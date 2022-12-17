@@ -28,7 +28,6 @@
 #include "chrome/browser/android/reading_list/reading_list_manager_factory.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/bookmarks/managed_bookmark_service_factory.h"
-#include "chrome/browser/commerce/commerce_feature_list.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
 #include "chrome/browser/power_bookmarks/power_bookmark_utils.h"
@@ -45,6 +44,7 @@
 #include "components/bookmarks/common/android/bookmark_type.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/bookmarks/managed/managed_bookmark_service.h"
+#include "components/commerce/core/commerce_feature_list.h"
 #include "components/commerce/core/proto/price_tracking.pb.h"
 #include "components/dom_distiller/core/url_utils.h"
 #include "components/optimization_guide/proto/hints.pb.h"
@@ -198,7 +198,7 @@ BookmarkBridge::GetBookmarkIdForWebContents(
             Profile::FromBrowserContext(web_contents->GetBrowserContext())
                 ->IsOffTheRecord());
   GURL url = dom_distiller::url_utils::GetOriginalUrlFromDistillerUrl(
-      web_contents->GetURL());
+      web_contents->GetLastCommittedURL());
 
   // TODO(crbug.com/1150559): This is a hack to avoid a historical issue that
   // this function doesn't wait for any backend loaded.
@@ -829,6 +829,24 @@ void BookmarkBridge::SearchBookmarks(JNIEnv* env,
   for (const bookmarks::BookmarkNode* match : results) {
     if (!IsReachable(match))
       continue;
+    Java_BookmarkBridge_addToBookmarkIdList(env, j_list, match->id(),
+                                            GetBookmarkType(match));
+  }
+}
+
+void BookmarkBridge::GetBookmarksOfType(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    const base::android::JavaParamRef<jobject>& j_list,
+    jint type) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  std::vector<const BookmarkNode*> results;
+  power_bookmarks::PowerBookmarkQueryFields query;
+  query.type = static_cast<power_bookmarks::PowerBookmarkType>(type);
+  power_bookmarks::GetBookmarksMatchingProperties(bookmark_model_, query, -1,
+                                                  &results);
+
+  for (const bookmarks::BookmarkNode* match : results) {
     Java_BookmarkBridge_addToBookmarkIdList(env, j_list, match->id(),
                                             GetBookmarkType(match));
   }

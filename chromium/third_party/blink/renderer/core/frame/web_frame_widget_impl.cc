@@ -65,6 +65,7 @@
 #include "third_party/blink/renderer/core/editing/ephemeral_range.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
 #include "third_party/blink/renderer/core/editing/ime/edit_context.h"
+#include "third_party/blink/renderer/core/editing/selection_template.h"
 #include "third_party/blink/renderer/core/events/current_input_event.h"
 #include "third_party/blink/renderer/core/events/pointer_event_factory.h"
 #include "third_party/blink/renderer/core/events/web_input_event_conversion.h"
@@ -130,7 +131,7 @@
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom-blink.h"
 #include "ui/gfx/geometry/point_conversions.h"
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 #include "third_party/blink/renderer/core/editing/substring_util.h"
 #include "third_party/blink/renderer/platform/fonts/mac/attributed_string_type_converter.h"
 #include "ui/base/mojom/attributed_string.mojom-blink.h"
@@ -141,10 +142,11 @@
 #include "third_party/blink/renderer/core/exported/web_settings_impl.h"
 
 namespace WTF {
+
 template <>
-struct CrossThreadCopier<base::OnceCallback<void(base::TimeTicks)>>
+struct CrossThreadCopier<blink::WebFrameWidgetImpl::PromiseCallbacks>
     : public CrossThreadCopierByValuePassThrough<
-          base::OnceCallback<void(base::TimeTicks)>> {
+          blink::WebFrameWidgetImpl::PromiseCallbacks> {
   STATIC_ONLY(CrossThreadCopier);
 };
 
@@ -167,11 +169,10 @@ const float kIdealPaddingRatio = 0.3f;
 
 // Returns a rect which is offset and scaled accordingly to |base_rect|'s
 // location and size.
-FloatRect NormalizeRect(const gfx::Rect& to_normalize,
-                        const gfx::Rect& base_rect) {
-  FloatRect result(to_normalize);
-  result.set_origin(
-      gfx::PointF(to_normalize.origin() - base_rect.OffsetFromOrigin()));
+gfx::RectF NormalizeRect(const gfx::Rect& to_normalize,
+                         const gfx::Rect& base_rect) {
+  gfx::RectF result(to_normalize);
+  result.Offset(base_rect.OffsetFromOrigin());
   result.Scale(1.0 / base_rect.width(), 1.0 / base_rect.height());
   return result;
 }
@@ -529,7 +530,7 @@ void WebFrameWidgetImpl::UpdateRenderThrottlingStatusForSubFrame(
       is_throttled, subtree_throttled, display_locked, /*recurse=*/true);
 }
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 void WebFrameWidgetImpl::GetStringAtPoint(const gfx::Point& point_in_local_root,
                                           GetStringAtPointCallback callback) {
   gfx::Point baseline_point;
@@ -701,9 +702,9 @@ WebInputEventResult WebFrameWidgetImpl::HandleKeyEvent(
     return result;
   }
 
-#if !defined(OS_MAC)
+#if !BUILDFLAG(IS_MAC)
   const WebInputEvent::Type kContextMenuKeyTriggeringEventType =
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
       WebInputEvent::Type::kKeyUp;
 #else
       WebInputEvent::Type::kRawKeyDown;
@@ -723,7 +724,7 @@ WebInputEventResult WebFrameWidgetImpl::HandleKeyEvent(
     View()->SendContextMenuEvent();
     return WebInputEventResult::kHandledSystem;
   }
-#endif  // !defined(OS_MAC)
+#endif  // !BUILDFLAG(IS_MAC)
 
   return WebInputEventResult::kNotHandled;
 }
@@ -778,7 +779,7 @@ void WebFrameWidgetImpl::HandleMouseDown(LocalFrame& local_root,
 
   // Dispatch the contextmenu event regardless of if the click was swallowed.
   if (!GetPage()->GetSettings().GetShowContextMenuOnMouseUp()) {
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
     if (event.button == WebMouseEvent::Button::kRight ||
         (event.button == WebMouseEvent::Button::kLeft &&
          event.GetModifiers() & WebMouseEvent::kControlKey))
@@ -979,9 +980,10 @@ WebInputEventResult WebFrameWidgetImpl::HandleGestureEvent(
         // Queue a highlight animation, then hand off to regular handler.
         web_view->EnableTapHighlightAtPoint(targeted_event);
         break;
+      case WebInputEvent::Type::kGestureShortPress:
+      case WebInputEvent::Type::kGestureLongPress:
       case WebInputEvent::Type::kGestureTapCancel:
       case WebInputEvent::Type::kGestureTap:
-      case WebInputEvent::Type::kGestureLongPress:
         GetPage()->GetLinkHighlight().StartHighlightAnimationIfNeeded();
         break;
       default:
@@ -1052,6 +1054,7 @@ WebInputEventResult WebFrameWidgetImpl::HandleGestureEvent(
       break;
     case WebInputEvent::Type::kGestureShowPress:
     case WebInputEvent::Type::kGestureTapUnconfirmed:
+    case WebInputEvent::Type::kGestureShortPress:
       event_result =
           frame->GetEventHandler().HandleGestureEvent(targeted_event);
       break;
@@ -1306,12 +1309,6 @@ void WebFrameWidgetImpl::SetPrefersReducedMotion(bool prefers_reduced_motion) {
     return;
   widget_base_->LayerTreeHost()->SetPrefersReducedMotion(
       prefers_reduced_motion);
-}
-
-void WebFrameWidgetImpl::RegisterSelection(cc::LayerSelection selection) {
-  if (!View()->does_composite())
-    return;
-  widget_base_->LayerTreeHost()->RegisterSelection(selection);
 }
 
 void WebFrameWidgetImpl::StartPageScaleAnimation(const gfx::Point& destination,
@@ -1600,8 +1597,10 @@ void WebFrameWidgetImpl::ApplyVisualPropertiesSizing(
           visual_properties.browser_controls_params);
     }
 
+#if !BUILDFLAG(IS_ANDROID)
     LocalRootImpl()->GetFrame()->UpdateWindowControlsOverlay(
         visual_properties.window_controls_overlay_rect);
+#endif
 
   } else {
     // Widgets in a WebView's frame tree without a local main frame
@@ -1783,6 +1782,12 @@ void WebFrameWidgetImpl::PointerLockMouseEvent(
     case WebInputEvent::Type::kMouseMove:
       event_type = event_type_names::kMousemove;
       break;
+    case WebInputEvent::Type::kMouseEnter:
+    case WebInputEvent::Type::kMouseLeave:
+    case WebInputEvent::Type::kContextMenu:
+      // These should not be normally dispatched but may be due to timing
+      // because pointer lost messaging happens on separate mojo channel.
+      return;
     default:
       NOTREACHED() << input_event.GetType();
   }
@@ -2031,6 +2036,7 @@ void WebFrameWidgetImpl::ResetMeaningfulLayoutStateForMainFrame() {
   data.should_dispatch_first_visually_non_empty_layout = true;
   data.should_dispatch_first_layout_after_finished_parsing = true;
   data.should_dispatch_first_layout_after_finished_loading = true;
+  data.last_background_color.reset();
 }
 
 void WebFrameWidgetImpl::InitializeCompositing(
@@ -2140,12 +2146,6 @@ void WebFrameWidgetImpl::BeginMainFrame(base::TimeTicks last_frame_time) {
 void WebFrameWidgetImpl::BeginCommitCompositorFrame() {
   commit_compositor_frame_start_time_.emplace(base::TimeTicks::Now());
   probe::LayerTreePainted(LocalRootImpl()->GetFrame());
-}
-
-void WebFrameWidgetImpl::EndCommitCompositorFrame(
-    base::TimeTicks commit_start_time,
-    base::TimeTicks commit_finish_time) {
-  DCHECK(commit_compositor_frame_start_time_.has_value());
   if (ForTopMostMainFrame()) {
     Document* doc = local_root_->GetFrame()->GetDocument();
     if (doc->GetSettings()->GetViewportMetaEnabled() &&
@@ -2166,7 +2166,12 @@ void WebFrameWidgetImpl::EndCommitCompositorFrame(
       base::debug::DumpWithoutCrashing();
     }
   }
+}
 
+void WebFrameWidgetImpl::EndCommitCompositorFrame(
+    base::TimeTicks commit_start_time,
+    base::TimeTicks commit_finish_time) {
+  DCHECK(commit_compositor_frame_start_time_.has_value());
   LocalRootImpl()
       ->GetFrame()
       ->View()
@@ -2510,10 +2515,12 @@ WebInputEventResult WebFrameWidgetImpl::HandleInputEvent(
   }
 
   // If a drag-and-drop operation is in progress, ignore input events except
-  // PointerCancel.
+  // PointerCancel and GestureLongPress.
   if (doing_drag_and_drop_ &&
-      input_event.GetType() != WebInputEvent::Type::kPointerCancel)
+      input_event.GetType() != WebInputEvent::Type::kPointerCancel &&
+      input_event.GetType() != WebInputEvent::Type::kGestureLongPress) {
     return WebInputEventResult::kHandledSuppressed;
+  }
 
   // Don't handle events once we've started shutting down.
   if (!GetPage())
@@ -2917,13 +2924,10 @@ void WebFrameWidgetImpl::SetDelegatedInkMetadata(
 // swap promises.
 class ReportTimeSwapPromise : public cc::SwapPromise {
  public:
-  ReportTimeSwapPromise(
-      base::OnceCallback<void(base::TimeTicks)> swap_time_callback,
-      base::OnceCallback<void(base::TimeTicks)> presentation_time_callback,
-      scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-      WebFrameWidgetImpl* widget)
-      : swap_time_callback_(std::move(swap_time_callback)),
-        presentation_time_callback_(std::move(presentation_time_callback)),
+  ReportTimeSwapPromise(WebFrameWidgetImpl::PromiseCallbacks callbacks,
+                        scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+                        WebFrameWidgetImpl* widget)
+      : promise_callbacks_(std::move(callbacks)),
         task_runner_(std::move(task_runner)),
         widget_(widget) {}
 
@@ -2945,16 +2949,14 @@ class ReportTimeSwapPromise : public cc::SwapPromise {
     DCHECK_GT(frame_token_, 0u);
     PostCrossThreadTask(
         *task_runner_, FROM_HERE,
-        CrossThreadBindOnce(
-            &RunCallbackAfterSwap, widget_, base::TimeTicks::Now(),
-            std::move(swap_time_callback_),
-            std::move(presentation_time_callback_), frame_token_));
+        CrossThreadBindOnce(&RunCallbackAfterSwap, widget_,
+                            base::TimeTicks::Now(),
+                            std::move(promise_callbacks_), frame_token_));
   }
 
   DidNotSwapAction DidNotSwap(DidNotSwapReason reason) override {
     ReportSwapAndPresentationFailureOnTaskRunner(
-        task_runner_, std::move(swap_time_callback_),
-        std::move(presentation_time_callback_), base::TimeTicks::Now());
+        task_runner_, std::move(promise_callbacks_), base::TimeTicks::Now());
     return DidNotSwapAction::BREAK_PROMISE;
   }
 
@@ -2964,8 +2966,7 @@ class ReportTimeSwapPromise : public cc::SwapPromise {
   static void RunCallbackAfterSwap(
       WebFrameWidgetImpl* widget,
       base::TimeTicks swap_time,
-      base::OnceCallback<void(base::TimeTicks)> swap_time_callback,
-      base::OnceCallback<void(base::TimeTicks)> presentation_time_callback,
+      WebFrameWidgetImpl::PromiseCallbacks callbacks,
       int frame_token) {
     // If the widget was collected or the widget wasn't collected yet, but
     // it was closed don't schedule a presentation callback.
@@ -2973,11 +2974,24 @@ class ReportTimeSwapPromise : public cc::SwapPromise {
       widget->widget_base_->AddPresentationCallback(
           frame_token,
           WTF::Bind(&RunCallbackAfterPresentation,
-                    std::move(presentation_time_callback), swap_time));
-      ReportTime(std::move(swap_time_callback), swap_time);
+                    std::move(callbacks.presentation_time_callback),
+                    swap_time));
+      ReportTime(std::move(callbacks.swap_time_callback), swap_time);
+
+#if BUILDFLAG(IS_MAC)
+      if (callbacks.core_animation_error_code_callback) {
+        widget->widget_base_->AddCoreAnimationErrorCodeCallback(
+            frame_token,
+            std::move(callbacks.core_animation_error_code_callback));
+      }
+#endif
     } else {
-      ReportTime(std::move(swap_time_callback), swap_time);
-      ReportTime(std::move(presentation_time_callback), swap_time);
+      ReportTime(std::move(callbacks.swap_time_callback), swap_time);
+      ReportTime(std::move(callbacks.presentation_time_callback), swap_time);
+#if BUILDFLAG(IS_MAC)
+      ReportErrorCode(std::move(callbacks.core_animation_error_code_callback),
+                      gfx::kCALayerUnknownNoWidget);
+#endif
     }
   }
 
@@ -3006,63 +3020,80 @@ class ReportTimeSwapPromise : public cc::SwapPromise {
       std::move(callback).Run(time);
   }
 
+#if BUILDFLAG(IS_MAC)
+  static void ReportErrorCode(
+      base::OnceCallback<void(gfx::CALayerResult)> callback,
+      gfx::CALayerResult error_code) {
+    if (callback)
+      std::move(callback).Run(error_code);
+  }
+#endif
+
   static void ReportSwapAndPresentationFailureOnTaskRunner(
       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-      base::OnceCallback<void(base::TimeTicks)> swap_time_callback,
-      base::OnceCallback<void(base::TimeTicks)> presentation_time_callback,
+      WebFrameWidgetImpl::PromiseCallbacks callbacks,
       base::TimeTicks failure_time) {
     if (!task_runner->BelongsToCurrentThread()) {
       PostCrossThreadTask(
           *task_runner, FROM_HERE,
           CrossThreadBindOnce(&ReportSwapAndPresentationFailureOnTaskRunner,
-                              task_runner, std::move(swap_time_callback),
-                              std::move(presentation_time_callback),
-                              failure_time));
+                              task_runner, std::move(callbacks), failure_time));
       return;
     }
 
-    ReportTime(std::move(swap_time_callback), failure_time);
-    ReportTime(std::move(presentation_time_callback), failure_time);
+    ReportTime(std::move(callbacks.swap_time_callback), failure_time);
+    ReportTime(std::move(callbacks.presentation_time_callback), failure_time);
+#if BUILDFLAG(IS_MAC)
+    ReportErrorCode(std::move(callbacks.core_animation_error_code_callback),
+                    gfx::kCALayerUnknownDidNotSwap);
+#endif
   }
 
-  base::OnceCallback<void(base::TimeTicks)> swap_time_callback_;
-  base::OnceCallback<void(base::TimeTicks)> presentation_time_callback_;
+  WebFrameWidgetImpl::PromiseCallbacks promise_callbacks_;
+
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   CrossThreadWeakPersistent<WebFrameWidgetImpl> widget_;
   uint32_t frame_token_ = 0;
 };
 
 void WebFrameWidgetImpl::NotifySwapAndPresentationTimeForTesting(
-    base::OnceCallback<void(base::TimeTicks)> swap_callback,
-    base::OnceCallback<void(base::TimeTicks)> presentation_callback) {
-  NotifySwapAndPresentationTime(std::move(swap_callback),
-                                std::move(presentation_callback));
+    PromiseCallbacks callbacks) {
+  NotifySwapAndPresentationTime(std::move(callbacks));
 }
 
 void WebFrameWidgetImpl::NotifyPresentationTimeInBlink(
     base::OnceCallback<void(base::TimeTicks)> presentation_callback) {
-  NotifySwapAndPresentationTime(base::NullCallback(),
-                                std::move(presentation_callback));
+  NotifySwapAndPresentationTime(
+      {.presentation_time_callback = std::move(presentation_callback)});
 }
 
 void WebFrameWidgetImpl::NotifyPresentationTime(
     base::OnceCallback<void(base::TimeTicks)> presentation_callback) {
-  NotifySwapAndPresentationTime(base::NullCallback(),
-                                std::move(presentation_callback));
+  NotifySwapAndPresentationTime(
+      {.presentation_time_callback = std::move(presentation_callback)});
 }
 
+#if BUILDFLAG(IS_MAC)
+void WebFrameWidgetImpl::NotifyCoreAnimationErrorCode(
+    base::OnceCallback<void(gfx::CALayerResult)>
+        core_animation_error_code_callback) {
+  NotifySwapAndPresentationTime(
+      {.core_animation_error_code_callback =
+           std::move(core_animation_error_code_callback)});
+}
+#endif
+
 void WebFrameWidgetImpl::NotifySwapAndPresentationTime(
-    base::OnceCallback<void(base::TimeTicks)> swap_time_callback,
-    base::OnceCallback<void(base::TimeTicks)> presentation_time_callback) {
+    PromiseCallbacks callbacks) {
   if (!View()->does_composite())
     return;
+
   widget_base_->LayerTreeHost()->QueueSwapPromise(
-      std::make_unique<ReportTimeSwapPromise>(
-          std::move(swap_time_callback), std::move(presentation_time_callback),
-          widget_base_->LayerTreeHost()
-              ->GetTaskRunnerProvider()
-              ->MainThreadTaskRunner(),
-          this));
+      std::make_unique<ReportTimeSwapPromise>(std::move(callbacks),
+                                              widget_base_->LayerTreeHost()
+                                                  ->GetTaskRunnerProvider()
+                                                  ->MainThreadTaskRunner(),
+                                              this));
 }
 
 scheduler::WebRenderWidgetSchedulingState*
@@ -3255,7 +3286,7 @@ void WebFrameWidgetImpl::DidOverscroll(
     const gfx::Vector2dF& accumulated_overscroll,
     const gfx::PointF& position,
     const gfx::Vector2dF& velocity) {
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   // On OSX the user can disable the elastic overscroll effect. If that's the
   // case, don't forward the overscroll notification.
   if (!widget_base_->LayerTreeHost()->GetSettings().enable_elastic_overscroll)
@@ -3401,7 +3432,7 @@ void WebFrameWidgetImpl::ProcessTouchAction(WebTouchAction touch_action) {
 }
 
 void WebFrameWidgetImpl::DidHandleGestureEvent(const WebGestureEvent& event) {
-#if defined(OS_ANDROID) || defined(USE_AURA)
+#if BUILDFLAG(IS_ANDROID) || defined(USE_AURA)
   if (event.GetType() == WebInputEvent::Type::kGestureTap) {
     widget_base_->ShowVirtualKeyboard();
   } else if (event.GetType() == WebInputEvent::Type::kGestureLongPress) {
@@ -3753,7 +3784,7 @@ void WebFrameWidgetImpl::MoveCaret(const gfx::Point& point_in_dips) {
       widget_base_->DIPsToRoundedBlinkSpace(point_in_dips));
 }
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 void WebFrameWidgetImpl::SelectAroundCaret(
     mojom::blink::SelectionGranularity granularity,
     bool should_show_handle,
@@ -4316,19 +4347,20 @@ void WebFrameWidgetImpl::ImeFinishComposingTextForPlugin(bool keep_selection) {
     plugin->ImeFinishComposingTextForPlugin(keep_selection);
 }
 
-void WebFrameWidgetImpl::SetWindowRect(const gfx::Rect& window_rect) {
+void WebFrameWidgetImpl::SetWindowRect(const gfx::Rect& requested_rect,
+                                       const gfx::Rect& adjusted_rect) {
   DCHECK(ForMainFrame());
   if (SynchronousResizeModeForTestingEnabled()) {
     // This is a web-test-only path. At one point, it was planned to be
     // removed. See https://crbug.com/309760.
-    SetWindowRectSynchronously(window_rect);
+    SetWindowRectSynchronously(adjusted_rect);
     return;
   }
 
-  SetPendingWindowRect(window_rect);
+  SetPendingWindowRect(adjusted_rect);
   View()->SendWindowRectToMainFrameHost(
-      window_rect, WTF::Bind(&WebFrameWidgetImpl::AckPendingWindowRect,
-                             WrapWeakPersistent(this)));
+      requested_rect, WTF::Bind(&WebFrameWidgetImpl::AckPendingWindowRect,
+                                WrapWeakPersistent(this)));
 }
 
 void WebFrameWidgetImpl::SetWindowRectSynchronouslyForTesting(
@@ -4434,10 +4466,10 @@ WebFrameWidgetImpl::GetScrollParamsForFocusedEditableElement(
   mojom::blink::ScrollIntoViewParamsPtr params =
       ScrollAlignment::CreateScrollIntoViewParams();
   params->zoom_into_rect = View()->ShouldZoomToLegibleScale(element);
-  params->relative_element_bounds = ToGfxRectF(NormalizeRect(
-      IntersectRects(absolute_element_bounds, maximal_rect), maximal_rect));
-  params->relative_caret_bounds = ToGfxRectF(NormalizeRect(
-      IntersectRects(absolute_caret_bounds, maximal_rect), maximal_rect));
+  params->relative_element_bounds = NormalizeRect(
+      IntersectRects(absolute_element_bounds, maximal_rect), maximal_rect);
+  params->relative_caret_bounds = NormalizeRect(
+      IntersectRects(absolute_caret_bounds, maximal_rect), maximal_rect);
   params->behavior = mojom::blink::ScrollBehavior::kInstant;
   out_rect_to_scroll = PhysicalRect(maximal_rect);
   return params;

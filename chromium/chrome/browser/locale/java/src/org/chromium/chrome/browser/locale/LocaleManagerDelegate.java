@@ -17,7 +17,6 @@ import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.supplier.Supplier;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
@@ -383,11 +382,6 @@ public class LocaleManagerDelegate {
      */
     public boolean needToCheckForSearchEnginePromo() {
         if (org.chromium.build.BuildConfig.IS_VIVALDI) return false;
-        if (ChromeFeatureList.isInitialized()
-                && !ChromeFeatureList.isEnabled(
-                        ChromeFeatureList.SEARCH_ENGINE_PROMO_EXISTING_DEVICE)) {
-            return false;
-        }
         @SearchEnginePromoState
         int state = SharedPreferencesManager.getInstance().readInt(
                 ChromePreferenceKeys.LOCALE_MANAGER_SEARCH_ENGINE_PROMO_SHOW_STATE,

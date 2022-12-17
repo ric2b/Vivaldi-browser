@@ -17,9 +17,9 @@
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "components/optimization_guide/core/execution_status.h"
+#include "components/optimization_guide/core/model_enums.h"
 #include "components/optimization_guide/core/model_executor.h"
-#include "components/optimization_guide/core/optimization_guide_enums.h"
-#include "components/optimization_guide/core/optimization_guide_util.h"
+#include "components/optimization_guide/core/model_util.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/tflite/src/tensorflow/lite/c/common.h"
 #include "third_party/tflite_support/src/tensorflow_lite_support/cc/task/core/base_task_api.h"
@@ -34,8 +34,7 @@ class ScopedExecutionStatusResultRecorder {
  public:
   explicit ScopedExecutionStatusResultRecorder(
       proto::OptimizationTarget optimization_target)
-      : optimization_target_(optimization_target),
-        start_time_(base::TimeTicks::Now()) {}
+      : optimization_target_(optimization_target) {}
 
   ~ScopedExecutionStatusResultRecorder() {
     base::UmaHistogramEnumeration(
@@ -43,12 +42,6 @@ class ScopedExecutionStatusResultRecorder {
             optimization_guide::GetStringNameForOptimizationTarget(
                 optimization_target_),
         status_);
-
-    base::UmaHistogramTimes(
-        "OptimizationGuide.ModelExecutor.ModelLoadingDuration." +
-            optimization_guide::GetStringNameForOptimizationTarget(
-                optimization_target_),
-        base::TimeTicks::Now() - start_time_);
   }
 
   ExecutionStatus* mutable_status() { return &status_; }
@@ -60,9 +53,6 @@ class ScopedExecutionStatusResultRecorder {
  private:
   // The OptimizationTarget of the model being executed.
   const proto::OptimizationTarget optimization_target_;
-
-  // The time at which this instance was constructed.
-  const base::TimeTicks start_time_;
 
   ExecutionStatus status_ = ExecutionStatus::kUnknown;
 };
@@ -88,26 +78,26 @@ class TFLiteModelExecutor : public ModelExecutor<OutputType, InputTypes...> {
   }
 
   // Should be called on the same sequence as the ctor, but once called |this|
-  // must only be used from a background thread/sequence.
-  void InitializeAndMoveToBackgroundThread(
+  // must only be used from the |execution_task_runner| thread/sequence.
+  void InitializeAndMoveToExecutionThread(
       proto::OptimizationTarget optimization_target,
-      scoped_refptr<base::SequencedTaskRunner> background_task_runner,
+      scoped_refptr<base::SequencedTaskRunner> execution_task_runner,
       scoped_refptr<base::SequencedTaskRunner> reply_task_runner) override {
-    DCHECK(!background_task_runner_);
+    DCHECK(!execution_task_runner_);
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     DCHECK_NE(optimization_target,
               proto::OptimizationTarget::OPTIMIZATION_TARGET_UNKNOWN);
 
     DETACH_FROM_SEQUENCE(sequence_checker_);
     optimization_target_ = optimization_target;
-    background_task_runner_ = background_task_runner;
+    execution_task_runner_ = execution_task_runner;
     reply_task_runner_ = reply_task_runner;
   }
 
   // Called when a model file is available to load. Depending on feature flags,
   // the model may or may not be immediately loaded.
   void UpdateModelFile(const base::FilePath& file_path) override {
-    DCHECK(background_task_runner_->RunsTasksInCurrentSequence());
+    DCHECK(execution_task_runner_->RunsTasksInCurrentSequence());
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
     UnloadModel();
@@ -130,7 +120,7 @@ class TFLiteModelExecutor : public ModelExecutor<OutputType, InputTypes...> {
   // called. False is the default behavior (see class comment).
   void SetShouldUnloadModelOnComplete(
       bool should_unload_model_on_complete) override {
-    DCHECK(background_task_runner_->RunsTasksInCurrentSequence());
+    DCHECK(execution_task_runner_->RunsTasksInCurrentSequence());
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     should_unload_model_on_complete_ = should_unload_model_on_complete;
   }
@@ -142,21 +132,21 @@ class TFLiteModelExecutor : public ModelExecutor<OutputType, InputTypes...> {
                  "OptimizationTarget",
                  optimization_guide::GetStringNameForOptimizationTarget(
                      optimization_target_));
-    DCHECK(background_task_runner_->RunsTasksInCurrentSequence());
+    DCHECK(execution_task_runner_->RunsTasksInCurrentSequence());
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
     loaded_model_.reset();
     model_fb_.reset();
   }
 
-  // Starts the execution of the model. When complete, |ui_callback_on_complete|
-  // will be run on the UI thread with the output of the model.
+  // Starts the execution of the model. When complete, |callback_on_complete|
+  // will be run via |reply_task_runner_| with the output of the model.
   using ExecutionCallback =
       base::OnceCallback<void(const absl::optional<OutputType>&)>;
-  void SendForExecution(ExecutionCallback ui_callback_on_complete,
+  void SendForExecution(ExecutionCallback callback_on_complete,
                         base::TimeTicks start_time,
                         InputTypes... args) override {
-    DCHECK(background_task_runner_->RunsTasksInCurrentSequence());
+    DCHECK(execution_task_runner_->RunsTasksInCurrentSequence());
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     DCHECK(reply_task_runner_);
 
@@ -175,7 +165,7 @@ class TFLiteModelExecutor : public ModelExecutor<OutputType, InputTypes...> {
     if (!loaded_model_ && !LoadModelFile(status_recorder.mutable_status())) {
       reply_task_runner_->PostTask(
           FROM_HERE,
-          base::BindOnce(std::move(ui_callback_on_complete), absl::nullopt));
+          base::BindOnce(std::move(callback_on_complete), absl::nullopt));
       // Some error status is expected, and derived classes should have set the
       // status.
       DCHECK_NE(status_recorder.status(), ExecutionStatus::kUnknown);
@@ -213,17 +203,11 @@ class TFLiteModelExecutor : public ModelExecutor<OutputType, InputTypes...> {
           base::TimeTicks::Now() - execute_start_time);
     }
 
-    DCHECK(ui_callback_on_complete);
+    DCHECK(callback_on_complete);
     reply_task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(std::move(ui_callback_on_complete), output));
+        FROM_HERE, base::BindOnce(std::move(callback_on_complete), output));
 
     OnExecutionComplete();
-  }
-
-  // IMPORTANT: These WeakPointers must only be dereferenced on the background
-  // thread.
-  base::WeakPtr<TFLiteModelExecutor> GetBackgroundWeakPtr() {
-    return background_weak_ptr_factory_.GetWeakPtr();
   }
 
   TFLiteModelExecutor(const TFLiteModelExecutor&) = delete;
@@ -252,7 +236,7 @@ class TFLiteModelExecutor : public ModelExecutor<OutputType, InputTypes...> {
                  "OptimizationTarget",
                  optimization_guide::GetStringNameForOptimizationTarget(
                      optimization_target_));
-    DCHECK(background_task_runner_->RunsTasksInCurrentSequence());
+    DCHECK(execution_task_runner_->RunsTasksInCurrentSequence());
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
     UnloadModel();
@@ -267,6 +251,8 @@ class TFLiteModelExecutor : public ModelExecutor<OutputType, InputTypes...> {
       return false;
     }
 
+    base::TimeTicks loading_start_time = base::TimeTicks::Now();
+
     std::unique_ptr<base::MemoryMappedFile> model_fb =
         std::make_unique<base::MemoryMappedFile>();
     if (!model_fb->Initialize(*model_file_path_)) {
@@ -277,11 +263,28 @@ class TFLiteModelExecutor : public ModelExecutor<OutputType, InputTypes...> {
 
     loaded_model_ = BuildModelExecutionTask(model_fb_.get(), out_status);
 
+    if (!!loaded_model_) {
+      // We only want to record successful loading times.
+      base::UmaHistogramTimes(
+          "OptimizationGuide.ModelExecutor.ModelLoadingDuration2." +
+              optimization_guide::GetStringNameForOptimizationTarget(
+                  optimization_target_),
+          base::TimeTicks::Now() - loading_start_time);
+    }
+
+    // Local histogram used in integration testing.
+    base::BooleanHistogram::FactoryGet(
+        "OptimizationGuide.ModelExecutor.ModelLoadedSuccessfully." +
+            optimization_guide::GetStringNameForOptimizationTarget(
+                optimization_target_),
+        base::Histogram::kNoFlags)
+        ->Add(!!loaded_model_);
+
     return !!loaded_model_;
   }
 
   void OnExecutionComplete() {
-    DCHECK(background_task_runner_->RunsTasksInCurrentSequence());
+    DCHECK(execution_task_runner_->RunsTasksInCurrentSequence());
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     if (should_unload_model_on_complete_) {
       UnloadModel();
@@ -293,7 +296,7 @@ class TFLiteModelExecutor : public ModelExecutor<OutputType, InputTypes...> {
 
   bool should_unload_model_on_complete_ = true;
 
-  scoped_refptr<base::SequencedTaskRunner> background_task_runner_;
+  scoped_refptr<base::SequencedTaskRunner> execution_task_runner_;
 
   scoped_refptr<base::SequencedTaskRunner> reply_task_runner_;
 
@@ -320,8 +323,6 @@ class TFLiteModelExecutor : public ModelExecutor<OutputType, InputTypes...> {
       GUARDED_BY_CONTEXT(sequence_checker_);
 
   SEQUENCE_CHECKER(sequence_checker_);
-
-  base::WeakPtrFactory<TFLiteModelExecutor> background_weak_ptr_factory_{this};
 };
 
 }  // namespace optimization_guide

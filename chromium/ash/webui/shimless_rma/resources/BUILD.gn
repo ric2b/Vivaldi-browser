@@ -29,7 +29,7 @@ polymer_element_files = [
   "onboarding_update_page.js",
   "onboarding_wait_for_manual_wp_disable_page.js",
   "onboarding_wp_disable_complete_page.js",
-  "reimaging_calibration_page.js",
+  "reimaging_calibration_failed_page.js",
   "reimaging_calibration_run_page.js",
   "reimaging_calibration_setup_page.js",
   "reimaging_device_information_page.js",
@@ -37,6 +37,7 @@ polymer_element_files = [
   "reimaging_provisioning_page.js",
   "repair_component_chip.js",
   "shimless_rma.js",
+  "shimless_rma_fonts_css.js",
   "shimless_rma_shared_css.js",
   "splash_screen.js",
   "wrapup_finalize_page.js",
@@ -53,6 +54,10 @@ generate_grd("build_grd") {
     "fake_shimless_rma_service.js",
     "index.html",
     "mojo_interface_provider.js",
+    "illustrations/downloading.svg",
+    "illustrations/insert_usb.svg",
+    "illustrations/repair_start.svg",
+    "illustrations/update_os.svg",
     "png/diagnostics_app_icon_192.png",
     "shimless_rma_types.js",
   ]
@@ -88,7 +93,7 @@ js_type_check("closure_compile_module") {
     ":onboarding_update_page",
     ":onboarding_wait_for_manual_wp_disable_page",
     ":onboarding_wp_disable_complete_page",
-    ":reimaging_calibration_page",
+    ":reimaging_calibration_failed_page",
     ":reimaging_calibration_run_page",
     ":reimaging_calibration_setup_page",
     ":reimaging_device_information_page",
@@ -124,7 +129,7 @@ js_library("shimless_rma") {
     ":onboarding_update_page",
     ":onboarding_wait_for_manual_wp_disable_page",
     ":onboarding_wp_disable_complete_page",
-    ":reimaging_calibration_page",
+    ":reimaging_calibration_failed_page",
     ":reimaging_calibration_run_page",
     ":reimaging_calibration_setup_page",
     ":reimaging_device_information_page",
@@ -293,7 +298,7 @@ js_library("onboarding_wp_disable_complete_page") {
   ]
 }
 
-js_library("reimaging_calibration_page") {
+js_library("reimaging_calibration_failed_page") {
   deps = [
     ":base_page",
     ":calibration_component_chip",

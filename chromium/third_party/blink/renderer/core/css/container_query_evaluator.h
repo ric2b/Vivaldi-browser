@@ -10,7 +10,7 @@
 #include "third_party/blink/renderer/core/layout/geometry/axis.h"
 #include "third_party/blink/renderer/core/layout/geometry/physical_size.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_map.h"
-#include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 
 namespace blink {
 
@@ -84,7 +84,6 @@ class CORE_EXPORT ContainerQueryEvaluator final
   bool Eval(const ContainerQuery&) const;
   bool Eval(const ContainerQuery&, MediaQueryEvaluator::Results) const;
 
-  // TODO(crbug.com/1145970): Don't lean on MediaQueryEvaluator.
   Member<MediaQueryEvaluator> media_query_evaluator_;
   PhysicalSize size_;
   PhysicalAxes contained_axes_;

@@ -106,6 +106,8 @@ ClientSideDetectionService::~ClientSideDetectionService() {
 
 void ClientSideDetectionService::Shutdown() {
   url_loader_factory_.reset();
+  delegate_.reset();
+  enabled_ = false;
 }
 
 void ClientSideDetectionService::OnPrefsUpdated() {
@@ -416,7 +418,7 @@ void ClientSideDetectionService::LoadPhishingReportTimesFromPrefs() {
   for (const base::Value& timestamp :
        delegate_->GetPrefs()
            ->GetList(prefs::kSafeBrowsingCsdPingTimestamps)
-           ->GetList()) {
+           ->GetListDeprecated()) {
     phishing_report_times_.push_back(
         base::Time::FromDoubleT(timestamp.GetDouble()));
   }

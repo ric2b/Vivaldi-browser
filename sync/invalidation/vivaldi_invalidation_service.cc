@@ -190,18 +190,16 @@ void VivaldiInvalidationService::OnClosed() {
                      base::Unretained(this)));
 }
 
-void VivaldiInvalidationService::OnInvalidation(base::Value invalidation) {
-  if (!invalidation.is_dict())
-    return;
-
+void VivaldiInvalidationService::OnInvalidation(
+    base::Value::Dict invalidation) {
   constexpr char kClientIdKey[] = "client_id";
   constexpr char kVersionKey[] = "version";
   constexpr char kTypeKey[] = "notification_type";
 
-  std::string* client_id = invalidation.FindStringKey(kClientIdKey);
+  std::string* client_id = invalidation.FindString(kClientIdKey);
   absl::optional<int64_t> version =
-      base::ValueToInt64(invalidation.FindKey(kVersionKey));
-  std::string* type = invalidation.FindStringKey(kTypeKey);
+      base::ValueToInt64(invalidation.Find(kVersionKey));
+  std::string* type = invalidation.FindString(kTypeKey);
 
   if (client_id && version && type && *client_id != client_id_) {
     invalidation::TopicInvalidationMap invalidations;

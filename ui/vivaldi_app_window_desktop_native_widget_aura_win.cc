@@ -48,3 +48,10 @@ void VivaldiAppWindowDesktopNativeWidgetAuraWin::Minimize() {
     DesktopNativeWidgetAura::Show(ui::SHOW_STATE_NORMAL, gfx::Rect());
   DesktopNativeWidgetAura::Minimize();
 }
+
+void VivaldiAppWindowDesktopNativeWidgetAuraWin::OnHostWorkspaceChanged(
+    aura::WindowTreeHost* host) {
+  views::DesktopNativeWidgetAura::OnHostWorkspaceChanged(host);
+
+  app_window_->NativeWidgetWorkspaceChanged();
+}

@@ -20,6 +20,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
@@ -45,7 +46,6 @@
 #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
 #include "chrome/browser/ui/views/toolbar/webui_tab_counter_button.h"
 #include "chrome/browser/ui/views/user_education/feature_promo_colors.h"
-#include "chrome/browser/ui/views/user_education/feature_promo_controller_views.h"
 #include "chrome/browser/ui/webui/tab_strip/tab_strip_ui.h"
 #include "chrome/browser/ui/webui/tab_strip/tab_strip_ui_layout.h"
 #include "chrome/browser/ui/webui/tab_strip/tab_strip_ui_metrics.h"
@@ -244,9 +244,9 @@ class WebUITabStripContainerView::AutoCloser : public ui::EventHandler,
 
     view_observations_.AddObservation(content_area_.get());
     view_observations_.AddObservation(omnibox_.get());
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
     view_observations_.AddObservation(top_container_.get());
-#endif  // defined(OS_WIN)
+#endif  // BUILDFLAG(IS_WIN)
 
     content_area_->GetWidget()->GetNativeView()->AddPreTargetHandler(this);
     pretarget_handler_added_ = true;
@@ -611,9 +611,8 @@ WebUITabStripContainerView::GetAcceleratorProvider() const {
 
 void WebUITabStripContainerView::CloseContainer() {
   SetContainerTargetVisibility(false, WebUITabStripOpenCloseReason::kOther);
-  browser_view_->feature_promo_controller()
-      ->feature_engagement_tracker()
-      ->NotifyEvent(feature_engagement::events::kWebUITabStripClosed);
+  browser_view_->NotifyFeatureEngagementEvent(
+      feature_engagement::events::kWebUITabStripClosed);
 }
 
 bool WebUITabStripContainerView::CanStartDragToOpen(
@@ -663,13 +662,11 @@ void WebUITabStripContainerView::EndDragToOpen(
 
   if (opening) {
     RecordTabStripUIOpenHistogram(TabStripUIOpenAction::kToolbarDrag);
-    browser_view_->feature_promo_controller()
-        ->feature_engagement_tracker()
-        ->NotifyEvent(feature_engagement::events::kWebUITabStripOpened);
+    browser_view_->NotifyFeatureEngagementEvent(
+        feature_engagement::events::kWebUITabStripOpened);
   } else {
-    browser_view_->feature_promo_controller()
-        ->feature_engagement_tracker()
-        ->NotifyEvent(feature_engagement::events::kWebUITabStripClosed);
+    browser_view_->NotifyFeatureEngagementEvent(
+        feature_engagement::events::kWebUITabStripClosed);
   }
 
   animation_.Reset(open_proportion);
@@ -690,14 +687,12 @@ void WebUITabStripContainerView::TabCounterPressed(const ui::Event& event) {
   const bool new_visibility = !GetVisible();
   if (new_visibility) {
     RecordTabStripUIOpenHistogram(TabStripUIOpenAction::kTapOnTabCounter);
-    browser_view_->feature_promo_controller()
-        ->feature_engagement_tracker()
-        ->NotifyEvent(feature_engagement::events::kWebUITabStripOpened);
+    browser_view_->NotifyFeatureEngagementEvent(
+        feature_engagement::events::kWebUITabStripOpened);
   } else {
     RecordTabStripUICloseHistogram(TabStripUICloseAction::kTapOnTabCounter);
-    browser_view_->feature_promo_controller()
-        ->feature_engagement_tracker()
-        ->NotifyEvent(feature_engagement::events::kWebUITabStripClosed);
+    browser_view_->NotifyFeatureEngagementEvent(
+        feature_engagement::events::kWebUITabStripClosed);
   }
 
   SetContainerTargetVisibility(new_visibility,
@@ -740,11 +735,8 @@ void WebUITabStripContainerView::SetContainerTargetVisibility(
 
     time_at_open_ = base::TimeTicks::Now();
 
-    if (browser_view_->feature_promo_controller()->BubbleIsShowing(
-            feature_engagement::kIPHWebUITabStripFeature)) {
-      browser_view_->feature_promo_controller()->CloseBubble(
-          feature_engagement::kIPHWebUITabStripFeature);
-    }
+    browser_view_->CloseFeaturePromo(
+        feature_engagement::kIPHWebUITabStripFeature);
   } else {
     if (time_at_open_) {
       RecordTabStripUIOpenDurationHistogram(base::TimeTicks::Now() -
@@ -896,7 +888,7 @@ gfx::Size WebUITabStripContainerView::FlexRule(
 }
 
 void WebUITabStripContainerView::OnViewBoundsChanged(View* observed_view) {
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   if (observed_view == top_container_) {
     if (old_top_container_width_ != top_container_->width()) {
       old_top_container_width_ = top_container_->width();
@@ -906,7 +898,7 @@ void WebUITabStripContainerView::OnViewBoundsChanged(View* observed_view) {
     }
     return;
   }
-#endif  // defined(OS_WIN)
+#endif  // BUILDFLAG(IS_WIN)
 
   if (observed_view == tab_contents_container_) {
     // TODO(pbos): PreferredSizeChanged seems to cause infinite recursion with

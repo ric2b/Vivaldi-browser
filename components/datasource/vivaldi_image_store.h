@@ -231,7 +231,7 @@ class VivaldiImageStore : public base::RefCountedThreadSafe<VivaldiImageStore> {
                                   std::string image_url);
 
   void LoadMappingsOnFileThread();
-  void InitMappingsOnFileThread(const base::DictionaryValue* dict);
+  void InitMappingsOnFileThread(base::Value::Dict& mappings);
 
   std::string GetMappingJSONOnFileThread();
   void SaveMappingsOnFileThread();

@@ -628,11 +628,11 @@ void AppActivityRegistry::OnTimeLimitAllowlistChanged(
 void AppActivityRegistry::SaveAppActivity() {
   {
     ListPrefUpdate update(pref_service_, prefs::kPerAppTimeLimitsAppActivities);
-    base::ListValue* list_value = update.Get();
+    base::Value* list_value = update.Get();
 
     const base::Time now = base::Time::Now();
 
-    base::Value::ListView list_view = list_value->GetList();
+    base::Value::ListView list_view = list_value->GetListDeprecated();
     for (base::Value& entry : list_view) {
       absl::optional<AppId> app_id = policy::AppIdFromAppInfoDict(entry);
       DCHECK(app_id.has_value());
@@ -700,10 +700,11 @@ void AppActivityRegistry::OnResetTimeReached(base::Time timestamp) {
 void AppActivityRegistry::CleanRegistry(base::Time timestamp) {
   ListPrefUpdate update(pref_service_, prefs::kPerAppTimeLimitsAppActivities);
 
-  base::ListValue* list_value = update.Get();
+  base::Value* list_value = update.Get();
 
   // base::Value::ListStorage is an alias for std::vector<base::Value>.
-  base::Value::ListStorage list_storage = std::move(*list_value).TakeList();
+  base::Value::ListStorage list_storage =
+      std::move(*list_value).TakeListDeprecated();
 
   for (size_t index = 0; index < list_storage.size();) {
     base::Value& entry = list_storage[index];
@@ -727,7 +728,7 @@ void AppActivityRegistry::CleanRegistry(base::Time timestamp) {
     }
   }
 
-  *list_value = base::ListValue(std::move(list_storage));
+  *list_value = base::Value(std::move(list_storage));
 }
 
 void AppActivityRegistry::OnAppReinstalled(const AppId& app_id) {

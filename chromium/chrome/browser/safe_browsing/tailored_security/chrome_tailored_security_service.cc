@@ -4,6 +4,7 @@
 
 #include "chrome/browser/safe_browsing/tailored_security/chrome_tailored_security_service.h"
 
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -13,7 +14,7 @@
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "content/public/browser/storage_partition.h"
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/ui/android/tab_model/tab_model.h"
 #include "chrome/browser/ui/android/tab_model/tab_model_list.h"
 #else
@@ -24,7 +25,7 @@ namespace safe_browsing {
 
 namespace {
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 content::WebContents* GetWebContentsForProfile(Profile* profile) {
   for (const TabModel* tab_model : TabModelList::models()) {
     if (tab_model->GetProfile() != profile)
@@ -71,19 +72,18 @@ void ChromeTailoredSecurityService::MaybeNotifySyncUser(
 }
 
 void ChromeTailoredSecurityService::ShowSyncNotification(bool is_enabled) {
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   content::WebContents* web_contents = GetWebContentsForProfile(profile_);
   if (!web_contents)
     return;
 
-  // Since the Android UX is a notice, we simply enable Enhanced Protection
-  // here.
+  // Since the Android UX is a notice, we simply set Safe Browsing state.
   SetSafeBrowsingState(profile_->GetPrefs(),
-                       SafeBrowsingState::ENHANCED_PROTECTION,
-                       /*is_esb_enabled_in_sync=*/true);
+                       is_enabled ? SafeBrowsingState::ENHANCED_PROTECTION
+                                  : SafeBrowsingState::STANDARD_PROTECTION,
+                       /*is_esb_enabled_in_sync=*/is_enabled);
 
-  message_ = std::make_unique<TailoredSecurityConsentedModalAndroid>();
-  message_->DisplayMessage(
+  message_ = std::make_unique<TailoredSecurityConsentedModalAndroid>(
       web_contents, is_enabled,
       base::BindOnce(&ChromeTailoredSecurityService::MessageDismissed,
                      // Unretained is safe because |this| owns |message_|.
@@ -93,7 +93,7 @@ void ChromeTailoredSecurityService::ShowSyncNotification(bool is_enabled) {
 #endif
 }
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 void ChromeTailoredSecurityService::MessageDismissed() {
   message_.reset();
 }

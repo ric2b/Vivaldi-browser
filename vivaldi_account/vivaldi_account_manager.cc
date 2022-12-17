@@ -62,57 +62,67 @@ constexpr char kErrorDescriptionKey[] = "error_description";
 
 const std::u16string kVivaldiDomain = u"vivaldi.net";
 
-absl::optional<base::DictionaryValue> ParseServerResponse(
+absl::optional<base::Value::Dict> ParseServerResponse(
     std::unique_ptr<std::string> data) {
   if (!data)
     return absl::nullopt;
 
   absl::optional<base::Value> value = base::JSONReader::Read(*data);
-  if (!value || value->type() != base::Value::Type::DICTIONARY)
+  if (!value || !value->is_dict())
     return absl::nullopt;
 
-  base::DictionaryValue* dict_value = nullptr;
-  if (!value.value().GetAsDictionary(&dict_value))
-    return absl::nullopt;
-
-  return std::move(*dict_value);
+  return std::move(value->GetDict());
 }
 
 bool ParseGetAccessTokenSuccessResponse(
     std::unique_ptr<std::string> response_body,
-    std::string* access_token,
-    int* expires_in,
-    std::string* refresh_token) {
-  CHECK(access_token);
-  CHECK(refresh_token);
-  absl::optional<base::DictionaryValue> value =
+    std::string& access_token,
+    int& expires_in,
+    std::string& refresh_token) {
+  absl::optional<base::Value::Dict> dict =
       ParseServerResponse(std::move(response_body));
-  if (!value)
+  if (!dict)
     return false;
-  return value->GetString(kAccessTokenKey, access_token) &&
-         value->GetInteger(kExpiresInKey, expires_in) &&
-         value->GetString(kRefreshTokenKey, refresh_token);
+  std::string* access_token_value = dict->FindString(kAccessTokenKey);
+  absl::optional<int> expires_in_value = dict->FindInt(kExpiresInKey);
+  std::string* refresh_token_value = dict->FindString(kRefreshTokenKey);
+  if (!access_token_value || !expires_in_value || !refresh_token_value)
+    return false;
+  access_token = std::move(*access_token_value);
+  expires_in = *expires_in_value;
+  refresh_token = std::move(*refresh_token_value);
+  return true;
 }
 
 bool ParseGetAccountInfoSuccessResponse(
     std::unique_ptr<std::string> response_body,
-    std::string* account_id,
-    std::string* picture_url) {
-  absl::optional<base::DictionaryValue> value =
+    std::string& account_id,
+    std::string& picture_url) {
+  absl::optional<base::Value::Dict> dict =
       ParseServerResponse(std::move(response_body));
-  if (!value)
+  if (!dict)
     return false;
+  std::string* account_id_value = dict->FindString(kAccountIdKey);
+  std::string* picture_url_value = dict->FindString(kPictureUrlKey);
+
   // Picture url field is optional.
-  value->GetString(kPictureUrlKey, picture_url);
-  return value->GetString(kAccountIdKey, account_id);
+  if (!account_id_value)
+    return false;
+  account_id = std::move(*account_id_value);
+  picture_url =
+      picture_url_value ? std::move(*picture_url_value) : std::string();
+  return true;
 }
 
-bool ParseFailureResponse(std::unique_ptr<std::string> response_body,
-                          std::string* server_message) {
-  CHECK(server_message);
-  absl::optional<base::DictionaryValue> value =
+std::string ParseFailureResponse(std::unique_ptr<std::string> response_body) {
+  absl::optional<base::Value::Dict> dict =
       ParseServerResponse(std::move(response_body));
-  return value ? value->GetString(kErrorDescriptionKey, server_message) : false;
+  if (dict) {
+    if (std::string* server_message = dict->FindString(kErrorDescriptionKey)) {
+      return std::move(*server_message);
+    }
+  }
+  return std::string();
 }
 
 }  // anonymous namespace
@@ -342,8 +352,7 @@ void VivaldiAccountManager::OnTokenRequestDone(
   int response_code = url_loader->ResponseInfo()->headers->response_code();
 
   if (response_code == net::HTTP_BAD_REQUEST) {
-    std::string server_message;
-    ParseFailureResponse(std::move(response_body), &server_message);
+    std::string server_message = ParseFailureResponse(std::move(response_body));
     if (!using_password && !password_handler_.password().empty()) {
       base::PostTask(
           FROM_HERE, {content::BrowserThread::UI},
@@ -369,9 +378,8 @@ void VivaldiAccountManager::OnTokenRequestDone(
   std::string refresh_token;
   int expires_in;
 
-  if (!ParseGetAccessTokenSuccessResponse(std::move(response_body),
-                                          &access_token, &expires_in,
-                                          &refresh_token)) {
+  if (!ParseGetAccessTokenSuccessResponse(
+          std::move(response_body), access_token, expires_in, refresh_token)) {
     access_token_request_handler_->Retry();
     NotifyTokenFetchFailed(SERVER_ERROR, "", response_code);
     return;
@@ -430,27 +438,23 @@ void VivaldiAccountManager::OnAccountInfoRequestDone(
   }
 
   if (response_code != net::HTTP_OK) {
-    std::string server_message;
-    ParseFailureResponse(std::move(response_body), &server_message);
+    std::string server_message = ParseFailureResponse(std::move(response_body));
     NotifyAccountInfoFetchFailed(INVALID_CREDENTIALS, server_message,
                                  response_code);
     RequestNewToken();
     return;
   }
 
-  std::string account_id;
-  std::string picture_url;
-  if (!ParseGetAccountInfoSuccessResponse(std::move(response_body), &account_id,
-                                          &picture_url)) {
+  if (!ParseGetAccountInfoSuccessResponse(std::move(response_body),
+                                          account_info_.account_id,
+                                          account_info_.picture_url)) {
     account_info_request_handler_->Retry();
     NotifyAccountInfoFetchFailed(SERVER_ERROR, "", response_code);
     return;
   }
 
-  account_info_.account_id = account_id;
-  account_info_.picture_url = picture_url;
-
-  profile_->GetPrefs()->SetString(vivaldiprefs::kVivaldiAccountId, account_id);
+  profile_->GetPrefs()->SetString(vivaldiprefs::kVivaldiAccountId,
+                                  account_info_.account_id);
 
   NotifyAccountUpdated();
   return;

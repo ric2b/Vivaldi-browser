@@ -19,7 +19,6 @@
 #include "build/build_config.h"
 #include "build/buildflag.h"
 #include "build/chromecast_buildflags.h"
-#include "build/os_buildflags.h"
 #include "cc/trees/layer_tree_settings.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
@@ -56,8 +55,7 @@
 #include "third_party/blink/public/platform/media/url_index.h"
 #include "third_party/blink/public/platform/media/video_frame_compositor.h"
 #include "third_party/blink/public/platform/media/web_encrypted_media_client_impl.h"
-#include "third_party/blink/public/platform/media/web_media_player_impl.h"
-#include "third_party/blink/public/platform/media/web_media_player_params.h"
+#include "third_party/blink/public/platform/media/web_media_player_builder.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_surface_layer_bridge.h"
 #include "third_party/blink/public/platform/web_video_frame_submitter.h"
@@ -67,7 +65,7 @@
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "url/origin.h"
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 #include "components/viz/common/features.h"
 #include "content/renderer/media/android/flinging_renderer_client_factory.h"
 #include "content/renderer/media/android/media_player_renderer_client_factory.h"
@@ -81,7 +79,7 @@
 #include "content/renderer/media/cast_renderer_client_factory.h"
 #endif
 
-#if defined(OS_FUCHSIA)
+#if BUILDFLAG(IS_FUCHSIA)
 #include "media/fuchsia/cdm/client/fuchsia_cdm_util.h"
 #elif BUILDFLAG(ENABLE_MOJO_CDM)
 #include "media/mojo/clients/mojo_cdm_factory.h"  // nogncheck
@@ -89,7 +87,7 @@
 #include "media/cdm/default_cdm_factory.h"
 #endif
 
-#if defined(OS_FUCHSIA) && BUILDFLAG(ENABLE_MOJO_CDM)
+#if BUILDFLAG(IS_FUCHSIA) && BUILDFLAG(ENABLE_MOJO_CDM)
 #error "MojoCdm should be disabled for Fuchsia."
 #endif
 
@@ -252,7 +250,7 @@ std::unique_ptr<media::DefaultRendererFactory> CreateDefaultRendererFactory(
     media::DecoderFactory* decoder_factory,
     content::RenderThreadImpl* render_thread,
     content::RenderFrameImpl* render_frame) {
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   auto default_factory = std::make_unique<media::DefaultRendererFactory>(
       media_log, decoder_factory,
       base::BindRepeating(&content::RenderThreadImpl::GetGpuFactories,
@@ -275,7 +273,7 @@ enum class MediaPlayerType {
 // Helper function returning whether SurfaceLayer should be enabled.
 blink::WebMediaPlayer::SurfaceLayerMode GetSurfaceLayerMode(
     MediaPlayerType type) {
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   if (!::features::UseSurfaceLayerForVideo())
     return blink::WebMediaPlayer::SurfaceLayerMode::kNever;
 #endif
@@ -427,10 +425,10 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
   const blink::web_pref::WebPreferences webkit_preferences =
       render_frame_->GetBlinkPreferences();
   bool embedded_media_experience_enabled = false;
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   embedded_media_experience_enabled =
       webkit_preferences.embedded_media_experience_enabled;
-#endif  // defined(OS_ANDROID)
+#endif  // BUILDFLAG(IS_ANDROID)
 
   // When memory pressure based garbage collection is enabled for MSE, the
   // |enable_instant_source_buffer_gc| flag controls whether the GC is done
@@ -501,15 +499,24 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
     return nullptr;
   }
 
-  auto params = std::make_unique<blink::WebMediaPlayerParams>(
+  auto vfc = std::make_unique<blink::VideoFrameCompositor>(
+      video_frame_compositor_task_runner, std::move(submitter));
+
+  std::unique_ptr<media::Demuxer> demuxer_override =
+      GetContentClient()->renderer()->OverrideDemuxerForUrl(render_frame_, url,
+                                                            media_task_runner);
+
+  return blink::WebMediaPlayerBuilder::Build(
+      web_frame, client, encrypted_client, delegate,
+      std::move(factory_selector), url_index_.get(), std::move(vfc),
       std::move(media_log),
       base::BindRepeating(&RenderFrameImpl::DeferMediaLoad,
                           base::Unretained(render_frame_),
                           delegate->has_played_media()),
-      audio_renderer_sink, media_task_runner,
+      std::move(audio_renderer_sink), std::move(media_task_runner),
       render_thread->GetWorkerTaskRunner(),
       render_thread->compositor_task_runner(),
-      video_frame_compositor_task_runner,
+      std::move(video_frame_compositor_task_runner),
       base::BindRepeating(&v8::Isolate::AdjustAmountOfExternalAllocatedMemory,
                           base::Unretained(blink::MainThreadIsolate())),
       initial_cdm, request_routing_token_cb_, media_observer,
@@ -526,19 +533,8 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
           .is_background_video_playback_enabled,
       render_frame_->GetRenderFrameMediaPlaybackOptions()
           .is_background_video_track_optimization_supported,
-      GetContentClient()->renderer()->OverrideDemuxerForUrl(render_frame_, url,
-                                                            media_task_runner));
-
-  auto vfc = std::make_unique<blink::VideoFrameCompositor>(
-      params->video_frame_compositor_task_runner(), std::move(submitter));
-
-  auto* media_player = new blink::WebMediaPlayerImpl(
-      web_frame, client, encrypted_client, delegate,
-      std::move(factory_selector), url_index_.get(), std::move(vfc),
-      blink::Platform::Current()->GetBrowserInterfaceBroker(),
-      std::move(params));
-
-  return media_player;
+      std::move(demuxer_override),
+      blink::Platform::Current()->GetBrowserInterfaceBroker());
 }
 
 blink::WebEncryptedMediaClient* MediaFactory::EncryptedMediaClient() {
@@ -580,7 +576,7 @@ MediaFactory::CreateRendererFactorySelector(
                                      std::move(factory));
   }
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   DCHECK(interface_broker_);
 
   // MediaPlayerRendererClientFactory setup. It is used for HLS playback.
@@ -615,7 +611,7 @@ MediaFactory::CreateRendererFactorySelector(
                           base::Unretained(flinging_factory.get()));
   factory_selector->AddConditionalFactory(
       RendererType::kFlinging, std::move(flinging_factory), is_flinging_cb);
-#endif  // defined(OS_ANDROID)
+#endif  // BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(ENABLE_MOJO_RENDERER)
   if (!is_base_renderer_factory_set &&
@@ -873,7 +869,7 @@ media::CdmFactory* MediaFactory::GetCdmFactory() {
   if (cdm_factory_)
     return cdm_factory_.get();
 
-#if defined(OS_FUCHSIA)
+#if BUILDFLAG(IS_FUCHSIA)
   DCHECK(interface_broker_);
   cdm_factory_ = media::CreateFuchsiaCdmFactory(interface_broker_);
 #elif BUILDFLAG(ENABLE_MOJO_CDM)

@@ -23,7 +23,7 @@ chromium-metrics-reviews@google.com.
 <histograms>
 
 <histogram name="Cras.A2dp100msFailureOverStream" units="units"
-    expires_after="2022-04-17">
+    expires_after="2022-06-19">
   <owner>hychao@chromium.org</owner>
   <owner>chromeos-audio@google.com</owner>
   <summary>
@@ -93,16 +93,16 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Cras.DeviceNoiseCancellationEnabled" units="BooleanEnabled"
-    expires_after="2022-12-01">
+<histogram name="Cras.DeviceNoiseCancellationStatus"
+    enum="CrasNoiseCancellationStatus" expires_after="2022-12-01">
 <!-- Name completed by histogram_suffixes
      name="Cras.DeviceType" -->
 
   <owner>johnylin@chromium.org</owner>
   <owner>chromeos-audio@google.com</owner>
   <summary>
-    Record whether Noise Cancellation is enabled or disabled for the supported
-    device. It is recorded when the device is opened.
+    Record the staus of Noise Cancellation (blocked/disabled/enabled) for the
+    supported device. It is recorded when the device is opened.
   </summary>
 </histogram>
 
@@ -465,23 +465,6 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Cras.InputStreamRuntime" units="seconds" expires_after="M90">
-  <obsolete>
-    Replaced by Cras.StreamRuntime in M90.
-  </obsolete>
-<!-- Name completed by histogram_suffixes
-     name="Cras.ClientType" and
-     name="Cras.StreamType" -->
-
-  <owner>yuhsuan@chromium.org</owner>
-  <owner>chromeos-audio@google.com</owner>
-  <summary>
-    The runtime of input stream in CRAS(ChromeOS audio server). The runtime is
-    the duration between creating and destroying a stream. The value is recorded
-    when the stream is destroyed.
-  </summary>
-</histogram>
-
 <histogram name="Cras.kHfpWidebandSpeechSelectedCodec" enum="CrasHfpCodec"
     expires_after="2022-12-01">
   <owner>hychao@chromium.org</owner>
@@ -731,23 +714,6 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Cras.OutputStreamRuntime" units="seconds" expires_after="M90">
-  <obsolete>
-    Replaced by Cras.StreamRuntime in M90.
-  </obsolete>
-<!-- Name completed by histogram_suffixes
-     name="Cras.ClientType" and
-     name="Cras.StreamType" -->
-
-  <owner>yuhsuan@chromium.org</owner>
-  <owner>chromeos-audio@google.com</owner>
-  <summary>
-    The runtime of output stream in CRAS(ChromeOS audio server). The runtime is
-    the duration between creating and destroying a stream. The value is recorded
-    when the stream is destroyed.
-  </summary>
-</histogram>
-
 <histogram name="Cras.RtcDevicePair" enum="CrasDevicePair"
     expires_after="2022-04-03">
   <owner>yuhsuan@chromium.org</owner>
@@ -819,6 +785,20 @@ chromium-metrics-reviews@google.com.
     <variant name="Unknown"/>
     <variant name="USB"/>
   </token>
+</histogram>
+
+<histogram name="Cras.SetAecRefDeviceType" enum="CrasDeviceType"
+    expires_after="2023-01-03">
+  <owner>hychao@chromium.org</owner>
+  <owner>chromeos-audio@google.com</owner>
+  <summary>
+    It is used to log the call to InputStream::SetOutputDeviceForAec() which
+    results different types of audio device being set as AEC referefence in
+    CRAS(Chrome OS audio server). Based on this metrics we can analyze the user
+    behavior in voice communication app. Note that CRAS_METRICS_DEVICE_NO_DEVICE
+    is tracking the case when the call sets a NULL device meaning to leave AEC
+    reference on system default.
+  </summary>
 </histogram>
 
 <histogram name="Cras.StreamCallbackThreshold" units="frames"
@@ -925,26 +905,8 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Cras.StreamTimeoutMilliSeconds" units="ms" expires_after="M90">
-  <obsolete>
-    Replaced by Cras.FetchDelayMilliSeconds in M90.
-  </obsolete>
-<!-- Name completed by histogram_suffixes
-     name="Cras.ClientType" and
-     name="Cras.StreamType" -->
-
-  <owner>hychao@chromium.org</owner>
-  <owner>chromeos-audio@google.com</owner>
-  <summary>
-    The longest additional time CRAS(Chrome OS audio server) ever waits for a
-    stream exceeding the timeout threshold. This value is recorded per stream
-    when it gets removed and used to investigate the audio glitch/skip problem
-    on Chrome OS.
-  </summary>
-</histogram>
-
 <histogram name="Cras.UnderrunsPerDevice" units="count"
-    expires_after="2022-06-05">
+    expires_after="2022-08-07">
   <owner>yuhsuan@chromium.org</owner>
   <owner>chromeos-audio@google.com</owner>
   <summary>

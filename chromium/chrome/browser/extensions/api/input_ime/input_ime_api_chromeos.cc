@@ -64,7 +64,6 @@ namespace FinishComposingText =
     extensions::api::input_method_private::FinishComposingText;
 
 using ::ash::input_method::InputMethodEngine;
-using ::ash::input_method::InputMethodEngineBase;
 using ::ui::IMEEngineHandlerInterface;
 
 const char kErrorEngineNotAvailable[] = "The engine is not available.";
@@ -83,7 +82,6 @@ void SetMenuItemToMenu(const input_ime::MenuItem& input,
   }
 
   if (input.style != input_ime::MENU_ITEM_STYLE_NONE) {
-    out->modified |= InputMethodEngine::MENU_ITEM_MODIFIED_STYLE;
     out->style =
         static_cast<ash::input_method::InputMethodManager::MenuItemStyle>(
             input.style);
@@ -228,7 +226,7 @@ InputMethodEngine* GetEngineIfActive(Profile* profile,
 }
 
 class ImeObserverChromeOS
-    : public ash::input_method::InputMethodEngineBase::Observer {
+    : public ash::input_method::InputMethodEngineObserver {
  public:
   ImeObserverChromeOS(const std::string& extension_id, Profile* profile)
       : extension_id_(extension_id), profile_(profile) {}
@@ -238,25 +236,24 @@ class ImeObserverChromeOS
 
   ~ImeObserverChromeOS() override = default;
 
-  void OnCandidateClicked(
-      const std::string& component_id,
-      int candidate_id,
-      InputMethodEngineBase::MouseButtonEvent button) override {
+  void OnCandidateClicked(const std::string& component_id,
+                          int candidate_id,
+                          ash::input_method::MouseButtonEvent button) override {
     if (extension_id_.empty() ||
         !HasListener(input_ime::OnCandidateClicked::kEventName))
       return;
 
     input_ime::MouseButton button_enum = input_ime::MOUSE_BUTTON_NONE;
     switch (button) {
-      case InputMethodEngineBase::MOUSE_BUTTON_MIDDLE:
+      case ash::input_method::MOUSE_BUTTON_MIDDLE:
         button_enum = input_ime::MOUSE_BUTTON_MIDDLE;
         break;
 
-      case InputMethodEngineBase::MOUSE_BUTTON_RIGHT:
+      case ash::input_method::MOUSE_BUTTON_RIGHT:
         button_enum = input_ime::MOUSE_BUTTON_RIGHT;
         break;
 
-      case InputMethodEngineBase::MOUSE_BUTTON_LEFT:
+      case ash::input_method::MOUSE_BUTTON_LEFT:
       // Default to left.
       default:
         button_enum = input_ime::MOUSE_BUTTON_LEFT;
@@ -908,7 +905,7 @@ bool InputImeEventRouter::RegisterImeExtension(
     is_login = active_state->GetUIStyle() ==
                ash::input_method::InputMethodManager::UIStyle::kLogin;
   } else {
-    is_login = chromeos::ProfileHelper::IsSigninProfile(profile);
+    is_login = ash::ProfileHelper::IsSigninProfile(profile);
   }
 
   if (is_login && profile->HasPrimaryOTRProfile()) {
@@ -1223,7 +1220,7 @@ ExtensionFunction::ResponseAction InputImeSetMenuItemsFunction::Run() {
     SetMenuItemToMenu(item_in, &items_out.back());
   }
 
-  if (!engine->SetMenuItems(items_out, &error)) {
+  if (!engine->UpdateMenuItems(items_out, &error)) {
     return RespondNow(Error(InformativeError(
         base::StringPrintf("%s %s", kErrorSetMenuItemsFail, error.c_str()),
         static_function_name())));
@@ -1330,10 +1327,10 @@ InputMethodPrivateGetCompositionBoundsFunction::Run() {
   auto bounds_list = std::make_unique<base::ListValue>();
   for (const auto& bounds : engine->composition_bounds()) {
     auto bounds_value = std::make_unique<base::DictionaryValue>();
-    bounds_value->SetInteger("x", bounds.x());
-    bounds_value->SetInteger("y", bounds.y());
-    bounds_value->SetInteger("w", bounds.width());
-    bounds_value->SetInteger("h", bounds.height());
+    bounds_value->SetIntKey("x", bounds.x());
+    bounds_value->SetIntKey("y", bounds.y());
+    bounds_value->SetIntKey("w", bounds.width());
+    bounds_value->SetIntKey("h", bounds.height());
     bounds_list->Append(std::move(bounds_value));
   }
 

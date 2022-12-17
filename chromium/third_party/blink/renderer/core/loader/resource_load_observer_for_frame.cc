@@ -73,9 +73,9 @@ void RecordAddressSpaceFeature(LocalFrame* client_frame,
   }
 
   LocalDOMWindow* window = client_frame->DomWindow();
-  absl::optional<WebFeature> feature =
-      AddressSpaceFeature(FetchType::kSubresource, window->AddressSpace(),
-                          window->IsSecureContext(), response.AddressSpace());
+  absl::optional<WebFeature> feature = AddressSpaceFeature(
+      FetchType::kSubresource, response.ClientAddressSpace(),
+      window->IsSecureContext(), response.AddressSpace());
   if (!feature.has_value()) {
     return;
   }
@@ -182,16 +182,6 @@ void ResourceLoadObserverForFrame::DidReceiveResponse(
     subresource_filter->ReportAdRequestId(response.RequestId());
 
   DCHECK(frame_client);
-  if (response.GetCTPolicyCompliance() ==
-      ResourceResponse::kCTPolicyDoesNotComply) {
-    CountUsage(
-        frame->IsMainFrame()
-            ? WebFeature::
-                  kCertificateTransparencyNonCompliantSubresourceInMainFrame
-            : WebFeature::
-                  kCertificateTransparencyNonCompliantResourceInSubframe);
-  }
-
   if (response_source == ResponseSource::kFromMemoryCache) {
     ResourceRequest resource_request(resource->GetResourceRequest());
 

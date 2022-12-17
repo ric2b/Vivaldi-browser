@@ -186,10 +186,8 @@ RenderFrameProxyHost* Portal::CreateProxyAndAttachPortal() {
     }
   }
 
-  FrameTreeNode* frame_tree_node =
-      portal_contents_->GetMainFrame()->frame_tree_node();
   RenderFrameProxyHost* proxy_host =
-      frame_tree_node->render_manager()->GetProxyToOuterDelegate();
+      portal_contents_->GetMainFrame()->GetProxyToOuterDelegate();
   proxy_host->SetRenderFrameProxyCreated(true);
   portal_contents_->ReattachToOuterWebContentsFrame();
 
@@ -261,7 +259,7 @@ void Portal::Navigate(const GURL& url,
   const blink::LocalFrameToken frame_token =
       owner_render_frame_host_->GetFrameToken();
   portal_root->navigator().NavigateFromFrameProxy(
-      portal_frame, url, &frame_token,
+      portal_frame, out_validated_url, &frame_token,
       owner_render_frame_host_->GetProcess()->GetID(),
       owner_render_frame_host_->GetLastCommittedOrigin(),
       owner_render_frame_host_->GetSiteInstance(),
@@ -626,6 +624,11 @@ void Portal::ActivateImpl(blink::TransferableMessage data,
 
   devtools_instrumentation::PortalActivated(outer_contents->GetMainFrame());
   successor_contents_raw->set_portal(nullptr);
+
+  // It's important we call this before destroying the outer contents'
+  // RenderWidgetHostView, otherwise the dialog may not be cleaned up correctly.
+  // See crbug.com/1292261 for more details.
+  outer_contents->CancelActiveAndPendingDialogs();
 
   std::unique_ptr<WebContents> predecessor_web_contents =
       delegate->ActivatePortalWebContents(outer_contents,

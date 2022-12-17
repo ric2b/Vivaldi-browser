@@ -14,7 +14,7 @@
 #include "ash/rotator/screen_rotation_animator_observer.h"
 #include "base/scoped_observation.h"
 #include "base/timer/timer.h"
-#include "chrome/browser/chromeos/printing/cups_printers_manager.h"
+#include "chrome/browser/ash/printing/cups_printers_manager.h"
 #include "chrome/browser/web_applications/web_app_id.h"
 #include "chromeos/services/machine_learning/public/mojom/machine_learning_service.mojom-forward.h"
 #include "chromeos/services/machine_learning/public/mojom/model.mojom.h"
@@ -251,6 +251,25 @@ class AutotestPrivateGetArcStateFunction : public ExtensionFunction {
   ResponseAction Run() override;
 };
 
+class AutotestPrivateStartArcFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.startArc",
+                             AUTOTESTPRIVATE_STARTARC)
+
+ private:
+  ~AutotestPrivateStartArcFunction() override;
+  ResponseAction Run() override;
+};
+
+class AutotestPrivateStopArcFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.stopArc", AUTOTESTPRIVATE_STOPARC)
+
+ private:
+  ~AutotestPrivateStopArcFunction() override;
+  ResponseAction Run() override;
+};
+
 class AutotestPrivateSetPlayStoreEnabledFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("autotestPrivate.setPlayStoreEnabled",
@@ -466,6 +485,16 @@ class AutotestPrivateImportCrostiniFunction : public ExtensionFunction {
   void CrostiniImported(crostini::CrostiniResult);
 };
 
+class AutotestPrivateCouldAllowCrostiniFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.couldAllowCrostini",
+                             AUTOTESTPRIVATE_COULDALLOWCROSTINI)
+
+ private:
+  ~AutotestPrivateCouldAllowCrostiniFunction() override;
+  ResponseAction Run() override;
+};
+
 class AutotestPrivateSetPluginVMPolicyFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("autotestPrivate.setPluginVMPolicy",
@@ -544,7 +573,7 @@ class AutotestPrivateTakeScreenshotForDisplayFunction
 
 class AutotestPrivateGetPrinterListFunction
     : public ExtensionFunction,
-      public chromeos::CupsPrintersManager::Observer {
+      public ash::CupsPrintersManager::Observer {
  public:
   DECLARE_EXTENSION_FUNCTION("autotestPrivate.getPrinterList",
                              AUTOTESTPRIVATE_GETPRINTERLIST)
@@ -558,11 +587,11 @@ class AutotestPrivateGetPrinterListFunction
   void RespondWithTimeoutError();
   void RespondWithSuccess();
 
-  // chromeos::CupsPrintersManager::Observer
+  // ash::CupsPrintersManager::Observer
   void OnEnterprisePrintersInitialized() override;
 
   std::unique_ptr<base::Value> results_;
-  std::unique_ptr<chromeos::CupsPrintersManager> printers_manager_;
+  std::unique_ptr<ash::CupsPrintersManager> printers_manager_;
   base::OneShotTimer timeout_timer_;
 };
 
@@ -940,6 +969,8 @@ class AutotestPrivateSetOverviewModeStateFunction : public ExtensionFunction {
   void OnOverviewModeChanged(bool for_start, bool finished);
 };
 
+// TODO(crbug.com/1275410): Replace this by introducing
+// autotestPrivate.setVirtualKeyboardVisibilityIfEnabled().
 class AutotestPrivateShowVirtualKeyboardIfEnabledFunction
     : public ExtensionFunction {
  public:
@@ -1091,7 +1122,7 @@ class AutotestPrivateInstallPWAForCurrentURLFunction
 
  private:
   class PWABannerObserver;
-  class PWARegistrarObserver;
+  class PWAInstallManagerObserver;
   ~AutotestPrivateInstallPWAForCurrentURLFunction() override;
   ResponseAction Run() override;
 
@@ -1103,7 +1134,7 @@ class AutotestPrivateInstallPWAForCurrentURLFunction
   void PWATimeout();
 
   std::unique_ptr<PWABannerObserver> banner_observer_;
-  std::unique_ptr<PWARegistrarObserver> registrar_observer_;
+  std::unique_ptr<PWAInstallManagerObserver> install_mananger_observer_;
   base::OneShotTimer timeout_timer_;
 };
 

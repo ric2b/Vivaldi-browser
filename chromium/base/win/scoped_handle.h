@@ -9,7 +9,6 @@
 
 #include "base/base_export.h"
 #include "base/check_op.h"
-#include "base/compiler_specific.h"
 #include "base/dcheck_is_on.h"
 #include "base/gtest_prod_util.h"
 #include "base/location.h"
@@ -57,7 +56,10 @@ class GenericScopedHandle {
 
   ~GenericScopedHandle() { Close(); }
 
-  bool IsValid() const { return Traits::IsHandleValid(handle_); }
+  bool is_valid() const { return Traits::IsHandleValid(handle_); }
+
+  // TODO(crbug.com/1291793): Migrate callers to is_valid().
+  bool IsValid() const { return is_valid(); }
 
   GenericScopedHandle& operator=(GenericScopedHandle&& other) {
     DCHECK_NE(this, &other);
@@ -80,10 +82,13 @@ class GenericScopedHandle {
     }
   }
 
-  Handle Get() const { return handle_; }
+  Handle get() const { return handle_; }
+
+  // TODO(crbug.com/1291793): Migrate callers to get().
+  Handle Get() const { return get(); }
 
   // Transfers ownership away from this object.
-  Handle Take() WARN_UNUSED_RESULT {
+  [[nodiscard]] Handle release() {
     Handle temp = handle_;
     handle_ = Traits::NullHandle();
     if (Traits::IsHandleValid(temp)) {
@@ -92,6 +97,9 @@ class GenericScopedHandle {
     }
     return temp;
   }
+
+  // TODO(crbug.com/1291793): Migrate callers to release().
+  [[nodiscard]] Handle Take() { return release(); }
 
   // Explicitly closes the owned handle.
   void Close() {

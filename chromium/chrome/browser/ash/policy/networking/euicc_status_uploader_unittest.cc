@@ -9,11 +9,11 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/values_test_util.h"
 #include "chrome/test/base/testing_browser_process.h"
+#include "chromeos/components/onc/onc_utils.h"
 #include "chromeos/dbus/shill/shill_manager_client.h"
 #include "chromeos/network/managed_network_configuration_handler.h"
 #include "chromeos/network/network_handler_test_helper.h"
 #include "chromeos/network/network_ui_data.h"
-#include "chromeos/network/onc/network_onc_utils.h"
 #include "components/policy/core/common/cloud/mock_cloud_policy_client.h"
 #include "components/prefs/testing_pref_service.h"
 #include "content/public/test/browser_task_environment.h"
@@ -394,6 +394,30 @@ TEST_F(EuiccStatusUploaderTest, ResetRequest) {
 
   ValidateUploadedStatus(kEuiccStatusAfterReset,
                          /*clear_profile_list=*/true);
+}
+
+TEST_F(EuiccStatusUploaderTest, UnexpectedNetworkHandlerShutdown) {
+  SetUpDeviceProfiles(kSetupOneEsimProfile);
+  // NetworkHandler has not been initialized.
+  auto status_uploader = CreateStatusUploader();
+
+  // Initial Request
+  EXPECT_EQ(GetRequestCount(), 1);
+
+  // Requests made normally.
+  UpdateUploader(status_uploader.get());
+  EXPECT_EQ(GetRequestCount(), 2);
+
+  // NetworkHandler::Shutdown() has already been called before
+  // EuiccStatusUploader is deleted
+  chromeos::NetworkHandler::Shutdown();
+
+  // No requests made as NetworkHandler is not available.
+  UpdateUploader(status_uploader.get());
+  EXPECT_EQ(GetRequestCount(), 2);
+
+  // Need to reinitialize before exiting test.
+  chromeos::NetworkHandler::Initialize();
 }
 
 }  // namespace policy

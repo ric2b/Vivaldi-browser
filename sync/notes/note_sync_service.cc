@@ -5,7 +5,6 @@
 #include "sync/notes/note_sync_service.h"
 
 #include "base/feature_list.h"
-#include "components/sync/driver/sync_driver_switches.h"
 #include "sync/notes/note_model_type_processor.h"
 
 namespace sync_notes {

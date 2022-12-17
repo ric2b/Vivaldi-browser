@@ -16,8 +16,7 @@ namespace vivaldi {
 class VivaldiTranslateAgent : public translate::TranslateAgent {
  public:
   VivaldiTranslateAgent(content::RenderFrame* render_frame,
-                        int world_id,
-                        const std::string& extension_scheme);
+                        int world_id);
   ~VivaldiTranslateAgent() override;
   VivaldiTranslateAgent(const VivaldiTranslateAgent&) = delete;
   VivaldiTranslateAgent& operator=(const VivaldiTranslateAgent&) = delete;

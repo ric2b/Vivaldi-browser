@@ -102,6 +102,7 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
   const std::vector<std::string>& GetConsoleMessages() override;
   int GetHeavyAdIssueCount(HeavyAdIssueType type) override;
   void SimulateManifestURLUpdate(const GURL& manifest_url) override;
+  TestRenderFrameHost* AppendFencedFrame() override;
 
   void SendNavigate(int nav_entry_id,
                     bool did_create_new_entry,
@@ -112,6 +113,9 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
       mojom::DidCommitProvisionalLoadParamsPtr params,
       mojom::DidCommitProvisionalLoadInterfaceParamsPtr interface_params,
       bool was_within_same_document);
+  void SendDidCommitSameDocumentNavigation(
+      mojom::DidCommitProvisionalLoadParamsPtr params,
+      blink::mojom::SameDocumentNavigationType same_document_navigation_type);
 
   // With the current navigation logic this method is a no-op.
   // Simulates a renderer-initiated navigation to |url| starting in the
@@ -134,6 +138,11 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
 
   void DidEnforceInsecureRequestPolicy(
       blink::mojom::InsecureRequestPolicy policy);
+
+  // Returns the number of FedCM issues sent to DevTools with the given
+  // FederatedAuthRequestResult.
+  int GetFederatedAuthRequestIssueCount(
+      blink::mojom::FederatedAuthRequestResult result);
 
   // If set, navigations will appear to have cleared the history list in the
   // RenderFrame (DidCommitProvisionalLoadParams::history_list_was_cleared).
@@ -287,6 +296,11 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
   int heavy_ad_issue_network_count_ = 0;
   int heavy_ad_issue_cpu_total_count_ = 0;
   int heavy_ad_issue_cpu_peak_count_ = 0;
+
+  // Keeps a count of federated authentication request issues sent to
+  // ReportInspectorIssue.
+  std::unordered_map<blink::mojom::FederatedAuthRequestResult, int>
+      federated_auth_counts_;
 
   TestRenderFrameHostCreationObserver child_creation_observer_;
 

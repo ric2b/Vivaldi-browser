@@ -27,6 +27,7 @@
 #include "components/infobars/core/infobar.h"
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/password_manager/core/browser/password_generation_frame_helper.h"
+#include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/security_state/ios/security_state_utils.h"
 #include "components/sync/driver/sync_service.h"
 #include "components/translate/core/browser/translate_manager.h"
@@ -380,15 +381,20 @@ bool ChromeAutofillClientIOS::IsAutocompleteEnabled() {
   return prefs::IsAutocompleteEnabled(GetPrefs());
 }
 
+bool ChromeAutofillClientIOS::IsPasswordManagerEnabled() {
+  return GetPrefs()->GetBoolean(
+      password_manager::prefs::kCredentialsEnableService);
+}
+
 void ChromeAutofillClientIOS::PropagateAutofillPredictions(
     content::RenderFrameHost* rfh,
     const std::vector<FormStructure*>& forms) {
-  password_manager_->ProcessAutofillPredictions(/*driver=*/nullptr, forms);
-  auto* generationHelper =
-      PasswordTabHelper::FromWebState(web_state_)->GetGenerationHelper();
-  if (generationHelper) {
-    generationHelper->ProcessPasswordRequirements(forms);
+  if (!PasswordTabHelper::FromWebState(web_state_)) {
+    return;
   }
+  password_manager_->ProcessAutofillPredictions(
+      PasswordTabHelper::FromWebState(web_state_)->GetPasswordManagerDriver(),
+      forms);
 }
 
 void ChromeAutofillClientIOS::DidFillOrPreviewField(

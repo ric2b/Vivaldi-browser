@@ -7,6 +7,12 @@ vivaldi_compiler_configs = [
 
 default_compiler_configs += vivaldi_compiler_configs
 
+default_shared_library_configs += vivaldi_compiler_configs
+
+default_executable_configs += vivaldi_compiler_configs
+
+default_component_configs += vivaldi_compiler_configs
+
 # Static libraries and source sets use only the compiler ones.
 
 set_defaults("static_library") {
@@ -17,13 +23,10 @@ set_defaults("source_set") {
   configs = default_compiler_configs
 }
 
-default_executable_configs += vivaldi_compiler_configs
-
 set_defaults("executable") {
   configs = default_executable_configs
 }
 
-default_shared_library_configs += vivaldi_compiler_configs
 set_defaults("shared_library") {
   configs = default_shared_library_configs
 }
@@ -38,12 +41,5 @@ set_defaults("loadable_module") {
 }
 
 set_defaults("component") {
-  if (is_component_build) {
-    configs = default_shared_library_configs
-    if (is_android) {
-      configs -= [ "//build/config/android:hide_all_but_jni_onload" ]
-    }
-  } else {
-    configs = default_compiler_configs
-  }
+  configs = default_component_configs
 }

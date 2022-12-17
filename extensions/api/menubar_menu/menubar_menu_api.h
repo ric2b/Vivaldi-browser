@@ -35,22 +35,21 @@ class MenubarMenuAPI : public BrowserContextKeyedAPI {
   static BrowserContextKeyedAPIFactory<MenubarMenuAPI>* GetFactoryInstance();
 
   // Functions that will send events to JS.
-  static void SendActivated(content::BrowserContext* browser_context,
-                            int id,
-                            int event_state);
   static void SendAction(content::BrowserContext* browser_context,
-                         int id,
+                         int command,
                          int event_state);
   static void SendOpenBookmark(content::BrowserContext* browser_context,
+                               int window_id,
                                int64_t bookmark_id,
                                int event_state);
   static void SendBookmarkAction(content::BrowserContext* browser_context,
+                                 int window_id,
                                  int64_t bookmark_id,
                                  int menu_id);
-  static void SendOpen(content::BrowserContext* browser_context, int id);
+  static void SendOpen(content::BrowserContext* browser_context, int menu_id);
   static void SendClose(content::BrowserContext* browser_context);
   static void SendHover(content::BrowserContext* browser_context,
-                        const std::string& url);
+                        int window_id, const std::string& url);
   static void SendError(content::BrowserContext* browser_context,
                         const std::string& text);
 

@@ -90,13 +90,13 @@ static void ClearPartnerId(BookmarkModel* model,
     Profile* profile = Profile::FromBrowserContext(browser_context);
     const base::Value* list_value =
         profile->GetPrefs()->GetList(vivaldiprefs::kBookmarksDeletedPartners);
-    base::Value::ListStorage updated(list_value->Clone().TakeList());
-    base::Value::ConstListView list_view = list_value->GetList();
+    const base::Value::List& list = list_value->GetList();
+    base::Value::List updated(list.Clone());
     for (const base::GUID& partner_id : partners) {
       base::Value v(partner_id.AsLowercaseString());
-      auto it = std::find(list_view.begin(), list_view.end(), v);
-      if (it == list_view.end()) {
-        updated.push_back(std::move(v));
+      auto it = std::find(list.begin(), list.end(), v);
+      if (it == list.end()) {
+        updated.Append(std::move(v));
       }
     }
     profile->GetPrefs()->Set(vivaldiprefs::kBookmarksDeletedPartners,

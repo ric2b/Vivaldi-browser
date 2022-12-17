@@ -417,8 +417,9 @@ bool ContextMenuController::GetAcceleratorForCommandId(
 
 void ContextMenuController::VivaldiCommandIdHighlighted(int command_id) {
   auto it = id_to_url_map_.find(command_id);
-  extensions::MenubarMenuAPI::SendHover(
-      GetProfile(), it != id_to_url_map_.end() ? *it->second : "");
+  extensions::MenubarMenuAPI::SendHover(GetProfile(),
+      params_->properties.window_id,
+      it != id_to_url_map_.end() ? *it->second : "");
 }
 
 void ContextMenuController::ExecuteCommand(int command_id, int event_flags) {

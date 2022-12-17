@@ -995,7 +995,7 @@ IN_PROC_BROWSER_TEST_F(LocalCardMigrationBrowserTestForStatusChip,
 }
 
 // TODO(crbug.com/999510): Crashes flakily on Linux.
-#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 #define MAYBE_ClickingOmniboxIconReshowsBubble \
   DISABLED_ClickingOmniboxIconReshowsBubble
 #else
@@ -1032,7 +1032,7 @@ IN_PROC_BROWSER_TEST_F(LocalCardMigrationBrowserTestForStatusChip,
           Bucket(AutofillMetrics::LOCAL_CARD_MIGRATION_BUBBLE_SHOWN, 1)));
 }
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 // TODO(crbug.com/823543): Widget activation doesn't work on Mac.
 #define MAYBE_ActivateFirstInactiveBubbleForAccessibility \
   DISABLED_ActivateFirstInactiveBubbleForAccessibility
@@ -1083,9 +1083,9 @@ IN_PROC_BROWSER_TEST_F(LocalCardMigrationBrowserTestForStatusChip,
   EXPECT_TRUE(GetLocalCardMigrationIconView()->GetVisible());
   EXPECT_TRUE(GetLocalCardMigrationOfferBubbleViews()->GetVisible());
 
-  AddTabAtIndexToBrowser(GetBrowser(0), 1, GURL("http://example.com/"),
-                         ui::PAGE_TRANSITION_TYPED,
-                         /*check_navigation_success=*/true);
+  ASSERT_TRUE(AddTabAtIndexToBrowser(GetBrowser(0), 1, GURL("about:blank"),
+                                     ui::PAGE_TRANSITION_TYPED,
+                                     /*check_navigation_success=*/true));
   TabStripModel* tab_model = GetBrowser(0)->tab_strip_model();
   tab_model->ActivateTabAt(1, {TabStripModel::GestureType::kOther});
   WaitForAnimationToComplete();

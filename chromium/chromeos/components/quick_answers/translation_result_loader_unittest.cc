@@ -20,7 +20,6 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-namespace ash {
 namespace quick_answers {
 namespace {
 
@@ -43,7 +42,7 @@ constexpr char kTestTranslationTitle[] = "test · inglés";
 constexpr char kTestTranslationResult[] = "prueba";
 
 const auto kTestTranslationIntent =
-    IntentInfo("test", IntentType::kTranslation, "en", "es");
+    IntentInfo("test", IntentType::kTranslation, "es", "en");
 
 }  // namespace
 
@@ -129,4 +128,3 @@ TEST_F(TranslationResultLoaderTest, EmptyResponse) {
 }
 
 }  // namespace quick_answers
-}  // namespace ash

@@ -21,6 +21,7 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/no_destructor.h"
 #include "base/rand_util.h"
 #include "base/stl_util.h"
 #include "base/strings/strcat.h"
@@ -48,9 +49,7 @@
 #include "content/browser/origin_agent_cluster_isolation_state.h"
 #include "content/browser/prerender/prerender_host_registry.h"
 #include "content/browser/process_lock.h"
-#include "content/browser/renderer_host/commit_deferring_condition.h"
 #include "content/browser/renderer_host/cookie_utils.h"
-#include "content/browser/renderer_host/cross_origin_embedder_policy.h"
 #include "content/browser/renderer_host/debug_urls.h"
 #include "content/browser/renderer_host/frame_tree.h"
 #include "content/browser/renderer_host/frame_tree_node.h"
@@ -88,6 +87,7 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/client_hints_controller_delegate.h"
+#include "content/public/browser/commit_deferring_condition.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/global_request_id.h"
 #include "content/public/browser/navigation_controller.h"
@@ -96,6 +96,7 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/site_isolation_policy.h"
 #include "content/public/browser/storage_partition.h"
+#include "content/public/browser/weak_document_ptr.h"
 #include "content/public/common/child_process_host.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
@@ -149,13 +150,14 @@
 #include "third_party/blink/public/mojom/navigation/navigation_params.mojom.h"
 #include "third_party/blink/public/mojom/navigation/prefetched_signed_exchange_info.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_provider.mojom.h"
+#include "third_party/blink/public/mojom/storage_key/ancestor_chain_bit.mojom.h"
 #include "third_party/blink/public/mojom/web_feature/web_feature.mojom.h"
 #include "third_party/blink/public/platform/resource_request_blocked_reason.h"
 #include "ui/compositor/compositor_lock.h"
 #include "url/origin.h"
 #include "url/url_constants.h"
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 #include "ui/android/window_android.h"
 #include "ui/android/window_android_compositor.h"
 #endif
@@ -314,9 +316,18 @@ bool NeedsHTTPOrigin(net::HttpRequestHeaders* headers,
   return true;
 }
 
+bool DoesHeaderContainClientHint(
+    const net::HttpRequestHeaders& headers,
+    const network::mojom::WebClientHintsType hint) {
+  std::string header = network::GetClientHintToNameMap().at(hint);
+  std::string value;
+  return headers.GetHeader(header, &value) && value == "?1";
+}
+
 // Computes the value that should be set for the User-Agent header, based on the
-// values of relevant headers like Sec-CH-UA-Reduced.  If `user_agent_override`
-// is non-empty, `user_agent_override` is returned as the header value.
+// values of relevant headers like Sec-CH-UA-Reduced or Sec-CH-UA-Full.  If
+// `user_agent_override` is non-empty, `user_agent_override` is returned as the
+// header value.
 std::string ComputeUserAgentValue(const net::HttpRequestHeaders& headers,
                                   const std::string& user_agent_override,
                                   content::BrowserContext* context) {
@@ -326,13 +337,23 @@ std::string ComputeUserAgentValue(const net::HttpRequestHeaders& headers,
     return user_agent_override;
   }
 
+  // If Sec-CH-UA-Full is set on the headers, it means that the token for the
+  // SendFullUserAgentAfterReduction Origin Trial has been validated and we
+  // should send a reduced UA string on the request.
+  const bool full = DoesHeaderContainClientHint(
+      headers, network::mojom::WebClientHintsType::kFullUserAgent);
+
+  if (full) {
+    base::UmaHistogramEnumeration("Navigation.UserAgentStringType",
+                                  UserAgentStringType::kFullVersion);
+    return GetContentClient()->browser()->GetFullUserAgent();
+  }
+
   // If Sec-CH-UA-Reduced is set on the headers, it means that the token for the
   // UserAgentReduction Origin Trial has been validated and we should send a
   // reduced UA string on the request.
-  std::string header = network::GetClientHintToNameMap().at(
-      network::mojom::WebClientHintsType::kUAReduced);
-  std::string value;
-  const bool reduced = headers.GetHeader(header, &value) && value == "?1";
+  const bool reduced = DoesHeaderContainClientHint(
+      headers, network::mojom::WebClientHintsType::kUAReduced);
   base::UmaHistogramEnumeration("Navigation.UserAgentStringType",
                                 reduced ? UserAgentStringType::kReducedVersion
                                         : UserAgentStringType::kFullVersion);
@@ -669,6 +690,12 @@ base::debug::CrashKeyString* GetNavigationRequestInitiatorCrashKey() {
   return crash_key;
 }
 
+base::debug::CrashKeyString* GetNavigationRequestIsSameDocumentCrashKey() {
+  static auto* crash_key = base::debug::AllocateCrashKeyString(
+      "navigation_request_is_same_document", base::debug::CrashKeySize::Size64);
+  return crash_key;
+}
+
 // Start a new nested async event with the given name.
 void EnterChildTraceEvent(const char* name, NavigationRequest* request) {
   // Tracing no longer outputs the end event name, so we can simply pass an
@@ -697,7 +724,7 @@ network::mojom::RequestDestination GetDestinationFromFrameTreeNode(
     return network::mojom::RequestDestination::kFencedframe;
 
   if (frame_tree_node->IsMainFrame()) {
-    if (frame_tree_node->current_frame_host()->InsidePortal()) {
+    if (frame_tree_node->frame_tree()->IsPortal()) {
       return network::mojom::RequestDestination::kIframe;
     }
     return network::mojom::RequestDestination::kDocument;
@@ -790,69 +817,6 @@ url::Origin GetOriginForURLLoaderFactoryUnchecked(
       common_params.initiator_origin.value_or(url::Origin()));
 }
 
-// Special chrome schemes cannot directly be categorized in public/private/local
-// address spaces using information from the network or the PolicyContainer. We
-// have to classify them manually. In its default state an unhandled scheme will
-// have an IPAddressSpace of kUnknown, which is equivalent to public.
-// This means a couple of things:
-// - They cannot embed anything private or local without being secure contexts
-//   and triggering a CORS preflight.
-// - Private Network Access does not prevent them being embedded by less private
-//   content.
-// - It pollutes metrics since kUnknown could also mean a missed edge case.
-// To address these issues we list here a number of schemes that should be
-// considered local.
-// TODO(titouan): It might be better to have these schemes (and in general
-// other schemes such as data: or blob:) handled directly by the URLLoaders.
-// Investigate on whether this is worth doing.
-network::mojom::IPAddressSpace IPAddressSpaceForSpecialScheme(const GURL& url) {
-  // This only handles schemes that are known to the content/ layer.
-  // List here: content/public/common/url_constants.cc.
-  const char* special_content_schemes[] = {
-    kChromeDevToolsScheme,
-    kChromeUIScheme,
-    kChromeUIUntrustedScheme,
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-    kExternalFileScheme,
-#endif
-  };
-
-  for (auto* scheme : special_content_schemes) {
-    if (url.SchemeIs(scheme))
-      return network::mojom::IPAddressSpace::kLocal;
-  }
-
-  // Some of these schemes are only known to the embedder. Query the embedder
-  // for these.
-  ContentBrowserClient* client = GetContentClient()->browser();
-  return client->DetermineAddressSpaceFromURL(url);
-}
-
-network::mojom::IPAddressSpace CalculateIPAddressSpace(
-    const GURL& url,
-    network::mojom::URLResponseHead* response_head) {
-  // Determine the IPAddressSpace, based on the IP address and the response
-  // headers received.
-  absl::optional<network::CalculateClientAddressSpaceParams> params =
-      absl::nullopt;
-  if (response_head) {
-    params.emplace(response_head->url_list_via_service_worker,
-                   response_head->parsed_headers,
-                   response_head->remote_endpoint);
-  }
-  network::mojom::IPAddressSpace computed_ip_address_space =
-      network::CalculateClientAddressSpace(url, params);
-
-  if (computed_ip_address_space != network::mojom::IPAddressSpace::kUnknown) {
-    return computed_ip_address_space;
-  }
-
-  // Some navigation aren't loaded from the network. An IPAddressSpace can still
-  // be attributed for some, whose scheme are known from the content/ layer. For
-  // instance chrome: or devtools:
-  return IPAddressSpaceForSpecialScheme(url);
-}
-
 // Returns true if the parent's COEP policy `parent_coep` should block a child
 // embedded in an <iframe> loaded with `child_coep` policy. The `anonymous`
 // parameter reflects whether the child will be loaded as an anonymous document.
@@ -882,6 +846,11 @@ int EstimateHistoryOffset(NavigationController& controller,
 
 bool IsDocumentToCommitAnonymous(FrameTreeNode* frame,
                                  bool is_synchronous_about_blank_navigation) {
+  // FencedFrame do not propagate the anonymous bit deeper.
+  // In particular, it means their future response will have to adhere to COEP.
+  if (frame->IsFencedFrameRoot())
+    return false;
+
   RenderFrameHostImpl* current_document = frame->current_frame_host();
   RenderFrameHostImpl* parent_document = frame->parent();
 
@@ -933,26 +902,38 @@ bool IsOptedInFencedFrame(const net::HttpResponseHeaders& http_headers) {
 }
 
 // If the response does not contain an Accept-CH header, then remove the
-// Sec-CH-UA-Reduced client hint from the Accept-CH cache, if it exists, for the
-// response origin.  The `client_hints` vector also has kUaReduced removed from
-// it if the Accept-CH response header doesn't exist.
-void RemoveUaReducedFromAcceptCH(
+// Sec-CH-UA-Reduced, Sec-CH-UA-Full, or Sec-CH-Partitioned-Cookies, client
+// hint from the Accept-CH cache, if it exists, for the response origin.  The
+// `client_hints` vector also has kUaReduced or kFullUserAgent removed from it
+// if the Accept-CH response header doesn't exist.
+void RemoveOriginTrialHintsFromAcceptCH(
     const GURL& url,
     ClientHintsControllerDelegate* delegate,
     const network::mojom::URLResponseHead* response,
     std::vector<network::mojom::WebClientHintsType>& client_hints) {
-  if (response && !response->parsed_headers->accept_ch &&
-      base::Contains(client_hints,
-                     network::mojom::WebClientHintsType::kUAReduced)) {
-    // For Chrome to continue to send Sec-CH-UA-Reduced, the server must
-    // continue replying with:
+  if (response && !response->parsed_headers->accept_ch) {
+    // For Chrome to continue to send Sec-CH-UA-Reduced, Sec-CH-UA-Full, or
+    // Sec-CH-Partitioned-Cookies, the server must continue replying with:
     //  - a valid Origin Trial token.
-    //  - Accept-CH header with Sec-CH-UA-Reduced as a value.
+    //  - Accept-CH header with Sec-CH-UA-Reduced, Sec-CH-UA-Full, or
+    //  Sec-CH-Partitioned-Cookies as a value.
     //
     // Here, it did not. So it gets removed from the persisted client hints
     // for the next request.
-    base::Erase(client_hints, network::mojom::WebClientHintsType::kUAReduced);
-    PersistAcceptCH(url, delegate, client_hints);
+    std::vector<network::mojom::WebClientHintsType> hints_to_remove = {
+        network::mojom::WebClientHintsType::kUAReduced,
+        network::mojom::WebClientHintsType::kFullUserAgent,
+        network::mojom::WebClientHintsType::kPartitionedCookies};
+    bool need_update_storage = false;
+    for (const auto& hint : hints_to_remove) {
+      if (base::Contains(client_hints, hint)) {
+        base::Erase(client_hints, hint);
+        need_update_storage = true;
+      }
+    }
+    if (need_update_storage) {
+      PersistAcceptCH(url, delegate, client_hints);
+    }
   }
 }
 
@@ -1139,7 +1120,7 @@ std::unique_ptr<NavigationRequest> NavigationRequest::CreateRendererInitiated(
           /*navigation_token=*/base::UnguessableToken::Create(),
           /*prefetched_signed_exchanges=*/
           std::vector<blink::mojom::PrefetchedSignedExchangeInfoPtr>(),
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
           /*data_url_as_string=*/std::string(),
 #endif
           /*is_browser_initiated=*/false,
@@ -1153,15 +1134,12 @@ std::unique_ptr<NavigationRequest> NavigationRequest::CreateRendererInitiated(
           std::vector<network::mojom::WebClientHintsType>(),
           /*is_cross_browsing_instance=*/false,
           /*old_page_info=*/nullptr, /*http_response_code=*/-1,
-          std::vector<blink::mojom::
-                          AppHistoryEntryPtr>() /* app_history_back_entries */,
-          std::vector<
-              blink::mojom::
-                  AppHistoryEntryPtr>() /* app_history_forward_entries */,
+          blink::mojom::AppHistoryEntryArrays::New(),
           /*early_hints_preloaded_resources=*/
           std::vector<GURL>(), absl::nullopt /* ad_auction_components */,
           // This timestamp will be populated when the commit IPC is sent.
-          base::TimeTicks() /* commit_sent */);
+          base::TimeTicks() /* commit_sent */, false /* anonymous */,
+          std::string() /* srcdoc_value */);
 
   // CreateRendererInitiated() should only be triggered when the navigation is
   // initiated by a frame in the same process.
@@ -1225,8 +1203,7 @@ NavigationRequest::CreateForSynchronousRendererCommit(
           is_same_document ? blink::mojom::NavigationType::SAME_DOCUMENT
                            : blink::mojom::NavigationType::DIFFERENT_DOCUMENT,
           blink::NavigationDownloadPolicy(), should_replace_current_entry,
-          GURL() /* base_url_for_data_url*/,
-          blink::PreviewsTypes::PREVIEWS_UNSPECIFIED, base::TimeTicks::Now(),
+          GURL() /* base_url_for_data_url*/, base::TimeTicks::Now(),
           method /* method */, nullptr /* post_data */,
           network::mojom::SourceLocation::New(),
           false /* started_from_context_menu */, has_transient_activation,
@@ -1266,7 +1243,7 @@ NavigationRequest::CreateForSynchronousRendererCommit(
           blink::mojom::WasActivatedOption::kUnknown,
           base::UnguessableToken::Create() /* navigation_token */,
           std::vector<blink::mojom::PrefetchedSignedExchangeInfoPtr>(),
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
           std::string() /* data_url_as_string */,
 #endif
           false /* is_browser_initiated */,
@@ -1279,16 +1256,12 @@ NavigationRequest::CreateForSynchronousRendererCommit(
           std::vector<
               network::mojom::WebClientHintsType>() /* enabled_client_hints */,
           false /* is_cross_browsing_instance */, nullptr /* old_page_info */,
-          http_response_code,
-          std::vector<blink::mojom::
-                          AppHistoryEntryPtr>() /* app_history_back_entries */,
-          std::vector<
-              blink::mojom::
-                  AppHistoryEntryPtr>() /* app_history_forward_entries */,
+          http_response_code, blink::mojom::AppHistoryEntryArrays::New(),
           std::vector<GURL>() /* early_hints_preloaded_resources */,
           absl::nullopt /* ad_auction_components */,
           // This timestamp will be populated when the commit IPC is sent.
-          base::TimeTicks() /* commit_sent */);
+          base::TimeTicks() /* commit_sent */, false /* anonymous */,
+          std::string() /* srcdoc_value */);
   blink::mojom::BeginNavigationParamsPtr begin_params =
       blink::mojom::BeginNavigationParams::New();
   std::unique_ptr<NavigationRequest> navigation_request(new NavigationRequest(
@@ -1312,7 +1285,10 @@ NavigationRequest::CreateForSynchronousRendererCommit(
   navigation_request->commit_params_->storage_key =
       blink::StorageKey::CreateWithOptionalNonce(
           origin, net::SchemefulSite(top_level_origin),
-          base::OptionalOrNullptr(nonce));
+          base::OptionalOrNullptr(nonce),
+          render_frame_host->ComputeSiteForCookies().IsNull()
+              ? blink::mojom::AncestorChainBit::kCrossSite
+              : blink::mojom::AncestorChainBit::kSameSite);
   navigation_request->web_bundle_navigation_info_ =
       std::move(web_bundle_navigation_info);
   if (subresource_web_bundle_navigation_info) {
@@ -1326,6 +1302,8 @@ NavigationRequest::CreateForSynchronousRendererCommit(
   navigation_request->coep_reporter_ = std::move(coep_reporter);
   navigation_request->isolation_info_for_subresources_ =
       isolation_info_for_subresources;
+  navigation_request->associated_site_instance_type_ =
+      AssociatedSiteInstanceType::CURRENT;
   navigation_request->StartNavigation();
   DCHECK(navigation_request->IsNavigationStarted());
 
@@ -1401,7 +1379,7 @@ NavigationRequest::NavigationRequest(
   DCHECK(!common_params_->should_replace_current_entry ||
          !NavigationTypeUtils::IsReload(common_params_->navigation_type));
   DCHECK(IsInMainFrame() || common_params_->base_url_for_data_url.is_empty());
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   DCHECK(IsInMainFrame() || commit_params_->data_url_as_string.empty());
 #endif
   // If `rfh_restored_from_back_forward_cache` was set, it should not be
@@ -1441,25 +1419,14 @@ NavigationRequest::NavigationRequest(
   if (GetInitiatorFrameToken().has_value()) {
     RenderFrameHostImpl* initiator_rfh = RenderFrameHostImpl::FromFrameToken(
         GetInitiatorProcessID(), GetInitiatorFrameToken().value());
-    if (initiator_rfh) {
-      initiator_commit_navigation_sent_counter_ =
-          initiator_rfh->commit_navigation_sent_counter();
-    }
+    if (initiator_rfh)
+      initiator_document_ = initiator_rfh->GetWeakDocumentPtr();
   }
 
   policy_container_navigation_bundle_.emplace(
       GetParentFrame(),
       initiator_frame_token_.has_value() ? &*initiator_frame_token_ : nullptr,
       frame_entry);
-
-  // Initialize the ClientSecurityState's COEP to that of the current document.
-  // It will be updated when a network response is received. For navigations
-  // that do not result in a network request, the COEP of the current document
-  // is passed to the next one.
-  // TODO(pmeuleman, clamy): Should we take into account the initiator COEP
-  // instead?
-  cross_origin_embedder_policy_ =
-      frame_tree_node_->current_frame_host()->cross_origin_embedder_policy();
 
   NavigationControllerImpl* controller = GetNavigationController();
 
@@ -1623,16 +1590,10 @@ NavigationRequest::NavigationRequest(
 
   begin_params_->headers = headers.ToString();
 
-#if defined(OS_ANDROID)
-  static constexpr base::Feature kOptimizeEarlyNavigation{
-      "OptimizeEarlyNavigation", base::FEATURE_DISABLED_BY_DEFAULT};
-  static constexpr base::FeatureParam<base::TimeDelta> kCompositorLockTimeout{
-      &kOptimizeEarlyNavigation, "compositor_lock_timeout",
-      base::Milliseconds(150)};
-
+#if BUILDFLAG(IS_ANDROID)
   RenderWidgetHostImpl* host = RenderWidgetHostImpl::From(
       frame_tree_node_->current_frame_host()->GetRenderWidgetHost());
-  if (base::FeatureList::IsEnabled(kOptimizeEarlyNavigation) &&
+  if (base::FeatureList::IsEnabled(features::kOptimizeEarlyNavigation) &&
       NeedsUrlLoader() && frame_tree_node_->IsMainFrame() && host &&
       !host->is_hidden() && host->GetView() &&
       host->GetView()->GetNativeView() &&
@@ -1643,14 +1604,12 @@ NavigationRequest::NavigationRequest(
         host->GetView()->GetNativeView()->GetWindowAndroid()->GetCompositor();
     if (compositor) {
       compositor_lock_ =
-          compositor->GetCompositorLock(kCompositorLockTimeout.Get());
+          compositor->GetCompositorLock(features::kCompositorLockTimeout.Get());
     }
   }
 #endif
 
-  static constexpr base::Feature kNavigationRequestPreconnect{
-      "NavigationRequestPreconnect", base::FEATURE_DISABLED_BY_DEFAULT};
-  if (base::FeatureList::IsEnabled(kNavigationRequestPreconnect) &&
+  if (base::FeatureList::IsEnabled(features::kNavigationRequestPreconnect) &&
       NeedsUrlLoader() && common_params_->url.SchemeIsHTTPOrHTTPS()) {
     BrowserContext* browser_context =
         frame_tree_node_->navigator().controller().GetBrowserContext();
@@ -1700,10 +1659,15 @@ NavigationRequest::~NavigationRequest() {
   // org.chromium.chrome.browser.toolbar.ToolbarManager
   pending_entry_ref_.reset();
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   if (navigation_handle_proxy_)
     navigation_handle_proxy_->DidFinish();
 #endif
+
+  if (is_deferred_on_fenced_frame_url_mapping_) {
+    CHECK(NeedFencedFrameURLMapping());
+    GetFencedFrameURLMap().RemoveObserverForURN(common_params_->url, this);
+  }
 
   if (IsNavigationStarted()) {
     GetDelegate()->DidFinishNavigation(this);
@@ -1758,8 +1722,39 @@ void NavigationRequest::BeginNavigation() {
   DCHECK(!render_frame_host_);
   ScopedCrashKeys crash_keys(*this);
 
+  if (begin_navigation_callback_for_testing_) {
+    std::move(begin_navigation_callback_for_testing_).Run();
+  }
+
   if (MaybeStartPrerenderingActivationChecks()) {
     // BeginNavigationImpl() will be called after the checks.
+    return;
+  }
+
+  MaybeAssignInvalidPrerenderFrameTreeNodeId();
+
+  bool need_url_mapping = NeedFencedFrameURLMapping();
+  frame_tree_node_->SetFencedFrameModeIfNeeded(
+      need_url_mapping ? FrameTreeNode::FencedFrameMode::kOpaque
+                       : FrameTreeNode::FencedFrameMode::kDefault);
+
+  // If this is a fenced frame with a urn:uuid, then convert it to a url before
+  // starting the navigation; otherwise, proceed directly with the navigation.
+  if (need_url_mapping) {
+    FencedFrameURLMapping& fenced_frame_urls_map = GetFencedFrameURLMap();
+
+    // If the mapping finishes synchronously, OnFencedFrameURLMappingComplete
+    // will be synchronously called and will reset
+    // `is_deferred_on_fenced_frame_url_mapping_` to false.
+    is_deferred_on_fenced_frame_url_mapping_ = true;
+
+    // OnFencedFrameURLMappingComplete() and BeginNavigationImpl() will be
+    // invoked after this.
+    fenced_frame_urls_map.ConvertFencedFrameURNToURL(common_params_->url,
+                                                     /*observer=*/this);
+    // DO NOT ADD CODE after this. The previous call to
+    // ConvertFencedFrameURNToURL may cause the destruction of the
+    // NavigationRequest.
     return;
   }
 
@@ -1837,46 +1832,53 @@ void NavigationRequest::OnPrerenderingActivationChecksComplete(
   is_potentially_prerendered_page_activation_for_testing_ = false;
   commit_deferrer_.reset();
 
+  // We can only activate top-level pages, which can never be at a fenced frame
+  // URN that needs to be mapped.
+  CHECK(!NeedFencedFrameURLMapping());
+
   BeginNavigationImpl();
-  // DO NOT ADD CODE after this. The previous call to BeginNavigationImpl may
-  // cause the destruction of the NavigationRequest.
+  // DO NOT ADD CODE after this. The previous call to
+  // BeginNavigationImpl may cause the destruction of the NavigationRequest.
 }
 
-void NavigationRequest::BeginNavigationImpl() {
-  base::ElapsedTimer timer;
-  SetState(WILL_START_NAVIGATION);
+FencedFrameURLMapping& NavigationRequest::GetFencedFrameURLMap() {
+  // `inner_frame_tree` is true for navigations inside the main frame of a
+  // nested fenced frame's `FrameTree`, and false otherwise. This is only the
+  // case for the MPArch implementation of fenced frames.
+  bool is_inner_frame_tree =
+      frame_tree_node_->frame_tree()->type() == FrameTree::Type::kFencedFrame;
+  FrameTreeNode* node_to_use =
+      is_inner_frame_tree
+          ? frame_tree_node_->render_manager()->GetOuterDelegateNode()
+          : frame_tree_node_;
 
-  bool convert_urn_uuid_urls = frame_tree_node_->IsFencedFrameRoot() ||
-                               (!frame_tree_node_->IsMainFrame() &&
-                                blink::features::IsAllowURNsInIframeEnabled());
-  // If this is a fenced frame or iframe with a urn:uuid then convert it to a
-  // url before starting the request.
-  if (convert_urn_uuid_urls &&
-      FencedFrameURLMapping::IsValidUrnUuidURL(common_params_->url)) {
-    // `inner_frame_tree` is true for navigations inside the main frame of a
-    // nested fenced frame's `FrameTree`, and false otherwise. This is only the
-    // case for the MPArch implementation of fenced frames.
-    bool is_inner_frame_tree =
-        frame_tree_node_->frame_tree()->type() == FrameTree::Type::kFencedFrame;
-    FrameTreeNode* node_to_use =
-        is_inner_frame_tree
-            ? frame_tree_node_->render_manager()->GetOuterDelegateNode()
-            : frame_tree_node_;
+  return node_to_use->current_frame_host()->GetPage().fenced_frame_urls_map();
+}
 
+bool NavigationRequest::NeedFencedFrameURLMapping() {
+  bool need_convert_urn_uuid_urls =
+      frame_tree_node_->IsFencedFrameRoot() ||
+      (!frame_tree_node_->IsMainFrame() &&
+       blink::features::IsAllowURNsInIframeEnabled());
+
+  return need_convert_urn_uuid_urls &&
+         FencedFrameURLMapping::IsValidUrnUuidURL(common_params_->url);
+}
+
+void NavigationRequest::OnFencedFrameURLMappingComplete(
+    absl::optional<GURL> mapped_url,
     absl::optional<FencedFrameURLMapping::PendingAdComponentsMap>
-        pending_ad_components_map;
-    absl::optional<GURL> mapped_url =
-        node_to_use->current_frame_host()
-            ->GetPage()
-            .fenced_frame_urls_map()
-            .ConvertFencedFrameURNToURL(common_params_->url,
-                                        pending_ad_components_map);
+        pending_ad_components_map) {
+  is_deferred_on_fenced_frame_url_mapping_ = false;
 
-    if (mapped_url) {
-      common_params_->url = *mapped_url;
-      commit_params_->original_url = *mapped_url;
-      pending_ad_components_map_ = std::move(pending_ad_components_map);
-    } else if (frame_tree_node_->IsFencedFrameRoot()) {
+  if (mapped_url) {
+    common_params_->url = mapped_url.value();
+    commit_params_->original_url = mapped_url.value();
+    // TODO(crbug/1281643): move into commit_params_->ad_auction_components
+    // directly.
+    pending_ad_components_map_ = std::move(pending_ad_components_map);
+  } else {
+    if (frame_tree_node_->IsFencedFrameRoot()) {
       StartNavigation();
       OnRequestFailedInternal(
           network::URLLoaderCompletionStatus(net::ERR_INVALID_URL),
@@ -1886,7 +1888,15 @@ void NavigationRequest::BeginNavigationImpl() {
     }  // else (for iframes) try the urn as-is to maintain existing behavior.
   }
 
-#if defined(OS_ANDROID)
+  BeginNavigationImpl();
+  // DO NOT ADD CODE after this. The previous call to BeginNavigationImpl may
+  // cause the destruction of the NavigationRequest.
+}
+
+void NavigationRequest::BeginNavigationImpl() {
+  base::ElapsedTimer timer;
+  SetState(WILL_START_NAVIGATION);
+#if BUILDFLAG(IS_ANDROID)
   base::WeakPtr<NavigationRequest> this_ptr(weak_factory_.GetWeakPtr());
   bool should_override_url_loading = false;
 
@@ -2017,6 +2027,21 @@ void NavigationRequest::BeginNavigationImpl() {
     if (IsSameDocument()) {
       render_frame_host_ = frame_tree_node_->current_frame_host();
     } else {
+      // [spec]: https://html.spec.whatwg.org/C/#process-a-navigate-response
+      // 4. if [...] the result of checking a navigation response's adherence to
+      // its embedder policy [...], then set failure to true.
+      if (!CheckResponseAdherenceToCoep(common_params_->url)) {
+        OnRequestFailedInternal(network::URLLoaderCompletionStatus(
+                                    network::mojom::BlockedByResponseReason::
+                                        kCoepFrameResourceNeedsCoepHeader),
+                                false /* skip_throttles */,
+                                absl::nullopt /* error_page_content */,
+                                false /* collapse_frame */);
+        return;
+        // DO NOT ADD CODE after this. The previous call to
+        // OnRequestFailedInternal has destroyed the NavigationRequest.
+      }
+
       // Enforce cross-origin-opener-policy for about:blank, about:srcdoc and
       // MHTML iframe, before selecting the RenderFrameHost.
       const url::Origin origin = GetOriginForURLLoaderFactoryUnchecked(this);
@@ -2042,16 +2067,6 @@ void NavigationRequest::BeginNavigationImpl() {
     return;
   }
 
-  // If the navigation is served from the back-forward cache or is activating a
-  // prerendered page, we already know its preview type from the first time we
-  // navigated into the page, so we should only set |previews_state| when the
-  // navigation is not served from one of these.
-  if (!IsPageActivation()) {
-    common_params_->previews_state =
-        GetContentClient()->browser()->DetermineAllowedPreviews(
-            common_params_->previews_state, this, common_params_->url);
-  }
-
   base::UmaHistogramTimes(
       base::StrCat({"Navigation.BeginNavigationImpl.",
                     IsInMainFrame() ? "MainFrame" : "Subframe"}),
@@ -2071,13 +2086,7 @@ void NavigationRequest::StartNavigation() {
          is_synchronous_renderer_commit_);
   FrameTreeNode* frame_tree_node = frame_tree_node_;
 
-  if (blink::features::IsPrerender2Enabled() &&
-      !prerender_frame_tree_node_id_.has_value()) {
-    // This navigation won't activate a prerendered page. Otherwise,
-    // `prerender_frame_tree_node_id_` should have already been set before this
-    // in OnPrerenderingActivationChecksComplete().
-    prerender_frame_tree_node_id_ = RenderFrameHost::kNoFrameTreeNodeId;
-  }
+  MaybeAssignInvalidPrerenderFrameTreeNodeId();
 
   // This is needed to get site URLs and assign the expected RenderProcessHost.
   // This is not always the same as |source_site_instance_|, as it only depends
@@ -2088,8 +2097,7 @@ void NavigationRequest::StartNavigation() {
   // starting SiteInstance.
   starting_site_instance_ =
       frame_tree_node->current_frame_host()->GetSiteInstance();
-  site_info_ = GetSiteInfoForCommonParamsURL(
-      starting_site_instance_->GetWebExposedIsolationInfo());
+  site_info_ = GetSiteInfoForCommonParamsURL();
 
   // Compute the redirect chain.
   // TODO(clamy): Try to simplify this and have the redirects be part of
@@ -2154,6 +2162,14 @@ void NavigationRequest::StartNavigation() {
     common_params_->should_replace_current_entry = true;
   }
 
+  DCHECK_NE(AssociatedSiteInstanceType::NONE, associated_site_instance_type_);
+  RenderFrameHostImpl* navigating_frame_host =
+      associated_site_instance_type_ == AssociatedSiteInstanceType::SPECULATIVE
+          ? frame_tree_node_->render_manager()->speculative_frame_host()
+          : frame_tree_node_->current_frame_host();
+  DCHECK(navigating_frame_host);
+  SetExpectedProcess(navigating_frame_host->GetProcess());
+
   DCHECK(!IsNavigationStarted());
   SetState(WILL_START_REQUEST);
   is_navigation_started_ = true;
@@ -2172,7 +2188,7 @@ void NavigationRequest::StartNavigation() {
         /*candidate_prerender_frame_tree_node_id=*/absl::nullopt);
   }
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   navigation_handle_proxy_ = std::make_unique<NavigationHandleProxy>(this);
 #endif
 
@@ -2232,7 +2248,7 @@ void NavigationRequest::ResetForCrossDocumentRestart() {
   // to objects owned by the handle (see the comment in the header).
   DCHECK(!loader_);
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   if (navigation_handle_proxy_)
     navigation_handle_proxy_->DidFinish();
 #endif
@@ -2254,9 +2270,8 @@ void NavigationRequest::ResetForCrossDocumentRestart() {
   SetState(NOT_STARTED);
   is_navigation_started_ = false;
   processing_navigation_throttle_ = false;
-  sandbox_flags_to_commit_.reset();
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   if (navigation_handle_proxy_)
     navigation_handle_proxy_.reset();
 #endif
@@ -2378,10 +2393,13 @@ void NavigationRequest::CreateCoepReporter(
     StoragePartition* storage_partition) {
   DCHECK(!isolation_info_for_subresources_.IsEmpty());
 
+  const PolicyContainerPolicies& policies =
+      policy_container_navigation_bundle_->FinalPolicies();
   coep_reporter_ = std::make_unique<CrossOriginEmbedderPolicyReporter>(
       static_cast<StoragePartitionImpl*>(storage_partition)->GetWeakPtr(),
-      common_params_->url, cross_origin_embedder_policy_.reporting_endpoint,
-      cross_origin_embedder_policy_.report_only_reporting_endpoint,
+      common_params_->url,
+      policies.cross_origin_embedder_policy.reporting_endpoint,
+      policies.cross_origin_embedder_policy.report_only_reporting_endpoint,
       render_frame_host_->GetFrameToken().value(),
       isolation_info_for_subresources_.network_isolation_key());
 }
@@ -2417,7 +2435,7 @@ void NavigationRequest::OnRequestRedirected(
   // a reason or another.
   RecordAddressSpaceFeature();
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   base::WeakPtr<NavigationRequest> this_ptr(weak_factory_.GetWeakPtr());
 
   bool should_override_url_loading = false;
@@ -2605,13 +2623,6 @@ void NavigationRequest::OnRequestRedirected(
         site_instance->GetBrowserContext());
   }
 
-  // Re-evaluate the PreviewsState, but do not update the URLLoader. The
-  // URLLoader PreviewsState is considered immutable after the URLLoader is
-  // created.
-  common_params_->previews_state =
-      GetContentClient()->browser()->DetermineAllowedPreviews(
-          common_params_->previews_state, this, common_params_->url);
-
   // Check what the process of the SiteInstance is. It will be passed to the
   // NavigationHandle, and informed to expect a navigation to the redirected
   // URL.
@@ -2621,8 +2632,7 @@ void NavigationRequest::OnRequestRedirected(
   RenderProcessHost* expected_process =
       site_instance->HasProcess() ? site_instance->GetProcess() : nullptr;
 
-  WillRedirectRequest(common_params_->referrer->url,
-                      ComputeWebExposedIsolationInfo(), expected_process);
+  WillRedirectRequest(common_params_->referrer->url, expected_process);
 }
 
 base::WeakPtr<NavigationRequest> NavigationRequest::GetWeakPtr() {
@@ -2708,8 +2718,15 @@ bool NavigationRequest::IsIsolationImplied() {
   if (!SiteIsolationPolicy::IsOriginAgentClusterEnabled())
     return false;
 
+  // Do not default-isolate if the feature is not enabled.
   if (!base::FeatureList::IsEnabled(
           blink::features::kOriginAgentClusterDefaultEnabled)) {
+    return false;
+  }
+
+  // Do not default-isolate if the enterprise policy forbids it.
+  if (GetContentClient()->browser()->ShouldDisableOriginAgentClusterDefault(
+          frame_tree_node_->navigator().controller().GetBrowserContext())) {
     return false;
   }
 
@@ -2764,7 +2781,7 @@ void NavigationRequest::DetermineOriginAgentClusterEndResult() {
   // This needs to be computed separately from origin.opaque() because, per
   // https://crbug.com/1041376, we don't have a notion of the true origin yet.
   const bool is_opaque_origin_because_sandbox =
-      (sandbox_flags_to_commit_.value() &
+      (policy_container_navigation_bundle_->FinalPolicies().sandbox_flags &
        network::mojom::WebSandboxFlags::kOrigin) ==
       network::mojom::WebSandboxFlags::kOrigin;
 
@@ -2862,6 +2879,8 @@ bool NavigationRequest::ShouldRequestSiteIsolationForCOOP() {
     case network::mojom::CrossOriginOpenerPolicyValue::kSameOrigin:
     case network::mojom::CrossOriginOpenerPolicyValue::kSameOriginPlusCoep:
     case network::mojom::CrossOriginOpenerPolicyValue::kSameOriginAllowPopups:
+    case network::mojom::CrossOriginOpenerPolicyValue::
+        kSameOriginAllowPopupsPlusCoep:
       should_header_value_trigger_isolation = true;
       break;
     case network::mojom::CrossOriginOpenerPolicyValue::kUnsafeNone:
@@ -2924,6 +2943,32 @@ UrlInfo NavigationRequest::GetUrlInfo() {
   // Compute the WebExposedIsolationInfo that will be bundled into UrlInfo.
   auto web_exposed_isolation_info = ComputeWebExposedIsolationInfo();
 
+  // Determine if the request is for a sandboxed frame or not. If
+  // ComputeSandboxFlagsToCommit() has run `sandbox_flags_to_commit_` will be
+  // valid, but even if it hasn't, we can speculatively take
+  // `commit_params_->frame_policy.sandbox_flags` if we haven't received the
+  // response yet and don't have the final `sandbox_flags_to_commit_`, and
+  // if the state of the kOrigin flag changes, we'll detect the change and
+  // recompute the target SiteInstance elsewhere.
+  bool is_origin_restricted_sandbox = false;
+  if (SiteIsolationPolicy::AreIsolatedSandboxedIframesEnabled()) {
+    if (state_ >= WILL_PROCESS_RESPONSE) {
+      is_origin_restricted_sandbox =
+          (policy_container_navigation_bundle_->FinalPolicies().sandbox_flags &
+           network::mojom::WebSandboxFlags::kOrigin) ==
+          network::mojom::WebSandboxFlags::kOrigin;
+    } else {
+      // Note: We'll end up here for srcdoc iframes, as they don't go through
+      // OnResponseStarted. That means ComputeSandboxFlagsToCommit() may not
+      // have been called yet, but we should be able to reliably get kOrigin
+      // information from `commit_params_->frame_policy.sandbox_flags`.
+      is_origin_restricted_sandbox =
+          (commit_params_->frame_policy.sandbox_flags &
+           network::mojom::WebSandboxFlags::kOrigin) ==
+          network::mojom::WebSandboxFlags::kOrigin;
+    }
+  }
+
   // TODO(crbug.com/1172042): Remove WebBundle-specific code here.
   if (GetWebBundleURL().is_valid()) {
     return UrlInfo(UrlInfoInit(GetURL())
@@ -2931,13 +2976,15 @@ UrlInfo NavigationRequest::GetUrlInfo() {
                        .WithOrigin(url::Origin::Resolve(
                            GetURL(), url::Origin::Create(GetWebBundleURL())))
                        .WithWebExposedIsolationInfo(web_exposed_isolation_info)
-                       .WithIsPdf(is_pdf_));
+                       .WithIsPdf(is_pdf_)
+                       .WithSandbox(is_origin_restricted_sandbox));
   }
 
   return UrlInfo(UrlInfoInit(GetURL())
                      .WithOriginIsolationRequest(isolation_request)
                      .WithWebExposedIsolationInfo(web_exposed_isolation_info)
-                     .WithIsPdf(is_pdf_));
+                     .WithIsPdf(is_pdf_)
+                     .WithSandbox(is_origin_restricted_sandbox));
 }
 
 const GURL& NavigationRequest::GetOriginalRequestURL() {
@@ -3057,11 +3104,11 @@ void NavigationRequest::OnResponseStarted(
   // can be determined. This is needed for enforcing COOP below.
 
   {
-    const url::Origin origin =
-        GetOriginForURLLoaderFactoryWithoutFinalFrameHost(
-            sandbox_flags_to_commit_.value());
     const PolicyContainerPolicies& policies =
         policy_container_navigation_bundle_->FinalPolicies();
+    const url::Origin origin =
+        GetOriginForURLLoaderFactoryWithoutFinalFrameHost(
+            policies.sandbox_flags);
     coop_status_.EnforceCOOP(policies.cross_origin_opener_policy, origin,
                              network_isolation_key);
   }
@@ -3189,66 +3236,21 @@ void NavigationRequest::OnResponseStarted(
     return;
   }
 
-  auto cross_origin_embedder_policy =
-      CoepFromMainResponse(url, response_head_.get());
-
-  if (network::IsUrlPotentiallyTrustworthy(url)) {
-    // https://mikewest.github.io/corpp/#process-navigation-response
-    auto* parent = GetParentFrame();
-    // Fenced Frames should respect the outer frame's COEP.
-    // Note: we only check the outer document for fenced frames, because it's
-    // unclear if other embedded cases like Portals should inherit COEP from the
-    // embedder as well.
-    // TODO(https://crbug.com/1278207) add other embedded cases if needed.
-    if (GetNavigatingFrameType() == NavigatingFrameType::kFencedFrameRoot) {
-      parent = GetParentFrameOrOuterDocument();
-    }
-    if (parent) {
-      const auto& parent_coep = parent->cross_origin_embedder_policy();
-      CrossOriginEmbedderPolicyReporter* parent_coep_reporter =
-          parent->coep_reporter();
-
-      // Some special URLs not loaded using the network are inheriting the
-      // Cross-Origin-Embedder-Policy header from their parent.
-      // TODO(https://crbug.com/1153648) Add COEP into the PolicyContainer and
-      // remove this fragile inheritance mechanism.
-      const bool inherit_coep_from_parent =
-          url.SchemeIsBlob() || url.SchemeIs(url::kDataScheme) ||
-          GetContentClient()
-              ->browser()
-              ->ShouldInheritCrossOriginEmbedderPolicyImplicitly(url);
-      if (inherit_coep_from_parent)
-        cross_origin_embedder_policy.value = parent_coep.value;
-
-      if (CoepBlockIframe(parent_coep.report_only_value,
-                          cross_origin_embedder_policy.value, anonymous())) {
-        if (parent_coep_reporter) {
-          parent_coep_reporter->QueueNavigationReport(redirect_chain_[0],
-                                                      /*report_only=*/true);
-        }
-      }
-
-      if (CoepBlockIframe(parent_coep.value, cross_origin_embedder_policy.value,
-                          anonymous())) {
-        if (parent_coep_reporter) {
-          parent_coep_reporter->QueueNavigationReport(redirect_chain_[0],
-                                                      /*report_only=*/false);
-        }
-        // TODO(https://crbug.com/1172169): Investigate what must be done in
-        // case of a download.
-        OnRequestFailedInternal(network::URLLoaderCompletionStatus(
-                                    network::mojom::BlockedByResponseReason::
-                                        kCoepFrameResourceNeedsCoepHeader),
-                                false /* skip_throttles */,
-                                absl::nullopt /* error_page_content */,
-                                false /* collapse_frame */);
-        // DO NOT ADD CODE after this. The previous call to
-        // OnRequestFailedInternal has destroyed the NavigationRequest.
-        return;
-      }
-    }
-  } else {
-    cross_origin_embedder_policy = network::CrossOriginEmbedderPolicy();
+  // [spec]: https://html.spec.whatwg.org/C/#process-a-navigate-response
+  // 4. if [...] the result of checking a navigation response's adherence to its
+  // embedder policy [...], then set failure to true.
+  if (!CheckResponseAdherenceToCoep(url)) {
+    // TODO(https://crbug.com/1172169): Investigate what must be done in
+    // case of a download.
+    OnRequestFailedInternal(network::URLLoaderCompletionStatus(
+                                network::mojom::BlockedByResponseReason::
+                                    kCoepFrameResourceNeedsCoepHeader),
+                            false /* skip_throttles */,
+                            absl::nullopt /* error_page_content */,
+                            false /* collapse_frame */);
+    return;
+    // DO NOT ADD CODE after this. The previous call to
+    // OnRequestFailedInternal has destroyed the NavigationRequest.
   }
 
   // Select an appropriate renderer to commit the navigation.
@@ -3303,8 +3305,6 @@ void NavigationRequest::OnResponseStarted(
   if (render_frame_host_)
     DetermineOriginAgentClusterEndResult();
 
-  cross_origin_embedder_policy_ = cross_origin_embedder_policy;
-
   if (!commit_params_->is_browser_initiated && render_frame_host_ &&
       render_frame_host_->GetProcess() !=
           frame_tree_node_->current_frame_host()->GetProcess()) {
@@ -3319,13 +3319,7 @@ void NavigationRequest::OnResponseStarted(
     }
   }
 
-  // This must be set before DetermineCommittedPreviews is called.
   proxy_server_ = response_head_->proxy_server;
-
-  // Update the previews state of the request.
-  common_params_->previews_state =
-      GetContentClient()->browser()->DetermineCommittedPreviews(
-          common_params_->previews_state, this, response_head_->headers.get());
 
   // Store the URLLoaderClient endpoints until checks have been processed.
   url_loader_client_endpoints_ = std::move(url_loader_client_endpoints);
@@ -3555,7 +3549,6 @@ void NavigationRequest::OnRequestFailedInternal(
   // anymore from now while the error page is being loaded.
   loader_.reset();
 
-  common_params_->previews_state = blink::PreviewsTypes::PREVIEWS_OFF;
   ssl_info_ = status.ssl_info;
 
   devtools_instrumentation::OnNavigationRequestFailed(*this, status);
@@ -3590,7 +3583,6 @@ void NavigationRequest::OnRequestFailedInternal(
   }
 
   is_mhtml_or_subframe_ = false;
-  sandbox_flags_to_commit_.reset();
   // TODO(https://crbug.com/1158370): Apparently, error pages inherit sandbox
   // flags from their parent/opener. Document loaded from the network
   // shouldn't have any influence over Chrome's internal error page. We should
@@ -3620,7 +3612,7 @@ void NavigationRequest::OnRequestFailedInternal(
       // account for clearing the expected process if it clears the speculative
       // RenderFrameHost. See https://crbug.com/793127.
       ResetExpectedProcess();
-      FALLTHROUGH;
+      [[fallthrough]];
     case ErrorPageProcess::kDestinationProcess:
       // A same-document navigation would normally attempt to navigate the
       // current document, but since we will be presenting an error instead and
@@ -3748,8 +3740,6 @@ void NavigationRequest::OnStartChecksComplete(
           ? frame_tree_node_->render_manager()->speculative_frame_host()
           : frame_tree_node_->current_frame_host();
   DCHECK(navigating_frame_host);
-
-  SetExpectedProcess(navigating_frame_host->GetProcess());
 
   BrowserContext* browser_context =
       frame_tree_node_->navigator().controller().GetBrowserContext();
@@ -3956,7 +3946,7 @@ void NavigationRequest::OnStartChecksComplete(
           devtools_navigation_token(), frame_tree_node_->devtools_frame_token(),
           OriginPolicyThrottle::ShouldRequestOriginPolicy(common_params_->url),
           std::move(cors_exempt_headers), std::move(client_security_state),
-          devtools_accepted_stream_types, is_pdf_),
+          devtools_accepted_stream_types, is_pdf_, initiator_document_),
       std::move(navigation_ui_data), service_worker_handle_.get(),
       std::move(prefetched_signed_exchange_cache_), this, loader_type,
       CreateCookieAccessObserver(),
@@ -3988,7 +3978,7 @@ network::mojom::WebSandboxFlags NavigationRequest::SandboxFlagsToCommit() {
   DCHECK_GE(state_, WILL_PROCESS_RESPONSE);
   DCHECK(!IsSameDocument());
   DCHECK(!IsPageActivation());
-  return sandbox_flags_to_commit_.value();
+  return policy_container_navigation_bundle_->FinalPolicies().sandbox_flags;
 }
 
 void NavigationRequest::OnRedirectChecksComplete(
@@ -4051,17 +4041,18 @@ void NavigationRequest::OnRedirectChecksComplete(
         source_url, response_head->parsed_headers, response_head->headers.get(),
         browser_context, client_hints_delegate, frame_tree_node_);
     // CriticalClientHintsThrottle issues a 307 internal redirect without the
-    // original headers, and we don't want to remove Sec-CH-UA-Reduced when
-    // Critical-CH is set.  This means that if the site sends a 307 (instead of
-    // a 301 or 302), Sec-CH-UA-Reduced will *not* be removed from the Accept-CH
-    // cache if the Accept-CH header is missing from the redirect response.
+    // original headers, and we don't want to remove Sec-CH-UA-Reduced or
+    // Sec-CH-UA-Full when Critical-CH is set.  This means that if the site
+    // sends a 307 (instead of a 301 or 302), Sec-CH-UA-Reduced or
+    // Sec-CH-UA-Full will *not* be removed from the Accept-CH cache if the
+    // Accept-CH header is missing from the redirect response.
     if (response_head->headers && response_head->headers->response_code() !=
                                       net::HTTP_TEMPORARY_REDIRECT) {
       std::vector<network::mojom::WebClientHintsType> client_hints =
           LookupAcceptCHForCommit(source_url, client_hints_delegate,
                                   frame_tree_node_);
-      RemoveUaReducedFromAcceptCH(source_url, client_hints_delegate,
-                                  response_head, client_hints);
+      RemoveOriginTrialHintsFromAcceptCH(source_url, client_hints_delegate,
+                                         response_head, client_hints);
     }
 
     AddNavigationRequestClientHintsHeaders(
@@ -4082,9 +4073,9 @@ void NavigationRequest::OnRedirectChecksComplete(
 
   net::HttpRequestHeaders cors_exempt_headers;
   std::swap(cors_exempt_headers, cors_exempt_request_headers_);
-  loader_->FollowRedirect(
-      std::move(removed_headers), std::move(modified_headers),
-      std::move(cors_exempt_headers), common_params_->previews_state);
+  loader_->FollowRedirect(std::move(removed_headers),
+                          std::move(modified_headers),
+                          std::move(cors_exempt_headers));
 }
 
 void NavigationRequest::OnFailureChecksComplete(
@@ -4383,7 +4374,6 @@ void NavigationRequest::CommitNavigation() {
          (was_redirected_ && common_params_->url.IsAboutBlank()));
   DCHECK(!common_params_->url.SchemeIs(url::kJavaScriptScheme));
   DCHECK(!blink::IsRendererDebugURL(common_params_->url));
-  DCHECK(sandbox_flags_to_commit_);
 
   AddOldPageInfoToCommitParamsIfNeeded();
 
@@ -4412,7 +4402,10 @@ void NavigationRequest::CommitNavigation() {
       render_frame_host_->ComputeTopFrameOrigin(GetOriginToCommit());
   commit_params_->storage_key = blink::StorageKey::CreateWithOptionalNonce(
       GetOriginToCommit(), net::SchemefulSite(top_level_origin),
-      base::OptionalOrNullptr(nonce));
+      base::OptionalOrNullptr(nonce),
+      render_frame_host_->ComputeSiteForCookies().IsNull()
+          ? blink::mojom::AncestorChainBit::kCrossSite
+          : blink::mojom::AncestorChainBit::kSameSite);
 
   if (IsServedFromBackForwardCache() || IsPrerenderedPageActivation()) {
     CommitPageActivation();
@@ -4467,9 +4460,9 @@ void NavigationRequest::CommitNavigation() {
     }
     commit_params_->enabled_client_hints = LookupAcceptCHForCommit(
         common_params_->url, client_hints_delegate, frame_tree_node_);
-    RemoveUaReducedFromAcceptCH(common_params_->url, client_hints_delegate,
-                                response(),
-                                commit_params_->enabled_client_hints);
+    RemoveOriginTrialHintsFromAcceptCH(common_params_->url,
+                                       client_hints_delegate, response(),
+                                       commit_params_->enabled_client_hints);
   }
 
   // Generate a UKM source and track it on NavigationRequest. This will be
@@ -4487,7 +4480,9 @@ void NavigationRequest::CommitNavigation() {
     // Notify the service worker navigation handle that navigation commit is
     // about to go.
     service_worker_handle_->OnBeginNavigationCommit(
-        render_frame_host_->GetGlobalId(), cross_origin_embedder_policy_,
+        render_frame_host_->GetGlobalId(),
+        policy_container_navigation_bundle_->FinalPolicies()
+            .cross_origin_embedder_policy,
         std::move(reporter_remote), &service_worker_container_info,
         commit_params_->document_ukm_source_id);
   }
@@ -4515,8 +4510,11 @@ void NavigationRequest::CommitNavigation() {
         pending_ad_components_map_->GetURNs();
   }
 
-  if (!IsSameDocument())
-    GetNavigationController()->PopulateAppHistoryEntryVectors(this);
+  if (!IsSameDocument()) {
+    commit_params_->app_history_entry_arrays =
+        GetNavigationController()->GetAppHistoryEntryVectors(frame_tree_node_,
+                                                             this);
+  }
 
   if (early_hints_manager_) {
     commit_params_->early_hints_preloaded_resources =
@@ -4544,19 +4542,8 @@ void NavigationRequest::CommitNavigation() {
   // Give SpareRenderProcessHostManager a heads-up about the most recently used
   // BrowserContext.  This is mostly needed to make sure the spare is warmed-up
   // if it wasn't done in RenderProcessHostImpl::GetProcessHostForSiteInstance.
-#if defined(OS_ANDROID)
-  // If we're in the experiment to always create a spare renderer on Android
-  // don't start it right away since the system is busy; this will happen when
-  // the page stops loading.
-  bool should_notify_spare_manager =
-      !base::FeatureList::IsEnabled(features::kSpareRenderer);
-#else
-  bool should_notify_spare_manager = true;
-#endif
-  if (should_notify_spare_manager) {
-    RenderProcessHostImpl::NotifySpareManagerAboutRecentlyUsedBrowserContext(
-        render_frame_host_->GetSiteInstance()->GetBrowserContext());
-  }
+  RenderProcessHostImpl::NotifySpareManagerAboutRecentlyUsedBrowserContext(
+      render_frame_host_->GetSiteInstance()->GetBrowserContext());
 
   SendDeferredConsoleMessages();
 }
@@ -4594,6 +4581,29 @@ void NavigationRequest::CommitPageActivation() {
     DCHECK(activated_entry || restarting_back_forward_cached_navigation_);
     if (!activated_entry)
       return;
+
+    // Restore appHistory entries, since they will probably have changed since
+    // the page entered bfcache. We must update all frames, not just the top
+    // frame, because it is possible (though unlikely) that an iframe's entries
+    // have changed, too.
+    activated_entry->render_frame_host()->ForEachRenderFrameHost(
+        base::BindRepeating(
+            [](content::RenderFrameHost* navigating_rfh,
+               NavigationRequest* request, content::RenderFrameHost* rfh) {
+              RenderFrameHostImpl* rfhi =
+                  static_cast<RenderFrameHostImpl*>(rfh);
+              // |request| is given as a parameter to
+              // GetAppHistoryEntryVectors() only for the frame being committed
+              // (i.e., the top frame).
+              auto entry_arrays =
+                  rfhi->frame_tree()->controller().GetAppHistoryEntryVectors(
+                      rfhi->frame_tree_node(),
+                      navigating_rfh == rfh ? request : nullptr);
+              rfhi->GetAssociatedLocalFrame()->SetAppHistoryEntriesForRestore(
+                  std::move(entry_arrays));
+              return content::RenderFrameHost::FrameIterationAction::kContinue;
+            },
+            activated_entry->render_frame_host(), this));
 
     base::WeakPtr<NavigationRequest> weak_self(weak_factory_.GetWeakPtr());
     ReadyToCommitNavigation(false /* is_error */);
@@ -4773,14 +4783,12 @@ void NavigationRequest::UpdateNavigationHandleTimingsOnCommitSent() {
 }
 
 void NavigationRequest::UpdateSiteInfo(
-    const WebExposedIsolationInfo& web_exposed_isolation_info,
     RenderProcessHost* post_redirect_process) {
   int post_redirect_process_id = post_redirect_process
                                      ? post_redirect_process->GetID()
                                      : ChildProcessHost::kInvalidUniqueID;
 
-  SiteInfo new_site_info =
-      GetSiteInfoForCommonParamsURL(web_exposed_isolation_info);
+  SiteInfo new_site_info = GetSiteInfoForCommonParamsURL();
   if (new_site_info == site_info_ &&
       post_redirect_process_id == expected_render_process_host_id_) {
     return;
@@ -4802,6 +4810,7 @@ bool NavigationRequest::IsAllowedByCSPDirective(
     bool has_followed_redirect,
     bool url_upgraded_after_redirect,
     bool is_response_check,
+    bool is_opaque_fenced_frame,
     network::CSPContext::CheckCSPDisposition disposition) {
   GURL url;
   // If this request was upgraded in the net stack, downgrade the URL back to
@@ -4826,7 +4835,7 @@ bool NavigationRequest::IsAllowedByCSPDirective(
   return context->IsAllowedByCsp(
       policies, directive, url, commit_params_->original_url,
       has_followed_redirect, is_response_check, common_params_->source_location,
-      disposition, begin_params_->is_form_submission);
+      disposition, begin_params_->is_form_submission, is_opaque_fenced_frame);
 }
 
 net::Error NavigationRequest::CheckCSPDirectives(
@@ -4848,7 +4857,8 @@ net::Error NavigationRequest::CheckCSPDirectives(
         !IsAllowedByCSPDirective(
             initiator_policies->content_security_policies, &initiator_context,
             network::mojom::CSPDirectiveName::FormAction, has_followed_redirect,
-            url_upgraded_after_redirect, is_response_check, disposition)) {
+            url_upgraded_after_redirect, is_response_check,
+            /*is_opaque_fenced_frame=*/false, disposition)) {
       // net::ERR_ABORTED is used instead of net::ERR_BLOCKED_BY_CSP. This is
       // a better user experience as the user is not presented with an error
       // page. However if other CSP directives like frame-src are violated, it
@@ -4864,7 +4874,8 @@ net::Error NavigationRequest::CheckCSPDirectives(
               initiator_policies->content_security_policies, &initiator_context,
               network::mojom::CSPDirectiveName::NavigateTo,
               has_followed_redirect, url_upgraded_after_redirect,
-              is_response_check, disposition)) {
+              is_response_check, /*is_opaque_fenced_frame=*/false,
+              disposition)) {
         // net::ERR_ABORTED is used instead of net::ERR_BLOCKED_BY_CSP. This is
         // a better user experience as the user is not presented with an error
         // page. However if other CSP directives life frame-src are violated, it
@@ -4880,20 +4891,27 @@ net::Error NavigationRequest::CheckCSPDirectives(
                 &initiator_context,
                 network::mojom::CSPDirectiveName::PrefetchSrc,
                 has_followed_redirect, url_upgraded_after_redirect,
-                is_response_check, disposition)) {
+                is_response_check, /*is_opaque_fenced_frame=*/false,
+                disposition)) {
           error = net::ERR_BLOCKED_BY_CSP;
         }
       }
     }
   }
 
-  // [frame-src]
-  if (parent_policies &&
-      !IsAllowedByCSPDirective(
-          parent_policies->content_security_policies, &parent_context,
-          network::mojom::CSPDirectiveName::FrameSrc, has_followed_redirect,
-          url_upgraded_after_redirect, is_response_check, disposition)) {
-    error = net::ERR_BLOCKED_BY_CSP;
+  // [frame-src] or [fenced-frame-src]
+  if (parent_policies) {
+    bool is_opaque_fenced_frame = frame_tree_node_->fenced_frame_mode() ==
+                                  FrameTreeNode::FencedFrameMode::kOpaque;
+    if (!IsAllowedByCSPDirective(
+            parent_policies->content_security_policies, &parent_context,
+            frame_tree_node_->IsFencedFrameRoot()
+                ? network::mojom::CSPDirectiveName::FencedFrameSrc
+                : network::mojom::CSPDirectiveName::FrameSrc,
+            has_followed_redirect, url_upgraded_after_redirect,
+            is_response_check, is_opaque_fenced_frame, disposition)) {
+      error = net::ERR_BLOCKED_BY_CSP;
+    }
   }
 
   return error;
@@ -4919,16 +4937,21 @@ net::Error NavigationRequest::CheckContentSecurityPolicy(
   const PolicyContainerPolicies* parent_policies =
       policy_container_navigation_bundle_->ParentPolicies();
   DCHECK(!parent == !parent_policies);
-  if (!parent && frame_tree_node()->current_frame_host()->InsidePortal() &&
-      frame_tree_node()->render_manager()->GetOuterDelegateNode()) {
+  bool set_parent_for_nested_frame_tree =
+      !parent &&
+      (frame_tree_node()->frame_tree()->IsPortal() ||
+       frame_tree_node()->IsFencedFrameRoot()) &&
+      frame_tree_node()->render_manager()->GetOuterDelegateNode();
+  if (set_parent_for_nested_frame_tree) {
     parent = frame_tree_node()
                  ->render_manager()
                  ->GetOuterDelegateNode()
                  ->current_frame_host()
                  ->GetParent();
-    // TODO(antoniosartori): If we want to keep checking frame-src for portals,
-    // consider storing a snapshot of the parent policies in the
-    // `policy_container_navigation_bundle_` at the beginning of the navigation.
+    // TODO(antoniosartori): If we want to keep checking frame-src for portals
+    // or fenced frames, consider storing a snapshot of the parent policies in
+    // the `policy_container_navigation_bundle_` at the beginning of the
+    // navigation.
     parent_policies = &parent->policy_container_host()->policies();
   }
 
@@ -5002,8 +5025,7 @@ NavigationRequest::CheckCredentialedSubresource() const {
   RenderFrameHostImpl* parent = frame_tree_node_->parent();
   DCHECK(parent);
   const GURL& parent_url = parent->GetLastCommittedURL();
-  if (url::Origin::Create(parent_url)
-          .IsSameOriginWith(url::Origin::Create(common_params_->url)) &&
+  if (url::IsSameOriginWith(parent_url, common_params_->url) &&
       parent_url.username() == common_params_->url.username() &&
       parent_url.password() == common_params_->url.password()) {
     return CredentialedSubresourceCheckResult::ALLOW_REQUEST;
@@ -5509,12 +5531,11 @@ void NavigationRequest::WillStartRequest() {
 
 void NavigationRequest::WillRedirectRequest(
     const GURL& new_referrer_url,
-    const WebExposedIsolationInfo& web_exposed_isolation_info,
     RenderProcessHost* post_redirect_process) {
   EnterChildTraceEvent("WillRedirectRequest", this, "url",
                        common_params_->url.possibly_invalid_spec());
   UpdateStateFollowingRedirect(new_referrer_url);
-  UpdateSiteInfo(web_exposed_isolation_info, post_redirect_process);
+  UpdateSiteInfo(post_redirect_process);
 
   if (IsSelfReferentialURL()) {
     SetState(CANCELING);
@@ -5609,8 +5630,11 @@ void NavigationRequest::DidCommitNavigation(
   // and it doesn't make sense to log this in history. Logging this in history
   // would lead to lots of visits to a particular page, which impacts the
   // visit count.
-  if (should_update_history_ && IsSameDocument() && !HasUserGesture() &&
-      params.url == previous_main_frame_url) {
+  // Navigations in non-primary frame trees or portals don't appear in history.
+  if ((should_update_history_ && IsSameDocument() && !HasUserGesture() &&
+       params.url == previous_main_frame_url) ||
+      !render_frame_host_->GetPage().IsPrimary() ||
+      GetWebContents()->IsPortal()) {
     should_update_history_ = false;
   }
   previous_main_frame_url_ = previous_main_frame_url;
@@ -5681,13 +5705,8 @@ void NavigationRequest::DidCommitNavigation(
   }
 }
 
-SiteInfo NavigationRequest::GetSiteInfoForCommonParamsURL(
-    const WebExposedIsolationInfo& web_exposed_isolation_info) {
-  // We typically call this function when we don't yet have response headers, so
-  // the computed WebExposedIsolationInfo is not relevant. We override it with
-  // the value passed in.
+SiteInfo NavigationRequest::GetSiteInfoForCommonParamsURL() {
   UrlInfo url_info = GetUrlInfo();
-  url_info.web_exposed_isolation_info = web_exposed_isolation_info;
 
   // TODO(alexmos): Using |starting_site_instance_|'s IsolationContext may not
   // be correct for cross-BrowsingInstance redirects.
@@ -5720,7 +5739,7 @@ void NavigationRequest::UpdateStateFollowingRedirect(
   SetState(WILL_REDIRECT_REQUEST);
   processing_navigation_throttle_ = true;
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   navigation_handle_proxy_->DidRedirect();
 #endif
 }
@@ -5964,8 +5983,8 @@ NavigationRequest::GetOriginForURLLoaderFactoryWithFinalFrameHost() {
   if (IsSameDocument() || IsPageActivation())
     return GetRenderFrameHost()->GetLastCommittedOrigin();
 
-  url::Origin origin = GetOriginForURLLoaderFactoryWithoutFinalFrameHost(
-      sandbox_flags_to_commit_.value());
+  url::Origin origin =
+      GetOriginForURLLoaderFactoryWithoutFinalFrameHost(SandboxFlagsToCommit());
 
   // MHTML documents should commit as an opaque origin. They should not be able
   // to make network request on behalf of the real origin.
@@ -6275,11 +6294,11 @@ RenderFrameHostImpl* NavigationRequest::GetParentFrameOrOuterDocument() {
 }
 
 bool NavigationRequest::IsInPrimaryMainFrame() const {
-  return GetNavigatingFrameType() == NavigatingFrameType::kPrimaryMainFrame;
+  return GetNavigatingFrameType() == FrameType::kPrimaryMainFrame;
 }
 
 bool NavigationRequest::IsInPrerenderedMainFrame() {
-  return GetNavigatingFrameType() == NavigatingFrameType::kPrerenderMainFrame;
+  return GetNavigatingFrameType() == FrameType::kPrerenderMainFrame;
 }
 
 bool NavigationRequest::IsPrerenderedPageActivation() {
@@ -6290,27 +6309,8 @@ bool NavigationRequest::IsPrerenderedPageActivation() {
   return prerender_frame_tree_node_id_ != RenderFrameHost::kNoFrameTreeNodeId;
 }
 
-NavigatingFrameType NavigationRequest::GetNavigatingFrameType() const {
-  // Use IsFencedFrameRoot() since we have
-  // FencedFramesImplementationType::kShadowDOM that is not checked with
-  // FrameTree::Type.
-  if (frame_tree_node()->IsFencedFrameRoot())
-    return NavigatingFrameType::kFencedFrameRoot;
-
-  if (!IsInMainFrame())
-    return NavigatingFrameType::kSubframe;
-
-  switch (frame_tree_node()->frame_tree()->type()) {
-    case FrameTree::Type::kPrimary:
-      return NavigatingFrameType::kPrimaryMainFrame;
-    case FrameTree::Type::kPrerender:
-      return NavigatingFrameType::kPrerenderMainFrame;
-    case FrameTree::Type::kFencedFrame:
-      // This should have been covered for both MPArch and ShadowDOM by
-      // checking IsFencedFrameRoot() above.
-      NOTREACHED();
-      return NavigatingFrameType::kFencedFrameRoot;
-  }
+FrameType NavigationRequest::GetNavigatingFrameType() const {
+  return frame_tree_node()->GetFrameType();
 }
 
 int NavigationRequest::GetFrameTreeNodeId() {
@@ -6579,6 +6579,11 @@ GlobalRenderFrameHostId NavigationRequest::GetPreviousRenderFrameHostId() {
   return previous_render_frame_host_id_;
 }
 
+int NavigationRequest::GetExpectedRenderProcessHostId() {
+  DCHECK_LT(state_, READY_TO_COMMIT);
+  return expected_render_process_host_id_;
+}
+
 bool NavigationRequest::IsServedFromBackForwardCache() {
   const NavigationRequest& request = *this;
   return request.IsServedFromBackForwardCache();
@@ -6716,10 +6721,137 @@ void NavigationRequest::ForceEnableOriginTrials(
   commit_params_->force_enabled_origin_trials = trials;
 }
 
+network::CrossOriginEmbedderPolicy
+NavigationRequest::ComputeCrossOriginEmbedderPolicy() {
+  const auto& url = common_params_->url;
+  // Fenced Frames should respect the outer frame's COEP.
+  // Note: we only check the outer document for fenced frames, because it's
+  // unclear if other embedded cases like Portals should inherit COEP from
+  // the embedder as well.
+  // TODO(https://crbug.com/1278207) add other embedded cases if needed.
+  RenderFrameHostImpl* const parent =
+      GetNavigatingFrameType() == FrameType::kFencedFrameRoot
+          ? GetParentFrameOrOuterDocument()
+          : GetParentFrame();
+  bool is_fenced_frame_from_local_scheme =
+      GetNavigatingFrameType() == FrameType::kFencedFrameRoot &&
+      (url.SchemeIsBlob() || url.SchemeIs(url::kDataScheme));
+
+  // Some special URLs not loaded using the network inherit the
+  // Cross-Origin-Embedder-Policy header from their parent.
+  if (parent && (GetContentClient()
+                     ->browser()
+                     ->ShouldInheritCrossOriginEmbedderPolicyImplicitly(url) ||
+                 is_fenced_frame_from_local_scheme)) {
+    return parent->cross_origin_embedder_policy();
+  }
+
+  // Compute "topLevelCreationURL" for COEP and secure context.
+  //
+  // [spec]: https://html.spec.whatwg.org/C/#initialise-the-document-object
+  // 3. Let creationURL be navigationParams's response's URL.
+  // 5. If browsingContext is still on its initial about:blank Document [...]
+  // 6. Otherwise:
+  // 6.6. Let topLevelCreationURL be creationURL.
+  // 6.8. If browsingContext is not a top-level browsing context, then:
+  // 6.8.2. Set topLevelCreationURL to parentEnvironment's top-level creation
+  //        URL.
+  //
+  // TODO(arthursonzogni): It would be good to clarify what
+  // |topLevelCreationURL| means when loading FencedFrame/Portals/GuestView, and
+  // how it should affect COEP.
+  // Tracking bug:
+  // - FencedFrame: https://crbug.com/1277430
+  // - Portals: https://crbug.com/1278207
+  // - GuestView: XXX or slightly related https://crbug.com/1260747
+  const GURL& top_level_creation_url = GetParentFrameOrOuterDocument()
+                                           ? GetParentFrameOrOuterDocument()
+                                                 ->GetOutermostMainFrame()
+                                                 ->GetLastCommittedURL()
+                                           : url;
+  // [spec]: https://html.spec.whatwg.org/C/#obtain-an-embedder-policy
+  //
+  // 1. Let policy be a new embedder policy.
+  // 2. If environment is a non-secure context, then return policy.
+  if (network::IsUrlPotentiallyTrustworthy(top_level_creation_url)) {
+    if (response_head_) {
+      return response_head_->parsed_headers->cross_origin_embedder_policy;
+    }
+  }
+  return network::CrossOriginEmbedderPolicy();
+}
+
+// [spec]:
+// https://html.spec.whatwg.org/C/#check-a-navigation-response's-adherence-to-its-embedder-policy
+//
+// Return whether the child's |coep| is compatible with its parent's COEP. It
+// also sends COEP reports if needed.
+bool NavigationRequest::CheckResponseAdherenceToCoep(const GURL& url) {
+  const auto& coep = policy_container_navigation_bundle_->FinalPolicies()
+                         .cross_origin_embedder_policy;
+
+  // Fenced Frames should respect the outer frame's COEP.
+  // Note: we only check the outer document for fenced frames, because it's
+  // unclear if other embedded cases like Portals should inherit COEP from
+  // the embedder as well.
+  // TODO(https://crbug.com/1278207) add other embedded cases if needed.
+  RenderFrameHostImpl* const parent =
+      GetNavigatingFrameType() == FrameType::kFencedFrameRoot
+          ? GetParentFrameOrOuterDocument()
+          : GetParentFrame();
+
+  // [spec]: 1. If target is not a child browsing context, then return true.
+  if (!parent)
+    return true;
+
+  // [spec]: 2. Let parentPolicy be target's container document's policy
+  //            container's embedder policy.
+  const auto& parent_coep = parent->cross_origin_embedder_policy();
+  CrossOriginEmbedderPolicyReporter* parent_coep_reporter =
+      parent->coep_reporter();
+
+  // [spec]: 3. If parentPolicy's report-only value is compatible with
+  // cross-origin isolation and responsePolicy's value is not, then queue a
+  // cross-origin embedder policy inheritance violation [...].
+  if (CoepBlockIframe(parent_coep.report_only_value, coep.value, anonymous())) {
+    if (parent_coep_reporter) {
+      parent_coep_reporter->QueueNavigationReport(redirect_chain_[0],
+                                                  /*report_only=*/true);
+    }
+  }
+
+  // [spec]: 4. If parentPolicy's value is not compatible with cross-origin
+  // isolation or responsePolicy's value is compatible with cross-origin
+  // isolation, then return true.
+  if (!CoepBlockIframe(parent_coep.value, coep.value, anonymous()))
+    return true;
+
+  // [spec]: 5 Queue a cross-origin embedder policy inheritance violation with
+  // response, "navigation", parentPolicy's reporting endpoint, "enforce", and
+  // target's container document's relevant settings object.
+  if (parent_coep_reporter) {
+    parent_coep_reporter->QueueNavigationReport(redirect_chain_[0],
+                                                /*report_only=*/false);
+  }
+
+  // [spec]: 6. Return false.
+  return false;
+}
+
 absl::optional<network::mojom::BlockedByResponseReason>
 NavigationRequest::EnforceCOEP() {
-  // https://html.spec.whatwg.org/#check-a-navigation-response's-adherence-to-its-embedder-policy
-  auto* parent_frame = GetParentFrame();
+  // https://html.spec.whatwg.org/C/#check-a-navigation-response's-adherence-to-its-embedder-policy
+  // Spec should be updated:
+  // https://github.com/shivanigithub/fenced-frame/issues/11
+
+  // Fenced frames should be treated as an embedded frame, thus COEP must apply.
+  // Note: we only check the outer document for fenced frames, because it's
+  // unclear if other embedded cases like Portals should behave the same.
+  // TODO(https://crbug.com/1278207): add other embedded cases if needed.
+  RenderFrameHostImpl* const parent_frame =
+      GetNavigatingFrameType() == FrameType::kFencedFrameRoot
+          ? GetParentFrameOrOuterDocument()
+          : GetParentFrame();
   if (!parent_frame) {
     return absl::nullopt;
   }
@@ -6740,14 +6872,23 @@ NavigationRequest::EnforceCOEP() {
 }
 
 bool NavigationRequest::CoopCoepSanityCheck() {
+  const PolicyContainerPolicies& policies =
+      policy_container_navigation_bundle_->FinalPolicies();
+  // Use GetParentFrameOrOuterDocument() to respect the outer frame's COEP for
+  // now. But other embedded cases like Portals should figure out how to inherit
+  // COEP because it's unclear yet.
+  // TODO(https://crbug.com/1278207) add other embedded cases if needed.
   network::mojom::CrossOriginOpenerPolicyValue coop_value =
-      IsInMainFrame() ? coop_status_.current_coop().value
-                      : render_frame_host_->GetMainFrame()
-                            ->cross_origin_opener_policy()
-                            .value;
+      GetParentFrameOrOuterDocument()
+          ? render_frame_host_->GetOutermostMainFrame()
+                ->cross_origin_opener_policy()
+                .value
+          : policies.cross_origin_opener_policy.value;
+
   if (coop_value ==
           network::mojom::CrossOriginOpenerPolicyValue::kSameOriginPlusCoep &&
-      !CompatibleWithCrossOriginIsolated(cross_origin_embedder_policy_)) {
+      !CompatibleWithCrossOriginIsolated(
+          policies.cross_origin_embedder_policy)) {
     NOTREACHED();
     base::debug::DumpWithoutCrashing();
     return false;
@@ -6775,7 +6916,7 @@ NavigationRequest::BuildClientSecurityState() {
   client_security_state->ip_address_space = policies.ip_address_space;
 
   client_security_state->cross_origin_embedder_policy =
-      cross_origin_embedder_policy_;
+      policies.cross_origin_embedder_policy;
   client_security_state->private_network_request_policy =
       private_network_request_policy_;
 
@@ -6835,24 +6976,8 @@ NavigationRequest::TakeCookieObservers() {
 }
 
 RenderFrameHostImpl* NavigationRequest::GetInitiatorDocumentRenderFrameHost() {
-  if (!initiator_frame_token_.has_value()) {
-    return nullptr;
-  }
-
-  RenderFrameHostImpl* initiator_render_frame_host =
-      RenderFrameHostImpl::FromFrameToken(initiator_process_id_,
-                                          *initiator_frame_token_);
-
-  if (!initiator_render_frame_host ||
-      initiator_render_frame_host->commit_navigation_sent_counter() !=
-          initiator_commit_navigation_sent_counter_) {
-    // Either the initiator RFH has been destroyed, or the initiator document
-    // within that RFH has navigated away since the navigation started. In any
-    // case the initiator document is no longer available.
-    return nullptr;
-  }
-
-  return initiator_render_frame_host;
+  return static_cast<RenderFrameHostImpl*>(
+      initiator_document_.AsRenderFrameHostIfValid());
 }
 
 void NavigationRequest::RecordAddressSpaceFeature() {
@@ -6908,8 +7033,11 @@ void NavigationRequest::RecordAddressSpaceFeature() {
 }
 
 void NavigationRequest::ComputePoliciesToCommit() {
+  const auto& url = common_params_->url;
+
   network::mojom::IPAddressSpace response_address_space =
-      CalculateIPAddressSpace(common_params_->url, response_head_.get());
+      CalculateIPAddressSpace(url, response_head_.get(),
+                              GetContentClient()->browser());
   policy_container_navigation_bundle_->SetIPAddressSpace(
       response_address_space);
 
@@ -6924,42 +7052,37 @@ void NavigationRequest::ComputePoliciesToCommit() {
   policy_container_navigation_bundle_->SetIsOriginPotentiallyTrustworthy(
       network::IsOriginPotentiallyTrustworthy(
           GetOriginForURLLoaderFactoryUnchecked(this)));
-  policy_container_navigation_bundle_->ComputePolicies(common_params_->url);
 
-  ComputeSandboxFlagsToCommit();
-}
+  policy_container_navigation_bundle_->SetCrossOriginEmbedderPolicy(
+      ComputeCrossOriginEmbedderPolicy());
 
-void NavigationRequest::ComputePoliciesToCommitForError() {
-  policy_container_navigation_bundle_->ComputePoliciesForError();
-  ComputeSandboxFlagsToCommit();
-}
-
-void NavigationRequest::ComputeSandboxFlagsToCommit() {
   DCHECK(commit_params_);
   DCHECK(!HasCommitted());
   DCHECK(!IsErrorPage());
-  DCHECK(!sandbox_flags_to_commit_);
 
-  // Inherit sandbox from the frame.
-  sandbox_flags_to_commit_ = commit_params_->frame_policy.sandbox_flags;
+  policy_container_navigation_bundle_->ComputePolicies(
+      url, IsMhtmlOrSubframe(), commit_params_->frame_policy.sandbox_flags);
 
-  // The document can also restrict sandbox further, via its CSP.
-  const PolicyContainerPolicies& policies_to_commit =
-      policy_container_navigation_bundle_->FinalPolicies();
-  for (const auto& csp : policies_to_commit.content_security_policies)
-    *sandbox_flags_to_commit_ |= csp->sandbox;
+  commit_params_->sandbox_flags =
+      policy_container_navigation_bundle_->FinalPolicies().sandbox_flags;
 
-  // The URL of a document loaded from a MHTML archive is controlled by the
-  // Content-Location header. This can be set to an arbitrary URL. This is
-  // potentially dangerous. For this reason we force the document to be
-  // sandboxed, providing exceptions only for creating new windows. This
-  // includes disallowing javascript and using an opaque origin.
-  if (IsMhtmlOrSubframe()) {
-    *sandbox_flags_to_commit_ |= ~network::mojom::WebSandboxFlags::kPopups &
-                                 ~network::mojom::WebSandboxFlags::
-                                     kPropagatesToAuxiliaryBrowsingContexts;
+  // For about: urls this function should not change the kOrigin flag. We rely
+  // on this when deciding on process isolation for sandboxed frames with these
+  // URLs, see NavigationRequest::GetUrlInfo().
+  if (GetURL().IsAboutBlank() || GetURL().IsAboutSrcdoc()) {
+    CHECK_EQ(
+        commit_params_->frame_policy.sandbox_flags &
+            network::mojom::WebSandboxFlags::kOrigin,
+        policy_container_navigation_bundle_->FinalPolicies().sandbox_flags &
+            network::mojom::WebSandboxFlags::kOrigin);
   }
-  commit_params_->sandbox_flags = *sandbox_flags_to_commit_;
+}
+
+void NavigationRequest::ComputePoliciesToCommitForError() {
+  policy_container_navigation_bundle_->ComputePoliciesForError(
+      IsMhtmlOrSubframe(), commit_params_->frame_policy.sandbox_flags);
+  commit_params_->sandbox_flags =
+      policy_container_navigation_bundle_->FinalPolicies().sandbox_flags;
 }
 
 void NavigationRequest::CheckStateTransition(NavigationState state) const {
@@ -6976,6 +7099,7 @@ void NavigationRequest::CheckStateTransition(NavigationState state) const {
           }},
           {WAITING_FOR_RENDERER_RESPONSE, {
               WILL_START_NAVIGATION,
+              WILL_START_REQUEST,
           }},
           {WILL_START_NAVIGATION, {
               WILL_START_REQUEST,
@@ -7176,9 +7300,14 @@ bool NavigationRequest::
     return true;
   }
 
-  // When InitialNavigationEntry is enabled, we always replace initial empty
-  // document entries.
-  return frame_tree_node_->is_on_initial_empty_document();
+  // For non-initial NavigationEntries, the initial empty document should also
+  // be replaced in subframes. For main frames, the initial empty document will
+  // usually only exist when on the initial NavigationEntry, but it can also
+  // exist in a restored or cloned NavigationController before the first commit.
+  // It is important not to replace one of the restored entries in that case.
+  // See https://crbug.com/1284566 and https://crbug.com/1295723.
+  return frame_tree_node_->is_on_initial_empty_document() &&
+         !frame_tree_node_->IsMainFrame();
 }
 
 bool NavigationRequest::ShouldReplaceCurrentEntryForFailedNavigation() const {
@@ -7269,7 +7398,8 @@ void NavigationRequest::SendDeferredConsoleMessages() {
   console_messages_.clear();
 }
 
-WebExposedIsolationInfo NavigationRequest::ComputeWebExposedIsolationInfo() {
+absl::optional<WebExposedIsolationInfo>
+NavigationRequest::ComputeWebExposedIsolationInfo() {
   // If we are in an iframe, we inherit the isolation state of the top level
   // frame. This can be inferred from the main frame SiteInstance. Note that
   // Iframes have to pass COEP tests in |OnResponseStarted| before being loaded
@@ -7284,20 +7414,46 @@ WebExposedIsolationInfo NavigationRequest::ComputeWebExposedIsolationInfo() {
         ->GetWebExposedIsolationInfo();
   }
 
+  // This accommodates for web tests that use COOP. They expect an about:blank
+  // page to stay in process, and hang otherwise. In general, it is safe to
+  // allow about:blank pages to stay in process, since scriptability is limited
+  // to the BrowsingInstance and all pages with the same web-exposed isolation
+  // level are trusted.
+  if (common_params_->url.IsAboutBlank())
+    return absl::nullopt;
+
+  // If we haven't yet received a definitive network response, it is too early
+  // to guess the isolation state.
+  if (state_ < WILL_PROCESS_RESPONSE)
+    return absl::nullopt;
+
   // We consider navigations to be cross-origin isolated if the response
   // asserts proper COOP and COEP headers.
-  if (coop_status().current_coop().value !=
-      network::mojom::CrossOriginOpenerPolicyValue::kSameOriginPlusCoep) {
+  if ((coop_status().current_coop().value !=
+       network::mojom::CrossOriginOpenerPolicyValue::kSameOriginPlusCoep) &&
+      (coop_status().current_coop().value !=
+       network::mojom::CrossOriginOpenerPolicyValue::
+           kSameOriginAllowPopupsPlusCoep)) {
     return WebExposedIsolationInfo::CreateNonIsolated();
   }
 
   const GURL& url = common_params().url;
   url::Origin origin = url::Origin::Create(url);
 
-  return GetContentClient()->browser()->ShouldUrlUseApplicationIsolationLevel(
+  return SiteIsolationPolicy::ShouldUrlUseApplicationIsolationLevel(
              GetNavigationController()->GetBrowserContext(), url)
              ? WebExposedIsolationInfo::CreateIsolatedApplication(origin)
              : WebExposedIsolationInfo::CreateIsolated(origin);
+}
+
+void NavigationRequest::MaybeAssignInvalidPrerenderFrameTreeNodeId() {
+  if (blink::features::IsPrerender2Enabled() &&
+      !prerender_frame_tree_node_id_.has_value()) {
+    // This navigation won't activate a prerendered page. Otherwise,
+    // `prerender_frame_tree_node_id_` should have already been set before this
+    // in OnPrerenderingActivationChecksComplete().
+    prerender_frame_tree_node_id_ = RenderFrameHost::kNoFrameTreeNodeId;
+  }
 }
 
 NavigationRequest::ScopedCrashKeys::ScopedCrashKeys(
@@ -7305,8 +7461,10 @@ NavigationRequest::ScopedCrashKeys::ScopedCrashKeys(
     : initiator_origin_(
           GetNavigationRequestInitiatorCrashKey(),
           base::OptionalOrNullptr(navigation_request.GetInitiatorOrigin())),
-      url_(GetNavigationRequestUrlCrashKey(),
-           navigation_request.GetURL().possibly_invalid_spec()) {}
+      url_(GetNavigationRequestUrlCrashKey(), navigation_request.GetURL()),
+      is_same_document_(
+          GetNavigationRequestIsSameDocumentCrashKey(),
+          navigation_request.IsSameDocument() ? "same-doc" : "cross-doc") {}
 
 NavigationRequest::ScopedCrashKeys::~ScopedCrashKeys() = default;
 

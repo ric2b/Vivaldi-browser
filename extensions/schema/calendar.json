@@ -15,6 +15,11 @@
         "type": "object",
         "description": "A object describing how an instance of event recurrence is changed.",
         "properties": {
+          "exception_id": {
+            "type": "string",
+            "optional": true,
+            "description": "The id of the exception."
+          },
           "cancelled": {
             "type": "boolean",
             "optional": true,
@@ -331,11 +336,6 @@
             "optional": true,
             "description": "The timezone of the event."
           },
-          "due": {
-            "type": "number",
-            "optional": true,
-            "description": "The date and time that a to-do is expected to be completed."
-          },
           "priority": {
             "type": "integer",
             "optional": true,
@@ -522,11 +522,6 @@
           "is_template": {
             "type": "boolean",
             "description": "Is  the event a template or not."
-          },
-          "due": {
-            "type": "number",
-            "optional": true,
-            "description": "The date and time that a to-do is expected to be completed."
           },
           "priority": {
             "type": "integer",
@@ -1062,6 +1057,29 @@
         }
       },
       {
+        "name": "deleteEventException",
+        "type": "function",
+        "description": "Deletes an recurring event exception.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "exception_id",
+            "description": "The id of the exception to delete."
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "$ref": "CalendarEvent",
+              "description": "The calendar event after removing the event exception."
+            }
+          ]
+        }
+      },
+      {
         "name": "updateEvent",
         "type": "function",
         "description": "Updates the properties of an event. Specify only the properties that you want to change. Unspecified properties will be left unchanged.",
@@ -1183,11 +1201,6 @@
                 "type": "string",
                 "optional": true,
                 "description": "The timezone of the event."
-              },
-              "due": {
-                "type": "number",
-                "optional": true,
-                "description": "The date and time that a to-do is expected to be completed."
               },
               "priority": {
                 "type": "integer",

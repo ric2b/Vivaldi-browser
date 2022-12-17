@@ -62,6 +62,8 @@ class SyncedBookmarkTracker {
 
     // Check whether |data| matches the stored specifics hash. It also compares
     // parent information, but only if present in specifics (M94 and above).
+    // TODO(crbug.com/1274122): Remove Possibly from the name, since it's now
+    // guaranteed and update comment.
     bool MatchesDataPossiblyIncludingParent(
         const syncer::EntityData& data) const;
 
@@ -213,15 +215,9 @@ class SyncedBookmarkTracker {
     model_type_state_ = std::move(model_type_state);
   }
 
-  // Treats the current time as last sync time.
-  // TODO(crbug.com/1032052): Remove this code once all local sync metadata is
-  // required to populate the client tag (and be considered invalid otherwise).
-  void UpdateLastSyncTime() { last_sync_time_ = base::Time::Now(); }
-
   std::vector<const Entity*> GetAllEntities() const;
 
-  std::vector<const Entity*> GetEntitiesWithLocalChanges(
-      size_t max_entries) const;
+  std::vector<const Entity*> GetEntitiesWithLocalChanges() const;
 
   // Updates the tracker after receiving the commit response. |sync_id| should
   // match the already tracked sync ID for |entity|, with the exception of the
@@ -282,10 +278,6 @@ class SyncedBookmarkTracker {
   // reuploaded.
   bool ReuploadBookmarksOnLoadIfNeeded();
 
-  // Returns whether bookmark commits sent to the server (most importantly
-  // creations) should populate client tags.
-  bool bookmark_client_tags_in_protocol_enabled() const;
-
   // Causes the tracker to remember that a remote sync update (initial or
   // incremental) was ignored because its parent was unknown (either because
   // the data was corrupt or because the update is a descendant of an
@@ -323,7 +315,6 @@ class SyncedBookmarkTracker {
   SyncedBookmarkTracker(
       sync_pb::ModelTypeState model_type_state,
       bool bookmarks_reuploaded,
-      base::Time last_sync_time,
       absl::optional<int64_t> num_ignored_updates_due_to_missing_parent,
       absl::optional<int64_t>
           max_version_among_ignored_updates_due_to_missing_parent);
@@ -382,12 +373,6 @@ class SyncedBookmarkTracker {
   // TODO(crbug.com/1232951): remove this code when most of bookmarks are
   // reuploaded.
   bool bookmarks_reuploaded_ = false;
-
-  // The local timestamp corresponding to the last time remote updates were
-  // received.
-  // TODO(crbug.com/1032052): Remove this code once all local sync metadata is
-  // required to populate the client tag (and be considered invalid otherwise).
-  base::Time last_sync_time_;
 
   // See corresponding proto fields in BookmarkModelMetadata.
   absl::optional<int64_t> num_ignored_updates_due_to_missing_parent_;

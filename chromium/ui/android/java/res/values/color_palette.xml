@@ -68,6 +68,7 @@
     <color name="baseline_secondary_300">#5AB3F0</color>
     <color name="baseline_secondary_300_with_neutral_100_alpha_8">#53A7E1</color>
     <color name="baseline_secondary_300_with_neutral_100_alpha_24">#448FC4</color>
+    <color name="baseline_secondary_700">#004A77</color>
     <color name="baseline_secondary_900">#001D35</color>
     <color name="baseline_tertiary_100">#C4EED0</color>
     <color name="baseline_tertiary_200">#6DD58C</color>
@@ -126,6 +127,7 @@
     <color name="white_alpha_32" tools:ignore="UnusedResources">#51FFFFFF</color>
     <color name="white_alpha_38" tools:ignore="UnusedResources">#61FFFFFF</color>
     <color name="white_alpha_50">#80FFFFFF</color>
+    <color name="white_alpha_60">#99FFFFFF</color>
     <color name="white_alpha_70">#B3FFFFFF</color>
     <color name="modern_yellow_300">#FDD663</color>
     <color name="modern_yellow_500">#FBBC04</color>

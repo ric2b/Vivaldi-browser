@@ -13,7 +13,6 @@
 #include "base/check_op.h"
 #include "base/files/file_util.h"
 #include "base/memory/raw_ptr.h"
-#include "base/memory/weak_ptr.h"
 #include "base/one_shot_event.h"
 #include "base/scoped_observation.h"
 #include "build/chromeos_buildflags.h"
@@ -188,9 +187,8 @@ void ManagedValueStoreCache::ExtensionTracker::LoadSchemasOnFileTaskRunner(
 
   for (ExtensionSet::const_iterator it = extensions->begin();
        it != extensions->end(); ++it) {
-    std::string schema_file;
-    if (!(*it)->manifest()->GetString(
-            manifest_keys::kStorageManagedSchema, &schema_file)) {
+    if (!(*it)->manifest()->FindStringPath(
+            manifest_keys::kStorageManagedSchema)) {
       // TODO(joaodasilva): Remove this. http://crbug.com/325349
       (*components)[(*it)->id()] = policy::Schema();
       continue;
@@ -318,16 +316,20 @@ void ManagedValueStoreCache::OnPolicyUpdated(const policy::PolicyNamespace& ns,
     return;
   }
 
+  // This WeakPtr usage *should* be safe. Even though we are "vending" WeakPtrs
+  // from the UI thread, they are only ever dereferenced or invalidated from
+  // the background sequence, since this object is destroyed on the
+  // background sequence.
   GetBackendTaskRunner()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&ManagedValueStoreCache::UpdatePolicyOnBackend,
-                     base::Unretained(this), ns.component_id, current.Clone()));
+      FROM_HERE, base::BindOnce(&ManagedValueStoreCache::UpdatePolicyOnBackend,
+                                weak_ptr_factory_.GetWeakPtr(), ns.component_id,
+                                current.Clone()));
 }
 
 // static
 policy::PolicyDomain ManagedValueStoreCache::GetPolicyDomain(Profile* profile) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  return chromeos::ProfileHelper::IsSigninProfile(profile)
+  return ash::ProfileHelper::IsSigninProfile(profile)
              ? policy::POLICY_DOMAIN_SIGNIN_EXTENSIONS
              : policy::POLICY_DOMAIN_EXTENSIONS;
 #else

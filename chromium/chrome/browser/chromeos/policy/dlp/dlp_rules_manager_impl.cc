@@ -24,10 +24,10 @@
 #include "chrome/common/chrome_features.h"
 #include "chromeos/dbus/dlp/dlp_client.h"
 #include "chromeos/dbus/dlp/dlp_service.pb.h"
-#include "components/policy/core/browser/url_util.h"
 #include "components/policy/core/common/policy_pref_names.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
+#include "components/url_matcher/url_util.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace policy {
@@ -101,14 +101,14 @@ void AddUrlConditions(url_matcher::URLMatcher* matcher,
   std::string path;
   std::string query;
   bool match_subdomains = true;
-  for (const auto& list_entry : urls->GetList()) {
+  for (const auto& list_entry : urls->GetListDeprecated()) {
     std::string url = list_entry.GetString();
-    if (!url_util::FilterToComponents(url, &scheme, &host, &match_subdomains,
-                                      &port, &path, &query)) {
+    if (!url_matcher::util::FilterToComponents(
+            url, &scheme, &host, &match_subdomains, &port, &path, &query)) {
       LOG(ERROR) << "Invalid pattern " << url;
       continue;
     }
-    auto condition_set = url_util::CreateConditionSet(
+    auto condition_set = url_matcher::util::CreateConditionSet(
         matcher, ++condition_id, scheme, host, match_subdomains, port, path,
         query, /*allow=*/true);
 
@@ -250,8 +250,7 @@ DlpRulesManager::Level DlpRulesManagerImpl::IsRestrictedDestination(
          restriction == Restriction::kFiles);
 
   // Allow copy/paste within the same document.
-  if (url::Origin::Create(source).IsSameOriginWith(
-          url::Origin::Create(destination)))
+  if (url::IsSameOriginWith(source, destination))
     return Level::kAllow;
 
   const RulesConditionsMap src_rules_map = MatchUrlAndGetRulesMapping(
@@ -396,20 +395,6 @@ size_t DlpRulesManagerImpl::GetClipboardCheckSizeLimitInBytes() const {
       policy_prefs::kDlpClipboardCheckSizeLimit);
 }
 
-std::vector<uint64_t> DlpRulesManagerImpl::GetDisallowedFileTransfers(
-    const std::vector<FileMetadata>& transferred_files,
-    const GURL& destination) const {
-  // TODO(crbug.com/1273793): Change to handle VMs, external drive, ...etc.
-  std::vector<uint64_t> restricted_files;
-  for (const auto& file : transferred_files) {
-    Level level = IsRestrictedDestination(
-        file.source, destination, Restriction::kFiles, nullptr, nullptr);
-    if (level == Level::kBlock)
-      restricted_files.push_back(file.inode);
-  }
-  return restricted_files;
-}
-
 void DlpRulesManagerImpl::OnPolicyUpdate() {
   components_rules_.clear();
   restrictions_map_.clear();
@@ -430,8 +415,8 @@ void DlpRulesManagerImpl::OnPolicyUpdate() {
       g_browser_process->local_state()->GetList(policy_prefs::kDlpRulesList);
 
   DlpBooleanHistogram(dlp::kDlpPolicyPresentUMA,
-                      rules_list && !rules_list->GetList().empty());
-  if (!rules_list || rules_list->GetList().empty()) {
+                      rules_list && !rules_list->GetListDeprecated().empty());
+  if (!rules_list || rules_list->GetListDeprecated().empty()) {
     DataTransferDlpController::DeleteInstance();
     return;
   }
@@ -443,7 +428,7 @@ void DlpRulesManagerImpl::OnPolicyUpdate() {
   // Constructing request to send the policy to DLP Files daemon.
   ::dlp::SetDlpFilesPolicyRequest request_to_daemon;
 
-  for (const base::Value& rule : rules_list->GetList()) {
+  for (const base::Value& rule : rules_list->GetListDeprecated()) {
     DCHECK(rule.is_dict());
     const auto* sources = rule.FindDictKey("sources");
     DCHECK(sources);
@@ -467,7 +452,8 @@ void DlpRulesManagerImpl::OnPolicyUpdate() {
     const auto* destinations_components =
         destinations ? destinations->FindListKey("components") : nullptr;
     if (destinations_components) {
-      for (const auto& component : destinations_components->GetList()) {
+      for (const auto& component :
+           destinations_components->GetListDeprecated()) {
         DCHECK(component.is_string());
         components_rules_[GetComponentMapping(component.GetString())].insert(
             rules_counter);
@@ -476,7 +462,7 @@ void DlpRulesManagerImpl::OnPolicyUpdate() {
 
     const auto* restrictions = rule.FindListKey("restrictions");
     DCHECK(restrictions);
-    for (const auto& restriction : restrictions->GetList()) {
+    for (const auto& restriction : restrictions->GetListDeprecated()) {
       const auto* rule_class_str = restriction.FindStringKey("class");
       DCHECK(rule_class_str);
       const auto* rule_level_str = restriction.FindStringKey("level");
@@ -492,13 +478,14 @@ void DlpRulesManagerImpl::OnPolicyUpdate() {
 
       // TODO(crbug.com/1172959): Implement Warn level for Files.
       if (rule_restriction == Restriction::kFiles && destinations_urls &&
-          !destinations_urls->GetList().empty() && rule_level != Level::kWarn) {
+          !destinations_urls->GetListDeprecated().empty() &&
+          rule_level != Level::kWarn) {
         ::dlp::DlpFilesRule files_rule;
-        for (const auto& url : sources_urls->GetList()) {
+        for (const auto& url : sources_urls->GetListDeprecated()) {
           DCHECK(url.is_string());
           files_rule.add_source_urls(url.GetString());
         }
-        for (const auto& url : destinations_urls->GetList()) {
+        for (const auto& url : destinations_urls->GetListDeprecated()) {
           DCHECK(url.is_string());
           files_rule.add_destination_urls(url.GetString());
         }

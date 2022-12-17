@@ -63,27 +63,25 @@ void OperaImporter::StartImport(const importer::SourceProfile& source_profile,
       profile_dir_ = profile_dir_.DirName();
       file = profile_dir_;
     }
+    master_password_required_ = false;
+
     // Read Inifile
     DictionaryValueINIParser inifile_parser;
     if (ReadOperaIniFile(profile_dir_, &inifile_parser)) {
-      const base::DictionaryValue& inifile = inifile_parser.root();
+      const base::Value::Dict& inifile = inifile_parser.root().GetDict();
 
       bookmarkfilename_ =
-          StringToPath(inifile.FindStringPath("User Prefs.Hot List File Ver2"));
+          StringToPath(inifile.FindStringByDottedPath("User Prefs.Hot List File Ver2"));
       notesfilename_ =
-          StringToPath(inifile.FindStringPath("MailBox.NotesFile"));
-      std::string temp_val;
-      master_password_required_ =
-          (inifile.GetString("Security Prefs.Use Paranoid Mailpassword",
-                             &temp_val) &&
-           !temp_val.empty() && atoi(temp_val.c_str()) != 0);
+          StringToPath(inifile.FindStringByDottedPath("MailBox.NotesFile"));
+      if (const std::string* s = inifile.FindStringByDottedPath("Security Prefs.Use Paranoid Mailpassword")) {
+        master_password_required_ = !s->empty() && atoi(s->c_str()) != 0;
+      }
 
       wandfilename_ =
-          StringToPath(inifile.FindStringPath("User Prefs.WandStorageFile"));
+          StringToPath(inifile.FindStringByDottedPath("User Prefs.WandStorageFile"));
       masterpassword_filename_ =
           profile_dir_.AppendASCII("opcert6.dat").value();
-    } else {
-      master_password_required_ = false;
     }
     // Fallbacks if the ini file was not found or didn't have paths.
     if (bookmarkfilename_.empty()) {
@@ -142,30 +140,20 @@ bool OperaImporter::ImportSpeedDial(std::string* error) {
   ini_file = ini_file.AppendASCII(OPERA_SPEEDDIAL_NAME);
 
   if (ReadOperaIniFile(ini_file, &inifile_parser)) {
-    for (base::DictionaryValue::Iterator itr(inifile_parser.root());
-         !itr.IsAtEnd(); itr.Advance()) {
-      const std::string& key = itr.key();
+    for (auto i : inifile_parser.root().GetDict()) {
+      const std::string& key = i.first;
+      if (key.find("Speed Dial ") == std::string::npos)
+        continue;
+      const base::Value::Dict* dict = i.second.GetIfDict();
+      if (!dict)
+        continue;
 
-      if (key.find("Speed Dial ") != std::string::npos) {
-        const base::DictionaryValue* dict = nullptr;
-        std::unique_ptr<ImportedSpeedDialEntry> entry(
-            new ImportedSpeedDialEntry);
-        if (itr.value().GetAsDictionary(&dict)) {
-          for (base::DictionaryValue::Iterator section(*dict);
-               !section.IsAtEnd(); section.Advance()) {
-            const std::string& section_key = section.key();
-            const base::Value& section_value = section.value();
-            if (section_key == "Title") {
-              section_value.GetAsString(&entry->title);
-            } else if (section_key == "Url") {
-              std::string url;
-              section_value.GetAsString(&url);
-              entry->url = GURL(url);
-            }
-          }
-          entries.push_back(*entry.release());
-        }
-      }
+      ImportedSpeedDialEntry entry;
+      const std::string* s = dict->FindString("Title");
+      entry.title = base::UTF8ToUTF16(s ? *s : std::string());
+      s = dict->FindString("Url");
+      entry.url = s ? GURL(*s): GURL();
+      entries.push_back(std::move(entry));
     }
   } else {
     *error = "Could not read speeddial.ini.";

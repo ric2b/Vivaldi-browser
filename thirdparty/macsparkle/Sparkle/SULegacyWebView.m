@@ -6,21 +6,15 @@
 //  Copyright © 2020 Sparkle Project. All rights reserved.
 //
 
+#if SPARKLE_BUILD_UI_BITS
+
 #import "SULegacyWebView.h"
 #import "SUWebViewCommon.h"
 #import "SULog.h"
 #import <WebKit/WebKit.h>
 
-// WebKit protocols are not explicitly declared until 10.11 SDK, so
-// declare dummy protocols to keep the build working on earlier SDKs.
-#if __MAC_OS_X_VERSION_MAX_ALLOWED < 101100
-@protocol WebFrameLoadDelegate <NSObject>
-@end
-@protocol WebPolicyDelegate <NSObject>
-@end
-@protocol WebUIDelegate <NSObject>
-@end
-#endif
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
 
 @interface SULegacyWebView () <WebPolicyDelegate, WebFrameLoadDelegate, WebUIDelegate>
 
@@ -39,8 +33,9 @@
     self = [super init];
     if (self != nil) {
         _webView = [[WebView alloc] initWithFrame:NSZeroRect];
-        
-        WebPreferences *preferences = _webView.preferences;
+
+        WebPreferences *preferences = [[WebPreferences alloc] initWithIdentifier:@"sparkle-project.org.legacy-web-view"];
+        preferences.autosaves = NO;
         preferences.javaScriptEnabled = javaScriptEnabled;
         preferences.javaEnabled = NO;
         preferences.plugInsEnabled = NO;
@@ -79,12 +74,6 @@
 {
     self.completionHandler = [completionHandler copy];
     [[self.webView mainFrame] loadData:data MIMEType:MIMEType textEncodingName:textEncodingName baseURL:baseURL];
-}
-
-- (void)loadRequest:(NSURLRequest *)urlRequest completionHandler:(void (^)(NSError * _Nullable))completionHandler
-{
-    self.completionHandler = [completionHandler copy];
-    [[self.webView mainFrame] loadRequest:urlRequest];
 }
 
 - (void)stopLoading
@@ -176,3 +165,7 @@
 }
 
 @end
+
+#pragma clang diagnostic pop
+
+#endif

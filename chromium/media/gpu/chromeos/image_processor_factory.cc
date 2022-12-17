@@ -76,7 +76,7 @@ std::unique_ptr<ImageProcessor> CreateVaapiImageProcessorWithInputCandidates(
       {VideoFrame::STORAGE_GPU_MEMORY_BUFFER});
   return ImageProcessor::Create(
       base::BindRepeating(&VaapiImageProcessorBackend::Create), input_config,
-      output_config, {ImageProcessor::OutputMode::IMPORT}, VIDEO_ROTATION_0,
+      output_config, ImageProcessor::OutputMode::IMPORT, VIDEO_ROTATION_0,
       std::move(error_cb), std::move(client_task_runner));
 }
 #endif  // BUILDFLAG(USE_VAAPI)
@@ -104,8 +104,17 @@ std::unique_ptr<ImageProcessor> CreateV4L2ImageProcessorWithInputCandidates(
 
   const auto output_fourcc = out_format_picker.Run(
       /*candidates=*/supported_fourccs, /*preferred_fourcc=*/absl::nullopt);
-  if (!output_fourcc)
+  if (!output_fourcc) {
+#if DCHECK_IS_ON()
+    std::string output_fourccs_string;
+    for (const auto fourcc : supported_fourccs) {
+      output_fourccs_string += fourcc.ToString();
+      output_fourccs_string += " ";
+    }
+    DVLOGF(1) << "None of " << output_fourccs_string << "formats is supported.";
+#endif
     return nullptr;
+  }
 
   const auto supported_input_pixfmts =
       V4L2ImageProcessorBackend::GetSupportedInputFormats();
@@ -116,8 +125,15 @@ std::unique_ptr<ImageProcessor> CreateV4L2ImageProcessorWithInputCandidates(
     if (!base::Contains(supported_input_pixfmts, input_fourcc.ToV4L2PixFmt()))
       continue;
 
-    // Try to get an image size as close as possible to the final size.
-    gfx::Size output_size = visible_size;
+    // Some Image Processors (e.g. MTK8183) are not able to produce the ideal
+    // output resolution (which would be the |visible_size|) -- and the call to
+    // TryOutputFormat() doesn't return a "corrected" |output_size| in those
+    // cases (see b/213396803). To avoid those situations, we set here the
+    // |output_size| to be the same as the |input_size|, and will let the
+    // |visible_size| carry the information of exactly what part of the output
+    // video frame contains meaningful pixels.
+    // TODO(b/191450183): Use a gfx::Rect instead of |visible_size|.
+    gfx::Size output_size = input_size;
     size_t num_planes = 0;
     if (!V4L2ImageProcessorBackend::TryOutputFormat(
             input_fourcc.ToV4L2PixFmt(), output_fourcc->ToV4L2PixFmt(),
@@ -142,7 +158,7 @@ std::unique_ptr<ImageProcessor> CreateV4L2ImageProcessorWithInputCandidates(
 std::unique_ptr<ImageProcessor> ImageProcessorFactory::Create(
     const ImageProcessor::PortConfig& input_config,
     const ImageProcessor::PortConfig& output_config,
-    const std::vector<ImageProcessor::OutputMode>& preferred_output_modes,
+    ImageProcessor::OutputMode output_mode,
     size_t num_buffers,
     VideoRotation relative_rotation,
     scoped_refptr<base::SequencedTaskRunner> client_task_runner,
@@ -160,10 +176,9 @@ std::unique_ptr<ImageProcessor> ImageProcessorFactory::Create(
 
   std::unique_ptr<ImageProcessor> image_processor;
   for (auto& create_func : create_funcs) {
-    image_processor =
-        ImageProcessor::Create(std::move(create_func), input_config,
-                               output_config, preferred_output_modes,
-                               relative_rotation, error_cb, client_task_runner);
+    image_processor = ImageProcessor::Create(
+        std::move(create_func), input_config, output_config, output_mode,
+        relative_rotation, error_cb, client_task_runner);
     if (image_processor)
       return image_processor;
   }

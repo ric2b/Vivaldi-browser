@@ -40,16 +40,22 @@ void ImageBitmapRenderingContextBase::Stop() {
   image_layer_bridge_->Dispose();
 }
 
+void ImageBitmapRenderingContextBase::Dispose() {
+  Stop();
+  CanvasRenderingContext::Dispose();
+}
+
 void ImageBitmapRenderingContextBase::ResetInternalBitmapToBlackTransparent(
     int width,
     int height) {
   SkBitmap black_bitmap;
-  black_bitmap.allocN32Pixels(width, height);
-  black_bitmap.eraseARGB(0, 0, 0, 0);
-  auto image = SkImage::MakeFromBitmap(black_bitmap);
-  if (image) {
-    image_layer_bridge_->SetImage(
-        UnacceleratedStaticBitmapImage::Create(image));
+  if (black_bitmap.tryAllocN32Pixels(width, height)) {
+    black_bitmap.eraseARGB(0, 0, 0, 0);
+    auto image = SkImage::MakeFromBitmap(black_bitmap);
+    if (image) {
+      image_layer_bridge_->SetImage(
+          UnacceleratedStaticBitmapImage::Create(image));
+    }
   }
 }
 

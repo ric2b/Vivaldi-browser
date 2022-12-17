@@ -61,6 +61,11 @@
             </menu>
         </item>
         <item
+            android:id="@+id/add_page_to_reading_list_menu_id"
+            android:title="@string/add_page_to_reading_list"
+            android:visible="false"
+            app:showAsAction="ifRoom" />
+        <item
             android:id="@+id/close_menu_id"
             android:icon="@drawable/vivaldi_close_mobile_24dp"
             android:title="@string/panel_close"

@@ -6,8 +6,8 @@
 #define NET_SOCKET_CONNECT_JOB_H_
 
 #include <memory>
+#include <set>
 #include <string>
-#include <vector>
 
 #include "base/callback_forward.h"
 #include "base/memory/raw_ptr.h"
@@ -30,6 +30,7 @@
 namespace net {
 
 class ClientSocketFactory;
+struct ConnectionEndpointMetadata;
 class HostPortPair;
 class HostResolver;
 class HttpAuthCache;
@@ -41,13 +42,13 @@ class NetLog;
 class NetLogWithSource;
 class NetworkQualityEstimator;
 class ProxyDelegate;
-class SocketPerformanceWatcherFactory;
-class StreamSocket;
-class WebSocketEndpointLockManager;
 class QuicStreamFactory;
+class SocketPerformanceWatcherFactory;
 class SocketTag;
 class SpdySessionPool;
 class SSLCertRequestInfo;
+class StreamSocket;
+class WebSocketEndpointLockManager;
 
 // Immutable socket parameters intended for shared use by all ConnectJob types.
 // Excludes priority because it can be modified over the lifetime of a
@@ -232,6 +233,10 @@ class NET_EXPORT_PRIVATE ConnectJob {
   // SSLCertRequestInfo received. Otherwise, returns nullptr.
   virtual scoped_refptr<SSLCertRequestInfo> GetCertRequestInfo();
 
+  // Returns the `ConnectionEndpointMetadata` structure corresponding to the
+  // chosen route. Should only be called on a successful connect.
+  virtual const ConnectionEndpointMetadata& GetEndpointMetadata() const;
+
   const LoadTimingInfo::ConnectTiming& connect_timing() const {
     return connect_timing_;
   }
@@ -266,7 +271,7 @@ class NET_EXPORT_PRIVATE ConnectJob {
   }
 
   void SetSocket(std::unique_ptr<StreamSocket> socket,
-                 absl::optional<std::vector<std::string>> dns_aliases);
+                 absl::optional<std::set<std::string>> dns_aliases);
   void NotifyDelegateOfCompletion(int rv);
   void NotifyDelegateOfProxyAuth(const HttpResponseInfo& response,
                                  HttpAuthController* auth_controller,

@@ -58,7 +58,7 @@ class VivaldiInvalidationService
   std::string GetChannel() override;
   void OnConnected() override;
   void OnClosed() override;
-  void OnInvalidation(base::Value) override;
+  void OnInvalidation(base::Value::Dict) override;
 
  private:
   bool ConnectionAllowed();

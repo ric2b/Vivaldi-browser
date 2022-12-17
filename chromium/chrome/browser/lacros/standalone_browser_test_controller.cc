@@ -7,23 +7,23 @@
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/browser/web_applications/web_app_install_manager.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
-#include "chrome/browser/web_applications/web_application_info.h"
 #include "chromeos/lacros/lacros_service.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
 
 namespace {
 blink::mojom::DisplayMode WindowModeToDisplayMode(
-    apps::mojom::WindowMode window_mode) {
+    apps::WindowMode window_mode) {
   switch (window_mode) {
-    case apps::mojom::WindowMode::kBrowser:
+    case apps::WindowMode::kBrowser:
       return blink::mojom::DisplayMode::kBrowser;
-    case apps::mojom::WindowMode::kTabbedWindow:
+    case apps::WindowMode::kTabbedWindow:
       return blink::mojom::DisplayMode::kTabbed;
-    case apps::mojom::WindowMode::kWindow:
+    case apps::WindowMode::kWindow:
       return blink::mojom::DisplayMode::kStandalone;
-    case apps::mojom::WindowMode::kUnknown:
+    case apps::WindowMode::kUnknown:
       return blink::mojom::DisplayMode::kUndefined;
   }
 }
@@ -39,9 +39,9 @@ StandaloneBrowserTestController::~StandaloneBrowserTestController() = default;
 
 void StandaloneBrowserTestController::InstallWebApp(
     const std::string& start_url,
-    apps::mojom::WindowMode window_mode,
+    apps::WindowMode window_mode,
     InstallWebAppCallback callback) {
-  auto info = std::make_unique<WebApplicationInfo>();
+  auto info = std::make_unique<WebAppInstallInfo>();
   info->title = u"Test Web App";
   info->start_url = GURL(start_url);
   info->display_mode = WindowModeToDisplayMode(window_mode);
@@ -59,8 +59,8 @@ void StandaloneBrowserTestController::InstallWebApp(
 void StandaloneBrowserTestController::WebAppInstallationDone(
     InstallWebAppCallback callback,
     const web_app::AppId& installed_app_id,
-    web_app::InstallResultCode code) {
-  std::move(callback).Run(code == web_app::InstallResultCode::kSuccessNewInstall
+    webapps::InstallResultCode code) {
+  std::move(callback).Run(code == webapps::InstallResultCode::kSuccessNewInstall
                               ? installed_app_id
                               : "");
 }

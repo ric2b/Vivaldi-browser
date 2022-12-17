@@ -20,7 +20,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/sync/base/unique_position.h"
-#include "components/sync/engine/entity_data.h"
+#include "components/sync/protocol/entity_data.h"
 #include "components/sync/protocol/entity_specifics.pb.h"
 #include "components/sync/protocol/notes_specifics.pb.h"
 #include "components/sync_bookmarks/switches.h"
@@ -41,8 +41,6 @@ const int kLegacyCanonicalizedTitleLimitBytes = 255;
 const char* const kForbiddenTitles[] = {"", ".", ".."};
 
 // This is an exact copy of the same code in note_update_preprocessing.cc.
-// TODO(crbug.com/1032052): Remove when client tags are adopted in
-// ModelTypeWorker.
 std::string ComputeGuidFromBytes(base::span<const uint8_t> bytes) {
   DCHECK_GE(bytes.size(), 16U);
 
@@ -66,9 +64,13 @@ std::string ComputeGuidFromBytes(base::span<const uint8_t> bytes) {
       bytes[14], bytes[15]);
 }
 
-// This is an exact copy of the same code in note_update_preprocessing.cc.
-// TODO(crbug.com/1032052): Remove when client tags are adopted in
-// ModelTypeWorker.
+// This is an exact copy of the same code in note_update_preprocessing.cc,
+// which could be removed if eventually client tags are adapted/inferred in
+// ModelTypeWorker. The reason why this is non-trivial today is that some users
+// are known to contain corrupt data in the sense that several different
+// entities (identified by their server-provided ID) use the same client tag
+// (and GUID). Currently NoteModelMerger has logic to prefer folders over
+// regular URLs and reassign GUIDs.
 std::string InferGuidForLegacyNote(
     const std::string& originator_cache_guid,
     const std::string& originator_client_item_id) {
@@ -211,8 +213,13 @@ const vivaldi::NoteNode* CreateNoteNodeFromSpecifics(
   DCHECK(model);
   DCHECK(IsValidNotesSpecifics(specifics));
 
-  base::GUID guid = base::GUID::ParseLowercase(specifics.guid());
+  const base::GUID guid = base::GUID::ParseLowercase(specifics.guid());
   DCHECK(guid.is_valid());
+
+  const base::GUID parent_guid =
+      base::GUID::ParseLowercase(specifics.parent_guid());
+  DCHECK(parent_guid.is_valid());
+  DCHECK_EQ(parent_guid, parent->guid());
 
   const int64_t creation_time_us = specifics.creation_time_us();
   const base::Time creation_time = base::Time::FromDeltaSinceWindowsEpoch(
@@ -340,13 +347,11 @@ bool IsValidNotesSpecifics(const sync_pb::NotesSpecifics& specifics) {
     DLOG(ERROR) << "Invalid note: banned GUID in specifics.";
     is_valid = false;
   }
-  if (specifics.has_parent_guid()) {
-    const base::GUID parent_guid =
-        base::GUID::ParseLowercase(specifics.parent_guid());
-    if (!parent_guid.is_valid()) {
-      DLOG(ERROR) << "Invalid note: invalid parent GUID in specifics.";
-      is_valid = false;
-    }
+  const base::GUID parent_guid =
+      base::GUID::ParseLowercase(specifics.parent_guid());
+  if (!parent_guid.is_valid()) {
+    DLOG(ERROR) << "Invalid note: invalid parent GUID in specifics.";
+    is_valid = false;
   }
 
   if (!syncer::UniquePosition::FromProto(specifics.unique_position())

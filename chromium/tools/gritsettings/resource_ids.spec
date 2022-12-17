@@ -133,6 +133,9 @@
     "META": {"sizes": {"includes": [50]}},
     "includes": [1380],
   },
+  "chrome/browser/resources/chromeos/app_icon/app_icon_resources.grd": {
+    "structures": [1390],
+  },
   "chrome/browser/resources/chromeos/login/oobe_conditional_resources.grd": {
     "META": {"sizes": {"includes": [150], "structures": [300]}},
     "includes": [1400],
@@ -177,6 +180,14 @@
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/history/history_resources.grd": {
     "META": {"sizes": {"includes": [40]}},
     "includes": [1620],
+  },
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/image_editor/resources.grd": {
+    "META": {"sizes": {"includes": [20]}},
+    "includes": [1625],
+  },
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/image_editor/image_editor_untrusted_resources.grd": {
+    "META": {"sizes": {"includes": [20]}},
+    "includes": [1630],
   },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/internals/resources.grd": {
     "META": {"sizes": {"includes": [20]}},
@@ -228,6 +239,10 @@
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/print_preview/print_preview_resources.grd": {
     "META": {"sizes": {"includes": [500],}},
     "includes": [1900],
+  },
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/privacy_sandbox/resources.grd": {
+    "META": {"sizes": {"includes": [20],}},
+    "includes": [1910],
   },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/read_later/read_later_resources.grd": {
     "META": {"sizes": {"includes": [10],}},
@@ -322,6 +337,10 @@
     "META": {"sizes": {"includes": [10]}},
     "includes": [2320],
   },
+  "<(SHARED_INTERMEDIATE_DIR)/components/optimization_guide/optimization_guide_internals/resources/resources.grd": {
+    "META": {"sizes": {"includes": [10]}},
+    "includes": [2330],
+  },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/gaia_auth_host/resources.grd": {
     "META": {"sizes": {"includes": [10],}},
     "includes": [2340],
@@ -362,6 +381,10 @@
    "META": {"sizes": {"includes": [10],}},
    "includes": [2520],
   },
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/app_settings/resources.grd": {
+    "META": {"sizes": {"includes": [10]}},
+    "includes": [2530],
+  },
   "<(SHARED_INTERMEDIATE_DIR)/components/sync/driver/resources/resources.grd": {
    "META": {"sizes": {"includes": [30],}},
     "includes": [2540],
@@ -373,12 +396,20 @@
     "META": {"sizes": {"includes": [10],}},
     "includes": [2580],
   },
+  "<(SHARED_INTERMEDIATE_DIR)/content/browser/resources/quota/resources.grd": {
+    "META": {"sizes": {"includes": [10],}},
+    "includes": [2590],
+  },
   "<(SHARED_INTERMEDIATE_DIR)/content/browser/webrtc/resources/resources.grd": {
     "META": {"sizes": {"includes": [20],}},
     "includes": [2600],
   },
   "content/dev_ui_content_resources.grd": {
     "includes": [2620],
+  },
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/feed/resources.grd": {
+    "META": {"sizes": {"includes": [20]}},
+    "includes": [2640],
   },
   # END chrome/ WebUI resources section
 
@@ -418,12 +449,23 @@
     "META": {"align": 100},
     "messages": [2900],
   },
+  "<(SHARED_INTERMEDIATE_DIR)/ash/ambient/resources/lottie_resources.grd": {
+    "META": {"sizes": {"includes": [100],}},
+    "includes": [2910],
+  },
+  "ash/resources/ash_resources.grd": {
+    "includes": [2915],
+  },
   "<(SHARED_INTERMEDIATE_DIR)/ash/webui/camera_app_ui/ash_camera_app_resources.grd": {
     "META": {"sizes": {"includes": [300],}},
     "includes": [2920],
   },
   "ash/webui/camera_app_ui/resources/strings/camera_strings.grd": {
     "messages": [2940],
+  },
+  "<(SHARED_INTERMEDIATE_DIR)/ash/webui/color_internals/resources/ash_color_internals_resources.grd": {
+    "META": {"sizes": {"includes": [20],}},
+    "includes": [2950],
   },
   "<(SHARED_INTERMEDIATE_DIR)/ash/webui/connectivity_diagnostics/resources/connectivity_diagnostics_resources.grd": {
     "META": {"sizes": {"includes": [50],}},
@@ -487,11 +529,11 @@
     "includes": [3140],
     "structures": [3160],
   },
-  "<(SHARED_INTERMEDIATE_DIR)/ash/webui/sample_system_web_app_ui/ash_sample_system_web_app_resources.grd": {
+  "<(SHARED_INTERMEDIATE_DIR)/ash/webui/sample_system_web_app_ui/resources/trusted/ash_sample_system_web_app_resources.grd": {
     "META": {"sizes": {"includes": [50],}},
     "includes": [3180],
   },
-  "<(SHARED_INTERMEDIATE_DIR)/ash/webui/sample_system_web_app_ui/ash_sample_system_web_app_untrusted_resources.grd": {
+  "<(SHARED_INTERMEDIATE_DIR)/ash/webui/sample_system_web_app_ui/resources/untrusted/ash_sample_system_web_app_untrusted_resources.grd": {
     "META": {"sizes": {"includes": [50],}},
     "includes": [3200],
   },
@@ -499,7 +541,8 @@
     "includes": [3220],
     "structures": [3240],
   },
-  "ash/webui/telemetry_extension_ui/resources/telemetry_extension_resources.grd": {
+  "<(SHARED_INTERMEDIATE_DIR)/ash/webui/system_extensions_internals_ui/ash_system_extensions_internals_resources.grd": {
+    "META": {"sizes": {"includes": [10],}},
     "includes": [3260],
   },
   "chromeos/resources/chromeos_resources.grd": {
@@ -520,8 +563,12 @@
     "META": {"sizes": {"includes": [120],}},
     "includes": [3320],
   },
+  "ash/webui/multidevice_debug/resources/multidevice_debug_resources.grd": {
+    "META": {"join": 2},
+    "includes": [3330],
+  },
   "<(SHARED_INTERMEDIATE_DIR)/ash/webui/personalization_app/resources/ash_personalization_app_resources.grd": {
-    "META": {"sizes": {"includes": [50],}},
+    "META": {"sizes": {"includes": [120],}},
     "includes": [3340],
   },
   "<(SHARED_INTERMEDIATE_DIR)/ash/webui/demo_mode_app_ui/ash_demo_mode_app_resources.grd": {
@@ -554,7 +601,7 @@
   # thus not rushing to update it for now.
   "ash/components/arc/input_overlay/resources/input_overlay_resources.grd": {
     # Big alignment at start of section.
-    "META": {"align": 1000},
+    "META": {"join": 2, "align": 1000},
     "includes": [3500],
   },
   # Chromium strings and Google Chrome strings must start at the same id.
@@ -731,6 +778,10 @@
     "META": {"sizes": {"includes": [50],}},
     "includes": [3980],
   },
+  "<(SHARED_INTERMEDIATE_DIR)/ash/webui/os_feedback_ui/untrusted_resources/ash_os_feedback_untrusted_resources.grd": {
+    "META": {"sizes": {"includes": [50],}},
+    "includes": [3982],
+  },
   "<(SHARED_INTERMEDIATE_DIR)/ash/webui/firmware_update_ui/resources/ash_firmware_update_app_resources.grd": {
     "META": {"sizes": {"includes": [200],}},
     "includes": [3990],
@@ -799,10 +850,6 @@
     "messages": [4380],
   },
 
-  "headless/lib/resources/headless_lib_resources.grd": {
-    "includes": [4400],
-  },
-
   "mojo/public/js/mojo_bindings_resources.grd": {
     "includes": [4420],
   },
@@ -831,8 +878,11 @@
     "includes": [4560],
     "structures": [4580],
   },
-  "third_party/blink/public/strings/blink_strings.grd": {
+  "third_party/blink/public/strings/blink_accessibility_strings.grd": {
     "messages": [4600],
+  },
+  "third_party/blink/public/strings/blink_strings.grd": {
+    "messages": [4610],
   },
   "third_party/libaddressinput/chromium/address_input_strings.grd": {
     "messages": [4620],

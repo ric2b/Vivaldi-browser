@@ -74,7 +74,8 @@ class RequestFilterProxyingURLLoaderFactory
     // network::mojom::URLLoaderClient:
     void OnReceiveEarlyHints(
         network::mojom::EarlyHintsPtr early_hints) override;
-    void OnReceiveResponse(network::mojom::URLResponseHeadPtr head) override;
+    void OnReceiveResponse(network::mojom::URLResponseHeadPtr head,
+                           mojo::ScopedDataPipeConsumerHandle body) override;
     void OnReceiveRedirect(const net::RedirectInfo& redirect_info,
                            network::mojom::URLResponseHeadPtr head) override;
     void OnUploadProgress(int64_t current_position,
@@ -179,6 +180,7 @@ class RequestFilterProxyingURLLoaderFactory
     // these fields are stored in a |BlockedRequest| (created and owned by
     // ExtensionWebRequestEventRouter) through much of the request's lifetime.
     network::mojom::URLResponseHeadPtr current_response_;
+    mojo::ScopedDataPipeConsumerHandle current_body_;
     scoped_refptr<net::HttpResponseHeaders> override_headers_;
     std::set<std::string> set_request_headers_;
     std::set<std::string> removed_request_headers_;

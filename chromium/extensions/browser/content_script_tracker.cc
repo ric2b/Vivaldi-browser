@@ -152,7 +152,11 @@ class RenderFrameHostAdapter
 
   std::unique_ptr<FrameAdapter> GetLocalParentOrOpener() const override {
     content::RenderFrameHost* parent_or_opener = frame_->GetParent();
-    if (!parent_or_opener) {
+    // Non primary pages(e.g. fenced frame, prerendered page, bfcache, and
+    // portals) can't look at the opener, and WebContents::GetOpener returns the
+    // opener on the primary frame tree. Thus, GetOpener should be called when
+    // |frame_| is a primary main frame.
+    if (!parent_or_opener && frame_->IsInPrimaryMainFrame()) {
       parent_or_opener =
           content::WebContents::FromRenderFrameHost(frame_)->GetOpener();
     }
@@ -328,8 +332,7 @@ bool DoContentScriptsMatch(const Extension& extension,
   // the content-script was appearing without being registered first. This is
   // only done for non-guest content, which will ofcourse fail in Vivaldi. Was
   // VB-85805.
-  if (VivaldiTabCheck::IsVivaldiTab(
-          content::WebContents::FromRenderFrameHost(frame))) {
+  if (VivaldiTabCheck::IsVivaldiTab(content::WebContents::FromRenderFrameHost(frame))) {
     guest = nullptr;
   }
 
@@ -356,7 +359,7 @@ bool DoContentScriptsMatch(const Extension& extension,
       if (!script_ids.empty()) {
         TRACE_EVENT_INSTANT(
             "extensions",
-            "ContentScriptTracker/DoesContentScriptMatch=true(guest)",
+            "ContentScriptTracker/DoContentScriptsMatch=true(guest)",
             ChromeTrackEvent::kRenderProcessHost, process,
             ChromeTrackEvent::kChromeExtensionId,
             ExtensionIdForTracing(extension.id()));
@@ -393,7 +396,7 @@ bool DoContentScriptsMatch(const Extension& extension,
     if (DoContentScriptsMatch(manifest_scripts, frame, url)) {
       TRACE_EVENT_INSTANT(
           "extensions",
-          "ContentScriptTracker/DoesContentScriptMatch=true(manifest)",
+          "ContentScriptTracker/DoContentScriptsMatch=true(manifest)",
           ChromeTrackEvent::kRenderProcessHost, process,
           ChromeTrackEvent::kChromeExtensionId,
           ExtensionIdForTracing(extension.id()));
@@ -412,7 +415,7 @@ bool DoContentScriptsMatch(const Extension& extension,
       if (DoContentScriptsMatch(dynamic_scripts, frame, url)) {
         TRACE_EVENT_INSTANT(
             "extensions",
-            "ContentScriptTracker/DoesContentScriptMatch=true(dynamic)",
+            "ContentScriptTracker/DoContentScriptsMatch=true(dynamic)",
             ChromeTrackEvent::kRenderProcessHost, process,
             ChromeTrackEvent::kChromeExtensionId,
             ExtensionIdForTracing(extension.id()));
@@ -423,7 +426,7 @@ bool DoContentScriptsMatch(const Extension& extension,
 
   // Otherwise, no content script from `extension` can run in `frame` at `url`.
   TRACE_EVENT_INSTANT("extensions",
-                      "ContentScriptTracker/DoesContentScriptMatch=false",
+                      "ContentScriptTracker/DoContentScriptsMatch=false",
                       ChromeTrackEvent::kRenderProcessHost, process,
                       ChromeTrackEvent::kChromeExtensionId,
                       ExtensionIdForTracing(extension.id()));

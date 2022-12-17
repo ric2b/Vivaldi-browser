@@ -10,6 +10,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
 #include "base/scoped_observation.h"
+#include "chrome/browser/ui/extensions/extension_popup_types.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/extension_action.h"
 #include "extensions/browser/extension_event_histogram_value.h"
@@ -72,9 +73,11 @@ class ExtensionActionAPI : public BrowserContextKeyedAPI {
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
 
-  // Opens the popup for the given |extension| in the given |browser|'s window.
+  // Opens the popup for the given |extension| in the given |browser|'s window,
+  // invoking |callback| when complete.
   bool ShowExtensionActionPopupForAPICall(const Extension* extension,
-                                          Browser* browser);
+                                          Browser* browser,
+                                          ShowPopupCallback callback);
 
   // Notifies that there has been a change in the given |extension_action|.
   void NotifyChange(ExtensionAction* extension_action,
@@ -356,6 +359,31 @@ class ActionGetUserSettingsFunction : public ExtensionFunction {
   ~ActionGetUserSettingsFunction() override;
 };
 
+// Note: action.openPopup() and browserAction.openPopup() have subtly different
+// implementations:
+//   * action.openPopup() allows the extension to specify a window ID.
+//   * browserAction.openPopup() will time out after 10 seconds;
+//     action.openPopup() does not time out and instead waits for the popup to
+//     either be shown or encounter an error.
+//   * browserAction.openPopup() returns a handle to the HTMLWindow of the
+//     popup; action.openPopup() returns nothing.
+// Due to these differences, the implementations are distinct classes.
+class ActionOpenPopupFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("action.openPopup", ACTION_OPENPOPUP)
+
+  ActionOpenPopupFunction();
+  ActionOpenPopupFunction(const ActionOpenPopupFunction&) = delete;
+  ActionOpenPopupFunction& operator=(const ActionOpenPopupFunction&) = delete;
+
+ protected:
+  // ExtensionFunction:
+  ~ActionOpenPopupFunction() override;
+  ResponseAction Run() override;
+
+  void OnShowPopupComplete(ExtensionHost* popup_host);
+};
+
 //
 // browserAction.* aliases for supported browserAction APIs.
 //
@@ -456,6 +484,9 @@ class BrowserActionDisableFunction : public ExtensionActionHideFunction {
   ~BrowserActionDisableFunction() override {}
 };
 
+// Note: action.openPopup() and browserAction.openPopup() have subtly different
+// implementations. See ActionOpenPopupFunction above.
+// TODO(devlin): Remove browserAction.openPopup().
 class BrowserActionOpenPopupFunction : public ExtensionFunction,
                                        public ExtensionHostRegistry::Observer {
  public:

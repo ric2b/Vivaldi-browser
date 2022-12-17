@@ -10,9 +10,12 @@
 #include <taskschd.h>
 #include <wrl/client.h>
 
+#include <ostream>
 #include <string>
 #include <utility>
+#include <vector>
 
+#include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
@@ -20,6 +23,7 @@
 #include "base/notreached.h"
 #include "base/path_service.h"
 #include "base/strings/strcat.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "base/win/scoped_bstr.h"
@@ -41,7 +45,6 @@ const wchar_t kV2Library[] = L"taskschd.dll";
 // Text for times used in the V2 API of the Task Scheduler.
 const wchar_t kOneHourText[] = L"PT1H";
 const wchar_t kFiveHoursText[] = L"PT5H";
-const wchar_t kZeroMinuteText[] = L"PT0M";
 const wchar_t kFifteenMinutesText[] = L"PT15M";
 const wchar_t kOneDayText[] = L"P1D";
 
@@ -50,9 +53,6 @@ const wchar_t kTaskCompanyFolder[] = L"\\" COMPANY_SHORTNAME_STRING;
 const wchar_t kTaskSubfolderName[] =
     L"\\" COMPANY_SHORTNAME_STRING L"\\" PRODUCT_FULLNAME_STRING;
 
-// Most of the users with pending logs succeeds within 7 days, so no need to
-// try for longer than that, especially for those who keep crashing.
-const int kNumDaysBeforeExpiry = 7;
 const size_t kNumDeleteTaskRetry = 3;
 const size_t kDeleteRetryDelayInMs = 100;
 
@@ -262,6 +262,21 @@ class TaskSchedulerV2 final : public TaskScheduler {
     return true;
   }
 
+  std::wstring FindFirstTaskName(const std::wstring& task_prefix) override {
+    DCHECK(!task_prefix.empty());
+
+    std::vector<std::wstring> task_names;
+    if (!GetTaskNameList(&task_names))
+      return std::wstring();
+
+    for (const std::wstring& task_name : task_names) {
+      if (base::StartsWith(task_name, task_prefix))
+        return task_name;
+    }
+
+    return std::wstring();
+  }
+
   bool GetTaskInfo(const wchar_t* task_name, TaskInfo* info) override {
     DCHECK(task_name);
     DCHECK(info);
@@ -297,6 +312,15 @@ class TaskSchedulerV2 final : public TaskScheduler {
                  << logging::SystemErrorCodeToString(hr);
       return false;
     }
+
+    hr = GetTaskUserId(registered_task.Get(), &info_storage.user_id);
+    if (FAILED(hr)) {
+      LOG(ERROR) << "Failed to get UserId for task '" << task_name << "'. "
+                 << std::hex << hr << ": "
+                 << logging::SystemErrorCodeToString(hr);
+      return false;
+    }
+
     info_storage.name = task_name;
     std::swap(*info, info_storage);
     return true;
@@ -359,8 +383,6 @@ class TaskSchedulerV2 final : public TaskScheduler {
                     bool hidden) override {
     DCHECK(task_name);
     DCHECK(task_description);
-    if (!DeleteTask(task_name))
-      return false;
 
     // Create the task definition object to create the task.
     Microsoft::WRL::ComPtr<ITaskDefinition> task;
@@ -427,14 +449,6 @@ class TaskSchedulerV2 final : public TaskScheduler {
     if (FAILED(hr)) {
       PLOG(ERROR) << "Can't put 'StartWhenAvailable' to true. " << std::hex
                   << hr;
-      return false;
-    }
-
-    // TODO(csharp): Find a way to only set this for log upload retry.
-    hr = task_settings->put_DeleteExpiredTaskAfter(
-        base::win::ScopedBstr(kZeroMinuteText).Get());
-    if (FAILED(hr)) {
-      PLOG(ERROR) << "Can't put 'DeleteExpiredTaskAfter'. " << std::hex << hr;
       return false;
     }
 
@@ -567,17 +581,6 @@ class TaskSchedulerV2 final : public TaskScheduler {
       }
     }
 
-    // None of the triggers should go beyond kNumDaysBeforeExpiry.
-    base::Time expiry_date(base::Time::NowFromSystemTime() +
-                           base::Days(kNumDaysBeforeExpiry));
-    base::win::ScopedBstr end_boundary(GetTimestampString(expiry_date));
-    hr = trigger->put_EndBoundary(end_boundary.Get());
-    if (FAILED(hr)) {
-      PLOG(ERROR) << "Can't put 'EndBoundary' to " << end_boundary.Get() << ". "
-                  << std::hex << hr;
-      return false;
-    }
-
     Microsoft::WRL::ComPtr<IActionCollection> actions;
     hr = task->get_Actions(&actions);
     if (FAILED(hr)) {
@@ -613,12 +616,17 @@ class TaskSchedulerV2 final : public TaskScheduler {
       return false;
     }
 
+    base::win::ScopedBstr task_xml;
+    task->get_XmlText(task_xml.Receive());
+    VLOG(2) << "Registering Task with XML: " << task_xml.Get();
+
     Microsoft::WRL::ComPtr<IRegisteredTask> registered_task;
     base::win::ScopedVariant user(user_name.Get());
 
     DCHECK(task_folder_);
     hr = task_folder_->RegisterTaskDefinition(
-        base::win::ScopedBstr(task_name).Get(), task.Get(), TASK_CREATE,
+        base::win::ScopedBstr(task_name).Get(), task.Get(),
+        TASK_CREATE_OR_UPDATE,
         *user.AsInput(),  // Not really input, but API expect non-const.
         base::win::ScopedVariant::kEmptyVariant,
         scope == UpdaterScope::kSystem ? TASK_LOGON_SERVICE_ACCOUNT
@@ -959,6 +967,38 @@ class TaskSchedulerV2 final : public TaskScheduler {
     return folder;
   }
 
+  // Return the UserId of the task.
+  HRESULT GetTaskUserId(IRegisteredTask* task, std::wstring* user_id) {
+    DCHECK(task);
+    DCHECK(user_id);
+
+    Microsoft::WRL::ComPtr<ITaskDefinition> task_info;
+    HRESULT hr = task->get_Definition(&task_info);
+    if (FAILED(hr)) {
+      LOG(ERROR) << "Failed to get definition: "
+                 << logging::SystemErrorCodeToString(hr);
+      return hr;
+    }
+
+    Microsoft::WRL::ComPtr<IPrincipal> iprincipal;
+    hr = task_info->get_Principal(&iprincipal);
+    if (FAILED(hr)) {
+      LOG(ERROR) << "Failed to get principal: "
+                 << logging::SystemErrorCodeToString(hr);
+      return hr;
+    }
+
+    base::win::ScopedBstr raw_user_id;
+    hr = iprincipal->get_UserId(raw_user_id.Receive());
+    if (FAILED(hr)) {
+      LOG(ERROR) << "Failed to get UserId: "
+                 << logging::SystemErrorCodeToString(hr);
+      return hr;
+    }
+    *user_id = std::wstring(raw_user_id.Get() ? raw_user_id.Get() : L"");
+    return ERROR_SUCCESS;
+  }
+
   // If the task folder specified by |folder_name| is empty, try to delete it.
   // Ignore failures. Returns true if the folder is successfully deleted.
   bool DeleteFolderIfEmpty(const wchar_t* folder_name) {
@@ -1046,5 +1086,19 @@ std::unique_ptr<TaskScheduler> TaskScheduler::CreateInstance() {
 }
 
 TaskScheduler::TaskScheduler() = default;
+
+std::ostream& operator<<(std::ostream& stream,
+                         const TaskScheduler::TaskInfo& t) {
+  std::wstring value =
+      base::StrCat({L"[TaskInfo][name]", t.name, L"[description]",
+                    t.description, L"[exec_actions]"});
+  for (auto exec_action : t.exec_actions)
+    value += base::StrCat({L"[exec_action]", exec_action.value()});
+
+  value +=
+      base::StrCat({L"[logon_type]", base::StringPrintf(L"0x%x", t.logon_type),
+                    L"[user_id]", t.user_id});
+  return stream << value;
+}
 
 }  // namespace updater

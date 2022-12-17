@@ -10,7 +10,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/safe_browsing/tailored_security/unconsented_message_android.h"
 #endif
 
@@ -56,7 +56,7 @@ class TailoredSecurityUrlObserver
 
   friend class content::WebContentsUserData<TailoredSecurityUrlObserver>;
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   void MessageDismissed();
 
   std::unique_ptr<TailoredSecurityUnconsentedMessageAndroid> message_;
@@ -70,6 +70,9 @@ class TailoredSecurityUrlObserver
 
   // The most recent URL the WebContents navigated to.
   GURL last_url_;
+
+  // Whether we currently have a query request.
+  bool has_query_request_ = false;
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
 };

@@ -4,7 +4,8 @@
 
 #include "chrome/browser/ash/login/session/user_session_initializer.h"
 
-#include "ash/components/pcie_peripheral/pcie_peripheral_manager.h"
+#include "ash/components/audio/cras_audio_handler.h"
+#include "ash/components/peripheral_notification/peripheral_notification_manager.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "base/files/file_util.h"
@@ -35,7 +36,6 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part_chromeos.h"
 #include "chrome/browser/component_updater/crl_set_component_installer.h"
-#include "chrome/browser/component_updater/sth_set_component_remover.h"
 #include "chrome/browser/google/google_brand_chromeos.h"
 #include "chrome/browser/net/nss_service.h"
 #include "chrome/browser/net/nss_service_factory.h"
@@ -112,19 +112,6 @@ void OnGotNSSCertDatabaseForUser(net::NSSCertDatabase* database) {
   NetworkCertLoader::Get()->SetUserNSSDB(database);
 }
 
-void OnNoiseCancellationSupportedRetrieved(
-    absl::optional<bool> noise_cancellation_supported) {
-  DCHECK(features::IsInputNoiseCancellationUiEnabled());
-  if (noise_cancellation_supported.has_value() &&
-      noise_cancellation_supported.value()) {
-    PrefService* local_state = g_browser_process->local_state();
-    const bool noise_cancellation_enabled =
-        local_state->GetBoolean(prefs::kInputNoiseCancellationEnabled);
-    chromeos::CrasAudioClient::Get()->SetNoiseCancellationEnabled(
-        noise_cancellation_enabled);
-  }
-}
-
 }  // namespace
 
 UserSessionInitializer::UserSessionInitializer() {
@@ -159,7 +146,6 @@ void UserSessionInitializer::OnUserProfileLoaded(const AccountId& account_id) {
     InitRlz(profile);
     InitializeCerts(profile);
     InitializeCRLSetFetcher();
-    InitializeCertificateTransparencyComponents(user);
     InitializePrimaryProfileServices(profile, user);
 
     FamilyUserMetricsServiceFactory::GetForBrowserContext(profile);
@@ -228,16 +214,6 @@ void UserSessionInitializer::InitializeCRLSetFetcher() {
     component_updater::RegisterCRLSetComponent(cus);
 }
 
-void UserSessionInitializer::InitializeCertificateTransparencyComponents(
-    const user_manager::User* user) {
-  const std::string username_hash = user->username_hash();
-  if (!username_hash.empty()) {
-    base::FilePath path =
-        ProfileHelper::GetProfilePathByUserIdHash(username_hash);
-    component_updater::DeleteLegacySTHSet(path);
-  }
-}
-
 void UserSessionInitializer::InitializePrimaryProfileServices(
     Profile* profile,
     const user_manager::User* user) {
@@ -296,17 +272,14 @@ void UserSessionInitializer::OnUserSessionStarted(bool is_primary_user) {
 
     // Pciguard can only be set by non-guest, primary users. By default,
     // Pciguard is turned on.
-    if (PciePeripheralManager::IsInitialized()) {
-      PciePeripheralManager::Get()->SetPcieTunnelingAllowedState(
+    if (PeripheralNotificationManager::IsInitialized()) {
+      PeripheralNotificationManager::Get()->SetPcieTunnelingAllowedState(
           chromeos::settings::PeripheralDataAccessHandler::GetPrefState());
     }
     PciguardClient::Get()->SendExternalPciDevicesPermissionState(
         chromeos::settings::PeripheralDataAccessHandler::GetPrefState());
 
-    if (features::IsInputNoiseCancellationUiEnabled()) {
-      chromeos::CrasAudioClient::Get()->GetNoiseCancellationSupported(
-          base::BindOnce(&OnNoiseCancellationSupportedRetrieved));
-    }
+    CrasAudioHandler::Get()->RefreshNoiseCancellationState();
   }
 }
 

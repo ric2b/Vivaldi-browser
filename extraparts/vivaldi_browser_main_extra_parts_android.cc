@@ -13,11 +13,12 @@ VivaldiBrowserMainExtraPartsAndroid::VivaldiBrowserMainExtraPartsAndroid() =
 VivaldiBrowserMainExtraPartsAndroid::~VivaldiBrowserMainExtraPartsAndroid() =
     default;
 
-void VivaldiBrowserMainExtraPartsAndroid::PostProfileInit() {
-  VivaldiBrowserMainExtraParts::PostProfileInit();
+void VivaldiBrowserMainExtraPartsAndroid::PostProfileInit(
+    Profile* profile,
+    bool is_initial_profile) {
+  VivaldiBrowserMainExtraParts::PostProfileInit(profile, is_initial_profile);
 
   if (first_run::IsChromeFirstRun()) {
-    Profile* profile = ProfileManager::GetLastUsedProfile();
     DCHECK(profile);
     vivaldi_default_bookmarks::UpdatePartners(profile);
   }

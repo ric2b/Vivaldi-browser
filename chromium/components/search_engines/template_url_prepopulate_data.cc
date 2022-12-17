@@ -1227,7 +1227,7 @@ std::vector<std::unique_ptr<TemplateURLData>> GetPrepopulationSetFromCountryID(
     UNHANDLED_COUNTRY(G, N)  // Guinea
     UNHANDLED_COUNTRY(G, P)  // Guadeloupe
     UNHANDLED_COUNTRY(H, T)  // Haiti
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
     UNHANDLED_COUNTRY(I, P)  // Clipperton Island ('IP' is an WinXP-ism; ISO
                              //                    includes it with France)
 #endif
@@ -1402,11 +1402,11 @@ std::vector<std::unique_ptr<TemplateURLData>> GetPrepopulatedTemplateURLData(
   if (!prefs)
     return t_urls;
 
-  const base::ListValue* list = prefs->GetList(prefs::kSearchProviderOverrides);
+  const base::Value* list = prefs->GetList(prefs::kSearchProviderOverrides);
   if (!list)
     return t_urls;
 
-  for (const base::Value& engine : list->GetList()) {
+  for (const base::Value& engine : list->GetListDeprecated()) {
     if (engine.is_dict()) {
       auto t_url = TemplateURLDataFromOverrideDictionary(engine);
       if (t_url)
@@ -1485,7 +1485,7 @@ std::unique_ptr<TemplateURLData> GetPrepopulatedEngine(PrefService* prefs,
   return nullptr;
 }
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 
 std::vector<std::unique_ptr<TemplateURLData>> GetLocalPrepopulatedEngines(
     const std::string& locale) {

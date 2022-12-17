@@ -133,7 +133,7 @@ class PlatformMediaPipelineIntegrationTest
 
 #if defined(OS_MAC) || defined(OS_WIN)
 TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback) {
-  ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("bear.mp4", kHashed));
+  ASSERT_EQ(PIPELINE_OK, Start("bear.mp4", kHashed));
 
   Play();
 
@@ -150,7 +150,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback) {
 }
 
 TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback_16x9_Aspect) {
-  ASSERT_EQ(PipelineStatus::PIPELINE_OK,
+  ASSERT_EQ(PIPELINE_OK,
             StartVivaldi("vivaldi-bear-320x240-16x9-aspect.mp4", kHashed));
 
   Play();
@@ -167,7 +167,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback_16x9_Aspect) {
 }
 
 TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback_VideoOnly) {
-  ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("bear_silent.mp4", kHashed));
+  ASSERT_EQ(PIPELINE_OK, Start("bear_silent.mp4", kHashed));
 
   Play();
 
@@ -183,7 +183,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback_VideoOnly) {
 }
 
 TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback_M4A) {
-  ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("sfx.m4a", kHashed));
+  ASSERT_EQ(PIPELINE_OK, Start("sfx.m4a", kHashed));
 
   Play();
 
@@ -197,7 +197,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback_M4A) {
 }
 
 TEST_F(PlatformMediaPipelineIntegrationTest, SeekWhilePaused) {
-  ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("bear.mp4"));
+  ASSERT_EQ(PIPELINE_OK, Start("bear.mp4"));
 
   base::TimeDelta duration(pipeline_->GetMediaDuration());
   base::TimeDelta start_seek_time(duration / 4);
@@ -220,7 +220,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, SeekWhilePaused) {
 }
 
 TEST_F(PlatformMediaPipelineIntegrationTest, SeekWhilePlaying) {
-  ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("bear.mp4"));
+  ASSERT_EQ(PIPELINE_OK, Start("bear.mp4"));
 
   base::TimeDelta duration(pipeline_->GetMediaDuration());
   base::TimeDelta start_seek_time(duration / 4);
@@ -239,7 +239,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, SeekWhilePlaying) {
 }
 
 TEST_F(PlatformMediaPipelineIntegrationTest, Seek_VideoOnly) {
-  ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("bear_silent.mp4", kHashed));
+  ASSERT_EQ(PIPELINE_OK, Start("bear_silent.mp4", kHashed));
 
   Play();
   ASSERT_TRUE(Seek(pipeline_->GetMediaDuration() / 2));
@@ -248,7 +248,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, Seek_VideoOnly) {
 }
 
 TEST_F(PlatformMediaPipelineIntegrationTest, PlayInLoop) {
-  ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("bear.mp4"));
+  ASSERT_EQ(PIPELINE_OK, Start("bear.mp4"));
 
   const base::TimeDelta duration = pipeline_->GetMediaDuration();
   const base::TimeDelta play_time = duration / 4;
@@ -264,21 +264,21 @@ TEST_F(PlatformMediaPipelineIntegrationTest, PlayInLoop) {
 }
 
 TEST_F(PlatformMediaPipelineIntegrationTest, TruncatedMedia) {
-  ASSERT_EQ(PipelineStatus::PIPELINE_OK,
+  ASSERT_EQ(PIPELINE_OK,
             StartVivaldi("vivaldi-bear_truncated.mp4"));
 
   Play();
   WaitUntilCurrentTimeIsAfter(base::Microseconds(1066666));
-  ASSERT_TRUE(ended_ || pipeline_status_ != PipelineStatus::PIPELINE_OK);
+  ASSERT_TRUE(ended_ || pipeline_status_ != PIPELINE_OK);
 }
 
 TEST_F(PlatformMediaPipelineIntegrationTest, DecodingError) {
   // TODO(wdzierzanowski): WMFMediaPipeline (Windows) doesn't detect the error?
   // (DNA-30324).
 #if !defined(OS_WIN)
-  ASSERT_EQ(PipelineStatus::PIPELINE_OK, StartVivaldi("bear_corrupt.mp4"));
+  ASSERT_EQ(PIPELINE_OK, StartVivaldi("bear_corrupt.mp4"));
   Play();
-  EXPECT_EQ(PipelineStatus::PIPELINE_ERROR_DECODE, WaitUntilEndedOrError());
+  EXPECT_EQ(PIPELINE_ERROR_DECODE, WaitUntilEndedOrError());
 #endif
 }
 
@@ -289,7 +289,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, Rotated_Metadata_0) {
     return;
 #endif
 
-  ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("bear_rotate_0.mp4"));
+  ASSERT_EQ(PIPELINE_OK, Start("bear_rotate_0.mp4"));
   ASSERT_EQ(VideoRotation::VIDEO_ROTATION_0,
             metadata_.video_decoder_config.video_transformation());
 }
@@ -301,7 +301,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, Rotated_Metadata_90) {
     return;
 #endif
 
-  ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("bear_rotate_90.mp4"));
+  ASSERT_EQ(PIPELINE_OK, Start("bear_rotate_90.mp4"));
   ASSERT_EQ(VideoRotation::VIDEO_ROTATION_90,
             metadata_.video_decoder_config.video_transformation());
 }
@@ -313,7 +313,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, Rotated_Metadata_180) {
     return;
 #endif
 
-  ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("bear_rotate_180.mp4"));
+  ASSERT_EQ(PIPELINE_OK, Start("bear_rotate_180.mp4"));
   ASSERT_EQ(VideoRotation::VIDEO_ROTATION_180,
             metadata_.video_decoder_config.video_transformation());
 }
@@ -325,7 +325,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, Rotated_Metadata_270) {
     return;
 #endif
 
-  ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("bear_rotate_270.mp4"));
+  ASSERT_EQ(PIPELINE_OK, Start("bear_rotate_270.mp4"));
   ASSERT_EQ(VideoRotation::VIDEO_ROTATION_270,
             metadata_.video_decoder_config.video_transformation());
 }
@@ -333,7 +333,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, Rotated_Metadata_270) {
 // Configuration change happens only on Windows.
 #if defined(OS_WIN)
 TEST_F(PlatformMediaPipelineIntegrationTest, AudioConfigChange) {
-  ASSERT_EQ(PipelineStatus::PIPELINE_OK,
+  ASSERT_EQ(PIPELINE_OK,
             StartVivaldi("vivaldi-config_change_audio.mp4"));
 
   Play();
@@ -351,7 +351,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, AudioConfigChange) {
 }
 
 TEST_F(PlatformMediaPipelineIntegrationTest, VideoConfigChange) {
-  ASSERT_EQ(PipelineStatus::PIPELINE_OK,
+  ASSERT_EQ(PIPELINE_OK,
             StartVivaldi("vivaldi-config_change_video.mp4"));
 
   Play();
@@ -369,7 +369,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, VideoConfigChange) {
 #endif  // defined(OS_WIN)
 
 TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlaybackPositiveStartTime) {
-  ASSERT_EQ(PipelineStatus::PIPELINE_OK,
+  ASSERT_EQ(PIPELINE_OK,
             StartVivaldi("vivaldi-nonzero-start-time.mp4"));
   Play();
   ASSERT_TRUE(WaitUntilOnEnded());

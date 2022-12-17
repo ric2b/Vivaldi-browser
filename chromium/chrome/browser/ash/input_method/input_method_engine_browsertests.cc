@@ -75,7 +75,7 @@ class InputMethodEngineBrowserTest
 
   virtual ~InputMethodEngineBrowserTest() = default;
 
-  void TearDownInProcessBrowserTestFixture() override { extension_ = NULL; }
+  void TearDownInProcessBrowserTestFixture() override { extension_ = nullptr; }
 
   ui::IMEEngineHandlerInterface::InputContext CreateInputContextWithInputType(
       ui::TextInputType type) {
@@ -1162,10 +1162,6 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest,
     EXPECT_EQ("LABEL2", props[2].label);
     EXPECT_EQ("LABEL3", props[3].label);
     EXPECT_EQ("LABEL4", props[4].label);
-
-    EXPECT_TRUE(props[2].is_selection_item);
-    // TODO(nona): Add tests for style: ["toggle" and "separator"]
-    // and visible:, when implement them.
 
     EXPECT_TRUE(props[4].is_selection_item_checked);
   }

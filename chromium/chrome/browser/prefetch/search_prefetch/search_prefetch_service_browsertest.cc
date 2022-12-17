@@ -455,7 +455,9 @@ class SearchPrefetchBaseBrowserTest : public InProcessBrowserTest {
 
     bool is_prefetch =
         request.headers.find("Purpose") != request.headers.end() &&
-        request.headers.find("Purpose")->second == "prefetch";
+        request.headers.find("Purpose")->second == "prefetch" &&
+        request.headers.find("Sec-Purpose") != request.headers.end() &&
+        request.headers.find("Sec-Purpose")->second == "prefetch";
 
     content::GetUIThreadTaskRunner({})->PostTask(
         FROM_HERE,
@@ -1176,7 +1178,7 @@ IN_PROC_BROWSER_TEST_P(SearchPrefetchServiceEnabledBrowserTest,
   // Disable back/forward cache to ensure that it doesn't get preserved in the
   // back/forward cache.
   content::DisableBackForwardCacheForTesting(
-      GetWebContents(), content::BackForwardCache::TEST_ASSUMES_NO_CACHING);
+      GetWebContents(), content::BackForwardCache::TEST_REQUIRES_NO_CACHING);
 
   std::string search_terms = "prefetch_content";
   GURL prefetch_url = GetSearchServerQueryURL(search_terms + "&pf=cs");
@@ -1244,7 +1246,7 @@ IN_PROC_BROWSER_TEST_P(SearchPrefetchServiceEnabledBrowserTest,
   // Disable back/forward cache to ensure that it doesn't get preserved in the
   // back/forward cache.
   content::DisableBackForwardCacheForTesting(
-      GetWebContents(), content::BackForwardCache::TEST_ASSUMES_NO_CACHING);
+      GetWebContents(), content::BackForwardCache::TEST_REQUIRES_NO_CACHING);
 
   std::string search_terms = "prefetch_content";
   GURL prefetch_url = GetSearchServerQueryURL(search_terms + "&pf=cs");
@@ -1367,7 +1369,7 @@ IN_PROC_BROWSER_TEST_P(SearchPrefetchServiceEnabledBrowserTest,
   // Disable back/forward cache to ensure that it doesn't get preserved in the
   // back/forward cache.
   content::DisableBackForwardCacheForTesting(
-      GetWebContents(), content::BackForwardCache::TEST_ASSUMES_NO_CACHING);
+      GetWebContents(), content::BackForwardCache::TEST_REQUIRES_NO_CACHING);
 
   std::string search_terms = "prefetch_content";
   GURL prefetch_url = GetSearchServerQueryURL(search_terms + "&pf=cs");
@@ -2270,7 +2272,7 @@ void RunFirstParam(base::RepeatingClosure closure,
 }
 
 // crbug.com/1272805
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 #define MAYBE_ServiceWorkerServedPrefetchWithPreload \
   DISABLED_ServiceWorkerServedPrefetchWithPreload
 #else

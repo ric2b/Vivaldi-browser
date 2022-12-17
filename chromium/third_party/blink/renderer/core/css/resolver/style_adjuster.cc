@@ -433,23 +433,29 @@ static void AdjustStyleForHTMLElement(ComputedStyle& style,
     return;
   }
 
-  if (IsA<HTMLFencedFrameElement>(element) &&
-      !features::IsFencedFramesMPArchBased()) {
-    // Force the inside-display to `flow`, but honors the outside-display.
-    switch (DisplayOutside(style.Display())) {
-      case EDisplay::kInline:
-      case EDisplay::kContents:
-        style.SetDisplay(EDisplay::kInlineBlock);
-        break;
-      case EDisplay::kBlock:
-        style.SetDisplay(EDisplay::kBlock);
-        break;
-      case EDisplay::kNone:
-        break;
-      default:
-        NOTREACHED();
-        style.SetDisplay(EDisplay::kInlineBlock);
-        break;
+  if (IsA<HTMLFencedFrameElement>(element)) {
+    // Force the effective CSS `zoom` property to 1, so that the CSS `zoom`
+    // property does not leak to fencedframe `window.innerWidth` and
+    // `window.innerHeight`. crbug.com/1285327
+    style.SetEffectiveZoom(1);
+
+    if (!features::IsFencedFramesMPArchBased()) {
+      // Force the inside-display to `flow`, but honors the outside-display.
+      switch (DisplayOutside(style.Display())) {
+        case EDisplay::kInline:
+        case EDisplay::kContents:
+          style.SetDisplay(EDisplay::kInlineBlock);
+          break;
+        case EDisplay::kBlock:
+          style.SetDisplay(EDisplay::kBlock);
+          break;
+        case EDisplay::kNone:
+          break;
+        default:
+          NOTREACHED();
+          style.SetDisplay(EDisplay::kInlineBlock);
+          break;
+      }
     }
   }
 
@@ -718,31 +724,11 @@ static void AdjustEffectiveTouchAction(ComputedStyle& style,
   }
 }
 
-static void AdjustStateForContentVisibility(ComputedStyle& style,
-                                            Element* element) {
-  if (!element)
-    return;
-  auto* context = element->GetDisplayLockContext();
-  // The common case for most elements is that we don't have a context and have
-  // the default (visible) content-visibility value.
-  if (LIKELY(!context &&
-             style.ContentVisibility() == EContentVisibility::kVisible)) {
-    return;
-  }
-
-  if (!context)
-    context = &element->EnsureDisplayLockContext();
-  context->SetRequestedState(style.ContentVisibility());
-  context->AdjustElementStyle(&style);
-}
-
 static void AdjustStyleForInert(ComputedStyle& style, Element* element) {
   if (!element || style.IsForcedInert())
     return;
 
-  if (RuntimeEnabledFeatures::InertAttributeEnabled() &&
-      element->FastHasAttribute(html_names::kInertAttr) &&
-      element->IsHTMLElement()) {
+  if (element->IsInertRoot()) {
     style.SetIsForcedInert();
     return;
   }
@@ -857,8 +843,6 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
     AdjustStyleForFirstLetter(style);
   }
 
-  AdjustStateForContentVisibility(style, element);
-
   // Make sure our z-index value is only applied if the object is positioned.
   if (style.GetPosition() == EPosition::kStatic &&
       !LayoutParentStyleForcesZIndexToCreateStackingContext(
@@ -874,15 +858,13 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
       style.OverflowY() != EOverflow::kVisible)
     AdjustOverflow(style, element);
 
-  // overflow-clip-margin only applies if 'overflow: clip' is set along both
-  // axis or 'contain: paint'.
-  if (!style.ContainsPaint() && !(style.OverflowX() == EOverflow::kClip &&
-                                  style.OverflowY() == EOverflow::kClip)) {
-    style.SetOverflowClipMargin(
-        ComputedStyleInitialValues::InitialOverflowClipMargin());
-  }
-
-  if (StopPropagateTextDecorations(style, element))
+  // TODO(rego): When HighlightInheritance (https://crbug.com/1024156) is
+  // enabled, we're going to inherit the text decorations from the parent
+  // elements, that would cause that we paint the decorations more than once in
+  // the highlight pseudos. This doesn't seem right and there's a spec issue
+  // (https://github.com/w3c/csswg-drafts/issues/6829) about not propagating
+  // text decorations on highlights pseudos.
+  if (StopPropagateTextDecorations(style, element) || state.IsForHighlight())
     style.ClearAppliedTextDecorations();
   else
     style.RestoreParentTextDecorations(layout_parent_style);

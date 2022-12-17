@@ -14,7 +14,8 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
 
-#if defined(OS_FUCHSIA)
+#if BUILDFLAG(IS_FUCHSIA)
+#include <fuchsia/element/cpp/fidl.h>
 #include <fuchsia/ui/composition/cpp/fidl.h>
 #include <fuchsia/ui/views/cpp/fidl.h>
 #include <lib/ui/scenic/cpp/view_ref_pair.h>
@@ -49,11 +50,11 @@ enum class PlatformWindowShadowType {
 
 class WorkspaceExtensionDelegate;
 
-#if defined(OS_FUCHSIA)
+#if BUILDFLAG(IS_FUCHSIA)
 class ScenicWindowDelegate;
 #endif
 
-#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 class X11ExtensionDelegate;
 #endif
 
@@ -82,7 +83,7 @@ struct COMPONENT_EXPORT(PLATFORM_WINDOW) PlatformWindowInitProperties {
   // Widget::InitProperties::WindowOpacity.
   PlatformWindowOpacity opacity = PlatformWindowOpacity::kOpaqueWindow;
 
-#if defined(OS_FUCHSIA)
+#if BUILDFLAG(IS_FUCHSIA)
   // Scenic 3D API uses `view_token` for links, whereas Flatland
   // API uses `view_creation_token`. Therefore, at most one of these fields must
   // be set. If `allow_null_view_token_for_test` is true, they may both be
@@ -91,6 +92,9 @@ struct COMPONENT_EXPORT(PLATFORM_WINDOW) PlatformWindowInitProperties {
   fuchsia::ui::views::ViewCreationToken view_creation_token;
 
   scenic::ViewRefPair view_ref_pair;
+
+  // Used to coordinate window closure requests with the shell.
+  fuchsia::element::ViewControllerPtr view_controller;
 
   // Specifies whether handling of keypress events from the system is enabled.
   bool enable_keyboard = false;
@@ -112,7 +116,7 @@ struct COMPONENT_EXPORT(PLATFORM_WINDOW) PlatformWindowInitProperties {
 
   PlatformWindowShadowType shadow_type = PlatformWindowShadowType::kDefault;
 
-#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
   bool prefer_dark_theme = false;
   gfx::ImageSkia* icon = nullptr;
   absl::optional<int> background_color;
@@ -125,6 +129,10 @@ struct COMPONENT_EXPORT(PLATFORM_WINDOW) PlatformWindowInitProperties {
   std::string wm_class_class;
 
   X11ExtensionDelegate* x11_extension_delegate = nullptr;
+
+  // Wayland specific.  Holds the application ID that is used by the window
+  // manager to match the desktop entry and group windows.
+  std::string wayland_app_id;
 #endif
 
   bool enable_compositing_based_throttling = false;

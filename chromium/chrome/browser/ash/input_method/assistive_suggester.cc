@@ -13,9 +13,11 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/user_metrics.h"
 #include "base/strings/string_util.h"
+#include "chrome/browser/ash/input_method/assistive_suggester_prefs.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/common/pref_names.h"
 #include "components/exo/wm_helper.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
@@ -117,12 +119,8 @@ void RecordSuggestionsMatch(const std::vector<TextSuggestion>& suggestions) {
   }
 }
 
-bool IsUsEnglishEngineId(const std::string& engine_id) {
+bool IsUsEnglishEngine(const std::string& engine_id) {
   return engine_id == "xkb:us::eng";
-}
-
-bool IsMultiWordPrefEnabled(PrefService* pref_service) {
-  return pref_service->GetBoolean(prefs::kAssistPredictiveWritingEnabled);
 }
 
 bool IsLacrosEnabled() {
@@ -148,14 +146,14 @@ void RecordMultiWordTextInputState(PrefService* pref_service,
     return;
   }
 
-  if (!IsMultiWordPrefEnabled(pref_service)) {
-    RecordTextInputStateMetric(
-        AssistiveTextInputState::kFeatureBlockedByPreference);
+  if (!IsUsEnglishEngine(engine_id)) {
+    RecordTextInputStateMetric(AssistiveTextInputState::kUnsupportedLanguage);
     return;
   }
 
-  if (!IsUsEnglishEngineId(engine_id)) {
-    RecordTextInputStateMetric(AssistiveTextInputState::kUnsupportedLanguage);
+  if (!IsPredictiveWritingPrefEnabled(pref_service, engine_id)) {
+    RecordTextInputStateMetric(
+        AssistiveTextInputState::kFeatureBlockedByPreference);
     return;
   }
 
@@ -171,14 +169,12 @@ AssistiveSuggester::AssistiveSuggester(
     : profile_(profile),
       personal_info_suggester_(engine, profile),
       emoji_suggester_(engine, profile),
-      multi_word_suggester_(engine),
+      multi_word_suggester_(engine, profile),
       suggester_switch_(std::move(suggester_switch)) {
   RecordAssistiveUserPrefForPersonalInfo(
       profile_->GetPrefs()->GetBoolean(prefs::kAssistPersonalInfoEnabled));
   RecordAssistiveUserPrefForEmoji(
       profile_->GetPrefs()->GetBoolean(prefs::kEmojiSuggestionEnabled));
-  RecordAssistiveUserPrefForMultiWord(
-      profile_->GetPrefs()->GetBoolean(prefs::kAssistPredictiveWritingEnabled));
 }
 
 AssistiveSuggester::~AssistiveSuggester() = default;
@@ -220,8 +216,8 @@ bool AssistiveSuggester::IsEnhancedEmojiSuggestEnabled() {
 
 bool AssistiveSuggester::IsMultiWordSuggestEnabled() {
   return features::IsAssistiveMultiWordEnabled() &&
-         profile_->GetPrefs()->GetBoolean(
-             prefs::kAssistPredictiveWritingEnabled);
+         IsPredictiveWritingPrefEnabled(profile_->GetPrefs(),
+                                        active_engine_id_);
 }
 
 bool AssistiveSuggester::IsExpandedMultiWordSuggestEnabled() {
@@ -298,6 +294,7 @@ void AssistiveSuggester::OnFocus(int context_id) {
   personal_info_suggester_.OnFocus(context_id_);
   emoji_suggester_.OnFocus(context_id_);
   multi_word_suggester_.OnFocus(context_id_);
+  RecordTextInputStateMetrics();
 }
 
 void AssistiveSuggester::OnBlur() {
@@ -371,11 +368,10 @@ void AssistiveSuggester::ProcessExternalSuggestions(
   }
 }
 
-void AssistiveSuggester::RecordTextInputStateMetrics(
-    const std::string& engine_id) {
+void AssistiveSuggester::RecordTextInputStateMetrics() {
   if (features::IsAssistiveMultiWordEnabled()) {
     RecordMultiWordTextInputState(profile_->GetPrefs(), suggester_switch_.get(),
-                                  engine_id);
+                                  active_engine_id_);
   }
 }
 
@@ -500,6 +496,14 @@ std::vector<ime::TextSuggestion> AssistiveSuggester::GetSuggestions() {
   if (IsSuggestionShown())
     return current_suggester_->GetSuggestions();
   return {};
+}
+
+void AssistiveSuggester::OnActivate(const std::string& engine_id) {
+  if (features::IsAssistiveMultiWordEnabled()) {
+    active_engine_id_ = engine_id;
+    RecordAssistiveUserPrefForMultiWord(
+        IsPredictiveWritingPrefEnabled(profile_->GetPrefs(), engine_id));
+  }
 }
 
 }  // namespace input_method

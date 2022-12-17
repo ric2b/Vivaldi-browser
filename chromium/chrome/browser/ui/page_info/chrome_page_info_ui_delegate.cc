@@ -11,7 +11,10 @@
 #include "chrome/browser/page_info/about_this_site_service_factory.h"
 #include "chrome/browser/permissions/permission_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/common/pref_names.h"
+#include "chrome/grit/generated_resources.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/page_info/core/about_this_site_service.h"
 #include "components/permissions/permission_manager.h"
@@ -24,16 +27,12 @@
 #include "ui/events/event.h"
 #include "url/gurl.h"
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/extensions/window_controller_list.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/tabs/tab_strip_model.h"
-#endif
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/web_applications/app_browser_controller.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/web_applications/web_app_ui_utils.h"
 #endif
 
 ChromePageInfoUiDelegate::ChromePageInfoUiDelegate(
@@ -123,21 +122,19 @@ bool ChromePageInfoUiDelegate::ShouldShowAsk(ContentSettingsType type) {
   return permissions::PermissionUtil::IsGuardContentSetting(type);
 }
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
 bool ChromePageInfoUiDelegate::ShouldShowSiteSettings(int* link_text_id,
                                                       int* tooltip_text_id) {
   if (GetProfile()->IsGuestSession())
     return false;
 
+  if (web_app::GetLabelIdsForAppManagementLinkInPageInfo(
+          web_contents_, link_text_id, tooltip_text_id)) {
+    return true;
+  }
+
   *link_text_id = IDS_PAGE_INFO_SITE_SETTINGS_LINK;
   *tooltip_text_id = IDS_PAGE_INFO_SITE_SETTINGS_TOOLTIP;
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  Browser* browser = chrome::FindBrowserWithWebContents(web_contents_);
-  if (web_app::AppBrowserController::IsWebApp(browser)) {
-    *link_text_id = IDS_PAGE_INFO_APP_SETTINGS_LINK;
-    *tooltip_text_id = IDS_PAGE_INFO_APP_SETTINGS_TOOLTIP;
-  }
-#endif
 
   return true;
 }
@@ -156,12 +153,18 @@ bool ChromePageInfoUiDelegate::IsMultipleTabsOpen() {
     DCHECK(tabs);
     for (int i = 0; i < tabs->count(); ++i) {
       content::WebContents* const web_contents = tabs->GetWebContentsAt(i);
-      if (web_contents->GetURL().DeprecatedGetOriginAsURL() == site_origin) {
+      if (web_contents->GetLastCommittedURL().DeprecatedGetOriginAsURL() ==
+          site_origin) {
         count++;
       }
     }
   }
   return count > 1;
+}
+
+void ChromePageInfoUiDelegate::ShowPrivacySandboxSettings() {
+  Browser* browser = chrome::FindBrowserWithWebContents(web_contents_);
+  chrome::ShowPrivacySandboxSettings(browser);
 }
 
 std::u16string ChromePageInfoUiDelegate::GetPermissionDetail(

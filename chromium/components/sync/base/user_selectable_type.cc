@@ -112,7 +112,7 @@ UserSelectableTypeInfo GetUserSelectableTypeInfo(UserSelectableType type) {
       return {"notes", NOTES, {NOTES}};
   }
   NOTREACHED();
-  return {nullptr, UNSPECIFIED};
+  return {nullptr, UNSPECIFIED, {}};
 }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)

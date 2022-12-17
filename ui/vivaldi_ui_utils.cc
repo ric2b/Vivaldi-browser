@@ -36,17 +36,19 @@ bool IsMainVivaldiBrowserWindow(VivaldiBrowserWindow* window) {
   base::JSONParserOptions options = base::JSON_PARSE_RFC;
   absl::optional<base::Value> json =
       base::JSONReader::Read(window->browser()->ext_data(), options);
-  base::DictionaryValue* dict = NULL;
   std::string window_type;
-  if (json && json->GetAsDictionary(&dict)) {
-    dict->GetString("windowType", &window_type);
-    // Don't track popup windows (like settings) in the session.
-    // We have "", "popup" and "settings".
-    // TODO(pettern): Popup windows still rely on extData, this
-    // should go away and we should use the type sent to the apis
-    // instead.
-    if (window_type == "popup" || window_type == "settings") {
-      return false;
+  if (json) {
+    if (base::Value::Dict* dict = json->GetIfDict()) {
+      if (std::string* window_type = dict->FindString("windowType")) {
+        // Don't track popup windows (like settings) in the session.
+        // We have "", "popup" and "settings".
+        // TODO(pettern): Popup windows still rely on extData, this
+        // should go away and we should use the type sent to the apis
+        // instead.
+        if (*window_type == "popup" || *window_type == "settings") {
+          return false;
+        }
+      }
     }
   }
   return true;

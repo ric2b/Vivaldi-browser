@@ -169,12 +169,13 @@ class PrintContextTest : public PaintTestConfigurations, public RenderingTest {
     Event* event = MakeGarbageCollected<BeforePrintEvent>();
     GetPrintContext().GetFrame()->DomWindow()->DispatchEvent(*event);
     GetPrintContext().BeginPrintMode(page_rect.width(), page_rect.height());
-    UpdateAllLifecyclePhasesForTest();
+    GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
+        DocumentUpdateReason::kTest);
     auto* builder = MakeGarbageCollected<PaintRecordBuilder>();
     GraphicsContext& context = builder->Context();
     context.SetPrinting(true);
-    GetDocument().View()->PaintContentsOutsideOfLifecycle(
-        context, kGlobalPaintAddUrlMetadata, CullRect(page_rect));
+    GetDocument().View()->PaintOutsideOfLifecycle(
+        context, PaintFlag::kAddUrlMetadata, CullRect(page_rect));
     {
       DrawingRecorder recorder(
           context, *GetDocument().GetLayoutView(),
@@ -369,9 +370,6 @@ TEST_P(PrintContextTest, LinkedTarget) {
 
   const Vector<MockPageContextCanvas::Operation>& operations =
       canvas.RecordedOperations();
-  for (const auto& operation : operations) {
-    LOG(INFO) << (operation.type ? "Point" : "Rect") << operation.rect;
-  }
   ASSERT_EQ(8u, operations.size());
   // The DrawRect operations come from a stable iterator.
   EXPECT_EQ(MockPageContextCanvas::kDrawRect, operations[0].type);

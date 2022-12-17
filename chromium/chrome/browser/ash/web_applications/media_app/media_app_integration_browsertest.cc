@@ -9,6 +9,7 @@
 #include "ash/webui/media_app_ui/test/media_app_ui_browsertest.h"
 #include "ash/webui/media_app_ui/url_constants.h"
 #include "base/containers/cxx20_erase_vector.h"
+#include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/path_service.h"
@@ -37,6 +38,7 @@
 #include "chrome/browser/web_applications/system_web_apps/system_web_app_manager.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/common/chrome_paths.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "components/crash/content/browser/error_reporting/mock_crash_endpoint.h"
 #include "content/public/browser/media_session_service.h"
 #include "content/public/test/browser_test.h"
@@ -45,6 +47,7 @@
 #include "services/media_session/public/mojom/media_controller.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
+#include "ui/gfx/color_palette.h"
 
 using platform_util::OpenOperationResult;
 using web_app::SystemAppType;
@@ -127,6 +130,28 @@ class MediaAppIntegrationAudioDisabledTest : public MediaAppIntegrationTest {
   base::test::ScopedFeatureList feature_list_;
 };
 
+class MediaAppIntegrationDarkLightModeEnabledTest
+    : public MediaAppIntegrationTest {
+ public:
+  MediaAppIntegrationDarkLightModeEnabledTest() {
+    feature_list_.InitAndEnableFeature(chromeos::features::kDarkLightMode);
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+class MediaAppIntegrationDarkLightModeDisabledTest
+    : public MediaAppIntegrationTest {
+ public:
+  MediaAppIntegrationDarkLightModeDisabledTest() {
+    feature_list_.InitAndDisableFeature(chromeos::features::kDarkLightMode);
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
 using MediaAppIntegrationAllProfilesTest = MediaAppIntegrationTest;
 using MediaAppIntegrationWithFilesAppAllProfilesTest =
     MediaAppIntegrationWithFilesAppTest;
@@ -149,7 +174,7 @@ class BrowserWindowWaiter : public BrowserListObserver {
 };
 
 // Waits for the number of active Browsers in the test process to reach `count`.
-void WaitForBrowserCount(int count) {
+void WaitForBrowserCount(size_t count) {
   EXPECT_LE(BrowserList::GetInstance()->size(), count) << "Too many browsers";
   while (BrowserList::GetInstance()->size() < count) {
     BrowserWindowWaiter().WaitForBrowserAdded();
@@ -166,6 +191,22 @@ base::FilePath TestFile(const std::string& ascii_name) {
   base::ScopedAllowBlockingForTesting allow_blocking;
   EXPECT_TRUE(base::PathExists(path));
   return path;
+}
+
+std::string FindAnyTTF() {
+  const base::FilePath root_path(FILE_PATH_LITERAL("/usr/share/fonts"));
+  base::ScopedAllowBlockingForTesting allow_blocking;
+  base::FileEnumerator enumerator(
+      root_path, true, base::FileEnumerator::FILES, FILE_PATH_LITERAL("*.ttf"),
+      base::FileEnumerator::FolderSearchPolicy::ALL,
+      base::FileEnumerator::ErrorPolicy::IGNORE_ERRORS);
+  const base::FilePath candidate = enumerator.Next();
+  std::vector<std::string> components = candidate.GetComponents();
+  if (components.size() < 5) {
+    return {};
+  }
+  std::vector<std::string> slice(components.begin() + 4, components.end());
+  return base::JoinString(slice, "/");
 }
 
 void PrepareAppForTest(content::WebContents* web_ui) {
@@ -901,6 +942,35 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppAllProfilesTest,
   histograms.ExpectTotalCount("Apps.DefaultAppLaunch.FromFileManager", 1);
 }
 
+IN_PROC_BROWSER_TEST_P(MediaAppIntegrationDarkLightModeEnabledTest,
+                       HasCorrectThemeAndBackgroundColor) {
+  WaitForTestSystemAppInstall();
+  web_app::AppId app_id =
+      *GetManager().GetAppIdForSystemApp(web_app::SystemAppType::MEDIA);
+
+  web_app::WebAppRegistrar& registrar =
+      web_app::WebAppProvider::GetForTest(profile())->registrar();
+
+  EXPECT_EQ(registrar.GetAppThemeColor(app_id), SK_ColorWHITE);
+  EXPECT_EQ(registrar.GetAppBackgroundColor(app_id), SK_ColorWHITE);
+  EXPECT_EQ(registrar.GetAppDarkModeThemeColor(app_id), gfx::kGoogleGrey900);
+  EXPECT_EQ(registrar.GetAppDarkModeBackgroundColor(app_id),
+            gfx::kGoogleGrey900);
+}
+
+IN_PROC_BROWSER_TEST_P(MediaAppIntegrationDarkLightModeDisabledTest,
+                       HasCorrectThemeAndBackgroundColor) {
+  WaitForTestSystemAppInstall();
+  web_app::AppId app_id =
+      *GetManager().GetAppIdForSystemApp(web_app::SystemAppType::MEDIA);
+
+  web_app::WebAppRegistrar& registrar =
+      web_app::WebAppProvider::GetForTest(profile())->registrar();
+
+  EXPECT_EQ(registrar.GetAppThemeColor(app_id), gfx::kGoogleGrey900);
+  EXPECT_EQ(registrar.GetAppBackgroundColor(app_id), gfx::kGoogleGrey800);
+}
+
 // Ensures both the "audio" and "gallery" flavours of the MediaApp can be
 // launched at the same time when launched via the files app.
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationAudioEnabledTest,
@@ -1198,11 +1268,58 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, ToggleBrowserFullscreen) {
   EXPECT_FALSE(app_browser->window()->IsFullscreen());
 }
 
+IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, GuestCanReadLocalFonts) {
+  // For this test, we first need to find a valid font to request from
+  // /usr/share/fonts. build/linux/install-chromeos-fonts.py installs some known
+  // fonts into /usr/*local*/share/fonts, so that's no good. A set of known font
+  // files *should* be available on any machine, but the subdirectory varies.
+  // E.g. NotoSans-Regular.ttf exists in fonts/truetype/noto/ on some machines,
+  // but it has a different parent folder on others.
+  //
+  // For a robust test, poke around on disk and pick the first non-zero .ttf
+  // file to deliver.
+  //
+  // Note that although the path differs across bots, it will be consistent on
+  // the ChromeOS image.
+  const std::string font_to_try = FindAnyTTF();
+  DLOG(INFO) << "Found: " << font_to_try;
+
+  constexpr char kFetchTestFont[] = R"(
+      (async function fetchTestFont() {
+        try {
+          const response = await fetch('/fonts/$1');
+          const blob = await response.blob();
+
+          if (response.status === 200 && blob.size > 0) {
+            domAutomationController.send('success');
+          } else {
+            domAutomationController.send(
+                `Failed: status:$${response.status} size:$${blob.size}`);
+          }
+        } catch (e) {
+          domAutomationController.send(`Failed: $${e}`);
+        }
+      })();
+  )";
+  const std::string script =
+      base::ReplaceStringPlaceholders(kFetchTestFont, {font_to_try}, nullptr);
+
+  WaitForTestSystemAppInstall();
+  content::WebContents* web_ui = LaunchApp(web_app::SystemAppType::MEDIA);
+  EXPECT_EQ("success", ExtractStringInGlobalScope(web_ui, script));
+}
+
 INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_REGULAR_PROFILE_P(
     MediaAppIntegrationAudioEnabledTest);
 
 INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_REGULAR_PROFILE_P(
     MediaAppIntegrationAudioDisabledTest);
+
+INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_REGULAR_PROFILE_P(
+    MediaAppIntegrationDarkLightModeEnabledTest);
+
+INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_REGULAR_PROFILE_P(
+    MediaAppIntegrationDarkLightModeDisabledTest);
 
 INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_REGULAR_PROFILE_P(
     MediaAppIntegrationTest);

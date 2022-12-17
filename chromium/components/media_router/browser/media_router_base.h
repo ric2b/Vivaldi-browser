@@ -18,11 +18,11 @@
 #include "components/media_router/common/media_route.h"
 #include "third_party/blink/public/mojom/presentation/presentation.mojom.h"
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
 #include "components/media_router/common/mojom/media_controller.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
-#endif  // !defined(OS_ANDROID)
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 namespace media_router {
 
@@ -34,25 +34,24 @@ class MediaRouterBase : public MediaRouter {
   ~MediaRouterBase() override;
 
   // Must be called before invoking any other method.
-  void Initialize();
+  virtual void Initialize();
 
   // MediaRouter implementation.
   base::CallbackListSubscription AddPresentationConnectionStateChangedCallback(
       const MediaRoute::Id& route_id,
       const content::PresentationConnectionStateChangedCallback& callback)
       override;
-  void OnIncognitoProfileShutdown() override;
   IssueManager* GetIssueManager() final;
   std::vector<MediaRoute> GetCurrentRoutes() const override;
   std::unique_ptr<media::FlingingController> GetFlingingController(
       const MediaRoute::Id& route_id) override;
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   void GetMediaController(
       const MediaRoute::Id& route_id,
       mojo::PendingReceiver<mojom::MediaController> controller,
       mojo::PendingRemote<mojom::MediaStatusObserver> observer) override;
   base::Value GetLogs() const override;
-#endif  // !defined(OS_ANDROID)
+#endif  // !BUILDFLAG(IS_ANDROID)
   base::Value GetState() const override;
   void GetProviderState(
       mojom::MediaRouteProviderId provider_id,

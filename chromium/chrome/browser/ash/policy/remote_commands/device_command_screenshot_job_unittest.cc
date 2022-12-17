@@ -51,7 +51,7 @@ em::RemoteCommand GenerateScreenshotCommandProto(
   command_proto.set_age_of_command(age_of_command.InMilliseconds());
   std::string payload;
   base::DictionaryValue root_dict;
-  root_dict.SetString(kUploadUrlFieldName, upload_url);
+  root_dict.SetStringKey(kUploadUrlFieldName, upload_url);
   base::JSONWriter::Write(root_dict, &payload);
   command_proto.set_payload(payload);
   return command_proto;
@@ -143,7 +143,7 @@ class MockScreenshotDelegate : public DeviceCommandScreenshotJob::Delegate {
   bool IsScreenshotAllowed() override;
   void TakeSnapshot(gfx::NativeWindow window,
                     const gfx::Rect& source_rect,
-                    ui::GrabWindowSnapshotAsyncPNGCallback callback) override;
+                    OnScreenshotTakenCallback callback) override;
   std::unique_ptr<UploadJob> CreateUploadJob(const GURL&,
                                              UploadJob::Delegate*) override;
 
@@ -164,10 +164,9 @@ bool MockScreenshotDelegate::IsScreenshotAllowed() {
   return screenshot_allowed_;
 }
 
-void MockScreenshotDelegate::TakeSnapshot(
-    gfx::NativeWindow window,
-    const gfx::Rect& source_rect,
-    ui::GrabWindowSnapshotAsyncPNGCallback callback) {
+void MockScreenshotDelegate::TakeSnapshot(gfx::NativeWindow window,
+                                          const gfx::Rect& source_rect,
+                                          OnScreenshotTakenCallback callback) {
   const int width = source_rect.width();
   const int height = source_rect.height();
   scoped_refptr<base::RefCountedBytes> test_png =

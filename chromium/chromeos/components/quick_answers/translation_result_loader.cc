@@ -18,7 +18,6 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "url/gurl.h"
 
-namespace ash {
 namespace quick_answers {
 namespace {
 
@@ -49,7 +48,7 @@ std::string BuildTranslationRequestBody(const IntentInfo& intent_info) {
   payload.SetKey(kQueryKey, std::move(query));
 
   payload.SetKey(kSourceLanguageKey, Value(intent_info.source_language));
-  payload.SetKey(kTargetLanguageKey, Value(intent_info.target_language));
+  payload.SetKey(kTargetLanguageKey, Value(intent_info.device_language));
 
   std::string request_payload_str;
   base::JSONWriter::Write(payload, &request_payload_str);
@@ -104,4 +103,3 @@ void TranslationResultLoader::OnRequestAccessTokenComplete(
 }
 
 }  // namespace quick_answers
-}  // namespace ash

@@ -867,7 +867,7 @@ bool RenderWidgetHostViewChildFrame::IsRenderWidgetHostViewChildFrame() {
   return true;
 }
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 void RenderWidgetHostViewChildFrame::SetActive(bool active) {}
 
 void RenderWidgetHostViewChildFrame::ShowDefinitionForSelection() {
@@ -888,7 +888,7 @@ void RenderWidgetHostViewChildFrame::ShowSharePicker(
     const std::string& url,
     const std::vector<std::string>& file_paths,
     blink::mojom::ShareService::ShareCallback callback) {}
-#endif  // defined(OS_MAC)
+#endif  // BUILDFLAG(IS_MAC)
 
 void RenderWidgetHostViewChildFrame::CopyFromSurface(
     const gfx::Rect& src_subrect,
@@ -976,7 +976,7 @@ void RenderWidgetHostViewChildFrame::TakeFallbackContentFrom(
 blink::mojom::InputEventResultState
 RenderWidgetHostViewChildFrame::FilterInputEvent(
     const blink::WebInputEvent& input_event) {
-#if defined(USE_X11)
+#if BUILDFLAG(IS_LINUX)
   if (vivaldi::IsVivaldiRunning()) {
     // NOTE(espen@vivaldi.com): Same handling as in
     // RenderWidgetHostViewAura::FilterInputEvent(). With the introduction of
@@ -985,7 +985,7 @@ RenderWidgetHostViewChildFrame::FilterInputEvent(
     // with events for UI.
     vivaldi::clipboard::OnInputEvent(input_event);
   }
-#endif  // USE_X11
+#endif  // IS_LINUX
 
   // A child renderer should never receive a GesturePinch event. Pinch events
   // can still be targeted to a child, but they must be processed without

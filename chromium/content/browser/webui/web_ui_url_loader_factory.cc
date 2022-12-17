@@ -37,6 +37,7 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/http/http_byte_range.h"
 #include "net/http/http_util.h"
+#include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/parsed_headers.h"
 #include "services/network/public/cpp/self_deleting_url_loader_factory.h"
 #include "services/network/public/mojom/network_service.mojom.h"
@@ -144,9 +145,16 @@ void ReadData(
 
   mojo::Remote<network::mojom::URLLoaderClient> client(
       std::move(client_remote));
-  client->OnReceiveResponse(std::move(headers));
 
-  client->OnStartLoadingResponseBody(std::move(pipe_consumer_handle));
+  if (base::FeatureList::IsEnabled(network::features::kCombineResponseBody)) {
+    client->OnReceiveResponse(std::move(headers),
+                              std::move(pipe_consumer_handle));
+  } else {
+    client->OnReceiveResponse(std::move(headers),
+                              mojo::ScopedDataPipeConsumerHandle());
+    client->OnStartLoadingResponseBody(std::move(pipe_consumer_handle));
+  }
+
   network::URLLoaderCompletionStatus status(net::OK);
   status.encoded_data_length = output_size;
   status.encoded_body_length = output_size;
@@ -172,7 +180,7 @@ void DataAvailable(
   // as Mojo requires a SequencedTaskRunnerHandle in scope.
   base::ThreadPool::CreateSequencedTaskRunner(
       {base::TaskPriority::USER_BLOCKING, base::MayBlock(),
-       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN})
+       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})
       ->PostTask(FROM_HERE,
                  base::BindOnce(ReadData, std::move(headers), replacements,
                                 replace_in_js, source, std::move(client_remote),

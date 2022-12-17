@@ -16,30 +16,57 @@
 #include "third_party/blink/public/platform/modules/webrtc/webrtc_logging.h"
 #include "third_party/blink/renderer/modules/webrtc/webrtc_audio_device_impl.h"
 #include "third_party/blink/renderer/platform/mediastream/aec_dump_agent_impl.h"
-#include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
+#include "third_party/blink/renderer/platform/wtf/functional.h"
 
 namespace blink {
+namespace {
+void WebRtcLogStringPiece(base::StringPiece message) {
+  WebRtcLogMessage(std::string{message});
+}
+}  // namespace
+
+// Subscribes a sink to the playout data source for the duration of the
+// PlayoutListener lifetime.
+class MediaStreamAudioProcessor::PlayoutListener {
+ public:
+  PlayoutListener(scoped_refptr<WebRtcAudioDeviceImpl> playout_data_source,
+                  WebRtcPlayoutDataSource::Sink* sink)
+      : playout_data_source_(std::move(playout_data_source)), sink_(sink) {
+    DCHECK(playout_data_source_);
+    DCHECK(sink_);
+    playout_data_source_->AddPlayoutSink(sink_);
+  }
+
+  ~PlayoutListener() { playout_data_source_->RemovePlayoutSink(sink_); }
+
+ private:
+  // TODO(crbug.com/704136): Replace with Member at some point.
+  scoped_refptr<WebRtcAudioDeviceImpl> const playout_data_source_;
+  WebRtcPlayoutDataSource::Sink* const sink_;
+};
 
 MediaStreamAudioProcessor::MediaStreamAudioProcessor(
     DeliverProcessedAudioCallback deliver_processed_audio_callback,
-    const AudioProcessingProperties& properties,
-    bool use_capture_multi_channel_processing,
+    const media::AudioProcessingSettings& settings,
+    const media::AudioParameters& capture_data_source_params,
     scoped_refptr<WebRtcAudioDeviceImpl> playout_data_source)
     : audio_processor_(std::move(deliver_processed_audio_callback),
                        /*log_callback=*/
-                       ConvertToBaseRepeatingCallback(
-                           CrossThreadBindRepeating(&WebRtcLogMessage)),
-                       properties.ToAudioProcessingSettings(
-                           use_capture_multi_channel_processing)),
-      playout_data_source_(std::move(playout_data_source)),
+                       WTF::BindRepeating(&WebRtcLogStringPiece),
+                       settings,
+                       capture_data_source_params,
+                       media::AudioProcessor::GetDefaultOutputFormat(
+                           capture_data_source_params,
+                           settings)),
       main_thread_runner_(base::ThreadTaskRunnerHandle::Get()),
       aec_dump_agent_impl_(AecDumpAgentImpl::Create(this)),
       stopped_(false) {
   DCHECK(main_thread_runner_);
-  // Register as a listener for the playout reference signal. Used for echo
-  // cancellation and gain control.
-  if (audio_processor_.RequiresPlayoutReference() && playout_data_source_) {
-    playout_data_source_->AddPlayoutSink(this);
+  // Register as a listener for the playout reference signal. Used for e.g. echo
+  // cancellation.
+  if (settings.NeedPlayoutReference() && playout_data_source) {
+    playout_listener_ =
+        std::make_unique<PlayoutListener>(std::move(playout_data_source), this);
   }
   DETACH_FROM_THREAD(capture_thread_checker_);
   DETACH_FROM_THREAD(render_thread_checker_);
@@ -51,17 +78,6 @@ MediaStreamAudioProcessor::~MediaStreamAudioProcessor() {
   // then remove the hack in WebRtcAudioSink::Adapter.
   DCHECK(main_thread_runner_->BelongsToCurrentThread());
   Stop();
-}
-
-void MediaStreamAudioProcessor::OnCaptureFormatChanged(
-    const media::AudioParameters& input_format) {
-  DCHECK(main_thread_runner_->BelongsToCurrentThread());
-
-  audio_processor_.OnCaptureFormatChanged(input_format);
-
-  // Reset the |capture_thread_checker_| since the capture data will come from
-  // a new capture thread.
-  DETACH_FROM_THREAD(capture_thread_checker_);
 }
 
 void MediaStreamAudioProcessor::ProcessCapturedAudio(
@@ -84,10 +100,7 @@ void MediaStreamAudioProcessor::Stop() {
 
   aec_dump_agent_impl_.reset();
   audio_processor_.OnStopDump();
-  if (audio_processor_.RequiresPlayoutReference() && playout_data_source_) {
-    playout_data_source_->RemovePlayoutSink(this);
-    playout_data_source_ = nullptr;
-  }
+  playout_listener_.reset();
 }
 
 const media::AudioParameters&
@@ -117,32 +130,26 @@ void MediaStreamAudioProcessor::OnStopDump() {
 }
 
 // static
+// TODO(https://crbug.com/1269364): This logic should be moved to
+// ProcessedLocalAudioSource and verified/fixed; The decision should be
+// "hardware effects are required or software audio mofidications are needed
+// (AudioProcessingSettings.NeedAudioModification())".
 bool MediaStreamAudioProcessor::WouldModifyAudio(
     const AudioProcessingProperties& properties) {
-  // Note: This method should be kept in-sync with any changes to the logic in
-  // AudioProcessor::InitializeAudioProcessingModule().
-  // TODO(https://crbug.com/1269364): Share this logic with
-  // AudioProcessor::InitializeAudioProcessingModule().
-
-  if (properties.goog_audio_mirroring)
+  if (properties
+          .ToAudioProcessingSettings(
+              /*multi_channel_capture_processing - does not matter here*/ false)
+          .NeedAudioModification()) {
     return true;
+  }
 
-#if !defined(OS_IOS)
-  if (properties.EchoCancellationIsWebRtcProvided() ||
-      properties.goog_auto_gain_control) {
+#if !BUILDFLAG(IS_IOS)
+  if (properties.goog_auto_gain_control) {
     return true;
   }
 #endif
 
-#if !defined(OS_IOS) && !defined(OS_ANDROID)
-  if (properties.goog_experimental_echo_cancellation) {
-    return true;
-  }
-#endif
-
-  if (properties.goog_noise_suppression ||
-      properties.goog_experimental_noise_suppression ||
-      properties.goog_highpass_filter) {
+  if (properties.goog_noise_suppression) {
     return true;
   }
 
@@ -153,7 +160,8 @@ void MediaStreamAudioProcessor::OnPlayoutData(media::AudioBus* audio_bus,
                                               int sample_rate,
                                               base::TimeDelta audio_delay) {
   DCHECK_CALLED_ON_VALID_THREAD(render_thread_checker_);
-  audio_processor_.OnPlayoutData(audio_bus, sample_rate, audio_delay);
+  DCHECK(audio_bus);
+  audio_processor_.OnPlayoutData(*audio_bus, sample_rate, audio_delay);
 }
 
 void MediaStreamAudioProcessor::OnPlayoutDataSourceChanged() {

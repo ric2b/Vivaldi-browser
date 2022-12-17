@@ -216,13 +216,6 @@ void WebAppSyncBridge::SetAppUserDisplayMode(const AppId& app_id,
   registrar_->NotifyWebAppUserDisplayModeChanged(app_id, user_display_mode);
 }
 
-void WebAppSyncBridge::SetAppRunOnOsLoginMode(const AppId& app_id,
-                                              RunOnOsLoginMode mode) {
-  ScopedRegistryUpdate update(this);
-  WebApp* web_app = update->UpdateApp(app_id);
-  if (web_app)
-    web_app->SetRunOnOsLoginMode(mode);
-}
 void WebAppSyncBridge::SetAppWindowControlsOverlayEnabled(const AppId& app_id,
                                                           bool enabled) {
   ScopedRegistryUpdate update(this);
@@ -421,6 +414,15 @@ void WebAppSyncBridge::RemoveDisallowedLaunchProtocol(
   }
   // Notify observers that the list of disallowed protocols was updated.
   registrar_->NotifyWebAppProtocolSettingsChanged();
+}
+
+void WebAppSyncBridge::SetAppFileHandlerApprovalState(const AppId& app_id,
+                                                      ApiApprovalState state) {
+  {
+    ScopedRegistryUpdate(this)->UpdateApp(app_id)->SetFileHandlerApprovalState(
+        state);
+  }
+  registrar_->NotifyWebAppFileHandlerApprovalStateChanged(app_id);
 }
 
 void WebAppSyncBridge::CheckRegistryUpdateData(

@@ -13,6 +13,8 @@
 #include <vector>
 
 #include "ash/components/arc/net/always_on_vpn_manager.h"
+#include "ash/components/login/auth/authenticator.h"
+#include "ash/components/login/auth/user_context.h"
 #include "base/callback.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
@@ -41,12 +43,6 @@
 #include "chrome/browser/ash/web_applications/help_app/help_app_notification_controller.h"
 #include "chromeos/dbus/session_manager/session_manager_client.h"
 #include "chromeos/dbus/tpm_manager/tpm_manager.pb.h"
-// TODO(https://crbug.com/1164001): move to forward declaration.
-#include "chromeos/login/auth/auth_status_consumer.h"
-#include "chromeos/login/auth/authenticator.h"
-// TODO(https://crbug.com/1164001): move to forward declaration.
-#include "chromeos/login/auth/stub_authenticator_builder.h"
-#include "chromeos/login/auth/user_context.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "services/network/public/cpp/network_connection_tracker.h"
@@ -54,7 +50,6 @@
 #include "ui/base/ime/ash/input_method_manager.h"
 
 class AccountId;
-class AshTurnSyncOnHelper;
 class GURL;
 class PrefRegistrySimple;
 class PrefService;
@@ -65,8 +60,9 @@ class User;
 }  // namespace user_manager
 
 namespace ash {
-class LoginDisplayHost;
+class AuthStatusConsumer;
 class OnboardingUserActivityCounter;
+class StubAuthenticatorBuilder;
 class TokenHandleFetcher;
 
 namespace test {
@@ -254,7 +250,7 @@ class UserSessionManager
   // Thin wrapper around StartupBrowserCreator::LaunchBrowser().  Meant to be
   // used in a Task posted to the UI thread.  Once the browser is launched the
   // login host is deleted.
-  void DoBrowserLaunch(Profile* profile, LoginDisplayHost* login_host);
+  void DoBrowserLaunch(Profile* profile);
 
   // Changes browser locale (selects best suitable locale from different
   // user settings). Returns true if callback will be called.
@@ -507,14 +503,16 @@ class UserSessionManager
   // `locale_pref_checked` set to false which will result in postponing browser
   // launch till user locale is applied if needed. After locale check has
   // completed this method is called with `locale_pref_checked` set to true.
-  void DoBrowserLaunchInternal(Profile* profile,
-                               LoginDisplayHost* login_host,
-                               bool locale_pref_checked);
+  void DoBrowserLaunchInternal(Profile* profile, bool locale_pref_checked);
 
   static void RunCallbackOnLocaleLoaded(
       base::OnceClosure callback,
       InputEventsBlocker* input_events_blocker,
       const locale_util::LanguageSwitchResult& result);
+
+  // Returns `true` if policy mandates that all mounts on device should
+  // be ephemeral.
+  bool IsEphemeralMountForced();
 
   // Callback invoked when `token_handle_util_` has finished.
   void OnTokenHandleObtained(const AccountId& account_id, bool success);
@@ -675,8 +673,6 @@ class UserSessionManager
 
   std::unique_ptr<HelpAppNotificationController>
       help_app_notification_controller_;
-
-  std::unique_ptr<AshTurnSyncOnHelper> ash_turn_sync_on_helper_;
 
   bool token_handle_backfill_tried_for_testing_ = false;
 

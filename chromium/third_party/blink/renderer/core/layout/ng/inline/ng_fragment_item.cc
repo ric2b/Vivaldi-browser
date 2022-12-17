@@ -331,10 +331,9 @@ bool NGFragmentItem::IsListMarker() const {
   return layout_object_ && layout_object_->IsLayoutNGOutsideListMarker();
 }
 
-LayoutBlock& NGFragmentItem::BlockInInline() const {
+LayoutObject& NGFragmentItem::BlockInInline() const {
   DCHECK(IsBlockInInline());
-  auto* const block =
-      To<LayoutBlock>(To<LayoutNGBlockFlow>(GetLayoutObject())->FirstChild());
+  auto* const block = To<LayoutNGBlockFlow>(GetLayoutObject())->FirstChild();
   DCHECK(block) << this;
   return *block;
 }
@@ -379,10 +378,10 @@ gfx::RectF NGFragmentItem::ObjectBoundingBox(
   return ink_bounds;
 }
 
-FloatQuad NGFragmentItem::SvgUnscaledQuad() const {
+gfx::QuadF NGFragmentItem::SvgUnscaledQuad() const {
   DCHECK_EQ(Type(), kSvgText);
-  FloatQuad quad = BuildSvgTransformForBoundingBox().MapQuad(
-      FloatQuad(SvgFragmentData()->rect));
+  gfx::QuadF quad = BuildSvgTransformForBoundingBox().MapQuad(
+      gfx::QuadF(SvgFragmentData()->rect));
   const float scaling_factor = SvgScalingFactor();
   quad.Scale(1 / scaling_factor, 1 / scaling_factor);
   return quad;

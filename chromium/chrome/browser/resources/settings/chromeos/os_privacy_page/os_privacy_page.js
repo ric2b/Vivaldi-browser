@@ -16,10 +16,10 @@ import './peripheral_data_access_protection_dialog.js';
 import '../../controls/settings_toggle_button.js';
 import '../../settings_shared_css.js';
 import '../../settings_page/settings_subpage.js';
-import '../os_people_page/users_page.m.js';
+import '../os_people_page/users_page.js';
 import '../../settings_page/settings_animated_pages.js';
-import '../os_people_page/lock_screen.m.js';
-import '../os_people_page/lock_screen_password_prompt_dialog.m.js';
+import '../os_people_page/lock_screen.js';
+import '../os_people_page/lock_screen_password_prompt_dialog.js';
 
 import {loadTimeData} from '//resources/js/load_time_data.m.js';
 import {afterNextRender, flush, html, Polymer, TemplateInstanceBase, Templatizer} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -232,6 +232,12 @@ Polymer({
       type: Boolean,
       value: false,
     },
+
+    /** @private */
+    metricsConsentDesc_: {
+      type: String,
+      value: '',
+    },
     // </if>
   },
 
@@ -264,6 +270,11 @@ Polymer({
       if (pref) {
         this.metricsConsentPref_ = pref;
         this.isMetricsConsentConfigurable_ = state.isConfigurable;
+        // TODO(crbug/1295789): Revert descriptions back to a single description
+        // once per-user crash is ready.
+        this.metricsConsentDesc_ = state.prefName === 'metrics.user_consent' ?
+            this.i18n('enableLoggingUserDesc') :
+            this.i18n('enableLoggingOwnerDesc');
       }
     });
     // </if>

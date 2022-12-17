@@ -110,6 +110,7 @@ int FileSystemContext::GetPermissionPolicy(FileSystemType type) {
     case kFileSystemTypeArcContent:
     case kFileSystemTypeArcDocumentsProvider:
     case kFileSystemTypeSmbFs:
+    case kFileSystemTypeFuseBox:
       return FILE_PERMISSION_USE_FILE_PERMISSION;
 
     case kFileSystemTypeRestrictedLocal:
@@ -427,10 +428,10 @@ void FileSystemContext::OpenFileSystem(const blink::StorageKey& storage_key,
   // Quota manager isn't provided by all tests.
   if (quota_manager_proxy()) {
     // Ensure default bucket for `storage_key` exists so that Quota API
-    // is aware of the usage. Bucket type 'temporary' is used even though the
-    // actual storage type of the file system being opened may be different.
-    quota_manager_proxy()->GetOrCreateBucket(
-        storage_key, kDefaultBucketName, io_task_runner_.get(),
+    // is aware of the usage.
+    quota_manager_proxy()->GetOrCreateBucketDeprecated(
+        storage_key, kDefaultBucketName, FileSystemTypeToQuotaStorageType(type),
+        io_task_runner_.get(),
         base::BindOnce(&FileSystemContext::OnGetOrCreateBucket,
                        weak_factory_.GetWeakPtr(), storage_key, type, mode,
                        std::move(callback)));
@@ -445,11 +446,6 @@ void FileSystemContext::OnGetOrCreateBucket(
     OpenFileSystemMode mode,
     OpenFileSystemCallback callback,
     QuotaErrorOr<BucketInfo> result) {
-  if (!result.ok()) {
-    std::move(callback).Run(GURL(), std::string(),
-                            base::File::FILE_ERROR_FAILED);
-    return;
-  }
   ResolveURLOnOpenFileSystem(storage_key, type, mode, std::move(callback));
 }
 
@@ -467,9 +463,22 @@ void FileSystemContext::ResolveURLOnOpenFileSystem(
     return;
   }
 
+  // Bind `this` to the callback to ensure this instance stays alive while the
+  // URL is resolving.
   backend->ResolveURL(
       CreateCrackedFileSystemURL(storage_key, type, base::FilePath()), mode,
-      std::move(callback));
+      base::BindOnce(&FileSystemContext::DidResolveURLOnOpenFileSystem, this,
+                     std::move(callback)));
+}
+
+void FileSystemContext::DidResolveURLOnOpenFileSystem(
+    OpenFileSystemCallback callback,
+    const GURL& filesystem_root,
+    const std::string& filesystem_name,
+    base::File::Error error) {
+  DCHECK(io_task_runner_->RunsTasksInCurrentSequence());
+
+  std::move(callback).Run(filesystem_root, filesystem_name, error);
 }
 
 void FileSystemContext::ResolveURL(const FileSystemURL& url,

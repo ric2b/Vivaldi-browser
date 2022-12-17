@@ -364,22 +364,10 @@ bool RenderWidgetHostViewAndroid::SynchronizeVisualProperties(
     const absl::optional<viz::LocalSurfaceId>& child_local_surface_id) {
   if (!CanSynchronizeVisualProperties())
     return false;
-  if (child_local_surface_id) {
+  if (child_local_surface_id)
     local_surface_id_allocator_.UpdateFromChild(*child_local_surface_id);
-  } else {
+  else
     local_surface_id_allocator_.GenerateId();
-    // When a rotation begins while hidden, the Renderer will report the amount
-    // of time spent performing layout of the incremental surfaces. We cache the
-    // first viz::LocalSurfaceId sent, and then update |hidden_rotation_time_|
-    // for all subsequent cc::RenderFrameMetadata reported until the rotation
-    // completes.
-    if (!is_showing_ && in_rotation_ &&
-        !first_hidden_local_surface_id_.is_valid()) {
-      hidden_rotation_time_ = base::TimeDelta();
-      first_hidden_local_surface_id_ =
-          local_surface_id_allocator_.GetCurrentLocalSurfaceId();
-    }
-  }
 
   // If we still have an invalid viz::LocalSurfaceId, then we are hidden and
   // evicted. This will have been triggered by a child acknowledging a previous
@@ -444,25 +432,6 @@ void RenderWidgetHostViewAndroid::LostFocus() {
 
 void RenderWidgetHostViewAndroid::OnRenderFrameMetadataChangedBeforeActivation(
     const cc::RenderFrameMetadata& metadata) {
-  // If we began Surface Synchronization while hidden, the Renderer will report
-  // the time spent performing the incremental layouts. The record those here,
-  // to be included with the final time spend completing rotation in
-  // OnRenderFrameMetadataChangedAfterActivation.
-  if (first_hidden_local_surface_id_.is_valid() &&
-      metadata.local_surface_id->is_valid()) {
-    auto local_surface_id = metadata.local_surface_id.value();
-    // We stop recording layout times once the surface is expected as the final
-    // one for rotation. For that surface we are interested in the full time
-    // until activation. Which will include layout and rendering.
-    if (!rotation_metrics_.empty() &&
-        local_surface_id.IsSameOrNewerThan(rotation_metrics_.front().second)) {
-      first_hidden_local_surface_id_ = viz::LocalSurfaceId();
-    } else if (metadata.local_surface_id->IsSameOrNewerThan(
-                   first_hidden_local_surface_id_)) {
-      hidden_rotation_time_ += metadata.visual_properties_update_duration;
-    }
-  }
-
   bool is_transparent = metadata.has_transparent_background;
   SkColor root_background_color = metadata.root_background_color;
 
@@ -692,12 +661,7 @@ void RenderWidgetHostViewAndroid::OnRenderFrameMetadataChangedAfterActivation(
         // From these, until `activation_time`, we can determine the length of
         // time that the Renderer is visible, until the post rotation surface is
         // first displayed.
-        //
-        // For hidden rotations, the Renderer may be doing additional, partial,
-        // layouts. This is tracked in `hidden_rotation_time_`. This extra work
-        // will be removed once `is_surface_sync_throttling_` is the default.
-        auto duration =
-            activation_time - rotation_target.first + hidden_rotation_time_;
+        auto duration = activation_time - rotation_target.first;
         TRACE_EVENT_NESTABLE_ASYNC_END_WITH_TIMESTAMP1(
             "viz", "RenderWidgetHostViewAndroid::RotationEmbed",
             TRACE_ID_LOCAL(rotation_target.second.hash()), activation_time,
@@ -707,7 +671,6 @@ void RenderWidgetHostViewAndroid::OnRenderFrameMetadataChangedAfterActivation(
         // corresponding surface.
         UMA_HISTOGRAM_TIMES("Android.Rotation.BeginToRendererFrameActivation",
                             duration);
-        hidden_rotation_time_ = base::TimeDelta();
         rotation_metrics_.pop_front();
       } else {
         // The embedded surface may have updated the
@@ -1233,15 +1196,6 @@ uint32_t RenderWidgetHostViewAndroid::GetCaptureSequenceNumber() const {
   return latest_capture_sequence_number_;
 }
 
-void RenderWidgetHostViewAndroid::OnInterstitialPageAttached() {
-  if (view_.parent())
-    view_.parent()->MoveToFront(&view_);
-}
-
-void RenderWidgetHostViewAndroid::OnInterstitialPageGoingAway() {
-  ResetSynchronousCompositor();
-}
-
 bool RenderWidgetHostViewAndroid::CanSynchronizeVisualProperties() {
   // When a rotation begins, the new visual properties are not all notified to
   // RenderWidgetHostViewAndroid at the same time. The process begins when
@@ -1277,6 +1231,11 @@ void RenderWidgetHostViewAndroid::UpdateWebViewBackgroundColorIfNecessary() {
   if (!using_browser_compositor_ && host()->delegate()->IsFullscreen()) {
     SetContentBackgroundColor(SK_ColorBLACK);
   }
+}
+
+void RenderWidgetHostViewAndroid::ClearFallbackSurfaceForCommitPending() {
+  delegated_frame_host_->ClearFallbackSurfaceForCommitPending();
+  local_surface_id_allocator_.Invalidate();
 }
 
 void RenderWidgetHostViewAndroid::ResetFallbackToFirstNavigationSurface() {
@@ -2826,6 +2785,10 @@ void RenderWidgetHostViewAndroid::BeginRotationBatching() {
 
 void RenderWidgetHostViewAndroid::EndRotationBatching() {
   in_rotation_ = false;
+  // Always clear when ending batching. As WebView can trigger multiple
+  // OnPhysicalBackingSizeChanged which would re-trigger rotation if we were
+  // still tracking `fullscreen_rotation_`. crbug.com/1302964
+  fullscreen_rotation_ = false;
   DCHECK(!rotation_metrics_.empty());
   const auto delta = rotation_metrics_.back().first - base::TimeTicks();
   TRACE_EVENT_NESTABLE_ASYNC_END1(

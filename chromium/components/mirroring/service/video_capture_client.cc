@@ -129,7 +129,7 @@ void VideoCaptureClient::OnNewBuffer(
 
   if (!buffer_handle->is_read_only_shmem_region() &&
       !buffer_handle->is_shared_buffer_handle()) {
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
     if (!buffer_handle->is_gpu_memory_buffer_handle()) {
       NOTIMPLEMENTED();
       return;
@@ -197,7 +197,7 @@ void VideoCaptureClient::OnBufferReady(
   scoped_refptr<media::VideoFrame> frame;
   BufferFinishedCallback buffer_finished_callback;
   if (buffer_iter->second->is_gpu_memory_buffer_handle()) {
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
     frame = media::VideoFrame::WrapUnacceleratedIOSurface(
         buffer_iter->second->get_gpu_memory_buffer_handle().Clone(),
         buffer->info->visible_rect, buffer->info->timestamp);
@@ -282,7 +282,7 @@ void VideoCaptureClient::OnBufferReady(
         nv12_to_i420_pool_->CreateFrame(
             media::PIXEL_FORMAT_I420, frame->coded_size(),
             frame->visible_rect(), frame->natural_size(), frame->timestamp());
-    media::Status status =
+    media::EncoderStatus status =
         media::ConvertAndScaleFrame(*frame, *new_frame, nv12_to_i420_tmp_buf_);
     if (!status.is_ok()) {
       LOG(DFATAL) << "Unable to convert frame to I420.";

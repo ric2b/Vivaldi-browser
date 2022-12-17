@@ -5,10 +5,16 @@
 #include "chrome/browser/ui/ui_features.h"
 
 #include "base/feature_list.h"
+#include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "ui_features.h"
 
 namespace features {
+
+// Enables the tab dragging fallback when full window dragging is not supported
+// by the platform (e.g. Wayland). See https://crbug.com/896640
+const base::Feature kAllowWindowDragUsingSystemDragDrop{
+    "AllowWindowDragUsingSystemDragDrop", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables Chrome Labs menu in the toolbar. See https://crbug.com/1145666
 const base::Feature kChromeLabs{"ChromeLabs",
@@ -51,7 +57,7 @@ const base::Feature kChromeWhatsNewInMainMenuNewBadge{
 #if !defined(ANDROID)
 // Enables "Access Code Cast" UI.
 const base::Feature kAccessCodeCastUI{"AccessCodeCastUI",
-                                      base::FEATURE_DISABLED_BY_DEFAULT};
+                                      base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
 
 // Enables showing the EV certificate details in the Page Info bubble.
@@ -113,18 +119,10 @@ const char kMinimumTabWidthFeatureParameterName[] = "minTabWidth";
 const base::Feature kScrollableTabStripButtons{
     "ScrollableTabStripButtons", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Updated managed profile sign-in popup. https://crbug.com/1141224
-const base::Feature kSyncConfirmationUpdatedText{
-    "SyncConfirmationUpdatedText", base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Automatically create groups for users based on domain.
 // https://crbug.com/1128703
 const base::Feature kTabGroupsAutoCreate{"TabGroupsAutoCreate",
                                          base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Enables tabs to be frozen when collapsed. https://crbug.com/1110108
-const base::Feature kTabGroupsCollapseFreezing{
-    "TabGroupsCollapseFreezing", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Directly controls the "new" badge (as opposed to old "master switch"; see
 // https://crbug.com/1169907 for master switch deprecation and
@@ -176,6 +174,11 @@ const base::FeatureParam<bool> kTabSearchSearchIgnoreLocation{
 const base::Feature kTabSearchMediaTabs{"TabSearchMediaTabs",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
+// If this feature parameter is enabled, show media tabs in both "Audio & Video"
+// section and "Open Tabs" section.
+const char kTabSearchAlsoShowMediaTabsinOpenTabsSectionParameterName[] =
+    "Also show Media Tabs in Open Tabs Section";
+
 const base::FeatureParam<int> kTabSearchSearchDistance{
     &kTabSearchFuzzySearch, "TabSearchSearchDistance", 200};
 
@@ -216,11 +219,6 @@ const base::Feature kUnifiedSidePanel{"UnifiedSidePanel",
 const base::Feature kWebUIBubblePerProfilePersistence{
     "WebUIBubblePerProfilePersistence", base::FEATURE_DISABLED_BY_DEFAULT};
 
-#if !defined(ANDROID)
-const base::Feature kWebUIBrandingUpdate{"WebUIBrandingUpdate",
-                                         base::FEATURE_DISABLED_BY_DEFAULT};
-#endif
-
 // Enables the WebUI Download Shelf instead of the Views framework Download
 // Shelf. See https://crbug.com/1180372.
 const base::Feature kWebUIDownloadShelf{"WebUIDownloadShelf",
@@ -246,14 +244,14 @@ const base::Feature kWebUITabStripContextMenuAfterTap {
 // Enables a WebUI Feedback UI, as opposed to the Chrome App UI. See
 // https://crbug.com/1167223.
 const base::Feature kWebUIFeedback{"WebUIFeedback",
-                                   base::FEATURE_DISABLED_BY_DEFAULT};
+                                   base::FEATURE_ENABLED_BY_DEFAULT};
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS)
 const base::Feature kChromeOSTabSearchCaptionButton{
     "ChromeOSTabSearchCaptionButton", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 // Enabled an experiment which increases the prominence to grant MacOS system
 // location permission to Chrome when location permissions have already been
 // approved. https://crbug.com/1211052
@@ -283,7 +281,7 @@ int GetLocationPermissionsExperimentLabelPromptLimit() {
 }
 #endif
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 
 // Moves the Tab Search button into the browser frame's caption button area on
 // Windows 10 (crbug.com/1223847).

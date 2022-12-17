@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "ash/components/cryptohome/cryptohome_parameters.h"
 #include "ash/constants/ash_switches.h"
 #include "base/bind.h"
 #include "base/logging.h"
@@ -22,7 +23,6 @@
 #include "chrome/browser/policy/enrollment_status.h"
 #include "chrome/common/chrome_content_client.h"
 #include "chrome/common/pref_names.h"
-#include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/system/statistics_provider.h"
 #include "chromeos/tpm/install_attributes.h"
 #include "components/policy/core/common/cloud/cloud_policy_core.h"
@@ -30,6 +30,16 @@
 #include "components/prefs/pref_service.h"
 
 namespace policy {
+
+namespace {
+
+std::string GetString(const base::Value& dict, base::StringPiece key) {
+  DCHECK(dict.is_dict());
+  const std::string* value = dict.FindStringKey(key);
+  return value ? *value : std::string();
+}
+
+}  // namespace
 
 DeviceCloudPolicyInitializer::DeviceCloudPolicyInitializer(
     PrefService* local_state,
@@ -64,6 +74,7 @@ void DeviceCloudPolicyInitializer::Init() {
   state_keys_update_subscription_ = state_keys_broker_->RegisterUpdateCallback(
       base::BindRepeating(&DeviceCloudPolicyInitializer::TryToStartConnection,
                           base::Unretained(this)));
+  policy_manager_observer_.Observe(policy_manager_);
 
   TryToStartConnection();
 }
@@ -73,6 +84,7 @@ void DeviceCloudPolicyInitializer::Shutdown() {
 
   policy_store_->RemoveObserver(this);
   state_keys_update_subscription_ = {};
+  policy_manager_observer_.Reset();
   is_initialized_ = false;
 }
 
@@ -137,7 +149,7 @@ EnrollmentConfig DeviceCloudPolicyInitializer::GetPrescribedEnrollmentConfig()
   // signal present that indicates the device should enroll.
 
   // Gather enrollment signals from various sources.
-  const base::DictionaryValue* device_state =
+  const base::Value* device_state =
       local_state_->GetDictionary(prefs::kServerBackedDeviceState);
   std::string device_state_mode;
   std::string device_state_management_domain;
@@ -145,12 +157,12 @@ EnrollmentConfig DeviceCloudPolicyInitializer::GetPrescribedEnrollmentConfig()
   std::string license_type;
 
   if (device_state) {
-    device_state->GetString(kDeviceStateMode, &device_state_mode);
-    device_state->GetString(kDeviceStateManagementDomain,
-                            &device_state_management_domain);
+    device_state_mode = GetString(*device_state, kDeviceStateMode);
+    device_state_management_domain =
+        GetString(*device_state, kDeviceStateManagementDomain);
     is_license_packaged_with_device =
         device_state->FindBoolPath(kDeviceStatePackagedLicense);
-    device_state->GetString(kDeviceStateLicenseType, &license_type);
+    license_type = GetString(*device_state, kDeviceStateLicenseType);
   }
 
   if (is_license_packaged_with_device) {
@@ -231,6 +243,20 @@ void DeviceCloudPolicyInitializer::OnStoreError(CloudPolicyStore* store) {
   // Do nothing.
 }
 
+void DeviceCloudPolicyInitializer::OnDeviceCloudPolicyManagerConnected() {
+  // Do nothing.
+}
+void DeviceCloudPolicyInitializer::OnDeviceCloudPolicyManagerDisconnected() {
+  // Do nothing.
+}
+void DeviceCloudPolicyInitializer::OnDeviceCloudPolicyManagerGotRegistry() {
+  // `policy_manager_->HasSchemaRegistry()` is one of requirements for
+  // StartConnection. Make another attempt when `policy_manager_` gets its
+  // registry.
+  policy_manager_observer_.Reset();
+  TryToStartConnection();
+}
+
 std::unique_ptr<CloudPolicyClient> DeviceCloudPolicyInitializer::CreateClient(
     DeviceManagementService* device_management_service) {
   // DeviceDMToken callback is empty here because for device policies this
@@ -249,6 +275,17 @@ void DeviceCloudPolicyInitializer::TryToStartConnection() {
     return;
   }
 
+  // TODO(crbug.com/1304636): Move this and all other checks from here to a
+  // separate method.
+  if (!policy_manager_->HasSchemaRegistry()) {
+    // crbug.com/1295871: `policy_manager_` might not have schema registry on
+    // start connection attempt. This may happen on chrome restart when
+    // `chrome::kInitialProfile` is created after login profile: policy will be
+    // loaded but `BuildSchemaRegistryServiceForProfile` will not be called for
+    // non-initial / non-sign-in profile.
+    return;
+  }
+
   // Currently reven devices don't support sever-backed state keys, but they
   // also don't support FRE/AutoRE so don't block initialization of device
   // policy on state keys being available on reven.
@@ -264,6 +301,11 @@ void DeviceCloudPolicyInitializer::TryToStartConnection() {
 
 void DeviceCloudPolicyInitializer::StartConnection(
     std::unique_ptr<CloudPolicyClient> client) {
+  // This initializer will be deleted once `policy_manager_` is connected.
+  // Stop observing the manager as there's nothing interesting it can say
+  // anymore.
+  policy_manager_observer_.Reset();
+
   if (!policy_manager_->IsConnected()) {
     policy_manager_->StartConnection(std::move(client), install_attributes_);
   }

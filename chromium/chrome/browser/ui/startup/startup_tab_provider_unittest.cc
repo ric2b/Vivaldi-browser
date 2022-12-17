@@ -188,14 +188,25 @@ TEST(StartupTabProviderTest, GetPinnedTabsForState_Negative) {
 }
 
 TEST(StartupTabProviderTest, GetPreferencesTabsForState) {
-  SessionStartupPref pref(SessionStartupPref::Type::URLS);
-  pref.urls = {GURL(u"https://www.google.com")};
+  SessionStartupPref pref_urls(SessionStartupPref::Type::URLS);
+  SessionStartupPref pref_last_and_urls(
+      SessionStartupPref::Type::LAST_AND_URLS);
+  pref_urls.urls = {GURL(u"https://www.google.com")};
+  pref_last_and_urls.urls = {GURL(u"https://www.google.com")};
 
   StartupTabs output =
-      StartupTabProviderImpl::GetPreferencesTabsForState(pref, false);
+      StartupTabProviderImpl::GetPreferencesTabsForState(pref_urls, false);
 
   ASSERT_EQ(1U, output.size());
   EXPECT_EQ("www.google.com", output[0].url.host());
+  EXPECT_EQ(StartupTab::Type::kNormal, output[0].type);
+
+  output = StartupTabProviderImpl::GetPreferencesTabsForState(
+      pref_last_and_urls, false);
+
+  ASSERT_EQ(1U, output.size());
+  EXPECT_EQ("www.google.com", output[0].url.host());
+  EXPECT_EQ(StartupTab::Type::kFromLastAndUrlsStartupPref, output[0].type);
 }
 
 TEST(StartupTabProviderTest, GetPreferencesTabsForState_WrongType) {
@@ -369,7 +380,7 @@ TEST(StartupTabProviderTest, GetCommandLineTabs) {
     auto has_tabs = instance.HasCommandLineTabs(command_line, base::FilePath());
     // This Windows-specific page is an exception and is not allowed on other
     // platforms, except ChromeOS which allows all chrome://settings pages.
-#if defined(OS_WIN) || defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
     ASSERT_EQ(1u, output.size());
     EXPECT_EQ(GURL("chrome://settings/resetProfileSettings#cct"),
               output[0].url);
@@ -390,7 +401,7 @@ TEST(StartupTabProviderTest, GetCommandLineTabs) {
         instance.GetCommandLineTabs(command_line, base::FilePath(), &profile);
 
     auto has_tabs = instance.HasCommandLineTabs(command_line, base::FilePath());
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS)
     // On Chrome OS (ash-chrome), settings page is allowed to be specified.
     ASSERT_EQ(1u, output.size());
     EXPECT_EQ(GURL("chrome://settings/syncSetup"), output[0].url);

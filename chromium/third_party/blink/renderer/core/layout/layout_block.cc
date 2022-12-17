@@ -36,6 +36,7 @@
 #include "third_party/blink/renderer/core/editing/drag_caret.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
+#include "third_party/blink/renderer/core/editing/ime/input_method_controller.h"
 #include "third_party/blink/renderer/core/editing/text_affinity.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
@@ -119,16 +120,6 @@ static TrackedDescendantsMap& GetPercentHeightDescendantsMap() {
   return *map;
 }
 
-// This map keeps track of SVG <text> descendants.
-// LayoutNGSVGText needs to do re-layout on transform changes of any ancestor
-// because LayoutNGSVGText's layout result depends on scaling factors computed
-// with ancestor transforms.
-TrackedDescendantsMap& GetSvgTextDescendantsMap() {
-  DEFINE_STATIC_LOCAL(Persistent<TrackedDescendantsMap>, map,
-                      (MakeGarbageCollected<TrackedDescendantsMap>()));
-  return *map;
-}
-
 LayoutBlock::LayoutBlock(ContainerNode* node)
     : LayoutBox(node),
       has_margin_before_quirk_(false),
@@ -176,7 +167,7 @@ void LayoutBlock::RemoveFromGlobalMaps() {
     }
   }
   if (has_svg_text_descendants_) {
-    GetSvgTextDescendantsMap().erase(this);
+    View()->SvgTextDescendantsMap().erase(this);
     has_svg_text_descendants_ = false;
   }
 }
@@ -228,6 +219,16 @@ static bool BorderOrPaddingLogicalDimensionChanged(
 void LayoutBlock::StyleDidChange(StyleDifference diff,
                                  const ComputedStyle* old_style) {
   NOT_DESTROYED();
+  // Computes old scaling factor before PaintLayer::UpdateTransform()
+  // updates Layer()->Transform().
+  double old_squared_scale = 1;
+  if (Layer() && diff.TransformChanged() && has_svg_text_descendants_) {
+    if (TransformationMatrix* old_transform = Layer()->Transform()) {
+      const auto transform = old_transform->ToAffineTransform();
+      old_squared_scale = transform.XScaleSquared() + transform.YScaleSquared();
+    }
+  }
+
   LayoutBox::StyleDidChange(diff, old_style);
 
   const ComputedStyle& new_style = StyleRef();
@@ -277,10 +278,19 @@ void LayoutBlock::StyleDidChange(StyleDifference diff,
                                              kLogicalHeight);
 
   if (diff.TransformChanged() && has_svg_text_descendants_) {
-    for (LayoutBox* box : *GetSvgTextDescendantsMap().at(this)) {
-      box->SetNeedsLayout(layout_invalidation_reason::kStyleChange,
-                          kMarkContainerChain);
-      To<LayoutNGSVGText>(box)->SetNeedsTextMetricsUpdate();
+    const TransformationMatrix* new_transform =
+        Layer() ? Layer()->Transform() : nullptr;
+    const auto new_affine_transform =
+        new_transform ? new_transform->ToAffineTransform() : AffineTransform();
+    // Compare XScaleSquared()+YScaleSquared().
+    // See SVGLayoutSupport::CalculateScreenFontSizeScalingFactor().
+    if (old_squared_scale != new_affine_transform.XScaleSquared() +
+                                 new_affine_transform.YScaleSquared()) {
+      for (LayoutBox* box : *View()->SvgTextDescendantsMap().at(this)) {
+        box->SetNeedsLayout(layout_invalidation_reason::kStyleChange,
+                            kMarkContainerChain);
+        To<LayoutNGSVGText>(box)->SetNeedsTextMetricsUpdate();
+      }
     }
   }
 }
@@ -289,12 +299,9 @@ void LayoutBlock::UpdateFromStyle() {
   NOT_DESTROYED();
   LayoutBox::UpdateFromStyle();
 
-  // OverflowClipMargin() is only set if overflow is 'clip' along both axis, or
-  // 'contain: paint'. The later implies clipping along both axis.
-  bool should_clip_overflow =
-      (!StyleRef().IsOverflowVisibleAlongBothAxes() ||
-       StyleRef().OverflowClipMargin() != LayoutUnit()) &&
-      AllowsNonVisibleOverflow();
+  bool should_clip_overflow = (!StyleRef().IsOverflowVisibleAlongBothAxes() ||
+                               ShouldApplyPaintContainment()) &&
+                              AllowsNonVisibleOverflow();
   if (should_clip_overflow != HasNonVisibleOverflow()) {
     if (GetScrollableArea())
       GetScrollableArea()->InvalidateAllStickyConstraints();
@@ -992,7 +999,11 @@ void LayoutBlock::LayoutPositionedObject(LayoutBox* positioned_object,
         layout_invalidation_reason::kAncestorMoved, kMarkOnlyThis);
   }
 
-  positioned_object->LayoutIfNeeded();
+  bool did_update_layout = false;
+  if (positioned_object->NeedsLayout()) {
+    positioned_object->UpdateLayout();
+    did_update_layout = true;
+  }
 
   LayoutObject* parent = positioned_object->Parent();
   bool layout_changed = false;
@@ -1010,12 +1021,20 @@ void LayoutBlock::LayoutPositionedObject(LayoutBox* positioned_object,
     // reposition?
     positioned_object->ForceLayout();
     layout_changed = true;
+    did_update_layout = true;
   }
 
   // Lay out again if our estimate was wrong.
   if (!layout_changed && needs_block_direction_location_set_before_layout &&
-      logical_top_estimate != LogicalTopForChild(*positioned_object))
+      logical_top_estimate != LogicalTopForChild(*positioned_object)) {
     positioned_object->ForceLayout();
+    did_update_layout = true;
+  }
+
+  if (did_update_layout) {
+    GetDocument().GetFrame()->GetInputMethodController().DidLayoutSubtree(
+        *positioned_object);
+  }
 
   if (is_paginated)
     UpdateFragmentationInfoForChild(*positioned_object);
@@ -1134,33 +1153,34 @@ void LayoutBlock::ImageChanged(WrappedImagePtr image,
   }
 }
 
-static void ProcessPositionedObjectRemoval(
-    ContainingBlockState containing_block_state,
-    LayoutObject* positioned_object) {
-  if (containing_block_state == kNewContainingBlock)
-    positioned_object->SetChildNeedsLayout(kMarkOnlyThis);
-
-  // It is parent blocks job to add positioned child to positioned objects
-  // list of its containing block.
-  // Parent layout needs to be invalidated to ensure this happens.
-  positioned_object->MarkParentForOutOfFlowPositionedChange();
-}
-
 void LayoutBlock::RemovePositionedObjects(
-    LayoutObject* o,
+    LayoutObject* stay_within,
     ContainingBlockState containing_block_state) {
   NOT_DESTROYED();
   TrackedLayoutBoxLinkedHashSet* positioned_descendants = PositionedObjects();
   if (!positioned_descendants)
     return;
 
+  auto ProcessPositionedObjectRemoval = [&](LayoutObject* positioned_object) {
+    if (stay_within && (!positioned_object->IsDescendantOf(stay_within) ||
+                        stay_within == positioned_object)) {
+      return false;
+    }
+
+    if (containing_block_state == kNewContainingBlock)
+      positioned_object->SetChildNeedsLayout(kMarkOnlyThis);
+
+    // It is parent blocks job to add positioned child to positioned objects
+    // list of its containing block.
+    // Parent layout needs to be invalidated to ensure this happens.
+    positioned_object->MarkParentForOutOfFlowPositionedChange();
+    return true;
+  };
+
   HeapVector<Member<LayoutBox>, 16> dead_objects;
   for (LayoutBox* positioned_object : *positioned_descendants) {
-    if (!o ||
-        (positioned_object->IsDescendantOf(o) && o != positioned_object)) {
-      ProcessPositionedObjectRemoval(containing_block_state, positioned_object);
+    if (ProcessPositionedObjectRemoval(positioned_object))
       dead_objects.push_back(positioned_object);
-    }
   }
 
   // Invalidate the nearest OOF container to ensure it is marked for layout.
@@ -1239,7 +1259,7 @@ void LayoutBlock::RemovePercentHeightDescendant(LayoutBox* descendant) {
 void LayoutBlock::AddSvgTextDescendant(LayoutBox& svg_text) {
   NOT_DESTROYED();
   DCHECK(IsA<LayoutNGSVGText>(svg_text));
-  auto result = GetSvgTextDescendantsMap().insert(this, nullptr);
+  auto result = View()->SvgTextDescendantsMap().insert(this, nullptr);
   if (result.is_new_entry) {
     result.stored_value->value =
         MakeGarbageCollected<TrackedLayoutBoxLinkedHashSet>();
@@ -1251,7 +1271,7 @@ void LayoutBlock::AddSvgTextDescendant(LayoutBox& svg_text) {
 void LayoutBlock::RemoveSvgTextDescendant(LayoutBox& svg_text) {
   NOT_DESTROYED();
   DCHECK(IsA<LayoutNGSVGText>(svg_text));
-  TrackedDescendantsMap& map = GetSvgTextDescendantsMap();
+  TrackedDescendantsMap& map = View()->SvgTextDescendantsMap();
   auto it = map.find(this);
   if (it == map.end())
     return;
@@ -1297,35 +1317,6 @@ LayoutUnit LayoutBlock::TextIndentOffset() const {
   if (StyleRef().TextIndent().IsPercentOrCalc())
     cw = ContentLogicalWidth();
   return MinimumValueForLength(StyleRef().TextIndent(), cw);
-}
-
-bool LayoutBlock::IsPointInOverflowControl(
-    HitTestResult& result,
-    const PhysicalOffset& hit_test_location,
-    const PhysicalOffset& accumulated_offset) const {
-  NOT_DESTROYED();
-  if (!ScrollsOverflow())
-    return false;
-
-  return Layer()->GetScrollableArea()->HitTestOverflowControls(
-      result, ToRoundedPoint(hit_test_location - accumulated_offset));
-}
-
-bool LayoutBlock::HitTestOverflowControl(
-    HitTestResult& result,
-    const HitTestLocation& hit_test_location,
-    const PhysicalOffset& adjusted_location) const {
-  NOT_DESTROYED();
-  if (VisibleToHitTestRequest(result.GetHitTestRequest()) &&
-      IsPointInOverflowControl(result, hit_test_location.Point(),
-                               adjusted_location)) {
-    UpdateHitTestResult(result, hit_test_location.Point() - adjusted_location);
-    // FIXME: isPointInOverflowControl() doesn't handle rect-based tests yet.
-    if (result.AddNodeToListBasedTestResult(
-            NodeForHitTest(), hit_test_location) == kStopHitTesting)
-      return true;
-  }
-  return false;
 }
 
 bool LayoutBlock::HitTestChildren(HitTestResult& result,
@@ -2155,6 +2146,7 @@ LayoutRect LayoutBlock::LocalCaretRect(
 }
 
 void LayoutBlock::AddOutlineRects(Vector<PhysicalRect>& rects,
+                                  OutlineInfo* info,
                                   const PhysicalOffset& additional_offset,
                                   NGOutlineType include_block_overflows) const {
   NOT_DESTROYED();
@@ -2181,6 +2173,8 @@ void LayoutBlock::AddOutlineRects(Vector<PhysicalRect>& rects,
                                      include_block_overflows);
     }
   }
+  if (info)
+    *info = OutlineInfo::GetFromStyle(StyleRef());
 }
 
 LayoutBox* LayoutBlock::CreateAnonymousBoxWithSameTypeAs(
@@ -2367,13 +2361,13 @@ void LayoutBlock::RebuildFragmentTreeSpine() {
   // If this box has an associated layout-result, rebuild the spine of the
   // fragment-tree to ensure consistency.
   LayoutBlock* cb = this;
-  while (cb->PhysicalFragmentCount() && !cb->NeedsLayout()) {
+  while (cb && cb->PhysicalFragmentCount() && !cb->NeedsLayout()) {
     // Create and set a new identical results.
     for (auto& layout_result : cb->layout_results_) {
       layout_result =
           NGLayoutResult::CloneWithPostLayoutFragments(*layout_result);
     }
-    cb = cb->ContainingBlock();
+    cb = cb->ContainingNGBlock();
   }
 }
 

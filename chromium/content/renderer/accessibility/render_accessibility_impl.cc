@@ -113,24 +113,24 @@ RenderAccessibilityImpl::RenderAccessibilityImpl(
   WebSettings* settings = web_view->GetSettings();
 
   SetAccessibilityCrashKey(mode);
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   // Password values are only passed through on Android.
   settings->SetAccessibilityPasswordValuesEnabled(true);
 #endif
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   // Inline text boxes can be enabled globally on all except Android.
   // On Android they can be requested for just a specific node.
   if (mode.has_mode(ui::AXMode::kInlineTextBoxes))
     settings->SetInlineTextBoxAccessibilityEnabled(true);
 #endif
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   // aria-modal currently prunes the accessibility tree on Mac only.
   settings->SetAriaModalPrunesAXTree(true);
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS)
   // Do not ignore SVG grouping (<g>) elements on ChromeOS, which is needed so
   // Select-to-Speak can read SVG text nodes in natural reading order.
   settings->SetAccessibilityIncludeSvgGElement(true);
@@ -142,7 +142,7 @@ RenderAccessibilityImpl::RenderAccessibilityImpl(
   // UI for a select element directly accessible. Disable by default on
   // Chrome OS, but some tests may override.
   bool disable_ax_menu_list = false;
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS)
   disable_ax_menu_list = true;
 #endif
   auto* command_line = base::CommandLine::ForCurrentProcess();
@@ -213,7 +213,7 @@ void RenderAccessibilityImpl::AccessibilityModeChanged(const ui::AXMode& mode) {
 
   SetAccessibilityCrashKey(mode);
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   // Inline text boxes can be enabled globally on all except Android.
   // On Android they can be requested for just a specific node.
   WebView* web_view = render_frame_->GetWebView();
@@ -229,7 +229,7 @@ void RenderAccessibilityImpl::AccessibilityModeChanged(const ui::AXMode& mode) {
       }
     }
   }
-#endif  // !defined(OS_ANDROID)
+#endif  // !BUILDFLAG(IS_ANDROID)
 
   serializer_->Reset();
   const WebDocument& document = GetMainDocument();
@@ -447,11 +447,12 @@ void RenderAccessibilityImpl::Reset(int32_t reset_token) {
 void RenderAccessibilityImpl::MarkWebAXObjectDirty(
     const WebAXObject& obj,
     bool subtree,
+    ax::mojom::EventFrom event_from,
     ax::mojom::Action event_from_action,
     std::vector<ui::AXEventIntent> event_intents,
     ax::mojom::Event event_type) {
-  EnqueueDirtyObject(obj, ax::mojom::EventFrom::kAction, event_from_action,
-                     event_intents, dirty_objects_.end());
+  EnqueueDirtyObject(obj, event_from, event_from_action, event_intents,
+                     dirty_objects_.end());
 
   if (subtree)
     serializer_->InvalidateSubtree(obj);
@@ -474,7 +475,7 @@ void RenderAccessibilityImpl::HandleAXEvent(const ui::AXEvent& event) {
   if (obj.IsDetached())
     return;
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   // Inline text boxes are needed to support moving by character/word/line.
   // On Android, we don't load inline text boxes by default, only on-demand, or
   // when part of the focused object. So, when focus moves to an editable text
@@ -508,8 +509,9 @@ void RenderAccessibilityImpl::HandleAXEvent(const ui::AXEvent& event) {
     event_schedule_mode_ = EventScheduleMode::kProcessEventsImmediately;
 
   if (ShouldSerializeNodeForEvent(obj, event)) {
-    MarkWebAXObjectDirty(obj, false, event.event_from_action,
-                         event.event_intents, event.event_type);
+    MarkWebAXObjectDirty(obj, /* subtree= */ false, event.event_from,
+                         event.event_from_action, event.event_intents,
+                         event.event_type);
   }
 
   ScheduleSendPendingAccessibilityEvents();
@@ -1306,7 +1308,8 @@ void RenderAccessibilityImpl::MarkAllAXObjectsDirty(
     objs_to_explore.pop();
 
     if (obj.Role() == role)
-      MarkWebAXObjectDirty(obj, /* subtree */ false, event_from_action);
+      MarkWebAXObjectDirty(obj, /* subtree */ false,
+                           ax::mojom::EventFrom::kNone, event_from_action);
 
     std::vector<blink::WebAXObject> children;
     tree_source_->GetChildren(obj, &children);

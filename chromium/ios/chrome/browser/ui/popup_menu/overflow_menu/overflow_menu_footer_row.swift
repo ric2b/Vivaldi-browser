@@ -31,13 +31,13 @@ struct OverflowMenuFooterRow: View {
         spacing: Dimensions.iconLineSpacing
       ) {
         Rectangle()
-          .foregroundColor(.cr_grey300)
+          .foregroundColor(.overflowMenuSeparatorColor)
           .frame(height: Dimensions.iconLineDividerHeight)
         footer.image
           .fixedSize()
-          .foregroundColor(.cr_grey300)
+          .foregroundColor(.cr_grey500)
         Rectangle()
-          .foregroundColor(.cr_grey300)
+          .foregroundColor(.overflowMenuSeparatorColor)
           .frame(height: Dimensions.iconLineDividerHeight)
       }
       .padding([.top], Dimensions.iconLineExtraVerticalSpacing)
@@ -48,6 +48,7 @@ struct OverflowMenuFooterRow: View {
         .font(.caption2)
         .foregroundColor(.cr_blue)
         .onTapGesture(perform: footer.handler)
+        .accessibilityIdentifier(footer.accessibilityIdentifier)
     }
     // Group all children together so VoiceOver doesn't have to read the two
     // text labels individually.

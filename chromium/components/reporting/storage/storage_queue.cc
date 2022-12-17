@@ -17,6 +17,7 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/containers/adapters.h"
 #include "base/containers/flat_set.h"
 #include "base/files/file.h"
 #include "base/files/file_enumerator.h"
@@ -41,6 +42,7 @@
 #include "components/reporting/resources/resource_interface.h"
 #include "components/reporting/storage/storage_configuration.h"
 #include "components/reporting/storage/storage_uploader_interface.h"
+#include "components/reporting/util/file.h"
 #include "components/reporting/util/status.h"
 #include "components/reporting/util/status_macros.h"
 #include "components/reporting/util/statusor.h"
@@ -727,10 +729,10 @@ Status StorageQueue::RestoreMetadata(
   // No match or failed to load. Let's locate any valid metadata file (from
   // latest to earilest) and use generation from there (last record digest is
   // useless in that case).
-  for (auto rit = meta_files.rbegin(); rit != meta_files.rend(); ++rit) {
-    const auto status = ReadMetadata(
-        /*meta_file_path=*/rit->second.first, /*size=*/rit->second.second,
-        /*sequencing_id=*/rit->first, used_files_set);
+  for (const auto& [sequencing_id, path_and_size] :
+       base::Reversed(meta_files)) {
+    const auto& [path, size] = path_and_size;
+    const auto status = ReadMetadata(path, size, sequencing_id, used_files_set);
     if (status.ok()) {
       return status;
     }
@@ -742,51 +744,53 @@ Status StorageQueue::RestoreMetadata(
 }  // namespace reporting
 
 void StorageQueue::DeleteUnusedFiles(
-    const base::flat_set<base::FilePath>& used_files_setused_files_set) {
+    const base::flat_set<base::FilePath>& used_files_set) const {
   // Note, that these files were not reserved against disk allowance and do not
   // need to be discarded.
+  // If the deletion of a file fails, the file will be naturally handled next
+  // time.
   base::FileEnumerator dir_enum(options_.directory(),
                                 /*recursive=*/true,
                                 base::FileEnumerator::FILES);
-  base::FilePath full_name;
-  while (full_name = dir_enum.Next(), !full_name.empty()) {
-    if (used_files_setused_files_set.count(full_name) > 0) {
-      continue;  // File is used, keep it.
-    }
-    base::DeleteFile(full_name);
-  }
+  DeleteFilesWarnIfFailed(
+      dir_enum, base::BindRepeating(
+                    [](const base::flat_set<base::FilePath>* used_files_set,
+                       const base::FilePath& full_name) {
+                      return !used_files_set->contains(full_name);
+                    },
+                    &used_files_set));
 }
 
 void StorageQueue::DeleteOutdatedMetadata(int64_t sequencing_id_to_keep) {
-  std::vector<std::pair<base::FilePath, uint64_t>> files_to_delete;
+  // Delete file on disk. Note: disk space has already been released when the
+  // metafile was destructed, and so we don't need to do that here.
+  // If the deletion of a file fails, the file will be naturally handled next
+  // time.
   base::FileEnumerator dir_enum(
       options_.directory(),
       /*recursive=*/false, base::FileEnumerator::FILES,
       base::StrCat({METADATA_NAME, FILE_PATH_LITERAL(".*")}));
-  base::FilePath full_name;
-  while (full_name = dir_enum.Next(), !full_name.empty()) {
-    const auto extension = dir_enum.GetInfo().GetName().FinalExtension();
-    if (extension.empty()) {
-      continue;
-    }
-    int64_t sequencing_id = 0;
-    bool success = base::StringToInt64(
-        dir_enum.GetInfo().GetName().FinalExtension().substr(1),
-        &sequencing_id);
-    if (!success) {
-      continue;
-    }
-    if (sequencing_id >= sequencing_id_to_keep) {
-      continue;
-    }
-    files_to_delete.emplace_back(
-        std::make_pair(full_name, dir_enum.GetInfo().GetSize()));
-  }
-  for (const auto& file_to_delete : files_to_delete) {
-    // Delete file on disk. Note: disk space has already been released when the
-    // metafile was destructed, and so we don't need to do that here.
-    base::DeleteFile(file_to_delete.first);  // ignore result
-  }
+
+  DeleteFilesWarnIfFailed(
+      dir_enum,
+      base::BindRepeating(
+          [](int64_t sequencing_id_to_keep, const base::FilePath& full_name) {
+            const auto extension = full_name.FinalExtension();
+            if (extension.empty()) {
+              return false;
+            }
+            int64_t sequencing_id = 0;
+            bool success =
+                base::StringToInt64(extension.substr(1), &sequencing_id);
+            if (!success) {
+              return false;
+            }
+            if (sequencing_id >= sequencing_id_to_keep) {
+              return false;
+            }
+            return true;
+          },
+          sequencing_id_to_keep));
 }
 
 // Context for uploading data from the queue in proper sequence.
@@ -1527,13 +1531,13 @@ Status StorageQueue::SwitchLastFileIfNotEmpty() {
 std::map<int64_t, scoped_refptr<StorageQueue::SingleFile>>
 StorageQueue::CollectFilesForUpload(int64_t sequencing_id) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(storage_queue_sequence_checker_);
-  // Locate the first file based on sequencing id.
-  auto file_it = files_.find(sequencing_id);
-  if (file_it == files_.end()) {
-    file_it = files_.upper_bound(sequencing_id);
-    if (file_it != files_.begin()) {
-      --file_it;
-    }
+  // Locate the last file that contains a sequencing ID <= sequencing_id. This
+  // is to ensure that we do not miss an event that hasn't been uploaded (i.e.,
+  // an event that has a sequencing ID >= sequencing_id). If no such file
+  // exists, use files_.begin().
+  auto file_it = files_.upper_bound(sequencing_id);
+  if (file_it != files_.begin()) {
+    --file_it;
   }
 
   // Create references to the files that will be uploaded.
@@ -1616,8 +1620,7 @@ Status StorageQueue::RemoveConfirmedData(int64_t sequencing_id) {
   // file for writing).
   for (;;) {
     DCHECK(!files_.empty()) << "Empty storage queue";
-    auto next_it = files_.begin();
-    ++next_it;  // Need to consider the next file.
+    auto next_it = std::next(files_.begin());  // Need to consider the next file
     if (next_it == files_.end()) {
       // We are on the last file, keep it.
       break;
@@ -1630,9 +1633,8 @@ Status StorageQueue::RemoveConfirmedData(int64_t sequencing_id) {
     // Current file holds only ids <= sequencing_id.
     // Delete it.
     files_.begin()->second->Close();
-    if (files_.begin()->second->Delete().ok()) {
-      files_.erase(files_.begin());
-    }
+    files_.begin()->second->DeleteWarnIfFailed();
+    files_.erase(files_.begin());
   }
   // Even if there were errors, ignore them.
   return Status::StatusOK();
@@ -1743,15 +1745,11 @@ void StorageQueue::SingleFile::Close() {
   }
 }
 
-Status StorageQueue::SingleFile::Delete() {
+void StorageQueue::SingleFile::DeleteWarnIfFailed() {
   DCHECK(!handle_);
   GetDiskResource()->Discard(size_);
   size_ = 0;
-  if (!base::DeleteFile(filename_)) {
-    return Status(error::DATA_LOSS,
-                  base::StrCat({"Cannot delete file=", name()}));
-  }
-  return Status::StatusOK();
+  DeleteFileWarnIfFailed(filename_);
 }
 
 StatusOr<base::StringPiece> StorageQueue::SingleFile::Read(

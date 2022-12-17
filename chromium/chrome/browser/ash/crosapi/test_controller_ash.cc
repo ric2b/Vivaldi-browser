@@ -16,10 +16,12 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
 #include "build/chromeos_buildflags.h"
+#include "chrome/browser/ash/crosapi/browser_manager.h"
 #include "chrome/browser/ash/crosapi/window_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/views/tabs/tab_scrubber_chromeos.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
@@ -96,7 +98,13 @@ void TestControllerAsh::DoesItemExistInShelf(
 void TestControllerAsh::DoesWindowExist(const std::string& window_id,
                                         DoesWindowExistCallback callback) {
   aura::Window* window = GetShellSurfaceWindow(window_id);
-  std::move(callback).Run(window != nullptr);
+  // A window exists if it is either visible or minimized.
+  bool exists = false;
+  if (window) {
+    auto* window_state = ash::WindowState::Get(window);
+    exists = window->IsVisible() || window_state->IsMinimized();
+  }
+  std::move(callback).Run(exists);
 }
 
 void TestControllerAsh::EnterOverviewMode(EnterOverviewModeCallback callback) {
@@ -303,6 +311,19 @@ void TestControllerAsh::CloseAllBrowserWindows(
   }
 
   std::move(callback).Run(/*success*/ true);
+}
+
+void TestControllerAsh::TriggerTabScrubbing(
+    float x_offset,
+    TriggerTabScrubbingCallback callback) {
+  crosapi::BrowserManager::Get()->HandleTabScrubbing(x_offset);
+
+  // Return whether tab scrubbing logic has started or not in Ash.
+  //
+  // In practice, it is expected that it does not trigger the scrubbing logic,
+  // returning |false|, and signal Lacros to do so.
+  bool scrubbing = TabScrubberChromeOS::GetInstance()->IsActivationPending();
+  std::move(callback).Run(scrubbing);
 }
 
 // This class waits for overview mode to either enter or exit and fires a

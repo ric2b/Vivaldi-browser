@@ -18,7 +18,7 @@
 <translation id="119944043368869598">Limpar tudo</translation>
 <translation id="1221825588892235038">Apenas a seleção</translation>
 <translation id="1244303850296295656">Erro de extensão</translation>
-<translation id="125220115284141797">Padrão</translation>
+<translation id="125220115284141797">Predefinido</translation>
 <translation id="1297175357211070620">Destino</translation>
 <translation id="1303101771013849280">Ficheiro HTML de favoritos</translation>
 <translation id="1430915738399379752">Imprimir</translation>
@@ -48,7 +48,7 @@
 <translation id="1815083418640426271">Colar como texto simples</translation>
 <translation id="1828901632669367785">Imprimir utilizando a janela de diálogo do sistema...</translation>
 <translation id="1850508293116537636">Rodar para a &amp;direita</translation>
-<translation id="1886996562706621347">Permitir que os websites peçam para se tornarem os processadores habituais de protocolos (recomendado)</translation>
+<translation id="1886996562706621347">Permitir que os websites peçam para se tornarem os processadores predefinidos de protocolos (recomendado)</translation>
 <translation id="1901303067676059328">Selecionar &amp;tudo</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> ppp</translation>
 <translation id="1936931585862840749">Use um número para indicar o número de cópias a imprimir (1 a <ph name="MAX_COPIES" />).</translation>
@@ -126,7 +126,7 @@
 <translation id="3127156390846601284">Esta ação irá eliminar todos os dados armazenados no equipamento para todos os websites apresentados. Pretende continuar?</translation>
 <translation id="3129173833825111527">Margem esquerda</translation>
 <translation id="3144647712221361880">Abrir ligação como</translation>
-<translation id="3154429428035006212">Offline durante mais de um mês</translation>
+<translation id="3154429428035006212">Offline há mais de um mês</translation>
 <translation id="3222066309010235055">Pré-renderizar: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Selecione o directório raiz da extensão a comprimir. Para atualizar uma extensão, selecione também o ficheiro de chave privada a reutilizar.</translation>
 <translation id="3280237271814976245">Guardar &amp;como...</translation>
@@ -165,7 +165,7 @@
 <translation id="3838085852053358637">Falha ao carregar a extensão</translation>
 <translation id="383891835335927981">A ampliação dos websites não foi aumentada nem diminuída</translation>
 <translation id="385051799172605136">Retroceder</translation>
-<translation id="3899879303189199559">Offline durante mais de um ano</translation>
+<translation id="3899879303189199559">Offline há mais de um ano</translation>
 <translation id="3905761538810670789">Reparar aplicação</translation>
 <translation id="3908501907586732282">Ativar extensão</translation>
 <translation id="3909701002594999354">Mostrar todos os &amp;controlos</translation>
@@ -222,7 +222,7 @@
 <translation id="4988526792673242964">Páginas</translation>
 <translation id="49896407730300355">Rodar para a &amp;esquerda</translation>
 <translation id="4989966318180235467">Inspecionar &amp;página de fundo</translation>
-<translation id="4994474651455208930">Permitir que os websites peçam para se tornarem os processadores padrão de protocolos</translation>
+<translation id="4994474651455208930">Permitir que os websites peçam para se tornarem os processadores predefinidos de protocolos</translation>
 <translation id="5000922062037820727">Bloqueado (recomendado)</translation>
 <translation id="5027562294707732951">Adicionar extensão</translation>
 <translation id="5036662165765606524">Não permitir que os websites transfiram vários ficheiros automaticamente</translation>
@@ -238,7 +238,7 @@
 <translation id="5233231016133573565">ID do processo</translation>
 <translation id="5233736638227740678">&amp;Colar</translation>
 <translation id="5256861893479663409">Em todos os websites</translation>
-<translation id="5265562206369321422">Offline durante mais de uma semana</translation>
+<translation id="5265562206369321422">Offline há mais de uma semana</translation>
 <translation id="5269977353971873915">Falha de Impressão</translation>
 <translation id="5284445933715251131">Continuar a transferir</translation>
 <translation id="52912272896845572">O ficheiro de chave privada é inválido.</translation>
@@ -429,7 +429,7 @@ Mantenha o seu ficheiro de chave num local seguro, pois irá precisar dele para 
 <translation id="8725066075913043281">Tentar novamente</translation>
 <translation id="8757090071857742562">Não é possível transmitir o ambiente de trabalho. Verifique se confirmou a mensagem para começar a partilhar o seu ecrã.</translation>
 <translation id="8774934320277480003">Margem superior</translation>
-<translation id="8798099450830957504">Padrão</translation>
+<translation id="8798099450830957504">Predefinido</translation>
 <translation id="8800004011501252845">A mostrar destinos para</translation>
 <translation id="8808478386290700967">Web Store</translation>
 <translation id="8823514049557262177">Copiar te&amp;xto da ligação</translation>

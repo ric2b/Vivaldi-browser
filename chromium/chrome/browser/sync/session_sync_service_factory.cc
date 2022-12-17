@@ -29,9 +29,9 @@
 #include "components/sync_sessions/sync_sessions_client.h"
 #include "content/public/common/url_utils.h"
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/sync/glue/synced_window_delegates_getter_android.h"
-#endif  // defined(OS_ANDROID)
+#endif  // BUILDFLAG(IS_ANDROID)
 
 #include "app/vivaldi_apptools.h"
 #include "extensions/common/constants.h"
@@ -46,8 +46,10 @@ bool ShouldSyncURLImpl(const GURL& url) {
   }
   return url.is_valid() && !content::HasWebUIScheme(url) &&
          !url.SchemeIs(chrome::kChromeNativeScheme) && !url.SchemeIsFile() &&
+#if !BUILDFLAG(IS_ANDROID)
          !(url.SchemeIs(extensions::kExtensionScheme) &&
            vivaldi::IsVivaldiApp(url.host())) &&
+#endif // !BUILDFLAG(IS_ANDROID)
          !url.SchemeIs(dom_distiller::kDomDistillerScheme);
 }
 
@@ -57,14 +59,14 @@ class SyncSessionsClientImpl : public sync_sessions::SyncSessionsClient {
   explicit SyncSessionsClientImpl(Profile* profile)
       : profile_(profile), session_sync_prefs_(profile->GetPrefs()) {
     window_delegates_getter_ =
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
         // Android doesn't have multi-profile support, so no need to pass the
         // profile in.
         std::make_unique<browser_sync::SyncedWindowDelegatesGetterAndroid>();
-#else   // defined(OS_ANDROID)
+#else   // BUILDFLAG(IS_ANDROID)
         std::make_unique<browser_sync::BrowserSyncedWindowDelegatesGetter>(
             profile);
-#endif  // defined(OS_ANDROID)
+#endif  // BUILDFLAG(IS_ANDROID)
   }
 
   SyncSessionsClientImpl(const SyncSessionsClientImpl&) = delete;

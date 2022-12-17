@@ -84,7 +84,7 @@ class BrowserUtilTest : public testing::Test {
     fake_user_manager_->UserLoggedIn(account_id, user->username_hash(),
                                      /*browser_restart=*/false,
                                      /*is_child=*/false);
-    chromeos::ProfileHelper::Get()->SetUserToProfileMappingForTesting(
+    ash::ProfileHelper::Get()->SetUserToProfileMappingForTesting(
         user, &testing_profile_);
   }
 
@@ -109,6 +109,18 @@ class LacrosSupportBrowserUtilTest : public BrowserUtilTest {
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
+// TODO(hidehiko): Replace with ScopedTestingLocalState.
+class ScopedLocalState {
+ public:
+  explicit ScopedLocalState(PrefService* local_state) {
+    TestingBrowserProcess::GetGlobal()->SetLocalState(local_state);
+  }
+
+  ~ScopedLocalState() {
+    TestingBrowserProcess::GetGlobal()->SetLocalState(nullptr);
+  }
+};
+
 TEST_F(LacrosSupportBrowserUtilTest, LacrosEnabledByFlag) {
   AddRegularUser("user@test.com");
 
@@ -124,18 +136,20 @@ TEST_F(LacrosSupportBrowserUtilTest, LacrosEnabledByFlag) {
 TEST_F(BrowserUtilTest, LacrosDisabledWithoutMigration) {
   // This sets `g_browser_process->local_state()` which activates the check
   // `IsProfileMigrationCompletedForUser()` inside `IsLacrosEnabled()`.
-  TestingBrowserProcess::GetGlobal()->SetLocalState(&pref_service_);
+  ScopedLocalState scoped_local_state(&pref_service_);
+
   // Note that disabling lacros is only enabled for Googlers at the moment.
   // TODO(crbug.com/1266669): Once profile migration is enabled for
   // non-googlers, add a @test.com account instead.
   AddRegularUser("user@google.com");
   const user_manager::User* const user =
-      chromeos::ProfileHelper::Get()->GetUserByProfile(&testing_profile_);
+      ash::ProfileHelper::Get()->GetUserByProfile(&testing_profile_);
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndEnableFeature(chromeos::features::kLacrosSupport);
 
   // Lacros is now enabled for profile migration to happen.
-  EXPECT_TRUE(browser_util::IsLacrosEnabledForMigration(user));
+  EXPECT_TRUE(browser_util::IsLacrosEnabledForMigration(
+      user, browser_util::PolicyInitState::kAfterInit));
   // Since profile migration hasn't been marked as completed, this returns
   // false.
   EXPECT_FALSE(browser_util::IsLacrosEnabled());
@@ -144,9 +158,30 @@ TEST_F(BrowserUtilTest, LacrosDisabledWithoutMigration) {
                                                     user->username_hash());
 
   EXPECT_TRUE(browser_util::IsLacrosEnabled());
+}
 
-  // Clean up Local State.
-  TestingBrowserProcess::GetGlobal()->SetLocalState(nullptr);
+TEST_F(BrowserUtilTest, IsLacrosEnabledForMigrationBeforePolocyInit) {
+  // This sets `g_browser_process->local_state()` which activates the check
+  // `IsProfileMigrationCompletedForUser()` inside `IsLacrosEnabled()`.
+  ScopedLocalState scoped_local_state(&pref_service_);
+
+  // Add an user.
+  AddRegularUser("user@test.com");
+  const user_manager::User* const user =
+      ash::ProfileHelper::Get()->GetUserByProfile(&testing_profile_);
+
+  // Lacros is not enabled yet for profile migration to happen.
+  EXPECT_FALSE(browser_util::IsLacrosEnabledForMigration(
+      user, browser_util::PolicyInitState::kBeforeInit));
+
+  // Sets command line flag to emulate the situation where the Chrome
+  // restart happens.
+  base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
+  cmdline->AppendSwitchASCII(browser_util::kLacrosAvailabilityPolicySwitch,
+                             browser_util::kLacrosAvailabilityPolicySideBySide);
+
+  EXPECT_TRUE(browser_util::IsLacrosEnabledForMigration(
+      user, browser_util::PolicyInitState::kBeforeInit));
 }
 
 TEST_F(BrowserUtilTest, LacrosGoogleRollout) {
@@ -306,6 +341,37 @@ TEST_F(BrowserUtilTest, IsAshWebBrowserDisabled) {
 
   EXPECT_TRUE(browser_util::IsLacrosEnabled(Channel::STABLE));
   EXPECT_FALSE(browser_util::IsAshWebBrowserEnabled(Channel::STABLE));
+}
+
+TEST_F(BrowserUtilTest, IsAshWebBrowserDisabledByFlags) {
+  AddRegularUser("user@test.com");
+  { EXPECT_TRUE(browser_util::IsAshWebBrowserEnabled()); }
+
+  // Just enabling LacrosOnly feature is not enough.
+  {
+    base::test::ScopedFeatureList feature_list;
+    feature_list.InitAndEnableFeature(chromeos::features::kLacrosOnly);
+    EXPECT_TRUE(browser_util::IsAshWebBrowserEnabled());
+  }
+
+  // LacrosSupport only is not enough.
+  {
+    base::test::ScopedFeatureList feature_list;
+    feature_list.InitWithFeatures(
+        {chromeos::features::kLacrosOnly, chromeos::features::kLacrosSupport},
+        {});
+    EXPECT_TRUE(browser_util::IsAshWebBrowserEnabled());
+  }
+
+  // All, LacrosOnly, LacrosPrimary and LacrosSupport are needed.
+  {
+    base::test::ScopedFeatureList feature_list;
+    feature_list.InitWithFeatures(
+        {chromeos::features::kLacrosOnly, chromeos::features::kLacrosPrimary,
+         chromeos::features::kLacrosSupport},
+        {});
+    EXPECT_FALSE(browser_util::IsAshWebBrowserEnabled());
+  }
 }
 
 TEST_F(LacrosSupportBrowserUtilTest, LacrosPrimaryBrowserByFlags) {
@@ -468,7 +534,7 @@ TEST_F(BrowserUtilTest, GetMissingDataVer) {
 TEST_F(BrowserUtilTest, GetCorruptDataVer) {
   base::DictionaryValue dictionary_value;
   std::string user_id_hash = "1234";
-  dictionary_value.SetString(user_id_hash, "corrupted");
+  dictionary_value.SetStringKey(user_id_hash, "corrupted");
   pref_service_.Set(browser_util::kDataVerPref, dictionary_value);
   base::Version version =
       browser_util::GetDataVer(&pref_service_, user_id_hash);
@@ -479,7 +545,7 @@ TEST_F(BrowserUtilTest, GetDataVer) {
   base::DictionaryValue dictionary_value;
   std::string user_id_hash = "1234";
   base::Version version{"1.1.1.1"};
-  dictionary_value.SetString(user_id_hash, version.GetString());
+  dictionary_value.SetStringKey(user_id_hash, version.GetString());
   pref_service_.Set(browser_util::kDataVerPref, dictionary_value);
 
   base::Version result_version =
@@ -492,11 +558,11 @@ TEST_F(BrowserUtilTest, RecordDataVer) {
   base::Version version{"1.1.1.1"};
   browser_util::RecordDataVer(&pref_service_, user_id_hash, version);
 
-  base::DictionaryValue expected;
-  expected.SetString(user_id_hash, version.GetString());
-  const base::DictionaryValue* dict =
+  base::Value expected{base::Value::Type::DICTIONARY};
+  expected.SetStringKey(user_id_hash, version.GetString());
+  const base::Value* dict =
       pref_service_.GetDictionary(browser_util::kDataVerPref);
-  EXPECT_TRUE(dict->Equals(&expected));
+  EXPECT_EQ(*dict, expected);
 }
 
 TEST_F(BrowserUtilTest, RecordDataVerOverrides) {
@@ -507,12 +573,12 @@ TEST_F(BrowserUtilTest, RecordDataVerOverrides) {
   browser_util::RecordDataVer(&pref_service_, user_id_hash, version1);
   browser_util::RecordDataVer(&pref_service_, user_id_hash, version2);
 
-  base::DictionaryValue expected;
-  expected.SetString(user_id_hash, version2.GetString());
+  base::Value expected{base::Value::Type::DICTIONARY};
+  expected.SetStringKey(user_id_hash, version2.GetString());
 
-  const base::DictionaryValue* dict =
+  const base::Value* dict =
       pref_service_.GetDictionary(browser_util::kDataVerPref);
-  EXPECT_TRUE(dict->Equals(&expected));
+  EXPECT_EQ(*dict, expected);
 }
 
 TEST_F(BrowserUtilTest, RecordDataVerWithMultipleUsers) {
@@ -529,13 +595,13 @@ TEST_F(BrowserUtilTest, RecordDataVerWithMultipleUsers) {
   base::Version version3{"3.3.3.3"};
   browser_util::RecordDataVer(&pref_service_, user_id_hash_1, version3);
 
-  base::DictionaryValue expected;
-  expected.SetString(user_id_hash_1, version3.GetString());
-  expected.SetString(user_id_hash_2, version2.GetString());
+  base::Value expected{base::Value::Type::DICTIONARY};
+  expected.SetStringKey(user_id_hash_1, version3.GetString());
+  expected.SetStringKey(user_id_hash_2, version2.GetString());
 
-  const base::DictionaryValue* dict =
+  const base::Value* dict =
       pref_service_.GetDictionary(browser_util::kDataVerPref);
-  EXPECT_TRUE(dict->Equals(&expected));
+  EXPECT_EQ(*dict, expected);
 }
 
 TEST_F(BrowserUtilTest, IsDataWipeRequiredInvalid) {

@@ -6,10 +6,10 @@
 
 #include "build/build_config.h"
 
-// Native headless is currently available only on Linux and Windows platforms.
+// Native headless is currently available on Linux, Windows and Mac platforms.
 // More platforms will be added later, so avoid function level clutter by
 // providing a compile time condition over the entire file.
-#if defined(OS_LINUX) || defined(OS_WIN)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
 
 #include <memory>
 #include <string>
@@ -36,9 +36,9 @@
 #include "testing/multiprocess_func_list.h"
 #include "ui/gfx/switches.h"
 
-#if defined(OS_LINUX)
+#if BUILDFLAG(IS_LINUX)
 #include "ui/ozone/public/ozone_platform.h"
-#endif  // defined(OS_LINUX)
+#endif  // BUILDFLAG(IS_LINUX)
 
 namespace {
 const char kChrome[] = "chrome";
@@ -70,20 +70,21 @@ class HeadlessModeBrowserTest : public InProcessBrowserTest {
  private:
 };
 
-#if defined(OS_LINUX)
+#if BUILDFLAG(IS_LINUX)
 IN_PROC_BROWSER_TEST_F(HeadlessModeBrowserTest, OzonePlatformHeadless) {
   // On Linux, the Native Headless Chrome uses Ozone/Headless.
   ASSERT_NE(ui::OzonePlatform::GetInstance(), nullptr);
   EXPECT_EQ(ui::OzonePlatform::GetPlatformNameForTest(), "headless");
 }
-#endif  // defined(OS_LINUX)
+#endif  // BUILDFLAG(IS_LINUX)
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
 IN_PROC_BROWSER_TEST_F(HeadlessModeBrowserTest, BrowserDesktopWindowHidden) {
-  // On Windows, the Native Headless Chrome browser window exists but is hidden.
+  // On Windows and Mac, the Native Headless Chrome browser window exists but is
+  // hidden.
   EXPECT_FALSE(browser()->window()->IsVisible());
 }
-#endif  // defined(OS_WIN)
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
 
 class HeadlessModeBrowserTestWithUserDataDir : public HeadlessModeBrowserTest {
  public:
@@ -167,4 +168,4 @@ MULTIPROCESS_TEST_MAIN(ChromeProcessSingletonChildProcessMain) {
   return static_cast<int>(notify_result);
 }
 
-#endif  // defined(OS_LINUX) || defined(OS_WIN)
+#endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)

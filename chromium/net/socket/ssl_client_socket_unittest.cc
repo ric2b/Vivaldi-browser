@@ -89,6 +89,7 @@
 #include "net/test/embedded_test_server/http_response.h"
 #include "net/test/gtest_util.h"
 #include "net/test/key_util.h"
+#include "net/test/ssl_test_util.h"
 #include "net/test/test_data_directory.h"
 #include "net/test/test_with_task_environment.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
@@ -979,23 +980,6 @@ class ClientSocketFactoryWithoutReadIfReady : public ClientSocketFactory {
                                            host_and_port, ssl_config);
   }
 
-  std::unique_ptr<ProxyClientSocket> CreateProxyClientSocket(
-      std::unique_ptr<StreamSocket> stream_socket,
-      const std::string& user_agent,
-      const HostPortPair& endpoint,
-      const ProxyServer& proxy_server,
-      HttpAuthController* http_auth_controller,
-      bool tunnel,
-      bool using_spdy,
-      NextProto negotiated_protocol,
-      ProxyDelegate* proxy_delegate,
-      const NetworkTrafficAnnotationTag& traffic_annotation) override {
-    return factory_->CreateProxyClientSocket(
-        std::move(stream_socket), user_agent, endpoint, proxy_server,
-        http_auth_controller, tunnel, using_spdy, negotiated_protocol,
-        proxy_delegate, traffic_annotation);
-  }
-
  private:
   const raw_ptr<ClientSocketFactory> factory_;
 };
@@ -1455,41 +1439,6 @@ class HangingCertVerifier : public CertVerifier {
   base::RunLoop run_loop_;
   int num_active_requests_ = 0;
 };
-
-bssl::UniquePtr<SSL_ECH_KEYS> MakeTestECHKeys(
-    const char* public_name,
-    size_t max_name_len,
-    std::vector<uint8_t>* ech_config_list) {
-  bssl::ScopedEVP_HPKE_KEY key;
-  if (!EVP_HPKE_KEY_generate(key.get(), EVP_hpke_x25519_hkdf_sha256())) {
-    return nullptr;
-  }
-
-  uint8_t* ech_config;
-  size_t ech_config_len;
-  if (!SSL_marshal_ech_config(&ech_config, &ech_config_len,
-                              /*config_id=*/1, key.get(), public_name,
-                              max_name_len)) {
-    return nullptr;
-  }
-  bssl::UniquePtr<uint8_t> scoped_ech_config(ech_config);
-
-  uint8_t* ech_config_list_raw;
-  size_t ech_config_list_len;
-  bssl::UniquePtr<SSL_ECH_KEYS> keys(SSL_ECH_KEYS_new());
-  if (!keys ||
-      !SSL_ECH_KEYS_add(keys.get(), /*is_retry_config=*/1, ech_config,
-                        ech_config_len, key.get()) ||
-      !SSL_ECH_KEYS_marshal_retry_configs(keys.get(), &ech_config_list_raw,
-                                          &ech_config_list_len)) {
-    return nullptr;
-  }
-  bssl::UniquePtr<uint8_t> scoped_ech_config_list(ech_config_list_raw);
-
-  ech_config_list->assign(ech_config_list_raw,
-                          ech_config_list_raw + ech_config_list_len);
-  return keys;
-}
 
 }  // namespace
 
@@ -5138,11 +5087,11 @@ TEST_F(SSLClientSocketTest, Tag) {
                             host_port_pair(), SSLConfig()));
 
   EXPECT_EQ(tagging_sock->tag(), SocketTag());
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   SocketTag tag(0x12345678, 0x87654321);
   sock->ApplySocketTag(tag);
   EXPECT_EQ(tagging_sock->tag(), tag);
-#endif  // OS_ANDROID
+#endif  // BUILDFLAG(IS_ANDROID)
 }
 
 TEST_F(SSLClientSocketTest, ECH) {
@@ -5151,7 +5100,7 @@ TEST_F(SSLClientSocketTest, ECH) {
 
   SSLServerConfig server_config;
   SSLConfig client_config;
-  server_config.ech_keys = MakeTestECHKeys(
+  server_config.ech_keys = MakeTestEchKeys(
       "public.example", /*max_name_len=*/64, &client_config.ech_config_list);
   ASSERT_TRUE(server_config.ech_keys);
 
@@ -5212,10 +5161,10 @@ TEST_F(SSLClientSocketTest, ECHWrongKeys) {
   static const char kPublicName[] = "public.example";
   std::vector<uint8_t> ech_config_list1, ech_config_list2;
   bssl::UniquePtr<SSL_ECH_KEYS> keys1 =
-      MakeTestECHKeys(kPublicName, /*max_name_len=*/64, &ech_config_list1);
+      MakeTestEchKeys(kPublicName, /*max_name_len=*/64, &ech_config_list1);
   ASSERT_TRUE(keys1);
   bssl::UniquePtr<SSL_ECH_KEYS> keys2 =
-      MakeTestECHKeys(kPublicName, /*max_name_len=*/64, &ech_config_list2);
+      MakeTestEchKeys(kPublicName, /*max_name_len=*/64, &ech_config_list2);
   ASSERT_TRUE(keys2);
 
   // Configure the client and server with different keys.
@@ -5256,7 +5205,7 @@ TEST_F(SSLClientSocketTest, ECHSecurelyDisabled) {
   static const char kPublicName[] = "public.example";
   std::vector<uint8_t> ech_config_list;
   bssl::UniquePtr<SSL_ECH_KEYS> keys =
-      MakeTestECHKeys(kPublicName, /*max_name_len=*/64, &ech_config_list);
+      MakeTestEchKeys(kPublicName, /*max_name_len=*/64, &ech_config_list);
   ASSERT_TRUE(keys);
 
   // The server does not have keys configured.
@@ -5293,7 +5242,7 @@ TEST_F(SSLClientSocketTest, ECHSecurelyDisabledTLS12) {
   static const char kPublicName[] = "public.example";
   std::vector<uint8_t> ech_config_list;
   bssl::UniquePtr<SSL_ECH_KEYS> keys =
-      MakeTestECHKeys(kPublicName, /*max_name_len=*/64, &ech_config_list);
+      MakeTestEchKeys(kPublicName, /*max_name_len=*/64, &ech_config_list);
   ASSERT_TRUE(keys);
 
   // The server does not have keys configured.
@@ -5331,10 +5280,10 @@ TEST_F(SSLClientSocketTest, ECHFallbackBadCert) {
   static const char kPublicName[] = "public.example";
   std::vector<uint8_t> ech_config_list1, ech_config_list2;
   bssl::UniquePtr<SSL_ECH_KEYS> keys1 =
-      MakeTestECHKeys(kPublicName, /*max_name_len=*/64, &ech_config_list1);
+      MakeTestEchKeys(kPublicName, /*max_name_len=*/64, &ech_config_list1);
   ASSERT_TRUE(keys1);
   bssl::UniquePtr<SSL_ECH_KEYS> keys2 =
-      MakeTestECHKeys(kPublicName, /*max_name_len=*/64, &ech_config_list2);
+      MakeTestEchKeys(kPublicName, /*max_name_len=*/64, &ech_config_list2);
   ASSERT_TRUE(keys2);
 
   // Configure the client and server with different keys.

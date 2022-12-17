@@ -4,6 +4,8 @@
 
 #include "ash/public/cpp/app_list/app_list_types.h"
 
+#include "ash/resources/vector_icons/vector_icons.h"
+
 namespace ash {
 
 const char kOemFolderId[] = "ddb1da55-d478-4243-8642-56d3041f0263";
@@ -36,6 +38,8 @@ bool IsAppListSearchResultAnApp(AppListSearchResultType result_type) {
     case AppListSearchResultType::kHelpApp:
     case AppListSearchResultType::kFileSearch:
     case AppListSearchResultType::kDriveSearch:
+    case AppListSearchResultType::kKeyboardShortcut:
+    case AppListSearchResultType::kOpenTab:
       return false;
   }
 }
@@ -118,11 +122,54 @@ AppListItemMetadata::AppListItemMetadata(const AppListItemMetadata& rhs) =
 AppListItemMetadata::~AppListItemMetadata() = default;
 
 ////////////////////////////////////////////////////////////////////////////////
+
+std::ostream& operator<<(std::ostream& os, AppListState state) {
+  switch (state) {
+    case AppListState::kStateApps:
+      return os << "StateApps";
+    case AppListState::kStateSearchResults:
+      return os << "SearchResults";
+    case AppListState::kStateStart_DEPRECATED:
+      return os << "Start_DEPRECATED";
+    case AppListState::kStateEmbeddedAssistant:
+      return os << "EmbeddedAssistant";
+    case AppListState::kInvalidState:
+      return os << "InvalidState";
+  }
+}
+
+std::ostream& operator<<(std::ostream& os, AppListBubblePage page) {
+  switch (page) {
+    case AppListBubblePage::kNone:
+      return os << "None";
+    case AppListBubblePage::kApps:
+      return os << "Apps";
+    case AppListBubblePage::kSearch:
+      return os << "Search";
+    case AppListBubblePage::kAssistant:
+      return os << "Assistant";
+  }
+}
+
+std::ostream& operator<<(std::ostream& os, AppListViewState state) {
+  switch (state) {
+    case AppListViewState::kClosed:
+      return os << "Closed";
+    case AppListViewState::kPeeking:
+      return os << "Peeking";
+    case AppListViewState::kHalf:
+      return os << "Half";
+    case AppListViewState::kFullscreenAllApps:
+      return os << "FullscreenAllApps";
+    case AppListViewState::kFullscreenSearch:
+      return os << "FullscreenSearch";
+  }
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // SearchResultIconInfo:
 
 SearchResultIconInfo::SearchResultIconInfo() = default;
-
-SearchResultIconInfo::SearchResultIconInfo(gfx::ImageSkia icon) : icon(icon) {}
 
 SearchResultIconInfo::SearchResultIconInfo(gfx::ImageSkia icon, int dimension)
     : icon(icon), dimension(dimension) {}
@@ -164,6 +211,126 @@ SearchResultAction::SearchResultAction(const SearchResultAction& other) =
 
 SearchResultAction::~SearchResultAction() = default;
 
+////////////////////////////////////////////////////////////////////////////////
+// SearchResultTextItem:
+
+SearchResultTextItem::SearchResultTextItem(SearchResultTextItemType type) {
+  item_type = type;
+}
+
+SearchResultTextItem::SearchResultTextItem(const SearchResultTextItem& other) {
+  item_type = other.item_type;
+  raw_text = other.raw_text;
+  text_tags = other.text_tags;
+  icon_code = other.icon_code;
+  raw_image = other.raw_image;
+}
+
+SearchResultTextItem& SearchResultTextItem::operator=(
+    const SearchResultTextItem& other) {
+  item_type = other.item_type;
+  raw_text = other.raw_text;
+  text_tags = other.text_tags;
+  icon_code = other.icon_code;
+  raw_image = other.raw_image;
+  return *this;
+}
+
+SearchResultTextItem::~SearchResultTextItem() = default;
+
+SearchResultTextItemType SearchResultTextItem::GetType() const {
+  return item_type;
+}
+
+const std::u16string& SearchResultTextItem::GetText() const {
+  DCHECK(item_type == SearchResultTextItemType::kString ||
+         item_type == SearchResultTextItemType::kIconifiedText);
+  return raw_text.value();
+}
+
+SearchResultTextItem& SearchResultTextItem::SetText(std::u16string text) {
+  DCHECK(item_type == SearchResultTextItemType::kString ||
+         item_type == SearchResultTextItemType::kIconifiedText);
+  raw_text = text;
+  return *this;
+}
+
+const SearchResultTags& SearchResultTextItem::GetTextTags() const {
+  DCHECK(item_type == SearchResultTextItemType::kString ||
+         item_type == SearchResultTextItemType::kIconifiedText);
+  return text_tags.value();
+}
+
+SearchResultTags& SearchResultTextItem::GetTextTags() {
+  DCHECK(item_type == SearchResultTextItemType::kString ||
+         item_type == SearchResultTextItemType::kIconifiedText);
+  return text_tags.value();
+}
+
+SearchResultTextItem& SearchResultTextItem::SetTextTags(SearchResultTags tags) {
+  DCHECK(item_type == SearchResultTextItemType::kString ||
+         item_type == SearchResultTextItemType::kIconifiedText);
+  text_tags = tags;
+  return *this;
+}
+
+const gfx::VectorIcon* SearchResultTextItem::GetIconFromCode() const {
+  DCHECK_EQ(item_type, SearchResultTextItemType::kIconCode);
+  DCHECK(icon_code.has_value());
+  switch (icon_code.value()) {
+    case kKeyboardShortcutBrowserBack:
+      return &kKsvBrowserBackIcon;
+    case kKeyboardShortcutBrowserForward:
+      return &kKsvBrowserForwardIcon;
+    case kKeyboardShortcutBrowserRefresh:
+      return &kKsvReloadIcon;
+    case kKeyboardShortcutZoom:
+      return &kKsvFullscreenIcon;
+    case kKeyboardShortcutMediaLaunchApp1:
+      return &kKsvOverviewIcon;
+    case kKeyboardShortcutBrightnessDown:
+      return &kKsvBrightnessDownIcon;
+    case kKeyboardShortcutBrightnessUp:
+      return &kKsvBrightnessUpIcon;
+    case kKeyboardShortcutVolumeMute:
+      return &kKsvMuteIcon;
+    case kKeyboardShortcutVolumeDown:
+      return &kKsvVolumeDownIcon;
+    case kKeyboardShortcutVolumeUp:
+      return &kKsvVolumeUpIcon;
+    case kKeyboardShortcutUp:
+      return &kKsvArrowUpIcon;
+    case kKeyboardShortcutDown:
+      return &kKsvArrowDownIcon;
+    case kKeyboardShortcutLeft:
+      return &kKsvArrowLeftIcon;
+    case kKeyboardShortcutRight:
+      return &kKsvArrowRightIcon;
+    case kKeyboardShortcutPrivacyScreenToggle:
+      return &kKsvPrivacyScreenToggleIcon;
+    case kKeyboardShortcutSnapshot:
+      return &kKsvSnapshotIcon;
+    default:
+      return nullptr;
+  }
+}
+
+SearchResultTextItem& SearchResultTextItem::SetIconCode(IconCode code) {
+  DCHECK_EQ(item_type, SearchResultTextItemType::kIconCode);
+  icon_code = code;
+  return *this;
+}
+
+gfx::ImageSkia SearchResultTextItem::GetImage() const {
+  DCHECK_EQ(item_type, SearchResultTextItemType::kCustomImage);
+  return raw_image.value();
+}
+
+SearchResultTextItem& SearchResultTextItem::SetImage(gfx::ImageSkia icon) {
+  DCHECK_EQ(item_type, SearchResultTextItemType::kCustomImage);
+  raw_image = icon;
+  return *this;
+}
 ////////////////////////////////////////////////////////////////////////////////
 // SearchResultMetadata:
 

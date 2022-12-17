@@ -5,6 +5,7 @@
 #include "content/browser/renderer_host/page_impl.h"
 
 #include "base/barrier_closure.h"
+#include "base/i18n/character_encoding.h"
 #include "base/trace_event/optional_trace_event.h"
 #include "content/browser/manifest/manifest_manager_host.h"
 #include "content/browser/renderer_host/frame_tree_node.h"
@@ -70,6 +71,10 @@ void PageImpl::WriteIntoTrace(perfetto::TracedValue context) {
 }
 
 base::WeakPtr<Page> PageImpl::GetWeakPtr() {
+  return weak_factory_.GetWeakPtr();
+}
+
+base::WeakPtr<PageImpl> PageImpl::GetWeakPtrImpl() {
   return weak_factory_.GetWeakPtr();
 }
 
@@ -181,7 +186,7 @@ void PageImpl::ActivateForPrerendering(
   // inner WebContents. These are in a different FrameTree which might not know
   // it is being prerendered. We should teach these FrameTrees that they are
   // being prerendered, or ban inner FrameTrees in a prerendering page.
-  main_document_.ForEachRenderFrameHost(base::BindRepeating(
+  main_document_.ForEachRenderFrameHostIncludingSpeculative(base::BindRepeating(
       [](PageImpl* page, RenderFrameHostImpl* rfh) {
         if (&rfh->GetPage() != page)
           return;
@@ -200,10 +205,10 @@ void PageImpl::MaybeDispatchLoadEventsOnPrerenderActivation() {
   if (load_progress() != blink::kFinalLoadProgress)
     main_document_.DidChangeLoadProgress(load_progress());
 
-  // Dispatch DocumentAvailableInMainFrame before dispatching following load
-  // complete events.
-  if (is_document_available_in_main_document())
-    main_document_.DocumentAvailableInMainFrame(uses_temporary_zoom_level());
+  // Dispatch PrimaryMainDocumentElementAvailable before dispatching following
+  // load complete events.
+  if (is_main_document_element_available())
+    main_document_.MainDocumentElementAvailable(uses_temporary_zoom_level());
 
   main_document_.ForEachRenderFrameHost(
       base::BindRepeating([](RenderFrameHostImpl* rfh) {
@@ -248,6 +253,15 @@ void PageImpl::UpdateBrowserControlsState(cc::BrowserControlsState constraints,
 
   GetMainDocument().GetAssociatedLocalMainFrame()->UpdateBrowserControlsState(
       constraints, current, animate);
+}
+
+void PageImpl::UpdateEncoding(const std::string& encoding_name) {
+  if (encoding_name == last_reported_encoding_)
+    return;
+  last_reported_encoding_ = encoding_name;
+
+  canonical_encoding_ =
+      base::GetCanonicalEncodingNameByAliasName(encoding_name);
 }
 
 }  // namespace content

@@ -8,12 +8,12 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/time/default_tick_clock.h"
 #include "components/shared_highlighting/core/common/shared_highlighting_features.h"
-#include "components/shared_highlighting/core/common/shared_highlighting_metrics.h"
 #include "third_party/abseil-cpp/absl/base/macros.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/interface_registry.h"
 #include "third_party/blink/renderer/core/editing/ephemeral_range.h"
 #include "third_party/blink/renderer/core/editing/finder/find_buffer.h"
+#include "third_party/blink/renderer/core/editing/iterators/character_iterator.h"
 #include "third_party/blink/renderer/core/editing/iterators/text_iterator.h"
 #include "third_party/blink/renderer/core/editing/range_in_flat_tree.h"
 #include "third_party/blink/renderer/core/fragment_directive/text_fragment_anchor_metrics.h"
@@ -21,8 +21,10 @@
 #include "third_party/blink/renderer/core/fragment_directive/text_fragment_selector.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/platform/text/text_boundaries.h"
+#include "third_party/blink/renderer/platform/wtf/text/unicode.h"
 
 using LinkGenerationError = shared_highlighting::LinkGenerationError;
+using LinkGenerationStatus = shared_highlighting::LinkGenerationStatus;
 
 namespace blink {
 
@@ -210,7 +212,7 @@ void TextFragmentSelectorGenerator::Reset() {
 
   generation_start_time_ = base::DefaultTickClock::GetInstance()->NowTicks();
   state_ = kNotStarted;
-  error_.reset();
+  error_ = LinkGenerationError::kNone;
   step_ = kExact;
   max_available_prefix_ = "";
   max_available_suffix_ = "";
@@ -619,10 +621,20 @@ void TextFragmentSelectorGenerator::ExtendContext() {
 
   // Try initiating properties necessary for calculating prefix and suffix.
   if (max_available_prefix_.IsEmpty() && max_available_suffix_.IsEmpty()) {
+    PositionInFlatTree suffix_start_position =
+        TextFragmentFinder::NextTextPosition(
+            range_->EndPosition(),
+            PositionInFlatTree::LastPositionInNode(
+                *frame_->GetDocument()->documentElement()->lastChild()));
+    PositionInFlatTree prefix_end_position =
+        TextFragmentFinder::PreviousTextPosition(
+            range_->StartPosition(),
+            PositionInFlatTree::FirstPositionInNode(
+                *frame_->GetDocument()->documentElement()->firstChild()));
     max_available_prefix_ =
-        GetPreviousTextBlock(ToPositionInDOMTree(range_->StartPosition()));
+        GetPreviousTextBlock(ToPositionInDOMTree(prefix_end_position));
     max_available_suffix_ =
-        GetNextTextBlock(ToPositionInDOMTree(range_->EndPosition()));
+        GetNextTextBlock(ToPositionInDOMTree(suffix_start_position));
 
     // Use at least 3 words from both sides for more robust link to text.
     num_context_words_ = kMinWordCount_;
@@ -652,9 +664,11 @@ void TextFragmentSelectorGenerator::ExtendContext() {
 
 void TextFragmentSelectorGenerator::RecordAllMetrics(
     const TextFragmentSelector& selector) {
-  UMA_HISTOGRAM_BOOLEAN(
-      "SharedHighlights.LinkGenerated",
-      selector.Type() != TextFragmentSelector::SelectorType::kInvalid);
+  LinkGenerationStatus status =
+      selector.Type() == TextFragmentSelector::SelectorType::kInvalid
+          ? LinkGenerationStatus::kFailure
+          : LinkGenerationStatus::kSuccess;
+  shared_highlighting::LogLinkGenerationStatus(status);
 
   ukm::UkmRecorder* recorder = frame_->GetDocument()->UkmRecorder();
   ukm::SourceId source_id = frame_->GetDocument()->UkmSourceID();
@@ -680,12 +694,11 @@ void TextFragmentSelectorGenerator::RecordAllMetrics(
     UMA_HISTOGRAM_TIMES("SharedHighlights.LinkGenerated.Error.TimeToGenerate",
                         base::DefaultTickClock::GetInstance()->NowTicks() -
                             generation_start_time_);
-
-    LinkGenerationError error =
-        error_.has_value() ? error_.value() : LinkGenerationError::kUnknown;
-    shared_highlighting::LogLinkGenerationErrorReason(error);
+    if (error_ == LinkGenerationError::kNone)
+      error_ = LinkGenerationError::kUnknown;
+    shared_highlighting::LogLinkGenerationErrorReason(error_);
     shared_highlighting::LogLinkGeneratedErrorUkmEvent(recorder, source_id,
-                                                       error);
+                                                       error_);
   }
 }
 

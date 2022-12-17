@@ -39,7 +39,7 @@ std::string MaybeConvertRegexToPlainPattern(const std::string& regex) {
           result.push_back(c);
           break;
         }
-        FALLTHROUGH;
+        [[fallthrough]];
       case '/':
       case '|':
       case '^':
@@ -96,7 +96,7 @@ void DuckDuckGoRulesParser::Parse(const base::Value& root) {
     return;
   }
 
-  parse_result_->tracker_infos = base::Value(base::Value::Type::DICTIONARY);
+  parse_result_->tracker_infos = base::Value::Dict();
 
   for (const auto item : trackers->DictItems()) {
     const std::string& domain = item.first;
@@ -121,16 +121,16 @@ void DuckDuckGoRulesParser::Parse(const base::Value& root) {
         excluded_origins = entity->FindListKey(kDomainsKey);
     }
 
-    base::DictionaryValue tracker_info;
+    base::Value::Dict tracker_info;
     const base::Value* owner_dict = item.second.FindKey(kOwnerKey);
     if (owner_dict)
-      tracker_info.SetKey(kOwnerKey, owner_dict->Clone());
+      tracker_info.Set(kOwnerKey, owner_dict->Clone());
     const base::Value* categories = item.second.FindKey(kCategoriesKey);
     if (categories)
-      tracker_info.SetKey(kCategoriesKey, categories->Clone());
+      tracker_info.Set(kCategoriesKey, categories->Clone());
 
     if (owner || categories)
-      parse_result_->tracker_infos.SetKey(domain, std::move(tracker_info));
+      parse_result_->tracker_infos->Set(domain, std::move(tracker_info));
 
     bool default_ignore = false;
     if (default_action->compare(kActionIgnore) == 0) {

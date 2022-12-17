@@ -488,6 +488,15 @@
       "channel": "stable",
       "extension_types": [ "platform_app" ],
       "allowlist": [ "A414F2F4543AC9C68DDF663D0A459E6053E3373C" ] // Vivaldi
+    },
+    {
+      "channel": "stable",
+      "extension_types": ["extension"],
+      "location": "component",
+      "platforms": ["chromeos"],
+      "allowlist": [
+        "371AC6869D2138CE58123741E69F67469206909F" // AccessibilityCommon extension. https://crbug.com/1220107
+      ]
     }
   ],
   "lockWindowFullscreenPrivate": {
@@ -510,12 +519,12 @@
   "dependencies": ["behavior:imprivata_extension"],
   "extension_types": ["extension","login_screen_extension"],
   "location": "policy",
-  "platforms": ["chromeos"]
+  "platforms": ["chromeos", "lacros"]
   }, {
     "channel": "stable",
     "extension_types": ["extension","login_screen_extension"],
     "location": "policy",
-    "platforms": ["chromeos"],
+    "platforms": ["chromeos", "lacros"],
     "allowlist": [
       "7FE4A999359A456C4B0FB7B7AD85CEA29CA50519", // Login screen APIs test extension
       "3F5995FE79A861F019C6F093BEF98D73FA9D3A5F"  // Login screen APIs in-sesesion test extension
@@ -526,12 +535,12 @@
     "dependencies": ["behavior:imprivata_extension"],
     "extension_types": ["extension","login_screen_extension"],
     "location": "policy",
-    "platforms": ["chromeos"]
+    "platforms": ["chromeos", "lacros"]
   }, {
     "channel": "canary",
     "extension_types": ["extension","login_screen_extension"],
     "location": "policy",
-    "platforms": ["chromeos"],
+    "platforms": ["chromeos", "lacros"],
     "allowlist": [
       "7FE4A999359A456C4B0FB7B7AD85CEA29CA50519", // Login screen APIs test extension
       "3F5995FE79A861F019C6F093BEF98D73FA9D3A5F"  // Login screen APIs in-sesesion test extension
@@ -867,8 +876,9 @@
     "extension_types": ["extension", "legacy_packaged_app", "platform_app"]
   },
   "speechRecognitionPrivate": {
-    "channel": "dev",
+    "channel": "stable",
     "extension_types": ["extension"],
+    "location": "component",
     "platforms": ["chromeos"],
     "allowlist": [
       "371AC6869D2138CE58123741E69F67469206909F" // AccessibilityCommon extension. https://crbug.com/1220107

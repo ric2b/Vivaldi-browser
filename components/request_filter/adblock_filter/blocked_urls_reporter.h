@@ -11,6 +11,7 @@
 #include "base/values.h"
 #include "components/request_filter/adblock_filter/adblock_metadata.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 namespace content {
 class RenderFrameHost;
@@ -28,11 +29,12 @@ class BlockedUrlsReporter {
         RuleGroup group,
         std::set<content::WebContents*> tabs_with_new_blocks) {}
   };
-  using BlockedDomains =
-      std::array<std::map<std::string, int>, kRuleGroupCount>;
+  using CounterGroup = std::array<std::map<std::string, int>, kRuleGroupCount>;
   using TrackerInfo = std::map<uint32_t, base::Value>;
 
-  BlockedUrlsReporter(BlockedDomains blocked_domains,
+  BlockedUrlsReporter(base::Time reporting_start,
+                      CounterGroup blocked_domains,
+                      CounterGroup blocked_for_origin,
                       base::RepeatingClosure schedule_save);
   ~BlockedUrlsReporter();
   BlockedUrlsReporter(const BlockedUrlsReporter&) = delete;
@@ -43,21 +45,31 @@ class BlockedUrlsReporter {
   }
 
   void OnTrackerInfosUpdated(const RuleSource& source,
-                             base::Value new_tracker_infos);
+                             base::Value::Dict new_tracker_infos);
 
-  void OnUrlBlocked(RuleGroup group, GURL url, content::RenderFrameHost* frame);
+  void OnUrlBlocked(RuleGroup group,
+                    url::Origin origin,
+                    GURL url,
+                    content::RenderFrameHost* frame);
   void OnTabRemoved(content::WebContents* contents);
 
-  const TrackerInfo* GetTrackerInfo(RuleGroup group, const std::string& domain);
-  const BlockedDomains& GetBlockedDomains() { return blocked_domains_; }
-  void ClearBlockedDomains();
+  const TrackerInfo* GetTrackerInfo(RuleGroup group,
+                                    const std::string& domain) const;
+  const CounterGroup& GetBlockedDomains() const { return blocked_domains_; }
+  const CounterGroup& GetBlockedForOrigin() const {
+    return blocked_for_origin_;
+  }
+  base::Time GetReportingStart() const { return reporting_start_; }
+  void ClearBlockedCounters();
 
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
 
  private:
   void NotifyOfNewBlockedUrls();
-  void AddToBlockedDomains(RuleGroup group, std::string domain);
+  void AddToCounter(CounterGroup& counter_group,
+                    RuleGroup group,
+                    std::string domain);
 
   std::array<std::set<content::WebContents*>, kRuleGroupCount>
       tabs_with_new_blocks_;
@@ -65,7 +77,9 @@ class BlockedUrlsReporter {
   std::array<std::map<std::string, TrackerInfo>, kRuleGroupCount>
       tracker_infos_;
 
-  BlockedDomains blocked_domains_;
+  base::Time reporting_start_;
+  CounterGroup blocked_domains_;
+  CounterGroup blocked_for_origin_;
 
   base::Time last_notification_time_;
   base::OneShotTimer next_notifiaction_timer_;

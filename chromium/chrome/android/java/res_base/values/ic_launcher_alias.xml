@@ -4,6 +4,5 @@
      found in the LICENSE file. -->
 
 <resources>
-    <!-- Dropping the rename (Vivaldi) -->
-    <drawable name="ic_launcher">@mipmap/ic_launcher</drawable>
+    <drawable name="ic_launcher">@mipmap/app_icon</drawable>
 </resources>

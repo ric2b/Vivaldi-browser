@@ -367,7 +367,8 @@ void BoxUploader::OnPreflightCheckResponse(BoxApiCallResponse response) {
       }
       DLOG(WARNING) << "Box upload failed for file " << target_file_name_;
       LogUniquifierCountToUma();
-      FALLTHROUGH;  // Also OnOnApiCallFlowFailure() to surface this to user.
+      [[fallthrough]];  // Also OnOnApiCallFlowFailure() to surface this to
+                        // user.
     default:
       // Unexpected error. Notify failure to download thread.
       OnApiCallFlowFailure(response);
@@ -648,7 +649,8 @@ void BoxChunkedUploader::OnPartFileUploadResponse(BoxApiCallResponse response,
     return;
   }
   uploaded_parts_.Append(std::move(part_info));
-  chunks_handler_->ContinueToReadChunk(uploaded_parts_.GetList().size() + 1);
+  chunks_handler_->ContinueToReadChunk(
+      uploaded_parts_.GetListDeprecated().size() + 1);
 }
 
 void BoxChunkedUploader::OnFileCompletelyUploaded(

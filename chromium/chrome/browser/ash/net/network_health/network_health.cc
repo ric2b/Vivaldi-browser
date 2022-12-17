@@ -18,10 +18,14 @@
 #include "chromeos/services/network_config/public/mojom/cros_network_config.mojom.h"
 #include "chromeos/services/network_health/public/mojom/network_health.mojom.h"
 
-namespace chromeos {
+namespace ash {
 namespace network_health {
 
 namespace {
+
+// TODO(https://crbug.com/1164001): remove when migrated to namespace ash.
+namespace mojom = ::chromeos::network_health::mojom;
+namespace network_config = ::chromeos::network_config;
 
 constexpr mojom::NetworkState DeviceStateToNetworkState(
     network_config::mojom::DeviceStateType device_state) {
@@ -156,10 +160,6 @@ void NetworkHealth::OnNetworkStateChanged(
   HandleNetworkEventsForInactiveNetworks(std::move(network_state));
   RequestNetworkStateList();
 }
-
-void NetworkHealth::OnVpnProvidersChanged() {}
-
-void NetworkHealth::OnNetworkCertificatesChanged() {}
 
 void NetworkHealth::OnNetworkStateListReceived(
     std::vector<network_config::mojom::NetworkStatePropertiesPtr> props) {
@@ -370,4 +370,4 @@ void NetworkHealth::AnalyzeSignalStrength() {
 }
 
 }  // namespace network_health
-}  // namespace chromeos
+}  // namespace ash

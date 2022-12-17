@@ -18,7 +18,7 @@
 #include "components/viz/test/test_in_process_context_provider.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
 
 namespace cc {
 namespace {
@@ -315,4 +315,4 @@ TEST_P(LayerTreeHostOverlayScrollbarsPixelTest, NinePatchScrollbarScaledDown) {
 }  // namespace
 }  // namespace cc
 
-#endif  // OS_ANDROID
+#endif  // BUILDFLAG(IS_ANDROID)

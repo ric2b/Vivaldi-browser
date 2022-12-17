@@ -9,6 +9,7 @@
 #include "base/callback.h"
 #include "base/memory/singleton.h"
 #include "base/memory/weak_ptr.h"
+#include "base/task/cancelable_task_tracker.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "content/public/browser/notification_observer.h"
@@ -32,7 +33,6 @@ class AdverseAdFilterListService : public KeyedService,
   friend struct base::DefaultSingletonTraits<AdverseAdFilterListService>;
 
  public:
-  typedef base::OnceCallback<void()> ListFailedCallback;
 
   AdverseAdFilterListService(Profile* profile);
   ~AdverseAdFilterListService() override;
@@ -40,16 +40,11 @@ class AdverseAdFilterListService : public KeyedService,
   AdverseAdFilterListService& operator=(const AdverseAdFilterListService&) =
       delete;
 
-  void LoadList(ListFailedCallback callback);
-  void LoadList(const base::FilePath& json_filename,
-                ListFailedCallback callback);
-  void LoadListOnIO(const base::FilePath& json_filename,
-                    ListFailedCallback callback);
+  void LoadList(const base::FilePath& json_filename);
 
   // This will load and parse the block list in addition to compute a MD5
   // checksum for the file-contents.
-  void LoadAndInitializeFromString(ListFailedCallback callback,
-                                   const std::string* json_string);
+  void LoadAndInitializeFromString(const std::string* json_string);
 
   bool IsSiteInList(const GURL&);
   bool has_sites() const { return !adverse_ad_sites_.empty(); }
@@ -64,11 +59,9 @@ class AdverseAdFilterListService : public KeyedService,
 
   static base::FilePath GetDefaultFilePath();
 
-  static std::string* ReadFileToString(const base::FilePath& json_filename,
-                                       ListFailedCallback callback);
+  static std::string* ReadFileToString(const base::FilePath& json_filename);
 
  private:
-  static void PostCallback(ListFailedCallback callback);
 
   void SettingsUpdated();
   void OnFileExistsChecked(bool exists);

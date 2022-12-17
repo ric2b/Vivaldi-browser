@@ -78,7 +78,7 @@
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Të kontrolloni konfigurimin e proxy-t, të sistemit mbrojtës të rrjetit dhe të DNS-së<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Nëse përdorni server proxy...</translation>
 <translation id="3894751534882749287">Gjithsesi, për ta parë faqen, ndryshoni nivelin e mbrojtjes nga gjurmimi nëpërmjet dritares automatike për gjurmuesit ose klikoni butonin Autorizoj</translation>
-<translation id="3950820424414687140">Lidhem</translation>
+<translation id="3950820424414687140">Identifikohem</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> është bllokuar</translation>
 <translation id="3987940399970879459">Më pak se 1 MB</translation>
 <translation id="4075732493274867456">Klienti dhe serveri përdorin një variant jo të zakonshëm të protokollit apo të metodave të shifrimit SSL.</translation>
@@ -107,7 +107,7 @@
 <translation id="4744603770635761495">Skedari i ekzekutueshëm</translation>
 <translation id="4750917950439032686">Faqja i mbron informacionet tuaja të fshehta (për shembull, fjalëkalimet ose numrat e kartës së kreditit).</translation>
 <translation id="4764776831041365478">Faqja <ph name="URL" /> është përkohësisht e padisponueshme ose është zhvendosur përfundimisht në një adresë të re interneti.</translation>
-<translation id="483241715238664915">Aktivizoj vërejtjet</translation>
+<translation id="483241715238664915">Aktivizoni vërejtjet</translation>
 <translation id="4943872375798546930">Nuk rezulton</translation>
 <translation id="5023310440958281426">Kontrolloni rregullat e administratorit</translation>
 <translation id="5039804452771397117">Autorizoj</translation>
@@ -172,7 +172,7 @@
 <translation id="7445762425076701745">Identiteti i këtij serverit nuk mund të vërtetohet plotësisht. Serveri përdor një emër të vlefshëm vetëm brenda rrjetit tuaj kompjuterik dhe autoritetet e jashtme certifikuese nuk e vërtetojnë dot se kujt i përket. Autoritetet certifikuese ndonjëherë lëshojnë dëshmi edhe për emra të tillë, prandaj nuk ka garanci që jeni lidhur me faqen e kërkuar apo me një pirat interneti.</translation>
 <translation id="7455133967321480974">Përdor standardin e përgjithshëm (Bllokoj)</translation>
 <translation id="7518003948725431193">Nuk u gjet faqja me adresën: <ph name="URL" /></translation>
-<translation id="7549584377607005141">Faqja e internetit kërkon që të plotësoni të dhënat e mëparshme që ajo të paraqitet drejt. Të dhënat mund t'i dërgoni prapë, por në këtë mënyrë do ju duhet të përsëritni çdo veprim të mëparshëm.</translation>
+<translation id="7549584377607005141">Faqja e internetit kërkon të dhënat e plotësuara më parë që të paraqitet në rregull. Të dhënat mund t'i dërgoni prapë, por në këtë mënyrë do ju duhet të kryeni të njëjtat veprime të mëparshme.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> nuk e shqyrton dot kërkesën për momentin.</translation>
 <translation id="7662298039739062396">Parametri kontrollohet nga një shtesë</translation>
 <translation id="7663736086183791259">Certifikata <ph name="CERTIFICATE_VALIDITY" /></translation>
@@ -197,7 +197,7 @@
 <translation id="8225771182978767009">Faqja është bllokuar nga personi që konfiguroi kompjuterin.</translation>
 <translation id="8241707690549784388">Faqja që kërkoni përdor informacionet tuaja të vjetra. Nëse ktheheni pas do ju duhet të përsëritni çdo veprim të mëparshëm. Doni të vijoni?</translation>
 <translation id="8241712895048303527">Bllokoj te kjo faqja</translation>
-<translation id="8286036467436129157">Lidhem</translation>
+<translation id="8286036467436129157">Identifikohem</translation>
 <translation id="8288807391153049143">Tregoj certifikatën</translation>
 <translation id="8289355894181816810">Kontaktoni administratorin e rrjetit kompjuterik nëse jeni në mëdyshje.</translation>
 <translation id="8332188693563227489">U refuzua aksesi në <ph name="HOST_NAME" /></translation>

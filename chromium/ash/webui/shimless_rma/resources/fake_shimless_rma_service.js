@@ -566,12 +566,30 @@ export class FakeShimlessRmaService {
   }
 
   /**
+   * @return {!Promise<!{dramPartNumber: string}>}
+   */
+  getOriginalDramPartNumber() {
+    return this.methods_.resolveMethod('getOriginalDramPartNumber');
+  }
+
+  /**
+   * @param {string} dramPartNumber
+   */
+  setGetOriginalDramPartNumberResult(dramPartNumber) {
+    this.methods_.setResult(
+        'getOriginalDramPartNumber', {dramPartNumber: dramPartNumber});
+  }
+
+  /**
    * @param {string} serialNumber
    * @param {number} regionIndex
    * @param {number} skuIndex
+   * @param {number} whiteLabelIndex
+   * @param {string} dramPartNumber
    * @return {!Promise<!StateResult>}
    */
-  setDeviceInformation(serialNumber, regionIndex, skuIndex) {
+  setDeviceInformation(
+      serialNumber, regionIndex, skuIndex, whiteLabelIndex, dramPartNumber) {
     // TODO(gavindodd): Validate range of region and sku.
     return this.getNextStateForMethod_(
         'setDeviceInformation', State.kUpdateDeviceInformation);
@@ -645,6 +663,14 @@ export class FakeShimlessRmaService {
   /**
    * @return {!Promise<!StateResult>}
    */
+  retryProvisioning() {
+    return this.getNextStateForMethod_(
+        'retryProvisioning', State.kProvisionDevice);
+  }
+
+  /**
+   * @return {!Promise<!StateResult>}
+   */
   provisioningComplete() {
     return this.getNextStateForMethod_(
         'provisioningComplete', State.kProvisionDevice);
@@ -660,19 +686,26 @@ export class FakeShimlessRmaService {
   /**
    * @return {!Promise<!StateResult>}
    */
+  retryFinalization() {
+    return this.getNextStateForMethod_('retryFinalization', State.kFinalize);
+  }
+
+  /**
+   * @return {!Promise<!StateResult>}
+   */
   writeProtectManuallyEnabled() {
     return this.getNextStateForMethod_(
         'writeProtectManuallyEnabled', State.kWaitForManualWPEnable);
   }
 
-  /** @return {!Promise<{log: string}>} */
+  /** @return {!Promise<{log: string, error: !RmadErrorCode}>} */
   getLog() {
     return this.methods_.resolveMethod('getLog');
   }
 
   /** @param {string} log */
   setGetLogResult(log) {
-    this.methods_.setResult('getLog', {log: log});
+    this.methods_.setResult('getLog', {log: log, error: RmadErrorCode.kOk});
   }
 
   launchDiagnostics() {
@@ -756,7 +789,13 @@ export class FakeShimlessRmaService {
               /** @type {!UpdateRoFirmwareStatus} */ (status));
         });
     if (this.automaticallyTriggerUpdateRoFirmwareObservation_) {
-      this.triggerUpdateRoFirmwareObserver(UpdateRoFirmwareStatus.kComplete, 0);
+      this.triggerUpdateRoFirmwareObserver(UpdateRoFirmwareStatus.kWaitUsb, 0);
+      this.triggerUpdateRoFirmwareObserver(
+          UpdateRoFirmwareStatus.kUpdating, 1000);
+      this.triggerUpdateRoFirmwareObserver(
+          UpdateRoFirmwareStatus.kRebooting, 2000);
+      this.triggerUpdateRoFirmwareObserver(
+          UpdateRoFirmwareStatus.kComplete, 3000);
     }
   }
 
@@ -1208,6 +1247,7 @@ export class FakeShimlessRmaService {
     this.methods_.register('getOriginalRegion');
     this.methods_.register('getOriginalSku');
     this.methods_.register('getOriginalWhiteLabel');
+    this.methods_.register('getOriginalDramPartNumber');
     this.methods_.register('setDeviceInformation');
 
     this.methods_.register('getCalibrationComponentList');
@@ -1217,8 +1257,10 @@ export class FakeShimlessRmaService {
     this.methods_.register('continueCalibration');
     this.methods_.register('calibrationComplete');
 
+    this.methods_.register('retryProvisioning');
     this.methods_.register('provisioningComplete');
 
+    this.methods_.register('retryFinalization');
     this.methods_.register('finalizationComplete');
 
     this.methods_.register('writeProtectManuallyEnabled');
@@ -1285,6 +1327,11 @@ export class FakeShimlessRmaService {
     } else {
       // Success.
       this.stateIndex_++;
+      if (method === 'chooseManuallyDisableWriteProtect') {
+        // A special case so that choosing manual WP disable sends you to the
+        // appropriate page in the fake app.
+        this.stateIndex_++;
+      }
       const state = this.states_[this.stateIndex_];
       this.setFakeStateForMethod_(
           method, state.state, state.canCancel, state.canGoBack, state.error);

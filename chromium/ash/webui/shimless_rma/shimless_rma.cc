@@ -8,11 +8,14 @@
 #include <string>
 #include <utility>
 
-#include "ash/grit/ash_shimless_rma_resources.h"
-#include "ash/grit/ash_shimless_rma_resources_map.h"
+#include "ash/constants/ash_features.h"
+#include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/network_config_service.h"
+#include "ash/webui/grit/ash_shimless_rma_resources.h"
+#include "ash/webui/grit/ash_shimless_rma_resources_map.h"
 #include "ash/webui/shimless_rma/backend/shimless_rma_delegate.h"
 #include "ash/webui/shimless_rma/url_constants.h"
+#include "base/command_line.h"
 #include "base/containers/span.h"
 #include "base/memory/ptr_util.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
@@ -76,6 +79,8 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
       {"backButtonLabel", IDS_SHIMLESS_RMA_BACK_BUTTON},
       {"nextButtonLabel", IDS_SHIMLESS_RMA_NEXT_BUTTON},
       {"skipButtonLabel", IDS_SHIMLESS_RMA_SKIP_BUTTON},
+      {"okButtonLabel", IDS_SHIMLESS_RMA_OK_BUTTON},
+      {"retryButtonLabel", IDS_SHIMLESS_RMA_RETRY_BUTTON},
       // Landing page
       {"welcomeTitleText", IDS_SHIMLESS_RMA_LANDING_PAGE_TITLE},
       {"beginRmaWarningText", IDS_SHIMLESS_RMA_AUTHORIZED_TECH_ONLY_WARNING},
@@ -85,6 +90,8 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
       {"validatedComponentsFailText",
        IDS_SHIMLESS_RMA_VALIDATED_COMPONENTS_FAIL},
       {"getStartedButtonLabel", IDS_SHIMLESS_RMA_GET_STARTED_BUTTON_LABEL},
+      {"unqualifiedComponentsTitle",
+       IDS_SHIMLESS_RMA_UNQUALIFIED_COMPONENTS_TITLE},
       // Network connect page
       {"connectNetworkTitleText", IDS_SHIMLESS_RMA_CONNECT_PAGE_TITLE},
       {"connectNetworkDescriptionText",
@@ -107,8 +114,10 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
       {"newOwnerDescriptionText", IDS_SHIMLESS_RMA_NEW_OWNER_DESCRIPTION},
       // OS update page
       {"osUpdateTitleText", IDS_SHIMLESS_RMA_UPDATE_OS_PAGE_TITLE},
-      {"osUpdateInvalidComponentsDescriptionText",
-       IDS_SHIMLESS_RMA_UPDATE_OS_INVALID_COMPONENTS},
+      {"osUpdateUnqualifiedComponentsTopText",
+       IDS_SHIMLESS_RMA_UPDATE_OS_UNQUALIFIED_COMPONENTS_TOP},
+      {"osUpdateUnqualifiedComponentsBottomText",
+       IDS_SHIMLESS_RMA_UPDATE_OS_UNQUALIFIED_COMPONENTS_BOTTOM},
       {"osUpdateVeryOutOfDateDescriptionText",
        IDS_SHIMLESS_RMA_UPDATE_OS_VERY_OUT_OF_DATE},
       {"osUpdateOutOfDateDescriptionText",
@@ -140,7 +149,6 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
       {"rsuChallengeDialogTitleText",
        IDS_SHIMLESS_RMA_RSU_CHALLENGE_DIALOG_TITLE},
       {"rsuCodeLabelText", IDS_SHIMLESS_RMA_RSU_CODE_LABEL},
-      {"rsuCodePlaceHolderText", IDS_SHIMLESS_RMA_RSU_CODE_PLACEHOLDER},
       {"rsuChallengeDialogDoneButtonLabel",
        IDS_SHIMLESS_RMA_RSU_CHALLENGE_DIALOG_DONE_BUTTON},
       // Manual WP disable complete
@@ -158,6 +166,12 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
        IDS_SHIMLESS_RMA_CALIBRATION_FAILED_INSTRUCTIONS},
       {"calibrationFailedRetryButtonLabel",
        IDS_SHIMLESS_RMA_CALIBRATION_FAILED_RETRY_BUTTON_LABEL},
+      {"calibrationFailedDialogTitle",
+       IDS_SHIMLESS_RMA_CALIBRATION_FAILED_DIALOG_TITLE},
+      {"calibrationFailedDialogText",
+       IDS_SHIMLESS_RMA_CALIBRATION_FAILED_DIALOG_TEXT},
+      {"calibrationFailedSkipCalibrationButtonLabel",
+       IDS_SHIMLESS_RMA_CALIBRATION_FAILED_SKIP_CALIBRATION_LABEL},
       // Setup calibration page
       {"setupCalibrationTitleText",
        IDS_SHIMLESS_RMA_SETUP_CALIBRATION_PAGE_TITLE},
@@ -173,6 +187,8 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
        IDS_SHIMLESS_RMA_FINALIZE_FAILED_BLOCKING},
       {"finalizePageFailedNonBlockingText",
        IDS_SHIMLESS_RMA_FINALIZE_FAILED_NON_BLOCKING},
+      {"finalizePageFailedRetryButtonLabel",
+       IDS_SHIMLESS_RMA_FINALIZE_FAILED_RETRY_BUTTON_LABEL},
       // Run calibration page
       {"runCalibrationTitleText", IDS_SHIMLESS_RMA_RUN_CALIBRATION_PAGE_TITLE},
       {"runCalibrationCompleteText", IDS_SHIMLESS_RMA_RUN_CALIBRATION_COMPLETE},
@@ -187,6 +203,8 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
        IDS_SHIMLESS_RMA_PROVISIONING_FAILED_BLOCKING},
       {"provisioningPageFailedNonBlockingText",
        IDS_SHIMLESS_RMA_PROVISIONING_FAILED_NON_BLOCKING},
+      {"provisioningPageFailedRetryButtonLabel",
+       IDS_SHIMLESS_RMA_PROVISIONING_FAILED_RETRY_BUTTON_LABEL},
       // Repair complete page
       {"repairCompletedTitleText", IDS_SHIMLESS_RMA_REPAIR_COMPLETED},
       {"repairCompletedDescriptionText",
@@ -195,6 +213,10 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
        IDS_SHIMLESS_RMA_REPAIR_COMPLETED_DIAGNOSTICS_BUTTON},
       {"repairCompletedDiagnosticsDescriptionText",
        IDS_SHIMLESS_RMA_REPAIR_COMPLETED_DIAGNOSTICS_DESCRIPTION},
+      {"repairCompleteShutDownButtonText",
+       IDS_SHIMLESS_RMA_REPAIR_COMPLETED_SHUT_DOWN_BUTTON_LABEL},
+      {"repairCompleteRebootButtonText",
+       IDS_SHIMLESS_RMA_REPAIR_COMPLETED_REBOOT_BUTTON_LABEL},
       {"repairCompletedLogsButtonText",
        IDS_SHIMLESS_RMA_REPAIR_COMPLETED_LOGS_BUTTON},
       {"repairCompletedLogsDescriptionText",
@@ -208,15 +230,7 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
       {"rmaLogsTitleText", IDS_SHIMLESS_RMA_LOGS_TITLE},
       {"rmaLogsCancelButtonText", IDS_SHIMLESS_RMA_LOGS_CANCEL_BUTTON},
       {"rmaLogsSaveToUsbButtonText", IDS_SHIMLESS_RMA_LOGS_SAVE_BUTTON},
-      {"batteryShutoffTitleText", IDS_SHIMLESS_BATTERY_CUTOFF_TITLE},
-      {"batteryShutoffUnplugMessageText",
-       IDS_SHIMLESS_BATTERY_SHUTOFF_UNPLUG_MESSAGE},
-      {"batteryShutoffShutdownMessageText",
-       IDS_SHIMLESS_BATTERY_SHUTOFF_SHUTDOWN_MESSAGE},
-      {"batteryShutoffCancelButtonText",
-       IDS_SHIMLESS_BATTERY_SHUTOFF_CANCEL_BUTTON},
-      {"batteryShutoffShutdownButtonText",
-       IDS_SHIMLESS_BATTERY_SHUTOFF_SHUTDOWN_BUTTON},
+      {"batteryShutoffTooltipText", IDS_SHIMLESS_BATTERY_SHUTOFF_TOOLTIP_TEXT},
 
       // Manual disable wp page
       {"manuallyDisableWpTitleText",
@@ -242,6 +256,14 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
        IDS_SHIMLESS_RMA_CONFIRM_DEVICE_INFO_SERIAL_NUMBER_LABEL},
       {"confirmDeviceInfoRegionLabel",
        IDS_SHIMLESS_RMA_CONFIRM_DEVICE_INFO_REGION_LABEL},
+      {"confirmDeviceInfoWhiteLabelLabel",
+       IDS_SHIMLESS_RMA_CONFIRM_DEVICE_INFO_WHITE_LABEL_LABEL},
+      {"confirmDeviceInfoEmptyWhiteLabelLabel",
+       IDS_SHIMLESS_RMA_CONFIRM_DEVICE_INFO_EMPTY_WHITE_LABEL_LABEL},
+      {"confirmDeviceInfoDramPartNumberLabel",
+       IDS_SHIMLESS_RMA_CONFIRM_DEVICE_INFO_DRAM_PART_NUMBER_LABEL},
+      {"confirmDeviceInfoDramPartNumberPlaceholderLabel",
+       IDS_SHIMLESS_RMA_CONFIRM_DEVICE_INFO_DRAM_PART_NUMBER_PLACEHOLDER_LABEL},
       {"confirmDeviceInfoSkuLabel",
        IDS_SHIMLESS_RMA_CONFIRM_DEVICE_INFO_SKU_LABEL},
       {"confirmDeviceInfoResetButtonLabel",
@@ -251,7 +273,8 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
       // Firmware reimaging page
       {"firmwareUpdatePageTitleText", IDS_SHIMLESS_RMA_FIRMWARE_UPDATE_TITLE},
       {"firmwareUpdateWaitForUsbText", IDS_SHIMLESS_RMA_FIRMWARE_WAIT_FOR_USB},
-      {"firmwareUpdateFileNotFoundText", IDS_SHIMLESS_RMA_FIRMWARE_NOT_FOUND},
+      {"firmwareUpdateFileNotFoundText",
+       IDS_SHIMLESS_RMA_FIRMWARE_FILE_NOT_FOUND},
       {"firmwareUpdatingText", IDS_SHIMLESS_RMA_FIRMWARE_UPDATING},
       {"firmwareUpdateRebootText", IDS_SHIMLESS_RMA_FIRMWARE_REBOOT},
       {"firmwareUpdateCompleteText", IDS_SHIMLESS_RMA_FIRMWARE_UPDATE_COMPLETE},
@@ -278,8 +301,7 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
       // Critical error
       {"criticalErrorTitleText", IDS_SHIMLESS_RMA_CRITICAL_ERROR_TITLE},
       {"criticalErrorMessageText", IDS_SHIMLESS_RMA_CRITICAL_ERROR_MESSAGE},
-      {"criticalErrorRecoverFirmwareText",
-       IDS_SHIMLESS_RMA_CRITICAL_RECOVER_FIRMWARE_BUTTON},
+      {"criticalErrorExitText", IDS_SHIMLESS_RMA_CRITICAL_EXIT_BUTTON},
       {"criticalErrorRebootText", IDS_SHIMLESS_RMA_CRITICAL_REBOOT_BUTTON},
   };
 
@@ -288,6 +310,36 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
 }
 
 }  // namespace
+
+namespace shimless_rma {
+
+/* static */
+bool IsShimlessRmaAllowed() {
+  const base::CommandLine& command_line =
+      *base::CommandLine::ForCurrentProcess();
+  // Do not attempt to launch RMA in safe mode as RMA will prevent login, and
+  // any option to attempt repairs.
+  return ash::features::IsShimlessRMAFlowEnabled() &&
+         !command_line.HasSwitch(switches::kRmaNotAllowed) &&
+         !command_line.HasSwitch(switches::kSafeMode);
+}
+
+/* static */
+bool HasLaunchRmaSwitchAndIsAllowed() {
+  const base::CommandLine& command_line =
+      *base::CommandLine::ForCurrentProcess();
+
+  // Do not attempt to launch RMA in safe mode as RMA will prevent login, and
+  // any option to attempt repairs.
+  const bool launch_rma_switch_detected =
+      command_line.HasSwitch(switches::kLaunchRma);
+
+  // Call IsShimlessRmaAllowed() to safe guard from launching Shimless RMA in
+  // in the wrong state.
+  return launch_rma_switch_detected && IsShimlessRmaAllowed();
+}
+
+}  // namespace shimless_rma
 
 ShimlessRMADialogUI::ShimlessRMADialogUI(
     content::WebUI* web_ui,

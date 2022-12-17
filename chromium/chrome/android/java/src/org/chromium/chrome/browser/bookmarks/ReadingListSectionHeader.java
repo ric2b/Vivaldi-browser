@@ -15,6 +15,9 @@ import org.chromium.components.bookmarks.BookmarkType;
 import java.util.Collections;
 import java.util.List;
 
+// Vivaldi
+import org.chromium.chrome.browser.ChromeApplicationImpl;
+
 /**
  * Helper class to manage all the logic and UI behind adding the reading list section headers in the
  * bookmark content UI.
@@ -64,6 +67,8 @@ class ReadingListSectionHeader {
             }
         }
 
+        // Vivaldi - Don't display Read section header until there is a read item
+        if (!ChromeApplicationImpl.isVivaldi())
         // If no read reading list items, add a read section header at the end.
         listItems.add(listItems.size(), createReadingListSectionHeader(/*read=*/true, context));
     }

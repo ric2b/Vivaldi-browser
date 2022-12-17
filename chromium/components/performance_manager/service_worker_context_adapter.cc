@@ -121,6 +121,7 @@ void ServiceWorkerContextAdapter::UnregisterServiceWorker(
 content::ServiceWorkerExternalRequestResult
 ServiceWorkerContextAdapter::StartingExternalRequest(
     int64_t service_worker_version_id,
+    content::ServiceWorkerExternalRequestTimeoutType timeout_type,
     const std::string& request_uuid) {
   NOTIMPLEMENTED();
   return content::ServiceWorkerExternalRequestResult::kOk;
@@ -138,6 +139,14 @@ size_t ServiceWorkerContextAdapter::CountExternalRequestsForTest(
     const blink::StorageKey& key) {
   NOTIMPLEMENTED();
   return 0u;
+}
+
+bool ServiceWorkerContextAdapter::ExecuteScriptForTest(
+    const std::string& script,
+    int64_t version_id,
+    content::ServiceWorkerScriptExecutionCallback callback) {
+  NOTIMPLEMENTED();
+  return false;
 }
 
 bool ServiceWorkerContextAdapter::MaybeHasRegistrationForStorageKey(

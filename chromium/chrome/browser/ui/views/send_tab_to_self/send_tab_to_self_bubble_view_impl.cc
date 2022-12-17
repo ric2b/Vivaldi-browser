@@ -130,34 +130,18 @@ const views::View* SendTabToSelfBubbleViewImpl::GetButtonContainerForTesting()
 
 void SendTabToSelfBubbleViewImpl::Init() {
   auto* provider = ChromeLayoutProvider::Get();
-  const bool create_hint_text_label =
-      base::FeatureList::IsEnabled(send_tab_to_self::kSendTabToSelfV2) ||
-      share::AreUpcomingSharingFeaturesEnabled();
   const int top_margin = provider->GetDistanceMetric(
-      create_hint_text_label
-          ? views::DISTANCE_DIALOG_CONTENT_MARGIN_TOP_TEXT
-          : views::DISTANCE_DIALOG_CONTENT_MARGIN_TOP_CONTROL);
-  const bool create_manage_devices_link = base::FeatureList::IsEnabled(
-      send_tab_to_self::kSendTabToSelfManageDevicesLink);
-  const int bottom_margin =
-      create_manage_devices_link
-          ? 0
-          : provider->GetDistanceMetric(
-                views::DISTANCE_DIALOG_CONTENT_MARGIN_BOTTOM_CONTROL);
-  set_margins(gfx::Insets(top_margin, 0, bottom_margin, 0));
+      views::DISTANCE_DIALOG_CONTENT_MARGIN_TOP_TEXT);
+  set_margins(gfx::Insets(top_margin, 0, 0, 0));
 
   SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical));
 
-  if (create_hint_text_label)
-    CreateHintTextLabel();
-
+  CreateHintTextLabel();
   CreateDevicesScrollView();
 
-  if (create_manage_devices_link) {
-    AddChildView(std::make_unique<views::Separator>());
-    CreateManageDevicesLink();
-  }
+  AddChildView(std::make_unique<views::Separator>());
+  CreateManageDevicesLink();
 }
 
 void SendTabToSelfBubbleViewImpl::AddedToWidget() {

@@ -1175,8 +1175,9 @@ TEST_F(HttpServerPropertiesManagerTest, UpdatePrefsWithCache) {
   base::Value* broken_alt_svc_list =
       server_dict.FindListKey("broken_alternative_services");
   ASSERT_TRUE(broken_alt_svc_list);
-  ASSERT_EQ(2u, broken_alt_svc_list->GetList().size());
-  base::Value& broken_alt_svcs_list_entry = broken_alt_svc_list->GetList()[0];
+  ASSERT_EQ(2u, broken_alt_svc_list->GetListDeprecated().size());
+  base::Value& broken_alt_svcs_list_entry =
+      broken_alt_svc_list->GetListDeprecated()[0];
   const std::string* broken_until_str =
       broken_alt_svcs_list_entry.FindStringKey("broken_until");
   ASSERT_TRUE(broken_until_str);
@@ -1351,7 +1352,7 @@ TEST_F(HttpServerPropertiesManagerTest, DoNotPersistExpiredAlternativeService) {
 
   const base::Value* servers_list = pref_dict->FindListKey("servers");
   ASSERT_TRUE(servers_list);
-  auto it = servers_list->GetList().begin();
+  auto it = servers_list->GetListDeprecated().begin();
   const base::Value& server_pref_dict = *it;
   ASSERT_TRUE(server_pref_dict.is_dict());
 
@@ -1363,22 +1364,22 @@ TEST_F(HttpServerPropertiesManagerTest, DoNotPersistExpiredAlternativeService) {
       server_pref_dict.FindKey("isolation");
   ASSERT_TRUE(network_isolation_key_value);
   ASSERT_EQ(base::Value::Type::LIST, network_isolation_key_value->type());
-  EXPECT_TRUE(network_isolation_key_value->GetList().empty());
+  EXPECT_TRUE(network_isolation_key_value->GetListDeprecated().empty());
 
   const base::Value* altsvc_list =
       server_pref_dict.FindListKey("alternative_service");
   ASSERT_TRUE(altsvc_list);
 
-  ASSERT_EQ(2u, altsvc_list->GetList().size());
+  ASSERT_EQ(2u, altsvc_list->GetListDeprecated().size());
 
-  const base::Value& altsvc_entry = altsvc_list->GetList()[0];
+  const base::Value& altsvc_entry = altsvc_list->GetListDeprecated()[0];
   ASSERT_TRUE(altsvc_entry.is_dict());
   const std::string* hostname = altsvc_entry.FindStringKey("host");
 
   ASSERT_TRUE(hostname);
   EXPECT_EQ("broken.example.com", *hostname);
 
-  const base::Value& altsvc_entry2 = altsvc_list->GetList()[1];
+  const base::Value& altsvc_entry2 = altsvc_list->GetListDeprecated()[1];
   ASSERT_TRUE(altsvc_entry.is_dict());
   hostname = altsvc_entry2.FindStringKey("host");
   ASSERT_TRUE(hostname);
@@ -1517,7 +1518,7 @@ TEST_F(HttpServerPropertiesManagerTest, PersistAdvertisedVersionsToPref) {
       "\"isolation\":[],"
       "\"server\":\"https://www.google.com:80\"},"
       "{\"alternative_service\":[{"
-      "\"advertised_alpns\":[\"h3\",\"h3-29\",\"h3-Q050\"],"
+      "\"advertised_alpns\":[\"h3\",\"h3-Q050\"],"
       "\"expiration\":\"9223372036854775807\","
       "\"host\":\"foo.google.com\",\"port\":444,\"protocol_str\":\"quic\"}],"
       "\"isolation\":[],"
@@ -1630,7 +1631,7 @@ TEST_F(HttpServerPropertiesManagerTest,
       "\"server_info\":\"quic_server_info1\"}],"
       "\"servers\":["
       "{\"alternative_service\":[{"
-      "\"advertised_alpns\":[\"h3\",\"h3-29\",\"h3-Q050\"],"
+      "\"advertised_alpns\":[\"h3\",\"h3-Q050\"],"
       "\"expiration\":\"13756212000000000\",\"port\":443,"
       "\"protocol_str\":\"quic\"}],"
       "\"isolation\":[],"
@@ -2024,13 +2025,13 @@ TEST_F(HttpServerPropertiesManagerTest, ForceHTTP11) {
   // Wait until the data's been written to prefs, and then tear down the
   // HttpServerProperties.
   FastForwardBy(HttpServerProperties::GetUpdatePrefsDelayForTesting());
-  std::unique_ptr<base::Value> saved_value =
-      unowned_pref_delegate->GetServerProperties()->CreateDeepCopy();
+  base::Value saved_value =
+      unowned_pref_delegate->GetServerProperties()->Clone();
   properties.reset();
 
   // Only information on kServer1 should have been saved to prefs.
   std::string preferences_json;
-  base::JSONWriter::Write(*saved_value, &preferences_json);
+  base::JSONWriter::Write(saved_value, &preferences_json);
   EXPECT_EQ(
       "{\"servers\":["
       "{\"isolation\":[],"
@@ -2059,7 +2060,7 @@ TEST_F(HttpServerPropertiesManagerTest, ForceHTTP11) {
   EXPECT_TRUE(properties->RequiresHTTP11(kServer3, NetworkIsolationKey()));
 
   // The data loads.
-  unowned_pref_delegate->InitializePrefs(*saved_value);
+  unowned_pref_delegate->InitializePrefs(saved_value);
 
   // The properties should contain a combination of the old and new data.
   EXPECT_TRUE(properties->GetSupportsSpdy(kServer1, NetworkIsolationKey()));
@@ -2211,8 +2212,8 @@ TEST_F(HttpServerPropertiesManagerTest, NetworkIsolationKeyIntegration) {
   // Wait until the data's been written to prefs, and then tear down the
   // HttpServerProperties.
   FastForwardBy(HttpServerProperties::GetUpdatePrefsDelayForTesting());
-  std::unique_ptr<base::Value> saved_value =
-      unowned_pref_delegate->GetServerProperties()->CreateDeepCopy();
+  base::Value saved_value =
+      unowned_pref_delegate->GetServerProperties()->Clone();
   properties.reset();
 
   // Create a new HttpServerProperties using the value saved to prefs above.
@@ -2220,7 +2221,7 @@ TEST_F(HttpServerPropertiesManagerTest, NetworkIsolationKeyIntegration) {
   unowned_pref_delegate = pref_delegate.get();
   properties = std::make_unique<HttpServerProperties>(
       std::move(pref_delegate), /*net_log=*/nullptr, GetMockTickClock());
-  unowned_pref_delegate->InitializePrefs(*saved_value);
+  unowned_pref_delegate->InitializePrefs(saved_value);
 
   // The information set using kNetworkIsolationKey on the original
   // HttpServerProperties should also be set on the restored
@@ -2363,8 +2364,8 @@ TEST_F(HttpServerPropertiesManagerTest,
   // Wait until the data's been written to prefs, and then tear down the
   // HttpServerProperties.
   FastForwardBy(HttpServerProperties::GetUpdatePrefsDelayForTesting());
-  std::unique_ptr<base::Value> saved_value =
-      unowned_pref_delegate->GetServerProperties()->CreateDeepCopy();
+  base::Value saved_value =
+      unowned_pref_delegate->GetServerProperties()->Clone();
   properties.reset();
 
   // Create a new HttpServerProperties using the value saved to prefs above.
@@ -2372,7 +2373,7 @@ TEST_F(HttpServerPropertiesManagerTest,
   unowned_pref_delegate = pref_delegate.get();
   properties = std::make_unique<HttpServerProperties>(
       std::move(pref_delegate), /*net_log=*/nullptr, GetMockTickClock());
-  unowned_pref_delegate->InitializePrefs(*saved_value);
+  unowned_pref_delegate->InitializePrefs(saved_value);
 
   // Only the first of the values learned for kNetworkIsolationKey1 should have
   // been saved, and the value for kNetworkIsolationKey2 as well. The canonical
@@ -2422,7 +2423,7 @@ TEST_F(HttpServerPropertiesManagerTest,
     SCOPED_TRACE(static_cast<int>(save_network_isolation_key_mode));
 
     // Save prefs using |save_network_isolation_key_mode|.
-    std::unique_ptr<base::Value> saved_value;
+    base::Value saved_value;
     {
       // Configure the the feature.
       std::unique_ptr<base::test::ScopedFeatureList> feature_list =
@@ -2496,8 +2497,7 @@ TEST_F(HttpServerPropertiesManagerTest,
       // Wait until the data's been written to prefs, and then create a copy of
       // the prefs data.
       FastForwardBy(HttpServerProperties::GetUpdatePrefsDelayForTesting());
-      saved_value =
-          unowned_pref_delegate->GetServerProperties()->CreateDeepCopy();
+      saved_value = unowned_pref_delegate->GetServerProperties()->Clone();
     }
 
     // Now try and load the data in each of the feature modes.
@@ -2520,7 +2520,7 @@ TEST_F(HttpServerPropertiesManagerTest,
           std::make_unique<HttpServerProperties>(std::move(pref_delegate),
                                                  /*net_log=*/nullptr,
                                                  GetMockTickClock());
-      unowned_pref_delegate->InitializePrefs(*saved_value);
+      unowned_pref_delegate->InitializePrefs(saved_value);
 
       if (save_network_isolation_key_mode ==
           NetworkIsolationKeyMode::kDisabled) {
@@ -2681,7 +2681,7 @@ TEST_F(HttpServerPropertiesManagerTest,
     SCOPED_TRACE(static_cast<int>(save_network_isolation_key_mode));
 
     // Save prefs using |save_network_isolation_key_mode|.
-    std::unique_ptr<base::Value> saved_value;
+    base::Value saved_value;
     {
       // Configure the the feature.
       std::unique_ptr<base::test::ScopedFeatureList> feature_list =
@@ -2741,8 +2741,7 @@ TEST_F(HttpServerPropertiesManagerTest,
       // Wait until the data's been written to prefs, and then create a copy of
       // the prefs data.
       FastForwardBy(HttpServerProperties::GetUpdatePrefsDelayForTesting());
-      saved_value =
-          unowned_pref_delegate->GetServerProperties()->CreateDeepCopy();
+      saved_value = unowned_pref_delegate->GetServerProperties()->Clone();
     }
 
     // Now try and load the data in each of the feature modes.
@@ -2765,7 +2764,7 @@ TEST_F(HttpServerPropertiesManagerTest,
           std::make_unique<HttpServerProperties>(std::move(pref_delegate),
                                                  /*net_log=*/nullptr,
                                                  GetMockTickClock());
-      unowned_pref_delegate->InitializePrefs(*saved_value);
+      unowned_pref_delegate->InitializePrefs(saved_value);
 
       if (save_network_isolation_key_mode ==
           NetworkIsolationKeyMode::kDisabled) {
@@ -2916,8 +2915,8 @@ TEST_F(HttpServerPropertiesManagerTest,
   // Wait until the data's been written to prefs, and then tear down the
   // HttpServerProperties.
   FastForwardBy(HttpServerProperties::GetUpdatePrefsDelayForTesting());
-  std::unique_ptr<base::Value> saved_value =
-      unowned_pref_delegate->GetServerProperties()->CreateDeepCopy();
+  base::Value saved_value =
+      unowned_pref_delegate->GetServerProperties()->Clone();
   properties.reset();
 
   // Create a new HttpServerProperties using the value saved to prefs above.
@@ -2925,7 +2924,7 @@ TEST_F(HttpServerPropertiesManagerTest,
   unowned_pref_delegate = pref_delegate.get();
   properties = std::make_unique<HttpServerProperties>(
       std::move(pref_delegate), /*net_log=*/nullptr, GetMockTickClock());
-  unowned_pref_delegate->InitializePrefs(*saved_value);
+  unowned_pref_delegate->InitializePrefs(saved_value);
 
   // All values should have been saved and be retrievable by suffix-matching
   // servers.
@@ -2990,6 +2989,10 @@ TEST_F(HttpServerPropertiesManagerTest,
 
 TEST_F(HttpServerPropertiesManagerTest, AdvertisedVersionsRoundTrip) {
   for (const quic::ParsedQuicVersion& version : quic::AllSupportedVersions()) {
+    if (version.AlpnDeferToRFCv1()) {
+      // These versions currently do not support Alt-Svc.
+      continue;
+    }
     // Reset test infrastructure.
     TearDown();
     SetUp();
@@ -3028,8 +3031,8 @@ TEST_F(HttpServerPropertiesManagerTest, AdvertisedVersionsRoundTrip) {
     const base::Value* servers_list = preferences_dict->FindListKey("servers");
     ASSERT_TRUE(servers_list);
     ASSERT_TRUE(servers_list->is_list());
-    ASSERT_EQ(servers_list->GetList().size(), 1u);
-    const base::Value& server_dict = servers_list->GetList()[0];
+    ASSERT_EQ(servers_list->GetListDeprecated().size(), 1u);
+    const base::Value& server_dict = servers_list->GetListDeprecated()[0];
     HttpServerProperties::ServerInfo server_info;
     EXPECT_TRUE(HttpServerPropertiesManager::ParseAlternativeServiceInfo(
         server, server_dict, &server_info));

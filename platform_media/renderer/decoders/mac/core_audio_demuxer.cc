@@ -92,12 +92,12 @@ void CoreAudioDemuxer::CancelPendingSeek(base::TimeDelta seek_time) {}
 void CoreAudioDemuxer::Seek(base::TimeDelta time,
                             PipelineStatusCallback status_cb) {
   if (audio_stream_->Seek(time)) {
-    std::move(status_cb).Run(PipelineStatus::PIPELINE_OK);
+    std::move(status_cb).Run(PIPELINE_OK);
     return;
   }
   LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
              << ": PIPELINE_ERROR_ABORT";
-  std::move(status_cb).Run(PipelineStatus::PIPELINE_ERROR_ABORT);
+  std::move(status_cb).Run(PIPELINE_ERROR_ABORT);
 }
 
 void CoreAudioDemuxer::Stop() {
@@ -209,14 +209,14 @@ void CoreAudioDemuxer::OnReadAudioFormatInfoDone(
   if (!blocking_thread_.IsRunning()) {
     LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                << ": PIPELINE_ERROR_ABORT";
-    std::move(status_cb).Run(PipelineStatus::PIPELINE_ERROR_ABORT);
+    std::move(status_cb).Run(PIPELINE_ERROR_ABORT);
     return;
   }
 
   if (read_size <= 0) {
     LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                << ": DEMUXER_ERROR_COULD_NOT_OPEN";
-    std::move(status_cb).Run(PipelineStatus::DEMUXER_ERROR_COULD_NOT_OPEN);
+    std::move(status_cb).Run(DEMUXER_ERROR_COULD_NOT_OPEN);
     return;
   }
 
@@ -238,7 +238,7 @@ void CoreAudioDemuxer::OnReadAudioFormatInfoDone(
   if (err != noErr) {
     LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                << ": PIPELINE_ERROR_ABORT";
-    std::move(status_cb).Run(PipelineStatus::PIPELINE_ERROR_ABORT);
+    std::move(status_cb).Run(PIPELINE_ERROR_ABORT);
     return;
   }
 
@@ -249,20 +249,20 @@ void CoreAudioDemuxer::OnReadAudioFormatInfoDone(
       LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << ": DEMUXER_ERROR_NO_SUPPORTED_STREAMS";
       std::move(status_cb).Run(
-          PipelineStatus::DEMUXER_ERROR_NO_SUPPORTED_STREAMS);
+          DEMUXER_ERROR_NO_SUPPORTED_STREAMS);
       return;
     }
 
     // Reset read offset to the beginning.
     ResetDataSourceOffset();
-    std::move(status_cb).Run(PipelineStatus::PIPELINE_OK);
+    std::move(status_cb).Run(PIPELINE_OK);
   }
 }
 
 void CoreAudioDemuxer::OnDataSourceError() {
   LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
              << ": PIPELINE_ERROR_READ";
-  host_->OnDemuxerError(PipelineStatus::PIPELINE_ERROR_READ);
+  host_->OnDemuxerError(PIPELINE_ERROR_READ);
 }
 
 void CoreAudioDemuxer::AudioPacketsProc(

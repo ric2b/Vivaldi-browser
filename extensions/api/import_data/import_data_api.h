@@ -120,7 +120,6 @@ class ImportDataStartImportFunction : public ExtensionFunction {
   ResponseAction Run() override;
 
   void StartImport(const importer::SourceProfile& source_profile);
-  void ImportData(const base::ListValue* args);
 
   scoped_refptr<ui::SelectFileDialog> select_file_dialog_;
 

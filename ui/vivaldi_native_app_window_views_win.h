@@ -37,6 +37,8 @@ class VivaldiNativeAppWindowViewsWin : public VivaldiNativeAppWindowViewsAura {
   ui::ImageModel GetWindowIcon() override;
   ui::ImageModel GetWindowAppIcon() override;
 
+  void NativeWidgetWorkspaceChanged();
+
  protected:
   gfx::Insets GetFrameInsets() const override;
 

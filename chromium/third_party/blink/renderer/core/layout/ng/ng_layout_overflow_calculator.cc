@@ -136,6 +136,9 @@ const PhysicalRect NGLayoutOverflowCalculator::Result(
       converter.ToLogical(padding_rect_.size).inline_size)
     return normal_overflow;
 
+  if (!inflow_bounds->IsEmpty())
+    return normal_overflow;
+
   // We'd like everything to be |normal_overflow|, lets see what the impact
   // would be.
   if (node_.Style().OverflowInlineDirection() == EOverflow::kAuto ||
@@ -172,15 +175,7 @@ void NGLayoutOverflowCalculator::AddItemsInternal(
       if (line_rect.IsEmpty())
         continue;
 
-      // Currently line-boxes don't contribute overflow in the block-axis. This
-      // was added for web-compat reasons.
-      PhysicalRect child_overflow = line_rect;
-      if (writing_direction_.IsHorizontal())
-        child_overflow.size.height = LayoutUnit();
-      else
-        child_overflow.size.width = LayoutUnit();
-
-      layout_overflow_.UniteEvenIfEmpty(child_overflow);
+      layout_overflow_.UniteEvenIfEmpty(line_rect);
       continue;
     }
 
@@ -291,7 +286,7 @@ PhysicalRect NGLayoutOverflowCalculator::LayoutOverflowForPropagation(
       child_fragment.ShouldApplyLayoutContainment() ||
       child_fragment.IsInlineBox() ||
       (child_fragment.ShouldClipOverflowAlongBothAxis() &&
-       child_style.OverflowClipMargin() == LayoutUnit()) ||
+       !child_fragment.ShouldApplyOverflowClipMargin()) ||
       child_fragment.IsHiddenForPaint();
 
   if (!ignore_layout_overflow) {
@@ -299,14 +294,13 @@ PhysicalRect NGLayoutOverflowCalculator::LayoutOverflowForPropagation(
     if (child_fragment.HasNonVisibleOverflow()) {
       const OverflowClipAxes overflow_clip_axes =
           child_fragment.GetOverflowClipAxes();
-      const LayoutUnit overflow_clip_margin = child_style.OverflowClipMargin();
-      if (overflow_clip_margin != LayoutUnit()) {
-        // overflow_clip_margin should only be set if 'overflow' is 'clip' along
-        // both axis.
+      if (child_fragment.ShouldApplyOverflowClipMargin()) {
+        // ShouldApplyOverflowClipMargin should only be true if we're clipping
+        // overflow in both axes.
         DCHECK_EQ(overflow_clip_axes, kOverflowClipBothAxis);
         PhysicalRect child_padding_rect({}, child_fragment.Size());
         child_padding_rect.Contract(child_fragment.Borders());
-        child_padding_rect.Inflate(overflow_clip_margin);
+        child_padding_rect.Inflate(child_style.OverflowClipMargin());
         child_overflow.Intersect(child_padding_rect);
       } else {
         if (overflow_clip_axes & kOverflowClipX) {
@@ -326,7 +320,7 @@ PhysicalRect NGLayoutOverflowCalculator::LayoutOverflowForPropagation(
   if (absl::optional<TransformationMatrix> transform =
           node_.GetTransformForChildFragment(child_fragment, size_)) {
     overflow =
-        PhysicalRect::EnclosingRect(transform->MapRect(FloatRect(overflow)));
+        PhysicalRect::EnclosingRect(transform->MapRect(gfx::RectF(overflow)));
   }
 
   return overflow;

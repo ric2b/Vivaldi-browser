@@ -192,7 +192,7 @@ void ManifestManager::OnManifestFetchComplete(const KURL& document_url,
   }
 
   manifest_debug_info_ = mojom::blink::ManifestDebugInfo::New();
-  manifest_debug_info_->raw_manifest = data;
+  manifest_debug_info_->raw_manifest = data.IsNull() ? "" : data;
   parser.TakeErrors(&manifest_debug_info_->errors);
 
   for (const auto& error : manifest_debug_info_->errors) {
@@ -225,6 +225,11 @@ void ManifestManager::RecordMetrics(const mojom::blink::Manifest& manifest) {
                       WebFeature::kWebAppManifestCaptureLinks);
   }
 
+  if (manifest.handle_links != mojom::blink::HandleLinks::kUndefined) {
+    UseCounter::Count(GetSupplementable(),
+                      WebFeature::kWebAppManifestHandleLinks);
+  }
+
   if (!manifest.launch_handler.is_null()) {
     UseCounter::Count(GetSupplementable(),
                       WebFeature::kWebAppManifestLaunchHandler);
@@ -246,6 +251,11 @@ void ManifestManager::RecordMetrics(const mojom::blink::Manifest& manifest) {
       UseCounter::Count(GetSupplementable(),
                         WebFeature::kWebAppWindowControlsOverlay);
     }
+  }
+
+  if (!manifest.user_preferences.is_null()) {
+    UseCounter::Count(GetSupplementable(),
+                      WebFeature::kWebAppManifestUserPreferences);
   }
 }
 

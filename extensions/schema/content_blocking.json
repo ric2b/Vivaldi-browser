@@ -160,8 +160,8 @@
         }
       },
       {
-        "id": "BlockedDomainCounter",
-        "description": "How often requests to given domain were blocked",
+        "id": "BlockedCounter",
+        "description": "How often requests relating to a domain were blocked",
         "type": "object",
         "properties": {
           "domain": {
@@ -653,28 +653,55 @@
         }
       },
       {
-        "name": "getBlockedDomainCounters",
+        "name": "getBlockedCounters",
         "type": "function",
-        "description": "Retrieves the amount of requests blocked per domain since the last time the counters got reset.",
+        "description": "Retrieves the amount of requests blocked since the last time the counters got reset.",
         "parameters": [
           {
             "name": "callback",
             "type": "function",
             "parameters": [
               {
+                "name": "reporting_start",
+                "type": "number",
+                "description": "The time at which the counters have been initialized or reset."
+              },
+              {
                 "name": "counters",
                 "type": "object",
                 "properties": {
-                  "tracking": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "BlockedDomainCounter"
+                  "blocked_domains": {
+                    "type": "object",
+                    "properties": {
+                      "tracking": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "BlockedCounter"
+                        }
+                      },
+                      "ad_blocking": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "BlockedCounter"
+                        }
+                      }
                     }
                   },
-                  "ad_blocking": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "BlockedDomainCounter"
+                  "blocked_for_origin": {
+                    "type": "object",
+                    "properties": {
+                      "tracking": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "BlockedCounter"
+                        }
+                      },
+                      "ad_blocking": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "BlockedCounter"
+                        }
+                      }
                     }
                   }
                 }
@@ -684,9 +711,9 @@
         ]
       },
       {
-        "name": "clearBlockedDomainCounters",
+        "name": "clearBlockedCounters",
         "type": "function",
-        "description": "Resets the counters used for getBlockedDomainCounters",
+        "description": "Resets the counters used for getBlockedCounters",
         "parameters": []
       },
       {

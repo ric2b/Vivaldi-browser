@@ -85,6 +85,8 @@ class VivaldiNativeAppWindowViews : public views::WidgetDelegateView,
   virtual bool IsOnCurrentWorkspace() const;
   virtual void UpdateEventTargeterWithInset();
   virtual void ShowEmojiPanel();
+  virtual std::string GetWorkspace() const;
+  virtual bool IsVisibleOnAllWorkspaces() const;
 
   virtual ui::WindowShowState GetRestoredState() const;
 

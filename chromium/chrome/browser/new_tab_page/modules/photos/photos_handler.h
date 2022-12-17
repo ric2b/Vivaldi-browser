@@ -26,6 +26,11 @@ class PhotosHandler : public photos::mojom::PhotosHandler {
   void ShouldShowOptInScreen(ShouldShowOptInScreenCallback callback) override;
   void OnUserOptIn(bool accept) override;
   void OnMemoryOpen() override;
+  void ShouldShowSoftOptOutButton(
+      ShouldShowSoftOptOutButtonCallback callback) override;
+  void SoftOptOut() override;
+  void GetOptInTitleText(std::vector<photos::mojom::MemoryPtr> memories,
+                         GetOptInTitleTextCallback callback) override;
 
  private:
   mojo::Receiver<photos::mojom::PhotosHandler> handler_;

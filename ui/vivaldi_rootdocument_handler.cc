@@ -73,6 +73,10 @@ void VivaldiRootDocumentHandler::OnOffTheRecordProfileCreated(
   DCHECK(vivaldi_extension_);
   vivaldi_document_loader_off_the_record_ =
       new VivaldiDocumentLoader(off_the_record, vivaldi_extension_);
+    // get the navigation-state updates
+  content::WebContentsObserver::Observe(
+      vivaldi_document_loader_off_the_record_->GetWebContents());
+
 }
 
 void VivaldiRootDocumentHandler::OnProfileWillBeDestroyed(Profile* profile) {
@@ -92,7 +96,33 @@ void VivaldiRootDocumentHandler::OnExtensionLoaded(
       !vivaldi_document_loader_) {
     vivaldi_document_loader_ = new VivaldiDocumentLoader(profile_, extension);
     vivaldi_extension_ = extension;
+
+    // get the navigation-state updates
+    content::WebContentsObserver::Observe(vivaldi_document_loader_->GetWebContents());
+
   }
+}
+
+void VivaldiRootDocumentHandler::DidFinishNavigation(
+    content::NavigationHandle* navigation_handle) {
+
+  if (!navigation_handle->HasCommitted() ||
+      (!navigation_handle->IsInMainFrame() &&
+       !navigation_handle->HasSubframeNavigationEntryCommitted()))
+    return;
+
+  if (navigation_handle->GetWebContents() ==
+      vivaldi_document_loader_->GetWebContents()) {
+    document_loader_is_ready_ = true;
+  } else if (navigation_handle->GetWebContents() ==
+             vivaldi_document_loader_off_the_record_->GetWebContents()) {
+    otr_document_loader_is_ready_ = true;
+  }
+
+  for (auto& observer : observers_) {
+    observer.OnRootDocumentDidFinishNavigation();
+  }
+
 }
 
 void VivaldiRootDocumentHandler::OnExtensionUnloaded(
@@ -120,6 +150,30 @@ void VivaldiRootDocumentHandler::Shutdown() {
   vivaldi_document_loader_ = nullptr;
   delete vivaldi_document_loader_off_the_record_;
   vivaldi_document_loader_off_the_record_ = nullptr;
+}
+
+void VivaldiRootDocumentHandler::AddObserver(
+    VivaldiRootDocumentHandlerObserver* observer) {
+  observers_.AddObserver(observer);
+
+  // Check if we already has loaded the document for the same profile and report.
+  content::BrowserContext* observercontext =
+      observer->GetRootDocumentWebContents()->GetBrowserContext();
+  if ((document_loader_is_ready_ &&
+       observercontext ==
+           vivaldi_document_loader_->GetWebContents()->GetBrowserContext()) ||
+      (otr_document_loader_is_ready_ &&
+       observercontext ==
+           vivaldi_document_loader_off_the_record_->GetWebContents()
+               ->GetBrowserContext())) {
+    observer->OnRootDocumentDidFinishNavigation();
+  }
+
+}
+
+void VivaldiRootDocumentHandler::RemoveObserver(
+    VivaldiRootDocumentHandlerObserver* observer) {
+  observers_.RemoveObserver(observer);
 }
 
 }  // namespace extensions

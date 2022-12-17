@@ -9,6 +9,8 @@
 
 #include "components/version_info/version_info.h"
 
+#include "app/vivaldi_constants.h"
+
 class GURL;
 
 namespace base {
@@ -19,10 +21,12 @@ namespace syncer {
 namespace internal {
 
 // Default sync server URL. Visible for testing.
-extern const char* const kSyncServerUrl;
+inline constexpr char kSyncServerUrl[] =
+    KNOWN_404("/chrome-sync");
 
 // Sync server URL for dev channel users. Visible for testing.
-extern const char* const kSyncDevServerUrl;
+inline constexpr char kSyncDevServerUrl[] =
+    KNOWN_404("/chrome-sync/dev");
 
 // Formats user agent string from system string and channel. Visible for
 // testing.

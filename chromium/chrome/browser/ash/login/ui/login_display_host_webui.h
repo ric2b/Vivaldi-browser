@@ -69,6 +69,7 @@ class LoginDisplayHostWebUI : public LoginDisplayHostCommon,
   LoginDisplay* GetLoginDisplay() override;
   ExistingUserController* GetExistingUserController() override;
   gfx::NativeWindow GetNativeWindow() const override;
+  views::Widget* GetLoginWindowWidget() const override;
   OobeUI* GetOobeUI() const override;
   content::WebContents* GetOobeWebContents() const override;
   WebUILoginView* GetWebUILoginView() const override;
@@ -85,7 +86,7 @@ class LoginDisplayHostWebUI : public LoginDisplayHostCommon,
   void ShowGaiaDialog(const AccountId& prefilled_account) override;
   void ShowOsInstallScreen() override;
   void ShowGuestTosScreen() override;
-  void HideOobeDialog() override;
+  void HideOobeDialog(bool saml_video_timeout = false) override;
   void SetShelfButtonsEnabled(bool enabled) override;
   void UpdateOobeDialogState(OobeDialogState state) override;
   void HandleDisplayCaptivePortal() override;

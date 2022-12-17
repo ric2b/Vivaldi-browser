@@ -30,6 +30,7 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/policy/core/common/policy_pref_names.h"
 #include "components/policy/policy_constants.h"
+#include "components/policy/proto/cloud_policy.pb.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "content/public/test/browser_test.h"
 #include "testing/gmock/include/gmock/gmock-matchers.h"
@@ -138,6 +139,13 @@ class FakeDlpController : public DataTransferDlpController,
   absl::optional<ui::DataTransferEndpoint> blink_data_dst_;
   base::RepeatingClosure blink_quit_cb_ = base::DoNothing();
   bool force_paste_on_warn_ = false;
+
+ protected:
+  base::TimeDelta GetSkipReportingTimeout() override {
+    // Override with a very high value to ensure that tests are passing on slow
+    // debug builds.
+    return base::Milliseconds(1000);
+  }
 };
 
 class MockDlpRulesManager : public DlpRulesManagerImpl {
@@ -176,11 +184,10 @@ class DataTransferDlpBrowserTest : public LoginPolicyTestBase {
     std::string json;
     base::JSONWriter::Write(rules, &json);
 
-    base::DictionaryValue policy;
-    policy.SetKey(key::kDataLeakPreventionRulesList, base::Value(json));
+    enterprise_management::CloudPolicySettings policy;
+    policy.mutable_dataleakpreventionruleslist()->set_value(json);
     user_policy_helper()->SetPolicyAndWait(
-        policy, /*recommended=*/base::DictionaryValue(),
-        ProfileManager::GetActiveUserProfile());
+        policy, ProfileManager::GetActiveUserProfile());
   }
 
   void SetupCrostini() {
@@ -672,8 +679,7 @@ IN_PROC_BROWSER_TEST_F(DataTransferDlpBlinkBrowserTest, MAYBE_ProceedOnWarn) {
   EXPECT_EQ(events.size(), 2u);
   EXPECT_THAT(events[1],
               IsDlpPolicyEvent(CreateDlpPolicyWarningProceededEvent(
-                  kMailUrl, "*", DlpRulesManager::Restriction::kClipboard,
-                  DlpRulesManager::Level::kNotSet)));
+                  kMailUrl, "*", DlpRulesManager::Restriction::kClipboard)));
 
   testing::Mock::VerifyAndClearExpectations(&dlp_controller_);
 }
@@ -845,8 +851,7 @@ IN_PROC_BROWSER_TEST_F(DataTransferDlpBlinkBrowserTest,
   EXPECT_EQ(events.size(), 1u);
   EXPECT_THAT(events[0],
               IsDlpPolicyEvent(CreateDlpPolicyWarningProceededEvent(
-                  kMailUrl, "*", DlpRulesManager::Restriction::kClipboard,
-                  DlpRulesManager::Level::kNotSet)));
+                  kMailUrl, "*", DlpRulesManager::Restriction::kClipboard)));
 
   testing::Mock::VerifyAndClearExpectations(&dlp_controller_);
 }

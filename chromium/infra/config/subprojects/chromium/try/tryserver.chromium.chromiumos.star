@@ -47,6 +47,7 @@ try_.orchestrator_builder(
     name = "chromeos-amd64-generic-rel",
     compilator = "chromeos-amd64-generic-rel-compilator",
     branch_selector = branches.CROS_LTS_MILESTONE,
+    mirrors = ["ci/chromeos-amd64-generic-rel"],
     main_list_view = "try",
     tryjob = try_.job(),
 )
@@ -174,24 +175,26 @@ try_.builder(
 )
 
 try_.builder(
-    name = "linux-lacros-rel-rts",
-    builderless = False,
-    cores = 16,
-    ssd = True,
-    goma_jobs = goma.jobs.J300,
-    main_list_view = "try",
-    os = os.LINUX_BIONIC_REMOVE,
-    tryjob = try_.job(
-        experiment_percentage = 1,
-    ),
-)
-
-try_.builder(
     name = "linux-chromeos-dbg",
+    # The CI builder that this mirrors is enabled on branches, so this will
+    # allow testing changes that would break it before submitting
+    branch_selector = branches.STANDARD_MILESTONE,
 )
 
 try_.builder(
     name = "linux-chromeos-annotator-rel",
+)
+
+try_.builder(
+    name = "linux-chromeos-clang-tidy-rel",
+    executable = "recipe:tricium_clang_tidy_wrapper",
+    goma_jobs = goma.jobs.J150,
+)
+
+try_.builder(
+    name = "linux-lacros-clang-tidy-rel",
+    executable = "recipe:tricium_clang_tidy_wrapper",
+    goma_jobs = goma.jobs.J150,
 )
 
 try_.builder(
@@ -212,7 +215,11 @@ try_.builder(
 # RTS builders
 
 try_.builder(
-    name = "chromeos-amd64-generic-rel-rts",
+    name = "linux-chromeos-rel-rts",
     builderless = False,
-    os = os.LINUX_XENIAL_OR_BIONIC_REMOVE,
+    use_clang_coverage = True,
+    coverage_test_types = ["unit", "overall"],
+    tryjob = try_.job(
+        experiment_percentage = 1,
+    ),
 )

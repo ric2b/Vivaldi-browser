@@ -145,14 +145,14 @@
 // Matcher for Add to bookmarks button.
 + (id<GREYMatcher>)addToBookmarksButton;
 
-// Matcher for SettingsSwitchCell.
-+ (id<GREYMatcher>)settingsSwitchCell:(NSString*)accessibilityIdentifier
-                          isToggledOn:(BOOL)isToggledOn;
+// Matcher for TableViewSwitchCell.
++ (id<GREYMatcher>)tableViewSwitchCell:(NSString*)accessibilityIdentifier
+                           isToggledOn:(BOOL)isToggledOn;
 
-// Matcher for SettingsSwitchCell.
-+ (id<GREYMatcher>)settingsSwitchCell:(NSString*)accessibilityIdentifier
-                          isToggledOn:(BOOL)isToggledOn
-                            isEnabled:(BOOL)isEnabled;
+// Matcher for TableViewSwitchCell.
++ (id<GREYMatcher>)tableViewSwitchCell:(NSString*)accessibilityIdentifier
+                           isToggledOn:(BOOL)isToggledOn
+                             isEnabled:(BOOL)isEnabled;
 
 // Matcher for SyncSwitchCell.
 + (id<GREYMatcher>)syncSwitchCell:(NSString*)accessibilityLabel
@@ -405,7 +405,7 @@
 // Returns matcher for the Copy item on the old-style context menu.
 + (id<GREYMatcher>)contextMenuCopyButton;
 
-// Returns matcher for defoucesed omnibox on a new tab.
+// Returns matcher for defocused omnibox on a new tab.
 + (id<GREYMatcher>)NTPOmnibox;
 
 // Returns matcher for a fake omnibox on a new tab page.
@@ -515,6 +515,9 @@
 
 // Returns a matcher for a history entry with |url| and |title|.
 + (id<GREYMatcher>)historyEntryForURL:(NSString*)URL title:(NSString*)title;
+
+// Returns a matcher to the add button in the toolbar of the settings view.
++ (id<GREYMatcher>)settingsToolbarAddButton;
 
 #pragma mark - Manual Fallback
 

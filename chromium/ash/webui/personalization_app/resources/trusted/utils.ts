@@ -8,7 +8,7 @@
 
 import {FilePath} from 'chrome://resources/mojo/mojo/public/mojom/base/file_path.mojom-webui.js';
 
-import {WallpaperImage, WallpaperLayout} from '../trusted/personalization_app.mojom-webui.js';
+import {GooglePhotosPhoto, WallpaperImage, WallpaperLayout} from '../trusted/personalization_app.mojom-webui.js';
 
 export function isWallpaperImage(obj: any): obj is WallpaperImage {
   return typeof obj?.assetId === 'bigint';
@@ -16,6 +16,11 @@ export function isWallpaperImage(obj: any): obj is WallpaperImage {
 
 export function isFilePath(obj: any): obj is FilePath {
   return typeof obj?.path === 'string' && obj.path;
+}
+
+/** Checks whether |obj| is an instance of |GooglePhotosPhoto|. */
+export function isGooglePhotosPhoto(obj: any): obj is GooglePhotosPhoto {
+  return typeof obj?.id === 'string';
 }
 
 /**
@@ -36,4 +41,22 @@ export function getWallpaperLayoutEnum(layout: string): WallpaperLayout {
  */
 export function isNonEmptyString(maybeString: unknown): maybeString is string {
   return typeof maybeString === 'string' && maybeString.length > 0;
+}
+
+/**
+ * Wallpaper images sometimes have a resolution suffix appended to the end of
+ * the image. This is typically to fetch a high resolution image to show as the
+ * user's wallpaper. We do not want the full resolution here, so remove the
+ * suffix to get a 512x512 preview.
+ * TODO(b/186807814) support different resolution parameters here.
+ */
+export function removeHighResolutionSuffix(url: string): string {
+  return url.replace(/=w\d+$/, '');
+}
+
+/**
+ * Returns whether the given URL starts with http:// or https://.
+ */
+export function hasHttpScheme(url: string): boolean {
+  return url.startsWith('http://') || url.startsWith('https://');
 }

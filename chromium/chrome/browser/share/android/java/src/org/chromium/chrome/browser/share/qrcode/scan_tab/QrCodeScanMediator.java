@@ -27,10 +27,10 @@ import org.chromium.base.task.AsyncTask;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.browserservices.intents.WebappConstants;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
-import org.chromium.ui.base.ActivityAndroidPermissionDelegate;
-import org.chromium.ui.base.AndroidPermissionDelegate;
-import org.chromium.ui.base.PermissionCallback;
 import org.chromium.ui.modelutil.PropertyModel;
+import org.chromium.ui.permissions.ActivityAndroidPermissionDelegate;
+import org.chromium.ui.permissions.AndroidPermissionDelegate;
+import org.chromium.ui.permissions.PermissionCallback;
 import org.chromium.ui.widget.Toast;
 
 import java.lang.ref.WeakReference;
@@ -39,6 +39,8 @@ import java.nio.ByteBuffer;
 // Vivaldi
 import android.content.ClipData;
 import android.content.ClipboardManager;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.TextUtils;
 
 import androidx.annotation.Nullable;
@@ -193,9 +195,11 @@ public class QrCodeScanMediator implements Camera.PreviewCallback {
 
         Barcode firstCode = barcodes.valueAt(0);
         if (!URLUtil.isValidUrl(firstCode.rawValue)) {
-            if (ChromeApplicationImpl.isVivaldi())
-                promptForScannedNonUrlOptions(firstCode.rawValue, camera);
-            else {
+            if (ChromeApplicationImpl.isVivaldi()) {
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    promptForScannedNonUrlOptions(firstCode.rawValue, camera);
+                });
+            } else {
             String toastMessage =
                     mContext.getString(R.string.qr_code_not_a_url_label, firstCode.rawValue);
             if (mToast != null) {

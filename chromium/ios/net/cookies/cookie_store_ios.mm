@@ -44,6 +44,8 @@ namespace net {
 
 using CookieDeletionInfo = CookieDeletionInfo;
 
+bool const kFirstPartySetsEnabled = false;
+
 namespace {
 
 #pragma mark NotificationTrampoline
@@ -241,7 +243,8 @@ void CookieStoreIOS::SetCanonicalCookieAsync(
     std::unique_ptr<net::CanonicalCookie> cookie,
     const GURL& source_url,
     const net::CookieOptions& options,
-    SetCookiesCallback callback) {
+    SetCookiesCallback callback,
+    const net::CookieAccessResult* cookie_access_result) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   // If cookies are not allowed, a CookieStoreIOS subclass should be used
@@ -256,12 +259,18 @@ void CookieStoreIOS::SetCanonicalCookieAsync(
   CookieAccessScheme access_scheme =
       cookie_util::ProvisionalAccessScheme(source_url);
 
+  net::CookieAccessResult access_result;
+  if (cookie_access_result) {
+    access_result = *cookie_access_result;
+  }
+
   if (cookie->IsSecure() &&
       access_scheme == CookieAccessScheme::kNonCryptographic) {
-    if (!callback.is_null())
-      std::move(callback).Run(
-          net::CookieAccessResult(net::CookieInclusionStatus(
-              net::CookieInclusionStatus::EXCLUDE_SECURE_ONLY)));
+    if (!callback.is_null()) {
+      access_result.status.AddExclusionReason(
+          net::CookieInclusionStatus::EXCLUDE_SECURE_ONLY);
+      std::move(callback).Run(access_result);
+    }
     return;
   }
 
@@ -270,13 +279,15 @@ void CookieStoreIOS::SetCanonicalCookieAsync(
   if (ns_cookie != nil) {
     system_store_->SetCookieAsync(
         ns_cookie, &cookie->CreationDate(),
-        BindSetCookiesCallback(&callback, net::CookieAccessResult()));
+        BindSetCookiesCallback(&callback, access_result));
     return;
   }
 
-  if (!callback.is_null())
-    std::move(callback).Run(net::CookieAccessResult(net::CookieInclusionStatus(
-        net::CookieInclusionStatus::EXCLUDE_FAILURE_TO_STORE)));
+  if (!callback.is_null()) {
+    access_result.status.AddExclusionReason(
+        net::CookieInclusionStatus::EXCLUDE_FAILURE_TO_STORE);
+    std::move(callback).Run(access_result);
+  }
 }
 
 void CookieStoreIOS::GetCookieListWithOptionsAsync(
@@ -408,7 +419,8 @@ CookieStoreIOS::CookieStoreIOS(
     std::unique_ptr<SystemCookieStore> system_store,
     NetLog* net_log)
     : cookie_monster_(new net::CookieMonster(persistent_store,
-                                             net_log)),
+                                             net_log,
+                                             net::kFirstPartySetsEnabled)),
       system_store_(std::move(system_store)),
       metrics_enabled_(false),
       cookie_cache_(new CookieCache()),

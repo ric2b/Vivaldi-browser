@@ -45,7 +45,7 @@ class FCMHandler : public gcm::GCMAppHandler, public Registration {
     // number of new registrations with the FCM service. Thus this code does not
     // compile on other platforms. Check with //components/gcm_driver owners
     // before changing this.
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
     CHECK(false) << "Do not use outside of Android.";
 #endif
 
@@ -74,7 +74,9 @@ class FCMHandler : public gcm::GCMAppHandler, public Registration {
     instance_id_->GetToken(
         kFCMSenderId, instance_id::kGCMScope,
         /*time_to_live=*/base::TimeDelta(),
-        /*flags=*/{},
+        // This flag causes high-priority messages to be processed immediately
+        // rather than deferred until the device is not dozing.
+        {instance_id::InstanceID::Flags::kBypassScheduler},
         base::BindOnce(&FCMHandler::GetTokenComplete, base::Unretained(this)));
   }
 

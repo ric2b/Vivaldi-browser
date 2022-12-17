@@ -7,8 +7,8 @@ import("//vivaldi/app/resources/generate_untranslated.gni")
 gritinfo_cmd = "//tools/grit/grit_info.py"
 _grit_cmd = "//tools/grit/grit.py"
 _default_grit_resource_ids = "//tools/gritsettings/resource_ids"
-if (!defined(locales)) {
-  locales = []
+if (!defined(platform_pak_locales)) {
+  platform_pak_locales = []
 }
 
 template("vivaldi_extract_untranslated") {
@@ -47,14 +47,14 @@ template("vivaldi_extract_untranslated") {
   # List of Chromium strings visible in the Vivaldi UI.
   idlist = "//vivaldi/vivapp/bin/gettext/ids.txt"
 
-  foreach(locale, locales + vivaldi_pending_locales - ["ar-XB", "en-US", "en-XA"]) {
+  foreach(locale, platform_pak_locales + vivaldi_pending_locales - ["ar-XB", "en-US", "en-XA"]) {
     name = "${target_name}_extract_$locale"
     deps_list += [":"+name]
 
     xtb_sources = []
     # Vivaldi support locales that Chromium doesn't, exclude ours for source in merge mode
     use_source_locale = !defined(vivaldi_source)
-    foreach(test_locale, locales) {
+    foreach(test_locale, platform_pak_locales) {
       if (test_locale == locale) {
         use_source_locale = true
       }
@@ -62,7 +62,7 @@ template("vivaldi_extract_untranslated") {
     if (use_source_locale) {
       corrected_locale = locale
       if (defined(vivaldi_source) && (!defined(invoker.no_override_locales) || !invoker.no_override_locales)) {
-        # Chromium uses "iw" for "he" and "no" for "nb" locales
+        # Chromium uses "iw" for "he" and "no" for "nb" platform_pak_locales
         if(locale == "he") {
           corrected_locale = "iw"
         } else if (locale == "nb") {

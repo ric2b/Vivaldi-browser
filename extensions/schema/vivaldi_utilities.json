@@ -520,6 +520,11 @@
           "tld": {
             "type": "string",
             "optional": true
+          },
+          "urlForSecurityDisplay":  {
+            "type": "string",
+            "optional": true,
+            "description":  "URL formatted for security display, meaning formatted in unicode in a way to avoid IDN homograph attack."
           }
         }
       },

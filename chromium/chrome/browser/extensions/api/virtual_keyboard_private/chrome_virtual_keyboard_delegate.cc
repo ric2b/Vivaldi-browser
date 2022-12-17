@@ -354,10 +354,19 @@ bool ChromeVirtualKeyboardDelegate::SetWindowBoundsInScreen(
 void ChromeVirtualKeyboardDelegate::GetClipboardHistory(
     const std::set<std::string>& item_ids_filter,
     OnGetClipboardHistoryCallback get_history_callback) {
+  // Do not leak clipboard history items if the screen is locked.
+  if (ash::ScreenLocker::default_screen_locker() &&
+      ash::ScreenLocker::default_screen_locker()->locked()) {
+    std::move(get_history_callback).Run(base::Value(base::Value::Type::LIST));
+    return;
+  }
+
   ash::ClipboardHistoryController* clipboard_history_controller =
       ash::ClipboardHistoryController::Get();
-  if (!clipboard_history_controller)
+  if (!clipboard_history_controller) {
+    std::move(get_history_callback).Run(base::Value(base::Value::Type::LIST));
     return;
+  }
 
   // Begin renderng all items in the clipboard history. Current items will
   // render even if Deactivate() is called on the ClipboardImageModelFactory.
@@ -486,7 +495,7 @@ void ChromeVirtualKeyboardDelegate::OnGetHistoryValuesAfterItemsUpdated(
     return;
 
   // Broadcast an api event for each updated item.
-  for (auto& item : updated_items.GetList()) {
+  for (auto& item : updated_items.GetListDeprecated()) {
     keyboard_api::ClipboardItem clipboard_item;
     if (item.FindKey("imageData")) {
       clipboard_item.image_data =
@@ -518,14 +527,14 @@ void ChromeVirtualKeyboardDelegate::OnHasInputDevices(
   auto* keyboard_client = ChromeKeyboardControllerClient::Get();
 
   std::unique_ptr<base::DictionaryValue> results(new base::DictionaryValue());
-  results->SetString("layout", GetKeyboardLayout());
+  results->SetStringKey("layout", GetKeyboardLayout());
 
   // TODO(bshe): Consolidate a11y, hotrod and normal mode into a mode enum. See
   // crbug.com/529474.
-  results->SetBoolean("a11ymode",
+  results->SetBoolKey("a11ymode",
                       keyboard_client->IsEnableFlagSet(
                           keyboard::KeyboardEnableFlag::kAccessibilityEnabled));
-  results->SetBoolean("hotrodmode", g_hotrod_keyboard_enabled);
+  results->SetBoolKey("hotrodmode", g_hotrod_keyboard_enabled);
   base::Value features(base::Value::Type::LIST);
 
   keyboard::KeyboardConfig config = keyboard_client->GetKeyboardConfig();
@@ -559,6 +568,9 @@ void ChromeVirtualKeyboardDelegate::OnHasInputDevices(
   features.Append(GenerateFeatureFlag(
       "darkmode", base::FeatureList::IsEnabled(
                       chromeos::features::kVirtualKeyboardDarkMode)));
+  features.Append(GenerateFeatureFlag(
+      "newheader", base::FeatureList::IsEnabled(
+                       chromeos::features::kVirtualKeyboardNewHeader)));
 
   // Flag used to enable system built-in IME decoder instead of NaCl.
   features.Append(GenerateFeatureFlag("usemojodecoder", true));
@@ -568,39 +580,22 @@ void ChromeVirtualKeyboardDelegate::OnHasInputDevices(
   // TODO(b/171846787): Remove the 3 flags after they are removed from clients.
   features.Append(GenerateFeatureFlag("fstinputlogic", true));
   features.Append(GenerateFeatureFlag("hmminputlogic", true));
-  features.Append(GenerateFeatureFlag(
-      "imemozcproto",
-      base::FeatureList::IsEnabled(chromeos::features::kImeMozcProto)));
 
   features.Append(GenerateFeatureFlag(
       "borderedkey", base::FeatureList::IsEnabled(
                          chromeos::features::kVirtualKeyboardBorderedKey)));
   features.Append(GenerateFeatureFlag(
-      "assistiveAutoCorrect",
-      base::FeatureList::IsEnabled(chromeos::features::kAssistAutoCorrect)));
-  features.Append(GenerateFeatureFlag(
       "systemchinesephysicaltyping",
-      chromeos::features::IsSystemChinesePhysicalTypingEnabled()));
+      base::FeatureList::IsEnabled(
+          chromeos::features::kSystemChinesePhysicalTyping)));
   features.Append(GenerateFeatureFlag(
       "systemjapanesephysicaltyping",
-      chromeos::features::IsSystemJapanesePhysicalTypingEnabled()));
-  features.Append(GenerateFeatureFlag(
-      "systemkoreanphysicaltyping",
-      chromeos::features::IsSystemKoreanPhysicalTypingEnabled()));
+      base::FeatureList::IsEnabled(
+          chromeos::features::kSystemJapanesePhysicalTyping)));
   features.Append(GenerateFeatureFlag("systemlatinphysicaltyping", true));
   features.Append(GenerateFeatureFlag(
       "multilingualtyping",
       base::FeatureList::IsEnabled(chromeos::features::kMultilingualTyping)));
-  features.Append(GenerateFeatureFlag(
-      "multipaste", base::FeatureList::IsEnabled(
-                        chromeos::features::kVirtualKeyboardMultipaste)));
-  features.Append(GenerateFeatureFlag(
-      "multipaste-suggestion",
-      base::FeatureList::IsEnabled(
-          chromeos::features::kVirtualKeyboardMultipasteSuggestion)));
-  features.Append(GenerateFeatureFlag(
-      "imeoptionsinsettings",
-      base::FeatureList::IsEnabled(chromeos::features::kImeOptionsInSettings)));
 
   results->SetKey("features", std::move(features));
 
@@ -620,7 +615,7 @@ void ChromeVirtualKeyboardDelegate::DispatchConfigChangeEvent(
   auto event = std::make_unique<extensions::Event>(
       extensions::events::VIRTUAL_KEYBOARD_PRIVATE_ON_KEYBOARD_CONFIG_CHANGED,
       keyboard_api::OnKeyboardConfigChanged::kEventName,
-      std::move(*event_args).TakeList(), browser_context_);
+      std::move(*event_args).TakeListDeprecated(), browser_context_);
   router->BroadcastEvent(std::move(event));
 }
 
@@ -666,10 +661,11 @@ ChromeVirtualKeyboardDelegate::RestrictFeatures(
 
   if (config != current_config) {
     ChromeKeyboardControllerClient::Get()->SetKeyboardConfig(config);
-    // This reloads virtual keyboard even if it exists. This ensures virtual
-    // keyboard gets the correct state through
-    // chrome.virtualKeyboardPrivate.getKeyboardConfig.
-    // TODO(oka): Extension should reload on it's own by receiving event
+    // This reloads the virtual keyboard (VK) even if it exists, so it can get
+    // new restrictFeatures via chrome.virtualKeyboardPrivate.getKeyboardConfig.
+    // However, this reload is unnecessary as the API specs do NOT require
+    // restrictFeatures to take effect immediately midway through a VK session.
+    // Keeping this unnecessary reload for now, just to avoid behaviour changes.
     ChromeKeyboardControllerClient::Get()->RebuildKeyboardIfEnabled();
   }
   return update;

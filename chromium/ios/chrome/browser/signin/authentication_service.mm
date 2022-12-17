@@ -14,6 +14,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
+#include "components/signin/ios/browser/features.h"
 #import "components/signin/public/base/signin_pref_names.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/device_accounts_synchronizer.h"
@@ -21,7 +22,9 @@
 #include "components/sync/driver/sync_service.h"
 #include "components/sync/driver/sync_user_settings.h"
 #include "google_apis/gaia/gaia_auth_util.h"
+#import "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/crash_report/crash_keys_helper.h"
+#import "ios/chrome/browser/policy/policy_util.h"
 #include "ios/chrome/browser/pref_names.h"
 #import "ios/chrome/browser/signin/authentication_service_delegate.h"
 #import "ios/chrome/browser/signin/authentication_service_observer.h"
@@ -29,9 +32,7 @@
 #include "ios/chrome/browser/sync/sync_setup_service.h"
 #include "ios/chrome/browser/system_flags.h"
 #import "ios/chrome/browser/ui/authentication/signin/signin_utils.h"
-#include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #import "ios/public/provider/chrome/browser/signin/chrome_identity.h"
-#include "ios/public/provider/chrome/browser/signin/chrome_identity_service.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -124,15 +125,30 @@ void AuthenticationService::Initialize(
 
   MigrateAccountsStoredInPrefsIfNeeded();
 
+  identity_manager_observation_.Observe(identity_manager_);
   HandleForgottenIdentity(nil, /*should_prompt=*/true,
                           device_restore_session == signin::Tribool::kTrue);
 
   crash_keys::SetCurrentlySignedIn(
       HasPrimaryIdentity(signin::ConsentLevel::kSignin));
 
-  identity_service_observation_.Observe(
-      ios::GetChromeBrowserProvider().GetChromeIdentityService());
   account_manager_service_observation_.Observe(account_manager_service_);
+
+  // Register for prefs::kSigninAllowed.
+  pref_change_registrar_.Init(pref_service_);
+  PrefChangeRegistrar::NamedChangeCallback signin_allowed_callback =
+      base::BindRepeating(&AuthenticationService::OnSigninAllowedChanged,
+                          base::Unretained(this));
+  pref_change_registrar_.Add(prefs::kSigninAllowed, signin_allowed_callback);
+
+  // Register for prefs::kBrowserSigninPolicy.
+  PrefService* local_pref_service = GetApplicationContext()->GetLocalState();
+  local_pref_change_registrar_.Init(local_pref_service);
+  PrefChangeRegistrar::NamedChangeCallback browser_signin_policy_callback =
+      base::BindRepeating(&AuthenticationService::OnBrowserSigninPolicyChanged,
+                          base::Unretained(this));
+  local_pref_change_registrar_.Add(prefs::kBrowserSigninPolicy,
+                                   browser_signin_policy_callback);
 
   // Reload credentials to ensure the accounts from the token service are
   // up-to-date.
@@ -140,7 +156,6 @@ void AuthenticationService::Initialize(
   // application is cold starting, |keychain_reload| must be set to true.
   ReloadCredentialsFromIdentities(/*keychain_reload=*/true);
 
-  identity_manager_observation_.Observe(identity_manager_);
   OnApplicationWillEnterForeground();
   bool has_primary_account_after_initialize =
       identity_manager_->HasPrimaryAccount(signin::ConsentLevel::kSignin);
@@ -190,6 +205,27 @@ void AuthenticationService::AddObserver(
 void AuthenticationService::RemoveObserver(
     AuthenticationServiceObserver* observer) {
   observer_list_.RemoveObserver(observer);
+}
+
+AuthenticationService::ServiceStatus AuthenticationService::GetServiceStatus() {
+  if (!account_manager_service_->IsServiceSupported()) {
+    return ServiceStatus::SigninDisabledByInternal;
+  }
+  BrowserSigninMode policy_mode = static_cast<BrowserSigninMode>(
+      GetApplicationContext()->GetLocalState()->GetInteger(
+          prefs::kBrowserSigninPolicy));
+  switch (policy_mode) {
+    case BrowserSigninMode::kDisabled:
+      return ServiceStatus::SigninDisabledByPolicy;
+    case BrowserSigninMode::kForced:
+      return ServiceStatus::SigninForcedByPolicy;
+    case BrowserSigninMode::kEnabled:
+      break;
+  }
+  if (!pref_service_->GetBoolean(prefs::kSigninAllowed)) {
+    return ServiceStatus::SigninDisabledByUser;
+  }
+  return ServiceStatus::SigninAllowed;
 }
 
 void AuthenticationService::OnApplicationWillEnterForeground() {
@@ -252,16 +288,6 @@ void AuthenticationService::ApproveAccountList() {
       current_accounts_info);
 }
 
-void AuthenticationService::OnChromeIdentityServiceDidChange(
-    ios::ChromeIdentityService* new_service) {
-  identity_service_observation_.Observe(
-      ios::GetChromeBrowserProvider().GetChromeIdentityService());
-}
-
-void AuthenticationService::OnChromeBrowserProviderWillBeDestroyed() {
-  identity_service_observation_.Reset();
-}
-
 void AuthenticationService::MigrateAccountsStoredInPrefsIfNeeded() {
   if (identity_manager_->GetAccountIdMigrationState() ==
       signin::IdentityManager::AccountIdMigrationState::MIGRATION_NOT_STARTED) {
@@ -322,8 +348,57 @@ ChromeIdentity* AuthenticationService::GetPrimaryIdentity(
   return account_manager_service_->GetIdentityWithGaiaID(authenticated_gaia_id);
 }
 
-void AuthenticationService::SignIn(ChromeIdentity* identity) {
-  CHECK(signin::IsSigninAllowed(pref_service_));
+void AuthenticationService::SignIn(ChromeIdentity* identity,
+                                   signin_ui::CompletionCallback completion) {
+  base::WeakPtr<AuthenticationService> weak_ptr = GetWeakPtr();
+  ProceduralBlock signin_callback = ^() {
+    bool has_primary_identity = false;
+    AuthenticationService* strong_ptr = weak_ptr.get();
+    if (strong_ptr) {
+      strong_ptr->SignInInternal(identity);
+      has_primary_identity =
+          strong_ptr->HasPrimaryIdentity(signin::ConsentLevel::kSignin);
+    }
+    if (completion) {
+      completion(has_primary_identity);
+    }
+  };
+
+  if (base::FeatureList::IsEnabled(signin::kEnableUnicornAccountSupport)) {
+    ios::ChromeIdentityService* identity_service =
+        ios::GetChromeBrowserProvider().GetChromeIdentityService();
+    identity_service->IsSubjectToParentalControls(
+        identity, ^(ios::ChromeIdentityCapabilityResult result) {
+          AuthenticationService* strong_ptr = weak_ptr.get();
+          if (strong_ptr) {
+            strong_ptr->OnIsSubjectToParentalControlsResult(result,
+                                                            signin_callback);
+          }
+        });
+    return;
+  }
+
+  // When supervised user account are not enabled, sign in the account by
+  // default.
+  signin_callback();
+}
+
+void AuthenticationService::OnIsSubjectToParentalControlsResult(
+    ios::ChromeIdentityCapabilityResult result,
+    ProceduralBlock completion) {
+  // Clears browsing data for supervised users before sign-in operation.
+  if (result == ios::ChromeIdentityCapabilityResult::kTrue) {
+    delegate_->ClearBrowsingData(completion);
+  } else if (completion) {
+    completion();
+  }
+}
+
+void AuthenticationService::SignInInternal(ChromeIdentity* identity) {
+  ServiceStatus status = GetServiceStatus();
+  CHECK(status == ServiceStatus::SigninAllowed ||
+        status == ServiceStatus::SigninForcedByPolicy)
+      << "Service status " << static_cast<int>(status);
   DCHECK(account_manager_service_->IsValidIdentity(identity));
 
   primary_account_was_restricted_ = false;
@@ -425,19 +500,37 @@ void AuthenticationService::SignOut(
   sync_service_->StopAndClear();
 
   auto* account_mutator = identity_manager_->GetPrimaryAccountMutator();
-
   // GetPrimaryAccountMutator() returns nullptr on ChromeOS only.
   DCHECK(account_mutator);
+
+  // Retrieve primary identity before clearing in the account mutator.
+  ChromeIdentity* primary_identity =
+      GetPrimaryIdentity(signin::ConsentLevel::kSignin);
+
   account_mutator->ClearPrimaryAccount(
       signout_source, signin_metrics::SignoutDelete::kIgnoreMetric);
   crash_keys::SetCurrentlySignedIn(false);
   cached_mdm_infos_.clear();
+
   // Browsing data for managed account needs to be cleared only if sync has
   // started at least once.
   if (force_clear_browsing_data || (is_managed && is_first_setup_complete)) {
     delegate_->ClearBrowsingData(completion);
+  } else if (base::FeatureList::IsEnabled(
+                 signin::kEnableUnicornAccountSupport)) {
+    ios::ChromeIdentityService* identity_service =
+        ios::GetChromeBrowserProvider().GetChromeIdentityService();
+    base::WeakPtr<AuthenticationService> weak_ptr = GetWeakPtr();
+    identity_service->IsSubjectToParentalControls(
+        primary_identity, ^(ios::ChromeIdentityCapabilityResult result) {
+          AuthenticationService* strong_ptr = weak_ptr.get();
+          if (strong_ptr) {
+            strong_ptr->OnIsSubjectToParentalControlsResult(result, completion);
+          }
+        });
   } else if (completion) {
-    completion();
+    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                  base::BindOnce(completion));
   }
 }
 
@@ -487,8 +580,8 @@ void AuthenticationService::OnPrimaryAccountChanged(
     const signin::PrimaryAccountChangeEvent& event_details) {
   switch (event_details.GetEventTypeFor(signin::ConsentLevel::kSignin)) {
     case signin::PrimaryAccountChangeEvent::Type::kSet:
-      // TODO(crbug.com/1217673): Re-add DCHECK if approved account list
-      // must be empty prior to a set call.
+      DCHECK(user_approved_account_list_manager_.GetApprovedAccountIDList()
+                 .empty());
       ApproveAccountList();
       break;
     case signin::PrimaryAccountChangeEvent::Type::kCleared:
@@ -581,10 +674,6 @@ void AuthenticationService::OnAccessTokenRefreshFailed(
                      /*device_restore=*/false));
 }
 
-void AuthenticationService::OnChromeIdentityServiceWillBeDestroyed() {
-  identity_service_observation_.Reset();
-}
-
 void AuthenticationService::HandleForgottenIdentity(
     ChromeIdentity* invalid_identity,
     bool should_prompt,
@@ -665,5 +754,22 @@ void AuthenticationService::FirePrimaryAccountRestricted() {
   primary_account_was_restricted_ = true;
   for (auto& observer : observer_list_) {
     observer.OnPrimaryAccountRestricted();
+  }
+}
+
+void AuthenticationService::OnSigninAllowedChanged(const std::string& name) {
+  DCHECK_EQ(prefs::kSigninAllowed, name);
+  FireServiceStatusNotification();
+}
+
+void AuthenticationService::OnBrowserSigninPolicyChanged(
+    const std::string& name) {
+  DCHECK_EQ(prefs::kBrowserSigninPolicy, name);
+  FireServiceStatusNotification();
+}
+
+void AuthenticationService::FireServiceStatusNotification() {
+  for (auto& observer : observer_list_) {
+    observer.OnServiceStatusChanged();
   }
 }

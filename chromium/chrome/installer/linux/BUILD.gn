@@ -13,6 +13,7 @@ import("//build/util/lastchange.gni")
 import("//build/util/process_version.gni")
 import("//build/util/version.gni")
 import("//components/nacl/features.gni")
+import("//components/optimization_guide/features.gni")
 import("//third_party/angle/gni/angle.gni")
 import("//third_party/widevine/cdm/widevine.gni")
 import("//ui/gl/features.gni")
@@ -89,6 +90,11 @@ if (enable_swiftshader) {
     "$root_out_dir/swiftshader_libGLESv2.so",
     "$root_out_dir/libvk_swiftshader.so",
   ]
+}
+
+if (build_with_internal_optimization_guide) {
+  packaging_files_shlibs +=
+      [ "$root_out_dir/liboptimization_guide_internal.so" ]
 }
 
 packaging_files_binaries = packaging_files_executables + packaging_files_shlibs
@@ -253,6 +259,15 @@ if (enable_nacl) {
   }
 }
 
+if (build_with_internal_optimization_guide) {
+  strip_binary("strip_optimization_guide") {
+    binary_input = "$root_out_dir/liboptimization_guide_internal.so"
+    deps = [
+      "//components/optimization_guide/internal:optimization_guide_internal",
+    ]
+  }
+}
+
 # This target builds all "normal" Linux installers.  You must set
 # is_component_build=false before building this target.
 group("linux") {
@@ -332,22 +347,22 @@ copy("theme_files") {
   ]
   if (is_chrome_branded) {
     sources += [
+      "$branding_dir/linux/product_logo_128_beta.png",
+      "$branding_dir/linux/product_logo_128_dev.png",
+      "$branding_dir/linux/product_logo_24_beta.png",
+      "$branding_dir/linux/product_logo_24_dev.png",
+      "$branding_dir/linux/product_logo_256_beta.png",
+      "$branding_dir/linux/product_logo_256_dev.png",
       "$branding_dir/linux/product_logo_32_beta.xpm",
       "$branding_dir/linux/product_logo_32_dev.xpm",
-      "$branding_dir/product_logo_128_beta.png",
-      "$branding_dir/product_logo_128_dev.png",
-      "$branding_dir/product_logo_24_beta.png",
-      "$branding_dir/product_logo_24_dev.png",
-      "$branding_dir/product_logo_256_beta.png",
-      "$branding_dir/product_logo_256_dev.png",
-      "$branding_dir/product_logo_48_beta.png",
-      "$branding_dir/product_logo_48_dev.png",
-      "$branding_dir/product_logo_64_beta.png",
-      "$branding_dir/product_logo_64_dev.png",
-      "$branding_dir_100/product_logo_16_beta.png",
-      "$branding_dir_100/product_logo_16_dev.png",
-      "$branding_dir_100/product_logo_32_beta.png",
-      "$branding_dir_100/product_logo_32_dev.png",
+      "$branding_dir/linux/product_logo_48_beta.png",
+      "$branding_dir/linux/product_logo_48_dev.png",
+      "$branding_dir/linux/product_logo_64_beta.png",
+      "$branding_dir/linux/product_logo_64_dev.png",
+      "$branding_dir_100/linux/product_logo_16_beta.png",
+      "$branding_dir_100/linux/product_logo_16_dev.png",
+      "$branding_dir_100/linux/product_logo_32_beta.png",
+      "$branding_dir_100/linux/product_logo_32_dev.png",
     ]
   }
   if (defined(is_vivaldi) && is_vivaldi) {
@@ -448,6 +463,12 @@ group("installer_deps") {
   }
   if (!is_chromeos_ash) {
     public_deps += [ ":rpm_packaging_files" ]
+  }
+  if (build_with_internal_optimization_guide) {
+    public_deps += [
+      ":strip_optimization_guide",
+      "//components/optimization_guide/internal:optimization_guide_internal",
+    ]
   }
 }
 

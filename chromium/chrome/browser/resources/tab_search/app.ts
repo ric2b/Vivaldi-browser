@@ -16,44 +16,33 @@ import './tab_search_search_field.js';
 import './title_item.js';
 import './strings.m.js';
 
-import {assert} from 'chrome://resources/js/assert.m.js';
+import {assert} from 'chrome://resources/js/assert_ts.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {listenOnce} from 'chrome://resources/js/util.m.js';
 import {Token} from 'chrome://resources/mojo/mojo/public/mojom/base/token.mojom-webui.js';
 import {IronA11yAnnouncer} from 'chrome://resources/polymer/v3_0/iron-a11y-announcer/iron-a11y-announcer.js';
-import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {DomRepeatEvent, html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {fuzzySearch, FuzzySearchOptions} from './fuzzy_search.js';
 import {InfiniteList, NO_SELECTION, selectorNavigationKeys} from './infinite_list.js';
 import {ariaLabel, ItemData, TabData, TabGroupData, TabItemType, tokenEquals, tokenToString} from './tab_data.js';
-import {ProfileData, RecentlyClosedTab, RecentlyClosedTabGroup, Tab, TabGroup, TabsRemovedInfo, TabUpdateInfo, Window} from './tab_search.mojom-webui.js';
+import {ProfileData, RecentlyClosedTab, RecentlyClosedTabGroup, Tab, TabGroup, TabsRemovedInfo, TabUpdateInfo} from './tab_search.mojom-webui.js';
 import {TabSearchApiProxy, TabSearchApiProxyImpl} from './tab_search_api_proxy.js';
 import {TabSearchSearchField} from './tab_search_search_field.js';
+import {tabHasMediaAlerts} from './tab_search_utils.js';
 import {TitleItem} from './title_item.js';
 
 // The minimum number of list items we allow viewing regardless of browser
 // height. Includes a half row that hints to the user the capability to scroll.
 const MINIMUM_AVAILABLE_HEIGHT_LIST_ITEM_COUNT: number = 5.5;
 
-interface RepeaterEvent<T> extends Event {
-  model: {
-    item: T,
-    index: number,
-  };
-}
-
-interface RepeaterCustomEvent<M, P> extends CustomEvent<P> {
-  model: {
-    item: M,
-    index: number,
-  };
-}
-
-interface RepeaterKeyboardEvent<T> extends KeyboardEvent {
-  model: {
-    item: T,
-    index: number,
-  };
+/**
+ * These values are persisted to logs and should not be renumbered or re-used.
+ * See tools/metrics/histograms/enums.xml.
+ */
+export enum TabSwitchAction {
+  WITHOUT_SEARCH = 0,
+  WITH_SEARCH = 1,
 }
 
 export interface TabSearchAppElement {
@@ -141,9 +130,12 @@ export class TabSearchAppElement extends PolymerElement {
   private openTabs_: Array<TabData> = [];
   private recentlyClosedTabs_: Array<TabData> = [];
   private windowShownTimestamp_: number = Date.now();
+  private mediaTabsTitleItem_: TitleItem;
   private openTabsTitleItem_: TitleItem;
   private recentlyClosedTitleItem_: TitleItem;
   private filteredOpenTabsCount_: number = 0;
+  private filteredMediaTabsCount_: number = 0;
+  private initiallySelectedTabIndex_: number = NO_SELECTION;
   private visibilityChangedListener_: () => void;
 
   constructor() {
@@ -158,6 +150,9 @@ export class TabSearchAppElement extends PolymerElement {
         this.onDocumentHidden_();
       }
     };
+
+    this.mediaTabsTitleItem_ =
+        new TitleItem(loadTimeData.getString('mediaTabs'));
 
     this.openTabsTitleItem_ = new TitleItem(loadTimeData.getString('openTabs'));
 
@@ -319,12 +314,12 @@ export class TabSearchAppElement extends PolymerElement {
 
   private onSearchChanged_(e: CustomEvent<string>) {
     this.searchText_ = e.detail;
+    // Reset the selected item whenever a search query is provided.
+    // updateFilteredTabs_ will set the correct tab index for initial selection.
+    const tabsList = this.$.tabsList;
+    tabsList.selected = NO_SELECTION;
 
     this.updateFilteredTabs_();
-    // Reset the selected item whenever a search query is provided.
-    this.$.tabsList.selected =
-        this.selectableItemCount_() > 0 ? 0 : NO_SELECTION;
-
     this.$.searchField.announce(this.getA11ySearchResultText_());
   }
 
@@ -356,9 +351,42 @@ export class TabSearchAppElement extends PolymerElement {
     }, 0);
   }
 
-  private onItemClick_(e: RepeaterEvent<ItemData>) {
+  private onItemClick_(e: DomRepeatEvent<ItemData>) {
     const tabItem = e.model.item;
     this.tabItemAction_(tabItem, e.model.index);
+  }
+
+  private recordMetricsForAction(
+      action: string, isMediaTab: boolean, tabIndex: number,
+      indexRelativeToSection: number,
+      distanceFromInitiallySelectedIndex: number) {
+    const withSearch = !!this.searchText_;
+    if (action === 'SwitchTab') {
+      chrome.metricsPrivate.recordEnumerationValue(
+          'Tabs.TabSearch.WebUI.TabSwitchAction',
+          withSearch ? TabSwitchAction.WITH_SEARCH :
+                       TabSwitchAction.WITHOUT_SEARCH,
+          Object.keys(TabSwitchAction).length);
+    }
+    chrome.metricsPrivate.recordSmallCount(
+        withSearch ? `Tabs.TabSearch.WebUI.IndexOf${action}InFilteredList` :
+                     `Tabs.TabSearch.WebUI.IndexOf${action}InUnfilteredList`,
+        tabIndex);
+    chrome.metricsPrivate.recordSmallCount(
+        withSearch ? `Tabs.TabSearch.DistanceOf${
+                         action}FromInitiallySelectedTabInFilteredList` :
+                     `Tabs.TabSearch.DistanceOf${
+                         action}FromInitiallySelectedTabInUnfilteredList`,
+        distanceFromInitiallySelectedIndex);
+    if (isMediaTab) {
+      chrome.metricsPrivate.recordBoolean(
+          `Tabs.TabSearch.WebUI.MediaTab${action}Action`, withSearch);
+    } else if (!withSearch) {
+      chrome.metricsPrivate.recordSmallCount(
+          `Tabs.TabSearch.WebUI.IndexRelativeToOpenTabsSectionOf${
+              action}InUnfilteredList`,
+          indexRelativeToSection);
+    }
   }
 
   /**
@@ -369,9 +397,13 @@ export class TabSearchAppElement extends PolymerElement {
     let action;
     switch (itemData.type) {
       case TabItemType.OPEN_TAB:
-        this.apiProxy_.switchToTab(
-            {tabId: (itemData as TabData).tab.tabId}, !!this.searchText_,
-            tabIndex);
+        const isMediaTab = tabHasMediaAlerts((itemData as TabData).tab as Tab);
+        const tabIndexRelativeToSection =
+            isMediaTab ? tabIndex : tabIndex - this.filteredMediaTabsCount_;
+        this.recordMetricsForAction(
+            'SwitchTab', isMediaTab, tabIndex, tabIndexRelativeToSection,
+            Math.abs(this.initiallySelectedTabIndex_ - tabIndex));
+        this.apiProxy_.switchToTab({tabId: (itemData as TabData).tab.tabId});
         action = 'SwitchTab';
         break;
       case TabItemType.RECENTLY_CLOSED_TAB:
@@ -395,17 +427,24 @@ export class TabSearchAppElement extends PolymerElement {
         Math.round(Date.now() - this.windowShownTimestamp_));
   }
 
-  private onItemClose_(e: RepeaterEvent<TabData>) {
+  private onItemClose_(e: DomRepeatEvent<TabData>) {
     performance.mark('tab_search:close_tab:metric_begin');
     const tabId = e.model.item.tab.tabId;
-    this.apiProxy_.closeTab(tabId, !!this.searchText_, e.model.index);
+    const tabIndex = e.model.index;
+    const isMediaTab = tabHasMediaAlerts(e.model.item.tab as Tab);
+    const tabIndexRelativeToSection =
+        isMediaTab ? tabIndex : tabIndex - this.filteredMediaTabsCount_;
+    this.recordMetricsForAction(
+        'CloseTab', isMediaTab, tabIndex, tabIndexRelativeToSection,
+        Math.abs(this.initiallySelectedTabIndex_ - tabIndex));
+    this.apiProxy_.closeTab(tabId);
     this.announceA11y_(loadTimeData.getString('a11yTabClosed'));
     listenOnce(this.$.tabsList, 'iron-items-changed', () => {
       performance.mark('tab_search:close_tab:metric_end');
     });
   }
 
-  private onItemKeyDown_(e: RepeaterKeyboardEvent<ItemData>) {
+  private onItemKeyDown_(e: DomRepeatEvent<ItemData, KeyboardEvent>) {
     if (e.key !== 'Enter' && e.key !== ' ') {
       return;
     }
@@ -441,24 +480,16 @@ export class TabSearchAppElement extends PolymerElement {
         profileData.recentlyClosedSectionExpanded;
 
     this.updateFilteredTabs_();
-
-    // If there was no previously selected index, set the first item as
-    // selected; else retain the currently selected index. If the list
-    // shrunk above the selected index, select the last index in the list.
-    // If there are no matching results, set the selected index value to none.
-    const tabsList = this.$.tabsList;
-    tabsList.selected = Math.min(
-        Math.max(this.getSelectedIndex(), 0), this.selectableItemCount_() - 1);
   }
 
-  private onItemFocus_(e: RepeaterEvent<TabData|TabGroupData>) {
+  private onItemFocus_(e: DomRepeatEvent<TabData|TabGroupData>) {
     // Ensure that when a TabSearchItem receives focus, it becomes the selected
     // item in the list.
     this.$.tabsList.selected = e.model.index;
   }
 
   private onTitleExpandChanged_(
-      e: RepeaterCustomEvent<TitleItem, {value: boolean}>) {
+      e: DomRepeatEvent<TitleItem, CustomEvent<{value: boolean}>>) {
     // Instead of relying on two-way binding to update the `expanded` property,
     // we update the value directly as the `expanded-changed` event takes place
     // before a two way bound property update and we need the TitleItem
@@ -471,13 +502,6 @@ export class TabSearchAppElement extends PolymerElement {
 
     this.updateFilteredTabs_();
     e.stopPropagation();
-  }
-
-  private onSearchFocus_() {
-    const tabsList = this.$.tabsList;
-    if (tabsList.selected === NO_SELECTION && this.selectableItemCount_() > 0) {
-      tabsList.selected = 0;
-    }
   }
 
   /**
@@ -584,9 +608,41 @@ export class TabSearchAppElement extends PolymerElement {
               tabA.lastActiveTimeTicks.internalValue) :
           0;
     });
-    const filteredOpenTabs =
+
+    let mediaTabs: Array<TabData> = [];
+    // Audio & Video section will not be added when search criteria is applied.
+    // Show media tabs in Open Tabs.
+    if (this.searchText_.length === 0) {
+      mediaTabs = this.openTabs_.filter(
+          tabData => tabHasMediaAlerts(tabData.tab as Tab));
+    }
+
+    const filteredMediaTabs =
+        fuzzySearch(this.searchText_, mediaTabs, this.fuzzySearchOptions_);
+
+    let filteredOpenTabs =
         fuzzySearch(this.searchText_, this.openTabs_, this.fuzzySearchOptions_);
-    this.filteredOpenTabsCount_ = filteredOpenTabs.length;
+
+    // The MRU tab that is not the active tab is either the first tab in the
+    // Audio and Video section (if it exists) or the first tab in the Open Tabs
+    // section.
+    if (filteredOpenTabs.length > 0) {
+      this.initiallySelectedTabIndex_ =
+          tabHasMediaAlerts(filteredOpenTabs[0]!.tab! as Tab) ?
+          0 :
+          filteredMediaTabs.length;
+    }
+
+    if (!loadTimeData.getBoolean('alsoShowMediaTabsinOpenTabsSection') &&
+        this.searchText_.length === 0) {
+      filteredOpenTabs = filteredOpenTabs.filter(
+          tabData => !tabHasMediaAlerts(tabData.tab as Tab));
+    }
+
+    this.filteredOpenTabsCount_ =
+        filteredOpenTabs.length + filteredMediaTabs.length;
+
+    this.filteredMediaTabsCount_ = filteredMediaTabs.length;
 
     const recentlyClosedItems: Array<TabData|TabGroupData> =
         [...this.recentlyClosedTabs_, ...this.recentlyClosedTabGroups_];
@@ -628,6 +684,7 @@ export class TabSearchAppElement extends PolymerElement {
 
     this.filteredItems_ =
         ([
+          [this.mediaTabsTitleItem_, filteredMediaTabs],
           [this.openTabsTitleItem_, filteredOpenTabs],
           [this.recentlyClosedTitleItem_, filteredRecentlyClosedItems],
         ] as Array<[TitleItem, Array<TabData|TabGroupData>]>)
@@ -642,6 +699,19 @@ export class TabSearchAppElement extends PolymerElement {
               return acc;
             }, [] as Array<TitleItem|TabData|TabGroupData>);
     this.searchResultText_ = this.getA11ySearchResultText_();
+
+    // If there was no previously selected index, set the selected index to be
+    // the tab index specified for initial selection; else retain the currently
+    // selected index. If the list shrunk above the selected index, select the
+    // last index in the list. If there are no matching results, set the
+    // selected index value to none.
+    const tabsList = this.$.tabsList;
+    let selectedIndex = this.getSelectedIndex();
+    if (selectedIndex === NO_SELECTION) {
+      selectedIndex = this.initiallySelectedTabIndex_;
+    }
+    tabsList.selected =
+        Math.min(Math.max(selectedIndex, 0), this.selectableItemCount_() - 1);
   }
 
   getSearchTextForTesting(): string {

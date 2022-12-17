@@ -45,7 +45,7 @@
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />Venasîna girêdanê bide xebitandin<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">Girêdan ji nû ve hate sazkirin.</translation>
 <translation id="2826760142808435982">Girêdan hatiye şîfrekirin û piştrastkirin bi riya karanîna <ph name="CIPHER" />ê û bikaranîna <ph name="KX" />ê wekî mekanîzmaya pevguhertina kilîd.</translation>
-<translation id="2856444702002559011">Dibe ku êrîşkar hewl didin ku diziya agahiyên te bikin <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (wekî mînak pêborîn, peyam an kartên krediyê). <ph name="BEGIN_LEARN_MORE_LINK" /> Bêhtir tişt fêr bibe<ph name="END_LEARN_MORE_LINK" /></translation>
+<translation id="2856444702002559011">Dibe ku êrîşkar hewl didin ku diziya agahiyên te bikin <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (mînak pêborîn, peyam an kartên krediyê). <ph name="BEGIN_LEARN_MORE_LINK" /> Bêhtir tişt fêr bibe<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Guhertina torê hate vedîtin.</translation>
 <translation id="2948083400971632585">Tu dikarî ji rûpela sazkariyê nûneran neçalak bikî yên ku ji bo têkiliyê hatine pevsazkirin.</translation>
 <translation id="2991571918955627853">Tu nikarî niha biçî seredana <ph name="SITE" />ê. Ji ber ku malper HSTS bi kar tîne. Çewtî û êrişên torê bi gelemperî demkî ne, loma dibe ku ev rûpel paşê bixebite.</translation>
@@ -130,9 +130,9 @@
 <translation id="5785756445106461925">Wekî din, ev rûpel çavkaniyên din ên ne ewledar dihewîne. Ev çavkanî gava ku tê veguhestin, dibe ku ji hêla kesên din ve bên dîtin û ji hêla êrişkar ve bên guhertin da ku tevgerên rûpelê biguherîne.</translation>
 <translation id="5799902971440853357">Tu nikarî niha biçî seredana <ph name="SITE" />ê. Ji ber ku malperê zanyariyên tevlihev şandin ku Vivaldi nikare wan vebikolîne. Çewtî û êrişên torê bi gelemperî demkî ne, loma dibe ku ev rûpel paşê bixebite.</translation>
 <translation id="5810442152076338065">Girêdana te bo <ph name="DOMAIN" />ê bi rêbaza kevn hatiye şîfrekirin.</translation>
-<translation id="5838278095973806738">Divê tu li ser vê malperê zanyariyên hestyarî (wekî mînak pêborîn an kartên krediyê) nenivîsinî, ji ber ku êrîşkar dikarin wan bidizin.</translation>
+<translation id="5838278095973806738">Divê tu li ser vê malperê zanyariyên hestyarî (mînak pêborîn an kartên krediyê) nenivîsinî, ji ber ku êrîşkar dikarin wan bidizin.</translation>
 <translation id="5869405914158311789">Ev malper nayê gihîştin</translation>
-<translation id="5920262536204764679">{NUM_COOKIES, plural, =1 {1 tê bikaranîn} other {# tê bikaranîn }}</translation>
+<translation id="5920262536204764679">{NUM_COOKIES, plural, =1 {1 dane tê bikaranîn} other {# dane tê bikaranîn }}</translation>
 <translation id="5932224571077948991">Malper reklamên nederbasdar an xapînok nîşan dide</translation>
 <translation id="6051221802930200923">Tu nikarî niha biçî seredana <ph name="SITE" /> ê. Ji ber ku malper sertîfîkaya westarî bi kar tîne. Çewtî û êrişên torê bi gelemperî demkî ne, loma dibe ku ev rûpel paşê bixebite.</translation>
 <translation id="6146055958333702838">Kabloyan kontrol bike û amûrên ku tu bi kar tînî -berhêlker, modem

@@ -439,6 +439,7 @@ void HWNDMessageHandler::Init(HWND parent, const gfx::Rect& bounds) {
   GetMonitorAndRects(bounds.ToRECT(), &last_monitor_, &last_monitor_rect_,
                      &last_work_area_);
 
+  initial_bounds_valid_ = !bounds.IsEmpty();
   // Create the window.
   WindowImpl::Init(parent, bounds);
 
@@ -659,9 +660,16 @@ void HWNDMessageHandler::Show(ui::WindowShowState show_state,
     SetWindowPlacement(hwnd(), &placement);
     native_show_state = SW_SHOWMAXIMIZED;
   } else {
+    const bool is_maximized = IsMaximized();
+
+    // Use SW_SHOW/SW_SHOWNA instead of SW_SHOWNORMAL/SW_SHOWNOACTIVATE so that
+    // the window is not restored to its original position if it is maximized.
+    // This could be used unconditionally for ui::SHOW_STATE_INACTIVE, but
+    // cross-platform behavior when showing a minimized window is inconsistent,
+    // some platforms restore the position, some do not. See crbug.com/1296710
     switch (show_state) {
       case ui::SHOW_STATE_INACTIVE:
-        native_show_state = SW_SHOWNOACTIVATE;
+        native_show_state = is_maximized ? SW_SHOWNA : SW_SHOWNOACTIVATE;
         break;
       case ui::SHOW_STATE_MAXIMIZED:
         native_show_state = SW_SHOWMAXIMIZED;
@@ -672,9 +680,9 @@ void HWNDMessageHandler::Show(ui::WindowShowState show_state,
       case ui::SHOW_STATE_NORMAL:
         if ((GetWindowLong(hwnd(), GWL_EXSTYLE) & WS_EX_TRANSPARENT) ||
             (GetWindowLong(hwnd(), GWL_EXSTYLE) & WS_EX_NOACTIVATE)) {
-          native_show_state = SW_SHOWNOACTIVATE;
+          native_show_state = is_maximized ? SW_SHOWNA : SW_SHOWNOACTIVATE;
         } else {
-          native_show_state = SW_SHOWNORMAL;
+          native_show_state = is_maximized ? SW_SHOW : SW_SHOWNORMAL;
         }
         break;
       case ui::SHOW_STATE_FULLSCREEN:
@@ -1650,6 +1658,12 @@ LRESULT HWNDMessageHandler::OnCreate(CREATESTRUCT* create_struct) {
       std::make_unique<ui::SessionChangeObserver>(base::BindRepeating(
           &HWNDMessageHandler::OnSessionChange, base::Unretained(this)));
 
+  // If the window was initialized with a specific size/location then we know
+  // the DPI and thus must initialize dpi_ now. See https://crbug.com/1282804
+  // for details.
+  if (initial_bounds_valid_)
+    dpi_ = display::win::ScreenWin::GetDPIForHWND(hwnd());
+
   // TODO(beng): move more of NWW::OnCreate here.
   return 0;
 }
@@ -2045,7 +2059,7 @@ LRESULT HWNDMessageHandler::OnPointerEvent(UINT message,
         return HandlePointerEventTypeTouchOrNonClient(
             message, w_param, l_param);
       }
-      FALLTHROUGH;
+      [[fallthrough]];
     default:
       break;
   }

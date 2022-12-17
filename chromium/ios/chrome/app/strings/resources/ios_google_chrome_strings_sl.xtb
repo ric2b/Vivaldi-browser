@@ -2,8 +2,8 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="sl">
 <translation id="1096883626080133124">Opravite več s preprostim in varnim Chromom, ki je hitrejši kot kdaj prej.</translation>
+<translation id="1143896152279775643">Geslo bo shranjeno v Google Upravitelju gesel za račun <ph name="EMAIL" />.</translation>
 <translation id="1282031177488366470">Pomagajte izboljšati funkcije in delovanje Chroma</translation>
-<translation id="1314663809820920746">Še vedno si lahko ogledate zaznamke, zgodovino, gesla in druge nastavitve v tej napravi. Če naredite spremembe, ne bodo sinhronizirane z računom Google.</translation>
 <translation id="1479202195792305274">Chrome lahko preveri vaša gesla, ko se prijavite z računom Google.</translation>
 <translation id="1493827051843127077">Nastavite Chrome kot privzeto možnost sinhroniziranja zavihkov, gesel in podatkov za plačilo v vseh napravah.</translation>
 <translation id="1504372625950710826">Chrome ni mogel preveriti, ali so na voljo posodobitve. Poskusite preveriti internetno povezavo.</translation>
@@ -40,6 +40,7 @@
 <translation id="3522659714780527202">Če si želite ogledati zavihke iz naprav, v katerih uporabljate Chrome, vklopite sinhronizacijo</translation>
 <translation id="3533694711092285624">Ni shranjenih gesel. Chrome lahko preveri gesla, če jih shranite.</translation>
 <translation id="3634910711516114487">Če želite kar najbolje izkoristiti Chrome, se prijavite v Chrome z računom Google.</translation>
+<translation id="3655656110921623717">To pomeni, da bo Chrome vsakič zahteval spletno mesto za mobilne naprave.</translation>
 <translation id="3706101708757577809">Zdaj lahko uporabljate Chrome, kadar koli se dotaknete povezav v sporočilih, dokumentih in drugih aplikacijah.</translation>
 <translation id="3720541637541300822">Zaklepanje anonimnih zavihkov po zaprtju Chroma</translation>
 <translation id="384394811301901750">Google Chrome trenutno ne more uporabljati fotoaparata</translation>
@@ -116,4 +117,5 @@
 <translation id="8772179140489533211">Pokaže pozive za prijavo v Chrome.</translation>
 <translation id="8788269841521769222">Tega gesla si ne bo treba zapomniti. Shranjeno bo v Google Upravitelju gesel za račun <ph name="EMAIL" />.</translation>
 <translation id="9112744793181547300">Želite nastaviti Chrome kot privzeto možnost?</translation>
+<translation id="9122931302567044771">To pomeni, da bo Chrome vsakič zahteval spletno mesto za namizne naprave.</translation>
 </translationbundle>

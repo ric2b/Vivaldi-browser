@@ -245,6 +245,11 @@
         "description": "Fired when bookmark menu item is activated.",
         "parameters": [
           {
+            "name": "windowId",
+            "type": "integer",
+            "description": "Window where action occurs."
+          },
+          {
             "name": "action",
             "$ref": "BookmarkAction"
           }
@@ -256,6 +261,11 @@
         "description": "Fired when bookmark command is activated.",
         "parameters": [
           {
+            "name": "windowId",
+            "type": "integer",
+            "description": "Window where action occurs."
+          },
+          {
             "name": "action",
             "$ref": "BookmarkAction"
           }
@@ -266,6 +276,11 @@
         "type": "function",
         "description": "Fired when a menu item with a url is highlighted.",
         "parameters": [
+          {
+            "name": "windowId",
+            "type": "integer",
+            "description": "Window where hover occurs."
+          },
           {
             "name": "url",
             "type": "string",

@@ -50,12 +50,12 @@ blink::WebCryptoAlgorithm CreateHmacImportAlgorithmWithLength(
 class WebCryptoHmacTest : public WebCryptoTestBase {};
 
 TEST_F(WebCryptoHmacTest, HMACSampleSets) {
-  base::ListValue tests;
-  ASSERT_TRUE(ReadJsonTestFileToList("hmac.json", &tests));
-  for (size_t test_index = 0; test_index < tests.GetList().size();
+  base::Value tests;
+  ASSERT_TRUE(ReadJsonTestFileAsList("hmac.json", &tests));
+  for (size_t test_index = 0; test_index < tests.GetListDeprecated().size();
        ++test_index) {
     SCOPED_TRACE(test_index);
-    const base::Value& test_value = tests.GetList()[test_index];
+    const base::Value& test_value = tests.GetListDeprecated()[test_index];
     ASSERT_TRUE(test_value.is_dict());
     const base::DictionaryValue* test =
         &base::Value::AsDictionaryValue(test_value);

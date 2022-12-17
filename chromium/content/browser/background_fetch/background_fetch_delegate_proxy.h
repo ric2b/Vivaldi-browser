@@ -142,6 +142,7 @@ class CONTENT_EXPORT BackgroundFetchDelegateProxy
   // BackgroundFetchDelegate::Client implementation:
   void OnJobCancelled(
       const std::string& job_unique_id,
+      const std::string& download_guid,
       blink::mojom::BackgroundFetchFailureReason reason_to_abort) override;
   void OnDownloadComplete(
       const std::string& job_unique_id,
@@ -161,6 +162,10 @@ class CONTENT_EXPORT BackgroundFetchDelegateProxy
       const std::string& job_unique_id,
       const std::string& download_guid,
       BackgroundFetchDelegate::GetUploadDataCallback callback) override;
+
+  void DidGetPermissionFromDownloadRequestLimiter(
+      GetPermissionForOriginCallback callback,
+      bool has_permission);
 
   BrowserContext* GetBrowserContext();
 

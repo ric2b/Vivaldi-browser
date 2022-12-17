@@ -38,7 +38,6 @@
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_constants.h"
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_data_sink.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_feature.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_commands.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_synchronizer.h"
@@ -47,7 +46,6 @@
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_menu_provider.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller_audience.h"
-#import "ios/chrome/browser/ui/content_suggestions/discover_feed_metrics_recorder.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_mediator.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_metrics.h"
@@ -55,6 +53,7 @@
 #import "ios/chrome/browser/ui/main/scene_state_browser_agent.h"
 #import "ios/chrome/browser/ui/menu/browser_action_factory.h"
 #import "ios/chrome/browser/ui/menu/menu_histograms.h"
+#import "ios/chrome/browser/ui/ntp/feed_metrics_recorder.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_commands.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_constants.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_feature.h"
@@ -101,7 +100,6 @@
 // Redefined as readwrite.
 @property(nonatomic, strong, readwrite)
     ContentSuggestionsHeaderViewController* headerController;
-@property(nonatomic, strong) PrefBackedBoolean* contentSuggestionsExpanded;
 @property(nonatomic, assign) BOOL contentSuggestionsEnabled;
 // Authentication Service for the user's signed-in state.
 @property(nonatomic, assign) AuthenticationService* authService;
@@ -138,44 +136,35 @@
   self.contentSuggestionsEnabled =
       prefs->GetBoolean(prefs::kArticlesForYouEnabled) &&
       prefs->GetBoolean(prefs::kNTPContentSuggestionsEnabled);
-  self.contentSuggestionsExpanded = [[PrefBackedBoolean alloc]
-      initWithPrefService:prefs
-                 prefName:feed::prefs::kArticlesListVisible];
-  if (self.contentSuggestionsEnabled) {
-    if ([self.contentSuggestionsExpanded value]) {
-      ntp_home::RecordNTPImpression(ntp_home::REMOTE_SUGGESTIONS);
-    } else {
-      ntp_home::RecordNTPImpression(ntp_home::REMOTE_COLLAPSED);
-    }
-  } else {
-    ntp_home::RecordNTPImpression(ntp_home::LOCAL_SUGGESTIONS);
-  }
 
-  self.headerController = [[ContentSuggestionsHeaderViewController alloc] init];
-  // TODO(crbug.com/1045047): Use HandlerForProtocol after commands protocol
-  // clean up.
-  self.headerController.dispatcher =
-      static_cast<id<ApplicationCommands, BrowserCommands, OmniboxCommands,
-                     FakeboxFocuser>>(self.browser->GetCommandDispatcher());
-  self.headerController.commandHandler = self;
-  self.headerController.delegate = self.ntpMediator;
+  if (!IsContentSuggestionsHeaderMigrationEnabled()) {
+    self.headerController =
+        [[ContentSuggestionsHeaderViewController alloc] init];
+    // TODO(crbug.com/1045047): Use HandlerForProtocol after commands protocol
+    // clean up.
+    self.headerController.dispatcher =
+        static_cast<id<ApplicationCommands, BrowserCommands, OmniboxCommands,
+                       FakeboxFocuser>>(self.browser->GetCommandDispatcher());
+    self.headerController.commandHandler = self;
+    self.headerController.delegate = self.ntpMediator;
 
-  self.headerController.readingListModel =
-      ReadingListModelFactory::GetForBrowserState(
-          self.browser->GetBrowserState());
-  self.headerController.toolbarDelegate = self.toolbarDelegate;
+    self.headerController.readingListModel =
+        ReadingListModelFactory::GetForBrowserState(
+            self.browser->GetBrowserState());
+    self.headerController.toolbarDelegate = self.toolbarDelegate;
 
-  // Only handle app state for the new First Run UI.
-  if (base::FeatureList::IsEnabled(kEnableFREUIModuleIOS)) {
-    SceneState* sceneState =
-        SceneStateBrowserAgent::FromBrowser(self.browser)->GetSceneState();
-    AppState* appState = sceneState.appState;
-    [appState addObserver:self];
+    // Only handle app state for the new First Run UI.
+    if (base::FeatureList::IsEnabled(kEnableFREUIModuleIOS)) {
+      SceneState* sceneState =
+          SceneStateBrowserAgent::FromBrowser(self.browser)->GetSceneState();
+      AppState* appState = sceneState.appState;
+      [appState addObserver:self];
 
-    // Do not focus on omnibox for voice over if there are other screens to
-    // show.
-    if (appState.initStage < InitStageFinal) {
-      self.headerController.focusOmniboxWhenViewAppears = NO;
+      // Do not focus on omnibox for voice over if there are other screens to
+      // show.
+      if (appState.initStage < InitStageFinal) {
+        self.headerController.focusOmniboxWhenViewAppears = NO;
+      }
     }
   }
 
@@ -216,24 +205,26 @@
       self.browser->GetWebStateList();
   [self configureStartSurfaceIfNeeded];
 
-  self.headerController.promoCanShow =
-      [self.contentSuggestionsMediator notificationPromo]->CanShow();
+  if (!IsContentSuggestionsHeaderMigrationEnabled()) {
+    self.headerController.promoCanShow =
+        [self.contentSuggestionsMediator notificationPromo]->CanShow();
+  }
 
   self.suggestionsViewController = [[ContentSuggestionsViewController alloc]
       initWithStyle:CollectionViewControllerStyleDefault];
-  [self.suggestionsViewController
-      setDataSource:self.contentSuggestionsMediator];
   self.suggestionsViewController.suggestionCommandHandler = self.ntpMediator;
   self.suggestionsViewController.audience = self;
-  id<SnackbarCommands> dispatcher =
-      static_cast<id<SnackbarCommands>>(self.browser->GetCommandDispatcher());
-  self.suggestionsViewController.dispatcher = dispatcher;
   self.suggestionsViewController.contentSuggestionsEnabled =
       self.contentSuggestionsEnabled;
 
   self.suggestionsViewController.menuProvider = self;
+  if (IsContentSuggestionsHeaderMigrationEnabled()) {
+    self.contentSuggestionsMediator.consumer = self.suggestionsViewController;
+  }
 
-  self.ntpMediator.consumer = self.headerController;
+  if (!IsContentSuggestionsHeaderMigrationEnabled()) {
+    self.ntpMediator.consumer = self.headerController;
+  }
   // TODO(crbug.com/1045047): Use HandlerForProtocol after commands protocol
   // clean up.
   self.ntpMediator.dispatcher =
@@ -242,15 +233,23 @@
   self.ntpMediator.suggestionsViewController = self.suggestionsViewController;
   self.ntpMediator.suggestionsMediator = self.contentSuggestionsMediator;
   [self.ntpMediator setUp];
-  self.ntpMediator.discoverFeedMetrics = self.discoverFeedMetricsRecorder;
+  self.ntpMediator.feedMetricsRecorder = self.feedMetricsRecorder;
 
-  [self.suggestionsViewController addChildViewController:self.headerController];
-  [self.headerController
-      didMoveToParentViewController:self.suggestionsViewController];
+  if (!IsContentSuggestionsHeaderMigrationEnabled()) {
+    [self.suggestionsViewController
+        addChildViewController:self.headerController];
+    [self.headerController
+        didMoveToParentViewController:self.suggestionsViewController];
 
-  // TODO(crbug.com/1114792): Remove header provider and use refactored header
-  // synchronizer instead.
-  self.suggestionsViewController.headerProvider = self.headerController;
+    // TODO(crbug.com/1114792): Remove header provider and use refactored header
+    // synchronizer instead.
+    self.suggestionsViewController.headerProvider = self.headerController;
+
+    // Set consumer after configuring the header to ensure that view controller
+    // has access to it when configuring its elements.
+    DCHECK(self.suggestionsViewController.headerProvider);
+    self.contentSuggestionsMediator.consumer = self.suggestionsViewController;
+  }
 
   self.suggestionsViewController.collectionView.accessibilityIdentifier =
       kContentSuggestionsCollectionIdentifier;
@@ -278,7 +277,6 @@
   [self.sharingCoordinator stop];
   self.sharingCoordinator = nil;
   self.headerController = nil;
-  self.contentSuggestionsExpanded = nil;
   _started = NO;
 }
 
@@ -301,6 +299,12 @@
   }
 }
 
+- (UIEdgeInsets)safeAreaInsetsForDiscoverFeed {
+  return [SceneStateBrowserAgent::FromBrowser(self.browser)
+              ->GetSceneState()
+              .window.rootViewController.view safeAreaInsets];
+}
+
 #pragma mark - URLDropDelegate
 
 - (BOOL)canHandleURLDropInView:(UIView*)view {
@@ -314,27 +318,14 @@
 
 #pragma mark - ContentSuggestionsHeaderCommands
 
-- (void)prepareForVoiceSearchPresentation {
-  [self.ntpMediator dismissModals];
-}
-
 - (void)updateForHeaderSizeChange {
   [self.ntpCommandHandler updateDiscoverFeedLayout];
-}
-
-- (void)updateForLocationBarResignedFirstResponder {
-  // TODO(crbug.com/1200303): Check if doing this is actually needed.
-  [self.ntpMediator dismissModals];
 }
 
 #pragma mark - Public methods
 
 - (UIView*)view {
   return self.suggestionsViewController.view;
-}
-
-- (void)dismissModals {
-  [self.ntpMediator dismissModals];
 }
 
 - (void)stopScrolling {
@@ -355,7 +346,7 @@
 }
 
 - (void)reload {
-  [self.contentSuggestionsMediator.dataSink reloadAllData];
+  [self.contentSuggestionsMediator reloadAllData];
 }
 
 - (void)locationBarDidBecomeFirstResponder {
@@ -364,6 +355,10 @@
 
 - (void)locationBarDidResignFirstResponder {
   [self.ntpMediator locationBarDidResignFirstResponder];
+}
+
+- (NotificationPromoWhatsNew*)notificationPromo {
+  return [self.contentSuggestionsMediator notificationPromo];
 }
 
 #pragma mark - ContentSuggestionsMenuProvider
@@ -392,23 +387,29 @@
         NSMutableArray<UIMenuElement*>* menuElements =
             [[NSMutableArray alloc] init];
 
-        NSIndexPath* indexPath =
-            [self.suggestionsViewController.collectionViewModel
-                indexPathForItem:item];
+        NSInteger index =
+            IsSingleCellContentSuggestionsEnabled()
+                ? item.index
+                : [self.suggestionsViewController.collectionViewModel
+                      indexPathForItem:item]
+                      .item;
+        CGPoint centerPoint = [view.superview convertPoint:view.center
+                                                    toView:nil];
 
         [menuElements addObject:[actionFactory actionToOpenInNewTabWithBlock:^{
                         [weakSelf.ntpMediator
                             openNewTabWithMostVisitedItem:item
                                                 incognito:NO
-                                                  atIndex:indexPath.item];
+                                                  atIndex:index
+                                                fromPoint:centerPoint];
                       }]];
 
         UIAction* incognitoAction =
             [actionFactory actionToOpenInNewIncognitoTabWithBlock:^{
-              [weakSelf.ntpMediator
-                  openNewTabWithMostVisitedItem:item
-                                      incognito:YES
-                                        atIndex:indexPath.item];
+              [weakSelf.ntpMediator openNewTabWithMostVisitedItem:item
+                                                        incognito:YES
+                                                          atIndex:index
+                                                        fromPoint:centerPoint];
             }];
 
         if (IsIncognitoModeDisabled(

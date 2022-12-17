@@ -85,89 +85,90 @@ namespace policy {
 
 namespace {
 
-const char kClientID[] = "fake-client-id";
-const char kMachineID[] = "fake-machine-id";
-const char kMachineModel[] = "fake-machine-model";
-const char kBrandCode[] = "fake-brand-code";
-const char kAttestedDeviceId[] = "fake-attested-device-id";
-const char kEthernetMacAddress[] = "fake-ethernet-mac-address";
-const char kDockMacAddress[] = "fake-dock-mac-address";
-const char kManufactureDate[] = "fake-manufacture-date";
-const char kOAuthToken[] = "fake-oauth-token";
-const char kDMToken[] = "fake-dm-token";
-const char kDeviceDMToken[] = "fake-device-dm-token";
-const char kMachineCertificate[] = "fake-machine-certificate";
-const char kEnrollmentCertificate[] = "fake-enrollment-certificate";
-const char kEnrollmentId[] = "fake-enrollment-id";
+constexpr char kClientID[] = "fake-client-id";
+constexpr char kMachineID[] = "fake-machine-id";
+constexpr char kMachineModel[] = "fake-machine-model";
+constexpr char kBrandCode[] = "fake-brand-code";
+constexpr char kAttestedDeviceId[] = "fake-attested-device-id";
+constexpr char kEthernetMacAddress[] = "fake-ethernet-mac-address";
+constexpr char kDockMacAddress[] = "fake-dock-mac-address";
+constexpr char kManufactureDate[] = "fake-manufacture-date";
+constexpr char kOAuthToken[] = "fake-oauth-token";
+constexpr char kDMToken[] = "fake-dm-token";
+constexpr char kDeviceDMToken[] = "fake-device-dm-token";
+constexpr char kMachineCertificate[] = "fake-machine-certificate";
+constexpr char kEnrollmentCertificate[] = "fake-enrollment-certificate";
+constexpr char kEnrollmentId[] = "fake-enrollment-id";
+constexpr char kOsName[] = "fake-os-name";
 
-#if defined(OS_WIN) || defined(OS_APPLE) || \
-    (defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
-const char kEnrollmentToken[] = "enrollment_token";
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || \
+    (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
+constexpr char kEnrollmentToken[] = "enrollment_token";
 #endif
 
-const char kRequisition[] = "fake-requisition";
-const char kStateKey[] = "fake-state-key";
-const char kPayload[] = "input_payload";
-const char kResultPayload[] = "output_payload";
-const char kAssetId[] = "fake-asset-id";
-const char kLocation[] = "fake-location";
-const char kGcmID[] = "fake-gcm-id";
-const char kPolicyToken[] = "fake-policy-token";
-const char kPolicyName[] = "fake-policy-name";
-const char kValueValidationMessage[] = "fake-value-validation-message";
-const char kRobotAuthCode[] = "fake-robot-auth-code";
-const char kApiAuthScope[] = "fake-api-auth-scope";
+constexpr char kRequisition[] = "fake-requisition";
+constexpr char kStateKey[] = "fake-state-key";
+constexpr char kPayload[] = "input_payload";
+constexpr char kResultPayload[] = "output_payload";
+constexpr char kAssetId[] = "fake-asset-id";
+constexpr char kLocation[] = "fake-location";
+constexpr char kGcmID[] = "fake-gcm-id";
+constexpr char kPolicyToken[] = "fake-policy-token";
+constexpr char kPolicyName[] = "fake-policy-name";
+constexpr char kValueValidationMessage[] = "fake-value-validation-message";
+constexpr char kRobotAuthCode[] = "fake-robot-auth-code";
+constexpr char kApiAuthScope[] = "fake-api-auth-scope";
 
-const int64_t kAgeOfCommand = 123123123;
-const int64_t kLastCommandId = 123456789;
-const int64_t kTimestamp = 987654321;
+constexpr int64_t kAgeOfCommand = 123123123;
+constexpr int64_t kLastCommandId = 123456789;
+constexpr int64_t kTimestamp = 987654321;
 
 MATCHER_P(MatchProto, expected, "matches protobuf") {
   return arg.SerializePartialAsString() == expected.SerializePartialAsString();
 }
 
-base::Value ConvertEncryptedRecordToValue(
+base::Value::Dict ConvertEncryptedRecordToValue(
     const ::reporting::EncryptedRecord& record) {
-  base::Value record_request(base::Value::Type::DICTIONARY);
+  base::Value::Dict record_request;
   if (record.has_encrypted_wrapped_record()) {
-    base::Value encrypted_wrapped_record(base::Value::Type::DICTIONARY);
+    base::Value::Dict encrypted_wrapped_record;
     std::string base64_encode;
     base::Base64Encode(record.encrypted_wrapped_record(), &base64_encode);
-    record_request.SetStringKey("encryptedWrappedRecord", base64_encode);
+    record_request.Set("encryptedWrappedRecord", base64_encode);
   }
   if (record.has_encryption_info()) {
-    base::Value encryption_info(base::Value::Type::DICTIONARY);
+    base::Value::Dict encryption_info;
     if (record.encryption_info().has_encryption_key()) {
       std::string base64_encode;
       base::Base64Encode(record.encryption_info().encryption_key(),
                          &base64_encode);
-      encryption_info.SetStringKey("encryptionKey", base64_encode);
+      encryption_info.Set("encryptionKey", base64_encode);
     }
     if (record.encryption_info().has_public_key_id()) {
-      encryption_info.SetStringKey(
+      encryption_info.Set(
           "publicKeyId",
           base::NumberToString(record.encryption_info().public_key_id()));
     }
-    record_request.SetPath("encryptionInfo", std::move(encryption_info));
+    record_request.Set("encryptionInfo", std::move(encryption_info));
   }
   if (record.has_sequence_information()) {
-    base::Value sequence_information(base::Value::Type::DICTIONARY);
+    base::Value::Dict sequence_information;
     if (record.sequence_information().has_sequencing_id()) {
-      sequence_information.SetStringKey(
+      sequence_information.Set(
           "sequencingId",
           base::NumberToString(record.sequence_information().sequencing_id()));
     }
     if (record.sequence_information().has_generation_id()) {
-      sequence_information.SetStringKey(
+      sequence_information.Set(
           "generationId",
           base::NumberToString(record.sequence_information().generation_id()));
     }
     if (record.sequence_information().has_priority()) {
-      sequence_information.SetIntKey("priority",
-                                     record.sequence_information().priority());
+      sequence_information.Set("priority",
+                               record.sequence_information().priority());
     }
-    record_request.SetPath("sequencingInformation",
-                           std::move(sequence_information));
+    record_request.Set("sequencingInformation",
+                       std::move(sequence_information));
   }
   return record_request;
 }
@@ -339,8 +340,8 @@ em::DeviceManagementRequest GetCertBasedRegistrationRequest(
   return request;
 }
 
-#if defined(OS_WIN) || defined(OS_APPLE) || \
-    (defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || \
+    (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
 em::DeviceManagementRequest GetEnrollmentRequest() {
   em::DeviceManagementRequest request;
 
@@ -496,20 +497,20 @@ class CloudPolicyClientTest : public testing::Test {
     client_->AddObserver(&observer_);
   }
 
-  base::Value MakeDefaultRealtimeReport() {
-    base::Value context(base::Value::Type::DICTIONARY);
-    context.SetStringPath("profile.gaiaEmail", "name@gmail.com");
-    context.SetStringPath("browser.userAgent", "User-Agent");
-    context.SetStringPath("profile.profileName", "Profile 1");
-    context.SetStringPath("profile.profilePath", "C:\\User Data\\Profile 1");
+  base::Value::Dict MakeDefaultRealtimeReport() {
+    base::Value::Dict context;
+    context.SetByDottedPath("profile.gaiaEmail", "name@gmail.com");
+    context.SetByDottedPath("browser.userAgent", "User-Agent");
+    context.SetByDottedPath("profile.profileName", "Profile 1");
+    context.SetByDottedPath("profile.profilePath", "C:\\User Data\\Profile 1");
 
-    base::Value event;
-    event.SetStringPath("time", "2019-05-22T13:01:45Z");
-    event.SetStringPath("foo.prop1", "value1");
-    event.SetStringPath("foo.prop2", "value2");
-    event.SetStringPath("foo.prop3", "value3");
+    base::Value::Dict event;
+    event.Set("time", "2019-05-22T13:01:45Z");
+    event.SetByDottedPath("foo.prop1", "value1");
+    event.SetByDottedPath("foo.prop2", "value2");
+    event.SetByDottedPath("foo.prop3", "value3");
 
-    base::Value event_list(base::Value::Type::LIST);
+    base::Value::List event_list;
     event_list.Append(std::move(event));
     return policy::RealtimeReportingJobConfiguration::BuildReport(
         std::move(event_list), std::move(context));
@@ -552,7 +553,7 @@ class CloudPolicyClientTest : public testing::Test {
 
   void AttemptUploadEncryptedWaitUntilIdle(
       const ::reporting::EncryptedRecord& record,
-      absl::optional<base::Value> context = absl::nullopt) {
+      absl::optional<base::Value::Dict> context = absl::nullopt) {
     CloudPolicyClient::ResponseCallback response_callback =
         base::BindOnce(&MockResponseCallbackObserver::OnResponseReceived,
                        base::Unretained(&response_callback_observer_));
@@ -647,8 +648,8 @@ TEST_F(CloudPolicyClientTest, SetupRegistrationAndPolicyFetchWithOAuthToken) {
   CheckPolicyResponse(policy_response);
 }
 
-#if defined(OS_WIN) || defined(OS_APPLE) || \
-    (defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || \
+    (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
 TEST_F(CloudPolicyClientTest, RegistrationWithTokenAndPolicyFetch) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitAndEnableFeature(
@@ -783,9 +784,8 @@ TEST_F(CloudPolicyClientTest, RegistrationWithCertificateAndPolicyFetch) {
       em::DeviceRegisterRequest::DEVICE,
       em::DeviceRegisterRequest::FLAVOR_ENROLLMENT_ATTESTATION);
   client_->RegisterWithCertificate(
-      device_attestation, std::string() /* client_id */, DMAuth::NoAuth(),
-      kEnrollmentCertificate, std::string() /* sub_organization */,
-      &fake_signing_service_);
+      device_attestation, std::string() /* client_id */, kEnrollmentCertificate,
+      std::string() /* sub_organization */, &fake_signing_service_);
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(
       DeviceManagementService::JobConfiguration::TYPE_CERT_BASED_REGISTRATION,
@@ -820,9 +820,8 @@ TEST_F(CloudPolicyClientTest, RegistrationWithCertificateFailToSignRequest) {
       em::DeviceRegisterRequest::DEVICE,
       em::DeviceRegisterRequest::FLAVOR_ENROLLMENT_ATTESTATION);
   client_->RegisterWithCertificate(
-      device_attestation, std::string() /* client_id */, DMAuth::NoAuth(),
-      kEnrollmentCertificate, std::string() /* sub_organization */,
-      &fake_signing_service_);
+      device_attestation, std::string() /* client_id */, kEnrollmentCertificate,
+      std::string() /* sub_organization */, &fake_signing_service_);
   EXPECT_FALSE(client_->is_registered());
   EXPECT_EQ(DM_STATUS_CANNOT_SIGN_REQUEST, client_->status());
 }
@@ -1067,7 +1066,7 @@ TEST_F(CloudPolicyClientTest, PolicyFetchWithInvalidationNoPayload) {
   EXPECT_EQ(-12345, client_->fetched_invalidation_version());
 }
 
-#if defined(OS_WIN) || defined(OS_MAC) || defined(OS_LINUX)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 TEST_F(CloudPolicyClientTest, PolicyFetchWithBrowserDeviceIdentifier) {
   RegisterClient();
 
@@ -1658,6 +1657,34 @@ TEST_F(CloudPolicyClientTest, UploadChromeOsUserReport) {
   EXPECT_EQ(DM_STATUS_SUCCESS, client_->status());
 }
 
+TEST_F(CloudPolicyClientTest, UploadChromeProfileReport) {
+  RegisterClient();
+
+  em::DeviceManagementRequest device_managment_request;
+  device_managment_request.mutable_chrome_profile_report_request()
+      ->mutable_os_report()
+      ->set_name(kOsName);
+
+  ExpectAndCaptureJob(GetEmptyResponse());
+  EXPECT_CALL(callback_observer_, OnCallbackComplete(true)).Times(1);
+  CloudPolicyClient::StatusCallback callback =
+      base::BindOnce(&MockStatusCallbackObserver::OnCallbackComplete,
+                     base::Unretained(&callback_observer_));
+  auto chrome_profile_report =
+      std::make_unique<em::ChromeProfileReportRequest>();
+  chrome_profile_report->mutable_os_report()->set_name(kOsName);
+  client_->UploadChromeProfileReport(std::move(chrome_profile_report),
+                                     std::move(callback));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(
+      DeviceManagementService::JobConfiguration::TYPE_CHROME_PROFILE_REPORT,
+      job_type_);
+  EXPECT_EQ(auth_data_, DMAuth::FromDMToken(kDMToken));
+  EXPECT_EQ(job_request_.SerializePartialAsString(),
+            device_managment_request.SerializePartialAsString());
+  EXPECT_EQ(DM_STATUS_SUCCESS, client_->status());
+}
+
 // A helper class to test all em::DeviceRegisterRequest::PsmExecutionResult enum
 // values.
 class CloudPolicyClientRegisterWithPsmParamsTest
@@ -1688,9 +1715,8 @@ TEST_P(CloudPolicyClientRegisterWithPsmParamsTest,
       kExpectedPsmDeterminationTimestamp);
   device_attestation.SetPsmExecutionResult(psm_execution_result);
   client_->RegisterWithCertificate(
-      device_attestation, std::string() /* client_id */, DMAuth::NoAuth(),
-      kEnrollmentCertificate, std::string() /* sub_organization */,
-      &fake_signing_service_);
+      device_attestation, std::string() /* client_id */, kEnrollmentCertificate,
+      std::string() /* sub_organization */, &fake_signing_service_);
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(
       DeviceManagementService::JobConfiguration::TYPE_CERT_BASED_REGISTRATION,
@@ -1714,8 +1740,8 @@ INSTANTIATE_TEST_SUITE_P(
         em::DeviceRegisterRequest::PSM_RESULT_SUCCESSFUL_WITHOUT_STATE,
         em::DeviceRegisterRequest::PSM_RESULT_ERROR));
 
-#if defined(OS_WIN) || defined(OS_APPLE) || defined(OS_LINUX) || \
-    defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_CHROMEOS)
 
 class CloudPolicyClientUploadSecurityEventTest
     : public CloudPolicyClientTest,
@@ -1802,7 +1828,7 @@ TEST_P(CloudPolicyClientUploadSecurityEventTest, Test) {
   base::Value* events =
       payload->FindPath(RealtimeReportingJobConfiguration::kEventListKey);
   EXPECT_EQ(base::Value::Type::LIST, events->type());
-  EXPECT_EQ(1u, events->GetList().size());
+  EXPECT_EQ(1u, events->GetListDeprecated().size());
 }
 
 TEST_F(CloudPolicyClientTest, RealtimeReportMerge) {
@@ -1813,51 +1839,51 @@ TEST_F(CloudPolicyClientTest, RealtimeReportMerge) {
 
   // Add one report to the config.
   {
-    base::Value context(base::Value::Type::DICTIONARY);
-    context.SetStringPath("profile.gaiaEmail", "name@gmail.com");
-    context.SetStringPath("browser.userAgent", "User-Agent");
-    context.SetStringPath("profile.profileName", "Profile 1");
-    context.SetStringPath("profile.profilePath", "C:\\User Data\\Profile 1");
+    base::Value::Dict context;
+    context.SetByDottedPath("profile.gaiaEmail", "name@gmail.com");
+    context.SetByDottedPath("browser.userAgent", "User-Agent");
+    context.SetByDottedPath("profile.profileName", "Profile 1");
+    context.SetByDottedPath("profile.profilePath", "C:\\User Data\\Profile 1");
 
-    base::Value event;
-    event.SetStringPath("time", "2019-09-10T20:01:45Z");
-    event.SetStringPath("foo.prop1", "value1");
-    event.SetStringPath("foo.prop2", "value2");
-    event.SetStringPath("foo.prop3", "value3");
+    base::Value::Dict event;
+    event.Set("time", "2019-09-10T20:01:45Z");
+    event.SetByDottedPath("foo.prop1", "value1");
+    event.SetByDottedPath("foo.prop2", "value2");
+    event.SetByDottedPath("foo.prop3", "value3");
 
-    base::Value events(base::Value::Type::LIST);
+    base::Value::List events;
     events.Append(std::move(event));
 
-    base::Value report(base::Value::Type::DICTIONARY);
-    report.SetPath(RealtimeReportingJobConfiguration::kEventListKey,
-                   std::move(events));
-    report.SetPath(RealtimeReportingJobConfiguration::kContextKey,
-                   std::move(context));
+    base::Value::Dict report;
+    report.Set(RealtimeReportingJobConfiguration::kEventListKey,
+               std::move(events));
+    report.Set(RealtimeReportingJobConfiguration::kContextKey,
+               std::move(context));
 
     ASSERT_TRUE(config->AddReport(std::move(report)));
   }
 
   // Add a second report to the config with a different context.
   {
-    base::Value context(base::Value::Type::DICTIONARY);
-    context.SetStringPath("profile.gaiaEmail", "name2@gmail.com");
-    context.SetStringPath("browser.userAgent", "User-Agent2");
-    context.SetStringPath("browser.version", "1.0.0.0");
+    base::Value::Dict context;
+    context.SetByDottedPath("profile.gaiaEmail", "name2@gmail.com");
+    context.SetByDottedPath("browser.userAgent", "User-Agent2");
+    context.SetByDottedPath("browser.version", "1.0.0.0");
 
-    base::Value event;
-    event.SetStringPath("time", "2019-09-10T20:02:45Z");
-    event.SetStringPath("foo.prop1", "value1");
-    event.SetStringPath("foo.prop2", "value2");
-    event.SetStringPath("foo.prop3", "value3");
+    base::Value::Dict event;
+    event.Set("time", "2019-09-10T20:02:45Z");
+    event.SetByDottedPath("foo.prop1", "value1");
+    event.SetByDottedPath("foo.prop2", "value2");
+    event.SetByDottedPath("foo.prop3", "value3");
 
-    base::Value events(base::Value::Type::LIST);
+    base::Value::List events;
     events.Append(std::move(event));
 
-    base::Value report(base::Value::Type::DICTIONARY);
-    report.SetPath(RealtimeReportingJobConfiguration::kEventListKey,
-                   std::move(events));
-    report.SetPath(RealtimeReportingJobConfiguration::kContextKey,
-                   std::move(context));
+    base::Value::Dict report;
+    report.Set(RealtimeReportingJobConfiguration::kEventListKey,
+               std::move(events));
+    report.Set(RealtimeReportingJobConfiguration::kContextKey,
+               std::move(context));
 
     ASSERT_TRUE(config->AddReport(std::move(report)));
   }
@@ -1877,7 +1903,7 @@ TEST_F(CloudPolicyClientTest, RealtimeReportMerge) {
   ASSERT_EQ(
       2u,
       payload->FindListPath(RealtimeReportingJobConfiguration::kEventListKey)
-          ->GetList()
+          ->GetListDeprecated()
           .size());
 }
 

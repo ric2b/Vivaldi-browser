@@ -78,24 +78,6 @@ GURL TabContentsSyncedTabDelegate::GetVirtualURLAtIndex(int i) const {
   return entry ? entry->GetVirtualURL() : GURL();
 }
 
-GURL TabContentsSyncedTabDelegate::GetFaviconURLAtIndex(int i) const {
-  DCHECK(web_contents_);
-  NavigationEntry* entry = GetPossiblyPendingEntryAtIndex(web_contents_, i);
-  return entry ? (entry->GetFavicon().valid ? entry->GetFavicon().url : GURL())
-               : GURL();
-}
-
-ui::PageTransition TabContentsSyncedTabDelegate::GetTransitionAtIndex(
-    int i) const {
-  DCHECK(web_contents_);
-  NavigationEntry* entry = GetPossiblyPendingEntryAtIndex(web_contents_, i);
-  // If we don't have an entry, there's not a coherent PageTransition we can
-  // supply. There's no PageTransition::Unknown, so we just use the default,
-  // which is PageTransition::LINK.
-  return entry ? entry->GetTransitionType()
-               : ui::PageTransition::PAGE_TRANSITION_LINK;
-}
-
 std::string TabContentsSyncedTabDelegate::GetPageLanguageAtIndex(int i) const {
   DCHECK(web_contents_);
   NavigationEntry* entry = GetPossiblyPendingEntryAtIndex(web_contents_, i);
@@ -120,7 +102,7 @@ void TabContentsSyncedTabDelegate::GetSerializedNavigationAtIndex(
   }
 }
 
-bool TabContentsSyncedTabDelegate::ProfileIsSupervised() const {
+bool TabContentsSyncedTabDelegate::ProfileHasChildAccount() const {
   return Profile::FromBrowserContext(web_contents_->GetBrowserContext())
       ->IsChild();
 }
@@ -145,7 +127,7 @@ bool TabContentsSyncedTabDelegate::ShouldSync(
           GetWindowId()) == nullptr)
     return false;
 
-  if (ProfileIsSupervised() && !GetBlockedNavigations()->empty())
+  if (ProfileHasChildAccount() && !GetBlockedNavigations()->empty())
     return true;
 
   if (IsInitialBlankNavigation())

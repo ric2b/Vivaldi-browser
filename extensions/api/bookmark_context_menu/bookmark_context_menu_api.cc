@@ -62,17 +62,17 @@ ExtensionFunction::ResponseAction BookmarkContextMenuShowFunction::Run() {
   using vivaldi::bookmark_context_menu::Show::Params;
   namespace Results = vivaldi::bookmark_context_menu::Show::Results;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  params_ = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params_.get());
 
   VivaldiBrowserWindow* window =
-      VivaldiBrowserWindow::FromId(params->properties.window_id);
+      VivaldiBrowserWindow::FromId(params_->properties.window_id);
   if (!window) {
     return RespondNow(Error("No such window"));
   }
 
   ::vivaldi::BookmarkSorter::SortField sortField;
-  switch (params->properties.sort_field) {
+  switch (params_->properties.sort_field) {
     case vivaldi::bookmark_context_menu::SORT_FIELD_NONE:
       sortField = ::vivaldi::BookmarkSorter::FIELD_NONE;
       break;
@@ -94,7 +94,7 @@ ExtensionFunction::ResponseAction BookmarkContextMenuShowFunction::Run() {
   }
 
   ::vivaldi::BookmarkSorter::SortOrder sortOrder;
-  switch (params->properties.sort_order) {
+  switch (params_->properties.sort_order) {
     case vivaldi::bookmark_context_menu::SORT_ORDER_NONE:
       sortOrder = ::vivaldi::BookmarkSorter::ORDER_NONE;
       break;
@@ -107,7 +107,7 @@ ExtensionFunction::ResponseAction BookmarkContextMenuShowFunction::Run() {
   }
 
   bookmark_menu_container_.reset(new ::vivaldi::BookmarkMenuContainer(this));
-  switch (params->properties.edge) {
+  switch (params_->properties.edge) {
     case vivaldi::bookmark_context_menu::EDGE_ABOVE:
       bookmark_menu_container_->edge = ::vivaldi::BookmarkMenuContainer::Above;
       break;
@@ -118,13 +118,13 @@ ExtensionFunction::ResponseAction BookmarkContextMenuShowFunction::Run() {
       bookmark_menu_container_->edge = ::vivaldi::BookmarkMenuContainer::Off;
       break;
   };
-  bookmark_menu_container_->support.initIcons(params->properties.icons);
+  bookmark_menu_container_->support.initIcons(params_->properties.icons);
   bookmark_menu_container_->sort_field = sortField;
   bookmark_menu_container_->sort_order = sortOrder;
   bookmark_menu_container_->siblings.reserve(
-      params->properties.siblings.size());
+      params_->properties.siblings.size());
   for (const vivaldi::bookmark_context_menu::FolderEntry& e :
-       params->properties.siblings) {
+       params_->properties.siblings) {
     bookmark_menu_container_->siblings.emplace_back();
     ::vivaldi::BookmarkMenuContainerEntry* sibling =
         &bookmark_menu_container_->siblings.back();
@@ -141,7 +141,7 @@ ExtensionFunction::ResponseAction BookmarkContextMenuShowFunction::Run() {
   ::vivaldi::ConvertContainerRectToScreen(window->web_contents(),
                                           *bookmark_menu_container_);
 
-  std::string error = Open(window->web_contents(), params->properties.id);
+  std::string error = Open(window->web_contents(), params_->properties.id);
   if (!error.empty()) {
     return RespondNow(Error(error));
   }
@@ -195,17 +195,20 @@ std::string BookmarkContextMenuShowFunction::Open(
 }
 
 void BookmarkContextMenuShowFunction::OnHover(const std::string& url) {
-  MenubarMenuAPI::SendHover(browser_context(), url);
+  MenubarMenuAPI::SendHover(browser_context(), params_->properties.window_id,
+      url);
 }
 
 void BookmarkContextMenuShowFunction::OnOpenBookmark(int64_t bookmark_id,
                                                      int event_state) {
-  MenubarMenuAPI::SendOpenBookmark(browser_context(), bookmark_id, event_state);
+  MenubarMenuAPI::SendOpenBookmark(browser_context(),
+    params_->properties.window_id, bookmark_id, event_state);
 }
 
 void BookmarkContextMenuShowFunction::OnBookmarkAction(int64_t bookmark_id,
                                                        int command) {
-  MenubarMenuAPI::SendBookmarkAction(browser_context(), bookmark_id, command);
+  MenubarMenuAPI::SendBookmarkAction(browser_context(),
+      params_->properties.window_id, bookmark_id, command);
 }
 
 void BookmarkContextMenuShowFunction::OnOpenMenu(int64_t bookmark_id) {

@@ -102,11 +102,7 @@ String GetOriginUrl(const Node* node) {
   if (!isolate || !isolate->InContext() || !debugger)
     return String();
   v8::HandleScope handleScope(isolate);
-  // Try not getting the entire stack first.
-  String url = GetCurrentScriptUrl(/* maxStackSize=*/5);
-  if (!url.IsEmpty())
-    return url;
-  url = GetCurrentScriptUrl(/* maxStackSize=*/200);
+  String url = GetCurrentScriptUrl();
   if (!url.IsEmpty())
     return url;
   // If we did not get anything from the sync stack, let's try the slow
@@ -178,8 +174,8 @@ class DOMTreeIterator {
 // static
 PhysicalRect InspectorDOMSnapshotAgent::RectInDocument(
     const LayoutObject* layout_object) {
-  PhysicalRect rect_in_absolute = PhysicalRect::EnclosingRect(
-      layout_object->AbsoluteBoundingBoxFloatRect());
+  PhysicalRect rect_in_absolute =
+      PhysicalRect::EnclosingRect(layout_object->AbsoluteBoundingBoxRectF());
   LocalFrameView* local_frame_view = layout_object->GetFrameView();
   // Don't do frame to document coordinate transformation for layout view,
   // whose bounding box is not affected by scroll offset.

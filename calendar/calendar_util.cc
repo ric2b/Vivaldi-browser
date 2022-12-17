@@ -123,10 +123,6 @@ calendar::EventRow GetEventRow(
 
   row.is_template = event.is_template;
 
-  if (event.due.get()) {
-    row.due = GetTime(*event.due.get());
-  }
-
   if (event.priority.get()) {
     row.priority = *event.priority;
   }

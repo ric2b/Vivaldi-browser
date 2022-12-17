@@ -16,7 +16,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/compiler_specific.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
@@ -25,6 +24,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/threading/platform_thread.h"
 #include "base/win/scoped_co_mem.h"
 #include "base/win/windows_version.h"
 #include "media/capture/mojom/image_capture_types.h"
@@ -722,12 +722,11 @@ VideoCaptureControlSupport VideoCaptureDeviceMFWin::GetControlSupport(
   VideoCaptureControlSupport control_support;
 
   ComPtr<IAMCameraControl> camera_control;
-  HRESULT hr = source.As(&camera_control);
+  [[maybe_unused]] HRESULT hr = source.As(&camera_control);
   DLOG_IF_FAILED_WITH_HRESULT("Failed to retrieve IAMCameraControl", hr);
   ComPtr<IAMVideoProcAmp> video_control;
   hr = source.As(&video_control);
   DLOG_IF_FAILED_WITH_HRESULT("Failed to retrieve IAMVideoProcAmp", hr);
-  ALLOW_UNUSED_LOCAL(hr);
 
   // On Windows platform, some Image Capture video constraints and settings are
   // get or set using IAMCameraControl interface while the rest are get or set
@@ -1756,7 +1755,7 @@ void VideoCaptureDeviceMFWin::OnEvent(IMFMediaEvent* media_event) {
   // OnEvent().
   base::AutoLock lock(lock_);
 
-  if (hr == DXGI_ERROR_DEVICE_REMOVED) {
+  if (hr == DXGI_ERROR_DEVICE_REMOVED && dxgi_device_manager_ != nullptr) {
     // Removed device can happen for external reasons.
     // We should restart capture.
     Microsoft::WRL::ComPtr<ID3D11Device> recreated_d3d_device;

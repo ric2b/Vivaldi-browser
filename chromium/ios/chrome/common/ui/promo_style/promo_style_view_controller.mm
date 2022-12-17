@@ -8,8 +8,8 @@
 #include "base/i18n/rtl.h"
 #import "ios/chrome/common/constants.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#import "ios/chrome/common/ui/elements/highlight_button.h"
 #import "ios/chrome/common/ui/promo_style/constants.h"
-#import "ios/chrome/common/ui/promo_style/highlighted_button.h"
 #import "ios/chrome/common/ui/util/button_util.h"
 #include "ios/chrome/common/ui/util/device_util.h"
 #include "ios/chrome/common/ui/util/dynamic_type_util.h"
@@ -28,7 +28,7 @@ constexpr CGFloat kActionsBottomMargin = 10;
 constexpr CGFloat kTallBannerMultiplier = 0.35;
 constexpr CGFloat kDefaultBannerMultiplier = 0.25;
 constexpr CGFloat kContentWidthMultiplier = 0.65;
-constexpr CGFloat kContentMaxWidth = 327;
+constexpr CGFloat kContentOptimalWidth = 327;
 constexpr CGFloat kMoreArrowMargin = 4;
 constexpr CGFloat kPreviousContentVisibleOnScroll = 0.15;
 constexpr CGFloat kSeparatorHeight = 1;
@@ -43,7 +43,7 @@ constexpr CGFloat kLearnMoreButtonSide = 40;
 // UIView that wraps the scrollable content.
 @property(nonatomic, strong) UIView* scrollContentView;
 @property(nonatomic, strong) UILabel* subtitleLabel;
-@property(nonatomic, strong) HighlightedButton* primaryActionButton;
+@property(nonatomic, strong) HighlightButton* primaryActionButton;
 @property(nonatomic, strong) UIButton* secondaryActionButton;
 @property(nonatomic, strong) UIButton* tertiaryActionButton;
 
@@ -262,10 +262,15 @@ constexpr CGFloat kLearnMoreButtonSide = 40;
                                  constant:-extraBottomMargin],
   ]];
 
-  // Also constrain the width layout guide to a maximum constant, but at a lower
-  // priority so that it only applies in compact screens.
+  // This constraint is added to enforce that the content width should be as
+  // close to the optimal width as possible, within the range already activated
+  // for "widthLayoutGuide.widthAnchor" previously, with a higher priority.
+  // In this case, the content width in iPad and iPhone landscape mode should be
+  // the safe layout width multiplied by kContentWidthMultiplier, while the
+  // content width for a iPhone portrait mode should be kContentOptimalWidth.
   NSLayoutConstraint* contentLayoutGuideWidthConstraint =
-      [widthLayoutGuide.widthAnchor constraintEqualToConstant:kContentMaxWidth];
+      [widthLayoutGuide.widthAnchor
+          constraintEqualToConstant:kContentOptimalWidth];
   contentLayoutGuideWidthConstraint.priority = UILayoutPriorityRequired - 1;
   contentLayoutGuideWidthConstraint.active = YES;
 
@@ -516,7 +521,7 @@ constexpr CGFloat kLearnMoreButtonSide = 40;
 
 - (UIButton*)primaryActionButton {
   if (!_primaryActionButton) {
-    _primaryActionButton = [[HighlightedButton alloc] initWithFrame:CGRectZero];
+    _primaryActionButton = [[HighlightButton alloc] initWithFrame:CGRectZero];
     _primaryActionButton.contentEdgeInsets =
         UIEdgeInsetsMake(kButtonVerticalInsets, 0, kButtonVerticalInsets, 0);
     [_primaryActionButton setBackgroundColor:[UIColor colorNamed:kBlueColor]];

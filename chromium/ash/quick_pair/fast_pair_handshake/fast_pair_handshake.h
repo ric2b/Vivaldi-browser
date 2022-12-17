@@ -51,7 +51,7 @@ class FastPairHandshake {
       std::unique_ptr<FastPairGattServiceClient> gatt_service_client);
   FastPairHandshake(const FastPairHandshake&) = delete;
   FastPairHandshake& operator=(const FastPairHandshake&) = delete;
-  ~FastPairHandshake();
+  virtual ~FastPairHandshake();
 
   bool completed_successfully() { return completed_successfully_; }
 
@@ -59,9 +59,8 @@ class FastPairHandshake {
     return fast_pair_data_encryptor_.get();
   }
 
-  FastPairGattServiceClient* fast_pair_gatt_service_client() {
-    return fast_pair_gatt_service_client_.get();
-  }
+  // Returns whether or not this handshake has an active GATT connection.
+  virtual bool IsConnected() = 0;
 
  protected:
   bool completed_successfully_ = false;

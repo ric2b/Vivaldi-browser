@@ -1,7 +1,7 @@
 # DO NOT EDIT EXCEPT FOR LOCAL TESTING.
 
 vars = {
-  "upstream_commit_id": "I803dc87f03e013a6fb7ac6477ae8f6072e1f26cf",
+  "upstream_commit_id": "Ia14d1f1b42beb6031ce2f78f3497cbcb5f360b4a",
 }
 
 hooks = [
@@ -40,7 +40,7 @@ hooks = [
     'action': [
       'python3', "-u",
       'chromium/build/landmines.py'
-      ],
+    ],
   },
   {
     # Ensure that the DEPS'd "depot_tools" has its self-update capability
@@ -166,7 +166,7 @@ hooks = [
     'name': 'lastchange_chromium',
     'pattern': '.',
     'action': ['python3', "-u", 'chromium/build/util/lastchange.py',
-      '-o', 'chromium/build/util/LASTCHANGE.chromium',
+                '-o', 'chromium/build/util/LASTCHANGE.chromium',
       "--filter", "^Change-Id: " + Var("upstream_commit_id")],
   },
   {
@@ -193,11 +193,11 @@ hooks = [
     'pattern': '.',
     'condition': 'host_os == "win"',
     'action': [ 'python3', "-u",
-      'chromium/third_party/depot_tools/download_from_google_storage.py',
-      '--no_resume',
-      '--no_auth',
-      '--bucket', 'chromium-clang-format',
-      '-s', 'chromium/buildtools/win/clang-format.exe.sha1'
+                'chromium/third_party/depot_tools/download_from_google_storage.py',
+                '--no_resume',
+                '--no_auth',
+                '--bucket', 'chromium-clang-format',
+                '-s', 'chromium/buildtools/win/clang-format.exe.sha1'
     ],
   },
   {
@@ -205,11 +205,11 @@ hooks = [
     'pattern': '.',
     'condition': 'host_os == "mac"',
     'action': [ 'python3', "-u",
-      'chromium/third_party/depot_tools/download_from_google_storage.py',
-      '--no_resume',
-      '--no_auth',
-      '--bucket', 'chromium-clang-format',
-      '-s', 'chromium/buildtools/mac/clang-format.sha1'
+                'chromium/third_party/depot_tools/download_from_google_storage.py',
+                '--no_resume',
+                '--no_auth',
+                '--bucket', 'chromium-clang-format',
+                '-s', 'chromium/buildtools/mac/clang-format.sha1'
     ],
   },
   {
@@ -217,11 +217,11 @@ hooks = [
     'pattern': '.',
     'condition': 'host_os == "linux"',
     'action': [ 'python3', "-u",
-      'chromium/third_party/depot_tools/download_from_google_storage.py',
-      '--no_resume',
-      '--no_auth',
-      '--bucket', 'chromium-clang-format',
-      '-s', 'chromium/buildtools/linux64/clang-format.sha1'
+                'chromium/third_party/depot_tools/download_from_google_storage.py',
+                '--no_resume',
+                '--no_auth',
+                '--bucket', 'chromium-clang-format',
+                '-s', 'chromium/buildtools/linux64/clang-format.sha1'
     ],
   },
   # Pull rc binaries using checked-in hashes.
@@ -342,7 +342,7 @@ hooks = [
                 '--no_auth',
                 '--bucket', 'chromium-gvr-static-shim',
                 '-s', 'chromium/third_party/gvr-android-sdk/libgvr_shim_static_arm64_1.a.sha1',
-      ],
+    ],
   },
   {
     'name': 'gvr_static_shim_android_arm64_Cr',
@@ -436,6 +436,17 @@ hooks = [
     'action': [ 'python3',
                 'chromium/tools/update_pgo_profiles.py',
                 '--target=mac',
+                'update',
+                '--gs-url-base=chromium-optimization-profiles/pgo_profiles',
+    ],
+  },
+  {
+    'name': 'Fetch PGO profiles for mac arm',
+    'pattern': '.',
+    'condition': 'checkout_pgo_profiles and checkout_mac',
+    'action': [ 'python3',
+                'chromium/tools/update_pgo_profiles.py',
+                '--target=mac-arm',
                 'update',
                 '--gs-url-base=chromium-optimization-profiles/pgo_profiles',
     ],

@@ -864,4 +864,10 @@ public class BrowserControlsManager
     int getControlsAnimationDurationMsForTesting() {
         return CONTROLS_ANIMATION_DURATION_MS;
     }
+
+    /** Vivaldi */
+    public void forceControlsOffsetUpdate() {
+        updateControlOffset();
+        notifyControlOffsetChanged();
+    }
 }

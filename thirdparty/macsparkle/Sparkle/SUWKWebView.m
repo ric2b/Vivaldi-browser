@@ -6,6 +6,8 @@
 //  Copyright © 2020 Sparkle Project. All rights reserved.
 //
 
+#if SPARKLE_BUILD_UI_BITS
+
 #import "SUWKWebView.h"
 #import "SUWebViewCommon.h"
 #import "SULog.h"
@@ -21,12 +23,8 @@
 
 @interface SUWKWebView () <WKNavigationDelegate>
 
-// Remove when minimum system requirement is 10.10+
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunguarded-availability"
 @property (nonatomic, readonly) WKWebView *webView;
 @property (nonatomic) WKNavigation *currentNavigation;
-#pragma clang diagnostic pop
 @property (nonatomic) void (^completionHandler)(NSError * _Nullable);
 @property (nonatomic) BOOL drawsWebViewBackground;
 
@@ -39,9 +37,6 @@
 @synthesize completionHandler = _completionHandler;
 @synthesize drawsWebViewBackground = _drawsWebViewBackground;
 
-// Remove when minimum system requirement is 10.10+
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunguarded-availability"
 static WKUserScript *_userScriptWithInjectedStyleSource(NSString *styleSource)
 {
     // We must remove newlines when inserting the style source in this interpolated string below
@@ -59,11 +54,7 @@ static WKUserScript *_userScriptWithInjectedStyleSource(NSString *styleSource)
     
     return [[WKUserScript alloc] initWithSource:scriptSource injectionTime:WKUserScriptInjectionTimeAtDocumentEnd forMainFrameOnly:YES];
 }
-#pragma clang diagnostic pop
 
-// Remove when minimum system requirement is 10.10+
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunguarded-availability"
 - (instancetype)initWithColorStyleSheetLocation:(NSURL *)colorStyleSheetLocation fontFamily:(NSString *)fontFamily fontPointSize:(int)fontPointSize javaScriptEnabled:(BOOL)javaScriptEnabled
 {
     self = [super init];
@@ -77,7 +68,10 @@ static WKUserScript *_userScriptWithInjectedStyleSource(NSString *styleSource)
         // that involves implementing a delegate method that is only available on macOS 11.. to get it properly working.
         // To simplify things, just rely on deprecated property for now.
         // Future reader: if you change how JS is disabled, please be sure to test that JS code is properly disabled in HTML release notes.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
         configuration.preferences.javaScriptEnabled = javaScriptEnabled;
+#pragma clang diagnostic pop
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = NO;
         
         NSError *colorStyleContentsError = nil;
@@ -85,7 +79,7 @@ static WKUserScript *_userScriptWithInjectedStyleSource(NSString *styleSource)
         
         WKUserContentController *userContentController = [[WKUserContentController alloc] init];
         
-        NSString *fontStyleContents = [NSString stringWithFormat:@"body { font-family: %@; font-size: %dpt; }", fontFamily, fontPointSize];
+        NSString *fontStyleContents = [NSString stringWithFormat:@"body { font-family: %@; font-size: %dpx; }", fontFamily, fontPointSize];
         
         NSString *finalStyleContents;
         if (colorStyleContents == nil) {
@@ -108,7 +102,6 @@ static WKUserScript *_userScriptWithInjectedStyleSource(NSString *styleSource)
     }
     return self;
 }
-#pragma clang diagnostic pop
 
 - (NSView *)view
 {
@@ -126,24 +119,7 @@ static WKUserScript *_userScriptWithInjectedStyleSource(NSString *styleSource)
 {
     self.completionHandler = [completionHandler copy];
 
-    // Remove when minimum system requirement is 10.11+
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunguarded-availability"
-    // Note: This API requires macOS 10.11
-    // Rather than figuring out a bad workaround for 10.10, it is simpler to just require 10.11 for this class
     self.currentNavigation = [self.webView loadData:data MIMEType:MIMEType characterEncodingName:textEncodingName baseURL:baseURL];
-#pragma clang diagnostic pop
-}
-
-- (void)loadRequest:(NSURLRequest *)urlRequest completionHandler:(void (^)(NSError * _Nullable))completionHandler
-{
-    self.completionHandler = [completionHandler copy];
-    
-    // Remove when minimum system requirement is 10.10+
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunguarded-availability"
-    self.currentNavigation = [self.webView loadRequest:urlRequest];
-#pragma clang diagnostic pop
 }
 
 - (void)setDrawsBackground:(BOOL)drawsBackground
@@ -172,11 +148,7 @@ static WKUserScript *_userScriptWithInjectedStyleSource(NSString *styleSource)
     [self.webView stopLoading];
 }
 
-// Remove when minimum system requirement is 10.10+
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunguarded-availability"
 - (void)webView:(WKWebView *)webView didFinishNavigation:(WKNavigation *)navigation
-#pragma clang diagnostic pop
 {
     if (navigation == self.currentNavigation) {
         if (self.completionHandler != nil) {
@@ -187,11 +159,7 @@ static WKUserScript *_userScriptWithInjectedStyleSource(NSString *styleSource)
     }
 }
 
-// Remove when minimum system requirement is 10.10+
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunguarded-availability"
 - (void)webView:(WKWebView *)webView didFailNavigation:(WKNavigation *)navigation withError:(NSError *)error
-#pragma clang diagnostic pop
 {
     if (navigation == self.currentNavigation) {
         if (self.completionHandler != nil) {
@@ -202,11 +170,7 @@ static WKUserScript *_userScriptWithInjectedStyleSource(NSString *styleSource)
     }
 }
 
-// Remove when minimum system requirement is 10.10+
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunguarded-availability"
 - (void)webViewWebContentProcessDidTerminate:(WKWebView *)webView
-#pragma clang diagnostic pop
 {
     if (self.currentNavigation != nil) {
         if (self.completionHandler != nil) {
@@ -218,8 +182,6 @@ static WKUserScript *_userScriptWithInjectedStyleSource(NSString *styleSource)
     }
 }
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunguarded-availability"
 - (void)webView:(WKWebView *)webView decidePolicyForNavigationAction:(WKNavigationAction *)navigationAction decisionHandler:(void (^)(WKNavigationActionPolicy))decisionHandler
 {
     NSURLRequest *request = navigationAction.request;
@@ -244,6 +206,7 @@ static WKUserScript *_userScriptWithInjectedStyleSource(NSString *styleSource)
         }
     }
 }
-#pragma clang diagnostic pop
 
 @end
+
+#endif

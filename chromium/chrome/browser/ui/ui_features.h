@@ -20,6 +20,10 @@ namespace features {
 // All features in alphabetical order. The features should be documented
 // alongside the definition of their values in the .cc file.
 
+// TODO(https://crbug.com/896640): Remove this when the tab dragging
+// interactive_ui_tests pass on Wayland.
+extern const base::Feature kAllowWindowDragUsingSystemDragDrop;
+
 extern const base::Feature kChromeLabs;
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
@@ -70,11 +74,7 @@ extern const base::Feature kSideSearchFeedback;
 extern const base::Feature kSideSearchStatePerTab;
 #endif  // BUILDFLAG(ENABLE_SIDE_SEARCH)
 
-extern const base::Feature kSyncConfirmationUpdatedText;
-
 extern const base::Feature kTabGroupsAutoCreate;
-
-extern const base::Feature kTabGroupsCollapseFreezing;
 
 extern const base::Feature kTabGroupsNewBadgePromo;
 
@@ -124,6 +124,8 @@ extern const char kTabSearchSearchThresholdName[];
 extern const base::FeatureParam<bool> kTabSearchSearchIgnoreLocation;
 
 extern const base::Feature kTabSearchMediaTabs;
+
+extern const char kTabSearchAlsoShowMediaTabsinOpenTabsSectionParameterName[];
 
 // Determines how close the match must be to the beginning of the string. Eg a
 // distance of 100 and threshold of 0.8 would require a perfect match to be
@@ -175,10 +177,6 @@ extern const base::Feature kUnifiedSidePanel;
 
 extern const base::Feature kWebUIBubblePerProfilePersistence;
 
-#if !defined(ANDROID)
-extern const base::Feature kWebUIBrandingUpdate;
-#endif
-
 extern const base::Feature kWebUIDownloadShelf;
 
 extern const base::Feature kWebUITabStrip;
@@ -189,12 +187,12 @@ extern const base::Feature kWebUITabStripContextMenuAfterTap;
 
 extern const base::Feature kWebUIFeedback;
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS)
 extern const base::Feature kChromeOSTabSearchCaptionButton;
 #endif
 
 // Cocoa to views migration.
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 extern const base::Feature kLocationPermissionsExperiment;
 
 extern const base::Feature kViewsFirstRunDialog;
@@ -205,7 +203,7 @@ int GetLocationPermissionsExperimentBubblePromptLimit();
 int GetLocationPermissionsExperimentLabelPromptLimit();
 #endif
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 extern const base::Feature kWin10TabSearchCaptionButton;
 #endif
 

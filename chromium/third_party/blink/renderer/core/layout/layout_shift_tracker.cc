@@ -23,7 +23,6 @@
 #include "third_party/blink/renderer/core/timing/dom_window_performance.h"
 #include "third_party/blink/renderer/core/timing/performance_entry.h"
 #include "third_party/blink/renderer/core/timing/window_performance.h"
-#include "third_party/blink/renderer/platform/graphics/graphics_layer.h"
 #include "third_party/blink/renderer/platform/graphics/paint/geometry_mapper.h"
 #include "third_party/blink/renderer/platform/graphics/paint/property_tree_state.h"
 #include "ui/gfx/geometry/rect.h"
@@ -116,12 +115,12 @@ void RectToTracedValue(const gfx::Rect& rect,
 }
 
 void RegionToTracedValue(const LayoutShiftRegion& region, TracedValue& value) {
-  Region blink_region;
+  cc::Region blink_region;
   for (const gfx::Rect& rect : region.GetRects())
-    blink_region.Unite(Region(rect));
+    blink_region.Union(rect);
 
   value.BeginArray("region_rects");
-  for (const gfx::Rect& rect : blink_region.Rects())
+  for (gfx::Rect rect : blink_region)
     RectToTracedValue(rect, value);
   value.EndArray();
 }
@@ -497,6 +496,9 @@ double LayoutShiftTracker::SubframeWeightingFactor() const {
   gfx::Size subframe_visible_size = subframe_rect.PixelSnappedSize();
   gfx::Size main_frame_size = frame.GetPage()->GetVisualViewport().Size();
 
+  if (main_frame_size.Area64() == 0) {
+    return 0;
+  }
   // TODO(crbug.com/940711): This comparison ignores page scale and CSS
   // transforms above the local root.
   return static_cast<double>(subframe_visible_size.Area64()) /
@@ -781,10 +783,10 @@ void LayoutShiftTracker::SendLayoutShiftRectsToHud(
       return;
     if (cc_layer->layer_tree_host()->hud_layer()) {
       WebVector<gfx::Rect> rects;
-      Region blink_region;
+      cc::Region blink_region;
       for (const gfx::Rect& rect : int_rects)
-        blink_region.Unite(Region(rect));
-      for (const gfx::Rect& rect : blink_region.Rects())
+        blink_region.Union(rect);
+      for (gfx::Rect rect : blink_region)
         rects.emplace_back(rect);
       cc_layer->layer_tree_host()->hud_layer()->SetLayoutShiftRects(
           rects.ReleaseVector());

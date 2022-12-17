@@ -37,14 +37,14 @@ struct NGInlineNodeData;
 template <typename Base>
 class LayoutNGBlockFlowMixin : public LayoutNGMixin<Base> {
  public:
-  explicit LayoutNGBlockFlowMixin(Element* element);
+  explicit LayoutNGBlockFlowMixin(ContainerNode*);
   ~LayoutNGBlockFlowMixin() override;
 
   NGInlineNodeData* TakeNGInlineNodeData() final;
   NGInlineNodeData* GetNGInlineNodeData() const final;
   void ResetNGInlineNodeData() final;
   void ClearNGInlineNodeData() final;
-  bool HasNGInlineNodeData() const final { return ng_inline_node_data_; }
+  bool HasNGInlineNodeData() const final;
 
   LayoutUnit FirstLineBoxBaseline() const final;
   LayoutUnit InlineBlockBaseline(LineDirectionMode) const final;
@@ -62,10 +62,11 @@ class LayoutNGBlockFlowMixin : public LayoutNGMixin<Base> {
   void StyleDidChange(StyleDifference, const ComputedStyle* old_style) override;
 
 #if DCHECK_IS_ON()
-  void AddLayoutOverflowFromChildren() final { NOTREACHED(); }
+  void AddLayoutOverflowFromChildren() final;
 #endif
 
   void AddOutlineRects(Vector<PhysicalRect>&,
+                       LayoutObject::OutlineInfo*,
                        const PhysicalOffset& additional_offset,
                        NGOutlineType) const final;
 

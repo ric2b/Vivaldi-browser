@@ -16,6 +16,7 @@
 #include "ash/components/arc/arc_util.h"
 #include "ash/components/arc/enterprise/arc_data_snapshotd_manager.h"
 #include "ash/components/arc/session/arc_bridge_host_impl.h"
+#include "ash/components/cryptohome/cryptohome_parameters.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "base/bind.h"
@@ -33,7 +34,6 @@
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_restrictions.h"
-#include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/memory/memory.h"
 #include "chromeos/system/scheduler_configuration_manager_base.h"
 #include "components/user_manager/user_manager.h"
@@ -159,7 +159,7 @@ void ApplyUsapProfile(
 void ApplyDisableDownloadProvider(StartParams* params) {
   params->disable_download_provider =
       base::CommandLine::ForCurrentProcess()->HasSwitch(
-          chromeos::switches::kArcDisableDownloadProvider);
+          ash::switches::kArcDisableDownloadProvider);
 }
 
 void ApplyDisableUreadahed(StartParams* params) {
@@ -472,10 +472,10 @@ void ArcSessionImpl::DoStartMiniInstance(size_t num_cores_disabled) {
   }
 
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          chromeos::switches::kArcPlayStoreAutoUpdate)) {
+          ash::switches::kArcPlayStoreAutoUpdate)) {
     const std::string value =
         base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-            chromeos::switches::kArcPlayStoreAutoUpdate);
+            ash::switches::kArcPlayStoreAutoUpdate);
     if (value == kOn) {
       params.play_store_auto_update =
           StartParams::PlayStoreAutoUpdate::AUTO_UPDATE_ON;
@@ -486,25 +486,25 @@ void ArcSessionImpl::DoStartMiniInstance(size_t num_cores_disabled) {
       VLOG(1) << "Play Store auto-update is forced off";
     } else {
       LOG(ERROR) << "Invalid parameter " << value << " for "
-                 << chromeos::switches::kArcPlayStoreAutoUpdate;
+                 << ash::switches::kArcPlayStoreAutoUpdate;
     }
   }
 
   params.arc_disable_system_default_app =
       base::CommandLine::ForCurrentProcess()->HasSwitch(
-          chromeos::switches::kArcDisableSystemDefaultApps);
+          ash::switches::kArcDisableSystemDefaultApps);
   if (params.arc_disable_system_default_app)
     VLOG(1) << "System default app(s) are disabled";
 
   params.disable_media_store_maintenance =
       base::CommandLine::ForCurrentProcess()->HasSwitch(
-          chromeos::switches::kArcDisableMediaStoreMaintenance);
+          ash::switches::kArcDisableMediaStoreMaintenance);
   if (params.disable_media_store_maintenance)
     VLOG(1) << "MediaStore maintenance task(s) are disabled";
 
   params.arc_generate_play_auto_install =
       base::CommandLine::ForCurrentProcess()->HasSwitch(
-          chromeos::switches::kArcGeneratePlayAutoInstall);
+          ash::switches::kArcGeneratePlayAutoInstall);
 
   VLOG(1) << "Starting ARC mini instance with lcd_density="
           << params.lcd_density
@@ -730,7 +730,7 @@ void ArcSessionImpl::Stop() {
     case State::WAITING_FOR_NUM_CORES:
       if (scheduler_configuration_manager_)  // for testing
         scheduler_configuration_manager_->RemoveObserver(this);
-      FALLTHROUGH;
+      [[fallthrough]];
     case State::NOT_STARTED:
       // If |Stop()| is called while waiting for LCD density or CPU cores
       // information, it can directly move to stopped state.

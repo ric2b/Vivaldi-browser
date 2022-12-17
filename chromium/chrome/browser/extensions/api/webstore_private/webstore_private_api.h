@@ -22,7 +22,7 @@
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
 // TODO(https://crbug.com/1060801): Here and elsewhere, possibly switch build
-// flag to #if defined(OS_CHROMEOS)
+// flag to #if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/supervised_user/supervised_user_extensions_metrics_recorder.h"
 #include "chrome/browser/ui/supervised_user/parent_permission_dialog.h"
 #endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
@@ -51,8 +51,11 @@ class WebstorePrivateApi {
       Profile* profile,
       const std::string& extension_id);
 
-  // Clear the pending approvals. This should be used for testing only.
+  // Clear the pending approvals. This should only be used for testing.
   static void ClearPendingApprovalsForTesting();
+
+  // Get the count of pending approvals. This should only be used for testing.
+  static int GetPendingApprovalsCountForTesting();
 };
 
 class WebstorePrivateBeginInstallWithManifest3Function

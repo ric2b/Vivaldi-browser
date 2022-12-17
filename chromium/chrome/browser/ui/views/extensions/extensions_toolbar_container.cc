@@ -9,6 +9,7 @@
 #include "base/callback_helpers.h"
 #include "base/cxx17_backports.h"
 #include "base/feature_list.h"
+#include "base/no_destructor.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -305,7 +306,7 @@ void ExtensionsToolbarContainer::OnContextMenuShown(
   // Only update the extension's toolbar visibility if the context menu is being
   // shown from an extension visible in the toolbar.
   if (!ExtensionsMenuView::IsShowing()) {
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
     // TODO(crbug/1065584): Remove hiding active popup here once this bug is
     // fixed.
     HideActivePopup();
@@ -390,7 +391,6 @@ bool ExtensionsToolbarContainer::CloseOverflowMenuIfOpen() {
 
 void ExtensionsToolbarContainer::PopOutAction(
     ToolbarActionViewController* action,
-    bool is_sticky,
     base::OnceClosure closure) {
   // TODO(pbos): Highlight popout differently.
   DCHECK(!popped_out_action_);
@@ -401,18 +401,17 @@ void ExtensionsToolbarContainer::PopOutAction(
 }
 
 bool ExtensionsToolbarContainer::ShowToolbarActionPopupForAPICall(
-    const std::string& action_id) {
+    const std::string& action_id,
+    ShowPopupCallback callback) {
   // Don't override another popup, and only show in the active window.
   if (popped_out_action_ || !browser_->window()->IsActive())
     return false;
 
   ToolbarActionViewController* action = GetActionForId(action_id);
-  // Since this was triggered by an API call, we never want to grant activeTab
-  // to the extension.
-  constexpr bool kGrantActiveTab = false;
-  return action && action->ExecuteAction(
-                       kGrantActiveTab,
-                       ToolbarActionViewController::InvocationSource::kApi);
+  DCHECK(action);
+  action->TriggerPopupForAPI(std::move(callback));
+
+  return true;
 }
 
 void ExtensionsToolbarContainer::ShowToolbarActionBubble(

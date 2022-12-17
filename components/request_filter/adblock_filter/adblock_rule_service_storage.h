@@ -40,7 +40,9 @@ class RuleServiceStorage : public base::ImportantFileWriter::DataSerializer {
         kRuleGroupCount>
         exceptions;
     std::array<std::string, kRuleGroupCount> index_checksums;
-    BlockedUrlsReporter::BlockedDomains blocked_counters;
+    base::Time blocked_reporting_start;
+    BlockedUrlsReporter::CounterGroup blocked_domains_counters;
+    BlockedUrlsReporter::CounterGroup blocked_for_origin_counters;
 
     int storage_version = 0;
   };

@@ -27,7 +27,7 @@
 #include "chrome/browser/web_applications/web_app_utils.h"
 #include "chrome/common/chrome_features.h"
 #include "components/account_id/account_id.h"
-#include "components/app_restore/features.h"
+#include "components/app_constants/constants.h"
 #include "components/app_restore/full_restore_save_handler.h"
 #include "components/app_restore/full_restore_utils.h"
 #include "components/services/app_service/app_service_mojom_impl.h"
@@ -36,7 +36,6 @@
 #include "components/services/app_service/public/cpp/app_types.h"
 #include "components/services/app_service/public/cpp/types_util.h"
 #include "components/user_manager/user.h"
-#include "extensions/common/constants.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace apps {
@@ -58,7 +57,7 @@ AppServiceProxyAsh::AppServiceProxyAsh(Profile* profile)
 }
 
 AppServiceProxyAsh::~AppServiceProxyAsh() {
-  if (IsValidProfile() && full_restore::features::IsFullRestoreEnabled()) {
+  if (IsValidProfile()) {
     ::full_restore::FullRestoreSaveHandler::GetInstance()->SetAppRegistryCache(
         profile_->GetPath(), nullptr);
   }
@@ -74,7 +73,7 @@ void AppServiceProxyAsh::Initialize() {
   }
 
   const user_manager::User* user =
-      chromeos::ProfileHelper::Get()->GetUserByProfile(profile_);
+      ash::ProfileHelper::Get()->GetUserByProfile(profile_);
   if (user) {
     const AccountId& account_id = user->GetAccountId();
     app_registry_cache_.SetAccountId(account_id);
@@ -85,19 +84,16 @@ void AppServiceProxyAsh::Initialize() {
         account_id, &app_capability_access_cache_);
   }
 
-  if (full_restore::features::IsFullRestoreEnabled()) {
-    if (user == user_manager::UserManager::Get()->GetPrimaryUser()) {
-      ::full_restore::FullRestoreSaveHandler::GetInstance()
-          ->SetPrimaryProfilePath(profile_->GetPath());
+  if (user == user_manager::UserManager::Get()->GetPrimaryUser()) {
+    ::full_restore::SetPrimaryProfilePath(profile_->GetPath());
 
-      // In Multi-Profile mode, only set for the primary user. For other users,
-      // active profile path is set when switch users.
-      ::full_restore::SetActiveProfilePath(profile_->GetPath());
-    }
-
-    ::full_restore::FullRestoreSaveHandler::GetInstance()->SetAppRegistryCache(
-        profile_->GetPath(), &app_registry_cache_);
+    // In Multi-Profile mode, only set for the primary user. For other users,
+    // active profile path is set when switch users.
+    ::full_restore::SetActiveProfilePath(profile_->GetPath());
   }
+
+  ::full_restore::FullRestoreSaveHandler::GetInstance()->SetAppRegistryCache(
+      profile_->GetPath(), &app_registry_cache_);
 
   AppServiceProxyBase::Initialize();
 
@@ -110,7 +106,7 @@ void AppServiceProxyAsh::Initialize() {
   publisher_host_ = std::make_unique<PublisherHost>(this);
 
   if (crosapi::browser_util::IsLacrosEnabled() &&
-      chromeos::ProfileHelper::IsPrimaryProfile(profile_) &&
+      ash::ProfileHelper::IsPrimaryProfile(profile_) &&
       web_app::IsWebAppsCrosapiEnabled()) {
     auto* browser_manager = crosapi::BrowserManager::Get();
     // In unit tests, it is possible that the browser manager is not created.
@@ -283,14 +279,17 @@ void AppServiceProxyAsh::UninstallImpl(
                                          &callback](
                                             const apps::AppUpdate& update) {
     apps::mojom::IconKeyPtr icon_key = update.IconKey();
-    auto uninstall_dialog = std::make_unique<UninstallDialog>(
+    auto uninstall_dialog_ptr = std::make_unique<UninstallDialog>(
         profile_, update.AppType(), update.AppId(), update.Name(),
-        std::move(icon_key), this, parent_window,
+        parent_window,
         base::BindOnce(&AppServiceProxyAsh::OnUninstallDialogClosed,
                        weak_ptr_factory_.GetWeakPtr(), update.AppType(),
                        update.AppId(), uninstall_source));
-    uninstall_dialog->SetDialogCreatedCallbackForTesting(std::move(callback));
-    uninstall_dialogs_.emplace(std::move(uninstall_dialog));
+    UninstallDialog* uninstall_dialog = uninstall_dialog_ptr.get();
+    uninstall_dialog_ptr->SetDialogCreatedCallbackForTesting(
+        std::move(callback));
+    uninstall_dialogs_.emplace(std::move(uninstall_dialog_ptr));
+    uninstall_dialog->PrepareToShow(std::move(icon_key), this);
   });
 }
 
@@ -319,7 +318,7 @@ void AppServiceProxyAsh::OnUninstallDialogClosed(
 
 bool AppServiceProxyAsh::MaybeShowLaunchPreventionDialog(
     const apps::AppUpdate& update) {
-  if (update.AppId() == extension_misc::kChromeAppId) {
+  if (update.AppId() == app_constants::kChromeAppId) {
     return false;
   }
 
@@ -471,8 +470,8 @@ void AppServiceProxyAsh::RecordAppPlatformMetrics(
     const apps::AppUpdate& update,
     apps::mojom::LaunchSource launch_source,
     apps::mojom::LaunchContainer container) {
-  RecordAppLaunchMetrics(profile, update.AppType(), update.AppId(),
-                         launch_source, container);
+  RecordAppLaunchMetrics(profile, ConvertMojomAppTypToAppType(update.AppType()),
+                         update.AppId(), launch_source, container);
 }
 
 void AppServiceProxyAsh::InitAppPlatformMetrics() {
@@ -489,7 +488,7 @@ void AppServiceProxyAsh::PerformPostUninstallTasks(
   if (app_platform_metrics_service_ &&
       app_platform_metrics_service_->AppPlatformMetrics()) {
     app_platform_metrics_service_->AppPlatformMetrics()->RecordAppUninstallUkm(
-        app_type, app_id, uninstall_source);
+        ConvertMojomAppTypToAppType(app_type), app_id, uninstall_source);
   }
 }
 

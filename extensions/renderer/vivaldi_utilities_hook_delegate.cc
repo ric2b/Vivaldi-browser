@@ -4,6 +4,7 @@
 
 #include "base/guid.h"
 #include "components/lookalikes/core/lookalike_url_util.h"
+#include "components/url_formatter/elide_url.h"
 #include "components/version_info/version_info.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/renderer/v8_value_converter.h"
@@ -115,6 +116,18 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleGetUrlFragments(
               gin::StringToV8(isolate, value))
         .ToChecked();
   };
+  auto set_fragment16 = [&](base::StringPiece key, std::u16string value) {
+    fragments
+        ->Set(context, gin::StringToV8(isolate, key),
+              gin::StringToSymbol(isolate, value))
+        .ToChecked();
+  };
+  if (url.is_valid()) {
+    set_fragment16("urlForSecurityDisplay",
+                   url_formatter::FormatUrl(
+                       url, url_formatter::kFormatUrlOmitNothing,
+                       net::UnescapeRule::NORMAL, nullptr, nullptr, nullptr));
+  }
 
   if (parsed.scheme.is_valid()) {
     set_fragment("scheme", url.scheme_piece());

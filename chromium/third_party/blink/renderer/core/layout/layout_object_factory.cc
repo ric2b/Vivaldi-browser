@@ -33,6 +33,7 @@
 #include "third_party/blink/renderer/core/layout/layout_text_control_single_line.h"
 #include "third_party/blink/renderer/core/layout/layout_text_fragment.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
+#include "third_party/blink/renderer/core/layout/ng/custom/layout_ng_custom.h"
 #include "third_party/blink/renderer/core/layout/ng/flex/layout_ng_flexible_box.h"
 #include "third_party/blink/renderer/core/layout/ng/grid/layout_ng_grid.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/layout_ng_br.h"
@@ -49,6 +50,7 @@
 #include "third_party/blink/renderer/core/layout/ng/layout_ng_text_control_inner_editor.h"
 #include "third_party/blink/renderer/core/layout/ng/layout_ng_text_control_multi_line.h"
 #include "third_party/blink/renderer/core/layout/ng/layout_ng_text_control_single_line.h"
+#include "third_party/blink/renderer/core/layout/ng/layout_ng_view.h"
 #include "third_party/blink/renderer/core/layout/ng/list/layout_ng_inside_list_marker.h"
 #include "third_party/blink/renderer/core/layout/ng/list/layout_ng_list_item.h"
 #include "third_party/blink/renderer/core/layout/ng/list/layout_ng_outside_list_marker.h"
@@ -130,6 +132,18 @@ LayoutBlock* LayoutObjectFactory::CreateBlockForLineClamp(
                       LayoutDeprecatedFlexibleBox>(node, legacy);
 }
 
+LayoutView* LayoutObjectFactory::CreateView(Document& document,
+                                            const ComputedStyle& style) {
+  bool disable_ng_for_type =
+      !RuntimeEnabledFeatures::LayoutNGViewEnabled() ||
+      (LayoutView::ShouldUsePrintingLayout(document) &&
+       !RuntimeEnabledFeatures::LayoutNGPrintingEnabled());
+
+  if (disable_ng_for_type)
+    return MakeGarbageCollected<LayoutView>(&document);
+  return MakeGarbageCollected<LayoutNGView>(&document);
+}
+
 LayoutBlock* LayoutObjectFactory::CreateFlexibleBox(Node& node,
                                                     const ComputedStyle& style,
                                                     LegacyLayout legacy) {
@@ -140,24 +154,28 @@ LayoutBlock* LayoutObjectFactory::CreateFlexibleBox(Node& node,
 LayoutBlock* LayoutObjectFactory::CreateGrid(Node& node,
                                              const ComputedStyle& style,
                                              LegacyLayout legacy) {
-  bool disable_ng_for_type = !RuntimeEnabledFeatures::LayoutNGGridEnabled();
-  if (disable_ng_for_type)
-    UseCounter::Count(node.GetDocument(), WebFeature::kLegacyLayoutByGrid);
-  return CreateObject<LayoutBlock, LayoutNGGrid, LayoutGrid>(
-      node, legacy, disable_ng_for_type);
+  return CreateObject<LayoutBlock, LayoutNGGrid, LayoutGrid>(node, legacy);
 }
 
 LayoutBlock* LayoutObjectFactory::CreateMath(Node& node,
                                              const ComputedStyle& style,
                                              LegacyLayout legacy) {
   DCHECK(IsA<MathMLElement>(node));
-  DCHECK_NE(legacy, LegacyLayout::kForce);
   bool disable_ng_for_type = !RuntimeEnabledFeatures::MathMLCoreEnabled();
   if (To<MathMLElement>(node).IsTokenElement()) {
     return CreateObject<LayoutBlockFlow, LayoutNGMathMLBlockFlow,
                         LayoutBlockFlow>(node, legacy, disable_ng_for_type);
   }
   return CreateObject<LayoutBlock, LayoutNGMathMLBlock, LayoutBlockFlow>(
+      node, legacy, disable_ng_for_type);
+}
+
+LayoutBlock* LayoutObjectFactory::CreateCustom(Node& node,
+                                               const ComputedStyle& style,
+                                               LegacyLayout legacy) {
+  DCHECK(node.IsElementNode());
+  bool disable_ng_for_type = !RuntimeEnabledFeatures::CSSLayoutAPIEnabled();
+  return CreateObject<LayoutBlock, LayoutNGCustom, LayoutBlockFlow>(
       node, legacy, disable_ng_for_type);
 }
 

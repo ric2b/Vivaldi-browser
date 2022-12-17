@@ -46,20 +46,23 @@
             android:textDirection="locale"
             android:layout_width="match_parent"
             android:layout_height="wrap_content" />
-        <TextView
+        <org.chromium.components.browser_ui.widget.text.TextViewWithCompoundDrawables
             android:id="@+id/message_description"
             style="@style/TextAppearance.TextSmall.Secondary"
             android:visibility="gone"
             android:breakStrategy="simple"
             android:textDirection="locale"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
+            android:layout_height="wrap_content"
+            android:drawablePadding="@dimen/message_description_icon_padding"
+            app:drawableWidth="@dimen/message_description_icon_size"
+            app:drawableHeight="@dimen/message_description_icon_size"/>
     </LinearLayout>
 
     <!--  Content description is set programmatically according to secondary button icon. -->
     <org.chromium.components.browser_ui.widget.listmenu.ListMenuButton
         android:id="@+id/message_secondary_button"
-        app:tint="@color/default_icon_color_secondary"
+        app:tint="@macro/default_icon_color_secondary"
         app:menuVerticalOverlapAnchor="false"
         android:visibility="gone"
         android:contentDescription="@null"

@@ -52,9 +52,7 @@ constexpr const base::FilePath::CharType* kRootPaths[] = {
 };
 
 base::FilePath GetTopLevelPath(const base::FilePath& path) {
-  std::vector<base::FilePath::StringType> components;
-  path.GetComponents(&components);
-  return base::FilePath(components[0]);
+  return base::FilePath(path.GetComponents()[0]);
 }
 
 bool IsDirectoryEmpty(FileSystemContext* context, const FileSystemURL& url) {
@@ -372,7 +370,7 @@ TEST_F(DraggedFileUtilTest, ReadDirectoryTest) {
       entry.name = current.BaseName();
       expected_entry_map[entry.name.value()] = entry;
 
-#if defined(OS_POSIX)
+#if BUILDFLAG(IS_POSIX)
       // Creates a symlink for each file/directory.
       // They should be ignored by ReadDirectory, so we don't add them
       // to expected_entry_map.

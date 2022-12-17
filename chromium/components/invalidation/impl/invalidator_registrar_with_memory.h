@@ -47,6 +47,8 @@ class INVALIDATION_EXPORT InvalidatorRegistrarWithMemory {
   static void RegisterProfilePrefs(PrefRegistrySimple* registry);
   static void RegisterPrefs(PrefRegistrySimple* registry);
 
+  static void ClearTopicsWithObsoleteOwnerNames(PrefService* prefs);
+
   // Starts sending notifications to |handler|.  |handler| must not be nullptr,
   // and it must not already be registered.
   void RegisterHandler(InvalidationHandler* handler);
@@ -62,9 +64,8 @@ class INVALIDATION_EXPORT InvalidatorRegistrarWithMemory {
   // to a different handler, returns false.
   // Note that this also updates the *subscribed* topics - assuming that whoever
   // called this will also send (un)subscription requests to the server.
-  bool UpdateRegisteredTopics(InvalidationHandler* handler,
-                              const std::set<TopicData>& topics)
-      WARN_UNUSED_RESULT;
+  [[nodiscard]] bool UpdateRegisteredTopics(InvalidationHandler* handler,
+                                            const std::set<TopicData>& topics);
 
   // Returns all topics currently registered to |handler|.
   Topics GetRegisteredTopics(InvalidationHandler* handler) const;

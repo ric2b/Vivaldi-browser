@@ -16,6 +16,7 @@
 #include <objc/runtime.h>
 
 #import "Service/Sources/EDOClientService.h"
+#include "build/build_config.h"
 #import "test/ios/host/cptest_shared_object.h"
 #include "util/mach/exception_types.h"
 #include "util/mach/mach_extensions.h"
@@ -33,15 +34,8 @@
 @implementation CPTestTestCase
 
 + (void)setUp {
-  // Swizzle away the handleCrashUnderSymbol callback.  Without this, any time
-  // the host app is intentionally crashed, the test is immediately failed.
-  SEL originalSelector = NSSelectorFromString(@"handleCrashUnderSymbol:");
-  SEL swizzledSelector = @selector(handleCrashUnderSymbol:);
-  Method originalMethod = class_getInstanceMethod(
-      objc_getClass("XCUIApplicationImpl"), originalSelector);
-  Method swizzledMethod =
-      class_getInstanceMethod([self class], swizzledSelector);
-  method_exchangeImplementations(originalMethod, swizzledMethod);
+  [CPTestTestCase swizzleHandleCrashUnderSymbol];
+  [CPTestTestCase swizleMayTerminateOutOfBandWithoutCrashReport];
 
   // Override EDO default error handler.  Without this, the default EDO error
   // handler will throw an error and fail the test.
@@ -50,10 +44,41 @@
   });
 }
 
+// Swizzle away the -[XCUIApplicationImpl handleCrashUnderSymbol:] callback.
+// Without this, any time the host app is intentionally crashed, the test is
+// immediately failed.
++ (void)swizzleHandleCrashUnderSymbol {
+  SEL originalSelector = NSSelectorFromString(@"handleCrashUnderSymbol:");
+  SEL swizzledSelector = @selector(handleCrashUnderSymbol:);
+  Method originalMethod = class_getInstanceMethod(
+      objc_getClass("XCUIApplicationImpl"), originalSelector);
+  Method swizzledMethod =
+      class_getInstanceMethod([self class], swizzledSelector);
+  method_exchangeImplementations(originalMethod, swizzledMethod);
+}
+
+// Swizzle away the time consuming 'Checking for crash reports corresponding to'
+// from -[XCUIApplicationProcess swizleMayTerminateOutOfBandWithoutCrashReport]
+// that is unnecessary for these tests.
++ (void)swizleMayTerminateOutOfBandWithoutCrashReport {
+  SEL originalSelector =
+      NSSelectorFromString(@"mayTerminateOutOfBandWithoutCrashReport");
+  SEL swizzledSelector = @selector(mayTerminateOutOfBandWithoutCrashReport);
+  Method originalMethod = class_getInstanceMethod(
+      objc_getClass("XCUIApplicationProcess"), originalSelector);
+  Method swizzledMethod =
+      class_getInstanceMethod([self class], swizzledSelector);
+  method_exchangeImplementations(originalMethod, swizzledMethod);
+}
+
 // This gets called after tearDown, so there's no straightforward way to
 // test that this is called. However, not swizzling this out will cause every
 // crashing test to fail.
 - (void)handleCrashUnderSymbol:(id)arg1 {
+}
+
+- (BOOL)mayTerminateOutOfBandWithoutCrashReport {
+  return YES;
 }
 
 - (void)setUp {
@@ -65,7 +90,7 @@
   XCTAssertTrue(app_.state == XCUIApplicationStateRunningForeground);
 }
 
-- (void)verifyCrashReportException:(int)exception {
+- (void)verifyCrashReportException:(uint32_t)exception {
   // Confirm the app is not running.
   XCTAssertTrue([app_ waitForState:XCUIApplicationStateNotRunning timeout:15]);
   XCTAssertTrue(app_.state == XCUIApplicationStateNotRunning);
@@ -75,7 +100,9 @@
   XCTAssertTrue(app_.state == XCUIApplicationStateRunningForeground);
   rootObject_ = [EDOClientService rootObjectWithPort:12345];
   XCTAssertEqual([rootObject_ pendingReportCount], 1);
-  XCTAssertEqual([rootObject_ pendingReportException], exception);
+  NSNumber* report_exception;
+  XCTAssertTrue([rootObject_ pendingReportException:&report_exception]);
+  XCTAssertEqual(report_exception.unsignedIntValue, exception);
 }
 
 - (void)testEDO {
@@ -83,46 +110,44 @@
   XCTAssertEqualObjects(result, @"crashpad");
 }
 
-- (void)testSegv {
-  [rootObject_ crashSegv];
-#if defined(NDEBUG) && TARGET_OS_SIMULATOR
-  [self verifyCrashReportException:SIGINT];
-#else
-  [self verifyCrashReportException:SIGHUP];
-#endif
-}
-
 - (void)testKillAbort {
   [rootObject_ crashKillAbort];
-  [self verifyCrashReportException:SIGABRT];
+  [self verifyCrashReportException:EXC_SOFT_SIGNAL];
+  NSNumber* report_exception;
+  XCTAssertTrue([rootObject_ pendingReportExceptionInfo:&report_exception]);
+  XCTAssertEqual(report_exception.intValue, SIGABRT);
 }
 
 - (void)testTrap {
   [rootObject_ crashTrap];
-#if TARGET_OS_SIMULATOR
-  [self verifyCrashReportException:SIGINT];
+#if defined(ARCH_CPU_X86_64)
+  [self verifyCrashReportException:EXC_BAD_INSTRUCTION];
+#elif defined(ARCH_CPU_ARM64)
+  [self verifyCrashReportException:EXC_BREAKPOINT];
 #else
-  [self verifyCrashReportException:SIGABRT];
+#error Port to your CPU architecture
 #endif
 }
 
 - (void)testAbort {
   [rootObject_ crashAbort];
-  [self verifyCrashReportException:SIGABRT];
+  [self verifyCrashReportException:EXC_SOFT_SIGNAL];
+  NSNumber* report_exception;
+  XCTAssertTrue([rootObject_ pendingReportExceptionInfo:&report_exception]);
+  XCTAssertEqual(report_exception.intValue, SIGABRT);
 }
 
 - (void)testBadAccess {
   [rootObject_ crashBadAccess];
-#if defined(NDEBUG) && TARGET_OS_SIMULATOR
-  [self verifyCrashReportException:SIGINT];
-#else
-  [self verifyCrashReportException:SIGHUP];
-#endif
+  [self verifyCrashReportException:EXC_BAD_ACCESS];
 }
 
 - (void)testException {
   [rootObject_ crashException];
-  [self verifyCrashReportException:SIGABRT];
+  [self verifyCrashReportException:EXC_SOFT_SIGNAL];
+  NSNumber* report_exception;
+  XCTAssertTrue([rootObject_ pendingReportExceptionInfo:&report_exception]);
+  XCTAssertEqual(report_exception.intValue, SIGABRT);
 }
 
 - (void)testNSException {
@@ -183,7 +208,7 @@
 
 - (void)testRecursion {
   [rootObject_ crashRecursion];
-  [self verifyCrashReportException:SIGHUP];
+  [self verifyCrashReportException:EXC_BAD_ACCESS];
 }
 
 - (void)testClientAnnotations {
@@ -192,7 +217,11 @@
   // Set app launch args to trigger different client annotations.
   NSArray<NSString*>* old_args = app_.launchArguments;
   app_.launchArguments = @[ @"--alternate-client-annotations" ];
-  [self verifyCrashReportException:SIGABRT];
+  [self verifyCrashReportException:EXC_SOFT_SIGNAL];
+  NSNumber* report_exception;
+  XCTAssertTrue([rootObject_ pendingReportExceptionInfo:&report_exception]);
+  XCTAssertEqual(report_exception.intValue, SIGABRT);
+
   app_.launchArguments = old_args;
 
   // Confirm the initial crash took the standard annotations.
@@ -205,7 +234,10 @@
   // Confirm passing alternate client annotation args works.
   [rootObject_ clearPendingReports];
   [rootObject_ crashKillAbort];
-  [self verifyCrashReportException:SIGABRT];
+  [self verifyCrashReportException:EXC_SOFT_SIGNAL];
+  XCTAssertTrue([rootObject_ pendingReportExceptionInfo:&report_exception]);
+  XCTAssertEqual(report_exception.intValue, SIGABRT);
+
   dict = [rootObject_ getProcessAnnotations];
   XCTAssertTrue([dict[@"crashpad"] isEqualToString:@"no"]);
   XCTAssertTrue([dict[@"plat"] isEqualToString:@"macOS"]);
@@ -220,7 +252,7 @@
     return;
   }
   [rootObject_ crashWithCrashInfoMessage];
-  [self verifyCrashReportException:SIGHUP];
+  [self verifyCrashReportException:EXC_BAD_ACCESS];
   NSDictionary* dict = [rootObject_ getAnnotations];
   NSString* dyldMessage = dict[@"vector"][0];
   XCTAssertTrue([dyldMessage isEqualToString:@"dyld: in dlsym()"]);
@@ -235,7 +267,7 @@
     return;
   }
   [rootObject_ crashWithDyldErrorString];
-  [self verifyCrashReportException:SIGINT];
+  [self verifyCrashReportException:EXC_BAD_INSTRUCTION];
   NSArray* vector = [rootObject_ getAnnotations][@"vector"];
   // This message is set by dyld-353.2.1/src/ImageLoaderMachO.cpp
   // ImageLoaderMachO::doInitialization().
@@ -246,7 +278,11 @@
 
 - (void)testCrashWithAnnotations {
   [rootObject_ crashWithAnnotations];
-  [self verifyCrashReportException:SIGABRT];
+  [self verifyCrashReportException:EXC_SOFT_SIGNAL];
+  NSNumber* report_exception;
+  XCTAssertTrue([rootObject_ pendingReportExceptionInfo:&report_exception]);
+  XCTAssertEqual(report_exception.intValue, SIGABRT);
+
   NSDictionary* dict = [rootObject_ getAnnotations];
   NSDictionary* simpleMap = dict[@"simplemap"];
   XCTAssertTrue([simpleMap[@"#TEST# empty_value"] isEqualToString:@""]);

@@ -41,7 +41,6 @@
 /arcore-android-sdk/test-apks/arcore/*.apk
 /asan
 /barhopper
-/binutils
 /bison
 /boringssl/src
 /bouncycastle/lib/
@@ -214,6 +213,8 @@
 /requests/src
 /robolectric/lib/
 /robolectric/robolectric
+/rust-src
+/rust-toolchain
 /ruy/src
 /scan-build/src
 /scons-2.0.1

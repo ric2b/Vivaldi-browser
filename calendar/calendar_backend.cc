@@ -118,7 +118,7 @@ void CalendarBackend::InitImpl(
       // and to not continue. If the error callback scheduled killing the
       // database, the task it posted has not executed yet. Try killing the
       // database now before we close it.
-      FALLTHROUGH;
+      [[fallthrough]];
     }  // Falls through.
     case sql::INIT_TOO_NEW: {
       LOG(ERROR) << "INIT_TOO_NEW";
@@ -295,6 +295,26 @@ EventResult CalendarBackend::FillEvent(EventID id) {
   db_->GetInvitesForEvent(id, &invite_rows);
   event_row.invites = invite_rows;
 
+  RecurrenceExceptionRows recurrence_exception_rows;
+  db_->GetAllRecurrenceExceptions(&recurrence_exception_rows);
+  std::set<RecurrenceExceptionID> events_with_exceptions;
+  for (auto& exception_row : recurrence_exception_rows) {
+    events_with_exceptions.insert(exception_row.parent_event_id);
+  }
+
+  const bool has_exception =
+      events_with_exceptions.find(id) != events_with_exceptions.end();
+
+  if (has_exception) {
+    RecurrenceExceptionRows exception_rows;
+    for (auto& exception : recurrence_exception_rows) {
+      if (exception.parent_event_id == id) {
+        exception_rows.push_back(exception);
+      }
+    }
+    event_row.recurrence_exceptions = exception_rows;
+  }
+
   EventResult res(event_row);
   return res;
 }
@@ -312,17 +332,9 @@ void CalendarBackend::CreateRecurrenceException(
   EventID parent_event_id = row.parent_event_id;
 
   if (id) {
-    row.id = id;
-    RecurrenceExceptionRows exception_rows;
-    db_->GetAllRecurrenceExceptionsForEvent(parent_event_id, &exception_rows);
-
-    EventRow event_row;
-    if (db_->GetRowForEvent(parent_event_id, &event_row)) {
-      event_row.recurrence_exceptions = exception_rows;
-      NotifyCalendarChanged();
-    }
+    result->event = FillEvent(parent_event_id);
     result->success = true;
-    result->event = event_row;
+    NotifyCalendarChanged();
   } else {
     result->success = false;
   }
@@ -584,10 +596,6 @@ void CalendarBackend::UpdateEvent(EventID event_id,
       event_row.timezone = event.timezone;
     }
 
-    if (event.updateFields & calendar::DUE) {
-      event_row.due = event.due;
-    }
-
     if (event.updateFields & calendar::PRIORITY) {
       event_row.priority = event.priority;
     }
@@ -744,6 +752,37 @@ void CalendarBackend::DeleteEvent(EventID event_id,
   } else {
     result->success = false;
   }
+}
+
+void CalendarBackend::DeleteEventRecurrenceException(
+    RecurrenceExceptionID exception_id,
+    std::shared_ptr<EventResultCB> result) {
+  if (!db_) {
+    result->success = false;
+    return;
+  }
+
+  RecurrenceExceptionRow recurrence_exception_row;
+  if (!db_->GetRecurrenceException(exception_id, &recurrence_exception_row)) {
+    result->success = false;
+    return;
+  }
+
+  if (!recurrence_exception_row.cancelled) {
+    db_->DeleteEvent(recurrence_exception_row.exception_event_id);
+  }
+
+  if (db_->DeleteRecurrenceException(exception_id)) {
+    EventRow event_row;
+    if (db_->GetRowForEvent(recurrence_exception_row.parent_event_id,
+                            &event_row)) {
+      result->event = event_row;
+      result->success = true;
+      NotifyCalendarChanged();
+    }
+    return;
+  }
+  result->success = false;
 }
 
 void CalendarBackend::CreateCalendar(
@@ -961,8 +1000,8 @@ void CalendarBackend::Commit() {
     return;
 
 #if defined(OS_IOS)
-  // Attempts to get the application running long enough to commit the database
-  // transaction if it is currently being backgrounded.
+  // Attempts to get the application running long enough to commit the
+  // database transaction if it is currently being backgrounded.
   base::ios::ScopedCriticalAction scoped_critical_action;
 #endif
 

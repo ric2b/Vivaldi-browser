@@ -515,6 +515,28 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, ConsoleError) {
               HasSubstr("Logged from MV3 service worker"));
 }
 
+// Tests that an extension can fetch a file scheme URL from the service worker,
+// if it has file access.
+IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
+                       FetchFileSchemeURLWithFileAccess) {
+  ASSERT_TRUE(
+      RunExtensionTest("service_worker/worker_based_background/"
+                       "fetch_file_scheme_url_with_file_access",
+                       {}, {.allow_file_access = true}))
+      << message_;
+}
+
+// Tests that an extension can not fetch a file scheme URL from the service
+// worker, if it does not have file access.
+IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
+                       FetchFileSchemeURLWithNoFileAccess) {
+  ASSERT_TRUE(
+      RunExtensionTest("service_worker/worker_based_background/"
+                       "fetch_file_scheme_url_with_no_file_access",
+                       {}))
+      << message_;
+}
+
 // Tests chrome.runtime.onInstalled fires for extension service workers.
 IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, OnInstalledEvent) {
   ASSERT_TRUE(RunExtensionTest(
@@ -888,7 +910,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, EarlyEventDispatch) {
       events::FOR_TEST, extensions::api::test::OnMessage::kEventName,
       base::JSONReader::Read(R"([{"data": "hello", "lastMessage": true}])")
           .value()
-          .TakeList(),
+          .TakeListDeprecated(),
       profile());
 
   EarlyWorkerMessageSender sender(profile(), kId, std::move(event));
@@ -2465,7 +2487,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, TabsOnCreated) {
 }
 
 // Disabled on win due to flakiness: https://crbug.com/1127126.
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 #define MAYBE_PRE_FilteredEventsAfterRestart \
   DISABLED_PRE_FilteredEventsAfterRestart
 #define MAYBE_FilteredEventsAfterRestart DISABLED_FilteredEventsAfterRestart
@@ -2610,6 +2632,14 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, PermissionsAPI) {
   // Expect the permission ("storage") to be available now.
   EXPECT_TRUE(extension->permissions_data()->HasAPIPermission(
       mojom::APIPermissionID::kStorage));
+}
+
+// Tests that loading a component MV3 extension succeeds.
+IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, Component) {
+  ASSERT_TRUE(
+      RunExtensionTest("service_worker/worker_based_background/component", {},
+                       {.load_as_component = true}))
+      << message_;
 }
 
 // Tests that an extension's service worker can't be used to relax the extension

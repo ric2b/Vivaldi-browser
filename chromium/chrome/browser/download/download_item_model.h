@@ -76,6 +76,7 @@ class DownloadItemModel : public DownloadUIModel,
   bool GetOpenWhenComplete() const override;
   bool IsOpenWhenCompleteByPolicy() const override;
   bool TimeRemaining(base::TimeDelta* remaining) const override;
+  base::Time GetEndTime() const override;
   bool GetOpened() const override;
   void SetOpened(bool opened) override;
   bool IsDone() const override;
@@ -92,7 +93,7 @@ class DownloadItemModel : public DownloadUIModel,
   bool HasUserGesture() const override;
   offline_items_collection::FailState GetLastFailState() const override;
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   bool IsCommandEnabled(const DownloadCommands* download_commands,
                         DownloadCommands::Command command) const override;
   bool IsCommandChecked(const DownloadCommands* download_commands,

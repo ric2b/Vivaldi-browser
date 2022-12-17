@@ -210,7 +210,8 @@ bool AdBlockRequestFilter::OnBeforeRequest(
 
   if (blocked_urls_reporter_ && frame)
     blocked_urls_reporter_->OnUrlBlocked(rules_index_manager_->group(),
-                                         request->request.url, frame);
+                                         document_origin, request->request.url,
+                                         frame);
 
   if (rule->redirect() && rule->redirect()->size() && resources_) {
     absl::optional<std::string> resource(

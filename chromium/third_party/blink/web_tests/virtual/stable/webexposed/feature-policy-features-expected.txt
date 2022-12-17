@@ -19,6 +19,7 @@ ch-ua-mobile
 ch-ua-model
 ch-ua-platform
 ch-ua-platform-version
+ch-ua-wow64
 ch-viewport-width
 ch-width
 clipboard-read
@@ -32,6 +33,7 @@ geolocation
 gyroscope
 hid
 idle-detection
+keyboard-map
 magnetometer
 microphone
 midi
@@ -43,5 +45,6 @@ screen-wake-lock
 serial
 sync-xhr
 usb
+window-placement
 xr-spatial-tracking
 

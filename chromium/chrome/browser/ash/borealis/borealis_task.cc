@@ -5,6 +5,7 @@
 #include "chrome/browser/ash/borealis/borealis_task.h"
 
 #include <optional>
+#include <sstream>
 #include <string>
 
 #include "ash/constants/ash_features.h"
@@ -21,10 +22,12 @@
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "chrome/browser/ash/borealis/borealis_context.h"
 #include "chrome/browser/ash/borealis/borealis_disk_manager.h"
+#include "chrome/browser/ash/borealis/borealis_features.h"
 #include "chrome/browser/ash/borealis/borealis_launch_options.h"
 #include "chrome/browser/ash/borealis/borealis_metrics.h"
 #include "chrome/browser/ash/borealis/borealis_service.h"
 #include "chrome/browser/ash/borealis/borealis_util.h"
+#include "chrome/browser/ash/borealis/borealis_wayland_interface.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chromeos/dbus/concierge/concierge_service.pb.h"
@@ -51,6 +54,28 @@ void BorealisTask::Complete(BorealisStartupResult status, std::string message) {
   base::SequencedTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::BindOnce(std::move(callback_), status, std::move(message)));
+}
+
+CheckAllowed::CheckAllowed() : BorealisTask("CheckAllowed") {}
+CheckAllowed::~CheckAllowed() = default;
+
+void CheckAllowed::RunInternal(BorealisContext* context) {
+  BorealisService::GetForProfile(context->profile())
+      ->Features()
+      .IsAllowed(base::BindOnce(&CheckAllowed::OnAllowednessChecked,
+                                weak_factory_.GetWeakPtr(), context));
+}
+
+void CheckAllowed::OnAllowednessChecked(
+    BorealisContext* context,
+    BorealisFeatures::AllowStatus allow_status) {
+  if (allow_status == BorealisFeatures::AllowStatus::kAllowed) {
+    Complete(BorealisStartupResult::kSuccess, "");
+    return;
+  }
+  std::stringstream ss;
+  ss << "Borealis is disallowed: " << allow_status;
+  Complete(BorealisStartupResult::kDisallowed, ss.str());
 }
 
 MountDlc::MountDlc() : BorealisTask("MountDlc") {}
@@ -84,7 +109,7 @@ void CreateDiskImage::RunInternal(BorealisContext* context) {
   vm_tools::concierge::CreateDiskImageRequest request;
   request.set_vm_name(context->vm_name());
   request.set_cryptohome_id(
-      chromeos::ProfileHelper::GetUserIdHashFromProfile(context->profile()));
+      ash::ProfileHelper::GetUserIdHashFromProfile(context->profile()));
   request.set_image_type(vm_tools::concierge::DISK_IMAGE_AUTO);
   request.set_storage_location(vm_tools::concierge::STORAGE_CRYPTOHOME_ROOT);
   request.set_disk_size(0);
@@ -113,6 +138,30 @@ void CreateDiskImage::OnCreateDiskImage(
     return;
   }
   context->set_disk_path(base::FilePath(response->disk_path()));
+  Complete(BorealisStartupResult::kSuccess, "");
+}
+
+RequestWaylandServer::RequestWaylandServer()
+    : BorealisTask("RequestWaylandServer") {}
+RequestWaylandServer::~RequestWaylandServer() = default;
+
+void RequestWaylandServer::RunInternal(BorealisContext* context) {
+  borealis::BorealisService::GetForProfile(context->profile())
+      ->WaylandInterface()
+      .GetWaylandServer(base::BindOnce(&RequestWaylandServer::OnServerRequested,
+                                       weak_factory_.GetWeakPtr(), context));
+}
+
+void RequestWaylandServer::OnServerRequested(
+    BorealisContext* context,
+    BorealisCapabilities* capabilities,
+    const base::FilePath& server_path) {
+  if (!capabilities) {
+    Complete(BorealisStartupResult::kRequestWaylandFailed,
+             "Failed to create a wayland server");
+    return;
+  }
+  context->set_wayland_path(server_path);
   Complete(BorealisStartupResult::kSuccess, "");
 }
 
@@ -165,9 +214,11 @@ void StartBorealisVm::StartBorealisWithExternalDisk(
     absl::optional<base::File> external_disk) {
   vm_tools::concierge::StartVmRequest request;
   request.mutable_vm()->set_dlc_id(kBorealisDlcName);
+  request.mutable_vm()->set_wayland_server(
+      context->wayland_path().AsUTF8Unsafe());
   request.set_start_termina(false);
   request.set_owner_id(
-      chromeos::ProfileHelper::GetUserIdHashFromProfile(context->profile()));
+      ash::ProfileHelper::GetUserIdHashFromProfile(context->profile()));
   request.set_enable_gpu(true);
   request.set_software_tpm(false);
   request.set_enable_audio_capture(false);

@@ -491,7 +491,8 @@ TEST_F(AppContainerTest, DenyOpenEventForLowBox) {
       ::CreateEvent(nullptr, false, false, event_name.c_str()));
   ASSERT_TRUE(event.IsValid());
 
-  EXPECT_EQ(SBOX_TEST_DENIED, runner.RunTest(L"AppContainerEvent_Open test"));
+  TestRunner runner2(JOB_UNPROTECTED, USER_UNPROTECTED, USER_UNPROTECTED);
+  EXPECT_EQ(SBOX_TEST_DENIED, runner2.RunTest(L"AppContainerEvent_Open test"));
 }
 
 TEST_F(AppContainerTest, CheckIncompatibleOptions) {
@@ -631,10 +632,10 @@ TEST_F(AppContainerTest, NoCapabilitiesLPAC) {
 }
 
 SBOX_TESTS_COMMAND int LoadDLL(int argc, wchar_t** argv) {
-  // DLL here doesn't matter as long as it's in the output directory: re-use one
-  // from another sbox test.
-  base::ScopedNativeLibrary test_dll(base::FilePath(
-      FILE_PATH_LITERAL("sbox_integration_test_hijack_dll.dll")));
+  // Library here doesn't matter as long as it's in the output directory: re-use
+  // one from another sbox test.
+  base::ScopedNativeLibrary test_dll(
+      base::FilePath(FILE_PATH_LITERAL("sbox_integration_test_win_proc.exe")));
   if (test_dll.is_valid())
     return SBOX_TEST_SUCCEEDED;
   return SBOX_TEST_FAILED;

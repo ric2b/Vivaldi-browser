@@ -2,8 +2,8 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="iw">
 <translation id="1096883626080133124">‏Chromium מאפשר לך להספיק יותר באופן פשוט, מאובטח ומהיר מאי פעם</translation>
+<translation id="1143896152279775643">‏הסיסמה תישמר במנהל הסיסמאות של Google עבור <ph name="EMAIL" />.</translation>
 <translation id="1282031177488366470">‏עזרה בשיפור התכונות והביצועים של Chrome</translation>
-<translation id="1314663809820920746">‏יש לך עדיין אפשרות לראות את הסימניות, ההיסטוריה, הסיסמאות והגדרות נוספות במכשיר זה. שינויים שיתבצעו על ידך לא יסונכרנו בחשבון Google שלך.</translation>
 <translation id="1479202195792305274">‏Chrome יכול לבדוק את הסיסמאות כשנכנסים באמצעות חשבון Google.</translation>
 <translation id="1493827051843127077">‏כדאי להגדיר את Chrome כדפדפן ברירת המחדל כדי לסנכרן את הכרטיסיות, הסיסמאות ופרטי התשלומים שלך בכל המכשירים שלך</translation>
 <translation id="1504372625950710826">‏Chrome לא הצליח לחפש עדכונים. יש לבדוק את החיבור לאינטרנט.</translation>
@@ -40,6 +40,7 @@
 <translation id="3522659714780527202">‏כדי לראות את הכרטיסיות שלך מכל מקום שבו פתחת את Chrome יש להפעיל את הסנכרון</translation>
 <translation id="3533694711092285624">‏אין סיסמאות שמורות. Chrome יכול לבדוק את הסיסמאות שלך רק אם שמרת אותן.</translation>
 <translation id="3634910711516114487">‏אפשר להיכנס ל-Chrome באמצעות חשבון Google כדי להפיק את המרב מ-Chrome</translation>
+<translation id="3655656110921623717">‏כלומר, Chrome תמיד יבקש את האתר לנייד.</translation>
 <translation id="3706101708757577809">‏אפשר עכשיו להשתמש ב-Chrome בכל פעם שמקישים על קישורים בהודעות, במסמכים ובאפליקציות אחרות.</translation>
 <translation id="3720541637541300822">‏כרטיסיות מצב אנונימי יינעלו כש-Chrome ייסגר</translation>
 <translation id="384394811301901750">‏Google Chrome לא יכול להשתמש עכשיו במצלמה</translation>
@@ -116,4 +117,5 @@
 <translation id="8772179140489533211">‏יוצגו הודעות לצורך כניסה אל Chrome.</translation>
 <translation id="8788269841521769222">‏אין צורך לזכור את הסיסמה הזו. היא תישמר במנהל הסיסמאות של Google בחשבון <ph name="EMAIL" /></translation>
 <translation id="9112744793181547300">‏להגדיר את Chrome כדפדפן ברירת המחדל?</translation>
+<translation id="9122931302567044771">‏כלומר, Chrome תמיד יבקש את האתר למחשב.</translation>
 </translationbundle>

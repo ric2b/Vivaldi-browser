@@ -11,17 +11,16 @@
 
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/public/cpp/style/color_mode_observer.h"
+#include "ash/public/cpp/style/color_provider.h"
+#include "ash/public/cpp/style/scoped_light_mode_as_default.h"
 #include "ash/public/cpp/tablet_mode.h"
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/feature_list.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
 #include "base/no_destructor.h"
 #include "base/strings/stringprintf.h"
-#include "base/task/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/apps/platform_apps/app_window_registry_util.h"
@@ -48,7 +47,6 @@
 #include "chromeos/ui/base/window_properties.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/native_app_window.h"
-#include "extensions/browser/extension_system.h"
 #include "ui/aura/window.h"
 #include "ui/base/base_window.h"
 #include "ui/gfx/color_palette.h"
@@ -64,11 +62,6 @@ const int kFileManagerWidth = 972;  // pixels
 const int kFileManagerHeight = 640;  // pixels
 const int kFileManagerMinimumWidth = 640;  // pixels
 const int kFileManagerMinimumHeight = 240;  // pixels
-
-// Specific color for File Picker (Files app).
-// TODO(crbug/1072904): Get these colors from ui::NativeTheme.
-constexpr SkColor kFilePickerActiveTitleColor = gfx::kGoogleGrey200;
-constexpr SkColor kFilePickerInactiveTitleColor = gfx::kGoogleGrey200;
 
 // Holds references to file manager dialogs that have callbacks pending
 // to their listeners.
@@ -193,16 +186,21 @@ SelectFileDialogExtension::RoutingID GetRoutingID(
 // A customization of SystemWebDialogDelegate that provides notifications
 // to SelectFileDialogExtension about web dialog closing events. Must be outside
 // anonymous namespace for the friend declaration to work.
-class SystemFilesAppDialogDelegate : public chromeos::SystemWebDialogDelegate {
+class SystemFilesAppDialogDelegate : public chromeos::SystemWebDialogDelegate,
+                                     public ash::ColorModeObserver {
  public:
-  SystemFilesAppDialogDelegate(SelectFileDialogExtension* parent,
+  SystemFilesAppDialogDelegate(base::WeakPtr<SelectFileDialogExtension> parent,
                                const std::string& id,
                                GURL url,
                                std::u16string title)
       : chromeos::SystemWebDialogDelegate(url, title),
         id_(id),
-        parent_(parent) {}
-  ~SystemFilesAppDialogDelegate() override = default;
+        parent_(std::move(parent)) {
+    ash::ColorProvider::Get()->AddObserver(this);
+  }
+  ~SystemFilesAppDialogDelegate() override {
+    ash::ColorProvider::Get()->RemoveObserver(this);
+  }
 
   void SetModal(bool modal) {
     set_modal_type(modal ? ui::MODAL_TYPE_WINDOW : ui::MODAL_TYPE_NONE);
@@ -216,10 +214,14 @@ class SystemFilesAppDialogDelegate : public chromeos::SystemWebDialogDelegate {
 
   void AdjustWidgetInitParams(views::Widget::InitParams* params) override {
     params->shadow_type = views::Widget::InitParams::ShadowType::kDefault;
+    auto* color_provider = ash::ColorProvider::Get();
+    ash::ScopedLightModeAsDefault scoped_light_mode_as_default;
     params->init_properties_container.SetProperty(
-        chromeos::kFrameActiveColorKey, kFilePickerActiveTitleColor);
+        chromeos::kFrameActiveColorKey,
+        color_provider->GetActiveDialogTitleBarColor());
     params->init_properties_container.SetProperty(
-        chromeos::kFrameInactiveColorKey, kFilePickerInactiveTitleColor);
+        chromeos::kFrameInactiveColorKey,
+        color_provider->GetInactiveDialogTitleBarColor());
   }
 
   void GetMinimumDialogSize(gfx::Size* size) const override {
@@ -233,11 +235,27 @@ class SystemFilesAppDialogDelegate : public chromeos::SystemWebDialogDelegate {
   }
 
   void OnDialogShown(content::WebUI* webui) override {
-    parent_->OnSystemDialogShown(webui->GetWebContents(), id_);
+    if (parent_) {
+      parent_->OnSystemDialogShown(webui->GetWebContents(), id_);
+    }
     chromeos::SystemWebDialogDelegate::OnDialogShown(webui);
   }
 
-  void OnDialogWillClose() override { parent_->OnSystemDialogWillClose(); }
+  void OnDialogWillClose() override {
+    if (parent_) {
+      parent_->OnSystemDialogWillClose();
+    }
+  }
+
+  void OnColorModeChanged(bool dark_mode_enabled) override {
+    auto* color_provider = ash::ColorProvider::Get();
+    dialog_window()->SetProperty(
+        chromeos::kFrameActiveColorKey,
+        color_provider->GetActiveDialogTitleBarColor());
+    dialog_window()->SetProperty(
+        chromeos::kFrameInactiveColorKey,
+        color_provider->GetInactiveDialogTitleBarColor());
+  }
 
  private:
   // The routing ID. We store it so that we can call back into the
@@ -246,7 +264,7 @@ class SystemFilesAppDialogDelegate : public chromeos::SystemWebDialogDelegate {
   const std::string id_;
 
   // The parent of this delegate.
-  SelectFileDialogExtension* parent_;
+  base::WeakPtr<SelectFileDialogExtension> parent_;
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -285,6 +303,8 @@ void SelectFileDialogExtension::ListenerDestroyed() {
 
 void SelectFileDialogExtension::ExtensionDialogClosing(
     ExtensionDialog* /*dialog*/) {
+  if (!ash::features::IsFileManagerSwaEnabled() && ash::ColorProvider::Get())
+    ash::ColorProvider::Get()->RemoveObserver(this);
   profile_ = nullptr;
   owner_window_ = nullptr;
   // Release our reference to the underlying dialog to allow it to close.
@@ -297,30 +317,20 @@ void SelectFileDialogExtension::ExtensionDialogClosing(
 
 void SelectFileDialogExtension::ExtensionTerminated(
     ExtensionDialog* dialog) {
-  // The extension would have been unloaded because of the termination,
-  // reload it.
-  std::string extension_id = dialog->host()->extension()->id();
-  // Reload the extension after a bit; the extension may not have been unloaded
-  // yet. We don't want to try to reload the extension only to have the Unload
-  // code execute after us and re-unload the extension.
-  //
-  // TODO(rkc): This is ugly. The ideal solution is that we shouldn't need to
-  // reload the extension at all - when we try to open the extension the next
-  // time, the extension subsystem would automatically reload it for us. At
-  // this time though this is broken because of some faulty wiring in
-  // extensions::ProcessManager::CreateViewHost. Once that is fixed, remove
-  // this.
-  if (profile_) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::BindOnce(
-            &extensions::ExtensionService::ReloadExtension,
-            base::Unretained(extensions::ExtensionSystem::Get(profile_)
-                                 ->extension_service()),
-            extension_id));
-  }
-
+  // The extension crashed (or the process was killed). Close the dialog.
   dialog->GetWidget()->Close();
+}
+
+void SelectFileDialogExtension::OnColorModeChanged(bool dark_mode_enabled) {
+  if (!ash::features::IsFileManagerSwaEnabled() && extension_dialog_.get()) {
+    auto* color_provider = ash::ColorProvider::Get();
+    gfx::NativeWindow native_view =
+        extension_dialog_->GetWidget()->GetNativeView();
+    native_view->SetProperty(chromeos::kFrameActiveColorKey,
+                             color_provider->GetActiveDialogTitleBarColor());
+    native_view->SetProperty(chromeos::kFrameInactiveColorKey,
+                             color_provider->GetInactiveDialogTitleBarColor());
+  }
 }
 
 void SelectFileDialogExtension::OnSystemDialogShown(
@@ -480,7 +490,7 @@ void SelectFileDialogExtension::SelectFileWithFileManagerParams(
 
   // Handle the cases where |web_contents| is not available or |web_contents| is
   // associated with Default profile.
-  if (!web_contents || chromeos::ProfileHelper::IsSigninProfile(profile_))
+  if (!web_contents || ash::ProfileHelper::IsSigninProfile(profile_))
     profile_ = ProfileManager::GetActiveUserProfile();
 
   DCHECK(profile_);
@@ -505,14 +515,11 @@ void SelectFileDialogExtension::SelectFileWithFileManagerParams(
       base_window ? base_window->GetNativeWindow() : owner.window;
 
   if (ash::features::IsFileManagerSwaEnabled()) {
-    // SystemFilesAppDialogDelegate is a self-deleting class that calls the
-    // delete operator once the dialog for which it was created has been closed.
-    // Hence this memory-leak looking code pattern.
     auto* dialog_delegate = new SystemFilesAppDialogDelegate(
-        this, routing_id, file_manager_url, dialog_title);
+        weak_factory_.GetWeakPtr(), routing_id, file_manager_url, dialog_title);
     dialog_delegate->SetModal(owner.window != nullptr);
     dialog_delegate->set_can_resize(can_resize_);
-    dialog_delegate->ShowSystemDialog(parent_window);
+    dialog_delegate->ShowSystemDialogForBrowserContext(profile_, parent_window);
   } else {
     ExtensionDialog::InitParams dialog_params(
         {kFileManagerWidth, kFileManagerHeight});
@@ -520,8 +527,13 @@ void SelectFileDialogExtension::SelectFileWithFileManagerParams(
     dialog_params.min_size = {kFileManagerMinimumWidth,
                               kFileManagerMinimumHeight};
     dialog_params.title = dialog_title;
-    dialog_params.title_color = kFilePickerActiveTitleColor;
-    dialog_params.title_inactive_color = kFilePickerInactiveTitleColor;
+    auto* color_provider = ash::ColorProvider::Get();
+    ash::ScopedLightModeAsDefault scoped_light_mode_as_default;
+    dialog_params.title_color = color_provider->GetActiveDialogTitleBarColor();
+    dialog_params.title_inactive_color =
+        color_provider->GetInactiveDialogTitleBarColor();
+
+    ash::ColorProvider::Get()->AddObserver(this);
 
     ExtensionDialog* dialog = ExtensionDialog::Show(
         file_manager_url, parent_window, profile_, web_contents,

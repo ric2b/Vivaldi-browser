@@ -104,19 +104,26 @@ public class AutofillAssistantUiTest {
     }
 
     private AssistantCoordinator createAndShowAssistantCoordinator() {
+        AssistantStaticDependencies staticDependencies = new AssistantStaticDependenciesChrome();
         return TestThreadUtils.runOnUiThreadBlockingNoException(() -> {
             AssistantCoordinator coordinator = new AssistantCoordinator(getActivity(),
-                    initializeBottomSheet(), getActivity().getTabObscuringHandler(),
+                    initializeBottomSheet(),
+                    staticDependencies.getTabObscuringUtilOrNull(getActivity().getWindowAndroid()),
                     /* overlayCoordinator= */ null,
                     /* keyboardCoordinatorDelegate= */ null,
                     getActivity().getWindowAndroid().getKeyboardDelegate(),
                     getActivity().getCompositorViewHolderForTesting(),
-                    getActivity().getActivityTabProvider(),
-                    getActivity().getBrowserControlsManager(),
+                    ()
+                            -> new AssistantBrowserControlsChrome(
+                                    getActivity().getBrowserControlsManager()),
                     getActivity().getWindowAndroid().getApplicationBottomInsetProvider(),
-                    new AssistantDependenciesFactoryChrome()
-                            .createStaticDependencies()
-                            .getAccessibilityUtil());
+                    staticDependencies.getAccessibilityUtil(),
+                    staticDependencies.createInfoPageUtil(),
+                    staticDependencies.createProfileImageUtilOrNull(
+                            getActivity(), R.dimen.autofill_assistant_profile_size),
+                    staticDependencies.createImageFetcher(),
+                    staticDependencies.createEditorFactory(),
+                    staticDependencies.createDependencies(getActivity()).getWindowAndroid());
             coordinator.show();
             return coordinator;
         });

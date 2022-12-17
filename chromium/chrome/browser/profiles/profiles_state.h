@@ -48,7 +48,7 @@ void RegisterPrefs(PrefRegistrySimple* registry);
 // System Profile directory, which is an invalid last used profile.
 void SetLastUsedProfile(const base::FilePath& profile_dir);
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
 // Returns the display name of the specified on-the-record profile (or guest),
 // specified by |profile_path|, used in the avatar button or user manager. If
 // |profile_path| is the guest path, it will return IDS_GUEST_PROFILE_NAME. If
@@ -86,11 +86,11 @@ bool IsProfileCreationAllowed();
 // Returns true if guest mode is allowed by prefs.
 bool IsGuestModeEnabled();
 
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS)
 // Returns true if secondary profiles are allowed by
 // |prefs::kLacrosSecondaryProfilesAllowed|.
 bool AreSecondaryProfilesAllowed();
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 // Returns true if sign in is required to browse as this profile.  Call with
 // profile->GetPath() if you have a profile pointer.
@@ -132,7 +132,7 @@ std::u16string GetDefaultNameForNewSignedInProfileWithIncompleteInfo(
     const CoreAccountInfo& account_info);
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
-#endif  // !defined(OS_ANDROID)
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 }  // namespace profiles
 

@@ -33,6 +33,8 @@ suite('CrComponentsBluetoothPairingUiTest', function() {
 
   setup(async function() {
     bluetoothConfig = new FakeBluetoothConfig();
+    bluetoothConfig.setSystemState(
+        chromeos.bluetoothConfig.mojom.BluetoothSystemState.kEnabled);
     setBluetoothConfigForTesting(bluetoothConfig);
   });
 
@@ -102,6 +104,11 @@ suite('CrComponentsBluetoothPairingUiTest', function() {
     const ironPages = bluetoothPairingUi.shadowRoot.querySelector('iron-pages');
     ironPages.dispatchEvent(event);
     await flushTasks();
+
+    // Explicitly fail the pairing.
+    bluetoothConfig.getLastCreatedPairingHandler().completePairDevice(
+        /*success=*/ false);
+    await flushTasks();
   }
 
   /**
@@ -138,8 +145,6 @@ suite('CrComponentsBluetoothPairingUiTest', function() {
 
     // Simulate pairing cancelation.
     await simulateCancelation();
-    deviceHandler.completePairDevice(/*success=*/ false);
-    await flushTasks();
 
     assertFalse(!!getEnterCodePage());
 
@@ -197,8 +202,6 @@ suite('CrComponentsBluetoothPairingUiTest', function() {
 
     // Simulate pairing cancelation.
     await simulateCancelation();
-    deviceHandler.completePairDevice(/*success=*/ false);
-    await flushTasks();
 
     // We return to device selection page when pairing is cancelled.
     assertFalse(!!getDeviceRequestCodePage());
@@ -263,7 +266,12 @@ suite('CrComponentsBluetoothPairingUiTest', function() {
     // page.
     assertTrue(!!getSpinnerPage());
     assertFalse(!!getDeviceSelectionPage());
-    await flushTasks();
+
+    const deviceHandler = bluetoothConfig.getLastCreatedPairingHandler();
+    await deviceHandler.completeFetchDevice(device.deviceProperties);
+
+    // Wait for DevicePairingHandler.PairDevice() to be called.
+    await deviceHandler.waitForPairDevice();
 
     // Once we begin pairing we should still be in the spinner page.
     assertTrue(!!getSpinnerPage());
@@ -408,6 +416,7 @@ suite('CrComponentsBluetoothPairingUiTest', function() {
         await selectDevice(device.deviceProperties);
         const deviceHandler = bluetoothConfig.getLastCreatedPairingHandler();
         deviceHandler.completePairDevice(/*success=*/ false);
+        await flushTasks();
 
         // Simulate pairing cancelation.
         await simulateCancelation();
@@ -449,8 +458,6 @@ suite('CrComponentsBluetoothPairingUiTest', function() {
 
     // Simulate pairing cancelation.
     await simulateCancelation();
-    deviceHandler.completePairDevice(/*success=*/ false);
-    await flushTasks();
 
     // We return to device selection page when pairing is cancelled.
     assertFalse(!!getConfirmCodePage());
@@ -547,8 +554,12 @@ suite('CrComponentsBluetoothPairingUiTest', function() {
     let deviceHandler = bluetoothConfig.getLastCreatedPairingHandler();
 
     // Try pairing to first device.
+    let pairDevicePromise = deviceHandler.waitForPairDevice();
     await selectDevice(device.deviceProperties);
-    await waitAfterNextRender(bluetoothPairingUi);
+
+    // Wait for DevicePairingHandler.PairDevice() to be called.
+    await pairDevicePromise;
+    assertEquals(deviceHandler.getPairDeviceCalledCount(), 1);
 
     // Try pairing to second device, before first device has completed pairing.
     await selectDevice(device1.deviceProperties);
@@ -559,15 +570,118 @@ suite('CrComponentsBluetoothPairingUiTest', function() {
     await waitAfterNextRender(bluetoothPairingUi);
 
     // Simulate device pairing cancellation.
+    pairDevicePromise = deviceHandler.waitForPairDevice();
     deviceHandler.completePairDevice(/*success=*/ false);
-    await waitAfterNextRender(bluetoothPairingUi);
 
+    // Wait for DevicePairingHandler.PairDevice() to be called.
+    await pairDevicePromise;
     assertEquals(deviceHandler.getPairDeviceCalledCount(), 2);
 
     // Complete second device pairing.
     deviceHandler.completePairDevice(/*success=*/ true);
     await finishedPromise;
   });
+
+  test(
+      'Do not pair queued device if handler becomes unavailable',
+      async function() {
+        await init();
+        let finishedPromise = eventToPromise('finished', bluetoothPairingUi);
+        const device = createDefaultBluetoothDevice(
+            /*id=*/ '1234321',
+            /*publicName=*/ 'BeatsX',
+            /*connectionState=*/
+            chromeos.bluetoothConfig.mojom.DeviceConnectionState.kConnected,
+            /*opt_nickname=*/ 'device 1',
+            /*opt_audioCapability=*/
+            mojom.AudioOutputCapability.kCapableOfAudioOutput,
+            /*opt_deviceType=*/ mojom.DeviceType.kMouse);
+
+        const device1 = createDefaultBluetoothDevice(
+            /*id=*/ '12345654321',
+            /*publicName=*/ 'Head phones',
+            /*connectionState=*/
+            chromeos.bluetoothConfig.mojom.DeviceConnectionState.kConnected,
+            /*opt_nickname=*/ 'device 2',
+            /*opt_audioCapability=*/
+            mojom.AudioOutputCapability.kCapableOfAudioOutput,
+            /*opt_deviceType=*/ mojom.DeviceType.kMouse);
+
+        const device2 = createDefaultBluetoothDevice(
+            /*id=*/ '12345555554321',
+            /*publicName=*/ 'Speakers',
+            /*connectionState=*/
+            chromeos.bluetoothConfig.mojom.DeviceConnectionState.kConnected,
+            /*opt_nickname=*/ 'device 3',
+            /*opt_audioCapability=*/
+            mojom.AudioOutputCapability.kCapableOfAudioOutput,
+            /*opt_deviceType=*/ mojom.DeviceType.kMouse);
+
+        bluetoothConfig.appendToDiscoveredDeviceList([
+          device.deviceProperties, device1.deviceProperties,
+          device2.deviceProperties
+        ]);
+        await flushTasks();
+        let deviceHandler = bluetoothConfig.getLastCreatedPairingHandler();
+
+        // Try pairing to first device.
+        let pairDevicePromise = deviceHandler.waitForPairDevice();
+        await selectDevice(device.deviceProperties);
+
+        // Wait for DevicePairingHandler.PairDevice() to be called.
+        await pairDevicePromise;
+        assertEquals(deviceHandler.getPairDeviceCalledCount(), 1);
+
+        // Try pairing to second device, before first device has completed
+        // pairing.
+        await selectDevice(device1.deviceProperties);
+        await waitAfterNextRender(bluetoothPairingUi);
+
+        // Disable Bluetooth.
+        bluetoothConfig.setSystemState(
+            chromeos.bluetoothConfig.mojom.BluetoothSystemState.kDisabled);
+        await flushTasks();
+
+        assertFalse(getDeviceSelectionPage().isBluetoothEnabled);
+
+        // Simulate device pairing cancellation.
+        pairDevicePromise = deviceHandler.waitForPairDevice();
+        deviceHandler.completePairDevice(/*success=*/ false);
+        assertEquals(deviceHandler.getPairDeviceCalledCount(), 1);
+
+        // New pairing handler would be null, since Bluetooth is disabled.
+        deviceHandler = bluetoothConfig.getLastCreatedPairingHandler();
+        assertFalse(!!deviceHandler);
+
+        // Test to make sure device pending pairing is reset to null, this
+        // should be the case because device pairing handler is null.
+
+        // Re-enable and select the device.
+        let onBluetoothDiscoveryStartedPromise =
+            bluetoothPairingUi.waitForOnBluetoothDiscoveryStartedForTest();
+        bluetoothConfig.setSystemState(
+            chromeos.bluetoothConfig.mojom.BluetoothSystemState.kEnabled);
+
+        // Wait for |devicePairingHandler_| to be set in
+        // onBluetoothDiscoveryStarted().
+        await onBluetoothDiscoveryStartedPromise;
+
+        deviceHandler = bluetoothConfig.getLastCreatedPairingHandler();
+        assertTrue(!!deviceHandler);
+
+        // Try pairing to device.
+        pairDevicePromise = deviceHandler.waitForPairDevice();
+        await selectDevice(device2.deviceProperties);
+        await pairDevicePromise;
+        assertEquals(deviceHandler.getPairDeviceCalledCount(), 1);
+
+        // Simulate device pairing cancellation and make sure there are
+        // no queued pairing devices.
+        deviceHandler.completePairDevice(/*success=*/ false);
+        await flushTasks();
+        await waitAfterNextRender(bluetoothPairingUi);
+        assertEquals(deviceHandler.getPairDeviceCalledCount(), 1);
+      });
 
   test('Pair with a specific device by address, success', async function() {
     await pairByDeviceAddress(/*address=*/ '123456');
@@ -578,16 +692,43 @@ suite('CrComponentsBluetoothPairingUiTest', function() {
     await finishedPromise;
   });
 
+  test(
+      'Cancel after attempting to pair to a device with address not found',
+      async function() {
+        await init(/*pairingDeviceAddress=*/ '123456');
+
+        // We should immediately be in the spinner page, not the device
+        // selection page.
+        assertTrue(!!getSpinnerPage());
+        assertFalse(!!getDeviceSelectionPage());
+
+        // Return no device.
+        const deviceHandler = bluetoothConfig.getLastCreatedPairingHandler();
+        await deviceHandler.completeFetchDevice(null);
+
+        // Pairing is not initialized since device does not exit in discoverable
+        // devices list.
+        assertFalse(!!deviceHandler.getLastPairingDelegate());
+
+        let finishedPromise = eventToPromise('finished', bluetoothPairingUi);
+
+        // Simulate clicking 'Cancel'.
+        const event = new CustomEvent('cancel');
+        const ironPages =
+            bluetoothPairingUi.shadowRoot.querySelector('iron-pages');
+        ironPages.dispatchEvent(event);
+        await finishedPromise;
+      });
+
   test('Pair with a specific device by address, failure', async function() {
     const deviceId1 = '123456';
     await pairByDeviceAddress(/*address=*/ deviceId1);
 
+    const handlePairDeviceResultPromise =
+        bluetoothPairingUi.waitForHandlePairDeviceResultForTest();
     const deviceHandler = bluetoothConfig.getLastCreatedPairingHandler();
     deviceHandler.completePairDevice(/*success=*/ false);
-
-    // Wait for the callback to finish (flushTasks() doesn't wait long enough
-    // here).
-    await waitAfterNextRender(bluetoothPairingUi);
+    await handlePairDeviceResultPromise;
 
     // On failure, the device selection page should be shown.
     assertTrue(!!getDeviceSelectionPage());
@@ -631,8 +772,12 @@ suite('CrComponentsBluetoothPairingUiTest', function() {
 
     // Simulate pressing 'Confirm'.
     let event = new CustomEvent('confirm-code');
+    let finishRequestConfirmPasskeyPromise =
+        deviceHandler.waitForFinishRequestConfirmPasskey_();
     getConfirmCodePage().dispatchEvent(event);
-    await flushTasks();
+
+    // Wait for confirm passkey result to propagate to device handler.
+    await finishRequestConfirmPasskeyPromise;
 
     // Spinner should be shown.
     assertTrue(!!getSpinnerPage());
@@ -661,8 +806,7 @@ suite('CrComponentsBluetoothPairingUiTest', function() {
 
         // Simulate clicking 'Cancel'.
         await simulateCancelation();
-        deviceHandler.completePairDevice(/*success=*/ false);
-        await flushTasks();
+        await waitAfterNextRender(bluetoothPairingUi);
 
         // The device selection page should be shown.
         assertTrue(!!getDeviceSelectionPage());
@@ -714,6 +858,9 @@ suite('CrComponentsBluetoothPairingUiTest', function() {
         /*opt_audioCapability=*/
         mojom.AudioOutputCapability.kCapableOfAudioOutput,
         /*opt_deviceType=*/ mojom.DeviceType.kMouse);
+    bluetoothConfig.appendToDiscoveredDeviceList([device.deviceProperties]);
+    await flushTasks();
+
     const pairingCode = '123456';
 
     // Try pairing.
@@ -729,14 +876,21 @@ suite('CrComponentsBluetoothPairingUiTest', function() {
     assertTrue(!!getConfirmCodePage());
     assertEquals(getConfirmCodePage().code, pairingCode);
 
+    let attemptFocusLastSelectedItemCallCount = 0;
+    getDeviceSelectionPage().attemptFocusLastSelectedItem = () => {
+      attemptFocusLastSelectedItemCallCount++;
+    };
+
     // Simulate pairing failure.
     deviceHandler.completePairDevice(/*success=*/ false);
     await flushTasks();
 
     // The device selection page should be shown and failed device ID
-    // should be set since the pairing operation failed.
+    // should be set since the pairing operation failed. The device list item
+    // should be focused.
     assertTrue(!!getDeviceSelectionPage());
     assertEquals(getDeviceSelectionPage().failedPairingDeviceId, deviceId);
+    assertEquals(1, attemptFocusLastSelectedItemCallCount);
 
     // Retry pairing.
     await selectDevice(device.deviceProperties);
@@ -748,12 +902,169 @@ suite('CrComponentsBluetoothPairingUiTest', function() {
 
     // Simulate clicking 'Cancel'.
     await simulateCancelation();
-    await flushTasks();
 
     // The device selection page should be shown, but no failed device ID
     // should be set since the operation was cancelled and did not explicitly
-    // fail.
+    // fail. The device list item should be focused.
     assertTrue(!!getDeviceSelectionPage());
     assertFalse(!!getDeviceSelectionPage().failedPairingDeviceId);
+    assertEquals(2, attemptFocusLastSelectedItemCallCount);
+  });
+
+  test('Disable Bluetooth during pairing', async function() {
+    await init();
+    assertTrue(!!getDeviceSelectionPage());
+    assertTrue(getDeviceSelectionPage().isBluetoothEnabled);
+
+    const deviceId = '123456';
+    const device = createDefaultBluetoothDevice(
+        deviceId,
+        /*publicName=*/ 'BeatsX',
+        /*connectionState=*/
+        chromeos.bluetoothConfig.mojom.DeviceConnectionState.kConnected,
+        /*opt_nickname=*/ 'device1',
+        /*opt_audioCapability=*/
+        mojom.AudioOutputCapability.kCapableOfAudioOutput,
+        /*opt_deviceType=*/ mojom.DeviceType.kMouse);
+    bluetoothConfig.appendToDiscoveredDeviceList([device.deviceProperties]);
+    await flushTasks();
+
+    // Disable Bluetooth.
+    bluetoothConfig.setSystemState(
+        chromeos.bluetoothConfig.mojom.BluetoothSystemState.kDisabled);
+    await flushTasks();
+
+    // This should propagate to the device selection page.
+    assertFalse(getDeviceSelectionPage().isBluetoothEnabled);
+
+    // Re-enable and select the device.
+    let onBluetoothDiscoveryStartedPromise =
+        bluetoothPairingUi.waitForOnBluetoothDiscoveryStartedForTest();
+    bluetoothConfig.setSystemState(
+        chromeos.bluetoothConfig.mojom.BluetoothSystemState.kEnabled);
+
+    // Wait for |devicePairingHandler_| to be set in
+    // onBluetoothDiscoveryStarted().
+    await onBluetoothDiscoveryStartedPromise;
+
+    assertTrue(getDeviceSelectionPage().isBluetoothEnabled);
+    await selectDevice(device.deviceProperties);
+    await flushTasks();
+
+    const pairingCode = '123456';
+    let deviceHandler = bluetoothConfig.getLastCreatedPairingHandler();
+    deviceHandler.requireAuthentication(
+        PairingAuthType.CONFIRM_PASSKEY, pairingCode);
+    await flushTasks();
+
+    // Confirmation code page should be shown.
+    assertTrue(!!getConfirmCodePage());
+    assertEquals(getConfirmCodePage().code, pairingCode);
+
+    // Disable Bluetooth.
+    bluetoothConfig.setSystemState(
+        chromeos.bluetoothConfig.mojom.BluetoothSystemState.kDisabled);
+    await flushTasks();
+
+    // We should be back to the device selection page again.
+    assertFalse(!!getConfirmCodePage());
+    assertTrue(!!getDeviceSelectionPage());
+    assertFalse(getDeviceSelectionPage().isBluetoothEnabled);
+
+    // Re-enable.
+    onBluetoothDiscoveryStartedPromise =
+        bluetoothPairingUi.waitForOnBluetoothDiscoveryStartedForTest();
+    bluetoothConfig.setSystemState(
+        chromeos.bluetoothConfig.mojom.BluetoothSystemState.kEnabled);
+
+    // Wait for |devicePairingHandler_| to be set in
+    // onBluetoothDiscoveryStarted().
+    await onBluetoothDiscoveryStartedPromise;
+
+    assertTrue(getDeviceSelectionPage().isBluetoothEnabled);
+
+    // Error text shouldn't be showing because this pairing failed due to
+    // Bluetooth disabling.
+    assertEquals(getDeviceSelectionPage().failedPairingDeviceId, '');
+
+    // Select the device.
+    await selectDevice(device.deviceProperties);
+    await flushTasks();
+
+    // Simulate pairing failing.
+    deviceHandler = bluetoothConfig.getLastCreatedPairingHandler();
+    deviceHandler.completePairDevice(/*success=*/ false);
+    await flushTasks();
+    await waitAfterNextRender(bluetoothPairingUi);
+
+    // Error text should be showing.
+    assertTrue(!!getDeviceSelectionPage());
+    assertEquals(getDeviceSelectionPage().failedPairingDeviceId, deviceId);
+
+    // Disable Bluetooth.
+    bluetoothConfig.setSystemState(
+        chromeos.bluetoothConfig.mojom.BluetoothSystemState.kDisabled);
+    await flushTasks();
+
+    assertFalse(getDeviceSelectionPage().isBluetoothEnabled);
+
+    // Re-enable Bluetooth.
+    onBluetoothDiscoveryStartedPromise =
+        bluetoothPairingUi.waitForOnBluetoothDiscoveryStartedForTest();
+    bluetoothConfig.setSystemState(
+        chromeos.bluetoothConfig.mojom.BluetoothSystemState.kEnabled);
+    await onBluetoothDiscoveryStartedPromise;
+
+    assertTrue(getDeviceSelectionPage().isBluetoothEnabled);
+
+    // Error text should no longer be showing.
+    assertEquals(getDeviceSelectionPage().failedPairingDeviceId, '');
+  });
+
+  test('Error message is not preserved', async function() {
+    // Test to ensure error message is not preserved if pairing fails and
+    // device is removed and readded to device list.
+
+    await init();
+    assertTrue(!!getDeviceSelectionPage());
+    assertTrue(getDeviceSelectionPage().isBluetoothEnabled);
+
+    const deviceId = '123456';
+    const device = createDefaultBluetoothDevice(
+        deviceId,
+        /*publicName=*/ 'BeatsX',
+        /*connectionState=*/
+        chromeos.bluetoothConfig.mojom.DeviceConnectionState.kConnected,
+        /*opt_nickname=*/ 'device1',
+        /*opt_audioCapability=*/
+        mojom.AudioOutputCapability.kCapableOfAudioOutput,
+        /*opt_deviceType=*/ mojom.DeviceType.kMouse);
+    bluetoothConfig.appendToDiscoveredDeviceList([device.deviceProperties]);
+    await flushTasks();
+
+    // Select the device.
+    await selectDevice(device.deviceProperties);
+    await flushTasks();
+
+    // Simulate pairing failing.
+    let deviceHandler = bluetoothConfig.getLastCreatedPairingHandler();
+    deviceHandler.completePairDevice(/*success=*/ false);
+    await flushTasks();
+    await waitAfterNextRender(bluetoothPairingUi);
+
+    // Error text should be showing.
+    assertTrue(!!getDeviceSelectionPage());
+    assertEquals(getDeviceSelectionPage().failedPairingDeviceId, deviceId);
+
+    // Reset device list.
+    bluetoothConfig.resetDiscoveredDeviceList();
+    await flushTasks();
+
+    // Add device back.
+    bluetoothConfig.appendToDiscoveredDeviceList([device.deviceProperties]);
+    await flushTasks();
+
+    // Error text should no longer be showing.
+    assertEquals(getDeviceSelectionPage().failedPairingDeviceId, '');
   });
 });

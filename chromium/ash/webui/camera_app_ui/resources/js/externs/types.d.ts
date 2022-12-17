@@ -21,17 +21,6 @@ interface InputDeviceCapabilities {
   readonly pointerMovementScrolls: boolean;
 }
 
-// The new "subtree" option is not published in the latest spec yet.
-// Ref: https://github.com/w3c/csswg-drafts/pull/3902
-
-interface GetAnimationsOptions {
-  subtree: boolean;
-}
-
-interface Animatable {
-  getAnimations(options?: GetAnimationsOptions): Animation[];
-}
-
 // File System Access API: This is currently a Chrome only API, and the spec is
 // still in working draft stage.
 // https://wicg.github.io/file-system-access/
@@ -251,9 +240,9 @@ type CreateScriptURLCallback = (input: string, arguments: any) => string;
 
 interface TrustedTypePolicy {
   readonly name: string;
-  createHTML(input: string, arguments: any): TrustedHTML;
-  createScript(input: string, arguments: any): TrustedScript;
-  createScriptURL(input: string, arguments: any): TrustedScriptURL;
+  createHTML(input: string, arguments?: any): TrustedHTML;
+  createScript(input: string, arguments?: any): TrustedScript;
+  createScriptURL(input: string, arguments?: any): TrustedScriptURL;
 }
 
 interface TrustedTypePolicyFactory {
@@ -273,20 +262,6 @@ interface TrustedTypePolicyFactory {
 }
 
 declare const trustedTypes: TrustedTypePolicyFactory;
-
-// Web Share API. TypeScript only includes types for share() without the files
-// field.
-// https://w3c.github.io/web-share/
-interface ShareData {
-  files?: File[];
-  text?: string;
-  title?: string;
-  url?: string;
-}
-
-interface Navigator {
-  canShare: (data: ShareData) => boolean;
-}
 
 // Web Workers API interface. This is included in lib.webworker.d.ts and
 // available if we enable lib: ["webworker"] in tsconfig.json, but it conflicts

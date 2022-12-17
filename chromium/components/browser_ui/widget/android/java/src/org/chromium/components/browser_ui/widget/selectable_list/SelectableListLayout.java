@@ -15,6 +15,7 @@ import android.widget.FrameLayout;
 import android.widget.TextView;
 
 import androidx.annotation.Nullable;
+import androidx.annotation.StringRes;
 import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.widget.Toolbar.OnMenuItemClickListener;
 import androidx.core.view.ViewCompat;
@@ -66,7 +67,6 @@ public class SelectableListLayout<E>
     private FadingShadowView mToolbarShadow;
 
     private int mEmptyStringResId;
-    private int mSearchEmptyStringResId;
 
     private UiConfig mUiConfig;
 
@@ -232,12 +232,10 @@ public class SelectableListLayout<E>
      * Initializes the view shown when the selectable list is empty.
      *
      * @param emptyStringResId The string to show when the selectable list is empty.
-     * @param searchEmptyStringResId The string to show when the selectable list is empty during
-     *                               a search.
      * @return The {@link TextView} displayed when the list is empty.
      */
-    public TextView initializeEmptyView(int emptyStringResId, int searchEmptyStringResId) {
-        setEmptyViewText(emptyStringResId, searchEmptyStringResId);
+    public TextView initializeEmptyView(int emptyStringResId) {
+        setEmptyViewText(emptyStringResId);
 
         // Dummy listener to have the touch events dispatched to this view tree for navigation UI.
         mEmptyViewWrapper.setOnTouchListener((v, event) -> true);
@@ -248,12 +246,9 @@ public class SelectableListLayout<E>
     /**
      * Sets the view text when the selectable list is empty.
      * @param emptyStringResId The string to show when the selectable list is empty.
-     * @param searchEmptyStringResId The string to show when the selectable list is empty during
-     *                               a search.
      */
-    public void setEmptyViewText(int emptyStringResId, int searchEmptyStringResId) {
+    public void setEmptyViewText(int emptyStringResId) {
         mEmptyStringResId = emptyStringResId;
-        mSearchEmptyStringResId = searchEmptyStringResId;
 
         mEmptyView.setText(mEmptyStringResId);
     }
@@ -306,11 +301,23 @@ public class SelectableListLayout<E>
 
     /**
      * Called when a search is starting.
+     * @param searchEmptyStringResId The string to show when the selectable list is empty during a
+     *         search.
      */
-    public void onStartSearch() {
+    public void onStartSearch(@StringRes int searchEmptyStringResId) {
+        onStartSearch(getContext().getString(searchEmptyStringResId));
+    }
+
+    /**
+     * Called when a search is starting.
+     * @param searchEmptyString The string to show when the selectable list is empty during a
+     *         search.
+     */
+    public void onStartSearch(String searchEmptyString) {
         mRecyclerView.setItemAnimator(null);
         mToolbarShadow.setVisibility(View.VISIBLE);
-        mEmptyView.setText(mSearchEmptyStringResId);
+        mEmptyView.setText(searchEmptyString);
+
         if (BuildConfig.IS_VIVALDI) // Vivaldi
             mEmptyView.setTag(TAG_SEARCH);
     }

@@ -160,7 +160,7 @@ class BookmarkPromoHeader implements SyncService.SyncStateChangedListener, SignI
      * @return Whether the personalized signin promo should be shown to user.
      */
     private boolean shouldShowBookmarkSigninPromo() {
-        return mSignInManager.isSignInAllowed()
+        return mSignInManager.isSyncOptInAllowed()
                 && SigninPromoController.canShowSyncPromo(SigninAccessPoint.BOOKMARK_MANAGER);
     }
 
@@ -172,10 +172,6 @@ class BookmarkPromoHeader implements SyncService.SyncStateChangedListener, SignI
         if (mSyncService == null) {
             // |mSyncService| will remain null until the next browser startup, so no sense in
             // offering any promo.
-            return SyncPromoState.NO_PROMO;
-        }
-
-        if (!mSyncService.isSyncAllowedByPlatform()) {
             return SyncPromoState.NO_PROMO;
         }
 

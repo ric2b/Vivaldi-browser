@@ -5,7 +5,6 @@
 package org.chromium.components.external_intents;
 
 import android.Manifest.permission;
-import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.Context;
@@ -63,8 +62,8 @@ import org.chromium.content_public.common.ContentUrlConstants;
 import org.chromium.content_public.common.Referrer;
 import org.chromium.network.mojom.ReferrerPolicy;
 import org.chromium.ui.base.PageTransition;
-import org.chromium.ui.base.PermissionCallback;
 import org.chromium.ui.base.WindowAndroid;
+import org.chromium.ui.permissions.PermissionCallback;
 import org.chromium.url.GURL;
 
 import java.lang.annotation.Retention;
@@ -153,7 +152,7 @@ public class ExternalNavigationHandler {
     }
 
     // A Supplier that only evaluates when needed then caches the value.
-    private abstract static class LazySupplier<T> implements Supplier<T> {
+    protected abstract static class LazySupplier<T> implements Supplier<T> {
         private T mValue;
         private Supplier<T> mInnerSupplier;
 
@@ -182,13 +181,13 @@ public class ExternalNavigationHandler {
     }
 
     // Used to ensure we only call queryIntentActivities when we really need to.
-    private class QueryIntentActivitiesSupplier extends LazySupplier<List<ResolveInfo>> {
+    protected class QueryIntentActivitiesSupplier extends LazySupplier<List<ResolveInfo>> {
         public QueryIntentActivitiesSupplier(Intent intent) {
             super(() -> queryIntentActivities(intent));
         }
     }
 
-    private static class ResolveActivitySupplier extends LazySupplier<ResolveInfo> {
+    protected static class ResolveActivitySupplier extends LazySupplier<ResolveInfo> {
         public ResolveActivitySupplier(Intent intent) {
             super(()
                             -> PackageManagerUtils.resolveActivity(
@@ -362,6 +361,7 @@ public class ExternalNavigationHandler {
             Intent targetIntent, GURL browserFallbackUrl, boolean canLaunchExternalFallback) {
         if (browserFallbackUrl.isEmpty()
                 || (params.getRedirectHandler() != null
+                        && params.getRedirectHandler().isOnNavigation()
                         // For instance, if this is a chained fallback URL, we ignore it.
                         && params.getRedirectHandler().shouldNotOverrideUrlLoading())) {
             return OverrideUrlLoadingResult.forNoOverride();
@@ -373,7 +373,7 @@ public class ExternalNavigationHandler {
         }
 
         if (canLaunchExternalFallback) {
-            if (shouldBlockAllExternalAppLaunches(params)) {
+            if (shouldBlockAllExternalAppLaunches(params, false /* incomingIntentRedirect */)) {
                 throw new SecurityException("Context is not allowed to launch an external app.");
             }
             if (!params.isIncognito()) {
@@ -416,7 +416,7 @@ public class ExternalNavigationHandler {
         // Otherwise, it can be used in chain for fingerprinting multiple app installation
         // status in one shot. In order to prevent this scenario, we notify redirection
         // handler that redirection from the current navigation should stay in this app.
-        if (params.getRedirectHandler() != null
+        if (params.getRedirectHandler() != null && params.getRedirectHandler().isOnNavigation()
                 && !params.getRedirectHandler()
                             .getAndClearShouldNotBlockOverrideUrlLoadingOnCurrentRedirectionChain()) {
             params.getRedirectHandler().setShouldNotOverrideUrlLoadingOnCurrentRedirectChain();
@@ -477,7 +477,12 @@ public class ExternalNavigationHandler {
     /**
      * http://crbug.com/441284 : Disallow firing external intent while the app is in the background.
      */
-    private boolean blockExternalNavWhileBackgrounded(ExternalNavigationParams params) {
+    private boolean blockExternalNavWhileBackgrounded(
+            ExternalNavigationParams params, boolean incomingIntentRedirect) {
+        // If the redirect is from an intent Chrome could still be transitioning to the foreground.
+        // Alternatively, the user may have sent Chrome to the background by this point, but for
+        // navigations started by another app that should still be safe.
+        if (incomingIntentRedirect) return false;
         if (params.isApplicationMustBeInForeground() && !mDelegate.isApplicationInForeground()) {
             if (DEBUG) Log.i(TAG, "App is not in foreground");
             return true;
@@ -486,7 +491,12 @@ public class ExternalNavigationHandler {
     }
 
     /** http://crbug.com/464669 : Disallow firing external intent from background tab. */
-    private boolean blockExternalNavFromBackgroundTab(ExternalNavigationParams params) {
+    private boolean blockExternalNavFromBackgroundTab(
+            ExternalNavigationParams params, boolean incomingIntentRedirect) {
+        // See #blockExternalNavWhileBackgrounded - isBackgroundTabNavigation is effectively
+        // checking both that the tab is foreground, and the app is foreground, so we can skip it
+        // for intent launches for the same reason.
+        if (incomingIntentRedirect) return false;
         if (params.isBackgroundTabNavigation()
                 && !params.areIntentLaunchesAllowedInBackgroundTabs()) {
             if (DEBUG) Log.i(TAG, "Navigation in background tab");
@@ -635,6 +645,7 @@ public class ExternalNavigationHandler {
         boolean shouldStayInApp = handler.shouldStayInApp(
                 isExternalProtocol, mDelegate.isIntentForTrustedCallingApp(targetIntent));
         if (shouldStayInApp || handler.shouldNotOverrideUrlLoading()) {
+            if (isExternalProtocol) handler.maybeLogExternalRedirectBlockedWithMissingGesture();
             if (DEBUG) Log.i(TAG, "RedirectHandler decision");
             return true;
         }
@@ -916,8 +927,9 @@ public class ExternalNavigationHandler {
      * Returns true if an intent is an ACTION_VIEW intent targeting browsers or browser-like apps
      * (excluding the embedding app).
      */
-    private boolean isViewIntentToOtherBrowser(Intent targetIntent, List<ResolveInfo> resolveInfos,
-            boolean isIntentWithSupportedProtocol, boolean hasSpecializedHandler) {
+    private boolean isViewIntentToOtherBrowser(Intent targetIntent,
+            QueryIntentActivitiesSupplier resolveInfos, boolean isIntentWithSupportedProtocol,
+            ResolveActivitySupplier resolveActivity) {
         // Note that up until at least Android S, an empty action will match any intent filter
         // with with an action specified. If an intent selector is specified, then don't trust the
         // action on the intent.
@@ -935,7 +947,7 @@ public class ExternalNavigationHandler {
 
         String selfPackageName = mDelegate.getContext().getPackageName();
         boolean matchesOtherPackage = false;
-        for (ResolveInfo resolveInfo : resolveInfos) {
+        for (ResolveInfo resolveInfo : resolveInfos.get()) {
             ActivityInfo info = resolveInfo.activityInfo;
             if (info == null || !selfPackageName.equals(info.packageName)) {
                 matchesOtherPackage = true;
@@ -944,29 +956,24 @@ public class ExternalNavigationHandler {
         }
         if (!matchesOtherPackage) return false;
 
-        // Shortcut the queryIntentActivities if the scheme is a browser-supported scheme.
-        if (isIntentWithSupportedProtocol && !hasSpecializedHandler) return true;
-
-        // Fall back to querying for browser packages if the intent doesn't obviously match or not
+        // Querying for browser packages if the intent doesn't obviously match or not
         // match a browser. This will catch custom URL schemes like googlechrome://.
         Set<String> browserPackages = getInstalledBrowserPackages();
 
-        if (hasSpecializedHandler) {
-            List<String> specializedPackages = getSpecializedHandlers(resolveInfos);
-            for (String packageName : specializedPackages) {
-                // A non-browser package is specialized, so don't consider it to be targeting a
-                // browser.
-                if (!browserPackages.contains(packageName)) return false;
-            }
-        }
-
-        for (ResolveInfo resolveInfo : resolveInfos) {
+        boolean matchesBrowser = false;
+        for (ResolveInfo resolveInfo : resolveInfos.get()) {
             ActivityInfo info = resolveInfo.activityInfo;
             if (info != null && browserPackages.contains(info.packageName)) {
-                return true;
+                matchesBrowser = true;
+                break;
             }
         }
-        return false;
+        if (!matchesBrowser) return false;
+        if (resolveActivity.get().activityInfo == null) return false;
+
+        // If the intent resolves to a non-browser even through a browser is included in
+        // queryIntentActivities, it's not really targeting a browser.
+        return browserPackages.contains(resolveActivity.get().activityInfo.packageName);
     }
 
     private static Set<String> getInstalledBrowserPackages() {
@@ -1276,19 +1283,44 @@ public class ExternalNavigationHandler {
     }
 
     // Check if we're navigating under conditions that should never launch an external app.
-    private boolean shouldBlockAllExternalAppLaunches(ExternalNavigationParams params) {
-        return blockExternalNavFromAutoSubframe(params) || blockExternalNavWhileBackgrounded(params)
-                || blockExternalNavFromBackgroundTab(params) || ignoreBackForwardNav(params);
+    private boolean shouldBlockAllExternalAppLaunches(
+            ExternalNavigationParams params, boolean incomingIntentRedirect) {
+        return blockExternalNavFromAutoSubframe(params)
+                || blockExternalNavWhileBackgrounded(params, incomingIntentRedirect)
+                || blockExternalNavFromBackgroundTab(params, incomingIntentRedirect)
+                || ignoreBackForwardNav(params);
+    }
+
+    private void recordIntentSelectorMetrics(GURL targetUrl, Intent targetIntent) {
+        if (UrlUtilities.hasIntentScheme(targetUrl)) {
+            RecordHistogram.recordBooleanHistogram(
+                    "Android.Intent.IntentUriWithSelector", targetIntent.getSelector() != null);
+        }
     }
 
     private OverrideUrlLoadingResult shouldOverrideUrlLoadingInternal(
             ExternalNavigationParams params, Intent targetIntent, GURL browserFallbackUrl,
             MutableBoolean canLaunchExternalFallbackResult) {
+        recordIntentSelectorMetrics(params.getUrl(), targetIntent);
         sanitizeQueryIntentActivitiesIntent(targetIntent);
+
         // Don't allow external fallback URLs by default.
         canLaunchExternalFallbackResult.set(false);
 
-        if (shouldBlockAllExternalAppLaunches(params)) {
+        int pageTransitionCore = params.getPageTransition() & PageTransition.CORE_MASK;
+        boolean isLink = pageTransitionCore == PageTransition.LINK;
+        boolean isFromIntent = (params.getPageTransition() & PageTransition.FROM_API) != 0;
+
+        boolean isOnEffectiveIntentRedirect = params.getRedirectHandler() == null
+                ? false
+                : params.getRedirectHandler().isOnEffectiveIntentRedirectChain();
+
+        // http://crbug.com/170925: We need to show the intent picker when we receive an intent from
+        // another app that 30x redirects to a YouTube/Google Maps/Play Store/Google+ URL etc.
+        boolean incomingIntentRedirect =
+                (isLink && isFromIntent && params.isRedirect()) || isOnEffectiveIntentRedirect;
+
+        if (shouldBlockAllExternalAppLaunches(params, incomingIntentRedirect)) {
             return OverrideUrlLoadingResult.forNoOverride();
         }
 
@@ -1320,20 +1352,8 @@ public class ExternalNavigationHandler {
             return OverrideUrlLoadingResult.forNoOverride();
         }
 
-        int pageTransitionCore = params.getPageTransition() & PageTransition.CORE_MASK;
-        boolean isLink = pageTransitionCore == PageTransition.LINK;
         boolean isFormSubmit = pageTransitionCore == PageTransition.FORM_SUBMIT;
-        boolean isFromIntent = (params.getPageTransition() & PageTransition.FROM_API) != 0;
         boolean linkNotFromIntent = isLink && !isFromIntent;
-
-        boolean isOnEffectiveIntentRedirect = params.getRedirectHandler() == null
-                ? false
-                : params.getRedirectHandler().isOnEffectiveIntentRedirectChain();
-
-        // http://crbug.com/170925: We need to show the intent picker when we receive an intent from
-        // another app that 30x redirects to a YouTube/Google Maps/Play Store/Google+ URL etc.
-        boolean incomingIntentRedirect =
-                (isLink && isFromIntent && params.isRedirect()) || isOnEffectiveIntentRedirect;
 
         if (handleCCTRedirectsToInstantApps(params, isExternalProtocol, incomingIntentRedirect)) {
             return OverrideUrlLoadingResult.forExternalIntent();
@@ -1377,6 +1397,10 @@ public class ExternalNavigationHandler {
 
         if (resolvingInfos.get().isEmpty()) {
             return handleUnresolvableIntent(params, targetIntent, browserFallbackUrl);
+        }
+
+        if (resolvesToNonExportedActivity(resolvingInfos.get())) {
+            return OverrideUrlLoadingResult.forNoOverride();
         }
 
         if (!browserFallbackUrl.isEmpty()) targetIntent.removeExtra(EXTRA_BROWSER_FALLBACK_URL);
@@ -1450,9 +1474,10 @@ public class ExternalNavigationHandler {
             return OverrideUrlLoadingResult.forExternalIntent();
         }
 
+        ResolveActivitySupplier resolveActivity = new ResolveActivitySupplier(targetIntent);
         boolean requiresIntentChooser = false;
-        if (isViewIntentToOtherBrowser(targetIntent, resolvingInfos.get(),
-                    isIntentWithSupportedProtocol, hasSpecializedHandler)) {
+        if (isViewIntentToOtherBrowser(
+                    targetIntent, resolvingInfos, isIntentWithSupportedProtocol, resolveActivity)) {
             RecordHistogram.recordBooleanHistogram("Android.Intent.WebIntentToOtherBrowser", true);
             requiresIntentChooser = true;
         }
@@ -1463,14 +1488,25 @@ public class ExternalNavigationHandler {
             requiresIntentChooser = false;
         }
 
-        ResolveActivitySupplier resolveActivity = new ResolveActivitySupplier(targetIntent);
         if (shouldAvoidShowingDisambiguationPrompt(targetIntent, resolvingInfos, resolveActivity)) {
             return OverrideUrlLoadingResult.forNoOverride();
         }
 
-        return startActivityIfNeeded(targetIntent, shouldProxyForInstantApps, resolvingInfos.get(),
-                resolveActivity, requiresIntentChooser, browserFallbackUrl, intentDataUrl,
+        return startActivity(targetIntent, shouldProxyForInstantApps, requiresIntentChooser,
+                resolvingInfos.get(), resolveActivity, browserFallbackUrl, intentDataUrl,
                 params.getReferrerUrl());
+    }
+
+    // https://crbug.com/1249964
+    private boolean resolvesToNonExportedActivity(List<ResolveInfo> infos) {
+        for (ResolveInfo info : infos) {
+            if (info.activityInfo != null && !info.activityInfo.exported) {
+                Log.w(TAG, "Web Intent resolves to non-exported Activity.");
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private boolean shouldAvoidShowingDisambiguationPrompt(Intent intent,
@@ -1527,15 +1563,14 @@ public class ExternalNavigationHandler {
      * Sanitize intent to be passed to {@link queryIntentActivities()}
      * ensuring that web pages cannot bypass browser security.
      */
-    private void sanitizeQueryIntentActivitiesIntent(Intent intent) {
+    public static void sanitizeQueryIntentActivitiesIntent(Intent intent) {
         intent.setFlags(intent.getFlags() & ALLOWED_INTENT_FLAGS);
         intent.addCategory(Intent.CATEGORY_BROWSABLE);
         intent.setComponent(null);
-        Intent selector = intent.getSelector();
-        if (selector != null) {
-            selector.addCategory(Intent.CATEGORY_BROWSABLE);
-            selector.setComponent(null);
-        }
+
+        // Intent Selectors allow intents to bypass the intent filter and potentially send apps URIs
+        // they were not expecting to handle. https://crbug.com/1254422
+        intent.setSelector(null);
     }
 
     /**
@@ -1779,26 +1814,7 @@ public class ExternalNavigationHandler {
      *              used by Instant Apps intents).
      */
     private void startActivity(Intent intent, boolean proxy) {
-        try {
-            forcePdfViewerAsIntentHandlerIfNeeded(intent);
-            if (proxy) {
-                mDelegate.dispatchAuthenticatedIntent(intent);
-            } else {
-                // Start the activity via the current activity if possible, and otherwise as a new
-                // task from the application context.
-                Context context = ContextUtils.activityFromContext(mDelegate.getContext());
-                if (context == null) {
-                    context = ContextUtils.getApplicationContext();
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                }
-                context.startActivity(intent);
-            }
-            recordExternalNavigationDispatched(intent);
-        } catch (RuntimeException e) {
-            Log.e(TAG, "Could not start Activity for intent " + intent.toString(), e);
-        }
-
-        mDelegate.didStartActivity(intent);
+        startActivity(intent, proxy, false, null, null, null, null, null);
     }
 
     /**
@@ -1807,41 +1823,41 @@ public class ExternalNavigationHandler {
      * @param intent The intent we want to send.
      * @param proxy Whether we need to proxy the intent through AuthenticatedProxyActivity (this is
      *              used by Instant Apps intents).
-     * @param resolvingInfos The resolvingInfos |intent| matches against.
      * @param requiresIntentChooser Whether, for security reasons, the Intent Chooser is required to
      *                              be shown.
+     *
+     * Below parameters are only used if |requiresIntentChooser| is true.
+     *
+     * @param resolvingInfos The queryIntentActivities |intent| matches against.
+     * @param resolveActivity The resolving Activity |intent| matches against.
      * @param browserFallbackUrl The fallback URL if the user chooses not to leave this app.
      * @param intentDataUrl The URL |intent| is targeting.
      * @param referrerUrl The referrer for the navigation.
      * @returns The OverrideUrlLoadingResult for starting (or not starting) the Activity.
      */
-    private OverrideUrlLoadingResult startActivityIfNeeded(Intent intent, boolean proxy,
-            List<ResolveInfo> resolvingInfos, ResolveActivitySupplier resolveActivity,
-            boolean requiresIntentChooser, GURL browserFallbackUrl, GURL intentDataUrl,
+    protected OverrideUrlLoadingResult startActivity(Intent intent, boolean proxy,
+            boolean requiresIntentChooser, List<ResolveInfo> resolvingInfos,
+            ResolveActivitySupplier resolveActivity, GURL browserFallbackUrl, GURL intentDataUrl,
             GURL referrerUrl) {
         // Only touches disk on Kitkat. See http://crbug.com/617725 for more context.
         StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskWrites();
         try {
-            boolean withoutPackage = TextUtils.isEmpty(intent.getPackage());
-
-            // TODO(https://crbug.com/1251722): Rename this delegate function and require
-            // the delegate to defer to the code below to actually launch the Activity.
-            @ExternalNavigationDelegate.StartActivityIfNeededResult
-            int delegateResult = mDelegate.maybeHandleStartActivityIfNeeded(intent, proxy);
-
-            switch (delegateResult) {
-                case ExternalNavigationDelegate.StartActivityIfNeededResult
-                        .HANDLED_WITH_ACTIVITY_START:
-                    return OverrideUrlLoadingResult.forExternalIntent();
-                case ExternalNavigationDelegate.StartActivityIfNeededResult
-                        .HANDLED_WITHOUT_ACTIVITY_START:
-                    return OverrideUrlLoadingResult.forNoOverride();
-                case ExternalNavigationDelegate.StartActivityIfNeededResult.DID_NOT_HANDLE:
-                    return startActivityIfNeededInternal(intent, proxy, resolvingInfos,
-                            resolveActivity, requiresIntentChooser, browserFallbackUrl,
-                            intentDataUrl, referrerUrl);
-                default:
-                    assert false;
+            forcePdfViewerAsIntentHandlerIfNeeded(intent);
+            if (proxy) {
+                mDelegate.dispatchAuthenticatedIntent(intent);
+                recordExternalNavigationDispatched(intent);
+                return OverrideUrlLoadingResult.forExternalIntent();
+            } else {
+                Context context = ContextUtils.activityFromContext(mDelegate.getContext());
+                if (context == null) {
+                    context = ContextUtils.getApplicationContext();
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                }
+                if (requiresIntentChooser) {
+                    return startActivityWithChooser(intent, resolvingInfos, resolveActivity,
+                            browserFallbackUrl, intentDataUrl, referrerUrl, context);
+                }
+                return doStartActivity(intent, context);
             }
         } catch (SecurityException e) {
             // https://crbug.com/808494: Handle the URL internally if dispatching to another
@@ -1863,47 +1879,17 @@ public class ExternalNavigationHandler {
         return OverrideUrlLoadingResult.forNoOverride();
     }
 
-    /**
-     * Implementation of startActivityIfNeeded() that is used when the delegate does not handle the
-     * event.
-     */
-    private OverrideUrlLoadingResult startActivityIfNeededInternal(Intent intent, boolean proxy,
-            List<ResolveInfo> resolvingInfos, ResolveActivitySupplier resolveActivity,
-            boolean requiresIntentChooser, GURL browserFallbackUrl, GURL intentDataUrl,
-            GURL referrerUrl) {
-        forcePdfViewerAsIntentHandlerIfNeeded(intent);
-        if (proxy) {
-            mDelegate.dispatchAuthenticatedIntent(intent);
-            recordExternalNavigationDispatched(intent);
-            return OverrideUrlLoadingResult.forExternalIntent();
-        } else {
-            Activity activity = ContextUtils.activityFromContext(mDelegate.getContext());
-            if (activity == null) return OverrideUrlLoadingResult.forNoOverride();
-
-            if (requiresIntentChooser) {
-                return startActivityWithChooser(intent, resolvingInfos, resolveActivity,
-                        browserFallbackUrl, intentDataUrl, referrerUrl, activity);
-            }
-            return doStartActivityIfNeeded(intent, activity);
-        }
-    }
-
-    private OverrideUrlLoadingResult doStartActivityIfNeeded(Intent intent, Activity activity) {
-        if (activity.startActivityIfNeeded(intent, -1)) {
-            if (DEBUG) Log.i(TAG, "startActivityIfNeeded");
-            mDelegate.didStartActivity(intent);
-            recordExternalNavigationDispatched(intent);
-            return OverrideUrlLoadingResult.forExternalIntent();
-        } else {
-            if (DEBUG) Log.i(TAG, "The current Activity was the only targeted Activity.");
-            return OverrideUrlLoadingResult.forNoOverride();
-        }
+    private OverrideUrlLoadingResult doStartActivity(Intent intent, Context context) {
+        if (DEBUG) Log.i(TAG, "startActivity");
+        context.startActivity(intent);
+        recordExternalNavigationDispatched(intent);
+        return OverrideUrlLoadingResult.forExternalIntent();
     }
 
     @SuppressWarnings("UseCompatLoadingForDrawables")
     private OverrideUrlLoadingResult startActivityWithChooser(final Intent intent,
             List<ResolveInfo> resolvingInfos, ResolveActivitySupplier resolveActivity,
-            GURL browserFallbackUrl, GURL intentDataUrl, GURL referrerUrl, Activity activity) {
+            GURL browserFallbackUrl, GURL intentDataUrl, GURL referrerUrl, Context context) {
         ResolveInfo intentResolveInfo = resolveActivity.get();
         // If this is null, then the intent was only previously matching
         // non-default filters, so just drop it.
@@ -1915,7 +1901,7 @@ public class ExternalNavigationHandler {
         // and we don't need to do anything. Otherwise we have to make a fake option in the chooser
         // dialog that loads the URL in the embedding app.
         if (!resolversSubsetOf(Arrays.asList(intentResolveInfo), resolvingInfos)) {
-            return doStartActivityIfNeeded(intent, activity);
+            return doStartActivity(intent, context);
         }
 
         Intent pickerIntent = new Intent(Intent.ACTION_PICK_ACTIVITY);
@@ -1923,10 +1909,10 @@ public class ExternalNavigationHandler {
 
         // Add the fake entry for the embedding app. This behavior is not well documented but works
         // consistently across Android since L (and at least up to S).
-        PackageManager pm = activity.getPackageManager();
+        PackageManager pm = context.getPackageManager();
         ArrayList<ShortcutIconResource> icons = new ArrayList<>();
         ArrayList<String> labels = new ArrayList<>();
-        String packageName = activity.getPackageName();
+        String packageName = context.getPackageName();
         String label = "";
         ShortcutIconResource resource = new ShortcutIconResource();
         try {

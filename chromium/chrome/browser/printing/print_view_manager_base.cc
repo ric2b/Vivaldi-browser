@@ -55,7 +55,7 @@
 #include "printing/printed_document.h"
 #include "ui/base/l10n/l10n_util.h"
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 #include "printing/printing_features.h"
 #endif
 
@@ -65,18 +65,12 @@
 #include "components/prefs/pref_service.h"
 #endif
 
-#if defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#if BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
 #include "chrome/browser/win/conflicts/module_database.h"
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-#include "base/callback_helpers.h"
-#include "base/strings/utf_string_conversions.h"
-#include "chrome/grit/generated_resources.h"
-#include "chromeos/lacros/lacros_service.h"
-#include "printing/print_settings.h"
-#include "printing/printing_utils.h"
-#include "ui/base/l10n/l10n_util.h"
+#include "chrome/browser/printing/print_job_utils_lacros.h"
 #endif
 
 namespace printing {
@@ -85,29 +79,6 @@ namespace {
 
 using PrintSettingsCallback =
     base::OnceCallback<void(std::unique_ptr<PrinterQuery>)>;
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-crosapi::mojom::PrintJobPtr PrintJobToMojom(int job_id,
-                                            PrintedDocument* document,
-                                            PrintJob::Source source,
-                                            const std::string& source_id) {
-  std::u16string title = SimplifyDocumentTitle(document->name());
-  if (title.empty()) {
-    title = SimplifyDocumentTitle(
-        l10n_util::GetStringUTF16(IDS_DEFAULT_PRINT_DOCUMENT_TITLE));
-  }
-  const PrintSettings& settings = document->settings();
-  int duplex = static_cast<int>(settings.duplex_mode());
-  DCHECK(duplex >= 0);
-  DCHECK(duplex < 3);
-  return crosapi::mojom::PrintJob::New(
-      base::UTF16ToUTF8(settings.device_name()), base::UTF16ToUTF8(title),
-      job_id, document->page_count(), source, source_id, settings.color(),
-      static_cast<crosapi::mojom::PrintJob::DuplexMode>(duplex),
-      settings.requested_media().size_microns,
-      settings.requested_media().vendor_id, settings.copies());
-}
-#endif
 
 void ShowWarningMessageBox(const std::u16string& message) {
   // Runs always on the UI thread.
@@ -202,12 +173,12 @@ mojom::PrintPagesParamsPtr CreateEmptyPrintPagesParamsPtr() {
 }
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 void NotifySystemDialogCancelled(base::WeakPtr<PrintViewManagerBase> manager) {
   if (manager)
     manager->SystemDialogCancelled();
 }
-#endif  // defined(OS_WIN)
+#endif  // BUILDFLAG(IS_WIN)
 
 void UpdatePrintSettingsReplyOnIO(
     scoped_refptr<PrintQueriesQueue> queue,
@@ -224,7 +195,7 @@ void UpdatePrintSettingsReplyOnIO(
     params->pages = PageRange::GetPages(printer_query->settings().ranges());
   }
   bool canceled = printer_query->last_status() == mojom::ResultCode::kCanceled;
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   if (canceled) {
     content::GetUIThreadTaskRunner({})->PostTask(
         FROM_HERE,
@@ -295,7 +266,7 @@ void ScriptedPrintOnIO(mojom::ScriptedPrintParamsPtr params,
                        int process_id,
                        int routing_id) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
-#if defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#if BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
   ModuleDatabase::GetInstance()->DisableThirdPartyBlocking();
 #endif
 
@@ -388,7 +359,7 @@ void PrintViewManagerBase::PrintDocument(
     const gfx::Size& page_size,
     const gfx::Rect& content_area,
     const gfx::Point& offsets) {
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   const bool source_is_pdf =
       !print_job_->document()->settings().is_modifiable();
   if (!printing::features::ShouldPrintUsingXps(source_is_pdf)) {
@@ -421,7 +392,7 @@ void PrintViewManagerBase::OnPrintSettingsDone(
   // the system dialog is cancelled.
   if (printer_query->last_status() == mojom::ResultCode::kCanceled) {
     queue_->QueuePrinterQuery(std::move(printer_query));
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
     content::GetUIThreadTaskRunner({})->PostTask(
         FROM_HERE, base::BindOnce(&PrintViewManagerBase::SystemDialogCancelled,
                                   weak_ptr_factory_.GetWeakPtr()));
@@ -463,7 +434,7 @@ void PrintViewManagerBase::StartLocalPrintJob(
     return;
   }
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   print_job_->ResetPageMapping();
 #endif
 
@@ -780,7 +751,7 @@ void PrintViewManagerBase::RenderFrameDeleted(
   }
 }
 
-#if defined(OS_WIN) && BUILDFLAG(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(IS_WIN) && BUILDFLAG(ENABLE_PRINT_PREVIEW)
 void PrintViewManagerBase::SystemDialogCancelled() {
   // System dialog was cancelled. Clean up the print job and notify the
   // BackgroundPrintingManager.
@@ -792,17 +763,9 @@ void PrintViewManagerBase::SystemDialogCancelled() {
 
 void PrintViewManagerBase::OnDocDone(int job_id, PrintedDocument* document) {
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-  chromeos::LacrosService* service = chromeos::LacrosService::Get();
-  if (!service->IsAvailable<crosapi::mojom::LocalPrinter>()) {
-    LOG(ERROR) << "Could not report print job queued";
-  } else {
-    service->GetRemote<crosapi::mojom::LocalPrinter>()->CreatePrintJob(
-        PrintJobToMojom(job_id, document, print_job_->source(),
-                        print_job_->source_id()),
-        base::DoNothing());
-  }
+  NotifyAshJobCreated(*print_job_, job_id, *document);
 #endif
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   DCHECK_LE(number_pages(), kMaxPageCount);
   PdfWritingDone(base::checked_cast<int>(number_pages()));
 #endif
@@ -893,7 +856,7 @@ bool PrintViewManagerBase::CreateNewPrintJob(
   DCHECK(!print_job_);
   print_job_ = base::MakeRefCounted<PrintJob>();
   print_job_->Initialize(std::move(query), RenderSourceName(), number_pages());
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS)
   print_job_->SetSource(web_contents()->GetBrowserContext()->IsOffTheRecord()
                             ? PrintJob::Source::PRINT_PREVIEW_INCOGNITO
                             : PrintJob::Source::PRINT_PREVIEW,
@@ -933,7 +896,7 @@ void PrintViewManagerBase::TerminatePrintJob(bool cancel) {
     // We don't need the metafile data anymore because the printing is canceled.
     print_job_->Cancel();
     quit_inner_loop_.Reset();
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
     PdfWritingDone(0);
 #endif
   } else {
@@ -1031,15 +994,6 @@ bool PrintViewManagerBase::OpportunisticallyCreatePrintJob(int cookie) {
 
 bool PrintViewManagerBase::IsCrashed() {
   return web_contents()->IsCrashed();
-}
-
-bool PrintViewManagerBase::PrintNowInternal(
-    content::RenderFrameHost* rfh,
-    std::unique_ptr<IPC::Message> message) {
-  // Don't print / print preview crashed tabs.
-  if (IsCrashed())
-    return false;
-  return rfh->Send(message.release());
 }
 
 void PrintViewManagerBase::SetPrintingRFH(content::RenderFrameHost* rfh) {

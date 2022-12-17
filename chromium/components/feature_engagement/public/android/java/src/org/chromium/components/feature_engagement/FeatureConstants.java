@@ -96,8 +96,7 @@ public @interface FeatureConstants {
     String KEYBOARD_ACCESSORY_PASSWORD_FILLING_FEATURE = "IPH_KeyboardAccessoryPasswordFilling";
     String KEYBOARD_ACCESSORY_PAYMENT_FILLING_FEATURE = "IPH_KeyboardAccessoryPaymentFilling";
     String KEYBOARD_ACCESSORY_PAYMENT_OFFER_FEATURE = "IPH_KeyboardAccessoryPaymentOffer";
-    String KEYBOARD_ACCESSORY_PAYMENT_VIRTUAL_CARD_FEATURE =
-            "IPH_KeyboardAccessoryPaymentVirtualCard";
+    String KEYBOARD_ACCESSORY_PAYMENT_VIRTUAL_CARD_FEATURE = "IPH_AutofillVirtualCardSuggestion";
     String KEYBOARD_ACCESSORY_BAR_SWIPING_FEATURE = "IPH_KeyboardAccessoryBarSwiping";
     String INSTANCE_SWITCHER = "IPH_InstanceSwitcher";
     String PREVIEWS_OMNIBOX_UI_FEATURE = "IPH_PreviewsOmniboxUI";
@@ -240,6 +239,36 @@ public @interface FeatureConstants {
     String VIDEO_TUTORIAL_TRY_NOW_FEATURE = "IPH_VideoTutorial_TryNow";
 
     /**
+     * Feature notification guide help UI for default browser promo.
+     */
+    String FEATURE_NOTIFICATION_GUIDE_DEFAULT_BROWSER_PROMO_FEATURE =
+            "IPH_FeatureNotificationGuideDefaultBrowserPromo";
+
+    /**
+     * Feature notification guide help UI for sign in promo.
+     */
+    String FEATURE_NOTIFICATION_GUIDE_SIGN_IN_HELP_BUBBLE_FEATURE =
+            "IPH_FeatureNotificationGuideSignInHelpBubble";
+
+    /**
+     * Feature notification guide help UI for incognito tab.
+     */
+    String FEATURE_NOTIFICATION_GUIDE_INCOGNITO_TAB_HELP_BUBBLE_FEATURE =
+            "IPH_FeatureNotificationGuideIncognitoTabHelpBubble";
+
+    /**
+     * Feature notification guide help UI for NTP suggestion card.
+     */
+    String FEATURE_NOTIFICATION_GUIDE_NTP_SUGGESTION_CARD_HELP_BUBBLE_FEATURE =
+            "IPH_FeatureNotificationGuideNTPSuggestionCardHelpBubble";
+
+    /**
+     * Feature notification guide help UI for voice search.
+     */
+    String FEATURE_NOTIFICATION_GUIDE_VOICE_SEARCH_HELP_BUBBLE_FEATURE =
+            "IPH_FeatureNotificationGuideVoiceSearchHelpBubble";
+
+    /**
      * An IPH feature to show on a card menu on the FeedNewTabPage.
      */
     String FEED_CARD_MENU_FEATURE = "IPH_FeedCardMenu";
@@ -248,6 +277,11 @@ public @interface FeatureConstants {
      * An IPH feature to prompt users to pull-to-refresh feed.
      */
     String FEED_SWIPE_REFRESH_FEATURE = "IPH_FeedSwipeRefresh";
+
+    /**
+     * A generic IPH feature to always trigger help UI when asked.
+     */
+    String GENERIC_ALWAYS_TRIGGER_HELP_UI_FEATURE = "IPH_GenericAlwaysTriggerHelpUiFeature";
 
     /**
      * An IPH feature prompting user to tap on identity disc to navigate to "Sync and Google

@@ -22,11 +22,10 @@
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/mojom/autoplay/autoplay.mojom.h"
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "extensions/api/tabs/tabs_private_api.h"
 #endif
-
 
 SoundContentSettingObserver::SoundContentSettingObserver(
     content::WebContents* contents)
@@ -38,7 +37,7 @@ SoundContentSettingObserver::SoundContentSettingObserver(
       HostContentSettingsMapFactory::GetForProfile(profile);
   observation_.Observe(host_content_settings_map_.get());
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   // Listen to changes of the block autoplay pref.
   pref_change_registrar_.Init(profile->GetPrefs());
   pref_change_registrar_.Add(
@@ -62,12 +61,11 @@ void SoundContentSettingObserver::ReadyToCommitNavigation(
                        ->GetLastCommittedURL();
 
   content_settings::SettingInfo setting_info;
-  std::unique_ptr<base::Value> setting =
-      host_content_settings_map_->GetWebsiteSetting(
-          url, navigation_handle->GetURL(), ContentSettingsType::SOUND,
-          &setting_info);
+  const base::Value setting = host_content_settings_map_->GetWebsiteSetting(
+      url, navigation_handle->GetURL(), ContentSettingsType::SOUND,
+      &setting_info);
 
-  if (content_settings::ValueToContentSetting(setting.get()) !=
+  if (content_settings::ValueToContentSetting(setting) !=
       CONTENT_SETTING_ALLOW) {
     return;
   }
@@ -88,14 +86,9 @@ void SoundContentSettingObserver::ReadyToCommitNavigation(
                            blink::mojom::kAutoplayFlagUserException);
 }
 
-void SoundContentSettingObserver::DidFinishNavigation(
-    content::NavigationHandle* navigation_handle) {
-  if (navigation_handle->IsInPrimaryMainFrame() &&
-      navigation_handle->HasCommitted() &&
-      !navigation_handle->IsSameDocument()) {
-    MuteOrUnmuteIfNecessary();
-    logged_site_muted_ukm_ = false;
-  }
+void SoundContentSettingObserver::PrimaryPageChanged(content::Page& page) {
+  MuteOrUnmuteIfNecessary();
+  logged_site_muted_ukm_ = false;
 }
 
 void SoundContentSettingObserver::OnAudioStateChanged(bool audible) {
@@ -109,7 +102,7 @@ void SoundContentSettingObserver::OnContentSettingChanged(
   if (!content_type_set.Contains(ContentSettingsType::SOUND))
     return;
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   if (primary_pattern.MatchesAllHosts() &&
       secondary_pattern.MatchesAllHosts()) {
     UpdateAutoplayPolicy();
@@ -124,7 +117,7 @@ void SoundContentSettingObserver::MuteOrUnmuteIfNecessary() {
   bool mute = GetCurrentContentSetting() == CONTENT_SETTING_BLOCK;
 
 // TabMutedReason does not exist on Android.
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   web_contents()->SetAudioMuted(mute);
 #else
   // We don't want to overwrite TabMutedReason with no change.
@@ -145,6 +138,10 @@ void SoundContentSettingObserver::MuteOrUnmuteIfNecessary() {
     return;
   }
 
+  // Do not unmute if we're muted due to audio indicator.
+  if (!mute && reason == TabMutedReason::AUDIO_INDICATOR)
+    return;
+
   // NOTE(andre@vivaldi.com) : Vivaldi can set a tab to muted in extdata. Do not
   // override this here.
   if (extensions::IsTabMuted(web_contents())){
@@ -153,7 +150,7 @@ void SoundContentSettingObserver::MuteOrUnmuteIfNecessary() {
 
   chrome::SetTabAudioMuted(web_contents(), mute,
                            TabMutedReason::CONTENT_SETTING, std::string());
-#endif  // defined(OS_ANDROID)
+#endif  // BUILDFLAG(IS_ANDROID)
 }
 
 ContentSetting SoundContentSettingObserver::GetCurrentContentSetting() {
@@ -208,7 +205,7 @@ SoundContentSettingObserver::GetSiteMutedReason() {
   return MuteReason::kSiteException;
 }
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
 void SoundContentSettingObserver::UpdateAutoplayPolicy() {
   // Force a WebkitPreferences update to update the autoplay policy.
   web_contents()->OnWebPreferencesChanged();

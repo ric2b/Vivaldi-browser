@@ -44,6 +44,9 @@ update_target("//chrome/browser/ui:ui") {
       "//vivaldi/ui/vivaldi_ui_utils.cc",
       "//vivaldi/ui/vivaldi_ui_utils.h",
     ]
+    deps += [
+      "//vivaldi/ui/vector_icons:vector_icons",
+    ]
   }
   if (is_mac) {
     sources += [

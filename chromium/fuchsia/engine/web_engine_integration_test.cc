@@ -78,7 +78,8 @@ class WebEngineIntegrationMediaTest : public WebEngineIntegrationTest {
   fuchsia::web::CreateContextParams ContextParamsWithAudioAndTestData() {
     fuchsia::web::CreateContextParams create_params =
         TestContextParamsWithTestData();
-    create_params.set_features(fuchsia::web::ContextFeatureFlags::AUDIO);
+    *create_params.mutable_features() |=
+        fuchsia::web::ContextFeatureFlags::AUDIO;
     return create_params;
   }
 
@@ -264,7 +265,7 @@ TEST_F(WebEngineIntegrationTest, RemoteDebuggingPort) {
       port_receiver;
   context_->GetRemoteDebuggingPort(
       cr_fuchsia::CallbackToFitFunction(port_receiver.GetCallback()));
-  port_receiver.Wait();
+  ASSERT_TRUE(port_receiver.Wait());
 
   ASSERT_TRUE(port_receiver.Get().is_response());
   uint16_t remote_debugging_port = port_receiver.Get().response().port;
@@ -278,9 +279,10 @@ TEST_F(WebEngineIntegrationTest, RemoteDebuggingPort) {
   base::Value devtools_list =
       cr_fuchsia::GetDevToolsListFromPort(remote_debugging_port);
   ASSERT_TRUE(devtools_list.is_list());
-  EXPECT_EQ(devtools_list.GetList().size(), 1u);
+  EXPECT_EQ(devtools_list.GetListDeprecated().size(), 1u);
 
-  base::Value* devtools_url = devtools_list.GetList()[0].FindPath("url");
+  base::Value* devtools_url =
+      devtools_list.GetListDeprecated()[0].FindPath("url");
   ASSERT_TRUE(devtools_url->is_string());
   EXPECT_EQ(devtools_url->GetString(), url);
 
@@ -292,9 +294,9 @@ TEST_F(WebEngineIntegrationTest, RemoteDebuggingPort) {
 
   devtools_list = cr_fuchsia::GetDevToolsListFromPort(remote_debugging_port);
   ASSERT_TRUE(devtools_list.is_list());
-  EXPECT_EQ(devtools_list.GetList().size(), 1u);
+  EXPECT_EQ(devtools_list.GetListDeprecated().size(), 1u);
 
-  devtools_url = devtools_list.GetList()[0].FindPath("url");
+  devtools_url = devtools_list.GetListDeprecated()[0].FindPath("url");
   ASSERT_TRUE(devtools_url->is_string());
   EXPECT_EQ(devtools_url->GetString(), url);
 
@@ -533,7 +535,8 @@ class MAYBE_VulkanWebEngineIntegrationTest
 TEST_F(MAYBE_VulkanWebEngineIntegrationTest,
        WebGLContextPresentWithVulkanFeature) {
   fuchsia::web::CreateContextParams create_params = TestContextParams();
-  create_params.set_features(fuchsia::web::ContextFeatureFlags::VULKAN);
+  *create_params.mutable_features() |=
+      fuchsia::web::ContextFeatureFlags::VULKAN;
   CreateContextAndFrame(std::move(create_params));
 
   ASSERT_NO_FATAL_FAILURE(LoadUrlAndExpectResponse(
@@ -609,10 +612,9 @@ TEST_F(MAYBE_VulkanWebEngineIntegrationTest,
   // The VULKAN flag is required for hardware video decoders to be available.
   fuchsia::web::CreateContextParams create_params =
       ContextParamsWithAudioAndTestData();
-  create_params.set_features(
+  *create_params.mutable_features() |=
       fuchsia::web::ContextFeatureFlags::VULKAN |
-      fuchsia::web::ContextFeatureFlags::HARDWARE_VIDEO_DECODER |
-      fuchsia::web::ContextFeatureFlags::AUDIO);
+      fuchsia::web::ContextFeatureFlags::HARDWARE_VIDEO_DECODER;
   CreateContextAndFrame(std::move(create_params));
 
   static const uint16_t kTestMediaSessionId = 1;

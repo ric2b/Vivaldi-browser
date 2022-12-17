@@ -474,7 +474,7 @@ void SetImagePathForProfilePath(const std::string& preferences_path,
   bool updated = false;
   PrefService* prefs = g_browser_process->local_state();
   ListPrefUpdate update(prefs, preferences_path);
-  base::ListValue* update_pref_data = update.Get();
+  base::Value* update_pref_data = update.Get();
 
   if (update_pref_data && update_pref_data->is_list()) {
     std::string image_path;

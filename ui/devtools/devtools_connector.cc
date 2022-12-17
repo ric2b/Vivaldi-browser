@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include "base/lazy_instance.h"
+#include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
@@ -124,35 +125,32 @@ void DevtoolsConnectorAPI::SendOnUndockedEvent(
   bool need_defaults = true;
   Profile* profile = Profile::FromBrowserContext(browser_context);
   PrefService* prefs = profile->GetPrefs();
-  if (prefs->GetDictionary(prefs::kAppWindowPlacement)
-          ->HasKey(DevToolsWindow::kDevToolsApp)) {
-    const base::DictionaryValue* dict =
-        prefs->GetDictionary(prefs::kAppWindowPlacement);
-    const base::DictionaryValue* state = nullptr;
-    if (dict && dict->GetDictionary(DevToolsWindow::kDevToolsApp, &state)) {
-      state->GetInteger("left", &params.left);
-      state->GetInteger("top", &params.top);
-      state->GetInteger("right", &params.right);
-      state->GetInteger("bottom", &params.bottom);
-      params.maximized = state->FindBoolPath("maximized").value_or(false);
-      params.always_on_top = state->FindBoolPath("always_on_top").value_or(false);
-      need_defaults = false;
-    }
+  const base::Value::Dict& pref_dict =
+      prefs->GetDictionary(prefs::kAppWindowPlacement)->GetDict();
+  if (const base::Value::Dict* state =
+          pref_dict.FindDict(DevToolsWindow::kDevToolsApp)) {
+    params.left = state->FindInt("left").value_or(0);
+    params.top = state->FindInt("top").value_or(0);
+    params.right = state->FindInt("right").value_or(0);
+    params.bottom = state->FindInt("bottom").value_or(0);
+    params.maximized = state->FindBool("maximized").value_or(false);
+    params.always_on_top = state->FindBool("always_on_top").value_or(false);
+    need_defaults = false;
   }
   if (need_defaults) {
     // Set defaults in prefs, based on DevToolsWindow::CreateDevToolsBrowser
     DictionaryPrefUpdate update(prefs, prefs::kAppWindowPlacement);
-    base::DictionaryValue* wp_prefs = update.Get();
-    std::unique_ptr<base::DictionaryValue> dev_tools_defaults(
-        new base::DictionaryValue);
-    dev_tools_defaults->SetInteger("left", 100);
-    dev_tools_defaults->SetInteger("top", 100);
-    dev_tools_defaults->SetInteger("right", 740);
-    dev_tools_defaults->SetInteger("bottom", 740);
-    dev_tools_defaults->SetBoolean("maximized", false);
-    dev_tools_defaults->SetBoolean("always_on_top", false);
+    base::Value* wp_prefs = update.Get();
+    base::Value::Dict dev_tools_defaults;
+    dev_tools_defaults.Set("left", 100);
+    dev_tools_defaults.Set("top", 100);
+    dev_tools_defaults.Set("right", 740);
+    dev_tools_defaults.Set("bottom", 740);
+    dev_tools_defaults.Set("maximized", false);
+    dev_tools_defaults.Set("always_on_top", false);
 
-    wp_prefs->Set(DevToolsWindow::kDevToolsApp, std::move(dev_tools_defaults));
+    wp_prefs->GetDict().Set(DevToolsWindow::kDevToolsApp,
+                            std::move(dev_tools_defaults));
   }
 
   ::vivaldi::BroadcastEvent(

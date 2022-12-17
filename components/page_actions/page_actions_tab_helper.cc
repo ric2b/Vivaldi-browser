@@ -5,7 +5,8 @@
 namespace page_actions {
 WEB_CONTENTS_USER_DATA_KEY_IMPL(TabHelper);
 
-TabHelper::TabHelper(content::WebContents* web_contents) {}
+TabHelper::TabHelper(content::WebContents* web_contents)
+    : content::WebContentsUserData<TabHelper>(*web_contents) {}
 TabHelper::~TabHelper() = default;
 
 void TabHelper::SetScriptOverride(base::FilePath script, bool enabled) {

@@ -12,9 +12,8 @@
 
 #include "base/component_export.h"
 #include "base/memory/ref_counted.h"
+#include "chromeos/components/onc/variable_expander.h"
 #include "chromeos/network/network_type_pattern.h"
-#include "chromeos/network/onc/onc_utils.h"
-#include "chromeos/network/onc/variable_expander.h"
 #include "components/onc/onc_constants.h"
 #include "net/cert/scoped_nss_types.h"
 
@@ -90,12 +89,12 @@ bool HasPolicyForNetwork(const PrefService* profile_prefs,
 // variable set as the password.
 COMPONENT_EXPORT(CHROMEOS_NETWORK)
 bool HasUserPasswordSubsitutionVariable(const OncValueSignature& signature,
-                                        base::Value* onc_object);
+                                        const base::Value* onc_object);
 
 // Checks whether a list of network objects has at least one network with the
 // ${PASSWORD} substitution variable set as the password.
 COMPONENT_EXPORT(CHROMEOS_NETWORK)
-bool HasUserPasswordSubsitutionVariable(base::Value* network_configs);
+bool HasUserPasswordSubsitutionVariable(const base::Value* network_configs);
 
 }  // namespace onc
 }  // namespace chromeos

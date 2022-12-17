@@ -82,7 +82,6 @@ bool OnlyLoginRequested(
          !collect_user_data_options.request_payer_phone &&
          !collect_user_data_options.request_shipping &&
          !collect_user_data_options.request_payment_method &&
-         !collect_user_data_options.request_date_time_range &&
          collect_user_data_options.accept_terms_and_conditions_text.empty() &&
          !collect_user_data_options.additional_model_identifier_to_check
               .has_value();
@@ -100,69 +99,6 @@ bool IsValidTermsChoice(
     const CollectUserDataOptions& collect_user_data_options) {
   return collect_user_data_options.accept_terms_and_conditions_text.empty() ||
          terms_state != TermsAndConditionsState::NOT_SELECTED;
-}
-
-// Checks |proto| and writes an error message to |error| if fields are missing.
-bool IsValidDateTimeRangeProto(
-    const autofill_assistant::DateTimeRangeProto& proto,
-    std::string* error) {
-  std::vector<std::string> missing_fields;
-  if (proto.start_date_label().empty())
-    missing_fields.emplace_back("start_date_label");
-  if (proto.start_time_label().empty())
-    missing_fields.emplace_back("start_time_label");
-  if (proto.end_date_label().empty())
-    missing_fields.emplace_back("end_date_label");
-  if (proto.end_time_label().empty())
-    missing_fields.emplace_back("end_time_label");
-  if (!proto.has_start_date())
-    missing_fields.emplace_back("start_date");
-  if (!proto.has_start_time_slot())
-    missing_fields.emplace_back("start_time_slot");
-  if (!proto.has_end_date())
-    missing_fields.emplace_back("end_date");
-  if (!proto.has_end_time_slot())
-    missing_fields.emplace_back("end_time_slot");
-  if (!proto.has_min_date())
-    missing_fields.emplace_back("min_date");
-  if (!proto.has_max_date())
-    missing_fields.emplace_back("max_date");
-  if (proto.time_slots().empty())
-    missing_fields.emplace_back("time_slots");
-  if (proto.date_not_set_error().empty())
-    missing_fields.emplace_back("date_not_set_error");
-  if (proto.time_not_set_error().empty())
-    missing_fields.emplace_back("time_not_set_error");
-
-  if (error != nullptr && !missing_fields.empty()) {
-    error->assign("The following fields are missing or empty: ");
-    error->append(base::JoinString(missing_fields, ", "));
-  }
-
-  return missing_fields.empty();
-}
-
-bool IsValidDateTimeRange(
-    const absl::optional<autofill_assistant::DateProto>& start_date,
-    const absl::optional<int> start_timeslot,
-    const absl::optional<autofill_assistant::DateProto> end_date,
-    const absl::optional<int> end_timeslot,
-    const CollectUserDataOptions& collect_user_data_options) {
-  if (!collect_user_data_options.request_date_time_range) {
-    return true;
-  }
-  if (!start_date.has_value() || !start_timeslot.has_value() ||
-      !end_date.has_value() || !end_timeslot.has_value()) {
-    return false;
-  }
-
-  auto temp_start_date = start_date;
-  auto temp_start_timeslot = start_timeslot;
-  auto temp_end_date = end_date;
-  auto temp_end_timeslot = end_timeslot;
-  return !autofill_assistant::CollectUserDataAction::SanitizeDateTimeRange(
-      &temp_start_date, &temp_start_timeslot, &temp_end_date,
-      &temp_end_timeslot, collect_user_data_options, false);
 }
 
 bool IsValidUserFormSection(
@@ -396,19 +332,60 @@ bool RequiresAddress(const CollectUserDataOptions& collect_user_data_options) {
          RequiresPaymentMethod(collect_user_data_options);
 }
 
+bool RequiresPhoneNumberSeparately(
+    const CollectUserDataOptions& collect_user_data_options) {
+  return collect_user_data_options.request_phone_number_separately;
+}
+
+void AddAutofillEntryToDataModel(autofill::ServerFieldType type,
+                                 AutofillEntryProto entry,
+                                 const std::string& locale,
+                                 autofill::AutofillDataModel* model) {
+  if (entry.raw()) {
+    model->SetRawInfo(type, base::UTF8ToUTF16(entry.value()));
+  } else {
+    model->SetInfo(type, base::UTF8ToUTF16(entry.value()), locale);
+  }
+}
+
 void AddProtoDataToAutofillDataModel(
     const google::protobuf::Map<int32_t, AutofillEntryProto>& data,
     const std::string& locale,
     autofill::AutofillDataModel* model) {
   for (const auto& it : data) {
-    if (it.second.raw()) {
-      model->SetRawInfo(static_cast<autofill::ServerFieldType>(it.first),
-                        base::UTF8ToUTF16(it.second.value()));
-    } else {
-      model->SetInfo(static_cast<autofill::ServerFieldType>(it.first),
-                     base::UTF8ToUTF16(it.second.value()), locale);
-    }
+    AddAutofillEntryToDataModel(
+        static_cast<autofill::ServerFieldType>(it.first), it.second, locale,
+        model);
   }
+}
+
+void MergePhoneNumberIntoSelectedContact(
+    UserData* user_data,
+    UserModel* user_model,
+    const CollectUserDataOptions& options,
+    const CollectUserDataProto::UserDataProto& proto_data) {
+  if (!user_data->selected_phone_number()) {
+    return;
+  }
+
+  // If there is no selected contact, we create a new one populated with the
+  // phone number.
+  if (!user_data->selected_address(options.contact_details_name)) {
+    user_model->SetSelectedAutofillProfile(
+        options.contact_details_name,
+        user_data::MakeUniqueFromProfile(*user_data->selected_phone_number()),
+        user_data);
+    return;
+  }
+
+  auto selected_phone_number = user_data->selected_phone_number()->GetRawInfo(
+      autofill::ServerFieldType::PHONE_HOME_WHOLE_NUMBER);
+  auto selected_contact = user_data::MakeUniqueFromProfile(
+      *user_data->selected_address(options.contact_details_name));
+  selected_contact->SetInfo(autofill::ServerFieldType::PHONE_HOME_WHOLE_NUMBER,
+                            selected_phone_number, proto_data.locale());
+  user_model->SetSelectedAutofillProfile(
+      options.contact_details_name, std::move(selected_contact), user_data);
 }
 
 }  // namespace
@@ -416,18 +393,22 @@ void AddProtoDataToAutofillDataModel(
 CollectUserDataAction::LoginDetails::LoginDetails(
     bool _choose_automatically_if_no_stored_login,
     const std::string& _payload,
+    const std::string& _tag,
     const WebsiteLoginManager::Login& _login)
     : choose_automatically_if_no_stored_login(
           _choose_automatically_if_no_stored_login),
       payload(_payload),
+      tag(_tag),
       login(_login) {}
 
 CollectUserDataAction::LoginDetails::LoginDetails(
     bool _choose_automatically_if_no_stored_login,
-    const std::string& _payload)
+    const std::string& _payload,
+    const std::string& _tag)
     : choose_automatically_if_no_stored_login(
           _choose_automatically_if_no_stored_login),
-      payload(_payload) {}
+      payload(_payload),
+      tag(_tag) {}
 
 CollectUserDataAction::LoginDetails::~LoginDetails() = default;
 
@@ -573,7 +554,7 @@ void CollectUserDataAction::OnGetLogins(
     login_details_map_.emplace(
         identifier, std::make_unique<LoginDetails>(
                         login_option.choose_automatically_if_no_stored_login(),
-                        login_option.payload(), login));
+                        login_option.payload(), login_option.tag(), login));
   }
   ShowToUser();
 }
@@ -678,8 +659,6 @@ void CollectUserDataAction::OnShowToUser(UserData* user_data,
     UpdatePersonalDataManagerProfiles(user_data);
     UpdatePersonalDataManagerCards(user_data);
   }
-  UpdateDateTimeRangeStart(user_data);
-  UpdateDateTimeRangeEnd(user_data);
 
   UpdateMetrics(user_data);
 
@@ -722,6 +701,11 @@ void CollectUserDataAction::OnGetUserData(
   delegate_->GetPersonalDataManager()->RemoveObserver(this);
 
   WriteProcessedAction(user_data, user_model);
+  if (RequiresPhoneNumberSeparately(*collect_user_data_options_)) {
+    MergePhoneNumberIntoSelectedContact(user_data, delegate_->GetUserModel(),
+                                        *collect_user_data_options_,
+                                        proto_.collect_user_data().user_data());
+  }
   if (collect_user_data_options_->should_store_data_changes) {
     UpdateProfileAndCardUse(user_data);
   }
@@ -850,7 +834,34 @@ bool CollectUserDataAction::CreateOptionsFromProto() {
       collect_user_data_options_->contact_full_max_lines =
           contact_details.max_number_full_lines();
     }
-    if (RequiresContact(*collect_user_data_options_)) {
+
+    if (contact_details.separate_phone_number_section()) {
+      if (contact_details.request_payer_phone()) {
+        VLOG(1) << "The phone number cannot be requested both in the contact "
+                   "details and separately";
+        return false;
+      }
+      if (!collect_user_data.has_user_data()) {
+        VLOG(1)
+            << "Separate phone number request is only supported with backend "
+               "data";
+        return false;
+      }
+      if (contact_details.phone_number_section_title().empty()) {
+        VLOG(1) << "Missing title for separate phone number section";
+        return false;
+      }
+      collect_user_data_options_->request_phone_number_separately = true;
+      collect_user_data_options_->phone_number_section_title =
+          contact_details.phone_number_section_title();
+      collect_user_data_options_->required_phone_number_data_pieces =
+          std::vector<RequiredDataPiece>(
+              contact_details.phone_number_required_data_piece().begin(),
+              contact_details.phone_number_required_data_piece().end());
+    }
+
+    if (RequiresContact(*collect_user_data_options_) ||
+        RequiresPhoneNumberSeparately(*collect_user_data_options_)) {
       if (!contact_details.has_contact_details_name()) {
         VLOG(1) << "Contact details name missing";
         return false;
@@ -921,6 +932,8 @@ bool CollectUserDataAction::CreateOptionsFromProto() {
       !collect_user_data.has_user_data();
   collect_user_data_options_->can_edit_contacts =
       !collect_user_data.has_user_data();
+  collect_user_data_options_->use_gms_core_edit_dialogs =
+      collect_user_data.has_user_data();
 
   collect_user_data_options_->request_login_choice =
       collect_user_data.has_login_details();
@@ -962,7 +975,7 @@ bool CollectUserDataAction::CreateOptionsFromProto() {
             identifier,
             std::make_unique<LoginDetails>(
                 login_option.choose_automatically_if_no_stored_login(),
-                login_option.payload()));
+                login_option.payload(), login_option.tag()));
         break;
       }
       case LoginDetailsProto::LoginOptionProto::kPasswordManager: {
@@ -975,27 +988,6 @@ bool CollectUserDataAction::CreateOptionsFromProto() {
         return false;
       }
     }
-  }
-
-  if (collect_user_data.has_date_time_range()) {
-    std::string error_message;
-    if (!IsValidDateTimeRangeProto(collect_user_data.date_time_range(),
-                                   &error_message)) {
-      VLOG(1) << "Invalid action: " << error_message;
-      return false;
-    }
-    if (collect_user_data.date_time_range().start_time_slot() < 0 ||
-        collect_user_data.date_time_range().end_time_slot() < 0 ||
-        collect_user_data.date_time_range().start_time_slot() >=
-            collect_user_data.date_time_range().time_slots().size() ||
-        collect_user_data.date_time_range().end_time_slot() >=
-            collect_user_data.date_time_range().time_slots().size()) {
-      VLOG(1) << "Invalid action: time slot index out of range";
-      return false;
-    }
-    collect_user_data_options_->request_date_time_range = true;
-    collect_user_data_options_->date_time_range =
-        collect_user_data.date_time_range();
   }
 
   for (const auto& section :
@@ -1151,9 +1143,17 @@ void CollectUserDataAction::FillInitiallySelectedDataStateForMetrics(
   DCHECK(user_data);
 
   if (RequiresContact(*collect_user_data_options_)) {
-    metrics_data_.selected_contact_field_bitmask =
-        user_data::GetFieldBitArrayForAddress(user_data->selected_address(
-            collect_user_data_options_->contact_details_name));
+    if (RequiresPhoneNumberSeparately(*collect_user_data_options_)) {
+      metrics_data_.selected_contact_field_bitmask =
+          user_data::GetFieldBitArrayForAddressAndPhoneNumber(
+              user_data->selected_address(
+                  collect_user_data_options_->contact_details_name),
+              user_data->selected_phone_number());
+    } else {
+      metrics_data_.selected_contact_field_bitmask =
+          user_data::GetFieldBitArrayForAddress(user_data->selected_address(
+              collect_user_data_options_->contact_details_name));
+    }
   }
 
   if (RequiresShipping(*collect_user_data_options_)) {
@@ -1183,7 +1183,11 @@ bool CollectUserDataAction::IsUserDataComplete(
       user_data.selected_address(options.billing_address_name);
   auto* shipping_address =
       user_data.selected_address(options.shipping_address_name);
+  // TODO(b/204419253): check for phone number errors
   return user_data::GetContactValidationErrors(selected_profile, options)
+             .empty() &&
+         user_data::GetPhoneNumberValidationErrors(
+             user_data.selected_phone_number(), options)
              .empty() &&
          user_data::GetShippingAddressValidationErrors(shipping_address,
                                                        options)
@@ -1193,97 +1197,8 @@ bool CollectUserDataAction::IsUserDataComplete(
              .empty() &&
          IsValidLoginChoice(user_data.selected_login_choice(), options) &&
          IsValidTermsChoice(user_data.terms_and_conditions_, options) &&
-         IsValidDateTimeRange(user_data.date_time_range_start_date_,
-                              user_data.date_time_range_start_timeslot_,
-                              user_data.date_time_range_end_date_,
-                              user_data.date_time_range_end_timeslot_,
-                              options) &&
          AreAdditionalSectionsComplete(user_data, options) &&
          IsValidUserModel(user_model, options);
-}
-
-// TODO(b/148448649): Move to dedicated helper namespace.
-// static
-int CollectUserDataAction::CompareDates(const DateProto& first,
-                                        const DateProto& second) {
-  auto first_tuple = std::make_tuple(first.year(), first.month(), first.day());
-  auto second_tuple =
-      std::make_tuple(second.year(), second.month(), second.day());
-  if (first_tuple < second_tuple) {
-    return -1;
-  } else if (second_tuple < first_tuple) {
-    return 1;
-  }
-  return 0;
-}
-
-// TODO(b/148448649): Move to dedicated helper namespace.
-// static
-bool CollectUserDataAction::SanitizeDateTimeRange(
-    absl::optional<DateProto>* start_date,
-    absl::optional<int>* start_timeslot,
-    absl::optional<DateProto>* end_date,
-    absl::optional<int>* end_timeslot,
-    const CollectUserDataOptions& collect_user_data_options,
-    bool change_start) {
-  if (!collect_user_data_options.request_date_time_range) {
-    return false;
-  }
-  DCHECK(start_date);
-  DCHECK(start_timeslot);
-  DCHECK(end_date);
-  DCHECK(end_timeslot);
-  if (!start_date->has_value() || !end_date->has_value()) {
-    return false;
-  }
-
-  auto date_comparison = CompareDates(**start_date, **end_date);
-  if (date_comparison < 0) {
-    return false;
-  }
-
-  // Start date > end date, reset date.
-  if (date_comparison > 0) {
-    if (change_start) {
-      start_date->reset();
-    } else {
-      end_date->reset();
-    }
-    return true;
-  }
-
-  if (!start_timeslot->has_value() || !end_timeslot->has_value()) {
-    return false;
-  }
-
-  DCHECK(**start_timeslot >= 0 &&
-         **start_timeslot <
-             collect_user_data_options.date_time_range.time_slots().size());
-  DCHECK(**end_timeslot >= 0 &&
-         **end_timeslot <
-             collect_user_data_options.date_time_range.time_slots().size());
-  auto start_time =
-      collect_user_data_options.date_time_range.time_slots(**start_timeslot);
-  auto end_time =
-      collect_user_data_options.date_time_range.time_slots(**end_timeslot);
-  auto time_comparison =
-      start_time.comparison_value() - end_time.comparison_value();
-  if (time_comparison < 0) {
-    return false;
-  }
-
-  // Start date == end date and start time >= end time, reset time.
-  if (time_comparison >= 0) {
-    if (change_start) {
-      start_timeslot->reset();
-    } else {
-      end_timeslot->reset();
-    }
-    return true;
-  }
-
-  NOTREACHED();
-  return false;
 }
 
 void CollectUserDataAction::WriteProcessedAction(UserData* user_data,
@@ -1330,33 +1245,16 @@ void CollectUserDataAction::WriteProcessedAction(UserData* user_data,
         }
       }
 
-      processed_action_proto_->mutable_collect_user_data_result()
-          ->set_login_payload(login_details->second->payload);
+      auto* result =
+          processed_action_proto_->mutable_collect_user_data_result();
+      if (!login_details->second->tag.empty()) {
+        result->set_login_tag(login_details->second->tag);
+      } else {
+        result->set_login_payload(login_details->second->payload);
+      }
     }
   }
 
-  if (proto().collect_user_data().has_date_time_range()) {
-    if (user_data->date_time_range_start_date_.has_value()) {
-      *processed_action_proto_->mutable_collect_user_data_result()
-           ->mutable_date_range_start_date() =
-          *user_data->date_time_range_start_date_;
-    }
-    if (user_data->date_time_range_start_timeslot_.has_value()) {
-      processed_action_proto_->mutable_collect_user_data_result()
-          ->set_date_range_start_timeslot(
-              *user_data->date_time_range_start_timeslot_);
-    }
-    if (user_data->date_time_range_end_date_.has_value()) {
-      *processed_action_proto_->mutable_collect_user_data_result()
-           ->mutable_date_range_end_date() =
-          *user_data->date_time_range_end_date_;
-    }
-    if (user_data->date_time_range_end_timeslot_.has_value()) {
-      processed_action_proto_->mutable_collect_user_data_result()
-          ->set_date_range_end_timeslot(
-              *user_data->date_time_range_end_timeslot_);
-    }
-  }
   for (const auto& section :
        proto().collect_user_data().additional_prepended_sections()) {
     FillProtoForAdditionalSection(section, *user_data,
@@ -1470,6 +1368,39 @@ void CollectUserDataAction::UpdateUserDataFromProto(
     }
   }
 
+  if (RequiresPhoneNumberSeparately(*collect_user_data_options_)) {
+    user_data->available_phone_numbers_.clear();
+    for (const auto& phone_number_data : proto_data.available_phone_numbers()) {
+      auto profile = std::make_unique<autofill::AutofillProfile>();
+      AddAutofillEntryToDataModel(
+          autofill::ServerFieldType::PHONE_HOME_WHOLE_NUMBER,
+          phone_number_data.value(), proto_data.locale(), profile.get());
+      auto phone_number = std::make_unique<PhoneNumber>(std::move(profile));
+      if (phone_number_data.has_identifier()) {
+        phone_number->identifier = phone_number_data.identifier();
+      }
+      user_data->available_phone_numbers_.emplace_back(std::move(phone_number));
+    }
+    if (proto_data.has_selected_phone_number_identifier()) {
+      const auto& it = base::ranges::find_if(
+          user_data->available_phone_numbers_, [&](const auto& phone_number) {
+            return phone_number->identifier &&
+                   proto_data.selected_phone_number_identifier() ==
+                       *phone_number->identifier;
+          });
+      if (it == user_data->available_phone_numbers_.end()) {
+        NOTREACHED();
+        EndAction(ClientStatus(INVALID_ACTION));
+        return;
+      }
+      const auto& phone_number_to_select = *it;
+      user_data->SetSelectedPhoneNumber(
+          user_data::MakeUniqueFromProfile(*phone_number_to_select->profile));
+    } else {
+      UpdateSelectedPhoneNumber(user_data);
+    }
+  }
+
   if (RequiresAddress(*collect_user_data_options_)) {
     user_data->available_addresses_.clear();
     for (const auto& profile_data : proto_data.available_addresses()) {
@@ -1513,6 +1444,13 @@ void CollectUserDataAction::UpdateUserDataFromProto(
       credit_card->set_record_type(autofill::CreditCard::MASKED_SERVER_CARD);
       AddProtoDataToAutofillDataModel(payment_data.card_values(),
                                       proto_data.locale(), credit_card.get());
+      if (payment_data.has_instrument_id()) {
+        credit_card->set_instrument_id(payment_data.instrument_id());
+      }
+      if (!payment_data.last_four_digits().empty()) {
+        credit_card->SetNumber(
+            base::UTF8ToUTF16(payment_data.last_four_digits()));
+      }
       if (!payment_data.network().empty()) {
         credit_card->SetNetworkForMaskedCard(payment_data.network());
       }
@@ -1660,10 +1598,8 @@ void CollectUserDataAction::UpdateSelectedContact(UserData* user_data) {
   if (selected_contact != nullptr) {
     found_contact = base::ranges::any_of(
         user_data->available_contacts_,
-        [&selected_contact, this](const std::unique_ptr<Contact>& contact) {
-          return user_data::CompareContactDetails(*collect_user_data_options_,
-                                                  contact->profile.get(),
-                                                  selected_contact);
+        [&selected_contact](const std::unique_ptr<Contact>& contact) {
+          return selected_contact->guid() == contact->profile->guid();
         });
   }
 
@@ -1688,6 +1624,35 @@ void CollectUserDataAction::UpdateSelectedContact(UserData* user_data) {
   }
 }
 
+void CollectUserDataAction::UpdateSelectedPhoneNumber(UserData* user_data) {
+  DCHECK(user_data != nullptr);
+
+  bool found_phone_number = false;
+  auto* selected_phone_number = user_data->selected_phone_number();
+  if (selected_phone_number != nullptr) {
+    found_phone_number = base::ranges::any_of(
+        user_data->available_phone_numbers_,
+        [&selected_phone_number](
+            const std::unique_ptr<PhoneNumber>& phone_number) {
+          return phone_number->profile->guid() == selected_phone_number->guid();
+        });
+  }
+
+  if (!found_phone_number && selected_phone_number != nullptr) {
+    user_data->SetSelectedPhoneNumber(/* profile= */ nullptr);
+  }
+
+  if (!user_data->selected_phone_number() &&
+      RequiresPhoneNumberSeparately(*collect_user_data_options_)) {
+    int default_selection = user_data::GetDefaultPhoneNumber(
+        *collect_user_data_options_, user_data->available_phone_numbers_);
+    if (default_selection != -1) {
+      user_data->SetSelectedPhoneNumber(user_data::MakeUniqueFromProfile(
+          *user_data->available_phone_numbers_[default_selection]->profile));
+    }
+  }
+}
+
 void CollectUserDataAction::UpdateSelectedShippingAddress(UserData* user_data) {
   DCHECK(user_data != nullptr);
 
@@ -1698,7 +1663,7 @@ void CollectUserDataAction::UpdateSelectedShippingAddress(UserData* user_data) {
     found_shipping_address = base::ranges::any_of(
         user_data->available_addresses_,
         [&selected_shipping_address](const std::unique_ptr<Address>& address) {
-          return address->profile->Compare(*selected_shipping_address) == 0;
+          return selected_shipping_address->guid() == address->profile->guid();
         });
   }
 
@@ -1727,12 +1692,14 @@ void CollectUserDataAction::UpdateSelectedCreditCard(UserData* user_data) {
   DCHECK(user_data != nullptr);
 
   bool found_card = false;
-  for (const std::unique_ptr<PaymentInstrument>& payment_instrument :
-       user_data->available_payment_instruments_) {
-    if (user_data->selected_card() != nullptr &&
-        payment_instrument->card->Compare(*user_data->selected_card()) == 0) {
-      found_card = true;
-    }
+  auto* selected_card = user_data->selected_card();
+  if (selected_card != nullptr) {
+    found_card = base::ranges::any_of(
+        user_data->available_payment_instruments_,
+        [&selected_card](
+            const std::unique_ptr<PaymentInstrument>& payment_instrument) {
+          return selected_card->guid() == payment_instrument->card->guid();
+        });
   }
 
   if (!found_card) {
@@ -1776,52 +1743,6 @@ void CollectUserDataAction::OnPersonalDataChanged() {
   delegate_->WriteUserData(
       base::BindOnce(&CollectUserDataAction::UpdatePersonalDataManagerCards,
                      weak_ptr_factory_.GetWeakPtr()));
-}
-
-void CollectUserDataAction::UpdateDateTimeRangeStart(
-    UserData* user_data,
-    UserData::FieldChange* field_change) {
-  DCHECK(user_data != nullptr);
-  DCHECK(collect_user_data_options_ != nullptr);
-
-  UserData::FieldChange changed = UserData::FieldChange::NONE;
-  if (!user_data->date_time_range_start_date_.has_value()) {
-    user_data->date_time_range_start_date_ =
-        collect_user_data_options_->date_time_range.start_date();
-    changed = UserData::FieldChange::DATE_TIME_RANGE_START;
-  }
-  if (!user_data->date_time_range_start_timeslot_.has_value()) {
-    user_data->date_time_range_start_timeslot_ =
-        collect_user_data_options_->date_time_range.start_time_slot();
-    changed = UserData::FieldChange::DATE_TIME_RANGE_START;
-  }
-
-  if (field_change != nullptr && changed != UserData::FieldChange::NONE) {
-    *field_change = changed;
-  }
-}
-
-void CollectUserDataAction::UpdateDateTimeRangeEnd(
-    UserData* user_data,
-    UserData::FieldChange* field_change) {
-  DCHECK(user_data != nullptr);
-  DCHECK(collect_user_data_options_ != nullptr);
-
-  UserData::FieldChange changed = UserData::FieldChange::NONE;
-  if (!user_data->date_time_range_end_date_.has_value()) {
-    user_data->date_time_range_end_date_ =
-        collect_user_data_options_->date_time_range.end_date();
-    changed = UserData::FieldChange::DATE_TIME_RANGE_END;
-  }
-  if (!user_data->date_time_range_end_timeslot_.has_value()) {
-    user_data->date_time_range_end_timeslot_ =
-        collect_user_data_options_->date_time_range.end_time_slot();
-    changed = UserData::FieldChange::DATE_TIME_RANGE_END;
-  }
-
-  if (field_change != nullptr && changed != UserData::FieldChange::NONE) {
-    *field_change = changed;
-  }
 }
 
 }  // namespace autofill_assistant

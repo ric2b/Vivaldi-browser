@@ -39,7 +39,6 @@
 #include "headless/lib/browser/headless_browser_main_parts.h"
 #include "headless/lib/browser/headless_devtools_agent_host_client.h"
 #include "headless/lib/browser/protocol/headless_handler.h"
-#include "headless/public/internal/headless_devtools_client_impl.h"
 #include "printing/buildflags/buildflags.h"
 #include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -57,12 +56,12 @@ namespace headless {
 namespace {
 
 void UpdatePrefsFromSystemSettings(blink::RendererPreferences* prefs) {
-#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS) || defined(OS_WIN)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS) || BUILDFLAG(IS_WIN)
   content::UpdateFontRendererPreferencesFromSystemSettings(prefs);
 #endif
 
   // The values were copied from chrome/browser/renderer_preferences_util.cc.
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   prefs->focus_ring_color = SkColorSetRGB(0x00, 0x5F, 0xCC);
 #else
   prefs->focus_ring_color = SkColorSetRGB(0x10, 0x10, 0x10);

@@ -10,6 +10,7 @@ SRC = os.path.dirname(os.path.dirname(__file__))
 
 cipd_pick_list = [
   "tools/clang/dsymutil",
+  "third_party/devtools-frontend/src/third_party/esbuild",
   ]
 
 exclude_cipd = [

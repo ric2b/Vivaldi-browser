@@ -23,9 +23,9 @@
 #include "chrome/browser/ui/test/test_browser_dialog.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
+#include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
-#include "chrome/browser/web_applications/web_application_info.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "content/public/test/browser_test.h"
@@ -130,17 +130,17 @@ class ArcAppsUninstallDialogViewBrowserTest
   }
 
   void CreateApp() {
-    arc::mojom::AppInfo app;
-    app.name = "Fake App 0";
-    app.package_name = "fake.package.0";
-    app.activity = "fake.app.0.activity";
-    app.sticky = false;
-    app_instance_->SendRefreshAppList(std::vector<arc::mojom::AppInfo>(1, app));
+    std::vector<arc::mojom::AppInfoPtr> apps;
+    apps.emplace_back(arc::mojom::AppInfo::New("Fake App 0", "fake.package.0",
+                                               "fake.app.0.activity",
+                                               false /* sticky */));
+    app_instance_->SendRefreshAppList(apps);
     base::RunLoop().RunUntilIdle();
 
     EXPECT_EQ(1u, arc_app_list_pref_->GetAppIds().size());
-    app_id_ = arc_app_list_pref_->GetAppId(app.package_name, app.activity);
-    app_name_ = app.name;
+    app_id_ =
+        arc_app_list_pref_->GetAppId(apps[0]->package_name, apps[0]->activity);
+    app_name_ = apps[0]->name;
   }
 
  private:
@@ -169,7 +169,7 @@ class WebAppsUninstallDialogViewBrowserTest
   }
 
   void CreateApp() {
-    auto web_app_info = std::make_unique<WebApplicationInfo>();
+    auto web_app_info = std::make_unique<WebAppInstallInfo>();
     web_app_info->start_url = GetAppURL();
     web_app_info->scope = GetAppURL().GetWithoutFilename();
 

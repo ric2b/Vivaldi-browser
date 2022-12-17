@@ -105,35 +105,20 @@ bool VivaldiSnapshotPage(blink::LocalFrame* local_frame,
     page_rect.set_height(visible_content_rect.height());
   }
 
-  local_frame->View()->UpdateAllLifecyclePhasesExceptPaint(
-      blink::DocumentUpdateReason::kSelection);
-
-  switch (document->Lifecycle().GetState()) {
-    case blink::DocumentLifecycle::kPrePaintClean:
-    case blink::DocumentLifecycle::kPaintClean:
-      break;
-    default:
-      // DragController::DragImageForSelection proceeds with a call to
-      // LocalFrameView::PaintContentsOutsideOfLifecycle() in any paint state
-      // even if the documentation for the latter requres that the state must
-      // be one of the above. For now do the same but log it.
-      LOG(WARNING) << "Unexpected lifecycle state "
-                   << document->Lifecycle().GetState();
-  }
+  local_frame->View()->UpdateLifecyclePhasesForPrinting();
 
   blink::PaintRecordBuilder picture_builder;
   {
     blink::GraphicsContext& context = picture_builder.Context();
     context.SetShouldAntialias(false);
 
-    blink::GlobalPaintFlags global_paint_flags =
-        blink::kGlobalPaintFlattenCompositingLayers;
+    blink::PaintFlags paint_flags = blink::PaintFlag::kOmitCompositingInfo;
     if (full_page) {
-      global_paint_flags |= blink::kGlobalPaintWholePage;
+      paint_flags |= blink::PaintFlag::kVivaldiPaintWholePage;
     }
 
-    local_frame->View()->PaintContentsOutsideOfLifecycle(
-        context, global_paint_flags, blink::CullRect(page_rect));
+    local_frame->View()->PaintOutsideOfLifecycle(context, paint_flags,
+                                                 blink::CullRect(page_rect));
   }
 
   SkSurfaceProps surface_props(0, kUnknown_SkPixelGeometry);

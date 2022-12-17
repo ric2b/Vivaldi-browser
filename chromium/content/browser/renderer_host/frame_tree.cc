@@ -349,6 +349,26 @@ FrameTree::NodeRange FrameTree::NodesIncludingInnerTreeNodes() {
                    /* should_descend_into_inner_trees */ true);
 }
 
+std::vector<FrameTreeNode*> FrameTree::CollectNodesForIsLoading() {
+  FrameTree::NodeRange node_range = NodesIncludingInnerTreeNodes();
+  FrameTree::NodeIterator node_iter = node_range.begin();
+  std::vector<FrameTreeNode*> nodes;
+
+  DCHECK(node_iter != node_range.end());
+  FrameTree* root_loading_tree = root_->frame_tree()->LoadingTree();
+  while (node_iter != node_range.end()) {
+    // Skip over frame trees and children which belong to inner web contents
+    // i.e., when nodes doesn't point to the same loading frame tree.
+    if ((*node_iter)->frame_tree()->LoadingTree() != root_loading_tree) {
+      node_iter.AdvanceSkippingChildren();
+    } else {
+      nodes.push_back(*node_iter);
+      ++node_iter;
+    }
+  }
+  return nodes;
+}
+
 FrameTree::NodeRange FrameTree::SubtreeAndInnerTreeNodes(
     RenderFrameHostImpl* parent) {
   std::vector<FrameTreeNode*> starting_nodes;
@@ -368,6 +388,12 @@ FrameTree::NodeRange FrameTree::SubtreeAndInnerTreeNodes(
 
 FrameTree::NodeRange FrameTree::NodesExceptSubtree(FrameTreeNode* node) {
   return NodeRange({root_}, node, /* should_descend_into_inner_trees */ false);
+}
+
+FrameTree* FrameTree::LoadingTree() {
+  // We return the delegate's loading frame tree to infer loading related
+  // states.
+  return delegate_->LoadingTree();
 }
 
 FrameTreeNode* FrameTree::AddFrame(
@@ -419,7 +445,6 @@ FrameTreeNode* FrameTree::AddFrame(
   // frame will need the value of pending frame policy instead of effective
   // frame policy.
   new_node->SetPendingFramePolicy(frame_policy);
-  new_node->CommitFramePolicy(frame_policy);
 
   if (was_discarded)
     new_node->set_was_discarded();
@@ -427,7 +452,7 @@ FrameTreeNode* FrameTree::AddFrame(
   // Add the new node to the FrameTree, creating the RenderFrameHost.
   FrameTreeNode* added_node =
       parent->AddChild(std::move(new_node), new_routing_id,
-                       std::move(frame_remote), frame_token);
+                       std::move(frame_remote), frame_token, frame_policy);
 
   added_node->SetFencedFrameNonceIfNeeded();
 
@@ -646,8 +671,14 @@ scoped_refptr<RenderViewHostImpl> FrameTree::CreateRenderViewHost(
 
 scoped_refptr<RenderViewHostImpl> FrameTree::GetRenderViewHost(
     SiteInstance* site_instance) {
-  auto it = render_view_host_map_.find(GetRenderViewHostMapId(
-      static_cast<SiteInstanceImpl*>(site_instance)->group()));
+  // When called from RenderFrameHostManager::CreateRenderFrameHost, it's
+  // possible that a RenderProcessHost hasn't yet been created, which means
+  // `site_instance` won't have gotten a group yet.
+  auto* group = static_cast<SiteInstanceImpl*>(site_instance)->group();
+  if (!group)
+    return nullptr;
+
+  auto it = render_view_host_map_.find(GetRenderViewHostMapId(group));
   if (it == render_view_host_map_.end())
     return nullptr;
 
@@ -725,11 +756,15 @@ void FrameTree::ReplicatePageFocus(bool is_focused) {
     SetPageFocus(instance, is_focused);
 }
 
+bool FrameTree::IsPortal() {
+  return delegate_->IsPortal();
+}
+
 void FrameTree::SetPageFocus(SiteInstance* instance, bool is_focused) {
   RenderFrameHostManager* root_manager = root_->render_manager();
 
   // Portal frame tree should not get page focus.
-  DCHECK(!GetMainFrame()->InsidePortal() || !is_focused);
+  DCHECK(!IsPortal() || !is_focused);
 
   // This is only used to set page-level focus in cross-process subframes, and
   // requests to set focus in main frame's SiteInstance are ignored.
@@ -788,13 +823,14 @@ void FrameTree::RegisterExistingOriginToPreventOptInIsolation(
 void FrameTree::Init(SiteInstance* main_frame_site_instance,
                      bool renderer_initiated_creation,
                      const std::string& main_frame_name,
-                     RenderFrameHostImpl* opener) {
+                     RenderFrameHostImpl* opener,
+                     const blink::FramePolicy& frame_policy) {
   // blink::FrameTree::SetName always keeps |unique_name| empty in case of a
   // main frame - let's do the same thing here.
   std::string unique_name;
   root_->SetFrameName(main_frame_name, unique_name);
   root_->render_manager()->InitRoot(main_frame_site_instance,
-                                    renderer_initiated_creation);
+                                    renderer_initiated_creation, frame_policy);
   root_->SetFencedFrameNonceIfNeeded();
 
   // The initial empty document should inherit the origin of its opener (the

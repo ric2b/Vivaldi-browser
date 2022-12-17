@@ -24,9 +24,15 @@ class FakeFastPairHandshake : public FastPairHandshake {
       std::unique_ptr<FastPairGattServiceClient> gatt_service_client = nullptr);
   FakeFastPairHandshake(const FakeFastPairHandshake&) = delete;
   FakeFastPairHandshake& operator=(const FakeFastPairHandshake&) = delete;
-  ~FakeFastPairHandshake();
+  ~FakeFastPairHandshake() override;
+
+  bool IsConnected() override;
+  void SetConnected(bool is_connected);
 
   void InvokeCallback(absl::optional<PairFailure> failure = absl::nullopt);
+
+ private:
+  bool is_connected_ = false;
 };
 
 }  // namespace quick_pair

@@ -15,8 +15,8 @@ import androidx.preference.PreferenceFragmentCompat;
 
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.tracing.settings.DeveloperSettings;
-import org.chromium.chrome.browser.version.ChromeVersionInfo;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
+import org.chromium.components.version_info.VersionInfo;
 import org.chromium.ui.widget.Toast;
 
 import java.util.Calendar;
@@ -76,7 +76,7 @@ public class AboutChromeSettings
         if (BuildConfig.IS_OEM_POLESTAR_BUILD) {
             version = version.concat("(PS)");
         }
-        if (ChromeVersionInfo.isOfficialBuild()) {
+        if (VersionInfo.isOfficialBuild()) {
             return version;
         }
 

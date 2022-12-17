@@ -449,6 +449,12 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   void ShowSpeechRecognitionDownloadNotificationForDictation(
       bool succeeded,
       const std::u16string& display_language) override;
+  void UpdateDictationBubble(
+      bool visible,
+      DictationBubbleIconType icon,
+      const absl::optional<std::u16string>& text,
+      const absl::optional<std::vector<DictationBubbleHintType>>& hints)
+      override;
 
   // SessionObserver:
   void OnSigninScreenPrefServiceInitialized(PrefService* prefs) override;

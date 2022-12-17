@@ -48,6 +48,9 @@ class RecurrrenceExceptionTable {
   bool DeleteRecurrenceExceptionsForCalendar(CalendarID calendar_id);
   bool GetAllRecurrenceExceptionsForEvent(EventID event_id,
                                           RecurrenceExceptionRows* exceptions);
+  bool GetRecurrenceException(RecurrenceExceptionID exception_id,
+                              RecurrenceExceptionRow* recurrence_exception);
+
   bool DoesRecurrenceExceptionExistForEvent(EventID event_id);
   bool GetAllEventExceptionIds(EventID event_id, EventIDs* event_ids);
 

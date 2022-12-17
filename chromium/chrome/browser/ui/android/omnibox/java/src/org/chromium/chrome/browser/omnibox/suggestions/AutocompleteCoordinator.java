@@ -26,7 +26,6 @@ import org.chromium.chrome.browser.omnibox.R;
 import org.chromium.chrome.browser.omnibox.UrlBar.UrlTextChangeListener;
 import org.chromium.chrome.browser.omnibox.UrlBarEditingTextStateProvider;
 import org.chromium.chrome.browser.omnibox.UrlFocusChangeListener;
-import org.chromium.chrome.browser.omnibox.styles.OmniboxTheme;
 import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteController.OnSuggestionsReceivedListener;
 import org.chromium.chrome.browser.omnibox.suggestions.SuggestionListViewBinder.SuggestionListViewHolder;
 import org.chromium.chrome.browser.omnibox.suggestions.answer.AnswerSuggestionViewBinder;
@@ -42,6 +41,8 @@ import org.chromium.chrome.browser.omnibox.suggestions.header.HeaderView;
 import org.chromium.chrome.browser.omnibox.suggestions.header.HeaderViewBinder;
 import org.chromium.chrome.browser.omnibox.suggestions.mostvisited.ExploreIconProvider;
 import org.chromium.chrome.browser.omnibox.suggestions.mostvisited.MostVisitedTilesProcessor;
+import org.chromium.chrome.browser.omnibox.suggestions.pedal.PedalSuggestionView;
+import org.chromium.chrome.browser.omnibox.suggestions.pedal.PedalSuggestionViewBinder;
 import org.chromium.chrome.browser.omnibox.suggestions.tail.TailSuggestionView;
 import org.chromium.chrome.browser.omnibox.suggestions.tail.TailSuggestionViewBinder;
 import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
@@ -49,6 +50,7 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabWindowManager;
+import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
 import org.chromium.chrome.browser.util.KeyNavigationUtil;
 import org.chromium.components.omnibox.AutocompleteMatch;
 import org.chromium.ui.ViewProvider;
@@ -94,7 +96,8 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
             @NonNull Callback<Tab> bringToForegroundCallback,
             @NonNull Supplier<TabWindowManager> tabWindowManagerSupplier,
             @NonNull BookmarkState bookmarkState, @NonNull JankTracker jankTracker,
-            @NonNull ExploreIconProvider exploreIconProvider) {
+            @NonNull ExploreIconProvider exploreIconProvider,
+            @NonNull OmniboxPedalDelegate omniboxPedalDelegate) {
         mParent = parent;
         Context context = parent.getContext();
 
@@ -108,7 +111,8 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
         mMediator = new AutocompleteMediator(context, delegate, urlBarEditingTextProvider,
                 listModel, new Handler(), modalDialogManagerSupplier, activityTabSupplier,
                 shareDelegateSupplier, locationBarDataProvider, bringToForegroundCallback,
-                tabWindowManagerSupplier, bookmarkState, jankTracker, exploreIconProvider);
+                tabWindowManagerSupplier, bookmarkState, jankTracker, exploreIconProvider,
+                omniboxPedalDelegate);
         mMediator.initDefaultProcessors();
 
         listModel.set(SuggestionListProperties.OBSERVER, mMediator);
@@ -211,6 +215,12 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
                         OmniboxSuggestionUiType.HEADER,
                         parent -> new HeaderView(parent.getContext()),
                         HeaderViewBinder::bind);
+
+                adapter.registerType(
+                        OmniboxSuggestionUiType.PEDAL_SUGGESTION,
+                        parent -> new PedalSuggestionView<View>(
+                                parent.getContext(), R.layout.omnibox_basic_suggestion),
+                        new PedalSuggestionViewBinder<View>(SuggestionViewViewBinder::bind));
                 // clang-format on
 
                 ViewGroup container = (ViewGroup) ((ViewStub) mParent.getRootView().findViewById(
@@ -334,10 +344,10 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
 
     /**
      * Update the visuals of the autocomplete UI.
-     * @param omniboxTheme The {@link @OmniboxTheme}.
+     * @param brandedColorScheme The {@link @BrandedColorScheme}.
      */
-    public void updateVisualsForState(@OmniboxTheme int omniboxTheme) {
-        mMediator.updateVisualsForState(omniboxTheme);
+    public void updateVisualsForState(@BrandedColorScheme int brandedColorScheme) {
+        mMediator.updateVisualsForState(brandedColorScheme);
     }
 
     /**
@@ -357,14 +367,19 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
      * @return Whether the key event was handled.
      */
     public boolean handleKeyEvent(int keyCode, KeyEvent event) {
-        boolean isShowingList = mDropdown != null && mDropdown.getViewGroup().isShown();
+        // Note: this method receives key events for key presses and key releases.
+        // Make sure we focus only on key press events alone.
+        if (!KeyNavigationUtil.isActionDown(event)) {
+            return false;
+        }
 
+        boolean isShowingList = mDropdown != null && mDropdown.getViewGroup().isShown();
         boolean isAnyDirection = KeyNavigationUtil.isGoAnyDirection(event);
+
         if (isShowingList && mMediator.getSuggestionCount() > 0 && isAnyDirection) {
             mMediator.allowPendingItemSelection();
         }
-        boolean isValidListKey = isAnyDirection || KeyNavigationUtil.isEnter(event);
-        if (isShowingList && isValidListKey && mDropdown.getViewGroup().onKeyDown(keyCode, event)) {
+        if (isShowingList && mDropdown.getViewGroup().onKeyDown(keyCode, event)) {
             return true;
         }
         if (KeyNavigationUtil.isEnter(event) && mParent.getVisibility() == View.VISIBLE) {

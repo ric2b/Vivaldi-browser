@@ -26,40 +26,41 @@ class ThemeProperties {
   // incorrectly.
 
   enum OverwritableByUserThemeProperty {
-    COLOR_FRAME_ACTIVE,
-    COLOR_FRAME_INACTIVE,
     // Instead of using the INCOGNITO variants directly, most code should
     // use the original color ID in an incognito-aware context (such as
     // GetDefaultColor).  This comment applies to other properties tagged
     // INCOGNITO below as well.
-    COLOR_FRAME_ACTIVE_INCOGNITO,
-    COLOR_FRAME_INACTIVE_INCOGNITO,
-    COLOR_TAB_BACKGROUND_INACTIVE_FRAME_ACTIVE,
-    COLOR_TAB_BACKGROUND_INACTIVE_FRAME_INACTIVE,
-    COLOR_TAB_BACKGROUND_INACTIVE_FRAME_ACTIVE_INCOGNITO,
-    COLOR_TAB_BACKGROUND_INACTIVE_FRAME_INACTIVE_INCOGNITO,
-    COLOR_TOOLBAR,
-    COLOR_TAB_FOREGROUND_ACTIVE_FRAME_ACTIVE,
-    COLOR_TAB_FOREGROUND_INACTIVE_FRAME_ACTIVE,
-    COLOR_TAB_FOREGROUND_INACTIVE_FRAME_INACTIVE,
-    COLOR_TAB_FOREGROUND_INACTIVE_FRAME_ACTIVE_INCOGNITO,
-    COLOR_TAB_FOREGROUND_INACTIVE_FRAME_INACTIVE_INCOGNITO,
     COLOR_BOOKMARK_TEXT,
+    COLOR_CONTROL_BUTTON_BACKGROUND,
+    COLOR_FRAME_ACTIVE,
+    COLOR_FRAME_ACTIVE_INCOGNITO,
+    COLOR_FRAME_INACTIVE,
+    COLOR_FRAME_INACTIVE_INCOGNITO,
     COLOR_NTP_BACKGROUND,
-    COLOR_NTP_TEXT,
     COLOR_NTP_LINK,
     COLOR_NTP_HEADER,
-    COLOR_CONTROL_BUTTON_BACKGROUND,
-    COLOR_TOOLBAR_BUTTON_ICON,
-    COLOR_OMNIBOX_TEXT,
+    COLOR_NTP_TEXT,
     COLOR_OMNIBOX_BACKGROUND,
+    COLOR_OMNIBOX_TEXT,
+    COLOR_TAB_BACKGROUND_INACTIVE_FRAME_ACTIVE,
+    COLOR_TAB_BACKGROUND_INACTIVE_FRAME_ACTIVE_INCOGNITO,
+    COLOR_TAB_BACKGROUND_INACTIVE_FRAME_INACTIVE,
+    COLOR_TAB_BACKGROUND_INACTIVE_FRAME_INACTIVE_INCOGNITO,
+    COLOR_TAB_FOREGROUND_ACTIVE_FRAME_ACTIVE,
+    COLOR_TAB_FOREGROUND_INACTIVE_FRAME_ACTIVE,
+    COLOR_TAB_FOREGROUND_INACTIVE_FRAME_ACTIVE_INCOGNITO,
+    COLOR_TAB_FOREGROUND_INACTIVE_FRAME_INACTIVE,
+    COLOR_TAB_FOREGROUND_INACTIVE_FRAME_INACTIVE_INCOGNITO,
+    COLOR_TOOLBAR,
+    COLOR_TOOLBAR_BUTTON_ICON,
+    COLOR_TOOLBAR_TEXT,
 
+    TINT_BACKGROUND_TAB,
     TINT_BUTTONS,
     TINT_FRAME,
     TINT_FRAME_INACTIVE,
     TINT_FRAME_INCOGNITO,
     TINT_FRAME_INCOGNITO_INACTIVE,
-    TINT_BACKGROUND_TAB,
 
     NTP_BACKGROUND_ALIGNMENT,
     NTP_BACKGROUND_TILING,
@@ -160,8 +161,8 @@ class ThemeProperties {
     COLOR_TAB_FOREGROUND_ACTIVE_FRAME_INACTIVE_INCOGNITO,
 
     // The throbber colors for tabs or anything on a toolbar (currently, only
-    // the download shelf). If you're adding a throbber elsewhere, such as in
-    // a dialog or bubble, you likely want ui::kColorThrobber.
+    // the download shelf). Do not use directly; only for use inside
+    // browser_theme_pack.cc.
     COLOR_TAB_THROBBER_SPINNING,
     COLOR_TAB_THROBBER_WAITING,
 
@@ -246,11 +247,11 @@ class ThemeProperties {
     // Color for the background of the most visited/custom link tile.
     COLOR_NTP_SHORTCUT,
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
     // The colors of the 1px border around the window on Windows 10.
     COLOR_ACCENT_BORDER_ACTIVE,
     COLOR_ACCENT_BORDER_INACTIVE,
-#endif  // OS_WIN
+#endif  // BUILDFLAG(IS_WIN)
 
     SHOULD_FILL_BACKGROUND_TAB_COLOR,
 
@@ -281,6 +282,19 @@ class ThemeProperties {
     COLOR_OMNIBOX_SECURITY_CHIP_DEFAULT,
     COLOR_OMNIBOX_SECURITY_CHIP_SECURE,
     COLOR_OMNIBOX_SECURITY_CHIP_DANGEROUS,
+
+    // The colors used for thumbnail tab visualizations,
+    COLOR_THUMBNAIL_TAB_BACKGROUND_ACTIVE_FRAME_ACTIVE,
+    COLOR_THUMBNAIL_TAB_FOREGROUND_ACTIVE_FRAME_ACTIVE,
+
+    // Colors used for the Bookmark bar
+    COLOR_BOOKMARK_BAR_BACKGROUND,
+    COLOR_BOOKMARK_BUTTON_ICON,
+    // If COLOR_TOOLBAR_BUTTON_ICON is defined in the custom theme, that color
+    // will be returned, otherwise it will be transparent so the default
+    // favicon color is retained.
+    COLOR_BOOKMARK_FAVICON,
+    COLOR_BOOKMARK_SEPARATOR,
 
     // /!\ If you make any changes to this enum, you must also increment
     // kThemePackVersion in browser_theme_pack.cc, or else themes will display

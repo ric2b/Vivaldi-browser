@@ -16,6 +16,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/observer_list.h"
 #include "base/scoped_observation.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/extensions/blocklist.h"
@@ -53,6 +54,10 @@
 
 #if !BUILDFLAG(ENABLE_EXTENSIONS)
 #error "Extensions must be enabled"
+#endif
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chrome/browser/extensions/ash_extension_keeplist_manager.h"
 #endif
 
 class BlocklistedExtensionSyncServiceTest;
@@ -465,6 +470,10 @@ class ExtensionService : public ExtensionServiceInterface,
   }
 
   void UninstallMigratedExtensionsForTest() { UninstallMigratedExtensions(); }
+
+  void ProfileMarkedForPermanentDeletionForTest() {
+    OnProfileMarkedForPermanentDeletion(profile_);
+  }
 #endif
 
   void set_browser_terminating_for_test(bool value) {
@@ -743,6 +752,10 @@ class ExtensionService : public ExtensionServiceInterface,
   using InstallGateRegistry =
       std::map<ExtensionPrefs::DelayReason, InstallGate*>;
   InstallGateRegistry install_delayer_registry_;
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  AshExtensionKeeplistManager ash_keeplist_manager_;
+#endif
 
   FRIEND_TEST_ALL_PREFIXES(ExtensionServiceTest,
                            DestroyingProfileClearsExtensions);

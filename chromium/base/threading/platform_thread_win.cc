@@ -114,17 +114,15 @@ DWORD __stdcall ThreadFunc(void* params) {
   if (did_dup) {
     scoped_platform_handle.Set(platform_handle);
     ThreadIdNameManager::GetInstance()->RegisterThread(
-        scoped_platform_handle.Get(),
-        PlatformThread::CurrentId());
+        scoped_platform_handle.get(), PlatformThread::CurrentId());
   }
 
   delete thread_params;
   delegate->ThreadMain();
 
   if (did_dup) {
-    ThreadIdNameManager::GetInstance()->RemoveName(
-        scoped_platform_handle.Get(),
-        PlatformThread::CurrentId());
+    ThreadIdNameManager::GetInstance()->RemoveName(scoped_platform_handle.get(),
+                                                   PlatformThread::CurrentId());
   }
 
 #if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
@@ -382,9 +380,7 @@ void PlatformThread::SetCurrentThreadPriorityImpl(ThreadPriority priority) {
       // MSDN recommends THREAD_MODE_BACKGROUND_BEGIN for threads that perform
       // background work, as it reduces disk and memory priority in addition to
       // CPU priority.
-      desired_priority = (win::GetVersion() != win::Version::WIN7 // Use lowest for Win7
-                              ? THREAD_MODE_BACKGROUND_BEGIN
-                              : THREAD_PRIORITY_LOWEST);
+      desired_priority = THREAD_MODE_BACKGROUND_BEGIN;
       break;
     case ThreadPriority::NORMAL:
       desired_priority = THREAD_PRIORITY_NORMAL;
@@ -467,11 +463,11 @@ ThreadPriority PlatformThread::GetCurrentThreadPriority() {
       return ThreadPriority::BACKGROUND;
     case kWin7NormalPriority:
       DCHECK_EQ(win::GetVersion(), win::Version::WIN7);
-      FALLTHROUGH;
+      [[fallthrough]];
     case THREAD_PRIORITY_NORMAL:
       return ThreadPriority::NORMAL;
     case kWinNormalPriority1:
-      FALLTHROUGH;
+      [[fallthrough]];
     case kWinNormalPriority2:
       return ThreadPriority::NORMAL;
     case THREAD_PRIORITY_ABOVE_NORMAL:

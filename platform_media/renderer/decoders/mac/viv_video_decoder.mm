@@ -3,7 +3,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-
 // This code is a merging of vda_video_decoder and vt_video_decode_accelerator,
 // modified to create a VideoDecoder that is not dependant on the GPU process.
 // The decoder calles the macOS VideoToolbox to decode h.264 media.
@@ -14,21 +13,22 @@
 #include "platform_media/renderer/decoders/mac/viv_video_decoder.h"
 
 #include <CoreFoundation/CoreFoundation.h>
-#include <CoreVideo/CoreVideo.h>
 #include <CoreVideo/CVPixelBuffer.h>
+#include <CoreVideo/CoreVideo.h>
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/mac/mac_logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/sys_byteorder.h"
-#include "media/base/video_frame.h"
 #include "media/base/async_destroy_video_decoder.h"
+#include "media/base/decoder_status.h"
+#include "media/base/video_frame.h"
 
-#define NOTIFY_STATUS(name, status) \
-  do {                                               \
-    OSSTATUS_DLOG(ERROR, status) << name;            \
-    NotifyError(name);  \
+#define NOTIFY_STATUS(name, status)       \
+  do {                                    \
+    OSSTATUS_DLOG(ERROR, status) << name; \
+    NotifyError(name);                    \
   } while (0)
 
 namespace media {
@@ -94,9 +94,7 @@ int32_t NextID(int32_t* counter) {
   return value;
 }
 
-bool IsProfileSupported(
-    VideoCodecProfile profile,
-    gfx::Size coded_size) {
+bool IsProfileSupported(VideoCodecProfile profile, gfx::Size coded_size) {
   for (const auto& supported_profile : kSupportedProfiles) {
     if (profile == supported_profile) {
       return true;
@@ -144,19 +142,16 @@ void BufferHolder(const CVImageBufferRef& buffer) {
 }
 
 // static
-std::unique_ptr<VideoDecoder>
-VivVideoDecoder::Create(
+std::unique_ptr<VideoDecoder> VivVideoDecoder::Create(
     scoped_refptr<base::SequencedTaskRunner> task_runner,
     MediaLog* media_log) {
-  auto* decoder = new VivVideoDecoder(
-      std::move(task_runner), media_log);
+  auto* decoder = new VivVideoDecoder(std::move(task_runner), media_log);
   return std::make_unique<AsyncDestroyVideoDecoder<VivVideoDecoder>>(
       base::WrapUnique(decoder));
 }
 
 VivVideoDecoder::Frame::Frame(int32_t bitstream_id, base::TimeDelta ts)
-    : bitstream_id(bitstream_id),
-      timestamp(ts) {}
+    : bitstream_id(bitstream_id), timestamp(ts) {}
 
 VivVideoDecoder::Frame::~Frame() {}
 
@@ -172,8 +167,8 @@ bool VivVideoDecoder::FrameOrder::operator()(
   return lhs->timestamp > rhs->timestamp;
 }
 
-void decompressionSessionDecodeFrameCallback(void *decompressionOutputRefCon,
-                                             void *sourceFrameRefCon,
+void decompressionSessionDecodeFrameCallback(void* decompressionOutputRefCon,
+                                             void* sourceFrameRefCon,
                                              OSStatus status,
                                              VTDecodeInfoFlags infoFlags,
                                              CVImageBufferRef imageBuffer,
@@ -190,14 +185,14 @@ VivVideoDecoder::VivVideoDecoder(
     : task_runner_(std::move(task_runner)),
       media_log_(std::move(media_log)),
       decoder_thread_("VivaldiVTDecoderThread"),
-      weak_this_factory_(this)
-       {
+      weak_this_factory_(this) {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK(media_log_);
 
   weak_this_ = weak_this_factory_.GetWeakPtr();
 
-  callback_.decompressionOutputCallback = decompressionSessionDecodeFrameCallback;
+  callback_.decompressionOutputCallback =
+      decompressionSessionDecodeFrameCallback;
   callback_.decompressionOutputRefCon = this;
 }
 
@@ -236,8 +231,8 @@ VideoDecoderType VivVideoDecoder::GetDecoderType() const {
 }
 
 void VivVideoDecoder::Output(void* source_frame_refcon,
-                              OSStatus status,
-                              CVImageBufferRef image_buffer) {
+                             OSStatus status,
+                             CVImageBufferRef image_buffer) {
   // Sometimes, for unknown reasons (http://crbug.com/453050), |image_buffer| is
   // NULL, which causes CFGetTypeID() to crash. While the rest of the code would
   // smoothly handle NULL as a dropped frame, we choose to fail permanantly here
@@ -250,8 +245,8 @@ void VivVideoDecoder::Output(void* source_frame_refcon,
   Frame* frame = reinterpret_cast<Frame*>(source_frame_refcon);
   frame->image.reset(image_buffer, base::scoped_policy::RETAIN);
 
-  task_runner_->PostTask(FROM_HERE,
-      base::BindOnce(&VivVideoDecoder::DecodeDone, weak_this_, frame));
+  task_runner_->PostTask(FROM_HERE, base::BindOnce(&VivVideoDecoder::DecodeDone,
+                                                   weak_this_, frame));
 }
 
 void VivVideoDecoder::DecodeDone(Frame* frame) {
@@ -297,8 +292,7 @@ void VivVideoDecoder::Initialize(const VideoDecoderConfig& config,
   DCHECK(decode_cbs_.empty());
 
   if (has_error_) {
-    std::move(init_cb).Run(
-        media::Status(media::StatusCode::kDecoderFailedInitialization));
+    std::move(init_cb).Run(DecoderStatus::Codes::kFailed);
     return;
   }
 
@@ -341,7 +335,7 @@ void VivVideoDecoder::Initialize(const VideoDecoderConfig& config,
     DLOG(ERROR) << "Failed to start decoder thread";
     return;
   }
-  std::move(init_cb_).Run(media::Status());
+  std::move(init_cb_).Run(DecoderStatus::Codes::kOk);
 }
 
 void VivVideoDecoder::NotifyEndOfBitstreamBuffer(int32_t bitstream_buffer_id) {
@@ -360,7 +354,7 @@ void VivVideoDecoder::NotifyEndOfBitstreamBuffer(int32_t bitstream_buffer_id) {
   // Run a local copy in case the decode callback modifies |decode_cbs_|.
   DecodeCB decode_cb = std::move(decode_cb_it->second);
   decode_cbs_.erase(decode_cb_it);
-  std::move(decode_cb).Run(DecodeStatus::OK);
+  std::move(decode_cb).Run(DecoderStatus::Codes::kOk);
 }
 
 void VivVideoDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
@@ -372,7 +366,7 @@ void VivVideoDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
   DCHECK(buffer->end_of_stream() || !buffer->decrypt_config());
 
   if (has_error_ || !buffer) {
-    std::move(decode_cb).Run(DecodeStatus::DECODE_ERROR);
+    std::move(decode_cb).Run(DecoderStatus::Codes::kInvalidArgument);
     return;
   }
 
@@ -395,13 +389,12 @@ void VivVideoDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
 
   decoder_thread_.task_runner()->PostTask(
       FROM_HERE,
-      base::BindOnce(&VivVideoDecoder::DecodeTask,
-                     base::Unretained(this), std::move(buffer), frame));
+      base::BindOnce(&VivVideoDecoder::DecodeTask, base::Unretained(this),
+                     std::move(buffer), frame));
 }
 
-
 void VivVideoDecoder::DecodeTask(scoped_refptr<DecoderBuffer> buffer,
-                                          Frame* frame) {
+                                 Frame* frame) {
   DCHECK(decoder_thread_.task_runner()->BelongsToCurrentThread());
 
   // NALUs are stored with Annex B format in the bitstream buffer (start codes),
@@ -448,7 +441,7 @@ void VivVideoDecoder::DecodeTask(scoped_refptr<DecoderBuffer> buffer,
       case H264NALU::kPPS:
         result = parser_.ParsePPS(&last_pps_id_);
         if (result == H264Parser::kUnsupportedStream) {
-           NotifyError("PLATFORM_FAILURE, SFT_UNSUPPORTED_STREAM");
+          NotifyError("PLATFORM_FAILURE, SFT_UNSUPPORTED_STREAM");
           return;
         }
         if (result != H264Parser::kOk) {
@@ -515,7 +508,7 @@ void VivVideoDecoder::DecodeTask(scoped_refptr<DecoderBuffer> buffer,
           frame->pic_order_cnt = *pic_order_cnt;
           frame->reorder_window = ComputeReorderWindow(sps);
         }
-        FALLTHROUGH;
+        [[fallthrough]];
 
       default:
         nalus.push_back(nalu);
@@ -539,7 +532,8 @@ void VivVideoDecoder::DecodeTask(scoped_refptr<DecoderBuffer> buffer,
   // If there is nothing to decode, drop the request by returning a frame with
   // no image.
   if (!frame->has_slice) {
-    task_runner_->PostTask(FROM_HERE,
+    task_runner_->PostTask(
+        FROM_HERE,
         base::BindOnce(&VivVideoDecoder::DecodeDone, weak_this_, frame));
     return;
   }
@@ -660,7 +654,8 @@ bool VivVideoDecoder::FinishDelayedFrames() {
   if (session_) {
     OSStatus status = VTDecompressionSessionWaitForAsynchronousFrames(session_);
     if (status) {
-      NOTIFY_STATUS("VTDecompressionSessionWaitForAsynchronousFrames()", status);
+      NOTIFY_STATUS("VTDecompressionSessionWaitForAsynchronousFrames()",
+                    status);
       return false;
     }
   }
@@ -843,12 +838,9 @@ bool VivVideoDecoder::SendFrame(const Frame& frame) {
     return false;
   }
 
-  scoped_refptr<VideoFrame> output
-    = VideoFrame::WrapExternalYuvData(
-      format, coded_size, visible_rect, natural_size,
-      Y_stride, U_stride, V_stride,
-      Y_data, U_data, V_data,
-      frame.timestamp);
+  scoped_refptr<VideoFrame> output = VideoFrame::WrapExternalYuvData(
+      format, coded_size, visible_rect, natural_size, Y_stride, U_stride,
+      V_stride, Y_data, U_data, V_data, frame.timestamp);
 
   output->AddDestructionObserver(
       base::BindRepeating(&BufferHolder, frame.image));
@@ -933,10 +925,10 @@ bool VivVideoDecoder::ConfigureDecoder() {
 
   status = VTDecompressionSessionCreate(
       kCFAllocatorDefault,
-      format_,     // video_format_description
-      NULL,        // video_decoder_specification, NULL means VT decides
-      image_config,// destination_image_buffer_attributes
-      &callback_,  // output_callback
+      format_,       // video_format_description
+      NULL,          // video_decoder_specification, NULL means VT decides
+      image_config,  // destination_image_buffer_attributes
+      &callback_,    // output_callback
       session_.InitializeInto());
   if (status) {
     NOTIFY_STATUS("VTDecompressionSessionCreate()", status);
@@ -1013,7 +1005,7 @@ void VivVideoDecoder::FlushDone() {
     return;
 
   DCHECK(decode_cbs_.empty());
-  std::move(flush_cb_).Run(DecodeStatus::OK);
+  std::move(flush_cb_).Run(DecoderStatus::Codes::kOk);
 }
 
 void VivVideoDecoder::QueueFlush(TaskType type) {
@@ -1067,9 +1059,9 @@ void VivVideoDecoder::DestroyCallbacks() {
   DVLOG(2) << __func__;
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
-  auto status = DecodeStatus::ABORTED;
+  auto status = DecoderStatus::Codes::kAborted;
   if (has_error_)
-    status = DecodeStatus::DECODE_ERROR;
+    status = DecoderStatus::Codes::kInvalidArgument;
 
   // We use an on-stack WeakPtr to detect Destroy() being called. Note that any
   // calls to Initialize(), Decode(), or Reset() are asynchronously rejected
@@ -1088,11 +1080,10 @@ void VivVideoDecoder::DestroyCallbacks() {
     std::move(flush_cb_).Run(status);
 
   if (weak_this && reset_cb_)
-      std::move(reset_cb_).Run();
+    std::move(reset_cb_).Run();
 
   if (has_error_ && weak_this && init_cb_)
-    std::move(init_cb_).Run(
-        media::Status(media::StatusCode::kInitializationUnspecifiedFailure));
+    std::move(init_cb_).Run(DecoderStatus::Codes::kFailed);
 }
 
 }  // namespace media

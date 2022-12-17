@@ -10,6 +10,7 @@
 #include <string>
 
 #include "base/command_line.h"
+#include "base/containers/adapters.h"
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/no_destructor.h"
@@ -436,7 +437,7 @@ const std::vector<ContentSettingsType>& GetVisiblePermissionCategories() {
       ContentSettingsType::MIXEDSCRIPT,
       ContentSettingsType::NOTIFICATIONS,
       ContentSettingsType::POPUPS,
-#if defined(IS_CHROMEOS_ASH) || defined(OS_WIN)
+#if defined(IS_CHROMEOS_ASH) || BUILDFLAG(IS_WIN)
       ContentSettingsType::PROTECTED_MEDIA_IDENTIFIER,
 #endif
       ContentSettingsType::SENSORS,
@@ -498,15 +499,15 @@ void AddExceptionForHostedApp(const std::string& url_pattern,
       content_settings::ContentSettingToString(CONTENT_SETTING_ALLOW);
   DCHECK(!setting_string.empty());
 
-  exception->SetString(kSetting, setting_string);
-  exception->SetString(kOrigin, url_pattern);
-  exception->SetString(kDisplayName, url_pattern);
-  exception->SetString(kEmbeddingOrigin, url_pattern);
-  exception->SetString(
+  exception->SetStringKey(kSetting, setting_string);
+  exception->SetStringKey(kOrigin, url_pattern);
+  exception->SetStringKey(kDisplayName, url_pattern);
+  exception->SetStringKey(kEmbeddingOrigin, url_pattern);
+  exception->SetStringKey(
       kSource, SiteSettingSourceToString(SiteSettingSource::kHostedApp));
-  exception->SetBoolean(kIncognito, false);
-  exception->SetString(kAppName, app.name());
-  exception->SetString(kAppId, app.id());
+  exception->SetBoolKey(kIncognito, false);
+  exception->SetStringKey(kAppName, app.name());
+  exception->SetStringKey(kAppId, app.id());
   exceptions->Append(std::move(exception));
 }
 
@@ -523,21 +524,21 @@ std::unique_ptr<base::DictionaryValue> GetExceptionForPage(
     bool incognito,
     bool is_embargoed) {
   auto exception = std::make_unique<base::DictionaryValue>();
-  exception->SetString(kOrigin, pattern.ToString());
-  exception->SetString(kDisplayName, display_name);
-  exception->SetString(kEmbeddingOrigin,
-                       secondary_pattern == ContentSettingsPattern::Wildcard()
-                           ? std::string()
-                           : secondary_pattern.ToString());
+  exception->SetStringKey(kOrigin, pattern.ToString());
+  exception->SetStringKey(kDisplayName, display_name);
+  exception->SetStringKey(
+      kEmbeddingOrigin, secondary_pattern == ContentSettingsPattern::Wildcard()
+                            ? std::string()
+                            : secondary_pattern.ToString());
 
   std::string setting_string =
       content_settings::ContentSettingToString(setting);
   DCHECK(!setting_string.empty());
-  exception->SetString(kSetting, setting_string);
+  exception->SetStringKey(kSetting, setting_string);
 
-  exception->SetString(kSource, provider_name);
-  exception->SetBoolean(kIncognito, incognito);
-  exception->SetBoolean(kIsEmbargoed, is_embargoed);
+  exception->SetStringKey(kSource, provider_name);
+  exception->SetBoolKey(kIncognito, incognito);
+  exception->SetBoolKey(kIsEmbargoed, is_embargoed);
   return exception;
 }
 
@@ -672,10 +673,9 @@ void GetExceptionsForContentType(
   // the highest (see operator< in ContentSettingsPattern), so traverse it in
   // reverse to show the patterns with the highest precedence (the more specific
   // ones) on the top.
-  for (auto i = all_patterns_settings.rbegin();
-       i != all_patterns_settings.rend(); ++i) {
-    const ContentSettingsPattern& primary_pattern = i->first.first;
-    const OnePatternSettings& one_settings = i->second;
+  for (const auto& [primary_pattern_and_source, one_settings] :
+       base::Reversed(all_patterns_settings)) {
+    const auto& [primary_pattern, source] = primary_pattern_and_source;
     const std::string display_name =
         GetDisplayNameForPattern(primary_pattern, extension_registry);
 
@@ -686,7 +686,6 @@ void GetExceptionsForContentType(
     if (parent == one_settings.end())
       parent = one_settings.find(ContentSettingsPattern::Wildcard());
 
-    const std::string& source = i->first.second;
     auto& this_provider_exceptions = all_provider_exceptions
         [HostContentSettingsMap::GetProviderTypeFromSource(source)];
 
@@ -740,9 +739,9 @@ void GetContentCategorySetting(const HostContentSettingsMap* map,
       map->GetDefaultContentSetting(content_type, &provider));
   DCHECK(!setting.empty());
 
-  object->SetString(kSetting, setting);
+  object->SetStringKey(kSetting, setting);
   if (provider != SiteSettingSourceToString(SiteSettingSource::kDefault))
-    object->SetString(kSource, provider);
+    object->SetStringKey(kSource, provider);
 }
 
 ContentSetting GetContentSettingForOrigin(
@@ -757,7 +756,7 @@ ContentSetting GetContentSettingForOrigin(
   // content settings, not just the permissions, plus all the possible sources,
   // and the calls to HostContentSettingsMap should be removed.
   content_settings::SettingInfo info;
-  std::unique_ptr<base::Value> value =
+  const base::Value value =
       map->GetWebsiteSetting(origin, origin, content_type, &info);
 
   // Retrieve the content setting.
@@ -769,10 +768,8 @@ ContentSetting GetContentSettingForOrigin(
         PermissionManagerFactory::GetForProfile(profile)->GetPermissionStatus(
             content_type, origin, origin);
   } else {
-    DCHECK(value.get());
-    DCHECK_EQ(base::Value::Type::INTEGER, value->type());
-    result.content_setting =
-        content_settings::ValueToContentSetting(value.get());
+    DCHECK_EQ(base::Value::Type::INTEGER, value.type());
+    result.content_setting = content_settings::ValueToContentSetting(value);
   }
 
   // Retrieve the source of the content setting.
@@ -813,14 +810,14 @@ void GetPolicyAllowedUrls(
 
   Profile* profile = Profile::FromWebUI(web_ui);
   PrefService* prefs = profile->GetPrefs();
-  const base::ListValue* policy_urls =
+  const base::Value* policy_urls =
       prefs->GetList(type == ContentSettingsType::MEDIASTREAM_MIC
                          ? prefs::kAudioCaptureAllowedUrls
                          : prefs::kVideoCaptureAllowedUrls);
 
   // Convert the URLs to |ContentSettingsPattern|s. Ignore any invalid ones.
   std::vector<ContentSettingsPattern> patterns;
-  for (const auto& entry : policy_urls->GetList()) {
+  for (const auto& entry : policy_urls->GetListDeprecated()) {
     const std::string* url = entry.GetIfString();
     if (!url)
       continue;

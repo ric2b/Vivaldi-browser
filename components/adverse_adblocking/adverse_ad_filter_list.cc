@@ -46,9 +46,6 @@ AdverseAdFilterListService::AdverseAdFilterListService(Profile* profile)
   if (!vivaldi::IsVivaldiRunning())
     return;
   if (profile_) {  // Profile will be null in components.
-    task_runner_ = base::ThreadPool::CreateSequencedTaskRunner(
-        {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
-         base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
 
     PrefService* prefs = profile_->GetPrefs();
 
@@ -203,7 +200,7 @@ void AdverseAdFilterListService::OnBlocklistDownloadDone(
                        weak_ptr_factory_.GetWeakPtr()),
         base::Hours(interval));
 
-    LoadList(AdverseAdFilterListService::ListFailedCallback());
+    LoadList(GetDefaultFilePath());
 
   } else {
     LOG(INFO) << "Vivaldi Adverse Ad block list download failed";
@@ -250,7 +247,7 @@ void AdverseAdFilterListService::OnDoBlockListLifecycleCheck() {
   // Make sure we try to load an existing file on startup.
   if (!is_enabled_and_been_loaded_ &&
       prefs->GetBoolean(vivaldiprefs::kPrivacyAdverseAdBlockEnabled)) {
-    LoadList(AdverseAdFilterListService::ListFailedCallback());
+    LoadList(GetDefaultFilePath());
   }
 }
 
@@ -263,22 +260,27 @@ void AdverseAdFilterListService::SettingsUpdated() {
   }
 }
 
-void AdverseAdFilterListService::LoadList(ListFailedCallback callback) {
-  LoadList(GetDefaultFilePath(), std::move(callback));
-}
+void AdverseAdFilterListService::LoadList(const base::FilePath& json_filename) {
+  auto read_json_file =
+      base::BindOnce(&AdverseAdFilterListService::ReadFileToString,
+                     json_filename);
 
-void AdverseAdFilterListService::LoadList(const base::FilePath& json_filename,
-                                          ListFailedCallback callback) {
-  base::PostTask(FROM_HERE, {content::BrowserThread::IO},
-                 base::BindOnce(&AdverseAdFilterListService::LoadListOnIO,
-                                base::Unretained(this), json_filename,
-                                std::move(callback)));
+  auto load_json_data =
+      base::BindOnce(&AdverseAdFilterListService::LoadAndInitializeFromString,
+                     weak_ptr_factory_.GetWeakPtr());
+
+  task_runner_ = base::ThreadPool::CreateSequencedTaskRunner(
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
+       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
+
+  task_runner_->PostTaskAndReplyWithResult(FROM_HERE, std::move(read_json_file),
+                                           std::move(load_json_data));
+
 }
 
 /*static*/
 std::string* AdverseAdFilterListService::ReadFileToString(
-    const base::FilePath& json_filename,
-    ListFailedCallback callback) {
+    const base::FilePath& json_filename) {
   std::string* json_string = new std::string;
 
   if (!base::ReadFileToString(json_filename, json_string)) {
@@ -296,28 +298,9 @@ void AdverseAdFilterListService::ComputeSHA256Sum(const void* data,
       crypto::SHA256HashString(base::StringPiece((const char*)data, length));
 }
 
-void AdverseAdFilterListService::LoadListOnIO(
-    const base::FilePath& json_filename,
-    ListFailedCallback callback) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
-  auto read_json_file =
-      base::BindOnce(&AdverseAdFilterListService::ReadFileToString,
-                     json_filename, std::move(callback));
-
-  auto load_json_data =
-      base::BindOnce(&AdverseAdFilterListService::LoadAndInitializeFromString,
-                     base::Unretained(this), std::move(callback));
-
-  base::PostTaskAndReplyWithResult(task_runner_.get(), FROM_HERE,
-                                   std::move(read_json_file),
-                                   std::move(load_json_data));
-}
-
 void AdverseAdFilterListService::LoadAndInitializeFromString(
-    ListFailedCallback callback,
     const std::string* json_string) {
   if (!json_string || json_string->length() == 0) {
-    PostCallback(std::move(callback));
     return;
   }
 
@@ -330,7 +313,6 @@ void AdverseAdFilterListService::LoadAndInitializeFromString(
   DLOG_IF(WARNING, loaded_json_list->is_list());
 
   if (!loaded_json_list || !loaded_json_list->is_list()) {
-    PostCallback(std::move(callback));
     return;
   }
 
@@ -381,13 +363,6 @@ void AdverseAdFilterListService::AddBlockItem(const std::string& new_site) {
 
 void AdverseAdFilterListService::ClearSiteList() {
   adverse_ad_sites_.clear();
-}
-
-/*static*/
-void AdverseAdFilterListService::PostCallback(ListFailedCallback callback) {
-  if (callback.is_null())
-    return;
-  base::PostTask(FROM_HERE, {content::BrowserThread::UI}, std::move(callback));
 }
 
 // static

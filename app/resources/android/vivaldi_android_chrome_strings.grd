@@ -246,6 +246,20 @@ To adjust your search term, long press to select. To refine your search, slide t
       <message name="IDS_NEW_INCOGNITO_TAB_TITLE" desc="Title in tab strip when opening a new private tab.">
         New Private tab
       </message>
+      <!-- Reading list strings -->
+      <message name="IDS_READING_LIST_READ" desc="The header for the read section in the reading list UI.">
+        Read Articles:
+      </message>
+      <message name="IDS_READING_LIST_UNREAD" desc="The header for the unread section in the reading list UI.">
+        Unread Articles - Available offline:
+      </message>
+      <!-- Page preloading settings strings-->
+      <message name="IDS_PRELOAD_PAGES_STANDARD_PRELOADING_BULLET_THREE" desc="Third bullet point under the Preload Pages standard preloading mode. Informs the user about what the standard preloading setting does.">
+        When a Google site asks to privately preload links on their page, Vivaldi encrypts and preloads pages through Google servers without cookies. This hides your identity from the preloaded site.
+      </message>
+      <message name="IDS_PRELOAD_PAGES_EXTENDED_PRELOADING_BULLET_THREE" desc="Third bullet point under the Preload Pages extended preloading mode. Informs the user about what the extended preloading setting does.">
+        When a site asks to privately preload links on their page, Vivaldi encrypts and preloads pages through Google servers without cookies. This hides your identity from the preloaded site.
+      </message>
     </messages>
   </release>
 </grit>

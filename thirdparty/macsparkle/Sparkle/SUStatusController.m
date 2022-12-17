@@ -6,11 +6,13 @@
 //  Copyright 2006 Andy Matuschak. All rights reserved.
 //
 
-#import "SUOperatingSystem.h"
+#if SPARKLE_BUILD_UI_BITS || !BUILDING_SPARKLE
+
 #import "SUStatusController.h"
 #import "SUHost.h"
-#import "SULocalizations.h"
 #import "SUApplicationInfo.h"
+#import "SULocalizations.h"
+#import "SUOperatingSystem.h"
 #import "SUTouchBarForwardDeclarations.h"
 #import "SUTouchBarButtonGroup.h"
 
@@ -36,9 +38,9 @@ static NSString *const SUStatusControllerTouchBarIndentifier = @"" SPARKLE_BUNDL
 
 - (instancetype)initWithHost:(SUHost *)aHost
 {
-    self = [super initWithWindowNibName:@"SUStatus"];
-    if (self)
-    {
+    self = [super initWithWindowNibName:@"SUStatus" owner:self];
+	if (self)
+	{
         self.host = aHost;
         [self setShouldCascadeWindows:NO];
     }
@@ -57,7 +59,7 @@ static NSString *const SUStatusControllerTouchBarIndentifier = @"" SPARKLE_BUNDL
     [[self window] setFrameAutosaveName:@"SUStatusFrame"];
     [self.progressBar setUsesThreadedAnimation:YES];
 
-    if (SUAVAILABLE(10, 11)) {
+    if ([SUOperatingSystem isOperatingSystemAtLeastVersion:(NSOperatingSystemVersion){10, 11, 0}]) {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wpartial-availability"
         [self.statusTextField setFont:[NSFont monospacedDigitSystemFontOfSize:0 weight:NSFontWeightRegular]];
@@ -125,7 +127,7 @@ static NSString *const SUStatusControllerTouchBarIndentifier = @"" SPARKLE_BUNDL
 
 - (void)setMaxProgressValue:(double)value
 {
-    if (value < 0.0) value = 0.0;
+	if (value < 0.0) value = 0.0;
     maxProgressValue = value;
     [self setProgressValue:0.0];
     [self.progressBar setIndeterminate:(value == 0.0)];
@@ -158,3 +160,5 @@ static NSString *const SUStatusControllerTouchBarIndentifier = @"" SPARKLE_BUNDL
 }
 
 @end
+
+#endif

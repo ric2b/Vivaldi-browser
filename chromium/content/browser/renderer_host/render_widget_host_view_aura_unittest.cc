@@ -122,12 +122,13 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/selection_bound.h"
 #include "ui/wm/core/window_util.h"
+#include "ui/wm/public/activation_client.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ui/base/ime/input_method.h"
 #endif
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 #include "ui/base/view_prop.h"
 #include "ui/base/win/window_event_target.h"
 #include "ui/display/win/test/scoped_screen_win.h"
@@ -407,6 +408,8 @@ class MockRenderWidgetHostImpl : public RenderWidgetHostImpl {
   const ui::LatencyInfo& LastWheelOrTouchEventLatencyInfo() const {
     return last_wheel_or_touch_event_latency_info_;
   }
+
+  MockWidget& mock_widget() { return widget_; }
 
  private:
   MockRenderWidgetHostImpl(FrameTree* frame_tree,
@@ -703,7 +706,8 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
     view->TextInputStateChanged(state_with_type_text);
   }
 
-  BrowserTaskEnvironment task_environment_;
+  BrowserTaskEnvironment task_environment_{
+      base::test::SingleThreadTaskEnvironment::TimeSource::MOCK_TIME};
   std::unique_ptr<aura::test::AuraTestHelper> aura_test_helper_;
   std::unique_ptr<BrowserContext> browser_context_;
   std::unique_ptr<WebContents> web_contents_;
@@ -1082,6 +1086,28 @@ class RenderWidgetHostViewAuraShutdownTest
   }
 };
 
+TEST_F(RenderWidgetHostViewAuraTest, ActiveWindow) {
+  InitViewForFrame(parent_view_->GetNativeView());
+  view_->SetBounds(gfx::Rect(0, 0, 400, 200));
+  view_->Hide();
+  view_->Show();
+  widget_host_->mock_widget().FlushWidgetForTesting();
+  EXPECT_EQ(false, widget_host_->mock_widget().IsHidden());
+  EXPECT_EQ(false, widget_host_->mock_widget().IsInActiveWindow());
+  aura::Window* aura_window = view_->GetNativeView();
+  wm::GetActivationClient(aura_window->GetRootWindow())
+      ->ActivateWindow(aura_window);
+  ASSERT_TRUE(view_->IsInActiveWindow());
+  widget_host_->mock_widget().FlushWidgetForTesting();
+  EXPECT_EQ(true, widget_host_->mock_widget().IsInActiveWindow());
+
+  wm::GetActivationClient(aura_window->GetRootWindow())
+      ->ActivateWindow(nullptr);
+  ASSERT_FALSE(view_->IsInActiveWindow());
+  widget_host_->mock_widget().FlushWidgetForTesting();
+  EXPECT_EQ(false, widget_host_->mock_widget().IsInActiveWindow());
+}
+
 // Checks that a popup is positioned correctly relative to its parent using
 // screen coordinates.
 TEST_F(RenderWidgetHostViewAuraTest, PositionChildPopup) {
@@ -1219,7 +1245,7 @@ TEST_F(RenderWidgetHostViewAuraTest, DestroyPopupTapOutsidePopup) {
 }
 #endif
 
-#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
 // On Desktop Linux, select boxes need mouse capture in order to work. Test that
 // when a select box is opened via a mouse press that it retains mouse capture
 // after the mouse is released.
@@ -1787,8 +1813,7 @@ TEST_F(RenderWidgetHostViewAuraTest, TimerBasedWheelEventPhaseInfo) {
 
   // Let the MouseWheelPhaseHandler::mouse_wheel_end_dispatch_timer_ fire. A
   // synthetic wheel event with zero deltas and kPhaseEnded will be sent.
-  base::PlatformThread::Sleep(base::Milliseconds(100));
-  base::RunLoop().RunUntilIdle();
+  task_environment_.FastForwardBy(base::Milliseconds(100));
 
   events = GetAndResetDispatchedMessages();
   const WebMouseWheelEvent* wheel_end_event =
@@ -2990,7 +3015,7 @@ TEST_F(RenderWidgetHostViewAuraTest, CursorVisibilityChange) {
   view_->Show();
   base::RunLoop().RunUntilIdle();
   auto events = GetAndResetDispatchedMessages();
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS)
   // TODO(crbug.com/1164453): Investigate occasional extra mousemoves in CrOS.
   EXPECT_GE(1u, events.size());
 #else
@@ -3737,7 +3762,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest,
        ScrollEventsOverscrollWithFling) {
   SetUpOverscrollEnvironment();
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   // Create a ScopedScreenWin.
   display::win::test::ScopedScreenWin scoped_screen_win;
 #endif
@@ -3818,7 +3843,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest,
        ScrollEventsOverscrollWithZeroFling) {
   SetUpOverscrollEnvironment();
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   // Create a ScopedScreenWin.
   display::win::test::ScopedScreenWin scoped_screen_win;
 #endif
@@ -3890,7 +3915,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest,
 // Tests that a fling in the opposite direction of the overscroll cancels the
 // overscroll instead of completing it.
 // Flaky on Fuchsia:  http://crbug.com/810690.
-#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_WIN)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_WIN)
 #define MAYBE_ReverseFlingCancelsOverscroll \
   DISABLED_ReverseFlingCancelsOverscroll
 #else
@@ -3900,7 +3925,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest,
        MAYBE_ReverseFlingCancelsOverscroll) {
   SetUpOverscrollEnvironment();
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   // Create a ScopedScreenWin.
   display::win::test::ScopedScreenWin scoped_screen_win;
 #endif
@@ -4262,8 +4287,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest,
   // enough overscroll to complete the gesture, the overscroll controller
   // will reset the state. The scroll-end should therefore be dispatched to the
   // renderer, and the gesture-event-filter should await an ACK for it.
-  base::PlatformThread::Sleep(base::Milliseconds(10));
-  base::RunLoop().RunUntilIdle();
+  task_environment_.FastForwardBy(base::Milliseconds(10));
   events = GetAndResetDispatchedMessages();
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
   EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
@@ -4387,8 +4411,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest, OverscrollWithTouchEvents) {
 
   SimulateGestureEvent(blink::WebInputEvent::Type::kGestureScrollEnd,
                        blink::WebGestureDevice::kTouchscreen);
-  base::PlatformThread::Sleep(base::Milliseconds(10));
-  base::RunLoop().RunUntilIdle();
+  task_environment_.FastForwardBy(base::Milliseconds(10));
   events = GetAndResetDispatchedMessages();
   EXPECT_EQ("GestureScrollEnd", GetMessageNames(events));
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
@@ -4443,8 +4466,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest,
                        blink::WebGestureDevice::kTouchscreen);
   events = GetAndResetDispatchedMessages();
   EXPECT_EQ(0U, events.size());
-  base::PlatformThread::Sleep(base::Milliseconds(10));
-  base::RunLoop().RunUntilIdle();
+  task_environment_.FastForwardBy(base::Milliseconds(10));
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
   EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
@@ -4487,8 +4509,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest,
                        blink::WebGestureDevice::kTouchscreen);
   events = GetAndResetDispatchedMessages();
   EXPECT_EQ(0U, events.size());
-  base::PlatformThread::Sleep(base::Milliseconds(10));
-  base::RunLoop().RunUntilIdle();
+  task_environment_.FastForwardBy(base::Milliseconds(10));
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
   EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
@@ -4779,7 +4800,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest,
        OverscrollStateResetsAfterScroll) {
   SetUpOverscrollEnvironment();
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   // Create a ScopedScreenWin.
   display::win::test::ScopedScreenWin scoped_screen_win;
 #endif
@@ -5221,7 +5242,7 @@ TEST_F(RenderWidgetHostViewAuraTest, CorrectNumberOfAcksAreDispatched) {
 TEST_F(RenderWidgetHostViewAuraOverscrollTest, ScrollDeltasResetOnEnd) {
   SetUpOverscrollEnvironment();
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   // Create a ScopedScreenWin.
   display::win::test::ScopedScreenWin scoped_screen_win;
 #endif
@@ -5352,7 +5373,7 @@ TEST_F(RenderWidgetHostViewAuraTest, ForwardMouseEvent) {
   view_ = nullptr;
 }
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 class MockWindowEventTarget : public ui::WindowEventTarget {
  public:
   MockWindowEventTarget() = default;
@@ -5635,7 +5656,7 @@ TEST_F(RenderWidgetHostViewAuraTest, GestureTapFromStylusHasPointerType) {
 // time passes without receiving a new compositor frame.
 // TODO(https://crbug.com/1225139): This test is flaky on "Linux ASan LSan Tests
 // (1)"
-#if defined(OS_LINUX)
+#if BUILDFLAG(IS_LINUX)
 #define MAYBE_NewContentRenderingTimeout DISABLED_NewContentRenderingTimeout
 #else
 #define MAYBE_NewContentRenderingTimeout NewContentRenderingTimeout
@@ -6701,7 +6722,7 @@ TEST_F(RenderWidgetHostViewAuraInputMethodTest,
   input_method->RemoveObserver(this);
 }
 
-#if defined(OS_WIN) || defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
 class MockVirtualKeyboardController final
     : public ui::VirtualKeyboardController {
  public:
@@ -6755,9 +6776,6 @@ class RenderWidgetHostViewAuraKeyboardMockInputMethod
   size_t keyboard_controller_observer_count() const {
     return keyboard_controller_.observer_count();
   }
-  void ShowVirtualKeyboardIfEnabled() override {
-    keyboard_controller_.DisplayVirtualKeyboard();
-  }
   void SetVirtualKeyboardVisibilityIfEnabled(bool should_show) override {
     if (should_show) {
       keyboard_controller_.DisplayVirtualKeyboard();
@@ -6801,7 +6819,7 @@ class RenderWidgetHostViewAuraKeyboardTest
 };
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS)
 TEST_F(RenderWidgetHostViewAuraKeyboardTest,
        UpdateTextInputStateUpdatesVirtualKeyboardState) {
   ActivateViewForTextInputManager(parent_view_, ui::TEXT_INPUT_TYPE_TEXT);
@@ -6826,7 +6844,7 @@ TEST_F(RenderWidgetHostViewAuraKeyboardTest,
 }
 #endif
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 TEST_F(RenderWidgetHostViewAuraKeyboardTest, KeyboardObserverDestroyed) {
   parent_view_->SetLastPointerType(ui::EventPointerType::kTouch);
   ActivateViewForTextInputManager(parent_view_, ui::TEXT_INPUT_TYPE_TEXT);
@@ -6910,6 +6928,6 @@ TEST_F(RenderWidgetHostViewAuraKeyboardTest,
   EXPECT_EQ(keyboard_controller_observer_count(), 0u);
 }
 
-#endif  // defined(OS_WIN)
+#endif  // BUILDFLAG(IS_WIN)
 
 }  // namespace content

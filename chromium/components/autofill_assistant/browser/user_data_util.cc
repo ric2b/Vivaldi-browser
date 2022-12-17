@@ -9,6 +9,7 @@
 #include "base/callback.h"
 #include "base/containers/flat_map.h"
 #include "base/i18n/case_conversion.h"
+#include "base/no_destructor.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/autofill/core/browser/autofill_data_util.h"
 #include "components/autofill/core/browser/geo/address_i18n.h"
@@ -144,19 +145,33 @@ std::vector<std::string> GetValidationErrors(
   return errors;
 }
 
+std::vector<std::string> GetProfileValidationErrors(
+    const autofill::AutofillProfile* profile,
+    const std::vector<RequiredDataPiece>& required_data_pieces) {
+  if (required_data_pieces.empty()) {
+    return std::vector<std::string>();
+  }
+
+  return GetValidationErrors(
+      profile
+          ? field_formatter::CreateAutofillMappings(*profile, kDefaultLocale)
+          : base::flat_map<field_formatter::Key, std::string>(),
+      required_data_pieces);
+}
+
 // Helper function that compares instances of AutofillProfile by completeness
 // in regards to the current options. Full profiles should be ordered before
 // empty ones and fall back to compare the profile's last usage.
 bool CompletenessCompareContacts(
-    const CollectUserDataOptions& options,
+    const std::vector<RequiredDataPiece>& required_data_pieces,
     const autofill::AutofillProfile& a,
     const base::flat_map<field_formatter::Key, std::string>& data_a,
     const autofill::AutofillProfile& b,
     const base::flat_map<field_formatter::Key, std::string>& data_b) {
   int incomplete_fields_a =
-      GetValidationErrors(data_a, options.required_contact_data_pieces).size();
+      GetValidationErrors(data_a, required_data_pieces).size();
   int incomplete_fields_b =
-      GetValidationErrors(data_b, options.required_contact_data_pieces).size();
+      GetValidationErrors(data_b, required_data_pieces).size();
   if (incomplete_fields_a != incomplete_fields_b) {
     return incomplete_fields_a <= incomplete_fields_b;
   }
@@ -281,20 +296,43 @@ bool EvaluateNotEmpty(
   return it != mapping.end() && !it->second.empty();
 }
 
+ClientStatus MoveAutofillValueRegexpToTextFilter(
+    const UserData* user_data,
+    SelectorProto::PropertyFilter* value) {
+  if (!value->has_autofill_value_regexp()) {
+    return OkClientStatus();
+  }
+  if (user_data == nullptr) {
+    return ClientStatus(PRECONDITION_FAILED);
+  }
+  const AutofillValueRegexp& autofill_value_regexp =
+      value->autofill_value_regexp();
+  TextFilter text_filter;
+  text_filter.set_case_sensitive(
+      autofill_value_regexp.value_expression_re2().case_sensitive());
+  std::string re2;
+  ClientStatus re2_status =
+      GetFormattedClientValue(autofill_value_regexp, *user_data, &re2);
+  text_filter.set_re2(re2);
+  // Assigning text_filter will clear autofill_value_regexp.
+  *value->mutable_text_filter() = text_filter;
+  return re2_status;
+}
+
 }  // namespace
 
 std::vector<std::string> GetContactValidationErrors(
     const autofill::AutofillProfile* profile,
     const CollectUserDataOptions& collect_user_data_options) {
-  if (collect_user_data_options.required_contact_data_pieces.empty()) {
-    return std::vector<std::string>();
-  }
+  return GetProfileValidationErrors(
+      profile, collect_user_data_options.required_contact_data_pieces);
+}
 
-  return GetValidationErrors(
-      profile
-          ? field_formatter::CreateAutofillMappings(*profile, kDefaultLocale)
-          : base::flat_map<field_formatter::Key, std::string>(),
-      collect_user_data_options.required_contact_data_pieces);
+std::vector<std::string> GetPhoneNumberValidationErrors(
+    const autofill::AutofillProfile* profile,
+    const CollectUserDataOptions& collect_user_data_options) {
+  return GetProfileValidationErrors(
+      profile, collect_user_data_options.required_phone_number_data_pieces);
 }
 
 std::vector<int> SortContactsByCompleteness(
@@ -312,8 +350,32 @@ std::vector<int> SortContactsByCompleteness(
       indices.begin(), indices.end(),
       [&collect_user_data_options, &contacts, &mapped_contacts](int i, int j) {
         return CompletenessCompareContacts(
-            collect_user_data_options, *contacts[i]->profile,
-            mapped_contacts[i], *contacts[j]->profile, mapped_contacts[j]);
+            collect_user_data_options.required_contact_data_pieces,
+            *contacts[i]->profile, mapped_contacts[i], *contacts[j]->profile,
+            mapped_contacts[j]);
+      });
+  return indices;
+}
+
+std::vector<int> SortPhoneNumbersByCompleteness(
+    const CollectUserDataOptions& collect_user_data_options,
+    const std::vector<std::unique_ptr<PhoneNumber>>& phone_numbers) {
+  std::vector<base::flat_map<field_formatter::Key, std::string>>
+      mapped_phone_numbers;
+  for (const auto& phone_number : phone_numbers) {
+    mapped_phone_numbers.push_back(field_formatter::CreateAutofillMappings(
+        *phone_number->profile, kDefaultLocale));
+  }
+  std::vector<int> indices(phone_numbers.size());
+  std::iota(std::begin(indices), std::end(indices), 0);
+  std::stable_sort(
+      indices.begin(), indices.end(),
+      [&collect_user_data_options, &phone_numbers, &mapped_phone_numbers](
+          int i, int j) {
+        return CompletenessCompareContacts(
+            collect_user_data_options.required_phone_number_data_pieces,
+            *phone_numbers[i]->profile, mapped_phone_numbers[i],
+            *phone_numbers[j]->profile, mapped_phone_numbers[j]);
       });
   return indices;
 }
@@ -337,6 +399,17 @@ int GetDefaultContact(const CollectUserDataOptions& collect_user_data_options,
   return sorted_indices[0];
 }
 
+int GetDefaultPhoneNumber(
+    const CollectUserDataOptions& collect_user_data_options,
+    const std::vector<std::unique_ptr<PhoneNumber>>& phone_numbers) {
+  if (phone_numbers.empty()) {
+    return -1;
+  }
+  auto sorted_indices =
+      SortPhoneNumbersByCompleteness(collect_user_data_options, phone_numbers);
+  return sorted_indices[0];
+}
+
 std::vector<std::string> GetShippingAddressValidationErrors(
     const autofill::AutofillProfile* profile,
     const CollectUserDataOptions& collect_user_data_options) {
@@ -347,10 +420,8 @@ std::vector<std::string> GetShippingAddressValidationErrors(
 
   if (!collect_user_data_options.required_shipping_address_data_pieces
            .empty()) {
-    errors = GetValidationErrors(
-        profile
-            ? field_formatter::CreateAutofillMappings(*profile, kDefaultLocale)
-            : base::flat_map<field_formatter::Key, std::string>(),
+    errors = GetProfileValidationErrors(
+        profile,
         collect_user_data_options.required_shipping_address_data_pieces);
   }
 
@@ -421,10 +492,8 @@ std::vector<std::string> GetPaymentInstrumentValidationErrors(
   }
 
   if (!collect_user_data_options.required_billing_address_data_pieces.empty()) {
-    const auto& address_errors = GetValidationErrors(
-        billing_address ? field_formatter::CreateAutofillMappings(
-                              *billing_address, kDefaultLocale)
-                        : base::flat_map<field_formatter::Key, std::string>(),
+    const auto& address_errors = GetProfileValidationErrors(
+        billing_address,
         collect_user_data_options.required_billing_address_data_pieces);
     errors.insert(errors.end(), address_errors.begin(), address_errors.end());
   }
@@ -505,37 +574,6 @@ std::unique_ptr<autofill::AutofillProfile> MakeUniqueFromProfile(
   // populated.
   unique_profile->FinalizeAfterImport();
   return unique_profile;
-}
-
-bool CompareContactDetails(
-    const CollectUserDataOptions& collect_user_data_options,
-    const autofill::AutofillProfile* a,
-    const autofill::AutofillProfile* b) {
-  std::vector<autofill::ServerFieldType> types;
-  if (collect_user_data_options.request_payer_name) {
-    types.emplace_back(autofill::NAME_FULL);
-    types.emplace_back(autofill::NAME_FIRST);
-    types.emplace_back(autofill::NAME_MIDDLE);
-    types.emplace_back(autofill::NAME_LAST);
-  }
-  if (collect_user_data_options.request_payer_phone) {
-    types.emplace_back(autofill::PHONE_HOME_WHOLE_NUMBER);
-  }
-  if (collect_user_data_options.request_payer_email) {
-    types.emplace_back(autofill::EMAIL_ADDRESS);
-  }
-  if (types.empty()) {
-    return a->guid() == b->guid();
-  }
-
-  for (auto type : types) {
-    int comparison = a->GetRawInfo(type).compare(b->GetRawInfo(type));
-    if (comparison != 0) {
-      return false;
-    }
-  }
-
-  return true;
 }
 
 ClientStatus GetFormattedClientValue(const AutofillValue& autofill_value,
@@ -691,14 +729,12 @@ Metrics::UserDataSelectionState GetNewSelectionState(
 }
 
 int GetFieldBitArrayForAddress(const autofill::AutofillProfile* profile) {
-  // If the profile is nullptr, we consider all fields as missing.
-  if (!profile) {
-    return 0;
-  }
+  return GetFieldBitArrayForAddressAndPhoneNumber(profile, profile);
+}
 
-  auto mapping =
-      field_formatter::CreateAutofillMappings(*profile, kDefaultLocale);
-
+int GetFieldBitArrayForAddressAndPhoneNumber(
+    const autofill::AutofillProfile* profile,
+    const autofill::AutofillProfile* phone_number_profile) {
   // Maps from the autofill field type to the respective position in the metrics
   // bitarray.
   static const base::NoDestructor<std::vector<std::pair<
@@ -712,12 +748,6 @@ int GetFieldBitArrayForAddress(const autofill::AutofillProfile* profile) {
             Metrics::AutofillAssistantProfileFields::NAME_FULL},
            {autofill::EMAIL_ADDRESS,
             Metrics::AutofillAssistantProfileFields::EMAIL_ADDRESS},
-           {autofill::PHONE_HOME_NUMBER,
-            Metrics::AutofillAssistantProfileFields::PHONE_HOME_NUMBER},
-           {autofill::PHONE_HOME_COUNTRY_CODE,
-            Metrics::AutofillAssistantProfileFields::PHONE_HOME_COUNTRY_CODE},
-           {autofill::PHONE_HOME_WHOLE_NUMBER,
-            Metrics::AutofillAssistantProfileFields::PHONE_HOME_WHOLE_NUMBER},
            {autofill::ADDRESS_HOME_COUNTRY,
             Metrics::AutofillAssistantProfileFields::ADDRESS_HOME_COUNTRY},
            {autofill::ADDRESS_HOME_STATE,
@@ -729,10 +759,37 @@ int GetFieldBitArrayForAddress(const autofill::AutofillProfile* profile) {
            {autofill::ADDRESS_HOME_STREET_ADDRESS,
             Metrics::AutofillAssistantProfileFields::ADDRESS_HOME_LINE1}});
 
+  // Maps from the phone-related autofill field types to the respective position
+  // in the metrics bitarray.
+  static const base::NoDestructor<std::vector<std::pair<
+      autofill::ServerFieldType, Metrics::AutofillAssistantProfileFields>>>
+      phone_number_fields_to_log(
+          {{autofill::PHONE_HOME_NUMBER,
+            Metrics::AutofillAssistantProfileFields::PHONE_HOME_NUMBER},
+           {autofill::PHONE_HOME_COUNTRY_CODE,
+            Metrics::AutofillAssistantProfileFields::PHONE_HOME_COUNTRY_CODE},
+           {autofill::PHONE_HOME_WHOLE_NUMBER,
+            Metrics::AutofillAssistantProfileFields::PHONE_HOME_WHOLE_NUMBER}});
+
   int bit_array = 0;
-  for (auto fields_pair : *fields_to_log) {
-    if (EvaluateNotEmpty(mapping, fields_pair.first)) {
-      bit_array |= fields_pair.second;
+  // Check the non-phone fields.
+  if (profile) {
+    auto mapping =
+        field_formatter::CreateAutofillMappings(*profile, kDefaultLocale);
+    for (auto fields_pair : *fields_to_log) {
+      if (EvaluateNotEmpty(mapping, fields_pair.first)) {
+        bit_array |= fields_pair.second;
+      }
+    }
+  }
+  // Check the phone fields.
+  if (phone_number_profile) {
+    auto mapping = field_formatter::CreateAutofillMappings(
+        *phone_number_profile, kDefaultLocale);
+    for (auto fields_pair : *phone_number_fields_to_log) {
+      if (EvaluateNotEmpty(mapping, fields_pair.first)) {
+        bit_array |= fields_pair.second;
+      }
     }
   }
   return bit_array;
@@ -779,6 +836,39 @@ int GetFieldBitArrayForCreditCard(const autofill::CreditCard* card) {
   }
 
   return bit_array;
+}
+
+ClientStatus ResolveSelectorUserData(SelectorProto* selector,
+                                     const UserData* user_data) {
+  for (auto& filter : *selector->mutable_filters()) {
+    switch (filter.filter_case()) {
+      case SelectorProto::Filter::kProperty: {
+        ClientStatus filter_status = MoveAutofillValueRegexpToTextFilter(
+            user_data, filter.mutable_property());
+        if (!filter_status.ok()) {
+          return filter_status;
+        }
+        break;
+      }
+      case SelectorProto::Filter::kInnerText:
+      case SelectorProto::Filter::kValue:
+      case SelectorProto::Filter::kPseudoElementContent:
+      case SelectorProto::Filter::kCssStyle:
+      case SelectorProto::Filter::kCssSelector:
+      case SelectorProto::Filter::kEnterFrame:
+      case SelectorProto::Filter::kPseudoType:
+      case SelectorProto::Filter::kBoundingBox:
+      case SelectorProto::Filter::kNthMatch:
+      case SelectorProto::Filter::kLabelled:
+      case SelectorProto::Filter::kMatchCssSelector:
+      case SelectorProto::Filter::kOnTop:
+      case SelectorProto::Filter::FILTER_NOT_SET:
+        break;
+        // Do not add default here. In case a new filter gets added (that may
+        // contain a RegexpFilter) we want this to fail at compilation here.
+    }
+  }
+  return OkClientStatus();
 }
 
 }  // namespace user_data

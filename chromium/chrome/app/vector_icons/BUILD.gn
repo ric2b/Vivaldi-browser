@@ -43,6 +43,8 @@ aggregate_vector_icons("chrome_vector_icons") {
     "credit_card.icon",
     "default_touch_favicon.icon",
     "default_touch_favicon_mask.icon",
+    "download_in_progress.icon",
+    "download_toolbar_button.icon",
     "eol.icon",
     "extension_crashed.icon",
     "eye.icon",
@@ -195,7 +197,11 @@ aggregate_vector_icons("chrome_vector_icons") {
   }
 
   if (is_chromeos) {
-    sources += [ "notification_download.icon" ]
+    sources += [
+      "crostini_mascot.icon",
+      "notification_download.icon",
+      "terminal_ssh.icon",
+    ]
   }
 
   if (is_chromeos_ash) {

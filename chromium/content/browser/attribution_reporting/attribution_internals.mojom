@@ -7,15 +7,22 @@ module content.mojom;
 import "url/mojom/origin.mojom";
 import "url/mojom/url.mojom";
 
-// Represents StorableSource::SourceType.
+// Represents CommonSourceInfo::SourceType.
 enum SourceType {
   kNavigation,
   kEvent,
 };
 
+struct AttributionReportID {
+  int64 value;
+};
+
 // Struct containing stored data that will be sent in a future attribution
 // report.
 struct WebUIAttributionReport {
+  // Allows the WebUI to issue commands for individual reports.
+  // Not intended to be displayed.
+  AttributionReportID? id;
   string attribution_destination;
   url.mojom.Url report_url;
   double trigger_time;
@@ -26,8 +33,13 @@ struct WebUIAttributionReport {
 
   enum Status {
     kPending,
+    kDroppedDueToExcessiveAttributions,
+    kDroppedDueToExcessiveReportingOrigins,
     kDroppedDueToLowPriority,
     kDroppedForNoise,
+    kDeduplicated,
+    kNoReportCapacityForDestinationSite,
+    kInternalError,
     kProhibitedByBrowserPolicy,
     kSent,
     kNetworkError,
@@ -37,6 +49,10 @@ struct WebUIAttributionReport {
 
   // Only valid if `status == kSent`.
   int32 http_response_code;
+};
+
+struct AttributionDebugKey {
+  uint64 value;
 };
 
 // Struct representing a stored attribution source that will be displayed by WebUI.
@@ -50,14 +66,21 @@ struct WebUIAttributionSource {
   double expiry_time;
   SourceType source_type;
   int64 priority;
-  array<int64> dedup_keys;
+  AttributionDebugKey? debug_key;
+  array<uint64> dedup_keys;
 
+  // Union of `StorableSource::Result` and `StoredSource::AttributionLogic`,
+  // and `AttributionStorage::DeactivatedSource::Reason`.
   enum Attributability {
     kAttributable,
-    // The source was dropped due to `StorableSource::AttributionLogic::kNever`.
+    // The source was dropped due to `CommonSourceInfo::AttributionLogic::kNever`.
     kNoised,
     kReplacedByNewerSource,
     kReachedAttributionLimit,
+    kInternalError,
+    kInsufficientSourceCapacity,
+    kInsufficientUniqueDestinationCapacity,
+    kExcessiveReportingOrigins,
   };
   Attributability attributability;
 };
@@ -72,8 +95,9 @@ interface AttributionInternalsObserver {
   // should call `AttributionInternalsHandler::GetReports()`.
   OnReportsChanged();
 
-  // Called when a source is deactivated.
-  OnSourceDeactivated(WebUIAttributionSource source);
+  // Called when a source-registration attempt fails or a stored source is
+  // deactivated.
+  OnSourceRejectedOrDeactivated(WebUIAttributionSource source);
 
   // Called when a report is sent, regardless of success.
   OnReportSent(WebUIAttributionReport report);
@@ -99,10 +123,10 @@ interface AttributionInternalsHandler {
   // being sent.
   GetReports() => (array<WebUIAttributionReport> reports);
 
-  // Sends all stored reports, ignoring delay, returning when the
-  // operation has been completed and all reports have been cleared from
+  // Sends the given reports, ignoring delay, returning when the
+  // operation has been completed and the reports have been cleared from
   // storage.
-  SendPendingReports() => ();
+  SendReports(array<AttributionReportID> ids) => ();
 
   // Deletes all persisted data for the attribution reporting API, returning when the
   // operation has been completed.

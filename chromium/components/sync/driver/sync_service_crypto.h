@@ -35,8 +35,9 @@ class SyncServiceCrypto : public SyncEncryptionHandler::Observer,
     virtual void CryptoStateChanged() = 0;
     virtual void CryptoRequiredUserActionChanged() = 0;
     virtual void ReconfigureDataTypesDueToCrypto() = 0;
-    virtual void EncryptionBootstrapTokenChanged(
+    virtual void SetEncryptionBootstrapToken(
         const std::string& bootstrap_token) = 0;
+    virtual std::string GetEncryptionBootstrapToken() = 0;
   };
 
   // |delegate| must not be null and must outlive this object.
@@ -52,7 +53,7 @@ class SyncServiceCrypto : public SyncEncryptionHandler::Observer,
 
   void Reset();
 
-  // See the SyncService header.
+  // See the SyncUserSettings header.
   base::Time GetExplicitPassphraseTime() const;
   bool IsPassphraseRequired() const;
   bool IsUsingExplicitPassphrase() const;
@@ -61,6 +62,8 @@ class SyncServiceCrypto : public SyncEncryptionHandler::Observer,
   bool IsEncryptEverythingEnabled() const;
   void SetEncryptionPassphrase(const std::string& passphrase);
   bool SetDecryptionPassphrase(const std::string& passphrase);
+  void SetDecryptionNigoriKey(std::unique_ptr<Nigori> nigori);
+  std::unique_ptr<Nigori> GetDecryptionNigoriKey() const;
 
   // Returns whether it's already possible to determine whether trusted vault
   // key required (e.g. engine didn't start yet or silent fetch attempt is in
@@ -83,7 +86,6 @@ class SyncServiceCrypto : public SyncEncryptionHandler::Observer,
   void OnPassphraseAccepted() override;
   void OnTrustedVaultKeyRequired() override;
   void OnTrustedVaultKeyAccepted() override;
-  void OnBootstrapTokenUpdated(const std::string& bootstrap_token) override;
   void OnEncryptedTypesChanged(ModelTypeSet encrypted_types,
                                bool encrypt_everything) override;
   void OnCryptographerStateChanged(Cryptographer* cryptographer,
@@ -144,6 +146,18 @@ class SyncServiceCrypto : public SyncEncryptionHandler::Observer,
   // Completion callback function for
   // TrustedVaultClient::GetIsRecoverabilityDegraded().
   void GetIsRecoverabilityDegradedCompleted(bool is_recoverability_degraded);
+
+  // Attempts decryption of |cached_pending_keys| with a |nigori| and, if
+  // successful, resolves the kPassphraseRequired state and populates the
+  // |nigori| to engine. Should never be called when there is no cached pending
+  // keys. Returns true if successful. Doesn't update bootstrap token.
+  bool SetDecryptionKeyWithoutUpdatingBootstrapToken(
+      std::unique_ptr<Nigori> nigori);
+
+  // Similar to SetDecryptionPassphrase(), but uses bootstrap token instead of
+  // user provided passphrase. Resolves the kPassphraseRequired state on
+  // successful attempt.
+  void MaybeSetDecryptionKeyFromBootstrapToken();
 
   const raw_ptr<Delegate> delegate_;
 

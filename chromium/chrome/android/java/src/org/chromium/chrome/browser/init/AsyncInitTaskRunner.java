@@ -16,8 +16,8 @@ import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.browser.ChromeActivitySessionTracker;
 import org.chromium.chrome.browser.flags.CachedFeatureFlags;
-import org.chromium.chrome.browser.version.ChromeVersionInfo;
 import org.chromium.components.variations.firstrun.VariationsSeedFetcher;
+import org.chromium.components.version_info.VersionInfo;
 import org.chromium.content_public.browser.ChildProcessLauncherHelper;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 
@@ -44,7 +44,7 @@ public abstract class AsyncInitTaskRunner {
     @VisibleForTesting
     boolean shouldFetchVariationsSeedDuringFirstRun() {
         if (BuildConfig.IS_VIVALDI) return false;   // Vivaldi says NO to field trials.
-        return ChromeVersionInfo.isOfficialBuild();
+        return VersionInfo.isOfficialBuild();
     }
 
     @VisibleForTesting
@@ -59,7 +59,7 @@ public abstract class AsyncInitTaskRunner {
 
         public FetchSeedTask(String restrictMode) {
             mRestrictMode = restrictMode;
-            mMilestone = Integer.toString(ChromeVersionInfo.getProductMajorVersion());
+            mMilestone = Integer.toString(VersionInfo.getProductMajorVersion());
             mChannel = getChannelString();
         }
 
@@ -75,16 +75,16 @@ public abstract class AsyncInitTaskRunner {
         }
 
         private String getChannelString() {
-            if (ChromeVersionInfo.isCanaryBuild()) {
+            if (VersionInfo.isCanaryBuild()) {
                 return "canary";
             }
-            if (ChromeVersionInfo.isDevBuild()) {
+            if (VersionInfo.isDevBuild()) {
                 return "dev";
             }
-            if (ChromeVersionInfo.isBetaBuild()) {
+            if (VersionInfo.isBetaBuild()) {
                 return "beta";
             }
-            if (ChromeVersionInfo.isStableBuild()) {
+            if (VersionInfo.isStableBuild()) {
                 return "stable";
             }
             return "";

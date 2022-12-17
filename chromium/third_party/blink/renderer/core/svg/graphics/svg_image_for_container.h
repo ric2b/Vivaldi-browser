@@ -28,10 +28,10 @@
 
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/svg/graphics/svg_image.h"
-#include "third_party/blink/renderer/platform/geometry/float_rect.h"
-#include "third_party/blink/renderer/platform/geometry/float_size.h"
 #include "third_party/blink/renderer/platform/graphics/image.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
+#include "ui/gfx/geometry/rect_f.h"
+#include "ui/gfx/geometry/size_f.h"
 
 namespace blink {
 
@@ -62,11 +62,12 @@ class CORE_EXPORT SVGImageForContainer final : public Image {
       SVGImage* image,
       const gfx::SizeF& target_size,
       float zoom,
-      const KURL& url) {
+      const KURL& url,
+      mojom::blink::PreferredColorScheme preferred_color_scheme) {
     gfx::SizeF container_size_without_zoom =
         gfx::ScaleSize(target_size, 1 / zoom);
     return base::AdoptRef(new SVGImageForContainer(
-        image, container_size_without_zoom, zoom, url));
+        image, container_size_without_zoom, zoom, url, preferred_color_scheme));
   }
 
   gfx::Size SizeWithConfig(SizeConfig) const override;
@@ -101,14 +102,12 @@ class CORE_EXPORT SVGImageForContainer final : public Image {
                    const ImageDrawOptions& draw_options) override;
 
  private:
-  SVGImageForContainer(SVGImage* image,
-                       const gfx::SizeF& container_size,
-                       float zoom,
-                       const KURL& url)
-      : image_(image),
-        container_size_(container_size),
-        zoom_(zoom),
-        url_(url) {}
+  SVGImageForContainer(
+      SVGImage* image,
+      const gfx::SizeF& container_size,
+      float zoom,
+      const KURL& url,
+      mojom::blink::PreferredColorScheme preferred_color_scheme);
 
   void DestroyDecodedData() override {}
 

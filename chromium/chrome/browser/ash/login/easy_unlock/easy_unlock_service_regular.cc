@@ -219,20 +219,21 @@ void EasyUnlockServiceRegular::UseLoadedRemoteDevices(
                           base::Base64UrlEncodePolicy::INCLUDE_PADDING,
                           &b64_psk);
 
-    dict->SetString(key_names::kKeyPsk, b64_psk);
+    dict->SetStringKey(key_names::kKeyPsk, b64_psk);
 
     // TODO(jhawkins): Remove the bluetoothAddress field from this proto.
-    dict->SetString(key_names::kKeyBluetoothAddress, std::string());
+    dict->SetStringKey(key_names::kKeyBluetoothAddress, std::string());
 
-    dict->SetString(
+    dict->SetStringPath(
         key_names::kKeyPermitPermitId,
         base::StringPrintf(
             key_names::kPermitPermitIdFormat,
             gaia::CanonicalizeEmail(GetAccountId().GetUserEmail()).c_str()));
 
-    dict->SetString(key_names::kKeyPermitId, b64_public_key);
-    dict->SetString(key_names::kKeyPermitType, key_names::kPermitTypeLicence);
-    dict->SetString(key_names::kKeyPermitData, b64_public_key);
+    dict->SetStringPath(key_names::kKeyPermitId, b64_public_key);
+    dict->SetStringPath(key_names::kKeyPermitType,
+                        key_names::kPermitTypeLicence);
+    dict->SetStringPath(key_names::kKeyPermitData, b64_public_key);
 
     std::unique_ptr<base::ListValue> beacon_seed_list(new base::ListValue());
     for (const auto& beacon_seed : device.beacon_seeds()) {
@@ -246,14 +247,14 @@ void EasyUnlockServiceRegular::UseLoadedRemoteDevices(
     std::string serialized_beacon_seeds;
     JSONStringValueSerializer serializer(&serialized_beacon_seeds);
     serializer.Serialize(*beacon_seed_list);
-    dict->SetString(key_names::kKeySerializedBeaconSeeds,
-                    serialized_beacon_seeds);
+    dict->SetStringKey(key_names::kKeySerializedBeaconSeeds,
+                       serialized_beacon_seeds);
 
     // This differentiates the local device from the remote device.
     bool unlock_key = device.GetSoftwareFeatureState(
                           multidevice::SoftwareFeature::kSmartLockHost) ==
                       multidevice::SoftwareFeatureState::kEnabled;
-    dict->SetBoolean(key_names::kKeyUnlockKey, unlock_key);
+    dict->SetBoolKey(key_names::kKeyUnlockKey, unlock_key);
 
     PA_LOG(VERBOSE) << "Storing RemoteDevice: { "
                     << "name: " << device.name()
@@ -263,10 +264,10 @@ void EasyUnlockServiceRegular::UseLoadedRemoteDevices(
     device_list->Append(std::move(dict));
   }
 
-  if (device_list->GetList().size() != 2u) {
+  if (device_list->GetListDeprecated().size() != 2u) {
     PA_LOG(ERROR) << "There should only be 2 devices persisted, the host and "
                      "the client, but there are: "
-                  << device_list->GetList().size();
+                  << device_list->GetListDeprecated().size();
     NOTREACHED();
   }
 
@@ -281,7 +282,7 @@ void EasyUnlockServiceRegular::SetStoredRemoteDevices(
 
   DictionaryPrefUpdate pairing_update(profile()->GetPrefs(),
                                       prefs::kEasyUnlockPairing);
-  if (devices.GetList().empty())
+  if (devices.GetListDeprecated().empty())
     pairing_update->RemoveKey(kKeyDevices);
   else
     pairing_update->SetKey(kKeyDevices, devices.Clone());
@@ -306,11 +307,13 @@ AccountId EasyUnlockServiceRegular::GetAccountId() const {
 }
 
 const base::ListValue* EasyUnlockServiceRegular::GetRemoteDevices() const {
-  const base::DictionaryValue* pairing_dict =
+  const base::Value* pairing_dict =
       profile()->GetPrefs()->GetDictionary(prefs::kEasyUnlockPairing);
-  const base::ListValue* devices = NULL;
-  if (pairing_dict && pairing_dict->GetList(kKeyDevices, &devices))
-    return devices;
+  if (pairing_dict) {
+    const base::Value* devices = pairing_dict->FindListKey(kKeyDevices);
+    if (devices)
+      return &base::Value::AsListValue(*devices);
+  }
   return NULL;
 }
 
@@ -359,16 +362,12 @@ void EasyUnlockServiceRegular::InitializeInternal() {
   multidevice_setup_client_->AddObserver(this);
   StartFeatureUsageMetrics();
 
-  proximity_auth::ScreenlockBridge::Get()->AddObserver(this);
-
   LoadRemoteDevices();
 }
 
 void EasyUnlockServiceRegular::ShutdownInternal() {
   pref_manager_.reset();
   notification_controller_.reset();
-
-  proximity_auth::ScreenlockBridge::Get()->RemoveObserver(this);
 
   registrar_.RemoveAll();
 
@@ -505,6 +504,8 @@ void EasyUnlockServiceRegular::ShowNotificationIfNewDevicePresent(
 
 void EasyUnlockServiceRegular::OnScreenDidLock(
     proximity_auth::ScreenlockBridge::LockHandler::ScreenType screen_type) {
+  EasyUnlockService::OnScreenDidLock(screen_type);
+
   set_will_authenticate_using_easy_unlock(false);
   lock_screen_last_shown_timestamp_ = base::TimeTicks::Now();
 }

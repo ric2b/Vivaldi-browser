@@ -7,6 +7,7 @@
 #include <array>
 #include <cstdint>
 
+#include "ash/quick_pair/common/fast_pair/fast_pair_metrics.h"
 #include "ash/quick_pair/common/logging.h"
 #include "ash/quick_pair/common/protocol.h"
 #include "ash/quick_pair/fast_pair_handshake/fast_pair_encryption.h"
@@ -112,7 +113,8 @@ void FastPairDataEncryptorImpl::Factory::DeviceMetadataRetrieved(
     scoped_refptr<Device> device,
     base::OnceCallback<void(std::unique_ptr<FastPairDataEncryptor>)>
         on_get_instance_callback,
-    DeviceMetadata* device_metadata) {
+    DeviceMetadata* device_metadata,
+    bool has_retryable_error) {
   if (!device_metadata) {
     QP_LOG(WARNING) << "No device metadata retrieved.";
     std::move(on_get_instance_callback).Run(nullptr);
@@ -124,6 +126,8 @@ void FastPairDataEncryptorImpl::Factory::DeviceMetadataRetrieved(
   absl::optional<fast_pair_encryption::KeyPair> key_pair =
       fast_pair_encryption::GenerateKeysWithEcdhKeyAgreement(
           public_anti_spoofing_key);
+
+  RecordKeyPairGenerationResult(/*success=*/key_pair.has_value());
 
   if (key_pair) {
     std::unique_ptr<FastPairDataEncryptorImpl> data_encryptor =

@@ -492,7 +492,7 @@
 <translation id="4221012616705981690">Nav iepriekšējā saraksta.</translation>
 <translation id="4225355998815256469">Veidlapas vadīklas</translation>
 <translation id="4230834257931120629">Gaiši zilganpelēka</translation>
-<translation id="4231102694147661229">Iespējot izstrādātājiem paredzētās opcijas</translation>
+<translation id="4231102694147661229">Iespējot izstrādātāju opcijas</translation>
 <translation id="423428485095722850">Lai ieslēgtu vai izslēgtu opciju, vienlaicīgi nospiediet meklēšanas un atstarpes taustiņu.</translation>
 <translation id="4243624244759495699"><ph name="LOCALE" />, <ph name="GRADE" />. pakāpe</translation>
 <translation id="4246217262268234757">Tēraudzila</translation>
@@ -666,6 +666,7 @@
 <translation id="5522423213731659107">Ātrā iepazīšanās pabeigta!</translation>
 <translation id="5534303576632885660">Galvene</translation>
 <translation id="5539820223028224601">Gaiši pelēka</translation>
+<translation id="554893713779400387">Pārslēgt diktēšanas režīmu</translation>
 <translation id="5549179427201066174">Ieslēgt vai izslēgt skaņas signālus (audio ikonas)</translation>
 <translation id="556042886152191864">Poga</translation>
 <translation id="5561345396546889625">Nākamais saraksts</translation>
@@ -1168,6 +1169,7 @@
 <translation id="9223032053830369045">Tumši sarkana</translation>
 <translation id="923331726185079994">ChromeVox atjaunināts</translation>
 <translation id="93384979447910801">Tumši jūraszaļa</translation>
+<translation id="937605981140327129">Funkcija TalkBack pašlaik nav instalēta. Lūdzu, instalējiet Android Accessibility Suite, izmantojot Play veikalu, un mēģiniet vēlreiz.</translation>
 <translation id="948171205378458592">Samazināt runas ātrumu</translation>
 <translation id="957570623732056069">Lai šajā nodarbībā pārietu uz priekšu vai atpakaļ, ar pirkstu velciet pa kreisi vai pa labi</translation>
 <translation id="958854023026327378">Velciet ar vienu pirkstu uz leju</translation>

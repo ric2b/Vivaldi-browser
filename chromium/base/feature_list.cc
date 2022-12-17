@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #include "base/feature_list.h"
-#include <string>
 
 // feature_list.h is a widely included header and its size impacts build
 // time. Try not to raise this limit unless necessary. See
@@ -11,6 +10,9 @@
 #ifndef NACL_TC_REV
 #pragma clang max_tokens_here 545000
 #endif
+
+#include <string>
+#include <tuple>
 
 #include <stddef.h>
 
@@ -22,7 +24,9 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/metrics/persistent_memory_allocator.h"
+#include "base/notreached.h"
 #include "base/path_service.h"
 #include "base/pickle.h"
 #include "base/strings/string_piece.h"
@@ -89,8 +93,7 @@ struct FeatureEntry {
       return false;
 
     // Return true because we are not guaranteed to have a trial name anyways.
-    auto sink = pickle_iter.ReadStringPiece(trial_name);
-    ALLOW_UNUSED_LOCAL(sink);
+    std::ignore = pickle_iter.ReadStringPiece(trial_name);
     return true;
   }
 };
@@ -361,13 +364,13 @@ void FeatureList::AddFeaturesToAllocator(PersistentMemoryAllocator* allocator) {
 }
 
 void FeatureList::GetFeatureOverrides(std::string* enable_overrides,
-                                      std::string* disable_overrides) {
+                                      std::string* disable_overrides) const {
   GetFeatureOverridesImpl(enable_overrides, disable_overrides, false);
 }
 
 void FeatureList::GetCommandLineFeatureOverrides(
     std::string* enable_overrides,
-    std::string* disable_overrides) {
+    std::string* disable_overrides) const {
   GetFeatureOverridesImpl(enable_overrides, disable_overrides, true);
 }
 
@@ -522,7 +525,7 @@ void FeatureList::FinalizeInitialization() {
   initialized_ = true;
 }
 
-bool FeatureList::IsFeatureEnabled(const Feature& feature) {
+bool FeatureList::IsFeatureEnabled(const Feature& feature) const {
   OverrideState overridden_state = GetOverrideState(feature);
 
   // If marked as OVERRIDE_USE_DEFAULT, simply return the default state below.
@@ -533,7 +536,7 @@ bool FeatureList::IsFeatureEnabled(const Feature& feature) {
 }
 
 absl::optional<bool> FeatureList::IsFeatureEnabledIfOverridden(
-    const Feature& feature) {
+    const Feature& feature) const {
   OverrideState overridden_state = GetOverrideState(feature);
 
   // If marked as OVERRIDE_USE_DEFAULT, fall through to returning empty.
@@ -544,7 +547,7 @@ absl::optional<bool> FeatureList::IsFeatureEnabledIfOverridden(
 }
 
 FeatureList::OverrideState FeatureList::GetOverrideState(
-    const Feature& feature) {
+    const Feature& feature) const {
   DCHECK(initialized_);
   DCHECK(IsValidFeatureOrFieldTrialName(feature.name)) << feature.name;
   DCHECK(CheckFeatureIdentity(feature)) << feature.name;
@@ -553,7 +556,7 @@ FeatureList::OverrideState FeatureList::GetOverrideState(
 }
 
 FeatureList::OverrideState FeatureList::GetOverrideStateByFeatureName(
-    StringPiece feature_name) {
+    StringPiece feature_name) const {
   DCHECK(initialized_);
   DCHECK(IsValidFeatureOrFieldTrialName(feature_name)) << feature_name;
 
@@ -573,7 +576,7 @@ FeatureList::OverrideState FeatureList::GetOverrideStateByFeatureName(
   return OVERRIDE_USE_DEFAULT;
 }
 
-FieldTrial* FeatureList::GetAssociatedFieldTrial(const Feature& feature) {
+FieldTrial* FeatureList::GetAssociatedFieldTrial(const Feature& feature) const {
   DCHECK(initialized_);
   DCHECK(CheckFeatureIdentity(feature)) << feature.name;
 
@@ -581,7 +584,7 @@ FieldTrial* FeatureList::GetAssociatedFieldTrial(const Feature& feature) {
 }
 
 const base::FeatureList::OverrideEntry*
-FeatureList::GetOverrideEntryByFeatureName(StringPiece name) {
+FeatureList::GetOverrideEntryByFeatureName(StringPiece name) const {
   DCHECK(initialized_);
   DCHECK(IsValidFeatureOrFieldTrialName(name)) << name;
 
@@ -594,7 +597,7 @@ FeatureList::GetOverrideEntryByFeatureName(StringPiece name) {
 }
 
 FieldTrial* FeatureList::GetAssociatedFieldTrialByFeatureName(
-    StringPiece name) {
+    StringPiece name) const {
   DCHECK(initialized_);
 
   const base::FeatureList::OverrideEntry* entry =
@@ -605,7 +608,8 @@ FieldTrial* FeatureList::GetAssociatedFieldTrialByFeatureName(
   return nullptr;
 }
 
-FieldTrial* FeatureList::GetEnabledFieldTrialByFeatureName(StringPiece name) {
+FieldTrial* FeatureList::GetEnabledFieldTrialByFeatureName(
+    StringPiece name) const {
   DCHECK(initialized_);
 
   const base::FeatureList::OverrideEntry* entry =
@@ -641,11 +645,11 @@ void FeatureList::RegisterOverridesFromCommandLine(
     if (pos != std::string::npos) {
       feature_name = StringPiece(value.data(), pos);
       trial = FieldTrialList::Find(value.substr(pos + 1));
-#if !defined(OS_NACL)
+#if !BUILDFLAG(IS_NACL)
       // If the below DCHECK fires, it means a non-existent trial name was
       // specified via the "Feature<Trial" command-line syntax.
       DCHECK(trial) << "trial='" << value.substr(pos + 1) << "' does not exist";
-#endif  // !defined(OS_NACL)
+#endif  // !BUILDFLAG(IS_NACL)
     }
 
     RegisterOverride(feature_name, overridden_state, trial);
@@ -675,7 +679,7 @@ void FeatureList::RegisterOverride(StringPiece feature_name,
 
 void FeatureList::GetFeatureOverridesImpl(std::string* enable_overrides,
                                           std::string* disable_overrides,
-                                          bool command_line_only) {
+                                          bool command_line_only) const {
   DCHECK(initialized_);
 
   // Check that the FieldTrialList this is associated with, if any, is the
@@ -721,7 +725,7 @@ void FeatureList::GetFeatureOverridesImpl(std::string* enable_overrides,
   }
 }
 
-bool FeatureList::CheckFeatureIdentity(const Feature& feature) {
+bool FeatureList::CheckFeatureIdentity(const Feature& feature) const {
   AutoLock auto_lock(feature_identity_tracker_lock_);
 
   auto it = feature_identity_tracker_.find(feature.name);

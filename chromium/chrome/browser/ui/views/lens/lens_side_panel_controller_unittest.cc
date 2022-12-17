@@ -29,9 +29,10 @@ class LensSidePanelControllerTest : public TestWithBrowserView {
  public:
   void SetUp() override {
     base::test::ScopedFeatureList features;
-    features.InitWithFeatures(
-        {features::kLensRegionSearch, ::features::kSidePanel,
-         reading_list::switches::kReadLater},
+    features.InitWithFeaturesAndParameters(
+        {{features::kLensStandalone, {{"enable-side-panel", "true"}}},
+         {::features::kSidePanel, {}},
+         {reading_list::switches::kReadLater, {}}},
         {});
     TestWithBrowserView::SetUp();
     // Create the lens side panel controller in BrowserView.
@@ -114,15 +115,27 @@ TEST_F(LensSidePanelControllerTest, ReOpensAndCloses) {
       content::OpenURLParams(GURL("http://foo.com"), content::Referrer(),
                              WindowOpenDisposition::NEW_FOREGROUND_TAB,
                              ui::PAGE_TRANSITION_LINK, false));
+  EXPECT_TRUE(browser_view()->lens_side_panel_controller());
+  EXPECT_TRUE(browser_view()->lens_side_panel()->GetVisible());
+
+  // Closing the controller should hide side panel and delete controller
+  // pointer.
   controller_->Close();
-  // Verify pointer was reset.
   EXPECT_FALSE(browser_view()->lens_side_panel_controller());
-  // Lens side panel controller needs to be recreated before reopen.
+  EXPECT_FALSE(browser_view()->lens_side_panel()->GetVisible());
+
+  // Creating a new controller in browser view should fix pointer, but side
+  // panel is still not visible.
   browser_view()->CreateLensSidePanelController();
+  controller_ = browser_view()->lens_side_panel_controller();
+  EXPECT_TRUE(browser_view()->lens_side_panel_controller());
+  EXPECT_FALSE(browser_view()->lens_side_panel()->GetVisible());
+
   controller_->OpenWithURL(
       content::OpenURLParams(GURL("http://bar.com"), content::Referrer(),
                              WindowOpenDisposition::NEW_FOREGROUND_TAB,
                              ui::PAGE_TRANSITION_LINK, false));
+  EXPECT_TRUE(browser_view()->lens_side_panel_controller());
   EXPECT_TRUE(browser_view()->lens_side_panel()->GetVisible());
   controller_->Close();
 
@@ -170,6 +183,7 @@ TEST_F(LensSidePanelControllerTest,
   // Creating a new controller in browser view should fix pointer, but side
   // panel is still not visible.
   browser_view()->CreateLensSidePanelController();
+  controller_ = browser_view()->lens_side_panel_controller();
   EXPECT_TRUE(browser_view()->lens_side_panel_controller());
   EXPECT_FALSE(browser_view()->lens_side_panel()->GetVisible());
 

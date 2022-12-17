@@ -70,6 +70,12 @@ extern const base::Feature kDelayedWarnings;
 // warnings feature is enabled.
 extern const base::FeatureParam<bool> kDelayedWarningsEnableMouseClicks;
 
+// Whether to use download bubble instead of download shelf.
+extern const base::Feature kDownloadBubble;
+
+// Enables Enhanced Safe Browsing.
+extern const base::Feature kEnhancedProtection;
+
 // Enables collection of signals related to extension activity and uploads
 // of telemetry reports to SB servers.
 extern const base::Feature kExtensionTelemetry;
@@ -92,6 +98,10 @@ extern const base::Feature kPasswordProtectionForSignedInUsers;
 // Controls whether Chrome prompts Enhanced Safe Browsing users for deep
 // scanning.
 extern const base::Feature kPromptEsbForDeepScanning;
+
+// Controls whether Client Safe Browsing Reports are sent with a GAIA-tied token
+// for Enhanced Safe Browsing users
+extern const base::Feature kSafeBrowsingCsbrrWithToken;
 
 // Controls whether users will see an account compromise specific warning
 // when Safe Browsing determines a file is associated with stealing cookies.
@@ -119,9 +129,9 @@ extern const base::Feature kSafeBrowsingRemoveCookiesInAuthRequests;
 // Controls the daily quota for the suspicious site trigger.
 extern const base::Feature kSuspiciousSiteTriggerQuotaFeature;
 
-// Controls whether the referrer chain is attached to real time requests for
-// enterprise.
-extern const base::Feature kRealTimeUrlLookupReferrerChainForEnterprise;
+// Controls whether to send sample pings of Protego allowlist domains on
+// the allowlist to Safe Browsing.
+extern const base::Feature kSendSampledPingsForProtegoAllowlistDomains;
 
 // Status of the SimplifiedUrlDisplay experiments. This does not control the
 // individual experiments, those are controlled by their own feature flags.

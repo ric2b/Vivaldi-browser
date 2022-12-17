@@ -24,7 +24,7 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/gpu_fence.h"
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 extern "C" typedef struct AHardwareBuffer AHardwareBuffer;
 #endif
 
@@ -167,7 +167,7 @@ class SharedImageRepresentationFactoryRef : public SharedImageRepresentation {
     backing()->RegisterImageFactory(factory);
   }
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   std::unique_ptr<base::android::ScopedHardwareBufferFenceSync>
   GetAHardwareBuffer();
 #endif
@@ -432,7 +432,7 @@ class GPU_GLES2_EXPORT SharedImageRepresentationOverlay
 
     gl::GLImage* gl_image() const { return gl_image_; }
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
     AHardwareBuffer* GetAHardwareBuffer() {
       return representation()->GetAHardwareBuffer();
     }
@@ -459,17 +459,9 @@ class GPU_GLES2_EXPORT SharedImageRepresentationOverlay
     gfx::GpuFenceHandle release_fence_;
   };
 
-#if defined(OS_ANDROID)
-  virtual void NotifyOverlayPromotion(bool promotion,
-                                      const gfx::Rect& bounds) = 0;
-#endif
-
   std::unique_ptr<ScopedReadAccess> BeginScopedReadAccess(bool needs_gl_image);
 
  protected:
-  // TODO(weiliangc): Currently this only handles Android pre-SurfaceControl
-  // case. Add appropriate fence later.
-
   // Notifies the backing that an access will start. Returns false if there is a
   // conflict. Otherwise, returns true and:
   // - Adds gpu fences to |acquire_fences| that should be waited on before the
@@ -483,7 +475,7 @@ class GPU_GLES2_EXPORT SharedImageRepresentationOverlay
   // |release_fence| will be null in that case.
   virtual void EndReadAccess(gfx::GpuFenceHandle release_fence) = 0;
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   virtual AHardwareBuffer* GetAHardwareBuffer();
 #elif defined(USE_OZONE)
   scoped_refptr<gfx::NativePixmap> GetNativePixmap();
@@ -493,6 +485,25 @@ class GPU_GLES2_EXPORT SharedImageRepresentationOverlay
   // Get the backing as GLImage for GLSurface::ScheduleOverlayPlane.
   virtual gl::GLImage* GetGLImage() = 0;
 };
+
+#if BUILDFLAG(IS_ANDROID)
+class GPU_GLES2_EXPORT SharedImageRepresentationLegacyOverlay
+    : public SharedImageRepresentation {
+ public:
+  SharedImageRepresentationLegacyOverlay(SharedImageManager* manager,
+                                         SharedImageBacking* backing,
+                                         MemoryTypeTracker* tracker)
+      : SharedImageRepresentation(manager, backing, tracker) {}
+
+  // Renders shared image to SurfaceView/Dialog overlay. Should only be called
+  // if the image already promoted to overlay.
+  virtual void RenderToOverlay() = 0;
+
+  // Notifies legacy overlay system about overlay promotion.
+  virtual void NotifyOverlayPromotion(bool promotion,
+                                      const gfx::Rect& bounds) = 0;
+};
+#endif
 
 class GPU_GLES2_EXPORT SharedImageRepresentationMemory
     : public SharedImageRepresentation {

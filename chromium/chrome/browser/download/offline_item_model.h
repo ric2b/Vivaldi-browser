@@ -56,6 +56,7 @@ class OfflineItemModel : public DownloadUIModel,
   download::DownloadItem::DownloadState GetState() const override;
   bool IsPaused() const override;
   bool TimeRemaining(base::TimeDelta* remaining) const override;
+  base::Time GetEndTime() const override;
   bool IsDone() const override;
   base::FilePath GetFullPath() const override;
   bool CanResume() const override;
@@ -67,7 +68,7 @@ class OfflineItemModel : public DownloadUIModel,
   GURL GetOriginalURL() const override;
   bool ShouldPromoteOrigin() const override;
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   bool IsCommandEnabled(const DownloadCommands* download_commands,
                         DownloadCommands::Command command) const override;
   bool IsCommandChecked(const DownloadCommands* download_commands,

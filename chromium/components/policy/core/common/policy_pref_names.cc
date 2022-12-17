@@ -4,6 +4,8 @@
 
 #include "components/policy/core/common/policy_pref_names.h"
 
+#include "build/build_config.h"
+
 namespace policy {
 namespace policy_prefs {
 
@@ -65,10 +67,10 @@ const char kIntensiveWakeUpThrottlingEnabled[] =
 const char kTargetBlankImpliesNoOpener[] =
     "policy.target_blank_implies_noopener";
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 // Boolean policy preference to disable the BackForwardCache feature.
 const char kBackForwardCacheEnabled[] = "policy.back_forward_cache_enabled";
-#endif  // defined(OS_ANDROID)
+#endif  // BUILDFLAG(IS_ANDROID)
 
 // Boolean policy to force enable WebSQL in third-party contexts.
 const char kWebSQLInThirdPartyContextEnabled[] =
@@ -78,6 +80,11 @@ const char kWebSQLInThirdPartyContextEnabled[] =
 // updated GREASE algorithm feature.
 const char kUserAgentClientHintsGREASEUpdateEnabled[] =
     "policy.user_agent_client_hints_grease_update_enabled";
+
+// Boolean policy to enable/disable Direct Sockets API.
+// If true, the default API behavior is observed (secure context / cli flags
+// required). If false, the API gets blocked unconditionally.
+const char kEnableDirectSockets[] = "policy.enable_direct_sockets";
 
 }  // namespace policy_prefs
 }  // namespace policy

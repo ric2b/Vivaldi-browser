@@ -700,37 +700,44 @@ ContentBlockingGetBlockedUrlsInfoFunction::RunWithService(
   return ArgumentList(Results::Create(tab_blocked_urls_infos));
 }
 
-ExtensionFunction::ResponseValue
-ContentBlockingGetBlockedDomainCountersFunction::RunWithService(
-    adblock_filter::RuleService* rules_service) {
-  namespace Results =
-      vivaldi::content_blocking::GetBlockedDomainCounters::Results;
-  Results::Counters blocked_domain_counters;
-  for (const auto& blocked_domain :
-       rules_service->GetBlockerUrlsReporter()
-           ->GetBlockedDomains()[static_cast<size_t>(
-               adblock_filter::RuleGroup::kTrackingRules)]) {
-    blocked_domain_counters.tracking.emplace_back();
-    blocked_domain_counters.tracking.back().domain = blocked_domain.first;
-    blocked_domain_counters.tracking.back().blocked_count =
-        blocked_domain.second;
+std::vector<vivaldi::content_blocking::BlockedCounter> ToVivaldiBlockedCounter(
+    std::map<std::string, int> counters) {
+  std::vector<vivaldi::content_blocking::BlockedCounter> result;
+  for (const auto& counter : counters) {
+    result.emplace_back();
+    result.back().domain = counter.first;
+    result.back().blocked_count = counter.second;
   }
-  for (const auto& blocked_domain :
-       rules_service->GetBlockerUrlsReporter()
-           ->GetBlockedDomains()[static_cast<size_t>(
-               adblock_filter::RuleGroup::kAdBlockingRules)]) {
-    blocked_domain_counters.ad_blocking.emplace_back();
-    blocked_domain_counters.ad_blocking.back().domain = blocked_domain.first;
-    blocked_domain_counters.ad_blocking.back().blocked_count =
-        blocked_domain.second;
-  }
-  return ArgumentList(Results::Create(blocked_domain_counters));
+
+  return result;
 }
 
 ExtensionFunction::ResponseValue
-ContentBlockingClearBlockedDomainCountersFunction::RunWithService(
+ContentBlockingGetBlockedCountersFunction::RunWithService(
     adblock_filter::RuleService* rules_service) {
-  rules_service->GetBlockerUrlsReporter()->ClearBlockedDomains();
+  namespace Results = vivaldi::content_blocking::GetBlockedCounters::Results;
+  const auto* reporter = rules_service->GetBlockerUrlsReporter();
+  Results::Counters counters;
+  counters.blocked_domains.tracking =
+      ToVivaldiBlockedCounter(reporter->GetBlockedDomains()[static_cast<size_t>(
+          adblock_filter::RuleGroup::kTrackingRules)]);
+  counters.blocked_domains.ad_blocking =
+      ToVivaldiBlockedCounter(reporter->GetBlockedDomains()[static_cast<size_t>(
+          adblock_filter::RuleGroup::kAdBlockingRules)]);
+  counters.blocked_for_origin.tracking = ToVivaldiBlockedCounter(
+      reporter->GetBlockedForOrigin()[static_cast<size_t>(
+          adblock_filter::RuleGroup::kTrackingRules)]);
+  counters.blocked_for_origin.ad_blocking = ToVivaldiBlockedCounter(
+      reporter->GetBlockedForOrigin()[static_cast<size_t>(
+          adblock_filter::RuleGroup::kAdBlockingRules)]);
+  return ArgumentList(
+      Results::Create(reporter->GetReportingStart().ToJsTime(), counters));
+}
+
+ExtensionFunction::ResponseValue
+ContentBlockingClearBlockedCountersFunction::RunWithService(
+    adblock_filter::RuleService* rules_service) {
+  rules_service->GetBlockerUrlsReporter()->ClearBlockedCounters();
   return NoArguments();
 }
 

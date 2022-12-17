@@ -13,10 +13,12 @@
 #include "ash/wm/window_state.h"
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "chromeos/ui/base/window_state_type.h"
 #include "components/exo/shell_surface_util.h"
+#include "components/exo/window_properties.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/cursor_client.h"
 #include "ui/aura/env.h"
@@ -154,14 +156,19 @@ void ShellSurface::Maximize() {
   TRACE_EVENT0("exo", "ShellSurface::Maximize");
 
   if (!widget_) {
-    initial_show_state_ = ui::SHOW_STATE_MAXIMIZED;
+    if (initial_show_state_ != ui::SHOW_STATE_FULLSCREEN ||
+        ShouldExitFullscreenFromRestoreOrMaximized())
+      initial_show_state_ = ui::SHOW_STATE_MAXIMIZED;
     return;
   }
 
-  // Note: This will ask client to configure its surface even if already
-  // maximized.
-  ScopedConfigure scoped_configure(this, true);
-  widget_->Maximize();
+  if (!widget_->IsFullscreen() ||
+      ShouldExitFullscreenFromRestoreOrMaximized()) {
+    // Note: This will ask client to configure its surface even if already
+    // maximized.
+    ScopedConfigure scoped_configure(this, true);
+    widget_->Maximize();
+  }
 }
 
 void ShellSurface::Minimize() {
@@ -182,21 +189,30 @@ void ShellSurface::Restore() {
   TRACE_EVENT0("exo", "ShellSurface::Restore");
 
   if (!widget_) {
-    initial_show_state_ = ui::SHOW_STATE_NORMAL;
+    if (initial_show_state_ != ui::SHOW_STATE_FULLSCREEN ||
+        ShouldExitFullscreenFromRestoreOrMaximized())
+      initial_show_state_ = ui::SHOW_STATE_NORMAL;
     return;
   }
 
-  // Note: This will ask client to configure its surface even if not already
-  // maximized or minimized.
-  ScopedConfigure scoped_configure(this, true);
-  widget_->Restore();
+  if (!widget_->IsFullscreen() ||
+      ShouldExitFullscreenFromRestoreOrMaximized()) {
+    // Note: This will ask client to configure its surface even if already
+    // maximized.
+    ScopedConfigure scoped_configure(this, true);
+    widget_->Restore();
+  }
 }
 
 void ShellSurface::SetFullscreen(bool fullscreen) {
   TRACE_EVENT1("exo", "ShellSurface::SetFullscreen", "fullscreen", fullscreen);
 
   if (!widget_) {
-    initial_show_state_ = ui::SHOW_STATE_FULLSCREEN;
+    if (fullscreen) {
+      initial_show_state_ = ui::SHOW_STATE_FULLSCREEN;
+    } else if (initial_show_state_ == ui::SHOW_STATE_FULLSCREEN) {
+      initial_show_state_ = ui::SHOW_STATE_DEFAULT;
+    }
     return;
   }
 
@@ -291,12 +307,7 @@ absl::optional<gfx::Rect> ShellSurface::GetWidgetBounds() const {
   if (!pending_configs_.empty() || scoped_configure_)
     return absl::nullopt;
 
-  gfx::Rect visible_bounds = GetVisibleBounds();
-  gfx::Rect new_widget_bounds =
-      widget_->non_client_view()
-          ? widget_->non_client_view()->GetWindowBoundsForClientBounds(
-                visible_bounds)
-          : visible_bounds;
+  gfx::Rect new_widget_bounds = GetWidgetBoundsFromVisibleBounds();
 
   if (movement_disabled_) {
     new_widget_bounds.set_origin(origin_);
@@ -359,6 +370,11 @@ void ShellSurface::OnWindowBoundsChanged(aura::Window* window,
   if (window == widget_->GetNativeWindow()) {
     if (new_bounds.size() == old_bounds.size())
       return;
+
+    if (needs_layout_on_show_) {
+      needs_layout_on_show_ = false;
+      return;
+    }
 
     // If size changed then give the client a chance to produce new contents
     // before origin on screen is changed. Retain the old origin by reverting
@@ -476,10 +492,9 @@ bool ShellSurface::OnPreWidgetCommit() {
     if (host_window()->bounds().IsEmpty() &&
         root_surface()->surface_hierarchy_content_bounds().IsEmpty()) {
       Configure();
-      // Widget should be created when |initial_show_state_| is minimize and
-      // surface doesn not have a contents. TODO(https://crbug.com/1220680)
+
       if (initial_show_state_ != ui::SHOW_STATE_MINIMIZED)
-        return false;
+        needs_layout_on_show_ = true;
     }
 
     CreateShellSurfaceWidget(initial_show_state_);

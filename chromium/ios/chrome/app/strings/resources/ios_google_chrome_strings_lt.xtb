@@ -2,8 +2,8 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="lt">
 <translation id="1096883626080133124">Nuveikite daugiau naudodami paprastą, saugią ir spartesnę nei bet kada anksčiau „Google Chrome“</translation>
+<translation id="1143896152279775643">Slaptažodis bus išsaugotas „Google“ slaptažodžių tvarkytuvėje kaip priskirtas el. pašto adresui <ph name="EMAIL" /></translation>
 <translation id="1282031177488366470">Padėti tobulinti „Chrome“ funkcijas ir našumą</translation>
-<translation id="1314663809820920746">Vis tiek galėsite peržiūrėti visas žymes, istoriją, slaptažodžius ir kitus nustatymus šiame įrenginyje. Jei atliksite pakeitimų, jie nebus sinchronizuojami su jūsų „Google“ paskyra.</translation>
 <translation id="1479202195792305274">„Chrome“ gali tikrinti jūsų slaptažodžius, kai prisijungiate naudodami „Google“ paskyrą.</translation>
 <translation id="1493827051843127077">Nustatykite „Chrome“ kaip numatytąjį nustatymą, kad būtų sinchronizuojami skirtukai, slaptažodžiai ir mokėjimo informacija visuose įrenginiuose</translation>
 <translation id="1504372625950710826">„Chrome“ nepavyko patikrinti, ar yra naujinių. Pabandykite patikrinti interneto ryšį.</translation>
@@ -40,6 +40,7 @@
 <translation id="3522659714780527202">Kad matytumėte skirtukus iš visų įrenginių, kuriuose naudojate „Chrome“, įjunkite sinchronizavimą</translation>
 <translation id="3533694711092285624">Nėra išsaugotų slaptažodžių. „Chrome“ gali tikrinti jūsų slaptažodžius, kai juos išsaugote.</translation>
 <translation id="3634910711516114487">Jei norite išnaudoti visas „Chrome“ galimybes, prisijunkite prie „Chrome“ naudodami „Google“ paskyrą</translation>
+<translation id="3655656110921623717">Tai reiškia, kad kiekvieną kartą „Chrome“ teiks svetainės mobiliesiems užklausą.</translation>
 <translation id="3706101708757577809">Dabar galite naudoti „Chrome“ bet kada palietę nuorodas pranešimuose, dokumentuose ir kitose programose.</translation>
 <translation id="3720541637541300822">Užrakinti inkognito skirtukus uždarius „Chrome“</translation>
 <translation id="384394811301901750">„Google Chrome“ šiuo metu negali naudoti fotoaparato</translation>
@@ -116,4 +117,5 @@
 <translation id="8772179140489533211">Rodomi raginimai prisijungti prie „Chrome“.</translation>
 <translation id="8788269841521769222">Jums nereikia prisiminti šio slaptažodžio. Jis bus išsaugotas „Google“ slaptažodžių tvarkytuvėje kaip priskirtas el. pašto adresui <ph name="EMAIL" /></translation>
 <translation id="9112744793181547300">Nustatyti „Chrome“ kaip numatytąją?</translation>
+<translation id="9122931302567044771">Tai reiškia, kad kiekvieną kartą „Chrome“ teiks staliniams kompiuteriams skirtos svetainės užklausą.</translation>
 </translationbundle>

@@ -47,7 +47,7 @@
 #include "third_party/blink/renderer/core/scroll/scroll_types.h"
 #include "third_party/blink/renderer/core/style/computed_style_constants.h"
 #include "third_party/blink/renderer/platform/geometry/layout_point.h"
-#include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
@@ -140,7 +140,7 @@ class CORE_EXPORT EventHandler final : public GarbageCollected<EventHandler> {
   // Performs a logical scroll that chains, crossing frames, starting from
   // the given node or a reasonable default (focus/last clicked).
   bool BubblingScroll(mojom::blink::ScrollDirection,
-                      ScrollGranularity,
+                      ui::ScrollGranularity,
                       Node* starting_node = nullptr);
 
   WebInputEventResult HandleMouseMoveEvent(
@@ -360,8 +360,6 @@ class CORE_EXPORT EventHandler final : public GarbageCollected<EventHandler> {
   void UpdateLastScrollbarUnderMouse(Scrollbar*, bool);
 
   WebInputEventResult HandleGestureShowPress();
-
-  bool ShouldBrowserControlsConsumeScroll(FloatSize) const;
 
   bool RootFrameTrackedActivePointerInCurrentFrame(PointerId pointer_id) const;
 

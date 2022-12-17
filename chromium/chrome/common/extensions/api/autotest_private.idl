@@ -609,6 +609,8 @@ namespace autotestPrivate {
     boolean markTimeOfFirstAdd;
   };
 
+  callback CouldAllowCrostiniCallback = void (boolean canBeAllowed);
+
   interface Functions {
     // Must be called to allow autotestPrivateAPI events to be fired.
     static void initializeEvents();
@@ -765,6 +767,16 @@ namespace autotestPrivate {
     // Remove printer.
     static void removePrinter(DOMString printerId);
 
+    // Start ARC directly, note this differs from |setPlayStoreEnabled|. It is
+    // used to restart ARC in tests.
+    // |callback|: Called when the operation has completed.
+    [supportsPromises] static void startArc(VoidCallback callback);
+
+    // Stop ARC directly, note this differs from |setPlayStoreEnabled|. It is
+    // used to restart ARC in tests. Note, this preserves ARC data.
+    // |callback|: Called when the operation has completed.
+    [supportsPromises] static void stopArc(VoidCallback callback);
+
     // Enable/disable the Play Store.
     // |enabled|: if set, enable the Play Store.
     // |callback|: Called when the operation has completed.
@@ -810,6 +822,12 @@ namespace autotestPrivate {
     // |callback|: Called when the operation has completed.
     [supportsPromises] static void importCrostini(DOMString path,
                                                   VoidCallback callback);
+
+    // Returns whether crostini could ever be allowed.
+    // |callback|: Called with a boolean indicating if crostini can ever be
+    // allowed in the current profile.
+    [supportsPromises] static void couldAllowCrostini(
+        CouldAllowCrostiniCallback callback);
 
     // Sets mock Plugin VM policy.
     // |imageUrl|: URL to the image to install.

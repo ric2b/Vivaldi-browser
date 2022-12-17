@@ -70,8 +70,6 @@ using page_load_metrics::PageVisitFinalStatus;
 namespace {
 
 const char kOfflinePreviewsMimeType[] = "multipart/related";
-extern const base::Feature kLayoutShiftNormalizationRecordUKM{
-    "LayoutShiftNormalizationRecordUKM", base::FEATURE_ENABLED_BY_DEFAULT};
 
 bool IsSupportedProtocol(page_load_metrics::NetworkProtocol protocol) {
   switch (protocol) {
@@ -139,6 +137,22 @@ int SiteInstanceRenderProcessAssignmentToInt(
   return 0;
 }
 
+// These are the high bounds of each bucket, in enum order. The index into this
+// array is cast to an enum value when recording UKM. These should correspond to
+// the upper bounds of the BitsPerPixelExponential enum in
+// tools/metrics/enums.xml.
+static const double kLCPEntropyBucketThresholds[] = {
+    0.0,  0.00001, 0.0001, 0.001, 0.01, 0.02, 0.03, 0.04,  0.05,   0.06,   0.07,
+    0.08, 0.09,    0.1,    0.2,   0.3,  0.4,  0.5,  0.6,   0.7,    0.8,    0.9,
+    1.0,  2.0,     3.0,    4.0,   5.0,  6.0,  7.0,  8.0,   9.0,    10.0,   20.0,
+    30.0, 40.0,    50.0,   60.0,  70.0, 80.0, 90.0, 100.0, 1000.0, 10000.0};
+
+int64_t CalculateLCPEntropyBucket(double bpp) {
+  return std::lower_bound(std::begin(kLCPEntropyBucketThresholds),
+                          std::end(kLCPEntropyBucketThresholds), bpp) -
+         std::begin(kLCPEntropyBucketThresholds);
+}
+
 }  // namespace
 
 // static
@@ -202,6 +216,7 @@ UkmPageLoadMetricsObserver::ObservePolicy UkmPageLoadMetricsObserver::OnStart(
   downstream_kbps_estimate_ =
       network_quality_tracker_->GetDownstreamThroughputKbps();
   page_transition_ = navigation_handle->GetPageTransition();
+  navigation_start_time_ = base::Time::Now();
   UpdateMainFrameRequestHadCookie(
       navigation_handle->GetWebContents()->GetBrowserContext(),
       navigation_handle->GetURL());
@@ -608,6 +623,13 @@ void UkmPageLoadMetricsObserver::RecordTimingMetrics(
         all_frames_largest_contentful_paint.Time().value().InMilliseconds());
     builder.SetPaintTiming_LargestContentfulPaintType(
         all_frames_largest_contentful_paint.Type());
+    if (all_frames_largest_contentful_paint.TextOrImage() ==
+        page_load_metrics::ContentfulPaintTimingInfo::
+            LargestContentTextOrImage::kImage) {
+      builder.SetPaintTiming_LargestContentfulPaintBPP(
+          CalculateLCPEntropyBucket(
+              all_frames_largest_contentful_paint.ImageBPP()));
+    }
   }
   const page_load_metrics::ContentfulPaintTimingInfo&
       cross_site_sub_frame_largest_contentful_paint =
@@ -862,6 +884,7 @@ void UkmPageLoadMetricsObserver::RecordPageLoadMetrics(
   if (GetDelegate().DidCommit()) {
     builder.SetNavigationEntryOffset(navigation_entry_offset_);
     builder.SetMainDocumentSequenceNumber(main_document_sequence_number_);
+    RecordPageLoadTimestampMetrics(builder);
   }
 
   builder.Record(ukm::UkmRecorder::Get());
@@ -994,8 +1017,7 @@ void UkmPageLoadMetricsObserver::ReportLayoutStability() {
       GetDelegate().GetNormalizedCLSData(
           page_load_metrics::PageLoadMetricsObserverDelegate::BfcacheStrategy::
               ACCUMULATE);
-  if (base::FeatureList::IsEnabled(kLayoutShiftNormalizationRecordUKM) &&
-      !normalized_cls_data.data_tainted) {
+  if (!normalized_cls_data.data_tainted) {
     builder
         .SetLayoutInstability_MaxCumulativeShiftScore_SessionWindow_Gap1000ms_Max5000ms(
             page_load_metrics::LayoutShiftUkmValue(
@@ -1053,8 +1075,7 @@ void UkmPageLoadMetricsObserver::ReportLayoutInstabilityAfterFirstForeground() {
       GetDelegate().GetNormalizedCLSData(
           page_load_metrics::PageLoadMetricsObserverDelegate::BfcacheStrategy::
               ACCUMULATE);
-  if (base::FeatureList::IsEnabled(kLayoutShiftNormalizationRecordUKM) &&
-      !normalized_cls_data.data_tainted) {
+  if (!normalized_cls_data.data_tainted) {
     builder
         .SetExperimental_LayoutInstability_MaxCumulativeShiftScoreAtFirstOnHidden_SessionWindow_Gap1000ms_Max5000ms(
             page_load_metrics::LayoutShiftUkmValue(
@@ -1074,7 +1095,8 @@ void UkmPageLoadMetricsObserver::RecordAbortMetrics(
   if (currently_in_foreground_ && !last_time_shown_.is_null()) {
     total_foreground_duration_ += page_end_time - last_time_shown_;
   }
-  UMA_HISTOGRAM_ENUMERATION("PageLoad.PageVisitFinalStatus", page_visit_status);
+  UMA_HISTOGRAM_ENUMERATION("PageLoad.Experimental.PageVisitFinalStatus",
+                            page_visit_status);
   PAGE_LOAD_LONG_HISTOGRAM("PageLoad.Experimental.TotalForegroundDuration",
                            total_foreground_duration_);
 
@@ -1111,6 +1133,16 @@ void UkmPageLoadMetricsObserver::RecordMemoriesMetrics(
   builder.SetIsNTPCustomLink(context_annotations.is_ntp_custom_link);
   builder.SetDurationSinceLastVisitSeconds(
       context_annotations.duration_since_last_visit.InSeconds());
+}
+
+void UkmPageLoadMetricsObserver::RecordPageLoadTimestampMetrics(
+    ukm::builders::PageLoad& builder) {
+  DCHECK(!navigation_start_time_.is_null());
+
+  base::Time::Exploded exploded;
+  navigation_start_time_.LocalExplode(&exploded);
+  builder.SetDayOfWeek(exploded.day_of_week);
+  builder.SetHourOfDay(exploded.hour);
 }
 
 void UkmPageLoadMetricsObserver::RecordInputTimingMetrics() {
@@ -1251,6 +1283,11 @@ void UkmPageLoadMetricsObserver::RecordPageEndMetrics(
   RecordMemoriesMetrics(builder, page_end_reason);
 
   builder.Record(ukm::UkmRecorder::Get());
+
+  // Also log UserInitiated in UserPerceivedPageVisit.
+  ukm::builders::UserPerceivedPageVisit(GetDelegate().GetPageUkmSourceId())
+      .SetUserInitiated(is_user_initiated_navigation)
+      .Record(ukm::UkmRecorder::Get());
 }
 
 absl::optional<int64_t>

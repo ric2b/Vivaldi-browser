@@ -68,6 +68,8 @@ class DeviceCloudPolicyManagerAsh : public CloudPolicyManager {
     virtual void OnDeviceCloudPolicyManagerConnected() = 0;
     // Invoked when the device cloud policy manager disconnects.
     virtual void OnDeviceCloudPolicyManagerDisconnected() = 0;
+    // Invoked when the device cloud policy manager obtains schema registry.
+    virtual void OnDeviceCloudPolicyManagerGotRegistry() = 0;
   };
 
   using UnregisterCallback = base::OnceCallback<void(bool)>;
@@ -119,6 +121,10 @@ class DeviceCloudPolicyManagerAsh : public CloudPolicyManager {
 
   bool IsConnected() const { return core()->service() != nullptr; }
 
+  bool HasSchemaRegistry() const {
+    return signin_profile_forwarding_schema_registry_ != nullptr;
+  }
+
   DeviceCloudPolicyStoreAsh* device_store() { return device_store_.get(); }
 
   // Return the StatusUploader used to communicate device status to the
@@ -159,9 +165,10 @@ class DeviceCloudPolicyManagerAsh : public CloudPolicyManager {
 
   void NotifyConnected();
   void NotifyDisconnected();
+  void NotifyGotRegistry();
 
   // Factory function to create the StatusUploader.
-  void CreateStatusUploader();
+  void CreateStatusUploader(ManagedSessionService* managed_session_service);
 
   // Points to the same object as the base CloudPolicyManager::store(), but with
   // actual device policy specific type.
@@ -185,7 +192,7 @@ class DeviceCloudPolicyManagerAsh : public CloudPolicyManager {
 
   // Object that monitors managed session related events used by reporting
   // services.
-  std::unique_ptr<policy::ManagedSessionService> managed_session_service_;
+  std::unique_ptr<ManagedSessionService> managed_session_service_;
 
   // Object that reports login/logout events to the server.
   std::unique_ptr<ash::reporting::LoginLogoutReporter> login_logout_reporter_;

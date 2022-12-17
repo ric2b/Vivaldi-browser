@@ -5,17 +5,17 @@
 package org.chromium.chrome.browser.toolbar.top;
 
 import android.content.Context;
-import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
 import android.view.View;
 
 import androidx.annotation.Nullable;
 
 import org.chromium.base.TraceEvent;
+import org.chromium.chrome.browser.theme.ThemeUtils;
 import org.chromium.chrome.browser.toolbar.R;
 import org.chromium.chrome.browser.toolbar.TabCountProvider;
 import org.chromium.chrome.browser.toolbar.TabSwitcherDrawable;
-import org.chromium.components.browser_ui.widget.highlight.PulseDrawable;
+import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
 import org.chromium.components.browser_ui.widget.listmenu.ListMenuButton;
 import org.chromium.ui.widget.Toast;
 
@@ -30,12 +30,9 @@ public class ToggleTabStackButton
         extends ListMenuButton implements TabCountProvider.TabCountObserver, View.OnClickListener,
                                           View.OnLongClickListener {
     private TabSwitcherDrawable mTabSwitcherButtonDrawable;
-    private TabSwitcherDrawable mTabSwitcherButtonDrawableLight;
     private TabCountProvider mTabCountProvider;
     private OnClickListener mTabSwitcherListener;
     private OnLongClickListener mTabSwitcherLongClickListener;
-    private PulseDrawable mHighlightDrawable;
-    private Drawable mNormalBackground;
 
     public ToggleTabStackButton(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
@@ -47,16 +44,10 @@ public class ToggleTabStackButton
 
         if (BuildConfig.IS_VIVALDI) {
             mTabSwitcherButtonDrawable =
-                    TabSwitcherDrawable.createTabSwitcherDrawableForTopToolBar(getContext(),
-                            false);
-            mTabSwitcherButtonDrawableLight =
-                    TabSwitcherDrawable.createTabSwitcherDrawableForTopToolBar(getContext(),
-                            true);
+                    TabSwitcherDrawable.createTabSwitcherDrawableForTopToolBar(getContext());
         } else {
-        mTabSwitcherButtonDrawable =
-                TabSwitcherDrawable.createTabSwitcherDrawable(getContext(), false);
-        mTabSwitcherButtonDrawableLight =
-                TabSwitcherDrawable.createTabSwitcherDrawable(getContext(), true);
+        mTabSwitcherButtonDrawable = TabSwitcherDrawable.createTabSwitcherDrawable(
+                getContext(), BrandedColorScheme.APP_DEFAULT);
         }
         setImageDrawable(mTabSwitcherButtonDrawable);
         setOnClickListener(this);
@@ -88,13 +79,9 @@ public class ToggleTabStackButton
         mTabSwitcherLongClickListener = listener;
     }
 
-    /**
-     * Updates the contained drawable.
-     * @param useLightDrawables Whether light drawables should be used.
-     */
-    void setUseLightDrawables(boolean useLightDrawables) {
-        setImageDrawable(
-                useLightDrawables ? mTabSwitcherButtonDrawableLight : mTabSwitcherButtonDrawable);
+    void setBrandedColorScheme(@BrandedColorScheme int brandedColorScheme) {
+        mTabSwitcherButtonDrawable.setTint(
+                ThemeUtils.getThemedToolbarIconTint(getContext(), brandedColorScheme));
     }
 
     /**
@@ -112,7 +99,6 @@ public class ToggleTabStackButton
         setContentDescription(getResources().getQuantityString(
                 R.plurals.accessibility_toolbar_btn_tabswitcher_toggle, numberOfTabs,
                 numberOfTabs));
-        mTabSwitcherButtonDrawableLight.updateForTabCount(numberOfTabs, isIncognito);
         mTabSwitcherButtonDrawable.updateForTabCount(numberOfTabs, isIncognito);
     }
 

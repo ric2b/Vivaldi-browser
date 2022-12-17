@@ -7,6 +7,12 @@
 
 #import <Foundation/Foundation.h>
 
+// Enum representing the different feeds displayed on the NTP.
+enum class FeedType {
+  kDiscoverFeed = 0,
+  kFollowingFeed = 1,
+};
+
 // Represents the NTP collection view.
 extern NSString* const kNTPCollectionViewIdentifier;
 
@@ -14,6 +20,9 @@ extern NSString* const kNTPCollectionViewIdentifier;
 extern NSString* const kNTPIncognitoViewIdentifier;
 
 // Represents the menu button of the feed header.
-extern NSString* const kNTPFeedHeaderButtonIdentifier;
+extern NSString* const kNTPFeedHeaderMenuButtonIdentifier;
+
+// Represents the sort button of the feed header.
+extern NSString* const kNTPFeedHeaderSortButtonIdentifier;
 
 #endif  // IOS_CHROME_BROWSER_UI_NTP_NEW_TAB_PAGE_CONSTANTS_H_

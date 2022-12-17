@@ -20,6 +20,7 @@ extern const char kJsonDeviceNameKey[];
 extern const char kJsonBoardNameKey[];
 extern const char kJsonTabletModeKey[];
 extern const char kJsonWifiConnectionStateKey[];
+extern const char kJsonDebugModeKey[];
 
 class SystemInfo;
 
@@ -70,6 +71,7 @@ class SystemInfoProvider
   void OnNetworkStateListChanged() override {}
   void OnVpnProvidersChanged() override {}
   void OnNetworkCertificatesChanged() override {}
+  void OnPoliciesApplied(const std::string& userhash) override {}
 
   void FetchWifiNetworkList();
   void OnWifiNetworkList(

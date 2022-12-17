@@ -34,7 +34,7 @@
 #include "services/network/test/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 #include "services/device/public/cpp/test/fake_geolocation_manager.h"
 #endif
 
@@ -134,7 +134,7 @@ class GeolocationNetworkProviderTest : public testing::Test {
   std::unique_ptr<LocationProvider> CreateProvider(
       bool set_permission_granted,
       const std::string& api_key = std::string()) {
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
     fake_geolocation_manager_ = std::make_unique<FakeGeolocationManager>();
     auto provider = std::make_unique<NetworkLocationProvider>(
         test_url_loader_factory_.GetSafeWeakWrapper(),
@@ -160,7 +160,7 @@ class GeolocationNetworkProviderTest : public testing::Test {
 
   bool grant_system_permission_by_default_ = true;
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   std::unique_ptr<FakeGeolocationManager> fake_geolocation_manager_;
 #endif
 
@@ -265,7 +265,7 @@ class GeolocationNetworkProviderTest : public testing::Test {
       return testing::AssertionFailure()
              << "Actual dictionary " << PrettyJson(actual)
              << " is missing field " << field;
-    if (!expected_value->Equals(actual_value))
+    if (*expected_value != *actual_value)
       return testing::AssertionFailure()
              << "Field " << field
              << " mismatch: " << PrettyJson(*expected_value)
@@ -297,18 +297,20 @@ class GeolocationNetworkProviderTest : public testing::Test {
       CreateReferenceWifiScanDataJson(expected_wifi_aps, wifi_start_index,
                                       &expected_wifi_aps_json);
       EXPECT_EQ(size_t(expected_wifi_aps),
-                expected_wifi_aps_json.GetList().size());
+                expected_wifi_aps_json.GetListDeprecated().size());
 
       const base::ListValue* wifi_aps_json;
       ASSERT_TRUE(
           JsonGetList("wifiAccessPoints", *request_json, &wifi_aps_json));
-      for (size_t i = 0; i < expected_wifi_aps_json.GetList().size(); ++i) {
+      for (size_t i = 0; i < expected_wifi_aps_json.GetListDeprecated().size();
+           ++i) {
         const base::Value& expected_json_value =
-            expected_wifi_aps_json.GetList()[i];
+            expected_wifi_aps_json.GetListDeprecated()[i];
         ASSERT_TRUE(expected_json_value.is_dict());
         const base::DictionaryValue& expected_json =
             base::Value::AsDictionaryValue(expected_json_value);
-        const base::Value& actual_json_value = wifi_aps_json->GetList()[i];
+        const base::Value& actual_json_value =
+            wifi_aps_json->GetListDeprecated()[i];
         ASSERT_TRUE(actual_json_value.is_dict());
         const base::DictionaryValue& actual_json =
             base::Value::AsDictionaryValue(actual_json_value);
@@ -320,7 +322,7 @@ class GeolocationNetworkProviderTest : public testing::Test {
             JsonFieldEquals("signalToNoiseRatio", expected_json, actual_json));
       }
     } else {
-      ASSERT_FALSE(request_json->HasKey("wifiAccessPoints"));
+      ASSERT_FALSE(request_json->FindKey("wifiAccessPoints"));
     }
   }
 
@@ -580,7 +582,7 @@ TEST_F(GeolocationNetworkProviderTest,
   CheckRequestIsValid(kScanCount, 0);
 }
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 // Tests that, callbacks and network requests are never made until we have
 // system location permission.
 TEST_F(GeolocationNetworkProviderTest, MacOSSystemPermissionsTest) {

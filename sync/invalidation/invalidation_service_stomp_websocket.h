@@ -32,7 +32,7 @@ class InvalidationServiceStompWebsocket
     virtual std::string GetChannel() = 0;
     virtual void OnConnected() = 0;
     virtual void OnClosed() = 0;
-    virtual void OnInvalidation(base::Value) = 0;
+    virtual void OnInvalidation(base::Value::Dict) = 0;
   };
 
   InvalidationServiceStompWebsocket(content::BrowserContext* browser_context,

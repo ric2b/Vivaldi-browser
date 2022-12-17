@@ -29,11 +29,15 @@ extern const base::Feature kContextMenuPerformanceInfoAndRemoteHintFetching;
 extern const base::Feature kOptimizationTargetPrediction;
 extern const base::Feature kOptimizationGuideModelDownloading;
 extern const base::Feature kPageContentAnnotations;
+extern const base::Feature kPageEntitiesPageContentAnnotations;
+extern const base::Feature kPageVisibilityPageContentAnnotations;
 extern const base::Feature kPageTextExtraction;
 extern const base::Feature kPushNotifications;
 extern const base::Feature kOptimizationGuideMetadataValidation;
 extern const base::Feature kPageTopicsBatchAnnotations;
 extern const base::Feature kPageVisibilityBatchAnnotations;
+extern const base::Feature kUseLocalPageEntitiesMetadataProvider;
+extern const base::Feature kBatchAnnotationsValidation;
 
 // The grace period duration for how long to give outstanding page text dump
 // requests to respond after DidFinishLoad.
@@ -133,7 +137,7 @@ base::TimeDelta StoredHostModelFeaturesFreshnessDuration();
 
 // The maximum duration for which models can remain in the
 // OptimizationGuideStore without being loaded.
-base::TimeDelta StoredModelsInactiveDuration();
+base::TimeDelta StoredModelsValidDuration();
 
 // The amount of time URL-keyed hints within the hint cache will be
 // allowed to be used and not be purged.
@@ -177,6 +181,10 @@ int PredictionModelFetchRandomMaxDelaySecs();
 // models.
 base::TimeDelta PredictionModelFetchRetryDelay();
 
+// Returns the time to wait after browser start before fetching prediciton
+// models.
+base::TimeDelta PredictionModelFetchStartupDelay();
+
 // Returns the time to wait after a successful fetch of prediction models to
 // refresh models.
 base::TimeDelta PredictionModelFetchInterval();
@@ -214,15 +222,16 @@ size_t MaxContentAnnotationRequestsCached();
 // as part of page content annotations.
 bool ShouldExtractRelatedSearches();
 
-// Returns an ordered vector of models to execute on the page content for each
-// page load. It is guaranteed that an optimization target will only be present
-// at most once in the returned vector. However, it is not guaranteed that it
-// will only contain models that the current PageContentAnnotationsService
-// supports, so it is up to the caller to ensure that it can execute the
-// specified models. `locale` is used for implement client-side locale filtering
-// for models that only work for some locales.
-std::vector<optimization_guide::proto::OptimizationTarget>
-GetPageContentModelsToExecute(const std::string& locale);
+// Returns whether the page entities model should be executed on page content
+// for a user using |locale| as their browser language.
+bool ShouldExecutePageEntitiesModelOnPageContent(const std::string& locale);
+
+// Returns whether the page entities model should be reset on shutdown.
+bool ShouldResetPageEntitiesModelOnShutdown();
+
+// Returns whether the page visibility model should be executed on page content
+// for a user using |locale| as their browser language.
+bool ShouldExecutePageVisibilityModelOnPageContent(const std::string& locale);
 
 // Returns whether page entities should be retrieved from the remote
 // Optimization Guide service.
@@ -248,6 +257,27 @@ bool PageTopicsBatchAnnotationsEnabled();
 
 // Returns if Page Visibility Batch Annotations are enabled.
 bool PageVisibilityBatchAnnotationsEnabled();
+
+// Whether to use the leveldb-based page entities metadata provider.
+bool UseLocalPageEntitiesMetadataProvider();
+
+// The number of visits batch before running the page content annotation
+// models. A size of 1 is equivalent to annotating one page load at time
+// immediately after requested.
+size_t AnnotateVisitBatchSize();
+
+// Whether the batch annotation validation feature is enabled.
+bool BatchAnnotationsValidationEnabled();
+
+// The time period between browser start and running a running batch annotation
+// validation.
+base::TimeDelta BatchAnnotationValidationStartupDelay();
+
+// The size of batches to run for validation.
+size_t BatchAnnotationsValidationBatchSize();
+
+// The maximum size of the visit annotation cache.
+size_t MaxVisitAnnotationCacheSize();
 
 }  // namespace features
 }  // namespace optimization_guide

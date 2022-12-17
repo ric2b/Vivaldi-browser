@@ -2,8 +2,8 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="cs">
 <translation id="1096883626080133124">S Google Chrome toho stihnete víc – je jednoduchý, bezpečný a rychlejší než kdy dřív</translation>
+<translation id="1143896152279775643">Heslo bude uloženo do Správce hesel Google pro účet <ph name="EMAIL" />.</translation>
 <translation id="1282031177488366470">Pomozte zlepšit funkce a výkon Chromu</translation>
-<translation id="1314663809820920746">Všechny záložky, historii, hesla a další nastavení na tomto zařízení nadále uvidíte. Pokud provedete nějaké změny, do účtu Google se synchronizovat nebudou.</translation>
 <translation id="1479202195792305274">Když se přihlásíte k účtu Google, může vám Chrome kontrolovat hesla</translation>
 <translation id="1493827051843127077">Nastavte si Chrome jako výchozí prohlížeč a karty, hesla a platební údaje se budou synchronizovat na všechna vaše zařízení</translation>
 <translation id="1504372625950710826">Chrome nemůže vyhledat dostupné aktualizace. Zkuste zkontrolovat připojení k internetu.</translation>
@@ -40,6 +40,7 @@
 <translation id="3522659714780527202">Chcete-li mít své karty k dispozici všude, kde používáte Chrome, zapněte synchronizaci</translation>
 <translation id="3533694711092285624">Nemáte žádná uložená hesla. Chrome může hesla zkontrolovat, pouze když si je uložíte.</translation>
 <translation id="3634910711516114487">Pokud z Chromu chcete získat maximum, přihlaste se do něj pomocí účtu Google</translation>
+<translation id="3655656110921623717">To znamená, že Chrom bude pokaždé odesílat požadavek na mobilní web.</translation>
 <translation id="3706101708757577809">Nyní můžete Chrome použít pokaždé, když klepnete na odkazy ve zprávách, dokumentech a ostatních aplikacích.</translation>
 <translation id="3720541637541300822">Při zavření Chromu zamknout anonymní karty</translation>
 <translation id="384394811301901750">Google Chrome teď nemůže použít fotoaparát</translation>
@@ -116,4 +117,5 @@
 <translation id="8772179140489533211">Zobrazuje výzvy k přihlášení do Chromu.</translation>
 <translation id="8788269841521769222">Toto heslo si nebudete muset pamatovat. Uloží se do Správce hesel Google pro účet <ph name="EMAIL" />.</translation>
 <translation id="9112744793181547300">Nastavit Chrome jako výchozí prohlížeč?</translation>
+<translation id="9122931302567044771">To znamená, že Chrome bude pokaždé odesílat požadavek na web pro počítač.</translation>
 </translationbundle>

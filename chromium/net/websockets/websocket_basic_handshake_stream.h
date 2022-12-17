@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -16,6 +17,7 @@
 #include "net/base/completion_once_callback.h"
 #include "net/base/net_export.h"
 #include "net/http/http_basic_state.h"
+#include "net/log/net_log_with_source.h"
 #include "net/websockets/websocket_handshake_stream_base.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
@@ -79,7 +81,7 @@ class NET_EXPORT_PRIVATE WebSocketBasicHandshakeStream final
   void SetPriority(RequestPriority priority) override;
   void PopulateNetErrorDetails(NetErrorDetails* details) override;
   HttpStream* RenewStreamForAuth() override;
-  const std::vector<std::string>& GetDnsAliases() const override;
+  const std::set<std::string>& GetDnsAliases() const override;
   base::StringPiece GetAcceptChViaAlps() const override;
 
   // This is called from the top level once correct handshake response headers
@@ -154,6 +156,8 @@ class NET_EXPORT_PRIVATE WebSocketBasicHandshakeStream final
   const raw_ptr<WebSocketStreamRequestAPI> stream_request_;
 
   const raw_ptr<WebSocketEndpointLockManager> websocket_endpoint_lock_manager_;
+
+  NetLogWithSource net_log_;
 
   base::WeakPtrFactory<WebSocketBasicHandshakeStream> weak_ptr_factory_{this};
 };

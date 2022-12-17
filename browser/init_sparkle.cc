@@ -8,10 +8,6 @@
 #include "base/logging.h"
 #include "base/vivaldi_switches.h"
 
-#if defined(OS_MAC)
-#include "browser/mac/sparkle_util.h"
-#endif
-
 #define UPDATE_SOURCE_WIN_normal 0
 #define UPDATE_SOURCE_WIN_snapshot 0
 #define UPDATE_SOURCE_WIN_preview 1
@@ -85,16 +81,5 @@ GURL GetAppcastUrl() {
 #endif
   return url;
 }
-
-#if defined(OS_MAC)
-void Initialize() {
-  static bool vivaldi_updater_initialized = false;
-  if (!vivaldi_updater_initialized) {
-    GURL url = GetAppcastUrl();
-    SparkleUtil::SetFeedURL(url.spec().c_str());
-    vivaldi_updater_initialized = true;
-  }
-}
-#endif
 
 }  // namespace init_sparkle

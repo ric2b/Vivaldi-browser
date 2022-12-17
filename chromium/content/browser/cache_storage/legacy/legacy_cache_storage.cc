@@ -34,6 +34,7 @@
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/traced_value.h"
+#include "build/build_config.h"
 #include "content/browser/cache_storage/cache_storage.pb.h"
 #include "content/browser/cache_storage/cache_storage_cache.h"
 #include "content/browser/cache_storage/cache_storage_cache_handle.h"
@@ -308,9 +309,7 @@ class LegacyCacheStorage::SimpleCacheLoader
       const std::string& cache_name,
       CacheAndErrorCallback callback,
       const std::tuple<CacheStorageError, std::string>& result) {
-    CacheStorageError status;
-    std::string cache_dir;
-    std::tie(status, cache_dir) = result;
+    auto [status, cache_dir] = result;
 
     if (status != CacheStorageError::kSuccess) {
       std::move(callback).Run(nullptr, status);
@@ -607,7 +606,7 @@ LegacyCacheStorage::LegacyCacheStorage(
       origin_path_, cache_task_runner_.get(), std::move(scheduler_task_runner),
       quota_manager_proxy, blob_storage_context_, this, storage_key, owner));
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   app_status_listener_ = base::android::ApplicationStatusListener::New(
       base::BindRepeating(&LegacyCacheStorage::OnApplicationStateChange,
                           weak_factory_.GetWeakPtr()));
@@ -1180,7 +1179,8 @@ void LegacyCacheStorage::DeleteCacheDidGetSize(
     int64_t cache_size) {
   quota_manager_proxy_->NotifyStorageModified(
       CacheStorageQuotaClient::GetClientTypeFromOwner(owner_), storage_key_,
-      StorageType::kTemporary, -cache_size, base::Time::Now());
+      StorageType::kTemporary, -cache_size, base::Time::Now(),
+      base::SequencedTaskRunnerHandle::Get(), base::DoNothing());
 
   cache_loader_->CleanUpDeletedCache(doomed_cache);
   auto doomed_caches_iter = doomed_caches_.find(doomed_cache);
@@ -1457,7 +1457,7 @@ void LegacyCacheStorage::FlushIndexIfDirty() {
   cache_loader_->WriteIndex(*cache_index_, base::DoNothing());
 }
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 void LegacyCacheStorage::OnApplicationStateChange(
     base::android::ApplicationState state) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);

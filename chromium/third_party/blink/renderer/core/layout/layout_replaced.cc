@@ -34,6 +34,7 @@
 #include "third_party/blink/renderer/core/layout/layout_inline.h"
 #include "third_party/blink/renderer/core/layout/layout_video.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_cursor.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_fragmentation_utils.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_length_utils.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
 #include "third_party/blink/renderer/core/paint/paint_info.h"
@@ -657,7 +658,7 @@ PhysicalRect LayoutReplaced::ComputeObjectFit(
       if (auto* image = DynamicTo<LayoutImage>(this)) {
         scaled_intrinsic_size.Scale(1.0 / image->ImageDevicePixelRatio());
       }
-      FALLTHROUGH;
+      [[fallthrough]];
     case EObjectFit::kContain:
     case EObjectFit::kCover:
       final_rect.size = final_rect.size.FitToAspectRatio(
@@ -667,7 +668,7 @@ PhysicalRect LayoutReplaced::ComputeObjectFit(
       if (object_fit != EObjectFit::kScaleDown ||
           final_rect.Width() <= scaled_intrinsic_size.width)
         break;
-      FALLTHROUGH;
+      [[fallthrough]];
     case EObjectFit::kNone:
       final_rect.size = scaled_intrinsic_size;
       break;
@@ -1001,8 +1002,11 @@ static std::pair<LayoutUnit, LayoutUnit> SelectionTopAndBottom(
     const auto writing_direction = line_style.GetWritingDirection();
     const WritingModeConverter converter(writing_direction,
                                          line_box.ContainerFragment().Size());
-    const LogicalRect logical_rect =
-        converter.ToLogical(line_box.Current().RectInContainerFragment());
+    PhysicalRect physical_rect = line_box.Current().RectInContainerFragment();
+    // The caller expects it to be in the "stitched" coordinate space.
+    physical_rect.offset +=
+        OffsetInStitchedFragments(line_box.ContainerFragment());
+    const LogicalRect logical_rect = converter.ToLogical(physical_rect);
     return {logical_rect.offset.block_offset, logical_rect.BlockEndOffset()};
   }
 
@@ -1018,9 +1022,7 @@ PositionWithAffinity LayoutReplaced::PositionForPoint(
     const PhysicalOffset& point) const {
   NOT_DESTROYED();
 
-  LayoutUnit top;
-  LayoutUnit bottom;
-  std::tie(top, bottom) = SelectionTopAndBottom(*this);
+  auto [top, bottom] = SelectionTopAndBottom(*this);
 
   LayoutPoint flipped_point_in_container =
       LocationContainer()->FlipForWritingMode(point + PhysicalLocation());

@@ -37,6 +37,11 @@ static constexpr char kUrlHandlerWildcardPrefix[] = "%2A.";
 static wtf_size_t kMaxUrlHandlersSize = 10;
 static wtf_size_t kMaxOriginLength = 2000;
 
+// The max number of file extensions an app can handle via the File Handling
+// API.
+const int kFileHandlerExtensionLimit = 300;
+int g_file_handler_extension_limit_for_testing = 0;
+
 bool IsValidMimeType(const String& mime_type) {
   if (mime_type.StartsWith('.'))
     return true;
@@ -102,7 +107,14 @@ ManifestParser::ManifestParser(const String& data,
 
 ManifestParser::~ManifestParser() {}
 
+// static
+void ManifestParser::SetFileHandlerExtensionLimitForTesting(int limit) {
+  g_file_handler_extension_limit_for_testing = limit;
+}
+
 bool ManifestParser::Parse() {
+  DCHECK(!manifest_);
+
   JSONParseError error;
   bool has_comments = false;
   std::unique_ptr<JSONValue> root = ParseJSON(data_, &error, &has_comments);
@@ -161,12 +173,9 @@ bool ManifestParser::Parse() {
   manifest_->shortcuts = ParseShortcuts(root_object.get());
   manifest_->capture_links = ParseCaptureLinks(root_object.get());
 
-  if (base::FeatureList::IsEnabled(
-          blink::features::kWebAppEnableIsolatedStorage)) {
-    manifest_->isolated_storage = ParseIsolatedStorage(root_object.get());
-    manifest_->permissions_policy =
-        ParseIsolatedAppPermissions(root_object.get());
-  }
+  manifest_->isolated_storage = ParseIsolatedStorage(root_object.get());
+  manifest_->permissions_policy =
+      ParseIsolatedAppPermissions(root_object.get());
 
   manifest_->launch_handler = ParseLaunchHandler(root_object.get());
 
@@ -177,6 +186,8 @@ bool ManifestParser::Parse() {
   if (RuntimeEnabledFeatures::WebAppDarkModeEnabled(feature_context_)) {
     manifest_->user_preferences = ParseUserPreferences(root_object.get());
   }
+
+  manifest_->handle_links = ParseHandleLinks(root_object.get());
 
   ManifestUmaUtil::ParseSucceeded(manifest_);
 
@@ -1050,6 +1061,13 @@ HashMap<String, Vector<String>> ManifestParser::ParseFileHandlerAccept(
   if (!accept)
     return result;
 
+  const int kExtensionLimit = g_file_handler_extension_limit_for_testing > 0
+                                  ? g_file_handler_extension_limit_for_testing
+                                  : kFileHandlerExtensionLimit;
+  if (total_file_handler_extension_count_ > kExtensionLimit) {
+    return result;
+  }
+
   for (wtf_size_t i = 0; i < accept->size(); ++i) {
     JSONObject::Entry entry = accept->at(i);
 
@@ -1090,7 +1108,23 @@ HashMap<String, Vector<String>> ManifestParser::ParseFileHandlerAccept(
       continue;
     }
 
-    result.Set(mimetype, std::move(extensions));
+    total_file_handler_extension_count_ += extensions.size();
+    int extension_overflow =
+        total_file_handler_extension_count_ - kExtensionLimit;
+    if (extension_overflow > 0) {
+      auto* erase_iter = extensions.end() - extension_overflow;
+      AddErrorInfo(
+          "property 'accept': too many total file extensions, ignoring "
+          "extensions starting from \"" +
+          *erase_iter + "\"");
+      extensions.erase(erase_iter, extensions.end());
+    }
+
+    if (!extensions.IsEmpty())
+      result.Set(mimetype, std::move(extensions));
+
+    if (extension_overflow > 0)
+      break;
   }
 
   return result;
@@ -1690,6 +1724,25 @@ mojom::blink::ManifestUserPreferencesPtr ManifestParser::ParseUserPreferences(
       ParsePreferenceOverrides(user_preferences_map, "color_scheme_dark");
 
   return result;
+}
+
+mojom::blink::HandleLinks ManifestParser::ParseHandleLinks(
+    const JSONObject* object) {
+  // Return kUndefined if feature is disabled instead of kAuto to indicate that
+  // no behavior that depends on HandleLinks should be active.
+  if (!RuntimeEnabledFeatures::WebAppHandleLinksEnabled())
+    return mojom::blink::HandleLinks::kUndefined;
+
+  const mojom::blink::HandleLinks enum_value =
+      ParseFirstValidEnum<mojom::blink::HandleLinks>(
+          object, "handle_links", &HandleLinksFromString,
+          /*invalid_value=*/mojom::blink::HandleLinks::kUndefined);
+
+  // invalid_value cannot be kAuto because kAuto is a valid input string.
+  // However, if no valid value is parsed, the value returned should be kAuto.
+  if (enum_value == mojom::blink::HandleLinks::kUndefined)
+    return mojom::blink::HandleLinks::kAuto;
+  return enum_value;
 }
 
 void ManifestParser::AddErrorInfo(const String& error_msg,

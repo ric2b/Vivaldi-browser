@@ -3,12 +3,14 @@
 #ifndef BROWSER_SESSIONS_PAGE_ACTIONS_SESSION_HELPER_H_
 #define BROWSER_SESSIONS_PAGE_ACTIONS_SESSION_HELPER_H_
 
+#include "chrome/browser/profiles/profile_observer.h"
 #include "components/page_actions/page_actions_service.h"
 
 class SessionService;
 class Profile;
 
-class PageActionsSessionHelper : public page_actions::Service::Observer {
+class PageActionsSessionHelper : public page_actions::Service::Observer,
+                                 public ProfileObserver {
  public:
   PageActionsSessionHelper(SessionService* session_service);
   ~PageActionsSessionHelper() override;
@@ -20,6 +22,8 @@ class PageActionsSessionHelper : public page_actions::Service::Observer {
       content::WebContents* tab_contents,
       const base::FilePath& script_path,
       page_actions::Service::ScriptOverride script_override) override;
+
+  void OnProfileWillBeDestroyed(Profile* profile) override;
 
  private:
   SessionService* session_service_;

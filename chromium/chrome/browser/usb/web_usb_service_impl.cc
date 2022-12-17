@@ -25,6 +25,7 @@
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "base/containers/fixed_flat_set.h"
+#include "extensions/browser/extension_registry.h"
 #include "extensions/common/constants.h"
 #endif
 
@@ -176,6 +177,31 @@ bool WebUsbServiceImpl::HasDevicePermission(
 }
 
 std::vector<uint8_t> WebUsbServiceImpl::GetProtectedInterfaceClasses() const {
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  // Don't enforce protected interface classes for Chrome Apps since the
+  // chrome.usb API has no such restriction.
+  if (origin_.scheme() == extensions::kExtensionScheme) {
+    auto* extension_registry = extensions::ExtensionRegistry::Get(
+        render_frame_host_->GetBrowserContext());
+    if (extension_registry) {
+      const extensions::Extension* extension =
+          extension_registry->enabled_extensions().GetByID(origin_.host());
+      if (extension && extension->is_platform_app()) {
+        return {};
+      }
+    }
+  }
+#endif
+
+  // Isolated Apps have unrestricted access to any USB interface class.
+  if (render_frame_host_->GetWebExposedIsolationLevel() >=
+      content::RenderFrameHost::WebExposedIsolationLevel::
+          kMaybeIsolatedApplication) {
+    // TODO(https://crbug.com/1236706): Should the list of interface classes the
+    // app expects to claim be encoded in the Web App Manifest?
+    return {};
+  }
+
   // Specified in https://wicg.github.io/webusb#protected-interface-classes
   std::vector<uint8_t> classes = {
       device::mojom::kUsbAudioClass,       device::mojom::kUsbHidClass,

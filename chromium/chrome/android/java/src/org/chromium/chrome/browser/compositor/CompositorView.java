@@ -163,11 +163,7 @@ public class CompositorView
         // Request the opaque surface.  We might need the translucent one, but
         // we don't know yet.  We'll switch back later if we discover that
         // we're on a low memory device that always uses translucent.
-        if (!ChromeApplicationImpl.isVivaldi())
         mCompositorSurfaceManager.requestSurface(PixelFormat.OPAQUE);
-        // Note(david@vivaldi.com): Changing to translucent surface might fix our rending issues
-        // like VAB-3138.
-        mCompositorSurfaceManager.requestSurface(PixelFormat.TRANSLUCENT);
     }
 
     /**

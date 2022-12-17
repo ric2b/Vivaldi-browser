@@ -186,19 +186,27 @@ bool AXRelationCache::IsValidOwnedChild(AXObject* child) {
   if (!child)
     return false;
 
-  if (!child->GetNode()) {
+  Node* node = child->GetNode();
+  if (!node) {
     NOTREACHED() << "Cannot use aria-owns without a node on both ends";
     return false;
   }
+
+  // Require a layout object, in order to avoid strange situations where
+  // a node tries to parent an AXObject that cannot exist because its node
+  // cannot partake in layout tree building (e.g. unused fallback content of a
+  // media element). This is the simplest way to avoid many types of abnormal
+  // situations, and there's no known use case for pairing aria-owns with
+  // invisible content.
+  if (!node->GetLayoutObject())
+    return false;
 
   if (child->IsImageMapLink())
     return false;  // An area can't be owned, only parented by <img usemap>.
 
   // <select> options can only be children of AXMenuListPopup or AXListBox.
-  if (IsA<HTMLOptionElement>(child->GetNode()) ||
-      IsA<HTMLOptGroupElement>(child->GetNode())) {
+  if (IsA<HTMLOptionElement>(node) || IsA<HTMLOptGroupElement>(node))
     return false;
-  }
 
   // Problematic for cycles, and does not solve a known use case.
   // Easiest to omit the possibility.
@@ -235,10 +243,8 @@ void AXRelationCache::UnmapOwnedChildren(const AXObject* owner,
       // Don't do this if it's also in the newly owned ids, as it's about to
       // get a new parent, and we want to avoid accidentally pruning it.
       if (!newly_owned_ids.Contains(removed_child_id)) {
-        if (AXObject* real_parent =
-                object_cache_->RestoreParentOrPrune(removed_child)) {
-          ChildrenChanged(real_parent);
-        }
+        MaybeRestoreParentOfOwnedChild(removed_child);
+
         // Now that the child is not owned, it's "included in tree" state must
         // be recomputed because while owned children are always included in the
         // tree, unowned children may not be included.
@@ -559,11 +565,24 @@ void AXRelationCache::RemoveAXID(AXID obj_id) {
 
   // |obj_id| owned others:
   if (aria_owner_to_children_mapping_.Contains(obj_id)) {
-    // |obj_id| longer owns anything.
+    // |obj_id| no longer owns anything.
     Vector<AXID> child_axids = aria_owner_to_children_mapping_.at(obj_id);
     aria_owned_child_to_owner_mapping_.RemoveAll(child_axids);
     // Owned children are no longer owned by |obj_id|
     aria_owner_to_children_mapping_.erase(obj_id);
+    // When removing nodes in AXObjectCacheImpl::Dispose we do not need to
+    // reparent (that could anyway fail trying to attach to an already removed
+    // node.
+    // TODO(jdapena@igalia.com): explore if we can skip all processing of the
+    // mappings in AXRelationCache in dispose case.
+    if (!object_cache_->HasBeenDisposed()) {
+      for (const auto& child_axid : child_axids) {
+        if (AXObject* owned_child = ObjectFromAXID(child_axid)) {
+          owned_child->DetachFromParent();
+          MaybeRestoreParentOfOwnedChild(owned_child);
+        }
+      }
+    }
   }
 
   // Another id owned |obj_id|:
@@ -584,6 +603,8 @@ void AXRelationCache::RemoveOwnedRelation(AXID obj_id) {
         break;
       }
     }
+    if (AXObject* owned_child = ObjectFromAXID(obj_id))
+      owned_child->DetachFromParent();
   }
 }
 
@@ -613,6 +634,14 @@ void AXRelationCache::LabelChanged(Node* node) {
         object_cache_->MarkAXObjectDirtyWithCleanLayout(obj);
     }
   }
+}
+
+void AXRelationCache::MaybeRestoreParentOfOwnedChild(AXObject* child) {
+  DCHECK(child);
+  if (child->IsDetached())
+    return;
+  if (AXObject* new_parent = object_cache_->RestoreParentOrPrune(child))
+    ChildrenChanged(new_parent);
 }
 
 }  // namespace blink

@@ -40,7 +40,7 @@ std::unique_ptr<CompositorGpuThread> CompositorGpuThread::Create(
   if (!features::IsDrDcEnabled())
     return nullptr;
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   // When using angle via enabling passthrough command decoder on android, angle
   // context virtualization group extension should be enabled. Also since angle
   // currently always enables this extension, we are adding DCHECK() to ensure
@@ -59,8 +59,8 @@ std::unique_ptr<CompositorGpuThread> CompositorGpuThread::Create(
     compositor_thread_device_queue->InitializeForCompositorGpuThread(
         device_queue->GetVulkanPhysicalDevice(),
         device_queue->GetVulkanDevice(), device_queue->GetVulkanQueue(),
-        device_queue->GetVulkanQueueIndex(),
-        device_queue->enabled_extensions());
+        device_queue->GetVulkanQueueIndex(), device_queue->enabled_extensions(),
+        device_queue->enabled_device_features_2());
     vulkan_context_provider =
         VulkanInProcessContextProvider::CreateForCompositorGpuThread(
             vulkan_implementation, std::move(compositor_thread_device_queue),
@@ -92,30 +92,22 @@ CompositorGpuThread::~CompositorGpuThread() {
   base::Thread::Stop();
 }
 
-bool CompositorGpuThread::Initialize() {
-  // Setup thread options.
-  base::Thread::Options thread_options(base::MessagePumpType::DEFAULT, 0);
-  if (base::FeatureList::IsEnabled(features::kGpuUseDisplayThreadPriority))
-    thread_options.priority = base::ThreadPriority::DISPLAY;
-  StartWithOptions(std::move(thread_options));
+scoped_refptr<gpu::SharedContextState>
+CompositorGpuThread::GetSharedContextState() {
+  DCHECK(task_runner()->BelongsToCurrentThread());
 
-  // Wait until threas is started and Init() is executed in order to return
-  // updated |init_succeded_|.
-  WaitUntilThreadStarted();
-  return init_succeded_;
-}
+  if (shared_context_state_ && !shared_context_state_->context_lost())
+    return shared_context_state_;
 
-void CompositorGpuThread::Init() {
-  const auto& gpu_preferences = gpu_channel_manager_->gpu_preferences();
-  if (enable_watchdog_) {
-    watchdog_thread_ = gpu::GpuWatchdogThread::Create(
-        gpu_preferences.watchdog_starts_backgrounded, "GpuWatchdog_Compositor");
-  }
+  // Cleanup the previous context if any.
+  shared_context_state_.reset();
 
   // Create a new share group. Note that this share group is different from the
   // share group which gpu main thread uses.
   auto share_group = base::MakeRefCounted<gl::GLShareGroup>();
   auto surface = gl::init::CreateOffscreenGLSurface(gfx::Size());
+
+  const auto& gpu_preferences = gpu_channel_manager_->gpu_preferences();
 
   const bool use_passthrough_decoder =
       gpu::gles2::PassthroughCommandDecoderSupported() &&
@@ -130,17 +122,21 @@ void CompositorGpuThread::Init() {
   // GL resources with the contexts created on gpu main thread.
   auto context =
       gl::init::CreateGLContext(share_group.get(), surface.get(), attribs);
-  if (!context)
-    return;
+  if (!context) {
+    LOG(ERROR) << "Failed to create shared context";
+    return nullptr;
+  }
 
   const auto& gpu_feature_info = gpu_channel_manager_->gpu_feature_info();
   gpu_feature_info.ApplyToGLContext(context.get());
 
-  if (!context->MakeCurrent(surface.get()))
-    return;
+  if (!context->MakeCurrent(surface.get())) {
+    LOG(ERROR) << "Failed to make context current";
+    return nullptr;
+  }
 
   // Create a SharedContextState.
-  shared_context_state_ = base::MakeRefCounted<gpu::SharedContextState>(
+  auto shared_context_state = base::MakeRefCounted<gpu::SharedContextState>(
       std::move(share_group), std::move(surface), std::move(context),
       /*use_virtualized_gl_contexts=*/false,
       gpu_channel_manager_->GetContextLostCallback(),
@@ -152,26 +148,53 @@ void CompositorGpuThread::Init() {
 #endif
       /*metal_context_provider=*/nullptr,
       /*dawn_context_provider=*/nullptr,
-      /*peak_memory_monitor=*/weak_ptr_factory_.GetWeakPtr());
+      /*peak_memory_monitor=*/weak_ptr_factory_.GetWeakPtr(),
+      /*created_on_compositor_gpu_thread=*/true);
 
   const auto& workarounds = gpu_channel_manager_->gpu_driver_bug_workarounds();
   auto gles2_feature_info = base::MakeRefCounted<gpu::gles2::FeatureInfo>(
       workarounds, gpu_feature_info);
 
   // Initialize GL.
-  if (!shared_context_state_->InitializeGL(gpu_preferences,
-                                           std::move(gles2_feature_info))) {
-    return;
+  if (!shared_context_state->InitializeGL(gpu_preferences,
+                                          std::move(gles2_feature_info))) {
+    LOG(ERROR) << "Failed to initialize GL for SharedContextState";
+    return nullptr;
   }
 
   // Initialize GrContext.
-  if (!shared_context_state_->InitializeGrContext(
+  if (!shared_context_state->InitializeGrContext(
           gpu_preferences, workarounds, gpu_channel_manager_->gr_shader_cache(),
           /*activity_flags=*/nullptr, /*progress_reporter=*/nullptr)) {
-    return;
+    LOG(ERROR) << "Failed to Initialize GrContext for SharedContextState";
   }
-  if (watchdog_thread_)
-    watchdog_thread_->OnInitComplete();
+  shared_context_state_ = std::move(shared_context_state);
+  return shared_context_state_;
+}
+
+bool CompositorGpuThread::Initialize() {
+  // Setup thread options.
+  base::Thread::Options thread_options(base::MessagePumpType::DEFAULT, 0);
+  if (base::FeatureList::IsEnabled(features::kGpuUseDisplayThreadPriority))
+    thread_options.priority = base::ThreadPriority::DISPLAY;
+  StartWithOptions(std::move(thread_options));
+
+  // Wait until thread is started and Init() is executed in order to return
+  // updated |init_succeded_|.
+  WaitUntilThreadStarted();
+  return init_succeded_;
+}
+
+void CompositorGpuThread::Init() {
+  const auto& gpu_preferences = gpu_channel_manager_->gpu_preferences();
+  if (enable_watchdog_) {
+    watchdog_thread_ = gpu::GpuWatchdogThread::Create(
+        gpu_preferences.watchdog_starts_backgrounded, "GpuWatchdog_Compositor");
+  }
+
+  if (!watchdog_thread_)
+    return;
+  watchdog_thread_->OnInitComplete();
   init_succeded_ = true;
 }
 

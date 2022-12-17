@@ -192,9 +192,10 @@ void MediaStreamVideoCapturerSource::ChangeSourceImpl(
                          WTF::Unretained(this), capture_params_));
 }
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
 void MediaStreamVideoCapturerSource::Crop(
     const base::Token& crop_id,
+    uint32_t crop_version,
     base::OnceCallback<void(media::mojom::CropRequestResult)> callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   const absl::optional<base::UnguessableToken>& session_id =
@@ -204,7 +205,7 @@ void MediaStreamVideoCapturerSource::Crop(
     return;
   }
   GetMediaStreamDispatcherHost()->Crop(session_id.value(), crop_id,
-                                       std::move(callback));
+                                       crop_version, std::move(callback));
 }
 #endif
 

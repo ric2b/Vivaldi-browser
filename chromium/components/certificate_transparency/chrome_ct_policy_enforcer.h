@@ -10,6 +10,8 @@
 #include <utility>
 #include <vector>
 
+#include "base/component_export.h"
+#include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/time/clock.h"
 #include "base/time/time.h"
@@ -17,12 +19,12 @@
 
 namespace certificate_transparency {
 
-struct OperatorHistoryEntry {
+struct COMPONENT_EXPORT(CERTIFICATE_TRANSPARENCY) OperatorHistoryEntry {
   // Name of the current operator for the log.
   std::string current_operator_;
   // Vector of previous operators (if any) for the log, represented as pairs of
   // operator name and time when they stopped operating the log.
-  std::vector<std::pair<std::string, base::TimeDelta>> previous_operators_;
+  std::vector<std::pair<std::string, base::Time>> previous_operators_;
 
   OperatorHistoryEntry();
   ~OperatorHistoryEntry();
@@ -37,7 +39,8 @@ struct OperatorHistoryEntry {
 // for the set of known, qualified logs - either through a reliable binary
 // updating mechanism or through out-of-band delivery. See
 // //net/docs/certificate-transparency.md for more details.
-class ChromeCTPolicyEnforcer : public net::CTPolicyEnforcer {
+class COMPONENT_EXPORT(CERTIFICATE_TRANSPARENCY) ChromeCTPolicyEnforcer
+    : public net::CTPolicyEnforcer {
  public:
   // |logs| is a list of Certificate Transparency logs.  Data about each log is
   // needed to apply Chrome's policies. |disqualified_logs| is a map of log ID
@@ -47,7 +50,7 @@ class ChromeCTPolicyEnforcer : public net::CTPolicyEnforcer {
   // arguments were generated.  Both lists of logs must be sorted by log ID.
   ChromeCTPolicyEnforcer(
       base::Time log_list_date,
-      std::vector<std::pair<std::string, base::TimeDelta>> disqualified_logs,
+      std::vector<std::pair<std::string, base::Time>> disqualified_logs,
       std::vector<std::string> operated_by_google_logs,
       std::map<std::string, OperatorHistoryEntry> log_operator_history);
 
@@ -63,7 +66,7 @@ class ChromeCTPolicyEnforcer : public net::CTPolicyEnforcer {
   // list of log IDs operated by Google
   void UpdateCTLogList(
       base::Time update_time,
-      std::vector<std::pair<std::string, base::TimeDelta>> disqualified_logs,
+      std::vector<std::pair<std::string, base::Time>> disqualified_logs,
       std::vector<std::string> operated_by_google_logs,
       std::map<std::string, OperatorHistoryEntry> log_operator_history);
 
@@ -77,7 +80,7 @@ class ChromeCTPolicyEnforcer : public net::CTPolicyEnforcer {
   const std::vector<std::string>& operated_by_google_logs_for_testing() {
     return operated_by_google_logs_;
   }
-  const std::vector<std::pair<std::string, base::TimeDelta>>&
+  const std::vector<std::pair<std::string, base::Time>>&
   disqualified_logs_for_testing() {
     return disqualified_logs_;
   }
@@ -93,6 +96,10 @@ class ChromeCTPolicyEnforcer : public net::CTPolicyEnforcer {
   }
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(ChromeCTPolicyEnforcerTestBothPolicies,
+                           IsLogDisqualifiedTimestamp);
+  FRIEND_TEST_ALL_PREFIXES(ChromeCTPolicyEnforcerTestBothPolicies,
+                           IsLogDisqualifiedReturnsFalseOnUnknownLog);
   // Returns true if the log identified by |log_id| (the SHA-256 hash of the
   // log's DER-encoded SPKI) has been disqualified, and sets
   // |*disqualification_date| to the date of disqualification. Any SCTs that
@@ -115,7 +122,7 @@ class ChromeCTPolicyEnforcer : public net::CTPolicyEnforcer {
   std::string GetOperatorForLog(std::string log_id, base::Time timestamp) const;
 
   // Map of SHA-256(SPKI) to log disqualification date.
-  std::vector<std::pair<std::string, base::TimeDelta>> disqualified_logs_;
+  std::vector<std::pair<std::string, base::Time>> disqualified_logs_;
 
   // List of SHA-256(SPKI) for logs operated by Google.
   std::vector<std::string> operated_by_google_logs_;

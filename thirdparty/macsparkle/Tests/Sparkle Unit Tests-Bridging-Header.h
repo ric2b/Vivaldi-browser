@@ -3,24 +3,24 @@
 //
 
 #import "SUUnarchiver.h"
+#import "SUUnarchiverProtocol.h"
 #import "SUBinaryDeltaUnarchiver.h"
 #import "SUPipedUnarchiver.h"
 #import "SUBinaryDeltaCommon.h"
 #import "SUFileManager.h"
+#import "SUExport.h"
 #import "SUAppcast.h"
+#import "SUAppcast+Private.h"
 #import "SUAppcastItem.h"
-#import "SUBasicUpdateDriver.h"
+#import "SUAppcastDriver.h"
 #import "SUVersionComparisonProtocol.h"
 #import "SUStandardVersionComparator.h"
-
-#import "SPUDownloader.h"
-#import "SPUDownloaderDelegate.h"
-#import "SPUDownloadData.h"
-#import "SPUDownloaderProtocol.h"
-#import "SPUDownloaderSession.h"
-#import "SPUURLRequest.h"
-
-#import <CommonCrypto/CommonCrypto.h>
+#import "SUUpdateValidator.h"
+#import "SUHost.h"
+#import "SPUSkippedUpdate.h"
+#import "SUSignatures.h"
+#import "SPUInstallationType.h"
+#import "SPUAppcastItemStateResolver.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -36,20 +36,20 @@ static const char *SUAppleQuarantineIdentifier = "com.apple.quarantine";
 
 @end
 
-@interface SUBasicUpdateDriver (Private)
+@interface SUAppcastDriver (Private)
 
 + (SUAppcastItem *)bestItemFromAppcastItems:(NSArray *)appcastItems getDeltaItem:(SUAppcastItem *_Nullable __autoreleasing *_Nullable)deltaItem withHostVersion:(NSString *)hostVersion comparator:(id<SUVersionComparison>)comparator;
 
-@end
++ (SUAppcast *)filterSupportedAppcast:(SUAppcast *)appcast phasedUpdateGroup:(NSNumber * _Nullable)phasedUpdateGroup skippedUpdate:(SPUSkippedUpdate * _Nullable)skippedUpdate currentDate:(NSDate *)currentDate hostVersion:(NSString *)hostVersion versionComparator:(id<SUVersionComparison>)versionComparator testOSVersion:(BOOL)testOSVersion testMinimumAutoupdateVersion:(BOOL)testMinimumAutoupdateVersion;
 
++ (SUAppcast *)filterAppcast:(SUAppcast *)appcast forMacOSAndAllowedChannels:(NSSet<NSString *> *)allowedChannels;
 
-@interface SUAppcast (Private)
-- (nullable NSArray *)parseAppcastItemsFromXMLFile:(NSURL *)appcastFile error:(NSError *_Nullable __autoreleasing *_Nullable)errorp;
 @end
 
 @interface SUBinaryDeltaUnarchiver (Private)
 
 + (void)updateSpotlightImportersAtBundlePath:(NSString *)targetPath;
 
-NS_ASSUME_NONNULL_END
 @end
+
+NS_ASSUME_NONNULL_END

@@ -145,10 +145,6 @@ bool TestPasswordStore::IsEmpty() const {
 
 TestPasswordStore::~TestPasswordStore() = default;
 
-base::WeakPtr<PasswordStoreBackend> TestPasswordStore::GetWeakPtr() {
-  return weak_ptr_factory_.GetWeakPtr();
-}
-
 void TestPasswordStore::InitBackend(
     RemoteChangesReceived remote_form_changes_received,
     base::RepeatingClosure sync_enabled_or_disabled_cb,
@@ -256,6 +252,10 @@ std::unique_ptr<syncer::ProxyModelTypeControllerDelegate>
 TestPasswordStore::CreateSyncControllerDelegate() {
   NOTIMPLEMENTED();
   return nullptr;
+}
+
+void TestPasswordStore::ClearAllLocalPasswords() {
+  NOTIMPLEMENTED();
 }
 
 bool TestPasswordStore::IsAccountStore() const {

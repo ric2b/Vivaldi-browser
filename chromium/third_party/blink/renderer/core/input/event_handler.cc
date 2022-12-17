@@ -103,7 +103,7 @@
 #include "third_party/blink/renderer/platform/cursors.h"
 #include "third_party/blink/renderer/platform/graphics/image.h"
 #include "third_party/blink/renderer/platform/graphics/image_orientation.h"
-#include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/instrumentation/histogram.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
@@ -116,6 +116,7 @@
 #include "ui/base/cursor/mojom/cursor_type.mojom-blink.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom-blink.h"
 #include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -404,7 +405,7 @@ void EventHandler::StopAutoscroll() {
 // TODO(bokan): This should be merged with logicalScroll assuming
 // defaultSpaceEventHandler's chaining scroll can be done crossing frames.
 bool EventHandler::BubblingScroll(mojom::blink::ScrollDirection direction,
-                                  ScrollGranularity granularity,
+                                  ui::ScrollGranularity granularity,
                                   Node* starting_node) {
   return scroll_manager_->BubblingScroll(
       direction, granularity, starting_node,
@@ -485,7 +486,7 @@ bool EventHandler::ShouldShowResizeForNode(const Node* node,
   if (LayoutObject* layout_object = node->GetLayoutObject()) {
     PaintLayer* layer = layout_object->EnclosingLayer();
     if (layer->GetScrollableArea() &&
-        layer->GetScrollableArea()->IsPointInResizeControl(
+        layer->GetScrollableArea()->IsAbsolutePointInResizeControl(
             ToRoundedPoint(location.Point()), kResizerForPointer)) {
       return true;
     }
@@ -585,13 +586,37 @@ absl::optional<ui::Cursor> EventHandler::SelectCursor(
       float scale = style_image->ImageScaleFactor();
       bool hot_spot_specified = (*cursors)[i].HotSpotSpecified();
       gfx::Point hot_spot = (*cursors)[i].HotSpot();
-      gfx::Size size = cached_image->GetImage()->Size();
+
       if (cached_image->ErrorOccurred())
         continue;
-      // Limit the size of cursors (in UI pixels) so that they cannot be
-      // used to cover UI elements in chrome.
-      size = gfx::ScaleToFlooredSize(size, 1 / scale);
-      if (size.width() > kMaximumCursorSize ||
+
+      // Compute the concrete object size in DIP based on the
+      // default cursor size obtained from the OS.
+      gfx::SizeF size =
+          style_image->ImageSize(1,
+                                 gfx::SizeF(page->GetChromeClient()
+                                                .GetScreenInfos(*frame_)
+                                                .system_cursor_size),
+                                 kRespectImageOrientation);
+
+      Image* image = cached_image->GetImage();
+
+      // If the image is an SVG, then adjust the scale to reflect the device
+      // scale factor so that the SVG can be rasterized in the native
+      // resolution and scaled down to the correct size for the cursor.
+      float device_scale_factor = 1;
+      if (image->IsSVGImage()) {
+        // Limit the size of cursors (in DIP) so that they cannot be
+        // used to cover UI elements in chrome. StyleImage::ImageSize does not
+        // take StyleImage::ImageScaleFactor() into account when computing the
+        // size for SVG images.
+        size.Scale(1 / scale);
+        device_scale_factor =
+            page->GetChromeClient().GetScreenInfo(*frame_).device_scale_factor;
+        scale *= device_scale_factor;
+      }
+
+      if (size.IsEmpty() || size.width() > kMaximumCursorSize ||
           size.height() > kMaximumCursorSize)
         continue;
 
@@ -624,34 +649,23 @@ absl::optional<ui::Cursor> EventHandler::SelectCursor(
         }
       }
 
-      Image* image = cached_image->GetImage();
-
-      // If the image is an SVG, then adjust the scale to reflect the device
-      // scale factor so that the SVG can be rasterized in the native
-      // resolution and scaled down to the correct size for the cursor.
-      float device_scale_factor = 1;
-      if (image->IsSVGImage()) {
-        device_scale_factor =
-            page->GetChromeClient().GetScreenInfo(*frame_).device_scale_factor;
-        scale *= device_scale_factor;
-      }
-
       // Ensure no overflow possible in calculations above.
       if (scale < kMinimumCursorScale)
         continue;
 
-      // Convert from logical pixels to physical pixels.
+      // Convert from DIP to physical pixels.
       hot_spot = gfx::ScaleToRoundedPoint(hot_spot, scale);
 
       // Special case for SVG so that it can be rasterized in the appropriate
       // resolution for high DPI displays.
       scoped_refptr<Image> svg_image_holder;
       if (auto* svg_image = DynamicTo<SVGImage>(image)) {
-        gfx::Size scaled_size =
-            gfx::ScaleToFlooredSize(svg_image->Size(), device_scale_factor);
+        // Re-scale back from DIP to device pixels.
+        size.Scale(scale);
         // TODO(fs): Should pass proper URL. Use StyleImage::GetImage.
         svg_image_holder = SVGImageForContainer::Create(
-            svg_image, gfx::SizeF(scaled_size), device_scale_factor, NullURL());
+            svg_image, size, device_scale_factor, NullURL(),
+            frame_->GetDocument()->GetPreferredColorScheme());
         image = svg_image_holder.get();
       }
 
@@ -872,7 +886,7 @@ WebInputEventResult EventHandler::HandleMousePressEvent(
     gfx::Point p = view->ConvertFromRootFrame(
         gfx::ToFlooredPoint(mouse_event.PositionInRootFrame()));
     if (layer && layer->GetScrollableArea() &&
-        layer->GetScrollableArea()->IsPointInResizeControl(
+        layer->GetScrollableArea()->IsAbsolutePointInResizeControl(
             p, kResizerForPointer)) {
       scroll_manager_->SetResizeScrollableArea(layer, p);
       return WebInputEventResult::kHandledSystem;
@@ -1662,8 +1676,8 @@ bool EventHandler::GestureCorrespondsToAdjustedTouch(
   // Check if the adjusted point is in the gesture event tap rect.
   // If not, should not use this touch point in following events.
   if (should_use_touch_event_adjusted_point_) {
-    FloatSize size(event.TapAreaInRootFrame());
-    FloatRect tap_rect(
+    gfx::SizeF size = event.TapAreaInRootFrame();
+    gfx::RectF tap_rect(
         event.PositionInRootFrame() -
             gfx::Vector2dF(size.width() * 0.5, size.height() * 0.5),
         size);
@@ -2017,6 +2031,7 @@ void EventHandler::ApplyTouchAdjustment(WebGestureEvent* gesture_event,
       adjusted = BestClickableNodeForHitTestResult(
           location, *hit_test_result, adjusted_point, adjusted_node);
       break;
+    case WebInputEvent::Type::kGestureShortPress:
     case WebInputEvent::Type::kGestureLongPress:
     case WebInputEvent::Type::kGestureLongTap:
     case WebInputEvent::Type::kGestureTwoFingerTap:

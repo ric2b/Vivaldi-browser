@@ -3,8 +3,8 @@ include_rules = [
   "+cc/debug",
   "+cc/output",
   "+cc/paint",
-  "+chromeos/cryptohome",
   "+components/account_id",
+  "+components/app_constants",
   "+components/app_restore",
   "+components/desks_storage",
   "+components/discardable_memory/public",
@@ -21,6 +21,7 @@ include_rules = [
   "+components/strings",
   "+components/sync",
   "+components/ui_devtools",
+  "+components/url_matcher",
   "+components/vector_icons",
   "+components/viz/common",
   "+components/viz/host",
@@ -59,6 +60,7 @@ include_rules = [
   "+chromeos/components/multidevice",
   "+chromeos/components/quick_answers",
   "+chromeos/components/sensors",
+  "+chromeos/constants",
   # crosapi is an API to support lacros.
   "+chromeos/crosapi",
   # //ash can access all D-Bus client libraries. The mustash project previously
@@ -78,7 +80,6 @@ include_rules = [
   "+chromeos/services/libassistant/public",
   "+chromeos/services/machine_learning/public",
   "+chromeos/services/multidevice_setup/public",
-  "+chromeos/services/nearby/public",
   "+chromeos/services/network_config/public",
   "+chromeos/services/power/public",
   "+chromeos/strings",
@@ -104,9 +105,6 @@ include_rules = [
 ]
 
 specific_include_rules = {
-  "ash_service\.*": [
-    "+chromeos/cryptohome",
-  ],
   "policy_recommendation_restorer_unittest.cc": [
     "+components/sync_preferences/testing_pref_service_syncable.h"
   ],

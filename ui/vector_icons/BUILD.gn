@@ -7,7 +7,8 @@ aggregate_vector_icons("vivaldi_vector_icons") {
   if (!is_android) {
     sources += [
       "vivaldi_mute.icon",
-      "vivaldi_mute_muted.icon"
+      "vivaldi_mute_muted.icon",
+      "vivaldi_splash.icon",
     ]
   }
 }

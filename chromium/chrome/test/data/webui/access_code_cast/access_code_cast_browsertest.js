@@ -7,7 +7,11 @@
 // Polymer BrowserTest fixture.
 GEN_INCLUDE(['//chrome/test/data/webui/polymer_browser_test_base.js']);
 
+GEN('#include "chrome/browser/media/router/discovery/access_code/access_code_cast_feature.h"');
+GEN('#include "chrome/browser/profiles/profile.h"');
+GEN('#include "chrome/browser/ui/browser.h"');
 GEN('#include "chrome/browser/ui/ui_features.h"');
+GEN('#include "components/prefs/pref_service.h"');
 GEN('#include "content/public/test/browser_test.h"');
 
 /** Test fixture for Polymer AccessCodeCast elements. */
@@ -25,6 +29,14 @@ const AccessCodeCastBrowserTest = class extends PolymerTest {
   /** @override */
   get featureList() {
     return {enabled: ['features::kAccessCodeCastUI']};
+  }
+
+  /** @override */
+  get testGenPreamble() {
+    return () => {
+      GEN('browser()->profile()->GetPrefs()->SetBoolean(');
+      GEN('   media_router::prefs::kAccessCodeCastEnabled, true);');
+    };
   }
 };
 
@@ -45,6 +57,18 @@ TEST_F('AccessCodeCastAppTest', 'All', function() {
 });
 
 // eslint-disable-next-line no-var
+var AccessCodeCastBrowserProxyTest = class extends AccessCodeCastBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://access-code-cast/test_loader.html?module=access_code_cast/browser_proxy_test.js';
+  }
+};
+
+TEST_F('AccessCodeCastBrowserProxyTest', 'All', function() {
+  mocha.run();
+});
+
+// eslint-disable-next-line no-var
 var AccessCodeCastCodeInputElementTest = class extends AccessCodeCastBrowserTest {
   /** @override */
   get browsePreload() {
@@ -52,10 +76,18 @@ var AccessCodeCastCodeInputElementTest = class extends AccessCodeCastBrowserTest
   }
 };
 
-/**
- * This browsertest acts as a thin wrapper to run the unit tests found
- * at code_input_test.js
- */
 TEST_F('AccessCodeCastCodeInputElementTest', 'All', function() {
+  mocha.run();
+});
+
+// eslint-disable-next-line no-var
+var AccessCodeCastErrorMessageElementTest = class extends AccessCodeCastBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://access-code-cast/test_loader.html?module=access_code_cast/error_message_test.js';
+  }
+};
+
+TEST_F('AccessCodeCastErrorMessageElementTest', 'All', function() {
   mocha.run();
 });

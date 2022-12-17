@@ -4,20 +4,74 @@
 
 #include "chrome/browser/ash/arc/input_overlay/actions/action.h"
 
-#include "chrome/browser/ash/arc/input_overlay/input_overlay_resources_util.h"
+#include "chrome/browser/ash/arc/input_overlay/actions/dependent_position.h"
+#include "chrome/browser/ash/arc/input_overlay/actions/position.h"
 #include "chrome/browser/ash/arc/input_overlay/touch_id_manager.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
-#include "ui/views/controls/label.h"
 
 namespace arc {
 namespace input_overlay {
 namespace {
-// Key strings in Json file.
+// Json strings.
 constexpr char kName[] = "name";
 constexpr char kLocation[] = "location";
+constexpr char kType[] = "type";
+constexpr char kPosition[] = "position";
+constexpr char kDependentPosition[] = "dependent_position";
+constexpr char kKey[] = "key";
+constexpr char kModifiers[] = "modifiers";
+constexpr char kCtrl[] = "ctrl";
+constexpr char kShift[] = "shift";
+constexpr char kAlt[] = "alt";
+constexpr char kRadius[] = "radius";
+// UI specs.
+constexpr int kMinRadius = 18;
+constexpr float kHalf = 0.5;
+
+std::vector<std::unique_ptr<Position>> ParseLocation(
+    const base::Value& position) {
+  std::vector<std::unique_ptr<Position>> positions;
+  for (const base::Value& val : position.GetListDeprecated()) {
+    auto pos = ParsePosition(val);
+    if (!pos) {
+      LOG(ERROR) << "Failed to parse location.";
+      positions.clear();
+      return positions;
+    }
+    positions.emplace_back(std::move(pos));
+  }
+
+  return positions;
+}
+
 }  // namespace
+
+std::unique_ptr<Position> ParsePosition(const base::Value& value) {
+  auto* type = value.FindStringKey(kType);
+  if (!type) {
+    LOG(ERROR) << "There must be type for each position.";
+    return nullptr;
+  }
+
+  std::unique_ptr<Position> pos;
+  if (*type == kPosition) {
+    pos = std::make_unique<Position>();
+  } else if (*type == kDependentPosition) {
+    pos = std::make_unique<DependentPosition>();
+  } else {
+    LOG(ERROR) << "There is position with unknown type: " << *type;
+    return nullptr;
+  }
+
+  bool succeed = pos->ParseFromJson(value);
+  if (!succeed) {
+    LOG(ERROR) << "Position is parsed incorrectly on type: " << *type;
+    return nullptr;
+  }
+  return pos;
+}
 
 void LogEvent(const ui::Event& event) {
   if (event.IsKeyEvent()) {
@@ -26,15 +80,16 @@ void LogEvent(const ui::Event& event) {
             << ui::KeycodeConverter::DomKeyToKeyString(key_event.GetDomKey())
             << "}. DomCode{"
             << ui::KeycodeConverter::DomCodeToCodeString(key_event.code())
-            << "}. Type{" << key_event.type() << "}. Flags {"
-            << key_event.flags() << "}. Time stamp {" << key_event.time_stamp()
-            << "}.";
+            << "}. Type{" << key_event.type() << "}. " << key_event.ToString();
   } else if (event.IsTouchEvent()) {
     const ui::TouchEvent& touch_event =
         static_cast<const ui::TouchEvent&>(event);
     VLOG(1) << "Touch event {" << touch_event.ToString()
             << "}. Pointer detail {" << touch_event.pointer_details().ToString()
             << "}, TouchID {" << touch_event.pointer_details().id << "}.";
+  } else if (event.IsMouseEvent()) {
+    auto* mouse_event = event.AsMouseEvent();
+    VLOG(1) << "MouseEvent {" << mouse_event->ToString() << "}.";
   }
   // TODO(cuicuiruan): Add logging other events as needed.
 }
@@ -44,17 +99,37 @@ void LogTouchEvents(const std::list<ui::TouchEvent>& events) {
     LogEvent(event);
 }
 
-std::string GetDisplayText(const std::string& dom_code_string) {
-  if (base::StartsWith(dom_code_string, "Key", base::CompareCase::SENSITIVE))
-    return dom_code_string.substr(3);
-  if (base::StartsWith(dom_code_string, "Digit", base::CompareCase::SENSITIVE))
-    return dom_code_string.substr(5);
-  auto lower = base::ToLowerASCII(dom_code_string);
-  if (lower == "escape")
-    return "esc";
-  // TODO(cuicuiruan): adjust more display text according to UX design
-  // requirement.
-  return lower;
+absl::optional<std::pair<ui::DomCode, int>> ParseKeyboardKey(
+    const base::Value& value,
+    const base::StringPiece key_name) {
+  const std::string* key = value.FindStringKey(kKey);
+  if (!key) {
+    LOG(ERROR) << "No key-value for {" << key_name << "}.";
+    return absl::nullopt;
+  }
+  auto code = ui::KeycodeConverter::CodeStringToDomCode(*key);
+  if (code == ui::DomCode::NONE) {
+    LOG(ERROR)
+        << "Invalid key code string. It should be similar to {KeyA}, but got {"
+        << *key << "}.";
+    return absl::nullopt;
+  }
+  // "modifiers" is optional.
+  auto* modifier_list = value.FindListKey(kModifiers);
+  int modifiers = 0;
+  if (modifier_list) {
+    for (const base::Value& val : modifier_list->GetListDeprecated()) {
+      if (base::ToLowerASCII(val.GetString()) == kCtrl)
+        modifiers |= ui::EF_CONTROL_DOWN;
+      else if (base::ToLowerASCII(val.GetString()) == kShift)
+        modifiers |= ui::EF_SHIFT_DOWN;
+      else if (base::ToLowerASCII(val.GetString()) == kAlt)
+        modifiers |= ui::EF_ALT_DOWN;
+      else
+        LOG(WARNING) << "Modifier {" << val.GetString() << "} not considered.";
+    }
+  }
+  return absl::make_optional<std::pair<ui::DomCode, int>>(code, modifiers);
 }
 
 Action::Action(aura::Window* window) : target_window_(window) {}
@@ -71,11 +146,22 @@ bool Action::ParseFromJson(const base::Value& value) {
   const base::Value* position = value.FindListKey(kLocation);
   if (position) {
     auto parsed_pos = ParseLocation(*position);
-    if (parsed_pos) {
-      std::move(parsed_pos->begin(), parsed_pos->end(),
+    if (!parsed_pos.empty()) {
+      std::move(parsed_pos.begin(), parsed_pos.end(),
                 std::back_inserter(locations_));
+      on_left_or_middle_side_ = (locations_.front()->anchor().x() <= kHalf);
     }
   }
+
+  if (!ParsePositiveFraction(value, kRadius, &radius_))
+    return false;
+
+  if (radius_ && *radius_ >= kHalf) {
+    LOG(ERROR) << "Require value of " << kRadius << " less than " << kHalf
+               << ". But got " << *radius_;
+    return false;
+  }
+
   return true;
 }
 
@@ -102,7 +188,7 @@ absl::optional<gfx::PointF> Action::CalculateTouchPosition(
   return absl::make_optional(root_location);
 }
 
-absl::optional<ui::TouchEvent> Action::GetTouchCancelEvent() {
+absl::optional<ui::TouchEvent> Action::GetTouchCanceledEvent() {
   if (!touch_id_)
     return absl::nullopt;
   auto touch_event = absl::make_optional<ui::TouchEvent>(
@@ -110,10 +196,30 @@ absl::optional<ui::TouchEvent> Action::GetTouchCancelEvent() {
       last_touch_root_location_, ui::EventTimeForNow(),
       ui::PointerDetails(ui::EventPointerType::kTouch, touch_id_.value()));
   ui::Event::DispatcherApi(&*touch_event).set_target(target_window_);
-
+  LogEvent(*touch_event);
   OnTouchCancelled();
-
   return touch_event;
+}
+
+absl::optional<ui::TouchEvent> Action::GetTouchReleasedEvent() {
+  if (!touch_id_)
+    return absl::nullopt;
+  auto touch_event = absl::make_optional<ui::TouchEvent>(
+      ui::EventType::ET_TOUCH_RELEASED, last_touch_root_location_,
+      last_touch_root_location_, ui::EventTimeForNow(),
+      ui::PointerDetails(ui::EventPointerType::kTouch, touch_id_.value()));
+  ui::Event::DispatcherApi(&*touch_event).set_target(target_window_);
+  LogEvent(*touch_event);
+  OnTouchReleased();
+  return touch_event;
+}
+
+int Action::GetUIRadius(const gfx::RectF& content_bounds) {
+  if (!radius_)
+    return kMinRadius;
+
+  int min = std::min(content_bounds.width(), content_bounds.height());
+  return std::max(static_cast<int>(*radius_ * min), kMinRadius);
 }
 
 bool Action::IsRepeatedKeyEvent(const ui::KeyEvent& key_event) {

@@ -270,7 +270,7 @@ TEST_F(BrowsingHistoryHandlerTest, ObservingWebHistoryDeletions) {
   }
 }
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
 TEST_F(BrowsingHistoryHandlerTest, MdTruncatesTitles) {
   history::BrowsingHistoryService::HistoryEntry long_url_entry;
   long_url_entry.url = GURL(
@@ -299,7 +299,7 @@ TEST_F(BrowsingHistoryHandlerTest, MdTruncatesTitles) {
   const base::Value* list = arg3->FindListKey("value");
   ASSERT_TRUE(list->is_list());
 
-  const base::Value& first_entry = list->GetList()[0];
+  const base::Value& first_entry = list->GetListDeprecated()[0];
   ASSERT_TRUE(first_entry.is_dict());
 
   const std::string* title = first_entry.FindStringKey("title");

@@ -92,10 +92,10 @@ EventID EventDatabase::CreateCalendarEvent(calendar::EventRow row) {
       "start, end, all_day, is_recurring, "
       "location, url, etag, href, uid, event_type_id, task, complete, trash, "
       "trash_time, sequence, ical, rrule, organizer, timezone, is_template, "
-      "due, priority, status, percentage_complete, categories, "
+      "priority, status, percentage_complete, categories, "
       "component_class, attachment, completed, sync_pending, delete_pending, "
-      "created, " "last_modified) "
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
+      "created, last_modified) "
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
       "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )"));
 
   int column_index = 0;
@@ -124,7 +124,6 @@ EventID EventDatabase::CreateCalendarEvent(calendar::EventRow row) {
   statement.BindString(column_index++, row.organizer);
   statement.BindString(column_index++, row.timezone);
   statement.BindInt(column_index++, row.is_template ? 1 : 0);
-  statement.BindInt64(column_index++, row.due.ToInternalValue());
   statement.BindInt(column_index++, row.priority);
   statement.BindString(column_index++, row.status);
   statement.BindInt(column_index++, row.percentage_complete);
@@ -196,7 +195,7 @@ bool EventDatabase::UpdateEventRow(const EventRow& event) {
         location=?, url=?, etag=?, href=?, uid=?, event_type_id=?, \
         task=?, complete=?, trash=?, trash_time=?, sequence=?, ical=?, \
         rrule=?, organizer=?, timezone=?, \
-        due=?, priority=?, status=?, percentage_complete=?,  \
+        priority=?, status=?, percentage_complete=?,  \
         categories=?, component_class=?, attachment=?, completed=?, \
         sync_pending=?, delete_pending=? \
         WHERE id=?"));
@@ -225,7 +224,6 @@ bool EventDatabase::UpdateEventRow(const EventRow& event) {
   statement.BindString(column_index++, event.rrule);
   statement.BindString(column_index++, event.organizer);
   statement.BindString(column_index++, event.timezone);
-  statement.BindInt64(column_index++, event.due.ToInternalValue());
   statement.BindInt64(column_index++, event.priority);
   statement.BindString(column_index++, event.status);
   statement.BindInt(column_index++, event.percentage_complete);
@@ -271,7 +269,6 @@ void EventDatabase::FillEventRow(sql::Statement& s, EventRow* event) {
   std::string rrule = s.ColumnString(column_index++);
   std::string organizer = s.ColumnString(column_index++);
   std::string timezone = s.ColumnString(column_index++);
-  base::Time due = base::Time::FromInternalValue(s.ColumnInt64(column_index++));
   int priority = s.ColumnInt(column_index++);
   std::string status = s.ColumnString(column_index++);
   int percentage_complete = s.ColumnInt(column_index++);
@@ -307,7 +304,6 @@ void EventDatabase::FillEventRow(sql::Statement& s, EventRow* event) {
   event->rrule = rrule;
   event->organizer = organizer;
   event->timezone = timezone;
-  event->due = due;
   event->priority = priority;
   event->status = status;
   event->percentage_complete = percentage_complete;
@@ -509,6 +505,15 @@ bool EventDatabase::MigrateCalendarToVersion11() {
                          "ADD COLUMN delete_pending INTEGER"))
       return false;
   }
+  return true;
+}
+
+// Updates to version 12. Migrate deprecated due column to end column
+bool EventDatabase::MigrateCalendarToVersion12() {
+  if (!GetDB().Execute("UPDATE events "
+                       " SET end = due WHERE task = true"))
+    return false;
+
   return true;
 }
 

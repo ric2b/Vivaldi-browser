@@ -15,11 +15,10 @@ import org.chromium.base.jank_tracker.JankTracker;
 import org.chromium.base.supplier.BooleanSupplier;
 import org.chromium.base.supplier.DestroyableObservableSupplier;
 import org.chromium.base.supplier.Supplier;
-import org.chromium.build.BuildConfig;
+import org.chromium.chrome.browser.app.download.home.DownloadPage;
 import org.chromium.chrome.browser.bookmarks.BookmarkPage;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsMarginSupplier;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
-import org.chromium.chrome.browser.download.DownloadPage;
 import org.chromium.chrome.browser.explore_sites.ExploreSitesPage;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
@@ -53,6 +52,7 @@ import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.util.ColorUtils;
 
 // Vivaldi
+import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.vivaldi.browser.common.VivaldiUrlConstants;

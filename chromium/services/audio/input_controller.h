@@ -18,6 +18,8 @@
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "media/base/audio_parameters.h"
+#include "media/base/audio_processing.h"
+#include "media/mojo/mojom/audio_processing.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -35,12 +37,14 @@ class UserInputMonitor;
 }  // namespace media
 
 namespace audio {
-class AudioProcessor;
+class AudioProcessorHandler;
+class AudioCallback;
+class OutputTapper;
 class DeviceOutputListener;
 class InputStreamActivityMonitor;
 
 // Only do power monitoring for non-mobile platforms to save resources.
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 #define AUDIO_POWER_MONITORING
 #endif
 
@@ -148,6 +152,7 @@ class InputController final : public StreamMonitor {
       media::UserInputMonitor* user_input_monitor,
       InputStreamActivityMonitor* activity_monitor,
       DeviceOutputListener* device_output_listener,
+      media::mojom::AudioProcessingConfigPtr processing_config,
       const media::AudioParameters& params,
       const std::string& device_id,
       bool agc_is_enabled);
@@ -172,6 +177,9 @@ class InputController final : public StreamMonitor {
   void OnStreamInactive(Snoopable* snoopable) override;
 
  private:
+  // TODO(https://crbug.com/1224845): Remove after the output mixing experiment.
+  class NoopReferenceOutputListener;
+
   // Used to log the result of capture startup.
   // This was previously logged as a boolean with only the no callback and OK
   // options. The enum order is kept to ensure backwards compatibility.
@@ -192,11 +200,12 @@ class InputController final : public StreamMonitor {
     CAPTURE_STARTUP_RESULT_MAX = CAPTURE_STARTUP_STOPPED_EARLY,
   };
 
-  InputController(EventHandler* handler,
+  InputController(EventHandler* event_handler,
                   SyncWriter* sync_writer,
                   media::UserInputMonitor* user_input_monitor,
                   InputStreamActivityMonitor* activity_monitor,
                   DeviceOutputListener* device_output_listener,
+                  media::mojom::AudioProcessingConfigPtr processing_config,
                   const media::AudioParameters& params,
                   StreamType type);
 
@@ -245,14 +254,28 @@ class InputController final : public StreamMonitor {
   // Called once at first audio callback.
   void ReportIsAlive();
 
+  // Receives new input data on the hw callback thread.
+  void DeliverDataToSyncWriter(const media::AudioBus* source,
+                               base::TimeTicks capture_time,
+                               double volume);
+
+#if BUILDFLAG(CHROME_WIDE_ECHO_CANCELLATION)
+  // Called from the constructor. Helper to isolate logic setting up audio
+  // processing components.
+  void MaybeSetUpAudioProcessing(
+      media::mojom::AudioProcessingConfigPtr processing_config,
+      DeviceOutputListener* device_output_listener);
+#endif
+
   static StreamType ParamsToStreamType(const media::AudioParameters& params);
 
-  // This class must be used on the audio manager thread.
-  THREAD_CHECKER(owning_thread_);
+  // The task runner for the audio manager. All control methods should be called
+  // via tasks run by this TaskRunner.
+  const scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
   // Contains the InputController::EventHandler which receives state
   // notifications from this class.
-  const raw_ptr<EventHandler> handler_;
+  const raw_ptr<EventHandler> event_handler_;
 
   // Pointer to the audio input stream object.
   // Only used on the audio thread.
@@ -266,7 +289,17 @@ class InputController final : public StreamMonitor {
   double max_volume_ = 0.0;
 
 #if BUILDFLAG(CHROME_WIDE_ECHO_CANCELLATION)
-  std::unique_ptr<AudioProcessor> audio_processor_;
+  // Handles audio processing effects applied to the microphone capture audio.
+  std::unique_ptr<AudioProcessorHandler> audio_processor_handler_;
+
+  // Placeholder for `audio_processor_handler_` when it is not created but
+  // `output_tapper_` still needs a ReferenceOutput::Listener to subscribe.
+  // TODO(https://crbug.com/1224845): Remove after the output mixing experiment.
+  std::unique_ptr<NoopReferenceOutputListener> noop_reference_output_listener_;
+
+  // Manages the `audio_processor_handler_` or
+  // `noop_reference_output_listener_` subscription to output audio.
+  std::unique_ptr<OutputTapper> output_tapper_;
 #endif
 
   const raw_ptr<media::UserInputMonitor> user_input_monitor_;
@@ -294,7 +327,6 @@ class InputController final : public StreamMonitor {
   bool is_muted_ = false;
   base::RepeatingTimer check_muted_state_timer_;
 
-  class AudioCallback;
   // Holds a pointer to the callback object that receives audio data from
   // the lower audio layer. Valid only while 'recording' (between calls to
   // stream_->Start() and stream_->Stop()).
@@ -312,7 +344,8 @@ class InputController final : public StreamMonitor {
   // error notification to keep the InputController alive for as long as
   // the error notification is pending and then make a callback from an
   // InputController that has already been closed.
-  // All outstanding weak pointers, are invalidated at the end of DoClose.
+  // All outstanding weak pointers are invalidated at the end of Close().
+  base::WeakPtr<InputController> weak_this_;
   base::WeakPtrFactory<InputController> weak_ptr_factory_{this};
 };
 

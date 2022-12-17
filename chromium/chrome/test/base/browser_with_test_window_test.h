@@ -32,7 +32,7 @@
 #endif
 #endif
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 #include "ui/base/win/scoped_ole_initializer.h"
 #endif
 
@@ -127,7 +127,7 @@ class BrowserWithTestWindowTest : public testing::Test {
 
   Browser* browser() const { return browser_.get(); }
   void set_browser(Browser* browser) { browser_.reset(browser); }
-  Browser* release_browser() WARN_UNUSED_RESULT { return browser_.release(); }
+  [[nodiscard]] Browser* release_browser() { return browser_.release(); }
 
   TestingProfile* profile() const { return profile_; }
 
@@ -143,7 +143,7 @@ class BrowserWithTestWindowTest : public testing::Test {
     return &test_url_loader_factory_;
   }
 
-  BrowserWindow* release_browser_window() WARN_UNUSED_RESULT {
+  [[nodiscard]] BrowserWindow* release_browser_window() {
     return window_.release();
   }
 
@@ -259,7 +259,7 @@ class BrowserWithTestWindowTest : public testing::Test {
   // The existence of this object enables tests via RenderViewHostTester.
   std::unique_ptr<content::RenderViewHostTestEnabler> rvh_test_enabler_;
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   ui::ScopedOleInitializer ole_initializer_;
 #endif
 

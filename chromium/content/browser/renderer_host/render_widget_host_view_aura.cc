@@ -71,6 +71,7 @@
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_observer.h"
 #include "ui/aura/window_tree_host.h"
+#include "ui/aura_extra/window_position_in_root_monitor.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
@@ -101,7 +102,7 @@
 #include "ui/wm/public/scoped_tooltip_disabler.h"
 #include "ui/wm/public/tooltip_client.h"
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 #include "base/time/time.h"
 #include "content/browser/accessibility/browser_accessibility_manager_win.h"
 #include "content/browser/accessibility/browser_accessibility_win.h"
@@ -114,7 +115,7 @@
 #include "ui/gfx/gdi_util.h"
 #endif
 
-#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "content/browser/accessibility/browser_accessibility_auralinux.h"
 #include "ui/base/ime/linux/text_edit_command_auralinux.h"
 #include "ui/base/ime/linux/text_edit_key_bindings_delegate_auralinux.h"
@@ -129,7 +130,7 @@
 #include "ui/base/ime/ash/input_method_manager.h"
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "ui/base/ime/mojom/virtual_keyboard_types.mojom.h"
 #endif
 
@@ -144,6 +145,19 @@ using blink::WebGestureEvent;
 using blink::WebTouchEvent;
 
 namespace content {
+
+// Returns true if `window` is in the active window.
+bool CalculateIfWindowInActiveWindow(aura::Window* window) {
+  if (!window)
+    return false;
+
+  aura::Window* root = window->GetRootWindow();
+  if (!root)
+    return false;
+  wm::ActivationClient* activation_client = wm::GetActivationClient(root);
+  return activation_client && activation_client->GetActiveWindow() &&
+         activation_client->GetActiveWindow()->Contains(window);
+}
 
 // We need to watch for mouse events outside a Web Popup or its parent
 // and dismiss the popup for certain events.
@@ -244,57 +258,6 @@ class RenderWidgetHostViewAura::WindowObserver : public aura::WindowObserver {
   raw_ptr<RenderWidgetHostViewAura> view_;
 };
 
-// This class provides functionality to observe the ancestors of the RWHVA for
-// bounds changes. This is done to snap the RWHVA window to a pixel boundary,
-// which could change when the bounds relative to the root changes.
-// An example where this happens is below:-
-// The fast resize code path for bookmarks where in the parent of RWHVA which
-// is WCV has its bounds changed before the bookmark is hidden. This results in
-// the traditional bounds change notification for the WCV reporting the old
-// bounds as the bookmark is still around. Observing all the ancestors of the
-// RWHVA window enables us to know when the bounds of the window relative to
-// root changes and allows us to snap accordingly.
-class RenderWidgetHostViewAura::WindowAncestorObserver
-    : public aura::WindowObserver {
- public:
-  explicit WindowAncestorObserver(RenderWidgetHostViewAura* view)
-      : view_(view) {
-    aura::Window* parent = view_->window_->parent();
-    while (parent) {
-      parent->AddObserver(this);
-      ancestors_.insert(parent);
-      parent = parent->parent();
-    }
-  }
-
-  WindowAncestorObserver(const WindowAncestorObserver&) = delete;
-  WindowAncestorObserver& operator=(const WindowAncestorObserver&) = delete;
-
-  ~WindowAncestorObserver() override {
-    RemoveAncestorObservers();
-  }
-
-  void OnWindowBoundsChanged(aura::Window* window,
-                             const gfx::Rect& old_bounds,
-                             const gfx::Rect& new_bounds,
-                             ui::PropertyChangeReason reason) override {
-    DCHECK(ancestors_.find(window) != ancestors_.end());
-    if (new_bounds.origin() != old_bounds.origin())
-      view_->HandleParentBoundsChanged();
-  }
-
- private:
-  void RemoveAncestorObservers() {
-    for (auto* ancestor : ancestors_)
-      ancestor->RemoveObserver(this);
-    ancestors_.clear();
-  }
-
-  raw_ptr<RenderWidgetHostViewAura> view_;
-  std::set<aura::Window*> ancestors_;
-};
-
-
 ////////////////////////////////////////////////////////////////////////////////
 // RenderWidgetHostViewAura, public:
 
@@ -310,7 +273,7 @@ RenderWidgetHostViewAura::RenderWidgetHostViewAura(
       has_composition_text_(false),
       added_frame_observer_(false),
       cursor_visibility_state_in_renderer_(UNKNOWN),
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
       legacy_render_widget_host_HWND_(nullptr),
       legacy_window_destroyed_(false),
 #endif
@@ -369,6 +332,13 @@ void RenderWidgetHostViewAura::InitAsChild(gfx::NativeView parent_view) {
     parent_view->AddChild(GetNativeView());
 
   device_scale_factor_ = GetDeviceScaleFactor();
+
+  aura::Window* root = window_->GetRootWindow();
+  if (root) {
+    auto* cursor_client = aura::client::GetCursorClient(root);
+    if (cursor_client)
+      UpdateSystemCursorSize(cursor_client->GetSystemCursorSize());
+  }
 }
 
 void RenderWidgetHostViewAura::InitAsPopup(
@@ -431,6 +401,10 @@ void RenderWidgetHostViewAura::InitAsPopup(
       std::make_unique<EventObserverForPopupExit>(this);
 
   device_scale_factor_ = GetDeviceScaleFactor();
+
+  auto* cursor_client = aura::client::GetCursorClient(root);
+  if (cursor_client)
+    UpdateSystemCursorSize(cursor_client->GetSystemCursorSize());
 }
 
 void RenderWidgetHostViewAura::Hide() {
@@ -468,7 +442,7 @@ gfx::NativeView RenderWidgetHostViewAura::GetNativeView() {
   return window_;
 }
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 HWND RenderWidgetHostViewAura::GetHostWindowHWND() const {
   aura::WindowTreeHost* host = window_->GetHost();
   return host ? host->GetAcceleratedWidget() : nullptr;
@@ -476,7 +450,7 @@ HWND RenderWidgetHostViewAura::GetHostWindowHWND() const {
 #endif
 
 gfx::NativeViewAccessible RenderWidgetHostViewAura::GetNativeViewAccessible() {
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   aura::WindowTreeHost* window_host = window_->GetHost();
   if (!window_host)
     return static_cast<gfx::NativeViewAccessible>(NULL);
@@ -486,7 +460,7 @@ gfx::NativeViewAccessible RenderWidgetHostViewAura::GetNativeViewAccessible() {
   if (manager)
     return ToBrowserAccessibilityWin(manager->GetRoot())->GetCOM();
 
-#elif defined(OS_LINUX)
+#elif BUILDFLAG(IS_LINUX)
   BrowserAccessibilityManager* manager =
       host()->GetOrCreateRootBrowserAccessibilityManager();
   if (manager && manager->GetRoot())
@@ -508,8 +482,8 @@ RenderFrameHostImpl* RenderWidgetHostViewAura::GetFocusedFrame() const {
   return focused_frame->current_frame_host();
 }
 
-void RenderWidgetHostViewAura::HandleParentBoundsChanged() {
-#if defined(OS_WIN)
+void RenderWidgetHostViewAura::HandleBoundsInRootChanged() {
+#if BUILDFLAG(IS_WIN)
   if (legacy_render_widget_host_HWND_) {
     legacy_render_widget_host_HWND_->SetBounds(
         window_->GetBoundsInRootWindow());
@@ -528,9 +502,27 @@ void RenderWidgetHostViewAura::HandleParentBoundsChanged() {
 }
 
 void RenderWidgetHostViewAura::ParentHierarchyChanged() {
-  ancestor_window_observer_ = std::make_unique<WindowAncestorObserver>(this);
+  if (window_->parent()) {
+    // Track changes of the window relative to the root. This is done to snap
+    // `window_` to a pixel boundary, which could change when the bounds
+    // relative to the root changes. An example where this happens:
+    // The fast resize code path for bookmarks where in the parent of RWHVA
+    // which is WCV has its bounds changed before the bookmark is hidden. This
+    // results in the traditional bounds change notification for the WCV
+    // reporting the old bounds as the bookmark is still around. Observing all
+    // the ancestors of the RWHVA window enables us to know when the bounds of
+    // the window relative to root changes and allows us to snap accordingly.
+    position_in_root_observer_ =
+        std::make_unique<aura_extra::WindowPositionInRootMonitor>(
+            window_->parent(),
+            base::BindRepeating(
+                &RenderWidgetHostViewAura::HandleBoundsInRootChanged,
+                base::Unretained(this)));
+  } else {
+    position_in_root_observer_.reset();
+  }
   // Snap when we receive a hierarchy changed. http://crbug.com/388908.
-  HandleParentBoundsChanged();
+  HandleBoundsInRootChanged();
 }
 
 void RenderWidgetHostViewAura::Focus() {
@@ -570,7 +562,7 @@ void RenderWidgetHostViewAura::ShowImpl(PageVisibilityState page_visibility) {
   // which updates `visibility_`, unless the host is hidden. Make sure no update
   // is needed.
   DCHECK(host_->is_hidden() || visibility_ == Visibility::VISIBLE);
-  OnShowWithPageVisibility(PageVisibilityState::kVisible);
+  OnShowWithPageVisibility(page_visibility);
 }
 
 void RenderWidgetHostViewAura::NotifyHostAndDelegateOnWasShown(
@@ -624,7 +616,7 @@ void RenderWidgetHostViewAura::NotifyHostAndDelegateOnWasShown(
       has_saved_frame ? std::move(tab_switch_start_state)
                       : blink::mojom::RecordContentToVisibleTimeRequestPtr());
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   UpdateLegacyWin();
 #endif
 }
@@ -653,17 +645,17 @@ void RenderWidgetHostViewAura::HideImpl() {
         cause = DelegatedFrameHost::HiddenCause::kOther;
       }
       delegated_frame_host_->WasHidden(cause);
-#if defined(OS_WIN)
-    if (host) {
-      // We reparent the legacy Chrome_RenderWidgetHostHWND window to the global
-      // hidden window on the same lines as Windowed plugin windows.
-      if (legacy_render_widget_host_HWND_)
-        legacy_render_widget_host_HWND_->UpdateParent(ui::GetHiddenWindow());
-    }
+#if BUILDFLAG(IS_WIN)
+      if (host) {
+        // We reparent the legacy Chrome_RenderWidgetHostHWND window to the
+        // global hidden window on the same lines as Windowed plugin windows.
+        if (legacy_render_widget_host_HWND_)
+          legacy_render_widget_host_HWND_->UpdateParent(ui::GetHiddenWindow());
+      }
 #endif
   }
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   if (legacy_render_widget_host_HWND_)
     legacy_render_widget_host_HWND_->Hide();
 #endif
@@ -809,12 +801,12 @@ void RenderWidgetHostViewAura::ShowWithVisibility(
 
   window_->Show();
   ShowImpl(page_visibility);
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   if (page_visibility != PageVisibilityState::kVisible &&
       legacy_render_widget_host_HWND_) {
     legacy_render_widget_host_HWND_->Hide();
   }
-#endif  // defined(OS_WIN)
+#endif  // BUILDFLAG(IS_WIN)
 }
 
 void RenderWidgetHostViewAura::Destroy() {
@@ -901,7 +893,7 @@ void RenderWidgetHostViewAura::CopyFromSurface(
       std::move(callback));
 }
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 bool RenderWidgetHostViewAura::UsesNativeWindowFrame() const {
   return (legacy_render_widget_host_HWND_ != nullptr);
 }
@@ -937,6 +929,11 @@ RenderWidgetHostViewAura::GetParentNativeViewAccessible() {
   return nullptr;
 }
 
+void RenderWidgetHostViewAura::ClearFallbackSurfaceForCommitPending() {
+  delegated_frame_host_->ClearFallbackSurfaceForCommitPending();
+  window_->InvalidateLocalSurfaceId();
+}
+
 void RenderWidgetHostViewAura::ResetFallbackToFirstNavigationSurface() {
   DCHECK(delegated_frame_host_) << "Cannot be invoked during destruction.";
   delegated_frame_host_->ResetFallbackToFirstNavigationSurface();
@@ -961,7 +958,7 @@ gfx::Rect RenderWidgetHostViewAura::GetBoundsInRootWindow() {
   aura::Window* top_level = window_->GetToplevelWindow();
   gfx::Rect bounds(top_level->GetBoundsInScreen());
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   // TODO(zturner,iyengar): This will break when we remove support for NPAPI and
   // remove the legacy hwnd, so a better fix will need to be decided when that
   // happens.
@@ -1121,7 +1118,7 @@ RenderWidgetHostViewAura::CreateSyntheticGestureTarget() {
 
 blink::mojom::InputEventResultState RenderWidgetHostViewAura::FilterInputEvent(
     const blink::WebInputEvent& input_event) {
-#if defined(USE_X11)
+#if BUILDFLAG(IS_LINUX)
   if (vivaldi::IsVivaldiRunning()) {
     // The renderer will send a ViewHostMsg_SelectionChanged whenever there has
     // been a change in the selected text and for whatever reason. The host
@@ -1134,7 +1131,7 @@ blink::mojom::InputEventResultState RenderWidgetHostViewAura::FilterInputEvent(
     // RenderWidgetHostViewChildFrame::FilterInputEvent()
     vivaldi::clipboard::OnInputEvent(input_event);
   }
-#endif  // USE_X11
+#endif  // IS_LINUX
 
   bool consumed = false;
   if (input_event.GetType() == WebInputEvent::Type::kGestureFlingStart) {
@@ -1174,7 +1171,7 @@ blink::mojom::InputEventResultState RenderWidgetHostViewAura::FilterInputEvent(
 
 gfx::AcceleratedWidget
 RenderWidgetHostViewAura::AccessibilityGetAcceleratedWidget() {
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   if (legacy_render_widget_host_HWND_)
     return legacy_render_widget_host_HWND_->hwnd();
 #endif
@@ -1183,7 +1180,7 @@ RenderWidgetHostViewAura::AccessibilityGetAcceleratedWidget() {
 
 gfx::NativeViewAccessible
 RenderWidgetHostViewAura::AccessibilityGetNativeViewAccessible() {
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   if (legacy_render_widget_host_HWND_) {
     return legacy_render_widget_host_HWND_->window_accessible();
   }
@@ -1601,7 +1598,7 @@ bool RenderWidgetHostViewAura::ShouldDoLearning() {
   return GetTextInputManager() && GetTextInputManager()->should_do_learning();
 }
 
-#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 bool RenderWidgetHostViewAura::SetCompositionFromExistingText(
     const gfx::Range& range,
     const std::vector<ui::ImeTextSpan>& ui_ime_text_spans) {
@@ -1738,7 +1735,7 @@ bool RenderWidgetHostViewAura::AddGrammarFragments(
 
 #endif
 
-#if defined(OS_WIN) || defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
 void RenderWidgetHostViewAura::GetActiveTextInputControlLayoutBounds(
     absl::optional<gfx::Rect>* control_bounds,
     absl::optional<gfx::Rect>* selection_bounds) {
@@ -1763,7 +1760,7 @@ void RenderWidgetHostViewAura::GetActiveTextInputControlLayoutBounds(
 }
 #endif
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 void RenderWidgetHostViewAura::SetActiveCompositionForAccessibility(
     const gfx::Range& range,
     const std::u16string& active_composition_text,
@@ -1882,7 +1879,7 @@ void RenderWidgetHostViewAura::OnDeviceScaleFactorChanged(
 }
 
 void RenderWidgetHostViewAura::OnWindowDestroying(aura::Window* window) {
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   // The LegacyRenderWidgetHostHWND instance is destroyed when its window is
   // destroyed. Normally we control when that happens via the Destroy call
   // in the dtor. However there may be cases where the window is destroyed
@@ -1939,7 +1936,7 @@ void RenderWidgetHostViewAura::OnKeyEvent(ui::KeyEvent* event) {
 }
 
 void RenderWidgetHostViewAura::OnMouseEvent(ui::MouseEvent* event) {
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   if (event->type() == ui::ET_MOUSE_MOVED) {
     if (event->location() == last_mouse_move_location_ &&
         event->movement().IsZero()) {
@@ -2002,7 +1999,7 @@ void RenderWidgetHostViewAura::FocusedNodeChanged(
     input_method->CancelComposition(this);
   has_composition_text_ = false;
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   if (window_ && virtual_keyboard_controller_win_) {
     virtual_keyboard_controller_win_->FocusedNodeChanged(editable);
   }
@@ -2042,11 +2039,30 @@ bool RenderWidgetHostViewAura::ShouldActivate() const {
   return !event;
 }
 
+void RenderWidgetHostViewAura::OnWindowActivated(ActivationReason reason,
+                                                 aura::Window* gained_active,
+                                                 aura::Window* lost_active) {
+  DCHECK(window_);
+  const bool new_in_active_window = CalculateIfWindowInActiveWindow(window_);
+  if (new_in_active_window == is_in_active_window_)
+    return;
+  is_in_active_window_ = new_in_active_window;
+  // `in_active_window` is sent when the renderer is shown, so only need to
+  // tell the renderer of state change when renderer is visible.
+  if (visibility_ == Visibility::VISIBLE)
+    host()->OnActiveWindowChanged(is_in_active_window_);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // RenderWidgetHostViewAura, aura::client::CursorClientObserver implementation:
 
 void RenderWidgetHostViewAura::OnCursorVisibilityChanged(bool is_visible) {
   NotifyRendererOfCursorVisibilityState(is_visible);
+}
+
+void RenderWidgetHostViewAura::OnSystemCursorSizeChanged(
+    const gfx::Size& system_cursor_size) {
+  UpdateSystemCursorSize(system_cursor_size);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2186,7 +2202,7 @@ RenderWidgetHostViewAura::~RenderWidgetHostViewAura() {
   }
   event_observer_for_popup_exit_.reset();
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   // The LegacyRenderWidgetHostHWND window should have been destroyed in
   // RenderWidgetHostViewAura::OnWindowDestroying and the pointer should
   // be set to NULL.
@@ -2250,7 +2266,7 @@ void RenderWidgetHostViewAura::UpdateCursorIfOverSelf() {
   // Ignore cursor update messages if the window under the cursor is not us.
   aura::Window* window_at_screen_point = screen->GetWindowAtScreenPoint(
       cursor_screen_point);
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   // On Windows we may fail to retrieve the aura Window at the current cursor
   // position. This is because the WindowFromPoint API may return the legacy
   // window which is not associated with an aura Window. In this case we need
@@ -2266,7 +2282,7 @@ void RenderWidgetHostViewAura::UpdateCursorIfOverSelf() {
     window_at_screen_point = screen_win->GetNativeWindowFromHWND(
         hwnd_at_point);
   }
-#endif  // defined(OS_WIN)
+#endif  // BUILDFLAG(IS_WIN)
   if (!window_at_screen_point ||
       (window_at_screen_point->GetRootWindow() != root_window)) {
     return;
@@ -2418,7 +2434,7 @@ bool RenderWidgetHostViewAura::NeedsInputGrab() {
 }
 
 bool RenderWidgetHostViewAura::NeedsMouseCapture() {
-#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
   return NeedsInputGrab();
 #else
   return false;
@@ -2470,7 +2486,7 @@ void RenderWidgetHostViewAura::InternalSetBounds(const gfx::Rect& rect) {
   SynchronizeVisualProperties(cc::DeadlinePolicy::UseDefaultDeadline(),
                               window_->GetLocalSurfaceId());
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   UpdateLegacyWin();
 
   if (IsMouseLocked())
@@ -2489,7 +2505,7 @@ void RenderWidgetHostViewAura::UpdateInsetsWithVirtualKeyboardEnabled() {
   }
 }
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 void RenderWidgetHostViewAura::UpdateLegacyWin() {
   if (legacy_window_destroyed_ || !GetHostWindowHWND())
     return;
@@ -2520,8 +2536,9 @@ void RenderWidgetHostViewAura::AddedToRootWindow() {
   window_->GetHost()->AddObserver(this);
   UpdateScreenInfo();
 
+  aura::Window* root_window = window_->GetRootWindow();
   aura::client::CursorClient* cursor_client =
-      aura::client::GetCursorClient(window_->GetRootWindow());
+      aura::client::GetCursorClient(root_window);
   if (cursor_client) {
     cursor_client->AddObserver(this);
     NotifyRendererOfCursorVisibilityState(cursor_client->IsCursorVisible());
@@ -2531,8 +2548,13 @@ void RenderWidgetHostViewAura::AddedToRootWindow() {
     if (input_method)
       input_method->SetFocusedTextInputClient(this);
   }
+  wm::ActivationClient* activation_client =
+      wm::GetActivationClient(root_window);
+  if (activation_client)
+    activation_client->AddObserver(this);
+  is_in_active_window_ = CalculateIfWindowInActiveWindow(window_);
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   UpdateLegacyWin();
 #endif
 
@@ -2542,21 +2564,30 @@ void RenderWidgetHostViewAura::AddedToRootWindow() {
 void RenderWidgetHostViewAura::RemovingFromRootWindow() {
   DCHECK(delegated_frame_host_) << "Cannot be invoked during destruction.";
 
+  aura::Window* root_window = window_->GetRootWindow();
+
   aura::client::CursorClient* cursor_client =
-      aura::client::GetCursorClient(window_->GetRootWindow());
+      aura::client::GetCursorClient(root_window);
   if (cursor_client)
     cursor_client->RemoveObserver(this);
+
+  wm::ActivationClient* activation_client =
+      wm::GetActivationClient(root_window);
+  if (activation_client)
+    activation_client->RemoveObserver(this);
+
+  is_in_active_window_ = false;
 
   DetachFromInputMethod(true);
 
   window_->GetHost()->RemoveObserver(this);
-    delegated_frame_host_->DetachFromCompositor();
+  delegated_frame_host_->DetachFromCompositor();
 
-#if defined(OS_WIN)
-  // Update the legacy window's parent temporarily to the hidden window. It
-  // will eventually get reparented to the right root.
-  if (legacy_render_widget_host_HWND_)
-    legacy_render_widget_host_HWND_->UpdateParent(ui::GetHiddenWindow());
+#if BUILDFLAG(IS_WIN)
+    // Update the legacy window's parent temporarily to the hidden window. It
+    // will eventually get reparented to the right root.
+    if (legacy_render_widget_host_HWND_)
+      legacy_render_widget_host_HWND_->UpdateParent(ui::GetHiddenWindow());
 #endif
 }
 
@@ -2569,7 +2600,7 @@ void RenderWidgetHostViewAura::DetachFromInputMethod(bool is_removed) {
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   }
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   // If window is getting destroyed, then reset the VK controller, else,
   // dismiss the VK and notify about the keyboard inset since window has lost
   // focus.
@@ -2579,7 +2610,7 @@ void RenderWidgetHostViewAura::DetachFromInputMethod(bool is_removed) {
     else
       virtual_keyboard_controller_win_->HideAndNotifyKeyboardInset();
   }
-#endif  // defined(OS_WIN)
+#endif  // BUILDFLAG(IS_WIN)
 }
 
 void RenderWidgetHostViewAura::ForwardKeyboardEventWithLatencyInfo(
@@ -2595,7 +2626,7 @@ void RenderWidgetHostViewAura::ForwardKeyboardEventWithLatencyInfo(
   if (!target_host)
     return;
 
-#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
   ui::TextEditKeyBindingsDelegateAuraLinux* keybinding_delegate =
       ui::GetTextEditKeyBindingsDelegate();
   std::vector<ui::TextEditCommandAuraLinux> commands;
@@ -2638,7 +2669,7 @@ void RenderWidgetHostViewAura::OnDidNavigateMainFrameToNewPage() {
 
   // Invalidate the surface so that we don't attempt to evict it multiple times.
   window_->InvalidateLocalSurfaceId();
-    delegated_frame_host_->OnNavigateToNewPage();
+  delegated_frame_host_->OnNavigateToNewPage();
   CancelActiveTouches();
 }
 
@@ -2665,7 +2696,7 @@ void RenderWidgetHostViewAura::OnUpdateTextInputStateCalled(
   const ui::mojom::TextInputState* state =
       text_input_manager_->GetTextInputState();
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS)
   if (state) {
     if (state->last_vk_visibility_request ==
         ui::mojom::VirtualKeyboardVisibilityRequest::SHOW) {
@@ -2680,14 +2711,14 @@ void RenderWidgetHostViewAura::OnUpdateTextInputStateCalled(
   // Show the virtual keyboard if needed.
   if (state && state->type != ui::TEXT_INPUT_TYPE_NONE &&
       state->mode != ui::TEXT_INPUT_MODE_NONE) {
-#if !defined(OS_WIN)
+#if !BUILDFLAG(IS_WIN)
     if (state->show_ime_if_needed &&
         GetInputMethod()->GetTextInputClient() == this) {
-      GetInputMethod()->ShowVirtualKeyboardIfEnabled();
+      GetInputMethod()->SetVirtualKeyboardVisibilityIfEnabled(true);
     }
 // TODO(crbug.com/1031786): Remove this once TSF fix for input pane policy
 // is serviced
-#elif defined(OS_WIN)
+#elif BUILDFLAG(IS_WIN)
     if (GetInputMethod()) {
       if (!virtual_keyboard_controller_win_) {
         virtual_keyboard_controller_win_ =
@@ -2738,12 +2769,12 @@ void RenderWidgetHostViewAura::OnSelectionBoundsChanged(
 void RenderWidgetHostViewAura::OnTextSelectionChanged(
     TextInputManager* text_input_manager,
     RenderWidgetHostViewBase* updated_view) {
-#if defined(USE_X11) && !defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_LINUX)
   if (vivaldi::IsVivaldiRunning() &&
       vivaldi::clipboard::SuppressWrite(ui::ClipboardBuffer::kSelection)) {
     return;
   }
-#endif // X11
+#endif  // IS_LINUX
 
   if (!GetTextInputManager())
     return;
@@ -2885,6 +2916,10 @@ void RenderWidgetHostViewAura::TransferTouches(
 void RenderWidgetHostViewAura::SetLastPointerType(
     ui::EventPointerType last_pointer_type) {
   last_pointer_type_ = last_pointer_type;
+}
+
+bool RenderWidgetHostViewAura::IsInActiveWindow() const {
+  return is_in_active_window_;
 }
 
 void RenderWidgetHostViewAura::InvalidateLocalSurfaceIdOnEviction() {

@@ -24,8 +24,10 @@
 #include "components/leveldb_proto/public/proto_database_provider.h"
 #include "components/optimization_guide/core/command_line_top_host_provider.h"
 #include "components/optimization_guide/core/hints_processing_util.h"
+#include "components/optimization_guide/core/model_util.h"
 #include "components/optimization_guide/core/optimization_guide_constants.h"
 #include "components/optimization_guide/core/optimization_guide_features.h"
+#include "components/optimization_guide/core/optimization_guide_logger.h"
 #include "components/optimization_guide/core/optimization_guide_navigation_data.h"
 #include "components/optimization_guide/core/optimization_guide_permissions_util.h"
 #include "components/optimization_guide/core/optimization_guide_store.h"
@@ -42,7 +44,7 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/commerce/price_tracking/android/price_tracking_notification_bridge.h"
 #include "chrome/browser/optimization_guide/android/android_push_notification_manager.h"
 #include "chrome/browser/optimization_guide/android/optimization_guide_tab_url_provider_android.h"
@@ -92,13 +94,43 @@ Profile* GetProfileForOTROptimizationGuide(Profile* profile) {
   return profile->GetOriginalProfile();
 }
 
+// Logs info about the common optimization guide feature flags.
+void LogFeatureFlagsInfo(OptimizationGuideLogger* optimization_guide_logger,
+                         Profile* profile) {
+  if (!optimization_guide::switches::IsDebugLogsEnabled())
+    return;
+  if (!optimization_guide::features::IsOptimizationHintsEnabled()) {
+    OPTIMIZATION_GUIDE_LOG(optimization_guide_logger,
+                           "FEATURE_FLAG Hints component disabled");
+  }
+  if (!optimization_guide::features::IsRemoteFetchingEnabled()) {
+    OPTIMIZATION_GUIDE_LOG(optimization_guide_logger,
+                           "FEATURE_FLAG remote fetching feature disabled");
+  }
+  if (!optimization_guide::IsUserPermittedToFetchFromRemoteOptimizationGuide(
+          profile->IsOffTheRecord(), profile->GetPrefs())) {
+    OPTIMIZATION_GUIDE_LOG(
+        optimization_guide_logger,
+        "FEATURE_FLAG remote fetching user permission disabled");
+  }
+  if (!optimization_guide::features::IsPushNotificationsEnabled()) {
+    OPTIMIZATION_GUIDE_LOG(
+        optimization_guide_logger,
+        "FEATURE_FLAG remote push notification feature disabled");
+  }
+  if (!optimization_guide::features::IsModelDownloadingEnabled()) {
+    OPTIMIZATION_GUIDE_LOG(optimization_guide_logger,
+                           "FEATURE_FLAG model downloading feature disabled");
+  }
+}
+
 }  // namespace
 
 // static
 std::unique_ptr<optimization_guide::PushNotificationManager>
 OptimizationGuideKeyedService::MaybeCreatePushNotificationManager(
     Profile* profile) {
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   if (optimization_guide::features::IsPushNotificationsEnabled()) {
     auto push_notification_manager = std::make_unique<
         optimization_guide::android::AndroidPushNotificationManager>(
@@ -167,7 +199,7 @@ void OptimizationGuideKeyedService::Initialize() {
         "SyntheticOptimizationGuideRemoteFetching",
         optimization_guide_fetching_enabled ? "Enabled" : "Disabled");
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
     tab_url_provider_ = std::make_unique<
         optimization_guide::android::OptimizationGuideTabUrlProviderAndroid>(
         profile);
@@ -199,22 +231,25 @@ void OptimizationGuideKeyedService::Initialize() {
         prediction_model_and_features_store_->AsWeakPtr();
   }
 
+  optimization_guide_logger_ = std::make_unique<OptimizationGuideLogger>();
   hints_manager_ = std::make_unique<optimization_guide::ChromeHintsManager>(
       profile, profile->GetPrefs(), hint_store, top_host_provider_.get(),
       tab_url_provider_.get(), url_loader_factory,
-      content::GetNetworkConnectionTracker(),
-      MaybeCreatePushNotificationManager(profile));
+      MaybeCreatePushNotificationManager(profile),
+      optimization_guide_logger_.get());
   prediction_manager_ = std::make_unique<optimization_guide::PredictionManager>(
       prediction_model_and_features_store, url_loader_factory,
-      profile->GetPrefs(), profile);
+      profile->GetPrefs(), profile, optimization_guide_logger_.get());
 
   // The previous store paths were written in incorrect locations. Delete the
   // old paths. Remove this code in 04/2022 since it should be assumed that all
   // clients that had the previous path have had their previous stores deleted.
   DeleteOldStorePaths(profile_path);
-  if (optimization_guide::switches::IsDebugLogsEnabled()) {
-    DVLOG(0) << "OptimizationGuide: KeyedService is initalized";
-  }
+
+  OPTIMIZATION_GUIDE_LOG(optimization_guide_logger_,
+                         "OptimizationGuide: KeyedService is initalized");
+
+  LogFeatureFlagsInfo(optimization_guide_logger_.get(), profile);
 }
 
 optimization_guide::ChromeHintsManager*
@@ -325,7 +360,6 @@ void OptimizationGuideKeyedService::AddHintForTesting(
 
 void OptimizationGuideKeyedService::ClearData() {
   hints_manager_->ClearFetchedHints();
-  prediction_manager_->ClearHostModelFeatures();
 }
 
 void OptimizationGuideKeyedService::Shutdown() {

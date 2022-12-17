@@ -1,0 +1,3 @@
+// InstallerStatus Debug
+
+#include "ConfigInstallerStatus.xcconfig"

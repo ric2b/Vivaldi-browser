@@ -72,6 +72,12 @@ static bool LargeImageFirst(const base::WeakPtr<ImageRecord>& a,
 
 }  // namespace
 
+double ImageRecord::EntropyForLCP() const {
+  if (first_size == 0 || !cached_image)
+    return 0.0;
+  return cached_image->ContentSizeForEntropy() * 8.0 / first_size;
+}
+
 ImagePaintTimingDetector::ImagePaintTimingDetector(
     LocalFrameView* frame_view,
     PaintTimingCallbackManager* callback_manager)
@@ -154,24 +160,20 @@ ImageRecord* ImagePaintTimingDetector::UpdateCandidate() {
     time = largest_image_record->first_animated_frame_time;
   }
 
-  // TODO(yoav): Once we'd enable the kLCPAnimatedImagesReporting flag by
-  // default, we'd be able to use the value of
-  // largest_image_record->first_animated_frame_time directly.
-  bool is_animated = largest_image_record &&
-                     largest_image_record->cached_image &&
-                     largest_image_record->cached_image
-                         ->IsAnimatedImageWithPaintedFirstFrame();
-
   const uint64_t size =
       largest_image_record ? largest_image_record->first_size : 0;
+
+  double bpp =
+      largest_image_record ? largest_image_record->EntropyForLCP() : 0.0;
+
   PaintTimingDetector& detector = frame_view_->GetPaintTimingDetector();
   // Calling NotifyIfChangedLargestImagePaint only has an impact on
   // PageLoadMetrics, and not on the web exposed metrics.
   //
   // Two different candidates are rare to have the same time and size.
   // So when they are unchanged, the candidate is considered unchanged.
-  bool changed =
-      detector.NotifyIfChangedLargestImagePaint(time, size, is_animated);
+  bool changed = detector.NotifyIfChangedLargestImagePaint(
+      time, size, largest_image_record, bpp);
   if (changed) {
     if (!time.is_null() && largest_image_record->loaded) {
       ReportCandidateToTrace(*largest_image_record);
@@ -336,8 +338,13 @@ void ImagePaintTimingDetector::RecordImage(
   uint64_t rect_size = ComputeImageRectSize(
       image_border, mapped_visual_rect, intrinsic_size,
       current_paint_chunk_properties, object, cached_image);
+
+  double bpp = (rect_size > 0)
+                   ? cached_image.ContentSizeForEntropy() * 8.0 / rect_size
+                   : 0.0;
+
   bool added_pending = records_manager_.RecordFirstPaintAndReturnIsPending(
-      record_id, rect_size, image_border, mapped_visual_rect);
+      record_id, rect_size, image_border, mapped_visual_rect, bpp);
   if (!added_pending)
     return;
 
@@ -492,7 +499,8 @@ bool ImageRecordsManager::RecordFirstPaintAndReturnIsPending(
     const RecordId& record_id,
     const uint64_t& visual_size,
     const gfx::Rect& frame_visual_rect,
-    const gfx::RectF& root_visual_rect) {
+    const gfx::RectF& root_visual_rect,
+    double bpp) {
   if (visual_size == 0u &&
       base::FeatureList::IsEnabled(
           features::kIncludeInitiallyInvisibleImagesInLCP)) {
@@ -508,6 +516,11 @@ bool ImageRecordsManager::RecordFirstPaintAndReturnIsPending(
                             largest_painted_image_->first_size > visual_size)) {
     return false;
   }
+  if (base::FeatureList::IsEnabled(features::kExcludeLowEntropyImagesFromLCP) &&
+      bpp < features::kMinimumEntropyForLCP.Get()) {
+    return false;
+  }
+
   std::unique_ptr<ImageRecord> record =
       CreateImageRecord(*record_id.first, record_id.second, visual_size,
                         frame_visual_rect, root_visual_rect);

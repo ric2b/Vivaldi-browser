@@ -2293,6 +2293,34 @@ TEST(XFormTest, verifyIsScaleOrTranslation) {
   EXPECT_FALSE(A.IsScaleOrTranslation());
 }
 
+TEST(XFormTest, Scale) {
+  Transform t;
+  EXPECT_TRUE(t.IsScale());
+  EXPECT_TRUE(t.IsScale2d());
+  EXPECT_EQ(gfx::Vector2dF(1, 1), t.To2dScale());
+
+  t.Scale(2.5f, 3.75f);
+  EXPECT_TRUE(t.IsScale());
+  EXPECT_TRUE(t.IsScale2d());
+  EXPECT_EQ(gfx::Vector2dF(2.5f, 3.75f), t.To2dScale());
+
+  t.Scale3d(3, 4, 5);
+  EXPECT_TRUE(t.IsScale());
+  EXPECT_FALSE(t.IsScale2d());
+  EXPECT_EQ(gfx::Vector2dF(7.5f, 15.f), t.To2dScale());
+
+  for (int row = 0; row < 4; row++) {
+    for (int col = 0; col < 4; col++) {
+      t.MakeIdentity();
+      t.matrix().set(row, col, 100);
+      bool is_scale = row == col && (row == 0 || row == 1 || row == 2);
+      bool is_scale_2d = row == col && (row == 0 || row == 1);
+      EXPECT_EQ(is_scale, t.IsScale()) << " row=" << row << " col=" << col;
+      EXPECT_EQ(is_scale_2d, t.IsScale2d()) << " row=" << row << " col=" << col;
+    }
+  }
+}
+
 TEST(XFormTest, verifyFlattenTo2d) {
   Transform A;
   InitializeTestMatrix(&A);
@@ -2643,6 +2671,14 @@ TEST(XFormTest, TransformRRectF) {
   expected = RRectF(gfx::RectF(-25.f, 0, 25.f, 20.f),
                     gfx::RoundedCornersF(4.f, 1.f, 2.f, 3.f));
   EXPECT_TRUE(rotation_90_Clock.TransformRRectF(&rrect));
+  EXPECT_EQ(expected.ToString(), rrect.ToString());
+
+  Transform rotation_90_unrounded;
+  rotation_90_unrounded.Rotate(90.0);
+  rrect = RRectF(gfx::RectF(0, 0, 20.f, 25.f),
+                 gfx::RoundedCornersF(1.f, 2.f, 3.f, 4.f));
+  EXPECT_TRUE(rotation_90_unrounded.Preserves2dAxisAlignment());
+  EXPECT_TRUE(rotation_90_unrounded.TransformRRectF(&rrect));
   EXPECT_EQ(expected.ToString(), rrect.ToString());
 
   Transform scale;

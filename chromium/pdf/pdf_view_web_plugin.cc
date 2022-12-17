@@ -50,6 +50,7 @@
 #include "third_party/blink/public/common/input/web_keyboard_event.h"
 #include "third_party/blink/public/common/metrics/document_update_reason.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-shared.h"
+#include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_input_event_result.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
 #include "third_party/blink/public/platform/web_string.h"
@@ -85,6 +86,7 @@
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/skia_conversions.h"
+#include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/geometry/vector2d_f.h"
 #include "ui/gfx/range/range.h"
 #include "url/gurl.h"
@@ -356,7 +358,17 @@ bool PdfViewWebPlugin::InitializeCommon(
       /*full_frame=*/params->full_frame,
       /*background_color=*/params->background_color,
       /*has_edits=*/params->has_edits);
+
+  SendSetSmoothScrolling();
   return true;
+}
+
+void PdfViewWebPlugin::SendSetSmoothScrolling() {
+  base::Value message(base::Value::Type::DICTIONARY);
+  message.SetStringKey("type", "setSmoothScrolling");
+  message.SetBoolKey("smoothScrolling",
+                     blink::Platform::Current()->IsScrollAnimatorEnabled());
+  SendMessage(std::move(message));
 }
 
 void PdfViewWebPlugin::Destroy() {
@@ -932,8 +944,6 @@ void PdfViewWebPlugin::NotifyFindResultsChanged(int total, bool final_result) {
 
 void PdfViewWebPlugin::NotifyFindTickmarks(
     const std::vector<gfx::Rect>& tickmarks) {
-  // TODO(crbug.com/1278476): Clean up `PdfFindInPage::SetTickmarks()` once
-  // plugin frame scrolling is stable.
   container_wrapper_->ReportFindInPageTickmarks(tickmarks);
 }
 
@@ -995,6 +1005,10 @@ void PdfViewWebPlugin::NotifyUnsupportedFeature() {
 
 void PdfViewWebPlugin::UserMetricsRecordAction(const std::string& action) {
   client_->RecordComputedAction(action);
+}
+
+gfx::Vector2d PdfViewWebPlugin::plugin_offset_in_frame() const {
+  return gfx::Vector2d();
 }
 
 void PdfViewWebPlugin::OnViewportChanged(

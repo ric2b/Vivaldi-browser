@@ -57,6 +57,7 @@
 #include "third_party/blink/renderer/platform/bindings/microtask.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
 namespace blink {
 
@@ -102,16 +103,13 @@ void FullscreenElementChanged(Document& document,
   }
 
   // Update IsInert() flags.
-  auto SetNeedsStyleRecalc = [](Element& element) {
-    element.SetNeedsStyleRecalc(
-        kLocalStyleChange,
-        StyleChangeReasonForTracing::Create(style_change_reason::kFullscreen));
-  };
+  const StyleChangeReasonForTracing& reason =
+      StyleChangeReasonForTracing::Create(style_change_reason::kFullscreen);
   if (old_element && new_element) {
-    SetNeedsStyleRecalc(*old_element);
-    SetNeedsStyleRecalc(*new_element);
+    old_element->SetNeedsStyleRecalc(kLocalStyleChange, reason);
+    new_element->SetNeedsStyleRecalc(kLocalStyleChange, reason);
   } else if (Element* root = document.documentElement()) {
-    SetNeedsStyleRecalc(*root);
+    root->SetNeedsStyleRecalc(kLocalStyleChange, reason);
   }
 
   // Any element not contained by the fullscreen element is inert (see
@@ -330,7 +328,9 @@ bool AllowedToRequestFullscreen(Document& document) {
 
   // The algorithm is triggered by another event with transient affordances,
   // e.g. permission-gated events for user-generated screens changes.
-  if (document.GetFrame()->IsTransientAllowFullscreenActive()) {
+  if (RuntimeEnabledFeatures::WindowPlacementV2Enabled(
+          document.GetExecutionContext()) &&
+      document.GetFrame()->IsTransientAllowFullscreenActive()) {
     UseCounter::Count(document, WebFeature::kFullscreenAllowedByScreensChange);
     return true;
   }

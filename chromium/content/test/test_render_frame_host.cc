@@ -10,6 +10,7 @@
 
 #include "base/guid.h"
 #include "base/run_loop.h"
+#include "content/browser/fenced_frame/fenced_frame.h"
 #include "content/browser/renderer_host/frame_tree.h"
 #include "content/browser/renderer_host/navigation_request.h"
 #include "content/browser/renderer_host/navigator.h"
@@ -135,6 +136,10 @@ void TestRenderFrameHost::ReportInspectorIssue(
         heavy_ad_issue_cpu_peak_count_++;
         break;
     }
+  } else if (issue->code ==
+             blink::mojom::InspectorIssueCode::kFederatedAuthRequestIssue) {
+    ++federated_auth_counts_[issue->details->federated_auth_request_details
+                                 ->status];
   }
   RenderFrameHostImpl::ReportInspectorIssue(std::move(issue));
 }
@@ -235,9 +240,24 @@ int TestRenderFrameHost::GetHeavyAdIssueCount(
   }
 }
 
+int TestRenderFrameHost::GetFederatedAuthRequestIssueCount(
+    blink::mojom::FederatedAuthRequestResult result) {
+  auto it = federated_auth_counts_.find(result);
+  if (it == federated_auth_counts_.end())
+    return 0;
+  return it->second;
+}
+
 void TestRenderFrameHost::SimulateManifestURLUpdate(const GURL& manifest_url) {
   // TODO(crbug.com/1222510): Add TestPage and use it.
   GetPage().UpdateManifestUrl(manifest_url);
+}
+
+TestRenderFrameHost* TestRenderFrameHost::AppendFencedFrame() {
+  fenced_frames_.push_back(
+      std::make_unique<FencedFrame>(weak_ptr_factory_.GetSafeRef()));
+  return static_cast<TestRenderFrameHost*>(
+      fenced_frames_.back().get()->GetInnerRoot());
 }
 
 void TestRenderFrameHost::SendNavigate(int nav_entry_id,
@@ -297,15 +317,22 @@ void TestRenderFrameHost::SendNavigateWithParamsAndInterfaceParams(
     bool was_within_same_document) {
   last_commit_was_error_page_ = params->url_is_unreachable;
   if (was_within_same_document) {
-    auto same_doc_params = mojom::DidCommitSameDocumentNavigationParams::New();
-    same_doc_params->same_document_navigation_type =
-        blink::mojom::SameDocumentNavigationType::kFragment;
-    params->http_status_code = last_http_status_code();
-    DidCommitSameDocumentNavigation(std::move(params),
-                                    std::move(same_doc_params));
+    SendDidCommitSameDocumentNavigation(
+        std::move(params), blink::mojom::SameDocumentNavigationType::kFragment);
   } else {
     DidCommitProvisionalLoad(std::move(params), std::move(interface_params));
   }
+}
+
+void TestRenderFrameHost::SendDidCommitSameDocumentNavigation(
+    mojom::DidCommitProvisionalLoadParamsPtr params,
+    blink::mojom::SameDocumentNavigationType same_document_navigation_type) {
+  auto same_doc_params = mojom::DidCommitSameDocumentNavigationParams::New();
+  same_doc_params->same_document_navigation_type =
+      same_document_navigation_type;
+  params->http_status_code = last_http_status_code();
+  DidCommitSameDocumentNavigation(std::move(params),
+                                  std::move(same_doc_params));
 }
 
 void TestRenderFrameHost::SendRendererInitiatedNavigationRequest(
@@ -646,7 +673,7 @@ void TestRenderFrameHost::SimulateLoadingCompleted(
 
   if (loading_scenario == LoadingScenario::NewDocumentNavigation) {
     if (is_main_frame())
-      DocumentAvailableInMainFrame(/* uses_temporary_zoom_level */ false);
+      MainDocumentElementAvailable(/* uses_temporary_zoom_level */ false);
 
     DidDispatchDOMContentLoadedEvent();
 

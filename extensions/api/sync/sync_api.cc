@@ -20,9 +20,9 @@
 #include "chrome/browser/profiles/profile.h"
 #include "components/browser_sync/browser_sync_switches.h"
 #include "components/invalidation/public/invalidator_state.h"
+#include "components/sync/base/command_line_switches.h"
 #include "components/sync/base/invalidation_helper.h"
 #include "components/sync/base/model_type.h"
-#include "components/sync/driver/sync_driver_switches.h"
 #include "components/sync/driver/sync_token_status.h"
 #include "components/sync_device_info/local_device_info_util.h"
 #include "extensions/browser/event_router.h"
@@ -76,10 +76,6 @@ ToVivaldiSyncDisableReasons(syncer::SyncService::DisableReasonSet reasons) {
 
   for (auto reason : reasons) {
     switch (reason) {
-      case syncer::SyncService::DISABLE_REASON_PLATFORM_OVERRIDE:
-        disable_reasons.push_back(
-            vivaldi::sync::DisableReason::DISABLE_REASON_PLATFORM_OVERRIDE);
-        break;
       case syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY:
         disable_reasons.push_back(
             vivaldi::sync::DisableReason::DISABLE_REASON_ENTERPRISE_POLICY);
@@ -243,7 +239,7 @@ vivaldi::sync::EngineData GetEngineData(Profile* profile) {
 
   if (!sync_service) {
     engine_data.engine_state = vivaldi::sync::EngineState::ENGINE_STATE_FAILED;
-    if (!switches::IsSyncAllowedByFlag())
+    if (!syncer::IsSyncAllowedByFlag())
       engine_data.disable_reasons = {
           vivaldi::sync::DisableReason::DISABLE_REASON_FLAG};
     engine_data.protocol_error_type =

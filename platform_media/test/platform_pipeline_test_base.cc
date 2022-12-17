@@ -79,8 +79,7 @@ class TestIPCDemuxer : public IPCDemuxer {
                          PipelineStatusCallback status_cb,
                          bool success) {
     if (!success) {
-      std::move(status_cb).Run(
-          PipelineStatus::PIPELINE_ERROR_INITIALIZATION_FAILED);
+      std::move(status_cb).Run(PIPELINE_ERROR_INITIALIZATION_FAILED);
       return;
     }
     IPCDemuxer::Initialize(host, std::move(status_cb));

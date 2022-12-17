@@ -15,8 +15,6 @@ const base::Feature kEnableAppRanker{"EnableAppRanker",
                                      base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kEnableZeroStateAppsRanker{
     "EnableZeroStateAppsRanker", base::FEATURE_ENABLED_BY_DEFAULT};
-const base::Feature kEnableQueryBasedMixedTypesRanker{
-    "EnableQueryBasedMixedTypesRanker", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kEnableZeroStateMixedTypesRanker{
     "EnableZeroStateMixedTypesRanker", base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kEnableAppReinstallZeroState{
@@ -25,13 +23,6 @@ const base::Feature kEnableSuggestedFiles{"EnableSuggestedFiles",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kEnableSuggestedLocalFiles{
     "EnableSuggestedLocalFiles", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// "EnableEmbeddedAssistantUI" is used in finch experiment therefore we cannot
-// change it until fully launched. It is used to redirect Launcher search to
-// Assistant search.
-const base::Feature kEnableAssistantSearch{"EnableEmbeddedAssistantUI",
-                                           base::FEATURE_ENABLED_BY_DEFAULT};
-
 const base::Feature kEnableAppListLaunchRecording{
     "EnableAppListLaunchRecording", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kLauncherSettingsSearch{"LauncherSettingsSearch",
@@ -48,6 +39,8 @@ const base::Feature kCategoricalSearch{"CategoricalSearch",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kForceShowContinueSection{
     "ForceShowContinueSection", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kSearchResultInlineIcon{"SearchResultInlineIcon",
+                                            base::FEATURE_ENABLED_BY_DEFAULT};
 
 bool IsAppRankerEnabled() {
   return base::FeatureList::IsEnabled(kEnableAppRanker);
@@ -55,10 +48,6 @@ bool IsAppRankerEnabled() {
 
 bool IsZeroStateAppsRankerEnabled() {
   return base::FeatureList::IsEnabled(kEnableZeroStateAppsRanker);
-}
-
-bool IsQueryBasedMixedTypesRankerEnabled() {
-  return base::FeatureList::IsEnabled(kEnableQueryBasedMixedTypesRanker);
 }
 
 bool IsZeroStateMixedTypesRankerEnabled() {
@@ -75,10 +64,6 @@ bool IsSuggestedFilesEnabled() {
 
 bool IsSuggestedLocalFilesEnabled() {
   return base::FeatureList::IsEnabled(kEnableSuggestedLocalFiles);
-}
-
-bool IsAssistantSearchEnabled() {
-  return base::FeatureList::IsEnabled(kEnableAssistantSearch);
 }
 
 bool IsLauncherSettingsSearchEnabled() {
@@ -117,6 +102,12 @@ bool IsCategoricalSearchEnabled() {
   // Force categorical search for the latest version of the launcher.
   return ash::features::IsProductivityLauncherEnabled() ||
          base::FeatureList::IsEnabled(kCategoricalSearch);
+}
+
+bool IsSearchResultInlineIconEnabled() {
+  // Inline Icons are only supported for categorical search.
+  return IsCategoricalSearchEnabled() &&
+         base::FeatureList::IsEnabled(kSearchResultInlineIcon);
 }
 
 std::string CategoricalSearchType() {

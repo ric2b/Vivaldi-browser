@@ -45,7 +45,7 @@ void VivaldiShortcutPinToTaskbar(const std::wstring& app_id) {
       props.set_app_id(app_id);
       props.options = base::win::ShortcutProperties::PROPERTIES_APP_ID;
       bool success = base::win::CreateOrUpdateShortcutLink(
-          shortcut_link, props, base::win::SHORTCUT_UPDATE_EXISTING);
+          shortcut_link, props, base::win::ShortcutOperation::kUpdateExisting);
       if (success) {
         // pin the modified shortcut link to the taskbar
         success = base::win::PinShortcutToTaskbar(shortcut_link);

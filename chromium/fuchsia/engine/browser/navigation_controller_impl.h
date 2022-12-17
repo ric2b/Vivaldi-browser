@@ -65,8 +65,7 @@ class NavigationControllerImpl final
 
   // content::WebContentsObserver implementation.
   void TitleWasSet(content::NavigationEntry*) override;
-  void DocumentAvailableInMainFrame(
-      content::RenderFrameHost* render_frame_host) override;
+  void PrimaryMainDocumentElementAvailable() override;
   void DidFinishLoad(content::RenderFrameHost* render_frame_host,
                      const GURL& validated_url) override;
   void PrimaryMainFrameRenderProcessGone(
@@ -110,9 +109,8 @@ class NavigationControllerImpl final
   base::WeakPtrFactory<NavigationControllerImpl> weak_factory_;
 };
 
-// Computes the differences from old_entry to new_entry and stores the result in
-// |difference|.
-WEB_ENGINE_EXPORT void DiffNavigationEntries(
+// Exposed to allow unit-testing of NavigationState differencing.
+WEB_ENGINE_EXPORT void DiffNavigationEntriesForTest(
     const fuchsia::web::NavigationState& old_entry,
     const fuchsia::web::NavigationState& new_entry,
     fuchsia::web::NavigationState* difference);

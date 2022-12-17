@@ -28,6 +28,7 @@ class PageInfoHoverButton;
 class PageInfoNavigationHandler;
 class PageInfoSecurityContentView;
 class PermissionToggleRowView;
+class PageInfoHistoryController;
 
 namespace test {
 class PageInfoBubbleViewTestApi;
@@ -43,9 +44,20 @@ class PageInfoMainView : public views::View,
   // The width of the column size for permissions and chosen object icons.
   static constexpr int kIconColumnWidth = 16;
 
+  // Container view that fills the bubble width for button rows. Supports
+  // updating the layout.
+  class ContainerView : public views::View {
+   public:
+    ContainerView();
+
+    // Notifies that preferred size changed and updates the layout.
+    void Update();
+  };
+
   PageInfoMainView(PageInfo* presenter,
                    ChromePageInfoUiDelegate* ui_delegate,
                    PageInfoNavigationHandler* navigation_handler,
+                   PageInfoHistoryController* history_controller,
                    base::OnceClosure initialized_callback);
   ~PageInfoMainView() override;
 
@@ -56,8 +68,10 @@ class PageInfoMainView : public views::View,
                          ChosenObjectInfoList chosen_object_info_list) override;
   void SetIdentityInfo(const IdentityInfo& identity_info) override;
   void SetPageFeatureInfo(const PageFeatureInfo& info) override;
+  void SetAdPersonalizationInfo(const AdPersonalizationInfo& info) override;
 
   gfx::Size CalculatePreferredSize() const override;
+  void ChildPreferredSizeChanged(views::View* child) override;
 
   // PermissionToggleRowViewObserver:
   void OnPermissionChanged(const PageInfo::PermissionInfo& permission) override;
@@ -76,11 +90,11 @@ class PageInfoMainView : public views::View,
 
   // Creates a view with vertical box layout that will used a container for
   // other views.
-  std::unique_ptr<views::View> CreateContainerView() WARN_UNUSED_RESULT;
+  [[nodiscard]] std::unique_ptr<views::View> CreateContainerView();
 
   // Creates bubble header view for this page, contains the title and the close
   // button.
-  std::unique_ptr<views::View> CreateBubbleHeaderView() WARN_UNUSED_RESULT;
+  [[nodiscard]] std::unique_ptr<views::View> CreateBubbleHeaderView();
 
   // Posts a task to HandleMoreInfoRequestAsync() below.
   void HandleMoreInfoRequest(views::View* source);
@@ -97,8 +111,12 @@ class PageInfoMainView : public views::View,
 
   // Creates 'About this site' section which contains a button that opens a
   // subpage and two separators.
-  std::unique_ptr<views::View> CreateAboutThisSiteSection(
-      const page_info::proto::SiteInfo& info) WARN_UNUSED_RESULT;
+  [[nodiscard]] std::unique_ptr<views::View> CreateAboutThisSiteSection(
+      const page_info::proto::SiteInfo& info);
+
+  // Creates 'Ad personalization' section which contains a button that opens a
+  // subpage and a separator.
+  [[nodiscard]] std::unique_ptr<views::View> CreateAdPersonalizationSection();
 
   raw_ptr<PageInfo> presenter_;
 
@@ -132,7 +150,11 @@ class PageInfoMainView : public views::View,
   // The view that contains `SecurityInformationView` and a certificate button.
   raw_ptr<PageInfoSecurityContentView> security_content_view_ = nullptr;
 
-#if defined(OS_WIN) && BUILDFLAG(ENABLE_VR)
+  // The section that contains 'Ad personalization' button that opens a
+  // subpage.
+  raw_ptr<views::View> ads_personalization_section_ = nullptr;
+
+#if BUILDFLAG(IS_WIN) && BUILDFLAG(ENABLE_VR)
   // The view that contains ui related to features on a page, like a presenting
   // VR page.
   raw_ptr<views::View> page_feature_info_view_ = nullptr;

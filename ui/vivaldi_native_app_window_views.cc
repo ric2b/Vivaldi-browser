@@ -39,6 +39,9 @@
 #include "ui/devtools/devtools_connector.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/gfx/image/image_family.h"
+#include "ui/gfx/canvas.h"
+#include "ui/native_theme/native_theme.h"
+#include "ui/views/background.h"
 #include "ui/views/controls/webview/webview.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/non_client_view.h"
@@ -47,6 +50,7 @@
 #include "ui/vivaldi_ui_utils.h"
 #include "ui/wm/core/easy_resize_window_targeter.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
+#include "vivaldi/ui/vector_icons/vector_icons.h"
 
 #if defined(USE_AURA)
 #include "ui/aura/window.h"
@@ -55,6 +59,10 @@
 #if defined(OS_WIN)
 #include "browser/win/vivaldi_utils.h"
 #endif  // defined(OS_WIN)
+
+// Colors for the flash screen.
+#define DEFAULT_DARK_BACKGROUND_COLOR SkColorSetARGB(0xFF, 0x2d, 0x2d, 0x2d)
+#define DEFAULT_LIGHT_BACKGROUND_COLOR SkColorSetARGB(0xFF, 0xd2, 0xd2, 0xd2)
 
 namespace {
 
@@ -115,6 +123,36 @@ gfx::Rect GetInitialWindowBounds(const VivaldiBrowserWindowParams& params,
   return combined_bounds;
 }
 
+class VivaldiSplashBackground : public views::Background {
+ public:
+  explicit VivaldiSplashBackground(bool show_logo) : show_logo_(show_logo) {}
+
+  VivaldiSplashBackground(const VivaldiSplashBackground&) = delete;
+  VivaldiSplashBackground& operator=(const VivaldiSplashBackground&) = delete;
+
+  void Paint(gfx::Canvas* canvas, views::View* view) const override {
+    ui::NativeTheme* theme = view->GetNativeTheme();
+    if (theme && theme->GetDefaultSystemColorScheme() ==
+                    ui::NativeTheme::ColorScheme::kDark) {
+      canvas->DrawColor(DEFAULT_DARK_BACKGROUND_COLOR);
+    } else {
+      canvas->DrawColor(DEFAULT_LIGHT_BACKGROUND_COLOR);
+    }
+
+    if (show_logo_) {
+      const gfx::Rect& b = view->GetContentsBounds();
+      int size = b.width() * 0.16;
+      const ui::ThemedVectorIcon& logo = ui::ThemedVectorIcon(
+          &kVivaldiSplashIcon, SkColorSetARGB(0x1A, 0x00, 0x00, 0x00), size);
+      canvas->DrawImageInt(logo.GetImageSkia(view->GetColorProvider()),
+          (b.width() - size) / 2, (b.height() - size) / 2);
+    }
+  }
+
+  private:
+    bool show_logo_;
+};
+
 }  // namespace
 
 VivaldiNativeAppWindowViews::VivaldiNativeAppWindowViews()
@@ -148,6 +186,7 @@ void VivaldiNativeAppWindowViews::InitializeDefaultWindow(
   }
   init_params.visible_on_all_workspaces =
       create_params.visible_on_all_workspaces;
+  init_params.workspace = create_params.workspace;
 
   OnBeforeWidgetInit(init_params);
   widget()->Init(std::move(init_params));
@@ -173,6 +212,11 @@ void VivaldiNativeAppWindowViews::InitializeDefaultWindow(
     else
       widget()->SetBounds(window_bounds);
   }
+
+  bool show_logo = window_->browser()->is_type_normal();
+  SetBackground(std::make_unique<VivaldiSplashBackground>(show_logo));
+  web_view_->SetBackground(
+      std::make_unique<VivaldiSplashBackground>(show_logo));
 }
 
 void VivaldiNativeAppWindowViews::Init(
@@ -655,6 +699,14 @@ void VivaldiNativeAppWindowViews::Close() {
 
 void VivaldiNativeAppWindowViews::ShowEmojiPanel() {
   GetWidget()->ShowEmojiPanel();
+}
+
+std::string VivaldiNativeAppWindowViews::GetWorkspace() const {
+  return GetWidget()->GetWorkspace();
+}
+
+bool VivaldiNativeAppWindowViews::IsVisibleOnAllWorkspaces() const {
+  return GetWidget()->IsVisibleOnAllWorkspaces();
 }
 
 ui::ZOrderLevel VivaldiNativeAppWindowViews::GetZOrderLevel() const {

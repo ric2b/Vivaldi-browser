@@ -21,12 +21,27 @@ class DeltaUpdate {
         return (archiveFileAttributes[.size] as! NSNumber).int64Value
     }
 
-    class func create(from: ArchiveItem, to: ArchiveItem, archivePath: URL) throws -> DeltaUpdate {
-        var applyDiffError: NSError?
+    class func create(from: ArchiveItem, to: ArchiveItem, deltaVersion: SUBinaryDeltaMajorVersion, deltaCompressionMode: SPUDeltaCompressionMode, deltaCompressionLevel: UInt8, archivePath: URL) throws -> DeltaUpdate {
+        var createDiffError: NSError?
 
-        if !createBinaryDelta(from.appPath.path, to.appPath.path, archivePath.path, .beigeMajorVersion, false, &applyDiffError) {
+        if !createBinaryDelta(from.appPath.path, to.appPath.path, archivePath.path, deltaVersion, deltaCompressionMode, deltaCompressionLevel, false, &createDiffError) {
+            throw createDiffError!
+        }
+        
+        // Ensure applying the diff also succeeds
+        let fileManager = FileManager.default
+        
+        let tempApplyToPath = to.appPath.deletingLastPathComponent().appendingPathComponent(".temp_" + to.appPath.lastPathComponent)
+        let _ = try? fileManager.removeItem(at: tempApplyToPath)
+        
+        var applyDiffError: NSError?
+        if !applyBinaryDelta(from.appPath.path, tempApplyToPath.path, archivePath.path, false, { _ in
+        }, &applyDiffError) {
+            let _ = try? fileManager.removeItem(at: archivePath)
             throw applyDiffError!
         }
+        
+        let _ = try? fileManager.removeItem(at: tempApplyToPath)
 
         return DeltaUpdate(fromVersion: from.version, archivePath: archivePath)
     }
@@ -37,6 +52,7 @@ class ArchiveItem: CustomStringConvertible {
     // swiftlint:disable identifier_name
     let _shortVersion: String?
     let minimumSystemVersion: String
+    let frameworkVersion: String?
     let archivePath: URL
     let appPath: URL
     let feedURL: URL?
@@ -50,11 +66,12 @@ class ArchiveItem: CustomStringConvertible {
     var downloadUrlPrefix: URL?
     var releaseNotesURLPrefix: URL?
 
-    init(version: String, shortVersion: String?, feedURL: URL?, minimumSystemVersion: String?, publicEdKey: String?, supportsDSA: Bool, appPath: URL, archivePath: URL) throws {
+    init(version: String, shortVersion: String?, feedURL: URL?, minimumSystemVersion: String?, frameworkVersion: String?, publicEdKey: String?, supportsDSA: Bool, appPath: URL, archivePath: URL) throws {
         self.version = version
         self._shortVersion = shortVersion
         self.feedURL = feedURL
-        self.minimumSystemVersion = minimumSystemVersion ?? "10.9"
+        self.minimumSystemVersion = minimumSystemVersion ?? "10.11"
+        self.frameworkVersion = frameworkVersion
         self.archivePath = archivePath
         self.appPath = appPath
         self.supportsDSA = supportsDSA
@@ -68,7 +85,7 @@ class ArchiveItem: CustomStringConvertible {
         self.deltas = []
     }
 
-    convenience init(fromArchive archivePath: URL, unarchivedDir: URL) throws {
+    convenience init(fromArchive archivePath: URL, unarchivedDir: URL, validateBundle: Bool, disableNestedCodeCheck: Bool) throws {
         let resourceKeys = [URLResourceKey.typeIdentifierKey]
         let items = try FileManager.default.contentsOfDirectory(at: unarchivedDir, includingPropertiesForKeys: resourceKeys, options: .skipsHiddenFiles)
 
@@ -85,10 +102,16 @@ class ArchiveItem: CustomStringConvertible {
             }
 
             let appPath = bundles[0]
+            
+            // If requested to validate the bundle, ensure it is properly signed
+            if validateBundle && SUCodeSigningVerifier.bundle(atURLIsCodeSigned: appPath) {
+                try SUCodeSigningVerifier.codeSignatureIsValid(atBundleURL: appPath, checkNestedCode: !disableNestedCodeCheck)
+            }
+            
             guard let infoPlist = NSDictionary(contentsOf: appPath.appendingPathComponent("Contents/Info.plist")) else {
                 throw makeError(code: .unarchivingError, "No plist \(appPath.path)")
             }
-            guard let version = infoPlist[kCFBundleVersionKey] as? String else {
+            guard let version = infoPlist[kCFBundleVersionKey!] as? String else {
                 throw makeError(code: .unarchivingError, "No Version \(kCFBundleVersionKey as String? ?? "missing kCFBundleVersionKey") \(appPath)")
             }
             let shortVersion = infoPlist["CFBundleShortVersionString"] as? String
@@ -103,15 +126,32 @@ class ArchiveItem: CustomStringConvertible {
                     feedURL = feedURL!.appendingPathComponent("appcast.xml")
                 }
             }
+            
+            var frameworkVersion: String? = nil
+            if let appBundle = Bundle(url: appPath), let frameworksURL = appBundle.privateFrameworksURL {
+                let sparkleBundleURL = frameworksURL.appendingPathComponent("Sparkle").appendingPathExtension("framework")
+                
+                if let sparkleBundle = Bundle(url: sparkleBundleURL), let infoDictionary = sparkleBundle.infoDictionary {
+                    frameworkVersion = infoDictionary[kCFBundleVersionKey as String] as? String
+                } else {
+                    // Try legacy SparkleCore framework that was shipping in early 2.0 betas
+                    let sparkleCoreBundleURL = frameworksURL.appendingPathComponent("SparkleCore").appendingPathExtension("framework")
+                    
+                    if let sparkleBundle = Bundle(url: sparkleCoreBundleURL), let infoDictionary = sparkleBundle.infoDictionary {
+                        frameworkVersion = infoDictionary[kCFBundleVersionKey as String] as? String
+                    }
+                }
+            }
 
             try self.init(version: version,
-                           shortVersion: shortVersion,
-                           feedURL: feedURL,
-                           minimumSystemVersion: infoPlist["LSMinimumSystemVersion"] as? String,
-                           publicEdKey: publicEdKey,
-                           supportsDSA: supportsDSA,
-                           appPath: appPath,
-                           archivePath: archivePath)
+                          shortVersion: shortVersion,
+                          feedURL: feedURL,
+                          minimumSystemVersion: infoPlist["LSMinimumSystemVersion"] as? String,
+                          frameworkVersion: frameworkVersion,
+                          publicEdKey: publicEdKey,
+                          supportsDSA: supportsDSA,
+                          appPath: appPath,
+                          archivePath: archivePath)
         } else {
             throw makeError(code: .missingUpdateError, "No supported items in \(unarchivedDir) \(items) [note: only .app bundles are supported]")
         }
@@ -141,6 +181,7 @@ class ArchiveItem: CustomStringConvertible {
     var pubDate: String {
         let date = self.archiveFileAttributes[.creationDate] as! Date
         let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss ZZ"
         return formatter.string(from: date)
     }
@@ -161,9 +202,9 @@ class ArchiveItem: CustomStringConvertible {
         return releaseNotes
     }
 
-    private func getReleaseNotesAsHTMLFragment(_ path: URL) -> String?  {
+    private func getReleaseNotesAsHTMLFragment(_ path: URL, _ maxCDATAThreshold: Int) -> String?  {
         if let html = try? String(contentsOf: path) {
-            if html.utf8.count < 1000 &&
+            if html.utf8.count <= maxCDATAThreshold &&
                 !html.localizedCaseInsensitiveContains("<!DOCTYPE") &&
                 !html.localizedCaseInsensitiveContains("<body") {
                 return html
@@ -171,37 +212,40 @@ class ArchiveItem: CustomStringConvertible {
         }
         return nil
     }
-
-    var releaseNotesHTML: String? {
+    
+    func releaseNotesHTML(maxCDATAThreshold: Int) -> String? {
         if let path = self.releaseNotesPath {
-            return self.getReleaseNotesAsHTMLFragment(path)
+            return self.getReleaseNotesAsHTMLFragment(path, maxCDATAThreshold)
         }
         return nil
     }
-
-    var releaseNotesURL: URL? {
+    
+    func releaseNotesURL(maxCDATAThreshold: Int) -> URL? {
         guard let path = self.releaseNotesPath else {
             return nil
         }
         // The file is already used as inline description
-        if self.getReleaseNotesAsHTMLFragment(path) != nil {
+        if self.getReleaseNotesAsHTMLFragment(path, maxCDATAThreshold) != nil {
             return nil
         }
-        guard let escapedFilename = path.lastPathComponent.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
+        return self.releaseNoteURL(for: path.lastPathComponent)
+    }
+    
+    func releaseNoteURL(for unescapedFilename: String) -> URL? {
+        guard let escapedFilename = unescapedFilename.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
             return nil
         }
-        
         if let releaseNotesURLPrefix = self.releaseNotesURLPrefix {
-            // If a URL prefix for release notes was passed on the command-line, use it
+            // If a URL prefix for release notes was passed on the commandline, use it
             return URL(string: escapedFilename, relativeTo: releaseNotesURLPrefix)
-        } else if let relative = self.feedURL {
-            return URL(string: escapedFilename, relativeTo: relative)
+        } else if let relativeURL = self.feedURL {
+            return URL(string: escapedFilename, relativeTo: relativeURL)
+        } else {
+            return URL(string: escapedFilename)
         }
-        return URL(string: escapedFilename)
     }
 
     func localizedReleaseNotes() -> [(String, URL)] {
-        let fileManager = FileManager.default
         var basename = archivePath.deletingPathExtension()
         if basename.pathExtension == "tar" {
             basename = basename.deletingPathExtension()
@@ -211,14 +255,10 @@ class ArchiveItem: CustomStringConvertible {
             let localizedReleaseNoteURL = basename
                 .appendingPathExtension(languageCode)
                 .appendingPathExtension("html")
-            if fileManager.fileExists(atPath: localizedReleaseNoteURL.path) {
-                if let releaseNotesURLPrefix = self.releaseNotesURLPrefix {
-                    localizedReleaseNotes.append((languageCode, URL(string: localizedReleaseNoteURL.lastPathComponent, relativeTo: releaseNotesURLPrefix)!))
-                }
-                else {
-                    localizedReleaseNotes.append((languageCode, URL(string: localizedReleaseNoteURL.lastPathComponent)!))
-                }
-                
+            if (try? localizedReleaseNoteURL.checkResourceIsReachable()) ?? false,
+               let localizedReleaseNoteRemoteURL = self.releaseNoteURL(for: localizedReleaseNoteURL.lastPathComponent)
+            {
+                localizedReleaseNotes.append((languageCode, localizedReleaseNoteRemoteURL))
             }
         }
         return localizedReleaseNotes

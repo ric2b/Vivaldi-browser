@@ -19,6 +19,7 @@
 #include "third_party/blink/renderer/core/paint/document_marker_painter.h"
 #include "third_party/blink/renderer/core/paint/highlight_painting_utils.h"
 #include "third_party/blink/renderer/core/paint/inline_text_box_painter.h"
+#include "third_party/blink/renderer/core/paint/ng/ng_text_decoration_painter.h"
 #include "third_party/blink/renderer/core/paint/ng/ng_text_painter.h"
 #include "third_party/blink/renderer/core/paint/paint_auto_dark_mode.h"
 #include "third_party/blink/renderer/core/paint/paint_info.h"
@@ -173,7 +174,7 @@ void NGHighlightPainter::SelectionPaintState::ComputeSelectionRectIfNeeded() {
     PhysicalRect rotated = writing_mode_rotation_
                                ? PhysicalRect::EnclosingRect(
                                      writing_mode_rotation_->Inverse().MapRect(
-                                         FloatRect(physical)))
+                                         gfx::RectF(physical)))
                                : physical;
     selection_rect_.emplace(SelectionRect{physical, rotated});
   }
@@ -204,7 +205,7 @@ void NGHighlightPainter::SelectionPaintState::PaintSelectionBackground(
                                                selection_style_.fill_color);
 
   AutoDarkMode auto_dark_mode(
-      PaintAutoDarkMode(style, DarkModeFilter::ElementRole::kForeground));
+      PaintAutoDarkMode(style, DarkModeFilter::ElementRole::kBackground));
 
   if (!rotation) {
     PaintRect(context, RectInPhysicalSpace(), color, auto_dark_mode);
@@ -296,8 +297,10 @@ void NGHighlightPainter::Paint(Phase phase) {
   const auto& text_node = To<Text>(*fragment_item_.GetNode());
   const StringView text = cursor_.CurrentText();
 
-  AutoDarkMode auto_dark_mode(
+  AutoDarkMode foreground_auto_dark_mode(
       PaintAutoDarkMode(style_, DarkModeFilter::ElementRole::kForeground));
+  AutoDarkMode background_auto_dark_mode(
+      PaintAutoDarkMode(style_, DarkModeFilter::ElementRole::kBackground));
 
   for (const DocumentMarker* marker : markers_) {
     const unsigned marker_start_offset =
@@ -342,7 +345,7 @@ void NGHighlightPainter::Paint(Phase phase) {
           PaintRect(paint_info_.context, PhysicalOffset(box_origin_),
                     fragment_item_.LocalRect(text, paint_start_offset,
                                              paint_end_offset),
-                    color, auto_dark_mode);
+                    color, background_auto_dark_mode);
           break;
         }
 
@@ -365,7 +368,7 @@ void NGHighlightPainter::Paint(Phase phase) {
         }
         text_painter_.Paint(paint_start_offset, paint_end_offset,
                             paint_end_offset - paint_start_offset, text_style,
-                            kInvalidDOMNodeId, auto_dark_mode);
+                            kInvalidDOMNodeId, foreground_auto_dark_mode);
       } break;
 
       case DocumentMarker::kComposition:
@@ -376,7 +379,8 @@ void NGHighlightPainter::Paint(Phase phase) {
           PaintRect(paint_info_.context, PhysicalOffset(box_origin_),
                     fragment_item_.LocalRect(text, paint_start_offset,
                                              paint_end_offset),
-                    styleable_marker.BackgroundColor(), auto_dark_mode);
+                    styleable_marker.BackgroundColor(),
+                    background_auto_dark_mode);
           break;
         }
         if (DocumentMarkerPainter::ShouldPaintMarkerUnderline(
@@ -409,7 +413,7 @@ void NGHighlightPainter::Paint(Phase phase) {
           PaintRect(paint_info_.context, PhysicalOffset(box_origin_),
                     fragment_item_.LocalRect(text, paint_start_offset,
                                              paint_end_offset),
-                    background_color, auto_dark_mode);
+                    background_color, background_auto_dark_mode);
           break;
         }
 
@@ -430,11 +434,27 @@ void NGHighlightPainter::Paint(Phase phase) {
                 text_style, paint_info_,
                 highlight_pseudo_marker.GetPseudoArgument());
 
+        scoped_refptr<const ComputedStyle> pseudo_style =
+            HighlightPaintingUtils::HighlightPseudoStyle(
+                node_, style_, highlight_pseudo_marker.GetPseudoId(),
+                highlight_pseudo_marker.GetPseudoArgument());
+        PhysicalRect decoration_rect = fragment_item_.LocalRect(
+            text, paint_start_offset, paint_end_offset);
+        decoration_rect.Move(PhysicalOffset(box_origin_));
+        NGTextDecorationPainter decoration_painter(
+            text_painter_, fragment_item_, paint_info_,
+            pseudo_style ? *pseudo_style : style_, final_text_style,
+            decoration_rect, selection_);
+
+        decoration_painter.Begin(NGTextDecorationPainter::kOriginating);
+        decoration_painter.PaintExceptLineThrough();
+
         text_painter_.Paint(paint_start_offset, paint_end_offset,
                             paint_end_offset - paint_start_offset,
                             final_text_style, kInvalidDOMNodeId,
-                            auto_dark_mode);
+                            foreground_auto_dark_mode);
 
+        decoration_painter.PaintOnlyLineThrough();
       } break;
 
       default:

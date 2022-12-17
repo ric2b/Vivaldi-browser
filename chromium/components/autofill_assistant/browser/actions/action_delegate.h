@@ -35,6 +35,10 @@ struct FormFieldData;
 class PersonalDataManager;
 }  // namespace autofill
 
+namespace password_manager {
+class PasswordChangeSuccessTracker;
+}
+
 namespace content {
 class WebContents;
 }  // namespace content
@@ -116,6 +120,7 @@ class ActionDelegate {
   // If |allow_interrupt| interrupts can run while waiting.
   virtual void WaitForDom(
       base::TimeDelta max_wait_time,
+      bool allow_observer_mode,
       bool allow_interrupt,
       WaitForDomObserver* observer,
       base::RepeatingCallback<
@@ -271,8 +276,12 @@ class ActionDelegate {
   // Get current personal data manager.
   virtual autofill::PersonalDataManager* GetPersonalDataManager() const = 0;
 
-  // Get current login fetcher.
+  // Get current login manager.
   virtual WebsiteLoginManager* GetWebsiteLoginManager() const = 0;
+
+  // Get current password change success tracker.
+  virtual password_manager::PasswordChangeSuccessTracker*
+  GetPasswordChangeSuccessTracker() const = 0;
 
   // Get associated web contents.
   virtual content::WebContents* GetWebContents() const = 0;

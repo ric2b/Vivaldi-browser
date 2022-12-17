@@ -35,6 +35,7 @@
 #include "third_party/blink/renderer/platform/graphics/paint/paint_shader.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/skia/include/effects/SkGradientShader.h"
+#include "ui/gfx/geometry/outsets_f.h"
 
 namespace blink {
 
@@ -202,9 +203,9 @@ void InlineTextBoxPainter::Paint(const PaintInfo& paint_info,
       // actual painting of the selection_rect, this is done below by
       // concatenating a rotation matrix on the context.
       if (!style_to_use.IsHorizontalWritingMode()) {
-        FloatRect rotated_selection =
+        gfx::RectF rotated_selection =
             TextPainterBase::Rotation(box_rect, TextPainterBase::kClockwise)
-                .MapRect(static_cast<FloatRect>(selection_rect));
+                .MapRect(static_cast<gfx::RectF>(selection_rect));
         selection_rect = PhysicalRect::EnclosingRect(rotated_selection);
       }
       selection_recorder.emplace(
@@ -588,7 +589,7 @@ void InlineTextBoxPainter::PaintSingleMarkerBackgroundRun(
   context.DrawHighlightForText(
       font, inline_text_box_.ConstructTextRun(style), local_origin, sel_height,
       background_color,
-      PaintAutoDarkMode(style, DarkModeFilter::ElementRole::kForeground),
+      PaintAutoDarkMode(style, DarkModeFilter::ElementRole::kBackground),
       start_pos, end_pos);
 }
 
@@ -862,19 +863,19 @@ PhysicalRect InlineTextBoxPainter::PaintSelection(
 
   context.FillRect(
       gfx::RectF(selection_rect), c,
-      PaintAutoDarkMode(style, DarkModeFilter::ElementRole::kForeground));
+      PaintAutoDarkMode(style, DarkModeFilter::ElementRole::kBackground));
   return selection_rect;
 }
 
 void InlineTextBoxPainter::ExpandToIncludeNewlineForSelection(
     PhysicalRect& rect) {
-  FloatRectOutsets outsets = FloatRectOutsets();
+  gfx::OutsetsF outsets;
   float space_width = inline_text_box_.NewlineSpaceWidth();
   if (inline_text_box_.IsLeftToRightDirection())
-    outsets.SetRight(space_width);
+    outsets.set_right(space_width);
   else
-    outsets.SetLeft(space_width);
-  rect.Expand(outsets);
+    outsets.set_left(space_width);
+  rect.Expand(EnclosingLayoutRectOutsets(outsets));
 }
 
 void InlineTextBoxPainter::PaintStyleableMarkerUnderline(
@@ -988,7 +989,7 @@ void InlineTextBoxPainter::PaintTextMarkerBackground(
   context.Clip(gfx::RectF(box_rect));
   context.DrawHighlightForText(
       font, run, gfx::PointF(box_origin), box_rect.Height().ToInt(), color,
-      PaintAutoDarkMode(style, DarkModeFilter::ElementRole::kForeground),
+      PaintAutoDarkMode(style, DarkModeFilter::ElementRole::kBackground),
       paint_offsets.first, paint_offsets.second);
 }
 

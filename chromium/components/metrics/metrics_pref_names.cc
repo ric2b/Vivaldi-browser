@@ -109,12 +109,6 @@ const char kLastClonedResetTimestamp[] = "cloned_install.last_timestamp";
 const char kStabilityBrowserLastLiveTimeStamp[] =
     "user_experience_metrics.stability.browser_last_live_timestamp";
 
-// Total number of child process crashes (other than renderer / extension
-// renderer ones, and plugin children, which are counted separately) since the
-// last report.
-const char kStabilityChildProcessCrashCount[] =
-    "user_experience_metrics.stability.child_process_crash_count";
-
 // Number of times the application exited uncleanly since the last report.
 // On Android this does not count the ones due to Gms Core updates (below).
 const char kStabilityCrashCount[] =
@@ -178,11 +172,6 @@ const char kStabilityRendererCrashCount[] =
 // Number of times a renderer process failed to launch since the last report.
 const char kStabilityRendererFailedLaunchCount[] =
     "user_experience_metrics.stability.renderer_failed_launch_count";
-
-// Number of times the renderer has become non-responsive since the last
-// report.
-const char kStabilityRendererHangCount[] =
-    "user_experience_metrics.stability.renderer_hang_count";
 
 // Number of times a renderer process successfully launched since the last
 // report.

@@ -11,7 +11,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 #include "base/win/windows_version.h"
 #include "sandbox/policy/win/sandbox_policy_feature_test.h"
 #include "sandbox/policy/win/sandbox_test_utils.h"
@@ -32,7 +32,7 @@ namespace content {
 namespace sandbox {
 namespace policy {
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 class RendererFeatureSandboxWinTest
     : public ::sandbox::policy::SandboxFeatureTest {
  public:
@@ -73,28 +73,9 @@ TEST_P(RendererFeatureSandboxWinTest, RendererGeneratedPolicyTest) {
           handles_to_inherit, &test_renderer_delegate, policy);
   ASSERT_EQ(::sandbox::ResultCode::SBOX_ALL_OK, result);
 
-  EXPECT_EQ(policy->GetIntegrityLevel(),
-            ::sandbox::IntegrityLevel::INTEGRITY_LEVEL_LOW);
-  EXPECT_EQ(policy->GetLockdownTokenLevel(),
-            ::sandbox::TokenLevel::USER_LOCKDOWN);
-  EXPECT_EQ(policy->GetInitialTokenLevel(),
-            ::sandbox::TokenLevel::USER_RESTRICTED_SAME_ACCESS);
-  EXPECT_EQ(policy->GetProcessMitigations(), GetExpectedMitigationFlags());
-  EXPECT_EQ(policy->GetDelayedProcessMitigations(),
-            GetExpectedDelayedMitigationFlags());
-
-  if (GetExpectedAppContainerType() == ::sandbox::AppContainerType::kLowbox) {
-    EXPECT_EQ(GetExpectedAppContainerType(),
-              policy->GetAppContainer()->GetAppContainerType());
-
-    ::sandbox::policy::EqualSidList(
-        static_cast<::sandbox::PolicyBase*>(policy.get())
-            ->GetAppContainerBase()
-            ->GetCapabilities(),
-        {});
-  } else {
-    EXPECT_EQ(policy->GetAppContainer().get(), nullptr);
-  }
+  ValidateSecurityLevels(policy);
+  ValidatePolicyFlagSettings(policy);
+  ValidateAppContainerSettings(policy);
 }
 
 INSTANTIATE_TEST_SUITE_P(

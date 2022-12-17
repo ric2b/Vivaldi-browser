@@ -173,7 +173,8 @@ void TtsExtensionEventHandler::OnTtsEvent(content::TtsUtterance* utterance,
 
   auto event = std::make_unique<extensions::Event>(
       ::extensions::events::TTS_ON_EVENT, ::events::kOnEvent,
-      std::move(*arguments).TakeList(), utterance->GetBrowserContext());
+      std::move(*arguments).TakeListDeprecated(),
+      utterance->GetBrowserContext());
   event->event_url = utterance->GetSrcUrl();
   extensions::EventRouter::Get(utterance->GetBrowserContext())
       ->DispatchEventToExtension(src_extension_id_, std::move(event));
@@ -259,7 +260,7 @@ ExtensionFunction::ResponseAction TtsSpeakFunction::Run() {
     base::ListValue* list;
     EXTENSION_FUNCTION_VALIDATE(
         options->GetList(constants::kRequiredEventTypesKey, &list));
-    for (const base::Value& i : list->GetList()) {
+    for (const base::Value& i : list->GetListDeprecated()) {
       const std::string* event_type = i.GetIfString();
       if (event_type) {
         required_event_types.insert(
@@ -273,7 +274,7 @@ ExtensionFunction::ResponseAction TtsSpeakFunction::Run() {
     base::ListValue* list;
     EXTENSION_FUNCTION_VALIDATE(
         options->GetList(constants::kDesiredEventTypesKey, &list));
-    for (const base::Value& i : list->GetList()) {
+    for (const base::Value& i : list->GetListDeprecated()) {
       const std::string* event_type = i.GetIfString();
       if (event_type)
         desired_event_types.insert(TtsEventTypeFromString(event_type->c_str()));
@@ -287,9 +288,10 @@ ExtensionFunction::ResponseAction TtsSpeakFunction::Run() {
   }
 
   int src_id = -1;
-  if (options->FindKey(constants::kSrcIdKey)) {
-    EXTENSION_FUNCTION_VALIDATE(
-        options->GetInteger(constants::kSrcIdKey, &src_id));
+  base::Value* src_id_value = options->FindKey(constants::kSrcIdKey);
+  if (src_id_value) {
+    EXTENSION_FUNCTION_VALIDATE(src_id_value->is_int());
+    src_id = src_id_value->GetInt();
   }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)

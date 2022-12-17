@@ -133,6 +133,18 @@ class MailPrivateReadMessageFileToBufferFunction : public ExtensionFunction {
   ResponseAction Run() override;
 };
 
+class MailPrivateMessageFileExistsFunction : public ExtensionFunction {
+  DECLARE_EXTENSION_FUNCTION("mailPrivate.messageFileExists",
+                             MAIL_MESSAGE_FILE_EXISTS)
+ public:
+  MailPrivateMessageFileExistsFunction() = default;
+
+ private:
+  ~MailPrivateMessageFileExistsFunction() override = default;
+  // ExtensionFunction:
+  ResponseAction Run() override;
+};
+
 class MailPrivateReadFileToTextFunction : public ExtensionFunction {
   DECLARE_EXTENSION_FUNCTION("mailPrivate.readFileToText",
                              MAIL_READ_FILE_TO_TEXT)

@@ -13,12 +13,12 @@
 #include <algorithm>
 #include <set>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
 #include "base/command_line.h"
 #include "base/files/file_util.h"
-#include "base/ignore_result.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
@@ -122,7 +122,7 @@ sql::InitStatus ContactDatabase::Init(const base::FilePath& contact_db_name) {
 void ContactDatabase::BeginExclusiveMode() {
   // We can't use set_exclusive_locking() since that only has an effect before
   // the DB is opened.
-  ignore_result(db_.Execute("PRAGMA locking_mode=EXCLUSIVE"));
+  std::ignore = db_.Execute("PRAGMA locking_mode=EXCLUSIVE");
 }
 
 // static
@@ -208,7 +208,7 @@ void ContactDatabase::RollbackTransaction() {
 void ContactDatabase::Vacuum() {
   DCHECK_EQ(0, db_.transaction_nesting())
       << "Can not have a transaction when vacuuming.";
-  ignore_result(db_.Execute("VACUUM"));
+  std::ignore = db_.Execute("VACUUM");
 }
 
 void ContactDatabase::TrimMemory(bool aggressively) {

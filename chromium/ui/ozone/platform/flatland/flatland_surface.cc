@@ -21,7 +21,7 @@ namespace ui {
 namespace {
 
 // Default interval used for vsync callback.
-// TODO(crbug.com/1230150): Remove the usage of this by calculating fps through
+// TODO(fxbug.dev/93998): Remove the usage of this by calculating fps through
 // Display API and present callbacks.
 constexpr base::TimeDelta kDefaultVsyncInterval = base::Seconds(1) / 60;
 
@@ -116,6 +116,9 @@ void FlatlandSurface::Present(
         image_id, collection->GetFlatlandImportToken(), handle.buffer_index,
         std::move(image_properties));
     flatland_.flatland()->SetImageDestinationSize(image_id, size);
+    // Set main layer to be opaque.
+    flatland_.flatland()->SetImageBlendingFunction(
+        image_id, fuchsia::ui::composition::BlendMode::SRC);
 
     // Add Flatland Image to |buffer_collection_to_image_id_|.
     buffer_collection_to_image_id_[collection->id()] = image_id;

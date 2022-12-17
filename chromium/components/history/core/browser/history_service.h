@@ -115,7 +115,7 @@ class HistoryService : public KeyedService {
   // Returns true if the backend has finished loading.
   bool backend_loaded() const { return backend_loaded_; }
 
-#if defined(OS_IOS)
+#if BUILDFLAG(IS_IOS)
   // Causes the history backend to commit any in-progress transactions. Called
   // when the application is being backgrounded.
   void HandleBackgrounding();
@@ -222,10 +222,12 @@ class HistoryService : public KeyedService {
                              const GURL& url,
                              base::Time end_ts);
 
-  // Updates the history database by setting the floc allowed bit. The page can
-  // be identified by the combination of the context id, the navigation entry id
-  // and the url. No-op if the page is not found.
-  void SetFlocAllowed(ContextID context_id, int nav_entry_id, const GURL& url);
+  // Updates the history database by setting the browsing topics allowed bit.
+  // The page can be identified by the combination of the context id, the
+  // navigation entry id and the url. No-op if the page is not found.
+  void SetBrowsingTopicsAllowed(ContextID context_id,
+                                int nav_entry_id,
+                                const GURL& url);
 
   // Updates the history database with the content model annotations for the
   // visit.
@@ -238,6 +240,12 @@ class HistoryService : public KeyedService {
   void AddRelatedSearchesForVisit(
       const std::vector<std::string>& related_searches,
       VisitID visit_id);
+
+  // Updates the history database with the search metadata for a search-like
+  // visit.
+  void AddSearchMetadataForVisit(const GURL& search_normalized_url,
+                                 const std::u16string& search_terms,
+                                 VisitID visit_id);
 
   // Querying ------------------------------------------------------------------
 
@@ -361,7 +369,7 @@ class HistoryService : public KeyedService {
   // time range [`begin_time`, `end_time`). If the given host has not been
   // visited in the given time range, the callback will be called with a null
   // base::Time.
-  base::CancelableTaskTracker::TaskId GetLastVisitToHost(
+  virtual base::CancelableTaskTracker::TaskId GetLastVisitToHost(
       const std::string& host,
       base::Time begin_time,
       base::Time end_time,
@@ -589,8 +597,8 @@ class HistoryService : public KeyedService {
   // Add a callback to the list. The callback will remain registered until the
   // returned subscription is destroyed. The subscription must be destroyed
   // before HistoryService is destroyed.
-  base::CallbackListSubscription AddFaviconsChangedCallback(
-      const FaviconsChangedCallback& callback) WARN_UNUSED_RESULT;
+  [[nodiscard]] base::CallbackListSubscription AddFaviconsChangedCallback(
+      const FaviconsChangedCallback& callback);
 
   // Testing -------------------------------------------------------------------
 
@@ -765,6 +773,13 @@ class HistoryService : public KeyedService {
   // Notify all HistoryServiceObservers registered that keyword search term is
   // deleted. `url_id` is the id of the url row.
   void NotifyKeywordSearchTermDeleted(URLID url_id);
+
+  // Notify all HistoryServiceObservers registered that content model
+  // annotations for the URL associated with `row` have changed. `row` contains
+  // the URL information for the page.
+  void NotifyContentModelAnnotationModified(
+      const URLRow& row,
+      const VisitContentModelAnnotations& model_annotations);
 
   // Favicon -------------------------------------------------------------------
 

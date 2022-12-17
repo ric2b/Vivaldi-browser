@@ -70,13 +70,15 @@ class AttributionManagerImpl;
 class CookieStoreManager;
 class FileSystemAccessEntryFactory;
 class FileSystemAccessManagerImpl;
-class FontAccessContext;
 class FontAccessManagerImpl;
 class GeneratedCodeCacheContext;
 class HostZoomLevelContext;
 class IndexedDBControlWrapper;
-class InterestGroupManager;
+class InterestGroupManagerImpl;
 class LockManager;
+#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
+class MediaLicenseManager;
+#endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 class NativeIOContextImpl;
 class PaymentAppContextImpl;
 class PrefetchURLLoaderService;
@@ -130,6 +132,8 @@ class CONTENT_EXPORT StoragePartitionImpl
   void OverrideSharedStorageWorkletHostManagerForTesting(
       std::unique_ptr<SharedStorageWorkletHostManager>
           shared_storage_worklet_host_manager);
+  void OverrideAggregationServiceForTesting(
+      std::unique_ptr<AggregationServiceImpl> aggregation_service);
 
   // Returns the StoragePartitionConfig that represents this StoragePartition.
   const StoragePartitionConfig& GetConfig();
@@ -157,7 +161,6 @@ class CONTENT_EXPORT StoragePartitionImpl
   storage::QuotaManager* GetQuotaManager() override;
   BackgroundSyncContextImpl* GetBackgroundSyncContext() override;
   storage::FileSystemContext* GetFileSystemContext() override;
-  FontAccessContext* GetFontAccessContext() override;
   storage::DatabaseTracker* GetDatabaseTracker() override;
   DOMStorageContextWrapper* GetDOMStorageContext() override;
   storage::mojom::LocalStorageControl* GetLocalStorageControl() override;
@@ -182,6 +185,7 @@ class CONTENT_EXPORT StoragePartitionImpl
   HostZoomLevelContext* GetHostZoomLevelContext() override;
   ZoomLevelDelegate* GetZoomLevelDelegate() override;
   PlatformNotificationContextImpl* GetPlatformNotificationContext() override;
+  InterestGroupManager* GetInterestGroupManager() override;
   leveldb_proto::ProtoDatabaseProvider* GetProtoDatabaseProvider() override;
   void SetProtoDatabaseProvider(
       std::unique_ptr<leveldb_proto::ProtoDatabaseProvider> proto_db_provider)
@@ -237,11 +241,13 @@ class CONTENT_EXPORT StoragePartitionImpl
   AttributionManagerImpl* GetAttributionManager();
   void SetFontAccessManagerForTesting(
       std::unique_ptr<FontAccessManagerImpl> font_access_manager);
-  FontAccessManagerImpl* GetFontAccessManager();
-  InterestGroupManager* GetInterestGroupManager();
   ComputePressureManager* GetComputePressureManager();
   std::string GetPartitionDomain();
   AggregationServiceImpl* GetAggregationService();
+  FontAccessManagerImpl* GetFontAccessManager();
+#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
+  MediaLicenseManager* GetMediaLicenseManager();
+#endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
   // blink::mojom::DomStorage interface.
   void OpenLocalStorage(
@@ -269,7 +275,7 @@ class CONTENT_EXPORT StoragePartitionImpl
   void OnCanSendDomainReliabilityUpload(
       const GURL& origin,
       OnCanSendDomainReliabilityUploadCallback callback) override;
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   void OnGenerateHttpNegotiateAuthToken(
       const std::string& server_auth_token,
       bool can_delegate,
@@ -277,12 +283,15 @@ class CONTENT_EXPORT StoragePartitionImpl
       const std::string& spn,
       OnGenerateHttpNegotiateAuthTokenCallback callback) override;
 #endif
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   void OnTrustAnchorUsed() override;
 #endif
   void OnTrustTokenIssuanceDivertedToSystem(
       network::mojom::FulfillTrustTokenIssuanceRequestPtr request,
       OnTrustTokenIssuanceDivertedToSystemCallback callback) override;
+  void OnCanSendSCTAuditingReport(
+      OnCanSendSCTAuditingReportCallback callback) override;
+  void OnNewSCTAuditingReportSent() override;
 
   // network::mojom::URLLoaderNetworkServiceObserver interface.
   void OnSSLCertificateError(const GURL& url,
@@ -307,10 +316,12 @@ class CONTENT_EXPORT StoragePartitionImpl
       const scoped_refptr<net::HttpResponseHeaders>& head_headers,
       mojo::PendingRemote<network::mojom::AuthChallengeResponder>
           auth_challenge_responder) override;
-  void OnClearSiteData(const GURL& url,
-                       const std::string& header_value,
-                       int load_flags,
-                       OnClearSiteDataCallback callback) override;
+  void OnClearSiteData(
+      const GURL& url,
+      const std::string& header_value,
+      int load_flags,
+      const absl::optional<net::CookiePartitionKey>& cookie_partition_key,
+      OnClearSiteDataCallback callback) override;
   void OnLoadingStateUpdate(network::mojom::LoadInfoPtr info,
                             OnLoadingStateUpdateCallback callback) override;
   void OnDataUseUpdate(int32_t network_traffic_annotation_id_hash,
@@ -632,8 +643,11 @@ class CONTENT_EXPORT StoragePartitionImpl
   scoped_refptr<NativeIOContextImpl> native_io_context_;
   std::unique_ptr<AttributionManagerImpl> attribution_manager_;
   std::unique_ptr<FontAccessManagerImpl> font_access_manager_;
-  std::unique_ptr<InterestGroupManager> interest_group_manager_;
+  std::unique_ptr<InterestGroupManagerImpl> interest_group_manager_;
   std::unique_ptr<AggregationServiceImpl> aggregation_service_;
+#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
+  std::unique_ptr<MediaLicenseManager> media_license_manager_;
+#endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
   // TODO(crbug.com/1205695): ComputePressureManager should live elsewher. The
   //                          Compute Pressure API does not store data.

@@ -4,7 +4,6 @@
 
 #include "chromeos/components/quick_answers/quick_answers_model.h"
 
-namespace ash {
 namespace quick_answers {
 
 QuickAnswer::QuickAnswer() = default;
@@ -14,12 +13,12 @@ IntentInfo::IntentInfo() = default;
 IntentInfo::IntentInfo(const IntentInfo& other) = default;
 IntentInfo::IntentInfo(const std::string& intent_text,
                        IntentType intent_type,
-                       const std::string& source_language,
-                       const std::string& target_language) {
+                       const std::string& device_language,
+                       const std::string& source_language) {
   this->intent_text = intent_text;
   this->intent_type = intent_type;
+  this->device_language = device_language;
   this->source_language = source_language;
-  this->target_language = target_language;
 }
 IntentInfo::~IntentInfo() = default;
 
@@ -34,4 +33,3 @@ QuickAnswersRequest::QuickAnswersRequest(const QuickAnswersRequest& other) =
 QuickAnswersRequest::~QuickAnswersRequest() = default;
 
 }  // namespace quick_answers
-}  // namespace ash

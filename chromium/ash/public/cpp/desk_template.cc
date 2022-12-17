@@ -54,7 +54,7 @@ DeskTemplate::DeskTemplate()
       source_(DeskTemplateSource::kUnknownSource),
       created_time_(base::Time::Now()) {}
 
-std::unique_ptr<DeskTemplate> DeskTemplate::Clone() {
+std::unique_ptr<DeskTemplate> DeskTemplate::Clone() const {
   std::unique_ptr<DeskTemplate> desk_template = std::make_unique<DeskTemplate>(
       uuid_.AsLowercaseString(), source_, base::UTF16ToUTF8(template_name_),
       created_time_);
@@ -63,6 +63,27 @@ std::unique_ptr<DeskTemplate> DeskTemplate::Clone() {
   if (desk_restore_data_)
     desk_template->set_desk_restore_data(desk_restore_data_->Clone());
   return desk_template;
+}
+
+std::string DeskTemplate::ToString() const {
+  std::string result =
+      "Template name: " + base::UTF16ToASCII(template_name_) + "\n";
+  result += "Source: ";
+  switch (source_) {
+    case DeskTemplateSource::kUnknownSource:
+      result += "unknown\n";
+      break;
+    case DeskTemplateSource::kUser:
+      result += "user\n";
+      break;
+    case DeskTemplateSource::kPolicy:
+      result += "policy\n";
+      break;
+  }
+
+  if (desk_restore_data_)
+    result += desk_restore_data_->ToString();
+  return result;
 }
 
 }  // namespace ash

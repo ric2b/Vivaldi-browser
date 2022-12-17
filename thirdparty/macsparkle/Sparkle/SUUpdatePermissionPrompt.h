@@ -6,25 +6,21 @@
 //  Copyright 2008 Andy Matuschak. All rights reserved.
 //
 
+#if SPARKLE_BUILD_UI_BITS
+
 #ifndef SUUPDATEPERMISSIONPROMPT_H
 #define SUUPDATEPERMISSIONPROMPT_H
 
 #import <Cocoa/Cocoa.h>
 
-typedef NS_ENUM(NSInteger, SUPermissionPromptResult) {
-    SUAutomaticallyCheck,
-    SUDoNotAutomaticallyCheck
-};
+@class SUHost, SPUUpdatePermissionRequest, SUUpdatePermissionResponse;
 
-@protocol SUUpdatePermissionPromptDelegate;
-
-@class SUHost, SUUpdatePermissionResponse;
 @interface SUUpdatePermissionPrompt : NSWindowController
 
-+ (void)promptWithHost:(SUHost *)host systemProfile:(NSArray *)profile reply:(void (^)(SUUpdatePermissionResponse *))reply;
+- (instancetype)initPromptWithHost:(SUHost *)theHost request:(SPUUpdatePermissionRequest *)request reply:(void (^)(SUUpdatePermissionResponse *))reply;
 
-- (IBAction)toggleMoreInfo:(id)sender;
-- (IBAction)finishPrompt:(NSButton *)sender;
 @end
+
+#endif
 
 #endif

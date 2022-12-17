@@ -168,6 +168,9 @@ enum class AccessPoint : int {
   ACCESS_POINT_SAFETY_CHECK = 32,
   ACCESS_POINT_KALEIDOSCOPE = 33,
   ACCESS_POINT_ENTERPRISE_SIGNOUT_COORDINATOR = 34,
+  ACCESS_POINT_SIGNIN_INTERCEPT_FIRST_RUN_EXPERIENCE = 35,
+  // Add values above this line with a corresponding label to the
+  // "SigninAccessPoint" enum in tools/metrics/histograms/enums.xml
   ACCESS_POINT_MAX,  // This must be last.
 };
 
@@ -210,7 +213,7 @@ enum class PromoAction : int {
   PROMO_ACTION_NEW_ACCOUNT_EXISTING_ACCOUNT
 };
 
-#if defined(OS_ANDROID) || defined(OS_IOS)
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
 // This class is used to record user action that was taken after
 // receiving the header from Gaia in the web sign-in flow.
 // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.components.signin.metrics
@@ -266,7 +269,7 @@ enum class AccountConsistencyPromoAction : int {
   TIMEOUT_ERROR_SHOWN = 17,
   MAX = 18,
 };
-#endif  // defined(OS_ANDROID) || defined(OS_IOS)
+#endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
 
 // Enum values which enumerates all reasons to start sign in process.
 // These values are persisted to logs. Entries should not be renumbered and
@@ -303,8 +306,11 @@ enum AccountReconcilorState {
   ACCOUNT_RECONCILOR_ERROR,
   // The account reconcilor will start running soon.
   ACCOUNT_RECONCILOR_SCHEDULED,
+  // The account reconcilor is inactive, e.g. initializing or disabled.
+  ACCOUNT_RECONCILOR_INACTIVE,
+
   // Always the last enumerated type.
-  ACCOUNT_RECONCILOR_HISTOGRAM_COUNT,
+  kMaxValue = ACCOUNT_RECONCILOR_SCHEDULED,
 };
 
 // Values of histogram comparing account id and email.
@@ -402,7 +408,7 @@ enum class SourceForRefreshTokenOperation {
   kAccountReconcilor_Reconcile = 12,
   kDiceResponseHandler_Signin = 13,
   kDiceResponseHandler_Signout = 14,
-  kDiceTurnOnSyncHelper_Abort = 15,
+  kTurnOnSyncHelper_Abort = 15,
   kMachineLogon_CredentialProvider = 16,
   kTokenService_ExtractCredentials = 17,
   // DEPRECATED on 09/2021 (used for force migration to DICE)
@@ -540,10 +546,10 @@ void RecordSigninImpressionWithAccountUserActionForAccessPoint(
     AccessPoint access_point,
     bool with_account);
 
-#if defined(OS_IOS)
+#if BUILDFLAG(IS_IOS)
 // Records |Signin.AccountConsistencyPromoAction| histogram.
 void RecordConsistencyPromoUserAction(AccountConsistencyPromoAction action);
-#endif  // defined(OS_IOS)
+#endif  // BUILDFLAG(IS_IOS)
 
 }  // namespace signin_metrics
 

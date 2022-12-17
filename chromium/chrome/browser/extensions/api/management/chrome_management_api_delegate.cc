@@ -12,6 +12,7 @@
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
+#include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
@@ -32,19 +33,19 @@
 #include "chrome/browser/ui/tab_helpers.h"
 #include "chrome/browser/ui/web_applications/web_app_dialog_utils.h"
 #include "chrome/browser/ui/webui/extensions/extension_icon_source.h"
-#include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
+#include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/browser/web_applications/web_app_install_manager.h"
 #include "chrome/browser/web_applications/web_app_install_params.h"
 #include "chrome/browser/web_applications/web_app_install_utils.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
-#include "chrome/browser/web_applications/web_application_info.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/extensions/extension_metrics.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "components/favicon/core/favicon_service.h"
+#include "components/webapps/browser/install_result_code.h"
 #include "components/webapps/browser/installable/installable_manager.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
 #include "content/public/browser/browser_context.h"
@@ -73,7 +74,7 @@
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
 // TODO(https://crbug.com/1060801): Here and elsewhere, possibly switch build
-// flag to #if defined(OS_CHROMEOS)
+// flag to #if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/supervised_user/supervised_user_service.h"
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
 #endif
@@ -230,9 +231,9 @@ class ManagementUninstallFunctionUninstallDialogDelegate
 void OnGenerateAppForLinkCompleted(
     extensions::ManagementGenerateAppForLinkFunction* function,
     const web_app::AppId& app_id,
-    web_app::InstallResultCode code) {
+    webapps::InstallResultCode code) {
   const bool install_success =
-      code == web_app::InstallResultCode::kSuccessNewInstall;
+      code == webapps::InstallResultCode::kSuccessNewInstall;
   function->FinishCreateWebApp(app_id, install_success);
 }
 
@@ -261,7 +262,7 @@ class ChromeAppForLinkDelegate : public extensions::AppForLinkDelegate {
     }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
-    auto web_app_info = std::make_unique<WebApplicationInfo>();
+    auto web_app_info = std::make_unique<WebAppInstallInfo>();
     web_app_info->title = base::UTF8ToUTF16(title);
     web_app_info->start_url = launch_url;
     web_app_info->display_mode = web_app::DisplayMode::kBrowser;
@@ -365,16 +366,15 @@ void LaunchWebApp(const web_app::AppId& app_id, Profile* profile) {
     profile = profile->GetOriginalProfile();
   }
 
-  apps::AppServiceProxyFactory::GetForProfile(profile)
-      ->BrowserAppLauncher()
-      ->LaunchAppWithParams(apps::AppLaunchParams(
-          app_id, launch_container, WindowOpenDisposition::NEW_FOREGROUND_TAB,
-          apps::mojom::LaunchSource::kFromManagementApi));
+  apps::AppServiceProxyFactory::GetForProfile(profile)->LaunchAppWithParams(
+      apps::AppLaunchParams(app_id, launch_container,
+                            WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                            apps::mojom::LaunchSource::kFromManagementApi));
 }
 
 void OnWebAppInstallCompleted(InstallOrLaunchWebAppCallback callback,
                               const web_app::AppId& app_id,
-                              web_app::InstallResultCode code) {
+                              webapps::InstallResultCode code) {
   InstallOrLaunchWebAppResult result =
       IsSuccess(code) ? InstallOrLaunchWebAppResult::kSuccess
                       : InstallOrLaunchWebAppResult::kUnknownError;
@@ -399,7 +399,7 @@ void OnWebAppInstallabilityChecked(
     case InstallableCheckResult::kInstallable:
       content::WebContents* containing_contents = web_contents.get();
       chrome::ScopedTabbedBrowserDisplayer displayer(profile);
-      const GURL& url = web_contents->GetURL();
+      const GURL& url = web_contents->GetLastCommittedURL();
       chrome::AddWebContents(
           displayer.browser(), nullptr, std::move(web_contents), url,
           WindowOpenDisposition::NEW_FOREGROUND_TAB, gfx::Rect());
@@ -428,7 +428,7 @@ void ChromeManagementAPIDelegate::LaunchAppFunctionDelegate(
   // returned.
   // TODO(crbug.com/1003602): Make AppLaunchParams launch container Optional or
   // add a "default" launch container enum value.
-  extensions::LaunchContainer launch_container =
+  apps::mojom::LaunchContainer launch_container =
       GetLaunchContainer(extensions::ExtensionPrefs::Get(context), extension);
   Profile* profile = Profile::FromBrowserContext(context);
   if (!apps::AppServiceProxyFactory::IsAppServiceAvailableForProfile(profile)) {
@@ -438,12 +438,10 @@ void ChromeManagementAPIDelegate::LaunchAppFunctionDelegate(
     // profile, so it is allowed to access apps in the original profile.
     profile = profile->GetOriginalProfile();
   }
-  apps::AppServiceProxyFactory::GetForProfile(profile)
-      ->BrowserAppLauncher()
-      ->LaunchAppWithParams(
-          apps::AppLaunchParams(extension->id(), launch_container,
-                                WindowOpenDisposition::NEW_FOREGROUND_TAB,
-                                apps::mojom::LaunchSource::kFromManagementApi));
+  apps::AppServiceProxyFactory::GetForProfile(profile)->LaunchAppWithParams(
+      apps::AppLaunchParams(extension->id(), launch_container,
+                            WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                            apps::mojom::LaunchSource::kFromManagementApi));
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   ash::DemoSession::RecordAppLaunchSourceIfInDemoMode(

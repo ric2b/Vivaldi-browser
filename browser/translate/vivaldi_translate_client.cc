@@ -68,7 +68,8 @@
 
 VivaldiTranslateClient::VivaldiTranslateClient(
     content::WebContents* web_contents)
-    : content::WebContentsObserver(web_contents) {
+    : content::WebContentsObserver(web_contents),
+      content::WebContentsUserData<VivaldiTranslateClient>(*web_contents) {
   translate_driver_ = std::make_unique<translate::ContentTranslateDriver>(
       *web_contents,
       UrlLanguageHistogramFactory::GetForBrowserContext(

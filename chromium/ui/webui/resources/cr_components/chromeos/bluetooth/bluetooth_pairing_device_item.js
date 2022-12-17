@@ -39,7 +39,7 @@ export class SettingsBluetoothPairingDeviceItemElement extends
   static get properties() {
     return {
       /**
-       * @type {!chromeos.bluetoothConfig.mojom.BluetoothDeviceProperties}
+       * @type {?chromeos.bluetoothConfig.mojom.BluetoothDeviceProperties}
        */
       device: Object,
 
@@ -71,6 +71,16 @@ export class SettingsBluetoothPairingDeviceItemElement extends
         computed: 'computePairingFailed_(deviceItemState)',
       },
     };
+  }
+
+  /** @override */
+  focus() {
+    // Prevent scroll stops iron list from trying to bring this element to view,
+    // if it is the |lastFocused| element and scrolled out of view. This can
+    // happen if this element is tabbed to or selected and then scrolled out of
+    // view.
+    // TODO(b/210743107) Add a test for this.
+    this.$.container.focus({preventScroll: true});
   }
 
   /**
@@ -145,36 +155,41 @@ export class SettingsBluetoothPairingDeviceItemElement extends
    * @private
    */
   getAriaLabel_() {
+    if (!this.device) {
+      return '';
+    }
+
     return this.i18n(
-        this.getA11yLabelMessageId_(), this.itemIndex + 1, this.listSize,
-        this.getDeviceName_());
+               'bluetoothA11yDeviceName', this.itemIndex + 1, this.listSize,
+               this.getDeviceName_()) +
+        ' ' + this.i18n(this.getA11yDeviceTypeTextName_());
   }
 
   /**
    * @return {string}
    * @private
    */
-  getA11yLabelMessageId_() {
+  getA11yDeviceTypeTextName_() {
     const deviceType = chromeos.bluetoothConfig.mojom.DeviceType;
     switch (this.device.deviceType) {
       case deviceType.kUnknown:
-        return 'bluetoothPairingDeviceItemA11YLabelUnknown';
+        return 'bluetoothA11yDeviceTypeUnknown';
       case deviceType.kComputer:
-        return 'bluetoothPairingDeviceItemA11YLabelComputer';
+        return 'bluetoothA11yDeviceTypeComputer';
       case deviceType.kPhone:
-        return 'bluetoothPairingDeviceItemA11YLabelPhone';
+        return 'bluetoothA11yDeviceTypePhone';
       case deviceType.kHeadset:
-        return 'bluetoothPairingDeviceItemA11YLabelHeadset';
+        return 'bluetoothA11yDeviceTypeHeadset';
       case deviceType.kVideoCamera:
-        return 'bluetoothPairingDeviceItemA11YLabelVideoCamera';
+        return 'bluetoothA11yDeviceTypeVideoCamera';
       case deviceType.kGameController:
-        return 'bluetoothPairingDeviceItemA11YLabelGameContoller';
+        return 'bluetoothA11yDeviceTypeGameController';
       case deviceType.kKeyboard:
-        return 'bluetoothPairingDeviceItemA11YLabelKeyboard';
+        return 'bluetoothA11yDeviceTypeKeyboard';
       case deviceType.kMouse:
-        return 'bluetoothPairingDeviceItemA11YLabelMouse';
+        return 'bluetoothA11yDeviceTypeMouse';
       case deviceType.kTablet:
-        return 'bluetoothPairingDeviceItemA11YLabelTablet';
+        return 'bluetoothA11yDeviceTypeTablet';
       default:
         assertNotReached();
     }

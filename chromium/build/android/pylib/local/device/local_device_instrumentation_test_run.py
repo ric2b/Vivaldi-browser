@@ -547,7 +547,8 @@ class LocalDeviceInstrumentationTestRun(
     all_tests = []
     for _, btests in list(batched_tests.items()):
       # Ensure a consistent ordering across external shards.
-      btests.sort(key=dict2list)
+      if len(btests) > _TEST_BATCH_MAX_GROUP_SIZE:
+        btests.sort(key=dict2list)
       all_tests.extend([
           btests[i:i + _TEST_BATCH_MAX_GROUP_SIZE]
           for i in range(0, len(btests), _TEST_BATCH_MAX_GROUP_SIZE)
@@ -1374,10 +1375,8 @@ def _IsWPRRecordReplayTest(test):
   """Determines whether a test or a list of tests is a WPR RecordReplay Test."""
   if not isinstance(test, list):
     test = [test]
-  return any([
-      WPR_RECORD_REPLAY_TEST_FEATURE_ANNOTATION in t['annotations'].get(
-          FEATURE_ANNOTATION, {}).get('value', ()) for t in test
-  ])
+  return any(WPR_RECORD_REPLAY_TEST_FEATURE_ANNOTATION in t['annotations'].get(
+      FEATURE_ANNOTATION, {}).get('value', ()) for t in test)
 
 
 def _GetWPRArchivePath(test):
@@ -1408,8 +1407,8 @@ def _IsRenderTest(test):
   """Determines if a test or list of tests has a RenderTest amongst them."""
   if not isinstance(test, list):
     test = [test]
-  return any([RENDER_TEST_FEATURE_ANNOTATION in t['annotations'].get(
-              FEATURE_ANNOTATION, {}).get('value', ()) for t in test])
+  return any(RENDER_TEST_FEATURE_ANNOTATION in t['annotations'].get(
+      FEATURE_ANNOTATION, {}).get('value', ()) for t in test)
 
 
 def _GenerateRenderTestHtml(image_name, failure_link, golden_link, diff_link):
@@ -1521,7 +1520,7 @@ def _MatchingTestInResults(results, full_test_name):
     True if one of the results in |results| has the same name as
     |full_test_name|, otherwise False.
   """
-  return any([r for r in results if r.GetName() == full_test_name])
+  return any(r for r in results if r.GetName() == full_test_name)
 
 
 def _ShouldReportNoMatchingResult(full_test_name):

@@ -202,6 +202,24 @@ class CalendarDeleteEventFunction : public CalendarAsyncFunction {
   base::CancelableTaskTracker task_tracker_;
 };
 
+class CalendarDeleteEventExceptionFunction : public CalendarAsyncFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("calendar.deleteEventException",
+                             CALENDAR_DELETEEVENT_EXCEPTION)
+  CalendarDeleteEventExceptionFunction() = default;
+
+ private:
+  ~CalendarDeleteEventExceptionFunction() override = default;
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  void DeleteEventExceptionComplete(
+      std::shared_ptr<calendar::EventResultCB> results);
+
+  // The task tracker for the CalendarService callbacks.
+  base::CancelableTaskTracker task_tracker_;
+};
+
 class CalendarCreateFunction : public CalendarAsyncFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("calendar.create", CALENDAR_CREATE)

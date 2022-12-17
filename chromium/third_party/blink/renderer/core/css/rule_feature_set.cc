@@ -33,6 +33,7 @@
 #include <algorithm>
 #include <bitset>
 #include "base/auto_reset.h"
+#include "base/memory/values_equivalent.h"
 #include "third_party/blink/renderer/core/css/css_custom_ident_value.h"
 #include "third_party/blink/renderer/core/css/css_function_value.h"
 #include "third_party/blink/renderer/core/css/css_property_value_set.h"
@@ -45,7 +46,6 @@
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/node.h"
 #include "third_party/blink/renderer/core/inspector/inspector_trace_events.h"
-#include "third_party/blink/renderer/core/style/data_equivalency.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 
 namespace blink {
@@ -187,6 +187,10 @@ bool SupportsInvalidation(CSSSelector::PseudoType type) {
     case CSSSelector::kPseudoSpellingError:
     case CSSSelector::kPseudoGrammarError:
     case CSSSelector::kPseudoHas:
+    case CSSSelector::kPseudoTransition:
+    case CSSSelector::kPseudoTransitionContainer:
+    case CSSSelector::kPseudoTransitionNewContent:
+    case CSSSelector::kPseudoTransitionOldContent:
       return true;
     case CSSSelector::kPseudoUnknown:
     case CSSSelector::kPseudoLeftPage:
@@ -268,7 +272,7 @@ bool InvalidationSetMapsEqual(const MapType& a, const MapType& b) {
     auto it = b.find(entry.key);
     if (it == b.end())
       return false;
-    if (!DataEquivalent(entry.value, it->value))
+    if (!base::ValuesEquivalent(entry.value, it->value))
       return false;
   }
   return true;
@@ -409,6 +413,7 @@ RuleFeatureSet::~RuleFeatureSet() {
   ids_in_has_argument_.clear();
   tag_names_in_has_argument_.clear();
   universal_in_has_argument_ = false;
+  pseudos_in_has_argument_.clear();
 
   is_alive_ = false;
 }
@@ -424,13 +429,14 @@ bool RuleFeatureSet::operator==(const RuleFeatureSet& other) const {
              other.attribute_invalidation_sets_) &&
          InvalidationSetMapsEqual<CSSSelector::PseudoType>(
              pseudo_invalidation_sets_, other.pseudo_invalidation_sets_) &&
-         DataEquivalent(universal_sibling_invalidation_set_,
-                        other.universal_sibling_invalidation_set_) &&
-         DataEquivalent(nth_invalidation_set_, other.nth_invalidation_set_) &&
-         DataEquivalent(universal_sibling_invalidation_set_,
-                        other.universal_sibling_invalidation_set_) &&
-         DataEquivalent(type_rule_invalidation_set_,
-                        other.type_rule_invalidation_set_) &&
+         base::ValuesEquivalent(universal_sibling_invalidation_set_,
+                                other.universal_sibling_invalidation_set_) &&
+         base::ValuesEquivalent(nth_invalidation_set_,
+                                other.nth_invalidation_set_) &&
+         base::ValuesEquivalent(universal_sibling_invalidation_set_,
+                                other.universal_sibling_invalidation_set_) &&
+         base::ValuesEquivalent(type_rule_invalidation_set_,
+                                other.type_rule_invalidation_set_) &&
          viewport_dependent_media_query_results_ ==
              other.viewport_dependent_media_query_results_ &&
          device_dependent_media_query_results_ ==
@@ -440,6 +446,7 @@ bool RuleFeatureSet::operator==(const RuleFeatureSet& other) const {
          ids_in_has_argument_ == other.ids_in_has_argument_ &&
          tag_names_in_has_argument_ == other.tag_names_in_has_argument_ &&
          universal_in_has_argument_ == other.universal_in_has_argument_ &&
+         pseudos_in_has_argument_ == other.pseudos_in_has_argument_ &&
          is_alive_ == other.is_alive_;
 }
 
@@ -637,6 +644,11 @@ InvalidationSet* RuleFeatureSet::InvalidationSetForSimpleSelector(
       case CSSSelector::kPseudoNthLastChild:
       case CSSSelector::kPseudoNthLastOfType:
         return &EnsureNthInvalidationSet();
+      case CSSSelector::kPseudoHas:
+        return position == kAncestor
+                   ? &EnsurePseudoInvalidationSet(selector.GetPseudoType(),
+                                                  type, position)
+                   : nullptr;
       case CSSSelector::kPseudoPart:
       default:
         break;
@@ -749,7 +761,6 @@ void RuleFeatureSet::ExtractInvalidationSetFeaturesFromSelectorList(
   // For the :has pseudo class, we should not extract invalidation set features
   // here because the :has invalidation direction is different with others.
   // (preceding-sibling/ancestors/preceding-sibling-of-ancestors)
-  // TODO(blee@igalia.com) Need to add :has invalidation
   if (UNLIKELY(pseudo_type == CSSSelector::kPseudoHas))
     return;
 
@@ -894,6 +905,14 @@ bool RuleFeatureSet::AddValueOfSimpleSelectorInHasArgument(
     tag_names_in_has_argument_.insert(selector.TagQName().LocalName());
     return true;
   }
+  if (selector.Match() == CSSSelector::kPseudoClass) {
+    CSSSelector::PseudoType pseudo_type = selector.GetPseudoType();
+
+    // Ignore :visited to prevent history leakage.
+    if (pseudo_type != CSSSelector::kPseudoVisited)
+      pseudos_in_has_argument_.insert(pseudo_type);
+    return true;
+  }
   return false;
 }
 
@@ -987,6 +1006,11 @@ void RuleFeatureSet::AddFeaturesToInvalidationSetsForSimpleSelector(
   if (simple_selector.IsIdClassOrAttributeSelector())
     descendant_features.has_features_for_rule_set_invalidation = true;
 
+  CSSSelector::PseudoType pseudo_type = simple_selector.GetPseudoType();
+
+  if (UNLIKELY(pseudo_type == CSSSelector::kPseudoHas))
+    CollectValuesInHasArgument(simple_selector);
+
   if (InvalidationSet* invalidation_set = InvalidationSetForSimpleSelector(
           simple_selector,
           sibling_features ? InvalidationType::kInvalidateSiblings
@@ -1023,12 +1047,9 @@ void RuleFeatureSet::AddFeaturesToInvalidationSetsForSimpleSelector(
     return;
   }
 
-  CSSSelector::PseudoType pseudo_type = simple_selector.GetPseudoType();
-
   // For the :has pseudo class, we should not extract invalidation set features
   // here because the :has invalidation direction is different with others.
   // (preceding-sibling/ancestors/preceding-sibling-of-ancestors)
-  // TODO(blee@igalia.com) Need to add :has invalidation
   if (UNLIKELY(pseudo_type == CSSSelector::kPseudoHas))
     return;
 
@@ -1138,7 +1159,7 @@ RuleFeatureSet::SelectorPreMatch RuleFeatureSet::CollectFeaturesFromSelector(
           return kSelectorNeverMatches;
         }
         found_host_pseudo = true;
-        FALLTHROUGH;
+        [[fallthrough]];
       default:
         if (const CSSSelectorList* selector_list = current->SelectorList()) {
           for (const CSSSelector* sub_selector = selector_list->First();
@@ -1239,6 +1260,8 @@ void RuleFeatureSet::Add(const RuleFeatureSet& other) {
   for (const auto& tag_name : other.tag_names_in_has_argument_)
     tag_names_in_has_argument_.insert(tag_name);
   universal_in_has_argument_ |= other.universal_in_has_argument_;
+  for (const auto& pseudo_type : other.pseudos_in_has_argument_)
+    pseudos_in_has_argument_.insert(pseudo_type);
 }
 
 void RuleFeatureSet::Clear() {
@@ -1253,11 +1276,18 @@ void RuleFeatureSet::Clear() {
   type_rule_invalidation_set_ = nullptr;
   viewport_dependent_media_query_results_.clear();
   device_dependent_media_query_results_.clear();
+  media_query_unit_flags_ = 0;
   classes_in_has_argument_.clear();
   attributes_in_has_argument_.clear();
   ids_in_has_argument_.clear();
   tag_names_in_has_argument_.clear();
   universal_in_has_argument_ = false;
+  pseudos_in_has_argument_.clear();
+}
+
+bool RuleFeatureSet::HasDynamicViewportDependentMediaQueries() const {
+  return media_query_unit_flags_ &
+         MediaQueryExpValue::UnitFlags::kDynamicViewport;
 }
 
 void RuleFeatureSet::CollectInvalidationSetsForClass(
@@ -1535,6 +1565,15 @@ bool RuleFeatureSet::NeedsHasInvalidationForElement(Element& element) const {
   }
 
   return NeedsHasInvalidationForTagName(element.LocalNameForSelectorMatching());
+}
+
+bool RuleFeatureSet::NeedsHasInvalidationForPseudoClass(
+    CSSSelector::PseudoType pseudo_type) const {
+  return pseudos_in_has_argument_.Contains(pseudo_type);
+}
+
+bool RuleFeatureSet::NeedsHasInvalidationForPseudoStateChange() const {
+  return !pseudos_in_has_argument_.IsEmpty();
 }
 
 void RuleFeatureSet::InvalidationSetFeatures::Add(

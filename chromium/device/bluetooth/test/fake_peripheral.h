@@ -77,7 +77,7 @@ class FakePeripheral : public device::BluetoothDevice {
 
   // BluetoothDevice overrides:
   uint32_t GetBluetoothClass() const override;
-#if defined(OS_CHROMEOS) || defined(OS_LINUX)
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
   device::BluetoothTransport GetType() const override;
 #endif
   std::string GetIdentifier() const override;
@@ -104,6 +104,10 @@ class FakePeripheral : public device::BluetoothDevice {
                             ErrorCallback error_callback) override;
   void Connect(PairingDelegate* pairing_delegate,
                ConnectCallback callback) override;
+#if BUILDFLAG(IS_CHROMEOS)
+  void ConnectClassic(PairingDelegate* pairing_delegate,
+                      ConnectCallback callback) override;
+#endif  // BUILDFLAG(IS_CHROMEOS)
   void SetPinCode(const std::string& pincode) override;
   void SetPasskey(uint32_t passkey) override;
   void ConfirmPairing() override;

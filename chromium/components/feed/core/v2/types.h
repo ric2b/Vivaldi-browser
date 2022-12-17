@@ -14,14 +14,12 @@
 #include "base/time/time.h"
 #include "base/types/id_type.h"
 #include "base/values.h"
+#include "components/feed/core/proto/v2/wire/client_info.pb.h"
 #include "components/feed/core/proto/v2/wire/reliability_logging_enums.pb.h"
 #include "components/feed/core/v2/enums.h"
 #include "components/feed/core/v2/public/common_enums.h"
 #include "components/feed/core/v2/public/types.h"
 
-namespace feedui {
-class LoggingParameters;
-}
 namespace feed {
 
 // Make sure public types are included here too.
@@ -48,6 +46,8 @@ struct RequestMetadata {
   ~RequestMetadata();
   RequestMetadata(RequestMetadata&&);
   RequestMetadata& operator=(RequestMetadata&&);
+
+  feedwire::ClientInfo ToClientInfo() const;
 
   ChromeInfo chrome_info;
   std::string language_tag;
@@ -148,31 +148,6 @@ struct LaunchResult {
   ~LaunchResult();
   LaunchResult& operator=(const LaunchResult& other);
 };
-
-struct LoggingParameters {
-  LoggingParameters();
-  ~LoggingParameters();
-  LoggingParameters(const LoggingParameters&);
-  LoggingParameters(LoggingParameters&&);
-  LoggingParameters& operator=(const LoggingParameters&);
-
-  // User ID, if the user is signed-in.
-  std::string email;
-  // A unique ID for this client. Used for reliability logging.
-  std::string client_instance_id;
-  // Whether attention / interaction logging is enabled.
-  bool logging_enabled = false;
-  // Whether view actions may be recorded.
-  bool view_actions_enabled = false;
-  // EventID of the first page response.
-  std::string root_event_id;
-
-  bool operator==(const LoggingParameters& rhs) const;
-};
-
-LoggingParameters FromProto(const feedui::LoggingParameters& proto);
-void ToProto(const LoggingParameters& logging_parameters,
-             feedui::LoggingParameters& proto);
 
 }  // namespace feed
 

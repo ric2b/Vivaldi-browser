@@ -158,6 +158,9 @@ viz_component("service") {
     "frame_sinks/frame_sink_manager_impl.cc",
     "frame_sinks/frame_sink_manager_impl.h",
     "frame_sinks/frame_sink_observer.h",
+    "frame_sinks/gmb_video_frame_pool_context_provider.h",
+    "frame_sinks/gmb_video_frame_pool_context_provider_impl.cc",
+    "frame_sinks/gmb_video_frame_pool_context_provider_impl.h",
     "frame_sinks/gpu_vsync_begin_frame_source.cc",
     "frame_sinks/gpu_vsync_begin_frame_source.h",
     "frame_sinks/root_compositor_frame_sink_impl.cc",
@@ -169,6 +172,8 @@ viz_component("service") {
     "frame_sinks/video_capture/frame_sink_video_capturer_impl.cc",
     "frame_sinks/video_capture/frame_sink_video_capturer_impl.h",
     "frame_sinks/video_capture/frame_sink_video_capturer_manager.h",
+    "frame_sinks/video_capture/gpu_memory_buffer_video_frame_pool.cc",
+    "frame_sinks/video_capture/gpu_memory_buffer_video_frame_pool.h",
     "frame_sinks/video_capture/in_flight_frame_delivery.cc",
     "frame_sinks/video_capture/in_flight_frame_delivery.h",
     "frame_sinks/video_capture/shared_memory_video_frame_pool.cc",
@@ -299,8 +304,11 @@ viz_component("service") {
 
   if (is_android || use_ozone) {
     sources += [
+      "display/overlay_processor_strategy.cc",
+      "display/overlay_processor_strategy.h",
       "display/overlay_processor_using_strategy.cc",
       "display/overlay_processor_using_strategy.h",
+      "display/overlay_proposed_candidate.h",
       "display/overlay_strategy_fullscreen.cc",
       "display/overlay_strategy_fullscreen.h",
       "display/overlay_strategy_single_on_top.cc",
@@ -331,18 +339,13 @@ viz_component("service") {
 
   if (use_ozone) {
     sources += [
+      "display/overlay_processor_delegated.cc",
+      "display/overlay_processor_delegated.h",
       "display/overlay_processor_ozone.cc",
       "display/overlay_processor_ozone.h",
       "display_embedder/software_output_device_ozone.cc",
       "display_embedder/software_output_device_ozone.h",
     ]
-
-    if (is_chromeos_lacros) {
-      sources += [
-        "display/overlay_processor_delegated.cc",
-        "display/overlay_processor_delegated.h",
-      ]
-    }
 
     public_deps += [ "//ui/ozone" ]
   }
@@ -487,8 +490,6 @@ viz_source_set("gpu_service_dependencies") {
       sources += [
         "display_embedder/skia_output_device_vulkan_secondary_cb.cc",
         "display_embedder/skia_output_device_vulkan_secondary_cb.h",
-        "display_embedder/skia_output_device_vulkan_secondary_cb_offscreen.cc",
-        "display_embedder/skia_output_device_vulkan_secondary_cb_offscreen.h",
       ]
     }
 
@@ -516,12 +517,12 @@ viz_source_set("gpu_service_dependencies") {
       "display_embedder/skia_output_device_dawn.h",
     ]
 
-    public_deps += [ "//third_party/dawn/src/dawn:dawn_headers" ]
+    public_deps += [ "//third_party/dawn/include/dawn:headers" ]
 
     deps += [
-      "//third_party/dawn/src/dawn:dawn_proc",
-      "//third_party/dawn/src/dawn:dawncpp",
-      "//third_party/dawn/src/dawn_native",
+      "//third_party/dawn/src/dawn:cpp",
+      "//third_party/dawn/src/dawn:proc",
+      "//third_party/dawn/src/dawn/native",
     ]
   }
 

@@ -24,7 +24,7 @@ class RuleSourceHandler {
  public:
   using OnUpdateCallback = base::RepeatingCallback<void(RuleSourceHandler*)>;
   using OnTrackerInfosUpdateCallback =
-      base::RepeatingCallback<void(const RuleSource&, base::Value)>;
+      base::RepeatingCallback<void(const RuleSource&, base::Value::Dict)>;
 
   RuleSourceHandler(
       content::BrowserContext* context,
@@ -54,7 +54,7 @@ class RuleSourceHandler {
   void OnRulesDownloaded(base::FilePath file);
   void ReadRulesFromFile(const base::FilePath& file, bool delete_after_read);
   void OnRulesRead(std::unique_ptr<RulesReadResult> result);
-  void OnTrackerInfosLoaded(base::Value tracker_infos);
+  void OnTrackerInfosLoaded(absl::optional<base::Value::Dict> tracker_infos);
 
   content::BrowserContext* context_;
 

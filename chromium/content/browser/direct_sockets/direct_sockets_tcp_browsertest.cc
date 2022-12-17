@@ -208,9 +208,6 @@ class ReadWriteWaiter {
 
 class DirectSocketsTcpBrowserTest : public ContentBrowserTest {
  public:
-  DirectSocketsTcpBrowserTest() {
-    feature_list_.InitAndEnableFeature(features::kDirectSockets);
-  }
   ~DirectSocketsTcpBrowserTest() override = default;
 
   GURL GetTestOpenPageURL() {
@@ -273,9 +270,6 @@ class DirectSocketsTcpBrowserTest : public ContentBrowserTest {
 
  protected:
   void SetUp() override {
-    DirectSocketsServiceImpl::SetConnectionDialogBypassForTesting(true);
-    DirectSocketsServiceImpl::SetEnterpriseManagedForTesting(false);
-
     embedded_test_server()->AddDefaultHandlers(GetTestDataFilePath());
     ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -326,7 +320,7 @@ IN_PROC_BROWSER_TEST_F(DirectSocketsTcpBrowserTest, OpenTcp_Success_Global) {
               StartsWith("openTcp succeeded"));
 }
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 // https://crbug.com/1211492 Keep failing on Mac11.3
 #define MAYBE_OpenTcp_MDNS DISABLED_OpenTcp_MDNS
 #else

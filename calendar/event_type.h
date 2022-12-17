@@ -56,16 +56,15 @@ enum UpdateEventFields {
   RRULE = 1 << 19,
   ORGANIZER = 1 << 20,
   TIMEZONE = 1 << 21,
-  DUE = 1 << 22,
-  PRIORITY = 1 << 23,
-  STATUS = 1 << 24,
-  PERCENTAGE_COMPLETE = 1 << 25,
-  CATEGORIES = 1 << 26,
-  COMPONENT_CLASS = 1 << 27,
-  ATTACHMENT = 1 << 28,
-  COMPLETED = 1 << 29,
-  SYNC_PENDING = 1 << 30,
-  DELETE_PENDING = 1 << 31,
+  PRIORITY = 1 << 22,
+  STATUS = 1 << 23,
+  PERCENTAGE_COMPLETE = 1 << 24,
+  CATEGORIES = 1 << 25,
+  COMPONENT_CLASS = 1 << 26,
+  ATTACHMENT = 1 << 27,
+  COMPLETED = 1 << 28,
+  SYNC_PENDING = 1 << 29,
+  DELETE_PENDING = 1 << 30,
 };
 
 // EventRow -------------------------------------------------------------------
@@ -113,7 +112,6 @@ class EventRow {
   InvitesToCreate invites_to_create;
   std::string timezone;
   bool is_template;
-  base::Time due;
   int priority;
   std::string status;
   int percentage_complete;

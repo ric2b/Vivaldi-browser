@@ -10,6 +10,7 @@
 #include "build/build_config.h"
 #include "mojo/public/cpp/bindings/binder_map.h"
 #include "third_party/blink/public/mojom/dom_storage/session_storage_namespace.mojom-blink.h"
+#include "third_party/blink/public/mojom/filesystem/file_system.mojom-blink.h"
 #include "third_party/blink/public/platform/interface_registry.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
 #include "third_party/blink/public/platform/web_string.h"
@@ -59,6 +60,7 @@
 #include "third_party/blink/renderer/modules/event_target_modules_names.h"
 #include "third_party/blink/renderer/modules/exported/web_embedded_worker_impl.h"
 #include "third_party/blink/renderer/modules/filesystem/dragged_isolated_file_system_impl.h"
+#include "third_party/blink/renderer/modules/filesystem/file_system_dispatcher.h"
 #include "third_party/blink/renderer/modules/gamepad/navigator_gamepad.h"
 #include "third_party/blink/renderer/modules/image_downloader/image_downloader_impl.h"
 #include "third_party/blink/renderer/modules/indexed_db_names.h"
@@ -106,7 +108,7 @@
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 #include "third_party/blink/public/platform/modules/video_capture/web_video_capture_impl_manager.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/web/modules/mediastream/web_media_stream_device_observer.h"
@@ -116,7 +118,7 @@
 
 namespace blink {
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 namespace {
 
 class SuspendCaptureObserver : public GarbageCollected<SuspendCaptureObserver>,
@@ -158,7 +160,7 @@ const char SuspendCaptureObserver::kSupplementName[] = "SuspendCaptureObserver";
 
 }  // namespace
 
-#endif  // OS_ANDROID
+#endif  // BUILDFLAG(IS_ANDROID)
 
 void ModulesInitializer::Initialize() {
   // Strings must be initialized before calling CoreInitializer::init().
@@ -227,10 +229,10 @@ void ModulesInitializer::InitLocalFrame(LocalFrame& frame) const {
       &AppBannerController::BindReceiver, WrapWeakPersistent(&frame)));
   frame.GetInterfaceRegistry()->AddInterface(WTF::BindRepeating(
       &TextSuggestionBackendImpl::Bind, WrapWeakPersistent(&frame)));
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   frame.GetInterfaceRegistry()->AddInterface(WTF::BindRepeating(
       &RemoteObjectGatewayFactoryImpl::Bind, WrapWeakPersistent(&frame)));
-#endif  // OS_ANDROID
+#endif  // BUILDFLAG(IS_ANDROID)
 
   frame.GetInterfaceRegistry()->AddInterface(
       WTF::BindRepeating(&PeerConnectionTracker::BindToFrame,
@@ -302,12 +304,12 @@ void ModulesInitializer::OnClearWindowObjectInMainWorld(
   }
   ManifestManager::From(window);
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   LocalFrame* frame = window.GetFrame();
   DCHECK(frame);
   if (auto* gateway = RemoteObjectGatewayImpl::From(*frame))
     gateway->OnClearWindowObjectInMainWorld();
-#endif  // OS_ANDROID
+#endif  // BUILDFLAG(IS_ANDROID)
 }
 
 std::unique_ptr<WebMediaPlayer> ModulesInitializer::CreateWebMediaPlayer(
@@ -344,9 +346,9 @@ void ModulesInitializer::ProvideModulesToPage(
                                    MakeGarbageCollected<DatabaseClient>());
   StorageNamespace::ProvideSessionStorageNamespaceTo(page, namespace_id);
   AudioGraphTracer::ProvideAudioGraphTracerTo(page);
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   page.ProvideSupplement(MakeGarbageCollected<SuspendCaptureObserver>(page));
-#endif  // OS_ANDROID
+#endif  // BUILDFLAG(IS_ANDROID)
 }
 
 void ModulesInitializer::ForceNextWebGLContextCreationToFail() const {
@@ -410,6 +412,11 @@ void ModulesInitializer::SetSessionStorageArea(
     return;
   DOMWindowStorage::From(*frame.DomWindow())
       .InitSessionStorage(std::move(session_storage_area));
+}
+
+mojom::blink::FileSystemManager& ModulesInitializer::GetFileSystemManager(
+    ExecutionContext* context) {
+  return FileSystemDispatcher::From(context).GetFileSystemManager();
 }
 
 void ModulesInitializer::RegisterInterfaces(mojo::BinderMap& binders) {

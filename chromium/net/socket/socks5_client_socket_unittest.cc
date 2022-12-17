@@ -373,11 +373,11 @@ TEST_F(SOCKS5ClientSocketTest, Tag) {
                             TRAFFIC_ANNOTATION_FOR_TESTS);
 
   EXPECT_EQ(tagging_sock->tag(), SocketTag());
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   SocketTag tag(0x12345678, 0x87654321);
   socket.ApplySocketTag(tag);
   EXPECT_EQ(tagging_sock->tag(), tag);
-#endif  // OS_ANDROID
+#endif  // BUILDFLAG(IS_ANDROID)
 }
 
 }  // namespace

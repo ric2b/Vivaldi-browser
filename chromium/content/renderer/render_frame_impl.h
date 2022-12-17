@@ -38,6 +38,7 @@
 #include "content/common/render_accessibility.mojom.h"
 #include "content/common/renderer.mojom.h"
 #include "content/common/web_ui.mojom.h"
+#include "content/public/common/alternative_error_page_override_info.mojom.h"
 #include "content/public/common/referrer.h"
 #include "content/public/common/stop_find_action.h"
 #include "content/public/common/widget_type.h"
@@ -70,7 +71,6 @@
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/common/frame/frame_owner_element_type.h"
 #include "third_party/blink/public/common/loader/loading_behavior_flag.h"
-#include "third_party/blink/public/common/loader/previews_state.h"
 #include "third_party/blink/public/common/permissions_policy/document_policy.h"
 #include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
 #include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
@@ -371,7 +371,6 @@ class CONTENT_EXPORT RenderFrameImpl
                        const gfx::Range& range) override;
   void AddMessageToConsole(blink::mojom::ConsoleMessageLevel level,
                            const std::string& message) override;
-  blink::PreviewsState GetPreviewsState() override;
   bool IsPasting() override;
   bool IsBrowserSideNavigationPending() override;
   void LoadHTMLStringForTesting(const std::string& html,
@@ -401,9 +400,6 @@ class CONTENT_EXPORT RenderFrameImpl
                         const int32_t flags) override;
 
   // blink::mojom::ResourceLoadInfoNotifier implementation:
-#if defined(OS_ANDROID)
-  void NotifyUpdateUserGestureCarryoverInfo() override;
-#endif
   void NotifyResourceRedirectReceived(
       const net::RedirectInfo& redirect_info,
       network::mojom::URLResponseHeadPtr redirect_response) override;
@@ -411,8 +407,7 @@ class CONTENT_EXPORT RenderFrameImpl
       int64_t request_id,
       const GURL& response_url,
       network::mojom::URLResponseHeadPtr head,
-      network::mojom::RequestDestination request_destination,
-      int32_t previews_state) override;
+      network::mojom::RequestDestination request_destination) override;
   void NotifyResourceTransferSizeUpdated(int64_t request_id,
                                          int32_t transfer_size_diff) override;
   void NotifyResourceLoadCompleted(
@@ -462,6 +457,7 @@ class CONTENT_EXPORT RenderFrameImpl
       std::unique_ptr<blink::PendingURLLoaderFactoryBundle>
           subresource_loader_factories,
       blink::mojom::PolicyContainerPtr policy_container,
+      mojom::AlternativeErrorPageOverrideInfoPtr alternative_error_page_info,
       mojom::NavigationClient::CommitFailedNavigationCallback
           per_navigation_mojo_interface_callback);
 
@@ -482,7 +478,7 @@ class CONTENT_EXPORT RenderFrameImpl
       const cc::LayerTreeSettings& settings) override;
   std::unique_ptr<blink::WebContentSettingsClient>
   CreateWorkerContentSettingsClient() override;
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   std::unique_ptr<media::SpeechRecognitionClient> CreateSpeechRecognitionClient(
       media::SpeechRecognitionClient::OnReadyCallback callback) override;
 #endif
@@ -559,6 +555,7 @@ class CONTENT_EXPORT RenderFrameImpl
   void RunScriptsAtDocumentIdle() override;
   void DidHandleOnloadEvents() override;
   void DidFinishLoad() override;
+  void DidFinishLoadForPrinting() override;
   void DidFinishSameDocumentNavigation(
       blink::WebHistoryCommitType commit_type,
       bool is_synchronously_committed,
@@ -595,9 +592,7 @@ class CONTENT_EXPORT RenderFrameImpl
   void DidObserveLayoutNg(uint32_t all_block_count,
                           uint32_t ng_block_count,
                           uint32_t all_call_count,
-                          uint32_t ng_call_count,
-                          uint32_t flexbox_ng_block_count,
-                          uint32_t grid_ng_block_count) override;
+                          uint32_t ng_call_count) override;
   void DidObserveLazyLoadBehavior(
       blink::WebLocalFrameClient::LazyLoadBehavior lazy_load_behavior) override;
   void DidCreateScriptContext(v8::Local<v8::Context> context,
@@ -617,10 +612,10 @@ class CONTENT_EXPORT RenderFrameImpl
   bool AllowContentInitiatedDataUrlNavigations(
       const blink::WebURL& url) override;
   void PostAccessibilityEvent(const ui::AXEvent& event) override;
-  void MarkWebAXObjectDirty(
-      const blink::WebAXObject& obj,
-      bool subtree,
-      ax::mojom::Action event_from_action = ax::mojom::Action::kNone) override;
+  void MarkWebAXObjectDirty(const blink::WebAXObject& obj,
+                            bool subtree,
+                            ax::mojom::EventFrom event_from,
+                            ax::mojom::Action event_from_action) override;
   void CheckIfAudioSinkExistsAndIsAuthorized(
       const blink::WebString& sink_id,
       blink::WebSetSinkIdCompleteCallback callback) override;
@@ -641,7 +636,10 @@ class CONTENT_EXPORT RenderFrameImpl
       const base::UnguessableToken& session_id,
       const media::AudioParameters& params,
       bool automatic_gain_control,
-      uint32_t shared_memory_count) override;
+      uint32_t shared_memory_count,
+      blink::CrossVariantMojoReceiver<
+          media::mojom::AudioProcessorControlsInterfaceBase> controls_receiver,
+      const media::AudioProcessingSettings& settings) override;
   void AssociateInputAndOutputForAec(
       const base::UnguessableToken& input_stream_id,
       const std::string& output_device_id) override;
@@ -735,8 +733,7 @@ class CONTENT_EXPORT RenderFrameImpl
   void DidStartResponse(const GURL& response_url,
                         int request_id,
                         network::mojom::URLResponseHeadPtr response_head,
-                        network::mojom::RequestDestination request_destination,
-                        blink::PreviewsState previews_state);
+                        network::mojom::RequestDestination request_destination);
   void DidCompleteResponse(int request_id,
                            const network::URLLoaderCompletionStatus& status);
   void DidCancelResponse(int request_id);

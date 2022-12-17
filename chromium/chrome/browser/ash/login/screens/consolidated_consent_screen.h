@@ -5,9 +5,11 @@
 #ifndef CHROME_BROWSER_ASH_LOGIN_SCREENS_CONSOLIDATED_CONSENT_SCREEN_H_
 #define CHROME_BROWSER_ASH_LOGIN_SCREENS_CONSOLIDATED_CONSENT_SCREEN_H_
 
+#include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "chrome/browser/ash/arc/optin/arc_optin_preference_handler_observer.h"
 #include "chrome/browser/ash/login/screens/base_screen.h"
+#include "chrome/browser/ash/settings/device_settings_service.h"
 #include "chrome/browser/ui/webui/chromeos/login/consolidated_consent_screen_handler.h"
 
 namespace arc {
@@ -82,6 +84,14 @@ class ConsolidatedConsentScreen
   void OnBackupAndRestoreModeChanged(bool enabled, bool managed) override;
   void OnLocationServicesModeChanged(bool enabled, bool managed) override;
 
+ protected:
+  // BaseScreen:
+  bool MaybeSkip(WizardContext* context) override;
+  void ShowImpl() override;
+  void HideImpl() override;
+  void OnUserAction(const std::string& action_id) override;
+  ScreenExitCallback* exit_callback() { return &exit_callback_; }
+
  private:
   struct ConsentsParameters {
     std::string tos_content;
@@ -92,13 +102,10 @@ class ConsolidatedConsentScreen
     bool location_accepted;
   };
 
-  // BaseScreen:
-  bool MaybeSkip(WizardContext* context) override;
-  void ShowImpl() override;
-  void HideImpl() override;
-  void OnUserAction(const std::string& action_id) override;
-
   void RecordConsents(const ConsentsParameters& params);
+
+  void OnOwnershipStatusCheckDone(
+      DeviceSettingsService::OwnershipStatus status);
 
   // Exits the screen with `Result::ACCEPTED` in the normal flow, and
   // `Result::ACCEPTED_DEMO_ONLINE` or `Result::ACCEPTED_DEMO_OFFLINE` in the
@@ -120,6 +127,8 @@ class ConsolidatedConsentScreen
   ConsolidatedConsentScreenView* view_ = nullptr;
 
   ScreenExitCallback exit_callback_;
+
+  base::WeakPtrFactory<ConsolidatedConsentScreen> weak_factory_{this};
 };
 
 }  // namespace ash

@@ -9,6 +9,7 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/timer/elapsed_timer.h"
+#include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
@@ -213,11 +214,11 @@ class AppMenuModel : public ui::SimpleMenuModel,
   // took to select the command.
   void LogMenuMetrics(int command_id);
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS)
   // Disables/Enables the settings item based on kSystemFeaturesDisableList
   // pref.
   void UpdateSettingsItemState();
-#endif  // BUILDFLAG(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
   // Time menu has been open. Used by LogMenuMetrics() to record the time
   // to action when the user selects a menu item.

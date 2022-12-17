@@ -44,11 +44,23 @@ bool ConvertMojoRoutine(MojoRoutineType in, RoutineType* out) {
     case MojoRoutineType::kCpuCache:
       *out = RoutineType::ROUTINE_TYPE_CPU_CACHE;
       return true;
+    case MojoRoutineType::kFloatingPointAccuracy:
+      *out = RoutineType::ROUTINE_TYPE_CPU_FLOATING_POINT_ACCURACY;
+      return true;
+    case MojoRoutineType::kPrimeSearch:
+      *out = RoutineType::ROUTINE_TYPE_CPU_PRIME_SEARCH;
+      return true;
     case MojoRoutineType::kCpuStress:
       *out = RoutineType::ROUTINE_TYPE_CPU_STRESS;
       return true;
     case MojoRoutineType::kMemory:
       *out = RoutineType::ROUTINE_TYPE_MEMORY;
+      return true;
+    case MojoRoutineType::kNvmeWearLevel:
+      *out = RoutineType::ROUTINE_TYPE_NVME_WEAR_LEVEL;
+      return true;
+    case MojoRoutineType::kSmartctlCheck:
+      *out = RoutineType::ROUTINE_TYPE_SMARTCTL_CHECK;
       return true;
     default:
       return false;

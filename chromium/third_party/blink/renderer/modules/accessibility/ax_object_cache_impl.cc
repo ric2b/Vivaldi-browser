@@ -67,6 +67,8 @@
 #include "third_party/blink/renderer/core/html/html_script_element.h"
 #include "third_party/blink/renderer/core/html/html_slot_element.h"
 #include "third_party/blink/renderer/core/html/html_style_element.h"
+#include "third_party/blink/renderer/core/html/html_table_element.h"
+#include "third_party/blink/renderer/core/html/html_table_row_element.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/input_type_names.h"
 #include "third_party/blink/renderer/core/layout/layout_inline.h"
@@ -346,8 +348,9 @@ bool IsShadowContentRelevantForAccessibility(const Node* node) {
 
   // Outside of AXMenuList descendants, all other non-slot user agent shadow
   // nodes are relevant.
-  const HTMLSlotElement* slot_element = DynamicTo<HTMLSlotElement>(node);
-  if (!slot_element || !slot_element->SupportsAssignment())
+  const HTMLSlotElement* slot_element =
+      ToHTMLSlotElementIfSupportsAssignmentOrNull(node);
+  if (!slot_element)
     return true;
 
   // Slots are relevant if they have content.
@@ -410,8 +413,10 @@ bool IsLayoutObjectRelevantForAccessibility(const LayoutObject& layout_object) {
   if (node->IsPseudoElement())
     return AXObjectCacheImpl::IsRelevantPseudoElement(*node);
 
-  if (const HTMLSlotElement* slot = DynamicTo<HTMLSlotElement>(node))
+  if (const HTMLSlotElement* slot =
+          ToHTMLSlotElementIfSupportsAssignmentOrNull(node)) {
     return AXObjectCacheImpl::IsRelevantSlotElement(*slot);
+  }
 
   // <optgroup> is irrelevant inside of a <select> menulist.
   if (auto* opt_group = DynamicTo<HTMLOptGroupElement>(node)) {
@@ -505,8 +510,10 @@ bool IsNodeRelevantForAccessibility(const Node* node,
   if (node->IsPseudoElement())
     return AXObjectCacheImpl::IsRelevantPseudoElement(*node);
 
-  if (const HTMLSlotElement* slot = DynamicTo<HTMLSlotElement>(node))
+  if (const HTMLSlotElement* slot =
+          ToHTMLSlotElementIfSupportsAssignmentOrNull(node)) {
     return AXObjectCacheImpl::IsRelevantSlotElement(*slot);
+  }
 
   // <optgroup> is irrelevant inside of a <select> menulist.
   if (auto* opt_group = DynamicTo<HTMLOptGroupElement>(node)) {
@@ -600,10 +607,8 @@ AXObjectCacheImpl::~AXObjectCacheImpl() {
 }
 
 void AXObjectCacheImpl::Dispose() {
-#if DCHECK_IS_ON()
   DCHECK(!has_been_disposed_) << "Something is wrong, trying to dispose twice.";
   has_been_disposed_ = true;
-#endif
 
   for (auto& entry : objects_) {
     AXObject* obj = entry.value;
@@ -638,8 +643,11 @@ Node* AXObjectCacheImpl::FocusedElement() {
     focused_node = document_;
 
   // See if there's a page popup, for example a calendar picker.
-  Element* adjusted_focused_element = document_->AdjustedFocusedElement();
-  if (auto* input = DynamicTo<HTMLInputElement>(adjusted_focused_element)) {
+  auto* input = DynamicTo<HTMLInputElement>(focused_node);
+  if (!input && focused_node->IsInUserAgentShadowRoot()) {
+    input = DynamicTo<HTMLInputElement>(focused_node->OwnerShadowHost());
+  }
+  if (input) {
     if (AXObject* ax_popup = input->PopupRootAXObject()) {
       if (Element* focused_element_in_popup =
               ax_popup->GetDocument()->FocusedElement())
@@ -1021,8 +1029,10 @@ bool AXObjectCacheImpl::IsRelevantSlotElement(const HTMLSlotElement& slot) {
   // TODO(accessibility): There should be a better way to accomplish this.
   // Could a new function be added to the slot element?
   const Node* parent = LayoutTreeBuilderTraversal::Parent(slot);
-  if (const HTMLSlotElement* parent_slot = DynamicTo<HTMLSlotElement>(parent))
+  if (const HTMLSlotElement* parent_slot =
+          ToHTMLSlotElementIfSupportsAssignmentOrNull(parent)) {
     return AXObjectCacheImpl::IsRelevantSlotElement(*parent_slot);
+  }
 
   if (parent && parent->GetLayoutObject())
     return true;
@@ -2031,6 +2041,22 @@ void AXObjectCacheImpl::UpdateCacheAfterNodeIsAttachedWithCleanLayout(
   // that should have this as a child will be updated.
   ChildrenChangedWithCleanLayout(
       Get(LayoutTreeBuilderTraversal::Parent(*node)));
+
+  // Once we have reached the threshhold number of roles that forces a data
+  // table, invalidate the AXTable if it was previously a layout table, so that
+  // its subtree recomputes roles.
+  if (IsA<HTMLTableRowElement>(node)) {
+    if (auto* table_element =
+            Traversal<HTMLTableElement>::FirstAncestor(*node)) {
+      if (table_element->rows()->length() >=
+          AXObjectCacheImpl::kDataTableHeuristicMinRows) {
+        if (AXObject* ax_table = Get(table_element)) {
+          if (ax_table->RoleValue() == ax::mojom::blink::Role::kLayoutTable)
+            HandleRoleChangeWithCleanLayout(table_element);
+        }
+      }
+    }
+  }
 }
 
 void AXObjectCacheImpl::DidInsertChildrenOfNode(Node* node) {
@@ -3389,8 +3415,12 @@ void AXObjectCacheImpl::MarkAXObjectDirtyWithCleanLayoutHelper(AXObject* obj,
 
   WebLocalFrameImpl* webframe = WebLocalFrameImpl::FromFrame(
       obj->GetDocument()->AXObjectCacheOwner().GetFrame());
-  if (webframe && webframe->Client())
-    webframe->Client()->MarkWebAXObjectDirty(WebAXObject(obj), subtree);
+  if (webframe && webframe->Client()) {
+    webframe->Client()->MarkWebAXObjectDirty(WebAXObject(obj), subtree,
+                                             active_event_from_,
+                                             active_event_from_action_);
+  }
+
   obj->UpdateCachedAttributeValuesIfNeeded(true);
   for (auto agent : agents_)
     agent->AXObjectModified(obj, subtree);
@@ -3446,7 +3476,7 @@ AXObject* AXObjectCacheImpl::GetSerializationTarget(AXObject* obj) {
   // TODO(accessibility): The relevance check probably applies to all nodes
   // not just slot elements.
   if (const HTMLSlotElement* slot =
-          DynamicTo<HTMLSlotElement>(obj->GetNode())) {
+          ToHTMLSlotElementIfSupportsAssignmentOrNull(obj->GetNode())) {
     if (!AXObjectCacheImpl::IsRelevantSlotElement(*slot))
       return nullptr;
   }
@@ -3469,7 +3499,7 @@ AXObject* AXObjectCacheImpl::GetSerializationTarget(AXObject* obj) {
 }
 
 AXObject* AXObjectCacheImpl::RestoreParentOrPrune(AXObject* child) {
-  AXObject* parent = child->ComputeParent();
+  AXObject* parent = child->ComputeParentOrNull();
   if (parent)
     child->SetParent(parent);
   else  // If no parent is possible, the child is no longer part of the tree.
@@ -3738,6 +3768,11 @@ void AXObjectCacheImpl::DidHideMenuListPopupWithCleanLayout(Node* menu_list) {
   auto* ax_object = DynamicTo<AXMenuList>(Get(menu_list));
   if (ax_object)
     ax_object->DidHidePopup();
+}
+
+void AXObjectCacheImpl::HandleLoadStart(Document* document) {
+  SCOPED_DISALLOW_LIFECYCLE_TRANSITION(*document);
+  MarkAXObjectDirty(Get(document));
 }
 
 void AXObjectCacheImpl::HandleLoadComplete(Document* document) {

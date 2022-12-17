@@ -149,15 +149,16 @@ ExtensionFunction::ResponseAction AppWindowCreateFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   GURL url = extension()->GetResourceURL(params->url);
-  // Allow absolute URLs for component apps, otherwise prepend the extension
-  // path.
-  // TODO(devlin): Investigate if this is still used. If not, kill it dead!
+  // URLs normally must be relative to the extension. We make an exception
+  // to allow component apps to open chrome URLs (e.g. for the settings page
+  // on ChromeOS).
   GURL absolute = GURL(params->url);
   if (absolute.has_scheme()) {
-    if (extension()->location() == mojom::ManifestLocation::kComponent) {
+    if (extension()->location() == mojom::ManifestLocation::kComponent &&
+        absolute.SchemeIs(content::kChromeUIScheme)) {
       url = absolute;
     } else {
-      // Show error when url passed isn't local.
+      // Show error when url passed isn't valid.
       return RespondNow(Error(app_window_constants::kInvalidUrlParameter));
     }
   }
@@ -244,7 +245,7 @@ ExtensionFunction::ResponseAction AppWindowCreateFunction::Run() {
       return RespondNow(Error(std::move(error)));
 
     if (extension()->GetType() == Manifest::TYPE_EXTENSION) {
-      // Whitelisted IME extensions are allowed to use this API to create IME
+      // Allowlisted IME extensions are allowed to use this API to create IME
       // specific windows to show accented characters or suggestions.
       if (!extension()->permissions_data()->HasAPIPermission(
               mojom::APIPermissionID::kImeWindowEnabled)) {
@@ -275,7 +276,7 @@ ExtensionFunction::ResponseAction AppWindowCreateFunction::Run() {
     }
 
     if (options->alpha_enabled.get()) {
-      const char* const kWhitelist[] = {
+      const char* const kAllowlist[] = {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
         "B58B99751225318C7EB8CF4688B5434661083E07",  // http://crbug.com/410550
         "06BE211D5F014BAB34BC22D9DDA09C63A81D828E",  // http://crbug.com/425539
@@ -293,8 +294,8 @@ ExtensionFunction::ResponseAction AppWindowCreateFunction::Run() {
         "0F585FB1D0FDFBEBCE1FEB5E9DFFB6DA476B8C9B"
       };
       if (AppWindowClient::Get()->IsCurrentChannelOlderThanDev() &&
-          !SimpleFeature::IsIdInArray(extension_id(), kWhitelist,
-                                      base::size(kWhitelist))) {
+          !SimpleFeature::IsIdInArray(extension_id(), kAllowlist,
+                                      base::size(kAllowlist))) {
         return RespondNow(
             Error(app_window_constants::kAlphaEnabledWrongChannel));
       }

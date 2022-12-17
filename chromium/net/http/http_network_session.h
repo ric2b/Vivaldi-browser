@@ -136,8 +136,6 @@ struct NET_EXPORT HttpNetworkSessionParams {
   SpdySessionPool::TimeFunc time_func;
   // Whether to enable HTTP/2 Alt-Svc entries.
   bool enable_http2_alternative_service;
-  // Whether to enable Websocket over HTTP/2.
-  bool enable_websocket_over_http2;
 
   // Enables 0-RTT support.
   bool enable_early_data;
@@ -162,6 +160,15 @@ struct NET_EXPORT HttpNetworkSessionParams {
   // has zero 0, but continue and also stop sending HTTP/2-style priority
   // information in HEADERS frames and PRIORITY frames if it has value 1.
   bool enable_priority_update;
+
+  // If true, objects used by a HttpNetworkTransaction are asked not to perform
+  // disruptive work after there has been an IP address change (which usually
+  // means that the "default network" has possibly changed).
+  // This is currently used by HttpNetworkSessions that are bound to a specific
+  // network: for these, the underlying network does never change, even if the
+  // default network does (hence underlying objects should not drop their
+  // state).
+  bool ignore_ip_address_changes;
 };
 
   // Structure with pointers to the dependencies of the HttpNetworkSession.
@@ -281,9 +288,6 @@ class NET_EXPORT HttpNetworkSession {
   const SSLConfig::ApplicationSettings& GetApplicationSettings() const {
     return application_settings_;
   }
-
-  // Populates |server_config| and |proxy_config| based on this session.
-  void GetSSLConfig(SSLConfig* server_config, SSLConfig* proxy_config) const;
 
   // Evaluates if QUIC is enabled for new streams.
   bool IsQuicEnabled() const;

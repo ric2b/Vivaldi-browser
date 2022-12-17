@@ -38,10 +38,6 @@ export class PDFViewerBaseElement extends PolymerElement {
     return 'pdf-viewer-base';
   }
 
-  static get template() {
-    return null;
-  }
-
   static get properties() {
     return {
       /** @protected */
@@ -282,6 +278,7 @@ export class PDFViewerBaseElement extends PolymerElement {
     this.browserApi.addZoomEventListener(
         zoom => this.zoomManager_.onBrowserZoomChange(zoom));
 
+    // TODO(crbug.com/1278476): Don't need this after Pepper plugin goes away.
     this.viewportScroller =
         new ViewportScroller(this.viewport_, this.plugin_, window);
 

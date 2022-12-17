@@ -37,7 +37,7 @@
 #include "ui/views/controls/menu/menu_item_view.h"
 #include "ui/views/test/scoped_views_test_helper.h"
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 #include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"
 #endif
 
@@ -416,8 +416,8 @@ TEST_F(BookmarkContextMenuTest, ShowManagedBookmarks) {
 
   // Now set the managed bookmarks policy.
   std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue);
-  dict->SetString("name", "Google");
-  dict->SetString("url", "http://google.com");
+  dict->SetStringKey("name", "Google");
+  dict->SetStringKey("url", "http://google.com");
   base::ListValue list;
   list.Append(std::move(dict));
   EXPECT_TRUE(managed->managed_node()->children().empty());

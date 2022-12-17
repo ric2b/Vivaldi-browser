@@ -214,6 +214,13 @@
       },
     },
   },
+  'android_s': {
+    'swarming': {
+      'dimensions': {
+        'device_os': 'S',
+      },
+    },
+  },
   'arm64': {
     'swarming': {
       'dimensions': {
@@ -227,16 +234,6 @@
         'device_type': 'bullhead',
         'os': 'Android',
       },
-    },
-  },
-  'chrome-gold-service-account': {
-    'swarming': {
-      'service_account': 'chrome-gold@chops-service-accounts.iam.gserviceaccount.com',
-    },
-  },
-  'chrome-gpu-gold-service-account': {
-    'swarming': {
-      'service_account': 'chrome-gpu-gold@chops-service-accounts.iam.gserviceaccount.com',
     },
   },
   'chrome-swarming-pool': {
@@ -282,6 +279,7 @@
         {
           'cpu': 'x86',
           'kvm': '1',
+          'gce': '1',
           'os': 'Ubuntu-18.04',
           'pool': 'chrome.tests',
         }
@@ -301,12 +299,28 @@
       ],
     },
   },
+  'chromeos-jacuzzi': {
+    'swarming': {
+      'dimensions': {
+        'os': 'ChromeOS',
+        'device_type': 'jacuzzi',
+      },
+    },
+  },
   'chromeos-kevin': {
     'swarming': {
       'dimensions': {
         'os': 'ChromeOS',
         'device_type': 'kevin',
         'pool': 'chromium.tests',
+      },
+    },
+  },
+  'chromeos-octopus': {
+    'swarming': {
+      'dimensions': {
+        'os': 'ChromeOS',
+        'device_type': 'octopus',
       },
     },
   },
@@ -331,9 +345,6 @@
   },
   'chromium-webrtc-rel-win10': {
     'perf_builder_name_alias': 'chromium-webrtc-rel-win10',
-  },
-  'chromium-webrtc-rel-win8': {
-    'perf_builder_name_alias': 'chromium-webrtc-rel-win8',
   },
   # Used for invert CQ tests selection. Adding ci_only: False to
   # test_suite_exceptions.pyl to select tests that are allowed on CQ builders.
@@ -402,16 +413,6 @@
       },
     },
   },
-  'foster': {
-    # NVIDIA SHIELD TV
-    'swarming': {
-      'dimensions': {
-        'device_os_type': 'user',
-        'device_type': 'foster',
-        'os': 'Android',
-      },
-    },
-  },
   'fuchsia-code-coverage': {
     '$mixin_append': {
       'args': [
@@ -426,12 +427,19 @@
         '--device=aemu',
       ],
     },
-  }, 
+  },
   'fuchsia_logs': {
     '$mixin_append': {
       'args': [
         '--logs-dir=${ISOLATED_OUTDIR}/logs',
       ],
+    },
+  },
+  'gpu-exp-swarming-pool': {
+    'swarming': {
+      'dimensions': {
+        'pool': 'chromium.tests.gpu.experimental',
+      },
     },
   },
   'gpu-swarming-pool': {
@@ -514,6 +522,18 @@
           {
             'name': 'runtime_ios_15_0',
             'path': 'Runtime-ios-15.0',
+          },
+        ],
+      },
+    },
+  },
+  'ios_runtime_cache_15_2': {
+    '$mixin_append': {
+      'swarming': {
+        'named_caches': [
+          {
+            'name': 'runtime_ios_15_2',
+            'path': 'Runtime-ios-15.2',
           },
         ],
       },
@@ -612,6 +632,8 @@
         'os': 'Ubuntu-18.04.5',
         'pool': 'chromium.tests.gpu',
       },
+      # Increase max pending time to 2 hours due to lack of capacity.
+      'expiration': 7200,
     }
   },
   'linux_nvidia_gtx_1660_experimental': {
@@ -716,6 +738,14 @@
       },
     },
   },
+  'mac_12_x64': {
+    'swarming': {
+      'dimensions': {
+        'cpu': 'x86-64',
+        'os': 'Mac-12',
+      },
+    },
+  },
   'mac_arm64_apple_m1_gpu': {
     'swarming': {
       'dimensions': {
@@ -763,7 +793,7 @@
         'cpu': 'x86-64',
         'gpu': '1002:6821',
         'hidpi': '1',
-        'os': 'Mac-12.0',
+        'os': 'Mac-12.1',
         'pool': 'chromium.tests.gpu',
         'display_attached': '1',
       },
@@ -775,7 +805,7 @@
         'cpu': 'x86-64',
         'gpu': '1002:6821',
         'hidpi': '1',
-        'os': 'Mac-11.4|Mac-12.1',
+        'os': 'Mac-12.1',
         'pool': 'chromium.tests.gpu',
         'display_attached': '1',
       },
@@ -870,6 +900,15 @@
       },
     },
   },
+  'mdarcy': {
+    # NVIDIA Shield TV 2019
+    'swarming': {
+      'dimensions': {
+        'device_type': 'mdarcy',
+        'os': 'Android',
+      },
+    },
+  },
   'no_gpu': {
     'swarming': {
       'dimensions': {
@@ -919,6 +958,15 @@
       },
     },
   },
+  'oriole': {
+    # Pixel 6
+    'swarming': {
+      'dimensions': {
+        'device_type': 'oriole',
+        'os': 'Android',
+      },
+    },
+  },
   'out_dir_arg': {
     '$mixin_append': {
       'args': [
@@ -959,6 +1007,13 @@
       'dimensions': {
         'device_os': 'PQ3A.190801.002',
         'device_os_flavor': 'google',
+      },
+    },
+  },
+  'pie_generic': {
+    'swarming': {
+      'dimensions': {
+        'device_os': 'P',
       },
     },
   },
@@ -1005,6 +1060,31 @@
         'device_type': 'walleye',
         'os': 'Android',
       },
+    },
+  },
+  'webgpu_cts': {
+    '$mixin_append': {
+      'args': [
+        # crbug.com/953991 Ensure WebGPU is ready before running tests
+        '--initialize-webgpu-adapter-at-startup-timeout-ms=60000',
+      ],
+      'win64_args': [ '--target=Release_x64' ],
+      'mac_args': [
+        '--platform=mac-mac11'
+      ],
+      'linux_args': [
+        '--no-xvfb',
+        '--additional-driver-flag=--enable-features=UseSkiaRenderer,Vulkan',
+      ],
+    },
+    'merge': {
+      'args': [
+        '--verbose',
+      ],
+      'script': '//third_party/blink/tools/merge_web_test_results.py',
+    },
+    'resultdb': {
+      'enable': True,
     },
   },
   'win10': {
@@ -1104,6 +1184,13 @@
       ],
     },
   },
+  'win11': {
+    'swarming': {
+      'dimensions': {
+        'os': 'Windows-11-22000',
+      },
+    },
+  },
   'win7': {
     'swarming': {
       'dimensions': {
@@ -1129,13 +1216,6 @@
       },
     },
   },
-  'win8': {
-    'swarming': {
-      'dimensions': {
-        'os': 'Windows-8.1-SP0',
-      },
-    },
-  },
   'x86-32': {
     'swarming': {
       'dimensions': {
@@ -1150,7 +1230,7 @@
       },
     },
   },
-  # (default in Chromium iOS) xcode 12.4 gm seed
+  # xcode 12.4 gm seed
   'xcode_12d4e': {
     '$mixin_append': {
       'args': [
@@ -1168,51 +1248,35 @@
 
     },
   },
-  # Xcode 12.5 RC
-  'xcode_12e262': {
+  # Xcode 13 used on beta bots.
+  'xcode_13_beta_bots': {
     '$mixin_append': {
       'args': [
         '--xcode-build-version',
-        '12e262'
-      ],
-      'swarming': {
-        'named_caches': [
-          {
-            'name': 'xcode_ios_12e262',
-            'path': 'Xcode.app',
-          },
-        ],
-      },
-    },
-  },
-  'xcode_13_latest_beta': {
-    '$mixin_append': {
-      'args': [
-        '--xcode-build-version',
-        '13a233'
+        '13c100'
       ],
     },
     'swarming': {
       'named_caches': [
         {
-          'name': 'xcode_ios_13a233',
+          'name': 'xcode_ios_13c100',
           'path': 'Xcode.app',
         },
       ],
     },
   },
-  # Default Xcode 13 on main (Xcode 13.0 release candidate).
+  # Default Xcode 13 on main.
   'xcode_13_main': {
     '$mixin_append': {
       'args': [
         '--xcode-build-version',
-        '13a233'
+        '13c100'
       ],
     },
     'swarming': {
       'named_caches': [
         {
-          'name': 'xcode_ios_13a233',
+          'name': 'xcode_ios_13c100',
           'path': 'Xcode.app',
         },
       ],

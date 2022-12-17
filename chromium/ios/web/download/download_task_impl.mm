@@ -7,6 +7,7 @@
 #import <WebKit/WebKit.h>
 
 #include "base/strings/sys_string_conversions.h"
+#include "ios/web/download/download_result.h"
 #import "ios/web/public/download/download_task_observer.h"
 #include "ios/web/public/thread/web_thread.h"
 #import "ios/web/public/web_state.h"
@@ -110,12 +111,21 @@ NSString* DownloadTaskImpl::GetHttpMethod() const {
 
 bool DownloadTaskImpl::IsDone() const {
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
-  return state_ == State::kComplete || state_ == State::kCancelled;
+  switch (state_) {
+    case State::kNotStarted:
+    case State::kInProgress:
+      return false;
+    case State::kCancelled:
+    case State::kComplete:
+    case State::kFailed:
+    case State::kFailedNotResumable:
+      return true;
+  }
 }
 
 int DownloadTaskImpl::GetErrorCode() const {
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
-  return error_code_;
+  return download_result_.error_code();
 }
 
 int DownloadTaskImpl::GetHttpCode() const {
@@ -181,9 +191,15 @@ void DownloadTaskImpl::OnDownloadUpdated() {
     observer.OnDownloadUpdated(this);
 }
 
-void DownloadTaskImpl::OnDownloadFinished(int error_code) {
-  error_code_ = error_code;
-  state_ = State::kComplete;
+void DownloadTaskImpl::OnDownloadFinished(DownloadResult download_result) {
+  download_result_ = download_result;
+  if (download_result_.error_code()) {
+    state_ = download_result_.can_retry() ? State::kFailed
+                                          : State::kFailedNotResumable;
+  } else {
+    state_ = State::kComplete;
+  }
+
   OnDownloadUpdated();
 }
 

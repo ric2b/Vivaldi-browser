@@ -15,6 +15,8 @@
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/traced_value.h"
+#include "cache_storage_histogram_utils.h"
+#include "components/services/storage/public/cpp/buckets/bucket_locator.h"
 #include "content/browser/cache_storage/cache_storage.h"
 #include "content/browser/cache_storage/cache_storage_cache.h"
 #include "content/browser/cache_storage/cache_storage_context_impl.h"
@@ -631,6 +633,7 @@ class CacheStorageDispatcherHost::CacheStorageImpl final
   CacheStorageImpl(
       CacheStorageDispatcherHost* host,
       const blink::StorageKey& storage_key,
+      const absl::optional<storage::BucketLocator>& bucket,
       bool incognito,
       const CrossOriginEmbedderPolicy& cross_origin_embedder_policy,
       mojo::PendingRemote<network::mojom::CrossOriginEmbedderPolicyReporter>
@@ -638,6 +641,7 @@ class CacheStorageDispatcherHost::CacheStorageImpl final
       storage::mojom::CacheStorageOwner owner)
       : host_(host),
         storage_key_(storage_key),
+        bucket_(bucket),
         cross_origin_embedder_policy_(cross_origin_embedder_policy),
         coep_reporter_(std::move(coep_reporter)),
         owner_(owner) {
@@ -753,7 +757,7 @@ class CacheStorageDispatcherHost::CacheStorageImpl final
         [](base::TimeTicks start_time, int64_t trace_id,
            blink::mojom::CacheStorage::HasCallback callback, bool has_cache,
            CacheStorageError error) {
-          if (!has_cache)
+          if (!has_cache && error == CacheStorageError::kSuccess)
             error = CacheStorageError::kErrorNotFound;
           TRACE_EVENT_WITH_FLOW1(
               "CacheStorage",
@@ -959,6 +963,8 @@ class CacheStorageDispatcherHost::CacheStorageImpl final
   const raw_ptr<CacheStorageDispatcherHost> host_;
 
   const blink::StorageKey storage_key_;
+  // absl::nullopt when bucket retrieval has failed.
+  const absl::optional<storage::BucketLocator> bucket_;
   const CrossOriginEmbedderPolicy cross_origin_embedder_policy_;
   mojo::Remote<network::mojom::CrossOriginEmbedderPolicyReporter>
       coep_reporter_;
@@ -984,12 +990,13 @@ void CacheStorageDispatcherHost::AddReceiver(
     mojo::PendingRemote<network::mojom::CrossOriginEmbedderPolicyReporter>
         coep_reporter,
     const blink::StorageKey& storage_key,
+    const absl::optional<storage::BucketLocator>& bucket,
     storage::mojom::CacheStorageOwner owner,
     mojo::PendingReceiver<blink::mojom::CacheStorage> receiver) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   bool incognito = context_ ? context_->is_incognito() : false;
   auto impl = std::make_unique<CacheStorageImpl>(
-      this, storage_key, incognito, cross_origin_embedder_policy,
+      this, storage_key, bucket, incognito, cross_origin_embedder_policy,
       std::move(coep_reporter), owner);
   receivers_.Add(std::move(impl), std::move(receiver));
 }

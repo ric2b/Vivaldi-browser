@@ -53,7 +53,9 @@ const char kRedirectKey[] = "redirect";
 const char kVersionKey[] = "version";
 const char kExpiresKey[] = "expires";
 
-const char kCountersKey[] = "counters";
+const char kBlockedDomainsCountersKey[] = "blocked-domain-counters";
+const char kBlockedForOriginCountersKey[] = "blocked-for-origin-counters";
+const char kBlockedReportingStartKey[] = "blocked-reporting-start";
 
 const char kPresetIdKey[] = "preset-id";
 
@@ -298,10 +300,19 @@ void LoadRulesGroup(RuleGroup group,
         *deleted_presets_list,
         load_result.deleted_presets[static_cast<size_t>(group)]);
 
-  base::Value* blocked_counters = rule_group_value.FindDictKey(kCountersKey);
-  if (blocked_counters)
-    LoadCounters(*blocked_counters,
-                 load_result.blocked_counters[static_cast<size_t>(group)]);
+  base::Value* blocked_domains_counters =
+      rule_group_value.FindDictKey(kBlockedDomainsCountersKey);
+  if (blocked_domains_counters)
+    LoadCounters(
+        *blocked_domains_counters,
+        load_result.blocked_domains_counters[static_cast<size_t>(group)]);
+
+  base::Value* blocked_for_origin_counters =
+      rule_group_value.FindDictKey(kBlockedForOriginCountersKey);
+  if (blocked_for_origin_counters)
+    LoadCounters(
+        *blocked_for_origin_counters,
+        load_result.blocked_for_origin_counters[static_cast<size_t>(group)]);
 }
 
 void DoLoad(const base::FilePath& path,
@@ -322,6 +333,12 @@ void DoLoad(const base::FilePath& path,
       LoadRulesGroup(RuleGroup::kAdBlockingRules, *ad_blocking_rules,
                      *load_result);
     }
+
+    absl::optional<base::Time> blocked_reporting_start =
+        base::ValueToTime(root->FindKey(kBlockedReportingStartKey));
+    if (blocked_reporting_start)
+      load_result->blocked_reporting_start = *blocked_reporting_start;
+
     absl::optional<int> version = root->FindIntKey(kVersionKey);
     if (version)
       load_result->storage_version =
@@ -341,49 +358,43 @@ base::Value SerializeCounters(const std::map<std::string, int>& counters) {
   return base::Value(base::Value::DictStorage(std::move(buffer)));
 }
 
-base::Value SerializeSourcesList(
+base::Value::List SerializeSourcesList(
     const std::map<uint32_t, RuleSource>& rule_sources) {
-  base::Value sources_list(base::Value::Type::LIST);
+  base::Value::List sources_list;
   for (const auto& map_entry : rule_sources) {
     const RuleSource& rule_source = map_entry.second;
-    base::DictionaryValue source_value;
+    base::Value::Dict source_dict;
     if (rule_source.is_from_url)
-      source_value.SetStringKey(kSourceUrlKey, rule_source.source_url.spec());
+      source_dict.Set(kSourceUrlKey, rule_source.source_url.spec());
     else
-      source_value.SetStringKey(kSourceFileKey,
-                                rule_source.source_file.AsUTF8Unsafe());
-    source_value.SetIntKey(kGroupKey, static_cast<int>(rule_source.group));
-    source_value.SetBoolKey(kAllowAbpSnippets, rule_source.allow_abp_snippets);
-    source_value.SetStringKey(kRulesListChecksumKey,
-                              rule_source.rules_list_checksum);
-    source_value.SetKey(kLastUpdateKey,
-                        base::TimeToValue(rule_source.last_update));
-    source_value.SetKey(kNextFetchKey,
-                        base::TimeToValue(rule_source.next_fetch));
-    source_value.SetIntKey(kValidRulesCountKey,
-                           rule_source.rules_info.valid_rules);
-    source_value.SetIntKey(kUnsupportedRulesCountKey,
-                           rule_source.rules_info.unsupported_rules);
-    source_value.SetIntKey(kInvalidRulesCountKey,
-                           rule_source.rules_info.invalid_rules);
-    source_value.SetIntKey(kLastFetchResultKey,
-                           static_cast<int>(rule_source.last_fetch_result));
-    source_value.SetBoolKey(kHasTrackerInfosKey, rule_source.has_tracker_infos);
-    source_value.SetStringKey(kTitleKey,
-                              rule_source.unsafe_adblock_metadata.title);
-    source_value.SetStringKey(
-        kHomePageKey, rule_source.unsafe_adblock_metadata.homepage.spec());
-    source_value.SetStringKey(
-        kLicenseKey, rule_source.unsafe_adblock_metadata.license.spec());
-    source_value.SetStringKey(
-        kRedirectKey, rule_source.unsafe_adblock_metadata.redirect.spec());
-    source_value.SetKey(
+      source_dict.Set(kSourceFileKey, rule_source.source_file.AsUTF8Unsafe());
+    source_dict.Set(kGroupKey, static_cast<int>(rule_source.group));
+    source_dict.Set(kAllowAbpSnippets, rule_source.allow_abp_snippets);
+    source_dict.Set(kRulesListChecksumKey, rule_source.rules_list_checksum);
+    source_dict.Set(kLastUpdateKey, base::TimeToValue(rule_source.last_update));
+    source_dict.Set(kNextFetchKey, base::TimeToValue(rule_source.next_fetch));
+    source_dict.Set(kValidRulesCountKey, rule_source.rules_info.valid_rules);
+    source_dict.Set(kUnsupportedRulesCountKey,
+                    rule_source.rules_info.unsupported_rules);
+    source_dict.Set(kInvalidRulesCountKey,
+                    rule_source.rules_info.invalid_rules);
+    source_dict.Set(kLastFetchResultKey,
+                    static_cast<int>(rule_source.last_fetch_result));
+    source_dict.Set(kHasTrackerInfosKey, rule_source.has_tracker_infos);
+    source_dict.Set(kTitleKey, rule_source.unsafe_adblock_metadata.title);
+    source_dict.Set(kHomePageKey,
+                    rule_source.unsafe_adblock_metadata.homepage.spec());
+    source_dict.Set(kLicenseKey,
+                    rule_source.unsafe_adblock_metadata.license.spec());
+    source_dict.Set(kRedirectKey,
+                    rule_source.unsafe_adblock_metadata.redirect.spec());
+    source_dict.Set(
         kVersionKey,
         base::Int64ToValue(rule_source.unsafe_adblock_metadata.version));
-    source_value.SetKey(
+    source_dict.Set(
         kExpiresKey,
         base::TimeDeltaToValue(rule_source.unsafe_adblock_metadata.expires));
-    sources_list.Append(std::move(source_value));
+    sources_list.Append(std::move(source_dict));
   }
 
   return sources_list;
@@ -398,58 +409,65 @@ base::Value SerializeStringSetToList(const std::set<std::string>& string_set) {
   return list;
 }
 
-base::Value SerializeKnownSourcesList(const KnownRuleSources& rule_sources) {
-  base::Value sources_list(base::Value::Type::LIST);
+base::Value::List SerializeKnownSourcesList(
+    const KnownRuleSources& rule_sources) {
+  base::Value::List sources_list;
   for (const auto& map_entry : rule_sources) {
     const KnownRuleSource& rule_source = map_entry.second;
     if (!rule_source.removable)
       continue;
 
-    base::DictionaryValue source_value;
+    base::Value::Dict source;
     if (rule_source.is_from_url)
-      source_value.SetStringKey(kSourceUrlKey, rule_source.source_url.spec());
+      source.Set(kSourceUrlKey, rule_source.source_url.spec());
     else
-      source_value.SetStringKey(kSourceFileKey,
-                                rule_source.source_file.AsUTF8Unsafe());
-    source_value.SetIntKey(kGroupKey, static_cast<int>(rule_source.group));
-    source_value.SetBoolKey(kAllowAbpSnippets, rule_source.allow_abp_snippets);
+      source.Set(kSourceFileKey, rule_source.source_file.AsUTF8Unsafe());
+    source.Set(kGroupKey, static_cast<int>(rule_source.group));
+    source.Set(kAllowAbpSnippets, rule_source.allow_abp_snippets);
     if (!rule_source.preset_id.empty())
-      source_value.SetStringKey(kPresetIdKey, rule_source.preset_id);
-    sources_list.Append(std::move(source_value));
+      source.Set(kPresetIdKey, rule_source.preset_id);
+    sources_list.Append(std::move(source));
   }
 
   return sources_list;
 }
 
-base::Value SerializeRuleGroup(RuleService* service, RuleGroup group) {
-  base::DictionaryValue rule_group;
-  rule_group.SetIntKey(kExceptionsTypeKey,
+base::Value::Dict SerializeRuleGroup(RuleService* service, RuleGroup group) {
+  base::Value::Dict rule_group;
+  rule_group.Set(kExceptionsTypeKey,
                        service->GetActiveExceptionList(group));
-  rule_group.SetKey(kProcessListKey,
+  rule_group.Set(kProcessListKey,
                     SerializeStringSetToList(service->GetExceptions(
                         group, RuleService::kProcessList)));
-  rule_group.SetKey(kExemptListKey,
+  rule_group.Set(kExemptListKey,
                     SerializeStringSetToList(service->GetExceptions(
                         group, RuleService::kExemptList)));
-  rule_group.SetBoolKey(kEnabledKey, service->IsRuleGroupEnabled(group));
+  rule_group.Set(kEnabledKey, service->IsRuleGroupEnabled(group));
 
-  rule_group.SetKey(kRuleSourcesKey,
+  rule_group.Set(kRuleSourcesKey,
                     SerializeSourcesList(service->GetRuleSources(group)));
-  rule_group.SetKey(kKnownSourcesKey,
+  rule_group.Set(kKnownSourcesKey,
                     SerializeKnownSourcesList(
                         service->GetKnownSourcesHandler()->GetSources(group)));
-  rule_group.SetKey(
+  rule_group.Set(
       kDeletedPresetsKey,
       SerializeStringSetToList(
           service->GetKnownSourcesHandler()->GetDeletedPresets(group)));
-  rule_group.SetStringKey(kIndexChecksum,
+  rule_group.Set(kIndexChecksum,
                           service->GetRulesIndexChecksum(group));
-  rule_group.SetKey(
-      kCountersKey,
+
+  rule_group.Set(
+      kBlockedDomainsCountersKey,
       SerializeCounters(service->GetBlockerUrlsReporter()
                             ->GetBlockedDomains()[static_cast<size_t>(group)]));
 
-  return std::move(rule_group);
+  rule_group.Set(
+      kBlockedForOriginCountersKey,
+      SerializeCounters(
+          service->GetBlockerUrlsReporter()
+              ->GetBlockedForOrigin()[static_cast<size_t>(group)]));
+
+  return rule_group;
 }
 
 }  // namespace
@@ -501,13 +519,16 @@ void RuleServiceStorage::OnRuleServiceShutdown() {
 }
 
 bool RuleServiceStorage::SerializeData(std::string* output) {
-  base::DictionaryValue root;
+  base::Value::Dict root;
 
-  root.SetKey(kTrackingRulesKey,
-              SerializeRuleGroup(rule_service_, RuleGroup::kTrackingRules));
-  root.SetKey(kAdBlockingRulesKey,
-              SerializeRuleGroup(rule_service_, RuleGroup::kAdBlockingRules));
-  root.SetIntKey(kVersionKey, kCurrentStorageVersion);
+  root.Set(kTrackingRulesKey,
+           SerializeRuleGroup(rule_service_, RuleGroup::kTrackingRules));
+  root.Set(kAdBlockingRulesKey,
+           SerializeRuleGroup(rule_service_, RuleGroup::kAdBlockingRules));
+  root.Set(kBlockedReportingStartKey,
+           base::TimeToValue(
+               rule_service_->GetBlockerUrlsReporter()->GetReportingStart()));
+  root.Set(kVersionKey, kCurrentStorageVersion);
 
   JSONStringValueSerializer serializer(output);
   serializer.set_pretty_print(true);

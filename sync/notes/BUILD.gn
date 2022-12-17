@@ -20,6 +20,8 @@ static_library("sync_notes") {
     "note_sync_service.h",
     "notes_model_observer_impl.cc",
     "notes_model_observer_impl.h",
+    "parent_guid_preprocessing.cc",
+    "parent_guid_preprocessing.h",
     "synced_note_tracker.cc",
     "synced_note_tracker.h",
   ]

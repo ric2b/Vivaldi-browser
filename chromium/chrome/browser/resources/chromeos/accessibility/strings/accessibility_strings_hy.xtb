@@ -536,7 +536,7 @@
 <translation id="4601367666219428522">աղսկ <ph name="TABLENAME" />․ <ph name="TABLEROWS" />x<ph name="TABLECOLS" /></translation>
 <translation id="4615592953348396470">Անտեսվում է հաջորդ ստեղնի սեղմումը</translation>
 <translation id="4623097797855662355">Հիշատակարան</translation>
-<translation id="463135993322337640">ChromeVox-ի նորություններին ծանոթանալու համար՝ սեղմեք ChromeVox + O + N ստեղնները:</translation>
+<translation id="463135993322337640">ChromeVox-ի նորություններին ծանոթանալու համար՝ սեղմեք ChromeVox + O + N ստեղները:</translation>
 <translation id="4649220074413114917">Երկու մատով էկրանին հպելով կարող եք անջատել տեքստի հնչեցումը, հատկապես, եթե չեք ցանկանում, որ ChromeVox-ը որևէ տեքստ հնչեցնի։ Շարունակելու համար երկու մատով հպեք էկրանին։</translation>
 <translation id="4660783501463101648">Classic տարբերակը հեռացվել է։ ChromeVox Classic տարբերակին վերադառնալու ստեղնների համակցությունը հեռացվել է։</translation>
 <translation id="4661075872484491155">tree</translation>
@@ -666,6 +666,7 @@
 <translation id="5522423213731659107">Կարճ դասընթացն ավարտված է</translation>
 <translation id="5534303576632885660">hdr</translation>
 <translation id="5539820223028224601">Բաց մոխրագույն</translation>
+<translation id="554893713779400387">Միացնել/անջատել ձայնային ներածումը</translation>
 <translation id="5549179427201066174">Միացնել կամ անջատել հնչյունավորումը (ձայնային ազդանշաններ)</translation>
 <translation id="556042886152191864">Կոճակ</translation>
 <translation id="5561345396546889625">Հաջորդ ցանկը</translation>
@@ -1168,6 +1169,7 @@
 <translation id="9223032053830369045">Մուգ կարմիր</translation>
 <translation id="923331726185079994">ChromeVox-ը թարմացվել է</translation>
 <translation id="93384979447910801">Մուգ ծովականաչ</translation>
+<translation id="937605981140327129">TalkBack-ը տեղադրված չէ։ Տեղադրեք Android AccessibilitySuite-ը Play Խանութից և նորից փորձեք։</translation>
 <translation id="948171205378458592">Դանդաղեցնել խոսքը</translation>
 <translation id="957570623732056069">Այս դասի մեջ տեղաշարժվելու համար մատը սահեցրեք ձախ կամ աջ</translation>
 <translation id="958854023026327378">Մատը սահեցրեք ներքև</translation>

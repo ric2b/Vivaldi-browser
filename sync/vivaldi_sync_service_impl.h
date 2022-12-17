@@ -58,8 +58,7 @@ class VivaldiSyncServiceImpl : public syncer::SyncServiceImpl {
 
   void OnClearDataComplete(scoped_refptr<net::HttpResponseHeaders> headers);
 
-  std::string GetEncryptionBootstrapToken() const;
-  void SetEncryptionBootstrapToken(const std::string& token);
+  void ResetEncryptionBootstrapToken(const std::string& token);
 
   bool force_local_data_reset_ = false;
 

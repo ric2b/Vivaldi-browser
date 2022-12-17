@@ -9,6 +9,8 @@
 #include "base/at_exit.h"
 #include "base/bind.h"
 #include "base/json/json_reader.h"
+#include "base/profiler/module_cache.h"
+#include "base/profiler/stack_sampling_profiler_test_util.h"
 #include "base/run_loop.h"
 #include "base/threading/thread.h"
 #include "base/trace_event/trace_buffer.h"
@@ -27,7 +29,7 @@
 #include "services/tracing/public/cpp/stack_sampling/loader_lock_sampling_thread_win.h"
 #endif
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 #include "base/mac/mac_util.h"
 #endif
 
@@ -166,27 +168,8 @@ class TracingSampleProfilerTest : public TracingUnitTest {
 #endif
 };
 
-// Stub module for testing.
-class TestModule : public base::ModuleCache::Module {
- public:
-  TestModule() = default;
-
-  TestModule(const TestModule&) = delete;
-  TestModule& operator=(const TestModule&) = delete;
-
-  void set_id(const std::string& id) { id_ = id; }
-  uintptr_t GetBaseAddress() const override { return 0; }
-  std::string GetId() const override { return id_; }
-  base::FilePath GetDebugBasename() const override { return base::FilePath(); }
-  size_t GetSize() const override { return 0; }
-  bool IsNative() const override { return true; }
-
- private:
-  std::string id_;
-};
-
 bool ShouldSkipTestForMacOS11() {
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   // The sampling profiler does not work on macOS 11 and is disabled.
   // See https://crbug.com/1101399 and https://crbug.com/1098119.
   // DCHECK here so that when the sampling profiler is re-enabled on macOS 11,
@@ -453,7 +436,7 @@ class TracingProfileBuilderTest : public TracingUnitTest {
 };
 
 TEST_F(TracingProfileBuilderTest, ValidModule) {
-  TestModule module;
+  base::TestModule module;
   TracingSamplerProfiler::TracingProfileBuilder profile_builder(
       base::PlatformThreadId(), std::make_unique<TestTraceWriter>(producer()),
       false);
@@ -469,9 +452,9 @@ TEST_F(TracingProfileBuilderTest, InvalidModule) {
                                     base::TimeTicks());
 }
 
-#if defined(OS_ANDROID) || defined(OS_LINUX) || defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 TEST_F(TracingProfileBuilderTest, MangleELFModuleID) {
-  TestModule module;
+  base::TestModule module;
   // See explanation for the module_id mangling in
   // TracingSamplerProfiler::TracingProfileBuilder::GetCallstackIDAndMaybeEmit.
   module.set_id("7F0715C286F8B16C10E4AD349CDA3B9B56C7A773");

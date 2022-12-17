@@ -163,7 +163,7 @@ GROUP BY gr.name, ARRAY_TO_STRING(gr.typ_tags, '')
 """.format(submitted_builds_subquery=SUBMITTED_BUILDS_SUBQUERY)
 
 
-class BigQueryQuerier(object):
+class BigQueryQuerier():
   def __init__(self, sample_period, billing_project):
     """Class for making calls to BigQuery.
 
@@ -227,7 +227,7 @@ class BigQueryQuerier(object):
     Returns:
       The loaded JSON results from running |query|.
     """
-    cmd = upc_queries._GenerateBigQueryCommand(
+    cmd = upc_queries.GenerateBigQueryCommand(
         self._billing_project,
         {'INT64': {
             'sample_period': self._sample_period

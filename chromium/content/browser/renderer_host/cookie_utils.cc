@@ -6,7 +6,6 @@
 
 #include "base/ranges/algorithm.h"
 #include "content/browser/devtools/devtools_instrumentation.h"
-#include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/cookie_access_details.h"
@@ -119,6 +118,8 @@ void EmitCookieWarningsAndMetrics(
 
   bool samesite_cookie_inclusion_changed_by_cross_site_redirect = false;
 
+  bool partitioned_cookies_exist = false;
+
   for (const network::mojom::CookieOrLineWithAccessResultPtr& cookie :
        cookie_details->cookie_list) {
     if (ShouldReportDevToolsIssueForStatus(cookie->access_result.status)) {
@@ -201,6 +202,11 @@ void EmitCookieWarningsAndMetrics(
                   WARN_CROSS_SITE_REDIRECT_DOWNGRADE_CHANGES_INCLUSION);
     }
 
+    partitioned_cookies_exist =
+        partitioned_cookies_exist ||
+        (cookie->cookie_or_line->is_cookie() &&
+         cookie->cookie_or_line->get_cookie().IsPartitioned());
+
     breaking_context_downgrade =
         breaking_context_downgrade ||
         cookie->access_result.status.HasDowngradeWarning();
@@ -277,6 +283,11 @@ void EmitCookieWarningsAndMetrics(
     GetContentClient()->browser()->LogWebFeatureForCurrentPage(
         rfh, blink::mojom::WebFeature::
                  kSameSiteCookieInclusionChangedByCrossSiteRedirect);
+  }
+
+  if (partitioned_cookies_exist) {
+    GetContentClient()->browser()->LogWebFeatureForCurrentPage(
+        rfh, blink::mojom::WebFeature::kPartitionedCookies);
   }
 }
 

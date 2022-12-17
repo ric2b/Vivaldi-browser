@@ -13,12 +13,12 @@
 #include <algorithm>
 #include <set>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
 #include "base/command_line.h"
 #include "base/files/file_util.h"
-#include "base/ignore_result.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -42,8 +42,8 @@ namespace {
 // Current version number. We write databases at the "current" version number,
 // but any previous version that can read the "compatible" one can make do with
 // our database without *too* many bad effects.
-const int kCurrentVersionNumber = 11;
-const int kCompatibleVersionNumber = 11;
+const int kCurrentVersionNumber = 12;
+const int kCompatibleVersionNumber = 12;
 
 sql::InitStatus LogMigrationFailure(int from_version) {
   LOG(ERROR) << "Calendar DB failed to migrate from version " << from_version
@@ -154,7 +154,7 @@ sql::InitStatus CalendarDatabase::Init(const base::FilePath& calendar_name) {
 void CalendarDatabase::BeginExclusiveMode() {
   // We can't use set_exclusive_locking() since that only has an effect before
   // the DB is opened.
-  ignore_result(db_.Execute("PRAGMA locking_mode=EXCLUSIVE"));
+  std::ignore = db_.Execute("PRAGMA locking_mode=EXCLUSIVE");
 }
 
 // static
@@ -183,7 +183,7 @@ void CalendarDatabase::RollbackTransaction() {
 void CalendarDatabase::Vacuum() {
   DCHECK_EQ(0, db_.transaction_nesting())
       << "Can not have a transaction when vacuuming.";
-  ignore_result(db_.Execute("VACUUM"));
+  std::ignore = db_.Execute("VACUUM");
 }
 
 void CalendarDatabase::TrimMemory(bool aggressively) {
@@ -318,6 +318,17 @@ sql::InitStatus CalendarDatabase::EnsureCurrentVersion() {
   if (cur_version == 10) {
     // Version prior to adding pending_delete and sync_pending
     if (!MigrateCalendarToVersion11()) {
+      return LogMigrationFailure(cur_version);
+    }
+    ++cur_version;
+    meta_table_.SetVersionNumber(cur_version);
+    meta_table_.SetCompatibleVersionNumber(
+        std::min(cur_version, kCompatibleVersionNumber));
+  }
+
+  if (cur_version == 11) {
+    // Deprecated due column migrated over to end column.
+    if (!MigrateCalendarToVersion12()) {
       return LogMigrationFailure(cur_version);
     }
     ++cur_version;

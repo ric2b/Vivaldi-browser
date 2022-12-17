@@ -64,7 +64,6 @@
 
 namespace {
 
-constexpr char kGoogleGIconResourceName[] = "google_g.png";
 constexpr char kSearchIconResourceName[] = "search.svg";
 
 constexpr char kAnswerCurrencyIconResourceName[] = "realbox/icons/currency.svg";
@@ -95,6 +94,7 @@ constexpr char kDriveSlidesIconResourceName[] =
 constexpr char kDriveVideoIconResourceName[] = "realbox/icons/drive_video.svg";
 constexpr char kExtensionAppIconResourceName[] =
     "realbox/icons/extension_app.svg";
+constexpr char kGoogleGIconResourceName[] = "realbox/icons/google_g.svg";
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
 constexpr char kGoogleCalendarIconResourceName[] = "realbox/icons/calendar.svg";
 constexpr char kGoogleKeepNoteIconResourceName[] = "realbox/icons/note.svg";
@@ -253,6 +253,8 @@ std::vector<realbox::mojom::AutocompleteMatchPtr> CreateAutocompleteMatches(
                 match,
                 RealboxHandler::FocusState::kFocusedButtonRemoveSuggestion));
 
+    mojom_match->tail_suggest_common_prefix = match.tail_suggest_common_prefix;
+
     matches.push_back(std::move(mojom_match));
     line++;
   }
@@ -274,7 +276,6 @@ realbox::mojom::AutocompleteResultPtr CreateAutocompleteResult(
 // static
 void RealboxHandler::SetupWebUIDataSource(content::WebUIDataSource* source) {
   static constexpr webui::ResourcePath kImages[] = {
-      {kGoogleGIconResourceName, IDR_WEBUI_IMAGES_200_LOGO_GOOGLEG_PNG},
       {kSearchIconResourceName, IDR_WEBUI_IMAGES_ICON_SEARCH_SVG}};
   source->AddResourcePaths(kImages);
 
@@ -286,9 +287,22 @@ void RealboxHandler::SetupWebUIDataSource(content::WebUIDataSource* source) {
       {"showSuggestions", IDS_TOOLTIP_HEADER_SHOW_SUGGESTIONS_BUTTON}};
   source->AddLocalizedStrings(kStrings);
 
+  source->AddInteger(
+      "realboxMatchOmniboxThemeVariant",
+      base::GetFieldTrialParamByFeatureAsInt(
+          ntp_features::kRealboxMatchOmniboxTheme,
+          ntp_features::kRealboxMatchOmniboxThemeVariantParam, 0));
   source->AddBoolean(
       "realboxMatchOmniboxTheme",
       base::FeatureList::IsEnabled(ntp_features::kRealboxMatchOmniboxTheme));
+  source->AddBoolean(
+      "roundCorners",
+      base::GetFieldTrialParamByFeatureAsInt(
+          ntp_features::kRealboxMatchSearchboxTheme,
+          ntp_features::kRealboxMatchSearchboxThemeParam, 0) == 1);
+  source->AddBoolean(
+      "realboxMatchSearchboxTheme",
+      base::FeatureList::IsEnabled(ntp_features::kRealboxMatchSearchboxTheme));
   source->AddString(
       "realboxDefaultIcon",
       base::FeatureList::IsEnabled(ntp_features::kRealboxUseGoogleGIcon)
@@ -682,6 +696,11 @@ void RealboxHandler::ExecuteAction(uint8_t line,
 void RealboxHandler::OnResultChanged(AutocompleteController* controller,
                                      bool default_match_changed) {
   DCHECK(controller == autocomplete_controller_.get());
+
+  // Prepend missing tail suggestion prefixes in results, if present.
+  if (base::FeatureList::IsEnabled(omnibox::kNtpRealboxTailSuggest)) {
+    autocomplete_controller_->SetTailSuggestCommonPrefixes();
+  }
 
   page_->AutocompleteResultChanged(CreateAutocompleteResult(
       autocomplete_controller_->input().text(),

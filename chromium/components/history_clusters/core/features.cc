@@ -17,7 +17,7 @@ namespace history_clusters {
 namespace {
 
 constexpr auto enabled_by_default_desktop_only =
-#if defined(OS_ANDROID) || defined(OS_IOS)
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
     base::FEATURE_DISABLED_BY_DEFAULT;
 #else
     base::FEATURE_ENABLED_BY_DEFAULT;
@@ -68,6 +68,9 @@ const base::FeatureParam<double> kMinScoreToAlwaysShowAboveTheFold{
 
 const base::FeatureParam<int> kNumVisitsToAlwaysShowAboveTheFold{
     &internal::kJourneys, "JourneysNumVisitsToAlwaysShowAboveTheFold", 3};
+
+const base::FeatureParam<bool> kRescoreVisitsWithinClustersForQuery{
+    &internal::kJourneys, "JourneysRescoreVisitsWithinClustersForQuery", true};
 
 // Default to true, as this new alternate action text was recommended by our UX
 // writers.

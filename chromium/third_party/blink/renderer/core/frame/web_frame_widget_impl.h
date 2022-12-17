@@ -36,7 +36,6 @@
 #include "base/types/pass_key.h"
 #include "build/build_config.h"
 #include "cc/input/event_listener_properties.h"
-#include "cc/input/layer_selection_bound.h"
 #include "cc/input/overscroll_behavior.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/paint_holding_reason.h"
@@ -74,6 +73,7 @@
 #include "third_party/blink/renderer/platform/wtf/casting.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom-shared.h"
 #include "ui/base/mojom/ui_base_types.mojom-shared.h"
+#include "ui/gfx/ca_layer_result.h"
 
 namespace gfx {
 class Point;
@@ -108,6 +108,15 @@ class CORE_EXPORT WebFrameWidgetImpl
       public FrameWidget,
       public PageWidgetEventHandler {
  public:
+  struct PromiseCallbacks {
+    base::OnceCallback<void(base::TimeTicks)> swap_time_callback;
+    base::OnceCallback<void(base::TimeTicks)> presentation_time_callback;
+#if BUILDFLAG(IS_MAC)
+    base::OnceCallback<void(gfx::CALayerResult)>
+        core_animation_error_code_callback;
+#endif
+  };
+
   WebFrameWidgetImpl(
       base::PassKey<WebLocalFrame>,
       CrossVariantMojoAssociatedRemote<
@@ -187,9 +196,7 @@ class CORE_EXPORT WebFrameWidgetImpl
   // is fired with the submission (aka swap) timestamp when the frame is
   // submitted to Viz; `presentation_callback` is fired with the presentation
   // timestamp after the frame is presented to the user.
-  void NotifySwapAndPresentationTimeForTesting(
-      base::OnceCallback<void(base::TimeTicks)> swap_callback,
-      base::OnceCallback<void(base::TimeTicks)> presentation_callback);
+  void NotifySwapAndPresentationTimeForTesting(PromiseCallbacks callbacks);
 
   // Process the input event, invoking the callback when complete. This
   // method will call the callback synchronously.
@@ -203,7 +210,6 @@ class CORE_EXPORT WebFrameWidgetImpl
       const cc::OverscrollBehavior& overscroll_behavior) final;
   void RequestAnimationAfterDelay(const base::TimeDelta&) final;
   void SetRootLayer(scoped_refptr<cc::Layer>) override;
-  void RegisterSelection(cc::LayerSelection selection) final;
   void RequestDecode(const cc::PaintImage&,
                      base::OnceCallback<void(bool)>) override;
   void NotifyPresentationTimeInBlink(
@@ -317,6 +323,10 @@ class CORE_EXPORT WebFrameWidgetImpl
       mojom::blink::ViewportIntersectionStatePtr intersection_state);
   void NotifyPresentationTime(
       base::OnceCallback<void(base::TimeTicks)> callback) override;
+#if BUILDFLAG(IS_MAC)
+  void NotifyCoreAnimationErrorCode(
+      base::OnceCallback<void(gfx::CALayerResult)> callback) override;
+#endif
   scheduler::WebRenderWidgetSchedulingState* RendererWidgetSchedulingState()
       override;
   void WaitForDebuggerWhenShown() override;
@@ -515,7 +525,8 @@ class CORE_EXPORT WebFrameWidgetImpl
   // pixels).
   gfx::Size DIPsToCeiledBlinkSpace(const gfx::Size& size);
 
-  void SetWindowRect(const gfx::Rect& window_rect);
+  void SetWindowRect(const gfx::Rect& requested_rect,
+                     const gfx::Rect& adjusted_rect);
   void SetWindowRectSynchronouslyForTesting(const gfx::Rect& new_window_rect);
 
   void UpdateTooltipUnderCursor(const String& tooltip_text, TextDirection dir);
@@ -630,6 +641,8 @@ class CORE_EXPORT WebFrameWidgetImpl
   // overridden by tests to disable this.
   virtual bool ShouldAutoDetermineCompositingToLCDTextSetting();
 
+  WidgetBase* widget_base_for_testing() const { return widget_base_.get(); }
+
   // WebFrameWidget overrides.
   cc::LayerTreeHost* LayerTreeHost() override;
 
@@ -639,9 +652,7 @@ class CORE_EXPORT WebFrameWidgetImpl
   friend class WebViewImpl;
   friend class ReportTimeSwapPromise;
 
-  void NotifySwapAndPresentationTime(
-      base::OnceCallback<void(base::TimeTicks)> swap_callback,
-      base::OnceCallback<void(base::TimeTicks)> presentation_callback);
+  void NotifySwapAndPresentationTime(PromiseCallbacks callbacks);
 
   // WidgetBaseClient overrides.
   void BeginCommitCompositorFrame() override;
@@ -738,7 +749,7 @@ class CORE_EXPORT WebFrameWidgetImpl
   // Sets the inert bit on an out-of-process iframe, causing it to ignore
   // input.
   void SetIsInertForSubFrame(bool inert) override;
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   void GetStringAtPoint(const gfx::Point& point_in_local_root,
                         GetStringAtPointCallback callback) override;
 #endif
@@ -783,7 +794,7 @@ class CORE_EXPORT WebFrameWidgetImpl
   void ScrollFocusedEditableNodeIntoRect(
       const gfx::Rect& rect_in_dips) override;
   void MoveCaret(const gfx::Point& point_in_dips) override;
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   void SelectAroundCaret(mojom::blink::SelectionGranularity granularity,
                          bool should_show_handle,
                          bool should_show_context_menu,

@@ -47,8 +47,12 @@ class AshNotificationExpandButton : public views::Button {
   void PerformExpandCollapseAnimation();
 
   // views::Button:
-  gfx::Size CalculatePreferredSize() const override;
   void OnThemeChanged() override;
+  gfx::Size CalculatePreferredSize() const override;
+
+  void set_label_fading_out(bool label_fading_out) {
+    label_fading_out_ = label_fading_out;
+  }
 
   views::Label* label_for_test() { return label_; }
 
@@ -61,11 +65,17 @@ class AshNotificationExpandButton : public views::Button {
   gfx::ImageSkia expanded_image_;
   gfx::ImageSkia collapsed_image_;
 
+  // Used in layer bounds animation.
+  gfx::Rect previous_bounds_;
+
   // Total number of grouped child notifications in this button's parent view.
   int total_grouped_notifications_ = 0;
 
   // The expand state of the button.
   bool expanded_ = false;
+
+  // True if `label_` is in its fade out animation.
+  bool label_fading_out_ = false;
 
   base::WeakPtrFactory<AshNotificationExpandButton> weak_factory_{this};
 };

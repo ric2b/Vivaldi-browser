@@ -19,7 +19,11 @@ import org.chromium.components.favicon.IconType;
 import org.chromium.components.favicon.LargeIconBridge.LargeIconCallback;
 import org.chromium.url.GURL;
 
+// Vivaldi
+import android.graphics.PorterDuff;
+
 import org.chromium.chrome.browser.ChromeApplicationImpl;
+import org.chromium.components.bookmarks.BookmarkType;
 
 /**
  * A row view that shows bookmark info in the bookmarks UI.
@@ -76,14 +80,22 @@ public class BookmarkItemRow extends BookmarkRow implements LargeIconCallback {
     }
 
     @Override
-    BookmarkItem setBookmarkId(BookmarkId bookmarkId, @Location int location) {
-        BookmarkItem item = super.setBookmarkId(bookmarkId, location);
+    BookmarkItem setBookmarkId(
+            BookmarkId bookmarkId, @Location int location, boolean fromFilterView) {
+        BookmarkItem item = super.setBookmarkId(bookmarkId, location, fromFilterView);
         mUrl = item.getUrl();
         mStartIconView.setImageDrawable(null);
         mTitleView.setText(item.getTitle());
         mDescriptionView.setText(item.getUrlForDisplay());
         mFaviconCancelled = false;
         mDelegate.getLargeIconBridge().getLargeIconForUrl(mUrl, mMinIconSize, this);
+        // Vivaldi - change font color for read items in Reading List
+        boolean isItemRead = bookmarkId.getType() == BookmarkType.READING_LIST && item.isRead();
+        int color = isItemRead
+                ? R.color.vivaldi_disabled_text_color
+                : R.color.default_text_color_baseline;
+        mTitleView.setTextColor(getResources().getColor(color));
+        mDescriptionView.setTextColor(getResources().getColor(color));
         return item;
     }
 
@@ -122,5 +134,26 @@ public class BookmarkItemRow extends BookmarkRow implements LargeIconCallback {
                 icon, mUrl.getSpec(), fallbackColor, mIconGenerator, getResources(),
                 vivaldiIconSize);
         setStartIconDrawable(iconDrawable);
+        if (mStartIconView != null) setReadingListIconTint();
+    }
+
+    /** Vivaldi - Sets the icon color as per the read status of Bookmark item **/
+    private void setReadingListIconTint() {
+        BookmarkId bookmarkId = this.getItem();
+        BookmarkItem bookmarkItem = mDelegate.getModel().getBookmarkById(bookmarkId);
+        if (this.getItem().getType() == BookmarkType.READING_LIST && bookmarkItem.isRead()) {
+            mStartIconView.setColorFilter(getContext().getColor(
+                    R.color.default_text_color_disabled_light), PorterDuff.Mode.MULTIPLY);
+            if (mMoreIcon != null)
+                mMoreIcon.setColorFilter(getContext().getColor(
+                        R.color.default_text_color_disabled_light), PorterDuff.Mode.MULTIPLY);
+        } else {
+            mStartIconView.setColorFilter(null);
+            ApiCompatibilityUtils.setImageTintList(mStartIconView, getDefaultStartIconTint());
+            if (mMoreIcon != null) {
+                mMoreIcon.setColorFilter(null);
+                ApiCompatibilityUtils.setImageTintList(mMoreIcon, getDefaultStartIconTint());
+            }
+        }
     }
 }

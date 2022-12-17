@@ -100,17 +100,18 @@ bool SessionServiceBase::ShouldTrackVivaldiBrowser(Browser* browser) {
   base::JSONParserOptions options = base::JSON_PARSE_RFC;
   absl::optional<base::Value> json =
       base::JSONReader::Read(browser->ext_data(), options);
-  base::DictionaryValue* dict = NULL;
-  std::string window_type;
-  if (json && json->GetAsDictionary(&dict)) {
-    dict->GetString("windowType", &window_type);
-    // Don't track popup windows (like settings) in the session.
-    // We have "", "popup" and "settings".
-    // TODO(pettern): Popup windows still rely on extData, this
-    // should go away and we should use the type sent to the apis
-    // instead.
-    if (window_type == "popup" || window_type == "settings") {
-      return false;
+  if (json) {
+    if (const base::Value::Dict* dict = json->GetIfDict()) {
+      if (const std::string* window_type = dict->FindString("windowType")) {
+        // Don't track popup windows (like settings) in the session.
+        // We have "", "popup" and "settings".
+        // TODO(pettern): Popup windows still rely on extData, this
+        // should go away and we should use the type sent to the apis
+        // instead.
+        if (*window_type == "popup" || *window_type == "settings") {
+          return false;
+        }
+      }
     }
   }
   if (static_cast<VivaldiBrowserWindow*>(browser->window())->type() ==
@@ -435,8 +436,6 @@ void VivaldiSessionService::ShowBrowser(Browser* browser,
                                         int selected_tab_index) {
   DCHECK(browser);
   DCHECK(browser->tab_strip_model()->count());
-  browser->tab_strip_model()->ActivateTabAt(
-      selected_tab_index, {TabStripModel::GestureType::kOther});
 
   if (browser_ == browser)
     return;
@@ -446,7 +445,7 @@ void VivaldiSessionService::ShowBrowser(Browser* browser,
 
   // TODO(jcampan): http://crbug.com/8123 we should not need to set the
   //                initial focus explicitly.
-  browser->tab_strip_model()->GetActiveWebContents()->SetInitialFocus();
+  browser->tab_strip_model()->ActivateTabAt(selected_tab_index);
 }
 
 // Based on RestoreTabsToBrowser in session_restore.cc

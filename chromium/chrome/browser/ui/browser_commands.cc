@@ -44,6 +44,7 @@
 #include "chrome/browser/ui/autofill/payments/manage_migration_ui_controller.h"
 #include "chrome/browser/ui/autofill/payments/offer_notification_bubble_controller_impl.h"
 #include "chrome/browser/ui/autofill/payments/save_card_bubble_controller_impl.h"
+#include "chrome/browser/ui/autofill/payments/virtual_card_enroll_bubble_controller_impl.h"
 #include "chrome/browser/ui/autofill/payments/virtual_card_manual_fallback_bubble_controller_impl.h"
 #include "chrome/browser/ui/autofill/save_update_address_profile_bubble_controller_impl.h"
 #include "chrome/browser/ui/bookmarks/bookmark_stats.h"
@@ -189,7 +190,7 @@ translate::TranslateBubbleUiEvent TranslateBubbleResultToUiEvent(
   switch (result) {
     default:
       NOTREACHED();
-      FALLTHROUGH;
+      [[fallthrough]];
     case ShowTranslateBubbleResult::SUCCESS:
       return translate::TranslateBubbleUiEvent::BUBBLE_SHOWN;
     case ShowTranslateBubbleResult::BROWSER_WINDOW_NOT_VALID:
@@ -638,9 +639,15 @@ void Home(Browser* browser, WindowOpenDisposition disposition) {
 
 base::WeakPtr<content::NavigationHandle> OpenCurrentURL(Browser* browser) {
   base::RecordAction(UserMetricsAction("LoadURL"));
-  LocationBar* location_bar = browser->window()->GetLocationBar();
-  if (!location_bar)
+  // TODO(https://crbug.com/1294004): Eliminate extra checks once source of
+  //  bad pointer dereference is identified. See also TODO comment below.
+  CHECK(browser);
+  BrowserWindow* window = browser->window();
+  CHECK(window);
+  LocationBar* location_bar = window->GetLocationBar();
+  if (!location_bar) {
     return nullptr;
+  }
 
   GURL url(location_bar->GetDestinationURL());
   TRACE_EVENT1("navigation", "chrome::OpenCurrentURL", "url", url);
@@ -666,10 +673,13 @@ base::WeakPtr<content::NavigationHandle> OpenCurrentURL(Browser* browser) {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   DCHECK(extensions::ExtensionSystem::Get(browser->profile())
              ->extension_service());
+  // TODO(https://crbug.com/1294004): Eliminate extra checks once source of
+  //  bad pointer dereference is identified. See also TODO comment above.
+  extensions::ExtensionRegistry* extension_registry =
+      extensions::ExtensionRegistry::Get(browser->profile());
+  CHECK(extension_registry);
   const extensions::Extension* extension =
-      extensions::ExtensionRegistry::Get(browser->profile())
-          ->enabled_extensions()
-          .GetAppByURL(url);
+      extension_registry->enabled_extensions().GetAppByURL(url);
   if (extension) {
     extensions::RecordAppLaunchType(extension_misc::APP_LAUNCH_OMNIBOX_LOCATION,
                                     extension->GetType());
@@ -685,7 +695,7 @@ void Stop(Browser* browser) {
 
 void NewWindow(Browser* browser) {
   Profile* const profile = browser->profile();
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   // Web apps should open a window to their launch page.
   if (browser->app_controller()) {
     const web_app::AppId app_id = browser->app_controller()->app_id();
@@ -711,7 +721,6 @@ void NewWindow(Browser* browser) {
   // Hosted apps should open a window to their launch page.
   const extensions::Extension* extension = GetExtensionForBrowser(browser);
   if (extension && extension->is_hosted_app()) {
-    DCHECK(!extension->from_bookmark());
     const auto app_launch_params = CreateAppLaunchParamsUserContainer(
         profile, extension, WindowOpenDisposition::NEW_WINDOW,
         apps::mojom::LaunchSource::kFromKeyboard);
@@ -721,7 +730,7 @@ void NewWindow(Browser* browser) {
     return;
   }
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
-#endif  // defined(OS_MAC)
+#endif  // BUILDFLAG(IS_MAC)
   NewEmptyWindow(profile->GetOriginalProfile());
 }
 
@@ -1182,7 +1191,7 @@ bool MoveTabToReadLater(Browser* browser, content::WebContents* web_contents) {
   model->AddEntry(url, base::UTF16ToUTF8(title),
                   reading_list::EntrySource::ADDED_VIA_CURRENT_APP);
   MaybeShowBookmarkBarForReadLater(browser);
-  browser->window()->GetFeaturePromoController()->MaybeShowPromo(
+  browser->window()->MaybeShowFeaturePromo(
       feature_engagement::kIPHReadingListDiscoveryFeature);
   base::UmaHistogramEnumeration(
       "ReadingList.BookmarkBarState.OnEveryAddToReadingList",
@@ -1218,7 +1227,7 @@ bool IsCurrentTabUnreadInReadLater(Browser* browser) {
 }
 
 void MaybeShowBookmarkBarForReadLater(Browser* browser) {
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   if (base::FeatureList::IsEnabled(features::kSidePanel))
     return;
   PrefService* pref_service = browser->profile()->GetPrefs();
@@ -1234,7 +1243,7 @@ void MaybeShowBookmarkBarForReadLater(Browser* browser) {
     if (browser->bookmark_bar_state() == BookmarkBar::HIDDEN)
       ToggleBookmarkBar(browser);
   }
-#endif  // defined(OS_ANDROID)
+#endif  // BUILDFLAG(IS_ANDROID)
 }
 
 void ShowOffersAndRewardsForPage(Browser* browser) {
@@ -1278,6 +1287,16 @@ void ShowVirtualCardManualFallbackBubble(Browser* browser) {
       browser->tab_strip_model()->GetActiveWebContents();
   auto* controller =
       autofill::VirtualCardManualFallbackBubbleControllerImpl::FromWebContents(
+          web_contents);
+  if (controller)
+    controller->ReshowBubble();
+}
+
+void ShowVirtualCardEnrollBubble(Browser* browser) {
+  WebContents* web_contents =
+      browser->tab_strip_model()->GetActiveWebContents();
+  autofill::VirtualCardEnrollBubbleControllerImpl* controller =
+      autofill::VirtualCardEnrollBubbleControllerImpl::FromWebContents(
           web_contents);
   if (controller)
     controller->ReshowBubble();
@@ -1564,7 +1583,7 @@ void ToggleDevToolsWindow(Browser* browser,
 }
 
 bool CanOpenTaskManager() {
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   return true;
 #else
   return false;
@@ -1583,11 +1602,11 @@ void OpenTaskManager(Browser* browser) {
   }
   // Invoke task manager UI in ash, which will call chrome::OpenTaskManager()
   // in ash to run through the code path in the next section
-  // (!defined(OS_ANDROID)).
+  // (!BUILDFLAG(IS_ANDROID)).
   chromeos::LacrosService::Get()
       ->GetRemote<crosapi::mojom::TaskManager>()
       ->ShowTaskManager();
-#elif !defined(OS_ANDROID)
+#elif !BUILDFLAG(IS_ANDROID)
   base::RecordAction(UserMetricsAction("TaskManager"));
   chrome::ShowTaskManager(browser);
 #else
@@ -1783,14 +1802,22 @@ Browser* OpenInChrome(Browser* hosted_app_browser) {
 }
 
 bool CanViewSource(const Browser* browser) {
-  return !browser->is_type_devtools() && browser->tab_strip_model()
-                                             ->GetActiveWebContents()
-                                             ->GetController()
-                                             .CanViewSource();
+  if (browser->is_type_devtools()) {
+    return false;
+  }
+
+  WebContents* web_contents =
+      browser->tab_strip_model()->GetActiveWebContents();
+
+  // Disallow ViewSource if DevTools are disabled.
+  if (!DevToolsWindow::AllowDevToolsFor(browser->profile(), web_contents)) {
+    return false;
+  }
+  return web_contents->GetController().CanViewSource();
 }
 
 bool CanToggleCaretBrowsing(Browser* browser) {
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   // On Mac, ignore the keyboard shortcut unless web contents is focused,
   // because the keyboard shortcut interferes with a Japenese IME when the
   // omnibox is focused.  See https://crbug.com/1138475
@@ -1803,7 +1830,7 @@ bool CanToggleCaretBrowsing(Browser* browser) {
   return rwhv && rwhv->HasFocus();
 #else
   return true;
-#endif  // defined(OS_MAC)
+#endif  // BUILDFLAG(IS_MAC)
 }
 
 void ToggleCaretBrowsing(Browser* browser) {

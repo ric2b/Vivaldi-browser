@@ -91,11 +91,19 @@ class CONTENT_EXPORT WebContentsFrameTracker final
   void SetWebContentsAndContextFromRoutingId(const GlobalRenderFrameHostId& id);
 
   // Start/stop cropping.
+  //
   // Must only be called on the UI thread.
+  //
   // Non-empty |crop_id| sets (or changes) the crop-target.
   // Empty |crop_id| reverts the capture to its original, uncropped state.
+  //
+  // |crop_version| must be incremented by at least one for each call.
+  // By including it in frame's metadata, Viz informs Blink what was the
+  // latest invocation of cropTo() before a given frame was produced.
+  //
   // The callback reports success/failure.
   void Crop(const base::Token& crop_id,
+            uint32_t crop_version,
             base::OnceCallback<void(media::mojom::CropRequestResult)> callback);
 
   // WebContents are retrieved on the UI thread normally, from the render IDs,
@@ -124,7 +132,7 @@ class CONTENT_EXPORT WebContentsFrameTracker final
   // WebContentsFrameTracker because the WebContentsFrameTracker deleter task
   // will be posted to the UI thread before the MouseCursorOverlayController
   // deleter task.
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   raw_ptr<MouseCursorOverlayController> cursor_controller_ = nullptr;
 #endif
 
@@ -137,6 +145,15 @@ class CONTENT_EXPORT WebContentsFrameTracker final
   // Indicates whether the WebContents's capturer count needs to be
   // decremented.
   bool is_capturing_ = false;
+
+  // Whenever the crop-target of a stream changes, the associated crop-version
+  // is incremented. This value is used in frames' metadata so as to allow
+  // other modules (mostly Blink) to see which frames are cropped to the
+  // old/new specified crop-target.
+  // The value 0 is used before any crop-target is assigned. (Note that by
+  // cropping and then uncropping, values other than 0 can also be associated
+  // with an uncropped track.)
+  uint32_t crop_version_ = 0;
 };
 
 }  // namespace content

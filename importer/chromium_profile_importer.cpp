@@ -144,43 +144,32 @@ void ChromiumProfileImporter::ReadProfiles(std::vector<ChromeProfileInfo>* cp,
   std::string input;
   ReadFileToString(profileFileName, &input);
 
-  absl::optional<base::Value> root(base::JSONReader::Read(input));
-
-  base::DictionaryValue* dict = NULL;
-  if (!root->GetAsDictionary(&dict)) {
+  absl::optional<base::Value> root_value(base::JSONReader::Read(input));
+  if (!root_value || !root_value->is_dict())
     return;
-  }
 
-  const base::Value* roots;
-  if (!dict->Get("profile", &roots)) {
+  const base::Value::Dict* profile_dict =
+      root_value->GetDict().FindDict("profile");
+  if (!profile_dict)
     return;
-  }
 
-  const base::DictionaryValue* roots_d_value =
-      static_cast<const base::DictionaryValue*>(roots);
+  const base::Value::Dict* info_cache = profile_dict->FindDict("info_cache");
+  if (!info_cache)
+    return;
 
-  const base::Value* vInfoCache;
-  const base::DictionaryValue* vDictValue;
-  if (roots_d_value->Get("info_cache", &vInfoCache)) {
-    vInfoCache->GetAsDictionary(&vDictValue);
-    for (base::DictionaryValue::Iterator it(*vDictValue); !it.IsAtEnd();
-         it.Advance()) {
-      std::string profileName = it.key();
-
-      const base::DictionaryValue* roots_sd_value =
-          static_cast<const base::DictionaryValue*>(&it.value());
-
-      ChromeProfileInfo prof;
-      const base::Value* namVal;
-      if (roots_sd_value->Get("name", &namVal)) {
-        std::u16string displayName;
-        namVal->GetAsString(&displayName);
-        prof.profileDisplayName = displayName;
-      } else {
-        prof.profileDisplayName = base::UTF8ToUTF16(profileName);
-      }
-      prof.profileName = profileName;
-      cp->push_back(prof);
+  for (auto i : *info_cache) {
+    const std::string& profile_name = i.first;
+    const base::Value::Dict* entry = i.second.GetIfDict();
+    if (!entry)
+      continue;
+    const std::string* display_name = entry->FindString("name");
+    if (!display_name) {
+      display_name = &profile_name;
     }
+
+    ChromeProfileInfo prof;
+    prof.profileDisplayName = base::UTF8ToUTF16(*display_name);
+    prof.profileName = profile_name;
+    cp->push_back(prof);
   }
 }

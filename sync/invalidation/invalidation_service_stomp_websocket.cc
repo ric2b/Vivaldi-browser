@@ -47,7 +47,7 @@ constexpr char kStomp12Protocol[] = "v12.stomp";
 // safe. This includes the stomp frame type, headers and the actual message.
 constexpr size_t kMaxInvalidationFrameSize = 1 << 12;
 
-constexpr char kConnectFrame[] = R"(CONNECT
+constexpr char kConnectFrame[] = R"(STOMP
 accept-version:1.2
 host:%s
 login:%s
@@ -343,8 +343,9 @@ void InvalidationServiceStompWebsocket::OnClose() {
 }
 
 bool InvalidationServiceStompWebsocket::HandleFrame() {
-  heart_beats_in_timer_.Reset();
-  if (incoming_message_ == kHeartBeatFrame)
+  if (heart_beats_in_timer_.IsRunning())
+    heart_beats_in_timer_.Reset();
+  if (incoming_message_ == kLf || incoming_message_ == kCrLf)
     return true;
   base::StringPiece incoming_message(incoming_message_);
 
@@ -354,7 +355,7 @@ bool InvalidationServiceStompWebsocket::HandleFrame() {
   if (header_end == base::StringPiece::npos) {
     line_ending = kCrLf;
     line_ending_length = 2;
-    size_t header_end = incoming_message.find("\r\n\r\n");
+    header_end = incoming_message.find("\r\n\r\n");
     if (header_end == base::StringPiece::npos)
       return false;
   }
@@ -399,23 +400,8 @@ bool InvalidationServiceStompWebsocket::HandleFrame() {
 
       // Unretained for the timers is fine, since they own the callbacks and are
       // owned by this
-      int server_heart_beats_delay_out;
-      if (!base::StringToInt(heart_beat_delays[0],
-                             &server_heart_beats_delay_out))
-        return false;
-      if (server_heart_beats_delay_out != 0) {
-        base::TimeDelta heart_beats_delay_out =
-            std::max(kHeartBeatDelay,
-                     base::Milliseconds(server_heart_beats_delay_out)) -
-            kHeartBeatGrace;
-        heart_beats_out_timer_.Start(
-            FROM_HERE, heart_beats_delay_out,
-            base::BindRepeating(&InvalidationServiceStompWebsocket::Send,
-                                base::Unretained(this), kHeartBeatFrame));
-      }
-
       int server_heart_beats_delay_in;
-      if (!base::StringToInt(heart_beat_delays[1],
+      if (!base::StringToInt(heart_beat_delays[0],
                              &server_heart_beats_delay_in))
         return false;
       if (server_heart_beats_delay_in != 0) {
@@ -427,6 +413,21 @@ bool InvalidationServiceStompWebsocket::HandleFrame() {
             FROM_HERE, heart_beats_delay_in,
             base::BindOnce(&InvalidationServiceStompWebsocket::OnClose,
                            base::Unretained(this)));
+      }
+
+      int server_heart_beats_delay_out;
+      if (!base::StringToInt(heart_beat_delays[1],
+                             &server_heart_beats_delay_out))
+        return false;
+      if (server_heart_beats_delay_out != 0) {
+        base::TimeDelta heart_beats_delay_out =
+            std::max(kHeartBeatDelay,
+                     base::Milliseconds(server_heart_beats_delay_out)) -
+            kHeartBeatGrace;
+        heart_beats_out_timer_.Start(
+            FROM_HERE, heart_beats_delay_out,
+            base::BindRepeating(&InvalidationServiceStompWebsocket::Send,
+                                base::Unretained(this), kHeartBeatFrame));
       }
     }
 
@@ -460,8 +461,8 @@ bool InvalidationServiceStompWebsocket::HandleFrame() {
     body = body.substr(0, body_end);
 
     absl::optional<base::Value> invalidation = base::JSONReader::Read(body);
-    if (invalidation)
-      client_->OnInvalidation(std::move(*invalidation));
+    if (invalidation && invalidation->is_dict())
+      client_->OnInvalidation(std::move(invalidation->GetDict()));
   } else {
     // Either we received an ERROR frame or a malformed one. In either case,
     // we are done.

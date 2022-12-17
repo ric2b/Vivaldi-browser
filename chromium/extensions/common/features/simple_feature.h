@@ -31,7 +31,7 @@ class ExtensionAPITest;
 
 class SimpleFeature : public Feature {
  public:
-  // Used by tests to override the cached --whitelisted-extension-id.
+  // Used by tests to override the cached --allowlisted-extension-id.
   // NOTE: Not thread-safe! This is because it sets extension id on global
   // singleton during its construction and destruction.
   class ScopedThreadUnsafeAllowlistForTest {
@@ -57,18 +57,23 @@ class SimpleFeature : public Feature {
   ~SimpleFeature() override;
 
   Availability IsAvailableToContext(const Extension* extension,
-                                    Context context) const {
-    return IsAvailableToContext(extension, context, GURL());
+                                    Context context,
+                                    int context_id) const {
+    return IsAvailableToContext(extension, context, GURL(), context_id);
   }
   Availability IsAvailableToContext(const Extension* extension,
                                     Context context,
-                                    Platform platform) const {
-    return IsAvailableToContext(extension, context, GURL(), platform);
+                                    Platform platform,
+                                    int context_id) const {
+    return IsAvailableToContext(extension, context, GURL(), platform,
+                                context_id);
   }
   Availability IsAvailableToContext(const Extension* extension,
                                     Context context,
-                                    const GURL& url) const {
-    return IsAvailableToContext(extension, context, url, GetCurrentPlatform());
+                                    const GURL& url,
+                                    int context_id) const {
+    return IsAvailableToContext(extension, context, url, GetCurrentPlatform(),
+                                context_id);
   }
 
   // extension::Feature:
@@ -76,12 +81,14 @@ class SimpleFeature : public Feature {
                                      Manifest::Type type,
                                      mojom::ManifestLocation location,
                                      int manifest_version,
-                                     Platform platform) const override;
+                                     Platform platform,
+                                     int context_id) const override;
   Availability IsAvailableToContext(const Extension* extension,
                                     Context context,
                                     const GURL& url,
-                                    Platform platform) const override;
-  Availability IsAvailableToEnvironment() const override;
+                                    Platform platform,
+                                    int context_id) const override;
+  Availability IsAvailableToEnvironment(int context_id) const override;
   bool IsInternal() const override;
   bool IsIdInBlocklist(const HashedExtensionId& hashed_id) const override;
   bool IsIdInAllowlist(const HashedExtensionId& hashed_id) const override;
@@ -118,6 +125,9 @@ class SimpleFeature : public Feature {
   void set_session_types(
       std::initializer_list<mojom::FeatureSessionType> types);
   void set_internal(bool is_internal) { is_internal_ = is_internal; }
+  void set_developer_mode_only(bool is_developer_mode_only) {
+    developer_mode_only_ = is_developer_mode_only;
+  }
   void set_disallow_for_service_workers(bool disallow) {
     disallow_for_service_workers_ = disallow;
   }
@@ -221,7 +231,8 @@ class SimpleFeature : public Feature {
   Availability GetEnvironmentAvailability(
       Platform platform,
       version_info::Channel channel,
-      mojom::FeatureSessionType session_type) const;
+      mojom::FeatureSessionType session_type,
+      int context_id) const;
 
   // Returns the availability of the feature with respect to a given extension's
   // properties.
@@ -261,6 +272,7 @@ class SimpleFeature : public Feature {
 
   bool component_extensions_auto_granted_;
   bool is_internal_;
+  bool developer_mode_only_{false};
   bool disallow_for_service_workers_;
 
   bool is_vivaldi_feature_ = false;

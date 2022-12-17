@@ -16,10 +16,10 @@
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
-#include "base/no_destructor.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/tabs/tab_group.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
@@ -135,9 +135,11 @@ class TabGroupEditorBubbleDelegate : public ui::DialogModelDelegate {
   ~TabGroupEditorBubbleDelegate() override = default;
 
   void NewTabInGroupPressed() {
+    TabStripModel* const model = browser_->tab_strip_model();
+    if (!model->group_model())
+      return;
     base::RecordAction(
         base::UserMetricsAction("TabGroups_TabGroupBubble_NewTabInGroup"));
-    TabStripModel* const model = browser_->tab_strip_model();
     const auto tabs = model->group_model()->GetTabGroup(group_)->ListTabs();
     model->delegate()->AddTabAt(GURL(), tabs.end(), true, group_);
     // Close the widget to allow users to continue their work in their newly
@@ -146,6 +148,10 @@ class TabGroupEditorBubbleDelegate : public ui::DialogModelDelegate {
   }
 
   void UngroupPressed(TabGroupHeader* header_view) {
+    TabStripModel* const model = browser_->tab_strip_model();
+    if (!model->group_model())
+      return;
+
     base::RecordAction(
         base::UserMetricsAction("TabGroups_TabGroupBubble_Ungroup"));
     if (header_view) {
@@ -155,7 +161,6 @@ class TabGroupEditorBubbleDelegate : public ui::DialogModelDelegate {
           static_cast<views::BubbleDialogModelHost*>(dialog_model()->host())
               ->GetWidget());
     }
-    TabStripModel* const model = browser_->tab_strip_model();
 
     const gfx::Range tab_range =
         model->group_model()->GetTabGroup(group_)->ListTabs();
@@ -180,18 +185,6 @@ class TabGroupEditorBubbleDelegate : public ui::DialogModelDelegate {
 
   void MoveGroupToNewWindowPressed() {
     browser_->tab_strip_model()->delegate()->MoveGroupToNewWindow(group_);
-    dialog_model()->host()->Close();
-  }
-
-  void SendFeedbackPressed() {
-    base::RecordAction(
-        base::UserMetricsAction("TabGroups_TabGroupBubble_SendFeedback"));
-    chrome::ShowFeedbackPage(
-        browser_, chrome::FeedbackSource::kFeedbackSourceDesktopTabGroups,
-        /*description_template=*/std::string(),
-        /*description_placeholder_text=*/std::string(),
-        /*category_tag=*/std::string(),
-        /*extra_diagnostics=*/std::string());
     dialog_model()->host()->Close();
   }
 
@@ -350,6 +343,8 @@ TabGroupEditorBubbleView::TabGroupEditorBubbleView(
   SetModalType(ui::MODAL_TYPE_NONE);
 
   TabStripModel* const tab_strip_model = browser_->tab_strip_model();
+  DCHECK(tab_strip_model->group_model());
+
   const std::u16string title = tab_strip_model->group_model()
                                    ->GetTabGroup(group_)
                                    ->visual_data()
@@ -368,7 +363,7 @@ TabGroupEditorBubbleView::TabGroupEditorBubbleView(
       l10n_util::GetStringUTF16(IDS_TAB_GROUP_HEADER_BUBBLE_TITLE_PLACEHOLDER));
   title_field_->set_controller(&title_field_controller_);
   title_field_->SetProperty(views::kElementIdentifierKey,
-                            kEditorBubbleIdentifier);
+                            kTabGroupEditorBubbleId);
 
   const tab_groups::TabGroupColorId initial_color_id = InitColorSet();
   color_selector_ = AddChildView(std::make_unique<ColorPickerView>(
@@ -584,18 +579,6 @@ void TabGroupEditorBubbleView::MoveGroupToNewWindowPressed() {
   GetWidget()->CloseWithReason(views::Widget::ClosedReason::kUnspecified);
 }
 
-void TabGroupEditorBubbleView::SendFeedbackPressed() {
-  base::RecordAction(
-      base::UserMetricsAction("TabGroups_TabGroupBubble_SendFeedback"));
-  chrome::ShowFeedbackPage(
-      browser_, chrome::FeedbackSource::kFeedbackSourceDesktopTabGroups,
-      /*description_template=*/std::string(),
-      /*description_placeholder_text=*/std::string(),
-      /*category_tag=*/std::string(),
-      /*extra_diagnostics=*/std::string());
-  GetWidget()->CloseWithReason(views::Widget::ClosedReason::kUnspecified);
-}
-
 void TabGroupEditorBubbleView::OnBubbleClose() {
   if (title_at_opening_ != title_field_->GetText()) {
     base::RecordAction(
@@ -654,6 +637,3 @@ void TabGroupEditorBubbleView::TitleField::ShowContextMenu(
 
 BEGIN_METADATA(TabGroupEditorBubbleView, TitleField, views::Textfield)
 END_METADATA
-
-DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(TabGroupEditorBubbleView,
-                                      kEditorBubbleIdentifier);

@@ -169,6 +169,7 @@ WebInputEventResult PageWidgetDelegate::HandleInputEvent(
     case WebInputEvent::Type::kGestureTapCancel:
     case WebInputEvent::Type::kGestureDoubleTap:
     case WebInputEvent::Type::kGestureTwoFingerTap:
+    case WebInputEvent::Type::kGestureShortPress:
     case WebInputEvent::Type::kGestureLongPress:
     case WebInputEvent::Type::kGestureLongTap:
       return handler.HandleGestureEvent(
@@ -198,7 +199,7 @@ WebInputEventResult PageWidgetDelegate::HandleInputEvent(
     case WebInputEvent::Type::kGesturePinchBegin:
       // Gesture pinch events are handled entirely on the compositor.
       DLOG(INFO) << "Gesture pinch ignored by main thread.";
-      FALLTHROUGH;
+      [[fallthrough]];
     case WebInputEvent::Type::kGesturePinchEnd:
     case WebInputEvent::Type::kGesturePinchUpdate:
       return WebInputEventResult::kNotHandled;

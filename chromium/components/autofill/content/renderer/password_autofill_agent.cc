@@ -62,7 +62,6 @@
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "url/gurl.h"
 
-using blink::ToWebInputElement;
 using blink::WebAutofillState;
 using blink::WebDocument;
 using blink::WebElement;
@@ -360,21 +359,15 @@ WebInputElement FindUsernameElementPrecedingPasswordElement(
 
   for (auto begin = elements.begin(); iter != begin;) {
     --iter;
-    const WebInputElement* input = ToWebInputElement(&*iter);
-    if (input && input->IsTextField() && !input->IsPasswordFieldForAutofill() &&
-        IsElementEditable(*input) && IsWebElementVisible(*input)) {
-      return *input;
+    const WebInputElement input = iter->DynamicTo<WebInputElement>();
+    if (!input.IsNull() && input.IsTextField() &&
+        !input.IsPasswordFieldForAutofill() && IsElementEditable(input) &&
+        IsWebElementVisible(input)) {
+      return input;
     }
   }
 
   return WebInputElement();
-}
-
-WebInputElement ConvertToWebInput(const WebFormControlElement& element) {
-  if (element.IsNull())
-    return WebInputElement();
-  const WebInputElement* input = ToWebInputElement(&element);
-  return input ? *input : WebInputElement();
 }
 
 // Returns true if |element|'s frame origin is not PSL matched with the origin
@@ -732,7 +725,7 @@ void PasswordAutofillAgent::UpdateStateForTextChange(
 void PasswordAutofillAgent::TrackAutofilledElement(
     const blink::WebFormControlElement& element) {
   if (autofill_agent_)
-    autofill_agent_->TrackAutofilledElement(element);
+  autofill_agent_->TrackAutofilledElement(element);
 }
 
 bool PasswordAutofillAgent::FillSuggestion(
@@ -740,15 +733,15 @@ bool PasswordAutofillAgent::FillSuggestion(
     const std::u16string& username,
     const std::u16string& password) {
   // The element in context of the suggestion popup.
-  const WebInputElement* element = ToWebInputElement(&control_element);
-  if (!element)
+  WebInputElement element = control_element.DynamicTo<WebInputElement>();
+  if (element.IsNull())
     return false;
 
   WebInputElement username_element;
   WebInputElement password_element;
   PasswordInfo* password_info = nullptr;
 
-  if (!FindPasswordInfoForElement(*element, UseFallbackData(true),
+  if (!FindPasswordInfoForElement(element, UseFallbackData(true),
                                   &username_element, &password_element,
                                   &password_info) ||
       (!password_element.IsNull() && !IsElementEditable(password_element))) {
@@ -756,7 +749,7 @@ bool PasswordAutofillAgent::FillSuggestion(
   }
 
   password_info->password_was_edited_last = false;
-  if (element->IsPasswordFieldForAutofill()) {
+  if (element.IsPasswordFieldForAutofill()) {
     password_info->password_field_suggestion_was_accepted = true;
     password_info->password_field = password_element;
   }
@@ -767,8 +760,8 @@ bool PasswordAutofillAgent::FillSuggestion(
     password_generation_agent_->OnFieldAutofilled(password_element);
 
   if (IsUsernameAmendable(username_element,
-                          element->IsPasswordFieldForAutofill()) &&
-      !(username.empty() && element->IsPasswordFieldForAutofill()) &&
+                          element.IsPasswordFieldForAutofill()) &&
+      !(username.empty() && element.IsPasswordFieldForAutofill()) &&
       username_element.Value().Utf16() != username) {
     FillField(&username_element, username);
   }
@@ -776,9 +769,7 @@ bool PasswordAutofillAgent::FillSuggestion(
   if (!password_element.IsNull())
     FillPasswordFieldAndSave(&password_element, password);
 
-  WebInputElement mutable_filled_element = *element;
-  mutable_filled_element.SetSelectionRange(element->Value().length(),
-                                           element->Value().length());
+  element.SetSelectionRange(element.Value().length(), element.Value().length());
 
   return true;
 }
@@ -822,15 +813,15 @@ bool PasswordAutofillAgent::PreviewSuggestion(
     const WebString& username,
     const WebString& password) {
   // The element in context of the suggestion popup.
-  const WebInputElement* element = ToWebInputElement(&control_element);
-  if (!element)
+  const WebInputElement element = control_element.DynamicTo<WebInputElement>();
+  if (element.IsNull())
     return false;
 
   WebInputElement username_element;
   WebInputElement password_element;
   PasswordInfo* password_info;
 
-  if (!FindPasswordInfoForElement(*element, UseFallbackData(true),
+  if (!FindPasswordInfoForElement(element, UseFallbackData(true),
                                   &username_element, &password_element,
                                   &password_info) ||
       (!password_element.IsNull() && !IsElementEditable(password_element))) {
@@ -838,7 +829,7 @@ bool PasswordAutofillAgent::PreviewSuggestion(
   }
 
   if (IsUsernameAmendable(username_element,
-                          element->IsPasswordFieldForAutofill())) {
+                          element.IsPasswordFieldForAutofill())) {
     if (username_query_prefix_.empty())
       username_query_prefix_ = username_element.Value().Utf16();
 
@@ -859,15 +850,15 @@ bool PasswordAutofillAgent::PreviewSuggestion(
 
 bool PasswordAutofillAgent::DidClearAutofillSelection(
     const WebFormControlElement& control_element) {
-  const WebInputElement* element = ToWebInputElement(&control_element);
-  if (!element)
+  const WebInputElement element = control_element.DynamicTo<WebInputElement>();
+  if (element.IsNull())
     return false;
 
   WebInputElement username_element;
   WebInputElement password_element;
   PasswordInfo* password_info;
 
-  if (!FindPasswordInfoForElement(*element, UseFallbackData(true),
+  if (!FindPasswordInfoForElement(element, UseFallbackData(true),
                                   &username_element, &password_element,
                                   &password_info)) {
     return false;
@@ -965,12 +956,13 @@ bool PasswordAutofillAgent::TryToShowTouchToFill(
   if (touch_to_fill_state_ != TouchToFillState::kShouldShow)
     return false;
 
-  const WebInputElement* input_element = ToWebInputElement(&control_element);
+  const WebInputElement input_element =
+      control_element.DynamicTo<WebInputElement>();
   WebInputElement username_element;
   WebInputElement password_element;
   PasswordInfo* password_info = nullptr;
-  if (!input_element ||
-      !FindPasswordInfoForElement(*input_element, UseFallbackData(false),
+  if (input_element.IsNull() ||
+      !FindPasswordInfoForElement(input_element, UseFallbackData(false),
                                   &username_element, &password_element,
                                   &password_info)) {
     return false;
@@ -984,7 +976,7 @@ bool PasswordAutofillAgent::TryToShowTouchToFill(
   // Highlight the fields that are about to be filled by the user and remember
   // the old autofill state of |username_element| and |password_element|.
   if (IsUsernameAmendable(username_element,
-                          input_element->IsPasswordFieldForAutofill())) {
+                          input_element.IsPasswordFieldForAutofill())) {
     username_autofill_state_ = username_element.GetAutofillState();
     username_element.SetAutofillState(WebAutofillState::kPreviewed);
   }
@@ -992,7 +984,7 @@ bool PasswordAutofillAgent::TryToShowTouchToFill(
   password_autofill_state_ = password_element.GetAutofillState();
   password_element.SetAutofillState(WebAutofillState::kPreviewed);
 
-  focused_input_element_ = *input_element;
+  focused_input_element_ = input_element;
   GetPasswordManagerDriver().ShowTouchToFill();
   touch_to_fill_state_ = TouchToFillState::kIsShowing;
   return true;
@@ -1273,7 +1265,7 @@ void PasswordAutofillAgent::SendPasswordForms(bool only_visible) {
     }
   }
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   // Provide warnings about the accessibility of password forms on the page.
   if (!password_forms_data.empty() &&
       (frame->GetDocument().Url().ProtocolIs(url::kHttpScheme) ||
@@ -1397,42 +1389,6 @@ void PasswordAutofillAgent::SetLoggingState(bool active) {
   logging_state_active_ = active;
 }
 
-void PasswordAutofillAgent::TouchToFillClosed(bool show_virtual_keyboard) {
-  touch_to_fill_state_ = TouchToFillState::kWasShown;
-
-  // Clear the autofill state from the username and password element. Note that
-  // we don't make use of ClearPreview() here, since this is considering the
-  // elements' SuggestedValue(), which Touch To Fill does not set.
-  DCHECK(!focused_input_element_.IsNull());
-  WebInputElement username_element;
-  WebInputElement password_element;
-  PasswordInfo* password_info = nullptr;
-  if (!FindPasswordInfoForElement(focused_input_element_, UseFallbackData(true),
-                                  &username_element, &password_element,
-                                  &password_info)) {
-    return;
-  }
-
-  if (!username_element.IsNull())
-    username_element.SetAutofillState(username_autofill_state_);
-
-  if (!password_element.IsNull())
-    password_element.SetAutofillState(password_autofill_state_);
-
-  if (show_virtual_keyboard) {
-    render_frame()->ShowVirtualKeyboard();
-
-    // Since Touch To Fill suppresses the Autofill popup, re-trigger the
-    // suggestions in case the virtual keyboard should be shown. This is limited
-    // to the keyboard accessory, as otherwise it would result in a flickering
-    // of the popup, due to showing the keyboard at the same time.
-    if (IsKeyboardAccessoryEnabled()) {
-      ShowSuggestions(focused_input_element_, ShowAll(false),
-                      GenerationShowing(false));
-    }
-  }
-}
-
 void PasswordAutofillAgent::AnnotateFieldsWithParsingResult(
     const ParsingResult& parsing_result) {
   WebDocument doc = render_frame()->GetWebFrame()->GetDocument();
@@ -1474,6 +1430,67 @@ void PasswordAutofillAgent::InformNoSavedCredentials(
   field_data_manager_->ClearData();
 }
 
+#if BUILDFLAG(IS_ANDROID)
+void PasswordAutofillAgent::TouchToFillClosed(bool show_virtual_keyboard) {
+  touch_to_fill_state_ = TouchToFillState::kWasShown;
+
+  // Clear the autofill state from the username and password element. Note that
+  // we don't make use of ClearPreview() here, since this is considering the
+  // elements' SuggestedValue(), which Touch To Fill does not set.
+  DCHECK(!focused_input_element_.IsNull());
+  WebInputElement username_element;
+  WebInputElement password_element;
+  PasswordInfo* password_info = nullptr;
+  if (!FindPasswordInfoForElement(focused_input_element_, UseFallbackData(true),
+                                  &username_element, &password_element,
+                                  &password_info)) {
+    return;
+  }
+
+  if (!username_element.IsNull())
+    username_element.SetAutofillState(username_autofill_state_);
+
+  if (!password_element.IsNull())
+    password_element.SetAutofillState(password_autofill_state_);
+
+  if (show_virtual_keyboard) {
+    render_frame()->ShowVirtualKeyboard();
+
+    // Since Touch To Fill suppresses the Autofill popup, re-trigger the
+    // suggestions in case the virtual keyboard should be shown. This is limited
+    // to the keyboard accessory, as otherwise it would result in a flickering
+    // of the popup, due to showing the keyboard at the same time.
+    if (IsKeyboardAccessoryEnabled()) {
+      ShowSuggestions(focused_input_element_, ShowAll(false),
+                      GenerationShowing(false));
+    }
+  }
+}
+
+void PasswordAutofillAgent::TriggerFormSubmission() {
+  // Find the last interacted element to simulate an enter keystroke at.
+  WebFormControlElement form_control = FindFormControlElementByUniqueRendererId(
+      render_frame()->GetWebFrame()->GetDocument(),
+      last_updated_field_renderer_id_, last_updated_form_renderer_id_);
+  if (form_control.IsNull()) {
+    // The target field doesn't exist anymore. Don't try to submit it.
+    return;
+  }
+
+  // TODO(crbug.com/1283004): Support submission for <form>less forms too.
+  if (!form_control.Form().IsNull()) {
+    // |form_control| can only be |WebInputElement|, not |WebSelectElement|.
+    WebInputElement input = form_control.To<WebInputElement>();
+
+    // TODO(crbug.com/1283004): Support filling single username fields too.
+    DCHECK(input.IsPasswordFieldForAutofill())
+        << "Form submission attempt for a non-password element";
+
+    input.DispatchSimulatedEnterIfLastInputInForm();
+  }
+}
+#endif
+
 void PasswordAutofillAgent::FocusedNodeHasChanged(const blink::WebNode& node) {
   DCHECK(!node.IsNull());
   focused_input_element_.Reset();
@@ -1484,39 +1501,39 @@ void PasswordAutofillAgent::FocusedNodeHasChanged(const blink::WebNode& node) {
     return;
   }
 
-  auto element = node.ToConst<WebElement>();
+  auto element = node.To<WebElement>();
   if (element.IsFormControlElement() &&
-      form_util::IsTextAreaElement(element.ToConst<WebFormControlElement>())) {
+      form_util::IsTextAreaElement(element.To<WebFormControlElement>())) {
     FieldRendererId textarea_id(
-        element.ToConst<WebFormControlElement>().UniqueRendererFormControlId());
+        element.To<WebFormControlElement>().UniqueRendererFormControlId());
     focus_state_notifier_.FocusedInputChanged(
         textarea_id, FocusedFieldType::kFillableTextArea);
     return;
   }
 
-  auto* input_element = ToWebInputElement(&element);
-  if (!input_element) {
+  WebInputElement input_element = element.DynamicTo<WebInputElement>();
+  if (input_element.IsNull()) {
     focus_state_notifier_.FocusedInputChanged(
         FieldRendererId(), FocusedFieldType::kUnfillableElement);
     return;
   }
 
   auto focused_field_type = FocusedFieldType::kUnfillableElement;
-  if (input_element->IsTextField() && IsElementEditable(*input_element)) {
-    focused_input_element_ = *input_element;
+  if (input_element.IsTextField() && IsElementEditable(input_element)) {
+    focused_input_element_ = input_element;
 
-    WebString type = input_element->GetAttribute("type");
+    WebString type = input_element.GetAttribute("type");
     if (!type.IsNull() && type == "search")
       focused_field_type = FocusedFieldType::kFillableSearchField;
-    else if (input_element->IsPasswordFieldForAutofill())
+    else if (input_element.IsPasswordFieldForAutofill())
       focused_field_type = FocusedFieldType::kFillablePasswordField;
-    else if (base::Contains(web_input_to_password_info_, *input_element))
+    else if (base::Contains(web_input_to_password_info_, input_element))
       focused_field_type = FocusedFieldType::kFillableUsernameField;
     else
       focused_field_type = FocusedFieldType::kFillableNonSearchField;
   }
 
-  const FieldRendererId input_id(input_element->UniqueRendererFormControlId());
+  const FieldRendererId input_id(input_element.UniqueRendererFormControlId());
   focus_state_notifier_.FocusedInputChanged(input_id, focused_field_type);
   field_data_manager_->UpdateFieldDataMapWithNullValue(
       input_id, FieldPropertiesFlags::kHadFocus);
@@ -1641,7 +1658,7 @@ void PasswordAutofillAgent::CleanupOnDocumentShutdown() {
   last_updated_field_renderer_id_ = FieldRendererId();
   last_updated_form_renderer_id_ = FormRendererId();
   touch_to_fill_state_ = TouchToFillState::kShouldShow;
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   page_passwords_analyser_.Reset();
 #endif
 }
@@ -1826,9 +1843,7 @@ void PasswordAutofillAgent::OnProvisionallySaveForm(
   if (source == ElementChangeSource::SELECT_CHANGED)
     return;
 
-  WebInputElement input_element;
-  if (!element.IsNull() && element.HasHTMLTagName("input"))
-    input_element = *ToWebInputElement(&element);
+  WebInputElement input_element = element.DynamicTo<WebInputElement>();
 
   if (source == ElementChangeSource::TEXTFIELD_CHANGED) {
     DCHECK(!input_element.IsNull());
@@ -1932,12 +1947,12 @@ PasswordAutofillAgent::FindUsernamePasswordElements(
   WebInputElement password_field;
   size_t current_index = 0;
   if (is_password_present)
-    password_field = ConvertToWebInput(elements[current_index++]);
+    password_field = elements[current_index++].DynamicTo<WebInputElement>();
 
   // Set username element.
   WebInputElement username_field;
   if (is_username_present)
-    username_field = ConvertToWebInput(elements[current_index++]);
+    username_field = elements[current_index++].DynamicTo<WebInputElement>();
 
   return std::make_pair(username_field, password_field);
 }

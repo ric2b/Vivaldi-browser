@@ -186,7 +186,8 @@ void TabHandleLayer::SetProperties(
   }
   if (vivaldi::IsVivaldiRunning()) {
     decoration_tab_->SetOpacity(tab_alpha);
-    title_layer->setOpacity(foreground_ ? 1.f : 0.5f);
+    if (title_layer != NULL)
+      title_layer->setOpacity(foreground_ ? 1.f : 0.5f);
     close_button_->SetOpacity(foreground_ ? 1.f : 0.5f);
   }
 }

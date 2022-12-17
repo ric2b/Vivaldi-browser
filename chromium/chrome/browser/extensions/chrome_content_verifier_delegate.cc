@@ -14,7 +14,6 @@
 #include "base/containers/contains.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/no_destructor.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/syslog_logging.h"
@@ -209,8 +208,6 @@ void ChromeContentVerifierDelegate::VerifyFailed(
   }
 
   ExtensionService* service = system->extension_service();
-  PendingExtensionManager* pending_manager =
-      service->pending_extension_manager();
   CorruptedExtensionReinstaller* corrupted_extension_reinstaller =
       service->corrupted_extension_reinstaller();
 
@@ -235,8 +232,8 @@ void ChromeContentVerifierDelegate::VerifyFailed(
     // TODO(https://crbug.com/1044572): Schedule the extension for reinstall.
     if (!info.is_from_webstore) {
       if (!base::Contains(would_be_reinstalled_ids_, extension_id)) {
-        pending_manager->RecordPolicyReinstallReason(
-            PendingExtensionManager::PolicyReinstallReason::
+        corrupted_extension_reinstaller->RecordPolicyReinstallReason(
+            CorruptedExtensionReinstaller::PolicyReinstallReason::
                 NO_UNSIGNED_HASHES_FOR_NON_WEBSTORE_SKIP);
         would_be_reinstalled_ids_.insert(extension_id);
       }
@@ -258,14 +255,16 @@ void ChromeContentVerifierDelegate::VerifyFailed(
   }
 
   if (info.should_repair) {
-    if (pending_manager->IsReinstallForCorruptionExpected(extension_id))
+    if (corrupted_extension_reinstaller->IsReinstallForCorruptionExpected(
+            extension_id))
       return;
-    pending_manager->ExpectReinstallForCorruption(
+    corrupted_extension_reinstaller->ExpectReinstallForCorruption(
         extension_id,
-        info.is_from_webstore ? PendingExtensionManager::PolicyReinstallReason::
-                                    CORRUPTION_DETECTED_WEBSTORE
-                              : PendingExtensionManager::PolicyReinstallReason::
-                                    CORRUPTION_DETECTED_NON_WEBSTORE,
+        info.is_from_webstore
+            ? CorruptedExtensionReinstaller::PolicyReinstallReason::
+                  CORRUPTION_DETECTED_WEBSTORE
+            : CorruptedExtensionReinstaller::PolicyReinstallReason::
+                  CORRUPTION_DETECTED_NON_WEBSTORE,
         extension->location());
     service->DisableExtension(extension_id, disable_reason::DISABLE_CORRUPTED);
     // Attempt to reinstall.

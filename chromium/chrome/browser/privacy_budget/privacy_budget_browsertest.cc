@@ -18,6 +18,7 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
+#include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
 #include "chrome/browser/browser_process.h"
@@ -67,7 +68,7 @@ namespace ukm {
 class UkmService;
 }  // namespace ukm
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 #include "chrome/test/base/android/android_browser_test.h"
 #else
 #include "chrome/test/base/in_process_browser_test.h"
@@ -315,7 +316,7 @@ IN_PROC_BROWSER_TEST_F(PrivacyBudgetBrowserTestWithTestRecorder,
 }
 
 // TODO(crbug.com/1238940, crbug.com/1238859): Test is flaky on Win and Android.
-#if defined(OS_WIN) || defined(OS_ANDROID)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
 #define MAYBE_CanvasToBlobDifferentDocument \
   DISABLED_CanvasToBlobDifferentDocument
 #else
@@ -464,7 +465,12 @@ IN_PROC_BROWSER_TEST_F(PrivacyBudgetGroupConfigBrowserTest, LoadsAGroup) {
   ASSERT_TRUE(settings->IsActive());
 }
 
-#if BUILDFLAG(FIELDTRIAL_TESTING_ENABLED)
+// The following test requires that the testing config defined in
+// testing/variations/fieldtrial_testing_config.json is applied. The testing
+// config is only applied by default if 1) the
+// "disable_fieldtrial_testing_config" GN flag is set to false, and 2) the build
+// is a non-Chrome branded build.
+#if BUILDFLAG(FIELDTRIAL_TESTING_ENABLED) && !BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
 namespace {
 class PrivacyBudgetFieldtrialConfigTest : public PrivacyBudgetBrowserTestBase {
@@ -518,4 +524,5 @@ IN_PROC_BROWSER_TEST_F(PrivacyBudgetFieldtrialConfigTest,
       blink::IdentifiableSurface::Type::kMediaCapabilities_DecodingInfo));
 }
 
-#endif
+#endif  // BUILDFLAG(FIELDTRIAL_TESTING_ENABLED) &&
+        // !BUILDFLAG(GOOGLE_CHROME_BRANDING)

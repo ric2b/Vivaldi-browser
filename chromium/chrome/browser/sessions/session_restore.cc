@@ -27,6 +27,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/observer_list.h"
 #include "base/run_loop.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "base/task/single_thread_task_runner.h"
@@ -36,9 +37,9 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/buildflags.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
+#include "chrome/browser/profiles/keep_alive/profile_keep_alive_types.h"
+#include "chrome/browser/profiles/keep_alive/scoped_profile_keep_alive.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/profiles/profile_keep_alive_types.h"
-#include "chrome/browser/profiles/scoped_profile_keep_alive.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/sessions/app_session_service.h"
 #include "chrome/browser/sessions/app_session_service_factory.h"
@@ -87,7 +88,6 @@
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ash/boot_times_recorder.h"
-#include "components/app_restore/features.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -548,23 +548,6 @@ class SessionRestoreImpl : public BrowserListObserver {
     }
 
     for (auto i = windows->begin(); i != windows->end(); ++i) {
-      // Check if a collapse tab group will be restored and if the feature flag
-      // |kTabGroupsCollapseFreezing| is enabled. UMA metrics for features are
-      // gathered based on the check of the feature flag. The goal of this code
-      // is to ensure the feature is initialized before the first UMA snapshot
-      // gets uploaded.
-      // TODO(1110108): Remove this check once the feature is fully launched.
-      for (auto& session_tab_group : (*i)->tab_groups) {
-        // Ensure that the user has a collapsed group before checking if the
-        // freezing experiment is enabled to ensure our metrics accurately track
-        // the impact of freezing for users with collapsed tab groups.
-        if (session_tab_group->visual_data.is_collapsed() &&
-            base::FeatureList::IsEnabled(
-                features::kTabGroupsCollapseFreezing)) {
-          break;
-        }
-      }
-
       ++(*window_count);
       // 1. Choose between restoring tabs in an existing browser or in a newly
       //    created browser.
@@ -631,14 +614,14 @@ class SessionRestoreImpl : public BrowserListObserver {
                        initial_tab_count);
 
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
       // On the mac, app visibility is asynchronously available, so we can't
       // rely on a particular value here.
       const bool is_visibility_async =
           browser->type() == Browser::Type::TYPE_APP;
 #else
       const bool is_visibility_async = false;
-#endif  // defined(OS_MAC)
+#endif  // BUILDFLAG(IS_MAC)
 
       DCHECK(is_visibility_async || browser->window()->IsVisible() ||
              browser->window()->IsMinimized() || ::vivaldi::IsVivaldiRunning());
@@ -647,12 +630,14 @@ class SessionRestoreImpl : public BrowserListObserver {
 
       // 6. Tabs will be grouped appropriately in RestoreTabsToBrowser. Now
       //    restore the groups' visual data.
-      TabGroupModel* group_model = browser->tab_strip_model()->group_model();
-      for (auto& session_tab_group : (*i)->tab_groups) {
-        TabGroup* model_tab_group =
-            group_model->GetTabGroup(new_group_ids.at(session_tab_group->id));
-        DCHECK(model_tab_group);
-        model_tab_group->SetVisualData(session_tab_group->visual_data);
+      if (browser->tab_strip_model()->SupportsTabGroups()) {
+        TabGroupModel* group_model = browser->tab_strip_model()->group_model();
+        for (auto& session_tab_group : (*i)->tab_groups) {
+          TabGroup* model_tab_group =
+              group_model->GetTabGroup(new_group_ids.at(session_tab_group->id));
+          DCHECK(model_tab_group);
+          model_tab_group->SetVisualData(session_tab_group->visual_data);
+        }
       }
 
       // 7. Notify SessionService of restored tabs, so they can be saved to the
@@ -677,7 +662,7 @@ class SessionRestoreImpl : public BrowserListObserver {
       last_normal_browser = browser_to_activate;
 
     if (last_normal_browser && !startup_tabs_.empty())
-      AppendURLsToBrowser(last_normal_browser, startup_tabs_);
+      browser_to_activate = OpenStartupUrls(last_normal_browser, startup_tabs_);
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     ash::BootTimesRecorder::Get()->AddLoginTimeMarker(
         "SessionRestore-CreatingTabs-End", false);
@@ -876,7 +861,7 @@ class SessionRestoreImpl : public BrowserListObserver {
           /*user_gesture=*/false);
     }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     params.restore_id = restore_id;
 #endif
 
@@ -898,8 +883,11 @@ class SessionRestoreImpl : public BrowserListObserver {
   void ShowBrowser(Browser* browser, int selected_tab_index) {
     DCHECK(browser);
     DCHECK(browser->tab_strip_model()->count());
+
+    if (!browser->is_vivaldi()) {
     browser->tab_strip_model()->ActivateTabAt(
         selected_tab_index, {TabStripModel::GestureType::kOther});
+    }
 
     if (browser_ == browser)
       return;
@@ -928,6 +916,33 @@ class SessionRestoreImpl : public BrowserListObserver {
       is_first_tab = false;
       Navigate(&params);
     }
+  }
+
+  // Normally opens |startup_tabs| in |last_normal_browser|, but if there are
+  // urls set from LAST_AND_URLS startup pref, those are opened in a new
+  // browser. Returns the browser to activate.
+  Browser* OpenStartupUrls(Browser* last_normal_browser,
+                           const StartupTabs& startup_tabs) {
+    Browser* browser_to_activate = last_normal_browser;
+    StartupTabs normal_startup_tabs, startup_tabs_from_last_and_urls_pref;
+    for (const StartupTab& startup_tab : startup_tabs) {
+      if (startup_tab.type == StartupTab::Type::kFromLastAndUrlsStartupPref)
+        startup_tabs_from_last_and_urls_pref.push_back(startup_tab);
+      else
+        normal_startup_tabs.push_back(startup_tab);
+    }
+    if (last_normal_browser && !normal_startup_tabs.empty())
+      AppendURLsToBrowser(last_normal_browser, normal_startup_tabs);
+    if (!startup_tabs_from_last_and_urls_pref.empty()) {
+      Browser::CreateParams params =
+          Browser::CreateParams(profile_, /*user_gesture*/ false);
+      params.creation_source = Browser::CreationSource::kLastAndUrlsStartupPref;
+      Browser* new_browser = Browser::Create(params);
+      AppendURLsToBrowser(new_browser, startup_tabs_from_last_and_urls_pref);
+      new_browser->window()->Show();
+      browser_to_activate = new_browser;
+    }
+    return browser_to_activate;
   }
 
   // Invokes TabRestored on the SessionService for all tabs in browser after
@@ -1067,14 +1082,11 @@ void SessionRestore::RestoreSessionAfterCrash(Browser* browser) {
            ? SessionRestore::CLOBBER_CURRENT_TAB
            : 0);
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  // In Chrome OS, apps are restored by full restore only. This function is
-  // called when the chrome browser is launched after crash, so only browser
-  // tabs are restored, apps are not restroed.
-  if (!full_restore::features::IsFullRestoreEnabled())
-    behavior |= SessionRestore::RESTORE_APPS;
-#else
-  // Apps should always be restored on crash restore.
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
+  // Apps should always be restored on crash restore except on Chrome OS. In
+  // Chrome OS, apps are restored by full restore only. This function is called
+  // when the chrome browser is launched after crash, so only browser restored,
+  // apps are not restored in Chrome OS.
   behavior |= SessionRestore::RESTORE_APPS;
 #endif
   SessionRestore::RestoreSession(profile, browser, behavior, StartupTabs());

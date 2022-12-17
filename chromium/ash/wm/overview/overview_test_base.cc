@@ -4,11 +4,13 @@
 
 #include "ash/wm/overview/overview_test_base.h"
 
-#include "ash/public/cpp/presentation_time_recorder.h"
+#include <tuple>
+
 #include "ash/public/cpp/test/test_desks_templates_delegate.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
+#include "ash/style/close_button.h"
 #include "ash/test_shell_delegate.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_grid.h"
@@ -17,13 +19,14 @@
 #include "ash/wm/overview/overview_utils.h"
 #include "ash/wm/overview/overview_wallpaper_controller.h"
 #include "ash/wm/overview/scoped_overview_transform_window.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller_test_api.h"
 #include "ash/wm/window_preview_view.h"
-#include "base/ignore_result.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/compositor/layer.h"
+#include "ui/compositor/presentation_time_recorder.h"
 #include "ui/compositor/test/test_utils.h"
 #include "ui/gfx/geometry/transform_util.h"
-#include "ui/views/controls/button/image_button.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/wm/core/coordinate_conversion.h"
 
 namespace ash {
@@ -31,9 +34,11 @@ namespace ash {
 OverviewTestBase::~OverviewTestBase() = default;
 
 void OverviewTestBase::EnterTabletMode() {
-  // Ensure calls to SetEnabledForTest complete.
-  base::RunLoop().RunUntilIdle();
-  Shell::Get()->tablet_mode_controller()->SetEnabledForTest(true);
+  // To avoid flaky failures due to mouse devices blocking entering tablet mode,
+  // we detach all mouse devices.
+  TabletModeControllerTestApi test_api;
+  test_api.DetachAllMice();
+  test_api.EnterTabletMode();
   base::RunLoop().RunUntilIdle();
 }
 
@@ -113,7 +118,7 @@ OverviewItem* OverviewTestBase::GetDropTarget(int grid_index) {
   return GetOverviewSession()->grid_list_[grid_index]->GetDropTarget();
 }
 
-views::ImageButton* OverviewTestBase::GetCloseButton(OverviewItem* item) {
+CloseButton* OverviewTestBase::GetCloseButton(OverviewItem* item) {
   return item->overview_item_view_->close_button();
 }
 
@@ -179,12 +184,14 @@ void OverviewTestBase::SetUp() {
   ScopedOverviewTransformWindow::SetImmediateCloseForTests(
       /*immediate=*/true);
   OverviewWallpaperController::SetDisableChangeWallpaperForTest(true);
-  PresentationTimeRecorder::SetReportPresentationTimeImmediatelyForTest(true);
+  ui::PresentationTimeRecorder::SetReportPresentationTimeImmediatelyForTest(
+      true);
 }
 
 void OverviewTestBase::TearDown() {
   OverviewWallpaperController::SetDisableChangeWallpaperForTest(false);
-  PresentationTimeRecorder::SetReportPresentationTimeImmediatelyForTest(false);
+  ui::PresentationTimeRecorder::SetReportPresentationTimeImmediatelyForTest(
+      false);
   trace_names_.clear();
   AshTestBase::TearDown();
 }
@@ -192,6 +199,18 @@ void OverviewTestBase::TearDown() {
 void OverviewTestBase::CheckForDuplicateTraceName(const std::string& trace) {
   DCHECK(!base::Contains(trace_names_, trace)) << trace;
   trace_names_.push_back(trace);
+}
+
+void OverviewTestBase::CheckA11yOverrides(const std::string& trace,
+                                          views::Widget* widget,
+                                          views::Widget* expected_previous,
+                                          views::Widget* expected_next) {
+  SCOPED_TRACE(trace);
+  views::View* contents_view = widget->GetContentsView();
+  views::ViewAccessibility& view_accessibility =
+      contents_view->GetViewAccessibility();
+  EXPECT_EQ(expected_previous, view_accessibility.GetPreviousFocus());
+  EXPECT_EQ(expected_next, view_accessibility.GetNextFocus());
 }
 
 void OverviewTestBase::CheckOverviewEnterExitHistogram(
@@ -204,9 +223,9 @@ void OverviewTestBase::CheckOverviewEnterExitHistogram(
   // on the next frame presented after animation stops. Wait for the next
   // frame with a 100ms timeout for the report, regardless of whether there
   // is a next frame.
-  ignore_result(ui::WaitForNextFrameToBePresented(
+  std::ignore = ui::WaitForNextFrameToBePresented(
       Shell::GetPrimaryRootWindow()->layer()->GetCompositor(),
-      base::Milliseconds(500)));
+      base::Milliseconds(500));
 
   {
     SCOPED_TRACE(trace + ".Enter");

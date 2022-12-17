@@ -70,23 +70,26 @@ bool ParsePrinterId(const std::string& printer_id,
 
 void UpdatePrinterWithExtensionInfo(base::DictionaryValue* printer,
                                     const Extension* extension) {
-  std::string internal_printer_id;
-  CHECK(printer->GetString("id", &internal_printer_id));
-  printer->SetString("id",
-                     GeneratePrinterId(extension->id(), internal_printer_id));
-  printer->SetString("extensionId", extension->id());
-  printer->SetString("extensionName", extension->name());
+  std::string* internal_printer_id = printer->FindStringKey("id");
+  CHECK(internal_printer_id);
+  printer->SetStringKey(
+      "id", GeneratePrinterId(extension->id(), *internal_printer_id));
+  printer->SetStringKey("extensionId", extension->id());
+  printer->SetStringKey("extensionName", extension->name());
 
-  std::u16string printer_name;
-  if (printer->GetString("name", &printer_name) &&
-      base::i18n::AdjustStringForLocaleDirection(&printer_name)) {
-    printer->SetString("name", printer_name);
+  std::string* printer_name = printer->FindStringKey("name");
+  if (printer_name) {
+    std::u16string u16_printer_name = base::UTF8ToUTF16(*printer_name);
+    if (base::i18n::AdjustStringForLocaleDirection(&u16_printer_name))
+      printer->SetStringKey("name", u16_printer_name);
   }
 
-  std::u16string printer_description;
-  if (printer->GetString("description", &printer_description) &&
-      base::i18n::AdjustStringForLocaleDirection(&printer_description)) {
-    printer->SetString("description", printer_description);
+  std::string* printer_description = printer->FindStringKey("description");
+  if (printer_description) {
+    std::u16string u16_printer_description =
+        base::UTF8ToUTF16(*printer_description);
+    if (base::i18n::AdjustStringForLocaleDirection(&u16_printer_description))
+      printer->SetStringKey("description", u16_printer_description);
   }
 }
 
@@ -294,12 +297,14 @@ class PrinterProviderAPIImpl : public PrinterProviderAPI,
   // in the event. If the extension listens to the event, it's added to the set
   // of |request| sources. |request| is |GetPrintersRequest| object associated
   // with the event.
-  bool WillRequestPrinters(int request_id,
-                           content::BrowserContext* browser_context,
-                           Feature::Context target_context,
-                           const Extension* extension,
-                           Event* event,
-                           const base::DictionaryValue* listener_filter);
+  bool WillRequestPrinters(
+      int request_id,
+      content::BrowserContext* browser_context,
+      Feature::Context target_context,
+      const Extension* extension,
+      const base::DictionaryValue* listener_filter,
+      std::unique_ptr<base::Value::List>* event_args_out,
+      mojom::EventFilteringInfoPtr* event_filtering_info_out);
 
   raw_ptr<content::BrowserContext> browser_context_;
 
@@ -756,8 +761,9 @@ bool PrinterProviderAPIImpl::WillRequestPrinters(
     content::BrowserContext* browser_context,
     Feature::Context target_context,
     const Extension* extension,
-    Event* event,
-    const base::DictionaryValue* listener_filter) {
+    const base::DictionaryValue* listener_filter,
+    std::unique_ptr<base::Value::List>* event_args_out,
+    mojom::EventFilteringInfoPtr* event_filtering_info_out) {
   if (!extension)
     return false;
   EventRouter* event_router = EventRouter::Get(browser_context_);

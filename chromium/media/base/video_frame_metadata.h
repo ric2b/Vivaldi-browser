@@ -16,6 +16,8 @@
 
 namespace media {
 
+// NOTE: When adding new VideoFrameMetadata fields, please ensure you update the
+// MergeMetadataFrom() method.
 struct MEDIA_EXPORT VideoFrameMetadata {
   VideoFrameMetadata();
   ~VideoFrameMetadata() = default;
@@ -70,6 +72,19 @@ struct MEDIA_EXPORT VideoFrameMetadata {
   // coded_size().width(), coded_size().height()]. It does not have to be
   // fully contained within visible_rect().
   absl::optional<gfx::Rect> capture_update_rect;
+
+  // If cropping was applied due to Region Capture to produce this frame,
+  // then this reflects where the frame's contents originate from in the
+  // original uncropped frame.
+  absl::optional<gfx::Rect> region_capture_rect;
+
+  // Whenever cropTo() is called, Blink increments the crop_version and records
+  // a Promise as associated with that crop_version.
+  // When Blink observes a frame with this new version or a later one,
+  // Blink resolves the Promise.
+  // Frames associated with a source which cannot be cropped will always
+  // have this value set to zero.
+  uint32_t crop_version = 0;
 
   // If not null, it indicates how video frame mailbox should be copied to a
   // new mailbox.

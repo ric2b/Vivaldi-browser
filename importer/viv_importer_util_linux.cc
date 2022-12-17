@@ -8,7 +8,11 @@
 
 #include "importer/viv_importer_utils.h"
 
-base::FilePath GetProfileDir() {
+base::FilePath GetProfileDir(bool mail) {
+  // Standalone Client does not exists for Linux
+  if (mail)
+    return base::FilePath();
+
   base::FilePath ini_file;
   // The default location of the profile folder containing user data is
   // under user HOME directory in .opera folder on Linux.
@@ -22,7 +26,11 @@ base::FilePath GetProfileDir() {
   return base::FilePath();
 }
 
-base::FilePath GetMailDirectory() {
+base::FilePath GetMailDirectory(bool mail) {
+  // Standalone Client does not exists for Linux
+  if (mail)
+    return base::FilePath();
+
   base::FilePath mail_directory;
   // The default location of the opera mail folder containing is
   // under user HOME directory in .opera/mail folder on Linux.

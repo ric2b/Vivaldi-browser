@@ -20,9 +20,16 @@
 -All/PendingUpdateScreenTest.*
 -All/PublicSessionOobeTest.*
 -All/PublicSessionWithTermsOfServiceOobeTest.*
+-All/SAMLDeviceAttestationEnrolledTest.*
+-All/SAMLDeviceAttestationTest.*
+-All/SAMLEnrollmentTest.*
 -All/SAMLPasswordAttributesTest.*
+-All/SAMLPolicyTest.*
+-All/SamlTestWithFeatures.*
+-All/SmartPrivacyProtectionScreenTest.*
 -All/SshWarningTest.*
 -All/SyncConsentPolicyDisabledTest.*
+-All/SyncConsentTestWithModesParams.*
 -All/SyncConsentTestWithParams.*
 -All/WebviewCloseViewLoginTest.*
 -All/WebviewLoginWithIframeTest.*
@@ -131,10 +138,6 @@
 -ResetTestWithTpmFirmwareUpdatePreserve.*
 -ResetTestWithTpmFirmwareUpdateRequested.*
 -RestoreOnStartupTestChromeOS.*
--SAMLDeviceAttestationTest.*
--SAMLEnrollmentTest.*
--SAMLPolicyTest.*
--SamlTest.*
 -SecurityTokenSamlTest.*
 -SigninToUserProfileSwitchTest.*
 -SiteIsolationFlagHandlingTest.*

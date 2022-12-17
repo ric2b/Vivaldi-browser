@@ -12,6 +12,11 @@
 class PrefService;
 class Profile;
 
+#if !BUILDFLAG(IS_ANDROID)
+struct StartupTab;
+using StartupTabs = std::vector<StartupTab>;
+#endif
+
 namespace user_prefs {
 class PrefRegistrySyncable;
 }
@@ -27,9 +32,13 @@ struct SessionStartupPref {
     // Indicates the user wants to restore the last session.
     LAST = 2,
 
-    // Indicates the user wants to restore a specific set of URLs. The URLs
+    // Indicates the user wants to open a specific set of URLs. The URLs
     // are contained in urls.
     URLS = 3,
+
+    // Indicates the user wants to restore the last session and open a specific
+    // set of URLs. The URLs are contained in urls.
+    LAST_AND_URLS = 4,
 
     VIVALDI_HOMEPAGE,
 
@@ -44,10 +53,11 @@ struct SessionStartupPref {
     kPrefValueLast = 1,
     kPrefValueURLs = 4,
     kPrefValueNewTab = 5,
-    kPrefValueVivaldiSpeeddial = 6,
-    kPrefValueVivaldiHomepage = 7,
-    kPrefValueVivaldiSpecificSession = 8,
-    kPrefValueMax = 9,
+    kPrefValueLastAndURLs = 6,
+    kPrefValueVivaldiSpeeddial = 7,
+    kPrefValueVivaldiHomepage = 8,
+    kPrefValueVivaldiSpecificSession = 9,
+    kPrefValueMax = 10,
   };
 
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
@@ -89,10 +99,15 @@ struct SessionStartupPref {
   // opened.
   bool ShouldOpenUrls() const;
 
+#if !BUILDFLAG(IS_ANDROID)
+  // Convert to StartupTabs.
+  StartupTabs ToStartupTabs() const;
+#endif
+
   // What to do on startup.
   Type type;
 
-  // The URLs to restore. Only used if type == URLS.
+  // The URLs to open. Only used if |type| is URLS or LAST_AND_URLS.
   std::vector<GURL> urls;
 };
 

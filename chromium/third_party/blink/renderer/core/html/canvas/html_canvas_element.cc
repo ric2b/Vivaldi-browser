@@ -40,7 +40,6 @@
 #include "base/numerics/checked_math.h"
 #include "base/numerics/safe_conversions.h"
 #include "build/build_config.h"
-#include "build/os_buildflags.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "third_party/blink/public/common/features.h"
@@ -98,7 +97,6 @@
 #include "third_party/blink/renderer/platform/graphics/canvas_resource_dispatcher.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_resource_provider.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/shared_gpu_context.h"
-#include "third_party/blink/renderer/platform/graphics/graphics_layer.h"
 #include "third_party/blink/renderer/platform/graphics/image_data_buffer.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_canvas.h"
 #include "third_party/blink/renderer/platform/graphics/static_bitmap_image_to_video_frame_copier.h"
@@ -117,8 +115,15 @@ namespace {
 
 // This feature will only take effect if `kTwoCopyCanvasCapture` is also
 // enabled.
-const base::Feature kOneCopyCanvasCapture{"OneCopyCanvasCapture",
-                                          base::FEATURE_ENABLED_BY_DEFAULT};
+// TODO(https://crbug.com/1298812): Investigate why this fails on Windows.
+const base::Feature kOneCopyCanvasCapture {
+  "OneCopyCanvasCapture",
+#if BUILDFLAG(IS_MAC)
+      base::FEATURE_ENABLED_BY_DEFAULT
+#else
+      base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+};
 
 const base::Feature kTwoCopyCanvasCapture {
   "TwoCopyCanvasCapture",
@@ -336,10 +341,9 @@ CanvasRenderingContext* HTMLCanvasElement::GetCanvasRenderingContext(
              !!result)
         .Record(doc.UkmRecorder());
   }
-  if (attributes.color_space != kSRGBCanvasColorSpaceName ||
-      attributes.pixel_format != kUint8CanvasPixelFormatName) {
+
+  if (attributes.color_space != PredefinedColorSpace::kSRGB)
     UseCounter::Count(doc, WebFeature::kCanvasUseColorSpace);
-  }
 
   if (RuntimeEnabledFeatures::NewCanvas2DAPIEnabled(GetExecutionContext()))
     UseCounter::Count(doc, WebFeature::kNewCanvas2DAPI);
@@ -734,7 +738,7 @@ void HTMLCanvasElement::NotifyListenersCanvasChanged() {
     // First attempt to copy directly from the rendering context to a video
     // frame. Not all rendering contexts need to support this (for contexts
     // where GetSourceImageForCanvasInternal is zero-copy, this is superfluous).
-    if (can_discard_alpha &&
+    if (context_ && can_discard_alpha &&
         base::FeatureList::IsEnabled(kOneCopyCanvasCapture)) {
       context_->CopyRenderingResultsToVideoFrame(
           copier_->GetAcceleratedVideoFramePool(
@@ -962,17 +966,20 @@ scoped_refptr<StaticBitmapImage> HTMLCanvasElement::Snapshot(
         // path that scales down the drawing buffer to the maximum supported
         // size. Hence, we need to query the adjusted size of DrawingBuffer.
         gfx::Size adjusted_size = context_->DrawingBufferSize();
-        SkColorInfo color_info = GetRenderingContextSkColorInfo().makeAlphaType(
-            kUnpremul_SkAlphaType);
-        if (color_info.colorType() == kN32_SkColorType)
-          color_info = color_info.makeColorType(kRGBA_8888_SkColorType);
-        else
-          color_info = color_info.makeColorType(kRGBA_F16_SkColorType);
-        image_bitmap = StaticBitmapImage::Create(
-            std::move(pixel_data),
-            SkImageInfo::Make(
-                SkISize::Make(adjusted_size.width(), adjusted_size.height()),
-                color_info));
+        if (!adjusted_size.IsEmpty()) {
+          SkColorInfo color_info =
+              GetRenderingContextSkColorInfo().makeAlphaType(
+                  kUnpremul_SkAlphaType);
+          if (color_info.colorType() == kN32_SkColorType)
+            color_info = color_info.makeColorType(kRGBA_8888_SkColorType);
+          else
+            color_info = color_info.makeColorType(kRGBA_F16_SkColorType);
+          image_bitmap = StaticBitmapImage::Create(
+              std::move(pixel_data),
+              SkImageInfo::Make(
+                  SkISize::Make(adjusted_size.width(), adjusted_size.height()),
+                  color_info));
+        }
       }
     }
   } else if (context_) {
@@ -981,8 +988,11 @@ scoped_refptr<StaticBitmapImage> HTMLCanvasElement::Snapshot(
     image_bitmap = context_->GetImage();
   }
 
-  if (!image_bitmap)
+  if (image_bitmap)
+    DCHECK(image_bitmap->SupportsDisplayCompositing());
+  else
     image_bitmap = CreateTransparentImage(size_);
+
   return image_bitmap;
 }
 
@@ -1243,8 +1253,9 @@ void HTMLCanvasElement::SetCanvas2DLayerBridgeInternal(
     // use accelerated-GPU rendering.
     // If any of the two conditions fails, or if the creation of accelerated
     // resource provider fails, the canvas will fallback to CPU rendering.
-    UMA_HISTOGRAM_BOOLEAN("Blink.Canvas.WillReadFrequently",
-                          context_->CreationAttributes().will_read_frequently);
+    UMA_HISTOGRAM_BOOLEAN(
+        "Blink.Canvas.2DLayerBridge.WillReadFrequently",
+        context_ && context_->CreationAttributes().will_read_frequently);
 
     if (ShouldAccelerate() &&
         !context_->CreationAttributes().will_read_frequently) {
@@ -1286,7 +1297,7 @@ Canvas2DLayerBridge* HTMLCanvasElement::GetOrCreateCanvas2DLayerBridge() {
   DCHECK(IsRenderingContext2D());
   if (!canvas2d_bridge_ && !did_fail_to_create_resource_provider_) {
     SetCanvas2DLayerBridgeInternal(nullptr);
-    if (did_fail_to_create_resource_provider_ && !Size().IsEmpty())
+    if (did_fail_to_create_resource_provider_ && !Size().IsEmpty() && context_)
       context_->LoseContext(CanvasRenderingContext::kSyntheticLostContext);
   }
   return canvas2d_bridge_.get();

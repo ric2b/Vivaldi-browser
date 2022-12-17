@@ -12,7 +12,6 @@
 #include "base/memory/weak_ptr.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/infobars/core/infobar_manager.h"
-#include "components/messages/android/message_wrapper.h"
 #include "components/permissions/permission_prompt.h"
 #include "components/permissions/permission_uma_util.h"
 #include "components/permissions/permissions_client.h"
@@ -52,7 +51,11 @@ class PermissionPromptAndroid : public permissions::PermissionPrompt,
   void Closing();
   void Accept();
   void Deny();
+  void SetManageClicked();
+  void SetLearnMoreClicked();
   bool ShouldCurrentRequestUseQuietUI();
+  absl::optional<PermissionUiSelector::QuietUiReason> ReasonForUsingQuietUi()
+      const;
 
   // We show one permission at a time except for grouped mic+camera, for which
   // we still have a single icon and message text.

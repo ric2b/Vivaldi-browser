@@ -6,40 +6,35 @@
 
 #include "ash/constants/ash_switches.h"
 #include "base/command_line.h"
+#include "base/path_service.h"
 #include "base/task/bind_post_task.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "chrome/browser/ash/crosapi/browser_data_migrator.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/common/chrome_paths.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/device_service.h"
 #include "services/device/public/mojom/wake_lock_provider.mojom.h"
 
 namespace ash {
 namespace {
-constexpr char kUserActionCancel[] = "cancel";
+constexpr char kUserActionSkip[] = "skip";
 constexpr base::TimeDelta kShowSkipButtonDuration = base::Seconds(20);
 
-class MigratorDelegateImpl
-    : public LacrosDataMigrationScreen::MigratorDelegate {
-  base::OnceClosure Migrate(
-      const std::string& user_id_hash,
-      const base::RepeatingCallback<void(int)>& progress_callback) override {
-    return BrowserDataMigrator::Migrate(
-        user_id_hash, progress_callback,
-        base::BindOnce(&chrome::AttemptRestart));
-  }
-};
-
+// If the battery percent is lower than this ratio, and the charger is not
+// connected, then the low-battery warning will be displayed.
+constexpr double kInsufficientBatteryPercent = 50;
 }  // namespace
 
 LacrosDataMigrationScreen::LacrosDataMigrationScreen(
     LacrosDataMigrationScreenView* view)
     : BaseScreen(LacrosDataMigrationScreenView::kScreenId,
                  OobeScreenPriority::SCREEN_DEVICE_DEVELOPER_MODIFICATION),
-      view_(view),
-      migrator_delegate_(std::make_unique<MigratorDelegateImpl>()) {
+      view_(view) {
   DCHECK(view_);
   if (view_)
     view_->Bind(this);
@@ -60,29 +55,58 @@ void LacrosDataMigrationScreen::ShowImpl() {
   if (!view_)
     return;
 
-  // user_id_hash_ is not empty if it is already set by
-  // `SetUserIdHashForTesting()`.
-  if (user_id_hash_.empty()) {
-    user_id_hash_ = base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-        switches::kBrowserDataMigrationForUser);
+  if (!power_manager_subscription_.IsObserving())
+    power_manager_subscription_.Observe(PowerManagerClient::Get());
+  PowerManagerClient::Get()->RequestStatusUpdate();
+
+  if (!migrator_) {
+    const std::string user_id_hash =
+        base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+            switches::kBrowserDataMigrationForUser);
+
+    if (user_id_hash.empty()) {
+      LOG(ERROR) << "Colud not retrieve user_id_hash from switch "
+                 << switches::kBrowserDataMigrationForUser
+                 << ". Aborting migration.";
+
+      chrome::AttemptRestart();
+    }
+    DCHECK(!user_id_hash.empty()) << "user_id_hash should not be empty.";
+
+    base::FilePath user_data_dir;
+    if (!base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir)) {
+      LOG(ERROR) << "Could not get the original user data dir path. Aborting "
+                    "migration.";
+      chrome::AttemptRestart();
+      return;
+    }
+
+    const base::FilePath profile_data_dir =
+        user_data_dir.Append(ProfileHelper::GetUserProfileDir(user_id_hash));
+
+    base::RepeatingCallback<void(int)> progress_callback = base::BindPostTask(
+        base::SequencedTaskRunnerHandle::Get(),
+        base::BindRepeating(&LacrosDataMigrationScreen::OnProgressUpdate,
+                            weak_factory_.GetWeakPtr()),
+        FROM_HERE);
+
+    migrator_ = std::make_unique<BrowserDataMigratorImpl>(
+        profile_data_dir, user_id_hash, progress_callback,
+        g_browser_process->local_state());
+
+    migrator_->Migrate(base::BindOnce([](BrowserDataMigrator::Result result) {
+      // TODO(crbug.com/1296174): support page transition on failure.
+      chrome::AttemptRestart();
+    }));
   }
-  DCHECK(!user_id_hash_.empty()) << "user_id_hash_ should not be empty.";
-
-  base::RepeatingCallback<void(int)> progress_callback = base::BindPostTask(
-      base::SequencedTaskRunnerHandle::Get(),
-      base::BindRepeating(&LacrosDataMigrationScreen::OnProgressUpdate,
-                          weak_factory_.GetWeakPtr()),
-      FROM_HERE);
-
-  cancel_callback_ =
-      migrator_delegate_->Migrate(user_id_hash_, progress_callback);
 
   // Show the screen.
   view_->Show();
 
   GetWakeLock()->RequestWakeLock();
+  UpdateLowBatteryStatus();
 
-  // If set, do not post `SHowSkipButton()`.
+  // If set, do not post `ShowSkipButton()`.
   if (skip_post_show_button_for_testing_)
     return;
 
@@ -104,10 +128,13 @@ void LacrosDataMigrationScreen::ShowSkipButton() {
 }
 
 void LacrosDataMigrationScreen::OnUserAction(const std::string& action_id) {
-  if (action_id == kUserActionCancel) {
-    if (cancel_callback_) {
-      LOG(WARNING) << "User has cancelled the migration.";
-      std::move(cancel_callback_).Run();
+  if (action_id == kUserActionSkip) {
+    LOG(WARNING) << "User has skipped the migration.";
+    if (migrator_) {
+      // Here migrator should be running. Trigger to cancel, then the migrator
+      // will report completion (actual completion or cancel) some time soon,
+      // which triggers Chrome to restart.
+      migrator_->Cancel();
     }
   } else {
     BaseScreen::OnUserAction(action_id);
@@ -116,6 +143,23 @@ void LacrosDataMigrationScreen::OnUserAction(const std::string& action_id) {
 
 void LacrosDataMigrationScreen::HideImpl() {
   GetWakeLock()->CancelWakeLock();
+  power_manager_subscription_.Reset();
+}
+
+void LacrosDataMigrationScreen::PowerChanged(
+    const power_manager::PowerSupplyProperties& proto) {
+  UpdateLowBatteryStatus();
+}
+
+void LacrosDataMigrationScreen::UpdateLowBatteryStatus() {
+  const absl::optional<power_manager::PowerSupplyProperties>& proto =
+      PowerManagerClient::Get()->GetLastStatus();
+  if (!proto.has_value())
+    return;
+  view_->SetLowBatteryStatus(
+      proto->battery_state() ==
+          power_manager::PowerSupplyProperties_BatteryState_DISCHARGING &&
+      proto->battery_percent() < kInsufficientBatteryPercent);
 }
 
 device::mojom::WakeLock* LacrosDataMigrationScreen::GetWakeLock() {
@@ -138,18 +182,13 @@ device::mojom::WakeLock* LacrosDataMigrationScreen::GetWakeLock() {
   return wake_lock_.get();
 }
 
-void LacrosDataMigrationScreen::SetMigratorDelegateForTesting(
-    std::unique_ptr<MigratorDelegate> migrator_delegate) {
-  migrator_delegate_ = std::move(migrator_delegate);
-}
-
-void LacrosDataMigrationScreen::SetUserIdHashForTesting(
-    const std::string& user_id_hash) {
-  user_id_hash_ = user_id_hash;
-}
-
 void LacrosDataMigrationScreen::SetSkipPostShowButtonForTesting(bool value) {
   skip_post_show_button_for_testing_ = value;
+}
+
+void LacrosDataMigrationScreen::SetMigratorForTesting(
+    std::unique_ptr<BrowserDataMigrator> migrator) {
+  migrator_ = std::move(migrator);
 }
 
 }  // namespace ash

@@ -62,17 +62,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/origin.h"
 
-#if BUILDFLAG(ENABLE_REPORTING)
-#include "net/network_error_logging/mock_persistent_nel_store.h"
-#include "net/network_error_logging/network_error_logging_service.h"
-#include "net/reporting/mock_persistent_reporting_store.h"
-#include "net/reporting/reporting_cache.h"
-#include "net/reporting/reporting_endpoint.h"
-#include "net/reporting/reporting_report.h"
-#include "net/reporting/reporting_service.h"
-#include "net/reporting/reporting_test_util.h"
-#endif  // BUILDFLAG(ENABLE_REPORTING)
-
 using base::test::RunOnceClosure;
 using testing::_;
 using testing::ByRef;
@@ -1324,6 +1313,15 @@ TEST_F(BrowsingDataRemoverImplTest, RemoveConversions) {
   StoragePartitionRemovalData removal_data = GetStoragePartitionRemovalData();
   EXPECT_EQ(removal_data.remove_mask,
             StoragePartition::REMOVE_DATA_MASK_CONVERSIONS);
+}
+
+TEST_F(BrowsingDataRemoverImplTest, RemoveAggregationServiceData) {
+  BlockUntilBrowsingDataRemoved(
+      base::Time(), base::Time::Max(),
+      BrowsingDataRemover::DATA_TYPE_AGGREGATION_SERVICE, false);
+  StoragePartitionRemovalData removal_data = GetStoragePartitionRemovalData();
+  EXPECT_EQ(removal_data.remove_mask,
+            StoragePartition::REMOVE_DATA_MASK_AGGREGATION_SERVICE);
 }
 
 class MultipleTasksObserver {

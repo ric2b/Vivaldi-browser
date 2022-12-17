@@ -168,11 +168,16 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
                                ResultCallback callback) override;
   ServiceWorkerExternalRequestResult StartingExternalRequest(
       int64_t service_worker_version_id,
+      ServiceWorkerExternalRequestTimeoutType timeout_type,
       const std::string& request_uuid) override;
   ServiceWorkerExternalRequestResult FinishedExternalRequest(
       int64_t service_worker_version_id,
       const std::string& request_uuid) override;
   size_t CountExternalRequestsForTest(const blink::StorageKey& key) override;
+  bool ExecuteScriptForTest(
+      const std::string& script,
+      int64_t service_worker_version_id,
+      ServiceWorkerScriptExecutionCallback callback) override;
   bool MaybeHasRegistrationForStorageKey(const blink::StorageKey& key) override;
   void GetAllOriginsInfo(GetUsageInfoCallback callback) override;
   void DeleteForStorageKey(const blink::StorageKey& key,
@@ -467,6 +472,7 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
   // This is used as a callback of GetRegisteredStorageKeys when initialising to
   // store a list of storage keys that have registered service workers.
   void DidGetRegisteredStorageKeys(
+      base::TimeTicks start_time,
       const std::vector<blink::StorageKey>& storage_keys);
 
   // Temporary for https://crbug.com/1161153.

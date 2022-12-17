@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/check_op.h"
+#include "base/observer_list.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/resource_coordinator/discard_metrics_lifecycle_unit_observer.h"
@@ -319,11 +320,19 @@ void TabLifecycleUnitSource::OnBrowserRemoved(Browser* browser) {
 }
 
 void TabLifecycleUnitSource::OnBrowserSetLastActive(Browser* browser) {
+  // NOTE(andre@vivaldi.com) : Added because we need to update active tab after
+  // restore has been done.
+  if(!browser->is_session_restore()) {
   UpdateFocusedTab();
+  }
 }
 
 void TabLifecycleUnitSource::OnBrowserNoLongerActive(Browser* browser) {
+  // NOTE(andre@vivaldi.com) : Added because we need to update active tab after
+  // restore has been done.
+  if(!browser->is_session_restore()) {
   UpdateFocusedTab();
+  }
 }
 
 // static

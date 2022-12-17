@@ -45,7 +45,7 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/profiles/profile_menu_view.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
-#include "chrome/browser/ui/views/user_education/feature_promo_controller_views.h"
+#include "chrome/browser/ui/views/user_education/browser_feature_promo_controller.h"
 #include "chrome/browser/ui/webui/signin/login_ui_test_utils.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
@@ -178,7 +178,7 @@ class ProfileMenuViewTestBase {
     ASSERT_TRUE(profile_menu_view());
     profile_menu_view()->set_close_on_deactivate(false);
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
     base::RunLoop().RunUntilIdle();
 #else
     // If possible wait until the menu is active.
@@ -266,8 +266,8 @@ IN_PROC_BROWSER_TEST_F(ProfileMenuViewExtensionsTest, CloseBubbleOnTadAdded) {
   ASSERT_EQ(0, tab_strip->active_index());
 
   ASSERT_NO_FATAL_FAILURE(OpenProfileMenu(browser()));
-  AddTabAtIndex(1, GURL("https://test_url.com"),
-                ui::PageTransition::PAGE_TRANSITION_LINK);
+  ASSERT_FALSE(AddTabAtIndex(1, GURL("https://test_url.com"),
+                             ui::PageTransition::PAGE_TRANSITION_LINK));
   EXPECT_EQ(1, tab_strip->active_index());
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(ProfileMenuView::IsShowing());
@@ -278,8 +278,8 @@ IN_PROC_BROWSER_TEST_F(ProfileMenuViewExtensionsTest, CloseBubbleOnTadAdded) {
 IN_PROC_BROWSER_TEST_F(ProfileMenuViewExtensionsTest,
                        CloseBubbleOnActiveTabChanged) {
   TabStripModel* tab_strip = browser()->tab_strip_model();
-  AddTabAtIndex(1, GURL("https://test_url.com"),
-                ui::PageTransition::PAGE_TRANSITION_LINK);
+  ASSERT_FALSE(AddTabAtIndex(1, GURL("https://test_url.com"),
+                             ui::PageTransition::PAGE_TRANSITION_LINK));
   ASSERT_EQ(2, tab_strip->count());
   ASSERT_EQ(1, tab_strip->active_index());
 
@@ -294,8 +294,8 @@ IN_PROC_BROWSER_TEST_F(ProfileMenuViewExtensionsTest,
 IN_PROC_BROWSER_TEST_F(ProfileMenuViewExtensionsTest,
                        CloseBubbleOnActiveTabClosed) {
   TabStripModel* tab_strip = browser()->tab_strip_model();
-  AddTabAtIndex(1, GURL("https://test_url.com"),
-                ui::PageTransition::PAGE_TRANSITION_LINK);
+  ASSERT_FALSE(AddTabAtIndex(1, GURL("https://test_url.com"),
+                             ui::PageTransition::PAGE_TRANSITION_LINK));
   ASSERT_EQ(2, tab_strip->count());
   ASSERT_EQ(1, tab_strip->active_index());
 
@@ -323,10 +323,10 @@ IN_PROC_BROWSER_TEST_F(ProfileMenuViewExtensionsTest,
 // Regression test for https://crbug.com/1205901
 IN_PROC_BROWSER_TEST_F(ProfileMenuViewExtensionsTest, CloseIPH) {
   // Display the IPH.
-  FeaturePromoControllerViews::BlockActiveWindowCheckForTesting();
-  FeaturePromoControllerViews* promo_controller =
-      BrowserView::GetBrowserViewForBrowser(browser())
-          ->feature_promo_controller();
+  auto lock = BrowserFeaturePromoController::BlockActiveWindowCheckForTesting();
+  BrowserFeaturePromoController* const promo_controller =
+      static_cast<BrowserFeaturePromoController*>(
+          browser()->window()->GetFeaturePromoController());
   feature_engagement::Tracker* tracker =
       promo_controller->feature_engagement_tracker();
   base::RunLoop loop;
@@ -345,14 +345,14 @@ IN_PROC_BROWSER_TEST_F(ProfileMenuViewExtensionsTest, CloseIPH) {
 #endif
   EXPECT_EQ(should_show, promo_controller->MaybeShowPromo(
                              feature_engagement::kIPHProfileSwitchFeature));
-  EXPECT_EQ(should_show, promo_controller->BubbleIsShowing(
+  EXPECT_EQ(should_show, promo_controller->IsPromoActive(
                              feature_engagement::kIPHProfileSwitchFeature));
 
   // Open the menu.
   ASSERT_NO_FATAL_FAILURE(OpenProfileMenu(browser()));
 
   // Check the IPH is no longer showing.
-  EXPECT_FALSE(promo_controller->BubbleIsShowing(
+  EXPECT_FALSE(promo_controller->IsPromoActive(
       feature_engagement::kIPHProfileSwitchFeature));
 }
 
@@ -416,7 +416,7 @@ IN_PROC_BROWSER_TEST_F(ProfileMenuViewSignoutTest, OpenLogoutTab) {
 // another tab.
 // Flaky on Linux, at least. crbug.com/1116606
 // Flaky on Mac because of crbug.com/1273102.
-#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_MAC)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC)
 #define MAYBE_SignoutFromNTP DISABLED_SignoutFromNTP
 #else
 #define MAYBE_SignoutFromNTP SignoutFromNTP
@@ -857,8 +857,15 @@ constexpr ProfileMenuViewBase::ActionableItem kActionableItems_SyncPaused[] = {
     // there are no other buttons at the end.
     ProfileMenuViewBase::ActionableItem::kEditProfileButton};
 
+// TODO(crbug.com/1298490): flaky on Windows.
+#if BUILDFLAG(IS_WIN)
+#define MAYBE_ProfileMenuClickTest_SyncPaused \
+  DISABLED_ProfileMenuClickTest_SyncPaused
+#else
+#define MAYBE_ProfileMenuClickTest_SyncPaused ProfileMenuClickTest_SyncPaused
+#endif
 PROFILE_MENU_CLICK_TEST(kActionableItems_SyncPaused,
-                        ProfileMenuClickTest_SyncPaused) {
+                        MAYBE_ProfileMenuClickTest_SyncPaused) {
   ASSERT_TRUE(sync_harness()->SetupSync());
   sync_harness()->EnterSyncPausedStateForPrimaryAccount();
   // Check that the setup was successful.

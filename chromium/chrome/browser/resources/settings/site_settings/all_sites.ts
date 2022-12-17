@@ -27,13 +27,14 @@ import {assert} from 'chrome://resources/js/assert.m.js';
 import {I18nMixin, I18nMixinInterface} from 'chrome://resources/js/i18n_mixin.js';
 import {WebUIListenerMixin, WebUIListenerMixinInterface} from 'chrome://resources/js/web_ui_listener_mixin.js';
 import {IronListElement} from 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
-import {afterNextRender, html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {afterNextRender, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {GlobalScrollTargetMixin} from '../global_scroll_target_mixin.js';
 import {loadTimeData} from '../i18n_setup.js';
 import {routes} from '../route.js';
 import {Route, RouteObserverMixin, RouteObserverMixinInterface, Router} from '../router.js';
 
+import {getTemplate} from './all_sites.html.js';
 import {ALL_SITES_DIALOG, AllSitesAction2, ContentSetting, SortMethod} from './constants.js';
 import {LocalDataBrowserProxy, LocalDataBrowserProxyImpl} from './local_data_browser_proxy.js';
 import {SiteSettingsMixin, SiteSettingsMixinInterface} from './site_settings_mixin.js';
@@ -44,6 +45,7 @@ type ActionMenuModel = {
   index: number,
   item: SiteGroup,
   origin: string,
+  isPartitioned: boolean,
   path: string,
   target: HTMLElement,
 };
@@ -98,7 +100,7 @@ export class AllSitesElement extends AllSitesElementBase {
   }
 
   static get template() {
-    return html`{__html_template__}`;
+    return getTemplate();
   }
 
   static get properties() {
@@ -459,7 +461,7 @@ export class AllSitesElement extends AllSitesElementBase {
   }
 
   onConfirmRemoveSite_(e: Event) {
-    const {index, actionScope, origin} = this.actionMenuModel_!;
+    const {index, actionScope, origin, isPartitioned} = this.actionMenuModel_!;
     const siteGroupToUpdate = this.filteredList_[index];
 
     const updatedSiteGroup: SiteGroup = {
@@ -470,17 +472,29 @@ export class AllSitesElement extends AllSitesElementBase {
     };
 
     if (actionScope === 'origin') {
-      this.browserProxy.recordAction(AllSitesAction2.REMOVE_ORIGIN);
-      this.browserProxy.clearOriginDataAndCookies(this.toUrl(origin)!.href);
-      this.resetPermissionsForOrigin_(origin);
+      if (isPartitioned) {
+        this.browserProxy.recordAction(
+            AllSitesAction2.REMOVE_ORIGIN_PARTITIONED);
+        this.browserProxy.clearPartitionedOriginDataAndCookies(
+            this.toUrl(origin)!.href, siteGroupToUpdate.etldPlus1);
 
-      updatedSiteGroup.origins =
-          siteGroupToUpdate.origins.filter(o => o.origin !== origin);
+      } else {
+        this.browserProxy.recordAction(AllSitesAction2.REMOVE_ORIGIN);
+        this.browserProxy.clearUnpartitionedOriginDataAndCookies(
+            this.toUrl(origin)!.href);
+        this.resetPermissionsForOrigin_(origin);
+      }
+      updatedSiteGroup.origins = siteGroupToUpdate.origins.filter(
+          o => (o.isPartitioned !== isPartitioned || o.origin !== origin));
+
+      console.log(updatedSiteGroup.origins);
       updatedSiteGroup.hasInstalledPWA =
           updatedSiteGroup.origins.some(o => o.isInstalled);
       updatedSiteGroup.numCookies -=
-          siteGroupToUpdate.origins.find(o => o.origin === origin)!.numCookies;
-
+          siteGroupToUpdate.origins
+              .find(
+                  o => o.isPartitioned === isPartitioned &&
+                      o.origin === origin)!.numCookies;
     } else {
       this.browserProxy.recordAction(AllSitesAction2.REMOVE_SITE_GROUP);
       this.browserProxy.clearEtldPlus1DataAndCookies(
@@ -623,6 +637,14 @@ export class AllSitesElement extends AllSitesElementBase {
     const originScoped = this.actionMenuModel_.actionScope === 'origin';
     const singleOriginSite =
         !originScoped && this.actionMenuModel_.item.origins.length === 1;
+
+    if (this.actionMenuModel_.isPartitioned) {
+      assert(originScoped);
+      return loadTimeData.substituteString(this.i18n(
+          'siteSettingsRemoveSiteOriginPartitionedDialogTitle',
+          this.originRepresentation(this.actionMenuModel_.origin),
+          this.originRepresentation(this.actionMenuModel_.item.etldPlus1)));
+    }
 
     const numInstalledApps =
         this.actionMenuModel_.item.origins
@@ -790,6 +812,7 @@ export class AllSitesElement extends AllSitesElementBase {
         numCookies: siteGroupToUpdate.numCookies,
         hasPermissionSettings: false,
         isInstalled: false,
+        isPartitioned: false,
       };
       updatedSiteGroup.origins.push(originPlaceHolder);
       this.set('filteredList_.' + index, updatedSiteGroup);
@@ -835,7 +858,8 @@ export class AllSitesElement extends AllSitesElementBase {
    * @param origin The origin of the target origin that should be cleared.
    */
   private clearDataForOrigin_(index: number, origin: string) {
-    this.browserProxy.clearOriginDataAndCookies(this.toUrl(origin)!.href);
+    this.browserProxy.clearUnpartitionedOriginDataAndCookies(
+        this.toUrl(origin)!.href);
 
     const siteGroupToUpdate = this.filteredList_[index];
     const updatedSiteGroup: SiteGroup = {

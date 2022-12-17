@@ -17,6 +17,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/shell_integration_win.h"
 #include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/browser_window_state.h"
 #include "chrome/browser/ui/views/apps/glass_app_window_frame_view_win.h"
 #include "chrome/browser/web_applications/extensions/web_app_extension_shortcut.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
@@ -96,6 +97,12 @@ void VivaldiNativeAppWindowViewsWin::InitializeDefaultWindow(
 
   if (!create_params.alpha_enabled)
     EnsureCaptionStyleSet();
+}
+
+void VivaldiNativeAppWindowViewsWin::NativeWidgetWorkspaceChanged() {
+  chrome::SaveWindowWorkspace(window()->browser(), GetWorkspace());
+  chrome::SaveWindowVisibleOnAllWorkspaces(window()->browser(),
+                                           IsVisibleOnAllWorkspaces());
 }
 
 bool VivaldiNativeAppWindowViewsWin::IsOnCurrentWorkspace() const {

@@ -101,6 +101,7 @@
 #include "ash/shell_observer.h"
 #include "ash/shell_tab_handler.h"
 #include "ash/shutdown_controller_impl.h"
+#include "ash/style/ash_color_mixer.h"
 #include "ash/style/ash_color_provider.h"
 #include "ash/system/audio/display_speaker_controller.h"
 #include "ash/system/bluetooth/bluetooth_device_status_ui_handler.h"
@@ -111,6 +112,8 @@
 #include "ash/system/brightness/brightness_controller_chromeos.h"
 #include "ash/system/brightness_control_delegate.h"
 #include "ash/system/caps_lock_notification_controller.h"
+#include "ash/system/firmware_update/firmware_update_notification_controller.h"
+#include "ash/system/hps/hps_orientation_controller.h"
 #include "ash/system/keyboard_brightness/keyboard_brightness_controller.h"
 #include "ash/system/keyboard_brightness_control_delegate.h"
 #include "ash/system/locale/locale_update_controller_impl.h"
@@ -139,6 +142,7 @@
 #include "ash/system/toast/toast_manager_impl.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "ash/system/unified/hps_notify_controller.h"
+#include "ash/system/usb_peripheral/usb_peripheral_notification_controller.h"
 #include "ash/touch/ash_touch_transform_controller.h"
 #include "ash/touch/touch_devices_controller.h"
 #include "ash/tray_action/tray_action.h"
@@ -189,7 +193,6 @@
 #include "chromeos/dbus/usb/usbguard_client.h"
 #include "chromeos/services/assistant/public/cpp/features.h"
 #include "chromeos/system/devicemode.h"
-#include "components/app_restore/features.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/viz/host/host_frame_sink_manager.h"
@@ -203,6 +206,7 @@
 #include "ui/base/ui_base_features.h"
 #include "ui/base/user_activity/user_activity_detector.h"
 #include "ui/chromeos/user_activity_power_manager_notifier.h"
+#include "ui/color/color_provider_manager.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator.h"
 #include "ui/display/display.h"
@@ -576,15 +580,18 @@ Shell::Shell(std::unique_ptr<ShellDelegate> shell_delegate)
   keyboard_controller_ =
       std::make_unique<KeyboardControllerImpl>(session_controller_.get());
 
-  if (base::FeatureList::IsEnabled(features::kUseBluetoothSystemInAsh)) {
-    mojo::PendingRemote<device::mojom::BluetoothSystemFactory>
-        bluetooth_system_factory;
-    shell_delegate_->BindBluetoothSystemFactory(
-        bluetooth_system_factory.InitWithNewPipeAndPassReceiver());
-    tray_bluetooth_helper_ = std::make_unique<TrayBluetoothHelperExperimental>(
-        std::move(bluetooth_system_factory));
-  } else {
-    tray_bluetooth_helper_ = std::make_unique<TrayBluetoothHelperLegacy>();
+  if (!ash::features::IsBluetoothRevampEnabled()) {
+    if (base::FeatureList::IsEnabled(features::kUseBluetoothSystemInAsh)) {
+      mojo::PendingRemote<device::mojom::BluetoothSystemFactory>
+          bluetooth_system_factory;
+      shell_delegate_->BindBluetoothSystemFactory(
+          bluetooth_system_factory.InitWithNewPipeAndPassReceiver());
+      tray_bluetooth_helper_ =
+          std::make_unique<TrayBluetoothHelperExperimental>(
+              std::move(bluetooth_system_factory));
+    } else {
+      tray_bluetooth_helper_ = std::make_unique<TrayBluetoothHelperLegacy>();
+    }
   }
 
   PowerStatus::Initialize();
@@ -696,6 +703,11 @@ Shell::~Shell() {
   // before destroying |session_controller_|.
   accelerator_controller_->Shutdown();
 
+  // Must be destructed before the tablet mode and message center controllers,
+  // both of which these rely on.
+  hps_notify_controller_.reset();
+  hps_orientation_controller_.reset();
+
   // Shutdown tablet mode controller early on since it has some observers which
   // need to be removed. It will be destroyed later after all windows are closed
   // since it might be accessed during this process.
@@ -796,8 +808,6 @@ Shell::~Shell() {
   ScreenAsh::CreateScreenForShutdown();
   display_configuration_controller_.reset();
 
-  hps_notify_controller_.reset();
-
   // These members access Shell in their destructors.
   wallpaper_controller_.reset();
   accessibility_controller_.reset();
@@ -896,7 +906,11 @@ Shell::~Shell() {
   // before it.
   detachable_base_handler_.reset();
 
+  firmware_update_notification_controller_.reset();
+
   pcie_peripheral_notification_controller_.reset();
+
+  usb_peripheral_notification_controller_.reset();
 
   message_center_ash_impl_.reset();
 
@@ -972,13 +986,26 @@ void Shell::Init(
   media_notification_provider_ =
       std::make_unique<MediaNotificationProviderImpl>(
           shell_delegate_->GetMediaSessionService());
-  if (features::IsSnoopingProtectionEnabled())
-    hps_notify_controller_ = std::make_unique<HpsNotifyController>();
 
   tablet_mode_controller_ = std::make_unique<TabletModeController>();
 
+  // Observes the tablet mode controller and adds a notification to the message
+  // center, so must be constructed after both.
+  if (features::IsSnoopingProtectionEnabled()) {
+    hps_orientation_controller_ = std::make_unique<HpsOrientationController>();
+    hps_notify_controller_ = std::make_unique<HpsNotifyController>();
+  }
+
+  firmware_update_notification_controller_ =
+      std::make_unique<FirmwareUpdateNotificationController>(
+          message_center::MessageCenter::Get());
+
   pcie_peripheral_notification_controller_ =
       std::make_unique<PciePeripheralNotificationController>(
+          message_center::MessageCenter::Get());
+
+  usb_peripheral_notification_controller_ =
+      std::make_unique<UsbPeripheralNotificationController>(
           message_center::MessageCenter::Get());
 
   accessibility_focus_ring_controller_ =
@@ -1025,6 +1052,9 @@ void Shell::Init(
     env->set_context_factory(context_factory);
 
   ash_color_provider_ = std::make_unique<AshColorProvider>();
+
+  ui::ColorProviderManager::Get().AppendColorProviderInitializer(
+      base::BindRepeating(AddAshColorMixer));
 
   // Night Light depends on the display manager, the display color manager, and
   // aura::Env, so initialize it after all have been initialized.
@@ -1226,8 +1256,10 @@ void Shell::Init(
   logout_confirmation_controller_ =
       std::make_unique<LogoutConfirmationController>();
 
-  // May trigger initialization of the Bluetooth adapter.
-  tray_bluetooth_helper_->Initialize();
+  if (!ash::features::IsBluetoothRevampEnabled()) {
+    // May trigger initialization of the Bluetooth adapter.
+    tray_bluetooth_helper_->Initialize();
+  }
 
   // Create AshTouchTransformController before
   // WindowTreeHostManager::InitDisplays()
@@ -1266,8 +1298,7 @@ void Shell::Init(
 
   // Create window restore controller after WindowTreeHostManager::InitHosts()
   // since it may need to add observers to root windows.
-  if (full_restore::features::IsFullRestoreEnabled())
-    window_restore_controller_ = std::make_unique<WindowRestoreController>();
+  window_restore_controller_ = std::make_unique<WindowRestoreController>();
 
   cursor_manager_->HideCursor();  // Hide the mouse cursor on startup.
   cursor_manager_->SetCursor(ui::mojom::CursorType::kPointer);

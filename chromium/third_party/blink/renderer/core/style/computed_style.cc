@@ -28,6 +28,7 @@
 #include <utility>
 
 #include "base/cxx17_backports.h"
+#include "base/memory/values_equivalent.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/numerics/clamped_math.h"
 #include "build/build_config.h"
@@ -38,6 +39,7 @@
 #include "third_party/blink/renderer/core/css/css_primitive_value.h"
 #include "third_party/blink/renderer/core/css/css_property_equality.h"
 #include "third_party/blink/renderer/core/css/css_property_names.h"
+#include "third_party/blink/renderer/core/css/properties/computed_style_utils.h"
 #include "third_party/blink/renderer/core/css/properties/css_property.h"
 #include "third_party/blink/renderer/core/css/properties/longhand.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
@@ -56,7 +58,6 @@
 #include "third_party/blink/renderer/core/style/computed_style_initial_values.h"
 #include "third_party/blink/renderer/core/style/content_data.h"
 #include "third_party/blink/renderer/core/style/cursor_data.h"
-#include "third_party/blink/renderer/core/style/data_equivalency.h"
 #include "third_party/blink/renderer/core/style/quotes_data.h"
 #include "third_party/blink/renderer/core/style/shadow_list.h"
 #include "third_party/blink/renderer/core/style/style_difference.h"
@@ -66,6 +67,7 @@
 #include "third_party/blink/renderer/core/style/style_inherited_variables.h"
 #include "third_party/blink/renderer/core/style/style_non_inherited_variables.h"
 #include "third_party/blink/renderer/core/style/style_ray.h"
+#include "third_party/blink/renderer/core/svg/svg_element.h"
 #include "third_party/blink/renderer/platform/fonts/font.h"
 #include "third_party/blink/renderer/platform/fonts/font_selector.h"
 #include "third_party/blink/renderer/platform/geometry/length_functions.h"
@@ -109,7 +111,7 @@ struct SameSizeAsComputedStyleBase {
  private:
   void* data_refs[8];
   void* pointers[1];
-  unsigned bitfields[5];
+  unsigned bitfields[6];
 };
 
 struct SameSizeAsComputedStyle : public SameSizeAsComputedStyleBase,
@@ -195,7 +197,7 @@ static bool PseudoElementStylesEqual(const ComputedStyle& old_style,
       !new_style.HasAnyPseudoElementStyles())
     return true;
   for (PseudoId pseudo_id = kFirstPublicPseudoId;
-       pseudo_id < kFirstInternalPseudoId;
+       pseudo_id <= kLastTrackedPublicPseudoId;
        pseudo_id = static_cast<PseudoId>(pseudo_id + 1)) {
     if (!old_style.HasPseudoElementStyle(pseudo_id) &&
         !new_style.HasPseudoElementStyle(pseudo_id))
@@ -585,9 +587,22 @@ bool ComputedStyle::CachedPseudoElementStylesDependOnFontMetrics() const {
 }
 
 const ComputedStyle* ComputedStyle::AddCachedPseudoElementStyle(
-    scoped_refptr<const ComputedStyle> pseudo) const {
+    scoped_refptr<const ComputedStyle> pseudo,
+    PseudoId pseudo_id,
+    const AtomicString& pseudo_argument) const {
   DCHECK(pseudo);
-  DCHECK_GT(pseudo->StyleType(), kPseudoIdNone);
+
+  // Confirm that the styles being cached are for the (PseudoId,argument) that
+  // the caller intended (and presumably had checked was not present).
+  DCHECK_EQ(static_cast<unsigned>(pseudo->StyleType()),
+            static_cast<unsigned>(pseudo_id));
+  DCHECK_EQ(pseudo->PseudoArgument(), pseudo_argument);
+
+  // The pseudo style cache assumes that only one entry will be added for any
+  // any given (PseudoId,argument). Adding more than one entry is a bug, even
+  // if the styles being cached are equal.
+  DCHECK(!GetCachedPseudoElementStyle(pseudo->StyleType(),
+                                      pseudo->PseudoArgument()));
 
   const ComputedStyle* result = pseudo.get();
 
@@ -674,9 +689,7 @@ StyleDifference ComputedStyle::VisualInvalidationDiff(
   // property inside this function anyway.
 
   StyleDifference diff;
-  if ((!diff.NeedsReshape() || !diff.NeedsFullLayout() ||
-       !diff.NeedsPaintInvalidation()) &&
-      DiffNeedsReshapeAndFullLayoutAndPaintInvalidation(*this, other)) {
+  if (DiffNeedsReshapeAndFullLayoutAndPaintInvalidation(*this, other)) {
     diff.SetNeedsReshape();
     diff.SetNeedsFullLayout();
     diff.SetNeedsPaintInvalidation();
@@ -911,6 +924,19 @@ void ComputedStyle::AdjustDiffForBackgroundVisuallyEqual(
     // Changes of background fill layers, such as images, may have
     // changed alpha.
     diff.SetHasAlphaChanged();
+    return;
+  }
+
+  // If the background image depends on currentColor
+  // (e.g., background-image: linear-gradient(currentColor, #fff)), and the
+  // color has changed, we need to recompute it even though VisuallyEqual()
+  // thinks the old and new background styles are identical.
+  if (BackgroundInternal().AnyLayerUsesCurrentColor() &&
+      (GetCurrentColor() != other.GetCurrentColor() ||
+       GetInternalVisitedCurrentColor() !=
+           other.GetInternalVisitedCurrentColor())) {
+    diff.SetNeedsPaintInvalidation();
+    diff.SetHasAlphaChanged();
   }
 }
 
@@ -965,12 +991,12 @@ bool ComputedStyle::CustomPropertiesEqual(
     return true;
 
   for (const AtomicString& property_name : properties) {
-    if (!DataEquivalent(GetVariableData(property_name),
-                        other.GetVariableData(property_name))) {
+    if (!base::ValuesEquivalent(GetVariableData(property_name),
+                                other.GetVariableData(property_name))) {
       return false;
     }
-    if (!DataEquivalent(GetVariableValue(property_name),
-                        other.GetVariableValue(property_name))) {
+    if (!base::ValuesEquivalent(GetVariableValue(property_name),
+                                other.GetVariableValue(property_name))) {
       return false;
     }
   }
@@ -1029,8 +1055,7 @@ void ComputedStyle::UpdatePropertySpecificDifferences(
 
   bool has_clip = HasOutOfFlowPosition() && !HasAutoClip();
   bool other_has_clip = other.HasOutOfFlowPosition() && !other.HasAutoClip();
-  if (has_clip != other_has_clip ||
-      (has_clip && Clip() != other.Clip()))
+  if (has_clip != other_has_clip || (has_clip && Clip() != other.Clip()))
     diff.SetCSSClipChanged();
 
   if (GetBlendMode() != other.GetBlendMode())
@@ -1042,12 +1067,13 @@ void ComputedStyle::UpdatePropertySpecificDifferences(
       HasCurrentBackdropFilterAnimation() !=
           other.HasCurrentBackdropFilterAnimation() ||
       SubtreeWillChangeContents() != other.SubtreeWillChangeContents() ||
+      WillChangeScrollPosition() != other.WillChangeScrollPosition() ||
+      WillChangeProperties() != other.WillChangeProperties() ||
       BackfaceVisibility() != other.BackfaceVisibility() ||
       UsedTransformStyle3D() != other.UsedTransformStyle3D() ||
       ContainsPaint() != other.ContainsPaint() ||
       IsOverflowVisibleAlongBothAxes() !=
           other.IsOverflowVisibleAlongBothAxes() ||
-      WillChangeProperties() != other.WillChangeProperties() ||
       !BackdropFilterDataEquivalent(other) ||
       PotentialCompositingReasonsFor3DTransformChanged(other)) {
     diff.SetCompositingReasonsChanged();
@@ -1100,7 +1126,7 @@ void ComputedStyle::SetCursorList(CursorList* other) {
 }
 
 bool ComputedStyle::QuotesDataEquivalent(const ComputedStyle& other) const {
-  return DataEquivalent(Quotes(), other.Quotes());
+  return base::ValuesEquivalent(Quotes(), other.Quotes());
 }
 
 void ComputedStyle::ClearCursorList() {
@@ -1415,7 +1441,7 @@ void ComputedStyle::ApplyMotionPathTransform(
 }
 
 bool ComputedStyle::TextShadowDataEquivalent(const ComputedStyle& other) const {
-  return DataEquivalent(TextShadow(), other.TextShadow());
+  return base::ValuesEquivalent(TextShadow(), other.TextShadow());
 }
 
 StyleImage* ComputedStyle::ListStyleImage() const {
@@ -1730,22 +1756,11 @@ const AtomicString& ComputedStyle::TextEmphasisMarkString() const {
 
 LineLogicalSide ComputedStyle::GetTextEmphasisLineLogicalSide() const {
   TextEmphasisPosition position = GetTextEmphasisPosition();
-  if (IsHorizontalWritingMode()) {
-    return position == TextEmphasisPosition::kOverRight ||
-                   position == TextEmphasisPosition::kOverLeft
-               ? LineLogicalSide::kOver
-               : LineLogicalSide::kUnder;
-  }
-  if (GetWritingMode() != WritingMode::kSidewaysLr) {
-    return position == TextEmphasisPosition::kOverRight ||
-                   position == TextEmphasisPosition::kUnderRight
-               ? LineLogicalSide::kOver
-               : LineLogicalSide::kUnder;
-  }
-  return position == TextEmphasisPosition::kOverLeft ||
-                 position == TextEmphasisPosition::kUnderLeft
-             ? LineLogicalSide::kOver
-             : LineLogicalSide::kUnder;
+  if (IsHorizontalWritingMode())
+    return IsOver(position) ? LineLogicalSide::kOver : LineLogicalSide::kUnder;
+  if (GetWritingMode() != WritingMode::kSidewaysLr)
+    return IsRight(position) ? LineLogicalSide::kOver : LineLogicalSide::kUnder;
+  return IsLeft(position) ? LineLogicalSide::kOver : LineLogicalSide::kUnder;
 }
 
 CSSAnimationData& ComputedStyle::AccessAnimations() {
@@ -2345,7 +2360,7 @@ Color ComputedStyle::ResolvedColor(const StyleColor& color) const {
 bool ComputedStyle::ShouldForceColor(const StyleColor& unforced_color) const {
   return InForcedColorsMode() &&
          ForcedColorAdjust() == EForcedColorAdjust::kAuto &&
-         !unforced_color.IsSystemColor();
+         !unforced_color.IsSystemColorIncludingDeprecated();
 }
 
 bool ComputedStyle::ShouldPreserveParentColor() const {
@@ -2474,8 +2489,10 @@ LayoutRectOutsets ComputedStyle::BoxDecorationOutsets() const {
   DCHECK(HasVisualOverflowingEffect());
   LayoutRectOutsets outsets;
 
-  if (const ShadowList* box_shadow = BoxShadow())
-    outsets = LayoutRectOutsets(box_shadow->RectOutsetsIncludingOriginal());
+  if (const ShadowList* box_shadow = BoxShadow()) {
+    outsets =
+        EnclosingLayoutRectOutsets(box_shadow->RectOutsetsIncludingOriginal());
+  }
 
   if (HasBorderImageOutsets())
     outsets.Unite(BorderImageOutsets());
@@ -2524,7 +2541,7 @@ Color ComputedStyle::GetInternalVisitedCurrentColor() const {
 
 Color ComputedStyle::GetInternalForcedCurrentColor() const {
   DCHECK(!InternalForcedColor().IsCurrentColor());
-  if (GetColor().IsSystemColor())
+  if (GetColor().IsSystemColorIncludingDeprecated())
     return GetCurrentColor();
   return InternalForcedColor().Resolve(Color(), UsedColorScheme(),
                                        /* is_forced_color */ true);
@@ -2532,7 +2549,7 @@ Color ComputedStyle::GetInternalForcedCurrentColor() const {
 
 Color ComputedStyle::GetInternalForcedVisitedCurrentColor() const {
   DCHECK(!InternalForcedVisitedColor().IsCurrentColor());
-  if (InternalVisitedColor().IsSystemColor())
+  if (InternalVisitedColor().IsSystemColorIncludingDeprecated())
     return GetInternalVisitedCurrentColor();
   return InternalForcedVisitedColor().Resolve(Color(), UsedColorScheme(),
                                               /* is_forced_color */ true);
@@ -2629,6 +2646,14 @@ bool ComputedStyle::ShouldApplyAnyContainment(const Element& element) const {
          (!IsDisplayTableType() || IsDisplayTableBox() ||
           Display() == EDisplay::kTableCell ||
           Display() == EDisplay::kTableCaption);
+}
+
+bool ComputedStyle::IsContainerForContainerQueries(
+    const Element& element) const {
+  return IsContainerForContainerQueries() &&
+         !element.ShouldForceLegacyLayout() &&
+         (!element.IsSVGElement() ||
+          To<SVGElement>(element).IsOutermostSVGSVGElement());
 }
 
 STATIC_ASSERT_ENUM(cc::OverscrollBehavior::Type::kAuto,

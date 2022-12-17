@@ -4,6 +4,7 @@
 
 #include "ios/chrome/browser/prefs/browser_prefs.h"
 
+#include "base/time/time.h"
 #include "components/autofill/core/common/autofill_prefs.h"
 #include "components/browsing_data/core/pref_names.h"
 #include "components/component_updater/component_updater_service.h"
@@ -186,6 +187,8 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
                              base::Time());
   registry->RegisterTimePref(
       enterprise_reporting::kLastUploadSucceededTimestamp, base::Time());
+  registry->RegisterTimeDeltaPref(
+      enterprise_reporting::kCloudReportingUploadFrequency, base::Hours(24));
 
   registry->RegisterIntegerPref(kOmniboxGeolocationAuthorizationState, 0);
   registry->RegisterStringPref(kOmniboxGeolocationLastAuthorizationAlertVersion,
@@ -281,6 +284,8 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterStringPref(kLastPromptedGoogleURL, std::string());
   registry->RegisterStringPref(kGoogleServicesUsername, std::string());
   registry->RegisterStringPref(kGoogleServicesUserAccountId, std::string());
+  registry->RegisterStringPref(prefs::kNewTabPageLocationOverride,
+                               std::string());
 
   registry->RegisterBooleanPref(kGCMChannelStatus, true);
   registry->RegisterIntegerPref(kGCMChannelPollIntervalSeconds, 0);
@@ -367,9 +372,6 @@ void MigrateObsoleteBrowserStatePrefs(PrefService* prefs) {
 
   // Added 12/2020.
   prefs->ClearPref(kDomainsWithCookiePref);
-
-  // Added 2/2021.
-  syncer::ClearObsoletePassphrasePromptPrefs(prefs);
 
   // Added 8/2021.
   prefs->ClearPref(kSigninAllowedByPolicy);

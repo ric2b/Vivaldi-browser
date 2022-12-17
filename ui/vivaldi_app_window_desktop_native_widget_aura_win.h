@@ -35,6 +35,7 @@ class VivaldiAppWindowDesktopNativeWidgetAuraWin
   void InitNativeWidget(views::Widget::InitParams params) override;
   void Maximize() override;
   void Minimize() override;
+  void OnHostWorkspaceChanged(aura::WindowTreeHost* host) override;
 
  private:
   // Ownership managed by the views system.

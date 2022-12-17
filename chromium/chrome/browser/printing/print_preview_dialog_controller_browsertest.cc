@@ -112,7 +112,7 @@ class PrintPreviewDialogControllerBrowserTest
 
  private:
   void SetUpOnMainThread() override {
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         switches::kDisableModalAnimations);
 #endif
@@ -121,7 +121,7 @@ class PrintPreviewDialogControllerBrowserTest
         browser()->tab_strip_model()->GetActiveWebContents();
     ASSERT_TRUE(first_tab);
 
-    // Open a new tab so |cloned_tab_observer_| can see it and create a
+    // Open a new tab so `cloned_tab_observer_` can see it and create a
     // TestPrintViewManagerForRequestPreview for it before the real
     // PrintViewManager gets created.
     // Since TestPrintViewManagerForRequestPreview is created with

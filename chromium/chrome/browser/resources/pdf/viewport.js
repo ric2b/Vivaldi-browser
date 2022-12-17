@@ -82,12 +82,9 @@ export class Viewport {
     /** @private {!HTMLElement} */
     this.window_ = container;
 
-    /** @private {number} */
-    this.scrollbarWidth_ = scrollbarWidth;
-
     /** @private {!ScrollContent} */
     this.scrollContent_ =
-        new ScrollContent(this.window_, sizer, content, this.scrollbarWidth_);
+        new ScrollContent(this.window_, sizer, content, scrollbarWidth);
 
     /** @private {number} */
     this.defaultZoom_ = defaultZoom;
@@ -132,6 +129,9 @@ export class Viewport {
     /** @private {number} */
     this.prevScale_ = 1;
 
+    /** @private {boolean} */
+    this.smoothScrolling_ = false;
+
     /** @private {!PinchPhase} */
     this.pinchPhase_ = PinchPhase.NONE;
 
@@ -171,6 +171,10 @@ export class Viewport {
         'pinchend',
         e => this.onPinchEnd_(
             /** @type {!CustomEvent<!PinchEventDetail>} */ (e)));
+    this.gestureDetector_.getEventTarget().addEventListener(
+        'wheel',
+        e => this.onWheel_(
+            /** @type {!CustomEvent<!PinchEventDetail>} */ (e)));
 
     // Set to a default zoom manager - used in tests.
     this.setZoomManager(new InactiveZoomManager(this.getZoom.bind(this), 1));
@@ -200,6 +204,15 @@ export class Viewport {
 
     document.body.addEventListener(
         'change-zoom', e => this.setZoom(e.detail.zoom));
+  }
+
+  /**
+   * Sets whether the viewport is in Presentation mode.
+   * @param {boolean} enabled
+   */
+  setPresentationMode(enabled) {
+    assert((document.fullscreenElement !== null) === enabled);
+    this.gestureDetector_.setPresentationMode(enabled);
   }
 
   /**
@@ -490,9 +503,10 @@ export class Viewport {
   /**
    * Scroll the viewport to the specified position.
    * @param {!Point} position The position to scroll to.
+   * @param {boolean} isSmooth Whether to scroll smoothly.
    */
-  setPosition(position) {
-    this.scrollContent_.scrollTo(position.x, position.y);
+  setPosition(position, isSmooth = false) {
+    this.scrollContent_.scrollTo(position.x, position.y, isSmooth);
   }
 
   /** @return {!Size} The size of the viewport. */
@@ -504,11 +518,11 @@ export class Viewport {
   }
 
   /**
-   * Exposes the current content size for testing.
+   * Gets the content size.
    * @return {!Size}
    */
-  get contentSizeForTesting() {
-    return this.scrollContent_.sizeForTesting;
+  get contentSize() {
+    return this.scrollContent_.size;
   }
 
   /** @return {number} The current zoom. */
@@ -680,9 +694,21 @@ export class Viewport {
     });
   }
 
-  /** @return {number} The width of scrollbars in the viewport in pixels. */
+  /**
+   * Gets the width of scrollbars in the viewport in pixels.
+   * @return {number}
+   */
   get scrollbarWidth() {
-    return this.scrollbarWidth_;
+    return this.scrollContent_.scrollbarWidth;
+  }
+
+  /**
+   * Gets the width of overlay scrollbars in the viewport in pixels, or 0 if not
+   * using overlay scrollbars.
+   * @return {number}
+   */
+  get overlayScrollbarWidth() {
+    return this.scrollContent_.overlayScrollbarWidth;
   }
 
   /** @return {FittingType} The fitting type the viewport is currently in. */
@@ -868,7 +894,7 @@ export class Viewport {
     const zoomedDimensions = this.getZoomedDocumentDimensions_(zoom);
 
     // Check if adding a scrollbar will result in needing the other scrollbar.
-    const scrollbarWidth = this.scrollbarWidth_;
+    const scrollbarWidth = this.scrollContent_.scrollbarWidth;
     if (needsScrollbars.horizontal &&
         zoomedDimensions.height > this.window_.offsetHeight - scrollbarWidth) {
       needsScrollbars.vertical = true;
@@ -1094,11 +1120,18 @@ export class Viewport {
       // Since we do the movement of the page.
       e.preventDefault();
     } else if (isCrossFrameKeyEvent(e)) {
-      const scrollOffset = (isDown ? 1 : -1) * this.size.height;
-      this.setPosition({
-        x: this.position.x,
-        y: this.position.y + scrollOffset,
-      });
+      // Web scrolls by a fraction of the viewport height. Use the same
+      // fractional value as `cc::kMinFractionToStepWhenPaging` in
+      // cc/input/scroll_utils.h. The values must be kept in sync.
+      const MIN_FRACTION_TO_STEP_WHEN_PAGING = 0.875;
+      const scrollOffset = (isDown ? 1 : -1) * this.size.height *
+          MIN_FRACTION_TO_STEP_WHEN_PAGING;
+      this.setPosition(
+          {
+            x: this.position.x,
+            y: this.position.y + scrollOffset,
+          },
+          this.smoothScrolling_);
     }
 
     this.window_.dispatchEvent(new CustomEvent('scroll-proceeded-for-testing'));
@@ -1122,10 +1155,12 @@ export class Viewport {
       e.preventDefault();
     } else if (isCrossFrameKeyEvent(e)) {
       const scrollOffset = (isRight ? 1 : -1) * SCROLL_INCREMENT;
-      this.setPosition({
-        x: this.position.x + scrollOffset,
-        y: this.position.y,
-      });
+      this.setPosition(
+          {
+            x: this.position.x + scrollOffset,
+            y: this.position.y,
+          },
+          this.smoothScrolling_);
     }
   }
 
@@ -1163,8 +1198,13 @@ export class Viewport {
   handleDirectionalKeyEvent(e, formFieldFocused) {
     switch (e.key) {
       case ' ':
+        this.pageUpDownSpaceHandler_(e, formFieldFocused);
+        return true;
       case 'PageUp':
       case 'PageDown':
+        if (hasKeyModifiers(e)) {
+          return false;
+        }
         this.pageUpDownSpaceHandler_(e, formFieldFocused);
         return true;
       case 'ArrowLeft':
@@ -1381,6 +1421,13 @@ export class Viewport {
   }
 
   /**
+   * @param {boolean} isSmooth
+   */
+  setSmoothScrolling(isSmooth) {
+    this.smoothScrolling_ = isSmooth;
+  }
+
+  /**
    * @param {!PartialPoint} point The position to which to scroll the viewport.
    */
   scrollTo(point) {
@@ -1530,6 +1577,19 @@ export class Viewport {
       // By doing so we will be able to compute the pan distance.
       this.firstPinchCenterInFrame_ = e.detail.center;
     });
+  }
+
+  /**
+   * A callback that's called when a Presentation mode wheel event is detected.
+   * @param {!CustomEvent<!PinchEventDetail>} e the pinch event.
+   * @private
+   */
+  onWheel_(e) {
+    if (e.detail.direction === 'down') {
+      this.goToNextPage();
+    } else {
+      this.goToPreviousPage();
+    }
   }
 
   /** @return {!GestureDetector} */
@@ -1751,11 +1811,33 @@ class ScrollContent {
     this.dispatchScroll_();
   }
 
+  /** @return {number} */
+  get scrollbarWidth() {
+    return this.scrollbarWidth_;
+  }
+
+  /** @return {number} */
+  get overlayScrollbarWidth() {
+    let overlayScrollbarWidth = 0;
+
+    // TODO(crbug.com/1286009): Support overlay scrollbars on all platforms.
+    // <if expr="is_macosx">
+    overlayScrollbarWidth = 16;
+    // </if>
+    // <if expr="not is_macosx">
+    if (this.unseasonedPlugin_) {
+      overlayScrollbarWidth = this.scrollbarWidth_;
+    }
+    // </if>
+
+    return overlayScrollbarWidth;
+  }
+
   /**
-   * Exposes the current content size for testing.
+   * Gets the content size.
    * @return {!Size}
    */
-  get sizeForTesting() {
+  get size() {
     return {
       width: this.width_,
       height: this.height_,
@@ -1808,8 +1890,9 @@ class ScrollContent {
    * Scrolls to the given coordinates.
    * @param {number} x
    * @param {number} y
+   * @param {boolean} isSmooth Whether to scroll smoothly.
    */
-  scrollTo(x, y) {
+  scrollTo(x, y, isSmooth = false) {
     if (this.unseasonedPlugin_) {
       // TODO(crbug.com/1277228): Can get NaN if zoom calculations divide by 0.
       x = Number.isNaN(x) ? 0 : x;
@@ -1825,12 +1908,13 @@ class ScrollContent {
           this.width_ > this.container_.clientWidth);
 
       if (this.container_.dir === 'rtl') {
-        // Right-to-left.
+        // Right-to-left. If `maxX` > 0, clamp to [-maxX, 0]. Else set to 0.
         x = Math.min(Math.max(-maxX, x), 0);
       } else {
-        // Left-to-right.
+        // Left-to-right. If `maxX` > 0, clamp to [0, maxX]. Else set to 0.
         x = Math.max(0, Math.min(x, maxX));
       }
+      // If `maxY` > 0, clamp to [0, maxY]. Else set to 0.
       y = Math.max(0, Math.min(y, maxY));
 
       // To match the DOM's scrollTo() behavior, update the scroll position
@@ -1844,6 +1928,7 @@ class ScrollContent {
         type: 'syncScrollToRemote',
         x: this.scrollLeft_,
         y: this.scrollTop_,
+        isSmooth: isSmooth,
       });
     } else {
       this.container_.scrollTo(x, y);

@@ -24,7 +24,7 @@
 #include "ui/base/ui_base_paths.h"
 #include "url/url_util.h"
 
-#if defined(OS_IOS)
+#if BUILDFLAG(IS_IOS)
 #include "components/test/ios_components_test_initializer.h"
 #else
 #include "content/public/common/content_client.h"
@@ -65,7 +65,7 @@ class ComponentsTestSuite : public base::TestSuite {
     url::AddStandardScheme("chrome-search", url::SCHEME_WITH_HOST);
     url::AddStandardScheme("chrome-distiller", url::SCHEME_WITH_HOST);
 
-#if !defined(OS_IOS)
+#if !BUILDFLAG(IS_IOS)
     gl::GLSurfaceTestSupport::InitializeOneOff();
 
     content::ForceInProcessNetworkService(true);
@@ -85,7 +85,7 @@ class ComponentsTestSuite : public base::TestSuite {
     ui::RegisterPathProvider();
 
     base::FilePath pak_path;
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
     base::PathService::Get(ui::DIR_RESOURCE_PAKS_ANDROID, &pak_path);
 #else
     base::PathService::Get(base::DIR_ASSETS, &pak_path);
@@ -120,7 +120,7 @@ class ComponentsUnitTestEventListener : public testing::EmptyTestEventListener {
   ~ComponentsUnitTestEventListener() override = default;
 
   void OnTestStart(const testing::TestInfo& test_info) override {
-#if defined(OS_IOS)
+#if BUILDFLAG(IS_IOS)
     ios_initializer_.reset(new IosComponentsTestInitializer());
 #else
     content_initializer_ =
@@ -129,7 +129,7 @@ class ComponentsUnitTestEventListener : public testing::EmptyTestEventListener {
   }
 
   void OnTestEnd(const testing::TestInfo& test_info) override {
-#if defined(OS_IOS)
+#if BUILDFLAG(IS_IOS)
     ios_initializer_.reset();
 #else
     content_initializer_.reset();
@@ -137,7 +137,7 @@ class ComponentsUnitTestEventListener : public testing::EmptyTestEventListener {
   }
 
  private:
-#if defined(OS_IOS)
+#if BUILDFLAG(IS_IOS)
   std::unique_ptr<IosComponentsTestInitializer> ios_initializer_;
 #else
   std::unique_ptr<content::TestContentClientInitializer> content_initializer_;
@@ -149,7 +149,7 @@ class ComponentsUnitTestEventListener : public testing::EmptyTestEventListener {
 base::RunTestSuiteCallback GetLaunchCallback(int argc, char** argv) {
   vivaldi::InitTestPathEnvironment();
 
-#if !defined(OS_IOS)
+#if !BUILDFLAG(IS_IOS)
   auto test_suite = std::make_unique<content::UnitTestTestSuite>(
       new ComponentsTestSuite(argc, argv));
 #else
@@ -162,7 +162,7 @@ base::RunTestSuiteCallback GetLaunchCallback(int argc, char** argv) {
       testing::UnitTest::GetInstance()->listeners();
   listeners.Append(new ComponentsUnitTestEventListener());
 
-#if !defined(OS_IOS)
+#if !BUILDFLAG(IS_IOS)
   return base::BindOnce(&content::UnitTestTestSuite::Run,
                         std::move(test_suite));
 #else

@@ -44,7 +44,6 @@ import org.chromium.components.prefs.PrefService;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.AccountUtils;
-import org.chromium.components.signin.ChildAccountStatus;
 import org.chromium.components.signin.GAIAServiceType;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
@@ -278,6 +277,10 @@ public class AccountManagementFragment extends PreferenceFragmentCompat
     }
 
     private void updateAccountsList(List<Account> accounts) {
+        // This method is called asynchronously on accounts fetched from AccountManagerFacade.
+        // Make sure the fragment is alive before updating preferences.
+        if (!isResumed()) return;
+
         setAccountBadges(accounts);
 
         PreferenceCategory accountsCategory = findPreference(PREF_ACCOUNTS_CATEGORY);
@@ -381,8 +384,8 @@ public class AccountManagementFragment extends PreferenceFragmentCompat
     private void setAccountBadges(List<Account> accounts) {
         for (Account account : accounts) {
             AccountManagerFacadeProvider.getInstance().checkChildAccountStatus(
-                    account, (status, childAccount) -> {
-                        if (ChildAccountStatus.isChild(status)) {
+                    account, (isChild, childAccount) -> {
+                        if (isChild) {
                             mProfileDataCache.setBadge(
                                     childAccount, R.drawable.ic_account_child_20dp);
                         }

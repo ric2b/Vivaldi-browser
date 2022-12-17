@@ -23,9 +23,12 @@ void WebViewImpl::SetPluginsEnabled(const bool plugins_enabled) {
 }
 
 void WebViewImpl::SetImagesEnabled(const bool images_enabled) {
-  Document* document = page_->MainFrame()->IsLocalFrame()
-                           ? page_->DeprecatedLocalMainFrame()->GetDocument()
-                           : 0;
+
+  auto* main_local_frame = DynamicTo<LocalFrame>(GetPage()->MainFrame());
+  if (!main_local_frame)
+    return;
+
+  Document* document = main_local_frame->GetDocument();
 
   if (document && document->GetSettings()->GetImagesEnabled() == images_enabled)
     return;

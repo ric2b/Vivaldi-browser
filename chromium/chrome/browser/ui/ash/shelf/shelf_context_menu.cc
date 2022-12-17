@@ -268,7 +268,7 @@ bool ShelfContextMenu::ExecuteCommonCommand(int command_id, int event_flags) {
     case ash::MENU_OPEN_NEW:
       ash::full_restore::FullRestoreService::MaybeCloseNotification(
           controller()->profile());
-      FALLTHROUGH;
+      [[fallthrough]];
     case ash::MENU_CLOSE:
     case ash::MENU_PIN:
     case ash::SWAP_WITH_NEXT:
@@ -292,7 +292,7 @@ void ShelfContextMenu::AddContextMenuOption(ui::SimpleMenuModel* menu_model,
   if (!icon.is_empty()) {
     menu_model->AddItemWithStringIdAndIcon(
         type, string_id,
-        ui::ImageModel::FromVectorIcon(icon, ui::kColorMenuIcon,
+        ui::ImageModel::FromVectorIcon(icon, ui::kColorAshSystemUIMenuIcon,
                                        ash::kAppContextMenuIconSize));
     return;
   }

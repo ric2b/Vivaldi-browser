@@ -13,6 +13,13 @@
 #include "extensions/common/draggable_region.h"
 
 class VivaldiBrowserWindow;
+namespace content {
+struct OpenURLParams;
+}
+
+namespace viz {
+class SurfaceId;
+}
 
 // WebContents delegate for Vivaldi UI in the browser window.
 class VivaldiUIWebContentsDelegate : public content::WebContentsDelegate,
@@ -55,9 +62,7 @@ class VivaldiUIWebContentsDelegate : public content::WebContentsDelegate,
                                   const GURL& security_origin,
                                   blink::mojom::MediaStreamType type) override;
   content::PictureInPictureResult EnterPictureInPicture(
-      content::WebContents* web_contents,
-      const viz::SurfaceId& surface_id,
-      const gfx::Size& natural_size) override;
+      content::WebContents* web_contents) override;
   void ExitPictureInPicture() override;
   void PrintCrossProcessSubframe(
       content::WebContents* web_contents,
@@ -65,9 +70,14 @@ class VivaldiUIWebContentsDelegate : public content::WebContentsDelegate,
       int document_cookie,
       content::RenderFrameHost* subframe_host) const override;
   void ActivateContents(content::WebContents* contents) override;
-
   void DidStartNavigation(
       content::NavigationHandle* navigation_handle) override;
+  content::WebContents* OpenURLFromTab(
+      content::WebContents* source,
+      const content::OpenURLParams& params) override;
+  std::unique_ptr<content::EyeDropper> OpenEyeDropper(
+      content::RenderFrameHost* frame,
+      content::EyeDropperListener* listener) override;
 
  private:
   // content::WebContentsObserver

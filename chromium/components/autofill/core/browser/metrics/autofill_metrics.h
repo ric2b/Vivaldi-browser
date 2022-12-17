@@ -1209,6 +1209,15 @@ class AutofillMetrics {
     kMaxValue = kPartialFill,
   };
 
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  enum class SuggestionClickResult {
+    kAccepted = 0,
+    kIgnored = 1,
+    kAcceptedAfterIgnored = 2,
+    kMaxValue = kAcceptedAfterIgnored
+  };
+
   // Utility to log URL keyed form interaction events.
   class FormInteractionsUkmLogger {
    public:
@@ -1656,9 +1665,13 @@ class AutofillMetrics {
   // This should be called each time a new chrome profile is launched.
   static void LogIsAutofillCreditCardEnabledAtStartup(bool enabled);
 
-  // Records the number of stored address profiles. This is be called each time
-  // a new chrome profile is launched.
+  // Records the number of stored address profiles. This is called each time a
+  // new Chrome profile is launched.
   static void LogStoredProfileCount(size_t num_profiles);
+
+  // Records the number of profiles without a country. This is called each time
+  // a new Chrome profile is launched.
+  static void LogStoredProfilesWithoutCountry(size_t num_profiles);
 
   // Records the number of stored address profiles which have not been used in
   // a long time. This is be called each time a new chrome profile is launched.
@@ -1717,6 +1730,10 @@ class AutofillMetrics {
   // Log the number of Autofill address suggestions presented to the user when
   // filling a form.
   static void LogAddressSuggestionsCount(size_t num_suggestions);
+
+  // Log whether a click was handled, ignored, or the followup of an ignored
+  // click.
+  static void LogSuggestionClick(SuggestionClickResult value);
 
   // Log the index of the selected Autofill suggestion in the popup.
   static void LogAutofillSuggestionAcceptedIndex(int index,
@@ -1918,18 +1935,34 @@ class AutofillMetrics {
   static void LogSilentUpdatesProfileImportType(
       AutofillProfileImportType import_type);
 
-  // Logs the user decision for importing a new profile
+  // Logs the user decision for importing a new profile.
   static void LogNewProfileImportDecision(
+      AutofillClient::SaveAddressProfileOfferUserDecision decision);
+
+  // Logs the user decision for importing a new profile with auto complemented
+  // country.
+  // TODO(crbug.com/1297032): Cleanup when launched.
+  static void LogNewProfileWithComplementedCountryImportDecision(
       AutofillClient::SaveAddressProfileOfferUserDecision decision);
 
   // Logs that a specific type was edited in a save prompt.
   static void LogNewProfileEditedType(ServerFieldType edited_type);
+
+  // Logs that the auto complemented country was edited in a save prompt.
+  // TODO(crbug.com/1297032): Cleanup when launched.
+  static void LogNewProfileEditedComplementedCountry();
 
   // Logs the number of edited fields for an accepted profile save.
   static void LogNewProfileNumberOfEditedFields(int number_of_edited_fields);
 
   // Logs the user decision for updating an exiting profile.
   static void LogProfileUpdateImportDecision(
+      AutofillClient::SaveAddressProfileOfferUserDecision decision);
+
+  // Logs the user decision for updating an exiting profile with auto
+  // complemented country.
+  // TODO(crbug.com/1297032): Cleanup when launched.
+  static void LogProfileUpdateWithComplementedCountryImportDecision(
       AutofillClient::SaveAddressProfileOfferUserDecision decision);
 
   // Logs that a specific type changed in a profile update that received the
@@ -1941,6 +1974,10 @@ class AutofillMetrics {
 
   // Logs that a specific type was edited in an update prompt.
   static void LogProfileUpdateEditedType(ServerFieldType edited_type);
+
+  // Logs that the auto complemented country was edited in an update prompt.
+  // TODO(crbug.com/1297032): Cleanup when launched.
+  static void LogProfileUpdateEditedComplementedCountry();
 
   // Logs the number of edited fields for an accepted profile update.
   static void LogUpdateProfileNumberOfEditedFields(int number_of_edited_fields);
@@ -2008,6 +2045,12 @@ class AutofillMetrics {
   // The total number of values in the |CardUploadDecisionMetric| enum. Must be
   // updated each time a new value is added.
   static const int kNumCardUploadDecisionMetrics = 19;
+
+  // Logs whether the submitted field value is same as the non-empty value
+  // to be autofilled in the field, when the field had a different prefilled
+  // value.
+  static void LogIsValueNotAutofilledOverExistingValueSameAsSubmittedValue(
+      bool is_same);
 
  private:
   static void Log(AutocompleteEvent event);

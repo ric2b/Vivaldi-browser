@@ -3,6 +3,7 @@
 <translationbundle lang="id">
 <translation id="102360288709523007">Bantu penyempurnaan Chromium dengan mengirimkan statistik penggunaan dan laporan kerusakan ke Google.</translation>
 <translation id="1047130070405668746">Pilih Chromium</translation>
+<translation id="1091252999271033193">Artinya, Chromium akan selalu meminta situs seluler.</translation>
 <translation id="1185134272377778587">Tentang Chromium</translation>
 <translation id="1257458525759135959">Untuk menyimpan gambar, ketuk Setelan untuk mengizinkan Chromium menambahkannya ke galeri foto Anda</translation>
 <translation id="1289216811211435351">Beralih ke Chromium</translation>
@@ -26,6 +27,7 @@
 <translation id="2178608107313874732">Chromium saat ini tidak dapat menggunakan kamera</translation>
 <translation id="2195025571279539885">Ingin Chromium menawarkan untuk menerjemahkan halaman berbahasa <ph name="LANGUAGE_NAME" /> dari situs ini saat Anda mengunjunginya lagi?</translation>
 <translation id="2218146227246548550">Organisasi mengharuskan Anda login untuk menggunakan Chromium. <ph name="BEGIN_LINK" />Pelajari Lebih Lanjut<ph name="END_LINK" /></translation>
+<translation id="2236584955986023187">Artinya, Chromium akan selalu meminta situs desktop.</translation>
 <translation id="2426113998523353159">Organisasi mengharuskan Anda login untuk menggunakan Chromium.</translation>
 <translation id="2450140762465183767">Anda sekarang dapat menggunakan Chromium kapan saja dengan mengetuk link di pesan, dokumen, dan aplikasi lainnya.</translation>
 <translation id="2478931088402984578">Pilih <ph name="BEGIN_BOLD" />Chromium<ph name="END_BOLD" /></translation>
@@ -43,7 +45,6 @@
 <translation id="3472200483164753384">Tidak didukung di Chromium Canary</translation>
 <translation id="3639997914391704523">Chromium dapat memeriksa sandi saat Anda login dengan Akun Google.</translation>
 <translation id="3805899903892079518">Chromium tidak memiliki akses ke foto atau video Anda. Izinkan akses di iOS Settings &gt; Privacy &gt; Photos.</translation>
-<translation id="3946918322491238254">Anda tetap dapat melihat semua bookmark, histori, sandi, dan setelan lain di perangkat ini. Jika Anda membuat perubahan, perubahan tersebut tidak akan disinkronkan ke akun Anda.</translation>
 <translation id="4043291146360695975">Sandi hanya disimpan ke Pengelola Sandi di perangkat ini.</translation>
 <translation id="4099085513035183040">Tidak didukung di Chromium Beta</translation>
 <translation id="4555020257205549924">Saat fitur ini diaktifkan, Chromium akan menawarkan untuk menerjemahkan halaman yang ditulis dalam bahasa lain menggunakan Google Terjemahan. <ph name="BEGIN_LINK" />Pelajari lebih lanjut<ph name="END_LINK" /></translation>
@@ -90,6 +91,7 @@
 <translation id="7313655110045230863">Untuk menjadikan Chromium sebagai browser default, buka Setelan. Ketuk Aplikasi Browser Default, lalu pilih Chromium.</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7357211569052832586">Data yang dipilih telah dihapus dari Chromium dan perangkat yang disinkronkan. Akun Google Anda mungkin memiliki bentuk histori penelusuran lain seperti penelusuran dan aktivitas dari layanan Google lainnya di history.google.com.</translation>
+<translation id="7395825497086981028">Sandi Anda akan disimpan ke Pengelola Sandi untuk <ph name="EMAIL" />.</translation>
 <translation id="7400689562045506105">Gunakan Chromium di Mana Saja</translation>
 <translation id="766897673682622022">Sandi Anda terekspos saat terjadi pelanggaran data. Chromium merekomendasikan untuk mengubah sandi sekarang.</translation>
 <translation id="7674213385180944843">Buka Setelan &gt; Privasi &gt; Kamera &gt; Chromium, lalu aktifkan kamera.</translation>

@@ -153,6 +153,13 @@ DlpRulesManager::Level IsDataTransferAllowed(
       break;
     }
 
+    case ui::EndpointType::kLacros: {
+      // Return ALLOW for Lacros destinations, as Lacros itself will make DLP
+      // checks.
+      level = DlpRulesManager::Level::kAllow;
+      break;
+    }
+
     case ui::EndpointType::kUnknownVm:
     case ui::EndpointType::kBorealis:
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
@@ -197,13 +204,11 @@ void ReportWarningProceededEvent(const ui::DataTransferEndpoint* const data_src,
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     reporting_manager->ReportWarningProceededEvent(
         src_pattern, GetComponent(data_dst->type()),
-        DlpRulesManager::Restriction::kClipboard,
-        DlpRulesManager::Level::kNotSet);
+        DlpRulesManager::Restriction::kClipboard);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   } else {
     reporting_manager->ReportWarningProceededEvent(
-        src_pattern, dst_pattern, DlpRulesManager::Restriction::kClipboard,
-        DlpRulesManager::Level::kNotSet);
+        src_pattern, dst_pattern, DlpRulesManager::Restriction::kClipboard);
   }
 }
 
@@ -355,7 +360,7 @@ void DataTransferDlpController::DropIfAllowed(
       break;
 
     case DlpRulesManager::Level::kAllow:
-      FALLTHROUGH;
+      [[fallthrough]];
     case DlpRulesManager::Level::kReport:
       std::move(drop_cb).Run();
       break;
@@ -374,6 +379,10 @@ DataTransferDlpController::DataTransferDlpController(
     : dlp_rules_manager_(dlp_rules_manager) {}
 
 DataTransferDlpController::~DataTransferDlpController() = default;
+
+base::TimeDelta DataTransferDlpController::GetSkipReportingTimeout() {
+  return kSkipReportingTimeout;
+}
 
 void DataTransferDlpController::NotifyBlockedPaste(
     const ui::DataTransferEndpoint* const data_src,
@@ -440,7 +449,7 @@ bool DataTransferDlpController::ShouldSkipReporting(
     base::UmaHistogramTimes(
         GetDlpHistogramPrefix() + dlp::kDataTransferReportingTimeDiffUMA,
         time_diff);
-    return time_diff < kSkipReportingTimeout;
+    return time_diff < GetSkipReportingTimeout();
   }
   return false;
 }

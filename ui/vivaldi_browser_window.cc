@@ -65,6 +65,7 @@
 #include "content/public/browser/file_select_listener.h"
 #include "content/public/browser/keyboard_event_processing_result.h"
 #include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/site_instance.h"
 #include "extensions/api/events/vivaldi_ui_events.h"
@@ -86,7 +87,6 @@
 #include "extensions/tools/vivaldi_tools.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "ui/devtools/devtools_connector.h"
-//#include "ui/gfx/geometry/rect.h"
 #include "ui/display/screen.h"
 #include "ui/views/controls/webview/webview.h"
 #include "ui/vivaldi_location_bar.h"
@@ -166,6 +166,14 @@ VivaldiAutofillBubbleHandler::ShowVirtualCardManualFallbackBubble(
   return nullptr;
 }
 
+autofill::AutofillBubbleBase*
+VivaldiAutofillBubbleHandler::ShowVirtualCardEnrollBubble(
+    content::WebContents* web_contents,
+    autofill::VirtualCardEnrollBubbleController* controller,
+    bool is_user_gesture) {
+  return nullptr;
+}
+
 namespace {
 static base::TimeTicks g_first_window_creation_time;
 
@@ -210,9 +218,14 @@ std::unique_ptr<content::WebContents> CreateBrowserWebContents(
   // the owner as default values in BrowserPluginGuest::InitInternal().
   renderer_preferences_util::UpdateFromSystemSettings(render_prefs, profile);
 
-  web_contents->GetMutableRendererPrefs()
-      ->browser_handles_all_top_level_requests = true;
+  web_contents->GetMutableRendererPrefs()->
+      browser_handles_all_top_level_requests = true;
   web_contents->SyncRendererPrefs();
+
+  auto prefs = web_contents->GetOrCreateWebPreferences();
+  // Enable opening of dropped files if nothing can handle the drop.
+  prefs.navigate_on_drag_drop = true;
+  web_contents->SetWebPreferences(prefs);
 
   return web_contents;
 }
@@ -246,6 +259,8 @@ VivaldiBrowserWindow::VivaldiBrowserWindow() {
 }
 
 VivaldiBrowserWindow::~VivaldiBrowserWindow() {
+  DCHECK(root_doc_handler_);
+  root_doc_handler_->RemoveObserver(this);
   OnDidFinishNavigation(false);
 }
 
@@ -286,11 +301,18 @@ VivaldiBrowserWindow* VivaldiBrowserWindow::CreateVivaldiBrowserWindow(
                                   std::min(300, display_size.height()));
   params.native_decorations = browser->profile()->GetPrefs()->GetBoolean(
       vivaldiprefs::kWindowsUseNativeDecoration);
+
   chrome::GetSavedWindowBoundsAndShowState(
       browser.get(), &params.content_bounds, &params.state);
   params.resource_relative_url = VIVALDI_BROWSER_DOCUMENT;
+  params.workspace = browser->initial_workspace();
+  params.visible_on_all_workspaces =
+      browser->initial_visible_on_all_workspaces_state();
 
   VivaldiBrowserWindow* window = new VivaldiBrowserWindow();
+
+  window->SetWindowURL(VIVALDI_BROWSER_DOCUMENT);
+
   window->CreateWebContents(std::move(browser), params);
 
   return window;
@@ -389,17 +411,25 @@ void VivaldiBrowserWindow::CreateWebContents(
   // TODO(pettern): Crashes on shutdown, fix.
   // extensions::ExtensionRegistry::Get(browser_->profile())->AddObserver(this);
 
-  // Ensure we force show the window after some time no matter what.
-  // base::Unretained() is safe as this owns the timer.
-  show_delay_timeout_ = std::make_unique<base::OneShotTimer>();
-  show_delay_timeout_->Start(
-      FROM_HERE, base::Milliseconds(5000),
-      base::BindOnce(&VivaldiBrowserWindow::ForceShow, base::Unretained(this)));
+  // Set this as a listener for the root document holding portal-windows.
+  root_doc_handler_ =
+      extensions::VivaldiRootDocumentHandlerFactory::GetForBrowserContext(
+          web_contents_->GetBrowserContext());
+  DCHECK(root_doc_handler_);
+  root_doc_handler_->AddObserver(this);
+}
 
-  GURL resource_url = extension_->GetResourceURL(params.resource_relative_url);
+void VivaldiBrowserWindow::OnRootDocumentDidFinishNavigation() {
+  GURL resource_url = extension_->GetResourceURL(resource_relative_url_);
   web_contents()->GetController().LoadURL(resource_url, content::Referrer(),
                                           ui::PAGE_TRANSITION_LINK,
                                           std::string());
+  // This window is no longer interested in states from the root document.
+  root_doc_handler_->RemoveObserver(this);
+}
+
+content::WebContents* VivaldiBrowserWindow::GetRootDocumentWebContents() {
+  return web_contents_.get();
 }
 
 void VivaldiBrowserWindow::OnIconImagesLoaded(gfx::ImageFamily image_family) {
@@ -422,11 +452,6 @@ void VivaldiBrowserWindow::ContentsDidStartNavigation() {
                             browser_->profile());
 }
 
-void VivaldiBrowserWindow::ForceShow() {
-  show_delay_timeout_.reset();
-  Show();
-}
-
 void VivaldiBrowserWindow::Show() {
 #if !defined(OS_WIN)
   // The Browser associated with this browser window must become the active
@@ -440,10 +465,6 @@ void VivaldiBrowserWindow::Show() {
     BrowserList::SetLastActive(browser());
   }
 #endif
-
-  // We delay showing it until the UI document has loaded.
-  if (show_delay_timeout_)
-    return;
 
   if (has_been_shown_)
     return;
@@ -731,6 +752,10 @@ bool VivaldiBrowserWindow::IsFullscreenBubbleVisible() const {
   return false;
 }
 
+bool VivaldiBrowserWindow::IsForceFullscreen() const {
+  return false;
+}
+
 LocationBar* VivaldiBrowserWindow::GetLocationBar() const {
   return location_bar_.get();
 }
@@ -864,11 +889,11 @@ void VivaldiBrowserWindow::ShowEmojiPanel() {
 }
 
 std::string VivaldiBrowserWindow::GetWorkspace() const {
-  return std::string();
+  return views_->GetWorkspace();
 }
 
 bool VivaldiBrowserWindow::IsVisibleOnAllWorkspaces() const {
-  return false;
+  return views_->IsVisibleOnAllWorkspaces();
 }
 
 Profile* VivaldiBrowserWindow::GetProfile() {
@@ -905,7 +930,7 @@ void VivaldiBrowserWindow::UpdateDevTools() {
   TabStripModel* tab_strip_model = browser_->tab_strip_model();
 
   // Get the docking state.
-  const base::DictionaryValue* prefs =
+  const base::Value* prefs =
       browser_->profile()->GetPrefs()->GetDictionary(
           prefs::kDevToolsPreferences);
 
@@ -942,7 +967,10 @@ void VivaldiBrowserWindow::UpdateDevTools() {
   if (window) {
     // We handle the closing devtools windows above.
     if (!window->IsClosing()) {
-      if (prefs->GetString("currentDockState", &docking_state)) {
+      const std::string* tmp_str =
+          prefs->GetDict().FindString("currentDockState");
+      if (tmp_str) {
+        docking_state = *tmp_str;
         // Strip quotation marks from the state.
         base::ReplaceChars(docking_state, "\"", "", &docking_state);
         if (item->docking_state() != docking_state) {
@@ -952,7 +980,9 @@ void VivaldiBrowserWindow::UpdateDevTools() {
               browser_->profile(), tab_id, docking_state);
         }
       }
-      if (prefs->GetString("showDeviceMode", &device_mode)) {
+      tmp_str = prefs->GetDict().FindString("showDeviceMode");
+      if (tmp_str) {
+        device_mode = *tmp_str;
         base::ReplaceChars(device_mode, "\"", "", &device_mode);
         bool device_mode_enabled = device_mode == "true";
         if (item->device_mode_enabled() == device_mode_enabled) {
@@ -1038,7 +1068,6 @@ void VivaldiBrowserWindow::OnNativeClose() {
     modal_dialog_manager->SetDelegate(nullptr);
   }
   web_contents_.reset();
-  show_delay_timeout_.reset();
 
   // For a while we used a direct "delete this" here. That causes the browser_
   // object to be destoyed immediately and that will kill the private profile.
@@ -1109,11 +1138,14 @@ void VivaldiBrowserWindow::SetWebContentsBlocked(
     bool blocked) {
   // The implementation is copied from
   // ChromeAppDelegate::SetWebContentsBlocked().
-  if (!blocked)
-    web_contents->Focus();
+  if (!blocked) {
+    content::RenderWidgetHostView* rwhv = web_contents->GetRenderWidgetHostView();
+    if (rwhv)
+      rwhv->Focus();
+  }
   // RenderViewHost may be NULL during shutdown.
   content::RenderFrameHost* host = web_contents->GetMainFrame();
-  if (host) {
+  if (host && host->GetRemoteInterfaces()) {
     mojo::Remote<extensions::mojom::AppWindow> app_window;
     host->GetRemoteInterfaces()->GetInterface(
         app_window.BindNewPipeAndPassReceiver());
@@ -1123,7 +1155,9 @@ void VivaldiBrowserWindow::SetWebContentsBlocked(
 
 bool VivaldiBrowserWindow::IsWebContentsVisible(
     content::WebContents* web_contents) {
-  return platform_util::IsVisible(web_contents->GetNativeView());
+  if (web_contents->GetNativeView())
+    return platform_util::IsVisible(web_contents->GetNativeView());
+  return false;
 }
 
 web_modal::WebContentsModalDialogHost*
@@ -1206,8 +1240,16 @@ ui::NativeTheme* VivaldiBrowserWindow::GetNativeTheme() {
   return nullptr;
 }
 
+const ui::ThemeProvider* VivaldiBrowserWindow::GetThemeProvider() const {
+  return nullptr;
+}
+
 const ui::ColorProvider* VivaldiBrowserWindow::GetColorProvider() const {
   return nullptr;
+}
+
+ui::ElementContext VivaldiBrowserWindow::GetElementContext() {
+  return {};
 }
 
 int VivaldiBrowserWindow::GetTopControlsHeight() const {
@@ -1358,4 +1400,25 @@ std::unique_ptr<content::EyeDropper> VivaldiBrowserWindow::OpenEyeDropper(
 
 FeaturePromoController* VivaldiBrowserWindow::GetFeaturePromoController() {
   return nullptr;
+}
+
+bool VivaldiBrowserWindow::IsFeaturePromoActive(const base::Feature& iph_feature,
+                          bool include_continued_promos) const {
+  return false;
+}
+
+bool VivaldiBrowserWindow::MaybeShowFeaturePromo(
+    const base::Feature& iph_feature,
+    FeaturePromoSpecification::StringReplacements body_text_replacements,
+    FeaturePromoController::BubbleCloseCallback close_callback) {
+  return false;
+}
+
+bool VivaldiBrowserWindow::CloseFeaturePromo(const base::Feature& iph_feature) {
+  return false;
+}
+
+FeaturePromoController::PromoHandle VivaldiBrowserWindow::CloseFeaturePromoAndContinue(
+    const base::Feature& iph_feature) {
+  return {};
 }

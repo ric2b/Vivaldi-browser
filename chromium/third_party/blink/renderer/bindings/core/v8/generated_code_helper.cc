@@ -90,6 +90,15 @@ bool IsCallbackFunctionRunnableIgnoringPause(
                                             IgnorePause::kIgnore);
 }
 
+void ExceptionToRejectPromiseScope::ConvertExceptionToRejectPromise() {
+  // As exceptions must always be created in the current realm, reject
+  // promises must also be created in the current realm while regular promises
+  // are created in the relevant realm of the context object.
+  ScriptState* script_state = ScriptState::ForCurrentRealm(info_);
+  V8SetReturnValue(
+      info_, ScriptPromise::Reject(script_state, exception_state_).V8Value());
+}
+
 namespace bindings {
 
 void SetupIDLInterfaceTemplate(
@@ -398,7 +407,8 @@ void CSSPropertyAttributeSet(const v8::FunctionCallbackInfo<v8::Value>& info) {
   if (UNLIKELY(exception_state.HadException())) {
     return;
   }
-  v8::Local<v8::Context> receiver_context = v8_receiver->CreationContext();
+  v8::Local<v8::Context> receiver_context =
+      v8_receiver->GetCreationContextChecked();
   ScriptState* receiver_script_state = ScriptState::From(receiver_context);
   // TODO(andruud): AnonymousNamedSetter is not the best function.  Change the
   // function to a more appropriate one.  It's better to pass |exception_state|

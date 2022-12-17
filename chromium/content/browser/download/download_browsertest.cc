@@ -92,7 +92,7 @@
 #include "content/browser/plugin_service_impl.h"
 #endif
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 #include "base/android/build_info.h"
 #endif
 
@@ -153,12 +153,12 @@ void ExpectRequestIsolationInfo(
 class DownloadTestContentBrowserClient : public TestContentBrowserClient {
  public:
   DownloadTestContentBrowserClient() {
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
     content_url_loader_factory_ = std::make_unique<FakeNetworkURLLoaderFactory>(
         "HTTP/1.1 200 OK\nContent-Type: multipart/related\n\n",
         "This is a test for download mhtml through non http/https urls",
         /* network_accessed */ true, net::OK);
-#endif  // OS_ANDROID
+#endif  // BUILDFLAG(IS_ANDROID)
 
     file_url_loader_factory_ = std::make_unique<FakeNetworkURLLoaderFactory>(
         "HTTP/1.1 200 OK\nContent-Type: multipart/related\n\n",
@@ -194,13 +194,13 @@ class DownloadTestContentBrowserClient : public TestContentBrowserClient {
     if (!enable_register_non_network_url_loader_)
       return;
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
     mojo::PendingRemote<network::mojom::URLLoaderFactory>
         content_factory_remote;
     content_url_loader_factory_->Clone(
         content_factory_remote.InitWithNewPipeAndPassReceiver());
     factories->emplace(url::kContentScheme, std::move(content_factory_remote));
-#endif  // OS_ANDROID
+#endif  // BUILDFLAG(IS_ANDROID)
 
     mojo::PendingRemote<network::mojom::URLLoaderFactory> file_factory_remote;
     file_url_loader_factory_->Clone(
@@ -1339,11 +1339,13 @@ class ParallelDownloadTest : public DownloadContentTest {
     download::DownloadItem* download =
         DownloadManagerForShell(shell())->CreateDownloadItem(
             "F7FB1F59-7DE1-4845-AFDB-8A688F70F583", 1, path, base::FilePath(),
-            url_chain, GURL(), GURL(), GURL(), GURL(), url::Origin(),
-            "application/octet-stream", "application/octet-stream",
-            base::Time::Now(), base::Time(), parameters.etag,
-            parameters.last_modified, total_bytes, parameters.size,
-            std::string(), download::DownloadItem::INTERRUPTED,
+            url_chain, GURL(),
+            StoragePartitionConfig::CreateDefault(
+                shell()->web_contents()->GetBrowserContext()),
+            GURL(), GURL(), url::Origin(), "application/octet-stream",
+            "application/octet-stream", base::Time::Now(), base::Time(),
+            parameters.etag, parameters.last_modified, total_bytes,
+            parameters.size, std::string(), download::DownloadItem::INTERRUPTED,
             download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
             download::DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED, false,
             base::Time(), false, parallel_slices,
@@ -3110,8 +3112,9 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, RemoveResumedDownload) {
 }
 
 // TODO(qinmin): Flaky crashes on ASAN Linux. https://crbug.com/836689
-#if defined(OS_ANDROID) || \
-    (defined(OS_LINUX) || defined(OS_CHROMEOS)) && defined(ADDRESS_SANITIZER)
+#if BUILDFLAG(IS_ANDROID) ||                           \
+    (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)) && \
+        defined(ADDRESS_SANITIZER)
 #define MAYBE_CancelResumedDownload DISABLED_CancelResumedDownload
 #else
 #define MAYBE_CancelResumedDownload CancelResumedDownload
@@ -3171,11 +3174,13 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, ResumeRestoredDownload_NoFile) {
   download::DownloadItem* download =
       DownloadManagerForShell(shell())->CreateDownloadItem(
           "F7FB1F59-7DE1-4845-AFDB-8A688F70F583", 1, intermediate_file_path,
-          base::FilePath(), url_chain, GURL(), GURL(), GURL(), GURL(),
-          url::Origin(), "application/octet-stream", "application/octet-stream",
-          base::Time::Now(), base::Time(), parameters.etag, std::string(),
-          kIntermediateSize, parameters.size, std::string(),
-          download::DownloadItem::INTERRUPTED,
+          base::FilePath(), url_chain, GURL(),
+          StoragePartitionConfig::CreateDefault(
+              shell()->web_contents()->GetBrowserContext()),
+          GURL(), GURL(), url::Origin(), "application/octet-stream",
+          "application/octet-stream", base::Time::Now(), base::Time(),
+          parameters.etag, std::string(), kIntermediateSize, parameters.size,
+          std::string(), download::DownloadItem::INTERRUPTED,
           download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
           download::DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED, false,
           base::Time(), false,
@@ -3239,11 +3244,13 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, ResumeRestoredDownload_NoHash) {
   download::DownloadItem* download =
       DownloadManagerForShell(shell())->CreateDownloadItem(
           "F7FB1F59-7DE1-4845-AFDB-8A688F70F583", 1, intermediate_file_path,
-          base::FilePath(), url_chain, GURL(), GURL(), GURL(), GURL(),
-          url::Origin(), "application/octet-stream", "application/octet-stream",
-          base::Time::Now(), base::Time(), parameters.etag, std::string(),
-          kIntermediateSize, parameters.size, std::string(),
-          download::DownloadItem::INTERRUPTED,
+          base::FilePath(), url_chain, GURL(),
+          StoragePartitionConfig::CreateDefault(
+              shell()->web_contents()->GetBrowserContext()),
+          GURL(), GURL(), url::Origin(), "application/octet-stream",
+          "application/octet-stream", base::Time::Now(), base::Time(),
+          parameters.etag, std::string(), kIntermediateSize, parameters.size,
+          std::string(), download::DownloadItem::INTERRUPTED,
           download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
           download::DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED, false,
           base::Time(), false,
@@ -3294,11 +3301,13 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest,
   download::DownloadItem* download =
       DownloadManagerForShell(shell())->CreateDownloadItem(
           "F7FB1F59-7DE1-4845-AFDB-8A688F70F583", 1, intermediate_file_path,
-          base::FilePath(), url_chain, GURL(), GURL(), GURL(), GURL(),
-          url::Origin(), "application/octet-stream", "application/octet-stream",
-          base::Time::Now(), base::Time(), "fake-etag", std::string(),
-          kIntermediateSize, parameters.size, std::string(),
-          download::DownloadItem::INTERRUPTED,
+          base::FilePath(), url_chain, GURL(),
+          StoragePartitionConfig::CreateDefault(
+              shell()->web_contents()->GetBrowserContext()),
+          GURL(), GURL(), url::Origin(), "application/octet-stream",
+          "application/octet-stream", base::Time::Now(), base::Time(),
+          "fake-etag", std::string(), kIntermediateSize, parameters.size,
+          std::string(), download::DownloadItem::INTERRUPTED,
           download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
           download::DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED, false,
           base::Time(), false,
@@ -3355,10 +3364,12 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest,
   download::DownloadItem* download =
       DownloadManagerForShell(shell())->CreateDownloadItem(
           "F7FB1F59-7DE1-4845-AFDB-8A688F70F583", 1, intermediate_file_path,
-          base::FilePath(), url_chain, GURL(), GURL(), GURL(), GURL(),
-          url::Origin(), "application/octet-stream", "application/octet-stream",
-          base::Time::Now(), base::Time(), parameters.etag, std::string(),
-          kIntermediateSize, parameters.size,
+          base::FilePath(), url_chain, GURL(),
+          StoragePartitionConfig::CreateDefault(
+              shell()->web_contents()->GetBrowserContext()),
+          GURL(), GURL(), url::Origin(), "application/octet-stream",
+          "application/octet-stream", base::Time::Now(), base::Time(),
+          parameters.etag, std::string(), kIntermediateSize, parameters.size,
           std::string(std::begin(kPartialHash), std::end(kPartialHash)),
           download::DownloadItem::INTERRUPTED,
           download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
@@ -3423,10 +3434,12 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, ResumeRestoredDownload_WrongHash) {
   download::DownloadItem* download =
       DownloadManagerForShell(shell())->CreateDownloadItem(
           "F7FB1F59-7DE1-4845-AFDB-8A688F70F583", 1, intermediate_file_path,
-          base::FilePath(), url_chain, GURL(), GURL(), GURL(), GURL(),
-          url::Origin(), "application/octet-stream", "application/octet-stream",
-          base::Time::Now(), base::Time(), parameters.etag, std::string(),
-          kIntermediateSize, parameters.size,
+          base::FilePath(), url_chain, GURL(),
+          StoragePartitionConfig::CreateDefault(
+              shell()->web_contents()->GetBrowserContext()),
+          GURL(), GURL(), url::Origin(), "application/octet-stream",
+          "application/octet-stream", base::Time::Now(), base::Time(),
+          parameters.etag, std::string(), kIntermediateSize, parameters.size,
           std::string(std::begin(kPartialHash), std::end(kPartialHash)),
           download::DownloadItem::INTERRUPTED,
           download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
@@ -3501,11 +3514,13 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, ResumeRestoredDownload_ShortFile) {
   download::DownloadItem* download =
       DownloadManagerForShell(shell())->CreateDownloadItem(
           "F7FB1F59-7DE1-4845-AFDB-8A688F70F583", 1, intermediate_file_path,
-          base::FilePath(), url_chain, GURL(), GURL(), GURL(), GURL(),
-          url::Origin(), "application/octet-stream", "application/octet-stream",
-          base::Time::Now(), base::Time(), parameters.etag, std::string(),
-          kIntermediateSize, parameters.size, std::string(),
-          download::DownloadItem::INTERRUPTED,
+          base::FilePath(), url_chain, GURL(),
+          StoragePartitionConfig::CreateDefault(
+              shell()->web_contents()->GetBrowserContext()),
+          GURL(), GURL(), url::Origin(), "application/octet-stream",
+          "application/octet-stream", base::Time::Now(), base::Time(),
+          parameters.etag, std::string(), kIntermediateSize, parameters.size,
+          std::string(), download::DownloadItem::INTERRUPTED,
           download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
           download::DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED, false,
           base::Time(), false,
@@ -3576,11 +3591,13 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, ResumeRestoredDownload_LongFile) {
   download::DownloadItem* download =
       DownloadManagerForShell(shell())->CreateDownloadItem(
           "F7FB1F59-7DE1-4845-AFDB-8A688F70F583", 1, intermediate_file_path,
-          base::FilePath(), url_chain, GURL(), GURL(), GURL(), GURL(),
-          url::Origin(), "application/octet-stream", "application/octet-stream",
-          base::Time::Now(), base::Time(), parameters.etag, std::string(),
-          kIntermediateSize, parameters.size, std::string(),
-          download::DownloadItem::INTERRUPTED,
+          base::FilePath(), url_chain, GURL(),
+          StoragePartitionConfig::CreateDefault(
+              shell()->web_contents()->GetBrowserContext()),
+          GURL(), GURL(), url::Origin(), "application/octet-stream",
+          "application/octet-stream", base::Time::Now(), base::Time(),
+          parameters.etag, std::string(), kIntermediateSize, parameters.size,
+          std::string(), download::DownloadItem::INTERRUPTED,
           download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
           download::DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED, false,
           base::Time(), false,
@@ -3993,7 +4010,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest,
 //
 // Alt-click doesn't make sense on Android, and download a HTML file results
 // in an intent, so just skip.
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
 IN_PROC_BROWSER_TEST_F(DownloadContentTest,
                        DownloadAttributeSameOriginRedirectAltClick) {
   net::EmbeddedTestServer origin_one;
@@ -4059,7 +4076,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest,
   DownloadManagerForShell(shell())->GetAllDownloads(&downloads);
   ASSERT_EQ(1u, downloads.size());
   base::FilePath file_name = downloads[0]->GetTargetFilePath().BaseName();
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   // Windows file extension depends on system registry.
   EXPECT_TRUE(file_name.value() == FILE_PATH_LITERAL("download.htm") ||
               file_name.value() == FILE_PATH_LITERAL("download.html"));
@@ -4070,7 +4087,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest,
   ASSERT_TRUE(origin_one.ShutdownAndWaitUntilComplete());
   ASSERT_TRUE(origin_two.ShutdownAndWaitUntilComplete());
 }
-#endif  // !defined(OS_ANDROID)
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 // Test that the suggested filename for data: URLs works.
 IN_PROC_BROWSER_TEST_F(DownloadContentTest, DownloadAttributeDataUrl) {
@@ -4917,7 +4934,7 @@ class MhtmlDownloadTest : public DownloadContentTest {
 // download for mhtml.
 IN_PROC_BROWSER_TEST_F(MhtmlDownloadTest,
                        AllowListForNonHTTPNotTriggerDownload) {
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   // "content://" is an protocol on Android.
   GURL content_url("content://non_download.mhtml");
   NavigateToCommittedURLAndExpectNoDownload(shell(), content_url);
@@ -4943,7 +4960,7 @@ IN_PROC_BROWSER_TEST_F(MhtmlDownloadTest,
       download::DownloadItem::COMPLETE);
 }
 
-#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(ADDRESS_SANITIZER)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || defined(ADDRESS_SANITIZER)
 // Flaky https://crbug.com/852073
 #define MAYBE_ForceDownloadMessageRfc822Page \
   DISABLED_ForceDownloadMessageRfc822Page

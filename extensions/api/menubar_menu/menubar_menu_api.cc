@@ -112,6 +112,7 @@ void MenubarMenuAPI::SendAction(content::BrowserContext* browser_context,
 
 // static
 void MenubarMenuAPI::SendOpenBookmark(content::BrowserContext* browser_context,
+                                      int window_id,
                                       int64_t bookmark_id,
                                       int event_state) {
   vivaldi::menubar_menu::BookmarkAction action;
@@ -121,12 +122,14 @@ void MenubarMenuAPI::SendOpenBookmark(content::BrowserContext* browser_context,
   action.state = FlagToEventState(event_state);
   ::vivaldi::BroadcastEvent(
       vivaldi::menubar_menu::OnOpenBookmark::kEventName,
-      vivaldi::menubar_menu::OnOpenBookmark::Create(action), browser_context);
+      vivaldi::menubar_menu::OnOpenBookmark::Create(window_id, action),
+      browser_context);
 }
 
 // static
 void MenubarMenuAPI::SendBookmarkAction(
     content::BrowserContext* browser_context,
+    int window_id,
     int64_t bookmark_id,
     int command) {
   // Some commands will open a bookmark while the rest are managing actions. If
@@ -140,14 +143,15 @@ void MenubarMenuAPI::SendBookmarkAction(
     action.background = IsBackgroundCommand(command);
     ::vivaldi::BroadcastEvent(
         vivaldi::menubar_menu::OnOpenBookmark::kEventName,
-        vivaldi::menubar_menu::OnOpenBookmark::Create(action), browser_context);
+        vivaldi::menubar_menu::OnOpenBookmark::Create(window_id, action),
+        browser_context);
   } else {
     vivaldi::menubar_menu::BookmarkAction action;
     action.id = std::to_string(bookmark_id);
     action.command = CommandToAction(command);
     ::vivaldi::BroadcastEvent(
         vivaldi::menubar_menu::OnBookmarkAction::kEventName,
-        vivaldi::menubar_menu::OnBookmarkAction::Create(action),
+        vivaldi::menubar_menu::OnBookmarkAction::Create(window_id, action),
         browser_context);
   }
 }
@@ -169,6 +173,7 @@ void MenubarMenuAPI::SendClose(content::BrowserContext* browser_context) {
 
 // static
 void MenubarMenuAPI::SendHover(content::BrowserContext* browser_context,
+                               int window_id,
                                const std::string& url) {
   MenubarMenuAPI* api = GetFactoryInstance()->Get(browser_context);
   DCHECK(api);
@@ -177,7 +182,8 @@ void MenubarMenuAPI::SendHover(content::BrowserContext* browser_context,
   if (api->hover_url_ != url) {
     api->hover_url_ = url;
     ::vivaldi::BroadcastEvent(vivaldi::menubar_menu::OnHover::kEventName,
-                              vivaldi::menubar_menu::OnHover::Create(url),
+                              vivaldi::menubar_menu::OnHover::Create(window_id,
+                                                                     url),
                               browser_context);
   }
 }
@@ -516,17 +522,20 @@ void MenubarMenuShowFunction::OnAction(int command, int event_state) {
 }
 
 void MenubarMenuShowFunction::OnHover(const std::string& url) {
-  MenubarMenuAPI::SendHover(browser_context(), url);
+  MenubarMenuAPI::SendHover(browser_context(), params_->properties.window_id,
+      url);
 }
 
 void MenubarMenuShowFunction::OnOpenBookmark(int64_t bookmark_id,
                                              int event_state) {
-  MenubarMenuAPI::SendOpenBookmark(browser_context(), bookmark_id, event_state);
+  MenubarMenuAPI::SendOpenBookmark(browser_context(),
+      params_->properties.window_id, bookmark_id, event_state);
 }
 
 void MenubarMenuShowFunction::OnBookmarkAction(int64_t bookmark_id,
                                                int command) {
-  MenubarMenuAPI::SendBookmarkAction(browser_context(), bookmark_id, command);
+  MenubarMenuAPI::SendBookmarkAction(browser_context(),
+      params_->properties.window_id, bookmark_id, command);
 }
 
 bool MenubarMenuShowFunction::IsBookmarkMenu(int menu_id) {

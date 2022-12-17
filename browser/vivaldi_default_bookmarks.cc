@@ -4,6 +4,7 @@
 
 #include "base/bind.h"
 #include "base/containers/flat_set.h"
+#include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
 #include "base/values.h"

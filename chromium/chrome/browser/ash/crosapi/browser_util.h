@@ -40,6 +40,22 @@ class User;
 namespace crosapi {
 namespace browser_util {
 
+// Indicates how the decision for the usage of Lacros has been made.
+enum class LacrosLaunchSwitchSource {
+  // It is unknown yet if and how Lacros will be used.
+  kUnknown = 0,
+  // Either there were no policies, or the system had a special condition in
+  // which the policy got ignored and the user could have set the mode.
+  kPossiblySetByUser = 1,
+  // The Lacros usage was enforced by the user via #lacros-availability-ignore
+  // flag override.
+  kForcedByUser = 2,
+  // The Lacros usage was enforced using the policy. Note that in this case
+  // the policy might still not be used, but it is programmatically overridden
+  // and not by the user (e.g. special Googler user case).
+  kForcedByPolicy = 3
+};
+
 // Represents different options for how to launch Lacros browser. The values
 // shall be consistent with the controlling policy.
 enum class LacrosLaunchSwitch {
@@ -99,6 +115,15 @@ extern const char kLacrosSelectionSwitch[];
 extern const char kLacrosSelectionRootfs[];
 extern const char kLacrosSelectionStateful[];
 
+// A command-line switch that is converted and set via the feature flag.
+extern const char kLacrosAvailabilityPolicyInternalName[];
+extern const char kLacrosAvailabilityPolicySwitch[];
+extern const char kLacrosAvailabilityPolicyUserChoice[];
+extern const char kLacrosAvailabilityPolicyLacrosDisabled[];
+extern const char kLacrosAvailabilityPolicySideBySide[];
+extern const char kLacrosAvailabilityPolicyLacrosPrimary[];
+extern const char kLacrosAvailabilityPolicyLacrosOnly[];
+
 // Boolean preference. Whether to launch lacros-chrome on login.
 extern const char kLaunchOnLoginPref[];
 
@@ -134,13 +159,21 @@ bool IsLacrosEnabled();
 // As above, but takes a channel. Exposed for testing.
 bool IsLacrosEnabled(version_info::Channel channel);
 
+// Represents whether the function is being called before the Policy is
+// initialized or not.
+enum class PolicyInitState {
+  kBeforeInit,
+  kAfterInit,
+};
+
 // Similar to `IsLacrosEnabled()` but does not check if profile migration has
 // been completed. This is to be used inside `BrowserDataMigrator`. Unlike
 // `IsLacrosEnabled()` it can be called before the primary user profile is
 // created.
 // TODO(crbug.com/1265800): Refactor `IsLacrosEnabled()` and
 // `IsLacrosEnabledForMigration()` to reduce duplicated code.
-bool IsLacrosEnabledForMigration(const user_manager::User* user);
+bool IsLacrosEnabledForMigration(const user_manager::User* user,
+                                 PolicyInitState policy_init_state);
 
 // Returns true if |chromeos::features::kLacrosSupport| flag is allowed.
 bool IsLacrosSupportFlagAllowed(version_info::Channel channel);
@@ -173,6 +206,13 @@ bool IsLacrosPrimaryBrowserAllowed(version_info::Channel channel);
 
 // Returns true if |chromeos::features::kLacrosPrimary| flag is allowed.
 bool IsLacrosPrimaryFlagAllowed(version_info::Channel channel);
+
+// Returns true if the lacros can be used as a only browser
+// for the current session.
+bool IsLacrosOnlyBrowserAllowed(version_info::Channel channel);
+
+// Returns true if |chromeos::features::kLacrosOnly| flag is allowed.
+bool IsLacrosOnlyFlagAllowed(version_info::Channel channel);
 
 // Returns true if Lacros is allowed to launch and show a window. This can
 // return false if the user is using multi-signin, which is mutually exclusive
@@ -261,6 +301,13 @@ void ClearProfileMigrationCompletedForUser(PrefService* local_state,
 // completed by getting user_id_hash of the logged in user and updating
 // g_browser_process->local_state() etc.
 void SetProfileMigrationCompletedForTest(bool is_completed);
+
+// Returns who decided how Lacros should be used - or not: The User, the policy
+// or another edge case.
+LacrosLaunchSwitchSource GetLacrosLaunchSwitchSource();
+
+// Returns the policy value name from the given value.
+base::StringPiece GetLacrosAvailabilityPolicyName(LacrosLaunchSwitch value);
 
 }  // namespace browser_util
 }  // namespace crosapi

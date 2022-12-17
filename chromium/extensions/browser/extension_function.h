@@ -7,14 +7,12 @@
 
 #include <stddef.h>
 
-#include <list>
 #include <memory>
 #include <string>
 #include <vector>
 
 #include "base/callback.h"
 #include "base/callback_list.h"
-#include "base/compiler_specific.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
@@ -203,7 +201,7 @@ class ExtensionFunction : public base::RefCountedThreadSafe<
   // exactly once.
   //
   // ExtensionFunction implementations are encouraged to just implement Run.
-  virtual ResponseAction Run() WARN_UNUSED_RESULT = 0;
+  [[nodiscard]] virtual ResponseAction Run() = 0;
 
   // Gets whether quota should be applied to this individual function
   // invocation. This is different to GetQuotaLimitHeuristics which is only
@@ -241,6 +239,8 @@ class ExtensionFunction : public base::RefCountedThreadSafe<
   // literal) must be provided.
   virtual void SetName(const char* name);
   const char* name() const { return name_; }
+
+  int context_id() const { return context_id_; }
 
   void set_profile_id(void* profile_id) { profile_id_ = profile_id; }
   void* profile_id() const { return profile_id_; }
@@ -420,9 +420,9 @@ class ExtensionFunction : public base::RefCountedThreadSafe<
   // has already executed, and only if it returned RespondLater().
   //
   // Respond to the extension immediately with |result|.
-  ResponseAction RespondNow(ResponseValue result) WARN_UNUSED_RESULT;
+  [[nodiscard]] ResponseAction RespondNow(ResponseValue result);
   // Don't respond now, but promise to call Respond(...) later.
-  ResponseAction RespondLater() WARN_UNUSED_RESULT;
+  [[nodiscard]] ResponseAction RespondLater();
   // Respond() was already called before Run() finished executing.
   //
   // Assume Run() uses some helper system that accepts callback that Respond()s.
@@ -444,13 +444,13 @@ class ExtensionFunction : public base::RefCountedThreadSafe<
   //   else
   //     // Asynchronously call |callback|.
   // }
-  ResponseAction AlreadyResponded() WARN_UNUSED_RESULT;
+  [[nodiscard]] ResponseAction AlreadyResponded();
 
   // This is the return value of the EXTENSION_FUNCTION_VALIDATE macro, which
   // needs to work from Run(), RunAsync(), and RunSync(). The former of those
   // has a different return type (ResponseAction) than the latter two (bool).
-  static ResponseAction ValidationFailure(ExtensionFunction* function)
-      WARN_UNUSED_RESULT;
+  [[nodiscard]] static ResponseAction ValidationFailure(
+      ExtensionFunction* function);
 
   // If RespondLater() was returned from Run(), functions must at some point
   // call Respond() with |result| as their result.
@@ -580,6 +580,9 @@ class ExtensionFunction : public base::RefCountedThreadSafe<
   // The type of the JavaScript context where this call originated.
   extensions::Feature::Context source_context_type_ =
       extensions::Feature::UNSPECIFIED_CONTEXT;
+
+  // The context ID of the browser context where this call originated.
+  int context_id_ = extensions::kUnspecifiedContextId;
 
   // The process ID of the page that triggered this function call, or -1
   // if unknown.

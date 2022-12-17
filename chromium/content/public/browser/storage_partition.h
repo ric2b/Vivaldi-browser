@@ -10,6 +10,7 @@
 #include <set>
 
 #include "base/callback_forward.h"
+#include "base/observer_list_types.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/services/storage/public/mojom/cache_storage_control.mojom-forward.h"
@@ -67,10 +68,10 @@ class DedicatedWorkerService;
 class DevToolsBackgroundServicesContext;
 class DOMStorageContext;
 class FileSystemAccessEntryFactory;
-class FontAccessContext;
 class GeneratedCodeCacheContext;
 class HostZoomLevelContext;
 class HostZoomMap;
+class InterestGroupManager;
 class NativeIOContext;
 class PlatformNotificationContext;
 class ServiceWorkerContext;
@@ -135,7 +136,6 @@ class CONTENT_EXPORT StoragePartition {
   virtual storage::QuotaManager* GetQuotaManager() = 0;
   virtual BackgroundSyncContext* GetBackgroundSyncContext() = 0;
   virtual storage::FileSystemContext* GetFileSystemContext() = 0;
-  virtual FontAccessContext* GetFontAccessContext() = 0;
   virtual storage::DatabaseTracker* GetDatabaseTracker() = 0;
   virtual DOMStorageContext* GetDOMStorageContext() = 0;
   virtual storage::mojom::LocalStorageControl* GetLocalStorageControl() = 0;
@@ -154,6 +154,7 @@ class CONTENT_EXPORT StoragePartition {
   virtual HostZoomLevelContext* GetHostZoomLevelContext() = 0;
   virtual ZoomLevelDelegate* GetZoomLevelDelegate() = 0;
   virtual PlatformNotificationContext* GetPlatformNotificationContext() = 0;
+  virtual InterestGroupManager* GetInterestGroupManager() = 0;
 
   virtual leveldb_proto::ProtoDatabaseProvider* GetProtoDatabaseProvider() = 0;
   // Must be set before the first call to GetProtoDatabaseProvider(), or a new
@@ -179,6 +180,7 @@ class CONTENT_EXPORT StoragePartition {
     // Public explainer here:
     // https://github.com/WICG/turtledove/blob/main/FLEDGE.md
     REMOVE_DATA_MASK_INTEREST_GROUPS = 1 << 12,
+    REMOVE_DATA_MASK_AGGREGATION_SERVICE = 1 << 13,
     REMOVE_DATA_MASK_ALL = 0xFFFFFFFF,
 
     // Corresponds to storage::kStorageTypeTemporary.

@@ -11,7 +11,6 @@
 
 import 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
-import 'chrome://resources/polymer/v3_0/iron-iconset-svg/iron-iconset-svg.js';
 import './styles.js';
 import '../../common/icons.js';
 import '../../common/styles.js';
@@ -22,7 +21,7 @@ import {afterNextRender, html} from 'chrome://resources/polymer/v3_0/polymer/pol
 
 import {getLoadingPlaceholderAnimationDelay} from '../../common/utils.js';
 import {isSelectionEvent} from '../../common/utils.js';
-import {CurrentWallpaper, WallpaperImage, WallpaperProviderInterface} from '../personalization_app.mojom-webui.js';
+import {CurrentWallpaper, GooglePhotosPhoto, WallpaperImage, WallpaperProviderInterface} from '../personalization_app.mojom-webui.js';
 import {WithPersonalizationStore} from '../personalization_store.js';
 import {isFilePath} from '../utils.js';
 
@@ -81,7 +80,7 @@ export class LocalImages extends WithPersonalizationStore {
   private imageData_: Record<FilePath['path'], string>;
   private imageDataLoading_: Record<FilePath['path'], boolean>;
   private currentSelected_: CurrentWallpaper|null;
-  private pendingSelected_: FilePath|WallpaperImage|null;
+  private pendingSelected_: FilePath|GooglePhotosPhoto|WallpaperImage|null;
   private imagesToDisplay_: FilePath[];
 
   constructor() {
@@ -91,15 +90,16 @@ export class LocalImages extends WithPersonalizationStore {
 
   connectedCallback() {
     super.connectedCallback();
-    this.watch<LocalImages['images_']>('images_', state => state.local.images);
+    this.watch<LocalImages['images_']>(
+        'images_', state => state.wallpaper.local.images);
     this.watch<LocalImages['imageData_']>(
-        'imageData_', state => state.local.data);
+        'imageData_', state => state.wallpaper.local.data);
     this.watch<LocalImages['imageDataLoading_']>(
-        'imageDataLoading_', state => state.loading.local.data);
+        'imageDataLoading_', state => state.wallpaper.loading.local.data);
     this.watch<LocalImages['currentSelected_']>(
-        'currentSelected_', state => state.currentSelected);
+        'currentSelected_', state => state.wallpaper.currentSelected);
     this.watch<LocalImages['pendingSelected_']>(
-        'pendingSelected_', state => state.pendingSelected);
+        'pendingSelected_', state => state.wallpaper.pendingSelected);
     this.updateFromStore();
     fetchLocalData(this.wallpaperProvider_, this.getStore());
     window.addEventListener('focus', () => {

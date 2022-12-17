@@ -19,12 +19,13 @@ import org.chromium.base.Callback;
 import org.chromium.chrome.autofill_assistant.R;
 import org.chromium.chrome.browser.autofill_assistant.AssistantBottomBarDelegate;
 import org.chromium.chrome.browser.autofill_assistant.AssistantBottomSheetContent;
+import org.chromium.chrome.browser.autofill_assistant.AssistantBrowserControlsFactory;
+import org.chromium.chrome.browser.autofill_assistant.AssistantInfoPageUtil;
 import org.chromium.chrome.browser.autofill_assistant.BottomSheetUtils;
 import org.chromium.chrome.browser.autofill_assistant.LayoutUtils;
 import org.chromium.chrome.browser.autofill_assistant.overlay.AssistantOverlayCoordinator;
 import org.chromium.chrome.browser.autofill_assistant.overlay.AssistantOverlayModel;
 import org.chromium.chrome.browser.autofill_assistant.overlay.AssistantOverlayState;
-import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.SheetState;
@@ -44,21 +45,21 @@ class BottomSheetOnboardingCoordinator extends BaseOnboardingCoordinator {
     private AssistantBottomSheetContent mContent;
     private BottomSheetObserver mBottomSheetObserver;
     private final BottomSheetController mController;
-    private final BrowserControlsStateProvider mBrowserControls;
+    private final AssistantBrowserControlsFactory mBrowserControlsFactory;
     private final View mRootView;
     private final ScrimCoordinator mScrimCoordinator;
-    private final AccessibilityUtil mAccessibilityUtil;
+    protected final AccessibilityUtil mAccessibilityUtil;
 
     @Nullable
     AssistantOverlayCoordinator mOverlayCoordinator;
 
-    BottomSheetOnboardingCoordinator(String experimentIds, Map<String, String> parameters,
-            Context context, BottomSheetController controller,
-            BrowserControlsStateProvider browserControls, View rootView, ScrimCoordinator scrim,
-            AccessibilityUtil accessibilityUtil) {
-        super(experimentIds, parameters, context);
+    BottomSheetOnboardingCoordinator(AssistantInfoPageUtil infoPageUtil, String experimentIds,
+            Map<String, String> parameters, Context context, BottomSheetController controller,
+            AssistantBrowserControlsFactory browserControlsFactory, View rootView,
+            ScrimCoordinator scrim, AccessibilityUtil accessibilityUtil) {
+        super(infoPageUtil, experimentIds, parameters, context);
         mController = controller;
-        mBrowserControls = browserControls;
+        mBrowserControlsFactory = browserControlsFactory;
         mRootView = rootView;
         mScrimCoordinator = scrim;
         mAccessibilityUtil = accessibilityUtil;
@@ -98,7 +99,7 @@ class BottomSheetOnboardingCoordinator extends BaseOnboardingCoordinator {
     void initViewImpl(Callback<Integer> callback) {
         // If there's a tab, cover it with an overlay.
         AssistantOverlayModel overlayModel = new AssistantOverlayModel();
-        mOverlayCoordinator = new AssistantOverlayCoordinator(getContext(), mBrowserControls,
+        mOverlayCoordinator = new AssistantOverlayCoordinator(getContext(), mBrowserControlsFactory,
                 mRootView, mScrimCoordinator, overlayModel, mAccessibilityUtil);
         overlayModel.set(AssistantOverlayModel.STATE, AssistantOverlayState.FULL);
 
@@ -183,6 +184,14 @@ class BottomSheetOnboardingCoordinator extends BaseOnboardingCoordinator {
             mOverlayCoordinator.destroy();
             mOverlayCoordinator = null;
         }
+    }
+
+    @Override
+    public void updateViews() {
+        assert mView != null;
+        updateTermsAndConditionsView(mView.findViewById(R.id.google_terms_message));
+        updateTitleView(mView.findViewById(R.id.onboarding_try_assistant));
+        updateSubtitleView(mView.findViewById(R.id.onboarding_subtitle));
     }
 
     @Override

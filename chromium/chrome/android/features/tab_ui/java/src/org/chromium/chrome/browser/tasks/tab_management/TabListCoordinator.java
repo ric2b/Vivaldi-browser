@@ -14,6 +14,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 import android.widget.ImageView;
+import android.widget.ImageView.ScaleType;
 
 import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
@@ -23,15 +24,17 @@ import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import org.chromium.base.MathUtils;
 import org.chromium.chrome.browser.lifecycle.DestroyObserver;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabUtils;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tasks.ReturnToChromeExperimentsUtil;
 import org.chromium.chrome.browser.tasks.pseudotab.PseudoTab;
 import org.chromium.chrome.browser.tasks.tab_management.TabProperties.UiType;
 import org.chromium.chrome.tab_ui.R;
+import org.chromium.ui.base.DeviceFormFactor;
+import org.chromium.ui.base.ViewUtils;
 import org.chromium.ui.modelutil.MVCListAdapter;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -69,8 +72,11 @@ public class TabListCoordinator
         int NUM_ENTRIES = 4;
     }
 
-    static final int GRID_LAYOUT_SPAN_COUNT_PORTRAIT = 2;
-    static final int GRID_LAYOUT_SPAN_COUNT_LANDSCAPE = 4; // Vivaldi overwrite.
+    static final int GRID_LAYOUT_SPAN_COUNT_COMPACT = 2;
+    static final int GRID_LAYOUT_SPAN_COUNT_MEDIUM = 4; // Vivaldi overwrite.
+    static final int GRID_LAYOUT_SPAN_COUNT_LARGE = 4;
+    static final int MAX_SCREEN_WIDTH_COMPACT_DP = 600;
+    static final int MAX_SCREEN_WIDTH_MEDIUM_DP = 800;
     private final TabListMediator mMediator;
     private final TabListRecyclerView mRecyclerView;
     private final SimpleRecyclerViewAdapter mAdapter;
@@ -157,24 +163,23 @@ public class TabListCoordinator
                 ViewLookupCachingFrameLayout root = (ViewLookupCachingFrameLayout) holder.itemView;
                 ImageView thumbnail = (ImageView) root.fastFindViewById(R.id.tab_thumbnail);
                 if (thumbnail == null) return;
+                if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(context)
+                        && TabUiFeatureUtilities.isGridTabSwitcherEnabled(context)) {
+                    thumbnail.setScaleType(ScaleType.CENTER_CROP);
+                } else {
+                    thumbnail.setScaleType(ScaleType.FIT_CENTER);
+                    thumbnail.setAdjustViewBounds(true);
+                }
 
                 if (TabUiFeatureUtilities.isLaunchPolishEnabled()) {
                     thumbnail.setImageDrawable(null);
                     return;
                 }
 
-                if (TabUiFeatureUtilities.isTabThumbnailAspectRatioNotOne()) {
-                    float expectedThumbnailAspectRatio =
-                            (float) TabUiFeatureUtilities.THUMBNAIL_ASPECT_RATIO.getValue();
-                    expectedThumbnailAspectRatio =
-                            MathUtils.clamp(expectedThumbnailAspectRatio, 0.5f, 2.0f);
-                    int height = (int) (thumbnail.getWidth() * 1.0 / expectedThumbnailAspectRatio);
-                    thumbnail.setMinimumHeight(Math.min(thumbnail.getHeight(), height));
-                    thumbnail.setImageDrawable(null);
-                } else {
-                    thumbnail.setImageDrawable(null);
-                    thumbnail.setMinimumHeight(thumbnail.getWidth());
-                }
+                float expectedThumbnailAspectRatio = TabUtils.getTabThumbnailAspectRatio(context);
+                int height = (int) (thumbnail.getWidth() * 1.0 / expectedThumbnailAspectRatio);
+                thumbnail.setMinimumHeight(Math.min(thumbnail.getHeight(), height));
+                thumbnail.setImageDrawable(null);
             };
         } else if (mMode == TabListMode.STRIP) {
             mAdapter.registerType(UiType.STRIP, parent -> {
@@ -254,8 +259,9 @@ public class TabListCoordinator
                     new GridLayoutManager(context, spanCount); // Vivaldi: consider new span count.
             mRecyclerView.setLayoutManager(gridLayoutManager);
             mMediator.registerOrientationListener(gridLayoutManager);
-            mMediator.updateSpanCountForOrientation(
-                    gridLayoutManager, context.getResources().getConfiguration().orientation);
+            mMediator.updateSpanCount(gridLayoutManager,
+                    context.getResources().getConfiguration().orientation,
+                    context.getResources().getConfiguration().screenWidthDp);
             mMediator.setupAccessibilityDelegate(mRecyclerView);
         } else if (mMode == TabListMode.STRIP || mMode == TabListMode.CAROUSEL
                 || mMode == TabListMode.LIST) {
@@ -267,7 +273,7 @@ public class TabListCoordinator
 
         if (mMode == TabListMode.GRID && selectionDelegateProvider == null) {
             // TODO(crbug.com/964406): unregister the listener when we don't need it.
-            mGlobalLayoutListener = this::updateThumbnailLocation;
+            mGlobalLayoutListener = this::updateThumbnailAndSpanCount;
             mRecyclerView.getViewTreeObserver().addOnGlobalLayoutListener(mGlobalLayoutListener);
         }
     }
@@ -318,6 +324,29 @@ public class TabListCoordinator
         rect.offset(0, getTabListTopOffset());
         mThumbnailLocationOfCurrentTab.set(rect);
         return true;
+    }
+
+    private void updateThumbnailAndSpanCount() {
+        updateThumbnailLocation();
+        if (mMode == TabListMode.GRID && DeviceFormFactor.isNonMultiDisplayContextOnTablet(mContext)
+                && TabUiFeatureUtilities.isGridTabSwitcherEnabled(mContext)) {
+            // Determine and set span count
+            final GridLayoutManager layoutManager =
+                    (GridLayoutManager) mRecyclerView.getLayoutManager();
+            mMediator.updateSpanCount(layoutManager,
+                    mContext.getResources().getConfiguration().orientation,
+                    mContext.getResources().getConfiguration().screenWidthDp);
+
+            final int screenWidthPx = ViewUtils.dpToPx(
+                    mContext, mContext.getResources().getConfiguration().screenWidthDp);
+            int itemWidthPx = (screenWidthPx / layoutManager.getSpanCount());
+            int itemHeightPx =
+                    ((int) ((itemWidthPx * 1f) / TabUtils.getTabThumbnailAspectRatio(mContext)));
+            for (int i = 0; i < mModel.size(); i++) {
+                mModel.get(i).model.set(TabProperties.GRID_CARD_WIDTH, itemWidthPx);
+                mModel.get(i).model.set(TabProperties.GRID_CARD_HEIGHT, itemHeightPx);
+            }
+        }
     }
 
     /**

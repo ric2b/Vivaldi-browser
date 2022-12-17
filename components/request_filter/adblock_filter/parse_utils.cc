@@ -49,7 +49,7 @@ std::string BuildNgramSearchString(const base::StringPiece& pattern) {
           if (*c == ']' && *(c - 1) != '\\')
             break;
         }
-        FALLTHROUGH;
+        [[fallthrough]];
       case '.':
         ngram_search_string.push_back('*');
         break;
@@ -60,13 +60,13 @@ std::string BuildNgramSearchString(const base::StringPiece& pattern) {
           if (*c == '}' && *(c - 1) != '\\')
             break;
         }
-        FALLTHROUGH;
+        [[fallthrough]];
       case '*':
       case '?':
         if (ngram_search_string.empty())
           break;
         ngram_search_string.pop_back();
-        FALLTHROUGH;
+        [[fallthrough]];
       case '+':
         ngram_search_string.push_back('*');
         break;
@@ -89,7 +89,7 @@ std::string BuildNgramSearchString(const base::StringPiece& pattern) {
           break;
         }
         // backslash used for escaping
-        FALLTHROUGH;
+        [[fallthrough]];
       default:
         ngram_search_string.push_back(*c);
     }

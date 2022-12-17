@@ -112,6 +112,7 @@ AppListControllerDelegate::Pinnable GetPinnableForAppID(
 
   const std::string policy_value_for_id =
       GetPolicyValueFromAppId(app_id, profile);
+  const GURL policy_value_gurl(policy_value_for_id);
 
   if (ash::DemoSession::Get() &&
       !ash::DemoSession::Get()->ShouldShowAndroidOrChromeAppInShelf(
@@ -119,12 +120,13 @@ AppListControllerDelegate::Pinnable GetPinnableForAppID(
     return AppListControllerDelegate::PIN_EDITABLE;
   }
 
-  const base::ListValue* policy_apps =
+  const base::Value* policy_apps =
       profile->GetPrefs()->GetList(prefs::kPolicyPinnedLauncherApps);
   if (!policy_apps)
     return AppListControllerDelegate::PIN_EDITABLE;
 
-  for (const base::Value& policy_dict_entry : policy_apps->GetList()) {
+  for (const base::Value& policy_dict_entry :
+       policy_apps->GetListDeprecated()) {
     if (!policy_dict_entry.is_dict())
       return AppListControllerDelegate::PIN_EDITABLE;
 
@@ -135,6 +137,14 @@ AppListControllerDelegate::Pinnable GetPinnableForAppID(
 
     if (policy_value_for_id == *policy_entry)
       return AppListControllerDelegate::PIN_FIXED;
+
+    // For web apps, the string equality might not be perfect since
+    // policy_value_for_id was stored as GURL and converted back.
+    // For example, example.org vs. example.org/
+    if (policy_value_gurl.is_valid() &&
+        policy_value_gurl.EqualsIgnoringRef(GURL(*policy_entry))) {
+      return AppListControllerDelegate::PIN_FIXED;
+    }
   }
 
   return AppListControllerDelegate::PIN_EDITABLE;

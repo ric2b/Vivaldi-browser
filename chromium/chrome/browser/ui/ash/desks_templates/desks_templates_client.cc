@@ -22,16 +22,17 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/sync/desk_sync_service_factory.h"
 #include "chrome/browser/ui/ash/desks_templates/desks_templates_app_launch_handler.h"
+#include "components/app_constants/constants.h"
 #include "components/desks_storage/core/desk_sync_service.h"
 #include "components/desks_storage/core/local_desk_data_manager.h"
 #include "components/sync/model/model_type_store.h"
-#include "extensions/common/constants.h"
 
 namespace {
 
 DesksTemplatesClient* g_desks_templates_client_instance = nullptr;
 
-// Histogram names
+// TODO(https://crbug.com/1284774): Remove metrics from this file.
+// Histogram names.
 constexpr char kWindowCountHistogramName[] = "Ash.DeskTemplate.WindowCount";
 constexpr char kTabCountHistogramName[] = "Ash.DeskTemplate.TabCount";
 constexpr char kWindowAndTabCountHistogramName[] =
@@ -183,7 +184,6 @@ void DesksTemplatesClient::LaunchDeskTemplate(
   MaybeCreateAppLaunchHandler();
   DCHECK(app_launch_handler_);
 
-  // TODO: Verify this method works in tests when reading from storage.
   if (launch_template_for_test_) {
     OnGetTemplateForDeskLaunch(
         std::move(callback),
@@ -199,7 +199,8 @@ void DesksTemplatesClient::LaunchDeskTemplate(
 }
 
 void DesksTemplatesClient::LaunchAppsFromTemplate(
-    std::unique_ptr<ash::DeskTemplate> desk_template) {
+    std::unique_ptr<ash::DeskTemplate> desk_template,
+    base::TimeDelta delay) {
   DCHECK(desk_template);
   const app_restore::RestoreData* restore_data =
       desk_template->desk_restore_data();
@@ -208,9 +209,8 @@ void DesksTemplatesClient::LaunchAppsFromTemplate(
 
   MaybeCreateAppLaunchHandler();
   DCHECK(app_launch_handler_);
+  app_launch_handler_->set_delay(delay);
   app_launch_handler_->SetRestoreDataAndLaunch(restore_data->Clone());
-
-  RecordLaunchFromTemplateHistogram();
 }
 
 desks_storage::DeskModel* DesksTemplatesClient::GetDeskModel() {
@@ -245,7 +245,17 @@ void DesksTemplatesClient::SetPolicyPreconfiguredTemplate(
 
 void DesksTemplatesClient::RemovePolicyPreconfiguredTemplate(
     const AccountId& account_id) {
+  Profile* profile =
+      ash::ProfileHelper::Get()->GetProfileByAccountId(account_id);
+  if (!IsSupportedProfile(profile))
+    return;
+
+  DCHECK(profile);
+
   preconfigured_desk_templates_json_.erase(account_id);
+
+  if (profile == active_profile_)
+    GetDeskModel()->RemovePolicyDeskTemplates();
 }
 
 void DesksTemplatesClient::MaybeCreateAppLaunchHandler() {
@@ -273,7 +283,7 @@ void DesksTemplatesClient::RecordWindowAndTabCountHistogram(
   for (const auto& iter : launch_list) {
     // Since apps aren't guaranteed to have the url field set up correctly, this
     // is necessary to ensure things are not double-counted.
-    if (iter.first != extension_misc::kChromeAppId) {
+    if (iter.first != app_constants::kChromeAppId) {
       ++window_count;
       ++total_count;
       continue;
@@ -314,6 +324,8 @@ void DesksTemplatesClient::OnGetTemplateForDeskLaunch(
     return;
   }
 
+  RecordLaunchFromTemplateHistogram();
+
   // Launch the windows as specified in the template to a new desk.
   const auto template_name = entry->template_name();
   desks_controller_->CreateAndActivateNewDeskForTemplate(
@@ -339,7 +351,7 @@ void DesksTemplatesClient::OnCreateAndActivateNewDesk(
     return;
   }
 
-  LaunchAppsFromTemplate(std::move(desk_template));
+  LaunchAppsFromTemplate(std::move(desk_template), base::TimeDelta());
   std::move(callback).Run(std::string(""));
 }
 

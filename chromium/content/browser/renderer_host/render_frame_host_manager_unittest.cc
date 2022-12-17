@@ -33,6 +33,7 @@
 #include "content/browser/renderer_host/navigator.h"
 #include "content/browser/renderer_host/render_frame_proxy_host.h"
 #include "content/browser/site_info.h"
+#include "content/browser/site_instance_group.h"
 #include "content/browser/site_instance_impl.h"
 #include "content/browser/webui/web_ui_controller_factory_registry.h"
 #include "content/common/content_navigation_policy.h"
@@ -66,14 +67,13 @@
 #include "net/http/http_response_headers.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/frame/frame_policy.h"
-#include "third_party/blink/public/common/loader/previews_state.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/favicon/favicon_url.mojom.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom.h"
 #include "ui/base/page_transition_types.h"
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 #include "content/public/browser/android/compositor.h"
 #endif
 
@@ -369,9 +369,9 @@ class RenderFrameHostManagerTest
     EXPECT_TRUE(contents()->CrossProcessNavigationPending());
 
     // Manually increase the number of active frames in the
-    // SiteInstance that ntp_rfh belongs to, to prevent the SiteInstance from
-    // being destroyed when ntp_rfh goes away.
-    ntp_rfh->GetSiteInstance()->IncrementActiveFrameCount();
+    // SiteInstanceGroup that ntp_rfh belongs to, to prevent the
+    // SiteInstanceGroup from being destroyed when ntp_rfh goes away.
+    ntp_rfh->GetSiteInstance()->group()->IncrementActiveFrameCount();
 
     TestRenderFrameHost* dest_rfh =
         contents()->GetSpeculativePrimaryMainFrame();
@@ -411,8 +411,7 @@ class RenderFrameHostManagerTest
         entry->ConstructCommonNavigationParams(
             *frame_entry, request_body, frame_entry->url(),
             blink::mojom::Referrer::New(referrer.url, referrer.policy),
-            navigate_type, blink::PreviewsTypes::PREVIEWS_UNSPECIFIED,
-            base::TimeTicks::Now(), base::TimeTicks::Now());
+            navigate_type, base::TimeTicks::Now(), base::TimeTicks::Now());
     blink::mojom::CommitNavigationParamsPtr commit_params =
         entry->ConstructCommitNavigationParams(
             *frame_entry, common_params->url, frame_entry->committed_origin(),
@@ -549,10 +548,10 @@ TEST_P(RenderFrameHostManagerTest, FilterMessagesWhileSwappedOut) {
     ntp_rfh->UpdateFaviconURL(std::move(icons));
     EXPECT_TRUE(observer.favicon_received());
   }
-  // Create one more frame in the same SiteInstance where ntp_rfh
+  // Create one more frame in the same SiteInstanceGroup where ntp_rfh
   // exists so that it doesn't get deleted on navigation to another
   // site.
-  ntp_rfh->GetSiteInstance()->IncrementActiveFrameCount();
+  ntp_rfh->GetSiteInstance()->group()->IncrementActiveFrameCount();
 
   // Navigate to a cross-site URL (don't unload to keep |ntp_rfh| alive).
   auto navigation =
@@ -599,9 +598,9 @@ TEST_P(RenderFrameHostManagerTest, UpdateFaviconURLWhilePendingUnload) {
     EXPECT_TRUE(observer.favicon_received());
   }
 
-  // Create one more frame in the same SiteInstance where |ntp_rfh| exists so
-  // that it doesn't get deleted on navigation to another site.
-  ntp_rfh->GetSiteInstance()->IncrementActiveFrameCount();
+  // Create one more frame in the same SiteInstanceGroup where |ntp_rfh| exists
+  // so that it doesn't get deleted on navigation to another site.
+  ntp_rfh->GetSiteInstance()->group()->IncrementActiveFrameCount();
 
   // Navigate to a cross-site URL and commit the new page.
   auto navigation =
@@ -679,7 +678,7 @@ TEST_P(RenderFrameHostManagerTest, ActiveFrameCountWhileSwappingInAndOut) {
   TestRenderFrameHost* rfh1 = main_test_rfh();
 
   SiteInstanceImpl* instance1 = rfh1->GetSiteInstance();
-  EXPECT_EQ(instance1->active_frame_count(), 1U);
+  EXPECT_EQ(instance1->group()->active_frame_count(), 1U);
 
   // Create 2 new tabs and simulate them being the opener chain for the main
   // tab.  They should be in the same SiteInstance.
@@ -691,7 +690,7 @@ TEST_P(RenderFrameHostManagerTest, ActiveFrameCountWhileSwappingInAndOut) {
       TestWebContents::Create(browser_context(), instance1));
   opener1->SetOpener(opener2.get());
 
-  EXPECT_EQ(instance1->active_frame_count(), 3U);
+  EXPECT_EQ(instance1->group()->active_frame_count(), 3U);
 
   // Navigate to a cross-site URL (different SiteInstance but same
   // BrowsingInstance).
@@ -701,21 +700,21 @@ TEST_P(RenderFrameHostManagerTest, ActiveFrameCountWhileSwappingInAndOut) {
 
   if (AreDefaultSiteInstancesEnabled()) {
     EXPECT_TRUE(instance1->IsDefaultSiteInstance());
-    EXPECT_EQ(instance1->active_frame_count(), 3U);
+    EXPECT_EQ(instance1->group()->active_frame_count(), 3U);
     EXPECT_EQ(instance1, instance2);
   } else {
     // rvh2 is on chromium.org which is different from google.com on
     // which other tabs are.
-    EXPECT_EQ(instance2->active_frame_count(), 1U);
+    EXPECT_EQ(instance2->group()->active_frame_count(), 1U);
 
     // There are two active views on google.com now.
-    EXPECT_EQ(instance1->active_frame_count(), 2U);
+    EXPECT_EQ(instance1->group()->active_frame_count(), 2U);
   }
 
   // Navigate to the original origin (google.com).
   contents()->NavigateAndCommit(kUrl1);
 
-  EXPECT_EQ(instance1->active_frame_count(), 3U);
+  EXPECT_EQ(instance1->group()->active_frame_count(), 3U);
 }
 
 // This deletes a WebContents when the given RVH is deleted. This is
@@ -1137,7 +1136,7 @@ TEST_P(RenderFrameHostManagerTest, NavigateAfterMissingUnloadACK) {
   // deleted.  Similarly, no
   // mojo::AgentSchedulingGroupHost::DidUnloadRenderFrame message is sent.
   contents()->GetController().GetBackForwardCache().DisableForTesting(
-      BackForwardCache::TEST_ASSUMES_NO_CACHING);
+      BackForwardCache::TEST_REQUIRES_NO_CACHING);
   const GURL kUrl1("http://www.google.com/");
   const GURL kUrl2 = isolated_cross_site_url();
 
@@ -1146,12 +1145,12 @@ TEST_P(RenderFrameHostManagerTest, NavigateAfterMissingUnloadACK) {
   TestRenderFrameHost* rfh1 = main_test_rfh();
 
   // Keep active_frame_count nonzero so that no unloaded frames in this
-  // SiteInstance get forcefully deleted.
-  rfh1->GetSiteInstance()->IncrementActiveFrameCount();
+  // SiteInstanceGroup get forcefully deleted.
+  rfh1->GetSiteInstance()->group()->IncrementActiveFrameCount();
 
   contents()->NavigateAndCommit(kUrl2);
   TestRenderFrameHost* rfh2 = main_test_rfh();
-  rfh2->GetSiteInstance()->IncrementActiveFrameCount();
+  rfh2->GetSiteInstance()->group()->IncrementActiveFrameCount();
 
   // Now go back, but suppose the
   // mojo::AgentSchedulingGroupHost::DidUnloadRenderFrame isn't received.  This
@@ -1438,9 +1437,9 @@ TEST_P(RenderFrameHostManagerTest, CleanUpProxiesOnProcessCrash) {
       opener1_manager->GetRenderFrameProxyHost(rfh2->GetSiteInstance()->group())
           ->GetRenderViewHost()
           ->IsRenderViewLive());
-  EXPECT_EQ(
-      opener1_manager->GetFrameTokenForSiteInstance(rfh2->GetSiteInstance()),
-      rfh2->GetRenderViewHost()->opener_frame_token());
+  EXPECT_EQ(opener1_manager->GetFrameTokenForSiteInstanceGroup(
+                rfh2->GetSiteInstance()->group()),
+            rfh2->GetRenderViewHost()->opener_frame_token());
 }
 
 // Test that we reuse the same guest SiteInstance if we navigate across sites.
@@ -1632,7 +1631,7 @@ TEST_P(RenderFrameHostManagerTest, DeleteFrameAfterUnloadACK) {
   // deleted.  Similarly, no
   // mojo::AgentSchedulingGroupHost::DidUnloadRenderFrame message is sent.
   contents()->GetController().GetBackForwardCache().DisableForTesting(
-      BackForwardCache::TEST_ASSUMES_NO_CACHING);
+      BackForwardCache::TEST_REQUIRES_NO_CACHING);
   const GURL kUrl1("http://www.google.com/");
   const GURL kUrl2("http://www.chromium.org/");
 
@@ -1683,7 +1682,7 @@ TEST_P(RenderFrameHostManagerTest, UnloadFrameAfterUnloadACK) {
   // deleted.  Similarly, no
   // mojo::AgentSchedulingGroupHost::DidUnloadRenderFrame message is sent.
   contents()->GetController().GetBackForwardCache().DisableForTesting(
-      BackForwardCache::TEST_ASSUMES_NO_CACHING);
+      BackForwardCache::TEST_REQUIRES_NO_CACHING);
   const GURL kUrl1("http://www.google.com/");
   const GURL kUrl2("http://www.chromium.org/");
 
@@ -1693,9 +1692,9 @@ TEST_P(RenderFrameHostManagerTest, UnloadFrameAfterUnloadACK) {
   RenderFrameDeletedObserver rfh_deleted_observer(rfh1);
   EXPECT_TRUE(rfh1->IsActive());
 
-  // Increment the number of active frames in SiteInstanceImpl so that rfh1 is
+  // Increment the number of active frames in SiteInstanceGroup so that rfh1 is
   // not deleted on unload.
-  rfh1->GetSiteInstance()->IncrementActiveFrameCount();
+  rfh1->GetSiteInstance()->group()->IncrementActiveFrameCount();
 
   // Navigate to new site, simulating onbeforeunload approval.
   auto navigation =
@@ -1731,7 +1730,7 @@ TEST_P(RenderFrameHostManagerTest, CommitNewNavigationBeforeSendingUnload) {
   // deleted.  Similarly, no
   // mojo::AgentSchedulingGroupHost::DidUnloadRenderFrame message is sent.
   contents()->GetController().GetBackForwardCache().DisableForTesting(
-      BackForwardCache::TEST_ASSUMES_NO_CACHING);
+      BackForwardCache::TEST_REQUIRES_NO_CACHING);
   const GURL kUrl1("http://www.google.com/");
   const GURL kUrl2("http://www.chromium.org/");
 
@@ -1741,10 +1740,11 @@ TEST_P(RenderFrameHostManagerTest, CommitNewNavigationBeforeSendingUnload) {
   RenderFrameDeletedObserver rfh_deleted_observer(rfh1);
   EXPECT_TRUE(rfh1->IsActive());
 
-  // Increment the number of active frames in rfh1's SiteInstance so that the
-  // SiteInstance is not deleted on unload.
-  scoped_refptr<SiteInstanceImpl> site_instance = rfh1->GetSiteInstance();
-  site_instance->IncrementActiveFrameCount();
+  // Increment the number of active frames in rfh1's SiteInstanceGroup so that
+  // the SiteInstanceGroup is not deleted on unload.
+  scoped_refptr<SiteInstanceGroup> site_instance_group =
+      rfh1->GetSiteInstance()->group();
+  site_instance_group->IncrementActiveFrameCount();
 
   // Navigate to new site, simulating onbeforeunload approval.
   auto navigation =
@@ -1772,7 +1772,7 @@ TEST_P(RenderFrameHostManagerTest, CommitNewNavigationBeforeSendingUnload) {
                   ->GetPrimaryFrameTree()
                   .root()
                   ->render_manager()
-                  ->GetRenderFrameProxyHost(site_instance->group()));
+                  ->GetRenderFrameProxyHost(site_instance_group.get()));
 }
 
 // Test that a RenderFrameHost is properly deleted when a cross-site navigation
@@ -1810,12 +1810,12 @@ TEST_P(RenderFrameHostManagerTest, CancelPendingProperlyDeletesOrSwaps) {
     pending_rfh = contents()->GetSpeculativePrimaryMainFrame();
     RenderFrameDeletedObserver rfh_deleted_observer(pending_rfh);
 
-    // Increment the number of active frames in the new SiteInstance, which will
-    // cause the pending RFH to be deleted and a RenderFrameProxyHost to be
+    // Increment the number of active frames in the new SiteInstanceGroup, which
+    // will cause the pending RFH to be deleted and a RenderFrameProxyHost to be
     // created.
-    scoped_refptr<SiteInstanceImpl> site_instance =
-        pending_rfh->GetSiteInstance();
-    site_instance->IncrementActiveFrameCount();
+    scoped_refptr<SiteInstanceGroup> site_instance_group =
+        pending_rfh->GetSiteInstance()->group();
+    site_instance_group->IncrementActiveFrameCount();
 
     contents()->GetMainFrame()->SimulateBeforeUnloadCompleted(false);
     EXPECT_FALSE(contents()->CrossProcessNavigationPending());
@@ -1825,7 +1825,7 @@ TEST_P(RenderFrameHostManagerTest, CancelPendingProperlyDeletesOrSwaps) {
                     ->GetPrimaryFrameTree()
                     .root()
                     ->render_manager()
-                    ->GetRenderFrameProxyHost(site_instance->group()));
+                    ->GetRenderFrameProxyHost(site_instance_group.get()));
   }
 }
 
@@ -1926,7 +1926,7 @@ TEST_P(RenderFrameHostManagerTestWithSiteIsolation, DetachPendingChild) {
       GetPendingFrameHost(iframe1)->GetSiteInstance();
   EXPECT_TRUE(site_instance->HasSite());
   EXPECT_NE(site_instance, contents()->GetSiteInstance());
-  EXPECT_EQ(2U, site_instance->active_frame_count());
+  EXPECT_EQ(2U, site_instance->group()->active_frame_count());
 
   // Proxies should exist.
   EXPECT_NE(nullptr,
@@ -1941,7 +1941,7 @@ TEST_P(RenderFrameHostManagerTestWithSiteIsolation, DetachPendingChild) {
 
   EXPECT_TRUE(delete_watcher1.deleted());
   EXPECT_FALSE(delete_watcher2.deleted());
-  EXPECT_EQ(1U, site_instance->active_frame_count());
+  EXPECT_EQ(1U, site_instance->group()->active_frame_count());
 
   // Proxies should still exist.
   EXPECT_NE(nullptr,
@@ -1956,7 +1956,7 @@ TEST_P(RenderFrameHostManagerTestWithSiteIsolation, DetachPendingChild) {
   EXPECT_TRUE(delete_watcher1.deleted());
   EXPECT_TRUE(delete_watcher2.deleted());
 
-  EXPECT_EQ(0U, site_instance->active_frame_count());
+  EXPECT_EQ(0U, site_instance->group()->active_frame_count());
   EXPECT_EQ(nullptr,
             root_manager->GetRenderFrameProxyHost(site_instance->group()))
       << "Proxies should have been cleaned up";
@@ -1964,7 +1964,7 @@ TEST_P(RenderFrameHostManagerTestWithSiteIsolation, DetachPendingChild) {
       << "This SiteInstance should be destroyable now.";
 }
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 // TODO(lukasza): https://crbug.com/1067432: Calling Compositor::Initialize()
 // DCHECKs flakily and without such call the test below consistently fails on
 // Android (DCHECKing about parent_view->GetFrameSinkId().is_valid() in
@@ -1979,7 +1979,7 @@ TEST_P(RenderFrameHostManagerTestWithSiteIsolation, DetachPendingChild) {
 // mess with the first tab's content. Motivated by http://crbug.com/473714.
 TEST_P(RenderFrameHostManagerTestWithSiteIsolation,
        MAYBE_TwoTabsCrashOneReloadsOneLeaves) {
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   // TODO(lukasza): https://crbug.com/1067432: This call might DCHECK flakily
   // about !CompositorImpl::IsInitialized()..
   Compositor::Initialize();
@@ -2054,6 +2054,92 @@ TEST_P(RenderFrameHostManagerTestWithSiteIsolation,
                          contents1->GetSiteInstance()->group()));
   EXPECT_EQ(nullptr, iframe->GetRenderFrameProxyHost(
                          contents2->GetSiteInstance()->group()));
+}
+
+// Tests two WebContents from the same origin, where one is first navigated to
+// a different origin. This different origin experiences a Renderer crash.
+// However we then navigate that WebContents back to the old origin, which still
+// has an active Renderer.
+//
+// This test confirms that for this return navigation that we identified that
+// there is no FallbackSurface for the RenderWidgetHostView to display during
+// the navigation. (https://crbug.com/1258363)
+TEST_P(RenderFrameHostManagerTestWithSiteIsolation,
+       TwoTabsOneNavigatesAndCrashesThenNavigatesBack) {
+  const GURL kUrl1("http://www.google.com/");
+  const GURL kUrl2("http://webkit.org/");
+
+  // `contents1` and `contents2` navigate to the same page.
+  TestWebContents* contents1 = contents();
+  std::unique_ptr<TestWebContents> contents2(
+      TestWebContents::Create(browser_context(), contents1->GetSiteInstance()));
+  contents1->NavigateAndCommit(kUrl1);
+  contents2->NavigateAndCommit(kUrl1);
+  MockRenderProcessHost* rph = contents1->GetMainFrame()->GetProcess();
+  EXPECT_EQ(rph, contents2->GetMainFrame()->GetProcess());
+  EXPECT_TRUE(contents1->GetMainFrame()->GetView());
+  EXPECT_TRUE(contents2->GetMainFrame()->GetView());
+  EXPECT_TRUE(contents1->GetMainFrame()->IsRenderFrameLive());
+  EXPECT_TRUE(contents2->GetMainFrame()->IsRenderFrameLive());
+  EXPECT_EQ(contents1->GetSiteInstance(), contents2->GetSiteInstance());
+  TestRenderWidgetHostView* initial_view =
+      static_cast<TestRenderWidgetHostView*>(
+          contents2->GetMainFrame()->GetView());
+
+  // Navigate `content2` to a different page. This navigation should have a
+  // valid FallbackSurface for the RenderWidgetHostView to display.
+  contents2->NavigateAndCommit(kUrl2);
+  TestRenderWidgetHostView* post_nav_view =
+      static_cast<TestRenderWidgetHostView*>(
+          contents2->GetMainFrame()->GetView());
+  // Since this is a different origin we should also be using a different
+  // RenderWidgetHostView.
+  EXPECT_NE(initial_view, post_nav_view);
+  EXPECT_FALSE(
+      post_nav_view->clear_fallback_surface_for_commit_pending_called());
+  EXPECT_TRUE(post_nav_view->take_fallback_content_from_called());
+  post_nav_view->ClearFallbackSurfaceCalled();
+  EXPECT_TRUE(contents1->GetMainFrame()->IsRenderFrameLive());
+  EXPECT_TRUE(contents2->GetMainFrame()->IsRenderFrameLive());
+  EXPECT_NE(contents1->GetSiteInstance(), contents2->GetSiteInstance());
+  EXPECT_TRUE(contents1->GetMainFrame()->GetView());
+  EXPECT_TRUE(contents2->GetMainFrame()->GetView());
+
+  // Crash the Renderer of the tab that navigated.
+  MockRenderProcessHost* rph2 = contents2->GetMainFrame()->GetProcess();
+  EXPECT_NE(rph, rph2);
+  rph2->SimulateCrash();
+  EXPECT_TRUE(contents1->GetMainFrame()->IsRenderFrameLive());
+  EXPECT_FALSE(contents2->GetMainFrame()->IsRenderFrameLive());
+  EXPECT_NE(contents1->GetSiteInstance(), contents2->GetSiteInstance());
+  EXPECT_TRUE(contents1->GetMainFrame()->GetView());
+  EXPECT_FALSE(contents2->GetMainFrame()->GetView());
+
+  // Navigate `contents2` back to previous host, which still has an active
+  // Renderer. This should notify the RenderWidgetHostView that there is no
+  // new FallbackSurface to take, and that it should update it's currently
+  // cached one.
+  contents2->NavigateAndCommit(kUrl1);
+  TestRenderWidgetHostView* return_nav_view =
+      static_cast<TestRenderWidgetHostView*>(
+          contents2->GetMainFrame()->GetView());
+  // We should be reusing the original RenderWidgetHostView that `contents2`
+  // used before the navigation to `kUrl2`
+  EXPECT_EQ(initial_view, return_nav_view);
+  EXPECT_TRUE(
+      return_nav_view->clear_fallback_surface_for_commit_pending_called());
+  EXPECT_FALSE(return_nav_view->take_fallback_content_from_called());
+  return_nav_view->ClearFallbackSurfaceCalled();
+
+  EXPECT_TRUE(contents1->GetMainFrame()->IsRenderFrameLive());
+  EXPECT_TRUE(contents2->GetMainFrame()->IsRenderFrameLive());
+  EXPECT_EQ(contents1->GetSiteInstance(), contents2->GetSiteInstance());
+  EXPECT_TRUE(contents1->GetMainFrame()->GetView());
+  EXPECT_TRUE(contents2->GetMainFrame()->GetView());
+  // We should also be back to sharing the same RenderProcessHost.
+  MockRenderProcessHost* rph3 = contents2->GetMainFrame()->GetProcess();
+  EXPECT_NE(rph2, rph3);
+  EXPECT_EQ(rph, rph3);
 }
 
 // Ensure that we don't grant WebUI bindings to a pending RenderViewHost when
@@ -2198,9 +2284,9 @@ TEST_P(RenderFrameHostManagerTest, CreateOpenerProxiesWithCycleOnOpenerChain) {
 
   // Verify that the proxies' openers point to each other.
   auto tab1_opener_frame_token =
-      tab1_manager->GetOpenerFrameToken(rfh2->GetSiteInstance());
+      tab1_manager->GetOpenerFrameToken(rfh2->GetSiteInstance()->group());
   auto tab2_opener_frame_token =
-      tab2_manager->GetOpenerFrameToken(rfh2->GetSiteInstance());
+      tab2_manager->GetOpenerFrameToken(rfh2->GetSiteInstance()->group());
   EXPECT_EQ(*tab1_opener_frame_token, tab2_proxy->GetFrameToken());
   EXPECT_EQ(*tab2_opener_frame_token, tab1_proxy->GetFrameToken());
 
@@ -2209,7 +2295,7 @@ TEST_P(RenderFrameHostManagerTest, CreateOpenerProxiesWithCycleOnOpenerChain) {
   // Verify that this IPC was sent and that it passed correct frame token.
   base::RunLoop().RunUntilIdle();
   DCHECK(proxy_observers.OpenerFrameToken(tab2_proxy) ==
-         tab2_manager->GetOpenerFrameToken(rfh2->GetSiteInstance()));
+         tab2_manager->GetOpenerFrameToken(rfh2->GetSiteInstance()->group()));
 }
 
 // Test that opener proxies are created properly when the opener points
@@ -2249,7 +2335,7 @@ TEST_P(RenderFrameHostManagerTest, CreateOpenerProxiesWhenOpenerPointsToSelf) {
 
   // Verify that the proxy's opener points to itself.
   auto opener_frame_token =
-      opener_manager->GetOpenerFrameToken(rfh2->GetSiteInstance());
+      opener_manager->GetOpenerFrameToken(rfh2->GetSiteInstance()->group());
   EXPECT_EQ(*opener_frame_token, opener_proxy->GetFrameToken());
 
   // Setting the opener in opener_proxy required an extra IPC message, since
@@ -2257,7 +2343,7 @@ TEST_P(RenderFrameHostManagerTest, CreateOpenerProxiesWhenOpenerPointsToSelf) {
   // Verify that this IPC was sent and that it passed correct frame token.
   base::RunLoop().RunUntilIdle();
   DCHECK(proxy_observers.OpenerFrameToken(opener_proxy) ==
-         opener_manager->GetOpenerFrameToken(rfh2->GetSiteInstance()));
+         opener_manager->GetOpenerFrameToken(rfh2->GetSiteInstance()->group()));
 }
 
 // Build the following frame opener graph and see that it can be properly
@@ -2951,8 +3037,7 @@ TEST_P(RenderFrameHostManagerTest, NavigateFromDeadRendererToWebUI) {
           *frame_entry, nullptr, frame_entry->url(),
           blink::mojom::Referrer::New(referrer.url, referrer.policy),
           blink::mojom::NavigationType::DIFFERENT_DOCUMENT,
-          blink::PreviewsTypes::PREVIEWS_UNSPECIFIED, base::TimeTicks::Now(),
-          base::TimeTicks::Now());
+          base::TimeTicks::Now(), base::TimeTicks::Now());
   blink::mojom::CommitNavigationParamsPtr commit_params =
       entry.ConstructCommitNavigationParams(
           *frame_entry, common_params->url, frame_entry->committed_origin(),
@@ -3305,7 +3390,7 @@ TEST_P(RenderFrameHostManagerTest,
   // deleted and is in BackForwardCache instead of being in pending deletion.
   // Disabling to consider this scenario.
   contents()->GetController().GetBackForwardCache().DisableForTesting(
-      BackForwardCache::TEST_ASSUMES_NO_CACHING);
+      BackForwardCache::TEST_REQUIRES_NO_CACHING);
 
   const GURL kUrl1("http://www.google.com");
   const GURL kUrl2("http://www.chromium.org");

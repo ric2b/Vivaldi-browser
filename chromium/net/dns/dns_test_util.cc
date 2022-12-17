@@ -13,13 +13,17 @@
 #include "base/check.h"
 #include "base/location.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/ranges/algorithm.h"
 #include "base/stl_util.h"
+#include "base/strings/strcat.h"
 #include "base/sys_byteorder.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "net/base/address_list.h"
 #include "net/base/io_buffer.h"
 #include "net/base/ip_address.h"
+#include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
 #include "net/dns/address_sorter.h"
 #include "net/dns/dns_hosts.h"
@@ -27,8 +31,11 @@
 #include "net/dns/dns_session.h"
 #include "net/dns/dns_socket_allocator.h"
 #include "net/dns/dns_util.h"
+#include "net/dns/public/dns_over_https_server_config.h"
 #include "net/dns/resolve_context.h"
+#include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/scheme_host_port.h"
 
 namespace net {
 namespace {
@@ -68,9 +75,10 @@ DnsResponse CreateMalformedResponse(std::string hostname, uint16_t type) {
 class MockAddressSorter : public AddressSorter {
  public:
   ~MockAddressSorter() override = default;
-  void Sort(const AddressList& list, CallbackType callback) const override {
+  void Sort(const std::vector<IPEndPoint>& endpoints,
+            CallbackType callback) const override {
     // Do nothing.
-    std::move(callback).Run(true, list);
+    std::move(callback).Run(true, endpoints);
   }
 };
 
@@ -630,7 +638,7 @@ MockDnsClient::~MockDnsClient() = default;
 
 bool MockDnsClient::CanUseSecureDnsTransactions() const {
   const DnsConfig* config = GetEffectiveConfig();
-  return config && config->IsValid() && !config->dns_over_https_servers.empty();
+  return config && config->IsValid() && !config->doh_config.servers().empty();
 }
 
 bool MockDnsClient::CanUseInsecureDnsTransactions() const {
@@ -730,6 +738,12 @@ DnsConfigOverrides MockDnsClient::GetConfigOverridesForTesting() const {
 void MockDnsClient::SetTransactionFactoryForTesting(
     std::unique_ptr<DnsTransactionFactory> factory) {
   NOTREACHED();
+}
+
+absl::optional<AddressList> MockDnsClient::GetPresetAddrs(
+    const url::SchemeHostPort& endpoint) const {
+  EXPECT_THAT(preset_endpoint_, testing::Optional(endpoint));
+  return preset_addrs_;
 }
 
 void MockDnsClient::CompleteDelayedTransactions() {

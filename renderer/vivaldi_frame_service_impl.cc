@@ -18,6 +18,7 @@
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/input/event_handler.h"
+#include "ui/events/types/scroll_types.h"
 
 #include "renderer/blink/vivaldi_snapshot_page.h"
 #include "renderer/blink/vivaldi_spatial_navigation.h"
@@ -162,32 +163,32 @@ void VivaldiFrameServiceImpl::ScrollPage(
     case ScrollType::kPageUp:
       local_frame->GetEventHandler().BubblingScroll(
           blink::mojom::blink::ScrollDirection::kScrollBlockDirectionBackward,
-          blink::ScrollGranularity::kScrollByPage);
+          ui::ScrollGranularity::kScrollByPage);
       break;
     case ScrollType::kPageDown:
       local_frame->GetEventHandler().BubblingScroll(
           blink::mojom::blink::ScrollDirection::kScrollBlockDirectionForward,
-          blink::ScrollGranularity::kScrollByPage);
+          ui::ScrollGranularity::kScrollByPage);
       break;
     case ScrollType::kPageLeft:
       local_frame->GetEventHandler().BubblingScroll(
           blink::mojom::blink::ScrollDirection::kScrollLeftIgnoringWritingMode,
-          blink::ScrollGranularity::kFirstScrollGranularity);
+          ui::ScrollGranularity::kFirstScrollGranularity);
       break;
     case ScrollType::kPageRight:
       local_frame->GetEventHandler().BubblingScroll(
           blink::mojom::blink::ScrollDirection::kScrollRightIgnoringWritingMode,
-          blink::ScrollGranularity::kFirstScrollGranularity);
+          ui::ScrollGranularity::kFirstScrollGranularity);
       break;
     case ScrollType::kTop:
       local_frame->GetEventHandler().BubblingScroll(
           blink::mojom::blink::ScrollDirection::kScrollBlockDirectionBackward,
-          blink::ScrollGranularity::kScrollByDocument);
+          ui::ScrollGranularity::kScrollByDocument);
       break;
     case ScrollType::kBottom:
       local_frame->GetEventHandler().BubblingScroll(
           blink::mojom::blink::ScrollDirection::kScrollBlockDirectionForward,
-          blink::ScrollGranularity::kScrollByDocument);
+          ui::ScrollGranularity::kScrollByDocument);
       break;
   }
 }

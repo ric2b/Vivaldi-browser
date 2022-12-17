@@ -7,6 +7,36 @@ This module contains classes that encapsulate data about the signing process.
 """
 
 import os.path
+import re
+import string
+
+from . import commands
+
+
+def _get_identity_hash(identity):
+    """Returns a string of the SHA-1 hash of a specified keychain identity.
+
+    Args:
+        identity: A string specifying the identity.
+
+    Returns:
+        A string with the hash, with a-f in lower case.
+
+    Raises:
+        ValueError: If the identity cannot be found.
+    """
+    if len(identity) == 40 and all(ch in string.hexdigits for ch in identity):
+        return identity.lower()
+
+    command = ['security', 'find-certificate', '-a', '-c', identity, '-Z']
+    output = commands.run_command_output(command)
+
+    hash_match = re.search(
+        b'^SHA-1 hash: ([0-9A-Fa-f]{40})$', output, flags=re.MULTILINE)
+    if not hash_match:
+        raise ValueError('Cannot find identity', identity)
+
+    return hash_match.group(1).decode('utf-8').lower()
 
 
 class CodeSignedProduct(object):
@@ -75,13 +105,14 @@ class CodeSignedProduct(object):
         # a hash to the identifier, which would violate the
         # identifier_requirement and most other requirements that would be
         # specified.
-        if config.identity == '-':
+        if config.identity == '-'or (not self.requirements and
+                                     not config.codesign_requirements_basic):
             return ''
 
         reqs = []
-        #if self.identifier_requirement:
-        #    reqs.append('designated => identifier "{identifier}"'.format(
-        #        identifier=self.identifier))
+        if self.identifier_requirement:
+            reqs.append('designated => identifier "{identifier}"'.format(
+                identifier=self.identifier))
         if self.requirements:
             reqs.append(self.requirements)
         if config.codesign_requirements_basic:
@@ -284,10 +315,19 @@ class Distribution(object):
 
             @property
             def provisioning_profile_basename(self):
-                profile = base_config.provisioning_profile_basename
-                if profile and this.channel_customize:
-                    return '{}_{}'.format(profile, this.app_name_fragment)
-                return profile
+                profile_basename = base_config.provisioning_profile_basename
+                if not profile_basename:
+                    return profile_basename
+
+                if this.channel_customize:
+                    profile_basename = '{}_{}'.format(profile_basename,
+                                                      this.app_name_fragment)
+                if base_config.identity:
+                    profile_basename = '{}.{}'.format(
+                        profile_basename,
+                        _get_identity_hash(base_config.identity))
+
+                return profile_basename
 
             @property
             def packaging_basename(self):

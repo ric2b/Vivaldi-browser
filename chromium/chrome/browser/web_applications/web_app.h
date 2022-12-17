@@ -14,13 +14,14 @@
 #include "chrome/browser/web_applications/web_app_chromeos_data.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_id.h"
+#include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/browser/web_applications/web_app_system_web_app_data.h"
-#include "chrome/browser/web_applications/web_application_info.h"
 #include "components/services/app_service/public/cpp/file_handler.h"
 #include "components/services/app_service/public/cpp/protocol_handler_info.h"
 #include "components/services/app_service/public/cpp/share_target.h"
 #include "components/services/app_service/public/cpp/url_handler_info.h"
 #include "components/sync/model/string_ordinal.h"
+#include "components/webapps/browser/installable/installable_metrics.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "url/gurl.h"
@@ -182,6 +183,11 @@ class WebApp {
     return run_on_os_login_mode_;
   }
 
+  absl::optional<RunOnOsLoginMode> run_on_os_login_os_integration_state()
+      const {
+    return run_on_os_login_os_integration_state_;
+  }
+
   bool window_controls_overlay_enabled() const {
     return window_controls_overlay_enabled_;
   }
@@ -223,6 +229,8 @@ class WebApp {
 
   blink::mojom::CaptureLinks capture_links() const { return capture_links_; }
 
+  blink::mojom::HandleLinks handle_links() const { return handle_links_; }
+
   const GURL& manifest_url() const { return manifest_url_; }
 
   const absl::optional<std::string>& manifest_id() const {
@@ -236,6 +244,15 @@ class WebApp {
   }
 
   const absl::optional<AppId>& parent_app_id() const { return parent_app_id_; }
+
+  const std::vector<PermissionsPolicyDeclaration>& permissions_policy() const {
+    return permissions_policy_;
+  }
+
+  const absl::optional<webapps::WebappInstallSource>
+  install_source_for_metrics() const {
+    return install_source_for_metrics_;
+  }
 
   // A Web App can be installed from multiple sources simultaneously. Installs
   // add a source to the app. Uninstalls remove a source from the app.
@@ -303,14 +320,20 @@ class WebApp {
   void SetInstallTime(const base::Time& time);
   void SetManifestUpdateTime(const base::Time& time);
   void SetRunOnOsLoginMode(RunOnOsLoginMode mode);
+  void SetRunOnOsLoginOsIntegrationState(RunOnOsLoginMode os_integration_state);
   void SetSyncFallbackData(SyncFallbackData sync_fallback_data);
   void SetCaptureLinks(blink::mojom::CaptureLinks capture_links);
+  void SetHandleLinks(blink::mojom::HandleLinks handle_links);
   void SetManifestUrl(const GURL& manifest_url);
   void SetManifestId(const absl::optional<std::string>& manifest_id);
   void SetWindowControlsOverlayEnabled(bool enabled);
   void SetStorageIsolated(bool is_storage_isolated);
   void SetLaunchHandler(absl::optional<LaunchHandler> launch_handler);
   void SetParentAppId(const absl::optional<AppId>& parent_app_id);
+  void SetPermissionsPolicy(
+      std::vector<PermissionsPolicyDeclaration> permissions_policy);
+  void SetInstallSourceForMetrics(
+      absl::optional<webapps::WebappInstallSource> install_source);
 
   // For logging and debug purposes.
   bool operator==(const WebApp&) const;
@@ -368,9 +391,15 @@ class WebApp {
   base::Time install_time_;
   base::Time manifest_update_time_;
   RunOnOsLoginMode run_on_os_login_mode_ = RunOnOsLoginMode::kNotRun;
+  // Tracks if the app run on os login mode has been registered with the OS.
+  // This might go out of sync with actual OS integration status, as Chrome does
+  // not actively monitor OS registries.
+  absl::optional<RunOnOsLoginMode> run_on_os_login_os_integration_state_;
   SyncFallbackData sync_fallback_data_;
   blink::mojom::CaptureLinks capture_links_ =
       blink::mojom::CaptureLinks::kUndefined;
+  blink::mojom::HandleLinks handle_links_ =
+      blink::mojom::HandleLinks::kUndefined;
   ClientData client_data_;
   GURL manifest_url_;
   absl::optional<std::string> manifest_id_;
@@ -386,6 +415,12 @@ class WebApp {
   bool is_storage_isolated_ = false;
   absl::optional<LaunchHandler> launch_handler_;
   absl::optional<AppId> parent_app_id_;
+  std::vector<PermissionsPolicyDeclaration> permissions_policy_;
+  // The source of the latest install, used for logging metrics. WebAppRegistrar
+  // provides range validation. Optional only to support legacy installations,
+  // since this used to be tracked as a pref. It might also be null if the value
+  // read from the database is not recognized by this client.
+  absl::optional<webapps::WebappInstallSource> install_source_for_metrics_;
   // New fields must be added to:
   //  - |operator==|
   //  - AsDebugValue()

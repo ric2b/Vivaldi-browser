@@ -170,11 +170,7 @@ void VivaldiSyncServiceImpl::OnClearDataComplete(
   NotifyObservers();
 }
 
-std::string VivaldiSyncServiceImpl::GetEncryptionBootstrapToken() const {
-  return sync_prefs_.GetEncryptionBootstrapToken();
-}
-
-void VivaldiSyncServiceImpl::SetEncryptionBootstrapToken(
+void VivaldiSyncServiceImpl::ResetEncryptionBootstrapToken(
     const std::string& token) {
   StopAndClear();
   sync_prefs_.SetEncryptionBootstrapToken(token);

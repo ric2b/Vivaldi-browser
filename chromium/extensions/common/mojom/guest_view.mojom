@@ -21,6 +21,13 @@ interface GuestView {
   // the script with the provided `script_id`.
   [Sync]
   CanExecuteContentScript(int32 routing_id, string script_id) => (bool allowed);
+
+  // NOTE(andre@vivaldi.com) : Check if the frame is owned by the extension with
+  // 'extension_id' and can inject and run code.
+  [Sync]
+  ExtensionCanExecuteContentScript(
+    int32 routing_id,
+    string extension_id) => (bool allowed);
 };
 
 // An interface implemented by the renderer which is used for creating a

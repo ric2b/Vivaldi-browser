@@ -5,7 +5,6 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_TABS_TAB_H_
 #define CHROME_BROWSER_UI_VIEWS_TABS_TAB_H_
 
-#include <list>
 #include <memory>
 #include <string>
 
@@ -30,7 +29,7 @@
 #include "ui/views/masked_targeter_delegate.h"
 #include "ui/views/view_observer.h"
 
-class AlertIndicator;
+class AlertIndicatorButton;
 class TabCloseButton;
 class TabController;
 class TabIcon;
@@ -154,6 +153,10 @@ class Tab : public gfx::AnimationDelegate,
   void ReleaseFreezingVoteToken();
   bool HasFreezingVoteToken() const { return freezing_token_ ? true : false; }
 
+  // Returns the width of the largest part of the tab that is available for the
+  // user to click to select/activate the tab.
+  int GetWidthOfLargestSelectableRegion() const;
+
   // Returns true if this tab became the active tab selected in
   // response to the last ui::ET_TAP_DOWN gesture dispatched to
   // this tab. Only used for collecting UMA metrics.
@@ -185,7 +188,7 @@ class Tab : public gfx::AnimationDelegate,
 
  private:
   class TabCloseButtonObserver;
-  friend class AlertIndicatorTest;
+  friend class AlertIndicatorButtonTest;
   friend class TabTest;
   friend class TabStripTestBase;
   FRIEND_TEST_ALL_PREFIXES(TabStripTest, TabCloseButtonVisibility);
@@ -233,7 +236,7 @@ class Tab : public gfx::AnimationDelegate,
   bool closing_ = false;
 
   raw_ptr<TabIcon> icon_ = nullptr;
-  raw_ptr<AlertIndicator> alert_indicator_ = nullptr;
+  raw_ptr<AlertIndicatorButton> alert_indicator_button_ = nullptr;
   raw_ptr<TabCloseButton> close_button_ = nullptr;
 
   raw_ptr<views::Label> title_;

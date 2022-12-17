@@ -99,7 +99,7 @@ bool ShouldShowQuietRequestAgainIfPreempted(
 }
 
 bool IsMediaRequest(RequestType type) {
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   if (type == RequestType::kCameraPanTiltZoom)
     return true;
 #endif
@@ -203,8 +203,7 @@ void PermissionRequestManager::AddRequest(
   const GURL& main_frame_origin =
       PermissionUtil::GetLastCommittedOriginAsURL(web_contents());
   bool is_main_frame =
-      url::Origin::Create(main_frame_origin)
-          .IsSameOriginWith(url::Origin::Create(request->requesting_origin()));
+      url::IsSameOriginWith(main_frame_origin, request->requesting_origin());
 
   absl::optional<url::Origin> auto_approval_origin =
       PermissionsClient::Get()->GetAutoApprovalOrigin();
@@ -375,8 +374,7 @@ void PermissionRequestManager::DidFinishNavigation(
   CleanUpRequests();
 }
 
-void PermissionRequestManager::DocumentOnLoadCompletedInMainFrame(
-    content::RenderFrameHost* render_frame_host) {
+void PermissionRequestManager::DocumentOnLoadCompletedInPrimaryMainFrame() {
   // This is scheduled because while all calls to the browser have been
   // issued at DOMContentLoaded, they may be bouncing around in scheduled
   // callbacks finding the UI thread still. This makes sure we allow those
@@ -428,7 +426,7 @@ void PermissionRequestManager::OnVisibilityChanged(
     return;
   }
 
-  if (!web_contents()->IsDocumentOnLoadCompletedInMainFrame())
+  if (!web_contents()->IsDocumentOnLoadCompletedInPrimaryMainFrame())
     return;
 
   if (!IsRequestInProgress()) {
@@ -556,6 +554,14 @@ void PermissionRequestManager::SetDecisionTime() {
   current_request_decision_time_ = base::Time::Now();
 }
 
+void PermissionRequestManager::SetManageClicked() {
+  set_manage_clicked();
+}
+
+void PermissionRequestManager::SetLearnMoreClicked() {
+  set_learn_more_clicked();
+}
+
 PermissionRequestManager::PermissionRequestManager(
     content::WebContents* web_contents)
     : content::WebContentsObserver(web_contents),
@@ -584,7 +590,7 @@ void PermissionRequestManager::DequeueRequestIfNeeded() {
   // PermissionBubbleMediaAccessHandler and UserMediaClient. We probably don't
   // need two permission queues, so resolve the duplication.
 
-  if (!web_contents()->IsDocumentOnLoadCompletedInMainFrame() || view_ ||
+  if (!web_contents()->IsDocumentOnLoadCompletedInPrimaryMainFrame() || view_ ||
       IsRequestInProgress()) {
     return;
   }
@@ -665,7 +671,7 @@ void PermissionRequestManager::ShowBubble() {
   if (!IsRequestInProgress() || view_)
     return;
 
-  DCHECK(web_contents()->IsDocumentOnLoadCompletedInMainFrame());
+  DCHECK(web_contents()->IsDocumentOnLoadCompletedInPrimaryMainFrame());
   DCHECK(current_request_ui_to_use_);
 
   if (tab_is_hidden_)
@@ -732,7 +738,7 @@ void PermissionRequestManager::ResetViewStateForCurrentRequest() {
   selector_decisions_.clear();
   should_dismiss_current_request_ = false;
   did_show_bubble_ = false;
-  did_click_managed_ = false;
+  did_click_manage_ = false;
   did_click_learn_more_ = false;
 
   if (view_)
@@ -761,7 +767,7 @@ void PermissionRequestManager::FinalizeCurrentRequests(
       requests_, web_contents(), permission_action, time_to_decision,
       DetermineCurrentRequestUIDisposition(),
       DetermineCurrentRequestUIDispositionReasonForUMA(),
-      prediction_grant_likelihood_, did_show_bubble_, did_click_managed_,
+      prediction_grant_likelihood_, did_show_bubble_, did_click_manage_,
       did_click_learn_more_);
 
   content::BrowserContext* browser_context =

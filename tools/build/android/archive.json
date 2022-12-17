@@ -1,0 +1,19 @@
+{
+  "keep": [],
+  "Vivaldi.*.apk": {
+    "file_globs": [ "apks/Vivaldi.*.apk" ],
+    "archive_type": "ARCHIVE_TYPE_FILES"
+  },
+  "Vivaldi.*.aab": {
+    "file_globs": [ "apks/Vivaldi.*.aab" ],
+    "archive_type": "ARCHIVE_TYPE_FILES"
+  },
+  "Vivaldi.apk.map": {
+    "file_globs": [ "apks/Vivaldi.*.apk.map" ],
+    "archive_type": "ARCHIVE_TYPE_ZIP"
+  },
+  "native_debug_symbols": {
+    "files": [ "lib.unstripped/libchrome.so" ],
+    "archive_type": "ARCHIVE_TYPE_ZIP"
+  }
+}

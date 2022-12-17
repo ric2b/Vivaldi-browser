@@ -48,7 +48,8 @@ bool HaveAllowedNetworkConnection() {
       chromeos::NetworkHandler::Get()->network_state_handler();
   const chromeos::NetworkState* network =
       network_state_handler->DefaultNetwork();
-  // TODO(gavindodd): Confirm that metered networks should be excluded.
+  // TODO(gavindodd): Confirm that metered networks should be excluded. This
+  // should only be true for cellular networks which are already blocked.
   const bool metered = network_state_handler->default_network_is_metered();
   // Return true if connected to an unmetered network.
   return network && network->IsConnectedState() && !metered;
@@ -84,9 +85,7 @@ ShimlessRmaService::ShimlessRmaService(
     std::unique_ptr<ShimlessRmaDelegate> shimless_rma_delegate)
     : shimless_rma_delegate_(std::move(shimless_rma_delegate)) {
   chromeos::RmadClient::Get()->AddObserver(this);
-  GetNetworkConfigService(
-      remote_cros_network_config_.BindNewPipeAndPassReceiver());
-  version_updater_.SetStatusCallback(
+  version_updater_.SetOsUpdateStatusCallback(
       base::BindRepeating(&ShimlessRmaService::OnOsUpdateStatusCallback,
                           weak_ptr_factory_.GetWeakPtr()));
   // Check if an OS update is available to minimize delays if needed later.
@@ -157,11 +156,9 @@ void ShimlessRmaService::BeginFinalization(BeginFinalizationCallback callback) {
       rmad::WelcomeState::RMAD_CHOICE_FINALIZE_REPAIR);
 
   if (!HaveAllowedNetworkConnection()) {
-    remote_cros_network_config_->GetNetworkStateList(
-        NetworkFilter::New(FilterType::kVisible, NetworkType::kAll,
-                           /*limit=*/0),
-        base::BindOnce(&ShimlessRmaService::OnNetworkListResponse,
-                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+    mojo_state_ = mojom::State::kConfigureNetwork;
+    std::move(callback).Run(mojom::State::kConfigureNetwork, can_abort_,
+                            can_go_back_, rmad::RmadErrorCode::RMAD_ERROR_OK);
   } else {
     check_os_callback_ =
         base::BindOnce(&ShimlessRmaService::OsUpdateOrNextRmadStateCallback,
@@ -237,7 +234,7 @@ void ShimlessRmaService::UpdateOsSkipped(UpdateOsSkippedCallback callback) {
                             rmad::RmadErrorCode::RMAD_ERROR_REQUEST_INVALID);
     return;
   }
-  if (!version_updater_.IsIdle()) {
+  if (!version_updater_.IsUpdateEngineIdle()) {
     LOG(ERROR) << "UpdateOsSkipped called while UpdateEngine active";
     // Override the rmad state (kWelcome) with the mojo sub-state for OS
     // updates.
@@ -440,6 +437,7 @@ void ShimlessRmaService::SetComponentList(
         state_proto_.mutable_components_repair()->add_components();
     proto_component->set_component(component.component());
     proto_component->set_repair_status(component.repair_status());
+    proto_component->set_identifier(component.identifier());
   }
   TransitionNextStateGeneric(std::move(callback));
 }
@@ -467,6 +465,8 @@ void ShimlessRmaService::RoFirmwareUpdateComplete(
                             rmad::RmadErrorCode::RMAD_ERROR_REQUEST_INVALID);
     return;
   }
+  state_proto_.mutable_update_ro_firmware()->set_choice(
+      rmad::UpdateRoFirmwareState::RMAD_UPDATE_CHOICE_CONTINUE);
   TransitionNextStateGeneric(std::move(callback));
 }
 
@@ -589,10 +589,26 @@ void ShimlessRmaService::GetOriginalWhiteLabel(
       state_proto_.update_device_info().original_whitelabel_index());
 }
 
+void ShimlessRmaService::GetOriginalDramPartNumber(
+    GetOriginalDramPartNumberCallback callback) {
+  if (state_proto_.state_case() != rmad::RmadState::kUpdateDeviceInfo) {
+    // TODO(gavindodd): Consider replacing all invalid call handling with
+    // mojo::ReportBadMessage("error message");
+    LOG(ERROR) << "GetOriginalDramPartNumber called from incorrect state "
+               << state_proto_.state_case();
+    std::move(callback).Run("");
+    return;
+  }
+  std::move(callback).Run(
+      state_proto_.update_device_info().original_dram_part_number());
+}
+
 void ShimlessRmaService::SetDeviceInformation(
     const std::string& serial_number,
-    uint8_t region_index,
-    uint8_t sku_index,
+    int32_t region_index,
+    int32_t sku_index,
+    int32_t white_label_index,
+    const std::string& dram_part_number,
     SetDeviceInformationCallback callback) {
   if (state_proto_.state_case() != rmad::RmadState::kUpdateDeviceInfo) {
     LOG(ERROR) << "SetDeviceInformation called from incorrect state "
@@ -605,6 +621,10 @@ void ShimlessRmaService::SetDeviceInformation(
   state_proto_.mutable_update_device_info()->set_serial_number(serial_number);
   state_proto_.mutable_update_device_info()->set_region_index(region_index);
   state_proto_.mutable_update_device_info()->set_sku_index(sku_index);
+  state_proto_.mutable_update_device_info()->set_whitelabel_index(
+      white_label_index);
+  state_proto_.mutable_update_device_info()->set_dram_part_number(
+      dram_part_number);
   TransitionNextStateGeneric(std::move(callback));
 }
 
@@ -701,6 +721,20 @@ void ShimlessRmaService::CalibrationComplete(
   TransitionNextStateGeneric(std::move(callback));
 }
 
+void ShimlessRmaService::RetryProvisioning(RetryProvisioningCallback callback) {
+  if (state_proto_.state_case() != rmad::RmadState::kProvisionDevice) {
+    LOG(ERROR) << "RetryProvisioning called from incorrect state "
+               << state_proto_.state_case();
+    std::move(callback).Run(RmadStateToMojo(state_proto_.state_case()),
+                            can_abort_, can_go_back_,
+                            rmad::RmadErrorCode::RMAD_ERROR_REQUEST_INVALID);
+    return;
+  }
+  state_proto_.mutable_provision_device()->set_choice(
+      rmad::ProvisionDeviceState::RMAD_PROVISION_CHOICE_RETRY);
+  TransitionNextStateGeneric(std::move(callback));
+}
+
 void ShimlessRmaService::ProvisioningComplete(
     ProvisioningCompleteCallback callback) {
   if (state_proto_.state_case() != rmad::RmadState::kProvisionDevice) {
@@ -711,6 +745,22 @@ void ShimlessRmaService::ProvisioningComplete(
                             rmad::RmadErrorCode::RMAD_ERROR_REQUEST_INVALID);
     return;
   }
+  state_proto_.mutable_provision_device()->set_choice(
+      rmad::ProvisionDeviceState::RMAD_PROVISION_CHOICE_CONTINUE);
+  TransitionNextStateGeneric(std::move(callback));
+}
+
+void ShimlessRmaService::RetryFinalization(RetryFinalizationCallback callback) {
+  if (state_proto_.state_case() != rmad::RmadState::kFinalize) {
+    LOG(ERROR) << "RetryFinalization called from incorrect state "
+               << state_proto_.state_case();
+    std::move(callback).Run(RmadStateToMojo(state_proto_.state_case()),
+                            can_abort_, can_go_back_,
+                            rmad::RmadErrorCode::RMAD_ERROR_REQUEST_INVALID);
+    return;
+  }
+  state_proto_.mutable_finalize()->set_choice(
+      rmad::FinalizeState::RMAD_FINALIZE_CHOICE_RETRY);
   TransitionNextStateGeneric(std::move(callback));
 }
 
@@ -746,7 +796,8 @@ void ShimlessRmaService::GetLog(GetLogCallback callback) {
   if (state_proto_.state_case() != rmad::RmadState::kRepairComplete) {
     LOG(ERROR) << "GetLog called from incorrect state "
                << state_proto_.state_case();
-    std::move(callback).Run("");
+    std::move(callback).Run("",
+                            rmad::RmadErrorCode::RMAD_ERROR_REQUEST_INVALID);
     return;
   }
   chromeos::RmadClient::Get()->GetLog(
@@ -755,12 +806,15 @@ void ShimlessRmaService::GetLog(GetLogCallback callback) {
 }
 
 void ShimlessRmaService::OnGetLog(GetLogCallback callback,
-                                  absl::optional<std::string> log) {
-  if (!log) {
-    std::move(callback).Run("");
+                                  absl::optional<rmad::GetLogReply> response) {
+  if (!response) {
+    LOG(ERROR) << "Failed to call rmad::GetLog";
+    std::move(callback).Run("",
+                            rmad::RmadErrorCode::RMAD_ERROR_REQUEST_INVALID);
     return;
   }
-  std::move(callback).Run(*log);
+
+  std::move(callback).Run(response->log(), response->error());
 }
 
 void ShimlessRmaService::LaunchDiagnostics() {
@@ -1029,15 +1083,21 @@ void ShimlessRmaService::OnAbortRmaResponse(
     AbortRmaCallback callback,
     bool reboot,
     absl::optional<rmad::AbortRmaReply> response) {
+  const bool rma_not_required =
+      critical_error_occurred_ ||
+      (response && response->error() == rmad::RMAD_ERROR_RMA_NOT_REQUIRED);
+  // Send status before shutting down or restarting Chrome session.
   if (!response) {
     LOG(ERROR) << "Failed to call rmad::AbortRma";
     std::move(callback).Run(rmad::RmadErrorCode::RMAD_ERROR_REQUEST_INVALID);
+  } else if (rma_not_required) {
+    std::move(callback).Run(rmad::RMAD_ERROR_OK);
   } else {
     std::move(callback).Run(response->error());
   }
-  // Only reboot or exit to login if abort was successful or a critical error
-  // has occurred.
-  if (critical_error_occurred_ || response->error() == rmad::RMAD_ERROR_OK) {
+  // Only reboot or exit to login if abort was successful (state will be
+  // RMAD_ERROR_RMA_NOT_REQUIRED) or a critical error has occurred.
+  if (rma_not_required) {
     if (reboot) {
       VLOG(1) << "Rebooting...";
       chromeos::PowerManagerClient::Get()->RequestRestart(
@@ -1047,39 +1107,9 @@ void ShimlessRmaService::OnAbortRmaResponse(
               : "Rebooting after user cancelled RMA.");
     } else {
       VLOG(1) << "Restarting Chrome to bypass RMA after cancel request.";
-      // TODO(gavindodd): Append ::ash::switches::kNoShimlessRma when autolaunch
-      // is implemented.
-      shimless_rma_delegate_->RestartChrome();
+      shimless_rma_delegate_->ExitRmaThenRestartChrome();
     }
   }
-}
-
-void ShimlessRmaService::OnNetworkListResponse(
-    BeginFinalizationCallback callback,
-    std::vector<NetworkStatePropertiesPtr> response) {
-  for (const NetworkStatePropertiesPtr& network : response) {
-    if (network->connection_state == ConnectionStateType::kOnline) {
-      switch (network->type) {
-        case NetworkType::kWiFi:
-        case NetworkType::kEthernet:
-          mojo_state_ = mojom::State::kUpdateOs;
-          std::move(callback).Run(mojom::State::kUpdateOs, can_abort_,
-                                  can_go_back_,
-                                  rmad::RmadErrorCode::RMAD_ERROR_OK);
-          return;
-        case NetworkType::kAll:  // filter-only type
-        case NetworkType::kCellular:
-        case NetworkType::kMobile:
-        case NetworkType::kTether:
-        case NetworkType::kVPN:
-        case NetworkType::kWireless:  // filter-only type
-          continue;
-      }
-    }
-  }
-  mojo_state_ = mojom::State::kConfigureNetwork;
-  std::move(callback).Run(mojom::State::kConfigureNetwork, can_abort_,
-                          can_go_back_, rmad::RmadErrorCode::RMAD_ERROR_OK);
 }
 
 void ShimlessRmaService::OnOsUpdateStatusCallback(

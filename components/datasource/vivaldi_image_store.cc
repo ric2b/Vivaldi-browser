@@ -300,31 +300,28 @@ void VivaldiImageStore::LoadMappingsOnFileThread() {
   }
 
   if (root.value->is_dict()) {
-    if (const base::Value* mappings_value =
-            root.value->FindDictKey("mappings")) {
-      InitMappingsOnFileThread(
-          static_cast<const base::DictionaryValue*>(mappings_value));
+    if (base::Value::Dict* mappings =
+            root.value->GetDict().FindDict("mappings")) {
+      InitMappingsOnFileThread(*mappings);
     }
   }
 }
 
-void VivaldiImageStore::InitMappingsOnFileThread(
-    const base::DictionaryValue* dict) {
+void VivaldiImageStore::InitMappingsOnFileThread(base::Value::Dict& mappings) {
   DCHECK(sequence_task_runner_->RunsTasksInCurrentSequence());
   DCHECK(path_id_map_.empty());
 
-  for (const auto i : dict->DictItems()) {
+  for (auto i : mappings) {
     const std::string& id = i.first;
     if (vivaldi_data_url_utils::isOldFormatThumbnailId(id)) {
       // Older mapping entry that we just skip as we know the path statically.
       continue;
     }
-    const base::Value& value = i.second;
-    if (value.is_dict()) {
-      const std::string* path_string = value.FindStringKey("local_path");
+    if (base::Value::Dict* dict = i.second.GetIfDict()) {
+      std::string* path_string = dict->FindString("local_path");
       if (!path_string) {
         // Older format support.
-        path_string = value.FindStringKey("relative_path");
+        path_string = dict->FindString("relative_path");
       }
       if (path_string) {
 #if defined(OS_POSIX)
@@ -352,14 +349,13 @@ std::string VivaldiImageStore::GetMappingJSONOnFileThread() {
   std::vector<base::Value::DictStorage::value_type> items;
   for (const auto& it : path_id_map_) {
     const base::FilePath& path = it.second;
-    base::Value item(base::Value::Type::DICTIONARY);
-    item.SetStringKey("local_path", path.AsUTF16Unsafe());
+    base::Value::Dict item;
+    item.Set("local_path", path.AsUTF16Unsafe());
     items.emplace_back(it.first, std::move(item));
   }
 
-  base::Value root(base::Value::Type::DICTIONARY);
-  root.SetKey("mappings",
-              base::Value(base::Value::DictStorage(std::move(items))));
+  base::Value::Dict root;
+  root.Set("mappings", base::Value(base::Value::DictStorage(std::move(items))));
 
   std::string json;
   base::JSONWriter::WriteWithOptions(

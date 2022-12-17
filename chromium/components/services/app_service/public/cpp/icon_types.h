@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include "base/component_export.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
 #include "ui/gfx/image/image_skia.h"
 
@@ -59,6 +60,8 @@ struct COMPONENT_EXPORT(ICON_TYPES) IconKey {
   // When adding new fields, also update the IconLoader::Key type in
   // components/services/app_service/public/cpp/icon_loader.*
 };
+
+using IconKeyPtr = std::unique_ptr<IconKey>;
 
 enum class IconType {
   // Sentinel value used in error cases.

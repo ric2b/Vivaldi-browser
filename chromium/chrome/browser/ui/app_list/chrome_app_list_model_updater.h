@@ -21,6 +21,7 @@
 namespace app_list {
 namespace reorder {
 class AppListReorderDelegate;
+struct ReorderParam;
 }  // namespace reorder
 }  // namespace app_list
 
@@ -55,6 +56,7 @@ class ChromeAppListModelUpdater : public AppListModelUpdater,
   void PublishSearchResults(
       const std::vector<ChromeSearchResult*>& results,
       const std::vector<ash::AppListSearchResultCategory>& categories) override;
+  void ClearSearchResults() override;
   std::vector<ChromeSearchResult*> GetPublishedSearchResultsForTest() override;
 
   // Methods only used by ChromeAppListItem that talk to ash directly.
@@ -120,10 +122,13 @@ class ChromeAppListModelUpdater : public AppListModelUpdater,
                              const syncer::StringOrdinal& new_position,
                              ash::RequestPositionUpdateReason reason) override;
   void RequestMoveItemToFolder(std::string id,
-                               const std::string& folder_id,
-                               ash::RequestMoveToFolderReason reason) override;
+                               const std::string& folder_id) override;
   void RequestMoveItemToRoot(std::string id,
                              syncer::StringOrdinal target_position) override;
+  std::string RequestFolderCreation(std::string target_merge_id,
+                                    std::string item_to_merge_id) override;
+  void RequestFolderRename(std::string folder_id,
+                           const std::string& new_name) override;
   void RequestAppListSort(ash::AppListSortOrder order) override;
   void RequestAppListSortRevert() override;
 
@@ -173,15 +178,25 @@ class ChromeAppListModelUpdater : public AppListModelUpdater,
   // Ends temporary sort status and performs the specified action.
   void EndTemporarySortAndTakeAction(EndAction action);
 
-  // Reverts item positions under the temporary sort.
-  void RevertTemporaryPositions();
-
   // Commits item positions under the temporary sort.
   void CommitTemporaryPositions();
+
+  // Calculates the reorder params for reverting the temporary order.
+  std::vector<app_list::reorder::ReorderParam>
+  CalculateReorderParamsForRevertOrder() const;
 
   // If folder with the provided ID has a single child, it reparents the child
   // to the root app list.
   void ClearFolderIfItHasSingleChild(const std::string& folder_id);
+
+  // Updates the item positions in the ash side. `reorder_params` specifies
+  // target positions.
+  void UpdateItemPositionWithReorderParam(
+      const std::vector<app_list::reorder::ReorderParam>& reorder_params);
+
+  // Resets the pref sort order to be kCustom when the app list is not under
+  // temporary sorting. `event` indicates the reason leading to reset.
+  void ResetPrefSortOrderInNonTemporaryMode(ash::AppListOrderUpdateEvent event);
 
   // Indicates the profile that the model updater is associated with.
   Profile* const profile_ = nullptr;

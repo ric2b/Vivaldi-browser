@@ -12,9 +12,9 @@ class SUFileManagerTest: XCTestCase
 {
     func makeTempFiles(_ testBlock: (SUFileManager, URL, URL, URL, URL, URL, URL) -> Void)
     {
-        let fileManager = SUFileManager.default()
-
-        let tempDirectoryURL = (try! fileManager.makeTemporaryDirectory(withPreferredName: "Sparkle Unit Test Data", appropriateForDirectoryURL: URL(fileURLWithPath: NSHomeDirectory())))
+        let fileManager = SUFileManager()
+        
+        let tempDirectoryURL = try! fileManager.makeTemporaryDirectoryAppropriate(forDirectoryURL: URL(fileURLWithPath: NSHomeDirectory()))
 
         defer {
             try! fileManager.removeItem(at: tempDirectoryURL)
@@ -228,6 +228,53 @@ class SUFileManagerTest: XCTestCase
         }
     }
 
+    func testUpdateFileAccessTime()
+    {
+        let accessTime: ((URL) -> timespec?) = { url in
+            var outputStat = stat()
+            let result = lstat(url.path, &outputStat)
+            if result != 0 {
+                return nil
+            } else {
+                return outputStat.st_atimespec
+            }
+        }
+
+        let timespecEqual: (timespec, timespec) -> Bool = {t1, t2 in
+            (t1.tv_sec == t2.tv_sec && t1.tv_nsec == t2.tv_nsec)
+        }
+
+        makeTempFiles() { fileManager, rootURL, ordinaryFileURL, directoryURL, fileInDirectoryURL, validSymlinkURL, _ in
+            XCTAssertNil(try? fileManager.updateAccessTimeOfItem(atRootURL: rootURL.appendingPathComponent("does not exist")))
+
+            let oldOrdinaryFileTime = accessTime(ordinaryFileURL)!
+            let oldDirectoryTime = accessTime(directoryURL)!
+            let oldValidSymlinkTime = accessTime(validSymlinkURL)!
+
+            sleep(1); // wait for clock to advance
+
+            // Make sure access time haven't changed since; lstat() shouldn't have changed the access time..
+            XCTAssertTrue(timespecEqual(oldOrdinaryFileTime, accessTime(ordinaryFileURL)!))
+            XCTAssertTrue(timespecEqual(oldDirectoryTime, accessTime(directoryURL)!))
+            XCTAssertTrue(timespecEqual(oldValidSymlinkTime, accessTime(validSymlinkURL)!))
+
+            // Test the symlink and make sure the target directory doesn't change
+            try! fileManager.updateAccessTimeOfItem(atRootURL: validSymlinkURL)
+            XCTAssertFalse(timespecEqual(oldValidSymlinkTime, accessTime(validSymlinkURL)!))
+            XCTAssertTrue(timespecEqual(oldDirectoryTime, accessTime(directoryURL)!))
+
+            // Test an ordinary file
+            try! fileManager.updateAccessTimeOfItem(atRootURL: ordinaryFileURL)
+            XCTAssertFalse(timespecEqual(oldOrdinaryFileTime, accessTime(ordinaryFileURL)!))
+
+            // Test the directory and file inside the directory
+            try! fileManager.updateAccessTimeOfItem(atRootURL: directoryURL)
+            let newDirectoryTime = accessTime(directoryURL)!
+            XCTAssertFalse(timespecEqual(oldDirectoryTime, newDirectoryTime))
+            XCTAssertTrue(timespecEqual(newDirectoryTime, accessTime(fileInDirectoryURL)!))
+        }
+    }
+
     func testFileExists()
     {
         makeTempFiles() { fileManager, rootURL, ordinaryFileURL, directoryURL, _, validSymlinkURL, invalidSymlinkURL in
@@ -274,11 +321,5 @@ class SUFileManagerTest: XCTestCase
             try! fileManager.removeItem(at: directoryURL)
             XCTAssertNil(try? fileManager.makeDirectory(at: validSymlinkURL))
         }
-    }
-
-    func testAcquireBadAuthorization()
-    {
-        let fileManager = SUFileManager.default()
-        XCTAssertNil(try? fileManager._acquireAuthorization())
     }
 }

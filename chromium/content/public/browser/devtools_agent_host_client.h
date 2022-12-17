@@ -7,11 +7,14 @@
 
 #include "base/containers/span.h"
 #include "content/common/content_export.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
+#include "url/origin.h"
 
 class GURL;
 namespace content {
 
 class DevToolsAgentHost;
+class RenderFrameHost;
 
 // DevToolsAgentHostClient can attach to a DevToolsAgentHost and start
 // debugging it.
@@ -29,6 +32,10 @@ class CONTENT_EXPORT DevToolsAgentHostClient {
   // Returns true if the client is allowed to attach to the given URL.
   // Note: this method may be called before navigation commits.
   virtual bool MayAttachToURL(const GURL& url, bool is_webui);
+
+  // Returns true if the client is allowed to attach to the given
+  // RenderFrameHost.
+  virtual bool MayAttachToRenderFrameHost(RenderFrameHost* render_frame_host);
 
   // Returns true if the client is allowed to attach to the browser agent host.
   // Browser client is allowed to discover other DevTools targets and generally
@@ -52,8 +59,19 @@ class CONTENT_EXPORT DevToolsAgentHostClient {
   // that are already privileged, such as local automation clients.
   virtual bool AllowUnsafeOperations();
 
+  // A value to use as NavigationController::LoadURLParams::initiator_origin.
+  // If set, navigations would also be treated as renderer-initiated.
+  // This is useful e.g. for Chrome Extensions so that their calls to
+  // Page.navigate would be treated as renderer-initiated naviation subject to
+  // URL spoofing protection.
+  virtual absl::optional<url::Origin> GetNavigationInitiatorOrigin();
+
   // Determines protocol message format.
   virtual bool UsesBinaryProtocol();
+
+  // Returns "DevTools" | "Extension" | "RemoteDebugger" | "Other", which is
+  // used to emit to the correct UMA histogram.
+  virtual std::string GetTypeForMetrics();
 };
 
 }  // namespace content

@@ -153,6 +153,9 @@ const char* ProtoEnumToString(
     sync_pb::UserConsentTypes::AssistantActivityControlConsent::SettingType
         setting_type);
 
+const char* ProtoEnumToString(
+    sync_pb::WebauthnCredentialSpecifics::PaymentsSupport payments_support);
+
 // Vivaldi specific
 const char* ProtoEnumToString(
     sync_pb::NotesSpecifics::VivaldiSpecialNotesType special_type);

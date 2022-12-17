@@ -257,8 +257,14 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessInteractiveBrowserTest,
 //
 // The test then presses <tab> six times to cycle through focused elements 1-6.
 // The test then repeats this with <shift-tab> to cycle in reverse order.
+#if BUILDFLAG(IS_MAC)
+// TODO(crbug.com/1295296): Fails on Mac 10.11.
+#define MAYBE_SequentialFocusNavigation DISABLED_SequentialFocusNavigation
+#else
+#define MAYBE_SequentialFocusNavigation SequentialFocusNavigation
+#endif
 IN_PROC_BROWSER_TEST_F(SitePerProcessInteractiveBrowserTest,
-                       SequentialFocusNavigation) {
+                       MAYBE_SequentialFocusNavigation) {
   GURL main_url(embedded_test_server()->GetURL(
       "a.com", "/cross_site_iframe_factory.html?a(b,c)"));
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), main_url));
@@ -422,7 +428,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessInteractiveBrowserTest,
 
 // TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
 // of lacros-chrome is complete.
-#if (defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)) || defined(OS_WIN)
+#if (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)) || BUILDFLAG(IS_WIN)
 // Ensures that renderers know to advance focus to sibling frames and parent
 // frames in the presence of mouse click initiated focus changes.
 // Verifies against regression of https://crbug.com/702330
@@ -737,7 +743,7 @@ void WaitForMultipleFullscreenEvents(
 // - fullscreenchange events fire in both frames.
 // - fullscreen CSS is applied correctly in both frames.
 //
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 // https://crbug.com/850594
 #define MAYBE_FullscreenElementInSubframe DISABLED_FullscreenElementInSubframe
 #else
@@ -935,7 +941,7 @@ void SitePerProcessInteractiveBrowserTest::FullscreenElementInABA(
 }
 
 // https://crbug.com/1087392: Flaky for ASAN and TSAN
-#if defined(OS_MAC) || defined(ADDRESS_SANITIZER) || defined(THREAD_SANITIZER)
+#if BUILDFLAG(IS_MAC) || defined(ADDRESS_SANITIZER) || defined(THREAD_SANITIZER)
 #define MAYBE_FullscreenElementInABAAndExitViaEscapeKey \
   DISABLED_FullscreenElementInABAAndExitViaEscapeKey
 #else
@@ -1554,7 +1560,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessInteractiveBrowserTest,
 // the NSEvent is sent to NSApplication in ui/base/test/ui_controls_mac.mm .
 // This test is disabled on only the Mac until the problem is resolved.
 // See http://crbug.com/425859 for more information.
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 #define MAYBE_SubframeAnchorOpenedInBackgroundTab \
   DISABLED_SubframeAnchorOpenedInBackgroundTab
 #else
@@ -1585,7 +1591,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessInteractiveBrowserTest,
   content::WebContents* new_contents = nullptr;
   {
     content::WebContentsAddedObserver new_tab_observer;
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
     ASSERT_TRUE(ui_test_utils::SendKeyPressToWindowSync(
         old_contents->GetTopLevelNativeWindow(), ui::VKEY_RETURN, false, false,
         false, true /* cmd */));

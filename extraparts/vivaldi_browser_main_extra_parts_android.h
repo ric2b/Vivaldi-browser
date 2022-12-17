@@ -16,7 +16,7 @@ class VivaldiBrowserMainExtraPartsAndroid
       const VivaldiBrowserMainExtraPartsAndroid&) = delete;
 
   // VivaldiBrowserMainExtraParts override.
-  void PostProfileInit() override;
+  void PostProfileInit(Profile* profile, bool is_initial_profile) override;
 };
 
 #endif  // EXTRAPARTS_VIVALDI_BROWSER_MAIN_EXTRA_PARTS_ANDROID_H_

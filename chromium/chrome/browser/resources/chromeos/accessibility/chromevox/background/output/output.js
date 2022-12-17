@@ -137,6 +137,8 @@ Output = class {
      * @private {!WeakSet<!AutomationNode>}
      */
     this.formattedAncestors_ = new WeakSet();
+    /** @private {!Object<string, string>} */
+    this.replacements_ = {};
   }
 
   /**
@@ -401,6 +403,15 @@ Output = class {
   }
 
   /**
+   * Causes any speech output to apply the replacement.
+   * @param {string} text The text to be replaced.
+   * @param {string} replace What to replace |text| with.
+   */
+  withSpeechTextReplacement(text, replace) {
+    this.replacements_[text] = replace;
+  }
+
+  /**
    * Suppresses processing of a token for subsequent formatting commands.
    * @param {string} token
    * @return {!Output}
@@ -547,8 +558,11 @@ Output = class {
       if (i === this.speechBuffer_.length - 1) {
         speechProps['endCallback'] = this.speechEndCallback_;
       }
-
-      ChromeVox.tts.speak(buff.toString(), queueMode, speechProps);
+      let finalSpeech = buff.toString();
+      for (const text in this.replacements_) {
+        finalSpeech = finalSpeech.replace(text, this.replacements_[text]);
+      }
+      ChromeVox.tts.speak(finalSpeech, queueMode, speechProps);
 
       // Skip resetting |queueMode| if the |text| is empty. If we don't do this,
       // and the tts engine doesn't generate a callback, we might not properly
@@ -1681,8 +1695,8 @@ Output = class {
         (this.contextOrder_ === OutputContextOrder.DIRECTED && !isForward);
     const preferStartOrEndAncestry =
         this.contextOrder_ === OutputContextOrder.FIRST_AND_LAST;
-    let cursor = cursors.Cursor.fromNode(range.start.node);
     let prevNode = prevRange.start.node;
+    let node = range.start.node;
 
     const formatNodeAndAncestors = function(node, prevNode) {
       const buff = [];
@@ -1705,26 +1719,72 @@ Output = class {
     }.bind(this);
 
     let lca = null;
+    if (range.start.node !== range.end.node) {
+      lca = AutomationUtil.getLeastCommonAncestor(
+          range.end.node, range.start.node);
+    }
     if (addContextAfter) {
-      if (range.start.node !== range.end.node) {
-        lca = AutomationUtil.getLeastCommonAncestor(
-            range.end.node, range.start.node);
-      }
-
       prevNode = lca || prevNode;
     }
 
-    const unit = range.isInlineText() ? cursors.Unit.TEXT : cursors.Unit.NODE;
-    while (cursor.node && range.end.node &&
-           AutomationUtil.getDirection(cursor.node, range.end.node) ===
-               Dir.FORWARD) {
-      const node = cursor.node;
-      rangeBuff.push.apply(rangeBuff, formatNodeAndAncestors(node, prevNode));
+    // Do some bookkeeping to see whether this range partially covers node(s) at
+    // its endpoints.
+    let hasPartialNodeStart = false;
+    let hasPartialNodeEnd = false;
+    if (AutomationPredicate.selectableText(range.start.node) &&
+        range.start.index > 0) {
+      hasPartialNodeStart = true;
+    }
+
+    if (AutomationPredicate.selectableText(range.end.node) &&
+        range.end.index >= 0 && range.end.index < range.end.node.name.length) {
+      hasPartialNodeEnd = true;
+    }
+
+    let pred;
+    if (range.isInlineText()) {
+      pred = AutomationPredicate.leaf;
+    } else if (hasPartialNodeStart || hasPartialNodeEnd) {
+      pred = AutomationPredicate.selectableText;
+    } else {
+      pred = AutomationPredicate.object;
+    }
+
+    // Computes output for nodes (including partial subnodes) between endpoints
+    // of |range|.
+    while (node && range.end.node &&
+           AutomationUtil.getDirection(node, range.end.node) === Dir.FORWARD) {
+      if (hasPartialNodeStart && node === range.start.node) {
+        if (range.start.index !== range.start.node.name.length) {
+          const partialRange = new cursors.Range(
+              new cursors.Cursor(node, range.start.index),
+              new cursors.Cursor(
+                  node, node.name.length, {preferNodeStartEquivalent: true}));
+          this.subNode_(partialRange, prevRange, type, rangeBuff, ruleStr);
+        }
+      } else if (hasPartialNodeEnd && node === range.end.node) {
+        if (range.end.index !== 0) {
+          const partialRange = new cursors.Range(
+              new cursors.Cursor(node, 0),
+              new cursors.Cursor(node, range.end.index));
+          this.subNode_(partialRange, prevRange, type, rangeBuff, ruleStr);
+        }
+      } else {
+        rangeBuff.push.apply(rangeBuff, formatNodeAndAncestors(node, prevNode));
+      }
+
+      // End early if the range is just a single node.
+      if (range.start.node === range.end.node) {
+        break;
+      }
+
       prevNode = node;
-      cursor = cursor.move(unit, cursors.Movement.DIRECTIONAL, Dir.FORWARD);
+      node = AutomationUtil.findNextNode(
+                 node, Dir.FORWARD, pred, {root: r => r === lca}) ||
+          prevNode;
 
       // Reached a boundary.
-      if (cursor.node === prevNode) {
+      if (node === prevNode) {
         break;
       }
     }

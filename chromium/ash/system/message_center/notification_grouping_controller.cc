@@ -113,12 +113,21 @@ class GroupedNotificationList {
   std::map<std::string, std::set<std::string>> notifications_in_parent_map_;
 };
 
+// Needs to be a static instance because we need a single instance to be shared
+// across multiple instances of `NotificationGroupingController`. When there are
+// multiple screens, each screen has it's own `MessagePopupCollection`,
+// `UnifiedSystemTray`, `NotificationGroupingController` etc.
+GroupedNotificationList& GetGroupedNotificationListInstance() {
+  static base::NoDestructor<GroupedNotificationList> instance;
+  return *instance;
+}
+
 }  // namespace
 
 NotificationGroupingController::NotificationGroupingController(
     UnifiedSystemTray* tray)
     : tray_(tray),
-      grouped_notification_list_(std::make_unique<GroupedNotificationList>()) {
+      grouped_notification_list_(&GetGroupedNotificationListInstance()) {
   observer_.Observe(MessageCenter::Get());
 }
 
@@ -142,6 +151,10 @@ void NotificationGroupingController::PopulateGroupParent(
                  << notification_id;
     return;
   }
+
+  if (!parent_view->IsManuallyExpandedOrCollapsed())
+    parent_view->SetExpanded(false);
+
   std::vector<const Notification*> notifications;
   for (const auto* notification : MessageCenter::Get()->GetNotifications()) {
     if (notification->notifier_id() == parent_view->notifier_id() &&
@@ -222,6 +235,10 @@ void NotificationGroupingController::
   if (!parent_view || !new_single_notification)
     return;
 
+  message_center->FindNotificationById(group_parent_id)->ClearGroupParent();
+  new_single_notification->ClearGroupChild();
+  grouped_notification_list_->ClearGroupedNotification(group_parent_id);
+
   parent_view->RemoveGroupNotification(new_single_notification_id);
   parent_view->UpdateWithNotification(*new_single_notification);
 
@@ -229,11 +246,6 @@ void NotificationGroupingController::
       ->ConvertGroupedNotificationViewToNotificationView(
           /*grouped_notification_id=*/group_parent_id,
           /*new_single_notification_id=*/new_single_notification_id);
-
-  message_center->FindNotificationById(group_parent_id)->ClearGroupParent();
-  new_single_notification->ClearGroupChild();
-
-  grouped_notification_list_->ClearGroupedNotification(group_parent_id);
 
   message_center->RemoveNotification(group_parent_id, /*by_user=*/false);
 }
@@ -244,7 +256,7 @@ NotificationGroupingController::CreateCopyForParentNotification(
   // Create a copy with a timestamp that is older than the copied notification.
   // We need to set an older timestamp so that this notification will become
   // the parent notification for it's notifier_id.
-  auto child_copy = std::make_unique<Notification>(
+  auto copy = std::make_unique<Notification>(
       message_center::NotificationType::NOTIFICATION_TYPE_SIMPLE,
       parent_notification.id() +
           message_center::kIdSuffixForGroupContainerNotification,
@@ -252,11 +264,15 @@ NotificationGroupingController::CreateCopyForParentNotification(
       std::u16string(), parent_notification.origin_url(),
       parent_notification.notifier_id(), message_center::RichNotificationData(),
       /*delegate=*/nullptr);
-  child_copy->set_timestamp(parent_notification.timestamp() -
-                            base::Milliseconds(1));
-  child_copy->SetGroupChild();
+  copy->set_timestamp(parent_notification.timestamp() - base::Milliseconds(1));
+  copy->set_settings_button_handler(
+      parent_notification.rich_notification_data().settings_button_handler);
+  copy->set_delegate(parent_notification.delegate());
 
-  return child_copy;
+  // After copying, set to be a group parent.
+  copy->SetGroupParent();
+
+  return copy;
 }
 
 void NotificationGroupingController::RemoveGroupedChild(
@@ -320,8 +336,7 @@ void NotificationGroupingController::OnNotificationAdded(
     return;
 
   Notification* parent_notification =
-      message_center->FindParentNotificationForOriginUrl(
-          notification->origin_url());
+      message_center->FindParentNotification(notification);
   std::string parent_id = parent_notification->id();
 
   // If we are creating a new notification group for this `notifier_id`,

@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/command_line.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/strcat.h"
 #include "base/strings/stringprintf.h"
@@ -23,6 +24,7 @@
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/themes/theme_service_factory.h"
+#include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/webui/browser_command/browser_command_handler.h"
 #include "chrome/browser/ui/webui/cr_components/most_visited/most_visited_handler.h"
 #include "chrome/browser/ui/webui/customize_themes/chrome_customize_themes_handler.h"
@@ -43,6 +45,7 @@
 #include "chrome/grit/new_tab_page_resources.h"
 #include "chrome/grit/new_tab_page_resources_map.h"
 #include "chrome/grit/theme_resources.h"
+#include "components/commerce/core/commerce_feature_list.h"
 #include "components/favicon_base/favicon_url_parser.h"
 #include "components/google/core/common/google_util.h"
 #include "components/grit/components_scaled_resources.h"
@@ -59,6 +62,7 @@
 #include "google_apis/gaia/core_account_id.h"
 #include "media/base/media_switches.h"
 #include "services/network/public/mojom/content_security_policy.mojom.h"
+#include "skia/ext/skia_utils_base.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -77,6 +81,78 @@ using content::WebContents;
 namespace {
 
 constexpr char kPrevNavigationTimePrefName[] = "NewTabPage.PrevNavigationTime";
+constexpr char kSignedOutNtpModulesSwitch[] = "signed-out-ntp-modules";
+
+void AddRawStringOrDefault(content::WebUIDataSource* source,
+                           const char key[],
+                           const std::string str,
+                           int default_string_id) {
+  if (str.empty()) {
+    source->AddLocalizedString(key, default_string_id);
+  } else {
+    source->AddString(key, str);
+  }
+}
+
+// The Discount Consent V2 is gated by Chrome Cart, and that is enabled for
+// en-us local only. So using plain en strings here is fine.
+void AddResourcesForCartDiscountConsentV2(content::WebUIDataSource* source) {
+  AddRawStringOrDefault(
+      source, "modulesCartDiscountConsentContent",
+      ntp_features::kNtpChromeCartModuleDiscountConsentStringChangeContent
+          .Get(),
+      IDS_NTP_MODULES_CART_DISCOUNT_CONSENT_CONTENT_V2);
+
+  source->AddBoolean(
+      "modulesCartConsentStepTwoDifferentColor",
+      ntp_features::
+          kNtpChromeCartModuleDiscountConsentInlineStepTwoDifferentColor.Get());
+
+  AddRawStringOrDefault(
+      source, "modulesCartDiscountConentTitle",
+      ntp_features::kNtpChromeCartModuleDiscountConsentNtpDialogContentTitle
+          .Get(),
+      IDS_NTP_MODULES_CART_DISCOUNT_CONSENT_TITLE);
+
+  source->AddBoolean(
+      "modulesCartStepOneUseStaticContent",
+      ntp_features::
+          kNtpChromeCartModuleDiscountConsentNtpStepOneUseStaticContent.Get());
+  // This does not have a raw string resource.
+  source->AddString(
+      "modulesCartStepOneStaticContent",
+      ntp_features::kNtpChromeCartModuleDiscountConsentNtpStepOneStaticContent
+          .Get());
+
+  AddRawStringOrDefault(
+      source, "modulesCartConsentStepOneOneMerchantContent",
+      ntp_features::kNtpChromeCartModuleDiscountConsentNtpStepOneContentOneCart
+          .Get(),
+      IDS_NTP_MODULES_CART_DISCOUNT_CONSENT_STEP_1_WITH_MERCHANT_NAME);
+  AddRawStringOrDefault(
+      source, "modulesCartConsentStepOneTwoMerchantsContent",
+      ntp_features::kNtpChromeCartModuleDiscountConsentNtpStepOneContentTwoCarts
+          .Get(),
+      IDS_NTP_MODULES_CART_DISCOUNT_CONSENT_STEP_1_WITH_TWO_MERCHANT_NAMES);
+  AddRawStringOrDefault(
+      source, "modulesCartConsentStepOneThreeMerchantsContent",
+      ntp_features::
+          kNtpChromeCartModuleDiscountConsentNtpStepOneContentThreeCarts.Get(),
+      IDS_NTP_MODULES_CART_DISCOUNT_CONSENT_STEP_1_WITH_THREE_MERCHANT_NAMES);
+  AddRawStringOrDefault(
+      source, "modulesCartConsentStepTwoContent",
+      ntp_features::kNtpChromeCartModuleDiscountConsentNtpStepTwoContent.Get(),
+      IDS_NTP_MODULES_CART_DISCOUNT_CONSENT_CONTENT_V3);
+
+  source->AddLocalizedString(
+      "modulesCartConsentStepOneButton",
+      IDS_NTP_MODULES_CART_DISCOUNT_CONSENT_STEP_1_CONTINUE);
+
+  source->AddBoolean(
+      "modulesCartDiscountInlineCardShowCloseButton",
+      ntp_features::kNtpChromeCartModuleDiscountConsentInlineShowCloseButton
+          .Get());
+}
 
 content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
   content::WebUIDataSource* source =
@@ -106,7 +182,8 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
                      base::FeatureList::IsEnabled(ntp_features::kNtpLogo));
   source->AddBoolean(
       "middleSlotPromoEnabled",
-      base::FeatureList::IsEnabled(ntp_features::kNtpMiddleSlotPromo));
+      base::FeatureList::IsEnabled(ntp_features::kNtpMiddleSlotPromo) &&
+          profile->GetPrefs()->GetBoolean(prefs::kNtpPromoVisible));
   source->AddBoolean(
       "modulesDragAndDropEnabled",
       base::FeatureList::IsEnabled(ntp_features::kNtpModulesDragAndDrop));
@@ -227,6 +304,16 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
       {"modulesDriveInfo", IDS_NTP_MODULES_DRIVE_INFO},
       {"modulesDummyTitle", IDS_NTP_MODULES_DUMMY_TITLE},
       {"modulesDummy2Title", IDS_NTP_MODULES_DUMMY2_TITLE},
+      {"modulesDummy3Title", IDS_NTP_MODULES_DUMMY2_TITLE},
+      {"modulesDummy4Title", IDS_NTP_MODULES_DUMMY2_TITLE},
+      {"modulesDummy5Title", IDS_NTP_MODULES_DUMMY2_TITLE},
+      {"modulesDummy6Title", IDS_NTP_MODULES_DUMMY2_TITLE},
+      {"modulesDummy7Title", IDS_NTP_MODULES_DUMMY2_TITLE},
+      {"modulesDummy8Title", IDS_NTP_MODULES_DUMMY2_TITLE},
+      {"modulesDummy9Title", IDS_NTP_MODULES_DUMMY2_TITLE},
+      {"modulesDummy10Title", IDS_NTP_MODULES_DUMMY2_TITLE},
+      {"modulesDummy11Title", IDS_NTP_MODULES_DUMMY2_TITLE},
+      {"modulesDummy12Title", IDS_NTP_MODULES_DUMMY2_TITLE},
       {"modulesKaleidoscopeTitle", IDS_NTP_MODULES_KALEIDOSCOPE_TITLE},
       {"modulesPhotosInfo", IDS_NTP_MODULES_PHOTOS_INFO},
       {"modulesPhotosSentence", IDS_NTP_MODULES_PHOTOS_MEMORIES_TITLE},
@@ -247,6 +334,9 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
        IDS_NTP_MODULES_PHOTOS_MEMORIES_WELCOME_BUTTON_OPT_IN},
       {"modulesPhotosMemoriesWelcomeButtonOptOut",
        IDS_NTP_MODULES_PHOTOS_MEMORIES_WELCOME_BUTTON_OPT_OUT},
+      {"modulesPhotosMemoriesWelcomeButtonSoftOptOut",
+       IDS_NTP_MODULES_PHOTOS_MEMORIES_WELCOME_BUTTON_SOFT_OPT_OUT},
+      {"modulesPhotosMemoriesSoftOptOut", IDS_NTP_MODULES_PHOTOS_SOFT_OPT_OUT},
       {"modulesPhotosMemoriesWelcomeExample",
        IDS_NTP_MODULES_PHOTOS_MEMORIES_WELCOME_EXAMPLE},
       {"modulesPhotosNew", IDS_NTP_MODULES_PHOTOS_NEW},
@@ -268,8 +358,6 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
        IDS_NTP_MODULES_CART_DISCOUNT_CHIP_AMOUNT},
       {"modulesCartDiscountChipUpToAmount",
        IDS_NTP_MODULES_CART_DISCOUNT_CHIP_UP_TO_AMOUNT},
-      {"modulesCartDiscountConsentContent",
-       IDS_NTP_MODULES_CART_DISCOUNT_CONSENT_CONTENT},
       {"modulesCartDiscountConsentAccept",
        IDS_NTP_MODULES_CART_DISCOUNT_CONSENT_ACCEPT},
       {"modulesCartDiscountConsentAcceptConfirmation",
@@ -284,9 +372,29 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
        IDS_NTP_MODULES_CART_ITEM_COUNT_SINGULAR},
       {"modulesCartItemCountMultiple",
        IDS_NTP_MODULES_CART_ITEM_COUNT_MULTIPLE},
+      {"modulesCartDiscountConsentContentV3",
+       IDS_NTP_MODULES_CART_DISCOUNT_CONSENT_CONTENT_V3},
+      {"modulesCartDiscountConentTitle",
+       IDS_NTP_MODULES_CART_DISCOUNT_CONSENT_TITLE},
   };
   source->AddLocalizedStrings(kStrings);
 
+  source->AddInteger(
+      "modulesCartDiscountConsentVariation",
+      ntp_features::kNtpChromeCartModuleDiscountConsentNtpVariation.Get());
+
+  if (base::FeatureList::IsEnabled(commerce::kDiscountConsentV2)) {
+    AddResourcesForCartDiscountConsentV2(source);
+  } else {
+    source->AddLocalizedString("modulesCartDiscountConsentContent",
+                               IDS_NTP_MODULES_CART_DISCOUNT_CONSENT_CONTENT);
+  }
+
+#if !defined(OFFICIAL_BUILD)
+  source->AddBoolean(
+      "dummyModulesEnabled",
+      base::FeatureList::IsEnabled(ntp_features::kNtpDummyModules));
+#endif
   source->AddBoolean(
       "recipeTasksModuleEnabled",
       base::FeatureList::IsEnabled(ntp_features::kNtpRecipeTasksModule));
@@ -299,6 +407,10 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
   source->AddBoolean(
       "photosModuleEnabled",
       base::FeatureList::IsEnabled(ntp_features::kNtpPhotosModule));
+  source->AddString("photosModuleCustomArtWork",
+                    base::GetFieldTrialParamValueByFeature(
+                        ntp_features::kNtpPhotosModuleCustomizedOptInArtWork,
+                        ntp_features::kNtpPhotosModuleOptInArtWorkParam));
   source->AddBoolean(
       "ruleBasedDiscountEnabled",
       base::GetFieldTrialParamValueByFeature(
@@ -420,6 +532,7 @@ void NewTabPageUI::RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterTimePref(kPrevNavigationTimePrefName, base::Time());
   registry->RegisterBooleanPref(ntp_prefs::kNtpUseMostVisitedTiles, false);
   registry->RegisterBooleanPref(ntp_prefs::kNtpShortcutsVisible, true);
+  registry->RegisterBooleanPref(prefs::kNtpPromoVisible, true);
 }
 
 // static
@@ -532,8 +645,7 @@ void NewTabPageUI::CreatePageHandler(
   page_handler_ = std::make_unique<NewTabPageHandler>(
       std::move(pending_page_handler), std::move(pending_page), profile_,
       ntp_custom_background_service_, theme_service_,
-      LogoServiceFactory::GetForProfile(profile_),
-      &ThemeService::GetThemeProviderForProfile(profile_), web_contents_,
+      LogoServiceFactory::GetForProfile(profile_), web_contents_,
       navigation_start_time_);
 }
 
@@ -578,14 +690,19 @@ void NewTabPageUI::OnNativeThemeUpdated(ui::NativeTheme* observed_theme) {
 
 void NewTabPageUI::OnThemeChanged() {
   std::unique_ptr<base::DictionaryValue> update(new base::DictionaryValue);
-  auto background_color =
-      ThemeService::GetThemeProviderForProfile(profile_).GetColor(
-          ThemeProperties::COLOR_NTP_BACKGROUND);
-  update->SetString(
-      "backgroundColor",
-      base::StringPrintf("#%02X%02X%02X", SkColorGetR(background_color),
-                         SkColorGetG(background_color),
-                         SkColorGetB(background_color)));
+
+  const ui::ThemeProvider* theme_provider =
+      webui::GetThemeProvider(web_contents_);
+  // TODO(crbug.com/1299925): Always mock theme provider in tests so that
+  // `theme_provider` is never nullptr.
+  if (theme_provider) {
+    auto background_color =
+        theme_provider->GetColor(ThemeProperties::COLOR_NTP_BACKGROUND);
+    update->SetStringKey("backgroundColor",
+                         skia::SkColorToHexString(background_color));
+  } else {
+    update->SetStringKey("backgroundColor", "");
+  }
   content::WebUIDataSource::Update(profile_, chrome::kChromeUINewTabPageHost,
                                    std::move(update));
 }
@@ -601,7 +718,7 @@ void NewTabPageUI::OnCustomBackgroundImageUpdated() {
           .custom_background_url;
   url::EncodeURIComponent(custom_background_url.spec().c_str(),
                           custom_background_url.spec().size(), &encoded_url);
-  update->SetString(
+  update->SetStringKey(
       "backgroundImageUrl",
       encoded_url.length() > 0
           ? base::StrCat(
@@ -666,11 +783,14 @@ void NewTabPageUI::OnLoad() {
   update->SetDoubleKey("navigationStartTime",
                        navigation_start_time_.ToJsTime());
   // Only enable modules if account credentials are available as most modules
-  // won't have data to render otherwise.
-
+  // won't have data to render otherwise. We can override this behavior with the
+  // "--signed-out-ntp-modules" command line switch, e.g. to allow modules in
+  // perf tests, which do not support sign-in.
   update->SetBoolKey("modulesEnabled",
                      base::FeatureList::IsEnabled(ntp_features::kModules) &&
-                         HasCredentials(profile_));
+                         (base::CommandLine::ForCurrentProcess()->HasSwitch(
+                              kSignedOutNtpModulesSwitch) ||
+                          HasCredentials(profile_)));
   update->SetBoolKey("driveModuleEnabled",
                      NewTabPageUI::IsDriveModuleEnabled(profile_));
   content::WebUIDataSource::Update(profile_, chrome::kChromeUINewTabPageHost,

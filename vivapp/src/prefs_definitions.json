@@ -96,6 +96,11 @@
           "default": true,
           "syncable": true
         },
+        "show_search_history": {
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
         "show_top_sites": {
           "type": "boolean",
           "default": false,
@@ -387,6 +392,28 @@
         "syncable": true
       }
     },
+    "reading_list": {
+      "panel": {
+        "sorting": {
+          "type": "dictionary",
+          "default": {
+            "sortOrder": 3,
+            "sortField": "read"
+          },
+          "syncable": true
+        },
+        "single_click_opens": {
+          "type": "boolean",
+          "default": false,
+          "syncable": true
+        }
+      },
+      "show_counter": {
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      }
+    },
     "show_extensions_banner": {
       "description": "Show the Vivaldi banner on the extensions page or not.",
       "type": "boolean",
@@ -530,6 +557,18 @@
         "default": -1,
         "syncable": false
       },
+      "default_allday_notification": {
+        "description": "Should a reminder be created for all day events.",
+        "type": "boolean",
+        "default": false,
+        "syncable": false
+      },
+      "default_allday_notification_time": {
+        "description": "Value is number of minutes from start of event. Can be negative",
+        "type": "integer",
+        "default": 0,
+        "syncable": false
+      },
       "hidden_hides_notifications": {
         "description": "Hide notifications for hidden calendars?",
         "type": "boolean",
@@ -665,6 +704,7 @@
         "syncable": true
       },
       "default_account_id": {
+        "description": "[DEPRECATED 2022/02] VB-86071, deferred from default calendar",
         "type": "string",
         "default": "",
         "syncable": true
@@ -971,6 +1011,16 @@
         "default": "fifteen_minutes",
         "syncable": true
       },
+      "preferred_rendering": {
+        "description": "How to render message. prefer_html will pick a text/html part and use text/plain as fallback. plaintext renders a text/plain part, no fallback.",
+        "type": "enum",
+        "enum_values": {
+          "prefer_html": 0,
+          "plaintext": 1
+        },
+        "default": "prefer_html",
+        "syncable": true
+      },
       "composer_colors": {
         "description": "Changes the default colors of fonts and background for viewing in the composer",
         "type": "enum",
@@ -1143,6 +1193,18 @@
         "default": true,
         "syncable": true
       },
+      "display_mail_panel_viewing_mail": {
+        "description": "Display Mail Panel when Viewing Mail",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
+      "open_panel_automatically_viewing_mail": {
+        "description": "Open Panel Automatically",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
       "smtp_logs_on": {
         "description": "Are smtp actions logged in debug console?",
         "type": "boolean",
@@ -1206,6 +1268,12 @@
         "description": "Handle mailto protocol in Vivaldi",
         "type": "boolean",
         "default": false,
+        "syncable": true
+      },
+      "include_identifying_headers": {
+        "description": "Include identifying headers in outgoing messages",
+        "type": "boolean",
+        "default": true,
         "syncable": true
       }
     },
@@ -1459,6 +1527,12 @@
             "width": -1,
             "resizable": false
           }, {
+            "id": "readinglist",
+            "available": true,
+            "forMailOnly": false,
+            "width": -1,
+            "resizable": false
+          }, {
             "id": "downloads",
             "available": true,
             "forMailOnly": false,
@@ -1483,9 +1557,21 @@
             "width": -1,
             "resizable": false
           }, {
+            "id": "translate",
+            "available": true,
+            "forMailOnly": false,
+            "width": -1,
+            "resizable": false
+          }, {
             "id": "mail",
             "available": true,
             "forMailOnly": true,
+            "width": -1,
+            "resizable": false
+          }, {
+            "id": "calendar",
+            "available": true,
+            "forMailOnly": false,
             "width": -1,
             "resizable": false
           }, {
@@ -1501,19 +1587,7 @@
             "width": -1,
             "resizable": false
           }, {
-            "id": "calendar",
-            "available": true,
-            "forMailOnly": false,
-            "width": -1,
-            "resizable": false
-          }, {
             "id": "chat",
-            "available": true,
-            "forMailOnly": false,
-            "width": -1,
-            "resizable": false
-          }, {
-            "id": "translate",
             "available": true,
             "forMailOnly": false,
             "width": -1,
@@ -1812,6 +1886,12 @@
         "default": true,
         "syncable": true
       },
+      "show_reading_list": {
+        "description": "Include Reading List in QC search results",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
       "show_calculator": {
         "description": "Include calculator in QC search results",
         "type": "boolean",
@@ -1876,6 +1956,7 @@
           "KEYWORD_SEARCH",
           "OPEN_TABS",
           "BOOKMARK_ITEM_OR_FOLDER",
+          "READING_LIST",
           "NOTES_SEARCH",
           "HISTORY",
           "EXTENSIONS",
@@ -2051,6 +2132,12 @@
           "syncable": false
         },
         "tracker_suggestion_show": {
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
+        "privacy_stats_show": {
+          "description": "Display privacy statistics in the SpeedDial",
           "type": "boolean",
           "default": true,
           "syncable": true
@@ -2443,6 +2530,12 @@
           "description": "[DEPRECATED 2021/1] Allow tab stack renaming",
           "type": "boolean",
           "default": false,
+          "syncable": true
+        },
+        "dnd_delay": {
+          "description": "Delay before triggering tab stacking by drag & drop",
+          "type": "integer",
+          "default": 450,
           "syncable": true
         },
         "mode": {
@@ -3032,6 +3125,7 @@
           "MailBack",
           "MailForward",
           "MailReload",
+          "FlexibleSpacer",
           "MailSearch",
           "MailMsgEdit",
           "MailMsgReply",
@@ -3056,7 +3150,7 @@
           "MailBack",
           "MailForward",
           "MailReload",
-          "MailSearch",
+          "FlexibleSpacer",
           "MailMsgReply",
           "MailMsgReplyToAll",
           "MailMsgForward",
@@ -3076,13 +3170,25 @@
           "MailBack",
           "MailForward",
           "MailReload",
-          "MailSearch",
+          "FlexibleSpacer",
           "MailMsgSend",
           "MailMsgAttach",
           "MailMsgShowHeaders",
           "MailMsgDiscard"
         ],
         "syncable": true
+      }
+    },
+    "toolbar_button": {
+      "popup": {
+        "sizes": {
+          "description": "Store the preferred size of toolbar button popouts",
+          "type": "dictionary",
+          "default": {
+            "downloads": 500
+          },
+          "syncable": false
+        }
       }
     },
     "vivaldi_account": {

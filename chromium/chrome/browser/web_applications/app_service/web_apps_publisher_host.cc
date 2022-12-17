@@ -26,41 +26,13 @@
 #include "chrome/common/chrome_features.h"
 #include "chromeos/lacros/lacros_service.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
+#include "components/services/app_service/public/cpp/intent_util.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/events/event_constants.h"
 #include "url/gurl.h"
 
 using apps::IconEffects;
-
-namespace {
-
-using LaunchResultCallback =
-    base::OnceCallback<void(::crosapi::mojom::LaunchResultPtr)>;
-
-void ReturnLaunchResult(Profile* profile,
-                        content::WebContents* web_contents,
-                        LaunchResultCallback callback) {
-  // TODO(crbug.com/1144877): Run callback when the window is ready.
-  auto* app_instance_tracker =
-      apps::AppServiceProxyFactory::GetForProfile(profile)
-          ->BrowserAppInstanceTracker();
-  auto launch_result = crosapi::mojom::LaunchResult::New();
-  if (app_instance_tracker) {
-    const apps::BrowserAppInstance* app_instance =
-        app_instance_tracker->GetAppInstance(web_contents);
-    launch_result->instance_id =
-        app_instance ? app_instance->id : base::UnguessableToken::Create();
-  } else {
-    // TODO(crbug.com/1144877): This part of code should not be reached
-    // after the instance tracker flag is turn on. Replaced with DCHECK when
-    // the app instance tracker flag is turned on.
-    launch_result->instance_id = base::UnguessableToken::Create();
-  }
-  std::move(callback).Run(std::move(launch_result));
-}
-
-}  // namespace
 
 namespace web_app {
 
@@ -69,7 +41,7 @@ WebAppsPublisherHost::WebAppsPublisherHost(Profile* profile)
       provider_(WebAppProvider::GetForWebApps(profile)),
       publisher_helper_(profile,
                         provider_,
-                        apps::mojom::AppType::kWeb,
+                        apps::AppType::kWeb,
                         this,
                         /*observe_media_requests=*/true) {
   DCHECK(provider_);
@@ -132,9 +104,9 @@ void WebAppsPublisherHost::OnReady() {
     return;
   }
 
-  std::vector<apps::mojom::AppPtr> apps;
+  std::vector<apps::AppPtr> apps;
   for (const WebApp& web_app : registrar().GetApps()) {
-    apps.push_back(publisher_helper().ConvertWebApp(&web_app));
+    apps.push_back(publisher_helper().CreateWebApp(&web_app));
   }
   PublishWebApps(std::move(apps));
 }
@@ -162,7 +134,7 @@ void WebAppsPublisherHost::UnpauseApp(const std::string& app_id) {
 }
 
 void WebAppsPublisherHost::LoadIcon(const std::string& app_id,
-                                    apps::mojom::IconKeyPtr icon_key,
+                                    apps::IconKeyPtr icon_key,
                                     apps::IconType icon_type,
                                     int32_t size_hint_in_dip,
                                     apps::LoadIconCallback callback) {
@@ -172,9 +144,8 @@ void WebAppsPublisherHost::LoadIcon(const std::string& app_id,
     return;
   }
 
-  std::unique_ptr<apps::IconKey> key =
-      apps::ConvertMojomIconKeyToIconKey(icon_key);
-  publisher_helper().LoadIcon(app_id, *key, icon_type, size_hint_in_dip,
+  publisher_helper().LoadIcon(app_id, icon_type, size_hint_in_dip,
+                              static_cast<IconEffects>(icon_key->icon_effects),
                               std::move(callback));
 }
 
@@ -183,8 +154,9 @@ void WebAppsPublisherHost::OpenNativeSettings(const std::string& app_id) {
 }
 
 void WebAppsPublisherHost::SetWindowMode(const std::string& app_id,
-                                         apps::mojom::WindowMode window_mode) {
-  return publisher_helper().SetWindowMode(app_id, window_mode);
+                                         apps::WindowMode window_mode) {
+  return publisher_helper().SetWindowMode(
+      app_id, apps::ConvertWindowModeToMojomWindowMode(window_mode));
 }
 
 void WebAppsPublisherHost::GetMenuModel(const std::string& app_id,
@@ -214,17 +186,17 @@ void WebAppsPublisherHost::ExecuteContextMenuCommand(
   auto* web_contents = publisher_helper().ExecuteContextMenuCommand(
       app_id, id, display::kDefaultDisplayId);
 
-  ReturnLaunchResult(profile_, web_contents, std::move(callback));
+  ReturnLaunchResult(std::move(callback), web_contents);
 }
 
 void WebAppsPublisherHost::StopApp(const std::string& app_id) {
   publisher_helper().StopApp(app_id);
 }
 
-void WebAppsPublisherHost::SetPermission(
-    const std::string& app_id,
-    apps::mojom::PermissionPtr permission) {
-  publisher_helper().SetPermission(app_id, std::move(permission));
+void WebAppsPublisherHost::SetPermission(const std::string& app_id,
+                                         apps::PermissionPtr permission) {
+  publisher_helper().SetPermission(
+      app_id, apps::ConvertPermissionToMojomPermission(permission));
 }
 
 // TODO(crbug.com/1144877): Clean up the multiple launch interfaces and remove
@@ -234,29 +206,55 @@ void WebAppsPublisherHost::Launch(crosapi::mojom::LaunchParamsPtr launch_params,
   content::WebContents* web_contents = nullptr;
   if (launch_params->intent) {
     if (!profile_) {
-      ReturnLaunchResult(profile_, nullptr, std::move(callback));
+      ReturnLaunchResult(std::move(callback), nullptr);
       return;
     }
 
     web_contents = publisher_helper().MaybeNavigateExistingWindow(
         launch_params->app_id, launch_params->intent->url);
     if (web_contents) {
-      ReturnLaunchResult(profile_, web_contents, std::move(callback));
+      ReturnLaunchResult(std::move(callback), web_contents);
       return;
     }
   }
 
   auto params = apps::ConvertCrosapiToLaunchParams(launch_params, profile_);
-  if (!params.launch_files.empty()) {
+  bool is_file_handling_launch =
+      !params.launch_files.empty() && !apps_util::IsShareIntent(params.intent);
+  if (is_file_handling_launch) {
     // File handling may create the WebContents asynchronously.
-    // TODO(crbug/1261263): implement.
-    NOTIMPLEMENTED_LOG_ONCE();
-    params.launch_files.clear();
+    publisher_helper().LaunchAppWithFilesCheckingUserPermission(
+        launch_params->app_id, std::move(params),
+        base::BindOnce(&WebAppsPublisherHost::ReturnLaunchResult,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+    return;
   }
 
   web_contents = publisher_helper().LaunchAppWithParams(std::move(params));
 
-  ReturnLaunchResult(profile_, web_contents, std::move(callback));
+  ReturnLaunchResult(std::move(callback), web_contents);
+}
+
+void WebAppsPublisherHost::ReturnLaunchResult(
+    LaunchCallback callback,
+    content::WebContents* web_contents) {
+  // TODO(crbug.com/1144877): Run callback when the window is ready.
+  auto* app_instance_tracker =
+      apps::AppServiceProxyFactory::GetForProfile(profile_)
+          ->BrowserAppInstanceTracker();
+  auto launch_result = crosapi::mojom::LaunchResult::New();
+  if (app_instance_tracker) {
+    const apps::BrowserAppInstance* app_instance =
+        app_instance_tracker->GetAppInstance(web_contents);
+    launch_result->instance_id =
+        app_instance ? app_instance->id : base::UnguessableToken::Create();
+  } else {
+    // TODO(crbug.com/1144877): This part of code should not be reached
+    // after the instance tracker flag is turn on. Replaced with DCHECK when
+    // the app instance tracker flag is turned on.
+    launch_result->instance_id = base::UnguessableToken::Create();
+  }
+  std::move(callback).Run(std::move(launch_result));
 }
 
 void WebAppsPublisherHost::OnShortcutsMenuIconsRead(
@@ -310,8 +308,7 @@ const WebApp* WebAppsPublisherHost::GetWebApp(const AppId& app_id) const {
   return registrar().GetAppById(app_id);
 }
 
-void WebAppsPublisherHost::PublishWebApps(
-    std::vector<apps::mojom::AppPtr> apps) {
+void WebAppsPublisherHost::PublishWebApps(std::vector<apps::AppPtr> apps) {
   if (!remote_publisher_) {
     return;
   }
@@ -326,12 +323,12 @@ void WebAppsPublisherHost::PublishWebApps(
   remote_publisher_->OnApps(std::move(apps));
 }
 
-void WebAppsPublisherHost::PublishWebApp(apps::mojom::AppPtr app) {
+void WebAppsPublisherHost::PublishWebApp(apps::AppPtr app) {
   if (!remote_publisher_) {
     return;
   }
 
-  std::vector<apps::mojom::AppPtr> apps;
+  std::vector<apps::AppPtr> apps;
   apps.push_back(std::move(app));
   PublishWebApps(std::move(apps));
 }

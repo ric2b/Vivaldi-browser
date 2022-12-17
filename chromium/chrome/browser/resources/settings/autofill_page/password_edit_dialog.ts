@@ -18,24 +18,32 @@ import '../settings_shared_css.js';
 import '../settings_vars_css.js';
 import './passwords_shared_css.js';
 
+import {CrButtonElement} from 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
 import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
 import {CrInputElement} from 'chrome://resources/cr_elements/cr_input/cr_input.m.js';
 import {assert, assertNotReached} from 'chrome://resources/js/assert.m.js';
 import {I18nMixin} from 'chrome://resources/js/i18n_mixin.js';
-import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-// <if expr="chromeos or lacros">
+// <if expr="chromeos_ash or chromeos_lacros">
 import {BlockingRequestManager} from './blocking_request_manager.js';
 // </if>
 import {MultiStorePasswordUiEntry} from './multi_store_password_ui_entry.js';
+import {getTemplate} from './password_edit_dialog.html.js';
 import {PasswordManagerImpl} from './password_manager_proxy.js';
 
 export interface PasswordEditDialogElement {
   $: {
+    actionButton: CrButtonElement,
+    cancel: CrButtonElement,
     dialog: CrDialogElement,
+    footnote: HTMLElement,
     passwordInput: CrInputElement,
+    storageDetails: HTMLElement,
     storePicker: HTMLSelectElement,
+    title: HTMLElement,
     usernameInput: CrInputElement,
+    viewExistingPasswordLink: HTMLElement,
     websiteInput: CrInputElement,
   };
 }
@@ -86,7 +94,7 @@ export class PasswordEditDialogElement extends PasswordEditDialogElementBase {
   }
 
   static get template() {
-    return html`{__html_template__}`;
+    return getTemplate();
   }
 
   static get properties() {
@@ -113,7 +121,7 @@ export class PasswordEditDialogElement extends PasswordEditDialogElementBase {
         value: () => [],
       },
 
-      // <if expr="chromeos or lacros">
+      // <if expr="chromeos_ash or chromeos_lacros">
       /**
        * Used for authentication when switching from ADD to EDIT mode.
        */
@@ -194,7 +202,7 @@ export class PasswordEditDialogElement extends PasswordEditDialogElementBase {
   readonly storeOptionAccountValue: string;
   readonly storeOptionDeviceValue: string;
   savedPasswords: Array<MultiStorePasswordUiEntry>;
-  // <if expr="chromeos or lacros">
+  // <if expr="chromeos_ash or chromeos_lacros">
   tokenRequestManager: BlockingRequestManager|null;
   // </if>
   private usernamesByOrigin_: Map<string, Set<string>>|null = null;
@@ -545,7 +553,7 @@ export class PasswordEditDialogElement extends PasswordEditDialogElementBase {
           .requestPlaintextPassword(
               id, chrome.passwordsPrivate.PlaintextReason.EDIT)
           .then(password => resolve(password), () => {
-            // <if expr="chromeos or lacros">
+            // <if expr="chromeos_ash or chromeos_lacros">
             // If no password was found, refresh auth token and retry.
             this.tokenRequestManager!.request(() => {
               this.requestPlaintextPasswordForEditing_(id).then(resolve);

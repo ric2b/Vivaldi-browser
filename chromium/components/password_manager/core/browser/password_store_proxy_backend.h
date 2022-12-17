@@ -12,6 +12,8 @@
 #include "base/memory/weak_ptr.h"
 #include "components/password_manager/core/browser/password_store_backend.h"
 
+class PrefService;
+
 namespace password_manager {
 
 // This backend forwards requests to two backends in order to compare and record
@@ -21,10 +23,10 @@ class PasswordStoreProxyBackend : public PasswordStoreBackend {
  public:
   // `main_backend` and `shadow_backend` must not be null and must outlive this
   // object as long as Shutdown() is not called.
-  PasswordStoreProxyBackend(
-      PasswordStoreBackend* main_backend,
-      PasswordStoreBackend* shadow_backend,
-      base::RepeatingCallback<bool()> is_syncing_passwords_callback);
+  PasswordStoreProxyBackend(PasswordStoreBackend* main_backend,
+                            PasswordStoreBackend* shadow_backend,
+                            PrefService* prefs,
+                            SyncDelegate* sync_delegate);
   PasswordStoreProxyBackend(const PasswordStoreProxyBackend&) = delete;
   PasswordStoreProxyBackend(PasswordStoreProxyBackend&&) = delete;
   PasswordStoreProxyBackend& operator=(const PasswordStoreProxyBackend&) =
@@ -34,7 +36,6 @@ class PasswordStoreProxyBackend : public PasswordStoreBackend {
 
  private:
   // Implements PasswordStoreBackend interface.
-  base::WeakPtr<PasswordStoreBackend> GetWeakPtr() override;
   void InitBackend(RemoteChangesReceived remote_form_changes_received,
                    base::RepeatingClosure sync_enabled_or_disabled_cb,
                    base::OnceCallback<void(bool)> completion) override;
@@ -68,11 +69,12 @@ class PasswordStoreProxyBackend : public PasswordStoreBackend {
   FieldInfoStore* GetFieldInfoStore() override;
   std::unique_ptr<syncer::ProxyModelTypeControllerDelegate>
   CreateSyncControllerDelegate() override;
+  void ClearAllLocalPasswords() override;
 
   const raw_ptr<PasswordStoreBackend> main_backend_;
   const raw_ptr<PasswordStoreBackend> shadow_backend_;
-  base::RepeatingCallback<bool()> is_syncing_passwords_callback_;
-  base::WeakPtrFactory<PasswordStoreProxyBackend> weak_ptr_factory_{this};
+  raw_ptr<PrefService> const prefs_ = nullptr;
+  const raw_ptr<SyncDelegate> sync_delegate_;
 };
 
 }  // namespace password_manager

@@ -18,7 +18,9 @@
 #include "base/strings/stringprintf.h"
 #include "components/crx_file/id_util.h"
 #include "extensions/common/extension_api.h"
+#include "extensions/common/extension_features.h"
 #include "extensions/common/features/feature_channel.h"
+#include "extensions/common/features/feature_developer_mode_only.h"
 #include "extensions/common/features/feature_flags.h"
 #include "extensions/common/features/feature_provider.h"
 #include "extensions/common/features/feature_session_type.h"
@@ -52,7 +54,7 @@ struct AllowlistInfo {
   }
   std::string hashed_id;
 };
-// A singleton copy of the --whitelisted-extension-id so that we don't need to
+// A singleton copy of the --allowlisted-extension-id so that we don't need to
 // copy it from the CommandLine each time.
 base::LazyInstance<AllowlistInfo>::Leaky g_allowlist_info =
     LAZY_INSTANCE_INITIALIZER;
@@ -63,6 +65,7 @@ Feature::Availability IsAvailableToManifestForBind(
     ManifestLocation location,
     int manifest_version,
     Feature::Platform platform,
+    int context_id,
     const Feature* feature) {
   return feature->IsAvailableToManifest(hashed_id, type, location,
                                         manifest_version, platform);
@@ -72,12 +75,15 @@ Feature::Availability IsAvailableToContextForBind(const Extension* extension,
                                                   Feature::Context context,
                                                   const GURL& url,
                                                   Feature::Platform platform,
+                                                  int context_id,
                                                   const Feature* feature) {
-  return feature->IsAvailableToContext(extension, context, url, platform);
+  return feature->IsAvailableToContext(extension, context, url, platform,
+                                       context_id);
 }
 
-Feature::Availability IsAvailableToEnvironmentForBind(const Feature* feature) {
-  return feature->IsAvailableToEnvironment();
+Feature::Availability IsAvailableToEnvironmentForBind(int context_id,
+                                                      const Feature* feature) {
+  return feature->IsAvailableToEnvironment(context_id);
 }
 
 // Gets a human-readable name for the given extension type, suitable for giving
@@ -236,9 +242,11 @@ Feature::Availability SimpleFeature::IsAvailableToManifest(
     Manifest::Type type,
     ManifestLocation location,
     int manifest_version,
-    Platform platform) const {
-  Availability environment_availability = GetEnvironmentAvailability(
-      platform, GetCurrentChannel(), GetCurrentFeatureSessionType());
+    Platform platform,
+    int context_id) const {
+  Availability environment_availability =
+      GetEnvironmentAvailability(platform, GetCurrentChannel(),
+                                 GetCurrentFeatureSessionType(), context_id);
   if (!environment_availability.is_available())
     return environment_availability;
   Availability manifest_availability =
@@ -246,18 +254,20 @@ Feature::Availability SimpleFeature::IsAvailableToManifest(
   if (!manifest_availability.is_available())
     return manifest_availability;
 
-  return CheckDependencies(base::BindRepeating(&IsAvailableToManifestForBind,
-                                               hashed_id, type, location,
-                                               manifest_version, platform));
+  return CheckDependencies(
+      base::BindRepeating(&IsAvailableToManifestForBind, hashed_id, type,
+                          location, manifest_version, platform, context_id));
 }
 
 Feature::Availability SimpleFeature::IsAvailableToContext(
     const Extension* extension,
     Feature::Context context,
     const GURL& url,
-    Platform platform) const {
-  Availability environment_availability = GetEnvironmentAvailability(
-      platform, GetCurrentChannel(), GetCurrentFeatureSessionType());
+    Platform platform,
+    int context_id) const {
+  Availability environment_availability =
+      GetEnvironmentAvailability(platform, GetCurrentChannel(),
+                                 GetCurrentFeatureSessionType(), context_id);
   if (!environment_availability.is_available())
     return environment_availability;
 
@@ -286,19 +296,20 @@ Feature::Availability SimpleFeature::IsAvailableToContext(
 
   // TODO(kalman): Assert that if the context was a webpage or WebUI context
   // then at some point a "matches" restriction was checked.
-  return CheckDependencies(base::BindRepeating(&IsAvailableToContextForBind,
-                                               base::RetainedRef(extension),
-                                               context, url, platform));
+  return CheckDependencies(base::BindRepeating(
+      &IsAvailableToContextForBind, base::RetainedRef(extension), context, url,
+      platform, context_id));
 }
 
-Feature::Availability SimpleFeature::IsAvailableToEnvironment() const {
+Feature::Availability SimpleFeature::IsAvailableToEnvironment(
+    int context_id) const {
   Availability environment_availability =
       GetEnvironmentAvailability(GetCurrentPlatform(), GetCurrentChannel(),
-                                 GetCurrentFeatureSessionType());
+                                 GetCurrentFeatureSessionType(), context_id);
   if (!environment_availability.is_available())
     return environment_availability;
   return CheckDependencies(
-      base::BindRepeating(&IsAvailableToEnvironmentForBind));
+      base::BindRepeating(&IsAvailableToEnvironmentForBind, context_id));
 }
 
 std::string SimpleFeature::GetAvailabilityMessage(
@@ -311,8 +322,8 @@ std::string SimpleFeature::GetAvailabilityMessage(
   switch (result) {
     case IS_AVAILABLE:
       return std::string();
-    case NOT_FOUND_IN_WHITELIST:
-    case FOUND_IN_BLACKLIST:
+    case NOT_FOUND_IN_ALLOWLIST:
+    case FOUND_IN_BLOCKLIST:
       return base::StringPrintf(
           "'%s' is not allowed for specified extension ID.",
           name().c_str());
@@ -379,6 +390,10 @@ std::string SimpleFeature::GetAvailabilityMessage(
       return base::StringPrintf(
           "'%s' requires the '%s' feature flag to be enabled.", name().c_str(),
           feature_flag_->c_str());
+    case REQUIRES_DEVELOPER_MODE:
+      return base::StringPrintf(
+          "'%s' requires the user to have developer mode enabled.",
+          name().c_str());
   }
 
   NOTREACHED();
@@ -596,7 +611,8 @@ void SimpleFeature::set_allowlist(
 Feature::Availability SimpleFeature::GetEnvironmentAvailability(
     Platform platform,
     version_info::Channel channel,
-    mojom::FeatureSessionType session_type) const {
+    mojom::FeatureSessionType session_type,
+    int context_id) const {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (!platforms_.empty() && !base::Contains(platforms_, platform))
     return CreateAvailability(INVALID_PLATFORM);
@@ -623,6 +639,12 @@ Feature::Availability SimpleFeature::GetEnvironmentAvailability(
   if (!MatchesSessionTypes(session_type))
     return CreateAvailability(INVALID_SESSION_TYPE, session_type);
 
+  if (base::FeatureList::IsEnabled(
+          extensions_features::kRestrictDeveloperModeAPIs) &&
+      developer_mode_only_ && !GetCurrentDeveloperMode(context_id)) {
+    return CreateAvailability(REQUIRES_DEVELOPER_MODE);
+  }
+
   return CreateAvailability(IS_AVAILABLE);
 }
 
@@ -643,7 +665,7 @@ Feature::Availability SimpleFeature::GetManifestAvailability(
   }
 
   if (!blocklist_.empty() && IsIdInBlocklist(hashed_id))
-    return CreateAvailability(FOUND_IN_BLACKLIST);
+    return CreateAvailability(FOUND_IN_BLOCKLIST);
 
   // TODO(benwells): don't grant all component extensions.
   // See http://crbug.com/370375 for more details.
@@ -655,7 +677,7 @@ Feature::Availability SimpleFeature::GetManifestAvailability(
 
   if (!allowlist_.empty() && !IsIdInAllowlist(hashed_id) &&
       !IsAllowlistedForTest(hashed_id)) {
-    return CreateAvailability(NOT_FOUND_IN_WHITELIST);
+    return CreateAvailability(NOT_FOUND_IN_ALLOWLIST);
   }
 
   if (location_ && !MatchesManifestLocation(location) &&

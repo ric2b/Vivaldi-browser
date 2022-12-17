@@ -16,11 +16,13 @@
 #include "base/observer_list.h"
 #include "base/scoped_observation.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom-forward.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_types.h"
 #include "ui/base/ui_base_types.h"
+#include "ui/color/color_provider_manager.h"
 #include "ui/color/color_provider_source.h"
 #include "ui/events/event_source.h"
 #include "ui/gfx/geometry/rect.h"
@@ -287,6 +289,11 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
     // be ignored on some platforms. No value indicates no preference.
     absl::optional<int> shadow_elevation;
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+    ui::ColorProviderManager::ElevationMode background_elevation =
+        ui::ColorProviderManager::ElevationMode::kLow;
+#endif
+
     // The window corner radius. May be ignored on some platforms.
     absl::optional<int> corner_radius;
 
@@ -374,11 +381,17 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
     std::string wm_class_name;
     std::string wm_class_class;
 
+    // Only used by Wayland, for root level windows.
+    std::string wayland_app_id;
+
     // If true then the widget uses software compositing.
     bool force_software_compositing = false;
 
     // If set, mouse events will be sent to the widget even if inactive.
     bool wants_mouse_events_when_inactive = false;
+
+    // If set, the widget was created in headless mode.
+    bool headless_mode = false;
 
     // Contains any properties with which the native widget should be
     // initialized prior to adding it to the window hierarchy. All the
@@ -594,6 +607,9 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
   // Sets the visibility transitions that should animate.
   // Default behavior is to animate both show and hide.
   void SetVisibilityAnimationTransition(VisibilityTransition transition);
+
+  // Whether calling RunMoveLoop() is supported for the widget.
+  bool IsMoveLoopSupported() const;
 
   // Starts a nested run loop that moves the window. This can be used to
   // start a window move operation from a mouse or touch event. This returns
@@ -1195,6 +1211,11 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
 
   // See set_is_secondary_widget().
   bool is_secondary_widget_ = true;
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  ui::ColorProviderManager::ElevationMode background_elevation_ =
+      ui::ColorProviderManager::ElevationMode::kLow;
+#endif
 
   // The current frame type in use by this window. Defaults to
   // FrameType::kDefault.

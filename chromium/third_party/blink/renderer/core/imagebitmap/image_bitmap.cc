@@ -96,14 +96,14 @@ ImageBitmap::ParsedOptions ParseOptions(const ImageBitmapOptions* options,
     parsed_options.resize_height = options->resizeHeight();
   } else if (options->hasResizeWidth() && !options->hasResizeHeight()) {
     parsed_options.resize_width = options->resizeWidth();
-    parsed_options.resize_height = ceil(
+    parsed_options.resize_height = ClampTo<unsigned>(ceil(
         static_cast<float>(options->resizeWidth()) /
-        parsed_options.crop_rect.width() * parsed_options.crop_rect.height());
+        parsed_options.crop_rect.width() * parsed_options.crop_rect.height()));
   } else {
     parsed_options.resize_height = options->resizeHeight();
-    parsed_options.resize_width = ceil(
+    parsed_options.resize_width = ClampTo<unsigned>(ceil(
         static_cast<float>(options->resizeHeight()) /
-        parsed_options.crop_rect.height() * parsed_options.crop_rect.width());
+        parsed_options.crop_rect.height() * parsed_options.crop_rect.width()));
   }
   if (static_cast<int>(parsed_options.resize_width) ==
           parsed_options.crop_rect.width() &&
@@ -786,6 +786,43 @@ ImageBitmap::ImageBitmap(scoped_refptr<StaticBitmapImage> image) {
 
 scoped_refptr<StaticBitmapImage> ImageBitmap::Transfer() {
   DCHECK(!IsNeutered());
+  if (!image_->HasOneRef()) {
+    // For it to be safe to transfer a StaticBitmapImage it must not be
+    // referenced by any other object on this thread.
+    // The first step is to attempt to release other references via
+    // NotifyWillTransfer
+    const auto content_id =
+        image_->PaintImageForCurrentFrame().GetContentIdForFrame(0);
+    CanvasResourceProvider::NotifyWillTransfer(content_id);
+
+    // If will still have other references, the last resort is to make a copy
+    // of the bitmap.  This could happen, for example, if another ImageBitmap
+    // or a CanvasPattern object points to the same StaticBitmapImage.
+    // This approach is slow and wateful but it is only to handle extremely
+    // rare edge cases.
+    if (!image_->HasOneRef()) {
+      SkImageInfo info = GetSkImageInfo(image_);
+      if (info.isEmpty())
+        return nullptr;
+      PaintImage paint_image = image_->PaintImageForCurrentFrame();
+      bool use_accelerated = paint_image.IsTextureBacked() &&
+                             info.alphaType() == kPremul_SkAlphaType;
+      auto resource_provider = CreateProvider(
+          use_accelerated ? image_->ContextProviderWrapper() : nullptr, info,
+          image_, true /* fallback_to_software */);
+      if (!resource_provider)
+        return nullptr;
+
+      auto* canvas = resource_provider->Canvas();
+      cc::PaintFlags paint;
+      paint.setBlendMode(SkBlendMode::kSrc);
+      canvas->drawImage(image_->PaintImageForCurrentFrame(), 0, 0,
+                        SkSamplingOptions(), &paint);
+      image_ = resource_provider->Snapshot(image_->CurrentFrameOrientation());
+    }
+  }
+
+  DCHECK(image_->HasOneRef());
   is_neutered_ = true;
   image_->Transfer();
   UpdateImageBitmapMemoryUsage();
@@ -876,10 +913,12 @@ void ImageBitmap::RasterizeImageOnBackgroundThread(
                           ImageOrientationEnum::kDefault));
 }
 
-ScriptPromise ImageBitmap::CreateAsync(ImageElementBase* image,
-                                       absl::optional<gfx::Rect> crop_rect,
-                                       ScriptState* script_state,
-                                       const ImageBitmapOptions* options) {
+ScriptPromise ImageBitmap::CreateAsync(
+    ImageElementBase* image,
+    absl::optional<gfx::Rect> crop_rect,
+    ScriptState* script_state,
+    mojom::blink::PreferredColorScheme preferred_color_scheme,
+    const ImageBitmapOptions* options) {
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   ScriptPromise promise = resolver->Promise();
 
@@ -924,7 +963,8 @@ ScriptPromise ImageBitmap::CreateAsync(ImageElementBase* image,
     canvas->scale(1, -1);
   }
   SVGImageForContainer::Create(To<SVGImage>(input.get()),
-                               gfx::SizeF(input_rect.size()), 1, NullURL())
+                               gfx::SizeF(input_rect.size()), 1, NullURL(),
+                               preferred_color_scheme)
       ->Draw(canvas, cc::PaintFlags(), gfx::RectF(draw_dst_rect),
              gfx::RectF(draw_src_rect), ImageDrawOptions());
   sk_sp<PaintRecord> paint_record = recorder.finishRecordingAsPicture();

@@ -23,6 +23,19 @@ class DesksTemplatesIconView;
 
 // This class for determines which app icons/favicons to show for a desk
 // template and creates the according DesksTemplatesIconView's for them.
+// The last DesksTemplatesIconView in the layout is used for storing the
+// overflow count of icons. Not every view in the container is visible.
+//   _______________________________________________________________________
+//   |  _________  _________   _________________   _________   _________   |
+//   |  |       |  |       |   |       |       |   |       |   |       |   |
+//   |  |   I   |  |   I   |   |   I      + N  |   |   I   |   |  + N  |   |
+//   |  |_______|  |_______|   |_______|_______|   |_______|   |_______|   |
+//   |_____________________________________________________________________|
+//
+// If there are multiple apps associated with a certain icon, the icon is drawn
+// once with a +N label attached, up to +99. If there are too many icons to be
+// displayed within the given width, we draw as many and a label at the end that
+// says +N, up to +99.
 class DesksTemplatesIconContainer : public views::BoxLayoutView {
  public:
   METADATA_HEADER(DesksTemplatesIconContainer);
@@ -60,13 +73,6 @@ class DesksTemplatesIconContainer : public views::BoxLayoutView {
   void CreateIconViewsFromIconIdentifiers(
       const std::vector<std::pair<std::string, int>>& identifiers_and_counts);
 
-  // A vector of the `DesksTemplatesIconView`s stored in this. They
-  // are owned by the views hierarchy but store pointers to them here as well.
-  // The last element of `icon_views_` is always an `DesksTemplatesIconView`
-  // used for storing the overflow count of icons. Not every View in this
-  // vector is visible.
-  std::vector<DesksTemplatesIconView*> icon_views_;
-
   // If `this` is created with an incognito window, store the ui::ColorProvider
   // of one of the incognito windows to retrieve its icon's color.
   const ui::ColorProvider* incognito_window_color_provider_ = nullptr;
@@ -75,6 +81,9 @@ class DesksTemplatesIconContainer : public views::BoxLayoutView {
 BEGIN_VIEW_BUILDER(/* no export */,
                    DesksTemplatesIconContainer,
                    views::BoxLayoutView)
+VIEW_BUILDER_METHOD(PopulateIconContainerFromTemplate, DeskTemplate*)
+VIEW_BUILDER_METHOD(PopulateIconContainerFromWindows,
+                    const std::vector<aura::Window*>&)
 END_VIEW_BUILDER
 
 }  // namespace ash

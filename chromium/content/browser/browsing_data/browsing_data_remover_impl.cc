@@ -409,6 +409,10 @@ void BrowsingDataRemoverImpl::RemoveImpl(
     storage_partition_remove_mask |=
         StoragePartition::REMOVE_DATA_MASK_CONVERSIONS;
   }
+  if (remove_mask & DATA_TYPE_AGGREGATION_SERVICE) {
+    storage_partition_remove_mask |=
+        StoragePartition::REMOVE_DATA_MASK_AGGREGATION_SERVICE;
+  }
 
   StoragePartition* storage_partition = GetStoragePartition();
 
@@ -530,9 +534,9 @@ void BrowsingDataRemoverImpl::RemoveImpl(
         CreateTaskCompletionClosureForMojo(TracingDataType::kTrustTokens));
   }
 
-#if BUILDFLAG(ENABLE_REPORTING)
   //////////////////////////////////////////////////////////////////////////////
   // Reporting cache.
+  // TODO(https://crbug.com/1291489): Add unit test to cover this.
   if (remove_mask & DATA_TYPE_COOKIES) {
     network::mojom::NetworkContext* network_context =
         browser_context_->GetDefaultStoragePartition()->GetNetworkContext();
@@ -544,7 +548,6 @@ void BrowsingDataRemoverImpl::RemoveImpl(
         CreateTaskCompletionClosureForMojo(
             TracingDataType::kNetworkErrorLogging));
   }
-#endif  // BUILDFLAG(ENABLE_REPORTING)
 
   //////////////////////////////////////////////////////////////////////////////
   // Auth cache.

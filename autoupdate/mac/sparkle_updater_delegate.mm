@@ -5,11 +5,12 @@
 #include "app/vivaldi_constants.h"
 #include "base/logging.h"
 #include "base/strings/sys_string_conversions.h"
+#include "browser/init_sparkle.h"
 #include "extensions/api/auto_update/auto_update_api.h"
 #include "extensions/api/auto_update/auto_update_status.h"
 #include "extensions/tools/vivaldi_tools.h"
 
-#import "thirdparty/macsparkle/Sparkle/SUErrors.h"
+#import "vivaldi/Sparkle/SUErrors.h"
 
 namespace {
 
@@ -20,13 +21,19 @@ base::Version GetItemVersion(SUAppcastItem* item) {
 
 }  // namespace
 
+@interface SparkleUpdaterDelegate ()
+@property (nonatomic, copy) void (^invocationBlock)(void);
+@end
+
 @implementation SparkleUpdaterDelegate {
 
-NSInvocation* invocation_;
 AutoUpdateStatus status_;
 NSString* version_;
+NSString* feedURL_;
 NSURL* rel_notes_url_;
 }
+
+@synthesize invocationBlock = _invocationBlock;
 
 - (instancetype)init {
   if ((self = [super init])) {
@@ -36,13 +43,14 @@ NSURL* rel_notes_url_;
 }
 
 - (void)dealloc {
-  if (invocation_) {
-    [invocation_ release];
+  if (self.invocationBlock != nil) {
+    self.invocationBlock = nil;
   }
+  [feedURL_ release];
   [super dealloc];
 }
 
-- (void)updater:(SUUpdater*)updater didFindValidUpdate:(SUAppcastItem*)item {
+- (void)updater:(SPUUpdater*)updater didFindValidUpdate:(SUAppcastItem*)item {
   status_ = AutoUpdateStatus::kDidFindValidUpdate;
   version_ = item.versionString;
   rel_notes_url_ = item.releaseNotesURL;
@@ -51,11 +59,11 @@ NSURL* rel_notes_url_;
     GetItemVersion(item));
 }
 
-- (void)updaterDidNotFindUpdate:(SUUpdater *)updater {
+- (void)updaterDidNotFindUpdate:(SPUUpdater *)updater {
   extensions::AutoUpdateAPI::SendUpdaterDidNotFindUpdate();
 }
 
-- (void)updater:(SUUpdater*)updater
+- (void)updater:(SPUUpdater*)updater
     willDownloadUpdate:(SUAppcastItem*)item
            withRequest:(NSMutableURLRequest*)request {
   status_ = AutoUpdateStatus::kWillDownloadUpdate;
@@ -64,43 +72,45 @@ NSURL* rel_notes_url_;
   extensions::AutoUpdateAPI::SendWillDownloadUpdate(GetItemVersion(item));
 }
 
-- (void)updater:(SUUpdater*)updater didDownloadUpdate:(SUAppcastItem*)item {
+- (void)updater:(SPUUpdater*)updater didDownloadUpdate:(SUAppcastItem*)item {
   status_ = AutoUpdateStatus::kDidDownloadUpdate;
   version_ = item.versionString;
   rel_notes_url_ = item.releaseNotesURL;
   extensions::AutoUpdateAPI::SendDidDownloadUpdate(GetItemVersion(item));
 }
 
-- (void)updaterWillRelaunchApplication:(SUUpdater*)updater {
+- (void)updaterWillRelaunchApplication:(SPUUpdater*)updater {
   extensions::AutoUpdateAPI::SendUpdaterWillRelaunchApplication();
 }
 
-- (void)updaterDidRelaunchApplication:(SUUpdater*)updater {
+- (void)updaterDidRelaunchApplication:(SPUUpdater*)updater {
   status_ = AutoUpdateStatus::kUpdaterDidRelaunchApplication;
   extensions::AutoUpdateAPI::SendUpdaterDidRelaunchApplication();
 }
 
-- (void)updater:(SUUpdater*)updater
-            willInstallUpdateOnQuit:(SUAppcastItem*)item
-    immediateInstallationInvocation:(NSInvocation*)invocation {
+- (BOOL)updater:(SPUUpdater *)updater
+          willInstallUpdateOnQuit:(SUAppcastItem *)item
+      immediateInstallationBlock:(void (^)(void))immediateInstallHandler {
   status_ = AutoUpdateStatus::kWillInstallUpdateOnQuit;
   version_ = item.versionString;
   rel_notes_url_ = item.releaseNotesURL;
-  if (invocation_) {
-    [invocation_ release];
-  }
-  invocation_ = [invocation retain];
+  self.invocationBlock = immediateInstallHandler;
   extensions::AutoUpdateAPI::SendWillInstallUpdateOnQuit(GetItemVersion(item));
+  return YES;
 }
 
-- (void)updater:(SUUpdater*)updater didAbortWithError:(NSError*)error {
+- (void)updater:(SPUUpdater*)updater didAbortWithError:(NSError*)error {
   status_ = AutoUpdateStatus::kDidAbortWithError;
   std::string desc = "";
   std::string reason = "";
 
   if (error.code == SUDownloadError ||
-      error.code == SUAppcastError) {
-    // Don't report to UI, will try again when internet connection is restored
+      error.code == SUAppcastError ||
+      error.code == SUNoUpdateError) {
+    // Don't report these errors to the UI,
+    // SUDownloadError - will try again when internet connection is restored
+    // SUAppcastError - will try again when internet connection is restored
+    // SUNoUpdateError - No update was found, no need to report that to the UI
     return;
   }
 
@@ -113,9 +123,15 @@ NSURL* rel_notes_url_;
   extensions::AutoUpdateAPI::SendDidAbortWithError(desc, reason);
 }
 
+- (NSString *)feedURLStringForUpdater:(SPUUpdater *)updater {
+  GURL url = init_sparkle::GetAppcastUrl();
+  return [NSString stringWithUTF8String:url.spec().c_str()];
+}
+
 - (void)installUpdateAndRestart {
-  if (invocation_) {
-    [invocation_ invoke];
+  if (self.invocationBlock != nil) {
+    self.invocationBlock();
+    self.invocationBlock = nil;
   } else {
     vivaldi::RestartBrowser();
   }

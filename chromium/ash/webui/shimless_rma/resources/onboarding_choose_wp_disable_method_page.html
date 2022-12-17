@@ -1,11 +1,11 @@
 <style include="cr-shared-style shimless-rma-shared">
 </style>
 
-<base-page orientation="column">
-  <div slot="header">
+<base-page>
+  <div slot="left-pane">
     <h1>[[i18n('chooseWpDisableMethodPageTitleText')]]</h1>
     <cr-radio-group
-        id="hwwpDisableMethod"
+        id="hwwpDisableMethod" disabled="[[allButtonsDisabled]]"
         on-selected-changed="onHwwpDisableMethodSelectionChanged_">
       <cr-radio-button
           name="hwwpDisableMethodManual"

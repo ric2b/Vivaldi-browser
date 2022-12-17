@@ -8,7 +8,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
 #include "build/chromeos_buildflags.h"
-#include "chrome/browser/ui/webui/app_management/app_management.mojom-forward.h"
 #include "chrome/browser/ui/webui/app_management/app_management_shelf_delegate_chromeos.h"
 #include "components/services/app_service/public/cpp/app_registry_cache.h"
 #include "components/services/app_service/public/cpp/preferred_apps_list_handle.h"
@@ -16,6 +15,8 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "ui/gfx/native_widget_types.h"
+#include "ui/webui/resources/cr_components/app_management/app_management.mojom-forward.h"
 
 class Profile;
 
@@ -24,10 +25,23 @@ class AppManagementPageHandler
       public apps::AppRegistryCache::Observer,
       public apps::PreferredAppsListHandle::Observer {
  public:
+  //  Handles platform specific tasks.
+  class Delegate {
+   public:
+    Delegate() = default;
+    Delegate(const Delegate&) = delete;
+    Delegate& operator=(const Delegate&) = delete;
+
+    virtual ~Delegate() = default;
+
+    virtual gfx::NativeWindow GetUninstallAnchorWindow() const = 0;
+  };
+
   AppManagementPageHandler(
       mojo::PendingReceiver<app_management::mojom::PageHandler> receiver,
       mojo::PendingRemote<app_management::mojom::Page> page,
-      Profile* profile);
+      Profile* profile,
+      Delegate& delegate);
 
   AppManagementPageHandler(const AppManagementPageHandler&) = delete;
   AppManagementPageHandler& operator=(const AppManagementPageHandler&) = delete;
@@ -38,6 +52,7 @@ class AppManagementPageHandler
 
   // app_management::mojom::PageHandler:
   void GetApps(GetAppsCallback callback) override;
+  void GetApp(const std::string& app_id, GetAppCallback callback) override;
   void GetExtensionAppPermissionMessages(
       const std::string& app_id,
       GetExtensionAppPermissionMessagesCallback callback) override;
@@ -53,6 +68,11 @@ class AppManagementPageHandler
   void GetOverlappingPreferredApps(
       const std::string& app_id,
       GetOverlappingPreferredAppsCallback callback) override;
+  void SetWindowMode(const std::string& app_id,
+                     apps::mojom::WindowMode window_mode) override;
+  void SetRunOnOsLoginMode(
+      const std::string& app_id,
+      apps::mojom::RunOnOsLoginMode run_on_os_login_mode) override;
 
  private:
   app_management::mojom::AppPtr CreateUIAppPtr(const apps::AppUpdate& update);
@@ -73,6 +93,8 @@ class AppManagementPageHandler
   mojo::Remote<app_management::mojom::Page> page_;
 
   raw_ptr<Profile> profile_;
+
+  Delegate& delegate_;
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   AppManagementShelfDelegate shelf_delegate_;

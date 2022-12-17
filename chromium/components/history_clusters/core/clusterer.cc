@@ -4,10 +4,42 @@
 
 #include "components/history_clusters/core/clusterer.h"
 
+#include "base/containers/adapters.h"
 #include "components/history/core/browser/history_types.h"
 #include "components/history_clusters/core/on_device_clustering_features.h"
 
 namespace history_clusters {
+
+namespace {
+
+// Returns whether |visit| should be added to |cluster|.
+bool ShouldAddVisitToCluster(const history::ClusterVisit& visit,
+                             const history::Cluster& cluster) {
+  if ((visit.annotated_visit.visit_row.visit_time -
+       cluster.visits.back().annotated_visit.visit_row.visit_time) >
+      features::ClusterNavigationTimeCutoff()) {
+    return false;
+  }
+  if (features::ShouldSplitClustersAtSearchVisits() &&
+      !visit.search_terms.empty()) {
+    // If we want to split the clusters at search visits and we are at a search
+    // visit, only add the visit to the cluster if the last search visit was
+    // also a search visit with the same terms. Also break the cluster if there
+    // was not already a search visit already.
+    absl::optional<history::ClusterVisit> last_search_visit;
+    for (const auto& existing_visit : base::Reversed(cluster.visits)) {
+      if (!existing_visit.search_terms.empty()) {
+        last_search_visit = existing_visit;
+        break;
+      }
+    }
+    return last_search_visit &&
+           visit.search_terms == last_search_visit->search_terms;
+  }
+  return true;
+}
+
+}  // namespace
 
 Clusterer::Clusterer() = default;
 Clusterer::~Clusterer() = default;
@@ -48,14 +80,12 @@ std::vector<history::Cluster> Clusterer::CreateInitialClustersFromVisits(
     }
     DCHECK(!cluster_idx || (*cluster_idx < clusters.size()));
 
-    // Even if above conditions were met, add it to a new cluster if the last
-    // visit in the cluster's navigation time exceeds a certain duration.
+    // Even if above conditions were met, see if we should add it to the cluster
+    // based on the characteristics of the in progress cluster and the current
+    // visit we are processing.
     if (cluster_idx) {
       auto in_progress_cluster = clusters[*cluster_idx];
-      auto last_visit_nav_time = in_progress_cluster.visits.back()
-                                     .annotated_visit.visit_row.visit_time;
-      if ((visit.annotated_visit.visit_row.visit_time - last_visit_nav_time) >
-          features::ClusterNavigationTimeCutoff()) {
+      if (!ShouldAddVisitToCluster(visit, in_progress_cluster)) {
         // Erase all visits in the cluster from the maps since we no longer
         // want to consider anything in the cluster as a referrer.
         auto finalized_cluster = clusters[*cluster_idx];

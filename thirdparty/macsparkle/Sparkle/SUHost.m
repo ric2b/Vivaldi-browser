@@ -12,6 +12,7 @@
 #import "SULog.h"
 #import "SUSignatures.h"
 
+
 #include "AppKitPrevention.h"
 
 NS_ASSUME_NONNULL_BEGIN
@@ -41,8 +42,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (instancetype)initWithBundle:(NSBundle *)aBundle
 {
-    if ((self = [super init]))
-    {
+	if ((self = [super init]))
+	{
         NSParameterAssert(aBundle);
         self.bundle = aBundle;
         if (![self.bundle bundleIdentifier]) {
@@ -63,7 +64,6 @@ NS_ASSUME_NONNULL_BEGIN
     return self;
 }
 
-
 - (NSString *)description { return [NSString stringWithFormat:@"%@ <%@>", [self class], [self bundlePath]]; }
 
 - (NSString *)bundlePath
@@ -71,7 +71,7 @@ NS_ASSUME_NONNULL_BEGIN
     return [self.bundle bundlePath];
 }
 
-- (NSString *)name
+- (NSString * _Nonnull)name
 {
     NSString *name;
 
@@ -80,23 +80,42 @@ NS_ASSUME_NONNULL_BEGIN
     if (name && name.length > 0) return name;
 
     name = [self objectForInfoDictionaryKey:@"CFBundleDisplayName"];
-    if (name && name.length > 0) return name;
+	if (name && name.length > 0) return name;
 
     name = [self objectForInfoDictionaryKey:(__bridge NSString *)kCFBundleNameKey];
-    if (name && name.length > 0) return name;
+	if (name && name.length > 0) return name;
 
     return [[[NSFileManager defaultManager] displayNameAtPath:[self bundlePath]] stringByDeletingPathExtension];
 }
 
-- (NSString *)version
+- (BOOL)validVersion
+{
+    return [self isValidVersion:[self _version]];
+}
+
+- (BOOL)isValidVersion:(NSString * _Nullable)version
+{
+    return (version != nil && version.length != 0);
+}
+
+- (NSString * _Nullable)_version
 {
     NSString *version = [self objectForInfoDictionaryKey:(__bridge NSString *)kCFBundleVersionKey];
-    if (!version || [version isEqualToString:@""])
-        [NSException raise:@"SUNoVersionException" format:@"This host (%@) has no %@! This attribute is required.", [self bundlePath], (__bridge NSString *)kCFBundleVersionKey];
+    return ([self isValidVersion:version] ? version : nil);
+}
+
+- (NSString * _Nonnull)version
+{
+    NSString *version = [self _version];
+    if (version == nil) {
+        SULog(SULogLevelError, @"This host (%@) has no %@! This attribute is required.", [self bundlePath], (__bridge NSString *)kCFBundleVersionKey);
+        // Instead of abort()-ing, return an empty string to satisfy the _Nonnull contract.
+        return @"";
+    }
     return version;
 }
 
-- (NSString *)displayVersion
+- (NSString * _Nonnull)displayVersion
 {
     NSString *shortVersionString = [self objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
     if (shortVersionString)
@@ -118,23 +137,22 @@ NS_ASSUME_NONNULL_BEGIN
     return [path rangeOfString:@"/AppTranslocation/"].location != NSNotFound;
 }
 
-
-- (NSString *__nullable)publicEDKey
+- (NSString *_Nullable)publicEDKey
 {
     return [self objectForInfoDictionaryKey:SUPublicEDKeyKey];
 }
 
-- (NSString *__nullable)publicDSAKey
+- (NSString *_Nullable)publicDSAKey
 {
     // Maybe the key is just a string in the Info.plist.
     NSString *key = [self objectForInfoDictionaryKey:SUPublicDSAKeyKey];
-    if (key) {
+	if (key) {
         return key;
     }
 
     // More likely, we've got a reference to a Resources file by filename:
     NSString *keyFilename = [self publicDSAKeyFileKey];
-    if (!keyFilename) {
+	if (!keyFilename) {
         return nil;
     }
 
@@ -155,7 +173,7 @@ NS_ASSUME_NONNULL_BEGIN
     return [[SUPublicKeys alloc] initWithDsa:[self publicDSAKey] ed:[self publicEDKey]];
 }
 
-- (NSString * __nullable)publicDSAKeyFileKey
+- (NSString * _Nullable)publicDSAKeyFileKey
 {
     return [self objectForInfoDictionaryKey:SUPublicDSAKeyFileKey];
 }
@@ -204,12 +222,12 @@ NS_ASSUME_NONNULL_BEGIN
 // Note this handles nil being passed for defaultName, in which case the user default will be removed
 - (void)setObject:(nullable id)value forUserDefaultsKey:(NSString *)defaultName
 {
-    if (self.usesStandardUserDefaults)
-    {
+	if (self.usesStandardUserDefaults)
+	{
         [[NSUserDefaults standardUserDefaults] setObject:value forKey:defaultName];
-    }
-    else
-    {
+	}
+	else
+	{
         CFPreferencesSetValue((__bridge CFStringRef)defaultName, (__bridge CFPropertyListRef)(value), (__bridge CFStringRef)self.defaultsDomain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
         CFPreferencesSynchronize((__bridge CFStringRef)self.defaultsDomain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
     }
@@ -225,9 +243,9 @@ NS_ASSUME_NONNULL_BEGIN
     CFPropertyListRef plr = CFPreferencesCopyAppValue((__bridge CFStringRef)defaultName, (__bridge CFStringRef)self.defaultsDomain);
     if (plr == NULL) {
         value = NO;
-    }
-    else
-    {
+	}
+	else
+	{
         value = CFBooleanGetValue((CFBooleanRef)plr) ? YES : NO;
         CFRelease(plr);
     }
@@ -236,12 +254,12 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (void)setBool:(BOOL)value forUserDefaultsKey:(NSString *)defaultName
 {
-    if (self.usesStandardUserDefaults)
-    {
+	if (self.usesStandardUserDefaults)
+	{
         [[NSUserDefaults standardUserDefaults] setBool:value forKey:defaultName];
-    }
-    else
-    {
+	}
+	else
+	{
         CFPreferencesSetValue((__bridge CFStringRef)defaultName, (__bridge CFBooleanRef) @(value), (__bridge CFStringRef)self.defaultsDomain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
         CFPreferencesSynchronize((__bridge CFStringRef)self.defaultsDomain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
     }

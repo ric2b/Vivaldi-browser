@@ -5,11 +5,12 @@
 
 #include "notes_bridge.h"
 
+#include <android/log.h>
+#include <memory>
+#include <queue>
 #include <stddef.h>
 #include <stdint.h>
 
-#include <android/log.h>
-#include <memory>
 
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"

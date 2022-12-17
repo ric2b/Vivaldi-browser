@@ -9,7 +9,7 @@
 namespace certificate_transparency {
 namespace features {
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 const base::Feature kCertificateTransparencyComponentUpdater{
     "CertificateTransparencyComponentUpdater",
     base::FEATURE_DISABLED_BY_DEFAULT};
@@ -20,7 +20,7 @@ const base::Feature kCertificateTransparencyComponentUpdater{
 #endif
 
 const base::Feature kCertificateTransparency2022Policy{
-    "CertificateTransparency2022Policy", base::FEATURE_DISABLED_BY_DEFAULT};
+    "CertificateTransparency2022Policy", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kCertificateTransparency2022PolicyAllCerts{
     "CertificateTransparency2022PolicyAllCerts",

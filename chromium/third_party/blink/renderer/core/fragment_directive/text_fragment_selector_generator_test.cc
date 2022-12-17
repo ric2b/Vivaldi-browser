@@ -90,13 +90,12 @@ class TextFragmentSelectorGeneratorTest : public SimTest {
 
     bool callback_called = false;
     String selector;
-    auto lambda =
-        [](bool& callback_called, String& selector,
-           const TextFragmentSelector& generated_selector,
-           absl::optional<shared_highlighting::LinkGenerationError> error) {
-          selector = generated_selector.ToString();
-          callback_called = true;
-        };
+    auto lambda = [](bool& callback_called, String& selector,
+                     const TextFragmentSelector& generated_selector,
+                     shared_highlighting::LinkGenerationError error) {
+      selector = generated_selector.ToString();
+      callback_called = true;
+    };
     auto callback =
         WTF::Bind(lambda, std::ref(callback_called), std::ref(selector));
     GetTextFragmentSelectorGenerator()->Generate(
@@ -111,10 +110,8 @@ class TextFragmentSelectorGeneratorTest : public SimTest {
   }
 
   TextFragmentSelectorGenerator* GetTextFragmentSelectorGenerator() {
-    return GetDocument()
-        .GetFrame()
-        ->GetTextFragmentHandler()
-        ->GetTextFragmentSelectorGenerator();
+    return MakeGarbageCollected<TextFragmentSelectorGenerator>(
+        GetDocument().GetFrame());
   }
 
  protected:
@@ -1247,6 +1244,62 @@ TEST_F(TextFragmentSelectorGeneratorTest, RangeBeginsOnShadowHost) {
   ASSERT_EQ("the quick", PlainText(EphemeralRange(start, end)));
 
   VerifySelector(start, end, "the%20quick,-brown%20fox%20jumped");
+}
+
+// Checks selection in multiline paragraph.
+TEST_F(TextFragmentSelectorGeneratorTest, Multiline_paragraph) {
+  SimRequest request("https://example.com/test.html", "text/html");
+  LoadURL("https://example.com/test.html");
+  request.Complete(R"HTML(
+    <!DOCTYPE html>
+  <p id ='p'>
+  first paragraph line<br>second paragraph line
+  </p>
+  )HTML");
+  Node* p = GetDocument().getElementById("p");
+  const auto& start = Position(p->firstChild(), 0);
+  const auto& end = Position(p->lastChild(), 24);
+  ASSERT_EQ("first paragraph line\nsecond paragraph line",
+            PlainText(EphemeralRange(start, end)));
+
+  VerifySelector(start, end,
+                 "first%20paragraph%20line%0Asecond%20paragraph%20line");
+}
+
+// Checks selection in multiline paragraph.
+TEST_F(TextFragmentSelectorGeneratorTest, Nbsp_before_suffix) {
+  SimRequest request("https://example.com/test.html", "text/html");
+  LoadURL("https://example.com/test.html");
+  request.Complete(R"HTML(
+    <!DOCTYPE html>
+  <p id ='p1'>first paragraph line.&nbsp;</p>
+  <p id ='p2'>&nbsp;second paragraph line.</p>
+  )HTML");
+  Node* p = GetDocument().getElementById("p1");
+  const auto& start = Position(p->firstChild(), 16);
+  const auto& end = Position(p->firstChild(), 21);
+  ASSERT_EQ("line.", PlainText(EphemeralRange(start, end)));
+
+  VerifySelector(start, end,
+                 "first%20paragraph-,line.,-second%20paragraph%20line");
+}
+
+// Checks selection in multiline paragraph.
+TEST_F(TextFragmentSelectorGeneratorTest, Nbsp_before_prefix) {
+  SimRequest request("https://example.com/test.html", "text/html");
+  LoadURL("https://example.com/test.html");
+  request.Complete(R"HTML(
+    <!DOCTYPE html>
+  <p id ='p1'>first paragraph line.&nbsp;    </p>
+  <p id ='p2'>&nbsp;    second paragraph line.</p>
+  )HTML");
+  Node* p = GetDocument().getElementById("p2");
+  const auto& start = Position(p->firstChild(), 5);
+  const auto& end = Position(p->firstChild(), 11);
+  ASSERT_EQ("second", PlainText(EphemeralRange(start, end)));
+
+  VerifySelector(start, end,
+                 "first%20paragraph%20line.-,second,-paragraph%20line.");
 }
 
 // Basic test case for |GetNextTextBlock|.

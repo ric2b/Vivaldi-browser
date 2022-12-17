@@ -14,10 +14,8 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/feature_list.h"
-#include "base/files/file_path.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/persistent_histogram_allocator.h"
-#include "base/no_destructor.h"
 #include "base/time/time.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/metrics/metrics_service.h"
@@ -29,6 +27,8 @@ namespace android_webview {
 namespace prefs {
 const char kMetricsAppPackageNameLoggingRule[] =
     "aw_metrics_app_package_name_logging_rule";
+const char kAppPackageNameLoggingRuleLastUpdateTime[] =
+    "aw_metrics_app_package_name_logging_rule_last_update";
 }  // namespace prefs
 
 namespace {
@@ -82,13 +82,6 @@ AwMetricsServiceClient::AwMetricsServiceClient(
     : time_created_(base::Time::Now()), delegate_(std::move(delegate)) {}
 
 AwMetricsServiceClient::~AwMetricsServiceClient() = default;
-
-void AwMetricsServiceClient::Initialize(PrefService* pref_service) {
-  // Pass an empty file path since the path is for the Extended Variations Safe
-  // Mode experiment and Android WebView is excluded from this experiment.
-  AndroidMetricsServiceClient::Initialize(/*user_data_dir=*/base::FilePath(),
-                                          pref_service);
-}
 
 int32_t AwMetricsServiceClient::GetProduct() {
   return metrics::ChromeUserMetricsExtension::ANDROID_WEBVIEW;
@@ -188,6 +181,21 @@ AwMetricsServiceClient::GetCachedAppPackageNameLoggingRule() {
   return cached_package_name_record_;
 }
 
+base::Time AwMetricsServiceClient::GetAppPackageNameLoggingRuleLastUpdateTime()
+    const {
+  PrefService* local_state = pref_service();
+  DCHECK(local_state);
+  return local_state->GetTime(prefs::kAppPackageNameLoggingRuleLastUpdateTime);
+}
+
+void AwMetricsServiceClient::SetAppPackageNameLoggingRuleLastUpdateTime(
+    base::Time update_time) {
+  PrefService* local_state = pref_service();
+  DCHECK(local_state);
+  local_state->SetTime(prefs::kAppPackageNameLoggingRuleLastUpdateTime,
+                       update_time);
+}
+
 void AwMetricsServiceClient::OnMetricsStart() {
   delegate_->AddWebViewAppStateObserver(this);
 }
@@ -238,6 +246,8 @@ void AwMetricsServiceClient::RegisterMetricsPrefs(
   RegisterPrefs(registry);
   registry->RegisterDictionaryPref(prefs::kMetricsAppPackageNameLoggingRule,
                                    base::Value(base::Value::Type::DICTIONARY));
+  registry->RegisterTimePref(prefs::kAppPackageNameLoggingRuleLastUpdateTime,
+                             base::Time());
 }
 
 // static

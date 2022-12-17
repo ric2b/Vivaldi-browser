@@ -8,7 +8,6 @@
 
 #include "base/bind.h"
 #include "base/cxx17_backports.h"
-#include "base/feature_list.h"
 #include "base/memory/raw_ptr.h"
 #include "base/notreached.h"
 #include "base/run_loop.h"
@@ -22,7 +21,6 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/signin/chrome_signin_client_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
-#include "chrome/browser/signin/signin_features.h"
 #include "chrome/browser/signin/signin_util.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
@@ -39,7 +37,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
 #include "chrome/test/base/browser_with_test_window_test.h"
 #endif
 
@@ -143,7 +141,7 @@ TEST_F(ChromeSigninClientTest, DelayNetworkCallRunsAfterNetworkChange) {
   ASSERT_TRUE(tester.WasCalledExactlyOnce());
 }
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
 
 class MockChromeSigninClient : public ChromeSigninClient {
  public:
@@ -316,8 +314,8 @@ TEST_P(ChromeSigninClientSignoutSourceTest, UserSignoutAllowed) {
   PreSignOut(signout_source, delete_metric);
 }
 
-#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_CHROMEOS) || \
-    defined(OS_MAC)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || \
+    BUILDFLAG(IS_MAC)
 TEST_P(ChromeSigninClientSignoutSourceTest, UserSignoutDisallowed) {
   signin_metrics::ProfileSignout signout_source = GetParam();
 
@@ -378,7 +376,6 @@ TEST_P(ChromeSigninClientSignoutSourceTest, UserSignoutDisallowedWithSync) {
 
 TEST_P(ChromeSigninClientSignoutSourceTest,
        UserSignoutDisallowedAccountManagementAccepted) {
-  base::test::ScopedFeatureList features(kAccountPoliciesLoadedWithoutSync);
   signin_metrics::ProfileSignout signout_source = GetParam();
 
   TestingProfile::Builder builder;
@@ -434,5 +431,5 @@ INSTANTIATE_TEST_SUITE_P(AllSignoutSources,
                          ChromeSigninClientSignoutSourceTest,
                          testing::ValuesIn(kSignoutSources));
 
-#endif  // !defined(OS_ANDROID)
+#endif  // !BUILDFLAG(IS_ANDROID)
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)

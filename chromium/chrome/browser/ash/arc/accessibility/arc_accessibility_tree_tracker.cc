@@ -95,6 +95,27 @@ void UpdateTreeIdOfNotificationSurface(const std::string& notification_key,
   }
 }
 
+extensions::api::accessibility_private::SetNativeChromeVoxResponse
+FromMojomResponseToAutomationResponse(
+    arc::mojom::SetNativeChromeVoxResponse response) {
+  switch (response) {
+    case arc::mojom::SetNativeChromeVoxResponse::SUCCESS:
+      return extensions::api::accessibility_private::
+          SetNativeChromeVoxResponse::SET_NATIVE_CHROME_VOX_RESPONSE_SUCCESS;
+    case arc::mojom::SetNativeChromeVoxResponse::TALKBACK_NOT_INSTALLED:
+      return extensions::api::accessibility_private::
+          SetNativeChromeVoxResponse::
+              SET_NATIVE_CHROME_VOX_RESPONSE_TALKBACKNOTINSTALLED;
+    case arc::mojom::SetNativeChromeVoxResponse::WINDOW_NOT_FOUND:
+      return extensions::api::accessibility_private::
+          SetNativeChromeVoxResponse::
+              SET_NATIVE_CHROME_VOX_RESPONSE_WINDOWNOTFOUND;
+    case arc::mojom::SetNativeChromeVoxResponse::FAILURE:
+      return extensions::api::accessibility_private::
+          SetNativeChromeVoxResponse::SET_NATIVE_CHROME_VOX_RESPONSE_FAILURE;
+  }
+}
+
 }  // namespace
 
 class ArcAccessibilityTreeTracker::FocusChangeObserver
@@ -176,10 +197,14 @@ class ArcAccessibilityTreeTracker::ArcInputMethodManagerServiceObserver
   }
 
   void OnAndroidVirtualKeyboardVisibilityChanged(bool visible) override {
+    is_virtual_keyboard_shown_ = visible;
     owner_->OnAndroidVirtualKeyboardVisibilityChanged(visible);
   }
 
+  bool is_virtual_keyboard_shown() const { return is_virtual_keyboard_shown_; }
+
  private:
+  bool is_virtual_keyboard_shown_ = false;
   base::ScopedObservation<ArcInputMethodManagerService,
                           ArcInputMethodManagerService::Observer>
       arc_imms_observation_{this};
@@ -349,18 +374,23 @@ AXTreeSourceArc* ArcAccessibilityTreeTracker::OnAccessibilityEvent(
     // notification_key before this receives an accessibility event for it.
     return GetFromKey(KeyForNotification(notification_key));
   } else if (event_data->is_input_method_window) {
+    if (!input_manager_service_observer_->is_virtual_keyboard_shown())
+      return nullptr;
+
     exo::InputMethodSurface* input_method_surface =
         exo::InputMethodSurface::GetInputMethodSurface();
     if (!input_method_surface)
       return nullptr;
 
     auto key = KeyForInputMethod();
-    if (GetFromKey(key) == nullptr) {
-      auto* tree = CreateFromKey(key, input_method_surface->host_window());
+    auto* tree = GetFromKey(key);
+    if (!tree) {
+      tree = CreateFromKey(key, input_method_surface->host_window());
       input_method_surface->SetChildAxTreeId(tree->ax_tree_id());
     }
+    DCHECK(tree->window() == input_method_surface->host_window());
 
-    return GetFromKey(key);
+    return tree;
   } else {
     int task_id;
     if (event_data->task_id != kNoTaskId) {
@@ -458,6 +488,10 @@ void ArcAccessibilityTreeTracker::OnNotificationStateChanged(
 
 void ArcAccessibilityTreeTracker::OnAndroidVirtualKeyboardVisibilityChanged(
     bool visible) {
+  // The lifetime of AXTreeSourceArc should be bounded by the corresponding exo
+  // window. Always using OnWindowDestroying is ideal.
+  // But it seems that OnWindowDestroying sometimes not called when visually VK
+  // is made invisible. We're using this callback here to destroy the tree.
   if (!visible)
     trees_.erase(KeyForInputMethod());
 }
@@ -473,13 +507,23 @@ void ArcAccessibilityTreeTracker::OnToggleNativeChromeVoxArcSupport(
   // OnSetNativeChromeVoxArcSupportProcessed()?
 }
 
-void ArcAccessibilityTreeTracker::SetNativeChromeVoxArcSupport(bool enabled) {
+void ArcAccessibilityTreeTracker::SetNativeChromeVoxArcSupport(
+    bool enabled,
+    SetNativeChromeVoxCallback callback) {
   aura::Window* window = GetFocusedArcWindow();
-  if (!window)
+  if (!window) {
+    std::move(callback).Run(
+        extensions::api::accessibility_private::SetNativeChromeVoxResponse::
+            SET_NATIVE_CHROME_VOX_RESPONSE_FAILURE);
     return;
+  }
 
-  if (!arc::GetWindowTaskId(window).has_value())
+  if (!arc::GetWindowTaskId(window).has_value()) {
+    std::move(callback).Run(
+        extensions::api::accessibility_private::SetNativeChromeVoxResponse::
+            SET_NATIVE_CHROME_VOX_RESPONSE_FAILURE);
     return;
+  }
 
   std::unique_ptr<aura::WindowTracker> window_tracker =
       std::make_unique<aura::WindowTracker>();
@@ -489,15 +533,21 @@ void ArcAccessibilityTreeTracker::SetNativeChromeVoxArcSupport(bool enabled) {
       enabled,
       base::BindOnce(
           &ArcAccessibilityTreeTracker::OnSetNativeChromeVoxArcSupportProcessed,
-          base::Unretained(this), std::move(window_tracker), enabled));
+          base::Unretained(this), std::move(window_tracker), enabled,
+          std::move(callback)));
 }
 
 void ArcAccessibilityTreeTracker::OnSetNativeChromeVoxArcSupportProcessed(
     std::unique_ptr<aura::WindowTracker> window_tracker,
     bool enabled,
-    bool processed) {
-  if (!processed || window_tracker->windows().size() != 1)
+    SetNativeChromeVoxCallback callback,
+    arc::mojom::SetNativeChromeVoxResponse response) {
+  std::move(callback).Run(FromMojomResponseToAutomationResponse(response));
+
+  if (response != arc::mojom::SetNativeChromeVoxResponse::SUCCESS ||
+      window_tracker->windows().size() != 1) {
     return;
+  }
 
   aura::Window* window = window_tracker->Pop();
   auto task_id = arc::GetWindowTaskId(window);
@@ -534,8 +584,8 @@ AXTreeSourceArc* ArcAccessibilityTreeTracker::CreateFromKey(
     TreeKey key,
     aura::Window* window) {
   auto tree = std::make_unique<AXTreeSourceArc>(tree_source_delegate_, window);
-  AXTreeSourceArc* tree_ptr = tree.get();
-  trees_.insert(std::make_pair(std::move(key), std::move(tree)));
+  auto [itr, inserted] = trees_.try_emplace(std::move(key), std::move(tree));
+  DCHECK(inserted);
 
   if (ash::AccessibilityManager::Get() &&
       ash::AccessibilityManager::Get()->IsSpokenFeedbackEnabled()) {
@@ -543,7 +593,7 @@ AXTreeSourceArc* ArcAccessibilityTreeTracker::CreateFromKey(
     // compare this with TalkBack usage.
     base::UmaHistogramBoolean("Arc.AccessibilityWithTalkBack", false);
   }
-  return tree_ptr;
+  return itr->second.get();
 }
 
 void ArcAccessibilityTreeTracker::InvalidateTrees() {

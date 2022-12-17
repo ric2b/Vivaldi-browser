@@ -115,6 +115,7 @@ class VivaldiWindowNativeWidgetMac : public views::NativeWidgetMac {
       const views::Widget::InitParams& widget_params,
       remote_cocoa::mojom::CreateWindowParams* params) override {
     if (is_frameless_) {
+      params->titlebar_appears_transparent = true;
       params->window_class = remote_cocoa::mojom::WindowClass::kFrameless;
       params->style_mask = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable |
                            NSWindowStyleMaskMiniaturizable |
@@ -199,16 +200,6 @@ gfx::Rect VivaldiNativeAppWindowViewsMac::GetRestoredBounds() const {
     return gfx::ScreenRectFromNSRect(bounds_before_maximize_);
 
   return VivaldiNativeAppWindowViews::GetRestoredBounds();
-}
-
-void VivaldiNativeAppWindowViewsMac::Show() {
-  [GetNativeWindow().GetNativeNSWindow()
-      makeFirstResponder:web_view()
-                             ->web_contents()
-                             ->GetRenderWidgetHostView()
-                             ->GetNativeView()
-                             .GetNativeNSView()];
-  VivaldiNativeAppWindowViews::Show();
 }
 
 void VivaldiNativeAppWindowViewsMac::Maximize() {

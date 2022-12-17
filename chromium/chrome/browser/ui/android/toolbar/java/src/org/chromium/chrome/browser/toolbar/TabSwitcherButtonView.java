@@ -8,6 +8,7 @@ import android.content.Context;
 import android.content.res.ColorStateList;
 import android.util.AttributeSet;
 
+import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
 import org.chromium.components.browser_ui.widget.listmenu.ListMenuButton;
 
 // Vialdi
@@ -32,11 +33,10 @@ public class TabSwitcherButtonView extends ListMenuButton {
 
         if (BuildConfig.IS_VIVALDI) { // Vivaldi
             mTabSwitcherButtonDrawable =
-                    TabSwitcherDrawable.createTabSwitcherDrawableForBottomBar(getContext(),
-                            false);
+                    TabSwitcherDrawable.createTabSwitcherDrawableForBottomBar(getContext());
         } else
-        mTabSwitcherButtonDrawable =
-                TabSwitcherDrawable.createTabSwitcherDrawable(getContext(), false);
+        mTabSwitcherButtonDrawable = TabSwitcherDrawable.createTabSwitcherDrawable(
+                getContext(), BrandedColorScheme.APP_DEFAULT);
         setImageDrawable(mTabSwitcherButtonDrawable);
     }
 

@@ -11,16 +11,20 @@
 #include "base/files/file_path.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/profiles/keep_alive/profile_keep_alive_types.h"
+#include "chrome/browser/profiles/keep_alive/scoped_profile_keep_alive.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/signin/signin_promo.h"
 #include "chrome/browser/signin/signin_util.h"
+#include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/layout_constants.h"
@@ -63,13 +67,13 @@
 #include "chrome/browser/ui/views/profiles/profile_picker_dice_sign_in_toolbar.h"
 #endif
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 #include "chrome/browser/shell_integration_win.h"
 #include "ui/base/win/shell.h"
 #include "ui/views/win/hwnd_util.h"
 #endif
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 #include "chrome/browser/global_keyboard_shortcuts_mac.h"
 #endif
 
@@ -126,7 +130,10 @@ class ProfilePickerWidget : public views::Widget {
 
   // views::Widget:
   const ui::ThemeProvider* GetThemeProvider() const override {
-    return profile_picker_view_->GetThemeProviderForProfileBeingCreated();
+    Profile* profile = profile_picker_view_->GetProfileBeingCreated();
+    if (profile)
+      return &ThemeService::GetThemeProviderForProfile(profile);
+    return nullptr;
   }
   ui::ColorProviderManager::InitializerSupplier* GetCustomTheme()
       const override {
@@ -258,7 +265,7 @@ bool ProfilePicker::IsActive() {
   if (!IsOpen())
     return false;
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   return g_profile_picker_view->GetWidget()->IsVisible();
 #else
   return g_profile_picker_view->GetWidget()->IsActive();
@@ -375,12 +382,14 @@ void ProfilePickerView::NavigationFinishedObserver::DidFinishNavigation(
 
 // ProfilePickerView ----------------------------------------------------------
 
-const ui::ThemeProvider*
-ProfilePickerView::GetThemeProviderForProfileBeingCreated() const {
+// Returns the initialized profile or nullptr if the profile has not been
+// initialized yet or not in the dice flow.
+Profile* ProfilePickerView::GetProfileBeingCreated() const {
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
   // Theme provider is only needed for the dice flow.
-  if (dice_sign_in_provider_)
-    return dice_sign_in_provider_->GetThemeProvider();
+  if (dice_sign_in_provider_ && dice_sign_in_provider_->IsInitialized()) {
+    return dice_sign_in_provider_->GetInitializedProfile();
+  }
 #endif
   return nullptr;
 }
@@ -440,6 +449,7 @@ void ProfilePickerView::ShowScreenInPickerContents(
 }
 
 void ProfilePickerView::Clear() {
+  TRACE_EVENT1("browser,startup", "ProfilePickerView::Clear", "state", state_);
   if (state_ == kClosing)
     return;
 
@@ -530,6 +540,8 @@ bool ProfilePickerView::ShouldReopen(
 
 void ProfilePickerView::Display(ProfilePicker::EntryPoint entry_point) {
   DCHECK_NE(state_, kClosing);
+  TRACE_EVENT2("browser,startup", "ProfilePickerView::Display", "entry_point",
+               entry_point, "state", state_);
   // Record creation metrics.
   base::UmaHistogramEnumeration("ProfilePicker.Shown", entry_point);
   if (entry_point == ProfilePicker::EntryPoint::kOnStartup) {
@@ -564,6 +576,10 @@ void ProfilePickerView::Display(ProfilePicker::EntryPoint entry_point) {
 
 void ProfilePickerView::OnPickerProfileCreated(Profile* picker_profile,
                                                Profile::CreateStatus status) {
+  TRACE_EVENT2("browser,startup", "ProfilePickerView::OnPickerProfileCreated",
+               "profile_path",
+               (picker_profile ? picker_profile->GetPath().AsUTF8Unsafe() : ""),
+               "status", status);
   DCHECK_NE(status, Profile::CREATE_STATUS_LOCAL_FAIL);
   if (status != Profile::CREATE_STATUS_INITIALIZED)
     return;
@@ -573,14 +589,30 @@ void ProfilePickerView::OnPickerProfileCreated(Profile* picker_profile,
 
 void ProfilePickerView::Init(Profile* picker_profile) {
   DCHECK_EQ(state_, kInitializing);
+  TRACE_EVENT1(
+      "browser,startup", "ProfilePickerView::Init", "profile_path",
+      (picker_profile ? picker_profile->GetPath().AsUTF8Unsafe() : ""));
   contents_ = content::WebContents::Create(
       content::WebContents::CreateParams(picker_profile));
   contents_->SetDelegate(this);
 
+  // Destroy the System Profile when the ProfilePickerView is closed (assuming
+  // its refcount hits 0). We need to use GetOriginalProfile() here because
+  // |profile_picker| is an OTR Profile, and ScopedProfileKeepAlive only
+  // supports non-OTR Profiles. Trying to acquire a keepalive on the OTR Profile
+  // would trigger a DCHECK.
+  //
+  // TODO(crbug.com/1153922): Once OTR Profiles use refcounting, remove the call
+  // to GetOriginalProfile(). The OTR Profile will hold a keepalive on the
+  // regular Profile, so the ownership model will be more straightforward.
+  profile_keep_alive_ = std::make_unique<ScopedProfileKeepAlive>(
+      picker_profile->GetOriginalProfile(),
+      ProfileKeepAliveOrigin::kProfilePickerView);
+
   // The widget is owned by the native widget.
   new ProfilePickerWidget(this);
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   // Set the app id for the user manager to the app id of its parent.
   ui::win::SetAppIdForWindow(
       shell_integration::win::GetAppUserModelIdForBrowser(
@@ -715,6 +747,7 @@ void ProfilePickerView::CancelSignedInFlow() {
 }
 
 void ProfilePickerView::WindowClosing() {
+  views::WidgetDelegateView::WindowClosing();
   // Now that the window is closed, we can allow a new one to be opened.
   // (WindowClosing comes in asynchronously from the call to Close() and we
   // may have already opened a new instance).
@@ -891,7 +924,7 @@ void ProfilePickerView::ConfigureAccelerators() {
     AddAccelerator(accelerator);
   }
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   // Check Mac-specific accelerators. Note: Chrome does not support dynamic or
   // user-configured accelerators on Mac. Default static accelerators are used
   // instead.
@@ -904,7 +937,7 @@ void ProfilePickerView::ConfigureAccelerators() {
       AddAccelerator(accelerator);
     }
   }
-#endif  // OS_MAC
+#endif  // BUILDFLAG(IS_MAC)
 }
 
 void ProfilePickerView::ShowDialog(content::BrowserContext* browser_context,

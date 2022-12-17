@@ -11,6 +11,17 @@
 
 namespace viv_importer {
 
+void DetectOperaMailProfiles(std::vector<importer::SourceProfile>* profiles) {
+  importer::SourceProfile opera;
+  opera.importer_name = l10n_util::GetStringUTF16(IDS_IMPORT_FROM_OPERA_MAIL);
+  opera.importer_type = importer::TYPE_OPERA;
+  opera.source_path = GetProfileDir(true);
+  opera.mail_path = GetMailDirectory(true);
+  opera.services_supported = importer::EMAIL;
+
+  profiles->push_back(opera);
+}
+
 void DetectOperaProfiles(std::vector<importer::SourceProfile>* profiles) {
   importer::SourceProfile opera;
   opera.importer_name = l10n_util::GetStringUTF16(IDS_IMPORT_FROM_OPERA);
@@ -30,10 +41,9 @@ void DetectOperaProfiles(std::vector<importer::SourceProfile>* profiles) {
   base::FilePath ini_file(opera.source_path);
   ini_file = ini_file.AppendASCII(OPERA_PREFS_NAME);
   if (ReadOperaIniFile(ini_file, inifile_parser)) {
-    const base::DictionaryValue& inifile = inifile_parser.root();
-    int val;
-    inifile.GetInteger("Security Prefs.Use Paranoid Mailpassword", &val);
-    if (val) {
+    const base::Value::Dict& inifile = inifile_parser.root();
+    absl::optional<int> val = inifile.FindInt("Security Prefs.Use Paranoid Mailpassword");
+    if (val && *val) {
       opera.services_supported |= importer::MASTER_PASSWORD;
     }
   }
@@ -44,5 +54,7 @@ void DetectOperaProfiles(std::vector<importer::SourceProfile>* profiles) {
   opera.services_supported |= importer::MASTER_PASSWORD;
 #endif
   profiles->push_back(opera);
+
+  DetectOperaMailProfiles(profiles);
 }
 }  // namespace viv_importer

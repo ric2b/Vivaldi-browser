@@ -2,8 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {MechanicalLayout, PhysicalLayout} from 'chrome://resources/ash/common/keyboard_diagram.js';
-import {assertEquals, assertNotEquals, assertTrue} from '../../chai_assert.js';
+import {MechanicalLayout, PhysicalLayout, TopRowKey} from 'chrome://resources/ash/common/keyboard_diagram.js';
+import {KeyboardKeyState} from 'chrome://resources/ash/common/keyboard_key.js';
+import {assertEquals, assertNotEquals, assertThrows, assertTrue} from '../../chai_assert.js';
 import {flushTasks, waitAfterNextRender} from '../../test_util.js';
 
 export function keyboardDiagramTestSuite() {
@@ -69,19 +70,31 @@ export function keyboardDiagramTestSuite() {
     assertKeyVisible('jisYenKey');
   });
 
-  test('dell-enterprise', async () => {
-    assertKeyHidden('dellDeleteKey');
+  test('dellEnterpriseWilco', async () => {
     assertKeyHidden('dellPageDownKey');
     assertKeyHidden('dellPageUpKey');
     assertKeyHidden('fnKey');
     assertKeyHidden('layoutSwitchKey');
 
-    diagramElement.physicalLayout = PhysicalLayout.kChromeOSDellEnterprise;
+    diagramElement.physicalLayout = PhysicalLayout.kChromeOSDellEnterpriseWilco;
     await flushTasks();
 
-    assertKeyVisible('dellDeleteKey');
     assertKeyVisible('dellPageDownKey');
     assertKeyVisible('dellPageUpKey');
+    assertKeyVisible('fnKey');
+    assertKeyVisible('layoutSwitchKey');
+  });
+
+  test('dellEnterpriseDrallion', async () => {
+    assertKeyHidden('fnKey');
+    assertKeyHidden('layoutSwitchKey');
+
+    diagramElement.physicalLayout =
+        PhysicalLayout.kChromeOSDellEnterpriseDrallion;
+    await flushTasks();
+
+    assertKeyHidden('dellPageDownKey');
+    assertKeyHidden('dellPageUpKey');
     assertKeyVisible('fnKey');
     assertKeyVisible('layoutSwitchKey');
   });
@@ -110,5 +123,115 @@ export function keyboardDiagramTestSuite() {
     diagramElement.showNumberPad = true;
     await waitAfterNextRender(keyboardElement);
     assertEquals(290, keyboardElement.offsetHeight);
+  });
+
+  test('topRowKeys', async () => {
+    const topRowContainer = diagramElement.$.topRow;
+    const testKeySet = [
+      TopRowKey.kBack,
+      TopRowKey.kRefresh,
+      TopRowKey.kNone,
+      TopRowKey.kNone,
+      TopRowKey.kScreenMirror,
+      TopRowKey.kDelete,
+    ];
+
+    diagramElement.topRowKeys = testKeySet;
+    await flushTasks();
+
+    const keyElements = topRowContainer.getElementsByTagName('keyboard-key');
+    // Add 2 for the escape and power keys, which are in the same container.
+    assertEquals(testKeySet.length + 2, keyElements.length);
+
+    assertEquals('keyboard:back', keyElements[1].icon);
+    assertEquals('delete', keyElements[6].mainGlyph);
+  });
+
+  test('setKeyState', async () => {
+    const backspaceKey = diagramElement.root.getElementById('backspaceKey');
+    assertEquals(KeyboardKeyState.kNotPressed, backspaceKey.state);
+    diagramElement.setKeyState(
+        14 /* KEY_BACKSPACE */, KeyboardKeyState.kPressed);
+    assertEquals(KeyboardKeyState.kPressed, backspaceKey.state);
+  });
+
+  test('setKeyState_twoPartEnter', async () => {
+    diagramElement.mechanicalLayout = MechanicalLayout.kIso;
+    await flushTasks();
+
+    const enterKey = diagramElement.root.getElementById('enterKey');
+    const enterKeyLowerPart =
+        diagramElement.root.getElementById('enterKeyLowerPart');
+    assertEquals(KeyboardKeyState.kNotPressed, enterKey.state);
+    assertEquals(KeyboardKeyState.kNotPressed, enterKeyLowerPart.state);
+    diagramElement.setKeyState(28 /* KEY_ENTER */, KeyboardKeyState.kPressed);
+    assertEquals(KeyboardKeyState.kPressed, enterKey.state);
+    assertEquals(KeyboardKeyState.kPressed, enterKeyLowerPart.state);
+  });
+
+  test('setTopRowKeyState', async () => {
+    const topRowContainer = diagramElement.$.topRow;
+    const testKeySet = [
+      TopRowKey.kBack,
+      TopRowKey.kRefresh,
+      TopRowKey.kNone,
+      TopRowKey.kNone,
+      TopRowKey.kScreenMirror,
+      TopRowKey.kDelete,
+    ];
+
+    diagramElement.topRowKeys = testKeySet;
+    await flushTasks();
+
+    diagramElement.setTopRowKeyState(
+        /* topRowPosition= */ 0, KeyboardKeyState.kPressed);
+    const keyElements = topRowContainer.getElementsByTagName('keyboard-key');
+    assertEquals(KeyboardKeyState.kPressed, keyElements[1].state);
+  });
+
+  test('setTopRowKeyState_invalidPosition', async () => {
+    const topRowContainer = diagramElement.$.topRow;
+    const testKeySet = [
+      TopRowKey.kBack,
+      TopRowKey.kRefresh,
+      TopRowKey.kNone,
+      TopRowKey.kNone,
+      TopRowKey.kScreenMirror,
+      TopRowKey.kDelete,
+    ];
+
+    diagramElement.topRowKeys = testKeySet;
+    await flushTasks();
+
+    assertThrows(
+        () => diagramElement.setTopRowKeyState(
+            /* topRowPosition= */ -1, KeyboardKeyState.kPressed),
+        RangeError);
+    assertThrows(
+        () => diagramElement.setTopRowKeyState(
+            /* topRowPosition= */ testKeySet.length + 1,
+            KeyboardKeyState.kPressed),
+        RangeError);
+  });
+
+  test('clearPressedKeys', async () => {
+    diagramElement.mechanicalLayout = MechanicalLayout.kIso;
+    diagramElement.topRowKeys = [
+      TopRowKey.kBack,
+      TopRowKey.kRefresh,
+      TopRowKey.kOverview,
+    ];
+    await flushTasks();
+
+    diagramElement.setKeyState(28 /* KEY_ENTER */, KeyboardKeyState.kPressed);
+    diagramElement.setKeyState(56 /* KEY_LEFTALT */, KeyboardKeyState.kPressed);
+    diagramElement.setKeyState(15 /* KEY_TAB */, KeyboardKeyState.kPressed);
+    diagramElement.setTopRowKeyState(2, KeyboardKeyState.kPressed);
+    diagramElement.clearPressedKeys();
+    await flushTasks();
+
+    const pressedKeys = diagramElement.root.querySelectorAll(
+        `keyboard-key[state="${KeyboardKeyState.kPressed}"]`);
+    assertEquals(0, pressedKeys.length);
   });
 }

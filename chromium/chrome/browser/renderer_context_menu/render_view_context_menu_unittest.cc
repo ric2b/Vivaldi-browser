@@ -32,7 +32,6 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/custom_handlers/protocol_handler_registry.h"
-#include "components/data_reduction_proxy/core/browser/data_reduction_proxy_settings.h"
 #include "components/lens/lens_features.h"
 #include "components/policy/core/common/policy_pref_names.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -591,26 +590,6 @@ TEST_F(RenderViewContextMenuPrefsTest,
   EXPECT_FALSE(menu->IsCommandIdEnabled(IDC_CONTENT_CONTEXT_CUSTOM_FIRST));
 }
 
-// Verify that request headers do not specify pass through when "Save Image
-// As..." is used with Data Saver disabled.
-TEST_F(RenderViewContextMenuPrefsTest, DataSaverDisabledSaveImageAs) {
-  data_reduction_proxy::DataReductionProxySettings::
-      SetDataSaverEnabledForTesting(profile()->GetPrefs(), false);
-
-  content::ContextMenuParams params = CreateParams(MenuItem::IMAGE);
-  params.unfiltered_link_url = params.link_url;
-  auto menu = std::make_unique<TestRenderViewContextMenu>(
-      *web_contents()->GetMainFrame(), params);
-
-  menu->ExecuteCommand(IDC_CONTENT_CONTEXT_SAVEIMAGEAS, 0);
-
-  const std::string& headers =
-      content::WebContentsTester::For(web_contents())->GetSaveFrameHeaders();
-  EXPECT_TRUE(headers.find(
-      "Chrome-Proxy-Accept-Transform: identity") == std::string::npos);
-  EXPECT_TRUE(headers.find("Cache-Control: no-cache") == std::string::npos);
-}
-
 // Check that if image is broken "Load image" menu item is present.
 TEST_F(RenderViewContextMenuPrefsTest, LoadBrokenImage) {
   content::ContextMenuParams params = CreateParams(MenuItem::IMAGE);
@@ -764,7 +743,7 @@ TEST_F(RenderViewContextMenuPrefsTest,
 // is enabled.
 TEST_F(RenderViewContextMenuPrefsTest, LensRegionSearch) {
   base::test::ScopedFeatureList features;
-  features.InitAndEnableFeature(lens::features::kLensRegionSearch);
+  features.InitAndEnableFeature(lens::features::kLensStandalone);
   SetUserSelectedDefaultSearchProvider("https://www.google.com",
                                        /*supports_image_search=*/true);
   content::ContextMenuParams params = CreateParams(MenuItem::PAGE);
@@ -779,7 +758,7 @@ TEST_F(RenderViewContextMenuPrefsTest, LensRegionSearch) {
 TEST_F(RenderViewContextMenuPrefsTest,
        LensRegionSearchEnterprisePoicyDisabled) {
   base::test::ScopedFeatureList features;
-  features.InitAndEnableFeature(lens::features::kLensRegionSearch);
+  features.InitAndEnableFeature(lens::features::kLensStandalone);
   SetUserSelectedDefaultSearchProvider("https://www.google.com",
                                        /*supports_image_search=*/true);
   // Set enterprise policy to false.
@@ -795,7 +774,7 @@ TEST_F(RenderViewContextMenuPrefsTest,
 // clicks on an image.
 TEST_F(RenderViewContextMenuPrefsTest, LensRegionSearchDisabledOnImage) {
   base::test::ScopedFeatureList features;
-  features.InitAndEnableFeature(lens::features::kLensRegionSearch);
+  features.InitAndEnableFeature(lens::features::kLensStandalone);
   SetUserSelectedDefaultSearchProvider("https://www.google.com",
                                        /*supports_image_search=*/true);
   content::ContextMenuParams params = CreateParams(MenuItem::IMAGE);
@@ -812,7 +791,7 @@ TEST_F(RenderViewContextMenuPrefsTest, LensRegionSearchDisabledOnImage) {
 TEST_F(RenderViewContextMenuPrefsTest,
        LensRegionSearchNonGoogleDefaultSearchEngineSupportsImageSearch) {
   base::test::ScopedFeatureList features;
-  features.InitAndEnableFeature(lens::features::kLensRegionSearch);
+  features.InitAndEnableFeature(lens::features::kLensStandalone);
   SetUserSelectedDefaultSearchProvider("https://www.search.com",
                                        /*supports_image_search=*/true);
   content::ContextMenuParams params = CreateParams(MenuItem::PAGE);
@@ -828,7 +807,7 @@ TEST_F(RenderViewContextMenuPrefsTest,
 TEST_F(RenderViewContextMenuPrefsTest,
        LensRegionSearchDefaultSearchEngineDoesNotSupportImageSearch) {
   base::test::ScopedFeatureList features;
-  features.InitAndEnableFeature(lens::features::kLensRegionSearch);
+  features.InitAndEnableFeature(lens::features::kLensStandalone);
   SetUserSelectedDefaultSearchProvider("https://www.search.com",
                                        /*supports_image_search=*/false);
   content::ContextMenuParams params = CreateParams(MenuItem::PAGE);
@@ -843,7 +822,7 @@ TEST_F(RenderViewContextMenuPrefsTest,
 // is disabled.
 TEST_F(RenderViewContextMenuPrefsTest, LensRegionSearchExperimentDisabled) {
   base::test::ScopedFeatureList features;
-  features.InitAndDisableFeature(lens::features::kLensRegionSearch);
+  features.InitAndDisableFeature(lens::features::kLensStandalone);
   SetUserSelectedDefaultSearchProvider("https://www.google.com",
                                        /*supports_image_search=*/true);
   content::ContextMenuParams params = CreateParams(MenuItem::PAGE);
@@ -857,7 +836,7 @@ TEST_F(RenderViewContextMenuPrefsTest, LensRegionSearchExperimentDisabled) {
 // Chrome UI Scheme.
 TEST_F(RenderViewContextMenuPrefsTest, LensRegionSearchChromeUIScheme) {
   base::test::ScopedFeatureList features;
-  features.InitAndEnableFeature(lens::features::kLensRegionSearch);
+  features.InitAndEnableFeature(lens::features::kLensStandalone);
   SetUserSelectedDefaultSearchProvider("https://www.google.com",
                                        /*supports_image_search=*/true);
   content::ContextMenuParams params = CreateParams(MenuItem::PAGE);

@@ -23,6 +23,7 @@
 #include "chrome/browser/ash/login/saml/in_session_password_sync_manager_factory.h"
 #include "chrome/browser/ash/login/startup_utils.h"
 #include "chrome/browser/ash/login/ui/login_display_host.h"
+#include "chrome/browser/ash/login/ui/login_display_host_webui.h"
 #include "chrome/browser/ash/login/ui/user_adding_screen.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_metrics.h"
@@ -35,6 +36,7 @@
 #include "components/session_manager/core/session_manager.h"
 #include "components/user_manager/remove_user_delegate.h"
 #include "components/user_manager/user_names.h"
+#include "ui/base/ime/ash/input_method_manager.h"
 
 namespace {
 using ash::SupervisedAction;
@@ -239,7 +241,7 @@ void LoginScreenClientImpl::RequestPublicSessionKeyboardLayouts(
   chromeos::GetKeyboardLayoutsForLocale(
       base::BindOnce(&LoginScreenClientImpl::SetPublicSessionKeyboardLayout,
                      weak_ptr_factory_.GetWeakPtr(), account_id, locale),
-      locale);
+      locale, ash::input_method::InputMethodManager::Get());
 }
 
 void LoginScreenClientImpl::HandleAccelerator(
@@ -298,8 +300,8 @@ void LoginScreenClientImpl::LoginAsGuest() {
   DCHECK(!ash::ScreenLocker::default_screen_locker());
   if (ash::LoginDisplayHost::default_host()) {
     ash::LoginDisplayHost::default_host()->GetExistingUserController()->Login(
-        chromeos::UserContext(user_manager::USER_TYPE_GUEST,
-                              user_manager::GuestAccountId()),
+        ash::UserContext(user_manager::USER_TYPE_GUEST,
+                         user_manager::GuestAccountId()),
         ash::SigninSpecifics());
   }
 }
@@ -328,7 +330,7 @@ void LoginScreenClientImpl::SetPublicSessionKeyboardLayout(
     std::unique_ptr<base::ListValue> keyboard_layouts) {
   std::vector<ash::InputMethodItem> result;
 
-  for (const auto& i : keyboard_layouts->GetList()) {
+  for (const auto& i : keyboard_layouts->GetListDeprecated()) {
     const base::DictionaryValue* dictionary;
     if (!i.GetAsDictionary(&dictionary))
       continue;
@@ -358,6 +360,13 @@ void LoginScreenClientImpl::OnUserActivity() {
   }
 }
 
+views::Widget* LoginScreenClientImpl::GetLoginWindowWidget() {
+  if (ash::LoginDisplayHost::default_host()) {
+    return ash::LoginDisplayHost::default_host()->GetLoginWindowWidget();
+  }
+  return nullptr;
+}
+
 void LoginScreenClientImpl::OnParentAccessValidation(
     const AccountId& prefilled_account,
     bool success) {
@@ -372,7 +381,7 @@ void LoginScreenClientImpl::ShowGaiaSigninInternal(
   } else {
     const user_manager::User* user =
         user_manager::UserManager::Get()->FindUser(prefilled_account);
-    Profile* profile = chromeos::ProfileHelper::Get()->GetProfileByUser(user);
+    Profile* profile = ash::ProfileHelper::Get()->GetProfileByUser(user);
     DCHECK(session_manager::SessionManager::Get()->IsScreenLocked());
     auto* password_sync_manager =
         ash::InSessionPasswordSyncManagerFactory::GetForProfile(profile);

@@ -27,6 +27,7 @@ TabStripSceneLayer::TabStripSceneLayer(JNIEnv* env,
     : SceneLayer(env, jobj),
       tab_strip_layer_(cc::SolidColorLayer::Create()),
       scrollable_strip_layer_(cc::Layer::Create()),
+      scrim_layer_(cc::SolidColorLayer::Create()),
       new_tab_button_(cc::UIResourceLayer::Create()),
       left_fade_(cc::UIResourceLayer::Create()),
       right_fade_(cc::UIResourceLayer::Create()),
@@ -39,6 +40,7 @@ TabStripSceneLayer::TabStripSceneLayer(JNIEnv* env,
   model_selector_button_->SetIsDrawable(true);
   left_fade_->SetIsDrawable(true);
   right_fade_->SetIsDrawable(true);
+  scrim_layer_->SetIsDrawable(true);
 
   // When the ScrollingStripStacker is used, the new tab button and tabs scroll,
   // while the incognito button and left/ride fade stay fixed. Put the new tab
@@ -49,6 +51,8 @@ TabStripSceneLayer::TabStripSceneLayer(JNIEnv* env,
   tab_strip_layer_->SetBackgroundColor(SK_ColorBLACK);
   tab_strip_layer_->SetIsDrawable(true);
   tab_strip_layer_->AddChild(scrollable_strip_layer_);
+
+  tab_strip_layer_->AddChild(scrim_layer_);
   tab_strip_layer_->AddChild(left_fade_);
   tab_strip_layer_->AddChild(right_fade_);
   tab_strip_layer_->AddChild(model_selector_button_);
@@ -166,6 +170,26 @@ void TabStripSceneLayer::UpdateTabStripLayer(JNIEnv* env,
   tab_strip_layer_->SetSubtreePropertyChanged();
 }
 
+void TabStripSceneLayer::UpdateStripScrim(JNIEnv* env,
+                                          const JavaParamRef<jobject>& jobj,
+                                          jfloat x,
+                                          jfloat y,
+                                          jfloat width,
+                                          jfloat height,
+                                          jint color,
+                                          jfloat alpha) {
+  if (alpha == 0.f) {
+    scrim_layer_->SetIsDrawable(false);
+    return;
+  }
+
+  scrim_layer_->SetIsDrawable(true);
+  scrim_layer_->SetBackgroundColor(color);
+  scrim_layer_->SetBounds(gfx::Size(width, height));
+  scrim_layer_->SetPosition(gfx::PointF(x, y));
+  scrim_layer_->SetOpacity(alpha);
+}
+
 void TabStripSceneLayer::UpdateNewTabButton(
     JNIEnv* env,
     const JavaParamRef<jobject>& jobj,
@@ -175,11 +199,13 @@ void TabStripSceneLayer::UpdateNewTabButton(
     jfloat width,
     jfloat height,
     jboolean visible,
+    jint tint,
+    jfloat button_alpha,
     const JavaParamRef<jobject>& jresource_manager) {
   ui::ResourceManager* resource_manager =
       ui::ResourceManagerImpl::FromJavaObject(jresource_manager);
-  ui::Resource* button_resource = resource_manager->GetResource(
-      ui::ANDROID_RESOURCE_TYPE_STATIC, resource_id);
+  ui::Resource* button_resource =
+      resource_manager->GetStaticResourceWithTint(resource_id, tint);
 
   // Vivaldi
   if (!use_light_foreground_on_background) {
@@ -193,6 +219,7 @@ void TabStripSceneLayer::UpdateNewTabButton(
   new_tab_button_->SetPosition(gfx::PointF(x + left_offset, y + top_offset));
   new_tab_button_->SetBounds(button_resource->size());
   new_tab_button_->SetHideLayerAndSubtree(!visible);
+  new_tab_button_->SetOpacity(button_alpha);
 }
 
 void TabStripSceneLayer::UpdateModelSelectorButton(

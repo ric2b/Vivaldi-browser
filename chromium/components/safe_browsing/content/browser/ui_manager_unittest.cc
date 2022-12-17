@@ -122,6 +122,7 @@ class TestSafeBrowsingBlockingPage : public SafeBrowsingBlockingPage {
                 "cpn_safe_browsing"),  // help_center_article_link
             true,                      // should_trigger_reporting
             /*history_service=*/nullptr,
+            /*get_user_population_callback=*/base::NullCallback(),
             /*navigation_observer_manager=*/nullptr,
             /*metrics_collector=*/nullptr,
             /*trigger_manager=*/nullptr) {
@@ -184,8 +185,7 @@ class TestSafeBrowsingUIManagerDelegate
       content::BrowserContext* browser_context) override {
     return nullptr;
   }
-  PingManager* GetPingManagerIfExists() override { return nullptr; }
-  scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory(
+  PingManager* GetPingManager(
       content::BrowserContext* browser_context) override {
     return nullptr;
   }

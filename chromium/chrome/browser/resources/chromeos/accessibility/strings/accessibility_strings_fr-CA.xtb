@@ -666,6 +666,7 @@
 <translation id="5522423213731659107">Vous avez terminé l'orientation rapide!</translation>
 <translation id="5534303576632885660">en-tête</translation>
 <translation id="5539820223028224601">Gris moyen</translation>
+<translation id="554893713779400387">Activer/désactiver la dictée</translation>
 <translation id="5549179427201066174">Activer ou désactiver la rétroaction sonore (carillons)</translation>
 <translation id="556042886152191864">Bouton</translation>
 <translation id="5561345396546889625">Liste suivante</translation>
@@ -1168,6 +1169,7 @@
 <translation id="9223032053830369045">Rouge foncé</translation>
 <translation id="923331726185079994">ChromeVox a été mis à jour</translation>
 <translation id="93384979447910801">Vert mer foncé</translation>
+<translation id="937605981140327129">La fonctionnalité TalkBack n'est pas installée pour le moment. Veuillez installer l'application Outils d'accessibilité Android à partir de la boutique Play Store et réessayez.</translation>
 <translation id="948171205378458592">Diminuer le débit de la parole</translation>
 <translation id="957570623732056069">Balayez l'écran vers la gauche ou la droite avec un doigt pour naviguer dans cette leçon</translation>
 <translation id="958854023026327378">Faites glisser un doigt vers le bas</translation>

@@ -217,8 +217,8 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
 
   // Location
   void GetRelativeBounds(AXObject** out_container,
-                         FloatRect& out_bounds_in_container,
-                         skia::Matrix44& out_container_transform,
+                         gfx::RectF& out_bounds_in_container,
+                         gfx::Transform& out_container_transform,
                          bool* clips_children = nullptr) const override;
 
   void AddChildren() override;

@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/memory/raw_ptr.h"
+#include "base/strings/string_number_conversions.h"
 #include "cc/paint/paint_flags.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_utils.h"
 #include "chrome/grit/generated_resources.h"
@@ -37,7 +38,7 @@
 #include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/link.h"
-#include "ui/views/controls/textfield/textfield.h"
+#include "ui/views/controls/textarea/textarea.h"
 #include "ui/views/controls/throbber.h"
 #include "ui/views/layout/box_layout_view.h"
 #include "ui/views/layout/fill_layout.h"
@@ -62,6 +63,9 @@ constexpr gfx::Insets kSideImageInsets = gfx::Insets(8, 8, 8, 8);
 constexpr int kMessageAndIconRowLeadingPadding = 32;
 constexpr int kMessageAndIconRowTrailingPadding = 48;
 constexpr int kSideIconBetweenChildSpacing = 16;
+constexpr int kPaddingBeforeBypassJustification = 16;
+
+constexpr size_t kMaxBypassJustificationLength = 280;
 
 // These time values are non-const in order to be overridden in test so they
 // complete faster.
@@ -232,7 +236,10 @@ std::u16string ContentAnalysisDialog::GetWindowTitle() const {
 void ContentAnalysisDialog::AcceptButtonCallback() {
   DCHECK(delegate_);
   DCHECK(is_warning());
-  delegate_->BypassWarnings();
+  absl::optional<std::u16string> justification = absl::nullopt;
+  if (delegate_->BypassRequiresJustification())
+    justification = bypass_justification_->GetText();
+  delegate_->BypassWarnings(justification);
 }
 
 void ContentAnalysisDialog::CancelButtonCallback() {
@@ -261,6 +268,27 @@ void ContentAnalysisDialog::SuccessCallback() {
     web_contents_->Focus();
   }
 #endif
+}
+
+void ContentAnalysisDialog::ContentsChanged(
+    views::Textfield* sender,
+    const std::u16string& new_contents) {
+  bypass_justification_text_length_->SetText(l10n_util::GetStringFUTF16(
+      IDS_DEEP_SCANNING_DIALOG_BYPASS_JUSTIFICATION_TEXT_LIMIT_LABEL,
+      base::NumberToString16(new_contents.size()),
+      base::NumberToString16(kMaxBypassJustificationLength)));
+
+  if (new_contents.size() == 0 ||
+      new_contents.size() > kMaxBypassJustificationLength) {
+    DialogDelegate::SetButtonEnabled(ui::DIALOG_BUTTON_OK, false);
+    bypass_justification_text_length_->SetEnabledColor(
+        bypass_justification_text_length_->GetColorProvider()->GetColor(
+            ui::kColorAlertHighSeverity));
+  } else {
+    DialogDelegate::SetButtonEnabled(ui::DIALOG_BUTTON_OK, true);
+    bypass_justification_text_length_->SetEnabledColor(
+        justification_text_label_->GetEnabledColor());
+  }
 }
 
 bool ContentAnalysisDialog::ShouldShowCloseButton() const {
@@ -297,7 +325,7 @@ views::View* ContentAnalysisDialog::GetContentsView() {
                    views::TableLayout::ColumnSize::kUsePreferred, 0, 0)
         .AddPaddingColumn(views::TableLayout::kFixedSize,
                           kMessageAndIconRowTrailingPadding)
-        .AddRows(2, views::TableLayout::kFixedSize);
+        .AddRows(5, views::TableLayout::kFixedSize);
 
     // Add the side icon.
     message_container->AddChildView(CreateSideIcon());
@@ -324,6 +352,39 @@ views::View* ContentAnalysisDialog::GetContentsView() {
         base::Unretained(this)));
     learn_more_link_->SetVisible(false);
 
+    message_container->AddChildView(
+        std::make_unique<views::View>());  // Skip a column
+    justification_text_label_ =
+        message_container->AddChildView(std::make_unique<views::Label>());
+    justification_text_label_->SetText(
+        delegate_->GetBypassJustificationLabel());
+    justification_text_label_->SetBorder(
+        views::CreateEmptyBorder(kPaddingBeforeBypassJustification, 0, 0, 0));
+    justification_text_label_->SetLineHeight(kLineHeight);
+    justification_text_label_->SetMultiLine(true);
+    justification_text_label_->SetVerticalAlignment(gfx::ALIGN_MIDDLE);
+    justification_text_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    justification_text_label_->SetVisible(false);
+
+    message_container->AddChildView(
+        std::make_unique<views::View>());  // Skip a column
+    bypass_justification_ =
+        message_container->AddChildView(std::make_unique<views::Textarea>());
+    bypass_justification_->SetAssociatedLabel(justification_text_label_);
+    bypass_justification_->SetController(this);
+    bypass_justification_->SetVisible(false);
+
+    message_container->AddChildView(
+        std::make_unique<views::View>());  // Skip a column
+    bypass_justification_text_length_ =
+        message_container->AddChildView(std::make_unique<views::Label>());
+    bypass_justification_text_length_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    bypass_justification_text_length_->SetText(l10n_util::GetStringFUTF16(
+        IDS_DEEP_SCANNING_DIALOG_BYPASS_JUSTIFICATION_TEXT_LIMIT_LABEL,
+        base::NumberToString16(0),
+        base::NumberToString16(kMaxBypassJustificationLength)));
+    bypass_justification_text_length_->SetVisible(false);
+
     // If the dialog was started in a state other than pending, setup the views
     // accordingly.
     if (!is_pending())
@@ -348,6 +409,19 @@ ui::ModalType ContentAnalysisDialog::GetModalType() const {
 void ContentAnalysisDialog::WebContentsDestroyed() {
   // If |web_contents_| is destroyed, then the scan results don't matter so the
   // delegate can be destroyed as well.
+  delegate_.reset(nullptr);
+  CancelDialog();
+}
+
+void ContentAnalysisDialog::PrimaryPageChanged(content::Page& page) {
+  // If the primary page is changed, the scan results would be stale. So the
+  // delegate should be reset and dialog should be cancelled.
+  // TODO(https://crbug.com/1289334): Currently, Chrome Enterprise Connectors
+  // supports the primary page only. Once we support non-primary pages for
+  // fenced frames and portals, we need to track multiple delegates and dialogs
+  // per page. There, we should revisit if we should keep scanning if it runs
+  // against a portals page, and the portals page is activated to be the primary
+  // page.
   delegate_.reset(nullptr);
   CancelDialog();
 }
@@ -422,6 +496,18 @@ void ContentAnalysisDialog::UpdateViews() {
   // display.
   learn_more_link_->SetVisible((is_failure() || is_warning()) &&
                                has_learn_more_url());
+  bool requires_justification = is_warning() && bypass_requires_justification();
+  justification_text_label_->SetVisible(requires_justification);
+  bypass_justification_->SetVisible(requires_justification);
+  bypass_justification_text_length_->SetVisible(requires_justification);
+  if (requires_justification) {
+    // Set the color to red here because a 0 length message is invalid, but the
+    // label doesn't have a Color Provider yet when it's created in
+    // GetContentsView.
+    bypass_justification_text_length_->SetEnabledColor(
+        bypass_justification_text_length_->GetColorProvider()->GetColor(
+            ui::kColorAlertHighSeverity));
+  }
 }
 
 void ContentAnalysisDialog::UpdateDialog() {
@@ -519,6 +605,9 @@ void ContentAnalysisDialog::SetupButtons() {
     DialogDelegate::SetAcceptCallback(
         base::BindOnce(&ContentAnalysisDialog::AcceptButtonCallback,
                        weak_ptr_factory_.GetWeakPtr()));
+
+    if (delegate_->BypassRequiresJustification())
+      DialogDelegate::SetButtonEnabled(ui::DIALOG_BUTTON_OK, false);
   } else if (is_failure() || is_pending()) {
     // Include the Cancel button when the scan is pending or failing.
     DialogDelegate::SetButtons(ui::DIALOG_BUTTON_CANCEL);
@@ -561,7 +650,7 @@ std::u16string ContentAnalysisDialog::GetCancelButtonText() const {
   switch (dialog_state_) {
     case State::SUCCESS:
       NOTREACHED();
-      FALLTHROUGH;
+      [[fallthrough]];
     case State::PENDING:
       text_id = IDS_DEEP_SCANNING_DIALOG_CANCEL_UPLOAD_BUTTON;
       break;
@@ -652,6 +741,11 @@ int ContentAnalysisDialog::GetTopImageId(bool use_dark) const {
 
 std::u16string ContentAnalysisDialog::GetPendingMessage() const {
   DCHECK(is_pending());
+  if (is_print_scan()) {
+    return l10n_util::GetStringUTF16(
+        IDS_DEEP_SCANNING_DIALOG_PRINT_PENDING_MESSAGE);
+  }
+
   return l10n_util::GetPluralStringFUTF16(
       IDS_DEEP_SCANNING_DIALOG_UPLOAD_PENDING_MESSAGE, files_count_);
 }
@@ -665,6 +759,10 @@ std::u16string ContentAnalysisDialog::GetFailureMessage() const {
     return GetCustomMessage();
 
   if (final_result_ == ContentAnalysisDelegateBase::FinalResult::LARGE_FILES) {
+    if (is_print_scan()) {
+      return l10n_util::GetStringUTF16(
+          IDS_DEEP_SCANNING_DIALOG_LARGE_PRINT_FAILURE_MESSAGE);
+    }
     return l10n_util::GetPluralStringFUTF16(
         IDS_DEEP_SCANNING_DIALOG_LARGE_FILE_FAILURE_MESSAGE, files_count_);
   }
@@ -673,6 +771,11 @@ std::u16string ContentAnalysisDialog::GetFailureMessage() const {
       ContentAnalysisDelegateBase::FinalResult::ENCRYPTED_FILES) {
     return l10n_util::GetPluralStringFUTF16(
         IDS_DEEP_SCANNING_DIALOG_ENCRYPTED_FILE_FAILURE_MESSAGE, files_count_);
+  }
+
+  if (is_print_scan()) {
+    return l10n_util::GetStringUTF16(
+        IDS_DEEP_SCANNING_DIALOG_PRINT_WARNING_MESSAGE);
   }
 
   return l10n_util::GetPluralStringFUTF16(
@@ -687,12 +790,21 @@ std::u16string ContentAnalysisDialog::GetWarningMessage() const {
   if (has_custom_message())
     return GetCustomMessage();
 
+  if (is_print_scan()) {
+    return l10n_util::GetStringUTF16(
+        IDS_DEEP_SCANNING_DIALOG_PRINT_WARNING_MESSAGE);
+  }
+
   return l10n_util::GetPluralStringFUTF16(
       IDS_DEEP_SCANNING_DIALOG_UPLOAD_WARNING_MESSAGE, files_count_);
 }
 
 std::u16string ContentAnalysisDialog::GetSuccessMessage() const {
   DCHECK(is_success());
+  if (is_print_scan()) {
+    return l10n_util::GetStringUTF16(
+        IDS_DEEP_SCANNING_DIALOG_PRINT_SUCCESS_MESSAGE);
+  }
   return l10n_util::GetPluralStringFUTF16(
       IDS_DEEP_SCANNING_DIALOG_SUCCESS_MESSAGE, files_count_);
 }
@@ -707,6 +819,10 @@ const gfx::ImageSkia* ContentAnalysisDialog::GetTopImage() const {
   const bool use_dark = color_utils::IsDark(GetBackgroundColor(contents_view_));
   return ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
       GetTopImageId(use_dark));
+}
+
+bool ContentAnalysisDialog::is_print_scan() const {
+  return access_point_ == safe_browsing::DeepScanAccessPoint::PRINT;
 }
 
 SkColor ContentAnalysisDialog::GetSideImageLogoColor() const {
@@ -752,6 +868,16 @@ views::Throbber* ContentAnalysisDialog::GetSideIconSpinnerForTesting() const {
 
 views::Label* ContentAnalysisDialog::GetMessageForTesting() const {
   return message_;
+}
+
+views::Label* ContentAnalysisDialog::GetBypassJustificationLabelForTesting()
+    const {
+  return justification_text_label_;
+}
+
+views::Textarea*
+ContentAnalysisDialog::GetBypassJustificationTextareaForTesting() const {
+  return bypass_justification_;
 }
 
 }  // namespace enterprise_connectors

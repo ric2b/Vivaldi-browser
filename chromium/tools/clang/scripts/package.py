@@ -278,6 +278,10 @@ def main():
     if sys.platform != 'darwin':
       # The Fuchsia asan runtime is only built on non-Mac platforms.
       want.append('lib/clang/$V/lib/x86_64-unknown-fuchsia/libclang_rt.asan.so')
+      want.append(
+          'lib/clang/$V/lib/x86_64-unknown-fuchsia/libclang_rt.asan-preinit.a')
+      want.append(
+          'lib/clang/$V/lib/x86_64-unknown-fuchsia/libclang_rt.asan_static.a')
   if sys.platform == 'darwin':
     want.extend([
       # AddressSanitizer runtime.
@@ -315,6 +319,8 @@ def main():
         'lib/clang/$V/lib/i386-unknown-linux-gnu/libclang_rt.asan.a',
         'lib/clang/$V/lib/x86_64-unknown-linux-gnu/libclang_rt.asan.a',
         'lib/clang/$V/lib/x86_64-unknown-linux-gnu/libclang_rt.asan.a.syms',
+        'lib/clang/$V/lib/i386-unknown-linux-gnu/libclang_rt.asan_static.a',
+        'lib/clang/$V/lib/x86_64-unknown-linux-gnu/libclang_rt.asan_static.a',
 
         # AddressSanitizer C++ runtime.
         'lib/clang/$V/lib/i386-unknown-linux-gnu/libclang_rt.asan_cxx.a',
@@ -325,12 +331,22 @@ def main():
         'lib/clang/$V/lib/linux/libclang_rt.asan-aarch64-android.so',
         'lib/clang/$V/lib/linux/libclang_rt.asan-arm-android.so',
         'lib/clang/$V/lib/linux/libclang_rt.asan-i686-android.so',
+        'lib/clang/$V/lib/linux/libclang_rt.asan_static-aarch64-android.a',
+        'lib/clang/$V/lib/linux/libclang_rt.asan_static-arm-android.a',
+        'lib/clang/$V/lib/linux/libclang_rt.asan_static-i686-android.a',
 
         # Builtins for Android.
         'lib/clang/$V/lib/linux/libclang_rt.builtins-aarch64-android.a',
         'lib/clang/$V/lib/linux/libclang_rt.builtins-arm-android.a',
         'lib/clang/$V/lib/linux/libclang_rt.builtins-i686-android.a',
         'lib/clang/$V/lib/linux/libclang_rt.builtins-x86_64-android.a',
+
+        # Builtins for Lacros (and potentially Linux, but not used there atm).
+        'lib/clang/$V/lib/x86_64-unknown-linux-gnu/libclang_rt.builtins.a',
+
+        # crtstart/crtend for Linux and Lacros.
+        'lib/clang/$V/lib/x86_64-unknown-linux-gnu/clang_rt.crtbegin.o',
+        'lib/clang/$V/lib/x86_64-unknown-linux-gnu/clang_rt.crtend.o',
 
         # HWASAN Android runtime.
         'lib/clang/$V/lib/linux/libclang_rt.hwasan-aarch64-android.so',
@@ -490,6 +506,13 @@ def main():
   if sys.platform.startswith('linux'):
     os.symlink('llvm-objcopy', os.path.join(pdir, 'bin', 'llvm-strip'))
 
+    # Make `--target=*-cros-linux-gnu` work with
+    # LLVM_ENABLE_PER_TARGET_RUNTIME_DIR=ON.
+    os.symlink(
+        'x86_64-unknown-linux-gnu',
+        os.path.join(pdir, 'lib', 'clang', RELEASE_VERSION, 'lib',
+                     'x86_64-cros-linux-gnu'))
+
   # Copy libc++ headers.
   if sys.platform == 'darwin':
     shutil.copytree(os.path.join(LLVM_BOOTSTRAP_INSTALL_DIR, 'include', 'c++'),
@@ -545,6 +568,52 @@ def main():
               os.path.join(clang_tidy_dir, 'bin'))
   PackageInArchive(clang_tidy_dir, clang_tidy_dir + '.tgz')
   MaybeUpload(args.upload, clang_tidy_dir + '.tgz', gcs_platform)
+
+  # Zip up clang-libs for users who opt into it. We want Clang and LLVM headers
+  # and libs, as well as a couple binaries. The LLVM parts are needed by the
+  # Rust build.
+  clang_libs_dir = 'clang-libs-' + stamp
+  shutil.rmtree(clang_libs_dir, ignore_errors=True)
+  os.makedirs(os.path.join(clang_libs_dir, 'include'))
+  # TODO(danakj): It's possible we need to also include headers from
+  # LLVM_DIR/clang/lib/AST/ and other subdirs of lib, but we won't include them
+  # unless we see it's needed, and we can document why.
+  shutil.copytree(os.path.join(LLVM_DIR, 'clang', 'include', 'clang'),
+                  os.path.join(clang_libs_dir, 'include', 'clang'))
+
+  # Copy LLVM includes. The llvm source and build directory includes must be
+  # merged. llvm-c for C bindings is also included.
+  shutil.copytree(os.path.join(LLVM_DIR, 'llvm', 'include', 'llvm'),
+                  os.path.join(clang_libs_dir, 'include', 'llvm'))
+  shutil.copytree(os.path.join(LLVM_DIR, 'llvm', 'include', 'llvm-c'),
+                  os.path.join(clang_libs_dir, 'include', 'llvm-c'))
+  shutil.copytree(os.path.join(LLVM_RELEASE_DIR, 'include', 'llvm'),
+                  os.path.join(clang_libs_dir, 'include', 'llvm'),
+                  dirs_exist_ok=True)
+
+  # Copy llvm-config and FileCheck which the Rust build needs
+  os.makedirs(os.path.join(clang_libs_dir, 'bin'))
+  shutil.copy(os.path.join(LLVM_RELEASE_DIR, 'bin', 'llvm-config' + exe_ext),
+              os.path.join(clang_libs_dir, 'bin'))
+  shutil.copy(os.path.join(LLVM_RELEASE_DIR, 'bin', 'FileCheck' + exe_ext),
+              os.path.join(clang_libs_dir, 'bin'))
+
+  os.makedirs(os.path.join(clang_libs_dir, 'lib'))
+  if sys.platform == 'win32':
+    clang_libs_want = [
+        '*.lib',
+    ]
+  else:
+    clang_libs_want = [
+        '*.a',
+    ]
+  for lib_path in os.listdir(os.path.join(LLVM_RELEASE_DIR, 'lib')):
+    for lib_want in clang_libs_want:
+      if fnmatch.fnmatch(lib_path, lib_want):
+        shutil.copy(os.path.join(LLVM_RELEASE_DIR, 'lib', lib_path),
+                    os.path.join(clang_libs_dir, 'lib'))
+  PackageInArchive(clang_libs_dir, clang_libs_dir + '.tgz')
+  MaybeUpload(args.upload, clang_libs_dir + '.tgz', gcs_platform)
 
   if sys.platform == 'darwin':
     # dsymutil isn't part of the main zip, and it gets periodically

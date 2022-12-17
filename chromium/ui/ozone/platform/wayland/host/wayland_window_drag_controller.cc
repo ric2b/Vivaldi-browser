@@ -54,6 +54,10 @@ constexpr char kMimeTypeChromiumWindow[] = "chromium/x-window";
 constexpr uint32_t kDndActionWindowDrag =
     WL_DATA_DEVICE_MANAGER_DND_ACTION_MOVE;
 
+// Value intentionally high to exit the horizontal rail threshold in
+// SnapScrollController, in case of an upwards tab dragging detach with touch.
+constexpr int kHorizontalRailExitThreshold = -1000;
+
 }  // namespace
 
 class WaylandWindowDragController::ExtendedDragSource {
@@ -128,7 +132,7 @@ bool WaylandWindowDragController::StartDragSession() {
   data_source_->Offer({kMimeTypeChromiumWindow});
   data_source_->SetDndActions(kDndActionWindowDrag);
 
-  if (IsExtendedDragAvailable()) {
+  if (IsExtendedDragAvailableInternal()) {
     extended_drag_source_ = std::make_unique<ExtendedDragSource>(
         *connection_, data_source_->data_source());
   } else {
@@ -157,14 +161,17 @@ bool WaylandWindowDragController::Drag(WaylandToplevelWindow* window,
   RunLoop();
   SetDraggedWindow(nullptr, {});
 
-  DCHECK(state_ == State::kAttaching || state_ == State::kDropped);
+  DCHECK(state_ == State::kAttaching || state_ == State::kDropped ||
+         state_ == State::kCancelled);
   if (state_ == State::kAttaching) {
     state_ = State::kAttached;
     return false;
   }
 
+  auto state = state_;
   HandleDropAndResetState();
-  return true;
+
+  return state != State::kCancelled;
 }
 
 void WaylandWindowDragController::StopDragging() {
@@ -292,8 +299,28 @@ void WaylandWindowDragController::OnDragLeave() {
   // ideally be reworked in the future, at higher level layers such that they
   // properly handle platforms that do not support global screen coordinates,
   // like Wayland.
-  if (state_ == State::kAttached)
+  //
+  // TODO(https://crbug.com/1282186): Find a better solution for upwards tab
+  // detaching.
+  if (state_ != State::kAttached)
+    return;
+
+  if (*drag_source_ == DragSource::kMouse) {
     pointer_delegate_->OnPointerMotionEvent({pointer_location_.x(), -1});
+  } else {
+    base::TimeTicks timestamp = base::TimeTicks::Now();
+    auto touch_pointer_ids = touch_delegate_->GetActiveTouchPointIds();
+    DCHECK_EQ(touch_pointer_ids.size(), 1u);
+
+    // If an user starts dragging a tab horizontally with touch, Chrome enters
+    // in "horizontal snapping" mode (see ScrollSnapController for details).
+    // Hence, in case of touch driven dragging, use a higher negative dy
+    // to work around the threshold in ScrollSnapController otherwise,
+    // the drag event is discarded.
+    touch_delegate_->OnTouchMotionEvent(
+        {pointer_location_.x(), kHorizontalRailExitThreshold}, timestamp,
+        touch_pointer_ids[0]);
+  }
 }
 
 void WaylandWindowDragController::OnDragDrop() {
@@ -328,7 +355,7 @@ void WaylandWindowDragController::OnDataSourceFinish(bool completed) {
   // wrongly kept to the latest surface received through wl_data_device::enter
   // (see OnDragEnter function).
   // In case of touch, though, we simply reset the focus altogether.
-  if (IsExtendedDragAvailable() && dragged_window_) {
+  if (IsExtendedDragAvailableInternal() && dragged_window_) {
     if (*drag_source_ == DragSource::kMouse) {
       pointer_delegate_->OnPointerFocusChanged(dragged_window_,
                                                pointer_location_);
@@ -341,7 +368,8 @@ void WaylandWindowDragController::OnDataSourceFinish(bool completed) {
   // Transition to |kDropped| state and determine the next action to take. If
   // drop happened while the move loop was running (i.e: kDetached), ask to quit
   // the loop, otherwise notify session end and reset state right away.
-  State state_when_dropped = std::exchange(state_, State::kDropped);
+  State state_when_dropped =
+      std::exchange(state_, completed ? State::kDropped : State::kCancelled);
   if (state_when_dropped == State::kDetached)
     QuitLoop();
   else
@@ -432,7 +460,7 @@ void WaylandWindowDragController::HandleMotionEvent(LocatedEvent* event) {
 // clear focus and reset internal state. Must be called when the session is
 // about to finish.
 void WaylandWindowDragController::HandleDropAndResetState() {
-  DCHECK_EQ(state_, State::kDropped);
+  DCHECK(state_ == State::kDropped || state_ == State::kCancelled);
   DVLOG(1) << "Notifying drop. window=" << pointer_grab_owner_;
 
   // StopDragging() may get called in response to bogus input events, eg:
@@ -508,6 +536,12 @@ void WaylandWindowDragController::SetDraggedWindow(
 }
 
 bool WaylandWindowDragController::IsExtendedDragAvailable() const {
+  return set_extended_drag_available_for_testing_
+             ? true
+             : IsExtendedDragAvailableInternal();
+}
+
+bool WaylandWindowDragController::IsExtendedDragAvailableInternal() const {
   return !!connection_->extended_drag_v1();
 }
 

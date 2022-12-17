@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_OPTIMIZATION_GUIDE_CONTENT_BROWSER_PAGE_CONTENT_ANNOTATIONS_MODEL_MANAGER_H_
 #define COMPONENTS_OPTIMIZATION_GUIDE_CONTENT_BROWSER_PAGE_CONTENT_ANNOTATIONS_MODEL_MANAGER_H_
 
+#include "base/memory/raw_ptr.h"
 #include "components/history/core/browser/url_row.h"
 #include "components/optimization_guide/content/browser/page_content_annotator.h"
 #include "components/optimization_guide/core/bert_model_handler.h"
@@ -49,6 +50,7 @@ class PageContentAnnotationsModelManager : public PageContentAnnotator {
   // This will execute all supported models of the PageContentAnnotationsService
   // feature and is only used by the History service code path. See the below
   // |Annotate| for the publicly available Annotation code path.
+  // TODO(crbug/1278833): Remove this.
   void Annotate(const std::string& text, PageContentAnnotatedCallback callback);
 
   // PageContentAnnotator:
@@ -56,16 +58,16 @@ class PageContentAnnotationsModelManager : public PageContentAnnotator {
                 const std::vector<std::string>& inputs,
                 AnnotationType annotation_type) override;
 
-  // Runs |callback| with true when the model that powers |BatchAnnotate| for
-  // the given annotation type is ready to execute. If the model is ready now,
-  // the callback is run immediately. If the model will never become ready, due
-  // to feature flags for example, the callback run with false.
-  void NotifyWhenModelAvailable(AnnotationType type,
-                                base::OnceCallback<void(bool)> callback);
+  // Requests that the given model for |type| be loaded in the background and
+  // then runs |callback| with true when the model is ready to execute. If the
+  // model is ready now, the callback is run immediately. If the model file will
+  // never be available, the callback is run with false.
+  void RequestAndNotifyWhenModelAvailable(
+      AnnotationType type,
+      base::OnceCallback<void(bool)> callback);
 
   // Returns the model info associated with the given AnnotationType, if it is
   // available and loaded.
-  // TODO(crbug/1249632): Add support for more than just page topics.
   absl::optional<ModelInfo> GetModelInfoForType(AnnotationType type) const;
 
   // Returns the version of the page topics model that is currently being used
@@ -92,7 +94,7 @@ class PageContentAnnotationsModelManager : public PageContentAnnotator {
     // All publicly posted jobs will have this priority level.
     kNormal = 1,
 
-    // TODO(crbug/1249632): Add a kHigh value for internal jobs.
+    // TODO(crbug/1278833): Add a kHigh value for internal jobs.
 
     // Always keep this last and as the highest priority + 1. This value is
     // passed to the priority queue ctor as "how many level of priorities are
@@ -215,7 +217,7 @@ class PageContentAnnotationsModelManager : public PageContentAnnotator {
   // Runs the next job in |job_queue_| if there is any.
   void MaybeStartNextAnnotationJob();
 
-  // Called when a job finishes executing.
+  // Called when a |job| finishes executing, just before it is deleted.
   void OnJobExecutionComplete();
 
   // The model executor responsible for executing the page topics model.
@@ -253,6 +255,9 @@ class PageContentAnnotationsModelManager : public PageContentAnnotator {
 
   // The current state of the running job, if any.
   JobExecutionState job_state_ = JobExecutionState::kIdle;
+
+  // The model provider, not owned.
+  raw_ptr<OptimizationGuideModelProvider> optimization_guide_model_provider_;
 
   base::WeakPtrFactory<PageContentAnnotationsModelManager> weak_ptr_factory_{
       this};

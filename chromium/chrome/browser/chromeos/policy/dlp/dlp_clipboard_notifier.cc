@@ -20,8 +20,9 @@
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/public/cpp/new_window_delegate.h"
-#include "ash/public/cpp/toast_data.h"
-#include "ash/public/cpp/toast_manager.h"
+#include "ash/public/cpp/system/toast_catalog.h"
+#include "ash/public/cpp/system/toast_data.h"
+#include "ash/public/cpp/system/toast_manager.h"
 #include "ash/public/cpp/window_tree_host_lookup.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
@@ -93,8 +94,9 @@ bool HasEndpoint(const std::vector<ui::DataTransferEndpoint>& saved_endpoints,
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 void OnToastClicked() {
-  ash::NewWindowDelegate::GetInstance()->OpenUrl(
-      GURL(kDlpLearnMoreUrl), /*from_user_interaction=*/true);
+  ash::NewWindowDelegate::GetPrimary()->OpenUrl(
+      GURL(kDlpLearnMoreUrl),
+      ash::NewWindowDelegate::OpenUrlFrom::kUserInteraction);
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
@@ -119,6 +121,7 @@ void DlpClipboardNotifier::NotifyBlockedAction(
   if (data_dst) {
     if (data_dst->type() == ui::EndpointType::kCrostini) {
       ShowToast(kClipboardBlockCrostiniToastId,
+                ash::ToastCatalogName::kClipboardBlockedAction,
                 l10n_util::GetStringFUTF16(
                     IDS_POLICY_DLP_CLIPBOARD_BLOCKED_ON_COPY_VM, host_name,
                     l10n_util::GetStringUTF16(IDS_CROSTINI_LINUX)));
@@ -126,6 +129,7 @@ void DlpClipboardNotifier::NotifyBlockedAction(
     }
     if (data_dst->type() == ui::EndpointType::kPluginVm) {
       ShowToast(kClipboardBlockPluginVmToastId,
+                ash::ToastCatalogName::kClipboardBlockedAction,
                 l10n_util::GetStringFUTF16(
                     IDS_POLICY_DLP_CLIPBOARD_BLOCKED_ON_COPY_VM, host_name,
                     l10n_util::GetStringUTF16(IDS_PLUGIN_VM_APP_NAME)));
@@ -133,6 +137,7 @@ void DlpClipboardNotifier::NotifyBlockedAction(
     }
     if (data_dst->type() == ui::EndpointType::kArc) {
       ShowToast(kClipboardBlockArcToastId,
+                ash::ToastCatalogName::kClipboardBlockedAction,
                 l10n_util::GetStringFUTF16(
                     IDS_POLICY_DLP_CLIPBOARD_BLOCKED_ON_COPY_VM, host_name,
                     l10n_util::GetStringUTF16(IDS_POLICY_DLP_ANDROID_APPS)));
@@ -159,6 +164,7 @@ void DlpClipboardNotifier::WarnOnPaste(
   if (data_dst) {
     if (data_dst->type() == ui::EndpointType::kCrostini) {
       ShowToast(kClipboardWarnCrostiniToastId,
+                ash::ToastCatalogName::kClipboardWarnOnPaste,
                 l10n_util::GetStringFUTF16(
                     IDS_POLICY_DLP_CLIPBOARD_WARN_ON_COPY_VM,
                     l10n_util::GetStringUTF16(IDS_CROSTINI_LINUX)));
@@ -166,6 +172,7 @@ void DlpClipboardNotifier::WarnOnPaste(
     }
     if (data_dst->type() == ui::EndpointType::kPluginVm) {
       ShowToast(kClipboardWarnPluginVmToastId,
+                ash::ToastCatalogName::kClipboardWarnOnPaste,
                 l10n_util::GetStringFUTF16(
                     IDS_POLICY_DLP_CLIPBOARD_WARN_ON_COPY_VM,
                     l10n_util::GetStringUTF16(IDS_PLUGIN_VM_APP_NAME)));
@@ -173,6 +180,7 @@ void DlpClipboardNotifier::WarnOnPaste(
     }
     if (data_dst->type() == ui::EndpointType::kArc) {
       ShowToast(kClipboardWarnArcToastId,
+                ash::ToastCatalogName::kClipboardWarnOnPaste,
                 l10n_util::GetStringFUTF16(
                     IDS_POLICY_DLP_CLIPBOARD_WARN_ON_COPY_VM,
                     l10n_util::GetStringUTF16(IDS_POLICY_DLP_ANDROID_APPS)));
@@ -268,9 +276,11 @@ void DlpClipboardNotifier::ResetUserWarnSelection() {
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 void DlpClipboardNotifier::ShowToast(const std::string& id,
+                                     ash::ToastCatalogName catalog_name,
                                      const std::u16string& text) const {
   ash::ToastData toast(
-      id, text, kClipboardDlpToastDurationMs,
+      id, catalog_name, text, ash::ToastData::kDefaultToastDuration,
+      /*visible_on_lock_screen=*/false,
       l10n_util::GetStringUTF16(IDS_POLICY_DLP_CLIPBOARD_BLOCK_TOAST_BUTTON));
   toast.is_managed = true;
   toast.dismiss_callback = base::BindRepeating(&OnToastClicked);

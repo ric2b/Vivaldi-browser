@@ -233,6 +233,10 @@ mojo::Remote<mojom::CommerceHintObserver> GetObserver(
     content::RenderFrame* render_frame) {
   // Connect to Mojo service on browser to notify commerce signals.
   mojo::Remote<mojom::CommerceHintObserver> observer;
+
+  // Subframes including fenced frames shouldn't be reached here.
+  DCHECK(render_frame->IsMainFrame() && !render_frame->IsInFencedFrameTree());
+
   render_frame->GetBrowserInterfaceBroker()->GetInterface(
       observer.BindNewPipeAndPassReceiver());
   return observer;
@@ -630,6 +634,9 @@ CommerceHintAgent::CommerceHintAgent(content::RenderFrame* render_frame)
     : content::RenderFrameObserver(render_frame),
       content::RenderFrameObserverTracker<CommerceHintAgent>(render_frame) {
   DCHECK(render_frame);
+
+  // Subframes including fenced frames shouldn't be reached here.
+  DCHECK(render_frame->IsMainFrame() && !render_frame->IsInFencedFrameTree());
 }
 
 CommerceHintAgent::~CommerceHintAgent() = default;
@@ -848,7 +855,7 @@ void CommerceHintAgent::OnProductsExtracted(
   bool is_partner = commerce_renderer_feature::IsPartnerMerchant(
       GURL(render_frame()->GetWebFrame()->GetDocument().Url()));
   std::vector<mojom::ProductPtr> products;
-  for (const auto& product : extracted_products->GetList()) {
+  for (const auto& product : extracted_products->GetListDeprecated()) {
     if (!product.is_dict())
       continue;
     const auto* image_url = product.FindKey("imageUrl");

@@ -7,6 +7,8 @@
 
 #include <set>
 
+#include "base/memory/raw_ptr.h"
+#include "base/observer_list.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "url/origin.h"
 
@@ -16,7 +18,13 @@ namespace content {
 class BrowserContext;
 }
 
+namespace user_prefs {
+class PrefRegistrySyncable;
+}
+
 namespace extensions {
+
+class ExtensionPrefs;
 
 // Class for managing user-scoped extension permissions.
 // Includes blocking all extensions from running on a site and automatically
@@ -44,7 +52,13 @@ class PermissionsManager : public KeyedService {
     std::set<url::Origin> permitted_sites;
   };
 
-  PermissionsManager();
+  class Observer {
+   public:
+    virtual void UserPermissionsSettingsChanged(
+        const UserPermissionsSettings& settings) {}
+  };
+
+  explicit PermissionsManager(content::BrowserContext* browser_context);
   ~PermissionsManager() override;
   PermissionsManager(const PermissionsManager&) = delete;
   const PermissionsManager& operator=(const PermissionsManager&) = delete;
@@ -55,13 +69,16 @@ class PermissionsManager : public KeyedService {
   // Retrieves the factory instance for the PermissionsManager.
   static BrowserContextKeyedServiceFactory* GetFactory();
 
+  // Registers the user preference that stores user permissions.
+  static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
+
   // Adds `origin` to the list of sites the user has blocked all
   // extensions from running on. If `origin` is in permitted_sites, it will
   // remove it from such list.
   void AddUserRestrictedSite(const url::Origin& origin);
 
   // Removes `origin` from the list of sites the user has blocked all
-  // extensions from running on.
+  // extensions from running on and notifies observers.
   void RemoveUserRestrictedSite(const url::Origin& origin);
 
   // Adds `origin` to the list of sites the user has allowed all
@@ -70,13 +87,32 @@ class PermissionsManager : public KeyedService {
   void AddUserPermittedSite(const url::Origin& origin);
 
   // Removes `origin` from the list of sites the user has allowed all
-  // extensions to run on.
+  // extensions to run on and notifies observers.
   void RemoveUserPermittedSite(const url::Origin& origin);
 
   // Returns the user's permission settings.
-  const UserPermissionsSettings& GetUserPermissionsSettings();
+  const UserPermissionsSettings& GetUserPermissionsSettings() const;
+
+  // Adds or removes observers.
+  void AddObserver(Observer* observer);
+  void RemoveObserver(Observer* observer);
 
  private:
+  // Called whenever `user_permissions_` have changed.
+  void SignalUserPermissionsSettingsChanged() const;
+
+  // Removes `origin` from the list of sites the user has allowed all
+  // extensions to run on and saves the change to `extension_prefs_`. Returns if
+  // the site has been removed.
+  bool RemovePermittedSiteAndUpdatePrefs(const url::Origin& origin);
+
+  // Removes `origin` from the list of sites the user has blocked all
+  // extensions from running on and saves the change to `extension_prefs_`.
+  // Returns if the site has been removed.
+  bool RemoveRestrictedSiteAndUpdatePrefs(const url::Origin& origin);
+
+  base::ObserverList<Observer>::Unchecked observers_;
+  ExtensionPrefs* const extension_prefs_;
   UserPermissionsSettings user_permissions_;
 };
 

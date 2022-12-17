@@ -20,6 +20,9 @@ import org.chromium.components.infobars.ConfirmInfoBar;
 import org.chromium.components.infobars.InfoBar;
 import org.chromium.components.infobars.InfoBarLayout;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /**
  * An infobar to ask whether to proceed downloading a file that already exists locally or is still
  * being downloaded.
@@ -90,6 +93,7 @@ public class DuplicateDownloadInfoBar extends ConfirmInfoBar {
      * @param isOfflinePage Whether this is an offline page download.
      */
     private void recordLinkClicked(boolean isOfflinePage) {
+        if (BuildConfig.IS_VIVALDI) return;
         RecordHistogram.recordEnumeratedHistogram(isOfflinePage
                         ? "Download.DuplicateInfobarEvent.OfflinePage"
                         : "Download.DuplicateInfobarEvent.Download",

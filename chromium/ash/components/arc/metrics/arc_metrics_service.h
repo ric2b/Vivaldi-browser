@@ -32,6 +32,10 @@
 
 class BrowserContextKeyedServiceFactory;
 
+namespace metrics {
+class PSIMemoryParser;
+}  // namespace metrics
+
 namespace aura {
 class Window;
 }  // namespace aura
@@ -137,6 +141,7 @@ class ArcMetricsService : public KeyedService,
   void ReportAppPrimaryAbi(mojom::AppPrimaryAbi abi) override;
   void ReportDataRestore(mojom::DataRestoreStatus status,
                          int64_t duration_ms) override;
+  void ReportMemoryPressure(const std::vector<uint8_t>& psiFile) override;
 
   // wm::ActivationChangeObserver overrides.
   // Records to UMA when a user has interacted with an ARC app window.
@@ -171,6 +176,10 @@ class ArcMetricsService : public KeyedService,
   // Forwards reports of app kills resulting from a MemoryPressureArcvm signal
   // to MemoryKillsMonitor via ArcMetricsServiceProxy.
   void ReportMemoryPressureArcVmKills(int count, int estimated_freed_kb);
+
+  // Make a request to ArcProcessService for App kill counts, so that those
+  // counts can be logged to UMA. Public for testing.
+  void RequestLowMemoryKillCountsForTesting();
 
  private:
   // Adapter to be able to also observe ProcessInstance events.
@@ -253,6 +262,9 @@ class ArcMetricsService : public KeyedService,
   void RequestProcessList();
   void ParseProcessList(std::vector<mojom::RunningAppProcessInfoPtr> processes);
 
+  void RequestLowMemoryKillCounts();
+  void LogLowMemoryKillCounts(mojom::LowMemoryKillCountsPtr counts);
+
   // DBus callbacks.
   void OnArcStartTimeRetrieved(std::vector<mojom::BootProgressEventPtr> events,
                                mojom::BootType boot_type,
@@ -278,10 +290,14 @@ class ArcMetricsService : public KeyedService,
 
   ProcessObserver process_observer_;
   base::RepeatingTimer request_process_list_timer_;
+  base::RepeatingTimer request_kill_count_timer_;
+
+  mojom::LowMemoryKillCountsPtr prev_logged_memory_kills_;
 
   ArcBridgeServiceObserver arc_bridge_service_observer_;
   IntentHelperObserver intent_helper_observer_;
   AppLauncherObserver app_launcher_observer_;
+  std::unique_ptr<metrics::PSIMemoryParser> psi_parser_;
 
   bool was_arc_window_active_ = false;
   std::vector<int32_t> task_ids_;

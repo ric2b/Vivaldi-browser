@@ -16,6 +16,7 @@ class NGBlockNode;
 class NGBlockBreakToken;
 class NGBoxFragment;
 struct DevtoolsFlexInfo;
+struct NGFlexItem;
 
 class CORE_EXPORT NGFlexLayoutAlgorithm
     : public NGLayoutAlgorithm<NGBlockNode,
@@ -26,11 +27,11 @@ class CORE_EXPORT NGFlexLayoutAlgorithm
                                  DevtoolsFlexInfo* devtools = nullptr);
 
   MinMaxSizesResult ComputeMinMaxSizes(const MinMaxSizesFloatInput&) override;
-  scoped_refptr<const NGLayoutResult> Layout() override;
+  const NGLayoutResult* Layout() override;
 
  private:
-  scoped_refptr<const NGLayoutResult> RelayoutIgnoringChildScrollbarChanges();
-  scoped_refptr<const NGLayoutResult> LayoutInternal();
+  const NGLayoutResult* RelayoutIgnoringChildScrollbarChanges();
+  const NGLayoutResult* LayoutInternal();
 
   void PlaceFlexItems(Vector<NGFlexLine>* flex_line_outputs);
   void CalculateTotalIntrinsicBlockSize(bool use_empty_line_block_size);
@@ -74,9 +75,11 @@ class CORE_EXPORT NGFlexLayoutAlgorithm
   void ConstructAndAppendFlexItems();
   void ApplyFinalAlignmentAndReversals(Vector<NGFlexLine>* flex_line_outputs);
   NGLayoutResult::EStatus GiveItemsFinalPositionAndSize(
-      Vector<NGFlexLine>* flex_line_outputs);
+      Vector<NGFlexLine>* flex_line_outputs,
+      Vector<EBreakBetween>* row_break_between_outputs);
   NGLayoutResult::EStatus GiveItemsFinalPositionAndSizeForFragmentation(
-      Vector<NGFlexLine>* flex_line_outputs);
+      Vector<NGFlexLine>* flex_line_outputs,
+      Vector<EBreakBetween>* row_break_between_outputs);
   NGLayoutResult::EStatus PropagateFlexItemInfo(FlexItem* flex_item,
                                                 wtf_size_t flex_line_idx,
                                                 LogicalOffset offset,
@@ -101,13 +104,25 @@ class CORE_EXPORT NGFlexLayoutAlgorithm
 
   // Return the amount of block space available in the current fragmentainer
   // for the node being laid out by this algorithm.
-  LayoutUnit FragmentainerSpaceAvailable() const;
+  LayoutUnit FragmentainerSpaceAvailable(LayoutUnit block_offset) const;
 
   // Consume all remaining fragmentainer space. This happens when we decide to
   // break before a child.
   //
   // https://www.w3.org/TR/css-break-3/#box-splitting
-  void ConsumeRemainingFragmentainerSpace(NGFlexLine& flex_line);
+  void ConsumeRemainingFragmentainerSpace(LogicalOffset item_offset,
+                                          NGFlexItem* flex_item);
+
+  // Insert a fragmentainer break before a row if necessary. Rows do not produce
+  // a layout result, so when breaking before a row, we will insert a
+  // fragmentainer break before the first child in a row. |child| and
+  // |layout_result| should be those associated with the first child in the row.
+  // |row_break_between| and |has_container_separation| are specific to the row
+  // itself. See |::blink::BreakBeforeChildIfNeeded()| for more documentation.
+  NGBreakStatus BreakBeforeRowIfNeeded(EBreakBetween row_break_between,
+                                       NGLayoutInputNode child,
+                                       const NGLayoutResult& layout_result,
+                                       bool has_container_separation);
 
 #if DCHECK_IS_ON()
   void CheckFlexLines(const Vector<NGFlexLine>& flex_line_outputs) const;

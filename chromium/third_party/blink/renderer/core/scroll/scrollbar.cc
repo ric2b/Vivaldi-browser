@@ -37,10 +37,10 @@
 #include "third_party/blink/renderer/core/scroll/scroll_animator_base.h"
 #include "third_party/blink/renderer/core/scroll/scrollable_area.h"
 #include "third_party/blink/renderer/core/scroll/scrollbar_theme.h"
-#include "third_party/blink/renderer/platform/geometry/float_rect.h"
 #include "third_party/blink/renderer/platform/text/text_direction.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/gfx/geometry/point_conversions.h"
+#include "ui/gfx/geometry/rect_f.h"
 
 namespace blink {
 
@@ -249,16 +249,16 @@ ScrollDirectionPhysical Scrollbar::PressedPartScrollDirectionPhysical() {
   }
 }
 
-ScrollGranularity Scrollbar::PressedPartScrollGranularity() {
+ui::ScrollGranularity Scrollbar::PressedPartScrollGranularity() {
   if (pressed_part_ == kBackButtonStartPart ||
       pressed_part_ == kBackButtonEndPart ||
       pressed_part_ == kForwardButtonStartPart ||
       pressed_part_ == kForwardButtonEndPart) {
     return RuntimeEnabledFeatures::PercentBasedScrollingEnabled()
-               ? ScrollGranularity::kScrollByPercentage
-               : ScrollGranularity::kScrollByLine;
+               ? ui::ScrollGranularity::kScrollByPercentage
+               : ui::ScrollGranularity::kScrollByLine;
   }
-  return ScrollGranularity::kScrollByPage;
+  return ui::ScrollGranularity::kScrollByPage;
 }
 
 void Scrollbar::MoveThumb(int pos, bool dragging_document) {
@@ -408,7 +408,8 @@ bool Scrollbar::GestureEvent(const WebGestureEvent& evt,
       // says we injected GestureScrollBegin, since we no longer need to inject
       // a GSE ourselves.
       injected_gesture_scroll_begin_ = false;
-      FALLTHROUGH;
+      [[fallthrough]];
+    case WebInputEvent::Type::kGestureShortPress:
     case WebInputEvent::Type::kGestureLongPress:
     case WebInputEvent::Type::kGestureFlingStart:
       scroll_pos_ = 0;
@@ -590,7 +591,7 @@ void Scrollbar::MouseDown(const WebMouseEvent& evt) {
 
 void Scrollbar::InjectScrollGestureForPressedPart(
     WebInputEvent::Type gesture_type) {
-  ScrollGranularity granularity = PressedPartScrollGranularity();
+  ui::ScrollGranularity granularity = PressedPartScrollGranularity();
   ScrollOffset delta =
       ToScrollDelta(PressedPartScrollDirectionPhysical(),
                     ScrollableArea::DirectionBasedScrollDelta(granularity));
@@ -620,12 +621,12 @@ void Scrollbar::InjectGestureScrollUpdateForThumbMove(
   ScrollOffset scroll_delta = desired_offset - current_offset;
 
   InjectScrollGesture(WebInputEvent::Type::kGestureScrollUpdate, scroll_delta,
-                      ScrollGranularity::kScrollByPrecisePixel);
+                      ui::ScrollGranularity::kScrollByPrecisePixel);
 }
 
 void Scrollbar::InjectScrollGesture(WebInputEvent::Type gesture_type,
                                     ScrollOffset delta,
-                                    ScrollGranularity granularity) {
+                                    ui::ScrollGranularity granularity) {
   DCHECK(scrollable_area_);
 
   if (gesture_type == WebInputEvent::Type::kGestureScrollEnd &&

@@ -687,12 +687,7 @@ Vector<int> GetApmSupportedChannels(
   result.push_back(1);
   if (base::FeatureList::IsEnabled(
           features::kWebRtcEnableCaptureMultiChannelApm)) {
-    // The APM outputs two channels when the layout is
-    // CHANNEL_LAYOUT_STEREO_KEYBOARD_MIC.
-    int channels = (device_params.channel_layout() ==
-                    media::CHANNEL_LAYOUT_STEREO_AND_KEYBOARD_MIC)
-                       ? 2
-                       : device_params.channels();
+    const int channels = device_params.channels();
     if (channels > 1)
       result.push_back(channels);
   }
@@ -869,8 +864,7 @@ class ProcessingBasedContainer {
     absl::optional<int> requested_buffer_size;
     if (processing_type_ == ProcessingType::kUnprocessed && latency &&
         !constraint_set.latency.IsUnconstrained()) {
-      int min_buffer_size, max_buffer_size;
-      std::tie(min_buffer_size, max_buffer_size) =
+      auto [min_buffer_size, max_buffer_size] =
           GetMinMaxBufferSizesForAudioParameters(parameters);
       requested_buffer_size = media::AudioLatency::GetExactBufferSize(
           base::Seconds(*latency), parameters.sample_rate(),
@@ -1071,8 +1065,7 @@ class ProcessingBasedContainer {
       case ProcessingType::kNoApmProcessed:
         return DoubleRangeSet::FromValue(allowed_latency);
       case ProcessingType::kUnprocessed:
-        double min_latency, max_latency;
-        std::tie(min_latency, max_latency) =
+        auto [min_latency, max_latency] =
             GetMinMaxLatenciesForAudioParameters(device_parameters);
         return DoubleRangeSet(min_latency, max_latency);
     }
@@ -1217,12 +1210,9 @@ class DeviceContainer {
       std::string default_device_id) const {
     DCHECK(!IsEmpty());
     Score score(0.0);
-    double sub_score = 0.0;
 
-    std::string device_id;
-    std::tie(sub_score, device_id) =
-        device_id_container_.SelectSettingsAndScore(constraint_set.device_id,
-                                                    default_device_id);
+    auto [sub_score, device_id] = device_id_container_.SelectSettingsAndScore(
+        constraint_set.device_id, default_device_id);
     score += sub_score;
 
     std::tie(sub_score, std::ignore) =
@@ -1255,12 +1245,8 @@ class DeviceContainer {
       if (container.IsEmpty())
         continue;
 
-      Score container_score(0.0);
-      AudioProcessingProperties container_properties;
-      absl::optional<int> requested_buffer_size;
-      int num_channels;
-      std::tie(container_score, container_properties, requested_buffer_size,
-               num_channels) =
+      auto [container_score, container_properties, requested_buffer_size,
+            num_channels] =
           container.SelectSettingsAndScore(
               constraint_set, should_disable_hardware_noise_suppression,
               device_parameters_);
@@ -1427,9 +1413,7 @@ class CandidatesContainer {
     AudioCaptureSettings best_settings;
     Score best_score(-1.0);
     for (const auto& candidate : devices_) {
-      Score score(0.0);
-      AudioCaptureSettings settings;
-      std::tie(score, settings) = candidate.SelectSettingsAndScore(
+      auto [score, settings] = candidate.SelectSettingsAndScore(
           constraint_set, is_desktop_source,
           should_disable_hardware_noise_suppression, default_device_id_);
 
@@ -1623,8 +1607,7 @@ std::tuple<int, int> GetMinMaxBufferSizesForAudioParameters(
 
 std::tuple<double, double> GetMinMaxLatenciesForAudioParameters(
     const media::AudioParameters& parameters) {
-  int min_buffer_size, max_buffer_size;
-  std::tie(min_buffer_size, max_buffer_size) =
+  auto [min_buffer_size, max_buffer_size] =
       GetMinMaxBufferSizesForAudioParameters(parameters);
 
   // Doing the microseconds conversion to match what is done in

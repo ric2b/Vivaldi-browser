@@ -74,8 +74,8 @@ class MockCaptureDevice : public WebContentsVideoCaptureDevice,
                           public base::SupportsWeakPtr<MockCaptureDevice> {
  public:
   using WebContentsVideoCaptureDevice::AsWeakPtr;
-  MOCK_METHOD1(OnTargetChanged,
-               void(const absl::optional<viz::VideoCaptureTarget>&));
+  MOCK_METHOD2(OnTargetChanged,
+               void(const absl::optional<viz::VideoCaptureTarget>&, uint32_t));
   MOCK_METHOD0(OnTargetPermanentlyLost, void());
 };
 
@@ -96,7 +96,7 @@ class WebContentsFrameTrackerTest : public RenderViewHostTestHarness {
     device_ = std::make_unique<StrictMock<MockCaptureDevice>>();
 
     // All tests should call target changed as part of initialization.
-    EXPECT_CALL(*device_, OnTargetChanged(_)).Times(1);
+    EXPECT_CALL(*device_, OnTargetChanged(_, _)).Times(1);
 
     tracker_ = std::make_unique<WebContentsFrameTracker>(device_->AsWeakPtr(),
                                                          controller());
@@ -155,7 +155,7 @@ class WebContentsFrameTrackerTest : public RenderViewHostTestHarness {
   // The controller is ignored on Android, and must be initialized on all
   // other platforms.
   MouseCursorOverlayController* controller() {
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
     return nullptr;
 #else
     return &controller_;
@@ -166,7 +166,7 @@ class WebContentsFrameTrackerTest : public RenderViewHostTestHarness {
   StrictMock<MockCaptureDevice>* device() { return device_.get(); }
 
  private:
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   MouseCursorOverlayController controller_;
 #endif
 
@@ -319,7 +319,8 @@ TEST_F(WebContentsFrameTrackerTest, NotifiesOfTargetChanges) {
   SetFrameSinkId(kNewId);
   EXPECT_CALL(
       *device(),
-      OnTargetChanged(absl::make_optional<viz::VideoCaptureTarget>(kNewId)))
+      OnTargetChanged(absl::make_optional<viz::VideoCaptureTarget>(kNewId),
+                      /*crop_version=*/0))
       .Times(1);
 
   // The tracker doesn't actually use the frame host information, just
@@ -344,10 +345,11 @@ TEST_F(WebContentsFrameTrackerTest,
   // Expect OnTargetChanged() to be invoked once with the crop-ID.
   EXPECT_CALL(*device(),
               OnTargetChanged(absl::make_optional<viz::VideoCaptureTarget>(
-                  kInitSinkId, kCropId)))
+                                  kInitSinkId, kCropId),
+                              /*crop_version=*/1))
       .Times(1);
 
-  tracker()->Crop(kCropId, std::move(callback));
+  tracker()->Crop(kCropId, /*crop_version=*/1, std::move(callback));
 
   RunAllTasksUntilIdle();
   EXPECT_TRUE(success);

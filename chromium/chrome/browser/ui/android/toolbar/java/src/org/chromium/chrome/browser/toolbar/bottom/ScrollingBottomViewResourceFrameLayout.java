@@ -30,9 +30,6 @@ public class ScrollingBottomViewResourceFrameLayout extends ViewResourceFrameLay
     /** The height of the shadow sitting above the bottom view in px. */
     private final int mTopShadowHeightPx;
 
-    /** Vivaldi swipe recognizer for handling swipe gestures. */
-    private SwipeGestureListener mSwipeGestureListener;
-
     public ScrollingBottomViewResourceFrameLayout(Context context, AttributeSet attrs) {
         super(context, attrs);
         mTopShadowHeightPx = getResources().getDimensionPixelOffset(R.dimen.toolbar_shadow_height);
@@ -67,39 +64,5 @@ public class ScrollingBottomViewResourceFrameLayout extends ViewResourceFrameLay
      */
     public int getTopShadowHeight() {
         return mTopShadowHeightPx;
-    }
-
-    /**
-     * Vivaldi
-     * Handle intercept touch event.
-     */
-    @Override
-    public boolean onInterceptTouchEvent(MotionEvent event) {
-        return mSwipeGestureListener.onTouchEvent(event);
-    }
-
-    /**
-     * Vivaldi
-     * Handle touch event.
-     */
-    @SuppressLint("ClickableViewAccessibility")
-    @Override
-    public boolean onTouchEvent(MotionEvent event) {
-        // Don't eat the event if we don't have a handler.
-        if (mSwipeGestureListener == null) return false;
-
-        if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
-            return true;
-        }
-
-        return mSwipeGestureListener.onTouchEvent(event);
-    }
-
-    /**
-     * Vivaldi
-     * Set the swipe handler
-     */
-    public void setSwipeHandler(SwipeGestureListener.SwipeHandler handler) {
-        mSwipeGestureListener = new SwipeGestureListener(getContext(), handler);
     }
 }

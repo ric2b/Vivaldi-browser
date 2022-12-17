@@ -21,6 +21,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkRect.h"
 #include "third_party/skia/include/core/SkSize.h"
+#include "ui/gfx/geometry/size.h"
 
 namespace cc {
 namespace {
@@ -28,11 +29,13 @@ namespace {
 using ::testing::_;
 using ::testing::Contains;
 using ::testing::Eq;
+using ::testing::FieldsAre;
 using ::testing::IsEmpty;
 using ::testing::Key;
 using ::testing::Mock;
 using ::testing::Ne;
 using ::testing::NotNull;
+using ::testing::Optional;
 using ::testing::Pair;
 using ::testing::SizeIs;
 using ::testing::UnorderedElementsAre;
@@ -117,10 +120,16 @@ TEST(SkottieWrapperTest, LoadsImageAssetsMetadata) {
   EXPECT_THAT(
       metadata.asset_storage(),
       UnorderedElementsAre(
-          Pair("image_0", base::FilePath(FILE_PATH_LITERAL("images/img_0.jpg"))
-                              .NormalizePathSeparators()),
-          Pair("image_1", base::FilePath(FILE_PATH_LITERAL("images/img_1.jpg"))
-                              .NormalizePathSeparators())));
+          Pair("image_0",
+               FieldsAre(base::FilePath(FILE_PATH_LITERAL("images/img_0.jpg"))
+                             .NormalizePathSeparators(),
+                         Optional(gfx::Size(kLottieDataWith2AssetsWidth,
+                                            kLottieDataWith2AssetsHeight)))),
+          Pair("image_1",
+               FieldsAre(base::FilePath(FILE_PATH_LITERAL("images/img_1.jpg"))
+                             .NormalizePathSeparators(),
+                         Optional(gfx::Size(kLottieDataWith2AssetsWidth,
+                                            kLottieDataWith2AssetsHeight))))));
 }
 
 TEST(SkottieWrapperTest, LoadsCorrectAssetsForDraw) {
@@ -132,13 +141,13 @@ TEST(SkottieWrapperTest, LoadsCorrectAssetsForDraw) {
   EXPECT_CALL(mock_callback,
               OnAssetLoaded(HashSkottieResourceId("image_0"), _, _, _));
   skottie->Draw(&canvas, /*t=*/0.25, SkRect::MakeWH(500, 500),
-                mock_callback.Get());
+                mock_callback.Get(), SkottieColorMap());
   Mock::VerifyAndClearExpectations(&mock_callback);
 
   EXPECT_CALL(mock_callback,
               OnAssetLoaded(HashSkottieResourceId("image_1"), _, _, _));
   skottie->Draw(&canvas, /*t=*/0.75, SkRect::MakeWH(500, 500),
-                mock_callback.Get());
+                mock_callback.Get(), SkottieColorMap());
   Mock::VerifyAndClearExpectations(&mock_callback);
 }
 
@@ -149,7 +158,7 @@ TEST(SkottieWrapperTest, AllowsNullFrameDataCallbackForDraw) {
   // Just verify that this call does not cause a CHECK failure.
   ::testing::NiceMock<MockCanvas> canvas;
   skottie->Draw(&canvas, /*t=*/0, SkRect::MakeWH(500, 500),
-                SkottieWrapper::FrameDataCallback());
+                SkottieWrapper::FrameDataCallback(), SkottieColorMap());
 }
 
 TEST(SkottieWrapperTest, LoadsCorrectAssetsForSeek) {

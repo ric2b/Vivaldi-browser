@@ -48,9 +48,7 @@ AccessibilityHitTestingBrowserTest::~AccessibilityHitTestingBrowserTest() =
 
 void AccessibilityHitTestingBrowserTest::SetUpCommandLine(
     base::CommandLine* command_line) {
-  double device_scale_factor;
-  bool use_zoom_for_dsf;
-  std::tie(device_scale_factor, use_zoom_for_dsf) = GetParam();
+  auto [device_scale_factor, use_zoom_for_dsf] = GetParam();
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
       switches::kForceDeviceScaleFactor,
       base::StringPrintf("%.2f", device_scale_factor));
@@ -62,9 +60,7 @@ void AccessibilityHitTestingBrowserTest::SetUpCommandLine(
 
 std::string AccessibilityHitTestingBrowserTest::TestPassToString::operator()(
     const ::testing::TestParamInfo<AccessibilityZoomTestParam>& info) const {
-  double device_scale_factor;
-  bool use_zoom_for_dsf;
-  std::tie(device_scale_factor, use_zoom_for_dsf) = info.param;
+  auto [device_scale_factor, use_zoom_for_dsf] = info.param;
   std::string name =
       base::StringPrintf("ZoomFactor%g_UseZoomForDSF%s", device_scale_factor,
                          use_zoom_for_dsf ? "On" : "Off");
@@ -597,10 +593,10 @@ IN_PROC_BROWSER_TEST_P(AccessibilityHitTestingBrowserTest,
   }
 }
 
-#if !defined(OS_ANDROID) && !defined(OS_MAC)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_MAC)
 // Fails flakily with compared ID differences. TODO(crbug.com/1121099): Re-nable
 // this test.
-#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 #define MAYBE_CachingAsyncHitTest_WithPinchZoom \
   DISABLED_CachingAsyncHitTest_WithPinchZoom
 #else
@@ -704,7 +700,7 @@ IN_PROC_BROWSER_TEST_P(AccessibilityHitTestingBrowserTest,
 }
 
 // Timeouts on Linux. TODO(crbug.com/1083805): Enable this test.
-#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 #define MAYBE_CachingAsyncHitTestMissesElement_WithPinchZoom \
   DISABLED_CachingAsyncHitTestMissesElement_WithPinchZoom
 #else
@@ -767,11 +763,11 @@ IN_PROC_BROWSER_TEST_P(AccessibilityHitTestingBrowserTest,
   }
 }
 
-#endif  // !defined(OS_ANDROID) && !defined(OS_MAC)
+#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_MAC)
 
 // GetAXPlatformNode is currently only supported on windows and linux (excluding
 // Chrome OS or Chromecast)
-#if defined(OS_WIN) || (defined(OS_LINUX) && !BUILDFLAG(IS_CHROMECAST))
+#if BUILDFLAG(IS_WIN) || (BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CHROMECAST))
 IN_PROC_BROWSER_TEST_P(AccessibilityHitTestingBrowserTest,
                        NearestLeafInIframes) {
   ASSERT_TRUE(embedded_test_server()->Start());

@@ -18,6 +18,10 @@
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/url_formatter/url_fixer.h"
 
+#if !BUILDFLAG(IS_ANDROID)
+#include "chrome/browser/ui/startup/startup_tab.h"
+#endif
+
 #include "app/vivaldi_apptools.h"
 
 namespace {
@@ -31,14 +35,16 @@ int TypeToPrefValue(SessionStartupPref::Type type) {
       return SessionStartupPref::kPrefValueLast;
     case SessionStartupPref::URLS:
       return SessionStartupPref::kPrefValueURLs;
+    case SessionStartupPref::LAST_AND_URLS:
+      return SessionStartupPref::kPrefValueLastAndURLs;
     default:
       return SessionStartupPref::kPrefValueNewTab;
   }
 }
 
-void URLListToPref(const base::ListValue* url_list, SessionStartupPref* pref) {
+void URLListToPref(const base::Value* url_list, SessionStartupPref* pref) {
   pref->urls.clear();
-  for (const base::Value& i : url_list->GetList()) {
+  for (const base::Value& i : url_list->GetListDeprecated()) {
     const std::string* url_text = i.GetIfString();
     if (url_text) {
       GURL fixed_url = url_formatter::FixupURL(*url_text, std::string());
@@ -52,7 +58,7 @@ void URLListToPref(const base::ListValue* url_list, SessionStartupPref* pref) {
 // static
 void SessionStartupPref::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   uint32_t flags = PrefRegistry::NO_REGISTRATION_FLAGS;
 #else
   uint32_t flags = user_prefs::PrefRegistrySyncable::SYNCABLE_PREF;
@@ -93,15 +99,13 @@ void SessionStartupPref::SetStartupPref(PrefService* prefs,
   if (!SessionStartupPref::URLsAreManaged(prefs)) {
     // Always save the URLs, that way the UI can remain consistent even if the
     // user changes the startup type pref.
-    // Ownership of the ListValue retains with the pref service.
+    // Ownership of the list Value retains with the pref service.
     ListPrefUpdate update(prefs, prefs::kURLsToRestoreOnStartup);
-    base::ListValue* url_pref_list = update.Get();
+    base::Value* url_pref_list = update.Get();
     DCHECK(url_pref_list);
     url_pref_list->ClearList();
-    for (size_t i = 0; i < pref.urls.size(); ++i) {
-      url_pref_list->Set(static_cast<int>(i),
-                         std::make_unique<base::Value>(pref.urls[i].spec()));
-    }
+    for (GURL url : pref.urls)
+      url_pref_list->Append(url.spec());
   }
 }
 
@@ -126,8 +130,7 @@ SessionStartupPref SessionStartupPref::GetStartupPref(
 
   // Always load the urls, even if the pref type isn't URLS. This way the
   // preferences panels can show the user their last choice.
-  const base::ListValue* url_list =
-      prefs->GetList(prefs::kURLsToRestoreOnStartup);
+  const base::Value* url_list = prefs->GetList(prefs::kURLsToRestoreOnStartup);
   URLListToPref(url_list, &pref);
 
   return pref;
@@ -178,6 +181,8 @@ SessionStartupPref::Type SessionStartupPref::PrefValueToType(int pref_value) {
       return SessionStartupPref::LAST;
     case kPrefValueURLs:
       return SessionStartupPref::URLS;
+    case kPrefValueLastAndURLs:
+      return SessionStartupPref::LAST_AND_URLS;
     default:
       return SessionStartupPref::DEFAULT;
   }
@@ -191,9 +196,22 @@ SessionStartupPref::SessionStartupPref(const SessionStartupPref& other) =
 SessionStartupPref::~SessionStartupPref() = default;
 
 bool SessionStartupPref::ShouldRestoreLastSession() const {
-  return type == LAST;
+  return type == LAST || type == LAST_AND_URLS;
 }
 
 bool SessionStartupPref::ShouldOpenUrls() const {
-  return type == URLS;
+  return type == URLS || type == LAST_AND_URLS;
 }
+
+#if !BUILDFLAG(IS_ANDROID)
+StartupTabs SessionStartupPref::ToStartupTabs() const {
+  StartupTabs startup_tabs;
+  for (const GURL& url : urls) {
+    startup_tabs.emplace_back(
+        url, type == LAST_AND_URLS
+                 ? StartupTab::Type::kFromLastAndUrlsStartupPref
+                 : StartupTab::Type::kNormal);
+  }
+  return startup_tabs;
+}
+#endif

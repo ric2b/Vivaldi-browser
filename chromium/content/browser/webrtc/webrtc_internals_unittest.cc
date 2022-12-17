@@ -51,19 +51,19 @@ class MockWebRtcInternalsProxy : public WebRTCInternalsUIObserver {
 
   const std::string& event_name() const { return event_name_; }
 
-  base::Value* event_data() { return event_data_.get(); }
+  base::Value* event_data() { return &event_data_; }
 
  private:
   void OnUpdate(const std::string& event_name,
                 const base::Value* event_data) override {
     event_name_ = event_name;
-    event_data_.reset(event_data ? event_data->DeepCopy() : nullptr);
+    event_data_ = event_data ? event_data->Clone() : base::Value();
     if (loop_)
       loop_->Quit();
   }
 
   std::string event_name_;
-  std::unique_ptr<base::Value> event_data_;
+  base::Value event_data_;
   raw_ptr<base::RunLoop> loop_{nullptr};
 };
 
@@ -254,8 +254,8 @@ TEST_F(WebRtcInternalsTest, EnsureNoLogWhenNoObserver) {
   EXPECT_EQ("update-all-peer-connections", observer.event_name());
 
   ASSERT_TRUE(observer.event_data()->is_list());
-  EXPECT_EQ(1U, observer.event_data()->GetList().size());
-  base::Value& dict = observer.event_data()->GetList()[0];
+  EXPECT_EQ(1U, observer.event_data()->GetListDeprecated().size());
+  base::Value& dict = observer.event_data()->GetListDeprecated()[0];
   ASSERT_TRUE(dict.is_dict());
   ASSERT_FALSE(dict.FindPath("log"));
 
@@ -281,8 +281,8 @@ TEST_F(WebRtcInternalsTest, EnsureLogIsRemovedWhenObserverIsRemoved) {
   EXPECT_EQ("update-all-peer-connections", observer.event_name());
 
   ASSERT_TRUE(observer.event_data()->is_list());
-  EXPECT_EQ(1U, observer.event_data()->GetList().size());
-  base::Value& dict = observer.event_data()->GetList()[0];
+  EXPECT_EQ(1U, observer.event_data()->GetListDeprecated().size());
+  base::Value& dict = observer.event_data()->GetListDeprecated()[0];
   ASSERT_TRUE(dict.is_dict());
   ASSERT_TRUE(dict.FindPath("log")->is_list());
 
@@ -292,8 +292,8 @@ TEST_F(WebRtcInternalsTest, EnsureLogIsRemovedWhenObserverIsRemoved) {
   EXPECT_EQ("update-all-peer-connections", observer.event_name());
 
   ASSERT_TRUE(observer.event_data()->is_list());
-  EXPECT_EQ(1U, observer.event_data()->GetList().size());
-  base::Value& updated_dict = observer.event_data()->GetList()[0];
+  EXPECT_EQ(1U, observer.event_data()->GetListDeprecated().size());
+  base::Value& updated_dict = observer.event_data()->GetListDeprecated()[0];
   ASSERT_TRUE(updated_dict.is_dict());
   ASSERT_FALSE(updated_dict.FindPath("log"));
 
@@ -500,7 +500,7 @@ TEST_F(WebRtcInternalsTest, SendAllUpdatesWithPeerConnectionUpdate) {
   ASSERT_TRUE(observer.event_data());
 
   ASSERT_TRUE(observer.event_data()->is_list());
-  base::Value::ConstListView list = observer.event_data()->GetList();
+  base::Value::ConstListView list = observer.event_data()->GetListDeprecated();
   EXPECT_EQ(1U, list.size());
 
   ASSERT_TRUE(list.begin()->is_dict());
@@ -516,7 +516,7 @@ TEST_F(WebRtcInternalsTest, SendAllUpdatesWithPeerConnectionUpdate) {
 
   const base::Value* log_value = dict.FindListKey("log");
   ASSERT_TRUE(log_value);
-  base::Value::ConstListView log = log_value->GetList();
+  base::Value::ConstListView log = log_value->GetListDeprecated();
   EXPECT_EQ(1U, log.size());
 
   ASSERT_TRUE(log.begin()->is_dict());
@@ -603,7 +603,7 @@ TEST_F(WebRtcInternalsTest, AudioDebugRecordingsFileSelectionCanceled) {
 
   EXPECT_EQ("audio-debug-recordings-file-selection-cancelled",
             observer.event_name());
-  EXPECT_EQ(nullptr, observer.event_data());
+  EXPECT_TRUE(observer.event_data()->is_none());
 
   base::RunLoop().RunUntilIdle();
 }

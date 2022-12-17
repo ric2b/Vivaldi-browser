@@ -66,6 +66,7 @@
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
 #include "components/autofill/core/common/autofill_features.h"
+#include "components/metrics/content/content_stability_metrics_provider.h"
 #include "components/navigation_interception/intercept_navigation_delegate.h"
 #include "components/safe_browsing/core/common/features.h"
 #include "components/security_interstitials/content/security_interstitial_tab_helper.h"
@@ -239,6 +240,8 @@ AwContents::AwContents(std::unique_ptr<WebContents> web_contents)
       std::make_unique<AwRenderViewHostExt>(this, web_contents_.get());
 
   InitializePageLoadMetricsForWebContents(web_contents_.get());
+  metrics::ContentStabilityMetricsProvider::SetupWebContentsObserver(
+      web_contents_.get());
 
   permission_request_handler_ =
       std::make_unique<PermissionRequestHandler>(this, web_contents_.get());
@@ -852,12 +855,12 @@ void AwContents::OnReceivedTouchIconUrl(const std::string& url,
       env, obj, ConvertUTF8ToJavaString(env, url), precomposed);
 }
 
-void AwContents::PostInvalidate() {
+void AwContents::PostInvalidate(bool inside_vsync) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
   if (obj)
-    Java_AwContents_postInvalidateOnAnimation(env, obj);
+    Java_AwContents_postInvalidate(env, obj, inside_vsync);
 }
 
 void AwContents::OnNewPicture() {
@@ -1201,7 +1204,8 @@ void AwContents::UpdateScrollState(const gfx::Point& max_scroll_offset,
 }
 
 void AwContents::DidOverscroll(const gfx::Vector2d& overscroll_delta,
-                               const gfx::Vector2dF& overscroll_velocity) {
+                               const gfx::Vector2dF& overscroll_velocity,
+                               bool inside_vsync) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
@@ -1209,7 +1213,7 @@ void AwContents::DidOverscroll(const gfx::Vector2d& overscroll_delta,
     return;
   Java_AwContents_didOverscroll(env, obj, overscroll_delta.x(),
                                 overscroll_delta.y(), overscroll_velocity.x(),
-                                overscroll_velocity.y());
+                                overscroll_velocity.y(), inside_vsync);
 }
 
 ui::TouchHandleDrawable* AwContents::CreateDrawable() {

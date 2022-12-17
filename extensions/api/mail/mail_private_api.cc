@@ -399,6 +399,33 @@ void MailPrivateReadFileToBufferFunction::OnFinished(ReadFileResult result) {
     Respond(Error(base::StringPrintf("Error reading file")));
   }
 }
+ExtensionFunction::ResponseAction MailPrivateMessageFileExistsFunction::Run() {
+  std::unique_ptr<mail_private::MessageFileExists::Params> params(
+      mail_private::MessageFileExists::Params::Create(args()));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  std::vector<std::string>& string_paths = params->paths;
+  std::string file_name = params->file_name;
+
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  base::FilePath file_path = profile->GetPath();
+
+  file_path = file_path.Append(kMailDirectory);
+
+  size_t count = string_paths.size();
+
+  for (size_t i = 0; i < count; i++) {
+    file_path = file_path.AppendASCII(string_paths[i]);
+  }
+
+  if (file_name.length() > 0) {
+    file_path = file_path.AppendASCII(file_name);
+  }
+  bool exists = base::PathExists(file_path);
+  return RespondNow(
+      ArgumentList(mail_private::MessageFileExists::Results::Create(exists)));
+}
+
 ExtensionFunction::ResponseAction
 MailPrivateReadMessageFileToBufferFunction::Run() {
   std::unique_ptr<mail_private::ReadMessageFileToBuffer::Params> params(

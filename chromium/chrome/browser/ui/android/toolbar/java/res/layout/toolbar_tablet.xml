@@ -84,6 +84,8 @@
         <org.chromium.chrome.browser.toolbar.top.ToggleTabStackButton
             android:id="@+id/tab_switcher_button"
             style="@style/ToolbarButton"
+            android:paddingStart="8dp"
+            android:layout_gravity="top"
             android:contentDescription="@string/accessibility_toolbar_btn_tabswitcher_toggle_default"
             android:visibility="gone" />
 
@@ -96,39 +98,6 @@
             android:visibility="gone"
             app:tint="@color/default_icon_color_tint_list" />
 
-        <org.chromium.chrome.browser.toolbar.menu_button.MenuButton
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:id="@+id/menu_button_wrapper" >
-
-            <!-- Vivaldi -->
-            <org.chromium.ui.widget.ChromeImageButton
-                android:id="@+id/menu_button"
-                style="@style/VivaldiToolbarMenuButtonTablet"
-                android:src="@drawable/ic_vivaldi_main_menu_24dp"
-                android:contentDescription="@string/accessibility_toolbar_btn_menu"
-                android:layout_gravity="center"
-                app:tint="@color/default_icon_color_tint_list" />
-
-            <ImageView
-                android:id="@+id/menu_badge"
-                style="@style/ToolbarMenuButtonTablet"
-                android:src="@drawable/badge_update_dark"
-                tools:ignore="ContentDescription"
-                android:importantForAccessibility="no"
-                android:layout_gravity="center"
-                android:visibility="invisible" />
-
-            <!-- Vivaldi - Adding dummy button to handle long click event on + button in tab strip  -->
-            <org.chromium.chrome.browser.toolbar.TabSwitcherButtonView
-                android:id="@+id/tab_switcher_menu_helper_button"
-                style="@style/ToolbarMenuButtonPhone"
-                tools:ignore="ContentDescription"
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:importantForAccessibility="no"
-                android:layout_gravity="top|end"/>
-
-        </org.chromium.chrome.browser.toolbar.menu_button.MenuButton>
+        <include layout="@layout/menu_button"/>
     </LinearLayout>
 </org.chromium.chrome.browser.toolbar.top.ToolbarTablet>

@@ -323,6 +323,15 @@ TEST_F(ArcUtilTest, IsArcVmDevConfIgnored) {
   EXPECT_TRUE(IsArcVmDevConfIgnored());
 }
 
+TEST_F(ArcUtilTest, GetShouldMountVmDebugFs) {
+  auto* command_line = base::CommandLine::ForCurrentProcess();
+  command_line->InitFromArgv({""});
+  EXPECT_FALSE(ShouldMountVmDebugFs());
+
+  command_line->InitFromArgv({"", "--arcvm-mount-debugfs"});
+  EXPECT_TRUE(ShouldMountVmDebugFs());
+}
+
 TEST_F(ArcUtilTest, GetArcVmUreadaheadMode) {
   constexpr char kArcMemProfile4GbName[] = "4G";
   constexpr char kArcMemProfile8GbName[] = "8G";
@@ -430,6 +439,20 @@ TEST_F(ArcUtilTest, ArcStartModeWithoutPlayStore) {
        "--arc-start-mode=always-start-with-no-play-store"});
   EXPECT_TRUE(ShouldArcAlwaysStart());
   EXPECT_TRUE(ShouldArcAlwaysStartWithNoPlayStore());
+}
+
+// Verifies that ARC manual start is activated by switch.
+TEST_F(ArcUtilTest, ArcStartModeManually) {
+  base::CommandLine::ForCurrentProcess()->InitFromArgv(
+      {"", "--arc-start-mode=manual"});
+  EXPECT_FALSE(ShouldArcAlwaysStart());
+  EXPECT_TRUE(ShouldArcStartManually());
+}
+
+// Verifies that ARC manual start is disabled by default.
+TEST_F(ArcUtilTest, ArcStartModeManuallyDisabledByDefault) {
+  EXPECT_FALSE(ShouldArcAlwaysStart());
+  EXPECT_FALSE(ShouldArcStartManually());
 }
 
 TEST_F(ArcUtilTest, ScaleFactorToDensity) {

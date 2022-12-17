@@ -34,7 +34,9 @@
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_rendering_context_2d.h"
 
 #include "base/metrics/histogram_functions.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
+#include "cc/paint/paint_flags.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_metric_builder.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_metrics.h"
@@ -58,7 +60,6 @@
 #include "third_party/blink/renderer/core/layout/hit_test_canvas_result.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
 #include "third_party/blink/renderer/core/layout/layout_theme.h"
-#include "third_party/blink/renderer/core/origin_trials/origin_trials.h"
 #include "third_party/blink/renderer/core/scroll/scroll_alignment.h"
 #include "third_party/blink/renderer/core/typed_arrays/array_buffer/array_buffer_contents.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_style.h"
@@ -69,7 +70,6 @@
 #include "third_party/blink/renderer/platform/graphics/canvas_2d_layer_bridge.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_resource_provider.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_canvas.h"
-#include "third_party/blink/renderer/platform/graphics/paint/paint_flags.h"
 #include "third_party/blink/renderer/platform/graphics/skia/skia_utils.h"
 #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/graphics/stroke_data.h"
@@ -658,6 +658,8 @@ ImageData* CanvasRenderingContext2D::getImageDataInternal(
     int sh,
     ImageDataSettings* image_data_settings,
     ExceptionState& exception_state) {
+  UMA_HISTOGRAM_BOOLEAN("Blink.Canvas.GetImageData.WillReadFrequently",
+                        CreationAttributes().will_read_frequently);
   return BaseRenderingContext2D::getImageDataInternal(
       sx, sy, sw, sh, image_data_settings, exception_state);
 }
@@ -939,14 +941,15 @@ void CanvasRenderingContext2D::fillFormattedText(
   if (!GetState().HasRealizedFont())
     setFont(font());
 
-  FloatRect bounds;
+  gfx::RectF bounds;
   sk_sp<PaintRecord> recording = formatted_text->PaintFormattedText(
       canvas()->GetDocument(), GetState().GetFontDescription(), x, y,
       wrap_width, bounds);
   Draw<OverdrawOp::kNone>(
-      [recording](cc::PaintCanvas* c, const PaintFlags* flags)  // draw lambda
+      [recording](cc::PaintCanvas* c,
+                  const cc::PaintFlags* flags)  // draw lambda
       { c->drawPicture(recording); },
-      [](const SkIRect& rect) { return false; }, bounds,
+      [](const SkIRect& rect) { return false; }, gfx::RectFToSkRect(bounds),
       CanvasRenderingContext2DState::PaintType::kFillPaintType,
       CanvasRenderingContext2DState::kNoImage,
       CanvasPerformanceMonitor::DrawType::kText);
@@ -1052,7 +1055,7 @@ void CanvasRenderingContext2D::DrawTextInternal(
 
   Draw<OverdrawOp::kNone>(
       [this, text = std::move(text), direction, bidi_override, location](
-          cc::PaintCanvas* c, const PaintFlags* flags)  // draw lambda
+          cc::PaintCanvas* c, const cc::PaintFlags* flags)  // draw lambda
       {
         TextRun text_run(text, 0, 0, TextRun::kAllowTrailingExpansion,
                          direction, bidi_override);
@@ -1098,9 +1101,9 @@ CanvasRenderingContext2D::getContextAttributes() const {
       CanvasRenderingContext2DSettings::Create();
   settings->setAlpha(CreationAttributes().alpha);
   if (RuntimeEnabledFeatures::CanvasColorManagementEnabled())
-    settings->setColorSpace(GetCanvas2DColorParams().GetColorSpaceAsString());
+    settings->setColorSpace(color_params_.GetColorSpaceAsString());
   if (RuntimeEnabledFeatures::CanvasColorManagementV2Enabled())
-    settings->setPixelFormat(GetCanvas2DColorParams().GetPixelFormatAsString());
+    settings->setPixelFormat(color_params_.GetPixelFormatAsString());
   settings->setDesynchronized(Host()->LowLatencyEnabled());
   if (RuntimeEnabledFeatures::NewCanvas2DAPIEnabled(
           canvas()->GetTopExecutionContext()))

@@ -21,6 +21,7 @@
 #include "ui/gfx/image/image_family.h"
 #include "ui/infobar_container_web_proxy.h"
 #include "ui/views/controls/webview/unhandled_keyboard_event_handler.h"
+#include "ui/vivaldi_rootdocument_handler.h"
 #include "ui/vivaldi_ui_web_contents_delegate.h"
 
 #if defined(OS_WIN)
@@ -80,6 +81,7 @@ struct VivaldiBrowserWindowParams {
   bool visible_on_all_workspaces = false;
   bool alpha_enabled = false;
   bool focused = false;
+  std::string workspace;
 
   gfx::Size minimum_size;
   gfx::Rect content_bounds{kUnspecifiedPosition, kUnspecifiedPosition, 0, 0};
@@ -140,6 +142,11 @@ class VivaldiAutofillBubbleHandler : public autofill::AutofillBubbleHandler {
       autofill::VirtualCardManualFallbackBubbleController* controller,
       bool is_user_gesture) override;
 
+  autofill::AutofillBubbleBase* ShowVirtualCardEnrollBubble(
+      content::WebContents* web_contents,
+      autofill::VirtualCardEnrollBubbleController* controller,
+      bool is_user_gesture) override;
+
   void OnPasswordSaved() override {}
 };
 
@@ -151,7 +158,8 @@ class VivaldiBrowserWindow final
       public ui::AcceleratorProvider,
       public infobars::InfoBarContainer::Delegate,
       public extensions::ExtensionFunctionDispatcher::Delegate,
-      public extensions::ExtensionRegistryObserver {
+      public extensions::ExtensionRegistryObserver,
+      public extensions::VivaldiRootDocumentHandlerObserver {
  public:
   VivaldiBrowserWindow();
   ~VivaldiBrowserWindow() override;
@@ -206,6 +214,10 @@ class VivaldiBrowserWindow final
   // infobars::InfoBarContainer::Delegate
   void InfoBarContainerStateChanged(bool is_animating) override;
 
+  // VivaldiRootDocumentHandlerObserver
+  void OnRootDocumentDidFinishNavigation() override;
+  content::WebContents* GetRootDocumentWebContents() override;
+
   void HandleMouseChange(bool motion);
 
   bool ConfirmWindowClose();
@@ -249,6 +261,8 @@ class VivaldiBrowserWindow final
   bool IsFullscreen() const override;
   void ResetToolbarTabState(content::WebContents* contents) override {}
   bool IsFullscreenBubbleVisible() const override;
+  bool IsForceFullscreen() const override;
+  void SetForceFullscreen(bool force_fullscreen) override {}
   LocationBar* GetLocationBar() const override;
   void SetFocusToLocationBar(bool select_all) override {}
   void UpdateReloadStopState(bool is_loading, bool force) override {}
@@ -311,7 +325,9 @@ class VivaldiBrowserWindow final
   bool DoBrowserControlsShrinkRendererSize(
       const content::WebContents* contents) const override;
   ui::NativeTheme* GetNativeTheme() override;
+  const ui::ThemeProvider* GetThemeProvider() const override;
   const ui::ColorProvider* GetColorProvider() const override;
+  ui::ElementContext GetElementContext() override;
   int GetTopControlsHeight() const override;
   void SetTopControlsGestureScrollInProgress(bool in_progress) override {}
   bool CanUserExitFullscreen() const override;
@@ -333,7 +349,7 @@ class VivaldiBrowserWindow final
       std::vector<apps::IntentPickerAppInfo> app_info,
       bool show_stay_in_chrome,
       bool show_remember_selection,
-      PageActionIconType icon_type,
+      apps::IntentPickerBubbleType bubble_type,
       const absl::optional<url::Origin>& initiating_origin,
       IntentPickerResponse callback) override {}
 #endif
@@ -362,8 +378,22 @@ class VivaldiBrowserWindow final
   void CreateTabSearchBubble() override {}
   void CloseTabSearchBubble() override {}
   FeaturePromoController* GetFeaturePromoController() override;
+  bool IsFeaturePromoActive(
+      const base::Feature& iph_feature,
+      bool include_continued_promos = false) const override;
+  bool MaybeShowFeaturePromo(
+      const base::Feature& iph_feature,
+      FeaturePromoSpecification::StringReplacements body_text_replacements = {},
+      FeaturePromoController::BubbleCloseCallback close_callback =
+          base::DoNothing()) override;
+  bool CloseFeaturePromo(const base::Feature& iph_feature) override;
+  FeaturePromoController::PromoHandle CloseFeaturePromoAndContinue(
+      const base::Feature& iph_feature) override;
+  void NotifyFeatureEngagementEvent(const char* event_name) override {}
   void ShowIncognitoClearBrowsingDataDialog() override {}
   void ShowIncognitoHistoryDisclaimerDialog() override {}
+  std::string GetWorkspace() const override;
+  bool IsVisibleOnAllWorkspaces() const override;
   // BrowserWindow overrides end
 
   // BaseWindow overrides
@@ -403,9 +433,6 @@ class VivaldiBrowserWindow final
       bool is_source_keyboard) override {}
 
   void MaybeShowProfileSwitchIPH() override {}
-
-  std::string GetWorkspace() const override;
-  bool IsVisibleOnAllWorkspaces() const override;
 
   void ResetDockingState(int tab_id);
 
@@ -450,6 +477,8 @@ class VivaldiBrowserWindow final
       base::OnceCallback<void(VivaldiBrowserWindow* window)>;
   void SetDidFinishNavigationCallback(DidFinishNavigationCallback callback);
 
+  void SetWindowURL(std::string s) { resource_relative_url_ = std::move(s);}
+
  private:
   class VivaldiManagePasswordsIconView : public ManagePasswordsIconView {
    public:
@@ -490,10 +519,6 @@ class VivaldiBrowserWindow final
   void OnStateChanged(ui::WindowShowState state);
   void OnPositionChanged();
   void OnActivationChanged(bool activated);
-
-  // Force showing of the window, even if the document has not loaded. This
-  // avoids situations where the document fails somehow and no window is shown.
-  void ForceShow();
 
   // VivaldiQuitConfirmationDialog::CloseCallback
   void ContinueClose(bool quiting, bool close, bool stop_asking);
@@ -538,6 +563,11 @@ class VivaldiBrowserWindow final
 
   std::unique_ptr<VivaldiLocationBar> location_bar_;
 
+  // Used when loading the url in the webcontents lazily.
+  std::string resource_relative_url_;
+  // |rootdochandler_| is BrowserContext bound and outlives this.
+  extensions::VivaldiRootDocumentHandler* root_doc_handler_ = nullptr;
+
   views::UnhandledKeyboardEventHandler unhandled_keyboard_event_handler_;
 
 #if !defined(OS_MAC)
@@ -546,9 +576,6 @@ class VivaldiBrowserWindow final
 #endif  // !defined(OS_MAC)
   bool last_motion_ = false;
   WindowStateData window_state_data_;
-
-  // Used to timeout the main document loading and force show the window.
-  std::unique_ptr<base::OneShotTimer> show_delay_timeout_;
 
   VivaldiManagePasswordsIconView icon_view_{*this};
   std::unique_ptr<autofill::AutofillBubbleHandler> autofill_bubble_handler_;

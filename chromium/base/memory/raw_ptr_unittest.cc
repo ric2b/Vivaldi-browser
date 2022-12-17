@@ -12,7 +12,6 @@
 
 #include "base/allocator/buildflags.h"
 #include "base/allocator/partition_allocator/partition_alloc.h"
-#include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
@@ -68,6 +67,7 @@ static int g_get_for_dereference_cnt = INT_MIN;
 static int g_get_for_extraction_cnt = INT_MIN;
 static int g_get_for_comparison_cnt = INT_MIN;
 static int g_wrapped_ptr_swap_cnt = INT_MIN;
+static int g_pointer_to_member_operator_cnt = INT_MIN;
 
 static void ClearCounters() {
   g_wrap_raw_ptr_cnt = 0;
@@ -76,6 +76,7 @@ static void ClearCounters() {
   g_get_for_extraction_cnt = 0;
   g_get_for_comparison_cnt = 0;
   g_wrapped_ptr_swap_cnt = 0;
+  g_pointer_to_member_operator_cnt = 0;
 }
 
 #if BUILDFLAG(USE_BACKUP_REF_PTR)
@@ -118,6 +119,10 @@ struct RawPtrCountingImpl : public CountingSuperClass {
 
   static ALWAYS_INLINE void IncrementSwapCountForTest() {
     ++g_wrapped_ptr_swap_cnt;
+  }
+
+  static ALWAYS_INLINE void IncrementPointerToMemberOperatorCountForTest() {
+    ++g_pointer_to_member_operator_cnt;
   }
 };
 
@@ -205,10 +210,9 @@ TEST_F(RawPtrTest, BoolOpNotCast) {
   is_valid = ptr || is_valid;      // volatile, so won't be optimized
   if (ptr)
     is_valid = true;
-  bool is_not_valid = !ptr;
+  [[maybe_unused]] bool is_not_valid = !ptr;
   if (!ptr)
     is_not_valid = true;
-  ALLOW_UNUSED_LOCAL(is_not_valid);
   std::ignore = IsValidNoCast(ptr);
   std::ignore = IsValidNoCast2(ptr);
   FuncThatAcceptsBool(!ptr);
@@ -228,9 +232,8 @@ bool IsValidWithCast(CountingRawPtr<int> ptr) {
 // costly, so the caller has to be careful not to trigger this path.
 TEST_F(RawPtrTest, CastNotBoolOp) {
   CountingRawPtr<int> ptr = nullptr;
-  bool is_valid = ptr;
+  [[maybe_unused]] bool is_valid = ptr;
   is_valid = IsValidWithCast(ptr);
-  ALLOW_UNUSED_LOCAL(is_valid);
   FuncThatAcceptsBool(ptr);
   EXPECT_EQ(g_get_for_comparison_cnt, 0);
   EXPECT_EQ(g_get_for_extraction_cnt, 3);
@@ -262,6 +265,28 @@ TEST_F(RawPtrTest, Delete) {
   EXPECT_EQ(g_get_for_comparison_cnt, 0);
   EXPECT_EQ(g_get_for_extraction_cnt, 1);
   EXPECT_EQ(g_get_for_dereference_cnt, 0);
+}
+
+TEST_F(RawPtrTest, ClearAndDelete) {
+  CountingRawPtr<int> ptr(new int);
+  ptr.ClearAndDelete();
+  EXPECT_EQ(g_wrap_raw_ptr_cnt, 1);
+  EXPECT_EQ(g_release_wrapped_ptr_cnt, 1);
+  EXPECT_EQ(g_get_for_dereference_cnt, 0);
+  EXPECT_EQ(g_get_for_extraction_cnt, 0);
+  EXPECT_EQ(g_wrapped_ptr_swap_cnt, 0);
+  EXPECT_EQ(ptr.get(), nullptr);
+}
+
+TEST_F(RawPtrTest, ClearAndDeleteArray) {
+  CountingRawPtr<int> ptr(new int[8]);
+  ptr.ClearAndDeleteArray();
+  EXPECT_EQ(g_wrap_raw_ptr_cnt, 1);
+  EXPECT_EQ(g_release_wrapped_ptr_cnt, 1);
+  EXPECT_EQ(g_get_for_dereference_cnt, 0);
+  EXPECT_EQ(g_get_for_extraction_cnt, 0);
+  EXPECT_EQ(g_wrapped_ptr_swap_cnt, 0);
+  EXPECT_EQ(ptr.get(), nullptr);
 }
 
 TEST_F(RawPtrTest, ConstVolatileVoidPtr) {
@@ -767,6 +792,68 @@ TEST_F(RawPtrTest, FunctionParameters_Copy) {
                               &x);
 }
 
+TEST_F(RawPtrTest, SetLookupUsesGetForComparison) {
+  std::set<CountingRawPtr<int>> set;
+  int x = 123;
+  CountingRawPtr<int> ptr(&x);
+
+  ClearCounters();
+  set.emplace(&x);
+  EXPECT_EQ(1, g_wrap_raw_ptr_cnt);
+  EXPECT_EQ(0, g_get_for_comparison_cnt);
+  EXPECT_EQ(0, g_get_for_extraction_cnt);
+  EXPECT_EQ(0, g_get_for_dereference_cnt);
+
+  ClearCounters();
+  set.count(&x);
+  EXPECT_EQ(0, g_wrap_raw_ptr_cnt);
+  EXPECT_NE(0, g_get_for_comparison_cnt);
+  EXPECT_EQ(0, g_get_for_extraction_cnt);
+  EXPECT_EQ(0, g_get_for_dereference_cnt);
+
+  ClearCounters();
+  set.count(ptr);
+  EXPECT_EQ(0, g_wrap_raw_ptr_cnt);
+  EXPECT_NE(0, g_get_for_comparison_cnt);
+  EXPECT_EQ(0, g_get_for_extraction_cnt);
+  EXPECT_EQ(0, g_get_for_dereference_cnt);
+}
+
+TEST_F(RawPtrTest, ComparisonOperatorUsesGetForComparison) {
+  int x = 123;
+  CountingRawPtr<int> ptr(&x);
+
+  ClearCounters();
+  EXPECT_FALSE(ptr < ptr);
+  EXPECT_FALSE(ptr > ptr);
+  EXPECT_TRUE(ptr <= ptr);
+  EXPECT_TRUE(ptr >= ptr);
+  EXPECT_EQ(0, g_wrap_raw_ptr_cnt);
+  EXPECT_EQ(8, g_get_for_comparison_cnt);
+  EXPECT_EQ(0, g_get_for_extraction_cnt);
+  EXPECT_EQ(0, g_get_for_dereference_cnt);
+
+  ClearCounters();
+  EXPECT_FALSE(ptr < &x);
+  EXPECT_FALSE(ptr > &x);
+  EXPECT_TRUE(ptr <= &x);
+  EXPECT_TRUE(ptr >= &x);
+  EXPECT_EQ(0, g_wrap_raw_ptr_cnt);
+  EXPECT_EQ(4, g_get_for_comparison_cnt);
+  EXPECT_EQ(0, g_get_for_extraction_cnt);
+  EXPECT_EQ(0, g_get_for_dereference_cnt);
+
+  ClearCounters();
+  EXPECT_FALSE(&x < ptr);
+  EXPECT_FALSE(&x > ptr);
+  EXPECT_TRUE(&x <= ptr);
+  EXPECT_TRUE(&x >= ptr);
+  EXPECT_EQ(0, g_wrap_raw_ptr_cnt);
+  EXPECT_EQ(4, g_get_for_comparison_cnt);
+  EXPECT_EQ(0, g_get_for_extraction_cnt);
+  EXPECT_EQ(0, g_get_for_dereference_cnt);
+}
+
 // This test checks how the std library handles collections like
 // std::vector<raw_ptr<T>>.
 //
@@ -875,6 +962,17 @@ TEST_F(RawPtrTest, DerivedStructsComparison) {
             checked_derived2_ptr);
 }
 
+class PmfTestBase {
+ public:
+  int MemFunc(char, double) const { return 11; }
+};
+
+class PmfTestDerived : public PmfTestBase {
+ public:
+  using PmfTestBase::MemFunc;
+  int MemFunc(float, double) { return 22; }
+};
+
 }  // namespace
 
 namespace base {
@@ -893,7 +991,7 @@ static constexpr PartitionOptions kOpts = {
     PartitionOptions::Cookie::kAllowed,
     PartitionOptions::BackupRefPtr::kEnabled,
     PartitionOptions::UseConfigurablePool::kNo,
-    PartitionOptions::LazyCommit::kEnabled};
+};
 
 TEST(BackupRefPtrImpl, Basic) {
   // TODO(bartekn): Avoid using PartitionAlloc API directly. Switch to
@@ -1019,7 +1117,7 @@ TEST(BackupRefPtrImpl, QuarantinedBytes) {
             0U);
 }
 
-#if DCHECK_IS_ON() || BUILDFLAG(ENABLE_BACKUP_REF_PTR_SLOW_CHECKS)
+#if defined(PA_REF_COUNT_CHECK_COOKIE)
 TEST(BackupRefPtrImpl, ReinterpretCast) {
   // TODO(bartekn): Avoid using PartitionAlloc API directly. Switch to
   // new/delete once PartitionAlloc Everywhere is fully enabled.
@@ -1039,6 +1137,68 @@ TEST(BackupRefPtrImpl, ReinterpretCast) {
 
 #endif  // BUILDFLAG(USE_BACKUP_REF_PTR) &&
         // !defined(MEMORY_TOOL_REPLACES_ALLOCATOR)
+
+#if BUILDFLAG(USE_ASAN_BACKUP_REF_PTR)
+
+struct AsanStruct {
+  int x;
+
+  void func() { ++x; }
+};
+
+TEST(AsanBackupRefPtrImpl, Dereference) {
+  raw_ptr<AsanStruct> protected_ptr = new AsanStruct;
+
+  // The four statements below should succeed.
+  (*protected_ptr).x = 1;
+  (*protected_ptr).func();
+  ++(protected_ptr->x);
+  protected_ptr->func();
+
+  delete protected_ptr.get();
+
+  EXPECT_DEATH_IF_SUPPORTED((*protected_ptr).x = 1,
+                            "BackupRefPtr: Dereferencing a raw_ptr");
+  EXPECT_DEATH_IF_SUPPORTED((*protected_ptr).func(),
+                            "BackupRefPtr: Dereferencing a raw_ptr");
+  EXPECT_DEATH_IF_SUPPORTED(++(protected_ptr->x),
+                            "BackupRefPtr: Dereferencing a raw_ptr");
+  EXPECT_DEATH_IF_SUPPORTED(protected_ptr->func(),
+                            "BackupRefPtr: Dereferencing a raw_ptr");
+}
+
+TEST(AsanBackupRefPtrImpl, Extraction) {
+  raw_ptr<AsanStruct> protected_ptr = new AsanStruct;
+
+  AsanStruct* ptr1 = protected_ptr;  // Shouldn't crash.
+  ptr1->x = 0;
+
+  delete protected_ptr.get();
+
+  EXPECT_DEATH_IF_SUPPORTED(
+      {
+        AsanStruct* ptr2 = protected_ptr;
+        ptr2->x = 1;
+      },
+      "BackupRefPtr: Extracting from a raw_ptr");
+}
+
+TEST(AsanBackupRefPtrImpl, Instantiation) {
+  AsanStruct* ptr = new AsanStruct;
+
+  raw_ptr<AsanStruct> protected_ptr1 = ptr;  // Shouldn't crash.
+  protected_ptr1 = nullptr;
+
+  delete ptr;
+
+  EXPECT_DEATH_IF_SUPPORTED(
+      {
+        raw_ptr<AsanStruct> protected_ptr2 = ptr;
+        ALLOW_UNUSED_LOCAL(protected_ptr2);
+      },
+      "BackupRefPtr: Constructing a raw_ptr");
+}
+#endif
 
 }  // namespace internal
 }  // namespace base

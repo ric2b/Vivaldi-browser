@@ -132,7 +132,7 @@ bool CopyHashListFromHeader(base::DictionaryValue* header_dict,
     // Hash lists are optional so it's not an error if not present.
     return true;
   }
-  base::Value::ConstListView list_view = list->GetList();
+  base::Value::ConstListView list_view = list->GetListDeprecated();
 
   out->clear();
   out->reserve(list_view.size());
@@ -178,7 +178,7 @@ bool CopyHashToHashesMapFromHeader(
     }
 
     std::vector<std::string> allowed_spkis;
-    for (const auto& j : i.second.GetList()) {
+    for (const auto& j : i.second.GetListDeprecated()) {
       allowed_spkis.push_back(std::string());
       if (!j.is_string() ||
           !base::Base64Decode(j.GetString(), &allowed_spkis.back())) {
@@ -223,10 +223,8 @@ bool CRLSet::Parse(base::StringPiece data, scoped_refptr<CRLSet>* out_crl_set) {
   if (!header_dict.get())
     return false;
 
-  std::string contents;
-  if (!header_dict->GetString("ContentType", &contents))
-    return false;
-  if (contents != "CRLSet")
+  std::string* contents = header_dict->FindStringKey("ContentType");
+  if (!contents || (*contents != "CRLSet"))
     return false;
 
   if (header_dict->FindIntKey("Version") != kCurrentFileVersion)

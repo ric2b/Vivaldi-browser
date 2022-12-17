@@ -4,7 +4,6 @@
 
 #include "sync/notes/note_local_changes_builder.h"
 
-#include <limits>
 #include <memory>
 #include <string>
 #include <utility>
@@ -33,11 +32,8 @@ syncer::CommitRequestDataList NoteLocalChangesBuilder::BuildCommitRequests(
   DCHECK(note_tracker_);
 
   const std::vector<const SyncedNoteTracker::Entity*>
-      entities_with_local_changes = note_tracker_->GetEntitiesWithLocalChanges(
-          base::FeatureList::IsEnabled(
-              switches::kSyncBookmarksEnforceLateMaxEntriesToCommit)
-              ? std::numeric_limits<int>::max()
-              : max_entries);
+      entities_with_local_changes =
+          note_tracker_->GetEntitiesWithLocalChanges();
 
   syncer::CommitRequestDataList commit_requests;
   for (const SyncedNoteTracker::Entity* entity : entities_with_local_changes) {
@@ -55,19 +51,17 @@ syncer::CommitRequestDataList NoteLocalChangesBuilder::BuildCommitRequests(
     data->modification_time =
         syncer::ProtoTimeToTime(metadata->modification_time());
 
-    if (note_tracker_->note_client_tags_in_protocol_enabled()) {
-      DCHECK(!metadata->client_tag_hash().empty());
-      data->client_tag_hash =
-          syncer::ClientTagHash::FromHashed(metadata->client_tag_hash());
-      // Earlier vivaldi versions were mistakenly using the BOOKMARKS type to
-      // verify the type, so we temporarily produce tags using the BOOKMARKS
-      // type. Change this to NOTES in a few version. 07-2021
-      DCHECK(metadata->is_deleted() ||
-             data->client_tag_hash ==
-                 syncer::ClientTagHash::FromUnhashed(
-                     syncer::BOOKMARKS,
-                     entity->note_node()->guid().AsLowercaseString()));
-    }
+    DCHECK(!metadata->client_tag_hash().empty());
+    data->client_tag_hash =
+        syncer::ClientTagHash::FromHashed(metadata->client_tag_hash());
+    // Earlier vivaldi versions were mistakenly using the BOOKMARKS type to
+    // verify the type, so we temporarily produce tags using the BOOKMARKS
+    // type. Change this to NOTES in a few version. 07-2021
+    DCHECK(metadata->is_deleted() ||
+           data->client_tag_hash ==
+               syncer::ClientTagHash::FromUnhashed(
+                   syncer::BOOKMARKS,
+                   entity->note_node()->guid().AsLowercaseString()));
 
     if (!metadata->is_deleted()) {
       const vivaldi::NoteNode* node = entity->note_node();
@@ -85,7 +79,7 @@ syncer::CommitRequestDataList NoteLocalChangesBuilder::BuildCommitRequests(
       const SyncedNoteTracker::Entity* parent_entity =
           note_tracker_->GetEntityForNoteNode(parent);
       DCHECK(parent_entity);
-      data->parent_id = parent_entity->metadata()->server_id();
+      data->legacy_parent_id = parent_entity->metadata()->server_id();
       // Assign specifics only for the non-deletion case. In case of deletion,
       // EntityData should contain empty specifics to indicate deletion.
       data->specifics = CreateSpecificsFromNoteNode(

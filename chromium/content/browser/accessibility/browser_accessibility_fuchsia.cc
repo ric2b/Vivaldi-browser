@@ -9,6 +9,7 @@
 #include "content/browser/accessibility/browser_accessibility_manager_fuchsia.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/platform/fuchsia/accessibility_bridge_fuchsia_registry.h"
+#include "ui/gfx/geometry/rect_conversions.h"
 
 namespace content {
 
@@ -18,16 +19,18 @@ using FuchsiaRole = fuchsia::accessibility::semantics::Role;
 BrowserAccessibilityFuchsia::BrowserAccessibilityFuchsia(
     BrowserAccessibilityManager* manager,
     ui::AXNode* node)
-    : BrowserAccessibility(manager, node) {}
+    : BrowserAccessibility(manager, node) {
+  platform_node_ =
+      static_cast<ui::AXPlatformNodeFuchsia*>(ui::AXPlatformNode::Create(this));
+}
 
 ui::AccessibilityBridgeFuchsia*
 BrowserAccessibilityFuchsia::GetAccessibilityBridge() const {
-  auto* accessibility_bridge_registry =
-      ui::AccessibilityBridgeFuchsiaRegistry::GetInstance();
-  DCHECK(accessibility_bridge_registry);
+  BrowserAccessibilityManagerFuchsia* manager_fuchsia =
+      static_cast<BrowserAccessibilityManagerFuchsia*>(manager());
+  DCHECK(manager_fuchsia);
 
-  return accessibility_bridge_registry->GetAccessibilityBridge(
-      manager()->ax_tree_id());
+  return manager_fuchsia->GetAccessibilityBridge();
 }
 
 // static
@@ -39,6 +42,7 @@ std::unique_ptr<BrowserAccessibility> BrowserAccessibility::Create(
 
 BrowserAccessibilityFuchsia::~BrowserAccessibilityFuchsia() {
   DeleteNode();
+  platform_node_->Destroy();
 }
 
 uint32_t BrowserAccessibilityFuchsia::GetFuchsiaNodeID() const {
@@ -88,9 +92,14 @@ BrowserAccessibilityFuchsia* ToBrowserAccessibilityFuchsia(
 
 std::vector<uint32_t> BrowserAccessibilityFuchsia::GetFuchsiaChildIDs() const {
   std::vector<uint32_t> child_ids;
-  for (const BrowserAccessibility& child : PlatformChildren()) {
-    child_ids.push_back(static_cast<const BrowserAccessibilityFuchsia&>(child)
-                            .GetFuchsiaNodeID());
+
+  // TODO(abrusher): Switch back to using platform children.
+  for (const auto* child : AllChildren()) {
+    const BrowserAccessibilityFuchsia* fuchsia_child =
+        static_cast<const BrowserAccessibilityFuchsia*>(child);
+    DCHECK(fuchsia_child);
+
+    child_ids.push_back(fuchsia_child->GetFuchsiaNodeID());
   }
 
   return child_ids;
@@ -226,6 +235,8 @@ BrowserAccessibilityFuchsia::GetFuchsiaStates() const {
 
   if (HasState(ax::mojom::State::kFocusable))
     states.set_focusable(true);
+
+  states.set_has_input_focus(IsFocused());
 
   return states;
 }
@@ -374,6 +385,24 @@ void BrowserAccessibilityFuchsia::DeleteNode() {
     return;
 
   GetAccessibilityBridge()->DeleteNode(GetFuchsiaNodeID());
+}
+
+bool BrowserAccessibilityFuchsia::AccessibilityPerformAction(
+    const ui::AXActionData& action_data) {
+  if (action_data.action == ax::mojom::Action::kHitTest) {
+    BrowserAccessibilityManager* root_manager = manager()->GetRootManager();
+    DCHECK(root_manager);
+
+    ui::AccessibilityBridgeFuchsia* accessibility_bridge =
+        GetAccessibilityBridge();
+    if (!accessibility_bridge)
+      return false;
+
+    root_manager->HitTest(action_data.target_point, action_data.request_id);
+    return true;
+  }
+
+  return BrowserAccessibility::AccessibilityPerformAction(action_data);
 }
 
 }  // namespace content

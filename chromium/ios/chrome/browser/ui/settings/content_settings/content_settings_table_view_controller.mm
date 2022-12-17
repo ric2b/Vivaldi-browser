@@ -15,17 +15,19 @@
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/content_settings/host_content_settings_map_factory.h"
+#import "ios/chrome/browser/main/browser.h"
 #include "ios/chrome/browser/pref_names.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_feature.h"
-#import "ios/chrome/browser/ui/settings/cells/settings_switch_cell.h"
-#import "ios/chrome/browser/ui/settings/cells/settings_switch_item.h"
 #import "ios/chrome/browser/ui/settings/content_settings/block_popups_table_view_controller.h"
+#import "ios/chrome/browser/ui/settings/content_settings/default_page_mode_coordinator.h"
 #import "ios/chrome/browser/ui/settings/settings_navigation_controller.h"
 #import "ios/chrome/browser/ui/settings/settings_table_view_controller_constants.h"
 #import "ios/chrome/browser/ui/settings/utils/content_setting_backed_boolean.h"
 #import "ios/chrome/browser/ui/settings/utils/pref_backed_boolean.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_detail_icon_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_multi_detail_text_item.h"
+#import "ios/chrome/browser/ui/table_view/cells/table_view_switch_cell.h"
+#import "ios/chrome/browser/ui/table_view/cells/table_view_switch_item.h"
 #import "ios/chrome/browser/ui/table_view/table_view_utils.h"
 #include "ios/chrome/browser/ui/ui_feature_flags.h"
 #include "ios/chrome/grit/ios_strings.h"
@@ -55,6 +57,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeSettingsBlockPopups = kItemTypeEnumZero,
   ItemTypeSettingsComposeEmail,
   ItemTypeSettingsShowLinkPreview,
+  ItemTypeSettingsDefaultSiteMode,
 };
 
 }  // namespace
@@ -67,13 +70,24 @@ typedef NS_ENUM(NSInteger, ItemType) {
   TableViewDetailIconItem* _blockPopupsDetailItem;
   TableViewDetailIconItem* _composeEmailDetailItem;
   TableViewMultiDetailTextItem* _openedInAnotherWindowItem;
+  TableViewDetailIconItem* _defaultSiteMode;
 }
 
 // PrefBackedBoolean for "Show Link Preview" setting state.
 @property(nonatomic, strong, readonly) PrefBackedBoolean* linkPreviewEnabled;
 
 // The item related to the switch for the "Show Link Preview" setting.
-@property(nonatomic, strong) SettingsSwitchItem* linkPreviewItem;
+@property(nonatomic, strong) TableViewSwitchItem* linkPreviewItem;
+
+// The item related to the default mode used to load the pages.
+@property(nonatomic, strong) TableViewDetailIconItem* defaultModeItem;
+
+// The coordinator showing the view to choose the defaultMode.
+@property(nonatomic, strong)
+    DefaultPageModeCoordinator* defaultModeViewCoordinator;
+
+// The setting used to store the default mode.
+@property(nonatomic, strong) ContentSettingBackedBoolean* requestDesktopSetting;
 
 // Helpers to create collection view items.
 - (id)blockPopupsItem;
@@ -82,16 +96,18 @@ typedef NS_ENUM(NSInteger, ItemType) {
 @end
 
 @implementation ContentSettingsTableViewController {
-  ChromeBrowserState* _browserState;  // weak
+  Browser* _browser;  // weak
 }
 
-- (instancetype)initWithBrowserState:(ChromeBrowserState*)browserState {
-  DCHECK(browserState);
+- (instancetype)initWithBrowser:(Browser*)browser {
+  DCHECK(browser);
 
   self = [super initWithStyle:ChromeTableViewStyle()];
   if (self) {
-    _browserState = browserState;
+    _browser = browser;
     self.title = l10n_util::GetNSString(IDS_IOS_CONTENT_SETTINGS_TITLE);
+
+    ChromeBrowserState* browserState = browser->GetBrowserState();
 
     HostContentSettingsMap* settingsMap =
         ios::HostContentSettingsMapFactory::GetForBrowserState(browserState);
@@ -102,9 +118,15 @@ typedef NS_ENUM(NSInteger, ItemType) {
     [_disablePopupsSetting setObserver:self];
 
     _linkPreviewEnabled = [[PrefBackedBoolean alloc]
-        initWithPrefService:_browserState->GetPrefs()
+        initWithPrefService:browserState->GetPrefs()
                    prefName:prefs::kLinkPreviewEnabled];
     [_linkPreviewEnabled setObserver:self];
+
+    _requestDesktopSetting = [[ContentSettingBackedBoolean alloc]
+        initWithHostContentSettingsMap:settingsMap
+                             settingID:ContentSettingsType::REQUEST_DESKTOP_SITE
+                              inverted:NO];
+    [_requestDesktopSetting setObserver:self];
   }
   return self;
 }
@@ -167,6 +189,12 @@ typedef NS_ENUM(NSInteger, ItemType) {
     [model addItem:[self linkPreviewItem]
         toSectionWithIdentifier:SectionIdentifierSettings];
   }
+
+  if (base::FeatureList::IsEnabled(kAddSettingForDefaultPageMode)) {
+    self.defaultModeItem = [self defaultSiteMode];
+    [model addItem:self.defaultModeItem
+        toSectionWithIdentifier:SectionIdentifierSettings];
+  }
 }
 
 #pragma mark - SettingsControllerProtocol
@@ -180,6 +208,17 @@ typedef NS_ENUM(NSInteger, ItemType) {
 }
 
 #pragma mark - ContentSettingsTableViewController
+
+- (TableViewDetailIconItem*)defaultSiteMode {
+  _defaultSiteMode = [[TableViewDetailIconItem alloc]
+      initWithType:ItemTypeSettingsDefaultSiteMode];
+  _defaultSiteMode.text =
+      l10n_util::GetNSString(IDS_IOS_DEFAULT_PAGE_MODE_LABEL);
+  _defaultSiteMode.detailText = [self defaultModeDescription];
+  _defaultSiteMode.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+  _defaultSiteMode.accessibilityIdentifier = kSettingsDefaultSiteModeCellId;
+  return _defaultSiteMode;
+}
 
 - (TableViewItem*)blockPopupsItem {
   _blockPopupsDetailItem = [[TableViewDetailIconItem alloc]
@@ -235,9 +274,9 @@ typedef NS_ENUM(NSInteger, ItemType) {
   return _openedInAnotherWindowItem;
 }
 
-- (SettingsSwitchItem*)linkPreviewItem {
+- (TableViewSwitchItem*)linkPreviewItem {
   if (!_linkPreviewItem) {
-    _linkPreviewItem = [[SettingsSwitchItem alloc]
+    _linkPreviewItem = [[TableViewSwitchItem alloc]
         initWithType:ItemTypeSettingsShowLinkPreview];
 
     _linkPreviewItem.text = l10n_util::GetNSString(IDS_IOS_SHOW_LINK_PREVIEWS);
@@ -256,8 +295,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
   NSInteger itemType = [self.tableViewModel itemTypeForIndexPath:indexPath];
 
   if (itemType == ItemTypeSettingsShowLinkPreview) {
-    SettingsSwitchCell* switchCell =
-        base::mac::ObjCCastStrict<SettingsSwitchCell>(cell);
+    TableViewSwitchCell* switchCell =
+        base::mac::ObjCCastStrict<TableViewSwitchCell>(cell);
     [switchCell.switchView addTarget:self
                               action:@selector(showLinkPreviewSwitchToggled:)
                     forControlEvents:UIControlEventValueChanged];
@@ -276,7 +315,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
     case ItemTypeSettingsBlockPopups: {
       BlockPopupsTableViewController* controller =
           [[BlockPopupsTableViewController alloc]
-              initWithBrowserState:_browserState];
+              initWithBrowserState:_browser->GetBrowserState()];
       controller.dispatcher = self.dispatcher;
       [self.navigationController pushViewController:controller animated:YES];
       break;
@@ -298,6 +337,12 @@ typedef NS_ENUM(NSInteger, ItemType) {
       }
       break;
     }
+    case ItemTypeSettingsDefaultSiteMode: {
+      self.defaultModeViewCoordinator = [[DefaultPageModeCoordinator alloc]
+          initWithBaseNavigationController:self.navigationController
+                                   browser:_browser];
+      [self.defaultModeViewCoordinator start];
+    }
   }
   [tableView deselectRowAtIndexPath:indexPath animated:YES];
 }
@@ -317,6 +362,10 @@ typedef NS_ENUM(NSInteger, ItemType) {
   } else if (observableBoolean == self.linkPreviewEnabled) {
     self.linkPreviewItem.on = [self.linkPreviewEnabled value];
     [self reconfigureCellsForItems:@[ self.linkPreviewItem ]];
+  } else if (observableBoolean == self.requestDesktopSetting &&
+             self.defaultModeItem) {
+    self.defaultModeItem.detailText = [self defaultModeDescription];
+    [self reconfigureCellsForItems:@[ self.defaultModeItem ]];
   } else {
     NOTREACHED();
   }
@@ -353,6 +402,13 @@ typedef NS_ENUM(NSInteger, ItemType) {
         postNotificationName:kMailToInstanceChanged
                       object:nil];
   }
+}
+
+// Returns the string for the default mode.
+- (NSString*)defaultModeDescription {
+  return self.requestDesktopSetting.value
+             ? l10n_util::GetNSString(IDS_IOS_DEFAULT_PAGE_MODE_DESKTOP)
+             : l10n_util::GetNSString(IDS_IOS_DEFAULT_PAGE_MODE_MOBILE);
 }
 
 @end

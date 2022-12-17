@@ -12,23 +12,28 @@ import '//resources/cr_elements/cr_toggle/cr_toggle.m.js';
 import '../controls/settings_toggle_button.js';
 import '../people_page/signout_dialog.js';
 import '../prefs/prefs.js';
+// <if expr="not chromeos_ash">
+import '../relaunch_confirmation_dialog.js';
+// </if>
 import '../settings_shared_css.js';
-// <if expr="not chromeos">
+// <if expr="not chromeos_ash">
 import '//resources/cr_elements/cr_toast/cr_toast.js';
+
 // </if>
 
 import {CrToastElement} from '//resources/cr_elements/cr_toast/cr_toast.js';
 import {WebUIListenerMixin} from '//resources/js/web_ui_listener_mixin.js';
-import {html, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {SettingsToggleButtonElement} from '../controls/settings_toggle_button.js';
 import {loadTimeData} from '../i18n_setup.js';
-import {LifetimeBrowserProxyImpl} from '../lifetime_browser_proxy.js';
 import {PrivacyPageVisibility} from '../page_visibility.js';
 import {SettingsSignoutDialogElement} from '../people_page/signout_dialog.js';
 import {StatusAction, SyncStatus} from '../people_page/sync_browser_proxy.js';
 import {PrefsMixin} from '../prefs/prefs_mixin.js';
+import {RelaunchMixin, RestartType} from '../relaunch_mixin.js';
 
+import {getTemplate} from './personalization_options.html.js';
 import {MetricsReporting, PrivacyPageBrowserProxy, PrivacyPageBrowserProxyImpl} from './privacy_page_browser_proxy.js';
 
 
@@ -42,7 +47,7 @@ export interface SettingsPersonalizationOptionsElement {
 }
 
 const SettingsPersonalizationOptionsElementBase =
-    WebUIListenerMixin(PrefsMixin(PolymerElement));
+    RelaunchMixin(WebUIListenerMixin(PrefsMixin(PolymerElement)));
 
 export class SettingsPersonalizationOptionsElement extends
     SettingsPersonalizationOptionsElementBase {
@@ -51,7 +56,7 @@ export class SettingsPersonalizationOptionsElement extends
   }
 
   static get template() {
-    return html`{__html_template__}`;
+    return getTemplate();
   }
 
   static get properties() {
@@ -287,7 +292,7 @@ export class SettingsPersonalizationOptionsElement extends
 
   private onRestartTap_(e: Event) {
     e.stopPropagation();
-    LifetimeBrowserProxyImpl.getInstance().restart();
+    this.performRestart(RestartType.RESTART);
   }
 }
 

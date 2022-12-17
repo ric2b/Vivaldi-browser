@@ -5,11 +5,13 @@
 #include <memory>
 
 #include "base/command_line.h"
+#include "base/run_loop.h"
 #include "base/strings/strcat.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/test/values_test_util.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "content/browser/attribution_reporting/attribution_manager_impl.h"
 #include "content/browser/attribution_reporting/attribution_test_utils.h"
 #include "content/public/common/content_switches.h"
@@ -33,6 +35,16 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "content/public/browser/network_service_instance.h"
+#include "services/network/public/cpp/network_connection_tracker.h"
+#endif
+
+#if BUILDFLAG(IS_FUCHSIA)
+#include "content/public/browser/network_service_instance.h"
+#include "services/network/test/test_network_connection_tracker.h"
+#endif
 
 namespace content {
 
@@ -76,6 +88,7 @@ struct ExpectedReportWaiter {
 
   GURL expected_url;
   base::Value expected_body;
+  std::string source_debug_key;
   std::unique_ptr<net::test_server::ControllableHttpResponse> response;
 
   bool HasRequest() { return !!response->http_request(); }
@@ -105,6 +118,14 @@ struct ExpectedReportWaiter {
     EXPECT_TRUE(report_id);
     EXPECT_TRUE(base::GUID::ParseLowercase(*report_id).is_valid());
 
+    EXPECT_TRUE(body.FindDoubleKey("randomized_trigger_rate"));
+
+    if (source_debug_key.empty()) {
+      EXPECT_FALSE(body.FindStringKey("source_debug_key"));
+    } else {
+      base::ExpectDictStringValue(source_debug_key, body, "source_debug_key");
+    }
+
     // Clear the port as it is assigned by the EmbeddedTestServer at runtime.
     replace_host.SetPortStr("");
 
@@ -115,11 +136,52 @@ struct ExpectedReportWaiter {
   }
 };
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+class ConnectionWaiter
+    : public network::NetworkConnectionTracker::NetworkConnectionObserver {
+ public:
+  static void WaitUntilOnline() {
+    ConnectionWaiter waiter;
+    waiter.run_loop_.Run();
+  }
+
+  ~ConnectionWaiter() override {
+    content::GetNetworkConnectionTracker()->RemoveNetworkConnectionObserver(
+        this);
+  }
+
+ private:
+  ConnectionWaiter() {
+    content::GetNetworkConnectionTracker()->AddNetworkConnectionObserver(this);
+  }
+
+  // network::NetworkConnectionTracker::NetworkConnectionObserver:
+  void OnConnectionChanged(network::mojom::ConnectionType type) override {
+    if (!content::GetNetworkConnectionTracker()->IsOffline())
+      run_loop_.Quit();
+  }
+
+  base::RunLoop run_loop_;
+};
+#endif
+
 }  // namespace
 
 class AttributionsBrowserTest : public ContentBrowserTest {
  public:
-  AttributionsBrowserTest() { AttributionManagerImpl::RunInMemoryForTesting(); }
+  AttributionsBrowserTest() {
+    AttributionManagerImpl::RunInMemoryForTesting();
+
+#if BUILDFLAG(IS_FUCHSIA)
+    // Fuchsia's network connection tracker always seems to indicate offline in
+    // these tests, so override the tracker with a test one, which defaults to
+    // online. See crbug.com/1285057 for details.
+    network_connection_tracker_ =
+        network::TestNetworkConnectionTracker::CreateInstance();
+    content::SetNetworkConnectionTrackerForTesting(
+        network::TestNetworkConnectionTracker::GetInstance());
+#endif
+  }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     command_line->AppendSwitch(switches::kConversionsDebugMode);
@@ -141,6 +203,14 @@ class AttributionsBrowserTest : public ContentBrowserTest {
     net::test_server::RegisterDefaultHandlers(https_server_.get());
     https_server_->ServeFilesFromSourceDirectory("content/test/data");
     SetupCrossSiteRedirector(https_server_.get());
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+    // On ChromeOS the connection type comes from a fake Shill service, which
+    // is configured with a fake ethernet connection asynchronously. Wait for
+    // the connection type to be available to avoid getting notified of the
+    // connection change halfway through the test. See crrev.com/c/1684295.
+    ConnectionWaiter::WaitUntilOnline();
+#endif
   }
 
   WebContents* web_contents() { return shell()->web_contents(); }
@@ -149,6 +219,11 @@ class AttributionsBrowserTest : public ContentBrowserTest {
 
  private:
   std::unique_ptr<net::EmbeddedTestServer> https_server_;
+
+#if BUILDFLAG(IS_FUCHSIA)
+  std::unique_ptr<network::TestNetworkConnectionTracker>
+      network_connection_tracker_;
+#endif
 };
 
 // Verifies that storage initialization does not hang when initialized in a
@@ -226,9 +301,6 @@ IN_PROC_BROWSER_TEST_F(AttributionsBrowserTest,
                      JsReplace("registerConversion({data: 7, origin: $1})",
                                url::Origin::Create(impression_url))));
 
-  // TODO(johnidel): This API surface was removed due to
-  // https://crbug.com/1187881. This test should be updated to verify the
-  // behavior with the new surface.
   base::RunLoop run_loop;
   base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, run_loop.QuitClosure(), base::Milliseconds(100));
@@ -666,6 +738,48 @@ IN_PROC_BROWSER_TEST_F(AttributionsBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(AttributionsBrowserTest,
+                       EventSourceImpressionWithDebugKeyConversion_ReportSent) {
+  // Expected reports must be registered before the server starts.
+  ExpectedReportWaiter expected_report(
+      GURL("https://a.test/.well-known/attribution-reporting/"
+           "report-attribution"),
+      /*attribution_destination=*/"https://b.test",
+      /*source_event_id=*/"5", /*source_type=*/"event", /*trigger_data=*/"1",
+      https_server());
+  expected_report.source_debug_key = "789";
+  ASSERT_TRUE(https_server()->Start());
+
+  EXPECT_TRUE(NavigateToURL(
+      web_contents(),
+      https_server()->GetURL(
+          "a.test", "/set-cookie?ar_debug=1;HttpOnly;Secure;SameSite=None")));
+
+  GURL impression_url = https_server()->GetURL(
+      "a.test", "/attribution_reporting/page_with_impression_creator.html");
+  EXPECT_TRUE(NavigateToURL(web_contents(), impression_url));
+
+  GURL register_url = https_server()->GetURL(
+      "a.test",
+      "/attribution_reporting/register_source_headers_debug_key.html");
+
+  EXPECT_TRUE(
+      ExecJs(web_contents(),
+             JsReplace("createAttributionSourceImg($1);", register_url)));
+
+  GURL conversion_url = https_server()->GetURL(
+      "b.test", "/attribution_reporting/page_with_conversion_redirect.html");
+  EXPECT_TRUE(NavigateToURL(web_contents(), conversion_url));
+
+  EXPECT_TRUE(
+      ExecJs(web_contents(), JsReplace(R"(registerConversion({data: 0,
+                                       origin: $1,
+                                       eventSourceTriggerData: 1});)",
+                                       url::Origin::Create(impression_url))));
+
+  expected_report.WaitForReport();
+}
+
+IN_PROC_BROWSER_TEST_F(AttributionsBrowserTest,
                        EventSourceImpressionTwoConversions_OneReportSent) {
   // Expected reports must be registered before the server starts.
   // 123 in the `registerConversion` call below is sanitized to 1 in
@@ -771,7 +885,7 @@ IN_PROC_BROWSER_TEST_F(AttributionsBrowserTest,
       /*attribution_destination=*/"https://b.test",
       /*source_event_id=*/"1", /*source_type=*/"navigation",
       /*trigger_data=*/"7", https_server());
-  // 12 below is sanitized to 4 here by the `AttributionPolicy`.
+  // 12 below is sanitized to 4 here by `SanitizeTriggerData()`.
   ExpectedReportWaiter expected_report2(
       GURL("https://a.test/.well-known/attribution-reporting/"
            "report-attribution"),

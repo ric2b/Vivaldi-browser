@@ -121,8 +121,14 @@ while [[ "${1:0:1}" = "-" ]]; do
       WINW=$2; WINH=$3
       shift; shift; shift;;
     --icon)
-      POSITION_CLAUSE="${POSITION_CLAUSE}set position of item \"$2\" to {$3, $4}
-"
+      POSITION_CLAUSE="${POSITION_CLAUSE}
+      if exists file \"$2\" then
+        log \"$2 exists, setting position.\"
+        set position of item \"$2\" to {$3, $4}
+      else
+        log \"$2 does not exist.\"
+      end if
+      "
       if ! test -z "$APPNAME"; then
         APPNAME=$2
       fi

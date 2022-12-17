@@ -7,7 +7,7 @@ import {fakeRsuChallengeQrCode} from 'chrome://shimless-rma/fake_data.js';
 import {FakeShimlessRmaService} from 'chrome://shimless-rma/fake_shimless_rma_service.js';
 import {setShimlessRmaServiceForTesting} from 'chrome://shimless-rma/mojo_interface_provider.js';
 import {OnboardingEnterRsuWpDisableCodePage} from 'chrome://shimless-rma/onboarding_enter_rsu_wp_disable_code_page.js';
-import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from '../../chai_assert.js';
+import {assertDeepEquals, assertEquals, assertFalse, assertNotReached, assertTrue} from '../../chai_assert.js';
 import {flushTasks} from '../../test_util.js';
 
 
@@ -116,5 +116,52 @@ export function onboardingEnterRsuWpDisableCodePageTest() {
 
     component.shadowRoot.querySelector('#rsuCodeDialogLink').click();
     assertTrue(component.shadowRoot.querySelector('#rsuChallengeDialog').open);
+  });
+
+  test('EnterRsuWpDisableCodePageDisableInput', async () => {
+    await initializeEnterRsuWpDisableCodePage('', '');
+
+    const rsuCodeInput = component.shadowRoot.querySelector('#rsuCode');
+    assertFalse(rsuCodeInput.disabled);
+    component.allButtonsDisabled = true;
+    assertTrue(rsuCodeInput.disabled);
+  });
+
+  test('EnterRsuWpDisableCodePageStopChallengeDialogOpening', async () => {
+    await initializeEnterRsuWpDisableCodePage('', '');
+
+    component.allButtonsDisabled = true;
+    component.shadowRoot.querySelector('#rsuCodeDialogLink').click();
+    assertFalse(component.shadowRoot.querySelector('#rsuChallengeDialog').open);
+  });
+
+  test('EnterRsuWpDisableCodeRejectWrongCodeLength', async () => {
+    await initializeEnterRsuWpDisableCodePage('', '');
+
+    const rsuCodeInput = component.shadowRoot.querySelector('#rsuCode');
+
+    // The code is shorter than the expected 8 characters.
+    rsuCodeInput.value = '12345';
+    assertFalse(rsuCodeInput.invalid);
+
+    let wasPromiseRejected = false;
+    component.onNextButtonClick()
+        .then(
+            () => assertNotReached(
+                'RSU code should not be set with invalid code'))
+        .catch(() => {
+          wasPromiseRejected = true;
+        });
+
+
+    await flushTasks();
+    assertTrue(wasPromiseRejected);
+    assertTrue(rsuCodeInput.invalid);
+
+    // Change the code so the invalid goes away.
+    rsuCodeInput.value = '123';
+
+    await flushTasks();
+    assertFalse(rsuCodeInput.invalid);
   });
 }

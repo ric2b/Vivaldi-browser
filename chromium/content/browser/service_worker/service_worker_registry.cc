@@ -195,11 +195,7 @@ void ServiceWorkerRegistry::CreateNewRegistrationWithBucketInfo(
     const blink::StorageKey& key,
     NewRegistrationCallback callback,
     storage::QuotaErrorOr<storage::BucketInfo> result) {
-  // Return nullptr if GetOrCreateBucket fails.
-  if (!result.ok()) {
-    std::move(callback).Run(nullptr);
-    return;
-  }
+  DCHECK(result.ok());
   CreateInvokerAndStartRemoteCall(
       &storage::mojom::ServiceWorkerStorageControl::GetNewRegistrationId,
       base::BindOnce(&ServiceWorkerRegistry::DidGetNewRegistrationId,
@@ -1247,7 +1243,8 @@ void ServiceWorkerRegistry::DidStoreRegistration(
         storage::QuotaClientType::kServiceWorker, key,
         blink::mojom::StorageType::kTemporary,
         stored_resources_total_size_bytes - deleted_resources_size,
-        base::Time::Now());
+        base::Time::Now(), base::SequencedTaskRunnerHandle::Get(),
+        base::DoNothing());
   }
 
   scoped_refptr<ServiceWorkerRegistration> registration =
@@ -1287,7 +1284,8 @@ void ServiceWorkerRegistry::DidDeleteRegistration(
     quota_manager_proxy_->NotifyStorageModified(
         storage::QuotaClientType::kServiceWorker, key,
         blink::mojom::StorageType::kTemporary, -deleted_resources_size,
-        base::Time::Now());
+        base::Time::Now(), base::SequencedTaskRunnerHandle::Get(),
+        base::DoNothing());
   }
 
   scoped_refptr<ServiceWorkerRegistration> registration =
@@ -1523,6 +1521,10 @@ bool ServiceWorkerRegistry::ShouldPurgeOnShutdownForTesting(
 
 mojo::Remote<storage::mojom::ServiceWorkerStorageControl>&
 ServiceWorkerRegistry::GetRemoteStorageControl() {
+  // TODO(https://crbug.com/1282869): Replace CHECK with DCHECK_CURRENTLY_ON
+  // once the cause is identified.
+  CHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
+
   DCHECK(!(remote_storage_control_.is_bound() &&
            !remote_storage_control_.is_connected()))
       << "Rebinding is not supported yet.";
@@ -1542,12 +1544,23 @@ ServiceWorkerRegistry::GetRemoteStorageControl() {
 void ServiceWorkerRegistry::OnRemoteStorageDisconnected() {
   const size_t kMaxRetryCounts = 100;
 
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  // TODO(https://crbug.com/1282869): Replace CHECK with DCHECK_CURRENTLY_ON
+  // once the cause is identified.
+  CHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
 
   remote_storage_control_.reset();
 
   if (!context_)
     return;
+
+  if (is_storage_disabled_) {
+    // When the storage is disabled a storage error recovery process is ongoing
+    // and the storage control will be destroyed soon. Don't try to reconnect
+    // storage control remote but flush inflight calls. These calls will check
+    // `is_storage_disabled_` and return errors.
+    DidRecover();
+    return;
+  }
 
   if (connection_state_ == ConnectionState::kRecovering) {
     ++recovery_retry_counts_;

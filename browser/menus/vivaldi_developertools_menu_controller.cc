@@ -3,6 +3,7 @@
 //
 #include "browser/menus/vivaldi_developertools_menu_controller.h"
 
+#include "apps/switches.h"
 #include "base/command_line.h"
 #include "browser/vivaldi_browser_finder.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -36,10 +37,11 @@ const extensions::Extension* DeveloperToolsMenuController::GetExtension()
 }
 
 bool DeveloperToolsMenuController::HasFeature() {
-  const extensions::Extension* platform_app = GetExtension();
-  return extensions::Manifest::IsUnpackedLocation(platform_app->location()) ||
-         base::CommandLine::ForCurrentProcess()->HasSwitch(
-             switches::kDebugPackedApps);
+  return
+    base::CommandLine::ForCurrentProcess()->HasSwitch(
+        apps::kLoadAndLaunchApp) ||
+    base::CommandLine::ForCurrentProcess()->HasSwitch(
+        switches::kDebugPackedApps);
 }
 
 void DeveloperToolsMenuController::PopulateModel(

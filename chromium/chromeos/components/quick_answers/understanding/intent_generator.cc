@@ -6,6 +6,7 @@
 
 #include <map>
 
+#include "base/i18n/break_iterator.h"
 #include "base/i18n/case_conversion.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_split.h"
@@ -18,7 +19,6 @@
 #include "chromeos/services/machine_learning/public/mojom/machine_learning_service.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 
-namespace ash {
 namespace quick_answers {
 namespace {
 
@@ -137,7 +137,28 @@ IntentGenerator::~IntentGenerator() {
 }
 
 void IntentGenerator::GenerateIntent(const QuickAnswersRequest& request) {
-  if (ash::QuickAnswersState::Get()->ShouldUseQuickAnswersTextAnnotator()) {
+  if (chromeos::features::IsQuickAnswersAlwaysTriggerForSingleWord()) {
+    const std::u16string& u16_text = base::UTF8ToUTF16(request.selected_text);
+    base::i18n::BreakIterator iter(u16_text,
+                                   base::i18n::BreakIterator::BREAK_WORD);
+    if (!iter.Init() || !iter.Advance()) {
+      NOTREACHED() << "Failed to load BreakIterator.";
+
+      std::move(complete_callback_)
+          .Run(IntentInfo(request.selected_text, IntentType::kUnknown));
+      return;
+    }
+
+    // Generate dictionary intent if the selected text is a single word.
+    if (iter.IsWord() && iter.prev() == 0 && iter.pos() == u16_text.length()) {
+      std::move(complete_callback_)
+          .Run(IntentInfo(request.selected_text, IntentType::kDictionary,
+                          request.context.device_properties.language));
+      return;
+    }
+  }
+
+  if (QuickAnswersState::Get()->ShouldUseQuickAnswersTextAnnotator()) {
     // Load text classifier.
     chromeos::machine_learning::ServiceConnection::GetInstance()
         ->GetMachineLearningService()
@@ -150,6 +171,10 @@ void IntentGenerator::GenerateIntent(const QuickAnswersRequest& request) {
 
   std::move(complete_callback_)
       .Run(IntentInfo(request.selected_text, IntentType::kUnknown));
+}
+
+void IntentGenerator::FlushForTesting() {
+  text_classifier_.FlushForTesting();
 }
 
 void IntentGenerator::LoadModelCallback(const QuickAnswersRequest& request,
@@ -192,9 +217,9 @@ void IntentGenerator::AnnotationCallback(
     if (it != intent_type_map.end()) {
       // Skip the entity if the corresponding intent type is disabled.
       bool definition_disabled =
-          !ash::QuickAnswersState::Get()->definition_enabled();
+          !QuickAnswersState::Get()->definition_enabled();
       bool unit_conversion_disabled =
-          !ash::QuickAnswersState::Get()->unit_conversion_enabled();
+          !QuickAnswersState::Get()->unit_conversion_enabled();
       if ((it->second == IntentType::kDictionary && definition_disabled) ||
           (it->second == IntentType::kUnit && unit_conversion_disabled)) {
         // Fallback to language detection for generating translation intent.
@@ -209,8 +234,10 @@ void IntentGenerator::AnnotationCallback(
         return;
       }
       std::move(complete_callback_)
-          .Run(IntentInfo(entity_str, RewriteIntent(request.selected_text,
-                                                    entity_str, it->second)));
+          .Run(IntentInfo(
+              entity_str,
+              RewriteIntent(request.selected_text, entity_str, it->second),
+              request.context.device_properties.language));
       return;
     }
   }
@@ -222,7 +249,7 @@ void IntentGenerator::MaybeGenerateTranslationIntent(
     const QuickAnswersRequest& request) {
   DCHECK(complete_callback_);
 
-  if (!ash::QuickAnswersState::Get()->translation_enabled() ||
+  if (!QuickAnswersState::Get()->translation_enabled() ||
       chromeos::features::IsQuickAnswersV2TranslationDisabled()) {
     std::move(complete_callback_)
         .Run(IntentInfo(request.selected_text, IntentType::kUnknown));
@@ -261,8 +288,8 @@ void IntentGenerator::LanguageDetectorCallback(
           request.context.device_properties.preferred_languages)) {
     std::move(complete_callback_)
         .Run(IntentInfo(request.selected_text, IntentType::kTranslation,
-                        detected_language.value(),
-                        request.context.device_properties.language));
+                        request.context.device_properties.language,
+                        detected_language.value()));
     return;
   }
 
@@ -271,4 +298,3 @@ void IntentGenerator::LanguageDetectorCallback(
 }
 
 }  // namespace quick_answers
-}  // namespace ash

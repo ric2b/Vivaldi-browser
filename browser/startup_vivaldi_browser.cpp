@@ -63,23 +63,20 @@ GURL GetVivaldiNewTabURL() {
 
 bool LaunchVivaldi(const base::CommandLine& command_line,
                    const base::FilePath& cur_dir,
-                   Profile* profile) {
+                   StartupProfileInfo profile_info) {
   if (!(IsVivaldiRunning(command_line) && !IsDebuggingVivaldi(command_line)))
     return false;
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   // Default is now launching the Vivaldi App.
   // TODO(sverrir@vivaldi.com): Remove
-  const Extension* extension = GetPlatformApp(profile, vivaldi::kVivaldiAppId);
+  const Extension* extension = GetPlatformApp(profile_info.profile, vivaldi::kVivaldiAppId);
   // If |vivaldi::kVivaldiAppId| is a disabled platform app we handle it
   // specially here, otherwise it will be handled below.
   if (extension) {
     RecordCmdLineAppHistogram(extensions::Manifest::TYPE_PLATFORM_APP);
-#if defined(OS_MAC)
-    init_sparkle::Initialize();
-#endif
   }
 #endif
-  LaunchUpdateNotifier(profile);
+  LaunchUpdateNotifier(profile_info.profile);
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   apps::AppLaunchParams params(
@@ -89,7 +86,7 @@ bool LaunchVivaldi(const base::CommandLine& command_line,
   params.command_line = command_line;
   params.current_directory = cur_dir;
 
-  ::OpenApplicationWithReenablePrompt(profile, std::move(params));
+  ::OpenApplicationWithReenablePrompt(profile_info.profile, std::move(params));
 
   return true;
 #else

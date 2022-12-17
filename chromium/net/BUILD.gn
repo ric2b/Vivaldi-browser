@@ -6,8 +6,9 @@ import("//build/buildflag_header.gni")
 import("//build/config/chromecast_build.gni")
 import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/compiler/compiler.gni")
-import("//build/config/crypto.gni")
 import("//build/config/features.gni")
+import("//build/config/ios/config.gni")
+import("//crypto/features.gni")
 import("//net/features.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 import("//testing/test.gni")
@@ -107,6 +108,12 @@ if (is_linux || is_chromeos) {
 source_set("constants") {
   sources = [ "base/trace_constants.h" ]
   deps = [ "//base" ]
+}
+
+buildflag_header("ios_cronet_buildflags") {
+  header = "ios_cronet_buildflags.h"
+  header_dir = "net/socket"
+  flags = [ "CRONET_BUILD=$is_cronet_build" ]
 }
 
 component("net") {
@@ -423,6 +430,8 @@ component("net") {
     "cookies/cookie_store.h",
     "cookies/cookie_util.cc",
     "cookies/cookie_util.h",
+    "cookies/first_party_set_metadata.cc",
+    "cookies/first_party_set_metadata.h",
     "cookies/parsed_cookie.cc",
     "cookies/parsed_cookie.h",
     "cookies/same_party_context.cc",
@@ -537,7 +546,6 @@ component("net") {
     "http/bidirectional_stream_request_info.h",
     "http/broken_alternative_services.cc",
     "http/broken_alternative_services.h",
-    "http/hsts_info.h",
     "http/http_auth.cc",
     "http/http_auth.h",
     "http/http_auth_cache.cc",
@@ -653,7 +661,6 @@ component("net") {
     "http/url_security_manager.h",
     "http/webfonts_histogram.cc",
     "http/webfonts_histogram.h",
-    "http2/platform/impl/http2_macros_impl.h",
     "log/file_net_log_observer.cc",
     "log/file_net_log_observer.h",
     "log/net_log.cc",
@@ -771,8 +778,6 @@ component("net") {
     "quic/platform/impl/quic_containers_impl.h",
     "quic/platform/impl/quic_error_code_wrappers_impl.h",
     "quic/platform/impl/quic_file_utils_impl.h",
-    "quic/platform/impl/quic_flags_impl.cc",
-    "quic/platform/impl/quic_flags_impl.h",
     "quic/platform/impl/quic_hostname_utils_impl.cc",
     "quic/platform/impl/quic_hostname_utils_impl.h",
     "quic/platform/impl/quic_iovec_impl.h",
@@ -833,6 +838,8 @@ component("net") {
     "quic/web_transport_client.h",
     "quic/web_transport_error.cc",
     "quic/web_transport_error.h",
+    "quiche/common/platform/impl/quiche_command_line_flags_impl.cc",
+    "quiche/common/platform/impl/quiche_command_line_flags_impl.h",
     "quiche/common/platform/impl/quiche_flag_utils_impl.h",
     "quiche/common/platform/impl/quiche_flags_impl.cc",
     "quiche/common/platform/impl/quiche_flags_impl.h",
@@ -855,6 +862,8 @@ component("net") {
     "socket/datagram_server_socket.h",
     "socket/datagram_socket.h",
     "socket/diff_serv_code_point.h",
+    "socket/network_binding_client_socket_factory.cc",
+    "socket/network_binding_client_socket_factory.h",
     "socket/next_proto.cc",
     "socket/next_proto.h",
     "socket/server_socket.cc",
@@ -1069,8 +1078,10 @@ component("net") {
   }
 
   deps = [
+    ":ios_cronet_buildflags",
     ":net_deps",
     "//build:chromeos_buildflags",
+    "//net/data/ssl/ev_roots:gen_ev_root_store_inc",
     "//net/http:transport_security_state_generated_files",
   ]
 
@@ -1383,6 +1394,12 @@ component("net") {
       "base/network_interfaces_getifaddrs.cc",
       "base/network_interfaces_getifaddrs.h",
     ]
+    if (is_android) {
+      sources += [
+        "base/network_interfaces_getifaddrs_android.cc",
+        "base/network_interfaces_getifaddrs_android.h",
+      ]
+    }
   }
 
   if (chrome_root_store_supported) {
@@ -1918,6 +1935,8 @@ bundle_data("test_support_bundle_data") {
     "data/ssl/certificates/key_usage_rsa_keyencipherment.pem",
     "data/ssl/certificates/key_usage_rsa_no_extension.pem",
     "data/ssl/certificates/large_key.pem",
+    "data/ssl/certificates/lets-encrypt-dst-x3-root.pem",
+    "data/ssl/certificates/lets-encrypt-isrg-x1-root.pem",
     "data/ssl/certificates/localhost_cert.pem",
     "data/ssl/certificates/may_2018.pem",
     "data/ssl/certificates/mit.davidben.der",
@@ -1963,6 +1982,7 @@ bundle_data("test_support_bundle_data") {
     "data/ssl/certificates/prime256v1-ecdsa-intermediate.pem",
     "data/ssl/certificates/punycodetest.pem",
     "data/ssl/certificates/quic-chain.pem",
+    "data/ssl/certificates/quic-ecdsa-leaf.key",
     "data/ssl/certificates/quic-leaf-cert.key",
     "data/ssl/certificates/quic-leaf-cert.key.pkcs8.pem",
     "data/ssl/certificates/quic-leaf-cert.key.sct",
@@ -1992,6 +2012,7 @@ bundle_data("test_support_bundle_data") {
     "data/ssl/certificates/verisign_class3_g5_crosssigned.pem",
     "data/ssl/certificates/verisign_intermediate_ca_2011.pem",
     "data/ssl/certificates/verisign_intermediate_ca_2016.pem",
+    "data/ssl/certificates/vrk_gov_root.pem",
     "data/ssl/certificates/weak_digest_md2_ee.pem",
     "data/ssl/certificates/weak_digest_md2_intermediate.pem",
     "data/ssl/certificates/weak_digest_md2_root.pem",
@@ -2028,6 +2049,8 @@ static_library("test_support") {
     "base/test_completion_callback.h",
     "base/test_data_stream.cc",
     "base/test_data_stream.h",
+    "cert/mock_cert_net_fetcher.cc",
+    "cert/mock_cert_net_fetcher.h",
     "cert/mock_cert_verifier.cc",
     "cert/mock_cert_verifier.h",
     "cert/mock_client_cert_verifier.cc",
@@ -2131,6 +2154,8 @@ static_library("test_support") {
     "test/revocation_builder.h",
     "test/scoped_disable_exit_on_dfatal.cc",
     "test/scoped_disable_exit_on_dfatal.h",
+    "test/ssl_test_util.cc",
+    "test/ssl_test_util.h",
     "test/test_certificate_data.h",
     "test/test_data_directory.cc",
     "test/test_data_directory.h",
@@ -2496,6 +2521,7 @@ if (is_android) {
       "android/java/src/org/chromium/net/HttpUtil.java",
       "android/java/src/org/chromium/net/NetStringUtil.java",
       "android/java/src/org/chromium/net/NetworkActivationRequest.java",
+      "android/java/src/org/chromium/net/NetworkActiveNotifier.java",
       "android/java/src/org/chromium/net/NetworkChangeNotifier.java",
       "android/java/src/org/chromium/net/ProxyChangeListener.java",
       "android/java/src/org/chromium/net/X509Util.java",
@@ -2653,8 +2679,6 @@ source_set("simple_quic_tools") {
     "tools/quic/quic_simple_server_session_helper.h",
     "tools/quic/quic_simple_server_socket.cc",
     "tools/quic/quic_simple_server_socket.h",
-    "tools/quic/quic_transport_simple_server.cc",
-    "tools/quic/quic_transport_simple_server.h",
     "tools/quic/synchronous_host_resolver.cc",
     "tools/quic/synchronous_host_resolver.h",
   ]
@@ -2703,17 +2727,6 @@ if (!is_ios) {
     public_deps = [ "//net/third_party/quiche:quic_server_core" ]
     allow_circular_includes_from =
         [ "//net/third_party/quiche:quic_server_core" ]
-  }
-  executable("quic_transport_simple_server") {
-    sources = [ "tools/quic/quic_transport_simple_server_bin.cc" ]
-    deps = [
-      ":net",
-      ":simple_quic_tools",
-      "//base",
-      "//build/win:default_exe_manifest",
-      "//third_party/boringssl",
-      "//third_party/protobuf:protobuf_lite",
-    ]
   }
   executable("crypto_message_printer") {
     sources = [ "tools/quic/crypto_message_printer_bin.cc" ]
@@ -4571,6 +4584,7 @@ test("net_unittests") {
     sources += [
       "quic/platform/impl/quic_epoll_clock_test.cc",
       "quic/platform/impl/quic_flags_test.cc",
+      "quiche/common/platform/impl/quiche_command_line_flags_test.cc",
       "tools/quic/quic_http_proxy_backend_stream_test.cc",
       "tools/quic/quic_http_proxy_backend_test.cc",
       "tools/quic/quic_simple_server_test.cc",
@@ -4607,6 +4621,7 @@ test("net_unittests") {
       "//third_party/fuchsia-sdk/sdk/pkg/fidl_cpp",
     ]
     sources += [ "base/network_change_notifier_fuchsia_unittest.cc" ]
+    use_cfv2 = false
     additional_manifest_fragments =
         [ "//build/config/fuchsia/test/network_capabilities.test-cmx" ]
   }
@@ -4712,8 +4727,8 @@ test("net_unittests") {
     ]
   }
 
-  # Use getifaddrs() on POSIX platforms, except Linux and Android.
-  if (is_posix && !is_linux && !is_chromeos && !is_android) {
+  # Use getifaddrs() on POSIX platforms, except Linux.
+  if (is_posix && !is_linux && !is_chromeos) {
     sources += [ "base/network_interfaces_getifaddrs_unittest.cc" ]
   }
 
@@ -4835,6 +4850,7 @@ if (!is_ios) {
     data_deps = [
       # Needed for isolate script to execute.
       "//testing:run_perf_test",
+      "//testing/buildbot/filters:net_perftests_filters",
     ]
     if (enable_websockets) {
       sources += [ "websockets/websocket_frame_perftest.cc" ]

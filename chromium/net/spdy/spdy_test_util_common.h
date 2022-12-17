@@ -125,7 +125,9 @@ base::WeakPtr<SpdyStream> CreateStreamSynchronously(
     const base::WeakPtr<SpdySession>& session,
     const GURL& url,
     RequestPriority priority,
-    const NetLogWithSource& net_log);
+    const NetLogWithSource& net_log,
+    bool detect_broken_connection = false,
+    base::TimeDelta heartbeat_interval = base::Seconds(0));
 
 // Helper class used by some tests to release a stream as soon as it's
 // created.
@@ -152,7 +154,11 @@ struct SpdySessionDependencies {
   explicit SpdySessionDependencies(
       std::unique_ptr<ProxyResolutionService> proxy_resolution_service);
 
+  SpdySessionDependencies(SpdySessionDependencies&&);
+
   ~SpdySessionDependencies();
+
+  SpdySessionDependencies& operator=(SpdySessionDependencies&&);
 
   HostResolver* GetHostResolver() {
     return alternate_host_resolver ? alternate_host_resolver.get()
@@ -210,6 +216,7 @@ struct SpdySessionDependencies {
   bool key_auth_cache_server_entries_by_network_isolation_key;
   bool enable_priority_update;
   bool go_away_on_ip_change;
+  bool ignore_ip_address_changes;
 };
 
 class SpdyURLRequestContext : public URLRequestContext {

@@ -163,11 +163,6 @@ void VivaldiUtilitiesAPI::PostProfileSetup() {
 VivaldiUtilitiesAPI::~VivaldiUtilitiesAPI() {}
 
 void VivaldiUtilitiesAPI::Shutdown() {
-  for (auto it : key_to_values_map_) {
-    // Get rid of the allocated items
-    delete it.second;
-  }
-
   base::PowerMonitor::RemovePowerStateObserver(this);
   base::PowerMonitor::RemovePowerSuspendObserver(this);
 
@@ -212,16 +207,8 @@ void VivaldiUtilitiesAPI::OnListenerAdded(const EventListenerInfo& details) {
 // Returns true if the key didn't not exist previously, false if it updated
 // an existing value
 bool VivaldiUtilitiesAPI::SetSharedData(const std::string& key,
-                                        base::Value* value) {
-  bool retval = true;
-  auto it = key_to_values_map_.find(key);
-  if (it != key_to_values_map_.end()) {
-    delete it->second;
-    key_to_values_map_.erase(it);
-    retval = false;
-  }
-  key_to_values_map_.insert(std::make_pair(key, value->DeepCopy()));
-  return retval;
+                                        base::Value value) {
+  return key_to_values_map_.insert_or_assign(key, std::move(value)).second;
 }
 
 // Looks up an existing key/value pair, returns nullptr if the key does not
@@ -229,7 +216,7 @@ bool VivaldiUtilitiesAPI::SetSharedData(const std::string& key,
 const base::Value* VivaldiUtilitiesAPI::GetSharedData(const std::string& key) {
   auto it = key_to_values_map_.find(key);
   if (it != key_to_values_map_.end()) {
-    return it->second;
+    return &it->second;
   }
   return nullptr;
 }
@@ -883,15 +870,18 @@ ExtensionFunction::ResponseAction UtilitiesSetSharedDataFunction::Run() {
   VivaldiUtilitiesAPI* api =
       VivaldiUtilitiesAPI::GetFactoryInstance()->Get(browser_context());
 
-  bool found = api->SetSharedData(params->key_value_pair.key,
-                                  params->key_value_pair.value.get());
+  bool added = api->SetSharedData(params->key_value_pair.key,
+                                  std::move(*params->key_value_pair.value));
   // Respond before sending an event
-  Respond(ArgumentList(Results::Create(found)));
+  Respond(ArgumentList(Results::Create(added)));
 
+  // Fetch value back from api and use in reply
+  const base::Value* value = api->GetSharedData(params->key_value_pair.key);
   ::vivaldi::BroadcastEvent(
       vivaldi::utilities::OnSharedDataUpdated::kEventName,
       vivaldi::utilities::OnSharedDataUpdated::Create(
-          params->key_value_pair.key, *params->key_value_pair.value),
+          params->key_value_pair.key,
+          value ? *value : *params->key_value_pair.value),
       browser_context());
   return AlreadyResponded();
 }
@@ -908,7 +898,7 @@ ExtensionFunction::ResponseAction UtilitiesGetSharedDataFunction::Run() {
 
   const base::Value* value = api->GetSharedData(params->key_value_pair.key);
   return RespondNow(ArgumentList(
-      Results::Create(value ? *value : *params->key_value_pair.value.get())));
+      Results::Create(value ? *value : *params->key_value_pair.value)));
 }
 
 ExtensionFunction::ResponseAction UtilitiesTakeMutexFunction::Run() {
@@ -1992,8 +1982,8 @@ ExtensionFunction::ResponseAction UtilitiesTranslateTextFunction::Run() {
 }
 
 namespace {
-vivaldi::utilities::TranslateError
-ConvertTranslateErrorCodeToAPIErrorCode(::vivaldi::TranslateError error) {
+vivaldi::utilities::TranslateError ConvertTranslateErrorCodeToAPIErrorCode(
+    ::vivaldi::TranslateError error) {
   switch (error) {
     case ::vivaldi::TranslateError::kNoError:
       return vivaldi::utilities::TRANSLATE_ERROR_NO_ERROR;
@@ -2009,7 +1999,7 @@ ConvertTranslateErrorCodeToAPIErrorCode(::vivaldi::TranslateError error) {
       return vivaldi::utilities::TRANSLATE_ERROR_TIMEOUT;
   }
 }
-}
+}  // namespace
 
 void UtilitiesTranslateTextFunction::OnTranslateFinished(
     ::vivaldi::TranslateError error,

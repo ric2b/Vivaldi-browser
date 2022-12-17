@@ -17,10 +17,10 @@
 #include "ash/screen_util.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
+#include "ash/utility/haptics_util.h"
 #include "ash/wm/default_window_resizer.h"
 #include "ash/wm/desks/desks_util.h"
 #include "ash/wm/drag_window_resizer.h"
-#include "ash/wm/haptics_util.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/pip/pip_window_resizer.h"
 #include "ash/wm/tablet_mode/tablet_mode_browser_window_drag_delegate.h"
@@ -708,14 +708,31 @@ void WorkspaceWindowResizer::Drag(const gfx::PointF& location_in_parent,
     if (!did_move_or_resize_) {
       if (!details().restore_bounds_in_parent.IsEmpty()) {
         window_state()->ClearRestoreBounds();
-        if (window_state()->IsMaximized() &&
-            details().window_component == HTCAPTION) {
-          // Update the maximized window so that it looks like it has been
-          // restored (i.e. update the caption buttons and height of the browser
-          // frame).
-          window_state()->window()->SetProperty(kFrameRestoreLookKey, true);
-          CrossFadeAnimation(window_state()->window(), bounds,
-                             /*maximize=*/false);
+        if (details().window_component == HTCAPTION) {
+          if (window_state()->IsMaximized()) {
+            // Update the maximized window so that it looks like it has been
+            // restored (i.e. update the caption buttons and height of the
+            // browser frame).
+
+            // TODO(http://crbug.com/1200599): Speculative, remove if not fixed.
+            // Change window property kFrameRestoreLookKey or window bounds may
+            // cause the window being destroyed during the drag and return early
+            // if that's the case.
+            base::WeakPtr<WorkspaceWindowResizer> resizer(
+                weak_ptr_factory_.GetWeakPtr());
+            window_state()->window()->SetProperty(kFrameRestoreLookKey, true);
+            if (!resizer)
+              return;
+            CrossFadeAnimation(window_state()->window(), bounds,
+                               /*maximize=*/false);
+            if (!resizer)
+              return;
+
+            base::RecordAction(
+                base::UserMetricsAction("WindowDrag_Unmaximize"));
+          } else if (window_state()->IsSnapped()) {
+            base::RecordAction(base::UserMetricsAction("WindowDrag_Unsnap"));
+          }
         }
       }
       RestackWindows();
@@ -1319,6 +1336,9 @@ bool WorkspaceWindowResizer::UpdateMagnetismWindow(
       continue;
 
     WindowState* other_state = WindowState::Get(*i);
+    if (!other_state)
+      continue;
+
     if (other_state->window() == GetTarget() ||
         !other_state->window()->IsVisible() ||
         !other_state->IsNormalOrSnapped() || !other_state->CanResize()) {
@@ -1592,7 +1612,7 @@ WorkspaceWindowResizer::SnapType WorkspaceWindowResizer::GetSnapType(
   switch (snap_type) {
     case SnapType::kPrimary:
     case SnapType::kSecondary:
-      if (!window_state()->CanSnap())
+      if (!window_state()->CanSnapOnDisplay(display))
         snap_type = SnapType::kNone;
       break;
     case SnapType::kMaximize:

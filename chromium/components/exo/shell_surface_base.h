@@ -309,8 +309,11 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   // Returns the "visible bounds" for the surface from the user's perspective.
   gfx::Rect GetVisibleBounds() const;
 
-  // Returns the bounds of the client area.nnn
+  // Returns the bounds of the client area.
   gfx::Rect GetClientViewBounds() const;
+
+  // Computes the widget bounds using visible bounds.
+  gfx::Rect GetWidgetBoundsFromVisibleBounds() const;
 
   // In the local coordinate system of the window.
   virtual gfx::Rect GetShadowBounds() const;
@@ -337,6 +340,10 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   // without actually updating it.
   bool CalculateCanResize() const;
 
+  // Returns true if this surface will exit fullscreen from a restore or
+  // maximize request. Currently only true for Lacros.
+  bool ShouldExitFullscreenFromRestoreOrMaximized();
+
   views::Widget* widget_ = nullptr;
   bool movement_disabled_ = false;
   gfx::Point origin_;
@@ -354,6 +361,7 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   bool is_popup_ = false;
   bool has_grab_ = false;
   bool server_side_resize_ = false;
+  bool needs_layout_on_show_ = false;
 
   // The orientation to be applied when widget is being created. Only set when
   // widget is not created yet orientation lock is being set. This is currently

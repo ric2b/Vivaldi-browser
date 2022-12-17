@@ -23,7 +23,6 @@
 #include "base/json/json_reader.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/no_destructor.h"
 #include "base/path_service.h"
 #include "base/strings/strcat.h"
 #include "base/task/post_task.h"
@@ -43,7 +42,6 @@
 #include "chrome/browser/web_applications/preinstalled_web_app_utils.h"
 #include "chrome/browser/web_applications/preinstalled_web_apps/preinstalled_web_apps.h"
 #include "chrome/browser/web_applications/web_app.h"
-#include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_install_utils.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/browser/web_applications/web_app_ui_manager.h"
@@ -58,6 +56,7 @@
 #include "components/services/app_service/public/cpp/app_registry_cache.h"
 #include "components/services/app_service/public/cpp/types_util.h"
 #include "components/version_info/version_info.h"
+#include "components/webapps/browser/install_result_code.h"
 #include "components/webapps/common/constants.h"
 #include "content/public/browser/browser_thread.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
@@ -75,18 +74,41 @@ namespace web_app {
 
 namespace {
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS)
 // The sub-directory of the extensions directory in which to scan for external
 // web apps (as opposed to external extensions or external ARC apps).
 const base::FilePath::CharType kWebAppsSubDirectory[] =
     FILE_PATH_LITERAL("web_apps");
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 bool g_skip_startup_for_testing_ = false;
 bool g_bypass_offline_manifest_requirement_for_testing_ = false;
 const base::FilePath* g_config_dir_for_testing = nullptr;
 const std::vector<base::Value>* g_configs_for_testing = nullptr;
 FileUtilsWrapper* g_file_utils_for_testing = nullptr;
+
+const char kHistogramMigrationDisabledReason[] =
+    "WebApp.Preinstalled.DisabledReason";
+
+// These values are reported to UMA, do not modify them.
+enum class DisabledReason {
+  kNotDisabled = 0,
+  kPreinstalledAppsNotEnabled = 1,
+  kUserTypeNotAllowed = 2,
+  kGatedFeatureNotEnabled = 3,
+  kGatedFeatureNotEnabledAndAppNotInstalled = 4,
+  kArcAvailable = 5,
+  kTabletFormFactor = 6,
+  kNotNewUserAndNotPreviouslyInstalled = 7,
+  kNotPreviouslyPreinstalled = 8,
+  kReplacingAppBlockedByPolicy = 9,
+  kReplacingAppForceInstalled = 10,
+  kReplacingAppStillInstalled = 11,
+  kDefaultAppAndAppsToReplaceUninstalled = 12,
+  kReplacingAppUninstalledByUser = 13,
+  kStylusRequired = 14,
+  kMaxValue = kStylusRequired
+};
 
 struct LoadedConfig {
   base::Value contents;
@@ -171,6 +193,8 @@ absl::optional<std::string> GetDisableReason(
   DCHECK(registrar);
 
   if (!preinstalled_apps_enabled_in_prefs) {
+    base::UmaHistogramEnumeration(kHistogramMigrationDisabledReason,
+                                  DisabledReason::kPreinstalledAppsNotEnabled);
     return options.install_url.spec() +
            " disabled by preinstalled_apps pref setting.";
   }
@@ -178,25 +202,51 @@ absl::optional<std::string> GetDisableReason(
   // Remove if not applicable to current user type.
   DCHECK_GT(options.user_type_allowlist.size(), 0u);
   if (!base::Contains(options.user_type_allowlist, user_type)) {
+    base::UmaHistogramEnumeration(kHistogramMigrationDisabledReason,
+                                  DisabledReason::kUserTypeNotAllowed);
     return options.install_url.spec() + " disabled for user type: " + user_type;
   }
 
   // Remove if gated on a disabled feature.
   if (options.gate_on_feature && !IsPreinstalledAppInstallFeatureEnabled(
                                      *options.gate_on_feature, *profile)) {
+    base::UmaHistogramEnumeration(kHistogramMigrationDisabledReason,
+                                  DisabledReason::kGatedFeatureNotEnabled);
     return options.install_url.spec() +
            " disabled because feature is disabled: " + *options.gate_on_feature;
+  }
+
+  // Remove if gated on a disabled feature, and the app hasn't been preinstalled
+  // before.
+  if (options.gate_on_feature_or_installed &&
+      !IsPreinstalledAppInstallFeatureEnabled(
+          *options.gate_on_feature_or_installed, *profile)) {
+    absl::optional<AppId> app_id =
+        ExternallyInstalledWebAppPrefs(profile->GetPrefs())
+            .LookupAppId(options.install_url);
+    if (!app_id.has_value()) {
+      base::UmaHistogramEnumeration(
+          kHistogramMigrationDisabledReason,
+          DisabledReason::kGatedFeatureNotEnabledAndAppNotInstalled);
+      return options.install_url.spec() + " disabled because the feature " +
+             *options.gate_on_feature_or_installed +
+             " is disabled and the app is not already installed";
+    }
   }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // Remove if ARC is supported and app should be disabled.
   if (options.disable_if_arc_supported && arc::IsArcAvailable()) {
+    base::UmaHistogramEnumeration(kHistogramMigrationDisabledReason,
+                                  DisabledReason::kArcAvailable);
     return options.install_url.spec() + " disabled because ARC is available.";
   }
 
   // Remove if device is tablet and app should be disabled.
   if (options.disable_if_tablet_form_factor &&
-      chromeos::switches::IsTabletFormFactor()) {
+      ash::switches::IsTabletFormFactor()) {
+    base::UmaHistogramEnumeration(kHistogramMigrationDisabledReason,
+                                  DisabledReason::kTabletFormFactor);
     return options.install_url.spec() + " disabled because device is tablet.";
   }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
@@ -209,6 +259,9 @@ absl::optional<std::string> GetDisableReason(
             .LookupAppId(options.install_url)
             .has_value();
     if (!was_previously_installed) {
+      base::UmaHistogramEnumeration(
+          kHistogramMigrationDisabledReason,
+          DisabledReason::kNotNewUserAndNotPreviouslyInstalled);
       return options.install_url.spec() +
              " disabled because user was not new when config was added.";
     }
@@ -228,6 +281,8 @@ absl::optional<std::string> GetDisableReason(
     }
 
     if (!was_previously_preinstalled) {
+      base::UmaHistogramEnumeration(kHistogramMigrationDisabledReason,
+                                    DisabledReason::kNotPreviouslyPreinstalled);
       return options.install_url.spec() +
              " disabled because was not previously preinstalled.";
     }
@@ -237,12 +292,18 @@ absl::optional<std::string> GetDisableReason(
   // policy.
   for (const AppId& app_id : options.uninstall_and_replace) {
     if (extensions::IsExtensionBlockedByPolicy(profile, app_id)) {
+      base::UmaHistogramEnumeration(
+          kHistogramMigrationDisabledReason,
+          DisabledReason::kReplacingAppBlockedByPolicy);
       return options.install_url.spec() +
              " disabled due to admin policy blocking replacement "
              "Extension.";
     }
     std::u16string reason;
     if (extensions::IsExtensionForceInstalled(profile, app_id, &reason)) {
+      base::UmaHistogramEnumeration(
+          kHistogramMigrationDisabledReason,
+          DisabledReason::kReplacingAppForceInstalled);
       return options.install_url.spec() +
              " disabled due to admin policy force installing replacement "
              "Extension: " +
@@ -253,11 +314,14 @@ absl::optional<std::string> GetDisableReason(
   // Keep if any apps to replace are installed.
   for (const AppId& app_id : options.uninstall_and_replace) {
     if (extensions::IsExtensionInstalled(profile, app_id)) {
+      base::UmaHistogramEnumeration(
+          kHistogramMigrationDisabledReason,
+          DisabledReason::kReplacingAppStillInstalled);
       return absl::nullopt;
     }
   }
 
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS)
   // Remove if it's a default app and the apps to replace are not installed and
   // default extension apps are not performing new installation.
   if (options.gate_on_feature && !options.uninstall_and_replace.empty() &&
@@ -269,6 +333,9 @@ absl::optional<std::string> GetDisableReason(
       if (!WasMigrationRun(profile, *options.gate_on_feature)) {
         if (extensions::IsPreinstalledAppId(app_id)) {
           MarkPreinstalledAppAsUninstalled(profile, app_id);
+          base::UmaHistogramEnumeration(
+              kHistogramMigrationDisabledReason,
+              DisabledReason::kDefaultAppAndAppsToReplaceUninstalled);
           return options.install_url.spec() +
                  "disabled because it's default app and apps to replace were "
                  "uninstalled.";
@@ -278,6 +345,9 @@ absl::optional<std::string> GetDisableReason(
         // uninstalled by user as the migration is already run, use the pref
         // saved in first migration.
         if (WasPreinstalledAppUninstalled(profile, app_id)) {
+          base::UmaHistogramEnumeration(
+              kHistogramMigrationDisabledReason,
+              DisabledReason::kDefaultAppAndAppsToReplaceUninstalled);
           return options.install_url.spec() +
                  "disabled because it's default app and apps to replace were "
                  "uninstalled.";
@@ -285,11 +355,14 @@ absl::optional<std::string> GetDisableReason(
       }
     }
   }
-#endif  // !defined(OS_CHROMEOS)
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 
   // Remove if any apps to replace were previously uninstalled.
   for (const AppId& app_id : options.uninstall_and_replace) {
     if (extensions::IsExternalExtensionUninstalled(profile, app_id)) {
+      base::UmaHistogramEnumeration(
+          kHistogramMigrationDisabledReason,
+          DisabledReason::kReplacingAppUninstalledByUser);
       return options.install_url.spec() +
              " disabled because apps to replace were uninstalled.";
     }
@@ -308,11 +381,15 @@ absl::optional<std::string> GetDisableReason(
       }
     }
     if (!have_touchscreen_with_stylus) {
+      base::UmaHistogramEnumeration(kHistogramMigrationDisabledReason,
+                                    DisabledReason::kStylusRequired);
       return options.install_url.spec() +
              " disabled because the device does not have a built-in "
              "touchscreen with stylus support.";
     }
   }
+  base::UmaHistogramEnumeration(kHistogramMigrationDisabledReason,
+                                DisabledReason::kNotDisabled);
 
   return absl::nullopt;
 }
@@ -325,7 +402,7 @@ std::string GetConfigDirectoryFromCommandLine() {
 std::string GetExtraConfigSubdirectory() {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   return base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-      chromeos::switches::kExtraWebAppsDir);
+      ash::switches::kExtraWebAppsDir);
 #else
   return std::string();
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
@@ -526,12 +603,12 @@ void PreinstalledWebAppManager::PostProcessConfigs(
 
     options.require_manifest = true;
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS)
     // On Chrome OS the "quick launch bar" is the shelf pinned apps.
     // This is configured in `GetDefaultPinnedAppsForFormFactor()` instead of
     // here to ensure a specific order is deployed.
     options.add_to_quick_launch_bar = false;
-#else   // defined(OS_CHROMEOS)
+#else   // BUILDFLAG(IS_CHROMEOS)
     if (!g_bypass_offline_manifest_requirement_for_testing_) {
       // Non-Chrome OS platforms are not permitted to fetch the web app install
       // URLs during start up.
@@ -546,7 +623,7 @@ void PreinstalledWebAppManager::PostProcessConfigs(
     options.add_to_management = false;
     options.add_to_desktop = false;
     options.add_to_quick_launch_bar = false;
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS)
   }
 
   // TODO(crbug.com/1175196): Move this constant into some shared constants.h
@@ -602,7 +679,7 @@ void PreinstalledWebAppManager::Synchronize(
     std::vector<ExternalInstallOptions> desired_apps_install_options) {
   DCHECK(externally_managed_app_manager_);
 
-  std::map<GURL, std::vector<AppId>> desired_uninstalls;
+  std::map<InstallUrl, std::vector<AppId>> desired_uninstalls;
   for (const auto& entry : desired_apps_install_options) {
     if (!entry.uninstall_and_replace.empty())
       desired_uninstalls.emplace(entry.install_url,
@@ -618,9 +695,10 @@ void PreinstalledWebAppManager::Synchronize(
 
 void PreinstalledWebAppManager::OnExternalWebAppsSynchronized(
     ExternallyManagedAppManager::SynchronizeCallback callback,
-    std::map<GURL, std::vector<AppId>> desired_uninstalls,
-    std::map<GURL, ExternallyManagedAppManager::InstallResult> install_results,
-    std::map<GURL, bool> uninstall_results) {
+    std::map<InstallUrl, std::vector<AppId>> desired_uninstalls,
+    std::map<InstallUrl, ExternallyManagedAppManager::InstallResult>
+        install_results,
+    std::map<InstallUrl, bool> uninstall_results) {
   // Note that we are storing the Chrome version (milestone number) instead of a
   // "has synchronised" bool in order to do version update specific logic.
   profile_->GetPrefs()->SetString(
@@ -653,7 +731,7 @@ void PreinstalledWebAppManager::OnExternalWebAppsSynchronized(
     if (iter == desired_uninstalls.end())
       continue;
 
-    for (const auto& replace_id : iter->second) {
+    for (const AppId& replace_id : iter->second) {
       // We mark the app as migrated to a web app as long as the
       // installation was successful, even if the previous app was not
       // installed. This ensures we properly re-install apps if the
@@ -663,7 +741,8 @@ void PreinstalledWebAppManager::OnExternalWebAppsSynchronized(
       // Track whether the app to replace is still present. This is
       // possibly due to getting reinstalled by the user or by Chrome app
       // sync. See https://crbug.com/1266234 for context.
-      if (proxy && result.code == InstallResultCode::kSuccessAlreadyInstalled) {
+      if (proxy &&
+          result.code == webapps::InstallResultCode::kSuccessAlreadyInstalled) {
         bool is_installed = false;
         proxy->AppRegistryCache().ForOneApp(
             replace_id, [&is_installed](const apps::AppUpdate& app) {
@@ -675,7 +754,7 @@ void PreinstalledWebAppManager::OnExternalWebAppsSynchronized(
 
         ++app_to_replace_still_installed_count;
 
-        if (!extensions::IsExtensionDefaultInstalled(profile_, replace_id))
+        if (extensions::IsExtensionDefaultInstalled(profile_, replace_id))
           ++app_to_replace_still_default_installed_count;
 
         if (ui_manager_->CanAddAppToQuickLaunchBar()) {
@@ -715,8 +794,9 @@ void PreinstalledWebAppManager::OnExternalWebAppsSynchronized(
 }
 
 void PreinstalledWebAppManager::OnStartUpTaskCompleted(
-    std::map<GURL, ExternallyManagedAppManager::InstallResult> install_results,
-    std::map<GURL, bool> uninstall_results) {
+    std::map<InstallUrl, ExternallyManagedAppManager::InstallResult>
+        install_results,
+    std::map<InstallUrl, bool> uninstall_results) {
   if (debug_info_) {
     debug_info_->is_start_up_task_complete = true;
     debug_info_->install_results = std::move(install_results);
@@ -729,14 +809,14 @@ base::FilePath PreinstalledWebAppManager::GetConfigDir() {
   if (!command_line_directory.empty())
     return base::FilePath::FromUTF8Unsafe(command_line_directory);
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS)
     // As of mid 2018, only Chrome OS has default/external web apps, and
     // chrome::DIR_STANDALONE_EXTERNAL_EXTENSIONS is only defined for OS_LINUX,
     // which includes OS_CHROMEOS.
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // Exclude sign-in and lock screen profiles.
-  if (!chromeos::ProfileHelper::IsRegularProfile(profile_)) {
+  if (!ash::ProfileHelper::IsRegularProfile(profile_)) {
     return {};
   }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
@@ -756,7 +836,7 @@ base::FilePath PreinstalledWebAppManager::GetConfigDir() {
   }
 
   LOG(ERROR) << "base::PathService::Get failed";
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
   return {};
 }

@@ -214,7 +214,7 @@ bool IsExtensionDownload(DownloadUIModel* item) {
 
 bool IsHoldingSpaceIncognitoProfileIntegrationEnabled() {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  return ash::features::IsHoldingSpaceIncognitoProfileIntegrationEnabled();
+  return true;
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
   auto* lacros_service = chromeos::LacrosService::Get();
   if (lacros_service) {
@@ -1103,7 +1103,7 @@ std::u16string DownloadItemNotification::GetSubStatusString() const {
         DCHECK(!interrupt_text.empty());
         return interrupt_text;
       }
-      FALLTHROUGH;  // Same as download::DownloadItem::CANCELLED.
+      [[fallthrough]];  // Same as download::DownloadItem::CANCELLED.
     }
     case download::DownloadItem::CANCELLED:
       // "Cancelled"

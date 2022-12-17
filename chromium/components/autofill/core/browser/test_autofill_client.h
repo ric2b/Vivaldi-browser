@@ -31,7 +31,7 @@
 #include "components/version_info/channel.h"
 #include "services/metrics/public/cpp/delegating_ukm_recorder.h"
 
-#if !defined(OS_IOS)
+#if !BUILDFLAG(IS_IOS)
 #include "components/webauthn/core/browser/internal_authenticator.h"
 #endif
 
@@ -66,7 +66,8 @@ class TestAutofillClient : public AutofillClient {
   security_state::SecurityLevel GetSecurityLevelForUmaHistograms() override;
   translate::LanguageState* GetLanguageState() override;
   translate::TranslateDriver* GetTranslateDriver() override;
-#if !defined(OS_IOS)
+  std::string GetVariationConfigCountryCode() const override;
+#if !BUILDFLAG(IS_IOS)
   std::unique_ptr<webauthn::InternalAuthenticator>
   CreateCreditCardInternalAuthenticator(content::RenderFrameHost* rfh) override;
 #endif
@@ -76,8 +77,9 @@ class TestAutofillClient : public AutofillClient {
                         UnmaskCardReason reason,
                         base::WeakPtr<CardUnmaskDelegate> delegate) override;
   void OnUnmaskVerificationResult(PaymentsRpcResult result) override;
-
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+  raw_ptr<VirtualCardEnrollmentManager> GetVirtualCardEnrollmentManager()
+      override;
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   std::vector<std::string> GetAllowedMerchantsForVirtualCards() override;
   std::vector<std::string> GetAllowedBinRangesForVirtualCards() override;
 
@@ -105,7 +107,7 @@ class TestAutofillClient : public AutofillClient {
   void OfferVirtualCardOptions(
       const std::vector<CreditCard*>& candidates,
       base::OnceCallback<void(const std::string&)> callback) override;
-#else  // defined(OS_ANDROID) || defined(OS_IOS)
+#else  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
   void ConfirmAccountNameFixFlow(
       base::OnceCallback<void(const std::u16string&)> callback) override;
   void ConfirmExpirationDateFixFlow(
@@ -147,6 +149,7 @@ class TestAutofillClient : public AutofillClient {
   void HideAutofillPopup(PopupHidingReason reason) override;
   void ShowVirtualCardErrorDialog(bool is_permanent_error) override;
   bool IsAutocompleteEnabled() override;
+  bool IsPasswordManagerEnabled() override;
   void PropagateAutofillPredictions(
       content::RenderFrameHost* rfh,
       const std::vector<FormStructure*>& forms) override;
@@ -164,7 +167,7 @@ class TestAutofillClient : public AutofillClient {
   void LoadRiskData(
       base::OnceCallback<void(const std::string&)> callback) override;
 
-#if defined(OS_IOS)
+#if BUILDFLAG(IS_IOS)
   bool IsQueryIDRelevant(int query_id) override;
 #endif
 
@@ -204,7 +207,12 @@ class TestAutofillClient : public AutofillClient {
 
   void set_last_committed_url(const GURL& url);
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+  void SetVariationConfigCountryCode(
+      const std::string& variation_config_country_code) {
+    variation_config_country_code_ = variation_config_country_code;
+  }
+
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   void set_allowed_merchants(
       const std::vector<std::string>& merchant_allowlist) {
     allowed_merchants_ = merchant_allowlist;
@@ -228,8 +236,17 @@ class TestAutofillClient : public AutofillClient {
     return offer_to_save_credit_card_bubble_was_shown_.value();
   }
 
+  void set_virtual_card_error_dialog_shown(
+      bool virtual_card_error_dialog_shown) {
+    virtual_card_error_dialog_shown_ = virtual_card_error_dialog_shown;
+  }
+
   bool virtual_card_error_dialog_shown() {
     return virtual_card_error_dialog_shown_;
+  }
+
+  bool virtual_card_error_dialog_is_permanent_error() {
+    return virtual_card_error_dialog_is_permanent_error_;
   }
 
   SaveCreditCardOptions get_save_credit_card_options() {
@@ -273,9 +290,10 @@ class TestAutofillClient : public AutofillClient {
   std::unique_ptr<PrefService> prefs_;
   std::unique_ptr<TestStrikeDatabase> test_strike_database_;
   std::unique_ptr<payments::PaymentsClient> payments_client_;
-  std::unique_ptr<FormDataImporter> form_data_importer_;
+  std::unique_ptr<TestFormDataImporter> form_data_importer_;
   GURL form_origin_;
   ukm::SourceId source_id_ = -1;
+  std::string variation_config_country_code_;
 
   security_state::SecurityLevel security_level_ =
       security_state::SecurityLevel::NONE;
@@ -285,6 +303,8 @@ class TestAutofillClient : public AutofillClient {
   bool confirm_save_credit_card_locally_called_ = false;
 
   bool virtual_card_error_dialog_shown_ = false;
+
+  bool virtual_card_error_dialog_is_permanent_error_ = false;
 
   // Populated if save was offered. True if bubble was shown, false otherwise.
   absl::optional<bool> offer_to_save_credit_card_bubble_was_shown_;
@@ -306,7 +326,7 @@ class TestAutofillClient : public AutofillClient {
   // The last URL submitted by the user in the URL bar. Set in the constructor.
   GURL last_committed_url_;
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   std::vector<std::string> allowed_merchants_;
   std::vector<std::string> allowed_bin_ranges_;
 #endif

@@ -49,6 +49,7 @@ import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.subscriptions.CommerceSubscriptionsServiceFactory;
+import org.chromium.chrome.browser.subscriptions.SubscriptionsManager;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
@@ -70,14 +71,16 @@ import java.util.ArrayList;
 import java.util.List;
 
 // Vivaldi
-import java.util.Locale;
-
-import org.chromium.base.IntentUtils;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
+import org.chromium.chrome.browser.tab.TabLaunchType;
+import org.chromium.chrome.browser.tabmodel.document.TabDelegate;
+import org.chromium.content_public.browser.LoadUrlParams;
 
 import org.vivaldi.browser.common.VivaldiBookmarkUtils;
 import org.vivaldi.browser.panels.PanelUtils;
+
+import java.util.Locale;
 
 /** A class holding static util functions for bookmark. */
 public class BookmarkUtils {
@@ -166,18 +169,27 @@ public class BookmarkUtils {
      * @param activity The current Activity.
      * @param bottomSheetController The BottomsheetController, used to show the save flow.
      * @param fromExplicitTrackUi Whether the bookmark was added from the explicit UI.
-     * @param bookmarkId The BookmarkId to show the save flow for.
+     * @param bookmarkId The BookmarkId to show the save flow for. Can be null in some cases.
      * @param wasBookmarkMoved Whether the save flow is shown as a reslult of a moved bookmark.
      */
     public static void showSaveFlow(@NonNull Activity activity,
             @NonNull BottomSheetController bottomSheetController, boolean fromExplicitTrackUi,
-            @NonNull BookmarkId bookmarkId, boolean wasBookmarkMoved) {
+            @Nullable BookmarkId bookmarkId, boolean wasBookmarkMoved) {
+        if (bookmarkId == null) {
+            Log.e(TAG, "Null bookmark found when showing the save flow, aborting.");
+            return;
+        }
+
+        SubscriptionsManager subscriptionService = null;
+        if (ShoppingFeatures.isShoppingListEnabled()) {
+            subscriptionService = new CommerceSubscriptionsServiceFactory()
+                                          .getForLastUsedProfile()
+                                          .getSubscriptionsManager();
+        }
+
         BookmarkSaveFlowCoordinator bookmarkSaveFlowCoordinator =
                 new BookmarkSaveFlowCoordinator(activity, bottomSheetController,
-                        new CommerceSubscriptionsServiceFactory()
-                                .getForLastUsedProfile()
-                                .getSubscriptionsManager(),
-                        new UserEducationHelper(activity, new Handler()));
+                        subscriptionService, new UserEducationHelper(activity, new Handler()));
         bookmarkSaveFlowCoordinator.show(bookmarkId, fromExplicitTrackUi, wasBookmarkMoved);
     }
 
@@ -469,7 +481,10 @@ public class BookmarkUtils {
         if (bookmarkModel != null) {
         // We need to reset the last used parent to support toggling reading list type-swapping.
         if (parent.getType() == BookmarkType.READING_LIST
-                && !ReadingListFeatures.shouldAllowBookmarkTypeSwapping()) {
+                // Vivaldi - Reset last used parent to avoid next bookmarks being added as reading
+                // list items
+                && (!ReadingListFeatures.shouldAllowBookmarkTypeSwapping()
+                || ChromeApplicationImpl.isVivaldi())) {
             setLastUsedParent(context, bookmarkModel.getDefaultFolder());
             return null;
         }
@@ -526,9 +541,17 @@ public class BookmarkUtils {
 
         if (bookmarkItem.getId().getType() == BookmarkType.READING_LIST
                 && !bookmarkItem.isFolder()) {
+            if (ChromeApplicationImpl.isVivaldi()) {
+                new TabDelegate(isIncognito).createNewTab(
+                        new LoadUrlParams(
+                                bookmarkItem.getUrl()), TabLaunchType.FROM_BROWSER_ACTIONS, null);
+            } else
             openReadingListItem(context, bookmarkItem.getUrl().getSpec(), openBookmarkComponentName,
                     isIncognito);
             model.setReadStatusForReadingList(bookmarkItem.getUrl(), true);
+            // Vivaldi - Close Reading list fragment
+            if (ChromeApplicationImpl.isVivaldi() && context instanceof ChromeTabbedActivity)
+                ((ChromeTabbedActivity)context).getSupportFragmentManager().popBackStack();
         } else {
             // Note(david@vivaldi.com): Always use the parent component.
             if (ChromeApplicationImpl.isVivaldi())

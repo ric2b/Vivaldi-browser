@@ -207,32 +207,6 @@ rmad::GetStateReply CreateDeviceDestinationStateReply(
   return reply;
 }
 
-TEST_F(FakeRmadClientTest, CheckInRma_Default_False) {
-  base::RunLoop run_loop;
-  client_->CheckInRma(
-      base::BindLambdaForTesting([&](absl::optional<bool> response) {
-        EXPECT_TRUE(response.has_value());
-        EXPECT_FALSE(*response);
-        run_loop.Quit();
-      }));
-  run_loop.RunUntilIdle();
-}
-
-TEST_F(FakeRmadClientTest, CheckInRma_WithState_True) {
-  std::vector<rmad::GetStateReply> fake_states;
-  fake_states.push_back(CreateWelcomeStateReply(rmad::RMAD_ERROR_OK));
-  fake_client_()->SetFakeStateReplies(std::move(fake_states));
-
-  base::RunLoop run_loop;
-  client_->CheckInRma(
-      base::BindLambdaForTesting([&](absl::optional<bool> response) {
-        EXPECT_TRUE(response.has_value());
-        EXPECT_TRUE(*response);
-        run_loop.Quit();
-      }));
-  run_loop.RunUntilIdle();
-}
-
 TEST_F(FakeRmadClientTest, GetCurrentState_Default_RmaNotRequired) {
   base::RunLoop run_loop;
   client_->GetCurrentState(base::BindLambdaForTesting(
@@ -472,12 +446,12 @@ TEST_F(FakeRmadClientTest,
   }
 }
 
-TEST_F(FakeRmadClientTest, Abortable_Default_Ok) {
+TEST_F(FakeRmadClientTest, Abortable_Default_Rma_Not_Required) {
   base::RunLoop run_loop;
   client_->AbortRma(base::BindLambdaForTesting(
       [&](absl::optional<rmad::AbortRmaReply> response) {
         EXPECT_TRUE(response.has_value());
-        EXPECT_EQ(response->error(), rmad::RMAD_ERROR_OK);
+        EXPECT_EQ(response->error(), rmad::RMAD_ERROR_RMA_NOT_REQUIRED);
         run_loop.Quit();
       }));
   run_loop.RunUntilIdle();
@@ -495,29 +469,27 @@ TEST_F(FakeRmadClientTest, Abortable_SetFalse_CannotCancel) {
   run_loop.RunUntilIdle();
 }
 
-TEST_F(FakeRmadClientTest, Abortable_SetTrue_Ok) {
+TEST_F(FakeRmadClientTest, Abortable_SetTrue_Rma_Not_Required) {
   fake_client_()->SetAbortable(true);
   base::RunLoop run_loop;
   client_->AbortRma(base::BindLambdaForTesting(
       [&](absl::optional<rmad::AbortRmaReply> response) {
         EXPECT_TRUE(response.has_value());
-        EXPECT_EQ(response->error(), rmad::RMAD_ERROR_OK);
+        EXPECT_EQ(response->error(), rmad::RMAD_ERROR_RMA_NOT_REQUIRED);
         run_loop.Quit();
       }));
   run_loop.RunUntilIdle();
 }
 
 TEST_F(FakeRmadClientTest, GetLog) {
+  const std::string expected_log = "This is my test log for the RMA process";
+  fake_client_()->SetGetLogReply(expected_log, rmad::RMAD_ERROR_OK);
   base::RunLoop run_loop;
-  client_->GetLog(
-      base::BindLambdaForTesting([&](absl::optional<std::string> response) {
+  client_->GetLog(base::BindLambdaForTesting(
+      [&](absl::optional<rmad::GetLogReply> response) {
         EXPECT_TRUE(response.has_value());
-        EXPECT_EQ(
-            *response,
-            "This is a log.\nIt has multiple lines.\nSome of which are very, "
-            "very long so that the log window can be tested. I mean really "
-            "long, much longer than you expect. It just keeps going on and "
-            "on, until it just stops.");
+        EXPECT_EQ(response->log(), expected_log);
+        EXPECT_EQ(response->error(), rmad::RMAD_ERROR_OK);
         run_loop.Quit();
       }));
   run_loop.RunUntilIdle();

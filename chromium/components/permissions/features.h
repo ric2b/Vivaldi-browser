@@ -49,10 +49,8 @@ extern const base::Feature kPermissionChipIsProminentStyle;
 COMPONENT_EXPORT(PERMISSIONS_COMMON)
 extern const base::Feature kPermissionPredictionServiceUseUrlOverride;
 
-#if defined(OS_ANDROID)
 COMPONENT_EXPORT(PERMISSIONS_COMMON)
-extern const base::Feature kRevertDSEAutomaticPermissions;
-#endif  // defined(OS_ANDROID)
+extern const base::Feature kPermissionOnDeviceNotificationPredictions;
 
 }  // namespace features
 namespace feature_params {
@@ -66,6 +64,10 @@ extern const base::FeatureParam<std::string>
 
 COMPONENT_EXPORT(PERMISSIONS_COMMON)
 extern const base::FeatureParam<bool> kPermissionPredictionServiceUseJson;
+
+COMPONENT_EXPORT(PERMISSIONS_COMMON)
+extern const base::FeatureParam<double>
+    kPermissionOnDeviceNotificationPredictionsHoldbackChance;
 
 }  // namespace feature_params
 }  // namespace permissions

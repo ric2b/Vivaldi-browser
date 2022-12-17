@@ -20,8 +20,8 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/task/sequenced_task_runner.h"
-#include "base/task/thread_pool.h"
 #include "base/task/task_runner_util.h"
+#include "base/task/thread_pool.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -184,6 +184,25 @@ base::CancelableTaskTracker::TaskId CalendarService::DeleteCalendarEvent(
       backend_task_runner_.get(), FROM_HERE,
       base::BindOnce(&CalendarBackend::DeleteEvent, calendar_backend_, event_id,
                      delete_results),
+      base::BindOnce(std::move(callback), delete_results));
+}
+
+base::CancelableTaskTracker::TaskId
+CalendarService::DeleteEventRecurrenceException(
+    RecurrenceExceptionID exception_id,
+    EventResultCallback callback,
+    base::CancelableTaskTracker* tracker) {
+  DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
+
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  std::shared_ptr<EventResultCB> delete_results =
+      std::shared_ptr<EventResultCB>(new EventResultCB());
+
+  return tracker->PostTaskAndReply(
+      backend_task_runner_.get(), FROM_HERE,
+      base::BindOnce(&CalendarBackend::DeleteEventRecurrenceException,
+                     calendar_backend_, exception_id, delete_results),
       base::BindOnce(std::move(callback), delete_results));
 }
 

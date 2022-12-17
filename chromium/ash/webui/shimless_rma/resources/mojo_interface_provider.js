@@ -4,7 +4,7 @@
 
 import {assert} from 'chrome://resources/js/assert.m.js';
 
-import {fakeCalibrationComponents, fakeChromeVersion, fakeComponents, fakeDeviceRegions, fakeDeviceSkus, fakeDeviceWhiteLabels, fakeLog, fakeRsuChallengeCode, fakeRsuChallengeQrCode, fakeStates} from './fake_data.js';
+import {fakeCalibrationComponentsWithFails, fakeChromeVersion, fakeComponents, fakeDeviceRegions, fakeDeviceSkus, fakeDeviceWhiteLabels, fakeLog, fakeRsuChallengeCode, fakeRsuChallengeQrCode, fakeStates} from './fake_data.js';
 import {FakeShimlessRmaService} from './fake_shimless_rma_service.js';
 import {CalibrationSetupInstruction, NetworkConfigServiceInterface, RmadErrorCode, ShimlessRmaService, ShimlessRmaServiceInterface, WriteProtectDisableCompleteAction} from './shimless_rma_types.js';
 
@@ -42,7 +42,7 @@ function setupFakeShimlessRmaService_() {
 
   service.setAsyncOperationDelayMs(500);
 
-  service.setAbortRmaResult(RmadErrorCode.kOk);
+  service.setAbortRmaResult(RmadErrorCode.kRmaNotRequired);
 
   service.automaticallyTriggerHardwareVerificationStatusObservation();
 
@@ -74,10 +74,12 @@ function setupFakeShimlessRmaService_() {
   service.setGetOriginalSkuResult(1);
   service.setGetWhiteLabelListResult(fakeDeviceWhiteLabels);
   service.setGetOriginalWhiteLabelResult(1);
+  service.setGetOriginalDramPartNumberResult('dram# 0123');
 
   service.setGetCalibrationSetupInstructionsResult(
       CalibrationSetupInstruction.kCalibrationInstructionPlaceLidOnFlatSurface);
-  service.setGetCalibrationComponentListResult(fakeCalibrationComponents);
+  service.setGetCalibrationComponentListResult(
+      fakeCalibrationComponentsWithFails);
 
   service.automaticallyTriggerProvisioningObservation();
   service.automaticallyTriggerFinalizationObservation();

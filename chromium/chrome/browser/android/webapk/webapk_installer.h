@@ -32,13 +32,17 @@ class BrowserContext;
 class WebContents;
 }  // namespace content
 
+namespace net {
+struct NetworkTrafficAnnotationTag;
+}  // namespace net
+
 namespace network {
 class SimpleURLLoader;
 }  // namespace network
 
 namespace webapps {
 struct ShortcutInfo;
-}
+}  // namespace webapps
 
 // The enum values are persisted to logs |WebApkInstallSpaceStatus| in
 // enums.xml, therefore they should never be reused nor renumbered.
@@ -116,9 +120,9 @@ class WebApkInstaller {
   // or install request. Runs |callback| on the calling thread when complete.
   static void BuildProto(
       const webapps::ShortcutInfo& shortcut_info,
-      const SkBitmap& primary_icon,
+      const std::string& primary_icon_data,
       bool is_primary_icon_maskable,
-      const SkBitmap& splash_icon,
+      const std::string& splash_icon_data,
       const std::string& package_name,
       const std::string& version,
       std::map<std::string, webapps::WebApkIconHasher::Icon>
@@ -133,9 +137,9 @@ class WebApkInstaller {
   static void StoreUpdateRequestToFile(
       const base::FilePath& update_request_path,
       const webapps::ShortcutInfo& shortcut_info,
-      const SkBitmap& primary_icon,
+      const std::string& primary_icon_data,
       bool is_primary_icon_maskable,
-      const SkBitmap& splash_icon,
+      const std::string& splash_icon_data,
       const std::string& package_name,
       const std::string& version,
       std::map<std::string, webapps::WebApkIconHasher::Icon>
@@ -204,7 +208,8 @@ class WebApkInstaller {
   // Sends a request to WebAPK server to create/update WebAPK. During a
   // successful request the WebAPK server responds with a token to send to
   // Google Play.
-  void SendRequest(std::unique_ptr<std::string> serialized_proto);
+  void SendRequest(const net::NetworkTrafficAnnotationTag& traffic_annotation,
+                   std::unique_ptr<std::string> serialized_proto);
 
   // Returns the WebAPK server URL based on the command line.
   GURL GetServerUrl();

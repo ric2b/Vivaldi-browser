@@ -19,10 +19,6 @@ namespace network {
 class SimpleURLLoader;
 }  // namespace network
 
-namespace base {
-class ListValue;
-}  // namespace base
-
 namespace vivaldi {
 
 FORWARD_DECLARE_TEST(VivaldiTranslateServerRequestTest, GenerateJSON);

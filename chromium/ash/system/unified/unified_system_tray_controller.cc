@@ -3,14 +3,13 @@
 // found in the LICENSE file.
 
 #include "ash/system/unified/unified_system_tray_controller.h"
+#include <memory>
 
 #include "ash/capture_mode/capture_mode_feature_pod_controller.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/metrics/user_metrics_action.h"
 #include "ash/metrics/user_metrics_recorder.h"
-#include "ash/projector/projector_controller_impl.h"
-#include "ash/projector/projector_feature_pod_controller.h"
 #include "ash/public/cpp/metrics_util.h"
 #include "ash/public/cpp/pagination/pagination_controller.h"
 #include "ash/public/cpp/system_tray_client.h"
@@ -28,7 +27,6 @@
 #include "ash/system/brightness/unified_brightness_slider_controller.h"
 #include "ash/system/cast/cast_feature_pod_controller.h"
 #include "ash/system/cast/unified_cast_detailed_view_controller.h"
-#include "ash/system/dark_mode/dark_mode_detailed_view_controller.h"
 #include "ash/system/dark_mode/dark_mode_feature_pod_controller.h"
 #include "ash/system/ime/ime_feature_pod_controller.h"
 #include "ash/system/ime/unified_ime_detailed_view_controller.h"
@@ -48,6 +46,7 @@
 #include "ash/system/night_light/night_light_feature_pod_controller.h"
 #include "ash/system/privacy_screen/privacy_screen_feature_pod_controller.h"
 #include "ash/system/rotation/rotation_lock_feature_pod_controller.h"
+#include "ash/system/time/calendar_metrics.h"
 #include "ash/system/time/unified_calendar_view_controller.h"
 #include "ash/system/tray/system_tray_item_uma_type.h"
 #include "ash/system/tray/tray_constants.h"
@@ -73,6 +72,7 @@
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/compositor/compositor.h"
 #include "ui/display/screen.h"
+#include "ui/events/event.h"
 #include "ui/gfx/animation/slide_animation.h"
 #include "ui/message_center/message_center.h"
 #include "ui/views/widget/widget.h"
@@ -121,10 +121,6 @@ UnifiedSystemTrayController::UnifiedSystemTrayController(
       model_->pagination_model(), PaginationController::SCROLL_AXIS_HORIZONTAL,
       base::BindRepeating(&RecordPageSwitcherSourceByEventType),
       Shell::Get()->tablet_mode_controller()->InTabletMode());
-
-  Shell::Get()->metrics()->RecordUserMetricsAction(UMA_STATUS_AREA_MENU_OPENED);
-  UMA_HISTOGRAM_BOOLEAN("ChromeOS.SystemTray.IsExpandedOnOpen",
-                        model_->IsExpandedOnOpen());
 }
 
 UnifiedSystemTrayController::~UnifiedSystemTrayController() {
@@ -391,19 +387,20 @@ void UnifiedSystemTrayController::ShowAudioDetailedView() {
   showing_audio_detailed_view_ = true;
 }
 
-void UnifiedSystemTrayController::ShowDarkModeDetailedView() {
-  ShowDetailedView(std::make_unique<DarkModeDetailedViewController>(this));
-}
-
 void UnifiedSystemTrayController::ShowNotifierSettingsView() {
   DCHECK(Shell::Get()->session_controller()->ShouldShowNotificationTray());
   DCHECK(!Shell::Get()->session_controller()->IsScreenLocked());
   ShowDetailedView(std::make_unique<UnifiedNotifierSettingsController>(this));
 }
 
-void UnifiedSystemTrayController::ShowCalendarView() {
-  if (features::IsCalendarViewEnabled())
-    ShowDetailedView(std::make_unique<UnifiedCalendarViewController>(this));
+void UnifiedSystemTrayController::ShowCalendarView(
+    calendar_metrics::CalendarViewShowSource show_source,
+    calendar_metrics::CalendarEventSource event_source) {
+  if (!features::IsCalendarViewEnabled())
+    return;
+
+  calendar_metrics::RecordCalendarShowMetrics(show_source, event_source);
+  ShowDetailedView(std::make_unique<UnifiedCalendarViewController>(this));
 }
 
 void UnifiedSystemTrayController::ShowMediaControlsDetailedView() {
@@ -507,10 +504,6 @@ void UnifiedSystemTrayController::InitFeaturePods() {
   AddFeaturePodItem(std::make_unique<RotationLockFeaturePodController>());
   AddFeaturePodItem(std::make_unique<PrivacyScreenFeaturePodController>());
   AddFeaturePodItem(std::make_unique<CaptureModeFeaturePodController>(this));
-  if (chromeos::features::IsProjectorFeaturePodEnabled() &&
-      Shell::Get()->projector_controller()->IsEligible()) {
-    AddFeaturePodItem(std::make_unique<ProjectorFeaturePodController>(this));
-  }
   AddFeaturePodItem(std::make_unique<NearbyShareFeaturePodController>(this));
   AddFeaturePodItem(std::make_unique<NightLightFeaturePodController>(this));
   AddFeaturePodItem(std::make_unique<CastFeaturePodController>(this));

@@ -84,6 +84,9 @@ class LoginDisplayHost {
   // Returns corresponding native window.
   virtual gfx::NativeWindow GetNativeWindow() const = 0;
 
+  // Returns the current login window widget.
+  virtual views::Widget* GetLoginWindowWidget() const = 0;
+
   // Returns instance of the OOBE WebUI.
   virtual OobeUI* GetOobeUI() const = 0;
 
@@ -156,7 +159,7 @@ class LoginDisplayHost {
   virtual void ShowGuestTosScreen() = 0;
 
   // Hide any visible oobe dialog.
-  virtual void HideOobeDialog() = 0;
+  virtual void HideOobeDialog(bool saml_video_timeout = false) = 0;
 
   // Sets whether shelf buttons are enabled.
   virtual void SetShelfButtonsEnabled(bool enabled) = 0;

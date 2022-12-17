@@ -100,7 +100,7 @@ class ExtensionActionUtil : public KeyedService,
   void PrefsChange();
 
   // Cached settings
-  std::unique_ptr<base::ListValue> user_hidden_extensions_;
+  base::Value user_hidden_extensions_;
 
   std::unique_ptr<PrefChangeRegistrar> prefs_registrar_;
 

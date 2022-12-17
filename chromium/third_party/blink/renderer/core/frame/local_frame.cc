@@ -37,6 +37,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/unguessable_token.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "services/data_decoder/public/mojom/resource_snapshot_for_web_bundle.mojom-blink.h"
@@ -106,6 +107,7 @@
 #include "third_party/blink/renderer/core/fileapi/public_url_manager.h"
 #include "third_party/blink/renderer/core/fragment_directive/text_fragment_handler.h"
 #include "third_party/blink/renderer/core/frame/ad_tracker.h"
+#include "third_party/blink/renderer/core/frame/attribution_src_loader.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/core/frame/event_handler_registry.h"
 #include "third_party/blink/renderer/core/frame/frame_console.h"
@@ -132,7 +134,6 @@
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
 #include "third_party/blink/renderer/core/frame/web_frame_widget_impl.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
-#include "third_party/blink/renderer/core/frame/window_controls_overlay.h"
 #include "third_party/blink/renderer/core/fullscreen/scoped_allow_fullscreen.h"
 #include "third_party/blink/renderer/core/html/html_frame_element_base.h"
 #include "third_party/blink/renderer/core/html/html_link_element.h"
@@ -165,7 +166,6 @@
 #include "third_party/blink/renderer/core/page/plugin_script_forbidden_scope.h"
 #include "third_party/blink/renderer/core/page/pointer_lock_controller.h"
 #include "third_party/blink/renderer/core/page/scrolling/scrolling_coordinator.h"
-#include "third_party/blink/renderer/core/paint/compositing/paint_layer_compositor.h"
 #include "third_party/blink/renderer/core/paint/object_painter.h"
 #include "third_party/blink/renderer/core/paint/paint_auto_dark_mode.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
@@ -178,8 +178,6 @@
 #include "third_party/blink/renderer/platform/bindings/v8_binding.h"
 #include "third_party/blink/renderer/platform/bindings/v8_per_isolate_data.h"
 #include "third_party/blink/renderer/platform/blob/blob_data.h"
-#include "third_party/blink/renderer/platform/graphics/graphics_layer.h"
-#include "third_party/blink/renderer/platform/graphics/graphics_layer_tree_as_text.h"
 #include "third_party/blink/renderer/platform/graphics/paint/drawing_recorder.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_canvas.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_controller.h"
@@ -195,7 +193,6 @@
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_request.h"
 #include "third_party/blink/renderer/platform/mhtml/serialized_resource.h"
-#include "third_party/blink/renderer/platform/network/network_state_notifier.h"
 #include "third_party/blink/renderer/platform/network/network_utils.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/scheduler/public/frame_scheduler.h"
@@ -209,12 +206,16 @@
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/transform.h"
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 #include "third_party/blink/renderer/core/editing/ephemeral_range.h"
 #include "third_party/blink/renderer/core/editing/substring_util.h"
 #include "third_party/blink/renderer/platform/fonts/mac/attributed_string_type_converter.h"
 #include "ui/base/mojom/attributed_string.mojom-blink.h"
 #include "ui/gfx/range/range.h"
+#endif
+
+#if !BUILDFLAG(IS_ANDROID)
+#include "third_party/blink/renderer/core/frame/window_controls_overlay_changed_delegate.h"
 #endif
 
 namespace blink {
@@ -378,6 +379,7 @@ LocalFrame::~LocalFrame() {
 
 void LocalFrame::Trace(Visitor* visitor) const {
   visitor->Trace(ad_tracker_);
+  visitor->Trace(attribution_src_loader_);
   visitor->Trace(probe_sink_);
   visitor->Trace(performance_monitor_);
   visitor->Trace(idleness_detector_);
@@ -403,6 +405,9 @@ void LocalFrame::Trace(Visitor* visitor) const {
   visitor->Trace(background_color_paint_image_generator_);
   visitor->Trace(box_shadow_paint_image_generator_);
   visitor->Trace(clip_path_paint_image_generator_);
+#if !BUILDFLAG(IS_ANDROID)
+  visitor->Trace(window_controls_overlay_changed_delegate_);
+#endif
   Frame::Trace(visitor);
   Supplementable<LocalFrame>::Trace(visitor);
 }
@@ -504,7 +509,7 @@ bool LocalFrame::DetachImpl(FrameDetachType type) {
   IgnoreOpensDuringUnloadCountIncrementer ignore_opens_during_unload(
       GetDocument());
 
-  loader_.DispatchUnloadEvent(nullptr, nullptr);
+  loader_.DispatchUnloadEvent(/*unload_timing_info=*/nullptr);
   if (evict_cached_session_storage_on_freeze_or_unload_) {
     // Evicts the cached data of Session Storage to avoid reusing old data in
     // the cache after the session storage has been modified by another renderer
@@ -599,7 +604,7 @@ bool LocalFrame::DetachImpl(FrameDetachType type) {
 }
 
 bool LocalFrame::DetachDocument() {
-  return Loader().DetachDocument(nullptr, nullptr);
+  return Loader().DetachDocument(/*unload_timing_info=*/nullptr);
 }
 
 void LocalFrame::CheckCompleted() {
@@ -792,6 +797,11 @@ LocalWindowProxy* LocalFrame::WindowProxy(DOMWrapperWorld& world) {
   return To<LocalWindowProxy>(Frame::GetWindowProxy(world));
 }
 
+LocalWindowProxy* LocalFrame::WindowProxyMaybeUninitialized(
+    DOMWrapperWorld& world) {
+  return To<LocalWindowProxy>(Frame::GetWindowProxyMaybeUninitialized(world));
+}
+
 LocalDOMWindow* LocalFrame::DomWindow() {
   return To<LocalDOMWindow>(dom_window_.Get());
 }
@@ -926,7 +936,7 @@ void LocalFrame::SetInheritedEffectiveTouchAction(TouchAction touch_action) {
 
 bool LocalFrame::BubbleLogicalScrollFromChildFrame(
     mojom::blink::ScrollDirection direction,
-    ScrollGranularity granularity,
+    ui::ScrollGranularity granularity,
     Frame* child) {
   FrameOwner* owner = child->Owner();
   auto* owner_element = DynamicTo<HTMLFrameOwnerElement>(owner);
@@ -1074,6 +1084,12 @@ void LocalFrame::SetPrinting(bool printing,
   GetDocument()->SetPrinting(printing ? Document::kPrinting
                                       : Document::kFinishingPrinting);
   View()->AdjustMediaTypeForPrinting(printing);
+
+  if (!printing) {
+    // Don't get stuck with the legacy engine when no longer printing.
+    if (Element* root = GetDocument()->documentElement())
+      root->ResetForceLegacyLayoutForPrinting();
+  }
 
   if (TextAutosizer* text_autosizer = GetDocument()->GetTextAutosizer())
     text_autosizer->UpdatePageInfo();
@@ -1418,16 +1434,6 @@ String LocalFrame::GetLayerTreeAsTextForTesting(unsigned flags) const {
   std::unique_ptr<JSONObject> layers;
   if (!(flags & kOutputAsLayerTree)) {
     layers = View()->CompositedLayersAsJSON(static_cast<LayerTreeFlags>(flags));
-  } else {
-    if (const auto* root_layer =
-            ContentLayoutObject()->Compositor()->RootGraphicsLayer()) {
-      if (flags & kLayerTreeIncludesAllLayers && IsMainFrame()) {
-        while (root_layer->Parent())
-          root_layer = root_layer->Parent();
-      }
-      layers = GraphicsLayerTreeAsJSON(root_layer,
-                                       static_cast<LayerTreeFlags>(flags));
-    }
   }
   return layers ? layers->ToPrettyJSONString() : String();
 }
@@ -1479,7 +1485,6 @@ LocalFrame::LocalFrame(LocalFrameClient* client,
       interface_registry_(interface_registry
                               ? interface_registry
                               : InterfaceRegistry::GetEmptyInterfaceRegistry()),
-      is_save_data_enabled_(GetNetworkStateNotifier().SaveDataEnabled()),
       lifecycle_state_(mojom::FrameLifecycleState::kRunning) {
   auto frame_tracking_result =
       GetLocalFramesMap().insert(FrameToken::Hasher()(GetFrameToken()), this);
@@ -1508,20 +1513,20 @@ LocalFrame::LocalFrame(LocalFrameClient* client,
     performance_monitor_ = LocalFrameRoot().performance_monitor_;
   }
   idleness_detector_ = MakeGarbageCollected<IdlenessDetector>(this, clock);
+  attribution_src_loader_ = MakeGarbageCollected<AttributionSrcLoader>(this);
   inspector_task_runner_->InitIsolate(isolate);
 
   DCHECK(ad_tracker_ ? RuntimeEnabledFeatures::AdTaggingEnabled()
                      : !RuntimeEnabledFeatures::AdTaggingEnabled());
+
+  absl::optional<AdTracker::AdScriptIdentifier> ad_script_on_stack;
   is_subframe_created_by_ad_script_ =
       !IsMainFrame() && ad_tracker_ &&
-      ad_tracker_->IsAdScriptInStack(AdTracker::StackType::kBottomAndTop);
-  if (IsMainFrame()) {
-    CreateTextFragmentHandler();
-  }
-
+      ad_tracker_->IsAdScriptInStack(AdTracker::StackType::kBottomAndTop,
+                                     /*out_ad_script=*/&ad_script_on_stack);
   Initialize();
 
-  probe::FrameAttachedToParent(this);
+  probe::FrameAttachedToParent(this, ad_script_on_stack);
 }
 
 FrameScheduler* LocalFrame::GetFrameScheduler() {
@@ -1629,7 +1634,7 @@ static bool CanNavigateHelper(LocalFrame& initiating_frame,
 
     // Sandboxed frames can also navigate popups, if the
     // 'allow-sandbox-escape-via-popup' flag is specified, or if
-    // 'allow-popups' flag is specified, or if the
+    // 'allow-popups' flag is specified and the popup's opener is the frame.
     if (target_frame.IsMainFrame() &&
         target_frame != source_frame.Tree().Top() &&
         source_frame.GetSecurityContext()->IsSandboxed(
@@ -1857,8 +1862,7 @@ WebContentSettingsClient* LocalFrame::GetContentSettingsClient() {
 PluginData* LocalFrame::GetPluginData() const {
   if (!Loader().AllowPlugins())
     return nullptr;
-  return GetPage()->GetPluginData(
-      Tree().Top().GetSecurityContext()->GetSecurityOrigin());
+  return GetPage()->GetPluginData();
 }
 
 void LocalFrame::SetAdTrackerForTesting(AdTracker* ad_tracker) {
@@ -1921,24 +1925,7 @@ LocalFrame::LazyLoadImageSetting LocalFrame::GetLazyLoadImageSetting() const {
     return LocalFrame::LazyLoadImageSetting::kDisabled;
   }
 
-  if (!RuntimeEnabledFeatures::AutomaticLazyImageLoadingEnabled())
-    return LocalFrame::LazyLoadImageSetting::kEnabledExplicit;
-  if (RuntimeEnabledFeatures::
-          RestrictAutomaticLazyImageLoadingToDataSaverEnabled() &&
-      !is_save_data_enabled_) {
-    return LocalFrame::LazyLoadImageSetting::kEnabledExplicit;
-  }
-
-  // Skip automatic lazyload when reloading a page.
-  if (!RuntimeEnabledFeatures::AutoLazyLoadOnReloadsEnabled() &&
-      Loader().GetDocumentLoader() &&
-      IsReloadLoadType(Loader().GetDocumentLoader()->LoadType())) {
-    return LocalFrame::LazyLoadImageSetting::kEnabledExplicit;
-  }
-
-  if (Owner() && !Owner()->ShouldLazyLoadChildren())
-    return LocalFrame::LazyLoadImageSetting::kEnabledExplicit;
-  return LocalFrame::LazyLoadImageSetting::kEnabledAutomatic;
+  return LocalFrame::LazyLoadImageSetting::kEnabledExplicit;
 }
 
 WebURLLoaderFactory* LocalFrame::GetURLLoaderFactory() {
@@ -2040,8 +2027,8 @@ void LocalFrame::SetViewportIntersectionFromParent(
 
     intersection_state.main_frame_transform.TransformRect(&transform_rect);
     gfx::Rect rect = ToEnclosingRect(
-        FloatRect(transform_rect.x(), transform_rect.y(),
-                  transform_rect.width(), transform_rect.height()));
+        gfx::RectF(transform_rect.x(), transform_rect.y(),
+                   transform_rect.width(), transform_rect.height()));
 
     // Return <0, 0, 0, 0> if there is no area.
     if (rect.IsEmpty())
@@ -2406,7 +2393,6 @@ void LocalFrame::UpdateFrameColorOverlayPrePaint() {
 }
 
 void LocalFrame::PaintFrameColorOverlay(GraphicsContext& context) {
-  DCHECK(RuntimeEnabledFeatures::CompositeAfterPaintEnabled());
   if (frame_color_overlay_)
     frame_color_overlay_->Paint(context);
 }
@@ -2676,7 +2662,7 @@ void LocalFrame::SetInitialFocus(bool reverse) {
               : mojom::blink::FocusType::kForward);
 }
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 void LocalFrame::GetCharacterIndexAtPoint(const gfx::Point& point) {
   HitTestLocation location(View()->ViewportToFrame(gfx::Point(point)));
   HitTestResult result = GetEventHandler().HitTestResultAtLocation(
@@ -2687,6 +2673,7 @@ void LocalFrame::GetCharacterIndexAtPoint(const gfx::Point& point) {
 }
 #endif
 
+#if !BUILDFLAG(IS_ANDROID)
 void LocalFrame::UpdateWindowControlsOverlay(
     const gfx::Rect& bounding_rect_in_dips) {
   if (!RuntimeEnabledFeatures::WebAppWindowControlsOverlayEnabled(
@@ -2745,16 +2732,17 @@ void LocalFrame::UpdateWindowControlsOverlay(
     }
   }
 
-  if (fire_event) {
-    auto* window_controls_overlay =
-        WindowControlsOverlay::FromIfExists(*DomWindow()->navigator());
-
-    if (window_controls_overlay) {
-      window_controls_overlay->WindowControlsOverlayChanged(
-          window_controls_overlay_rect_);
-    }
+  if (fire_event && window_controls_overlay_changed_delegate_) {
+    window_controls_overlay_changed_delegate_->WindowControlsOverlayChanged(
+        window_controls_overlay_rect_);
   }
 }
+
+void LocalFrame::RegisterWindowControlsOverlayChangedDelegate(
+    WindowControlsOverlayChangedDelegate* delegate) {
+  window_controls_overlay_changed_delegate_ = delegate;
+}
+#endif
 
 HitTestResult LocalFrame::HitTestResultForVisualViewportPos(
     const gfx::Point& pos_in_viewport) {
@@ -2902,8 +2890,7 @@ void LocalFrame::MediaPlayerActionAtViewportPoint(
       if (enable) {
         PictureInPictureController::From(node->GetDocument())
             .EnterPictureInPicture(To<HTMLVideoElement>(media_element),
-                                   nullptr /* promise */,
-                                   nullptr /* options */);
+                                   /*promise=*/nullptr);
       } else {
         PictureInPictureController::From(node->GetDocument())
             .ExitPictureInPicture(To<HTMLVideoElement>(media_element), nullptr);
@@ -3053,7 +3040,7 @@ bool LocalFrame::ShouldThrottleDownload() {
   return false;
 }
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 void LocalFrame::ResetTextInputHostForTesting() {
   mojo_handler_->ResetTextInputHostForTesting();
 }

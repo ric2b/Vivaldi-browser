@@ -16,7 +16,6 @@
 #include "base/strings/string_split.h"
 #include "chrome/browser/prefetch/prefetch_proxy/prefetch_proxy_features.h"
 #include "chrome/common/chrome_features.h"
-#include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 #include "components/prefs/pref_service.h"
 #include "components/unified_consent/url_keyed_data_collection_consent_helper.h"
 
@@ -58,11 +57,6 @@ std::string PrefetchProxyProxyHeaderKey() {
     return header;
   }
   return "chrome-tunnel";
-}
-
-bool PrefetchProxyOnlyForLiteMode() {
-  return base::GetFieldTrialParamByFeatureAsBool(features::kIsolatePrerenders,
-                                                 "lite_mode_only", true);
 }
 
 bool PrefetchProxyNoStatePrefetchSubresources() {
@@ -278,6 +272,12 @@ bool PrefetchProxySendDecoyRequestForIneligiblePrefetch(
 bool PrefetchProxyAllowAllDomains() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       "isolated-prerender-allow-all-domains");
+}
+
+bool PrefetchProxyAllowAllDomainsForExtendedPreloading() {
+  return base::GetFieldTrialParamByFeatureAsBool(
+      features::kIsolatePrerenders, "allow_all_domains_for_extended_preloading",
+      false);
 }
 
 base::TimeDelta PrefetchProxyCacheableDuration() {

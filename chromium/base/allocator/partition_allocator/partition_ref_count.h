@@ -10,16 +10,20 @@
 
 #include "base/allocator/buildflags.h"
 #include "base/allocator/partition_allocator/partition_alloc_check.h"
+#include "base/allocator/partition_allocator/partition_alloc_config.h"
 #include "base/allocator/partition_allocator/partition_alloc_constants.h"
 #include "base/allocator/partition_allocator/partition_alloc_forward.h"
+#include "base/allocator/partition_allocator/tagging.h"
 #include "base/base_export.h"
 #include "base/compiler_specific.h"
 #include "base/dcheck_is_on.h"
 #include "build/build_config.h"
 
-namespace base {
+#if BUILDFLAG(ENABLE_DANGLING_RAW_PTR_CHECKS)
+#include "base/allocator/partition_allocator/dangling_raw_ptr_checks.h"
+#endif
 
-namespace internal {
+namespace partition_alloc::internal {
 
 #if BUILDFLAG(USE_BACKUP_REF_PTR)
 
@@ -55,7 +59,7 @@ class BASE_EXPORT PartitionRefCount {
   // For details, see base::AtomicRefCount, which has the same constraints and
   // characteristics.
   ALWAYS_INLINE void Acquire() {
-#if DCHECK_IS_ON() || BUILDFLAG(ENABLE_BACKUP_REF_PTR_SLOW_CHECKS)
+#if defined(PA_REF_COUNT_CHECK_COOKIE)
     CheckCookie();
 #endif
 
@@ -64,7 +68,7 @@ class BASE_EXPORT PartitionRefCount {
 
   // Returns true if the allocation should be reclaimed.
   ALWAYS_INLINE bool Release() {
-#if DCHECK_IS_ON() || BUILDFLAG(ENABLE_BACKUP_REF_PTR_SLOW_CHECKS)
+#if defined(PA_REF_COUNT_CHECK_COOKIE)
     CheckCookie();
 #endif
 
@@ -75,9 +79,16 @@ class BASE_EXPORT PartitionRefCount {
       // finishes before the final `Release` call, so it shouldn't be a problem.
       // However, we will keep it as a precautionary measure.
       std::atomic_thread_fence(std::memory_order_acquire);
-#if DCHECK_IS_ON() || BUILDFLAG(ENABLE_BACKUP_REF_PTR_SLOW_CHECKS)
+#if defined(PA_REF_COUNT_CHECK_COOKIE)
       // The allocation is about to get freed, so clear the cookie.
       brp_cookie_ = 0;
+#endif
+
+#if BUILDFLAG(ENABLE_DANGLING_RAW_PTR_CHECKS)
+      if (UNLIKELY(dangling_ptr_detected_.load(std::memory_order_relaxed))) {
+        partition_alloc::internal::DanglingRawPtrReleased(
+            reinterpret_cast<uintptr_t>(this));
+      }
 #endif
       return true;
     }
@@ -88,7 +99,7 @@ class BASE_EXPORT PartitionRefCount {
   // Returns true if the allocation should be reclaimed.
   // This function should be called by the allocator during Free().
   ALWAYS_INLINE bool ReleaseFromAllocator() {
-#if DCHECK_IS_ON() || BUILDFLAG(ENABLE_BACKUP_REF_PTR_SLOW_CHECKS)
+#if defined(PA_REF_COUNT_CHECK_COOKIE)
     CheckCookie();
 #endif
 
@@ -97,15 +108,20 @@ class BASE_EXPORT PartitionRefCount {
     int32_t old_count = count_.fetch_sub(1, std::memory_order_release);
     if (UNLIKELY(!(old_count & 1)))
       DoubleFreeOrCorruptionDetected();
-    if (old_count == 1) {
+    if (LIKELY(old_count == 1)) {
       std::atomic_thread_fence(std::memory_order_acquire);
-#if DCHECK_IS_ON() || BUILDFLAG(ENABLE_BACKUP_REF_PTR_SLOW_CHECKS)
+#if defined(PA_REF_COUNT_CHECK_COOKIE)
       // The allocation is about to get freed, so clear the cookie.
       brp_cookie_ = 0;
 #endif
       return true;
     }
 
+#if BUILDFLAG(ENABLE_DANGLING_RAW_PTR_CHECKS)
+    dangling_ptr_detected_.store(true, std::memory_order_relaxed);
+    partition_alloc::internal::DanglingRawPtrDetected(
+        reinterpret_cast<uintptr_t>(this));
+#endif  // BUILDFLAG(ENABLE_DANGLING_RAW_PTR_CHECKS)
     return false;
   }
 
@@ -115,7 +131,7 @@ class BASE_EXPORT PartitionRefCount {
   // To summarize, the function returns whether we believe the allocation can be
   // safely freed.
   ALWAYS_INLINE bool IsAliveWithNoKnownRefs() {
-#if DCHECK_IS_ON() || BUILDFLAG(ENABLE_BACKUP_REF_PTR_SLOW_CHECKS)
+#if defined(PA_REF_COUNT_CHECK_COOKIE)
     CheckCookie();
 #endif
 
@@ -124,7 +140,7 @@ class BASE_EXPORT PartitionRefCount {
 
   ALWAYS_INLINE bool IsAlive() {
     bool alive = count_.load(std::memory_order_relaxed) & 1;
-#if DCHECK_IS_ON() || BUILDFLAG(ENABLE_BACKUP_REF_PTR_SLOW_CHECKS)
+#if defined(PA_REF_COUNT_CHECK_COOKIE)
     if (alive)
       CheckCookie();
 #endif
@@ -132,7 +148,7 @@ class BASE_EXPORT PartitionRefCount {
   }
 
  private:
-#if DCHECK_IS_ON() || BUILDFLAG(ENABLE_BACKUP_REF_PTR_SLOW_CHECKS)
+#if defined(PA_REF_COUNT_CHECK_COOKIE)
   // The cookie helps us ensure that:
   // 1) The reference count pointer calculation is correct.
   // 2) The returned allocation slot is not freed.
@@ -153,14 +169,18 @@ class BASE_EXPORT PartitionRefCount {
   // this class, to preserve this functionality.
   std::atomic<int32_t> count_{1};
 
-#if DCHECK_IS_ON() || BUILDFLAG(ENABLE_BACKUP_REF_PTR_SLOW_CHECKS)
+#if defined(PA_REF_COUNT_CHECK_COOKIE)
   static constexpr uint32_t kCookieSalt = 0xc01dbeef;
   volatile uint32_t brp_cookie_;
-#endif  // DCHECK_IS_ON() || BUILDFLAG(ENABLE_BACKUP_REF_PTR_SLOW_CHECKS)
+#endif
+
+#if BUILDFLAG(ENABLE_DANGLING_RAW_PTR_CHECKS)
+  std::atomic<int32_t> dangling_ptr_detected_{false};
+#endif  // BUILDFLAG(ENABLE_DANGLING_RAW_PTR_CHECKS)
 };
 
 ALWAYS_INLINE PartitionRefCount::PartitionRefCount()
-#if DCHECK_IS_ON() || BUILDFLAG(ENABLE_BACKUP_REF_PTR_SLOW_CHECKS)
+#if defined(PA_REF_COUNT_CHECK_COOKIE)
     : brp_cookie_(CalculateCookie())
 #endif
 {
@@ -187,25 +207,23 @@ static_assert((sizeof(PartitionRefCount) * (kSuperPageSize / SystemPageSize()) *
               "PartitionRefCount Bitmap size must be smaller than or equal to "
               "<= SystemPageSize().");
 
-ALWAYS_INLINE PartitionRefCount* PartitionRefCountPointer(void* slot_start) {
-  PA_DCHECK(slot_start == memory::RemaskPtr(slot_start));
+ALWAYS_INLINE PartitionRefCount* PartitionRefCountPointer(
+    uintptr_t slot_start) {
+  PA_DCHECK(slot_start == ::partition_alloc::internal::RemaskPtr(slot_start));
 #if DCHECK_IS_ON() || BUILDFLAG(ENABLE_BACKUP_REF_PTR_SLOW_CHECKS)
   CheckThatSlotOffsetIsZero(slot_start);
 #endif
-  uintptr_t slot_start_as_uintptr = reinterpret_cast<uintptr_t>(slot_start);
-  if (LIKELY(slot_start_as_uintptr & SystemPageOffsetMask())) {
-    uintptr_t refcount_ptr_as_uintptr =
-        slot_start_as_uintptr - sizeof(PartitionRefCount);
+  if (LIKELY(slot_start & SystemPageOffsetMask())) {
+    uintptr_t refcount_address = slot_start - sizeof(PartitionRefCount);
 #if DCHECK_IS_ON() || BUILDFLAG(ENABLE_BACKUP_REF_PTR_SLOW_CHECKS)
-    PA_CHECK(refcount_ptr_as_uintptr % alignof(PartitionRefCount) == 0);
+    PA_CHECK(refcount_address % alignof(PartitionRefCount) == 0);
 #endif
-    return reinterpret_cast<PartitionRefCount*>(refcount_ptr_as_uintptr);
+    return reinterpret_cast<PartitionRefCount*>(refcount_address);
   } else {
     PartitionRefCount* bitmap_base = reinterpret_cast<PartitionRefCount*>(
-        (slot_start_as_uintptr & kSuperPageBaseMask) + SystemPageSize() * 2);
-    size_t index =
-        ((slot_start_as_uintptr & kSuperPageOffsetMask) >> SystemPageShift()) *
-        kPartitionRefCountIndexMultiplier;
+        (slot_start & kSuperPageBaseMask) + SystemPageSize() * 2);
+    size_t index = ((slot_start & kSuperPageOffsetMask) >> SystemPageShift()) *
+                   kPartitionRefCountIndexMultiplier;
 #if DCHECK_IS_ON() || BUILDFLAG(ENABLE_BACKUP_REF_PTR_SLOW_CHECKS)
     PA_CHECK(sizeof(PartitionRefCount) * index <= SystemPageSize());
 #endif
@@ -225,7 +243,8 @@ constexpr size_t kPartitionRefCountOffsetAdjustment = kInSlotRefCountBufferSize;
 // only then we'll be able to find ref-count in that slot.
 constexpr size_t kPartitionPastAllocationAdjustment = 1;
 
-ALWAYS_INLINE PartitionRefCount* PartitionRefCountPointer(void* slot_start) {
+ALWAYS_INLINE PartitionRefCount* PartitionRefCountPointer(
+    uintptr_t slot_start) {
 #if DCHECK_IS_ON() || BUILDFLAG(ENABLE_BACKUP_REF_PTR_SLOW_CHECKS)
   CheckThatSlotOffsetIsZero(slot_start);
 #endif
@@ -246,7 +265,21 @@ constexpr size_t kPartitionRefCountOffsetAdjustment = 0;
 
 constexpr size_t kPartitionRefCountSizeAdjustment = kInSlotRefCountBufferSize;
 
-}  // namespace internal
-}  // namespace base
+}  // namespace partition_alloc::internal
+
+namespace base::internal {
+
+// TODO(https://crbug.com/1288247): Remove these 'using' declarations once
+// the migration to the new namespaces gets done.
+#if BUILDFLAG(USE_BACKUP_REF_PTR)
+using ::partition_alloc::internal::kPartitionPastAllocationAdjustment;
+using ::partition_alloc::internal::PartitionRefCount;
+using ::partition_alloc::internal::PartitionRefCountPointer;
+#endif  // BUILDFLAG(USE_BACKUP_REF_PTR)
+using ::partition_alloc::internal::kInSlotRefCountBufferSize;
+using ::partition_alloc::internal::kPartitionRefCountOffsetAdjustment;
+using ::partition_alloc::internal::kPartitionRefCountSizeAdjustment;
+
+}  // namespace base::internal
 
 #endif  // BASE_ALLOCATOR_PARTITION_ALLOCATOR_PARTITION_REF_COUNT_H_

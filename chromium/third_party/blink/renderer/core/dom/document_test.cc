@@ -68,6 +68,7 @@
 #include "third_party/blink/renderer/core/html/html_head_element.h"
 #include "third_party/blink/renderer/core/html/html_iframe_element.h"
 #include "third_party/blink/renderer/core/html/html_link_element.h"
+#include "third_party/blink/renderer/core/layout/layout_box.h"
 #include "third_party/blink/renderer/core/loader/document_loader.h"
 #include "third_party/blink/renderer/core/loader/empty_clients.h"
 #include "third_party/blink/renderer/core/page/page.h"
@@ -78,7 +79,6 @@
 #include "third_party/blink/renderer/core/testing/sim/sim_request.h"
 #include "third_party/blink/renderer/core/testing/sim/sim_test.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
-#include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 #include "third_party/blink/renderer/platform/testing/url_test_helpers.h"
@@ -888,7 +888,7 @@ TEST_F(DocumentTest, CanExecuteScriptsWithSandboxAndIsolatedWorld) {
 }
 
 // Android does not support non-overlay top-level scrollbars.
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
 TEST_F(DocumentTest, ElementFromPointOnScrollbar) {
   GetDocument().SetCompatibilityMode(Document::kQuirksMode);
   // This test requires that scrollbars take up space.
@@ -915,7 +915,7 @@ TEST_F(DocumentTest, ElementFromPointOnScrollbar) {
   // A hit test above the horizontal scrollbar should hit the body element.
   EXPECT_EQ(GetDocument().ElementFromPoint(1, 580), GetDocument().body());
 }
-#endif  // defined(OS_ANDROID)
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 TEST_F(DocumentTest, ElementFromPointWithPageZoom) {
   GetDocument().SetCompatibilityMode(Document::kQuirksMode);
@@ -1085,7 +1085,7 @@ TEST_F(DocumentTest, AtPageMarginWithDeviceScaleFactor) {
   EXPECT_EQ(50, description.margin_right);
   EXPECT_EQ(50, description.margin_bottom);
   EXPECT_EQ(50, description.margin_left);
-  EXPECT_EQ(WebDoubleSize(400, 960), description.size);
+  EXPECT_EQ(gfx::SizeF(400, 960), description.size);
 }
 
 TEST(Document, HandlesDisconnectDuringHasTrustToken) {
@@ -1422,6 +1422,21 @@ class MockReportingContext final : public ReportingContext {
 
 }  // namespace
 
+TEST_F(DocumentSimTest, LastModified) {
+  const char kLastModified[] = "Tue, 15 Nov 1994 12:45:26 GMT";
+  SimRequest::Params params;
+  params.response_http_headers = {{"Last-Modified", kLastModified}};
+  SimRequest main_resource("https://example.com", "text/html", params);
+  LoadURL("https://example.com");
+  main_resource.Finish();
+
+  // We test lastModifiedTime() instead of lastModified() because the latter
+  // returns a string in the local time zone.
+  base::Time time;
+  ASSERT_TRUE(base::Time::FromString(kLastModified, &time));
+  EXPECT_EQ(time, GetDocument().lastModifiedTime());
+}
+
 TEST_F(DocumentSimTest, DuplicatedDocumentPolicyViolationsAreIgnored) {
   blink::ScopedDocumentPolicyForTest scoped_document_policy(true);
   SimRequest::Params params;
@@ -1692,6 +1707,31 @@ TEST_F(UnassociatedListedElementTest,
   div->remove();
   listed_elements = GetDocument().UnassociatedListedElements();
   EXPECT_EQ(0u, listed_elements.size());
+}
+
+TEST_F(DocumentTest, DocumentDefiningElementWithMultipleBodies) {
+  SetHtmlInnerHTML(R"HTML(
+    <body style="overflow: auto; height: 100%">
+      <div style="height: 10000px"></div>
+    </body>
+  )HTML");
+
+  Element* body1 = GetDocument().body();
+  EXPECT_EQ(body1, GetDocument().ViewportDefiningElement());
+  EXPECT_FALSE(body1->GetLayoutBox()->GetScrollableArea());
+
+  Element* body2 = To<Element>(body1->cloneNode(true));
+  GetDocument().documentElement()->appendChild(body2);
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_EQ(body1, GetDocument().ViewportDefiningElement());
+  EXPECT_FALSE(body1->GetLayoutBox()->GetScrollableArea());
+  EXPECT_TRUE(body2->GetLayoutBox()->GetScrollableArea());
+
+  GetDocument().documentElement()->appendChild(body1);
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_EQ(body2, GetDocument().ViewportDefiningElement());
+  EXPECT_TRUE(body1->GetLayoutBox()->GetScrollableArea());
+  EXPECT_FALSE(body2->GetLayoutBox()->GetScrollableArea());
 }
 
 }  // namespace blink

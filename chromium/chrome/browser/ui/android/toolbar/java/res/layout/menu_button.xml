@@ -23,7 +23,7 @@
 
        <ImageView
            android:id="@+id/menu_badge"
-           style="@style/ToolbarMenuButtonPhone"
+           style="@style/ToolbarMenuButton"
            android:src="@drawable/badge_update_dark"
            tools:ignore="ContentDescription"
            android:importantForAccessibility="no"
@@ -33,7 +33,7 @@
        <!-- Vivaldi - Adding dummy button to handle long click event on + button in tab strip  -->
        <org.chromium.chrome.browser.toolbar.TabSwitcherButtonView
            android:id="@+id/tab_switcher_menu_helper_button"
-           style="@style/ToolbarMenuButtonPhone"
+           style="@style/ToolbarMenuButton"
            tools:ignore="ContentDescription"
            android:layout_width="0dp"
            android:layout_height="0dp"

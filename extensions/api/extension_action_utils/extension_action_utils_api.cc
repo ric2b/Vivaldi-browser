@@ -14,6 +14,7 @@
 #include "base/json/json_reader.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/values.h"
 #include "browser/vivaldi_browser_finder.h"
 #include "chrome/browser/extensions/api/commands/command_service.h"
 #include "chrome/browser/extensions/api/context_menus/context_menus_api_helpers.h"
@@ -178,10 +179,10 @@ void FillInfoFromManifest(vivaldi::extension_action_utils::ExtensionInfo* info,
                           const Extension* extension) {
   info->name = std::make_unique<std::string>(extension->name());
 
-  std::string manifest_string;
-  if (extension->manifest()->GetString(manifest_keys::kHomepageURL,
-                                       &manifest_string)) {
-    info->homepage = std::make_unique<std::string>(manifest_string);
+  const std::string* manifest_string =
+      extension->manifest()->FindStringPath(manifest_keys::kHomepageURL);
+  if (manifest_string) {
+    info->homepage = std::make_unique<std::string>(*manifest_string);
   }
   if (OptionsPageInfo::HasOptionsPage(extension)) {
     GURL url = OptionsPageInfo::GetOptionsPage(extension);
@@ -288,8 +289,7 @@ void ExtensionActionUtil::PrefsChange() {
     return;
   }
 
-  user_hidden_extensions_.reset(
-      new base::ListValue(hidden_extensions->GetList()));
+  user_hidden_extensions_ = hidden_extensions->Clone();
 }
 
 ExtensionActionUtil::~ExtensionActionUtil() {}
@@ -325,7 +325,7 @@ void ExtensionActionUtil::FillInfoForTabId(
   info->allow_in_incognito.reset(
       new bool(util::IsIncognitoEnabled(action->extension_id(), profile_)));
 
-  bool is_user_hidden = Contains(user_hidden_extensions_->GetList(),
+  bool is_user_hidden = Contains(user_hidden_extensions_.GetList(),
                                  base::Value(action->extension_id()));
 
   info->action_is_hidden.reset(new bool(is_user_hidden));
@@ -602,14 +602,14 @@ ExtensionActionUtilsGetToolbarExtensionsFunction::Run() {
       utils->FillInfoForTabId(&info, action, ExtensionAction::kDefaultTabId);
       info.name.reset(new std::string(extension->name()));
 
-      std::string manifest_string;
-      if (extension->manifest()->GetString(manifest_keys::kHomepageURL,
-                                           &manifest_string)) {
-        info.homepage.reset(new std::string(manifest_string));
+      const std::string* manifest_string =
+          extension->manifest()->FindStringPath(manifest_keys::kHomepageURL);
+      if (manifest_string) {
+        info.homepage.reset(new std::string(*manifest_string));
       }
-      if (extension->manifest()->GetString(manifest_keys::kOptionsPage,
-                                           &manifest_string)) {
-        info.optionspage.reset(new std::string(manifest_string));
+      manifest_string = extension->manifest()->FindStringPath(manifest_keys::kOptionsPage);
+      if (manifest_string) {
+        info.optionspage.reset(new std::string(*manifest_string));
       }
       toolbar_extensionactions.push_back(std::move(info));
     }
@@ -686,7 +686,7 @@ ExtensionActionUtilsToggleBrowserActionVisibilityFunction::Run() {
   const base::Value* hidden_extensions = profile->GetPrefs()->GetList(
       vivaldiprefs::kAddressBarExtensionsHiddenExtensions);
 
-  base::ListValue updated_hidden_extensions(hidden_extensions->GetList());
+  base::Value updated_hidden_extensions(hidden_extensions->GetList().Clone());
 
   if (Contains(updated_hidden_extensions.GetList(),
                base::Value(params->extension_id))) {

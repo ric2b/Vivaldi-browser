@@ -412,7 +412,7 @@ static base::TimeDelta CurrentAge(const ResourceResponse& response,
 
 static base::TimeDelta FreshnessLifetime(const ResourceResponse& response,
                                          base::Time response_timestamp) {
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   // On desktop, local files should be reloaded in case they change.
   if (response.CurrentRequestUrl().IsLocalFile())
     return base::TimeDelta();
@@ -526,7 +526,6 @@ void Resource::ResponseReceived(const ResourceResponse& response) {
 
 void Resource::SetSerializedCachedMetadata(mojo_base::BigBuffer data) {
   DCHECK(!is_revalidating_);
-  DCHECK(!GetResponse().IsNull());
 }
 
 bool Resource::CodeCacheHashRequired() const {
@@ -920,10 +919,6 @@ void Resource::SetCachePolicyBypassingCache() {
   resource_request_.SetCacheMode(mojom::FetchCacheMode::kBypassCache);
 }
 
-void Resource::SetPreviewsState(PreviewsState previews_state) {
-  resource_request_.SetPreviewsState(previews_state);
-}
-
 void Resource::ClearRangeRequestHeader() {
   resource_request_.ClearHttpHeaderField("range");
 }
@@ -1095,6 +1090,8 @@ static const char* InitiatorTypeNameToString(
     const AtomicString& initiator_type_name) {
   if (initiator_type_name == fetch_initiator_type_names::kAudio)
     return "Audio";
+  if (initiator_type_name == fetch_initiator_type_names::kAttributionsrc)
+    return "Attribution resource";
   if (initiator_type_name == fetch_initiator_type_names::kCSS)
     return "CSS resource";
   if (initiator_type_name == fetch_initiator_type_names::kDocument)
@@ -1123,7 +1120,7 @@ static const char* InitiatorTypeNameToString(
     return "XMLHttpRequest";
 
   static_assert(
-      fetch_initiator_type_names::kNamesCount == 17,
+      fetch_initiator_type_names::kNamesCount == 18,
       "New FetchInitiatorTypeNames should be handled correctly here.");
 
   return "Resource";

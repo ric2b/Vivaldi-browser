@@ -2,10 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// ReadLaterUI is a Mojo WebUI controller and therefore needs mojo defined to
-// finish running its tests.
-import 'chrome://resources/mojo/mojo/public/js/mojo_bindings_lite.js';
-
+import 'chrome://webui-test/mojo_webui_test_support.js';
 import 'chrome://read-later.top-chrome/side_panel/bookmarks_list.js';
 
 import {BookmarkFolderElement, FOLDER_OPEN_CHANGED_EVENT} from 'chrome://read-later.top-chrome/side_panel/bookmark_folder.js';
@@ -239,70 +236,5 @@ suite('SidePanelBookmarksListTest', () => {
     assertEquals(
         JSON.stringify(['5001']),
         window.localStorage[LOCAL_STORAGE_OPEN_FOLDERS_KEY]);
-  });
-
-  test('MovesFocusBetweenFolders', () => {
-    const folderElements = getFolderElements(bookmarksList);
-
-    function dispatchArrowKey(key: string) {
-      bookmarksList.dispatchEvent(new KeyboardEvent('keydown', {key}));
-    }
-
-    function assertActiveElement(index: number) {
-      assertEquals(
-          folderElements[index], bookmarksList.shadowRoot!.activeElement);
-    }
-
-    // Move focus to the first folder.
-    folderElements[0]!.moveFocus(1);
-    assertActiveElement(0);
-
-    // One ArrowDown key should still keep focus in the first folder since the
-    // folder has children.
-    dispatchArrowKey('ArrowDown');
-    assertActiveElement(0);
-
-    // Two ArrowsDown to eventually make it to the second folder.
-    dispatchArrowKey('ArrowDown');
-    dispatchArrowKey('ArrowDown');
-    assertActiveElement(1);
-
-    // One ArrowsDown to eventually make it to the third folder.
-    dispatchArrowKey('ArrowDown');
-    assertActiveElement(2);
-
-    // One ArrowsDown to loop back to the first folder.
-    dispatchArrowKey('ArrowDown');
-    assertActiveElement(0);
-
-    // One ArrowUp to loop back to the last folder.
-    dispatchArrowKey('ArrowUp');
-    assertActiveElement(2);
-
-    // One ArrowUp to loop back to the second folder.
-    dispatchArrowKey('ArrowUp');
-    assertActiveElement(1);
-  });
-
-  test('CutsCopyPastesBookmark', async () => {
-    const folderElement = getFolderElements(bookmarksList)[0]!;
-    const bookmarkElement = getBookmarkElements(folderElement)[0]!;
-
-    bookmarkElement.dispatchEvent(new KeyboardEvent(
-        'keydown', {key: 'x', ctrlKey: true, bubbles: true, composed: true}));
-    const cutId = await bookmarksApi.whenCalled('cutBookmark');
-    assertEquals('3', cutId);
-
-    bookmarkElement.dispatchEvent(new KeyboardEvent(
-        'keydown', {key: 'c', ctrlKey: true, bubbles: true, composed: true}));
-    const copiedId = await bookmarksApi.whenCalled('copyBookmark');
-    assertEquals('3', copiedId);
-
-    bookmarkElement.dispatchEvent(new KeyboardEvent(
-        'keydown', {key: 'v', ctrlKey: true, bubbles: true, composed: true}));
-    let [pastedId, pastedDestinationId] =
-        await bookmarksApi.whenCalled('pasteToBookmark');
-    assertEquals('0', pastedId);
-    assertEquals('3', pastedDestinationId);
   });
 });

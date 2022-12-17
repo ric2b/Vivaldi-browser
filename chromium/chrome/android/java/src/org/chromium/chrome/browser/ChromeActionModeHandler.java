@@ -49,9 +49,11 @@ import java.util.Set;
 import android.content.Intent;
 
 import org.vivaldi.browser.VivaldiNonSelectionActionModeCallback;
+import org.vivaldi.browser.common.VivaldiUrlConstants;
 import org.vivaldi.browser.notes.NoteAppendActivity;
 import org.vivaldi.browser.notes.NoteSelectionPopupController;
 import org.vivaldi.browser.notes.NotesModel;
+import org.vivaldi.browser.panels.PanelUtils;
 
 /**
  * A class that handles selection action mode for the active {@link Tab}.
@@ -254,6 +256,12 @@ public class ChromeActionModeHandler {
                     intent.putExtra("APPEND_CONTENT", mHelper.getSelectedText());
                     mTab.getContext().startActivity(intent);
                 }
+                mHelper.finishActionMode();
+            }  else if (item.getItemId()
+                    == org.chromium.chrome.R.id.select_action_menu_translate) { // Vivaldi
+                PanelUtils.showPanel(TabUtils.getActivity(mTab), VivaldiUrlConstants.TRANSLATE_PANEL_URL,
+                        false, false, mHelper.getSelectedText());
+
                 mHelper.finishActionMode();
             } else {
                 return mHelper.onActionItemClicked(mode, item);

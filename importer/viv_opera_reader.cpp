@@ -35,7 +35,7 @@ bool OperaAdrFileReader::LoadFile(const base::FilePath& file) {
   base::StringTokenizer tokenizer(bookmark_data, "\r\n");
 
   std::string category;
-  base::DictionaryValue entries;
+  base::Value::Dict entries;
   while (tokenizer.GetNext()) {
     std::string line = tokenizer.token();
 
@@ -46,7 +46,7 @@ bool OperaAdrFileReader::LoadFile(const base::FilePath& file) {
     if (line[0] == '-' || line[0] == '#') {
       if (!category.empty())
         HandleEntry(category, entries);
-      entries.DictClear();
+      entries.clear();
       if (line[0] == '-') {
         HandleEntry("-", entries);
         category = "";
@@ -61,10 +61,10 @@ bool OperaAdrFileReader::LoadFile(const base::FilePath& file) {
     if (equal != std::string::npos) {
       std::string key = base::ToLowerASCII(line.substr(0, equal));
       std::string val = line.substr(equal + 1);
-      entries.SetString(key, val);
+      entries.Set(std::move(key), std::move(val));
     }
   }
-  if (entries.DictSize() > 0) {
+  if (entries.size() > 0) {
     HandleEntry(category, entries);
   }
   return true;

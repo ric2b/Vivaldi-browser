@@ -34,6 +34,7 @@ class MockLoginDisplayHost : public LoginDisplayHost {
               (),
               (override));
   MOCK_METHOD(gfx::NativeWindow, GetNativeWindow, (), (const, override));
+  MOCK_METHOD(views::Widget*, GetLoginWindowWidget, (), (const, override));
   MOCK_METHOD(OobeUI*, GetOobeUI, (), (const, override));
   MOCK_METHOD(content::WebContents*, GetOobeWebContents, (), (const, override));
   MOCK_METHOD(WebUILoginView*, GetWebUILoginView, (), (const, override));
@@ -65,7 +66,7 @@ class MockLoginDisplayHost : public LoginDisplayHost {
   MOCK_METHOD(void, ShowGaiaDialog, (const AccountId&), (override));
   MOCK_METHOD(void, ShowOsInstallScreen, (), (override));
   MOCK_METHOD(void, ShowGuestTosScreen, (), (override));
-  MOCK_METHOD(void, HideOobeDialog, (), (override));
+  MOCK_METHOD(void, HideOobeDialog, (bool saml_video_timeout), (override));
   MOCK_METHOD(void, SetShelfButtonsEnabled, (bool), (override));
   MOCK_METHOD(void, UpdateOobeDialogState, (OobeDialogState state), (override));
 

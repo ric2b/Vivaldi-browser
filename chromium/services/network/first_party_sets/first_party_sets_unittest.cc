@@ -4,15 +4,21 @@
 
 #include "services/network/first_party_sets/first_party_sets.h"
 
+#include <set>
+#include <string>
+
+#include "base/containers/flat_set.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/json/json_reader.h"
+#include "base/run_loop.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "net/base/features.h"
 #include "net/base/schemeful_site.h"
+#include "net/base/test_completion_callback.h"
 #include "net/cookies/cookie_constants.h"
+#include "net/cookies/first_party_set_metadata.h"
 #include "net/cookies/same_party_context.h"
 #include "services/network/first_party_sets/first_party_set_parser.h"
 #include "testing/gmock/include/gmock/gmock-matchers.h"
@@ -38,22 +44,20 @@ MATCHER_P(SerializesTo, want, "") {
   return testing::ExplainMatchResult(testing::Eq(want), got, result_listener);
 }
 
+FirstPartySets::FlattenedSets ParseSetsFromStream(const std::string& sets) {
+  std::istringstream stream(sets);
+  return FirstPartySetParser::ParseSetsFromStream(stream);
+}
+
 class FirstPartySetsTest : public ::testing::Test {
  public:
-  explicit FirstPartySetsTest(bool enabled) {
-    if (enabled) {
-      feature_list_.InitAndEnableFeature(net::features::kFirstPartySets);
-    } else {
-      feature_list_.InitAndDisableFeature(net::features::kFirstPartySets);
-    }
+  explicit FirstPartySetsTest(bool enabled) : sets_(enabled) {}
+
+  void SetComponentSets(base::StringPiece content) {
+    SetComponentSets(sets_, content);
   }
 
-  void SetComponentSetsAndWait(base::StringPiece content) {
-    SetComponentSetsAndWait(sets_, content);
-  }
-
-  void SetComponentSetsAndWait(FirstPartySets& sets,
-                               base::StringPiece content) {
+  void SetComponentSets(FirstPartySets& sets, base::StringPiece content) const {
     base::ScopedTempDir temp_dir;
     CHECK(temp_dir.CreateUniqueTempDir());
     base::FilePath path =
@@ -62,10 +66,40 @@ class FirstPartySetsTest : public ::testing::Test {
 
     sets.ParseAndSet(
         base::File(path, base::File::FLAG_OPEN | base::File::FLAG_READ));
-    env_.RunUntilIdle();
+  }
+
+  FirstPartySets::SetsByOwner SetsAndWait() {
+    net::TestOptionalCompletionCallback<FirstPartySets::SetsByOwner> callback;
+    return callback.GetResult(sets_.Sets(callback.callback())).value();
+  }
+
+  net::FirstPartySetMetadata ComputeMetadataAndWait(
+      const net::SchemefulSite& site,
+      const net::SchemefulSite* top_frame_site,
+      const std::set<net::SchemefulSite>& party_context) {
+    net::TestOptionalCompletionCallback<net::FirstPartySetMetadata> callback;
+    return callback
+        .GetResult(sets_.ComputeMetadata(site, top_frame_site, party_context,
+                                         callback.callback()))
+        .value();
+  }
+
+  FirstPartySets::OwnerResult FindOwnerAndWait(const net::SchemefulSite& site) {
+    net::TestOptionalCompletionCallback<FirstPartySets::OwnerResult> callback;
+    return callback.GetResult(sets_.FindOwner(site, callback.callback()))
+        .value();
+  }
+
+  FirstPartySets::OwnersResult FindOwnersAndWait(
+      const base::flat_set<net::SchemefulSite>& site) {
+    net::TestOptionalCompletionCallback<FirstPartySets::OwnersResult> callback;
+    return callback.GetResult(sets_.FindOwners(site, callback.callback()))
+        .value();
   }
 
   FirstPartySets& sets() { return sets_; }
+
+  base::test::TaskEnvironment& env() { return env_; }
 
  private:
   base::test::ScopedFeatureList feature_list_;
@@ -78,98 +112,78 @@ class FirstPartySetsDisabledTest : public FirstPartySetsTest {
   FirstPartySetsDisabledTest() : FirstPartySetsTest(false) {}
 };
 
-TEST_F(FirstPartySetsDisabledTest, ParseAndSet_IgnoresValid) {
-  const std::string input =
-      R"([{
-        "owner": "https://example.test",
-        "members": ["https://aaaa.test"]
-        }])";
-  ASSERT_TRUE(base::JSONReader::Read(input));
-
-  SetComponentSetsAndWait(input);
-  EXPECT_THAT(sets().Sets(), IsEmpty());
-}
-
-TEST_F(FirstPartySetsDisabledTest, ParseV2Format_IgnoresValid) {
+TEST_F(FirstPartySetsDisabledTest, Parse_IgnoresValid) {
   const std::string input =
       "{\"owner\": \"https://example.test\",\"members\": "
       "[\"https://aaaa.test\"]}";
 
-  SetComponentSetsAndWait(input);
-  EXPECT_THAT(sets().Sets(), IsEmpty());
+  SetComponentSets(input);
+
+  EXPECT_THAT(SetsAndWait(), IsEmpty());
 }
 
 TEST_F(FirstPartySetsDisabledTest, SetsManuallySpecified_IgnoresValid) {
-  FirstPartySets sets;
-  sets.SetManuallySpecifiedSet("https://example.test,https://member.test");
-  EXPECT_THAT(sets.Sets(), IsEmpty());
+  sets().SetManuallySpecifiedSet("https://example.test,https://member.test");
+  EXPECT_THAT(SetsAndWait(), IsEmpty());
 }
 
-TEST_F(FirstPartySetsDisabledTest, IsInNontrivialFirstPartySet) {
-  const std::string input =
-      R"([{
-        "owner": "https://example.test",
-        "members": ["https://aaaa.test"]
-        }])";
-  ASSERT_TRUE(base::JSONReader::Read(input));
+TEST_F(FirstPartySetsDisabledTest, FindOwners) {
+  net::SchemefulSite kExample =
+      net::SchemefulSite(GURL("https://example.test"));
 
-  SetComponentSetsAndWait(input);
-
-  // IsInNontrivialFirstPartySet queries should return false, regardless of what
-  // data has been passed to the instance.
-  EXPECT_FALSE(sets().IsInNontrivialFirstPartySet(
-      net::SchemefulSite(GURL("https://example.test"))));
-  EXPECT_FALSE(sets().IsInNontrivialFirstPartySet(
-      net::SchemefulSite(GURL("https://aaaa.test"))));
-  EXPECT_FALSE(sets().IsInNontrivialFirstPartySet(
-      net::SchemefulSite(GURL("https://bbbb.test"))));
+  EXPECT_THAT(FindOwnersAndWait({kExample}), IsEmpty());
 }
 
-TEST_F(FirstPartySetsDisabledTest, ComputeContext_InfersSingletons) {
+TEST_F(FirstPartySetsDisabledTest, ComputeMetadata_InfersSingletons) {
   net::SchemefulSite member(GURL("https://member1.test"));
   net::SchemefulSite example(GURL("https://example.test"));
   net::SchemefulSite wss_member(GURL("wss://member1.test"));
 
-  FirstPartySets sets;
-
   // Works if the site is provided with WSS scheme instead of HTTPS.
-  EXPECT_THAT(sets.ComputeContext(wss_member, &member, {member, example}),
-              net::SamePartyContext(Type::kCrossParty, Type::kCrossParty,
-                                    Type::kSameParty));
+  EXPECT_THAT(
+      ComputeMetadataAndWait(wss_member, &member, {member, example}).context(),
+      net::SamePartyContext(Type::kCrossParty, Type::kCrossParty,
+                            Type::kSameParty));
 
-  EXPECT_THAT(sets.ComputeContext(example, &member, {member}),
+  EXPECT_THAT(ComputeMetadataAndWait(example, &member, {member}).context(),
               net::SamePartyContext(Type::kCrossParty));
-  EXPECT_THAT(sets.ComputeContext(member, &example, {member}),
+  EXPECT_THAT(ComputeMetadataAndWait(member, &example, {member}).context(),
               net::SamePartyContext(Type::kCrossParty));
 
   // Top&resource differs from Ancestors.
-  EXPECT_THAT(sets.ComputeContext(member, &member, {example}),
+  EXPECT_THAT(ComputeMetadataAndWait(member, &member, {example}).context(),
               net::SamePartyContext(Type::kCrossParty, Type::kCrossParty,
                                     Type::kSameParty));
 
   // Metrics values infer singleton sets when appropriate.
-  EXPECT_THAT(sets.ComputeContext(member, &member, {member}),
+  EXPECT_THAT(ComputeMetadataAndWait(member, &member, {member}).context(),
               net::SamePartyContext(Type::kCrossParty, Type::kSameParty,
                                     Type::kSameParty));
-  EXPECT_THAT(sets.ComputeContext(member, &example, {member}),
+  EXPECT_THAT(ComputeMetadataAndWait(member, &example, {member}).context(),
               net::SamePartyContext(Type::kCrossParty));
-  EXPECT_THAT(sets.ComputeContext(example, &member, {member}),
+  EXPECT_THAT(ComputeMetadataAndWait(example, &member, {member}).context(),
               net::SamePartyContext(Type::kCrossParty));
-  EXPECT_THAT(sets.ComputeContext(member, &member, {example}),
+  EXPECT_THAT(ComputeMetadataAndWait(member, &member, {example}).context(),
               net::SamePartyContext(Type::kCrossParty, Type::kCrossParty,
                                     Type::kSameParty));
 
-  EXPECT_THAT(sets.ComputeContext(member, &member, {member, example}),
-              net::SamePartyContext(Type::kCrossParty, Type::kCrossParty,
-                                    Type::kSameParty));
+  EXPECT_THAT(
+      ComputeMetadataAndWait(member, &member, {member, example}).context(),
+      net::SamePartyContext(Type::kCrossParty, Type::kCrossParty,
+                            Type::kSameParty));
 }
 
 TEST_F(FirstPartySetsDisabledTest, FindOwner) {
   sets().SetManuallySpecifiedSet("https://example.test,https://member.test");
+
   EXPECT_FALSE(
-      sets().FindOwner(net::SchemefulSite(GURL("https://example.test"))));
+      FindOwnerAndWait(net::SchemefulSite(GURL("https://example.test"))));
   EXPECT_FALSE(
-      sets().FindOwner(net::SchemefulSite(GURL("https://member.test"))));
+      FindOwnerAndWait(net::SchemefulSite(GURL("https://member.test"))));
+}
+
+TEST_F(FirstPartySetsDisabledTest, Sets_IsEmpty) {
+  EXPECT_THAT(SetsAndWait(), IsEmpty());
 }
 
 class FirstPartySetsEnabledTest : public FirstPartySetsTest {
@@ -178,483 +192,13 @@ class FirstPartySetsEnabledTest : public FirstPartySetsTest {
 };
 
 TEST_F(FirstPartySetsEnabledTest, Sets_IsEmpty) {
-  EXPECT_THAT(FirstPartySets().Sets(), IsEmpty());
-}
-
-TEST_F(FirstPartySetsEnabledTest, ParsesJSON) {
-  SetComponentSetsAndWait("[]");
-  EXPECT_THAT(sets().Sets(), IsEmpty());
-}
-
-TEST_F(FirstPartySetsEnabledTest, AcceptsMinimal) {
-  const std::string input =
-      R"([{
-        "owner": "https://example.test",
-        "members": ["https://aaaa.test"]
-        }])";
-  ASSERT_TRUE(base::JSONReader::Read(input));
-
-  SetComponentSetsAndWait(input);
-
-  EXPECT_THAT(sets().Sets(),
-              UnorderedElementsAre(Pair(
-                  SerializesTo("https://example.test"),
-                  UnorderedElementsAre(SerializesTo("https://example.test"),
-                                       SerializesTo("https://aaaa.test")))));
-}
-
-TEST_F(FirstPartySetsEnabledTest, V2_AcceptsMinimal) {
-  const std::string input =
-      "{\"owner\": \"https://example.test\",\"members\": "
-      "[\"https://aaaa.test\",],}";
-
-  SetComponentSetsAndWait(input);
-  EXPECT_THAT(sets().Sets(),
-              UnorderedElementsAre(Pair(
-                  SerializesTo("https://example.test"),
-                  UnorderedElementsAre(SerializesTo("https://example.test"),
-                                       SerializesTo("https://aaaa.test")))));
-}
-
-TEST_F(FirstPartySetsEnabledTest, AcceptsMultipleSets) {
-  const std::string input = R"(
-  [
-    {
-      "owner": "https://example.test",
-      "members": ["https://member1.test"]
-    },
-    {
-      "owner": "https://foo.test",
-      "members": ["https://member2.test"]
-    }
-  ]
-  )";
-  ASSERT_TRUE(base::JSONReader::Read(input));
-  SetComponentSetsAndWait(input);
-
-  EXPECT_THAT(
-      sets().Sets(),
-      UnorderedElementsAre(
-          Pair(SerializesTo("https://example.test"),
-               UnorderedElementsAre(SerializesTo("https://example.test"),
-                                    SerializesTo("https://member1.test"))),
-          Pair(SerializesTo("https://foo.test"),
-               UnorderedElementsAre(SerializesTo("https://foo.test"),
-                                    SerializesTo("https://member2.test")))));
-}
-
-TEST_F(FirstPartySetsEnabledTest, V2_AcceptsMultipleSets) {
-  const std::string input =
-      "{\"owner\": \"https://example.test\",\"members\": "
-      "[\"https://member1.test\"]}\n"
-      "{\"owner\": \"https://foo.test\",\"members\": "
-      "[\"https://member2.test\"]}";
-
-  SetComponentSetsAndWait(input);
-  EXPECT_THAT(
-      sets().Sets(),
-      UnorderedElementsAre(
-          Pair(SerializesTo("https://example.test"),
-               UnorderedElementsAre(SerializesTo("https://example.test"),
-                                    SerializesTo("https://member1.test"))),
-          Pair(SerializesTo("https://foo.test"),
-               UnorderedElementsAre(SerializesTo("https://foo.test"),
-                                    SerializesTo("https://member2.test")))));
-}
-
-TEST_F(FirstPartySetsEnabledTest, ClearsPreloadedOnError) {
-  const std::string input = R"(
-  [
-    {
-      "owner": "https://example.test",
-      "members": ["https://member1.test"]
-    },
-    {
-      "owner": "https://foo.test",
-      "members": ["https://member2.test"]
-    }
-  ]
-  )";
-  ASSERT_TRUE(base::JSONReader::Read(input));
-  SetComponentSetsAndWait(input);
-
-  EXPECT_THAT(
-      sets().Sets(),
-      UnorderedElementsAre(
-          Pair(SerializesTo("https://example.test"),
-               UnorderedElementsAre(SerializesTo("https://example.test"),
-                                    SerializesTo("https://member1.test"))),
-          Pair(SerializesTo("https://foo.test"),
-               UnorderedElementsAre(SerializesTo("https://foo.test"),
-                                    SerializesTo("https://member2.test")))));
-
-  SetComponentSetsAndWait("{}");
-
-  EXPECT_THAT(sets().Sets(), IsEmpty());
-}
-
-TEST_F(FirstPartySetsEnabledTest, OwnerIsOnlyMember) {
-  const std::string input = R"(
-  [
-    {
-      "owner": "https://example.test",
-      "members": ["https://example.test"]
-    },
-    {
-      "owner": "https://foo.test",
-      "members": ["https://member2.test"]
-    }
-  ]
-  )";
-  ASSERT_TRUE(base::JSONReader::Read(input));
-  SetComponentSetsAndWait(input);
-
-  EXPECT_THAT(sets().Sets(), IsEmpty());
-}
-
-TEST_F(FirstPartySetsEnabledTest, OwnerIsMember) {
-  const std::string input = R"(
-  [
-    {
-      "owner": "https://example.test",
-      "members": ["https://example.test", "https://member1.test"]
-    },
-    {
-      "owner": "https://foo.test",
-      "members": ["https://member2.test"]
-    }
-  ]
-  )";
-  ASSERT_TRUE(base::JSONReader::Read(input));
-  SetComponentSetsAndWait(input);
-
-  EXPECT_THAT(sets().Sets(), IsEmpty());
-}
-
-TEST_F(FirstPartySetsEnabledTest, RepeatedMember) {
-  const std::string input = R"(
-  [
-    {
-      "owner": "https://example.test",
-      "members": [
-        "https://member1.test",
-        "https://member2.test",
-        "https://member1.test"
-        ]
-    },
-    {
-      "owner": "https://foo.test",
-      "members": ["https://member3.test"]
-    }
-  ]
-  )";
-  ASSERT_TRUE(base::JSONReader::Read(input));
-  SetComponentSetsAndWait(input);
-
-  EXPECT_THAT(sets().Sets(), IsEmpty());
-}
-
-TEST_F(FirstPartySetsEnabledTest, SetsManuallySpecified_Invalid_TooSmall) {
-  sets().SetManuallySpecifiedSet("https://example.test");
-  EXPECT_THAT(sets().Sets(), IsEmpty());
-}
-
-TEST_F(FirstPartySetsEnabledTest, SetsManuallySpecified_Invalid_NotOrigins) {
-  sets().SetManuallySpecifiedSet("https://example.test,member1");
-  EXPECT_THAT(sets().Sets(), IsEmpty());
-}
-
-TEST_F(FirstPartySetsEnabledTest, SetsManuallySpecified_Invalid_NotHTTPS) {
-  sets().SetManuallySpecifiedSet("https://example.test,http://member1.test");
-  EXPECT_THAT(sets().Sets(), IsEmpty());
-}
-
-TEST_F(FirstPartySetsEnabledTest,
-       SetsManuallySpecified_Invalid_RegisteredDomain_Owner) {
-  sets().SetManuallySpecifiedSet(
-      "https://www.example.test..,https://www.member.test");
-  EXPECT_THAT(sets().Sets(), IsEmpty());
-}
-
-TEST_F(FirstPartySetsEnabledTest,
-       SetsManuallySpecified_Invalid_RegisteredDomain_Member) {
-  sets().SetManuallySpecifiedSet(
-      "https://www.example.test,https://www.member.test..");
-  EXPECT_THAT(sets().Sets(), IsEmpty());
-}
-
-TEST_F(FirstPartySetsEnabledTest, SetsManuallySpecified_Valid_EmptyValue) {
+  SetComponentSets("[]");
   sets().SetManuallySpecifiedSet("");
-
-  // Set non-empty existing sets to distinguish the failure case from the no-op
-  // case when processing the manually-specified sets.
-  const std::string existing_sets = R"(
-  [
-    {
-      "owner": "https://example.test",
-      "members": ["https://member.test"]
-    }
-  ]
-  )";
-  ASSERT_TRUE(base::JSONReader::Read(existing_sets));
-  SetComponentSetsAndWait(existing_sets);
-
-  EXPECT_THAT(sets().Sets(),
-              UnorderedElementsAre(Pair(
-                  SerializesTo("https://example.test"),
-                  UnorderedElementsAre(SerializesTo("https://example.test"),
-                                       SerializesTo("https://member.test")))));
-}
-
-TEST_F(FirstPartySetsEnabledTest, SetsManuallySpecified_Valid_SingleMember) {
-  sets().SetManuallySpecifiedSet("https://example.test,https://member.test");
-  EXPECT_THAT(sets().Sets(),
-              UnorderedElementsAre(Pair(
-                  SerializesTo("https://example.test"),
-                  UnorderedElementsAre(SerializesTo("https://example.test"),
-                                       SerializesTo("https://member.test")))));
-}
-
-TEST_F(FirstPartySetsEnabledTest,
-       SetsManuallySpecified_Valid_SingleMember_RegisteredDomain) {
-  sets().SetManuallySpecifiedSet(
-      "https://www.example.test,https://www.member.test");
-  EXPECT_THAT(sets().Sets(),
-              UnorderedElementsAre(Pair(
-                  SerializesTo("https://example.test"),
-                  UnorderedElementsAre(SerializesTo("https://example.test"),
-                                       SerializesTo("https://member.test")))));
-}
-
-TEST_F(FirstPartySetsEnabledTest, SetsManuallySpecified_Valid_MultipleMembers) {
-  sets().SetManuallySpecifiedSet(
-      "https://example.test,https://member1.test,https://member2.test");
-  EXPECT_THAT(sets().Sets(),
-              UnorderedElementsAre(Pair(
-                  SerializesTo("https://example.test"),
-                  UnorderedElementsAre(SerializesTo("https://example.test"),
-                                       SerializesTo("https://member1.test"),
-                                       SerializesTo("https://member2.test")))));
-}
-
-TEST_F(FirstPartySetsEnabledTest,
-       SetsManuallySpecified_Valid_OwnerIsOnlyMember) {
-  sets().SetManuallySpecifiedSet("https://example.test,https://example.test");
-  EXPECT_THAT(sets().Sets(), IsEmpty());
-}
-
-TEST_F(FirstPartySetsEnabledTest, SetsManuallySpecified_Valid_OwnerIsMember) {
-  sets().SetManuallySpecifiedSet(
-      "https://example.test,https://example.test,https://member1.test");
-  EXPECT_THAT(sets().Sets(),
-              UnorderedElementsAre(Pair(
-                  SerializesTo("https://example.test"),
-                  UnorderedElementsAre(SerializesTo("https://example.test"),
-                                       SerializesTo("https://member1.test")))));
-}
-
-TEST_F(FirstPartySetsEnabledTest, SetsManuallySpecified_Valid_RepeatedMember) {
-  sets().SetManuallySpecifiedSet(
-      R"(https://example.test,
-       https://member1.test,
-       https://member2.test,
-       https://member1.test)");
-  EXPECT_THAT(sets().Sets(),
-              UnorderedElementsAre(Pair(
-                  SerializesTo("https://example.test"),
-                  UnorderedElementsAre(SerializesTo("https://example.test"),
-                                       SerializesTo("https://member1.test"),
-                                       SerializesTo("https://member2.test")))));
-}
-
-TEST_F(FirstPartySetsEnabledTest,
-       SetsManuallySpecified_DeduplicatesOwnerOwner) {
-  const std::string input = R"(
-  [
-    {
-      "owner": "https://example.test",
-      "members": ["https://member2.test", "https://member3.test"]
-    },
-    {
-      "owner": "https://bar.test",
-      "members": ["https://member4.test"]
-    }
-  ]
-  )";
-  ASSERT_TRUE(base::JSONReader::Read(input));
-  SetComponentSetsAndWait(input);
-
-  sets().SetManuallySpecifiedSet(
-      "https://example.test,https://member1.test,https://member2.test");
-  EXPECT_THAT(
-      sets().Sets(),
-      UnorderedElementsAre(
-          Pair(SerializesTo("https://example.test"),
-               UnorderedElementsAre(SerializesTo("https://example.test"),
-                                    SerializesTo("https://member1.test"),
-                                    SerializesTo("https://member2.test"))),
-          Pair(SerializesTo("https://bar.test"),
-               UnorderedElementsAre(SerializesTo("https://bar.test"),
-                                    SerializesTo("https://member4.test")))));
-}
-
-TEST_F(FirstPartySetsEnabledTest,
-       SetsManuallySpecified_DeduplicatesOwnerMember) {
-  const std::string input = R"(
-  [
-    {
-      "owner": "https://foo.test",
-      "members": ["https://member1.test", "https://example.test"]
-    },
-    {
-      "owner": "https://bar.test",
-      "members": ["https://member2.test"]
-    }
-  ]
-  )";
-  ASSERT_TRUE(base::JSONReader::Read(input));
-  SetComponentSetsAndWait(input);
-
-  sets().SetManuallySpecifiedSet(
-      "https://example.test,https://member1.test,https://member3.test");
-  EXPECT_THAT(
-      sets().Sets(),
-      UnorderedElementsAre(
-          Pair(SerializesTo("https://example.test"),
-               UnorderedElementsAre(SerializesTo("https://example.test"),
-                                    SerializesTo("https://member1.test"),
-                                    SerializesTo("https://member3.test"))),
-          Pair(SerializesTo("https://bar.test"),
-               UnorderedElementsAre(SerializesTo("https://bar.test"),
-                                    SerializesTo("https://member2.test")))));
-}
-
-TEST_F(FirstPartySetsEnabledTest,
-       SetsManuallySpecified_DeduplicatesMemberOwner) {
-  const std::string input = R"(
-  [
-    {
-      "owner": "https://foo.test",
-      "members": ["https://member1.test", "https://member2.test"]
-    },
-    {
-      "owner": "https://member3.test",
-      "members": ["https://member4.test"]
-    }
-  ]
-  )";
-  ASSERT_TRUE(base::JSONReader::Read(input));
-  SetComponentSetsAndWait(input);
-
-  sets().SetManuallySpecifiedSet("https://example.test,https://member3.test");
-  EXPECT_THAT(
-      sets().Sets(),
-      UnorderedElementsAre(
-          Pair(SerializesTo("https://example.test"),
-               UnorderedElementsAre(SerializesTo("https://example.test"),
-                                    SerializesTo("https://member3.test"))),
-          Pair(SerializesTo("https://foo.test"),
-               UnorderedElementsAre(SerializesTo("https://foo.test"),
-                                    SerializesTo("https://member1.test"),
-                                    SerializesTo("https://member2.test")))));
-}
-
-TEST_F(FirstPartySetsEnabledTest,
-       SetsManuallySpecified_DeduplicatesMemberMember) {
-  const std::string input = R"(
-  [
-    {
-      "owner": "https://foo.test",
-      "members": ["https://member2.test", "https://member3.test"]
-    },
-    {
-      "owner": "https://bar.test",
-      "members": ["https://member4.test"]
-    }
-  ]
-  )";
-  ASSERT_TRUE(base::JSONReader::Read(input));
-  SetComponentSetsAndWait(input);
-
-  sets().SetManuallySpecifiedSet(
-      "https://example.test,https://member1.test,https://member2.test");
-  EXPECT_THAT(
-      sets().Sets(),
-      UnorderedElementsAre(
-          Pair(SerializesTo("https://example.test"),
-               UnorderedElementsAre(SerializesTo("https://example.test"),
-                                    SerializesTo("https://member1.test"),
-                                    SerializesTo("https://member2.test"))),
-          Pair(SerializesTo("https://foo.test"),
-               UnorderedElementsAre(SerializesTo("https://foo.test"),
-                                    SerializesTo("https://member3.test"))),
-          Pair(SerializesTo("https://bar.test"),
-               UnorderedElementsAre(SerializesTo("https://bar.test"),
-                                    SerializesTo("https://member4.test")))));
-}
-
-TEST_F(FirstPartySetsEnabledTest,
-       SetsManuallySpecified_ClearsPreloadedOnError) {
-  const std::string input = R"(
-  [
-    {
-      "owner": "https://bar.test",
-      "members": ["https://member3.test"]
-    }
-  ]
-  )";
-  ASSERT_TRUE(base::JSONReader::Read(input));
-  SetComponentSetsAndWait(input);
-
-  sets().SetManuallySpecifiedSet(
-      "https://example.test,https://member1.test,https://member2.test");
-  EXPECT_THAT(
-      sets().Sets(),
-      UnorderedElementsAre(
-          Pair(SerializesTo("https://example.test"),
-               UnorderedElementsAre(SerializesTo("https://example.test"),
-                                    SerializesTo("https://member1.test"),
-                                    SerializesTo("https://member2.test"))),
-          Pair(SerializesTo("https://bar.test"),
-               UnorderedElementsAre(SerializesTo("https://bar.test"),
-                                    SerializesTo("https://member3.test")))));
-
-  SetComponentSetsAndWait("{}");
-
-  EXPECT_THAT(sets().Sets(),
-              UnorderedElementsAre(Pair(
-                  SerializesTo("https://example.test"),
-                  UnorderedElementsAre(SerializesTo("https://example.test"),
-                                       SerializesTo("https://member1.test"),
-                                       SerializesTo("https://member2.test")))));
-}
-
-TEST_F(FirstPartySetsEnabledTest,
-       SetsManuallySpecified_PrunesInducedSingletons) {
-  const std::string input = R"(
-  [
-    {
-      "owner": "https://foo.test",
-      "members": ["https://member1.test"]
-    }
-  ]
-  )";
-  ASSERT_TRUE(base::JSONReader::Read(input));
-  SetComponentSetsAndWait(input);
-
-  sets().SetManuallySpecifiedSet("https://example.test,https://member1.test");
-  // If we just erased entries that overlapped with the manually-supplied set,
-  // https://foo.test would be left as a singleton set. But since we disallow
-  // singleton sets, we ensure that such cases are caught and removed.
-  EXPECT_THAT(sets().Sets(),
-              UnorderedElementsAre(Pair(
-                  SerializesTo("https://example.test"),
-                  UnorderedElementsAre(SerializesTo("https://example.test"),
-                                       SerializesTo("https://member1.test")))));
+  EXPECT_THAT(SetsAndWait(), IsEmpty());
 }
 
 TEST_F(FirstPartySetsEnabledTest, ComputeSetsDiff_SitesJoined) {
-  auto old_sets = base::flat_map<net::SchemefulSite, net::SchemefulSite>{
+  auto old_sets = FirstPartySets::FlattenedSets{
       {net::SchemefulSite(GURL("https://example.test")),
        net::SchemefulSite(GURL("https://example.test"))},
       {net::SchemefulSite(GURL("https://member1.test")),
@@ -662,29 +206,20 @@ TEST_F(FirstPartySetsEnabledTest, ComputeSetsDiff_SitesJoined) {
       {net::SchemefulSite(GURL("https://member3.test")),
        net::SchemefulSite(GURL("https://example.test"))}};
 
-  // Consistency check the reviewer-friendly JSON format matches the input.
-  ASSERT_THAT(FirstPartySetParser::ParseSetsFromComponentUpdater(R"(
-    [
-      {
-        "owner": "https://example.test",
-        "members": ["https://member1.test", "https://member3.test"]
-      }
-    ]
-  )"),
+  // Consistency check the reviewer-friendly format matches the input.
+  ASSERT_THAT(ParseSetsFromStream(
+                  R"({"owner": "https://example.test", "members": )"
+                  R"(["https://member1.test", "https://member3.test"]})"),
               old_sets);
 
-  SetComponentSetsAndWait(R"(
-    [
-      {
-        "owner": "https://example.test",
-        "members": ["https://member1.test", "https://member3.test"]
-      },
-      {
-        "owner": "https://foo.test",
-        "members": ["https://member2.test"]
-      }
-    ]
-  )");
+  SetComponentSets(
+      R"({"owner": "https://example.test", )"
+      R"("members": ["https://member1.test", "https://member3.test"]}
+      {"owner": "https://foo.test", "members": ["https://member2.test"]})");
+  // Set required input to be able to receive the merged sets from
+  // FirstPartySetsLoader.
+  sets().SetManuallySpecifiedSet("");
+  env().RunUntilIdle();
 
   // "https://foo.test" and "https://member2.test" joined FPSs. We don't clear
   // site data upon joining, so the computed diff should be empty set.
@@ -692,7 +227,7 @@ TEST_F(FirstPartySetsEnabledTest, ComputeSetsDiff_SitesJoined) {
 }
 
 TEST_F(FirstPartySetsEnabledTest, ComputeSetsDiff_SitesLeft) {
-  auto old_sets = base::flat_map<net::SchemefulSite, net::SchemefulSite>{
+  auto old_sets = FirstPartySets::FlattenedSets{
       {net::SchemefulSite(GURL("https://example.test")),
        net::SchemefulSite(GURL("https://example.test"))},
       {net::SchemefulSite(GURL("https://member1.test")),
@@ -704,29 +239,19 @@ TEST_F(FirstPartySetsEnabledTest, ComputeSetsDiff_SitesLeft) {
       {net::SchemefulSite(GURL("https://member2.test")),
        net::SchemefulSite(GURL("https://foo.test"))}};
 
-  // Consistency check the reviewer-friendly JSON format matches the input.
-  ASSERT_THAT(FirstPartySetParser::ParseSetsFromComponentUpdater(R"(
-    [
-      {
-        "owner": "https://example.test",
-        "members": ["https://member1.test", "https://member3.test"]
-      },
-      {
-        "owner": "https://foo.test",
-        "members": ["https://member2.test"]
-      },
-    ]
-  )"),
-              old_sets);
+  // Consistency check the reviewer-friendly format matches the input.
+  ASSERT_THAT(
+      ParseSetsFromStream(R"({"owner": "https://example.test", "members": )"
+                          R"(["https://member1.test", "https://member3.test"]}
+      { "owner": "https://foo.test", "members": ["https://member2.test"]})"),
+      old_sets);
 
-  SetComponentSetsAndWait(R"(
-    [
-      {
-        "owner": "https://example.test",
-        "members": ["https://member1.test"]
-      },
-    ]
-  )");
+  SetComponentSets(R"({"owner": "https://example.test", )"
+                   R"("members": ["https://member1.test"]})");
+  // Set required input to be able to receive the merged sets from
+  // FirstPartySetsLoader.
+  sets().SetManuallySpecifiedSet("");
+  env().RunUntilIdle();
   // Expected diff: "https://foo.test", "https://member2.test" and
   // "https://member3.test" left FPSs.
   EXPECT_THAT(sets().ComputeSetsDiff(old_sets),
@@ -736,7 +261,7 @@ TEST_F(FirstPartySetsEnabledTest, ComputeSetsDiff_SitesLeft) {
 }
 
 TEST_F(FirstPartySetsEnabledTest, ComputeSetsDiff_OwnerChanged) {
-  auto old_sets = base::flat_map<net::SchemefulSite, net::SchemefulSite>{
+  auto old_sets = FirstPartySets::FlattenedSets{
       {net::SchemefulSite(GURL("https://example.test")),
        net::SchemefulSite(GURL("https://example.test"))},
       {net::SchemefulSite(GURL("https://member1.test")),
@@ -748,40 +273,28 @@ TEST_F(FirstPartySetsEnabledTest, ComputeSetsDiff_OwnerChanged) {
       {net::SchemefulSite(GURL("https://member3.test")),
        net::SchemefulSite(GURL("https://foo.test"))}};
 
-  // Consistency check the reviewer-friendly JSON format matches the input.
-  ASSERT_THAT(FirstPartySetParser::ParseSetsFromComponentUpdater(R"(
-    [
-      {
-        "owner": "https://example.test",
-        "members": ["https://member1.test"]
-      },
-      {
-        "owner": "https://foo.test",
-        "members": ["https://member2.test", "https://member3.test"]
-      },
-    ]
-  )"),
+  // Consistency check the reviewer-friendly format matches the input.
+  ASSERT_THAT(ParseSetsFromStream(
+                  R"({"owner": "https://example.test", "members": )"
+                  R"(["https://member1.test"]}
+      {"owner": "https://foo.test", "members": )"
+                  R"(["https://member2.test", "https://member3.test"]})"),
               old_sets);
 
-  SetComponentSetsAndWait(R"(
-    [
-      {
-        "owner": "https://example.test",
-        "members": ["https://member1.test", "https://member3.test"]
-      },
-      {
-        "owner": "https://foo.test",
-        "members": ["https://member2.test"]
-      }
-    ]
-  )");
+  SetComponentSets(R"({"owner": "https://example.test", "members": )"
+                   R"(["https://member1.test", "https://member3.test"]}
+      {"owner": "https://foo.test", "members": ["https://member2.test"]})");
+  // Set required input to be able to receive the merged sets from
+  // FirstPartySetsLoader.
+  sets().SetManuallySpecifiedSet("");
+  env().RunUntilIdle();
   // Expected diff: "https://member3.test" changed owner.
   EXPECT_THAT(sets().ComputeSetsDiff(old_sets),
               UnorderedElementsAre(SerializesTo("https://member3.test")));
 }
 
 TEST_F(FirstPartySetsEnabledTest, ComputeSetsDiff_OwnerLeft) {
-  auto old_sets = base::flat_map<net::SchemefulSite, net::SchemefulSite>{
+  auto old_sets = FirstPartySets::FlattenedSets{
       {net::SchemefulSite(GURL("https://example.test")),
        net::SchemefulSite(GURL("https://example.test"))},
       {net::SchemefulSite(GURL("https://foo.test")),
@@ -789,25 +302,19 @@ TEST_F(FirstPartySetsEnabledTest, ComputeSetsDiff_OwnerLeft) {
       {net::SchemefulSite(GURL("https://bar.test")),
        net::SchemefulSite(GURL("https://example.test"))}};
 
-  // Consistency check the reviewer-friendly JSON format matches the input.
-  ASSERT_THAT(FirstPartySetParser::ParseSetsFromComponentUpdater(R"(
-    [
-      {
-        "owner": "https://example.test",
-        "members": ["https://foo.test", "https://bar.test"]
-      }
-    ]
-  )"),
-              old_sets);
+  // Consistency check the reviewer-friendly format matches the input.
+  ASSERT_THAT(
+      ParseSetsFromStream(R"({"owner": "https://example.test", "members": )"
+                          R"(["https://foo.test", "https://bar.test"]})"),
+      old_sets);
 
-  SetComponentSetsAndWait(R"(
-    [
-      {
-        "owner": "https://foo.test",
-        "members": ["https://bar.test"]
-      }
-    ]
+  SetComponentSets(R"(
+      {"owner": "https://foo.test", "members": ["https://bar.test"]}
   )");
+  // Set required input to be able to receive the merged sets from
+  // FirstPartySetsLoader.
+  sets().SetManuallySpecifiedSet("");
+  env().RunUntilIdle();
   // Expected diff: "https://example.test" left FPSs, "https://foo.test" and
   // "https://bar.test" changed owner.
   // It would be valid to only have example.test in the diff, but our logic
@@ -820,31 +327,24 @@ TEST_F(FirstPartySetsEnabledTest, ComputeSetsDiff_OwnerLeft) {
 }
 
 TEST_F(FirstPartySetsEnabledTest, ComputeSetsDiff_OwnerMemberRotate) {
-  auto old_sets = base::flat_map<net::SchemefulSite, net::SchemefulSite>{
+  auto old_sets = FirstPartySets::FlattenedSets{
       {net::SchemefulSite(GURL("https://example.test")),
        net::SchemefulSite(GURL("https://example.test"))},
       {net::SchemefulSite(GURL("https://foo.test")),
        net::SchemefulSite(GURL("https://example.test"))}};
 
-  // Consistency check the reviewer-friendly JSON format matches the input.
-  ASSERT_THAT(FirstPartySetParser::ParseSetsFromComponentUpdater(R"(
-    [
-      {
-        "owner": "https://example.test",
-        "members": ["https://foo.test"]
-      }
-    ]
-  )"),
-              old_sets);
+  // Consistency check the reviewer-friendly format matches the input.
+  ASSERT_THAT(
+      ParseSetsFromStream(R"({"owner": "https://example.test", "members": )"
+                          R"(["https://foo.test"]})"),
+      old_sets);
 
-  SetComponentSetsAndWait(R"(
-    [
-      {
-        "owner": "https://foo.test",
-        "members": ["https://example.test"]
-      }
-    ]
-  )");
+  SetComponentSets(
+      R"({"owner": "https://foo.test", "members": ["https://example.test"]})");
+  // Set required input to be able to receive the merged sets from
+  // FirstPartySetsLoader.
+  sets().SetManuallySpecifiedSet("");
+  env().RunUntilIdle();
   // Expected diff: "https://example.test" and "https://foo.test" changed owner.
   // It would be valid to not include example.test and foo.test in the result,
   // but our logic isn't sophisticated enough yet to know that.ß
@@ -855,33 +355,29 @@ TEST_F(FirstPartySetsEnabledTest, ComputeSetsDiff_OwnerMemberRotate) {
 
 TEST_F(FirstPartySetsEnabledTest, ComputeSetsDiff_EmptySets) {
   // Empty old_sets.
-  SetComponentSetsAndWait(R"(
-    [
-      {
-        "owner": "https://example.test",
-        "members": ["https://member1.test"]
-      },
-    ]
-  )");
+  SetComponentSets(R"({"owner": "https://example.test", )"
+                   R"("members": ["https://member1.test"]})");
+  // Set required input to be able to receive the merged sets from
+  // FirstPartySetsLoader.
+  sets().SetManuallySpecifiedSet("");
+  env().RunUntilIdle();
   EXPECT_THAT(sets().ComputeSetsDiff({}), IsEmpty());
 
   // Empty current sets.
-  auto old_sets = base::flat_map<net::SchemefulSite, net::SchemefulSite>{
+  auto old_sets = FirstPartySets::FlattenedSets{
       {net::SchemefulSite(GURL("https://example.test")),
        net::SchemefulSite(GURL("https://example.test"))},
       {net::SchemefulSite(GURL("https://member1.test")),
        net::SchemefulSite(GURL("https://example.test"))}};
-  // Consistency check the reviewer-friendly JSON format matches the input.
-  ASSERT_THAT(FirstPartySetParser::ParseSetsFromComponentUpdater(R"(
-    [
-      {
-        "owner": "https://example.test",
-        "members": ["https://member1.test"]
-      }
-    ]
-  )"),
+  // Consistency check the reviewer-friendly format matches the input.
+  ASSERT_THAT(ParseSetsFromStream(R"({"owner": "https://example.test", )"
+                                  R"("members": ["https://member1.test"]})"),
               old_sets);
-  EXPECT_THAT(FirstPartySets().ComputeSetsDiff(old_sets),
+  FirstPartySets first_party_sets(true);
+  first_party_sets.SetManuallySpecifiedSet("");
+  SetComponentSets(first_party_sets, "[]");
+  env().RunUntilIdle();
+  EXPECT_THAT(first_party_sets.ComputeSetsDiff(old_sets),
               UnorderedElementsAre(SerializesTo("https://example.test"),
                                    SerializesTo("https://member1.test")));
 }
@@ -892,7 +388,7 @@ TEST_F(FirstPartySetsEnabledTest, ClearSiteDataOnChangedSetsIfReady_NotReady) {
       [&](const std::string& got) { callback_calls++; });
   // component sets not ready.
   {
-    FirstPartySets sets;
+    FirstPartySets sets(true);
     callback_calls = 0;
     sets.SetPersistedSets("{}");
     sets.SetManuallySpecifiedSet("");
@@ -901,29 +397,32 @@ TEST_F(FirstPartySetsEnabledTest, ClearSiteDataOnChangedSetsIfReady_NotReady) {
   }
   // manual sets not ready.
   {
-    FirstPartySets sets;
+    FirstPartySets sets(true);
     callback_calls = 0;
-    SetComponentSetsAndWait(sets, "[]");
+    SetComponentSets(sets, "[]");
     sets.SetPersistedSets("{}");
     sets.SetOnSiteDataCleared(callback);
+    env().RunUntilIdle();
     EXPECT_EQ(callback_calls, 0);
   }
   // persisted sets not ready.
   {
-    FirstPartySets sets;
+    FirstPartySets sets(true);
     callback_calls = 0;
-    SetComponentSetsAndWait(sets, "[]");
+    SetComponentSets(sets, "[]");
     sets.SetManuallySpecifiedSet("");
     sets.SetOnSiteDataCleared(callback);
+    env().RunUntilIdle();
     EXPECT_EQ(callback_calls, 0);
   }
   // callback not set.
   {
-    FirstPartySets sets;
+    FirstPartySets sets(true);
     callback_calls = 0;
-    SetComponentSetsAndWait(sets, "[]");
+    SetComponentSets(sets, "[]");
     sets.SetManuallySpecifiedSet("");
     sets.SetPersistedSets("{}");
+    env().RunUntilIdle();
     EXPECT_EQ(callback_calls, 0);
   }
 }
@@ -932,88 +431,76 @@ TEST_F(FirstPartySetsEnabledTest, ClearSiteDataOnChangedSetsIfReady_NotReady) {
 // inputs from Component Updater and command line flag.
 TEST_F(FirstPartySetsEnabledTest, ClearSiteDataOnChangedSetsIfReady_Ready) {
   int callback_calls = 0;
-  SetComponentSetsAndWait(R"([
-       {
-         "owner": "https://example.test",
-         "members": ["https://member1.test"]
-       }
-     ])");
+  SetComponentSets(R"({"owner": "https://example.test", "members": )"
+                   R"(["https://member1.test"]})");
   sets().SetManuallySpecifiedSet("https://example2.test,https://member2.test");
   sets().SetPersistedSets(
       R"({"https://example.test":"https://example.test",
             "https://member1.test":"https://example.test"})");
-  sets().SetOnSiteDataCleared(base::BindLambdaForTesting([&](const std::string&
-                                                                 got) {
-    EXPECT_EQ(
-        got,
-        R"({"https://member1.test":"https://example.test","https://member2.test":"https://example2.test"})");
-    callback_calls++;
-  }));
+  sets().SetOnSiteDataCleared(
+      base::BindLambdaForTesting([&](const std::string& got) {
+        EXPECT_EQ(got, R"({"https://member1.test":"https://example.test",)"
+                       R"("https://member2.test":"https://example2.test"})");
+        callback_calls++;
+      }));
+  env().RunUntilIdle();
   EXPECT_EQ(callback_calls, 1);
 }
 
 class PopulatedFirstPartySetsTest : public FirstPartySetsEnabledTest {
  public:
   PopulatedFirstPartySetsTest() {
-    const std::string input = R"(
-      [
-        {
-          "owner": "https://example.test",
-          "members": ["https://member1.test", "https://member3.test"]
-        },
-        {
-          "owner": "https://foo.test",
-          "members": ["https://member2.test"]
-        }
-      ]
-      )";
-    CHECK(base::JSONReader::Read(input));
-    SetComponentSetsAndWait(input);
+    const std::string input =
+        R"({"owner": "https://example.test", "members": )"
+        R"(["https://member1.test", "https://member3.test"]}
+        {"owner": "https://foo.test", "members": ["https://member2.test"]})";
+    SetComponentSets(input);
+    // Set required input to be able to receive the merged sets from
+    // FirstPartySetsLoader.
+    sets().SetManuallySpecifiedSet("");
 
-    CHECK(Value(
-        sets().Sets(),
-        UnorderedElementsAre(
-            Pair(SerializesTo("https://example.test"),
-                 UnorderedElementsAre(SerializesTo("https://example.test"),
-                                      SerializesTo("https://member1.test"),
-                                      SerializesTo("https://member3.test"))),
-            Pair(SerializesTo("https://foo.test"),
-                 UnorderedElementsAre(SerializesTo("https://foo.test"),
-                                      SerializesTo("https://member2.test"))))));
+    // We don't wait for the sets to be loaded before running the tests, in
+    // order to let the tests provoke raciness if any exists.
   }
 };
 
-TEST_F(PopulatedFirstPartySetsTest, ComputeContext_EmptyContext) {
+TEST_F(PopulatedFirstPartySetsTest, ComputeMetadata_EmptyContext) {
   net::SchemefulSite example_site(GURL("https://example.test"));
   net::SchemefulSite nonmember(GURL("https://nonmember.test"));
 
   for (const net::SchemefulSite* top_frame :
        std::initializer_list<net::SchemefulSite*>{&example_site, nullptr}) {
     EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("https://nonmember.test")),
-                            top_frame, {})
+        ComputeMetadataAndWait(
+            net::SchemefulSite(GURL("https://nonmember.test")), top_frame, {})
+            .context()
             .context_type(),
         Type::kCrossParty);
 
-    EXPECT_EQ(sets().ComputeContext(example_site, top_frame, {}).context_type(),
+    EXPECT_EQ(ComputeMetadataAndWait(example_site, top_frame, {})
+                  .context()
+                  .context_type(),
               Type::kSameParty);
 
     EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("http://example.test")),
-                            top_frame, {})
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("http://example.test")),
+                               top_frame, {})
+            .context()
             .context_type(),
         Type::kCrossParty);
   }
 
-  EXPECT_EQ(sets().ComputeContext(example_site, &nonmember, {}).context_type(),
+  EXPECT_EQ(ComputeMetadataAndWait(example_site, &nonmember, {})
+                .context()
+                .context_type(),
             Type::kCrossParty);
-  EXPECT_EQ(sets().ComputeContext(nonmember, &example_site, {}).context_type(),
+  EXPECT_EQ(ComputeMetadataAndWait(nonmember, &example_site, {})
+                .context()
+                .context_type(),
             Type::kCrossParty);
 }
 
-TEST_F(PopulatedFirstPartySetsTest, ComputeContext_ContextIsNonmember) {
+TEST_F(PopulatedFirstPartySetsTest, ComputeMetadata_ContextIsNonmember) {
   std::set<net::SchemefulSite> context({
       net::SchemefulSite(GURL("https://nonmember.test")),
   });
@@ -1023,49 +510,50 @@ TEST_F(PopulatedFirstPartySetsTest, ComputeContext_ContextIsNonmember) {
   for (const net::SchemefulSite* top_frame :
        std::initializer_list<net::SchemefulSite*>{&example_site, nullptr}) {
     EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("https://example.test")),
-                            top_frame, context)
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("https://example.test")),
+                               top_frame, context)
+            .context()
             .context_type(),
         Type::kCrossParty);
 
     EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("http://example.test")),
-                            top_frame, context)
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("http://example.test")),
+                               top_frame, context)
+            .context()
             .context_type(),
         Type::kCrossParty);
 
     EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("https://member1.test")),
-                            top_frame, context)
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("https://member1.test")),
+                               top_frame, context)
+            .context()
             .context_type(),
         Type::kCrossParty);
 
-    EXPECT_EQ(sets()
-                  .ComputeContext(net::SchemefulSite(GURL("https://foo.test")),
-                                  top_frame, context)
+    EXPECT_EQ(
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("https://foo.test")),
+                               top_frame, context)
+            .context()
+            .context_type(),
+        Type::kCrossParty);
+
+    EXPECT_EQ(
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("https://member2.test")),
+                               top_frame, context)
+            .context()
+            .context_type(),
+        Type::kCrossParty);
+
+    EXPECT_EQ(ComputeMetadataAndWait(
+                  net::SchemefulSite(GURL("https://nonmember.test")), top_frame,
+                  context)
+                  .context()
                   .context_type(),
               Type::kCrossParty);
-
-    EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("https://member2.test")),
-                            top_frame, context)
-            .context_type(),
-        Type::kCrossParty);
-
-    EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("https://nonmember.test")),
-                            top_frame, context)
-            .context_type(),
-        Type::kCrossParty);
   }
 }
 
-TEST_F(PopulatedFirstPartySetsTest, ComputeContext_ContextIsOwner) {
+TEST_F(PopulatedFirstPartySetsTest, ComputeMetadata_ContextIsOwner) {
   std::set<net::SchemefulSite> context(
       {net::SchemefulSite(GURL("https://example.test"))});
 
@@ -1074,49 +562,50 @@ TEST_F(PopulatedFirstPartySetsTest, ComputeContext_ContextIsOwner) {
   for (const net::SchemefulSite* top_frame :
        std::initializer_list<net::SchemefulSite*>{&example_site, nullptr}) {
     EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("https://example.test")),
-                            top_frame, context)
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("https://example.test")),
+                               top_frame, context)
+            .context()
             .context_type(),
         Type::kSameParty);
 
     EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("http://example.test")),
-                            top_frame, context)
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("http://example.test")),
+                               top_frame, context)
+            .context()
             .context_type(),
         Type::kCrossParty);
 
     EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("https://member1.test")),
-                            top_frame, context)
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("https://member1.test")),
+                               top_frame, context)
+            .context()
             .context_type(),
         Type::kSameParty);
 
-    EXPECT_EQ(sets()
-                  .ComputeContext(net::SchemefulSite(GURL("https://foo.test")),
-                                  top_frame, context)
+    EXPECT_EQ(
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("https://foo.test")),
+                               top_frame, context)
+            .context()
+            .context_type(),
+        Type::kCrossParty);
+
+    EXPECT_EQ(
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("https://member2.test")),
+                               top_frame, context)
+            .context()
+            .context_type(),
+        Type::kCrossParty);
+
+    EXPECT_EQ(ComputeMetadataAndWait(
+                  net::SchemefulSite(GURL("https://nonmember.test")), top_frame,
+                  context)
+                  .context()
                   .context_type(),
               Type::kCrossParty);
-
-    EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("https://member2.test")),
-                            top_frame, context)
-            .context_type(),
-        Type::kCrossParty);
-
-    EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("https://nonmember.test")),
-                            top_frame, context)
-            .context_type(),
-        Type::kCrossParty);
   }
 }
 
-TEST_F(PopulatedFirstPartySetsTest, ComputeContext_ContextIsMember) {
+TEST_F(PopulatedFirstPartySetsTest, ComputeMetadata_ContextIsMember) {
   std::set<net::SchemefulSite> context(
       {net::SchemefulSite(GURL("https://member1.test"))});
 
@@ -1125,56 +614,57 @@ TEST_F(PopulatedFirstPartySetsTest, ComputeContext_ContextIsMember) {
   for (const net::SchemefulSite* top_frame :
        std::initializer_list<net::SchemefulSite*>{&example_site, nullptr}) {
     EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("https://example.test")),
-                            top_frame, context)
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("https://example.test")),
+                               top_frame, context)
+            .context()
             .context_type(),
         Type::kSameParty);
 
     EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("http://example.test")),
-                            top_frame, context)
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("http://example.test")),
+                               top_frame, context)
+            .context()
             .context_type(),
         Type::kCrossParty);
 
     EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("https://example.test")),
-                            top_frame, context)
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("https://example.test")),
+                               top_frame, context)
+            .context()
             .context_type(),
         Type::kSameParty);
 
     EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("https://member1.test")),
-                            top_frame, context)
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("https://member1.test")),
+                               top_frame, context)
+            .context()
             .context_type(),
         Type::kSameParty);
 
-    EXPECT_EQ(sets()
-                  .ComputeContext(net::SchemefulSite(GURL("https://foo.test")),
-                                  top_frame, context)
+    EXPECT_EQ(
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("https://foo.test")),
+                               top_frame, context)
+            .context()
+            .context_type(),
+        Type::kCrossParty);
+
+    EXPECT_EQ(
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("https://member2.test")),
+                               top_frame, context)
+            .context()
+            .context_type(),
+        Type::kCrossParty);
+
+    EXPECT_EQ(ComputeMetadataAndWait(
+                  net::SchemefulSite(GURL("https://nonmember.test")), top_frame,
+                  context)
+                  .context()
                   .context_type(),
               Type::kCrossParty);
-
-    EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("https://member2.test")),
-                            top_frame, context)
-            .context_type(),
-        Type::kCrossParty);
-
-    EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("https://nonmember.test")),
-                            top_frame, context)
-            .context_type(),
-        Type::kCrossParty);
   }
 }
 
-TEST_F(PopulatedFirstPartySetsTest, ComputeContext_ContextIsOwnerAndMember) {
+TEST_F(PopulatedFirstPartySetsTest, ComputeMetadata_ContextIsOwnerAndMember) {
   std::set<net::SchemefulSite> context({
       net::SchemefulSite(GURL("https://example.test")),
       net::SchemefulSite(GURL("https://member1.test")),
@@ -1185,56 +675,57 @@ TEST_F(PopulatedFirstPartySetsTest, ComputeContext_ContextIsOwnerAndMember) {
   for (const net::SchemefulSite* top_frame :
        std::initializer_list<net::SchemefulSite*>{&example_site, nullptr}) {
     EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("https://example.test")),
-                            top_frame, context)
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("https://example.test")),
+                               top_frame, context)
+            .context()
             .context_type(),
         Type::kSameParty);
 
     EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("http://example.test")),
-                            top_frame, context)
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("http://example.test")),
+                               top_frame, context)
+            .context()
             .context_type(),
         Type::kCrossParty);
 
     EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("https://member1.test")),
-                            top_frame, context)
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("https://member1.test")),
+                               top_frame, context)
+            .context()
             .context_type(),
         Type::kSameParty);
 
     EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("https://member3.test")),
-                            top_frame, context)
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("https://member3.test")),
+                               top_frame, context)
+            .context()
             .context_type(),
         Type::kSameParty);
 
-    EXPECT_EQ(sets()
-                  .ComputeContext(net::SchemefulSite(GURL("https://foo.test")),
-                                  top_frame, context)
+    EXPECT_EQ(
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("https://foo.test")),
+                               top_frame, context)
+            .context()
+            .context_type(),
+        Type::kCrossParty);
+
+    EXPECT_EQ(
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("https://member2.test")),
+                               top_frame, context)
+            .context()
+            .context_type(),
+        Type::kCrossParty);
+
+    EXPECT_EQ(ComputeMetadataAndWait(
+                  net::SchemefulSite(GURL("https://nonmember.test")), top_frame,
+                  context)
+                  .context()
                   .context_type(),
               Type::kCrossParty);
-
-    EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("https://member2.test")),
-                            top_frame, context)
-            .context_type(),
-        Type::kCrossParty);
-
-    EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("https://nonmember.test")),
-                            top_frame, context)
-            .context_type(),
-        Type::kCrossParty);
   }
 }
 
-TEST_F(PopulatedFirstPartySetsTest, ComputeContext_ContextMixesParties) {
+TEST_F(PopulatedFirstPartySetsTest, ComputeMetadata_ContextMixesParties) {
   std::set<net::SchemefulSite> context({
       net::SchemefulSite(GURL("https://example.test")),
       net::SchemefulSite(GURL("https://member1.test")),
@@ -1246,50 +737,51 @@ TEST_F(PopulatedFirstPartySetsTest, ComputeContext_ContextMixesParties) {
   for (const net::SchemefulSite* top_frame :
        std::initializer_list<net::SchemefulSite*>{&example_site, nullptr}) {
     EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("https://example.test")),
-                            top_frame, context)
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("https://example.test")),
+                               top_frame, context)
+            .context()
             .context_type(),
         Type::kCrossParty);
 
     EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("http://example.test")),
-                            top_frame, context)
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("http://example.test")),
+                               top_frame, context)
+            .context()
             .context_type(),
         Type::kCrossParty);
 
     EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("https://member1.test")),
-                            top_frame, context)
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("https://member1.test")),
+                               top_frame, context)
+            .context()
             .context_type(),
         Type::kCrossParty);
 
-    EXPECT_EQ(sets()
-                  .ComputeContext(net::SchemefulSite(GURL("https://foo.test")),
-                                  top_frame, context)
+    EXPECT_EQ(
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("https://foo.test")),
+                               top_frame, context)
+            .context()
+            .context_type(),
+        Type::kCrossParty);
+
+    EXPECT_EQ(
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("https://member2.test")),
+                               top_frame, context)
+            .context()
+            .context_type(),
+        Type::kCrossParty);
+
+    EXPECT_EQ(ComputeMetadataAndWait(
+                  net::SchemefulSite(GURL("https://nonmember.test")), top_frame,
+                  context)
+                  .context()
                   .context_type(),
               Type::kCrossParty);
-
-    EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("https://member2.test")),
-                            top_frame, context)
-            .context_type(),
-        Type::kCrossParty);
-
-    EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("https://nonmember.test")),
-                            top_frame, context)
-            .context_type(),
-        Type::kCrossParty);
   }
 }
 
 TEST_F(PopulatedFirstPartySetsTest,
-       ComputeContext_ContextMixesMembersAndNonmembers) {
+       ComputeMetadata_ContextMixesMembersAndNonmembers) {
   std::set<net::SchemefulSite> context({
       net::SchemefulSite(GURL("https://example.test")),
       net::SchemefulSite(GURL("https://member1.test")),
@@ -1301,49 +793,50 @@ TEST_F(PopulatedFirstPartySetsTest,
   for (const net::SchemefulSite* top_frame :
        std::initializer_list<net::SchemefulSite*>{&example_site, nullptr}) {
     EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("https://example.test")),
-                            top_frame, context)
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("https://example.test")),
+                               top_frame, context)
+            .context()
             .context_type(),
         Type::kCrossParty);
 
     EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("http://example.test")),
-                            top_frame, context)
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("http://example.test")),
+                               top_frame, context)
+            .context()
             .context_type(),
         Type::kCrossParty);
 
     EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("https://member1.test")),
-                            top_frame, context)
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("https://member1.test")),
+                               top_frame, context)
+            .context()
             .context_type(),
         Type::kCrossParty);
 
-    EXPECT_EQ(sets()
-                  .ComputeContext(net::SchemefulSite(GURL("https://foo.test")),
-                                  top_frame, context)
+    EXPECT_EQ(
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("https://foo.test")),
+                               top_frame, context)
+            .context()
+            .context_type(),
+        Type::kCrossParty);
+
+    EXPECT_EQ(
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("https://member2.test")),
+                               top_frame, context)
+            .context()
+            .context_type(),
+        Type::kCrossParty);
+
+    EXPECT_EQ(ComputeMetadataAndWait(
+                  net::SchemefulSite(GURL("https://nonmember.test")), top_frame,
+                  context)
+                  .context()
                   .context_type(),
               Type::kCrossParty);
-
-    EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("https://member2.test")),
-                            top_frame, context)
-            .context_type(),
-        Type::kCrossParty);
-
-    EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("https://nonmember.test")),
-                            top_frame, context)
-            .context_type(),
-        Type::kCrossParty);
   }
 }
 
-TEST_F(PopulatedFirstPartySetsTest, ComputeContext_ContextMixesSchemes) {
+TEST_F(PopulatedFirstPartySetsTest, ComputeMetadata_ContextMixesSchemes) {
   std::set<net::SchemefulSite> context({
       net::SchemefulSite(GURL("https://example.test")),
       net::SchemefulSite(GURL("https://member1.test")),
@@ -1355,49 +848,50 @@ TEST_F(PopulatedFirstPartySetsTest, ComputeContext_ContextMixesSchemes) {
   for (const net::SchemefulSite* top_frame :
        std::initializer_list<net::SchemefulSite*>{&example_site, nullptr}) {
     EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("https://example.test")),
-                            top_frame, context)
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("https://example.test")),
+                               top_frame, context)
+            .context()
             .context_type(),
         Type::kCrossParty);
 
     EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("http://example.test")),
-                            top_frame, context)
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("http://example.test")),
+                               top_frame, context)
+            .context()
             .context_type(),
         Type::kCrossParty);
 
     EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("https://member1.test")),
-                            top_frame, context)
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("https://member1.test")),
+                               top_frame, context)
+            .context()
             .context_type(),
         Type::kCrossParty);
 
-    EXPECT_EQ(sets()
-                  .ComputeContext(net::SchemefulSite(GURL("https://foo.test")),
-                                  top_frame, context)
+    EXPECT_EQ(
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("https://foo.test")),
+                               top_frame, context)
+            .context()
+            .context_type(),
+        Type::kCrossParty);
+
+    EXPECT_EQ(
+        ComputeMetadataAndWait(net::SchemefulSite(GURL("https://member2.test")),
+                               top_frame, context)
+            .context()
+            .context_type(),
+        Type::kCrossParty);
+
+    EXPECT_EQ(ComputeMetadataAndWait(
+                  net::SchemefulSite(GURL("https://nonmember.test")), top_frame,
+                  context)
+                  .context()
                   .context_type(),
               Type::kCrossParty);
-
-    EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("https://member2.test")),
-                            top_frame, context)
-            .context_type(),
-        Type::kCrossParty);
-
-    EXPECT_EQ(
-        sets()
-            .ComputeContext(net::SchemefulSite(GURL("https://nonmember.test")),
-                            top_frame, context)
-            .context_type(),
-        Type::kCrossParty);
   }
 }
 
-TEST_F(PopulatedFirstPartySetsTest, ComputeContext) {
+TEST_F(PopulatedFirstPartySetsTest, ComputeMetadata) {
   net::SchemefulSite nonmember(GURL("https://nonmember.test"));
   net::SchemefulSite nonmember1(GURL("https://nonmember1.test"));
   net::SchemefulSite member(GURL("https://member1.test"));
@@ -1406,72 +900,88 @@ TEST_F(PopulatedFirstPartySetsTest, ComputeContext) {
   net::SchemefulSite wss_nonmember(GURL("wss://nonmember.test"));
 
   // Works as usual for sites that are in First-Party sets.
-  EXPECT_THAT(sets().ComputeContext(member, &member, {member}),
-              net::SamePartyContext(Type::kSameParty));
-  EXPECT_THAT(sets().ComputeContext(owner, &member, {member}),
-              net::SamePartyContext(Type::kSameParty));
-  EXPECT_THAT(sets().ComputeContext(member, &owner, {member}),
-              net::SamePartyContext(Type::kSameParty));
-  EXPECT_THAT(sets().ComputeContext(member, &member, {owner}),
-              net::SamePartyContext(Type::kSameParty));
-  EXPECT_THAT(sets().ComputeContext(member, &member, {member, owner}),
-              net::SamePartyContext(Type::kSameParty));
+  EXPECT_EQ(ComputeMetadataAndWait(member, &member, {member}),
+            net::FirstPartySetMetadata(
+                net::SamePartyContext(Type::kSameParty), &owner, &owner,
+                net::FirstPartySetsContextType::kHomogeneous));
+  EXPECT_EQ(ComputeMetadataAndWait(owner, &member, {member}),
+            net::FirstPartySetMetadata(
+                net::SamePartyContext(Type::kSameParty), &owner, &owner,
+                net::FirstPartySetsContextType::kHomogeneous));
+  EXPECT_EQ(ComputeMetadataAndWait(member, &owner, {member}),
+            net::FirstPartySetMetadata(
+                net::SamePartyContext(Type::kSameParty), &owner, &owner,
+                net::FirstPartySetsContextType::kHomogeneous));
+  EXPECT_EQ(ComputeMetadataAndWait(member, &member, {owner}),
+            net::FirstPartySetMetadata(
+                net::SamePartyContext(Type::kSameParty), &owner, &owner,
+                net::FirstPartySetsContextType::kHomogeneous));
+  EXPECT_EQ(ComputeMetadataAndWait(member, &member, {member, owner}),
+            net::FirstPartySetMetadata(
+                net::SamePartyContext(Type::kSameParty), &owner, &owner,
+                net::FirstPartySetsContextType::kHomogeneous));
 
   // Works if the site is provided with WSS scheme instead of HTTPS.
-  EXPECT_THAT(sets().ComputeContext(wss_member, &member, {member, owner}),
-              net::SamePartyContext(Type::kSameParty));
+  EXPECT_EQ(ComputeMetadataAndWait(wss_member, &member, {member, owner}),
+            net::FirstPartySetMetadata(
+                net::SamePartyContext(Type::kSameParty), &owner, &owner,
+                net::FirstPartySetsContextType::kHomogeneous));
 
-  EXPECT_THAT(sets().ComputeContext(nonmember, &member, {member}),
-              net::SamePartyContext(Type::kCrossParty));
-  EXPECT_THAT(sets().ComputeContext(member, &nonmember, {member}),
-              net::SamePartyContext(Type::kCrossParty));
-  EXPECT_THAT(
-      sets().ComputeContext(wss_nonmember, &wss_member, {member, owner}),
-      net::SamePartyContext(Type::kCrossParty));
+  EXPECT_EQ(ComputeMetadataAndWait(nonmember, &member, {member}),
+            net::FirstPartySetMetadata(
+                net::SamePartyContext(Type::kCrossParty), nullptr, &owner,
+                net::FirstPartySetsContextType::kTopResourceMismatch));
+  EXPECT_EQ(ComputeMetadataAndWait(member, &nonmember, {member}),
+            net::FirstPartySetMetadata(
+                net::SamePartyContext(Type::kCrossParty), &owner, nullptr,
+                net::FirstPartySetsContextType::kTopResourceMismatch));
+  EXPECT_EQ(ComputeMetadataAndWait(wss_nonmember, &wss_member, {member, owner}),
+            net::FirstPartySetMetadata(
+                net::SamePartyContext(Type::kCrossParty), nullptr, &owner,
+                net::FirstPartySetsContextType::kTopResourceMismatch));
 
   // Top&resource differs from Ancestors.
-  EXPECT_THAT(sets().ComputeContext(member, &member, {nonmember}),
-              net::SamePartyContext(Type::kCrossParty, Type::kCrossParty,
-                                    Type::kSameParty));
+  EXPECT_EQ(ComputeMetadataAndWait(member, &member, {nonmember}),
+            net::FirstPartySetMetadata(
+                net::SamePartyContext(Type::kCrossParty, Type::kCrossParty,
+                                      Type::kSameParty),
+                &owner, &owner,
+                net::FirstPartySetsContextType::kTopResourceMatchMixed));
 
   // Metrics values infer singleton sets when appropriate.
-  EXPECT_THAT(sets().ComputeContext(nonmember, &nonmember, {nonmember}),
-              net::SamePartyContext(Type::kCrossParty, Type::kSameParty,
-                                    Type::kSameParty));
-  EXPECT_THAT(sets().ComputeContext(nonmember, &nonmember1, {nonmember}),
-              net::SamePartyContext(Type::kCrossParty));
-  EXPECT_THAT(sets().ComputeContext(nonmember1, &nonmember, {nonmember}),
-              net::SamePartyContext(Type::kCrossParty));
-  EXPECT_THAT(sets().ComputeContext(nonmember, &nonmember, {nonmember1}),
-              net::SamePartyContext(Type::kCrossParty, Type::kCrossParty,
-                                    Type::kSameParty));
+  EXPECT_EQ(
+      ComputeMetadataAndWait(nonmember, &nonmember, {nonmember}),
+      net::FirstPartySetMetadata(
+          net::SamePartyContext(Type::kCrossParty, Type::kSameParty,
+                                Type::kSameParty),
+          nullptr, nullptr, net::FirstPartySetsContextType::kHomogeneous));
+  EXPECT_EQ(ComputeMetadataAndWait(nonmember, &nonmember1, {nonmember}),
+            net::FirstPartySetMetadata(
+                net::SamePartyContext(Type::kCrossParty), nullptr, nullptr,
+                net::FirstPartySetsContextType::kTopResourceMismatch));
+  EXPECT_EQ(ComputeMetadataAndWait(nonmember1, &nonmember, {nonmember}),
+            net::FirstPartySetMetadata(
+                net::SamePartyContext(Type::kCrossParty), nullptr, nullptr,
+                net::FirstPartySetsContextType::kTopResourceMismatch));
+  EXPECT_EQ(ComputeMetadataAndWait(nonmember, &nonmember, {nonmember1}),
+            net::FirstPartySetMetadata(
+                net::SamePartyContext(Type::kCrossParty, Type::kCrossParty,
+                                      Type::kSameParty),
+                nullptr, nullptr,
+                net::FirstPartySetsContextType::kTopResourceMatchMixed));
 
-  EXPECT_THAT(sets().ComputeContext(member, &member, {member, nonmember}),
-              net::SamePartyContext(Type::kCrossParty, Type::kCrossParty,
-                                    Type::kSameParty));
-  EXPECT_THAT(sets().ComputeContext(nonmember, &nonmember, {member, nonmember}),
-              net::SamePartyContext(Type::kCrossParty, Type::kCrossParty,
-                                    Type::kSameParty));
-}
-
-TEST_F(PopulatedFirstPartySetsTest, IsInNontrivialFirstPartySet) {
-  EXPECT_TRUE(sets().IsInNontrivialFirstPartySet(
-      net::SchemefulSite(GURL("https://example.test"))));
-
-  EXPECT_FALSE(sets().IsInNontrivialFirstPartySet(
-      net::SchemefulSite(GURL("http://example.test"))));
-
-  EXPECT_TRUE(sets().IsInNontrivialFirstPartySet(
-      net::SchemefulSite(GURL("https://member1.test"))));
-
-  EXPECT_TRUE(sets().IsInNontrivialFirstPartySet(
-      net::SchemefulSite(GURL("wss://member1.test"))));
-
-  EXPECT_FALSE(sets().IsInNontrivialFirstPartySet(
-      net::SchemefulSite(GURL("ws://member1.test"))));
-
-  EXPECT_FALSE(sets().IsInNontrivialFirstPartySet(
-      net::SchemefulSite(GURL("https://nonmember.test"))));
+  EXPECT_EQ(ComputeMetadataAndWait(member, &member, {member, nonmember}),
+            net::FirstPartySetMetadata(
+                net::SamePartyContext(Type::kCrossParty, Type::kCrossParty,
+                                      Type::kSameParty),
+                &owner, &owner,
+                net::FirstPartySetsContextType::kTopResourceMatchMixed));
+  EXPECT_EQ(ComputeMetadataAndWait(nonmember, &nonmember, {member, nonmember}),
+            net::FirstPartySetMetadata(
+                net::SamePartyContext(Type::kCrossParty, Type::kCrossParty,
+                                      Type::kSameParty),
+                nullptr, nullptr,
+                net::FirstPartySetsContextType::kTopResourceMatchMixed));
 }
 
 TEST_F(PopulatedFirstPartySetsTest, FindOwner) {
@@ -1499,13 +1009,61 @@ TEST_F(PopulatedFirstPartySetsTest, FindOwner) {
 
   for (const auto& test_case : test_cases) {
     EXPECT_EQ(test_case.expected,
-              sets().FindOwner(net::SchemefulSite(GURL(test_case.url))));
+              FindOwnerAndWait(net::SchemefulSite(GURL(test_case.url))));
   }
+}
+
+TEST_F(PopulatedFirstPartySetsTest, FindOwners) {
+  net::SchemefulSite kExample =
+      net::SchemefulSite(GURL("https://example.test"));
+  net::SchemefulSite kFoo = net::SchemefulSite(GURL("https://foo.test"));
+  net::SchemefulSite kMember1 =
+      net::SchemefulSite(GURL("https://member1.test"));
+  net::SchemefulSite kMember2 =
+      net::SchemefulSite(GURL("https://member2.test"));
+  net::SchemefulSite kNonmember =
+      net::SchemefulSite(GURL("https://nonmember.test"));
+
+  EXPECT_THAT(FindOwnersAndWait({kExample}),
+              UnorderedElementsAre(Pair(SerializesTo("https://example.test"),
+                                        SerializesTo("https://example.test"))));
+  EXPECT_THAT(FindOwnersAndWait({kMember1}),
+              UnorderedElementsAre(Pair(SerializesTo("https://member1.test"),
+                                        SerializesTo("https://example.test"))));
+  EXPECT_THAT(FindOwnersAndWait({kNonmember}), IsEmpty());
+
+  EXPECT_THAT(FindOwnersAndWait({kExample, kNonmember}),
+              UnorderedElementsAre(Pair(SerializesTo("https://example.test"),
+                                        SerializesTo("https://example.test"))));
+  EXPECT_THAT(FindOwnersAndWait({kMember1, kNonmember}),
+              UnorderedElementsAre(Pair(SerializesTo("https://member1.test"),
+                                        SerializesTo("https://example.test"))));
+
+  EXPECT_THAT(FindOwnersAndWait({kExample, kFoo}),
+              UnorderedElementsAre(Pair(SerializesTo("https://example.test"),
+                                        SerializesTo("https://example.test")),
+                                   Pair(SerializesTo("https://foo.test"),
+                                        SerializesTo("https://foo.test"))));
+  EXPECT_THAT(FindOwnersAndWait({kMember1, kFoo}),
+              UnorderedElementsAre(Pair(SerializesTo("https://member1.test"),
+                                        SerializesTo("https://example.test")),
+                                   Pair(SerializesTo("https://foo.test"),
+                                        SerializesTo("https://foo.test"))));
+  EXPECT_THAT(FindOwnersAndWait({kExample, kMember2}),
+              UnorderedElementsAre(Pair(SerializesTo("https://example.test"),
+                                        SerializesTo("https://example.test")),
+                                   Pair(SerializesTo("https://member2.test"),
+                                        SerializesTo("https://foo.test"))));
+  EXPECT_THAT(FindOwnersAndWait({kMember1, kMember2}),
+              UnorderedElementsAre(Pair(SerializesTo("https://member1.test"),
+                                        SerializesTo("https://example.test")),
+                                   Pair(SerializesTo("https://member2.test"),
+                                        SerializesTo("https://foo.test"))));
 }
 
 TEST_F(PopulatedFirstPartySetsTest, Sets_NonEmpty) {
   EXPECT_THAT(
-      sets().Sets(),
+      SetsAndWait(),
       UnorderedElementsAre(
           Pair(SerializesTo("https://example.test"),
                UnorderedElementsAre(SerializesTo("https://example.test"),
@@ -1517,76 +1075,56 @@ TEST_F(PopulatedFirstPartySetsTest, Sets_NonEmpty) {
 }
 
 TEST_F(PopulatedFirstPartySetsTest, ComputeContextType) {
+  // ComputeContextType assumes that the instance is fully initialized, so we
+  // wait for that before proceeding.
+  SetsAndWait();
+
+  net::SchemefulSite example(GURL("https://example.test"));
+  net::SchemefulSite member1(GURL("https://member1.test"));
+  net::SchemefulSite foo(GURL("https://foo.test"));
+
   std::set<net::SchemefulSite> homogeneous_context({
-      net::SchemefulSite(GURL("https://example.test")),
-      net::SchemefulSite(GURL("https://member1.test")),
+      example,
+      member1,
   });
   std::set<net::SchemefulSite> mixed_context({
-      net::SchemefulSite(GURL("https://example.test")),
+      example,
       net::SchemefulSite(GURL("https://nonmember.test")),
   });
   net::SchemefulSite singleton(GURL("https://implicit-singleton.test"));
 
-  EXPECT_EQ(
-      net::FirstPartySetsContextType::kTopFrameIgnoredHomogeneous,
-      sets().ComputeContextType(
-          net::SchemefulSite(GURL("https://example.test")), absl::nullopt, {}));
   EXPECT_EQ(net::FirstPartySetsContextType::kTopFrameIgnoredHomogeneous,
-            sets().ComputeContextType(
-                net::SchemefulSite(GURL("https://example.test")), absl::nullopt,
-                homogeneous_context));
+            sets().ComputeContextType(example, nullptr, {}));
+  EXPECT_EQ(net::FirstPartySetsContextType::kTopFrameIgnoredHomogeneous,
+            sets().ComputeContextType(example, nullptr, homogeneous_context));
 
   EXPECT_EQ(net::FirstPartySetsContextType::kTopFrameIgnoredMixed,
-            sets().ComputeContextType(
-                net::SchemefulSite(GURL("https://example.test")), absl::nullopt,
-                mixed_context));
+            sets().ComputeContextType(example, nullptr, mixed_context));
 
   EXPECT_EQ(net::FirstPartySetsContextType::kHomogeneous,
-            sets().ComputeContextType(
-                net::SchemefulSite(GURL("https://example.test")),
-                net::SchemefulSite(GURL("https://member1.test")), {}));
+            sets().ComputeContextType(example, &member1, {}));
   EXPECT_EQ(net::FirstPartySetsContextType::kHomogeneous,
-            sets().ComputeContextType(
-                net::SchemefulSite(GURL("https://example.test")),
-                net::SchemefulSite(GURL("https://member1.test")),
-                homogeneous_context));
+            sets().ComputeContextType(example, &member1, homogeneous_context));
   EXPECT_EQ(net::FirstPartySetsContextType::kHomogeneous,
-            sets().ComputeContextType(singleton, singleton, {singleton}));
+            sets().ComputeContextType(singleton, &singleton, {singleton}));
 
   EXPECT_EQ(net::FirstPartySetsContextType::kTopResourceMatchMixed,
-            sets().ComputeContextType(
-                net::SchemefulSite(GURL("https://example.test")),
-                net::SchemefulSite(GURL("https://member1.test")),
-                {net::SchemefulSite(GURL("https://foo.test"))}));
-  EXPECT_EQ(
-      net::FirstPartySetsContextType::kTopResourceMatchMixed,
-      sets().ComputeContextType(
-          net::SchemefulSite(GURL("https://example.test")),
-          net::SchemefulSite(GURL("https://member1.test")), mixed_context));
+            sets().ComputeContextType(example, &member1, {foo}));
   EXPECT_EQ(net::FirstPartySetsContextType::kTopResourceMatchMixed,
-            sets().ComputeContextType(
-                net::SchemefulSite(GURL("https://example.test")),
-                net::SchemefulSite(GURL("https://member1.test")), {singleton}));
+            sets().ComputeContextType(example, &member1, mixed_context));
   EXPECT_EQ(net::FirstPartySetsContextType::kTopResourceMatchMixed,
-            sets().ComputeContextType(singleton, singleton, mixed_context));
+            sets().ComputeContextType(example, &member1, {singleton}));
+  EXPECT_EQ(net::FirstPartySetsContextType::kTopResourceMatchMixed,
+            sets().ComputeContextType(singleton, &singleton, mixed_context));
 
   EXPECT_EQ(net::FirstPartySetsContextType::kTopResourceMismatch,
-            sets().ComputeContextType(
-                net::SchemefulSite(GURL("https://example.test")),
-                net::SchemefulSite(GURL("https://foo.test")), {}));
-  EXPECT_EQ(
-      net::FirstPartySetsContextType::kTopResourceMismatch,
-      sets().ComputeContextType(
-          net::SchemefulSite(GURL("https://example.test")),
-          net::SchemefulSite(GURL("https://foo.test")), homogeneous_context));
+            sets().ComputeContextType(example, &foo, {}));
   EXPECT_EQ(net::FirstPartySetsContextType::kTopResourceMismatch,
-            sets().ComputeContextType(
-                net::SchemefulSite(GURL("https://example.test")),
-                net::SchemefulSite(GURL("https://foo.test")), mixed_context));
+            sets().ComputeContextType(example, &foo, homogeneous_context));
   EXPECT_EQ(net::FirstPartySetsContextType::kTopResourceMismatch,
-            sets().ComputeContextType(
-                net::SchemefulSite(GURL("https://example.test")), singleton,
-                mixed_context));
+            sets().ComputeContextType(example, &foo, mixed_context));
+  EXPECT_EQ(net::FirstPartySetsContextType::kTopResourceMismatch,
+            sets().ComputeContextType(example, &singleton, mixed_context));
 }
 
 }  // namespace network

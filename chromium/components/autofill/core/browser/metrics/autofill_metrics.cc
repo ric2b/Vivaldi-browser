@@ -523,7 +523,7 @@ const char* GetQualityMetricTypeSuffix(
   switch (metric_type) {
     default:
       NOTREACHED();
-      FALLTHROUGH;
+      [[fallthrough]];
     case AutofillMetrics::TYPE_SUBMISSION:
       return "";
     case AutofillMetrics::TYPE_NO_SUBMISSION:
@@ -2090,6 +2090,12 @@ void AutofillMetrics::LogStoredProfileCount(size_t num_profiles) {
 }
 
 // static
+void AutofillMetrics::LogStoredProfilesWithoutCountry(size_t num_profiles) {
+  UMA_HISTOGRAM_COUNTS_1M("Autofill.StoredProfileWithoutCountryCount",
+                          num_profiles);
+}
+
+// static
 void AutofillMetrics::LogStoredProfileDisusedCount(size_t num_profiles) {
   UMA_HISTOGRAM_COUNTS_1000("Autofill.StoredProfileDisusedCount", num_profiles);
 }
@@ -2297,6 +2303,11 @@ void AutofillMetrics::LogNumberOfAddressesDeletedForDisuse(
 // static
 void AutofillMetrics::LogAddressSuggestionsCount(size_t num_suggestions) {
   UMA_HISTOGRAM_COUNTS_1M("Autofill.AddressSuggestionsCount", num_suggestions);
+}
+
+// static
+void AutofillMetrics::LogSuggestionClick(SuggestionClickResult value) {
+  base::UmaHistogramEnumeration("Autofill.SuggestionClick", value);
 }
 
 // static
@@ -3056,10 +3067,23 @@ void AutofillMetrics::LogNewProfileImportDecision(
                                 decision);
 }
 
+void AutofillMetrics::LogNewProfileWithComplementedCountryImportDecision(
+    AutofillClient::SaveAddressProfileOfferUserDecision decision) {
+  base::UmaHistogramEnumeration(
+      "Autofill.ProfileImport.NewProfileWithComplementedCountryDecision",
+      decision);
+}
+
 void AutofillMetrics::LogNewProfileEditedType(ServerFieldType edited_type) {
   base::UmaHistogramEnumeration(
       "Autofill.ProfileImport.NewProfileEditedType",
       ConvertSettingsVisibleFieldTypeForMetrics(edited_type));
+}
+
+void AutofillMetrics::LogNewProfileEditedComplementedCountry() {
+  base::UmaHistogramEnumeration(
+      "Autofill.ProfileImport.NewProfileEditedComplementedCountry",
+      AutofillMetrics::SettingsVisibleFieldTypeForMetrics::kCountry);
 }
 
 void AutofillMetrics::LogNewProfileNumberOfEditedFields(
@@ -3073,6 +3097,13 @@ void AutofillMetrics::LogProfileUpdateImportDecision(
     AutofillClient::SaveAddressProfileOfferUserDecision decision) {
   base::UmaHistogramEnumeration("Autofill.ProfileImport.UpdateProfileDecision",
                                 decision);
+}
+
+void AutofillMetrics::LogProfileUpdateWithComplementedCountryImportDecision(
+    AutofillClient::SaveAddressProfileOfferUserDecision decision) {
+  base::UmaHistogramEnumeration(
+      "Autofill.ProfileImport.UpdateProfileWithComplementedCountryDecision",
+      decision);
 }
 
 void AutofillMetrics::LogProfileUpdateAffectedType(
@@ -3104,6 +3135,12 @@ void AutofillMetrics::LogProfileUpdateEditedType(ServerFieldType edited_type) {
   base::UmaHistogramEnumeration(
       "Autofill.ProfileImport.UpdateProfileEditedType",
       ConvertSettingsVisibleFieldTypeForMetrics(edited_type));
+}
+
+void AutofillMetrics::LogProfileUpdateEditedComplementedCountry() {
+  base::UmaHistogramEnumeration(
+      "Autofill.ProfileImport.UpdateProfileEditedComplementedCountry",
+      AutofillMetrics::SettingsVisibleFieldTypeForMetrics::kCountry);
 }
 
 void AutofillMetrics::LogUpdateProfileNumberOfEditedFields(
@@ -3270,6 +3307,14 @@ void AutofillMetrics::LogOtpInputDialogErrorMessageShown(
 void AutofillMetrics::LogOtpInputDialogNewOtpRequested() {
   base::UmaHistogramBoolean("Autofill.OtpInputDialog.SmsOtp.NewOtpRequested",
                             true);
+}
+
+// static
+void AutofillMetrics::
+    LogIsValueNotAutofilledOverExistingValueSameAsSubmittedValue(bool is_same) {
+  base::UmaHistogramBoolean(
+      "Autofill.IsValueNotAutofilledOverExistingValueSameAsSubmittedValue",
+      is_same);
 }
 
 }  // namespace autofill

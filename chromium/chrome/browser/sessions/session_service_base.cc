@@ -39,7 +39,7 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/session_storage_namespace.h"
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 #include "chrome/browser/app_controller_mac.h"
 #endif
 
@@ -613,12 +613,15 @@ void SessionServiceBase::BuildCommandsForBrowser(
 
   // Set the visual data for each tab group.
   TabStripModel* tab_strip = browser->tab_strip_model();
-  TabGroupModel* group_model = tab_strip->group_model();
-  for (const tab_groups::TabGroupId& group_id : group_model->ListTabGroups()) {
-    const tab_groups::TabGroupVisualData* visual_data =
-        group_model->GetTabGroup(group_id)->visual_data();
-    command_storage_manager()->AppendRebuildCommand(
-        sessions::CreateTabGroupMetadataUpdateCommand(group_id, visual_data));
+  if (tab_strip->SupportsTabGroups()) {
+    TabGroupModel* group_model = tab_strip->group_model();
+    for (const tab_groups::TabGroupId& group_id :
+         group_model->ListTabGroups()) {
+      const tab_groups::TabGroupVisualData* visual_data =
+          group_model->GetTabGroup(group_id)->visual_data();
+      command_storage_manager()->AppendRebuildCommand(
+          sessions::CreateTabGroupMetadataUpdateCommand(group_id, visual_data));
+    }
   }
 
   for (int i = 0; i < tab_strip->count(); ++i) {

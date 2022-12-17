@@ -33,7 +33,7 @@
 #include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
 #include "ui/accessibility/platform/inspect/ax_api_type.h"
 #include "ui/accessibility/platform/inspect/ax_tree_formatter.h"
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 #include "content/browser/accessibility/browser_accessibility_manager_win.h"
 #endif
 
@@ -111,12 +111,9 @@ std::vector<std::string> DumpAccessibilityEventsTest::Dump() {
   bool run_go_again = false;
   std::vector<std::string> result;
   do {
-    base::Value go_results;
-    std::vector<std::string> event_logs;
-
     // Dump the event logs, running them through any filters specified
     // in the HTML file.
-    std::tie(go_results, event_logs) = CaptureEvents(base::BindOnce(
+    auto [go_results, event_logs] = CaptureEvents(base::BindOnce(
         &ExecuteScriptAndGetValue, web_contents->GetMainFrame(), "go()"));
     run_go_again = go_results.is_bool() && go_results.GetBool();
     // Save a copy of the final accessibility tree (as a text dump); we'll
@@ -196,7 +193,7 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
 
 // TODO(crbug.com/1052397): Revisit once build flag switch of lacros-chrome is
 // complete.
-#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
 #define DISABLED_ON_LINUX_TSAN_MSAN(name) DISABLED_##name
 #else
 #define DISABLED_ON_LINUX_TSAN_MSAN(name) name
@@ -234,7 +231,7 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
   RunEventTest(FILE_PATH_LITERAL("aria-current-changed.html"));
 }
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 #define MAYBE_AccessibilityEventsAriaDisabledChanged \
   DISABLED_AccessibilityEventsAriaDisabledChanged
 #else
@@ -328,8 +325,16 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
   RunEventTest(FILE_PATH_LITERAL("aria-textbox-children-change.html"));
 }
 
+// Test is flaky on Mac: crbug.com/1295914
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_AccessibilityEventsAriaTextboxEditabilityChanges \
+  DISABLED_AccessibilityEventsAriaTextboxEditabilityChanges
+#else
+#define MAYBE_AccessibilityEventsAriaTextboxEditabilityChanges \
+  AccessibilityEventsAriaTextboxEditabilityChanges
+#endif
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
-                       AccessibilityEventsAriaTextboxEditabilityChanges) {
+                       MAYBE_AccessibilityEventsAriaTextboxEditabilityChanges) {
   RunEventTest(FILE_PATH_LITERAL("aria-textbox-editability-changes.html"));
 }
 
@@ -361,7 +366,7 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
 
 // TODO(crbug.com/835455): Fails on Windows.
 // TODO(crbug.com/945193): Flaky on Mac.
-#if defined(OS_WIN) || defined(OS_MAC)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
 #define MAYBE_AccessibilityEventsAriaComboBoxDelayAddList \
   DISABLED_AccessibilityEventsAriaComboBoxDelayAddList
 #else
@@ -424,6 +429,11 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
                        AccessibilityEventsAddAlertWithRoleChange) {
   RunEventTest(FILE_PATH_LITERAL("add-alert-with-role-change.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
+                       AccessibilityEventsAddAlertContent) {
+  RunEventTest(FILE_PATH_LITERAL("add-alert-content.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
@@ -493,8 +503,8 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
   RunEventTest(FILE_PATH_LITERAL("caret-move.html"));
 }
 
-// Flaky on Windows: https://crbug.com/1186887
-#if defined(OS_WIN)
+// Flaky on Windows, disabled on Linux: https://crbug.com/1186887
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
 #define MAYBE_AccessibilityEventsCaretMoveHiddenInput \
   DISABLED_AccessibilityEventsCaretMoveHiddenInput
 #else
@@ -635,7 +645,7 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
 }
 
 // Flaky on Windows: https://crbug.com/1078490.
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 #define MAYBE_AccessibilityEventsFocusListbox \
   DISABLED_AccessibilityEventsFocusListbox
 #else
@@ -652,6 +662,11 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
+                       AccessibilityEventsIframeSrcChanged) {
+  RunEventTest(FILE_PATH_LITERAL("iframe-src-changed.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
                        AccessibilityEventsInnerHtmlChange) {
   RunEventTest(FILE_PATH_LITERAL("inner-html-change.html"));
 }
@@ -662,7 +677,7 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
 }
 
 // Flaky on Windows: https://crbug.com/1078490.
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 #define MAYBE_AccessibilityEventsListboxFocus \
   DISABLED_AccessibilityEventsListboxFocus
 #else
@@ -679,7 +694,7 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
 }
 
 // TODO(https://crbug.com/1123394): This is failing on Windows.
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 #define MAYBE_AccessibilityEventsLiveRegionAdd \
   DISABLED_AccessibilityEventsLiveRegionAdd
 #else
@@ -701,7 +716,7 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
 }
 
 // Flaky on Windows: https://crbug.com/1078490.
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 #define MAYBE_AccessibilityEventsLiveRegionCreate \
   DISABLED_AccessibilityEventsLiveRegionCreate
 #else
@@ -746,7 +761,7 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
 }
 
 // TODO(crbug/1232295): Flaky on Linux and Win.
-#if defined(OS_LINUX) || defined(OS_WIN)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
 #define MAYBE_AccessibilityEventsMenuListExpand \
   DISABLED_AccessibilityEventsMenuListExpand
 #else
@@ -778,7 +793,7 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
 }
 
 // Flaky on Windows: https://crbug.com/1078490.
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 #define MAYBE_AccessibilityEventsNameChange \
   DISABLED_AccessibilityEventsNameChange
 #else
@@ -805,12 +820,18 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
+                       AccessibilityEventsReparentElementWithActiveDescendant) {
+  RunEventTest(
+      FILE_PATH_LITERAL("reparent-element-with-active-descendant.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
                        AccessibilityEventsRemoveHiddenAttribute) {
   RunEventTest(FILE_PATH_LITERAL("remove-hidden-attribute.html"));
 }
 
 // TODO(aboxhall): Fix flakiness on Windows and Mac
-#if defined(OS_WIN) || defined(OS_MAC)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
 #define MAYBE_AccessibilityEventsReportValidityInvalidField \
   DISABLED_AccessibilityEventsReportValidityInvalidField
 #else
@@ -829,7 +850,7 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
                        AccessibilityEventsSamePageLinkNavigation) {
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   if (!BrowserAccessibilityManagerWin::
           IsUiaActiveTextPositionChangedEventSupported())
     return;
@@ -966,7 +987,7 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
   RunEventTest(FILE_PATH_LITERAL("tbody-focus.html"));
 }
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 // TODO(crbug.com/1084871) Flaky on Windows https://crbug.com/1084871#c33
 #define MAYBE_AccessibilityEventsVisibilityHiddenChanged \
   DISABLED_AccessibilityEventsVisibilityHiddenChanged
@@ -1028,7 +1049,7 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
   RunEventTest(FILE_PATH_LITERAL("menu-opened-closed.html"));
 }
 
-#if defined(OS_WIN) && defined(ADDRESS_SANITIZER)
+#if BUILDFLAG(IS_WIN) && defined(ADDRESS_SANITIZER)
 // TODO(crbug.com/1198056#c16): Test is flaky on Windows ASAN.
 #define MAYBE_AccessibilityEventsMenubarShowHideMenus \
   DISABLED_AccessibilityEventsMenubarShowHideMenus
@@ -1054,7 +1075,7 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
 }
 
 // Test is flaky on Linux. See crbug.com/990847 for more details.
-#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 #define MAYBE_DeleteSubtree DISABLED_DeleteSubtree
 #else
 #define MAYBE_DeleteSubtree DeleteSubtree

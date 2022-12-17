@@ -13,6 +13,7 @@
 
 #include "base/containers/id_map.h"
 #include "base/synchronization/lock.h"
+#include "base/synchronization/waitable_event.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/thread_annotations.h"
 #include "base/time/time.h"
@@ -29,7 +30,7 @@
 #include "third_party/blink/public/mojom/cache_storage/cache_storage.mojom.h"
 #include "third_party/blink/public/mojom/loader/code_cache.mojom.h"
 
-#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 #include "components/services/font/public/cpp/font_loader.h"  // nogncheck
 #include "third_party/skia/include/core/SkRefCnt.h"           // nogncheck
 #endif
@@ -86,6 +87,7 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   uint64_t VisitedLinkHash(const char* canonicalURL, size_t length) override;
   bool IsLinkVisited(uint64_t linkHash) override;
   blink::WebString UserAgent() override;
+  blink::WebString FullUserAgent() override;
   blink::WebString ReducedUserAgent() override;
   blink::UserAgentMetadata UserAgentMetadata() override;
   void CacheMetadata(blink::mojom::CodeCacheType cache_type,
@@ -127,7 +129,7 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
       const blink::WebSecurityOrigin& origin) override;
   bool IsThreadedAnimationEnabled() override;
   bool IsGpuCompositingDisabled() const override;
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   bool IsSynchronousCompositingEnabledForAndroidWebView() override;
   bool IsZeroCopySynchronousSwDrawEnabledForAndroidWebView() override;
   SkCanvas* SynchronousCompositorGetSkCanvasForAndroidWebView() override;
@@ -196,7 +198,7 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
       const blink::WebURL& top_document_web_url) override;
   gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() override;
   blink::WebString ConvertIDNToUnicode(const blink::WebString& host) override;
-#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
   void SetDisplayThreadPriority(base::PlatformThreadId thread_id) override;
 #endif
   blink::BlameContext* GetTopLevelBlameContext() override;
@@ -274,7 +276,7 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   void Collect3DContextInformation(blink::Platform::GraphicsInfo* gl_info,
                                    const gpu::GPUInfo& gpu_info) const;
 
-#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_MAC)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC)
   std::unique_ptr<blink::WebSandboxSupport> sandbox_support_;
 #endif
 
@@ -298,7 +300,11 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   mojo::SharedRemote<blink::mojom::CodeCacheHost> code_cache_host_
       GUARDED_BY(code_cache_host_lock_);
 
-#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+  // Event that signals `io_thread_id_` is set and ready to be read.
+  mutable base::WaitableEvent io_thread_id_ready_event_;
+  base::PlatformThreadId io_thread_id_ = base::kInvalidThreadId;
+
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
   sk_sp<font_service::FontLoader> font_loader_;
 #endif
 

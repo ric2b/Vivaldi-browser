@@ -29,9 +29,11 @@ import org.chromium.chrome.browser.firstrun.FirstRunFragment;
 import org.chromium.chrome.browser.firstrun.FirstRunUtils;
 import org.chromium.chrome.browser.firstrun.MobileFreProgress;
 import org.chromium.chrome.browser.firstrun.SkipTosDialogPolicyListener;
+import org.chromium.chrome.browser.privacy.settings.PrivacyPreferencesManagerImpl;
 import org.chromium.chrome.browser.ui.signin.SigninUtils;
 import org.chromium.chrome.browser.ui.signin.fre.FreUMADialogCoordinator;
 import org.chromium.chrome.browser.ui.signin.fre.SigninFirstRunCoordinator;
+import org.chromium.chrome.browser.ui.signin.fre.SigninFirstRunView;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogManagerHolder;
@@ -94,7 +96,7 @@ public class SigninFirstRunFragment extends Fragment implements FirstRunFragment
     @Override
     public View onCreateView(
             LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        mAllowCrashUpload = true;
+        mAllowCrashUpload = false;
         mFragmentView = new FrameLayout(getActivity());
         mFragmentView.addView(inflateFragmentView(inflater, getResources().getConfiguration()));
 
@@ -102,9 +104,9 @@ public class SigninFirstRunFragment extends Fragment implements FirstRunFragment
     }
 
     @Override
-    public void onDestroy() {
-        super.onDestroy();
-        mSigninFirstRunCoordinator.destroy();
+    public void onDestroyView() {
+        super.onDestroyView();
+        setSigninFirstRunCoordinator(null);
     }
 
     @Override
@@ -160,6 +162,12 @@ public class SigninFirstRunFragment extends Fragment implements FirstRunFragment
 
     /** Implements {@link SigninFirstRunCoordinator.Delegate}. */
     @Override
+    public void advanceToNextPage() {
+        getPageDelegate().advanceToNextPage();
+    }
+
+    /** Implements {@link SigninFirstRunCoordinator.Delegate}. */
+    @Override
     public void recordFreProgressHistogram(@MobileFreProgress int state) {
         getPageDelegate().recordFreProgressHistogram(state);
     }
@@ -194,25 +202,41 @@ public class SigninFirstRunFragment extends Fragment implements FirstRunFragment
         }
     }
 
+    /**
+     * Destroys the old coordinator if needed and sets {@link #mSigninFirstRunCoordinator}.
+     * @param coordinator the new coordinator instance (may be null).
+     */
+    private void setSigninFirstRunCoordinator(@Nullable SigninFirstRunCoordinator coordinator) {
+        if (mSigninFirstRunCoordinator != null) {
+            mSigninFirstRunCoordinator.destroy();
+        }
+        mSigninFirstRunCoordinator = coordinator;
+    }
+
     private void notifyCoordinatorWhenNativeAndPolicyAreLoaded() {
+        // This may happen when the native initialized supplier in FirstRunActivity calls back after
+        // the fragment has been detached from the activity. See https://crbug.com/1294998.
+        if (getPageDelegate() == null) return;
+
         if (mSigninFirstRunCoordinator != null && mNativeInitialized
                 && getPageDelegate().getPolicyLoadListener().get() != null) {
             mSigninFirstRunCoordinator.onNativeAndPolicyLoaded(
                     getPageDelegate().getPolicyLoadListener().get());
+            mAllowCrashUpload = !mSigninFirstRunCoordinator.isMetricsReportingDisabledByPolicy();
         }
     }
 
     private View inflateFragmentView(LayoutInflater inflater, Configuration configuration) {
         // Since the landscape view has two panes the minimum screenWidth to show it is set to
         // 600dp per android guideline.
-        final View view =
-                inflater.inflate(configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-                                        && configuration.screenWidthDp >= 600
-                                ? R.layout.signin_first_run_landscape_view
-                                : R.layout.signin_first_run_portrait_view,
-                        null, false);
-        mSigninFirstRunCoordinator =
-                new SigninFirstRunCoordinator(requireContext(), view, mModalDialogManager, this);
+        final SigninFirstRunView view = (SigninFirstRunView) inflater.inflate(
+                configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+                                && configuration.screenWidthDp >= 600
+                        ? R.layout.signin_first_run_landscape_view
+                        : R.layout.signin_first_run_portrait_view,
+                null, false);
+        setSigninFirstRunCoordinator(new SigninFirstRunCoordinator(requireContext(), view,
+                mModalDialogManager, this, PrivacyPreferencesManagerImpl.getInstance()));
         notifyCoordinatorWhenNativeAndPolicyAreLoaded();
         return view;
     }

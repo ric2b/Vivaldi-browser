@@ -34,12 +34,15 @@ on run (volumeName)
       log "Stage 3 done"
       BACKGROUND_CLAUSE
 
+      log "Stage 4.1"
       -- Positioning
       POSITION_CLAUSE
 
+      log "Stage 4.2"
       -- Hiding
       HIDING_CLAUSE
 
+      log "Stage 4.3"
       -- Application Link Clause
       APPLICATION_CLAUSE
       close

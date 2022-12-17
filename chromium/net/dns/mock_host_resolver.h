@@ -157,7 +157,7 @@ class MockHostResolverBase
     const RuleResult& Resolve(
         const absl::variant<url::SchemeHostPort, HostPortPair>&
             request_endpoint,
-        DnsQueryType request_type,
+        DnsQueryTypeSet request_types,
         HostResolverSource request_source) const;
 
     void ClearRules();
@@ -180,6 +180,9 @@ class MockHostResolverBase
     void AddIPLiteralRuleWithDnsAliases(base::StringPiece hostname_pattern,
                                         base::StringPiece ip_literal,
                                         std::vector<std::string> dns_aliases);
+    void AddIPLiteralRuleWithDnsAliases(base::StringPiece hostname_pattern,
+                                        base::StringPiece ip_literal,
+                                        std::set<std::string> dns_aliases);
     void AddSimulatedFailure(base::StringPiece hostname_pattern);
     void AddSimulatedTimeoutFailure(base::StringPiece hostname_pattern);
     void AddRuleWithFlags(base::StringPiece host_pattern,
@@ -526,14 +529,6 @@ class RuleBasedHostResolverProc : public HostResolverProc {
       const std::string& host,
       HostResolverFlags flags = HOST_RESOLVER_LOOPBACK_ONLY);
 
-  // Simulate a lookup that returns ERR_DNS_NAME_HTTPS_ONLY regardless of the
-  // request's scheme. After the rule is used once, it is deleted.
-  //
-  // TODO(https://crbug.com/1206799) Once RuleBasedHostResolverProc::Resolve
-  // takes a url::SchemeHostPort parameter, change the semantics of this method
-  // to vary depending on request scheme.
-  void AddSimulatedHTTPSServiceFormRecord(const std::string& host);
-
   // Deletes all the rules that have been added.
   void ClearRules();
 
@@ -550,10 +545,10 @@ class RuleBasedHostResolverProc : public HostResolverProc {
               int* os_error) override;
 
   struct Rule {
+    // TODO(https://crbug.com/1298106) Deduplicate this enum's definition.
     enum ResolverType {
       kResolverTypeFail,
       kResolverTypeFailTimeout,
-      kResolverTypeFailHTTPSServiceFormRecord,
       // TODO(mmenke): Is it really reasonable for a "mock" host resolver to
       // fall back to the system resolver?
       kResolverTypeSystem,

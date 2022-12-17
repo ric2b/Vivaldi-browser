@@ -40,7 +40,6 @@ class VivaldiNativeAppWindowViewsMac : public VivaldiNativeAppWindowViews {
   void OnBeforeWidgetInit(views::Widget::InitParams& init_params) override;
   bool IsMaximized() const override;
   gfx::Rect GetRestoredBounds() const override;
-  void Show() override;
   void Maximize() override;
   void Restore() override;
   void FlashFrame(bool flash) override;

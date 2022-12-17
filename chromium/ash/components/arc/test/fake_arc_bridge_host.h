@@ -47,9 +47,6 @@ class FakeArcBridgeHost : public mojom::ArcBridgeHost {
           boot_phase_monitor_remote) override;
   void OnCameraInstanceReady(
       mojo::PendingRemote<mojom::CameraInstance> camera_remote) override;
-  void OnCastReceiverInstanceReady(
-      mojo::PendingRemote<mojom::CastReceiverInstance> cast_receiver_remote)
-      override;
   void OnCertStoreInstanceReady(
       mojo::PendingRemote<mojom::CertStoreInstance> instance_remote) override;
   void OnClipboardInstanceReady(
@@ -122,6 +119,9 @@ class FakeArcBridgeHost : public mojom::ArcBridgeHost {
       mojo::PendingRemote<mojom::PowerInstance> power_remote) override;
   void OnPrintSpoolerInstanceReady(
       mojo::PendingRemote<mojom::PrintSpoolerInstance> print_spooler_remote)
+      override;
+  void OnPrivacyItemsInstanceReady(
+      mojo::PendingRemote<mojom::PrivacyItemsInstance> privacy_items_remote)
       override;
   void OnProcessInstanceReady(
       mojo::PendingRemote<mojom::ProcessInstance> process_remote) override;

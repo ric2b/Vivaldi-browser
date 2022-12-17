@@ -81,6 +81,7 @@ typedef std::vector<vivaldi::calendar::RecurrenceException>
 // static
 RecurrenceException CreateException(const RecurrenceExceptionRow& row) {
   RecurrenceException exception;
+  exception.exception_id.reset(new std::string(base::NumberToString(row.id)));
   exception.cancelled.reset(new bool(row.cancelled));
   exception.date.reset(new double(MilliSecondsFromTime(row.exception_day)));
   exception.exception_event_id.reset(
@@ -302,7 +303,6 @@ std::unique_ptr<CalendarEvent> CreateVivaldiEvent(
   cal_event->invites = CreateInvites(event.invites);
   cal_event->organizer.reset(new std::string(event.organizer));
   cal_event->timezone.reset(new std::string(event.timezone));
-  cal_event->due.reset(new double(MilliSecondsFromTime(event.due)));
   cal_event->priority.reset(new int(event.priority));
   cal_event->status.reset(new std::string(event.status));
   cal_event->percentage_complete.reset(new int(event.percentage_complete));
@@ -710,11 +710,6 @@ ExtensionFunction::ResponseAction CalendarUpdateEventFunction::Run() {
     updatedEvent.updateFields |= calendar::EVENT_TYPE_ID;
   }
 
-  if (params->changes.due.get()) {
-    updatedEvent.due = GetTime(*params->changes.due);
-    updatedEvent.updateFields |= calendar::DUE;
-  }
-
   if (params->changes.priority.get()) {
     updatedEvent.priority = *params->changes.priority;
     updatedEvent.updateFields |= calendar::PRIORITY;
@@ -811,6 +806,44 @@ void CalendarDeleteEventFunction::DeleteEventComplete(
     Respond(Error("Error deleting event"));
   } else {
     Respond(NoArguments());
+  }
+}
+
+ExtensionFunction::ResponseAction CalendarDeleteEventExceptionFunction::Run() {
+  std::unique_ptr<vivaldi::calendar::DeleteEventException::Params> params(
+      vivaldi::calendar::DeleteEventException::Params::Create(args()));
+
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  std::u16string id;
+  id = base::UTF8ToUTF16(params->exception_id);
+  calendar::RecurrenceExceptionID exception_id;
+
+  if (!GetIdAsInt64(id, &exception_id)) {
+    return RespondNow(Error("Error. Invalid exception id"));
+  }
+
+  CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
+
+  model->DeleteEventRecurrenceException(
+      exception_id,
+      base::BindOnce(
+          &CalendarDeleteEventExceptionFunction::DeleteEventExceptionComplete,
+          this),
+      &task_tracker_);
+  return RespondLater();  // DeleteEventExceptionComplete() will be called
+                          // asynchronously.
+}
+
+void CalendarDeleteEventExceptionFunction::DeleteEventExceptionComplete(
+    std::shared_ptr<calendar::EventResultCB> results) {
+  if (!results->success) {
+    Respond(Error("Error deleting event exception"));
+  } else {
+    std::unique_ptr<CalendarEvent> event = CreateVivaldiEvent(results->event);
+    Respond(ArgumentList(
+        extensions::vivaldi::calendar::DeleteEventException::Results::Create(
+            *event)));
   }
 }
 

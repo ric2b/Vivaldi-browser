@@ -27,7 +27,8 @@ BlockedUrlsReporterTabHelper::TabBlockedUrlInfo::operator=(
 
 BlockedUrlsReporterTabHelper::BlockedUrlsReporterTabHelper(
     content::WebContents* contents)
-    : WebContentsObserver(contents) {}
+    : WebContentsObserver(contents),
+      WebContentsUserData<BlockedUrlsReporterTabHelper>(*contents) {}
 
 BlockedUrlsReporterTabHelper::~BlockedUrlsReporterTabHelper() = default;
 

@@ -57,6 +57,11 @@ class JavaScriptDialogExtensionsClientImpl
           web_contents->GetLastCommittedURL().spec());
   }
   void OnDialogClosed(content::WebContents* web_contents) override {
+    // NOTE(andre@vivaldi.com) : Callstack in VB-86640 indicates a nulled
+    // web_contents passed in.
+    if (!web_contents) {
+      return;
+    }
     const Extension* extension = GetExtensionForWebContents(web_contents);
     if (extension == nullptr)
       return;

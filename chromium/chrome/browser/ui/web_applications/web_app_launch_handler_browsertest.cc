@@ -12,7 +12,7 @@
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/web_applications/manifest_update_task.h"
-#include "chrome/browser/web_applications/os_integration_manager.h"
+#include "chrome/browser/web_applications/os_integration/os_integration_manager.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
@@ -112,8 +112,7 @@ class WebAppLaunchHandlerBrowserTest : public InProcessBrowserTest {
  private:
   base::test::ScopedFeatureList feature_list_{
       blink::features::kWebAppEnableLaunchHandler};
-  ScopedOsHooksSuppress os_hooks_suppress_{
-      OsIntegrationManager::ScopedSuppressOsHooksForTesting()};
+  OsIntegrationManager::ScopedSuppressForTesting os_hooks_suppress_;
 };
 
 IN_PROC_BROWSER_TEST_F(WebAppLaunchHandlerBrowserTest, RouteToEmpty) {
@@ -312,8 +311,7 @@ class WebAppLaunchHandlerDisabledBrowserTest : public InProcessBrowserTest {
 
  private:
   base::test::ScopedFeatureList feature_list_;
-  ScopedOsHooksSuppress os_hooks_suppress_{
-      OsIntegrationManager::ScopedSuppressOsHooksForTesting()};
+  OsIntegrationManager::ScopedSuppressForTesting os_hooks_suppress_;
 };
 
 IN_PROC_BROWSER_TEST_F(WebAppLaunchHandlerDisabledBrowserTest, NoLaunchQueue) {
@@ -352,8 +350,7 @@ class WebAppLaunchHandlerOriginTrialBrowserTest : public InProcessBrowserTest {
 
  private:
   base::test::ScopedFeatureList feature_list_;
-  ScopedOsHooksSuppress os_hooks_suppress_{
-      OsIntegrationManager::ScopedSuppressOsHooksForTesting()};
+  OsIntegrationManager::ScopedSuppressForTesting os_hooks_suppress_;
 };
 namespace {
 
@@ -444,7 +441,7 @@ IN_PROC_BROWSER_TEST_F(WebAppLaunchHandlerOriginTrialBrowserTest, OriginTrial) {
 
   // Open the page again with the token missing.
   {
-    UpdateAwaiter update_awaiter(provider.registrar());
+    UpdateAwaiter update_awaiter(provider.install_manager());
 
     serve_token = false;
     NavigateToURLAndWait(browser(), GURL(kTestWebAppUrl));

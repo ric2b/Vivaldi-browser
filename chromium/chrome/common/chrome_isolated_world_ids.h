@@ -15,10 +15,10 @@ enum ChromeIsolatedWorldIDs {
   // Isolated world ID for internal Chrome features.
   ISOLATED_WORLD_ID_CHROME_INTERNAL,
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   // Isolated world ID for AppleScript.
   ISOLATED_WORLD_ID_APPLESCRIPT,
-#endif  // defined(OS_MAC)
+#endif  // BUILDFLAG(IS_MAC)
 
   // Grabbing 5 world IDs for the content injection feature.
   ISOLATED_WORLD_ID_VIVALDI_CONTENT_INJECTION,

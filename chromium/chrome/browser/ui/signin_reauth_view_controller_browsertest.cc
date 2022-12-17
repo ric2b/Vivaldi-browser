@@ -214,7 +214,7 @@ class SigninReauthViewControllerBrowserTest : public InProcessBrowserTest {
   // The test cannot depend on Views implementation so it simulates clicking on
   // the close button through calling the close event.
   void SimulateCloseButtonClick() {
-    signin_reauth_view_controller()->OnModalSigninClosed();
+    signin_reauth_view_controller()->OnModalDialogClosed();
   }
 
   void ResetAbortHandle() { abort_handle_.reset(); }
@@ -232,7 +232,7 @@ class SigninReauthViewControllerBrowserTest : public InProcessBrowserTest {
         browser()->signin_view_controller();
     DCHECK(signin_view_controller->ShowsModalDialog());
     return static_cast<SigninReauthViewController*>(
-        signin_view_controller->GetModalDialogDelegateForTesting());
+        signin_view_controller->GetModalDialogForTesting());
   }
 
   base::HistogramTester* histogram_tester() { return &histogram_tester_; }
@@ -399,7 +399,7 @@ IN_PROC_BROWSER_TEST_F(SigninReauthViewControllerBrowserTest,
   target_content_observer.Wait();
 
   content::WebContents* target_contents =
-      signin_reauth_view_controller()->GetWebContents();
+      signin_reauth_view_controller()->GetModalDialogWebContentsForTesting();
   ASSERT_TRUE(content::ExecuteScript(
       target_contents, "document.getElementsByTagName('a')[0].click();"));
   EXPECT_EQ(WaitForReauthResult(), signin::ReauthResult::kSuccess);
@@ -435,12 +435,13 @@ IN_PROC_BROWSER_TEST_F(SigninReauthViewControllerBrowserTest,
   target_content_observer.Wait();
 
   content::WebContents* target_contents =
-      signin_reauth_view_controller()->GetWebContents();
+      signin_reauth_view_controller()->GetModalDialogWebContentsForTesting();
 
   SyncEncryptionKeysTabHelper* encryption_keys_tab_helper =
       SyncEncryptionKeysTabHelper::FromWebContents(target_contents);
   ASSERT_NE(encryption_keys_tab_helper, nullptr);
-  EXPECT_TRUE(encryption_keys_tab_helper->IsEncryptionKeysApiBoundForTesting());
+  EXPECT_TRUE(encryption_keys_tab_helper->HasEncryptionKeysApiForTesting(
+      target_contents->GetMainFrame()));
 
   // The invocation of the API, even with dummy values, should propagate until
   // TrustedVaultClient and its observers.
@@ -471,7 +472,7 @@ IN_PROC_BROWSER_TEST_F(SigninReauthViewControllerBrowserTest,
   target_content_observer.Wait();
 
   content::WebContents* dialog_contents =
-      signin_reauth_view_controller()->GetWebContents();
+      signin_reauth_view_controller()->GetModalDialogWebContentsForTesting();
   content::TestNavigationObserver new_tab_observer(nullptr);
   new_tab_observer.StartWatchingNewWebContents();
   ASSERT_TRUE(content::ExecuteScript(
@@ -482,7 +483,8 @@ IN_PROC_BROWSER_TEST_F(SigninReauthViewControllerBrowserTest,
       browser()->tab_strip_model()->GetActiveWebContents();
   EXPECT_NE(new_contents, original_contents);
   EXPECT_NE(new_contents, dialog_contents);
-  EXPECT_EQ(new_contents->GetURL(), https_server()->GetURL("/title1.html"));
+  EXPECT_EQ(new_contents->GetLastCommittedURL(),
+            https_server()->GetURL("/title1.html"));
 }
 
 // Tests that the authentication flow that goes outside of the reauth host is
@@ -515,8 +517,10 @@ IN_PROC_BROWSER_TEST_F(SigninReauthViewControllerBrowserTest,
   content::WebContents* target_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   EXPECT_NE(target_contents, original_contents);
-  EXPECT_EQ(target_contents, signin_reauth_view_controller()->GetWebContents());
-  EXPECT_EQ(target_contents->GetURL(), target_url);
+  EXPECT_EQ(
+      target_contents,
+      signin_reauth_view_controller()->GetModalDialogWebContentsForTesting());
+  EXPECT_EQ(target_contents->GetLastCommittedURL(), target_url);
 
   ASSERT_TRUE(content::ExecuteScript(
       target_contents, "document.getElementsByTagName('a')[0].click();"));
@@ -543,7 +547,8 @@ IN_PROC_BROWSER_TEST_F(SigninReauthViewControllerBrowserTest, CloseSAMLTab) {
   tab_added_waiter.Wait();
 
   auto* tab_strip_model = browser()->tab_strip_model();
-  EXPECT_EQ(tab_strip_model->GetActiveWebContents()->GetURL(), target_url);
+  EXPECT_EQ(tab_strip_model->GetActiveWebContents()->GetLastCommittedURL(),
+            target_url);
   tab_strip_model->CloseWebContentsAt(tab_strip_model->active_index(),
                                       TabStripModel::CLOSE_USER_GESTURE);
   EXPECT_EQ(WaitForReauthResult(), signin::ReauthResult::kDismissedByUser);
@@ -593,7 +598,7 @@ IN_PROC_BROWSER_TEST_F(SigninReauthViewControllerBrowserTest,
   ShowReauthPrompt(
       signin_metrics::ReauthAccessPoint::kPasswordSaveLocallyBubble);
   content::WebContents* confirmation_dialog_contents =
-      signin_reauth_view_controller()->GetWebContents();
+      signin_reauth_view_controller()->GetModalDialogWebContentsForTesting();
   content::TestNavigationObserver navigation_observer(
       confirmation_dialog_contents);
   navigation_observer.Wait();
@@ -618,7 +623,7 @@ IN_PROC_BROWSER_TEST_F(SigninReauthViewControllerBrowserTest,
   // before the reauth prompt was shown.
   ShowReauthPrompt(signin_metrics::ReauthAccessPoint::kPasswordSaveBubble);
   content::WebContents* confirmation_dialog_contents =
-      signin_reauth_view_controller()->GetWebContents();
+      signin_reauth_view_controller()->GetModalDialogWebContentsForTesting();
   content::TestNavigationObserver navigation_observer(
       confirmation_dialog_contents);
   navigation_observer.Wait();
@@ -657,7 +662,7 @@ IN_PROC_BROWSER_TEST_F(SigninReauthViewControllerDarkModeBrowserTest,
                        ConfirmationDialogDarkModeDisabled) {
   ShowReauthPrompt();
   content::WebContents* confirmation_dialog_contents =
-      signin_reauth_view_controller()->GetWebContents();
+      signin_reauth_view_controller()->GetModalDialogWebContentsForTesting();
   content::TestNavigationObserver navigation_observer(
       confirmation_dialog_contents);
   navigation_observer.WaitForNavigationFinished();

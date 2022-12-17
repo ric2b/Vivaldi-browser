@@ -48,7 +48,7 @@
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/test/gl_surface_test_support.h"
 
-#if defined(OS_APPLE)
+#if BUILDFLAG(IS_APPLE)
 #include "ui/accelerated_widget_mac/ca_transaction_observer.h"
 #endif
 
@@ -157,7 +157,7 @@ class InProcessContextFactory::PerCompositorData
     display_->SetVisible(visible);
   }
   void Resize(const gfx::Size& size) override { display_->Resize(size); }
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   bool DisableSwapUntilResize() override {
     display_->DisableSwapUntilResize(base::OnceClosure());
     return true;
@@ -184,7 +184,7 @@ class InProcessContextFactory::PerCompositorData
   void AddVSyncParameterObserver(
       mojo::PendingRemote<viz::mojom::VSyncParameterObserver> observer)
       override {}
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   void SetVSyncPaused(bool paused) override {}
   void UpdateRefreshRate(float refresh_rate) override {}
   void SetSupportedRefreshRates(
@@ -192,10 +192,11 @@ class InProcessContextFactory::PerCompositorData
   void PreserveChildSurfaceControls() override {}
   void SetSwapCompletionCallbackEnabled(bool enabled) override {}
 #endif
-
   void SetDelegatedInkPointRenderer(
       mojo::PendingReceiver<gfx::mojom::DelegatedInkPointRenderer> receiver)
       override {}
+  void SetStandaloneBeginFrameObserver(
+      mojo::PendingRemote<viz::mojom::BeginFrameObserver> observer) override {}
 
   void SetSurfaceHandle(gpu::SurfaceHandle surface_handle) {
     surface_handle_ = surface_handle;
@@ -262,7 +263,7 @@ InProcessContextFactory::InProcessContextFactory(
       << "gl::GLSurfaceTestSupport::InitializeOneOff()";
   if (use_skia_renderer)
     renderer_settings_.use_skia_renderer = true;
-#if defined(OS_APPLE)
+#if BUILDFLAG(IS_APPLE)
   renderer_settings_.release_overlay_resources_after_gpu_query = true;
   // Ensure that tests don't wait for frames that will never come.
   ui::CATransactionCoordinator::Get().DisableForTesting();
@@ -284,43 +285,51 @@ void InProcessContextFactory::CreateLayerTreeFrameSink(
   if (shared_worker_context_provider_) {
     // Note: If context is lost, delete reference after releasing the lock.
     base::AutoLock lock(*shared_worker_context_provider_->GetLock());
-    if (shared_worker_context_provider_->ContextGL()
+    if (shared_worker_context_provider_->RasterInterface()
             ->GetGraphicsResetStatusKHR() != GL_NO_ERROR) {
       shared_worker_context_provider_lost = true;
     }
   }
   if (!shared_worker_context_provider_ || shared_worker_context_provider_lost) {
-    constexpr bool support_locking = true;
     shared_worker_context_provider_ = InProcessContextProvider::CreateOffscreen(
-        &gpu_memory_buffer_manager_, &image_factory_, support_locking);
+        &gpu_memory_buffer_manager_, &image_factory_, /*is_worker=*/true);
     auto result = shared_worker_context_provider_->BindToCurrentThread();
     if (result != gpu::ContextResult::kSuccess)
       shared_worker_context_provider_ = nullptr;
   }
 
-  gpu::ContextCreationAttribs attribs;
-  attribs.alpha_size = 8;
-  attribs.blue_size = 8;
-  attribs.green_size = 8;
-  attribs.red_size = 8;
-  attribs.depth_size = 0;
-  attribs.stencil_size = 0;
-  attribs.samples = 0;
-  attribs.sample_buffers = 0;
-  attribs.fail_if_major_perf_caveat = false;
-  attribs.bind_generates_resource = false;
   PerCompositorData* data = per_compositor_data_[compositor.get()].get();
   if (!data)
     data = CreatePerCompositorData(compositor.get());
 
-  constexpr bool support_locking = false;
-  scoped_refptr<InProcessContextProvider> context_provider =
-      InProcessContextProvider::Create(attribs, &gpu_memory_buffer_manager_,
-                                       &image_factory_, data->surface_handle(),
-                                       "UICompositor", support_locking);
+  scoped_refptr<InProcessContextProvider> context_provider;
+  if (renderer_settings_.use_skia_renderer) {
+    // SkiaRenderer doesn't need a ContextProvider per ui::Compositor so just
+    // use the shared main thread context.
+    SharedMainThreadContextProvider();
+    DCHECK(shared_main_thread_contexts_);
+    context_provider = shared_main_thread_contexts_;
+  } else {
+    gpu::ContextCreationAttribs attribs;
+    attribs.alpha_size = 8;
+    attribs.blue_size = 8;
+    attribs.green_size = 8;
+    attribs.red_size = 8;
+    attribs.depth_size = 0;
+    attribs.stencil_size = 0;
+    attribs.samples = 0;
+    attribs.sample_buffers = 0;
+    attribs.fail_if_major_perf_caveat = false;
+    attribs.bind_generates_resource = false;
 
-  auto context_result = context_provider->BindToCurrentThread();
-  DCHECK_EQ(context_result, gpu::ContextResult::kSuccess);
+    constexpr bool support_locking = false;
+    context_provider = InProcessContextProvider::Create(
+        attribs, &gpu_memory_buffer_manager_, &image_factory_,
+        data->surface_handle(), "UICompositor", support_locking);
+
+    auto context_result = context_provider->BindToCurrentThread();
+    DCHECK_EQ(context_result, gpu::ContextResult::kSuccess);
+  }
 
   std::unique_ptr<viz::OutputSurface> display_output_surface;
   std::unique_ptr<viz::DisplayCompositorMemoryAndTaskController>
@@ -396,9 +405,8 @@ InProcessContextFactory::SharedMainThreadContextProvider() {
           GL_NO_ERROR)
     return shared_main_thread_contexts_;
 
-  constexpr bool support_locking = false;
   shared_main_thread_contexts_ = InProcessContextProvider::CreateOffscreen(
-      &gpu_memory_buffer_manager_, &image_factory_, support_locking);
+      &gpu_memory_buffer_manager_, &image_factory_, /*is_worker=*/false);
   auto result = shared_main_thread_contexts_->BindToCurrentThread();
   if (result != gpu::ContextResult::kSuccess)
     shared_main_thread_contexts_.reset();
@@ -507,7 +515,7 @@ InProcessContextFactory::CreatePerCompositorData(Compositor* compositor) {
     data->SetSurfaceHandle(tracker->AddSurfaceForNativeWidget(
         gpu::GpuSurfaceTracker::SurfaceRecord(
             widget
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
             // We have to provide a surface too, but we don't have one.  For
             // now, we don't proide it, since nobody should ask anyway.
             // If we ever provide a valid surface here, then GpuSurfaceTracker

@@ -27,7 +27,7 @@ class VivaldiBrowserMainExtraParts : public ChromeBrowserMainExtraParts {
   void PostEarlyInitialization() override;
   void PreProfileInit() override;
 
-  void PostProfileInit() override;
+  void PostProfileInit(Profile* profile, bool is_initial_profile) override;
 
   void PostMainMessageLoopRun() override;
 

@@ -1509,7 +1509,8 @@ IN_PROC_BROWSER_TEST_F(KioskDeviceOwnedTest,
 }
 
 // TODO(crbug.com/1149893): Migrate to KioskDeviceOwnedTest.
-IN_PROC_BROWSER_TEST_F(KioskTest, SpokenFeedback) {
+// This test is flaky (https://crbug.com/1294660).
+IN_PROC_BROWSER_TEST_F(KioskTest, DISABLED_SpokenFeedback) {
   test::SpeechMonitor sm;
   // Disable the TTS engine for testing so that we don't wait for the TTS engine
   // to load (the engine will never load on linux-chromeos builds).
@@ -2875,7 +2876,7 @@ class KioskAutoLaunchViewsTest : public OobeBaseTest,
     DictionaryPrefUpdate dict_update(prefs,
                                      KioskAppManager::kKioskDictionaryName);
     // The AutoLoginState is taken from KioskAppManager::AutoLoginState.
-    dict_update->SetInteger(
+    dict_update->SetIntKey(
         KioskAppManager::kKeyAutoLoginState,
         static_cast<int>(KioskAppManager::AutoLoginState::kRequested));
   }

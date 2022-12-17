@@ -39,10 +39,23 @@ class PhotosService : public KeyedService,
     kCached = 2,
     kMaxValue = kCached,
   };
+
+  // These values should be in sync with featureParam values in aboutFlags.cc.
+  enum class OptInCardTitle {
+    kOptInRHTitle = 0,
+    kOptInFavoritesTitle = 1,
+    kOptInpersonalizedTitle = 2,
+    kOptInTripsTitle = 3,
+  };
+
   static const char kLastDismissedTimePrefName[];
   static const char kOptInAcknowledgedPrefName[];
   static const char kLastMemoryOpenTimePrefName[];
+  static const char kSoftOptOutCountPrefName[];
+  static const char kLastSoftOptedOutTimePrefName[];
   static const base::TimeDelta kDismissDuration;
+  static const base::TimeDelta kSoftOptOutDuration;
+  static const int kMaxSoftOptOuts;
 
   PhotosService(const PhotosService&) = delete;
   PhotosService(
@@ -70,6 +83,15 @@ class PhotosService : public KeyedService,
   void OnUserOptIn(bool accept);
   // Stores the last time the user opened a memory.
   void OnMemoryOpen();
+  // Returns whether to show the soft opt out button.
+  bool ShouldShowSoftOptOutButton();
+  // Dismisses the module for fixed amount of time before asking the user
+  // to opt in again.
+  void SoftOptOut();
+  // Returns if the user soft opted out.
+  bool IsModuleSoftOptedOut();
+  // Returns the string which should be shown as the opt-in card title.
+  std::string GetOptInTitleText(std::vector<photos::mojom::MemoryPtr> memories);
 
  private:
   void OnTokenReceived(GoogleServiceAuthError error,
@@ -78,6 +100,8 @@ class PhotosService : public KeyedService,
                       const std::unique_ptr<std::string> json_response);
   void OnJsonParsed(const std::string& token,
                     data_decoder::DataDecoder::ValueOrError result);
+  std::string ConstructPersonalizedString(
+      std::vector<photos::mojom::MemoryPtr> memories);
 
   // Used for fetching OAuth2 access tokens. Only non-null when a token
   // is made available, or a token is being fetched.

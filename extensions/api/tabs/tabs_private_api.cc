@@ -51,6 +51,7 @@
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/picture_in_picture_window_controller.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/video_picture_in_picture_window_controller.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
@@ -389,7 +390,8 @@ void TabsPrivateAPI::Init() {
 
 VivaldiPrivateTabObserver::VivaldiPrivateTabObserver(
     content::WebContents* web_contents)
-    : WebContentsObserver(web_contents) {
+    : WebContentsObserver(web_contents),
+      WebContentsUserData<VivaldiPrivateTabObserver>(*web_contents) {
   auto* zoom_controller = zoom::ZoomController::FromWebContents(web_contents);
   if (zoom_controller) {
     zoom_controller->AddObserver(this);
@@ -954,8 +956,8 @@ void VivaldiPrivateTabObserver::CaptureFinished() {
 void VivaldiPrivateTabObserver::MediaPictureInPictureChanged(
     bool is_picture_in_picture) {
   content::PictureInPictureWindowController* pip_controller =
-      content::PictureInPictureWindowController::GetOrCreateForWebContents(
-          web_contents());
+      content::PictureInPictureWindowController::
+          GetOrCreateVideoPictureInPictureController(web_contents());
   DCHECK(pip_controller);
   pip_controller->SetVivaldiDelegate(weak_ptr_factory_.GetWeakPtr());
 }

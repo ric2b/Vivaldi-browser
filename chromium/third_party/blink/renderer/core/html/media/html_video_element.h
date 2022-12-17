@@ -32,11 +32,10 @@
 #include "third_party/blink/renderer/core/html/html_image_loader.h"
 #include "third_party/blink/renderer/core/html/media/html_media_element.h"
 #include "third_party/blink/renderer/core/imagebitmap/image_bitmap_source.h"
-#include "third_party/blink/renderer/core/paint/compositing/paint_layer_compositor.h"
+#include "third_party/blink/renderer/platform/graphics/canvas_resource_provider.h"
 
 namespace blink {
 
-class CanvasResourceProvider;
 class ImageBitmapOptions;
 class IntersectionObserverEntry;
 class MediaCustomControlsFullscreenDetector;
@@ -88,10 +87,10 @@ class CORE_EXPORT HTMLVideoElement final
 
   // Used by canvas to gain raw pixel access
   //
-  // PaintFlags is optional. If unspecified, its blend mode defaults to kSrc.
+  // |paint_flags| is optional. If unspecified, its blend mode defaults to kSrc.
   void PaintCurrentFrame(cc::PaintCanvas*,
                          const gfx::Rect&,
-                         const cc::PaintFlags*) const;
+                         const cc::PaintFlags* paint_flags) const;
 
   bool HasAvailableVideoFrame() const;
 

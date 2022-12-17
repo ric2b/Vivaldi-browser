@@ -85,7 +85,8 @@ WaylandEventSource::WaylandEventSource(wl_display* display,
     : window_manager_(window_manager),
       connection_(connection),
       event_watcher_(
-          std::make_unique<WaylandEventWatcher>(display, event_queue)) {
+          WaylandEventWatcher::CreateWaylandEventWatcher(display,
+                                                         event_queue)) {
   DCHECK(window_manager_);
 
   // Observes remove changes to know when touch points can be removed.
@@ -250,6 +251,10 @@ void WaylandEventSource::OnResetPointerFlags() {
   ResetPointerFlags();
 }
 
+void WaylandEventSource::RoundTripQueue() {
+  event_watcher_->RoundTripQueue();
+}
+
 const gfx::PointF& WaylandEventSource::GetPointerLocation() const {
   return pointer_location_;
 }
@@ -346,7 +351,8 @@ void WaylandEventSource::OnTouchPressEvent(WaylandWindow* window,
   }
 
   PointerDetails details(EventPointerType::kTouch, id);
-  TouchEvent event(ET_TOUCH_PRESSED, loc, loc, timestamp, details);
+  TouchEvent event(ET_TOUCH_PRESSED, loc, loc, timestamp, details,
+                   keyboard_modifiers_);
   DispatchEvent(&event);
 }
 
@@ -363,7 +369,8 @@ void WaylandEventSource::OnTouchReleaseEvent(base::TimeTicks timestamp,
   gfx::PointF location = touch_point->last_known_location;
   PointerDetails details(EventPointerType::kTouch, id);
 
-  TouchEvent event(ET_TOUCH_RELEASED, location, location, timestamp, details);
+  TouchEvent event(ET_TOUCH_RELEASED, location, location, timestamp, details,
+                   keyboard_modifiers_);
   DispatchEvent(&event);
 
   HandleTouchFocusChange(touch_point->window, false, id);
@@ -386,7 +393,8 @@ void WaylandEventSource::OnTouchMotionEvent(const gfx::PointF& location,
           : location;
   it->second->last_known_location = loc;
   PointerDetails details(EventPointerType::kTouch, id);
-  TouchEvent event(ET_TOUCH_MOVED, loc, loc, timestamp, details);
+  TouchEvent event(ET_TOUCH_MOVED, loc, loc, timestamp, details,
+                   keyboard_modifiers_);
   DispatchEvent(&event);
 }
 
@@ -425,11 +433,11 @@ void WaylandEventSource::OnPinchEvent(EventType event_type,
                                       const gfx::Vector2dF& delta,
                                       base::TimeTicks timestamp,
                                       int device_id,
-                                      absl::optional<float> scale) {
+                                      absl::optional<float> scale_delta) {
   GestureEventDetails details(event_type);
   details.set_device_type(GestureDeviceType::DEVICE_TOUCHPAD);
-  if (scale)
-    details.set_scale(*scale);
+  if (scale_delta)
+    details.set_scale(*scale_delta);
 
   auto location = pointer_location_ + delta;
   GestureEvent event(location.x(), location.y(), 0 /* flags */, timestamp,
@@ -461,16 +469,8 @@ void WaylandEventSource::ResetPointerFlags() {
   pointer_flags_ = 0;
 }
 
-void WaylandEventSource::UseSingleThreadedPollingForTesting() {
-  event_watcher_->UseSingleThreadedPollingForTesting();
-}
-
 void WaylandEventSource::OnDispatcherListChanged() {
   StartProcessingEvents();
-}
-
-void WaylandEventSource::StopProcessingEventsForTesting() {
-  event_watcher_->StopProcessingEvents();
 }
 
 void WaylandEventSource::OnWindowRemoved(WaylandWindow* window) {

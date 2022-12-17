@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#include <string>
 
 #include "base/base_paths.h"
 #include "base/big_endian.h"
@@ -33,7 +34,7 @@
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_rep.h"
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 #include "ui/display/win/dpi.h"
 #endif
 
@@ -64,14 +65,13 @@ constexpr char kLottieData[] = "LOTTIEtest";
 
 // Mock of |lottie::ParseLottieAsStillImage|. Checks that |kLottieData| is
 // properly stripped of the "LOTTIE" prefix.
-gfx::ImageSkiaRep ParseLottieAsStillImageForTesting(
-    const base::RefCountedString& bytes_string) {
-  auto expected_bytes_string = base::MakeRefCounted<base::RefCountedString>();
-  expected_bytes_string->data() = "test";
-  CHECK(bytes_string.Equals(expected_bytes_string));
+gfx::ImageSkia ParseLottieAsStillImageForTesting(
+    const std::string& bytes_string) {
+  CHECK_EQ("test", bytes_string);
 
-  const int kDimension = 16;
-  return gfx::ImageSkiaRep(gfx::Size(kDimension, kDimension), 0.f);
+  constexpr int kDimension = 16;
+  return gfx::ImageSkia(
+      gfx::ImageSkiaRep(gfx::Size(kDimension, kDimension), 0.f));
 }
 #endif
 
@@ -566,7 +566,7 @@ TEST_F(ResourceBundleImageTest, GetRawDataResource) {
 // Test requesting image reps at various scale factors from the image returned
 // via ResourceBundle::GetImageNamed().
 TEST_F(ResourceBundleImageTest, GetImageNamed) {
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   display::win::SetDefaultDeviceScaleFactor(2.0);
 #endif
   std::vector<ResourceScaleFactor> supported_factors;
@@ -590,7 +590,7 @@ TEST_F(ResourceBundleImageTest, GetImageNamed) {
 
   gfx::ImageSkia* image_skia = resource_bundle->GetImageSkiaNamed(3);
 
-#if BUILDFLAG(IS_CHROMEOS_ASH) || defined(OS_WIN)
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_WIN)
   // ChromeOS/Windows load highest scale factor first.
   EXPECT_EQ(ui::k200Percent, GetSupportedResourceScaleFactor(
                                  image_skia->image_reps()[0].scale()));
@@ -689,8 +689,9 @@ TEST_F(ResourceBundleImageTest, FallbackToNone) {
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 TEST_F(ResourceBundleImageTest, Lottie) {
-  ui::ResourceBundle::SetParseLottieAsStillImage(
-      &ParseLottieAsStillImageForTesting);
+  ui::ResourceBundle::SetLottieParsingFunctions(
+      &ParseLottieAsStillImageForTesting,
+      /*parse_lottie_as_themed_still_image=*/nullptr);
   test::ScopedSetSupportedResourceScaleFactors scoped_supported(
       {k100Percent, k200Percent});
   base::FilePath data_unscaled_path = dir_path().AppendASCII("sample.pak");

@@ -124,7 +124,7 @@ void ScanningHandler::SetWebUIForTest(content::WebUI* web_ui) {
 }
 
 void ScanningHandler::HandleInitialize(const base::ListValue* args) {
-  DCHECK(args && args->GetList().empty());
+  DCHECK(args && args->GetListDeprecated().empty());
   AllowJavascript();
 }
 
@@ -132,9 +132,10 @@ void ScanningHandler::HandleOpenFilesInMediaApp(const base::ListValue* args) {
   if (!IsJavascriptAllowed())
     return;
 
-  CHECK_EQ(1U, args->GetList().size());
-  DCHECK(args->GetList()[0].is_list());
-  const base::Value::ConstListView& value_list = args->GetList()[0].GetList();
+  CHECK_EQ(1U, args->GetListDeprecated().size());
+  DCHECK(args->GetListDeprecated()[0].is_list());
+  const base::Value::ConstListView& value_list =
+      args->GetListDeprecated()[0].GetListDeprecated();
   DCHECK(!value_list.empty());
 
   std::vector<base::FilePath> file_paths;
@@ -146,8 +147,8 @@ void ScanningHandler::HandleOpenFilesInMediaApp(const base::ListValue* args) {
 }
 
 void ScanningHandler::HandleRequestScanToLocation(const base::ListValue* args) {
-  CHECK_EQ(1U, args->GetList().size());
-  scan_location_callback_id_ = args->GetList()[0].GetString();
+  CHECK_EQ(1U, args->GetListDeprecated().size());
+  scan_location_callback_id_ = args->GetListDeprecated()[0].GetString();
 
   content::WebContents* web_contents = web_ui()->GetWebContents();
   gfx::NativeWindow owning_window =
@@ -168,9 +169,9 @@ void ScanningHandler::HandleShowFileInLocation(const base::ListValue* args) {
   if (!IsJavascriptAllowed())
     return;
 
-  CHECK_EQ(2U, args->GetList().size());
-  const std::string callback = args->GetList()[0].GetString();
-  const base::FilePath file_location(args->GetList()[1].GetString());
+  CHECK_EQ(2U, args->GetListDeprecated().size());
+  const std::string callback = args->GetListDeprecated()[0].GetString();
+  const base::FilePath file_location(args->GetListDeprecated()[1].GetString());
   scanning_app_delegate_->ShowFileInFilesApp(
       file_location,
       base::BindOnce(&ScanningHandler::OnShowFileInLocation,
@@ -187,13 +188,19 @@ void ScanningHandler::HandleGetPluralString(const base::ListValue* args) {
   if (!IsJavascriptAllowed())
     return;
 
-  CHECK_EQ(3U, args->GetList().size());
-  const std::string callback = args->GetList()[0].GetString();
-  const std::string name = args->GetList()[1].GetString();
-  const int count = args->GetList()[2].GetInt();
+  CHECK_EQ(3U, args->GetListDeprecated().size());
+  const std::string callback = args->GetListDeprecated()[0].GetString();
+  const std::string name = args->GetListDeprecated()[1].GetString();
+  const int count = args->GetListDeprecated()[2].GetInt();
 
-  const std::u16string localized_string = l10n_util::GetPluralStringFUTF16(
-      string_id_map_.find(name)->second, count);
+  auto iter = string_id_map_.find(name);
+  if (iter == string_id_map_.end()) {
+    // Only reachable if the WebUI renderer is misbehaving.
+    return;
+  }
+
+  const std::u16string localized_string =
+      l10n_util::GetPluralStringFUTF16(iter->second, count);
   ResolveJavascriptCallback(base::Value(callback),
                             base::Value(localized_string));
 }
@@ -202,8 +209,8 @@ void ScanningHandler::HandleGetMyFilesPath(const base::ListValue* args) {
   if (!IsJavascriptAllowed())
     return;
 
-  CHECK_EQ(1U, args->GetList().size());
-  const std::string& callback = args->GetList()[0].GetString();
+  CHECK_EQ(1U, args->GetListDeprecated().size());
+  const std::string& callback = args->GetListDeprecated()[0].GetString();
 
   const base::FilePath my_files_path = scanning_app_delegate_->GetMyFilesPath();
   ResolveJavascriptCallback(base::Value(callback),
@@ -214,8 +221,8 @@ void ScanningHandler::HandleSaveScanSettings(const base::ListValue* args) {
   if (!IsJavascriptAllowed())
     return;
 
-  CHECK_EQ(1U, args->GetList().size());
-  const std::string& scan_settings = args->GetList()[0].GetString();
+  CHECK_EQ(1U, args->GetListDeprecated().size());
+  const std::string& scan_settings = args->GetListDeprecated()[0].GetString();
   scanning_app_delegate_->SaveScanSettingsToPrefs(scan_settings);
 }
 
@@ -223,8 +230,8 @@ void ScanningHandler::HandleGetScanSettings(const base::ListValue* args) {
   if (!IsJavascriptAllowed())
     return;
 
-  CHECK_EQ(1U, args->GetList().size());
-  const std::string& callback = args->GetList()[0].GetString();
+  CHECK_EQ(1U, args->GetListDeprecated().size());
+  const std::string& callback = args->GetListDeprecated()[0].GetString();
 
   ResolveJavascriptCallback(
       base::Value(callback),
@@ -235,14 +242,14 @@ void ScanningHandler::HandleEnsureValidFilePath(const base::ListValue* args) {
   if (!IsJavascriptAllowed())
     return;
 
-  CHECK_EQ(2U, args->GetList().size());
-  const std::string callback = args->GetList()[0].GetString();
-  const base::FilePath file_path(args->GetList()[1].GetString());
+  CHECK_EQ(2U, args->GetListDeprecated().size());
+  const std::string callback = args->GetListDeprecated()[0].GetString();
+  const base::FilePath file_path(args->GetListDeprecated()[1].GetString());
 
   task_runner_->PostTaskAndReplyWithResult(
       FROM_HERE, base::BindOnce(&base::PathExists, file_path),
-      base::BindOnce(&ScanningHandler::OnPathExists, base::Unretained(this),
-                     file_path, callback));
+      base::BindOnce(&ScanningHandler::OnPathExists,
+                     weak_ptr_factory_.GetWeakPtr(), file_path, callback));
 }
 
 void ScanningHandler::OnPathExists(const base::FilePath& file_path,

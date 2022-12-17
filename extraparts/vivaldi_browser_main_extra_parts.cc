@@ -151,12 +151,10 @@ void VivaldiBrowserMainExtraParts::PreProfileInit() {
   EnsureBrowserContextKeyedServiceFactoriesBuilt();
 }
 
-void VivaldiBrowserMainExtraParts::PostProfileInit() {
+void VivaldiBrowserMainExtraParts::PostProfileInit(Profile* profile,
+                                                   bool is_initial_profile) {
   content::WebUIControllerFactory::RegisterFactory(
       vivaldi::VivaldiWebUIControllerFactory::GetInstance());
-
-  Profile* profile =
-      g_browser_process->profile_manager()->GetActiveUserProfile();
 
   if (vivaldi::IsVivaldiRunning()) {
     translate_language_list_ =

@@ -19,8 +19,6 @@
 class Profile;
 
 namespace base {
-class Value;
-class DictionaryValue;
 class SequencedTaskRunner;
 }  // namespace base
 

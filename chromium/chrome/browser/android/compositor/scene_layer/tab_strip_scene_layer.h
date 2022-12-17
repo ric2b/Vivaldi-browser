@@ -57,6 +57,15 @@ class TabStripSceneLayer : public SceneLayer {
                            jfloat brightness,
                            jboolean should_readd_background);
 
+  void UpdateStripScrim(JNIEnv* env,
+                        const base::android::JavaParamRef<jobject>& jobj,
+                        jfloat x,
+                        jfloat y,
+                        jfloat width,
+                        jfloat height,
+                        jint color,
+                        jfloat alpha);
+
   void UpdateNewTabButton(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& jobj,
@@ -66,6 +75,8 @@ class TabStripSceneLayer : public SceneLayer {
       jfloat width,
       jfloat height,
       jboolean visible,
+      jint tint,
+      jfloat button_alpha,
       const base::android::JavaParamRef<jobject>& jresource_manager);
 
   void UpdateModelSelectorButton(
@@ -145,6 +156,7 @@ class TabStripSceneLayer : public SceneLayer {
 
   scoped_refptr<cc::SolidColorLayer> tab_strip_layer_;
   scoped_refptr<cc::Layer> scrollable_strip_layer_;
+  scoped_refptr<cc::SolidColorLayer> scrim_layer_;
   scoped_refptr<cc::UIResourceLayer> new_tab_button_;
   scoped_refptr<cc::UIResourceLayer> left_fade_;
   scoped_refptr<cc::UIResourceLayer> right_fade_;

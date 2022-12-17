@@ -188,8 +188,12 @@ class DiceWebSigninInterceptor : public KeyedService,
         const BubbleParameters& bubble_parameters,
         base::OnceCallback<void(SigninInterceptionResult)> callback) = 0;
 
-    // Shows the profile customization bubble.
-    virtual void ShowProfileCustomizationBubble(Browser* browser) = 0;
+    // Shows the first run experience for `account_id` in `browser` opened for
+    // a newly created profile.
+    virtual void ShowFirstRunExperienceInNewProfile(
+        Browser* browser,
+        const CoreAccountId& account_id,
+        SigninInterceptionType interception_type) = 0;
   };
 
   DiceWebSigninInterceptor(Profile* profile,
@@ -227,7 +231,8 @@ class DiceWebSigninInterceptor : public KeyedService,
       content::WebContents* intercepted_contents,
       std::unique_ptr<ScopedDiceWebSigninInterceptionBubbleHandle>
           bubble_handle,
-      bool is_new_profile);
+      bool is_new_profile,
+      SigninInterceptionType interception_type);
 
   // Returns the outcome of the interception heuristic.
   // If the outcome is kInterceptProfileSwitch, the target profile is returned
@@ -267,20 +272,20 @@ class DiceWebSigninInterceptor : public KeyedService,
   FRIEND_TEST_ALL_PREFIXES(DiceWebSigninInterceptorTest,
                            ShouldShowMultiUserBubble);
   FRIEND_TEST_ALL_PREFIXES(DiceWebSigninInterceptorTest, PersistentHash);
-  FRIEND_TEST_ALL_PREFIXES(DiceWebSigninInterceptorForcedSeparationTest,
+  FRIEND_TEST_ALL_PREFIXES(DiceWebSigninInterceptorTest,
                            ShouldEnforceEnterpriseProfileSeparation);
-  FRIEND_TEST_ALL_PREFIXES(DiceWebSigninInterceptorForcedSeparationTest,
+  FRIEND_TEST_ALL_PREFIXES(DiceWebSigninInterceptorTest,
                            ShouldEnforceEnterpriseProfileSeparationWithoutUPA);
-  FRIEND_TEST_ALL_PREFIXES(DiceWebSigninInterceptorForcedSeparationTest,
+  FRIEND_TEST_ALL_PREFIXES(DiceWebSigninInterceptorTest,
                            ShouldEnforceEnterpriseProfileSeparationReauth);
-  FRIEND_TEST_ALL_PREFIXES(DiceWebSigninInterceptorForcedSeparationTest,
+  FRIEND_TEST_ALL_PREFIXES(DiceWebSigninInterceptorTest,
                            EnforceManagedAccountAsPrimary);
-  FRIEND_TEST_ALL_PREFIXES(DiceWebSigninInterceptorForcedSeparationTest,
+  FRIEND_TEST_ALL_PREFIXES(DiceWebSigninInterceptorTest,
                            ShouldEnforceEnterpriseProfileSeparationReauth);
-  FRIEND_TEST_ALL_PREFIXES(DiceWebSigninInterceptorEnterpriseBrowserTest,
+  FRIEND_TEST_ALL_PREFIXES(DiceWebSigninInterceptorTest,
                            ForcedEnterpriseInterceptionTestAccountLevelPolicy);
   FRIEND_TEST_ALL_PREFIXES(
-      DiceWebSigninInterceptorEnterpriseBrowserTest,
+      DiceWebSigninInterceptorTest,
       ForcedEnterpriseInterceptionTestNoForcedInterception);
 
   // Cancels any current signin interception and resets the interceptor to its
@@ -297,6 +302,11 @@ class DiceWebSigninInterceptor : public KeyedService,
       const AccountInfo& intercepted_account_info) const;
   bool ShouldShowMultiUserBubble(
       const AccountInfo& intercepted_account_info) const;
+
+  // Helper function to call `delegate_->ShowSigninInterceptionBubble()`.
+  void ShowSigninInterceptionBubble(
+      const Delegate::BubbleParameters& bubble_parameters,
+      base::OnceCallback<void(SigninInterceptionResult)> callback);
 
   void OnInterceptionReadyToBeProcessed(const AccountInfo& info);
 
@@ -375,6 +385,7 @@ class DiceWebSigninInterceptor : public KeyedService,
   CoreAccountId account_id_;
   bool new_account_interception_ = false;
   bool intercepted_account_management_accepted_ = false;
+  absl::optional<SigninInterceptionType> interception_type_;
   base::ScopedObservation<signin::IdentityManager,
                           signin::IdentityManager::Observer>
       account_info_update_observation_{this};

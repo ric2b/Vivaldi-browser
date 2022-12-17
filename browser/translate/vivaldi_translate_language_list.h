@@ -17,10 +17,6 @@ namespace network {
 class SimpleURLLoader;
 }  // namespace network
 
-namespace base {
-class ListValue;
-}  // namespace base
-
 namespace translate {
 
 class VivaldiTranslateLanguageList
@@ -38,7 +34,7 @@ class VivaldiTranslateLanguageList
   void StartUpdateTimer();
   void OnListDownloaded(std::unique_ptr<std::string> response_body);
   void SetPrefsListAsDefault();
-  void SetListInChromium(const base::ListValue& list);
+  void SetListInChromium(const base::Value::List& list);
   const std::string GetServer();
 
   content::BrowserContext* context_;

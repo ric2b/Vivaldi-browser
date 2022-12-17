@@ -276,9 +276,9 @@ TEST_F(RenderWidgetHostViewAndroidTest, InsetVisualViewport) {
 }
 
 TEST_F(RenderWidgetHostViewAndroidTest, HideWindowRemoveViewAddViewShowWindow) {
-  std::unique_ptr<ui::WindowAndroid> window(
-      ui::WindowAndroid::CreateForTesting());
-  window->AddChild(parent_view());
+  std::unique_ptr<ui::WindowAndroid::ScopedWindowAndroidForTesting> window =
+      ui::WindowAndroid::CreateForTesting();
+  window->get()->AddChild(parent_view());
   EXPECT_TRUE(render_widget_host_view_android()->IsShowing());
   // The layer should be visible once attached to a window.
   EXPECT_FALSE(render_widget_host_view_android()
@@ -287,7 +287,7 @@ TEST_F(RenderWidgetHostViewAndroidTest, HideWindowRemoveViewAddViewShowWindow) {
                    ->hide_layer_and_subtree());
 
   // Hiding the window should and removing the view should hide the layer.
-  window->OnVisibilityChanged(nullptr, nullptr, false);
+  window->get()->OnVisibilityChanged(nullptr, nullptr, false);
   parent_view()->RemoveFromParent();
   EXPECT_TRUE(render_widget_host_view_android()->IsShowing());
   EXPECT_TRUE(render_widget_host_view_android()
@@ -297,8 +297,8 @@ TEST_F(RenderWidgetHostViewAndroidTest, HideWindowRemoveViewAddViewShowWindow) {
 
   // Adding the view back to a window and notifying the window is visible should
   // make the layer visible again.
-  window->AddChild(parent_view());
-  window->OnVisibilityChanged(nullptr, nullptr, true);
+  window->get()->AddChild(parent_view());
+  window->get()->OnVisibilityChanged(nullptr, nullptr, true);
   EXPECT_TRUE(render_widget_host_view_android()->IsShowing());
   EXPECT_FALSE(render_widget_host_view_android()
                    ->GetNativeView()
@@ -632,12 +632,12 @@ TEST_F(RenderWidgetHostViewAndroidRotationTest, FullscreenRotation) {
   }
 
   // When exiting rotation the order of visual property updates can differ.
+  // Though we need to always allow Surface Sync to continue, as WebView will
+  // send two OnPhysicalBackingSizeChanged in a row to exit fullscreen. While
+  // non-WebView can alternate some combination of 1-2
+  // OnPhysicalBackingSizeChanged and OnSynchronizedDisplayPropertiesChanged.
   delegate()->set_is_fullscreen(false);
   rwhva->OnPhysicalBackingSizeChanged(/* deadline_override= */ absl::nullopt);
-  EXPECT_FALSE(rwhva->CanSynchronizeVisualProperties());
-  EXPECT_EQ(post_rotation_local_surface_id, rwhva->GetLocalSurfaceId());
-
-  rwhva->OnSynchronizedDisplayPropertiesChanged(/* rotation= */ true);
   EXPECT_TRUE(rwhva->CanSynchronizeVisualProperties());
   const viz::LocalSurfaceId post_fullscreen_local_surface_id =
       rwhva->GetLocalSurfaceId();
@@ -645,6 +645,21 @@ TEST_F(RenderWidgetHostViewAndroidRotationTest, FullscreenRotation) {
   EXPECT_TRUE(post_fullscreen_local_surface_id.is_valid());
   EXPECT_TRUE(post_fullscreen_local_surface_id.IsNewerThan(
       post_rotation_local_surface_id));
+
+  // When rotation begins again it should block Surface Sync again.
+  rwhva->OnSynchronizedDisplayPropertiesChanged(/* rotation= */ true);
+  EXPECT_FALSE(rwhva->CanSynchronizeVisualProperties());
+  EXPECT_EQ(post_fullscreen_local_surface_id, rwhva->GetLocalSurfaceId());
+
+  // When rotation has completed we should begin Surface Sync again.
+  rwhva->OnPhysicalBackingSizeChanged(/* deadline_override= */ absl::nullopt);
+  const viz::LocalSurfaceId post_fullscreen_rotation_local_surface_id =
+      rwhva->GetLocalSurfaceId();
+  EXPECT_NE(post_fullscreen_local_surface_id,
+            post_fullscreen_rotation_local_surface_id);
+  EXPECT_TRUE(post_fullscreen_rotation_local_surface_id.is_valid());
+  EXPECT_TRUE(post_fullscreen_rotation_local_surface_id.IsNewerThan(
+      post_fullscreen_local_surface_id));
   EXPECT_TRUE(rwhva->CanSynchronizeVisualProperties());
 
   {

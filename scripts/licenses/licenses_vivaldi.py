@@ -135,11 +135,17 @@ SPECIAL_CASES = {
         "License": "BSD",
         "License File": "/../platform_media/OPERA_LICENSE.txt",
     },
-    join('..', 'third_party', '_winsparkle_lib'): {
+    join('..', 'update_notifier/', 'thirdparty', 'winsparkle'): {
         "Name": "WinSparkle",
         "URL": "http://winsparkle.org/",
         "License": "MIT",
-        "License File": "/../third_party/_winsparkle_lib/COPYING",
+        "License File": "/../update_notifier/thirdparty/winsparkle/COPYING",
+    },
+    join('..', 'update_notifier/', 'thirdparty', 'wxWidgets'): {
+        "Name": "wxWidgets",
+        "URL": "https://www.wxwidgets.org/",
+        "License": "Modified LGPL",
+        "License File": "/../update_notifier/thirdparty/wxWidgets/docs/licence.txt",
     },
     join('..', 'thirdparty', 'macsparkle'): {
         "Name": "Sparkle",
@@ -170,6 +176,12 @@ SPECIAL_CASES = {
         "URL": "https://github.com/Chocobo1/bmhs",
         "License": "BSD-3-Clause",
         "License File": "/../vivapp/src/util/bmhs_license.txt",
+    },
+    join('..', 'vivapp', 'src', 'dispatcher'): {
+        "Name": "Flux",
+        "URL": "https://facebook.github.io/flux/",
+        "License": "BSD",
+        "License File": "/../vivapp/fork_licenses/flux/LICENSE",
     },
 }
 

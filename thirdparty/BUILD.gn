@@ -6,12 +6,39 @@ if (is_mac) {
     script = "//vivaldi/scripts/mac/build_sparkle_mac.py"
     sparkle_code = rebase_path("//vivaldi/thirdparty/macsparkle")
     output_folder = rebase_path("$root_out_dir/sparkle_lib")
+    framework_path = "$root_out_dir/sparkle_lib/Build/Products/Release/Sparkle.framework/Versions/Current"
+    headers_path = "$framework_path/Headers"
+
     inputs = []
     outputs = [
-      "$root_out_dir/sparkle_lib/Build/Products/Release/Sparkle.framework/Versions/Current/Helpers",
-      "$root_out_dir/sparkle_lib/Build/Products/Release/Sparkle.framework/Versions/Current/Modules",
-      "$root_out_dir/sparkle_lib/Build/Products/Release/Sparkle.framework/Versions/Current/Resources",
-      "$root_out_dir/sparkle_lib/Build/Products/Release/Sparkle.framework/Versions/Current/Sparkle",
+      "$headers_path/SPUDownloadData.h",
+      "$headers_path/SPUStandardUpdaterController.h",
+      "$headers_path/SPUStandardUserDriver.h",
+      "$headers_path/SPUStandardUserDriverDelegate.h",
+      "$headers_path/SPUUpdateCheck.h",
+      "$headers_path/SPUUpdatePermissionRequest.h",
+      "$headers_path/SPUUpdater.h",
+      "$headers_path/SPUUpdaterDelegate.h",
+      "$headers_path/SPUUpdaterSettings.h",
+      "$headers_path/SPUUserDriver.h",
+      "$headers_path/SPUUserUpdateState.h",
+      "$headers_path/SUAppcast.h",
+      "$headers_path/SUAppcastItem.h",
+      "$headers_path/SUErrors.h",
+      "$headers_path/SUExport.h",
+      "$headers_path/SUStandardVersionComparator.h",
+      "$headers_path/SUUpdatePermissionResponse.h",
+      "$headers_path/SUUpdater.h",
+      "$headers_path/SUUpdaterDelegate.h",
+      "$headers_path/SUVersionComparisonProtocol.h",
+      "$headers_path/SUVersionDisplayProtocol.h",
+      "$headers_path/Sparkle.h",
+
+      "$framework_path/Sparkle",
+      "$framework_path/Autoupdate",
+      "$framework_path/Updater.app",
+      "$framework_path/Modules",
+      "$framework_path/Resources",
     ]
     args = [
       "--project-folder", sparkle_code,
@@ -26,13 +53,24 @@ if (is_mac) {
     framework_path = "$root_out_dir/sparkle_lib/Build/Products/Release/Sparkle.framework/Versions/Current"
 
     sources = [
-      "$framework_path/Helpers",
       "$framework_path/Sparkle",
+      "$framework_path/Autoupdate",
+      "$framework_path/Updater.app",
       "$framework_path/Modules",
       "$framework_path/Resources",
     ]
     outputs = [
       "$root_out_dir/Vivaldi.app/Contents/Frameworks/Sparkle.framework/{{source_file_part}}",
+    ]
+  }
+
+  copy("copy_sparkle_headers") {
+    deps = [ ":build_sparkle" ]
+
+    sources = filter_include(get_target_outputs(":build_sparkle"), ["*.h"])
+
+    outputs = [
+      "$root_gen_dir/vivaldi/Sparkle/{{source_file_part}}"
     ]
   }
 

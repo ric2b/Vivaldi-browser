@@ -12,6 +12,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "content/browser/media/capture/web_contents_video_capture_device.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -27,7 +28,7 @@
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/native_widget_types.h"
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
 #include "content/browser/media/capture/mouse_cursor_overlay_controller.h"
 #endif
 
@@ -92,7 +93,7 @@ WebContentsFrameTracker::WebContentsFrameTracker(
       device_task_runner_(base::ThreadTaskRunnerHandle::Get()) {
   DCHECK(device_task_runner_);
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   cursor_controller_ = cursor_controller;
   DCHECK(cursor_controller_);
 #endif
@@ -207,11 +208,22 @@ void WebContentsFrameTracker::SetWebContentsAndContextFromRoutingId(
 
 void WebContentsFrameTracker::Crop(
     const base::Token& crop_id,
+    uint32_t crop_version,
     base::OnceCallback<void(media::mojom::CropRequestResult)> callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(callback);
 
+  if (crop_version_ >= crop_version) {
+    // This will trigger a BadMessage from MediaStreamDispatcherHost.
+    // (MediaStreamDispatcherHost knows the capturer, whereas here we know
+    // the capturee.)
+    std::move(callback).Run(
+        media::mojom::CropRequestResult::kNonIncreasingCropVersion);
+    return;
+  }
+
   crop_id_ = crop_id;
+  crop_version_ = crop_version;
 
   // If we don't have a target yet, we can store the crop ID but cannot actually
   // crop yet.
@@ -222,7 +234,7 @@ void WebContentsFrameTracker::Crop(
   device_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(
-          [](const viz::VideoCaptureTarget& target,
+          [](const viz::VideoCaptureTarget& target, uint32_t crop_version,
              base::OnceCallback<void(media::mojom::CropRequestResult)> callback,
              base::WeakPtr<WebContentsVideoCaptureDevice> device) {
             if (!device) {
@@ -230,10 +242,10 @@ void WebContentsFrameTracker::Crop(
                   media::mojom::CropRequestResult::kErrorGeneric);
               return;
             }
-            device->OnTargetChanged(target);
+            device->OnTargetChanged(target, crop_version);
             std::move(callback).Run(media::mojom::CropRequestResult::kSuccess);
           },
-          target, std::move(callback), device_));
+          target, crop_version_, std::move(callback), device_));
 }
 
 void WebContentsFrameTracker::SetWebContentsAndContextForTesting(
@@ -274,7 +286,7 @@ void WebContentsFrameTracker::OnPossibleTargetChange() {
     device_task_runner_->PostTask(
         FROM_HERE,
         base::BindOnce(&WebContentsVideoCaptureDevice::OnTargetChanged, device_,
-                       std::move(target)));
+                       std::move(target), crop_version_));
   }
 
   SetTargetView(web_contents()->GetNativeView());
@@ -287,7 +299,7 @@ void WebContentsFrameTracker::SetTargetView(gfx::NativeView view) {
   if (view == target_native_view_)
     return;
   target_native_view_ = view;
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   cursor_controller_->SetTargetView(view);
 #endif
 }

@@ -97,8 +97,7 @@ class MirroringActivityTest
     CastSinkExtraData cast_data;
     cast_data.cast_channel_id = kChannelId;
     cast_data.capabilities = cast_channel::AUDIO_OUT | cast_channel::VIDEO_OUT;
-    MediaRoute route(kRouteId, source, kSinkId, kDescription, route_is_local_,
-                     true);
+    MediaRoute route(kRouteId, source, kSinkId, kDescription, route_is_local_);
     route.set_presentation_id(kPresentationId);
     activity_ = std::make_unique<MirroringActivity>(
         route, kAppId, &message_handler_, &session_tracker_, kTabId, cast_data,
@@ -131,10 +130,10 @@ class MirroringActivityTest
   std::unique_ptr<MirroringActivity> activity_;
 };
 
-INSTANTIATE_TEST_CASE_P(Namespaces,
-                        MirroringActivityTest,
-                        testing::Values(mirroring::mojom::kWebRtcNamespace,
-                                        mirroring::mojom::kRemotingNamespace));
+INSTANTIATE_TEST_SUITE_P(Namespaces,
+                         MirroringActivityTest,
+                         testing::Values(mirroring::mojom::kWebRtcNamespace,
+                                         mirroring::mojom::kRemotingNamespace));
 
 TEST_F(MirroringActivityTest, MirrorDesktop) {
   base::HistogramTester uma_recorder;

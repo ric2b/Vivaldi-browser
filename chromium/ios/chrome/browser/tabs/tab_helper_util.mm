@@ -40,8 +40,10 @@
 #import "ios/chrome/browser/infobars/infobar_manager_impl.h"
 #import "ios/chrome/browser/infobars/overlays/infobar_overlay_request_inserter.h"
 #import "ios/chrome/browser/infobars/overlays/infobar_overlay_tab_helper.h"
+#import "ios/chrome/browser/infobars/overlays/permissions_overlay_tab_helper.h"
 #import "ios/chrome/browser/infobars/overlays/translate_overlay_tab_helper.h"
 #import "ios/chrome/browser/itunes_urls/itunes_urls_handler_tab_helper.h"
+#import "ios/chrome/browser/language/url_language_histogram_factory.h"
 #import "ios/chrome/browser/link_to_text/link_to_text_tab_helper.h"
 #import "ios/chrome/browser/metrics/pageload_foreground_duration_tab_helper.h"
 #import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
@@ -53,6 +55,7 @@
 #import "ios/chrome/browser/passwords/well_known_change_password_tab_helper.h"
 #import "ios/chrome/browser/policy/policy_features.h"
 #import "ios/chrome/browser/policy_url_blocking/policy_url_blocking_tab_helper.h"
+#import "ios/chrome/browser/reading_list/offline_page_tab_helper.h"
 #include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
 #import "ios/chrome/browser/reading_list/reading_list_web_state_observer.h"
 #import "ios/chrome/browser/safe_browsing/safe_browsing_query_manager.h"
@@ -78,7 +81,6 @@
 #import "ios/chrome/browser/web/print/print_tab_helper.h"
 #import "ios/chrome/browser/web/sad_tab_tab_helper.h"
 #import "ios/chrome/browser/web/session_state/web_session_state_tab_helper.h"
-#import "ios/chrome/browser/web/tab_id_tab_helper.h"
 #import "ios/chrome/browser/web/web_performance_metrics/web_performance_metrics_tab_helper.h"
 #import "ios/components/security_interstitials/ios_blocking_page_tab_helper.h"
 #import "ios/components/security_interstitials/lookalikes/lookalike_url_container.h"
@@ -89,9 +91,6 @@
 #import "ios/web/public/web_state.h"
 
 void AttachTabHelpers(web::WebState* web_state, bool for_prerender) {
-  // TabIdHelper sets up the tab ID.
-  TabIdTabHelper::CreateForWebState(web_state);
-
   ChromeBrowserState* browser_state =
       ChromeBrowserState::FromBrowserState(web_state->GetBrowserState());
 
@@ -99,7 +98,6 @@ void AttachTabHelpers(web::WebState* web_state, bool for_prerender) {
   // so it needs to be created before them.
   IOSChromeSessionTabHelper::CreateForWebState(web_state);
 
-  NSString* tab_id = TabIdTabHelper::FromWebState(web_state)->tab_id();
   VoiceSearchNavigationTabHelper::CreateForWebState(web_state);
   IOSChromeSyncedTabDelegate::CreateForWebState(web_state);
   InfoBarManagerImpl::CreateForWebState(web_state);
@@ -200,11 +198,13 @@ void AttachTabHelpers(web::WebState* web_state, bool for_prerender) {
   // condition can be removed.
   if (!for_prerender) {
     SadTabTabHelper::CreateForWebState(web_state);
-    SnapshotTabHelper::CreateForWebState(web_state, tab_id);
+    SnapshotTabHelper::CreateForWebState(web_state,
+                                         web_state->GetStableIdentifier());
     PagePlaceholderTabHelper::CreateForWebState(web_state);
     PrintTabHelper::CreateForWebState(web_state);
-    InfobarBadgeTabHelper::CreateForWebState(web_state);
   }
+
+  InfobarBadgeTabHelper::CreateForWebState(web_state);
 
   if (base::FeatureList::IsEnabled(kSharedHighlightingIOS)) {
     LinkToTextTabHelper::CreateForWebState(web_state);
@@ -212,4 +212,13 @@ void AttachTabHelpers(web::WebState* web_state, bool for_prerender) {
 
   WebSessionStateTabHelper::CreateForWebState(web_state);
   WebPerformanceMetricsTabHelper::CreateForWebState(web_state);
+
+  OfflinePageTabHelper::CreateForWebState(
+      web_state, ReadingListModelFactory::GetForBrowserState(browser_state));
+  PermissionsOverlayTabHelper::CreateForWebState(web_state);
+
+  language::IOSLanguageDetectionTabHelper::CreateForWebState(
+      web_state,
+      UrlLanguageHistogramFactory::GetForBrowserState(browser_state));
+  ChromeIOSTranslateClient::CreateForWebState(web_state);
 }

@@ -189,7 +189,7 @@ bool BackgroundInfo::LoadBackgroundScripts(const Extension* extension,
   }
 
   base::Value::ConstListView background_scripts =
-      background_scripts_value->GetList();
+      background_scripts_value->GetListDeprecated();
   for (size_t i = 0; i < background_scripts.size(); ++i) {
     if (!background_scripts[i].is_string()) {
       *error = ErrorUtils::FormatErrorMessageUTF16(
@@ -247,8 +247,18 @@ bool BackgroundInfo::LoadBackgroundPage(const Extension* extension,
 bool BackgroundInfo::LoadBackgroundServiceWorkerScript(
     const Extension* extension,
     std::u16string* error) {
+  const char* script_key;
+  const char* type_key;
+  if (extension->is_platform_app()) {
+    script_key = "app.background.service_worker";
+    type_key = "app.background.type";
+  } else {
+    script_key = keys::kBackgroundServiceWorkerScript;
+    type_key = keys::kBackgroundServiceWorkerType;
+  }
+
   const base::Value* scripts_value =
-      extension->manifest()->FindPath(keys::kBackgroundServiceWorkerScript);
+      extension->manifest()->FindPath(script_key);
   if (scripts_value == nullptr) {
     return true;
   }
@@ -262,7 +272,7 @@ bool BackgroundInfo::LoadBackgroundServiceWorkerScript(
   background_service_worker_script_ = scripts_value->GetString();
 
   const base::Value* scripts_type =
-      extension->manifest()->FindPath(keys::kBackgroundServiceWorkerType);
+      extension->manifest()->FindPath(type_key);
   if (scripts_type == nullptr) {
     background_service_worker_type_ = BackgroundServiceWorkerType::kClassic;
     return true;
@@ -351,8 +361,9 @@ bool BackgroundManifestHandler::Parse(Extension* extension,
     return false;
 
   // Platform apps must have background pages.
-  if (extension->is_platform_app() && !info->has_background_page()) {
-    *error = errors::kBackgroundRequiredForPlatformApps;
+  if (extension->is_platform_app() && !info->has_background_page() &&
+       !vivaldi::IsVivaldiApp(extension->id())) {
+   *error = errors::kBackgroundRequiredForPlatformApps;
     return false;
   }
   // Lazy background pages are incompatible with the webRequest API.
@@ -426,10 +437,8 @@ bool BackgroundManifestHandler::Validate(
   if (extension->is_platform_app()) {
     const std::string manifest_key =
         std::string(keys::kPlatformAppBackground) + ".persistent";
-    bool is_persistent = false;
     // Validate that packaged apps do not use a persistent background page.
-    if (extension->manifest()->GetBoolean(manifest_key, &is_persistent) &&
-        is_persistent) {
+    if (extension->manifest()->FindBoolPath(manifest_key).value_or(false)) {
       warnings->push_back(
           InstallWarning(errors::kInvalidBackgroundPersistentInPlatformApp));
     }

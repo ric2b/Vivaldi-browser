@@ -520,8 +520,7 @@ ResultCode BrokerServicesBase::SpawnTarget(const wchar_t* exe_path,
   for (HANDLE handle : policy_handle_list)
     startup_info->AddInheritedHandle(handle);
 
-  scoped_refptr<AppContainerBase> container =
-      policy_base->GetAppContainerBase();
+  scoped_refptr<AppContainer> container = policy_base->GetAppContainer();
   if (container)
     startup_info->SetAppContainer(container);
 
@@ -577,7 +576,7 @@ ResultCode BrokerServicesBase::SpawnTarget(const wchar_t* exe_path,
 
   // Now the policy is the owner of the target. TargetProcess will terminate
   // the process if it has not completed when it is destroyed.
-  result = policy_base->AddTarget(std::move(target));
+  result = policy_base->ApplyToTarget(std::move(target));
 
   if (result != SBOX_ALL_OK) {
     *last_error = ::GetLastError();

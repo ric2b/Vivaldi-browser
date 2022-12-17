@@ -59,7 +59,6 @@ class ASH_PUBLIC_EXPORT AppListViewDelegate {
   // |launch_as_default|: True if the result is launched as the default result
   // by user pressing ENTER key.
   virtual void OpenSearchResult(const std::string& result_id,
-                                AppListSearchResultType result_type,
                                 int event_flags,
                                 AppListLaunchedFrom launched_from,
                                 AppListLaunchType launch_type,
@@ -208,6 +207,10 @@ class ASH_PUBLIC_EXPORT AppListViewDelegate {
 
   // Loads the icon of an app item identified by `app_id`.
   virtual void LoadIcon(const std::string& app_id) = 0;
+
+  // Whether the controller has a valid profile, and hence a valid data model.
+  // Returns false during startup and shutdown.
+  virtual bool HasValidProfile() const = 0;
 };
 
 }  // namespace ash

@@ -35,24 +35,24 @@ class ModelTypeState;
 
 namespace wallet_helper {
 
-extern const char kDefaultCardID[];
-extern const char kDefaultAddressID[];
-extern const char kDefaultCustomerID[];
-extern const char kDefaultBillingAddressID[];
-extern const char kDefaultCreditCardCloudTokenDataID[];
+inline constexpr char kDefaultCardID[] = "wallet card ID";
+inline constexpr char kDefaultAddressID[] = "wallet address ID";
+inline constexpr char kDefaultCustomerID[] = "deadbeef";
+inline constexpr char kDefaultBillingAddressID[] = "billing address entity ID";
+inline constexpr char kDefaultCreditCardCloudTokenDataID[] =
+    "cloud token data ID";
 
 // Used to access the personal data manager within a particular sync profile.
-autofill::PersonalDataManager* GetPersonalDataManager(int index)
-    WARN_UNUSED_RESULT;
+[[nodiscard]] autofill::PersonalDataManager* GetPersonalDataManager(int index);
 
 // Used to access the web data service within a particular sync profile.
-scoped_refptr<autofill::AutofillWebDataService> GetProfileWebDataService(
-    int index) WARN_UNUSED_RESULT;
+[[nodiscard]] scoped_refptr<autofill::AutofillWebDataService>
+GetProfileWebDataService(int index);
 
 // Used to access the account-scoped web data service within a particular sync
 // profile.
-scoped_refptr<autofill::AutofillWebDataService> GetAccountWebDataService(
-    int index) WARN_UNUSED_RESULT;
+[[nodiscard]] scoped_refptr<autofill::AutofillWebDataService>
+GetAccountWebDataService(int index);
 
 void SetServerCreditCards(
     int profile,

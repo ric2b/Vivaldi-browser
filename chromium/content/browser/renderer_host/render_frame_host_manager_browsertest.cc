@@ -935,6 +935,47 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest, MAYBE_DisownOpener) {
   EXPECT_FALSE(new_shell->web_contents()->HasOpener());
 }
 
+// Test that changes to an iframe's srcdoc attribute propagate through the
+// browser and are stored/cleared on the FrameTreeNode as needed.
+IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest, SrcdocIframe) {
+  StartEmbeddedServer();
+
+  GURL main_url(embedded_test_server()->GetURL("a.com", "/title1.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+
+  // Create srcdoc iframe.
+  {
+    std::string js_str =
+        "var frame = document.createElement('iframe'); "
+        "frame.id = 'test_frame'; "
+        "frame.srcdoc = 'srcdoc test content'; "
+        "document.body.append(frame);";
+    EXPECT_TRUE(ExecJs(shell(), js_str));
+    ASSERT_TRUE(WaitForLoadStop(shell()->web_contents()));
+  }
+
+  // Verify content on FrameTreeNode.
+  FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
+                            ->GetPrimaryFrameTree()
+                            .root();
+  ASSERT_EQ(1U, root->child_count());
+  FrameTreeNode* child = root->child_at(0);
+  EXPECT_EQ(GURL(url::kAboutSrcdocURL), child->current_url());
+  EXPECT_EQ("srcdoc test content", child->srcdoc_value());
+
+  // Reset the srcdoc attribute, and verify the FrameTreeNode is updated
+  // accordingly.
+  {
+    std::string js_str =
+        "var frame = document.getElementById('test_frame'); "
+        "frame.removeAttribute('srcdoc');";
+    EXPECT_TRUE(ExecJs(shell(), js_str));
+    ASSERT_TRUE(WaitForLoadStop(shell()->web_contents()));
+  }
+  EXPECT_EQ(GURL(url::kAboutBlankURL), child->current_url());
+  EXPECT_EQ("", child->srcdoc_value());
+}
+
 // Test that subframes can disown their openers.  http://crbug.com/225528.
 IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest, DisownSubframeOpener) {
   const GURL frame_url("data:text/html,<iframe name=\"foo\"></iframe>");
@@ -2004,8 +2045,8 @@ IN_PROC_BROWSER_TEST_P(
   EXPECT_FALSE(speculative_rfh);
 }
 
-#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID) || \
-    defined(OS_MAC)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID) || \
+    BUILDFLAG(IS_MAC)
 #define MAYBE_DeleteSpeculativeRFHPendingCommitOfPendingEntryOnInterrupted2 \
   DISABLED_DeleteSpeculativeRFHPendingCommitOfPendingEntryOnInterrupted2
 #else
@@ -2452,7 +2493,7 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
 // See http://crbug.com/335503.
 // The test fails on Mac OSX with ASAN.
 // See http://crbug.com/699062.
-#if defined(OS_MAC) && defined(THREAD_SANITIZER)
+#if BUILDFLAG(IS_MAC) && defined(THREAD_SANITIZER)
 #define MAYBE_RendererDebugURLsDontSwap DISABLED_RendererDebugURLsDontSwap
 #else
 #define MAYBE_RendererDebugURLsDontSwap RendererDebugURLsDontSwap
@@ -2541,7 +2582,7 @@ class RFHMProcessPerTabTest : public RenderFrameHostManagerTest {
 // --process-per-tab mode.  See http://crbug.com/343017.
 // Disabled on Android: http://crbug.com/345873.
 // Crashes under ThreadSanitizer, http://crbug.com/356758.
-#if defined(OS_ANDROID) || defined(THREAD_SANITIZER)
+#if BUILDFLAG(IS_ANDROID) || defined(THREAD_SANITIZER)
 #define MAYBE_BackFromWebUI DISABLED_BackFromWebUI
 #else
 #define MAYBE_BackFromWebUI BackFromWebUI
@@ -2756,7 +2797,7 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest, DontSelectInvalidFiles) {
   // With BackForwardCache, old process won't get deleted on navigation as it is
   // still in use by the bfcached document, disable back-forward cache to ensure
   // that the process gets deleted.
-  DisableBackForwardCache(BackForwardCacheImpl::TEST_ASSUMES_NO_CACHING);
+  DisableBackForwardCache(BackForwardCacheImpl::TEST_REQUIRES_NO_CACHING);
 
   EXPECT_TRUE(NavigateToURL(shell(), GetCrossSiteURL("/title1.html")));
   exit_observer.Wait();
@@ -2775,7 +2816,7 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest, DontSelectInvalidFiles) {
   EXPECT_EQ(url1, prev_entry->GetURL());
   const std::vector<base::FilePath>& files =
       prev_entry->GetPageState().GetReferencedFiles();
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   EXPECT_EQ(1U, files.size());
 #else
   EXPECT_EQ(0U, files.size());
@@ -2818,7 +2859,7 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
   // With BackForwardCache, old process won't get deleted on navigation as it is
   // still in use by the bfcached document, disable back-forward cache to ensure
   // that the process gets deleted.
-  DisableBackForwardCache(BackForwardCacheImpl::TEST_ASSUMES_NO_CACHING);
+  DisableBackForwardCache(BackForwardCacheImpl::TEST_REQUIRES_NO_CACHING);
 
   EXPECT_TRUE(NavigateToURL(shell(), GetCrossSiteURL("/title1.html")));
   exit_observer.Wait();
@@ -2987,7 +3028,7 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
   // With BackForwardCache, old process won't get deleted on navigation as it is
   // still in use by the bfcached document, disable back-forward cache to ensure
   // that the process gets deleted.
-  DisableBackForwardCache(BackForwardCacheImpl::TEST_ASSUMES_NO_CACHING);
+  DisableBackForwardCache(BackForwardCacheImpl::TEST_REQUIRES_NO_CACHING);
 
   EXPECT_TRUE(NavigateToURL(shell(), GetCrossSiteURL("/title1.html")));
   exit_observer.Wait();
@@ -3118,7 +3159,7 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
 
   // The old RenderFrameHost might have entered the BackForwardCache. Disable
   // back-forward cache to ensure that the RenderFrameHost gets deleted.
-  DisableBackForwardCache(BackForwardCacheImpl::TEST_ASSUMES_NO_CACHING);
+  DisableBackForwardCache(BackForwardCacheImpl::TEST_REQUIRES_NO_CACHING);
 
   EXPECT_TRUE(NavigateToURL(shell(), cross_site_url));
   rfh_observer.Wait();
@@ -3516,7 +3557,7 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
 
   // With BackForwardCache, swapped out RenderFrameHost won't have a
   // replacement proxy as the document is stored in cache.
-  DisableBackForwardCache(BackForwardCacheImpl::TEST_ASSUMES_NO_CACHING);
+  DisableBackForwardCache(BackForwardCacheImpl::TEST_REQUIRES_NO_CACHING);
 
   // Navigate the tab to a different site, and only wait for commit, not load
   // stop.
@@ -3800,7 +3841,7 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
 // with arbitrary origin, when universal access setting is enabled.
 // TODO(nasko): The test is disabled on Mac, since universal access from file
 // scheme behaves differently.  See also https://crbug.com/981018.
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 #define MAYBE_EnsureUniversalAccessFromFileSchemeSucceeds \
   DISABLED_EnsureUniversalAccessFromFileSchemeSucceeds
 #else
@@ -3893,7 +3934,7 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest, LastCommittedOrigin) {
 
   // Disable the back-forward cache so that documents are always deleted when
   // navigating.
-  DisableBackForwardCache(BackForwardCacheImpl::TEST_ASSUMES_NO_CACHING);
+  DisableBackForwardCache(BackForwardCacheImpl::TEST_REQUIRES_NO_CACHING);
 
   GURL url_a(embedded_test_server()->GetURL("a.com", "/title1.html"));
   EXPECT_TRUE(NavigateToURL(shell(), url_a));
@@ -5384,7 +5425,7 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
 
   // Ensure that previous document won't be restored from the BackForwardCache,
   // to force a network fetch, which would result in a network error.
-  DisableBackForwardCache(BackForwardCacheImpl::TEST_ASSUMES_NO_CACHING);
+  DisableBackForwardCache(BackForwardCacheImpl::TEST_REQUIRES_NO_CACHING);
 
   // Create an interceptor to cause navigations to url1 to fail and go back
   // in session history.
@@ -6364,7 +6405,7 @@ IN_PROC_BROWSER_TEST_P(ProactivelySwapBrowsingInstancesSameSiteTest,
   // navigate away from the page using it, which won't happen if the page is
   // kept alive in the back-forward cache.  So, we should disable back-forward
   // cache for this test.
-  DisableBackForwardCache(BackForwardCacheImpl::TEST_ASSUMES_NO_CACHING);
+  DisableBackForwardCache(BackForwardCacheImpl::TEST_REQUIRES_NO_CACHING);
 
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url_1(embedded_test_server()->GetURL("/title1.html"));
@@ -6450,7 +6491,7 @@ IN_PROC_BROWSER_TEST_P(ProactivelySwapBrowsingInstancesSameSiteTest,
   // navigate away from the page using it, which won't happen if the page is
   // kept alive in the back-forward cache.  So, we should disable back-forward
   // cache for this test.
-  DisableBackForwardCache(BackForwardCacheImpl::TEST_ASSUMES_NO_CACHING);
+  DisableBackForwardCache(BackForwardCacheImpl::TEST_REQUIRES_NO_CACHING);
 
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url_1(embedded_test_server()->GetURL("/title1.html"));
@@ -6537,7 +6578,7 @@ IN_PROC_BROWSER_TEST_P(ProactivelySwapBrowsingInstancesSameSiteTest,
   // navigate away from the page using it, which won't happen if the page is
   // kept alive in the back-forward cache.  So, we should disable back-forward
   // cache for this test.
-  DisableBackForwardCache(BackForwardCacheImpl::TEST_ASSUMES_NO_CACHING);
+  DisableBackForwardCache(BackForwardCacheImpl::TEST_REQUIRES_NO_CACHING);
 
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url_1(embedded_test_server()->GetURL("/title1.html"));
@@ -6612,7 +6653,7 @@ IN_PROC_BROWSER_TEST_P(ProactivelySwapBrowsingInstancesSameSiteTest,
   // navigate away from the page using it, which won't happen if the page is
   // kept alive in the back-forward cache.  So, we should disable back-forward
   // cache for this test.
-  DisableBackForwardCache(BackForwardCacheImpl::TEST_ASSUMES_NO_CACHING);
+  DisableBackForwardCache(BackForwardCacheImpl::TEST_REQUIRES_NO_CACHING);
 
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url_1(embedded_test_server()->GetURL("/title1.html"));
@@ -6741,7 +6782,7 @@ IN_PROC_BROWSER_TEST_P(ProactivelySwapBrowsingInstancesSameSiteCoopTest,
   // navigate away from the page using it, which won't happen if the page is
   // kept alive in the back-forward cache.  So, we should disable back-forward
   // cache for this test.
-  DisableBackForwardCache(BackForwardCacheImpl::TEST_ASSUMES_NO_CACHING);
+  DisableBackForwardCache(BackForwardCacheImpl::TEST_REQUIRES_NO_CACHING);
 
   GURL url_1(https_server()->GetURL("a.com", "/title1.html"));
   GURL url_2(https_server()->GetURL("a.com", "/title2.html"));
@@ -8086,8 +8127,8 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerUnloadBrowserTest,
 // its unload handler is able to send a postMessage to the parent frame.
 // See https://crbug.com/857274.
 // TODO(https://crbug.com/989704): Fix flake on Linux TSAN and ASAN.
-#if defined(OS_MAC) || (defined(OS_WIN) && defined(ADDRESS_SANITIZER)) || \
-    (defined(OS_LINUX) &&                                                 \
+#if BUILDFLAG(IS_MAC) || (BUILDFLAG(IS_WIN) && defined(ADDRESS_SANITIZER)) || \
+    (BUILDFLAG(IS_LINUX) &&                                                   \
      (defined(ADDRESS_SANITIZER) || defined(THREAD_SANITIZER)))
 #define MAYBE_PostMessageToParentWhenSubframeNavigates \
   DISABLED_PostMessageToParentWhenSubframeNavigates
@@ -8208,7 +8249,7 @@ class AssertForegroundHelper {
   AssertForegroundHelper(const AssertForegroundHelper&) = delete;
   AssertForegroundHelper& operator=(const AssertForegroundHelper&) = delete;
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   // Asserts that |renderer_process| isn't backgrounded and reposts self to
   // check again shortly. |renderer_process| must outlive this
   // AssertForegroundHelper instance.
@@ -8222,7 +8263,7 @@ class AssertForegroundHelper {
                        std::cref(renderer_process), port_provider),
         base::Milliseconds(1));
   }
-#else   // defined(OS_MAC)
+#else   // BUILDFLAG(IS_MAC)
   // Same as above without the Mac specific base::PortProvider.
   void AssertForegroundAndRepost(const base::Process& renderer_process) {
     ASSERT_FALSE(renderer_process.IsProcessBackgrounded());
@@ -8233,7 +8274,7 @@ class AssertForegroundHelper {
                        std::cref(renderer_process)),
         base::Milliseconds(1));
   }
-#endif  // defined(OS_MAC)
+#endif  // BUILDFLAG(IS_MAC)
 
  private:
   base::WeakPtrFactory<AssertForegroundHelper> weak_ptr_factory_{this};
@@ -8248,7 +8289,7 @@ class AssertForegroundHelper {
 // RenderProcessHost if present, to ensure that it is not used in the
 // cross-process navigation.
 // TODO(https://crbug.com/1197438): Flaky on Mac.
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 #define MAYBE_ForegroundNavigationIsNeverBackgroundedWithoutSpareProcess \
   DISABLED_ForegroundNavigationIsNeverBackgroundedWithoutSpareProcess
 #else
@@ -8262,10 +8303,10 @@ IN_PROC_BROWSER_TEST_P(
   WebContentsImpl* web_contents =
       static_cast<WebContentsImpl*>(shell()->web_contents());
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   base::PortProvider* port_provider =
       BrowserChildProcessHost::GetPortProvider();
-#endif  //  defined(OS_MAC)
+#endif  //  BUILDFLAG(IS_MAC)
 
   // Start off navigating to a.com and capture the process used to commit.
   EXPECT_TRUE(NavigateToURL(
@@ -8291,7 +8332,7 @@ IN_PROC_BROWSER_TEST_P(
   EXPECT_NE(start_rph, speculative_rph);
   EXPECT_FALSE(speculative_rph->IsReady());
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   // TODO(gab, nasko): On Android IsProcessBackgrounded is currently giving
   // incorrect value at this stage of the process lifetime. This should be
   // fixed in follow up cleanup work. See https://crbug.com/560446.
@@ -8311,7 +8352,7 @@ IN_PROC_BROWSER_TEST_P(
   const base::Process& process = speculative_rph->GetProcess();
   EXPECT_TRUE(process.IsValid());
   AssertForegroundHelper assert_foreground_helper;
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   assert_foreground_helper.AssertForegroundAndRepost(process, port_provider);
 #else
   assert_foreground_helper.AssertForegroundAndRepost(process);
@@ -8337,10 +8378,10 @@ IN_PROC_BROWSER_TEST_P(
   WebContentsImpl* web_contents =
       static_cast<WebContentsImpl*>(shell()->web_contents());
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   base::PortProvider* port_provider =
       BrowserChildProcessHost::GetPortProvider();
-#endif  //  defined(OS_MAC)
+#endif  //  BUILDFLAG(IS_MAC)
 
   // Start off navigating to a.com and capture the process used to commit.
   EXPECT_TRUE(NavigateToURL(
@@ -8396,7 +8437,7 @@ IN_PROC_BROWSER_TEST_P(
   const base::Process& process = spare_rph->GetProcess();
   EXPECT_TRUE(process.IsValid());
   AssertForegroundHelper assert_foreground_helper;
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   assert_foreground_helper.AssertForegroundAndRepost(process, port_provider);
 #else
   assert_foreground_helper.AssertForegroundAndRepost(process);
@@ -8488,7 +8529,7 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
   // With BackForwardCache, old process won't be deleted on navigation as it is
   // still in use by the bfcached document, disable back-forward cache to ensure
   // that the process gets deleted.
-  DisableBackForwardCache(BackForwardCacheImpl::TEST_ASSUMES_NO_CACHING);
+  DisableBackForwardCache(BackForwardCacheImpl::TEST_REQUIRES_NO_CACHING);
 
   EXPECT_TRUE(NavigateToURL(shell(), url3));
   exit_observer.Wait();
@@ -8668,7 +8709,7 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
   EXPECT_EQ(
       ProcessLock::FromSiteInfo(SiteInfo(
           GURL("http://foo.com"), GURL("http://foo.com"),
-          false /* requires_origin_keyed_process */,
+          false /* requires_origin_keyed_process */, false /* is_sandboxed */,
           StoragePartitionConfig::CreateDefault(browser_context),
           WebExposedIsolationInfo::CreateNonIsolated(), false /* is_guest */,
           false /* does_site_request_dedicated_process_for_coop */,

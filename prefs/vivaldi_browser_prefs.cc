@@ -206,12 +206,12 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
   registry->RegisterStringPref(vivaldiprefs::kVivaldiSyncNotificationsServerUrl,
                                "wss://bifrost.vivaldi.com:15674/ws");
 
-  std::vector<base::Value> args;
+  base::Value::List args;
   for (int i = 0; i < kDefaultLanguageListSize; i++) {
-    args.push_back(base::Value(kDefaultLanguageList[i]));
+    args.Append(base::Value(kDefaultLanguageList[i]));
   }
   registry->RegisterListPref(vivaldiprefs::kVivaldiTranslateLanguageList,
-                             base::ListValue(std::move(args)));
+                             base::Value(std::move(args)));
 }
 
 namespace {
@@ -238,22 +238,21 @@ base::Value GetComputedDefault(const std::string& path) {
   return GetPlatformComputedDefault(path);
 }
 
-void RegisterPrefsFromDefinition(base::Value definition,
+void RegisterPrefsFromDefinition(base::Value::Dict& definition,
                                  std::string current_path,
                                  user_prefs::PrefRegistrySyncable* registry,
                                  PrefPropertiesMap* pref_properties_map) {
-  const base::Value* type_value = definition.FindKey(kTypeKeyName);
+  const base::Value* type_value = definition.Find(kTypeKeyName);
   if (!type_value) {
-    for (auto child : definition.DictItems()) {
+    for (auto child : definition) {
       std::string child_path = current_path;
       child_path += ".";
       child_path += child.first;
       if (!child.second.is_dict()) {
         LOG(FATAL) << "Expected a dictionary at '" << child_path << "'";
       }
-      RegisterPrefsFromDefinition(std::move(child.second),
-                                  std::move(child_path), registry,
-                                  pref_properties_map);
+      RegisterPrefsFromDefinition(child.second.GetDict(), std::move(child_path),
+                                  registry, pref_properties_map);
     }
     return;
   }
@@ -295,7 +294,7 @@ void RegisterPrefsFromDefinition(base::Value definition,
     LOG(FATAL) << "Invalid type value at '" << current_path << "'";
   }
 
-  absl::optional<bool> syncable = definition.FindBoolKey(kSyncableKeyName);
+  absl::optional<bool> syncable = definition.FindBool(kSyncableKeyName);
   if (!syncable) {
     LOG(FATAL) << "Expected a boolean at '" << current_path << "."
                << kSyncableKeyName << "'";
@@ -303,10 +302,10 @@ void RegisterPrefsFromDefinition(base::Value definition,
   int flags = *syncable ? user_prefs::PrefRegistrySyncable::SYNCABLE_PREF : 0;
 
   const char* default_key_name = vivaldiprefs::kPlatformDefaultKeyName;
-  base::Value* default_value_ptr = definition.FindKey(default_key_name);
+  base::Value* default_value_ptr = definition.Find(default_key_name);
   if (!default_value_ptr) {
     default_key_name = kDefaultKeyName;
-    default_value_ptr = definition.FindKey(default_key_name);
+    default_value_ptr = definition.Find(default_key_name);
   }
   base::Value default_value;
   if (default_value_ptr && !default_value_ptr->is_none()) {
@@ -336,16 +335,16 @@ void RegisterPrefsFromDefinition(base::Value definition,
 #endif
   switch (pref_kind) {
     case PrefKind::kEnum: {
-      const base::Value* enum_values = definition.FindDictKey(kEnumValuesKey);
-      if (!enum_values) {
+      const base::Value::Dict* enum_dict = definition.FindDict(kEnumValuesKey);
+      if (!enum_dict) {
         LOG(FATAL) << "Expected a dictionary at '" << current_path << "."
                    << kEnumValuesKey << "'";
         return;
       }
 
       EnumPrefProperties enum_properties;
-      enum_properties.name_value_pairs.reserve(enum_values->DictSize());
-      for (auto enum_name_value : enum_values->DictItems()) {
+      enum_properties.name_value_pairs.reserve(enum_dict->size());
+      for (auto enum_name_value : *enum_dict) {
         const std::string& name = enum_name_value.first;
         if (!enum_name_value.second.is_int()) {
           LOG(FATAL) << "Expected an integer at '" << current_path << "."
@@ -423,21 +422,21 @@ void RegisterPrefsFromDefinition(base::Value definition,
 
 #if !defined(OS_ANDROID)
 
-void AddChromiumProperties(base::Value* value,
+void AddChromiumProperties(base::Value::Dict& prefs,
                            base::StringPiece current_path,
                            bool local_pref,
                            PrefPropertiesMap* pref_properties_map) {
-  base::Value* chromium_prefs = value->FindDictKey(current_path);
+  base::Value::Dict* chromium_prefs = prefs.FindDict(current_path);
   if (!chromium_prefs) {
     LOG(FATAL) << "Expected a dictionary at '" << current_path << "'";
   }
 
-  for (const auto pref : chromium_prefs->DictItems()) {
+  for (const auto pref : *chromium_prefs) {
     if (!pref.second.is_dict()) {
       LOG(FATAL) << "Expected a dictionary at '" << current_path << "."
                  << pref.first << "'";
     }
-    std::string* pref_path = pref.second.FindStringKey("path");
+    std::string* pref_path = pref.second.GetDict().FindString("path");
     if (!pref_path) {
       LOG(FATAL) << "Expected a string at '" << current_path << "."
                  << pref.first << ".path'";
@@ -511,13 +510,13 @@ struct PrefOverrideValues {
   std::string theme_default_day_or_night[2];
   std::string theme_default_private;
 
-  std::vector<base::Value> theme_extra;
+  base::Value theme_extra;
 };
 
 // Patch default preferences according to the override JSON. The code trusts
 // prefs structure (in the release builds erroneous assumptions will CHECK() or
 // crash on null pointer), but verifies the overrides reporting errors there.
-void PatchPrefsJson(base::Value& prefs, base::Value& overrides) {
+void PatchPrefsJson(base::Value::Dict& prefs, base::Value& overrides) {
   bool has_errors = false;
   auto error = [&](std::string message) {
     LOG(ERROR) << prefs_overrides::kFileName << ": " << message;
@@ -580,7 +579,7 @@ void PatchPrefsJson(base::Value& prefs, base::Value& overrides) {
       }
       if (has_errors)
         continue;
-      values.theme_extra = std::move(value).TakeList();
+      values.theme_extra = std::move(value);
     } else {
       error("unsupported object property - " + std::string(name));
       continue;
@@ -600,11 +599,11 @@ void PatchPrefsJson(base::Value& prefs, base::Value& overrides) {
     return;
 
   if (!values.theme_default.empty()) {
-    prefs.FindPath(append_default(vivaldiprefs::kThemesCurrent))->GetString() =
-        std::move(values.theme_default);
+    prefs.FindByDottedPath(append_default(vivaldiprefs::kThemesCurrent))
+        ->GetString() = std::move(values.theme_default);
   }
   if (!values.theme_default_private.empty()) {
-    prefs.FindPath(append_default(vivaldiprefs::kThemesCurrentPrivate))
+    prefs.FindByDottedPath(append_default(vivaldiprefs::kThemesCurrentPrivate))
         ->GetString() = std::move(values.theme_default_private);
   }
   for (size_t i = 0; i < 2; ++i) {
@@ -615,29 +614,31 @@ void PatchPrefsJson(base::Value& prefs, base::Value& overrides) {
     }
     if (value.empty())
       continue;
-    prefs.FindPath(append_default(vivaldiprefs::kThemeScheduleTimeline))
+    prefs
+        .FindByDottedPath(append_default(vivaldiprefs::kThemeScheduleTimeline))
         ->GetList()[i]
         .FindKey("themeId")
         ->GetString() = value;
     std::string schedule_path = append_default(vivaldiprefs::kThemeScheduleOS);
     schedule_path.append(i == kDayIndex ? ".light" : ".dark");
-    prefs.FindPath(schedule_path)->GetString() = std::move(value);
+    prefs.FindByDottedPath(schedule_path)->GetString() = std::move(value);
   }
-  if (!values.theme_extra.empty()) {
+  if (!values.theme_extra.GetList().empty()) {
     // Prepent value elements to the original list.
     base::Value* themes_value =
-        prefs.FindPath(append_default(vivaldiprefs::kThemesSystem));
-    std::vector<base::Value> themes = std::move(*themes_value).TakeList();
-    themes.insert(themes.begin(),
-                  std::make_move_iterator(values.theme_extra.begin()),
-                  std::make_move_iterator(values.theme_extra.end()));
-    *themes_value = base::Value(themes);
+        prefs.FindByDottedPath(append_default(vivaldiprefs::kThemesSystem));
+    base::Value themes = std::move(*themes_value);
+    auto themes_start = themes.GetList().begin();
+    for (auto& it : values.theme_extra.GetList())
+      themes.GetList().Insert(themes_start, std::move(it));
+    *themes_value = std::move(themes);
   }
 
-  auto pretty_print_patched_prefs = [](const base::Value& prefs) {
+  auto pretty_print_patched_prefs = [](const base::Value::Dict& prefs) {
     std::string text;
-    base::JSONWriter::WriteWithOptions(
-        prefs, base::JSONWriter::OPTIONS_PRETTY_PRINT, &text);
+    base::JSONWriter::WriteWithOptions(base::Value(prefs.Clone()),
+                                       base::JSONWriter::OPTIONS_PRETTY_PRINT,
+                                       &text);
     return text;
   };
   VLOG(7) << "patched default preferences: "
@@ -648,18 +649,19 @@ void PatchPrefsJson(base::Value& prefs, base::Value& overrides) {
 
 #endif  // VIVALDI_PREFERENCE_OVERRIDE_FILE
 
-base::Value ReadPrefsJson() {
+base::Value::Dict ReadPrefsJson() {
   // This might be called outside the startup, eg. during creation of a guest
   // window, so need to allow IO.
   base::ThreadRestrictions::ScopedAllowIO allow_io;
 
   ResourceReader reader_main(kPrefsDefinitionFileName);
-  absl::optional<base::Value> dictionary = reader_main.ParseJSON();
-  if (!dictionary) {
+  absl::optional<base::Value> dictionary_value = reader_main.ParseJSON();
+  if (!dictionary_value) {
     // Any error in the primary preference file is fatal.
     LOG(FATAL) << reader_main.GetError();
   }
-  if (!dictionary->is_dict()) {
+  base::Value::Dict* dictionary = dictionary_value->GetIfDict();
+  if (!dictionary) {
     LOG(FATAL) << kPrefsDefinitionFileName << ": JSON is not an object";
   }
 
@@ -690,26 +692,23 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterListPref(vivaldiprefs::kVivaldiExperiments);
   registry->RegisterInt64Pref(vivaldiprefs::kVivaldiLastTopSitesVacuumDate, 0);
 
-  base::Value prefs_definitions = ReadPrefsJson();
-  if (!prefs_definitions.is_dict()) {
-    LOG(FATAL) << "Expected a dictionary at the root of the pref definitions";
-  }
+  base::Value::Dict prefs_definitions = ReadPrefsJson();
 
-  base::Value* vivaldi_pref_definition =
-      prefs_definitions.FindDictKey(kVivaldiKeyName);
+  base::Value::Dict* vivaldi_pref_definition =
+      prefs_definitions.FindDict(kVivaldiKeyName);
   if (!vivaldi_pref_definition) {
     LOG(FATAL) << "Expected a dictionary at '" << kVivaldiKeyName << "'";
   }
 
   PrefPropertiesMap pref_properties_map;
 
-  RegisterPrefsFromDefinition(std::move(*vivaldi_pref_definition),
-                              kVivaldiKeyName, registry, &pref_properties_map);
+  RegisterPrefsFromDefinition(*vivaldi_pref_definition, kVivaldiKeyName,
+                              registry, &pref_properties_map);
 
 #if !defined(OS_ANDROID)
-  AddChromiumProperties(&prefs_definitions, kChromiumKeyName, false,
+  AddChromiumProperties(prefs_definitions, kChromiumKeyName, false,
                         &pref_properties_map);
-  AddChromiumProperties(&prefs_definitions, kChromiumLocalKeyName, true,
+  AddChromiumProperties(prefs_definitions, kChromiumLocalKeyName, true,
                         &pref_properties_map);
 
   DCHECK(GetRegisteredPrefPropertiesStorage().empty());

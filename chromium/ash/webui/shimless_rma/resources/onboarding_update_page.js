@@ -57,6 +57,12 @@ export class OnboardingUpdatePageElement extends
 
   static get properties() {
     return {
+      /**
+       * Set by shimless_rma.js.
+       * @type {boolean}
+       */
+      allButtonsDisabled: Boolean,
+
       /** @protected */
       currentVersionText_: {
         type: String,
@@ -71,7 +77,7 @@ export class OnboardingUpdatePageElement extends
       /** @protected */
       updateNoticeMessage_: {
         type: String,
-        value: '',
+        computed: 'computeUpdateNoticeMessage_(updateAvailable_)',
       },
 
       /** @protected */
@@ -92,6 +98,7 @@ export class OnboardingUpdatePageElement extends
       updateInProgress_: {
         type: Boolean,
         value: false,
+        observer: 'onUpdateInProgressChange_',
       },
 
       /** @protected */
@@ -104,7 +111,23 @@ export class OnboardingUpdatePageElement extends
       updateVersion_: {
         type: String,
         value: '',
-      }
+      },
+
+      /** @protected */
+      verificationFailedMessage_: {
+        type: String,
+        value: '',
+      },
+
+      /**
+       * A string containing a list of the unqualified component identifiers
+       * separated by new lines.
+       * @protected
+       */
+      unqualifiedComponentsText_: {
+        type: String,
+        value: '',
+      },
     };
   }
 
@@ -124,7 +147,8 @@ export class OnboardingUpdatePageElement extends
     this.shimlessRmaService_.observeOsUpdateProgress(
         this.osUpdateObserverReceiver_.$.bindNewPipeAndPassRemote());
 
-    this.isCompliant_ = false;
+    // We assume it's compliant until updated in onHardwareVerificationResult().
+    this.isCompliant_ = true;
     /** @protected {?HardwareVerificationStatusObserverReceiver} */
     this.hwVerificationObserverReceiver_ =
         new HardwareVerificationStatusObserverReceiver(
@@ -173,7 +197,6 @@ export class OnboardingUpdatePageElement extends
           this.updateAvailable_ ? 'currentVersionOutOfDateText' :
                                   'currentVersionUpToDateText',
           this.currentVersion_);
-      this.setUpdateNoticeMessage_();
       this.setNextButtonLabel_();
     });
   }
@@ -181,18 +204,10 @@ export class OnboardingUpdatePageElement extends
   /** @protected */
   onUpdateButtonClicked_() {
     this.updateInProgress_ = true;
-    this.dispatchEvent(new CustomEvent(
-        'disable-next-button',
-        {bubbles: true, composed: true, detail: false},
-        ));
     this.shimlessRmaService_.updateOs().then((res) => {
       if (!res.updateStarted) {
         this.updateProgressMessage_ = this.i18n('osUpdateFailedToStartText');
         this.updateInProgress_ = false;
-        this.dispatchEvent(new CustomEvent(
-            'disable-next-button',
-            {bubbles: true, composed: true, detail: false},
-            ));
       }
     });
   }
@@ -208,26 +223,6 @@ export class OnboardingUpdatePageElement extends
   /** @protected */
   updateCheckButtonHidden_() {
     return !this.networkAvailable || this.updateAvailable_;
-  }
-
-  /** @private */
-  setUpdateNoticeMessage_() {
-    if (!this.isCompliant_) {
-      this.updateNoticeMessage_ =
-          this.i18n('osUpdateInvalidComponentsDescriptionText');
-    } else if (this.updateAvailable_) {
-      // TODO(gavindodd): Do we need a check that the current major version is
-      // within n of the installed version to switch between this message and
-      // 'Chrome OS needs an additional update to get fully up to date.'?
-      this.updateNoticeMessage_ =
-          this.i18n('osUpdateVeryOutOfDateDescriptionText');
-    } else {
-      // Note: In current implementation this should not be reached, but it is
-      // still a perfectly valid state.
-      // If there was ever an update that did not require a reboot this would
-      // be reached.
-      this.updateNoticeMessage_ = '';
-    }
   }
 
   /** @return {!Promise<StateResult>} */
@@ -250,10 +245,6 @@ export class OnboardingUpdatePageElement extends
         operation === OsUpdateOperation.kNeedPermissionToUpdate ||
         operation === OsUpdateOperation.kDisabled) {
       this.updateInProgress_ = false;
-      this.dispatchEvent(new CustomEvent(
-          'disable-next-button',
-          {bubbles: true, composed: true, detail: false},
-          ));
     }
     this.updateProgressMessage_ = this.i18n(
         'onboardingUpdateProgress', this.i18n(operationNameKeys[operation]),
@@ -268,7 +259,11 @@ export class OnboardingUpdatePageElement extends
    */
   onHardwareVerificationResult(isCompliant, errorMessage) {
     this.isCompliant_ = isCompliant;
-    this.setUpdateNoticeMessage_();
+
+    if (!this.isCompliant_) {
+      this.unqualifiedComponentsText_ = errorMessage;
+      this.setVerificationFailedMessage_();
+    }
   }
 
   /** @protected */
@@ -280,6 +275,46 @@ export class OnboardingUpdatePageElement extends
           composed: true,
           detail: this.updateAvailable_ ? 'skipButtonLabel' : 'nextButtonLabel'
         },
+        ));
+  }
+
+  /** @protected */
+  computeUpdateNoticeMessage_() {
+    // |updateAvailable_| is not expected to be false in this state but if there
+    // was ever an update that did not require a reboot this would be reached.
+    return this.updateAvailable_ ?
+        this.i18n('osUpdateOutOfDateDescriptionText') :
+        '';
+  }
+
+  /** @private */
+  setVerificationFailedMessage_() {
+    this.verificationFailedMessage_ = this.i18nAdvanced(
+        'osUpdateUnqualifiedComponentsTopText', {attrs: ['id']});
+
+    // The #unqualifiedComponentsLink identifier is sourced from the string
+    // attached to `osUpdateUnqualifiedComponentsTopText` in the related .grd
+    // file.
+    const linkElement =
+        this.shadowRoot.querySelector('#unqualifiedComponentsLink');
+    linkElement.setAttribute('href', '#');
+    linkElement.addEventListener(
+        'click',
+        () => this.shadowRoot.querySelector('#unqualifiedComponentsDialog')
+                  .showModal());
+  }
+
+  /** @private */
+  closeDialog_() {
+    this.shadowRoot.querySelector('#unqualifiedComponentsDialog').close();
+  }
+
+  /** @private */
+  onUpdateInProgressChange_() {
+    const shouldDisableAllButtons = this.updateInProgress_;
+    this.dispatchEvent(new CustomEvent(
+        'disable-all-buttons',
+        {bubbles: true, composed: true, detail: shouldDisableAllButtons},
         ));
   }
 }

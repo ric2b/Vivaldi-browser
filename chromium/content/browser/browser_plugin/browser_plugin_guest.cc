@@ -25,7 +25,7 @@
 #include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom.h"
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 #include "content/browser/browser_plugin/browser_plugin_popup_menu_helper_mac.h"
 #endif
 
@@ -121,7 +121,7 @@ void BrowserPluginGuest::InitInternal(WebContentsImpl* owner_web_contents) {
   // be reset again the next time preferences are updated.
   blink::web_pref::WebPreferences prefs =
       GetWebContents()->GetOrCreateWebPreferences();
-  prefs.navigate_on_drag_drop = false;
+  prefs.navigate_on_drag_drop = vivaldi::IsVivaldiRunning();
   GetWebContents()->SetWebPreferences(prefs);
 }
 
@@ -202,7 +202,7 @@ void BrowserPluginGuest::DidFinishNavigation(
 void BrowserPluginGuest::PrimaryMainFrameRenderProcessGone(
     base::TerminationStatus status) {
   switch (status) {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS)
     case base::TERMINATION_STATUS_PROCESS_WAS_KILLED_BY_OOM:
 #endif
     case base::TERMINATION_STATUS_PROCESS_WAS_KILLED:
@@ -223,7 +223,7 @@ void BrowserPluginGuest::PrimaryMainFrameRenderProcessGone(
   }
 }
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 void BrowserPluginGuest::ShowPopupMenu(
     RenderFrameHost* render_frame_host,
     mojo::PendingRemote<blink::mojom::PopupMenuClient>* popup_client,

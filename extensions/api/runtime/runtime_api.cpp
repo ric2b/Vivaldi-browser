@@ -270,7 +270,7 @@ RuntimePrivateSwitchToGuestSessionFunction::Run() {
   bool success = service->GetBoolean(prefs::kBrowserGuestModeEnabled);
 
   if (success) {
-    profiles::SwitchToGuestProfile(ProfileManager::CreateCallback());
+    profiles::SwitchToGuestProfile(ProfileManager::ProfileLoadedCallback());
   }
 
   return RespondNow(ArgumentList(Results::Create(success)));
@@ -452,7 +452,7 @@ RuntimePrivateOpenNamedProfileFunction::Run() {
   for (auto* entry : entries) {
     if (entry->GetPath().AsUTF8Unsafe() == params->profile_path) {
       profiles::SwitchToProfile(entry->GetPath(), false,
-                                ProfileManager::CreateCallback());
+                                ProfileManager::ProfileLoadedCallback());
       success = true;
       break;
     }
@@ -614,12 +614,11 @@ void RuntimePrivateCreateProfileFunction::CreateShortcutAndShowSuccess(
   }
   // Opening the new window must be the last action, after all callbacks
   // have been run, to give them a chance to initialize the profile.
-  OpenNewWindowForProfile(profile, Profile::CREATE_STATUS_INITIALIZED);
+  OpenNewWindowForProfile(profile);
 }
 
 void RuntimePrivateCreateProfileFunction::OpenNewWindowForProfile(
-    Profile* profile,
-    Profile::CreateStatus status) {
+    Profile* profile) {
   profiles::OpenBrowserWindowForProfile(
       base::BindOnce(
           &RuntimePrivateCreateProfileFunction::OnBrowserReadyCallback, this),
@@ -628,12 +627,11 @@ void RuntimePrivateCreateProfileFunction::OpenNewWindowForProfile(
       false,  // There is no need to unblock all extensions because we only open
               // browser window if the Profile is not locked. Hence there is no
               // extension blocked.
-      profile, status);
+      profile);
 }
 
 void RuntimePrivateCreateProfileFunction::OnBrowserReadyCallback(
-    Profile* profile,
-    Profile::CreateStatus profile_create_status) {
+    Profile* profile) {
   namespace Results = vivaldi::runtime_private::CreateProfile::Results;
 
   if (!did_respond()) {

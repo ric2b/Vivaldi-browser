@@ -9,10 +9,6 @@
 #include "chrome/common/importer/importer_data_types.h"
 #include "chrome/utility/importer/importer.h"
 
-namespace base {
-class DictionaryValue;
-}
-
 namespace password_manager {
 struct PasswordForm;
 }

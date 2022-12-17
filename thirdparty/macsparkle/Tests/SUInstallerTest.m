@@ -11,6 +11,7 @@
 #import "SUHost.h"
 #import "SUInstaller.h"
 #import "SUInstallerProtocol.h"
+#import "SPUInstallationType.h"
 #import <unistd.h>
 
 @interface SUInstallerTest : XCTestCase
@@ -36,8 +37,8 @@
 {
     uid_t uid = getuid();
 
-    if (uid) {
-        NSLog(@"Test must be run as root: sudo xctest -XCTest SUInstallerTest 'Sparkle Unit Tests.xctest'");
+    if (uid != 0) {
+        NSLog(@"Test must be run as root: sudo xcodebuild -project Sparkle.xcodeproj -scheme Sparkle '-only-testing:Sparkle Unit Tests/SUInstallerTest/testInstallIfRoot' test");
         return;
     }
 
@@ -46,40 +47,36 @@
     [fm removeItemAtPath:expectedDestination error:nil];
     XCTAssertFalse([fm fileExistsAtPath:expectedDestination isDirectory:nil]);
 
-    XCTestExpectation *done = [self expectationWithDescription:@"install finished"];
-
     NSBundle *bundle = [NSBundle bundleForClass:[self class]];
     NSString *path = [bundle pathForResource:@"test" ofType:@"pkg"];
     XCTAssertNotNil(path);
 
     SUHost *host = [[SUHost alloc] initWithBundle:bundle];
 
-    NSString *fileOperationToolPath = [bundle pathForResource:@""SPARKLE_FILEOP_TOOL_NAME ofType:@""];
-    XCTAssertNotNil(fileOperationToolPath);
-    
     NSError *installerError = nil;
-    id<SUInstallerProtocol> installer = [SUInstaller installerForHost:host fileOperationToolPath:fileOperationToolPath updateDirectory:[path stringByDeletingLastPathComponent] error:&installerError];
+    // Note: we may not be using the "correct" home directory or user name (they will be root) but our test pkg does not have
+    // pre/post install scripts so it doesn't matter
+    id<SUInstallerProtocol> installer = [SUInstaller installerForHost:host expectedInstallationType:SPUInstallationTypeGuidedPackage updateDirectory:[path stringByDeletingLastPathComponent] homeDirectory:NSHomeDirectory() userName:NSUserName() error:&installerError];
     
     if (installer == nil) {
-        XCTFail(@"Failed to retrieve installer: %@", installerError);
+        XCTFail(@"Installer is nil with error: %@", installerError);
+        return;
     }
     
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        NSError *initialInstallationError = nil;
-        if (![installer performInitialInstallation:&initialInstallationError]) {
-            XCTFail(@"Failed to perform initial installation: %@", initialInstallationError);
-        }
-        
-        NSError *finalInstallationError = nil;
-        if (![installer performFinalInstallationProgressBlock:nil error:&finalInstallationError]) {
-            XCTFail(@"Failed to perform final installation with underlying error = %@ ; error = %@", [finalInstallationError.userInfo objectForKey:NSUnderlyingErrorKey], finalInstallationError);
-        }
-        
-        XCTAssertTrue([fm fileExistsAtPath:expectedDestination isDirectory:nil]);
-        [done fulfill];
-    });
+    NSError *initialInstallError = nil;
+    if (![installer performInitialInstallation:&initialInstallError]) {
+        XCTFail(@"Initial Installation failed with error: %@", initialInstallError);
+        return;
+    }
 
-    [self waitForExpectationsWithTimeout:40 handler:nil];
+    NSError *finalInstallError = nil;
+    if (![installer performFinalInstallationProgressBlock:nil error:&finalInstallError]) {
+        XCTFail(@"Final installation failed with error: %@", finalInstallError);
+        return;
+    }
+
+    XCTAssertTrue([fm fileExistsAtPath:expectedDestination isDirectory:nil]);
+
     [fm removeItemAtPath:expectedDestination error:nil];
 }
 #endif

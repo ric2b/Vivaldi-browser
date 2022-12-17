@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/guid.h"
+#include "build/build_config.h"
 #include "content/public/browser/browser_thread.h"
 
 using blink::mojom::PresentationConnectionState;
@@ -16,11 +17,17 @@ namespace media_router {
 
 // A MediaRoutesObserver that maintains state about the current set of media
 // routes.
+//
+// TODO(crbug.com/1297324): This observer is used to implement
+// HasJoinableRoute() and GetRoute(), which are used internally by
+// MediaRouterMojoImpl; it would be simpler to move route tracking to a separate
+// object owned by MRMI, and then MediaRouterBase could likely be deleted
+// entirely.
 class MediaRouterBase::InternalMediaRoutesObserver
     : public MediaRoutesObserver {
  public:
   explicit InternalMediaRoutesObserver(MediaRouter* router)
-      : MediaRoutesObserver(router), has_route(false) {}
+      : MediaRoutesObserver(router) {}
 
   InternalMediaRoutesObserver(const InternalMediaRoutesObserver&) = delete;
   InternalMediaRoutesObserver& operator=(const InternalMediaRoutesObserver&) =
@@ -29,23 +36,16 @@ class MediaRouterBase::InternalMediaRoutesObserver
   ~InternalMediaRoutesObserver() override {}
 
   // MediaRoutesObserver
-  void OnRoutesUpdated(
-      const std::vector<MediaRoute>& routes,
-      const std::vector<MediaRoute::Id>& joinable_route_ids) override {
-    current_routes = routes;
-    off_the_record_route_ids.clear();
-    // TODO(crbug.com/611486): Have the MRPM pass a list of joinable route ids
-    // via |joinable_route_ids|, and check here if it is non-empty.
-    has_route = !routes.empty();
-    for (const auto& route : routes) {
-      if (route.is_off_the_record())
-        off_the_record_route_ids.push_back(route.media_route_id());
-    }
+  void OnRoutesUpdated(const std::vector<MediaRoute>& routes) override {
+    current_routes_ = routes;
   }
 
-  bool has_route;
-  std::vector<MediaRoute> current_routes;
-  std::vector<MediaRoute::Id> off_the_record_route_ids;
+  const std::vector<MediaRoute>& current_routes() const {
+    return current_routes_;
+  }
+
+ private:
+  std::vector<MediaRoute> current_routes_;
 };
 
 MediaRouterBase::~MediaRouterBase() {
@@ -69,18 +69,12 @@ MediaRouterBase::AddPresentationConnectionStateChangedCallback(
   return callbacks->Add(callback);
 }
 
-void MediaRouterBase::OnIncognitoProfileShutdown() {
-  for (const auto& route_id :
-       internal_routes_observer_->off_the_record_route_ids)
-    TerminateRoute(route_id);
-}
-
 IssueManager* MediaRouterBase::GetIssueManager() {
   return &issue_manager_;
 }
 
 std::vector<MediaRoute> MediaRouterBase::GetCurrentRoutes() const {
-  return internal_routes_observer_->current_routes;
+  return internal_routes_observer_->current_routes();
 }
 
 std::unique_ptr<media::FlingingController>
@@ -88,7 +82,7 @@ MediaRouterBase::GetFlingingController(const MediaRoute::Id& route_id) {
   return nullptr;
 }
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
 void MediaRouterBase::GetMediaController(
     const MediaRoute::Id& route_id,
     mojo::PendingReceiver<mojom::MediaController> controller,
@@ -97,7 +91,7 @@ void MediaRouterBase::GetMediaController(
 base::Value MediaRouterBase::GetLogs() const {
   return base::Value();
 }
-#endif  // !defined(OS_ANDROID)
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 MediaRouterBase::MediaRouterBase() : initialized_(false) {}
 
@@ -135,12 +129,12 @@ void MediaRouterBase::NotifyPresentationConnectionClose(
 }
 
 bool MediaRouterBase::HasJoinableRoute() const {
-  return internal_routes_observer_->has_route;
+  return !(internal_routes_observer_->current_routes().empty());
 }
 
 const MediaRoute* MediaRouterBase::GetRoute(
     const MediaRoute::Id& route_id) const {
-  const auto& routes = internal_routes_observer_->current_routes;
+  const auto& routes = internal_routes_observer_->current_routes();
   auto it = std::find_if(routes.begin(), routes.end(),
                          [&route_id](const MediaRoute& route) {
                            return route.media_route_id() == route_id;

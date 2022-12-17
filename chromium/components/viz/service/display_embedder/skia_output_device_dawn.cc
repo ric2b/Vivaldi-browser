@@ -9,7 +9,7 @@
 #include "base/check_op.h"
 #include "base/notreached.h"
 #include "components/viz/common/gpu/dawn_context_provider.h"
-#include "third_party/dawn/src/include/dawn_native/D3D12Backend.h"
+#include "third_party/dawn/include/dawn/native/D3D12Backend.h"
 #include "ui/gfx/presentation_feedback.h"
 #include "ui/gfx/vsync_provider.h"
 #include "ui/gl/vsync_provider_win.h"
@@ -139,7 +139,7 @@ void SkiaOutputDeviceDawn::EndPaint() {
 }
 
 void SkiaOutputDeviceDawn::CreateSwapChainImplementation() {
-  swap_chain_implementation_ = dawn_native::d3d12::CreateNativeSwapChainImpl(
+  swap_chain_implementation_ = dawn::native::d3d12::CreateNativeSwapChainImpl(
       context_provider_->GetDevice().Get(), child_window_.window());
 }
 

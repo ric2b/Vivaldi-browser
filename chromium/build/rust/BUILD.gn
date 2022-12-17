@@ -14,10 +14,6 @@ config("edition_2015") {
   rustflags = [ "--edition=2015" ]
 }
 
-config("rust_enabled") {
-  defines = [ "RUST_ENABLED" ]
-}
-
 # The required config for cxx-generated bindings because Chromium C++ is built
 # with -fno-exceptions.
 config("cxx_cppconfig") {
@@ -50,4 +46,13 @@ source_set("cxx_cppdeps") {
 # on the Rust side.
 group("cxx_rustdeps") {
   deps = [ "//third_party/rust/cxx/v1:lib" ]
+}
+
+# Enables code behind #[cfg(test)]. This should only be used for targets where
+# testonly=true.
+config("test") {
+  rustflags = [
+    "--cfg",
+    "test",
+  ]
 }

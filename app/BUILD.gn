@@ -137,15 +137,9 @@ grit("vivaldi_native_resources") {
     "vivaldi_native_resources_100_percent.pak",
     "vivaldi_native_resources_200_percent.pak",
   ]
-  if (!is_android) {
-    deps = [
-      "//vivaldi/vivapp:vivaldi_app"
-    ]
-  } else {
-    deps = [
-      "//vivaldi/vivapp:bundle"
-    ]
-  }
+  deps = [
+    "//vivaldi/vivapp:bundle"
+  ]
 }
 
 grit("vivaldi_unscaled_native_resources") {
@@ -163,6 +157,9 @@ grit("vivaldi_unscaled_native_resources") {
   outputs = [
     "grit/vivaldi_native_unscaled.h",
     "vivaldi_native_unscaled.pak",
+  ]
+  deps = [
+    "//vivaldi/vivapp:bundle"
   ]
 }
 

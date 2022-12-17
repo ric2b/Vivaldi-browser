@@ -4,8 +4,11 @@
 
 package org.chromium.chrome.browser.ui.android.webid;
 
+import android.content.res.Resources;
+
 import androidx.annotation.Nullable;
 
+import org.chromium.base.ContextUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.browser.ui.android.webid.data.Account;
@@ -32,6 +35,22 @@ class AccountSelectionBridge implements AccountSelectionComponent.Delegate {
         mAccountSelectionComponent = new AccountSelectionCoordinator();
         mAccountSelectionComponent.initialize(
                 windowAndroid.getContext().get(), bottomSheetController, this);
+    }
+
+    @CalledByNative
+    private static int getBrandIconMinimumSize() {
+        // Icon needs to be big enough for the smallest screen density (1x).
+        Resources resources = ContextUtils.getApplicationContext().getResources();
+        // Density < 1.0f on ldpi devices. Adjust density to ensure that
+        // {@link getBrandIconMinimumSize()} <= {@link getBrandIconIdealSize()}.
+        float density = Math.max(resources.getDisplayMetrics().density, 1.0f);
+        return Math.round(getBrandIconIdealSize() / density);
+    }
+
+    @CalledByNative
+    private static int getBrandIconIdealSize() {
+        Resources resources = ContextUtils.getApplicationContext().getResources();
+        return Math.round(resources.getDimension(R.dimen.account_selection_sheet_icon_size));
     }
 
     @CalledByNative

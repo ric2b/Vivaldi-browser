@@ -14,11 +14,15 @@ struct Feature;
 
 namespace page_info {
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 // Enables the history sub page for Page Info.
 extern const base::Feature kPageInfoHistory;
 // Enables the store info row for Page Info.
 extern const base::Feature kPageInfoStoreInfo;
+
+// Used to experiment with different permission timeouts. The underlying feature
+// itself is already launched.
+extern const base::Feature kPageInfoDiscoverability;
 #endif
 
 // Enables the "About this site" section in Page Info.
@@ -26,6 +30,11 @@ extern const base::Feature kPageInfoAboutThisSite;
 
 // Whether we show hard-coded content for some sites like https://example.com.
 extern const base::FeatureParam<bool> kShowSampleContent;
+
+#if !BUILDFLAG(IS_ANDROID)
+// Enables the history section for Page Info on desktop.
+extern const base::Feature kPageInfoHistoryDesktop;
+#endif
 
 }  // namespace page_info
 

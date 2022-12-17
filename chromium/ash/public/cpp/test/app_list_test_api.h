@@ -32,17 +32,21 @@ class ASH_EXPORT AppListTestApi {
   AppListModel* GetAppListModel();
 
   // Waits for the bubble launcher window to open on the primary display.
-  // `wait_for_opening_animation` indicates whether to wait for the window
-  // opening animation. See AppListBubblePresenter::Show(). Only used with
-  // productivity launcher in clamshell mode.
+  // `wait_for_opening_animation` indicates whether to wait for the bubble
+  // launcher show animations (including the app list window animation, the
+  // bubble apps page animation, the bubble view animation and apps grid
+  // animation). Only used with productivity launcher in clamshell mode.
   void WaitForBubbleWindow(bool wait_for_opening_animation);
 
-  // Waits until all the animations on the app list widget end. No operations
-  // if the app list widget is already idle.
-  void WaitUntilAppListAnimationIdle();
+  // Waits until all the animations to show the app list become idle. No
+  // operations if the app list is already idle.
+  void WaitForAppListShowAnimation(bool is_bubble_window);
 
   // Returns whether there is an item for |app_id|.
   bool HasApp(const std::string& app_id);
+
+  // Returns the name displayed in the launcher for the provided app list item.
+  std::u16string GetAppListItemViewName(const std::string& item_id);
 
   // Returns ids of the items in top level app list view.
   std::vector<std::string> GetTopLevelViewIdList();
@@ -82,14 +86,54 @@ class ASH_EXPORT AppListTestApi {
   // Returns the top level apps grid view. Could be ScrollableAppsGridView if
   // bubble launcher is enabled or PagedAppsGridView otherwise.
   AppsGridView* GetTopLevelAppsGridView();
+  const AppsGridView* GetTopLevelAppsGridView() const;
+
+  // Returns the apps grid view in the folder.
+  AppsGridView* GetFolderAppsGridView();
+
+  // Returns whether the folder view is under animation.
+  bool IsFolderViewAnimating() const;
 
   // Returns the app list bubble's undo button that reverts the temporary
   // sorting order when triggered.
   views::View* GetBubbleReorderUndoButton();
 
+  // Returns the fullscreen app list's undo button that reverts the temporary
+  // sorting order when triggered.
+  views::View* GetFullscreenReorderUndoButton();
+
   // Returns the visibility of the app list bubble's undo toast where the undo
   // button is located.
   bool GetBubbleReorderUndoToastVisibility() const;
+
+  // Returns the visibility of the fullscreen app list's undo toast where the
+  // undo button is located.
+  bool GetFullscreenReorderUndoToastVisibility() const;
+
+  // Registers a callback that runs when all the animations scheduled to show or
+  // hide the folder view complete.
+  void SetFolderViewAnimationCallback(
+      base::OnceClosure folder_animation_done_callback);
+
+  // Adds a callback that runs at the end of the app list reorder. The callback
+  // carries:
+  // (1) A boolean parameter that is true if the reorder is aborted.
+  // (2) An enum value that specifies the reorder animation status when the
+  // callback runs.
+  void AddReorderAnimationCallback(
+      base::RepeatingCallback<void(bool, AppListReorderAnimationStatus)>
+          callback);
+
+  // Returns true if there is any waiting reorder animation test callback.
+  bool HasAnyWaitingReorderDoneCallback() const;
+
+  // Enables/Disables the app list nudge for testing.
+  void DisableAppListNudge(bool disable);
+
+  // Moves the app list item at `source_index` to `target_index` by
+  // drag-and-drop. `source_index` and `target_index` are view indices in the
+  // root apps grid.
+  void ReorderItemInRootByDragAndDrop(int source_index, int target_index);
 };
 
 }  // namespace ash

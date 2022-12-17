@@ -218,6 +218,8 @@ if (is_mac) {
   }
 
   update_target("//components/remote_cocoa/app_shim:app_shim") {
+    include_dirs=[ "$root_gen_dir/vivaldi" ] # For sparkle header files
+    public_deps = [ "//vivaldi/thirdparty/:copy_sparkle_headers" ]
     sources += [
       "//vivaldi/components/remote_cocoa/app_shim/vivaldi_window_size_helper.h",
       "//vivaldi/components/remote_cocoa/app_shim/vivaldi_window_size_helper.mm",

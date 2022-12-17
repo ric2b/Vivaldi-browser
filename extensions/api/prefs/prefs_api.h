@@ -64,19 +64,17 @@ class VivaldiPrefsApiNotification : public KeyedService {
 
   void RegisterPref(const std::string& path, bool local_pref);
 
-  void OnChanged(const std::string& path);
-
  private:
-  void RegisterLocalPref(const std::string& path);
-  void RegisterProfilePref(const std::string& path);
+  void OnChanged(const std::string& path);
 
   Profile* profile_;
   PrefChangeRegistrar prefs_registrar_;
   PrefChangeRegistrar local_prefs_registrar_;
   ::vivaldi::PrefPropertiesMap pref_properties_map_;
+  PrefChangeRegistrar::NamedChangeCallback pref_change_callback_;
 
   std::unique_ptr<::vivaldi::NativeSettingsObserver> native_settings_observer_;
-  base::WeakPtrFactory<VivaldiPrefsApiNotification> weak_ptr_factory_;
+  base::WeakPtrFactory<VivaldiPrefsApiNotification> weak_ptr_factory_{this};
 };
 
 class PrefsGetFunction : public ExtensionFunction {

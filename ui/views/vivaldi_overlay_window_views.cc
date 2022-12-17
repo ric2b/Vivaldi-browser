@@ -1,6 +1,6 @@
 // Copyright (c) 2020 Vivaldi Technologies AS. All rights reserved
 
-#include "chrome/browser/ui/views/overlay/overlay_window_views.h"
+#include "chrome/browser/ui/views/overlay/video_overlay_window_views.h"
 #include "content/public/browser/picture_in_picture_window_controller.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/compositor/layer.h"
@@ -8,7 +8,7 @@
 #include "ui/views/controls/mute_button.h"
 #include "ui/views/controls/video_progress.h"
 
-// The file contains the vivaldi specific code for the OverlayWindowViews class
+// The file contains the vivaldi specific code for the VideoOverlayWindowViews class
 // used for the Picture-in-Picture window.
 
 constexpr int kVideoProgressHeight = 8;
@@ -46,12 +46,12 @@ class VideoPipControllerDelegate
   }
 
  private:
-  // ownership tied to the OverlayWindowViews class
+  // ownership tied to the VideoOverlayWindowViews class
   vivaldi::VideoProgress* progress_view_ = nullptr;
   vivaldi::MuteButton* mute_button_ = nullptr;
 };
 
-void OverlayWindowViews::HandleVivaldiMuteButton() {
+void VideoOverlayWindowViews::HandleVivaldiMuteButton() {
   content::WebContents* contents = controller_->GetWebContents();
 
   DCHECK_EQ(contents->IsAudioMuted(),
@@ -66,15 +66,18 @@ void OverlayWindowViews::HandleVivaldiMuteButton() {
   }
 }
 
-void OverlayWindowViews::CreateVivaldiVideoControls() {
+void VideoOverlayWindowViews::CreateVivaldiVideoControls() {
   auto mute_button = std::make_unique<vivaldi::MuteButton>(base::BindRepeating(
-      [](OverlayWindowViews* overlay) { overlay->HandleVivaldiMuteButton(); },
+      [](VideoOverlayWindowViews* overlay) {
+        overlay->HandleVivaldiMuteButton();
+      },
       base::Unretained(this)));
 
   mute_button->SetPaintToLayer(ui::LAYER_TEXTURED);
   mute_button->layer()->SetFillsBoundsOpaquely(false);
   mute_button->layer()->SetName("MuteControlsView");
-  mute_button_ = GetContentsView()->AddChildView(std::move(mute_button));
+  mute_button_ =
+      GetControlsContainerView()->AddChildView(std::move(mute_button));
 
   content::WebContents* contents = controller_->GetWebContents();
 
@@ -89,10 +92,11 @@ void OverlayWindowViews::CreateVivaldiVideoControls() {
   progress_view->SetPaintToLayer(ui::LAYER_TEXTURED);
   progress_view->layer()->SetFillsBoundsOpaquely(false);
   progress_view->layer()->SetName("VideoProgressControlsView");
-  progress_view_ = GetContentsView()->AddChildView(std::move(progress_view));
+  progress_view_ =
+      GetControlsContainerView()->AddChildView(std::move(progress_view));
 }
 
-void OverlayWindowViews::UpdateVivaldiControlsVisibility(bool is_visible) {
+void VideoOverlayWindowViews::UpdateVivaldiControlsVisibility(bool is_visible) {
   if (progress_view_) {
     progress_view_->ToggleVisibility(is_visible);
   }
@@ -101,7 +105,7 @@ void OverlayWindowViews::UpdateVivaldiControlsVisibility(bool is_visible) {
   }
 }
 
-void OverlayWindowViews::UpdateVivaldiControlsBounds(int primary_control_y,
+void VideoOverlayWindowViews::UpdateVivaldiControlsBounds(int primary_control_y,
                                                      int margin) {
   int window_width = GetBounds().size().width();
   int offset_left = kVivaldiButtonControlSize.width();
@@ -118,7 +122,7 @@ void OverlayWindowViews::UpdateVivaldiControlsBounds(int primary_control_y,
                  primary_control_y - kVideoProgressHeight));
 }
 
-void OverlayWindowViews::CreateVivaldiVideoObserver() {
+void VideoOverlayWindowViews::CreateVivaldiVideoObserver() {
   video_pip_delegate_ = std::make_unique<VideoPipControllerDelegate>(
       progress_view_, mute_button_);
   video_pip_controller_ = std::make_unique<vivaldi::VideoPIPController>(
@@ -130,7 +134,7 @@ void OverlayWindowViews::CreateVivaldiVideoObserver() {
                           base::Unretained(video_pip_controller_.get())));
 }
 
-void OverlayWindowViews::HandleVivaldiKeyboardEvents(ui::KeyEvent* event) {
+void VideoOverlayWindowViews::HandleVivaldiKeyboardEvents(ui::KeyEvent* event) {
   int seek_seconds = 0;
   if (event->type() == ui::ET_KEY_PRESSED) {
     if (event->key_code() == ui::VKEY_RIGHT) {
@@ -148,7 +152,8 @@ void OverlayWindowViews::HandleVivaldiKeyboardEvents(ui::KeyEvent* event) {
   }
 }
 
-void OverlayWindowViews::HandleVivaldiGestureEvent(ui::GestureEvent* event) {
+void VideoOverlayWindowViews::HandleVivaldiGestureEvent(
+    ui::GestureEvent* event) {
   bool handled = false;
   if (progress_view_) {
     handled = progress_view_->HandleGestureEvent(event);
@@ -158,7 +163,7 @@ void OverlayWindowViews::HandleVivaldiGestureEvent(ui::GestureEvent* event) {
   }
 }
 
-bool OverlayWindowViews::IsPointInVivaldiControl(const gfx::Point& point) {
+bool VideoOverlayWindowViews::IsPointInVivaldiControl(const gfx::Point& point) {
   if ((progress_view_ && progress_view_->GetMirroredBounds().Contains(point)) ||
       (mute_button_ && mute_button_->GetMirroredBounds().Contains(point))) {
     return true;

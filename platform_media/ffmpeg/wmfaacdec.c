@@ -817,6 +817,11 @@ cleanup:
 static void ffwmf_flush(AVCodecContext* avctx) {
   WMFDecodeContext* wmf = avctx->priv_data;
 
+  if (!wmf || !wmf->decoder) {
+    // We can be called before the decoder is lazy-initialized.
+    return;
+  }
+
   HRESULT hr = wmf->decoder->lpVtbl->ProcessMessage(
       wmf->decoder, MFT_MESSAGE_COMMAND_FLUSH, 0);
   if (FAILED(hr)) {

@@ -28,7 +28,7 @@
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/network_time/network_time_tracker.h"
 #include "components/prefs/pref_service.h"
-#include "components/sync/driver/sync_driver_switches.h"
+#include "components/sync/base/command_line_switches.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/network_service_instance.h"
@@ -60,7 +60,7 @@ SyncService* VivaldiSyncServiceFactory::GetForProfile(Profile* profile) {
 // static
 VivaldiSyncServiceImpl* VivaldiSyncServiceFactory::GetForProfileVivaldi(
     Profile* profile) {
-  if (!switches::IsSyncAllowedByFlag()) {
+  if (!syncer::IsSyncAllowedByFlag()) {
     return nullptr;
   }
 

@@ -72,6 +72,14 @@ mojom("stable_video_decoder") {
           move_only = true
         },
         {
+          mojom = "media.stable.mojom.StatusData"
+          cpp = "::media::internal::StatusData"
+        },
+        {
+          mojom = "media.stable.mojom.Status"
+          cpp = "::media::DecoderStatus"
+        },
+        {
           mojom = "media.stable.mojom.SubsampleEntry"
           cpp = "::media::SubsampleEntry"
         },
@@ -121,7 +129,7 @@ mojom("stable_video_decoder") {
 
   cpp_proxy_target = "//media/mojo/services"
   export_class_attribute = "MEDIA_MOJO_EXPORT"
-  export_define = "MEDIA_MOJO_IMPLEMENTATION"
+  export_define = "IS_MEDIA_MOJO_IMPL"
   export_header = "media/mojo/services/media_mojo_export.h"
 }
 

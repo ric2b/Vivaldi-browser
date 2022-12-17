@@ -9,6 +9,7 @@
 
 #include "base/check.h"
 #include "base/lazy_instance.h"
+#include "base/no_destructor.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
@@ -27,6 +28,8 @@
 #include "third_party/blink/public/web/web_script_source.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "url/gurl.h"
+
+#include "app/vivaldi_apptools.h"
 
 namespace extensions {
 
@@ -189,6 +192,26 @@ PermissionsData::PageAccess UserScriptInjector::CanExecuteOnFrame(
   // because there is nothing to inject.
   if (!script_)
     return PermissionsData::PageAccess::kAllowed;
+
+  if (vivaldi::IsVivaldiRunning()) {
+    // NOTE(andre@vivaldi.com) : This is to make sure we do not try to inject
+    // content-scripts from extensions in webviews. This would cause a
+    // bad-message crash in IsValidMessagingSource because the content-script is
+    // not expected. This was bugs: VB-86619 and friends. Scripts added with
+    // WebView.AddContentScripts will be allowed.
+    auto* guest_view = GetGuestView();
+    if (guest_view) {
+      bool allowed = false;
+      int routing_id =
+          content::RenderFrame::FromWebFrame(web_frame)->GetRoutingID();
+      guest_view->ExtensionCanExecuteContentScript(
+          routing_id, injection_host->id().id, &allowed);
+      if (allowed) {
+        return PermissionsData::PageAccess::kAllowed;
+      }
+      // else fallthrough
+    }
+  }
 
   if (script_->consumer_instance_type() ==
           UserScript::ConsumerInstanceType::WEBVIEW) {

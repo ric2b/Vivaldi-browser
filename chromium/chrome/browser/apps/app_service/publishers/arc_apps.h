@@ -77,6 +77,8 @@ class ArcApps : public KeyedService,
     return arc_icon_once_loader_;
   }
 
+  WebApkManager* GetWebApkManagerForTesting() { return web_apk_manager_.get(); }
+
  private:
   friend class ArcAppsFactory;
   friend class PublisherTest;
@@ -173,7 +175,6 @@ class ArcApps : public KeyedService,
   // arc::ArcIntentHelperObserver overrides.
   void OnIntentFiltersUpdated(
       const absl::optional<std::string>& package_name) override;
-  void OnPreferredAppsChanged() override;
   void OnArcSupportedLinksChanged(
       const std::vector<arc::mojom::SupportedLinksPtr>& added,
       const std::vector<arc::mojom::SupportedLinksPtr>& removed,
@@ -202,10 +203,10 @@ class ArcApps : public KeyedService,
                          IconEffects icon_effects,
                          apps::LoadIconCallback callback);
 
-  std::unique_ptr<App> CreateApp(ArcAppListPrefs* prefs,
-                                 const std::string& app_id,
-                                 const ArcAppListPrefs::AppInfo& app_info,
-                                 bool update_icon = true);
+  AppPtr CreateApp(ArcAppListPrefs* prefs,
+                   const std::string& app_id,
+                   const ArcAppListPrefs::AppInfo& app_info,
+                   bool update_icon = true);
   apps::mojom::AppPtr Convert(ArcAppListPrefs* prefs,
                               const std::string& app_id,
                               const ArcAppListPrefs::AppInfo& app_info,

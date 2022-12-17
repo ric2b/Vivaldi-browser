@@ -118,7 +118,9 @@ void RuleServiceImpl::OnStateLoaded(
 
   active_exceptions_lists_ = load_result->active_exceptions_lists;
   blocked_urls_reporter_.emplace(
-      std::move(load_result->blocked_counters),
+      load_result->blocked_reporting_start,
+      std::move(load_result->blocked_domains_counters),
+      std::move(load_result->blocked_for_origin_counters),
       base::BindRepeating(&RuleServiceStorage::ScheduleSave,
                           base::Unretained(&state_store_.value())));
 

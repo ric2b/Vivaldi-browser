@@ -32,7 +32,7 @@ group("All") {
 
   deps = [
     ":vivaldi",
-    ":generate_files_cfg",
+    ":generate_files_json",
     "//vivaldi/app:write_translation_xml_generation_script",
     "//vivaldi/app:write_pakfile_xml_generation_script",
     "//vivaldi/app:write_full_pakfile_xml_generation_script",
@@ -58,7 +58,6 @@ group("All") {
       "//google_apis:google_apis_unittests",
       "//gpu:gpu_unittests",
       "//ipc:ipc_tests",
-      "//jingle:jingle_unittests",
       "//media:media_unittests",
       "//media/cast:cast_unittests",
       "//net:net_unittests",
@@ -216,11 +215,17 @@ if (is_win && getenv("CHROME_HEADLESS") == "1") {
   }
 }
 
-action("generate_files_cfg") {
+action("generate_files_json") {
   if (is_win) {
     plat = "win"
+    if (target_cpu == "x86") {
+      plat="win32"
+    }
   } else if (is_mac) {
     plat = "mac"
+    if (target_cpu == "arm64") {
+      plat="$plat-$target_cpu"
+    }
   } else if (is_android) {
     plat = "android"
   } else if (is_linux) {
@@ -229,11 +234,11 @@ action("generate_files_cfg") {
     assert(false, "Unknown target platform")
   }
 
-  script = "//vivaldi/scripts/cat_files.py"
-  chromium_files_cfg = "//chrome/tools/build/$plat/FILES.cfg"
-  vivaldi_files_cfg = "//vivaldi/tools/build/$plat/FILES.cfg"
+  script = "//vivaldi/scripts/merge-archive-json.py"
+  chromium_files_cfg = "//infra/archive_config/$plat-archive-rel.json"
+  vivaldi_files_cfg = "//vivaldi/tools/build/$plat/archive.json"
 
-  files_cfg_target = "$root_build_dir/FILES.cfg"
+  files_cfg_target = "$root_build_dir/archive.json"
 
   inputs = [
     script,

@@ -113,7 +113,7 @@ void ContactBackend::InitImpl(
     case sql::INIT_FAILURE: {
       // TODO(arnar): add db init failure check
       LOG(ERROR) << "ContactBackend db init failure";
-      FALLTHROUGH;
+      [[fallthrough]];
     }  // Falls through.
     case sql::INIT_TOO_NEW: {
       LOG(ERROR) << "INIT_TOO_NEW";

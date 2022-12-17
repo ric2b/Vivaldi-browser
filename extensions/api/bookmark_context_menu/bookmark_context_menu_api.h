@@ -66,6 +66,8 @@ class BookmarkContextMenuShowFunction
 
   std::string Open(content::WebContents* web_contents, const std::string& id);
 
+  // Parsed data from the JS layer.
+  std::unique_ptr<vivaldi::bookmark_context_menu::Show::Params> params_;
   std::unique_ptr<::vivaldi::BookmarkMenuContainer> bookmark_menu_container_;
 };
 

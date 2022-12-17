@@ -60,7 +60,6 @@
 #include "components/signin/public/base/signin_buildflags.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
-#include "components/sync/driver/sync_driver_switches.h"
 #include "components/sync/driver/sync_service_impl.h"
 #include "components/sync/test/fake_server/fake_server.h"
 #include "components/sync/test/fake_server/fake_server_network_resources.h"
@@ -1104,7 +1103,7 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_EQ(cardholder_name_textfield->GetText(), u"John Smith");
 }
 
-#endif  // !OS_CHROMEOS
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 // Tests the fully-syncing state. Ensures that the Butter (i) info icon does not
 // appear for fully-syncing users.
@@ -2080,7 +2079,7 @@ IN_PROC_BROWSER_TEST_F(SaveCardBubbleViewsFullFormBrowserTestForStatusChip,
 }
 
 // Disabled on Linux due to crashes; https://crbug.com/1216300.
-#if defined(OS_LINUX)
+#if BUILDFLAG(IS_LINUX)
 #define MAYBE_ClickingOnCreditCardIconInStatusChipReshowsBubble \
     DISABLED_ClickingOnCreditCardIconInStatusChipReshowsBubble
 #else
@@ -2101,7 +2100,7 @@ IN_PROC_BROWSER_TEST_F(SaveCardBubbleViewsFullFormBrowserTestForStatusChip,
   EXPECT_TRUE(GetSaveCardBubbleViews()->GetVisible());
 }
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 // TODO(crbug.com/823543): Widget activation doesn't work on Mac.
 #define MAYBE_ActivateFirstInactiveBubbleForAccessibility \
   DISABLED_ActivateFirstInactiveBubbleForAccessibility
@@ -2150,9 +2149,9 @@ IN_PROC_BROWSER_TEST_F(SaveCardBubbleViewsFullFormBrowserTestForStatusChip,
   EXPECT_TRUE(GetSaveCardIconView()->GetVisible());
   EXPECT_TRUE(GetSaveCardBubbleViews()->GetVisible());
 
-  AddTabAtIndexToBrowser(GetBrowser(0), 1, GURL("http://example.com/"),
-                         ui::PAGE_TRANSITION_TYPED,
-                         /*check_navigation_success=*/true);
+  ASSERT_TRUE(AddTabAtIndexToBrowser(GetBrowser(0), 1, GURL("about:blank"),
+                                     ui::PAGE_TRANSITION_TYPED,
+                                     /*check_navigation_success=*/true));
   TabStripModel* tab_model = GetBrowser(0)->tab_strip_model();
   tab_model->ActivateTabAt(1, {TabStripModel::GestureType::kOther});
   WaitForAnimationToEnd();

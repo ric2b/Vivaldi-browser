@@ -95,7 +95,6 @@ extern const char kChromeUIFeedbackURL[];
 extern const char kChromeUIFileiconURL[];
 extern const char kChromeUIFlagsHost[];
 extern const char kChromeUIFlagsURL[];
-extern const char kChromeUIFlocInternalsHost[];
 extern const char kChromeUIGCMInternalsHost[];
 extern const char kChromeUIHangUIHost[];
 extern const char kChromeUIHelpHost[];
@@ -141,7 +140,7 @@ extern const char kChromeUINewTabURL[];
 extern const char kChromeUIOfflineInternalsHost[];
 extern const char kChromeUIOmniboxHost[];
 extern const char kChromeUIOmniboxURL[];
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS)
 extern const char kChromeUIAppDisabledURL[];
 extern const char kChromeUIOsFlagsAppURL[];
 extern const char kChromeUIOsUrlAppURL[];
@@ -152,9 +151,10 @@ extern const char kChromeUIPolicyURL[];
 extern const char kChromeUIPredictorsHost[];
 extern const char kChromeUIPrefsInternalsHost[];
 extern const char kChromeUIPrintURL[];
+extern const char kChromeUIPrivacySandboxDialogHost[];
+extern const char kChromeUIPrivacySandboxDialogURL[];
 extern const char kChromeUIQuitHost[];
 extern const char kChromeUIQuitURL[];
-extern const char kChromeUIQuotaInternalsHost[];
 extern const char kChromeUIResetPasswordHost[];
 extern const char kChromeUIResetPasswordURL[];
 extern const char kChromeUIRestartHost[];
@@ -206,12 +206,12 @@ extern const char kChromeUIWelcomeURL[];
 extern const char kChromeUIWhatsNewHost[];
 extern const char kChromeUIWhatsNewURL[];
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 // TODO(crbug.com/1003960): Remove when issue is resolved.
 extern const char kChromeUIWelcomeWin10Host[];
-#endif  // defined(OS_WIN)
+#endif  // BUILDFLAG(IS_WIN)
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 extern const char kChromeUIExploreSitesInternalsHost[];
 extern const char kChromeUIJavaCrashURL[];
 extern const char kChromeUINativeBookmarksURL[];
@@ -225,12 +225,16 @@ extern const char kChromeUIWebApksHost[];
 #else
 extern const char kChromeUIAppServiceInternalsHost[];
 extern const char kChromeUINearbyInternalsHost[];
+extern const char kChromeUIBookmarksSidePanelHost[];
+extern const char kChromeUIBookmarksSidePanelURL[];
+extern const char kChromeUIReaderModeSidePanelHost[];
+extern const char kChromeUIReaderModeSidePanelURL[];
 extern const char kChromeUIReadLaterHost[];
 extern const char kChromeUIReadLaterURL[];
 extern const char kChromeUIWebAppInternalsHost[];
-#endif  // defined(OS_ANDROID)
+#endif  // BUILDFLAG(IS_ANDROID)
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS)
 extern const char kChromeUIGpuURL[];
 extern const char kChromeUIHistogramsURL[];
 #endif
@@ -303,8 +307,6 @@ extern const char kChromeUIPasswordChangeUrl[];
 extern const char kChromeUIPrintManagementUrl[];
 extern const char kChromeUIPowerHost[];
 extern const char kChromeUIPowerUrl[];
-extern const char kChromeUIProjectorHost[];
-extern const char kChromeUIProjectorURL[];
 extern const char kChromeUIScanningAppURL[];
 extern const char kChromeUIScreenlockIconHost[];
 extern const char kChromeUIScreenlockIconURL[];
@@ -319,6 +321,7 @@ extern const char kChromeUISmbShareHost[];
 extern const char kChromeUISmbShareURL[];
 extern const char kChromeUISysInternalsHost[];
 extern const char kChromeUISysInternalsUrl[];
+extern const char kChromeUIUntrustedCroshHost[];
 extern const char kChromeUIUntrustedCroshURL[];
 extern const char kChromeUIUntrustedTerminalHost[];
 extern const char kChromeUIUntrustedTerminalURL[];
@@ -344,12 +347,12 @@ extern const char kOsUIHistogramsURL[];
 extern const char kOsUIInvalidationsUrl[];
 extern const char kOsUILockScreenNetworkURL[];
 extern const char kOsUINetworkUrl[];
-extern const char kOsUIOSSettingsURL[];
 extern const char kOsUIRestartURL[];
 extern const char kOsUIScanningAppURL[];
 extern const char kOsUISettingsURL[];
 extern const char kOsUISignInInternalsUrl[];
 extern const char kOsUISyncInternalsUrl[];
+extern const char kOsUITerms[];
 
 // Returns true if this web UI is part of the "system UI". Generally this is
 // UI that opens in a window (not a browser tab) and that on other operating
@@ -368,40 +371,46 @@ extern const char kOsUIFlagsURL[];
 extern const char kOsUIVersionURL[];
 #endif
 
-#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 extern const char kChromeUIWebUIJsErrorHost[];
 extern const char kChromeUIWebUIJsErrorURL[];
 #endif
 
-#if defined(OS_WIN) || defined(OS_MAC) || defined(OS_LINUX) || \
-    defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_CHROMEOS)
 extern const char kChromeUIConnectorsInternalsHost[];
 #endif
 
-#if defined(OS_WIN) || defined(OS_MAC) || defined(OS_LINUX) || \
-    defined(OS_CHROMEOS) || defined(OS_FUCHSIA)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_FUCHSIA)
 extern const char kChromeUIDiscardsHost[];
 extern const char kChromeUIDiscardsURL[];
 #endif
 
-#if !defined(OS_ANDROID)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_FUCHSIA)
+extern const char kChromeUIWebAppSettingsURL[];
+extern const char kChromeUIWebAppSettingsHost[];
+#endif
+
+#if !BUILDFLAG(IS_ANDROID)
 extern const char kChromeUINearbyShareHost[];
 extern const char kChromeUINearbyShareURL[];
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif
 
-#if defined(OS_POSIX) && !defined(OS_MAC) && !defined(OS_ANDROID)
+#if BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_ANDROID)
 extern const char kChromeUILinuxProxyConfigHost[];
 #endif
 
-#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_CHROMEOS) || \
-    defined(OS_ANDROID)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || \
+    BUILDFLAG(IS_ANDROID)
 extern const char kChromeUISandboxHost[];
 #endif
 
 // TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
 // of lacros-chrome is complete.
-#if defined(OS_WIN) || defined(OS_MAC) || defined(OS_FUCHSIA) || \
-    (defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_FUCHSIA) || \
+    (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
 extern const char kChromeUIBrowserSwitchHost[];
 extern const char kChromeUIBrowserSwitchURL[];
 extern const char kChromeUIEnterpriseProfileWelcomeHost[];
@@ -413,7 +422,8 @@ extern const char kChromeUIProfilePickerUrl[];
 extern const char kChromeUIProfilePickerStartupQuery[];
 #endif
 
-#if ((defined(OS_LINUX) || defined(OS_CHROMEOS)) && defined(TOOLKIT_VIEWS)) || \
+#if ((BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)) && \
+     defined(TOOLKIT_VIEWS)) ||                         \
     defined(USE_AURA)
 extern const char kChromeUITabModalConfirmDialogHost[];
 #endif
@@ -427,7 +437,7 @@ extern const char kChromeUITabStripHost[];
 extern const char kChromeUITabStripURL[];
 #endif
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
 extern const char kChromeUICommanderHost[];
 extern const char kChromeUICommanderURL[];
 extern const char kChromeUIDownloadShelfHost[];
@@ -465,7 +475,7 @@ extern const char kPasswordManagerSubPage[];
 extern const char kPaymentsSubPage[];
 extern const char kPeopleSubPage[];
 extern const char kPrintingSettingsSubPage[];
-extern const char kPrivacyReviewSubPage[];
+extern const char kPrivacyGuideSubPage[];
 extern const char kPrivacySubPage[];
 extern const char kResetSubPage[];
 extern const char kResetProfileSettingsSubPage[];
@@ -476,16 +486,17 @@ extern const char kSearchEnginesSubPage[];
 extern const char kSignOutSubPage[];
 extern const char kSyncSetupSubPage[];
 extern const char kTriggeredResetProfileSettingsSubPage[];
+extern const char kPrivacySandboxSubPage[];
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
 extern const char kPrivacySandboxSubPagePath[];
 #endif
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 extern const char kCleanupSubPage[];
 #endif
 
-#if !defined(OS_ANDROID) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#if !BUILDFLAG(IS_ANDROID) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
 extern const char kChromeUICastFeedbackHost[];
 #endif
 

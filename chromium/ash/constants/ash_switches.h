@@ -12,8 +12,7 @@ namespace base {
 class TimeDelta;
 }
 
-namespace chromeos {
-namespace switches {
+namespace ash::switches {
 
 // Prefer adding Features over switches. Features go in ash_features.h.
 //
@@ -54,6 +53,7 @@ COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kArcPlayStoreAutoUpdate[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kArcScale[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kArcStartMode[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kArcTosHostForTests[];
+COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kArcVmMountDebugFs[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kArcVmUreadaheadMode[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kArcVmUseHugePages[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kAshClearFastInkBuffer[];
@@ -118,6 +118,8 @@ COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kDisableLoginLacrosOpening[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kDisableMachineCertRequest[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kDisableOOBEChromeVoxHintTimerForTesting[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kDisableOOBENetworkScreenSkippingForTesting[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kDisablePerUserTimezone[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kDisableRollbackOption[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
@@ -126,6 +128,8 @@ COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kDisableVolumeAdjustSound[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kEnableArc[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kEnableArcVm[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kEnableArcVmRtVcpu[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kEnableCaptureModeFakeCameras[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kEnableCastReceiver[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kEnableConsumerKiosk[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kEnableDimShelf[];
@@ -159,6 +163,8 @@ extern const char kEnterpriseEnrollmentInitialModulus[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kEnterpriseEnrollmentModulusLimit[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kDisallowPolicyBlockDevMode[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kExtensionInstallEventChromeLogForTests[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kExternalMetricsCollectionInterval[];
@@ -174,7 +180,7 @@ COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kFirstExecAfterBoot[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kForceDevToolsAvailable[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kForceFirstRunUI[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
-extern const char kForceHWIDCheckFailureForTest[];
+extern const char kForceHWIDCheckResultForTest[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kForceHappinessTrackingSystem[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kForceLaunchBrowser[];
@@ -187,6 +193,7 @@ COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kGuestSession[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kGuestWallpaperLarge[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kGuestWallpaperSmall[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kHasChromeOSKeyboard[];
+COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kHasHps[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kHasInternalStylus[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kHasNumberPad[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kHomedir[];
@@ -203,6 +210,7 @@ COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kLacrosChromeAdditionalArgs[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kLacrosChromeAdditionalEnv[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kLacrosChromePath[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kLacrosMojoSocketForTesting[];
+COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kLaunchRma[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kLoginManager[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kLoginProfile[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kLoginUser[];
@@ -232,6 +240,7 @@ COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kPublicAccountsSamlAclUrl[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kRegulatoryLabelDir[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kRevenBranding[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kRlzPingDelay[];
+COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kRmaNotAllowed[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kSafeMode[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kSamlLockScreenReauthenticationEnabledOverrideForTesting[];
@@ -247,6 +256,7 @@ COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kSupportsClamshellAutoRotation[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kSuppressMessageCenterPopups[];
+COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kSystemExtensionsDebug[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kTelemetryExtensionDirectory[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kTestEncryptionMigrationUI[];
@@ -273,6 +283,10 @@ COMPONENT_EXPORT(ASH_CONSTANTS) bool IsAuthSessionCryptohomeEnabled();
 
 // Returns true if this is a Cellular First device.
 COMPONENT_EXPORT(ASH_CONSTANTS) bool IsCellularFirstDevice();
+
+// Returns true if testing the selfie camera feature of Capture Mode is enabled
+// using fake camera devices.
+COMPONENT_EXPORT(ASH_CONSTANTS) bool AreCaptureModeFakeCamerasEnabled();
 
 // Returns true if this is reven board.
 COMPONENT_EXPORT(ASH_CONSTANTS) bool IsRevenBranding();
@@ -327,6 +341,11 @@ bool IsAueReachedForUpdateRequiredForTest();
 COMPONENT_EXPORT(ASH_CONSTANTS)
 bool IsOOBEChromeVoxHintTimerDisabledForTesting();
 
+// Returns true if the OOBE Network screen skipping check based on ethernet
+// connection is disabled for testing.
+COMPONENT_EXPORT(ASH_CONSTANTS)
+bool IsOOBENetworkScreenSkippingDisabledForTesting();
+
 // Returns true if the OOBE ChromeVox hint is enabled for dev mode.
 COMPONENT_EXPORT(ASH_CONSTANTS)
 bool IsOOBEChromeVoxHintEnabledForDevMode();
@@ -344,15 +363,30 @@ COMPONENT_EXPORT(ASH_CONSTANTS) bool ContextualNudgesResetShownCount();
 COMPONENT_EXPORT(ASH_CONSTANTS) bool IsUsingShelfAutoDim();
 COMPONENT_EXPORT(ASH_CONSTANTS) bool ShouldClearFastInkBuffer();
 
-}  // namespace switches
-}  // namespace chromeos
+// Returns whether the device has hps hardware.
+COMPONENT_EXPORT(ASH_CONSTANTS) bool HasHps();
+
+}  // namespace ash::switches
 
 // TODO(https://crbug.com/1164001): remove after //chrome/browser/chromeos
 // source migration is finished.
-namespace ash {
-namespace switches {
-using namespace ::chromeos::switches;
-}
-}  // namespace ash
+namespace chromeos::switches {
+using ::ash::switches::IsOsInstallAllowed;
+using ::ash::switches::IsRevenBranding;
+using ::ash::switches::kAppOemManifestFile;
+using ::ash::switches::kArcTosHostForTests;
+using ::ash::switches::kDisableGaiaServices;
+using ::ash::switches::kEnableOobeTestAPI;
+using ::ash::switches::kEnableTouchCalibrationSetting;
+using ::ash::switches::kForceSystemCompositorMode;
+using ::ash::switches::kHasChromeOSKeyboard;
+using ::ash::switches::kLoginManager;
+using ::ash::switches::kOobeEulaUrlForTests;
+using ::ash::switches::kOobeScreenshotDirectory;
+using ::ash::switches::kOobeSkipPostLogin;
+using ::ash::switches::kPublicAccountsSamlAclUrl;
+using ::ash::switches::kSamlPasswordChangeUrl;
+using ::ash::switches::kShowOobeDevOverlay;
+}  // namespace chromeos::switches
 
 #endif  // ASH_CONSTANTS_ASH_SWITCHES_H_

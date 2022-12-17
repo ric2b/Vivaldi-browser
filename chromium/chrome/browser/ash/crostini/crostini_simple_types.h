@@ -96,7 +96,9 @@ enum class CrostiniResult {
   SHARE_PATHS_FAILED = 63,
   UNREGISTERED_APPLICATION = 64,
   VSH_CONNECT_FAILED = 65,
-  kMaxValue = VSH_CONNECT_FAILED,
+  CONTAINER_STOP_FAILED = 66,
+  CONTAINER_STOP_CANCELLED = 67,
+  kMaxValue = CONTAINER_STOP_CANCELLED,
   // When adding a new value, check you've followed the steps in the comment at
   // the top of this enum.
 };
@@ -121,15 +123,6 @@ enum class UninstallPackageProgressStatus {
   SUCCEEDED,
   FAILED,
   UNINSTALLING,  // In progress
-};
-
-// TODO(juwa): delete this once the new version of tremplin has shipped.
-enum class ExportContainerProgressStatus {
-  // Deprecated. Has been replaced by STREAMING.
-  PACK,
-  // Deprecated. Has been replaced by STREAMING.
-  DOWNLOAD,
-  STREAMING,
 };
 
 enum class ImportContainerProgressStatus {

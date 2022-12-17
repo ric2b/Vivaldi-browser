@@ -18,15 +18,14 @@
 #include "third_party/blink/renderer/core/editing/visible_units.h"
 #include "third_party/blink/renderer/core/fragment_directive/fragment_directive_utils.h"
 #include "third_party/blink/renderer/core/fragment_directive/text_fragment_anchor.h"
+#include "third_party/blink/renderer/core/fragment_directive/text_fragment_selector_generator.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/loader/document_loader.h"
 
 namespace blink {
 
-TextFragmentHandler::TextFragmentHandler(LocalFrame* main_frame)
-    : text_fragment_selector_generator_(
-          MakeGarbageCollected<TextFragmentSelectorGenerator>(main_frame)) {}
+TextFragmentHandler::TextFragmentHandler(LocalFrame* frame) : frame_(frame) {}
 
 // TODO(http://crbug/1262142): lazily bind once and not re-bind each time.
 void TextFragmentHandler::BindTextFragmentReceiver(
@@ -34,11 +33,12 @@ void TextFragmentHandler::BindTextFragmentReceiver(
   selector_producer_.reset();
   selector_producer_.Bind(
       std::move(producer),
-      text_fragment_selector_generator_->GetFrame()->GetTaskRunner(
-          blink::TaskType::kInternalDefault));
+      GetFrame()->GetTaskRunner(blink::TaskType::kInternalDefault));
 }
 
 void TextFragmentHandler::Cancel() {
+  DCHECK(GetTextFragmentSelectorGenerator());
+
   GetTextFragmentSelectorGenerator()->Reset();
 }
 
@@ -47,17 +47,30 @@ void TextFragmentHandler::RequestSelector(RequestSelectorCallback callback) {
       GetFrame()->GetDocument()->Url()));
   DCHECK(!GetFrame()->Selection().SelectedText().IsEmpty());
 
+  response_callback_ = std::move(callback);
+  selector_ready_status_ =
+      preemptive_generation_result_.has_value()
+          ? shared_highlighting::LinkGenerationReadyStatus::kRequestedAfterReady
+          : shared_highlighting::LinkGenerationReadyStatus::
+                kRequestedBeforeReady;
+
+  if (!GetTextFragmentSelectorGenerator()) {
+    // TODO(crbug.com/1303881): This shouldn't happen, but sometimes browser
+    // side requests link to text when generation was never started.
+    // See crash in crbug.com/1301794.
+    error_ = shared_highlighting::LinkGenerationError::kNotGenerated;
+    InvokeReplyCallback(
+        TextFragmentSelector(TextFragmentSelector::SelectorType::kInvalid),
+        error_);
+    return;
+  }
+
   GetTextFragmentSelectorGenerator()->RecordSelectorStateUma();
 
-  selector_requested_before_ready_ = !preemptive_generation_result_.has_value();
-  response_callback_ = std::move(callback);
-
-  // If preemptive link generation is enabled, the generator would have
-  // already been invoked when the selection was updated in
-  // StartPreemptiveGenerationIfNeeded. If that generation finished simply
-  // respond with the result. Otherwise, the response callback is stored so
-  // that we reply on completion.
-  if (!selector_requested_before_ready_.value())
+  // If generation finished simply respond with the result. Otherwise, the
+  // response callback is stored so that we reply on completion.
+  if (selector_ready_status_.value() ==
+      shared_highlighting::LinkGenerationReadyStatus::kRequestedAfterReady)
     InvokeReplyCallback(preemptive_generation_result_.value(), error_);
 }
 
@@ -86,17 +99,15 @@ void TextFragmentHandler::RemoveFragments() {
   DCHECK(
       base::FeatureList::IsEnabled(shared_highlighting::kSharedHighlightingV2));
 
-  LocalFrame* frame = GetTextFragmentSelectorGenerator()->GetFrame();
-
   if (GetTextFragmentAnchor()) {
-    frame->View()->DismissFragmentAnchor();
-  } else if (frame->IsMainFrame()) {
+    GetFrame()->View()->DismissFragmentAnchor();
+  } else if (GetFrame()->IsMainFrame()) {
     // DismissFragmentAnchor normally runs the URL update steps to remove the
     // selectors from the URL. However, even if the main frame doesn't have a
     // text fragment anchor, the selectors still need to be removed from the
     // URL. This is because dismissing the text fragment anchors is a page-wide
     // operation, and the URL might have selectors for a subframe.
-    FragmentDirectiveUtils::RemoveSelectorsFromUrl(frame);
+    FragmentDirectiveUtils::RemoveSelectorsFromUrl(GetFrame());
   }
 }
 
@@ -175,7 +186,7 @@ void TextFragmentHandler::ExtractFirstFragmentRect(
 
 void TextFragmentHandler::DidFinishSelectorGeneration(
     const TextFragmentSelector& selector,
-    absl::optional<shared_highlighting::LinkGenerationError> error) {
+    shared_highlighting::LinkGenerationError error) {
   DCHECK(!preemptive_generation_result_.has_value());
 
   if (response_callback_) {
@@ -190,8 +201,14 @@ void TextFragmentHandler::DidFinishSelectorGeneration(
 }
 
 void TextFragmentHandler::StartGeneratingForCurrentSelection() {
-  if (GetFrame()->Selection().SelectedText().IsEmpty())
-    return;
+  preemptive_generation_result_.reset();
+  error_ = shared_highlighting::LinkGenerationError::kNone;
+  selector_ready_status_.reset();
+
+  // It is possible we have unsurved callback, but if we are starting a new
+  // generation, then we have a new selection, in which case it is safe to
+  // assume that the client is not waiting for the callback return.
+  response_callback_.Reset();
 
   VisibleSelectionInFlatTree selection =
       GetFrame()->Selection().ComputeVisibleSelectionInFlatTree();
@@ -199,74 +216,41 @@ void TextFragmentHandler::StartGeneratingForCurrentSelection() {
   RangeInFlatTree* current_selection_range =
       MakeGarbageCollected<RangeInFlatTree>(selection_range.StartPosition(),
                                             selection_range.EndPosition());
+  if (!GetTextFragmentSelectorGenerator()) {
+    text_fragment_selector_generator_ =
+        MakeGarbageCollected<TextFragmentSelectorGenerator>(GetFrame());
+  }
   GetTextFragmentSelectorGenerator()->Generate(
       *current_selection_range,
       WTF::Bind(&TextFragmentHandler::DidFinishSelectorGeneration,
                 WrapWeakPersistent(this)));
 }
 
-void TextFragmentHandler::RecordPreemptiveGenerationMetrics(
-    const TextFragmentSelector& selector,
-    absl::optional<shared_highlighting::LinkGenerationError> optional_error) {
-  DCHECK(selector_requested_before_ready_.has_value());
-
-  bool success =
-      selector.Type() != TextFragmentSelector::SelectorType::kInvalid;
-
-  std::string uma_prefix = "SharedHighlights.LinkGenerated";
-  if (selector_requested_before_ready_.value()) {
-    uma_prefix = base::StrCat({uma_prefix, ".RequestedBeforeReady"});
-  } else {
-    uma_prefix = base::StrCat({uma_prefix, ".RequestedAfterReady"});
-  }
-  base::UmaHistogramBoolean(uma_prefix, success);
-
-  if (!success) {
-    shared_highlighting::LinkGenerationError error =
-        optional_error.has_value()
-            ? optional_error.value()
-            : shared_highlighting::LinkGenerationError::kUnknown;
-    base::UmaHistogramEnumeration(
-        "SharedHighlights.LinkGenerated.Error.Requested", error);
-  }
-}
-
-void TextFragmentHandler::StartPreemptiveGenerationIfNeeded() {
-  preemptive_generation_result_.reset();
-  error_.reset();
-  selector_requested_before_ready_.reset();
-
-  // It is possible we have unsurved callback, but if we are starting a new
-  // generation, then we have a new selection, in which case it is safe to
-  // assume that the client is not waiting for the callback return.
-  response_callback_.Reset();
-
-  if (!shared_highlighting::ShouldOfferLinkToText(
-          GetFrame()->GetDocument()->Url())) {
-    return;
-  }
-
-  StartGeneratingForCurrentSelection();
-}
-
 void TextFragmentHandler::Trace(Visitor* visitor) const {
   visitor->Trace(text_fragment_selector_generator_);
   visitor->Trace(selector_producer_);
+  visitor->Trace(frame_);
 }
 
 void TextFragmentHandler::DidDetachDocumentOrFrame() {
   // Clear out any state in the generator and cancel pending tasks so they
   // don't run after frame detachment.
-  GetTextFragmentSelectorGenerator()->Reset();
+  if (GetTextFragmentSelectorGenerator())
+    GetTextFragmentSelectorGenerator()->Reset();
 }
 
 void TextFragmentHandler::InvokeReplyCallback(
     const TextFragmentSelector& selector,
-    absl::optional<shared_highlighting::LinkGenerationError> error) {
-  RecordPreemptiveGenerationMetrics(selector, error);
-
+    shared_highlighting::LinkGenerationError error) {
   DCHECK(response_callback_);
-  std::move(response_callback_).Run(selector.ToString());
+  DCHECK(selector_ready_status_.has_value());
+
+  std::move(response_callback_)
+      .Run(selector.ToString(), error, selector_ready_status_.value());
+
+  // After reply is sent it is safe to reset the generator.
+  if (GetTextFragmentSelectorGenerator())
+    GetTextFragmentSelectorGenerator()->Reset();
 }
 
 TextFragmentAnchor* TextFragmentHandler::GetTextFragmentAnchor() {
@@ -278,6 +262,41 @@ TextFragmentAnchor* TextFragmentHandler::GetTextFragmentAnchor() {
     return nullptr;
   }
   return static_cast<TextFragmentAnchor*>(fragmentAnchor);
+}
+
+// static
+bool TextFragmentHandler::ShouldPreemptivelyGenerateFor(LocalFrame* frame) {
+  if (frame->GetTextFragmentHandler())
+    return true;
+
+  // Always preemptively generate for main frame.
+  if (frame->IsMainFrame())
+    return true;
+
+  // Only generate for iframe urls if they are supported
+  return base::FeatureList::IsEnabled(
+             shared_highlighting::kSharedHighlightingAmp) &&
+         shared_highlighting::SupportsLinkGenerationInIframe(
+             frame->GetDocument()->Url());
+}
+
+// static
+void TextFragmentHandler::OpenedContextMenuOverSelection(LocalFrame* frame) {
+  if (!TextFragmentHandler::ShouldPreemptivelyGenerateFor(frame))
+    return;
+
+  if (!shared_highlighting::ShouldOfferLinkToText(
+          frame->GetDocument()->Url())) {
+    return;
+  }
+
+  if (frame->Selection().SelectedText().IsEmpty())
+    return;
+
+  if (!frame->GetTextFragmentHandler())
+    frame->CreateTextFragmentHandler();
+
+  frame->GetTextFragmentHandler()->StartGeneratingForCurrentSelection();
 }
 
 }  // namespace blink

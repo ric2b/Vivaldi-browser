@@ -4,11 +4,14 @@
 
 #include "chrome/browser/ash/login/screens/guest_tos_screen.h"
 
+#include "ash/constants/ash_switches.h"
+#include "base/command_line.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/ash/login/startup_utils.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/ui/webui/chromeos/login/guest_tos_screen_handler.h"
 #include "chrome/common/url_constants.h"
+#include "components/metrics/metrics_service.h"
 
 namespace ash {
 namespace {
@@ -17,11 +20,23 @@ constexpr const char kUserActionBackClicked[] = "back-button";
 constexpr const char kUserActionCancelClicked[] = "cancel";
 
 std::string GetGoogleEulaOnlineUrl() {
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kOobeEulaUrlForTests)) {
+    return base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+        switches::kOobeEulaUrlForTests);
+  }
+
   return base::StringPrintf(chrome::kGoogleEulaOnlineURLPath,
                             g_browser_process->GetApplicationLocale().c_str());
 }
 
 std::string GetCrosEulaOnlineUrl() {
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kOobeEulaUrlForTests)) {
+    return base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+        switches::kOobeEulaUrlForTests);
+  }
+
   return base::StringPrintf(chrome::kCrosEulaOnlineURLPath,
                             g_browser_process->GetApplicationLocale().c_str());
 }
@@ -79,7 +94,13 @@ void GuestTosScreen::OnUserAction(const std::string& action_id) {
 }
 
 void GuestTosScreen::OnAccept(bool enable_usage_stats) {
-  // TODO(crbug.com/1241468): Handle usage stats reporting for guest session.
+  // TODO(crbug/1298249): Add browser tests to ensure that the feature is
+  // working.
+  auto* metrics_service = g_browser_process->metrics_service();
+  DCHECK(metrics_service);
+
+  metrics_service->UpdateCurrentUserMetricsConsent(enable_usage_stats);
   exit_callback_.Run(Result::ACCEPT);
 }
+
 }  // namespace ash

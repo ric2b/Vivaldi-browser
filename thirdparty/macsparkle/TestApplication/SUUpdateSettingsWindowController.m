@@ -9,12 +9,7 @@
 #import "SUUpdateSettingsWindowController.h"
 #import <Sparkle/Sparkle.h>
 
-@interface SUUpdateSettingsWindowController ()
-
-@property (nonatomic) IBOutlet SUUpdater *updater;
-
-@end
-
+// This class binds to various updater properties in the nib
 @implementation SUUpdateSettingsWindowController
 
 @synthesize updater = _updater;
@@ -22,19 +17,6 @@
 - (NSString *)windowNibName
 {
     return NSStringFromClass([self class]);
-}
-
-- (IBAction)checkForUpdates:(id __unused)sender
-{
-    [self.updater checkForUpdates:nil];
-}
-
-- (BOOL)validateMenuItem:(NSMenuItem *)menuItem
-{
-    if (menuItem.action == @selector(checkForUpdates:)) {
-        return [self.updater validateMenuItem:menuItem];
-    }
-    return YES;
 }
 
 @end

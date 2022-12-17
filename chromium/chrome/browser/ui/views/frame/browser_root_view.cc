@@ -22,6 +22,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/frame/browser_frame.h"
+#include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/ui/views/tabs/tab_strip_controller.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
@@ -152,6 +153,13 @@ bool BrowserRootView::CanDrop(const ui::OSExchangeData& data) {
   if (!tabstrip()->GetVisible() && !toolbar()->GetVisible())
     return false;
 
+  // Return false and let TabStripRegionView forward drag events to TabStrip.
+  // This is necessary because we don't want to return true if
+  // tabstrip()->WantsToReceiveAllDragEvents() is true but the mouse is not over
+  // the tab strip region, and we don't know the current mouse location.
+  if (tabstrip()->WantsToReceiveAllDragEvents())
+    return false;
+
   // If there is a URL, we'll allow the drop.
   if (data.HasURL(ui::FilenameToURLPolicy::CONVERT_FILENAMES))
     return true;
@@ -168,10 +176,14 @@ void BrowserRootView::OnDragEntered(const ui::DropTargetEvent& event) {
 
     // Check if the file is supported.
     if (url.SchemeIsFile()) {
-      content::RenderFrameHost* rfh = browser_view_->browser()
-                                          ->tab_strip_model()
-                                          ->GetActiveWebContents()
-                                          ->GetMainFrame();
+      // Avoid crashing while the tab strip is being initialized or is empty.
+      content::WebContents* web_contents =
+          browser_view_->browser()->tab_strip_model()->GetActiveWebContents();
+      if (!web_contents) {
+        return;
+      }
+
+      content::RenderFrameHost* rfh = web_contents->GetMainFrame();
       base::ThreadPool::PostTaskAndReplyWithResult(
           FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
           base::BindOnce(&FindURLMimeType, url),

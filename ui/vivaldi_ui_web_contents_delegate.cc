@@ -6,7 +6,6 @@
 
 #include "ui/vivaldi_ui_web_contents_delegate.h"
 
-#include "app/vivaldi_constants.h"
 #include "chrome/browser/file_select_helper.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
@@ -23,8 +22,11 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "extensions/browser/extension_registry.h"
+#include "extensions/browser/extension_web_contents_observer.h"
 #include "extensions/common/extension_messages.h"
 #include "third_party/blink/public/common/input/web_gesture_event.h"
+
+#include "app/vivaldi_constants.h"
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_native_app_window_views.h"
 
@@ -160,11 +162,9 @@ bool VivaldiUIWebContentsDelegate::CheckMediaAccessPermission(
 // it. The implementation for webpages is in WebViewGuest.
 content::PictureInPictureResult
 VivaldiUIWebContentsDelegate::EnterPictureInPicture(
-    content::WebContents* web_contents,
-    const viz::SurfaceId& surface_id,
-    const gfx::Size& natural_size) {
-  return PictureInPictureWindowManager::GetInstance()->EnterPictureInPicture(
-      web_contents, surface_id, natural_size);
+    content::WebContents* web_contents) {
+  return PictureInPictureWindowManager::GetInstance()
+      ->EnterVideoPictureInPicture(web_contents);
 }
 
 void VivaldiUIWebContentsDelegate::ExitPictureInPicture() {
@@ -196,17 +196,15 @@ void VivaldiUIWebContentsDelegate::RenderFrameCreated(
   // Follow ChromeExtensionWebContentsObserver::InitializeRenderFrame() and
   // notify the renderer about the window id so
   // chrome.extension.getViews({windowId}) works in our UI.
-  render_frame_host->Send(new ExtensionMsg_UpdateBrowserWindowId(
-      render_frame_host->GetRoutingID(), window_->id()));
+  extensions::ExtensionWebContentsObserver::GetForWebContents(
+      window_->web_contents())
+      ->GetLocalFrame(render_frame_host)
+      ->UpdateBrowserWindowId(window_->id());
 
-  if (window_->requested_alpha_enabled()) {
-    VivaldiNativeAppWindowViews* window_views = window_->views();
-    if (window_views && window_views->CanHaveAlphaEnabled()) {
-      content::RenderWidgetHostView* host_view = render_frame_host->GetView();
-      DCHECK(host_view);
-      host_view->SetBackgroundColor(SK_ColorTRANSPARENT);
-    }
-  }
+  // Avoid white flash from the default background color.
+  content::RenderWidgetHostView* host_view = render_frame_host->GetView();
+  DCHECK(host_view);
+  host_view->SetBackgroundColor(SK_ColorTRANSPARENT);
 
   // An incognito profile is not initialized with the UI zoom value. Set it up
   // here by reading prefs from the regular profile. At this point we do not
@@ -215,41 +213,24 @@ void VivaldiUIWebContentsDelegate::RenderFrameCreated(
   if (window_->GetProfile()->IsOffTheRecord()) {
     PrefService* pref_service =
         window_->GetProfile()->GetOriginalProfile()->GetPrefs();
-    const base::DictionaryValue* partition_dict =
-        pref_service->GetDictionary(prefs::kPartitionPerHostZoomLevels);
-    bool match = false;
-    for (base::DictionaryValue::Iterator partition(*partition_dict);
-         !partition.IsAtEnd() && !match; partition.Advance()) {
-      const base::DictionaryValue* host_dict = nullptr;
-      partition_dict->GetDictionary(partition.key(), &host_dict);
-      if (host_dict) {
-        // Test each host until we match kVivaldiAppId
-        for (base::DictionaryValue::Iterator host(*host_dict); !host.IsAtEnd();
-             host.Advance()) {
-          if (host.key() == ::vivaldi::kVivaldiAppId) {
-            match = true;
-            // Each host is another dictionary with settings
-            const base::DictionaryValue* settings_dict = nullptr;
-            if (host.value().GetAsDictionary(&settings_dict)) {
-              for (base::DictionaryValue::Iterator setting(*settings_dict);
-                   !setting.IsAtEnd(); setting.Advance()) {
-                if (setting.key() == "zoom_level") {
-                  const absl::optional<double> zoom_level =
-                      setting.value().GetIfDouble();
-                  if (zoom_level.has_value()) {
-                    content::HostZoomMap* zoom_map =
-                        content::HostZoomMap::GetForWebContents(
-                            window_->web_contents());
-                    DCHECK(zoom_map);
-                    zoom_map->SetZoomLevelForHost(::vivaldi::kVivaldiAppId,
-                                                  zoom_level.value());
-                  }
-                  break;
-                }
-              }
-            }
-            break;
+    const base::Value::Dict& partition_dict =
+        pref_service->GetDictionary(prefs::kPartitionPerHostZoomLevels)
+            ->GetDict();
+    for (auto partition : partition_dict) {
+      if (const base::Value::Dict* host_dict = partition.second.GetIfDict()) {
+        // Each entry in host_dict is another dictionary with settings
+        if (auto* settings = host_dict->FindDict(::vivaldi::kVivaldiAppId)) {
+          const absl::optional<double> zoom_level =
+              settings->FindDouble("zoom_level");
+          if (zoom_level.has_value()) {
+            content::HostZoomMap* zoom_map =
+                content::HostZoomMap::GetForWebContents(
+                    window_->web_contents());
+            DCHECK(zoom_map);
+            zoom_map->SetZoomLevelForHost(::vivaldi::kVivaldiAppId,
+                                          zoom_level.value());
           }
+          break;
         }
       }
     }
@@ -286,10 +267,8 @@ bool VivaldiUIWebContentsDelegate::OnMessageReceived(
 
 void VivaldiUIWebContentsDelegate::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
-  if (!navigation_handle->HasCommitted()) {
-    LOG(ERROR)
-        << "VivaldiUIWebContentsDelegate::DidFinishNavigation: Failed to load "
-        << navigation_handle->GetURL().spec();
+  if (!navigation_handle->IsInPrimaryMainFrame() ||
+      !navigation_handle->HasCommitted()) {
     return;
   }
 
@@ -322,8 +301,12 @@ void VivaldiUIWebContentsDelegate::UpdateDraggableRegions(
 void VivaldiUIWebContentsDelegate::DidFinishLoad(
     content::RenderFrameHost* render_frame_host,
     const GURL& validated_url) {
+  // Don't do anything for subframes.
+  if (!render_frame_host->IsInPrimaryMainFrame())
+    return;
+
   window_->UpdateTitleBar();
-  window_->ForceShow();
+  window_->Show();
 }
 
 void VivaldiUIWebContentsDelegate::DidStartNavigation(
@@ -334,4 +317,24 @@ void VivaldiUIWebContentsDelegate::DidStartNavigation(
     return;
 
   window_->ContentsDidStartNavigation();
+}
+
+content::WebContents* VivaldiUIWebContentsDelegate::OpenURLFromTab(
+    content::WebContents* source,
+    const content::OpenURLParams& params) {
+  // NEW_BACKGROUND_TAB is used for dragging files into our window, handle that
+  // and ignore everything else.
+  if (params.disposition == WindowOpenDisposition::NEW_BACKGROUND_TAB) {
+    return window_->browser()->OpenURL(params);
+  }
+  // Form submissions in our UI ends up as CURRENT_TAB, so ignore those
+  // and others.
+  return nullptr;
+}
+
+std::unique_ptr<content::EyeDropper>
+VivaldiUIWebContentsDelegate::OpenEyeDropper(
+    content::RenderFrameHost* frame,
+    content::EyeDropperListener* listener) {
+  return window_->OpenEyeDropper(frame, listener);
 }

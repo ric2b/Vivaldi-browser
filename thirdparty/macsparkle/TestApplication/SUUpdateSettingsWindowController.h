@@ -8,6 +8,10 @@
 
 #import <Cocoa/Cocoa.h>
 
+@class SPUUpdater;
+
 @interface SUUpdateSettingsWindowController : NSWindowController
+
+@property (nonatomic) SPUUpdater *updater;
 
 @end

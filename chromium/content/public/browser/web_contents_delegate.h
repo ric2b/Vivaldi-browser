@@ -22,7 +22,6 @@
 #include "content/public/browser/serial_chooser.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/window_container_type.mojom-forward.h"
-#include "third_party/blink/public/common/loader/previews_state.h"
 #include "third_party/blink/public/common/mediastream/media_stream_request.h"
 #include "third_party/blink/public/common/page/drag_operation.h"
 #include "third_party/blink/public/mojom/choosers/color_chooser.mojom-forward.h"
@@ -34,7 +33,7 @@
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/native_widget_types.h"
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 #include "base/android/scoped_java_ref.h"
 #endif
 
@@ -84,10 +83,6 @@ class Size;
 namespace url {
 class Origin;
 }
-
-namespace viz {
-class SurfaceId;
-}  // namespace viz
 
 namespace blink {
 class WebGestureEvent;
@@ -363,7 +358,7 @@ class CONTENT_EXPORT WebContentsDelegate {
       const GURL& opener_url,
       const std::string& frame_name,
       const GURL& target_url,
-      const StoragePartitionId& partition_id,
+      const StoragePartitionConfig& partition_config,
       SessionStorageNamespace* session_storage_namespace);
 
   // Notifies the delegate about the creation of a new WebContents. This
@@ -424,7 +419,7 @@ class CONTENT_EXPORT WebContentsDelegate {
   virtual JavaScriptDialogManager* GetJavaScriptDialogManager(
       WebContents* source);
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_MAC)
   // Called when color chooser should open. Returns the opened color chooser.
   // Returns nullptr if we failed to open the color chooser. The color chooser
   // is only supported/required for Android.
@@ -432,7 +427,7 @@ class CONTENT_EXPORT WebContentsDelegate {
       WebContents* web_contents,
       SkColor color,
       const std::vector<blink::mojom::ColorSuggestionPtr>& suggestions);
-#endif
+#endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_MAC)
 
   // Called when an eye dropper should open. Returns the eye dropper window.
   // The eye dropper is responsible for calling listener->ColorSelected() or
@@ -525,7 +520,7 @@ class CONTENT_EXPORT WebContentsDelegate {
                          int active_match_ordinal,
                          bool final_update) {}
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   // Provides the rects of the current find-in-page matches.
   // Sent as a reply to RequestFindMatchRects.
   virtual void FindMatchRectsReply(WebContents* web_contents,
@@ -591,7 +586,7 @@ class CONTENT_EXPORT WebContentsDelegate {
   // url.
   virtual std::string GetTitleForMediaControls(WebContents* web_contents);
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   // Returns true if the given media should be blocked to load.
   virtual bool ShouldBlockMediaRequest(const GURL& url);
 
@@ -669,11 +664,6 @@ class CONTENT_EXPORT WebContentsDelegate {
   // top controls as a result of page gesture scrolling while in tablet mode.
   virtual void SetTopControlsGestureScrollInProgress(bool in_progress) {}
 
-  // Give WebContentsDelegates the opportunity to adjust the previews state.
-  virtual void AdjustPreviewsStateForNavigation(
-      WebContents* web_contents,
-      blink::PreviewsState* previews_state) {}
-
   // Requests to print an out-of-process subframe for the specified WebContents.
   // |rect| is the rectangular area where its content resides in its parent
   // frame. |document_cookie| is a unique id for a printed document associated
@@ -700,21 +690,11 @@ class CONTENT_EXPORT WebContentsDelegate {
   // entering Picture-in-Picture.
   // Returns the result of the enter request.
   virtual PictureInPictureResult EnterPictureInPicture(
-      WebContents* web_contents,
-      const viz::SurfaceId&,
-      const gfx::Size& natural_size);
+      WebContents* web_contents);
 
   // Updates the Picture-in-Picture controller with a signal that
   // Picture-in-Picture mode has ended.
   virtual void ExitPictureInPicture() {}
-
-#if defined(OS_ANDROID)
-  // Updates information to determine whether a user gesture should carryover to
-  // future navigations. This is needed so navigations within a certain
-  // timeframe of a request initiated by a gesture will be treated as if they
-  // were initiated by a gesture too, otherwise the navigation may be blocked.
-  virtual void UpdateUserGestureCarryoverInfo(WebContents* web_contents) {}
-#endif
 
   // Returns true if lazy loading of images and frames should be enabled.
   virtual bool ShouldAllowLazyLoad();
@@ -723,8 +703,9 @@ class CONTENT_EXPORT WebContentsDelegate {
   // indication that the cache will be used.
   virtual bool IsBackForwardCacheSupported();
 
-  // Returns true is prerender2 is supported.
-  virtual bool IsPrerender2Supported();
+  // Returns true if Prerender2 (see content/browser/prerender/README.md for
+  // details) is supported.
+  virtual bool IsPrerender2Supported(WebContents& web_contents);
 
   // Requests the delegate to replace |predecessor_contents| with
   // |portal_contents| in the container that holds |predecessor_contents|. If
@@ -775,6 +756,11 @@ class CONTENT_EXPORT WebContentsDelegate {
 
   // Returns a weak ptr to the web contents delegate.
   virtual base::WeakPtr<WebContentsDelegate> GetDelegateWeakPtr();
+
+  // Whether the WebContents is privileged.
+  // It's used to prevent drag and drop between privileged and non-privileged
+  // WebContents.
+  virtual bool IsPrivileged();
 
   // Vivaldi
   void SetDownloadInformation(const content::DownloadInformation& info);

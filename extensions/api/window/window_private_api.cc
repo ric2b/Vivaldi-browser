@@ -346,6 +346,7 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
   create_params.ext_data = ext_data;
   std::unique_ptr<Browser> browser(Browser::Create(create_params));
   DCHECK(browser->window() == window);
+  window->SetWindowURL(window_params.resource_relative_url);
   window->CreateWebContents(std::move(browser), window_params);
 
   if (!tab_url.empty()) {
@@ -416,14 +417,24 @@ ExtensionFunction::ResponseAction WindowPrivateSetStateFunction::Run() {
       }
       break;
     case ui::SHOW_STATE_MAXIMIZED:
+      was_fullscreen = browser->window()->IsFullscreen();
+#if defined(OS_MAC)
       // NOTE(bjorgvin@vivaldi.com): VB-82933 SetFullscreenMode has to be after
       // Maximize on macOS.
-      was_fullscreen = browser->window()->IsFullscreen();
       browser->extension_window_controller()->window()->Maximize();
       if (was_fullscreen) {
         browser->extension_window_controller()->SetFullscreenMode(
             false, extension()->url());
       }
+#else
+      // NOTE(bjorgvin@vivaldi.com): VB-83626 SetFullscreenMode has to be before
+      // Maximize on Linux to prevent triggering of extra onStateChanged events.
+      if (was_fullscreen) {
+        browser->extension_window_controller()->SetFullscreenMode(
+            false, extension()->url());
+      }
+      browser->extension_window_controller()->window()->Maximize();
+#endif
       break;
     case ui::SHOW_STATE_FULLSCREEN:
       browser->extension_window_controller()->SetFullscreenMode(

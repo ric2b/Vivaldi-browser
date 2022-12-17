@@ -11,6 +11,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_list.h"
+#include "base/containers/adapters.h"
 #include "base/containers/flat_set.h"
 #include "base/files/file.h"
 #include "base/files/file_enumerator.h"
@@ -32,6 +33,7 @@
 #include "components/reporting/storage/storage_configuration.h"
 #include "components/reporting/storage/storage_queue.h"
 #include "components/reporting/storage/storage_uploader_interface.h"
+#include "components/reporting/util/file.h"
 #include "components/reporting/util/status.h"
 #include "components/reporting/util/status_macros.h"
 #include "components/reporting/util/statusor.h"
@@ -344,7 +346,7 @@ class Storage::KeyInStorage {
       if (full_name == signed_encryption_key_result.value().first) {
         continue;  // This file is used.
       }
-      base::DeleteFile(full_name);  // Ignore errors, if any.
+      DeleteFileWarnIfFailed(full_name);  // Ignore errors, if any.
     }
 
     // Return the key.
@@ -412,40 +414,32 @@ class Storage::KeyInStorage {
   // Enumerates key files and deletes those with index lower than
   // |new_file_index|. Called during key upload.
   void RemoveKeyFilesWithLowerIndexes(uint64_t new_file_index) {
-    base::flat_set<base::FilePath> key_files_to_remove;
     base::FileEnumerator dir_enum(
         directory_,
         /*recursive=*/false, base::FileEnumerator::FILES,
         base::StrCat({kEncryptionKeyFilePrefix, FILE_PATH_LITERAL("*")}));
-    base::FilePath full_name;
-    while (full_name = dir_enum.Next(), !full_name.empty()) {
-      const auto result = key_files_to_remove.emplace(full_name);
-      if (!result.second) {
-        // Duplicate file name. Should not happen.
-        continue;
-      }
-      const auto extension = full_name.Extension();
-      if (extension.empty()) {
-        // Should not happen, will remove this file.
-        continue;
-      }
-      uint64_t file_index = 0;
-      if (!base::StringToUint64(extension.substr(1), &file_index)) {
-        // Bad extension - not a number. Should not happen, will remove this
-        // file.
-        continue;
-      }
-      if (file_index < new_file_index) {
-        // Lower index file, will remove it.
-        continue;
-      }
-      // Keep this file - drop it from erase list.
-      key_files_to_remove.erase(result.first);
-    }
-    // Delete all files assigned for deletion.
-    for (const auto& file_to_remove : key_files_to_remove) {
-      base::DeleteFile(file_to_remove);  // Ignore errors, if any.
-    }
+    DeleteFilesWarnIfFailed(
+        dir_enum,
+        base::BindRepeating(
+            [](uint64_t new_file_index, const base::FilePath& full_name) {
+              const auto extension = full_name.Extension();
+              if (extension.empty()) {
+                // Should not happen, will remove this file.
+                return true;
+              }
+              uint64_t file_index = 0;
+              if (!base::StringToUint64(extension.substr(1), &file_index)) {
+                // Bad extension - not a number. Should not happen, will remove
+                // this file.
+                return true;
+              }
+              if (file_index < new_file_index) {
+                // Lower index file, will remove it.
+                return true;
+              }
+              return false;
+            },
+            new_file_index));
   }
 
   // Enumerates possible key files, collects the ones that have valid name,
@@ -494,9 +488,8 @@ class Storage::KeyInStorage {
   LocateValidKeyAndParse(
       const base::flat_map<uint64_t, base::FilePath>& found_key_files) {
     // Try to unserialize the key from each found file (latest first).
-    for (auto key_file_it = found_key_files.rbegin();
-         key_file_it != found_key_files.rend(); ++key_file_it) {
-      base::File key_file(key_file_it->second,
+    for (const auto& [index, file_path] : base::Reversed(found_key_files)) {
+      base::File key_file(file_path,
                           base::File::FLAG_OPEN | base::File::FLAG_READ);
       if (!key_file.IsValid()) {
         continue;  // Could not open.
@@ -511,7 +504,7 @@ class Storage::KeyInStorage {
         if (read_result < 0) {
           LOG(WARNING) << "File read error="
                        << key_file.ErrorToString(key_file.GetLastFileError())
-                       << " " << key_file_it->second.MaybeAsASCII();
+                       << " " << file_path.MaybeAsASCII();
           continue;  // File read error.
         }
         if (read_result == 0 || read_result >= kEncryptionKeyMaxFileSize) {
@@ -521,7 +514,7 @@ class Storage::KeyInStorage {
             key_file_buffer.get(), read_result);
         if (!signed_encryption_key.ParseFromZeroCopyStream(&key_stream)) {
           LOG(WARNING) << "Failed to parse key file, full_name='"
-                       << key_file_it->second.MaybeAsASCII() << "'";
+                       << file_path.MaybeAsASCII() << "'";
           continue;
         }
       }
@@ -532,12 +525,12 @@ class Storage::KeyInStorage {
       if (!signature_verification_status.ok()) {
         LOG(WARNING) << "Loaded key failed verification, status="
                      << signature_verification_status << ", full_name='"
-                     << key_file_it->second.MaybeAsASCII() << "'";
+                     << file_path.MaybeAsASCII() << "'";
         continue;
       }
 
       // Validated successfully. Return file name and signed key proto.
-      return std::make_pair(key_file_it->second, signed_encryption_key);
+      return std::make_pair(file_path, signed_encryption_key);
     }
 
     // Not found, return error.

@@ -79,6 +79,14 @@ class WPTAndroidAdapter(wpt_common.BaseWptScriptAdapter):
     self.output_directory = os.path.join(SRC_DIR, 'out', self.options.target)
     self.mojo_js_directory = os.path.join(self.output_directory, 'gen')
 
+  def _wpt_report(self):
+    env = os.environ.copy()
+    if 'GTEST_SHARD_INDEX' in env:
+      shard_index = int(env['GTEST_SHARD_INDEX'])
+      return 'wpt_reports_%s_%02d.json' % (self.options.product, shard_index)
+    else:
+      return 'wpt_reports_%s.json' % self.options.product
+
   @property
   def rest_args(self):
     rest_args = super(WPTAndroidAdapter, self).rest_args
@@ -99,8 +107,7 @@ class WPTAndroidAdapter(wpt_common.BaseWptScriptAdapter):
     rest_args.extend(['--venv=' + SRC_DIR, '--skip-venv-setup'])
 
     rest_args.extend(['run',
-      '--tests=' + wpt_common.EXTERNAL_WPT_TESTS_DIR,
-      '--test-type=' + self.options.test_type,
+      '--tests=' + wpt_common.TESTS_ROOT_DIR,
       '--webdriver-binary',
       self.options.webdriver_binary,
       '--symbols-path',
@@ -111,6 +118,9 @@ class WPTAndroidAdapter(wpt_common.BaseWptScriptAdapter):
       '--no-pause-after-test',
       '--no-capture-stdio',
       '--no-manifest-download',
+      # Exclude webdriver tests for now.
+      "--exclude=webdriver",
+      "--exclude=infrastructure/webdriver",
       '--binary-arg=--enable-blink-features=MojoJS,MojoJSTest',
       '--binary-arg=--enable-blink-test-features',
       '--binary-arg=--disable-field-trial-config',
@@ -141,7 +151,7 @@ class WPTAndroidAdapter(wpt_common.BaseWptScriptAdapter):
     if self.options.log_wptreport:
       wpt_output = self.options.isolated_script_test_output
       self.wptreport = os.path.join(os.path.dirname(wpt_output),
-                                       'reports.json')
+                                    self._wpt_report())
       rest_args.extend(['--log-wptreport',
                         self.wptreport])
 
@@ -226,9 +236,6 @@ class WPTAndroidAdapter(wpt_common.BaseWptScriptAdapter):
     parser.add_argument('--ignore-browser-specific-expectations',
                         action='store_true', default=False,
                         help='Ignore browser specific expectation files.')
-    parser.add_argument('--test-type', default='testharness',
-                        help='Specify to experiment with other test types.'
-                        ' Currently only the default is expected to work.')
     parser.add_argument('--verbose', '-v', action='count', default=0,
                         help='Verbosity level.')
     parser.add_argument('--repeat',
@@ -311,6 +318,7 @@ class WPTWeblayerAdapter(WPTAndroidAdapter):
   @property
   def rest_args(self):
     args = super(WPTWeblayerAdapter, self).rest_args
+    args.append('--test-type=testharness')
     args.append(ANDROID_WEBLAYER)
     return args
 
@@ -429,7 +437,6 @@ def get_devices(args):
       for _ in range(max(args.processes, 1)):
         instance = avd_config.CreateInstance()
         instance.Start(writable_system=True, window=args.emulator_window)
-        device_utils.DeviceUtils(instance.serial).WaitUntilFullyBooted()
         instances.append(instance)
 
     #TODO(weizhong): when choose device, make sure abi matches with target

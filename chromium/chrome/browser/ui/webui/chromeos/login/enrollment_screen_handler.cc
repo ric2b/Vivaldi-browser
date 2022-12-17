@@ -32,6 +32,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/chromeos/login/cookie_waiter.h"
 #include "chrome/browser/ui/webui/chromeos/login/error_screen_handler.h"
+#include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
@@ -291,11 +292,6 @@ void EnrollmentScreenHandler::ShowUserError(UserErrorType error_type,
   }
 }
 
-void EnrollmentScreenHandler::ShowEnrollmentCloudReadyNotAllowedError() {
-  ShowScreen(EnrollmentScreenView::kScreenId);
-  CallJS("login.OAuthEnrollmentScreen.showOSNotInstalledError");
-}
-
 void EnrollmentScreenHandler::ShowActiveDirectoryScreen(
     const std::string& domain_join_config,
     const std::string& machine_name,
@@ -461,10 +457,6 @@ void EnrollmentScreenHandler::Shutdown() {
   shutdown_ = true;
 }
 
-void EnrollmentScreenHandler::SetIsBrandedBuild(bool is_branded) {
-  CallJS("login.OAuthEnrollmentScreen.setIsBrandedBuild", is_branded);
-}
-
 void EnrollmentScreenHandler::ShowEnrollmentStatus(
     policy::EnrollmentStatus status) {
   switch (status.status()) {
@@ -620,6 +612,9 @@ void EnrollmentScreenHandler::ShowEnrollmentStatus(
       // only within MODE_OFFLINE_DEMO flow, which shouldn't happen here.
       NOTREACHED();
       return;
+    case policy::EnrollmentStatus::MAY_NOT_BLOCK_DEV_MODE:
+      ShowError(IDS_ENTERPRISE_ENROLLMENT_ERROR_MAY_NOT_BLOCK_DEV_MODE, false);
+      return;
   }
   NOTREACHED();
 }
@@ -654,9 +649,9 @@ void EnrollmentScreenHandler::DeclareLocalizedValues(
                 ui::GetChromeOSDeviceName());
   builder->Add("oauthEnrollSuccessTitle",
                IDS_ENTERPRISE_ENROLLMENT_SUCCESS_TITLE);
+  builder->Add("oauthEnrollSuccessEnterpriseIconExplanation",
+               IDS_ENTERPRISE_ENROLLMENT_SUCCESS_ENTERPRISE_ICON_EXPLANATION);
   builder->Add("oauthEnrollErrorTitle", IDS_ENTERPRISE_ENROLLMENT_ERROR_TITLE);
-  builder->Add("oauthOSNotInstalledError",
-               IDS_ENTERPRISE_ENROLLMENT_STATUS_CLOUD_READY_NOT_ALLOWED);
   builder->Add("oauthEnrollDeviceInformation",
                IDS_ENTERPRISE_ENROLLMENT_DEVICE_INFORMATION);
   builder->Add("oauthEnrollExplainAttributeLink",
@@ -1031,6 +1026,15 @@ void EnrollmentScreenHandler::ShowErrorForDevice(int message_id, bool retry) {
       retry);
 }
 
+void EnrollmentScreenHandler::ShowEnrollmentDuringTrialNotAllowedError() {
+  ShowScreen(EnrollmentScreenView::kScreenId);
+  ShowErrorMessage(
+      l10n_util::GetStringFUTF8(
+          IDS_ENTERPRISE_ENROLLMENT_STATUS_CLOUD_READY_NOT_ALLOWED,
+          l10n_util::GetStringUTF16(IDS_INSTALLED_PRODUCT_OS_NAME)),
+      /*retry=*/false);
+}
+
 void EnrollmentScreenHandler::ShowErrorMessage(const std::string& message,
                                                bool retry) {
   CallJS("login.OAuthEnrollmentScreen.showError", message, retry);
@@ -1057,21 +1061,22 @@ void EnrollmentScreenHandler::DoShowWithPartition(
 
   base::DictionaryValue screen_data;
 
-  screen_data.SetString("webviewPartitionName", partition_name);
+  screen_data.SetStringKey("webviewPartitionName", partition_name);
   signin_partition_name_ = partition_name;
 
-  screen_data.SetString("gaiaUrl", GaiaUrls::GetInstance()->gaia_url().spec());
-  screen_data.SetString("clientId",
-                        GaiaUrls::GetInstance()->oauth2_chrome_client_id());
-  screen_data.SetString("enrollment_mode",
-                        EnrollmentModeToUIMode(config_.mode));
-  screen_data.SetBoolean("is_enrollment_enforced", config_.is_forced());
-  screen_data.SetBoolean("attestationBased", config_.is_mode_attestation());
-  screen_data.SetString("management_domain", config_.management_domain);
-  screen_data.SetString("flow", GetFlowString(flow_type_));
+  screen_data.SetStringKey("gaiaUrl",
+                           GaiaUrls::GetInstance()->gaia_url().spec());
+  screen_data.SetStringKey("clientId",
+                           GaiaUrls::GetInstance()->oauth2_chrome_client_id());
+  screen_data.SetStringKey("enrollment_mode",
+                           EnrollmentModeToUIMode(config_.mode));
+  screen_data.SetBoolKey("is_enrollment_enforced", config_.is_forced());
+  screen_data.SetBoolKey("attestationBased", config_.is_mode_attestation());
+  screen_data.SetStringKey("management_domain", config_.management_domain);
+  screen_data.SetStringKey("flow", GetFlowString(flow_type_));
   const std::string app_locale = g_browser_process->GetApplicationLocale();
   if (!app_locale.empty())
-    screen_data.SetString("hl", app_locale);
+    screen_data.SetStringKey("hl", app_locale);
 
   ShowScreenWithData(EnrollmentScreenView::kScreenId, &screen_data);
   if (first_show_) {

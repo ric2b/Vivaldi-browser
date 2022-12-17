@@ -64,10 +64,8 @@ bool IsValidBookmarkName(bool folder, base::StringPiece name) {
 
 bool ParsePartnerDatabaseDetailsList(
     bool is_folder,
-    base::Value* list_value,
+    base::Value::List& list,
     std::vector<PartnerDetails>& details_list) {
-  DCHECK(list_value->is_list());
-  auto list = list_value->GetList();
   for (size_t i = 0; i < list.size(); ++i) {
     auto error = [&](base::StringPiece message) -> bool {
       LOG(ERROR) << "Partner database JSON error: bad format of "
@@ -75,12 +73,12 @@ bool ParsePartnerDatabaseDetailsList(
                  << "] - " << message;
       return false;
     };
-    base::Value& dict = list[i];
-    if (!dict.is_dict())
+    base::Value::Dict* dict = list[i].GetIfDict();
+    if (!dict)
       return error("entry is not an object");
     PartnerDetails details;
     details.folder = is_folder;
-    for (auto property_key_value : dict.DictItems()) {
+    for (auto property_key_value : *dict) {
       const std::string& property = property_key_value.first;
       base::Value& v = property_key_value.second;
       bool folder_only = false;
@@ -241,28 +239,29 @@ std::unique_ptr<PartnerDatabase> PartnerDatabase::Read() {
   return db;
 }
 
-bool PartnerDatabase::ParseJson(base::Value root,
+bool PartnerDatabase::ParseJson(base::Value root_value,
                                 base::Value partners_locale_value) {
   auto error = [](base::StringPiece message) -> bool {
     LOG(ERROR) << "Partner database JSON error: " << message;
     return false;
   };
-  if (!root.is_dict())
+
+  base::Value::Dict* root_dict = root_value.GetIfDict();
+  if (!root_dict)
     return error("partner db json is not an object");
 
-  base::Value* folders_value = root.FindListKey(kFoldersKey);
-  if (!folders_value)
+  base::Value::List* folders = root_dict->FindList(kFoldersKey);
+  if (!folders)
     return error(std::string("missing ") + kFoldersKey + " key");
 
-  base::Value* bookmarks_value = root.FindListKey(kBookmarksKey);
-  if (!bookmarks_value)
+  base::Value::List* bookmarks = root_dict->FindList(kBookmarksKey);
+  if (!bookmarks)
     return error(std::string("missing ") + kBookmarksKey + " key");
 
-  details_list_.reserve(folders_value->GetList().size() +
-                        bookmarks_value->GetList().size());
-  if (!ParsePartnerDatabaseDetailsList(true, folders_value, details_list_))
+  details_list_.reserve(folders->size() + bookmarks->size());
+  if (!ParsePartnerDatabaseDetailsList(true, *folders, details_list_))
     return false;
-  if (!ParsePartnerDatabaseDetailsList(false, bookmarks_value, details_list_))
+  if (!ParsePartnerDatabaseDetailsList(false, *bookmarks, details_list_))
     return false;
 
   // Establish the index now that we no longer mutate details and check
@@ -318,8 +317,7 @@ bool PartnerDatabase::ParseJson(base::Value root,
       if (!v.is_list())
         return error(std::string(kPartnerLocaleMapFile) + "." + name + "." +
                      guid_key + " is not a list");
-      base::Value::ListView id_list = v.GetList();
-      for (base::Value& id_value : id_list) {
+      for (base::Value& id_value : v.GetList()) {
         if (!id_value.is_string())
           return error(std::string("Partner id in ") +
                        std::string(kPartnerLocaleMapFile) + "." + name + "." +

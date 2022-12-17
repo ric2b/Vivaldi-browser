@@ -3,6 +3,7 @@
 <translationbundle lang="pt-BR">
 <translation id="102360288709523007">Ajude a melhorar o Chromium. Envie estatísticas e relatórios de erros ao Google.</translation>
 <translation id="1047130070405668746">Selecione o Chromium</translation>
+<translation id="1091252999271033193">Isso significa que o Chromium vai solicitar sempre o site para dispositivo móvel.</translation>
 <translation id="1185134272377778587">Sobre o Chromium</translation>
 <translation id="1257458525759135959">Para salvar imagens, toque em "Configurações" e permita que o Chromium adicione às suas fotos</translation>
 <translation id="1289216811211435351">Mudar para o Chromium</translation>
@@ -26,6 +27,7 @@
 <translation id="2178608107313874732">O Chromium não pode usar a câmera agora</translation>
 <translation id="2195025571279539885">Quer que na próxima vez o Chromium ofereça a tradução de páginas em <ph name="LANGUAGE_NAME" /> deste site?</translation>
 <translation id="2218146227246548550">Sua organização exige que você faça login para usar o Chromium. <ph name="BEGIN_LINK" />Saiba mais<ph name="END_LINK" /></translation>
+<translation id="2236584955986023187">Isso significa que o Chromium vai solicitar sempre o site para computador.</translation>
 <translation id="2426113998523353159">Sua organização exige que você faça login para usar o Chromium.</translation>
 <translation id="2450140762465183767">Agora você pode usar o Chromium sempre que toca em links em mensagens, documentos e outros apps.</translation>
 <translation id="2478931088402984578">Selecione o <ph name="BEGIN_BOLD" />Chromium<ph name="END_BOLD" />.</translation>
@@ -43,7 +45,6 @@
 <translation id="3472200483164753384">Indisponível no Chromium Canary</translation>
 <translation id="3639997914391704523">O Chromium pode verificar suas senhas quando você faz login com sua Conta do Google.</translation>
 <translation id="3805899903892079518">O Chromium não têm acesso às suas fotos ou seus vídeos. Permita o acesso em "Configurações do iOS" &gt; "Privacidade" &gt; "Fotos".</translation>
-<translation id="3946918322491238254">Ainda é possível ver seus favoritos, seu histórico, suas senhas e outras configurações neste dispositivo. Se você fizer mudanças, elas não serão sincronizadas com sua conta.</translation>
 <translation id="4043291146360695975">As senhas são salvas no Gerenciador de senhas somente neste dispositivo.</translation>
 <translation id="4099085513035183040">Indisponível no Chromium Beta</translation>
 <translation id="4555020257205549924">Quando este recurso está ativado, o Chromium oferece a tradução de páginas escritas em outros idiomas usando o Google Tradutor. <ph name="BEGIN_LINK" />Saiba mais<ph name="END_LINK" /></translation>
@@ -90,6 +91,7 @@
 <translation id="7313655110045230863">Para definir o Chromium como o navegador padrão, abra as configurações. Toque em "App do navegador padrão" e selecione o Chromium.</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7357211569052832586">Os dados selecionados foram removidos do Chromium e dos dispositivos sincronizados. É possível que sua Conta do Google tenha outras formas de histórico de navegação, como pesquisas e atividades de outros serviços do Google em history.google.com.</translation>
+<translation id="7395825497086981028">A senha será salva no Gerenciador de senhas da conta <ph name="EMAIL" />.</translation>
 <translation id="7400689562045506105">Use o Chromium em qualquer lugar</translation>
 <translation id="766897673682622022">Sua senha foi exposta em uma violação de dados. Por recomendação do Chromium, mude a senha imediatamente.</translation>
 <translation id="7674213385180944843">Abra Ajustes &gt; Privacidade &gt; Câmera &gt; Chromium e ative a câmera.</translation>

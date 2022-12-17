@@ -27,13 +27,22 @@
     width: 100%;
   }
 
-  .row:not([empty]):hover,
-  .row:focus-visible:focus {
-    background-color: var(--cr-hover-background-color);
+  :host-context([hover-visible]) .row:not([empty]):hover {
+    background-color: var(--mwb-list-item-hover-background-color);
+  }
+
+  :host-context(.focus-outline-visible) .row:focus,
+  :host-context(.focus-outline-visible) .row:focus:hover {
+    background-color: var(--mwb-list-item-selected-background-color);
     outline: none;
   }
 
-  .row:not([empty]):active {
+  .row:focus-visible:focus {
+    outline: none;
+  }
+
+  :host-context([hover-visible]) .row:not([empty]):active,
+  :host-context(.focus-outline-visible) .row:not([empty]):active {
     background-color: var(--cr-active-background-color);
   }
 
@@ -141,7 +150,7 @@
 
   [drop-position='above']::after,
   [drop-position='below']::after {
-    background: var(--google-blue-refresh-500);
+    background: var(--google-blue-500);
     content: '';
     display: block;
     height: 2px;

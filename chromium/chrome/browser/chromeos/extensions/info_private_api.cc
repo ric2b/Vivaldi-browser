@@ -30,6 +30,7 @@
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
+#include "chromeos/components/chromebox_for_meetings/buildflags/buildflags.h"
 #include "chromeos/network/device_state.h"
 #include "chromeos/network/network_handler.h"
 #include "chromeos/network/network_state_handler.h"
@@ -55,6 +56,9 @@ const char kPropertyCustomizationID[] = "customizationId";
 
 // Key which corresponds to the oem_device_requisition setting.
 const char kPropertyDeviceRequisition[] = "deviceRequisition";
+
+// Key which corresponds to the isMeetDevice property in JS.
+const char kPropertyMeetDevice[] = "isMeetDevice";
 
 // Key which corresponds to the home provider property.
 const char kPropertyHomeProvider[] = "homeProvider";
@@ -229,7 +233,7 @@ const struct {
      ash::prefs::kAccessibilitySwitchAccessEnabled},
     {kPropertyCursorColorEnabled, ash::prefs::kAccessibilityCursorColorEnabled},
     {kPropertyDockedMagnifierEnabled, ash::prefs::kDockedMagnifierEnabled},
-    {kPropertySendFunctionsKeys, prefs::kLanguageSendFunctionKeys}};
+    {kPropertySendFunctionsKeys, ash::prefs::kSendFunctionKeys}};
 
 const char* GetBoolPrefNameForApiProperty(const char* api_name) {
   for (size_t i = 0;
@@ -267,7 +271,7 @@ ChromeosInfoPrivateGetFunction::~ChromeosInfoPrivateGetFunction() {
 
 ExtensionFunction::ResponseAction ChromeosInfoPrivateGetFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(!args().empty() && args()[0].is_list());
-  base::Value::ConstListView list = args()[0].GetList();
+  base::Value::ConstListView list = args()[0].GetListDeprecated();
 
   base::Value result(base::Value::Type::DICTIONARY);
   for (size_t i = 0; i < list.size(); ++i) {
@@ -307,6 +311,14 @@ std::unique_ptr<base::Value> ChromeosInfoPrivateGetFunction::GetValue(
     provider->GetMachineStatistic(chromeos::system::kOemDeviceRequisitionKey,
                                   &device_requisition);
     return std::make_unique<base::Value>(device_requisition);
+  }
+
+  if (property_name == kPropertyMeetDevice) {
+#if BUILDFLAG(PLATFORM_CFM)
+    return std::make_unique<base::Value>(true);
+#else
+    return std::make_unique<base::Value>(false);
+#endif
   }
 
   if (property_name == kPropertyHomeProvider) {
@@ -449,7 +461,7 @@ ExtensionFunction::ResponseAction ChromeosInfoPrivateSetFunction::Run() {
           ->SetString(prefs::kUserTimezone, param_value);
     } else {
       const user_manager::User* user =
-          chromeos::ProfileHelper::Get()->GetUserByProfile(
+          ash::ProfileHelper::Get()->GetUserByProfile(
               Profile::FromBrowserContext(browser_context()));
       if (user)
         ash::system::SetSystemTimezone(user, param_value);

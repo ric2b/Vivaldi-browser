@@ -65,7 +65,7 @@
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/mojom/devtools/devtools_agent.mojom.h"
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 #include "content/browser/devtools/devtools_frame_trace_recorder.h"
 #include "content/browser/renderer_host/compositor_impl_android.h"
 #include "content/public/browser/render_widget_host_view.h"
@@ -296,6 +296,14 @@ bool RenderFrameDevToolsAgentHost::AttachSession(DevToolsSession* session,
   if (!ShouldAllowSession(session))
     return false;
 
+  if (frame_tree_node_ && !frame_tree_node_->parent() &&
+      frame_tree_node_->is_on_initial_empty_document()) {
+    // Since the DevTools protocol can be used to modify the initial empty
+    // document of a tab, notify the browser that the pending URL shouldn't be
+    // displayed anymore to eliminate a URL spoof risk.
+    frame_host_->DidAccessInitialMainDocument();
+  }
+
   auto emulation_handler = std::make_unique<protocol::EmulationHandler>();
   protocol::EmulationHandler* emulation_handler_ptr = emulation_handler.get();
 
@@ -328,7 +336,8 @@ bool RenderFrameDevToolsAgentHost::AttachSession(DevToolsSession* session,
       GetIOContext(),
       base::BindRepeating(
           &RenderFrameDevToolsAgentHost::UpdateResourceLoaderFactories,
-          base::Unretained(this))));
+          base::Unretained(this)),
+      session->GetClient()->MayReadLocalFiles()));
   session->AddHandler(std::make_unique<protocol::FetchHandler>(
       GetIOContext(), base::BindRepeating(
                           [](RenderFrameDevToolsAgentHost* self,
@@ -349,19 +358,20 @@ bool RenderFrameDevToolsAgentHost::AttachSession(DevToolsSession* session,
       GetId(), auto_attacher_.get(), session->GetRootSession()));
   session->AddHandler(std::make_unique<protocol::PageHandler>(
       emulation_handler_ptr, browser_handler_ptr,
-      session->GetClient()->AllowUnsafeOperations()));
+      session->GetClient()->AllowUnsafeOperations(),
+      session->GetClient()->GetNavigationInitiatorOrigin()));
   session->AddHandler(std::make_unique<protocol::SecurityHandler>());
   if (!frame_tree_node_ || !frame_tree_node_->parent()) {
     session->AddHandler(
         std::make_unique<protocol::TracingHandler>(GetIOContext()));
   }
   session->AddHandler(std::make_unique<protocol::LogHandler>());
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   session->AddHandler(std::make_unique<protocol::WebAuthnHandler>());
-#endif  // !defined(OS_ANDROID)
+#endif  // !BUILDFLAG(IS_ANDROID)
 
   if (sessions().empty()) {
-#ifdef OS_ANDROID
+#if BUILDFLAG(IS_ANDROID)
     // With video capture API snapshots happen in TracingHandler. However, the
     // video capture API cannot be used with Android WebView so
     // DevToolsFrameTraceRecorder takes snapshots.
@@ -369,7 +379,7 @@ bool RenderFrameDevToolsAgentHost::AttachSession(DevToolsSession* session,
       frame_trace_recorder_ = std::make_unique<DevToolsFrameTraceRecorder>();
 #endif
     UpdateRawHeadersAccess(frame_host_);
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
     if (acquire_wake_lock)
       GetWakeLock()->RequestWakeLock();
 #endif
@@ -380,11 +390,11 @@ bool RenderFrameDevToolsAgentHost::AttachSession(DevToolsSession* session,
 void RenderFrameDevToolsAgentHost::DetachSession(DevToolsSession* session) {
   // Destroying session automatically detaches in renderer.
   if (sessions().empty()) {
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
     frame_trace_recorder_.reset();
 #endif
     UpdateRawHeadersAccess(frame_host_);
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
     GetWakeLock()->CancelWakeLock();
 #endif
   }
@@ -551,7 +561,7 @@ void RenderFrameDevToolsAgentHost::DestroyOnRenderFrameGone() {
   Release();
 }
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 device::mojom::WakeLock* RenderFrameDevToolsAgentHost::GetWakeLock() {
   // Here is a lazy binding, and will not reconnect after connection error.
   if (!wake_lock_) {
@@ -597,11 +607,11 @@ void RenderFrameDevToolsAgentHost::RenderProcessExited(
   switch (info.status) {
     case base::TERMINATION_STATUS_ABNORMAL_TERMINATION:
     case base::TERMINATION_STATUS_PROCESS_WAS_KILLED:
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS)
     case base::TERMINATION_STATUS_PROCESS_WAS_KILLED_BY_OOM:
 #endif
     case base::TERMINATION_STATUS_PROCESS_CRASHED:
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
     case base::TERMINATION_STATUS_OOM_PROTECTED:
 #endif
     case base::TERMINATION_STATUS_LAUNCH_FAILED:
@@ -619,7 +629,7 @@ void RenderFrameDevToolsAgentHost::RenderProcessExited(
 
 void RenderFrameDevToolsAgentHost::OnVisibilityChanged(
     content::Visibility visibility) {
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   if (!sessions().empty()) {
     if (visibility == content::Visibility::HIDDEN) {
       GetWakeLock()->CancelWakeLock();
@@ -823,7 +833,7 @@ base::TimeTicks RenderFrameDevToolsAgentHost::GetLastActivityTime() {
   return base::TimeTicks();
 }
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 void RenderFrameDevToolsAgentHost::SignalSynchronousSwapCompositorFrame(
     RenderFrameHost* frame_host,
     const cc::RenderFrameMetadata& frame_metadata) {
@@ -894,23 +904,7 @@ bool RenderFrameDevToolsAgentHost::ShouldAllowSession(
       !manager->delegate()->AllowInspectingRenderFrameHost(frame_host_)) {
     return false;
   }
-  // In case this is called during the navigation, besides checking the
-  // access to the entire current local tree (below), ensure we can access
-  // the target URL.
-  const GURL& target_url = frame_host_->GetSiteInstance()->GetSiteURL();
-  if (!session->GetClient()->MayAttachToURL(target_url,
-                                            frame_host_->web_ui())) {
-    return false;
-  }
-  auto* root = FrameTreeNode::From(frame_host_);
-  for (FrameTreeNode* node : root->frame_tree()->SubtreeNodes(root)) {
-    // Note this may be called before navigation is committed.
-    RenderFrameHostImpl* rfh = node->current_frame_host();
-    const GURL& url = rfh->GetSiteInstance()->GetSiteURL();
-    if (!session->GetClient()->MayAttachToURL(url, rfh->web_ui()))
-      return false;
-  }
-  return true;
+  return session->GetClient()->MayAttachToRenderFrameHost(frame_host_);
 }
 
 void RenderFrameDevToolsAgentHost::UpdateResourceLoaderFactories() {

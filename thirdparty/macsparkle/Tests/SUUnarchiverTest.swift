@@ -10,7 +10,7 @@ import XCTest
 
 class SUUnarchiverTest: XCTestCase
 {
-    func unarchiveTestAppWithExtension(_ archiveExtension: String, password: String? = nil, resourceName: String = "SparkleTestCodeSignApp", expectingSuccess: Bool = true) {
+    func unarchiveTestAppWithExtension(_ archiveExtension: String, password: String? = nil, resourceName: String = "SparkleTestCodeSignApp", extractedAppName: String = "SparkleTestCodeSignApp", expectingInstallationType installationType: String = SPUInstallationTypeApplication, expectingSuccess: Bool = true) {
         let appName = resourceName
         let archiveResourceURL = Bundle(for: type(of: self)).url(forResource: appName, withExtension: archiveExtension)!
 
@@ -25,22 +25,22 @@ class SUUnarchiverTest: XCTestCase
         let unarchivedFailureExpectation = super.expectation(description: "Unarchived Failure (format: \(archiveExtension))")
 
         let tempArchiveURL = tempDirectoryURL.appendingPathComponent(archiveResourceURL.lastPathComponent)
-        let extractedAppURL = tempDirectoryURL.appendingPathComponent(appName).appendingPathExtension("app")
+        let extractedAppURL = tempDirectoryURL.appendingPathComponent(extractedAppName).appendingPathExtension("app")
 
-        self.unarchiveTestAppWithExtension(archiveExtension, appName: appName, tempDirectoryURL: tempDirectoryURL, tempArchiveURL: tempArchiveURL, archiveResourceURL: archiveResourceURL, password: password, expectingSuccess: expectingSuccess, testExpectation: unarchivedSuccessExpectation)
-        self.unarchiveNonExistentFileTestFailureAppWithExtension(archiveExtension, tempDirectoryURL: tempDirectoryURL, password: password, testExpectation: unarchivedFailureExpectation)
+        self.unarchiveTestAppWithExtension(archiveExtension, appName: appName, tempDirectoryURL: tempDirectoryURL, tempArchiveURL: tempArchiveURL, archiveResourceURL: archiveResourceURL, password: password, expectingInstallationType: installationType, expectingSuccess: expectingSuccess, testExpectation: unarchivedSuccessExpectation)
+        self.unarchiveNonExistentFileTestFailureAppWithExtension(archiveExtension, tempDirectoryURL: tempDirectoryURL, password: password, expectingInstallationType: installationType, testExpectation: unarchivedFailureExpectation)
 
         super.waitForExpectations(timeout: 30.0, handler: nil)
 
-        if !archiveExtension.hasSuffix("pkg") {
+        if !archiveExtension.hasSuffix("pkg") && expectingSuccess {
             XCTAssertTrue(fileManager.fileExists(atPath: extractedAppURL.path))
             XCTAssertEqual("6a60ab31430cfca8fb499a884f4a29f73e59b472", hashOfTree(extractedAppURL.path))
         }
     }
 
-    func unarchiveNonExistentFileTestFailureAppWithExtension(_ archiveExtension: String, tempDirectoryURL: URL, password: String?, testExpectation: XCTestExpectation) {
+    func unarchiveNonExistentFileTestFailureAppWithExtension(_ archiveExtension: String, tempDirectoryURL: URL, password: String?, expectingInstallationType installationType: String, testExpectation: XCTestExpectation) {
         let tempArchiveURL = tempDirectoryURL.appendingPathComponent("error-invalid").appendingPathExtension(archiveExtension)
-        let unarchiver = SUUnarchiver.unarchiver(forPath: tempArchiveURL.path, updatingHostBundlePath: nil, decryptionPassword: password)!
+        let unarchiver = SUUnarchiver.unarchiver(forPath: tempArchiveURL.path, updatingHostBundlePath: nil, decryptionPassword: password, expectingInstallationType: installationType)!
 
         unarchiver.unarchive(completionBlock: {(error: Error?) -> Void in
             XCTAssertNotNil(error)
@@ -49,13 +49,13 @@ class SUUnarchiverTest: XCTestCase
     }
 
     // swiftlint:disable function_parameter_count
-    func unarchiveTestAppWithExtension(_ archiveExtension: String, appName: String, tempDirectoryURL: URL, tempArchiveURL: URL, archiveResourceURL: URL, password: String?, expectingSuccess: Bool, testExpectation: XCTestExpectation) {
+    func unarchiveTestAppWithExtension(_ archiveExtension: String, appName: String, tempDirectoryURL: URL, tempArchiveURL: URL, archiveResourceURL: URL, password: String?, expectingInstallationType installationType: String, expectingSuccess: Bool, testExpectation: XCTestExpectation) {
 
         let fileManager = FileManager.default
 
         try! fileManager.copyItem(at: archiveResourceURL, to: tempArchiveURL)
 
-        let unarchiver = SUUnarchiver.unarchiver(forPath: tempArchiveURL.path, updatingHostBundlePath: nil, decryptionPassword: password)!
+        let unarchiver = SUUnarchiver.unarchiver(forPath: tempArchiveURL.path, updatingHostBundlePath: nil, decryptionPassword: password, expectingInstallationType: installationType)!
 
         unarchiver.unarchive(completionBlock: {(error: Error?) -> Void in
             if expectingSuccess {
@@ -70,6 +70,29 @@ class SUUnarchiverTest: XCTestCase
     func testUnarchivingZip()
     {
         self.unarchiveTestAppWithExtension("zip")
+    }
+    
+    // This zip file has extraneous zero bytes added at the very end
+    func testUnarchivingBadZipWithExtaneousTrailingBytes() {
+        // We may receive a SIGPIPE error when writing data to a pipe
+        // The Autoupdate installer ignores SIGPIPE too
+        // We need to ignore it otherwise the xctest will terminate unexpectedly with exit code 13
+        signal(SIGPIPE, SIG_IGN)
+        
+        self.unarchiveTestAppWithExtension("zip", resourceName: "SparkleTestCodeSignApp_bad_extraneous", extractedAppName: "SparkleTestCodeSignApp", expectingSuccess: false)
+        
+        signal(SIGPIPE, SIG_DFL)
+    }
+    
+    func testUnarchivingBadZipWithMissingHeaderBytes() {
+        // We may receive a SIGPIPE error when writing data to a pipe
+        // The Autoupdate installer ignores SIGPIPE too
+        // We need to ignore it otherwise the xctest will terminate unexpectedly with exit code 13
+        signal(SIGPIPE, SIG_IGN)
+        
+        self.unarchiveTestAppWithExtension("zip", resourceName: "SparkleTestCodeSignApp_bad_header", extractedAppName: "SparkleTestCodeSignApp", expectingSuccess: false)
+        
+        signal(SIGPIPE, SIG_DFL)
     }
 
     func testUnarchivingTarDotGz()
@@ -92,20 +115,27 @@ class SUUnarchiverTest: XCTestCase
         self.unarchiveTestAppWithExtension("tar.xz")
     }
 
-    func testUnarchivingDmg()
+    func testUnarchivingHFSDmgWithLicenseAgreement()
     {
         self.unarchiveTestAppWithExtension("dmg")
     }
 
-    func testUnarchivingEncryptedDmg()
+    func testUnarchivingEncryptedDmgWithLicenseAgreement()
     {
         self.unarchiveTestAppWithExtension("enc.dmg", password: "testpass")
     }
     
+    func testUnarchivingAPFSDMG()
+    {
+        self.unarchiveTestAppWithExtension("dmg", resourceName: "SparkleTestCodeSign_apfs")
+    }
+    
     func testUnarchivingFlatPackage()
     {
-        self.unarchiveTestAppWithExtension("pkg", resourceName: "test")
+        self.unarchiveTestAppWithExtension("pkg", resourceName: "test", expectingInstallationType: SPUInstallationTypeGuidedPackage)
         
-        self.unarchiveTestAppWithExtension("pkg", resourceName: "test.sparkle_interactive", expectingSuccess: false)
+        self.unarchiveTestAppWithExtension("pkg", resourceName: "test", expectingInstallationType: SPUInstallationTypeInteractivePackage, expectingSuccess: false)
+        
+        self.unarchiveTestAppWithExtension("pkg", resourceName: "test", expectingInstallationType: SPUInstallationTypeApplication, expectingSuccess: false)
     }
 }

@@ -16,7 +16,6 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/strings/string_piece.h"
 #include "base/trace_event/trace_event.h"
 #include "components/sync/base/unique_position.h"
 #include "components/sync/model/conflict_resolution.h"
@@ -33,23 +32,26 @@ namespace {
 // emit updates in top-down order. |ordered_updates| must not be null because
 // traversed updates are appended to |*ordered_updates|.
 void TraverseAndAppendChildren(
-    const base::StringPiece& node_id,
-    const std::unordered_map<base::StringPiece,
-                             const syncer::UpdateResponseData*,
-                             base::StringPieceHash>& id_to_updates,
-    const std::unordered_map<base::StringPiece,
-                             std::vector<base::StringPiece>,
-                             base::StringPieceHash>& node_to_children,
+    const base::GUID& node_guid,
+    const std::unordered_multimap<base::GUID,
+                                  const syncer::UpdateResponseData*,
+                                  base::GUIDHash>& guid_to_updates,
+    const std::unordered_map<base::GUID,
+                             std::vector<base::GUID>,
+                             base::GUIDHash>& node_to_children,
     std::vector<const syncer::UpdateResponseData*>* ordered_updates) {
   // If no children to traverse, we are done.
-  if (node_to_children.count(node_id) == 0) {
+  if (node_to_children.count(node_guid) == 0) {
     return;
   }
   // Recurse over all children.
-  for (const base::StringPiece& child : node_to_children.at(node_id)) {
-    DCHECK_NE(id_to_updates.count(child), 0U);
-    ordered_updates->push_back(id_to_updates.at(child));
-    TraverseAndAppendChildren(child, id_to_updates, node_to_children,
+  for (const base::GUID& child : node_to_children.at(node_guid)) {
+    auto [begin, end] = guid_to_updates.equal_range(child);
+    DCHECK(begin != end);
+    for (auto it = begin; it != end; ++it) {
+      ordered_updates->push_back(it->second);
+    }
+    TraverseAndAppendChildren(child, guid_to_updates, node_to_children,
                               ordered_updates);
   }
 }
@@ -91,8 +93,7 @@ size_t ComputeChildNodeIndex(const vivaldi::NoteNode* parent,
 }
 
 bool IsPermanentNodeUpdate(const syncer::EntityData& update_entity) {
-  return update_entity.parent_id == "0" ||
-         !update_entity.server_defined_unique_tag.empty();
+  return !update_entity.server_defined_unique_tag.empty();
 }
 
 // Checks that the |update_entity| is valid and returns false otherwise. It is
@@ -119,6 +120,16 @@ bool IsValidUpdate(const syncer::EntityData& update_entity) {
   }
 
   return true;
+}
+
+// Determines the parent's GUID included in |update_entity|. |update_entity|
+// must be a valid update as defined in IsValidUpdate().
+base::GUID GetParentGUIDInUpdate(const syncer::EntityData& update_entity) {
+  DCHECK(IsValidUpdate(update_entity));
+  base::GUID parent_guid =
+      base::GUID::ParseLowercase(update_entity.specifics.notes().parent_guid());
+  DCHECK(parent_guid.is_valid());
+  return parent_guid;
 }
 
 void ApplyRemoteUpdate(
@@ -364,15 +375,15 @@ NoteRemoteUpdatesHandler::ReorderValidUpdates(
   // 3. Start at each root in |roots|, emit the update and recurse over its
   //    children.
 
-  std::unordered_map<base::StringPiece, const syncer::UpdateResponseData*,
-                     base::StringPieceHash>
-      id_to_updates;
-  std::set<base::StringPiece> roots;
-  std::unordered_map<base::StringPiece, std::vector<base::StringPiece>,
-                     base::StringPieceHash>
-      parent_to_children;
+  // Normally there shouldn't be multiple updates for the same GUID, but let's
+  // avoiding dedupping here just in case (e.g. the could in theory be a
+  // combination of client-tagged and non-client-tagged updated that
+  // ModelTypeWorker failed to deduplicate.
+  std::unordered_multimap<base::GUID, const syncer::UpdateResponseData*,
+                          base::GUIDHash>
+      guid_to_updates;
 
-  // Add only valid, non-deletions to |id_to_updates|.
+  // Add only valid, non-deletions to |guid_to_updates|.
   int invalid_updates_count = 0;
   int root_node_updates_count = 0;
   for (const syncer::UpdateResponseData& update : *updates) {
@@ -389,35 +400,40 @@ NoteRemoteUpdatesHandler::ReorderValidUpdates(
       ++invalid_updates_count;
       continue;
     }
-    id_to_updates[update_entity.id] = &update;
+    base::GUID guid =
+        base::GUID::ParseLowercase(update_entity.specifics.notes().guid());
+    DCHECK(guid.is_valid());
+    guid_to_updates.emplace(std::move(guid), &update);
   }
-  // Iterate over |id_to_updates| and construct |roots| and
+
+  // Iterate over |guid_to_updates| and construct |roots| and
   // |parent_to_children|.
-  for (const std::pair<const base::StringPiece,
-                       const syncer::UpdateResponseData*>& pair :
-       id_to_updates) {
-    const syncer::EntityData& update_entity = pair.second->entity;
-    parent_to_children[update_entity.parent_id].push_back(update_entity.id);
+  std::set<base::GUID> roots;
+  std::unordered_map<base::GUID, std::vector<base::GUID>, base::GUIDHash>
+      parent_to_children;
+  for (const auto& [guid, update] : guid_to_updates) {
+    base::GUID parent_guid = GetParentGUIDInUpdate(update->entity);
+    base::GUID child_guid =
+        base::GUID::ParseLowercase(update->entity.specifics.notes().guid());
+    DCHECK(child_guid.is_valid());
+
+    parent_to_children[parent_guid].emplace_back(std::move(child_guid));
     // If this entity's parent has no pending update, add it to |roots|.
-    if (id_to_updates.count(update_entity.parent_id) == 0) {
-      roots.insert(update_entity.parent_id);
+    if (guid_to_updates.count(parent_guid) == 0) {
+      roots.insert(std::move(parent_guid));
     }
   }
   // |roots| contains only root of all trees in the forest all of which are
   // ready to be processed because none has a pending update.
   std::vector<const syncer::UpdateResponseData*> ordered_updates;
-  for (const base::StringPiece& root : roots) {
-    TraverseAndAppendChildren(root, id_to_updates, parent_to_children,
+  for (const base::GUID& root : roots) {
+    TraverseAndAppendChildren(root, guid_to_updates, parent_to_children,
                               &ordered_updates);
   }
   // Add deletions.
   for (const syncer::UpdateResponseData& update : *updates) {
     const syncer::EntityData& update_entity = update.entity;
-    // Ignore updates to root nodes.
-    if (IsPermanentNodeUpdate(update_entity)) {
-      continue;
-    }
-    if (update_entity.is_deleted()) {
+    if (!IsPermanentNodeUpdate(update_entity) && update_entity.is_deleted()) {
       ordered_updates.push_back(&update);
     }
   }
@@ -497,18 +513,11 @@ const SyncedNoteTracker::Entity* NoteRemoteUpdatesHandler::ProcessCreate(
   const vivaldi::NoteNode* parent_node = GetParentNode(update_entity);
   if (!parent_node) {
     // If we cannot find the parent, we can do nothing.
-    DLOG(ERROR) << "Could not find parent of node being added."
-                << " Node title: "
-                << update_entity.specifics.notes().legacy_canonicalized_title()
-                << ", parent id = " << update_entity.parent_id;
     note_tracker_->RecordIgnoredServerUpdateDueToMissingParent(
         update.response_version);
     return nullptr;
   }
   if (!parent_node->is_folder()) {
-    DLOG(ERROR) << "Parent node is not a folder. Node title: "
-                << update_entity.specifics.notes().legacy_canonicalized_title()
-                << ", parent id: " << update_entity.parent_id;
     return nullptr;
   }
   const vivaldi::NoteNode* note_node = CreateNoteNodeFromSpecifics(
@@ -547,20 +556,15 @@ void NoteRemoteUpdatesHandler::ProcessUpdate(
   DCHECK(old_parent->is_folder());
 
   const SyncedNoteTracker::Entity* new_parent_entity =
-      note_tracker_->GetEntityForSyncId(update_entity.parent_id);
+      note_tracker_->GetEntityForGUID(GetParentGUIDInUpdate(update_entity));
   if (!new_parent_entity) {
-    DLOG(ERROR) << "Could not update node. Parent node doesn't exist: "
-                << update_entity.parent_id;
     return;
   }
   const vivaldi::NoteNode* new_parent = new_parent_entity->note_node();
   if (!new_parent) {
-    DLOG(ERROR)
-        << "Could not update node. Parent node has been deleted already.";
     return;
   }
   if (!new_parent->is_folder()) {
-    DLOG(ERROR) << "Could not update node. Parent not is not a folder.";
     return;
   }
   // Node update could be either in the node data (e.g. title or
@@ -654,15 +658,13 @@ const SyncedNoteTracker::Entity* NoteRemoteUpdatesHandler::ProcessConflict(
   DCHECK(old_parent->is_folder());
 
   const SyncedNoteTracker::Entity* new_parent_entity =
-      note_tracker_->GetEntityForSyncId(update_entity.parent_id);
+      note_tracker_->GetEntityForGUID(GetParentGUIDInUpdate(update_entity));
   // The |new_parent_entity| could be null in some racy conditions.  For
   // example, when a client A moves a node and deletes the old parent and
   // commits, and then updates the node again, and at the same time client B
   // updates before receiving the move updates. The client B update will arrive
   // at client A after the parent entity has been deleted already.
   if (!new_parent_entity) {
-    DLOG(ERROR) << "Could not update node. Parent node doesn't exist: "
-                << update_entity.parent_id;
     return tracked_entity;
   }
   const vivaldi::NoteNode* new_parent = new_parent_entity->note_node();
@@ -671,8 +673,6 @@ const SyncedNoteTracker::Entity* NoteRemoteUpdatesHandler::ProcessConflict(
   // entails child deletion, and if this child has been updated on another
   // client, this would cause conflict.
   if (!new_parent) {
-    DLOG(ERROR)
-        << "Could not update node. Parent node has been deleted already.";
     return tracked_entity;
   }
   // Either local and remote data match or server wins, and in both cases we
@@ -718,8 +718,10 @@ void NoteRemoteUpdatesHandler::RemoveEntityAndChildrenFromTracker(
 
 const vivaldi::NoteNode* NoteRemoteUpdatesHandler::GetParentNode(
     const syncer::EntityData& update_entity) const {
+  DCHECK(IsValidNotesSpecifics(update_entity.specifics.notes()));
+
   const SyncedNoteTracker::Entity* parent_entity =
-      note_tracker_->GetEntityForSyncId(update_entity.parent_id);
+      note_tracker_->GetEntityForGUID(GetParentGUIDInUpdate(update_entity));
   if (!parent_entity) {
     return nullptr;
   }

@@ -80,6 +80,7 @@ import org.chromium.content_public.browser.NavigationController;
 import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.content_public.browser.NavigationHistory;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
+import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.modelutil.ListObservable;
 import org.chromium.ui.modelutil.ListObservable.ListObserver;
@@ -1300,12 +1301,11 @@ class TabListMediator {
     }
 
     void registerOrientationListener(GridLayoutManager manager) {
-        // TODO(yuezhanggg): Try to dynamically determine span counts based on screen width,
-        // minimum card width and padding.
         mComponentCallbacks = new ComponentCallbacks() {
             @Override
             public void onConfigurationChanged(Configuration newConfig) {
-                updateSpanCountForOrientation(manager, newConfig.orientation);
+                updateSpanCount(
+                        manager, newConfig.orientation, newConfig.screenWidthDp);
                 if (mMode == TabListMode.GRID && mUiType != UiType.SELECTABLE) updateLayout();
             }
 
@@ -1319,14 +1319,12 @@ class TabListMediator {
     /**
      * Update the grid layout span count and span size lookup base on orientation.
      * @param manager     The {@link GridLayoutManager} used to update the span count.
-     * @param orientation The orientation base on which we update the span count.
+     * @param orientation The orientation based on which we update the span count.
+     * @param screenWidthDp The screnWidth based on which we update the span count.
      */
-    void updateSpanCountForOrientation(GridLayoutManager manager, int orientation) {
-        // When in multi-window mode, the span count is fixed to 2 to keep tab card size reasonable.
-        int spanCount = orientation == Configuration.ORIENTATION_PORTRAIT
-                        || MultiWindowUtils.getInstance().isInMultiWindowMode((Activity) mContext)
-                ? TabListCoordinator.GRID_LAYOUT_SPAN_COUNT_PORTRAIT
-                : TabListCoordinator.GRID_LAYOUT_SPAN_COUNT_LANDSCAPE;
+    void updateSpanCount(
+            GridLayoutManager manager, int orientation, int screenWidthDp) {
+        int spanCount = getSpanCount(orientation, screenWidthDp);
 
         // Vivaldi
         spanCount = calculateGridSpanCount(orientation);
@@ -1344,6 +1342,26 @@ class TabListMediator {
                 return 1;
             }
         });
+    }
+
+    /**
+     * Span count is computed based on screen width for tablets and orientation for phones.
+     * When in multi-window mode on phone, the span count is fixed to 2 to keep tab card size
+     * reasonable.
+     */
+    private int getSpanCount(int orientation, int screenWidthDp) {
+        if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(mContext)
+                && TabUiFeatureUtilities.isGridTabSwitcherEnabled(mContext)) {
+            return screenWidthDp < TabListCoordinator.MAX_SCREEN_WIDTH_COMPACT_DP
+                    ? TabListCoordinator.GRID_LAYOUT_SPAN_COUNT_COMPACT
+                    : screenWidthDp < TabListCoordinator.MAX_SCREEN_WIDTH_MEDIUM_DP
+                            ? TabListCoordinator.GRID_LAYOUT_SPAN_COUNT_MEDIUM
+                            : TabListCoordinator.GRID_LAYOUT_SPAN_COUNT_LARGE;
+        }
+        return orientation == Configuration.ORIENTATION_PORTRAIT
+                        || MultiWindowUtils.getInstance().isInMultiWindowMode((Activity) mContext)
+                ? TabListCoordinator.GRID_LAYOUT_SPAN_COUNT_COMPACT
+                : TabListCoordinator.GRID_LAYOUT_SPAN_COUNT_MEDIUM;
     }
 
     /**
@@ -1507,9 +1525,9 @@ class TabListMediator {
             // Incognito in both light/dark theme is the same as non-incognito mode in dark theme.
             // Non-incognito mode and incognito in both light/dark themes in dark theme all look
             // dark.
-            ColorStateList checkedDrawableColorList = AppCompatResources.getColorStateList(mContext,
-                    pseudoTab.isIncognito() ? R.color.default_icon_color_dark
-                                            : R.color.default_icon_color_inverse);
+            ColorStateList checkedDrawableColorList = ColorStateList.valueOf(pseudoTab.isIncognito()
+                            ? mContext.getColor(R.color.default_icon_color_dark)
+                            : SemanticColorUtils.getDefaultIconColorInverse(mContext));
             ColorStateList actionButtonBackgroundColorList =
                     AppCompatResources.getColorStateList(mContext,
                             pseudoTab.isIncognito() ? R.color.default_icon_color_light
@@ -1969,8 +1987,8 @@ class TabListMediator {
     /** Vivaldi: Calculates the tab switcher grid layout span depending on device size */
     public int calculateGridSpanCount(int orientation) {
         int spanCount = orientation == Configuration.ORIENTATION_PORTRAIT
-                ? TabListCoordinator.GRID_LAYOUT_SPAN_COUNT_PORTRAIT
-                : TabListCoordinator.GRID_LAYOUT_SPAN_COUNT_LANDSCAPE;
+                ? TabListCoordinator.GRID_LAYOUT_SPAN_COUNT_COMPACT
+                : TabListCoordinator.GRID_LAYOUT_SPAN_COUNT_MEDIUM;
         if (MultiWindowUtils.getInstance().isInMultiWindowMode((Activity) mContext))
             return spanCount;
         // Add a column with large screens.

@@ -22,6 +22,7 @@
 #include "third_party/blink/renderer/core/paint/theme_painter.h"
 
 #include "build/build_config.h"
+#include "third_party/blink/public/mojom/web_feature/web_feature.mojom-shared.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
@@ -51,7 +52,7 @@ namespace blink {
 namespace {
 
 bool IsMultipleFieldsTemporalInput(const AtomicString& type) {
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   return type == input_type_names::kDate ||
          type == input_type_names::kDatetimeLocal ||
          type == input_type_names::kMonth || type == input_type_names::kTime ||

@@ -20,16 +20,15 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ActivityState;
 import org.chromium.base.Callback;
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.jank_tracker.JankScenario;
 import org.chromium.base.jank_tracker.JankTracker;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.Supplier;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.omnibox.LocationBarDataProvider;
 import org.chromium.chrome.browser.omnibox.OmniboxSuggestionType;
 import org.chromium.chrome.browser.omnibox.R;
 import org.chromium.chrome.browser.omnibox.UrlBarEditingTextStateProvider;
-import org.chromium.chrome.browser.omnibox.styles.OmniboxTheme;
 import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteController.OnSuggestionsReceivedListener;
 import org.chromium.chrome.browser.omnibox.suggestions.SuggestionsMetrics.RefineActionUsage;
 import org.chromium.chrome.browser.omnibox.suggestions.basic.BasicSuggestionProcessor.BookmarkState;
@@ -42,6 +41,7 @@ import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.browser.tabmodel.TabWindowManager;
+import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
 import org.chromium.components.metrics.OmniboxEventProtos.OmniboxEventProto.PageClassification;
 import org.chromium.components.omnibox.AutocompleteMatch;
 import org.chromium.components.omnibox.AutocompleteResult;
@@ -97,7 +97,6 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
     /* Vivaldi */ public boolean mNativeInitialized;
     private AutocompleteController mAutocomplete;
     private long mUrlFocusTime;
-    private boolean mEnableAdaptiveSuggestionsCount;
     private boolean mShouldCacheSuggestions;
 
     // Vivaldi
@@ -136,6 +135,10 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
     // Set at the end of the Omnibox interaction to indicate whether the user selected an item
     // from the list (true) or left the Omnibox and suggestions list with no action taken (false).
     private boolean mOmniboxFocusResultedInNavigation;
+    // Facilitate detection of Autocomplete actions being scheduled from an Autocomplete action.
+    private boolean mIsExecutingAutocompleteAction;
+    // Whether user scrolled the suggestions list.
+    private boolean mSuggestionsListScrolled;
 
     /**
      * The text shown in the URL bar (user text + inline autocomplete) after the most recent set of
@@ -157,7 +160,8 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
             @NonNull Callback<Tab> bringTabToFrontCallback,
             @NonNull Supplier<TabWindowManager> tabWindowManagerSupplier,
             @NonNull BookmarkState bookmarkState, @NonNull JankTracker jankTracker,
-            @NonNull ExploreIconProvider exploreIconProvider) {
+            @NonNull ExploreIconProvider exploreIconProvider,
+            @NonNull OmniboxPedalDelegate omniboxPedalDelegate) {
         mContext = context;
         mDelegate = delegate;
         mUrlBarEditingTextProvider = textProvider;
@@ -170,7 +174,7 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
         mTabWindowManagerSupplier = tabWindowManagerSupplier;
         mSuggestionModels = mListPropertyModel.get(SuggestionListProperties.SUGGESTION_MODELS);
         mDropdownViewInfoListBuilder = new DropdownItemViewInfoListBuilder(
-                activityTabSupplier, bookmarkState, exploreIconProvider);
+                activityTabSupplier, bookmarkState, exploreIconProvider, omniboxPedalDelegate);
         mDropdownViewInfoListBuilder.setShareDelegateSupplier(shareDelegateSupplier);
         mDropdownViewInfoListManager = new DropdownItemViewInfoListManager(mSuggestionModels);
     }
@@ -257,11 +261,11 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 
     /**
      * Specifies the visual state to be used by the suggestions.
-     * @param omniboxTheme The {@link @OmniboxTheme}.
+     * @param brandedColorScheme The {@link @BrandedColorScheme}.
      */
-    void updateVisualsForState(@OmniboxTheme int omniboxTheme) {
-        mDropdownViewInfoListManager.setOmniboxTheme(omniboxTheme);
-        mListPropertyModel.set(SuggestionListProperties.OMNIBOX_THEME, omniboxTheme);
+    void updateVisualsForState(@BrandedColorScheme int brandedColorScheme) {
+        mDropdownViewInfoListManager.setBrandedColorScheme(brandedColorScheme);
+        mListPropertyModel.set(SuggestionListProperties.COLOR_SCHEME, brandedColorScheme);
     }
 
     /**
@@ -290,11 +294,7 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
      */
     void onNativeInitialized() {
         mNativeInitialized = true;
-
-        mEnableAdaptiveSuggestionsCount =
-                ChromeFeatureList.isEnabled(ChromeFeatureList.OMNIBOX_ADAPTIVE_SUGGESTIONS_COUNT);
         mDropdownViewInfoListBuilder.onNativeInitialized();
-
         runPendingAutocompleteRequests();
 
         // Vivaldi
@@ -307,6 +307,7 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
             dismissDeleteDialog(DialogDismissalCause.DISMISSED_BY_NATIVE);
             mRefineActionUsage = RefineActionUsage.NOT_USED;
             mOmniboxFocusResultedInNavigation = false;
+            mSuggestionsListScrolled = false;
             mUrlFocusTime = System.currentTimeMillis();
             mJankTracker.startTrackingScenario(JankScenario.OMNIBOX_FOCUS);
 
@@ -333,6 +334,9 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
             SuggestionsMetrics.recordOmniboxFocusResultedInNavigation(
                     mOmniboxFocusResultedInNavigation);
             SuggestionsMetrics.recordRefineActionUsage(mRefineActionUsage);
+            SuggestionsMetrics.recordSuggestionsListScrolled(
+                    mDataProvider.getPageClassification(mDelegate.didFocusUrlFromFakebox()),
+                    mSuggestionsListScrolled);
 
             setSuggestionVisibilityState(SuggestionVisibilityState.DISALLOWED);
             mEditSessionState = EditSessionState.INACTIVE;
@@ -525,6 +529,7 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
                 new PropertyModel.Builder(ModalDialogProperties.ALL_KEYS)
                         .with(ModalDialogProperties.CONTROLLER, dialogController)
                         .with(ModalDialogProperties.TITLE, suggestion.getDisplayText())
+                        .with(ModalDialogProperties.TITLE_MAX_LINES, 1)
                         .with(ModalDialogProperties.MESSAGE, resources.getString(dialogMessageId))
                         .with(ModalDialogProperties.POSITIVE_BUTTON_TEXT, resources, R.string.ok)
                         .with(ModalDialogProperties.NEGATIVE_BUTTON_TEXT, resources,
@@ -907,8 +912,8 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 
     @Override
     public void onSuggestionDropdownScroll() {
-        if (mEnableAdaptiveSuggestionsCount
-                && mDropdownViewInfoListBuilder.hasFullyConcealedElements()) {
+        if (mDropdownViewInfoListBuilder.hasFullyConcealedElements()) {
+            mSuggestionsListScrolled = true;
             mDelegate.setKeyboardVisibility(false, false);
         }
     }
@@ -945,9 +950,7 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 
     @Override
     public void onSuggestionDropdownOverscrolledToTop() {
-        if (mEnableAdaptiveSuggestionsCount) {
-            mDelegate.setKeyboardVisibility(true, false);
-        }
+        mDelegate.setKeyboardVisibility(true, false);
     }
 
     /**
@@ -979,15 +982,16 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
      *         Use SCHEDULE_FOR_IMMEDIATE_EXECUTION to post action at front of the message queue.
      */
     private void postAutocompleteRequest(@NonNull Runnable action, long delayMillis) {
+        assert !mIsExecutingAutocompleteAction : "Can't schedule conflicting autocomplete action";
+        assert ThreadUtils.runningOnUiThread() : "Detected input from a non-UI thread. Test error?";
+
         cancelAutocompleteRequests();
         mCurrentAutocompleteRequest = new Runnable() {
             @Override
             public void run() {
+                mIsExecutingAutocompleteAction = true;
                 action.run();
-                // Catch any AutocompleteRequests that post subsequent AutocompleteRequest.
-                // Note: we have to explicitly instantiate a Runnable class, otherwise
-                // 'this' will resolve into a parent class and Runnable.this won't work.
-                assert mCurrentAutocompleteRequest == this;
+                mIsExecutingAutocompleteAction = false;
                 // Release completed Runnable.
                 mCurrentAutocompleteRequest = null;
             }

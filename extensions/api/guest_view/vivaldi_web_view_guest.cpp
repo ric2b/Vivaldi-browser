@@ -98,24 +98,24 @@ std::string GetStoragePartitionIdFromPartitionConfig(
   return (persist_storage ? webview::kPersistPrefix : "") + partition_id;
 }*/
 
-void ParsePartitionParam(const base::DictionaryValue& create_params,
+void ParsePartitionParam(const base::Value::Dict& create_params,
                          std::string* storage_partition_id,
                          bool* persist_storage) {
-  std::string partition_str;
-  if (!create_params.GetString(webview::kStoragePartitionId, &partition_str)) {
+  const std::string* partition_str =
+      create_params.FindString(webview::kStoragePartitionId);
+  if (!partition_str)
     return;
-  }
 
   // Since the "persist:" prefix is in ASCII, base::StartsWith will work fine on
   // UTF-8 encoded |partition_id|. If the prefix is a match, we can safely
   // remove the prefix without splicing in the middle of a multi-byte codepoint.
   // We can use the rest of the string as UTF-8 encoded one.
-  if (base::StartsWith(partition_str,
+  if (base::StartsWith(*partition_str,
                        "persist:", base::CompareCase::SENSITIVE)) {
-    size_t index = partition_str.find(":");
+    size_t index = partition_str->find(":");
     CHECK(index != std::string::npos);
     // It is safe to do index + 1, since we tested for the full prefix above.
-    *storage_partition_id = partition_str.substr(index + 1);
+    *storage_partition_id = partition_str->substr(index + 1);
 
     if (storage_partition_id->empty()) {
       // TODO(lazyboy): Better way to deal with this error.
@@ -123,7 +123,7 @@ void ParsePartitionParam(const base::DictionaryValue& create_params,
     }
     *persist_storage = true;
   } else {
-    *storage_partition_id = partition_str;
+    *storage_partition_id = *partition_str;
     *persist_storage = false;
   }
 }
@@ -228,6 +228,15 @@ static std::string ContentSettingsTypeToString(
   return "unknown";
 }
 
+void SendEventToView(WebViewGuest& guest,
+                     const std::string& event_name,
+                     base::Value::Dict args) {
+  auto args_value = std::make_unique<base::DictionaryValue>();
+  args_value->GetDict() = std::move(args);
+  guest.DispatchEventToView(
+      std::make_unique<GuestViewEvent>(event_name, std::move(args_value)));
+}
+
 }  // namespace
 
 #if defined(USE_AURA)
@@ -253,15 +262,15 @@ WebViewGuest::CursorHider::~CursorHider() {
 #endif  // USE_AURA
 
 void WebViewGuest::VivaldiSetLoadProgressEventExtraArgs(
-    base::Value& dictionary) {
+    base::Value::Dict& dictionary) {
   if (!IsVivaldiRunning())
     return;
   const content::PageImpl& page =
       static_cast<const content::PageImpl&>(web_contents()->GetPrimaryPage());
-  dictionary.SetDoubleKey(webview::kLoadedBytes, page.vivaldi_loaded_bytes());
-  dictionary.SetIntKey(webview::kLoadedElements,
-                       page.vivaldi_loaded_resources());
-  dictionary.SetIntKey(webview::kTotalElements, page.vivaldi_total_resources());
+  dictionary.Set(webview::kLoadedBytes,
+                 static_cast<double>(page.vivaldi_loaded_bytes()));
+  dictionary.Set(webview::kLoadedElements, page.vivaldi_loaded_resources());
+  dictionary.Set(webview::kTotalElements, page.vivaldi_total_resources());
 }
 
 void WebViewGuest::ToggleFullscreenModeForTab(
@@ -288,11 +297,10 @@ void WebViewGuest::ToggleFullscreenModeForTab(
   }
 #endif  // USE_AURA
 
-  std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
-  args->SetInteger("windowId", browser ? browser->session_id().id() : -1);
-  args->SetBoolean("enterFullscreen", enter_fullscreen);
-  DispatchEventToView(base::WrapUnique(
-      new GuestViewEvent(webview::kEventOnFullscreen, std::move(args))));
+  base::Value::Dict args;
+  args.Set("windowId", browser ? browser->session_id().id() : -1);
+  args.Set("enterFullscreen", enter_fullscreen);
+  SendEventToView(*this, webview::kEventOnFullscreen, std::move(args));
 }
 
 void WebViewGuest::BeforeUnloadFired(content::WebContents* web_contents,
@@ -362,14 +370,14 @@ void WebViewGuest::SetIsFullscreen(bool is_fullscreen) {
 }
 
 void WebViewGuest::VisibleSecurityStateChanged(WebContents* source) {
-  std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
+  base::Value::Dict args;
   SecurityStateTabHelper* helper =
       SecurityStateTabHelper::FromWebContents(web_contents());
   if (!helper) {
     return;
   }
 
-  args->SetString("SSLState", SSLStateToString(helper));
+  args.Set("SSLState", SSLStateToString(helper));
 
   content::NavigationController& controller = web_contents()->GetController();
   content::NavigationEntry* entry = controller.GetVisibleEntry();
@@ -380,15 +388,14 @@ void WebViewGuest::VisibleSecurityStateChanged(WebContents* source) {
     // EV are required to have an organization name and country.
     if (cert.get() && (!cert.get()->subject().organization_names.empty() &&
                        !cert.get()->subject().country_name.empty())) {
-      args->SetString(
+      args.Set(
           "issuerstring",
           base::StringPrintf(
               "%s [%s]", cert.get()->subject().organization_names[0].c_str(),
               cert.get()->subject().country_name.c_str()));
     }
   }
-  DispatchEventToView(base::WrapUnique(
-      new GuestViewEvent(webview::kEventSSLStateChanged, std::move(args))));
+  SendEventToView(*this, webview::kEventSSLStateChanged, std::move(args));
 }
 
 bool WebViewGuest::IsMouseGesturesEnabled() const {
@@ -403,55 +410,41 @@ bool WebViewGuest::IsMouseGesturesEnabled() const {
 
 void WebViewGuest::UpdateTargetURL(content::WebContents* source,
                                    const GURL& url) {
-  std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
-  args->SetString(webview::kNewURL, url.spec());
-  DispatchEventToView(base::WrapUnique(
-      new GuestViewEvent(webview::kEventTargetURLChanged, std::move(args))));
+  base::Value::Dict args;
+  args.Set(webview::kNewURL, url.spec());
+  SendEventToView(*this, webview::kEventTargetURLChanged, std::move(args));
 }
 
-void WebViewGuest::CreateSearch(const base::ListValue& search) {
-  std::string keyword, url;
-
-  if (!search.GetString(0, &keyword)) {
-    NOTREACHED();
+void WebViewGuest::CreateSearch(const base::ListValue& search_value) {
+  const base::Value::List& search = search_value.GetList();
+  if (search.size() < 2)
     return;
-  }
-  if (!search.GetString(1, &url)) {
-    NOTREACHED();
+  const std::string* keyword = search[0].GetIfString();
+  const std::string* url = search[1].GetIfString();
+  if (!keyword || !url)
     return;
-  }
 
-  std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
-  args->SetString(webview::kNewSearchName, keyword);
-  args->SetString(webview::kNewSearchUrl, url);
-  DispatchEventToView(base::WrapUnique(
-      new GuestViewEvent(webview::kEventCreateSearch, std::move(args))));
+  base::Value::Dict args;
+  args.Set(webview::kNewSearchName, *keyword);
+  args.Set(webview::kNewSearchUrl, *url);
+  SendEventToView(*this, webview::kEventCreateSearch, std::move(args));
 }
 
-void WebViewGuest::PasteAndGo(const base::ListValue& search) {
-  std::string clipBoardText;
-  std::string pasteTarget;
-  std::string modifiers;
+void WebViewGuest::PasteAndGo(const base::ListValue& search_value) {
+  const base::Value::List& search = search_value.GetList();
+  if (search.size() < 3)
+    return;
+  const std::string* clipBoardText = search[0].GetIfString();
+  const std::string* pasteTarget = search[1].GetIfString();
+  const std::string* modifiers = search[2].GetIfString();
+  if (!clipBoardText || !pasteTarget || !modifiers)
+    return;
 
-  if (!search.GetString(0, &clipBoardText)) {
-    NOTREACHED();
-    return;
-  }
-  if (!search.GetString(1, &pasteTarget)) {
-    NOTREACHED();
-    return;
-  }
-  if (!search.GetString(2, &modifiers)) {
-    NOTREACHED();
-    return;
-  }
-
-  std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
-  args->SetString(webview::kClipBoardText, clipBoardText);
-  args->SetString(webview::kPasteTarget, pasteTarget);
-  args->SetString(webview::kModifiers, modifiers);
-  DispatchEventToView(base::WrapUnique(
-      new GuestViewEvent(webview::kEventPasteAndGo, std::move(args))));
+  base::Value::Dict args;
+  args.Set(webview::kClipBoardText, *clipBoardText);
+  args.Set(webview::kPasteTarget, *pasteTarget);
+  args.Set(webview::kModifiers, *modifiers);
+  SendEventToView(*this, webview::kEventPasteAndGo, std::move(args));
 }
 
 void WebViewGuest::ParseNewWindowUserInput(const std::string& user_input,
@@ -562,17 +555,15 @@ void WebViewGuest::AddGuestToTabStripModel(WebViewGuest* guest,
 }
 
 void WebViewGuest::OnContentAllowed(ContentSettingsType settings_type) {
-  auto args = std::make_unique<base::DictionaryValue>();
-  args->SetString("allowedType", ContentSettingsTypeToString(settings_type));
-  DispatchEventToView(std::make_unique<GuestViewEvent>(
-      webview::kEventContentAllowed, std::move(args)));
+  base::Value::Dict args;
+  args.Set("allowedType", ContentSettingsTypeToString(settings_type));
+  SendEventToView(*this, webview::kEventContentAllowed, std::move(args));
 }
 
 void WebViewGuest::OnContentBlocked(ContentSettingsType settings_type) {
-  std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
-  args->SetString("blockedType", ContentSettingsTypeToString(settings_type));
-  DispatchEventToView(base::WrapUnique(
-      new GuestViewEvent(webview::kEventContentBlocked, std::move(args))));
+  base::Value::Dict args;
+  args.Set("blockedType", ContentSettingsTypeToString(settings_type));
+  SendEventToView(*this, webview::kEventContentBlocked, std::move(args));
 }
 
 void WebViewGuest::OnWindowBlocked(
@@ -580,26 +571,25 @@ void WebViewGuest::OnWindowBlocked(
     const std::string& frame_name,
     WindowOpenDisposition disposition,
     const blink::mojom::WindowFeatures& features) {
-  std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
-  args->SetString(webview::kTargetURL, window_target_url.spec());
+  base::Value::Dict args;
+  args.Set(webview::kTargetURL, window_target_url.spec());
   if (features.has_height) {
-    args->SetInteger(webview::kInitialHeight, features.height);
+    args.Set(webview::kInitialHeight, features.height);
   }
   if (features.has_width) {
-    args->SetInteger(webview::kInitialWidth, features.width);
+    args.Set(webview::kInitialWidth, features.width);
   }
   if (features.has_x) {
-    args->SetInteger(webview::kInitialLeft, features.x);
+    args.Set(webview::kInitialLeft, features.x);
   }
   if (features.has_y) {
-    args->SetInteger(webview::kInitialTop, features.y);
+    args.Set(webview::kInitialTop, features.y);
   }
-  args->SetString(webview::kName, frame_name);
-  args->SetString(webview::kWindowOpenDisposition,
-                  WindowOpenDispositionToString(disposition));
+  args.Set(webview::kName, frame_name);
+  args.Set(webview::kWindowOpenDisposition,
+           WindowOpenDispositionToString(disposition));
 
-  DispatchEventToView(base::WrapUnique(
-      new GuestViewEvent(webview::kEventWindowBlocked, std::move(args))));
+  SendEventToView(*this, webview::kEventWindowBlocked, std::move(args));
 }
 
 void WebViewGuest::AllowRunningInsecureContent() {
@@ -652,11 +642,9 @@ void WebViewGuest::ShowRepostFormWarningDialog(WebContents* source) {
 }
 
 content::PictureInPictureResult WebViewGuest::EnterPictureInPicture(
-    WebContents* web_contents,
-    const viz::SurfaceId& surface_id,
-    const gfx::Size& natural_size) {
-  return PictureInPictureWindowManager::GetInstance()->EnterPictureInPicture(
-      web_contents, surface_id, natural_size);
+    WebContents* web_contents) {
+  return PictureInPictureWindowManager::GetInstance()
+      ->EnterVideoPictureInPicture(web_contents);
 }
 
 void WebViewGuest::ExitPictureInPicture() {
@@ -741,12 +729,13 @@ void WebViewGuest::SetIsNavigatingAwayFromVivaldiUI(bool away) {
 }
 
 void WebViewGuest::VivaldiCreateWebContents(
-    const base::DictionaryValue& create_params,
+    const base::DictionaryValue& create_params_value,
     WebContentsCreatedCallback callback) {
   RenderProcessHost* owner_render_process_host =
       owner_web_contents()->GetMainFrame()->GetProcess();
   DCHECK_EQ(browser_context(), owner_render_process_host->GetBrowserContext());
 
+  const base::Value::Dict& create_params = create_params_value.GetDict();
   std::string storage_partition_id;
   bool persist_storage = false;
   ParsePartitionParam(create_params, &storage_partition_id, &persist_storage);
@@ -785,9 +774,9 @@ void WebViewGuest::VivaldiCreateWebContents(
 
   GURL guest_site;
   if (IsVivaldiApp(owner_host())) {
-    std::string new_url;
-    if (create_params.GetString(webview::kNewURL, &new_url)) {
-      guest_site = GURL(new_url);
+    const std::string* new_url = create_params.FindString(webview::kNewURL);
+    if (new_url) {
+      guest_site = GURL(*new_url);
     } else {
       // NOTE(espen@vivaldi.com): This is a workaround for web panels. We can
       // not use GetSiteForGuestPartitionConfig() as that will prevent loading
@@ -814,16 +803,12 @@ void WebViewGuest::VivaldiCreateWebContents(
     guest_site_instance = content::SiteInstance::CreateForGuest(
         browser_context(), partition_config);
   }
-  WebContents::CreateParams params(browser_context(),
-                                   std::move(guest_site_instance));
-  params.guest_delegate = this;
 
   WebContents* new_contents = nullptr;
 
   Profile* profile = Profile::FromBrowserContext(browser_context());
   content::BrowserContext* context = browser_context();
-  int tab_id;
-  if (create_params.GetInteger("tab_id", &tab_id)) {
+  if (auto tab_id = create_params.FindInt("tab_id")) {
     // If we created the WebContents through CreateNewWindow and created this
     // guest with InitWithWebContents we cannot delete the tabstrip contents,
     // and we don't need to recreate the webcontents either. Just use the
@@ -834,7 +819,7 @@ void WebViewGuest::VivaldiCreateWebContents(
     int tab_index;
 
     if (extensions::ExtensionTabUtil::GetTabById(
-            tab_id, profile, include_incognito, &browser, NULL,
+            *tab_id, profile, include_incognito, &browser, NULL,
             &tabstrip_contents, &tab_index)) {
       new_contents = tabstrip_contents;
       content::WebContentsImpl* contentsimpl =
@@ -858,10 +843,8 @@ void WebViewGuest::VivaldiCreateWebContents(
 
       // Fire a WebContentsCreated event informing the client that script-
       // injection can be done.
-      auto args = std::make_unique<base::DictionaryValue>();
-      DispatchEventToView(std::make_unique<GuestViewEvent>(
-          webview::kEventWebContentsCreated, std::move(args)));
-
+      SendEventToView(*this, webview::kEventWebContentsCreated,
+                      base::Value::Dict());
     } else {
       // NOTE(jarle): Get the |new_contents| using the original Chromium way.
       // This makes Chrome apps work again, ref. VB-22908.
@@ -885,13 +868,13 @@ void WebViewGuest::VivaldiCreateWebContents(
       params.guest_delegate = this;
       new_contents = WebContents::Create(params).release();
     }
-  } else if (create_params.GetInteger("inspect_tab_id", &tab_id)) {
+  } else if (auto tab_id = create_params.FindInt("inspect_tab_id")) {
     // We want to attach this guest view to the already existing WebContents
     // currently used for DevTools.
-    if (inspecting_tab_id_ == 0 || inspecting_tab_id_ != tab_id) {
+    if (inspecting_tab_id_ == 0 || inspecting_tab_id_ != *tab_id) {
       content::WebContents* inspected_contents =
           ::vivaldi::ui_tools::GetWebContentsFromTabStrip(
-              tab_id, Profile::FromBrowserContext(browser_context()));
+              *tab_id, Profile::FromBrowserContext(browser_context()));
       if (inspected_contents) {
         // NOTE(david@vivaldi.com): This returns always the |main_web_contents_|
         // which is required when the dev tools window is undocked.
@@ -916,11 +899,12 @@ void WebViewGuest::VivaldiCreateWebContents(
         DevToolsWindow* devWindow =
             DevToolsWindow::GetInstanceForInspectedWebContents(
                 inspected_contents);
-        if (create_params.GetString("name", &paramstr) &&
-            !paramstr.find("vivaldi-devtools")) {
-          DevToolsContentsResizingStrategy strategy;
-          devtools_contents = DevToolsWindow::GetInTabWebContents(
-              inspected_contents, &strategy);
+        if (auto* paramstr = create_params.FindString("name")) {
+          if (!paramstr->find("vivaldi-devtools")) {
+            DevToolsContentsResizingStrategy strategy;
+            devtools_contents = DevToolsWindow::GetInTabWebContents(
+                inspected_contents, &strategy);
+          }
         }
         DCHECK(devtools_contents);
         if (!devtools_contents) {
@@ -937,28 +921,26 @@ void WebViewGuest::VivaldiCreateWebContents(
 
         connector_item_ =
             base::WrapRefCounted<extensions::DevtoolsConnectorItem>(
-                api->GetOrCreateDevtoolsConnectorItem(tab_id));
+                api->GetOrCreateDevtoolsConnectorItem(*tab_id));
         DCHECK(connector_item_.get());
         connector_item_->set_guest_delegate(this);
         connector_item_->set_devtools_delegate(devWindow);
 
         new_contents = contents;
         CreatePluginGuest(new_contents);
-        inspecting_tab_id_ = tab_id;
-        SetAttachParams(create_params);
+        inspecting_tab_id_ = *tab_id;
+        SetAttachParams(create_params_value);
       }
     }
   } else {
-    std::string window_id;
-    if (create_params.GetString(webview::kWindowID, &window_id)) {
-      int windowId = atoi(window_id.c_str());
+    if (auto* window_id = create_params.FindString(webview::kWindowID)) {
+      int windowId = atoi(window_id->c_str());
       BrowserList* list = BrowserList::GetInstance();
       for (size_t i = 0; i < list->size(); i++) {
         if (list->get(i)->session_id().id() == windowId) {
           context = list->get(i)->profile();
-          std::string src_string;
-          if (create_params.GetString("src", &src_string)) {
-            guest_site = GURL(src_string);
+          if (auto* src_string = create_params.FindString("src")) {
+            guest_site = GURL(*src_string);
             guest_site_instance =
                 content::SiteInstance::CreateForURL(context, guest_site);
           }
@@ -980,14 +962,12 @@ void WebViewGuest::VivaldiCreateWebContents(
     }
 
     if (IsVivaldiRunning()) {
-      std::string view_name;
-      if (create_params.GetString("vivaldi_view_type", &view_name)) {
-        if (view_name == "extension_popup") {
+      if (auto* view_name = create_params.FindString("vivaldi_view_type")) {
+        if (*view_name == "extension_popup") {
           // 1. Create an ExtensionFrameHelper for the viewtype.
           // 2. take a WebContents as parameter.
-          std::string src_string;
-          if (create_params.GetString("src", &src_string)) {
-            GURL popup_url = guest_site = GURL(src_string);
+          if (auto* src_string = create_params.FindString("src")) {
+            GURL popup_url = guest_site = GURL(*src_string);
 
             scoped_refptr<content::SiteInstance> site_instance =
                 ProcessManager::Get(context)->GetSiteInstanceForURL(popup_url);
@@ -999,22 +979,34 @@ void WebViewGuest::VivaldiCreateWebContents(
                 new_contents);
             task_manager::WebContentsTags::CreateForTabContents(new_contents);
           }
+        } else if (*view_name == "vivaldi_embedded_view") {
+          // Create WebContents where we can open
+          // chrome-extension://mpognobbkildjkofajifpdfhcoklimli resources.
+          WebContents::CreateParams params(context);
+          params.guest_delegate = this;
+          new_contents = WebContents::Create(params).release();
         }
       }
     }
+
     if (!new_contents) {
-      WebContents::CreateParams params(context, std::move(guest_site_instance));
-      params.guest_delegate = this;
-      // TODO(erikchen): Fix ownership semantics for guest views.
-      // https://crbug.com/832879.
-      new_contents = WebContents::Create(params).release();
-    }
-    if (!new_contents) {
-      WebContents::CreateParams params(context, std::move(guest_site_instance));
-      params.guest_delegate = this;
-      // TODO(erikchen): Fix ownership semantics for guest views.
-      // https://crbug.com/832879.
-      new_contents = WebContents::Create(params).release();
+      // If the guest is embedded inside Vivaldi we cannot set siteinstance on
+      // creation since we want to be able to nagivate away from the initial url
+      // and communicate with the conetent with script injection and
+      // sendMessage. This was bug VB-87237, caused by
+      // https://source.chromium.org/chromium/chromium/src/+/5ce2763c03762e7b84fede080ebca1f5b033967e
+      // Note this is also triggered for OpenURLFromTab code paths. Background
+      // tabs, ctrl+click middleclick.
+      if (IsVivaldiApp(owner_host())) {
+        WebContents::CreateParams params(context);
+        params.guest_delegate = this;
+        new_contents = WebContents::Create(params).release();
+      } else {
+        WebContents::CreateParams params(context,
+                                         std::move(guest_site_instance));
+        params.guest_delegate = this;
+        new_contents = WebContents::Create(params).release();
+      }
     }
   }
   DCHECK(new_contents);

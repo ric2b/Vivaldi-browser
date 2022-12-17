@@ -58,18 +58,20 @@ class EventDatabase {
   bool MigrateCalendarToVersion8();
   bool MigrateCalendarToVersion9();
   bool MigrateCalendarToVersion11();
+  bool MigrateCalendarToVersion12();
 };
 
 // This is available BOTH as a macro and a static string (kURLRowFields). Use
 // the macro if you want to put this in the middle of an otherwise constant
 // string, it will save time doing string appends. If you have to build a SQL
 // string dynamically anyway, use the constant, it will save space.
-#define CALENDAR_EVENT_ROW_FIELDS                                            \
-  " id, calendar_id, alarm_id, title, description, start, end, all_day, "    \
-  "is_recurring, location, url, etag, href," \
-  "uid, event_type_id, task, complete, trash, trash_time, sequence, ical, "  \
-  "rrule, organizer, timezone, due, priority, status, percentage_complete, " \
-  "categories, component_class, attachment, completed, sync_pending, delete_pending "
+#define CALENDAR_EVENT_ROW_FIELDS                                           \
+  " id, calendar_id, alarm_id, title, description, start, end, all_day, "   \
+  "is_recurring, location, url, etag, href,"                                \
+  "uid, event_type_id, task, complete, trash, trash_time, sequence, ical, " \
+  "rrule, organizer, timezone, priority, status, percentage_complete, "     \
+  "categories, component_class, attachment, completed, sync_pending, "      \
+  "delete_pending "
 
 }  // namespace calendar
 

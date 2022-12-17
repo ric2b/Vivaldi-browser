@@ -55,8 +55,10 @@
   }
 }
 
-// Controls hit testing of the bottom toolbar. When the toolbar is transparent,
-// only respond to tapping on the new tab button.
+// |pointInside| is called as long as this view is on the screen (even if its
+// size is zero). It controls hit testing of the bottom toolbar. When the
+// toolbar is transparent and has the |_largeNewTabButton|, only respond to
+// tapping on that button.
 - (BOOL)pointInside:(CGPoint)point withEvent:(UIEvent*)event {
   if ([self shouldShowFullBar]) {
     return [super pointInside:point withEvent:event];
@@ -98,7 +100,6 @@
 - (void)setMode:(TabGridMode)mode {
   if (_mode == mode)
     return;
-  DCHECK(IsTabsBulkActionsEnabled() || mode == TabGridModeNormal);
   _mode = mode;
   // Reset selected tabs count when mode changes.
   self.selectedTabsCount = 0;
@@ -262,28 +263,26 @@
       [[UIBarButtonItem alloc] initWithCustomView:_smallNewTabButton];
 
   // Create selection mode buttons
-  if (IsTabsBulkActionsEnabled()) {
-    _editButton = [[UIBarButtonItem alloc] init];
-    _editButton.tintColor = UIColorFromRGB(kTabGridToolbarTextButtonColor);
-    _editButton.title = l10n_util::GetNSString(IDS_IOS_TAB_GRID_EDIT_BUTTON);
-    _editButton.accessibilityIdentifier = kTabGridEditButtonIdentifier;
+  _editButton = [[UIBarButtonItem alloc] init];
+  _editButton.tintColor = UIColorFromRGB(kTabGridToolbarTextButtonColor);
+  _editButton.title = l10n_util::GetNSString(IDS_IOS_TAB_GRID_EDIT_BUTTON);
+  _editButton.accessibilityIdentifier = kTabGridEditButtonIdentifier;
 
-    _addToButton = [[UIBarButtonItem alloc] init];
-    _addToButton.tintColor = UIColorFromRGB(kTabGridToolbarTextButtonColor);
-    _addToButton.title = l10n_util::GetNSString(IDS_IOS_TAB_GRID_ADD_TO_BUTTON);
-    _addToButton.accessibilityIdentifier = kTabGridEditAddToButtonIdentifier;
-    _shareButton = [[UIBarButtonItem alloc]
-        initWithBarButtonSystemItem:UIBarButtonSystemItemAction
-                             target:nil
-                             action:nil];
-    _shareButton.tintColor = UIColorFromRGB(kTabGridToolbarTextButtonColor);
-    _shareButton.accessibilityIdentifier = kTabGridEditShareButtonIdentifier;
-    _closeTabsButton = [[UIBarButtonItem alloc] init];
-    _closeTabsButton.tintColor = UIColorFromRGB(kTabGridToolbarTextButtonColor);
-    _closeTabsButton.accessibilityIdentifier =
-        kTabGridEditCloseTabsButtonIdentifier;
-    [self updateCloseTabsButtonTitle];
-  }
+  _addToButton = [[UIBarButtonItem alloc] init];
+  _addToButton.tintColor = UIColorFromRGB(kTabGridToolbarTextButtonColor);
+  _addToButton.title = l10n_util::GetNSString(IDS_IOS_TAB_GRID_ADD_TO_BUTTON);
+  _addToButton.accessibilityIdentifier = kTabGridEditAddToButtonIdentifier;
+  _shareButton = [[UIBarButtonItem alloc]
+      initWithBarButtonSystemItem:UIBarButtonSystemItemAction
+                           target:nil
+                           action:nil];
+  _shareButton.tintColor = UIColorFromRGB(kTabGridToolbarTextButtonColor);
+  _shareButton.accessibilityIdentifier = kTabGridEditShareButtonIdentifier;
+  _closeTabsButton = [[UIBarButtonItem alloc] init];
+  _closeTabsButton.tintColor = UIColorFromRGB(kTabGridToolbarTextButtonColor);
+  _closeTabsButton.accessibilityIdentifier =
+      kTabGridEditCloseTabsButtonIdentifier;
+  [self updateCloseTabsButtonTitle];
 
   _compactConstraints = @[
     [_toolbar.topAnchor constraintEqualToAnchor:self.topAnchor],
@@ -347,7 +346,6 @@
       -kTabGridFloatingButtonVerticalInset;
 
   if (self.mode == TabGridModeSelection) {
-    DCHECK(IsTabsBulkActionsEnabled());
     [_toolbar setItems:@[
       _closeTabsButton, _spaceItem, _shareButton, _spaceItem, _addToButton
     ]];
@@ -358,7 +356,7 @@
     return;
   }
   UIBarButtonItem* leadingButton = _closeAllOrUndoButton;
-  if (IsTabsBulkActionsEnabled() && !_undoActive)
+  if (!_undoActive)
     leadingButton = _editButton;
   UIBarButtonItem* trailingButton = _doneButton;
 
@@ -397,7 +395,8 @@
 // Returns YES if the full toolbar should be shown instead of the floating
 // button.
 - (BOOL)shouldShowFullBar {
-  return [self shouldUseCompactLayout] || self.mode == TabGridModeSelection;
+  return [self shouldUseCompactLayout] || self.page == TabGridPageRemoteTabs ||
+         self.mode == TabGridModeSelection || self.mode == TabGridModeSearch;
 }
 
 // Returns YES if should use compact bottom toolbar layout.

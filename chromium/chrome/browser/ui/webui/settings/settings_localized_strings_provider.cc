@@ -23,8 +23,8 @@
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/obsolete_system/obsolete_system.h"
-#include "chrome/browser/privacy_sandbox/privacy_sandbox_settings.h"
-#include "chrome/browser/privacy_sandbox/privacy_sandbox_settings_factory.h"
+#include "chrome/browser/privacy_sandbox/privacy_sandbox_service.h"
+#include "chrome/browser/privacy_sandbox/privacy_sandbox_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_shortcut_manager.h"
 #include "chrome/browser/signin/account_consistency_mode_manager.h"
@@ -68,6 +68,7 @@
 #include "components/password_manager/core/browser/manage_passwords_referrer.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/prefs/pref_service.h"
+#include "components/privacy_sandbox/privacy_sandbox_features.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/signin/public/base/signin_buildflags.h"
 #include "components/strings/grit/components_chromium_strings.h"
@@ -82,6 +83,7 @@
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
+#include "crypto/crypto_buildflags.h"
 #include "device/fido/features.h"
 #include "media/base/media_switches.h"
 #include "net/base/url_util.h"
@@ -116,11 +118,11 @@
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
 #endif
 
-#if defined(OS_LINUX) && !BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "ui/display/screen.h"
 #endif
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 #include "chrome/browser/safe_browsing/chrome_cleaner/srt_field_trial_win.h"
 #include "device/fido/win/webauthn_api.h"
 
@@ -130,13 +132,13 @@
 #include "chrome/grit/chrome_unscaled_resources.h"
 #include "ui/base/resource/resource_bundle.h"
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
-#endif  // defined(OS_WIN)
+#endif  // BUILDFLAG(IS_WIN)
 
-#if defined(USE_NSS_CERTS)
+#if BUILDFLAG(USE_NSS_CERTS)
 #include "chrome/browser/ui/webui/certificate_manager_localized_strings_provider.h"
 #endif
 
-#if defined(OS_LINUX)
+#if BUILDFLAG(IS_LINUX)
 #include "ui/ozone/public/ozone_platform.h"
 #endif
 
@@ -166,7 +168,11 @@ void AddCommonStrings(content::WebUIDataSource* html_source, Profile* profile) {
     {"menu", IDS_MENU},
     {"menuButtonLabel", IDS_SETTINGS_MENU_BUTTON_LABEL},
     {"moreActions", IDS_SETTINGS_MORE_ACTIONS},
+    {"noThanks", IDS_NO_THANKS},
     {"ok", IDS_OK},
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
+    {"relaunchConfirmationDialogTitle", IDS_RELAUNCH_CONFIRMATION_DIALOG_TITLE},
+#endif
     {"restart", IDS_SETTINGS_RESTART},
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
     {"restartToApplyChanges", IDS_SETTINGS_RESTART_TO_APPLY_CHANGES},
@@ -210,7 +216,7 @@ void AddCommonStrings(content::WebUIDataSource* html_source, Profile* profile) {
                           profile->IsGuestSession());
 #endif
 
-  html_source->AddBoolean("isSupervised", profile->IsChild());
+  html_source->AddBoolean("isChildAccount", profile->IsChild());
 }
 
 void AddA11yStrings(content::WebUIDataSource* html_source) {
@@ -237,7 +243,7 @@ void AddA11yStrings(content::WebUIDataSource* html_source) {
   };
   html_source->AddLocalizedStrings(kLocalizedStrings);
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   html_source->AddBoolean("isWindows10OrNewer",
                           base::win::GetVersion() >= base::win::Version::WIN10);
 #endif
@@ -365,7 +371,7 @@ void AddAppearanceStrings(content::WebUIDataSource* html_source,
     {"huge", IDS_SETTINGS_HUGE_FONT_SIZE},
 // TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
 // of lacros-chrome is complete.
-#if defined(OS_LINUX) && !BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CHROMEOS_LACROS)
     {"systemTheme", IDS_SETTINGS_SYSTEM_THEME},
     {"useSystemTheme", IDS_SETTINGS_USE_SYSTEM_THEME},
     {"classicTheme", IDS_SETTINGS_CLASSIC_THEME},
@@ -373,10 +379,10 @@ void AddAppearanceStrings(content::WebUIDataSource* html_source,
 #else
     {"resetToDefaultTheme", IDS_SETTINGS_RESET_TO_DEFAULT_THEME},
 #endif
-#if defined(OS_LINUX) && !BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CHROMEOS_LACROS)
     {"showWindowDecorations", IDS_SHOW_WINDOW_DECORATIONS},
 #endif
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
     {"tabsToLinks", IDS_SETTINGS_TABS_TO_LINKS_PREF},
     {"warnBeforeQuitting", IDS_SETTINGS_WARN_BEFORE_QUITTING_PREF},
 #endif
@@ -394,7 +400,7 @@ void AddAppearanceStrings(content::WebUIDataSource* html_source,
 
 // TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
 // of lacros-chrome is complete.
-#if defined(OS_LINUX) && !BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CHROMEOS_LACROS)
   bool show_custom_chrome_frame = ui::OzonePlatform::GetInstance()
                                       ->GetPlatformRuntimeProperties()
                                       .supports_server_side_window_decorations;
@@ -537,7 +543,7 @@ void AddDownloadsStrings(content::WebUIDataSource* html_source) {
                              IDS_SETTINGS_DOWNLOAD_WEB_DRIVE_LOCATION, kBox));
 }
 
-#if defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#if BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
 void AddChromeCleanupStrings(content::WebUIDataSource* html_source) {
   const char16_t kUnwantedSoftwareProtectionWhitePaperUrl[] =
       u"https://www.google.ca/chrome/browser/privacy/"
@@ -662,11 +668,11 @@ void AddIncompatibleApplicationsStrings(content::WebUIDataSource* html_source) {
   html_source->AddString("incompatibleApplicationsSubpageLearnHow",
                          learn_how_text);
 }
-#endif  // defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#endif  // BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
 void AddResetStrings(content::WebUIDataSource* html_source, Profile* profile) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
-#if defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#if BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
     {"resetPageTitle", IDS_SETTINGS_RESET_AND_CLEANUP},
 #else
     {"resetPageTitle", IDS_SETTINGS_RESET},
@@ -686,7 +692,7 @@ void AddResetStrings(content::WebUIDataSource* html_source, Profile* profile) {
     {"resetAutomatedDialogTitle", IDS_SETTINGS_RESET_AUTOMATED_DIALOG_TITLE},
     {"resetProfileBannerButton", IDS_SETTINGS_RESET_BANNER_RESET_BUTTON_TEXT},
     {"resetProfileBannerDescription", IDS_SETTINGS_RESET_BANNER_TEXT},
-#if defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#if BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
     {"resetCleanupComputerTrigger",
      IDS_SETTINGS_RESET_CLEAN_UP_COMPUTER_TRIGGER},
 #endif
@@ -697,7 +703,7 @@ void AddResetStrings(content::WebUIDataSource* html_source, Profile* profile) {
       "showResetProfileBanner",
       ResetSettingsHandler::ShouldShowResetProfileBanner(profile));
   bool is_reset_shortcuts_feature_enabled = false;
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   // TODO(crbug/1234599): Remove this flag from the JS.
   is_reset_shortcuts_feature_enabled = true;
 #endif
@@ -749,7 +755,7 @@ void AddLanguagesStrings(content::WebUIDataSource* html_source,
     {"removeLanguage", IDS_SETTINGS_LANGUAGES_LANGUAGES_LIST_REMOVE},
     {"addLanguages", IDS_SETTINGS_LANGUAGES_LANGUAGES_ADD},
     {"addLanguagesDialogTitle", IDS_SETTINGS_LANGUAGES_MANAGE_LANGUAGES_TITLE},
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
     {"isDisplayedInThisLanguage",
      IDS_SETTINGS_LANGUAGES_IS_DISPLAYED_IN_THIS_LANGUAGE},
     {"displayInThisLanguage", IDS_SETTINGS_LANGUAGES_DISPLAY_IN_THIS_LANGUAGE},
@@ -772,7 +778,7 @@ void AddLanguagesStrings(content::WebUIDataSource* html_source,
     // Managed dialog strings:
     {"languageManagedDialogTitle", IDS_SETTINGS_LANGUAGES_MANAGED_DIALOG_TITLE},
     {"languageManagedDialogBody", IDS_SETTINGS_LANGUAGES_MANAGED_DIALOG_BODY},
-#if !defined(OS_MAC)
+#if !BUILDFLAG(IS_MAC)
     {"spellCheckDisabledReason",
      IDS_SETTING_LANGUAGES_SPELL_CHECK_DISABLED_REASON},
     {"spellCheckLanguagesListTitle",
@@ -827,6 +833,8 @@ void AddOnStartupStrings(content::WebUIDataSource* html_source) {
       {"onStartupOpenNewTab", IDS_SETTINGS_ON_STARTUP_OPEN_NEW_TAB},
       {"onStartupContinue", IDS_SETTINGS_ON_STARTUP_CONTINUE},
       {"onStartupOpenSpecific", IDS_SETTINGS_ON_STARTUP_OPEN_SPECIFIC},
+      {"onStartupContinueAndOpenSpecific",
+       IDS_SETTINGS_ON_STARTUP_CONTINUE_AND_OPEN_SPECIFIC},
       {"onStartupUseCurrent", IDS_SETTINGS_ON_STARTUP_USE_CURRENT},
       {"onStartupAddNewPage", IDS_SETTINGS_ON_STARTUP_ADD_NEW_PAGE},
       {"onStartupEditPage", IDS_SETTINGS_ON_STARTUP_EDIT_PAGE},
@@ -900,6 +908,7 @@ void AddAutofillStrings(content::WebUIDataSource* html_source,
       {"compromisedPasswords", IDS_SETTINGS_COMPROMISED_PASSWORDS},
       {"compromisedPasswordsDescription",
        IDS_SETTINGS_COMPROMISED_PASSWORDS_ADVICE},
+      {"mutedPasswords", IDS_SETTINGS_MUTED_PASSWORDS},
       {"weakPasswords", IDS_SETTINGS_WEAK_PASSWORDS},
       {"changePasswordButton", IDS_SETTINGS_CHANGE_PASSWORD_BUTTON},
       {"changePasswordInApp", IDS_SETTINGS_CHANGE_PASSWORD_IN_APP_LABEL},
@@ -910,6 +919,9 @@ void AddAutofillStrings(content::WebUIDataSource* html_source,
       {"showCompromisedPassword", IDS_SETTINGS_COMPROMISED_PASSWORD_SHOW},
       {"hideCompromisedPassword", IDS_SETTINGS_COMPROMISED_PASSWORD_HIDE},
       {"removeCompromisedPassword", IDS_SETTINGS_COMPROMISED_PASSWORD_REMOVE},
+      {"muteCompromisedPassword", IDS_SETTINGS_COMPROMISED_PASSWORD_MUTE},
+      {"unmuteMutedCompromisedPassword",
+       IDS_SETTINGS_COMPROMISED_PASSWORD_UNMUTE},
       {"removeCompromisedPasswordConfirmationTitle",
        IDS_SETTINGS_REMOVE_COMPROMISED_PASSWORD_CONFIRMATION_TITLE},
       {"removeCompromisedPasswordConfirmationDescription",
@@ -923,6 +935,7 @@ void AddAutofillStrings(content::WebUIDataSource* html_source,
       {"editDisclaimerTitle", IDS_SETTINGS_COMPROMISED_EDIT_DISCLAIMER_TITLE},
       {"editDisclaimerDescription",
        IDS_SETTINGS_COMPROMISED_EDIT_DISCLAIMER_DESCRIPTION},
+      {"genericCreditCard", IDS_AUTOFILL_CC_GENERIC},
       {"creditCards", IDS_AUTOFILL_PAYMENT_METHODS},
       {"noPaymentMethodsFound", IDS_SETTINGS_PAYMENT_METHODS_NONE},
       {"googlePayments", IDS_SETTINGS_GOOGLE_PAYMENTS},
@@ -944,6 +957,10 @@ void AddAutofillStrings(content::WebUIDataSource* html_source,
       {"addressEmail", IDS_SETTINGS_AUTOFILL_ADDRESSES_EMAIL},
       {"honorificLabel", IDS_SETTINGS_AUTOFILL_ADDRESS_HONORIFIC_LABEL},
       {"moreActionsForAddress", IDS_SETTINGS_AUTOFILL_MORE_ACTIONS_FOR_ADDRESS},
+      {"moreActionsForCreditCard",
+       IDS_SETTINGS_AUTOFILL_MORE_ACTIONS_FOR_CREDIT_CARD},
+      {"moreActionsCreditCardDescription",
+       IDS_SETTINGS_AUTOFILL_MORE_ACTIONS_CARD_DESCRIPTION},
       {"removeAddress", IDS_SETTINGS_ADDRESS_REMOVE},
       {"removeAddressConfirmationTitle",
        IDS_SETTINGS_ADDRESS_REMOVE_CONFIRMATION_TITLE},
@@ -1038,6 +1055,7 @@ void AddAutofillStrings(content::WebUIDataSource* html_source,
        IDS_SETTINGS_PASSWORD_DELETED_PASSWORD_FROM_ACCOUNT},
       {"passwordDeletedFromAccountAndDevice",
        IDS_SETTINGS_PASSWORD_DELETED_PASSWORD_FROM_ACCOUNT_AND_DEVICE},
+      {"passwordCopiedToClipboard", IDS_SETTINGS_PASSWORD_COPIED_TO_CLIPBOARD},
       {"passwordMovePasswordsToAccount",
        IDS_SETTINGS_PASSWORD_MOVE_PASSWORDS_TO_ACCOUNT},
       {"passwordMovePasswordsToAccountDialogBodyText",
@@ -1091,14 +1109,24 @@ void AddAutofillStrings(content::WebUIDataSource* html_source,
        IDS_SETTINGS_PASSWORDS_MANAGE_PASSWORDS_PLAINTEXT},
       {"savedToThisDeviceOnly",
        IDS_SETTINGS_PAYMENTS_SAVED_TO_THIS_DEVICE_ONLY},
-      {"trustedVaultOptInLabel", IDS_SETTINGS_TRUSTED_VAULT_OPT_IN_LABEL},
-      {"trustedVaultOptInSubLabel",
-       IDS_SETTINGS_TRUSTED_VAULT_OPT_IN_SUB_LABEL},
+      {"trustedVaultBannerLabel", IDS_SETTINGS_TRUSTED_VAULT_BANNER_LABEL},
+      {"trustedVaultBannerSubLabelOfferOptIn",
+       IDS_SETTINGS_TRUSTED_VAULT_BANNER_SUB_LABEL_OFFER_OPT_IN},
+      {"trustedVaultBannerSubLabelOptedIn",
+       IDS_SETTINGS_TRUSTED_VAULT_BANNER_SUB_LABEL_OPTED_IN},
       {"noSearchResults", IDS_SEARCH_NO_RESULTS},
       {"searchResultsPlural", IDS_SEARCH_RESULTS_PLURAL},
       {"searchResultsSingular", IDS_SEARCH_RESULTS_SINGULAR},
       {"showPasswordLabel", IDS_SETTINGS_PASSWORD_SHOW_PASSWORD_A11Y},
-      {"hidePasswordLabel", IDS_SETTINGS_PASSWORD_HIDE_PASSWORD_A11Y}};
+      {"hidePasswordLabel", IDS_SETTINGS_PASSWORD_HIDE_PASSWORD_A11Y},
+      {"addVirtualCard", IDS_AUTOFILL_ADD_VIRTUAL_CARD},
+      {"removeVirtualCard", IDS_AUTOFILL_REMOVE_VIRTUAL_CARD},
+      {"editServerCard", IDS_AUTOFILL_EDIT_SERVER_CREDIT_CARD},
+      {"virtualCardEnabled", IDS_AUTOFILL_VIRTUAL_CARD_ENABLED_LABEL},
+      {"unenrollVirtualCardDialogTitle",
+       IDS_AUTOFILL_VIRTUAL_CARD_UNENROLL_DIALOG_TITLE},
+      {"unenrollVirtualCardDialogConfirm",
+       IDS_AUTOFILL_VIRTUAL_CARD_UNENROLL_DIALOG_CONFIRM_BUTTON_LABEL}};
 
   GURL google_password_manager_url = GetGooglePasswordManagerURL(
       password_manager::ManagePasswordsReferrer::kChromeSettings);
@@ -1163,6 +1191,8 @@ void AddAutofillStrings(content::WebUIDataSource* html_source,
           base::ASCIIToUTF16(chrome::kSyncLearnMoreURL)));
   html_source->AddString("trustedVaultOptInUrl",
                          chrome::kSyncTrustedVaultOptInURL);
+  html_source->AddString("trustedVaultLearnMoreUrl",
+                         chrome::kSyncTrustedVaultLearnMoreURL);
 
   bool is_guest_mode = false;
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -1204,6 +1234,21 @@ void AddAutofillStrings(content::WebUIDataSource* html_source,
       base::FeatureList::IsEnabled(
           password_manager::features::kSupportForAddPasswordsInSettings));
 
+  html_source->AddBoolean(
+      "virtualCardEnrollmentEnabled",
+      base::FeatureList::IsEnabled(
+          autofill::features::kAutofillEnableUpdateVirtualCardEnrollment) &&
+          base::FeatureList::IsEnabled(
+              autofill::features::
+                  kAutofillEnableVirtualCardManagementInDesktopSettingsPage));
+  html_source->AddString(
+      "unenrollVirtualCardDialogLabel",
+      l10n_util::GetStringFUTF16(
+          IDS_AUTOFILL_VIRTUAL_CARD_UNENROLL_DIALOG_LABEL,
+          base::UTF8ToUTF16(
+              autofill::payments::GetVirtualCardEnrollmentSupportUrl()
+                  .spec())));
+
   html_source->AddLocalizedStrings(kLocalizedStrings);
 }
 
@@ -1211,15 +1256,12 @@ void AddSignOutDialogStrings(content::WebUIDataSource* html_source,
                              Profile* profile) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   bool is_dice_enabled = false;
-  bool use_browser_sync_consent =
-      chromeos::features::ShouldUseBrowserSyncConsent();
 #else
   bool is_dice_enabled =
       AccountConsistencyModeManager::IsDiceEnabledForProfile(profile);
-  bool use_browser_sync_consent = false;
 #endif
 
-  if (use_browser_sync_consent || is_dice_enabled) {
+  if (is_dice_enabled) {
     static constexpr webui::LocalizedString kTurnOffStrings[] = {
         {"syncDisconnect", IDS_SETTINGS_PEOPLE_SYNC_TURN_OFF},
         {"syncDisconnectTitle",
@@ -1376,7 +1418,7 @@ bool IsSecureDnsAvailable() {
 void AddPrivacyStrings(content::WebUIDataSource* html_source,
                        Profile* profile) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
-    {"privacyPageTitle", IDS_SETTINGS_PRIVACY_V2},
+    {"privacyPageTitle", IDS_SETTINGS_PRIVACY},
     {"privacyPageMore", IDS_SETTINGS_PRIVACY_MORE},
     {"doNotTrack", IDS_SETTINGS_ENABLE_DO_NOT_TRACK},
     {"doNotTrackDialogTitle", IDS_SETTINGS_ENABLE_DO_NOT_TRACK_DIALOG_TITLE},
@@ -1576,6 +1618,59 @@ void AddPrivacySandboxStrings(content::WebUIDataSource* html_source,
        IDS_SETTINGS_PRIVACY_SANDBOX_PAGE_FLOC_COHORT_NEXT_UPDATE},
       {"privacySandboxPageFlocResetCohort",
        IDS_SETTINGS_PRIVACY_SANDBOX_PAGE_FLOC_RESET_COHORT},
+      // The following strings are used for PrivacySandboxSettings3.
+      {"privacySandboxTrialsTitle", IDS_SETTINGS_PRIVACY_SANDBOX_TRIALS_TITLE},
+      {"privacySandboxTrialsSummary",
+       IDS_SETTINGS_PRIVACY_SANDBOX_TRIALS_SUMMARY},
+      {"privacySandboxAdPersonalizationTitle",
+       IDS_SETTINGS_PRIVACY_SANDBOX_AD_PERSONALIZATION_TITLE},
+      {"privacySandboxAdPersonalizationSummary",
+       IDS_SETTINGS_PRIVACY_SANDBOX_AD_PERSONALIZATION_SUMMARY},
+      {"privacySandboxAdMeasurementTitle",
+       IDS_SETTINGS_PRIVACY_SANDBOX_AD_MEASUREMENT_TITLE},
+      {"privacySandboxAdMeasurementSummary",
+       IDS_SETTINGS_PRIVACY_SANDBOX_AD_MEASUREMENT_SUMMARY},
+      {"privacySandboxSpamAndFraudTitle",
+       IDS_SETTINGS_PRIVACY_SANDBOX_SPAM_AND_FRAUD_TITLE},
+      {"privacySandboxSpamAndFraudSummary",
+       IDS_SETTINGS_PRIVACY_SANDBOX_SPAM_AND_FRAUD_SUMMARY},
+      {"privacySandboxLearnMoreDialogTitle",
+       IDS_SETTINGS_PRIVACY_SANDBOX_LEARN_MORE_DIALOG_TITLE},
+      {"privacySandboxLearnMoreDialogBrowserInterests",
+       IDS_SETTINGS_PRIVACY_SANDBOX_LEARN_MORE_DIALOG_BROWSER_INTERESTS},
+      {"privacySandboxLearnMoreDialogWebsiteInterests",
+       IDS_SETTINGS_PRIVACY_SANDBOX_LEARN_MORE_DIALOG_WEBSITE_INTERESTS},
+      {"privacySandboxLearnMoreDialogDataTypes",
+       IDS_SETTINGS_PRIVACY_SANDBOX_LEARN_MORE_DIALOG_DATA_TYPES},
+      {"privacySandboxLearnMoreDialogDataUsage",
+       IDS_SETTINGS_PRIVACY_SANDBOX_LEARN_MORE_DIALOG_DATA_USAGE},
+      {"privacySandboxLearnMoreDialogDataManagement",
+       IDS_SETTINGS_PRIVACY_SANDBOX_LEARN_MORE_DIALOG_DATA_MANAGEMENT},
+      {"privacySandboxAdPersonalizationDialogTitle",
+       IDS_SETTINGS_PRIVACY_SANDBOX_AD_PERSONALIZATION_DIALOG_TITLE},
+      {"privacySandboxAdPersonalizationDialogDescription",
+       IDS_SETTINGS_PRIVACY_SANDBOX_AD_PERSONALIZATION_DIALOG_DESCRIPTION},
+      {"privacySandboxAdPersonalizationDialogBrowserInterests",
+       IDS_SETTINGS_PRIVACY_SANDBOX_AD_PERSONALIZATION_DIALOG_BROWSER_INTERESTS},
+      {"privacySandboxAdPersonalizationDialogBrowserInterestsEmpty",
+       IDS_SETTINGS_PRIVACY_SANDBOX_AD_PERSONALIZATION_DIALOG_BROWSER_INTERESTS_EMPTY},
+      {"privacySandboxAdPersonalizationDialogWebsiteInterests",
+       IDS_SETTINGS_PRIVACY_SANDBOX_AD_PERSONALIZATION_DIALOG_WEBSITE_INTERESTS},
+      {"privacySandboxAdPersonalizationDialogWebsiteInterestsEmpty",
+       IDS_SETTINGS_PRIVACY_SANDBOX_AD_PERSONALIZATION_DIALOG_WEBSITE_INTERESTS_EMPTY},
+      {"privacySandboxAdMeasurementDialogTitle",
+       IDS_SETTINGS_PRIVACY_SANDBOX_AD_MEASUREMENT_DIALOG_TITLE},
+      {"privacySandboxAdMeasurementDialogDescription",
+       IDS_SETTINGS_PRIVACY_SANDBOX_AD_MEASUREMENT_DIALOG_DESCRIPTION},
+      {"privacySandboxSpamAndFraudDialogTitle",
+       IDS_SETTINGS_PRIVACY_SANDBOX_SPAM_AND_FRAUD_DIALOG_TITLE},
+      {"privacySandboxSpamAndFraudDialogDescription1",
+       IDS_SETTINGS_PRIVACY_SANDBOX_SPAM_AND_FRAUD_DIALOG_DESCRIPTION1},
+      {"privacySandboxSpamAndFraudDialogDescription2",
+       IDS_SETTINGS_PRIVACY_SANDBOX_SPAM_AND_FRAUD_DIALOG_DESCRIPTION2},
+      {"privacySandboxSpamAndFraudDialogDescription3",
+       IDS_SETTINGS_PRIVACY_SANDBOX_SPAM_AND_FRAUD_DIALOG_DESCRIPTION3},
+
   };
   html_source->AddLocalizedStrings(kLocalizedStrings);
 
@@ -1589,7 +1684,7 @@ void AddPrivacySandboxStrings(content::WebUIDataSource* html_source,
   // one provided by the Privacy Sandbox service, and one with a URL
   // replacement based on a feature parameter.
   std::u16string floc_explanation =
-      PrivacySandboxSettingsFactory::GetForProfile(profile)
+      PrivacySandboxServiceFactory::GetForProfile(profile)
           ->GetFlocDescriptionForDisplay() +
       u" " +  // Whitespace is a valid separator w.r.t l10n.
       l10n_util::GetStringFUTF16(IDS_SETTINGS_PRIVACY_SANDBOX_FLOC_TRIAL_ACTIVE,
@@ -1600,109 +1695,114 @@ void AddPrivacySandboxStrings(content::WebUIDataSource* html_source,
   // profile, and so the relevant string can be injected here, rather than
   // fetched dynamically from JS.
   html_source->AddString("privacySandboxPageFlocResetExplanation",
-                         PrivacySandboxSettingsFactory::GetForProfile(profile)
+                         PrivacySandboxServiceFactory::GetForProfile(profile)
                              ->GetFlocResetExplanationForDisplay());
+
+  html_source->AddBoolean(
+      "privacySandboxSettings3Enabled",
+      base::FeatureList::IsEnabled(privacy_sandbox::kPrivacySandboxSettings3));
+  html_source->AddString(
+      "privacySandboxAdMeasurementDialogControlMeasurement",
+      l10n_util::GetStringFUTF16(
+          IDS_SETTINGS_PRIVACY_SANDBOX_AD_MEASUREMENT_DIALOG_CONTROL_MEASUREMENT,
+          base::ASCIIToUTF16(chrome::kChromeUIHistoryURL)));
 }
 
-void AddPrivacyReviewStrings(content::WebUIDataSource* html_source) {
+void AddPrivacyGuideStrings(content::WebUIDataSource* html_source) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
-      {"privacyReviewLabel", IDS_SETTINGS_PRIVACY_REVIEW_LABEL},
-      {"privacyReviewSublabel", IDS_SETTINGS_PRIVACY_REVIEW_SUBLABEL},
-      {"privacyReviewPromoTitle", IDS_SETTINGS_PRIVACY_REVIEW_PROMO_TITLE},
-      {"privacyReviewPromoBody", IDS_SETTINGS_PRIVACY_REVIEW_PROMO_BODY},
-      {"privacyReviewPromoStartButton",
-       IDS_SETTINGS_PRIVACY_REVIEW_PROMO_START_BUTTON},
-      {"privacyReviewBackButton", IDS_SETTINGS_PRIVACY_REVIEW_BACK_BUTTON},
-      {"privacyReviewSteps", IDS_SETTINGS_PRIVACY_REVIEW_STEPS},
-      {"privacyReviewNextButton", IDS_SETTINGS_PRIVACY_REVIEW_NEXT_BUTTON},
-      {"privacyReviewFeatureDescriptionHeader",
-       IDS_SETTINGS_PRIVACY_REVIEW_FEATURE_DESCRIPTION_HEADER},
-      {"privacyReviewWhatYouShareWithGoogle",
-       IDS_SETTINGS_PRIVACY_REVIEW_WHAT_YOU_SHARE_WITH_GOOGLE},
-      {"privacyReviewWhatYouShareWithWebsites",
-       IDS_SETTINGS_PRIVACY_REVIEW_WHAT_YOU_SHARE_WITH_WEBSITES},
-      {"privacyReviewWelcomeCardHeader",
-       IDS_SETTINGS_PRIVACY_REVIEW_WELCOME_CARD_HEADER},
-      {"privacyReviewWelcomeCardSubHeader",
-       IDS_SETTINGS_PRIVACY_REVIEW_WELCOME_CARD_SUB_HEADER},
-      {"privacyReviewWelcomeCardStartButton",
-       IDS_SETTINGS_PRIVACY_REVIEW_WELCOME_CARD_START_BUTTON},
-      {"privacyReviewWelcomeCardDontShowAgainCheckbox",
-       IDS_SETTINGS_PRIVACY_REVIEW_WELCOME_CARD_DONT_SHOW_AGAIN_CHECKBOX},
-      {"privacyReviewCompletionCardHeader",
-       IDS_SETTINGS_PRIVACY_REVIEW_COMPLETION_CARD_HEADER},
-      {"privacyReviewCompletionCardSubHeader",
-       IDS_SETTINGS_PRIVACY_REVIEW_COMPLETION_CARD_SUB_HEADER},
-      {"privacyReviewCompletionCardLeaveButton",
-       IDS_SETTINGS_PRIVACY_REVIEW_COMPLETION_CARD_LEAVE_BUTTON},
-      {"privacyReviewCompletionCardPrivacySandboxLabel",
-       IDS_SETTINGS_PRIVACY_REVIEW_COMPLETION_CARD_PRIVACY_SANDBOX_LABEL},
-      {"privacyReviewCompletionCardPrivacySandboxSubLabel",
-       IDS_SETTINGS_PRIVACY_REVIEW_COMPLETION_CARD_PRIVACY_SANDBOX_SUB_LABEL},
-      {"privacyReviewCompletionCardWaaLabel",
-       IDS_SETTINGS_PRIVACY_REVIEW_COMPLETION_CARD_WAA_LABEL},
-      {"privacyReviewCompletionCardWaaSubLabel",
-       IDS_SETTINGS_PRIVACY_REVIEW_COMPLETION_CARD_WAA_SUB_LABEL},
-      {"privacyReviewMsbbCardHeader",
-       IDS_SETTINGS_PRIVACY_REVIEW_MSBB_CARD_HEADER},
-      {"privacyReviewMsbbFeatureDescription1",
-       IDS_SETTINGS_PRIVACY_REVIEW_MSBB_FEATURE_DESCRIPTION1},
-      {"privacyReviewMsbbFeatureDescription2",
-       IDS_SETTINGS_PRIVACY_REVIEW_MSBB_FEATURE_DESCRIPTION2},
-      {"privacyReviewMsbbFeatureDescription3",
-       IDS_SETTINGS_PRIVACY_REVIEW_MSBB_FEATURE_DESCRIPTION3},
-      {"privacyReviewMsbbPrivacyDescription1",
-       IDS_SETTINGS_PRIVACY_REVIEW_MSBB_PRIVACY_DESCRIPTION1},
-      {"privacyReviewMsbbPrivacyDescription2",
-       IDS_SETTINGS_PRIVACY_REVIEW_MSBB_PRIVACY_DESCRIPTION2},
-      {"privacyReviewClearOnExitCardHeader",
-       IDS_SETTINGS_PRIVACY_REVIEW_CLEAR_ON_EXIT_CARD_HEADER},
-      {"privacyReviewClearOnExitFeatureDescription1",
-       IDS_SETTINGS_PRIVACY_REVIEW_CLEAR_ON_EXIT_FEATURE_DESCRIPTION1},
-      {"privacyReviewClearOnExitFeatureDescription2",
-       IDS_SETTINGS_PRIVACY_REVIEW_CLEAR_ON_EXIT_FEATURE_DESCRIPTION2},
-      {"privacyReviewClearOnExitFeatureDescription3",
-       IDS_SETTINGS_PRIVACY_REVIEW_CLEAR_ON_EXIT_FEATURE_DESCRIPTION3},
-      {"privacyReviewHistorySyncCardHeader",
-       IDS_SETTINGS_PRIVACY_REVIEW_HISTORY_SYNC_CARD_HEADER},
-      {"privacyReviewHistorySyncFeatureDescription1",
-       IDS_SETTINGS_PRIVACY_REVIEW_HISTORY_SYNC_FEATURE_DESCRIPTION1},
-      {"privacyReviewHistorySyncFeatureDescription2",
-       IDS_SETTINGS_PRIVACY_REVIEW_HISTORY_SYNC_FEATURE_DESCRIPTION2},
-      {"privacyReviewHistorySyncPrivacyDescription1",
-       IDS_SETTINGS_PRIVACY_REVIEW_HISTORY_SYNC_PRIVACY_DESCRIPTION1},
-      {"privacyReviewCookiesCardHeader",
-       IDS_SETTINGS_PRIVACY_REVIEW_COOKIES_CARD_HEADER},
-      {"privacyReviewCookiesCardBlockTpcIncognitoSubheader",
-       IDS_SETTINGS_PRIVACY_REVIEW_COOKIES_CARD_BLOCK_TPC_INCOGNITO_SUBHEADER},
-      {"privacyReviewCookiesCardBlockTpcIncognitoFeatureDescription1",
-       IDS_SETTINGS_PRIVACY_REVIEW_COOKIES_CARD_BLOCK_TPC_INCOGNITO_FEATURE_DESCRIPTION1},
-      {"privacyReviewCookiesCardBlockTpcIncognitoFeatureDescription2",
-       IDS_SETTINGS_PRIVACY_REVIEW_COOKIES_CARD_BLOCK_TPC_INCOGNITO_FEATURE_DESCRIPTION2},
-      {"privacyReviewCookiesCardBlockTpcIncognitoPrivacyDescription1",
-       IDS_SETTINGS_PRIVACY_REVIEW_COOKIES_CARD_BLOCK_TPC_INCOGNITO_PRIVACY_DESCRIPTION1},
-      {"privacyReviewCookiesCardBlockTpcSubheader",
-       IDS_SETTINGS_PRIVACY_REVIEW_COOKIES_CARD_BLOCK_TPC_SUBHEADER},
-      {"privacyReviewCookiesCardBlockTpcFeatureDescription1",
-       IDS_SETTINGS_PRIVACY_REVIEW_COOKIES_CARD_BLOCK_TPC_FEATURE_DESCRIPTION1},
-      {"privacyReviewCookiesCardBlockTpcFeatureDescription2",
-       IDS_SETTINGS_PRIVACY_REVIEW_COOKIES_CARD_BLOCK_TPC_FEATURE_DESCRIPTION2},
-      {"privacyReviewCookiesCardBlockTpcPrivacyDescription1",
-       IDS_SETTINGS_PRIVACY_REVIEW_COOKIES_CARD_BLOCK_TPC_PRIVACY_DESCRIPTION1},
-      {"privacyReviewSafeBrowsingCardHeader",
-       IDS_SETTINGS_PRIVACY_REVIEW_SAFE_BROWSING_CARD_HEADER},
-      {"privacyReviewSafeBrowsingCardEnhancedProtectionPrivacyDescription1",
-       IDS_SETTINGS_PRIVACY_REVIEW_SAFE_BROWSING_CARD_ENHANCED_PROTECTION_PRIVACY_DESCRIPTION1},
-      {"privacyReviewSafeBrowsingCardEnhancedProtectionPrivacyDescription2",
-       IDS_SETTINGS_PRIVACY_REVIEW_SAFE_BROWSING_CARD_ENHANCED_PROTECTION_PRIVACY_DESCRIPTION2},
-      {"privacyReviewSafeBrowsingCardEnhancedProtectionPrivacyDescription3",
-       IDS_SETTINGS_PRIVACY_REVIEW_SAFE_BROWSING_CARD_ENHANCED_PROTECTION_PRIVACY_DESCRIPTION3},
-      {"privacyReviewSafeBrowsingCardStandardProtectionFeatureDescription1",
-       IDS_SETTINGS_PRIVACY_REVIEW_SAFE_BROWSING_CARD_STANDARD_PROTECTION_FEATURE_DESCRIPTION1},
-      {"privacyReviewSafeBrowsingCardStandardProtectionFeatureDescription2",
-       IDS_SETTINGS_PRIVACY_REVIEW_SAFE_BROWSING_CARD_STANDARD_PROTECTION_FEATURE_DESCRIPTION2},
-      {"privacyReviewSafeBrowsingCardStandardProtectionPrivacyDescription1",
-       IDS_SETTINGS_PRIVACY_REVIEW_SAFE_BROWSING_CARD_STANDARD_PROTECTION_PRIVACY_DESCRIPTION1},
+      {"privacyGuideLabel", IDS_SETTINGS_PRIVACY_GUIDE_LABEL},
+      {"privacyGuideSublabel", IDS_SETTINGS_PRIVACY_GUIDE_SUBLABEL},
+      {"privacyGuidePromoHeader", IDS_SETTINGS_PRIVACY_GUIDE_PROMO_HEADER},
+      {"privacyGuidePromoBody", IDS_SETTINGS_PRIVACY_GUIDE_PROMO_BODY},
+      {"privacyGuidePromoStartButton",
+       IDS_SETTINGS_PRIVACY_GUIDE_PROMO_START_BUTTON},
+      {"privacyGuideBackButton", IDS_SETTINGS_PRIVACY_GUIDE_BACK_BUTTON},
+      {"privacyGuideSteps", IDS_SETTINGS_PRIVACY_GUIDE_STEPS},
+      {"privacyGuideNextButton", IDS_SETTINGS_PRIVACY_GUIDE_NEXT_BUTTON},
+      {"privacyGuideFeatureDescriptionHeader",
+       IDS_SETTINGS_PRIVACY_GUIDE_FEATURE_DESCRIPTION_HEADER},
+      {"privacyGuideThingsToConsider",
+       IDS_SETTINGS_PRIVACY_GUIDE_THINGS_TO_CONSIDER},
+      {"privacyGuideWelcomeCardHeader",
+       IDS_SETTINGS_PRIVACY_GUIDE_WELCOME_CARD_HEADER},
+      {"privacyGuideWelcomeCardSubHeader",
+       IDS_SETTINGS_PRIVACY_GUIDE_WELCOME_CARD_SUB_HEADER},
+      {"privacyGuideCompletionCardHeader",
+       IDS_SETTINGS_PRIVACY_GUIDE_COMPLETION_CARD_HEADER},
+      {"privacyGuideCompletionCardSubHeader",
+       IDS_SETTINGS_PRIVACY_GUIDE_COMPLETION_CARD_SUB_HEADER},
+      {"privacyGuideCompletionCardLeaveButton",
+       IDS_SETTINGS_PRIVACY_GUIDE_COMPLETION_CARD_LEAVE_BUTTON},
+      {"privacyGuideCompletionCardPrivacySandboxLabel",
+       IDS_SETTINGS_PRIVACY_GUIDE_COMPLETION_CARD_PRIVACY_SANDBOX_LABEL},
+      {"privacyGuideCompletionCardPrivacySandboxSubLabel",
+       IDS_SETTINGS_PRIVACY_GUIDE_COMPLETION_CARD_PRIVACY_SANDBOX_SUB_LABEL},
+      {"privacyGuideCompletionCardWaaLabel",
+       IDS_SETTINGS_PRIVACY_GUIDE_COMPLETION_CARD_WAA_LABEL},
+      {"privacyGuideCompletionCardWaaSubLabel",
+       IDS_SETTINGS_PRIVACY_GUIDE_COMPLETION_CARD_WAA_SUB_LABEL},
+      {"privacyGuideMsbbCardHeader",
+       IDS_SETTINGS_PRIVACY_GUIDE_MSBB_CARD_HEADER},
+      {"privacyGuideMsbbFeatureDescription1",
+       IDS_SETTINGS_PRIVACY_GUIDE_MSBB_FEATURE_DESCRIPTION1},
+      {"privacyGuideMsbbFeatureDescription2",
+       IDS_SETTINGS_PRIVACY_GUIDE_MSBB_FEATURE_DESCRIPTION2},
+      {"privacyGuideMsbbPrivacyDescription1",
+       IDS_SETTINGS_PRIVACY_GUIDE_MSBB_PRIVACY_DESCRIPTION1},
+      {"privacyGuideMsbbPrivacyDescription2",
+       IDS_SETTINGS_PRIVACY_GUIDE_MSBB_PRIVACY_DESCRIPTION2},
+      {"privacyGuideClearOnExitCardHeader",
+       IDS_SETTINGS_PRIVACY_GUIDE_CLEAR_ON_EXIT_CARD_HEADER},
+      {"privacyGuideClearOnExitFeatureDescription1",
+       IDS_SETTINGS_PRIVACY_GUIDE_CLEAR_ON_EXIT_FEATURE_DESCRIPTION1},
+      {"privacyGuideClearOnExitFeatureDescription2",
+       IDS_SETTINGS_PRIVACY_GUIDE_CLEAR_ON_EXIT_FEATURE_DESCRIPTION2},
+      {"privacyGuideClearOnExitFeatureDescription3",
+       IDS_SETTINGS_PRIVACY_GUIDE_CLEAR_ON_EXIT_FEATURE_DESCRIPTION3},
+      {"privacyGuideHistorySyncCardHeader",
+       IDS_SETTINGS_PRIVACY_GUIDE_HISTORY_SYNC_CARD_HEADER},
+      {"privacyGuideHistorySyncSettingLabel",
+       IDS_SETTINGS_PRIVACY_GUIDE_HISTORY_SYNC_SETTING_LABEL},
+      {"privacyGuideHistorySyncFeatureDescription1",
+       IDS_SETTINGS_PRIVACY_GUIDE_HISTORY_SYNC_FEATURE_DESCRIPTION1},
+      {"privacyGuideHistorySyncFeatureDescription2",
+       IDS_SETTINGS_PRIVACY_GUIDE_HISTORY_SYNC_FEATURE_DESCRIPTION2},
+      {"privacyGuideHistorySyncPrivacyDescription1",
+       IDS_SETTINGS_PRIVACY_GUIDE_HISTORY_SYNC_PRIVACY_DESCRIPTION1},
+      {"privacyGuideCookiesCardHeader",
+       IDS_SETTINGS_PRIVACY_GUIDE_COOKIES_CARD_HEADER},
+      {"privacyGuideCookiesCardBlockTpcIncognitoSubheader",
+       IDS_SETTINGS_PRIVACY_GUIDE_COOKIES_CARD_BLOCK_TPC_INCOGNITO_SUBHEADER},
+      {"privacyGuideCookiesCardBlockTpcIncognitoFeatureDescription1",
+       IDS_SETTINGS_PRIVACY_GUIDE_COOKIES_CARD_BLOCK_TPC_INCOGNITO_FEATURE_DESCRIPTION1},
+      {"privacyGuideCookiesCardBlockTpcIncognitoFeatureDescription2",
+       IDS_SETTINGS_PRIVACY_GUIDE_COOKIES_CARD_BLOCK_TPC_INCOGNITO_FEATURE_DESCRIPTION2},
+      {"privacyGuideCookiesCardBlockTpcIncognitoPrivacyDescription1",
+       IDS_SETTINGS_PRIVACY_GUIDE_COOKIES_CARD_BLOCK_TPC_INCOGNITO_PRIVACY_DESCRIPTION1},
+      {"privacyGuideCookiesCardBlockTpcIncognitoPrivacyDescription2",
+       IDS_SETTINGS_PRIVACY_GUIDE_COOKIES_CARD_BLOCK_TPC_INCOGNITO_PRIVACY_DESCRIPTION2},
+      {"privacyGuideCookiesCardBlockTpcSubheader",
+       IDS_SETTINGS_PRIVACY_GUIDE_COOKIES_CARD_BLOCK_TPC_SUBHEADER},
+      {"privacyGuideCookiesCardBlockTpcFeatureDescription1",
+       IDS_SETTINGS_PRIVACY_GUIDE_COOKIES_CARD_BLOCK_TPC_FEATURE_DESCRIPTION1},
+      {"privacyGuideCookiesCardBlockTpcFeatureDescription2",
+       IDS_SETTINGS_PRIVACY_GUIDE_COOKIES_CARD_BLOCK_TPC_FEATURE_DESCRIPTION2},
+      {"privacyGuideCookiesCardBlockTpcPrivacyDescription1",
+       IDS_SETTINGS_PRIVACY_GUIDE_COOKIES_CARD_BLOCK_TPC_PRIVACY_DESCRIPTION1},
+      {"privacyGuideSafeBrowsingCardHeader",
+       IDS_SETTINGS_PRIVACY_GUIDE_SAFE_BROWSING_CARD_HEADER},
+      {"privacyGuideSafeBrowsingCardEnhancedProtectionPrivacyDescription1",
+       IDS_SETTINGS_PRIVACY_GUIDE_SAFE_BROWSING_CARD_ENHANCED_PROTECTION_PRIVACY_DESCRIPTION1},
+      {"privacyGuideSafeBrowsingCardEnhancedProtectionPrivacyDescription2",
+       IDS_SETTINGS_PRIVACY_GUIDE_SAFE_BROWSING_CARD_ENHANCED_PROTECTION_PRIVACY_DESCRIPTION2},
+      {"privacyGuideSafeBrowsingCardEnhancedProtectionPrivacyDescription3",
+       IDS_SETTINGS_PRIVACY_GUIDE_SAFE_BROWSING_CARD_ENHANCED_PROTECTION_PRIVACY_DESCRIPTION3},
+      {"privacyGuideSafeBrowsingCardStandardProtectionFeatureDescription1",
+       IDS_SETTINGS_PRIVACY_GUIDE_SAFE_BROWSING_CARD_STANDARD_PROTECTION_FEATURE_DESCRIPTION1},
+      {"privacyGuideSafeBrowsingCardStandardProtectionFeatureDescription2",
+       IDS_SETTINGS_PRIVACY_GUIDE_SAFE_BROWSING_CARD_STANDARD_PROTECTION_FEATURE_DESCRIPTION2},
+      {"privacyGuideSafeBrowsingCardStandardProtectionPrivacyDescription1",
+       IDS_SETTINGS_PRIVACY_GUIDE_SAFE_BROWSING_CARD_STANDARD_PROTECTION_PRIVACY_DESCRIPTION1},
   };
   html_source->AddLocalizedStrings(kLocalizedStrings);
 }
@@ -1744,12 +1844,12 @@ void AddSafetyCheckStrings(content::WebUIDataSource* html_source) {
      IDS_SETTINGS_SAFETY_CHECK_EXTENSIONS_PRIMARY_LABEL},
     {"safetyCheckExtensionsButtonAriaLabel",
      IDS_SETTINGS_SAFETY_CHECK_EXTENSIONS_BUTTON_ARIA_LABEL},
-#if defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#if BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
     {"safetyCheckChromeCleanerPrimaryLabel",
      IDS_SETTINGS_SAFETY_CHECK_CHROME_CLEANER_PRIMARY_LABEL},
     {"safetyCheckChromeCleanerButtonAriaLabel",
      IDS_SETTINGS_SAFETY_CHECK_CHROME_CLEANER_BUTTON_ARIA_LABEL},
-#endif  // defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#endif  // BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
   };
   html_source->AddLocalizedStrings(kLocalizedStrings);
 }
@@ -1792,6 +1892,10 @@ void AddSearchEnginesStrings(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_SEARCH_ENGINES_ADD_SEARCH_ENGINE},
       {"searchEnginesEditSearchEngine",
        IDS_SETTINGS_SEARCH_ENGINES_EDIT_SEARCH_ENGINE},
+      {"searchEnginesDeleteConfirmationTitle",
+       IDS_SETTINGS_SEARCH_ENGINES_DELETE_CONFIRMATION_TITLE},
+      {"searchEnginesDeleteConfirmationDescription",
+       IDS_SETTINGS_SEARCH_ENGINES_DELETE_CONFIRMATION_DESCRIPTION},
       {"searchEngines", IDS_SETTINGS_SEARCH_ENGINES},
       {"searchEnginesDefault", IDS_SETTINGS_SEARCH_ENGINES_DEFAULT_ENGINES},
       {"searchEnginesSearchEngines",
@@ -1844,9 +1948,6 @@ void AddSearchEnginesStrings(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_SEARCH_ENGINES_ADDITIONAL_EXTENSIONS},
   };
   html_source->AddLocalizedStrings(kLocalizedStrings);
-  html_source->AddBoolean(
-      "showKeywordTriggerSetting",
-      base::FeatureList::IsEnabled(omnibox::kKeywordSpaceTriggeringSetting));
   html_source->AddBoolean(
       "isActiveSearchEnginesFlagEnabled",
       base::FeatureList::IsEnabled(omnibox::kActiveSearchEngines));
@@ -1919,20 +2020,28 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
     {"cookiePageTitle", IDS_SETTINGS_COOKIES_PAGE},
     {"cookiePageGeneralControls", IDS_SETTINGS_COOKIES_CONTROLS},
     {"cookiePageAllowAll", IDS_SETTINGS_COOKIES_ALLOW_ALL},
+    {"cookiePageAllowAllExpandA11yLabel",
+     IDS_SETTINGS_COOKIES_ALLOW_ALL_EXPAND_A11Y_LABEL},
     {"cookiePageAllowAllBulOne", IDS_SETTINGS_COOKIES_ALLOW_ALL_BULLET_ONE},
     {"cookiePageAllowAllBulTwo", IDS_SETTINGS_COOKIES_ALLOW_ALL_BULLET_TWO},
     {"cookiePageBlockThirdIncognito",
      IDS_SETTINGS_COOKIES_BLOCK_THIRD_PARTY_INCOGNITO},
+    {"cookiePageBlockThirdIncognitoExpandA11yLabel",
+     IDS_SETTINGS_COOKIES_BLOCK_THIRD_PARTY_INCOGNITO_EXPAND_A11Y_LABEL},
     {"cookiePageBlockThirdIncognitoBulOne",
      IDS_SETTINGS_COOKIES_BLOCK_THIRD_PARTY_INCOGNITO_BULLET_ONE},
     {"cookiePageBlockThirdIncognitoBulTwo",
      IDS_SETTINGS_COOKIES_BLOCK_THIRD_PARTY_INCOGNITO_BULLET_TWO},
     {"cookiePageBlockThird", IDS_SETTINGS_COOKIES_BLOCK_THIRD_PARTY},
+    {"cookiePageBlockThirdExpandA11yLabel",
+     IDS_SETTINGS_COOKIES_BLOCK_THIRD_PARTY_EXPAND_A11Y_LABEL},
     {"cookiePageBlockThirdBulOne",
      IDS_SETTINGS_COOKIES_BLOCK_THIRD_PARTY_BULLET_ONE},
     {"cookiePageBlockThirdBulTwo",
      IDS_SETTINGS_COOKIES_BLOCK_THIRD_PARTY_BULLET_TWO},
     {"cookiePageBlockAll", IDS_SETTINGS_COOKIES_BLOCK_ALL},
+    {"cookiePageBlockAllExpandA11yLabel",
+     IDS_SETTINGS_COOKIES_BLOCK_ALL_EXPAND_A11Y_LABEL},
     {"cookiePageBlockAllBulOne", IDS_SETTINGS_COOKIES_BLOCK_ALL_BULLET_ONE},
     {"cookiePageBlockAllBulTwo", IDS_SETTINGS_COOKIES_BLOCK_ALL_BULLET_TWO},
     {"cookiePageBlockAllBulThree", IDS_SETTINGS_COOKIES_BLOCK_ALL_BULLET_THREE},
@@ -1973,6 +2082,8 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
      IDS_SETTINGS_SITE_SETTINGS_ALL_SITES_SORT_METHOD_STORAGE},
     {"siteSettingsAllSitesSortMethodName",
      IDS_SETTINGS_SITE_SETTINGS_ALL_SITES_SORT_METHOD_NAME},
+    {"siteSettingsSiteEntryPartitionedLabel",
+     IDS_SETTINGS_SITE_SETTINGS_SITE_ENTRY_PARTITIONED_LABEL},
     {"siteSettingsSiteRepresentationSeparator",
      IDS_SETTINGS_SITE_SETTINGS_SITE_REPRESENTATION_SEPARATOR},
     {"siteSettingsAppProtocolHandlers",
@@ -2047,7 +2158,7 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
      IDS_SETTINGS_SITE_SETTINGS_PROTECTED_CONTENT_BLOCKED},
     {"siteSettingsProtectedContentBlockedSubLabel",
      IDS_SETTINGS_SITE_SETTINGS_PROTECTED_CONTENT_BLOCKED_SUB_LABEL},
-#if BUILDFLAG(IS_CHROMEOS_ASH) || defined(OS_WIN)
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_WIN)
     {"siteSettingsProtectedContentIdentifiersExplanation",
      IDS_SETTINGS_SITE_SETTINGS_PROTECTED_CONTENT_IDENTIFIERS_EXPLANATION},
     {"siteSettingsProtectedContentEnableIdentifiers",
@@ -2306,6 +2417,8 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
      IDS_SETTINGS_SITE_SETTINGS_REMOVE_SITE_ORIGIN_DIALOG_TITLE},
     {"siteSettingsRemoveSiteOriginAppDialogTitle",
      IDS_SETTINGS_SITE_SETTINGS_REMOVE_SITE_ORIGIN_APP_DIALOG_TITLE},
+    {"siteSettingsRemoveSiteOriginPartitionedDialogTitle",
+     IDS_SETTINGS_SITE_SETTINGS_REMOVE_SITE_ORIGIN_PARTITIONED_DIALOG_TITLE},
     {"siteSettingsRemoveSiteGroupDialogTitle",
      IDS_SETTINGS_SITE_SETTINGS_REMOVE_SITE_GROUP_DIALOG_TITLE},
     {"siteSettingsRemoveSiteGroupAppDialogTitle",
@@ -2619,12 +2732,16 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
     {"siteSettingsWindowPlacement", IDS_SITE_SETTINGS_TYPE_WINDOW_PLACEMENT},
     {"siteSettingsWindowPlacementMidSentence",
      IDS_SITE_SETTINGS_TYPE_WINDOW_PLACEMENT_MID_SENTENCE},
+    {"siteSettingsWindowPlacementDescription",
+     IDS_SETTINGS_SITE_SETTINGS_WINDOW_PLACEMENT_DESCRIPTION},
     {"siteSettingsWindowPlacementAsk",
      IDS_SETTINGS_SITE_SETTINGS_WINDOW_PLACEMENT_ASK},
-    {"siteSettingsWindowPlacementAskRecommended",
-     IDS_SETTINGS_SITE_SETTINGS_WINDOW_PLACEMENT_ASK_RECOMMENDED},
-    {"siteSettingsWindowPlacementBlock",
-     IDS_SETTINGS_SITE_SETTINGS_WINDOW_PLACEMENT_BLOCK},
+    {"siteSettingsWindowPlacementBlocked",
+     IDS_SETTINGS_SITE_SETTINGS_WINDOW_PLACEMENT_BLOCKED},
+    {"siteSettingsWindowPlacementAskExceptions",
+     IDS_SETTINGS_SITE_SETTINGS_WINDOW_PLACEMENT_ASK_EXCEPTIONS},
+    {"siteSettingsWindowPlacementBlockedExceptions",
+     IDS_SETTINGS_SITE_SETTINGS_WINDOW_PLACEMENT_BLOCKED_EXCEPTIONS},
     {"siteSettingsFontAccessMidSentence",
      IDS_SITE_SETTINGS_TYPE_FONT_ACCESS_MID_SENTENCE},
     {"siteSettingsFontAccessAsk", IDS_SETTINGS_SITE_SETTINGS_FONT_ACCESS_ASK},
@@ -2700,7 +2817,7 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
 void AddSystemStrings(content::WebUIDataSource* html_source) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
     {"systemPageTitle", IDS_SETTINGS_SYSTEM},
-#if !defined(OS_MAC)
+#if !BUILDFLAG(IS_MAC)
     {"backgroundAppsLabel", IDS_SETTINGS_SYSTEM_BACKGROUND_APPS_LABEL},
 #endif
     {"hardwareAccelerationLabel",
@@ -2849,10 +2966,23 @@ void AddSecurityKeysStrings(content::WebUIDataSource* html_source) {
       {"securityKeysSetPinButton", IDS_SETTINGS_SECURITY_KEYS_SET_PIN_BUTTON},
       {"securityKeysSamePINAsCurrent",
        IDS_SETTINGS_SECURITY_KEYS_SAME_PIN_AS_CURRENT},
+      {"securityKeysPhoneEditDialogTitle",
+       IDS_SETTINGS_SECURITY_KEYS_PHONE_EDIT_DIALOG_TITLE},
+      {"securityKeysPhonesYourDevices",
+       IDS_SETTINGS_SECURITY_KEYS_PHONES_YOUR_DEVICES},
+      {"securityKeysPhonesSyncedDesc",
+       IDS_SETTINGS_SECURITY_KEYS_PHONES_SYNCED_DESC},
+      {"securityKeysPhonesLinkedDevices",
+       IDS_SETTINGS_SECURITY_KEYS_PHONES_LINKED_DEVICES},
+      {"securityKeysPhonesLinkedDesc",
+       IDS_SETTINGS_SECURITY_KEYS_PHONES_LINKED_DESC},
+      {"securityKeysPhonesManage", IDS_SETTINGS_SECURITY_KEYS_PHONES_MANAGE},
+      {"securityKeysPhonesManageDesc",
+       IDS_SETTINGS_SECURITY_KEYS_PHONES_MANAGE_DESC},
   };
   html_source->AddLocalizedStrings(kSecurityKeysStrings);
   bool win_native_api_available = false;
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   win_native_api_available =
       base::FeatureList::IsEnabled(device::kWebAuthUseNativeWinApi) &&
       device::WinWebAuthnApi::GetDefault()->IsAvailable();
@@ -2861,6 +2991,9 @@ void AddSecurityKeysStrings(content::WebUIDataSource* html_source) {
                           !win_native_api_available);
   html_source->AddBoolean("enableSecurityKeysBioEnrollment",
                           !win_native_api_available);
+  html_source->AddBoolean(
+      "enableSecurityKeysPhonesSubpage",
+      base::FeatureList::IsEnabled(device::kWebAuthPhoneSupport));
 }
 
 void AddIPHStrings(content::WebUIDataSource* html_source) {
@@ -2878,10 +3011,10 @@ void AddLocalizedStrings(content::WebUIDataSource* html_source,
   AddAutofillStrings(html_source, profile, web_contents);
   AddAppearanceStrings(html_source, profile);
 
-#if defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#if BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
   AddChromeCleanupStrings(html_source);
   AddIncompatibleApplicationsStrings(html_source);
-#endif  // defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#endif  // BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
   AddClearBrowsingDataStrings(html_source, profile);
   AddCommonStrings(html_source, profile);
@@ -2892,7 +3025,7 @@ void AddLocalizedStrings(content::WebUIDataSource* html_source,
   AddOnStartupStrings(html_source);
   AddPeopleStrings(html_source, profile);
   AddPrivacySandboxStrings(html_source, profile);
-  AddPrivacyReviewStrings(html_source);
+  AddPrivacyGuideStrings(html_source);
   AddPrivacyStrings(html_source, profile);
   AddSafetyCheckStrings(html_source);
   AddResetStrings(html_source, profile);
@@ -2909,7 +3042,7 @@ void AddLocalizedStrings(content::WebUIDataSource* html_source,
   AddImportDataStrings(html_source);
 #endif
 
-#if defined(USE_NSS_CERTS)
+#if BUILDFLAG(USE_NSS_CERTS)
   certificate_manager::AddLocalizedStrings(html_source);
 #endif
 

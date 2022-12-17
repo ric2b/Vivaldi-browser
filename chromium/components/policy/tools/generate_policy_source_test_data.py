@@ -17,12 +17,14 @@ package enterprise_management;
 option go_package="chromium/policy/enterprise_management_proto";
 
 import "policy_common_definitions%(full_runtime_suffix)s.proto";
+
 message CloudPolicySettings {
   optional StringPolicyProto ExampleStringPolicy = 3;
   optional BooleanPolicyProto ExampleBoolPolicy = 4;
   optional BooleanPolicyProto ExampleBoolMergeMetapolicy = 5;
   optional BooleanPolicyProto ExampleBoolPrecedenceMetapolicy = 6;
   optional BooleanPolicyProto CloudOnlyPolicy = 7;
+  optional StringPolicyProto CloudManagementEnrollmentToken = 8;
 }
 '''
 
@@ -90,6 +92,79 @@ message CloudOnlyPolicyProto {
   optional bool CloudOnlyPolicy = 2;
 }
 
+// CloudManagementEnrollmentToken caption
+//
+// CloudManagementEnrollmentToken desc
+//
+// Supported on: android, chrome_os
+message CloudManagementEnrollmentTokenProto {
+  optional PolicyOptions policy_options = 1;
+  optional string CloudManagementEnrollmentToken = 2;
+}
+
+// ChunkZeroLastFieldBooleanPolicy caption
+//
+// ChunkZeroLastFieldBooleanPolicy desc.
+//
+// Supported on:
+message ChunkZeroLastFieldBooleanPolicyProto {
+  optional PolicyOptions policy_options = 1;
+  optional bool ChunkZeroLastFieldBooleanPolicy = 2;
+}
+
+// ChunkOneFirstFieldBooleanPolicy caption
+//
+// ChunkOneFirstFieldBooleanPolicy desc.
+//
+// Supported on:
+message ChunkOneFirstFieldBooleanPolicyProto {
+  optional PolicyOptions policy_options = 1;
+  optional bool ChunkOneFirstFieldBooleanPolicy = 2;
+}
+
+// ChunkOneLastFieldBooleanPolicy caption
+//
+// ChunkOneLastFieldBooleanPolicy desc.
+//
+// Supported on:
+message ChunkOneLastFieldBooleanPolicyProto {
+  optional PolicyOptions policy_options = 1;
+  optional bool ChunkOneLastFieldBooleanPolicy = 2;
+}
+
+// ChunkTwoFirstFieldStringPolicy caption
+//
+// ChunkTwoFirstFieldStringPolicy desc
+//
+// Supported on:
+message ChunkTwoFirstFieldStringPolicyProto {
+  optional PolicyOptions policy_options = 1;
+  optional string ChunkTwoFirstFieldStringPolicy = 2;
+}
+
+// ChunkTwoLastFieldStringPolicy caption
+//
+// ChunkTwoLastFieldStringPolicy desc
+//
+// Supported on:
+message ChunkTwoLastFieldStringPolicyProto {
+  optional PolicyOptions policy_options = 1;
+  optional string ChunkTwoLastFieldStringPolicy = 2;
+}
+
+// --------------------------------------------------
+// PBs for policies with ID > 979.
+
+message ChromeSettingsSubProto1 {
+  optional ChunkOneFirstFieldBooleanPolicyProto ChunkOneFirstFieldBooleanPolicy = 1;
+  optional ChunkOneLastFieldBooleanPolicyProto ChunkOneLastFieldBooleanPolicy = 800;
+}
+
+message ChromeSettingsSubProto2 {
+  optional ChunkTwoFirstFieldStringPolicyProto ChunkTwoFirstFieldStringPolicy = 1;
+  optional ChunkTwoLastFieldStringPolicyProto ChunkTwoLastFieldStringPolicy = 800;
+}
+
 // --------------------------------------------------
 // Big wrapper PB containing the above groups.
 
@@ -99,6 +174,10 @@ message ChromeSettingsProto {
   optional ExampleBoolMergeMetapolicyProto ExampleBoolMergeMetapolicy = 5;
   optional ExampleBoolPrecedenceMetapolicyProto ExampleBoolPrecedenceMetapolicy = 6;
   optional CloudOnlyPolicyProto CloudOnlyPolicy = 7;
+  optional CloudManagementEnrollmentTokenProto CloudManagementEnrollmentToken = 8;
+  optional ChunkZeroLastFieldBooleanPolicyProto ChunkZeroLastFieldBooleanPolicy = 981;
+  optional ChromeSettingsSubProto1 subProto1 = 982;
+  optional ChromeSettingsSubProto2 subProto2 = 983;
 }
 """
 
@@ -123,7 +202,16 @@ EXPECTED_POLICY_CONSTANTS_HEADER = '''
 
 #include "components/policy/core/common/policy_details.h"
 #include "components/policy/core/common/policy_map.h"
-#include "components/policy/proto/cloud_policy.pb.h"
+
+namespace enterprise_management {
+class BooleanPolicyProto;
+class CloudPolicySettings;
+class IntegerPolicyProto;
+class StringListPolicyProto;
+class StringPolicyProto;
+}
+
+namespace em = enterprise_management;
 
 namespace policy {
 
@@ -131,7 +219,7 @@ namespace internal {
 struct SchemaData;
 }
 %(windows_only_part)s
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS)
 // Sets default profile policies values for enterprise users.
 void SetEnterpriseUsersProfileDefaults(PolicyMap* policy_map);
 // Sets default system-wide policies values for enterprise users.
@@ -156,6 +244,12 @@ extern const char kExampleBoolPolicy[];
 extern const char kExampleBoolMergeMetapolicy[];
 extern const char kExampleBoolPrecedenceMetapolicy[];
 extern const char kCloudOnlyPolicy[];
+extern const char kCloudManagementEnrollmentToken[];
+extern const char kChunkZeroLastFieldBooleanPolicy[];
+extern const char kChunkOneFirstFieldBooleanPolicy[];
+extern const char kChunkOneLastFieldBooleanPolicy[];
+extern const char kChunkTwoFirstFieldStringPolicy[];
+extern const char kChunkTwoLastFieldStringPolicy[];
 
 }  // namespace key
 
@@ -193,42 +287,42 @@ enum class StringPolicyType {
 struct BooleanPolicyAccess {
   const char* policy_key;
   bool per_profile;
-  bool (enterprise_management::CloudPolicySettings::*has_proto)() const;
-  const enterprise_management::BooleanPolicyProto&
-      (enterprise_management::CloudPolicySettings::*get_proto)() const;
+  bool (*has_proto)(const em::CloudPolicySettings& policy);
+  const em::BooleanPolicyProto& (*get_proto)(
+      const em::CloudPolicySettings& policy);
 };
-extern const BooleanPolicyAccess kBooleanPolicyAccess[];
+extern const std::array<BooleanPolicyAccess, 4> kBooleanPolicyAccess;
 
 // Read access to the protobufs of all supported integer user policies.
 struct IntegerPolicyAccess {
   const char* policy_key;
   bool per_profile;
-  bool (enterprise_management::CloudPolicySettings::*has_proto)() const;
-  const enterprise_management::IntegerPolicyProto&
-      (enterprise_management::CloudPolicySettings::*get_proto)() const;
+  bool (*has_proto)(const em::CloudPolicySettings& policy);
+  const em::IntegerPolicyProto& (*get_proto)(
+      const em::CloudPolicySettings& policy);
 };
-extern const IntegerPolicyAccess kIntegerPolicyAccess[];
+extern const std::array<IntegerPolicyAccess, 0> kIntegerPolicyAccess;
 
 // Read access to the protobufs of all supported string user policies.
 struct StringPolicyAccess {
   const char* policy_key;
   bool per_profile;
-  bool (enterprise_management::CloudPolicySettings::*has_proto)() const;
-  const enterprise_management::StringPolicyProto&
-      (enterprise_management::CloudPolicySettings::*get_proto)() const;
+  bool (*has_proto)(const em::CloudPolicySettings& policy);
+  const em::StringPolicyProto& (*get_proto)(
+      const em::CloudPolicySettings& policy);
   const StringPolicyType type;
 };
-extern const StringPolicyAccess kStringPolicyAccess[];
+extern const std::array<StringPolicyAccess, 2> kStringPolicyAccess;
 
 // Read access to the protobufs of all supported stringlist user policies.
 struct StringListPolicyAccess {
   const char* policy_key;
   bool per_profile;
-  bool (enterprise_management::CloudPolicySettings::*has_proto)() const;
-  const enterprise_management::StringListPolicyProto&
-      (enterprise_management::CloudPolicySettings::*get_proto)() const;
+  bool (*has_proto)(const em::CloudPolicySettings& policy);
+  const em::StringListPolicyProto& (*get_proto)(
+      const em::CloudPolicySettings& policy);
 };
-extern const StringListPolicyAccess kStringListPolicyAccess[];
+extern const std::array<StringListPolicyAccess, 0> kStringListPolicyAccess;
 
 constexpr int64_t kDevicePolicyExternalDataResourceCacheSize = 0;
 
@@ -257,11 +351,9 @@ EXPECTED_POLICY_CONSTANTS_SOURCE = '''\
 #include "components/policy/proto/cloud_policy.pb.h"
 #include "components/policy/risk_tag.h"
 
-namespace em = enterprise_management;
-
 namespace policy {
 
-const __attribute__((unused)) PolicyDetails kChromePolicyDetails[] = {
+[[maybe_unused]] const PolicyDetails kChromePolicyDetails[] = {
 // is_deprecated is_future is_device_policy id max_external_data_size, risk tags
   // ExampleStringPolicy
   { false,        false,    false,              1,                     0, {  } },
@@ -273,27 +365,30 @@ const __attribute__((unused)) PolicyDetails kChromePolicyDetails[] = {
   { false,        false,    false,              4,                     0, {  } },
   // CloudOnlyPolicy
   { false,        false,    false,              5,                     0, {  } },
+  // CloudManagementEnrollmentToken
+  { false,        false,    false,              6,                     0, {  } },
 };
 
 const internal::SchemaNode kSchemas[] = {
 //  Type                           Extra  IsSensitiveValue HasSensitiveChildren
   { base::Value::Type::DICTIONARY,     0, false,           false },  // root node
-  { base::Value::Type::BOOLEAN,       -1, false,           false },  // simple type: boolean
   { base::Value::Type::STRING,        -1, false,           false },  // simple type: string
+  { base::Value::Type::BOOLEAN,       -1, false,           false },  // simple type: boolean
 };
 
 const internal::PropertyNode kPropertyNodes[] = {
 //  Property                                                             Schema
-  { key::kCloudOnlyPolicy,                                                1 },
-  { key::kExampleBoolMergeMetapolicy,                                     1 },
-  { key::kExampleBoolPolicy,                                              1 },
-  { key::kExampleBoolPrecedenceMetapolicy,                                1 },
-  { key::kExampleStringPolicy,                                            2 },
+  { key::kCloudManagementEnrollmentToken,                                 1 },
+  { key::kCloudOnlyPolicy,                                                2 },
+  { key::kExampleBoolMergeMetapolicy,                                     2 },
+  { key::kExampleBoolPolicy,                                              2 },
+  { key::kExampleBoolPrecedenceMetapolicy,                                2 },
+  { key::kExampleStringPolicy,                                            1 },
 };
 
 const internal::PropertiesNode kProperties[] = {
 //  Begin    End  PatternEnd  RequiredBegin  RequiredEnd  Additional Properties
-  {     0,     5,     5,     0,          0,    -1 },  // root node
+  {     0,     6,     6,     0,          0,    -1 },  // root node
 };
 
 const internal::SchemaData* GetChromeSchemaData() {
@@ -320,7 +415,7 @@ bool CompareKeys(const internal::PropertyNode& node,
 
 }  // namespace
 %(windows_only_part)s
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS)
 void SetEnterpriseUsersProfileDefaults(PolicyMap* policy_map) {
 
 }
@@ -339,7 +434,7 @@ const PolicyDetails* GetChromePolicyDetails(const std::string& policy) {
   // First index in kPropertyNodes of the Chrome policies.
   static const int begin_index = 0;
   // One-past-the-end of the Chrome policies in kPropertyNodes.
-  static const int end_index = 5;
+  static const int end_index = 6;
   const internal::PropertyNode* begin =
      kPropertyNodes + begin_index;
   const internal::PropertyNode* end = kPropertyNodes + end_index;
@@ -369,6 +464,12 @@ const char kExampleBoolPolicy[] = "ExampleBoolPolicy";
 const char kExampleBoolMergeMetapolicy[] = "ExampleBoolMergeMetapolicy";
 const char kExampleBoolPrecedenceMetapolicy[] = "ExampleBoolPrecedenceMetapolicy";
 const char kCloudOnlyPolicy[] = "CloudOnlyPolicy";
+const char kCloudManagementEnrollmentToken[] = "CloudManagementEnrollmentToken";
+const char kChunkZeroLastFieldBooleanPolicy[] = "ChunkZeroLastFieldBooleanPolicy";
+const char kChunkOneFirstFieldBooleanPolicy[] = "ChunkOneFirstFieldBooleanPolicy";
+const char kChunkOneLastFieldBooleanPolicy[] = "ChunkOneLastFieldBooleanPolicy";
+const char kChunkTwoFirstFieldStringPolicy[] = "ChunkTwoFirstFieldStringPolicy";
+const char kChunkTwoLastFieldStringPolicy[] = "ChunkTwoLastFieldStringPolicy";
 
 }  // namespace key
 
@@ -399,42 +500,79 @@ const char* const kPrecedence[1] = {
 
 }  // namespace metapolicy
 
-const BooleanPolicyAccess kBooleanPolicyAccess[] = {
+const std::array<BooleanPolicyAccess, 4> kBooleanPolicyAccess {{
   {key::kExampleBoolPolicy,
    false,
-   &em::CloudPolicySettings::has_exampleboolpolicy,
-   &em::CloudPolicySettings::exampleboolpolicy},
+   [](const em::CloudPolicySettings& policy) {
+     return policy.has_exampleboolpolicy();
+   },
+   [](const em::CloudPolicySettings& policy)
+       -> const em::BooleanPolicyProto& {
+     return policy.exampleboolpolicy();
+   }
+  },
   {key::kExampleBoolMergeMetapolicy,
    false,
-   &em::CloudPolicySettings::has_exampleboolmergemetapolicy,
-   &em::CloudPolicySettings::exampleboolmergemetapolicy},
+   [](const em::CloudPolicySettings& policy) {
+     return policy.has_exampleboolmergemetapolicy();
+   },
+   [](const em::CloudPolicySettings& policy)
+       -> const em::BooleanPolicyProto& {
+     return policy.exampleboolmergemetapolicy();
+   }
+  },
   {key::kExampleBoolPrecedenceMetapolicy,
    false,
-   &em::CloudPolicySettings::has_exampleboolprecedencemetapolicy,
-   &em::CloudPolicySettings::exampleboolprecedencemetapolicy},
+   [](const em::CloudPolicySettings& policy) {
+     return policy.has_exampleboolprecedencemetapolicy();
+   },
+   [](const em::CloudPolicySettings& policy)
+       -> const em::BooleanPolicyProto& {
+     return policy.exampleboolprecedencemetapolicy();
+   }
+  },
   {key::kCloudOnlyPolicy,
    false,
-   &em::CloudPolicySettings::has_cloudonlypolicy,
-   &em::CloudPolicySettings::cloudonlypolicy},
-  {nullptr, false, nullptr, nullptr},
-};
+   [](const em::CloudPolicySettings& policy) {
+     return policy.has_cloudonlypolicy();
+   },
+   [](const em::CloudPolicySettings& policy)
+       -> const em::BooleanPolicyProto& {
+     return policy.cloudonlypolicy();
+   }
+  },
+}};
 
-const IntegerPolicyAccess kIntegerPolicyAccess[] = {
-  {nullptr, false, nullptr, nullptr},
-};
+const std::array<IntegerPolicyAccess, 0> kIntegerPolicyAccess {{
+}};
 
-const StringPolicyAccess kStringPolicyAccess[] = {
+const std::array<StringPolicyAccess, 2> kStringPolicyAccess {{
   {key::kExampleStringPolicy,
    false,
-   &em::CloudPolicySettings::has_examplestringpolicy,
-   &em::CloudPolicySettings::examplestringpolicy,
-   StringPolicyType::STRING},
-  {nullptr, false, nullptr, nullptr},
-};
+   [](const em::CloudPolicySettings& policy) {
+     return policy.has_examplestringpolicy();
+   },
+   [](const em::CloudPolicySettings& policy)
+       -> const em::StringPolicyProto& {
+     return policy.examplestringpolicy();
+   },
+   StringPolicyType::STRING
+  },
+  {key::kCloudManagementEnrollmentToken,
+   false,
+   [](const em::CloudPolicySettings& policy) {
+     return policy.has_cloudmanagementenrollmenttoken();
+   },
+   [](const em::CloudPolicySettings& policy)
+       -> const em::StringPolicyProto& {
+     return policy.cloudmanagementenrollmenttoken();
+   },
+   StringPolicyType::STRING
+  },
+}};
 
-const StringListPolicyAccess kStringListPolicyAccess[] = {
-  {nullptr, false, nullptr, nullptr},
-};
+const std::array<StringListPolicyAccess, 0> kStringListPolicyAccess {{
+}};
 
 
 }  // namespace policy
@@ -470,6 +608,7 @@ extern const char kExampleBoolPolicy[];
 extern const char kExampleBoolMergeMetapolicy[];
 extern const char kExampleBoolPrecedenceMetapolicy[];
 extern const char kCloudOnlyPolicy[];
+extern const char kCloudManagementEnrollmentToken[];
 
 }  // namespace key
 
@@ -536,6 +675,7 @@ const char kExampleBoolPolicy[] = "ExampleBoolPolicy";
 const char kExampleBoolMergeMetapolicy[] = "ExampleBoolMergeMetapolicy";
 const char kExampleBoolPrecedenceMetapolicy[] = "ExampleBoolPrecedenceMetapolicy";
 const char kCloudOnlyPolicy[] = "CloudOnlyPolicy";
+const char kCloudManagementEnrollmentToken[] = "CloudManagementEnrollmentToken";
 
 }  // namespace key
 
@@ -567,6 +707,9 @@ constexpr StringPolicyAccess kStringPolicyAccess[] = {
   {key::kExampleStringPolicy,
    false,
    &em::CloudPolicySettings::mutable_examplestringpolicy},
+  {key::kCloudManagementEnrollmentToken,
+   false,
+   &em::CloudPolicySettings::mutable_cloudmanagementenrollmenttoken},
   {nullptr, false, nullptr},
 };
 
@@ -581,16 +724,10 @@ EXPECTED_APP_RESTRICTIONS_XML = '''
 <restrictions xmlns:android="http://schemas.android.com/apk/res/android">
 
     <restriction
-        android:key="ExampleStringPolicy"
-        android:title="@string/ExampleStringPolicyTitle"
-        android:description="@string/ExampleStringPolicyDesc"
+        android:key="CloudManagementEnrollmentToken"
+        android:title="@string/CloudManagementEnrollmentTokenTitle"
+        android:description="@string/CloudManagementEnrollmentTokenDesc"
         android:restrictionType="string"/>
-
-    <restriction
-        android:key="ExampleBoolPolicy"
-        android:title="@string/ExampleBoolPolicyTitle"
-        android:description="@string/ExampleBoolPolicyDesc"
-        android:restrictionType="bool"/>
 
     <restriction
         android:key="ExampleBoolMergeMetapolicy"
@@ -599,9 +736,21 @@ EXPECTED_APP_RESTRICTIONS_XML = '''
         android:restrictionType="bool"/>
 
     <restriction
+        android:key="ExampleBoolPolicy"
+        android:title="@string/ExampleBoolPolicyTitle"
+        android:description="@string/ExampleBoolPolicyDesc"
+        android:restrictionType="bool"/>
+
+    <restriction
         android:key="ExampleBoolPrecedenceMetapolicy"
         android:title="@string/ExampleBoolPrecedenceMetapolicyTitle"
         android:description="@string/ExampleBoolPrecedenceMetapolicyDesc"
         android:restrictionType="bool"/>
+
+    <restriction
+        android:key="ExampleStringPolicy"
+        android:title="@string/ExampleStringPolicyTitle"
+        android:description="@string/ExampleStringPolicyDesc"
+        android:restrictionType="string"/>
 
 </restrictions>'''

@@ -352,9 +352,11 @@ void HTMLElement::CollectStyleForPresentationAttribute(
         EqualIgnoringASCIICase(value, "until-found")) {
       AddPropertyToPresentationAttributeStyle(
           style, CSSPropertyID::kContentVisibility, CSSValueID::kHidden);
+      UseCounter::Count(GetDocument(), WebFeature::kHiddenUntilFoundAttribute);
     } else {
       AddPropertyToPresentationAttributeStyle(style, CSSPropertyID::kDisplay,
                                               CSSValueID::kNone);
+      UseCounter::Count(GetDocument(), WebFeature::kHiddenAttribute);
     }
   } else if (name == html_names::kDraggableAttr) {
     UseCounter::Count(GetDocument(), WebFeature::kDraggableAttribute);
@@ -405,6 +407,8 @@ AttributeTriggers* HTMLElement::TriggersForAttributeName(
   static AttributeTriggers attribute_triggers[] = {
       {html_names::kDirAttr, kNoWebFeature, kNoEvent,
        &HTMLElement::OnDirAttrChanged},
+      {html_names::kFocusgroupAttr, kNoWebFeature, kNoEvent,
+       &HTMLElement::OnFocusgroupAttrChanged},
       {html_names::kFormAttr, kNoWebFeature, kNoEvent,
        &HTMLElement::OnFormAttrChanged},
       {html_names::kLangAttr, kNoWebFeature, kNoEvent,
@@ -1127,6 +1131,10 @@ void HTMLElement::setSpellcheck(bool enable) {
 
 void HTMLElement::click() {
   DispatchSimulatedClick(nullptr, SimulatedClickCreationScope::kFromScript);
+  if (IsA<HTMLInputElement>(this)) {
+    UseCounter::Count(GetDocument(),
+                      WebFeature::kHTMLInputElementSimulatedClick);
+  }
 }
 
 void HTMLElement::AccessKeyAction(SimulatedClickCreationScope creation_scope) {
@@ -1908,6 +1916,11 @@ void HTMLElement::OnDirAttrChanged(const AttributeModificationParams& params) {
         StyleChangeReasonForTracing::Create(style_change_reason::kPseudoClass));
     PseudoStateChanged(CSSSelector::kPseudoDir);
   }
+}
+
+void HTMLElement::OnFocusgroupAttrChanged(
+    const AttributeModificationParams& params) {
+  Element::ParseAttribute(params);
 }
 
 void HTMLElement::OnFormAttrChanged(const AttributeModificationParams& params) {

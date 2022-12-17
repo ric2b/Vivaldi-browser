@@ -107,24 +107,21 @@ class NotesCodecTest : public testing::Test {
     return model.release();
   }
 
-  void GetNotesChildValue(base::Value* value,
+  void GetNotesChildValue(base::Value& value,
                           size_t index,
-                          base::DictionaryValue** result_value) {
-    ASSERT_EQ(base::Value::Type::DICTIONARY, value->type());
+                          base::Value::Dict*& result) {
+    base::Value::Dict* dict = value.GetIfDict();
+    ASSERT_TRUE(dict);
 
-    base::DictionaryValue* d_value = static_cast<base::DictionaryValue*>(value);
+    base::Value::List* bb_children = dict->FindList(NotesCodec::kChildrenKey);
+    ASSERT_TRUE(bb_children);
 
-    base::Value* bb_children_value;
-    ASSERT_TRUE(d_value->Get(NotesCodec::kChildrenKey, &bb_children_value));
-    ASSERT_EQ(base::Value::Type::LIST, bb_children_value->type());
+    ASSERT_LT(index, bb_children->size());
+    base::Value* child_value = &(*bb_children)[index];
+    ASSERT_TRUE(child_value);
+    ASSERT_TRUE(child_value->is_dict());
 
-    base::ListValue* bb_children_l_value =
-        static_cast<base::ListValue*>(bb_children_value);
-    base::Value* child_value;
-    ASSERT_TRUE(bb_children_l_value->Get(index, &child_value));
-    ASSERT_EQ(base::Value::Type::DICTIONARY, child_value->type());
-
-    *result_value = static_cast<base::DictionaryValue*>(child_value);
+    result = &child_value->GetDict();
   }
 
   base::Value EncodeHelper(NotesModel* model, std::string* checksum) {
@@ -233,18 +230,19 @@ TEST_F(NotesCodecTest, ChecksumManualEditTest) {
   base::Value value(EncodeHelper(model_to_encode.get(), &enc_checksum));
 
   // Change something in the encoded value before decoding it.
-  base::DictionaryValue* child1_value;
-  GetNotesChildValue(&value, 0, &child1_value);
-  std::string title;
-  ASSERT_TRUE(child1_value->GetString(NotesCodec::kSubjectKey, &title));
-  child1_value->SetString(NotesCodec::kSubjectKey, title + "1");
+  base::Value::Dict* child1 = nullptr;
+  GetNotesChildValue(value, 0, child1);
+  std::string* title = child1->FindString(NotesCodec::kSubjectKey);
+  ASSERT_TRUE(title);
+  std::string orig_title = std::move(*title);
+  child1->Set(NotesCodec::kSubjectKey, orig_title + "1");
 
   std::string dec_checksum;
   std::unique_ptr<NotesModel> decoded_model1(
       DecodeHelper(value, enc_checksum, &dec_checksum, true));
 
   // Undo the change and make sure the checksum is same as original.
-  child1_value->SetString(NotesCodec::kSubjectKey, title);
+  child1->Set(NotesCodec::kSubjectKey, std::move(orig_title));
   std::unique_ptr<NotesModel> decoded_model2(
       DecodeHelper(value, enc_checksum, &dec_checksum, false));
 }
@@ -261,12 +259,11 @@ TEST_F(NotesCodecTest, ChecksumManualEditIDsTest) {
   base::Value value(EncodeHelper(model_to_encode.get(), &enc_checksum));
 
   // Change IDs for all children of notes main node to be 1.
-  base::DictionaryValue* child_value;
   for (int i = 0; i < notes_child_count; ++i) {
-    GetNotesChildValue(&value, i, &child_value);
-    std::string id;
-    ASSERT_TRUE(child_value->GetString(NotesCodec::kIdKey, &id));
-    child_value->SetString(NotesCodec::kIdKey, "1");
+    base::Value::Dict* child = nullptr;
+    GetNotesChildValue(value, i, child);
+    ASSERT_TRUE(child->FindString(NotesCodec::kIdKey));
+    child->Set(NotesCodec::kIdKey, "1");
   }
 
   std::string dec_checksum;

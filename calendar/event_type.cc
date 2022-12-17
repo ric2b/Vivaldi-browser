@@ -64,7 +64,6 @@ void EventRow::Swap(EventRow* other) {
   std::swap(notifications_to_create, other->notifications_to_create);
   std::swap(timezone, other->timezone);
   std::swap(is_template, other->is_template);
-  std::swap(due, other->due);
   std::swap(priority, other->priority);
   std::swap(status, other->status);
   std::swap(percentage_complete, other->percentage_complete);
@@ -112,7 +111,6 @@ EventRow::EventRow(const EventRow&& other) noexcept
       invites_to_create(other.invites_to_create),
       timezone(other.timezone),
       is_template(other.is_template),
-      due(other.due),
       priority(other.priority),
       percentage_complete(other.percentage_complete),
       sync_pending(other.sync_pending),

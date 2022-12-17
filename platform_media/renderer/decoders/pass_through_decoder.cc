@@ -19,6 +19,7 @@
 #include "media/base/audio_decoder.h"
 #include "media/base/audio_decoder_config.h"
 #include "media/base/decoder_buffer.h"
+#include "media/base/decoder_status.h"
 #include "media/base/demuxer_stream.h"
 #include "media/base/video_decoder.h"
 #include "media/base/video_decoder_config.h"
@@ -58,15 +59,16 @@ class PassThroughDecoderImpl {
     output_cb_ = output_cb;
 
     // The caller expects the callback will be called after the call.
-    task_runner_->PostTask(FROM_HERE,
-                           base::BindOnce(std::move(init_cb), media::Status()));
+    task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(std::move(init_cb), DecoderStatus::Codes::kOk));
   }
 
   void Decode(scoped_refptr<DecoderBuffer> buffer, DecodeCB decode_cb) {
     DCHECK(task_runner_->RunsTasksInCurrentSequence());
     DCHECK(config_.IsValidConfig());
 
-    typename media::DecodeStatus status = DecodeStatus::OK;
+    typename DecoderStatus::Codes status = DecoderStatus::Codes::kOk;
 
     if (!buffer->end_of_stream()) {
       scoped_refptr<OutputType> output;
@@ -77,9 +79,8 @@ class PassThroughDecoderImpl {
         task_runner_->PostTask(FROM_HERE, base::BindOnce(output_cb_, output));
       } else {
         LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                     << " Detected " << DecoderTraits::ToString()
-                     << " DECODE_ERROR";
-        status = DecodeStatus::DECODE_ERROR;
+                     << " Detected " << DecoderTraits::ToString() << " kFailed";
+        status = DecoderStatus::Codes::kFailed;
       }
     }
 

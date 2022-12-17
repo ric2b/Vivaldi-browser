@@ -23,6 +23,7 @@
 #include "media/base/channel_layout.h"
 #include "media/base/data_buffer.h"
 #include "media/base/decoder_buffer.h"
+#include "media/base/decoder_status.h"
 #include "platform_media/common/platform_logging_util.h"
 #include "platform_media/common/win/platform_media_init.h"
 
@@ -86,8 +87,7 @@ void WMFDecoderImpl<StreamType>::Initialize(const DecoderConfig& config,
     VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
             << " Media Config not accepted for codec : "
             << GetCodecName(config.codec());
-    std::move(init_cb).Run(
-        media::Status(media::StatusCode::kDecoderUnsupportedConfig));
+    std::move(init_cb).Run(DecoderStatus::Codes::kUnsupportedConfig);
     return;
   } else {
     VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
@@ -101,8 +101,7 @@ void WMFDecoderImpl<StreamType>::Initialize(const DecoderConfig& config,
     VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
             << " Creating/Configuring failed for codec : "
             << GetCodecName(config.codec());
-    std::move(init_cb).Run(
-        media::Status(media::StatusCode::kDecoderFailedCreation));
+    std::move(init_cb).Run(DecoderStatus::Codes::kFailedToCreateDecoder);
     return;
   }
 
@@ -111,7 +110,7 @@ void WMFDecoderImpl<StreamType>::Initialize(const DecoderConfig& config,
   output_cb_ = output_cb;
   ResetTimestampState();
 
-  std::move(init_cb).Run(media::Status());
+  std::move(init_cb).Run(DecoderStatus::Codes::kOk);
 }
 
 template <DemuxerStream::Type StreamType>
@@ -126,11 +125,12 @@ void WMFDecoderImpl<StreamType>::Decode(scoped_refptr<DecoderBuffer> buffer,
     const bool drained_ok = Drain();
     LOG_IF(WARNING, !drained_ok)
         << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-        << " Drain did not succeed - returning DECODE_ERROR";
+        << " Drain did not succeed - returning kMalformedBitstream";
     task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(std::move(decode_cb),
-                                  drained_ok ? DecodeStatus::OK
-                                             : DecodeStatus::DECODE_ERROR));
+        FROM_HERE,
+        base::BindOnce(std::move(decode_cb),
+                       drained_ok ? DecoderStatus::Codes::kOk
+                                  : DecoderStatus::Codes::kMalformedBitstream));
     return;
   }
   VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__ << " ("
@@ -140,13 +140,14 @@ void WMFDecoderImpl<StreamType>::Decode(scoped_refptr<DecoderBuffer> buffer,
   DCHECK_NE(MF_E_NOTACCEPTING, hr)
       << "The transform is neither producing output "
          "nor accepting input? This must not happen, see ProcessOutputLoop()";
-  typename media::DecodeStatus status = SUCCEEDED(hr) && ProcessOutputLoop()
-                                            ? DecodeStatus::OK
-                                            : DecodeStatus::DECODE_ERROR;
+  typename media::DecoderStatus::Codes status =
+      SUCCEEDED(hr) && ProcessOutputLoop()
+          ? DecoderStatus::Codes::kOk
+          : DecoderStatus::Codes::kPlatformDecodeFailure;
 
-  LOG_IF(WARNING, (status == DecodeStatus::DECODE_ERROR))
+  LOG_IF(WARNING, (status == DecoderStatus::Codes::kPlatformDecodeFailure))
       << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-      << " processing buffer failed, returning DECODE_ERROR";
+      << " processing buffer failed, returning kPlatformDecodeFailure";
 
   task_runner_->PostTask(FROM_HERE,
                          base::BindOnce(std::move(decode_cb), status));

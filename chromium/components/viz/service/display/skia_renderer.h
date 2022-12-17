@@ -19,10 +19,10 @@
 #include "components/viz/service/display/sync_query_collection.h"
 #include "components/viz/service/viz_service_export.h"
 #include "third_party/skia/include/core/SkCanvas.h"
+#include "ui/gfx/color_conversion_sk_filter_cache.h"
 #include "ui/latency/latency_info.h"
 
 class SkColorFilter;
-class SkRuntimeEffect;
 
 namespace viz {
 class AggregatedRenderPassDrawQuad;
@@ -257,7 +257,7 @@ class VIZ_SERVICE_EXPORT SkiaRenderer : public DirectRenderer {
   // be sent to GPU scheduler.
   void FlushOutputSurface();
 
-#if defined(OS_APPLE) || defined(USE_OZONE)
+#if BUILDFLAG(IS_APPLE) || defined(USE_OZONE)
   void PrepareRenderPassOverlay(
       OverlayProcessorInterface::PlatformOverlayCandidate* overlay);
 #endif
@@ -339,7 +339,7 @@ class VIZ_SERVICE_EXPORT SkiaRenderer : public DirectRenderer {
       std::vector<DisplayResourceProviderSkia::ScopedReadLockSharedImage>>
       read_lock_release_fence_overlay_locks_;
 
-#if defined(OS_APPLE) || defined(USE_OZONE)
+#if BUILDFLAG(IS_APPLE) || defined(USE_OZONE)
   class ScopedReadLockComparator {
    public:
     using is_transparent = void;
@@ -360,11 +360,9 @@ class VIZ_SERVICE_EXPORT SkiaRenderer : public DirectRenderer {
   base::flat_set<DisplayResourceProviderSkia::ScopedReadLockSharedImage,
                  ScopedReadLockComparator>
       awaiting_release_overlay_locks_;
-#endif  // defined(OS_APPLE) || defined(USE_OZONE)
+#endif  // BUILDFLAG(IS_APPLE) || defined(USE_OZONE)
 
-  base::flat_map<gfx::ColorSpace,
-                 base::flat_map<gfx::ColorSpace, sk_sp<SkRuntimeEffect>>>
-      color_filter_cache_;
+  gfx::ColorConversionSkFilterCache color_filter_cache_;
 
   bool UsingSkiaForDelegatedInk() const;
   uint32_t debug_tint_modulate_count_ = 0;

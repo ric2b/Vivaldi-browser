@@ -94,8 +94,6 @@ class TestStoragePartition : public StoragePartition {
   }
   storage::FileSystemContext* GetFileSystemContext() override;
 
-  FontAccessContext* GetFontAccessContext() override;
-
   void set_background_sync_context(BackgroundSyncContext* context) {
     background_sync_context_ = context;
   }
@@ -140,6 +138,8 @@ class TestStoragePartition : public StoragePartition {
     platform_notification_context_ = context;
   }
   PlatformNotificationContext* GetPlatformNotificationContext() override;
+
+  InterestGroupManager* GetInterestGroupManager() override;
 
   void set_devtools_background_services_context(
       DevToolsBackgroundServicesContext* context) {

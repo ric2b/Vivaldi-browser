@@ -15,6 +15,7 @@
 #include "ash/public/cpp/session/session_observer.h"
 #include "ash/public/cpp/style/color_mode_observer.h"
 #include "ash/public/cpp/tablet_mode_observer.h"
+#include "ash/public/cpp/wallpaper/google_photos_wallpaper_params.h"
 #include "ash/public/cpp/wallpaper/online_wallpaper_params.h"
 #include "ash/public/cpp/wallpaper/wallpaper_controller.h"
 #include "ash/public/cpp/wallpaper/wallpaper_info.h"
@@ -267,6 +268,9 @@ class ASH_EXPORT WallpaperControllerImpl
   void SetOnlineWallpaperFromData(const OnlineWallpaperParams& params,
                                   const std::string& image_data,
                                   SetOnlineWallpaperCallback callback) override;
+  void SetGooglePhotosWallpaper(
+      const GooglePhotosWallpaperParams& params,
+      SetGooglePhotosWallpaperCallback callback) override;
   void SetDefaultWallpaper(const AccountId& account_id,
                            bool show_wallpaper) override;
   void SetCustomizedDefaultWallpaperPaths(
@@ -435,10 +439,8 @@ class ASH_EXPORT WallpaperControllerImpl
 
   // Reads image from |file_path| on disk, and calls |OnWallpaperDataRead|
   // with the result of |ReadFileToString|.
-  void ReadAndDecodeWallpaper(
-      DecodeImageCallback callback,
-      scoped_refptr<base::SequencedTaskRunner> task_runner,
-      const base::FilePath& file_path);
+  void ReadAndDecodeWallpaper(DecodeImageCallback callback,
+                              const base::FilePath& file_path);
 
   // Sets wallpaper info for the user to default and saves it to local
   // state the user is not ephemeral. Returns false if this fails.
@@ -467,6 +469,20 @@ class ASH_EXPORT WallpaperControllerImpl
                                 bool save_file,
                                 SetOnlineWallpaperCallback callback,
                                 const gfx::ImageSkia& image);
+
+  // Used as the callback of fetching the metadata for a Google Photos photo
+  // from the unique id. Currently metadata is simply the image URL (stubbed).
+  void OnGooglePhotosMetadataFetched(const GooglePhotosWallpaperParams& params,
+                                     SetGooglePhotosWallpaperCallback callback,
+                                     const std::string& metadata);
+
+  // Used as the callback of downloading wallpapers of type
+  // `WallpaperType::kGooglePhotos`. Shows the wallpaper immediately if
+  // `params.account_id` is the active user.
+  void OnGooglePhotosWallpaperDownloaded(
+      const GooglePhotosWallpaperParams& params,
+      SetGooglePhotosWallpaperCallback callback,
+      const gfx::ImageSkia& image);
 
   // Implementation of |SetOnlineWallpaper|. Shows the wallpaper on screen if
   // |show_wallpaper| is true.
@@ -665,8 +681,10 @@ class ASH_EXPORT WallpaperControllerImpl
   // wallpaper set.
   base::TimeDelta GetTimeToNextDailyRefreshUpdate() const;
 
-  void SaveWallpaperToDriveFs(const AccountId& account_id,
-                              const base::FilePath& origin_path);
+  void SaveWallpaperToDriveFsAndSyncInfo(const AccountId& account_id,
+                                         const base::FilePath& origin_path);
+
+  void WallpaperSavedToDriveFS(const AccountId& account_id, bool success);
 
   void HandleCustomWallpaperInfoSyncedIn(const AccountId& account_id,
                                          WallpaperInfo info);
@@ -682,6 +700,9 @@ class ASH_EXPORT WallpaperControllerImpl
 
   void HandleOnlineWallpaperInfoSyncedIn(const AccountId& account_id,
                                          const WallpaperInfo& info);
+
+  void HandleGooglePhotosWallpaperInfoSyncedIn(const AccountId& account_id,
+                                               const WallpaperInfo& info);
 
   // Updates the online and daily wallpaper with the correct variant based on
   // the color mode.

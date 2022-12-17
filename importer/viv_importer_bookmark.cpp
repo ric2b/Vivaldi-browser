@@ -4,13 +4,13 @@
 #include <string>
 #include <vector>
 
-#include "app/vivaldi_resources.h"
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/browser/importer/importer_list.h"
@@ -19,10 +19,12 @@
 #include "chrome/common/importer/importer_bridge.h"
 #include "chrome/common/importer/importer_data_types.h"
 #include "chrome/common/ini_parser.h"
+#include "ui/base/l10n/l10n_util.h"
+
+#include "app/vivaldi_resources.h"
 #include "importer/viv_importer.h"
 #include "importer/viv_importer_utils.h"
 #include "importer/viv_opera_reader.h"
-#include "ui/base/l10n/l10n_util.h"
 
 class OperaBookmarkReader : public OperaAdrFileReader {
  public:
@@ -32,7 +34,7 @@ class OperaBookmarkReader : public OperaAdrFileReader {
   OperaBookmarkReader& operator=(const OperaBookmarkReader&) = delete;
 
   void AddBookmark(const std::vector<std::u16string>& current_folder,
-                   const base::DictionaryValue& entries,
+                   const base::Value::Dict& entries,
                    bool is_folder,
                    std::u16string* item_name = NULL);
 
@@ -42,7 +44,7 @@ class OperaBookmarkReader : public OperaAdrFileReader {
 
  protected:
   void HandleEntry(const std::string& category,
-                   const base::DictionaryValue& entries) override;
+                   const base::Value::Dict& entries) override;
 
  private:
   std::vector<std::u16string> current_folder_;
@@ -50,7 +52,7 @@ class OperaBookmarkReader : public OperaAdrFileReader {
 };
 
 void OperaBookmarkReader::HandleEntry(const std::string& category,
-                                      const base::DictionaryValue& entries) {
+                                      const base::Value::Dict& entries) {
   if (base::LowerCaseEqualsASCII(category, "folder")) {
     std::u16string foldername;
     AddBookmark(current_folder_, entries, true, &foldername);
@@ -64,47 +66,44 @@ void OperaBookmarkReader::HandleEntry(const std::string& category,
 
 void OperaBookmarkReader::AddBookmark(
     const std::vector<std::u16string>& current_folder,
-    const base::DictionaryValue& entries,
+    const base::Value::Dict& entries,
     bool is_folder,
     std::u16string* item_name) {
-  std::string temp;
-  std::u16string name;
-  std::u16string url;
-  std::string nickname;
-  std::string description;
+  const std::string* url = nullptr;
+  if (!is_folder) {
+    url = entries.FindString("url");
+  }
+
+  const std::string* name = entries.FindString("name");
+  if (!name) {
+    name = url;
+  }
+
+  const std::string* nickname = entries.FindString("short name");
+  const std::string* description = entries.FindString("description");
 
   double created_time = 0;
-
-  if (!is_folder && !entries.GetString("url", &url))
-    url = std::u16string();
-
-  if (!entries.GetString("name", &name))
-    name = url;
-
-  if (item_name)
-    *item_name = name;
-
-  if (!entries.GetString("short name", &nickname)) {
-    nickname.clear();
+  if (const std::string* created = entries.FindString("created")) {
+    if (!base::StringToDouble(*created, &created_time)) {
+      created_time = 0;
+    }
   }
-  if (!entries.GetString("description", &description)) {
-    description.clear();
-  }
-  if (!entries.GetString("created", &temp) ||
-      !base::StringToDouble(temp, &created_time))
-    created_time = 0;
 
   ImportedBookmarkEntry entry;
   entry.in_toolbar = false;  // on_personal_bar;
   entry.is_folder = is_folder;
-  entry.title = name;
-  entry.nickname = nickname;
-  entry.description = description;
+  entry.title = name ? base::UTF8ToUTF16(*name) : std::u16string();
+  entry.nickname = nickname ? *nickname : std::string();
+  entry.description = description ? *description : std::string();
   entry.path = current_folder;
-  entry.url = GURL(url);
+  entry.url = GURL(url ? *url : std::string());
   entry.creation_time = base::Time::FromTimeT(created_time);
 
-  bookmarks_.push_back(entry);
+  if (item_name) {
+    *item_name = entry.title;
+  }
+
+  bookmarks_.push_back(std::move(entry));
 }
 
 bool OperaImporter::ImportBookMarks(std::string* error) {

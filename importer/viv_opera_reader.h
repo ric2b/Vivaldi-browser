@@ -14,7 +14,7 @@ class OperaAdrFileReader {
 
  protected:
   virtual void HandleEntry(const std::string& category,
-                           const base::DictionaryValue& entries) = 0;
+                           const base::Value::Dict& entries) = 0;
 
   OperaAdrFileReader();
   virtual ~OperaAdrFileReader();

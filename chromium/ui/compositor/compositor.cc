@@ -62,7 +62,7 @@
 #include "ui/gfx/switches.h"
 #include "ui/gl/gl_switches.h"
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 #include "mojo/public/cpp/bindings/sync_call_restrictions.h"
 #endif
 
@@ -115,6 +115,15 @@ Compositor::Compositor(const viz::FrameSinkId& frame_sink_id,
   // Use occlusion to allow more overlapping windows to take less memory.
   settings.use_occlusion_for_tile_prioritization = true;
   settings.main_frame_before_activation_enabled = false;
+
+  settings.release_tile_resources_for_hidden_layers =
+      base::FeatureList::IsEnabled(
+          features::kUiCompositorReleaseTileResourcesForHiddenLayers);
+
+  if (base::FeatureList::IsEnabled(features::kUiCompositorRequiredTilesOnly)) {
+    settings.memory_policy.priority_cutoff_when_visible =
+        gpu::MemoryAllocation::CUTOFF_ALLOW_REQUIRED_ONLY;
+  }
 
   // Disable edge anti-aliasing in order to increase support for HW overlays.
   settings.enable_edge_anti_aliasing = false;
@@ -180,7 +189,7 @@ Compositor::Compositor(const viz::FrameSinkId& frame_sink_id,
   settings.use_rgba_4444 =
       command_line->HasSwitch(switches::kUIEnableRGBA4444Textures);
 
-#if defined(OS_APPLE)
+#if BUILDFLAG(IS_APPLE)
   // Using CoreAnimation to composite requires using GpuMemoryBuffers, which
   // require zero copy.
   settings.resource_settings.use_gpu_memory_buffer_resources =
@@ -391,6 +400,18 @@ void Compositor::SetRootLayer(Layer* root_layer) {
     root_layer_->SetCompositor(this, root_web_layer_);
 }
 
+void Compositor::DisableAnimations() {
+  DCHECK(animations_are_enabled_);
+  animations_are_enabled_ = false;
+  root_layer_->ResetCompositorForAnimatorsInTree(this);
+}
+
+void Compositor::EnableAnimations() {
+  DCHECK(!animations_are_enabled_);
+  animations_are_enabled_ = true;
+  root_layer_->SetCompositorForAnimatorsInTree(this);
+}
+
 cc::AnimationTimeline* Compositor::GetAnimationTimeline() const {
   return animation_timeline_.get();
 }
@@ -416,7 +437,7 @@ void Compositor::ScheduleRedrawRect(const gfx::Rect& damage_rect) {
   host_->SetNeedsCommit();
 }
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 void Compositor::SetShouldDisableSwapUntilResize(bool should) {
   should_disable_swap_until_resize_ = should;
 }
@@ -839,7 +860,7 @@ void Compositor::OnResume() {
 
 // TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
 // of lacros-chrome is complete.
-#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
 void Compositor::OnCompleteSwapWithNewSize(const gfx::Size& size) {
   for (auto& observer : observer_list_)
     observer.OnCompositingCompleteSwapWithNewSize(this, size);

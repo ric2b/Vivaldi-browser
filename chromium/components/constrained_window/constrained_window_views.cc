@@ -21,10 +21,13 @@
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
 #include "ui/views/window/dialog_delegate.h"
+#include "url/gurl.h"
 
 #if defined(USE_OZONE)
 #include "ui/ozone/public/ozone_platform.h"
 #endif
+
+#include "ui/content/vivaldi_tab_check.h"
 
 using web_modal::ModalDialogHost;
 using web_modal::ModalDialogHostObserver;
@@ -184,6 +187,12 @@ views::Widget* ShowWebModalDialogViews(
   // window.
   content::WebContents* web_contents =
       GetTopLevelWebContents(initiator_web_contents);
+
+  // For Vivaldi tabs, inside webviews, use the tab-content as owner.
+  if (VivaldiTabCheck::IsVivaldiTab(initiator_web_contents)) {
+    web_contents = initiator_web_contents;
+  }
+
   views::Widget* widget = CreateWebModalDialogViews(dialog, web_contents);
   ShowModalDialog(widget->GetNativeWindow(), web_contents);
   return widget;
@@ -199,11 +208,16 @@ views::Widget* CreateWebModalDialogViews(views::WidgetDelegate* dialog,
   // so this is just to avoid the crasher from VB-4437.
   web_modal::WebContentsModalDialogManager* manager =
       web_modal::WebContentsModalDialogManager::FromWebContents(web_contents);
-  LOG_IF(FATAL, !manager) << "CreateWebModalDialogViews without a manager"
-                          << ", scheme="
-                          << web_contents->GetLastCommittedURL().scheme_piece()
-                          << ", host="
-                          << web_contents->GetLastCommittedURL().host_piece();
+
+  // TODO(http://crbug/1273287): Drop "if" and DEBUG_ALIAS_FOR_GURL after fix.
+  if (!manager) {
+    const GURL& url = web_contents->GetLastCommittedURL();
+    DEBUG_ALIAS_FOR_GURL(url_alias, url);
+    LOG_IF(FATAL, !manager)
+        << "CreateWebModalDialogViews without a manager"
+        << ", scheme=" << url.scheme_piece() << ", host=" << url.host_piece();
+  }
+
   return views::DialogDelegate::CreateDialogWidget(
       dialog, nullptr,
       manager->delegate() ?
@@ -231,7 +245,7 @@ views::Widget* CreateBrowserModalDialogViews(views::DialogDelegate* dialog,
 
   bool requires_positioning = dialog->use_custom_frame();
 
-#if defined(OS_APPLE)
+#if BUILDFLAG(IS_APPLE)
   // On Mac, window modal dialogs are displayed as sheets, so their position is
   // managed by the parent window.
   requires_positioning = false;

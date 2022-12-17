@@ -5,11 +5,14 @@
 #include "components/sync/engine/cycle/data_type_tracker.h"
 
 #include <algorithm>
+#include <memory>
 #include <string>
 #include <utility>
 
 #include "base/check.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
+#include "components/sync/base/features.h"
 #include "components/sync/engine/polling_constants.h"
 #include "components/sync/protocol/data_type_progress_marker.pb.h"
 
@@ -26,8 +29,13 @@ constexpr base::TimeDelta kVeryBigLocalChangeNudgeDelay = kDefaultPollInterval;
 
 constexpr base::TimeDelta kDefaultLocalChangeNudgeDelayForSessions =
     base::Seconds(11);
+constexpr base::TimeDelta kDepletedQuotaNudgeDelayForExtensionTypes =
+    base::Seconds(100);
 
 const size_t kDefaultMaxPayloadsPerType = 10;
+
+constexpr base::TimeDelta kRefillIntervalForExtensionTypes = base::Seconds(100);
+constexpr int kInitialQuotaForExtensionTypes = 100;
 
 base::TimeDelta GetDefaultLocalChangeNudgeDelay(ModelType model_type) {
   switch (model_type) {
@@ -88,6 +96,55 @@ base::TimeDelta GetDefaultLocalChangeNudgeDelay(ModelType model_type) {
   }
 }
 
+bool CanGetCommitsFromExtensions(ModelType model_type) {
+  switch (model_type) {
+    case BOOKMARKS:
+    case EXTENSION_SETTINGS:
+    case APP_SETTINGS:
+      // Only for the types above, extensions can trigger a commit via a js API.
+      return true;
+    case AUTOFILL:
+    case USER_EVENTS:
+    case SESSIONS:
+    case PREFERENCES:
+    case SHARING_MESSAGE:
+    case PASSWORDS:
+    case AUTOFILL_PROFILE:
+    case AUTOFILL_WALLET_DATA:
+    case AUTOFILL_WALLET_METADATA:
+    case AUTOFILL_WALLET_OFFER:
+    case THEMES:
+    case TYPED_URLS:
+    case EXTENSIONS:
+    case SEARCH_ENGINES:
+    case APPS:
+    case HISTORY_DELETE_DIRECTIVES:
+    case DICTIONARY:
+    case DEVICE_INFO:
+    case PRIORITY_PREFERENCES:
+    case SUPERVISED_USER_SETTINGS:
+    case APP_LIST:
+    case ARC_PACKAGE:
+    case PRINTERS:
+    case READING_LIST:
+    case USER_CONSENTS:
+    case SEND_TAB_TO_SELF:
+    case SECURITY_EVENTS:
+    case WIFI_CONFIGURATIONS:
+    case WEB_APPS:
+    case OS_PREFERENCES:
+    case OS_PRIORITY_PREFERENCES:
+    case WORKSPACE_DESK:
+    case NIGORI:
+    case PROXY_TABS:
+    case NOTES:
+      return false;
+    case UNSPECIFIED:
+      NOTREACHED();
+      return false;
+  }
+}
+
 }  // namespace
 
 WaitInterval::WaitInterval() : mode(BlockingMode::kUnknown) {}
@@ -98,7 +155,8 @@ WaitInterval::WaitInterval(BlockingMode mode, base::TimeDelta length)
 WaitInterval::~WaitInterval() = default;
 
 DataTypeTracker::DataTypeTracker(ModelType type)
-    : local_nudge_count_(0),
+    : type_(type),
+      local_nudge_count_(0),
       local_refresh_request_count_(0),
       payload_buffer_size_(kDefaultMaxPayloadsPerType),
       initial_sync_required_(false),
@@ -106,6 +164,12 @@ DataTypeTracker::DataTypeTracker(ModelType type)
       local_change_nudge_delay_(GetDefaultLocalChangeNudgeDelay(type)) {
   // Sanity check the hardcode value for kMinLocalChangeNudgeDelay.
   DCHECK_GE(local_change_nudge_delay_, kMinLocalChangeNudgeDelay);
+
+  if (CanGetCommitsFromExtensions(type) &&
+      base::FeatureList::IsEnabled(kSyncExtensionTypesThrottling)) {
+    quota_ = std::make_unique<CommitQuota>(kInitialQuotaForExtensionTypes,
+                                           kRefillIntervalForExtensionTypes);
+  }
 }
 
 DataTypeTracker::~DataTypeTracker() = default;
@@ -119,7 +183,7 @@ void DataTypeTracker::RecordLocalRefreshRequest() {
 }
 
 void DataTypeTracker::RecordRemoteInvalidation(
-    std::unique_ptr<InvalidationInterface> incoming) {
+    std::unique_ptr<SyncInvalidation> incoming) {
   DCHECK(incoming);
 
   // Merge the incoming invalidation into our list of pending invalidations.
@@ -142,13 +206,13 @@ void DataTypeTracker::RecordRemoteInvalidation(
 
   // Find the lower bound.
   while (it != pending_invalidations_.end() &&
-         InvalidationInterface::LessThanByVersion(**it, *incoming)) {
+         SyncInvalidation::LessThanByVersion(**it, *incoming)) {
     it++;
   }
 
   if (it != pending_invalidations_.end() &&
-      !InvalidationInterface::LessThanByVersion(*incoming, **it) &&
-      !InvalidationInterface::LessThanByVersion(**it, *incoming)) {
+      !SyncInvalidation::LessThanByVersion(*incoming, **it) &&
+      !SyncInvalidation::LessThanByVersion(**it, *incoming)) {
     // Incoming overlaps with existing.  Either both are unknown versions
     // (likely) or these two have the same version number (very unlikely).
     // Acknowledge and overwrite existing.
@@ -183,6 +247,12 @@ void DataTypeTracker::RecordCommitConflict() {
   sync_required_to_resolve_conflict_ = true;
 }
 
+void DataTypeTracker::RecordSuccessfulCommitMessage() {
+  if (quota_) {
+    quota_->ConsumeToken();
+  }
+}
+
 void DataTypeTracker::RecordSuccessfulSyncCycle() {
   // If we were blocked, then we would have been excluded from this cycle's
   // GetUpdates and Commit actions.  Our state remains unchanged.
@@ -201,7 +271,7 @@ void DataTypeTracker::RecordSuccessfulSyncCycle() {
   // crash before writing all our state, we should wait until the results of
   // this sync cycle have been written to disk before updating the invalidations
   // state.  See crbug.com/324996.
-  for (const std::unique_ptr<InvalidationInterface>& pending_invalidation :
+  for (const std::unique_ptr<SyncInvalidation>& pending_invalidation :
        pending_invalidations_) {
     pending_invalidation->Acknowledge();
   }
@@ -294,7 +364,7 @@ void DataTypeTracker::FillGetUpdatesTriggersMessage(
   // Fill the list of payloads, if applicable.  The payloads must be ordered
   // oldest to newest, so we insert them in the same order as we've been storing
   // them internally.
-  for (const std::unique_ptr<InvalidationInterface>& pending_invalidation :
+  for (const std::unique_ptr<SyncInvalidation>& pending_invalidation :
        pending_invalidations_) {
     if (!pending_invalidation->IsUnknownVersion()) {
       msg->add_notification_hint(pending_invalidation->GetPayload());
@@ -371,6 +441,11 @@ void DataTypeTracker::UpdateLocalChangeNudgeDelay(base::TimeDelta delay) {
 }
 
 base::TimeDelta DataTypeTracker::GetLocalChangeNudgeDelay() const {
+  if (quota_ && !quota_->HasTokensAvailable()) {
+    base::UmaHistogramEnumeration("Sync.ModelTypeCommitWithDepletedQuota",
+                                  ModelTypeHistogramValue(type_));
+    return kDepletedQuotaNudgeDelayForExtensionTypes;
+  }
   return local_change_nudge_delay_;
 }
 

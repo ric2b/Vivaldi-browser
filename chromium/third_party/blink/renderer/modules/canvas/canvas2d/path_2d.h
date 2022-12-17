@@ -36,7 +36,7 @@
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_path.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/identifiability_study_helper.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
-#include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/transforms/affine_transform.h"
 
 namespace blink {
@@ -91,19 +91,20 @@ class MODULES_EXPORT Path2D final : public ScriptWrappable, public CanvasPath {
 
   explicit Path2D(ExecutionContext* context) : context_(context) {
     identifiability_study_helper_.SetExecutionContext(context);
+    path_.SetIsVolatile(false);
   }
   Path2D(ExecutionContext* context, const Path& path)
       : CanvasPath(path), context_(context) {
     identifiability_study_helper_.SetExecutionContext(context);
+    path_.SetIsVolatile(false);
   }
   Path2D(ExecutionContext* context, Path2D* path)
-      : CanvasPath(path->GetPath()), context_(context) {
-    identifiability_study_helper_.SetExecutionContext(context);
-  }
+      : Path2D(context, path->GetPath()) {}
   Path2D(ExecutionContext* context, const String& path_data)
       : context_(context) {
     identifiability_study_helper_.SetExecutionContext(context);
     BuildPathFromString(path_data, path_);
+    path_.SetIsVolatile(false);
   }
 
   Path2D(const Path2D&) = delete;

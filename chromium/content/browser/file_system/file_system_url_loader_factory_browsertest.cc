@@ -88,8 +88,8 @@ bool TestAutoMountForURLRequest(
   if (request_info.storage_domain != "automount")
     return false;
 
-  std::vector<base::FilePath::StringType> components;
-  filesystem_url.path().GetComponents(&components);
+  std::vector<base::FilePath::StringType> components =
+      filesystem_url.path().GetComponents();
   std::string mount_point = base::FilePath(components[0]).AsUTF8Unsafe();
 
   if (mount_point == kValidExternalMountPoint) {
@@ -544,9 +544,9 @@ IN_PROC_BROWSER_TEST_P(FileSystemURLLoaderFactoryTest, DirectoryListing) {
       listing_entries.push_back(line);
   }
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   EXPECT_EQ("<script>start(\"foo\\\\bar\");</script>", listing_header);
-#elif defined(OS_POSIX)
+#elif BUILDFLAG(IS_POSIX)
   EXPECT_EQ("<script>start(\"/foo/bar\");</script>", listing_header);
 #endif
 

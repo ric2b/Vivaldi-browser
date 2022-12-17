@@ -12,7 +12,9 @@ source_set("interstitial") {
   deps = [
     "../:adblock_filter",
     "//chrome/common:buildflags",
+    "//chromeos/components/chromebox_for_meetings/buildflags",
     "//components/site_engagement/core/mojom:mojo_bindings",
+    "//components/security_interstitials/core/common/mojom",
     "//content/public/browser",
   ]
 }

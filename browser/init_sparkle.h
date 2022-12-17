@@ -9,11 +9,6 @@ namespace init_sparkle {
 
 GURL GetAppcastUrl();
 
-#if defined(OS_MAC)
-
-void Initialize();
-
-#endif
 }  // namespace init_sparkle
 
 #endif  // BROWSER_INIT_SPARKLE_H_

@@ -28,6 +28,7 @@
 <translation id="1476607407192946488">언어 설정(&amp;L)</translation>
 <translation id="150411034776756821"><ph name="SITE" /> 삭제</translation>
 <translation id="1546280085599573572">홈 버튼을 클릭하면 표시되는 페이지가 이 확장 프로그램으로 인해 변경되었습니다.</translation>
+<translation id="1552752544932680961">확장 프로그램 관리</translation>
 <translation id="15662109988763471">선택한 프린터가 사용 불가능하거나 올바르게 설치되어 있지 않습니다. 프린터를 확인하거나 다른 프린터를 선택해 보세요.</translation>
 <translation id="1588438908519853928">일반</translation>
 <translation id="1588870296199743671">다음으로 링크 열기...</translation>
@@ -295,6 +296,7 @@
 <translation id="6156863943908443225">스크립트 캐시</translation>
 <translation id="6169666352732958425">데스크톱을 전송할 수 없습니다.</translation>
 <translation id="6196854373336333322">'<ph name="EXTENSION_NAME" />' 확장 프로그램이 프록시 설정을 제어할 수 있게 되었으며, 따라서 사용자가 온라인에서 수행하는 모든 작업을 변경, 중단하거나 엿볼 수 있게 되었습니다. 이와 같이 변경된 이유를 잘 모른다면 이 설정을 사용하지 않는 것이 좋습니다.</translation>
+<translation id="6200151268994853226">확장 프로그램 관리</translation>
 <translation id="6206311232642889873">이미지 복사(&amp;Y)</translation>
 <translation id="6239558157302047471">프레임 새로고침(&amp;F)</translation>
 <translation id="6247802389331535091">시스템: <ph name="ARC_PROCESS_NAME" /></translation>

@@ -16,6 +16,7 @@
 #include "base/files/file_util.h"
 #include "base/files/important_file_writer.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/sequence_checker.h"
 #include "base/stl_util.h"
 #include "base/time/clock.h"
@@ -23,11 +24,11 @@
 #include "base/time/time.h"
 #include "components/os_crypt/os_crypt.h"
 #include "components/signin/public/identity_manager/accounts_in_cookie_jar_info.h"
+#include "components/sync/base/features.h"
 #include "components/sync/base/time.h"
 #include "components/sync/trusted_vault/proto_string_bytes_conversion.h"
 #include "components/sync/trusted_vault/securebox.h"
 #include "components/sync/trusted_vault/trusted_vault_server_constants.h"
-#include "components/sync/trusted_vault/trusted_vault_switches.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 
 namespace syncer {
@@ -40,8 +41,15 @@ sync_pb::LocalTrustedVault ReadEncryptedFile(const base::FilePath& file_path) {
   sync_pb::LocalTrustedVault proto;
   std::string ciphertext;
   std::string decrypted_content;
-  if (base::ReadFileToString(file_path, &ciphertext) &&
-      OSCrypt::DecryptString(ciphertext, &decrypted_content)) {
+  if (!base::ReadFileToString(file_path, &ciphertext)) {
+    return proto;
+  }
+
+  const bool decryption_success =
+      OSCrypt::DecryptString(ciphertext, &decrypted_content);
+  base::UmaHistogramBoolean("Sync.TrustedVaultLocalDataDecryptionIsSuccessful",
+                            decryption_success);
+  if (decryption_success) {
     proto.ParseFromString(decrypted_content);
   }
 
@@ -51,7 +59,11 @@ sync_pb::LocalTrustedVault ReadEncryptedFile(const base::FilePath& file_path) {
 void WriteToDisk(const sync_pb::LocalTrustedVault& data,
                  const base::FilePath& file_path) {
   std::string encrypted_data;
-  if (!OSCrypt::EncryptString(data.SerializeAsString(), &encrypted_data)) {
+  const bool encryption_success =
+      OSCrypt::EncryptString(data.SerializeAsString(), &encrypted_data);
+  base::UmaHistogramBoolean("Sync.TrustedVaultLocalDataEncryptionIsSuccessful",
+                            encryption_success);
+  if (!encryption_success) {
     DLOG(ERROR) << "Failed to encrypt trusted vault file.";
     return;
   }
@@ -67,7 +79,7 @@ bool HasNonConstantKey(
   std::string constant_key_as_proto_string;
   AssignBytesToProtoString(GetConstantTrustedVaultKey(),
                            &constant_key_as_proto_string);
-  for (const auto& key : per_user_vault.vault_key()) {
+  for (const sync_pb::LocalTrustedVaultKey& key : per_user_vault.vault_key()) {
     if (key.key_material() != constant_key_as_proto_string) {
       return true;
     }
@@ -93,7 +105,7 @@ void DownloadIsRecoverabilityDegradedCompleted(
 base::flat_set<std::string> GetGaiaIDs(
     const std::vector<gaia::ListedAccount>& listed_accounts) {
   base::flat_set<std::string> result;
-  for (const auto& listed_account : listed_accounts) {
+  for (const gaia::ListedAccount& listed_account : listed_accounts) {
     result.insert(listed_account.gaia_id);
   }
   return result;
@@ -502,7 +514,7 @@ StandaloneTrustedVaultBackend::MaybeRegisterDevice(
 
   if (per_user_vault->vault_key().empty() &&
       !base::FeatureList::IsEnabled(
-          switches::kAllowSilentTrustedVaultDeviceRegistration)) {
+          kAllowSilentTrustedVaultDeviceRegistration)) {
     // Either vault key with known version should be available or registration
     // without it should be allowed through feature flag.
     return absl::nullopt;
@@ -770,7 +782,7 @@ bool StandaloneTrustedVaultBackend::AreConnectionRequestsThrottled() {
   }
 
   return last_failed_request_time +
-             switches::kTrustedVaultServiceThrottlingDuration.Get() >
+             kTrustedVaultServiceThrottlingDuration.Get() >
          current_time;
 }
 

@@ -197,8 +197,7 @@ public class DownloadDialogBridge
         mDownloadLaterChoice = choice;
         mDownloadLaterTime = startTime;
 
-        DownloadLaterMetrics.recordDownloadLaterDialogChoice(
-                choice, DownloadDialogBridgeJni.get().isDataReductionProxyEnabled(), mTotalBytes);
+        DownloadLaterMetrics.recordDownloadLaterDialogChoice(choice, mTotalBytes);
 
         // When there is no error message, skip the location dialog.
         if (mLocationDialogType == DownloadLocationDialogType.DEFAULT) {
@@ -379,7 +378,6 @@ public class DownloadDialogBridge
         void onCanceled(long nativeDownloadDialogBridge, DownloadDialogBridge caller);
         String getDownloadDefaultDirectory();
         void setDownloadAndSaveFileDefaultDirectory(String directory);
-        boolean isDataReductionProxyEnabled();
         long getDownloadLaterMinFileSize();
         boolean shouldShowDateTimePicker();
         boolean isLocationDialogManaged();

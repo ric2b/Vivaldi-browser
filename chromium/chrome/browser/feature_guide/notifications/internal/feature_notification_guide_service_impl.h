@@ -23,6 +23,11 @@ class NotificationScheduleService;
 struct NotificationData;
 }  // namespace notifications
 
+namespace segmentation_platform {
+class SegmentationPlatformService;
+struct SegmentSelectionResult;
+}  // namespace segmentation_platform
+
 namespace feature_guide {
 
 class FeatureNotificationGuideServiceImpl
@@ -33,6 +38,8 @@ class FeatureNotificationGuideServiceImpl
       const Config& config,
       notifications::NotificationScheduleService* notification_scheduler,
       feature_engagement::Tracker* tracker,
+      segmentation_platform::SegmentationPlatformService*
+          segmentation_platform_service,
       base::Clock* clock);
   ~FeatureNotificationGuideServiceImpl() override;
 
@@ -45,17 +52,25 @@ class FeatureNotificationGuideServiceImpl
   Delegate* GetDelegate() { return delegate_.get(); }
 
  private:
-  void StartCheckingForEligibleFeatures(bool init_success);
-  void ScheduleNotification(FeatureType feature);
+  void OnTrackerInitialized(bool init_success);
+  void OnQuerySegmentationPlatform(
+      const segmentation_platform::SegmentSelectionResult& result);
+  void StartCheckingForEligibleFeatures();
+  void ScheduleNotification(FeatureType feature, bool schedule_immediately);
+  void CloseRedundantNotifications();
+  void CheckForLowEnagedUser();
 
   std::unique_ptr<FeatureNotificationGuideService::Delegate> delegate_;
   raw_ptr<notifications::NotificationScheduleService> notification_scheduler_;
   raw_ptr<feature_engagement::Tracker> tracker_;
+  raw_ptr<segmentation_platform::SegmentationPlatformService>
+      segmentation_platform_service_;
   base::Clock* clock_;
   Config config_;
 
-  std::set<FeatureType> scheduled_features_;
+  std::set<std::string> scheduled_feature_guids_;
   absl::optional<base::Time> last_notification_schedule_time_;
+  bool is_low_engaged_user_{false};
 
   base::WeakPtrFactory<FeatureNotificationGuideServiceImpl> weak_ptr_factory_{
       this};

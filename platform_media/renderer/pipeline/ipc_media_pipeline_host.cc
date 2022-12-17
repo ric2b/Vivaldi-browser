@@ -129,7 +129,7 @@ void IPCMediaPipelineHost::DisconnectHandler() {
     return;
   }
   if (seek_callback_) {
-    std::move(seek_callback_).Run(PipelineStatus::PIPELINE_ERROR_ABORT);
+    std::move(seek_callback_).Run(PIPELINE_ERROR_ABORT);
   }
   for (auto& callback : decoded_data_read_callbacks_) {
     if (callback) {
@@ -238,7 +238,7 @@ void IPCMediaPipelineHost::Seek(base::TimeDelta time,
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!seek_callback_);
   if (!remote_pipeline_) {
-    std::move(seek_callback).Run(PipelineStatus::PIPELINE_ERROR_ABORT);
+    std::move(seek_callback).Run(PIPELINE_ERROR_ABORT);
     return;
   }
 
@@ -262,9 +262,7 @@ void IPCMediaPipelineHost::OnSeekDone(bool success) {
   VLOG(3) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
           << " success=" << success;
 
-  std::move(seek_callback_)
-      .Run(success ? PipelineStatus::PIPELINE_OK
-                   : PipelineStatus::PIPELINE_ERROR_ABORT);
+  std::move(seek_callback_).Run(success ? PIPELINE_OK : PIPELINE_ERROR_ABORT);
 
   TRACE_EVENT_ASYNC_END0("IPC_MEDIA", "Seek", this);
 }

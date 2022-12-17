@@ -13,7 +13,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/ui/browser.h"
 #endif
 
@@ -23,7 +23,7 @@ using content::GlobalRequestID;
 using content::NavigationController;
 using content::WebContents;
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 NavigateParams::NavigateParams(std::unique_ptr<WebContents> contents_to_insert)
     : contents_to_insert(std::move(contents_to_insert)) {}
 #else
@@ -41,7 +41,7 @@ NavigateParams::NavigateParams(Browser* a_browser,
       should_create_guestframe = browser ? browser->is_vivaldi() :
                                            vivaldi::IsVivaldiRunning();
     }
-#endif  // !defined(OS_ANDROID)
+#endif  // BUILDFLAG(IS_ANDROID)
 
 NavigateParams::NavigateParams(Profile* a_profile,
                                const GURL& a_url,

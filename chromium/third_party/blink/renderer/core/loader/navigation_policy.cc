@@ -54,7 +54,7 @@ NavigationPolicy NavigationPolicyFromEventModifiers(int16_t button,
                                                     bool shift,
                                                     bool alt,
                                                     bool meta) {
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   const bool new_tab_modifier = (button == 1) || meta;
 #else
   const bool new_tab_modifier = (button == 1) || ctrl;
@@ -194,5 +194,7 @@ STATIC_ASSERT_ENUM(kWebNavigationPolicyNewForegroundTab,
                    kNavigationPolicyNewForegroundTab);
 STATIC_ASSERT_ENUM(kWebNavigationPolicyNewWindow, kNavigationPolicyNewWindow);
 STATIC_ASSERT_ENUM(kWebNavigationPolicyNewPopup, kNavigationPolicyNewPopup);
+STATIC_ASSERT_ENUM(kWebNavigationPolicyPictureInPicture,
+                   kNavigationPolicyPictureInPicture);
 
 }  // namespace blink

@@ -1,5 +1,6 @@
 tools/metrics/histograms/histograms.xml
 tools/metrics/histograms/metadata/accessibility/histograms.xml
+tools/metrics/histograms/metadata/account_manager/histograms.xml
 tools/metrics/histograms/metadata/android/histograms.xml
 tools/metrics/histograms/metadata/apps/histograms.xml
 tools/metrics/histograms/metadata/arc/histograms.xml
@@ -11,12 +12,13 @@ tools/metrics/histograms/metadata/autofill/histograms.xml
 tools/metrics/histograms/metadata/background/histograms.xml
 tools/metrics/histograms/metadata/blink/histograms.xml
 tools/metrics/histograms/metadata/bluetooth/histograms.xml
+tools/metrics/histograms/metadata/bookmarks/histograms.xml
 tools/metrics/histograms/metadata/borealis/histograms.xml
 tools/metrics/histograms/metadata/browser/histograms.xml
 tools/metrics/histograms/metadata/chrome/histograms.xml
 tools/metrics/histograms/metadata/chromeos/histograms.xml
 tools/metrics/histograms/metadata/chromeos_hps/histograms.xml
-tools/metrics/histograms/metadata/cloud/histograms.xml
+tools/metrics/histograms/metadata/chromeos_settings/histograms.xml
 tools/metrics/histograms/metadata/commerce/histograms.xml
 tools/metrics/histograms/metadata/compositing/histograms.xml
 tools/metrics/histograms/metadata/content/histograms.xml
@@ -37,8 +39,8 @@ tools/metrics/histograms/metadata/disk/histograms.xml
 tools/metrics/histograms/metadata/download/histograms.xml
 tools/metrics/histograms/metadata/enterprise/histograms.xml
 tools/metrics/histograms/metadata/event/histograms.xml
-tools/metrics/histograms/metadata/extension/histograms.xml
 tools/metrics/histograms/metadata/extensions/histograms.xml
+tools/metrics/histograms/metadata/families/histograms.xml
 tools/metrics/histograms/metadata/feature_engagement/histograms.xml
 tools/metrics/histograms/metadata/file/histograms.xml
 tools/metrics/histograms/metadata/fingerprint/histograms.xml
@@ -90,6 +92,7 @@ tools/metrics/histograms/metadata/power/histograms.xml
 tools/metrics/histograms/metadata/prefetch/histograms.xml
 tools/metrics/histograms/metadata/print/histograms.xml
 tools/metrics/histograms/metadata/printing/histograms.xml
+tools/metrics/histograms/metadata/privacy_budget/histograms.xml
 tools/metrics/histograms/metadata/profile/histograms.xml
 tools/metrics/histograms/metadata/quickoffice/histograms.xml
 tools/metrics/histograms/metadata/quota/histograms.xml

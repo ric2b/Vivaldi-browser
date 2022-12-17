@@ -789,7 +789,7 @@ void UpdateDialog::DownloadProgress(DownloadReport report) {
       // Ensure that we show a progress in case we recovered from failed delta
       // verification and update and switched to downloading the full update.
       SHOW(m_progressLabel);
-      FALLTHROUGH;
+      [[fallthrough]];
     case DownloadReport::kMoreData: {
       int total = report.content_length;
       int downloaded = report.downloaded_length;

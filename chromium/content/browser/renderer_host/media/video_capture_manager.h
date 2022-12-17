@@ -31,7 +31,7 @@
 #include "media/capture/video_capture_types.h"
 #include "ui/gfx/native_widget_types.h"
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 #include "base/android/application_status_listener.h"
 #endif
 
@@ -81,11 +81,18 @@ class CONTENT_EXPORT VideoCaptureManager
   void Close(const base::UnguessableToken& capture_session_id) override;
 
   // Start/stop cropping the video track.
+  //
   // Non-empty |crop_id| sets (or changes) the crop-target.
   // Empty |crop_id| reverts the capture to its original, uncropped state.
+  //
+  // |crop_version| must be incremented by at least one for each call.
+  // By including it in frame's metadata, Viz informs Blink what was the
+  // latest invocation of cropTo() before a given frame was produced.
+  //
   // The callback reports success/failure.
   void Crop(const base::UnguessableToken& session_id,
             const base::Token& crop_id,
+            uint32_t crop_version,
             base::OnceCallback<void(media::mojom::CropRequestResult)> callback);
 
   // Called by VideoCaptureHost to locate a capture device for |capture_params|,
@@ -182,7 +189,7 @@ class CONTENT_EXPORT VideoCaptureManager
   void TakePhoto(const base::UnguessableToken& session_id,
                  VideoCaptureDevice::TakePhotoCallback callback);
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   // Some devices had troubles when stopped and restarted quickly, so the device
   // is only stopped when Chrome is sent to background and not when, e.g., a tab
   // is hidden, see http://crbug.com/582295.
@@ -279,7 +286,7 @@ class CONTENT_EXPORT VideoCaptureManager
   void ReleaseDevices();
   void ResumeDevices();
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   std::unique_ptr<base::android::ApplicationStatusListener>
       app_status_listener_;
   bool application_state_has_running_activities_;

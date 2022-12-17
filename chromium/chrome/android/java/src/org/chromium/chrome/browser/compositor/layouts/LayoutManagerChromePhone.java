@@ -15,6 +15,7 @@ import org.chromium.chrome.browser.compositor.LayerTitleCache;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.compositor.layouts.phone.SimpleAnimationLayout;
 import org.chromium.chrome.browser.device.DeviceClassManager;
+import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
@@ -45,6 +46,8 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
     private final List<StripLayoutHelperManager> mTabStrips = new ArrayList<>();
     private SharedPreferencesManager.Observer mPreferenceObserver;
     private boolean mTabStripAdded;
+    /** A {@link TitleCache} instance that stores all title/favicon bitmaps as CC resources. */
+    protected LayerTitleCache mLayerTitleCache;
 
     /**
      * Creates an instance of a {@link LayoutManagerChromePhone}.
@@ -53,25 +56,22 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
      * @param startSurface An interface to talk to the Grid Tab Switcher. If it's NULL, VTS
      *                     should be used, otherwise GTS should be used.
      * @param tabContentManagerSupplier Supplier of the {@link TabContentManager} instance.
-     * @param layerTitleCacheSupplier Supplier of the {@link LayerTitleCache}.
      * @param overviewModeBehaviorSupplier Supplier of the {@link OverviewModeBehavior}.
      * @param topUiThemeColorProvider {@link ThemeColorProvider} for top UI.
      */
     public LayoutManagerChromePhone(LayoutManagerHost host, ViewGroup contentContainer,
             StartSurface startSurface,
             ObservableSupplier<TabContentManager> tabContentManagerSupplier,
-            Supplier<LayerTitleCache> layerTitleCacheSupplier,
             OneshotSupplierImpl<OverviewModeBehavior> overviewModeBehaviorSupplier,
             Supplier<TopUiThemeColorProvider> topUiThemeColorProvider, JankTracker jankTracker) {
         super(host, contentContainer, true, startSurface, tabContentManagerSupplier,
-                layerTitleCacheSupplier, overviewModeBehaviorSupplier, topUiThemeColorProvider,
-                jankTracker);
+                overviewModeBehaviorSupplier, topUiThemeColorProvider, jankTracker);
 
         // Note(david@vivaldi.com): We create two tab strips here. The first one is the main strip.
         // The second one is the stack strip.
         for (int i = 0; i < 2; i++) {
             mTabStrips.add(new StripLayoutHelperManager(mHost.getContext(), this,
-                    mHost.getLayoutRenderHost(), () -> mTitleCache, layerTitleCacheSupplier));
+                    mHost.getLayoutRenderHost(), () -> mLayerTitleCache));
             mTabStrips.get(i).setIsStackStrip(i != 0);
         }
 
@@ -111,6 +111,20 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
 
         // Vivaldi
         for (int i = 0; i < 2; i++) mTabStrips.get(i).setTabModelSelector(selector, creator);
+
+        // Vivaldi
+        if (DeviceClassManager.enableLayerDecorationCache()) {
+            mLayerTitleCache = new LayerTitleCache(mHost.getContext(), getResourceManager());
+            mLayerTitleCache.setTabModelSelector(selector);
+        }
+    }
+
+    @Override
+    protected Layout getLayoutForType(int layoutType) {
+        if (layoutType == LayoutType.SIMPLE_ANIMATION) {
+            return mSimpleAnimationLayout;
+        }
+        return super.getLayoutForType(layoutType);
     }
 
     @Override
@@ -135,12 +149,6 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
         };
     }
 
-    @Override
-    protected void emptyCachesExcept(int tabId) {
-        super.emptyCachesExcept(tabId);
-        if (mTitleCache != null) mTitleCache.clearExcept(tabId);
-    }
-
     private void tabClosing(int id) {
         Tab closedTab = getTabById(id);
         if (closedTab == null) return;
@@ -149,7 +157,7 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
             // The user is currently interacting with the {@code LayoutHost}.
             // Allow the foreground layout to animate the tab closing.
             getActiveLayout().onTabClosing(time(), id);
-        } else if (animationsEnabled()) {
+        } else if (animationsEnabled() && !hasExplicitNextLayout()) {
             startShowing(mSimpleAnimationLayout, false);
             getActiveLayout().onTabClosing(time(), id);
         }
@@ -158,20 +166,21 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
     @Override
     protected void tabClosed(int id, int nextId, boolean incognito, boolean tabRemoved) {
         boolean showOverview = nextId == Tab.INVALID_TAB_ID;
-        Layout overviewLayout = DeviceClassManager.enableAccessibilityLayout(mHost.getContext())
-                ? mOverviewListLayout
-                : mOverviewLayout;
-        if (getActiveLayout() != overviewLayout && showOverview) {
+        if (getActiveLayoutType() != LayoutType.TAB_SWITCHER && showOverview) {
             // Since there will be no 'next' tab to display, switch to
             // overview mode when the animation is finished.
-            setNextLayout(overviewLayout);
+            if (getActiveLayoutType() == LayoutType.SIMPLE_ANIMATION) {
+                setNextLayout(getLayoutForType(LayoutType.TAB_SWITCHER), true);
+            } else {
+                showLayout(LayoutType.TAB_SWITCHER, true);
+            }
         }
         getActiveLayout().onTabClosed(time(), id, nextId, incognito);
         Tab nextTab = getTabById(nextId);
         if (nextTab != null && nextTab.getView() != null) nextTab.getView().requestFocus();
         boolean animate = !tabRemoved && animationsEnabled();
-        if (getActiveLayout() != overviewLayout && showOverview && !animate) {
-            showOverview(false);
+        if (getActiveLayoutType() != LayoutType.TAB_SWITCHER && showOverview && !animate) {
+            showLayout(LayoutType.TAB_SWITCHER, false);
         }
     }
 
@@ -186,7 +195,7 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
         } else if (animationsEnabled()) {
             if (!overviewVisible()) {
                 if (getActiveLayout() != null && getActiveLayout().isStartingToHide()) {
-                    setNextLayout(mSimpleAnimationLayout);
+                    setNextLayout(mSimpleAnimationLayout, true);
                     // The method Layout#doneHiding() will automatically show the next layout.
                     getActiveLayout().doneHiding();
                 } else {
@@ -229,10 +238,14 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
         }
     }
 
-    @Override
-    public void releaseTabLayout(int id) {
-        mTitleCache.remove(id);
-        super.releaseTabLayout(id);
+    // Vivaldi: Update the {@link SceneOverlay} according to the tab strip setting.
+    private void updateGlobalSceneOverlay() {
+            if(!mTabStripAdded) {
+                for (int i = 0; i < 2; i++) addSceneOverlay(mTabStrips.get(i));
+                if (getTabModelSelector() != null)
+                    tabModelSwitched(getTabModelSelector().isIncognitoSelected()); //!! TODO(jarle): CHECK IF THIS IS CORRECT
+                mTabStripAdded = true;
+            }
     }
 
     // Vivaldi
@@ -246,13 +259,33 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
         SharedPreferencesManager.getInstance().removeObserver(mPreferenceObserver);
     }
 
-    // Vivaldi: Update the {@link SceneOverlay} according to the tab strip setting.
-    private void updateGlobalSceneOverlay() {
-            if(!mTabStripAdded) {
-                for (int i = 0; i < 2; i++) addSceneOverlay(mTabStrips.get(i));
-                if (getTabModelSelector() != null)
-                    tabModelSwitched(getTabModelSelector().isIncognitoSelected()); //!! TODO(jarle): CHECK IF THIS IS CORRECT
-                mTabStripAdded = true;
-            }
+    // Vivaldi
+    @Override
+    protected void emptyCachesExcept(int tabId) {
+        super.emptyCachesExcept(tabId);
+        if (mLayerTitleCache != null) mLayerTitleCache.clearExcept(tabId);
+    }
+
+    // Vivaldi
+    @Override
+    public void initLayoutTabFromHost(final int tabId) {
+        if (mLayerTitleCache != null) {
+            mLayerTitleCache.remove(tabId);
+        }
+        super.initLayoutTabFromHost(tabId);
+    }
+
+    // Vivaldi
+    @Override
+    public void releaseTabLayout(int id) {
+        mLayerTitleCache.remove(id);
+        super.releaseTabLayout(id);
+    }
+
+    // Vivaldi
+    @Override
+    public void releaseResourcesForTab(int tabId) {
+        super.releaseResourcesForTab(tabId);
+        mLayerTitleCache.remove(tabId);
     }
 }

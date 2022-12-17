@@ -23,7 +23,7 @@
 #include "build/build_config.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 #include <sys/event.h>
 #endif
 
@@ -95,7 +95,7 @@ bool WaitpidWithTimeout(base::ProcessHandle handle,
   return ret_pid > 0;
 }
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 // Using kqueue on Mac so that we can wait on non-child processes.
 // We can't use kqueues on child processes because we need to reap
 // our own children using wait.
@@ -183,7 +183,7 @@ bool WaitForSingleNonChildProcess(base::ProcessHandle handle,
 
   return true;
 }
-#endif  // OS_MAC
+#endif  // BUILDFLAG(IS_MAC)
 
 bool WaitForExitWithTimeoutImpl(base::ProcessHandle handle,
                                 int* exit_code,
@@ -200,13 +200,13 @@ bool WaitForExitWithTimeoutImpl(base::ProcessHandle handle,
   const bool exited = (parent_pid < 0);
 
   if (!exited && parent_pid != our_pid) {
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
     // On Mac we can wait on non child processes.
     return WaitForSingleNonChildProcess(handle, timeout);
 #else
     // Currently on Linux we can't handle non child processes.
     NOTIMPLEMENTED();
-#endif  // OS_MAC
+#endif  // BUILDFLAG(IS_MAC)
   }
 
   int status;
@@ -312,20 +312,18 @@ bool Process::Terminate(int exit_code, bool wait) const {
   DCHECK(IsValid());
   CHECK_GT(process_, 0);
 
-  bool did_terminate = kill(process_, SIGTERM) == 0;
-
-  if (wait && did_terminate) {
-    if (WaitForExitWithTimeout(Seconds(60), nullptr))
-      return true;
-    did_terminate = kill(process_, SIGKILL) == 0;
-    if (did_terminate)
-      return WaitForExit(nullptr);
-  }
-
-  if (!did_terminate)
+  if (kill(process_, SIGTERM) != 0) {
     DPLOG(ERROR) << "Unable to terminate process " << process_;
-
-  return did_terminate;
+    return false;
+  }
+  if (!wait || WaitForExitWithTimeout(Seconds(60), nullptr)) {
+    return true;
+  }
+  if (kill(process_, SIGKILL) != 0) {
+    DPLOG(ERROR) << "Unable to kill process " << process_;
+    return false;
+  }
+  return WaitForExit(nullptr);
 }
 
 bool Process::WaitForExit(int* exit_code) const {

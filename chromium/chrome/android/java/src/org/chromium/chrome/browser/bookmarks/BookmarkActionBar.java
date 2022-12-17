@@ -31,8 +31,16 @@ import org.chromium.url.GURL;
 import java.util.HashSet;
 import java.util.List;
 
+// Vivaldi
+import android.text.SpannableString;
+import android.text.style.AbsoluteSizeSpan;
+import android.text.style.ForegroundColorSpan;
+
 import org.chromium.chrome.browser.ChromeApplicationImpl;
+import org.chromium.chrome.browser.ChromeTabbedActivity;
+import org.chromium.chrome.browser.read_later.ReadingListUtils;
 import org.chromium.ui.base.DeviceFormFactor;
+import org.chromium.ui.widget.Toast;
 
 import org.vivaldi.browser.bookmarks.BookmarkDialogDelegate;
 import org.vivaldi.browser.panels.PanelUtils;
@@ -47,6 +55,7 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
 
     private BookmarkItem mCurrentFolder;
     private BookmarkDelegate mDelegate;
+    private ChromeTabbedActivity mTabbedActivity; // Vivaldi
 
     /** Vivaldi **/
     private BookmarkDialogDelegate mBookmarkDialogDelegate;
@@ -79,16 +88,23 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
         // SelectionDelegate is retrieved from the BookmarkDelegate.
         getMenu().setGroupEnabled(R.id.selection_mode_menu_group, false);
 
-        if (ChromeApplicationImpl.isVivaldi()) {
-            getMenu().findItem(R.id.sort_bookmarks_id).setVisible(
-                    true);
-        }
+        // Vivaldi - Reading list
+        if (getContext() instanceof ChromeTabbedActivity)
+            mTabbedActivity = (ChromeTabbedActivity)getContext();
     }
 
     @Override
     public void onNavigationBack() {
         if (isSearching()) {
             super.onNavigationBack();
+            return;
+        }
+
+        // Vivaldi - Close reading list fragment on back press
+        boolean isReadingListFolder =
+                mCurrentFolder.getId().equals(mDelegate.getModel().getReadingListFolder());
+        if (isReadingListFolder && mTabbedActivity != null) {
+            closeReadingListFragment();
             return;
         }
 
@@ -158,6 +174,8 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
             RecordUserAction.record("MobileBookmarkManagerDeleteBulk");
             return true;
         } else if (menuItem.getItemId() == R.id.selection_open_in_new_tab_id) {
+            // Vivaldi - Close reading list fragment on back press
+            closeReadingListFragment();
             RecordUserAction.record("MobileBookmarkManagerEntryOpenedInNewTab");
             RecordHistogram.recordCount1000Histogram(
                     "Bookmarks.Count.OpenInNewTab", mSelectionDelegate.getSelectedItems().size());
@@ -166,6 +184,8 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
             selectionDelegate.clearSelection();
             return true;
         } else if (menuItem.getItemId() == R.id.selection_open_in_incognito_tab_id) {
+            // Vivaldi - Close reading list fragment on back press
+            closeReadingListFragment();
             RecordUserAction.record("MobileBookmarkManagerEntryOpenedInIncognito");
             RecordHistogram.recordCount1000Histogram("Bookmarks.Count.OpenInIncognito",
                     mSelectionDelegate.getSelectedItems().size());
@@ -222,6 +242,14 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
                 mDelegate.setSortOrder(
                         BookmarkItemsAdapter.SortOrder.forNumber(BookmarkItemsAdapter.
                                 SortOrder.DATE.getNumber()));
+                return true;
+            } else if (menuItem.getItemId() == R.id.add_page_to_reading_list_menu_id) {
+                if (mTabbedActivity != null && mTabbedActivity.getActivityTab() != null
+                  && ReadingListUtils.isReadingListSupported(mTabbedActivity.getActivityTab().getUrl())) {
+                    mTabbedActivity.addToReadingList(mTabbedActivity.getActivityTab());
+                    Toast.makeText(getContext(), R.string.add_page_to_reading_list_confirm,
+                            Toast.LENGTH_SHORT).show();
+                }
                 return true;
             }
         }
@@ -284,6 +312,9 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
         mCurrentFolder = mDelegate.getModel().getBookmarkById(folder);
         getMenu().findItem(R.id.search_menu_id).setVisible(true);
         getMenu().findItem(R.id.edit_menu_id).setVisible(mCurrentFolder.isEditable());
+        // Vivaldi
+        MenuItem addPageMenuItem = getMenu().findItem(R.id.add_page_to_reading_list_menu_id);
+        addPageMenuItem.setVisible(false);
 
         // If this is the root folder, we can't go up anymore.
         if (folder.equals(mDelegate.getModel().getRootFolderId())) {
@@ -307,6 +338,28 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
         // Vivaldi needs this for adding new bookmarks
         if (!mCurrentFolder.getId().equals(mDelegate.getModel().getTrashFolderId()))
             BookmarkUtils.setLastUsedParent(getContext(), mCurrentFolder.getId());
+
+        // Update menus for Reading list
+        boolean isReadingListFolder =
+                mCurrentFolder.getId().equals(mDelegate.getModel().getReadingListFolder());
+        if (isReadingListFolder && mTabbedActivity != null) {
+            getMenu().findItem(R.id.close_menu_id).setVisible(false);
+            getMenu().findItem(R.id.search_menu_id).setVisible(false);
+            addPageMenuItem.setVisible(true);
+            addPageMenuItem.setEnabled(shouldEnableAddCurrentPageMenu(mTabbedActivity));
+            int textColor = addPageMenuItem.isEnabled()
+                    ? R.color.vivaldi_highlight
+                    : R.color.default_icon_color_disabled;
+            SpannableString menuTitle = new SpannableString(
+                    getContext().getString(R.string.add_page_to_reading_list));
+            menuTitle.setSpan(new AbsoluteSizeSpan(
+                    getContext().getResources().getDimensionPixelSize(R.dimen.text_size_small)),
+                    0,menuTitle.length(), 0);
+            menuTitle.setSpan(new ForegroundColorSpan(
+                    getContext().getColor(textColor)), 0, menuTitle.length(), 0);
+            addPageMenuItem.setTitle(menuTitle);
+        }
+        getMenu().findItem(R.id.sort_bookmarks_id).setVisible(!isReadingListFolder);
     }
 
     @Override
@@ -390,9 +443,26 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
     }
 
     // Vivaldi
-
     private boolean isVivaldiTablet() {
         return ChromeApplicationImpl.isVivaldi() &&
                 DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext());
+    }
+
+    /** Vivaldi
+     * Returns true if current page is reading list supported and not already on reading list **/
+    private boolean shouldEnableAddCurrentPageMenu(ChromeTabbedActivity activity) {
+        if (activity.getActivityTab() == null) return false;
+        if (!ReadingListUtils.isReadingListSupported(activity.getActivityTab().getUrl()))
+            return false;
+        BookmarkId existingBookmark =
+                mDelegate.getModel().getUserBookmarkIdForTab(activity.getActivityTab());
+        if (existingBookmark == null) return true;
+        return existingBookmark.getType() != BookmarkType.READING_LIST;
+    }
+
+    /** Vivaldi **/
+    private void closeReadingListFragment() {
+        if (mTabbedActivity != null)
+            mTabbedActivity.getSupportFragmentManager().popBackStack();
     }
 }

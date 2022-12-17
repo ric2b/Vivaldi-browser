@@ -5,6 +5,7 @@
 
 #include <vector>
 #include "base/supports_user_data.h"
+#include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "url/gurl.h"
 
 namespace base {
@@ -20,7 +21,7 @@ extern const char kVivaldiStartupTabUserDataKey[];
 
 bool LaunchVivaldi(const base::CommandLine& command_line,
                    const base::FilePath& cur_dir,
-                   Profile* profile);
+                   StartupProfileInfo profile_info);
 bool AddVivaldiNewPage(bool welcome_run_none, std::vector<GURL>* startup_urls);
 
 class VivaldiStartupTabUserData : public base::SupportsUserData::Data {

@@ -4,6 +4,9 @@
   <message name="IDS_IMPORT_FROM_OPERA" desc="browser combo box: Opera Browser">
     Opera 12.x
   </message>
+  <message name="IDS_IMPORT_FROM_OPERA_MAIL" desc="browser combo box: Opera Mail">
+    Opera Mail
+  </message>
   <message name="IDS_IMPORT_FROM_GOOGLE_CHROME" desc="Name of import profile Google Chrome">
     Chrome
   </message>

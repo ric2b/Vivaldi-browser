@@ -143,6 +143,7 @@
 #include "third_party/blink/public/platform/web_runtime_features.h"
 #include "third_party/blink/public/platform/web_scoped_page_pauser.h"
 #include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/platform/web_theme_engine.h"
 #include "third_party/blink/public/web/blink.h"
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_frame.h"
@@ -160,18 +161,18 @@
 #include "ui/display/display_switches.h"
 #include "v8/include/v8-extension.h"
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 #include <cpu-features.h>
 #include "content/renderer/media/android/stream_texture_factory.h"
 #include "media/base/android/media_codec_util.h"
 #endif
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 #include "base/mac/mac_util.h"
 #include "content/renderer/theme_helper_mac.h"
 #endif
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 #include <objbase.h>
 #include <windows.h>
 #include "content/renderer/media/win/dcomp_texture_factory.h"
@@ -186,7 +187,7 @@
 #include "mojo/public/cpp/bindings/message_dumper.h"
 #endif
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 #include <malloc/malloc.h>
 #else
 #include <malloc.h>
@@ -596,7 +597,7 @@ void RenderThreadImpl::Init() {
 
 #if BUILDFLAG(USE_EXTERNAL_POPUP_MENU)
   // On Mac and Android Java UI, the select popups are rendered by the browser.
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   // When UseCommonSelectPopup is enabled, the internal popup menu should be
   // used.
   if (!features::IsUseCommonSelectPopupEnabled())
@@ -622,8 +623,24 @@ void RenderThreadImpl::Init() {
   if (base::FeatureList::IsEnabled(features::kEarlyEstablishGpuChannel)) {
     gpu_->EstablishGpuChannel(
         base::BindOnce([](scoped_refptr<gpu::GpuChannelHost> host) {
-          if (host)
-            GetContentClient()->SetGpuInfo(host->gpu_info());
+          if (!host)
+            return;
+          GetContentClient()->SetGpuInfo(host->gpu_info());
+          const bool create_compositor_worker_context =
+              base::GetFieldTrialParamByFeatureAsBool(
+                  features::kEarlyEstablishGpuChannel,
+                  "CreateCompositorWorkerContext", false);
+          if (create_compositor_worker_context) {
+            // Similarly, establish the SharedCompositorWorkerContextProvider as
+            // it involves a sync call. PostTask() is used as this may be called
+            // from within SharedCompositorWorkerContextProvider(), in which
+            // case we don't want to trigger reeentrancy.
+            g_main_task_runner.Get()->PostTask(
+                FROM_HERE, base::BindOnce([] {
+                  RenderThreadImpl::current()
+                      ->SharedCompositorWorkerContextProvider();
+                }));
+          }
         }));
   }
 
@@ -674,9 +691,9 @@ void RenderThreadImpl::Init() {
   } else if (command_line.HasSwitch(switches::kEnableLCDText)) {
     is_lcd_text_enabled_ = true;
   } else {
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
     is_lcd_text_enabled_ = false;
-#elif defined(OS_MAC)
+#elif BUILDFLAG(IS_MAC)
     is_lcd_text_enabled_ = IsSubpixelAntialiasingAvailable();
 #else
     is_lcd_text_enabled_ = true;
@@ -705,7 +722,7 @@ void RenderThreadImpl::Init() {
   DCHECK(parsed_num_raster_threads) << string_value;
   DCHECK_GT(num_raster_threads, 0);
 
-#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
   categorized_worker_pool_->SetBackgroundingCallback(
       main_thread_scheduler_->DefaultTaskRunner(),
       base::BindOnce(
@@ -728,7 +745,7 @@ void RenderThreadImpl::Init() {
   base::DiscardableMemoryAllocator::SetInstance(
       discardable_memory_allocator_.get());
 
-#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
   if (base::FeatureList::IsEnabled(
           blink::features::kBlinkCompositorUseDisplayThreadPriority)) {
     render_message_filter()->SetThreadPriority(
@@ -742,7 +759,8 @@ void RenderThreadImpl::Init() {
     BindHostReceiver(compositing_mode_reporter_.BindNewPipeAndPassReceiver());
 
     compositing_mode_reporter_->AddCompositingModeWatcher(
-        compositing_mode_watcher_receiver_.BindNewPipeAndPassRemote());
+        compositing_mode_watcher_receiver_.BindNewPipeAndPassRemote(
+            main_thread_scheduler_->CompositorTaskRunner()));
   }
 
   variations_observer_ = std::make_unique<VariationsRenderThreadObserver>();
@@ -958,6 +976,24 @@ void RenderThreadImpl::InitializeWebKit(mojo::BinderMap* binders) {
       blink::WebImageGenerator::CreateAsSkImageGenerator);
 }
 
+void RenderThreadImpl::InitializeRenderer(
+    const std::string& user_agent,
+    const std::string& full_user_agent,
+    const std::string& reduced_user_agent,
+    const blink::UserAgentMetadata& user_agent_metadata,
+    const std::vector<std::string>& cors_exempt_header_list) {
+  DCHECK(user_agent_.IsNull());
+  DCHECK(reduced_user_agent_.IsNull());
+  DCHECK(full_user_agent_.IsNull());
+
+  user_agent_ = WebString::FromUTF8(user_agent);
+  GetContentClient()->renderer()->DidSetUserAgent(user_agent);
+  full_user_agent_ = WebString::FromUTF8(full_user_agent);
+  reduced_user_agent_ = WebString::FromUTF8(reduced_user_agent);
+  user_agent_metadata_ = user_agent_metadata;
+  cors_exempt_header_list_ = cors_exempt_header_list;
+}
+
 void RenderThreadImpl::RegisterSchemes() {
   // chrome:
   WebString chrome_scheme(WebString::FromASCII(kChromeUIScheme));
@@ -1065,22 +1101,22 @@ media::GpuVideoAcceleratorFactories* RenderThreadImpl::GetGpuFactories() {
 
   const bool enable_video_decode_accelerator =
 
-#if defined(OS_LINUX)
+#if BUILDFLAG(IS_LINUX)
       base::FeatureList::IsEnabled(media::kVaapiVideoDecodeLinux) &&
 #else
       !cmd_line->HasSwitch(switches::kDisableAcceleratedVideoDecode) &&
-#endif  // defined(OS_LINUX)
+#endif  // BUILDFLAG(IS_LINUX)
       (gpu_channel_host->gpu_feature_info()
            .status_values[gpu::GPU_FEATURE_TYPE_ACCELERATED_VIDEO_DECODE] ==
        gpu::kGpuFeatureStatusEnabled);
 
   const bool enable_video_encode_accelerator =
 
-#if defined(OS_LINUX)
+#if BUILDFLAG(IS_LINUX)
       base::FeatureList::IsEnabled(media::kVaapiVideoEncodeLinux) &&
 #else
       !cmd_line->HasSwitch(switches::kDisableAcceleratedVideoEncode) &&
-#endif  // defined(OS_LINUX)
+#endif  // BUILDFLAG(IS_LINUX)
       (gpu_channel_host->gpu_feature_info()
            .status_values[gpu::GPU_FEATURE_TYPE_ACCELERATED_VIDEO_ENCODE] ==
        gpu::kGpuFeatureStatusEnabled);
@@ -1088,23 +1124,22 @@ media::GpuVideoAcceleratorFactories* RenderThreadImpl::GetGpuFactories() {
   const bool enable_gpu_memory_buffers =
       !forced_gpu_channel_ && // FEATURE_FORCE_ACCESS_TO_GPU
       !is_gpu_compositing_disabled_ &&
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
       !cmd_line->HasSwitch(switches::kDisableGpuMemoryBufferVideoFrames);
 #else
       cmd_line->HasSwitch(switches::kEnableGpuMemoryBufferVideoFrames);
-#endif  // defined(OS_MAC) || defined(OS_LINUX) || defined(OS_CHROMEOS) ||
-        // defined(OS_WIN)
+#endif
   const bool enable_media_stream_gpu_memory_buffers =
       enable_gpu_memory_buffers &&
       base::FeatureList::IsEnabled(
           features::kWebRtcUseGpuMemoryBufferVideoFrames);
   bool enable_video_gpu_memory_buffers = enable_gpu_memory_buffers;
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   enable_video_gpu_memory_buffers =
       enable_video_gpu_memory_buffers &&
       (cmd_line->HasSwitch(switches::kEnableGpuMemoryBufferVideoFrames) ||
        gpu_channel_host->gpu_info().overlay_info.supports_overlays);
-#endif  // defined(OS_WIN)
+#endif  // BUILDFLAG(IS_WIN)
 
   mojo::PendingRemote<media::mojom::InterfaceFactory> interface_factory;
   BindHostReceiver(interface_factory.InitWithNewPipeAndPassReceiver());
@@ -1237,7 +1272,7 @@ RenderThreadImpl::SharedMainThreadContextProvider() {
   return shared_main_thread_contexts_;
 }
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 scoped_refptr<StreamTextureFactory> RenderThreadImpl::GetStreamTexureFactory() {
   DCHECK(IsMainThread());
   if (!stream_texture_factory_ || stream_texture_factory_->IsLost()) {
@@ -1254,9 +1289,9 @@ scoped_refptr<StreamTextureFactory> RenderThreadImpl::GetStreamTexureFactory() {
 bool RenderThreadImpl::EnableStreamTextureCopy() {
   return GetContentClient()->UsingSynchronousCompositing();
 }
-#endif  // defined(OS_ANDROID)
+#endif  // BUILDFLAG(IS_ANDROID)
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 scoped_refptr<DCOMPTextureFactory> RenderThreadImpl::GetDCOMPTextureFactory() {
   DCHECK(IsMainThread());
   if (!dcomp_texture_factory_.get() || dcomp_texture_factory_->IsLost()) {
@@ -1270,7 +1305,7 @@ scoped_refptr<DCOMPTextureFactory> RenderThreadImpl::GetDCOMPTextureFactory() {
   }
   return dcomp_texture_factory_;
 }
-#endif  // defined(OS_WIN)
+#endif  // BUILDFLAG(IS_WIN)
 
 base::WaitableEvent* RenderThreadImpl::GetShutdownEvent() {
   return ChildProcess::current()->GetShutDownEvent();
@@ -1289,6 +1324,12 @@ blink::WebString RenderThreadImpl::GetUserAgent() {
   DCHECK(!user_agent_.IsNull());
 
   return user_agent_;
+}
+
+blink::WebString RenderThreadImpl::GetFullUserAgent() {
+  DCHECK(!full_user_agent_.IsNull());
+
+  return full_user_agent_;
 }
 
 blink::WebString RenderThreadImpl::GetReducedUserAgent() {
@@ -1650,10 +1691,6 @@ gpu::GpuChannelHost* RenderThreadImpl::GetGpuChannel() {
   return gpu_->GetGpuChannel().get();
 }
 
-base::PlatformThreadId RenderThreadImpl::GetIOPlatformThreadId() const {
-  return ChildProcess::current()->io_thread_id();
-}
-
 void RenderThreadImpl::CreateAgentSchedulingGroup(
     mojo::PendingReceiver<IPC::mojom::ChannelBootstrap> bootstrap,
     mojo::PendingRemote<blink::mojom::BrowserInterfaceBroker> broker_remote) {
@@ -1692,7 +1729,7 @@ void RenderThreadImpl::OnNetworkQualityChanged(
 }
 
 void RenderThreadImpl::SetWebKitSharedTimersSuspended(bool suspend) {
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   if (suspend) {
     main_thread_scheduler_->PauseTimersForAndroidWebView();
   } else {
@@ -1703,30 +1740,9 @@ void RenderThreadImpl::SetWebKitSharedTimersSuspended(bool suspend) {
 #endif
 }
 
-void RenderThreadImpl::SetUserAgent(const std::string& user_agent) {
-  DCHECK(user_agent_.IsNull());
-  user_agent_ = WebString::FromUTF8(user_agent);
-  GetContentClient()->renderer()->DidSetUserAgent(user_agent);
-}
-
-void RenderThreadImpl::SetReducedUserAgent(const std::string& user_agent) {
-  DCHECK(reduced_user_agent_.IsNull());
-  reduced_user_agent_ = WebString::FromUTF8(user_agent);
-}
-
-void RenderThreadImpl::SetUserAgentMetadata(
-    const blink::UserAgentMetadata& user_agent_metadata) {
-  user_agent_metadata_ = user_agent_metadata;
-}
-
-void RenderThreadImpl::SetCorsExemptHeaderList(
-    const std::vector<std::string>& list) {
-  cors_exempt_header_list_ = list;
-}
-
 void RenderThreadImpl::UpdateScrollbarTheme(
     mojom::UpdateScrollbarThemeParamsPtr params) {
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   blink::WebScrollbarTheme::UpdateScrollbarsWithNSDefaults(
       params->has_initial_button_delay
           ? absl::make_optional(params->initial_button_delay)
@@ -1747,7 +1763,7 @@ void RenderThreadImpl::OnSystemColorsChanged(
     int32_t aqua_color_variant,
     const std::string& highlight_text_color,
     const std::string& highlight_color) {
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   if (!IsSingleProcess()) {
     // The purpose of this function is to send an IPC to the renderer notifying
     // it that the browser received an NSNotificationCenter notification, which
@@ -1767,10 +1783,26 @@ void RenderThreadImpl::OnSystemColorsChanged(
 
 void RenderThreadImpl::UpdateSystemColorInfo(
     mojom::UpdateSystemColorInfoParamsPtr params) {
+  if (blink_platform_impl_->ThemeEngine()->UpdateColorProviders(
+          params->light_colors, params->dark_colors)) {
+    // Notify blink that the global ColorProvider instances for this renderer
+    // have changed. These color providers are only used to paint native
+    // controls and only require us to invalidate paint for local frames in this
+    // renderer.
+    blink::ColorProvidersChanged();
+  }
+
   bool did_system_color_info_change =
       ui::NativeTheme::GetInstanceForWeb()->UpdateSystemColorInfo(
           params->is_dark_mode, params->forced_colors, params->colors);
+
   if (did_system_color_info_change) {
+    // Notify blink of system color info changes. These give blink the
+    // opportunity to update internal state to reflect the NativeTheme's color
+    // scheme. These will also prompt blink to invalidate and recalculate styles
+    // for elements that rely on system colors, such as those leveraging the
+    // forced colors media feature. These can affect CSS styles and thus require
+    // action beyond simply invalidating paint on local frames.
     blink::SystemColorsChanged();
     blink::ColorSchemeChanged();
   }
@@ -1789,15 +1821,14 @@ void RenderThreadImpl::PurgePluginListCache(bool reload_pages) {
 
 void RenderThreadImpl::OnMemoryPressure(
     base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level) {
-  TRACE_EVENT("memory", "RenderThreadImpl::OnMemoryPressure",
-              [&](perfetto::EventContext ctx) {
-                auto* event =
-                    ctx.event<perfetto::protos::pbzero::ChromeTrackEvent>();
-                auto* data = event->set_chrome_memory_pressure_notification();
-                data->set_level(
-                    base::trace_event::MemoryPressureLevelToTraceEnum(
-                        memory_pressure_level));
-              });
+  TRACE_EVENT(
+      "memory", "RenderThreadImpl::OnMemoryPressure",
+      [&](perfetto::EventContext ctx) {
+        auto* event = ctx.event<perfetto::protos::pbzero::ChromeTrackEvent>();
+        auto* data = event->set_chrome_memory_pressure_notification();
+        data->set_level(base::trace_event::MemoryPressureLevelToTraceEnum(
+            memory_pressure_level));
+      });
   if (blink_platform_impl_)
     blink::WebMemoryPressureListener::OnMemoryPressure(memory_pressure_level);
   if (memory_pressure_level ==
@@ -1811,7 +1842,7 @@ RenderThreadImpl::GetMediaThreadTaskRunner() {
   DCHECK(main_thread_runner()->BelongsToCurrentThread());
   if (!media_thread_) {
     media_thread_ = std::make_unique<base::Thread>("Media");
-#if defined(OS_FUCHSIA)
+#if BUILDFLAG(IS_FUCHSIA)
     // Start IO thread on Fuchsia to make that thread usable for FIDL.
     base::Thread::Options options(base::MessagePumpType::IO, 0);
 #else
@@ -1827,8 +1858,7 @@ base::TaskRunner* RenderThreadImpl::GetWorkerTaskRunner() {
 }
 
 scoped_refptr<viz::RasterContextProvider>
-RenderThreadImpl::SharedCompositorWorkerContextProvider(
-    bool try_gpu_rasterization) {
+RenderThreadImpl::SharedCompositorWorkerContextProvider() {
   DCHECK(IsMainThread());
   // Try to reuse existing shared worker context provider.
   if (shared_worker_context_provider_) {
@@ -1847,26 +1877,22 @@ RenderThreadImpl::SharedCompositorWorkerContextProvider(
   }
 
   bool support_locking = true;
-  bool support_oop_rasterization =
-      gpu_channel_host->gpu_feature_info()
-          .status_values[gpu::GPU_FEATURE_TYPE_OOP_RASTERIZATION] ==
-      gpu::kGpuFeatureStatusEnabled;
   bool support_gpu_rasterization =
-      try_gpu_rasterization && !support_oop_rasterization &&
       gpu_channel_host->gpu_feature_info()
-              .status_values[gpu::GPU_FEATURE_TYPE_GPU_RASTERIZATION] ==
-          gpu::kGpuFeatureStatusEnabled;
-  bool support_gles2_interface = support_gpu_rasterization;
+          .status_values[gpu::GPU_FEATURE_TYPE_GPU_RASTERIZATION] ==
+      gpu::kGpuFeatureStatusEnabled;
+
+  bool support_gles2_interface = false;
   bool support_raster_interface = true;
-  bool support_grcontext = support_gpu_rasterization;
+  bool support_grcontext = false;
   bool automatic_flushes = false;
   auto shared_memory_limits =
-      support_oop_rasterization ? gpu::SharedMemoryLimits::ForOOPRasterContext()
+      support_gpu_rasterization ? gpu::SharedMemoryLimits::ForOOPRasterContext()
                                 : gpu::SharedMemoryLimits();
   shared_worker_context_provider_ = CreateOffscreenContext(
       std::move(gpu_channel_host), GetGpuMemoryBufferManager(),
       shared_memory_limits, support_locking, support_gles2_interface,
-      support_raster_interface, support_oop_rasterization, support_grcontext,
+      support_raster_interface, support_gpu_rasterization, support_grcontext,
       automatic_flushes,
       viz::command_buffer_metrics::ContextType::RENDER_WORKER,
       kGpuStreamIdWorker, kGpuStreamPriorityWorker);
@@ -1876,31 +1902,6 @@ RenderThreadImpl::SharedCompositorWorkerContextProvider(
     return nullptr;
   }
 
-  // Check if we really have support for GPU rasterization.
-  if (support_gpu_rasterization) {
-    bool really_support_gpu_rasterization = false;
-    {
-      viz::RasterContextProvider::ScopedRasterContextLock scoped_context(
-          shared_worker_context_provider_.get());
-      if (shared_worker_context_provider_->ContextCapabilities()
-              .gpu_rasterization &&
-          shared_worker_context_provider_->ContextSupport()
-              ->HasGrContextSupport()) {
-        // Do not check GrContext above. It is lazy-created, and we only want to
-        // create it if it might be used.
-        GrDirectContext* gr_context =
-            shared_worker_context_provider_->GrContext();
-        really_support_gpu_rasterization = !!gr_context;
-      }
-    }
-
-    // If not really supported, recreate context with different attributes.
-    if (!really_support_gpu_rasterization) {
-      shared_worker_context_provider_ = nullptr;
-      return SharedCompositorWorkerContextProvider(
-          /*try_gpu_rasterization=*/false);
-    }
-  }
   return shared_worker_context_provider_;
 }
 

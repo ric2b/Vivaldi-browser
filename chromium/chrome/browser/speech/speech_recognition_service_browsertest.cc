@@ -40,7 +40,7 @@
 #include "services/audio/public/cpp/fake_stream_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 #include <windows.h>
 #else
 #include <unistd.h>
@@ -127,8 +127,7 @@ class SpeechRecognitionServiceTest
       public media::mojom::SpeechRecognitionRecognizerClient {
  public:
   SpeechRecognitionServiceTest() {
-    scoped_feature_list_.InitWithFeatures(
-        {media::kLiveCaption, media::kUseSodaForLiveCaption}, {});
+    scoped_feature_list_.InitWithFeatures({media::kLiveCaption}, {});
   }
 
   SpeechRecognitionServiceTest(const SpeechRecognitionServiceTest&) = delete;
@@ -144,13 +143,14 @@ class SpeechRecognitionServiceTest
   void OnSpeechRecognitionRecognitionEvent(
       const media::SpeechRecognitionResult& result,
       OnSpeechRecognitionRecognitionEventCallback reply) override;
+  void OnSpeechRecognitionStopped() override;
   void OnSpeechRecognitionError() override;
   void OnLanguageIdentificationEvent(
       media::mojom::LanguageIdentificationEventPtr event) override;
 
   // Disable the sandbox on Windows and MacOS as the sandboxes on those
   // platforms have not been configured yet.
-#if defined(OS_WIN) || defined(OS_MAC)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
   void SetUpCommandLine(base::CommandLine* command_line) override {
     // Required for the utility process to access the directory containing the
     // test files.
@@ -207,6 +207,10 @@ void SpeechRecognitionServiceTest::OnSpeechRecognitionRecognitionEvent(
   std::move(reply).Run(is_client_requesting_speech_recognition_);
 }
 
+void SpeechRecognitionServiceTest::OnSpeechRecognitionStopped() {
+  NOTREACHED();
+}
+
 void SpeechRecognitionServiceTest::OnSpeechRecognitionError() {
   NOTREACHED();
 }
@@ -218,7 +222,7 @@ void SpeechRecognitionServiceTest::OnLanguageIdentificationEvent(
 
 void SpeechRecognitionServiceTest::SetUpPrefs() {
   base::FilePath soda_binary_path;
-#if defined(OS_WIN) || defined(OS_MAC)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
   soda_binary_path =
       test_data_dir_.Append(base::FilePath(soda::kSodaResourcePath))
           .Append(soda::kSodaTestBinaryRelativePath);
@@ -334,7 +338,7 @@ void SpeechRecognitionServiceTest::SendAudioChunk(
 
     // Sleep for 20ms to simulate real-time audio. SODA requires audio
     // streaming in order to return events.
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
     ::Sleep(20);
 #else
     usleep(20000);
@@ -381,7 +385,7 @@ IN_PROC_BROWSER_TEST_F(SpeechRecognitionServiceTest, RecognizePhrase) {
   base::RunLoop().RunUntilIdle();
 
   // Sleep for 50ms to ensure SODA has returned real-time results.
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   ::Sleep(50);
 #else
   usleep(50000);
@@ -455,7 +459,7 @@ IN_PROC_BROWSER_TEST_F(SpeechRecognitionServiceTest,
   base::RunLoop().RunUntilIdle();
 
   // Sleep for 50ms to ensure SODA has returned real-time results.
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   ::Sleep(50);
 #else
   usleep(50000);
@@ -479,7 +483,7 @@ IN_PROC_BROWSER_TEST_F(SpeechRecognitionServiceTest, CreateAudioSourceFetcher) {
 
   // TODO(crbug.com/1185978): Check implementation / sandbox policy on Mac and
   // Windows.
-#if defined(OS_CHROMEOS) || defined(OS_LINUX)
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
   // Check that Start begins audio recording.
   // TODO(crbug.com/1173135): Try to mock audio input, maybe with
   // TestStreamFactory::stream_, to test end-to-end.

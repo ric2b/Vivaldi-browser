@@ -19,13 +19,13 @@
 #include "base/test/task_environment.h"
 #include "base/threading/thread.h"
 #include "components/sync/base/client_tag_hash.h"
+#include "components/sync/base/features.h"
 #include "components/sync/base/unique_position.h"
 #include "components/sync/engine/cancelation_signal.h"
 #include "components/sync/engine/commit_contribution.h"
 #include "components/sync/engine/cycle/entity_change_metric_recording.h"
 #include "components/sync/engine/cycle/status_controller.h"
 #include "components/sync/engine/model_type_processor.h"
-#include "components/sync/engine/sync_engine_switches.h"
 #include "components/sync/protocol/autofill_specifics.pb.h"
 #include "components/sync/protocol/entity_specifics.pb.h"
 #include "components/sync/protocol/model_type_state.pb.h"
@@ -1409,8 +1409,7 @@ TEST_F(ModelTypeWorkerTest, TimeUntilEncryptionKeyFoundMetric) {
 TEST_F(ModelTypeWorkerTest, IgnoreUpdatesEncryptedWithKeysMissingForTooLong) {
   base::HistogramTester histogram_tester;
   base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      switches::kIgnoreSyncEncryptionKeysLongMissing);
+  feature_list.InitAndEnableFeature(kIgnoreSyncEncryptionKeysLongMissing);
 
   NormalInitialize();
   worker()->SetMinGetUpdatesToIgnoreKeyForTest(2);
@@ -1559,7 +1558,7 @@ TEST(ModelTypeWorkerPopulateUpdateResponseDataTest,
                 FakeCryptographer(), PREFERENCES, entity, &response_data));
   const EntityData& data = response_data.entity;
   EXPECT_FALSE(data.id.empty());
-  EXPECT_FALSE(data.parent_id.empty());
+  EXPECT_FALSE(data.legacy_parent_id.empty());
   EXPECT_EQ("CLIENT_TAG", data.client_tag_hash.value());
   EXPECT_EQ("SERVER_TAG", data.server_defined_unique_tag);
   EXPECT_FALSE(data.is_deleted());
@@ -1841,14 +1840,14 @@ void GetLocalChangesRequestTest::ScheduleBlockingWait(
 // Tests that request doesn't block when cancelation signal is already signaled.
 TEST_F(GetLocalChangesRequestTest, CancelationSignaledBeforeRequest) {
   cancelation_signal_.Signal();
-  auto request = MakeRequest();
+  scoped_refptr<GetLocalChangesRequest> request = MakeRequest();
   request->WaitForResponseOrCancelation();
   EXPECT_TRUE(request->WasCancelled());
 }
 
 // Tests that signaling cancelation signal while request is blocked unblocks it.
 TEST_F(GetLocalChangesRequestTest, CancelationSignaledAfterRequest) {
-  auto request = MakeRequest();
+  scoped_refptr<GetLocalChangesRequest> request = MakeRequest();
   ScheduleBlockingWait(request);
   start_event_.Wait();
   cancelation_signal_.Signal();
@@ -1859,7 +1858,7 @@ TEST_F(GetLocalChangesRequestTest, CancelationSignaledAfterRequest) {
 // Tests that setting response unblocks request.
 TEST_F(GetLocalChangesRequestTest, SuccessfulRequest) {
   const std::string kHash1 = "SomeHash";
-  auto request = MakeRequest();
+  scoped_refptr<GetLocalChangesRequest> request = MakeRequest();
   ScheduleBlockingWait(request);
   start_event_.Wait();
   {

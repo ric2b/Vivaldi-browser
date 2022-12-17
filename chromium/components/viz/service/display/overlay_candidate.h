@@ -137,7 +137,7 @@ class VIZ_SERVICE_EXPORT OverlayCandidate {
   // Mailbox from resource_id. It is used by SkiaRenderer.
   gpu::Mailbox mailbox;
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   // For candidates from StreamVideoDrawQuads, this records whether the quad is
   // marked as being backed by a SurfaceTexture or not.  If so, it's not really
   // promotable to an overlay.
@@ -215,7 +215,8 @@ class VIZ_SERVICE_EXPORT OverlayCandidate {
       const DrawQuad* quad,
       ResourceId resource_id,
       bool y_flipped,
-      OverlayCandidate* candidate);
+      OverlayCandidate* candidate,
+      bool is_delegated_context);
   static CandidateStatus FromTextureQuad(
       DisplayResourceProvider* resource_provider,
       SurfaceDamageRectList* surface_damage_rect_list,
@@ -249,7 +250,8 @@ class VIZ_SERVICE_EXPORT OverlayCandidate {
       DisplayResourceProvider* resource_provider,
       SurfaceDamageRectList* surface_damage_rect_list,
       const StreamVideoDrawQuad* quad,
-      OverlayCandidate* candidate);
+      OverlayCandidate* candidate,
+      bool is_delegated_context);
   static CandidateStatus FromVideoHoleQuad(
       DisplayResourceProvider* resource_provider,
       SurfaceDamageRectList* surface_damage_rect_list,
@@ -260,6 +262,7 @@ class VIZ_SERVICE_EXPORT OverlayCandidate {
   static void AssignDamage(const DrawQuad* quad,
                            SurfaceDamageRectList* surface_damage_rect_list,
                            OverlayCandidate* candidate);
+  static void ApplyClip(OverlayCandidate* candidate);
 };
 
 using OverlayCandidateList = std::vector<OverlayCandidate>;

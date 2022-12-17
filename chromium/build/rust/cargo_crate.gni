@@ -76,7 +76,7 @@ template("cargo_crate") {
     }
     _epochlabel = "vunknown"
     if (defined(invoker.epoch)) {
-      _tempepoch = string_replace(invoker.epoch, ".", "")
+      _tempepoch = string_replace(invoker.epoch, ".", "_")
       _epochlabel = "v${_tempepoch}"
     }
     build_script_name = "${_cratelabel}_${_epochlabel}_build_script"
@@ -97,10 +97,6 @@ template("cargo_crate") {
       assert(!defined(invoker.epoch))
     } else if (crate_type == "proc-macro") {
       target_type = "rust_proc_macro"
-      rustflags += [
-        "--extern",
-        "proc_macro",
-      ]
     } else {
       assert(crate_type == "rlib")
       target_type = "rust_library"
@@ -211,6 +207,10 @@ template("cargo_crate") {
         foreach(generated_file, invoker.build_script_outputs) {
           outputs += [ "$target_out_dir/$generated_file" ]
         }
+      }
+      if (defined(invoker.rustenv)) {
+        args += [ "--env" ]
+        args += invoker.rustenv
       }
       if (defined(invoker.build_script_inputs)) {
         inputs += invoker.build_script_inputs

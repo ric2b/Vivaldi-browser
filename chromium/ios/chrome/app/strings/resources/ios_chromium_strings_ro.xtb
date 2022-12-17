@@ -3,6 +3,7 @@
 <translationbundle lang="ro">
 <translation id="102360288709523007">Contribuie la îmbunătățirea Chromium trimițând statistici de utilizare și rapoarte de blocare la Google.</translation>
 <translation id="1047130070405668746">Selectează Chromium.</translation>
+<translation id="1091252999271033193">Aceasta înseamnă că Chromium va solicita de fiecare dată site-ul mobil.</translation>
 <translation id="1185134272377778587">Despre Chromium</translation>
 <translation id="1257458525759135959">Pentru a salva imaginile, atinge Setări ca să permiți browserului Chromium să adauge fotografiile</translation>
 <translation id="1289216811211435351">Treci la Chromium</translation>
@@ -26,6 +27,7 @@
 <translation id="2178608107313874732">Momentan, Chromium nu poate folosi camera foto</translation>
 <translation id="2195025571279539885">Dorești ca data viitoare Chromium să propună traducerea paginilor în limba <ph name="LANGUAGE_NAME" /> de pe acest site?</translation>
 <translation id="2218146227246548550">Organizația îți solicită să te conectezi pentru a folosi Chromium. <ph name="BEGIN_LINK" />Află mai multe<ph name="END_LINK" /></translation>
+<translation id="2236584955986023187">Aceasta înseamnă că Chromium va solicita de fiecare dată versiunea pentru desktop a site-urilor.</translation>
 <translation id="2426113998523353159">Organizația îți solicită să te conectezi pentru a folosi Chromium.</translation>
 <translation id="2450140762465183767">Acum poți folosi Chromium oricând atingi linkuri în mesaje, documente și alte aplicații.</translation>
 <translation id="2478931088402984578">Selectează <ph name="BEGIN_BOLD" />Chromium<ph name="END_BOLD" /></translation>
@@ -43,7 +45,6 @@
 <translation id="3472200483164753384">Nu se acceptă în Chromium Canary</translation>
 <translation id="3639997914391704523">Chromium poate să îți verifice parolele atunci când te conectezi folosind Contul Google.</translation>
 <translation id="3805899903892079518">Chromium nu are acces la fotografii și videoclipuri. Activează accesul din Setări iOS &gt; Confidențialitate &gt; Fotografii.</translation>
-<translation id="3946918322491238254">Poți vedea în continuare toate marcajele, istoricul, parolele și alte setări pe acest dispozitiv. Dacă faci modificări, ele nu se vor sincroniza cu contul.</translation>
 <translation id="4043291146360695975">Parolele sunt salvate în Managerul de parole numai pe acest dispozitiv.</translation>
 <translation id="4099085513035183040">Nu se acceptă în Chromium Beta</translation>
 <translation id="4555020257205549924">Când această funcție este activată, Chromium se va oferi să traducă paginile scrise în alte limbi utilizând Google Traducere. <ph name="BEGIN_LINK" />Află mai multe<ph name="END_LINK" /></translation>
@@ -90,6 +91,7 @@
 <translation id="7313655110045230863">Pentru a seta Chromium ca browser prestabilit, deschide Setările. Atinge Aplicația browser prestabilită și selectează Chromium.</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7357211569052832586">Datele selectate au fost eliminate din Chromium și de pe dispozitivele sincronizate. Contul Google poate să ofere alte forme ale istoricului de navigare, cum ar fi căutările și activitatea din alte servicii Google, la history.google.com.</translation>
+<translation id="7395825497086981028">Parola se va salva în Managerul de parole pentru <ph name="EMAIL" />.</translation>
 <translation id="7400689562045506105">Folosește Chromium pretutindeni</translation>
 <translation id="766897673682622022">Parola a fost expusă în urma încălcării securității datelor. Chromium recomandă să-ți schimbi acum parola.</translation>
 <translation id="7674213385180944843">Deschide Setări &gt; Confidențialitate &gt; Cameră foto &gt; Chromium și activează camera foto.</translation>

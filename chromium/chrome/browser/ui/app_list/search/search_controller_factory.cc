@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include "ash/components/arc/arc_util.h"
+#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/app_list/app_list_config.h"
 #include "ash/public/cpp/app_list/app_list_features.h"
 #include "ash/public/cpp/app_list/app_list_switches.h"
@@ -17,7 +18,6 @@
 #include "chrome/browser/ash/arc/arc_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/search/app_search_provider.h"
-#include "chrome/browser/ui/app_list/search/arc/arc_app_reinstall_search_provider.h"
 #include "chrome/browser/ui/app_list/search/arc/arc_app_shortcuts_search_provider.h"
 #include "chrome/browser/ui/app_list/search/arc/arc_playstore_search_provider.h"
 #include "chrome/browser/ui/app_list/search/assistant_text_search_provider.h"
@@ -26,6 +26,7 @@
 #include "chrome/browser/ui/app_list/search/files/zero_state_drive_provider.h"
 #include "chrome/browser/ui/app_list/search/files/zero_state_file_provider.h"
 #include "chrome/browser/ui/app_list/search/help_app_provider.h"
+#include "chrome/browser/ui/app_list/search/keyboard_shortcut_provider.h"
 #include "chrome/browser/ui/app_list/search/mixer.h"
 #include "chrome/browser/ui/app_list/search/omnibox_provider.h"
 #include "chrome/browser/ui/app_list/search/os_settings_provider.h"
@@ -64,7 +65,6 @@ constexpr size_t kMaxDriveSearchResults = 6;
 // duplicates of these results for the suggestion chips.
 constexpr size_t kMaxZeroStateFileResults = 20;
 constexpr size_t kMaxZeroStateDriveResults = 10;
-constexpr size_t kMaxAppReinstallSearchResults = 1;
 
 // TODO(warx): Need UX spec.
 constexpr size_t kMaxAppShortcutResults = 4;
@@ -108,11 +108,9 @@ std::unique_ptr<SearchController> CreateSearchController(
   controller->AddProvider(omnibox_group_id, std::make_unique<OmniboxProvider>(
                                                 profile, list_controller));
 
-  if (app_list_features::IsAssistantSearchEnabled()) {
-    size_t assistant_group_id = controller->AddGroup(kMaxAssistantTextResults);
-    controller->AddProvider(assistant_group_id,
-                            std::make_unique<AssistantTextSearchProvider>());
-  }
+  size_t assistant_group_id = controller->AddGroup(kMaxAssistantTextResults);
+  controller->AddProvider(assistant_group_id,
+                          std::make_unique<AssistantTextSearchProvider>());
 
   // File search providers are added only when not in guest session and running
   // on Chrome OS.
@@ -125,16 +123,6 @@ std::unique_ptr<SearchController> CreateSearchController(
                             std::make_unique<DriveSearchProvider>(profile));
   }
 
-  // reinstallation candidates for Arc++ apps.
-  if (app_list_features::IsAppReinstallZeroStateEnabled() &&
-      arc::IsArcAllowedForProfile(profile)) {
-    size_t recommended_app_group_id =
-        controller->AddGroup(kMaxAppReinstallSearchResults);
-    controller->AddProvider(recommended_app_group_id,
-                            std::make_unique<ArcAppReinstallSearchProvider>(
-                                profile, kMaxAppReinstallSearchResults));
-  }
-
   if (arc::IsArcAllowedForProfile(profile)) {
     size_t app_shortcut_group_id = controller->AddGroup(kMaxAppShortcutResults);
     controller->AddProvider(
@@ -143,10 +131,13 @@ std::unique_ptr<SearchController> CreateSearchController(
             kMaxAppShortcutResults, profile, list_controller));
   }
 
-  // This flag controls whether files are shown alongside Omnibox recent queries
-  // in the launcher. If enabled, Omnibox recent queries have their relevance
-  // scores changed to fit with these providers.
-  if (app_list_features::IsZeroStateMixedTypesRankerEnabled()) {
+  // Enable zero-state files aka. the Continue section if:
+  // - unconditionally in the old launcher.
+  // - in the productivity launcher only if the enable_continue parameter is
+  //   true (the default).
+  if (!ash::features::IsProductivityLauncherEnabled() ||
+      base::GetFieldTrialParamByFeatureAsBool(
+          ash::features::kProductivityLauncher, "enable_continue", true)) {
     size_t zero_state_files_group_id =
         controller->AddGroup(kMaxZeroStateFileResults);
     controller->AddProvider(zero_state_files_group_id,
@@ -165,6 +156,15 @@ std::unique_ptr<SearchController> CreateSearchController(
         controller->AddGroup(kGenericMaxResults);
     controller->AddProvider(os_settings_search_group_id,
                             std::make_unique<OsSettingsProvider>(profile));
+  }
+
+  if (ash::features::IsProductivityLauncherEnabled() &&
+      base::GetFieldTrialParamByFeatureAsBool(
+          ash::features::kProductivityLauncher, "enable_shortcuts", true)) {
+    size_t shortcut_search_group_id = controller->AddGroup(kGenericMaxResults);
+    controller->AddProvider(
+        shortcut_search_group_id,
+        std::make_unique<KeyboardShortcutProvider>(profile));
   }
 
   size_t help_app_group_id = controller->AddGroup(kGenericMaxResults);

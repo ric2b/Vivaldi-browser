@@ -20,7 +20,6 @@ import json
 import os
 import pipes
 import platform
-import pprint
 import re
 import shutil
 import sys
@@ -1540,6 +1539,7 @@ class MetaBuildWrapper(object):
               'Chromium Helper.app/',
               'Chromium.app/',
               'ChromiumUpdater.app/',
+              'ChromiumUpdater_test.app/',
               'Content Shell.app/',
               'Google Chrome Framework.framework/',
               'Google Chrome Helper (Alerts).app/',
@@ -1549,6 +1549,7 @@ class MetaBuildWrapper(object):
               'Google Chrome Helper.app/',
               'Google Chrome.app/',
               'GoogleUpdater.app/',
+              'GoogleUpdater_test.app/',
               'UpdaterTestApp Framework.framework/',
               'UpdaterTestApp.app/',
               'blink_deprecated_test_plugin.plugin/',
@@ -1574,12 +1575,12 @@ class MetaBuildWrapper(object):
       return 1
 
     self.WriteFile(isolate_path,
-      pprint.pformat({
+      json.dumps({
         'variables': {
           'command': command,
           'files': files,
         }
-      }) + '\n')
+      }, sort_keys=True) + '\n')
 
     self.WriteJSON(
       {
@@ -1779,8 +1780,7 @@ class MetaBuildWrapper(object):
           # Enable lsan when asan is enabled except on Windows where LSAN isn't
           # supported.
           # TODO(https://crbug.com/948939): Enable on Mac once things pass.
-          # TODO(https://crbug.com/974478): Enable on ChromeOS once things pass.
-          '--lsan=%d' % (asan and not is_mac and not is_win and not is_cros),
+          '--lsan=%d' % (asan and not is_mac and not is_win),
           '--msan=%d' % msan,
           '--tsan=%d' % tsan,
           '--cfi-diag=%d' % cfi_diag,

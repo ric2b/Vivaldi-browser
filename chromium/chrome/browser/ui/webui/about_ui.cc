@@ -54,7 +54,7 @@
 #include "ui/base/webui/web_ui_util.h"
 #include "url/gurl.h"
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/ui/webui/theme_source.h"
 #endif
 
@@ -66,6 +66,7 @@
 #include "base/strings/strcat.h"
 #include "chrome/browser/ash/crosapi/browser_manager.h"
 #include "chrome/browser/ash/crosapi/browser_util.h"
+#include "chrome/browser/ash/crostini/crostini_features.h"
 #include "chrome/browser/ash/crostini/crostini_manager.h"
 #include "chrome/browser/ash/customization/customization_document.h"
 #include "chrome/browser/ash/login/demo_mode/demo_setup_controller.h"
@@ -82,16 +83,17 @@
 #include "chrome/browser/lacros/lacros_url_handling.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/common/webui_url_constants.h"
 #include "ui/base/l10n/l10n_util.h"
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 using content::BrowserThread;
 
 namespace {
 
 constexpr char kCreditsJsPath[] = "credits.js";
+constexpr char kCreditsCssPath[] = "credits.css";
 constexpr char kStatsJsPath[] = "stats.js";
 constexpr char kStringsJsPath[] = "strings.js";
 
@@ -163,16 +165,6 @@ std::string ReadDeviceRegionFromVpd() {
   return base::ToLowerASCII(region);
 }
 
-// Returns an absolute path under the preinstalled demo resources directory.
-base::FilePath CreateDemoResourcesTermsPath(const base::FilePath& file_path) {
-  // Offline ARC TOS are only available during demo mode setup.
-  auto* wizard_controller = ash::WizardController::default_controller();
-  if (!wizard_controller || !wizard_controller->demo_setup_controller())
-    return base::FilePath();
-  return wizard_controller->demo_setup_controller()
-      ->GetPreinstalledDemoResourcesPath(file_path);
-}
-
 // Loads bundled terms of service contents (Eula, OEM Eula, Play Store Terms).
 // The online version of terms is fetched in OOBE screen javascript. This is
 // intentional because chrome://terms runs in a privileged webui context and
@@ -211,18 +203,9 @@ class ChromeOSTermsHandler
           base::BindOnce(&ChromeOSTermsHandler::LoadOemEulaFileAsync, this),
           base::BindOnce(&ChromeOSTermsHandler::ResponseOnUIThread, this));
     } else if (path_ == chrome::kArcTermsURLPath) {
-      // Load ARC++ terms from the file.
-      base::ThreadPool::PostTaskAndReply(
-          FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-          base::BindOnce(&ChromeOSTermsHandler::LoadArcTermsFileAsync, this),
-          base::BindOnce(&ChromeOSTermsHandler::ResponseOnUIThread, this));
+      LOG(WARNING) << "Could not load offline Play Store ToS.";
     } else if (path_ == chrome::kArcPrivacyPolicyURLPath) {
-      // Load ARC++ privacy policy from the file.
-      base::ThreadPool::PostTaskAndReply(
-          FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-          base::BindOnce(&ChromeOSTermsHandler::LoadArcPrivacyPolicyFileAsync,
-                         this),
-          base::BindOnce(&ChromeOSTermsHandler::ResponseOnUIThread, this));
+      LOG(WARNING) << "Could not load offline Play Store privacy policy.";
     } else {
       NOTREACHED();
       ResponseOnUIThread();
@@ -245,47 +228,6 @@ class ChromeOSTermsHandler
         contents_.clear();
       }
     }
-  }
-
-  void LoadArcPrivacyPolicyFileAsync() {
-    base::ScopedBlockingCall scoped_blocking_call(
-        FROM_HERE, base::BlockingType::MAY_BLOCK);
-
-    for (const auto& locale : CreateArcLocaleLookupArray()) {
-      // Offline ARC privacy policies are only available during demo mode setup.
-      auto path =
-          CreateDemoResourcesTermsPath(base::FilePath(base::StringPrintf(
-              chrome::kArcPrivacyPolicyPathFormat, locale.c_str())));
-      std::string contents;
-      if (base::ReadFileToString(path, &contents)) {
-        base::Base64Encode(contents, &contents_);
-        VLOG(1) << "Read offline Play Store privacy policy for: " << locale;
-        return;
-      }
-      LOG(WARNING) << "Could not find offline Play Store privacy policy for: "
-                   << locale;
-    }
-    LOG(ERROR) << "Failed to load offline Play Store privacy policy";
-    contents_.clear();
-  }
-
-  void LoadArcTermsFileAsync() {
-    base::ScopedBlockingCall scoped_blocking_call(
-        FROM_HERE, base::BlockingType::MAY_BLOCK);
-
-    for (const auto& locale : CreateArcLocaleLookupArray()) {
-      // Offline ARC TOS are only available during demo mode setup.
-      auto path = CreateDemoResourcesTermsPath(base::FilePath(
-          base::StringPrintf(chrome::kArcTermsPathFormat, locale.c_str())));
-      std::string contents;
-      if (base::ReadFileToString(path, &contents_)) {
-        VLOG(1) << "Read offline Play Store terms for: " << locale;
-        return;
-      }
-      LOG(WARNING) << "Could not find offline Play Store terms for: " << locale;
-    }
-    LOG(ERROR) << "Failed to load offline Play Store ToS";
-    contents_.clear();
   }
 
   std::vector<std::string> CreateArcLocaleLookupArray() {
@@ -438,8 +380,13 @@ class CrostiniCreditsHandler
       RespondOnUIThread();
       return;
     }
-    crostini::CrostiniManager::GetForProfile(profile_)->GetInstallLocation(
-        base::BindOnce(&CrostiniCreditsHandler::LoadCredits, this));
+
+    if (crostini::CrostiniFeatures::Get()->IsAllowedNow(profile_)) {
+      crostini::CrostiniManager::GetForProfile(profile_)->GetInstallLocation(
+          base::BindOnce(&CrostiniCreditsHandler::LoadCredits, this));
+    } else {
+      RespondWithPlaceholder();
+    }
   }
 
   void LoadCredits(base::FilePath path) {
@@ -508,7 +455,7 @@ void AppendHeader(std::string* output, const std::string& unescaped_title) {
   }
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS)
 // This function returns true if Lacros is the primary browser - or if the
 // calling browser is Lacros.
 bool isLacrosPrimaryOrCurrentBrowser() {
@@ -552,7 +499,7 @@ void AppendFooter(std::string* output) {
   output->append("</body>\n</html>\n");
 }
 
-#else  // !defined(OS_CHROMEOS)
+#else  // BUILDFLAG(IS_CHROMEOS)
 
 void AppendBody(std::string *output) {
   output->append("</head>\n<body>\n");
@@ -562,7 +509,7 @@ void AppendFooter(std::string *output) {
   output->append("</body>\n</html>\n");
 }
 
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 }  // namespace about_ui
 
@@ -656,7 +603,7 @@ std::string ChromeURLs() {
   return html;
 }
 
-#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_OPENBSD)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_OPENBSD)
 std::string AboutLinuxProxyConfig() {
   std::string data;
   AppendHeader(&data,
@@ -702,6 +649,8 @@ void AboutUIHTMLSource::StartDataRequest(
     int idr = IDR_ABOUT_UI_CREDITS_HTML;
     if (path == kCreditsJsPath)
       idr = IDR_ABOUT_UI_CREDITS_JS;
+    else if (path == kCreditsCssPath)
+      idr = IDR_ABOUT_UI_CREDITS_CSS;
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     else if (path == kKeyboardUtilsPath)
       idr = IDR_KEYBOARD_UTILS_JS;
@@ -712,7 +661,7 @@ void AboutUIHTMLSource::StartDataRequest(
       response =
           ui::ResourceBundle::GetSharedInstance().LoadDataResourceString(idr);
     }
-#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_OPENBSD)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_OPENBSD)
   } else if (source_name_ == chrome::kChromeUILinuxProxyConfigHost) {
     response = AboutLinuxProxyConfig();
 #endif
@@ -724,7 +673,7 @@ void AboutUIHTMLSource::StartDataRequest(
     CrostiniCreditsHandler::Start(profile(), path, std::move(callback));
     return;
 #endif
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   } else if (source_name_ == chrome::kChromeUITermsHost) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     if (!path.empty()) {
@@ -756,6 +705,11 @@ std::string AboutUIHTMLSource::GetMimeType(const std::string& path) {
       path == kStatsJsPath || path == kStringsJsPath) {
     return "application/javascript";
   }
+
+  if (path == kCreditsCssPath) {
+    return "text/css";
+  }
+
   return "text/html";
 }
 
@@ -786,7 +740,7 @@ AboutUI::AboutUI(content::WebUI* web_ui, const std::string& name)
     : WebUIController(web_ui) {
   Profile* profile = Profile::FromWebUI(web_ui);
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   // Set up the chrome://theme/ source.
   content::URLDataSource::Add(profile, std::make_unique<ThemeSource>(profile));
 #endif
@@ -795,7 +749,7 @@ AboutUI::AboutUI(content::WebUI* web_ui, const std::string& name)
       profile, std::make_unique<AboutUIHTMLSource>(name, profile));
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS)
 
 bool AboutUI::OverrideHandleWebUIMessage(const GURL& source_url,
                                          const std::string& message,
@@ -808,9 +762,9 @@ bool AboutUI::OverrideHandleWebUIMessage(const GURL& source_url,
 #else
   // Note: This will only be called by the UI when Lacros is available.
   DCHECK(crosapi::BrowserManager::Get());
-  crosapi::BrowserManager::Get()->OpenUrl(GURL(chrome::kChromeUIAboutURL));
+  crosapi::BrowserManager::Get()->SwitchToTab(GURL(chrome::kChromeUIAboutURL));
 #endif
   return true;
 }
 
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS)

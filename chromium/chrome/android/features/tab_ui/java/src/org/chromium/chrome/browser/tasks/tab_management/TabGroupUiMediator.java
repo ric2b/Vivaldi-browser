@@ -334,6 +334,12 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
                         resetTabStripWithRelatedTabsForId(movedTab.getId());
                     }
                 }
+
+                // Note(david@vivaldi.com): Update the tab strip based on given tab ID (VAB-5290).
+                @Override
+                public void didMergeTabToGroup(Tab movedTab, int selectedTabIdInGroup) {
+                    resetTabStripWithRelatedTabsForId(movedTab.getId());
+                }
             };
 
             // TODO(995951): Add observer similar to TabModelSelectorTabModelObserver for

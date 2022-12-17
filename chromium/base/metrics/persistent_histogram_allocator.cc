@@ -35,10 +35,6 @@
 #include "base/synchronization/lock.h"
 #include "build/build_config.h"
 
-#if defined(OS_APPLE)
-#include "base/mac/backup_util.h"
-#endif
-
 namespace base {
 
 namespace {
@@ -104,8 +100,15 @@ size_t CalculateRequiredCountsBytes(size_t bucket_count) {
 
 }  // namespace
 
-const Feature kPersistentHistogramsFeature{"PersistentHistograms",
-                                           FEATURE_ENABLED_BY_DEFAULT};
+const Feature kPersistentHistogramsFeature{
+    "PersistentHistograms",
+#if BUILDFLAG(IS_FUCHSIA)
+    // TODO(crbug.com/1295119): Enable once writable mmap() is supported.
+    FEATURE_DISABLED_BY_DEFAULT
+#else
+    FEATURE_ENABLED_BY_DEFAULT
+#endif  // BUILDFLAG(IS_FUCHSIA)
+};
 
 PersistentSparseHistogramDataManager::PersistentSparseHistogramDataManager(
     PersistentMemoryAllocator* allocator)
@@ -569,9 +572,9 @@ std::unique_ptr<HistogramBase> PersistentHistogramAllocator::CreateHistogram(
   // it is needed, memory will be allocated from the persistent segment and
   // a reference to it stored at the passed address. Other threads can then
   // notice the valid reference and access the same data.
-  DelayedPersistentAllocation counts_data(memory_allocator_.get(),
-                                          &histogram_data_ptr->counts_ref,
-                                          kTypeIdCountsArray, counts_bytes, 0);
+  DelayedPersistentAllocation counts_data(
+      memory_allocator_.get(), &histogram_data_ptr->counts_ref,
+      kTypeIdCountsArray, counts_bytes, false);
 
   // A second delayed allocations is defined using the same reference storage
   // location as the first so the allocation of one will automatically be found
@@ -680,7 +683,7 @@ void GlobalHistogramAllocator::CreateWithLocalMemory(
       std::make_unique<LocalPersistentMemoryAllocator>(size, id, name))));
 }
 
-#if !defined(OS_NACL)
+#if !BUILDFLAG(IS_NACL)
 // static
 bool GlobalHistogramAllocator::CreateWithFile(const FilePath& file_path,
                                               size_t size,
@@ -707,15 +710,6 @@ bool GlobalHistogramAllocator::CreateWithFile(const FilePath& file_path,
       !FilePersistentMemoryAllocator::IsFileAcceptable(*mmfile, true)) {
     return false;
   }
-
-#if defined(OS_APPLE)
-  // This prevents backing up and then later restoring the file created above.
-  // Preventing backup saves space and bandwidth. There is little value in
-  // backing up this file since the metrics stored in this file will likely
-  // have already been uploaded at some point between the time the backup was
-  // created and the time it is restored.
-  base::mac::SetBackupExclusion(file_path);
-#endif
 
   Set(WrapUnique(new GlobalHistogramAllocator(
       std::make_unique<FilePersistentMemoryAllocator>(std::move(mmfile), 0, id,
@@ -841,21 +835,12 @@ bool GlobalHistogramAllocator::CreateSpareFile(const FilePath& spare_path,
   if (success)
     success = ReplaceFile(temp_spare_path, spare_path, nullptr);
 
-#if defined(OS_APPLE)
-  // Then purpose of the "spare" file created above is to save time during the
-  // next startup, when this file can be used instead of creating a new one.
-  // However, this file is large, so it's not worth the storage and bandwidth
-  // costs to back up and restore it; instead, after restoration, a new file
-  // will be created on the next startup.
-  base::mac::SetBackupExclusion(spare_path);
-#endif
-
   if (!success)
     DeleteFile(temp_spare_path);
 
   return success;
 }
-#endif  // !defined(OS_NACL)
+#endif  // !BUILDFLAG(IS_NACL)
 
 // static
 void GlobalHistogramAllocator::CreateWithSharedMemoryRegion(
@@ -924,7 +909,7 @@ const FilePath& GlobalHistogramAllocator::GetPersistentLocation() const {
 }
 
 bool GlobalHistogramAllocator::WriteToPersistentLocation() {
-#if defined(OS_NACL)
+#if BUILDFLAG(IS_NACL)
   // NACL doesn't support file operations, including ImportantFileWriter.
   NOTREACHED();
   return false;
@@ -951,7 +936,7 @@ bool GlobalHistogramAllocator::WriteToPersistentLocation() {
 void GlobalHistogramAllocator::DeletePersistentLocation() {
   memory_allocator()->SetMemoryState(PersistentMemoryAllocator::MEMORY_DELETED);
 
-#if defined(OS_NACL)
+#if BUILDFLAG(IS_NACL)
   NOTREACHED();
 #else
   if (persistent_location_.empty())

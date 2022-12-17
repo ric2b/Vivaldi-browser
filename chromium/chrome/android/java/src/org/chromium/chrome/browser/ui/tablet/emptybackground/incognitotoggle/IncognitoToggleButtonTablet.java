@@ -83,6 +83,11 @@ public class IncognitoToggleButtonTablet extends IncognitoToggleButton {
                 }
 
                 @Override
+                public void willCloseAllTabs(boolean incognito) {
+                    updateButtonVisibility();
+                }
+
+                @Override
                 public void tabRemoved(Tab tab) {
                     updateButtonVisibility();
                 }

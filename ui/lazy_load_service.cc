@@ -52,25 +52,8 @@ void LazyLoadService::OnLifecycleUnitCreated(
   Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
   if (!browser)
     return;
-  TabStripModel* tab_strip_model = browser->tab_strip_model();
-
-  // Since the |GetActiveWebContents| is not updated until after
-  // |OnLifecycleUnitCreated| we need to also check if the tab was added as
-  // active.
-
-  bool is_active_tab = static_cast<resource_coordinator::LifecycleUnit*>(
-                           resource_coordinator::GetTabLifecycleUnitSource()
-                               ->GetFocusedLifecycleUnit()) == lifecycle_unit;
-
-  if (is_active_tab || !tab_strip_model ||
-      (tab_strip_model->GetActiveWebContents() == web_contents))
-    return;
-
-  if (prefs->GetBoolean(vivaldiprefs::kTabsAlwaysLoadPinnedAfterRestore) &&
-      tab_strip_model->IsTabPinned(
-          tab_strip_model->GetIndexOfWebContents(web_contents)))
-    return;
-
+  // Discard all restored tabs as the activation is now done after the webview
+  // has been attached.
   tab_lifecycle_unit_external->SetIsDiscarded();
 }
 

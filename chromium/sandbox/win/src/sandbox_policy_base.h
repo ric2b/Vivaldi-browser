@@ -85,9 +85,6 @@ class PolicyBase final : public TargetPolicy {
   void SetAllowNoSandboxJob() override;
   bool GetAllowNoSandboxJob() override;
 
-  // Get the AppContainer profile as its internal type.
-  scoped_refptr<AppContainerBase> GetAppContainerBase();
-
   // Creates a Job object with the level specified in a previous call to
   // SetJobLevel().
   ResultCode MakeJobObject(base::win::ScopedHandle* job);
@@ -103,9 +100,9 @@ class PolicyBase final : public TargetPolicy {
                         base::win::ScopedHandle* lockdown,
                         base::win::ScopedHandle* lowbox);
 
-  // Adds a target process to the internal list of targets. Internally a
+  // Applies the sandbox to |target| and takes ownership. Internally a
   // call to TargetProcess::Init() is issued.
-  ResultCode AddTarget(std::unique_ptr<TargetProcess> target);
+  ResultCode ApplyToTarget(std::unique_ptr<TargetProcess> target);
 
   // Called when there are no more active processes in a Job.
   // Removes a Job object associated with this policy and the target associated
@@ -139,12 +136,8 @@ class PolicyBase final : public TargetPolicy {
                              Semantics semantics,
                              const wchar_t* pattern);
 
-  // This lock synchronizes operations on the targets_ collection.
-  base::Lock lock_;
-  // Maintains the list of target process associated with this policy.
-  // The policy takes ownership of them.
-  typedef std::list<std::unique_ptr<TargetProcess>> TargetSet;
-  TargetSet targets_;
+  // The policy takes ownership of a target as it is applied to it.
+  std::unique_ptr<TargetProcess> target_;
   // Standard object-lifetime reference counter.
   volatile LONG ref_count;
   // The user-defined global policy settings.
@@ -155,8 +148,6 @@ class PolicyBase final : public TargetPolicy {
   size_t memory_limit_;
   bool use_alternate_desktop_;
   bool use_alternate_winstation_;
-  // Helps the file system policy initialization.
-  bool file_system_init_;
   bool relaxed_interceptions_;
   HANDLE stdout_handle_;
   HANDLE stderr_handle_;

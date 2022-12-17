@@ -13,10 +13,13 @@
 #include <utility>
 #include <vector>
 
+#include "base/base_paths.h"
 #include "base/bind.h"
 #include "base/files/file_enumerator.h"
+#include "base/files/file_path.h"
 #include "base/files/scoped_file.h"
 #include "base/logging.h"
+#include "base/path_service.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
@@ -212,9 +215,21 @@ void AddDrmGpuPermissions(std::vector<BrokerFilePermission>* permissions) {
 }
 
 void AddAmdGpuPermissions(std::vector<BrokerFilePermission>* permissions) {
-  static const char* const kReadOnlyList[] = {"/etc/ld.so.cache",
-                                              "/usr/lib64/libEGL.so.1",
-                                              "/usr/lib64/libGLESv2.so.2"};
+  static const char* const kReadOnlyList[] = {
+      "/etc/ld.so.cache",
+      // To support threads in mesa we use --gpu-sandbox-start-early and
+      // that requires the following libs and files to be accessible.
+      "/usr/lib64/libEGL.so.1",
+      "/usr/lib64/libGLESv2.so.2",
+      "/usr/lib64/libglapi.so.0",
+      "/usr/lib64/dri/r300_dri.so",
+      "/usr/lib64/dri/r600_dri.so",
+      "/usr/lib64/dri/radeonsi_dri.so",
+      // Allow libglvnd files and libs.
+      "/usr/share/glvnd/egl_vendor.d",
+      "/usr/share/glvnd/egl_vendor.d/50_mesa.json",
+      "/usr/lib64/libEGL_mesa.so.0",
+      "/usr/lib64/libGLdispatch.so.0"};
   for (const char* item : kReadOnlyList)
     permissions->push_back(BrokerFilePermission::ReadOnly(item));
 
@@ -351,6 +366,16 @@ void AddStandardGpuPermissions(std::vector<BrokerFilePermission>* permissions) {
   permissions->push_back(
       BrokerFilePermission::ReadWrite(kNvidiaDeviceModeSetPath));
   permissions->push_back(BrokerFilePermission::ReadOnly(kNvidiaParamsPath));
+
+  // For SwiftShader
+  base::FilePath module_path;
+  if (base::PathService::Get(base::DIR_MODULE, &module_path)) {
+    std::string sw_path =
+        module_path.Append("libvk_swiftshader.so").MaybeAsASCII();
+    if (!sw_path.empty()) {
+      permissions->push_back(BrokerFilePermission::ReadOnly(sw_path));
+    }
+  }
 }
 
 std::vector<BrokerFilePermission> FilePermissionsForGpu(

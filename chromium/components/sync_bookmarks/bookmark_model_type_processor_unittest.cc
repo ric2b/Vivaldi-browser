@@ -85,7 +85,7 @@ syncer::UpdateResponseData CreateUpdateResponseData(
     const base::GUID& guid) {
   syncer::EntityData data;
   data.id = bookmark_info.server_id;
-  data.parent_id = bookmark_info.parent_id;
+  data.legacy_parent_id = bookmark_info.parent_id;
   data.server_defined_unique_tag = bookmark_info.server_tag;
   data.originator_client_item_id = guid.AsLowercaseString();
 
@@ -745,10 +745,6 @@ TEST_F(BookmarkModelTypeProcessorTest,
 
 TEST_F(BookmarkModelTypeProcessorTest,
        ShouldCommitEntitiesWhileOtherFaviconsLoading) {
-  base::test::ScopedFeatureList features;
-  features.InitAndEnableFeature(
-      switches::kSyncBookmarksEnforceLateMaxEntriesToCommit);
-
   const std::string kNodeId1 = "node_id1";
   const std::string kNodeId2 = "node_id2";
   const std::string kTitle = "title";
@@ -785,8 +781,7 @@ TEST_F(BookmarkModelTypeProcessorTest,
   // order for raw pointers in an unordered_set) which means the test needs to
   // pass for both cases.
   const std::vector<const SyncedBookmarkTracker::Entity*> unsynced_entities =
-      processor()->GetTrackerForTest()->GetEntitiesWithLocalChanges(
-          /*max_entries=*/1000);
+      processor()->GetTrackerForTest()->GetEntitiesWithLocalChanges();
   ASSERT_THAT(
       unsynced_entities,
       UnorderedElementsAre(TrackedEntityCorrespondsToBookmarkNode(node1),

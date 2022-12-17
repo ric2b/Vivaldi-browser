@@ -49,19 +49,16 @@ class DesksTemplatesPresenterTestApi {
 // functions.
 class DesksTemplatesGridViewTestApi {
  public:
-  explicit DesksTemplatesGridViewTestApi(
-      const DesksTemplatesGridView* grid_view);
-  DesksTemplatesGridViewTestApi(const DesksTemplatesGridViewTestApi&) = delete;
-  DesksTemplatesGridViewTestApi& operator=(
-      const DesksTemplatesGridViewTestApi&) = delete;
+  explicit DesksTemplatesGridViewTestApi(DesksTemplatesGridView* grid_view);
+  DesksTemplatesGridViewTestApi(DesksTemplatesGridViewTestApi&) = delete;
+  DesksTemplatesGridViewTestApi& operator=(DesksTemplatesGridViewTestApi&) =
+      delete;
   ~DesksTemplatesGridViewTestApi();
 
-  const std::vector<DesksTemplatesItemView*>& grid_items() const {
-    return grid_view_->grid_items_;
-  }
+  void WaitForItemMoveAnimationDone();
 
  private:
-  const DesksTemplatesGridView* grid_view_;
+  DesksTemplatesGridView* grid_view_;
 };
 
 // Wrapper for `DesksTemplatesItemView` that exposes internal state to test
@@ -85,13 +82,13 @@ class DesksTemplatesItemViewTestApi {
 
   const base::GUID uuid() const { return item_view_->desk_template_->uuid(); }
 
-  const std::vector<DesksTemplatesIconView*>& icon_views() const {
-    return item_view_->icon_container_view_->icon_views_;
-  }
-
   const views::View* hover_container() const {
     return item_view_->hover_container_;
   }
+
+  // Icons views are stored in the view hierarchy so this convenience function
+  // returns them as a vector of DesksTemplatesIconView*.
+  std::vector<DesksTemplatesIconView*> GetIconViews() const;
 
  private:
   const DesksTemplatesItemView* item_view_;
@@ -124,25 +121,6 @@ class DesksTemplatesIconViewTestApi {
   const DesksTemplatesIconView* desks_templates_icon_view_;
 };
 
-// Wrapper for `DesksTemplatesNameView` that exposes internal state to test
-// functions.
-class DesksTemplatesNameViewTestApi {
- public:
-  explicit DesksTemplatesNameViewTestApi(
-      const DesksTemplatesNameView* desks_templates_name_view);
-  DesksTemplatesNameViewTestApi(const DesksTemplatesNameViewTestApi&) = delete;
-  DesksTemplatesNameViewTestApi& operator=(
-      const DesksTemplatesNameViewTestApi&) = delete;
-  ~DesksTemplatesNameViewTestApi();
-
-  const std::u16string full_text() const {
-    return desks_templates_name_view_->full_text_;
-  }
-
- private:
-  const DesksTemplatesNameView* desks_templates_name_view_;
-};
-
 // Return the `grid_item_index`th `DesksTemplatesItemView` from the first
 // `OverviewGrid`'s `DesksTemplatesGridView` in `GetOverviewGridList()`.
 DesksTemplatesItemView* GetItemViewFromTemplatesGrid(int grid_item_index);
@@ -152,6 +130,8 @@ views::Button* GetZeroStateDesksTemplatesButton();
 views::Button* GetExpandedStateDesksTemplatesButton();
 views::Button* GetSaveDeskAsTemplateButton();
 views::Button* GetTemplateItemButton(int index);
+views::Button* GetTemplateItemDeleteButton(int index);
+views::Button* GetDesksTemplatesDialogAcceptButton();
 
 // A lot of the UI relies on calling into the local desk data manager to
 // update, which sends callbacks via posting tasks. Call

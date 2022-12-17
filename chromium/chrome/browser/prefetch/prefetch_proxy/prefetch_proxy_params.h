@@ -29,9 +29,6 @@ GURL PrefetchProxyProxyHost();
 // The header name used to connect to the tunnel proxy.
 std::string PrefetchProxyProxyHeaderKey();
 
-// Whether the feature is only enabled for Lite Mode users.
-bool PrefetchProxyOnlyForLiteMode();
-
 // Returns true when prefetched pages should run no state prefetch.
 bool PrefetchProxyNoStatePrefetchSubresources();
 
@@ -118,6 +115,11 @@ bool PrefetchProxySendDecoyRequestForIneligiblePrefetch(
 // Returns true if any domain can issue private prefetches using the Google
 // proxy. Normally, this is restricted to Google domains.
 bool PrefetchProxyAllowAllDomains();
+
+// Returns true if any domain can issue private prefetches using the Google
+// proxy, so long as the user opted-in to extended preloading. This allows us
+// to disable the prefetch proxy on non-Google origins via Finch.
+bool PrefetchProxyAllowAllDomainsForExtendedPreloading();
 
 // The maximum time a prefetched response is servable.
 base::TimeDelta PrefetchProxyCacheableDuration();

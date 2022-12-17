@@ -507,9 +507,8 @@ void ProfileMenuViewBase::ShowBubble(profiles::BubbleViewMode view_mode,
 
   signin_ui_util::RecordProfileMenuViewShown(browser->profile());
   // Close any existing IPH bubble for the profile menu.
-  FeaturePromoController* promo_controller =
-      browser->window()->GetFeaturePromoController();
-  promo_controller->CloseBubble(feature_engagement::kIPHProfileSwitchFeature);
+  browser->window()->CloseFeaturePromo(
+      feature_engagement::kIPHProfileSwitchFeature);
 
   ProfileMenuViewBase* bubble = nullptr;
   if (view_mode == profiles::BUBBLE_VIEW_MODE_INCOGNITO) {
@@ -612,7 +611,7 @@ void ProfileMenuViewBase::SetProfileIdentityInfo(
 
 // TODO(crbug.com/1052397): Revisit once build flag switch of lacros-chrome is
 // complete.
-#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
   // crbug.com/1161166: Orca does not read the accessible window title of the
   // bubble, so we duplicate it in the top-level menu item. To be revisited
   // after considering other options, including fixes on the AT side.
@@ -921,7 +920,7 @@ int ProfileMenuViewBase::GetMaxHeight() const {
           ->GetDisplayNearestPoint(anchor_rect.CenterPoint())
           .work_area();
   int available_space = screen_space.bottom() - anchor_rect.bottom();
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   // On Windows the bubble can also be show to the top of the anchor.
   available_space =
       std::max(available_space, anchor_rect.y() - screen_space.y());

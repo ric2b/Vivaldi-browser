@@ -4,6 +4,7 @@
 
 #include "net/quic/quic_http_stream.h"
 
+#include <set>
 #include <utility>
 
 #include "base/auto_reset.h"
@@ -59,7 +60,7 @@ void NetLogQuicPushStream(const NetLogWithSource& net_log1,
 
 QuicHttpStream::QuicHttpStream(
     std::unique_ptr<QuicChromiumClientSession::Handle> session,
-    std::vector<std::string> dns_aliases)
+    std::set<std::string> dns_aliases)
     : MultiplexedHttpStream(std::move(session)),
       next_state_(STATE_NONE),
       stream_(nullptr),
@@ -109,6 +110,9 @@ HttpResponseInfo::ConnectionInfo QuicHttpStream::ConnectionInfoFromQuicVersion(
       return HttpResponseInfo::CONNECTION_INFO_QUIC_RFC_V1;
     case quic::QUIC_VERSION_RESERVED_FOR_NEGOTIATION:
       return HttpResponseInfo::CONNECTION_INFO_QUIC_999;
+    case quic::QUIC_VERSION_IETF_2_DRAFT_01:
+      DCHECK(quic_version.UsesTls());
+      return HttpResponseInfo::CONNECTION_INFO_QUIC_2_DRAFT_1;
   }
   NOTREACHED();
   return HttpResponseInfo::CONNECTION_INFO_QUIC_UNKNOWN_VERSION;
@@ -438,7 +442,7 @@ void QuicHttpStream::OnReadResponseHeadersComplete(int rv) {
   }
 }
 
-const std::vector<std::string>& QuicHttpStream::GetDnsAliases() const {
+const std::set<std::string>& QuicHttpStream::GetDnsAliases() const {
   return dns_aliases_;
 }
 

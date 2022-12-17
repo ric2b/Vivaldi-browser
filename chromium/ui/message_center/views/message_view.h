@@ -11,6 +11,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
+#include "build/chromeos_buildflags.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/insets.h"
@@ -25,6 +26,10 @@
 #include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/view.h"
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "base/time/time.h"
+#endif
 
 namespace views {
 class ScrollView;
@@ -52,6 +57,7 @@ class MESSAGE_CENTER_EXPORT MessageView
    public:
     virtual void OnSlideStarted(const std::string& notification_id) {}
     virtual void OnSlideChanged(const std::string& notification_id) {}
+    virtual void OnSlideEnded(const std::string& notification_id) {}
     virtual void OnPreSlideOut(const std::string& notification_id) {}
     virtual void OnSlideOut(const std::string& notification_id) {}
     virtual void OnCloseButtonPressed(const std::string& notification_id) {}
@@ -89,6 +95,11 @@ class MESSAGE_CENTER_EXPORT MessageView
   // the grouped notification state.
   virtual void AddGroupNotification(const Notification& notification,
                                     bool newest_first) {}
+
+  // Find the message view associated with a grouped notification id if it
+  // exists.
+  virtual views::View* FindGroupNotificationView(
+      const std::string& notification_id);
 
   // Populates this view with a list of grouped notifications, this is intended
   // to be used for initializing of grouped notifications so it does not
@@ -130,11 +141,18 @@ class MESSAGE_CENTER_EXPORT MessageView
   virtual void OnSettingsButtonPressed(const ui::Event& event);
   virtual void OnSnoozeButtonPressed(const ui::Event& event);
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // Gets the animation duration for a recent bounds change.
+  virtual base::TimeDelta GetBoundsAnimationDuration(
+      const Notification& notification) const;
+#endif
+
   // views::View:
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   bool OnMousePressed(const ui::MouseEvent& event) override;
   bool OnMouseDragged(const ui::MouseEvent& event) override;
   void OnMouseReleased(const ui::MouseEvent& event) override;
+  void OnMouseEntered(const ui::MouseEvent& event) override;
   bool OnKeyPressed(const ui::KeyEvent& event) override;
   bool OnKeyReleased(const ui::KeyEvent& event) override;
   void OnPaint(gfx::Canvas* canvas) override;
@@ -161,7 +179,7 @@ class MESSAGE_CENTER_EXPORT MessageView
   Mode GetMode() const;
 
   // Gets the current horizontal scroll offset of the view by slide gesture.
-  float GetSlideAmount() const;
+  virtual float GetSlideAmount() const;
 
   // Set "setting" mode. This overrides "pinned" mode. See the comment of
   // MessageView::Mode enum for detail.

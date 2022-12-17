@@ -11,7 +11,6 @@
 #include "net/base/escape.h"
 #include "ui/base/l10n/l10n_util.h"
 
-namespace ash {
 namespace quick_answers {
 
 namespace {
@@ -63,7 +62,7 @@ std::string BuildKpEntityTitleText(const std::string& average_score,
 
 std::string BuildTranslationTitleText(const IntentInfo& intent_info) {
   auto locale_name = l10n_util::GetDisplayNameForLocale(
-      intent_info.source_language, intent_info.target_language, true);
+      intent_info.source_language, intent_info.device_language, true);
   return l10n_util::GetStringFUTF8(IDS_QUICK_ANSWERS_TRANSLATION_TITLE_TEXT,
                                    base::UTF8ToUTF16(intent_info.intent_text),
                                    locale_name);
@@ -95,4 +94,3 @@ absl::optional<double> GetRatio(const double value1, const double value2) {
 }
 
 }  // namespace quick_answers
-}  // namespace ash

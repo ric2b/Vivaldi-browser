@@ -20,7 +20,7 @@ import './more_settings.js';
 import './other_options_settings.js';
 import './pages_per_sheet_settings.js';
 import './pages_settings.js';
-// <if expr="chromeos or lacros">
+// <if expr="chromeos_ash or chromeos_lacros">
 import './pin_settings.js';
 // </if>
 import './print_preview_vars_css.js';
@@ -32,7 +32,6 @@ import './link_container.js';
 // </if>
 
 import {CrContainerShadowMixin} from 'chrome://resources/cr_elements/cr_container_shadow_mixin.js';
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {WebUIListenerMixin} from 'chrome://resources/js/web_ui_listener_mixin.js';
 import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 

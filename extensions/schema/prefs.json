@@ -16,50 +16,7 @@
           },
           "value": {
             "type": "any",
-            "description": "Preference value."
-          }
-        }
-      },
-      {
-        "id": "PreferenceNotification",
-        "type": "object",
-        "description": "Preference value change notification.",
-        "properties": {
-          "path": {
-            "type": "string",
-            "description": "The preference path"
-          },
-          "value": {
-            "type": "any",
-            "description": "Preference value."
-          },
-          "usesDefault": {
-            "type": "boolean",
-            "description": "True if the current value comes from the default and has not been overriden by the user."
-          }
-        }
-      },
-      {
-        "id": "PreferenceValueAndDefault",
-        "type": "object",
-        "description": "Preference with its current value and default value.",
-        "properties": {
-          "path": {
-            "type": "string",
-            "description": "The preference path"
-          },
-          "value": {
-            "type": "any",
-            "optional": "true",
-            "description": "Preference value."
-          },
-          "defaultValue": {
-            "type": "any",
-            "description": "Preference default value."
-          },
-          "usesDefault": {
-            "type": "boolean",
-            "description": "True if the current value comes from the default and has not been overriden by the user."
+            "description": "Preference value. None indicate to use the default."
           }
         }
       },
@@ -140,7 +97,7 @@
       {
         "name": "getForCache",
         "type": "function",
-        "description": "Get all preferences to be cached on the JS side with one call. Only changes to these will be reported by onChanged",
+        "description": "Get all preferences to be cached on the JS side with one call. Only changes to these will be reported by onChanged. The result type is optimized for bulk transfer of over 450 values",
         "parameters": [
           {
             "name": "paths",
@@ -156,7 +113,8 @@
             {
               "name": "results",
               "type": "array",
-              "items": { "$ref": "PreferenceValueAndDefault" }
+              "items": { "type": "any" },
+              "description": "Sequence of value, defaultValue for each element in paths array. None at the value position indicates a preference not applicable to the current platform. None at the defaultValue position means the value uses default."
             }
           ]
         }
@@ -370,7 +328,7 @@
           {
             "name": "newValue",
             "description": "Information about the changed preference.",
-            "$ref": "PreferenceNotification"
+            "$ref": "PreferenceValue"
           }
         ]
       }

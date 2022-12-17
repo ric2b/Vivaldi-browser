@@ -81,8 +81,20 @@ public class BookmarkModel extends BookmarkBridge {
      * is disabled.
      */
     public void deleteBookmarks(BookmarkId... bookmarks) {
-        if (ChromeApplicationImpl.isVivaldi()) { deleteBookmarksPublic(bookmarks); return; }
         assert bookmarks != null && bookmarks.length > 0;
+        // Vivaldi - Reading list changes
+        boolean isReadingListItem = false;
+        for (BookmarkId bookmarkId : bookmarks) {
+            if (bookmarkId.getType() == BookmarkType.READING_LIST) {
+                isReadingListItem = true;
+                break;
+            }
+        }
+        if (ChromeApplicationImpl.isVivaldi() && !isReadingListItem) {
+            deleteBookmarksPublic(bookmarks);
+            return;
+        }
+
         // Store all titles of bookmarks.
         List<String> titles = new ArrayList<>();
         boolean isUndoable = true;

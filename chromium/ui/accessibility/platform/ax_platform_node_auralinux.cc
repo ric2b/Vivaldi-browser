@@ -337,7 +337,7 @@ const char* BuildDescriptionFromHeaders(AXPlatformNodeDelegate* delegate,
 
   std::string result = base::JoinString(names, " ");
 
-#if defined(LEAK_SANITIZER) && !defined(OS_NACL)
+#if defined(LEAK_SANITIZER) && !BUILDFLAG(IS_NACL)
   // http://crbug.com/982839
   // atk_table_get_column_description and atk_table_get_row_description return
   // const gchar*, which suggests the caller does not gain ownership of the
@@ -3573,6 +3573,14 @@ void AXPlatformNodeAuraLinux::ResendFocusSignalsForCurrentlyFocusedNode() {
 
   g_signal_emit_by_name(focused_node, "focus-event", true);
   atk_object_notify_state_change(focused_node, ATK_STATE_FOCUSED, true);
+}
+
+void AXPlatformNodeAuraLinux::SetAsCurrentlyFocusedNode() {
+  AtkObject* obj = GetOrCreateAtkObject();
+  if (!obj)
+    return;
+
+  SetWeakGPtrToAtkObject(&g_current_focused, obj);
 }
 
 // All menus have closed.

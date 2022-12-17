@@ -318,15 +318,16 @@ bool SaveRulesList(const base::FilePath& output_path,
   return true;
 }
 
-void LoadTrackerInfos(const base::FilePath& tracker_infos_path,
-                      base::OnceCallback<void(base::Value)> callback) {
+void LoadTrackerInfos(
+    const base::FilePath& tracker_infos_path,
+    base::OnceCallback<void(absl::optional<base::Value::Dict>)> callback) {
   JSONFileValueDeserializer serializer(tracker_infos_path);
   std::unique_ptr<base::Value> tracker_infos(
       serializer.Deserialize(nullptr, nullptr));
-  if (!tracker_infos)
-    std::move(callback).Run(base::Value());
+  if (!tracker_infos || !tracker_infos->is_dict())
+    std::move(callback).Run(absl::nullopt);
   else
-    std::move(callback).Run(std::move(*tracker_infos));
+    std::move(callback).Run(std::move(tracker_infos->GetDict()));
 }
 
 }  // namespace
@@ -342,7 +343,7 @@ struct RuleSourceHandler::RulesReadResult {
   FetchResult fetch_result = FetchResult::kSuccess;
   RulesInfo rules_info;
   std::string checksum;
-  base::Value tracker_infos;
+  absl::optional<base::Value::Dict> tracker_infos;
 };
 
 class RuleSourceHandler::RulesReader {
@@ -421,11 +422,11 @@ void RuleSourceHandler::RulesReader::Read(RulesReadResult* read_result) {
   read_result->fetch_result = parse_result.fetch_result;
   read_result->metadata = parse_result.metadata;
   read_result->rules_info = parse_result.rules_info;
-  if (parse_result.tracker_infos.is_dict()) {
+  if (parse_result.tracker_infos) {
     JSONFileValueSerializer serializer(tracker_info_output_path_);
     // Missing the tracker infos isn't critical. If we fail at saving it,
     // just act as if we didn't get it.
-    if (serializer.Serialize(parse_result.tracker_infos))
+    if (serializer.Serialize(*parse_result.tracker_infos))
       read_result->tracker_infos = std::move(parse_result.tracker_infos);
   }
 
@@ -514,10 +515,12 @@ RuleSourceHandler::RuleSourceHandler(
 
 RuleSourceHandler::~RuleSourceHandler() = default;
 
-void RuleSourceHandler::OnTrackerInfosLoaded(base::Value tracker_infos) {
-  if (tracker_infos.is_dict())
+void RuleSourceHandler::OnTrackerInfosLoaded(
+    absl::optional<base::Value::Dict> tracker_infos) {
+  if (tracker_infos) {
     on_tracker_infos_update_callback_.Run(rule_source_,
-                                          std::move(tracker_infos));
+                                          std::move(*tracker_infos));
+  }
 }
 
 void RuleSourceHandler::FetchNow() {
@@ -644,10 +647,10 @@ void RuleSourceHandler::OnRulesRead(std::unique_ptr<RulesReadResult> result) {
 
     rule_source_.next_fetch = CalculateNextUpdateTime(rule_source_);
 
-    if (result->tracker_infos.is_dict()) {
+    if (result->tracker_infos) {
       rule_source_.has_tracker_infos = true;
       on_tracker_infos_update_callback_.Run(rule_source_,
-                                            std::move(result->tracker_infos));
+                                            std::move(*result->tracker_infos));
     }
   } else {
     rule_source_.next_fetch =

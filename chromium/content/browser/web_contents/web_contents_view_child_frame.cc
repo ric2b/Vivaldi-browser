@@ -111,7 +111,7 @@ void WebContentsViewChildFrame::SetOverscrollControllerEnabled(bool enabled) {
   // This is managed by the outer view.
 }
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 bool WebContentsViewChildFrame::CloseTabAfterEventTrackingIfNeeded() {
   return false;
 }

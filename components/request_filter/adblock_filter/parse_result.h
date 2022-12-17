@@ -10,6 +10,7 @@
 #include "components/request_filter/adblock_filter/adblock_content_injection_rule.h"
 #include "components/request_filter/adblock_filter/adblock_metadata.h"
 #include "components/request_filter/adblock_filter/adblock_request_filter_rule.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace adblock_filter {
 struct ParseResult {
@@ -24,7 +25,7 @@ struct ParseResult {
   ScriptletInjectionRules scriptlet_injection_rules;
   FetchResult fetch_result = FetchResult::kSuccess;
   RulesInfo rules_info;
-  base::Value tracker_infos;
+  absl::optional<base::Value::Dict> tracker_infos;
 };
 
 }  // namespace adblock_filter

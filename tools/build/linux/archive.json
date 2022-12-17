@@ -1,0 +1,26 @@
+{
+  "keep": [
+    "chrome-linux"
+  ],
+  "remove-files": [
+    "chrome",
+    "chrome_100_percent.pak",
+    "chrome_200_percent.pak"
+  ],
+  "chrome-linux": {
+    "files": [
+      "vivaldi",
+      "vivaldi_100_percent.pak",
+      "vivaldi_200_percent.pak"
+    ]
+  },
+  "background-bundle.js.map": {},
+  "bundle.js.map": {},
+  "inject-root-bundle.js.map": {},
+  "background-common-bundle.js.map": {},
+  "bundle-mailreader-worker.js.map": {},
+  "inject-all-bundle.js.map": {},
+  "main-bundle.js.map": {},
+  "translate-bundle.js.map": {},
+  "vendor-bundle.js.map": {}
+}

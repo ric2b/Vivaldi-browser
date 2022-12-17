@@ -248,7 +248,7 @@ public class HomepageManager implements HomepagePolicyManager.HomepagePolicyStat
      */
     public boolean getPrefHomepageUseChromeNTP() {
         return mSharedPreferencesManager.readBoolean(
-                ChromePreferenceKeys.HOMEPAGE_USE_CHROME_NTP, false);
+                ChromePreferenceKeys.HOMEPAGE_USE_CHROME_NTP, true); // Vivaldi
     }
 
     /**

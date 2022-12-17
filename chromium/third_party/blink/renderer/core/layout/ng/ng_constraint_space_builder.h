@@ -34,8 +34,8 @@ class CORE_EXPORT NGConstraintSpaceBuilder final {
                                  is_new_fc,
                                  /* force_orthogonal_writing_mode_root */ false,
                                  adjust_inline_size_if_needed) {
-    if (parent_space.IsInsideBalancedColumns())
-      space_.EnsureRareData()->is_inside_balanced_columns = true;
+    if (parent_space.ShouldPropagateChildBreakValues())
+      SetShouldPropagateChildBreakValues();
   }
 
   // The setters on this builder are in the writing mode of parent_writing_mode.
@@ -131,6 +131,10 @@ class CORE_EXPORT NGConstraintSpaceBuilder final {
       space_.EnsureRareData()->fragmentainer_offset_at_bfc = offset;
   }
 
+  void SetIsAtFragmentainerStart() {
+    space_.EnsureRareData()->is_at_fragmentainer_start = true;
+  }
+
   void SetIsFixedInlineSize(bool b) {
     if (LIKELY(is_in_parallel_flow_))
       space_.bitfields_.is_fixed_inline_size = b;
@@ -206,6 +210,10 @@ class CORE_EXPORT NGConstraintSpaceBuilder final {
     if (!space_.HasRareData() && min_break_appeal == kBreakAppealLastResort)
       return;
     space_.EnsureRareData()->min_break_appeal = min_break_appeal;
+  }
+
+  void SetShouldPropagateChildBreakValues() {
+    space_.EnsureRareData()->propagate_child_break_values = true;
   }
 
   void SetIsTableCell(bool is_table_cell) {

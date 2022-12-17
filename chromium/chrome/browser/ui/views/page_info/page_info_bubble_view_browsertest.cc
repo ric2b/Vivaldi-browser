@@ -9,6 +9,7 @@
 #include "base/scoped_observation.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
+#include "chrome/browser/certificate_viewer.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
 #include "chrome/browser/safe_browsing/chrome_password_protection_service.h"
@@ -177,6 +178,7 @@ class PageInfoBubbleViewBrowserTest : public InProcessBrowserTest {
       const PageInfoBubbleViewBrowserTest& test) = delete;
 
   void SetUp() override {
+    MockCertificateViewerForTesting();
     ASSERT_TRUE(embedded_test_server()->Start());
     InProcessBrowserTest::SetUp();
   }
@@ -299,8 +301,8 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
                        StopShowingBubbleWhenWebContentsDestroyed) {
   // Open a new tab so the whole browser does not close once we close
   // the tab via WebContents::Close() below.
-  AddTabAtIndex(0, GURL("data:text/html,<p>puppies!</p>"),
-                ui::PAGE_TRANSITION_TYPED);
+  ASSERT_TRUE(AddTabAtIndex(0, GURL("data:text/html,<p>puppies!</p>"),
+                            ui::PAGE_TRANSITION_TYPED));
   OpenPageInfoBubble(browser());
   EXPECT_EQ(PageInfoBubbleView::BUBBLE_PAGE_INFO,
             PageInfoBubbleView::GetShownBubbleType());

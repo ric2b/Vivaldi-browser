@@ -48,32 +48,28 @@ void SortFlags::InitFromPrefs() {
   Profile* profile = appController.lastProfile;
   if (profile) {
     PrefService* pref_service = profile->GetPrefs();
-    const base::DictionaryValue* dict = pref_service->GetDictionary(
+    const base::Value* dict_value = pref_service->GetDictionary(
         vivaldiprefs::kBookmarksManagerSorting);
-    if (dict) {
-      const base::Value* val =
-          dict->FindKeyOfType("sortField", base::Value::Type::STRING);
-      if (val) {
-        const std::string sortField = val->GetString();
-        if (sortField == "manually")
+    if (dict_value) {
+      const base::Value::Dict& dict = dict_value->GetDict();
+      if (const std::string* sortField = dict.FindString("sortField")) {
+        if (*sortField == "manually")
           field_ = ::vivaldi::BookmarkSorter::FIELD_NONE;
-        else if (sortField == "title")
+        else if (*sortField == "title")
           field_ = ::vivaldi::BookmarkSorter::FIELD_TITLE;
-        else if (sortField == "url")
+        else if (*sortField == "url")
           field_ = ::vivaldi::BookmarkSorter::FIELD_URL;
-        else if (sortField == "nickname")
+        else if (*sortField == "nickname")
           field_ = ::vivaldi::BookmarkSorter::FIELD_NICKNAME;
-        else if (sortField == "description")
+        else if (*sortField == "description")
           field_ = ::vivaldi::BookmarkSorter::FIELD_DESCRIPTION;
       }
-      val = dict->FindKeyOfType("sortOrder", base::Value::Type::INTEGER);
-      if (val) {
-        const int sortOrder = val->GetInt();
-        if (sortOrder == 1)
+      if (absl::optional<int> sortOrder = dict.FindInt("sortOrder")) {
+        if (*sortOrder == 1)
           order_ = ::vivaldi::BookmarkSorter::ORDER_NONE;
-        else if (sortOrder == 2)
+        else if (*sortOrder == 2)
           order_ = ::vivaldi::BookmarkSorter::ORDER_ASCENDING;
-        else if (sortOrder == 3)
+        else if (*sortOrder == 3)
           order_ = ::vivaldi::BookmarkSorter::ORDER_DESCENDING;
       }
     }

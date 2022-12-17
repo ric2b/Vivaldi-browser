@@ -30,11 +30,13 @@
 #include "build/build_config.h"
 #include "build/buildflag.h"
 #include "net/base/net_export.h"
+#include "net/base/network_change_notifier.h"
 #include "net/base/network_delegate.h"
 #include "net/base/proxy_delegate.h"
 #include "net/dns/host_resolver.h"
 #include "net/http/http_network_session.h"
 #include "net/net_buildflags.h"
+#include "net/network_error_logging/network_error_logging_service.h"
 #include "net/proxy_resolution/proxy_config_service.h"
 #include "net/proxy_resolution/proxy_resolution_service.h"
 #include "net/ssl/ssl_config_service.h"
@@ -119,7 +121,7 @@ class NET_EXPORT URLRequestContextBuilder {
     // The cache path (when type is DISK).
     base::FilePath path;
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
     // If this is set, will override the default ApplicationStatusListener. This
     // is useful if the cache will not be in the main process.
     raw_ptr<base::android::ApplicationStatusListener> app_status_listener =
@@ -150,7 +152,8 @@ class NET_EXPORT URLRequestContextBuilder {
   // associated HttpNetworkSession are consistent.
   static void SetHttpNetworkSessionComponents(
       const URLRequestContext* request_context,
-      HttpNetworkSessionContext* session_context);
+      HttpNetworkSessionContext* session_context,
+      bool suppress_setting_socket_performance_watcher_factory = false);
 
   // These functions are mutually exclusive.  The ProxyConfigService, if
   // set, will be used to construct a ConfiguredProxyResolutionService.
@@ -229,8 +232,11 @@ class NET_EXPORT URLRequestContextBuilder {
   // Uses NetworkDelegateImpl by default. Note that calling Build will unset
   // any custom delegate in builder, so this must be called each time before
   // Build is called.
-  void set_network_delegate(std::unique_ptr<NetworkDelegate> delegate) {
+  // Returns a raw pointer to the set delegate.
+  template <typename T>
+  T* set_network_delegate(std::unique_ptr<T> delegate) {
     network_delegate_ = std::move(delegate);
+    return static_cast<T*>(network_delegate_.get());
   }
 
   // Sets the ProxyDelegate.
@@ -269,6 +275,9 @@ class NET_EXPORT URLRequestContextBuilder {
   void set_throttling_enabled(bool throttling_enabled) {
     throttling_enabled_ = throttling_enabled;
   }
+  void set_first_party_sets_enabled(bool enabled) {
+    first_party_sets_enabled_ = enabled;
+  }
 
   void set_ct_policy_enforcer(
       std::unique_ptr<CTPolicyEnforcer> ct_policy_enforcer);
@@ -283,6 +292,12 @@ class NET_EXPORT URLRequestContextBuilder {
 
   void set_network_error_logging_enabled(bool network_error_logging_enabled) {
     network_error_logging_enabled_ = network_error_logging_enabled;
+  }
+
+  template <typename T>
+  T* SetNetworkErrorLoggingServiceForTesting(std::unique_ptr<T> service) {
+    network_error_logging_service_ = std::move(service);
+    return static_cast<T*>(network_error_logging_service_.get());
   }
 
   void set_persistent_reporting_and_nel_store(
@@ -307,17 +322,30 @@ class NET_EXPORT URLRequestContextBuilder {
       CreateHttpTransactionFactoryCallback
           create_http_network_transaction_factory);
 
-  // Sets a ClientSocketFactory so a test can mock out sockets. The
-  // ClientSocketFactory must be destroyed after the creates URLRequestContext.
+  // Sets a ClientSocketFactory so a test can mock out sockets. This must
+  // outlive the URLRequestContext that will be built.
   void set_client_socket_factory_for_testing(
       ClientSocketFactory* client_socket_factory_for_testing) {
-    client_socket_factory_for_testing_ = client_socket_factory_for_testing;
+    set_client_socket_factory(client_socket_factory_for_testing);
   }
+
+  // Binds the context to `network`. All requests scheduled through the context
+  // built by this builder will be sent using `network`. Requests will fail if
+  // `network` disconnects.
+  // This also imposes some limitations on the context capabilities:
+  // * Currently, URLs will only be resolved using the System DNS.
+  // * By design, QUIC connection migration will be turned off.
+  // Only implemented for Android (API level > 23).
+  void BindToNetwork(NetworkChangeNotifier::NetworkHandle network);
 
   // Creates a mostly self-contained URLRequestContext. May only be called once
   // per URLRequestContextBuilder. After this is called, the Builder can be
   // safely destroyed.
   std::unique_ptr<URLRequestContext> Build();
+
+  void SuppressSettingSocketPerformanceWatcherFactoryForTesting() {
+    suppress_setting_socket_performance_watcher_factory_for_testing_ = true;
+  }
 
  protected:
   // Lets subclasses override ProxyResolutionService creation, using a
@@ -333,6 +361,13 @@ class NET_EXPORT URLRequestContextBuilder {
       bool pac_quick_check_enabled);
 
  private:
+  // Factory that will be used to create all client sockets used by the
+  // URLRequestContext that will be built.
+  // `client_socket_factory` must outlive the context.
+  void set_client_socket_factory(ClientSocketFactory* client_socket_factory) {
+    client_socket_factory_ = client_socket_factory;
+  }
+
   bool enable_brotli_ = false;
   raw_ptr<NetworkQualityEstimator> network_quality_estimator_ = nullptr;
 
@@ -343,6 +378,11 @@ class NET_EXPORT URLRequestContextBuilder {
   bool http_cache_enabled_ = true;
   bool throttling_enabled_ = false;
   bool cookie_store_set_by_client_ = false;
+  bool suppress_setting_socket_performance_watcher_factory_for_testing_ = false;
+  bool first_party_sets_enabled_ = false;
+
+  NetworkChangeNotifier::NetworkHandle bound_network_ =
+      NetworkChangeNotifier::kInvalidNetworkHandle;
 
   HttpCacheParams http_cache_params_;
   HttpNetworkSessionParams http_network_session_params_;
@@ -369,6 +409,7 @@ class NET_EXPORT URLRequestContextBuilder {
 #if BUILDFLAG(ENABLE_REPORTING)
   std::unique_ptr<ReportingPolicy> reporting_policy_;
   bool network_error_logging_enabled_ = false;
+  std::unique_ptr<NetworkErrorLoggingService> network_error_logging_service_;
   std::unique_ptr<PersistentReportingAndNelStore>
       persistent_reporting_and_nel_store_;
 #endif  // BUILDFLAG(ENABLE_REPORTING)
@@ -376,7 +417,7 @@ class NET_EXPORT URLRequestContextBuilder {
   std::map<std::string, std::unique_ptr<URLRequestJobFactory::ProtocolHandler>>
       protocol_handlers_;
 
-  raw_ptr<ClientSocketFactory> client_socket_factory_for_testing_ = nullptr;
+  raw_ptr<ClientSocketFactory> client_socket_factory_ = nullptr;
 };
 
 }  // namespace net

@@ -146,12 +146,13 @@ class PaymentRequestBrowserTestBase
   void OnProcessingSpinnerHidden() override;
   void OnPaymentHandlerWindowOpened() override;
 
-  void SetHostReplaceRule(const std::string& host_pattern,
-                          const std::string& replacement);
-
   void InstallPaymentApp(const std::string& hostname,
                          const std::string& service_worker_filename,
                          std::string* url_method_output);
+
+  void InstallPaymentAppWithoutIcon(const std::string& hostname,
+                                    const std::string& service_worker_filename,
+                                    std::string* url_method_output);
 
   // Will call JavaScript to invoke the PaymentRequest dialog and verify that
   // it's open and ready for input.

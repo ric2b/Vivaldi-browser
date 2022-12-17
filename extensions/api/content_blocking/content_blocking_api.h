@@ -353,28 +353,28 @@ class ContentBlockingGetBlockedUrlsInfoFunction : public AdBlockFunction {
       adblock_filter::RuleService* rules_service) override;
 };
 
-class ContentBlockingGetBlockedDomainCountersFunction : public AdBlockFunction {
+class ContentBlockingGetBlockedCountersFunction : public AdBlockFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("contentBlocking.getBlockedDomainCounters",
-                             CONTENT_BLOCKING_GET_BLOCKED_DOMAIN_COUNTERS)
-  ContentBlockingGetBlockedDomainCountersFunction() = default;
+  DECLARE_EXTENSION_FUNCTION("contentBlocking.getBlockedCounters",
+                             CONTENT_BLOCKING_GET_BLOCKED_COUNTERS)
+  ContentBlockingGetBlockedCountersFunction() = default;
 
  private:
-  ~ContentBlockingGetBlockedDomainCountersFunction() override = default;
+  ~ContentBlockingGetBlockedCountersFunction() override = default;
   // AdBlockFunction:
   ResponseValue RunWithService(
       adblock_filter::RuleService* rules_service) override;
 };
 
-class ContentBlockingClearBlockedDomainCountersFunction
+class ContentBlockingClearBlockedCountersFunction
     : public AdBlockFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("contentBlocking.clearBlockedDomainCounters",
-                             CONTENT_BLOCKING_CLEAR_BLOCKED_DOMAIN_COUNTERS)
-  ContentBlockingClearBlockedDomainCountersFunction() = default;
+  DECLARE_EXTENSION_FUNCTION("contentBlocking.clearBlockedCounters",
+                             CONTENT_BLOCKING_CLEAR_BLOCKED_COUNTERS)
+  ContentBlockingClearBlockedCountersFunction() = default;
 
  private:
-  ~ContentBlockingClearBlockedDomainCountersFunction() override = default;
+  ~ContentBlockingClearBlockedCountersFunction() override = default;
   // AdBlockFunction:
   ResponseValue RunWithService(
       adblock_filter::RuleService* rules_service) override;

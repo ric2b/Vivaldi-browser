@@ -217,6 +217,18 @@
   <message name="IDS_OS_SETTINGS_TAG_BLUETOOTH_TURN_ON_ALT1" desc="Text for search result item which, when clicked, navigates the user to Bluetooth settings, with a toggle to turn on Bluetooth. Alternate phrase for: 'Turn on Bluetooth'">
     Enable Bluetooth
   </message>
+  <message name="IDS_OS_SETTINGS_TAG_FAST_PAIR_TURN_ON" desc="Text for search result item which, when clicked, navigates the user to Bluetooth settings, with a toggle to turn on Fast Pair. Alternate phrase for: 'Enable Fast Pair'">
+    Turn on Fast Pair
+  </message>
+  <message name="IDS_OS_SETTINGS_TAG_FAST_PAIR_TURN_ON_ALT1" desc="Text for search result item which, when clicked, navigates the user to Bluetooth settings, with a toggle to turn on Fast Pair. Alternate phrase for: 'Turn on Fast Pair'">
+    Enable Fast Pair
+  </message>
+  <message name="IDS_OS_SETTINGS_TAG_FAST_PAIR_TURN_OFF" desc="Text for search result item which, when clicked, navigates the user to Bluetooth settings, with a toggle to turn off Fast Pair. Alternate phrase for: 'Disable Fast Pair'">
+    Turn off Fast Pair
+  </message>
+ <message name="IDS_OS_SETTINGS_TAG_FAST_PAIR_TURN_OFF_ALT1" desc="Text for search result item which, when clicked, navigates the user to Bluetooth settings, with a toggle to turn off Fast Pair. Alternate phrase for: 'Turn off Fast Pair'">
+    Disable Fast Pair
+  </message>
 
   <!-- MultiDevice section. -->
   <message name="IDS_OS_SETTINGS_TAG_MULTIDEVICE" desc="Text for search result item which, when clicked, navigates the user to multi-device settings (connects Android phone to Chromebook). Alternate phrase for: 'Phone'">
@@ -276,8 +288,11 @@
   <message name="IDS_OS_SETTINGS_TAG_NEARBY_SHARE_DATA_USAGE" desc="Text for search result item which, when clicked, navigates the user to Nearby Share edit data usage button in settings.">
     Nearby Share data usage
   </message>
-  <message name="IDS_OS_SETTINGS_TAG_NEARBY_SHARE_DEVICES_NEARBY_SHARING_NOTIFICATION" translateable="false" desc="Text for search result item which, when clicked, navigates the user to Nearby Device is trying to share notification toggle.">
-    Nearby Share devices nearby are sharing notification
+  <message name="IDS_OS_SETTINGS_TAG_NEARBY_SHARE_DEVICES_NEARBY_SHARING_NOTIFICATION_OFF" desc="Text for search result item which, when clicked, navigates the user to Nearby Device is trying to share notification toggle.">
+    Turn on notification when devices are nearby
+  </message>
+  <message name="IDS_OS_SETTINGS_TAG_NEARBY_SHARE_DEVICES_NEARBY_SHARING_NOTIFICATION_ON" desc="Text for search result item which, when clicked, navigates the user to Nearby Device is trying to share notification toggle.">
+    Turn off notification when devices are nearby
   </message>
   <message name="IDS_OS_SETTINGS_TAG_MULTIDEVICE_PHONE_HUB" desc="Text for search result item which, when clicked, navigates the user to Phone Hub settings, with a toggle to enable/disable the feature. Phone hub provides the user with information about their Android phone and allows the user to perform phone-side actions directly in the Chrome OS UI.">
     Phone Hub

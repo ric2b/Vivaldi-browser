@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "base/cxx17_backports.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/lock.h"
 #include "base/test/bind.h"
@@ -15,21 +16,104 @@
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "content/services/auction_worklet/public/mojom/bidder_worklet.mojom.h"
 #include "content/services/auction_worklet/worklet_devtools_debug_test_util.h"
 #include "content/services/auction_worklet/worklet_v8_debug_test_util.h"
 #include "gin/converter.h"
+#include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 #include "v8/include/v8-context.h"
 #include "v8/include/v8-forward.h"
+#include "v8/include/v8-wasm.h"
 
 using testing::ElementsAre;
 using testing::HasSubstr;
 using testing::StartsWith;
 
 namespace auction_worklet {
+
+// The bytes of a minimal WebAssembly module, courtesy of
+// v8/test/cctest/test-api-wasm.cc
+const char kMinimalWasmModuleBytes[] = {0x00, 0x61, 0x73, 0x6d,
+                                        0x01, 0x00, 0x00, 0x00};
+
+// ConnectDevToolsAgent takes an associated interface, which normally needs to
+// be passed through a different pipe to be usable.  The usual way of testing
+// this is by using BindNewEndpointAndPassDedicatedReceiver to force creation
+// of a new pipe.  Unfortunately, this doesn't appear to be compatible with how
+// our threads are setup.  So instead, we emulate how this would normally be
+// used: by call to a worklet, and just have a mock implementation that only
+// supports ConnectDevToolsAgent.
+class DebugConnector : public auction_worklet::mojom::BidderWorklet {
+ public:
+  // Expected to be run on V8 thread.
+  static void Create(
+      scoped_refptr<AuctionV8Helper> auction_v8_helper,
+      scoped_refptr<base::SequencedTaskRunner> mojo_thread,
+      scoped_refptr<AuctionV8Helper::DebugId> debug_id,
+      mojo::PendingReceiver<auction_worklet::mojom::BidderWorklet>
+          pending_receiver) {
+    DCHECK(auction_v8_helper->v8_runner()->RunsTasksInCurrentSequence());
+    auto instance = base::WrapUnique(
+        new DebugConnector(std::move(auction_v8_helper), std::move(mojo_thread),
+                           std::move(debug_id)));
+    mojo::MakeSelfOwnedReceiver(std::move(instance),
+                                std::move(pending_receiver));
+  }
+
+  void GenerateBid(
+      auction_worklet::mojom::BidderWorkletNonSharedParamsPtr
+          bidder_worklet_non_shared_params,
+      const absl::optional<std::string>& auction_signals_json,
+      const absl::optional<std::string>& per_buyer_signals_json,
+      const absl::optional<base::TimeDelta> per_buyer_timeout,
+      const url::Origin& seller_origin,
+      auction_worklet::mojom::BiddingBrowserSignalsPtr bidding_browser_signals,
+      base::Time auction_start_time,
+      GenerateBidCallback generate_bid_callback) override {
+    ADD_FAILURE() << "GenerateBid shouldn't be called on DebugConnector";
+  }
+
+  void ReportWin(const std::string& interest_group_name,
+                 const absl::optional<std::string>& auction_signals_json,
+                 const absl::optional<std::string>& per_buyer_signals_json,
+                 const std::string& seller_signals_json,
+                 const GURL& browser_signal_render_url,
+                 double browser_signal_bid,
+                 const url::Origin& browser_signal_seller_origin,
+                 uint32_t bidding_data_version,
+                 bool has_biding_data_version,
+                 ReportWinCallback report_win_callback) override {
+    ADD_FAILURE() << "ReportWin shouldn't be called on DebugConnector";
+  }
+
+  void SendPendingSignalsRequests() override {
+    ADD_FAILURE()
+        << "SendPendingSignalsRequests shouldn't be called on DebugConnector";
+  }
+
+  void ConnectDevToolsAgent(
+      mojo::PendingAssociatedReceiver<blink::mojom::DevToolsAgent>
+          agent_receiver) override {
+    auction_v8_helper_->ConnectDevToolsAgent(std::move(agent_receiver),
+                                             mojo_thread_, *debug_id_);
+  }
+
+ private:
+  DebugConnector(scoped_refptr<AuctionV8Helper> auction_v8_helper,
+                 scoped_refptr<base::SequencedTaskRunner> mojo_thread,
+                 scoped_refptr<AuctionV8Helper::DebugId> debug_id)
+      : auction_v8_helper_(std::move(auction_v8_helper)),
+        mojo_thread_(std::move(mojo_thread)),
+        debug_id_(std::move(debug_id)) {}
+
+  scoped_refptr<AuctionV8Helper> auction_v8_helper_;
+  scoped_refptr<base::SequencedTaskRunner> mojo_thread_;
+  scoped_refptr<AuctionV8Helper::DebugId> debug_id_;
+};
 
 class AuctionV8HelperTest : public testing::Test {
  public:
@@ -83,12 +167,13 @@ class AuctionV8HelperTest : public testing::Test {
               helper->MaybeTriggerInstrumentationBreakpoint(*debug_id, "start");
               helper->MaybeTriggerInstrumentationBreakpoint(*debug_id,
                                                             "start2");
-              bool success = helper
-                                 ->RunScript(context, script, debug_id.get(),
-                                             function_name,
-                                             base::span<v8::Local<v8::Value>>(),
-                                             error_msgs)
-                                 .ToLocal(&result);
+              bool success =
+                  helper
+                      ->RunScript(context, script, debug_id.get(),
+                                  function_name,
+                                  base::span<v8::Local<v8::Value>>(),
+                                  /*script_timeout=*/absl::nullopt, error_msgs)
+                      .ToLocal(&result);
               EXPECT_EQ(expect_success, success);
               if (result_out) {
                 // If the caller wants to look at *result_out (including to see
@@ -109,23 +194,47 @@ class AuctionV8HelperTest : public testing::Test {
             expect_success, std::move(done), result_out));
   }
 
-  void ConnectToDevToolsAgent(
+  bool CompileWasmOnV8ThreadAndWait(
       scoped_refptr<AuctionV8Helper::DebugId> debug_id,
-      mojo::PendingReceiver<blink::mojom::DevToolsAgent> agent_receiver) {
-    DCHECK(debug_id);
+      const GURL& url,
+      const std::string& body,
+      absl::optional<std::string>* error_out) {
+    bool success = false;
+    base::RunLoop run_loop;
     helper_->v8_runner()->PostTask(
         FROM_HERE,
         base::BindOnce(
             [](scoped_refptr<AuctionV8Helper> helper,
-               mojo::PendingReceiver<blink::mojom::DevToolsAgent>
-                   agent_receiver,
-               scoped_refptr<base::SequencedTaskRunner> mojo_thread,
-               scoped_refptr<AuctionV8Helper::DebugId> debug_id) {
-              helper->ConnectDevToolsAgent(std::move(agent_receiver),
-                                           std::move(mojo_thread), *debug_id);
+               scoped_refptr<AuctionV8Helper::DebugId> debug_id, GURL url,
+               std::string body, bool* success_out,
+               absl::optional<std::string>* error_out, base::OnceClosure done) {
+              AuctionV8Helper::FullIsolateScope isolate_scope(helper.get());
+              v8::Context::Scope ctx(helper->scratch_context());
+              *success_out =
+                  !helper->CompileWasm(body, url, debug_id.get(), *error_out)
+                       .IsEmpty();
+              std::move(done).Run();
             },
-            helper_, std::move(agent_receiver),
-            base::SequencedTaskRunnerHandle::Get(), std::move(debug_id)));
+            helper_, std::move(debug_id), url, body, &success, error_out,
+            run_loop.QuitClosure()));
+    run_loop.Run();
+    return success;
+  }
+
+  mojo::Remote<auction_worklet::mojom::BidderWorklet> ConnectToDevToolsAgent(
+      scoped_refptr<AuctionV8Helper::DebugId> debug_id,
+      mojo::PendingAssociatedReceiver<blink::mojom::DevToolsAgent>
+          agent_receiver) {
+    DCHECK(debug_id);
+    mojo::Remote<auction_worklet::mojom::BidderWorklet> connector_pipe;
+
+    helper_->v8_runner()->PostTask(
+        FROM_HERE, base::BindOnce(&DebugConnector::Create, helper_,
+                                  base::SequencedTaskRunnerHandle::Get(),
+                                  std::move(debug_id),
+                                  connector_pipe.BindNewPipeAndPassReceiver()));
+    connector_pipe->ConnectDevToolsAgent(std::move(agent_receiver));
+    return connector_pipe;
   }
 
  protected:
@@ -157,7 +266,8 @@ TEST_F(AuctionV8HelperTest, Basic) {
     ASSERT_TRUE(helper_
                     ->RunScript(context, script,
                                 /*debug_id=*/nullptr, "foo",
-                                base::span<v8::Local<v8::Value>>(), error_msgs)
+                                base::span<v8::Local<v8::Value>>(),
+                                /*script_timeout=*/absl::nullopt, error_msgs)
                     .ToLocal(&result));
     int int_result = 0;
     ASSERT_TRUE(gin::ConvertFromV8(helper_->isolate(), result, &int_result));
@@ -188,66 +298,88 @@ TEST_F(AuctionV8HelperTest, Timeout) {
         while(1);)",
        true}};
 
-  // Use a shorter timeout so test runs faster.
-  const base::TimeDelta kScriptTimeout = base::Milliseconds(20);
-  helper_->set_script_timeout_for_testing(kScriptTimeout);
+  struct Timeouts {
+    absl::optional<base::TimeDelta> script_timeout;
+    base::TimeDelta default_timeout;
+    bool test_default_timeout;
+  };
 
-  for (const HangingScript& hanging_script : kHangingScripts) {
-    base::TimeTicks start_time = base::TimeTicks::Now();
+  const Timeouts kTimeouts[] = {
+      // Test default timeout. Use a shorter default timeout so test runs
+      // faster.
+      {absl::nullopt, base::Milliseconds(20), true},
+
+      // Test `script_timeout` parameter of AuctionV8Helper::RunScript(). Use a
+      // very long default timeout, so that we know the parameter worked if the
+      // script timed out.
+      {base::Milliseconds(20), base::Days(100), false}};
+
+  for (const Timeouts& timeout : kTimeouts) {
+    helper_->set_script_timeout_for_testing(timeout.default_timeout);
+
+    for (const HangingScript& hanging_script : kHangingScripts) {
+      base::TimeTicks start_time = base::TimeTicks::Now();
+      v8::Local<v8::Context> context = helper_->CreateContext();
+      v8::Context::Scope context_scope(context);
+
+      v8::Local<v8::UnboundScript> script;
+      absl::optional<std::string> compile_error;
+      ASSERT_TRUE(helper_
+                      ->Compile(hanging_script.script,
+                                GURL("https://foo.test/"),
+                                /*debug_id=*/nullptr, compile_error)
+                      .ToLocal(&script));
+      EXPECT_EQ(compile_error, absl::nullopt);
+
+      std::vector<std::string> error_msgs;
+      v8::MaybeLocal<v8::Value> result =
+          helper_->RunScript(context, script, /*debug_id=*/nullptr, "foo",
+                             base::span<v8::Local<v8::Value>>(),
+                             timeout.script_timeout, error_msgs);
+      EXPECT_TRUE(result.IsEmpty());
+      EXPECT_THAT(
+          error_msgs,
+          ElementsAre(hanging_script.top_level_hangs
+                          ? "https://foo.test/ top-level execution timed out."
+                          : "https://foo.test/ execution of `foo` timed out."));
+
+      base::TimeDelta time_passed = timeout.test_default_timeout
+                                        ? timeout.default_timeout
+                                        : timeout.script_timeout.value();
+      // Make sure at least `time_passed` has passed, allowing for some time
+      // skew between change in base::TimeTicks::Now() and the timeout. This
+      // mostly serves to make sure the script timed out, instead of immediately
+      // terminating.
+      EXPECT_GE(base::TimeTicks::Now() - start_time,
+                time_passed - base::Milliseconds(10));
+    }
+
+    // Make sure it's still possible to run a script with the isolate after the
+    // timeouts.
     v8::Local<v8::Context> context = helper_->CreateContext();
     v8::Context::Scope context_scope(context);
-
     v8::Local<v8::UnboundScript> script;
     absl::optional<std::string> compile_error;
     ASSERT_TRUE(helper_
-                    ->Compile(hanging_script.script, GURL("https://foo.test/"),
+                    ->Compile("function foo() { return 1;}",
+                              GURL("https://foo.test/"),
                               /*debug_id=*/nullptr, compile_error)
                     .ToLocal(&script));
-    EXPECT_FALSE(compile_error.has_value());
+    EXPECT_EQ(compile_error, absl::nullopt);
 
     std::vector<std::string> error_msgs;
-    v8::MaybeLocal<v8::Value> result =
-        helper_->RunScript(context, script, /*debug_id=*/nullptr, "foo",
-                           base::span<v8::Local<v8::Value>>(), error_msgs);
-    EXPECT_TRUE(result.IsEmpty());
-    EXPECT_THAT(
-        error_msgs,
-        ElementsAre(hanging_script.top_level_hangs
-                        ? "https://foo.test/ top-level execution timed out."
-                        : "https://foo.test/ execution of `foo` timed out."));
-
-    // Make sure at least `kScriptTimeout` has passed, allowing for some time
-    // skew between change in base::TimeTicks::Now() and the timeout. This
-    // mostly serves to make sure the script timed out, instead of immediately
-    // terminating.
-    EXPECT_GE(base::TimeTicks::Now() - start_time,
-              kScriptTimeout - base::Milliseconds(10));
+    v8::Local<v8::Value> result;
+    ASSERT_TRUE(helper_
+                    ->RunScript(context, script,
+                                /*debug_id=*/nullptr, "foo",
+                                base::span<v8::Local<v8::Value>>(),
+                                /*script_timeout=*/absl::nullopt, error_msgs)
+                    .ToLocal(&result));
+    EXPECT_TRUE(error_msgs.empty());
+    int int_result = 0;
+    ASSERT_TRUE(gin::ConvertFromV8(helper_->isolate(), result, &int_result));
+    EXPECT_EQ(1, int_result);
   }
-
-  // Make sure it's still possible to run a script with the isolate after the
-  // timeouts.
-  v8::Local<v8::Context> context = helper_->CreateContext();
-  v8::Context::Scope context_scope(context);
-  v8::Local<v8::UnboundScript> script;
-  absl::optional<std::string> compile_error;
-  ASSERT_TRUE(helper_
-                  ->Compile("function foo() { return 1;}",
-                            GURL("https://foo.test/"),
-                            /*debug_id=*/nullptr, compile_error)
-                  .ToLocal(&script));
-  EXPECT_FALSE(compile_error.has_value());
-
-  std::vector<std::string> error_msgs;
-  v8::Local<v8::Value> result;
-  ASSERT_TRUE(helper_
-                  ->RunScript(context, script,
-                              /*debug_id=*/nullptr, "foo",
-                              base::span<v8::Local<v8::Value>>(), error_msgs)
-                  .ToLocal(&result));
-  EXPECT_TRUE(error_msgs.empty());
-  int int_result = 0;
-  ASSERT_TRUE(gin::ConvertFromV8(helper_->isolate(), result, &int_result));
-  EXPECT_EQ(1, int_result);
 }
 
 // Make sure the when CreateContext() is used, there's no access to the time,
@@ -269,7 +401,8 @@ TEST_F(AuctionV8HelperTest, NoTime) {
   EXPECT_TRUE(helper_
                   ->RunScript(context, script,
                               /*debug_id=*/nullptr, "foo",
-                              base::span<v8::Local<v8::Value>>(), error_msgs)
+                              base::span<v8::Local<v8::Value>>(),
+                              /*script_timeout=*/absl::nullopt, error_msgs)
                   .IsEmpty());
   ASSERT_EQ(1u, error_msgs.size());
   EXPECT_THAT(error_msgs[0], StartsWith("https://foo.test/:1"));
@@ -312,7 +445,8 @@ TEST_F(AuctionV8HelperTest, RunErrorTopLevel) {
   ASSERT_FALSE(helper_
                    ->RunScript(context, script,
                                /*debug_id=*/nullptr, "foo",
-                               base::span<v8::Local<v8::Value>>(), error_msgs)
+                               base::span<v8::Local<v8::Value>>(),
+                               /*script_timeout=*/absl::nullopt, error_msgs)
                    .ToLocal(&result));
   EXPECT_THAT(
       error_msgs,
@@ -341,7 +475,8 @@ TEST_F(AuctionV8HelperTest, TargetFunctionNotFound) {
   ASSERT_FALSE(helper_
                    ->RunScript(context, script,
                                /*debug_id=*/nullptr, "bar",
-                               base::span<v8::Local<v8::Value>>(), error_msgs)
+                               base::span<v8::Local<v8::Value>>(),
+                               /*script_timeout=*/absl::nullopt, error_msgs)
                    .ToLocal(&result));
 
   // This "not a function" and not "not found" since the lookup successfully
@@ -371,7 +506,8 @@ TEST_F(AuctionV8HelperTest, TargetFunctionError) {
   ASSERT_FALSE(helper_
                    ->RunScript(context, script,
                                /*debug_id=*/nullptr, "foo",
-                               base::span<v8::Local<v8::Value>>(), error_msgs)
+                               base::span<v8::Local<v8::Value>>(),
+                               /*script_timeout=*/absl::nullopt, error_msgs)
                    .ToLocal(&result));
   ASSERT_EQ(1u, error_msgs.size());
 
@@ -380,49 +516,112 @@ TEST_F(AuctionV8HelperTest, TargetFunctionError) {
   EXPECT_THAT(error_msgs[0], HasSubstr("notfound"));
 }
 
-TEST_F(AuctionV8HelperTest, LogThenError) {
+TEST_F(AuctionV8HelperTest, ConsoleLog) {
+  // Console log output is reported by V8 via debugging channels.
+  // Need to use a separate thread for debugger stuff.
+  v8_scope_.reset();
+  helper_ = AuctionV8Helper::Create(AuctionV8Helper::CreateTaskRunner());
+  ScopedInspectorSupport inspector_support(helper_.get());
+
+  auto id = base::MakeRefCounted<AuctionV8Helper::DebugId>(helper_.get());
+  TestChannel* channel =
+      inspector_support.ConnectDebuggerSession(id->context_group_id());
+  channel->RunCommandAndWaitForResult(
+      1, "Runtime.enable", R"({"id":1,"method":"Runtime.enable","params":{}})");
+  channel->RunCommandAndWaitForResult(
+      2, "Debugger.enable",
+      R"({"id":2,"method":"Debugger.enable","params":{}})");
+
   const char kScript[] = R"(
     console.debug('debug is there');
-    console.error('error is also there');
 
     function foo() {
-      console.info('info too');
-      console.log('can', 'log', 'multiple', 'things');
-      console.warn('conversions?', true);
-      console.table('not the fancier stuff, though');
+      console.log('can', 'log', 'multiple', 'things', true);
+      console.table('even table!');
     }
   )";
 
-  v8::Local<v8::UnboundScript> script;
+  base::RunLoop run_loop;
+  CompileAndRunScriptOnV8Thread(id, "foo", GURL("https://foo.test/"), kScript,
+                                /*expect_success=*/true,
+                                run_loop.QuitClosure());
+  run_loop.Run();
+
   {
-    v8::Context::Scope ctx(helper_->scratch_context());
-    absl::optional<std::string> error_msg;
-    ASSERT_TRUE(helper_
-                    ->Compile(kScript, GURL("https://foo.test/"),
-                              /*debug_id=*/nullptr, error_msg)
-                    .ToLocal(&script));
-    EXPECT_FALSE(error_msg.has_value());
+    TestChannel::Event message =
+        channel->WaitForMethodNotification("Runtime.consoleAPICalled");
+    const std::string* type = message.value.FindStringPath("params.type");
+    ASSERT_TRUE(type);
+    EXPECT_EQ("debug", *type);
+    const base::Value* args = message.value.FindListPath("params.args");
+    ASSERT_TRUE(args);
+    ASSERT_EQ(1u, args->GetListDeprecated().size());
+    EXPECT_EQ("string", *args->GetListDeprecated()[0].FindStringKey("type"));
+    EXPECT_EQ("debug is there",
+              *args->GetListDeprecated()[0].FindStringKey("value"));
+    const base::Value* stack_trace =
+        message.value.FindListPath("params.stackTrace.callFrames");
+    ASSERT_EQ(1u, stack_trace->GetListDeprecated().size());
+    EXPECT_EQ(
+        "", *stack_trace->GetListDeprecated()[0].FindStringKey("functionName"));
+    EXPECT_EQ("https://foo.test/",
+              *stack_trace->GetListDeprecated()[0].FindStringKey("url"));
+    EXPECT_EQ(1, *stack_trace->GetListDeprecated()[0].FindIntKey("lineNumber"));
   }
 
-  v8::Local<v8::Context> context = helper_->CreateContext();
+  {
+    TestChannel::Event message =
+        channel->WaitForMethodNotification("Runtime.consoleAPICalled");
+    const std::string* type = message.value.FindStringPath("params.type");
+    ASSERT_TRUE(type);
+    EXPECT_EQ("log", *type);
+    const base::Value* args = message.value.FindListPath("params.args");
+    ASSERT_TRUE(args);
+    ASSERT_EQ(5u, args->GetListDeprecated().size());
+    EXPECT_EQ("string", *args->GetListDeprecated()[0].FindStringKey("type"));
+    EXPECT_EQ("can", *args->GetListDeprecated()[0].FindStringKey("value"));
+    EXPECT_EQ("string", *args->GetListDeprecated()[1].FindStringKey("type"));
+    EXPECT_EQ("log", *args->GetListDeprecated()[1].FindStringKey("value"));
+    EXPECT_EQ("string", *args->GetListDeprecated()[2].FindStringKey("type"));
+    EXPECT_EQ("multiple", *args->GetListDeprecated()[2].FindStringKey("value"));
+    EXPECT_EQ("string", *args->GetListDeprecated()[3].FindStringKey("type"));
+    EXPECT_EQ("things", *args->GetListDeprecated()[3].FindStringKey("value"));
+    EXPECT_EQ("boolean", *args->GetListDeprecated()[4].FindStringKey("type"));
+    EXPECT_EQ(true, *args->GetListDeprecated()[4].FindBoolKey("value"));
 
-  std::vector<std::string> error_msgs;
-  v8::Context::Scope ctx(context);
-  v8::Local<v8::Value> result;
-  ASSERT_FALSE(helper_
-                   ->RunScript(context, script,
-                               /*debug_id=*/nullptr, "foo",
-                               base::span<v8::Local<v8::Value>>(), error_msgs)
-                   .ToLocal(&result));
-  ASSERT_EQ(error_msgs.size(), 6u);
-  EXPECT_EQ("https://foo.test/ [Debug]: debug is there", error_msgs[0]);
-  EXPECT_EQ("https://foo.test/ [Error]: error is also there", error_msgs[1]);
-  EXPECT_EQ("https://foo.test/ [Info]: info too", error_msgs[2]);
-  EXPECT_EQ("https://foo.test/ [Log]: can log multiple things", error_msgs[3]);
-  EXPECT_EQ("https://foo.test/ [Warn]: conversions? true", error_msgs[4]);
-  EXPECT_THAT(error_msgs[5], StartsWith("https://foo.test/:9"));
-  EXPECT_THAT(error_msgs[5], HasSubstr("TypeError"));
-  EXPECT_THAT(error_msgs[5], HasSubstr("table"));
+    const base::Value* stack_trace =
+        message.value.FindListPath("params.stackTrace.callFrames");
+    ASSERT_EQ(1u, stack_trace->GetListDeprecated().size());
+    EXPECT_EQ("foo", *stack_trace->GetListDeprecated()[0].FindStringKey(
+                         "functionName"));
+    EXPECT_EQ("https://foo.test/",
+              *stack_trace->GetListDeprecated()[0].FindStringKey("url"));
+    EXPECT_EQ(4, *stack_trace->GetListDeprecated()[0].FindIntKey("lineNumber"));
+  }
+
+  {
+    TestChannel::Event message =
+        channel->WaitForMethodNotification("Runtime.consoleAPICalled");
+    const std::string* type = message.value.FindStringPath("params.type");
+    ASSERT_TRUE(type);
+    EXPECT_EQ("table", *type);
+    const base::Value* args = message.value.FindListPath("params.args");
+    ASSERT_TRUE(args);
+    ASSERT_EQ(1u, args->GetListDeprecated().size());
+    EXPECT_EQ("string", *args->GetListDeprecated()[0].FindStringKey("type"));
+    EXPECT_EQ("even table!",
+              *args->GetListDeprecated()[0].FindStringKey("value"));
+    const base::Value* stack_trace =
+        message.value.FindListPath("params.stackTrace.callFrames");
+    ASSERT_EQ(1u, stack_trace->GetListDeprecated().size());
+    EXPECT_EQ("foo", *stack_trace->GetListDeprecated()[0].FindStringKey(
+                         "functionName"));
+    EXPECT_EQ("https://foo.test/",
+              *stack_trace->GetListDeprecated()[0].FindStringKey("url"));
+    EXPECT_EQ(5, *stack_trace->GetListDeprecated()[0].FindIntKey("lineNumber"));
+  }
+
+  id->AbortDebuggerPauses();
 }
 
 TEST_F(AuctionV8HelperTest, FormatScriptName) {
@@ -647,8 +846,9 @@ TEST_F(AuctionV8HelperTest, DevToolsDebuggerBasics) {
 
     auto id = base::MakeRefCounted<AuctionV8Helper::DebugId>(helper_.get());
 
-    mojo::Remote<blink::mojom::DevToolsAgent> agent_remote;
-    ConnectToDevToolsAgent(id, agent_remote.BindNewPipeAndPassReceiver());
+    mojo::AssociatedRemote<blink::mojom::DevToolsAgent> agent_remote;
+    auto connector = ConnectToDevToolsAgent(
+        id, agent_remote.BindNewEndpointAndPassReceiver());
 
     TestDevToolsAgentClient debug_client(std::move(agent_remote), kSession,
                                          use_binary_protocol);
@@ -699,7 +899,7 @@ TEST_F(AuctionV8HelperTest, DevToolsDebuggerBasics) {
         breakpoint_hit.value.FindListPath("params.hitBreakpoints");
     ASSERT_TRUE(hit_breakpoints);
     base::Value::ConstListView hit_breakpoints_list =
-        hit_breakpoints->GetList();
+        hit_breakpoints->GetListDeprecated();
     ASSERT_EQ(1u, hit_breakpoints_list.size());
     ASSERT_TRUE(hit_breakpoints_list[0].is_string());
     EXPECT_EQ("1:2:0:https://example.com/test.js",
@@ -757,8 +957,9 @@ TEST_F(AuctionV8HelperTest, DevToolsAgentDebuggerInstrumentationBreakpoint) {
 
       auto id = base::MakeRefCounted<AuctionV8Helper::DebugId>(helper_.get());
 
-      mojo::Remote<blink::mojom::DevToolsAgent> agent_remote;
-      ConnectToDevToolsAgent(id, agent_remote.BindNewPipeAndPassReceiver());
+      mojo::AssociatedRemote<blink::mojom::DevToolsAgent> agent_remote;
+      auto connector = ConnectToDevToolsAgent(
+          id, agent_remote.BindNewEndpointAndPassReceiver());
 
       TestDevToolsAgentClient debug_client(std::move(agent_remote), kSession,
                                            use_binary_protocol);
@@ -811,7 +1012,7 @@ TEST_F(AuctionV8HelperTest, DevToolsAgentDebuggerInstrumentationBreakpoint) {
         const base::Value* reasons =
             breakpoint_hit.value.FindListPath("params.data.reasons");
         ASSERT_TRUE(reasons);
-        base::Value::ConstListView reasons_list = reasons->GetList();
+        base::Value::ConstListView reasons_list = reasons->GetListDeprecated();
         ASSERT_EQ(2u, reasons_list.size());
         ASSERT_TRUE(reasons_list[0].is_dict());
         ASSERT_TRUE(reasons_list[1].is_dict());
@@ -869,8 +1070,9 @@ TEST_F(AuctionV8HelperTest, DevToolsDebuggerInvalidCommand) {
 
     auto id = base::MakeRefCounted<AuctionV8Helper::DebugId>(helper_.get());
 
-    mojo::Remote<blink::mojom::DevToolsAgent> agent_remote;
-    ConnectToDevToolsAgent(id, agent_remote.BindNewPipeAndPassReceiver());
+    mojo::AssociatedRemote<blink::mojom::DevToolsAgent> agent_remote;
+    auto connector = ConnectToDevToolsAgent(
+        id, agent_remote.BindNewEndpointAndPassReceiver());
 
     TestDevToolsAgentClient debug_client(std::move(agent_remote), kSession,
                                          use_binary_protocol);
@@ -894,8 +1096,9 @@ TEST_F(AuctionV8HelperTest, DevToolsDeleteSessionPipeLate) {
 
   auto id = base::MakeRefCounted<AuctionV8Helper::DebugId>(helper_.get());
 
-  mojo::Remote<blink::mojom::DevToolsAgent> agent_remote;
-  ConnectToDevToolsAgent(id, agent_remote.BindNewPipeAndPassReceiver());
+  mojo::AssociatedRemote<blink::mojom::DevToolsAgent> agent_remote;
+  auto connector =
+      ConnectToDevToolsAgent(id, agent_remote.BindNewEndpointAndPassReceiver());
 
   TestDevToolsAgentClient debug_client(std::move(agent_remote), kSession,
                                        use_binary_protocol);
@@ -941,8 +1144,9 @@ TEST_F(MockTimeAuctionV8HelperTest, TimelimitDebug) {
   helper_ = AuctionV8Helper::Create(AuctionV8Helper::CreateTaskRunner());
 
   auto id = base::MakeRefCounted<AuctionV8Helper::DebugId>(helper_.get());
-  mojo::Remote<blink::mojom::DevToolsAgent> agent_remote;
-  ConnectToDevToolsAgent(id, agent_remote.BindNewPipeAndPassReceiver());
+  mojo::AssociatedRemote<blink::mojom::DevToolsAgent> agent_remote;
+  auto connector =
+      ConnectToDevToolsAgent(id, agent_remote.BindNewEndpointAndPassReceiver());
 
   TestDevToolsAgentClient debug_client(std::move(agent_remote), kSession,
                                        /*use_binary_protocol=*/true);
@@ -1009,8 +1213,9 @@ TEST_F(AuctionV8HelperTest, DebugTimeout) {
   helper_ = AuctionV8Helper::Create(AuctionV8Helper::CreateTaskRunner());
 
   auto id = base::MakeRefCounted<AuctionV8Helper::DebugId>(helper_.get());
-  mojo::Remote<blink::mojom::DevToolsAgent> agent_remote;
-  ConnectToDevToolsAgent(id, agent_remote.BindNewPipeAndPassReceiver());
+  mojo::AssociatedRemote<blink::mojom::DevToolsAgent> agent_remote;
+  auto connector =
+      ConnectToDevToolsAgent(id, agent_remote.BindNewEndpointAndPassReceiver());
 
   TestDevToolsAgentClient debug_client(std::move(agent_remote), kSession,
                                        /*use_binary_protocol=*/false);
@@ -1053,6 +1258,157 @@ TEST_F(AuctionV8HelperTest, DebugTimeout) {
   result_run_loop.Run();
   EXPECT_EQ(-1, result);
   id->AbortDebuggerPauses();
+}
+
+TEST_F(AuctionV8HelperTest, CompileWasm) {
+  v8::Local<v8::Context> context = helper_->CreateContext();
+  v8::Context::Scope context_scope(context);
+
+  v8::Local<v8::WasmModuleObject> wasm_module;
+  absl::optional<std::string> compile_error;
+  ASSERT_TRUE(
+      helper_
+          ->CompileWasm(std::string(kMinimalWasmModuleBytes,
+                                    base::size(kMinimalWasmModuleBytes)),
+                        GURL("https://foo.test/"),
+                        /*debug_id=*/nullptr, compile_error)
+          .ToLocal(&wasm_module));
+  EXPECT_FALSE(compile_error.has_value());
+}
+
+TEST_F(AuctionV8HelperTest, CompileWasmError) {
+  v8::Local<v8::Context> context = helper_->CreateContext();
+  v8::Context::Scope context_scope(context);
+
+  v8::Local<v8::WasmModuleObject> wasm_module;
+  absl::optional<std::string> compile_error;
+  EXPECT_FALSE(helper_
+                   ->CompileWasm("not wasm", GURL("https://foo.test/"),
+                                 /*debug_id=*/nullptr, compile_error)
+                   .ToLocal(&wasm_module));
+  ASSERT_TRUE(compile_error.has_value());
+  EXPECT_THAT(compile_error.value(), StartsWith("https://foo.test/ "));
+  EXPECT_THAT(compile_error.value(),
+              HasSubstr("Uncaught CompileError: WasmModuleObject::Compile"));
+}
+
+TEST_F(AuctionV8HelperTest, CompileWasmDebug) {
+  const char kSession[] = "123-456";
+  // Need to use a separate thread for debugger stuff.
+  v8_scope_.reset();
+  helper_ = AuctionV8Helper::Create(AuctionV8Helper::CreateTaskRunner());
+
+  auto id = base::MakeRefCounted<AuctionV8Helper::DebugId>(helper_.get());
+
+  mojo::AssociatedRemote<blink::mojom::DevToolsAgent> agent_remote;
+  auto connector =
+      ConnectToDevToolsAgent(id, agent_remote.BindNewEndpointAndPassReceiver());
+
+  TestDevToolsAgentClient debug_client(std::move(agent_remote), kSession,
+                                       /*use_binary_protocol=*/false);
+
+  debug_client.RunCommandAndWaitForResult(
+      TestDevToolsAgentClient::Channel::kMain, 1, "Runtime.enable",
+      R"({"id":1,"method":"Runtime.enable","params":{}})");
+  debug_client.RunCommandAndWaitForResult(
+      TestDevToolsAgentClient::Channel::kMain, 2, "Debugger.enable",
+      R"({"id":2,"method":"Debugger.enable","params":{}})");
+
+  absl::optional<std::string> error_out;
+  EXPECT_TRUE(CompileWasmOnV8ThreadAndWait(
+      id, GURL("https://example.com"),
+      std::string(kMinimalWasmModuleBytes, base::size(kMinimalWasmModuleBytes)),
+      &error_out));
+  TestDevToolsAgentClient::Event script_parsed =
+      debug_client.WaitForMethodNotification("Debugger.scriptParsed");
+  const std::string* lang =
+      script_parsed.value.FindStringPath("params.scriptLanguage");
+  ASSERT_TRUE(lang);
+  EXPECT_EQ(*lang, "WebAssembly");
+
+  debug_client.WaitForMethodNotification("Runtime.executionContextDestroyed");
+  id->AbortDebuggerPauses();
+}
+
+TEST_F(AuctionV8HelperTest, CloneWasmModule) {
+  // Test proper CloneWasmModule() usage to prevent state persistence via
+  // WASM Module objects.
+
+  const char kScript[] = R"(
+    function probe(moduleObject) {
+      var result = moduleObject.weirdField ? moduleObject.weirdField : -1;
+      moduleObject.weirdField = 5;
+      return result;
+    }
+  )";
+
+  v8::Local<v8::Context> context = helper_->CreateContext();
+  v8::Context::Scope context_scope(context);
+
+  // Compile the WASM module...
+  v8::Local<v8::WasmModuleObject> wasm_module;
+  absl::optional<std::string> error_msg;
+  ASSERT_TRUE(
+      helper_
+          ->CompileWasm(std::string(kMinimalWasmModuleBytes,
+                                    base::size(kMinimalWasmModuleBytes)),
+                        GURL("https://foo.test/"),
+                        /*debug_id=*/nullptr, error_msg)
+          .ToLocal(&wasm_module));
+  EXPECT_FALSE(error_msg.has_value());
+
+  // And the test script.
+  v8::Local<v8::UnboundScript> script;
+  ASSERT_TRUE(helper_
+                  ->Compile(kScript, GURL("https://foo.test/"),
+                            /*debug_id=*/nullptr, error_msg)
+                  .ToLocal(&script));
+  EXPECT_FALSE(error_msg.has_value());
+
+  // Run the script a couple of times passing in the same module.
+  std::vector<v8::Local<v8::Value>> args;
+  args.push_back(wasm_module);
+  v8::Local<v8::Value> result;
+  std::vector<std::string> error_msgs;
+  ASSERT_TRUE(helper_
+                  ->RunScript(context, script,
+                              /*debug_id=*/nullptr, "probe", args,
+                              /*script_timeout=*/absl::nullopt, error_msgs)
+                  .ToLocal(&result));
+  EXPECT_TRUE(error_msgs.empty());
+  int int_result = 0;
+  ASSERT_TRUE(gin::ConvertFromV8(helper_->isolate(), result, &int_result));
+  EXPECT_EQ(-1, int_result);
+
+  ASSERT_TRUE(helper_
+                  ->RunScript(context, script,
+                              /*debug_id=*/nullptr, "probe", args,
+                              /*script_timeout=*/absl::nullopt, error_msgs)
+                  .ToLocal(&result));
+  EXPECT_TRUE(error_msgs.empty());
+  ASSERT_TRUE(gin::ConvertFromV8(helper_->isolate(), result, &int_result));
+  EXPECT_EQ(5, int_result);
+
+  // Nothing stick arounds if CloneWasmModule is consistently used, however.
+  args[0] = helper_->CloneWasmModule(wasm_module).ToLocalChecked();
+  ASSERT_TRUE(helper_
+                  ->RunScript(context, script,
+                              /*debug_id=*/nullptr, "probe", args,
+                              /*script_timeout=*/absl::nullopt, error_msgs)
+                  .ToLocal(&result));
+  EXPECT_TRUE(error_msgs.empty());
+  ASSERT_TRUE(gin::ConvertFromV8(helper_->isolate(), result, &int_result));
+  EXPECT_EQ(-1, int_result);
+
+  args[0] = helper_->CloneWasmModule(wasm_module).ToLocalChecked();
+  ASSERT_TRUE(helper_
+                  ->RunScript(context, script,
+                              /*debug_id=*/nullptr, "probe", args,
+                              /*script_timeout=*/absl::nullopt, error_msgs)
+                  .ToLocal(&result));
+  EXPECT_TRUE(error_msgs.empty());
+  ASSERT_TRUE(gin::ConvertFromV8(helper_->isolate(), result, &int_result));
+  EXPECT_EQ(-1, int_result);
 }
 
 }  // namespace auction_worklet

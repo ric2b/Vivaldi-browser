@@ -24,6 +24,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/views/controls/image_view.h"
+#include "ui/views/controls/textarea/textarea.h"
 #include "ui/views/controls/throbber.h"
 #include "ui/views/test/ax_event_counter.h"
 
@@ -175,7 +176,7 @@ class ContentAnalysisDialogBehaviorBrowserTest
     EXPECT_FALSE(dialog_updated_);
 
     // TODO(crbug/1131565): Re-enable this for Mac.
-#if !defined(OS_MAC)
+#if !BUILDFLAG(IS_MAC)
     // The dialog being updated implies an accessibility alert is sent.
     EXPECT_EQ(ax_events_count_when_first_shown_ + 1,
               ax_event_counter_.GetCount(ax::mojom::Event::kAlert));
@@ -349,8 +350,14 @@ class ContentAnalysisDialogAppearanceBrowserTest
     // The dialog initially shows the pending message for the appropriate access
     // point and scan type.
     std::u16string pending_message = dialog->GetMessageForTesting()->GetText();
-    std::u16string expected_message = l10n_util::GetPluralStringFUTF16(
-        IDS_DEEP_SCANNING_DIALOG_UPLOAD_PENDING_MESSAGE, file_scan() ? 1 : 0);
+    std::u16string expected_message;
+    if (access_point() == safe_browsing::DeepScanAccessPoint::PRINT) {
+      expected_message = l10n_util::GetStringUTF16(
+          IDS_DEEP_SCANNING_DIALOG_PRINT_PENDING_MESSAGE);
+    } else {
+      expected_message = l10n_util::GetPluralStringFUTF16(
+          IDS_DEEP_SCANNING_DIALOG_UPLOAD_PENDING_MESSAGE, file_scan() ? 1 : 0);
+    }
     ASSERT_EQ(pending_message, expected_message);
 
     // The top image is the pending one corresponding to the access point.
@@ -392,6 +399,12 @@ class ContentAnalysisDialogAppearanceBrowserTest
   }
 
   virtual std::u16string GetExpectedMessage() {
+    if (access_point() == safe_browsing::DeepScanAccessPoint::PRINT) {
+      return success() ? l10n_util::GetStringUTF16(
+                             IDS_DEEP_SCANNING_DIALOG_PRINT_SUCCESS_MESSAGE)
+                       : l10n_util::GetStringUTF16(
+                             IDS_DEEP_SCANNING_DIALOG_PRINT_WARNING_MESSAGE);
+    }
     int files_count = file_scan() ? 1 : 0;
     return success()
                ? l10n_util::GetPluralStringFUTF16(
@@ -422,6 +435,13 @@ class ContentAnalysisDialogCustomMessageAppearanceBrowserTest
     : public ContentAnalysisDialogAppearanceBrowserTest {
  private:
   std::u16string GetExpectedMessage() override {
+    if (access_point() == safe_browsing::DeepScanAccessPoint::PRINT) {
+      return success() ? l10n_util::GetStringUTF16(
+                             IDS_DEEP_SCANNING_DIALOG_PRINT_SUCCESS_MESSAGE)
+                       : l10n_util::GetStringFUTF16(
+                             IDS_DEEP_SCANNING_DIALOG_CUSTOM_MESSAGE,
+                             u"Custom message");
+    }
     int files_count = file_scan() ? 1 : 0;
     return success()
                ? l10n_util::GetPluralStringFUTF16(
@@ -656,7 +676,8 @@ INSTANTIATE_TEST_SUITE_P(
         /*access_point=*/
         testing::Values(safe_browsing::DeepScanAccessPoint::UPLOAD,
                         safe_browsing::DeepScanAccessPoint::DRAG_AND_DROP,
-                        safe_browsing::DeepScanAccessPoint::PASTE)));
+                        safe_browsing::DeepScanAccessPoint::PASTE,
+                        safe_browsing::DeepScanAccessPoint::PRINT)));
 
 IN_PROC_BROWSER_TEST_P(ContentAnalysisDialogCustomMessageAppearanceBrowserTest,
                        Test) {
@@ -715,7 +736,8 @@ INSTANTIATE_TEST_SUITE_P(
         /*access_point=*/
         testing::Values(safe_browsing::DeepScanAccessPoint::UPLOAD,
                         safe_browsing::DeepScanAccessPoint::DRAG_AND_DROP,
-                        safe_browsing::DeepScanAccessPoint::PASTE)));
+                        safe_browsing::DeepScanAccessPoint::PASTE,
+                        safe_browsing::DeepScanAccessPoint::PRINT)));
 
 class ContentAnalysisDialogPlainTests : public InProcessBrowserTest {
  public:
@@ -727,7 +749,8 @@ class ContentAnalysisDialogPlainTests : public InProcessBrowserTest {
   class MockDelegate : public ContentAnalysisDelegateBase {
    public:
     ~MockDelegate() override = default;
-    void BypassWarnings() override {}
+    void BypassWarnings(
+        absl::optional<std::u16string> user_justification) override {}
     void Cancel(bool warning) override {}
 
     absl::optional<std::u16string> GetCustomMessage() const override {
@@ -738,9 +761,24 @@ class ContentAnalysisDialogPlainTests : public InProcessBrowserTest {
       return absl::nullopt;
     }
 
+    bool BypassRequiresJustification() const override {
+      return bypass_requires_justification_;
+    }
+
+    std::u16string GetBypassJustificationLabel() const override {
+      return u"MOCK_BYPASS_JUSTIFICATION_LABEL";
+    }
+
     absl::optional<std::u16string> OverrideCancelButtonText() const override {
       return absl::nullopt;
     }
+
+    void SetBypassRequiresJustification(bool value) {
+      bypass_requires_justification_ = value;
+    }
+
+   private:
+    bool bypass_requires_justification_ = false;
   };
 
   class MockCustomMessageDelegate : public ContentAnalysisDelegateBase {
@@ -750,7 +788,8 @@ class ContentAnalysisDialogPlainTests : public InProcessBrowserTest {
 
     ~MockCustomMessageDelegate() override = default;
 
-    void BypassWarnings() override {}
+    void BypassWarnings(
+        absl::optional<std::u16string> user_justification) override {}
     void Cancel(bool warning) override {}
 
     absl::optional<std::u16string> GetCustomMessage() const override {
@@ -759,6 +798,11 @@ class ContentAnalysisDialogPlainTests : public InProcessBrowserTest {
 
     absl::optional<GURL> GetCustomLearnMoreUrl() const override {
       return learn_more_url_;
+    }
+
+    bool BypassRequiresJustification() const override { return false; }
+    std::u16string GetBypassJustificationLabel() const override {
+      return u"MOCK_BYPASS_JUSTIFICATION_LABEL";
     }
 
     absl::optional<std::u16string> OverrideCancelButtonText() const override {
@@ -805,7 +849,46 @@ IN_PROC_BROWSER_TEST_F(ContentAnalysisDialogPlainTests, TestCustomMessage) {
       std::move(delegate), ContentAnalysisDelegateBase::FinalResult::SUCCESS);
   dialog->ShowResult(ContentAnalysisDelegateBase::FinalResult::WARNING);
 
+  EXPECT_TRUE(dialog->IsDialogButtonEnabled(ui::DIALOG_BUTTON_OK));
   EXPECT_EQ(dialog->GetMessageForTesting()->GetText(), u"Test");
+}
+
+IN_PROC_BROWSER_TEST_F(ContentAnalysisDialogPlainTests,
+                       TestBypassJustification) {
+  enterprise_connectors::ContentAnalysisDialog::
+      SetMinimumPendingDialogTimeForTesting(base::Milliseconds(0));
+
+  std::unique_ptr<MockDelegate> delegate = std::make_unique<MockDelegate>();
+  delegate->SetBypassRequiresJustification(true);
+  ContentAnalysisDialog* dialog = CreateContentAnalysisDialog(
+      std::move(delegate), ContentAnalysisDelegateBase::FinalResult::SUCCESS);
+  dialog->ShowResult(ContentAnalysisDelegateBase::FinalResult::WARNING);
+
+  EXPECT_FALSE(dialog->IsDialogButtonEnabled(ui::DIALOG_BUTTON_OK));
+  dialog->GetBypassJustificationTextareaForTesting()->InsertOrReplaceText(
+      u"test");
+  EXPECT_TRUE(dialog->IsDialogButtonEnabled(ui::DIALOG_BUTTON_OK));
+}
+
+IN_PROC_BROWSER_TEST_F(ContentAnalysisDialogPlainTests,
+                       TestBypassJustificationTooLongDisablesBypassButton) {
+  enterprise_connectors::ContentAnalysisDialog::
+      SetMinimumPendingDialogTimeForTesting(base::Milliseconds(0));
+
+  std::unique_ptr<MockDelegate> delegate = std::make_unique<MockDelegate>();
+  delegate->SetBypassRequiresJustification(true);
+  ContentAnalysisDialog* dialog = CreateContentAnalysisDialog(
+      std::move(delegate), ContentAnalysisDelegateBase::FinalResult::SUCCESS);
+  dialog->ShowResult(ContentAnalysisDelegateBase::FinalResult::WARNING);
+
+  EXPECT_FALSE(dialog->IsDialogButtonEnabled(ui::DIALOG_BUTTON_OK));
+  dialog->GetBypassJustificationTextareaForTesting()->InsertOrReplaceText(
+      u"This is a very long string. In fact, it is over two hundred characters "
+      u"long because that is the maximum length of a bypass justification that "
+      u"can be entered by a user. When the justification is this long, the "
+      u"user will not be able to submit it. The maximum length just happens to "
+      u"be the same as a popular bird-based service's character limit.");
+  EXPECT_FALSE(dialog->IsDialogButtonEnabled(ui::DIALOG_BUTTON_OK));
 }
 
 IN_PROC_BROWSER_TEST_F(ContentAnalysisDialogPlainTests,

@@ -63,9 +63,7 @@
   // WebContentsDelegate
   void ShowRepostFormWarningDialog(content::WebContents* source) override;
   content::PictureInPictureResult EnterPictureInPicture(
-      content::WebContents* web_contents,
-      const viz::SurfaceId&,
-      const gfx::Size& natural_size) override;
+      content::WebContents* web_contents) override;
   void ExitPictureInPicture() override;
   std::unique_ptr<content::EyeDropper> OpenEyeDropper(
       content::RenderFrameHost* frame,
@@ -110,7 +108,7 @@
   // vivaldi addition:
   bool IsMouseGesturesEnabled() const;
 
-  void VivaldiSetLoadProgressEventExtraArgs(base::Value& dictionary);
+  void VivaldiSetLoadProgressEventExtraArgs(base::Value::Dict& dictionary);
 
   bool is_fullscreen_;
   ui::WindowShowState window_state_prior_to_fullscreen_ = ui::SHOW_STATE_NORMAL;

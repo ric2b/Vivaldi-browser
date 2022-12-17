@@ -5,15 +5,24 @@
 #ifndef ASH_WM_DESKS_TEMPLATES_DESKS_TEMPLATES_ANIMATIONS_H_
 #define ASH_WM_DESKS_TEMPLATES_DESKS_TEMPLATES_ANIMATIONS_H_
 
+#include "base/callback_forward.h"
+#include "base/callback_helpers.h"
+
 namespace ui {
 class Layer;
 }  // namespace ui
 
 namespace ash {
 
-// Animates the desks templates grid when it is shown, fading out current
-// overview items and widgets, and fading in the grid.
-void PerformFadeInDesksTemplatesGridView(ui::Layer* layer);
+// Immediately shows `layer` if `animate` is false. Does a linear fade in of
+// `layer` if `animate` is true.
+void PerformFadeInLayer(ui::Layer* layer, bool animate);
+
+// Immediately hides `layer` if `animate` is false. Does a linear fade out of
+// `layer` if `animate` is true.
+void PerformFadeOutLayer(ui::Layer* layer,
+                         bool animate,
+                         base::OnceClosure on_animation_ended_callback);
 
 }  // namespace ash
 

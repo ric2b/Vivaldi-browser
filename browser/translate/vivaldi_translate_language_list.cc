@@ -74,21 +74,23 @@ void VivaldiTranslateLanguageList::StartUpdateTimer() {
 
 void VivaldiTranslateLanguageList::SetPrefsListAsDefault() {
   PrefService* prefs = g_browser_process->local_state();
-  const base::ListValue* list =
+  const base::Value* list =
       prefs->GetList(vivaldiprefs::kVivaldiTranslateLanguageList);
   if (list) {
-    SetListInChromium(*list);
+    SetListInChromium(list->GetList());
   }
 }
 
 void VivaldiTranslateLanguageList::SetListInChromium(
-    const base::ListValue& list) {
+    const base::Value::List& list) {
   translate::TranslateLanguageList* language_list =
       translate::TranslateDownloadManager::GetInstance()->language_list();
   if (language_list) {
     std::vector<std::string> lang_list;
-    for (const auto& value : list.GetList()) {
-      lang_list.push_back(value.GetString());
+    for (const auto& value : list) {
+      if (value.is_string()) {
+        lang_list.push_back(value.GetString());
+      }
     }
     if (lang_list.size()) {
       // The chromium language list code likes the list sorted.
@@ -186,45 +188,47 @@ void VivaldiTranslateLanguageList::StartDownload() {
 
 void VivaldiTranslateLanguageList::OnListDownloaded(
     std::unique_ptr<std::string> response_body) {
-  if (!response_body || response_body->empty()) {
-    LOG(WARNING) << "Downloading language list from server "
-                 << " failed with error " << url_loader_->NetError();
-  } else {
+  do {
+    if (!response_body || response_body->empty()) {
+      LOG(WARNING) << "Downloading language list from server "
+                   << " failed with error " << url_loader_->NetError();
+      break;
+    }
     base::JSONParserOptions options = base::JSON_ALLOW_TRAILING_COMMAS;
     absl::optional<base::Value> json =
         base::JSONReader::Read(*response_body, options);
-    if (json) {
-      std::vector<base::Value> args;
-      base::Value::ListView list = json->GetList();
-      for (const auto& item : list) {
-        args.push_back(item.Clone());
-      }
-      if (args.size()) {
-        // The chromium language list code likes the list sorted.
-        std::sort(args.begin(), args.end(),
-                  [](base::Value& v1, base::Value& v2) {
-                    std::string n1 = v1.GetString();
-                    std::string n2 = v2.GetString();
-                    return n1 < n2;
-                  });
-        PrefService* prefs = g_browser_process->local_state();
-        prefs->Set(vivaldiprefs::kVivaldiTranslateLanguageList,
-                   base::ListValue(args));
-        if (GetServer() != kTranslateLanguageListUrl) {
-          // Only update last update on the main server
-          prefs->SetTime(vivaldiprefs::kVivaldiTranslateLanguageListLastUpdate,
-                         base::Time::Now());
-        }
-        LOG(INFO) << "Downloaded language list from server.";
-
-        SetListInChromium(base::ListValue(args));
-
-        args.erase(args.begin(), args.end());
-      }
+    if (!json) {
+      LOG(ERROR) << "Invalid language list JSON";
+      break;
     }
-  }
-  url_loader_.reset(nullptr);
+    base::Value::List* list = json->GetIfList();
+    if (!list ||
+        !std::all_of(list->begin(), list->end(),
+                     [](const base::Value& v) { return v.is_string(); })) {
+      LOG(ERROR) << "Invalid language list structure";
+      break;
+    }
+    if (list->empty())
+      break;
 
+    // The chromium language list code likes the list sorted.
+    std::sort(list->begin(), list->end(),
+              [](const base::Value& v1, const base::Value& v2) {
+                return v1.GetString() < v2.GetString();
+              });
+    PrefService* prefs = g_browser_process->local_state();
+    prefs->Set(vivaldiprefs::kVivaldiTranslateLanguageList, *json);
+    if (GetServer() != kTranslateLanguageListUrl) {
+      // Only update last update on the main server
+      prefs->SetTime(vivaldiprefs::kVivaldiTranslateLanguageListLastUpdate,
+                     base::Time::Now());
+    }
+    LOG(INFO) << "Downloaded language list from server.";
+
+    SetListInChromium(*list);
+  } while (false);
+
+  url_loader_.reset(nullptr);
   StartUpdateTimer();
 }
 

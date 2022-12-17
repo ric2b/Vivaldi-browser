@@ -8,9 +8,13 @@
 #include <stdint.h>
 
 #include <memory>
+#include <ostream>
+#include <string>
 #include <vector>
 
 #include "base/files/file_path.h"
+#include "base/strings/strcat.h"
+#include "base/strings/stringprintf.h"
 
 namespace base {
 class CommandLine;
@@ -59,6 +63,12 @@ class TaskScheduler {
     base::FilePath application_path;
     base::FilePath working_dir;
     std::wstring arguments;
+
+    std::wstring value() const {
+      return base::StrCat({L"[TaskExecAction][application_path]",
+                           application_path.value(), L"[working_dir]",
+                           working_dir.value(), L"[arguments]", arguments});
+    }
   };
 
   // Detailed description of a scheduled task. This type is returned by the
@@ -84,6 +94,9 @@ class TaskScheduler {
     // The log-on requirements for the task's actions to be run. A bit mask with
     // the mapping defined by LogonType.
     uint32_t logon_type = 0;
+
+    // User ID under which the task runs.
+    std::wstring user_id;
   };
 
   static std::unique_ptr<TaskScheduler> CreateInstance();
@@ -115,6 +128,10 @@ class TaskScheduler {
   // List all currently registered scheduled tasks.
   virtual bool GetTaskNameList(std::vector<std::wstring>* task_names) = 0;
 
+  // Returns the first instance of a scheduled task installed with the given
+  // `task_prefix`.
+  virtual std::wstring FindFirstTaskName(const std::wstring& task_prefix) = 0;
+
   // Return detailed information about a task. Return true if no errors were
   // encountered. On error, the struct is left unmodified.
   virtual bool GetTaskInfo(const wchar_t* task_name, TaskInfo* info) = 0;
@@ -134,6 +151,9 @@ class TaskScheduler {
  protected:
   TaskScheduler();
 };
+
+std::ostream& operator<<(std::ostream& stream,
+                         const TaskScheduler::TaskInfo& t);
 
 }  // namespace updater
 

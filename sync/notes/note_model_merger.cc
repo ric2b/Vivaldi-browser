@@ -13,7 +13,6 @@
 #include "base/logging.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "components/sync/driver/sync_driver_switches.h"
 #include "components/sync/protocol/entity_specifics.pb.h"
 #include "components/sync/protocol/notes_specifics.pb.h"
 #include "components/sync_bookmarks/switches.h"
@@ -59,8 +58,10 @@ const size_t kMaxNoteTreeDepth = 200;
 
 // The value must be a list since there is a container using pointers to its
 // elements.
-using UpdatesPerParentId =
-    std::unordered_map<std::string, std::list<syncer::UpdateResponseData>>;
+using UpdatesPerParentGUID =
+    std::unordered_map<base::GUID,
+                       std::list<syncer::UpdateResponseData>,
+                       base::GUIDHash>;
 
 enum class NotesGUIDDuplicates {
   // Both entities are notes.
@@ -72,12 +73,16 @@ enum class NotesGUIDDuplicates {
 };
 
 // Gets the note node corresponding to a permanent folder identified by
-// |server_defined_unique_tag|. |notes_model| must not be null.
-const vivaldi::NoteNode* GetPermanentFolder(
+// |server_defined_unique_tag| or null of the tag is unknown. |notes_model|
+// must not be null and |server_defined_unique_tag| must not be empty.
+const vivaldi::NoteNode* GetPermanentFolderForServerDefinedUniqueTag(
     const vivaldi::NotesModel* notes_model,
     const std::string& server_defined_unique_tag) {
   DCHECK(notes_model);
+  DCHECK(!server_defined_unique_tag.empty());
 
+  // WARNING: Keep this logic consistent with the analogous in
+  // GetPermanentFolderGUIDForServerDefinedUniqueTag().
   if (server_defined_unique_tag == kMainNotesTag) {
     return notes_model->main_node();
   }
@@ -89,6 +94,28 @@ const vivaldi::NoteNode* GetPermanentFolder(
   }
 
   return nullptr;
+}
+
+// Gets the note GUID corresponding to a permanent folder identified by
+// |served_defined_unique_tag| or an invalid GUID if the tag is unknown.
+// |server_defined_unique_tag| must not be empty.
+base::GUID GetPermanentFolderGUIDForServerDefinedUniqueTag(
+    const std::string& server_defined_unique_tag) {
+  DCHECK(!server_defined_unique_tag.empty());
+
+  // WARNING: Keep this logic consistent with the analogous in
+  // GetPermanentFolderForServerDefinedUniqueTag().
+  if (server_defined_unique_tag == kMainNotesTag) {
+    return base::GUID::ParseLowercase(vivaldi::NoteNode::kMainNodeGuid);
+  }
+  if (server_defined_unique_tag == kOtherNotesTag) {
+    return base::GUID::ParseLowercase(vivaldi::NoteNode::kOtherNotesNodeGuid);
+  }
+  if (server_defined_unique_tag == kTrashNotesTag) {
+    return base::GUID::ParseLowercase(vivaldi::NoteNode::kTrashNodeGuid);
+  }
+
+  return base::GUID();
 }
 
 std::string LegacyCanonicalizedTitleFromSpecifics(
@@ -134,31 +161,6 @@ bool NodeSemanticsMatch(
   return true;
 }
 
-void ReparentAllChildren(const std::string& from_parent_id,
-                         const std::string& to_parent_id,
-                         UpdatesPerParentId* updates_per_parent_id) {
-  // Any of parents may be empty.
-  auto from_parent_updates_iter = updates_per_parent_id->find(from_parent_id);
-  if (from_parent_updates_iter == updates_per_parent_id->end()) {
-    // There is nothing to merge.
-    return;
-  }
-
-  // Update parent ids for all entities before moving.
-  for (auto& update : from_parent_updates_iter->second) {
-    DCHECK_EQ(update.entity.parent_id, from_parent_id);
-    update.entity.parent_id = to_parent_id;
-  }
-
-  // Move all elements to a new parent (create one if it didn't exist).
-  (*updates_per_parent_id)[to_parent_id].splice(
-      (*updates_per_parent_id)[to_parent_id].end(),
-      from_parent_updates_iter->second);
-  updates_per_parent_id->erase(from_parent_id);
-
-  // No need to update iterators since splice doesn't invalidate them.
-}
-
 // Returns true the |next_update| is selected to keep and the |previous_update|
 // should be removed. False is returned otherwise. |next_update| and
 // |previous_update| must have the same GUID.
@@ -180,20 +182,17 @@ bool CompareDuplicateUpdates(const UpdateResponseData& next_update,
          previous_update.entity.creation_time;
 }
 
-void DeduplicateValidUpdatesByGUID(UpdatesPerParentId* updates_per_parent_id) {
-  DCHECK(updates_per_parent_id);
+void DeduplicateValidUpdatesByGUID(
+    UpdatesPerParentGUID* updates_per_parent_guid) {
+  DCHECK(updates_per_parent_guid);
 
   std::unordered_map<base::GUID, std::list<UpdateResponseData>::iterator,
                      base::GUIDHash>
       guid_to_update;
 
-  // Removing data in a separate loop helps easier merge parents since one of
-  // them may have already been processed.
-  std::list<std::list<UpdateResponseData>::iterator> updates_to_remove;
-  for (auto& parent_id_and_updates : *updates_per_parent_id) {
-    std::list<UpdateResponseData>* updates = &parent_id_and_updates.second;
-    for (auto updates_iter = updates->begin(); updates_iter != updates->end();
-         ++updates_iter) {
+  for (auto& [parent_guid, updates] : *updates_per_parent_guid) {
+    auto updates_iter = updates.begin();
+    while (updates_iter != updates.end()) {
       const UpdateResponseData& update = *updates_iter;
       DCHECK(!update.entity.is_deleted());
       DCHECK(update.entity.server_defined_unique_tag.empty());
@@ -202,54 +201,29 @@ void DeduplicateValidUpdatesByGUID(UpdatesPerParentId* updates_per_parent_id) {
           base::GUID::ParseLowercase(update.entity.specifics.notes().guid());
       DCHECK(guid_in_specifics.is_valid());
 
-      auto it_and_success =
+      auto [it, success] =
           guid_to_update.emplace(guid_in_specifics, updates_iter);
-      if (it_and_success.second) {
+      if (success) {
+        ++updates_iter;
         continue;
       }
-      const UpdateResponseData& duplicate_update =
-          *it_and_success.first->second;
+
+      const auto& [guid, previous_update_it] = *it;
       DCHECK_EQ(guid_in_specifics.AsLowercaseString(),
-                duplicate_update.entity.specifics.notes().guid());
+                previous_update_it->entity.specifics.notes().guid());
       DLOG(ERROR) << "Duplicate guid for new sync ID " << update.entity.id
-                  << " and original sync ID " << duplicate_update.entity.id;
+                  << " and original sync ID " << previous_update_it->entity.id;
 
       // Choose the latest element to keep.
       if (CompareDuplicateUpdates(/*next_update=*/update,
-                                  /*previous_update=*/duplicate_update)) {
-        updates_to_remove.push_back(it_and_success.first->second);
-        // Update |guid_to_update| to find a duplicate folder and merge them.
+                                  /*previous_update=*/*previous_update_it)) {
+        updates.erase(previous_update_it);
         guid_to_update[guid_in_specifics] = updates_iter;
+        ++updates_iter;
       } else {
-        updates_to_remove.push_back(updates_iter);
+        updates_iter = updates.erase(updates_iter);
       }
     }
-  }
-
-  for (std::list<UpdateResponseData>::iterator updates_iter :
-       updates_to_remove) {
-    if (updates_iter->entity.specifics.notes().special_node_type() ==
-        sync_pb::NotesSpecifics::FOLDER) {
-      const base::GUID guid = base::GUID::ParseLowercase(
-          updates_iter->entity.specifics.notes().guid());
-      DCHECK(base::Contains(guid_to_update, guid));
-      DCHECK(guid_to_update[guid] != updates_iter);
-
-      // Never remove a folder if its duplicate is a URL.
-      DCHECK_EQ(
-          guid_to_update[guid]->entity.specifics.notes().special_node_type(),
-          sync_pb::NotesSpecifics::FOLDER);
-
-      // Merge doesn't affect iterators.
-      ReparentAllChildren(
-          /*from_parent_id=*/updates_iter->entity.id,
-          /*to_parent_id=*/guid_to_update[guid]->entity.id,
-          updates_per_parent_id);
-    }
-
-    const std::string& parent_id = updates_iter->entity.parent_id;
-    DCHECK(base::Contains(*updates_per_parent_id, parent_id));
-    (*updates_per_parent_id)[parent_id].erase(updates_iter);
   }
 }
 
@@ -278,16 +252,28 @@ bool IsValidUpdate(const UpdateResponseData& update) {
   return true;
 }
 
+// Returns the GUID determined by a remote update, which may be an update for a
+// permanent folder or a regular note node.
+base::GUID GetGUIDForUpdate(const UpdateResponseData& update) {
+  if (!update.entity.server_defined_unique_tag.empty()) {
+    return GetPermanentFolderGUIDForServerDefinedUniqueTag(
+        update.entity.server_defined_unique_tag);
+  }
+
+  DCHECK(IsValidUpdate(update));
+  return base::GUID::ParseLowercase(update.entity.specifics.notes().guid());
+}
+
 struct GroupedUpdates {
-  // |updates_per_parent_id| contains all valid updates grouped by their
-  // |parent_id|. Permanent nodes and deletions are filtered out. Permanent
+  // |updates_per_parent_guid| contains all valid updates grouped by their
+  // |parent_guid|. Permanent nodes and deletions are filtered out. Permanent
   // nodes are stored in a dedicated list |permanent_node_updates|.
-  UpdatesPerParentId updates_per_parent_id;
+  UpdatesPerParentGUID updates_per_parent_guid;
   UpdateResponseDataList permanent_node_updates;
 };
 
-// Groups all valid updates by the server ID of their parent. Permanent nodes
-// are grouped in a dedicated |permanent_node_updates| list in a returned value.
+// Groups all valid updates by the GUID of their parent. Permanent nodes are
+// grouped in a dedicated |permanent_node_updates| list in a returned value.
 GroupedUpdates GroupValidUpdates(UpdateResponseDataList updates) {
   GroupedUpdates grouped_updates;
   for (UpdateResponseData& update : updates) {
@@ -295,14 +281,26 @@ GroupedUpdates GroupValidUpdates(UpdateResponseDataList updates) {
     if (update_entity.is_deleted()) {
       continue;
     }
+    // Special-case the root folder to avoid reporting an error.
+    if (update_entity.server_defined_unique_tag ==
+        syncer::ModelTypeToRootTag(syncer::NOTES)) {
+      continue;
+    }
+    // Non-root permanent folders don't need further validation.
     if (!update_entity.server_defined_unique_tag.empty()) {
       grouped_updates.permanent_node_updates.push_back(std::move(update));
       continue;
     }
+    // Regular (non-permanent) node updates must pass IsValidUpdate().
     if (!IsValidUpdate(update)) {
       continue;
     }
-    grouped_updates.updates_per_parent_id[update_entity.parent_id].push_back(
+
+    const base::GUID parent_guid = base::GUID::ParseLowercase(
+        update_entity.specifics.notes().parent_guid());
+    DCHECK(parent_guid.is_valid());
+
+    grouped_updates.updates_per_parent_guid[parent_guid].push_back(
         std::move(update));
   }
 
@@ -351,10 +349,13 @@ bool NoteModelMerger::RemoteTreeNode::UniquePositionLessThan(
 NoteModelMerger::RemoteTreeNode NoteModelMerger::RemoteTreeNode::BuildTree(
     UpdateResponseData update,
     size_t max_depth,
-    UpdatesPerParentId* updates_per_parent_id) {
-  DCHECK(updates_per_parent_id);
+    UpdatesPerParentGUID* updates_per_parent_guid) {
+  DCHECK(updates_per_parent_guid);
   DCHECK(!update.entity.server_defined_unique_tag.empty() ||
          IsValidUpdate(update));
+
+  // |guid| may be invalid for unsupported permanent nodes.
+  const base::GUID guid = GetGUIDForUpdate(update);
 
   RemoteTreeNode node;
   node.update_ = std::move(update);
@@ -367,31 +368,39 @@ NoteModelMerger::RemoteTreeNode NoteModelMerger::RemoteTreeNode::BuildTree(
     return node;
   }
 
-  // Check to prevent creating empty lists in |updates_per_parent_id| and
+  // Check to prevent creating empty lists in |updates_per_parent_guid| and
   // unnecessary rehashing.
-  auto updates_per_parent_id_iter =
-      updates_per_parent_id->find(node.entity().id);
-  if (updates_per_parent_id_iter == updates_per_parent_id->end()) {
+  auto updates_per_parent_guid_iter = updates_per_parent_guid->find(guid);
+  if (updates_per_parent_guid_iter == updates_per_parent_guid->end()) {
     return node;
   }
-  DCHECK(!updates_per_parent_id_iter->second.empty());
+  DCHECK(!updates_per_parent_guid_iter->second.empty());
+  DCHECK(guid.is_valid());
 
   // Only folders may have descendants (ignore them otherwise). Treat
   // permanent nodes as folders explicitly.
   if (node.update_.entity.specifics.notes().special_node_type() !=
           sync_pb::NotesSpecifics::FOLDER &&
       node.update_.entity.server_defined_unique_tag.empty()) {
+    for (UpdateResponseData& child_update :
+         updates_per_parent_guid_iter->second) {
+      // To avoid double-counting later for bucket |kMissingParentEntity|,
+      // clear the update from the list as if it would have been moved.
+      child_update.entity = EntityData();
+    }
     return node;
   }
 
   // Populate descendants recursively.
-  node.children_.reserve(updates_per_parent_id_iter->second.size());
-  for (UpdateResponseData& child_update : updates_per_parent_id_iter->second) {
-    DCHECK_EQ(child_update.entity.parent_id, node.entity().id);
+  node.children_.reserve(updates_per_parent_guid_iter->second.size());
+  for (UpdateResponseData& child_update :
+       updates_per_parent_guid_iter->second) {
+    DCHECK_EQ(child_update.entity.specifics.notes().parent_guid(),
+              guid.AsLowercaseString());
     DCHECK(IsValidNotesSpecifics(child_update.entity.specifics.notes()));
 
     node.children_.push_back(BuildTree(std::move(child_update), max_depth - 1,
-                                       updates_per_parent_id));
+                                       updates_per_parent_guid));
   }
 
   // Sort the children according to their unique position.
@@ -434,14 +443,26 @@ void NoteModelMerger::Merge() {
   // and url to perform the primary match. If there are multiple match
   // candidates it selects the first one.
   // Associate permanent folders.
-  for (const auto& tree_tag_and_root : remote_forest_) {
+  for (const auto& [server_defined_unique_tag, root] : remote_forest_) {
+    DCHECK(!server_defined_unique_tag.empty());
+
     const vivaldi::NoteNode* permanent_folder =
-        GetPermanentFolder(notes_model_, tree_tag_and_root.first);
+        GetPermanentFolderForServerDefinedUniqueTag(notes_model_,
+                                                    server_defined_unique_tag);
+
+    // Ignore unsupported permanent folders.
     if (!permanent_folder) {
+      DCHECK(!GetPermanentFolderGUIDForServerDefinedUniqueTag(
+                  server_defined_unique_tag)
+                  .is_valid());
       continue;
     }
+
+    DCHECK_EQ(permanent_folder->guid(),
+              GetPermanentFolderGUIDForServerDefinedUniqueTag(
+                  server_defined_unique_tag));
     MergeSubtree(/*local_subtree_root=*/permanent_folder,
-                 /*remote_node=*/tree_tag_and_root.second);
+                 /*remote_node=*/root);
   }
 
   if (base::FeatureList::IsEnabled(switches::kSyncReuploadBookmarks)) {
@@ -462,7 +483,7 @@ NoteModelMerger::RemoteForest NoteModelMerger::BuildRemoteForest(
   // of their parent.
   GroupedUpdates grouped_updates = GroupValidUpdates(std::move(updates));
 
-  DeduplicateValidUpdatesByGUID(&grouped_updates.updates_per_parent_id);
+  DeduplicateValidUpdatesByGUID(&grouped_updates.updates_per_parent_guid);
 
   // Construct one tree per permanent entity.
   RemoteForest update_forest;
@@ -477,14 +498,14 @@ NoteModelMerger::RemoteForest NoteModelMerger::BuildRemoteForest(
         server_defined_unique_tag,
         RemoteTreeNode::BuildTree(std::move(permanent_node_update),
                                   kMaxNoteTreeDepth,
-                                  &grouped_updates.updates_per_parent_id));
+                                  &grouped_updates.updates_per_parent_guid));
   }
 
-  // All remaining entries in |updates_per_parent_id| must be unreachable from
+  // All remaining entries in |updates_per_parent_guid| must be unreachable from
   // permanent entities, since otherwise they would have been moved away.
-  for (const auto& parent_id_and_updates :
-       grouped_updates.updates_per_parent_id) {
-    for (const UpdateResponseData& update : parent_id_and_updates.second) {
+  for (const auto& [parent_guid, updates] :
+       grouped_updates.updates_per_parent_guid) {
+    for (const UpdateResponseData& update : updates) {
       if (update.entity.specifics.has_notes()) {
         tracker_for_recording_ignored_updates
             ->RecordIgnoredServerUpdateDueToMissingParent(
@@ -506,9 +527,8 @@ NoteModelMerger::FindGuidMatchesOrReassignLocal(
   // Build a temporary lookup table for remote GUIDs.
   std::unordered_map<base::GUID, const RemoteTreeNode*, base::GUIDHash>
       guid_to_remote_node_map;
-  for (const auto& tree_tag_and_root : remote_forest) {
-    tree_tag_and_root.second.EmplaceSelfAndDescendantsByGUID(
-        &guid_to_remote_node_map);
+  for (const auto& [server_defined_unique_tag, root] : remote_forest) {
+    root.EmplaceSelfAndDescendantsByGUID(&guid_to_remote_node_map);
   }
 
   // Iterate through all local notes to find matches by GUID.
@@ -534,9 +554,8 @@ NoteModelMerger::FindGuidMatchesOrReassignLocal(
     // Permanent nodes don't match by GUID but by |server_defined_unique_tag|.
     // As extra precaution, specially with remote GUIDs in mind, let's ignore
     // them explicitly here.
-    if (node->is_permanent_node() ||
-        GetPermanentFolder(
-            notes_model, remote_entity.server_defined_unique_tag) != nullptr) {
+    DCHECK(remote_entity.server_defined_unique_tag.empty());
+    if (node->is_permanent_node()) {
       continue;
     }
 

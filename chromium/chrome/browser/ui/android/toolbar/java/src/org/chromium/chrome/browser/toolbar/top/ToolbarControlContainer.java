@@ -51,6 +51,7 @@ public class ToolbarControlContainer extends OptimizedFrameLayout implements Con
 
     // Vivaldi
     private Supplier<Boolean> mIsInOverviewModeSupplier;
+    private float mTabGroupUiToolbarHeight;
 
     /**
      * Constructs a new control container.
@@ -297,6 +298,7 @@ public class ToolbarControlContainer extends OptimizedFrameLayout implements Con
     @Override
     public boolean onInterceptTouchEvent(MotionEvent event) {
         if (!isToolbarContainerFullyVisible()) return true;
+        if (isOnTabGroupToolbar(event)) return false; // Vivaldi
         if (mSwipeGestureListener == null || isOnTabStrip(event)) return false;
 
         return mSwipeGestureListener.onTouchEvent(event);
@@ -325,6 +327,7 @@ public class ToolbarControlContainer extends OptimizedFrameLayout implements Con
         @Override
         public boolean shouldRecognizeSwipe(MotionEvent e1, MotionEvent e2) {
             if (isOnTabStrip(e1)) return false;
+            if (isOnTabGroupToolbar(e1)) return false; // Vivaldi
             if (mToolbar != null && mToolbar.shouldIgnoreSwipeGesture()) return false;
             if (KeyboardVisibilityDelegate.getInstance().isKeyboardShowing(
                         getContext(), ToolbarControlContainer.this)) {
@@ -342,5 +345,20 @@ public class ToolbarControlContainer extends OptimizedFrameLayout implements Con
     /** Vivaldi */
     public void setIsInOverviewModeSupplier(Supplier<Boolean> supplier) {
         mIsInOverviewModeSupplier = supplier;
+    }
+
+    /**
+     * Vivaldi: Set the actual tab group toolbar height. Is zero when there is no toolbar visible.
+     */
+    public void setTabGroupUiToolbarHeight(int height) {
+        mTabGroupUiToolbarHeight = height;
+    }
+
+    /** Vivaldi: Check if touch event is on tab group toolbar. */
+    private boolean isOnTabGroupToolbar(MotionEvent e) {
+        if (!ToolbarLayout.isTopToolbarOn() && mTabGroupUiToolbarHeight > 0)
+            return (e.getY() >= mTabGroupUiToolbarHeight);
+        else
+            return false;
     }
 }

@@ -9,7 +9,6 @@
 #include <memory>
 #include <string>
 
-#include "base/compiler_specific.h"
 #include "base/files/file_path.h"
 #include "base/memory/raw_ptr.h"
 #include "base/scoped_multi_source_observation.h"
@@ -55,25 +54,25 @@ class TestingProfileManager : public ProfileObserver {
   // |profiles_dir| is the path in which new directories would be placed.
   // If empty, one will be created (and deleted upon destruction of |this|).
   // If not empty, it will be used, but ownership is maintained by the caller.
-  bool SetUp(const base::FilePath& profiles_path = base::FilePath())
-      WARN_UNUSED_RESULT;
+  [[nodiscard]] bool SetUp(
+      const base::FilePath& profiles_path = base::FilePath());
 
   // Creates a new TestingProfile whose data lives in a directory related to
   // profile_name, which is a non-user-visible key for the test environment.
   // |prefs| is the PrefService used by the profile. If it is NULL, the profile
   // creates a PrefService on demand.
-  // |user_name|, |avatar_id| and |supervised_user_id| are passed along to the
-  // ProfileAttributesStorage and provide the user-visible profile metadata.
-  // This will register the TestingProfile with the profile subsystem as well.
-  // The subsystem owns the Profile and returns a weak pointer.
+  // |user_name|, |avatar_id| and |is_supervised_profile| status are passed
+  // along to the ProfileAttributesStorage and provide the user-visible profile
+  // metadata. This will register the TestingProfile with the profile subsystem
+  // as well. The subsystem owns the Profile and returns a weak pointer.
   // |factories| contains BCKSs to use with the newly created profile.
   TestingProfile* CreateTestingProfile(
       const std::string& profile_name,
       std::unique_ptr<sync_preferences::PrefServiceSyncable> prefs,
       const std::u16string& user_name,
       int avatar_id,
-      const std::string& supervised_user_id,
       TestingProfile::TestingFactories testing_factories,
+      bool is_supervised_profile = false,
       absl::optional<bool> is_new_profile = absl::nullopt,
       absl::optional<std::unique_ptr<policy::PolicyService>> policy_service =
           absl::nullopt);

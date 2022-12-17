@@ -19,9 +19,9 @@
 #include "base/files/file_path.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
-#include "base/task/single_thread_task_runner.h"
 #include "base/supports_user_data.h"
 #include "base/task/cancelable_task_tracker.h"
+#include "base/task/single_thread_task_runner.h"
 #include "calendar/calendar_backend_notifier.h"
 #include "calendar/calendar_database.h"
 #include "calendar/event_type.h"
@@ -104,6 +104,8 @@ class CalendarBackend
                    const EventRow& event,
                    std::shared_ptr<EventResultCB> result);
   void DeleteEvent(EventID event_id, std::shared_ptr<DeleteEventResult> result);
+  void DeleteEventRecurrenceException(RecurrenceExceptionID exception_id,
+                                      std::shared_ptr<EventResultCB> result);
 
   // Creates an Calendar
   void CreateCalendar(CalendarRow ev,

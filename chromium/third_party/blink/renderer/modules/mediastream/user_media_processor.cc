@@ -795,9 +795,6 @@ void UserMediaProcessor::SetupVideoInput() {
       IsPanTiltZoomPermissionRequested(
           current_request_info_->request()->VideoConstraints());
 
-  current_request_info_->stream_controls()->region_capture_capable =
-      current_request_info_->request()->region_capture_capable();
-
   if (blink::IsDeviceMediaType(video_controls.stream_type)) {
     GetMediaDevicesDispatcher()->GetVideoInputCapabilities(
         WTF::Bind(&UserMediaProcessor::SelectVideoDeviceSettings,
@@ -1852,7 +1849,7 @@ void UserMediaProcessor::StopAllProcessing() {
         // canceled.
         GetMediaStreamDispatcherHost()->CancelRequest(
             current_request_info_->request_id());
-        FALLTHROUGH;
+        [[fallthrough]];
 
       case RequestInfo::State::kNotSentForGeneration:
         LogUserMediaRequestWithNoResult(
@@ -1926,7 +1923,7 @@ bool UserMediaProcessor::HasActiveSources() const {
   return !local_sources_.IsEmpty();
 }
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
 void UserMediaProcessor::FocusCapturedSurface(const String& label, bool focus) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   GetMediaStreamDispatcherHost()->FocusCapturedSurface(label, focus);

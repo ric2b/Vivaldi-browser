@@ -10,6 +10,7 @@
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/browser/importer/importer_list.h"
@@ -29,7 +30,7 @@ class OperaNotesReader : public OperaAdrFileReader {
   OperaNotesReader& operator=(const OperaNotesReader&) = delete;
 
   void AddNote(const std::vector<std::u16string>& current_folder,
-               const base::DictionaryValue& entries,
+               const base::Value::Dict& entries,
                bool is_folder,
                std::u16string* item_name = NULL);
 
@@ -37,7 +38,7 @@ class OperaNotesReader : public OperaAdrFileReader {
 
  protected:
   void HandleEntry(const std::string& category,
-                   const base::DictionaryValue& entries) override;
+                   const base::Value::Dict& entries) override;
 
  private:
   std::vector<std::u16string> current_folder_;
@@ -45,7 +46,7 @@ class OperaNotesReader : public OperaAdrFileReader {
 };
 
 void OperaNotesReader::HandleEntry(const std::string& category,
-                                   const base::DictionaryValue& entries) {
+                                   const base::Value::Dict& entries) {
   if (base::LowerCaseEqualsASCII(category, "folder")) {
     std::u16string foldername;
     AddNote(current_folder_, entries, true, &foldername);
@@ -59,24 +60,21 @@ void OperaNotesReader::HandleEntry(const std::string& category,
 
 void OperaNotesReader::AddNote(
     const std::vector<std::u16string>& current_folder,
-    const base::DictionaryValue& entries,
+    const base::Value::Dict& entries,
     bool is_folder,
     std::u16string* item_name) {
-  std::string temp;
-  std::u16string wtemp;
-  std::u16string title;
-  std::u16string url;
-  std::u16string nickname;
-  std::u16string content;
 
-  double created_time = 0;
+  const std::string* url = nullptr;
+  if (!is_folder) {
+    url = entries.FindString("url");
+  }
 
-  if (!is_folder && !entries.GetString("url", &url))
-    url = std::u16string();
+  const std::string* name = entries.FindString("name");
+  if (!name) {
+    name = url;
+  }
 
-  if (!entries.GetString("name", &wtemp))
-    wtemp = url;
-
+  std::u16string wtemp = name ? base::UTF8ToUTF16(*name) : std::u16string();
   int line_end = -1;
   for (std::u16string::iterator it = wtemp.begin(); it != wtemp.end(); it++) {
     // LF is coded as 0x02 char in the file, to prevent
@@ -91,27 +89,31 @@ void OperaNotesReader::AddNote(
     }
   }
 
-  title = wtemp.substr(0, line_end);
+  std::u16string title = wtemp.substr(0, line_end);
 
+  std::u16string content;
   if (!is_folder)
-    content = wtemp;
+    content = std::move(wtemp);
 
   if (item_name)
     *item_name = title;
 
-  if (!entries.GetString("created", &temp) ||
-      !base::StringToDouble(temp, &created_time))
-    created_time = 0;
+  double created_time = 0;
+  if (const std::string* created = entries.FindString("created")) {
+    if (!base::StringToDouble(*created, &created_time)) {
+      created_time = 0;
+    }
+  }
 
   ImportedNotesEntry entry;
   entry.is_folder = is_folder;
-  entry.title = title;
-  entry.content = content;
+  entry.title = std::move(title);
+  entry.content = std::move(content);
   entry.path = current_folder;
-  entry.url = GURL(url);
+  entry.url = GURL(url ? *url : std::string());
   entry.creation_time = base::Time::FromTimeT(created_time);
 
-  notes_.push_back(entry);
+  notes_.push_back(std::move(entry));
 }
 
 bool OperaImporter::ImportNotes(std::string* error) {

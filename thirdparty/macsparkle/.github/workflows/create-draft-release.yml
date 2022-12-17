@@ -1,0 +1,100 @@
+name: "Create Draft Release"
+
+env:
+  BUILDDIR: "build"
+  DEVELOPER_DIR: "/Applications/Xcode_13.2.1.app/Contents/Developer"
+
+on:
+  workflow_dispatch:
+    inputs:
+      marketingVersion:
+        description: "Marketing Version"
+        required: true
+        default: ""
+        
+      prereleaseSuffix:
+        description: "Pre-release Suffix"
+        required: false
+        default: ""
+        
+      buildVersion:
+        description: "Product Build"
+        required: true
+        default: ""
+
+concurrency: 
+  group: publish-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    name: "Publish binaries for release"
+    runs-on: macos-11
+
+    steps:
+      - name: "Checkout sources"
+        uses: actions/checkout@v2
+        with:
+          token: ${{ secrets.BOT_PERSONAL_ACCESS_TOKEN }}
+          submodules: true
+          fetch-depth: 0
+          
+      - name: "Extract latest changes from CHANGELOG"
+        run: |
+            ./Configurations/generate_latest_changes.py > latest-changes.txt
+            
+      - name: "Overwrite project versions in project"
+        run: |
+            IFS='.' read major minor patch <<< "${{ github.event.inputs.marketingVersion }}"
+            sed -E -i '' "s/SPARKLE_VERSION_MAJOR =.+/SPARKLE_VERSION_MAJOR = $major/g" ./Configurations/ConfigCommon.xcconfig
+            sed -E -i '' "s/SPARKLE_VERSION_MINOR =.+/SPARKLE_VERSION_MINOR = $minor/g" ./Configurations/ConfigCommon.xcconfig
+            sed -E -i '' "s/SPARKLE_VERSION_PATCH =.+/SPARKLE_VERSION_PATCH = $patch/g" ./Configurations/ConfigCommon.xcconfig
+            
+            if [[ ! -z "${{ github.event.inputs.prereleaseSuffix }}" ]]; then
+                sed -E -i '' "s/SPARKLE_VERSION_SUFFIX =.*/SPARKLE_VERSION_SUFFIX = ${{ github.event.inputs.prereleaseSuffix }}/g" ./Configurations/ConfigCommon.xcconfig
+            else
+                sed -E -i '' "s/SPARKLE_VERSION_SUFFIX =.*/SPARKLE_VERSION_SUFFIX =/g" ./Configurations/ConfigCommon.xcconfig
+            fi
+            
+            sed -E -i '' "s/CURRENT_PROJECT_VERSION =.+/CURRENT_PROJECT_VERSION = ${{ github.event.inputs.buildVersion }}/g" ./Configurations/ConfigCommon.xcconfig
+            git add ./Configurations/ConfigCommon.xcconfig
+
+      - name: "Determine if this is a pre-release version"
+        run: |
+          if [[ ! -z "${{ github.event.inputs.prereleaseSuffix }}" ]]; then
+            echo "PRERELEASE_VERSION=true" >> $GITHUB_ENV
+          else
+            echo "PRERELEASE_VERSION=false" >> $GITHUB_ENV
+          fi
+
+      - name: "Set up git and create tag"
+        run: |
+            git config user.name Sparkle-Bot
+            git config user.email sparkle.project.bot@gmail.com
+            git tag "${{ github.event.inputs.marketingVersion }}${{ github.event.inputs.prereleaseSuffix }}"
+
+      - name: "Build release distribution"
+        run: make release
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.BOT_PERSONAL_ACCESS_TOKEN }}
+
+      - name: "Push the updated package description"
+        env:
+            GITHUB_TOKEN: ${{ secrets.BOT_PERSONAL_ACCESS_TOKEN }}
+        run: git push
+
+      - name: "Draft a release"
+        uses: softprops/action-gh-release@v1
+        with:
+          draft: true
+          prerelease: ${{ env.PRERELEASE_VERSION }}
+          name: "Sparkle ${{ github.event.inputs.marketingVersion }}${{ github.event.inputs.prereleaseSuffix }}"
+          tag_name: "${{ github.event.inputs.marketingVersion }}${{ github.event.inputs.prereleaseSuffix }}"
+          fail_on_unmatched_files: true
+          token: ${{ secrets.BOT_PERSONAL_ACCESS_TOKEN }}
+          body_path: latest-changes.txt
+          files: |
+            build/Build/Products/Release/Sparkle-*.tar.xz
+            build/Build/Products/Release/Sparkle-for-Swift-Package-Manager.zip

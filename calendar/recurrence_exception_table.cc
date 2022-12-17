@@ -76,6 +76,7 @@ bool RecurrrenceExceptionTable ::GetAllRecurrenceExceptions(
 
   return true;
 }
+
 bool RecurrrenceExceptionTable ::GetAllRecurrenceExceptionsForEvent(
     EventID event_id,
     RecurrenceExceptionRows* recurrences) {
@@ -96,6 +97,24 @@ bool RecurrrenceExceptionTable ::GetAllRecurrenceExceptionsForEvent(
   return true;
 }
 
+bool RecurrrenceExceptionTable ::GetRecurrenceException(
+    RecurrenceExceptionID exception_id,
+    RecurrenceExceptionRow* recurrence_exception) {
+  sql::Statement s(GetDB().GetCachedStatement(
+      SQL_FROM_HERE, "SELECT" CALENDAR_RECURRING_EXCEPTION_ROW_FIELDS
+                     " FROM recurring_exceptions  \
+        where id = ?"));
+
+  s.BindInt64(0, exception_id);
+
+  if (!s.Step())
+    return false;
+
+  FillRecurrenceExceptionRow(s, recurrence_exception);
+
+  return true;
+}
+
 bool RecurrrenceExceptionTable ::UpdateRecurrenceExceptionRow(
     const RecurrenceExceptionRow& rec_ex) {
   sql::Statement statement(
@@ -108,7 +127,7 @@ bool RecurrrenceExceptionTable ::UpdateRecurrenceExceptionRow(
   statement.BindInt64(0, rec_ex.parent_event_id);
   statement.BindInt64(1, rec_ex.exception_event_id);
   statement.BindInt64(2, rec_ex.exception_day.ToInternalValue());
-  statement.BindInt(3, rec_ex.cancelled ? 1: 0);
+  statement.BindInt(3, rec_ex.cancelled ? 1 : 0);
   statement.BindInt64(4, base::Time().Now().ToInternalValue());
 
   statement.BindInt64(5, rec_ex.id);

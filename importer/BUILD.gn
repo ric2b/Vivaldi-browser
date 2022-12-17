@@ -2,8 +2,6 @@
 static_library("importer") {
   if (!is_android) {
     sources = [
-      "chrome_bookmark_reader.cpp",
-      "chrome_bookmark_reader.h",
       "chrome_importer_bookmark.cpp",
       "chrome_importer_utils.h",
       "chromium_importer.cpp",

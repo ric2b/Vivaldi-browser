@@ -147,6 +147,12 @@ namespace cc {
 class CompletionEvent;
 class TileTaskManagerImpl;
 }
+namespace chrome {
+#if BUILDFLAG(IS_MAC)
+void DeveloperIDCertificateReauthorizeInApp();
+void PurgeStaleScreenCapturePermission();
+#endif  // BUILDFLAG(IS_MAC)
+}  // namespace chrome
 namespace chromecast {
 class CrashUtil;
 }
@@ -170,6 +176,7 @@ class BrowserTestBase;
 class CategorizedWorkerPool;
 class DesktopCaptureDevice;
 class DWriteFontCollectionProxy;
+class DWriteFontProxyImpl;
 class EmergencyTraceFinalisationCoordinator;
 class InProcessUtilityThread;
 class NestedMessagePumpAndroid;
@@ -178,6 +185,7 @@ class PepperPrintSettingsManagerImpl;
 class RenderProcessHostImpl;
 class RenderProcessHost;
 class RenderWidgetHostViewMac;
+class RendererBlinkPlatformImpl;
 class RTCVideoDecoder;
 class SandboxHostLinux;
 class ScopedAllowWaitForDebugURL;
@@ -188,6 +196,7 @@ class SynchronousCompositorHost;
 class SynchronousCompositorSyncCallBridge;
 class TextInputClientMac;
 class WaitForProcessesToDumpProfilingInfo;
+class WebContentsImpl;
 class WebContentsViewMac;
 }  // namespace content
 namespace cronet {
@@ -261,7 +270,7 @@ class ScopedIPCSupport;
 }  // namespace mojo
 namespace printing {
 class LocalPrinterHandlerDefault;
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 class PrintBackendServiceImpl;
 #endif
 class PrintBackendServiceManager;
@@ -449,11 +458,15 @@ class BASE_EXPORT ScopedAllowBlocking {
   friend class blink::DiskDataAllocator;
   friend class chromecast::CrashUtil;
   friend class content::BrowserProcessIOThread;
+  friend class content::DWriteFontProxyImpl;
   friend class content::NetworkServiceInstancePrivate;
   friend class content::PepperPrintSettingsManagerImpl;
   friend class content::RenderProcessHostImpl;
   friend class content::RenderWidgetHostViewMac;  // http://crbug.com/121917
   friend class content::ShellPathProvider;
+#if BUILDFLAG(IS_WIN)
+  friend class content::WebContentsImpl;  // http://crbug.com/1262162
+#endif
   friend class content::WebContentsViewMac;
   friend class cronet::CronetPrefsManager;
   friend class cronet::CronetURLRequestContext;
@@ -466,7 +479,7 @@ class BASE_EXPORT ScopedAllowBlocking {
   friend class module_installer::ScopedAllowModulePakLoad;
   friend class mojo::CoreLibraryInitializer;
   friend class printing::LocalPrinterHandlerDefault;
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   friend class printing::PrintBackendServiceImpl;
 #endif
   friend class printing::PrintBackendServiceManager;
@@ -483,6 +496,10 @@ class BASE_EXPORT ScopedAllowBlocking {
 
   friend Profile* ::GetLastProfileMac();  // crbug.com/1176734
   friend bool PathProviderWin(int, FilePath*);
+#if BUILDFLAG(IS_MAC)
+  friend void chrome::DeveloperIDCertificateReauthorizeInApp();
+  friend void chrome::PurgeStaleScreenCapturePermission();
+#endif  // BUILDFLAG(IS_MAC)
   friend bool chromeos::system::IsCoreSchedulingAvailable();
   friend int chromeos::system::NumberOfPhysicalCores();
   friend bool ::HasWaylandDisplay(base::Environment* env);  // crbug.com/1246928
@@ -572,6 +589,7 @@ class BASE_EXPORT ScopedAllowBaseSyncPrimitives {
   friend class chrome_cleaner::SystemReportComponent;
   friend class content::BrowserMainLoop;
   friend class content::BrowserProcessIOThread;
+  friend class content::RendererBlinkPlatformImpl;
   friend class content::DWriteFontCollectionProxy;
   friend class content::ServiceWorkerContextClient;
   friend class device::UsbContext;

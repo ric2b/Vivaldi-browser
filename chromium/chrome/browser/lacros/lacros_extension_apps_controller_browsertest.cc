@@ -37,8 +37,8 @@ IN_PROC_BROWSER_TEST_F(LacrosExtensionAppsControllerTest, OpenNativeSettings) {
 
   // It doesn't matter what the URL is, it shouldn't be related to the
   // extension.
-  ASSERT_FALSE(
-      base::Contains(GetActiveWebContents()->GetURL().spec(), extension->id()));
+  ASSERT_FALSE(base::Contains(GetActiveWebContents()->GetVisibleURL().spec(),
+                              extension->id()));
 
   // Send the message to open native settings.
   std::string muxed_id =
@@ -47,8 +47,8 @@ IN_PROC_BROWSER_TEST_F(LacrosExtensionAppsControllerTest, OpenNativeSettings) {
   controller.OpenNativeSettings(muxed_id);
 
   // Now the URL should be on a settings page that has the extension id.
-  ASSERT_TRUE(
-      base::Contains(GetActiveWebContents()->GetURL().spec(), extension->id()));
+  ASSERT_TRUE(base::Contains(GetActiveWebContents()->GetVisibleURL().spec(),
+                             extension->id()));
 }
 
 // Test uninstalling an app.
@@ -106,13 +106,12 @@ IN_PROC_BROWSER_TEST_F(LacrosExtensionAppsControllerTest, LoadIcon) {
           &run_loop, &output);
 
       // Load the icon
-      auto icon_key = apps::mojom::IconKey::New(0, 0, 0);
       auto icon_type = compressed ? apps::IconType::kCompressed
                                   : apps::IconType::kUncompressed;
       LacrosExtensionAppsController controller;
       controller.LoadIcon(
           lacros_extension_apps_utility::MuxId(profile(), extension),
-          std::move(icon_key), icon_type,
+          std::make_unique<apps::IconKey>(0, 0, 0), icon_type,
           /*size_hint_in_dip=*/1, std::move(callback));
       run_loop.Run();
 

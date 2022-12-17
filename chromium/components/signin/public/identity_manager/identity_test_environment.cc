@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #include "components/signin/public/identity_manager/identity_test_environment.h"
-#include "base/memory/raw_ptr.h"
 
 #include <limits>
 #include <memory>
@@ -13,6 +12,7 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -51,12 +51,12 @@
 #include "components/account_manager_core/chromeos/account_manager_facade_factory.h"
 #endif
 
-#if defined(OS_IOS)
+#if BUILDFLAG(IS_IOS)
 #include "components/signin/internal/identity_manager/device_accounts_synchronizer_impl.h"
 #include "components/signin/internal/identity_manager/profile_oauth2_token_service_delegate_ios.h"
 #endif
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 #include "components/signin/internal/identity_manager/accounts_mutator_impl.h"
 #endif
 
@@ -357,7 +357,7 @@ IdentityTestEnvironment::FinishBuildIdentityManagerForTests(
           account_tracker_service.get(), token_service.get(),
           primary_account_manager.get(), pref_service, account_consistency);
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   init_params.accounts_mutator = std::make_unique<AccountsMutatorImpl>(
       token_service.get(), account_tracker_service.get(),
       primary_account_manager.get(), pref_service);
@@ -371,7 +371,7 @@ IdentityTestEnvironment::FinishBuildIdentityManagerForTests(
           signin_client, token_service.get(), gaia_cookie_manager_service.get(),
           account_tracker_service.get());
 
-#if defined(OS_IOS)
+#if BUILDFLAG(IS_IOS)
   init_params.device_accounts_synchronizer =
       std::make_unique<DeviceAccountsSynchronizerImpl>(
           token_service->GetDelegate());

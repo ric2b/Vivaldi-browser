@@ -400,9 +400,8 @@ ExtensionFunction::ResponseAction ManagementLaunchAppFunction::Run() {
           ->GetExtensionById(params->id, ExtensionRegistry::EVERYTHING);
   if (!extension)
     return RespondNow(Error(keys::kNoExtensionError, params->id));
-  if (!extension->is_app()) {
+  if (!extension->is_app())
     return RespondNow(Error(keys::kNotAnAppError, params->id));
-  }
 
   const ManagementAPIDelegate* delegate = ManagementAPI::GetFactoryInstance()
                                               ->Get(browser_context())
@@ -759,7 +758,7 @@ ExtensionFunction::ResponseAction ManagementCreateAppShortcutFunction::Run() {
         ErrorUtils::FormatErrorMessage(keys::kNotAnAppError, params->id)));
   }
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   if (!extension->is_platform_app())
     return RespondNow(Error(keys::kCreateOnlyPackagedAppShortcutMac));
 #endif

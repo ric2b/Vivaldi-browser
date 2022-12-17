@@ -7,8 +7,9 @@
 #include "ash/constants/app_types.h"
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/desk_template.h"
-#include "ash/public/cpp/toast_data.h"
-#include "ash/public/cpp/toast_manager.h"
+#include "ash/public/cpp/system/toast_catalog.h"
+#include "ash/public/cpp/system/toast_data.h"
+#include "ash/public/cpp/system/toast_manager.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "base/bind.h"
 #include "base/check.h"
@@ -16,16 +17,19 @@
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
+#include "chrome/browser/apps/icon_standardizer.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/desks_templates/desks_templates_client.h"
+#include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/theme_resources.h"
+#include "components/app_constants/constants.h"
 #include "components/app_restore/app_launch_info.h"
 #include "components/app_restore/app_restore_data.h"
 #include "components/app_restore/full_restore_save_handler.h"
@@ -33,12 +37,12 @@
 #include "components/app_restore/restore_data.h"
 #include "components/app_restore/window_properties.h"
 #include "components/favicon/core/favicon_service.h"
+#include "components/favicon_base/favicon_util.h"
 #include "components/services/app_service/public/cpp/app_registry_cache.h"
 #include "components/services/app_service/public/cpp/app_types.h"
 #include "components/services/app_service/public/cpp/types_util.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
 #include "components/user_manager/user_manager.h"
-#include "extensions/common/constants.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -56,10 +60,6 @@ namespace {
 // Name for app not available toast.
 constexpr char kAppNotAvailableTemplateToastName[] =
     "AppNotAvailableTemplateToast";
-
-// The amount of time for which the launch template toasts will remain
-// displayed.
-constexpr int kLaunchTemplateToastDurationMs = 6 * 1000;
 
 // Returns the TabStripModel that associates with `window` if the given `window`
 // contains a browser frame, otherwise returns nullptr.
@@ -146,10 +146,41 @@ void ShowUnavailableAppToast(const std::vector<std::string>& unavailable_apps) {
   }
 
   ash::ToastData toast_data = {/*id=*/kAppNotAvailableTemplateToastName,
-                               /*text=*/
-                               toast_string, kLaunchTemplateToastDurationMs,
-                               /*dismiss_text=*/absl::nullopt};
+                               ash::ToastCatalogName::kAppNotAvailable,
+                               /*text=*/toast_string};
   ash::ToastManager::Get()->Show(toast_data);
+}
+
+// Creates a callback for when a favicon image is retrieved which creates a
+// standard icon image and then calls `callback` with the standardized image.
+base::OnceCallback<void(const favicon_base::FaviconImageResult&)>
+ImageResultToImageSkia(
+    base::OnceCallback<void(const gfx::ImageSkia&)> callback) {
+  return base::BindOnce(
+      [](base::OnceCallback<void(const gfx::ImageSkia&)> image_skia_callback,
+         const favicon_base::FaviconImageResult& result) {
+        auto image = result.image.AsImageSkia();
+        image.EnsureRepsForSupportedScales();
+        std::move(image_skia_callback)
+            .Run(apps::CreateStandardIconImage(image));
+      },
+      std::move(callback));
+}
+
+// Creates a callback for when a app icon image is retrieved which creates a
+// standard icon image and then calls `callback` with the standardized image.
+base::OnceCallback<void(apps::IconValuePtr icon_value)>
+AppIconResultToImageSkia(
+    base::OnceCallback<void(const gfx::ImageSkia&)> callback) {
+  return base::BindOnce(
+      [](base::OnceCallback<void(const gfx::ImageSkia&)> image_skia_callback,
+         apps::IconValuePtr icon_value) {
+        auto image = icon_value->uncompressed;
+        image.EnsureRepsForSupportedScales();
+        std::move(image_skia_callback)
+            .Run(apps::CreateStandardIconImage(image));
+      },
+      std::move(callback));
 }
 
 }  // namespace
@@ -215,7 +246,7 @@ ChromeDesksTemplatesDelegate::GetAppLaunchDataForDeskTemplate(
       apps::AppServiceProxyFactory::GetForProfile(user_profile)
           ->AppRegistryCache();
   const apps::mojom::AppType app_type = app_registry_cache.GetAppType(app_id);
-  if (app_id != extension_misc::kChromeAppId &&
+  if (app_id != app_constants::kChromeAppId &&
       (app_type == apps::mojom::AppType::kChromeApp ||
        app_type == apps::mojom::AppType::kWeb)) {
     // If these values are not present, we will not be able to restore the
@@ -262,46 +293,47 @@ ChromeDesksTemplatesDelegate::MaybeRetrieveIconForSpecialIdentifier(
 
 void ChromeDesksTemplatesDelegate::GetFaviconForUrl(
     const std::string& page_url,
-    int desired_icon_size,
-    favicon_base::FaviconRawBitmapCallback callback,
+    base::OnceCallback<void(const gfx::ImageSkia&)> callback,
     base::CancelableTaskTracker* tracker) const {
   favicon::FaviconService* favicon_service =
       FaviconServiceFactory::GetForProfile(
           ProfileManager::GetActiveUserProfile(),
           ServiceAccessType::EXPLICIT_ACCESS);
 
-  favicon_service->GetRawFaviconForPageURL(
-      GURL(page_url), {favicon_base::IconType::kFavicon}, desired_icon_size,
-      /*fallback_to_host=*/false, std::move(callback), tracker);
+  favicon_service->GetFaviconImageForPageURL(
+      GURL(page_url), ImageResultToImageSkia(std::move(callback)), tracker);
 }
 
 void ChromeDesksTemplatesDelegate::GetIconForAppId(
     const std::string& app_id,
     int desired_icon_size,
-    base::OnceCallback<void(apps::IconValuePtr icon_value)> callback) const {
+    base::OnceCallback<void(const gfx::ImageSkia&)> callback) const {
   auto* app_service_proxy = apps::AppServiceProxyFactory::GetForProfile(
       ProfileManager::GetActiveUserProfile());
   if (!app_service_proxy) {
-    std::move(callback).Run(std::make_unique<apps::IconValue>());
+    std::move(callback).Run(gfx::ImageSkia());
     return;
   }
 
   auto app_type = app_service_proxy->AppRegistryCache().GetAppType(app_id);
   if (base::FeatureList::IsEnabled(features::kAppServiceLoadIconWithoutMojom)) {
-    app_service_proxy->LoadIcon(
-        apps::ConvertMojomAppTypToAppType(app_type), app_id,
-        apps::IconType::kStandard, desired_icon_size,
-        /*allow_placeholder_icon=*/false, std::move(callback));
+    app_service_proxy->LoadIcon(apps::ConvertMojomAppTypToAppType(app_type),
+                                app_id, apps::IconType::kStandard,
+                                desired_icon_size,
+                                /*allow_placeholder_icon=*/false,
+                                AppIconResultToImageSkia(std::move(callback)));
   } else {
     app_service_proxy->LoadIcon(
         app_type, app_id, apps::mojom::IconType::kStandard, desired_icon_size,
         /*allow_placeholder_icon=*/false,
-        apps::MojomIconValueToIconValueCallback(std::move(callback)));
+        apps::MojomIconValueToIconValueCallback(
+            AppIconResultToImageSkia(std::move(callback))));
   }
 }
 
 void ChromeDesksTemplatesDelegate::LaunchAppsFromTemplate(
-    std::unique_ptr<ash::DeskTemplate> desk_template) {
+    std::unique_ptr<ash::DeskTemplate> desk_template,
+    base::TimeDelta delay) {
   const auto& launch_list =
       desk_template->desk_restore_data()->app_id_to_launch_list();
   std::vector<std::string> unavailable_apps =
@@ -309,7 +341,8 @@ void ChromeDesksTemplatesDelegate::LaunchAppsFromTemplate(
   // Show app unavailable toast.
   if (!unavailable_apps.empty())
     ShowUnavailableAppToast(unavailable_apps);
-  DesksTemplatesClient::Get()->LaunchAppsFromTemplate(std::move(desk_template));
+  DesksTemplatesClient::Get()->LaunchAppsFromTemplate(std::move(desk_template),
+                                                      delay);
 }
 
 // Returns true if `window` is supported in desk templates feature.
@@ -320,4 +353,16 @@ bool ChromeDesksTemplatesDelegate::IsWindowSupportedForDeskTemplate(
 
   // Exclude incognito browser window.
   return !IsIncognitoWindow(window);
+}
+
+void ChromeDesksTemplatesDelegate::OpenFeedbackDialog(
+    const std::string& extra_diagnostics) {
+  // Shows a feedback dialog which prompts users to help us identify which
+  // template(s) and app(s) are problematic.
+  chrome::ShowFeedbackPage(
+      /*browser=*/nullptr, chrome::kFeedbackSourceDesksTemplates,
+      /*description_template=*/
+      "#DesksTemplates\n\nProblem Template(s): \nProblem App(s): ",
+      /*description_placeholder_text=*/std::string(),
+      /*category_tag=*/std::string(), extra_diagnostics);
 }

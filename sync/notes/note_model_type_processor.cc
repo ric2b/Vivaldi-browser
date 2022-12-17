@@ -34,6 +34,7 @@
 #include "sync/notes/note_remote_updates_handler.h"
 #include "sync/notes/note_specifics_conversions.h"
 #include "sync/notes/notes_model_observer_impl.h"
+#include "sync/notes/parent_guid_preprocessing.h"
 #include "ui/base/models/tree_node_iterator.h"
 
 namespace sync_notes {
@@ -162,6 +163,9 @@ void NoteModelTypeProcessor::OnUpdateReceived(
   DCHECK_EQ(model_type_state.cache_guid(), cache_guid_);
   DCHECK(model_type_state.initial_sync_done());
 
+  // Clients before M94 did not populate the parent GUID in specifics.
+  PopulateParentGuidInSpecifics(note_tracker_.get(), &updates);
+
   if (!note_tracker_) {
     OnInitialUpdateReceived(model_type_state, std::move(updates));
     return;
@@ -181,7 +185,6 @@ void NoteModelTypeProcessor::OnUpdateReceived(
       note_tracker_->model_type_state().encryption_key_name() !=
       model_type_state.encryption_key_name();
   note_tracker_->set_model_type_state(model_type_state);
-  note_tracker_->UpdateLastSyncTime();
   updates_handler.Process(updates, got_new_encryption_requirements);
   if (note_tracker_->ReuploadNotesOnLoadIfNeeded()) {
     NudgeForCommitIfNeeded();
@@ -490,13 +493,13 @@ void NoteModelTypeProcessor::AppendNodeAndChildrenForDebugging(
     // Set the parent to empty string to indicate it's parent of the root node
     // for notes. The code in sync_node_browser.js links nodes with the
     // "modelType" when they are lacking a parent id.
-    data.parent_id = "";
+    data.legacy_parent_id = "";
   } else {
     const vivaldi::NoteNode* parent = node->parent();
     const SyncedNoteTracker::Entity* parent_entity =
         note_tracker_->GetEntityForNoteNode(parent);
     DCHECK(parent_entity);
-    data.parent_id = parent_entity->metadata()->server_id();
+    data.legacy_parent_id = parent_entity->metadata()->server_id();
   }
 
   std::unique_ptr<base::DictionaryValue> data_dictionary =
@@ -512,7 +515,7 @@ void NoteModelTypeProcessor::AppendNodeAndChildrenForDebugging(
     data_dictionary->SetString("UNIQUE_SERVER_TAG",
                                data.server_defined_unique_tag);
   } else {
-    data_dictionary->SetString("PARENT_ID", "s" + data.parent_id);
+    data_dictionary->SetString("PARENT_ID", "s" + data.legacy_parent_id);
   }
   data_dictionary->SetInteger("LOCAL_EXTERNAL_ID", node->id());
   data_dictionary->SetInteger("positionIndex", index);

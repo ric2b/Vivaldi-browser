@@ -25,6 +25,7 @@ import org.chromium.chrome.browser.browsing_data.ClearBrowsingDataTabsFragment;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
@@ -36,6 +37,7 @@ import org.chromium.components.browser_ui.widget.selectable_list.SelectableListT
 import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate.SelectionObserver;
 import org.chromium.components.profile_metrics.BrowserProfileType;
+import org.chromium.components.search_engines.TemplateUrl;
 import org.chromium.ui.base.Clipboard;
 
 import java.util.List;
@@ -129,8 +131,7 @@ public class HistoryManager implements OnMenuItemClickListener, SelectionObserve
         mSelectableListLayout.configureWideDisplayStyle();
 
         // 5. Initialize empty view.
-        mEmptyView = mSelectableListLayout.initializeEmptyView(
-                R.string.history_manager_empty, R.string.history_manager_no_results);
+        mEmptyView = mSelectableListLayout.initializeEmptyView(R.string.history_manager_empty);
 
         // 6. Load items.
         mContentManager.initialize();
@@ -202,7 +203,14 @@ public class HistoryManager implements OnMenuItemClickListener, SelectionObserve
         } else if (item.getItemId() == R.id.search_menu_id) {
             mContentManager.removeHeader();
             mToolbar.showSearchView();
-            mSelectableListLayout.onStartSearch();
+            String dse = getDefaultSearchEngine();
+            String searchEmptyString = "";
+            if (dse == null) {
+                searchEmptyString = mActivity.getString(R.string.history_manager_no_results_no_dse);
+            } else {
+                searchEmptyString = mActivity.getString(R.string.history_manager_no_results, dse);
+            }
+            mSelectableListLayout.onStartSearch(searchEmptyString);
             recordUserAction("Search");
             mIsSearching = true;
             return true;
@@ -215,6 +223,14 @@ public class HistoryManager implements OnMenuItemClickListener, SelectionObserve
             mContentManager.updatePrivacyDisclaimers(shouldShowInfoHeader);
         }
         return false;
+    }
+
+    private String getDefaultSearchEngine() {
+        String defaultSearchEngineName = null;
+        TemplateUrl dseTemplateUrl =
+                TemplateUrlServiceFactory.get().getDefaultSearchEngineTemplateUrl();
+        if (dseTemplateUrl != null) defaultSearchEngineName = dseTemplateUrl.getShortName();
+        return defaultSearchEngineName;
     }
 
     /**
@@ -454,8 +470,7 @@ public class HistoryManager implements OnMenuItemClickListener, SelectionObserve
     // Vivaldi
     public void openSearchUI() {
         mToolbar.showSearchView();
-        mSelectableListLayout.onStartSearch();
-        recordUserAction("Search");
+        mSelectableListLayout.onStartSearch(R.string.bookmark_no_result);
         mIsSearching = true;
     }
     public void clearSelection() {

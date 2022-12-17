@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/passwords/password_bubble_view_base.h"
 
+#include "base/notreached.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/passwords/manage_passwords_view_utils.h"
@@ -47,10 +48,6 @@ void PasswordBubbleViewBase::ShowBubble(content::WebContents* web_contents,
          !g_manage_passwords_bubble_->GetWidget()->IsVisible());
 
   if (browser->is_vivaldi()) {
-    BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
-    FeaturePromoControllerViews* promo_controller =
-      browser_view ? browser_view->feature_promo_controller() : nullptr;
-
     VivaldiBrowserWindow* window =
         static_cast<VivaldiBrowserWindow*>(browser->window());
     views::View* contents_view = window->GetContentsView();
@@ -78,7 +75,7 @@ void PasswordBubbleViewBase::ShowBubble(content::WebContents* web_contents,
     rect.set_x(pos.x() - (rect.width() / 2));
 
     PasswordBubbleViewBase* bubble =
-        CreateBubble(web_contents, nullptr, reason, promo_controller);
+        CreateBubble(web_contents, nullptr, reason);
     DCHECK(bubble);
     DCHECK(bubble == g_manage_passwords_bubble_);
 
@@ -109,10 +106,14 @@ void PasswordBubbleViewBase::ShowBubble(content::WebContents* web_contents,
       button_provider->GetAnchorView(PageActionIconType::kManagePasswords);
 
   PasswordBubbleViewBase* bubble =
-      CreateBubble(web_contents, anchor_view, reason,
-                   browser_view->feature_promo_controller());
+      CreateBubble(web_contents, anchor_view, reason);
   DCHECK(bubble);
   DCHECK_EQ(bubble, g_manage_passwords_bubble_);
+  // TODO(crbug.com/1305276): In non-DCHECK mode we could fall through here and
+  // hard-crash if we requested a bubble and were in the wrong state. In the
+  // meantime we will abort if we did not create a bubble.
+  if (!g_manage_passwords_bubble_)
+    return;
 
   g_manage_passwords_bubble_->SetHighlightedButton(
       button_provider->GetPageActionIconView(
@@ -127,8 +128,7 @@ void PasswordBubbleViewBase::ShowBubble(content::WebContents* web_contents,
 PasswordBubbleViewBase* PasswordBubbleViewBase::CreateBubble(
     content::WebContents* web_contents,
     views::View* anchor_view,
-    DisplayReason reason,
-    FeaturePromoControllerViews* promo_controller) {
+    DisplayReason reason) {
   PasswordBubbleViewBase* view = nullptr;
   password_manager::ui::State model_state =
       PasswordsModelDelegateFromWebContents(web_contents)->GetState();
@@ -142,8 +142,7 @@ PasswordBubbleViewBase* PasswordBubbleViewBase::CreateBubble(
   } else if (model_state ==
                  password_manager::ui::PENDING_PASSWORD_UPDATE_STATE ||
              model_state == password_manager::ui::PENDING_PASSWORD_STATE) {
-    view = new PasswordSaveUpdateView(web_contents, anchor_view, reason,
-                                      promo_controller);
+    view = new PasswordSaveUpdateView(web_contents, anchor_view, reason);
   } else if (model_state == password_manager::ui::
                                 WILL_DELETE_UNSYNCED_ACCOUNT_PASSWORDS_STATE) {
     view = new PasswordSaveUnsyncedCredentialsLocallyView(web_contents,
@@ -234,8 +233,8 @@ void PasswordBubbleViewBase::SetBubbleHeader(int light_image_id,
   auto image_view = std::make_unique<ThemeTrackingNonAccessibleImageView>(
       *bundle.GetImageSkiaNamed(light_image_id),
       *bundle.GetImageSkiaNamed(dark_image_id),
-      base::BindRepeating(&views::BubbleFrameView::GetBackgroundColor,
-                          base::Unretained(GetBubbleFrameView())));
+      base::BindRepeating(&views::BubbleDialogDelegate::GetBackgroundColor,
+                          base::Unretained(this)));
 
   gfx::Size preferred_size = image_view->GetPreferredSize();
   if (preferred_size.width()) {

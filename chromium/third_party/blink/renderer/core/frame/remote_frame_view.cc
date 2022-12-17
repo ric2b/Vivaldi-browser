@@ -158,7 +158,7 @@ void RemoteFrameView::UpdateCompositingRect() {
   TransformationMatrix matrix =
       local_root_transform_state.AccumulatedTransform().Inverse();
   PhysicalRect local_viewport_rect = PhysicalRect::EnclosingRect(
-      matrix.ProjectQuad(FloatRect(viewport_rect)).BoundingBox());
+      matrix.ProjectQuad(gfx::QuadF(gfx::RectF(viewport_rect))).BoundingBox());
   compositing_rect_ = ToEnclosingRect(local_viewport_rect);
   gfx::Size frame_size = Size();
 
@@ -201,8 +201,8 @@ void RemoteFrameView::UpdateCompositingScaleFactor() {
                                           kTraverseDocumentBoundaries);
 
   float frame_to_local_root_scale_factor = 1.0f;
-  gfx::Transform local_root_transform = TransformationMatrix::ToTransform(
-      local_root_transform_state.AccumulatedTransform());
+  gfx::Transform local_root_transform =
+      local_root_transform_state.AccumulatedTransform().ToTransform();
   absl::optional<gfx::Vector2dF> scale_components =
       gfx::TryComputeTransform2dScaleComponents(local_root_transform);
   if (!scale_components) {
@@ -268,7 +268,7 @@ void RemoteFrameView::PropagateFrameRects() {
 }
 
 void RemoteFrameView::Paint(GraphicsContext& context,
-                            const GlobalPaintFlags flags,
+                            PaintFlags flags,
                             const CullRect& rect,
                             const gfx::Vector2d& paint_offset) const {
   if (!rect.Intersects(FrameRect()))
@@ -297,8 +297,7 @@ void RemoteFrameView::Paint(GraphicsContext& context,
     context.Restore();
   }
 
-  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled() &&
-      GetFrame().GetCcLayer()) {
+  if (GetFrame().GetCcLayer()) {
     RecordForeignLayer(
         context, owner_layout_object, DisplayItem::kForeignLayerRemoteFrame,
         GetFrame().GetCcLayer(), FrameRect().origin() + paint_offset);

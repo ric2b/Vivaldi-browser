@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 
 #include "base/feature_list.h"
+#include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "components/shared_highlighting/core/common/shared_highlighting_features.h"
@@ -20,6 +21,7 @@
 #include "third_party/blink/renderer/core/css/font_face_set_document.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
 #include "third_party/blink/renderer/core/editing/markers/document_marker_controller.h"
+#include "third_party/blink/renderer/core/editing/selection_template.h"
 #include "third_party/blink/renderer/core/editing/visible_units.h"
 #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
 #include "third_party/blink/renderer/core/loader/document_loader.h"
@@ -68,18 +70,22 @@ class TextFragmentHandlerTest : public SimTest {
 
   String SelectThenRequestSelector(const Position& start, const Position& end) {
     SetSelection(start, end);
-    GetTextFragmentHandler().StartPreemptiveGenerationIfNeeded();
+    TextFragmentHandler::OpenedContextMenuOverSelection(
+        GetDocument().GetFrame());
     return RequestSelector();
   }
 
   String RequestSelector() {
     bool callback_called = false;
     String selector;
-    auto lambda = [](bool& callback_called, String& selector,
-                     const String& generated_selector) {
-      selector = generated_selector;
-      callback_called = true;
-    };
+    auto lambda =
+        [](bool& callback_called, String& selector,
+           const String& generated_selector,
+           shared_highlighting::LinkGenerationError error,
+           shared_highlighting::LinkGenerationReadyStatus ready_status) {
+          selector = generated_selector;
+          callback_called = true;
+        };
     auto callback =
         WTF::Bind(lambda, std::ref(callback_called), std::ref(selector));
     GetTextFragmentHandler().RequestSelector(std::move(callback));
@@ -140,72 +146,9 @@ class TextFragmentHandlerTest : public SimTest {
         ->addForBinding(script_state, ahem, exception_state);
   }
 
-  void VerifyPreemptiveGenerationMetricsDetailed(
-      bool success,
-      bool requested_after_ready,
-      absl::optional<shared_highlighting::LinkGenerationError> error,
-      bool has_async_tasks) {
-    base::StringPiece recorded_histograme;
-    base::StringPiece not_recorded_histogram;
-    if (requested_after_ready) {
-      recorded_histograme =
-          "SharedHighlights.LinkGenerated.RequestedAfterReady";
-      not_recorded_histogram =
-          "SharedHighlights.LinkGenerated.RequestedBeforeReady";
-    } else {
-      recorded_histograme =
-          "SharedHighlights.LinkGenerated.RequestedBeforeReady";
-      not_recorded_histogram =
-          "SharedHighlights.LinkGenerated.RequestedAfterReady";
-    }
-
-    histogram_tester_.ExpectTotalCount(recorded_histograme, 1);
-    histogram_tester_.ExpectTotalCount(not_recorded_histogram, 0);
-    histogram_tester_.ExpectBucketCount(recorded_histograme, success, 1);
-
-    histogram_tester_.ExpectTotalCount(
-        "SharedHighlights.LinkGenerated.Error.Requested", !success);
-    if (!success && error.has_value()) {
-      histogram_tester_.ExpectBucketCount(
-          "SharedHighlights.LinkGenerated.Error.Requested", error.value(), 1);
-    }
-
-    if (has_async_tasks) {
-      EXPECT_LT(0u, histogram_tester_
-                        .GetAllSamples("SharedHighlights.AsyncTask.Iterations")
-                        .size());
-      EXPECT_LT(0u,
-                histogram_tester_
-                    .GetAllSamples("SharedHighlights.AsyncTask.SearchDuration")
-                    .size());
-    }
-  }
-
-  void VerifyPreemptiveGenerationMetrics(bool success) {
-    EXPECT_EQ(1u,
-              histogram_tester_
-                      .GetAllSamples(
-                          "SharedHighlights.LinkGenerated.RequestedAfterReady")
-                      .size() +
-                  histogram_tester_
-                      .GetAllSamples(
-                          "SharedHighlights.LinkGenerated.RequestedBeforeReady")
-                      .size());
-
-    histogram_tester_.ExpectTotalCount(
-        "SharedHighlights.LinkGenerated.Error.Requested", !success);
-
-    // Check async task metrics.
-    EXPECT_LT(0u, histogram_tester_
-                      .GetAllSamples("SharedHighlights.AsyncTask.Iterations")
-                      .size());
-    EXPECT_LT(0u,
-              histogram_tester_
-                  .GetAllSamples("SharedHighlights.AsyncTask.SearchDuration")
-                  .size());
-  }
-
   TextFragmentHandler& GetTextFragmentHandler() {
+    if (!GetDocument().GetFrame()->GetTextFragmentHandler())
+      GetDocument().GetFrame()->CreateTextFragmentHandler();
     return *GetDocument().GetFrame()->GetTextFragmentHandler();
   }
 
@@ -642,7 +585,7 @@ TEST_F(TextFragmentHandlerTest, CheckPreemptiveGeneration) {
   ASSERT_EQ("First", PlainText(EphemeralRange(selected_start, selected_end)));
 
   SetSelection(selected_start, selected_end);
-  GetTextFragmentHandler().StartPreemptiveGenerationIfNeeded();
+  TextFragmentHandler::OpenedContextMenuOverSelection(GetDocument().GetFrame());
 
   base::RunLoop().RunUntilIdle();
 
@@ -665,7 +608,7 @@ TEST_F(TextFragmentHandlerTest, CheckNoPreemptiveGenerationBlocklist) {
   ASSERT_EQ("First", PlainText(EphemeralRange(selected_start, selected_end)));
 
   SetSelection(selected_start, selected_end);
-  GetTextFragmentHandler().StartPreemptiveGenerationIfNeeded();
+  TextFragmentHandler::OpenedContextMenuOverSelection(GetDocument().GetFrame());
 
   base::RunLoop().RunUntilIdle();
 
@@ -691,7 +634,7 @@ TEST_F(TextFragmentHandlerTest, CheckNoPreemptiveGenerationEditable) {
             PlainText(EphemeralRange(selected_start, selected_end)));
 
   SetSelection(selected_start, selected_end);
-  GetTextFragmentHandler().StartPreemptiveGenerationIfNeeded();
+  TextFragmentHandler::OpenedContextMenuOverSelection(GetDocument().GetFrame());
 
   base::RunLoop().RunUntilIdle();
 
@@ -716,17 +659,14 @@ TEST_F(TextFragmentHandlerTest, SecondGenerationCrash) {
   ASSERT_EQ("First paragraph", PlainText(EphemeralRange(start, end)));
   SetSelection(start, end);
 
-  auto callback = WTF::Bind(
-      [](const TextFragmentSelector& selector,
-         absl::optional<shared_highlighting::LinkGenerationError> error) {});
-  GetDocument()
-      .GetFrame()
-      ->GetTextFragmentHandler()
-      ->GetTextFragmentSelectorGenerator()
+  auto callback =
+      WTF::Bind([](const TextFragmentSelector& selector,
+                   shared_highlighting::LinkGenerationError error) {});
+  MakeGarbageCollected<TextFragmentSelectorGenerator>(GetDocument().GetFrame())
       ->SetCallbackForTesting(std::move(callback));
 
   // This shouldn't crash.
-  GetTextFragmentHandler().StartPreemptiveGenerationIfNeeded();
+  TextFragmentHandler::OpenedContextMenuOverSelection(GetDocument().GetFrame());
   base::RunLoop().RunUntilIdle();
 }
 
@@ -751,7 +691,6 @@ TEST_F(TextFragmentHandlerTest, CheckMetrics_Success) {
 
   String selector = SelectThenRequestSelector(selected_start, selected_end);
   EXPECT_EQ(selector, "First%20paragraph%20text%20that%20is");
-  VerifyPreemptiveGenerationMetrics(true);
 }
 
 // Verifies metrics for preemptive generation are correctly recorded when the
@@ -774,7 +713,6 @@ TEST_F(TextFragmentHandlerTest, CheckMetrics_Failure) {
             PlainText(EphemeralRange(selected_start, selected_end)));
   String selector = SelectThenRequestSelector(selected_start, selected_end);
   EXPECT_EQ(selector, "");
-  VerifyPreemptiveGenerationMetrics(false);
 }
 
 TEST_F(TextFragmentHandlerTest,
@@ -818,7 +756,7 @@ TEST_F(TextFragmentHandlerTest,
   EXPECT_FALSE(HasTextFragmentHandler(child_frame));
 
   child_frame->CreateTextFragmentHandler();
-  GetTextFragmentHandler().StartPreemptiveGenerationIfNeeded();
+  TextFragmentHandler::OpenedContextMenuOverSelection(GetDocument().GetFrame());
 
   mojo::Remote<mojom::blink::TextFragmentReceiver> remote;
   child_frame->BindTextFragmentReceiver(remote.BindNewPipeAndPassReceiver());
@@ -867,7 +805,7 @@ TEST_F(TextFragmentHandlerTest,
   Compositor().BeginFrame();
 
   EXPECT_EQ(2u, GetDocument().Markers().Markers().size());
-  EXPECT_TRUE(HasTextFragmentHandler(GetDocument().GetFrame()));
+  EXPECT_FALSE(HasTextFragmentHandler(GetDocument().GetFrame()));
 
   mojo::Remote<mojom::blink::TextFragmentReceiver> remote;
   EXPECT_FALSE(remote.is_bound());
@@ -905,10 +843,10 @@ TEST_F(TextFragmentHandlerTest,
   SetSelection(selected_start, selected_end);
 
   mojo::Remote<mojom::blink::TextFragmentReceiver> remote;
-  EXPECT_TRUE(HasTextFragmentHandler(GetDocument().GetFrame()));
+  EXPECT_FALSE(HasTextFragmentHandler(GetDocument().GetFrame()));
   EXPECT_FALSE(remote.is_bound());
 
-  GetTextFragmentHandler().StartPreemptiveGenerationIfNeeded();
+  TextFragmentHandler::OpenedContextMenuOverSelection(GetDocument().GetFrame());
   GetDocument().GetFrame()->BindTextFragmentReceiver(
       remote.BindNewPipeAndPassReceiver());
 
@@ -917,11 +855,14 @@ TEST_F(TextFragmentHandlerTest,
 
   bool callback_called = false;
   String selector;
-  auto lambda = [](bool& callback_called, String& selector,
-                   const String& generated_selector) {
-    selector = generated_selector;
-    callback_called = true;
-  };
+  auto lambda =
+      [](bool& callback_called, String& selector,
+         const String& generated_selector,
+         shared_highlighting::LinkGenerationError error,
+         shared_highlighting::LinkGenerationReadyStatus ready_status) {
+        selector = generated_selector;
+        callback_called = true;
+      };
   auto callback =
       WTF::Bind(lambda, std::ref(callback_called), std::ref(selector));
   remote->RequestSelector(std::move(callback));
@@ -929,7 +870,6 @@ TEST_F(TextFragmentHandlerTest,
   EXPECT_TRUE(callback_called);
 
   EXPECT_EQ(selector, "First%20paragraph%20text%20that%20is");
-  VerifyPreemptiveGenerationMetrics(true);
 }
 
 // Verifies that removing a text fragments from an iframe updates the URL
@@ -1193,17 +1133,40 @@ TEST_F(TextFragmentHandlerTest, IfGeneratorResetShouldRecordCorrectError) {
   ASSERT_EQ(" ", PlainText(EphemeralRange(selected_start, selected_end)));
 
   SetSelection(selected_start, selected_end);
-  GetTextFragmentHandler().StartPreemptiveGenerationIfNeeded();
+  TextFragmentHandler::OpenedContextMenuOverSelection(GetDocument().GetFrame());
 
   // Reset |TextFragmentSelectorGenerator|.
   GetTextFragmentHandler().DidDetachDocumentOrFrame();
 
   EXPECT_EQ(RequestSelector(), "");
 
-  absl::optional<shared_highlighting::LinkGenerationError> expected_error =
+  shared_highlighting::LinkGenerationError expected_error =
       shared_highlighting::LinkGenerationError::kEmptySelection;
   EXPECT_EQ(expected_error, GetTextFragmentHandler().error_);
-  VerifyPreemptiveGenerationMetricsDetailed(false, true, expected_error, false);
 }
 
+// crbug.com/1301794 If generation didn't start requesting selector shouldn't
+// crash.
+TEST_F(TextFragmentHandlerTest, NotGenerated) {
+  SimRequest request("https://example.com/test.html", "text/html");
+  LoadURL("https://example.com/test.html");
+  request.Complete(R"HTML(
+    <!DOCTYPE html>
+    <div>Test page</div>
+    <p id='first'>First paragraph text that is longer than 20 chars</p>
+    <p id='second'>Second paragraph text</p>
+  )HTML");
+
+  Node* first_paragraph = GetDocument().getElementById("first")->firstChild();
+  const auto& selected_start = Position(first_paragraph, 5);
+  const auto& selected_end = Position(first_paragraph, 6);
+  ASSERT_EQ(" ", PlainText(EphemeralRange(selected_start, selected_end)));
+
+  SetSelection(selected_start, selected_end);
+  EXPECT_EQ(RequestSelector(), "");
+
+  shared_highlighting::LinkGenerationError expected_error =
+      shared_highlighting::LinkGenerationError::kNotGenerated;
+  EXPECT_EQ(expected_error, GetTextFragmentHandler().error_);
+}
 }  // namespace blink

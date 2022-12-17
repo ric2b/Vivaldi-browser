@@ -159,8 +159,7 @@ void IPCDemuxer::Initialize(DemuxerHost* host,
 
   // Demuxer requires that the callback runs after the method returns.
   media_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(std::move(status_cb), PipelineStatus::PIPELINE_OK));
+      FROM_HERE, base::BindOnce(std::move(status_cb), PIPELINE_OK));
 }
 
 void IPCDemuxer::StartWaitingForSeek(base::TimeDelta seek_time) {
@@ -195,7 +194,7 @@ void IPCDemuxer::Seek(base::TimeDelta time, PipelineStatusCallback status_cb) {
   if (!ipc_media_pipeline_host_) {
     LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                << ": PIPELINE_ERROR_ABORT";
-    std::move(status_cb).Run(PipelineStatus::PIPELINE_ERROR_ABORT);
+    std::move(status_cb).Run(PIPELINE_ERROR_ABORT);
     return;
   }
 

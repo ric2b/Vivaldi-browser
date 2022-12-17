@@ -1,24 +1,16 @@
 <style include="cr-shared-style shimless-rma-shared">
-  iron-icon {
-    height: 200px;
-    width: 300px;
-  }
-
-  paper-spinner-lite {
-    height: 300px;
-    width: 300px;
-  }
 </style>
 
-<base-page orientation="column">
-  <div slot="header">
+<base-page>
+  <div slot="left-pane">
     <h1>[[i18n('runCalibrationTitleText')]]</h1>
-    <div id="calibration">
+    <div id="calibration" class="instructions">
       <span>[[calibrationStatusMessage_]]</span>
     </div>
   </div>
-  <div slot="body">
-    <paper-spinner-lite active hidden$="[[calibrationComplete_]]">
+  <div slot="right-pane">
+    <paper-spinner-lite active hidden$="[[calibrationComplete_]]"
+        class="large-spinner">
     </paper-spinner-lite>
   </div>
 </base-page>

@@ -7,10 +7,11 @@ import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {FilePath} from 'chrome://resources/mojo/mojo/public/mojom/base/file_path.mojom-webui.js';
 
 import {isNonEmptyArray} from '../../common/utils.js';
-import * as action from '../personalization_actions.js';
-import {WallpaperCollection, WallpaperImage, WallpaperLayout, WallpaperProviderInterface, WallpaperType} from '../personalization_app.mojom-webui.js';
+import {FetchGooglePhotosAlbumsResponse, FetchGooglePhotosPhotosResponse, GooglePhotosAlbum, GooglePhotosPhoto, WallpaperCollection, WallpaperImage, WallpaperLayout, WallpaperProviderInterface, WallpaperType} from '../personalization_app.mojom-webui.js';
 import {PersonalizationStore} from '../personalization_store.js';
-import {isFilePath, isWallpaperImage} from '../utils.js';
+import {isFilePath, isGooglePhotosPhoto, isWallpaperImage} from '../utils.js';
+
+import * as action from './wallpaper_actions.js';
 
 /**
  * @fileoverview contains all of the functions to interact with C++ side through
@@ -19,7 +20,7 @@ import {isFilePath, isWallpaperImage} from '../utils.js';
  */
 
 /** Fetch wallpaper collections and save them to the store. */
-async function fetchCollections(
+export async function fetchCollections(
     provider: WallpaperProviderInterface,
     store: PersonalizationStore): Promise<void> {
   let {collections} = await provider.fetchCollections();
@@ -46,7 +47,7 @@ async function fetchAndDispatchCollectionImages(
 async function fetchAllImagesForCollections(
     provider: WallpaperProviderInterface,
     store: PersonalizationStore): Promise<void> {
-  const collections = store.data.backdrop.collections;
+  const collections = store.data.wallpaper.backdrop.collections;
   if (!Array.isArray(collections)) {
     console.warn(
         'Cannot fetch data for collections when it is not initialized');
@@ -65,41 +66,55 @@ async function fetchAllImagesForCollections(
  * specified id and saves it to the store.
  */
 export async function fetchGooglePhotosAlbum(
-    _: WallpaperProviderInterface, store: PersonalizationStore,
+    provider: WallpaperProviderInterface, store: PersonalizationStore,
     albumId: string): Promise<void> {
   store.dispatch(action.beginLoadGooglePhotosAlbumAction(albumId));
 
-  // TODO(dmblack): Create and wire up mojo API. For now, simulate an async
-  // request that returns a list of 1,000 Google Photos photos.
-  return new Promise(resolve => setTimeout(() => {
-                       store.dispatch(action.setGooglePhotosAlbumAction(
-                           albumId, Array.from({length: 1000})));
-                       resolve();
-                     }, 1000));
+  let photos: Array<GooglePhotosPhoto>|null = [];
+  let resumeToken: string|null|undefined = null;
+
+  // TODO(b/216882690): Support incremental load of photos as the user scrolls
+  // through their library as opposed to loading them all at once.
+  do {
+    const {response} = await provider.fetchGooglePhotosPhotos(
+                           /*itemId=*/ null, albumId, resumeToken) as
+        {response: FetchGooglePhotosPhotosResponse};
+    if (!Array.isArray(response.photos)) {
+      console.warn('Failed to fetch Google Photos album');
+      photos = null;
+      break;
+    }
+    photos.push(...response.photos);
+    resumeToken = response.resumeToken;
+  } while (resumeToken);
+
+  store.dispatch(action.setGooglePhotosAlbumAction(albumId, photos));
 }
 
 /** Fetches the list of Google Photos albums and saves it to the store. */
 async function fetchGooglePhotosAlbums(
-    _: WallpaperProviderInterface, store: PersonalizationStore): Promise<void> {
+    provider: WallpaperProviderInterface,
+    store: PersonalizationStore): Promise<void> {
   store.dispatch(action.beginLoadGooglePhotosAlbumsAction());
 
-  // TODO(dmblack): Create and wire up mojo API. For now, simulate an async
-  // request that returns a list of fictitious Google Photos albums.
-  return new Promise(resolve => setTimeout(() => {
-                       store.dispatch(action.setGooglePhotosAlbumsAction([
-                         '9bd1d7a3-f995-4445-be47-53c5b58ce1cb',
-                         '0ec40478-9712-42e1-b5bf-3e75870ca042',
-                         '0a268a37-877a-4936-81d4-38cc84b0f596',
-                         '27597eb3-a42d-474c-ab39-592680dcf35a',
-                         'bdcd6ba5-ed70-4866-9bc0-87ccf87db08c',
-                       ].map((uuid, i) => {
-                         const album = new WallpaperCollection();
-                         album.id = uuid;
-                         album.name = `Album ${i}`;
-                         return album;
-                       })));
-                       resolve();
-                     }, 1000));
+  let albums: Array<GooglePhotosAlbum>|null = [];
+  let resumeToken: string|null|undefined = null;
+
+  // TODO(b/215179074): Support incremental load of albums as the user scrolls
+  // through their library as opposed to loading them all at once.
+  do {
+    const {response} = await provider.fetchGooglePhotosAlbums(resumeToken) as
+        {response: FetchGooglePhotosAlbumsResponse};
+    if (!Array.isArray(response.albums)) {
+      console.warn('Failed to fetch Google Photos albums');
+      albums = null;
+      break;
+    }
+    albums.push(...response.albums);
+    resumeToken = response.resumeToken;
+  } while (resumeToken);
+
+  store.dispatch(action.setGooglePhotosAlbumsAction(albums));
 }
 
 /** Fetches the count of Google Photos photos and saves it to the store. */
@@ -108,25 +123,38 @@ async function fetchGooglePhotosCount(
     store: PersonalizationStore): Promise<void> {
   store.dispatch(action.beginLoadGooglePhotosCountAction());
   const {count} = await provider.fetchGooglePhotosCount();
-  store.dispatch(action.setGooglePhotosCountAction(count >= 0n ? count : null));
+  store.dispatch(action.setGooglePhotosCountAction(count >= 0 ? count : null));
 }
 
 /** Fetches the list of Google Photos photos and saves it to the store. */
 async function fetchGooglePhotosPhotos(
-    _: WallpaperProviderInterface, store: PersonalizationStore): Promise<void> {
+    provider: WallpaperProviderInterface,
+    store: PersonalizationStore): Promise<void> {
   store.dispatch(action.beginLoadGooglePhotosPhotosAction());
 
-  // TODO(dmblack): Create and wire up mojo API. For now, simulate an async
-  // request that returns a list of 1,000 Google Photos photos.
-  return new Promise(resolve => setTimeout(() => {
-                       store.dispatch(action.setGooglePhotosPhotosAction(
-                           Array.from({length: 1000})));
-                       resolve();
-                     }, 1000));
+  let photos: Array<GooglePhotosPhoto>|null = [];
+  let resumeToken: string|null|undefined = null;
+
+  // TODO(b/216882690): Support incremental load of photos as the user scrolls
+  // through their library as opposed to loading them all at once.
+  do {
+    const {response} = await provider.fetchGooglePhotosPhotos(
+                           /*itemId=*/ null, /*albumId=*/ null, resumeToken) as
+        {response: FetchGooglePhotosPhotosResponse};
+    if (!Array.isArray(response.photos)) {
+      console.warn('Failed to fetch Google Photos photos');
+      photos = null;
+      break;
+    }
+    photos.push(...response.photos);
+    resumeToken = response.resumeToken;
+  } while (resumeToken);
+
+  store.dispatch(action.setGooglePhotosPhotosAction(photos));
 }
 
 /** Get list of local images from disk and save it to the store. */
-async function getLocalImages(
+export async function getLocalImages(
     provider: WallpaperProviderInterface,
     store: PersonalizationStore): Promise<void> {
   store.dispatch(action.beginLoadLocalImagesAction());
@@ -151,7 +179,7 @@ const imageThumbnailsToFetch = new Set<FilePath['path']>();
 async function getMissingLocalImageThumbnails(
     provider: WallpaperProviderInterface,
     store: PersonalizationStore): Promise<void> {
-  if (!Array.isArray(store.data.local.images)) {
+  if (!Array.isArray(store.data.wallpaper.local.images)) {
     console.warn('Cannot fetch thumbnails with invalid image list');
     return;
   }
@@ -159,9 +187,9 @@ async function getMissingLocalImageThumbnails(
   // Set correct loading state for each image thumbnail. Do in a batch update to
   // reduce number of times that polymer must re-render.
   store.beginBatchUpdate();
-  for (const filePath of store.data.local.images) {
-    if (store.data.local.data[filePath.path] ||
-        store.data.loading.local.data[filePath.path] ||
+  for (const filePath of store.data.wallpaper.local.images) {
+    if (store.data.wallpaper.local.data[filePath.path] ||
+        store.data.wallpaper.loading.local.data[filePath.path] ||
         imageThumbnailsToFetch.has(filePath.path)) {
       // Do not re-load thumbnail if already present, or already loading.
       continue;
@@ -184,8 +212,8 @@ async function getMissingLocalImageThumbnails(
 }
 
 export async function selectWallpaper(
-    image: WallpaperImage|FilePath, provider: WallpaperProviderInterface,
-    store: PersonalizationStore,
+    image: WallpaperImage|FilePath|GooglePhotosPhoto,
+    provider: WallpaperProviderInterface, store: PersonalizationStore,
     layout: WallpaperLayout = WallpaperLayout.kCenterCropped): Promise<void> {
   // Batch these changes together to reduce polymer churn as multiple state
   // fields change quickly.
@@ -203,6 +231,8 @@ export async function selectWallpaper(
     } else if (isFilePath(image)) {
       return provider.selectLocalImage(
           image, layout, /*preview_mode=*/ shouldPreview);
+    } else if (isGooglePhotosPhoto(image)) {
+      return provider.selectGooglePhotosPhoto(image.id);
     } else {
       console.warn('Image must be a local image or a WallpaperImage');
       return {success: false};
@@ -218,20 +248,16 @@ export async function selectWallpaper(
   }
   if (!success) {
     console.warn('Error setting wallpaper');
-    store.dispatch(action.setSelectedImageAction(store.data.currentSelected));
+    store.dispatch(
+        action.setSelectedImageAction(store.data.wallpaper.currentSelected));
   }
   store.endBatchUpdate();
 }
 
-/**
- * @param {!WallpaperLayout} layout
- * @param {!WallpaperProviderInterface} provider
- * @param {!PersonalizationStore} store
- */
 export async function setCustomWallpaperLayout(
     layout: WallpaperLayout, provider: WallpaperProviderInterface,
     store: PersonalizationStore): Promise<void> {
-  const image = store.data.currentSelected;
+  const image = store.data.wallpaper.currentSelected;
   assert(image && image.type === WallpaperType.kCustomized);
   assert(
       layout === WallpaperLayout.kCenter ||
@@ -308,9 +334,9 @@ export async function initializeGooglePhotosData(
 
   // If the count of Google Photos photos is zero or null, it's not necesssary
   // to query the server for the list of albums/photos.
-  const count = store.data.googlePhotos.count;
-  if (count === 0n || count === null) {
-    const /** ?Array<undefined> */ result = count === 0n ? [] : null;
+  const count = store.data.wallpaper.googlePhotos.count;
+  if (count === 0 || count === null) {
+    const /** ?Array<undefined> */ result = count === 0 ? [] : null;
     store.beginBatchUpdate();
     store.dispatch(action.beginLoadGooglePhotosAlbumsAction());
     store.dispatch(action.beginLoadGooglePhotosPhotosAction());
@@ -334,7 +360,7 @@ export async function fetchLocalData(
     provider: WallpaperProviderInterface,
     store: PersonalizationStore): Promise<void> {
   // Do not restart loading local image list if a load is already in progress.
-  if (!store.data.loading.local.images) {
+  if (!store.data.wallpaper.loading.local.images) {
     await getLocalImages(provider, store);
   }
   await getMissingLocalImageThumbnails(provider, store);

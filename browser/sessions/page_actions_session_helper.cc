@@ -37,18 +37,13 @@ PageActionsSessionHelper::PageActionsSessionHelper(
   if (!profile_)
     return;
 
+  profile_->AddObserver(this);
   page_actions::ServiceFactory::GetForBrowserContext(profile_)->AddObserver(
       this);
 }
 
 PageActionsSessionHelper::~PageActionsSessionHelper() {
-  if (!profile_)
-    return;
-
-  auto* page_action_service =
-      page_actions::ServiceFactory::GetForBrowserContextIfExists(profile_);
-  if (page_action_service)
-    page_action_service->RemoveObserver(this);
+  OnProfileWillBeDestroyed(profile_);
 }
 
 void PageActionsSessionHelper::OnScriptOverridesChanged(
@@ -62,4 +57,19 @@ void PageActionsSessionHelper::OnScriptOverridesChanged(
   session_service_->PageActionOverridesChanged(session_tab_helper->window_id(),
                                                session_tab_helper->session_id(),
                                                script_path, script_override);
+}
+
+void PageActionsSessionHelper::OnProfileWillBeDestroyed(Profile* profile) {
+  if (!profile_)
+    return;
+
+  DCHECK(profile == profile_);
+  profile_->RemoveObserver(this);
+
+  auto* page_action_service =
+      page_actions::ServiceFactory::GetForBrowserContextIfExists(profile_);
+  if (page_action_service)
+    page_action_service->RemoveObserver(this);
+
+  profile_ = nullptr;
 }

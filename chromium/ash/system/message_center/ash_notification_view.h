@@ -7,6 +7,8 @@
 
 #include "ash/ash_export.h"
 #include "base/timer/timer.h"
+#include "ui/message_center/message_center.h"
+#include "ui/message_center/message_center_observer.h"
 #include "ui/message_center/views/notification_input_container.h"
 #include "ui/message_center/views/notification_view.h"
 #include "ui/message_center/views/notification_view_base.h"
@@ -19,7 +21,6 @@ class Notification;
 namespace views {
 class BoxLayout;
 class FlexLayoutView;
-class ImageButton;
 class LabelButton;
 class View;
 }  // namespace views
@@ -28,12 +29,14 @@ namespace ash {
 
 class RoundedImageView;
 class AshNotificationExpandButton;
+class IconButton;
 
 // Customized NotificationView for notification on ChromeOS. This view is used
 // to displays all current types of notification on ChromeOS (web, basic, image,
 // and list) except custom notification.
 class ASH_EXPORT AshNotificationView
-    : public message_center::NotificationViewBase {
+    : public message_center::NotificationViewBase,
+      public message_center::MessageCenterObserver {
  public:
   static const char kViewClassName[];
 
@@ -54,10 +57,8 @@ class ASH_EXPORT AshNotificationView
   // Toggle the expand state of the notification.
   void ToggleExpand();
 
-  // Gets the animation duration for a recent bounds change. Called after
-  // `PreferredSizeChanged()`, so the current state is the target state.
-  base::TimeDelta GetBoundsAnimationDuration(
-      const message_center::Notification& notification) const;
+  // Called when a child notificaiton's preferred size changes.
+  void GroupedNotificationsPreferredSizeChanged();
 
   // message_center::MessageView:
   void AddGroupNotification(const message_center::Notification& notification,
@@ -67,6 +68,10 @@ class ASH_EXPORT AshNotificationView
       override;
   void RemoveGroupNotification(const std::string& notification_id) override;
   const char* GetClassName() const override;
+  // Called after `PreferredSizeChanged()`, so the current state is the target
+  // state.
+  base::TimeDelta GetBoundsAnimationDuration(
+      const message_center::Notification& notification) const override;
 
   // message_center::NotificationViewBase:
   void UpdateViewForExpandedState(bool expanded) override;
@@ -79,6 +84,10 @@ class ASH_EXPORT AshNotificationView
   void CreateOrUpdateSmallIconView(
       const message_center::Notification& notification) override;
   void CreateOrUpdateInlineSettingsViews(
+      const message_center::Notification& notification) override;
+  void CreateOrUpdateCompactTitleMessageView(
+      const message_center::Notification& notification) override;
+  void CreateOrUpdateProgressViews(
       const message_center::Notification& notification) override;
   void UpdateControlButtonsVisibility() override;
   bool IsIconViewShown() const override;
@@ -96,6 +105,28 @@ class ASH_EXPORT AshNotificationView
   int GetLargeImageViewMaxWidth() const override;
   void ToggleInlineSettings(const ui::Event& event) override;
   void ActionButtonPressed(size_t index, const ui::Event& event) override;
+
+  // View containing all grouped notifications, propagates size changes
+  // to the parent notification view.
+  class GroupedNotificationsContainer : public views::BoxLayoutView {
+   public:
+    GroupedNotificationsContainer() = default;
+    GroupedNotificationsContainer(const GroupedNotificationsContainer&) =
+        delete;
+    GroupedNotificationsContainer& operator=(
+        const GroupedNotificationsContainer&) = delete;
+    void ChildPreferredSizeChanged(views::View* view) override;
+    void SetParentNotificationView(
+        AshNotificationView* parent_notification_view);
+
+   private:
+    AshNotificationView* parent_notification_view_ = nullptr;
+  };
+  BEGIN_VIEW_BUILDER(/*no export*/,
+                     GroupedNotificationsContainer,
+                     views::BoxLayoutView)
+  VIEW_BUILDER_PROPERTY(AshNotificationView*, ParentNotificationView)
+  END_VIEW_BUILDER
 
  private:
   friend class AshNotificationViewTest;
@@ -138,20 +169,28 @@ class ASH_EXPORT AshNotificationView
     absl::optional<base::Time> timestamp_;
   };
 
+  // message_center::MessageView:
+  views::View* FindGroupNotificationView(
+      const std::string& notification_id) override;
+
+  // message_center::MessageCenterObserver:
+  void OnNotificationRemoved(const std::string& notification_id,
+                             bool by_user) override;
+
   // Create or update the customized snooze button in action buttons row
   // according to the given notification.
   void CreateOrUpdateSnoozeButton(
       const message_center::Notification& notification);
 
   // Update `message_in_expanded_view_` according to the given notification.
-  void UpdateMessageViewInExpandedState(
+  void UpdateMessageLabelInExpandedState(
       const message_center::Notification& notification);
 
   // Update the background color with rounded corner.
   void UpdateBackground(int top_radius, int bottom_radius);
 
-  // Get the available space for `message_view_in_expanded_state_` width.
-  int GetExpandedMessageViewWidth();
+  // Get the available space for `message_label_in_expanded_state_` width.
+  int GetExpandedMessageLabelWidth();
 
   // Disable the notification of this view. Called after the turn of
   // notifications button is clicked.
@@ -160,25 +199,48 @@ class ASH_EXPORT AshNotificationView
   // Update the color and icon for `app_icon_view_`.
   void UpdateAppIconView();
 
+  // Calculate the color used for the app icon and action buttons.
+  SkColor CalculateIconAndButtonsColor();
+
+  // Update the color of icon and buttons.
+  void UpdateIconAndButtonsColor();
+
   // AshNotificationView will animate its expand/collapse in the parent's
   // ChildPreferredSizeChange(). Child views are animated here.
   void PerformExpandCollapseAnimation();
 
+  // Expand/collapse animation for large image within `image_container_view()`.
+  void PerformLargeImageAnimation();
+
+  // Animations when toggle inline settings.
+  void PerformToggleInlineSettingsAnimation(bool should_show_inline_settings);
+
+  // Calculate vertical space available on screen for the
+  // grouped_notifications_scroll_view_
+  int CalculateMaxHeightForGroupedNotifications();
+
+  // Return true is `message_label()` is truncated. We need this helper because
+  // Label::IsDisplayTextTruncated doesn't work when `message_label()` hasn't
+  // been laid out yet.
+  bool IsMessageLabelTruncated();
+
   // Owned by views hierarchy.
+  views::View* main_view_ = nullptr;
+  views::View* main_right_view_ = nullptr;
   RoundedImageView* app_icon_view_ = nullptr;
   AshNotificationExpandButton* expand_button_ = nullptr;
   views::FlexLayoutView* expand_button_container_ = nullptr;
   views::View* control_buttons_container_ = nullptr;
   views::View* left_content_ = nullptr;
-  views::Label* message_view_in_expanded_state_ = nullptr;
+  views::Label* message_label_in_expanded_state_ = nullptr;
+  views::ScrollView* grouped_notifications_scroll_view_ = nullptr;
   views::View* grouped_notifications_container_ = nullptr;
   views::View* collapsed_summary_view_ = nullptr;
   views::View* control_buttons_view_ = nullptr;
-  views::View* main_view_ = nullptr;
   views::LabelButton* turn_off_notifications_button_ = nullptr;
   views::LabelButton* inline_settings_cancel_button_ = nullptr;
   views::View* snooze_button_spacer_ = nullptr;
-  views::ImageButton* snooze_button_ = nullptr;
+  IconButton* snooze_button_ = nullptr;
 
   // These views below are dynamically created inside view hierarchy.
   NotificationTitleRow* title_row_ = nullptr;
@@ -206,9 +268,15 @@ class ASH_EXPORT AshNotificationView
   // Whether this view is shown in a notification popup.
   bool shown_in_popup_ = false;
 
+  base::ScopedObservation<message_center::MessageCenter, MessageCenterObserver>
+      message_center_observer_{this};
+
   base::WeakPtrFactory<AshNotificationView> weak_factory_{this};
 };
 
 }  // namespace ash
+
+DEFINE_VIEW_BUILDER(/* no export */,
+                    ash::AshNotificationView::GroupedNotificationsContainer)
 
 #endif  // ASH_SYSTEM_MESSAGE_CENTER_ASH_NOTIFICATION_VIEW_H_

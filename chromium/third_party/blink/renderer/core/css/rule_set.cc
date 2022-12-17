@@ -146,6 +146,7 @@ void RuleSet::AddToRuleSet(const AtomicString& key,
 static void ExtractSelectorValues(const CSSSelector* selector,
                                   AtomicString& id,
                                   AtomicString& class_name,
+                                  AtomicString& attr_name,
                                   AtomicString& custom_pseudo_element_name,
                                   AtomicString& tag_name,
                                   AtomicString& part_name,
@@ -193,6 +194,15 @@ static void ExtractSelectorValues(const CSSSelector* selector,
           break;
       }
       break;
+    case CSSSelector::kAttributeExact:
+    case CSSSelector::kAttributeSet:
+    case CSSSelector::kAttributeHyphen:
+    case CSSSelector::kAttributeList:
+    case CSSSelector::kAttributeContain:
+    case CSSSelector::kAttributeBegin:
+    case CSSSelector::kAttributeEnd:
+      attr_name = selector->Attribute().LocalName();
+      break;
     default:
       break;
   }
@@ -202,6 +212,7 @@ bool RuleSet::FindBestRuleSetAndAdd(const CSSSelector& component,
                                     RuleData* rule_data) {
   AtomicString id;
   AtomicString class_name;
+  AtomicString attr_name;
   AtomicString custom_pseudo_element_name;
   AtomicString tag_name;
   AtomicString part_name;
@@ -214,12 +225,14 @@ bool RuleSet::FindBestRuleSetAndAdd(const CSSSelector& component,
   const CSSSelector* it = &component;
   for (; it && it->Relation() == CSSSelector::kSubSelector;
        it = it->TagHistory()) {
-    ExtractSelectorValues(it, id, class_name, custom_pseudo_element_name,
-                          tag_name, part_name, pseudo_type);
+    ExtractSelectorValues(it, id, class_name, attr_name,
+                          custom_pseudo_element_name, tag_name, part_name,
+                          pseudo_type);
   }
   if (it) {
-    ExtractSelectorValues(it, id, class_name, custom_pseudo_element_name,
-                          tag_name, part_name, pseudo_type);
+    ExtractSelectorValues(it, id, class_name, attr_name,
+                          custom_pseudo_element_name, tag_name, part_name,
+                          pseudo_type);
   }
 
   // Prefer rule sets in order of most likely to apply infrequently.
@@ -230,6 +243,14 @@ bool RuleSet::FindBestRuleSetAndAdd(const CSSSelector& component,
 
   if (!class_name.IsEmpty()) {
     AddToRuleSet(class_name, EnsurePendingRules()->class_rules, rule_data);
+    return true;
+  }
+
+  if (!attr_name.IsEmpty()) {
+    AddToRuleSet(attr_name, EnsurePendingRules()->attr_rules, rule_data);
+    if (attr_name == html_names::kStyleAttr) {
+      has_bucket_for_style_attr_ = true;
+    }
     return true;
   }
 
@@ -386,6 +407,11 @@ void RuleSet::AddCounterStyleRule(StyleRuleCounterStyle* rule) {
   counter_style_rules_.push_back(rule);
 }
 
+void RuleSet::AddFontPaletteValuesRule(StyleRuleFontPaletteValues* rule) {
+  EnsurePendingRules();
+  font_palette_values_rules_.push_back(rule);
+}
+
 void RuleSet::AddScrollTimelineRule(StyleRuleScrollTimeline* rule) {
   EnsurePendingRules();  // So that property_rules_.ShrinkToFit() gets called.
   scroll_timeline_rules_.push_back(rule);
@@ -418,6 +444,11 @@ void RuleSet::AddChildRules(const HeapVector<Member<StyleRuleBase>>& rules,
     } else if (auto* font_face_rule = DynamicTo<StyleRuleFontFace>(rule)) {
       font_face_rule->SetCascadeLayer(cascade_layer);
       AddFontFaceRule(font_face_rule);
+    } else if (auto* font_palette_values_rule =
+                   DynamicTo<StyleRuleFontPaletteValues>(rule)) {
+      // TODO(https://crbug.com/1170794): Handle cascade layers for
+      // @font-palette-values.
+      AddFontPaletteValuesRule(font_palette_values_rule);
     } else if (auto* keyframes_rule = DynamicTo<StyleRuleKeyframes>(rule)) {
       keyframes_rule->SetCascadeLayer(cascade_layer);
       AddKeyframesRule(keyframes_rule);
@@ -438,10 +469,14 @@ void RuleSet::AddChildRules(const HeapVector<Member<StyleRuleBase>>& rules,
                       container_query, cascade_layer);
       }
     } else if (auto* container_rule = DynamicTo<StyleRuleContainer>(rule)) {
-      // TODO(crbug.com/1145970): Handle nested container queries.
-      // For now only the innermost applies.
+      const ContainerQuery* inner_container_query =
+          &container_rule->GetContainerQuery();
+      if (container_query) {
+        inner_container_query =
+            inner_container_query->CopyWithParent(container_query);
+      }
       AddChildRules(container_rule->ChildRules(), medium, add_rule_flags,
-                    &container_rule->GetContainerQuery(), cascade_layer);
+                    inner_container_query, cascade_layer);
     } else if (auto* layer_block_rule = DynamicTo<StyleRuleLayerBlock>(rule)) {
       CascadeLayer* sub_layer =
           GetOrAddSubLayer(cascade_layer, layer_block_rule->GetName());
@@ -462,7 +497,8 @@ bool RuleSet::MatchMediaForAddRules(const MediaQueryEvaluator& evaluator,
   bool match_media = evaluator.Eval(
       *media_queries, MediaQueryEvaluator::Results{
                           &features_.ViewportDependentMediaQueryResults(),
-                          &features_.DeviceDependentMediaQueryResults()});
+                          &features_.DeviceDependentMediaQueryResults(),
+                          &features_.MediaQueryUnitFlags()});
   media_query_set_results_.push_back(
       MediaQuerySetResult(*media_queries, match_media));
   return match_media;
@@ -550,6 +586,7 @@ void RuleSet::CompactRules() {
   PendingRuleMaps* pending_rules = pending_rules_.Release();
   CompactPendingRules(pending_rules->id_rules, id_rules_);
   CompactPendingRules(pending_rules->class_rules, class_rules_);
+  CompactPendingRules(pending_rules->attr_rules, attr_rules_);
   CompactPendingRules(pending_rules->tag_rules, tag_rules_);
   CompactPendingRules(pending_rules->ua_shadow_pseudo_element_rules,
                       ua_shadow_pseudo_element_rules_);
@@ -565,6 +602,7 @@ void RuleSet::CompactRules() {
   visited_dependent_rules_.ShrinkToFit();
   page_rules_.ShrinkToFit();
   font_face_rules_.ShrinkToFit();
+  font_palette_values_rules_.ShrinkToFit();
   keyframes_rules_.ShrinkToFit();
   property_rules_.ShrinkToFit();
   counter_style_rules_.ShrinkToFit();
@@ -672,6 +710,7 @@ void ExtendedRuleData::TraceAfterDispatch(Visitor* visitor) const {
 void RuleSet::PendingRuleMaps::Trace(Visitor* visitor) const {
   visitor->Trace(id_rules);
   visitor->Trace(class_rules);
+  visitor->Trace(attr_rules);
   visitor->Trace(tag_rules);
   visitor->Trace(ua_shadow_pseudo_element_rules);
 }
@@ -683,6 +722,7 @@ void RuleSet::LayerInterval::Trace(Visitor* visitor) const {
 void RuleSet::Trace(Visitor* visitor) const {
   visitor->Trace(id_rules_);
   visitor->Trace(class_rules_);
+  visitor->Trace(attr_rules_);
   visitor->Trace(tag_rules_);
   visitor->Trace(ua_shadow_pseudo_element_rules_);
   visitor->Trace(link_pseudo_class_rules_);
@@ -697,6 +737,7 @@ void RuleSet::Trace(Visitor* visitor) const {
   visitor->Trace(visited_dependent_rules_);
   visitor->Trace(page_rules_);
   visitor->Trace(font_face_rules_);
+  visitor->Trace(font_palette_values_rules_);
   visitor->Trace(keyframes_rules_);
   visitor->Trace(property_rules_);
   visitor->Trace(counter_style_rules_);

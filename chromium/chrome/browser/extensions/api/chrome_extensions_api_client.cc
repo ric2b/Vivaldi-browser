@@ -86,7 +86,7 @@
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
 // TODO(https://crbug.com/1060801): Here and elsewhere, possibly switch build
-// flag to #if defined(OS_CHROMEOS)
+// flag to #if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/supervised_user/supervised_user_extensions_delegate_impl.h"
 #endif
 
@@ -335,7 +335,7 @@ bool ChromeExtensionsAPIClient::ShouldAllowDetachingUsb(int vid,
   const base::ListValue* policy_list;
   if (ash::CrosSettings::Get()->GetList(ash::kUsbDetachableAllowlist,
                                         &policy_list)) {
-    for (const auto& entry : policy_list->GetList()) {
+    for (const auto& entry : policy_list->GetListDeprecated()) {
       if (entry.FindIntKey(ash::kUsbDetachableAllowlistKeyVid) == vid &&
           entry.FindIntKey(ash::kUsbDetachableAllowlistKeyPid) == pid) {
         return true;

@@ -133,7 +133,6 @@ class SyncServiceImpl : public SyncService,
   ModelTypeSet GetPreferredDataTypes() const override;
   ModelTypeSet GetActiveDataTypes() const override;
   void StopAndClear() override;
-  void SetSyncAllowedByPlatform(bool allowed) override;
   void OnDataTypeRequestsSyncStartup(ModelType type) override;
   void TriggerRefresh(const ModelTypeSet& types) override;
   void DataTypePreconditionChanged(ModelType type) override;
@@ -187,8 +186,8 @@ class SyncServiceImpl : public SyncService,
   void CryptoStateChanged() override;
   void CryptoRequiredUserActionChanged() override;
   void ReconfigureDataTypesDueToCrypto() override;
-  void EncryptionBootstrapTokenChanged(
-      const std::string& bootstrap_token) override;
+  void SetEncryptionBootstrapToken(const std::string& bootstrap_token) override;
+  std::string GetEncryptionBootstrapToken() override;
 
   // IdentityManager::Observer implementation.
   void OnAccountsInCookieUpdated(
@@ -217,17 +216,6 @@ class SyncServiceImpl : public SyncService,
   // KeyedService implementation.  This must be called exactly
   // once (before this object is destroyed).
   void Shutdown() override;
-
-#if defined(OS_ANDROID)
-  // Persists the fact that sync should no longer respect whether Android master
-  // sync is enabled. This will be respected for the current syncing account
-  // (if one exists) and any future ones. Only called on Android.
-  void SetDecoupledFromAndroidMasterSync();
-
-  // Gets the persisted information of whether sync should no longer respect
-  // if Android master sync is enabled. Only called on Android.
-  bool GetDecoupledFromAndroidMasterSync();
-#endif  // defined(OS_ANDROID)
 
   // Returns whether or not the underlying sync engine has made any
   // local changes to items that have not yet been synced with the
@@ -282,7 +270,7 @@ class SyncServiceImpl : public SyncService,
     kDisabledAccount = 2,
     kRequestedPrefChange = 3,
     kStopAndClear = 4,
-    kSetSyncAllowedByPlatform = 5,
+    // kSetSyncAllowedByPlatform = 5,
     kCredentialsChanged = 6,
     kResetLocalData = 7,
 
@@ -436,10 +424,6 @@ class SyncServiceImpl : public SyncService,
   // Prevents SyncServiceImpl from starting engine till browser restarted
   // or user signed out.
   bool sync_disabled_by_admin_;
-
-  // Whether Sync is allowed at the platform level (e.g. Android's "MasterSync"
-  // toggle). Maps to DISABLE_REASON_PLATFORM_OVERRIDE.
-  bool sync_allowed_by_platform_ = true;
 
   // Information describing an unrecoverable error.
   absl::optional<UnrecoverableErrorReason> unrecoverable_error_reason_ =

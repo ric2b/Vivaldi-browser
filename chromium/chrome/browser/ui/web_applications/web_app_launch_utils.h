@@ -9,6 +9,8 @@
 #include <string>
 
 #include "chrome/browser/web_applications/web_app_id.h"
+#include "components/services/app_service/public/mojom/types.mojom-forward.h"
+#include "extensions/common/constants.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -44,6 +46,12 @@ Browser* ReparentWebAppForActiveTab(Browser* browser);
 Browser* ReparentWebContentsIntoAppBrowser(content::WebContents* contents,
                                            const AppId& app_id);
 
+// Tags `contents` with the given app id and marks it as an app. This
+// differentiates it from a `WebContents` which happens to be hosting a page
+// that is part of an app.
+void SetWebContentsActingAsApp(content::WebContents* contents,
+                               const AppId& app_id);
+
 // Set preferences that are unique to app windows.
 void SetAppPrefsForWebContents(content::WebContents* web_contents);
 
@@ -73,6 +81,12 @@ content::WebContents* NavigateWebAppUsingParams(const std::string& app_id,
                                                 NavigateParams& nav_params);
 
 void RecordAppWindowLaunch(Profile* profile, const std::string& app_id);
+
+void RecordMetrics(const AppId& app_id,
+                   apps::mojom::LaunchContainer container,
+                   extensions::AppLaunchSource launch_source,
+                   const GURL& launch_url,
+                   content::WebContents* web_contents);
 
 }  // namespace web_app
 

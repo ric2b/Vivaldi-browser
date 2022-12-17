@@ -31,6 +31,8 @@
 
 namespace net {
 
+extern bool const kFirstPartySetsEnabled;
+
 class NetLog;
 
 // Observer for changes on |NSHTTPCookieStorge sharedHTTPCookieStorage|.
@@ -84,10 +86,12 @@ class CookieStoreIOS : public net::CookieStore,
   void SetMetricsEnabled();
 
   // Implementation of the net::CookieStore interface.
-  void SetCanonicalCookieAsync(std::unique_ptr<CanonicalCookie> cookie,
-                               const GURL& source_url,
-                               const net::CookieOptions& options,
-                               SetCookiesCallback callback) override;
+  void SetCanonicalCookieAsync(
+      std::unique_ptr<CanonicalCookie> cookie,
+      const GURL& source_url,
+      const net::CookieOptions& options,
+      SetCookiesCallback callback,
+      const net::CookieAccessResult* cookie_access_result = nullptr) override;
   void GetCookieListWithOptionsAsync(
       const GURL& url,
       const net::CookieOptions& options,
@@ -161,17 +165,18 @@ class CookieStoreIOS : public net::CookieStore,
     ~CookieChangeDispatcherIOS() override;
 
     // net::CookieChangeDispatcher
-    std::unique_ptr<CookieChangeSubscription> AddCallbackForCookie(
+    [[nodiscard]] std::unique_ptr<CookieChangeSubscription>
+    AddCallbackForCookie(
         const GURL& url,
         const std::string& name,
         const absl::optional<net::CookiePartitionKey>& cookie_partition_key,
-        CookieChangeCallback callback) override WARN_UNUSED_RESULT;
-    std::unique_ptr<CookieChangeSubscription> AddCallbackForUrl(
+        CookieChangeCallback callback) override;
+    [[nodiscard]] std::unique_ptr<CookieChangeSubscription> AddCallbackForUrl(
         const GURL& url,
         const absl::optional<net::CookiePartitionKey>& cookie_partition_key,
-        CookieChangeCallback callback) override WARN_UNUSED_RESULT;
-    std::unique_ptr<CookieChangeSubscription> AddCallbackForAllChanges(
-        CookieChangeCallback callback) override WARN_UNUSED_RESULT;
+        CookieChangeCallback callback) override;
+    [[nodiscard]] std::unique_ptr<CookieChangeSubscription>
+    AddCallbackForAllChanges(CookieChangeCallback callback) override;
 
    private:
     // Instances of this class are always members of CookieStoreIOS, so
@@ -180,10 +185,10 @@ class CookieStoreIOS : public net::CookieStore,
   };
 
   // Interface only used by CookieChangeDispatcherIOS.
-  std::unique_ptr<CookieChangeSubscription> AddCallbackForCookie(
+  [[nodiscard]] std::unique_ptr<CookieChangeSubscription> AddCallbackForCookie(
       const GURL& url,
       const std::string& name,
-      CookieChangeCallback callback) WARN_UNUSED_RESULT;
+      CookieChangeCallback callback);
 
   // Returns true if the system cookie store policy is
   // |NSHTTPCookieAcceptPolicyAlways|.

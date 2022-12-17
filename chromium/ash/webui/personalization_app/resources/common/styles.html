@@ -1,5 +1,11 @@
 <template>
   <style>
+    [hidden] {
+      /* The |hidden| attribute does not hide an element with an explicitly
+       * specified |display| property. Handle this by forcing display to |none|
+       * when the |hidden| attribute is present. */
+      display: none !important;
+    }
     :host {
       --personalization-app-grid-item-border-radius: 12px;
       --personalization-app-grid-item-height: 120px;
@@ -10,6 +16,9 @@
 
       /* copied from |AshColorProvider| |kSecondToneOpacity| constant. */
       --personalization-app-second-tone-opacity: 0.3;
+
+      --personalization-app-label-font: 500 13px/20px
+          var(--cros-font-family-google-sans);
     }
     @media (prefers-color-scheme: light) {
       .placeholder,
@@ -211,6 +220,22 @@
       top: 50%;
       width: 100%;
       z-index: 1;
+    }
+    cr-button {
+      border-color: var(--cros-button-stroke-color-secondary);
+      border-radius: 16px;
+    }
+    cr-button[aria-pressed=true],
+    cr-button[aria-selected=true] {
+      background-color: var(--cros-highlight-color);
+      border: 0;
+    }
+    cr-button + cr-button {
+      margin-inline-start: 8px;
+    }
+    .preview-container {
+      border: 1px solid var(--cros-button-stroke-color-secondary);
+      border-radius: 16px;
     }
   </style>
 </template>

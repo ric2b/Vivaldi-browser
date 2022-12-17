@@ -9,10 +9,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace base {
-class Value;
-class DictionaryValue;
-}  // namespace base
+#include "base/values.h"
 
 namespace vivaldi {
 

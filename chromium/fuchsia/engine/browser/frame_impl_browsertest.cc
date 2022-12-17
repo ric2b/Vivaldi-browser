@@ -122,11 +122,6 @@ IN_PROC_BROWSER_TEST_F(FrameImplTest, MAYBE_VisibilityState) {
 
   auto frame = cr_fuchsia::FrameForTest::Create(context(), {});
   base::RunLoop().RunUntilIdle();
-  FrameImpl* frame_impl = context_impl()->GetFrameImplForTest(&frame.ptr());
-
-  // CreateView() will cause the AccessibilityBridge to be created.
-  FakeSemanticsManager fake_semantics_manager;
-  frame_impl->set_semantics_manager_for_test(&fake_semantics_manager);
 
   // Navigate to a page and wait for it to finish loading.
   ASSERT_TRUE(cr_fuchsia::LoadUrlAndExpectResponse(
@@ -186,6 +181,44 @@ IN_PROC_BROWSER_TEST_F(FrameImplTest, NavigateFrame) {
       url::kAboutBlankURL));
   frame.navigation_listener().RunUntilUrlAndTitleEquals(
       GURL(url::kAboutBlankURL), url::kAboutBlankURL);
+}
+
+// Verifies that the browser does not crash if the Renderer process exits while
+// a navigation event listener is attached to the Frame.
+IN_PROC_BROWSER_TEST_F(FrameImplTest, NavigationListenerRendererProcessGone) {
+  net::test_server::EmbeddedTestServerHandle test_server_handle;
+  ASSERT_TRUE(test_server_handle =
+                  embedded_test_server()->StartAndReturnHandle());
+  GURL url(embedded_test_server()->GetURL("/nocontent"));
+
+  // Create a Frame and navigate it to a URL that will not "commit".
+  auto frame = cr_fuchsia::FrameForTest::Create(context(), {});
+
+  EXPECT_TRUE(cr_fuchsia::LoadUrlAndExpectResponse(
+      frame.GetNavigationController(), fuchsia::web::LoadUrlParams(),
+      url.spec()));
+
+  // Terminate the Renderer process and run the browser until that is observed.
+  content::RenderProcessHost* child_process =
+      context_impl()
+          ->GetFrameImplForTest(&frame.ptr())
+          ->web_contents()
+          ->GetMainFrame()
+          ->GetProcess();
+
+  content::RenderProcessHostWatcher(
+      child_process, content::RenderProcessHostWatcher::WATCH_FOR_PROCESS_READY)
+      .Wait();
+  ASSERT_TRUE(child_process->IsReady());
+
+  content::RenderProcessHostWatcher exit_observer(
+      child_process, content::RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
+  child_process->Shutdown(0);
+  exit_observer.Wait();
+  EXPECT_FALSE(exit_observer.did_exit_normally());
+
+  // Spin the browser main loop to flush any queued work, or FIDL activity.
+  base::RunLoop().RunUntilIdle();
 }
 
 // Verifies that the renderer process consumes more memory for document
@@ -269,10 +302,6 @@ IN_PROC_BROWSER_TEST_F(FrameImplTest, ContextDeletedBeforeFrameWithView) {
   EXPECT_TRUE(frame.ptr());
   base::RunLoop().RunUntilIdle();
   FrameImpl* frame_impl = context_impl()->GetFrameImplForTest(&frame.ptr());
-
-  // CreateView() will cause the AccessibilityBridge to be created.
-  FakeSemanticsManager fake_semantics_manager;
-  frame_impl->set_semantics_manager_for_test(&fake_semantics_manager);
 
   auto view_tokens = scenic::ViewTokenPair::New();
   frame->CreateView(std::move(view_tokens.view_token));
@@ -894,11 +923,11 @@ IN_PROC_BROWSER_TEST_F(FrameImplTest, Stop) {
 #if defined(ARCH_CPU_ARM_FAMILY)
 #define MAYBE_SetPageScale DISABLED_SetPageScale
 #else
-#define MAYBE_SetPageScale SetPageScale
-#endif
 // TODO(crbug.com/1239135): SetPageScale/ExecuteJavaScript is racey, causing
 // the test to flake.
-IN_PROC_BROWSER_TEST_F(FrameImplTest, DISABLED_SetPageScale) {
+#define MAYBE_SetPageScale DISABLED_SetPageScale
+#endif
+IN_PROC_BROWSER_TEST_F(FrameImplTest, MAYBE_SetPageScale) {
   auto frame = cr_fuchsia::FrameForTest::Create(context(), {});
 
   auto view_tokens = scenic::ViewTokenPair::New();
@@ -1010,10 +1039,6 @@ IN_PROC_BROWSER_TEST_F(FrameImplTest, RecreateView) {
   ASSERT_TRUE(frame_impl);
   EXPECT_FALSE(frame_impl->has_view_for_test());
 
-  // CreateView() will cause the AccessibilityBridge to be created.
-  FakeSemanticsManager fake_semantics_manager;
-  frame_impl->set_semantics_manager_for_test(&fake_semantics_manager);
-
   // Verify that the Frame can navigate, prior to the View being created.
   const GURL page1_url(embedded_test_server()->GetURL(kPage1Path));
   EXPECT_TRUE(cr_fuchsia::LoadUrlAndExpectResponse(
@@ -1102,13 +1127,14 @@ IN_PROC_BROWSER_TEST_F(FrameImplTest, ImmediateNavigationEvent) {
   base::RunLoop run_loop;
   auto frame = cr_fuchsia::FrameForTest::Create(context(), {});
   frame.navigation_listener().SetBeforeAckHook(base::BindRepeating(
-      [](base::RunLoop* run_loop, const fuchsia::web::NavigationState& change,
+      [](base::OnceClosure quit_loop,
+         const fuchsia::web::NavigationState& change,
          OnNavigationStateChangedCallback callback) {
+        std::move(quit_loop).Run();
         EXPECT_TRUE(change.IsEmpty());
-        run_loop->Quit();
         callback();
       },
-      base::Unretained(&run_loop)));
+      run_loop.QuitClosure()));
   run_loop.Run();
   frame.navigation_listener().SetBeforeAckHook({});
 
@@ -1123,8 +1149,8 @@ IN_PROC_BROWSER_TEST_F(FrameImplTest, ImmediateNavigationEvent) {
   cr_fuchsia::TestNavigationListener navigation_listener;
   fidl::Binding<fuchsia::web::NavigationEventListener>
       navigation_listener_binding(&navigation_listener);
-  frame.ptr()->SetNavigationEventListener(
-      navigation_listener_binding.NewBinding());
+  frame.ptr()->SetNavigationEventListener2(
+      navigation_listener_binding.NewBinding(), /*flags=*/{});
   navigation_listener.RunUntilUrlAndTitleEquals(page_url, kPage1Title);
 }
 
@@ -1185,7 +1211,7 @@ IN_PROC_BROWSER_TEST_F(FrameImplTest, InvalidHeader) {
     controller->LoadUrl(
         "http://site.ext/", std::move(load_url_params),
         cr_fuchsia::CallbackToFitFunction(result.GetCallback()));
-    result.Wait();
+    ASSERT_TRUE(result.Wait());
 
     ASSERT_TRUE(result.Get().is_err());
     EXPECT_EQ(result.Get().err(),

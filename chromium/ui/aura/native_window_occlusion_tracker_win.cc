@@ -380,7 +380,7 @@ void NativeWindowOcclusionTrackerWin::OnDisplayStateChanged(bool display_on) {
   if (display_on_) {
     // NOTE(andre@vivaldi.com) : Update occlusionstate for all non-minimized
     // windows. See VB-75959. This was introduced with:
-    // https://source.chromium.org/chromium/chromium/src/+/d2852ba3a19e0074a8c5372acff50e1757b1fdcc 
+    // https://source.chromium.org/chromium/chromium/src/+/d2852ba3a19e0074a8c5372acff50e1757b1fdcc
     for (const auto& root_window_hwnd_pair : hwnd_root_window_map_) {
       root_window_hwnd_pair.second->GetHost()->SetNativeWindowOcclusionState(
           IsIconic(root_window_hwnd_pair.first)
@@ -661,10 +661,11 @@ void NativeWindowOcclusionTrackerWin::WindowOcclusionCalculator::
 void NativeWindowOcclusionTrackerWin::WindowOcclusionCalculator::
     ScheduleOcclusionCalculationIfNeeded() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (!occlusion_update_timer_.IsRunning())
+  if (!occlusion_update_timer_.IsRunning()) {
     occlusion_update_timer_.Start(
         FROM_HERE, kUpdateOcclusionDelay, this,
         &WindowOcclusionCalculator::ComputeNativeWindowOcclusionStatus);
+  }
 }
 
 void NativeWindowOcclusionTrackerWin::WindowOcclusionCalculator::
@@ -690,6 +691,16 @@ void NativeWindowOcclusionTrackerWin::WindowOcclusionCalculator::
     RegisterEventHooks() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(global_event_hooks_.empty());
+
+  // This helps with the case where an extension tried to foreground a window,
+  // but Windows prevented it, and the user clicks on the task bar to bring the
+  // window forward. See https://crbug.com/1137982. This is the only event I
+  // could find that always gets sent in this scenario, and isn't too common.
+  // TODO(crbug.com/1297684): See if we can make handling this event cheaper,
+  // since we typically don't need it, e.g., by using a longer timer interval
+  // for starting the occlusion calculation for this event, to batch subsequent
+  // events.
+  RegisterGlobalEventHook(EVENT_SYSTEM_CAPTUREEND, EVENT_SYSTEM_CAPTUREEND);
 
   // Detects native window move (drag) and resizing events.
   RegisterGlobalEventHook(EVENT_SYSTEM_MOVESIZESTART, EVENT_SYSTEM_MOVESIZEEND);

@@ -1,0 +1,10 @@
+
+vivaldi_provisioningprofile_files = []
+
+foreach(suffix, ["", ".2953f34141632c2344c96222789fa2bbb718640e"]) {
+  vivaldi_provisioningprofile_files += [
+      "//vivaldi/installer/mac/profiles/Vivaldi${suffix}.provisionprofile",
+      "//vivaldi/installer/mac/profiles/Vivaldi_Internal${suffix}.provisionprofile",
+      "//vivaldi/installer/mac/profiles/Vivaldi_Snapshot${suffix}.provisionprofile",
+  ]
+}

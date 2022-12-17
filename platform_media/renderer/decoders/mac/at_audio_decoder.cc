@@ -19,6 +19,7 @@
 #include "base/task/sequenced_task_runner.h"
 #include "media/base/audio_buffer.h"
 #include "media/base/audio_discard_helper.h"
+#include "media/base/decoder_status.h"
 #include "media/base/demuxer_stream.h"
 #include "media/formats/mpeg/adts_constants.h"
 #include "platform_media/common/mac/framework_type_conversions.h"
@@ -464,10 +465,8 @@ void ATAudioDecoder::Initialize(
                  << " Unsupported Encrypted Audio codec : "
                  << GetCodecName(config.codec());
     task_runner_->PostTask(
-        FROM_HERE,
-        base::BindOnce(
-            std::move(init_cb),
-            media::Status(media::StatusCode::kDecoderUnsupportedCodec)));
+        FROM_HERE, base::BindOnce(std::move(init_cb),
+                                  DecoderStatus::Codes::kUnsupportedCodec));
     return;
   }
 
@@ -475,10 +474,8 @@ void ATAudioDecoder::Initialize(
     VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
             << " Unsupported codec: " << GetCodecName(config.codec());
     task_runner_->PostTask(
-        FROM_HERE,
-        base::BindOnce(
-            std::move(init_cb),
-            media::Status(media::StatusCode::kDecoderUnsupportedCodec)));
+        FROM_HERE, base::BindOnce(std::move(init_cb),
+                                  DecoderStatus::Codes::kUnsupportedCodec));
     return;
   }
 
@@ -486,10 +483,8 @@ void ATAudioDecoder::Initialize(
     VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
             << " ffmpeg demuxer is not supported";
     task_runner_->PostTask(
-        FROM_HERE,
-        base::BindOnce(
-            std::move(init_cb),
-            media::Status(media::StatusCode::kDecoderUnsupportedCodec)));
+        FROM_HERE, base::BindOnce(std::move(init_cb),
+                                  DecoderStatus::Codes::kUnsupportedCodec));
     return;
   }
 
@@ -515,15 +510,13 @@ void ATAudioDecoder::Initialize(
     if (!InitializeConverter(format, full_extra_data)) {
       task_runner_->PostTask(
           FROM_HERE,
-          base::BindOnce(
-              std::move(init_cb),
-              media::Status(media::StatusCode::kDecoderInitializationFailed)));
+          base::BindOnce(std::move(init_cb), DecoderStatus::Codes::kFailed));
       return;
     }
   }
 
-  task_runner_->PostTask(FROM_HERE,
-                         base::BindOnce(std::move(init_cb), media::Status()));
+  task_runner_->PostTask(
+      FROM_HERE, base::BindOnce(std::move(init_cb), DecoderStatus::Codes::kOk));
 }
 
 void ATAudioDecoder::Decode(scoped_refptr<DecoderBuffer> input,
@@ -543,7 +536,8 @@ void ATAudioDecoder::Decode(scoped_refptr<DecoderBuffer> input,
 
   VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__ << " ok=" << ok;
 
-  DecodeStatus status = ok ? DecodeStatus::OK : DecodeStatus::DECODE_ERROR;
+  DecoderStatus status =
+      ok ? DecoderStatus::Codes::kOk : DecoderStatus::Codes::kFailed;
   task_runner_->PostTask(FROM_HERE,
                          base::BindOnce(std::move(decode_cb), status));
 }

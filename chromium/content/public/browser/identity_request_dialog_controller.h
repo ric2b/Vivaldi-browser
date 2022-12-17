@@ -12,13 +12,15 @@
 #include "base/containers/span.h"
 #include "content/common/content_export.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "url/gurl.h"
 
 namespace content {
 class WebContents;
 
-extern const char CONTENT_EXPORT kSecWebIdCsrfHeader[];
+extern const char CONTENT_EXPORT kSecFedCmCsrfHeader[];
+extern const char CONTENT_EXPORT kSecFedCmCsrfHeaderValue[];
 
 // Represents a federated user account which is used when displaying an account
 // selector.
@@ -45,26 +47,25 @@ struct CONTENT_EXPORT IdentityRequestAccount {
     kAuto,
   };
 
-  IdentityRequestAccount(const std::string& sub,
-                         const std::string& email,
-                         const std::string& name,
-                         const std::string& given_name,
-                         const GURL& picture,
-                         LoginState login_state = LoginState::kSignUp);
+  IdentityRequestAccount(
+      const std::string& id,
+      const std::string& email,
+      const std::string& name,
+      const std::string& given_name,
+      const GURL& picture,
+      absl::optional<LoginState> login_state = absl::nullopt);
   IdentityRequestAccount(const IdentityRequestAccount&);
   ~IdentityRequestAccount();
 
-  // sub, short for subject, is the unique identifier.
-  std::string sub;
+  std::string id;
   std::string email;
   std::string name;
   std::string given_name;
   GURL picture;
 
-  // The account login state. Unlike the other fields this one is not populated
-  // by the IDP but instead by the browser based on its stored permission
-  // grants.
-  LoginState login_state;
+  // The account login state. Unlike the other fields this one can be populated
+  // either by the IDP or by the browser based on its stored permission grants.
+  absl::optional<LoginState> login_state;
 };
 
 struct ClientIdData {
@@ -81,6 +82,8 @@ struct CONTENT_EXPORT IdentityProviderMetadata {
 
   absl::optional<SkColor> brand_text_color;
   absl::optional<SkColor> brand_background_color;
+  SkBitmap brand_icon;
+  GURL brand_icon_url;
 };
 
 // IdentityRequestDialogController is in interface for control of the UI
@@ -100,7 +103,8 @@ class CONTENT_EXPORT IdentityRequestDialogController {
   using InitialApprovalCallback = base::OnceCallback<void(UserApproval)>;
   using IdProviderWindowClosedCallback = base::OnceCallback<void()>;
   using TokenExchangeApprovalCallback = base::OnceCallback<void(UserApproval)>;
-  using AccountSelectionCallback = base::OnceCallback<void(const std::string&)>;
+  using AccountSelectionCallback =
+      base::OnceCallback<void(const std::string&, bool)>;
 
   IdentityRequestDialogController() = default;
 
@@ -110,6 +114,14 @@ class CONTENT_EXPORT IdentityRequestDialogController {
       const IdentityRequestDialogController&) = delete;
 
   virtual ~IdentityRequestDialogController() = default;
+
+  // Returns the ideal size for the identity provider brand icon. The brand icon
+  // is displayed in the accounts dialog.
+  virtual int GetBrandIconIdealSize();
+
+  // Returns the minimum size for the identity provider brand icon. The brand
+  // icon is displayed in the accounts dialog.
+  virtual int GetBrandIconMinimumSize();
 
   // Permission-oriented flow methods.
 
@@ -142,7 +154,7 @@ class CONTENT_EXPORT IdentityRequestDialogController {
       const IdentityProviderMetadata& idp_metadata,
       const ClientIdData& client_id_data,
       IdentityRequestAccount::SignInMode sign_in_mode,
-      AccountSelectionCallback on_selected) {}
+      AccountSelectionCallback on_selected);
 
   // Shows the identity provider sign-in page at the given URL using the
   // |idp_web_contents| inside a modal window. The |on_closed| callback is

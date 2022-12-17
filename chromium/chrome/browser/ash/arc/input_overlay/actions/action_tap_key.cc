@@ -4,21 +4,84 @@
 
 #include "chrome/browser/ash/arc/input_overlay/actions/action_tap_key.h"
 
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ash/arc/input_overlay/actions/action.h"
-#include "chrome/browser/ash/arc/input_overlay/input_overlay_resources_util.h"
 #include "chrome/browser/ash/arc/input_overlay/touch_id_manager.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
+#include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/size.h"
-#include "ui/views/controls/label.h"
 
 namespace arc {
 namespace input_overlay {
 namespace {
-// Key strings in Json file.
-constexpr char kKey[] = "key";
+// UI specs.
+constexpr int kLabelPositionToSide = 36;
+constexpr int kLabelMargin = 2;
+
+bool IsAlt(ui::DomCode code) {
+  return code == ui::DomCode::ALT_LEFT || code == ui::DomCode::ALT_RIGHT;
+}
+
+bool IsCtrl(ui::DomCode code) {
+  return code == ui::DomCode::CONTROL_LEFT ||
+         code == ui::DomCode::CONTROL_RIGHT;
+}
+
+bool IsShift(ui::DomCode code) {
+  return code == ui::DomCode::SHIFT_LEFT || code == ui::DomCode::SHIFT_RIGHT;
+}
+
+bool IsSameKeyCode(ui::DomCode a, ui::DomCode b) {
+  return a == b || (IsAlt(a) && IsAlt(b)) || (IsCtrl(a) && IsCtrl(b)) ||
+         (IsShift(a) && IsShift(b));
+}
+
+bool IsModifier(ui::DomCode code) {
+  return IsAlt(code) || IsCtrl(code) || IsShift(code);
+}
+
 }  // namespace
+
+class ActionTapKey::ActionTapKeyView : public ActionView {
+ public:
+  ActionTapKeyView(Action* action, const gfx::RectF& content_bounds)
+      : ActionView(action) {
+    int radius = action->GetUIRadius(content_bounds);
+    auto circle = std::make_unique<ActionCircle>(radius);
+    auto text = GetDisplayText(static_cast<ActionTapKey*>(action)->key());
+    auto label = std::make_unique<ActionLabel>(base::UTF8ToUTF16(text));
+    label->set_editable(true);
+    auto label_size = label->GetPreferredSize();
+    label->SetSize(label_size);
+    int width = std::max(
+        radius * 2, radius * 2 - kLabelPositionToSide + label_size.width());
+    SetSize(gfx::Size(width, radius * 2));
+    if (action->on_left_or_middle_side()) {
+      circle->SetPosition(gfx::Point());
+      label->SetPosition(
+          gfx::Point(label_size.width() > kLabelPositionToSide
+                         ? width - label_size.width()
+                         : width - kLabelPositionToSide,
+                     radius * 2 - label_size.height() - kLabelMargin));
+      center_.set_x(radius);
+      center_.set_y(radius);
+    } else {
+      circle->SetPosition(gfx::Point(width - radius * 2, 0));
+      label->SetPosition(
+          gfx::Point(0, radius * 2 - label_size.height() - kLabelMargin));
+      center_.set_x(width - radius);
+      center_.set_y(radius);
+    }
+    circle_ = AddChildView(std::move(circle));
+    labels_.emplace_back(AddChildView(std::move(label)));
+  }
+
+  ActionTapKeyView(const ActionTapKeyView&) = delete;
+  ActionTapKeyView& operator=(const ActionTapKeyView&) = delete;
+  ~ActionTapKeyView() override = default;
+};
 
 ActionTapKey::ActionTapKey(aura::Window* window) : Action(window) {}
 
@@ -31,38 +94,38 @@ bool ActionTapKey::ParseFromJson(const base::Value& value) {
                << "}.";
     return false;
   }
-  const std::string* key = value.FindStringKey(kKey);
+  auto key = ParseKeyboardKey(value, name_);
   if (!key) {
-    LOG(ERROR) << "Require key code for tap key action {" << name_ << "}.";
+    LOG(ERROR) << "No/invalid key code for key tap action {" << name_ << "}.";
     return false;
   }
-  key_ = ui::KeycodeConverter::CodeStringToDomCode(*key);
-  if (key_ == ui::DomCode::NONE) {
-    LOG(ERROR) << "Tap key code is invalid for tap key action {" << name_
-               << "}. It should be similar to {KeyA}, but got {" << *key
-               << "}.";
-    return false;
+  key_ = key->first;
+  if (IsModifier(key_)) {
+    is_modifier_key_ = true;
   }
   return true;
 }
 
 bool ActionTapKey::RewriteEvent(const ui::Event& origin,
+                                const gfx::RectF& content_bounds,
+                                const bool is_mouse_locked,
                                 std::list<ui::TouchEvent>& touch_events,
-                                const gfx::RectF& content_bounds) {
+                                bool& keep_original_event) {
   if (!origin.IsKeyEvent())
     return false;
   LogEvent(origin);
   const ui::KeyEvent& key_event = static_cast<const ui::KeyEvent&>(origin);
-  bool rewritten = RewriteKeyEvent(key_event, touch_events, content_bounds);
+  bool rewritten = RewriteKeyEvent(key_event, touch_events, content_bounds,
+                                   keep_original_event);
   LogTouchEvents(touch_events);
   return rewritten;
 }
 
 bool ActionTapKey::RewriteKeyEvent(const ui::KeyEvent& key_event,
                                    std::list<ui::TouchEvent>& rewritten_events,
-                                   const gfx::RectF& content_bounds) {
-  if (key_event.source_device_id() == ui::ED_UNKNOWN_DEVICE ||
-      key_event.code() != key_) {
+                                   const gfx::RectF& content_bounds,
+                                   bool& keep_original_event) {
+  if (!IsSameKeyCode(key_event.code(), key_)) {
     return false;
   }
 
@@ -78,6 +141,9 @@ bool ActionTapKey::RewriteKeyEvent(const ui::KeyEvent& key_event,
     }
 
     touch_id_ = TouchIdManager::GetInstance()->ObtainTouchID();
+    DCHECK(touch_id_);
+    if (!touch_id_)
+      return false;
     auto pos = CalculateTouchPosition(content_bounds);
     if (!pos)
       return false;
@@ -89,7 +155,21 @@ bool ActionTapKey::RewriteKeyEvent(const ui::KeyEvent& key_event,
         ui::PointerDetails(ui::EventPointerType::kTouch, *touch_id_)));
     ui::Event::DispatcherApi(&(rewritten_events.back()))
         .set_target(target_window_);
-    keys_pressed_.emplace(key_event.code());
+    if (!is_modifier_key_) {
+      keys_pressed_.emplace(key_event.code());
+    } else {
+      // For modifier keys, EventRewriterChromeOS skips release event for other
+      // event rewriters but still keeps the press event, so AcceleratorHistory
+      // can still receive the release event. To avoid error in
+      // AcceleratorHistory, original press event is still sent.
+      keep_original_event = true;
+      rewritten_events.emplace_back(ui::TouchEvent(
+          ui::EventType::ET_TOUCH_RELEASED, last_touch_root_location_,
+          last_touch_root_location_, key_event.time_stamp(),
+          ui::PointerDetails(ui::EventPointerType::kTouch, *touch_id_)));
+      ui::Event::DispatcherApi(&(rewritten_events.back()));
+      OnTouchReleased();
+    }
   } else {
     if (!touch_id_) {
       LOG(ERROR) << "There should be a touch ID for the release {"
@@ -113,18 +193,17 @@ bool ActionTapKey::RewriteKeyEvent(const ui::KeyEvent& key_event,
   return true;
 }
 
-gfx::PointF ActionTapKey::GetUIPosition(const gfx::RectF& content_bounds) {
-  // TODO(cuicuiruan): will update the UI position according to design specs.
+gfx::PointF ActionTapKey::GetUICenterPosition(
+    const gfx::RectF& content_bounds) {
   auto* position = locations().front().get();
   return position->CalculatePosition(content_bounds);
 }
 
-std::unique_ptr<ActionLabel> ActionTapKey::CreateView(
+std::unique_ptr<ActionView> ActionTapKey::CreateView(
     const gfx::RectF& content_bounds) {
-  // TODO(cuicuiruan): will update the view according to design specs.
-  auto text = GetDisplayText(ui::KeycodeConverter::DomCodeToCodeString(key_));
-  auto view = std::make_unique<ActionLabel>(base::UTF8ToUTF16(text));
-  auto center_pos = GetUIPosition(content_bounds);
+  auto view = std::make_unique<ActionTapKeyView>(this, content_bounds);
+  view->set_editable(true);
+  auto center_pos = GetUICenterPosition(content_bounds);
   view->SetPositionFromCenterPosition(center_pos);
   return view;
 }

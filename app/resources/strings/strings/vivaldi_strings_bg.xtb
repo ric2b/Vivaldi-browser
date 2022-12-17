@@ -4,7 +4,7 @@
 <translation id="1089894737218087497">Инсталирай самостоятелно</translation>
 <translation id="1682285232070778125">Задай Vivaldi като водещ браузър</translation>
 <translation id="1974060860693918893">Разширено</translation>
-<translation id="2134216661302048561">Инсталаторът на Vivaldi не е завършил работа. Сигурен ли сте, че затваряте?</translation>
+<translation id="2134216661302048561">Инсталаторът на Vivaldi не е приключил работа. Сигурен ли сте, че затваряте?</translation>
 <translation id="2286454467119466181">Опростено</translation>
 <translation id="237789874664518125">Авторски права Vivaldi Technologies AS, <ph name="YEAR" /> г. Всички права запазени. &lt;a&gt;Политика на поверителност&lt;/a&gt;</translation>
 <translation id="2392002507524894126">Авторски права Vivaldi Technologies AS, <ph name="YEAR" /> г. Всички права запазени.</translation>
@@ -34,6 +34,6 @@
 <translation id="694714344624446243">Инсталатор на Vivaldi</translation>
 <translation id="7658239707568436148">Отказ</translation>
 <translation id="8031581238030785388">Приложения към Vivaldi</translation>
-<translation id="8773751185824654197">Забележка: при обновяване върху работещ браузър, копието на Vivaldi ще бъде затворено и презаредено.</translation>
+<translation id="8773751185824654197">Забележка: при обновяване на работещ браузър това копие ще бъде затворено и презаредено.</translation>
 <translation id="933060950687965486">Вид инсталиране</translation>
 </translationbundle>

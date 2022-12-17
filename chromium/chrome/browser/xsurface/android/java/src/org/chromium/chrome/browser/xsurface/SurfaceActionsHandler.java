@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.xsurface;
 
 import android.view.View;
 
+import java.util.List;
 /**
  * Interface to provide chromium calling points for an external surface.
  */
@@ -48,6 +49,27 @@ public interface SurfaceActionsHandler {
 
     /**
      * Dismiss the open bottom sheet (or do nothing if there isn't one).
+     *
      */
     default void dismissBottomSheet() {}
+
+    /**
+     * Notifies the host app that url with broadTopicMids and entityMids was clicked.
+     * @param url The URL that the user clicked on
+     * @param entityMids Sorted list (most relevant to least) of entity MIDs that correspond to the
+     *         clicked URL
+     */
+    default void updateUserProfileOnLinkClick(String url, List<Long> entityMids) {}
+
+    /**
+     * Attempts to follow a WebFeed. If the WebFeed cannot be followed immediately
+     * due to network limitations, the operation will be retried at a later time.
+     */
+    default void followWebFeed(String webFeedName) {}
+
+    /**
+     * Attempts to unfollow a WebFeed. If the WebFeed cannot be unfollowed immediately
+     * due to network limitations, the operation will be retried at a later time.
+     */
+    default void unfollowWebFeed(String webFeedName) {}
 }

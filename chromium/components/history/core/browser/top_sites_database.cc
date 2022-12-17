@@ -6,11 +6,12 @@
 
 #include <stddef.h>
 #include <stdint.h>
+
+#include <tuple>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/files/file_util.h"
-#include "base/ignore_result.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_piece.h"
@@ -130,7 +131,7 @@ void FixTopSitesTable(sql::Database* db, int version) {
         "DELETE FROM thumbnails "
         "WHERE (url_rank = -1 AND last_forced = 0) "
         "OR (url_rank <> -1 AND last_forced <> 0)";
-    ignore_result(db->Execute(kFixRankSql));
+    std::ignore = db->Execute(kFixRankSql);
     if (db->GetLastChangeCount() > 0)
       RecordRecoveryEvent(RECOVERY_EVENT_INVARIANT_RANK);
   }
@@ -142,8 +143,8 @@ void FixTopSitesTable(sql::Database* db, int version) {
   static const char kFixRedirectsSql[] =
       "DELETE FROM %s "
       "WHERE url <> substr(redirects, -length(url), length(url))";
-  ignore_result(
-      db->Execute(base::StringPrintf(kFixRedirectsSql, kTableName).c_str()));
+  std::ignore =
+      db->Execute(base::StringPrintf(kFixRedirectsSql, kTableName).c_str());
   if (db->GetLastChangeCount() > 0)
     RecordRecoveryEvent(RECOVERY_EVENT_INVARIANT_REDIRECT);
 
@@ -258,7 +259,7 @@ void DatabaseErrorCallback(sql::Database* db,
     // or hardware issues, not coding errors at the client level, so displaying
     // the error would probably lead to confusion.  The ignored call signals the
     // test-expectation framework that the error was handled.
-    ignore_result(sql::Database::IsExpectedSqliteError(extended_error));
+    std::ignore = sql::Database::IsExpectedSqliteError(extended_error);
     return;
   }
 

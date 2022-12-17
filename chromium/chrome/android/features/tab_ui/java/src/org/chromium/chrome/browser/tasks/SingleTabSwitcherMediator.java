@@ -33,6 +33,7 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.chrome.browser.tasks.pseudotab.PseudoTab;
 import org.chromium.chrome.browser.tasks.tab_management.TabListFaviconProvider;
+import org.chromium.chrome.browser.tasks.tab_management.TabManagementDelegate.TabSwitcherType;
 import org.chromium.chrome.browser.tasks.tab_management.TabSwitcher;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.chrome.features.start_surface.StartSurfaceConfiguration;
@@ -258,6 +259,11 @@ public class SingleTabSwitcherMediator implements TabSwitcher.Controller {
     @Override
     public boolean isDialogVisible() {
         return false;
+    }
+
+    @Override
+    public @TabSwitcherType int getTabSwitcherType() {
+        return TabSwitcherType.SINGLE;
     }
 
     private void updateSelectedTab(Tab tab) {

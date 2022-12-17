@@ -8,7 +8,6 @@
 #include <memory>
 
 #include "base/check.h"
-#include "base/compiler_specific.h"
 #include "ui/ozone/platform/wayland/common/wayland.h"
 
 struct wl_proxy;
@@ -41,8 +40,7 @@ template <typename T>
 class GlobalObjectRegistrar {
  public:
   GlobalObjectRegistrar() {
-    GlobalObjectFactory Instantiate = T::Instantiate;
-    ALLOW_UNUSED_LOCAL(Instantiate);
+    [[maybe_unused]] GlobalObjectFactory Instantiate = T::Instantiate;
   }
 };
 
@@ -106,6 +104,7 @@ bool CanBind(const std::string& interface,
 
 // For convenience, keep aphabetical order in this list.
 DECLARE_WAYLAND_OBJECT_TRAITS(augmented_surface)
+DECLARE_WAYLAND_OBJECT_TRAITS(augmented_sub_surface)
 DECLARE_WAYLAND_OBJECT_TRAITS(gtk_primary_selection_device)
 DECLARE_WAYLAND_OBJECT_TRAITS(gtk_primary_selection_device_manager)
 DECLARE_WAYLAND_OBJECT_TRAITS(gtk_primary_selection_offer)

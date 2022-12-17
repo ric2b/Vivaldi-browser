@@ -11,6 +11,7 @@
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/bookmarks/managed/managed_bookmarks_policy_handler.h"
 #include "components/content_settings/core/common/pref_names.h"
+#include "components/enterprise/browser/reporting/cloud_reporting_frequency_policy_handler.h"
 #include "components/enterprise/browser/reporting/cloud_reporting_policy_handler.h"
 #include "components/enterprise/browser/reporting/common_pref_names.h"
 #include "components/history/core/common/pref_names.h"
@@ -32,6 +33,7 @@
 #include "components/variations/pref_names.h"
 #include "components/variations/service/variations_service.h"
 #include "ios/chrome/browser/policy/browser_signin_policy_handler.h"
+#include "ios/chrome/browser/policy/new_tab_page_location_policy_handler.h"
 #include "ios/chrome/browser/policy/policy_features.h"
 #import "ios/chrome/browser/policy/restrict_accounts_policy_handler.h"
 #include "ios/chrome/browser/pref_names.h"
@@ -149,6 +151,11 @@ std::unique_ptr<policy::ConfigurationPolicyHandlerList> BuildPolicyHandlerList(
   handlers->AddHandler(std::make_unique<syncer::SyncPolicyHandler>());
   handlers->AddHandler(
       std::make_unique<enterprise_reporting::CloudReportingPolicyHandler>());
+  handlers->AddHandler(
+      std::make_unique<
+          enterprise_reporting::CloudReportingFrequencyPolicyHandler>());
+  handlers->AddHandler(
+      std::make_unique<policy::NewTabPageLocationPolicyHandler>());
 
   if (ShouldInstallURLBlocklistPolicyHandlers()) {
     handlers->AddHandler(std::make_unique<policy::URLBlocklistPolicyHandler>(

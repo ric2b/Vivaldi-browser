@@ -110,7 +110,7 @@ class TestLayer {
 class TestHostClient : public MutatorHostClient {
  public:
   explicit TestHostClient(ThreadInstance thread_instance);
-  ~TestHostClient();
+  ~TestHostClient() override;
 
   void ClearMutatedProperties();
 
@@ -161,6 +161,12 @@ class TestHostClient : public MutatorHostClient {
   void OnCustomPropertyMutated(
       PaintWorkletInput::PropertyKey property_key,
       PaintWorkletInput::PropertyValue property_value) override {}
+
+  bool RunsOnCurrentThread() const override;
+
+  bool IsOwnerThread() const override;
+  bool InProtectedSequence() const override;
+  void WaitForProtectedSequenceCompletion() const override;
 
   bool mutators_need_commit() const { return mutators_need_commit_; }
   void set_mutators_need_commit(bool need) { mutators_need_commit_ = need; }
@@ -316,11 +322,11 @@ class AnimationTimelinesTest : public testing::Test {
 
   scoped_refptr<AnimationTimeline> timeline_;
   scoped_refptr<Animation> animation_;
-  scoped_refptr<ElementAnimations> element_animations_;
+  scoped_refptr<const ElementAnimations> element_animations_;
 
   scoped_refptr<AnimationTimeline> timeline_impl_;
   scoped_refptr<Animation> animation_impl_;
-  scoped_refptr<ElementAnimations> element_animations_impl_;
+  scoped_refptr<const ElementAnimations> element_animations_impl_;
 };
 
 }  // namespace cc

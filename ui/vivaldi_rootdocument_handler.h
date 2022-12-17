@@ -16,6 +16,7 @@
 #include "chrome/browser/profiles/profile_observer.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "content/public/browser/navigation_handle.h"
 #include "extensions/browser/extension_registry_observer.h"
 #include "ui/vivaldi_document_loader.h"
 
@@ -25,6 +26,18 @@ class VivaldiDocumentLoader;
 namespace extensions {
 
 class VivaldiRootDocumentHandler;
+
+class VivaldiRootDocumentHandlerObserver {
+ public:
+  virtual ~VivaldiRootDocumentHandlerObserver() {}
+
+  // Called when the root document has finished loading.
+  virtual void OnRootDocumentDidFinishNavigation() {}
+
+  // Return the corresponding webcontents. Used for loaded state on
+  // observe-start.
+  virtual content::WebContents* GetRootDocumentWebContents() = 0;
+};
 
 class VivaldiRootDocumentHandlerFactory
     : public BrowserContextKeyedServiceFactory {
@@ -52,7 +65,8 @@ class VivaldiRootDocumentHandlerFactory
 
 class VivaldiRootDocumentHandler : public KeyedService,
                                    public extensions::ExtensionRegistryObserver,
-                                   public ProfileObserver {
+                                   public ProfileObserver,
+                                   protected content::WebContentsObserver {
   friend base::DefaultSingletonTraits<VivaldiRootDocumentHandler>;
 
  public:
@@ -61,6 +75,9 @@ class VivaldiRootDocumentHandler : public KeyedService,
   // ProfileObserver implementation.
   void OnOffTheRecordProfileCreated(Profile* off_the_record) override;
   void OnProfileWillBeDestroyed(Profile* profile) override;
+
+  void AddObserver(VivaldiRootDocumentHandlerObserver* observer);
+  void RemoveObserver(VivaldiRootDocumentHandlerObserver* observer);
 
  private:
   ~VivaldiRootDocumentHandler() override;
@@ -78,11 +95,20 @@ class VivaldiRootDocumentHandler : public KeyedService,
                            const extensions::Extension* extension,
                            extensions::UnloadedExtensionReason reason) override;
 
+  // content::WebContentsObserver overrides.
+  void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override;
+
   // These are the WebContents holders for our portal-windows. One document for
   // regular-windows and one for incognito-windows. Incognito is lazy loaded and
   // destroyed on the last private window closure.
   VivaldiDocumentLoader* vivaldi_document_loader_ = nullptr;
   VivaldiDocumentLoader* vivaldi_document_loader_off_the_record_ = nullptr;
+
+  bool document_loader_is_ready_ = false;
+  bool otr_document_loader_is_ready_ = false;
+
+  base::ObserverList<VivaldiRootDocumentHandlerObserver>::Unchecked observers_;
 
   const Extension* vivaldi_extension_ = nullptr;
   // The profile we observe.

@@ -24,6 +24,8 @@
 
 namespace content {
 
+using NotRestoredReason = BackForwardCacheMetrics::NotRestoredReason;
+
 namespace {
 
 const char kResponseWithNoCache[] =
@@ -103,19 +105,18 @@ class BackForwardCacheBrowserTestAllowCacheControlNoStore
 }  // namespace
 
 // TODO(https://crbug.com/1231849): flaky on Cast Linux.
-#if defined(OS_LINUX)
-#define MAYBE_PagesWithCacheControlNoStoreEnterBfcacheAndEvicted \
-  DISABLED_PagesWithCacheControlNoStoreEnterBfcacheAndEvicted
-#else
-#define MAYBE_PagesWithCacheControlNoStoreEnterBfcacheAndEvicted \
-  PagesWithCacheControlNoStoreEnterBfcacheAndEvicted
-#endif
-
 // Test that a page with cache-control:no-store enters bfcache with the flag on,
 // but does not get restored and gets evicted.
-IN_PROC_BROWSER_TEST_F(
-    BackForwardCacheBrowserTestAllowCacheControlNoStore,
-    MAYBE_PagesWithCacheControlNoStoreEnterBfcacheAndEvicted) {
+// Turned off on cast for https://crbug.com/1281665 , along with others.
+#if BUILDFLAG(IS_CHROMECAST)
+#define MAYBE_PagesWithCacheControlNoStoreEnterBfcacheAndEvicted \
+        DISABLED_PagesWithCacheControlNoStoreEnterBfcacheAndEvicted
+#else
+#define MAYBE_PagesWithCacheControlNoStoreEnterBfcacheAndEvicted \
+        PagesWithCacheControlNoStoreEnterBfcacheAndEvicted
+#endif
+IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTestAllowCacheControlNoStore,
+                       MAYBE_PagesWithCacheControlNoStoreEnterBfcacheAndEvicted) {
   net::test_server::ControllableHttpResponse response(embedded_test_server(),
                                                       "/main_document");
   net::test_server::ControllableHttpResponse response2(embedded_test_server(),
@@ -146,22 +147,21 @@ IN_PROC_BROWSER_TEST_F(
   response2.Done();
   observer2.Wait();
 
-  ExpectNotRestored(
-      {BackForwardCacheMetrics::NotRestoredReason::kCacheControlNoStore}, {},
-      {}, {}, {}, FROM_HERE);
+  ExpectNotRestored({NotRestoredReason::kCacheControlNoStore}, {}, {}, {}, {},
+                    FROM_HERE);
 }
-
-#if BUILDFLAG(IS_CHROMECAST)
-#define MAYBE_PagesWithCacheControlNoStoreCookieModifiedThroughJavaScript \
-  DISABLED_PagesWithCacheControlNoStoreCookieModifiedThroughJavaScript
-#else
-#define MAYBE_PagesWithCacheControlNoStoreCookieModifiedThroughJavaScript \
-  PagesWithCacheControlNoStoreCookieModifiedThroughJavaScript
-#endif
 
 // Test that a page with cache-control:no-store enters bfcache with the flag on,
 // and if a cookie is modified while it is in bfcache via JavaScript, gets
 // evicted with cookie modified marked.
+// Turned off on cast for https://crbug.com/1281665 .
+#if BUILDFLAG(IS_CHROMECAST)
+#define MAYBE_PagesWithCacheControlNoStoreCookieModifiedThroughJavaScript \
+        DISABLED_PagesWithCacheControlNoStoreCookieModifiedThroughJavaScript
+#else
+#define MAYBE_PagesWithCacheControlNoStoreCookieModifiedThroughJavaScript \
+        PagesWithCacheControlNoStoreCookieModifiedThroughJavaScript
+#endif
 IN_PROC_BROWSER_TEST_F(
     BackForwardCacheBrowserTestAllowCacheControlNoStore,
     MAYBE_PagesWithCacheControlNoStoreCookieModifiedThroughJavaScript) {
@@ -211,9 +211,8 @@ IN_PROC_BROWSER_TEST_F(
   observer2.Wait();
 
   EXPECT_EQ("foo=baz", EvalJs(tab_to_be_bfcached, "document.cookie"));
-  ExpectNotRestored({BackForwardCacheMetrics::NotRestoredReason::
-                         kCacheControlNoStoreCookieModified},
-                    {}, {}, {}, {}, FROM_HERE);
+  ExpectNotRestored({NotRestoredReason::kCacheControlNoStoreCookieModified}, {},
+                    {}, {}, {}, FROM_HERE);
 }
 
 // Disabled due to flakiness on Cast Audio Linux https://crbug.com/1229182
@@ -224,7 +223,6 @@ IN_PROC_BROWSER_TEST_F(
 #define MAYBE_PagesWithCacheControlNoStoreCookieModifiedBackTwice \
   PagesWithCacheControlNoStoreCookieModifiedBackTwice
 #endif
-
 // Test that a page with cache-control:no-store enters bfcache with the flag on,
 // and if a cookie is modified, it gets evicted with cookie changed, but if
 // navigated away again and navigated back, it gets evicted without cookie
@@ -265,9 +263,8 @@ IN_PROC_BROWSER_TEST_F(
   ASSERT_TRUE(HistoryGoBack(tab_to_be_bfcached->web_contents()));
 
   EXPECT_EQ("foo=baz", EvalJs(tab_to_be_bfcached, "document.cookie"));
-  ExpectNotRestored({BackForwardCacheMetrics::NotRestoredReason::
-                         kCacheControlNoStoreCookieModified},
-                    {}, {}, {}, {}, FROM_HERE);
+  ExpectNotRestored({NotRestoredReason::kCacheControlNoStoreCookieModified}, {},
+                    {}, {}, {}, FROM_HERE);
   RenderFrameHostImplWrapper rfh_a_2(current_frame_host());
 
   // 6) Navigate away to b.com. |rfh_a_2| should enter bfcache again.
@@ -277,23 +274,22 @@ IN_PROC_BROWSER_TEST_F(
   // 7) Navigate back to a.com. This time the cookie change has to be reset and
   // gets evicted with a different reason.
   ASSERT_TRUE(HistoryGoBack(tab_to_be_bfcached->web_contents()));
-  ExpectNotRestored(
-      {BackForwardCacheMetrics::NotRestoredReason::kCacheControlNoStore}, {},
-      {}, {}, {}, FROM_HERE);
+  ExpectNotRestored({NotRestoredReason::kCacheControlNoStore}, {}, {}, {}, {},
+                    FROM_HERE);
 }
 
-// Disabled due to flakiness on Cast Audio Linux https://crbug.com/1229182
-#if BUILDFLAG(IS_CHROMECAST)
-#define MAYBE_PagesWithCacheControlNoStoreCookieModifiedThroughJavaScriptOnDifferentDomain \
-  DISABLED_PagesWithCacheControlNoStoreCookieModifiedThroughJavaScriptOnDifferentDomain
-#else
-#define MAYBE_PagesWithCacheControlNoStoreCookieModifiedThroughJavaScriptOnDifferentDomain \
-  PagesWithCacheControlNoStoreCookieModifiedThroughJavaScriptOnDifferentDomain
-#endif
-
+// Flaky on Cast Audio Linux https://crbug.com/1229182
 // Test that a page with cache-control:no-store enters bfcache with the flag on,
 // and even if a cookie is modified on a different domain than the entry, the
 // entry is not marked as cookie modified.
+// Turned off on cast for https://crbug.com/1281665 .
+#if BUILDFLAG(IS_CHROMECAST)
+#define MAYBE_PagesWithCacheControlNoStoreCookieModifiedThroughJavaScriptOnDifferentDomain \
+        DISABLED_PagesWithCacheControlNoStoreCookieModifiedThroughJavaScriptOnDifferentDomain
+#else
+#define MAYBE_PagesWithCacheControlNoStoreCookieModifiedThroughJavaScriptOnDifferentDomain \
+        PagesWithCacheControlNoStoreCookieModifiedThroughJavaScriptOnDifferentDomain
+#endif
 IN_PROC_BROWSER_TEST_F(
     BackForwardCacheBrowserTestAllowCacheControlNoStore,
     MAYBE_PagesWithCacheControlNoStoreCookieModifiedThroughJavaScriptOnDifferentDomain) {
@@ -342,9 +338,8 @@ IN_PROC_BROWSER_TEST_F(
   observer2.Wait();
   EXPECT_EQ("foo=bar", EvalJs(tab_to_be_bfcached, "document.cookie"));
 
-  ExpectNotRestored(
-      {BackForwardCacheMetrics::NotRestoredReason::kCacheControlNoStore}, {},
-      {}, {}, {}, FROM_HERE);
+  ExpectNotRestored({NotRestoredReason::kCacheControlNoStore}, {}, {}, {}, {},
+                    FROM_HERE);
 }
 
 // Test that a page with cache-control:no-store records other not restored
@@ -372,10 +367,9 @@ IN_PROC_BROWSER_TEST_F(
   // 4) Go back.
   ASSERT_TRUE(HistoryGoBack(web_contents()));
 
-  ExpectNotRestored(
-      {BackForwardCacheMetrics::NotRestoredReason::kJavaScriptExecution,
-       BackForwardCacheMetrics::NotRestoredReason::kCacheControlNoStore},
-      {}, {}, {}, {}, FROM_HERE);
+  ExpectNotRestored({NotRestoredReason::kJavaScriptExecution,
+                     NotRestoredReason::kCacheControlNoStore},
+                    {}, {}, {}, {}, FROM_HERE);
 }
 
 // Test that a page with cache-control:no-store records other not restored
@@ -405,8 +399,8 @@ IN_PROC_BROWSER_TEST_F(
   ASSERT_TRUE(HistoryGoBack(web_contents()));
 
   ExpectNotRestored(
-      {BackForwardCacheMetrics::NotRestoredReason::kBlocklistedFeatures,
-       BackForwardCacheMetrics::NotRestoredReason::kCacheControlNoStore},
+      {NotRestoredReason::kBlocklistedFeatures,
+       NotRestoredReason::kCacheControlNoStore},
       {blink::scheduler::WebSchedulerTrackedFeature::kBroadcastChannel}, {}, {},
       {}, FROM_HERE);
 }
@@ -445,7 +439,6 @@ const char kResponseWithNoCacheWithHTTPOnlyCookie2[] =
 #define MAYBE_PagesWithCacheControlNoStoreSetFromResponseHeader \
   PagesWithCacheControlNoStoreSetFromResponseHeader
 #endif
-
 // Test that a page with cache-control:no-store enters bfcache with the flag on,
 // and if a cookie is modified while it is in bfcache via response header, gets
 // evicted with cookie modified marked.
@@ -496,9 +489,8 @@ IN_PROC_BROWSER_TEST_F(
   response2.Done();
   observer2.Wait();
   EXPECT_EQ("foo=baz", EvalJs(tab_to_be_bfcached, "document.cookie"));
-  ExpectNotRestored({BackForwardCacheMetrics::NotRestoredReason::
-                         kCacheControlNoStoreCookieModified},
-                    {}, {}, {}, {}, FROM_HERE);
+  ExpectNotRestored({NotRestoredReason::kCacheControlNoStoreCookieModified}, {},
+                    {}, {}, {}, FROM_HERE);
 }
 
 // Disabled due to flakiness on Cast Audio Linux https://crbug.com/1229182
@@ -509,7 +501,6 @@ IN_PROC_BROWSER_TEST_F(
 #define MAYBE_PagesWithCacheControlNoStoreSetFromResponseHeaderHTTPOnlyCookie \
   PagesWithCacheControlNoStoreSetFromResponseHeaderHTTPOnlyCookie
 #endif
-
 // Test that a page with cache-control:no-store enters bfcache with the flag on,
 // and if HTTPOnly cookie is modified while it is in bfcache, gets evicted with
 // HTTPOnly cookie modified marked.
@@ -564,9 +555,9 @@ IN_PROC_BROWSER_TEST_F(
   response3.Send(kResponseWithNoCacheWithHTTPOnlyCookie);
   response3.Done();
   observer3.Wait();
-  ExpectNotRestored({BackForwardCacheMetrics::NotRestoredReason::
-                         kCacheControlNoStoreHTTPOnlyCookieModified},
-                    {}, {}, {}, {}, FROM_HERE);
+  ExpectNotRestored(
+      {NotRestoredReason::kCacheControlNoStoreHTTPOnlyCookieModified}, {}, {},
+      {}, {}, FROM_HERE);
 }
 
 // Disabled due to flakiness on Cast Audio Linux https://crbug.com/1229182
@@ -577,7 +568,6 @@ IN_PROC_BROWSER_TEST_F(
 #define MAYBE_PagesWithCacheControlNoStoreHTTPOnlyCookieModifiedBackTwice \
   PagesWithCacheControlNoStoreHTTPOnlyCookieModifiedBackTwice
 #endif
-
 // Test that a page with cache-control:no-store enters bfcache with the flag on,
 // and if a HTTPOnly cookie is modified, it gets evicted with cookie changed,
 // but if navigated away again and navigated back, it gets evicted without
@@ -633,9 +623,9 @@ IN_PROC_BROWSER_TEST_F(
   response3.Done();
   observer3.Wait();
 
-  ExpectNotRestored({BackForwardCacheMetrics::NotRestoredReason::
-                         kCacheControlNoStoreHTTPOnlyCookieModified},
-                    {}, {}, {}, {}, FROM_HERE);
+  ExpectNotRestored(
+      {NotRestoredReason::kCacheControlNoStoreHTTPOnlyCookieModified}, {}, {},
+      {}, {}, FROM_HERE);
   RenderFrameHostImplWrapper rfh_a_2(current_frame_host());
 
   // 5) Navigate away to b.com. |rfh_a_2| should enter bfcache again.
@@ -650,9 +640,8 @@ IN_PROC_BROWSER_TEST_F(
   response4.Send(kResponseWithNoCache);
   response4.Done();
   observer4.Wait();
-  ExpectNotRestored(
-      {BackForwardCacheMetrics::NotRestoredReason::kCacheControlNoStore}, {},
-      {}, {}, {}, FROM_HERE);
+  ExpectNotRestored({NotRestoredReason::kCacheControlNoStore}, {}, {}, {}, {},
+                    FROM_HERE);
 }
 
 class BackForwardCacheBrowserTestRestoreCacheControlNoStoreUnlessCookieChange
@@ -667,16 +656,15 @@ class BackForwardCacheBrowserTestRestoreCacheControlNoStoreUnlessCookieChange
 };
 
 // TODO(https://crbug.com/1231849): flaky on Cast Linux.
-#if defined(OS_LINUX)
+// Test that a page with cache-control:no-store enters bfcache with the flag on,
+// and gets restored if cookies do not change.
+#if BUILDFLAG(IS_CHROMECAST)
 #define MAYBE_PagesWithCacheControlNoStoreRestoreFromBackForwardCache \
   DISABLED_PagesWithCacheControlNoStoreRestoreFromBackForwardCache
 #else
 #define MAYBE_PagesWithCacheControlNoStoreRestoreFromBackForwardCache \
   PagesWithCacheControlNoStoreRestoreFromBackForwardCache
 #endif
-
-// Test that a page with cache-control:no-store enters bfcache with the flag on,
-// and gets restored if cookies do not change.
 IN_PROC_BROWSER_TEST_F(
     BackForwardCacheBrowserTestRestoreCacheControlNoStoreUnlessCookieChange,
     MAYBE_PagesWithCacheControlNoStoreRestoreFromBackForwardCache) {
@@ -708,15 +696,16 @@ IN_PROC_BROWSER_TEST_F(
 }
 
 // Flaky on Cast: crbug.com/1229182
-#if BUILDFLAG(IS_CHROMECAST)
-#define MAYBE_PagesWithCacheControlNoStoreEvictedIfCookieChange \
-  DISABLED_PagesWithCacheControlNoStoreEvictedIfCookieChange
-#else
-#define MAYBE_PagesWithCacheControlNoStoreEvictedIfCookieChange \
-  PagesWithCacheControlNoStoreEvictedIfCookieChange
-#endif
 // Test that a page with cache-control:no-store enters bfcache with the flag on,
 // but gets evicted if cookies change.
+// Turned off on cast for https://crbug.com/1281665 .
+#if BUILDFLAG(IS_CHROMECAST)
+#define MAYBE_PagesWithCacheControlNoStoreEvictedIfCookieChange \
+        DISABLED_PagesWithCacheControlNoStoreEvictedIfCookieChange
+#else
+#define MAYBE_PagesWithCacheControlNoStoreEvictedIfCookieChange \
+        PagesWithCacheControlNoStoreEvictedIfCookieChange
+#endif
 IN_PROC_BROWSER_TEST_F(
     BackForwardCacheBrowserTestRestoreCacheControlNoStoreUnlessCookieChange,
     MAYBE_PagesWithCacheControlNoStoreEvictedIfCookieChange) {
@@ -766,13 +755,12 @@ IN_PROC_BROWSER_TEST_F(
   observer2.Wait();
 
   EXPECT_EQ("foo=baz", EvalJs(tab_to_be_bfcached, "document.cookie"));
-  ExpectNotRestored({BackForwardCacheMetrics::NotRestoredReason::
-                         kCacheControlNoStoreCookieModified},
-                    {}, {}, {}, {}, FROM_HERE);
+  ExpectNotRestored({NotRestoredReason::kCacheControlNoStoreCookieModified}, {},
+                    {}, {}, {}, FROM_HERE);
 }
 
 // TODO(https://crbug.com/1231849): flaky on Cast Linux.
-#if defined(OS_LINUX)
+#if BUILDFLAG(IS_LINUX)
 #define MAYBE_PagesWithCacheControlNoStoreEvictedWithBothCookieReasons \
   DISABLED_PagesWithCacheControlNoStoreEvictedWithBothCookieReasons
 #else
@@ -833,9 +821,9 @@ IN_PROC_BROWSER_TEST_F(
   response3.Send(kResponseWithNoCacheWithHTTPOnlyCookie);
   response3.Done();
   observer3.Wait();
-  ExpectNotRestored({BackForwardCacheMetrics::NotRestoredReason::
-                         kCacheControlNoStoreHTTPOnlyCookieModified},
-                    {}, {}, {}, {}, FROM_HERE);
+  ExpectNotRestored(
+      {NotRestoredReason::kCacheControlNoStoreHTTPOnlyCookieModified}, {}, {},
+      {}, {}, FROM_HERE);
 }
 
 class BackForwardCacheBrowserTestRestoreUnlessHTTPOnlyCookieChange
@@ -851,14 +839,13 @@ class BackForwardCacheBrowserTestRestoreUnlessHTTPOnlyCookieChange
 };
 
 // TODO(https://crbug.com/1231849): flaky on Cast Linux.
-#if defined(OS_LINUX)
+#if BUILDFLAG(IS_LINUX)
 #define MAYBE_NoCacheControlNoStoreButHTTPOnlyCookieChange \
   DISABLED_NoCacheControlNoStoreButHTTPOnlyCookieChange
 #else
 #define MAYBE_NoCacheControlNoStoreButHTTPOnlyCookieChange \
   NoCacheControlNoStoreButHTTPOnlyCookieChange
 #endif
-
 // Test that a page without cache-control:no-store can enter BackForwardCache
 // and gets restored if HTTPOnly Cookie changes.
 IN_PROC_BROWSER_TEST_F(
@@ -894,14 +881,13 @@ IN_PROC_BROWSER_TEST_F(
 }
 
 // TODO(https://crbug.com/1231849): flaky on Cast Linux.
-#if defined(OS_LINUX)
+#if BUILDFLAG(IS_LINUX)
 #define MAYBE_PagesWithCacheControlNoStoreNotEvictedIfNormalCookieChange \
   DISABLED_PagesWithCacheControlNoStoreNotEvictedIfNormalCookieChange
 #else
 #define MAYBE_PagesWithCacheControlNoStoreNotEvictedIfNormalCookieChange \
   PagesWithCacheControlNoStoreNotEvictedIfNormalCookieChange
 #endif
-
 // Test that a page with cache-control:no-store enters bfcache with the flag on,
 // and does not get evicted if normal cookies change.
 IN_PROC_BROWSER_TEST_F(
@@ -943,14 +929,13 @@ IN_PROC_BROWSER_TEST_F(
 }
 
 // TODO(https://crbug.com/1231849): flaky on Cast Linux.
-#if defined(OS_LINUX)
+#if BUILDFLAG(IS_LINUX)
 #define MAYBE_PagesWithCacheControlNoStoreEvictedIfHTTPOnlyCookieChange \
   DISABLED_PagesWithCacheControlNoStoreEvictedIfHTTPOnlyCookieChange
 #else
 #define MAYBE_PagesWithCacheControlNoStoreEvictedIfHTTPOnlyCookieChange \
   PagesWithCacheControlNoStoreEvictedIfHTTPOnlyCookieChange
 #endif
-
 // Test that a page with cache-control:no-store enters bfcache with the flag on,
 // and gets evicted if HTTPOnly cookie changes.
 IN_PROC_BROWSER_TEST_F(
@@ -1001,20 +986,19 @@ IN_PROC_BROWSER_TEST_F(
   response3.Send(kResponseWithNoCacheWithHTTPOnlyCookie);
   response3.Done();
   observer3.Wait();
-  ExpectNotRestored({BackForwardCacheMetrics::NotRestoredReason::
-                         kCacheControlNoStoreHTTPOnlyCookieModified},
-                    {}, {}, {}, {}, FROM_HERE);
+  ExpectNotRestored(
+      {NotRestoredReason::kCacheControlNoStoreHTTPOnlyCookieModified}, {}, {},
+      {}, {}, FROM_HERE);
 }
 
 // TODO(https://crbug.com/1231849): flaky on Cast Linux.
-#if defined(OS_LINUX)
+#if BUILDFLAG(IS_LINUX)
 #define MAYBE_PagesWithCacheControlNoStoreEvictedIfJSAndHTTPOnlyCookieChange \
   DISABLED_PagesWithCacheControlNoStoreEvictedIfJSAndHTTPOnlyCookieChange
 #else
 #define MAYBE_PagesWithCacheControlNoStoreEvictedIfJSAndHTTPOnlyCookieChange \
   PagesWithCacheControlNoStoreEvictedIfJSAndHTTPOnlyCookieChange
 #endif
-
 // Test that a page with cache-control:no-store enters bfcache with the flag on,
 // and gets evicted if HTTPOnly cookie changes.
 IN_PROC_BROWSER_TEST_F(
@@ -1067,9 +1051,9 @@ IN_PROC_BROWSER_TEST_F(
   response3.Send(kResponseWithNoCacheWithHTTPOnlyCookie);
   response3.Done();
   observer3.Wait();
-  ExpectNotRestored({BackForwardCacheMetrics::NotRestoredReason::
-                         kCacheControlNoStoreHTTPOnlyCookieModified},
-                    {}, {}, {}, {}, FROM_HERE);
+  ExpectNotRestored(
+      {NotRestoredReason::kCacheControlNoStoreHTTPOnlyCookieModified}, {}, {},
+      {}, {}, FROM_HERE);
 }
 
 }  // namespace content

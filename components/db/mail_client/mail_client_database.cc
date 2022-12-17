@@ -13,12 +13,12 @@
 #include <algorithm>
 #include <set>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
 #include "base/command_line.h"
 #include "base/files/file_util.h"
-#include "base/ignore_result.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -147,7 +147,7 @@ void MailClientDatabase::RollbackTransaction() {
 void MailClientDatabase::Vacuum() {
   DCHECK_EQ(0, db_.transaction_nesting())
       << "Can not have a transaction when vacuuming.";
-  ignore_result(db_.Execute("VACUUM"));
+  std::ignore = db_.Execute("VACUUM");
 }
 
 void MailClientDatabase::TrimMemory(bool aggressively) {

@@ -349,9 +349,7 @@ typedef NS_ENUM(NSInteger, ReauthenticationReason) {
       l10n_util::GetNSString(IDS_IOS_SHOW_PASSWORD_VIEW_USERNAME);
   item.textFieldValue = self.password.username;  // Empty for a new form.
   // If password is missing (federated credential) don't allow to edit username.
-  if (self.credentialType != CredentialTypeFederation &&
-      base::FeatureList::IsEnabled(
-          password_manager::features::kEditPasswordsInSettings)) {
+  if (self.credentialType != CredentialTypeFederation) {
     item.textFieldEnabled = self.tableView.editing;
     item.hideIcon = !self.tableView.editing;
     item.autoCapitalizationType = UITextAutocapitalizationTypeNone;
@@ -505,14 +503,26 @@ typedef NS_ENUM(NSInteger, ReauthenticationReason) {
 }
 
 - (NSString*)footerText {
-  if (self.syncingUserEmail) {
-    return l10n_util::GetNSStringF(
-        IDS_IOS_SETTINGS_ADD_PASSWORD_FOOTER,
-        base::SysNSStringToUTF16(self.syncingUserEmail));
-  }
+  if (base::FeatureList::IsEnabled(
+          password_manager::features::
+              kIOSEnablePasswordManagerBrandingUpdate)) {
+    if (self.syncingUserEmail) {
+      return l10n_util::GetNSStringF(
+          IDS_IOS_SETTINGS_ADD_PASSWORD_FOOTER_BRANDED,
+          base::SysNSStringToUTF16(self.syncingUserEmail));
+    }
 
-  return l10n_util::GetNSString(
-      IDS_IOS_SETTINGS_ADD_PASSWORD_FOOTER_NON_SYNCING);
+    return l10n_util::GetNSString(IDS_IOS_SAVE_PASSWORD_FOOTER_NOT_SYNCING);
+  } else {
+    if (self.syncingUserEmail) {
+      return l10n_util::GetNSStringF(
+          IDS_IOS_SETTINGS_ADD_PASSWORD_FOOTER,
+          base::SysNSStringToUTF16(self.syncingUserEmail));
+    }
+
+    return l10n_util::GetNSString(
+        IDS_IOS_SETTINGS_ADD_PASSWORD_FOOTER_NON_SYNCING);
+  }
 }
 
 #pragma mark - UITableViewDelegate
@@ -537,9 +547,7 @@ typedef NS_ENUM(NSInteger, ReauthenticationReason) {
     case ItemTypeDuplicateCredentialMessage:
       break;
     case ItemTypeUsername: {
-      if (base::FeatureList::IsEnabled(
-              password_manager::features::kEditPasswordsInSettings) &&
-          self.tableView.editing) {
+      if (self.tableView.editing) {
         UITableViewCell* cell =
             [self.tableView cellForRowAtIndexPath:indexPath];
         TableViewTextEditCell* textFieldCell =
@@ -715,8 +723,6 @@ typedef NS_ENUM(NSInteger, ReauthenticationReason) {
     case ItemTypeDuplicateCredentialButton:
       return NO;
     case ItemTypeUsername:
-      return base::FeatureList::IsEnabled(
-          password_manager::features::kEditPasswordsInSettings);
     case ItemTypePassword:
       return YES;
   }
@@ -1015,8 +1021,6 @@ typedef NS_ENUM(NSInteger, ReauthenticationReason) {
   NSInteger itemType = [self.tableViewModel itemTypeForIndexPath:cellPath];
   switch (static_cast<ItemType>(itemType)) {
     case ItemTypeUsername:
-      return base::FeatureList::IsEnabled(
-          password_manager::features::kEditPasswordsInSettings);
     case ItemTypePassword:
       return YES;
     case ItemTypeWebsite:

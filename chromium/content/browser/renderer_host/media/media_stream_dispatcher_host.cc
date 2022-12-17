@@ -14,7 +14,6 @@
 #include "base/task/post_task.h"
 #include "base/task/task_runner_util.h"
 #include "build/build_config.h"
-#include "content/browser/bad_message.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
 #include "content/browser/renderer_host/media/video_capture_manager.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -30,7 +29,7 @@
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom.h"
 #include "url/origin.h"
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
 #include "content/browser/media/capture/crop_id_web_contents_helper.h"
 #endif
 
@@ -69,7 +68,7 @@ StartObservingWebContents(int render_process_id,
   return web_contents_observer;
 }
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
 // Checks whether a track living in the WebContents indicated by
 // (render_process_id, render_frame_id) may be cropped to the crop-target
 // indicated by |crop_id|.
@@ -102,7 +101,60 @@ bool IsCropTargetValid(int render_process_id,
   // * !crop_id.is_zero() = crop-request.
   return crop_id.is_zero() || helper->IsAssociatedWithCropId(crop_id);
 }
+
+MediaStreamDispatcherHost::CropCallback WrapCropCallback(
+    MediaStreamDispatcherHost::CropCallback callback,
+    mojo::ReportBadMessageCallback bad_message_callback) {
+  return base::BindOnce(
+      [](MediaStreamDispatcherHost::CropCallback callback,
+         mojo::ReportBadMessageCallback bad_message_callback,
+         media::mojom::CropRequestResult result) {
+        if (result ==
+            media::mojom::CropRequestResult::kNonIncreasingCropVersion) {
+          std::move(bad_message_callback).Run("Non-increasing crop-version.");
+          return;
+        }
+        std::move(callback).Run(result);
+      },
+      std::move(callback), std::move(bad_message_callback));
+}
 #endif
+
+bool AllowedStreamTypeCombination(
+    blink::mojom::MediaStreamType audio_stream_type,
+    blink::mojom::MediaStreamType video_stream_type) {
+  switch (audio_stream_type) {
+    // TODO(crbug.com/1288237): Disallow video_stream_type == NO_SERVICE when
+    // {video=false} is no longer allowed.
+    case blink::mojom::MediaStreamType::NO_SERVICE:
+      return blink::IsVideoInputMediaType(video_stream_type) ||
+             video_stream_type == blink::mojom::MediaStreamType::NO_SERVICE;
+    case blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE:
+      return video_stream_type ==
+                 blink::mojom::MediaStreamType::DEVICE_VIDEO_CAPTURE ||
+             video_stream_type == blink::mojom::MediaStreamType::NO_SERVICE;
+    case blink::mojom::MediaStreamType::GUM_TAB_AUDIO_CAPTURE:
+      return video_stream_type ==
+                 blink::mojom::MediaStreamType::GUM_TAB_VIDEO_CAPTURE ||
+             video_stream_type == blink::mojom::MediaStreamType::NO_SERVICE;
+    case blink::mojom::MediaStreamType::GUM_DESKTOP_AUDIO_CAPTURE:
+      return video_stream_type ==
+             blink::mojom::MediaStreamType::GUM_DESKTOP_VIDEO_CAPTURE;
+    case blink::mojom::MediaStreamType::DISPLAY_AUDIO_CAPTURE:
+      return video_stream_type ==
+                 blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE ||
+             video_stream_type ==
+                 blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE_THIS_TAB;
+    case blink::mojom::MediaStreamType::DEVICE_VIDEO_CAPTURE:
+    case blink::mojom::MediaStreamType::GUM_TAB_VIDEO_CAPTURE:
+    case blink::mojom::MediaStreamType::GUM_DESKTOP_VIDEO_CAPTURE:
+    case blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE:
+    case blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE_THIS_TAB:
+    case blink::mojom::MediaStreamType::NUM_MEDIA_TYPES:
+      return false;
+  }
+  return false;
+}
 
 }  // namespace
 
@@ -298,12 +350,19 @@ void MediaStreamDispatcherHost::GenerateStream(
     GenerateStreamCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
+  if (!AllowedStreamTypeCombination(controls.audio.stream_type,
+                                    controls.video.stream_type)) {
+    ReceivedBadMessage(render_process_id_,
+                       bad_message::MSDH_INVALID_STREAM_TYPE_COMBINATION);
+    return;
+  }
+
   if (audio_stream_selection_info_ptr->strategy ==
           blink::mojom::StreamSelectionStrategy::SEARCH_BY_SESSION_ID &&
       (!audio_stream_selection_info_ptr->session_id.has_value() ||
        audio_stream_selection_info_ptr->session_id->is_empty())) {
-    bad_message::ReceivedBadMessage(
-        render_process_id_, bad_message::MDDH_INVALID_STREAM_SELECTION_INFO);
+    ReceivedBadMessage(render_process_id_,
+                       bad_message::MDDH_INVALID_STREAM_SELECTION_INFO);
     return;
   }
 
@@ -395,8 +454,8 @@ void MediaStreamDispatcherHost::OpenDevice(int32_t page_request_id,
   // OpenDevice is only supported for microphone or webcam capture.
   if (type != blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE &&
       type != blink::mojom::MediaStreamType::DEVICE_VIDEO_CAPTURE) {
-    bad_message::ReceivedBadMessage(
-        render_process_id_, bad_message::MDDH_INVALID_DEVICE_TYPE_REQUEST);
+    ReceivedBadMessage(render_process_id_,
+                       bad_message::MDDH_INVALID_DEVICE_TYPE_REQUEST);
     return;
   }
 
@@ -454,7 +513,7 @@ void MediaStreamDispatcherHost::OnStreamStarted(const std::string& label) {
   media_stream_manager_->OnStreamStarted(label);
 }
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
 void MediaStreamDispatcherHost::FocusCapturedSurface(const std::string& label,
                                                      bool focus) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
@@ -467,6 +526,7 @@ void MediaStreamDispatcherHost::FocusCapturedSurface(const std::string& label,
 
 void MediaStreamDispatcherHost::Crop(const base::UnguessableToken& device_id,
                                      const base::Token& crop_id,
+                                     uint32_t crop_version,
                                      CropCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
@@ -474,18 +534,23 @@ void MediaStreamDispatcherHost::Crop(const base::UnguessableToken& device_id,
   // from this particular context. Namely, cropping is currently only allowed
   // for self-capture, so the crop_id has to be associated with the top-level
   // WebContents belonging to this very tab.
+  // TODO(crbug.com/1299008): Switch away from the free function version
+  // when SelfOwnedReceiver properly supports this.
   GetUIThreadTaskRunner({})->PostTaskAndReplyWithResult(
       FROM_HERE,
       base::BindOnce(&IsCropTargetValid, render_process_id_, render_frame_id_,
                      crop_id),
       base::BindOnce(&MediaStreamDispatcherHost::OnCropValidationComplete,
                      weak_factory_.GetWeakPtr(), device_id, crop_id,
-                     std::move(callback)));
+                     crop_version,
+                     WrapCropCallback(std::move(callback),
+                                      mojo::GetBadMessageCallback())));
 }
 
 void MediaStreamDispatcherHost::OnCropValidationComplete(
     const base::UnguessableToken& device_id,
     const base::Token& crop_id,
+    uint32_t crop_version,
     CropCallback callback,
     bool crop_id_passed_validation) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
@@ -494,9 +559,30 @@ void MediaStreamDispatcherHost::OnCropValidationComplete(
     std::move(callback).Run(media::mojom::CropRequestResult::kErrorGeneric);
     return;
   }
-  media_stream_manager_->video_capture_manager()->Crop(device_id, crop_id,
-                                                       std::move(callback));
+
+  media_stream_manager_->video_capture_manager()->Crop(
+      device_id, crop_id, crop_version, std::move(callback));
 }
 #endif
+
+void MediaStreamDispatcherHost::ReceivedBadMessage(
+    int render_process_id,
+    bad_message::BadMessageReason reason) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  if (bad_message_callback_for_testing_) {
+    bad_message_callback_for_testing_.Run(render_process_id, reason);
+  }
+
+  bad_message::ReceivedBadMessage(render_process_id, reason);
+}
+
+void MediaStreamDispatcherHost::SetBadMessageCallbackForTesting(
+    base::RepeatingCallback<void(int, bad_message::BadMessageReason)>
+        callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  DCHECK(!bad_message_callback_for_testing_);
+  bad_message_callback_for_testing_ = std::move(callback);
+}
 
 }  // namespace content

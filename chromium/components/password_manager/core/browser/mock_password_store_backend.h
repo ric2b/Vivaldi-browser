@@ -19,14 +19,21 @@
 
 namespace password_manager {
 
+class MockPasswordBackendSyncDelegate
+    : public PasswordStoreBackend::SyncDelegate {
+ public:
+  MockPasswordBackendSyncDelegate();
+  ~MockPasswordBackendSyncDelegate() override;
+
+  MOCK_METHOD(bool, IsSyncingPasswordsEnabled, (), (override));
+
+  MOCK_METHOD(absl::optional<std::string>, GetSyncingAccount, (), (override));
+};
+
 class MockPasswordStoreBackend : public PasswordStoreBackend {
  public:
   MockPasswordStoreBackend();
   ~MockPasswordStoreBackend() override;
-
-  base::WeakPtr<PasswordStoreBackend> GetWeakPtr() override {
-    return weak_ptr_factory_.GetWeakPtr();
-  }
 
   MOCK_METHOD(void,
               InitBackend,
@@ -87,9 +94,7 @@ class MockPasswordStoreBackend : public PasswordStoreBackend {
               CreateSyncControllerDelegate,
               (),
               (override));
-
- private:
-  base::WeakPtrFactory<MockPasswordStoreBackend> weak_ptr_factory_{this};
+  MOCK_METHOD(void, ClearAllLocalPasswords, (), (override));
 };
 
 }  // namespace password_manager

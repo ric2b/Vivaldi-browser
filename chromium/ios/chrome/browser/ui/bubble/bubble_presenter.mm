@@ -5,6 +5,7 @@
 #import "ios/chrome/browser/ui/bubble/bubble_presenter.h"
 
 #include "base/bind.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "components/feature_engagement/public/event_constants.h"
@@ -62,6 +63,8 @@ const CGFloat kBubblePresentationDelay = 1;
     BubbleViewControllerPresenter* discoverFeedHeaderMenuTipBubblePresenter;
 @property(nonatomic, strong)
     BubbleViewControllerPresenter* readingListTipBubblePresenter;
+@property(nonatomic, strong)
+    BubbleViewControllerPresenter* defaultPageModeTipBubblePresenter;
 
 @property(nonatomic, assign) ChromeBrowserState* browserState;
 @property(nonatomic, weak) id<BubblePresenterDelegate> delegate;
@@ -137,6 +140,7 @@ const CGFloat kBubblePresentationDelay = 1;
   [self.longPressToolbarTipBubblePresenter dismissAnimated:NO];
   [self.discoverFeedHeaderMenuTipBubblePresenter dismissAnimated:NO];
   [self.readingListTipBubblePresenter dismissAnimated:NO];
+  [self.defaultPageModeTipBubblePresenter dismissAnimated:NO];
 }
 
 - (void)userEnteredTabSwitcher {
@@ -191,15 +195,9 @@ const CGFloat kBubblePresentationDelay = 1;
   if (![self canPresentBubble])
     return;
 
-  BubbleArrowDirection arrowDirection = BubbleArrowDirectionDown;
-  const UIDeviceOrientation deviceOrientation =
-      [[UIDevice currentDevice] orientation];
-  if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
-    arrowDirection = BubbleArrowDirectionUp;
-  } else if (deviceOrientation == UIDeviceOrientationLandscapeRight ||
-             deviceOrientation == UIDeviceOrientationLandscapeLeft) {
-    arrowDirection = BubbleArrowDirectionUp;
-  }
+  BubbleArrowDirection arrowDirection =
+      IsSplitToolbarMode(self.rootViewController) ? BubbleArrowDirectionDown
+                                                  : BubbleArrowDirectionUp;
   NSString* text = l10n_util::GetNSString(IDS_IOS_READING_LIST_MESSAGES_IPH);
   CGPoint toolsMenuAnchor = [self anchorPointToGuide:kToolsMenuGuide
                                            direction:arrowDirection];
@@ -219,6 +217,37 @@ const CGFloat kBubblePresentationDelay = 1;
     return;
 
   self.readingListTipBubblePresenter = presenter;
+}
+
+- (void)presentDefaultSiteViewTipBubble {
+  if (![self canPresentBubble])
+    return;
+
+  BubbleArrowDirection arrowDirection =
+      IsSplitToolbarMode(self.rootViewController) ? BubbleArrowDirectionDown
+                                                  : BubbleArrowDirectionUp;
+  NSString* text = l10n_util::GetNSString(IDS_IOS_DEFAULT_PAGE_MODE_TIP);
+  CGPoint toolsMenuAnchor = [self anchorPointToGuide:kToolsMenuGuide
+                                           direction:arrowDirection];
+
+  // If the feature engagement tracker does not consider it valid to display
+  // the tip, then end early to prevent the potential reassignment of the
+  // existing presenter to nil.
+  BubbleViewControllerPresenter* presenter = [self
+      presentBubbleForFeature:feature_engagement::kIPHDefaultSiteViewFeature
+                    direction:arrowDirection
+                    alignment:BubbleAlignmentTrailing
+                         text:text
+        voiceOverAnnouncement:l10n_util::GetNSString(
+                                  IDS_IOS_DEFAULT_PAGE_MODE_TIP_VOICE_OVER)
+                  anchorPoint:toolsMenuAnchor];
+  if (!presenter)
+    return;
+
+  self.defaultPageModeTipBubblePresenter = presenter;
+  feature_engagement::TrackerFactory::GetForBrowserState(self.browserState)
+      ->NotifyEvent(feature_engagement::events::kDefaultSiteViewShown);
+  base::UmaHistogramBoolean("IOS.IPH.DefaultSite.Presented", true);
 }
 
 #pragma mark - Private

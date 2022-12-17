@@ -161,8 +161,9 @@ class InMenuButtonBackground : public views::Background {
       params.menu_separator.paint_rect = &separator_bounds;
       params.menu_separator.type = ui::VERTICAL_SEPARATOR;
       view->GetNativeTheme()->Paint(
-          canvas->sk_canvas(), ui::NativeTheme::kMenuPopupSeparator,
-          ui::NativeTheme::kNormal, separator_bounds, params);
+          canvas->sk_canvas(), view->GetColorProvider(),
+          ui::NativeTheme::kMenuPopupSeparator, ui::NativeTheme::kNormal,
+          separator_bounds, params);
       bounds.Inset(
           gfx::Insets(0, MenuConfig::instance().separator_thickness, 0, 0));
     }
@@ -187,6 +188,7 @@ class InMenuButtonBackground : public views::Background {
         params.menu_item.corner_radius = kBackgroundCornerRadius;
       }
       view->GetNativeTheme()->Paint(canvas->sk_canvas(),
+                                    view->GetColorProvider(),
                                     ui::NativeTheme::kMenuItemBackground,
                                     ui::NativeTheme::kHovered, bounds, params);
     }
@@ -910,16 +912,6 @@ ui::mojom::DragOperation AppMenu::GetDropOperation(
   return IsBookmarkCommand(item->GetCommand())
              ? bookmark_menu_delegate_->GetDropOperation(item, event, position)
              : ui::mojom::DragOperation::kNone;
-}
-
-ui::mojom::DragOperation AppMenu::OnPerformDrop(
-    MenuItemView* menu,
-    DropPosition position,
-    const ui::DropTargetEvent& event) {
-  auto drop_cb = GetDropCallback(menu, position, event);
-  ui::mojom::DragOperation output_drag_op = ui::mojom::DragOperation::kNone;
-  std::move(drop_cb).Run(event, output_drag_op);
-  return output_drag_op;
 }
 
 views::View::DropCallback AppMenu::GetDropCallback(

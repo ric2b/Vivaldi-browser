@@ -8,6 +8,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_forward.h"
+#include "base/command_line.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/endpoint_fetcher/endpoint_fetcher.h"
 #include "chrome/browser/media/router/discovery/access_code/discovery_resources.pb.h"
@@ -54,9 +55,17 @@ class AccessCodeCastDiscoveryInterface {
   // validate given |access_code| with the discovery server. The status
   // of this attempt will be stored in the |callback| -- either returning an
   // error or the actual DiscoveryDevice found on the discovery server.
+  // |absl::optional<DiscoveryDevice>| will always have a value if an
+  // AddSinkResultCode::OK is returned.
   void ValidateDiscoveryAccessCode(DiscoveryDeviceCallback callback);
 
+  static void EnableCommandLineSupportForTesting();
+
  private:
+  friend class AccessCodeCastDiscoveryInterfaceTest;
+  FRIEND_TEST_ALL_PREFIXES(AccessCodeCastDiscoveryInterfaceTest,
+                           CommandLineSwitch);
+
   std::unique_ptr<EndpointFetcher> CreateEndpointFetcher(
       const std::string& access_code);
 
@@ -80,8 +89,6 @@ class AccessCodeCastDiscoveryInterface {
   const std::string access_code_;
 
   std::unique_ptr<EndpointFetcher> endpoint_fetcher_;
-
-  const GURL discovery_url_;
 
   DiscoveryDeviceCallback callback_;
 

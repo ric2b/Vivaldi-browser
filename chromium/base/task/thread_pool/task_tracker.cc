@@ -105,14 +105,14 @@ class EphemeralTaskExecutor : public TaskExecutor {
     return single_thread_task_runner_;
   }
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   scoped_refptr<SingleThreadTaskRunner> CreateCOMSTATaskRunner(
       const TaskTraits& traits,
       SingleThreadTaskRunnerThreadMode thread_mode) override {
     CheckTraitsCompatibleWithSequenceTraits(traits);
     return single_thread_task_runner_;
   }
-#endif  // defined(OS_WIN)
+#endif  // BUILDFLAG(IS_WIN)
 
  private:
   // Currently ignores |traits.priority()|.
@@ -353,6 +353,7 @@ void TaskTracker::CompleteShutdown() {
 }
 
 void TaskTracker::FlushForTesting() {
+  AssertFlushForTestingAllowed();
   CheckedAutoLock auto_lock(flush_lock_);
   while (num_incomplete_task_sources_.load(std::memory_order_acquire) != 0 &&
          !IsShutdownComplete()) {
@@ -446,7 +447,8 @@ bool TaskTracker::CanRunPriority(TaskPriority priority) const {
 }
 
 RegisteredTaskSource TaskTracker::RunAndPopNextTask(
-    RegisteredTaskSource task_source) {
+    RegisteredTaskSource task_source,
+    base::Location* posted_from) {
   DCHECK(task_source);
 
   const bool should_run_tasks = BeforeRunTask(task_source->shutdown_behavior());
@@ -462,6 +464,8 @@ RegisteredTaskSource TaskTracker::RunAndPopNextTask(
   }
 
   if (task) {
+    if (posted_from)
+      *posted_from = task->posted_from;
     // Run the |task| (whether it's a worker task or the Clear() closure).
     RunTask(std::move(task.value()), task_source.get(), traits);
   }

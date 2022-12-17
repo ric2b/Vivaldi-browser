@@ -28,6 +28,12 @@ const ARC_TERMS_URL = 'chrome://terms/arc/terms';
 const PRIVACY_POLICY_URL = 'chrome://terms/arc/privacy_policy';
 
 /**
+ * Timeout to load online ToS.
+ * @type {number}
+ */
+const CONSOLIDATED_CONSENT_ONLINE_LOAD_TIMEOUT_IN_MS = 10000;
+
+/**
  * @constructor
  * @extends {PolymerElement}
  * @implements {LoginScreenBehaviorInterface}
@@ -61,6 +67,11 @@ class ConsolidatedConsent extends ConsolidatedConsentScreenElementBase {
       },
 
       isChildAccount_: {
+        type: Boolean,
+        value: false,
+      },
+
+      isOwner_: {
         type: Boolean,
         value: false,
       },
@@ -139,6 +150,7 @@ class ConsolidatedConsent extends ConsolidatedConsentScreenElementBase {
     this.crosEulaLoading_ = false;
     this.arcTosLoading_ = false;
     this.privacyPolicyLoading_ = false;
+    this.isOwnerLoading_ = true;
   }
 
   /** Overridden from LoginScreenBehavior. */
@@ -147,8 +159,10 @@ class ConsolidatedConsent extends ConsolidatedConsentScreenElementBase {
     return ['setUsageMode',
             'setBackupMode',
             'setLocationMode',
+            'setIsDeviceOwner',
     ];
   }
+  // clang-format on
 
   /** @override */
   defaultUIStep() {
@@ -159,7 +173,10 @@ class ConsolidatedConsent extends ConsolidatedConsentScreenElementBase {
     return ConsolidatedConsentScreenState;
   }
 
-  // clang-format on
+  /** Initial UI State for screen */
+  getOobeUIInitialState() {
+    return OOBE_UI_STATE.ONBOARDING;
+  }
 
   /** @override */
   ready() {
@@ -184,6 +201,11 @@ class ConsolidatedConsent extends ConsolidatedConsentScreenElementBase {
     this.isChildAccount_ = data['isChildAccount'];
     this.isEnterpriseManagedAccount_ = data['isEnterpriseManagedAccount'];
     this.countryCode_ = data['countryCode'];
+
+    if (this.isDemo_) {
+      this.isOwner_ = true;
+      this.isOwnerLoading_ = false;
+    }
 
     this.googleEulaUrl_ = data['googleEulaUrl'];
     this.crosEulaUrl_ = data['crosEulaUrl'];
@@ -295,7 +317,8 @@ class ConsolidatedConsent extends ConsolidatedConsentScreenElementBase {
     };
 
     const tosLoader = new WebViewLoader(
-        webview, loadFailureCallback, clear_anchors, true /* inject_css */);
+        webview, CONSOLIDATED_CONSENT_ONLINE_LOAD_TIMEOUT_IN_MS,
+        loadFailureCallback, clear_anchors, true /* inject_css */);
     tosLoader.setUrl(online_tos_url);
   }
 
@@ -313,8 +336,8 @@ class ConsolidatedConsent extends ConsolidatedConsentScreenElementBase {
     };
 
     var tosLoader = new WebViewLoader(
-        webview, loadFailureCallback, false /* clear_anchors */,
-        false /* inject_css */);
+        webview, CONSOLIDATED_CONSENT_ONLINE_LOAD_TIMEOUT_IN_MS,
+        loadFailureCallback, false /* clear_anchors */, false /* inject_css */);
     tosLoader.setUrl(online_tos_url);
   }
 
@@ -360,8 +383,8 @@ class ConsolidatedConsent extends ConsolidatedConsentScreenElementBase {
     };
 
     var tosLoader = new WebViewLoader(
-        webview, loadFailureCallback, false /* clear_anchors */,
-        false /* inject_css */);
+        webview, CONSOLIDATED_CONSENT_ONLINE_LOAD_TIMEOUT_IN_MS,
+        loadFailureCallback, false /* clear_anchors */, false /* inject_css */);
     tosLoader.setUrl(online_tos_url);
   }
 
@@ -376,6 +399,7 @@ class ConsolidatedConsent extends ConsolidatedConsentScreenElementBase {
 
   maybeSetLoadedStep_() {
     if (!this.googleEulaLoading_ && !this.arcTosLoading_ &&
+        !this.isOwnerLoading_ &&
         this.uiStep == ConsolidatedConsentScreenState.LOADING) {
       this.setUIStep(ConsolidatedConsentScreenState.LOADED);
       this.$.acceptButton.focus();
@@ -501,27 +525,50 @@ class ConsolidatedConsent extends ConsolidatedConsentScreenElementBase {
     return this.i18n('consolidatedConsentHeader');
   }
 
-  getUsageText_(locale, isChildAccount, isArcEnabled, isDemo) {
+  getUsageText_(locale, isChildAccount, isArcEnabled, isDemo, isOwner) {
     if (this.isArcOptInsHidden_(isArcEnabled, isDemo)) {
+      if (isOwner)
+        return this.i18n('consolidatedConsentUsageOptInArcDisabledOwner');
       return this.i18n('consolidatedConsentUsageOptInArcDisabled');
     }
 
-    if (isChildAccount)
+    if (isChildAccount) {
+      if (isOwner)
+        return this.i18n('consolidatedConsentUsageOptInChildOwner');
       return this.i18n('consolidatedConsentUsageOptInChild');
+    }
+
+    if (isOwner)
+      return this.i18n('consolidatedConsentUsageOptInOwner');
     return this.i18n('consolidatedConsentUsageOptIn');
   }
 
-  getUsageLearnMoreText_(locale, isChildAccount, isArcEnabled, isDemo) {
+  getUsageLearnMoreText_(
+      locale, isChildAccount, isArcEnabled, isDemo, isOwner) {
     if (this.isArcOptInsHidden_(isArcEnabled, isDemo)) {
       if (isChildAccount) {
+        if (isOwner)
+          return this.i18nAdvanced(
+              'consolidatedConsentUsageOptInLearnMoreArcDisabledChildOwner');
         return this.i18nAdvanced(
             'consolidatedConsentUsageOptInLearnMoreArcDisabledChild');
       }
+
+      if (isOwner)
+        return this.i18nAdvanced(
+            'consolidatedConsentUsageOptInLearnMoreArcDisabledOwner');
       return this.i18nAdvanced(
           'consolidatedConsentUsageOptInLearnMoreArcDisabled');
     }
-    if (isChildAccount)
+    if (isChildAccount) {
+      if (isOwner)
+        return this.i18nAdvanced(
+            'consolidatedConsentUsageOptInLearnMoreChildOwner');
       return this.i18nAdvanced('consolidatedConsentUsageOptInLearnMoreChild');
+    }
+
+    if (isOwner)
+      return this.i18nAdvanced('consolidatedConsentUsageOptInLearnMoreOwner');
     return this.i18nAdvanced('consolidatedConsentUsageOptInLearnMore');
   }
 
@@ -571,6 +618,17 @@ class ConsolidatedConsent extends ConsolidatedConsentScreenElementBase {
   setLocationMode(enabled, managed) {
     this.locationChecked = enabled;
     this.locationManaged_ = managed;
+  }
+
+  /**
+   * Sets isOwner_ property.
+   * @param {boolean} isOwner Defines whether the current user is the  device
+   *     owner.
+   */
+  setIsDeviceOwner(isOwner) {
+    this.isOwner_ = isOwner;
+    this.isOwnerLoading_ = false;
+    this.maybeSetLoadedStep_();
   }
 
   /**

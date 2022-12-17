@@ -180,6 +180,10 @@ class CORE_EXPORT NGFragmentItem {
     return GetLayoutObject();
   }
 
+  bool IsRelayoutBoundary() const {
+    return layout_object_->IsRelayoutBoundary();
+  }
+
   wtf_size_t DeltaToNextForSameLayoutObject() const {
     return delta_to_next_for_same_layout_object_;
   }
@@ -251,8 +255,9 @@ class CORE_EXPORT NGFragmentItem {
     return nullptr;
   }
 
-  // Returns block of block-in-inline.
-  LayoutBlock& BlockInInline() const;
+  // Returns block of block-in-inline. Note: We can have LayoutBlock and
+  // LayoutImage. See http://crbug.com/1295087
+  LayoutObject& BlockInInline() const;
 
   bool HasNonVisibleOverflow() const;
   bool IsScrollContainer() const;
@@ -452,13 +457,13 @@ class CORE_EXPORT NGFragmentItem {
   bool HasSvgTransformForBoundingBox() const;
   // A transform which should be used on computing a bounding box.
   // This contains no transform for lengthAdjust=spacingAndGlyphs because
-  // FloatRectInContainerFragment() already takes into account of
+  // RectInContainerFragment() already takes into account of
   // lengthAdjust=spacingAndGlyphs.
   AffineTransform BuildSvgTransformForBoundingBox() const;
 
   // Returns a transformed text cell in the unscaled coordination system.
   // This works only with kSvgText type.
-  FloatQuad SvgUnscaledQuad() const;
+  gfx::QuadF SvgUnscaledQuad() const;
 
   // Returns a font scaling factor for SVG <text>.
   // This returns 1 for an NGFragmentItem not for LayoutSVGInlineText.

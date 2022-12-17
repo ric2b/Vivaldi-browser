@@ -12,6 +12,10 @@ namespace gfx {
 struct VectorIcon;
 }  // namespace gfx
 
+namespace ui {
+class Event;
+}  // namespace ui
+
 namespace ash {
 
 // A circular ImageButton that can have small/medium/large different sizes. Each
@@ -72,6 +76,14 @@ class IconButton : public views::ImageButton {
   // states.
   void SetVectorIcon(const gfx::VectorIcon& icon);
 
+  // Sets the button's background color. Note, do this only when the button
+  // wants to have different color from the default one.
+  void SetBackgroundColor(const SkColor background_color);
+
+  // Sets the icon's color. If the button is togglable, this will be the color
+  // when it's not toggled.
+  void SetIconColor(const SkColor icon_color);
+
   // Updates the `toggled_` state of the button.
   void SetToggled(bool toggled);
 
@@ -79,6 +91,7 @@ class IconButton : public views::ImageButton {
   void PaintButtonContents(gfx::Canvas* canvas) override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   void OnThemeChanged() override;
+  void NotifyClick(const ui::Event& event) override;
 
  protected:
   void UpdateVectorIcon();
@@ -95,6 +108,10 @@ class IconButton : public views::ImageButton {
 
   // True if the button is currently toggled.
   bool toggled_ = false;
+
+  // Customized value for button's background color or icon's color.
+  absl::optional<SkColor> background_color_;
+  absl::optional<SkColor> icon_color_;
 
   DisabledButtonBehavior button_behavior_ = DisabledButtonBehavior::kNone;
 };

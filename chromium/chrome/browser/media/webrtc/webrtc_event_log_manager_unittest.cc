@@ -41,7 +41,6 @@
 #include "chrome/browser/media/webrtc/webrtc_event_log_manager_unittest_helpers.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/prefs/browser_prefs.h"
-#include "chrome/browser/supervised_user/supervised_user_constants.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
@@ -63,7 +62,7 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/zlib/google/compression_utils.h"
 
-#if !defined(OS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
 #include "components/policy/core/common/policy_map.h"
@@ -78,7 +77,7 @@
 
 namespace webrtc_event_logging {
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 #define NumberToStringType base::NumberToWString
 #else
 #define NumberToStringType base::NumberToString
@@ -98,7 +97,7 @@ using Compression = WebRtcEventLogCompression;
 
 namespace {
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
 
 auto SaveFilePathTo(absl::optional<base::FilePath>* output) {
   return [output](PeerConnectionKey ignored_key, base::FilePath file_path,
@@ -313,13 +312,13 @@ class WebRtcEventLogManagerTestBase : public ::testing::Test {
     SetLocalLogsObserver(&local_observer_);
     SetRemoteLogsObserver(&remote_observer_);
     LoadMainTestProfile();
-#if !defined(OS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
     policy::BrowserPolicyConnectorBase::SetPolicyProviderForTesting(&provider_);
 #endif
   }
 
   void TearDown() override {
-#if !defined(OS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
     TestingBrowserProcess::GetGlobal()->ShutdownBrowserPolicyConnector();
 #endif
   }
@@ -684,7 +683,7 @@ class WebRtcEventLogManagerTestBase : public ::testing::Test {
                                 policy_allows_remote_logging.value());
     }
 
-#if !defined(OS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
     policy::PolicyMap policy_map;
     if (has_device_level_policies) {
       policy_map.Set("test-policy", policy::POLICY_LEVEL_MANDATORY,
@@ -709,7 +708,7 @@ class WebRtcEventLogManagerTestBase : public ::testing::Test {
         is_managed_profile);
     if (is_supervised) {
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-      profile_builder.SetSupervisedUserId(supervised_users::kChildAccountSUID);
+      profile_builder.SetIsSupervisedProfile();
 #endif
     }
     std::unique_ptr<TestingProfile> profile = profile_builder.Build();
@@ -830,7 +829,7 @@ class WebRtcEventLogManagerTestBase : public ::testing::Test {
   scoped_refptr<network::SharedURLLoaderFactory>
       test_shared_url_loader_factory_;
 
-#if !defined(OS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
   policy::MockConfigurationPolicyProvider provider_;
 #endif
 
@@ -901,7 +900,7 @@ class WebRtcEventLogManagerTestBase : public ::testing::Test {
   NiceMock<MockWebRtcRemoteEventLogsObserver> remote_observer_;
 };
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
 
 class WebRtcEventLogManagerTest : public WebRtcEventLogManagerTestBase,
                                   public ::testing::WithParamInterface<bool> {
@@ -1894,7 +1893,7 @@ TEST_F(WebRtcEventLogManagerTest, LocalLogIllegalPath) {
   EXPECT_TRUE(base::IsDirectoryEmpty(local_logs_base_dir_.GetPath()));
 }
 
-#if defined(OS_POSIX)
+#if BUILDFLAG(IS_POSIX)
 TEST_F(WebRtcEventLogManagerTest, LocalLogLegalPathWithoutPermissionsSanity) {
   RemoveWritePermissions(local_logs_base_dir_.GetPath());
 
@@ -1921,7 +1920,7 @@ TEST_F(WebRtcEventLogManagerTest, LocalLogLegalPathWithoutPermissionsSanity) {
   EXPECT_TRUE(DisableLocalLogging());
   EXPECT_TRUE(base::IsDirectoryEmpty(local_logs_base_dir_.GetPath()));
 }
-#endif  // defined(OS_POSIX)
+#endif  // BUILDFLAG(IS_POSIX)
 
 TEST_F(WebRtcEventLogManagerTest, LocalLogEmptyStringHandledGracefully) {
   const auto key = GetPeerConnectionKey(rph_.get(), kLid);
@@ -2610,7 +2609,7 @@ TEST_F(WebRtcEventLogManagerTest, RemoteLogFileClosedWhenCapacityReached) {
   EXPECT_EQ(OnWebRtcEventLogWrite(key, log), std::make_pair(false, true));
 }
 
-#if defined(OS_POSIX)
+#if BUILDFLAG(IS_POSIX)
 // TODO(crbug.com/775415): Add unit tests for lacking read permissions when
 // looking to upload the file.
 TEST_F(WebRtcEventLogManagerTest,
@@ -2676,7 +2675,7 @@ TEST_F(WebRtcEventLogManagerTest, GracefullyHandleFailureToStartRemoteLogFile) {
   EXPECT_EQ(OnWebRtcEventLogWrite(key, "abc"), std::make_pair(false, false));
   EXPECT_TRUE(base::IsDirectoryEmpty(remote_logs_path));
 }
-#endif  // defined(OS_POSIX)
+#endif  // BUILDFLAG(IS_POSIX)
 
 TEST_F(WebRtcEventLogManagerTest, RemoteLogLimitActiveLogFiles) {
   for (int i = 0; i < kMaxActiveRemoteLogFiles + 1; ++i) {
@@ -3098,7 +3097,7 @@ TEST_F(WebRtcEventLogManagerTest, RemoteLogEmptyStringHandledGracefully) {
       std::accumulate(std::begin(logs), std::end(logs), std::string()));
 }
 
-#if defined(OS_POSIX)
+#if BUILDFLAG(IS_POSIX)
 TEST_F(WebRtcEventLogManagerTest,
        UnopenedRemoteLogFilesNotCountedTowardsActiveLogsLimit) {
   std::unique_ptr<TestingProfile> browser_contexts[2];
@@ -3136,7 +3135,7 @@ TEST_F(WebRtcEventLogManagerTest,
     EXPECT_TRUE(StartRemoteLogging(with_permissions_key));
   }
 }
-#endif  // defined(OS_POSIX)
+#endif  // BUILDFLAG(IS_POSIX)
 
 TEST_F(WebRtcEventLogManagerTest,
        NoStartWebRtcSendingEventLogsWhenLocalEnabledWithoutPeerConnection) {
@@ -4079,7 +4078,7 @@ TEST_F(WebRtcEventLogManagerTestPolicy,
 }
 #endif
 
-#if !defined(OS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
 TEST_F(WebRtcEventLogManagerTestPolicy,
        OnlyManagedByPlatformPoliciesDoesNotAllowRemoteLoggingByDefault) {
   SetUp(true);  // Feature generally enabled (kill-switch not engaged).
@@ -5037,7 +5036,7 @@ TEST_F(WebRtcEventLogManagerTestHistory,
 // TODO(crbug.com/775415): Add a test for the limit on the number of history
 // files allowed to remain on disk.
 
-#else  // defined(OS_ANDROID)
+#else  // BUILDFLAG(IS_ANDROID)
 
 class WebRtcEventLogManagerTestOnMobileDevices
     : public WebRtcEventLogManagerTestBase {

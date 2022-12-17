@@ -1284,10 +1284,8 @@ TEST_P(ObfuscatedFileUtilTest, TestPathQuotas) {
   bool exclusive = true;
   bool recursive = true;
   url = CreateURLFromUTF8("directory/to/use");
-  std::vector<base::FilePath::StringType> components;
-  url.path().GetComponents(&components);
   path_cost = 0;
-  for (const auto& component : components) {
+  for (const auto& component : url.path().GetComponents()) {
     path_cost +=
         ObfuscatedFileUtil::ComputeFilePathCost(base::FilePath(component));
   }
@@ -2043,7 +2041,7 @@ TEST_P(ObfuscatedFileUtilTest, TestFileEnumeratorTimestamp) {
 }
 
 // crbug.com/176470
-#if defined(OS_WIN) || defined(OS_ANDROID)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
 #define MAYBE_TestQuotaOnCopyFile DISABLED_TestQuotaOnCopyFile
 #else
 #define MAYBE_TestQuotaOnCopyFile TestQuotaOnCopyFile

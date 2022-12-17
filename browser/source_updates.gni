@@ -32,8 +32,6 @@ update_target("//chrome/browser:browser") {
   }
   if (is_mac) {
     sources += [
-      "//vivaldi/browser/mac/sparkle_util.h",
-      "//vivaldi/browser/mac/sparkle_util.mm",
       "//vivaldi/autoupdate/mac/sparkle_updater_delegate.h",
       "//vivaldi/autoupdate/mac/sparkle_updater_delegate.mm",
       "//vivaldi/browser/mac/vivaldi_main_menu_builder.h",
@@ -78,6 +76,8 @@ update_target("//chrome/browser:browser") {
       "//vivaldi/browser/android/autofill/autofill_provider.cc",
       "//vivaldi/browser/android/autofill/android_autofill_manager.h",
       "//vivaldi/browser/android/autofill/android_autofill_manager.cc",
+      "//vivaldi/browser/android/translate/vivaldi_translate_bridge.h",
+      "//vivaldi/browser/android/translate/vivaldi_translate_bridge.cc",
     ]
   }
 }
@@ -144,6 +144,7 @@ update_target("//content/public/browser:browser_sources") {
     ]
     deps += [
       "//vivaldi/components/datasource:dataurl",
+      "//vivaldi/prefs:prefs_strings",
     ]
   }
 }

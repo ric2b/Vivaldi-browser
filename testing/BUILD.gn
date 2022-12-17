@@ -14,7 +14,6 @@ if (is_win) {
       "//sandbox/win:sbox_integration_tests",
       "//sandbox/win:sbox_unittests",
       "//sandbox/win:sbox_validation_tests",
-      "//jingle:jingle_unittests",
       "//media:media_unittests",
       "//media/cast:cast_unittests",
       "//net:net_unittests",

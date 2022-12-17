@@ -20,12 +20,6 @@ AX_BASE_EXPORT extern const base::Feature
 // property.
 AX_BASE_EXPORT bool IsAccessibilityAriaVirtualContentEnabled();
 
-AX_BASE_EXPORT extern const base::Feature kEnableAccessibilityExposeDisplayNone;
-
-// Returns true if "display: none" nodes should be exposed to the
-// browser process AXTree.
-AX_BASE_EXPORT bool IsAccessibilityExposeDisplayNoneEnabled();
-
 AX_BASE_EXPORT extern const base::Feature kEnableAccessibilityExposeHTMLElement;
 
 // Returns true if the <html> element should be exposed to the
@@ -68,7 +62,7 @@ AX_BASE_EXPORT extern const base::Feature kAutoDisableAccessibility;
 // accessibility API usage in that time.
 AX_BASE_EXPORT bool IsAutoDisableAccessibilityEnabled();
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 // Enables an experimental Chrome-specific accessibility COM API
 AX_BASE_EXPORT extern const base::Feature kIChromeAccessible;
 
@@ -82,7 +76,7 @@ AX_BASE_EXPORT extern const base::Feature kSelectiveUIAEnablement;
 // the accessibility system.
 AX_BASE_EXPORT bool IsSelectiveUIAEnablementEnabled();
 
-#endif  // defined(OS_WIN)
+#endif  // BUILDFLAG(IS_WIN)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 // Enables ability to choose new continuous mouse following mode in Magnifier
@@ -118,11 +112,31 @@ AX_BASE_EXPORT extern const base::Feature
 // text editing commands is enabled.
 AX_BASE_EXPORT bool IsExperimentalAccessibilityDictationCommandsEnabled();
 
+// Enables the accessibility Dictation extension.
+AX_BASE_EXPORT extern const base::Feature
+    kExperimentalAccessibilityDictationExtension;
+
+// Returns true if experimental accessibility dictation extension is enabled.
+AX_BASE_EXPORT bool IsExperimentalAccessibilityDictationExtensionEnabled();
+
+// Enables accessibility Dictation UI hints.
+AX_BASE_EXPORT extern const base::Feature
+    kExperimentalAccessibilityDictationHints;
+
+// Returns true if experimental accessibility dictation hints is enabled.
+AX_BASE_EXPORT bool IsExperimentalAccessibilityDictationHintsEnabled();
+
 // Enables high-quality, network-based voices in Select-to-speak.
 AX_BASE_EXPORT extern const base::Feature kEnhancedNetworkVoices;
 
 // Returns true if network-based voices are enabled in Select-to-speak.
 AX_BASE_EXPORT bool IsEnhancedNetworkVoicesEnabled();
+
+// Enables improved Accessibility OS Settings visibility.
+AX_BASE_EXPORT extern const base::Feature kAccessibilityOSSettingsVisibility;
+
+// Returns true if improved Accessibility OS Settings visibility is enabled.
+AX_BASE_EXPORT bool IsAccessibilityOSSettingsVisibilityEnabled();
 
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
@@ -152,14 +166,14 @@ AX_BASE_EXPORT extern const base::Feature kEnableAriaElementReflection;
 // Returns true if ARIA element reflection is enabled.
 AX_BASE_EXPORT bool IsAriaElementReflectionEnabled();
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 // Compute the AXMode based on AccessibilityServiceInfo. If disabled,
 // the AXMode is either entirely on or entirely off.
 AX_BASE_EXPORT extern const base::Feature kComputeAXMode;
 
 // Returns true if the IChromeAccessible COM API is enabled.
 AX_BASE_EXPORT bool IsComputeAXModeEnabled();
-#endif  // defined(OS_ANDROID)
+#endif  // BUILDFLAG(IS_ANDROID)
 
 AX_BASE_EXPORT extern const base::Feature kReaderModeSidePanel;
 

@@ -27,21 +27,21 @@
 #include "components/optimization_guide/proto/hints.pb.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
+class OptimizationGuideLogger;
 class OptimizationGuideNavigationData;
 class OptimizationGuideTestAppInterfaceWrapper;
 class PrefService;
 
 namespace network {
 class SharedURLLoaderFactory;
-class NetworkConnectionTracker;
 }  // namespace network
 
 namespace optimization_guide {
 class HintCache;
 class HintsFetcherFactory;
 class OptimizationFilter;
-class OptimizationMetadata;
 class OptimizationGuideStore;
+class OptimizationMetadata;
 enum class OptimizationTypeDecision;
 class StoreUpdateData;
 class TabUrlProvider;
@@ -58,8 +58,8 @@ class HintsManager : public OptimizationHintsComponentObserver,
       TopHostProvider* top_host_provider,
       TabUrlProvider* tab_url_provider,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-      network::NetworkConnectionTracker* network_connection_tracker,
-      std::unique_ptr<PushNotificationManager> push_notification_manager);
+      std::unique_ptr<PushNotificationManager> push_notification_manager,
+      OptimizationGuideLogger* optimization_guide_logger);
 
   ~HintsManager() override;
 
@@ -472,6 +472,11 @@ class HintsManager : public OptimizationHintsComponentObserver,
   // The class that handles push notification processing and informs |this| of
   // what to do through the implemented Delegate above.
   std::unique_ptr<PushNotificationManager> push_notification_manager_;
+
+  // The logger that plumbs the debug logs to the optimization guide
+  // internals page. Not owned. Guaranteed to outlive |this|, since the logger
+  // and |this| are owned by the optimization guide keyed service.
+  raw_ptr<OptimizationGuideLogger> optimization_guide_logger_;
 
   // The clock used to schedule fetching from the remote Optimization Guide
   // Service.

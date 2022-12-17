@@ -7,6 +7,7 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/no_destructor.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
@@ -17,7 +18,6 @@
 #include "components/autofill_assistant/browser/switches.h"
 #include "components/autofill_assistant/content/browser/annotate_dom_model_service.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
-#include "components/translate/content/browser/translate_model_service.h"
 
 AnnotateDomModelServiceFactory::AnnotateDomModelServiceFactory()
     : BrowserContextKeyedServiceFactory(

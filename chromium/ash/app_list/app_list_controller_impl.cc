@@ -271,10 +271,8 @@ GetTransitionFromMetricsAnimationInfo(
 AppListControllerImpl::AppListControllerImpl()
     : model_provider_(std::make_unique<AppListModelProvider>()),
       fullscreen_presenter_(std::make_unique<AppListPresenterImpl>(this)),
+      bubble_presenter_(std::make_unique<AppListBubblePresenter>(this)),
       badge_controller_(std::make_unique<AppListBadgeController>()) {
-  if (features::IsProductivityLauncherEnabled())
-    bubble_presenter_ = std::make_unique<AppListBubblePresenter>(this);
-
   SessionControllerImpl* session_controller =
       Shell::Get()->session_controller();
   session_controller->AddObserver(this);
@@ -323,6 +321,10 @@ void AppListControllerImpl::RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(
       prefs::kSuggestedContentInfoDismissedInLauncher, false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
+  AppListNudgeController::RegisterProfilePrefs(registry);
+
+  // TODO(crbug.com/1277666): Move to Launcher nudge controller.
+  registry->RegisterDictionaryPref(prefs::kLauncherFilesPrivacyNotice);
 }
 
 void AppListControllerImpl::SetClient(AppListClient* client) {
@@ -467,6 +469,17 @@ void AppListControllerImpl::OnSessionStateChanged(
     OnVisibilityChanged(true, last_visible_display_id_);
 }
 
+void AppListControllerImpl::OnUserSessionAdded(const AccountId& account_id) {
+  if (!ash::features::IsLauncherAppSortEnabled())
+    return;
+
+  if (!client_)
+    return;
+
+  ash::ReportPrefSortOrderOnSessionStart(client_->GetPermanentSortingOrder(),
+                                         IsTabletMode());
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Methods used in Ash
 
@@ -485,6 +498,9 @@ void AppListControllerImpl::Show(int64_t display_id,
     LogAppListShowSource(show_source.value(), show_app_list_bubble);
 
   if (show_app_list_bubble) {
+    // Clamshell ProductivityLauncher does not support app list drags.
+    if (show_source.has_value())
+      DCHECK_NE(show_source.value(), AppListShowSource::kSwipeFromShelf);
     bubble_presenter_->Show(display_id);
     return;
   }
@@ -520,16 +536,32 @@ void AppListControllerImpl::ProcessScrollEvent(const ui::ScrollEvent& event) {
   fullscreen_presenter_->ProcessScrollOffset(event.location(), offset);
 }
 
-void AppListControllerImpl::OnTemporarySortOrderChanged(
-    const absl::optional<AppListSortOrder>& new_order) {
+void AppListControllerImpl::UpdateAppListWithNewTemporarySortOrder(
+    const absl::optional<AppListSortOrder>& new_order,
+    bool animate,
+    base::OnceClosure update_position_closure) {
   DCHECK(features::IsProductivityLauncherEnabled());
   DCHECK(features::IsLauncherAppSortEnabled());
 
-  // Adapt to the new sorting order in clamshell mode.
-  if (!IsTabletMode()) {
-    DCHECK(bubble_presenter_);
-    bubble_presenter_->OnTemporarySortOrderChanged(new_order);
-  }
+  if (new_order)
+    RecordAppListSortAction(*new_order, IsInTabletMode());
+
+  // Adapt the bubble app list to the new sorting order. NOTE: the bubble app
+  // list is visible only in clamshell mode. Therefore do not animate in tablet
+  // mode.
+  const bool is_tablet_mode = IsTabletMode();
+  bubble_presenter_->UpdateForNewSortingOrder(
+      new_order, !is_tablet_mode && animate,
+      is_tablet_mode ? base::NullCallback()
+                     : std::move(update_position_closure));
+
+  // Adapt the fullscreen app list to the new sorting order. NOTE: the full
+  // screen app list is visible only in tablet mode. Therefore do not animate in
+  // clamshell mode.
+  fullscreen_presenter_->UpdateForNewSortingOrder(
+      new_order, is_tablet_mode && animate,
+      is_tablet_mode ? std::move(update_position_closure)
+                     : base::NullCallback());
 }
 
 ShelfAction AppListControllerImpl::ToggleAppList(
@@ -549,17 +581,6 @@ ShelfAction AppListControllerImpl::ToggleAppList(
   }
 
   if (features::IsProductivityLauncherEnabled()) {
-#if !defined(OFFICIAL_BUILD)
-    // Make shift-click on the shelf button toggle the non-bubble app list. This
-    // allows developers to compare behavior without restarting to flip the
-    // flag. TODO(crbug.com/1232168): Remove before feature launch.
-    if (show_source == AppListShowSource::kShelfButtonFullscreen) {
-      bubble_presenter_->Dismiss();
-      return fullscreen_presenter_->ToggleAppList(display_id, show_source,
-                                                  event_time_stamp);
-    }
-    fullscreen_presenter_->Dismiss(event_time_stamp);
-#endif  // !defined(OFFICIAL_BUILD)
     ShelfAction action = bubble_presenter_->Toggle(display_id);
     if (action == SHELF_ACTION_APP_LIST_SHOWN)
       LogAppListShowSource(show_source, /*app_list_bubble=*/true);
@@ -859,8 +880,12 @@ void AppListControllerImpl::OnTabletModeEnded() {
 }
 
 void AppListControllerImpl::OnWallpaperColorsChanged() {
-  if (IsVisible(last_visible_display_id_))
-    fullscreen_presenter_->GetView()->OnWallpaperColorsChanged();
+  // Clamshell ProductivityLauncher doesn't use wallpaper prominent color.
+  if (IsVisible(last_visible_display_id_) && !ShouldShowAppListBubble()) {
+    AppListView* app_list_view = fullscreen_presenter_->GetView();
+    DCHECK(app_list_view);
+    app_list_view->OnWallpaperColorsChanged();
+  }
 }
 
 void AppListControllerImpl::OnWallpaperPreviewStarted() {
@@ -930,12 +955,14 @@ void AppListControllerImpl::OnUiVisibilityChanged(
 
   switch (new_visibility) {
     case AssistantVisibility::kVisible:
+      DVLOG(1) << "Assistant becoming visible";
       if (!IsVisible() || is_old_visibility_closing) {
         absl::optional<AppListView::ScopedContentsResetDisabler> disabler;
         if (is_old_visibility_closing) {
           // Avoid resetting the contents view when the transition to close the
           // Assistant ui is going to be reversed.
-          disabler.emplace(fullscreen_presenter_->GetView());
+          if (fullscreen_presenter_->GetView())
+            disabler.emplace(fullscreen_presenter_->GetView());
 
           // Reset `close_assistant_ui_runner_` because the Assistant ui is
           // going to show.
@@ -1078,11 +1105,17 @@ void AppListControllerImpl::SetKeyboardTraversalMode(bool engaged) {
   keyboard_traversal_engaged_ = engaged;
 
   // No need to schedule paint for bubble presenter.
-  if (bubble_presenter_ && bubble_presenter_->IsShowing())
+  if (features::IsProductivityLauncherEnabled() &&
+      bubble_presenter_->IsShowing()) {
     return;
+  }
 
+  AppListView* app_list_view = fullscreen_presenter_->GetView();
+  // May be null in tests of bubble presenter.
+  if (!app_list_view)
+    return;
   views::View* focused_view =
-      fullscreen_presenter_->GetView()->GetFocusManager()->GetFocusedView();
+      app_list_view->GetFocusManager()->GetFocusedView();
 
   if (!focused_view)
     return;
@@ -1106,8 +1139,10 @@ void AppListControllerImpl::SetKeyboardTraversalMode(bool engaged) {
 }
 
 bool AppListControllerImpl::IsShowingEmbeddedAssistantUI() const {
-  if (bubble_presenter_ && bubble_presenter_->IsShowingEmbeddedAssistantUI())
+  if (features::IsProductivityLauncherEnabled() &&
+      bubble_presenter_->IsShowingEmbeddedAssistantUI()) {
     return true;
+  }
   return fullscreen_presenter_->IsShowingEmbeddedAssistantUI();
 }
 
@@ -1153,20 +1188,15 @@ void AppListControllerImpl::StartSearch(const std::u16string& raw_query) {
     std::u16string query;
     base::TrimWhitespace(raw_query, base::TRIM_ALL, &query);
     client_->StartSearch(query);
-    auto* notifier = GetNotifier();
-    if (notifier)
-      notifier->NotifySearchQueryChanged(raw_query);
   }
 }
 
-void AppListControllerImpl::OpenSearchResult(
-    const std::string& result_id,
-    AppListSearchResultType result_type,
-    int event_flags,
-    AppListLaunchedFrom launched_from,
-    AppListLaunchType launch_type,
-    int suggestion_index,
-    bool launch_as_default) {
+void AppListControllerImpl::OpenSearchResult(const std::string& result_id,
+                                             int event_flags,
+                                             AppListLaunchedFrom launched_from,
+                                             AppListLaunchType launch_type,
+                                             int suggestion_index,
+                                             bool launch_as_default) {
   SearchModel* search_model = GetSearchModel();
   SearchResult* result = search_model->FindSearchResult(result_id);
   if (!result)
@@ -1238,22 +1268,8 @@ void AppListControllerImpl::OpenSearchResult(
     }
   }
 
-  auto* notifier = GetNotifier();
-  if (notifier) {
-    // Special-case chip results, because the display type of app results
-    // doesn't account for whether it's being displayed in the suggestion chips
-    // or app tiles.
-    AppListNotifier::Result notifier_result(result->id(),
-                                            result->metrics_type());
-    if (launched_from == AppListLaunchedFrom::kLaunchedFromSuggestionChip) {
-      notifier->NotifyLaunched(SearchResultDisplayType::kChip, notifier_result);
-    } else {
-      notifier->NotifyLaunched(result->display_type(), notifier_result);
-    }
-  }
-
   if (client_) {
-    client_->OpenSearchResult(profile_id_, result_id, result_type, event_flags,
+    client_->OpenSearchResult(profile_id_, result_id, event_flags,
                               launched_from, launch_type, suggestion_index,
                               launch_as_default);
   }
@@ -1334,7 +1350,7 @@ void AppListControllerImpl::ActivateItem(const std::string& id,
   }
 
   if (client_)
-    client_->ActivateItem(profile_id_, id, event_flags);
+    client_->ActivateItem(profile_id_, id, event_flags, launched_from);
 
   ResetHomeLauncherIfShown();
 }
@@ -1475,6 +1491,10 @@ void AppListControllerImpl::OnStateTransitionAnimationCompleted(
     state_transition_animation_callback_.Run(state);
   }
 
+  MaybeCloseAssistant();
+}
+
+void AppListControllerImpl::MaybeCloseAssistant() {
   if (close_assistant_ui_runner_)
     close_assistant_ui_runner_.RunAndReset();
 }
@@ -1484,15 +1504,18 @@ AppListViewState AppListControllerImpl::GetAppListViewState() const {
 }
 
 void AppListControllerImpl::OnViewStateChanged(AppListViewState state) {
+  DVLOG(1) << __PRETTY_FUNCTION__ << " " << state;
   app_list_view_state_ = state;
-
-  auto* notifier = GetNotifier();
-  if (notifier)
-    notifier->NotifyUIStateChanged(state);
 
   for (auto& observer : observers_)
     observer.OnViewStateChanged(state);
 
+  if (state == AppListViewState::kClosed)
+    ScheduleCloseAssistant();
+}
+
+void AppListControllerImpl::ScheduleCloseAssistant() {
+  DVLOG(1) << __PRETTY_FUNCTION__;
   // Close the Assistant in asynchronous way if the app list is going to be
   // closed while the Assistant is visible. If the app list close animation is
   // not reversed, `close_assistant_ui_runner_` runs at the end of the animation
@@ -1500,7 +1523,7 @@ void AppListControllerImpl::OnViewStateChanged(AppListViewState state) {
   const bool is_assistant_ui_visible =
       (AssistantUiController::Get()->GetModel()->visibility() ==
        AssistantVisibility::kVisible);
-  if (state == AppListViewState::kClosed && is_assistant_ui_visible) {
+  if (is_assistant_ui_visible) {
     absl::optional<base::ScopedClosureRunner> runner =
         AssistantUiController::Get()->CloseUi(
             AssistantExitPoint::kLauncherClose);
@@ -1538,6 +1561,10 @@ int AppListControllerImpl::AdjustAppListViewScrollOffset(int offset,
 void AppListControllerImpl::LoadIcon(const std::string& app_id) {
   if (client_)
     client_->LoadIcon(profile_id_, app_id);
+}
+
+bool AppListControllerImpl::HasValidProfile() const {
+  return profile_id_ != kAppListInvalidProfileID;
 }
 
 void AppListControllerImpl::GetAppLaunchedMetricParams(
@@ -1613,6 +1640,8 @@ void AppListControllerImpl::RemoveObserver(
 
 void AppListControllerImpl::OnVisibilityChanged(bool visible,
                                                 int64_t display_id) {
+  DVLOG(1) << __PRETTY_FUNCTION__ << " visible " << visible << " display_id "
+           << display_id;
   // Focus and app visibility changes while finishing home launcher state
   // animation may cause OnVisibilityChanged() to be called before the home
   // launcher state transition finished - delay the visibility change until
@@ -1680,10 +1709,10 @@ void AppListControllerImpl::OnVisibilityChanged(bool visible,
 
     last_visible_ = real_visibility;
 
-    // We could make Assistant sub-controllers an AppListControllerObserver,
-    // but we do not want to introduce new dependency of AppListController to
-    // Assistant.
-    GetAssistantViewDelegate()->OnHostViewVisibilityChanged(real_visibility);
+    // Updates AppsContainerView in `fullscreen_presenter_`.
+    if (app_list_view)
+      app_list_view->OnAppListVisibilityChanged(real_visibility);
+
     for (auto& observer : observers_)
       observer.OnAppListVisibilityChanged(real_visibility, display_id);
 
@@ -1940,6 +1969,11 @@ int AppListControllerImpl::GetLastQueryLength() {
 void AppListControllerImpl::Shutdown() {
   DCHECK(!is_shutdown_);
   is_shutdown_ = true;
+
+  // Always shutdown the bubble presenter, even if ProductivityLauncher is
+  // disabled, because tests might have temporarily enabled the feature and
+  // the widget needs to be closed.
+  bubble_presenter_->Shutdown();
 
   Shell* shell = Shell::Get();
   AssistantController::Get()->RemoveObserver(this);

@@ -109,6 +109,7 @@ base::Value NetLogSSLInfoParams(SSLClientSocketImpl* socket) {
                  SSLConnectionStatusToCipherSuite(ssl_info.connection_status));
   dict.SetIntKey("key_exchange_group", ssl_info.key_exchange_group);
   dict.SetIntKey("peer_signature_algorithm", ssl_info.peer_signature_algorithm);
+  dict.SetBoolKey("encrypted_client_hello", ssl_info.encrypted_client_hello);
 
   dict.SetStringKey("next_proto",
                     NextProtoToString(socket->GetNegotiatedProtocol()));
@@ -214,7 +215,8 @@ RSAKeyUsage CheckRSAKeyUsage(const X509Certificate* cert,
     return RSAKeyUsage::kError;
   }
   ParsedExtension key_usage_ext;
-  if (!ConsumeExtension(KeyUsageOid(), &extensions, &key_usage_ext)) {
+  if (!ConsumeExtension(der::Input(kKeyUsageOid), &extensions,
+                        &key_usage_ext)) {
     return RSAKeyUsage::kOKNoExtension;
   }
   der::BitString key_usage;
@@ -1089,6 +1091,13 @@ int SSLClientSocketImpl::DoHandshakeComplete(int result) {
   }
   UMA_HISTOGRAM_ENUMERATION("Net.SSLHandshakeDetails", details);
 
+  // Measure TLS connections that implement the renegotiation_info extension.
+  // Note this records true for TLS 1.3. By removing renegotiation altogether,
+  // TLS 1.3 is implicitly patched against the bug. See
+  // https://crbug.com/850800.
+  base::UmaHistogramBoolean("Net.SSLRenegotiationInfoSupported",
+                            SSL_get_secure_renegotiation_support(ssl_.get()));
+
   completed_connect_ = true;
   next_handshake_state_ = STATE_NONE;
 
@@ -1282,7 +1291,7 @@ ssl_verify_result_t SSLClientSocketImpl::HandleVerifyResult() {
         break;
       case TransportSecurityState::PKPStatus::BYPASSED:
         pkp_bypassed_ = true;
-        FALLTHROUGH;
+        [[fallthrough]];
       case TransportSecurityState::PKPStatus::OK:
         // Do nothing.
         break;
@@ -1348,8 +1357,7 @@ int SSLClientSocketImpl::CheckCTCompliance() {
           server_cert_verify_result_.policy_compliance,
           ssl_config_.network_isolation_key);
 
-  if (context_->sct_auditing_delegate() &&
-      context_->sct_auditing_delegate()->IsSCTAuditingEnabled()) {
+  if (context_->sct_auditing_delegate()) {
     context_->sct_auditing_delegate()->MaybeEnqueueReport(
         host_and_port_, server_cert_verify_result_.verified_cert.get(),
         server_cert_verify_result_.scts);
@@ -1671,10 +1679,10 @@ int SSLClientSocketImpl::ClientCertRequestCallback(SSL* ssl) {
     }
   }
 
-#if defined(OS_IOS)
+#if BUILDFLAG(IS_IOS)
   // TODO(droger): Support client auth on iOS. See http://crbug.com/145954).
   LOG(WARNING) << "Client auth is not supported";
-#else   // !defined(OS_IOS)
+#else   // !BUILDFLAG(IS_IOS)
   if (!send_client_cert_) {
     // First pass: we know that a client certificate is needed, but we do not
     // have one at hand. Suspend the handshake. SSL_get_error will return
@@ -1709,7 +1717,7 @@ int SSLClientSocketImpl::ClientCertRequestCallback(SSL* ssl) {
                                 client_cert_->intermediate_buffers().size()));
     return 1;
   }
-#endif  // defined(OS_IOS)
+#endif  // BUILDFLAG(IS_IOS)
 
   // Send no client certificate.
   net_log_.AddEventWithIntParams(NetLogEventType::SSL_CLIENT_CERT_PROVIDED,
@@ -1789,6 +1797,7 @@ ssl_private_key_result_t SSLClientSocketImpl::PrivateKeySignCallback(
         client_private_key_.get());
   });
 
+  base::UmaHistogramSparse("Net.SSLClientCertSignatureAlgorithm", algorithm);
   signature_result_ = ERR_IO_PENDING;
   client_private_key_->Sign(
       algorithm, base::make_span(in, in_len),
@@ -1856,8 +1865,14 @@ void SSLClientSocketImpl::MessageCallback(int is_write,
             return NetLogSSLMessageParams(!!is_write, buf, len, capture_mode);
           });
       break;
-    default:
-      return;
+    case SSL3_RT_CLIENT_HELLO_INNER:
+      DCHECK(is_write);
+      net_log_.AddEvent(NetLogEventType::SSL_ENCYPTED_CLIENT_HELLO,
+                        [&](NetLogCaptureMode capture_mode) {
+                          return NetLogSSLMessageParams(!!is_write, buf, len,
+                                                        capture_mode);
+                        });
+      break;
   }
 }
 

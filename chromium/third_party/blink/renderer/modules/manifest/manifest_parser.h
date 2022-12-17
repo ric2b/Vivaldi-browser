@@ -42,6 +42,8 @@ class MODULES_EXPORT ManifestParser {
 
   ~ManifestParser();
 
+  static void SetFileHandlerExtensionLimitForTesting(int limit);
+
   // Parse the Manifest from a string using following:
   // https://w3c.github.io/manifest/#processing
   bool Parse();
@@ -296,7 +298,7 @@ class MODULES_EXPORT ManifestParser {
       const JSONObject* object);
 
   // Parses the 'url_handlers' field of a Manifest, as defined in:
-  // https://github.com/WICG/pwa-url-handler/blob/master/explainer.md
+  // https://github.com/WICG/pwa-url-handler/blob/main/explainer.md
   // Returns the parsed list of UrlHandlers. The returned UrlHandlers are empty
   // if the field didn't exist, parsing failed, the input list was empty, or if
   // the blink feature flag is disabled.
@@ -306,7 +308,7 @@ class MODULES_EXPORT ManifestParser {
       const JSONObject* object);
 
   // Parses a single URL handler entry in 'url_handlers', as defined in:
-  // https://github.com/WICG/pwa-url-handler/blob/master/explainer.md
+  // https://github.com/WICG/pwa-url-handler/blob/main/explainer.md
   // Returns |absl::nullopt| if the UrlHandler was invalid, or a UrlHandler if
   // parsing succeeded.
   // This feature is experimental and is only enabled by the blink feature flag:
@@ -315,7 +317,7 @@ class MODULES_EXPORT ManifestParser {
       const JSONObject* object);
 
   // Parses the 'file_handlers' field of a Manifest, as defined in:
-  // https://github.com/WICG/file-handling/blob/master/explainer.md
+  // https://github.com/WICG/file-handling/blob/main/explainer.md
   // Returns the parsed list of FileHandlers. The returned FileHandlers are
   // empty if the field didn't exist, parsing failed, or the input list was
   // empty.
@@ -323,20 +325,20 @@ class MODULES_EXPORT ManifestParser {
       const JSONObject* object);
 
   // Parses a FileHandler from an entry in the 'file_handlers' list, as
-  // defined in: https://github.com/WICG/file-handling/blob/master/explainer.md.
+  // defined in: https://github.com/WICG/file-handling/blob/main/explainer.md.
   // Returns |absl::nullopt| if the FileHandler was invalid, or a
   // FileHandler, if parsing succeeded.
   absl::optional<mojom::blink::ManifestFileHandlerPtr> ParseFileHandler(
       const JSONObject* file_handler_entry);
 
   // Parses the 'accept' field of a FileHandler, as defined in:
-  // https://github.com/WICG/file-handling/blob/master/explainer.md.
+  // https://github.com/WICG/file-handling/blob/main/explainer.md.
   // Returns the parsed accept map. Invalid accept entries are ignored.
   HashMap<String, Vector<String>> ParseFileHandlerAccept(
       const JSONObject* accept);
 
   // Parses an extension in the 'accept' field of a FileHandler, as defined in:
-  // https://github.com/WICG/file-handling/blob/master/explainer.md. Returns
+  // https://github.com/WICG/file-handling/blob/main/explainer.md. Returns
   // whether the parsing was successful and, if so, populates |output| with the
   // parsed extension.
   bool ParseFileHandlerAcceptExtension(const JSONValue* extension,
@@ -460,6 +462,10 @@ class MODULES_EXPORT ManifestParser {
   mojom::blink::ManifestUserPreferencesPtr ParseUserPreferences(
       const JSONObject* object);
 
+  // Parse the `handle_links` field of the manifest as defined in:
+  // https://github.com/WICG/pwa-url-handler/blob/main/handle_links/explainer.md
+  mojom::blink::HandleLinks ParseHandleLinks(const JSONObject* object);
+
   void AddErrorInfo(const String& error_msg,
                     bool critical = false,
                     int error_line = 0,
@@ -469,6 +475,10 @@ class MODULES_EXPORT ManifestParser {
   KURL manifest_url_;
   KURL document_url_;
   const FeatureContext* feature_context_;
+
+  // The total number of file extensions seen so far while parsing
+  // `file_handlers` `accept` entries.
+  int total_file_handler_extension_count_ = 0;
 
   bool failed_;
   mojom::blink::ManifestPtr manifest_;

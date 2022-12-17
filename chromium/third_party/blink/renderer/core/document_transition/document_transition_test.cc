@@ -4,6 +4,9 @@
 
 #include "third_party/blink/renderer/core/document_transition/document_transition.h"
 
+#include "base/check_op.h"
+#include "base/memory/scoped_refptr.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/scoped_feature_list.h"
 #include "cc/document_transition/document_transition_request.h"
 #include "third_party/blink/public/web/web_settings.h"
@@ -12,15 +15,20 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_document_transition_prepare_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_document_transition_start_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_root_transition_type.h"
+#include "third_party/blink/renderer/core/css/style_change_reason.h"
+#include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/document_transition/document_transition_supplement.h"
+#include "third_party/blink/renderer/core/document_transition/document_transition_utils.h"
 #include "third_party/blink/renderer/core/dom/abort_signal.h"
+#include "third_party/blink/renderer/core/dom/node_computed_style.h"
+#include "third_party/blink/renderer/core/dom/pseudo_element.h"
 #include "third_party/blink/renderer/core/frame/frame_test_helpers.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
-#include "third_party/blink/renderer/core/paint/compositing/compositing_state.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.h"
 #include "third_party/blink/renderer/platform/testing/find_cc_layer.h"
 #include "third_party/blink/renderer/platform/testing/paint_test_configurations.h"
+#include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
 
 namespace blink {
 
@@ -99,7 +107,64 @@ class DocumentTransitionTest : public testing::Test,
     return transition->state_;
   }
 
- private:
+  void FinishTransition() {
+    auto* transition =
+        DocumentTransitionSupplement::documentTransition(GetDocument());
+    transition->NotifyStartFinished(transition->last_start_sequence_id_);
+  }
+
+  bool ShouldCompositeForDocumentTransition(Element* e) {
+    auto* layout_object = e->GetLayoutObject();
+    auto* transition =
+        DocumentTransitionSupplement::documentTransition(GetDocument());
+    return layout_object && transition &&
+           transition->IsTransitionParticipant(*layout_object);
+  }
+
+  void ValidatePseudoElementTree(
+      const Vector<WTF::AtomicString>& document_transition_tags,
+      bool has_new_content) {
+    auto* transition_pseudo =
+        GetDocument().documentElement()->GetPseudoElement(kPseudoIdTransition);
+    ASSERT_TRUE(transition_pseudo);
+    EXPECT_TRUE(transition_pseudo->GetComputedStyle());
+    EXPECT_TRUE(transition_pseudo->GetLayoutObject());
+
+    PseudoElement* previous_container = nullptr;
+    for (const auto& document_transition_tag : document_transition_tags) {
+      auto* container_pseudo = transition_pseudo->GetPseudoElement(
+          kPseudoIdTransitionContainer, document_transition_tag);
+      ASSERT_TRUE(container_pseudo);
+      EXPECT_TRUE(container_pseudo->GetComputedStyle());
+      EXPECT_TRUE(container_pseudo->GetLayoutObject());
+
+      if (previous_container) {
+        EXPECT_EQ(LayoutTreeBuilderTraversal::NextSibling(*previous_container),
+                  container_pseudo);
+      }
+      previous_container = container_pseudo;
+
+      auto* old_content = container_pseudo->GetPseudoElement(
+          kPseudoIdTransitionOldContent, document_transition_tag);
+      ASSERT_TRUE(old_content);
+      EXPECT_TRUE(old_content->GetComputedStyle());
+      EXPECT_TRUE(old_content->GetLayoutObject());
+
+      auto* new_content = container_pseudo->GetPseudoElement(
+          kPseudoIdTransitionNewContent, document_transition_tag);
+
+      if (!has_new_content) {
+        ASSERT_FALSE(new_content);
+        continue;
+      }
+
+      ASSERT_TRUE(new_content);
+      EXPECT_TRUE(new_content->GetComputedStyle());
+      EXPECT_TRUE(new_content->GetLayoutObject());
+    }
+  }
+
+ protected:
   std::unique_ptr<frame_test_helpers::WebViewHelper> web_view_helper_;
 };
 
@@ -183,7 +248,7 @@ TEST_P(DocumentTransitionTest, EffectParsing) {
   ASSERT_TRUE(request);
 
   auto directive = request->ConstructDirective({});
-  EXPECT_EQ(directive.effect(), DocumentTransition::Request::Effect::kNone);
+  EXPECT_EQ(directive.effect(), DocumentTransitionRequest::Effect::kNone);
 
   // Test "explode" effect parsing.
   DocumentTransitionPrepareOptions explode_options;
@@ -195,7 +260,7 @@ TEST_P(DocumentTransitionTest, EffectParsing) {
   ASSERT_TRUE(request);
 
   directive = request->ConstructDirective({});
-  EXPECT_EQ(directive.effect(), DocumentTransition::Request::Effect::kExplode);
+  EXPECT_EQ(directive.effect(), DocumentTransitionRequest::Effect::kExplode);
 }
 
 TEST_P(DocumentTransitionTest, PrepareSharedElementsWantToBeComposited) {
@@ -220,9 +285,9 @@ TEST_P(DocumentTransitionTest, PrepareSharedElementsWantToBeComposited) {
   ScriptState* script_state = v8_scope.GetScriptState();
   ExceptionState& exception_state = v8_scope.GetExceptionState();
 
-  EXPECT_FALSE(e1->ShouldCompositeForDocumentTransition());
-  EXPECT_FALSE(e2->ShouldCompositeForDocumentTransition());
-  EXPECT_FALSE(e3->ShouldCompositeForDocumentTransition());
+  EXPECT_FALSE(ShouldCompositeForDocumentTransition(e1));
+  EXPECT_FALSE(ShouldCompositeForDocumentTransition(e2));
+  EXPECT_FALSE(ShouldCompositeForDocumentTransition(e3));
 
   DocumentTransitionPrepareOptions options;
   // Set two of the elements to be shared.
@@ -232,9 +297,9 @@ TEST_P(DocumentTransitionTest, PrepareSharedElementsWantToBeComposited) {
   // Update the lifecycle while keeping the transition active.
   UpdateAllLifecyclePhasesForTest();
 
-  EXPECT_TRUE(e1->ShouldCompositeForDocumentTransition());
-  EXPECT_FALSE(e2->ShouldCompositeForDocumentTransition());
-  EXPECT_TRUE(e3->ShouldCompositeForDocumentTransition());
+  EXPECT_TRUE(ShouldCompositeForDocumentTransition(e1));
+  EXPECT_FALSE(ShouldCompositeForDocumentTransition(e2));
+  EXPECT_TRUE(ShouldCompositeForDocumentTransition(e3));
 
   EXPECT_TRUE(ElementIsComposited("e1"));
   EXPECT_FALSE(ElementIsComposited("e2"));
@@ -242,9 +307,9 @@ TEST_P(DocumentTransitionTest, PrepareSharedElementsWantToBeComposited) {
 
   UpdateAllLifecyclePhasesAndFinishDirectives();
 
-  EXPECT_FALSE(e1->ShouldCompositeForDocumentTransition());
-  EXPECT_FALSE(e2->ShouldCompositeForDocumentTransition());
-  EXPECT_FALSE(e3->ShouldCompositeForDocumentTransition());
+  EXPECT_FALSE(ShouldCompositeForDocumentTransition(e1));
+  EXPECT_FALSE(ShouldCompositeForDocumentTransition(e2));
+  EXPECT_FALSE(ShouldCompositeForDocumentTransition(e3));
 
   // We need to actually run the lifecycle in order to see the full effect of
   // finishing directives.
@@ -274,25 +339,25 @@ TEST_P(DocumentTransitionTest, UncontainedElementsAreCleared) {
   ScriptState* script_state = v8_scope.GetScriptState();
   ExceptionState& exception_state = v8_scope.GetExceptionState();
 
-  EXPECT_FALSE(e1->ShouldCompositeForDocumentTransition());
-  EXPECT_FALSE(e2->ShouldCompositeForDocumentTransition());
-  EXPECT_FALSE(e3->ShouldCompositeForDocumentTransition());
+  EXPECT_FALSE(ShouldCompositeForDocumentTransition(e1));
+  EXPECT_FALSE(ShouldCompositeForDocumentTransition(e2));
+  EXPECT_FALSE(ShouldCompositeForDocumentTransition(e3));
 
   DocumentTransitionPrepareOptions options;
   options.setSharedElements({e1, e2, e3});
   transition->prepare(script_state, &options, exception_state);
 
-  EXPECT_TRUE(e1->ShouldCompositeForDocumentTransition());
-  EXPECT_TRUE(e2->ShouldCompositeForDocumentTransition());
-  EXPECT_TRUE(e3->ShouldCompositeForDocumentTransition());
+  EXPECT_TRUE(ShouldCompositeForDocumentTransition(e1));
+  EXPECT_TRUE(ShouldCompositeForDocumentTransition(e2));
+  EXPECT_TRUE(ShouldCompositeForDocumentTransition(e3));
 
   // Update the lifecycle while keeping the transition active.
   UpdateAllLifecyclePhasesForTest();
 
   // Since only the first element is contained, the rest should be cleared.
-  EXPECT_TRUE(e1->ShouldCompositeForDocumentTransition());
-  EXPECT_FALSE(e2->ShouldCompositeForDocumentTransition());
-  EXPECT_FALSE(e3->ShouldCompositeForDocumentTransition());
+  EXPECT_TRUE(ShouldCompositeForDocumentTransition(e1));
+  EXPECT_FALSE(ShouldCompositeForDocumentTransition(e2));
+  EXPECT_FALSE(ShouldCompositeForDocumentTransition(e3));
 
   EXPECT_TRUE(ElementIsComposited("e1"));
   EXPECT_FALSE(ElementIsComposited("e2"));
@@ -332,9 +397,9 @@ TEST_P(DocumentTransitionTest, StartSharedElementCountMismatch) {
   transition->start(script_state, &start_options, exception_state);
   EXPECT_TRUE(exception_state.HadException());
 
-  EXPECT_FALSE(e1->ShouldCompositeForDocumentTransition());
-  EXPECT_FALSE(e2->ShouldCompositeForDocumentTransition());
-  EXPECT_FALSE(e3->ShouldCompositeForDocumentTransition());
+  EXPECT_FALSE(ShouldCompositeForDocumentTransition(e1));
+  EXPECT_FALSE(ShouldCompositeForDocumentTransition(e2));
+  EXPECT_FALSE(ShouldCompositeForDocumentTransition(e3));
 }
 
 TEST_P(DocumentTransitionTest, StartSharedElementsWantToBeComposited) {
@@ -360,9 +425,9 @@ TEST_P(DocumentTransitionTest, StartSharedElementsWantToBeComposited) {
   prepare_options.setSharedElements({e1, e3});
   transition->prepare(script_state, &prepare_options, exception_state);
 
-  EXPECT_TRUE(e1->ShouldCompositeForDocumentTransition());
-  EXPECT_FALSE(e2->ShouldCompositeForDocumentTransition());
-  EXPECT_TRUE(e3->ShouldCompositeForDocumentTransition());
+  EXPECT_TRUE(ShouldCompositeForDocumentTransition(e1));
+  EXPECT_FALSE(ShouldCompositeForDocumentTransition(e2));
+  EXPECT_TRUE(ShouldCompositeForDocumentTransition(e3));
 
   UpdateAllLifecyclePhasesAndFinishDirectives();
 
@@ -371,15 +436,15 @@ TEST_P(DocumentTransitionTest, StartSharedElementsWantToBeComposited) {
   start_options.setSharedElements({e1, e2});
   transition->start(script_state, &start_options, exception_state);
 
-  EXPECT_TRUE(e1->ShouldCompositeForDocumentTransition());
-  EXPECT_TRUE(e2->ShouldCompositeForDocumentTransition());
-  EXPECT_FALSE(e3->ShouldCompositeForDocumentTransition());
+  EXPECT_TRUE(ShouldCompositeForDocumentTransition(e1));
+  EXPECT_TRUE(ShouldCompositeForDocumentTransition(e2));
+  EXPECT_FALSE(ShouldCompositeForDocumentTransition(e3));
 
   UpdateAllLifecyclePhasesAndFinishDirectives();
 
-  EXPECT_FALSE(e1->ShouldCompositeForDocumentTransition());
-  EXPECT_FALSE(e2->ShouldCompositeForDocumentTransition());
-  EXPECT_FALSE(e3->ShouldCompositeForDocumentTransition());
+  EXPECT_FALSE(ShouldCompositeForDocumentTransition(e1));
+  EXPECT_FALSE(ShouldCompositeForDocumentTransition(e2));
+  EXPECT_FALSE(ShouldCompositeForDocumentTransition(e3));
 }
 
 TEST_P(DocumentTransitionTest, AdditionalPrepareAfterPreparedSucceeds) {
@@ -483,7 +548,7 @@ TEST_P(DocumentTransitionTest, StartAfterPrepare) {
   EXPECT_FALSE(transition->TakePendingRequest());
 
   start_request->TakeFinishedCallback().Run();
-  EXPECT_EQ(GetState(transition), State::kIdle);
+  FinishTransition();
   start_tester.WaitUntilSettled();
   EXPECT_TRUE(start_tester.IsFulfilled());
 }
@@ -520,6 +585,7 @@ TEST_P(DocumentTransitionTest, StartPromiseIsResolved) {
 
   EXPECT_EQ(GetState(transition), State::kStarted);
   UpdateAllLifecyclePhasesAndFinishDirectives();
+  FinishTransition();
 
   // Visual updates are restored on start.
   EXPECT_FALSE(LayerTreeHost()->IsDeferringCommits());
@@ -550,6 +616,69 @@ TEST_P(DocumentTransitionTest, AbortSignal) {
   prepare_tester.WaitUntilSettled();
   EXPECT_TRUE(prepare_tester.IsRejected());
   EXPECT_EQ(GetState(transition), State::kIdle);
+}
+
+// Checks that the pseudo element tree is correctly build for ::transition*
+// pseudo elements.
+TEST_P(DocumentTransitionTest, DocumentTransitionPseudoTree) {
+  SetHtmlInnerHTML(R"HTML(
+    <style>
+      div { width: 100px; height: 100px; contain: paint }
+    </style>
+
+    <div id=e1></div>
+    <div id=e2></div>
+    <div id=e3></div>
+  )HTML");
+
+  auto* e1 = GetDocument().getElementById("e1");
+  auto* e2 = GetDocument().getElementById("e2");
+  auto* e3 = GetDocument().getElementById("e3");
+
+  auto* transition =
+      DocumentTransitionSupplement::documentTransition(GetDocument());
+
+  V8TestingScope v8_scope;
+  ScriptState* script_state = v8_scope.GetScriptState();
+  ExceptionState& exception_state = v8_scope.GetExceptionState();
+
+  DocumentTransitionPrepareOptions options;
+  options.setSharedElements({e1, e2, e3});
+  transition->prepare(script_state, &options, exception_state);
+  ASSERT_FALSE(exception_state.HadException());
+  UpdateAllLifecyclePhasesForTest();
+
+  // The prepare phase should generate the pseudo tree.
+  const Vector<AtomicString> document_transition_tags = {"shared-0", "shared-1",
+                                                         "shared-2"};
+  ValidatePseudoElementTree(document_transition_tags, false);
+
+  // Finish the prepare phase, mutate the DOM and start the animation.
+  UpdateAllLifecyclePhasesAndFinishDirectives();
+  SetHtmlInnerHTML(R"HTML(
+    <style>
+      div { width: 200px; height: 200px; contain: paint }
+    </style>
+
+    <div id=e1></div>
+    <div id=e2></div>
+    <div id=e3></div>
+  )HTML");
+  DocumentTransitionStartOptions start_options;
+  start_options.setSharedElements({e1, e2, e3});
+  transition->start(script_state, &start_options, exception_state);
+  ASSERT_FALSE(exception_state.HadException());
+
+  // The start phase should generate pseudo elements for rendering new live
+  // content.
+  UpdateAllLifecyclePhasesAndFinishDirectives();
+  ValidatePseudoElementTree(document_transition_tags, true);
+
+  // Finish the animations which should remove the pseudo element tree.
+  FinishTransition();
+  UpdateAllLifecyclePhasesAndFinishDirectives();
+  EXPECT_FALSE(
+      GetDocument().documentElement()->GetPseudoElement(kPseudoIdTransition));
 }
 
 }  // namespace blink

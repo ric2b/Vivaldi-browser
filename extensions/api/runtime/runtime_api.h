@@ -241,9 +241,8 @@ class RuntimePrivateCreateProfileFunction : public ExtensionFunction {
                         Profile* profile,
                         Profile::CreateStatus status);
   void CreateShortcutAndShowSuccess(bool create_shortcut, Profile* profile);
-  void OnBrowserReadyCallback(Profile* profile,
-                              Profile::CreateStatus profile_create_status);
-  void OpenNewWindowForProfile(Profile* profile, Profile::CreateStatus status);
+  void OnBrowserReadyCallback(Profile* profile);
+  void OpenNewWindowForProfile(Profile* profile);
 
   ResponseAction Run() override;
 };

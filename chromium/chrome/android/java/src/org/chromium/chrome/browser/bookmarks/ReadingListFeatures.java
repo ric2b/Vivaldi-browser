@@ -9,6 +9,9 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 
 import java.util.concurrent.TimeUnit;
 
+// Vivaldi
+import org.chromium.chrome.browser.ChromeApplicationImpl;
+
 /**
  * Reading List feature flags and params.
  *
@@ -34,6 +37,7 @@ public class ReadingListFeatures {
     private ReadingListFeatures() {}
 
     public static boolean isReadingListEnabled() {
+        if (ChromeApplicationImpl.isVivaldi()) return FeatureList.isInitialized();
         return FeatureList.isInitialized()
                 && ChromeFeatureList.isEnabled(ChromeFeatureList.READ_LATER)
                 && ChromeFeatureList.getFieldTrialParamByFeatureAsInt(
@@ -43,6 +47,8 @@ public class ReadingListFeatures {
 
     /** Returns whether Reading list items should open in a custom tab. */
     public static boolean shouldUseCustomTab() {
+        // Vivaldi - We don't use custom tabs for reading list
+        if (ChromeApplicationImpl.isVivaldi()) return false;
         // Default value is `true`.
         if (!isReadingListEnabled()) return true;
         return ChromeFeatureList.getFieldTrialParamByFeatureAsBoolean(
@@ -73,6 +79,7 @@ public class ReadingListFeatures {
     }
 
     public static boolean shouldAllowBookmarkTypeSwapping() {
+        if (ChromeApplicationImpl.isVivaldi()) return isReadingListEnabled();
         return isReadingListEnabled()
                 && ChromeFeatureList.getFieldTrialParamByFeatureAsBoolean(
                         ChromeFeatureList.READ_LATER, "allow_bookmark_type_swapping", false);

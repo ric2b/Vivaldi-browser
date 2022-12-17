@@ -51,10 +51,18 @@ constexpr char kCardifiedStateAnimationSmoothnessExit[] =
 constexpr char kAppListZeroStateSearchResultUserActionHistogram[] =
     "Apps.AppList.ZeroStateSearchResultUserActionType";
 
-// The UMA histogram that logs user's decision(remove or cancel) for zero state
+// The UMA histogram that logs user's decision (remove or cancel) for zero state
 // search result removal confirmation.
 constexpr char kAppListZeroStateSearchResultRemovalHistogram[] =
     "Apps.AppList.ZeroStateSearchResultRemovalDecision";
+
+// The UMA histogram that logs user's decision (remove or cancel) for search
+// result removal confirmation. Recorded if productivity launcher is enabled, in
+// which case search result removal is enabled outside zero state search.
+// Otherwise, the dialog result is reported using
+// `kAppListZeroStateSearchResultRemovalHistogram`.
+constexpr char kSearchResultRemovalDialogDecisionHistogram[] =
+    "Apps.AppList.SearchResultRemovalDecision";
 
 // The base UMA histogram that logs app launches within the HomeLauncher (tablet
 // mode AppList), and the fullscreen AppList (when ProductivityLauncher is
@@ -105,6 +113,16 @@ constexpr char kAppListAppLaunchedHomecherAllApps[] =
     "Apps.AppListAppLaunchedV2.HomecherAllApps";
 constexpr char kAppListAppLaunchedHomecherSearch[] =
     "Apps.AppListAppLaunchedV2.HomecherSearch";
+
+constexpr char kClamshellReorderAnimationSmoothnessHistogram[] =
+    "Apps.Launcher.ProductivityReorderAnimationSmoothness.ClamshellMode";
+constexpr char kTabletReorderAnimationSmoothnessHistogram[] =
+    "Apps.Launcher.ProductivityReorderAnimationSmoothness.TabletMode";
+
+constexpr char kClamshellReorderActionHistogram[] =
+    "Apps.Launcher.ProductivityReorderAction.ClamshellMode";
+constexpr char kTabletReorderActionHistogram[] =
+    "Apps.Launcher.ProductivityReorderAction.TabletMode";
 
 // The prefix for all the variants that track how long the app list is kept
 // open by open method. Suffix is decided in `GetAppListOpenMethod`
@@ -202,9 +220,15 @@ void RecordZeroStateSearchResultUserActionHistogram(
 }
 
 void RecordZeroStateSearchResultRemovalHistogram(
-    ZeroStateSearchResutRemovalConfirmation removal_decision) {
+    SearchResultRemovalConfirmation removal_decision) {
   UMA_HISTOGRAM_ENUMERATION(kAppListZeroStateSearchResultRemovalHistogram,
                             removal_decision);
+}
+
+void RecordSearchResultRemovalDialogDecision(
+    SearchResultRemovalConfirmation removal_decision) {
+  base::UmaHistogramEnumeration(kSearchResultRemovalDialogDecisionHistogram,
+                                removal_decision);
 }
 
 std::string GetAppListOpenMethod(AppListShowSource source) {
@@ -456,6 +480,29 @@ void ReportCardifiedSmoothness(bool is_entering_cardified, int smoothness) {
     UMA_HISTOGRAM_PERCENTAGE(kCardifiedStateAnimationSmoothnessExit,
                              smoothness);
   }
+}
+
+// Reports reorder animation smoothness.
+void ReportReorderAnimationSmoothness(bool in_tablet, int smoothness) {
+  if (in_tablet) {
+    base::UmaHistogramPercentage(kTabletReorderAnimationSmoothnessHistogram,
+                                 smoothness);
+  } else {
+    base::UmaHistogramPercentage(kClamshellReorderAnimationSmoothnessHistogram,
+                                 smoothness);
+  }
+}
+
+void RecordAppListSortAction(AppListSortOrder new_order, bool in_tablet) {
+  // NOTE: (1) kNameReverseAlphabetical is not used for now; (2) Resetting the
+  // sort order is not recorded here.
+  DCHECK(new_order != AppListSortOrder::kNameReverseAlphabetical &&
+         new_order != AppListSortOrder::kCustom);
+
+  if (in_tablet)
+    base::UmaHistogramEnumeration(kTabletReorderActionHistogram, new_order);
+  else
+    base::UmaHistogramEnumeration(kClamshellReorderActionHistogram, new_order);
 }
 
 }  // namespace ash

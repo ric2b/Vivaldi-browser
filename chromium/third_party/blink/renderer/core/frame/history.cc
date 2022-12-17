@@ -39,6 +39,7 @@
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
+#include "third_party/blink/renderer/platform/bindings/v8_private_property.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
@@ -62,8 +63,8 @@ unsigned History::length(ExceptionState& exception_state) const {
     return 0;
   }
 
-  // TODO(crbug.com/1277593): Remove this condition when Fenced Frames
-  // transition to MPArch completely
+  // TODO(crbug.com/1262022): Remove this condition when Fenced Frames
+  // transition to MPArch completely.
   if (DomWindow()->GetFrame()->IsInFencedFrameTree()) {
     return 1;
   }
@@ -183,6 +184,12 @@ void History::go(ScriptState* script_state,
     return;
   }
 
+  // TODO(crbug.com/1262022): Remove this condition when Fenced Frames
+  // transition to MPArch completely.
+  if (DomWindow()->GetFrame()->IsInFencedFrameTree()) {
+    return;
+  }
+
   DCHECK(IsMainThread());
   auto* active_window = LocalDOMWindow::From(script_state);
   if (!active_window)
@@ -224,8 +231,9 @@ void History::pushState(v8::Isolate* isolate,
         MakeGarbageCollected<ConsoleMessage>(
             mojom::blink::ConsoleMessageSource::kJavaScript,
             mojom::blink::ConsoleMessageLevel::kWarning,
-            "Use of history.pushState in a prerender context "
-            "is treated as history.replaceState."),
+            "Use of history.pushState in a trivial session history context, "
+            "which maintains only one session history entry, is treated as "
+            "history.replaceState."),
         /* discard_duplicates */ true);
     load_type = WebFrameLoadType::kReplaceCurrentItem;
   }

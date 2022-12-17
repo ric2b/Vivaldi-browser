@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "ash/components/attestation/mock_attestation_flow.h"
+#include "ash/components/cryptohome/system_salt_getter.h"
 #include "ash/constants/ash_switches.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
@@ -35,7 +36,6 @@
 #include "chrome/browser/prefs/browser_prefs.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
-#include "chromeos/cryptohome/system_salt_getter.h"
 #include "chromeos/dbus/dbus_client_implementation_type.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager/fake_session_manager_client.h"
@@ -181,6 +181,7 @@ class DeviceCloudPolicyManagerAshTest
 
     RegisterLocalState(local_state_.registry());
     manager_->Init(&schema_registry_);
+    manager_->SetSigninProfileSchemaRegistry(&schema_registry_);
 
     // SharedURLLoaderFactory and LocalState singletons have to be set since
     // they are accessed by EnrollmentHandler and StartupUtils.
@@ -440,6 +441,7 @@ class DeviceCloudPolicyManagerAshObserverTest
   // DeviceCloudPolicyManagerAsh::Observer:
   MOCK_METHOD0(OnDeviceCloudPolicyManagerConnected, void());
   MOCK_METHOD0(OnDeviceCloudPolicyManagerDisconnected, void());
+  MOCK_METHOD0(OnDeviceCloudPolicyManagerGotRegistry, void());
 };
 
 TEST_F(DeviceCloudPolicyManagerAshObserverTest, ConnectAndDisconnect) {
@@ -462,6 +464,19 @@ TEST_F(DeviceCloudPolicyManagerAshObserverTest, ConnectAndDisconnect) {
   EXPECT_CALL(*this, OnDeviceCloudPolicyManagerDisconnected());
   manager_->Disconnect();
   EXPECT_FALSE(manager_->IsConnected());
+}
+
+TEST_F(DeviceCloudPolicyManagerAshObserverTest, GetSchemaRegistry) {
+  EXPECT_CALL(*this, OnDeviceCloudPolicyManagerGotRegistry()).Times(1);
+
+  manager_->Shutdown();
+  manager_->Init(&schema_registry_);
+
+  EXPECT_FALSE(manager_->HasSchemaRegistry());
+
+  manager_->SetSigninProfileSchemaRegistry(&schema_registry_);
+
+  EXPECT_TRUE(manager_->HasSchemaRegistry());
 }
 
 class DeviceCloudPolicyManagerAshEnrollmentTest
@@ -923,7 +938,7 @@ TEST_P(DeviceCloudPolicyManagerAshEnrollmentTest, UnregisterFails) {
 TEST_P(DeviceCloudPolicyManagerAshEnrollmentTest, DisableMachineCertReq) {
   // Simulate the flag --disable-machine-cert-request being provided to Chrome.
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      chromeos::switches::kDisableMachineCertRequest);
+      ash::switches::kDisableMachineCertRequest);
 
   // Set expectation that a request for a machine cert is never made.
   EXPECT_CALL(

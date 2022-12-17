@@ -35,6 +35,7 @@
 
 #include "base/gtest_prod_util.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/observer_list.h"
 #include "build/build_config.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
@@ -66,7 +67,6 @@
 #include "third_party/blink/renderer/core/page/page_widget_delegate.h"
 #include "third_party/blink/renderer/core/page/scoped_page_pauser.h"
 #include "third_party/blink/renderer/platform/graphics/apply_viewport_changes.h"
-#include "third_party/blink/renderer/platform/graphics/graphics_layer.h"
 #include "third_party/blink/renderer/platform/graphics/touch_action.h"
 #include "third_party/blink/renderer/platform/heap/member.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
@@ -75,6 +75,7 @@
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/vector2d_f.h"
 
 namespace cc {
 class ScopedDeferMainFrameUpdate;
@@ -108,7 +109,7 @@ class TextAutosizerPageInfo;
 
 using PaintHoldingCommitTrigger = cc::PaintHoldingCommitTrigger;
 
-class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
+class CORE_EXPORT WebViewImpl final : public WebView,
                                       public RefCounted<WebViewImpl>,
                                       public mojom::blink::PageBroadcast {
  public:
@@ -495,7 +496,7 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
 
   PageScaleConstraintsSet& GetPageScaleConstraintsSet() const;
 
-  FloatSize ElasticOverscroll() const { return elastic_overscroll_; }
+  gfx::Vector2dF ElasticOverscroll() const { return elastic_overscroll_; }
 
   class ChromeClient& GetChromeClient() const {
     return *chrome_client_.Get();
@@ -556,7 +557,8 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   // Shows a previously created WebView (via window.open()).
   void Show(const LocalFrameToken& opener_frame_token,
             NavigationPolicy policy,
-            const gfx::Rect& rect,
+            const gfx::Rect& requested_rect,
+            const gfx::Rect& adjusted_rect,
             bool opened_by_user_gesture);
 
   // Send the window rect to the browser and call `ack_callback` when the
@@ -860,7 +862,7 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
 
   float zoom_factor_override_ = 0.f;
 
-  FloatSize elastic_overscroll_;
+  gfx::Vector2dF elastic_overscroll_;
 
   // If true, we send IPC messages when |preferred_size_| changes.
   bool send_preferred_size_changes_ = false;

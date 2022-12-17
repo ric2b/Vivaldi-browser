@@ -10,6 +10,7 @@
 // #import {loadTimeData} from '../i18n_setup.js';
 // #import {Oobe} from '../cr_ui.m.js'
 // #import {$} from 'chrome://resources/js/util.m.js';
+// #import './debug_util.js';
 
 // #import {MessageType, ProblemType} from 'chrome://resources/cr_components/chromeos/quick_unlock/setup_pin_keyboard.m.js';
 
@@ -75,9 +76,6 @@ cr.define('cr.ui.login.debug', function() {
       border-color: #faa !important;
       color: #faa`;
 
-  const RECOMMENDED_APPS_CONTENT = `
-// <include src="../../arc_support/recommend_app_list_view.html">
-  `;
   /**
    * Indicates if screen is present in usual user flow, represents some error
    * state or is shown in some other cases. See KNOWN_SCREENS for more details.
@@ -537,6 +535,10 @@ cr.define('cr.ui.login.debug', function() {
       ]
     },
     {
+      id: 'smart-privacy-protection',
+      kind: ScreenKind.NORMAL,
+    },
+    {
       id: 'reset',
       kind: ScreenKind.OTHER,
       states: [
@@ -904,13 +906,25 @@ cr.define('cr.ui.login.debug', function() {
       id: 'sync-consent',
       kind: ScreenKind.NORMAL,
       defaultState: 'step-no-split',
-      states: [{
-        id: 'minor-mode',
-        data: {
-          syncConsentOptionalEnabled: false,
-          isMinorMode: true,
+      states: [
+        {
+          id: 'minor-mode',
+          data: {
+            isChildAccount: true,
+            isArcRestricted: false,
+          },
+          trigger: (screen) => {
+            screen.setIsMinorMode(true);
+          },
         },
-      }]
+        {
+          id: 'arc-restricted',
+          data: {
+            isChildAccount: false,
+            isArcRestricted: true,
+          },
+        }
+      ]
     },
     {
       id: 'consolidated-consent',
@@ -920,7 +934,10 @@ cr.define('cr.ui.login.debug', function() {
       // additionalTosUrl.
       states: [
         {
-          id: 'regular',
+          id: 'regular-owner',
+          trigger: (screen) => {
+            screen.setIsDeviceOwner(true);
+          },
           data: {
             isArcEnabled: true,
             isDemo: false,
@@ -932,7 +949,40 @@ cr.define('cr.ui.login.debug', function() {
           },
         },
         {
+          id: 'regular',
+          trigger: (screen) => {
+            screen.setIsDeviceOwner(false);
+          },
+          data: {
+            isArcEnabled: true,
+            isDemo: false,
+            isChildAccount: false,
+            isEnterpriseManagedAccount: false,
+            googleEulaUrl: 'https://policies.google.com/terms/embedded?hl=en',
+            crosEulaUrl: 'https://www.google.com/intl/en/chrome/terms/',
+            countryCode: 'us',
+          },
+        },
+        {
+          id: 'child-owner',
+          trigger: (screen) => {
+            screen.setIsDeviceOwner(true);
+          },
+          data: {
+            isArcEnabled: true,
+            isDemo: false,
+            isChildAccount: true,
+            isEnterpriseManagedAccount: false,
+            googleEulaUrl: 'https://policies.google.com/terms/embedded?hl=en',
+            crosEulaUrl: 'https://www.google.com/intl/en/chrome/terms/',
+            countryCode: 'us',
+          },
+        },
+        {
           id: 'child',
+          trigger: (screen) => {
+            screen.setIsDeviceOwner(false);
+          },
           data: {
             isArcEnabled: true,
             isDemo: false,
@@ -956,7 +1006,25 @@ cr.define('cr.ui.login.debug', function() {
           },
         },
         {
+          id: 'arc-disabled-owner',
+          trigger: (screen) => {
+            screen.setIsDeviceOwner(true);
+          },
+          data: {
+            isArcEnabled: false,
+            isDemo: false,
+            isChildAccount: false,
+            isEnterpriseManagedAccount: false,
+            googleEulaUrl: 'https://policies.google.com/terms/embedded?hl=en',
+            crosEulaUrl: 'https://www.google.com/intl/en/chrome/terms/',
+            countryCode: 'us',
+          },
+        },
+        {
           id: 'arc-disabled',
+          trigger: (screen) => {
+            screen.setIsDeviceOwner(false);
+          },
           data: {
             isArcEnabled: false,
             isDemo: false,
@@ -972,6 +1040,7 @@ cr.define('cr.ui.login.debug', function() {
           trigger: (screen) => {
             screen.setBackupMode(true, true);
             screen.setLocationMode(false, true);
+            screen.setIsDeviceOwner(false);
           },
           data: {
             isArcEnabled: true,
@@ -987,6 +1056,7 @@ cr.define('cr.ui.login.debug', function() {
           id: 'error',
           trigger: (screen) => {
             screen.setUIStep('error');
+            screen.setIsDeviceOwner(true);
           },
           data: {
             isArcEnabled: true,
@@ -1135,6 +1205,49 @@ cr.define('cr.ui.login.debug', function() {
         },
       ],
     },
+    // TODO(crbug.com/1261902): Remove.
+    {
+      id: 'recommend-apps-old',
+      kind: ScreenKind.NORMAL,
+      handledSteps: 'list',
+      // Known issue: reset() does not clear list of apps, so loadAppList
+      // will append apps instead of replacing.
+      states: [
+        {
+          id: '2-apps',
+          trigger: (screen) => {
+            screen.reset();
+            screen.setWebview(RECOMMENDED_APPS_OLD_CONTENT);
+            screen.loadAppList([
+              {
+                name: 'Test app 1',
+                package_name: 'test1.app',
+              },
+              {
+                name: 'Test app 2 with some really long name',
+                package_name: 'test2.app',
+              },
+            ]);
+          },
+        },
+        {
+          id: '21-apps',
+          trigger: (screen) => {
+            // There can be up to 21 apps: see recommend_apps_fetcher_impl
+            screen.reset();
+            screen.setWebview(RECOMMENDED_APPS_OLD_CONTENT);
+            let apps = [];
+            for (let i = 1; i <= 21; i++) {
+              apps.push({
+                name: 'Test app ' + i,
+                package_name: 'app.test' + i,
+              });
+            }
+            screen.loadAppList(apps);
+          },
+        },
+      ],
+    },
     {
       id: 'recommend-apps',
       kind: ScreenKind.NORMAL,
@@ -1206,6 +1319,7 @@ cr.define('cr.ui.login.debug', function() {
     {
       id: 'marketing-opt-in',
       kind: ScreenKind.NORMAL,
+      handledSteps: 'overview',
       states: [
         {
           id: 'WithOptionToSubscribe',
@@ -1215,6 +1329,7 @@ cr.define('cr.ui.login.debug', function() {
             legalFooterVisibility: false,
           },
           trigger: (screen) => {
+            screen.setUIStep('overview');
             screen.updateA11ySettingsButtonVisibility(false);
           },
         },
@@ -1226,6 +1341,7 @@ cr.define('cr.ui.login.debug', function() {
             legalFooterVisibility: false,
           },
           trigger: (screen) => {
+            screen.setUIStep('overview');
             screen.updateA11ySettingsButtonVisibility(false);
           },
         },
@@ -1237,17 +1353,19 @@ cr.define('cr.ui.login.debug', function() {
             legalFooterVisibility: true,
           },
           trigger: (screen) => {
+            screen.setUIStep('overview');
             screen.updateA11ySettingsButtonVisibility(false);
           },
         },
         {
-          id: 'WithAceessibilityButton',
+          id: 'WithAccessibilityButton',
           data: {
             optInVisibility: true,
             optInDefaultState: true,
             legalFooterVisibility: true,
           },
           trigger: (screen) => {
+            screen.setUIStep('overview');
             screen.updateA11ySettingsButtonVisibility(true);
           },
         },

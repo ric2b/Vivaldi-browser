@@ -26,9 +26,8 @@ namespace vivaldi {
 // TranslateAgent, public:
 VivaldiTranslateAgent::VivaldiTranslateAgent(
     content::RenderFrame* render_frame,
-    int world_id,
-    const std::string& extension_scheme)
-    : translate::TranslateAgent(render_frame, world_id, extension_scheme),
+    int world_id)
+    : translate::TranslateAgent(render_frame, world_id),
       world_id_(world_id) {}
 
 VivaldiTranslateAgent::~VivaldiTranslateAgent() {}

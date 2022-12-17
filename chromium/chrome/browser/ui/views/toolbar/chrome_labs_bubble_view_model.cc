@@ -38,14 +38,6 @@ const std::vector<LabInfo>& GetData() {
   static const base::NoDestructor<std::vector<LabInfo>> lab_info_([]() {
     std::vector<LabInfo> lab_info;
 
-    // Lens Region Search
-    lab_info.emplace_back(LabInfo(
-        flag_descriptions::kEnableLensRegionSearchFlagId,
-        l10n_util::GetStringUTF16(IDS_LENS_REGION_SEARCH_EXPERIMENT_NAME),
-        l10n_util::GetStringUTF16(
-            IDS_LENS_REGION_SEARCH_EXPERIMENT_DESCRIPTION),
-        "chrome-labs-lens-region-search", version_info::Channel::BETA));
-
     // Side Panel.
     lab_info.emplace_back(LabInfo(
         flag_descriptions::kSidePanelFlagId,
@@ -69,7 +61,7 @@ const std::vector<LabInfo>& GetData() {
 
     // Thumbnail Tab Strip for Windows
 #if BUILDFLAG(ENABLE_WEBUI_TAB_STRIP) && \
-    (defined(OS_WIN) || BUILDFLAG(IS_CHROMEOS_ASH))
+    (BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS_ASH))
     lab_info.emplace_back(LabInfo(
         flag_descriptions::kWebUITabStripFlagId,
         l10n_util::GetStringUTF16(IDS_THUMBNAIL_TAB_STRIP_EXPERIMENT_NAME),

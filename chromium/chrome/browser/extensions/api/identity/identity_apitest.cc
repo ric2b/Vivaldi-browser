@@ -121,12 +121,12 @@ void InitNetwork() {
           ->network_state_handler()
           ->DefaultNetwork();
 
-  auto* portal_detector = new chromeos::NetworkPortalDetectorTestImpl();
+  auto* portal_detector = new ash::NetworkPortalDetectorTestImpl();
   portal_detector->SetDefaultNetworkForTesting(default_network->guid());
 
   portal_detector->SetDetectionResultsForTesting(
       default_network->guid(),
-      chromeos::NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_ONLINE, 204);
+      ash::NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_ONLINE, 204);
 
   chromeos::network_portal_detector::InitializeForTesting(portal_detector);
 }
@@ -176,7 +176,7 @@ class AsyncFunctionRunner {
         << "Unexpected error: " << function->GetError();
     EXPECT_NE(nullptr, function->GetResultList());
 
-    const auto& result_list = function->GetResultList()->GetList();
+    const auto& result_list = function->GetResultList()->GetListDeprecated();
     EXPECT_EQ(2ul, result_list.size());
 
     *first_result = result_list[0].Clone();
@@ -633,7 +633,7 @@ class IdentityGetAccountsFunctionTest : public IdentityTestWithSignin {
     if (!callback_arguments)
       return GenerateFailureResult(gaia_ids, absl::nullopt) << "NULL result";
     base::Value::ConstListView callback_arguments_list =
-        callback_arguments->GetList();
+        callback_arguments->GetListDeprecated();
 
     if (callback_arguments_list.size() != 1u) {
       return GenerateFailureResult(gaia_ids, absl::nullopt)
@@ -644,7 +644,8 @@ class IdentityGetAccountsFunctionTest : public IdentityTestWithSignin {
     if (!callback_arguments_list[0].is_list())
       GenerateFailureResult(gaia_ids, absl::nullopt)
           << "Result was not an array";
-    base::Value::ConstListView results = callback_arguments_list[0].GetList();
+    base::Value::ConstListView results =
+        callback_arguments_list[0].GetListDeprecated();
 
     std::set<std::string> result_ids;
     for (const base::Value& item : results) {
@@ -998,7 +999,7 @@ class GetAuthTokenFunctionTest
         << "Unexpected error: " << function->GetError();
     EXPECT_NE(nullptr, function->GetResultList());
 
-    const auto& result_list = function->GetResultList()->GetList();
+    const auto& result_list = function->GetResultList()->GetListDeprecated();
     EXPECT_EQ(2ul, result_list.size());
 
     const auto& access_token_value = result_list[0];
@@ -1007,7 +1008,7 @@ class GetAuthTokenFunctionTest
     EXPECT_TRUE(granted_scopes_value.is_list());
 
     std::set<std::string> scopes;
-    for (const auto& scope : granted_scopes_value.GetList()) {
+    for (const auto& scope : granted_scopes_value.GetListDeprecated()) {
       EXPECT_TRUE(scope.is_string());
       scopes.insert(scope.GetString());
     }
@@ -1033,7 +1034,7 @@ class GetAuthTokenFunctionTest
     EXPECT_TRUE(granted_scopes_value.is_list());
 
     std::set<std::string> scopes;
-    for (const auto& scope : granted_scopes_value.GetList()) {
+    for (const auto& scope : granted_scopes_value.GetListDeprecated()) {
       EXPECT_TRUE(scope.is_string());
       scopes.insert(scope.GetString());
     }
@@ -1593,7 +1594,7 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, InteractiveApprovalSuccess) {
       1);
 }
 
-#if !defined(OS_MAC)
+#if !BUILDFLAG(IS_MAC)
 // Test was originally written for http://crbug.com/753014 and subsequently
 // modified to use the remote consent flow.
 //
@@ -1625,7 +1626,7 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
       kGetAuthTokenResultHistogramName,
       IdentityGetAuthTokenError::State::kRemoteConsentPageLoadFailure, 1);
 }
-#endif  // !defined(OS_MAC)
+#endif  // !BUILDFLAG(IS_MAC)
 
 IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, NoninteractiveQueue) {
   SignIn("primary@example.com");

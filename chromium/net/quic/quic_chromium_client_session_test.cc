@@ -249,7 +249,6 @@ class QuicChromiumClientSessionTest
     FLAGS_quic_reloadable_flag_quic_pass_path_response_to_validator = true;
     FLAGS_quic_reloadable_flag_quic_send_path_response2 = true;
     FLAGS_quic_reloadable_flag_quic_server_reverse_validate_new_path3 = true;
-    FLAGS_quic_reloadable_flag_quic_drop_unsent_path_response = true;
     FLAGS_quic_reloadable_flag_quic_connection_migration_use_new_cid_v2 = true;
     config_.SetConnectionOptionsToSend({quic::kRVCM});
   }
@@ -1658,7 +1657,7 @@ TEST_P(QuicChromiumClientSessionTest, CanPool) {
       "www.example.org",
       QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
                      NetworkIsolationKey(), SecureDnsPolicy::kDisable)));
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   SocketTag tag1(SocketTag::UNSET_UID, 0x12345678);
   SocketTag tag2(getuid(), 0x87654321);
   EXPECT_FALSE(session_->CanPool(
@@ -1830,7 +1829,7 @@ TEST_P(QuicChromiumClientSessionTest, CanPoolWithNetworkIsolationKey) {
       "www.example.org",
       QuicSessionKey("foo", 1234, PRIVACY_MODE_ENABLED, SocketTag(),
                      kNetworkIsolationKey1, SecureDnsPolicy::kAllow)));
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   SocketTag tag1(SocketTag::UNSET_UID, 0x12345678);
   SocketTag tag2(getuid(), 0x87654321);
   EXPECT_FALSE(session_->CanPool(

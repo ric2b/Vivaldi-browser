@@ -31,14 +31,41 @@
 constexpr gfx::Size ExtensionPopup::kMinSize;
 constexpr gfx::Size ExtensionPopup::kMaxSize;
 
+// A helper class to scope the observation of DevToolsAgentHosts. We can't just
+// use base::ScopedObservation here because that requires a specific source
+// object, where as DevToolsAgentHostObservers are added to a singleton list.
+// The `observer_` passed into this object will be registered as an observer
+// for this object's lifetime.
+class ExtensionPopup::ScopedDevToolsAgentHostObservation {
+ public:
+  ScopedDevToolsAgentHostObservation(
+      content::DevToolsAgentHostObserver* observer)
+      : observer_(observer) {
+    content::DevToolsAgentHost::AddObserver(observer_);
+  }
+
+  ScopedDevToolsAgentHostObservation(
+      const ScopedDevToolsAgentHostObservation&) = delete;
+  ScopedDevToolsAgentHostObservation& operator=(
+      const ScopedDevToolsAgentHostObservation&) = delete;
+
+  ~ScopedDevToolsAgentHostObservation() {
+    content::DevToolsAgentHost::RemoveObserver(observer_);
+  }
+
+ private:
+  content::DevToolsAgentHostObserver* observer_;
+};
+
 // static
 void ExtensionPopup::ShowPopup(
     std::unique_ptr<extensions::ExtensionViewHost> host,
     views::View* anchor_view,
     views::BubbleBorder::Arrow arrow,
-    ShowAction show_action) {
-  auto* popup =
-      new ExtensionPopup(std::move(host), anchor_view, arrow, show_action);
+    PopupShowAction show_action,
+    ShowPopupCallback callback) {
+  auto* popup = new ExtensionPopup(std::move(host), anchor_view, arrow,
+                                   show_action, std::move(callback));
   views::BubbleDialogDelegateView::CreateBubble(popup);
 
   // Check that the preferred adjustment is set to mirror to match
@@ -63,7 +90,10 @@ void ExtensionPopup::ShowPopup(
 }
 
 ExtensionPopup::~ExtensionPopup() {
-  content::DevToolsAgentHost::RemoveObserver(this);
+  // The ExtensionPopup may close before it was ever shown. If so, indicate such
+  // through the callback.
+  if (shown_callback_)
+    std::move(shown_callback_).Run(nullptr);
 }
 
 gfx::Size ExtensionPopup::CalculatePreferredSize() const {
@@ -161,17 +191,17 @@ void ExtensionPopup::OnExtensionUnloaded(
 
     extension_host_observation_.Reset();
     host_.reset();
-    // Stop observing the registry immediately to prevent any subsequent
-    // notifications, since Widget::Close is asynchronous.
+    // Stop observing the registry and devtools immediately to prevent any
+    // subsequent notifications, since Widget::Close is asynchronous.
     DCHECK(extension_registry_observation_.IsObserving());
     extension_registry_observation_.Reset();
+    scoped_devtools_observation_.reset();
 
     GetWidget()->Close();
   }
 }
 
-void ExtensionPopup::DocumentOnLoadCompletedInMainFrame(
-    content::RenderFrameHost* render_frame_host) {
+void ExtensionPopup::DocumentOnLoadCompletedInPrimaryMainFrame() {
   // Show when the content finishes loading and its width is computed.
   ShowBubble();
   Observe(nullptr);
@@ -187,20 +217,16 @@ void ExtensionPopup::OnTabStripModelChanged(
 
 void ExtensionPopup::DevToolsAgentHostAttached(
     content::DevToolsAgentHost* agent_host) {
+  DCHECK(host_);
   if (host_->host_contents() == agent_host->GetWebContents())
-    show_action_ = SHOW_AND_INSPECT;
+    show_action_ = PopupShowAction::kShowAndInspect;
 }
 
 void ExtensionPopup::DevToolsAgentHostDetached(
     content::DevToolsAgentHost* agent_host) {
-  // If the extension's page is open it will be closed when the extension
-  // is uninstalled, and if DevTools are attached, we will be notified here.
-  // But because OnExtensionUnloaded was already called, |host_| is
-  // no longer valid.
-  if (!host_)
-    return;
+  DCHECK(host_);
   if (host_->host_contents() == agent_host->GetWebContents())
-    show_action_ = SHOW;
+    show_action_ = PopupShowAction::kShow;
 }
 
 void ExtensionPopup::OnExtensionHostShouldClose(
@@ -213,12 +239,14 @@ ExtensionPopup::ExtensionPopup(
     std::unique_ptr<extensions::ExtensionViewHost> host,
     views::View* anchor_view,
     views::BubbleBorder::Arrow arrow,
-    ShowAction show_action)
+    PopupShowAction show_action,
+    ShowPopupCallback callback)
     : BubbleDialogDelegateView(anchor_view,
                                arrow,
                                views::BubbleBorder::STANDARD_SHADOW),
       host_(std::move(host)),
-      show_action_(show_action) {
+      show_action_(show_action),
+      shown_callback_(std::move(callback)) {
   SetButtons(ui::DIALOG_BUTTON_NONE);
   set_use_round_corners(false);
 
@@ -237,7 +265,8 @@ ExtensionPopup::ExtensionPopup(
   // See comments in OnWidgetActivationChanged().
   set_close_on_deactivate(false);
 
-  content::DevToolsAgentHost::AddObserver(this);
+  scoped_devtools_observation_ =
+      std::make_unique<ScopedDevToolsAgentHostObservation>(this);
   host_->browser()->tab_strip_model()->AddObserver(this);
 
   // Listen for the containing view calling window.close();
@@ -262,14 +291,17 @@ void ExtensionPopup::ShowBubble() {
   // Focus on the host contents when the bubble is first shown.
   host_->host_contents()->Focus();
 
-  if (show_action_ == SHOW_AND_INSPECT) {
+  if (show_action_ == PopupShowAction::kShowAndInspect) {
     DevToolsWindow::OpenDevToolsWindow(
         host_->host_contents(), DevToolsToggleAction::ShowConsolePanel());
   }
+
+  if (shown_callback_)
+    std::move(shown_callback_).Run(host_.get());
 }
 
 void ExtensionPopup::CloseUnlessUnderInspection() {
-  if (show_action_ != SHOW_AND_INSPECT)
+  if (show_action_ != PopupShowAction::kShowAndInspect)
     GetWidget()->CloseWithReason(views::Widget::ClosedReason::kLostFocus);
 }
 

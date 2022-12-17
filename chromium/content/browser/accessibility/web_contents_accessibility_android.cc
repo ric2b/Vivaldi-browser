@@ -47,25 +47,6 @@ base::LazyInstance<SearchKeyToPredicateMap>::Leaky
 base::LazyInstance<std::u16string>::Leaky g_all_search_keys =
     LAZY_INSTANCE_INITIALIZER;
 
-bool SectionPredicate(BrowserAccessibility* start, BrowserAccessibility* node) {
-  switch (node->GetRole()) {
-    case ax::mojom::Role::kApplication:
-    case ax::mojom::Role::kArticle:
-    case ax::mojom::Role::kBanner:
-    case ax::mojom::Role::kComplementary:
-    case ax::mojom::Role::kContentInfo:
-    case ax::mojom::Role::kHeading:
-    case ax::mojom::Role::kMain:
-    case ax::mojom::Role::kNavigation:
-    case ax::mojom::Role::kRegion:
-    case ax::mojom::Role::kSearch:
-    case ax::mojom::Role::kSection:
-      return true;
-    default:
-      return false;
-  }
-}
-
 bool AllInterestingNodesPredicate(BrowserAccessibility* start,
                                   BrowserAccessibility* node) {
   BrowserAccessibilityAndroid* android_node =
@@ -89,6 +70,7 @@ void InitSearchKeyToPredicateMapIfNeeded() {
     return;
 
   AddToPredicateMap("ARTICLE", AccessibilityArticlePredicate);
+  AddToPredicateMap("BLOCKQUOTE", AccessibilityBlockquotePredicate);
   AddToPredicateMap("BUTTON", AccessibilityButtonPredicate);
   AddToPredicateMap("CHECKBOX", AccessibilityCheckboxPredicate);
   AddToPredicateMap("COMBOBOX", AccessibilityComboboxPredicate);
@@ -103,16 +85,23 @@ void InitSearchKeyToPredicateMapIfNeeded() {
   AddToPredicateMap("H5", AccessibilityH5Predicate);
   AddToPredicateMap("H6", AccessibilityH6Predicate);
   AddToPredicateMap("HEADING", AccessibilityHeadingPredicate);
+  AddToPredicateMap("HEADING_SAME", AccessibilityHeadingSameLevelPredicate);
   AddToPredicateMap("LANDMARK", AccessibilityLandmarkPredicate);
   AddToPredicateMap("LINK", AccessibilityLinkPredicate);
   AddToPredicateMap("LIST", AccessibilityListPredicate);
   AddToPredicateMap("LIST_ITEM", AccessibilityListItemPredicate);
+  AddToPredicateMap("LIVE", AccessibilityLiveRegionPredicate);
   AddToPredicateMap("MAIN", AccessibilityMainPredicate);
   AddToPredicateMap("MEDIA", AccessibilityMediaPredicate);
   AddToPredicateMap("RADIO", AccessibilityRadioButtonPredicate);
-  AddToPredicateMap("SECTION", SectionPredicate);
+  AddToPredicateMap("RADIO_GROUP", AccessibilityRadioGroupPredicate);
+  AddToPredicateMap("SECTION", AccessibilitySectionPredicate);
   AddToPredicateMap("TABLE", AccessibilityTablePredicate);
   AddToPredicateMap("TEXT_FIELD", AccessibilityTextfieldPredicate);
+  AddToPredicateMap("TEXT_BOLD", AccessibilityTextStyleBoldPredicate);
+  AddToPredicateMap("TEXT_ITALIC", AccessibilityTextStyleItalicPredicate);
+  AddToPredicateMap("TEXT_UNDERLINE", AccessibilityTextStyleUnderlinePredicate);
+  AddToPredicateMap("TREE", AccessibilityTreePredicate);
   AddToPredicateMap("UNVISITED_LINK", AccessibilityUnvisitedLinkPredicate);
   AddToPredicateMap("VISITED_LINK", AccessibilityVisitedLinkPredicate);
 }
@@ -228,6 +217,7 @@ WebContentsAccessibilityAndroid::WebContentsAccessibilityAndroid(
       reinterpret_cast<ui::AXTreeUpdate*>(ax_tree_update_ptr));
   manager_ = std::make_unique<BrowserAccessibilityManagerAndroid>(
       *ax_tree_snapshot, GetWeakPtr(), nullptr);
+  manager_->BuildAXTreeHitTestCache();
   connector_ = nullptr;
   BrowserAccessibilityStateImplAndroid* accessibility_state =
       static_cast<BrowserAccessibilityStateImplAndroid*>(
@@ -313,22 +303,35 @@ void WebContentsAccessibilityAndroid::SetAllowImageDescriptions(
 void WebContentsAccessibilityAndroid::SetAXMode(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
-    jboolean screen_reader_mode) {
-  if (!features::IsComputeAXModeEnabled())
-    return;
-
+    jboolean screen_reader_mode,
+    jboolean is_accessibility_enabled) {
   BrowserAccessibilityStateImpl* accessibility_state =
       BrowserAccessibilityStateImpl::GetInstance();
 
-  if (screen_reader_mode) {
-    accessibility_state->AddAccessibilityModeFlags(ui::kAXModeComplete);
-  } else {
-    // Remove the mode flags present in kAXModeComplete but not in
-    // kAXModeBasic, thereby reverting the mode to kAXModeBasic while
-    // not touching any other flags.
-    ui::AXMode remove_mode_flags(ui::kAXModeComplete.mode() &
-                                 ~ui::kAXModeBasic.mode());
-    accessibility_state->RemoveAccessibilityModeFlags(remove_mode_flags);
+  if (!features::IsComputeAXModeEnabled() &&
+      !features::IsAutoDisableAccessibilityEnabled()) {
+    return;
+  }
+
+  if (features::IsAutoDisableAccessibilityEnabled()) {
+    if (!is_accessibility_enabled) {
+      accessibility_state->DisableAccessibility();
+    } else {
+      accessibility_state->AddAccessibilityModeFlags(ui::kAXModeComplete);
+    }
+  }
+
+  if (features::IsComputeAXModeEnabled()) {
+    if (screen_reader_mode) {
+      accessibility_state->AddAccessibilityModeFlags(ui::kAXModeComplete);
+    } else {
+      // Remove the mode flags present in kAXModeComplete but not in
+      // kAXModeBasic, thereby reverting the mode to kAXModeBasic while
+      // not touching any other flags.
+      ui::AXMode remove_mode_flags(ui::kAXModeComplete.mode() &
+                                   ~ui::kAXModeBasic.mode());
+      accessibility_state->RemoveAccessibilityModeFlags(remove_mode_flags);
+    }
   }
 }
 
@@ -347,14 +350,6 @@ bool WebContentsAccessibilityAndroid::ShouldExposePasswordText() {
   if (obj.is_null())
     return false;
   return Java_WebContentsAccessibilityImpl_shouldExposePasswordText(env, obj);
-}
-
-void WebContentsAccessibilityAndroid::HandlePageLoaded(int32_t unique_id) {
-  JNIEnv* env = AttachCurrentThread();
-  ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
-  if (obj.is_null())
-    return;
-  Java_WebContentsAccessibilityImpl_handlePageLoaded(env, obj, unique_id);
 }
 
 void WebContentsAccessibilityAndroid::HandleContentChanged(int32_t unique_id) {
@@ -543,7 +538,7 @@ bool WebContentsAccessibilityAndroid::OnHoverEvent(
   // Hover event was consumed by accessibility by now. Return true to
   // stop the event from proceeding.
   if (event.GetAction() != ui::MotionEvent::Action::HOVER_EXIT)
-    GetRootBrowserAccessibilityManager()->HitTest(point);
+    GetRootBrowserAccessibilityManager()->HitTest(point, /*request_id=*/0);
 
   if (!GetRootBrowserAccessibilityManager()->touch_passthrough_enabled())
     return true;
@@ -583,8 +578,7 @@ bool WebContentsAccessibilityAndroid::OnHoverEventNoRenderer(
   if (BrowserAccessibilityManagerAndroid* root_manager =
           GetRootBrowserAccessibilityManager()) {
     auto* hover_node = static_cast<BrowserAccessibilityAndroid*>(
-        root_manager->GetRoot()->ApproximateHitTest(
-            gfx::ToFlooredPoint(point)));
+        root_manager->ApproximateHitTest(gfx::ToFlooredPoint(point)));
     if (hover_node && hover_node != root_manager->GetRoot()) {
       HandleHover(hover_node->unique_id());
       return true;
@@ -625,12 +619,12 @@ WebContentsAccessibilityAndroid::GenerateAccessibilityNodeInfoString(
           env, obj, unique_id));
 }
 
-base::android::ScopedJavaLocalRef<jstring>
+base::android::ScopedJavaGlobalRef<jstring>
 WebContentsAccessibilityAndroid::GetSupportedHtmlElementTypes(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
   InitSearchKeyToPredicateMapIfNeeded();
-  return base::android::ConvertUTF16ToJavaString(env, g_all_search_keys.Get());
+  return GetCanonicalJNIString(env, g_all_search_keys.Get());
 }
 
 jint WebContentsAccessibilityAndroid::GetRootId(
@@ -659,7 +653,7 @@ void WebContentsAccessibilityAndroid::HitTest(JNIEnv* env,
                                               jint y) {
   if (BrowserAccessibilityManagerAndroid* root_manager =
           GetRootBrowserAccessibilityManager())
-    root_manager->HitTest(gfx::Point(x, y));
+    root_manager->HitTest(gfx::Point(x, y), /*request_id=*/0);
 }
 
 jboolean WebContentsAccessibilityAndroid::IsEditableText(
@@ -1127,7 +1121,8 @@ jint WebContentsAccessibilityAndroid::FindElementType(
     jint start_id,
     const JavaParamRef<jstring>& element_type_str,
     jboolean forwards,
-    jboolean can_wrap_to_last_element) {
+    jboolean can_wrap_to_last_element,
+    jboolean use_default_predicate) {
   BrowserAccessibilityAndroid* start_node = GetAXFromUniqueID(start_id);
   if (!start_node)
     return 0;
@@ -1141,8 +1136,14 @@ jint WebContentsAccessibilityAndroid::FindElementType(
   if (!root)
     return 0;
 
-  AccessibilityMatchPredicate predicate = PredicateForSearchKey(
-      base::android::ConvertJavaStringToUTF16(env, element_type_str));
+  // If |element_type_str| was empty, we can skip to the default predicate.
+  AccessibilityMatchPredicate predicate;
+  if (use_default_predicate) {
+    predicate = AllInterestingNodesPredicate;
+  } else {
+    predicate = PredicateForSearchKey(
+        base::android::ConvertJavaStringToUTF16(env, element_type_str));
+  }
 
   OneShotAccessibilityTreeSearch tree_search(root);
   tree_search.SetStartNode(start_node);

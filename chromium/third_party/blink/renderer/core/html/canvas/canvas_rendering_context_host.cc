@@ -108,7 +108,6 @@ CanvasRenderingContextHost::GetOrCreateCanvasResourceProviderImpl(
       } else if (IsWebGL()) {
         CreateCanvasResourceProviderWebGL();
       } else {
-        DCHECK(IsRenderingContext2D() || IsImageBitmapRenderingContext());
         CreateCanvasResourceProvider2D(hint);
       }
     }
@@ -218,7 +217,7 @@ void CanvasRenderingContextHost::CreateCanvasResourceProviderWebGL() {
 
 void CanvasRenderingContextHost::CreateCanvasResourceProvider2D(
     RasterModeHint hint) {
-  DCHECK(IsRenderingContext2D());
+  DCHECK(IsRenderingContext2D() || IsImageBitmapRenderingContext());
   base::WeakPtr<CanvasResourceDispatcher> dispatcher =
       GetOrCreateResourceDispatcher()
           ? GetOrCreateResourceDispatcher()->GetWeakPtr()
@@ -316,7 +315,8 @@ void CanvasRenderingContextHost::CreateCanvasResourceProvider2D(
 SkColorInfo CanvasRenderingContextHost::GetRenderingContextSkColorInfo() const {
   if (RenderingContext())
     return RenderingContext()->CanvasRenderingContextSkColorInfo();
-  return SkColorInfo(kN32_SkColorType, kPremul_SkAlphaType, nullptr);
+  return SkColorInfo(kN32_SkColorType, kPremul_SkAlphaType,
+                     SkColorSpace::MakeSRGB());
 }
 
 ScriptPromise CanvasRenderingContextHost::convertToBlob(

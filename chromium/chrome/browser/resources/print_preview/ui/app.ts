@@ -9,7 +9,7 @@ import '../data/document_info.js';
 import './sidebar.js';
 
 import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
-import {assert} from 'chrome://resources/js/assert.m.js';
+import {assert} from 'chrome://resources/js/assert_ts.js';
 import {isMac, isWindows} from 'chrome://resources/js/cr.m.js';
 import {FocusOutlineManager} from 'chrome://resources/js/cr/ui/focus_outline_manager.m.js';
 import {EventTracker} from 'chrome://resources/js/event_tracker.m.js';
@@ -19,7 +19,10 @@ import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/poly
 
 import {CloudPrintInterface, CloudPrintInterfaceErrorEventDetail, CloudPrintInterfaceEventType} from '../cloud_print_interface.js';
 import {CloudPrintInterfaceImpl} from '../cloud_print_interface_impl.js';
-import {Destination, DestinationOrigin} from '../data/destination.js';
+import {Destination} from '../data/destination.js';
+// <if expr="chromeos_ash or chromeos_lacros">
+import {DestinationOrigin} from '../data/destination.js';
+// </if>
 import {getPrinterTypeForDestination, PrinterType} from '../data/destination_match.js';
 import {DocumentSettings, PrintPreviewDocumentInfoElement} from '../data/document_info.js';
 import {Margins} from '../data/margins.js';
@@ -30,7 +33,7 @@ import {Size} from '../data/size.js';
 import {Error, PrintPreviewStateElement, State} from '../data/state.js';
 import {MetricsContext, PrintPreviewInitializationEvents} from '../metrics.js';
 import {NativeInitialSettings, NativeLayer, NativeLayerImpl} from '../native_layer.js';
-// <if expr="chromeos or lacros">
+// <if expr="chromeos_ash or chromeos_lacros">
 import {NativeLayerCros, NativeLayerCrosImpl} from '../native_layer_cros.js';
 
 // </if>
@@ -138,7 +141,7 @@ export class PrintPreviewAppElement extends PrintPreviewAppElementBase {
   private maxSheets_: number;
 
   private nativeLayer_: NativeLayer|null = null;
-  // <if expr="chromeos or lacros">
+  // <if expr="chromeos_ash or chromeos_lacros">
   private nativeLayerCros_: NativeLayerCros|null = null;
   // </if>
   private tracker_: EventTracker = new EventTracker();
@@ -174,7 +177,7 @@ export class PrintPreviewAppElement extends PrintPreviewAppElementBase {
 
     document.documentElement.classList.remove('loading');
     this.nativeLayer_ = NativeLayerImpl.getInstance();
-    // <if expr="chromeos or lacros">
+    // <if expr="chromeos_ash or chromeos_lacros">
     this.nativeLayerCros_ = NativeLayerCrosImpl.getInstance();
     // </if>
     this.addWebUIListener('cr-dialog-open', this.onCrDialogOpen_.bind(this));
@@ -228,7 +231,7 @@ export class PrintPreviewAppElement extends PrintPreviewAppElementBase {
         e.preventDefault();
       }
 
-      // <if expr="chromeos or lacros">
+      // <if expr="chromeos_ash or chromeos_lacros">
       if (this.destination_ &&
           this.destination_.origin === DestinationOrigin.CROS) {
         this.nativeLayerCros_!.recordPrinterStatusHistogram(
@@ -246,8 +249,11 @@ export class PrintPreviewAppElement extends PrintPreviewAppElementBase {
     }
 
     // Ctrl + Shift + p / Mac equivalent. Doesn't apply on Chrome OS.
+    // On Linux/Windows, shift + p means that e.key will be 'P' with caps lock
+    // off or 'p' with caps lock on.
+    // On Mac, alt + p means that e.key will be unicode 03c0 (pi).
     // <if expr="not chromeos and not lacros">
-    if (e.key === 'p') {
+    if (e.key === 'P' || e.key === 'p' || e.key === '\u03c0') {
       if ((isMac && e.metaKey && e.altKey && !e.shiftKey && !e.ctrlKey) ||
           (!isMac && e.shiftKey && e.ctrlKey && !e.altKey && !e.metaKey)) {
         // Don't use system dialog if the link isn't available.
@@ -353,10 +359,10 @@ export class PrintPreviewAppElement extends PrintPreviewAppElementBase {
     this.cloudPrintInterface_ = CloudPrintInterfaceImpl.getInstance();
     this.cloudPrintInterface_.configure(cloudPrintUrl, appKioskMode, uiLocale);
     this.tracker_.add(
-        assert(this.cloudPrintInterface_).getEventTarget(),
+        this.cloudPrintInterface_.getEventTarget(),
         CloudPrintInterfaceEventType.SUBMIT_DONE, this.close_.bind(this));
     this.tracker_.add(
-        assert(this.cloudPrintInterface_).getEventTarget(),
+        this.cloudPrintInterface_.getEventTarget(),
         CloudPrintInterfaceEventType.SUBMIT_FAILED,
         this.onCloudPrintError_.bind(this, appKioskMode));
   }
@@ -392,7 +398,7 @@ export class PrintPreviewAppElement extends PrintPreviewAppElementBase {
         break;
       case DestinationState.ERROR:
         let newState = State.ERROR;
-        // <if expr="chromeos or lacros">
+        // <if expr="chromeos_ash or chromeos_lacros">
         if (this.error_ === Error.NO_DESTINATIONS) {
           newState = State.FATAL_ERROR;
         }
@@ -442,13 +448,12 @@ export class PrintPreviewAppElement extends PrintPreviewAppElementBase {
         this.nativeLayer_!.hidePreview();
       }
     } else if (this.state === State.PRINTING) {
-      const destination = assert(this.destination_);
       const whenPrintDone =
           this.nativeLayer_!.print(this.$.model.createPrintTicket(
-              destination, this.openPdfInPreview_,
+              this.destination_, this.openPdfInPreview_,
               this.showSystemDialogBeforePrint_));
-      if (destination.isLocal) {
-        const onError = getPrinterTypeForDestination(destination) ===
+      if (this.destination_.isLocal) {
+        const onError = getPrinterTypeForDestination(this.destination_) ===
                 PrinterType.PDF_PRINTER ?
             this.onFileSelectionCancel_.bind(this) :
             this.onPrintFailed_.bind(this);
@@ -469,7 +474,7 @@ export class PrintPreviewAppElement extends PrintPreviewAppElementBase {
       this.printRequested_ = true;
       return;
     }
-    // <if expr="chromeos or lacros">
+    // <if expr="chromeos_ash or chromeos_lacros">
     if (this.destination_ &&
         this.destination_.origin === DestinationOrigin.CROS) {
       this.nativeLayerCros_!.recordPrinterStatusHistogram(
@@ -481,7 +486,7 @@ export class PrintPreviewAppElement extends PrintPreviewAppElementBase {
   }
 
   private onCancelRequested_() {
-    // <if expr="chromeos or lacros">
+    // <if expr="chromeos_ash or chromeos_lacros">
     if (this.destination_ &&
         this.destination_.origin === DestinationOrigin.CROS) {
       this.nativeLayerCros_!.recordPrinterStatusHistogram(
@@ -517,9 +522,8 @@ export class PrintPreviewAppElement extends PrintPreviewAppElementBase {
     assert(
         this.cloudPrintInterface_ !== null,
         'Google Cloud Print is not enabled');
-    const destination = assert(this.destination_);
     this.cloudPrintInterface_.submit(
-        destination, this.$.model.createCloudJobTicket(destination),
+        this.destination_, this.$.model.createCloudJobTicket(this.destination_),
         this.documentSettings_.title, data);
   }
 

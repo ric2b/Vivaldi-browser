@@ -55,6 +55,7 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadResponseHandler
       const DownloadUrlParameters::RequestHeadersType& request_headers,
       const std::string& request_origin,
       DownloadSource download_source,
+      bool require_safety_checks,
       std::vector<GURL> url_chain,
       bool is_background_mode);
 
@@ -65,7 +66,8 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadResponseHandler
 
   // network::mojom::URLLoaderClient
   void OnReceiveEarlyHints(network::mojom::EarlyHintsPtr early_hints) override;
-  void OnReceiveResponse(network::mojom::URLResponseHeadPtr head) override;
+  void OnReceiveResponse(network::mojom::URLResponseHeadPtr head,
+                         mojo::ScopedDataPipeConsumerHandle body) override;
   void OnReceiveRedirect(const net::RedirectInfo& redirect_info,
                          network::mojom::URLResponseHeadPtr head) override;
   void OnUploadProgress(int64_t current_position,
@@ -110,6 +112,7 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadResponseHandler
   absl::optional<net::IsolationInfo> isolation_info_;
   bool is_partial_request_;
   bool completed_;
+  bool require_safety_checks_;
 
   // The abort reason if this class decides to block the download.
   DownloadInterruptReason abort_reason_;

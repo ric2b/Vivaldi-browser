@@ -45,8 +45,8 @@
         "id": "DisableReason",
         "description": "The reason why the sync engine is in a failed state. This should be kept in sync with SyncService::DisableReason (chromium/components/sync/driver/sync_service.h)",
         "type": "string",
-        "enum" : [ "platform_override", "enterprise_policy", "not_signed_in",
-          "user_choice", "unrecoverable_error", "flag" ]
+        "enum" : [ "enterprise_policy", "not_signed_in", "user_choice",
+          "unrecoverable_error", "flag" ]
       },
       {
         "id": "CycleStatus",

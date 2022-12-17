@@ -72,6 +72,11 @@ absl::optional<FeatureMap> ParseFeatures(base::Value json) {
     if (std::string* value = dict.FindStringKey("friendly_name")) {
       feature.friendly_name = std::move(*value);
     }
+    if (absl::optional<bool> value = dict.FindBoolKey("value")) {
+      if (*value) {
+        feature.default_value = true;
+      }
+    }
 #if !defined(OFFICIAL_BUILD)
     if (absl::optional<bool> value = dict.FindBoolKey("internal_value")) {
       if (*value) {
@@ -84,15 +89,24 @@ absl::optional<FeatureMap> ParseFeatures(base::Value json) {
       }
     }
 #endif
+#if BUILDFLAG(IS_WIN)
+    // NOTE(igor@vivaldi.com): Temporary workaround to disable
+    // disable_ipc_demuxer feature by default on Windows until VB-87590 is
+    // resolved. Note as on Mac it works fine, we proceed with it enabled there.
+    if (feature_name == "disable_ipc_demuxer") {
+        feature.default_value = false;
+        feature.locked = false;
+    }
+#endif
     if (const std::string* value = dict.FindStringKey("os")) {
       std::vector<base::StringPiece> os_list = base::SplitStringPiece(
           *value, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
       base::StringPiece current_os;
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
       current_os = "mac";
-#elif defined(OS_WIN)
+#elif BUILDFLAG(IS_WIN)
       current_os = "win";
-#elif defined(OS_LINUX)
+#elif BUILDFLAG(IS_LINUX)
       current_os = "linux";
 #else
 #error "Unsupported platform"

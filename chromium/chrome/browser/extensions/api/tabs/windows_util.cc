@@ -75,8 +75,10 @@ bool CanOperateOnWindow(const ExtensionFunction* function,
   if (filter && !controller->MatchesFilter(filter))
     return false;
 
-  // NOTE(pettern@vivaldi.com): Make sure we can operate on all windows.
-  if (function->extension() &&
+  // NOTE(pettern@vivaldi.com): Make sure we can operate on all windows
+  // within the same profile (see also VB-87828).
+  if (function->browser_context() == controller->profile() &&
+      function->extension() &&
       vivaldi::IsVivaldiApp(function->extension()->id())) {
     return true;
   }

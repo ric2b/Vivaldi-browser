@@ -6,6 +6,8 @@
 //  Copyright © 2020 Sparkle Project. All rights reserved.
 //
 
+#if SPARKLE_BUILD_UI_BITS
+
 #import <Foundation/Foundation.h>
 
 @class NSView;
@@ -20,8 +22,6 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (void)loadData:(NSData *)data MIMEType:(NSString *)MIMEType textEncodingName:(NSString *)textEncodingName baseURL:(NSURL *)baseURL completionHandler:(void (^)(NSError * _Nullable))completionHandler;
 
-- (void)loadRequest:(NSURLRequest *)urlRequest completionHandler:(void (^)(NSError * _Nullable))completionHandler;
-
 - (void)stopLoading;
 
 - (void)setDrawsBackground:(BOOL)drawsBackground;
@@ -29,3 +29,5 @@ NS_ASSUME_NONNULL_BEGIN
 @end
 
 NS_ASSUME_NONNULL_END
+
+#endif

@@ -29,7 +29,7 @@ class XrInstallHelper;
 
 namespace content {
 // This class wraps a physical device's interfaces, and registers for events.
-// There is one BrowserXRRuntimeImpl per physical device runtime.  It manages
+// There is one BrowserXRRuntimeImpl per physical device runtime. It manages
 // browser-side handling of state, like which VRServiceImpl is listening for
 // device activation.
 class BrowserXRRuntimeImpl : public content::BrowserXRRuntime,
@@ -87,7 +87,7 @@ class BrowserXRRuntimeImpl : public content::BrowserXRRuntime,
 
   device::mojom::XRDeviceId GetId() const { return id_; }
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   absl::optional<CHROME_LUID> GetLuid() const;
 #endif
 

@@ -82,6 +82,7 @@ class CONTENT_EXPORT FrameSinkVideoCaptureDevice
   void MaybeSuspend() final;
   void Resume() final;
   void Crop(const base::Token& crop_id,
+            uint32_t crop_version,
             base::OnceCallback<void(media::mojom::CropRequestResult)> callback)
       override;
   void StopAndDeAllocate() final;
@@ -95,6 +96,7 @@ class CONTENT_EXPORT FrameSinkVideoCaptureDevice
       const gfx::Rect& content_rect,
       mojo::PendingRemote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks>
           callbacks) final;
+  void OnFrameWithEmptyRegionCapture() final;
   void OnStopped() final;
   void OnLog(const std::string& message) final;
 
@@ -102,12 +104,13 @@ class CONTENT_EXPORT FrameSinkVideoCaptureDevice
   // permanently lost. NOTE: a target can be temporarily absl::nullopt without
   // being permanently lost.
   virtual void OnTargetChanged(
-      const absl::optional<viz::VideoCaptureTarget>& target);
+      const absl::optional<viz::VideoCaptureTarget>& target,
+      uint32_t crop_version);
   virtual void OnTargetPermanentlyLost();
 
  protected:
   MouseCursorOverlayController* cursor_controller() const {
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
     return cursor_controller_.get();
 #else
     return nullptr;
@@ -182,12 +185,21 @@ class CONTENT_EXPORT FrameSinkVideoCaptureDevice
 
   SEQUENCE_CHECKER(sequence_checker_);
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   // Controls the overlay that renders the mouse cursor onto each video frame.
   const std::unique_ptr<MouseCursorOverlayController,
                         BrowserThread::DeleteOnUIThread>
       cursor_controller_;
 #endif
+
+  // Whenever the crop-target of a stream changes, the associated crop-version
+  // is incremented. This value is used in frames' metadata so as to allow
+  // other modules (mostly Blink) to see which frames are cropped to the
+  // old/new specified crop-target.
+  // The value 0 is used before any crop-target is assigned. (Note that by
+  // cropping and then uncropping, values other than 0 can also be associated
+  // with an uncropped track.)
+  uint32_t crop_version_ = 0;
 
   // Prevent display sleeping while content capture is in progress.
   mojo::Remote<device::mojom::WakeLock> wake_lock_;

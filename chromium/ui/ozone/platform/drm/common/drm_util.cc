@@ -5,6 +5,7 @@
 #include "ui/ozone/platform/drm/common/drm_util.h"
 
 #include <drm_fourcc.h>
+#include <fcntl.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <sys/mman.h>
@@ -18,14 +19,12 @@
 #include <vector>
 
 #include "base/containers/flat_map.h"
-#include "base/logging.h"
+#include "base/files/file_util.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/notreached.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
-#include "ui/display/types/display_constants.h"
 #include "ui/display/types/display_mode.h"
 #include "ui/display/util/display_util.h"
 #include "ui/display/util/edid_parser.h"
@@ -182,22 +181,38 @@ ScopedDrmPropertyBlobPtr GetDrmPropertyBlob(int fd,
 
 display::PrivacyScreenState GetPrivacyScreenState(int fd,
                                                   drmModeConnector* connector) {
-  ScopedDrmPropertyPtr property;
-  int index = GetDrmProperty(fd, connector, "privacy-screen", &property);
-  if (index < 0)
-    return display::PrivacyScreenState::kNotSupported;
+  ScopedDrmPropertyPtr sw_property;
+  const int sw_index = GetDrmProperty(
+      fd, connector, kPrivacyScreenSwStatePropertyName, &sw_property);
+  ScopedDrmPropertyPtr hw_property;
+  const int hw_index = GetDrmProperty(
+      fd, connector, kPrivacyScreenHwStatePropertyName, &hw_property);
 
-  DCHECK_LT(connector->prop_values[index],
-            display::PrivacyScreenState::kPrivacyScreenStateLast);
-  if (connector->prop_values[index] >=
-      display::PrivacyScreenState::kPrivacyScreenStateLast) {
-    LOG(ERROR) << "Invalid privacy-screen property value: Expected < "
-               << display::PrivacyScreenState::kPrivacyScreenStateLast
-               << ", but got: " << connector->prop_values[index];
+  // Both privacy-screen properties (software- and hardware-state) must be
+  // present in order for the feature to be supported, but the hardware-state
+  // property indicates the true state of the privacy screen.
+  if (sw_index >= 0 && hw_index >= 0) {
+    const std::string hw_enum_value = GetNameForEnumValue(
+        hw_property.get(), connector->prop_values[hw_index]);
+    const display::PrivacyScreenState* state =
+        GetInternalTypeValueFromDrmEnum(hw_enum_value, kPrivacyScreenStates);
+    return state ? *state : display::kNotSupported;
   }
 
-  return static_cast<display::PrivacyScreenState>(
-      connector->prop_values[index]);
+  // If the new privacy screen UAPI properties are missing, try to fetch the
+  // legacy privacy screen property.
+  ScopedDrmPropertyPtr legacy_property;
+  const int legacy_index = GetDrmProperty(
+      fd, connector, kPrivacyScreenPropertyNameLegacy, &legacy_property);
+  if (legacy_index >= 0) {
+    const std::string legacy_enum_value = GetNameForEnumValue(
+        legacy_property.get(), connector->prop_values[legacy_index]);
+    const display::PrivacyScreenState* state = GetInternalTypeValueFromDrmEnum(
+        legacy_enum_value, kPrivacyScreenStates);
+    return state ? *state : display::kNotSupported;
+  }
+
+  return display::PrivacyScreenState::kNotSupported;
 }
 
 std::vector<uint64_t> GetPathTopology(int fd, drmModeConnector* connector) {
@@ -265,14 +280,15 @@ bool HasPerPlaneColorCorrectionMatrix(const int fd, drmModeCrtc* crtc) {
   return plane_resources->count_planes > 0;
 }
 
-bool IsDrmModuleName(const int fd, const std::string& name) {
-  // TODO(dcastagna): Use DrmDevice::GetVersion so that it can be easily mocked
-  // and tested.
-  drmVersionPtr drm_version = drmGetVersion(fd);
-  DCHECK(drm_version) << "Can't get version for drm device.";
-  bool result = std::string(drm_version->name) == name;
-  drmFreeVersion(drm_version);
-  return result;
+// Read a file and trim whitespace. If the file can't be read, returns
+// nullopt.
+absl::optional<std::string> ReadFileAndTrim(const base::FilePath& path) {
+  std::string data;
+  if (!base::ReadFileToString(path, &data))
+    return absl::nullopt;
+
+  return std::string(
+      base::TrimWhitespaceASCII(data, base::TrimPositions::TRIM_ALL));
 }
 
 }  // namespace
@@ -513,7 +529,7 @@ std::unique_ptr<display::DisplaySnapshot> CreateDisplaySnapshot(
   // linear space. https://crbug.com/839020 to track if it will be possible to
   // disable the per-plane degamma/gamma.
   const bool color_correction_in_linear_space =
-      has_color_correction_matrix && IsDrmModuleName(fd, "rockchip");
+      has_color_correction_matrix && GetDrmDriverNameFromFd(fd) == "rockchip";
   const gfx::Size maximum_cursor_size = GetMaximumCursorSize(fd);
 
   std::string display_name;
@@ -673,6 +689,61 @@ std::vector<uint64_t> ParsePathBlob(const drmModePropertyBlobRes& path_blob) {
   }
 
   return path;
+}
+
+std::string GetEnumNameForProperty(
+    const drmModePropertyRes& property,
+    const drmModeObjectProperties& property_values) {
+  for (uint32_t prop_idx = 0; prop_idx < property_values.count_props;
+       ++prop_idx) {
+    if (property_values.props[prop_idx] != property.prop_id)
+      continue;
+
+    for (int enum_idx = 0; enum_idx < property.count_enums; ++enum_idx) {
+      const drm_mode_property_enum& property_enum = property.enums[enum_idx];
+      if (property_enum.value == property_values.prop_values[prop_idx])
+        return property_enum.name;
+    }
+  }
+
+  NOTREACHED();
+  return std::string();
+}
+
+absl::optional<std::string> GetDrmDriverNameFromFd(int fd) {
+  ScopedDrmVersionPtr version(drmGetVersion(fd));
+  if (!version) {
+    LOG(ERROR) << "Failed to query DRM version";
+    return absl::nullopt;
+  }
+
+  return std::string(version->name, version->name_len);
+}
+
+absl::optional<std::string> GetDrmDriverNameFromPath(
+    const char* device_file_name) {
+  base::ScopedFD fd(open(device_file_name, O_RDWR));
+  if (!fd.is_valid()) {
+    LOG(ERROR) << "Failed to open DRM device " << device_file_name;
+    return absl::nullopt;
+  }
+
+  return GetDrmDriverNameFromFd(fd.get());
+}
+
+std::vector<const char*> GetPreferredDrmDrivers() {
+  const base::FilePath dmi_dir("/sys/class/dmi/id");
+
+  const auto sys_vendor = ReadFileAndTrim(dmi_dir.Append("sys_vendor"));
+  const auto product_name = ReadFileAndTrim(dmi_dir.Append("product_name"));
+
+  // The iMac 12,1 has an integrated Intel GPU that isn't connected to
+  // any real outputs. Prefer the Radeon card instead.
+  if (sys_vendor == "Apple Inc." && product_name == "iMac12,1")
+    return {"radeon"};
+
+  // Default order.
+  return {"i915", "amdgpu", "virtio_gpu"};
 }
 
 }  // namespace ui

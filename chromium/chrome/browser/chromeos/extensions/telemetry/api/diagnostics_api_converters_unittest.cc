@@ -58,6 +58,17 @@ TEST(TelemetryExtensionDiagnosticsApiConvertersUnitTest,
   }
   {
     RoutineType out;
+    EXPECT_TRUE(
+        ConvertMojoRoutine(MojoRoutineType::kFloatingPointAccuracy, &out));
+    EXPECT_EQ(out, RoutineType::ROUTINE_TYPE_CPU_FLOATING_POINT_ACCURACY);
+  }
+  {
+    RoutineType out;
+    EXPECT_TRUE(ConvertMojoRoutine(MojoRoutineType::kPrimeSearch, &out));
+    EXPECT_EQ(out, RoutineType::ROUTINE_TYPE_CPU_PRIME_SEARCH);
+  }
+  {
+    RoutineType out;
     EXPECT_TRUE(ConvertMojoRoutine(MojoRoutineType::kCpuStress, &out));
     EXPECT_EQ(out, RoutineType::ROUTINE_TYPE_CPU_STRESS);
   }
@@ -66,29 +77,23 @@ TEST(TelemetryExtensionDiagnosticsApiConvertersUnitTest,
     EXPECT_TRUE(ConvertMojoRoutine(MojoRoutineType::kMemory, &out));
     EXPECT_EQ(out, RoutineType::ROUTINE_TYPE_MEMORY);
   }
+  {
+    RoutineType out = RoutineType::ROUTINE_TYPE_NONE;
+    EXPECT_TRUE(ConvertMojoRoutine(MojoRoutineType::kNvmeWearLevel, &out));
+    EXPECT_EQ(out, RoutineType::ROUTINE_TYPE_NVME_WEAR_LEVEL);
+  }
+  {
+    RoutineType out = RoutineType::ROUTINE_TYPE_NONE;
+    EXPECT_TRUE(ConvertMojoRoutine(MojoRoutineType::kSmartctlCheck, &out));
+    EXPECT_EQ(out, RoutineType::ROUTINE_TYPE_SMARTCTL_CHECK);
+  }
 
   // Tests for unsupported routines.
   // Note: If an unsupported routine becomes supported, the respective test
   // should be changed.
   {
     RoutineType out = RoutineType::ROUTINE_TYPE_NONE;
-    EXPECT_FALSE(ConvertMojoRoutine(MojoRoutineType::kSmartctlCheck, &out));
-    EXPECT_EQ(out, RoutineType::ROUTINE_TYPE_NONE);
-  }
-  {
-    RoutineType out = RoutineType::ROUTINE_TYPE_NONE;
     EXPECT_FALSE(ConvertMojoRoutine(MojoRoutineType::kAcPower, &out));
-    EXPECT_EQ(out, RoutineType::ROUTINE_TYPE_NONE);
-  }
-  {
-    RoutineType out = RoutineType::ROUTINE_TYPE_NONE;
-    EXPECT_FALSE(
-        ConvertMojoRoutine(MojoRoutineType::kFloatingPointAccuracy, &out));
-    EXPECT_EQ(out, RoutineType::ROUTINE_TYPE_NONE);
-  }
-  {
-    RoutineType out = RoutineType::ROUTINE_TYPE_NONE;
-    EXPECT_FALSE(ConvertMojoRoutine(MojoRoutineType::kNvmeWearLevel, &out));
     EXPECT_EQ(out, RoutineType::ROUTINE_TYPE_NONE);
   }
   {
@@ -99,11 +104,6 @@ TEST(TelemetryExtensionDiagnosticsApiConvertersUnitTest,
   {
     RoutineType out = RoutineType::ROUTINE_TYPE_NONE;
     EXPECT_FALSE(ConvertMojoRoutine(MojoRoutineType::kDiskRead, &out));
-    EXPECT_EQ(out, RoutineType::ROUTINE_TYPE_NONE);
-  }
-  {
-    RoutineType out = RoutineType::ROUTINE_TYPE_NONE;
-    EXPECT_FALSE(ConvertMojoRoutine(MojoRoutineType::kPrimeSearch, &out));
     EXPECT_EQ(out, RoutineType::ROUTINE_TYPE_NONE);
   }
 }

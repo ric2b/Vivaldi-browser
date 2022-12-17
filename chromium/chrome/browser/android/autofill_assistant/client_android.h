@@ -11,6 +11,7 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "chrome/browser/android/autofill_assistant/dependencies.h"
 #include "chrome/browser/android/autofill_assistant/ui_controller_android.h"
 #include "components/autofill_assistant/browser/client.h"
 #include "components/autofill_assistant/browser/controller.h"
@@ -23,6 +24,10 @@
 #include "content/public/browser/web_contents_user_data.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
+
+namespace password_manager {
+class PasswordChangeSuccessTracker;
+}
 
 namespace autofill_assistant {
 
@@ -77,7 +82,7 @@ class ClientAndroid : public Client,
   void OnPaymentsClientToken(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& jcaller,
-      const base::android::JavaParamRef<jstring>& jclient_token);
+      const base::android::JavaParamRef<jbyteArray>& jclient_token);
 
   void FetchWebsiteActions(
       JNIEnv* env,
@@ -115,6 +120,7 @@ class ClientAndroid : public Client,
   base::android::ScopedJavaGlobalRef<jobject> GetDependencies(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& jcaller);
+  std::string GetDebugContext();
 
   // Overrides Client
   void AttachUI() override;
@@ -129,6 +135,8 @@ class ClientAndroid : public Client,
   AccessTokenFetcher* GetAccessTokenFetcher() override;
   autofill::PersonalDataManager* GetPersonalDataManager() const override;
   WebsiteLoginManager* GetWebsiteLoginManager() const override;
+  password_manager::PasswordChangeSuccessTracker*
+  GetPasswordChangeSuccessTracker() const override;
   std::string GetLocale() const override;
   std::string GetCountryCode() const override;
   DeviceContext GetDeviceContext() const override;
@@ -138,6 +146,7 @@ class ClientAndroid : public Client,
   void Shutdown(Metrics::DropOutReason reason) override;
   void RecordDropOut(Metrics::DropOutReason reason) override;
   bool HasHadUI() const override;
+  ScriptExecutorUiDelegate* GetScriptExecutorUiDelegate() override;
 
   // Overrides AccessTokenFetcher
   void FetchAccessToken(
@@ -147,8 +156,9 @@ class ClientAndroid : public Client,
  private:
   friend class content::WebContentsUserData<ClientAndroid>;
 
-  explicit ClientAndroid(content::WebContents* web_contents,
-                         const base::android::JavaRef<jobject>& jdependencies);
+  explicit ClientAndroid(
+      content::WebContents* web_contents,
+      const base::android::ScopedJavaGlobalRef<jobject>& jdependencies);
 
   void CreateController(
       std::unique_ptr<Service> service,
@@ -172,10 +182,14 @@ class ClientAndroid : public Client,
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
 
+  // Contains AssistantStaticDependencies which do not change.
+  const std::unique_ptr<const Dependencies> dependencies_;
+  // Can change based on activity attachment.
   const base::android::ScopedJavaGlobalRef<jobject> jdependencies_;
 
   base::android::ScopedJavaGlobalRef<jobject> java_object_;
   std::unique_ptr<Controller> controller_;
+  std::unique_ptr<UiController> ui_controller_;
   mutable std::unique_ptr<WebsiteLoginManager> website_login_manager_;
 
   // True if Start() was called. This turns on the tracking of dropouts.

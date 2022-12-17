@@ -14,6 +14,7 @@
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chromeos/components/multidevice/logging/logging.h"
@@ -36,8 +37,6 @@ namespace multidevice_setup {
 
 namespace {
 
-const char kPhoneHubCameraRollPendingStatePrefName[] =
-    "multidevice_setup.phone_hub_camera_roll_pending_state";
 // This pref name is left in a legacy format to maintain compatibility.
 const char kWifiSyncPendingStatePrefName[] =
     "multidevice_setup.pending_set_wifi_sync_enabled_request";
@@ -69,12 +68,6 @@ GlobalStateFeatureManagerImpl::Factory::Create(
   multidevice::SoftwareFeature managed_host_feature;
   std::string pending_state_pref_name;
   switch (option) {
-    case Option::kPhoneHubCameraRoll:
-      managed_feature = mojom::Feature::kPhoneHubCameraRoll;
-      managed_host_feature =
-          multidevice::SoftwareFeature::kPhoneHubCameraRollHost;
-      pending_state_pref_name = kPhoneHubCameraRollPendingStatePrefName;
-      break;
     case Option::kWifiSync:
       managed_feature = mojom::Feature::kWifiSync;
       managed_host_feature = multidevice::SoftwareFeature::kWifiSyncHost;
@@ -97,8 +90,6 @@ GlobalStateFeatureManagerImpl::Factory::~Factory() = default;
 
 void GlobalStateFeatureManagerImpl::RegisterPrefs(
     PrefRegistrySimple* registry) {
-  registry->RegisterIntegerPref(kPhoneHubCameraRollPendingStatePrefName,
-                                static_cast<int>(PendingState::kPendingNone));
   registry->RegisterIntegerPref(kWifiSyncPendingStatePrefName,
                                 static_cast<int>(PendingState::kPendingNone));
 }
@@ -355,6 +346,11 @@ void GlobalStateFeatureManagerImpl::ProcessEnableOnVerifyAttempt() {
   }
 
   SetIsFeatureEnabled(true);
+
+  if (managed_feature_ == mojom::Feature::kPhoneHubCameraRoll) {
+    base::UmaHistogramEnumeration("PhoneHub.CameraRoll.OptInEntryPoint",
+                                  mojom::CameraRollOptInEntryPoint::kSetupFlow);
+  }
 }
 
 bool GlobalStateFeatureManagerImpl::ShouldAttemptToEnableAfterHostVerified() {

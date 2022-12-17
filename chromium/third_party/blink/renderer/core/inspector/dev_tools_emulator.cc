@@ -18,13 +18,13 @@
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/scroll/scrollbar_theme.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
-#include "third_party/blink/renderer/platform/geometry/float_rect.h"
-#include "third_party/blink/renderer/platform/geometry/float_size.h"
-#include "third_party/blink/renderer/platform/graphics/graphics_layer.h"
 #include "third_party/blink/renderer/platform/loader/fetch/memory_cache.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/rect_conversions.h"
+#include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/geometry/size_f.h"
 
 namespace {
 
@@ -469,21 +469,6 @@ TransformationMatrix DevToolsEmulator::ComputeRootLayerTransform() {
   if (device_metrics_enabled_)
     transform.Scale(emulation_params_.scale);
   return transform;
-}
-
-void DevToolsEmulator::OverrideVisibleRect(
-    const gfx::Size& viewport_size,
-    gfx::Rect* visible_rect_in_frame) const {
-  WebLocalFrameImpl* frame = web_view_->MainFrameImpl();
-  if (!viewport_override_ || !frame)
-    return;
-
-  // Don't apply viewport_override_->scale because all coordinates here are
-  // under the same scale.
-  gfx::Rect visible_rect_in_document = ToEnclosingRect(
-      FloatRect(viewport_override_->position, FloatSize(viewport_size)));
-  *visible_rect_in_frame =
-      frame->GetFrameView()->DocumentToFrame(visible_rect_in_document);
 }
 
 float DevToolsEmulator::InputEventsScaleForEmulation() {

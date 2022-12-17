@@ -68,7 +68,7 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
 
   // Returns true if the key didn't not exist previously, false if it updated
   // an existing value
-  bool SetSharedData(const std::string& key, base::Value* value);
+  bool SetSharedData(const std::string& key, base::Value value);
 
   // Looks up an existing key/value pair, returns nullptr if the key does not
   // exist.
@@ -166,7 +166,7 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
   static const bool kServiceRedirectedInIncognito = true;
 
   // Map used for the *sharedData apis.
-  std::map<std::string, base::Value*> key_to_values_map_;
+  std::map<std::string, base::Value> key_to_values_map_;
 
   std::map<std::string, MutexData> mutexes_;
 

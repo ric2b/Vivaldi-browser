@@ -71,7 +71,7 @@ TEST(ScriptParametersTest, TriggerScriptAllowList) {
                                   {"INTENT", "FAKE_INTENT"}}};
 
   EXPECT_THAT(
-      parameters.ToProto(/* only_trigger_script_allowlisted = */ false),
+      parameters.ToProto(/* only_non_sensitive_allowlisted = */ false),
       UnorderedElementsAreArray(base::flat_map<std::string, std::string>(
           {{"DEBUG_BUNDLE_ID", "12345"},
            {"key_a", "value_a"},
@@ -83,7 +83,7 @@ TEST(ScriptParametersTest, TriggerScriptAllowList) {
            {"INTENT", "FAKE_INTENT"}})));
 
   EXPECT_THAT(
-      parameters.ToProto(/* only_trigger_script_allowlisted = */ true),
+      parameters.ToProto(/* only_non_sensitive_allowlisted = */ true),
       UnorderedElementsAreArray(base::flat_map<std::string, std::string>(
           {{"DEBUG_BUNDLE_ID", "12345"},
            {"DEBUG_BUNDLE_VERSION", "version"},
@@ -195,11 +195,11 @@ TEST(ScriptParametersTest, ToProtoRemovesEnabled) {
   ScriptParameters parameters = {{{"key_a", "value_a"}, {"ENABLED", "true"}}};
 
   EXPECT_THAT(
-      parameters.ToProto(/* only_trigger_script_allowlisted = */ false),
+      parameters.ToProto(/* only_non_sensitive_allowlisted = */ false),
       UnorderedElementsAreArray(
           base::flat_map<std::string, std::string>({{"key_a", "value_a"}})));
 
-  EXPECT_THAT(parameters.ToProto(/* only_trigger_script_allowlisted = */ true),
+  EXPECT_THAT(parameters.ToProto(/* only_non_sensitive_allowlisted = */ true),
               IsEmpty());
 }
 
@@ -209,7 +209,7 @@ TEST(ScriptParametersTest, ToProtoDoesNotAddDeviceOnlyParameters) {
   parameters.UpdateDeviceOnlyParameters(
       base::flat_map<std::string, std::string>({{"device_only", "secret"}}));
 
-  EXPECT_THAT(parameters.ToProto(/* only_trigger_script_allowlisted = */ false),
+  EXPECT_THAT(parameters.ToProto(/* only_non_sensitive_allowlisted = */ false),
               IsEmpty());
 }
 
@@ -298,6 +298,18 @@ TEST(ScriptParametersTest, ExperimentIdParsing) {
         parameters.GetExperiments(),
         UnorderedElementsAreArray(std::vector<std::string>{"not_an_integer"}));
   }
+}
+
+TEST(ScriptParametersTest, HasExperimentId) {
+  ScriptParameters parameters = {{{"EXPERIMENT_IDS", "13,123,778"}}};
+  EXPECT_THAT(
+      parameters.GetExperiments(),
+      UnorderedElementsAreArray(std::vector<std::string>{"13", "123", "778"}));
+  EXPECT_TRUE(parameters.HasExperimentId("13"));
+  EXPECT_TRUE(parameters.HasExperimentId("123"));
+  EXPECT_TRUE(parameters.HasExperimentId("778"));
+  EXPECT_FALSE(parameters.HasExperimentId("1"));
+  EXPECT_FALSE(parameters.HasExperimentId("42"));
 }
 
 }  // namespace autofill_assistant

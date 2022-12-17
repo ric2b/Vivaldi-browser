@@ -5,6 +5,7 @@
 #include "base/containers/cxx20_erase.h"
 #include "base/stl_util.h"
 #include "components/request_filter/adblock_filter/blocked_urls_reporter_tab_helper.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
 
 namespace adblock_filter {
@@ -14,31 +15,38 @@ const int kSecondsBetweenNotifications = 1;
 
 BlockedUrlsReporter::Observer::~Observer() = default;
 
-BlockedUrlsReporter::BlockedUrlsReporter(BlockedDomains blocked_domains,
+BlockedUrlsReporter::BlockedUrlsReporter(base::Time reporting_start,
+                                         CounterGroup blocked_domains,
+                                         CounterGroup blocked_for_origin,
                                          base::RepeatingClosure schedule_save)
-    : blocked_domains_(std::move(blocked_domains)),
+    : reporting_start_(reporting_start),
+      blocked_domains_(std::move(blocked_domains)),
+      blocked_for_origin_(std::move(blocked_for_origin)),
       schedule_save_(schedule_save),
-      weak_factory_(this) {}
+      weak_factory_(this) {
+  if (reporting_start.is_null())
+    ClearBlockedCounters();
+}
 
 BlockedUrlsReporter::~BlockedUrlsReporter() = default;
 
-void BlockedUrlsReporter::OnTrackerInfosUpdated(const RuleSource& source,
-                                                base::Value new_tracker_infos) {
-  DCHECK(new_tracker_infos.is_dict());
+void BlockedUrlsReporter::OnTrackerInfosUpdated(
+    const RuleSource& source,
+    base::Value::Dict new_tracker_infos) {
   auto& tracker_infos = tracker_infos_[static_cast<size_t>(source.group)];
   base::EraseIf(tracker_infos, [&source](auto& tracker) {
     tracker.second.erase(source.id);
     return tracker.second.empty();
   });
 
-  for (const auto tracker : new_tracker_infos.DictItems()) {
-    tracker_infos[tracker.first][source.id] = tracker.second.Clone();
+  for (const auto tracker : new_tracker_infos) {
+    tracker_infos[tracker.first][source.id] = std::move(tracker.second);
   }
 }
 
 const std::map<uint32_t, base::Value>* BlockedUrlsReporter::GetTrackerInfo(
     RuleGroup group,
-    const std::string& domain) {
+    const std::string& domain) const {
   auto& tracker_infos = tracker_infos_[static_cast<size_t>(group)];
   const auto& tracker_info = tracker_infos.find(domain);
   if (tracker_info == tracker_infos.end())
@@ -48,6 +56,7 @@ const std::map<uint32_t, base::Value>* BlockedUrlsReporter::GetTrackerInfo(
 }
 
 void BlockedUrlsReporter::OnUrlBlocked(RuleGroup group,
+                                       url::Origin origin,
                                        GURL url,
                                        content::RenderFrameHost* frame) {
   content::WebContents* web_contents =
@@ -57,8 +66,10 @@ void BlockedUrlsReporter::OnUrlBlocked(RuleGroup group,
     return;
   }
 
-  // Create it if it doesn't exist yet.
-  BlockedUrlsReporterTabHelper::CreateForWebContents(web_contents);
+  bool is_off_the_record = web_contents->GetBrowserContext()->IsOffTheRecord();
+
+    // Create it if it doesn't exist yet.
+    BlockedUrlsReporterTabHelper::CreateForWebContents(web_contents);
   BlockedUrlsReporterTabHelper* tab_helper =
       BlockedUrlsReporterTabHelper::FromWebContents(web_contents);
 
@@ -76,7 +87,8 @@ void BlockedUrlsReporter::OnUrlBlocked(RuleGroup group,
 
       if (tracker_infos_[static_cast<size_t>(group)].count(subdomain)) {
         tab_helper->OnTrackerBlocked(group, subdomain, url);
-        AddToBlockedDomains(group, subdomain);
+        if (!is_off_the_record)
+          AddToCounter(blocked_domains_, group, subdomain);
         is_known_tracker = true;
         break;
       }
@@ -89,9 +101,12 @@ void BlockedUrlsReporter::OnUrlBlocked(RuleGroup group,
 
   if (!is_known_tracker) {
     tab_helper->OnUrlBlocked(group, url);
-    if (url.has_host())
-      AddToBlockedDomains(group, url.host());
+    if (url.has_host() && !is_off_the_record)
+      AddToCounter(blocked_domains_, group, url.host());
   }
+
+  if (!origin.host().empty() && !is_off_the_record)
+    AddToCounter(blocked_for_origin_, group, origin.host());
 
   tabs_with_new_blocks_[static_cast<size_t>(group)].insert(web_contents);
 
@@ -114,20 +129,23 @@ void BlockedUrlsReporter::OnUrlBlocked(RuleGroup group,
                      weak_factory_.GetWeakPtr()));
 }
 
-void BlockedUrlsReporter::AddToBlockedDomains(RuleGroup group,
-                                              std::string domain) {
-  auto& blocked_domains = blocked_domains_[static_cast<size_t>(group)];
-  auto blocked_domain = blocked_domains.find(domain);
-  if (blocked_domain != blocked_domains.end())
-    blocked_domain->second++;
+void BlockedUrlsReporter::AddToCounter(CounterGroup& counter_group,
+                                       RuleGroup group,
+                                       std::string domain) {
+  auto& counters = counter_group[static_cast<size_t>(group)];
+  auto domain_counter = counters.find(domain);
+  if (domain_counter != counters.end())
+    domain_counter->second++;
   else
-    blocked_domains.insert({domain, 1});
+    counters.insert({domain, 1});
 }
 
-void BlockedUrlsReporter::ClearBlockedDomains() {
+void BlockedUrlsReporter::ClearBlockedCounters() {
   for (size_t i = 0; i < kRuleGroupCount; i++) {
     blocked_domains_[i].clear();
+    blocked_for_origin_[i].clear();
   }
+  reporting_start_ = base::Time::Now();
 }
 
 void BlockedUrlsReporter::OnTabRemoved(content::WebContents* contents) {

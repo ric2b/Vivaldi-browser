@@ -130,16 +130,16 @@ def get_parts(config):
                 'app_mode_loader',
                 options=full_hardened_runtime_options,
                 verify_options=verify_options),
-        'mac-sparkle-autoupdate-fileop':
+        'mac-sparkle-autoupdate':
             CodeSignedProduct(
-                "{.app_dir}/Contents/Frameworks/Sparkle.framework/Helpers/Autoupdate.app/Contents/MacOS/fileop".format(config),
-                'org.sparkle-project.Sparkle.autoupdate.fileop',
+                "{.app_dir}/Contents/Frameworks/Sparkle.framework/Autoupdate".format(config),
+                'org.sparkle-project.Sparkle.Autoupdate',
                 options=limited_app_hardened_runtime_options,
                 verify_options=verify_options),
-        'mac-sparkle-autoupdate-app':
+        'mac-sparkle-updater-app':
             CodeSignedProduct(
-                "{.app_dir}/Contents/Frameworks/Sparkle.framework/Helpers/Autoupdate.app".format(config),
-                'org.sparkle-project.Sparkle.autoupdate.app',
+                "{.app_dir}/Contents/Frameworks/Sparkle.framework/Updater.app".format(config),
+                'org.sparkle-project.Sparkle.Updater',
                 options=limited_app_hardened_runtime_options,
                 verify_options=verify_options),
         'mac-sparkle-framework':
@@ -150,13 +150,15 @@ def get_parts(config):
                 verify_options=verify_options),
     }
 
-    dylibs = (
+    dylibs = [
         'libEGL.dylib',
         'libGLESv2.dylib',
         'libswiftshader_libEGL.dylib',
         'libswiftshader_libGLESv2.dylib',
         'libvk_swiftshader.dylib',
-    )
+    ]
+    if config.is_chrome_branded():
+        dylibs.append('liboptimization_guide_internal.dylib')
     for library in dylibs:
         library_basename = os.path.basename(library)
         parts[library_basename] = CodeSignedProduct(
@@ -224,12 +226,12 @@ def sign_chrome(paths, config, sign_framework=False):
         # signing the Current version.
         # https://developer.apple.com/library/content/technotes/tn2206/_index.html#//apple_ref/doc/uid/DTS40007919-CH1-TNTAG13
         for name, part in parts.items():
-            if name in ('app', 'framework', "mac-sparkle-framework", "mac-sparkle-autoupdate-app"):
+            if name in ('app', 'framework', "mac-sparkle-framework", "mac-sparkle-updater-app"):
                 continue
             signing.sign_part(paths, config, part)
 
         # Signing the sparkle framework has to be done in a specific order
-        signing.sign_part(paths, config, parts['mac-sparkle-autoupdate-app'])
+        signing.sign_part(paths, config, parts['mac-sparkle-updater-app'])
         signing.sign_part(paths, config, parts['mac-sparkle-framework'])
 
         # Sign the framework bundle.

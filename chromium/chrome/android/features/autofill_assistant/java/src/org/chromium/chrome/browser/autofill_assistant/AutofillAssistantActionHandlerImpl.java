@@ -4,19 +4,20 @@
 
 package org.chromium.chrome.browser.autofill_assistant;
 
+import android.app.Activity;
 import android.os.Bundle;
 
 import androidx.annotation.Nullable;
 
 import org.chromium.base.Callback;
 import org.chromium.base.ThreadUtils;
-import org.chromium.chrome.browser.ActivityTabProvider;
+import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.autofill_assistant.onboarding.AssistantOnboardingResult;
 import org.chromium.chrome.browser.autofill_assistant.onboarding.BaseOnboardingCoordinator;
 import org.chromium.chrome.browser.autofill_assistant.onboarding.OnboardingCoordinatorFactory;
 import org.chromium.chrome.browser.autofill_assistant.overlay.AssistantOverlayCoordinator;
-import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.ui.base.WindowAndroid;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -28,15 +29,15 @@ import java.util.Map;
  */
 class AutofillAssistantActionHandlerImpl implements AutofillAssistantActionHandler {
     private final OnboardingCoordinatorFactory mOnboardingCoordinatorFactory;
-    private final AssistantDependenciesFactory mDependenciesFactory;
-    private final ActivityTabProvider mActivityTabProvider;
+    private final AssistantStaticDependencies mStaticDependencies;
+    private final Supplier<WebContents> mWebContentsSupplier;
 
     AutofillAssistantActionHandlerImpl(OnboardingCoordinatorFactory onboardingCoordinatorFactory,
-            ActivityTabProvider activityTabProvider,
-            AssistantDependenciesFactory dependenciesFactory) {
+            Supplier<WebContents> webContentsSupplier,
+            AssistantStaticDependencies staticDependencies) {
         mOnboardingCoordinatorFactory = onboardingCoordinatorFactory;
-        mActivityTabProvider = activityTabProvider;
-        mDependenciesFactory = dependenciesFactory;
+        mWebContentsSupplier = webContentsSupplier;
+        mStaticDependencies = staticDependencies;
     }
 
     @Override
@@ -126,14 +127,6 @@ class AutofillAssistantActionHandlerImpl implements AutofillAssistantActionHandl
         client.showFatalError();
     }
 
-    private WebContents getWebContents() {
-        Tab tab = mActivityTabProvider.get();
-        if (tab == null) {
-            return null;
-        }
-        return tab.getWebContents();
-    }
-
     /**
      * Returns a client for the current tab or {@code null} if there's no current tab or the current
      * tab doesn't have an associated browser content.
@@ -141,12 +134,34 @@ class AutofillAssistantActionHandlerImpl implements AutofillAssistantActionHandl
     @Nullable
     private AutofillAssistantClient getOrCreateClient() {
         ThreadUtils.assertOnUiThread();
-        WebContents webContents = getWebContents();
-        if (webContents == null) {
+
+        WebContents webContents = mWebContentsSupplier.get();
+        Activity activity = getActivityFromWebContents(webContents);
+        if (webContents == null || activity == null) {
             return null;
         }
+
         return AutofillAssistantClient.createForWebContents(
-                webContents, mDependenciesFactory.createDependencies(webContents));
+                webContents, mStaticDependencies.createDependencies(activity));
+    }
+
+    /**
+     * Looks up the Activity of the given web contents. This can be null. Should never be cached,
+     * because web contents can change activities, e.g., when user selects "Open in Chrome" menu
+     * item.
+     *
+     * @param webContents The web contents for which to lookup the Activity.
+     * @return Activity currently related to webContents. Could be <c>null</c> and could change,
+     *         therefore do not cache.
+     */
+    @Nullable
+    private static Activity getActivityFromWebContents(@Nullable WebContents webContents) {
+        if (webContents == null || webContents.isDestroyed()) return null;
+
+        WindowAndroid window = webContents.getTopLevelNativeWindow();
+        if (window == null) return null;
+
+        return window.getActivity().get();
     }
 
     /** Extracts string arguments from a bundle. */

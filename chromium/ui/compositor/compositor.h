@@ -186,6 +186,16 @@ class COMPOSITOR_EXPORT Compositor : public base::PowerSuspendObserver,
   Layer* root_layer() { return root_layer_; }
   void SetRootLayer(Layer* root_layer);
 
+  // HideHelper temporarily hides the root layer and replaces it with a
+  // temporary layer, without calling SetRootLayer (but doing much of the work
+  // that SetRootLayer does).  During that time we must disable ticking
+  // of animations, since animations that animate layers that are not in
+  // cc's layer tree must not tick.  These methods make those changes
+  // and record/reflect that state.
+  void DisableAnimations();
+  void EnableAnimations();
+  bool animations_are_enabled() const { return animations_are_enabled_; }
+
   cc::AnimationTimeline* GetAnimationTimeline() const;
 
   // The scale factor of the device that this compositor is
@@ -208,7 +218,7 @@ class COMPOSITOR_EXPORT Compositor : public base::PowerSuspendObserver,
   // from changes to layer properties.
   void ScheduleRedrawRect(const gfx::Rect& damage_rect);
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   // Until this is called with |should| true then both DisableSwapUntilResize()
   // and ReenableSwap() do nothing.
   void SetShouldDisableSwapUntilResize(bool should);
@@ -228,6 +238,10 @@ class COMPOSITOR_EXPORT Compositor : public base::PowerSuspendObserver,
   // sets the SDR white level (in nits) used to scale HDR color space primaries.
   void SetDisplayColorSpaces(
       const gfx::DisplayColorSpaces& display_color_spaces);
+
+  const gfx::DisplayColorSpaces& display_color_spaces() const {
+    return display_color_spaces_;
+  }
 
   // Set the transform/rotation info for the display output surface.
   void SetDisplayTransformHint(gfx::OverlayTransform hint);
@@ -388,7 +402,7 @@ class COMPOSITOR_EXPORT Compositor : public base::PowerSuspendObserver,
 
 // TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
 // of lacros-chrome is complete.
-#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
   void OnCompleteSwapWithNewSize(const gfx::Size& size);
 #endif
 
@@ -507,12 +521,14 @@ class COMPOSITOR_EXPORT Compositor : public base::PowerSuspendObserver,
 
   std::unique_ptr<ScrollInputHandler> scroll_input_handler_;
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   bool should_disable_swap_until_resize_ = false;
 #endif
 
   // Set in DisableSwapUntilResize and reset when a resize happens.
   bool disabled_swap_until_resize_ = false;
+
+  bool animations_are_enabled_ = true;
 
   TrackerId next_throughput_tracker_id_ = 1u;
   struct TrackerState {

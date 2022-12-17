@@ -38,6 +38,7 @@ consoles.console_view(
             "network",
             "viz",
             "win10",
+            "win11",
             "win32",
             "paeverywhere",
             "backuprefptr",
@@ -86,7 +87,10 @@ ci.builder(
     console_view_entry = consoles.console_view_entry(
         category = "viz",
     ),
+    goma_backend = None,
     os = os.LINUX_BIONIC_SWITCH_TO_DEFAULT,
+    reclient_jobs = rbe_jobs.DEFAULT,
+    reclient_instance = rbe_instance.DEFAULT,
 )
 
 ci.builder(
@@ -185,6 +189,24 @@ ci.builder(
 )
 
 ci.builder(
+    name = "fuchsia-fyi-x64-asan",
+    console_view_entry = [
+        consoles.console_view_entry(
+            category = "fuchsia|x64",
+            short_name = "asan",
+        ),
+        consoles.console_view_entry(
+            branch_selector = branches.MAIN,
+            console_view = "sheriff.fuchsia",
+            category = "fyi",
+            short_name = "asan",
+        ),
+    ],
+    notifies = ["cr-fuchsia"],
+    os = os.LINUX_BIONIC_SWITCH_TO_DEFAULT,
+)
+
+ci.builder(
     name = "fuchsia-fyi-x64-dbg",
     console_view_entry = [
         consoles.console_view_entry(
@@ -221,6 +243,24 @@ ci.builder(
 )
 
 ci.builder(
+    name = "fuchsia-fyi-x64-wst",
+    console_view_entry = [
+        consoles.console_view_entry(
+            category = "fuchsia|x64",
+            short_name = "wst",
+        ),
+        consoles.console_view_entry(
+            branch_selector = branches.MAIN,
+            console_view = "sheriff.fuchsia",
+            category = "fyi",
+            short_name = "wst",
+        ),
+    ],
+    notifies = ["cr-fuchsia"],
+    os = os.LINUX_BIONIC_SWITCH_TO_DEFAULT,
+)
+
+ci.builder(
     name = "lacros-amd64-generic-rel-fyi",
     console_view_entry = consoles.console_view_entry(
         category = "lacros",
@@ -237,6 +277,9 @@ ci.builder(
     ),
     notifies = ["annotator-rel"],
     os = os.LINUX_BIONIC_SWITCH_TO_DEFAULT,
+    goma_backend = None,
+    reclient_jobs = rbe_jobs.HIGH_JOBS_FOR_CI,
+    reclient_instance = rbe_instance.DEFAULT,
 )
 
 ci.builder(
@@ -256,7 +299,8 @@ ci.builder(
                         "chrome_100_percent.pak",
                         "chrome_200_percent.pak",
                         "chrome_crashpad_handler",
-                        "headless_lib.pak",
+                        "headless_lib_data.pak",
+                        "headless_lib_strings.pak",
                         "icudtl.dat",
                         "libminigbm.so",
                         "nacl_helper",
@@ -313,6 +357,9 @@ ci.builder(
     ),
     notifies = ["linux-blink-fyi-bots"],
     os = os.LINUX_BIONIC_SWITCH_TO_DEFAULT,
+    goma_backend = None,
+    reclient_jobs = rbe_jobs.HIGH_JOBS_FOR_CI,
+    reclient_instance = rbe_instance.DEFAULT,
 )
 
 ci.builder(
@@ -322,6 +369,16 @@ ci.builder(
         short_name = "VO",
     ),
     notifies = ["linux-blink-fyi-bots"],
+    os = os.LINUX_BIONIC_SWITCH_TO_DEFAULT,
+)
+
+ci.builder(
+    name = "linux-blink-v8-sandbox-future-dbg",
+    console_view_entry = consoles.console_view_entry(
+        category = "linux|blink",
+        short_name = "SB",
+    ),
+    notifies = ["v8-sandbox-fyi-bots"],
     os = os.LINUX_BIONIC_SWITCH_TO_DEFAULT,
 )
 
@@ -430,6 +487,25 @@ ci.builder(
 # OS shouldn't matter.
 ci.builder(
     name = "mac-osxbeta-rel",
+    builder_spec = builder_config.builder_spec(
+        execution_mode = builder_config.execution_mode.TEST,
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = [
+                "mb",
+                "goma_use_local",  # to mitigate compile step timeout (crbug.com/1056935)
+            ],
+            build_config = builder_config.build_config.RELEASE,
+            target_bits = 64,
+        ),
+        test_results_config = builder_config.test_results_config(
+            config = "staging_server",
+        ),
+        build_gs_bucket = "chromium-fyi-archive",
+    ),
     console_view_entry = consoles.console_view_entry(
         category = "mac",
         short_name = "beta",
@@ -548,7 +624,7 @@ ci.builder(
 )
 
 ci.builder(
-    name = "Comparison Linux",
+    name = "Comparison Linux (reclient)",
     console_view_entry = consoles.console_view_entry(
         category = "linux",
         short_name = "cmp",
@@ -560,6 +636,23 @@ ci.builder(
     reclient_instance = rbe_instance.DEFAULT,
     reclient_jobs = 250,
     os = os.LINUX_BIONIC_SWITCH_TO_DEFAULT,
+)
+
+ci.builder(
+    name = "Comparison Windows (reclient)",
+    builderless = True,
+    console_view_entry = consoles.console_view_entry(
+        category = "win",
+        short_name = "re",
+    ),
+    cores = 32,
+    goma_jobs = 250,
+    executable = "recipe:reclient_goma_comparison",
+    execution_timeout = 6 * time.hour,
+    reclient_cache_silo = "Comparison Windows - cache siloed",
+    reclient_instance = rbe_instance.DEFAULT,
+    reclient_jobs = 250,
+    os = os.WINDOWS_DEFAULT,
 )
 
 ci.builder(
@@ -826,6 +919,7 @@ fyi_coverage_builder(
         ),
     ],
     os = os.LINUX_BIONIC_SWITCH_TO_DEFAULT,
+    coverage_test_types = ["overall", "unit"],
     use_clang_coverage = True,
     schedule = "triggered",
     triggered_by = [],
@@ -926,16 +1020,6 @@ fyi_ios_builder(
     ),
 )
 fyi_ios_builder(
-    name = "ios-catalyst",
-    console_view_entry = [
-        consoles.console_view_entry(
-            category = "iOS",
-            short_name = "ctl",
-        ),
-    ],
-    os = os.MAC_11,
-)
-fyi_ios_builder(
     name = "ios-reclient",
     console_view_entry = consoles.console_view_entry(
         category = "iOS",
@@ -1021,8 +1105,8 @@ fyi_ios_builder(
             short_name = "dev",
         ),
     ],
-    os = os.MAC_11,
-    xcode = xcode.x13latestbeta,
+    os = os.MAC_12,
+    xcode = xcode.x13betabots,
 )
 
 fyi_ios_builder(
@@ -1033,8 +1117,8 @@ fyi_ios_builder(
             short_name = "sdk15",
         ),
     ],
-    os = os.MAC_11,
-    xcode = xcode.x13latestbeta,
+    os = os.MAC_12,
+    xcode = xcode.x13betabots,
 )
 
 fyi_mac_builder(
@@ -1089,9 +1173,10 @@ ci.builder(
 )
 
 ci.builder(
-    name = "Win10 Tests x64 20h2",
+    name = "Win11 Tests x64",
+    builderless = True,
     console_view_entry = consoles.console_view_entry(
-        category = "win10|20h2",
+        category = "win11",
     ),
     goma_backend = None,
     main_console_view = None,

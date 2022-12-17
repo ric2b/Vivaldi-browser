@@ -99,6 +99,9 @@ const CGFloat kFaviconWidthHeight = 24;
 - (UIContextMenuConfiguration*)
     contextMenuConfigurationForWebState:(web::WebState*)webState
                                  params:(web::ContextMenuParams)params {
+  // Reset the URL.
+  _URLToLoad = GURL();
+
   // Prevent context menu from displaying for a tab which is no longer the
   // current one.
   if (webState != self.currentWebState) {
@@ -135,6 +138,7 @@ const CGFloat kFaviconWidthHeight = 24;
                                            scenario:menuScenario];
 
   if (isLink) {
+    _URLToLoad = linkURL;
     base::RecordAction(
         base::UserMetricsAction("MobileWebContextMenuLinkImpression"));
     if (web::UrlHasWebScheme(linkURL)) {
@@ -272,11 +276,8 @@ const CGFloat kFaviconWidthHeight = 24;
 
     if (!useLens && search_engines::SupportsSearchByImage(service)) {
       const TemplateURL* defaultURL = service->GetDefaultSearchProvider();
-      NSString* title =
-          IsContextMenuActionsRefreshEnabled()
-              ? l10n_util::GetNSString(IDS_IOS_CONTEXT_MENU_SEARCHFORIMAGE)
-              : l10n_util::GetNSStringF(IDS_IOS_CONTEXT_MENU_SEARCHWEBFORIMAGE,
-                                        defaultURL->short_name());
+      NSString* title = l10n_util::GetNSStringF(
+          IDS_IOS_CONTEXT_MENU_SEARCHWEBFORIMAGE, defaultURL->short_name());
       UIAction* searchByImage = [actionFactory
           actionSearchImageWithTitle:title
                                Block:^{
@@ -337,8 +338,12 @@ const CGFloat kFaviconWidthHeight = 24;
       return previewViewController;
     }
     DCHECK(isImage);
-    ImagePreviewViewController* preview =
-        [[ImagePreviewViewController alloc] init];
+    ImagePreviewViewController* preview = [[ImagePreviewViewController alloc]
+        initWithPreferredContentSize:CGSizeMake(params.natural_width,
+                                                params.natural_height)];
+    if (params.screenshot) {
+      [preview updateImage:params.screenshot];
+    }
     __weak ImagePreviewViewController* weakPreview = preview;
 
     ImageFetchTabHelper* imageFetcher =

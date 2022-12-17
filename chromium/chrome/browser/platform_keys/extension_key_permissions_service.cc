@@ -108,7 +108,7 @@ bool PolicyAllowsCorporateKeyUsageForExtension(
   bool allow_corporate_key_usage =
       GetCorporateKeyUsageFromPref(key_permissions_for_ext);
 
-  VLOG_IF(allow_corporate_key_usage, 2)
+  VLOG_IF(2, allow_corporate_key_usage)
       << "Policy allows usage of corporate keys by extension " << extension_id;
   return allow_corporate_key_usage;
 }
@@ -334,10 +334,11 @@ void ExtensionKeyPermissionsService::KeyEntriesFromState(
     LOG(ERROR) << "Found a state store of wrong type.";
     return;
   }
-  for (const auto& entry : state.GetList()) {
+  for (const auto& entry : state.GetListDeprecated()) {
     std::string spki_b64;
     const base::DictionaryValue* dict_entry = nullptr;
-    if (entry.GetAsString(&spki_b64)) {
+    if (entry.is_string()) {
+      spki_b64 = entry.GetString();
       // This handles the case that the store contained a plain list of base64
       // and DER-encoded SPKIs from an older version of ChromeOS.
       KeyEntry new_entry(spki_b64);
