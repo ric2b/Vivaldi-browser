@@ -4,7 +4,8 @@
 
 #include "content/browser/site_instance_group.h"
 
-#include "content/browser/renderer_host/render_process_host_impl.h"
+#include "base/observer_list.h"
+#include "content/public/browser/render_process_host.h"
 
 namespace content {
 
@@ -12,8 +13,10 @@ namespace {
 SiteInstanceGroupId::Generator site_instance_group_id_generator;
 }  // namespace
 
-SiteInstanceGroup::SiteInstanceGroup(RenderProcessHost* process)
-    : id_(site_instance_group_id_generator.GenerateNextId()) {
+SiteInstanceGroup::SiteInstanceGroup(BrowsingInstanceId browsing_instance_id,
+                                     RenderProcessHost* process)
+    : id_(site_instance_group_id_generator.GenerateNextId()),
+      browsing_instance_id_(browsing_instance_id) {
   SetProcessAndAgentSchedulingGroup(process);
 }
 
@@ -28,8 +31,12 @@ SiteInstanceGroup::~SiteInstanceGroup() {
   process_->Cleanup();
 }
 
-SiteInstanceGroupId SiteInstanceGroup::GetId() {
+SiteInstanceGroupId SiteInstanceGroup::GetId() const {
   return id_;
+}
+
+base::SafeRef<SiteInstanceGroup> SiteInstanceGroup::GetSafeRef() {
+  return weak_ptr_factory_.GetSafeRef();
 }
 
 void SiteInstanceGroup::AddObserver(Observer* observer) {
@@ -68,12 +75,6 @@ void SiteInstanceGroup::RenderProcessHostDestroyed(RenderProcessHost* host) {
   process_->RemoveObserver(this);
   process_ = nullptr;
   agent_scheduling_group_ = nullptr;
-
-  // Protect `this` from being deleted inside of the observers.
-  scoped_refptr<SiteInstanceGroup> protect(this);
-
-  for (auto& observer : observers_)
-    observer.RenderProcessHostDestroyed();
 }
 
 void SiteInstanceGroup::RenderProcessExited(
@@ -81,6 +82,13 @@ void SiteInstanceGroup::RenderProcessExited(
     const ChildProcessTerminationInfo& info) {
   for (auto& observer : observers_)
     observer.RenderProcessGone(this, info);
+}
+
+void SiteInstanceGroup::WriteIntoTrace(
+    perfetto::TracedProto<TraceProto> proto) const {
+  proto->set_site_instance_group_id(GetId().value());
+  proto->set_active_frame_count(active_frame_count());
+  proto.Set(TraceProto::kProcess, process());
 }
 
 }  // namespace content

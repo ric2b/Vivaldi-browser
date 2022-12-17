@@ -15,7 +15,11 @@ cargo_crate("lib") {
   crate_root = "crate/src/lib.rs"
 
   # Unit tests skipped. Generate with --with-tests to include them.
-  skip_unit_tests = true
+  build_native_rust_unit_tests = false
   sources = [ "crate/src/lib.rs" ]
   edition = "2015"
+  cargo_pkg_version = "0.8.0"
+  cargo_pkg_authors = "Danny Guo <dannyguo91@gmail.com>"
+  cargo_pkg_name = "strsim"
+  cargo_pkg_description = "Implementations of string similarity metrics.Includes Hamming, Levenshtein, OSA, Damerau-Levenshtein, Jaro, and Jaro-Winkler."
 }

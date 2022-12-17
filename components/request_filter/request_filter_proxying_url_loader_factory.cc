@@ -199,8 +199,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
   network::ResourceRequest request_for_info = request_;
   request_for_info.request_initiator = original_initiator_;
   info_.emplace(request_id_, factory_->render_process_id_, frame_routing_id_,
-                view_routing_id_, request_for_info,
-                factory_->loader_factory_type(),
+                request_for_info, factory_->loader_factory_type(),
                 !(options_ & network::mojom::kURLLoadOptionSynchronous), false,
                 factory_->navigation_id_);
 
@@ -215,7 +214,6 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
       has_any_extra_headers_listeners_ &&
       factory_->url_loader_header_client_receiver_.is_bound() &&
       (request_.url.SchemeIsHTTPOrHTTPS() ||
-       request_.url.SchemeIs(url::kUrnScheme) ||
        request_.url.SchemeIs(url::kUuidInPackageScheme)) &&
       (for_cors_preflight_ || network_service_request_id_ != 0) &&
       factory_->request_handler_->WantsExtraHeadersForRequest(&info_.value());
@@ -578,7 +576,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     proxied_client_receiver_.Resume();
 
   if (request_.url.SchemeIsHTTPOrHTTPS() ||
-      request_.url.SchemeIs(url::kUrnScheme)) {
+      request_.url.SchemeIs(url::kUuidInPackageScheme)) {
     // NOTE: While it does not appear to be documented (and in fact it may be
     // intuitive), |onBeforeSendHeaders| is only dispatched for HTTP and HTTPS
     // and urn: requests.
@@ -731,7 +729,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     proxied_client_receiver_.Resume();
 
   if (request_.url.SchemeIsHTTPOrHTTPS() ||
-      request_.url.SchemeIs(url::kUrnScheme)) {
+      request_.url.SchemeIs(url::kUuidInPackageScheme)) {
     // NOTE: While it does not appear to be documented (and in fact it may be
     // intuitive), |onSendHeaders| is only dispatched for HTTP and HTTPS
     // requests.
@@ -966,7 +964,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
 
   auto callback_pair = base::SplitOnceCallback(std::move(continuation));
   if (request_.url.SchemeIsHTTPOrHTTPS() ||
-      request_.url.SchemeIs(url::kUrnScheme)) {
+      request_.url.SchemeIs(url::kUuidInPackageScheme)) {
     DCHECK(info_.has_value());
     int result = factory_->request_handler_->OnHeadersReceived(
         factory_->browser_context_, &info_.value(),

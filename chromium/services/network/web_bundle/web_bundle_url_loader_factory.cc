@@ -6,6 +6,7 @@
 
 #include "base/metrics/histogram_functions.h"
 #include "base/threading/sequenced_task_runner_handle.h"
+#include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "components/web_package/web_bundle_parser.h"
 #include "components/web_package/web_bundle_utils.h"
@@ -412,7 +413,7 @@ class WebBundleURLLoaderFactory::BundleDataSource
                                      std::move(writer), std::move(callback)));
   }
 
-  // mojom::BundleDataSource
+  // Implements mojom::BundleDataSource.
   void Read(uint64_t offset, uint64_t length, ReadCallback callback) override {
     TRACE_EVENT0("loading", "BundleDataSource::Read");
     if (!finished_loading_ && !buffer_.ContainsAll(offset, length)) {
@@ -429,7 +430,13 @@ class WebBundleURLLoaderFactory::BundleDataSource
     std::move(callback).Run(std::move(output));
   }
 
-  // mojo::DataPipeDrainer::Client
+  void Length(LengthCallback callback) override { std::move(callback).Run(-1); }
+
+  void IsRandomAccessContext(IsRandomAccessContextCallback callback) override {
+    std::move(callback).Run(false);
+  }
+
+  // Implements mojo::DataPipeDrainer::Client.
   void OnDataAvailable(const void* data, size_t num_bytes) override {
     DCHECK(!finished_loading_);
     if (!web_bundle_memory_quota_consumer_->AllocateMemory(num_bytes)) {
@@ -672,12 +679,9 @@ void WebBundleURLLoaderFactory::StartLoad(base::WeakPtr<URLLoader> loader) {
     loader->OnFail(net::ERR_INVALID_WEB_BUNDLE);
     return;
   }
-  // Currently, we just return the first response for the URL.
-  // TODO(crbug.com/1082020): Support variant matching.
-  auto& location = it->second->response_locations[0];
 
   parser_->ParseResponse(
-      location->offset, location->length,
+      it->second->offset, it->second->length,
       base::BindOnce(&WebBundleURLLoaderFactory::OnResponseParsed,
                      weak_ptr_factory_.GetWeakPtr(), loader->GetWeakPtr()));
 }
@@ -730,15 +734,6 @@ void WebBundleURLLoaderFactory::OnMetadataParsed(
         mojom::WebBundleErrorType::kDeprecationWarning,
         "WebBundle format \"b1\" is deprecated. See migration guide at "
         "https://bit.ly/3rpDuEX.");
-  }
-  for (auto& it : metadata_->requests) {
-    if (it.first.SchemeIs(url::kUrnScheme)) {
-      web_bundle_handle_->OnWebBundleError(
-          mojom::WebBundleErrorType::kDeprecationWarning,
-          "urn:uuid resource URL in WebBundles is deprecated. See migration "
-          "guide at https://bit.ly/3rpDuEX.");
-      break;
-    }
   }
 
   if (data_completed_)

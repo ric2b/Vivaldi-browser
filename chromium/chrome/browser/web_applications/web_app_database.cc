@@ -33,6 +33,7 @@
 #include "components/sync/model/metadata_change_list.h"
 #include "components/sync/model/model_error.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
+#include "third_party/blink/public/common/permissions_policy/policy_helper_public.h"
 #include "third_party/blink/public/mojom/manifest/capture_links.mojom.h"
 #include "third_party/blink/public/mojom/manifest/handle_links.mojom.h"
 #include "third_party/blink/public/mojom/manifest/manifest.mojom.h"
@@ -134,15 +135,27 @@ WebAppProto::HandleLinks HandleLinksToProto(
 }
 
 LaunchHandler::RouteTo ProtoToLaunchHandlerRouteTo(
-    const LaunchHandlerProto::RouteTo& route_to) {
+    const LaunchHandlerProto::RouteTo& route_to,
+    const LaunchHandlerProto::NavigateExistingClient&
+        navigate_existing_client) {
   switch (route_to) {
     case LaunchHandlerProto_RouteTo_UNSPECIFIED_ROUTE:
     case LaunchHandlerProto_RouteTo_AUTO:
       return LaunchHandler::RouteTo::kAuto;
     case LaunchHandlerProto_RouteTo_NEW_CLIENT:
       return LaunchHandler::RouteTo::kNewClient;
-    case LaunchHandlerProto_RouteTo_EXISTING_CLIENT:
-      return LaunchHandler::RouteTo::kExistingClient;
+    case LaunchHandlerProto_RouteTo_DEPRECATED_EXISTING_CLIENT:
+      // route_to: existing-client and navigate_existing_client were removed in
+      // favor of existing-client-navigate and existing-client-retain.
+      if (navigate_existing_client ==
+          LaunchHandlerProto_NavigateExistingClient_NEVER) {
+        return LaunchHandler::RouteTo::kExistingClientRetain;
+      }
+      return LaunchHandler::RouteTo::kExistingClientNavigate;
+    case LaunchHandlerProto_RouteTo_EXISTING_CLIENT_NAVIGATE:
+      return LaunchHandler::RouteTo::kExistingClientNavigate;
+    case LaunchHandlerProto_RouteTo_EXISTING_CLIENT_RETAIN:
+      return LaunchHandler::RouteTo::kExistingClientRetain;
   }
 }
 
@@ -153,32 +166,10 @@ LaunchHandlerProto::RouteTo LaunchHandlerRouteToToProto(
       return LaunchHandlerProto_RouteTo_AUTO;
     case LaunchHandler::RouteTo::kNewClient:
       return LaunchHandlerProto_RouteTo_NEW_CLIENT;
-    case LaunchHandler::RouteTo::kExistingClient:
-      return LaunchHandlerProto_RouteTo_EXISTING_CLIENT;
-  }
-}
-
-LaunchHandler::NavigateExistingClient
-ProtoToLaunchHandlerNavigateExistingClient(
-    const LaunchHandlerProto::NavigateExistingClient&
-        navigate_existing_client) {
-  switch (navigate_existing_client) {
-    case LaunchHandlerProto_NavigateExistingClient_UNSPECIFIED_NAVIGATE:
-    case LaunchHandlerProto_NavigateExistingClient_ALWAYS:
-      return LaunchHandler::NavigateExistingClient::kAlways;
-    case LaunchHandlerProto_NavigateExistingClient_NEVER:
-      return LaunchHandler::NavigateExistingClient::kNever;
-  }
-}
-
-LaunchHandlerProto::NavigateExistingClient
-LaunchHandlerNavigateExistingClientToProto(
-    const LaunchHandler::NavigateExistingClient& navigate_existing_client) {
-  switch (navigate_existing_client) {
-    case LaunchHandler::NavigateExistingClient::kAlways:
-      return LaunchHandlerProto_NavigateExistingClient_ALWAYS;
-    case LaunchHandler::NavigateExistingClient::kNever:
-      return LaunchHandlerProto_NavigateExistingClient_NEVER;
+    case LaunchHandler::RouteTo::kExistingClientNavigate:
+      return LaunchHandlerProto_RouteTo_EXISTING_CLIENT_NAVIGATE;
+    case LaunchHandler::RouteTo::kExistingClientRetain:
+      return LaunchHandlerProto_RouteTo_EXISTING_CLIENT_RETAIN;
   }
 }
 
@@ -223,6 +214,28 @@ WebAppProto::OsIntegrationState OsIntegrationStateToProto(
       return WebAppProto_OsIntegrationState_ENABLED;
     case OsIntegrationState::kDisabled:
       return WebAppProto_OsIntegrationState_DISABLED;
+  }
+}
+
+apps::FileHandler::LaunchType ProtoToLaunchType(
+    WebAppFileHandlerProto::LaunchType state) {
+  switch (state) {
+    case WebAppFileHandlerProto_LaunchType_SINGLE_CLIENT:
+      return apps::FileHandler::LaunchType::kSingleClient;
+    case WebAppFileHandlerProto_LaunchType_MULTIPLE_CLIENTS:
+      return apps::FileHandler::LaunchType::kMultipleClients;
+    case WebAppFileHandlerProto_LaunchType_UNDEFINED:
+      return apps::FileHandler::LaunchType::kSingleClient;
+  }
+}
+
+WebAppFileHandlerProto::LaunchType LaunchTypeToProto(
+    apps::FileHandler::LaunchType state) {
+  switch (state) {
+    case apps::FileHandler::LaunchType::kSingleClient:
+      return WebAppFileHandlerProto_LaunchType_SINGLE_CLIENT;
+    case apps::FileHandler::LaunchType::kMultipleClients:
+      return WebAppFileHandlerProto_LaunchType_MULTIPLE_CLIENTS;
   }
 }
 
@@ -299,17 +312,21 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
   // Set sync data to sync proto.
   *(local_data->mutable_sync_data()) = WebAppToSyncProto(web_app);
 
-  local_data->set_name(web_app.name());
+  local_data->set_name(web_app.untranslated_name());
 
   DCHECK(web_app.sources_.any());
-  local_data->mutable_sources()->set_system(web_app.sources_[Source::kSystem]);
-  local_data->mutable_sources()->set_policy(web_app.sources_[Source::kPolicy]);
+  local_data->mutable_sources()->set_system(
+      web_app.sources_[WebAppManagement::kSystem]);
+  local_data->mutable_sources()->set_policy(
+      web_app.sources_[WebAppManagement::kPolicy]);
   local_data->mutable_sources()->set_web_app_store(
-      web_app.sources_[Source::kWebAppStore]);
-  local_data->mutable_sources()->set_sync(web_app.sources_[Source::kSync]);
+      web_app.sources_[WebAppManagement::kWebAppStore]);
+  local_data->mutable_sources()->set_sync(
+      web_app.sources_[WebAppManagement::kSync]);
   local_data->mutable_sources()->set_default_(
-      web_app.sources_[Source::kDefault]);
-  local_data->mutable_sources()->set_sub_app(web_app.sources_[Source::kSubApp]);
+      web_app.sources_[WebAppManagement::kDefault]);
+  local_data->mutable_sources()->set_sub_app(
+      web_app.sources_[WebAppManagement::kSubApp]);
 
   local_data->set_is_locally_installed(web_app.is_locally_installed());
 
@@ -327,7 +344,7 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
         ToWebAppProtoDisplayMode(display_mode));
   }
 
-  local_data->set_description(web_app.description());
+  local_data->set_description(web_app.untranslated_description());
   if (!web_app.scope().is_empty())
     local_data->set_scope(web_app.scope().spec());
   if (web_app.theme_color().has_value())
@@ -421,6 +438,8 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
     file_handler_proto->set_action(file_handler.action.spec());
     file_handler_proto->set_display_name(
         base::UTF16ToUTF8(file_handler.display_name));
+    file_handler_proto->set_launch_type(
+        LaunchTypeToProto(file_handler.launch_type));
 
     for (const auto& accept_entry : file_handler.accept) {
       WebAppFileHandlerAcceptProto* accept_entry_proto =
@@ -575,13 +594,8 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
   local_data->set_is_storage_isolated(web_app.IsStorageIsolated());
 
   if (web_app.launch_handler()) {
-    LaunchHandlerProto& launch_handler_proto =
-        *local_data->mutable_launch_handler();
-    launch_handler_proto.set_route_to(
+    local_data->mutable_launch_handler()->set_route_to(
         LaunchHandlerRouteToToProto(web_app.launch_handler()->route_to));
-    launch_handler_proto.set_navigate_existing_client(
-        LaunchHandlerNavigateExistingClientToProto(
-            web_app.launch_handler()->navigate_existing_client));
   }
 
   if (web_app.parent_app_id_) {
@@ -590,12 +604,20 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
 
   if (!web_app.permissions_policy().empty()) {
     auto& policy = *local_data->mutable_permissions_policy();
+    const auto& feature_to_name_map =
+        blink::GetPermissionsPolicyFeatureToNameMap();
     for (const auto& decl : web_app.permissions_policy()) {
       WebAppPermissionsPolicy proto_policy;
-      proto_policy.set_feature(decl.feature);
-      for (const auto& origin : decl.allowlist) {
-        proto_policy.add_allowlist(origin);
+      const auto feature_name = feature_to_name_map.find(decl.feature);
+      if (feature_name == feature_to_name_map.end())
+        continue;
+      const std::string feature_string(feature_name->second);
+      proto_policy.set_feature(feature_string);
+      for (const auto& origin : decl.allowed_origins) {
+        proto_policy.add_allowed_origins(origin.Serialize());
       }
+      proto_policy.set_matches_all_origins(decl.matches_all_origins);
+      proto_policy.set_matches_opaque_src(decl.matches_opaque_src);
       policy.Add(std::move(proto_policy));
     }
   }
@@ -639,13 +661,14 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
   }
 
   WebAppSources sources;
-  sources[Source::kSystem] = local_data.sources().system();
-  sources[Source::kPolicy] = local_data.sources().policy();
-  sources[Source::kWebAppStore] = local_data.sources().web_app_store();
-  sources[Source::kSync] = local_data.sources().sync();
-  sources[Source::kDefault] = local_data.sources().default_();
+  sources[WebAppManagement::kSystem] = local_data.sources().system();
+  sources[WebAppManagement::kPolicy] = local_data.sources().policy();
+  sources[WebAppManagement::kWebAppStore] =
+      local_data.sources().web_app_store();
+  sources[WebAppManagement::kSync] = local_data.sources().sync();
+  sources[WebAppManagement::kDefault] = local_data.sources().default_();
   if (local_data.sources().has_sub_app()) {
-    sources[Source::kSubApp] = local_data.sources().sub_app();
+    sources[WebAppManagement::kSubApp] = local_data.sources().sub_app();
   }
   if (!sources.any()) {
     DLOG(ERROR) << "WebApp proto parse error: no any source in sources field";
@@ -847,6 +870,9 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
       file_handler.display_name =
           base::UTF8ToUTF16(file_handler_proto.display_name());
     }
+
+    file_handler.launch_type =
+        ProtoToLaunchType(file_handler_proto.launch_type());
 
     for (const auto& accept_entry_proto : file_handler_proto.accept()) {
       apps::FileHandler::AcceptEntry accept_entry;
@@ -1109,14 +1135,11 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
     const LaunchHandlerProto& launch_handler_proto =
         local_data.launch_handler();
     if (launch_handler_proto.has_route_to()) {
-      launch_handler.route_to =
-          ProtoToLaunchHandlerRouteTo(launch_handler_proto.route_to());
+      launch_handler.route_to = ProtoToLaunchHandlerRouteTo(
+          launch_handler_proto.route_to(),
+          launch_handler_proto.navigate_existing_client());
     }
-    if (launch_handler_proto.has_navigate_existing_client()) {
-      launch_handler.navigate_existing_client =
-          ProtoToLaunchHandlerNavigateExistingClient(
-              launch_handler_proto.navigate_existing_client());
-    }
+
     web_app->SetLaunchHandler(std::move(launch_handler));
   }
 
@@ -1125,13 +1148,21 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
   }
 
   if (local_data.permissions_policy_size()) {
-    std::vector<PermissionsPolicyDeclaration> policy;
+    blink::ParsedPermissionsPolicy policy;
+    const auto& name_to_feature_map =
+        blink::GetPermissionsPolicyNameToFeatureMap();
     for (const auto& decl_proto : local_data.permissions_policy()) {
-      PermissionsPolicyDeclaration decl;
-      decl.feature = decl_proto.feature();
-      for (const std::string& origin : decl_proto.allowlist()) {
-        decl.allowlist.push_back(origin);
+      blink::ParsedPermissionsPolicyDeclaration decl;
+      const auto feature_enum = name_to_feature_map.find(decl_proto.feature());
+      if (feature_enum == name_to_feature_map.end())
+        continue;
+      decl.feature = feature_enum->second;
+
+      for (const std::string& origin : decl_proto.allowed_origins()) {
+        decl.allowed_origins.push_back(url::Origin::Create(GURL(origin)));
       }
+      decl.matches_all_origins = decl_proto.matches_all_origins();
+      decl.matches_opaque_src = decl_proto.matches_opaque_src();
       policy.push_back(decl);
     }
     web_app->SetPermissionsPolicy(policy);

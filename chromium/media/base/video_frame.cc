@@ -12,7 +12,6 @@
 #include "base/atomic_sequence_num.h"
 #include "base/bind.h"
 #include "base/bits.h"
-#include "base/cxx17_backports.h"
 #include "base/logging.h"
 #include "base/process/memory.h"
 #include "base/strings/string_piece.h"
@@ -128,12 +127,16 @@ gfx::Size VideoFrame::SampleSize(VideoPixelFormat format, size_t plane) {
         case PIXEL_FORMAT_YUV444P10:
         case PIXEL_FORMAT_YUV444P12:
         case PIXEL_FORMAT_Y16:
+        case PIXEL_FORMAT_I444A:
+        case PIXEL_FORMAT_YUV444AP10:
           return gfx::Size(1, 1);
 
         case PIXEL_FORMAT_I422:
         case PIXEL_FORMAT_YUV422P9:
         case PIXEL_FORMAT_YUV422P10:
         case PIXEL_FORMAT_YUV422P12:
+        case PIXEL_FORMAT_I422A:
+        case PIXEL_FORMAT_YUV422AP10:
           return gfx::Size(2, 1);
 
         case PIXEL_FORMAT_YV12:
@@ -145,6 +148,7 @@ gfx::Size VideoFrame::SampleSize(VideoPixelFormat format, size_t plane) {
         case PIXEL_FORMAT_YUV420P10:
         case PIXEL_FORMAT_YUV420P12:
         case PIXEL_FORMAT_P016LE:
+        case PIXEL_FORMAT_YUV420AP10:
           return gfx::Size(2, 2);
 
         case PIXEL_FORMAT_UYVY:
@@ -214,6 +218,11 @@ static bool RequiresEvenSizeAllocation(VideoPixelFormat format) {
     case PIXEL_FORMAT_I420A:
     case PIXEL_FORMAT_UYVY:
     case PIXEL_FORMAT_P016LE:
+    case PIXEL_FORMAT_I422A:
+    case PIXEL_FORMAT_I444A:
+    case PIXEL_FORMAT_YUV420AP10:
+    case PIXEL_FORMAT_YUV422AP10:
+    case PIXEL_FORMAT_YUV444AP10:
       return true;
     case PIXEL_FORMAT_UNKNOWN:
       break;
@@ -268,8 +277,6 @@ static absl::optional<VideoFrameLayout> GetDefaultLayout(
     }
 
     default:
-      // TODO(miu): This function should support any pixel format.
-      // http://crbug.com/555909 .
       DLOG(ERROR) << "Unsupported pixel format"
                   << VideoPixelFormatToString(format);
       return absl::nullopt;
@@ -1060,16 +1067,19 @@ int VideoFrame::BytesPerElement(VideoPixelFormat format, size_t plane) {
     case PIXEL_FORMAT_YUV420P12:
     case PIXEL_FORMAT_YUV422P12:
     case PIXEL_FORMAT_YUV444P12:
+    case PIXEL_FORMAT_YUV420AP10:
+    case PIXEL_FORMAT_YUV422AP10:
+    case PIXEL_FORMAT_YUV444AP10:
       return 2;
     case PIXEL_FORMAT_NV12:
     case PIXEL_FORMAT_NV21: {
       static const int bytes_per_element[] = {1, 2};
-      DCHECK_LT(plane, base::size(bytes_per_element));
+      DCHECK_LT(plane, std::size(bytes_per_element));
       return bytes_per_element[plane];
     }
     case PIXEL_FORMAT_P016LE: {
       static const int bytes_per_element[] = {1, 2};
-      DCHECK_LT(plane, base::size(bytes_per_element));
+      DCHECK_LT(plane, std::size(bytes_per_element));
       return bytes_per_element[plane] * 2;
     }
     case PIXEL_FORMAT_YV12:
@@ -1077,6 +1087,8 @@ int VideoFrame::BytesPerElement(VideoPixelFormat format, size_t plane) {
     case PIXEL_FORMAT_I422:
     case PIXEL_FORMAT_I420A:
     case PIXEL_FORMAT_I444:
+    case PIXEL_FORMAT_I422A:
+    case PIXEL_FORMAT_I444A:
       return 1;
     case PIXEL_FORMAT_MJPEG:
       return 0;
@@ -1451,9 +1463,6 @@ bool VideoFrame::IsValidConfigInternal(VideoPixelFormat format,
     return false;
   }
 
-  // Make sure new formats are properly accounted for in the method.
-  static_assert(PIXEL_FORMAT_MAX == 33,
-                "Added pixel format, please review AreSizesValid()");
   switch (frame_control_type) {
     case FrameControlType::kNone:
       // Check that software-allocated buffer formats are not empty.

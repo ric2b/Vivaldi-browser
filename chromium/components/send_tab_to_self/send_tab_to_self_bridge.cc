@@ -12,6 +12,7 @@
 #include "base/containers/cxx20_erase_vector.h"
 #include "base/guid.h"
 #include "base/memory/ptr_util.h"
+#include "base/observer_list.h"
 #include "base/strings/string_util.h"
 #include "base/time/clock.h"
 #include "base/time/time.h"
@@ -618,6 +619,7 @@ void SendTabToSelfBridge::DoGarbageCollection() {
   auto entry = entries_.begin();
   while (entry != entries_.end()) {
     DCHECK_EQ(entry->first, entry->second->GetGUID());
+
     std::string guid = entry->first;
     bool expired = entry->second->IsExpired(clock_->Now());
     entry++;

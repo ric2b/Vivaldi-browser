@@ -119,11 +119,6 @@ ContentAutofillDriver* ContentAutofillDriver::GetForRenderFrameHost(
 
 void ContentAutofillDriver::BindPendingReceiver(
     mojo::PendingAssociatedReceiver<mojom::AutofillDriver> pending_receiver) {
-  if (!base::FeatureList::IsEnabled(
-          features::kAutofillEnableWithinFencedFrame) &&
-      render_frame_host_->IsNestedWithinFencedFrame()) {
-    return;
-  }
   receiver_.Bind(std::move(pending_receiver));
 }
 
@@ -135,8 +130,8 @@ bool ContentAutofillDriver::IsIncognito() const {
       ->IsOffTheRecord();
 }
 
-bool ContentAutofillDriver::IsInMainFrame() const {
-  return render_frame_host_->GetParent() == nullptr;
+bool ContentAutofillDriver::IsInAnyMainFrame() const {
+  return render_frame_host_->GetMainFrame() == render_frame_host_;
 }
 
 bool ContentAutofillDriver::IsPrerendering() const {
@@ -204,8 +199,7 @@ net::IsolationInfo ContentAutofillDriver::IsolationInfo() {
   return render_frame_host_->GetIsolationInfoForSubresources();
 }
 
-base::flat_map<FieldGlobalId, ServerFieldType>
-ContentAutofillDriver::FillOrPreviewForm(
+std::vector<FieldGlobalId> ContentAutofillDriver::FillOrPreviewForm(
     int query_id,
     mojom::RendererFormDataAction action,
     const FormData& data,
@@ -717,6 +711,10 @@ void ContentAutofillDriver::UnsetKeyPressHandlerImpl() {
 void ContentAutofillDriver::SetFrameAndFormMetaData(
     FormData& form,
     FormFieldData* optional_field) const {
+  static FormVersion version_counter;
+  ++*version_counter;
+  form.version = version_counter;
+
   form.host_frame =
       LocalFrameToken(render_frame_host_->GetFrameToken().value());
 

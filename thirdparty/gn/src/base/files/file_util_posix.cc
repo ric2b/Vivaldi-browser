@@ -444,7 +444,7 @@ bool CreateDirectoryAndGetError(const FilePath& full_path, File::Error* error) {
        i != subpaths.rend(); ++i) {
     if (DirectoryExists(*i))
       continue;
-    if (mkdir(i->value().c_str(), 0700) == 0)
+    if (mkdir(i->value().c_str(), 0777) == 0)
       continue;
     // Mkdir failed, but it might have failed with EEXIST, or some other error
     // due to the the directory appearing out of thin air. This can occur if

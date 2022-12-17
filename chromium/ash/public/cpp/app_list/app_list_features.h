@@ -8,6 +8,7 @@
 #include <string>
 
 #include "ash/public/cpp/ash_public_export.h"
+#include "base/time/time.h"
 
 namespace base {
 struct Feature;
@@ -69,6 +70,21 @@ ASH_PUBLIC_EXPORT extern const base::Feature kForceShowContinueSection;
 // Enables iconified text and inline icons in launcher search.
 ASH_PUBLIC_EXPORT extern const base::Feature kSearchResultInlineIcon;
 
+// Enable shortened search result update animations when in progress animations
+// are interrupted by search model updates.
+ASH_PUBLIC_EXPORT extern const base::Feature kDynamicSearchUpdateAnimation;
+
+// Forces the Launcher provider to send Omnibox search queries to the lacros
+// browser. If disabled, queries are sent to the ash browser.
+ASH_PUBLIC_EXPORT extern const base::Feature kLauncherLacrosIntegration;
+
+// Shows a feedback dialog when removing a continue section suggestion.
+ASH_PUBLIC_EXPORT extern const base::Feature kFeedbackOnContinueSectionRemove;
+
+// Controls the bubble launcher (productivity launcher in clamshell) width. When
+// enabled, the bubble UI will be narrower.
+ASH_PUBLIC_EXPORT extern const base::Feature kCompactBubbleLauncher;
+
 ASH_PUBLIC_EXPORT bool IsAppRankerEnabled();
 ASH_PUBLIC_EXPORT bool IsZeroStateAppsRankerEnabled();
 ASH_PUBLIC_EXPORT bool IsQueryBasedMixedTypesRankerEnabled();
@@ -85,6 +101,11 @@ ASH_PUBLIC_EXPORT bool IsAggregatedMlSearchRankingEnabled();
 ASH_PUBLIC_EXPORT bool IsLauncherSearchNormalizationEnabled();
 ASH_PUBLIC_EXPORT bool IsCategoricalSearchEnabled();
 ASH_PUBLIC_EXPORT bool IsSearchResultInlineIconEnabled();
+ASH_PUBLIC_EXPORT bool IsDynamicSearchUpdateAnimationEnabled();
+ASH_PUBLIC_EXPORT base::TimeDelta DynamicSearchUpdateAnimationDuration();
+ASH_PUBLIC_EXPORT bool IsLauncherLacrosIntegrationEnabled();
+ASH_PUBLIC_EXPORT bool IsFeedbackOnContinueSectionRemoveEnabled();
+ASH_PUBLIC_EXPORT bool IsCompactBubbleLauncherEnabled();
 
 ASH_PUBLIC_EXPORT std::string AnswerServerUrl();
 ASH_PUBLIC_EXPORT std::string AnswerServerQuerySuffix();

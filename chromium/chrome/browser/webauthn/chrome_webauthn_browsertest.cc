@@ -148,8 +148,7 @@ IN_PROC_BROWSER_TEST_F(WebAuthnBrowserTest, ChromeExtensions) {
 class WebAuthnCableSecondFactor : public WebAuthnBrowserTest {
  public:
   void SetUp() override {
-    scoped_feature_list_.InitWithFeatures(
-        {features::kWebAuthCable, device::kWebAuthCableSecondFactor}, {});
+    scoped_feature_list_.InitWithFeatures({features::kWebAuthCable}, {});
     // This makes it a little easier to compare against.
     trace_ << std::endl;
 
@@ -201,10 +200,9 @@ class WebAuthnCableSecondFactor : public WebAuthnBrowserTest {
       }
     }
 
-    void set_cable_pairing_callback(
-        base::RepeatingCallback<void(device::cablev2::PairingEvent)> callback)
-        override {
-      pairing_callback_ = std::move(callback);
+    void set_cable_invalidated_pairing_callback(
+        base::RepeatingCallback<void(size_t)> callback) override {
+      invalid_pairing_callback_ = std::move(callback);
     }
 
     base::RepeatingCallback<void(size_t)> get_cable_contact_callback()
@@ -219,8 +217,9 @@ class WebAuthnCableSecondFactor : public WebAuthnBrowserTest {
             // should trigger a fallback to the second-priority phone with the
             // same name.
             base::SequencedTaskRunnerHandle::Get()->PostTask(
-                FROM_HERE, base::BindLambdaForTesting(
-                               [this, n]() { pairing_callback_.Run(n); }));
+                FROM_HERE, base::BindLambdaForTesting([this, n]() {
+                  invalid_pairing_callback_.Run(n);
+                }));
             break;
 
           case 1:
@@ -295,8 +294,7 @@ class WebAuthnCableSecondFactor : public WebAuthnBrowserTest {
     };
 
     const raw_ptr<WebAuthnCableSecondFactor> parent_;
-    base::RepeatingCallback<void(device::cablev2::PairingEvent)>
-        pairing_callback_;
+    base::RepeatingCallback<void(size_t)> invalid_pairing_callback_;
     base::RepeatingClosure add_authenticator_callback_;
     int contact_step_number_ = 0;
   };

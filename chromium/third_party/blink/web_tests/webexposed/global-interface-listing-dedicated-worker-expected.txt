@@ -665,6 +665,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter name
 [Worker]     getter objectStore
 [Worker]     getter unique
+[Worker]     method batchGetAll
 [Worker]     method constructor
 [Worker]     method count
 [Worker]     method get
@@ -694,6 +695,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter name
 [Worker]     getter transaction
 [Worker]     method add
+[Worker]     method batchGetAll
 [Worker]     method clear
 [Worker]     method constructor
 [Worker]     method count
@@ -843,37 +845,6 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     setter onsourceclose
 [Worker]     setter onsourceended
 [Worker]     setter onsourceopen
-[Worker] interface MediaStreamTrack : EventTarget
-[Worker]     attribute @@toStringTag
-[Worker]     getter contentHint
-[Worker]     getter enabled
-[Worker]     getter id
-[Worker]     getter kind
-[Worker]     getter label
-[Worker]     getter muted
-[Worker]     getter oncapturehandlechange
-[Worker]     getter onended
-[Worker]     getter onmute
-[Worker]     getter onunmute
-[Worker]     getter readyState
-[Worker]     method applyConstraints
-[Worker]     method clone
-[Worker]     method constructor
-[Worker]     method getCapabilities
-[Worker]     method getCaptureHandle
-[Worker]     method getConstraints
-[Worker]     method getSettings
-[Worker]     method stop
-[Worker]     setter contentHint
-[Worker]     setter enabled
-[Worker]     setter oncapturehandlechange
-[Worker]     setter onended
-[Worker]     setter onmute
-[Worker]     setter onunmute
-[Worker] interface MediaStreamTrackGenerator : MediaStreamTrack
-[Worker]     attribute @@toStringTag
-[Worker]     getter writable
-[Worker]     method constructor
 [Worker] interface MessageChannel
 [Worker]     attribute @@toStringTag
 [Worker]     getter port1
@@ -1205,7 +1176,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter duration
 [Worker]     getter entryType
 [Worker]     getter name
-[Worker]     getter navigationCount
+[Worker]     getter navigationId
 [Worker]     getter startTime
 [Worker]     method constructor
 [Worker]     method toJSON
@@ -1768,6 +1739,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method constructor
 [Worker]     method controlTransferIn
 [Worker]     method controlTransferOut
+[Worker]     method forget
 [Worker]     method isochronousTransferIn
 [Worker]     method isochronousTransferOut
 [Worker]     method open
@@ -1872,6 +1844,13 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method close
 [Worker]     method constructor
 [Worker]     method copyTo
+[Worker] interface VideoTrackGenerator
+[Worker]     attribute @@toStringTag
+[Worker]     getter muted
+[Worker]     getter track
+[Worker]     getter writable
+[Worker]     method constructor
+[Worker]     setter muted
 [Worker] interface WakeLock
 [Worker]     attribute @@toStringTag
 [Worker]     method constructor
@@ -2446,9 +2425,11 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     attribute WAIT_FAILED
 [Worker]     attribute ZERO
 [Worker]     getter canvas
+[Worker]     getter drawingBufferColorSpace
 [Worker]     getter drawingBufferFormat
 [Worker]     getter drawingBufferHeight
 [Worker]     getter drawingBufferWidth
+[Worker]     getter unpackColorSpace
 [Worker]     method activeTexture
 [Worker]     method attachShader
 [Worker]     method beginQuery
@@ -2677,6 +2658,8 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method vertexAttribPointer
 [Worker]     method viewport
 [Worker]     method waitSync
+[Worker]     setter drawingBufferColorSpace
+[Worker]     setter unpackColorSpace
 [Worker] interface WebGLActiveInfo
 [Worker]     attribute @@toStringTag
 [Worker]     getter name
@@ -2997,9 +2980,11 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     attribute VIEWPORT
 [Worker]     attribute ZERO
 [Worker]     getter canvas
+[Worker]     getter drawingBufferColorSpace
 [Worker]     getter drawingBufferFormat
 [Worker]     getter drawingBufferHeight
 [Worker]     getter drawingBufferWidth
+[Worker]     getter unpackColorSpace
 [Worker]     method activeTexture
 [Worker]     method attachShader
 [Worker]     method bindAttribLocation
@@ -3140,6 +3125,8 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method vertexAttrib4fv
 [Worker]     method vertexAttribPointer
 [Worker]     method viewport
+[Worker]     setter drawingBufferColorSpace
+[Worker]     setter unpackColorSpace
 [Worker] interface WebGLSampler
 [Worker]     attribute @@toStringTag
 [Worker]     method constructor

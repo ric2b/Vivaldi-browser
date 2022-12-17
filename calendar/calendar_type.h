@@ -153,6 +153,7 @@ class CalendarResult : public CalendarRow {
 };
 
 typedef std::vector<CalendarRow> CalendarRows;
+typedef std::vector<CalendarID> CalendarIDs;
 
 // Represents a simplified version of a calendar.
 struct Calendar {

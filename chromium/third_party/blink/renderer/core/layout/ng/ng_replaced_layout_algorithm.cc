@@ -18,6 +18,10 @@ const NGLayoutResult* NGReplacedLayoutAlgorithm::Layout() {
   // Set this as a legacy root so that legacy painters are used.
   container_builder_.SetIsLegacyLayoutRoot();
 
+  // TODO(crbug.com/1252693): kIgnoreBlockLengths applies inline constraints
+  // through the aspect ratio. But the aspect ratio is ignored when computing
+  // the intrinsic block size for NON-replaced elements. This is inconsistent
+  // and could lead to subtle bugs.
   const LayoutUnit intrinsic_block_size =
       ComputeReplacedSize(Node(), ConstraintSpace(), BorderPadding(),
                           ReplacedSizeMode::kIgnoreBlockLengths)
@@ -37,7 +41,14 @@ MinMaxSizesResult NGReplacedLayoutAlgorithm::ComputeMinMaxSizes(
   sizes = ComputeReplacedSize(Node(), ConstraintSpace(), BorderPadding(),
                               ReplacedSizeMode::kIgnoreInlineLengths)
               .inline_size;
-  return {sizes, /* depends_on_block_constraints */ false};
+
+  const bool depends_on_block_constraints =
+      Style().LogicalHeight().IsPercentOrCalc() ||
+      Style().LogicalMinHeight().IsPercentOrCalc() ||
+      Style().LogicalMaxHeight().IsPercentOrCalc() ||
+      (Style().LogicalHeight().IsAuto() &&
+       ConstraintSpace().IsBlockAutoBehaviorStretch());
+  return {sizes, depends_on_block_constraints};
 }
 
 }  // namespace blink

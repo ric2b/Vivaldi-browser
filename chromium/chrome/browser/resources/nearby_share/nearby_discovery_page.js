@@ -14,12 +14,12 @@ import 'chrome://resources/mojo/mojo/public/mojom/base/unguessable_token.mojom-l
 import 'chrome://resources/mojo/url/mojom/url.mojom-lite.js';
 import 'chrome://resources/polymer/v3_0/iron-media-query/iron-media-query.js';
 import 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
-import './shared/nearby_device.m.js';
+import './shared/nearby_device.js';
 import './mojo/nearby_share_target_types.mojom-lite.js';
 import './mojo/nearby_share_share_type.mojom-lite.js';
 import './mojo/nearby_share.mojom-lite.js';
-import './shared/nearby_page_template.m.js';
-import './shared/nearby_preview.m.js';
+import './shared/nearby_page_template.js';
+import './shared/nearby_preview.js';
 import './strings.m.js';
 
 import {assert, assertNotReached} from 'chrome://resources/js/assert.m.js';
@@ -313,7 +313,6 @@ Polymer({
     const currentShareTarget = event.currentTarget.shareTarget;
     const currentIndex = this.shareTargets_.findIndex(
         (target) => tokensEqual(target.id, currentShareTarget.id));
-    console.log(event.code);
     event.stopPropagation();
     switch (event.code) {
       // Down arrow: bring into focus the next shareTarget in list.
@@ -497,8 +496,8 @@ Polymer({
    * @private
    */
   getTabIndexOfShareTarget_(shareTarget) {
-    if ((!this.selectedShareTarget && shareTarget == this.shareTargets_[0]) ||
-        (shareTarget == this.selectedShareTarget)) {
+    if ((!this.selectedShareTarget && shareTarget === this.shareTargets_[0]) ||
+        (shareTarget === this.selectedShareTarget)) {
       return '0';
     }
     return '-1';
@@ -523,7 +522,7 @@ Polymer({
     tempEl.childNodes.forEach((node, index) => {
       // Text nodes should be aria-hidden and associated with an element id
       // that the anchor element can be aria-labelledby.
-      if (node.nodeType == Node.TEXT_NODE) {
+      if (node.nodeType === Node.TEXT_NODE) {
         const spanNode = document.createElement('span');
         spanNode.textContent = node.textContent;
         spanNode.id = `helpText${index}`;
@@ -534,7 +533,7 @@ Polymer({
       }
       // The single element node with anchor tags should also be aria-labelledby
       // itself in-order with respect to the entire string.
-      if (node.nodeType == Node.ELEMENT_NODE && node.nodeName == 'A') {
+      if (node.nodeType === Node.ELEMENT_NODE && node.nodeName === 'A') {
         node.id = `helpLink`;
         ariaLabelledByIds.push(node.id);
         return;
@@ -547,12 +546,12 @@ Polymer({
     const anchorTags = tempEl.getElementsByTagName('a');
     // In the event the localizedString contains only text nodes, populate the
     // contents with the localizedString.
-    if (anchorTags.length == 0) {
+    if (anchorTags.length === 0) {
       return localizedString;
     }
 
     assert(
-        anchorTags.length == 1,
+        anchorTags.length === 1,
         'nearbyShareDiscoveryPageInfo should contain exactly one anchor tag');
     const anchorTag = anchorTags[0];
     anchorTag.setAttribute('aria-labelledby', ariaLabelledByIds.join(' '));

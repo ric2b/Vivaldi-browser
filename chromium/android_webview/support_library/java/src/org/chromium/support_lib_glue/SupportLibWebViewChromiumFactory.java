@@ -84,7 +84,12 @@ class SupportLibWebViewChromiumFactory implements WebViewProviderFactoryBoundary
                     Features.SET_SUPPORT_LIBRARY_VERSION + Features.DEV_SUFFIX,
                     Features.DOCUMENT_START_SCRIPT,
                     Features.PROXY_OVERRIDE_REVERSE_BYPASS,
+                    Features.REQUESTED_WITH_HEADER_CONTROL + Features.DEV_SUFFIX,
                     Features.GET_VARIATIONS_HEADER,
+                    Features.ALGORITHMIC_DARKENING,
+                    // Add new features above. New features must include `+ Features.DEV_SUFFIX`
+                    // when they're initially added (this can be removed in a future CL). The final
+                    // feature should have a trailing comma for cleaner diffs.
             };
 
     // These values are persisted to logs. Entries should not be renumbered and
@@ -149,7 +154,10 @@ class SupportLibWebViewChromiumFactory implements WebViewProviderFactoryBoundary
             ApiCall.WEB_SETTINGS_GET_REQUESTED_WITH_HEADER_MODE,
             ApiCall.SERVICE_WORKER_SETTINGS_SET_REQUESTED_WITH_HEADER_MODE,
             ApiCall.SERVICE_WORKER_SETTINGS_GET_REQUESTED_WITH_HEADER_MODE,
-            ApiCall.GET_VARIATIONS_HEADER})
+            ApiCall.GET_VARIATIONS_HEADER,
+            // Add new constants above. The final constant should have a trailing comma for cleaner
+            // diffs.
+    })
     public @interface ApiCall {
         int ADD_WEB_MESSAGE_LISTENER = 0;
         int CLEAR_PROXY_OVERRIDE = 1;

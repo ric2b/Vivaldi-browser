@@ -13,9 +13,13 @@
 
 namespace base {
 class TaskRunner;
-}  // namespace base
+}
 
-namespace chromeos {
+namespace ash {
+
+namespace multidevice {
+class RemoteDeviceRef;
+}
 
 namespace secure_channel {
 
@@ -93,15 +97,6 @@ class SecureChannelClientImpl : public SecureChannelClient {
 };
 
 }  // namespace secure_channel
-
-}  // namespace chromeos
-
-// TODO(https://crbug.com/1164001): remove after the //chrome/browser/chromeos
-// source migration is finished.
-namespace ash {
-namespace secure_channel {
-using ::chromeos::secure_channel::SecureChannelClientImpl;
-}
 }  // namespace ash
 
 #endif  // ASH_SERVICES_SECURE_CHANNEL_PUBLIC_CPP_CLIENT_SECURE_CHANNEL_CLIENT_IMPL_H_

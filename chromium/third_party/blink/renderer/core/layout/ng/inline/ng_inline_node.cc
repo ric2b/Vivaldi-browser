@@ -41,6 +41,7 @@
 #include "third_party/blink/renderer/core/layout/ng/svg/ng_svg_text_layout_attributes_builder.h"
 #include "third_party/blink/renderer/core/layout/ng/svg/svg_inline_node_data.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
+#include "third_party/blink/renderer/core/style/computed_style_base_constants.h"
 #include "third_party/blink/renderer/platform/fonts/font_performance.h"
 #include "third_party/blink/renderer/platform/fonts/shaping/harfbuzz_shaper.h"
 #include "third_party/blink/renderer/platform/fonts/shaping/run_segmenter.h"
@@ -528,13 +529,19 @@ void NGInlineNode::PrepareLayoutIfNeeded() const {
 }
 
 void NGInlineNode::ShapeTextOrDefer(const NGConstraintSpace& space) const {
-  if (Data().shaping_state_ != NGInlineNodeData::kShapingNone)
+  if (Data().shaping_state_ != NGInlineNodeData::kShapingNone) {
+    if (ShouldBeReshaped()) {
+      ShapeTextIncludingFirstLine(NGInlineNodeData::kShapingDone, MutableData(),
+                                  nullptr, nullptr);
+    }
     return;
+  }
 
   NGInlineNodeData* data = MutableData();
-  const auto& view = *GetLayoutBox()->GetFrameView();
+  auto& view = *GetLayoutBox()->GetFrameView();
   NGInlineNodeData::ShapingState new_state = NGInlineNodeData::kShapingDone;
-  if (view.AllowDeferredShaping() && !GetLayoutBox()->IsInsideFlowThread()) {
+  if (view.AllowDeferredShaping() && !GetLayoutBox()->IsInsideFlowThread() &&
+      Style().IsContentVisibilityVisible()) {
     DCHECK(IsHorizontalWritingMode(Style().GetWritingMode()));
     const LayoutUnit viewport_bottom = view.CurrentViewportBottom();
     DCHECK_NE(viewport_bottom, kIndefiniteSize) << GetLayoutBox();
@@ -547,6 +554,15 @@ void NGInlineNode::ShapeTextOrDefer(const NGConstraintSpace& space) const {
     if (viewport_bottom >= LayoutUnit() && IsDeferrableContent(*data) &&
         top > viewport_bottom) {
       new_state = NGInlineNodeData::kShapingDeferred;
+
+      if (Element* element = DynamicTo<Element>(GetDOMNode())) {
+        // We can't call DisplayLockContext::SetRequestedState() during layout.
+        view.RequestToLockDeferred(*element);
+      } else {
+        // We don't support deferring anonymous IFCs because DisplayLock
+        // supports only elements.
+        new_state = NGInlineNodeData::kShapingDone;
+      }
     }
   }
   ShapeTextIncludingFirstLine(new_state, MutableData(), nullptr, nullptr);
@@ -559,12 +575,19 @@ void NGInlineNode::PrepareLayout(NGInlineNodeData* previous_data) const {
   DCHECK(data);
   CollectInlines(data, previous_data);
   SegmentText(data);
-  if ((previous_data &&
-       previous_data->shaping_state_ == NGInlineNodeData::kShapingDone) ||
+  if ((previous_data && previous_data->IsShapingDone()) ||
       UNLIKELY(IsTextCombine())) {
     ShapeTextIncludingFirstLine(
         NGInlineNodeData::kShapingDone, data,
         previous_data ? &previous_data->text_content : nullptr, nullptr);
+  } else if (previous_data && previous_data->IsShapingDeferred()) {
+    if (IsDisplayLocked()) {
+      ShapeTextIncludingFirstLine(NGInlineNodeData::kShapingDeferred, data,
+                                  &previous_data->text_content, nullptr);
+    } else {
+      ShapeTextIncludingFirstLine(NGInlineNodeData::kShapingDone, data, nullptr,
+                                  nullptr);
+    }
   }
   AssociateItemsWithInlines(data);
   DCHECK_EQ(data, MutableData());
@@ -973,7 +996,7 @@ bool NGInlineNode::SetTextWithOffset(LayoutText* layout_text,
   // Relocates |ShapeResult| in |previous_data| after |offset|+|length|
   editor.Run();
   node.SegmentText(data);
-  if (previous_data->shaping_state_ == NGInlineNodeData::kShapingDone) {
+  if (previous_data->IsShapingDone()) {
     node.ShapeTextIncludingFirstLine(NGInlineNodeData::kShapingDone, data,
                                      &previous_data->text_content,
                                      &previous_data->items);
@@ -1438,8 +1461,7 @@ void NGInlineNode::ShapeText(NGInlineItemsData* data,
 
     // Shape each item with the full context of the entire node.
     scoped_refptr<ShapeResult> shape_result;
-    if (MutableData() &&
-        MutableData()->shaping_state_ == NGInlineNodeData::kShapingDeferred &&
+    if (MutableData() && MutableData()->IsShapingDeferred() &&
         font.PrimaryFont()) {
       unsigned length = end_offset - start_item.StartOffset();
       shape_result = ShapeResult::CreateForSpacesWithPerGlyphWidth(
@@ -1565,14 +1587,21 @@ void NGInlineNode::ShapeTextIncludingFirstLine(
   DCHECK_NE(new_state, NGInlineNodeData::kShapingNone);
   data->shaping_state_ = new_state;
 #if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID)
-  ShapeText(data, previous_text, previous_items);
-  ShapeTextForFirstLineIfNeeded(data);
+  // Because |ElapsedTimer| causes notable speed regression on Android and
+  // ChromeOS, we don't use it. See http://crbug.com/1261519
 #else
-  base::ElapsedTimer shaping_timer;
+  struct ShapeTextTimingScope final {
+    ~ShapeTextTimingScope() {
+      FontPerformance::AddShapingTime(shaping_timer.Elapsed());
+    }
+    base::ElapsedTimer shaping_timer;
+  };
+
+  ShapeTextTimingScope shape_text_timing_scope;
+#endif
+
   ShapeText(data, previous_text, previous_items);
   ShapeTextForFirstLineIfNeeded(data);
-  FontPerformance::AddShapingTime(shaping_timer.Elapsed());
-#endif
 }
 
 void NGInlineNode::AssociateItemsWithInlines(NGInlineNodeData* data) const {
@@ -1610,13 +1639,14 @@ void NGInlineNode::AssociateItemsWithInlines(NGInlineNodeData* data) const {
 const NGLayoutResult* NGInlineNode::Layout(
     const NGConstraintSpace& constraint_space,
     const NGBreakToken* break_token,
+    const NGColumnSpannerPath* column_spanner_path,
     NGInlineChildLayoutContext* context) const {
   PrepareLayoutIfNeeded();
   ShapeTextOrDefer(constraint_space);
 
   const auto* inline_break_token = To<NGInlineBreakToken>(break_token);
   NGInlineLayoutAlgorithm algorithm(*this, constraint_space, inline_break_token,
-                                    context);
+                                    column_spanner_path, context);
   return algorithm.Layout();
 }
 
@@ -1681,10 +1711,10 @@ static LayoutUnit ComputeContentSize(
   NGPositionedFloatVector empty_leading_floats;
   NGLineLayoutOpportunity line_opportunity(available_inline_size);
   LayoutUnit result;
-  NGLineBreaker line_breaker(node, mode, space, line_opportunity,
-                             empty_leading_floats,
-                             /* handled_leading_floats_index */ 0u,
-                             /* break_token */ nullptr, &empty_exclusion_space);
+  NGLineBreaker line_breaker(
+      node, mode, space, line_opportunity, empty_leading_floats,
+      /* handled_leading_floats_index */ 0u, /* break_token */ nullptr,
+      /* column_spanner_path */ nullptr, &empty_exclusion_space);
   line_breaker.SetIntrinsicSizeOutputs(max_size_cache,
                                        depends_on_block_constraints_out);
   const NGInlineItemsData& items_data = line_breaker.ItemsData();
@@ -1900,7 +1930,7 @@ static LayoutUnit ComputeContentSize(
       const MinMaxSizesResult child_result =
           ComputeMinAndMaxContentContribution(style, float_node, float_space);
       LayoutUnit child_inline_margins =
-          ComputeMinMaxMargins(style, float_node).InlineSum();
+          ComputeMarginsFor(float_space, float_node.Style(), space).InlineSum();
 
       if (depends_on_block_constraints_out) {
         *depends_on_block_constraints_out |=
@@ -1993,6 +2023,34 @@ MinMaxSizesResult NGInlineNode::ComputeMinMaxSizes(
 bool NGInlineNode::UseFirstLineStyle() const {
   return GetLayoutBox() &&
          GetLayoutBox()->GetDocument().GetStyleEngine().UsesFirstLineRules();
+}
+
+bool NGInlineNode::ShouldBeReshaped() const {
+  if (!Data().IsShapingDeferred())
+    return false;
+  if (const auto* context = GetDisplayLockContext()) {
+    if (context->IsLocked())
+      return false;
+    // Need to check the request queue because
+    // 1. ShapeTextOrDefer() in ComputeMinMaxSizes() requested to lock an
+    //    element.
+    // 2. ShapeTextOrDefer() in Layout() calls this function before handling
+    //    the request queue.
+    return !GetLayoutBox()->GetFrameView()->LockDeferredRequested(
+        *To<Element>(GetDOMNode()));
+  }
+  // This is deferred, but not locked yet.
+  return false;
+}
+
+DisplayLockContext* NGInlineNode::GetDisplayLockContext() const {
+  return GetLayoutBox()->GetDisplayLockContext();
+}
+
+bool NGInlineNode::IsDisplayLocked() const {
+  if (const auto* context = GetDisplayLockContext())
+    return context->IsLocked();
+  return false;
 }
 
 void NGInlineNode::CheckConsistency() const {

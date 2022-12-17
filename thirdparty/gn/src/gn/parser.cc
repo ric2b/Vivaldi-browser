@@ -181,19 +181,20 @@ Scopes
 
   All execution happens in the context of a scope which holds the current state
   (like variables). With the exception of loops and conditions, '{' introduces
-  a new scope that has a parent reference to the old scope.
+  a new scope.
 
-  Variable reads recursively search all nested scopes until the variable is
-  found or there are no more scopes. Variable writes always go into the current
-  scope. This means that after the closing '}' (again excepting loops and
-  conditions), all local variables will be restored to the previous values.
-  This also means that "foo = foo" can do useful work by copying a variable
-  into the current scope that was defined in a containing scope.
+  Most scopes have a parent reference to the old scope. Variable reads
+  recursively search all parent scopes until the variable is found or there are
+  no more scopes. Variable writes always go into the current scope. This means
+  that after the closing '}' (again excepting loops and conditions), all local
+  variables will be restored to the previous values.  This also means that "foo
+  = foo" can do useful work by copying a variable into the current scope that
+  was defined in a containing scope.
 
-  Scopes can also be assigned to variables. Such scopes can be created by
-  functions like exec_script, when invoking a template (the template code
-  refers to the variables set by the invoking code by the implicitly-created
-  "invoker" scope), or explicitly like:
+  Scopes can be assigned to variables. Examples of such scopes are the
+  implicitly-created "invoker" when invoking a template (which refers to the
+  variables set by the invoking code), scopes created by functions like
+  exec_script, and scopes explicitly created like
 
     empty_scope = {}
     myvalues = {
@@ -201,10 +202,14 @@ Scopes
       bar = "something"
     }
 
-  Inside such a scope definition can be any GN code including conditionals and
-  function calls. After the close of the scope, it will contain all variables
-  explicitly set by the code contained inside it. After this, the values can be
-  read, modified, or added to:
+  In the case of explicitly created scopes and scopes created by functions like
+  exec_script, there is no reference to the parent scope. Such scopes are fully
+  self-contained and do not "inherit" values from their defining scope.
+
+  Inside an explicit scope definition can be any GN code including conditionals
+  and function calls. After the close of the scope, it will contain all
+  variables explicitly set by the code contained inside it. After this, the
+  values can be read, modified, or added to:
 
     myvalues.foo += 2
     empty_scope.new_thing = [ 1, 2, 3 ]
@@ -472,7 +477,7 @@ std::unique_ptr<ParseNode> Parser::BlockComment(const Token& token) {
   std::unique_ptr<BlockCommentNode> comment =
       std::make_unique<BlockCommentNode>();
   comment->set_comment(token);
-  return std::move(comment);
+  return comment;
 }
 
 std::unique_ptr<ParseNode> Parser::Group(const Token& token) {
@@ -495,7 +500,7 @@ std::unique_ptr<ParseNode> Parser::Not(const Token& token) {
   std::unique_ptr<UnaryOpNode> unary_op = std::make_unique<UnaryOpNode>();
   unary_op->set_op(token);
   unary_op->set_operand(std::move(expr));
-  return std::move(unary_op);
+  return unary_op;
 }
 
 std::unique_ptr<ParseNode> Parser::List(const Token& node) {
@@ -521,7 +526,7 @@ std::unique_ptr<ParseNode> Parser::BinaryOperator(
   binary_op->set_op(token);
   binary_op->set_left(std::move(left));
   binary_op->set_right(std::move(right));
-  return std::move(binary_op);
+  return binary_op;
 }
 
 std::unique_ptr<ParseNode> Parser::IdentifierOrCall(
@@ -562,7 +567,7 @@ std::unique_ptr<ParseNode> Parser::IdentifierOrCall(
   func_call->set_args(std::move(list));
   if (block)
     func_call->set_block(std::move(block));
-  return std::move(func_call);
+  return func_call;
 }
 
 std::unique_ptr<ParseNode> Parser::Assignment(std::unique_ptr<ParseNode> left,
@@ -583,7 +588,7 @@ std::unique_ptr<ParseNode> Parser::Assignment(std::unique_ptr<ParseNode> left,
   assign->set_op(token);
   assign->set_left(std::move(left));
   assign->set_right(std::move(value));
-  return std::move(assign);
+  return assign;
 }
 
 std::unique_ptr<ParseNode> Parser::Subscript(std::unique_ptr<ParseNode> left,
@@ -603,7 +608,7 @@ std::unique_ptr<ParseNode> Parser::Subscript(std::unique_ptr<ParseNode> left,
   std::unique_ptr<AccessorNode> accessor = std::make_unique<AccessorNode>();
   accessor->set_base(left->AsIdentifier()->value());
   accessor->set_subscript(std::move(value));
-  return std::move(accessor);
+  return accessor;
 }
 
 std::unique_ptr<ParseNode> Parser::DotOperator(std::unique_ptr<ParseNode> left,
@@ -629,7 +634,7 @@ std::unique_ptr<ParseNode> Parser::DotOperator(std::unique_ptr<ParseNode> left,
   accessor->set_base(left->AsIdentifier()->value());
   accessor->set_member(std::unique_ptr<IdentifierNode>(
       static_cast<IdentifierNode*>(right.release())));
-  return std::move(accessor);
+  return accessor;
 }
 
 // Does not Consume the start or end token.
@@ -699,7 +704,7 @@ std::unique_ptr<ParseNode> Parser::ParseFile() {
   // ignorant of them.
   AssignComments(file.get());
 
-  return std::move(file);
+  return file;
 }
 
 std::unique_ptr<ParseNode> Parser::ParseStatement() {
@@ -769,7 +774,7 @@ std::unique_ptr<ParseNode> Parser::ParseCondition() {
   }
   if (has_error())
     return std::unique_ptr<ParseNode>();
-  return std::move(condition);
+  return condition;
 }
 
 void Parser::TraverseOrder(const ParseNode* root,

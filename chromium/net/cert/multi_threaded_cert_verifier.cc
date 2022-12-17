@@ -9,7 +9,6 @@
 #include "base/check_op.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/trace_event/trace_event.h"
@@ -235,6 +234,7 @@ int MultiThreadedCertVerifier::Verify(const RequestParams& params,
 }
 
 void MultiThreadedCertVerifier::SetConfig(const CertVerifier::Config& config) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   LOG_IF(DFATAL, verify_proc_ &&
                      !verify_proc_->SupportsAdditionalTrustAnchors() &&
                      !config.additional_trust_anchors.empty())

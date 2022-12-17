@@ -30,18 +30,25 @@ class TraceLog {
   TraceLog() { events_.reserve(16384); }
   // Trace items leaked intentionally.
 
-  void Add(TraceItem* item) {
+  void Add(std::unique_ptr<TraceItem> item) {
     std::lock_guard<std::mutex> lock(lock_);
-    events_.push_back(item);
+    events_.push_back(std::move(item));
   }
 
   // Returns a copy for threadsafety.
-  std::vector<TraceItem*> events() const { return events_; }
+  std::vector<TraceItem*> events() const {
+    std::vector<TraceItem*> events;
+    std::lock_guard<std::mutex> lock(lock_);
+    events.reserve(events_.size());
+    for (const auto& e : events_)
+      events.push_back(e.get());
+    return events;
+  }
 
  private:
-  std::mutex lock_;
+  mutable std::mutex lock_;
 
-  std::vector<TraceItem*> events_;
+  std::vector<std::unique_ptr<TraceItem>> events_;
 
   TraceLog(const TraceLog&) = delete;
   TraceLog& operator=(const TraceLog&) = delete;
@@ -120,18 +127,17 @@ TraceItem::TraceItem(Type type,
 TraceItem::~TraceItem() = default;
 
 ScopedTrace::ScopedTrace(TraceItem::Type t, const std::string& name)
-    : item_(nullptr), done_(false) {
+    : done_(false) {
   if (trace_log) {
-    item_ = new TraceItem(t, name, std::this_thread::get_id());
+    item_ = std::make_unique<TraceItem>(t, name, std::this_thread::get_id());
     item_->set_begin(TicksNow());
   }
 }
 
-ScopedTrace::ScopedTrace(TraceItem::Type t, const Label& label)
-    : item_(nullptr), done_(false) {
+ScopedTrace::ScopedTrace(TraceItem::Type t, const Label& label) : done_(false) {
   if (trace_log) {
-    item_ = new TraceItem(t, label.GetUserVisibleName(false),
-                          std::this_thread::get_id());
+    item_ = std::make_unique<TraceItem>(t, label.GetUserVisibleName(false),
+                                        std::this_thread::get_id());
     item_->set_begin(TicksNow());
   }
 }
@@ -155,7 +161,7 @@ void ScopedTrace::Done() {
     done_ = true;
     if (trace_log) {
       item_->set_end(TicksNow());
-      AddTrace(item_);
+      AddTrace(std::move(item_));
     }
   }
 }
@@ -169,8 +175,8 @@ bool TracingEnabled() {
   return !!trace_log;
 }
 
-void AddTrace(TraceItem* item) {
-  trace_log->Add(item);
+void AddTrace(std::unique_ptr<TraceItem> item) {
+  trace_log->Add(std::move(item));
 }
 
 std::string SummarizeTraces() {
@@ -244,19 +250,27 @@ void SaveTraces(const base::FilePath& file_name) {
 
   std::string quote_buffer;  // Allocate outside loop to prevent reallocationg.
 
+  // Trace viewer doesn't handle integer > 2^53 well, so re-numbering them to
+  // small numbers.
+  std::map<std::thread::id, int> tidmap;
+  std::vector<TraceItem*> events = trace_log->events();
+  for (const auto* item : events) {
+    int id = tidmap.size();
+    tidmap.emplace(item->thread_id(), id);
+  }
+
   // Write main thread metadata (assume this is being written on the main
   // thread).
-  out << "{\"pid\":0,\"tid\":\"" << std::this_thread::get_id() << "\"";
+  out << "{\"pid\":0,\"tid\":\"" << tidmap[std::this_thread::get_id()] << "\"";
   out << ",\"ts\":0,\"ph\":\"M\",";
   out << "\"name\":\"thread_name\",\"args\":{\"name\":\"Main thread\"}},";
 
-  std::vector<TraceItem*> events = trace_log->events();
   for (size_t i = 0; i < events.size(); i++) {
     const TraceItem& item = *events[i];
 
     if (i != 0)
       out << ",";
-    out << "{\"pid\":0,\"tid\":\"" << item.thread_id() << "\"";
+    out << "{\"pid\":0,\"tid\":\"" << tidmap[item.thread_id()] << "\"";
     out << ",\"ts\":" << item.begin() / kNanosecondsToMicroseconds;
     out << ",\"ph\":\"X\"";  // "X" = complete event with begin & duration.
     out << ",\"dur\":" << item.delta().InMicroseconds();

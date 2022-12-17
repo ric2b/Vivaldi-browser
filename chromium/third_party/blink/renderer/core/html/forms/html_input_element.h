@@ -33,7 +33,6 @@
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/dom/create_element_flags.h"
 #include "third_party/blink/renderer/core/dom/events/simulated_click_options.h"
-#include "third_party/blink/renderer/core/html/forms/file_chooser.h"
 #include "third_party/blink/renderer/core/html/forms/step_range.h"
 #include "third_party/blink/renderer/core/html/forms/text_control_element.h"
 
@@ -324,7 +323,8 @@ class CORE_EXPORT HTMLInputElement
   void SetShouldRevealPassword(bool value);
   bool ShouldRevealPassword() const { return should_reveal_password_; }
 #if BUILDFLAG(IS_ANDROID)
-  void DispatchSimulatedEnterIfLastInputInForm();
+  bool IsLastInputElementInForm();
+  void DispatchSimulatedEnter();
 #endif
   AXObject* PopupRootAXObject();
   void DidNotifySubtreeInsertionsToDocument() override;
@@ -408,7 +408,6 @@ class CORE_EXPORT HTMLInputElement
 
   void CloneNonAttributePropertiesFrom(const Element&, CloneChildrenFlag) final;
 
-  bool TypeShouldForceLegacyLayout() const final;
   void AttachLayoutTree(AttachContext&) final;
 
   void AppendToFormData(FormData&) final;

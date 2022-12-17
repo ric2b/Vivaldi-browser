@@ -20,6 +20,7 @@
 #include "components/sessions/content/session_tab_helper.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/web_contents.h"
 #include "google_apis/google_api_keys.h"
 #include "net/base/escape.h"
@@ -39,19 +40,25 @@ const char PPAPIDownloadRequest::kDownloadRequestUrl[] =
 
 PPAPIDownloadRequest::PPAPIDownloadRequest(
     const GURL& requestor_url,
-    const GURL& initiating_frame_url,
-    content::WebContents* web_contents,
+    content::RenderFrameHost* initiating_frame,
     const base::FilePath& default_file_path,
     const std::vector<base::FilePath::StringType>& alternate_extensions,
     Profile* profile,
     CheckDownloadCallback callback,
     DownloadProtectionService* service,
     scoped_refptr<SafeBrowsingDatabaseManager> database_manager)
-    : requestor_url_(requestor_url),
-      initiating_frame_url_(initiating_frame_url),
+    : content::WebContentsObserver(
+          content::WebContents::FromRenderFrameHost(initiating_frame)),
+      requestor_url_(requestor_url),
+      initiating_frame_url_(
+          initiating_frame ? initiating_frame->GetLastCommittedURL() : GURL()),
+      initiating_outermost_main_frame_id_(
+          initiating_frame
+              ? initiating_frame->GetOutermostMainFrame()->GetGlobalId()
+              : content::GlobalRenderFrameHostId()),
       initiating_main_frame_url_(
-          web_contents ? web_contents->GetLastCommittedURL() : GURL()),
-      tab_id_(sessions::SessionTabHelper::IdForTab(web_contents)),
+          web_contents() ? web_contents()->GetLastCommittedURL() : GURL()),
+      tab_id_(sessions::SessionTabHelper::IdForTab(web_contents())),
       default_file_path_(default_file_path),
       alternate_extensions_(alternate_extensions),
       callback_(std::move(callback)),
@@ -60,25 +67,22 @@ PPAPIDownloadRequest::PPAPIDownloadRequest(
       start_time_(base::TimeTicks::Now()),
       supported_path_(
           GetSupportedFilePath(default_file_path, alternate_extensions)),
-      profile_(profile),
-      web_contents_(web_contents) {
+      profile_(profile) {
   DCHECK(profile);
   is_extended_reporting_ = IsExtendedReportingEnabled(*profile->GetPrefs());
   is_enhanced_protection_ = IsEnhancedProtectionEnabled(*profile->GetPrefs());
 
   // web_contents can be null in tests.
-  if (!web_contents) {
+  if (!web_contents()) {
     return;
   }
 
-  Observe(web_contents);
-
   SafeBrowsingNavigationObserverManager* observer_manager =
-      service->GetNavigationObserverManager(web_contents);
+      service->GetNavigationObserverManager(web_contents());
   if (observer_manager) {
-    has_user_gesture_ = observer_manager->HasUserGesture(web_contents);
+    has_user_gesture_ = observer_manager->HasUserGesture(web_contents());
     if (has_user_gesture_) {
-      observer_manager->OnUserGestureConsumed(web_contents);
+      observer_manager->OnUserGestureConsumed(web_contents());
     }
   }
 }
@@ -208,7 +212,8 @@ void PPAPIDownloadRequest::SendRequest() {
   }
 
   service_->AddReferrerChainToPPAPIClientDownloadRequest(
-      web_contents_, initiating_frame_url_, initiating_main_frame_url_, tab_id_,
+      web_contents(), initiating_frame_url_,
+      initiating_outermost_main_frame_id_, initiating_main_frame_url_, tab_id_,
       has_user_gesture_, &request);
 
   if (!request.SerializeToString(&client_download_request_data_)) {

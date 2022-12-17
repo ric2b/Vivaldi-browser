@@ -27,6 +27,8 @@ import org.chromium.ui.base.ViewUtils;
 // Vivaldi
 import android.content.Intent;
 
+import org.chromium.chrome.browser.ChromeApplicationImpl;
+
 import org.vivaldi.browser.common.VivaldiUtils;
 import org.vivaldi.browser.sync.VivaldiSyncActivity;
 import org.vivaldi.browser.sync.VivaldiSyncService;
@@ -96,7 +98,8 @@ public class RecentTabsPage
 
         mView.addOnAttachStateChangeListener(this);
 
-        if (!DeviceFormFactor.isNonMultiDisplayContextOnTablet(mActivity)) {
+        if (!DeviceFormFactor.isNonMultiDisplayContextOnTablet(mActivity) // Vivaldi
+                || ChromeApplicationImpl.isVivaldi()) {
             mBrowserControlsStateProvider = browserControlsStateProvider;
             mBrowserControlsStateProvider.addObserver(this);
             onBottomControlsHeightChanged(mBrowserControlsStateProvider.getBottomControlsHeight(),

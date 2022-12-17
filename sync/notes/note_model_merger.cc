@@ -11,8 +11,10 @@
 #include "base/containers/contains.h"
 #include "base/guid.h"
 #include "base/logging.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "components/sync/protocol/entity_metadata.pb.h"
 #include "components/sync/protocol/entity_specifics.pb.h"
 #include "components/sync/protocol/notes_specifics.pb.h"
 #include "components/sync_bookmarks/switches.h"
@@ -20,6 +22,7 @@
 #include "notes/notes_model.h"
 #include "sync/notes/note_specifics_conversions.h"
 #include "sync/notes/synced_note_tracker.h"
+#include "sync/notes/synced_note_tracker_entity.h"
 #include "sync/vivaldi_hash_util.h"
 #include "ui/base/models/tree_node_iterator.h"
 
@@ -404,8 +407,7 @@ NoteModelMerger::RemoteTreeNode NoteModelMerger::RemoteTreeNode::BuildTree(
   }
 
   // Sort the children according to their unique position.
-  std::sort(node.children_.begin(), node.children_.end(),
-            UniquePositionLessThan);
+  base::ranges::sort(node.children_, UniquePositionLessThan);
 
   return node;
 }
@@ -573,16 +575,14 @@ NoteModelMerger::FindGuidMatchesOrReassignLocal(
       continue;
     }
 
-    bool success =
+    const bool success =
         guid_to_match_map.emplace(node->guid(), GuidMatch{node, remote_node})
             .second;
 
     // Insertion must have succeeded unless there were duplicate GUIDs in the
     // local NotesModel (invariant violation that gets resolved upon
     // restart).
-    // TODO(crbug.com/516866): The below CHECK is added to debug some crashes.
-    // Should be converted to a DCHECK after the root cause if found.
-    CHECK(success);
+    DCHECK(success);
   }
 
   for (const vivaldi::NoteNode* node : nodes_to_replace_guid) {
@@ -595,7 +595,7 @@ NoteModelMerger::FindGuidMatchesOrReassignLocal(
 void NoteModelMerger::MergeSubtree(const vivaldi::NoteNode* local_subtree_root,
                                    const RemoteTreeNode& remote_node) {
   const EntityData& remote_update_entity = remote_node.entity();
-  const SyncedNoteTracker::Entity* entity = note_tracker_->Add(
+  const SyncedNoteTrackerEntity* entity = note_tracker_->Add(
       local_subtree_root, remote_update_entity.id,
       remote_node.response_version(), remote_update_entity.creation_time,
       remote_update_entity.specifics);
@@ -748,7 +748,7 @@ void NoteModelMerger::ProcessRemoteCreation(
   const vivaldi::NoteNode* note_node = CreateNoteNodeFromSpecifics(
       specifics.notes(), local_parent, index, notes_model_);
   DCHECK(note_node);
-  const SyncedNoteTracker::Entity* entity = note_tracker_->Add(
+  const SyncedNoteTrackerEntity* entity = note_tracker_->Add(
       note_node, remote_update_entity.id, remote_node.response_version(),
       remote_update_entity.creation_time, specifics);
   const bool is_reupload_needed =
@@ -780,7 +780,7 @@ void NoteModelMerger::ProcessRemoteCreation(
 void NoteModelMerger::ProcessLocalCreation(const vivaldi::NoteNode* parent,
                                            size_t index) {
   DCHECK_LE(index, parent->children().size());
-  const SyncedNoteTracker::Entity* parent_entity =
+  const SyncedNoteTrackerEntity* parent_entity =
       note_tracker_->GetEntityForNoteNode(parent);
   // Since we are merging top down, parent entity must be tracked.
   DCHECK(parent_entity);
@@ -805,7 +805,7 @@ void NoteModelMerger::ProcessLocalCreation(const vivaldi::NoteNode* parent,
       GenerateUniquePositionForLocalCreation(parent, index, suffix);
   const sync_pb::EntitySpecifics specifics =
       CreateSpecificsFromNoteNode(node, notes_model_, pos.ToProto());
-  const SyncedNoteTracker::Entity* entity = note_tracker_->Add(
+  const SyncedNoteTrackerEntity* entity = note_tracker_->Add(
       node, sync_id, server_version, creation_time, specifics);
   // Mark the entity that it needs to be committed.
   note_tracker_->IncrementSequenceNumber(entity);
@@ -888,7 +888,7 @@ syncer::UniquePosition NoteModelMerger::GenerateUniquePositionForLocalCreation(
   // one as it might be skipped if it has unprocessed remote matching by GUID
   // update.
   for (size_t i = index; i > 0; --i) {
-    const SyncedNoteTracker::Entity* predecessor_entity =
+    const SyncedNoteTrackerEntity* predecessor_entity =
         note_tracker_->GetEntityForNoteNode(parent->children()[i - 1].get());
     if (predecessor_entity != nullptr) {
       return syncer::UniquePosition::After(

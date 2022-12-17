@@ -4,53 +4,47 @@
 
 #include "media/formats/hls/items.h"
 
-#include <utility>
-
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "media/formats/hls/parse_status.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 
-namespace media {
-namespace hls {
+namespace media::hls {
 
 namespace {
 
-// Attempts to determine tag type, if this line contains a tag.
-absl::optional<TagItem> GetTagItem(SourceString line) {
-  constexpr base::StringPiece kTagPrefix = "#EXT";
+// Determines tag type, which may be known or unknown.
+TagItem GetTagItem(SourceString tag) {
+  // Tags that include content have the name separated by a colon.
+  const auto colon_index = tag.Str().find_first_of(':');
 
-  // If this line does not begin with #EXT prefix, it must be a comment.
-  if (!base::StartsWith(line.Str(), kTagPrefix)) {
-    return absl::nullopt;
+  // Extract name and content
+  const auto name_str = tag.Substr(0, colon_index);
+
+  absl::optional<SourceString> content;
+  if (colon_index != base::StringPiece::npos) {
+    content = tag.Substr(colon_index + 1);
   }
 
-  auto content = line.Substr(kTagPrefix.size());
-
-  constexpr std::pair<base::StringPiece, TagKind> kTagKindPrefixes[] = {
-      {"M3U", TagKind::kM3u},
-      {"-X-VERSION:", TagKind::kXVersion},
-      {"INF:", TagKind::kInf},
-      {"-X-INDEPENDENT-SEGMENTS", TagKind::kXIndependentSegments},
-      {"-X-END-LIST", TagKind::kXEndList},
-      {"-X-I-FRAMES-ONLY", TagKind::kXIFramesOnly},
-      {"-X-DISCONTINUITY", TagKind::kXDiscontinuity},
-      {"-X-GAP", TagKind::kXGap},
-      {"-X-DEFINE:", TagKind::kXDefine},
-  };
-
-  for (const auto& tag : kTagKindPrefixes) {
-    if (base::StartsWith(content.Str(), tag.first)) {
-      content = content.Substr(tag.first.size());
-      return TagItem{.kind = tag.second, .content = content};
-    }
+  auto name = ParseTagName(name_str.Str());
+  if (name.has_value()) {
+    return content ? TagItem::Create(*name, *content)
+                   : TagItem::CreateEmpty(*name, tag.Line());
   }
 
-  return TagItem{.kind = TagKind::kUnknown, .content = content};
+  return TagItem::CreateUnknown(name_str);
 }
 
 }  // namespace
+
+base::StringPiece TagItem::GetNameStr() {
+  if (!name_.has_value()) {
+    return content_or_name_->Str();
+  }
+
+  return TagNameToString(*name_);
+}
 
 ParseStatus::Or<GetNextLineItemResult> GetNextLineItem(
     SourceLineIterator* src) {
@@ -68,14 +62,16 @@ ParseStatus::Or<GetNextLineItemResult> GetNextLineItem(
       continue;
     }
 
-    // Tags and comments start with '#', try to get a tag
+    // Tags and comments start with '#'
     if (line.Str().front() == '#') {
-      auto tag = GetTagItem(line);
-      if (!tag.has_value()) {
-        continue;
+      line.Consume(1);
+
+      // All tags begin with "EXT", otherwise it's a comment.
+      if (base::StartsWith(line.Str(), "EXT")) {
+        return GetNextLineItemResult{GetTagItem(line)};
       }
 
-      return GetNextLineItemResult{std::move(tag).value()};
+      continue;
     }
 
     // If not empty, tag, or comment, it must be a URI.
@@ -85,5 +81,4 @@ ParseStatus::Or<GetNextLineItemResult> GetNextLineItem(
   }
 }
 
-}  // namespace hls
-}  // namespace media
+}  // namespace media::hls

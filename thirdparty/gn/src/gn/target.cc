@@ -43,7 +43,7 @@ void MergeAllDependentConfigsFrom(const Target* from_target,
   }
 }
 
-Err MakeTestOnlyError(const Target* from, const Target* to) {
+Err MakeTestOnlyError(const Item* from, const Item* to) {
   return Err(
       from->defined_from(), "Test-only dependency not allowed.",
       from->label().GetUserVisibleName(false) +
@@ -760,48 +760,45 @@ void Target::PullDependentTargetLibsFrom(const Target* dep, bool is_public) {
   if (dep->output_type() == STATIC_LIBRARY ||
       dep->output_type() == SHARED_LIBRARY ||
       dep->output_type() == RUST_LIBRARY ||
-      dep->output_type() == RUST_PROC_MACRO ||
       dep->output_type() == SOURCE_SET ||
       (dep->output_type() == CREATE_BUNDLE &&
        dep->bundle_data().is_framework())) {
     inherited_libraries_.Append(dep, is_public);
   }
 
+  // Collect Rust libraries that are accessible from the current target, or
+  // transitively part of the current target.
   if (dep->output_type() == STATIC_LIBRARY ||
       dep->output_type() == SHARED_LIBRARY ||
-      dep->output_type() == RUST_LIBRARY) {
-    rust_transitive_libs_.Append(dep, is_public);
+      dep->output_type() == SOURCE_SET || dep->output_type() == RUST_LIBRARY ||
+      dep->output_type() == GROUP) {
+    // Here we have: `this` --[depends-on]--> `dep`
+    //
+    // The `this` target has direct access to `dep` since its a direct
+    // dependency, regardless of the edge being a public_dep or not, so we pass
+    // true for public-ness. Whereas, anything depending on `this` can only gain
+    // direct access to `dep` if the edge between `this` and `dep` is public, so
+    // we pass `is_public`.
+    //
+    // TODO(danakj): We should only need to track Rust rlibs or dylibs here, as
+    // it's used for passing to rustc with --extern. We currently track
+    // everything then drop non-Rust libs in ninja_rust_binary_target_writer.cc.
+    rust_transitive_inherited_libs_.Append(dep, true);
+    rust_transitive_inheritable_libs_.Append(dep, is_public);
 
-    // Propagate public dependent libraries.
-    for (const auto& transitive :
-         dep->rust_transitive_libs_.GetOrderedAndPublicFlag()) {
-      if (transitive.second) {
-        rust_transitive_libs_.Append(transitive.first, is_public);
-      }
-    }
+    rust_transitive_inherited_libs_.AppendInherited(
+        dep->rust_transitive_inheritable_libs(), true);
+    rust_transitive_inheritable_libs_.AppendInherited(
+        dep->rust_transitive_inheritable_libs(), is_public);
+  } else if (dep->output_type() == RUST_PROC_MACRO) {
+    // Proc-macros are inherited as a transitive dependency, but the things they
+    // depend on can't be used elsewhere, as the proc macro is not linked into
+    // the target (as it's only used during compilation).
+    rust_transitive_inherited_libs_.Append(dep, true);
+    rust_transitive_inheritable_libs_.Append(dep, is_public);
   }
 
-  // Rust libraries (those meant for consumption by another Rust target) are
-  // handled the same way, whether static or dynamic.
-  if (dep->output_type() == RUST_LIBRARY ||
-      RustValues::InferredCrateType(dep) == RustValues::CRATE_DYLIB) {
-    rust_transitive_libs_.AppendInherited(dep->rust_transitive_libs_,
-                                          is_public);
-
-    // If there is a transitive dependency that is not a rust library, place it
-    // in the normal location
-    for (const auto& inherited :
-         rust_transitive_libs_.GetOrderedAndPublicFlag()) {
-      if (!RustValues::IsRustLibrary(inherited.first)) {
-        inherited_libraries_.Append(inherited.first, inherited.second);
-      }
-    }
-  } else if (dep->output_type() == RUST_PROC_MACRO) {
-    // We will need to specify the path to find a procedural macro,
-    // but have no need to specify the paths to find its dependencies
-    // as the procedural macro is now a complete .so.
-    rust_transitive_libs_.Append(dep, is_public);
-  } else if (dep->output_type() == SHARED_LIBRARY) {
+  if (dep->output_type() == SHARED_LIBRARY) {
     // Shared library dependendencies are inherited across public shared
     // library boundaries.
     //
@@ -824,24 +821,37 @@ void Target::PullDependentTargetLibsFrom(const Target* dep, bool is_public) {
     // resolved by the compiler.
     inherited_libraries_.AppendPublicSharedLibraries(dep->inherited_libraries(),
                                                      is_public);
-  } else if (!dep->IsFinal()) {
-    // The current target isn't linked, so propagate linked deps and
-    // libraries up the dependency tree.
-    inherited_libraries_.AppendInherited(dep->inherited_libraries(), is_public);
-    rust_transitive_libs_.AppendInherited(dep->rust_transitive_libs_,
-                                          is_public);
-  } else if (dep->complete_static_lib()) {
-    // Inherit only final targets through _complete_ static libraries.
-    //
-    // Inherited final libraries aren't linked into complete static libraries.
-    // They are forwarded here so that targets that depend on complete
-    // static libraries can link them in. Conversely, since complete static
-    // libraries link in non-final targets they shouldn't be inherited.
-    for (const auto& inherited :
-         dep->inherited_libraries().GetOrderedAndPublicFlag()) {
-      if (inherited.first->IsFinal()) {
-        inherited_libraries_.Append(inherited.first,
-                                    is_public && inherited.second);
+  } else {
+    InheritedLibraries transitive;
+
+    if (!dep->IsFinal()) {
+      // The current target isn't linked, so propagate linked deps and
+      // libraries up the dependency tree.
+      for (const auto& [inherited, inherited_is_public] :
+           dep->inherited_libraries().GetOrderedAndPublicFlag()) {
+        transitive.Append(inherited, is_public && inherited_is_public);
+      }
+    } else if (dep->complete_static_lib()) {
+      // Inherit only final targets through _complete_ static libraries.
+      //
+      // Inherited final libraries aren't linked into complete static libraries.
+      // They are forwarded here so that targets that depend on complete
+      // static libraries can link them in. Conversely, since complete static
+      // libraries link in non-final targets they shouldn't be inherited.
+      for (const auto& [inherited, inherited_is_public] :
+           dep->inherited_libraries().GetOrderedAndPublicFlag()) {
+        if (inherited->IsFinal()) {
+          transitive.Append(inherited, is_public && inherited_is_public);
+        }
+      }
+    }
+
+    for (const auto& [target, pub] : transitive.GetOrderedAndPublicFlag()) {
+      // Proc macros are not linked into targets that depend on them, so do not
+      // get inherited; they are consumed by the Rust compiler and only need to
+      // be specified in --extern.
+      if (target->output_type() != RUST_PROC_MACRO) {
+        inherited_libraries_.Append(target, pub);
       }
     }
   }
@@ -879,7 +889,7 @@ void Target::PullRecursiveHardDeps() {
     // by the current target).
     if (pair.ptr->IsBinary() && !pair.ptr->all_headers_public() &&
         pair.ptr->public_headers().empty() &&
-        !pair.ptr->swift_values().builds_module()) {
+        !pair.ptr->builds_swift_module()) {
       continue;
     }
 
@@ -996,7 +1006,7 @@ bool Target::FillOutputFiles(Err* err) {
           SubstitutionWriter::ApplyListToLinkerAsOutputFile(
               this, tool, tool->runtime_outputs(), &runtime_outputs_);
         }
-      } else if (const RustTool* rstool = tool->AsRust()) {
+      } else if (tool->AsRust()) {
         // Default behavior, use the first output file for both.
         link_output_file_ = dependency_output_file_ =
             SubstitutionWriter::ApplyPatternToLinkerAsOutputFile(
@@ -1139,6 +1149,16 @@ bool Target::CheckTestonly(Err* err) const {
     if (pair.ptr->testonly()) {
       *err = MakeTestOnlyError(this, pair.ptr);
       return false;
+    }
+  }
+
+  // Verify no configs have "testonly" set.
+  for (ConfigValuesIterator iter(this); !iter.done(); iter.Next()) {
+    if (const Config* config = iter.GetCurrentConfig()) {
+      if (config->testonly()) {
+        *err = MakeTestOnlyError(this, config);
+        return false;
+      }
     }
   }
 

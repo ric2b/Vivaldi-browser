@@ -25,13 +25,14 @@ class ChromeTabRestoreServiceClient : public sessions::TabRestoreServiceClient {
  private:
   // TabRestoreServiceClient:
   sessions::LiveTabContext* CreateLiveTabContext(
+      sessions::LiveTabContext* existing_context,
       const std::string& app_name,
       const gfx::Rect& bounds,
       ui::WindowShowState show_state,
       const std::string& workspace,
       const std::string& user_title,
       const std::map<std::string, std::string>& extra_data,
-      const std::string& ext_data) override;
+      const std::string& viv_ext_data) override;
   sessions::LiveTabContext* FindLiveTabContextForTab(
       const sessions::LiveTab* tab) override;
   sessions::LiveTabContext* FindLiveTabContextWithID(

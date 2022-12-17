@@ -6,13 +6,14 @@
 #include <string>
 #include <vector>
 
-#include "app/vivaldi_resources.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/strings/utf_string_conversions.h"
-//#include "chrome/grit/generated_resources.h"
-#include "importer/chrome_importer_utils.h"
+#include "build/build_config.h"
 #include "ui/base/l10n/l10n_util.h"
+
+#include "app/vivaldi_resources.h"
+#include "importer/chrome_importer_utils.h"
 
 using importer::ChromeProfileInfo;
 using importer::ImporterType;
@@ -34,7 +35,7 @@ ChromiumProfileImporter::ChromiumProfileImporter() {
       GetChromeProfile(ImporterType::TYPE_OPERA_OPIUM_BETA));
   chromeProfiles.push_back(
       GetChromeProfile(ImporterType::TYPE_OPERA_OPIUM_DEV));
-#if !defined(OS_MAC)
+#if !BUILDFLAG(IS_MAC)
   chromeProfiles.push_back(GetChromeProfile(ImporterType::TYPE_VIVALDI));
 #endif
 }

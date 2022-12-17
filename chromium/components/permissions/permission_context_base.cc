@@ -13,6 +13,7 @@
 #include "base/callback.h"
 #include "base/logging.h"
 #include "base/metrics/field_trial_params.h"
+#include "base/observer_list.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -129,9 +130,11 @@ void PermissionContextBase::RequestPermission(
     BrowserPermissionCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  GURL requesting_origin = requesting_frame.DeprecatedGetOriginAsURL();
-  GURL embedding_origin =
-      PermissionUtil::GetLastCommittedOriginAsURL(web_contents);
+  content::RenderFrameHost* const rfh = content::RenderFrameHost::FromID(
+      id.render_process_id(), id.render_frame_id());
+  const GURL requesting_origin = requesting_frame.DeprecatedGetOriginAsURL();
+  const GURL embedding_origin =
+      PermissionUtil::GetLastCommittedOriginAsURL(rfh->GetMainFrame());
 
   if (!requesting_origin.is_valid() || !embedding_origin.is_valid()) {
     std::string type_name =
@@ -149,8 +152,7 @@ void PermissionContextBase::RequestPermission(
 
   // Check the content setting to see if the user has already made a decision,
   // or if the origin is under embargo. If so, respect that decision.
-  content::RenderFrameHost* rfh = content::RenderFrameHost::FromID(
-      id.render_process_id(), id.render_frame_id());
+  DCHECK(rfh);
   PermissionResult result =
       GetPermissionStatus(rfh, requesting_origin, embedding_origin);
 

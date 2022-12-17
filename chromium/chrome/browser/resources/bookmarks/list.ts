@@ -8,7 +8,7 @@ import './shared_style.js';
 import './strings.m.js';
 import './item.js';
 
-import {CrA11yAnnouncerElement} from 'chrome://resources/cr_elements/cr_a11y_announcer/cr_a11y_announcer.js';
+import {getInstance as getAnnouncerInstance} from 'chrome://resources/cr_elements/cr_a11y_announcer/cr_a11y_announcer.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
 import {isMac} from 'chrome://resources/js/cr.m.js';
 import {EventTracker} from 'chrome://resources/js/event_tracker.m.js';
@@ -35,7 +35,7 @@ export interface BookmarksListElement {
   $: {
     list: IronListElement,
     message: HTMLDivElement,
-  }
+  };
 }
 
 export class BookmarksListElement extends BookmarksListElementBase {
@@ -90,7 +90,7 @@ export class BookmarksListElement extends BookmarksListElementBase {
   private selectedItems_: Set<string>;
   private boundOnHighlightItems_: (p1: CustomEvent) => void;
 
-  ready() {
+  override ready() {
     super.ready();
     this.addEventListener('click', () => this.deselectItems_());
     this.addEventListener('contextmenu', e => this.onContextMenu_(e));
@@ -99,7 +99,7 @@ export class BookmarksListElement extends BookmarksListElementBase {
         e => this.onOpenCommandMenu_(e as CustomEvent<OpenCommandMenuDetail>));
   }
 
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
 
     const list = this.$.list;
@@ -125,7 +125,7 @@ export class BookmarksListElement extends BookmarksListElementBase {
         document, 'import-ended', () => this.onImportEnded_());
   }
 
-  disconnectedCallback() {
+  override disconnectedCallback() {
     super.disconnectedCallback();
 
     this.eventTracker_.remove(document, 'highlight-items');
@@ -140,7 +140,8 @@ export class BookmarksListElement extends BookmarksListElementBase {
    * allows the iron-list to delete sublists of items which preserves scroll and
    * focus on incremental update.
    */
-  private async onDisplayedIdsChanged_(newValue: string[], oldValue: string[]) {
+  private async onDisplayedIdsChanged_(
+      newValue: string[], _oldValue: string[]) {
     const updatedList = newValue.map(id => ({id: id}));
     let skipFocus = false;
     let selectIndex = -1;
@@ -165,7 +166,7 @@ export class BookmarksListElement extends BookmarksListElementBase {
         new CustomEvent('iron-resize', {bubbles: true, composed: true}));
     const label = await PluralStringProxyImpl.getInstance().getPluralString(
         'listChanged', this.displayedList_.length);
-    CrA11yAnnouncerElement.getInstance().announce(label);
+    getAnnouncerInstance().announce(label);
 
     if (!skipFocus && selectIndex > -1) {
       setTimeout(() => {
@@ -254,13 +255,11 @@ export class BookmarksListElement extends BookmarksListElementBase {
   }
 
   private onImportBegan_() {
-    CrA11yAnnouncerElement.getInstance().announce(
-        loadTimeData.getString('importBegan'));
+    getAnnouncerInstance().announce(loadTimeData.getString('importBegan'));
   }
 
   private onImportEnded_() {
-    CrA11yAnnouncerElement.getInstance().announce(
-        loadTimeData.getString('importEnded'));
+    getAnnouncerInstance().announce(loadTimeData.getString('importEnded'));
   }
 
   private onItemKeydown_(e: KeyboardEvent) {

@@ -90,8 +90,13 @@ enum MouseEventFlags {
                                      // when users is requesting to scroll by
                                      // pages.
   EF_UNADJUSTED_MOUSE = 1 << 24,     // Indicates this mouse event is unadjusted
-                                  // mouse events that has unadjusted movement
-                                  // delta, i.e. is from WM_INPUT on Windows.
+                                     // mouse events that has unadjusted
+                                     // movement delta, i.e. is from WM_INPUT
+                                     // on Windows.
+  EF_NOT_SUITABLE_FOR_MOUSE_WARPING =  // Indicates this mouse event should not
+  1 << 25,                             // trigger mouse warping (which moves the
+                                       // mouse to another display when the
+                                       // mouse hits the window boundaries).
 };
 
 // Result of dispatching an event.
@@ -172,9 +177,11 @@ enum class EventMomentumPhase {
   BLOCKED,
 };
 
-// Device ID for Touch and Key Events.
 enum EventDeviceId {
-  ED_UNKNOWN_DEVICE = -1
+  // Device ID for Touch, Mouse and Key Events.
+  ED_UNKNOWN_DEVICE = -1,
+  // Device ID for events injected through a remote connection (like CRD).
+  ED_REMOTE_INPUT_DEVICE = -2,
 };
 
 // Pointing device type.

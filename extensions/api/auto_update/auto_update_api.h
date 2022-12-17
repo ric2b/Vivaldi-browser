@@ -6,10 +6,11 @@
 #include <memory>
 
 #include "base/version.h"
-#include "extensions/api/auto_update/auto_update_status.h"
+#include "build/build_config.h"
 #include "extensions/browser/extension_function.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
+#include "extensions/api/auto_update/auto_update_status.h"
 #include "vivaldi/extensions/schema/autoupdate.h"
 
 namespace extensions {
@@ -17,13 +18,13 @@ namespace extensions {
 class AutoUpdateAPI {
  public:
   static void Init() {
-#ifdef OS_WIN
+#if BUILDFLAG(IS_WIN)
     InitUpgradeDetection();
 #endif
   }
 
   static void Shutdown() {
-#ifdef OS_WIN
+#if BUILDFLAG(IS_WIN)
     ShutdownUpgradeDetection();
 #endif
   }
@@ -40,7 +41,7 @@ class AutoUpdateAPI {
                                     const std::string& reason);
 
  private:
-#ifdef OS_WIN
+#if BUILDFLAG(IS_WIN)
   static void InitUpgradeDetection();
   static void ShutdownUpgradeDetection();
 #endif

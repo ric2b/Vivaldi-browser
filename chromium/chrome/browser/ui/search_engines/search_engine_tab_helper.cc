@@ -26,6 +26,8 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 
+#include "app/vivaldi_apptools.h"
+
 using content::NavigationController;
 using content::NavigationEntry;
 using content::WebContents;
@@ -110,6 +112,9 @@ SearchEngineTabHelper::SearchEngineTabHelper(WebContents* web_contents)
 void SearchEngineTabHelper::PageHasOpenSearchDescriptionDocument(
     const GURL& page_url,
     const GURL& osdd_url) {
+  if(vivaldi::IsVivaldiRunning())
+    return;
+
   // Checks to see if we should generate a keyword based on the OSDD, and if
   // necessary uses TemplateURLFetcher to download the OSDD and create a
   // keyword.
@@ -180,6 +185,9 @@ void SearchEngineTabHelper::OnFaviconUpdated(
 
 void SearchEngineTabHelper::GenerateKeywordIfNecessary(
     content::NavigationHandle* handle) {
+  if(vivaldi::IsVivaldiRunning())
+    return;
+
   if (!handle->IsInPrimaryMainFrame() ||
       !handle->GetSearchableFormURL().is_valid())
     return;

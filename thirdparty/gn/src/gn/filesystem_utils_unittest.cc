@@ -546,6 +546,8 @@ TEST(FilesystemUtils, RebasePath) {
   EXPECT_EQ("../../../../path/to/foo",
             RebasePath("/c:/path/to/foo", SourceDir("//a/b"),
                        std::string_view("C:/source/root")));
+  EXPECT_EQ("f:/foo.py",
+            RebasePath("/f:/foo.py", SourceDir("/G:/bar/")));
 #endif
 }
 

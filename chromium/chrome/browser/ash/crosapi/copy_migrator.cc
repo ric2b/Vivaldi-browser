@@ -11,7 +11,6 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/timer/elapsed_timer.h"
 #include "chrome/browser/ash/crosapi/browser_data_migrator.h"
@@ -84,7 +83,7 @@ BrowserDataMigratorImpl::MigrationResult CopyMigrator::MigrateInternal(
   browser_data_migrator_util::TargetItems need_copy_items =
       browser_data_migrator_util::GetTargetItems(
           original_profile_dir,
-          browser_data_migrator_util::ItemType::kNeedCopy);
+          browser_data_migrator_util::ItemType::kNeedCopyForCopy);
   browser_data_migrator_util::TargetItems lacros_items =
       browser_data_migrator_util::GetTargetItems(
           original_profile_dir, browser_data_migrator_util::ItemType::kLacros);

@@ -33,7 +33,8 @@ namespace {
 TEST(WebSocketBasicHandshakeStreamTest, ConnectionClosedOnFailure) {
   std::string request = WebSocketStandardRequest(
       "/", "www.example.org",
-      url::Origin::Create(GURL("http://origin.example.org")), "", "");
+      url::Origin::Create(GURL("http://origin.example.org")),
+      /*send_additional_request_headers=*/{}, /*extra_headers=*/{});
   std::string response =
       "HTTP/1.1 404 Not Found\r\n"
       "Content-Length: 0\r\n"
@@ -67,9 +68,10 @@ TEST(WebSocketBasicHandshakeStreamTest, ConnectionClosedOnFailure) {
       MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS);
   TestCompletionCallback callback1;
   NetLogWithSource net_log;
+  basic_handshake_stream.RegisterRequest(&request_info);
   const int result1 =
       callback1.GetResult(basic_handshake_stream.InitializeStream(
-          &request_info, true, LOWEST, net_log, callback1.callback()));
+          true, LOWEST, net_log, callback1.callback()));
   EXPECT_EQ(result1, OK);
 
   auto request_headers = WebSocketCommonTestHeaders();
@@ -90,7 +92,8 @@ TEST(WebSocketBasicHandshakeStreamTest, ConnectionClosedOnFailure) {
 TEST(WebSocketBasicHandshakeStreamTest, DnsAliasesCanBeAccessed) {
   std::string request = WebSocketStandardRequest(
       "/", "www.example.org",
-      url::Origin::Create(GURL("http://origin.example.org")), "", "");
+      url::Origin::Create(GURL("http://origin.example.org")),
+      /*send_additional_request_headers=*/{}, /*extra_headers=*/{});
   std::string response = WebSocketStandardResponse("");
   MockWrite writes[] = {MockWrite(SYNCHRONOUS, 0, request.c_str())};
   MockRead reads[] = {MockRead(SYNCHRONOUS, 1, response.c_str()),
@@ -133,9 +136,10 @@ TEST(WebSocketBasicHandshakeStreamTest, DnsAliasesCanBeAccessed) {
       MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS);
   TestCompletionCallback callback1;
   NetLogWithSource net_log;
+  basic_handshake_stream.RegisterRequest(&request_info);
   const int result1 =
       callback1.GetResult(basic_handshake_stream.InitializeStream(
-          &request_info, true, LOWEST, net_log, callback1.callback()));
+          true, LOWEST, net_log, callback1.callback()));
   EXPECT_EQ(result1, OK);
 
   auto request_headers = WebSocketCommonTestHeaders();

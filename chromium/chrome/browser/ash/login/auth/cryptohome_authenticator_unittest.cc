@@ -20,7 +20,6 @@
 #include "ash/constants/ash_switches.h"
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/cxx17_backports.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/memory/ptr_util.h"
@@ -114,12 +113,12 @@ const uint8_t kOwnerPublicKey[] = {
 
 std::vector<uint8_t> GetOwnerPublicKey() {
   return std::vector<uint8_t>(kOwnerPublicKey,
-                              kOwnerPublicKey + base::size(kOwnerPublicKey));
+                              kOwnerPublicKey + std::size(kOwnerPublicKey));
 }
 
 bool CreateOwnerKeyInSlot(PK11SlotInfo* slot) {
   const std::vector<uint8_t> key(
-      kOwnerPrivateKey, kOwnerPrivateKey + base::size(kOwnerPrivateKey));
+      kOwnerPrivateKey, kOwnerPrivateKey + std::size(kOwnerPrivateKey));
   return crypto::ImportNSSKeyFromPrivateKeyInfo(
              slot, key, true /* permanent */) != nullptr;
 }
@@ -693,7 +692,7 @@ TEST_F(CryptohomeAuthenticatorTest, DriveDataResync) {
   state_->PresetOnlineLoginComplete();
   SetAttemptState(auth_.get(), state_.release());
 
-  auth_->ResyncEncryptedData();
+  auth_->ResyncEncryptedData(std::make_unique<UserContext>(user_context_));
   run_loop_.Run();
 }
 
@@ -706,7 +705,7 @@ TEST_F(CryptohomeAuthenticatorTest, DriveResyncFail) {
 
   SetAttemptState(auth_.get(), state_.release());
 
-  auth_->ResyncEncryptedData();
+  auth_->ResyncEncryptedData(std::make_unique<UserContext>(user_context_));
   run_loop_.Run();
 }
 
@@ -737,7 +736,8 @@ TEST_F(CryptohomeAuthenticatorTest, DriveDataRecover) {
   state_->PresetOnlineLoginComplete();
   SetAttemptState(auth_.get(), state_.release());
 
-  auth_->RecoverEncryptedData(std::string());
+  auth_->RecoverEncryptedData(std::make_unique<UserContext>(user_context_),
+                              std::string());
   run_loop_.Run();
 }
 
@@ -748,7 +748,8 @@ TEST_F(CryptohomeAuthenticatorTest, DriveDataRecoverButFail) {
 
   SetAttemptState(auth_.get(), state_.release());
 
-  auth_->RecoverEncryptedData(std::string());
+  auth_->RecoverEncryptedData(std::make_unique<UserContext>(user_context_),
+                              std::string());
   run_loop_.Run();
 }
 

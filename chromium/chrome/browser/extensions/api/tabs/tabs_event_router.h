@@ -127,7 +127,7 @@ class TabsEventRouter : public TabStripModelObserver,
   void FaviconUrlUpdated(content::WebContents* contents);
 
   // Triggers a tab updated event if the ext data changes.
-  void ExtDataUpdated(content::WebContents* contents);
+  void VivExtDataUpdated(content::WebContents* contents);
 
   // The DispatchEvent methods forward events to the |profile|'s event router.
   // The TabsEventRouter listens to events for all profiles,
@@ -184,7 +184,7 @@ class TabsEventRouter : public TabStripModelObserver,
     bool SetDiscarded(bool new_val);
 
     // content::WebContentsObserver:
-    void ExtDataSet(content::WebContents* contents) override;
+    void VivExtDataSet(content::WebContents* contents) override;
     void NavigationEntryCommitted(
         const content::LoadCommittedDetails& load_details) override;
     void TitleWasSet(content::NavigationEntry* entry) override;

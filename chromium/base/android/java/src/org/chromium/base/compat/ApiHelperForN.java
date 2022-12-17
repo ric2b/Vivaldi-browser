@@ -13,6 +13,7 @@ import android.content.ComponentName;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.media.MediaCodec.CryptoInfo;
+import android.net.ConnectivityManager;
 import android.os.Build;
 import android.os.Process;
 import android.security.NetworkSecurityPolicy;
@@ -27,14 +28,11 @@ import android.widget.RemoteViews;
 
 import androidx.annotation.RequiresApi;
 
-import org.chromium.base.annotations.VerifiesOnN;
-
 /**
  * Utility class to use new APIs that were added in N (API level 24). These need to exist in a
  * separate class so that Android framework can successfully verify classes without
  * encountering the new APIs.
  */
-@VerifiesOnN
 @RequiresApi(Build.VERSION_CODES.N)
 public final class ApiHelperForN {
     private ApiHelperForN() {}
@@ -105,5 +103,10 @@ public final class ApiHelperForN {
     public static Notification.Builder setCustomBigContentView(
             Notification.Builder builder, RemoteViews view) {
         return builder.setCustomBigContentView(view);
+    }
+
+    /** See {@link ConnectivityManager#getRestrictBackgroundStatus(ConnectivityManager)}. */
+    public static int getRestrictBackgroundStatus(ConnectivityManager cm) {
+        return cm.getRestrictBackgroundStatus();
     }
 }

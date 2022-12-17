@@ -7,26 +7,20 @@
 #include <memory>
 #include <vector>
 
+#include "ash/components/multidevice/logging/logging.h"
 #include "ash/components/proximity_auth/proximity_auth_pref_names.h"
+#include "ash/services/multidevice_setup/public/cpp/prefs.h"
 #include "base/bind.h"
 #include "base/values.h"
-#include "chromeos/components/multidevice/logging/logging.h"
-#include "chromeos/services/multidevice_setup/public/cpp/prefs.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
 
 namespace proximity_auth {
-namespace {
-
-using chromeos::multidevice_setup::mojom::Feature;
-using chromeos::multidevice_setup::mojom::FeatureState;
-}  // namespace
 
 ProximityAuthProfilePrefManager::ProximityAuthProfilePrefManager(
     PrefService* pref_service,
-    chromeos::multidevice_setup::MultiDeviceSetupClient*
-        multidevice_setup_client)
+    ash::multidevice_setup::MultiDeviceSetupClient* multidevice_setup_client)
     : pref_service_(pref_service),
       multidevice_setup_client_(multidevice_setup_client) {
   OnFeatureStatesChanged(multidevice_setup_client_->GetFeatureStates());
@@ -69,14 +63,13 @@ void ProximityAuthProfilePrefManager::StartSyncingToLocalState(
       weak_ptr_factory_.GetWeakPtr());
 
   registrar_.Init(pref_service_);
-  registrar_.Add(chromeos::multidevice_setup::kSmartLockAllowedPrefName,
+  registrar_.Add(ash::multidevice_setup::kSmartLockAllowedPrefName,
                  on_pref_changed_callback);
-  registrar_.Add(
-      chromeos::multidevice_setup::kSmartLockEnabledDeprecatedPrefName,
-      on_pref_changed_callback);
+  registrar_.Add(ash::multidevice_setup::kSmartLockEnabledDeprecatedPrefName,
+                 on_pref_changed_callback);
   registrar_.Add(proximity_auth::prefs::kProximityAuthIsChromeOSLoginEnabled,
                  on_pref_changed_callback);
-  registrar_.Add(chromeos::multidevice_setup::kSmartLockSigninAllowedPrefName,
+  registrar_.Add(ash::multidevice_setup::kSmartLockSigninAllowedPrefName,
                  on_pref_changed_callback);
 
   SyncPrefsToLocalState();
@@ -85,16 +78,12 @@ void ProximityAuthProfilePrefManager::StartSyncingToLocalState(
 void ProximityAuthProfilePrefManager::SyncPrefsToLocalState() {
   base::Value user_prefs_dict(base::Value::Type::DICTIONARY);
 
+  user_prefs_dict.SetBoolKey(ash::multidevice_setup::kSmartLockAllowedPrefName,
+                             IsEasyUnlockAllowed());
+  user_prefs_dict.SetBoolKey(ash::multidevice_setup::kSmartLockEnabledPrefName,
+                             IsEasyUnlockEnabled());
   user_prefs_dict.SetBoolKey(
-      chromeos::multidevice_setup::kSmartLockAllowedPrefName,
-      IsEasyUnlockAllowed());
-  user_prefs_dict.SetBoolKey(
-      chromeos::multidevice_setup::kSmartLockEnabledPrefName,
-      IsEasyUnlockEnabled());
-  user_prefs_dict.SetBoolKey(prefs::kSmartLockEligiblePrefName,
-                             IsSmartLockEligible());
-  user_prefs_dict.SetBoolKey(
-      chromeos::multidevice_setup::kSmartLockSigninAllowedPrefName,
+      ash::multidevice_setup::kSmartLockSigninAllowedPrefName,
       IsChromeOSLoginAllowed());
   user_prefs_dict.SetBoolKey(prefs::kProximityAuthIsChromeOSLoginEnabled,
                              IsChromeOSLoginEnabled());
@@ -115,13 +104,13 @@ void ProximityAuthProfilePrefManager::SyncPrefsToLocalState() {
 
 bool ProximityAuthProfilePrefManager::IsEasyUnlockAllowed() const {
   return pref_service_->GetBoolean(
-      chromeos::multidevice_setup::kSmartLockAllowedPrefName);
+      ash::multidevice_setup::kSmartLockAllowedPrefName);
 }
 
 void ProximityAuthProfilePrefManager::SetIsEasyUnlockEnabled(
     bool is_easy_unlock_enabled) const {
   pref_service_->SetBoolean(
-      chromeos::multidevice_setup::kSmartLockEnabledDeprecatedPrefName,
+      ash::multidevice_setup::kSmartLockEnabledDeprecatedPrefName,
       is_easy_unlock_enabled);
 }
 
@@ -129,36 +118,9 @@ bool ProximityAuthProfilePrefManager::IsEasyUnlockEnabled() const {
   // Note: if GetFeatureState() is called in the first few hundred milliseconds
   // of user session startup, it can incorrectly return a feature-default state
   // of kProhibitedByPolicy. See https://crbug.com/1154766 for more.
-  return multidevice_setup_client_->GetFeatureState(Feature::kSmartLock) ==
-         FeatureState::kEnabledByUser;
-}
-
-bool ProximityAuthProfilePrefManager::IsSmartLockEligible() const {
-  switch (multidevice_setup_client_->GetFeatureState(Feature::kSmartLock)) {
-    case FeatureState::kUnavailableNoVerifiedHost:
-      [[fallthrough]];
-    case FeatureState::kUnavailableNoVerifiedHost_ClientNotReady:
-      [[fallthrough]];
-    case FeatureState::kNotSupportedByChromebook:
-      [[fallthrough]];
-    case FeatureState::kNotSupportedByPhone:
-      return false;
-
-    case FeatureState::kProhibitedByPolicy:
-      [[fallthrough]];
-    case FeatureState::kDisabledByUser:
-      [[fallthrough]];
-    case FeatureState::kEnabledByUser:
-      [[fallthrough]];
-    case FeatureState::kUnavailableInsufficientSecurity:
-      [[fallthrough]];
-    case FeatureState::kUnavailableSuiteDisabled:
-      [[fallthrough]];
-    case FeatureState::kFurtherSetupRequired:
-      [[fallthrough]];
-    case FeatureState::kUnavailableTopLevelFeatureDisabled:
-      return true;
-  }
+  return multidevice_setup_client_->GetFeatureState(
+             ash::multidevice_setup::mojom::Feature::kSmartLock) ==
+         ash::multidevice_setup::mojom::FeatureState::kEnabledByUser;
 }
 
 void ProximityAuthProfilePrefManager::SetEasyUnlockEnabledStateSet() const {
@@ -191,7 +153,7 @@ int ProximityAuthProfilePrefManager::GetPromotionShownCount() const {
 
 bool ProximityAuthProfilePrefManager::IsChromeOSLoginAllowed() const {
   return pref_service_->GetBoolean(
-      chromeos::multidevice_setup::kSmartLockSigninAllowedPrefName);
+      ash::multidevice_setup::kSmartLockSigninAllowedPrefName);
 }
 
 void ProximityAuthProfilePrefManager::SetIsChromeOSLoginEnabled(
@@ -234,7 +196,7 @@ bool ProximityAuthProfilePrefManager::HasShownLoginDisabledMessage() const {
 }
 
 void ProximityAuthProfilePrefManager::OnFeatureStatesChanged(
-    const chromeos::multidevice_setup::MultiDeviceSetupClient::FeatureStatesMap&
+    const ash::multidevice_setup::MultiDeviceSetupClient::FeatureStatesMap&
         feature_states_map) {
   if (local_state_ && account_id_.is_valid())
     SyncPrefsToLocalState();

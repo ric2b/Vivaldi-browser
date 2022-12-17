@@ -5,6 +5,7 @@
 #include "base/command_line.h"
 #include "base/task/current_thread.h"
 #include "browser/menus/vivaldi_render_view_context_menu.h"
+#include "build/build_config.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/renderer_context_menu/views/toolkit_delegate_views.h"
 #include "content/public/browser/web_contents.h"
@@ -18,7 +19,7 @@ namespace vivaldi {
 
 // Mac uses both a native version and the views version depening menu location
 // A separate CreateVivaldiContextMenu exists on the mac implementation.
-#if !defined(OS_MAC)
+#if !BUILDFLAG(IS_MAC)
 
 VivaldiContextMenu* CreateVivaldiContextMenu(
     content::WebContents* web_contents,

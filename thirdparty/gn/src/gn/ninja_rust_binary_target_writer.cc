@@ -13,8 +13,8 @@
 #include "gn/ninja_target_command_util.h"
 #include "gn/ninja_utils.h"
 #include "gn/rust_substitution_type.h"
-#include "gn/substitution_writer.h"
 #include "gn/rust_values.h"
+#include "gn/substitution_writer.h"
 #include "gn/target.h"
 
 namespace {
@@ -113,8 +113,8 @@ void NinjaRustBinaryTargetWriter::Run() {
 
   size_t num_stamp_uses = target_->sources().size();
 
-  std::vector<OutputFile> input_deps = WriteInputsStampAndGetDep(
-      num_stamp_uses);
+  std::vector<OutputFile> input_deps =
+      WriteInputsStampAndGetDep(num_stamp_uses);
 
   WriteCompilerVars();
 
@@ -176,11 +176,23 @@ void NinjaRustBinaryTargetWriter::Run() {
     }
   }
 
-  // Bubble up the full list of transitive rlib dependencies.
-  std::vector<OutputFile> transitive_rustlibs;
-  for (const auto* dep : target_->rust_transitive_libs().GetOrdered()) {
-    if (dep->source_types_used().RustSourceUsed()) {
-      transitive_rustlibs.push_back(dep->dependency_output_file());
+  // Collect the full transitive set of rust libraries that this target depends
+  // on, and the public flag represents if the target has direct access to the
+  // dependency through a chain of public_deps.
+  std::vector<ExternCrate> transitive_crates;
+  for (const auto& [dep, has_direct_access] :
+       target_->rust_transitive_inherited_libs().GetOrderedAndPublicFlag()) {
+    // We will tell rustc to look for crate metadata for any rust crate
+    // dependencies except cdylibs, as they have no metadata present.
+    if (dep->source_types_used().RustSourceUsed() &&
+        RustValues::IsRustLibrary(dep)) {
+      transitive_crates.push_back({dep, has_direct_access});
+      // If the current crate can directly acccess the `dep` crate, then the
+      // current crate needs an implicit dependency on `dep` so it will be
+      // rebuilt if `dep` changes.
+      if (has_direct_access) {
+        implicit_deps.push_back(dep->dependency_output_file());
+      }
     }
   }
 
@@ -196,8 +208,7 @@ void NinjaRustBinaryTargetWriter::Run() {
   std::copy(classified_deps.non_linkable_deps.begin(),
             classified_deps.non_linkable_deps.end(),
             std::back_inserter(extern_deps));
-  WriteExterns(extern_deps);
-  WriteRustdeps(transitive_rustlibs, rustdeps, nonrustdeps);
+  WriteExternsAndDeps(extern_deps, transitive_crates, rustdeps, nonrustdeps);
   WriteSourcesAndInputs();
 }
 
@@ -207,13 +218,7 @@ void NinjaRustBinaryTargetWriter::WriteCompilerVars() {
   EscapeOptions opts = GetFlagOptions();
   WriteCrateVars(target_, tool_, opts, out_);
 
-  WriteOneFlag(kRecursiveWriterKeepDuplicates, target_,
-               &kRustSubstitutionRustFlags, false, Tool::kToolNone,
-               &ConfigValues::rustflags, opts, path_output_, out_);
-
-  WriteOneFlag(kRecursiveWriterKeepDuplicates, target_,
-               &kRustSubstitutionRustEnv, false, Tool::kToolNone,
-               &ConfigValues::rustenv, opts, path_output_, out_);
+  WriteRustCompilerVars(subst, /*indent=*/false, /*always_write=*/true);
 
   WriteSharedVars(subst);
 }
@@ -237,7 +242,8 @@ void NinjaRustBinaryTargetWriter::WriteSourcesAndInputs() {
   out_ << "  sources =";
   for (const auto& source : target_->sources()) {
     out_ << " ";
-    path_output_.WriteFile(out_, OutputFile(settings_->build_settings(), source));
+    path_output_.WriteFile(out_,
+                           OutputFile(settings_->build_settings(), source));
   }
   for (const auto& data : target_->config_values().inputs()) {
     out_ << " ";
@@ -246,66 +252,98 @@ void NinjaRustBinaryTargetWriter::WriteSourcesAndInputs() {
   out_ << std::endl;
 }
 
-void NinjaRustBinaryTargetWriter::WriteExterns(
-    const std::vector<const Target*>& deps) {
+void NinjaRustBinaryTargetWriter::WriteExternsAndDeps(
+    const std::vector<const Target*>& deps,
+    const std::vector<ExternCrate>& transitive_rust_deps,
+    const std::vector<OutputFile>& rustdeps,
+    const std::vector<OutputFile>& nonrustdeps) {
+  // Writes a external LibFile which comes from user-specified externs, and may
+  // be either a string or a SourceFile.
+  auto write_extern_lib_file = [this](std::string_view crate_name,
+                                      LibFile lib_file) {
+    out_ << " --extern ";
+    out_ << crate_name;
+    out_ << "=";
+    if (lib_file.is_source_file()) {
+      path_output_.WriteFile(out_, lib_file.source_file());
+    } else {
+      EscapeOptions escape_opts_command;
+      escape_opts_command.mode = ESCAPE_NINJA_COMMAND;
+      EscapeStringToStream(out_, lib_file.value(), escape_opts_command);
+    }
+  };
+  // Writes an external OutputFile which comes from a dependency of the current
+  // target.
+  auto write_extern_target = [this](const Target& dep) {
+    std::string_view crate_name;
+    const auto& aliased_deps = target_->rust_values().aliased_deps();
+    if (auto it = aliased_deps.find(dep.label()); it != aliased_deps.end()) {
+      crate_name = it->second;
+    } else {
+      crate_name = dep.rust_values().crate_name();
+    }
+
+    out_ << " --extern ";
+    out_ << crate_name;
+    out_ << "=";
+    path_output_.WriteFile(out_, dep.dependency_output_file());
+  };
+
+  // Write accessible crates with `--extern` to add them to the extern prelude.
   out_ << "  externs =";
 
-  for (const Target* target : deps) {
-    if (target->output_type() == Target::RUST_LIBRARY ||
-        target->output_type() == Target::RUST_PROC_MACRO ||
-        (target->source_types_used().RustSourceUsed() &&
-         target->rust_values().InferredCrateType(target) ==
-             RustValues::CRATE_DYLIB)) {
-      out_ << " --extern ";
-      const auto& renamed_dep =
-          target_->rust_values().aliased_deps().find(target->label());
-      if (renamed_dep != target_->rust_values().aliased_deps().end()) {
-        out_ << renamed_dep->second << "=";
-      } else {
-        out_ << std::string(target->rust_values().crate_name()) << "=";
+  // Tracking to avoid emitted the same lib twice. We track it instead of
+  // pre-emptively constructing a UniqueVector since we would have to also store
+  // the crate name, and in the future the public-ness.
+  std::unordered_set<OutputFile> emitted_rust_libs;
+  // TODO: We defer private dependencies to -Ldependency until --extern priv is
+  // stabilized.
+  UniqueVector<SourceDir> private_extern_dirs;
+
+  // Walk the transitive closure of all rust dependencies.
+  //
+  // For dependencies that are meant to be accessible we pass them to --extern
+  // in order to add them to the crate's extern prelude.
+  //
+  // For all transitive dependencies, we add them to `private_extern_dirs` in
+  // order to generate a -Ldependency switch that points to them. This ensures
+  // that rustc can find them if they are used by other dependencies. For
+  // example:
+  //
+  //   A -> C --public--> D
+  //     -> B --private-> D
+  //
+  // Here A has direct access to D, but B and C also make use of D, and they
+  // will only search the paths specified to -Ldependency, thus D needs to
+  // appear as both a --extern (for A) and -Ldependency (for B and C).
+  for (const auto& crate : transitive_rust_deps) {
+    const OutputFile& rust_lib = crate.target->dependency_output_file();
+    if (emitted_rust_libs.count(rust_lib) == 0) {
+      if (crate.has_direct_access) {
+        write_extern_target(*crate.target);
       }
-      path_output_.WriteFile(out_, target->dependency_output_file());
+      emitted_rust_libs.insert(rust_lib);
     }
+    private_extern_dirs.push_back(
+        rust_lib.AsSourceFile(settings_->build_settings()).GetDir());
   }
 
-  EscapeOptions extern_escape_opts;
-  extern_escape_opts.mode = ESCAPE_NINJA_COMMAND;
-
+  // Add explicitly specified externs from the GN target.
   for (ConfigValuesIterator iter(target_); !iter.done(); iter.Next()) {
     const ConfigValues& cur = iter.cur();
-    for (const auto& e : cur.externs()) {
-      out_ << " --extern " << std::string(e.first) << "=";
-      if (e.second.is_source_file()) {
-        path_output_.WriteFile(out_, e.second.source_file());
-      } else {
-        EscapeStringToStream(out_, e.second.value(), extern_escape_opts);
-      }
+    for (const auto& [crate_name, lib_file] : cur.externs()) {
+      write_extern_lib_file(crate_name, lib_file);
     }
   }
 
   out_ << std::endl;
-}
-
-void NinjaRustBinaryTargetWriter::WriteRustdeps(
-    const std::vector<OutputFile>& transitive_rustdeps,
-    const std::vector<OutputFile>& rustdeps,
-    const std::vector<OutputFile>& nonrustdeps) {
   out_ << "  rustdeps =";
 
-  // Rust dependencies.
-  UniqueVector<SourceDir> transitive_rustdep_dirs;
-  for (const auto& rustdep : transitive_rustdeps) {
-    // TODO switch to using --extern priv: after stabilization
-    transitive_rustdep_dirs.push_back(
-        rustdep.AsSourceFile(settings_->build_settings()).GetDir());
-  }
-  for (const auto& rustdepdir : transitive_rustdep_dirs) {
+  for (const SourceDir& dir : private_extern_dirs) {
+    // TODO: switch to using `--extern priv:name` after stabilization.
     out_ << " -Ldependency=";
-    path_output_.WriteDir(out_, rustdepdir, PathOutput::DIR_NO_LAST_SLASH);
+    path_output_.WriteDir(out_, dir, PathOutput::DIR_NO_LAST_SLASH);
   }
-
-  EscapeOptions lib_escape_opts;
-  lib_escape_opts.mode = ESCAPE_NINJA_COMMAND;
 
   // Non-Rust native dependencies.
   UniqueVector<SourceDir> nonrustdep_dirs;

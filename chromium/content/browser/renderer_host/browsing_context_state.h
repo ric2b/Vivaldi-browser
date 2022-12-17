@@ -8,9 +8,11 @@
 #include "base/feature_list.h"
 #include "base/memory/ref_counted.h"
 #include "content/browser/browsing_instance.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_frame_proxy_host.h"
 #include "content/browser/site_instance_group.h"
 #include "third_party/blink/public/mojom/frame/frame_replication_state.mojom-forward.h"
+#include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
 
 namespace features {
 // Currently there are two paths - legacy code, in which BrowsingContextState
@@ -39,6 +41,10 @@ namespace content {
 // changes), but each BrowsingContextState can be shared between multiple
 // RenderFrameHosts for the same frame/FrameTreeNode.
 
+// BrowsingContextState is responsible for proxy storage and
+// RenderFrameHostManager is responsible for connecting different
+// BrowsingContextStates and creating proxies for appropriate SiteInstances.
+
 // A new BCS will be created when a new RenderFrameHost is created for a new
 // frame or a speculative RFH is created for a cross-BrowsingInstance (browsing
 // context group in the spec) navigation (speculative RFHs created in the same
@@ -59,22 +65,34 @@ namespace content {
 // kLegacyOneToOneWithFrameTreeNode is currently enabled and will be removed
 // once the functionality gated behind kSwapForCrossBrowsingInstanceNavigations
 // is implemented.
-class BrowsingContextState : public base::RefCounted<BrowsingContextState>,
-                             public SiteInstanceGroup::Observer {
+class CONTENT_EXPORT BrowsingContextState
+    : public base::RefCounted<BrowsingContextState>,
+      public SiteInstanceGroup::Observer {
  public:
   using RenderFrameProxyHostMap =
       std::unordered_map<SiteInstanceGroupId,
                          std::unique_ptr<RenderFrameProxyHost>,
                          SiteInstanceGroupId::Hasher>;
 
-  explicit BrowsingContextState(
-      blink::mojom::FrameReplicationStatePtr replication_state);
+  // Currently browsing_instance_id| will be null iff the legacy mode is
+  // enabled, as is the legacy mode BrowsingContextState is 1:1 with
+  // FrameTreeNode and therefore doesn't have a dedicated associated
+  // BrowsingInstance.
+  // TODO(crbug.com/1270671): Make |browsing_instance_id| non-optional when the
+  // legacy path is removed.
+  BrowsingContextState(blink::mojom::FrameReplicationStatePtr replication_state,
+                       raw_ptr<RenderFrameHostImpl> parent,
+                       absl::optional<BrowsingInstanceId> browsing_instance_id);
 
   // Returns a const reference to the map of proxy hosts. The keys are
   // SiteInstanceGroup IDs, the values are RenderFrameProxyHosts.
   const RenderFrameProxyHostMap& proxy_hosts() const { return proxy_hosts_; }
 
   RenderFrameProxyHostMap& proxy_hosts() { return proxy_hosts_; }
+
+  // Returns true if this is a main BrowsingContextState. True if and only if
+  // this BrowsingContextState doesn't have a parent.
+  bool is_main_frame() const { return !parent_; }
 
   const blink::mojom::FrameReplicationState& current_replication_state() const {
     return *replication_state_;
@@ -116,8 +134,29 @@ class BrowsingContextState : public base::RefCounted<BrowsingContextState>,
     replication_state_->has_active_user_gesture = has_active_user_gesture;
   }
 
+  // All proxies except outer delegate proxies should belong to the same
+  // BrowsingInstance as their BrowsingContextState. See the comment for the
+  // CHECK inside BrowsingContextState::GetRenderFrameProxyHost for more
+  // details. All proxy accessing/creating/deleting functionality assumes the
+  // same BrowsingInstance. However, in very select cases (i.e. outer
+  // delegates), the proxies will not have the same BrowsingInstance. As such,
+  // we use this enum to specify whether or not we need to check for a
+  // BrowsingInstance match when creating/deleting or accessing proxies from
+  // this BrowsingContextState.
+  enum class ProxyAccessMode {
+    kRegular,
+    kAllowOuterDelegate,
+  };
+
   RenderFrameProxyHost* GetRenderFrameProxyHost(
-      SiteInstanceGroup* site_instance_group) const;
+      SiteInstanceGroup* site_instance_group,
+      ProxyAccessMode proxy_access_mode = ProxyAccessMode::kRegular) const;
+
+  // Returns the number of RenderFrameProxyHosts for this frame.
+  size_t GetProxyCount();
+
+  // Set the current name and notify proxies about the update.
+  void SetFrameName(const std::string& name, const std::string& unique_name);
 
   // Set the current origin and notify proxies about the update.
   void SetCurrentOrigin(const url::Origin& origin,
@@ -141,7 +180,9 @@ class BrowsingContextState : public base::RefCounted<BrowsingContextState>,
   void SetIsAdSubframe(bool is_ad_subframe);
 
   // Delete a RenderFrameProxyHost owned by this object.
-  void DeleteRenderFrameProxyHost(SiteInstanceGroup* site_instance_group);
+  void DeleteRenderFrameProxyHost(
+      SiteInstanceGroup* site_instance_group,
+      ProxyAccessMode proxy_access_mode = ProxyAccessMode::kRegular);
 
   // SiteInstanceGroup::Observer
   void ActiveFrameCountIsZero(SiteInstanceGroup* site_instance_group) override;
@@ -171,8 +212,57 @@ class BrowsingContextState : public base::RefCounted<BrowsingContextState>,
 
   // Notify all of the proxies about the updated FramePolicy, excluding the
   // parent, as it will already know.
-  void SendFramePolicyUpdatesToProxies(SiteInstance* parent_site_instance,
+  void SendFramePolicyUpdatesToProxies(SiteInstanceGroup* parent_group,
                                        const blink::FramePolicy& frame_policy);
+
+  // Create a RenderFrameProxyHost owned by this object. This
+  // RenderFrameProxyHost represents the browsing context in this site instance.
+  // TODO(crbug.com/1270671): Currently we pass a FrameTreeNode because it is
+  // required for the constructor to RenderFrameProxyHost. However, the stored
+  // reference to FrameTreeNode should be replaced by a BrowsingContextState
+  // instead; FrameTreeNode will need to be removed from here as well.
+  RenderFrameProxyHost* CreateRenderFrameProxyHost(
+      SiteInstance* site_instance,
+      const scoped_refptr<RenderViewHostImpl>& rvh,
+      FrameTreeNode* frame_tree_node,
+      ProxyAccessMode proxy_access_mode = ProxyAccessMode::kRegular);
+
+  // Called on the RFHM of the inner WebContents to create a
+  // RenderFrameProxyHost in its outer WebContents's SiteInstance,
+  // |outer_contents_site_instance|.
+  RenderFrameProxyHost* CreateOuterDelegateProxy(
+      SiteInstance* outer_contents_site_instance,
+      FrameTreeNode* frame_tree_node);
+
+  // Called on an inner WebContents that's being detached from its outer
+  // WebContents. This will delete the proxy in the
+  // |outer_contents_site_instance_group|.
+  void DeleteOuterDelegateProxy(
+      SiteInstanceGroup* outer_contents_site_instance_group);
+
+  // Deletes any proxy hosts associated with this node. Used during destruction
+  // of WebContentsImpl.
+  void ResetProxyHosts();
+
+  // Notification methods to tell this RenderFrameHostManager that the frame it
+  // is responsible for has started or stopped loading a document.
+  void OnDidStartLoading();
+  void OnDidStopLoading();
+
+  // Notify proxies that an opener has been updated.
+  void UpdateOpener(SiteInstanceGroup* source_site_instance_group);
+
+  void OnDidUpdateFrameOwnerProperties(
+      const blink::mojom::FrameOwnerProperties& properties);
+
+  void ExecuteRemoteFramesBroadcastMethod(
+      base::RepeatingCallback<void(RenderFrameProxyHost*)> callback,
+      SiteInstance* instance_to_skip,
+      RenderFrameProxyHost* outer_delegate_proxy);
+
+  using TraceProto = perfetto::protos::pbzero::BrowsingContextState;
+  // Write a representation of this object into a trace.
+  void WriteIntoTrace(perfetto::TracedProto<TraceProto> proto) const;
 
  protected:
   friend class base::RefCounted<BrowsingContextState>;
@@ -180,12 +270,30 @@ class BrowsingContextState : public base::RefCounted<BrowsingContextState>,
   virtual ~BrowsingContextState();
 
  private:
-  // Proxy hosts, indexed by SiteInstanceGroup ID.
+  RenderFrameProxyHost* GetRenderFrameProxyHostImpl(
+      SiteInstanceGroup* site_instance_group,
+      ProxyAccessMode proxy_access_mode) const;
+
+  // Proxy hosts for this browsing context in various renderer processes, keyed
+  // by SiteInstanceGroup ID.
   RenderFrameProxyHostMap proxy_hosts_;
 
   // Track information that needs to be replicated to processes that have
   // proxies for this frame.
   blink::mojom::FrameReplicationStatePtr replication_state_;
+
+  // Parent document of this BrowsingContextState, might be null if this is a
+  // main frame BrowsingContextState.
+  const raw_ptr<RenderFrameHostImpl> parent_;
+
+  // ID of the BrowsingInstance to which this BrowsingContextState belongs.
+  // Currently browsing_instance_id| will be null iff the legacy mode is
+  // enabled, as is the legacy mode BrowsingContextState is 1:1 with
+  // FrameTreeNode and therefore doesn't have a dedicated associated
+  // BrowsingInstance.
+  // TODO(crbug.com/1270671): Make |browsing_instance_id| non-optional when the
+  // legacy path is removed.
+  const absl::optional<BrowsingInstanceId> browsing_instance_id_;
 };
 
 }  // namespace content

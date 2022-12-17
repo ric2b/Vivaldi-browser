@@ -75,6 +75,7 @@
 #include "components/services/app_service/public/mojom/types.mojom.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
+#include "components/webapps/browser/uninstall_result_code.h"
 #include "content/public/common/content_features.h"
 #include "content/public/test/background_color_change_waiter.h"
 #include "content/public/test/browser_test.h"
@@ -1222,8 +1223,8 @@ IN_PROC_BROWSER_TEST_F(WebAppBrowserTest,
   base::RunLoop run_loop_uninstall;
   provider->install_finalizer().UninstallWebApp(
       app_id, webapps::WebappUninstallSource::kAppMenu,
-      base::BindLambdaForTesting([&](bool uninstalled) {
-        DCHECK(uninstalled);
+      base::BindLambdaForTesting([&](webapps::UninstallResultCode code) {
+        EXPECT_EQ(code, webapps::UninstallResultCode::kSuccess);
         run_loop_uninstall.Quit();
       }));
   run_loop_uninstall.Run();
@@ -1311,8 +1312,8 @@ IN_PROC_BROWSER_TEST_F(WebAppBrowserTest_ShortcutMenu, ShortcutsMenu) {
   base::RunLoop run_loop_uninstall;
   WebAppProvider::GetForTest(profile())->install_finalizer().UninstallWebApp(
       app_id, webapps::WebappUninstallSource::kAppMenu,
-      base::BindLambdaForTesting([&](bool uninstalled) {
-        DCHECK(uninstalled);
+      base::BindLambdaForTesting([&](webapps::UninstallResultCode code) {
+        EXPECT_EQ(code, webapps::UninstallResultCode::kSuccess);
         run_loop_uninstall.Quit();
       }));
   run_loop_uninstall.Run();
@@ -1375,8 +1376,8 @@ IN_PROC_BROWSER_TEST_F(WebAppBrowserTest, WebAppCreateAndDeleteShortcut) {
   base::RunLoop run_loop_uninstall;
   provider->install_finalizer().UninstallWebApp(
       app_id, webapps::WebappUninstallSource::kAppMenu,
-      base::BindLambdaForTesting([&](bool uninstalled) {
-        DCHECK(uninstalled);
+      base::BindLambdaForTesting([&](webapps::UninstallResultCode code) {
+        EXPECT_EQ(code, webapps::UninstallResultCode::kSuccess);
         run_loop_uninstall.Quit();
       }));
   run_loop_uninstall.Run();
@@ -1829,6 +1830,7 @@ class WebAppBrowserTest_NoDestroyProfile : public WebAppBrowserTest {
 
 // Check that no web app is launched during shutdown.
 IN_PROC_BROWSER_TEST_F(WebAppBrowserTest_NoDestroyProfile, Shutdown) {
+  Profile* profile = browser()->profile();
   const GURL app_url = GetSecureAppURL();
   const AppId app_id = InstallPWA(app_url);
   apps::AppLaunchParams params(
@@ -1840,8 +1842,7 @@ IN_PROC_BROWSER_TEST_F(WebAppBrowserTest_NoDestroyProfile, Shutdown) {
   ui_test_utils::WaitForBrowserToClose();
 
   content::WebContents* const web_contents =
-      apps::AppServiceProxyFactory::GetForProfile(
-          ProfileManager::GetActiveUserProfile())
+      apps::AppServiceProxyFactory::GetForProfile(profile)
           ->BrowserAppLauncher()
           ->LaunchAppWithParamsForTesting(std::move(params));
   EXPECT_EQ(web_contents, nullptr);
@@ -2017,8 +2018,8 @@ IN_PROC_BROWSER_TEST_F(WebAppBrowserTest_FileHandler, MAYBE_WebAppFileHandler) {
   base::RunLoop run_loop_uninstall;
   WebAppProvider::GetForTest(profile())->install_finalizer().UninstallWebApp(
       app_id, webapps::WebappUninstallSource::kAppsPage,
-      base::BindLambdaForTesting([&](bool uninstalled) {
-        DCHECK(uninstalled);
+      base::BindLambdaForTesting([&](webapps::UninstallResultCode code) {
+        EXPECT_EQ(code, webapps::UninstallResultCode::kSuccess);
         run_loop_uninstall.Quit();
       }));
   run_loop_uninstall.Run();

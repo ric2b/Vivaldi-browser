@@ -5,6 +5,7 @@
 #include "ui/gfx/geometry/insets.h"
 
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/gfx/geometry/outsets.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/vector2d.h"
@@ -19,12 +20,20 @@ TEST(InsetsTest, Default) {
   EXPECT_EQ(0, insets.right());
 }
 
-TEST(InsetsTest, Insets) {
-  Insets insets(1, 2, 3, 4);
+TEST(InsetsTest, TLBR) {
+  Insets insets = Insets::TLBR(1, 2, 3, 4);
   EXPECT_EQ(1, insets.top());
   EXPECT_EQ(2, insets.left());
   EXPECT_EQ(3, insets.bottom());
   EXPECT_EQ(4, insets.right());
+}
+
+TEST(InsetsTest, VH) {
+  Insets insets = Insets::VH(1, 2);
+  EXPECT_EQ(1, insets.top());
+  EXPECT_EQ(2, insets.left());
+  EXPECT_EQ(1, insets.bottom());
+  EXPECT_EQ(2, insets.right());
 }
 
 TEST(InsetsTest, SetLeftRight) {
@@ -87,15 +96,6 @@ TEST(InsetsTest, SetRight) {
   EXPECT_EQ(1, insets.bottom());
   EXPECT_EQ(2, insets.right());
   EXPECT_EQ(insets, Insets(1).set_right(2));
-}
-
-TEST(InsetsTest, Set) {
-  Insets insets;
-  insets.Set(1, 2, 3, 4);
-  EXPECT_EQ(1, insets.top());
-  EXPECT_EQ(2, insets.left());
-  EXPECT_EQ(3, insets.bottom());
-  EXPECT_EQ(4, insets.right());
 }
 
 TEST(InsetsTest, WidthHeightAndIsEmpty) {
@@ -375,6 +375,13 @@ TEST(InsetsTest, SetToMax) {
   Insets insets1 = Insets().set_left_right(-2, -4).set_top_bottom(-2, -4);
   insets1.SetToMax(Insets());
   EXPECT_EQ(Insets(), insets1);
+}
+
+TEST(InsetsTest, ConversionFromToOutsets) {
+  Insets insets = Insets().set_left_right(2, 4).set_top_bottom(-1, -3);
+  EXPECT_EQ(Outsets().set_left_right(-2, -4).set_top_bottom(1, 3),
+            insets.ToOutsets());
+  EXPECT_EQ(insets, insets.ToOutsets().ToInsets());
 }
 
 }  // namespace gfx

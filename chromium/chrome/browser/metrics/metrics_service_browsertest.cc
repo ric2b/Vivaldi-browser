@@ -162,7 +162,6 @@ IN_PROC_BROWSER_TEST_F(MetricsServiceBrowserTest, CloseRenderersNormally) {
 
   // Verify that the expected stability metrics were recorded.
   const PrefService* prefs = g_browser_process->local_state();
-  EXPECT_EQ(1, prefs->GetInteger(metrics::prefs::kStabilityLaunchCount));
   EXPECT_EQ(3, prefs->GetInteger(metrics::prefs::kStabilityPageLoadCount));
   EXPECT_EQ(0, prefs->GetInteger(metrics::prefs::kStabilityRendererCrashCount));
 }
@@ -185,7 +184,6 @@ IN_PROC_BROWSER_TEST_F(MetricsServiceBrowserTest, MAYBE_CrashRenderers) {
 
   // Verify that the expected stability metrics were recorded.
   const PrefService* prefs = g_browser_process->local_state();
-  EXPECT_EQ(1, prefs->GetInteger(metrics::prefs::kStabilityLaunchCount));
   // The three tabs from OpenTabs() and the one tab to open chrome://crash/.
   EXPECT_EQ(4, prefs->GetInteger(metrics::prefs::kStabilityPageLoadCount));
   EXPECT_EQ(1, prefs->GetInteger(metrics::prefs::kStabilityRendererCrashCount));
@@ -199,7 +197,6 @@ IN_PROC_BROWSER_TEST_F(MetricsServiceBrowserTest, MAYBE_CrashRenderers) {
 #elif BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
   VerifyRendererExitCodeIsSignal(histogram_tester, SIGSEGV);
 #endif
-  histogram_tester.ExpectUniqueSample("Tabs.SadTab.CrashCreated", 1, 1);
 }
 
 // Test is disabled on Windows AMR64 because
@@ -217,7 +214,6 @@ IN_PROC_BROWSER_TEST_F(MetricsServiceBrowserTest,
 
   // Verify that the expected stability metrics were recorded.
   const PrefService* prefs = g_browser_process->local_state();
-  EXPECT_EQ(1, prefs->GetInteger(metrics::prefs::kStabilityLaunchCount));
   // The three tabs from OpenTabs() and the one tab to open chrome://crash/.
   EXPECT_EQ(4, prefs->GetInteger(metrics::prefs::kStabilityPageLoadCount));
   EXPECT_EQ(1, prefs->GetInteger(metrics::prefs::kStabilityRendererCrashCount));
@@ -225,7 +221,6 @@ IN_PROC_BROWSER_TEST_F(MetricsServiceBrowserTest,
   histogram_tester.ExpectUniqueSample(
       "CrashExitCodes.Renderer",
       std::abs(static_cast<int32_t>(STATUS_HEAP_CORRUPTION)), 1);
-  histogram_tester.ExpectUniqueSample("Tabs.SadTab.CrashCreated", 1, 1);
   LOG(INFO) << histogram_tester.GetAllHistogramsRecorded();
 }
 #endif  // BUILDFLAG(IS_WIN)
@@ -237,7 +232,6 @@ IN_PROC_BROWSER_TEST_F(MetricsServiceBrowserTest, MAYBE_CheckCrashRenderers) {
 
   // Verify that the expected stability metrics were recorded.
   const PrefService* prefs = g_browser_process->local_state();
-  EXPECT_EQ(1, prefs->GetInteger(metrics::prefs::kStabilityLaunchCount));
   // The three tabs from OpenTabs() and the one tab to open
   // chrome://checkcrash/.
   EXPECT_EQ(4, prefs->GetInteger(metrics::prefs::kStabilityPageLoadCount));
@@ -252,7 +246,6 @@ IN_PROC_BROWSER_TEST_F(MetricsServiceBrowserTest, MAYBE_CheckCrashRenderers) {
 #elif BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
   VerifyRendererExitCodeIsSignal(histogram_tester, SIGTRAP);
 #endif
-  histogram_tester.ExpectUniqueSample("Tabs.SadTab.CrashCreated", 1, 1);
 }
 
 // OOM code only works on Windows.
@@ -269,7 +262,6 @@ IN_PROC_BROWSER_TEST_F(MetricsServiceBrowserTest, OOMRenderers) {
 
   // Verify that the expected stability metrics were recorded.
   const PrefService* prefs = g_browser_process->local_state();
-  EXPECT_EQ(1, prefs->GetInteger(metrics::prefs::kStabilityLaunchCount));
   // The three tabs from OpenTabs() and the one tab to open
   // chrome://memory-exhaust/.
   EXPECT_EQ(4, prefs->GetInteger(metrics::prefs::kStabilityPageLoadCount));
@@ -294,8 +286,6 @@ IN_PROC_BROWSER_TEST_F(MetricsServiceBrowserTest, OOMRenderers) {
 
   EXPECT_THAT(histogram_tester.GetAllSamples("CrashExitCodes.Renderer"),
               ::testing::IsSubsetOf(expected_possible_exit_codes));
-
-  histogram_tester.ExpectUniqueSample("Tabs.SadTab.OomCreated", 1, 1);
 }
 #endif  // BUILDFLAG(IS_WIN) && !defined(ADDRESS_SANITIZER)
 

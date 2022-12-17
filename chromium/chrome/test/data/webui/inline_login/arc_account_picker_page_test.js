@@ -4,18 +4,22 @@
 
 import 'chrome://chrome-signin/inline_login_app.js';
 
-import {Account, InlineLoginBrowserProxyImpl} from 'chrome://chrome-signin/inline_login_browser_proxy.js';
+import {ArcAccountPickerAppElement} from 'chrome://chrome-signin/arc_account_picker/arc_account_picker_app.js';
+import {Account} from 'chrome://chrome-signin/arc_account_picker/arc_account_picker_browser_proxy.js';
+import {InlineLoginBrowserProxyImpl} from 'chrome://chrome-signin/inline_login_browser_proxy.js';
+import {AccountAdditionOptions} from 'chrome://chrome-signin/inline_login_util.js';
 import {assert} from 'chrome://resources/js/assert.m.js';
 import {webUIListenerCallback} from 'chrome://resources/js/cr.m.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {assertDeepEquals, assertEquals} from '../chai_assert.js';
+import {getFakeAccountsNotAvailableInArcList, setTestArcAccountPickerBrowserProxy, TestArcAccountPickerBrowserProxy} from '../chromeos/arc_account_picker/test_util.js';
 
 import {fakeAuthExtensionData, fakeAuthExtensionDataWithEmail, TestAuthenticator, TestInlineLoginBrowserProxy} from './inline_login_test_util.js';
 
 window.arc_account_picker_page_test = {};
 const arc_account_picker_page_test = window.arc_account_picker_page_test;
-arc_account_picker_page_test.suiteName = 'InlineLoginWelcomePageTest';
+arc_account_picker_page_test.suiteName = 'InlineLoginArcPickerPageTest';
 
 /** @enum {string} */
 arc_account_picker_page_test.TestNames = {
@@ -26,27 +30,15 @@ arc_account_picker_page_test.TestNames = {
   MakeAvailableInArc: 'MakeAvailableInArc',
 };
 
-/** @return {!Array<Account>} */
-function getFakeAccountsNotAvailableInArcList() {
-  return [
-    {
-      id: '1',
-      email: 'test@gmail.com',
-      fullName: 'Test User',
-      image: 'data:image/png;base64,abc123'
-    },
-    {id: '2', email: 'test2@gmail.com', fullName: 'Test2 User', image: ''},
-    {id: '3', email: 'test3@gmail.com', fullName: 'Test3 User', image: ''},
-  ];
-}
-
 suite(arc_account_picker_page_test.suiteName, () => {
-  /** @type {ArcAccountAppPickerAppElement} */
+  /** @type {ArcAccountPickerAppElement} */
   let arcAccountPickerComponent;
   /** @type {InlineLoginAppElement} */
   let inlineLoginComponent;
   /** @type {TestInlineLoginBrowserProxy} */
   let testBrowserProxy;
+  /** @type {TestArcAccountPickerBrowserProxy} */
+  let testArcBrowserProxy;
 
   /**
    * @return {string} id of the active view.
@@ -57,37 +49,46 @@ suite(arc_account_picker_page_test.suiteName, () => {
 
   /**
    * @param {?AccountAdditionOptions} dialogArgs
-   * @param {?Array<Account>} accountsNotAvailableInArc
+   * @param {!Array<Account>} accountsNotAvailableInArc
+   * @param {!Object} authExtensionData
    */
-  function testSetup(dialogArgs, accountsNotAvailableInArc) {
+  async function testSetup(
+      dialogArgs, accountsNotAvailableInArc, authExtensionData) {
     document.body.innerHTML = '';
+
     testBrowserProxy = new TestInlineLoginBrowserProxy();
     testBrowserProxy.setDialogArguments(dialogArgs);
-    if (accountsNotAvailableInArc) {
-      testBrowserProxy.setAccountsNotAvailableInArc(accountsNotAvailableInArc);
-    }
     InlineLoginBrowserProxyImpl.instance_ = testBrowserProxy;
+
+    testArcBrowserProxy = new TestArcAccountPickerBrowserProxy();
+    testArcBrowserProxy.setAccountsNotAvailableInArc(accountsNotAvailableInArc);
+    setTestArcAccountPickerBrowserProxy(testArcBrowserProxy);
+
     inlineLoginComponent = /** @type {InlineLoginAppElement} */ (
         document.createElement('inline-login-app'));
     document.body.appendChild(inlineLoginComponent);
     inlineLoginComponent.setAuthExtHostForTest(new TestAuthenticator());
     flush();
-    arcAccountPickerComponent =
-        inlineLoginComponent.$$('arc-account-picker-app');
+    arcAccountPickerComponent = /** @type {ArcAccountPickerAppElement} */ (
+        inlineLoginComponent.$$('arc-account-picker-app'));
+
+    const switchViewPromise = new Promise(
+        resolve => inlineLoginComponent.addEventListener(
+            'switch-view-notify-for-testing', () => resolve()));
+    webUIListenerCallback('load-auth-extension', authExtensionData);
+    await switchViewPromise;
+    flush();
   }
 
   test(
       assert(arc_account_picker_page_test.TestNames.ArcPickerActive),
       async () => {
-        testSetup(
+        await testSetup(
             {isAvailableInArc: true, showArcAvailabilityPicker: true},
-            getFakeAccountsNotAvailableInArcList());
-        // Send auth extension data without email -> it's account addition flow.
-        webUIListenerCallback('load-auth-extension', fakeAuthExtensionData);
-        // Wait for getAccountsNotAvailableInArc call which will return > 0
-        // accounts.
-        await testBrowserProxy.whenCalled('getAccountsNotAvailableInArc');
-        flush();
+            getFakeAccountsNotAvailableInArcList(),
+            // Send auth extension data without email -> it's account addition
+            // flow.
+            fakeAuthExtensionData);
         assertEquals(
             inlineLoginComponent.View.arcAccountPicker, getActiveViewId(),
             'ARC account picker screen should be active');
@@ -101,11 +102,13 @@ suite(arc_account_picker_page_test.suiteName, () => {
 
   test(
       assert(arc_account_picker_page_test.TestNames.ArcPickerHiddenForReauth),
-      () => {
-        testSetup({isAvailableInArc: true, showArcAvailabilityPicker: true});
-        // Send auth extension data with email -> it's reauthentication flow.
-        webUIListenerCallback(
-            'load-auth-extension', fakeAuthExtensionDataWithEmail);
+      async () => {
+        await testSetup(
+            {isAvailableInArc: true, showArcAvailabilityPicker: true},
+            /*accountsNotAvailableInArc=*/[],
+            // Send auth extension data with email -> it's reauthentication
+            // flow.
+            fakeAuthExtensionDataWithEmail);
         assertEquals(
             inlineLoginComponent.View.addAccount, getActiveViewId(),
             'Add account view should be active for reauthentication');
@@ -114,32 +117,24 @@ suite(arc_account_picker_page_test.suiteName, () => {
   test(
       assert(arc_account_picker_page_test.TestNames.ArcPickerHiddenNoAccounts),
       async () => {
-        testSetup(
+        await testSetup(
             {isAvailableInArc: true, showArcAvailabilityPicker: true},
-            /*accountsNotAvailableInArc=*/[]);
-        // Send auth extension data without email -> it's account addition flow.
-        webUIListenerCallback('load-auth-extension', fakeAuthExtensionData);
-        // Wait for getAccountsNotAvailableInArc call which will return 0
-        // accounts.
-        return testBrowserProxy.whenCalled('getAccountsNotAvailableInArc')
-            .then(function() {
-              assertEquals(
-                  inlineLoginComponent.View.welcome, getActiveViewId(),
-                  'Welcome view should be active when there are 0 accounts' +
-                      ' not available in ARC');
-            });
+            /*accountsNotAvailableInArc=*/[],
+            // Send auth extension data without email -> it's account addition
+            // flow.
+            fakeAuthExtensionData);
+        assertEquals(
+            inlineLoginComponent.View.welcome, getActiveViewId(),
+            'Welcome view should be active when there are 0 accounts' +
+                ' not available in ARC');
       });
 
   test(assert(arc_account_picker_page_test.TestNames.AddAccount), async () => {
-    testSetup(
+    await testSetup(
         {isAvailableInArc: true, showArcAvailabilityPicker: true},
-        getFakeAccountsNotAvailableInArcList());
-    // Send auth extension data without email -> it's account addition flow.
-    webUIListenerCallback('load-auth-extension', fakeAuthExtensionData);
-    // Wait for getAccountsNotAvailableInArc call which will return > 0
-    // accounts.
-    await testBrowserProxy.whenCalled('getAccountsNotAvailableInArc');
-    flush();
+        getFakeAccountsNotAvailableInArcList(),
+        // Send auth extension data without email -> it's account addition flow.
+        fakeAuthExtensionData);
     assertEquals(
         inlineLoginComponent.View.arcAccountPicker, getActiveViewId(),
         'ARC account picker screen should be active');
@@ -154,15 +149,12 @@ suite(arc_account_picker_page_test.suiteName, () => {
   test(
       assert(arc_account_picker_page_test.TestNames.MakeAvailableInArc),
       async () => {
-        testSetup(
+        await testSetup(
             {isAvailableInArc: true, showArcAvailabilityPicker: true},
-            getFakeAccountsNotAvailableInArcList());
-        // Send auth extension data without email -> it's account addition flow.
-        webUIListenerCallback('load-auth-extension', fakeAuthExtensionData);
-        // Wait for getAccountsNotAvailableInArc call which will return > 0
-        // accounts.
-        await testBrowserProxy.whenCalled('getAccountsNotAvailableInArc');
-        flush();
+            getFakeAccountsNotAvailableInArcList(),
+            // Send auth extension data without email -> it's account addition
+            // flow.
+            fakeAuthExtensionData);
         assertEquals(
             inlineLoginComponent.View.arcAccountPicker, getActiveViewId(),
             'ARC account picker screen should be active');
@@ -171,9 +163,8 @@ suite(arc_account_picker_page_test.suiteName, () => {
         arcAccountPickerComponent.shadowRoot
             .querySelectorAll('.account-item')[0]
             .click();
-        return testBrowserProxy.whenCalled('makeAvailableInArc')
-            .then(function(account) {
-              assertDeepEquals(expectedAccount, account);
-            });
+        const account =
+            await testArcBrowserProxy.whenCalled('makeAvailableInArc');
+        assertDeepEquals(expectedAccount, account);
       });
 });

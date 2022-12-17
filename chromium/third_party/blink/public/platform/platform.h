@@ -59,7 +59,6 @@
 #include "third_party/blink/public/platform/web_code_cache_loader.h"
 #include "third_party/blink/public/platform/web_common.h"
 #include "third_party/blink/public/platform/web_data.h"
-#include "third_party/blink/public/platform/web_dedicated_worker_host_factory_client.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_v8_value_converter.h"
 #include "third_party/blink/public/platform/websocket_handshake_throttle_provider.h"
@@ -90,6 +89,7 @@ namespace media {
 struct AudioSinkParameters;
 struct AudioSourceParameters;
 class DecoderFactory;
+class MediaLog;
 class MediaPermission;
 class GpuVideoAcceleratorFactories;
 }  // namespace media
@@ -134,6 +134,7 @@ class WebAudioBus;
 class WebAudioLatencyHint;
 class WebCrypto;
 class WebDedicatedWorker;
+class WebDedicatedWorkerHostFactoryClient;
 class WebGraphicsContext3DProvider;
 class WebLocalFrame;
 class WebMediaCapabilitiesClient;
@@ -449,10 +450,11 @@ class BLINK_PLATFORM_EXPORT Platform {
     return WebData();
   }
 
-  // Gets a blob of data resource corresponding to |resource_id|, then
-  // uncompresses it. This should be used for resources which have
-  // compress="gzip" in *.grd.
-  virtual WebData UncompressDataResource(int resource_id) { return WebData(); }
+  // Returns string data from a data resource. compress="gzip" and "brotli" are
+  // detected automatically.
+  virtual std::string GetDataResourceString(int resource_id) {
+    return std::string();
+  }
 
   // Decodes the in-memory audio file data and returns the linear PCM audio data
   // in the |destination_bus|.
@@ -606,11 +608,6 @@ class BLINK_PLATFORM_EXPORT Platform {
   }
 #endif
 
-  // Whether zoom for dsf is enabled. When true, inputs to blink would all be
-  // scaled by the device scale factor so that layout is done in device pixel
-  // space.
-  virtual bool IsUseZoomForDSFEnabled() { return true; }
-
   // Whether LCD text is enabled.
   virtual bool IsLcdTextEnabled() { return false; }
 
@@ -636,6 +633,11 @@ class BLINK_PLATFORM_EXPORT Platform {
   // If there is a pending asynchronous request, it will be completed by the
   // time this routine returns.
   virtual scoped_refptr<gpu::GpuChannelHost> EstablishGpuChannelSync();
+
+  // Same as above, but asynchronous.
+  using EstablishGpuChannelCallback =
+      base::OnceCallback<void(scoped_refptr<gpu::GpuChannelHost>)>;
+  virtual void EstablishGpuChannel(EstablishGpuChannelCallback callback);
 
   // The TaskGraphRunner. This must be non-null if compositing any widgets.
   virtual cc::TaskGraphRunner* GetTaskGraphRunner() { return nullptr; }
@@ -714,9 +716,7 @@ class BLINK_PLATFORM_EXPORT Platform {
 
   virtual std::unique_ptr<WebDedicatedWorkerHostFactoryClient>
   CreateDedicatedWorkerHostFactoryClient(WebDedicatedWorker*,
-                                         const BrowserInterfaceBrokerProxy&) {
-    return nullptr;
-  }
+                                         const BrowserInterfaceBrokerProxy&);
   virtual void DidStartWorkerThread() {}
   virtual void WillStopWorkerThread() {}
   virtual void WorkerContextCreated(const v8::Local<v8::Context>& worker) {}
@@ -819,7 +819,9 @@ class BLINK_PLATFORM_EXPORT Platform {
     return nullptr;
   }
 
-  virtual media::DecoderFactory* GetMediaDecoderFactory() { return nullptr; }
+  virtual base::WeakPtr<media::DecoderFactory> GetMediaDecoderFactory() {
+    return nullptr;
+  }
 
   virtual void SetRenderingColorSpace(const gfx::ColorSpace& color_space) {}
 

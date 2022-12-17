@@ -3,6 +3,7 @@
 #include "notes/notes_submenu_observer.h"
 
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/prefs/pref_service.h"
 #include "components/renderer_context_menu/render_view_context_menu_proxy.h"
@@ -107,7 +108,7 @@ void NotesSubMenuObserver::RootMenuWillOpen() {
 
 void NotesSubMenuObserver::PopulateModel(ui::SimpleMenuModel* menu_model) {
   vivaldi::NoteNode* parent = menumodel_to_note_map_[menu_model];
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   bool underline_letter = false;
 #else
   Profile* profile = Profile::FromBrowserContext(proxy_->GetBrowserContext());

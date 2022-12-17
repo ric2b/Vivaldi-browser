@@ -6,8 +6,8 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
-#include "base/task/post_task.h"
 #include "base/threading/sequenced_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/renderer_host/pepper/pepper_file_io_host.h"
 #include "content/browser/renderer_host/pepper/quota_reservation.h"
 #include "content/common/pepper_file_util.h"
@@ -310,7 +310,7 @@ void PepperFileSystemBrowserHost::IOThreadState::ShouldCreateQuotaReservation(
   }
 
   // For file system types with quota, some origins have unlimited storage.
-  storage::QuotaManagerProxy* quota_manager_proxy =
+  const scoped_refptr<storage::QuotaManagerProxy>& quota_manager_proxy =
       file_system_context_->quota_manager_proxy();
   CHECK(quota_manager_proxy);
   storage::FileSystemType file_system_type =

@@ -40,7 +40,7 @@
 #include "chrome/browser/ui/autofill/save_update_address_profile_bubble_controller_impl.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/page_info/page_info_dialog.h"
-#include "chrome/browser/ui/passwords/manage_passwords_view_utils.h"
+#include "chrome/browser/ui/passwords/ui_utils.h"
 #include "chrome/browser/vr/vr_tab_helper.h"
 #include "chrome/browser/web_data_service_factory.h"
 #include "chrome/common/channel_info.h"
@@ -61,6 +61,7 @@
 #include "components/autofill_assistant/browser/public/runtime_manager.h"
 #include "components/password_manager/content/browser/content_password_manager_driver.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
+#include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/browser/password_requirements_service.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/prefs/pref_service.h"
@@ -120,7 +121,7 @@
 #endif  // BUILDFLAG(IS_ANDROID)
 
 #include "app/vivaldi_apptools.h"
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 #include "content/browser/web_contents/web_contents_impl.h"
 #endif
 
@@ -686,7 +687,7 @@ void ChromeAutofillClient::ShowAutofillPopup(
   gfx::RectF element_bounds_in_screen_space =
       open_args.element_bounds + client_area.OffsetFromOrigin();
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   // NOTE(tomas@vivaldi.com): when we are vivaldi, the web_contents in autofill
   // client is wrong, so we use the embedder web contents to send the window web
   // contents into the popup controller. This does not fix chrome apps.
@@ -707,7 +708,7 @@ void ChromeAutofillClient::ShowAutofillPopup(
       popup_controller_, delegate, web_contents(),
       web_contents()->GetNativeView(), element_bounds_in_screen_space,
       open_args.text_direction);
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   }
 #endif
 
@@ -843,10 +844,11 @@ void ChromeAutofillClient::OnVirtualCardDataAvailable(
 
   GetFormDataImporter()->CacheFetchedVirtualCard(credit_card->LastFourDigits());
 #if BUILDFLAG(IS_ANDROID)
-  // Show the virtual card snackbar only if the keyboard accessory feature is
-  // enabled. This is because the ManualFillingComponent for credit cards is
-  // only enabled when keyboard accessory is enabled.
-  if (features::IsAutofillManualFallbackEnabled()) {
+  // Show the virtual card snackbar only if the ManualFillingComponent component
+  // is enabled for credit cards.
+  if (features::IsAutofillManualFallbackEnabled() ||
+      base::FeatureList::IsEnabled(
+          autofill::features::kAutofillEnableManualFallbackForVirtualCards)) {
     (new AutofillSnackbarControllerImpl(web_contents()))->Show();
   }
 #else
@@ -893,8 +895,8 @@ bool ChromeAutofillClient::IsAutocompleteEnabled() {
 }
 
 bool ChromeAutofillClient::IsPasswordManagerEnabled() {
-  return GetPrefs()->GetBoolean(
-      password_manager::prefs::kCredentialsEnableService);
+  return password_manager_util::IsSavingPasswordsEnabled(GetPrefs(),
+                                                         GetSyncService());
 }
 
 void ChromeAutofillClient::PropagateAutofillPredictions(

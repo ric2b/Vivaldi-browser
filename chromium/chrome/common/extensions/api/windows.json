@@ -82,7 +82,7 @@
           },
           "alwaysOnTop": {"type": "boolean", "description": "Whether the window is set to be always on top."},
           "sessionId": {"type": "string", "optional": true, "description": "The session ID used to uniquely identify a window, obtained from the $(ref:sessions) API."},
-          "extData": {"type": "string", "optional": true, "description": "Extra data."}
+          "vivExtData": {"type": "string", "optional": true, "description": "Extra data."}
         }
       },
       {
@@ -229,7 +229,7 @@
                 "optional": true,
                 "description": "Specifies what type of browser window to create."
               },
-              "extData": {"type": "string", "optional": true, "description": "Extra data."},
+              "vivExtData": {"type": "string", "optional": true, "description": "Extra data."},
               "state": {
                 "$ref": "WindowState",
                 "optional": true,
@@ -244,6 +244,11 @@
                 "$ref": "history.TransitionType",
                 "optional": true,
                 "description": "The type of page transition to use when opening the tabs. Specific to Vivaldi"
+              },
+              "fromUrlField": {
+                "type": "boolean",
+                "optional": true,
+                "description": "Vivaldi addition: Whether the creation request came from the url field"
               }
             },
             "optional": true
@@ -281,7 +286,7 @@
                 "optional": true,
                 "description": "The new state of the window. The 'minimized', 'maximized', and 'fullscreen' states cannot be combined with 'left', 'top', 'width', or 'height'."
               },
-              "extData": {"type": "string", "optional": true, "description": "Extra data."}
+              "vivExtData": {"type": "string", "optional": true, "description": "Extra data."}
             }
           }
         ],

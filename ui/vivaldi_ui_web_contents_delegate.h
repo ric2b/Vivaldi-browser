@@ -7,6 +7,8 @@
 #ifndef UI_VIVALDI_APP_WINDOW_CONTENTS_H_
 #define UI_VIVALDI_APP_WINDOW_CONTENTS_H_
 
+#include "build/build_config.h"
+#include "components/paint_preview/buildflags/buildflags.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -42,7 +44,7 @@ class VivaldiUIWebContentsDelegate : public content::WebContentsDelegate,
                           bool exited) override;
   bool PreHandleGestureEvent(content::WebContents* source,
                              const blink::WebGestureEvent& event) override;
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   std::unique_ptr<content::ColorChooser> OpenColorChooser(
       content::WebContents* web_contents,
       SkColor color,
@@ -78,6 +80,13 @@ class VivaldiUIWebContentsDelegate : public content::WebContentsDelegate,
   std::unique_ptr<content::EyeDropper> OpenEyeDropper(
       content::RenderFrameHost* frame,
       content::EyeDropperListener* listener) override;
+#if BUILDFLAG(ENABLE_PAINT_PREVIEW)
+  void CapturePaintPreviewOfSubframe(
+      content::WebContents* web_contents,
+      const gfx::Rect& rect,
+      const base::UnguessableToken& guid,
+      content::RenderFrameHost* render_frame_host) override;
+#endif
 
  private:
   // content::WebContentsObserver

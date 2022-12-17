@@ -40,7 +40,6 @@ import androidx.annotation.RequiresApi;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ActivityState;
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.BundleUtils;
 import org.chromium.base.Callback;
@@ -256,7 +255,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
+import org.chromium.build.BuildConfig;
+import org.vivaldi.browser.anr_watchdog.ANRError;
+import org.vivaldi.browser.anr_watchdog.ANRWatchDog;
 import org.vivaldi.browser.common.VivaldiUtils;
+import org.vivaldi.browser.media.MediaPlaybackService;
 import org.vivaldi.browser.omnibox.status.SearchEngineIconHandler;
 import org.vivaldi.browser.speeddial.SpeedDialUtils;
 import org.vivaldi.browser.thumbnail.CaptureThumbnailHandler;
@@ -664,8 +667,9 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
                     mManualFillingComponentSupplier.get().getBottomInsetSupplier());
 
             // Should be called after TabModels are initialized.
-            mShareRegistrationCoordinator = new ShareRegistrationCoordinator(
-                    this, mActivityTabProvider, mRootUiCoordinator.getBottomSheetController());
+            mShareRegistrationCoordinator =
+                    new ShareRegistrationCoordinator(this, getWindowAndroid(), mActivityTabProvider,
+                            mRootUiCoordinator.getBottomSheetController());
             // Some share types are registered in the coorindator itself.
             mShareRegistrationCoordinator.registerShareType(PrintShareActivity.SHARE_ACTION,
                     () -> doPrintShare(this, mActivityTabProvider));
@@ -682,6 +686,25 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
                 mCompositorViewHolderSupplier.get().onStart();
             }
         }
+
+        // Note(david@vivaldi.com): We use the ANRWatchDog here in order to detect freezes and hangs
+        // of the application. The watchdog schedules a runnable to be run on the UI thread as soon
+        // as possible. It waits for 5 seconds and checks if the runnable has ben run. If it didn't
+        // run, which means that the UI has has been blocked for at least 5 seconds, it raises an
+        // error with all running threads stack traces.
+        final int timeout = 5000;
+        ANRWatchDog anrWatchDog = new ANRWatchDog(timeout);
+        // Callback for a detected ANR. If we rather want to crash the application we can set the
+        // listener to null.
+        anrWatchDog.setANRListener(error -> { Log.e("ANR-Watchdog", "", error); });
+        // Report ANRs on any thread.
+        anrWatchDog.setReportAllThreads();
+        // Start the thread with a minimum hanging time of 5000 millis.
+        // By default, the watchdog will ignore ANRs if the debugger is attached or if the app is
+        // waiting for the debugger to attach. This is because it detects execution pauses and
+        // breakpoints as ANRs. To disable this and throw an ANRError even if the debugger is
+        // connected, set this to true.
+        anrWatchDog.setIgnoreDebugger(false).start();
     }
 
     @Override
@@ -1209,6 +1232,11 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
 
         // Resume the ChromeActivity...
 
+        // Vivaldi
+        if (BuildConfig.IS_OEM_RENAULT_BUILD) {
+            MediaPlaybackService.setEnabled(this, true);
+        }
+
         RecordUserAction.record("MobileComeToForeground");
         getLaunchCauseMetrics().recordLaunchCause();
 
@@ -1297,6 +1325,11 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
 
     @Override
     public void onPauseWithNative() {
+        // Vivaldi
+        if (BuildConfig.IS_OEM_RENAULT_BUILD) {
+            MediaPlaybackService.setEnabled(this, false);
+        }
+
         RecordUserAction.record("MobileGoToBackground");
         Tab tab = getActivityTab();
         if (tab != null) getTabContentManager().cacheTabThumbnail(tab);
@@ -1711,8 +1744,7 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
     }
 
     protected Drawable getBackgroundDrawable() {
-        return new ColorDrawable(
-                ApiCompatibilityUtils.getColor(getResources(), R.color.light_background_color));
+        return new ColorDrawable(getColor(R.color.light_background_color));
     }
 
     /**
@@ -1722,8 +1754,8 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
      * ColorDrawable.
      */
     protected void changeBackgroundColorForResizing() {
-        getWindow().setBackgroundDrawable(new ColorDrawable(
-                ApiCompatibilityUtils.getColor(getResources(), R.color.resizing_background_color)));
+        getWindow().setBackgroundDrawable(
+                new ColorDrawable(getColor(R.color.resizing_background_color)));
     }
 
     private void maybeRemoveWindowBackground() {
@@ -1787,32 +1819,30 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
                 AsyncTabParamsManagerSingleton.getInstance()));
 
         // This must be initialized after initialization of tab reparenting controller.
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.ANDROID_LAYOUT_CHANGE_TAB_REPARENT)) {
-            DisplayAndroid display = getWindowAndroid().getDisplay();
-            mDisplayAndroidObserver = new DisplayAndroidObserver() {
-                @Override
-                public void onDisplayModesChanged(List<Mode> supportedModes) {
-                    maybeOnScreenSizeChange();
-                }
-
-                @Override
-                public void onCurrentModeChanged(Mode currentMode) {
-                    maybeOnScreenSizeChange();
-                }
-
-                private void maybeOnScreenSizeChange() {
-                    if (didChangeTabletMode()) {
-                        onScreenLayoutSizeChange();
-                    }
-                }
-            };
-            display.addObserver(mDisplayAndroidObserver);
-
-            CommerceSubscriptionsServiceFactory factory = new CommerceSubscriptionsServiceFactory();
-
-            if (ShoppingFeatures.isShoppingListEnabled()) {
-                mSubscriptionsManager = factory.getForLastUsedProfile().getSubscriptionsManager();
+        DisplayAndroid display = getWindowAndroid().getDisplay();
+        mDisplayAndroidObserver = new DisplayAndroidObserver() {
+            @Override
+            public void onDisplayModesChanged(List<Mode> supportedModes) {
+                maybeOnScreenSizeChange();
             }
+
+            @Override
+            public void onCurrentModeChanged(Mode currentMode) {
+                maybeOnScreenSizeChange();
+            }
+
+            private void maybeOnScreenSizeChange() {
+                if (didChangeTabletMode()) {
+                    onScreenLayoutSizeChange();
+                }
+            }
+        };
+        display.addObserver(mDisplayAndroidObserver);
+
+        CommerceSubscriptionsServiceFactory factory = new CommerceSubscriptionsServiceFactory();
+
+        if (ShoppingFeatures.isShoppingListEnabled()) {
+            mSubscriptionsManager = factory.getForLastUsedProfile().getSubscriptionsManager();
         }
 
         // Make sure the user is reporting into one of the feed spinner groups, so that we can
@@ -1822,6 +1852,11 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
         // cold-starts).
         // TODO(crbug.com/1151391): Remove after analysis is complete.
         ChromeFeatureList.isEnabled(ChromeFeatureList.INTEREST_FEED_SPINNER_ALWAYS_ANIMATE);
+
+        // Note(david@vivaldi.com): Set the background transparent in order to avoid ui flashes
+        // (ref: VAB-4354).
+        getWindow().getDecorView().getRootView().setBackgroundColor(
+                android.graphics.Color.TRANSPARENT);
     }
 
     /**

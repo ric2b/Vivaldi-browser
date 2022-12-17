@@ -6,7 +6,7 @@ import {OutputPage} from './output_page.js';
 import {Page} from './page.js';
 
 interface feedbackObject {
-  [key: string]: any
+  [key: string]: any;
 }
 
 export class FeedbackPage extends Page {
@@ -20,7 +20,7 @@ export class FeedbackPage extends Page {
     this.registerButtons();
   }
 
-  showPage() {
+  override showPage() {
     super.showPage();
     this.updateAudioInfo();
     this.updateDownloadButton();

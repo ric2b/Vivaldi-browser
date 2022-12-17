@@ -91,83 +91,71 @@ void FloatRoundedRect::Radii::Scale(float factor) {
     bottom_right_ = gfx::SizeF();
 }
 
-void FloatRoundedRect::Radii::Shrink(const gfx::InsetsF& insets) {
-  DCHECK_GE(insets.top(), 0);
-  DCHECK_GE(insets.bottom(), 0);
-  DCHECK_GE(insets.left(), 0);
-  DCHECK_GE(insets.right(), 0);
-
-  top_left_.set_width(std::max<float>(0, top_left_.width() - insets.left()));
-  top_left_.set_height(std::max<float>(0, top_left_.height() - insets.top()));
-
-  top_right_.set_width(std::max<float>(0, top_right_.width() - insets.right()));
-  top_right_.set_height(std::max<float>(0, top_right_.height() - insets.top()));
-
-  bottom_left_.set_width(
-      std::max<float>(0, bottom_left_.width() - insets.left()));
-  bottom_left_.set_height(
-      std::max<float>(0, bottom_left_.height() - insets.bottom()));
-
-  bottom_right_.set_width(
-      std::max<float>(0, bottom_right_.width() - insets.right()));
-  bottom_right_.set_height(
-      std::max<float>(0, bottom_right_.height() - insets.bottom()));
-}
-
-void FloatRoundedRect::Radii::Expand(const gfx::OutsetsF& outsets) {
-  DCHECK_GE(outsets.top(), 0);
-  DCHECK_GE(outsets.bottom(), 0);
-  DCHECK_GE(outsets.left(), 0);
-  DCHECK_GE(outsets.right(), 0);
-  if (top_left_.width() > 0 && top_left_.height() > 0) {
+void FloatRoundedRect::Radii::Outset(const gfx::OutsetsF& outsets) {
+  if (top_left_.width() > 0)
     top_left_.set_width(top_left_.width() + outsets.left());
+  if (top_left_.height() > 0)
     top_left_.set_height(top_left_.height() + outsets.top());
-  }
-  if (top_right_.width() > 0 && top_right_.height() > 0) {
+  if (top_right_.width() > 0)
     top_right_.set_width(top_right_.width() + outsets.right());
+  if (top_right_.height() > 0)
     top_right_.set_height(top_right_.height() + outsets.top());
-  }
-  if (bottom_left_.width() > 0 && bottom_left_.height() > 0) {
+  if (bottom_left_.width() > 0)
     bottom_left_.set_width(bottom_left_.width() + outsets.left());
+  if (bottom_left_.height() > 0)
     bottom_left_.set_height(bottom_left_.height() + outsets.bottom());
-  }
-  if (bottom_right_.width() > 0 && bottom_right_.height() > 0) {
+  if (bottom_right_.width() > 0)
     bottom_right_.set_width(bottom_right_.width() + outsets.right());
+  if (bottom_right_.height() > 0)
     bottom_right_.set_height(bottom_right_.height() + outsets.bottom());
-  }
 }
 
-// From: https://drafts.csswg.org/css-backgrounds-3/#shadow-shape
-// When the border radius is less than the spread distance, the spread distance
-// is first multiplied by the proportion 1 + (r-1)^3, where r is the ratio of
-// the border radius to the spread distance, in calculating the corner radii of
-// the spread shadow shape. For example, if the border radius is 10px and the
-// spread distance is 20px (r = .5), the corner radius of the shadow shape will
-// be 10px + 20px × (1 + (.5 - 1)^3) = 27.5px rather than 30px. This adjustment
+// From: https://drafts.csswg.org/css-backgrounds-3/#corner-shaping
+// ... in order to create a sharper corner when the border radius is small (and
+// thus ensure continuity between round and sharp corners), when the border
+// radius is less than the margin, the margin is multiplied by the proportion
+// 1 + (r-1)^3, where r is the ratio of the border radius to the margin, in
+// calculating the corner radii of the margin box shape.
+// And https://drafts.csswg.org/css-backgrounds-3/#shadow-shape:
+// ... For example, if the border radius is 10px and the spread distance is
+// 20px (r = .5), the corner radius of the shadow shape will be
+// 10px + 20px × (1 + (.5 - 1)^3) = 27.5px rather than 30px. This adjustment
 // is applied independently to the radii in each dimension.
-static void ReshapeCorner(gfx::SizeF& corner, float inflation) {
-  if (corner.width() == 0 && corner.height() == 0)
+static void OutsetCornerForMarginOrShadow(gfx::SizeF& corner, float outset) {
+  if (corner.IsZero() || outset == 0)
     return;
 
   float width_factor = 1;
-  if (corner.width() < inflation)
-    width_factor = 1 + pow(corner.width() / inflation - 1, 3);
+  if (corner.width() < outset)
+    width_factor = 1 + pow(corner.width() / outset - 1, 3);
 
   float height_factor = 1;
   if (corner.height() == corner.width())
     height_factor = width_factor;
-  else if (corner.height() < inflation)
-    height_factor = 1 + pow(corner.height() / inflation - 1, 3);
+  else if (corner.height() < outset)
+    height_factor = 1 + pow(corner.height() / outset - 1, 3);
 
-  corner.set_width(corner.width() + width_factor * inflation);
-  corner.set_height(corner.height() + height_factor * inflation);
+  corner.set_width(corner.width() + width_factor * outset);
+  corner.set_height(corner.height() + height_factor * outset);
 }
 
-void FloatRoundedRect::Radii::Reshape(float inflation) {
-  ReshapeCorner(top_left_, inflation);
-  ReshapeCorner(top_right_, inflation);
-  ReshapeCorner(bottom_left_, inflation);
-  ReshapeCorner(bottom_right_, inflation);
+void FloatRoundedRect::Radii::OutsetForMarginOrShadow(float outset) {
+  OutsetCornerForMarginOrShadow(top_left_, outset);
+  OutsetCornerForMarginOrShadow(top_right_, outset);
+  OutsetCornerForMarginOrShadow(bottom_left_, outset);
+  OutsetCornerForMarginOrShadow(bottom_right_, outset);
+}
+
+void FloatRoundedRect::Radii::OutsetForShapeMargin(float outset) {
+  // TODO(crbug.com/1309478): This isn't correct for non-circular
+  // corners (that is, corners that have x and y radii that are not
+  // equal).  But it's not clear to me if the correct result for that
+  // case is even an ellipse.
+  gfx::SizeF outset_size(outset, outset);
+  top_left_ += outset_size;
+  top_right_ += outset_size;
+  bottom_left_ += outset_size;
+  bottom_right_ += outset_size;
 }
 
 static inline float CornerRectIntercept(float y,
@@ -175,17 +163,6 @@ static inline float CornerRectIntercept(float y,
   DCHECK_GT(corner_rect.height(), 0);
   return corner_rect.width() *
          sqrt(1 - (y * y) / (corner_rect.height() * corner_rect.height()));
-}
-
-gfx::RectF FloatRoundedRect::RadiusCenterRect() const {
-  gfx::InsetsF maximum_radius_insets(
-      std::max(radii_.TopLeft().height(), radii_.TopRight().height()),
-      std::max(radii_.TopRight().width(), radii_.BottomRight().width()),
-      std::max(radii_.BottomLeft().height(), radii_.BottomRight().height()),
-      std::max(radii_.TopLeft().width(), radii_.BottomLeft().width()));
-  gfx::RectF center_rect(rect_);
-  center_rect.Inset(maximum_radius_insets);
-  return center_rect;
 }
 
 bool FloatRoundedRect::XInterceptsAtY(float y,
@@ -237,26 +214,24 @@ bool FloatRoundedRect::XInterceptsAtY(float y,
   return true;
 }
 
-void FloatRoundedRect::InflateAndReshape(float size) {
+void FloatRoundedRect::Outset(const gfx::OutsetsF& outsets) {
+  rect_.Outset(outsets);
+  radii_.Outset(outsets);
+}
+
+void FloatRoundedRect::OutsetForMarginOrShadow(float size) {
   if (size == 0.f)
     return;
   rect_.Outset(size);
-  radii_.Reshape(size);
+  radii_.OutsetForMarginOrShadow(size);
 }
 
-void FloatRoundedRect::InflateWithRadii(int size) {
-  gfx::RectF old = rect_;
-
-  rect_.Outset(size);
-  // Considering the inflation factor of shorter size to scale the radii seems
-  // appropriate here
-  float factor;
-  if (rect_.width() < rect_.height())
-    factor = old.width() ? (float)rect_.width() / old.width() : int(0);
-  else
-    factor = old.height() ? (float)rect_.height() / old.height() : int(0);
-
-  radii_.Scale(factor);
+void FloatRoundedRect::OutsetForShapeMargin(float outset) {
+  DCHECK_GE(outset, 0);
+  if (outset == 0.f)
+    return;
+  rect_.Outset(outset);
+  radii_.OutsetForShapeMargin(outset);
 }
 
 bool FloatRoundedRect::IntersectsQuad(const gfx::QuadF& quad) const {

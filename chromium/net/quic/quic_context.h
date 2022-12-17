@@ -9,7 +9,7 @@
 
 #include "base/time/time.h"
 #include "net/base/host_port_pair.h"
-#include "net/third_party/quiche/src/quic/core/quic_connection.h"
+#include "net/third_party/quiche/src/quiche/quic/core/quic_connection.h"
 
 namespace net {
 
@@ -160,8 +160,6 @@ struct NET_EXPORT QuicParams {
   // If true, the quic stream factory may race connection from stale dns
   // result with the original dns resolution
   bool race_stale_dns_on_connection = false;
-  // If true, the quic session may mark itself as GOAWAY on path degrading.
-  bool go_away_on_path_degrading = false;
   // If true, bidirectional streams over QUIC will be disabled.
   bool disable_bidirectional_streams = false;
   // If true, estimate the initial RTT for QUIC connections based on network.
@@ -179,6 +177,12 @@ struct NET_EXPORT QuicParams {
   // Network Service Type of the socket for iOS. Default is NET_SERVICE_TYPE_BE
   // (best effort).
   int ios_network_service_type = 0;
+  // Delay for the 1st time the alternative service is marked broken.
+  absl::optional<base::TimeDelta> initial_delay_for_broken_alternative_service;
+  // If true, the delay for broke alternative service would be initial_delay *
+  // (1 << broken_count). Otherwise, the delay would be initial_delay, 5min,
+  // 10min and so on.
+  absl::optional<bool> exponential_backoff_on_initial_delay;
 };
 
 // QuicContext contains QUIC-related variables that are shared across all of the

@@ -4,6 +4,7 @@
 
 #include "chrome/updater/test/integration_tests_impl.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <memory>
 #include <string>
@@ -11,6 +12,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
+#include "base/containers/contains.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -28,7 +30,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/task/post_task.h"
 #include "base/task/single_thread_task_runner_thread_mode.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
@@ -88,6 +89,7 @@ std::string GetHashHex(const base::FilePath& file) {
 }
 
 std::string GetUpdateResponse(const std::string& app_id,
+                              const std::string& install_data_index,
                               const std::string& codebase,
                               const base::Version& version,
                               const base::FilePath& update_file,
@@ -101,6 +103,7 @@ std::string GetUpdateResponse(const std::string& app_id,
       R"(    {)"
       R"(      "appid":"%s",)"
       R"(      "status":"ok",)"
+      R"(%s)"
       R"(      "updatecheck":{)"
       R"(        "status":"ok",)"
       R"(        "urls":{"url":[{"codebase":"%s"}]},)"
@@ -118,9 +121,16 @@ std::string GetUpdateResponse(const std::string& app_id,
       R"(    })"
       R"(  ])"
       R"(}})",
-      app_id.c_str(), codebase.c_str(), version.GetString().c_str(),
-      run_action.c_str(), arguments.c_str(),
-      update_file.BaseName().AsUTF8Unsafe().c_str(),
+      app_id.c_str(),
+      !install_data_index.empty()
+          ? base::StringPrintf(
+                R"(     "data":[{ "status":"ok", "name":"install", )"
+                R"("index":"%s", "#text":"%s_text" }],)",
+                install_data_index.c_str(), install_data_index.c_str())
+                .c_str()
+          : "",
+      codebase.c_str(), version.GetString().c_str(), run_action.c_str(),
+      arguments.c_str(), update_file.BaseName().AsUTF8Unsafe().c_str(),
       GetHashHex(update_file).c_str());
 }
 
@@ -283,11 +293,13 @@ void RunWakeActive(UpdaterScope scope, int expected_exit_code) {
   EXPECT_EQ(exit_code, expected_exit_code);
 }
 
-void Update(UpdaterScope scope, const std::string& app_id) {
+void Update(UpdaterScope scope,
+            const std::string& app_id,
+            const std::string& install_data_index) {
   scoped_refptr<UpdateService> update_service = CreateUpdateServiceProxy(scope);
   base::RunLoop loop;
   update_service->Update(
-      app_id, UpdateService::Priority::kForeground,
+      app_id, install_data_index, UpdateService::Priority::kForeground,
       UpdateService::PolicySameVersionUpdate::kNotAllowed, base::DoNothing(),
       base::BindOnce(base::BindLambdaForTesting(
           [&loop](UpdateService::Result result_unused) { loop.Quit(); })));
@@ -362,13 +374,18 @@ void SetServerStarts(UpdaterScope scope, int value) {
   PrefsCommitPendingWrites(global_prefs->GetPrefService());
 }
 
-void ExpectAppUnregisteredExistenceCheckerPath(UpdaterScope scope,
-                                               const std::string& app_id) {
-  scoped_refptr<GlobalPrefs> global_prefs = CreateGlobalPrefs(scope);
-  auto persisted_data =
-      base::MakeRefCounted<PersistedData>(global_prefs->GetPrefService());
-  EXPECT_EQ(base::FilePath(FILE_PATH_LITERAL("")).value(),
-            persisted_data->GetExistenceCheckerPath(app_id).value());
+void ExpectRegistered(UpdaterScope scope, const std::string& app_id) {
+  ASSERT_TRUE(base::Contains(base::MakeRefCounted<PersistedData>(
+                                 CreateGlobalPrefs(scope)->GetPrefService())
+                                 ->GetAppIds(),
+                             app_id));
+}
+
+void ExpectNotRegistered(UpdaterScope scope, const std::string& app_id) {
+  ASSERT_FALSE(base::Contains(base::MakeRefCounted<PersistedData>(
+                                  CreateGlobalPrefs(scope)->GetPrefService())
+                                  ->GetAppIds(),
+                              app_id));
 }
 
 void ExpectAppVersion(UpdaterScope scope,
@@ -396,7 +413,7 @@ bool Run(UpdaterScope scope, base::CommandLine command_line, int* exit_code) {
     return false;
 
   // TODO(crbug.com/1096654): Get the timeout from TestTimeouts.
-  return process.WaitForExitWithTimeout(base::Seconds(45), exit_code);
+  return process.WaitForExitWithTimeout(base::Seconds(360), exit_code);
 }
 
 bool WaitFor(base::RepeatingCallback<bool()> predicate) {
@@ -433,10 +450,12 @@ void ExpectSelfUpdateSequence(UpdaterScope scope, ScopedServer* test_server) {
            base::StringPrintf(R"(.*"appid":"%s".*)", kUpdaterAppId)),
        GetScopePredicate(scope)},
       GetUpdateResponse(
-          kUpdaterAppId, test_server->base_url().spec(),
+          kUpdaterAppId, "", test_server->base_url().spec(),
           base::Version(kUpdaterVersion), crx_path, kSelfUpdateCRXRun,
-          base::StrCat({"--update",
-                        scope == UpdaterScope::kSystem ? " --system" : ""})));
+          base::StrCat(
+              {"--update", scope == UpdaterScope::kSystem ? " --system" : "",
+               " --", kEnableLoggingSwitch, " --", kLoggingModuleSwitch, "=",
+               kLoggingModuleSwitchValue})));
 
   // Second request: update download.
   std::string crx_bytes;
@@ -458,6 +477,7 @@ void ExpectSelfUpdateSequence(UpdaterScope scope, ScopedServer* test_server) {
 void ExpectUpdateSequence(UpdaterScope scope,
                           ScopedServer* test_server,
                           const std::string& app_id,
+                          const std::string& install_data_index,
                           const base::Version& from_version,
                           const base::Version& to_version) {
   base::FilePath test_data_path;
@@ -471,9 +491,20 @@ void ExpectUpdateSequence(UpdaterScope scope,
       {base::BindRepeating(
            RequestMatcherRegex,
            base::StringPrintf(R"(.*"appid":"%s".*)", app_id.c_str())),
+       base::BindRepeating(
+           RequestMatcherRegex,
+           base::StringPrintf(
+               R"(.*%s)",
+               !install_data_index.empty()
+                   ? base::StringPrintf(
+                         R"("data":\[{"index":"%s","name":"install"}],.*)",
+                         install_data_index.c_str())
+                         .c_str()
+                   : "")),
        GetScopePredicate(scope)},
-      GetUpdateResponse(app_id, test_server->base_url().spec(), to_version,
-                        crx_path, kDoNothingCRXRun, {}));
+      GetUpdateResponse(app_id, install_data_index,
+                        test_server->base_url().spec(), to_version, crx_path,
+                        kDoNothingCRXRun, {}));
 
   // Second request: update download.
   std::string crx_bytes;
@@ -563,6 +594,7 @@ void StressUpdateService(UpdaterScope scope) {
 
 void CallServiceUpdate(UpdaterScope updater_scope,
                        const std::string& app_id,
+                       const std::string& install_data_index,
                        bool same_version_update_allowed) {
   UpdateService::PolicySameVersionUpdate policy_same_version_update =
       same_version_update_allowed
@@ -574,7 +606,8 @@ void CallServiceUpdate(UpdaterScope updater_scope,
 
   base::RunLoop loop;
   service_proxy->Update(
-      app_id, UpdateService::Priority::kForeground, policy_same_version_update,
+      app_id, install_data_index, UpdateService::Priority::kForeground,
+      policy_same_version_update,
       base::BindLambdaForTesting([](const UpdateService::UpdateState&) {}),
       base::BindLambdaForTesting([&](UpdateService::Result result) {
         EXPECT_EQ(result, UpdateService::Result::kSuccess);

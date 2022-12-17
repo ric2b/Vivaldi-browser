@@ -36,6 +36,9 @@ config("features") {
   if (is_vivaldi_polestar) {
     defines += [ "OEM_POLESTAR_BUILD" ]
   }
+  if (is_vivaldi_renault) {
+    defines += [ "OEM_RENAULT_BUILD" ]
+  }
 }
 
 config("linux_386_linking") {

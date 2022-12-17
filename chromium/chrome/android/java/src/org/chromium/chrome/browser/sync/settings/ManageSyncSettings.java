@@ -29,7 +29,6 @@ import androidx.preference.Preference;
 import androidx.preference.PreferenceCategory;
 import androidx.preference.PreferenceFragmentCompat;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.IntentUtils;
 import org.chromium.base.metrics.RecordUserAction;
@@ -39,13 +38,12 @@ import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.SyncFirstSetupCompleteSource;
 import org.chromium.chrome.browser.autofill.PersonalDataManager;
 import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncherImpl;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.profiles.ProfileAccountManagementMetrics;
 import org.chromium.chrome.browser.settings.ChromeManagedPreferenceDelegate;
 import org.chromium.chrome.browser.settings.SettingsActivity;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.services.SigninManager;
-import org.chromium.chrome.browser.signin.services.SigninMetricsUtils;
 import org.chromium.chrome.browser.signin.services.UnifiedConsentServiceBridge;
 import org.chromium.chrome.browser.sync.SyncService;
 import org.chromium.chrome.browser.sync.TrustedVaultClient;
@@ -194,13 +192,31 @@ public class ManageSyncSettings extends PreferenceFragmentCompat
         mSyncSettings = (CheckBoxPreference) findPreference(PREF_SYNC_SETTINGS);
 
         mTurnOffSync = findPreference(PREF_TURN_OFF_SYNC);
-        mTurnOffSync.setOnPreferenceClickListener(
-                SyncSettingsUtils.toOnClickListener(this, this::onTurnOffSyncClicked));
 
         Profile profile = Profile.getLastUsedRegularProfile();
         if (!mIsFromSigninScreen) {
-            // Child profiles should not be able to sign out.
-            mTurnOffSync.setVisible(!profile.isChild());
+            if (!profile.isChild()) {
+                // Non-child users have an option to sign out and turn off sync.  This is to ensure
+                // that revoking consents for sign in and sync does not require more steps than
+                // enabling them.
+                mTurnOffSync.setVisible(true);
+                mTurnOffSync.setIcon(R.drawable.ic_signout_40dp);
+                mTurnOffSync.setTitle(R.string.sign_out_and_turn_off_sync);
+                mTurnOffSync.setOnPreferenceClickListener(SyncSettingsUtils.toOnClickListener(
+                        this, this::onSignOutAndTurnOffSyncClicked));
+            } else if (ChromeFeatureList.isEnabled(
+                               ChromeFeatureList.ALLOW_SYNC_OFF_FOR_CHILD_ACCOUNTS)) {
+                // Child users are force signed-in, so have an option which only turns off sync.
+                mTurnOffSync.setVisible(true);
+                mTurnOffSync.setIcon(R.drawable.ic_turn_off_sync_48dp);
+                mTurnOffSync.setTitle(R.string.turn_off_sync);
+                mTurnOffSync.setOnPreferenceClickListener(
+                        SyncSettingsUtils.toOnClickListener(this, this::onTurnOffSyncClicked));
+            } else {
+                // Child users who are not allowed to disable sync have this option hidden.
+                mTurnOffSync.setVisible(false);
+            }
+
             findPreference(PREF_ADVANCED_CATEGORY).setVisible(true);
 
             /**
@@ -440,8 +456,7 @@ public class ManageSyncSettings extends PreferenceFragmentCompat
 
     private void setEncryptionErrorSummary(@StringRes int stringId) {
         SpannableString summary = new SpannableString(getString(stringId));
-        final int errorColor =
-                ApiCompatibilityUtils.getColor(getResources(), R.color.input_underline_error_color);
+        final int errorColor = getContext().getColor(R.color.input_underline_error_color);
         summary.setSpan(new ForegroundColorSpan(errorColor), 0, summary.length(), 0);
         mSyncEncryption.setSummary(summary);
     }
@@ -553,18 +568,28 @@ public class ManageSyncSettings extends PreferenceFragmentCompat
         RecordUserAction.record("Signin_AccountSettings_GoogleActivityControlsClicked");
     }
 
+    private void onSignOutAndTurnOffSyncClicked() {
+        if (!IdentityServicesProvider.get()
+                        .getIdentityManager(Profile.getLastUsedRegularProfile())
+                        .hasPrimaryAccount(ConsentLevel.SYNC)) {
+            return;
+        }
+        SignOutDialogFragment signOutFragment =
+                SignOutDialogFragment.create(SignOutDialogFragment.ActionType.CLEAR_PRIMARY_ACCOUNT,
+                        GAIAServiceType.GAIA_SERVICE_TYPE_NONE);
+        signOutFragment.setTargetFragment(this, 0);
+        signOutFragment.show(getParentFragmentManager(), SIGN_OUT_DIALOG_TAG);
+    }
+
     private void onTurnOffSyncClicked() {
         if (!IdentityServicesProvider.get()
                         .getIdentityManager(Profile.getLastUsedRegularProfile())
                         .hasPrimaryAccount(ConsentLevel.SYNC)) {
             return;
         }
-        SigninMetricsUtils.logProfileAccountManagementMenu(
-                ProfileAccountManagementMetrics.TOGGLE_SIGNOUT,
-                GAIAServiceType.GAIA_SERVICE_TYPE_NONE);
-
         SignOutDialogFragment signOutFragment =
-                SignOutDialogFragment.create(GAIAServiceType.GAIA_SERVICE_TYPE_NONE);
+                SignOutDialogFragment.create(SignOutDialogFragment.ActionType.REVOKE_SYNC_CONSENT,
+                        GAIAServiceType.GAIA_SERVICE_TYPE_NONE);
         signOutFragment.setTargetFragment(this, 0);
         signOutFragment.show(getParentFragmentManager(), SIGN_OUT_DIALOG_TAG);
     }
@@ -682,8 +707,10 @@ public class ManageSyncSettings extends PreferenceFragmentCompat
                 startActivity(intent);
                 return;
             case SyncError.OTHER_ERRORS:
-                SignOutDialogFragment signOutFragment =
-                        SignOutDialogFragment.create(GAIAServiceType.GAIA_SERVICE_TYPE_NONE);
+                SignOutDialogFragment signOutFragment = SignOutDialogFragment.create(
+                        profile.isChild() ? SignOutDialogFragment.ActionType.REVOKE_SYNC_CONSENT
+                                          : SignOutDialogFragment.ActionType.CLEAR_PRIMARY_ACCOUNT,
+                        GAIAServiceType.GAIA_SERVICE_TYPE_NONE);
                 signOutFragment.setTargetFragment(this, 0);
                 signOutFragment.show(getParentFragmentManager(), SIGN_OUT_DIALOG_TAG);
                 return;
@@ -750,20 +777,36 @@ public class ManageSyncSettings extends PreferenceFragmentCompat
         }
 
         final DialogFragment clearDataProgressDialog = new ClearDataProgressDialog();
-        IdentityServicesProvider.get().getSigninManager(profile).signOut(
-                SignoutReason.USER_CLICKED_SIGNOUT_SETTINGS, new SigninManager.SignOutCallback() {
-                    @Override
-                    public void preWipeData() {
-                        clearDataProgressDialog.show(
-                                getChildFragmentManager(), CLEAR_DATA_PROGRESS_DIALOG_TAG);
-                    }
+        SigninManager.SignOutCallback dataWipeCallback = new SigninManager.SignOutCallback() {
+            @Override
+            public void preWipeData() {
+                clearDataProgressDialog.show(
+                        getChildFragmentManager(), CLEAR_DATA_PROGRESS_DIALOG_TAG);
+            }
 
-                    @Override
-                    public void signOutComplete() {
-                        if (clearDataProgressDialog.isAdded()) {
-                            clearDataProgressDialog.dismissAllowingStateLoss();
-                        }
-                    }
-                }, forceWipeUserData);
+            @Override
+            public void signOutComplete() {
+                // TODO(crbug.com/1313527): deal with both the following edge cases (currently
+                // this code only deals with 1):
+                //
+                // 1) The parent activity showing the dialog is dismissed before signout completes.
+                // 2) The signout completes before the dialog is added.
+                if (clearDataProgressDialog.isAdded()) {
+                    clearDataProgressDialog.dismissAllowingStateLoss();
+                }
+            }
+        };
+
+        if (profile.isChild()) {
+            // Call through to PrimaryAccountMutatorImpl::RevokeSyncConsent().
+            assert ChromeFeatureList.isEnabled(ChromeFeatureList.ALLOW_SYNC_OFF_FOR_CHILD_ACCOUNTS);
+            IdentityServicesProvider.get().getSigninManager(profile).revokeSyncConsent(
+                    SignoutReason.USER_CLICKED_REVOKE_SYNC_CONSENT_SETTINGS, dataWipeCallback,
+                    forceWipeUserData);
+        } else {
+            IdentityServicesProvider.get().getSigninManager(profile).signOut(
+                    SignoutReason.USER_CLICKED_SIGNOUT_SETTINGS, dataWipeCallback,
+                    forceWipeUserData);
+        }
     }
 }

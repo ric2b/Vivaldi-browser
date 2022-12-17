@@ -46,6 +46,7 @@ import org.chromium.chrome.browser.night_mode.NightModeStateProvider;
 import org.chromium.chrome.browser.page_info.ChromePageInfo;
 import org.chromium.chrome.browser.page_info.ChromePageInfoHighlight;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TrustedCdn;
 import org.chromium.components.page_info.PageInfoController.OpenedFromSource;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
@@ -121,7 +122,7 @@ public class CustomTabActivity extends BaseCustomTabActivity {
 
         mSession = mIntentDataProvider.getSession();
 
-        CustomTabNavigationBarController.update(getWindow(), mIntentDataProvider, getResources());
+        CustomTabNavigationBarController.update(getWindow(), mIntentDataProvider, this);
     }
 
     @Override
@@ -238,7 +239,7 @@ public class CustomTabActivity extends BaseCustomTabActivity {
         } else if (id == R.id.info_menu_id) {
             Tab tab = getTabModelSelector().getCurrentTab();
             if (tab == null) return false;
-            String publisher = getToolbarManager().getContentPublisher();
+            String publisher = TrustedCdn.getContentPublisher(tab);
             new ChromePageInfo(getModalDialogManagerSupplier(), publisher, OpenedFromSource.MENU,
                     () -> mRootUiCoordinator.getMerchantTrustSignalsCoordinatorSupplier().get())
                     .show(tab, ChromePageInfoHighlight.noHighlight());

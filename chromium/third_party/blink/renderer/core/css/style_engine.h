@@ -32,54 +32,76 @@
 
 #include <memory>
 #include <utility>
+
 #include "base/auto_reset.h"
 #include "third_party/blink/public/common/css/forced_colors.h"
-#include "third_party/blink/public/mojom/css/preferred_color_scheme.mojom-shared.h"
-#include "third_party/blink/public/web/web_document.h"
-#include "third_party/blink/renderer/core/animation/css/css_scroll_timeline.h"
+#include "third_party/blink/public/mojom/css/preferred_color_scheme.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/frame/color_scheme.mojom-blink-forward.h"
+#include "third_party/blink/public/web/web_css_origin.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/css/active_style_sheets.h"
+#include "third_party/blink/renderer/core/css/color_scheme_flags.h"
 #include "third_party/blink/renderer/core/css/css_global_rule_set.h"
-#include "third_party/blink/renderer/core/css/document_style_sheet_collection.h"
 #include "third_party/blink/renderer/core/css/invalidation/pending_invalidations.h"
 #include "third_party/blink/renderer/core/css/invalidation/style_invalidator.h"
 #include "third_party/blink/renderer/core/css/layout_tree_rebuild_root.h"
-#include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
-#include "third_party/blink/renderer/core/css/resolver/style_resolver_stats.h"
-#include "third_party/blink/renderer/core/css/style_engine_context.h"
+#include "third_party/blink/renderer/core/css/pending_sheet_type.h"
+#include "third_party/blink/renderer/core/css/rule_feature_set.h"
 #include "third_party/blink/renderer/core/css/style_invalidation_root.h"
 #include "third_party/blink/renderer/core/css/style_recalc_root.h"
 #include "third_party/blink/renderer/core/css/vision_deficiency.h"
-#include "third_party/blink/renderer/core/dom/document.h"
-#include "third_party/blink/renderer/core/dom/tree_ordered_list.h"
-#include "third_party/blink/renderer/core/html/track/text_track.h"
+#include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/layout/geometry/axis.h"
-#include "third_party/blink/renderer/core/style/filter_operations.h"
 #include "third_party/blink/renderer/platform/bindings/name_client.h"
 #include "third_party/blink/renderer/platform/fonts/font_selector_client.h"
+#include "third_party/blink/renderer/platform/graphics/color.h"
+#include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_map.h"
+#include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_set.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
+
+namespace WTF {
+class TextPosition;
+}
 
 namespace blink {
 
 class CounterStyle;
 class CounterStyleMap;
 class CSSFontSelector;
+class CSSPropertyValueSet;
+class CSSScrollTimeline;
 class CSSStyleSheet;
+class CSSValue;
+class Document;
+class DocumentStyleSheetCollection;
+class ElementRuleCollector;
 class FontSelector;
+class HTMLBodyElement;
+class HTMLFieldSetElement;
 class HTMLSelectElement;
 class MediaQueryEvaluator;
 class Node;
+class ReferenceFilterOperation;
 class RuleFeatureSet;
 class ShadowTreeStyleSheetCollection;
 class DocumentStyleEnvironmentVariables;
 class CascadeLayerMap;
+class SpaceSplitString;
+class StyleResolver;
+class StyleResolverStats;
 class StyleRuleFontFace;
+class StyleRuleFontPaletteValues;
+class StyleRuleScrollTimeline;
+class StyleRuleKeyframes;
 class StyleRuleUsageTracker;
+class StyleSheet;
 class StyleSheetContents;
 class StyleInitialData;
+class TextTrack;
+class TreeScopeStyleSheetCollection;
 class ViewportStyleResolver;
 struct LogicalSize;
 
@@ -201,12 +223,11 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   }
   void ViewportRulesChanged();
 
-  void InjectSheet(const StyleSheetKey&, StyleSheetContents*,
-                   WebDocument::CSSOrigin =
-                       WebDocument::kAuthorOrigin);
+  void InjectSheet(const StyleSheetKey&,
+                   StyleSheetContents*,
+                   WebCssOrigin = WebCssOrigin::kAuthor);
   void RemoveInjectedSheet(const StyleSheetKey&,
-                           WebDocument::CSSOrigin =
-                               WebDocument::kAuthorOrigin);
+                           WebCssOrigin = WebCssOrigin::kAuthor);
   CSSStyleSheet& EnsureInspectorStyleSheet();
   RuleSet* WatchedSelectorsRuleSet() {
     DCHECK(global_rule_set_);
@@ -223,21 +244,14 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   void SetPreferredStylesheetSetNameIfNotSet(const String&);
   void SetHttpDefaultStyle(const String&);
 
-  void AddPendingSheet(StyleEngineContext&);
-  void RemovePendingSheet(Node& style_sheet_candidate_node,
-                          const StyleEngineContext&);
+  void AddPendingSheet(Node& style_sheet_candidate_node);
+  void RemovePendingSheet(Node& style_sheet_candidate_node);
 
   bool HasPendingScriptBlockingSheets() const {
     return pending_script_blocking_stylesheets_ > 0;
   }
-  bool HasPendingRenderBlockingSheets() const {
-    return pending_render_blocking_stylesheets_ > 0;
-  }
   bool HaveScriptBlockingStylesheetsLoaded() const {
     return !HasPendingScriptBlockingSheets();
-  }
-  bool HaveRenderBlockingStylesheetsLoaded() const {
-    return !HasPendingRenderBlockingSheets();
   }
 
   unsigned MaxDirectAdjacentSelectors() const {
@@ -249,14 +263,14 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   bool UsesWindowInactiveSelector() const {
     return GetRuleFeatureSet().UsesWindowInactiveSelector();
   }
-  bool UsesContainerQueries() const {
-    return GetRuleFeatureSet().UsesContainerQueries() ||
-           uses_container_relative_units_ || skipped_container_recalc_;
-  }
 
-  void SetUsesContainerRelativeUnits() {
-    uses_container_relative_units_ = true;
-  }
+  // Set when we recalc the style of any element that depends on layout.
+  void SetStyleAffectedByLayout() { style_affected_by_layout_ = true; }
+  bool StyleAffectedByLayout() { return style_affected_by_layout_; }
+
+  bool SkippedContainerRecalc() const { return skipped_container_recalc_ != 0; }
+  void IncrementSkippedContainerRecalc() { ++skipped_container_recalc_; }
+  void DecrementSkippedContainerRecalc() { --skipped_container_recalc_; }
 
   bool UsesRemUnits() const { return uses_rem_units_; }
   void SetUsesRemUnit(bool uses_rem_units) { uses_rem_units_ = uses_rem_units; }
@@ -278,10 +292,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
 
   void ComputeFont(Element& element,
                    ComputedStyle* font_style,
-                   const CSSPropertyValueSet& font_properties) {
-    UpdateActiveStyle();
-    GetStyleResolver().ComputeFont(element, font_style, font_properties);
-  }
+                   const CSSPropertyValueSet& font_properties);
 
   PendingInvalidations& GetPendingNodeInvalidations() {
     return pending_invalidations_;
@@ -336,19 +347,10 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
 
   CSSStyleSheet* CreateSheet(Element&,
                              const String& text,
-                             TextPosition start_position,
-                             StyleEngineContext&);
+                             WTF::TextPosition start_position,
+                             PendingSheetType type);
 
-  void CollectFeaturesTo(RuleFeatureSet& features) {
-    CollectUserStyleFeaturesTo(features);
-    CollectScopedStyleFeaturesTo(features);
-    for (CSSStyleSheet* sheet : custom_element_default_style_sheets_) {
-      if (!sheet)
-        continue;
-      if (RuleSet* rule_set = RuleSetForSheet(*sheet))
-        features.Add(rule_set->Features());
-    }
-  }
+  void CollectFeaturesTo(RuleFeatureSet& features);
 
   void EnsureUAStyleForFullscreen();
   void EnsureUAStyleForXrOverlay();
@@ -372,7 +374,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   void PseudoStateChangedForElement(CSSSelector::PseudoType,
                                     Element&,
                                     bool invalidate_descendants_or_siblings,
-                                    bool invalidate_ancestors);
+                                    bool invalidate_ancestors_or_siblings);
   void PartChangedForElement(Element&);
   void ExportpartsChangedForElement(Element&);
 
@@ -390,8 +392,12 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
                                         InvalidationScope =
                                             kInvalidateCurrentScope);
   void ScheduleCustomElementInvalidations(HashSet<AtomicString> tag_names);
-  void ElementInsertedOrRemoved(Element* parent, Element& element);
-  void SubtreeInsertedOrRemoved(Element* parent, Element& subtree_root);
+  void ElementInsertedOrRemoved(Element* parent,
+                                Node* node_before_change,
+                                Element& element);
+  void SubtreeInsertedOrRemoved(Element* parent,
+                                Node* node_before_change,
+                                Element& subtree_root);
 
   void NodeWillBeRemoved(Node&);
   void ChildrenRemoved(ContainerNode& parent);
@@ -403,7 +409,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   }
   // Do necessary invalidations, which are not covered by a style recalc, for a
   // body element which changed between being the document.body element and not.
-  void FirstBodyElementChanged(HTMLBodyElement&);
+  void FirstBodyElementChanged(HTMLBodyElement*);
 
   unsigned StyleForElementCount() const { return style_for_element_count_; }
   void IncStyleForElementCount() { style_for_element_count_++; }
@@ -449,6 +455,10 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
 
   StyleRuleKeyframes* KeyframeStylesForAnimation(
       const AtomicString& animation_name);
+
+  StyleRuleFontPaletteValues* FontPaletteValuesForNameAndFamily(
+      AtomicString palette_name,
+      AtomicString font_family);
 
   void UpdateTimelines();
 
@@ -511,7 +521,6 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
       return To<Element>(style_recalc_root_.GetRootNode());
     return nullptr;
   }
-  void SkipStyleRecalcForContainer() { skipped_container_recalc_ = true; }
   void ChangeRenderingForHTMLSelect(HTMLSelectElement& select);
   void DetachedFromParent(LayoutObject* parent) {
     // This method will be called for every LayoutObject while detaching a
@@ -528,8 +537,8 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
       parent_for_detached_subtree_ = parent;
   }
 
-  void SetColorSchemeFromMeta(const CSSValue* color_scheme);
-  const CSSValue* GetMetaColorSchemeValue() const { return meta_color_scheme_; }
+  void SetPageColorSchemes(const CSSValue* color_scheme);
+  ColorSchemeFlags GetPageColorSchemes() const { return page_color_schemes_; }
   mojom::PreferredColorScheme GetPreferredColorScheme() const {
     return preferred_color_scheme_;
   }
@@ -596,7 +605,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
 
   CSSStyleSheet* ParseSheet(Element&,
                             const String& text,
-                            TextPosition start_position);
+                            WTF::TextPosition start_position);
 
   const DocumentStyleSheetCollection& GetDocumentStyleSheetCollection() const {
     DCHECK(document_style_sheet_collection_);
@@ -641,7 +650,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   bool ClearFontFaceCacheAndAddUserFonts(
       const ActiveStyleSheetVector& user_sheets);
 
-  void ClearKeyframeRules() { keyframes_rule_map_.clear(); }
+  void ClearKeyframeRules();
   void ClearPropertyRules();
   void ClearScrollTimelineRules();
 
@@ -695,11 +704,20 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   // container.
   void RebuildFieldSetContainer(HTMLFieldSetElement& fieldset);
 
-  // Walk-up to invalidate elements affected by :has() state change
-  void InvalidateAncestorsAffectedByHasInternal(Element*,
-                                                bool for_pseudo_change);
-  void InvalidateAncestorsAffectedByHas(Element*);
-  void InvalidateAncestorsAffectedByHasForPseudoChange(Element*);
+  // Invalidate ancestors or siblings affected by :has() state change
+  void InvalidateAncestorsOrSiblingsAffectedByHasInternal(
+      Element* parent,
+      Element* previous_sibling,
+      bool for_pseudo_change);
+  inline void InvalidateAncestorsOrSiblingsAffectedByHas(
+      Element& changed_element);
+  void InvalidateAncestorsOrSiblingsAffectedByHas(Element* parent,
+                                                  Element* previous_sibling);
+  inline void InvalidateAncestorsOrSiblingsAffectedByHasForPseudoChange(
+      Element& changed_element);
+  void InvalidateAncestorsOrSiblingsAffectedByHasForPseudoChange(
+      Element* parent,
+      Element* previous_sibling);
 
   Member<Document> document_;
 
@@ -710,14 +728,6 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   // loaded). See:
   // https://html.spec.whatwg.org/multipage/semantics.html#interactions-of-styling-and-scripting
   int pending_script_blocking_stylesheets_{0};
-
-  // Tracks the number of currently loading top-level stylesheets which block
-  // rendering (the "Update the rendering" step of the event loop processing
-  // model) from starting. Sheets loaded using the @import directive are not
-  // included in this count. See:
-  // https://html.spec.whatwg.org/multipage/webappapis.html#event-loop-processing-model
-  // Once all of these sheets have loaded, rendering begins.
-  int pending_render_blocking_stylesheets_{0};
 
   // Tracks the number of currently loading top-level stylesheets which block
   // the HTML parser. Sheets loaded using the @import directive are not included
@@ -745,14 +755,19 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   String preferred_stylesheet_set_name_;
 
   bool uses_rem_units_{false};
-  bool uses_container_relative_units_{false};
-  // True if the previous UpdateStyleAndLayoutTree skipped style recalc for a
-  // subtree for a container to have the follow layout update the size of the
-  // container before continuing with interleaved style and layout with the
-  // correct container size for container queries. This being true is a signal
-  // to EnsureComputedStyle that we need to update layout to have up-to-date
-  // ComputedStyles.
-  bool skipped_container_recalc_{false};
+  // True if we have performed style recalc for at least one element that
+  // depends on container queries.
+  bool style_affected_by_layout_{false};
+  // The number of elements currently in a skipped style recalc state.
+  //
+  // Style recalc can be skipped for an element [1] if its style depends on
+  // the size, which can be the case for container queries. This number is
+  // used to understand whether or not we need to upgrade [2] a call to
+  // UpdateStyleAndLayoutTree* to also include layout.
+  //
+  // [1] Element::SkipStyleRecalcForContainer.
+  // [2] LayoutUpgrade
+  int64_t skipped_container_recalc_{0};
   bool in_layout_tree_rebuild_{false};
   bool in_container_query_style_recalc_{false};
   bool in_dom_removal_{false};
@@ -818,8 +833,11 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
       HeapHashMap<AtomicString, Member<StyleRuleKeyframes>>;
   KeyframesRuleMap keyframes_rule_map_;
 
+  // Combined key consisting of the rule's name and the case-folded font-family
+  // name to which this @font-palette-values rule selectively applies to.
   using FontPaletteValuesRuleMap =
-      HeapHashMap<AtomicString, Member<StyleRuleFontPaletteValues>>;
+      HeapHashMap<std::pair<AtomicString, String>,
+                  Member<StyleRuleFontPaletteValues>>;
   FontPaletteValuesRuleMap font_palette_values_rule_map_;
 
   Member<CounterStyleMap> user_counter_style_map_;
@@ -834,21 +852,26 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
 
   scoped_refptr<StyleInitialData> initial_data_;
 
-  // Color schemes explicitly supported by the author through the viewport meta
-  // tag. E.g. <meta name="color-scheme" content="light dark">. A dark color-
-  // scheme is used to opt-out of forced darkening.
-  Member<const CSSValue> meta_color_scheme_;
+  // Page color schemes set by the viewport meta tag. E.g.
+  // <meta name="color-scheme" content="light dark">.
+  ColorSchemeFlags page_color_schemes_ =
+      static_cast<ColorSchemeFlags>(ColorSchemeFlag::kNormal);
 
   // The preferred color scheme is set in settings, but may be overridden by the
   // ForceDarkMode setting where the preferred_color_scheme_ will be set to
   // kLight to avoid dark styling to be applied before auto darkening.
-  mojom::PreferredColorScheme preferred_color_scheme_{
-      mojom::PreferredColorScheme::kLight};
+  //
+  // This data member should be initialized in the constructor in order to avoid
+  // including full mojom headers from this header.
+  mojom::blink::PreferredColorScheme preferred_color_scheme_;
 
   // We pass the used value of color-scheme from the iframe element in the
   // embedding document. If the color-scheme of the owner element and the root
   // element in the embedded document differ, use a solid backdrop color instead
   // of the default transparency of an iframe.
+  //
+  // This data member should be initialized in the constructor in order to avoid
+  // including full mojom headers from this header.
   mojom::blink::ColorScheme owner_color_scheme_;
 
   // The color of the canvas backdrop for the used color-scheme.
@@ -873,7 +896,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   // re-attachment after the removal.
   Member<LayoutObject> parent_for_detached_subtree_;
 
-  // The set of IDs for which ::transition-container pseudo elements are
+  // The set of IDs for which ::page-transition-container pseudo elements are
   // generated during a DocumentTransition.
   Vector<AtomicString> document_transition_tags_;
 };

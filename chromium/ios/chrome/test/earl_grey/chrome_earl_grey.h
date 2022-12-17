@@ -460,8 +460,10 @@ UIWindow* GetAnyKeyWindow();
 
 #pragma mark - Sync Utilities (EG2)
 
-// Waits for sync to be initialized or not. If not succeeded a GREYAssert is
-// induced.
+// Waits for sync engine to be initialized or not. It doesn't necessarily mean
+// that data types are configured and ready to use. See
+// SyncService::IsEngineInitialized() for details. If not succeeded a GREYAssert
+// is induced.
 - (void)waitForSyncInitialized:(BOOL)isInitialized
                    syncTimeout:(NSTimeInterval)timeout;
 
@@ -642,6 +644,9 @@ UIWindow* GetAnyKeyWindow();
 // with custom WebKit frameworks.
 - (BOOL)isCustomWebKitLoadedIfRequested [[nodiscard]];
 
+// Returns YES if error pages are displayed using loadSimulatedRequest.
+- (BOOL)isLoadSimulatedRequestAPIEnabled;
+
 // Returns whether the mobile version of the websites are requested by default.
 - (BOOL)isMobileModeByDefault [[nodiscard]];
 
@@ -654,6 +659,13 @@ UIWindow* GetAnyKeyWindow();
 
 // Returns whether the NewOverflowMenu feature is enabled.
 - (BOOL)isNewOverflowMenuEnabled;
+
+// Returns whether the OmniboxUpdatedPopupUI feature is enabled.
+- (BOOL)isNewOmniboxPopupEnabled;
+
+// Returns whether the Thumbstrip feature is enabled for window with given
+// number.
+- (BOOL)isThumbstripEnabledForWindowWithNumber:(int)windowNumber;
 
 #pragma mark - ContentSettings
 

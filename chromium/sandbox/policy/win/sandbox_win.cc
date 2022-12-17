@@ -11,7 +11,6 @@
 #include <vector>
 
 #include "base/command_line.h"
-#include "base/cxx17_backports.h"
 #include "base/debug/activity_tracker.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
@@ -33,7 +32,6 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
-#include "base/trace_event/trace_arguments.h"
 #include "base/trace_event/trace_event.h"
 #include "base/win/iat_patch_function.h"
 #include "base/win/scoped_handle.h"
@@ -41,19 +39,18 @@
 #include "base/win/win_util.h"
 #include "base/win/windows_version.h"
 #include "printing/buildflags/buildflags.h"
+#include "sandbox/features.h"
 #include "sandbox/policy/features.h"
 #include "sandbox/policy/mojom/sandbox.mojom.h"
 #include "sandbox/policy/sandbox_type.h"
 #include "sandbox/policy/switches.h"
 #include "sandbox/policy/win/lpac_capability.h"
 #include "sandbox/policy/win/sandbox_diagnostics.h"
-#include "sandbox/win/src/app_container.h"
 #include "sandbox/win/src/job.h"
 #include "sandbox/win/src/process_mitigations.h"
 #include "sandbox/win/src/sandbox.h"
 #include "sandbox/win/src/sandbox_nt_util.h"
 #include "sandbox/win/src/sandbox_policy_base.h"
-#include "sandbox/win/src/sandbox_policy_diagnostic.h"
 #include "sandbox/win/src/win_utils.h"
 
 namespace sandbox {
@@ -157,26 +154,6 @@ const wchar_t* const kTroublesomeDlls[] = {
 const base::Feature kEnableCsrssLockdownFeature{
     "EnableCsrssLockdown", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Helps emit trace events for sandbox policy. This mediates memory between
-// chrome.exe and chrome.dll.
-class PolicyTraceHelper : public base::trace_event::ConvertableToTraceFormat {
- public:
-  explicit PolicyTraceHelper(TargetPolicy* policy) {
-    // |info| must live until JsonString() output is copied.
-    std::unique_ptr<PolicyInfo> info = policy->GetPolicyInfo();
-    json_string_ = std::string(info->JsonString());
-  }
-  ~PolicyTraceHelper() override = default;
-
-  // ConvertableToTraceFormat.
-  void AppendAsTraceFormat(std::string* out) const override {
-    out->append(json_string_);
-  }
-
- private:
-  std::string json_string_;
-};  // PolicyTraceHelper
-
 #if !defined(NACL_WIN64)
 // Adds the policy rules for the path and path\ with the semantic |access|.
 // If |children| is set to true, we need to add the wildcard rules to also
@@ -216,12 +193,12 @@ bool AddDirectory(int path,
 // Compares the loaded |module| file name matches |module_name|.
 bool IsExpandedModuleName(HMODULE module, const wchar_t* module_name) {
   wchar_t path[MAX_PATH];
-  DWORD sz = ::GetModuleFileNameW(module, path, base::size(path));
-  if ((sz == base::size(path)) || (sz == 0)) {
+  DWORD sz = ::GetModuleFileNameW(module, path, std::size(path));
+  if ((sz == std::size(path)) || (sz == 0)) {
     // XP does not set the last error properly, so we bail out anyway.
     return false;
   }
-  if (!::GetLongPathName(path, path, base::size(path)))
+  if (!::GetLongPathName(path, path, std::size(path)))
     return false;
   base::FilePath fname(path);
   return (fname.BaseName().value() == module_name);
@@ -283,7 +260,7 @@ void BlocklistAddOneDll(const wchar_t* module_name,
 // Eviction of injected DLLs is done by the sandbox so that the injected module
 // does not get a chance to execute any code.
 void AddGenericDllEvictionPolicy(TargetPolicy* policy) {
-  for (int ix = 0; ix != base::size(kTroublesomeDlls); ++ix)
+  for (int ix = 0; ix != std::size(kTroublesomeDlls); ++ix)
     BlocklistAddOneDll(kTroublesomeDlls[ix], true, policy);
 }
 
@@ -550,7 +527,7 @@ BOOL WINAPI DuplicateHandlePatch(HANDLE source_process_handle,
 #endif
 
 bool IsAppContainerEnabled() {
-  if (base::win::GetVersion() < base::win::Version::WIN8)
+  if (!sandbox::features::IsAppContainerSandboxSupported())
     return false;
 
   return base::FeatureList::IsEnabled(features::kRendererAppContainer);
@@ -558,7 +535,7 @@ bool IsAppContainerEnabled() {
 
 ResultCode SetJobMemoryLimit(const base::CommandLine& cmd_line,
                              TargetPolicy* policy) {
-  DCHECK_NE(policy->GetJobLevel(), JOB_NONE);
+  DCHECK_NE(policy->GetJobLevel(), JobLevel::kNone);
 
 #ifdef _WIN64
   size_t memory_limit = static_cast<size_t>(kDataSizeLimit);
@@ -782,15 +759,16 @@ ResultCode LaunchWithoutSandbox(
     if (base::win::GetVersion() >= base::win::Version::WIN8 ||
         (::IsProcessInJob(::GetCurrentProcess(), nullptr, &in_job) &&
          !in_job)) {
-      static HANDLE job_object_handle = nullptr;
-      if (!job_object_handle) {
-        Job job_obj;
-        DWORD result = job_obj.Init(JOB_UNPROTECTED, nullptr, 0, 0);
-        if (result != ERROR_SUCCESS)
+      static Job* job_object = nullptr;
+      if (!job_object) {
+        job_object = new Job;
+        DWORD result = job_object->Init(JobLevel::kUnprotected, nullptr, 0, 0);
+        if (result != ERROR_SUCCESS) {
+          job_object = nullptr;
           return SBOX_ERROR_CANNOT_INIT_JOB;
-        job_object_handle = job_obj.Take().Take();
+        }
       }
-      options.job_handle = job_object_handle;
+      options.job_handle = job_object->GetHandle();
     }
   }
 
@@ -832,7 +810,7 @@ ResultCode SandboxWin::SetJobLevel(const base::CommandLine& cmd_line,
                                    uint32_t ui_exceptions,
                                    TargetPolicy* policy) {
   if (!ShouldSetJobLevel(policy->GetAllowNoSandboxJob()))
-    return policy->SetJobLevel(JOB_NONE, 0);
+    return policy->SetJobLevel(JobLevel::kNone, 0);
 
   ResultCode ret = policy->SetJobLevel(job_level, ui_exceptions);
   if (ret != SBOX_ALL_OK)
@@ -932,7 +910,7 @@ ResultCode SandboxWin::AddAppContainerProfileToPolicy(
 bool SandboxWin::IsAppContainerEnabledForSandbox(
     const base::CommandLine& command_line,
     Sandbox sandbox_type) {
-  if (base::win::GetVersion() < base::win::Version::WIN10_RS1)
+  if (!sandbox::features::IsAppContainerSandboxSupported())
     return false;
 
   if (sandbox_type == Sandbox::kMediaFoundationCdm)
@@ -1002,7 +980,7 @@ ResultCode SandboxWin::GeneratePolicyForSandboxedProcess(
     const std::string& process_type,
     const base::HandlesToInheritVector& handles_to_inherit,
     SandboxDelegate* delegate,
-    const scoped_refptr<TargetPolicy>& policy) {
+    TargetPolicy* policy) {
   const base::CommandLine& launcher_process_command_line =
       *base::CommandLine::ForCurrentProcess();
 
@@ -1049,7 +1027,7 @@ ResultCode SandboxWin::GeneratePolicyForSandboxedProcess(
     return result;
 
   if (process_type == switches::kRendererProcess) {
-    result = SandboxWin::AddWin32kLockdownPolicy(policy.get());
+    result = AddWin32kLockdownPolicy(policy);
     if (result != SBOX_ALL_OK)
       return result;
   }
@@ -1057,7 +1035,8 @@ ResultCode SandboxWin::GeneratePolicyForSandboxedProcess(
   // Post-startup mitigations.
   mitigations = MITIGATION_DLL_SEARCH_ORDER;
   if (!cmd_line.HasSwitch(switches::kAllowThirdPartyModules) &&
-      sandbox_type != Sandbox::kSpeechRecognition) {
+      sandbox_type != Sandbox::kSpeechRecognition &&
+      sandbox_type != Sandbox::kMediaFoundationCdm) {
     mitigations |= MITIGATION_FORCE_MS_SIGNED_BINS;
   }
 
@@ -1070,12 +1049,12 @@ ResultCode SandboxWin::GeneratePolicyForSandboxedProcess(
   if (result != SBOX_ALL_OK)
     return result;
 
-  result = SetJobLevel(cmd_line, JOB_LOCKDOWN, 0, policy.get());
+  result = SetJobLevel(cmd_line, JobLevel::kLockdown, 0, policy);
   if (result != SBOX_ALL_OK)
     return result;
 
   if (!delegate->DisableDefaultPolicy()) {
-    result = AddDefaultPolicyForSandboxedProcess(policy.get());
+    result = AddDefaultPolicyForSandboxedProcess(policy);
     if (result != SBOX_ALL_OK)
       return result;
   }
@@ -1092,11 +1071,11 @@ ResultCode SandboxWin::GeneratePolicyForSandboxedProcess(
       process_type == switches::kPpapiPluginProcess ||
       sandbox_type == Sandbox::kPrintCompositor) {
     AddDirectory(base::DIR_WINDOWS_FONTS, NULL, true,
-                 TargetPolicy::FILES_ALLOW_READONLY, policy.get());
+                 TargetPolicy::FILES_ALLOW_READONLY, policy);
   }
 #endif
 
-  result = AddGenericPolicy(policy.get());
+  result = AddGenericPolicy(policy);
   if (result != SBOX_ALL_OK) {
     NOTREACHED();
     return result;
@@ -1106,8 +1085,8 @@ ResultCode SandboxWin::GeneratePolicyForSandboxedProcess(
   if (IsAppContainerEnabledForSandbox(cmd_line, sandbox_type) &&
       delegate->GetAppContainerId(&appcontainer_id)) {
     result = AddAppContainerProfileToPolicy(cmd_line, sandbox_type,
-                                            appcontainer_id, policy.get());
-    DCHECK(result == SBOX_ALL_OK);
+                                            appcontainer_id, policy);
+    DCHECK_EQ(result, SBOX_ALL_OK);
     if (result != SBOX_ALL_OK)
       return result;
   }
@@ -1130,7 +1109,7 @@ ResultCode SandboxWin::GeneratePolicyForSandboxedProcess(
     // Set a policy that would normally allow for process creation. This allows
     // the mf cdm process to launch the protected media pipeline process
     // (mfpmp.exe) without process interception.
-    result = policy->SetJobLevel(JOB_INTERACTIVE, 0);
+    result = policy->SetJobLevel(JobLevel::kInteractive, 0);
     if (result != SBOX_ALL_OK)
       return result;
   }
@@ -1142,7 +1121,7 @@ ResultCode SandboxWin::GeneratePolicyForSandboxedProcess(
   policy->SetStderrHandle(GetStdHandle(STD_ERROR_HANDLE));
 #endif
 
-  if (!delegate->PreSpawnTarget(policy.get()))
+  if (!delegate->PreSpawnTarget(policy))
     return SBOX_ERROR_DELEGATE_PRE_SPAWN;
 
   return result;
@@ -1155,9 +1134,9 @@ ResultCode SandboxWin::StartSandboxedProcess(
     const base::HandlesToInheritVector& handles_to_inherit,
     SandboxDelegate* delegate,
     base::Process* process) {
-  scoped_refptr<TargetPolicy> policy = g_broker_services->CreatePolicy();
+  auto policy = g_broker_services->CreatePolicy();
   ResultCode result = GeneratePolicyForSandboxedProcess(
-      cmd_line, process_type, handles_to_inherit, delegate, policy);
+      cmd_line, process_type, handles_to_inherit, delegate, policy.get());
 
   if (ResultCode::SBOX_ERROR_UNSANDBOXED_PROCESS == result) {
     return LaunchWithoutSandbox(cmd_line, handles_to_inherit, delegate,
@@ -1173,19 +1152,12 @@ ResultCode SandboxWin::StartSandboxedProcess(
   DWORD last_error = ERROR_SUCCESS;
   result = g_broker_services->SpawnTarget(
       cmd_line.GetProgram().value().c_str(),
-      cmd_line.GetCommandLineString().c_str(), policy, &last_warning,
+      cmd_line.GetCommandLineString().c_str(), std::move(policy), &last_warning,
       &last_error, &temp_process_info);
 
   base::win::ScopedProcessInformation target(temp_process_info);
 
   TRACE_EVENT_END0("startup", "StartProcessWithAccess::LAUNCHPROCESS");
-
-  // Trace policy as processes are started. Useful for both failure and success.
-  TRACE_EVENT_INSTANT2(TRACE_DISABLED_BY_DEFAULT("sandbox"), "processLaunch",
-                       TRACE_EVENT_SCOPE_PROCESS, "sandboxType",
-                       GetSandboxTypeInEnglish(delegate->GetSandboxType()),
-                       "policy",
-                       std::make_unique<PolicyTraceHelper>(policy.get()));
 
   if (SBOX_ALL_OK != result) {
     base::UmaHistogramSparse("Process.Sandbox.Launch.Error", last_error);

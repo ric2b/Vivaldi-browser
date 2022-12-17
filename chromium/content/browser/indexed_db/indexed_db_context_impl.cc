@@ -18,7 +18,6 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/string_util.h"
-#include "base/task/post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_restrictions.h"
@@ -167,38 +166,32 @@ IndexedDBContextImpl::IndexedDBContextImpl(
       std::move(quota_client_remote),
       storage::QuotaClientType::kIndexedDatabase,
       {blink::mojom::StorageType::kTemporary});
+  IDBTaskRunner()->PostTask(
+      FROM_HERE, base::BindOnce(&IndexedDBContextImpl::BindPipesOnIDBSequence,
+                                weak_factory_.GetWeakPtr(),
+                                std::move(quota_client_receiver),
+                                std::move(blob_storage_context),
+                                std::move(file_system_access_context)));
+}
 
-  // This is safe because the IndexedDBContextImpl must be destructed on the
-  // IDBTaskRunner, and this task will always happen before that.
-  idb_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(
-          [](mojo::Remote<storage::mojom::BlobStorageContext>*
-                 blob_storage_context,
-             mojo::Remote<storage::mojom::FileSystemAccessContext>*
-                 file_system_access_context,
-             mojo::Receiver<storage::mojom::QuotaClient>* quota_client_receiver,
-             mojo::PendingRemote<storage::mojom::BlobStorageContext>
-                 pending_blob_storage_context,
-             mojo::PendingRemote<storage::mojom::FileSystemAccessContext>
-                 pending_file_system_access_context,
-             mojo::PendingReceiver<storage::mojom::QuotaClient>
-                 quota_client_pending_receiver) {
-            quota_client_receiver->Bind(
-                std::move(quota_client_pending_receiver));
-            if (pending_blob_storage_context) {
-              blob_storage_context->Bind(
-                  std::move(pending_blob_storage_context));
-            }
-            if (pending_file_system_access_context) {
-              file_system_access_context->Bind(
-                  std::move(pending_file_system_access_context));
-            }
-          },
-          &blob_storage_context_, &file_system_access_context_,
-          &quota_client_receiver_, std::move(blob_storage_context),
-          std::move(file_system_access_context),
-          std::move(quota_client_receiver)));
+void IndexedDBContextImpl::BindPipesOnIDBSequence(
+    mojo::PendingReceiver<storage::mojom::QuotaClient>
+        pending_quota_client_receiver,
+    mojo::PendingRemote<storage::mojom::BlobStorageContext>
+        pending_blob_storage_context,
+    mojo::PendingRemote<storage::mojom::FileSystemAccessContext>
+        pending_file_system_access_context) {
+  DCHECK(IDBTaskRunner()->RunsTasksInCurrentSequence());
+  if (pending_quota_client_receiver) {
+    quota_client_receiver_.Bind(std::move(pending_quota_client_receiver));
+  }
+  if (pending_blob_storage_context) {
+    blob_storage_context_.Bind(std::move(pending_blob_storage_context));
+  }
+  if (pending_file_system_access_context) {
+    file_system_access_context_.Bind(
+        std::move(pending_file_system_access_context));
+  }
 }
 
 void IndexedDBContextImpl::Bind(
@@ -350,7 +343,7 @@ void IndexedDBContextImpl::GetAllStorageKeysDetails(
 
   std::sort(storage_keys.begin(), storage_keys.end());
 
-  base::Value list(base::Value::Type::LIST);
+  base::Value::List list;
   for (const auto& storage_key : storage_keys) {
     base::Value info(base::Value::Type::DICTIONARY);
     // TODO(https://crbug.com/1199077): Serialize storage key directly

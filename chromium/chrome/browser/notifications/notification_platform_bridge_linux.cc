@@ -24,6 +24,7 @@
 #include "base/i18n/number_formatting.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/ref_counted_memory.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -35,6 +36,8 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/notifications/notification_display_service_impl.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/themes/theme_service.h"
+#include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/notifications/notification_operation.h"
 #include "chrome/grit/chrome_unscaled_resources.h"
@@ -381,7 +384,9 @@ class NotificationPlatformBridgeLinuxImpl
     // Make a deep copy of the notification as its resources cannot safely
     // be passed between threads.
     auto notification_copy = message_center::Notification::DeepCopy(
-        notification, body_images_supported_.value(),
+        notification,
+        ThemeServiceFactory::GetForProfile(profile)->GetColorProvider(),
+        body_images_supported_.value(),
         /*include_small_image=*/false, /*include_icon_images=*/false);
 
     task_runner_->PostTask(
@@ -808,8 +813,8 @@ class NotificationPlatformBridgeLinuxImpl
     desktop_entry_writer.AppendVariantOfString(desktop_file.value());
     hints_writer.CloseContainer(&desktop_entry_writer);
 
-    std::unique_ptr<ResourceFile> icon_file =
-        WriteDataToTmpFile(notification->icon().As1xPNGBytes());
+    std::unique_ptr<ResourceFile> icon_file = WriteDataToTmpFile(
+        gfx::Image(notification->icon().Rasterize(nullptr)).As1xPNGBytes());
     if (icon_file) {
       for (const std::string& hint_name : {"image_path", "image-path"}) {
         dbus::MessageWriter image_path_writer(nullptr);

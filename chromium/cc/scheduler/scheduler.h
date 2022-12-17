@@ -155,9 +155,6 @@ class CC_EXPORT Scheduler : public viz::BeginFrameObserverBase {
   // can send a CompositorFrame to the display compositor with appropriate
   // timing.
   void SetNeedsBeginMainFrame();
-  bool needs_begin_main_frame() const {
-    return state_machine_.needs_begin_main_frame();
-  }
 
   // Requests a single impl frame (after the current frame if there is one
   // active).
@@ -182,6 +179,7 @@ class CC_EXPORT Scheduler : public viz::BeginFrameObserverBase {
   // Drawing should result in submitting a CompositorFrame to the
   // LayerTreeFrameSink and then calling this.
   void DidSubmitCompositorFrame(uint32_t frame_token,
+                                base::TimeTicks submit_time,
                                 EventMetricsSet events_metrics,
                                 bool has_missing_content);
   // The LayerTreeFrameSink acks when it is ready for a new frame which
@@ -269,8 +267,6 @@ class CC_EXPORT Scheduler : public viz::BeginFrameObserverBase {
   }
 
   void ClearHistory();
-
-  bool IsBeginMainFrameSent() const;
 
   size_t CommitDurationSampleCountForTesting() const;
 

@@ -9,6 +9,7 @@
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "base/check.h"
+#include "ui/gfx/image/image.h"
 
 namespace ash {
 namespace eche_app {
@@ -41,10 +42,6 @@ LaunchAppHelper::~LaunchAppHelper() = default;
 
 LaunchAppHelper::AppLaunchProhibitedReason
 LaunchAppHelper::CheckAppLaunchProhibitedReason(FeatureStatus status) const {
-  if (status == FeatureStatus::kNotEnabledByPhone) {
-    return LaunchAppHelper::AppLaunchProhibitedReason::kDisabledByPhone;
-  }
-
   if (IsScreenLockRequired()) {
     return LaunchAppHelper::AppLaunchProhibitedReason::kDisabledByScreenLock;
   }
@@ -73,13 +70,13 @@ void LaunchAppHelper::ShowNotification(
   launch_notification_function_.Run(title, message, std::move(info));
 }
 
-void LaunchAppHelper::LaunchEcheApp(
-    absl::optional<int64_t> notification_id,
-    const std::string& package_name,
-    const std::u16string& visible_name,
-    const absl::optional<int64_t>& user_id) const {
+void LaunchAppHelper::LaunchEcheApp(absl::optional<int64_t> notification_id,
+                                    const std::string& package_name,
+                                    const std::u16string& visible_name,
+                                    const absl::optional<int64_t>& user_id,
+                                    const gfx::Image& icon) const {
   launch_eche_app_function_.Run(notification_id, package_name, visible_name,
-                                user_id);
+                                user_id, icon);
 }
 
 void LaunchAppHelper::CloseEcheApp() const {

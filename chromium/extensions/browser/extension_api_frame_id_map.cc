@@ -9,7 +9,6 @@
 
 #include "base/bind.h"
 #include "base/check_op.h"
-#include "base/task/post_task.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
@@ -136,6 +135,31 @@ content::RenderFrameHost* ExtensionApiFrameIdMap::GetRenderFrameHostById(
     return nullptr;
 
   return rfh;
+}
+
+content::RenderFrameHost*
+ExtensionApiFrameIdMap::GetRenderFrameHostByDocumentId(
+    const DocumentId& document_id) {
+  auto iter = document_id_map_.find(document_id);
+  if (iter == document_id_map_.end())
+    return nullptr;
+  return &iter->second->render_frame_host();
+}
+
+ExtensionApiFrameIdMap::DocumentId ExtensionApiFrameIdMap::DocumentIdFromString(
+    const std::string& document_id) {
+  if (document_id.length() != 32)
+    return DocumentId();
+
+  base::StringPiece string_piece(document_id);
+  uint64_t high = 0;
+  uint64_t low = 0;
+  if (!base::HexStringToUInt64(string_piece.substr(0, 16), &high) ||
+      !base::HexStringToUInt64(string_piece.substr(16, 16), &low)) {
+    return DocumentId();
+  }
+
+  return base::UnguessableToken::Deserialize(high, low);
 }
 
 ExtensionApiFrameIdMap::FrameData ExtensionApiFrameIdMap::KeyToValue(
@@ -287,10 +311,14 @@ void ExtensionApiFrameIdMap::OnRenderFrameDeleted(
 ExtensionApiFrameIdMap::ExtensionDocumentUserData::ExtensionDocumentUserData(
     content::RenderFrameHost* render_frame_host)
     : content::DocumentUserData<ExtensionDocumentUserData>(render_frame_host),
-      document_id_(DocumentId::Create()) {}
+      document_id_(DocumentId::Create()) {
+  Get()->document_id_map_[document_id_] = this;
+}
 
 ExtensionApiFrameIdMap::ExtensionDocumentUserData::
-    ~ExtensionDocumentUserData() = default;
+    ~ExtensionDocumentUserData() {
+  Get()->document_id_map_.erase(document_id_);
+}
 
 DOCUMENT_USER_DATA_KEY_IMPL(ExtensionApiFrameIdMap::ExtensionDocumentUserData);
 

@@ -10,10 +10,12 @@
 #include <set>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "base/check.h"
 #include "base/check_op.h"
 #include "base/containers/contains.h"
+#include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_functions.h"
@@ -39,6 +41,7 @@
 #include "net/http/http_util.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
+#include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom-shared.h"
 #include "third_party/blink/public/mojom/manifest/manifest.mojom.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -109,6 +112,11 @@ std::vector<WebAppShortcutsMenuItemInfo> ToWebAppShortcutsMenuItemInfos(
   web_app_shortcut_infos.reserve(shortcuts.size());
   int num_shortcut_icons = 0;
   for (const auto& shortcut : shortcuts) {
+    if (web_app_shortcut_infos.size() >= kMaxApplicationDockMenuItems) {
+      DLOG(ERROR) << "Too many shortcuts";
+      break;
+    }
+
     WebAppShortcutsMenuItemInfo shortcut_info;
     shortcut_info.name = shortcut.name;
     shortcut_info.url = shortcut.url;
@@ -316,6 +324,30 @@ void PopulateFileHandlingIcons(WebAppInstallInfo* web_app_info,
   }
 }
 
+apps::FileHandler::LaunchType ToFileHandlerLaunchType(
+    blink::mojom::ManifestFileHandler::LaunchType launch_type) {
+  switch (launch_type) {
+    case blink::mojom::ManifestFileHandler::LaunchType::kSingleClient:
+      return apps::FileHandler::LaunchType::kSingleClient;
+    case blink::mojom::ManifestFileHandler::LaunchType::kMultipleClients:
+      return apps::FileHandler::LaunchType::kMultipleClients;
+  }
+}
+
+base::flat_map<std::string, blink::Manifest::TranslationItem>
+ToWebAppTranslations(
+    const base::flat_map<std::u16string, blink::Manifest::TranslationItem>&
+        manifest_translations) {
+  std::vector<std::pair<std::string, blink::Manifest::TranslationItem>>
+      translations_vector;
+  translations_vector.reserve(manifest_translations.size());
+  for (const auto& it : manifest_translations) {
+    translations_vector.emplace_back(base::UTF16ToUTF8(it.first), it.second);
+  }
+  return base::flat_map<std::string, blink::Manifest::TranslationItem>(
+      std::move(translations_vector));
+}
+
 }  // namespace
 
 apps::FileHandlers CreateFileHandlersFromManifest(
@@ -329,6 +361,8 @@ apps::FileHandlers CreateFileHandlersFromManifest(
     apps::FileHandler web_app_file_handler;
     web_app_file_handler.action = manifest_file_handler->action;
     web_app_file_handler.display_name = manifest_file_handler->name;
+    web_app_file_handler.launch_type =
+        ToFileHandlerLaunchType(manifest_file_handler->launch_type);
 
     for (const auto& it : manifest_file_handler->accept) {
       apps::FileHandler::AcceptEntry web_app_accept_entry;
@@ -384,24 +418,25 @@ void UpdateWebAppInfoFromManifest(const blink::mojom::Manifest& manifest,
 
   if (manifest.has_theme_color) {
     web_app_info->theme_color =
-        SkColorSetA(SkColor(manifest.theme_color), SK_AlphaOPAQUE);
+        SkColorSetA(static_cast<SkColor>(manifest.theme_color), SK_AlphaOPAQUE);
   }
 
   if (manifest.has_background_color) {
-    web_app_info->background_color =
-        SkColorSetA(SkColor(manifest.background_color), SK_AlphaOPAQUE);
+    web_app_info->background_color = SkColorSetA(
+        static_cast<SkColor>(manifest.background_color), SK_AlphaOPAQUE);
   }
 
   if (manifest.user_preferences &&
       manifest.user_preferences->color_scheme_dark) {
     if (manifest.user_preferences->color_scheme_dark->has_theme_color) {
       web_app_info->dark_mode_theme_color = SkColorSetA(
-          SkColor(manifest.user_preferences->color_scheme_dark->theme_color),
+          static_cast<SkColor>(
+              manifest.user_preferences->color_scheme_dark->theme_color),
           SK_AlphaOPAQUE);
     }
     if (manifest.user_preferences->color_scheme_dark->has_background_color) {
       web_app_info->dark_mode_background_color = SkColorSetA(
-          SkColor(
+          static_cast<SkColor>(
               manifest.user_preferences->color_scheme_dark->background_color),
           SK_AlphaOPAQUE);
     }
@@ -488,14 +523,16 @@ void UpdateWebAppInfoFromManifest(const blink::mojom::Manifest& manifest,
     web_app_info->description = manifest.description.value();
   }
 
-  web_app_info->translations = manifest.translations;
+  web_app_info->translations = ToWebAppTranslations(manifest.translations);
 
   web_app_info->permissions_policy.clear();
   for (const auto& decl : manifest.permissions_policy) {
-    PermissionsPolicyDeclaration copy;
-    copy.feature = decl->feature;
-    for (const auto& origin : decl->allowlist)
-      copy.allowlist.push_back(origin);
+    blink::ParsedPermissionsPolicyDeclaration copy;
+    copy.feature = decl.feature;
+    for (const auto& origin : decl.allowed_origins)
+      copy.allowed_origins.push_back(origin);
+    copy.matches_all_origins = decl.matches_all_origins;
+    copy.matches_opaque_src = decl.matches_opaque_src;
     web_app_info->permissions_policy.push_back(std::move(copy));
   }
 }
@@ -661,6 +698,12 @@ void RecordDownloadedIconHttpStatusCodes(
     counter->Add(net::HttpUtil::MapStatusCodeForHistogram(http_status_code));
 }
 
+WebAppManagement::Type ConvertExternalInstallSourceToSource(
+    ExternalInstallSource external_install_source) {
+  return ConvertInstallSurfaceToWebAppSource(
+      ConvertExternalInstallSourceToInstallSource(external_install_source));
+}
+
 webapps::WebappInstallSource ConvertExternalInstallSourceToInstallSource(
     ExternalInstallSource external_install_source) {
   webapps::WebappInstallSource install_source;
@@ -709,9 +752,7 @@ webapps::WebappUninstallSource ConvertExternalInstallSourceToUninstallSource(
   return uninstall_source;
 }
 
-// TODO(loyso): Call sites should specify Source explicitly as a part of
-// AppTraits parameter object.
-Source::Type InferSourceFromMetricsInstallSource(
+WebAppManagement::Type ConvertInstallSurfaceToWebAppSource(
     webapps::WebappInstallSource install_source) {
   switch (install_source) {
     case webapps::WebappInstallSource::MENU_BROWSER_TAB:
@@ -727,27 +768,28 @@ Source::Type InferSourceFromMetricsInstallSource(
     case webapps::WebappInstallSource::OMNIBOX_INSTALL_ICON:
     case webapps::WebappInstallSource::SYNC:
     case webapps::WebappInstallSource::MENU_CREATE_SHORTCUT:
-      return Source::kSync;
+    case webapps::WebappInstallSource::CHROME_SERVICE:
+      return WebAppManagement::kSync;
 
     case webapps::WebappInstallSource::INTERNAL_DEFAULT:
     case webapps::WebappInstallSource::EXTERNAL_DEFAULT:
-      return Source::kDefault;
+      return WebAppManagement::kDefault;
 
     case webapps::WebappInstallSource::EXTERNAL_POLICY:
-      return Source::kPolicy;
+      return WebAppManagement::kPolicy;
 
     case webapps::WebappInstallSource::SYSTEM_DEFAULT:
-      return Source::kSystem;
+      return WebAppManagement::kSystem;
 
     case webapps::WebappInstallSource::ARC:
-      return Source::kWebAppStore;
+      return WebAppManagement::kWebAppStore;
 
     case webapps::WebappInstallSource::SUB_APP:
-      return Source::kSubApp;
+      return WebAppManagement::kSubApp;
 
     case webapps::WebappInstallSource::COUNT:
       NOTREACHED();
-      return Source::kSync;
+      return WebAppManagement::kSync;
   }
 }
 
@@ -761,7 +803,7 @@ void CreateWebAppInstallTabHelpers(content::WebContents* web_contents) {
 }
 
 void MaybeRegisterOsUninstall(const WebApp* web_app,
-                              Source::Type source_uninstalling,
+                              WebAppManagement::Type source_uninstalling,
                               OsIntegrationManager& os_integration_manager,
                               InstallOsHooksCallback callback) {
 #if BUILDFLAG(IS_WIN)
@@ -786,7 +828,7 @@ void MaybeRegisterOsUninstall(const WebApp* web_app,
 }
 
 void MaybeUnregisterOsUninstall(const WebApp* web_app,
-                                Source::Type source_installing,
+                                WebAppManagement::Type source_installing,
                                 OsIntegrationManager& os_integration_manager) {
 #if BUILDFLAG(IS_WIN)
   // |web_app| object will add target |source_installing| type.

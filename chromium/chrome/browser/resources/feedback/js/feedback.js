@@ -311,7 +311,7 @@ function updateDescription(wasValid) {
  * @return {boolean} True if the report was sent.
  */
 function sendReport() {
-  if ($('description-text').value.length == 0) {
+  if ($('description-text').value.length === 0) {
     updateDescription(false);
     return false;
   }
@@ -322,7 +322,7 @@ function sendReport() {
 
   // Prevent double clicking from sending additional reports.
   $('send-report-button').disabled = true;
-  console.log('Feedback: Sending report');
+  console.info('Feedback: Sending report');
   if (!feedbackInfo.attachedFile && attachedFileBlob) {
     feedbackInfo.attachedFile = {
       name: $('attach-file').value,
@@ -341,7 +341,7 @@ function sendReport() {
     useSystemInfo = useHistograms = true;
   }
 
-  // <if expr="chromeos">
+  // <if expr="chromeos_ash">
   if ($('assistant-info-checkbox') != null &&
       $('assistant-info-checkbox').checked &&
       !$('assistant-checkbox-container').hidden) {
@@ -350,7 +350,7 @@ function sendReport() {
   }
   // </if>
 
-  // <if expr="chromeos">
+  // <if expr="chromeos_ash">
   if ($('bluetooth-logs-checkbox') != null &&
       $('bluetooth-logs-checkbox').checked &&
       !$('bluetooth-checkbox-container').hidden) {
@@ -397,12 +397,12 @@ function sendReport() {
 function cancel(e) {
   e.preventDefault();
   scheduleWindowClose();
-  if (feedbackInfo.flow == chrome.feedbackPrivate.FeedbackFlow.LOGIN) {
+  if (feedbackInfo.flow === chrome.feedbackPrivate.FeedbackFlow.LOGIN) {
     chrome.feedbackPrivate.loginFeedbackComplete();
   }
 }
 
-// <if expr="chromeos">
+// <if expr="chromeos_ash">
 /**
  * Update the page when performance feedback state is changed.
  */
@@ -439,7 +439,7 @@ function resizeAppWindow() {
                    .reduce((acc, el) => acc + el.scrollHeight, 0);
 
   let minHeight = FEEDBACK_MIN_HEIGHT;
-  if (feedbackInfo.flow == chrome.feedbackPrivate.FeedbackFlow.LOGIN) {
+  if (feedbackInfo.flow === chrome.feedbackPrivate.FeedbackFlow.LOGIN) {
     minHeight = FEEDBACK_MIN_HEIGHT_LOGIN;
   }
   height = Math.max(height, minHeight);
@@ -493,7 +493,7 @@ function initialize() {
 
       if (feedbackInfo.includeBluetoothLogs) {
         assert(
-            feedbackInfo.flow ==
+            feedbackInfo.flow ===
             chrome.feedbackPrivate.FeedbackFlow.GOOGLE_INTERNAL);
         $('description-text')
             .addEventListener('input', checkForSendBluetoothLogs);
@@ -501,14 +501,14 @@ function initialize() {
 
       if (feedbackInfo.showQuestionnaire) {
         assert(
-            feedbackInfo.flow ==
+            feedbackInfo.flow ===
             chrome.feedbackPrivate.FeedbackFlow.GOOGLE_INTERNAL);
         $('description-text')
             .addEventListener('input', checkForShowQuestionnaire);
       }
 
       if ($('assistant-checkbox-container') != null &&
-          feedbackInfo.flow ==
+          feedbackInfo.flow ===
               chrome.feedbackPrivate.FeedbackFlow.GOOGLE_INTERNAL &&
           feedbackInfo.fromAssistant) {
         $('assistant-checkbox-container').hidden = false;
@@ -582,14 +582,14 @@ function initialize() {
 
       // No URL, file attachment, or window minimizing for login screen
       // feedback.
-      if (feedbackInfo.flow == chrome.feedbackPrivate.FeedbackFlow.LOGIN) {
+      if (feedbackInfo.flow === chrome.feedbackPrivate.FeedbackFlow.LOGIN) {
         $('page-url').hidden = true;
         $('attach-file-container').hidden = true;
         $('attach-file-note').hidden = true;
         $('minimize-button').hidden = true;
       }
 
-      // <if expr="chromeos">
+      // <if expr="chromeos_ash">
       if (feedbackInfo.traceId && ($('performance-info-area'))) {
         $('performance-info-area').hidden = false;
         $('performance-info-checkbox').checked = true;
@@ -657,7 +657,7 @@ function initialize() {
 
         // The following URLs don't open on login screen, so hide them.
         // TODO(crbug.com/1116383): Find a solution to display them properly.
-        if (feedbackInfo.flow != chrome.feedbackPrivate.FeedbackFlow.LOGIN) {
+        if (feedbackInfo.flow !== chrome.feedbackPrivate.FeedbackFlow.LOGIN) {
           const legalHelpPageUrlElement = $('legal-help-page-url');
           if (legalHelpPageUrlElement) {
             setupLinkHandlers(
@@ -738,7 +738,7 @@ function initialize() {
     $('send-report-button').onclick = sendReport;
     $('cancel-button').onclick = cancel;
     $('remove-attached-file').onclick = clearAttachedFile;
-    // <if expr="chromeos">
+    // <if expr="chromeos_ash">
     $('performance-info-checkbox')
         .addEventListener('change', performanceFeedbackChanged);
     // </if>

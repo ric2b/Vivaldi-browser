@@ -11,11 +11,11 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
-#include "base/cxx17_backports.h"
 #include "base/files/file_path.h"
 #include "base/i18n/base_i18n_switches.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/threading/thread.h"
 #include "build/build_config.h"
 #include "components/network_session_configurator/common/network_switches.h"
 #include "content/browser/browser_child_process_host_impl.h"
@@ -28,6 +28,7 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
+#include "content/public/browser/render_process_host.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
@@ -312,7 +313,7 @@ bool UtilityProcessHost::StartProcess() {
 #endif
     };
     cmd_line->CopySwitchesFrom(browser_command_line, kSwitchNames,
-                               base::size(kSwitchNames));
+                               std::size(kSwitchNames));
 
     network_session_configurator::CopyNetworkSwitches(browser_command_line,
                                                       cmd_line.get());
@@ -328,8 +329,7 @@ bool UtilityProcessHost::StartProcess() {
       cmd_line->AppendSwitch(extra_switch);
 
 #if BUILDFLAG(IS_WIN)
-    if (base::FeatureList::IsEnabled(
-            media::kMediaFoundationD3D11VideoCapture)) {
+    if (media::IsMediaFoundationD3D11VideoCaptureEnabled()) {
       // MediaFoundationD3D11VideoCapture requires Gpu memory buffers,
       // which are unavailable if the GPU process isn't running.
       if (!GpuDataManagerImpl::GetInstance()->IsGpuCompositingDisabled()) {
@@ -376,15 +376,6 @@ void UtilityProcessHost::OnProcessCrashed(int exit_code) {
   // Take ownership of |client_| so the destructor doesn't notify it of
   // termination.
   auto client = std::move(client_);
-#if BUILDFLAG(IS_ANDROID)
-  // OnProcessCrashed() is always called on Android even in the case of normal
-  // process termination. |clean_exit| gives us a reliable indication of whether
-  // this was really a crash or just normal termination.
-  if (process_->GetTerminationInfo(true /* known_dead */).clean_exit) {
-    client->OnProcessTerminatedNormally();
-    return;
-  }
-#endif
   client->OnProcessCrashed();
 }
 

@@ -95,7 +95,8 @@ int AwBrowserMainParts::PreEarlyInitialization() {
 int AwBrowserMainParts::PreCreateThreads() {
   base::android::MemoryPressureListenerAndroid::Initialize(
       base::android::AttachCurrentThread());
-  ::crash_reporter::ChildExitObserver::Create();
+  child_exit_observer_ =
+      std::make_unique<::crash_reporter::ChildExitObserver>();
 
   // We need to create the safe browsing specific directory even if the
   // AwSafeBrowsingConfigHelper::GetSafeBrowsingEnabled() is false
@@ -118,7 +119,7 @@ int AwBrowserMainParts::PreCreateThreads() {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kWebViewSandboxedRenderer)) {
     // Create the renderers crash manager on the UI thread.
-    ::crash_reporter::ChildExitObserver::GetInstance()->RegisterClient(
+    child_exit_observer_->RegisterClient(
         std::make_unique<AwBrowserTerminator>());
   }
 
@@ -133,9 +134,9 @@ int AwBrowserMainParts::PreCreateThreads() {
 void AwBrowserMainParts::RegisterSyntheticTrials() {
   metrics::MetricsService* metrics =
       AwMetricsServiceClient::GetInstance()->GetMetricsService();
-  metrics->synthetic_trial_registry()->AddSyntheticTrialObserver(
+  metrics->GetSyntheticTrialRegistry()->AddSyntheticTrialObserver(
       variations::VariationsIdsProvider::GetInstance());
-  metrics->synthetic_trial_registry()->AddSyntheticTrialObserver(
+  metrics->GetSyntheticTrialRegistry()->AddSyntheticTrialObserver(
       variations::SyntheticTrialsActiveGroupIdProvider::GetInstance());
 
   static constexpr char kWebViewApkTypeTrial[] = "WebViewApkType";
@@ -178,7 +179,7 @@ void AwBrowserMainParts::PostCreateThreads() {
   if (mode != heap_profiling::Mode::kNone)
     heap_profiling::Supervisor::GetInstance()->Start(base::NullCallback());
 
-  SetupBackgroundTracingFieldTrial();
+  MaybeSetupSystemTracing();
 }
 
 }  // namespace android_webview

@@ -66,7 +66,7 @@ class MockScriptExecutorDelegate : public ScriptExecutorDelegate {
               (override));
   MOCK_METHOD(void,
               WriteUserData,
-              (base::OnceCallback<void(UserData*, UserData::FieldChange*)>
+              (base::OnceCallback<void(UserData*, UserDataFieldChange*)>
                    write_callback),
               (override));
   MOCK_METHOD(ViewportMode, GetViewportMode, (), (override));
@@ -88,8 +88,6 @@ class MockScriptExecutorDelegate : public ScriptExecutorDelegate {
               RemoveNavigationListener,
               (NavigationListener * listener),
               (override));
-  MOCK_METHOD(void, AddListener, (Listener * listener), (override));
-  MOCK_METHOD(void, RemoveListener, (Listener * listener), (override));
   MOCK_METHOD(void,
               SetBrowseDomainsAllowlist,
               (std::vector<std::string> domains),

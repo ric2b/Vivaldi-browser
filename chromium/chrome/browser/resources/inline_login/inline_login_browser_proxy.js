@@ -5,18 +5,7 @@
 import {assert} from 'chrome://resources/js/assert.m.js';
 import {addSingletonGetter, sendWithPromise} from 'chrome://resources/js/cr.m.js';
 
-import {AuthCompletedCredentials} from '../gaia_auth_host/authenticator.m.js';
-
-/**
- * Data representing a Gaia account added in-session.
- * @typedef {{
- *   id: string,
- *   email: string,
- *   fullName: string,
- *   image: string,
- * }}
- */
-export let Account;
+import {AuthCompletedCredentials} from './gaia_auth_host/authenticator.m.js';
 
 /** @interface */
 export class InlineLoginBrowserProxy {
@@ -68,24 +57,12 @@ export class InlineLoginBrowserProxy {
   /** Send 'dialogClose' message to close the login dialog. */
   dialogClose() {}
 
-  // <if expr="chromeos">
+  // <if expr="chromeos_ash">
   /**
    * Send 'skipWelcomePage' message to the handler.
    * @param {boolean} skip Whether the welcome page should be skipped.
    */
   skipWelcomePage(skip) {}
-
-  /**
-   * @param {Account} account
-   */
-  makeAvailableInArc(account) {}
-
-  /**
-   * Send 'getAccountsNotAvailableInArc' message to the handler. The promise
-   * will be resolved with the list of accounts that are not available in ARC.
-   * @return {Promise<Array<Account>>}
-   */
-  getAccountsNotAvailableInArc() {}
 
   /** Send 'openGuestWindow' message to the handler */
   openGuestWindow() {}
@@ -144,20 +121,10 @@ export class InlineLoginBrowserProxyImpl {
     chrome.send('dialogClose');
   }
 
-  // <if expr="chromeos">
+  // <if expr="chromeos_ash">
   /** @override */
   skipWelcomePage(skip) {
     chrome.send('skipWelcomePage', [skip]);
-  }
-
-  /** @override */
-  getAccountsNotAvailableInArc() {
-    return sendWithPromise('getAccountsNotAvailableInArc');
-  }
-
-  /** @override */
-  makeAvailableInArc(account) {
-    chrome.send('makeAvailableInArc', [account]);
   }
 
   /** @override */

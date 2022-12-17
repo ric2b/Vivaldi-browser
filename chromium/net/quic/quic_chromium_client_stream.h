@@ -25,8 +25,8 @@
 #include "net/http/http_response_info.h"
 #include "net/http/http_stream.h"
 #include "net/log/net_log_with_source.h"
-#include "net/third_party/quiche/src/quic/core/http/quic_spdy_stream.h"
-#include "net/third_party/quiche/src/spdy/core/spdy_header_block.h"
+#include "net/third_party/quiche/src/quiche/quic/core/http/quic_spdy_stream.h"
+#include "net/third_party/quiche/src/quiche/spdy/core/spdy_header_block.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 
 namespace quic {
@@ -85,7 +85,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientStream
     int WriteHeaders(
         spdy::Http2HeaderBlock header_block,
         bool fin,
-        quic::QuicReferenceCountedPointer<quic::QuicAckListenerInterface>
+        quiche::QuicheReferenceCountedPointer<quic::QuicAckListenerInterface>
             ack_notifier_delegate);
 
     // Writes |data| to the peer. Closes the write side if |fin| is true.
@@ -251,7 +251,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientStream
   size_t WriteHeaders(
       spdy::Http2HeaderBlock header_block,
       bool fin,
-      quic::QuicReferenceCountedPointer<quic::QuicAckListenerInterface>
+      quiche::QuicheReferenceCountedPointer<quic::QuicAckListenerInterface>
           ack_listener) override;
 
   // While the server's set_priority shouldn't be called externally, the creator

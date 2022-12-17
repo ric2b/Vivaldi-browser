@@ -55,7 +55,7 @@ constexpr const char* const kCanonicalExtensions[] = {
     // clang-format on
 };
 
-static_assert(base::size(kCanonicalExtensions) ==
+static_assert(std::size(kCanonicalExtensions) ==
                   VivaldiImageStore::kImageFormatCount,
               "array must be in sync with ImageFormat");
 
@@ -74,7 +74,7 @@ const char* const kAllowedMimeTypes[] = {
     // clang-format on
 };
 
-static_assert(base::size(kAllowedMimeTypes) ==
+static_assert(std::size(kAllowedMimeTypes) ==
                   VivaldiImageStore::kImageFormatCount,
               "array must be in sync with ImageFormat");
 
@@ -209,7 +209,7 @@ VivaldiImageStore::FindFormatForExtension(base::StringPiece file_extension) {
 /* static */
 absl::optional<VivaldiImageStore::ImageFormat>
 VivaldiImageStore::FindFormatForPath(const base::FilePath& path) {
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   return FindFormatForExtension(base::WideToUTF8(path.FinalExtension()));
 #else
   return FindFormatForExtension(path.FinalExtension());
@@ -324,9 +324,9 @@ void VivaldiImageStore::InitMappingsOnFileThread(base::Value::Dict& mappings) {
         path_string = dict->FindString("relative_path");
       }
       if (path_string) {
-#if defined(OS_POSIX)
+#if BUILDFLAG(IS_POSIX)
         base::FilePath path(*path_string);
-#elif defined(OS_WIN)
+#elif BUILDFLAG(IS_WIN)
         base::FilePath path(base::UTF8ToWide(*path_string));
 #endif
         path_id_map_.emplace(id, std::move(path));
@@ -406,9 +406,9 @@ base::FilePath VivaldiImageStore::GetFileMappingFilePath() {
 
 base::FilePath VivaldiImageStore::GetImagePath(base::StringPiece image_id) {
   base::FilePath path = user_data_dir_.Append(kImageDirectory);
-#if defined(OS_POSIX)
+#if BUILDFLAG(IS_POSIX)
   path = path.Append(image_id);
-#elif defined(OS_WIN)
+#elif BUILDFLAG(IS_WIN)
   path = path.Append(base::UTF8ToWide(image_id));
 #endif
   return path;

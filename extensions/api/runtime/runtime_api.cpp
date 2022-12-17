@@ -7,7 +7,6 @@
 #include <utility>
 #include <vector>
 
-#include "app/vivaldi_apptools.h"
 #include "base/base64.h"
 #include "base/files/file_path.h"
 #include "base/no_destructor.h"
@@ -17,7 +16,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
-#include "browser/vivaldi_runtime_feature.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/profiles/profile.h"
@@ -33,10 +32,6 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/profile_picker.h"
 #include "chrome/browser/ui/webui/profile_helper.h"
-#if defined(OS_MAC)
-#include "chrome/common/chrome_paths.h"
-#include "chrome/common/chrome_paths_internal.h"
-#endif  // defined(OS_MAC)
 #include "chrome/common/pref_names.h"
 #include "components/download/public/background_service/background_download_service.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
@@ -46,15 +41,23 @@
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "ui/base/l10n/l10n_util.h"
+#include "ui/base/resource/resource_bundle.h"
+#include "ui/devtools/devtools_connector.h"
+
+#include "app/vivaldi_apptools.h"
+#include "browser/vivaldi_runtime_feature.h"
 #include "extensions/api/window/window_private_api.h"
 #include "extensions/schema/runtime_private.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "prefs/vivaldi_gen_prefs.h"
 #include "prefs/vivaldi_pref_names.h"
-#include "ui/base/l10n/l10n_util.h"
-#include "ui/base/resource/resource_bundle.h"
-#include "ui/devtools/devtools_connector.h"
 #include "ui/vivaldi_ui_utils.h"
+
+#if BUILDFLAG(IS_MAC)
+#include "chrome/common/chrome_paths.h"
+#include "chrome/common/chrome_paths_internal.h"
+#endif  // BUILDFLAG(IS_MAC)
 
 namespace extensions {
 
@@ -296,7 +299,8 @@ RuntimePrivateOpenProfileSelectionWindowFunction::Run() {
   if (profile->IsGuestSession()) {
     profiles::CloseProfileWindows(profile);
   } else {
-    ProfilePicker::Show(ProfilePicker::EntryPoint::kBackgroundModeManager);
+    ProfilePicker::Show(ProfilePicker::Params::FromEntryPoint(
+        ProfilePicker::EntryPoint::kBackgroundModeManager));
   }
   return RespondNow(ArgumentList(Results::Create(true)));
 }
@@ -733,7 +737,7 @@ ExtensionFunction::ResponseAction RuntimePrivateDeleteProfileFunction::Run() {
       profile_path,
       base::BindOnce(
           &runtime_api::DeleteProfileCallback,
-          std::make_unique<ScopedKeepAlive>(KeepAliveOrigin::PROFILE_HELPER,
+          std::make_unique<ScopedKeepAlive>(KeepAliveOrigin::PROFILE_MANAGER,
                                             KeepAliveRestartOption::DISABLED)),
       ProfileMetrics::DELETE_PROFILE_SETTINGS);
 
@@ -743,7 +747,7 @@ ExtensionFunction::ResponseAction RuntimePrivateDeleteProfileFunction::Run() {
 ExtensionFunction::ResponseAction
 RuntimePrivateHasDesktopShortcutFunction::Run() {
   namespace Results = vivaldi::runtime_private::HasDesktopShortcut::Results;
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   if (ProfileShortcutManager::IsFeatureEnabled()) {
     ProfileShortcutManager* shortcut_manager =
         g_browser_process->profile_manager()->profile_shortcut_manager();
@@ -760,7 +764,7 @@ RuntimePrivateHasDesktopShortcutFunction::Run() {
   }
 #else
   return RespondNow(ArgumentList(Results::Create(false, false)));
-#endif  // defined(OS_WIN)
+#endif  // BUILDFLAG(IS_WIN)
 }
 
 void RuntimePrivateHasDesktopShortcutFunction::OnHasProfileShortcuts(

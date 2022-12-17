@@ -1,5 +1,9 @@
 // Copyright (c) 2017-2021 Vivaldi Technologies AS. All rights reserved
 
+#include <utility>
+#include <string>
+#include <vector>
+
 #include "extensions/api/prefs/prefs_api.h"
 
 #include "apps/switches.h"
@@ -7,6 +11,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profile_resetter/profile_resetter.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/common/pref_names.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/language/core/browser/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
@@ -505,6 +510,40 @@ ExtensionFunction::ResponseAction PrefsResetTranslationPrefsFunction::Run() {
 
   prefs->ClearPref(language::prefs::kSelectedLanguages);
 
+  return RespondNow(NoArguments());
+}
+
+PrefsResetAllToDefaultFunction::PrefsResetAllToDefaultFunction() {}
+PrefsResetAllToDefaultFunction::~PrefsResetAllToDefaultFunction() {}
+
+void PrefsResetAllToDefaultFunction::HandlePrefValue(
+    const std::string& key,
+    const base::Value& value) {
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  PrefService* prefs = profile->GetPrefs();
+  const PrefService::Preference* pref = prefs->FindPreference(key);
+  if (!pref->IsDefaultValue()) {
+    // Some prefs will crash the browser unless we restart, so filter them out:
+    if (key != prefs::kProfileAvatarIndex) {
+      keys_to_reset_.push_back(key);
+    }
+  }
+}
+
+
+ExtensionFunction::ResponseAction PrefsResetAllToDefaultFunction::Run() {
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  PrefService* prefs = profile->GetPrefs();
+  DCHECK(prefs);
+
+  // No other way (I know of) to get all prefs in a flat structure.
+  prefs->IteratePreferenceValues(base::BindRepeating(
+      &PrefsResetAllToDefaultFunction::HandlePrefValue, this));
+
+  // Don't mutate while we're iterating.
+  for (std::string& reset_key : keys_to_reset_) {
+    prefs->ClearPref(reset_key);
+  }
   return RespondNow(NoArguments());
 }
 

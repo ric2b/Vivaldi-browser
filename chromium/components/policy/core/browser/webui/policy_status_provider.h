@@ -9,6 +9,7 @@
 
 #include "base/callback_helpers.h"
 #include "base/time/clock.h"
+#include "base/time/time.h"
 #include "components/policy/policy_export.h"
 
 namespace base {
@@ -57,7 +58,7 @@ class POLICY_EXPORT PolicyStatusProvider {
   void NotifyStatusChange();
   static std::u16string GetPolicyStatusFromStore(const CloudPolicyStore*,
                                                  const CloudPolicyClient*);
-  static std::u16string GetTimeSinceLastRefreshString(base::Time);
+  static std::u16string GetTimeSinceLastActionString(base::Time);
 
  private:
   base::RepeatingClosure callback_;

@@ -61,7 +61,7 @@ class NoteRemoteUpdatesHandler {
   // |should_ignore_update| must not be null and it can be marked as true if the
   // function reports that the update should not be processed further (e.g. it
   // is invalid).
-  const SyncedNoteTracker::Entity* DetermineLocalTrackedEntityToUpdate(
+  const SyncedNoteTrackerEntity* DetermineLocalTrackedEntityToUpdate(
       const syncer::EntityData& update_entity,
       bool* should_ignore_update);
 
@@ -78,7 +78,7 @@ class NoteRemoteUpdatesHandler {
   //    registered in |note_tracker_|.
   //
   // Returns the newly tracked entity or null if the creation failed.
-  const SyncedNoteTracker::Entity* ProcessCreate(
+  const SyncedNoteTrackerEntity* ProcessCreate(
       const syncer::UpdateResponseData& update);
 
   // Processes a remote update of a note node. |update| must not be a
@@ -88,7 +88,7 @@ class NoteRemoteUpdatesHandler {
   // of performing a lookup inside ProcessUpdate() to avoid wasting CPU
   // cycles for doing another lookup (this code runs on the UI thread).
   void ProcessUpdate(const syncer::UpdateResponseData& update,
-                     const SyncedNoteTracker::Entity* tracked_entity);
+                     const SyncedNoteTrackerEntity* tracked_entity);
 
   // Processes a remote delete of a note node. |update_entity| must not be a
   // deletion. |tracked_entity| is the tracked entity for that server_id. It is
@@ -96,7 +96,7 @@ class NoteRemoteUpdatesHandler {
   // ProcessDelete() to avoid wasting CPU cycles for doing another lookup
   // (this code runs on the UI thread).
   void ProcessDelete(const syncer::EntityData& update_entity,
-                     const SyncedNoteTracker::Entity* tracked_entity);
+                     const SyncedNoteTrackerEntity* tracked_entity);
 
   // Processes a conflict where the note has been changed both locally and
   // remotely. It applies the general policy the server wins except in the case
@@ -107,9 +107,9 @@ class NoteRemoteUpdatesHandler {
   // entity (if any) as a result of resolving the conflict, which is often the
   // same as the input |tracked_entity|, but may also be different, including
   // null (if the conflict led to untracking).
-  [[nodiscard]] const SyncedNoteTracker::Entity* ProcessConflict(
+  [[nodiscard]] const SyncedNoteTrackerEntity* ProcessConflict(
       const syncer::UpdateResponseData& update,
-      const SyncedNoteTracker::Entity* tracked_entity);
+      const SyncedNoteTrackerEntity* tracked_entity);
 
   // Recursively removes the entities corresponding to |node| and its children
   // from |note_tracker_|.
@@ -118,7 +118,7 @@ class NoteRemoteUpdatesHandler {
   // Initiate reupload for the update with |entity_data|. |tracked_entity| must
   // not be nullptr.
   void ReuploadEntityIfNeeded(const syncer::EntityData& entity_data,
-                              const SyncedNoteTracker::Entity* tracked_entity);
+                              const SyncedNoteTrackerEntity* tracked_entity);
 
   const raw_ptr<vivaldi::NotesModel> notes_model_;
   const raw_ptr<SyncedNoteTracker> note_tracker_;

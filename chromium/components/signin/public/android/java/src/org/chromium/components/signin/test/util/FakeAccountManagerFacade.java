@@ -21,8 +21,10 @@ import org.chromium.components.signin.AccessTokenData;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.AccountsChangeObserver;
 import org.chromium.components.signin.AuthException;
+import org.chromium.components.signin.base.AccountCapabilities;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -108,6 +110,11 @@ public class FakeAccountManagerFacade implements AccountManagerFacade {
         } else {
             listener.onStatusReady(false, /*childAccount=*/null);
         }
+    }
+
+    @Override
+    public Promise<AccountCapabilities> getAccountCapabilities(Account account) {
+        return Promise.fulfilled(new AccountCapabilities(new HashMap<>()));
     }
 
     @Override

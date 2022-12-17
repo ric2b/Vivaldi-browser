@@ -34,6 +34,7 @@
 #include "content/public/test/test_utils.h"
 #include "content/shell/browser/shell.h"
 #include "content/test/content_browser_test_utils_internal.h"
+#include "net/base/escape.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "third_party/blink/public/common/frame/frame_owner_element_type.h"
@@ -116,6 +117,16 @@ void DumpAccessibilityTestBase::ChooseFeatures(
   enabled_features->emplace_back(features::kUseAXPositionForDocumentMarkers);
 
   enabled_features->emplace_back(blink::features::kPortals);
+}
+
+std::string DumpAccessibilityTestBase::DumpTreeAsString() const {
+  std::unique_ptr<AXTreeFormatter> formatter(CreateFormatter());
+  formatter->SetPropertyFilters(scenario_.property_filters,
+                                AXTreeFormatter::kFiltersDefaultSet);
+  formatter->SetNodeFilters(scenario_.node_filters);
+  std::string actual_contents =
+      formatter->Format(GetRootAccessibilityNode(GetWebContents()));
+  return net::EscapeNonASCII(actual_contents);
 }
 
 std::string
@@ -276,10 +287,6 @@ void DumpAccessibilityTestBase::RunTestForPlatform(
 
   absl::optional<std::vector<std::string>> expected_lines =
       test_helper_.LoadExpectationFile(expected_file);
-  if (!expected_lines) {
-    LOG(INFO) << "Skipping this test on this platform.";
-    return;
-  }
 
   // Get the test URL.
   GURL url(embedded_test_server()->GetURL("/" + std::string(file_dir) + "/" +
@@ -336,6 +343,14 @@ void DumpAccessibilityTestBase::RunTestForPlatform(
           web_contents, ui::AXMode(), ax::mojom::Event::kNone);
       accessibility_waiter.WaitForNotification();
     }
+  }
+
+  // No expected lines indicate the test is marked to skip the expectations
+  // checks. If we reach this point, then it means no crashes during the test
+  // run and we can consider the test as succeeding.
+  if (!expected_lines) {
+    EXPECT_TRUE(true);
+    return;
   }
 
   // Validate against the expectation file.

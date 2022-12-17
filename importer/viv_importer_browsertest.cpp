@@ -180,9 +180,9 @@ class OperaImportObserver : public ProfileWriter,
   void ImportItemEnded(importer::ImportItem item) override {}
   void ImportEnded() override {
     base::RunLoop().QuitCurrentWhenIdleDeprecated();
-    EXPECT_EQ(base::size(OperaBookmarks), bookmark_count);
-    EXPECT_EQ(base::size(OperaNotes), notes_count);
-    EXPECT_EQ(base::size(OperaPasswords), password_count);
+    EXPECT_EQ(std::size(OperaBookmarks), bookmark_count);
+    EXPECT_EQ(std::size(OperaNotes), notes_count);
+    EXPECT_EQ(std::size(OperaPasswords), password_count);
   }
 
   bool BookmarkModelIsLoaded() const override { return true; }
@@ -204,7 +204,7 @@ class OperaImportObserver : public ProfileWriter,
   }
   void AddBookmarks(const std::vector<ImportedBookmarkEntry>& bookmarks,
                     const std::u16string& top_level_folder_name) override {
-    ASSERT_LE(bookmark_count + bookmarks.size(), base::size(OperaBookmarks));
+    ASSERT_LE(bookmark_count + bookmarks.size(), std::size(OperaBookmarks));
 
     for (size_t i = 0; i < bookmarks.size(); i++) {
       EXPECT_NO_FATAL_FAILURE(
@@ -215,7 +215,7 @@ class OperaImportObserver : public ProfileWriter,
   }
   void AddNotes(const std::vector<ImportedNotesEntry>& notes,
                 const std::u16string& top_level_folder_name) override {
-    ASSERT_LE(notes_count + notes.size(), base::size(OperaNotes));
+    ASSERT_LE(notes_count + notes.size(), std::size(OperaNotes));
 
     for (size_t i = 0; i < notes.size(); i++) {
       EXPECT_NO_FATAL_FAILURE(

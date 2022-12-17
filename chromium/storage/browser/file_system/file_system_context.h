@@ -135,6 +135,7 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) FileSystemContext
       std::vector<std::unique_ptr<FileSystemBackend>> additional_backends,
       const std::vector<URLRequestAutoMountHandler>& auto_mount_handlers,
       const base::FilePath& partition_path,
+      const base::FilePath& bucket_base_path,
       const FileSystemOptions& options);
 
   // Exposed for base::MakeRefCounted(). Instances should be obtained from the
@@ -148,6 +149,7 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) FileSystemContext
       std::vector<std::unique_ptr<FileSystemBackend>> additional_backends,
       const std::vector<URLRequestAutoMountHandler>& auto_mount_handlers,
       const base::FilePath& partition_path,
+      const base::FilePath& bucket_base_path,
       const FileSystemOptions& options,
       base::PassKey<FileSystemContext>);
 
@@ -162,8 +164,8 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) FileSystemContext
       const blink::StorageKey& storage_key,
       FileSystemType type);
 
-  QuotaManagerProxy* quota_manager_proxy() const {
-    return quota_manager_proxy_.get();
+  const scoped_refptr<QuotaManagerProxy>& quota_manager_proxy() const {
+    return quota_manager_proxy_;
   }
 
   // Discards inflight operations in the operation runner.
@@ -305,6 +307,8 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) FileSystemContext
 
   const base::FilePath& partition_path() const { return partition_path_; }
 
+  const base::FilePath& bucket_base_path() const { return bucket_base_path_; }
+
   // Same as `CrackFileSystemURL`, but cracks FileSystemURL created from `url`
   // and `storage_key`.
   FileSystemURL CrackURL(const GURL& url,
@@ -345,6 +349,12 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) FileSystemContext
                                    StatusCallback callback);
 
   bool is_incognito() { return is_incognito_; }
+
+  // TODO(com/1231162): Remove this. Used only by test code and to migrate media
+  // license data to the new backend.
+  PluginPrivateFileSystemBackend* plugin_private_backend() const {
+    return plugin_private_backend_.get();
+  }
 
  private:
   // For CreateFileSystemOperation.
@@ -424,11 +434,6 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) FileSystemContext
     return sandbox_backend_.get();
   }
 
-  // Used only by test code.
-  PluginPrivateFileSystemBackend* plugin_private_backend() const {
-    return plugin_private_backend_.get();
-  }
-
   // Override the default leveldb Env with `env_override_` if set.
   std::unique_ptr<leveldb::Env> env_override_;
 
@@ -469,6 +474,10 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) FileSystemContext
 
   // The base path of the storage partition for this context.
   const base::FilePath partition_path_;
+
+  // The base path of the file directory where StorageBucket data is stored for
+  // this context.
+  const base::FilePath bucket_base_path_;
 
   const bool is_incognito_;
 

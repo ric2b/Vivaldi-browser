@@ -5,6 +5,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_NG_NG_COLUMN_LAYOUT_ALGORITHM_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_NG_NG_COLUMN_LAYOUT_ALGORITHM_H_
 
+#include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_box_fragment_builder.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_layout_algorithm.h"
 
@@ -13,6 +14,7 @@ namespace blink {
 enum class NGBreakStatus;
 class NGBlockNode;
 class NGBlockBreakToken;
+class NGColumnSpannerPath;
 class NGConstraintSpace;
 struct LogicalSize;
 struct NGMarginStrut;
@@ -72,7 +74,14 @@ class CORE_EXPORT NGColumnLayoutAlgorithm
   void PropagateBaselineFromChild(const NGPhysicalBoxFragment& child,
                                   LayoutUnit block_offset);
 
+  // Calculate the smallest possible block-size for balanced columns. This will
+  // be the initial size we'll try with when actually lay out the columns.
   LayoutUnit CalculateBalancedColumnBlockSize(
+      const LogicalSize& column_size,
+      LayoutUnit row_offset,
+      const NGBlockBreakToken* child_break_token);
+
+  LayoutUnit CalculateBalancedColumnBlockSizeInternal(
       const LogicalSize& column_size,
       LayoutUnit row_offset,
       const NGBlockBreakToken* child_break_token);
@@ -98,6 +107,20 @@ class CORE_EXPORT NGColumnLayoutAlgorithm
       const NGBlockNode& spanner,
       LayoutUnit block_offset) const;
   NGConstraintSpace CreateConstraintSpaceForMinMax() const;
+
+  // If this is a nested multicol container, and there's no room for anything in
+  // the current outer fragmentainer, we're normally allowed to abort (typically
+  // with NGLayoutResult::kOutOfFragmentainerSpace), and retry in the next outer
+  // fragmentainer. This is not the case for out-of-flow positioned multicol
+  // containers, though, as we're not allowed to insert a soft break before an
+  // out-of-flow positioned node. Our implementation requires that an OOF start
+  // in the fragmentainer where it would "naturally" occur.
+  bool MayAbortOnInsufficientSpace() const {
+    DCHECK(is_constrained_by_outer_fragmentation_context_);
+    return !Node().IsOutOfFlowPositioned();
+  }
+
+  const NGColumnSpannerPath* spanner_path_ = nullptr;
 
   int used_column_count_;
   LayoutUnit column_inline_size_;

@@ -54,7 +54,6 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/url_constants.h"
-#include "content/public/common/use_zoom_for_dsf_policy.h"
 #include "content/public/test/back_forward_cache_util.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -3859,7 +3858,7 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest, ReloadWithUrlAnchor) {
 
   double window_scroll_y = EvalJs(shell(), "window.scrollY").ExtractDouble();
 
-  // TODO(bokan): The floor hack below required when ZoomForDSFEnabled can go
+  // TODO(bokan): The floor hack below can go
   // away once FractionalScrolLOffsets ships. The reason it's required is that,
   // at certain device scale factors, the given CSS pixel scroll value may land
   // between physical pixels. Without the feature Blink will truncate to the
@@ -3870,7 +3869,7 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest, ReloadWithUrlAnchor) {
 
   // The 'center-element' y-position is 2000px. 2000px is an arbitrary value.
   double expected_window_scroll_y = 2000;
-  if (IsUseZoomForDSFEnabled() && !fractional_scroll_offsets_enabled) {
+  if (!fractional_scroll_offsets_enabled) {
     float device_scale_factor = shell()
                                     ->web_contents()
                                     ->GetRenderWidgetHostView()
@@ -3903,7 +3902,7 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
 
   double window_scroll_y = EvalJs(shell(), "window.scrollY").ExtractDouble();
 
-  // TODO(bokan): The floor hack below required when ZoomForDSFEnabled can go
+  // TODO(bokan): The floor hack below can go
   // away once FractionalScrolLOffsets ships. The reason it's required is that,
   // at certain device scale factors, the given CSS pixel scroll value may land
   // between physical pixels. Without the feature Blink will truncate to the
@@ -3913,7 +3912,7 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
   bool fractional_scroll_offsets_enabled = IsFractionalScrollOffsetsEnabled();
 
   double expected_window_scroll_y = 2100;
-  if (IsUseZoomForDSFEnabled() && !fractional_scroll_offsets_enabled) {
+  if (!fractional_scroll_offsets_enabled) {
     float device_scale_factor = shell()
                                     ->web_contents()
                                     ->GetRenderWidgetHostView()
@@ -4270,8 +4269,9 @@ class InitialEmptyDocNavigationControllerBrowserTest
 // on the initial empty document because they have committed the synchronous
 // non-initial about:blank document. Update these tests or remove the
 // synchronous navigation entirely.
+// crbug.com/1311616 Disable test due to flakiness.
 IN_PROC_BROWSER_TEST_P(InitialEmptyDocNavigationControllerBrowserTest,
-                       NavigateNewSubframe) {
+                       DISABLED_NavigateNewSubframe) {
   GURL url_1(embedded_test_server()->GetURL("/title1.html"));
   GURL url_2(embedded_test_server()->GetURL("/title2.html"));
   GURL hung_url(embedded_test_server()->GetURL("/hung"));
@@ -6263,6 +6263,139 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
   // TODO(creis): Check subframe entries once we create them in this case.
   // See https://crbug.com/608402.
   EXPECT_EQ(grandchild_url, root->child_at(0)->child_at(0)->current_url());
+}
+
+// Verify that an iframe is not reloaded after going back same-document to a
+// NavigationEntry before the iframe was created, and then forward again.
+// Prevents regression of https://crbug.com/1301985.
+IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
+                       FrameNavigationEntry_BackForwardAcrossSubframeCreation) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "/navigation_controller/simple_page_1.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+  FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
+                            ->GetPrimaryFrameTree()
+                            .root();
+
+  // 1. Perform a same-document navigation.
+  {
+    FrameNavigateParamsCapturer capturer(root);
+    std::string script = "history.pushState({}, 'foo', 'foo')";
+    EXPECT_TRUE(ExecJs(root, script));
+    capturer.Wait();
+    EXPECT_EQ(NAVIGATION_TYPE_MAIN_FRAME_NEW_ENTRY, capturer.navigation_type());
+    EXPECT_TRUE(capturer.is_same_document());
+  }
+
+  // 2. Create an iframe to about:blank and inject content.
+  GURL blank_url(url::kAboutBlankURL);
+  {
+    LoadCommittedCapturer capturer(shell()->web_contents());
+    EXPECT_TRUE(ExecJs(root, JsReplace(kAddFrameWithSrcScript, blank_url)));
+    capturer.Wait();
+    EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
+        capturer.transition_type(), ui::PAGE_TRANSITION_AUTO_SUBFRAME));
+    EXPECT_TRUE(ExecJs(root->child_at(0), "foo=3;"));
+  }
+
+  // 3. Perform a same-document back navigation, to a NavigationEntry before the
+  // iframe existed.
+  {
+    TestNavigationObserver back_load_observer(shell()->web_contents());
+    shell()->web_contents()->GetController().GoBack();
+    back_load_observer.Wait();
+  }
+
+  // 4. Perform a same-document forward navigation. Wait for all navigations to
+  // stop, in case subframes are navigated as well.
+  {
+    TestNavigationObserver forward_load_observer(shell()->web_contents());
+    shell()->web_contents()->GetController().GoForward();
+    forward_load_observer.Wait();
+    EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
+  }
+
+  // Ensure the injected content is still present in the iframe to verify that
+  // it was not reloaded. See https://crbug.com/1301985.
+  EXPECT_EQ(3, EvalJs(root->child_at(0), "foo"));
+}
+
+// Verify that an iframe ends up at the correct URL if going forward from a
+// NavigationEntry created before it existed to one where its URL must change.
+// See https://crbug.com/1301985 and
+// FrameNavigationEntry_BackForwardAcrossSubframeCreation.
+IN_PROC_BROWSER_TEST_P(
+    NavigationControllerBrowserTest,
+    FrameNavigationEntry_BackForwardAcrossSubframeCreationCrossDocument) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "/navigation_controller/simple_page_1.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+  FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
+                            ->GetPrimaryFrameTree()
+                            .root();
+
+  // 1. Perform a same-document navigation.
+  {
+    FrameNavigateParamsCapturer capturer(root);
+    std::string script = "history.pushState({}, 'foo', 'foo')";
+    EXPECT_TRUE(ExecJs(root, script));
+    capturer.Wait();
+    EXPECT_EQ(NAVIGATION_TYPE_MAIN_FRAME_NEW_ENTRY, capturer.navigation_type());
+    EXPECT_TRUE(capturer.is_same_document());
+  }
+
+  // 2. Create an iframe to about:blank and inject content.
+  GURL child_url1(embedded_test_server()->GetURL(
+      "/navigation_controller/simple_page_2.html"));
+  {
+    LoadCommittedCapturer capturer(shell()->web_contents());
+    EXPECT_TRUE(ExecJs(root, JsReplace(kAddFrameWithSrcScript, child_url1)));
+    capturer.Wait();
+    EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
+        capturer.transition_type(), ui::PAGE_TRANSITION_AUTO_SUBFRAME));
+    EXPECT_TRUE(ExecJs(root->child_at(0), "foo=3;"));
+  }
+
+  // 3. Navigate the iframe to another document.
+  GURL child_url2(embedded_test_server()->GetURL(
+      "foo.com", "/navigation_controller/page_with_links.html"));
+  {
+    LoadCommittedCapturer capturer(root->child_at(0));
+    std::string script = JsReplace("frames[0].location = $1;", child_url2);
+    EXPECT_TRUE(ExecJs(root, script));
+    capturer.Wait();
+    EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
+        capturer.transition_type(), ui::PAGE_TRANSITION_MANUAL_SUBFRAME));
+  }
+  EXPECT_EQ(child_url2, root->child_at(0)->current_url());
+
+  // 4. Perform a cross-document back navigation within the iframe.
+  {
+    TestNavigationObserver back_load_observer(shell()->web_contents());
+    shell()->web_contents()->GetController().GoBack();
+    back_load_observer.Wait();
+  }
+  EXPECT_EQ(child_url1, root->child_at(0)->current_url());
+
+  // 5. Perform a same-document back navigation, to a NavigationEntry before the
+  // iframe existed.
+  {
+    TestNavigationObserver back_load_observer(shell()->web_contents());
+    shell()->web_contents()->GetController().GoBack();
+    back_load_observer.Wait();
+  }
+  EXPECT_EQ(child_url1, root->child_at(0)->current_url());
+
+  // 6. Go forward two entries (cross-document in the iframe) and wait for all
+  // navigations to stop. Checking the URL in this case ensures that we do not
+  // incorrectly skip navigating the iframe if it needs to be navigated.
+  {
+    TestNavigationObserver forward_load_observer(shell()->web_contents());
+    shell()->web_contents()->GetController().GoToOffset(2);
+    forward_load_observer.Wait();
+    EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
+  }
+  EXPECT_EQ(child_url2, root->child_at(0)->current_url());
 }
 
 // Verify that the main frame can navigate a grandchild frame to about:blank,
@@ -11947,7 +12080,8 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest, ReloadOriginalRequest) {
     std::string script = "history.replaceState({}, '', 'foo');";
     root->render_manager()
         ->current_frame_host()
-        ->ExecuteJavaScriptWithUserGestureForTests(base::UTF8ToUTF16(script));
+        ->ExecuteJavaScriptWithUserGestureForTests(base::UTF8ToUTF16(script),
+                                                   base::NullCallback());
     EXPECT_FALSE(shell()->web_contents()->IsLoading());
     shell()->web_contents()->GetController().Reload(
         ReloadType::ORIGINAL_REQUEST_URL, false);
@@ -14067,6 +14201,136 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest, 204Navigation) {
   entry = controller.GetLastCommittedEntry();
   EXPECT_EQ(kURL, entry->GetURL());
   EXPECT_EQ(1, controller.GetEntryCount());
+}
+
+// Tests that navigating to an empty URL or a URL that never commits will
+// have appropriate origins. Empty URL navigations are not currently known to
+// be possible, but it used to be possible and caused crashes because the
+// initiator origin wasn't inherited correctly with empty URLs. See also
+// https://crbug.com/1240138.
+IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest, NavigateToEmptyURL) {
+  GURL url_1 = embedded_test_server()->GetURL("/title1.html");
+  GURL url_2 = embedded_test_server()->GetURL("/title2.html");
+  GURL url_204 = embedded_test_server()->GetURL("/page204.html");
+
+  // Navigate to the initial page.
+  EXPECT_TRUE(NavigateToURL(shell(), url_1));
+  NavigationControllerImpl& controller = static_cast<NavigationControllerImpl&>(
+      shell()->web_contents()->GetController());
+  NavigationEntryImpl* entry = controller.GetLastCommittedEntry();
+  EXPECT_EQ(url_1, entry->GetURL());
+  EXPECT_EQ(1, controller.GetEntryCount());
+
+  // Navigate (browser-initiated) to an empty URL, which will get rewritten to
+  // about:blank and commit an opaque origin.
+  EXPECT_TRUE(NavigateToURL(shell(), GURL(), GURL("about:blank")));
+
+  entry = controller.GetLastCommittedEntry();
+  EXPECT_EQ(GURL("about:blank"), entry->GetURL());
+  EXPECT_EQ(2, controller.GetEntryCount());
+  EXPECT_TRUE(contents()->GetMainFrame()->GetLastCommittedOrigin().opaque());
+  EXPECT_FALSE(entry->root_node()->frame_entry->initiator_origin().has_value());
+
+  // Trying to navigate to an empty URL through setting the location would fail
+  // because it's not a valid URL and it's stopped in the renderer.
+  EXPECT_FALSE(NavigateToURLFromRenderer(shell(), GURL()));
+  EXPECT_EQ(entry, controller.GetLastCommittedEntry());
+  EXPECT_EQ(2, controller.GetEntryCount());
+
+  // Navigate another URL.
+  EXPECT_TRUE(NavigateToURL(shell(), url_2));
+  const url::Origin& opener_origin =
+      contents()->GetMainFrame()->GetLastCommittedOrigin();
+
+  {
+    // Pop open a new window which won't commit a navigation, so it will stay at
+    // the initial NavigationEntry.
+    Shell* new_shell = OpenWindow(contents(), url_204);
+    WebContentsImpl* new_contents =
+        static_cast<WebContentsImpl*>(new_shell->web_contents());
+
+    // The initial NavigationEntry, if it exists, will have an empty URL, and
+    // its initiator origin is set to the origin of the document that opened the
+    // window.
+    NavigationControllerImpl& new_controller = new_contents->GetController();
+    if (blink::features::IsInitialNavigationEntryEnabled()) {
+      EXPECT_EQ(1, new_controller.GetEntryCount());
+      entry = new_controller.GetLastCommittedEntry();
+      EXPECT_TRUE(entry->IsInitialEntry());
+      EXPECT_EQ(GURL(), entry->GetURL());
+
+      scoped_refptr<FrameNavigationEntry> frame_entry =
+          entry->root_node()->frame_entry.get();
+      ASSERT_TRUE(frame_entry->initiator_origin().has_value());
+      EXPECT_EQ(opener_origin, frame_entry->initiator_origin().value());
+      EXPECT_EQ(
+          opener_origin,
+          new_shell->web_contents()->GetMainFrame()->GetLastCommittedOrigin());
+    } else {
+      EXPECT_EQ(0, new_controller.GetEntryCount());
+    }
+  }
+
+  {
+    // Pop open a new window which won't commit a navigation, but this time use
+    // the 'noopener' option, which will cause the navigation to be triggered
+    // by the browser.
+    ShellAddedObserver new_shell_observer;
+    EXPECT_TRUE(
+        ExecJs(shell(), "window.open('/page204.html', '_blank', 'noopener');"));
+    Shell* new_shell = new_shell_observer.GetShell();
+
+    // The initial NavigationEntry, if it exists, will have an empty URL, and
+    // its initiator origin is set to an opaque origin (not the opener's
+    // origin).
+    NavigationControllerImpl& new_controller =
+        static_cast<WebContentsImpl*>(new_shell->web_contents())
+            ->GetController();
+    if (blink::features::IsInitialNavigationEntryEnabled()) {
+      EXPECT_EQ(1, new_controller.GetEntryCount());
+      entry = new_controller.GetLastCommittedEntry();
+      EXPECT_TRUE(entry->IsInitialEntry());
+      EXPECT_EQ(GURL(), entry->GetURL());
+
+      scoped_refptr<FrameNavigationEntry> frame_entry =
+          entry->root_node()->frame_entry.get();
+      ASSERT_TRUE(frame_entry->initiator_origin().has_value());
+      EXPECT_NE(opener_origin, frame_entry->initiator_origin().value());
+      EXPECT_TRUE(frame_entry->initiator_origin()->opaque());
+      EXPECT_EQ(
+          frame_entry->initiator_origin().value(),
+          new_shell->web_contents()->GetMainFrame()->GetLastCommittedOrigin());
+    } else {
+      EXPECT_EQ(0, new_controller.GetEntryCount());
+    }
+  }
+
+  {
+    // Pop open another window,  this time to an empty URL and with the
+    // 'noopener' option. This navigation will go through the browser and the
+    // empty URL will be rewritten to about:blank#blocked, but the initiator
+    // origin is still set to the opener's origin.
+    ShellAddedObserver new_shell_observer;
+    EXPECT_TRUE(ExecJs(shell(), "window.open('', '_blank', 'noopener');"));
+    Shell* new_shell = new_shell_observer.GetShell();
+    EXPECT_TRUE(WaitForLoadStop(new_shell->web_contents()));
+
+    NavigationControllerImpl& new_controller =
+        static_cast<WebContentsImpl*>(new_shell->web_contents())
+            ->GetController();
+    EXPECT_EQ(1, new_controller.GetEntryCount());
+    entry = new_controller.GetLastCommittedEntry();
+    EXPECT_FALSE(entry->IsInitialEntry());
+    EXPECT_EQ(GURL("about:blank#blocked"), entry->GetURL());
+
+    scoped_refptr<FrameNavigationEntry> frame_entry =
+        entry->root_node()->frame_entry.get();
+    ASSERT_TRUE(frame_entry->initiator_origin().has_value());
+    EXPECT_EQ(opener_origin, frame_entry->initiator_origin().value());
+    EXPECT_EQ(
+        opener_origin,
+        new_shell->web_contents()->GetMainFrame()->GetLastCommittedOrigin());
+  }
 }
 
 // Tests that stopping a load clears the pending navigation entry.
@@ -18698,20 +18962,11 @@ class DidCommitNavigationCanceller : public DidCommitNavigationInterceptor {
 
 }  //  namespace
 
-// Test is flaky on Mac: https://crbug.com/1151545.
-#if BUILDFLAG(IS_MAC)
-#define MAYBE_CrossProcessIframeToInvalidURLCancelsRedirectSpoof \
-  DISABLED_CrossProcessIframeToInvalidURLCancelsRedirectSpoof
-#else
-#define MAYBE_CrossProcessIframeToInvalidURLCancelsRedirectSpoof \
-  CrossProcessIframeToInvalidURLCancelsRedirectSpoof
-#endif
 // When running OpenURL to an invalid URL on a frame proxy it should not spoof
 // the url by canceling a main frame navigation.
 // See https://crbug.com/966914.
-IN_PROC_BROWSER_TEST_P(
-    NavigationControllerBrowserTest,
-    MAYBE_CrossProcessIframeToInvalidURLCancelsRedirectSpoof) {
+IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
+                       CrossProcessIframeToInvalidURLCancelsRedirectSpoof) {
   // This tests something that can only happened with out of process iframes.
   if (!AreAllSitesIsolatedForTesting())
     return;
@@ -19061,15 +19316,8 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
               controller.GetLastCommittedEntry()->GetFrameEntry(child));
     EXPECT_TRUE(capturer.did_replace_entry());
 
-    // We keep the same history.state value (except when RenderDocument
-    // subframe is on).
-    // TODO(http://crbug.com/1068965): Keep the history.state even with
-    // RenderDocument.
-    if (ShouldCreateNewHostForSameSiteSubframe()) {
-      EXPECT_EQ(nullptr, EvalJs(child, "history.state"));
-    } else {
-      EXPECT_EQ("foo", EvalJs(child, "history.state"));
-    }
+    // We keep the same history.state value.
+    EXPECT_EQ("foo", EvalJs(child, "history.state"));
   }
 
   {
@@ -19095,15 +19343,8 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
               controller.GetLastCommittedEntry()->GetFrameEntry(child));
     EXPECT_FALSE(capturer.did_replace_entry());
 
-    // We keep the same history.state value (except when RenderDocument
-    // subframe is on).
-    // TODO(http://crbug.com/1068965): Keep the history.state even with
-    // RenderDocument.
-    if (ShouldCreateNewHostForSameSiteSubframe()) {
-      EXPECT_EQ(nullptr, EvalJs(child, "history.state"));
-    } else {
-      EXPECT_EQ("foo", EvalJs(child, "history.state"));
-    }
+    // We keep the same history.state value.
+    EXPECT_EQ("foo", EvalJs(child, "history.state"));
   }
 
   // 3) Test navigating the subframe to the same URL, but it ends up in an error
@@ -19165,15 +19406,8 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
               controller.GetLastCommittedEntry()->GetFrameEntry(child));
     EXPECT_FALSE(capturer.did_replace_entry());
 
-    // We keep the history.state value from before the failed navigation (except
-    // when RenderDocument subframe is on).
-    // TODO(http://crbug.com/1068965): Keep the history.state even with
-    // RenderDocument.
-    if (ShouldCreateNewHostForSameSiteSubframe()) {
-      EXPECT_EQ(nullptr, EvalJs(child, "history.state"));
-    } else {
-      EXPECT_EQ("foo", EvalJs(child, "history.state"));
-    }
+    // We keep the same history.state value.
+    EXPECT_EQ("foo", EvalJs(child, "history.state"));
   }
 }
 
@@ -19231,15 +19465,8 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
               controller.GetLastCommittedEntry()->GetFrameEntry(child));
     EXPECT_EQ(2, controller.GetEntryCount());
 
-    // We keep the same history.state value (except when RenderDocument
-    // subframe is on).
-    // TODO(http://crbug.com/1068965): Keep the history.state even with
-    // RenderDocument.
-    if (ShouldCreateNewHostForSameSiteSubframe()) {
-      EXPECT_EQ(nullptr, EvalJs(child, "history.state"));
-    } else {
-      EXPECT_EQ("foo", EvalJs(child, "history.state"));
-    }
+    // We keep the same history.state value.
+    EXPECT_EQ("foo", EvalJs(child, "history.state"));
   }
 
   {
@@ -19313,15 +19540,8 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
               controller.GetLastCommittedEntry()->GetFrameEntry(child));
     EXPECT_EQ(1, controller.GetEntryCount());
 
-    // We keep the same history.state value (except when RenderDocument
-    // subframe is on).
-    // TODO(http://crbug.com/1068965): Keep the history.state even with
-    // RenderDocument.
-    if (ShouldCreateNewHostForSameSiteSubframe()) {
-      EXPECT_EQ(nullptr, EvalJs(child, "history.state"));
-    } else {
-      EXPECT_EQ("foo", EvalJs(child, "history.state"));
-    }
+    // We keep the same history.state value.
+    EXPECT_EQ("foo", EvalJs(child, "history.state"));
   }
 
   {
@@ -19348,15 +19568,8 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
               controller.GetLastCommittedEntry()->GetFrameEntry(child));
     EXPECT_EQ(1, controller.GetEntryCount());
 
-    // We keep the same history.state value (except when RenderDocument
-    // subframe is on).
-    // TODO(http://crbug.com/1068965): Keep the history.state even with
-    // RenderDocument.
-    if (ShouldCreateNewHostForSameSiteSubframe()) {
-      EXPECT_EQ(nullptr, EvalJs(child, "history.state"));
-    } else {
-      EXPECT_EQ("foo", EvalJs(child, "history.state"));
-    }
+    // We keep the same history.state value.
+    EXPECT_EQ("foo", EvalJs(child, "history.state"));
   }
 
   {
@@ -19422,14 +19635,10 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
               controller.GetLastCommittedEntry()->GetFrameEntry(child));
     EXPECT_EQ(1, controller.GetEntryCount());
 
-    // We keep the history.state value from before the failed navigation (except
-    // when RenderDocument subframe is on).
-    // TODO(http://crbug.com/1068965): Keep the history.state even with
-    // RenderDocument.
+    // We keep the history.state value from before the failed navigation.
     // TODO(http://crbug.com/1188956): Ensure error page isolation correctly
     // maintains history.state as well.
-    if (ShouldCreateNewHostForSameSiteSubframe() ||
-        SiteIsolationPolicy::IsErrorPageIsolationEnabled(false)) {
+    if (SiteIsolationPolicy::IsErrorPageIsolationEnabled(false)) {
       EXPECT_EQ(nullptr, EvalJs(child, "history.state"));
     } else {
       EXPECT_EQ("foo", EvalJs(child, "history.state"));
@@ -20242,10 +20451,6 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest, ReloadFrame) {
   EXPECT_EQ(network::mojom::ReferrerPolicy::kStrictOriginWhenCrossOrigin,
             frame_entry_2->referrer().policy);
 
-  // TODO(http://crbug.com/1068965): Remove this when test passes.
-  if (ShouldCreateNewHostForSameSiteSubframe())
-    return;
-
   int item_sequence_number_2 = frame_entry_1->item_sequence_number();
   int document_sequence_number_2 = frame_entry_1->document_sequence_number();
   EXPECT_EQ(item_sequence_number_1, item_sequence_number_2);
@@ -20920,6 +21125,148 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerInitialNavigationEntryBrowserTest,
             capturer.did_replace_entry());
   EXPECT_EQ(1, new_controller.GetEntryCount());
   EXPECT_EQ(url, new_controller.GetLastCommittedEntry()->GetURL());
+}
+
+// A test to verify that a navigation with |force_new_browsing_instance| set to
+// true results in a new BrowsingInstance, even if it's to a URL compatible with
+// the original SiteInstance.
+IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
+                       ResetForTestForcesNewBrowsingInstance) {
+  GURL test_url(embedded_test_server()->GetURL("a.com", "/title1.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), test_url));
+
+  SiteInstance* initial_site_instance = contents()->GetSiteInstance();
+
+  FrameTreeNode* root = contents()->GetPrimaryFrameTree().root();
+  DisableProactiveBrowsingInstanceSwapFor(root->current_frame_host());
+
+  TestNavigationObserver navigation_observer(contents());
+  NavigationController::LoadURLParams params(test_url);
+  params.force_new_browsing_instance = true;
+  contents()->GetController().LoadURLWithParams(params);
+  navigation_observer.Wait();
+  EXPECT_TRUE(navigation_observer.last_navigation_succeeded());
+
+  SiteInstance* post_reset_site_instance = contents()->GetSiteInstance();
+  EXPECT_NE(initial_site_instance, post_reset_site_instance);
+  EXPECT_FALSE(
+      post_reset_site_instance->IsRelatedSiteInstance(initial_site_instance));
+}
+
+// Test that unload timing of old document is accessible after same-origin
+// navigation, but not after cross-origin navigation.
+IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest, UnloadTiming) {
+  // With BackForwardCache, old document doesn't fire unload handlers as the
+  // page is stored in BackForwardCache on navigation.
+  DisableBackForwardCacheForTesting(contents(),
+                                    BackForwardCache::TEST_USES_UNLOAD_EVENT);
+
+  GURL initial_url(embedded_test_server()->GetURL(
+      "a.com", "/cross_site_iframe_factory.html?a(a)"));
+  GURL url_a(embedded_test_server()->GetURL("a.com", "/title1.html"));
+  GURL url_b(embedded_test_server()->GetURL("b.com", "/title2.html"));
+  // Navigate to a page with an iframe.
+  EXPECT_TRUE(NavigateToURL(shell(), initial_url));
+
+  FrameTreeNode* root = contents()->GetPrimaryFrameTree().root();
+  ASSERT_EQ(1u, root->child_count());
+  FrameTreeNode* child = root->child_at(0u);
+
+  // Navigate the subframe same-origin.
+  ASSERT_TRUE(NavigateFrameToURL(child, url_a));
+
+  // The unloadEventStart and unloadEventEnd timings should be set.
+  EXPECT_TRUE(ExecJs(
+      child,
+      "var navigationTiming = performance.getEntriesByType('navigation')"));
+  ASSERT_EQ(1, EvalJs(child, "navigationTiming.length"));
+  EXPECT_NE(0, EvalJs(child, "navigationTiming[0].unloadEventStart"));
+  EXPECT_NE(0, EvalJs(child, "navigationTiming[0].unloadEventEnd"));
+
+  // Navigate the subframe cross-origin.
+  {
+    FrameNavigateParamsCapturer capturer(child);
+    ASSERT_TRUE(NavigateFrameToURL(child, url_b));
+    capturer.Wait();
+  }
+  // The unloadEventStart and unloadEventEnd timings should not be set.
+  EXPECT_TRUE(ExecJs(
+      child,
+      "var navigationTiming = performance.getEntriesByType('navigation')"));
+  ASSERT_EQ(1, EvalJs(child, "navigationTiming.length"));
+  EXPECT_EQ(0, EvalJs(child, "navigationTiming[0].unloadEventStart"));
+  EXPECT_EQ(0, EvalJs(child, "navigationTiming[0].unloadEventEnd"));
+
+  // Navigate the main frame same-origin.
+  ASSERT_TRUE(NavigateToURL(shell(), url_a));
+  // The unloadEventStart and unloadEventEnd timings should be set.
+  EXPECT_TRUE(ExecJs(
+      root,
+      "var navigationTiming = performance.getEntriesByType('navigation')"));
+  ASSERT_EQ(1, EvalJs(root, "navigationTiming.length"));
+  EXPECT_NE(0, EvalJs(root, "navigationTiming[0].unloadEventStart"));
+  EXPECT_NE(0, EvalJs(root, "navigationTiming[0].unloadEventEnd"));
+
+  // Navigate the main frame cross-origin.
+  ASSERT_TRUE(NavigateToURL(shell(), url_b));
+  // The unloadEventStart and unloadEventEnd timings should not be set.
+  EXPECT_TRUE(ExecJs(
+      root,
+      "var navigationTiming = performance.getEntriesByType('navigation')"));
+  ASSERT_EQ(1, EvalJs(root, "navigationTiming.length"));
+  EXPECT_EQ(0, EvalJs(root, "navigationTiming[0].unloadEventStart"));
+  EXPECT_EQ(0, EvalJs(root, "navigationTiming[0].unloadEventEnd"));
+}
+
+IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
+                       SameURLNavigationRetainsHistoryState) {
+  GURL main_frame_url(embedded_test_server()->GetURL("/page_with_iframe.html"));
+  GURL subframe_url(embedded_test_server()->GetURL("/title1.html"));
+  GURL other_url(embedded_test_server()->GetURL("/title2.html"));
+  // Navigate to a page with an iframe.
+  EXPECT_TRUE(NavigateToURL(shell(), main_frame_url));
+  FrameTreeNode* root = contents()->GetPrimaryFrameTree().root();
+  ASSERT_EQ(1u, root->child_count());
+  FrameTreeNode* child = root->child_at(0u);
+  EXPECT_EQ(main_frame_url, root->current_url());
+  EXPECT_EQ(subframe_url, child->current_url());
+
+  // Do a replaceState on the subframe to set the history.state to "foo".
+  ReplaceState(child, "foo");
+
+  // Navigate the subframe to the same URL it is currently on.
+  {
+    FrameNavigateParamsCapturer capturer(child);
+    ASSERT_TRUE(NavigateFrameToURL(child, subframe_url));
+    capturer.Wait();
+    EXPECT_EQ(subframe_url, child->current_url());
+  }
+  // Check that the history.state is retained after the navigation.
+  EXPECT_EQ("foo", EvalJs(child, "history.state"));
+
+  // Navigate the subframe to a different URL.
+  {
+    FrameNavigateParamsCapturer capturer(child);
+    ASSERT_TRUE(NavigateFrameToURL(child, other_url));
+    capturer.Wait();
+    EXPECT_EQ(other_url, child->current_url());
+  }
+  // Check that the history.state is not retained after the navigation.
+  EXPECT_EQ(nullptr, EvalJs(child, "history.state"));
+
+  // Do a replaceState on the main frame to set the history.state to "bar".
+  ReplaceState(root, "bar");
+  EXPECT_EQ("bar", EvalJs(root, "history.state"));
+
+  // Navigate the main frame to the same URL it's currently on.
+  ASSERT_TRUE(NavigateToURL(shell(), root->current_url()));
+  // Check that the history.state is retained after the navigation.
+  EXPECT_EQ("bar", EvalJs(root, "history.state"));
+
+  // Navigate the main frame to a different URL.
+  ASSERT_TRUE(NavigateToURL(shell(), other_url));
+  // Check that the history.state is not retained after the navigation.
+  EXPECT_EQ(nullptr, EvalJs(root, "history.state"));
 }
 
 INSTANTIATE_TEST_SUITE_P(

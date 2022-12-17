@@ -19,11 +19,8 @@ import org.chromium.components.browser_ui.widget.RoundedCornerImageView;
  * behavior of this Class is the same as the RoundedCornerImageView.
  */
 public class TabGridThumbnailView extends RoundedCornerImageView {
-    private final float mAspectRatio;
-
     public TabGridThumbnailView(Context context, AttributeSet attrs) {
         super(context, attrs);
-        mAspectRatio = TabUtils.getTabThumbnailAspectRatio(context);
     }
 
     @Override
@@ -33,7 +30,8 @@ public class TabGridThumbnailView extends RoundedCornerImageView {
         int measuredWidth = getMeasuredWidth();
         int measureHeight = getMeasuredHeight();
 
-        int expectedHeight = (int) (measuredWidth * 1.0 / mAspectRatio);
+        int expectedHeight =
+                (int) (measuredWidth * 1.0 / TabUtils.getTabThumbnailAspectRatio(getContext()));
         if ((TabUiFeatureUtilities.isLaunchPolishEnabled()
                     || ReturnToChromeExperimentsUtil.isStartSurfaceEnabled(getContext()))
                 && isPlaceHolder()) {
@@ -73,8 +71,12 @@ public class TabGridThumbnailView extends RoundedCornerImageView {
             return;
         }
 
-        float expectedThumbnailAspectRatio = TabUtils.getTabThumbnailAspectRatio(getContext());
-        int height = (int) (getWidth() * 1.0 / expectedThumbnailAspectRatio);
-        setMinimumHeight(Math.min(getHeight(), height));
+        if (TabUiFeatureUtilities.isTabThumbnailAspectRatioNotOne()) {
+            float expectedThumbnailAspectRatio = TabUtils.getTabThumbnailAspectRatio(getContext());
+            int height = (int) (getWidth() * 1.0 / expectedThumbnailAspectRatio);
+            setMinimumHeight(Math.min(getHeight(), height));
+        } else {
+            setMinimumHeight(getWidth());
+        }
     }
 }

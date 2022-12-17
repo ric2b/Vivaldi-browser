@@ -27,13 +27,13 @@
 #include "ash/shortcut_viewer/views/ksv_search_box_view.h"
 #include "base/bind.h"
 #include "base/i18n/string_search.h"
-#include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "chromeos/ui/base/window_properties.h"
+#include "chromeos/ui/wm/features.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/base/accelerators/accelerator.h"
@@ -41,11 +41,9 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/chromeos/events/keyboard_layout_util.h"
-#include "ui/compositor/compositor.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/types/event_type.h"
 #include "ui/gfx/paint_vector_icon.h"
-#include "ui/gfx/presentation_feedback.h"
 #include "ui/views/accessibility/accessibility_paint_checks.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
@@ -79,7 +77,7 @@ std::unique_ptr<views::View> CreateNoSearchResultView() {
   views::BoxLayout* layout =
       illustration_view->SetLayoutManager(std::make_unique<views::BoxLayout>(
           views::BoxLayout::Orientation::kVertical,
-          gfx::Insets(kTopPadding, 0, 0, 0)));
+          gfx::Insets::TLBR(kTopPadding, 0, 0, 0)));
   layout->set_main_axis_alignment(views::BoxLayout::MainAxisAlignment::kStart);
   auto image_view = std::make_unique<views::ImageView>();
   image_view->SetImage(gfx::CreateVectorIcon(ash::kKsvSearchNoResultIcon,
@@ -154,7 +152,7 @@ bool ShouldExcludeItem(const ash::KeyboardShortcutItem& item) {
     case IDS_KSV_DESCRIPTION_PRIVACY_SCREEN_TOGGLE:
       return !ash::Shell::Get()->privacy_screen_controller()->IsSupported();
     case IDS_KSV_DESCRIPTION_FLOAT:
-      return !ash::features::IsWindowControlMenuEnabled();
+      return !chromeos::wm::features::IsFloatWindowEnabled();
   }
 
   return false;
@@ -175,7 +173,6 @@ views::Widget* KeyboardShortcutView::Toggle(aura::Window* context) {
     else
       g_ksv_view->GetWidget()->Activate();
   } else {
-    const base::TimeTicks start_time = base::TimeTicks::Now();
     TRACE_EVENT0("shortcut_viewer", "CreateWidget");
     base::RecordAction(
         base::UserMetricsAction("KeyboardShortcutViewer.CreateWindow"));
@@ -193,6 +190,7 @@ views::Widget* KeyboardShortcutView::Toggle(aura::Window* context) {
 
     // Set frame view Active and Inactive colors, both are SK_ColorWHITE.
     aura::Window* window = g_ksv_view->GetWidget()->GetNativeWindow();
+    window->SetProperty(chromeos::kTrackDefaultFrameColors, false);
     window->SetProperty(chromeos::kFrameActiveColorKey, SK_ColorWHITE);
     window->SetProperty(chromeos::kFrameInactiveColorKey, SK_ColorWHITE);
 
@@ -228,14 +226,6 @@ views::Widget* KeyboardShortcutView::Toggle(aura::Window* context) {
     g_ksv_view->did_first_paint_ = false;
     g_ksv_view->GetWidget()->Show();
     g_ksv_view->search_box_view_->search_box()->RequestFocus();
-
-    widget->GetCompositor()->RequestPresentationTimeForNextFrame(base::BindOnce(
-        [](base::TimeTicks start_time,
-           const gfx::PresentationFeedback& feedback) {
-          UMA_HISTOGRAM_TIMES("Keyboard.ShortcutViewer.StartupTime",
-                              feedback.timestamp - start_time);
-        },
-        start_time));
   }
   return g_ksv_view->GetWidget();
 }
@@ -594,8 +584,8 @@ void KeyboardShortcutView::ShowSearchResults(
     // the top of the |search_results_container_|.
     constexpr int kTopPadding = -16;
     constexpr int kHorizontalPadding = 128;
-    found_items_list_view->SetBorder(views::CreateEmptyBorder(
-        gfx::Insets(kTopPadding, kHorizontalPadding, 0, kHorizontalPadding)));
+    found_items_list_view->SetBorder(views::CreateEmptyBorder(gfx::Insets::TLBR(
+        kTopPadding, kHorizontalPadding, 0, kHorizontalPadding)));
     search_container_content_view =
         CreateScrollView(std::move(found_items_list_view)).release();
   }

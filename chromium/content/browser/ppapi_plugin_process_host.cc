@@ -12,7 +12,6 @@
 #include "base/base_switches.h"
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/cxx17_backports.h"
 #include "base/files/file_path.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/string_number_conversions.h"
@@ -254,7 +253,7 @@ bool PpapiPluginProcessHost::Init(const PepperPluginInfo& info) {
     , switches::kDebugVivaldi,
   };
   cmd_line->CopySwitchesFrom(browser_command_line, kCommonForwardSwitches,
-                             base::size(kCommonForwardSwitches));
+                             std::size(kCommonForwardSwitches));
 
   static const char* const kPluginForwardSwitches[] = {
     sandbox::policy::switches::kDisableSeccompFilterSandbox,
@@ -266,7 +265,7 @@ bool PpapiPluginProcessHost::Init(const PepperPluginInfo& info) {
     switches::kTimeZoneForTesting,
   };
   cmd_line->CopySwitchesFrom(browser_command_line, kPluginForwardSwitches,
-                             base::size(kPluginForwardSwitches));
+                             std::size(kPluginForwardSwitches));
 
   std::string locale = GetContentClient()->browser()->GetApplicationLocale();
   if (!locale.empty()) {
@@ -294,8 +293,7 @@ bool PpapiPluginProcessHost::Init(const PepperPluginInfo& info) {
   // having a plugin launcher means we need to use another process instead of
   // just forking the zygote.
   process_->Launch(
-      std::make_unique<PpapiPluginSandboxedProcessLauncherDelegate>(
-          permissions_),
+      std::make_unique<PpapiPluginSandboxedProcessLauncherDelegate>(),
       std::move(cmd_line), true);
   return true;
 }

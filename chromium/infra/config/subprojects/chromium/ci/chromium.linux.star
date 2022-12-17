@@ -19,7 +19,7 @@ ci.defaults.set(
     goma_jobs = goma.jobs.MANY_JOBS_FOR_CI,
     main_console_view = "main",
     notifies = ["chromium.linux"],
-    os = os.LINUX_BIONIC_SWITCH_TO_DEFAULT,
+    os = os.LINUX_DEFAULT,
     pool = ci.DEFAULT_POOL,
     service_account = ci.DEFAULT_SERVICE_ACCOUNT,
     sheriff_rotations = sheriff_rotations.CHROMIUM,
@@ -51,6 +51,23 @@ ci.builder(
 ci.builder(
     name = "Cast Linux",
     branch_selector = branches.STANDARD_MILESTONE,
+    builder_spec = builder_config.builder_spec(
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+            apply_configs = [
+                "enable_reclient",
+            ],
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium_clang",
+            apply_configs = [
+                "mb",
+            ],
+            build_config = builder_config.build_config.RELEASE,
+            target_bits = 64,
+        ),
+        build_gs_bucket = "chromium-linux-archive",
+    ),
     console_view_entry = consoles.console_view_entry(
         category = "cast",
         short_name = "vid",
@@ -64,6 +81,23 @@ ci.builder(
 ci.builder(
     name = "Cast Linux Debug",
     branch_selector = branches.STANDARD_MILESTONE,
+    builder_spec = builder_config.builder_spec(
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+            apply_configs = [
+                "enable_reclient",
+            ],
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium_clang",
+            apply_configs = [
+                "mb",
+            ],
+            build_config = builder_config.build_config.DEBUG,
+            target_bits = 64,
+        ),
+        build_gs_bucket = "chromium-linux-archive",
+    ),
     console_view_entry = consoles.console_view_entry(
         category = "cast",
         short_name = "dbg",
@@ -124,6 +158,9 @@ ci.builder(
     # failure.
     tree_closing = False,
     notifies = ["Deterministic Linux", "close-on-any-step-failure"],
+    goma_backend = None,
+    reclient_jobs = rbe_jobs.DEFAULT,
+    reclient_instance = rbe_instance.DEFAULT,
 )
 
 ci.builder(
@@ -135,6 +172,9 @@ ci.builder(
     cores = 32,
     executable = "recipe:swarming/deterministic_build",
     execution_timeout = 7 * time.hour,
+    goma_backend = None,
+    reclient_jobs = rbe_jobs.DEFAULT,
+    reclient_instance = rbe_instance.DEFAULT,
 )
 
 ci.builder(
@@ -154,6 +194,25 @@ ci.builder(
     ],
     cq_mirrors_console_view = "mirrors",
     notifies = ["cr-fuchsia"],
+    builder_spec = builder_config.builder_spec(
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+            apply_configs = [
+                "fuchsia_arm64",
+                "fuchsia_arm64_host",
+            ],
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = [
+                "mb",
+            ],
+            build_config = builder_config.build_config.RELEASE,
+            target_bits = 64,
+            target_platform = builder_config.target_platform.FUCHSIA,
+        ),
+        build_gs_bucket = "chromium-linux-archive",
+    ),
 )
 
 ci.builder(
@@ -173,6 +232,24 @@ ci.builder(
     ],
     cq_mirrors_console_view = "mirrors",
     notifies = ["cr-fuchsia"],
+    builder_spec = builder_config.builder_spec(
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+            apply_configs = [
+                "fuchsia_x64",
+            ],
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = [
+                "mb",
+            ],
+            build_config = builder_config.build_config.RELEASE,
+            target_bits = 64,
+            target_platform = builder_config.target_platform.FUCHSIA,
+        ),
+        build_gs_bucket = "chromium-linux-archive",
+    ),
 )
 
 ci.builder(
@@ -185,16 +262,41 @@ ci.builder(
     main_console_view = None,
     notifies = args.ignore_default([]),
     tree_closing = False,
+    goma_backend = None,
+    reclient_jobs = rbe_jobs.DEFAULT,
+    reclient_instance = rbe_instance.DEFAULT,
+    sheriff_rotations = args.ignore_default(None),
 )
 
 ci.builder(
     name = "Linux Builder",
     branch_selector = branches.STANDARD_MILESTONE,
+    builder_spec = builder_config.builder_spec(
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+            apply_configs = [
+                "use_clang_coverage",
+                "enable_reclient",
+            ],
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = [
+                "mb",
+            ],
+            build_config = builder_config.build_config.RELEASE,
+            target_bits = 64,
+        ),
+        build_gs_bucket = "chromium-linux-archive",
+    ),
     console_view_entry = consoles.console_view_entry(
         category = "release",
         short_name = "bld",
     ),
     cq_mirrors_console_view = "mirrors",
+    goma_backend = None,
+    reclient_jobs = rbe_jobs.HIGH_JOBS_FOR_CI,
+    reclient_instance = rbe_instance.DEFAULT,
 )
 
 ci.builder(
@@ -224,19 +326,26 @@ ci.builder(
 )
 
 ci.builder(
-    name = "Linux Builder (dbg)(32)",
-    console_view_entry = consoles.console_view_entry(
-        category = "debug|builder",
-        short_name = "32",
-    ),
-    goma_backend = None,
-    reclient_jobs = rbe_jobs.DEFAULT,
-    reclient_instance = rbe_instance.DEFAULT,
-)
-
-ci.builder(
     name = "Linux Builder (Wayland)",
     branch_selector = branches.STANDARD_MILESTONE,
+    builder_spec = builder_config.builder_spec(
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+            apply_configs = [
+                "use_clang_coverage",
+                "enable_reclient",
+            ],
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = [
+                "mb",
+            ],
+            build_config = builder_config.build_config.RELEASE,
+            target_bits = 64,
+        ),
+        build_gs_bucket = "chromium-linux-archive",
+    ),
     console_view_entry = consoles.console_view_entry(
         category = "release",
         short_name = "bld-wl",
@@ -250,6 +359,24 @@ ci.builder(
 ci.builder(
     name = "Linux Tests",
     branch_selector = branches.STANDARD_MILESTONE,
+    builder_spec = builder_config.builder_spec(
+        execution_mode = builder_config.execution_mode.TEST,
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+            apply_configs = [
+                "use_clang_coverage",
+            ],
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = [
+                "mb",
+            ],
+            build_config = builder_config.build_config.RELEASE,
+            target_bits = 64,
+        ),
+        build_gs_bucket = "chromium-linux-archive",
+    ),
     console_view_entry = consoles.console_view_entry(
         category = "release",
         short_name = "tst",
@@ -301,6 +428,25 @@ ci.builder(
 ci.builder(
     name = "Linux Tests (Wayland)",
     branch_selector = branches.STANDARD_MILESTONE,
+    builder_spec = builder_config.builder_spec(
+        execution_mode = builder_config.execution_mode.TEST,
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+            apply_configs = [
+                "use_clang_coverage",
+                "enable_reclient",
+            ],
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = [
+                "mb",
+            ],
+            build_config = builder_config.build_config.RELEASE,
+            target_bits = 64,
+        ),
+        build_gs_bucket = "chromium-linux-archive",
+    ),
     console_view_entry = consoles.console_view_entry(
         category = "release",
         short_name = "tst-wl",
@@ -331,6 +477,24 @@ ci.builder(
     # failure.
     tree_closing = False,
     notifies = ["cr-fuchsia", "close-on-any-step-failure"],
+    builder_spec = builder_config.builder_spec(
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+            apply_configs = [
+                "fuchsia_arm64",
+            ],
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = [
+                "mb",
+            ],
+            build_config = builder_config.build_config.RELEASE,
+            target_bits = 64,
+            target_platform = builder_config.target_platform.FUCHSIA,
+        ),
+        build_gs_bucket = "chromium-linux-archive",
+    ),
 )
 
 ci.builder(
@@ -339,6 +503,9 @@ ci.builder(
         category = "release",
         short_name = "nsl",
     ),
+    goma_backend = None,
+    reclient_jobs = rbe_jobs.DEFAULT,
+    reclient_instance = rbe_instance.DEFAULT,
 )
 
 ci.builder(
@@ -362,6 +529,24 @@ ci.builder(
     # failure.
     tree_closing = False,
     notifies = ["cr-fuchsia", "close-on-any-step-failure"],
+    builder_spec = builder_config.builder_spec(
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+            apply_configs = [
+                "fuchsia_x64",
+            ],
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = [
+                "mb",
+            ],
+            build_config = builder_config.build_config.RELEASE,
+            target_bits = 64,
+            target_platform = builder_config.target_platform.FUCHSIA,
+        ),
+        build_gs_bucket = "chromium-linux-archive",
+    ),
 )
 
 ci.builder(
@@ -382,6 +567,25 @@ ci.builder(
     goma_backend = None,
     reclient_jobs = rbe_jobs.HIGH_JOBS_FOR_CI,
     reclient_instance = rbe_instance.DEFAULT,
+    builder_spec = builder_config.builder_spec(
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+            apply_configs = [
+                "fuchsia_x64",
+                "enable_reclient",
+            ],
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = [
+                "mb",
+            ],
+            build_config = builder_config.build_config.DEBUG,
+            target_bits = 64,
+            target_platform = builder_config.target_platform.FUCHSIA,
+        ),
+        build_gs_bucket = "chromium-linux-archive",
+    ),
 )
 
 ci.builder(
@@ -390,6 +594,9 @@ ci.builder(
         category = "bfcache",
         short_name = "bfc",
     ),
+    goma_backend = None,
+    reclient_jobs = rbe_jobs.DEFAULT,
+    reclient_instance = rbe_instance.DEFAULT,
 )
 
 ci.builder(
@@ -398,6 +605,9 @@ ci.builder(
         category = "release",
         short_name = "trc",
     ),
+    goma_backend = None,
+    reclient_jobs = rbe_jobs.DEFAULT,
+    reclient_instance = rbe_instance.DEFAULT,
 )
 
 ci.builder(
@@ -407,32 +617,4 @@ ci.builder(
         short_name = "gcc",
     ),
     goma_backend = None,
-)
-
-ci.builder(
-    name = "linux-bionic-rel",
-    console_view_entry = consoles.console_view_entry(
-        category = "release",
-        short_name = "bio",
-    ),
-    os = os.LINUX_BIONIC,
-    tree_closing = False,
-)
-
-ci.builder(
-    name = "linux-trusty-rel",
-    console_view_entry = consoles.console_view_entry(
-        category = "release",
-        short_name = "tru",
-    ),
-    os = os.LINUX_TRUSTY,
-)
-
-ci.builder(
-    name = "linux-xenial-rel",
-    console_view_entry = consoles.console_view_entry(
-        category = "release",
-        short_name = "xen",
-    ),
-    os = os.LINUX_XENIAL,
 )

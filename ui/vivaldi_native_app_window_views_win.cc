@@ -163,12 +163,6 @@ ui::MenuModel* VivaldiNativeAppWindowViewsWin::GetSystemMenuModel() {
 int VivaldiNativeAppWindowViewsWin::GetCommandIDForAppCommandID(
     int app_command_id) const {
   switch (app_command_id) {
-      // NOTE: The order here matches the APPCOMMAND declaration order in the
-      // Windows headers.
-    case APPCOMMAND_BROWSER_BACKWARD:
-      return IDC_BACK;
-    case APPCOMMAND_BROWSER_FORWARD:
-      return IDC_FORWARD;
     case APPCOMMAND_BROWSER_REFRESH:
       return IDC_RELOAD;
     case APPCOMMAND_BROWSER_HOME:
@@ -199,6 +193,9 @@ int VivaldiNativeAppWindowViewsWin::GetCommandIDForAppCommandID(
     case APPCOMMAND_UNDO:
     case APPCOMMAND_REDO:
     case APPCOMMAND_SPELL_CHECK:
+    // Handled in WebViewGuest::HandleKeyboardShortcuts:
+    case APPCOMMAND_BROWSER_BACKWARD:
+    case APPCOMMAND_BROWSER_FORWARD:
     default:
       return -1;
   }

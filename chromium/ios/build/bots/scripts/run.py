@@ -25,6 +25,7 @@ import subprocess
 import sys
 import traceback
 
+import constants
 import shard_util
 import test_runner
 import variations_runner
@@ -126,6 +127,9 @@ class Runner():
       self.args.test_cases = self.args.test_cases or []
       if self.args.gtest_filter:
         self.args.test_cases.extend(self.args.gtest_filter.split(':'))
+      if self.args.isolated_script_test_filter:
+        self.args.test_cases.extend(
+            self.args.isolated_script_test_filter.split('::'))
       self.args.test_cases.extend(args_json.get('test_cases', []))
 
   def run(self, args):
@@ -157,8 +161,9 @@ class Runner():
             self.args.version,
             self.args.platform,
             out_dir=self.args.out_dir,
+            readline_timeout=self.args.readline_timeout,
             release=self.args.release,
-            repeat_count=self.args.gtest_repeat,
+            repeat_count=self.args.repeat,
             retries=self.args.retries,
             shards=self.args.shards,
             test_cases=self.args.test_cases,
@@ -174,6 +179,7 @@ class Runner():
             self.args.platform,
             self.args.out_dir,
             self.args.variations_seed_path,
+            readline_timeout=self.args.readline_timeout,
             release=self.args.release,
             test_cases=self.args.test_cases,
             test_args=self.test_args,
@@ -189,6 +195,7 @@ class Runner():
             self.args.wpr_tools_path,
             self.args.out_dir,
             env_vars=self.args.env_var,
+            readline_timeout=self.args.readline_timeout,
             retries=self.args.retries,
             shards=self.args.shards,
             test_args=self.test_args,
@@ -203,7 +210,8 @@ class Runner():
             self.args.version,
             self.args.out_dir,
             env_vars=self.args.env_var,
-            repeat_count=self.args.gtest_repeat,
+            readline_timeout=self.args.readline_timeout,
+            repeat_count=self.args.repeat,
             retries=self.args.retries,
             shards=self.args.shards,
             test_args=self.test_args,
@@ -217,8 +225,9 @@ class Runner():
             app_path=self.args.app,
             host_app_path=self.args.host_app,
             out_dir=self.args.out_dir,
+            readline_timeout=self.args.readline_timeout,
             release=self.args.release,
-            repeat_count=self.args.gtest_repeat,
+            repeat_count=self.args.repeat,
             retries=self.args.retries,
             test_cases=self.args.test_cases,
             test_args=self.test_args,
@@ -228,7 +237,8 @@ class Runner():
             self.args.app,
             self.args.out_dir,
             env_vars=self.args.env_var,
-            repeat_count=self.args.gtest_repeat,
+            readline_timeout=self.args.readline_timeout,
+            repeat_count=self.args.repeat,
             restart=self.args.restart,
             retries=self.args.retries,
             test_args=self.test_args,
@@ -338,17 +348,27 @@ class Runner():
     )
     parser.add_argument(
         '--gtest_filter',
-        help='List of test names to run. (In GTest filter format but not '
-        'necessarily for GTests). Note: Specifying test cases is not supported '
-        'in multiple swarming shards environment. Will be merged with tests'
-        'specified in --test-cases and --args-json.',
+        help='List of test names to run. Expected to be in GTest filter format,'
+        'which should be a colon delimited list. Note: Specifying test cases '
+        'is not supported in multiple swarming shards environment. Will be '
+        'merged with tests specified in --test-cases, --args-json and '
+        '--isolated-script-test-filter.',
         metavar='gtest_filter',
     )
     parser.add_argument(
+        '--isolated-script-test-filter',
+        help='A double-colon-separated ("::") list of test names to run. '
+        'Note: Specifying test cases is not supported in multiple swarming '
+        'shards environment. Will be merged with tests specified in '
+        '--test-cases, --args-json and --gtest_filter.',
+        metavar='isolated_test_filter',
+    )
+    parser.add_argument(
         '--gtest_repeat',
-        help='Number of times to repeat each test case. (Not necessarily for '
-        'GTests)',
-        metavar='n',
+        '--isolated-script-test-repeat',
+        help='Number of times to repeat each test case.',
+        metavar='repeat',
+        dest='repeat',
         type=int,
     )
     parser.add_argument(
@@ -389,6 +409,14 @@ class Runner():
         '--platform',
         help='Platform to simulate.',
         metavar='sim',
+    )
+    parser.add_argument(
+        '--readline-timeout',
+        help='Timeout to kill a test process when it doesn\'t'
+        'have output (in seconds).',
+        metavar='n',
+        type=int,
+        default=constants.READLINE_TIMEOUT,
     )
     #TODO(crbug.com/1056887): Implement this arg in infra.
     parser.add_argument(

@@ -2,6 +2,7 @@
 
 #include "chrome/browser/ui/window_sizer/window_sizer.h"
 
+#include "build/build_config.h"
 #include "ui/display/display.h"
 
 namespace vivaldi {
@@ -41,13 +42,13 @@ bool SetMaximizedIfPossible(gfx::Rect* bounds,
       return true;
     }
   }
-#if !defined(OS_MAC)
+#if !BUILDFLAG(IS_MAC)
   // If we're lower resolution, always maximize, except on Mac.
   if (display_bounds.width() < 1920 && display_bounds.height() < 1080) {
     *show_state = ui::SHOW_STATE_MAXIMIZED;
     return true;
   }
-#endif  // (OS_MACX)
+#endif  // !IS_MAC
   return false;
 }
 

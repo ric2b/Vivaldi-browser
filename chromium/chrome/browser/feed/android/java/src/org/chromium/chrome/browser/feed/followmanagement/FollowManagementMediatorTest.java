@@ -23,6 +23,7 @@ import org.mockito.MockitoAnnotations;
 import org.robolectric.Robolectric;
 
 import org.chromium.base.Callback;
+import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.feed.FeedServiceBridge;
 import org.chromium.chrome.browser.feed.FeedServiceBridgeJni;
@@ -33,7 +34,6 @@ import org.chromium.chrome.browser.feed.webfeed.WebFeedBridge.WebFeedMetadata;
 import org.chromium.chrome.browser.feed.webfeed.WebFeedBridgeJni;
 import org.chromium.chrome.browser.feed.webfeed.WebFeedSubscriptionRequestStatus;
 import org.chromium.chrome.browser.feed.webfeed.WebFeedSubscriptionStatus;
-import org.chromium.testing.local.LocalRobolectricTestRunner;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.url.GURL;
@@ -46,7 +46,7 @@ import java.util.Arrays;
 /**
  * Tests {@link FollowManagementMediator}.
  */
-@RunWith(LocalRobolectricTestRunner.class)
+@RunWith(BaseRobolectricTestRunner.class)
 public class FollowManagementMediatorTest {
     private Activity mActivity;
     private ModelList mModelList;
@@ -149,7 +149,9 @@ public class FollowManagementMediatorTest {
 
         mFollowManagementMediator.clickHandler(mModelList.get(0).model);
 
-        verify(mWebFeedBridgeJni).unfollowWebFeed(eq(ID1), mUnfollowCallbackCaptor.capture());
+        verify(mWebFeedBridgeJni)
+                .unfollowWebFeed(
+                        eq(ID1), /*isDurable=*/eq(false), mUnfollowCallbackCaptor.capture());
         mUnfollowCallbackCaptor.getValue().onResult(
                 new WebFeedBridge.UnfollowResults(WebFeedSubscriptionRequestStatus.FAILED_OFFLINE));
 
@@ -165,7 +167,9 @@ public class FollowManagementMediatorTest {
 
         mFollowManagementMediator.clickHandler(mModelList.get(0).model);
 
-        verify(mWebFeedBridgeJni).unfollowWebFeed(eq(ID1), mUnfollowCallbackCaptor.capture());
+        verify(mWebFeedBridgeJni)
+                .unfollowWebFeed(
+                        eq(ID1), /*isDurable=*/eq(false), mUnfollowCallbackCaptor.capture());
         mUnfollowCallbackCaptor.getValue().onResult(
                 new WebFeedBridge.UnfollowResults(WebFeedSubscriptionRequestStatus.SUCCESS));
 
@@ -193,7 +197,9 @@ public class FollowManagementMediatorTest {
 
         mFollowManagementMediator.clickHandler(mModelList.get(0).model);
 
-        verify(mWebFeedBridgeJni).followWebFeedById(eq(ID1), mFollowCallbackCaptor.capture());
+        verify(mWebFeedBridgeJni)
+                .followWebFeedById(
+                        eq(ID1), /*isDurable=*/eq(false), mFollowCallbackCaptor.capture());
         mFollowCallbackCaptor.getValue().onResult(new WebFeedBridge.FollowResults(
                 WebFeedSubscriptionRequestStatus.FAILED_UNKNOWN_ERROR, null));
 
@@ -210,7 +216,9 @@ public class FollowManagementMediatorTest {
 
         mFollowManagementMediator.clickHandler(mModelList.get(0).model);
 
-        verify(mWebFeedBridgeJni).followWebFeedById(eq(ID1), mFollowCallbackCaptor.capture());
+        verify(mWebFeedBridgeJni)
+                .followWebFeedById(
+                        eq(ID1), /*isDurable=*/eq(false), mFollowCallbackCaptor.capture());
         mFollowCallbackCaptor.getValue().onResult(
                 new WebFeedBridge.FollowResults(WebFeedSubscriptionRequestStatus.SUCCESS, null));
 

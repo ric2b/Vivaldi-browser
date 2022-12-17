@@ -17,7 +17,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/rand_util.h"
 #include "base/run_loop.h"
-#include "base/task/post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/test/bind.h"
@@ -82,6 +81,7 @@ class BlobRegistryImplTest : public testing::Test {
         /*quota_manager_proxy=*/nullptr,
         std::vector<std::unique_ptr<FileSystemBackend>>(),
         std::vector<URLRequestAutoMountHandler>(), data_dir_.GetPath(),
+        data_dir_.GetPath(),
         FileSystemOptions(FileSystemOptions::PROFILE_MODE_INCOGNITO,
                           /*force_in_memory=*/false,
                           std::vector<std::string>()));

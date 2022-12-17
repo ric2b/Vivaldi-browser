@@ -51,6 +51,12 @@ class BuiltInBackendToAndroidBackendMigrator {
   // Schedules async calls to read of all passwords from both backends.
   void PrepareForMigration();
 
+  // Migrates all non-syncable data contained in |logins_or_error| to the
+  // |target_backend|. This is implemented by issuing update requests for
+  // all retrieved credentials.
+  void MigrateNonSyncableData(PasswordStoreBackend* target_backend,
+                              LoginsResultOrError logins_or_error);
+
   // Migrates password between |built_in_backend_| and |android_backend_|.
   // |result| consists of passwords from the |built_in_backend_| let's call them
   // |A| and passwords from the |android_backend_| - |B|. If initial migration
@@ -95,6 +101,10 @@ class BuiltInBackendToAndroidBackendMigrator {
   // Reports metrics and deletes |metrics_reporter_|
   void MigrationFinished(bool is_success);
 
+  // Returns true if prefs and enabled features allow non-syncable data
+  // migration.
+  bool ShouldMigrateNonSyncableData();
+
   const raw_ptr<PasswordStoreBackend> built_in_backend_;
   const raw_ptr<PasswordStoreBackend> android_backend_;
 
@@ -103,6 +113,8 @@ class BuiltInBackendToAndroidBackendMigrator {
   std::unique_ptr<MigrationMetricsReporter> metrics_reporter_;
 
   const raw_ptr<PasswordStoreBackend::SyncDelegate> sync_delegate_;
+
+  bool non_syncable_data_migration_in_progress_ = false;
 
   base::WeakPtrFactory<BuiltInBackendToAndroidBackendMigrator>
       weak_ptr_factory_{this};

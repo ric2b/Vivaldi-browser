@@ -19,6 +19,11 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/remote_set.h"
 #include "printing/buildflags/buildflags.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
+
+#if BUILDFLAG(IS_WIN)
+#include "ui/gfx/native_widget_types.h"
+#endif
 
 #if !BUILDFLAG(ENABLE_OOP_PRINTING)
 #error "Out-of-process printing must be enabled."
@@ -34,15 +39,36 @@ class PrintedPage;
 
 class PrintBackendServiceManager {
  public:
+  using ClientsSet = base::flat_set<uint32_t>;
+  using PrintClientsMap = base::flat_map<std::string, ClientsSet>;
+
+  // Amount of idle time to wait before resetting the connection to the service.
+  static constexpr base::TimeDelta kNoClientsRegisteredResetOnIdleTimeout =
+      base::Seconds(10);
+  static constexpr base::TimeDelta kClientsRegisteredResetOnIdleTimeout =
+      base::Seconds(120);
+
   PrintBackendServiceManager(const PrintBackendServiceManager&) = delete;
   PrintBackendServiceManager& operator=(const PrintBackendServiceManager&) =
       delete;
 
-  // Register as a client of PrintBackendServiceManager.  This acts as a signal
-  // of impending activity enabling possible optimizations within the manager.
-  // Returns an ID which the caller is to use with `UnregisterClient()` once it
-  // is completed its printing activity.
-  uint32_t RegisterClient();
+  // Client registration routines.  These act as a signal of impending activity
+  // enabling possible optimizations within the manager.  They return an ID
+  // which the callers are to use with `UnregisterClient()` once they have
+  // completed their printing activity.
+
+  // Register as a client of PrintBackendServiceManager for print queries.
+  uint32_t RegisterQueryClient();
+
+  // Register as a client of PrintBackendServiceManager for print queries which
+  // require a system print dialog UI.  If a platform cannot support concurrent
+  // queries of this type then this will return `absl::nullopt` if another
+  // client is already registered.
+  absl::optional<uint32_t> RegisterQueryWithUiClient();
+
+  // Register as a client of PrintBackendServiceManager for printing a document
+  // to a specific printer.
+  uint32_t RegisterPrintDocumentClient(const std::string& printer_name);
 
   // Notify the manager that this client is no longer needing print backend
   // services.  This signal might alter the manager's internal optimizations.
@@ -63,9 +89,18 @@ class PrintBackendServiceManager {
   void UseDefaultSettings(
       const std::string& printer_name,
       mojom::PrintBackendService::UseDefaultSettingsCallback callback);
+#if BUILDFLAG(IS_WIN)
+  void AskUserForSettings(
+      const std::string& printer_name,
+      gfx::NativeView parent_view,
+      int max_pages,
+      bool has_selection,
+      bool is_scripted,
+      mojom::PrintBackendService::AskUserForSettingsCallback callback);
+#endif
   void UpdatePrintSettings(
       const std::string& printer_name,
-      base::flat_map<std::string, base::Value> job_settings,
+      base::Value::Dict job_settings,
       mojom::PrintBackendService::UpdatePrintSettingsCallback callback);
   void StartPrinting(
       const std::string& printer_name,
@@ -83,18 +118,24 @@ class PrintBackendServiceManager {
       base::ReadOnlySharedMemoryRegion serialized_page_data,
       mojom::PrintBackendService::RenderPrintedPageCallback callback);
 #endif
+  void RenderPrintedDocument(
+      const std::string& printer_name,
+      int document_cookie,
+      mojom::MetafileDataType data_type,
+      base::ReadOnlySharedMemoryRegion serialized_data,
+      mojom::PrintBackendService::RenderPrintedDocumentCallback callback);
   void DocumentDone(const std::string& printer_name,
                     int document_cookie,
                     mojom::PrintBackendService::DocumentDoneCallback callback);
 
   // Query if printer driver has been found to require elevated privilege in
   // order to have print queries/commands succeed.
-  bool PrinterDriverRequiresElevatedPrivilege(
+  bool PrinterDriverFoundToRequireElevatedPrivilege(
       const std::string& printer_name) const;
 
   // Make note that `printer_name` has been detected as requiring elevated
   // privileges in order to operate.
-  void SetPrinterDriverRequiresElevatedPrivilege(
+  void SetPrinterDriverFoundToRequireElevatedPrivilege(
       const std::string& printer_name);
 
   // Overrides the print backend service for testing.  Caller retains ownership
@@ -115,6 +156,25 @@ class PrintBackendServiceManager {
 
  private:
   friend base::NoDestructor<PrintBackendServiceManager>;
+  friend class PrintBackendPrintBrowserTestBase;
+  FRIEND_TEST_ALL_PREFIXES(PrintBackendServiceManagerTest,
+                           IsIdleTimeoutUpdateNeededForRegisteredClient);
+  FRIEND_TEST_ALL_PREFIXES(PrintBackendServiceManagerTest,
+                           IsIdleTimeoutUpdateNeededForUnregisteredClient);
+
+  enum class ClientType {
+    // Print Preview scenario, where printer might not be known.  Only performs
+    // queries, none of which would invoke a system dialog.
+    kQuery,
+    // System print scenario, where printer is not known. Only performs queries,
+    // and can require a window-modal system dialog be displayed to satisfy
+    // those queries.
+    kQueryWithUi,
+    // Printer is known, and printing of a document will be performed.  System
+    // dialogs might be required to complete printing (e.g., if driver saves to
+    // a file).
+    kPrintDocument,
+  };
 
   // Types to track saved callbacks associated with currently executing mojom
   // service calls.  These will be run either after a Mojom call finishes
@@ -147,6 +207,10 @@ class PrintBackendServiceManager {
       RemoteSavedStructCallbacks<mojom::PrinterSemanticCapsAndDefaultsResult>;
   using RemoteSavedUseDefaultSettingsCallbacks =
       RemoteSavedStructCallbacks<mojom::PrintSettingsResult>;
+#if BUILDFLAG(IS_WIN)
+  using RemoteSavedAskUserForSettingsCallbacks =
+      RemoteSavedStructCallbacks<mojom::PrintSettingsResult>;
+#endif
   using RemoteSavedUpdatePrintSettingsCallbacks =
       RemoteSavedStructCallbacks<mojom::PrintSettingsResult>;
   using RemoteSavedStartPrintingCallbacks =
@@ -155,11 +219,24 @@ class PrintBackendServiceManager {
   using RemoteSavedRenderPrintedPageCallbacks =
       RemoteSavedCallbacks<mojom::ResultCode>;
 #endif
+  using RemoteSavedRenderPrintedDocumentCallbacks =
+      RemoteSavedCallbacks<mojom::ResultCode>;
   using RemoteSavedDocumentDoneCallbacks =
       RemoteSavedCallbacks<mojom::ResultCode>;
 
-  using RemotesMap =
-      base::flat_map<std::string, mojo::Remote<mojom::PrintBackendService>>;
+  // Bundle of the `PrintBackendService` and its sandboxed/unsandboxed host
+  // remotes.
+  template <class T>
+  struct RemotesBundle {
+    RemotesBundle() = default;
+    ~RemotesBundle() = default;
+    mojo::Remote<mojom::PrintBackendService> service;
+    mojo::Remote<T> host;
+  };
+
+  template <class T>
+  using RemotesBundleMap =
+      base::flat_map<std::string, std::unique_ptr<RemotesBundle<T>>>;
 
   // PrintBackendServiceManager needs to be able to run a callback either after
   // a successful return from the service or after the remote was disconnected.
@@ -183,18 +260,64 @@ class PrintBackendServiceManager {
   // Determine the remote ID that is used for the specified `printer_name`.
   std::string GetRemoteIdForPrinterName(const std::string& printer_name) const;
 
+  // Common helper for registering clients.
+  absl::optional<uint32_t> RegisterClient(ClientType client_type,
+                                          const std::string& printer_name);
+
+  // Get the total number of clients registered.
+  size_t GetClientsRegisteredCount() const;
+
+#if BUILDFLAG(IS_WIN)
+  // Query if printer driver has known reasons for requiring elevated
+  // privileges in order to operate.  In these cases relying upon fallback
+  // after an access-denied error is not preferable.  Any such reasons are
+  // platform specific.
+  bool PrinterDriverKnownToRequireElevatedPrivilege(
+      const std::string& printer_name,
+      ClientType client_type);
+#endif
+
   // Acquires a remote handle to the Print Backend Service instance, launching a
   // process to host the service if necessary. `is_sandboxed` is set to indicate
   // if the service was launched within a sandbox.
   const mojo::Remote<mojom::PrintBackendService>& GetService(
       const std::string& printer_name,
+      ClientType client_type,
       bool* is_sandboxed);
 
-  // Help function to reset idle timeout duration to a short value.
-  void UpdateServiceToShortIdleTimeout(
-      mojo::Remote<mojom::PrintBackendService>& service,
+  // Helper to `GetService` for a particular remotes bundle type.
+  template <class T>
+  mojo::Remote<mojom::PrintBackendService>& GetServiceFromBundle(
+      const std::string& remote_id,
+      ClientType client_type,
       bool sandboxed,
-      const std::string& remote_id);
+      RemotesBundleMap<T>& bundle_map);
+
+  // Get the idle timeout value to user for a particular client type.
+  static constexpr base::TimeDelta GetClientTypeIdleTimeout(
+      ClientType client_type);
+
+  // Determine if idle timeout should be modified based upon there having been
+  // a new client registered for `registered_client_type`.
+  absl::optional<base::TimeDelta> DetermineIdleTimeoutUpdateOnRegisteredClient(
+      ClientType registered_client_type,
+      const std::string& remote_id) const;
+
+  // Determine if idle timeout should be modified after a client of type
+  // `unregistered_client_type` has been unregistered.
+  absl::optional<base::TimeDelta>
+  DetermineIdleTimeoutUpdateOnUnregisteredClient(
+      ClientType unregistered_client_type,
+      const std::string& remote_id) const;
+
+  // Helper functions to adjust service idle timeout duration.
+  void SetServiceIdleHandler(
+      mojo::Remote<printing::mojom::PrintBackendService>& service,
+      bool sandboxed,
+      const std::string& remote_id,
+      const base::TimeDelta& timeout);
+  void UpdateServiceIdleTimeoutByRemoteId(const std::string& remote_id,
+                                          const base::TimeDelta& timeout);
 
   // Callback when predetermined idle timeout occurs indicating no in-flight
   // messages for a short period of time.  `sandboxed` is used to distinguish
@@ -217,6 +340,10 @@ class PrintBackendServiceManager {
   GetRemoteSavedGetPrinterSemanticCapsAndDefaultsCallbacks(bool sandboxed);
   RemoteSavedUseDefaultSettingsCallbacks&
   GetRemoteSavedUseDefaultSettingsCallbacks(bool sandboxed);
+#if BUILDFLAG(IS_WIN)
+  RemoteSavedAskUserForSettingsCallbacks&
+  GetRemoteSavedAskUserForSettingsCallbacks(bool sandboxed);
+#endif
   RemoteSavedUpdatePrintSettingsCallbacks&
   GetRemoteSavedUpdatePrintSettingsCallbacks(bool sandboxed);
   RemoteSavedStartPrintingCallbacks& GetRemoteSavedStartPrintingCallbacks(
@@ -225,6 +352,8 @@ class PrintBackendServiceManager {
   RemoteSavedRenderPrintedPageCallbacks&
   GetRemoteSavedRenderPrintedPageCallbacks(bool sandboxed);
 #endif
+  RemoteSavedRenderPrintedDocumentCallbacks&
+  GetRemoteSavedRenderPrintedDocumentCallbacks(bool sandboxed);
   RemoteSavedDocumentDoneCallbacks& GetRemoteSavedDocumentDoneCallbacks(
       bool sandboxed);
 
@@ -232,6 +361,7 @@ class PrintBackendServiceManager {
   // `printer_name`.
   const mojo::Remote<mojom::PrintBackendService>& GetServiceAndCallbackContext(
       const std::string& printer_name,
+      ClientType client_type,
       CallbackContext& context);
 
   // Helper function to save outstanding callbacks.
@@ -262,6 +392,10 @@ class PrintBackendServiceManager {
       mojom::PrinterSemanticCapsAndDefaultsResultPtr printer_caps);
   void OnDidUseDefaultSettings(const CallbackContext& context,
                                mojom::PrintSettingsResultPtr settings);
+#if BUILDFLAG(IS_WIN)
+  void OnDidAskUserForSettings(const CallbackContext& context,
+                               mojom::PrintSettingsResultPtr settings);
+#endif
   void OnDidUpdatePrintSettings(const CallbackContext& context,
                                 mojom::PrintSettingsResultPtr printer_caps);
   void OnDidStartPrinting(const CallbackContext& context,
@@ -270,6 +404,8 @@ class PrintBackendServiceManager {
   void OnDidRenderPrintedPage(const CallbackContext& context,
                               mojom::ResultCode result);
 #endif
+  void OnDidRenderPrintedDocument(const CallbackContext& context,
+                                  mojom::ResultCode result);
   void OnDidDocumentDone(const CallbackContext& context,
                          mojom::ResultCode result);
 
@@ -285,18 +421,34 @@ class PrintBackendServiceManager {
                                const std::string& remote_id,
                                T result);
 
-  // Keep separate mapping of remotes for sandboxed vs. unsandboxed services.
-  RemotesMap sandboxed_remotes_;
-  RemotesMap unsandboxed_remotes_;
+  // Test support for client ID management.
+  static void SetClientsForTesting(
+      const ClientsSet& query_clients,
+      const ClientsSet& query_with_ui_clients,
+      const PrintClientsMap& print_document_clients);
 
-  // Keeps remotes for wrapping service hosts alive until they disconnect.
-  mojo::RemoteSet<mojom::SandboxedPrintBackendHost> sandboxed_hosts_;
-  mojo::RemoteSet<mojom::UnsandboxedPrintBackendHost> unsandboxed_hosts_;
+  // Bundles of remotes for the Print Backend Service and their corresponding
+  // wrapping hosts, to manage these sets until they disconnect.  The sandboxed
+  // and unsandboxed services are kept separate.
+  RemotesBundleMap<mojom::SandboxedPrintBackendHost> sandboxed_remotes_bundles_;
+  RemotesBundleMap<mojom::UnsandboxedPrintBackendHost>
+      unsandboxed_remotes_bundles_;
 
-  // Set of IDs for clients actively engaged in printing.  This could include
-  // tabs in print preview as well as an active system print.  Retention of a
-  // service process can have benefit so long as there are active clients.
-  base::flat_set<uint32_t> clients_;
+  // Members tracking active clients to aid retention of a service process.
+
+  // Set of IDs for clients actively engaged in printing queries.  This could
+  // include any tab which has triggered Print Preview.
+  ClientsSet query_clients_;
+
+  // Set of IDs for clients actively engaged in a printing query which requires
+  // the use of a UI.  Such a UI corresponds to a modal system dialog.  For
+  // Linux there can be multiple of these, but for other platforms there can be
+  // at most one such client.
+  ClientsSet query_with_ui_clients_;
+
+  // Map of remote ID to the set of clients printing documents to it.
+  PrintClientsMap print_document_clients_;
+
   uint32_t last_client_id_ = 0;
 
   // Track the saved callbacks for each remote.
@@ -320,6 +472,12 @@ class PrintBackendServiceManager {
       sandboxed_saved_use_default_settings_callbacks_;
   RemoteSavedUseDefaultSettingsCallbacks
       unsandboxed_saved_use_default_settings_callbacks_;
+#if BUILDFLAG(IS_WIN)
+  RemoteSavedAskUserForSettingsCallbacks
+      sandboxed_saved_ask_user_for_settings_callbacks_;
+  RemoteSavedAskUserForSettingsCallbacks
+      unsandboxed_saved_ask_user_for_settings_callbacks_;
+#endif
   RemoteSavedUpdatePrintSettingsCallbacks
       sandboxed_saved_update_print_settings_callbacks_;
   RemoteSavedUpdatePrintSettingsCallbacks
@@ -332,6 +490,10 @@ class PrintBackendServiceManager {
   RemoteSavedRenderPrintedPageCallbacks
       unsandboxed_saved_render_printed_page_callbacks_;
 #endif
+  RemoteSavedRenderPrintedDocumentCallbacks
+      sandboxed_saved_render_printed_document_callbacks_;
+  RemoteSavedRenderPrintedDocumentCallbacks
+      unsandboxed_saved_render_printed_document_callbacks_;
   RemoteSavedDocumentDoneCallbacks sandboxed_saved_document_done_callbacks_;
   RemoteSavedDocumentDoneCallbacks unsandboxed_saved_document_done_callbacks_;
 

@@ -9,6 +9,7 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
 #include "net/base/net_errors.h"
+#include "net/http/http_response_headers.h"
 #include "net/http/http_util.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "third_party/blink/public/mojom/loader/referrer.mojom.h"
@@ -138,6 +139,10 @@ jint NavigationImpl::GetNavigationEntryOffset(JNIEnv* env) {
   return GetNavigationEntryOffset();
 }
 
+jboolean NavigationImpl::WasFetchedFromCache(JNIEnv* env) {
+  return WasFetchedFromCache();
+}
+
 void NavigationImpl::SetResponse(
     std::unique_ptr<embedder_support::WebResourceResponse> response) {
   response_ = std::move(response);
@@ -179,6 +184,10 @@ Page* NavigationImpl::GetPage() {
 
 int NavigationImpl::GetNavigationEntryOffset() {
   return navigation_handle_->GetNavigationEntryOffset();
+}
+
+bool NavigationImpl::WasFetchedFromCache() {
+  return navigation_handle_->WasResponseCached();
 }
 
 GURL NavigationImpl::GetURL() {

@@ -174,7 +174,7 @@ export class LogoElement extends PolymerElement {
     });
   }
 
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
     this.eventTracker_.add(window, 'message', ({data}: MessageEvent) => {
       if (data['cmd'] === 'resizeDoodle') {
@@ -190,12 +190,12 @@ export class LogoElement extends PolymerElement {
     this.sendMode_();
   }
 
-  disconnectedCallback() {
+  override disconnectedCallback() {
     super.disconnectedCallback();
     this.eventTracker_.removeAll();
   }
 
-  ready() {
+  override ready() {
     super.ready();
     performance.measure('logo-creation', 'logo-creation-start');
   }
@@ -340,7 +340,8 @@ export class LogoElement extends PolymerElement {
   }
 
   private isCtaImageShown_(): boolean {
-    return !this.showAnimation_ && !!this.imageDoodle_!.animationUrl;
+    return !this.showAnimation_ && !!this.imageDoodle_ &&
+        !!this.imageDoodle_.animationUrl;
   }
 
   /**

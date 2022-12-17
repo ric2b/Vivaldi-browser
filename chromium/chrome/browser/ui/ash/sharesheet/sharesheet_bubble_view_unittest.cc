@@ -132,6 +132,15 @@ class SharesheetBubbleViewTest : public ChromeAshTestBase {
     ASSERT_FALSE(IsSharesheetVisible());
   }
 
+  void CloseBubbleWithEscKey() {
+    GetEventGenerator()->PressAndReleaseKey(ui::VKEY_ESCAPE);
+    // |bubble_delegate_| and |sharesheet_bubble_view_| destruct on close.
+    bubble_delegate_ = nullptr;
+    sharesheet_bubble_view_ = nullptr;
+
+    ASSERT_FALSE(IsSharesheetVisible());
+  }
+
   bool IsSharesheetVisible() { return sharesheet_widget_->IsVisible(); }
 
   SharesheetBubbleView* sharesheet_bubble_view() {
@@ -181,7 +190,7 @@ TEST_F(SharesheetBubbleViewTest, EmptyState) {
 
   // Footer should be an empty view that just acts as padding.
   ASSERT_TRUE(footer_view()->GetVisible());
-  ASSERT_EQ(footer_view()->children().size(), 0);
+  ASSERT_EQ(footer_view()->children().size(), 0u);
 }
 
 TEST_F(SharesheetBubbleViewTest, RecordLaunchSource) {
@@ -318,6 +327,7 @@ TEST_F(SharesheetBubbleViewTest, TextPreviewOneFile) {
 
   auto* title_text = static_cast<views::Label*>(text_views->children()[1]);
   ASSERT_EQ(title_text->GetText(), u"text.txt");
+  ASSERT_EQ(title_text->GetAccessibleName(), u"text.txt");
   CloseBubble();
 }
 
@@ -339,6 +349,7 @@ TEST_F(SharesheetBubbleViewTest, TextPreviewMultipleFiles) {
 
   auto* title_text = static_cast<views::Label*>(text_views->children()[1]);
   ASSERT_EQ(title_text->GetText(), u"2 files");
+  ASSERT_EQ(title_text->GetAccessibleName(), u"2 files file.pdf, text.txt");
   CloseBubble();
 }
 
@@ -442,6 +453,27 @@ TEST_F(SharesheetBubbleViewTest, URLPreviewEmojis) {
   ASSERT_EQ(url_text->GetText(), u"https://hello.com/😁/");
   ASSERT_EQ(url_text->GetTooltipText(), u"https://hello.com/😁/");
   CloseBubble();
+}
+
+TEST_F(SharesheetBubbleViewTest, CloseWithEscKey) {
+  ShowAndVerifyBubble(::sharesheet::CreateValidTextIntent(),
+                      ::sharesheet::LaunchSource::kUnknown);
+  CloseBubbleWithEscKey();
+}
+
+TEST_F(SharesheetBubbleViewTest, CloseMultipleTimes) {
+  ShowAndVerifyBubble(::sharesheet::CreateValidTextIntent(),
+                      ::sharesheet::LaunchSource::kUnknown);
+  CloseBubbleWithEscKey();
+  CloseBubbleWithEscKey();
+}
+
+TEST_F(SharesheetBubbleViewTest, HoldEscapeKey) {
+  GetEventGenerator()->PressKey(ui::VKEY_ESCAPE, ui::EventFlags::EF_NONE);
+  ShowAndVerifyBubble(::sharesheet::CreateValidTextIntent(),
+                      ::sharesheet::LaunchSource::kUnknown);
+  GetEventGenerator()->ReleaseKey(ui::VKEY_ESCAPE, ui::EventFlags::EF_NONE);
+  CloseBubbleWithEscKey();
 }
 
 }  // namespace sharesheet

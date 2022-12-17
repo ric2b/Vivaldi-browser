@@ -23,6 +23,7 @@
 #include "ui/display/display_observer.h"
 #include "ui/events/event.h"
 #include "ui/events/event_handler.h"
+#include "ui/gfx/geometry/point.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/widget/unique_widget_ptr.h"
 #include "ui/views/widget/widget.h"
@@ -155,6 +156,12 @@ class ASH_EXPORT CaptureModeSession
   // active.
   gfx::Rect GetCameraPreviewConfineBounds() const;
 
+  // Returns the in-session target value that should be used for the visibility
+  // of the camera preview (if any). During the session, things like dragging
+  // the user region may affect the camera preview's visibility, and hence this
+  // function should be consulted.
+  bool CalculateCameraPreviewTargetVisibility() const;
+
   // ui::LayerDelegate:
   void OnPaintLayer(const ui::PaintContext& context) override;
   void OnDeviceScaleFactorChanged(float old_device_scale_factor,
@@ -195,12 +202,25 @@ class ASH_EXPORT CaptureModeSession
   // updated correspondingly.
   void MaybeUpdateSettingsBounds();
 
+  // Called when opacity of capture UIs (capture bar, capture label) may need to
+  // be updated. For example, when camera preview is created, destroyed,
+  // reparented, display metrics change or located events enter / exit / move
+  // on capture UI.
+  void MaybeUpdateCaptureUisOpacity(
+      absl::optional<gfx::Point> cursor_screen_location = absl::nullopt);
+
+  void OnCameraPreviewDragStarted();
+  void OnCameraPreviewDragEnded(const gfx::Point& screen_location,
+                                bool is_touch);
+  void OnCameraPreviewBoundsOrVisibilityChanged();
+
  private:
   friend class CaptureModeSettingsTestApi;
   friend class CaptureModeSessionFocusCycler;
   friend class CaptureModeSessionTestApi;
   friend class CaptureModeTestApi;
   class CursorSetter;
+  class ParentContainerObserver;
 
   enum class CaptureLabelAnimation {
     // No animation on the capture label.
@@ -250,8 +270,8 @@ class ASH_EXPORT CaptureModeSession
 
   // Ensures that the bar widget is on top of everything, and the overlay (which
   // is the |layer()| of this class that paints the capture region) is stacked
-  // right below the bar.
-  void RefreshStackingOrder(aura::Window* parent_container);
+  // below the bar.
+  void RefreshStackingOrder();
 
   // Paints the current capture region depending on the current capture source.
   void PaintCaptureRegion(gfx::Canvas* canvas);
@@ -371,6 +391,13 @@ class ASH_EXPORT CaptureModeSession
   // space between the capture bar and the menu.
   bool IsEventInSettingsMenuBounds(const gfx::Point& location_in_screen);
 
+  // Called when the parent container of camera preview may need to be updated.
+  void MaybeReparentCameraPreviewWidget();
+
+  // Called at the beginning or end of the drag of capture region to update the
+  // camera preview's bounds and visibility.
+  void MaybeUpdateCameraPreviewBounds();
+
   CaptureModeController* const controller_;
 
   // The current root window on which the capture session is active, which may
@@ -440,6 +467,9 @@ class ASH_EXPORT CaptureModeSession
   // Observer to observe the current selected to-be-captured window.
   std::unique_ptr<CaptureWindowObserver> capture_window_observer_;
 
+  // Observer to observe the parent container `kShellWindowId_MenuContainer`.
+  std::unique_ptr<ParentContainerObserver> parent_container_observer_;
+
   // Contains the window dimmers which dim all the root windows except
   // |current_root_|.
   base::flat_set<std::unique_ptr<WindowDimmer>> root_window_dimmers_;
@@ -491,6 +521,9 @@ class ASH_EXPORT CaptureModeSession
   // to false when the event is a release event and "event_on_settings_menu_" is
   // true.
   bool located_press_event_on_settings_menu_ = false;
+
+  // True if a located event should be passed to camera preview to be handled.
+  bool should_pass_located_event_to_camera_preview_ = false;
 
   // Controls the folder selection dialog. Not null only while the dialog is
   // shown.

@@ -5,6 +5,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_INSPECTOR_INSPECTOR_EMULATION_AGENT_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_INSPECTOR_INSPECTOR_EMULATION_AGENT_H_
 
+#include "base/time/time.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "third_party/blink/public/platform/web_theme_engine.h"
@@ -91,6 +92,10 @@ class CORE_EXPORT InspectorEmulationAgent final
   protocol::Response setDisabledImageTypes(
       std::unique_ptr<protocol::Array<protocol::Emulation::DisabledImageType>>)
       override;
+  protocol::Response setAutomationOverride(bool enabled) override;
+
+  // Automation Emulation API
+  void ApplyAutomationOverride(bool& enabled) const;
 
   // InspectorInstrumentation API
   void ApplyAcceptLanguageOverride(String* accept_lang);
@@ -159,6 +164,7 @@ class CORE_EXPORT InspectorEmulationAgent final
   InspectorAgentState::String timezone_id_override_;
   InspectorAgentState::BooleanMap disabled_image_types_;
   InspectorAgentState::Double cpu_throttling_rate_;
+  InspectorAgentState::Boolean automation_override_;
 };
 
 }  // namespace blink

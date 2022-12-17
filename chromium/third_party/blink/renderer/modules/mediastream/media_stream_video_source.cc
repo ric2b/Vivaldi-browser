@@ -25,6 +25,7 @@
 #include "third_party/blink/renderer/modules/mediastream/video_track_adapter.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_source.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
+#include "third_party/blink/renderer/platform/wtf/cross_thread_copier_media.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 
 namespace blink {
@@ -49,15 +50,7 @@ MediaStreamVideoSource* MediaStreamVideoSource::GetVideoSource(
 
 MediaStreamVideoSource::MediaStreamVideoSource(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner)
-    : MediaStreamVideoSource(std::move(task_runner),
-                             /*metronome_provider=*/nullptr) {}
-
-MediaStreamVideoSource::MediaStreamVideoSource(
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-    scoped_refptr<MetronomeProvider> metronome_provider)
-    : WebPlatformMediaStreamSource(std::move(task_runner)),
-      state_(NEW),
-      metronome_provider_(std::move(metronome_provider)) {}
+    : WebPlatformMediaStreamSource(std::move(task_runner)), state_(NEW) {}
 
 MediaStreamVideoSource::~MediaStreamVideoSource() {
   DCHECK(GetTaskRunner()->BelongsToCurrentThread());
@@ -534,8 +527,8 @@ VideoCaptureFeedbackCB MediaStreamVideoSource::GetFeedbackCallback() const {
 scoped_refptr<VideoTrackAdapter> MediaStreamVideoSource::GetTrackAdapter() {
   DCHECK(GetTaskRunner()->BelongsToCurrentThread());
   if (!track_adapter_) {
-    track_adapter_ = base::MakeRefCounted<VideoTrackAdapter>(
-        io_task_runner(), metronome_provider_, GetWeakPtr());
+    track_adapter_ =
+        base::MakeRefCounted<VideoTrackAdapter>(io_task_runner(), GetWeakPtr());
   }
   return track_adapter_;
 }

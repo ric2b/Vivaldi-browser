@@ -5,6 +5,7 @@
 #include <fuchsia/sys/cpp/fidl.h>
 #include <fuchsia/ui/policy/cpp/fidl.h>
 #include <fuchsia/web/cpp/fidl.h>
+#include <lib/fdio/directory.h>
 #include <lib/sys/cpp/component_context.h>
 #include <lib/ui/scenic/cpp/view_token_pair.h>
 #include <lib/vfs/cpp/pseudo_file.h>
@@ -41,6 +42,7 @@ constexpr char kEnableProtectedMediaIdentifier[] =
     "enable-protected-media-identifier";
 constexpr char kWebEnginePackageName[] = "web-engine-package-name";
 constexpr char kUseWebInstance[] = "use-web-instance";
+constexpr char kEnableWebInstanceTmp[] = "enable-web-instance-tmp";
 
 void PrintUsage() {
   std::cerr << "Usage: "
@@ -147,11 +149,19 @@ int main(int argc, char** argv) {
   const bool enable_protected_media_identifier_access =
       command_line->HasSwitch(kEnableProtectedMediaIdentifier);
   const bool use_context_provider = !command_line->HasSwitch(kUseWebInstance);
+  const bool enable_web_instance_tmp =
+      command_line->HasSwitch(kEnableWebInstanceTmp);
 
   base::CommandLine::StringVector additional_args = command_line->GetArgs();
   GURL url(GetUrlFromArgs(additional_args));
   if (!url.is_valid()) {
     PrintUsage();
+    return 1;
+  }
+
+  if (enable_web_instance_tmp && use_context_provider) {
+    LOG(ERROR) << "Cannot use --enable-web-instance-tmp without "
+               << "--use-web-instance";
     return 1;
   }
 
@@ -215,6 +225,7 @@ int main(int argc, char** argv) {
   // Keep alive in run_loop scope.
   fuchsia::web::ContextProviderPtr web_context_provider;
   std::unique_ptr<cr_fuchsia::WebInstanceHost> web_instance_host;
+  fuchsia::io::DirectoryHandle tmp_directory;
 
   if (use_context_provider) {
     web_context_provider = ConnectToContextProvider(
@@ -223,15 +234,27 @@ int main(int argc, char** argv) {
     web_context_provider->Create(std::move(create_context_params),
                                  context.NewRequest());
   } else {
+    web_instance_host = std::make_unique<cr_fuchsia::WebInstanceHost>();
+    if (enable_web_instance_tmp) {
+      const zx_status_t status = fdio_open(
+          "/tmp",
+          static_cast<uint32_t>(fuchsia::io::OpenFlags::RIGHT_READABLE |
+                                fuchsia::io::OpenFlags::RIGHT_WRITABLE |
+                                fuchsia::io::OpenFlags::DIRECTORY),
+          tmp_directory.NewRequest().TakeChannel().release());
+      ZX_CHECK(status == ZX_OK, status) << "fdio_open(/tmp)";
+      web_instance_host->set_tmp_dir(std::move(tmp_directory));
+    }
     fidl::InterfaceRequest<fuchsia::io::Directory> services_request;
     auto services = sys::ServiceDirectory::CreateWithRequest(&services_request);
-    web_instance_host = std::make_unique<cr_fuchsia::WebInstanceHost>();
-    zx_status_t result = web_instance_host->CreateInstanceForContext(
-        std::move(create_context_params), std::move(services_request));
+    zx_status_t result =
+        web_instance_host->CreateInstanceForContextWithCopiedArgs(
+            std::move(create_context_params), std::move(services_request),
+            base::CommandLine(additional_args));
     if (result == ZX_OK) {
       services->Connect(context.NewRequest());
     } else {
-      ZX_LOG(ERROR, result) << "CreateInstanceForContext failed";
+      ZX_LOG(ERROR, result) << "CreateInstanceForContextWithCopiedArgs failed";
       return 2;
     }
   }
@@ -308,7 +331,7 @@ int main(int argc, char** argv) {
     frame->CreateView(std::move(view_tokens.view_token));
     auto presenter = base::ComponentContextForProcess()
                          ->svc()
-                         ->Connect<::fuchsia::ui::policy::Presenter>();
+                         ->Connect<fuchsia::ui::policy::Presenter>();
     presenter->PresentOrReplaceView(std::move(view_tokens.view_holder_token),
                                     nullptr);
   }

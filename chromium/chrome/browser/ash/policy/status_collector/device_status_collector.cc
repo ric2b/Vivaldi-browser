@@ -4,11 +4,10 @@
 
 #include "chrome/browser/ash/policy/status_collector/device_status_collector.h"
 
-#include <sys/types.h>
-#include <unistd.h>
-
 #include <stddef.h>
 #include <stdint.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -27,7 +26,6 @@
 #include "ash/constants/ash_features.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
-#include "base/cxx17_backports.h"
 #include "base/feature_list.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
@@ -41,7 +39,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
-#include "base/task/post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
@@ -468,24 +465,24 @@ base::Version GetPlatformVersion() {
 // to dBm units expected by server.
 int ConvertWifiSignalStrength(int signal_strength) {
   // Shill attempts to convert WiFi signal strength from its internal dBm to a
-  // percentage range (from 0-100) by adding 120 to the raw dBm value,
+  // percentage range (from 0-100) using the equation 25 * dBm_value / 11 + 200,
   // and then clamping the result to the range 0-100 (see
   // shill::WiFiService::SignalToStrength()).
   //
-  // To convert back to dBm, we subtract 120 from the percentage value to yield
-  // a clamped dBm value in the range of -119 to -20dBm.
+  // To convert back to dBm, we use the inverse of the function above to yield
+  // a clamped dBm value in the range of -88 to -44dBm.
   //
   // TODO(atwilson): Tunnel the raw dBm signal strength from Shill instead of
   // doing the conversion here so we can report non-clamped values
   // (crbug.com/463334).
   DCHECK_GT(signal_strength, 0);
   DCHECK_LE(signal_strength, 100);
-  return signal_strength - 120;
+  return (signal_strength - 200) * 11 / 25;
 }
 
-bool IsKioskApp() {
+bool IsKioskSession() {
   return chromeos::LoginState::Get()->GetLoggedInUserType() ==
-         chromeos::LoginState::LOGGED_IN_USER_KIOSK_APP;
+         chromeos::LoginState::LOGGED_IN_USER_KIOSK;
 }
 
 // Utility method to turn cpu_temp_fetcher_ to OnceCallback
@@ -1510,7 +1507,6 @@ class DeviceStatusCollectorState : public StatusCollectorState {
       return;
     em::StatefulPartitionInfo* stateful_partition_info =
         response_params_.device_status->mutable_stateful_partition_info();
-    DCHECK_GE(hdsi.available_space(), 0);
     DCHECK_GE(hdsi.total_space(), hdsi.available_space());
     stateful_partition_info->CopyFrom(hdsi);
     SetDeviceStatusReported();
@@ -1908,8 +1904,8 @@ void DeviceStatusCollector::ProcessIdleState(ui::IdleState state) {
 
   Time now = clock_->Now();
 
-  // For kiosk apps we report total uptime instead of active time.
-  if (state == ui::IDLE_STATE_ACTIVE || IsKioskApp()) {
+  // For kiosk session we report total uptime instead of active time.
+  if (state == ui::IDLE_STATE_ACTIVE || IsKioskSession()) {
     std::string user_email = GetUserForActivityReporting();
     // If it's been too long since the last report, or if the activity is
     // negative (which can happen when the clock changes), assume a single
@@ -2331,14 +2327,14 @@ bool DeviceStatusCollector::GetNetworkConfiguration(
   for (device = device_list.begin(); device != device_list.end(); ++device) {
     // Determine the type enum constant for |device|.
     size_t type_idx = 0;
-    for (; type_idx < base::size(kDeviceTypeMap); ++type_idx) {
+    for (; type_idx < std::size(kDeviceTypeMap); ++type_idx) {
       if ((*device)->type() == kDeviceTypeMap[type_idx].type_string)
         break;
     }
 
     // If the type isn't in |kDeviceTypeMap|, the interface is not relevant for
     // reporting. This filters out VPN devices.
-    if (type_idx >= base::size(kDeviceTypeMap))
+    if (type_idx >= std::size(kDeviceTypeMap))
       continue;
 
     em::NetworkInterface* interface = status->add_network_interfaces();
@@ -2423,7 +2419,7 @@ bool DeviceStatusCollector::GetNetworkStatus(
     em::NetworkState::ConnectionState connection_state_enum =
         em::NetworkState::UNKNOWN;
     const std::string connection_state_string(state->connection_state());
-    for (size_t i = 0; i < base::size(kConnectionStateMap); ++i) {
+    for (size_t i = 0; i < std::size(kConnectionStateMap); ++i) {
       if (connection_state_string == kConnectionStateMap[i].state_string) {
         connection_state_enum = kConnectionStateMap[i].state_constant;
         break;
@@ -2975,7 +2971,7 @@ bool DeviceStatusCollector::IsReportingHardwareData() const {
   return report_power_status_ || report_storage_status_ ||
          report_audio_status_ || report_board_status_ || report_memory_info_ ||
          report_cpu_info_ || report_backlight_info_ || report_bluetooth_info_ ||
-         report_fan_info_ || report_vpd_info_ || report_system_info_ ||
+         report_fan_info_ || report_vpd_info_ || report_system_info_ || report_boot_mode_ ||
          report_version_info_;
 }
 bool DeviceStatusCollector::IsReportingUsers() const {

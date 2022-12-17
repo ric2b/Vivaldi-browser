@@ -32,7 +32,7 @@ VivaldiRenderFrameBlinkProxy* VivaldiRenderFrameBlinkProxy::GetProxy() {
 /* static */
 void VivaldiRenderFrameBlinkProxy::SendMediaElementAddedEvent(
     blink::WebMediaPlayer* player) {
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   if (!vivaldi::IsVivaldiRunning())
     return;
   if (!player || !g_proxy_singleton)
@@ -54,7 +54,7 @@ void VivaldiRenderFrameBlinkProxy::DidChangeLoadProgressExtended(
     int64_t loaded_bytes_delta,
     int loaded_resource_delta,
     int total_resource_delta) {
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   if (!g_proxy_singleton)
     return;
   blink::WebLocalFrame* web_frame =

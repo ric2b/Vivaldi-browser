@@ -258,7 +258,7 @@ class CORE_EXPORT WebLocalFrameImpl final
   void SetContentSettingsClient(WebContentSettingsClient*) override;
   void ReloadImage(const WebNode&) override;
   bool IsAllowedToDownload() const override;
-  bool IsCrossOriginToMainFrame() const override;
+  bool IsCrossOriginToOutermostMainFrame() const override;
   bool FindForTesting(int identifier,
                       const WebString& search_text,
                       bool match_case,
@@ -310,6 +310,7 @@ class CORE_EXPORT WebLocalFrameImpl final
   bool ShouldSuppressKeyboardForFocusedElement() override;
   WebPerformance Performance() const override;
   bool IsAdSubframe() const override;
+  bool IsAdScriptInStack() const override;
   void SetAdEvidence(const blink::FrameAdEvidence& ad_evidence) override;
   const absl::optional<blink::FrameAdEvidence>& AdEvidence() override;
   bool IsSubframeCreatedByAdScript() override;
@@ -355,8 +356,7 @@ class CORE_EXPORT WebLocalFrameImpl final
       bool is_client_redirect,
       bool has_transient_user_activation,
       const WebSecurityOrigin& initiator_origin,
-      bool is_browser_initiated,
-      std::unique_ptr<WebDocumentLoader::ExtraData> extra_data) override;
+      bool is_browser_initiated) override;
   void SetIsNotOnInitialEmptyDocument() override;
   bool IsOnInitialEmptyDocument() override;
   bool WillStartNavigation(const WebNavigationInfo&) override;
@@ -424,7 +424,8 @@ class CORE_EXPORT WebLocalFrameImpl final
 
   RemoteFrame* CreateFencedFrame(
       HTMLFencedFrameElement*,
-      mojo::PendingAssociatedReceiver<mojom::blink::FencedFrameOwnerHost>);
+      mojo::PendingAssociatedReceiver<mojom::blink::FencedFrameOwnerHost>,
+      mojom::blink::FencedFrameMode);
 
   void DidChangeContentsSize(const gfx::Size&);
 

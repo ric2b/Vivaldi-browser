@@ -24,7 +24,6 @@
 #include "components/dom_distiller/core/url_constants.h"
 #include "components/dom_distiller/core/url_utils.h"
 #include "components/prefs/pref_service.h"
-#include "components/reading_list/features/reading_list_switches.h"
 #include "components/search/search.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/url_formatter/url_formatter.h"
@@ -40,14 +39,15 @@
 #if defined(TOOLKIT_VIEWS)
 #include "chrome/grit/theme_resources.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/base/themed_vector_icon.h"
 #include "ui/color/color_id.h"
 #include "ui/color/color_provider.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_utils.h"
+#include "ui/gfx/image/image_skia_rep.h"
 #include "ui/gfx/image/image_skia_source.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/scoped_canvas.h"
-#include "ui/native_theme/themed_vector_icon.h"
 #include "ui/resources/grit/ui_resources.h"
 #endif
 
@@ -148,7 +148,7 @@ std::u16string FormatBookmarkURLForDisplay(const GURL& url) {
 }
 
 bool IsAppsShortcutEnabled(Profile* profile) {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   // Chrome OS uses the app list / app launcher.
   return false;
 #else
@@ -160,12 +160,6 @@ bool ShouldShowAppsShortcutInBookmarkBar(Profile* profile) {
   return IsAppsShortcutEnabled(profile) &&
          profile->GetPrefs()->GetBoolean(
              bookmarks::prefs::kShowAppsShortcutInBookmarkBar);
-}
-
-bool ShouldShowReadingListInBookmarkBar(Profile* profile) {
-  return base::FeatureList::IsEnabled(reading_list::switches::kReadLater) &&
-         profile->GetPrefs()->GetBoolean(
-             bookmarks::prefs::kShowReadingListInBookmarkBar);
 }
 
 int GetBookmarkDragOperation(content::BrowserContext* browser_context,

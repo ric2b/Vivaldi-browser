@@ -26,12 +26,12 @@ import '../settings_page_css.js';
 import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
 // </if>
 
-// <if expr="not chromeos and not lacros">
+// <if expr="not chromeos_ash and not chromeos_lacros">
 import '../default_browser_page/default_browser_page.js';
 
 // </if>
 
-import {assert} from 'chrome://resources/js/assert.m.js';
+import {assert} from 'chrome://resources/js/assert_ts.js';
 import {WebUIListenerMixin, WebUIListenerMixinInterface} from 'chrome://resources/js/web_ui_listener_mixin.js';
 import {beforeNextRender, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
@@ -74,7 +74,8 @@ const SettingsBasicPageElementBase =
         RouteObserverMixin(WebUIListenerMixin(PolymerElement)) as unknown as
         Constructor<PolymerElement>)) as unknown as {
       new (): PolymerElement & WebUIListenerMixinInterface &
-      PrefsMixinInterface & RouteObserverMixinInterface & MainPageMixinInterface
+          PrefsMixinInterface & RouteObserverMixinInterface &
+          MainPageMixinInterface,
     };
 
 export class SettingsBasicPageElement extends SettingsBasicPageElementBase {
@@ -208,7 +209,7 @@ export class SettingsBasicPageElement extends SettingsBasicPageElementBase {
   private privacyGuideBrowserProxy_: PrivacyGuideBrowserProxy =
       PrivacyGuideBrowserProxyImpl.getInstance();
 
-  ready() {
+  override ready() {
     super.ready();
 
     this.setAttribute('role', 'main');
@@ -216,7 +217,7 @@ export class SettingsBasicPageElement extends SettingsBasicPageElementBase {
   }
 
 
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
     this.addWebUIListener(
         'is-managed-changed', this.onIsManagedChanged_.bind(this));
@@ -226,7 +227,7 @@ export class SettingsBasicPageElement extends SettingsBasicPageElementBase {
     this.currentRoute_ = Router.getInstance().getCurrentRoute();
   }
 
-  currentRouteChanged(newRoute: Route, oldRoute?: Route) {
+  override currentRouteChanged(newRoute: Route, oldRoute?: Route) {
     this.currentRoute_ = newRoute;
 
     if (routes.ADVANCED && routes.ADVANCED.contains(newRoute)) {
@@ -249,12 +250,10 @@ export class SettingsBasicPageElement extends SettingsBasicPageElementBase {
     }
   }
 
-  /**
-   * Override MainPageMixin method.
-   */
-  containsRoute(route: Route|null): boolean {
+  /** Overrides MainPageMixin method. */
+  override containsRoute(route: Route|null): boolean {
     return !route || routes.BASIC.contains(route) ||
-        routes.ADVANCED.contains(route);
+        (routes.ADVANCED && routes.ADVANCED.contains(route));
   }
 
   private showPage_(visibility?: boolean): boolean {
@@ -312,8 +311,7 @@ export class SettingsBasicPageElement extends SettingsBasicPageElementBase {
   searchContents(query: string): Promise<SearchResult> {
     const whenSearchDone = [
       getSearchManager().search(
-          query,
-          assert(this.shadowRoot!.querySelector('#basicPage') as HTMLElement)),
+          query, this.shadowRoot!.querySelector<HTMLElement>('#basicPage')!),
     ];
 
     if (this.pageVisibility.advancedSettings !== false) {
@@ -380,7 +378,7 @@ export class SettingsBasicPageElement extends SettingsBasicPageElementBase {
   }
   // </if>
 
-  // <if expr="chromeos">
+  // <if expr="chromeos_ash">
   private onOpenChromeOSLanguagesSettingsClick_() {
     const chromeOSLanguagesSettingsPath =
         loadTimeData.getString('chromeOSLanguagesSettingsPath');

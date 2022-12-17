@@ -63,6 +63,7 @@
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_pref_names.h"  // nogncheck
 #include "ash/public/cpp/ambient/ambient_prefs.h"
+#include "base/metrics/histogram_functions.h"
 #include "chrome/browser/ash/app_restore/full_restore_prefs.h"
 #include "chrome/browser/ash/crostini/crostini_pref_names.h"
 #include "chrome/browser/ash/guest_os/guest_os_pref_names.h"
@@ -285,6 +286,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
   (*s_allowlist)[::prefs::kPrivacySandboxApisEnabledV2] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_allowlist)[::prefs::kPrivacySandboxManuallyControlled] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_allowlist)[::prefs::kPrivacySandboxManuallyControlledV2] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_allowlist)[::prefs::kPrivacySandboxPageViewed] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
@@ -607,10 +610,12 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
       settings_api::PrefType::PREF_TYPE_NUMBER;
 
   // Dark Mode.
-  (*s_allowlist)[ash::prefs::kDarkModeEnabled] =
-      settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_allowlist)[ash::prefs::kColorModeThemed] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_allowlist)[ash::prefs::kDarkModeEnabled] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_allowlist)[ash::prefs::kDarkModeScheduleType] =
+      settings_api::PrefType::PREF_TYPE_NUMBER;
 
   // Google Assistant.
   (*s_allowlist)[chromeos::assistant::prefs::kAssistantConsentStatus] =
@@ -728,6 +733,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_allowlist)[ash::prefs::kDockedMagnifierScale] =
       settings_api::PrefType::PREF_TYPE_NUMBER;
+  (*s_allowlist)[ash::prefs::kDockedMagnifierScreenHeightDivisor] =
+      settings_api::PrefType::PREF_TYPE_NUMBER;
 
   // Input method settings.
   (*s_allowlist)[::prefs::kLanguagePreloadEngines] =
@@ -804,6 +811,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
       settings_api::PrefType::PREF_TYPE_DICTIONARY;
   (*s_allowlist)[arc::prefs::kArcVisibleExternalStorages] =
       settings_api::PrefType::PREF_TYPE_LIST;
+  (*s_allowlist)[ash::prefs::kPowerAdaptiveChargingEnabled] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
 
   // Native Printing settings.
   (*s_allowlist)[::prefs::kUserPrintersAllowed] =
@@ -835,6 +844,11 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
   (*s_allowlist)[::prefs::kImportDialogSavedPasswords] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_allowlist)[::prefs::kImportDialogSearchEngine] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+#endif
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  (*s_allowlist)[::prefs::kUseAshProxy] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
 #endif
 
@@ -1117,6 +1131,18 @@ settings_private::SetPrefResult PrefsUtil::SetPref(const std::string& pref_name,
     default:
       return settings_private::SetPrefResult::PREF_TYPE_UNSUPPORTED;
   }
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  if (pref_name == ash::prefs::kDarkModeEnabled) {
+    DCHECK(value->is_bool());
+    base::UmaHistogramBoolean("Ash.DarkTheme.Settings.IsDarkModeEnabled",
+                              value->GetBool());
+  } else if (pref_name == ash::prefs::kColorModeThemed) {
+    DCHECK(value->is_bool());
+    base::UmaHistogramBoolean("Ash.DarkTheme.Settings.IsThemed",
+                              value->GetBool());
+  }
+#endif
 
   // TODO(orenb): Process setting metrics here and in the CrOS setting method
   // too (like "ProcessUserMetric" in CoreOptionsHandler).

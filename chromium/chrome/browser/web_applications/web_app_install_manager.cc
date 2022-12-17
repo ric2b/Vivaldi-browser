@@ -12,12 +12,14 @@
 #include "base/callback_helpers.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/observer_list.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/web_applications/install_bounce_metric.h"
 #include "chrome/browser/web_applications/web_app.h"
+#include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_data_retriever.h"
 #include "chrome/browser/web_applications/web_app_install_finalizer.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
@@ -28,6 +30,7 @@
 #include "chrome/common/chrome_features.h"
 #include "components/webapps/browser/install_result_code.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
+#include "components/webapps/browser/uninstall_result_code.h"
 #include "content/public/browser/web_contents.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -105,16 +108,17 @@ void WebAppInstallManager::SetSubsystems(
 
 void WebAppInstallManager::LoadWebAppAndCheckManifest(
     const GURL& web_app_url,
-    webapps::WebappInstallSource install_source,
+    webapps::WebappInstallSource install_surface,
     WebAppManifestCheckCallback callback) {
   if (!started_)
     return;
 
-  auto task = std::make_unique<WebAppInstallTask>(
-      profile_, this, finalizer_, data_retriever_factory_.Run(), registrar_);
+  auto task = std::make_unique<WebAppInstallTask>(profile_, this, finalizer_,
+                                                  data_retriever_factory_.Run(),
+                                                  registrar_, install_surface);
 
   task->LoadWebAppAndCheckManifest(
-      web_app_url, install_source, url_loader_.get(),
+      web_app_url, url_loader_.get(),
       base::BindOnce(
           &WebAppInstallManager::OnLoadWebAppAndCheckManifestCompleted,
           GetWeakPtr(), task.get(), std::move(callback)));
@@ -125,17 +129,17 @@ void WebAppInstallManager::LoadWebAppAndCheckManifest(
 void WebAppInstallManager::InstallWebAppFromManifest(
     content::WebContents* contents,
     bool bypass_service_worker_check,
-    webapps::WebappInstallSource install_source,
+    webapps::WebappInstallSource install_surface,
     WebAppInstallDialogCallback dialog_callback,
     OnceInstallCallback callback) {
   if (!started_)
     return;
 
-  auto task = std::make_unique<WebAppInstallTask>(
-      profile_, this, finalizer_, data_retriever_factory_.Run(), registrar_);
+  auto task = std::make_unique<WebAppInstallTask>(profile_, this, finalizer_,
+                                                  data_retriever_factory_.Run(),
+                                                  registrar_, install_surface);
   task->InstallWebAppFromManifest(
-      contents, bypass_service_worker_check, install_source,
-      std::move(dialog_callback),
+      contents, bypass_service_worker_check, std::move(dialog_callback),
       base::BindOnce(&WebAppInstallManager::OnInstallTaskCompleted,
                      GetWeakPtr(), task.get(), std::move(callback)));
 
@@ -144,17 +148,18 @@ void WebAppInstallManager::InstallWebAppFromManifest(
 
 void WebAppInstallManager::InstallWebAppFromManifestWithFallback(
     content::WebContents* contents,
-    bool force_shortcut_app,
-    webapps::WebappInstallSource install_source,
+    WebAppInstallFlow flow,
+    webapps::WebappInstallSource install_surface,
     WebAppInstallDialogCallback dialog_callback,
     OnceInstallCallback callback) {
   if (!started_)
     return;
 
-  auto task = std::make_unique<WebAppInstallTask>(
-      profile_, this, finalizer_, data_retriever_factory_.Run(), registrar_);
+  auto task = std::make_unique<WebAppInstallTask>(profile_, this, finalizer_,
+                                                  data_retriever_factory_.Run(),
+                                                  registrar_, install_surface);
   task->InstallWebAppFromManifestWithFallback(
-      contents, force_shortcut_app, install_source, std::move(dialog_callback),
+      contents, flow, std::move(dialog_callback),
       base::BindOnce(&WebAppInstallManager::OnInstallTaskCompleted,
                      GetWeakPtr(), task.get(), std::move(callback)));
 
@@ -172,7 +177,8 @@ void WebAppInstallManager::InstallSubApp(const AppId& parent_app_id,
   // app_id is made available.
 
   auto task = std::make_unique<WebAppInstallTask>(
-      profile_, this, finalizer_, data_retriever_factory_.Run(), registrar_);
+      profile_, this, finalizer_, data_retriever_factory_.Run(), registrar_,
+      webapps::WebappInstallSource::SUB_APP);
 
   WebAppInstallParams params;
   params.parent_app_id = parent_app_id;
@@ -199,11 +205,12 @@ void WebAppInstallManager::InstallWebAppFromInfo(
     std::unique_ptr<WebAppInstallInfo> web_application_info,
     bool overwrite_existing_manifest_fields,
     ForInstallableSite for_installable_site,
-    webapps::WebappInstallSource install_source,
+    webapps::WebappInstallSource install_surface,
     OnceInstallCallback callback) {
-  InstallWebAppFromInfo(
-      std::move(web_application_info), overwrite_existing_manifest_fields,
-      for_installable_site, absl::nullopt, install_source, std::move(callback));
+  InstallWebAppFromInfo(std::move(web_application_info),
+                        overwrite_existing_manifest_fields,
+                        for_installable_site, absl::nullopt, install_surface,
+                        std::move(callback));
 }
 
 void WebAppInstallManager::InstallWebAppFromInfo(
@@ -211,19 +218,19 @@ void WebAppInstallManager::InstallWebAppFromInfo(
     bool overwrite_existing_manifest_fields,
     ForInstallableSite for_installable_site,
     const absl::optional<WebAppInstallParams>& install_params,
-    webapps::WebappInstallSource install_source,
+    webapps::WebappInstallSource install_surface,
     OnceInstallCallback callback) {
   if (!started_)
     return;
 
-  auto task = std::make_unique<WebAppInstallTask>(
-      profile_, this, finalizer_, data_retriever_factory_.Run(), registrar_);
+  auto task = std::make_unique<WebAppInstallTask>(profile_, this, finalizer_,
+                                                  data_retriever_factory_.Run(),
+                                                  registrar_, install_surface);
   if (install_params) {
     task->SetInstallParams(install_params.value());
   }
   task->InstallWebAppFromInfo(
       std::move(web_application_info), overwrite_existing_manifest_fields,
-      for_installable_site, install_source,
       base::BindOnce(&WebAppInstallManager::OnInstallTaskCompleted,
                      GetWeakPtr(), task.get(), std::move(callback)));
 
@@ -233,15 +240,16 @@ void WebAppInstallManager::InstallWebAppFromInfo(
 void WebAppInstallManager::InstallWebAppWithParams(
     content::WebContents* web_contents,
     const WebAppInstallParams& install_params,
-    webapps::WebappInstallSource install_source,
+    webapps::WebappInstallSource install_surface,
     OnceInstallCallback callback) {
   if (!started_)
     return;
 
-  auto task = std::make_unique<WebAppInstallTask>(
-      profile_, this, finalizer_, data_retriever_factory_.Run(), registrar_);
+  auto task = std::make_unique<WebAppInstallTask>(profile_, this, finalizer_,
+                                                  data_retriever_factory_.Run(),
+                                                  registrar_, install_surface);
   task->InstallWebAppWithParams(
-      web_contents, install_params, install_source,
+      web_contents, install_params,
       base::BindOnce(&WebAppInstallManager::OnInstallTaskCompleted,
                      GetWeakPtr(), task.get(), std::move(callback)));
 
@@ -276,7 +284,8 @@ void WebAppInstallManager::EnqueueInstallAppFromSync(
   GURL start_url = web_application_info->start_url;
 
   auto task = std::make_unique<WebAppInstallTask>(
-      profile_, this, finalizer_, data_retriever_factory_.Run(), registrar_);
+      profile_, this, finalizer_, data_retriever_factory_.Run(), registrar_,
+      webapps::WebappInstallSource::SYNC);
 
   task->ExpectAppId(sync_app_id);
 
@@ -303,7 +312,7 @@ void WebAppInstallManager::EnqueueInstallAppFromSync(
   base::OnceClosure start_task = base::BindOnce(
       &WebAppInstallTask::LoadAndInstallWebAppFromManifestWithFallback,
       task->GetWeakPtr(), start_url, EnsureWebContentsCreated(),
-      base::Unretained(url_loader_.get()), webapps::WebappInstallSource::SYNC,
+      base::Unretained(url_loader_.get()),
       base::BindOnce(&WebAppInstallManager::OnQueuedTaskCompleted, GetWeakPtr(),
                      task.get(), std::move(task_completed_callback)));
 
@@ -370,8 +379,15 @@ void WebAppInstallManager::UninstallWithoutRegistryUpdateFromSync(
   if (!started_)
     return;
 
-  finalizer_->UninstallWithoutRegistryUpdateFromSync(std::move(web_apps),
-                                                     std::move(callback));
+  finalizer_->UninstallWithoutRegistryUpdateFromSync(
+      std::move(web_apps),
+      base::BindRepeating(
+          [](RepeatingUninstallCallback callback, const web_app::AppId& app_id,
+             webapps::UninstallResultCode code) {
+            callback.Run(app_id,
+                         code == webapps::UninstallResultCode::kSuccess);
+          },
+          std::move(callback)));
 }
 
 void WebAppInstallManager::RetryIncompleteUninstalls(
@@ -416,13 +432,14 @@ void WebAppInstallManager::
 
   // Install failed. Do the fallback install from info fetching just icon URLs.
   auto task = std::make_unique<WebAppInstallTask>(
-      profile_, this, finalizer_, data_retriever_factory_.Run(), registrar_);
+      profile_, this, finalizer_, data_retriever_factory_.Run(), registrar_,
+      webapps::WebappInstallSource::SYNC);
   // Set the expect app id for fallback install too. This can avoid duplicate
   // installs.
   task->ExpectAppId(sync_app_id);
 
-  WebAppInstallFinalizer::FinalizeOptions finalize_options;
-  finalize_options.install_source = webapps::WebappInstallSource::SYNC;
+  WebAppInstallFinalizer::FinalizeOptions finalize_options(
+      webapps::WebappInstallSource::SYNC);
   finalize_options.overwrite_existing_manifest_fields = true;
   // If app is not locally installed then no OS integration like OS shortcuts.
   finalize_options.locally_installed = AreAppsLocallyInstalledBySync();
@@ -485,9 +502,13 @@ void WebAppInstallManager::TakeTaskErrorLog(WebAppInstallTask* task) {
 }
 
 void WebAppInstallManager::DeleteTask(WebAppInstallTask* task) {
-  DCHECK(tasks_.contains(task));
   TakeTaskErrorLog(task);
-  tasks_.erase(task);
+  // If this happens after/during the call to Shutdown(), then ignore deletion
+  // as `tasks_` is emptied already.
+  if (started_) {
+    DCHECK(tasks_.contains(task));
+    tasks_.erase(task);
+  }
 }
 
 void WebAppInstallManager::OnInstallTaskCompleted(
@@ -688,7 +709,8 @@ void WebAppInstallManager::NotifyWebAppInstalledWithOsHooks(
 
 WebAppInstallManager::PendingTask::PendingTask() = default;
 
-WebAppInstallManager::PendingTask::PendingTask(PendingTask&&) = default;
+WebAppInstallManager::PendingTask::PendingTask(PendingTask&&) noexcept =
+    default;
 
 WebAppInstallManager::PendingTask::~PendingTask() = default;
 

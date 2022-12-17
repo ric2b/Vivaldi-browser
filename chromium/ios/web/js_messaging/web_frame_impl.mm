@@ -16,13 +16,13 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "base/values.h"
 #include "crypto/aead.h"
 #include "crypto/random.h"
 #import "ios/web/js_messaging/java_script_content_world.h"
 #import "ios/web/js_messaging/web_view_js_utils.h"
 #include "ios/web/public/thread/web_task_traits.h"
+#include "ios/web/public/thread/web_thread.h"
 #include "url/gurl.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -159,14 +159,10 @@ bool WebFrameImpl::CallJavaScriptFunctionInContentWorld(
   int message_id = next_message_id_;
   next_message_id_++;
 
-#if defined(__IPHONE_14_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_14_0
-  if (@available(iOS 14, *)) {
-    if (content_world && content_world->GetWKContentWorld()) {
-      return ExecuteJavaScriptFunction(content_world, name, parameters,
-                                       message_id, reply_with_result);
-    }
+  if (content_world && content_world->GetWKContentWorld()) {
+    return ExecuteJavaScriptFunction(content_world, name, parameters,
+                                     message_id, reply_with_result);
   }
-#endif  // defined(__IPHONE14_0)
 
   if (!CanCallJavaScriptFunction()) {
     return false;
@@ -244,9 +240,9 @@ bool WebFrameImpl::CallJavaScriptFunctionInContentWorld(
       std::move(callback), std::move(timeout_callback));
   pending_requests_[message_id] = std::move(callbacks);
 
-  base::PostDelayedTask(
-      FROM_HERE, {web::WebThread::UI},
-      pending_requests_[message_id]->timeout_callback->callback(), timeout);
+  web::GetUIThreadTaskRunner({})->PostDelayedTask(
+      FROM_HERE, pending_requests_[message_id]->timeout_callback->callback(),
+      timeout);
   bool called =
       CallJavaScriptFunctionInContentWorld(name, parameters, content_world,
                                            /*reply_with_result=*/true);
@@ -277,7 +273,6 @@ bool WebFrameImpl::ExecuteJavaScript(
 bool WebFrameImpl::ExecuteJavaScript(
     const std::string& script,
     ExecuteJavaScriptCallbackWithError callback) {
-  DCHECK(base::ios::IsRunningOnIOS14OrLater());
   DCHECK(frame_info_);
 
   if (!IsMainFrame()) {
@@ -296,13 +291,9 @@ bool WebFrameImpl::ExecuteJavaScript(
     }
   };
 
-  if (@available(iOS 14.0, *)) {
-    web::ExecuteJavaScript(frame_info_.webView, WKContentWorld.pageWorld,
-                           frame_info_, ns_script, completion_handler);
-    return true;
-  }
-
-  return false;
+  web::ExecuteJavaScript(frame_info_.webView, WKContentWorld.pageWorld,
+                         frame_info_, ns_script, completion_handler);
+  return true;
 }
 
 WebFrame::ExecuteJavaScriptCallbackWithError
@@ -334,7 +325,6 @@ bool WebFrameImpl::ExecuteJavaScriptFunction(
     int message_id,
     bool reply_with_result) {
   DCHECK(content_world);
-  DCHECK(base::ios::IsRunningOnIOS14OrLater());
   DCHECK(frame_info_);
 
   NSString* script = CreateFunctionCallWithParamaters(name, parameters);
@@ -357,18 +347,12 @@ bool WebFrameImpl::ExecuteJavaScriptFunction(
     };
   }
 
-#if defined(__IPHONE_14_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_14_0
-  if (@available(iOS 14.0, *)) {
-    WKContentWorld* world = content_world->GetWKContentWorld();
-    DCHECK(world);
+  WKContentWorld* world = content_world->GetWKContentWorld();
+  DCHECK(world);
 
-    web::ExecuteJavaScript(frame_info_.webView, world, frame_info_, script,
-                           completion_handler);
-    return true;
-  }
-#endif  // defined(__IPHONE14_0)
-
-  return false;
+  web::ExecuteJavaScript(frame_info_.webView, world, frame_info_, script,
+                         completion_handler);
+  return true;
 }
 
 bool WebFrameImpl::ExecuteJavaScriptFunction(

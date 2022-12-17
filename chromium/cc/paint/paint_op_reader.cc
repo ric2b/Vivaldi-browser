@@ -16,6 +16,7 @@
 #include "base/debug/dump_without_crashing.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/notreached.h"
 #include "base/rand_util.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -30,10 +31,12 @@
 #include "cc/paint/skottie_wrapper.h"
 #include "cc/paint/transfer_cache_deserialize_helper.h"
 #include "components/crash/core/common/crash_key.h"
+#include "third_party/skia/include/core/SkColorSpace.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "third_party/skia/include/core/SkRRect.h"
 #include "third_party/skia/include/core/SkSerialProcs.h"
 #include "third_party/skia/include/core/SkTextBlob.h"
+#include "third_party/skia/include/private/chromium/GrSlug.h"
 #include "third_party/skia/include/private/chromium/SkChromeRemoteGlyphCache.h"
 
 namespace cc {
@@ -472,6 +475,27 @@ void PaintOpReader::Read(sk_sp<SkColorSpace>* color_space) {
 
   memory_ += size;
   remaining_bytes_ -= size;
+}
+void PaintOpReader::Read(sk_sp<GrSlug>* slug) {
+  AlignMemory(4);
+
+  size_t data_bytes = 0u;
+  ReadSize(&data_bytes);
+
+  if (data_bytes == 0) {
+    *slug = nullptr;
+    return;
+  }
+  if (remaining_bytes_ < data_bytes)
+    SetInvalid(
+        DeserializationError::kInsufficientRemainingBytes_Read_SkTextBlob);
+  if (!valid_)
+    return;
+
+  *slug = GrSlug::Deserialize(const_cast<const char*>(memory_), data_bytes,
+                              options_.strike_client);
+  memory_ += data_bytes;
+  remaining_bytes_ -= data_bytes;
 }
 
 void PaintOpReader::Read(sk_sp<SkTextBlob>* blob) {

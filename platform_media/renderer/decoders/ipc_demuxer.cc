@@ -13,6 +13,7 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/media_log.h"
 #include "net/base/mime_util.h"
@@ -41,7 +42,7 @@ static const char* const kIPCMediaPipelineSupportedMimeTypes[] = {
     "video/mpeg",      /**/
     "video/x-m4v",     /**/
     "video/quicktime", /**/
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
     "video/mpeg4", /**/
 #endif
 };
@@ -50,9 +51,9 @@ std::string MimeTypeFromContentTypeOrURL(const std::string& content_type,
                                          const GURL& url) {
   std::string mime_type = base::ToLowerASCII(content_type);
   if (mime_type.empty() || mime_type == "application/octet-stream") {
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
     base::FilePath file(base::FilePath::FromUTF8Unsafe(url.ExtractFileName()));
-#elif defined(OS_POSIX)
+#elif BUILDFLAG(IS_POSIX)
     base::FilePath file(url.ExtractFileName());
 #endif
     net::GetMimeTypeFromFile(file, &mime_type);

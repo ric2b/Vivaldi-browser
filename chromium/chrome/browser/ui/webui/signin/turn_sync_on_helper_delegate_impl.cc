@@ -10,10 +10,15 @@
 #include "base/metrics/user_metrics_action.h"
 #include "base/notreached.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/new_tab_page/chrome_colors/selected_colors_info.h"
+#include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_window.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/browser/signin/signin_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -26,6 +31,7 @@
 #include "chrome/browser/ui/webui/signin/signin_email_confirmation_dialog.h"
 #include "chrome/browser/ui/webui/signin/signin_ui_error.h"
 #include "chrome/common/url_constants.h"
+#include "components/policy/core/browser/signin/user_cloud_signin_restriction_policy_fetcher.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -50,52 +56,26 @@ Browser* EnsureBrowser(Browser* browser, Profile* profile) {
   return browser;
 }
 
+#if !BUILDFLAG(IS_CHROMEOS_LACROS)
 // Converts SigninEmailConfirmationDialog::Action to
 // TurnSyncOnHelper::SigninChoice and invokes |callback| on it.
-void OnEmailConfirmation(TurnSyncOnHelper::SigninChoiceCallback callback,
+void OnEmailConfirmation(signin::SigninChoiceCallback callback,
                          SigninEmailConfirmationDialog::Action action) {
   DCHECK(callback) << "This function should be called only once.";
   switch (action) {
     case SigninEmailConfirmationDialog::START_SYNC:
-      std::move(callback).Run(TurnSyncOnHelper::SIGNIN_CHOICE_CONTINUE);
+      std::move(callback).Run(signin::SIGNIN_CHOICE_CONTINUE);
       return;
     case SigninEmailConfirmationDialog::CREATE_NEW_USER:
-      std::move(callback).Run(TurnSyncOnHelper::SIGNIN_CHOICE_NEW_PROFILE);
+      std::move(callback).Run(signin::SIGNIN_CHOICE_NEW_PROFILE);
       return;
     case SigninEmailConfirmationDialog::CLOSE:
-      std::move(callback).Run(TurnSyncOnHelper::SIGNIN_CHOICE_CANCEL);
+      std::move(callback).Run(signin::SIGNIN_CHOICE_CANCEL);
       return;
   }
   NOTREACHED();
 }
-
-void OnProfileCheckComplete(const AccountInfo& account_info,
-                            TurnSyncOnHelper::SigninChoiceCallback callback,
-                            base::WeakPtr<Browser> browser,
-                            bool prompt_for_new_profile) {
-  if (!browser) {
-    std::move(callback).Run(TurnSyncOnHelper::SIGNIN_CHOICE_CANCEL);
-    return;
-  }
-  ProfileAttributesEntry* entry =
-      g_browser_process->profile_manager()
-          ->GetProfileAttributesStorage()
-          .GetProfileAttributesWithPath(browser->profile()->GetPath());
-  browser->signin_view_controller()->ShowModalEnterpriseConfirmationDialog(
-      account_info, GenerateNewProfileColor(entry).color,
-      base::BindOnce(
-          [](TurnSyncOnHelper::SigninChoiceCallback callback, Browser* browser,
-             bool prompt_for_new_profile, bool create_profile) {
-            browser->signin_view_controller()->CloseModalSignin();
-            std::move(callback).Run(
-                create_profile
-                    ? prompt_for_new_profile
-                          ? TurnSyncOnHelper::SIGNIN_CHOICE_NEW_PROFILE
-                          : TurnSyncOnHelper::SIGNIN_CHOICE_CONTINUE
-                    : TurnSyncOnHelper::SIGNIN_CHOICE_CANCEL);
-          },
-          std::move(callback), browser.get(), prompt_for_new_profile));
-}
+#endif
 
 }  // namespace
 
@@ -124,13 +104,26 @@ void TurnSyncOnHelperDelegateImpl::
 
 void TurnSyncOnHelperDelegateImpl::ShowEnterpriseAccountConfirmation(
     const AccountInfo& account_info,
-    TurnSyncOnHelper::SigninChoiceCallback callback) {
+    signin::SigninChoiceCallback callback) {
   browser_ = EnsureBrowser(browser_, profile_);
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  // Profile Separation Enforced is not supported on Lacros.
+  OnProfileCheckComplete(account_info, std::move(callback),
+                         /*prompt_for_new_profile=*/false);
+#else
+  account_level_signin_restriction_policy_fetcher_ =
+      std::make_unique<policy::UserCloudSigninRestrictionPolicyFetcher>(
+          g_browser_process->browser_policy_connector(),
+          g_browser_process->system_network_context_manager()
+              ->GetSharedURLLoaderFactory());
   // Checking whether to show the prompt for a new profile is sometimes
   // asynchronous.
   ShouldEnterpriseConfirmationPromptForNewProfile(
-      profile_, base::BindOnce(&OnProfileCheckComplete, account_info,
-                               std::move(callback), browser_->AsWeakPtr()));
+      profile_,
+      base::BindOnce(&TurnSyncOnHelperDelegateImpl::OnProfileCheckComplete,
+                     weak_ptr_factory_.GetWeakPtr(), account_info,
+                     std::move(callback)));
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 }
 
 void TurnSyncOnHelperDelegateImpl::ShowSyncConfirmation(
@@ -155,12 +148,17 @@ void TurnSyncOnHelperDelegateImpl::ShowSyncDisabledConfirmation(
 void TurnSyncOnHelperDelegateImpl::ShowMergeSyncDataConfirmation(
     const std::string& previous_email,
     const std::string& new_email,
-    TurnSyncOnHelper::SigninChoiceCallback callback) {
+    signin::SigninChoiceCallback callback) {
   DCHECK(callback);
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  // TODO(https://crbug.com/1260291): add support for signed out profiles.
+  NOTREACHED() << "Lacros doesn't support signed-out profiles yet.";
+#else
   browser_ = EnsureBrowser(browser_, profile_);
   browser_->signin_view_controller()->ShowModalSigninEmailConfirmationDialog(
       previous_email, new_email,
       base::BindOnce(&OnEmailConfirmation, std::move(callback)));
+#endif
 }
 
 void TurnSyncOnHelperDelegateImpl::ShowSyncSettings() {
@@ -179,11 +177,89 @@ void TurnSyncOnHelperDelegateImpl::OnSyncConfirmationUIClosed(
   // Treat closing the ui as an implicit ABORT_SYNC action.
   if (result == LoginUIService::UI_CLOSED)
     result = LoginUIService::ABORT_SYNC;
-  browser_->signin_view_controller()->CloseModalSignin();
+  if (browser_)
+    browser_->signin_view_controller()->CloseModalSignin();
   std::move(sync_confirmation_callback_).Run(result);
 }
 
 void TurnSyncOnHelperDelegateImpl::OnBrowserRemoved(Browser* browser) {
   if (browser == browser_)
     browser_ = nullptr;
+}
+
+#if !BUILDFLAG(IS_CHROMEOS_LACROS)
+void TurnSyncOnHelperDelegateImpl::OnProfileSigninRestrictionsFetched(
+    const AccountInfo& account_info,
+    signin::SigninChoiceCallback callback,
+    const std::string& signin_restriction) {
+  if (!browser_) {
+    std::move(callback).Run(signin::SIGNIN_CHOICE_CANCEL);
+    return;
+  }
+  ProfileAttributesEntry* entry =
+      g_browser_process->profile_manager()
+          ->GetProfileAttributesStorage()
+          .GetProfileAttributesWithPath(browser_->profile()->GetPath());
+  auto profile_creation_required_by_policy =
+      signin_util::ProfileSeparationEnforcedByPolicy(browser_->profile(),
+                                                     signin_restriction);
+  bool show_link_data_option = signin_util::
+      ProfileSeparationAllowsKeepingUnmanagedBrowsingDataInManagedProfile(
+          browser_->profile(), signin_restriction);
+  browser_->signin_view_controller()->ShowModalEnterpriseConfirmationDialog(
+      account_info, profile_creation_required_by_policy, show_link_data_option,
+      GenerateNewProfileColor(entry).color,
+      base::BindOnce(
+          [](signin::SigninChoiceCallback callback, Browser* browser,
+             signin::SigninChoice choice) {
+            browser->signin_view_controller()->CloseModalSignin();
+            std::move(callback).Run(choice);
+          },
+          std::move(callback), browser_.get()));
+}
+#endif
+
+void TurnSyncOnHelperDelegateImpl::OnProfileCheckComplete(
+    const AccountInfo& account_info,
+    signin::SigninChoiceCallback callback,
+    bool prompt_for_new_profile) {
+  if (!browser_) {
+    std::move(callback).Run(signin::SIGNIN_CHOICE_CANCEL);
+    return;
+  }
+#if !BUILDFLAG(IS_CHROMEOS_LACROS)
+  if (prompt_for_new_profile) {
+    account_level_signin_restriction_policy_fetcher_
+        ->GetManagedAccountsSigninRestriction(
+            IdentityManagerFactory::GetForProfile(browser_->profile()),
+            account_info.account_id,
+            base::BindOnce(&TurnSyncOnHelperDelegateImpl::
+                               OnProfileSigninRestrictionsFetched,
+                           weak_ptr_factory_.GetWeakPtr(), account_info,
+                           std::move(callback)));
+    return;
+  }
+#endif
+  DCHECK(!prompt_for_new_profile);
+  ProfileAttributesEntry* entry =
+      g_browser_process->profile_manager()
+          ->GetProfileAttributesStorage()
+          .GetProfileAttributesWithPath(browser_->profile()->GetPath());
+  browser_->signin_view_controller()->ShowModalEnterpriseConfirmationDialog(
+      account_info, /*profile_creation_required_by_policy=*/false,
+      /*show_link_data_option=*/false, GenerateNewProfileColor(entry).color,
+      base::BindOnce(
+          [](signin::SigninChoiceCallback callback, Browser* browser,
+             signin::SigninChoice choice) {
+            browser->signin_view_controller()->CloseModalSignin();
+            // When `show_link_data_option` is false,
+            // `ShowModalEnterpriseConfirmationDialog()` calls back with either
+            // `SIGNIN_CHOICE_CANCEL` or `SIGNIN_CHOICE_NEW_PROFILE`.
+            // The profile is clean here, no need to create a new one.
+            std::move(callback).Run(
+                choice == signin::SigninChoice::SIGNIN_CHOICE_CANCEL
+                    ? signin::SigninChoice::SIGNIN_CHOICE_CANCEL
+                    : signin::SigninChoice::SIGNIN_CHOICE_CONTINUE);
+          },
+          std::move(callback), browser_.get()));
 }

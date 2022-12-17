@@ -13,7 +13,6 @@
 #include "base/command_line.h"
 #include "base/no_destructor.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -163,10 +162,10 @@ void GetShortcutInfoForApp(const extensions::Extension* extension,
         extensions::IconsInfo::GetIconResource(extension, size,
                                                ExtensionIconSet::MATCH_EXACTLY);
     if (!resource.empty()) {
-      info_list.push_back(extensions::ImageLoader::ImageRepresentation(
+      info_list.emplace_back(
           resource, extensions::ImageLoader::ImageRepresentation::ALWAYS_RESIZE,
           gfx::Size(size, size),
-          GetScaleForResourceScaleFactor(ui::k100Percent)));
+          GetScaleForResourceScaleFactor(ui::k100Percent));
     }
   }
 
@@ -183,10 +182,9 @@ void GetShortcutInfoForApp(const extensions::Extension* extension,
       resource = extensions::IconsInfo::GetIconResource(
           extension, size, ExtensionIconSet::MATCH_SMALLER);
     }
-    info_list.push_back(extensions::ImageLoader::ImageRepresentation(
+    info_list.emplace_back(
         resource, extensions::ImageLoader::ImageRepresentation::ALWAYS_RESIZE,
-        gfx::Size(size, size),
-        GetScaleForResourceScaleFactor(ui::k100Percent)));
+        gfx::Size(size, size), GetScaleForResourceScaleFactor(ui::k100Percent));
   }
 
   // |info_list| may still be empty at this point, in which case

@@ -7,14 +7,17 @@
 
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/platform/geometry/layout_unit.h"
+#include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 
 namespace blink {
 
-struct NGBlockBreakTokenData {
+struct NGBlockBreakTokenData : public GarbageCollected<NGBlockBreakTokenData> {
+ public:
   enum NGBreakTokenDataType {
     kBlockBreakTokenData,
     kFlexBreakTokenData,
-    kGridBreakTokenData
+    kGridBreakTokenData,
+    kTableRowBreakTokenData
     // When adding new values, ensure |type| below has enough bits.
   };
   NGBreakTokenDataType Type() const {
@@ -37,6 +40,9 @@ struct NGBlockBreakTokenData {
 
   bool IsFlexType() const { return Type() == kFlexBreakTokenData; }
   bool IsGridType() const { return Type() == kGridBreakTokenData; }
+  bool IsTableRowType() const { return Type() == kTableRowBreakTokenData; }
+
+  virtual void Trace(Visitor* visitor) const {}
 
   LayoutUnit consumed_block_size;
   LayoutUnit consumed_block_size_legacy_adjustment;

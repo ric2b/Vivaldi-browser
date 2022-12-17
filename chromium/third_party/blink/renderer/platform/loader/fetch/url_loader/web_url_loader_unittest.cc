@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "third_party/blink/public/platform/web_url_loader.h"
-
 #include <stdint.h>
 #include <string.h>
 
@@ -11,7 +9,6 @@
 #include <vector>
 
 #include "base/command_line.h"
-#include "base/cxx17_backports.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
@@ -89,9 +86,7 @@ class MockResourceRequestSender : public WebResourceRequestSender {
       mojo::PendingRemote<mojom::BlobRegistry> download_to_blob_registry,
       scoped_refptr<WebRequestPeer> peer,
       std::unique_ptr<ResourceLoadInfoNotifierWrapper>
-          resource_load_info_notifier_wrapper,
-      WebBackForwardCacheLoaderHelper back_forward_cache_loader_helper)
-      override {
+          resource_load_info_notifier_wrapper) override {
     *response = std::move(sync_load_response_);
   }
 
@@ -381,9 +376,9 @@ class WebURLLoaderTest : public testing::Test {
     body_handle_.reset();
     base::RunLoop().RunUntilIdle();
     network::URLLoaderCompletionStatus status(net::OK);
-    status.encoded_data_length = base::size(kTestData);
-    status.encoded_body_length = base::size(kTestData);
-    status.decoded_body_length = base::size(kTestData);
+    status.encoded_data_length = std::size(kTestData);
+    status.encoded_body_length = std::size(kTestData);
+    status.decoded_body_length = std::size(kTestData);
     peer()->OnCompletedRequest(status);
     EXPECT_TRUE(client()->did_finish());
     // There should be no error.
@@ -396,9 +391,9 @@ class WebURLLoaderTest : public testing::Test {
     body_handle_.reset();
     base::RunLoop().RunUntilIdle();
     network::URLLoaderCompletionStatus status(net::ERR_FAILED);
-    status.encoded_data_length = base::size(kTestData);
-    status.encoded_body_length = base::size(kTestData);
-    status.decoded_body_length = base::size(kTestData);
+    status.encoded_data_length = std::size(kTestData);
+    status.encoded_body_length = std::size(kTestData);
+    status.decoded_body_length = std::size(kTestData);
     peer()->OnCompletedRequest(status);
     EXPECT_FALSE(client()->did_finish());
     ASSERT_TRUE(client()->error());

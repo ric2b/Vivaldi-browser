@@ -46,6 +46,7 @@ class ASH_PUBLIC_EXPORT TestSystemTrayClient : public SystemTrayClient {
   void ShowPaletteHelp() override;
   void ShowPaletteSettings() override;
   void ShowPrivacyAndSecuritySettings() override;
+  void ShowSmartPrivacySettings() override;
   void ShowEnterpriseInfo() override;
   void ShowNetworkConfigure(const std::string& network_id) override;
   void ShowNetworkCreate(const std::string& type) override;
@@ -67,6 +68,10 @@ class ASH_PUBLIC_EXPORT TestSystemTrayClient : public SystemTrayClient {
     return show_bluetooth_settings_count_;
   }
 
+  int show_network_settings_count() const {
+    return show_network_settings_count_;
+  }
+
   int show_bluetooth_pairing_dialog_count() const {
     return show_bluetooth_pairing_dialog_count_;
   }
@@ -83,6 +88,10 @@ class ASH_PUBLIC_EXPORT TestSystemTrayClient : public SystemTrayClient {
     return show_os_settings_privacy_and_security_count_;
   }
 
+  int show_os_smart_privacy_settings_count() const {
+    return show_os_smart_privacy_settings_count_;
+  }
+
   int show_wifi_sync_settings_count() const {
     return show_wifi_sync_settings_count_;
   }
@@ -97,16 +106,23 @@ class ASH_PUBLIC_EXPORT TestSystemTrayClient : public SystemTrayClient {
     return last_bluetooth_settings_device_id_;
   }
 
+  const std::string& last_network_settings_network_id() const {
+    return last_network_settings_network_id_;
+  }
+
  private:
+  int show_network_settings_count_ = 0;
   int show_bluetooth_settings_count_ = 0;
   int show_bluetooth_pairing_dialog_count_ = 0;
   int show_multi_device_setup_count_ = 0;
   int show_connected_devices_settings_count_ = 0;
   int show_os_settings_privacy_and_security_count_ = 0;
+  int show_os_smart_privacy_settings_count_ = 0;
   int show_wifi_sync_settings_count_ = 0;
   int show_sim_unlock_settings_count_ = 0;
   int show_firmware_update_count_ = 0;
   std::string last_bluetooth_settings_device_id_;
+  std::string last_network_settings_network_id_;
 };
 
 }  // namespace ash

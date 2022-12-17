@@ -49,6 +49,7 @@ namespace http://www.w3.org/1999/xhtml
     property ariaFlowToElements
     property ariaHasPopup
     property ariaHidden
+    property ariaInvalid
     property ariaKeyShortcuts
     property ariaLabel
     property ariaLabelledByElements
@@ -134,8 +135,10 @@ namespace http://www.w3.org/1999/xhtml
     property hasChildNodes
     property hasPointerCapture
     property hidden
+    property hidePopup
     property id
     property inert
+    property initiallyOpen
     property innerHTML
     property innerText
     property inputMode
@@ -282,6 +285,7 @@ namespace http://www.w3.org/1999/xhtml
     property parentElement
     property parentNode
     property part
+    property popup
     property prefix
     property prepend
     property previousElementSibling
@@ -317,6 +321,7 @@ namespace http://www.w3.org/1999/xhtml
     property setHTML
     property setPointerCapture
     property shadowRoot
+    property showPopup
     property slot
     property spellcheck
     property style
@@ -337,6 +342,7 @@ html element a
     property attributionReportTo
     property attributionSourceEventId
     property attributionSourcePriority
+    property attributionSrc
     property charset
     property coords
     property download
@@ -354,7 +360,6 @@ html element a
     property port
     property protocol
     property referrerPolicy
-    property registerAttributionSource
     property rel
     property relList
     property rev
@@ -688,9 +693,9 @@ html element img
     property currentSrc
     property decode
     property decoding
+    property fetchPriority
     property height
     property hspace
-    property importance
     property isMap
     property loading
     property longDesc
@@ -782,22 +787,21 @@ html element li
     property value
 html element link
     property as
+    property blocking
     property charset
     property crossOrigin
     property disabled
+    property fetchPriority
     property href
     property hreflang
     property imageSizes
     property imageSrcset
-    property importance
     property integrity
     property media
     property referrerPolicy
     property rel
     property relList
-    property resources
     property rev
-    property scopes
     property sheet
     property sizes
     property target
@@ -913,9 +917,7 @@ html element param
 html element picture
 html element plaintext
 html element popup
-    property anchor
     property hide
-    property initiallyOpen
     property open
     property show
 html element pre
@@ -936,12 +938,13 @@ html element s
 html element samp
 html element script
     property async
+    property blocking
     property charset
     property crossOrigin
     property defer
     property event
+    property fetchPriority
     property htmlFor
-    property importance
     property integrity
     property noModule
     property referrerPolicy
@@ -1007,6 +1010,7 @@ html element span
 html element strike
 html element strong
 html element style
+    property blocking
     property disabled
     property media
     property sheet
@@ -1287,6 +1291,7 @@ namespace http://www.w3.org/2000/svg
     property ariaFlowToElements
     property ariaHasPopup
     property ariaHidden
+    property ariaInvalid
     property ariaKeyShortcuts
     property ariaLabel
     property ariaLabelledByElements
@@ -1341,7 +1346,6 @@ namespace http://www.w3.org/2000/svg
     property contains
     property dataset
     property dispatchEvent
-    property editContext
     property elementTiming
     property firstChild
     property firstElementChild
@@ -1364,7 +1368,9 @@ namespace http://www.w3.org/2000/svg
     property hasAttributes
     property hasChildNodes
     property hasPointerCapture
+    property hidePopup
     property id
+    property initiallyOpen
     property innerHTML
     property insertAdjacentElement
     property insertAdjacentHTML
@@ -1502,6 +1508,7 @@ namespace http://www.w3.org/2000/svg
     property parentElement
     property parentNode
     property part
+    property popup
     property prefix
     property prepend
     property previousElementSibling
@@ -1537,6 +1544,7 @@ namespace http://www.w3.org/2000/svg
     property setHTML
     property setPointerCapture
     property shadowRoot
+    property showPopup
     property slot
     property style
     property tabIndex

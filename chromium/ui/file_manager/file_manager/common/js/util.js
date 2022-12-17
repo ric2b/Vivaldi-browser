@@ -312,7 +312,7 @@ export function str(id) {
   try {
     return loadTimeData.getString(id);
   } catch (e) {
-    console.warn('Failed to get string for ', id);
+    console.warn('Failed to get string for', id);
     return id;
   }
 }
@@ -364,42 +364,6 @@ util.addIsFocusedMethod = () => {
   };
 };
 
-/**
- * Checks, if the Files app's window is in a full screen mode.
- *
- * @param {chrome.app.window.AppWindow} appWindow App window to be maximized.
- * @return {boolean} True if the full screen mode is enabled.
- */
-util.isFullScreen = appWindow => {
-  if (appWindow) {
-    return appWindow.isFullscreen();
-  } else {
-    console.error(
-        'App window not passed. Unable to check status of the full screen ' +
-        'mode.');
-    return false;
-  }
-};
-
-/**
- * Toggles the full screen mode.
- *
- * @param {chrome.app.window.AppWindow} appWindow App window to be maximized.
- * @param {boolean} enabled True for enabling, false for disabling.
- */
-util.toggleFullScreen = (appWindow, enabled) => {
-  if (appWindow) {
-    if (enabled) {
-      appWindow.fullscreen();
-    } else {
-      appWindow.restore();
-    }
-    return;
-  }
-
-  console.error(
-      'App window not passed. Unable to toggle the full screen mode.');
-};
 
 /**
  * The type of a file operation.
@@ -982,7 +946,7 @@ util.URLsToEntries = (urls, opt_callback) => {
           opt_callback(result.entries, result.failureUrls);
         })
         .catch(error => {
-          console.error(
+          console.warn(
               'util.URLsToEntries is failed.',
               error.stack ? error.stack : error);
         });
@@ -1123,6 +1087,7 @@ util.getRootTypeLabel = locationInfo => {
     case VolumeManagerCommon.RootType.ANDROID_FILES:
     case VolumeManagerCommon.RootType.DOCUMENTS_PROVIDER:
     case VolumeManagerCommon.RootType.SMB:
+    case VolumeManagerCommon.RootType.GUEST_OS:
       return locationInfo.volumeInfo.label;
     default:
       console.error('Unsupported root type: ' + locationInfo.rootType);
@@ -1171,6 +1136,7 @@ util.getEntryLabel = (locationInfo, entry) => {
  *  - "My Files"/{Downloads,PvmDefault,Camera} directories, or
  *  - "Play Files"/{<any-directory>,DCIM/Camera} directories, or
  *  - "Linux Files" root "/" directory
+ *  - "Guest OS" root "/" directory
  *
  * which cannot be modified such as deleted/cut or renamed.
  *
@@ -1247,6 +1213,10 @@ util.isNonModifiable = (volumeManager, entry) => {
     return entry.fullPath === '/';
   }
 
+  if (volumeType === VolumeManagerCommon.RootType.GUEST_OS) {
+    return entry.fullPath === '/';
+  }
+
   return false;
 };
 
@@ -1282,7 +1252,7 @@ util.addEventListenerToBackgroundComponent = (target, type, handler) => {
  */
 util.checkAPIError = () => {
   if (chrome.runtime.lastError) {
-    console.error(chrome.runtime.lastError.message);
+    console.warn(chrome.runtime.lastError.message);
   }
 };
 
@@ -1327,6 +1297,14 @@ util.isCopyImageEnabled = () => {
  */
 util.isRecentsFilterEnabled = () => {
   return loadTimeData.getBoolean('FILTERS_IN_RECENTS_ENABLED');
+};
+
+/**
+ * Returns true if filters in Recents view V2 is enabled.
+ * @return {boolean}
+ */
+util.isRecentsFilterV2Enabled = () => {
+  return loadTimeData.getBoolean('FILTERS_IN_RECENTS_V2_ENABLED');
 };
 
 /**
@@ -1706,4 +1684,12 @@ util.isInGuestMode = async () => {
   return profiles.length > 0 && profiles[0].profileId === '$guest';
 };
 
-export {util};
+/**
+ * A kind of error that represents user electing to cancel an operation. We use
+ * this specialization to differentiate between system errors and errors
+ * generated through legitimate user actions.
+ */
+class UserCanceledError extends Error {}
+
+
+export {util, UserCanceledError};

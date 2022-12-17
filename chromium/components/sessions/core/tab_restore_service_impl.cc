@@ -140,12 +140,15 @@ const size_t kMaxEntries = TabRestoreServiceHelper::kMaxEntries;
 void RemoveEntryByID(
     SessionID id,
     std::vector<std::unique_ptr<TabRestoreService::Entry>>* entries) {
+  // If the id is invalid, return.
+  if (id == SessionID::InvalidValue())
+    return;
   // Look for the entry in the top-level collection.
   for (auto entry_it = entries->begin(); entry_it != entries->end();
        ++entry_it) {
     TabRestoreService::Entry& entry = **entry_it;
     // Erase it if it's our target.
-    if (entry.id == id) {
+    if (entry.id == id || entry.original_id == id) {
       entries->erase(entry_it);
       return;
     }
@@ -491,6 +494,8 @@ class TabRestoreServiceImpl::PersistenceDelegate
   // the selected navigation.
   void ScheduleCommandsForTab(const Tab& tab, int selected_index);
 
+  void ScheduleRestoredEntryCommandsForTest(SessionID id);
+
   // Creates a window close command.
   static std::unique_ptr<SessionCommand> CreateWindowCommand(
       SessionID window_id,
@@ -734,7 +739,7 @@ void TabRestoreServiceImpl::PersistenceDelegate::LoadTabsFromLastSession() {
 
 void TabRestoreServiceImpl::PersistenceDelegate::DeleteLastSession() {
   command_storage_manager_->DeleteLastSession();
-  #if defined(OS_ANDROID)
+  #if BUILDFLAG(IS_ANDROID)
   // Vivaldi - Note(nagamani@vivaldi.com): [ClearDataOnExit] Delayed save is not triggered before
   // Vivaldi is closed. Hence, explicitly calling save to write changes to file.
   command_storage_manager_->Save();
@@ -1070,6 +1075,7 @@ void TabRestoreServiceImpl::PersistenceDelegate::CreateEntriesFromCommands(
         }
 
         RemoveEntryByID(window_id, &entries);
+        window->original_id = window_id;
         current_window =
             absl::make_optional(std::make_pair(window.get(), num_tabs));
         entries.push_back(std::move(window));
@@ -1096,6 +1102,7 @@ void TabRestoreServiceImpl::PersistenceDelegate::CreateEntriesFromCommands(
         }
 
         RemoveEntryByID(group_id, &entries);
+        group->original_id = group_id;
         current_group =
             absl::make_optional(std::make_pair(group.get(), num_tabs));
         entries.push_back(std::move(group));
@@ -1145,6 +1152,7 @@ void TabRestoreServiceImpl::PersistenceDelegate::CreateEntriesFromCommands(
               base::Microseconds(payload.timestamp));
         }
         current_tab->current_navigation_index = payload.index;
+        current_tab->original_id = SessionID::FromSerializedValue(payload.id);
         break;
       }
 
@@ -1362,11 +1370,11 @@ bool TabRestoreServiceImpl::PersistenceDelegate::ConvertSessionWindowToWindow(
     tab.timestamp = base::Time();
 
     // Vivaldi
-    tab.ext_data = i->ext_data;
-    tab.page_action_overrides = i->page_action_overrides;
+    tab.viv_ext_data = i->viv_ext_data;
+    tab.viv_page_action_overrides = i->viv_page_action_overrides;
   }
 
-  window->ext_data = session_window->ext_data;
+  window->viv_ext_data = session_window->viv_ext_data;
 
   if (window->tabs.empty())
     return false;
@@ -1428,6 +1436,11 @@ void TabRestoreServiceImpl::PersistenceDelegate::LoadStateChanged() {
   tab_restore_service_helper_->NotifyTabsChanged();
 
   tab_restore_service_helper_->NotifyLoaded();
+}
+
+void TabRestoreServiceImpl::PersistenceDelegate::
+    ScheduleRestoredEntryCommandsForTest(SessionID id) {
+  command_storage_manager_->ScheduleCommand(CreateRestoredEntryCommand(id));
 }
 
 // TabRestoreServiceImpl -------------------------------------------------
@@ -1506,9 +1519,8 @@ std::vector<LiveTab*> TabRestoreServiceImpl::RestoreMostRecentEntry(
   return helper_.RestoreMostRecentEntry(context);
 }
 
-std::unique_ptr<TabRestoreService::Tab>
-TabRestoreServiceImpl::RemoveTabEntryById(SessionID id) {
-  return helper_.RemoveTabEntryById(id);
+void TabRestoreServiceImpl::RemoveTabEntryById(SessionID id) {
+  helper_.RemoveTabEntryById(id);
 }
 
 std::vector<LiveTab*> TabRestoreServiceImpl::RestoreEntryById(
@@ -1579,6 +1591,11 @@ TabRestoreService::Entries* TabRestoreServiceImpl::mutable_entries() {
 
 void TabRestoreServiceImpl::PruneEntries() {
   helper_.PruneEntries();
+}
+
+void TabRestoreServiceImpl::CreateRestoredEntryCommandForTest(SessionID id) {
+  if (persistence_delegate_)
+    persistence_delegate_->ScheduleRestoredEntryCommandsForTest(id);
 }
 
 }  // namespace sessions

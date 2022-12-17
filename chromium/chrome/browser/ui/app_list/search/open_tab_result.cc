@@ -5,10 +5,14 @@
 #include "chrome/browser/ui/app_list/search/open_tab_result.h"
 
 #include "ash/public/cpp/app_list/vector_icons/vector_icons.h"
+#include "ash/strings/grit/ash_strings.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/app_list/app_list_controller_delegate.h"
 #include "chrome/browser/ui/app_list/search/common/icon_constants.h"
+#include "chrome/browser/ui/app_list/search/common/search_result_util.h"
+#include "chrome/browser/ui/app_list/search/common/string_util.h"
 #include "chrome/browser/ui/app_list/search/omnibox_util.h"
 #include "chrome/browser/ui/app_list/search/search_tags_util.h"
 #include "chromeos/components/string_matching/tokenized_string_match.h"
@@ -32,20 +36,7 @@ constexpr char kOpenTabScheme[] = "opentab://";
 
 constexpr char16_t kUrlDelimiter[] = u" - ";
 
-absl::optional<std::string> GetDriveId(const GURL& url) {
-  if (url.host() != "docs.google.com")
-    return absl::nullopt;
-
-  std::string path = url.path();
-
-  const std::string kPathPrefix = "/document/d/";
-  if (!base::StartsWith(path, kPathPrefix))
-    return absl::nullopt;
-
-  std::string id = path.substr(kPathPrefix.size());
-  int suffix = id.find_first_of('/');
-  return id.substr(0, suffix);
-}
+constexpr char16_t kA11yDelimiter[] = u", ";
 
 }  // namespace
 
@@ -59,6 +50,8 @@ OpenTabResult::OpenTabResult(Profile* profile,
       favicon_cache_(favicon_cache),
       match_(match),
       drive_id_(GetDriveId(match.destination_url)) {
+  DCHECK(match_.destination_url.is_valid());
+
   // TODO(crbug.com/1293702): This may not be unique. Once we have a mechanism
   // for opening a specific tab, add that info too to ensure uniqueness.
   set_id(kOpenTabScheme + match.destination_url.spec());
@@ -68,7 +61,9 @@ OpenTabResult::OpenTabResult(Profile* profile,
   SetMetricsType(ash::OPEN_TAB);
   SetCategory(Category::kWeb);
 
-  UpdateRelevance(query);
+  // Derive relevance from omnibox relevance and normalize it to [0, 1].
+  set_relevance(match_.relevance / kMaxOmniboxScore);
+
   UpdateText();
   UpdateIcon();
 }
@@ -86,37 +81,21 @@ absl::optional<std::string> OpenTabResult::DriveId() const {
   return drive_id_;
 }
 
-void OpenTabResult::UpdateRelevance(const TokenizedString& query) {
-  TokenizedString title(match_.contents, TokenizedString::Mode::kCamelCase);
-  TokenizedStringMatch match;
-  if (!match.Calculate(query, title)) {
-    // TODO(crbug.com/1293702): Low-scoring results are filtered out here
-    // because the browser-side provider currently only does very basic
-    // filtering.
-    scoring().filter = true;
-  }
-  set_relevance(match.relevance());
-}
-
 void OpenTabResult::UpdateText() {
   // URL results from the Omnibox have the page title stored in
-  // |match.description|.
-  TextItem contents_text(TextType::kString);
-  contents_text.SetText(match_.description);
-  contents_text.SetTextTags({});
-
-  TextItem delimiter_text(TextType::kString);
-  delimiter_text.SetText(kUrlDelimiter);
-  delimiter_text.SetTextTags({});
+  // `match.description`.
+  SetTitle(match_.description);
 
   std::u16string url = base::UTF8ToUTF16(match_.destination_url.spec());
-  TextItem url_text(TextType::kString);
-  url_text.SetText(url);
-  url_text.SetTextTags({Tag(Tag::URL, 0, url.length())});
+  SetDetailsTextVector(
+      {CreateStringTextItem(url).SetTextTags({Tag(Tag::URL, 0, url.length())}),
+       CreateStringTextItem(kUrlDelimiter),
+       CreateStringTextItem(IDS_APP_LIST_OPEN_TAB_HINT).SetElidable(false)});
 
-  SetTitleTextVector({std::move(contents_text), std::move(delimiter_text),
-                      std::move(url_text)});
-  SetDetails(l10n_util::GetStringUTF16(IDS_OMNIBOX_TAB_SUGGEST_HINT));
+  SetAccessibleName(
+      base::JoinString({match_.description, url,
+                        l10n_util::GetStringUTF16(IDS_APP_LIST_OPEN_TAB_HINT)},
+                       kA11yDelimiter));
 }
 
 void OpenTabResult::UpdateIcon() {
@@ -140,7 +119,7 @@ void OpenTabResult::UpdateIcon() {
 }
 
 void OpenTabResult::OnFaviconFetched(const gfx::Image& icon) {
-  // By contract, this is never called with an empty |icon|.
+  // By contract, this is never called with an empty `icon`.
   DCHECK(!icon.IsEmpty());
   SetIcon(IconInfo(icon.AsImageSkia(), kFaviconDimension));
 }

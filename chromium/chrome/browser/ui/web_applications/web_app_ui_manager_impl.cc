@@ -8,6 +8,7 @@
 
 #include "base/callback.h"
 #include "base/callback_helpers.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
@@ -33,6 +34,7 @@
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "components/constrained_window/constrained_window_views.h"
 #include "components/services/app_service/public/cpp/app_registry_cache.h"
+#include "components/services/app_service/public/cpp/app_types.h"
 #include "components/services/app_service/public/cpp/types_util.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
 #include "extensions/browser/app_sorting.h"
@@ -316,7 +318,7 @@ void WebAppUiManagerImpl::OnShortcutLocationGathered(
   auto* proxy = apps::AppServiceProxyFactory::GetForProfile(profile_);
 
   const bool is_extension = proxy->AppRegistryCache().GetAppType(from_app) ==
-                            apps::mojom::AppType::kChromeApp;
+                            apps::AppType::kChromeApp;
   if (is_extension) {
     WaitForExtensionShortcutsDeleted(
         from_app,
@@ -414,21 +416,6 @@ void WebAppUiManagerImpl::ReparentAppTabToWindow(content::WebContents* contents,
   ReparentWebContentsIntoAppBrowser(contents, app_id);
 }
 
-content::WebContents* WebAppUiManagerImpl::NavigateExistingWindow(
-    const AppId& app_id,
-    const GURL& url) {
-  for (Browser* open_browser : *BrowserList::GetInstance()) {
-    if (web_app::AppBrowserController::IsForWebApp(open_browser, app_id)) {
-      open_browser->OpenURL(content::OpenURLParams(
-          url, content::Referrer(), WindowOpenDisposition::CURRENT_TAB,
-          ui::PAGE_TRANSITION_LINK,
-          /*is_renderer_initiated=*/false));
-      return open_browser->tab_strip_model()->GetActiveWebContents();
-    }
-  }
-  return nullptr;
-}
-
 void WebAppUiManagerImpl::ShowWebAppIdentityUpdateDialog(
     const std::string& app_id,
     bool title_change,
@@ -496,7 +483,7 @@ bool WebAppUiManagerImpl::IsBrowserForInstalledApp(Browser* browser) {
   return true;
 }
 
-const AppId WebAppUiManagerImpl::GetAppIdForBrowser(Browser* browser) {
+AppId WebAppUiManagerImpl::GetAppIdForBrowser(Browser* browser) {
   return browser->app_controller()->app_id();
 }
 

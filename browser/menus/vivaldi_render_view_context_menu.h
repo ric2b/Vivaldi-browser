@@ -7,6 +7,7 @@
 #include <map>
 #include <vector>
 
+#include "build/build_config.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu.h"
 #include "extensions/schema/context_menu.h"
 
@@ -155,7 +156,7 @@ protected:
   std::unique_ptr<DeviceMenuController> sendtolink_controller_;
   std::unique_ptr<NotesSubMenuObserver> note_submenu_observer_;
   std::unique_ptr<PWALinkMenuController> pwa_link_controller_;
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   std::unique_ptr<SpeechMenuController> speech_controller_;
 #endif
 

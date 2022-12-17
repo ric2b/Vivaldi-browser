@@ -35,6 +35,7 @@
 #include "base/threading/platform_thread.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
@@ -48,6 +49,7 @@
 #include "chrome/browser/metrics/desktop_platform_features_metrics_provider.h"
 #include "chrome/browser/metrics/desktop_session_duration/desktop_profile_session_durations_service_factory.h"
 #include "chrome/browser/metrics/desktop_session_duration/desktop_session_metrics_provider.h"
+#include "chrome/browser/metrics/family_link_user_metrics_provider.h"
 #include "chrome/browser/metrics/https_engagement_metrics_provider.h"
 #include "chrome/browser/metrics/metrics_reporting_state.h"
 #include "chrome/browser/metrics/network_quality_estimator_provider_impl.h"
@@ -82,6 +84,7 @@
 #include "components/metrics/demographics/demographic_metrics_provider.h"
 #include "components/metrics/drive_metrics_provider.h"
 #include "components/metrics/entropy_state_provider.h"
+#include "components/metrics/form_factor_metrics_provider.h"
 #include "components/metrics/metrics_log_uploader.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/metrics/metrics_reporting_default_state.h"
@@ -138,12 +141,9 @@
 #include "extensions/common/extension.h"
 #endif
 
-#if BUILDFLAG(ENABLE_PLUGINS)
-#include "chrome/browser/metrics/plugin_metrics_provider.h"
-#endif
-
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "chrome/browser/metrics/lacros_metrics_provider.h"
+#include "chromeos/lacros/lacros_service.h"
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -521,10 +521,6 @@ void ChromeMetricsServiceClient::RegisterPrefs(PrefRegistrySimple* registry) {
   ChromeAndroidMetricsProvider::RegisterPrefs(registry);
 #endif  // BUILDFLAG(IS_ANDROID)
 
-#if BUILDFLAG(ENABLE_PLUGINS)
-  PluginMetricsProvider::RegisterPrefs(registry);
-#endif  // BUILDFLAG(ENABLE_PLUGINS)
-
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   metrics::PerUserStateManagerChromeOS::RegisterPrefs(registry);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
@@ -536,6 +532,11 @@ void ChromeMetricsServiceClient::RegisterProfilePrefs(
   metrics::PerUserStateManagerChromeOS::RegisterProfilePrefs(registry);
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+variations::SyntheticTrialRegistry*
+ChromeMetricsServiceClient::GetSyntheticTrialRegistry() {
+  return synthetic_trial_registry_.get();
+}
 
 metrics::MetricsService* ChromeMetricsServiceClient::GetMetricsService() {
   return metrics_service_.get();
@@ -628,15 +629,6 @@ base::TimeDelta ChromeMetricsServiceClient::GetStandardUploadInterval() {
   return metrics::GetUploadInterval(metrics::ShouldUseCellularUploadInterval());
 }
 
-void ChromeMetricsServiceClient::OnPluginLoadingError(
-    const base::FilePath& plugin_path) {
-#if BUILDFLAG(ENABLE_PLUGINS)
-  plugin_metrics_provider_->LogPluginLoadingError(plugin_path);
-#else
-  NOTREACHED();
-#endif  // BUILDFLAG(ENABLE_PLUGINS)
-}
-
 bool ChromeMetricsServiceClient::IsReportingPolicyManaged() {
   return IsMetricsReportingPolicyManaged();
 }
@@ -650,6 +642,10 @@ ChromeMetricsServiceClient::GetMetricsReportingDefaultState() {
 void ChromeMetricsServiceClient::Initialize() {
   PrefService* local_state = g_browser_process->local_state();
 
+  synthetic_trial_registry_ =
+      std::make_unique<variations::SyntheticTrialRegistry>(
+          IsExternalExperimentAllowlistEnabled());
+
   metrics_service_ = std::make_unique<metrics::MetricsService>(
       metrics_state_manager_, this, local_state);
 
@@ -660,10 +656,20 @@ void ChromeMetricsServiceClient::Initialize() {
       base::FeatureList::IsEnabled(ukm::kUkmFeature)) {
     identifiability_study_state_ =
         std::make_unique<IdentifiabilityStudyState>(local_state);
+
+    uint64_t client_id = 0;
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+    // Read metrics service client id from ash chrome if it's present.
+    if (auto* lacros_service = chromeos::LacrosService::Get()) {
+      client_id = lacros_service->init_params()->ukm_client_id;
+    }
+#endif
+
     ukm_service_ = std::make_unique<ukm::UkmService>(
         local_state, this,
         MakeDemographicMetricsProvider(
-            metrics::MetricsLogUploader::MetricServiceType::UKM));
+            metrics::MetricsLogUploader::MetricServiceType::UKM),
+        client_id);
     ukm_service_->SetIsWebstoreExtensionCallback(
         base::BindRepeating(&IsWebstoreExtension));
     ukm_service_->RegisterEventFilter(
@@ -718,6 +724,9 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
   metrics_service_->RegisterMetricsProvider(
       std::make_unique<metrics::ScreenInfoMetricsProvider>());
 
+  metrics_service_->RegisterMetricsProvider(
+      std::make_unique<metrics::FormFactorMetricsProvider>());
+
   metrics_service_->RegisterMetricsProvider(CreateFileMetricsProvider(
       metrics_state_manager_->IsMetricsReportingEnabled()));
 
@@ -762,6 +771,8 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
       std::make_unique<ChromeAndroidMetricsProvider>(local_state));
   metrics_service_->RegisterMetricsProvider(
       std::make_unique<PageLoadMetricsProvider>());
+  metrics_service_->RegisterMetricsProvider(
+      std::make_unique<FamilyLinkUserMetricsProvider>());
 #endif  // BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_WIN)
@@ -779,12 +790,6 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
       std::make_unique<DesktopPlatformFeaturesMetricsProvider>());
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || (BUILDFLAG(IS_LINUX) ||
         // BUILDFLAG(IS_CHROMEOS_LACROS))
-
-#if BUILDFLAG(ENABLE_PLUGINS)
-  plugin_metrics_provider_ = new PluginMetricsProvider(local_state);
-  metrics_service_->RegisterMetricsProvider(
-      std::unique_ptr<metrics::MetricsProvider>(plugin_metrics_provider_));
-#endif  // BUILDFLAG(ENABLE_PLUGINS)
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   metrics_service_->RegisterMetricsProvider(
@@ -872,6 +877,8 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
   metrics_service_->RegisterMetricsProvider(
       metrics::CreateDesktopSessionMetricsProvider());
+  metrics_service_->RegisterMetricsProvider(
+      std::make_unique<FamilyLinkUserMetricsProvider>());
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || (BUILDFLAG(IS_LINUX)
 }
 
@@ -898,7 +905,11 @@ void ChromeMetricsServiceClient::RegisterUKMProviders() {
   ukm_service_->RegisterMetricsProvider(
       std::make_unique<metrics::ScreenInfoMetricsProvider>());
 
-  ukm_service_->RegisterMetricsProvider(ukm::CreateFieldTrialsProviderForUkm());
+  ukm_service_->RegisterMetricsProvider(
+      std::make_unique<metrics::FormFactorMetricsProvider>());
+
+  ukm_service_->RegisterMetricsProvider(
+      ukm::CreateFieldTrialsProviderForUkm(synthetic_trial_registry_.get()));
 
   ukm_service_->RegisterMetricsProvider(
       std::make_unique<PrivacyBudgetMetricsProvider>(
@@ -976,14 +987,11 @@ void ChromeMetricsServiceClient::OnHistogramSynchronizationDone() {
 void ChromeMetricsServiceClient::RecordCommandLineMetrics() {
   // Get stats on use of command line.
   const base::CommandLine* command_line(base::CommandLine::ForCurrentProcess());
-  size_t common_commands = 0;
   if (command_line->HasSwitch(switches::kUserDataDir)) {
-    ++common_commands;
     UMA_HISTOGRAM_COUNTS_100("Chrome.CommandLineDatDirCount", 1);
   }
 
   if (command_line->HasSwitch(switches::kApp)) {
-    ++common_commands;
     UMA_HISTOGRAM_COUNTS_100("Chrome.CommandLineAppModeCount", 1);
   }
 }
@@ -1129,6 +1137,10 @@ void ChromeMetricsServiceClient::OnUkmAllowedStateChanged(bool total_purge) {
     if (!IsUkmAllowedWithAppsForAllProfiles())
       ukm_service_->PurgeAppsData();
   }
+
+  // Broadcast UKM consent state change. This doesn't include extension or app
+  // consent change.
+  ukm_service_->OnUkmAllowedStateChanged(IsUkmAllowedForAllProfiles());
 
   // Signal service manager to enable/disable UKM based on new states.
   UpdateRunningServices();

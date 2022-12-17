@@ -9,6 +9,9 @@
 #include "base/logging.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
+#if BUILDFLAG(IS_WIN)
+#include "media/base/media_switches.h"
+#endif
 #include "media/media_buildflags.h"
 #include "media/video/gpu_video_accelerator_factories.h"
 #include "third_party/blink/public/common/features.h"
@@ -170,6 +173,17 @@ SupportedFormats GetSupportedFormatsInternal(
       supported_formats.profiles.push_back(profile.profile);
       supported_formats.scalability_modes.push_back(profile.scalability_modes);
       supported_formats.sdp_formats.push_back(std::move(*format));
+
+#if BUILDFLAG(IS_WIN)
+      if (media::IsMediaFoundationH264CbpEncodingEnabled() &&
+          profile.profile == media::VideoCodecProfile::H264PROFILE_BASELINE) {
+        supported_formats.profiles.push_back(profile.profile);
+        supported_formats.scalability_modes.push_back(
+            profile.scalability_modes);
+        cricket::AddH264ConstrainedBaselineProfileToSupportedFormats(
+            &supported_formats.sdp_formats);
+      }
+#endif
     }
   }
 

@@ -169,6 +169,16 @@ DarkModeFilter* GraphicsContext::GetDarkModeFilter() {
   return dark_mode_filter_.get();
 }
 
+DarkModeFilter* GraphicsContext::GetDarkModeFilterForImage(
+    const ImageAutoDarkMode& auto_dark_mode) {
+  if (!auto_dark_mode.enabled)
+    return nullptr;
+  DarkModeFilter* dark_mode_filter = GetDarkModeFilter();
+  if (!dark_mode_filter->ShouldApplyFilterToImage(auto_dark_mode.image_type))
+    return nullptr;
+  return dark_mode_filter;
+}
+
 void GraphicsContext::UpdateDarkModeSettingsForTest(
     const DarkModeSettings& settings) {
   dark_mode_filter_ = std::make_unique<DarkModeFilter>(settings);
@@ -737,7 +747,7 @@ void GraphicsContext::DrawHighlightForText(const Font& font,
 void GraphicsContext::DrawImage(
     Image* image,
     Image::ImageDecodingMode decode_mode,
-    const AutoDarkMode& auto_dark_mode,
+    const ImageAutoDarkMode& auto_dark_mode,
     const gfx::RectF& dest,
     const gfx::RectF* src_ptr,
     SkBlendMode op,
@@ -746,16 +756,15 @@ void GraphicsContext::DrawImage(
     return;
 
   const gfx::RectF src = src_ptr ? *src_ptr : gfx::RectF(image->Rect());
-
   cc::PaintFlags image_flags = ImmutableState()->FillFlags();
   image_flags.setBlendMode(op);
   image_flags.setColor(SK_ColorBLACK);
 
   SkSamplingOptions sampling = ComputeSamplingOptions(image, dest, src);
+  DarkModeFilter* dark_mode_filter = GetDarkModeFilterForImage(auto_dark_mode);
   ImageDrawOptions draw_options(
-      auto_dark_mode.enabled ? GetDarkModeFilter() : nullptr, sampling,
-      should_respect_image_orientation, Image::kClampImageToSourceRect,
-      decode_mode, auto_dark_mode.enabled);
+      dark_mode_filter, sampling, should_respect_image_orientation,
+      Image::kClampImageToSourceRect, decode_mode, auto_dark_mode.enabled);
 
   image->Draw(canvas_, image_flags, dest, src, draw_options);
   paint_controller_.SetImagePainted();
@@ -764,7 +773,7 @@ void GraphicsContext::DrawImage(
 void GraphicsContext::DrawImageRRect(
     Image* image,
     Image::ImageDecodingMode decode_mode,
-    const AutoDarkMode& auto_dark_mode,
+    const ImageAutoDarkMode& auto_dark_mode,
     const FloatRoundedRect& dest,
     const gfx::RectF& src_rect,
     SkBlendMode op,
@@ -791,10 +800,10 @@ void GraphicsContext::DrawImageRRect(
   image_flags.setBlendMode(op);
   image_flags.setColor(SK_ColorBLACK);
 
-  ImageDrawOptions draw_options(
-      auto_dark_mode.enabled ? GetDarkModeFilter() : nullptr, sampling,
-      respect_orientation, Image::kClampImageToSourceRect, decode_mode,
-      auto_dark_mode.enabled);
+  DarkModeFilter* dark_mode_filter = GetDarkModeFilterForImage(auto_dark_mode);
+  ImageDrawOptions draw_options(dark_mode_filter, sampling, respect_orientation,
+                                Image::kClampImageToSourceRect, decode_mode,
+                                auto_dark_mode.enabled);
 
   bool use_shader = (visible_src == src_rect) &&
                     (respect_orientation == kDoNotRespectImageOrientation ||
@@ -802,8 +811,8 @@ void GraphicsContext::DrawImageRRect(
   if (use_shader) {
     const SkMatrix local_matrix = SkMatrix::RectToRect(
         gfx::RectFToSkRect(visible_src), gfx::RectFToSkRect(dest.Rect()));
-    use_shader = image->ApplyShader(image_flags, local_matrix, dest.Rect(),
-                                    src_rect, draw_options);
+    use_shader =
+        image->ApplyShader(image_flags, local_matrix, src_rect, draw_options);
   }
 
   if (use_shader) {
@@ -854,7 +863,7 @@ void GraphicsContext::DrawImageTiled(
     Image* image,
     const gfx::RectF& dest_rect,
     const ImageTilingInfo& tiling_info,
-    const AutoDarkMode& auto_dark_mode,
+    const ImageAutoDarkMode& auto_dark_mode,
     SkBlendMode op,
     RespectImageOrientationEnum respect_orientation) {
   if (!image)
@@ -863,10 +872,10 @@ void GraphicsContext::DrawImageTiled(
   cc::PaintFlags image_flags = ImmutableState()->FillFlags();
   image_flags.setBlendMode(op);
   SkSamplingOptions sampling = ImageSamplingOptions();
-  ImageDrawOptions draw_options(
-      auto_dark_mode.enabled ? GetDarkModeFilter() : nullptr, sampling,
-      respect_orientation, Image::kClampImageToSourceRect, Image::kSyncDecode,
-      auto_dark_mode.enabled);
+  DarkModeFilter* dark_mode_filter = GetDarkModeFilterForImage(auto_dark_mode);
+  ImageDrawOptions draw_options(dark_mode_filter, sampling, respect_orientation,
+                                Image::kClampImageToSourceRect,
+                                Image::kSyncDecode, auto_dark_mode.enabled);
 
   image->DrawPattern(*this, image_flags, dest_rect, tiling_info, draw_options);
   paint_controller_.SetImagePainted();

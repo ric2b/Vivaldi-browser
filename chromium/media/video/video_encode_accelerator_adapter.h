@@ -14,6 +14,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/unsafe_shared_memory_pool.h"
 #include "base/synchronization/lock.h"
+#include "base/time/time.h"
 #include "media/base/media_export.h"
 #include "media/base/video_encoder.h"
 #include "media/video/video_encode_accelerator.h"
@@ -27,6 +28,7 @@ class SequencedTaskRunner;
 
 namespace media {
 class GpuVideoAcceleratorFactories;
+class MediaLog;
 class H264AnnexBToAvcBitstreamConverter;
 
 // This class is a somewhat complex adapter from VideoEncodeAccelerator
@@ -40,6 +42,7 @@ class MEDIA_EXPORT VideoEncodeAcceleratorAdapter
  public:
   VideoEncodeAcceleratorAdapter(
       GpuVideoAcceleratorFactories* gpu_factories,
+      std::unique_ptr<MediaLog> media_log,
       scoped_refptr<base::SequencedTaskRunner> callback_task_runner);
   ~VideoEncodeAcceleratorAdapter() override;
 
@@ -123,6 +126,7 @@ class MEDIA_EXPORT VideoEncodeAcceleratorAdapter
 
   std::unique_ptr<VideoEncodeAccelerator> accelerator_;
   raw_ptr<GpuVideoAcceleratorFactories> gpu_factories_;
+  std::unique_ptr<MediaLog> media_log_;
 
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
   // If |h264_converter_| is null, we output in annexb format. Otherwise, we

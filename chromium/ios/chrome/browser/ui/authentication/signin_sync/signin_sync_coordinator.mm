@@ -155,7 +155,9 @@
       [self finishPresentingAndSkipRemainingScreens:NO];
       return;
   }
-  if (IsSyncDisabledByPolicy(browserState)) {
+  syncer::SyncService* syncService =
+      SyncServiceFactory::GetForBrowserState(browserState);
+  if (IsSyncDisabledByPolicy(syncService)) {
     // Skip the screen if sync is disabled by policy.
     self.attemptStatus = first_run::SignInAttemptStatus::SKIPPED_BY_POLICY;
     [self finishPresentingAndSkipRemainingScreens:NO];
@@ -182,8 +184,10 @@
 
   self.viewController = [[SigninSyncViewController alloc] init];
   self.viewController.delegate = self;
+  PrefService* prefService = browserState->GetPrefs();
   self.viewController.enterpriseSignInRestrictions =
-      GetEnterpriseSignInRestrictions(browserState);
+      GetEnterpriseSignInRestrictions(authenticationService, prefService,
+                                      syncService);
   self.viewController.identitySwitcherPosition =
       fre_field_trial::GetSigninSyncScreenUIIdentitySwitcherPosition();
   self.viewController.stringsSet =
@@ -193,8 +197,7 @@
       ChromeAccountManagerServiceFactory::GetForBrowserState(browserState);
 
   self.mediator = [[SigninSyncMediator alloc]
-      initWithAuthenticationService:AuthenticationServiceFactory::
-                                        GetForBrowserState(browserState)
+      initWithAuthenticationService:authenticationService
                     identityManager:IdentityManagerFactory::GetForBrowserState(
                                         browserState)
               accountManagerService:self.accountManagerService
@@ -203,8 +206,7 @@
                    syncSetupService:syncSetupService
               unifiedConsentService:UnifiedConsentServiceFactory::
                                         GetForBrowserState(browserState)
-                        syncService:SyncServiceFactory::GetForBrowserState(
-                                        self.browser->GetBrowserState())];
+                        syncService:syncService];
   self.mediator.delegate = self;
   self.mediator.selectedIdentity =
       self.accountManagerService->GetDefaultIdentity();
@@ -218,7 +220,7 @@
 
   if (self.firstRun) {
     base::UmaHistogramEnumeration("FirstRun.Stage",
-                                  first_run::kSignInScreenStart);
+                                  first_run::kSyncScreenStart);
   }
 }
 
@@ -359,7 +361,7 @@
     base::UmaHistogramEnumeration("FirstRun.Stage",
                                   first_run::kSyncScreenCompletionWithSync);
   }
-  [self.delegate willFinishPresenting];
+  [self finishPresentingAndSkipRemainingScreens:NO];
 }
 
 - (void)signinSyncMediatorDidSuccessfulyFinishSigninForAdvancedSettings:
@@ -371,8 +373,8 @@
     (SigninSyncMediator*)mediator {
   [self finishPresentingAndSkipRemainingScreens:NO];
   if (self.firstRun) {
-    base::UmaHistogramEnumeration(
-        "FirstRun.Stage", first_run::kSignInScreenCompletionWithoutSignIn);
+    base::UmaHistogramEnumeration("FirstRun.Stage",
+                                  first_run::kSyncScreenCompletionWithoutSync);
   }
 }
 

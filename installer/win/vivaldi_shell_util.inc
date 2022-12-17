@@ -21,7 +21,7 @@ void RemoveDelegateExecuteForVivaldi(const base::FilePath& chrome_exe,
   delegate_exe_key.append(install_static::GetBaseAppId() + suffix);
   delegate_exe_key.append(ShellUtil::kRegExePath);
   delegate_exe_key.append(ShellUtil::kRegShellOpen);
-  InstallUtil::DeleteRegistryValue(root_key, delegate_exe_key,
+  installer::DeleteRegistryValue(root_key, delegate_exe_key,
                                    WorkItem::kWow64Default,
                                    ShellUtil::kRegDelegateExecute);
 
@@ -31,7 +31,7 @@ void RemoveDelegateExecuteForVivaldi(const base::FilePath& chrome_exe,
   delegate_exe_key.append(install_static::GetBaseAppId() + suffix);
   delegate_exe_key.append(ShellUtil::kRegExePath);
   delegate_exe_key.append(kRegShellOpenNewWindow);
-  InstallUtil::DeleteRegistryValue(root_key, delegate_exe_key,
+  installer::DeleteRegistryValue(root_key, delegate_exe_key,
                                    WorkItem::kWow64Default,
                                    ShellUtil::kRegDelegateExecute);
 
@@ -40,7 +40,7 @@ void RemoveDelegateExecuteForVivaldi(const base::FilePath& chrome_exe,
   delegate_exe_key.push_back(base::FilePath::kSeparators[0]);
   delegate_exe_key.append(GetBrowserProgId(suffix));
   delegate_exe_key.append(ShellUtil::kRegShellOpen);
-  InstallUtil::DeleteRegistryValue(root_key, delegate_exe_key,
+  installer::DeleteRegistryValue(root_key, delegate_exe_key,
                                    WorkItem::kWow64Default,
                                    ShellUtil::kRegDelegateExecute);
 }
@@ -54,7 +54,7 @@ void GetPathSpecificSuffix(const base::FilePath& path, std::wstring* suffix) {
   base::MD5Sum(path_utf8.c_str(), strlen(path_utf8.c_str()), &md5_digest);
   const std::string base32_md5(base32::Base32Encode(
       base::StringPiece(reinterpret_cast<char*>(md5_digest.a),
-                        base::size(md5_digest.a)),
+                        std::size(md5_digest.a)),
       base32::Base32EncodePolicy::OMIT_PADDING));
   DCHECK_EQ(base32_md5.length(), 26U);
   suffix->reserve(base32_md5.length() + 1);

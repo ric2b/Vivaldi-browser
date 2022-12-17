@@ -7,12 +7,14 @@
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/logging.h"
 #include "base/task/task_traits.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/component_updater/soda_language_pack_component_installer.h"
 #include "components/component_updater/component_updater_service.h"
 #include "components/crx_file/id_util.h"
+#include "components/live_caption/caption_util.h"
 #include "components/live_caption/pref_names.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/soda/constants.h"
@@ -20,7 +22,6 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "crypto/sha2.h"
-#include "media/base/media_switches.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 #include <memory>
@@ -48,7 +49,7 @@ constexpr uint8_t kSodaPublicKeySHA256[32] = {
     0x8e, 0xd0, 0x0c, 0xef, 0xa5, 0xc0, 0x97, 0x00, 0x84, 0x1c, 0x21,
     0xa6, 0xae, 0xc8, 0x1b, 0x87, 0xfb, 0x12, 0x27, 0x28, 0xb1};
 
-static_assert(base::size(kSodaPublicKeySHA256) == crypto::kSHA256Length,
+static_assert(std::size(kSodaPublicKeySHA256) == crypto::kSHA256Length,
               "Wrong hash length");
 
 constexpr char kSodaManifestName[] = "SODA Library";
@@ -121,7 +122,7 @@ SodaComponentInstallerPolicy::SetComponentDirectoryPermission(
       reinterpret_cast<LPTSTR>(users_sid->GetPSID());
 
   PACL acl_ptr = nullptr;
-  if (::SetEntriesInAcl(base::size(explicit_access), explicit_access, nullptr,
+  if (::SetEntriesInAcl(std::size(explicit_access), explicit_access, nullptr,
                         &acl_ptr) != ERROR_SUCCESS) {
     return update_client::CrxInstaller::Result(
         update_client::InstallError::SET_PERMISSIONS_FAILED);
@@ -199,7 +200,7 @@ base::FilePath SodaComponentInstallerPolicy::GetRelativeInstallDir() const {
 
 void SodaComponentInstallerPolicy::GetHash(std::vector<uint8_t>* hash) const {
   hash->assign(kSodaPublicKeySHA256,
-               kSodaPublicKeySHA256 + base::size(kSodaPublicKeySHA256));
+               kSodaPublicKeySHA256 + std::size(kSodaPublicKeySHA256));
 }
 
 std::string SodaComponentInstallerPolicy::GetName() const {
@@ -225,7 +226,7 @@ void RegisterSodaComponent(ComponentUpdateService* cus,
                            base::OnceClosure on_registered_callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  if (media::IsLiveCaptionFeatureEnabled()) {
+  if (captions::IsLiveCaptionFeatureSupported()) {
     auto installer = base::MakeRefCounted<ComponentInstaller>(
         std::make_unique<SodaComponentInstallerPolicy>(
             base::BindRepeating(
@@ -251,7 +252,7 @@ void RegisterSodaLanguageComponent(
     OnSodaLanguagePackComponentReadyCallback on_ready_callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  if (media::IsLiveCaptionFeatureEnabled()) {
+  if (captions::IsLiveCaptionFeatureSupported()) {
     absl::optional<speech::SodaLanguagePackComponentConfig> config =
         speech::GetLanguageComponentConfig(language);
     if (config) {

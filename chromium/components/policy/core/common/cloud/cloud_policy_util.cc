@@ -7,6 +7,7 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
+#include "components/policy/proto/device_management_backend.pb.h"
 
 #if BUILDFLAG(IS_WIN)
 #include <Windows.h>  // For GetComputerNameW()
@@ -115,7 +116,7 @@ std::string GetMachineName() {
   return std::string();
 #elif BUILDFLAG(IS_WIN)
   wchar_t computer_name[MAX_COMPUTERNAME_LENGTH + 1] = {0};
-  DWORD size = base::size(computer_name);
+  DWORD size = std::size(computer_name);
   if (::GetComputerNameW(computer_name, &size)) {
     std::string result;
     bool conversion_successful = base::WideToUTF8(computer_name, size, &result);

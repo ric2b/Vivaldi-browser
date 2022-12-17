@@ -1308,6 +1308,22 @@ void HWNDMessageHandler::PostProcessActivateMessage(
     bool minimized,
     HWND window_gaining_or_losing_activation) {
   DCHECK(IsTopLevelWindow(hwnd()));
+
+  // Check if this is a legacy window created for screen readers.
+  if (::IsChild(hwnd(), window_gaining_or_losing_activation) &&
+      gfx::GetClassName(window_gaining_or_losing_activation) ==
+          std::wstring(ui::kLegacyRenderWidgetHostHwnd)) {
+    // In Aura, there is only one main HWND which comprises the whole browser
+    // window. Some screen readers however, expect every unique web content
+    // container (WebView) to be in its own HWND. In these cases, a dummy HWND
+    // with class name |Chrome_RenderWidgetHostHWND| is created for each web
+    // content container.
+    // Note that this dummy window should not interfere with focus, and instead
+    // delegates its accessibility implementation to the root of the
+    // |BrowserAccessibilityManager| tree.
+    return;
+  }
+
   const bool active = activation_state != WA_INACTIVE && !minimized;
   if (notify_restore_on_activate_) {
     notify_restore_on_activate_ = false;
@@ -1443,8 +1459,7 @@ bool HWNDMessageHandler::GetClientAreaInsets(gfx::Insets* insets,
     if (!delegate_->HasFrame())
       frame_thickness -= 1;
 #endif
-    *insets = gfx::Insets(frame_thickness, frame_thickness, frame_thickness,
-                          frame_thickness);
+    *insets = gfx::Insets(frame_thickness);
     return true;
   }
 
@@ -2826,8 +2841,8 @@ void HWNDMessageHandler::OnWindowPosChanging(WINDOWPOS* window_pos) {
       // (Win+Shift+Arrows). See crbug.com/656001.
       window_rect.left = window_pos->x;
       window_rect.top = window_pos->y;
-      window_rect.right = window_pos->x + window_pos->cx - 1;
-      window_rect.bottom = window_pos->y + window_pos->cy - 1;
+      window_rect.right = window_pos->x + window_pos->cx;
+      window_rect.bottom = window_pos->y + window_pos->cy;
     }
 
     HMONITOR monitor;

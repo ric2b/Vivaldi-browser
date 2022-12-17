@@ -29,18 +29,18 @@
 #include "third_party/blink/renderer/modules/accessibility/ax_node_object.h"
 
 #include <math.h>
+
+#include <algorithm>
 #include <memory>
 #include <queue>
 
-#include <algorithm>
-
+#include "base/auto_reset.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/input/web_keyboard_event.h"
 #include "third_party/blink/public/mojom/frame/user_activation_notification_type.mojom-blink.h"
 #include "third_party/blink/public/strings/grit/blink_strings.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_image_bitmap_options.h"
 #include "third_party/blink/renderer/core/aom/accessible_node.h"
-#include "third_party/blink/renderer/core/clipboard/data_transfer.h"
 #include "third_party/blink/renderer/core/css/css_resolution_units.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_utilities.h"
 #include "third_party/blink/renderer/core/dom/element.h"
@@ -111,6 +111,7 @@
 #include "third_party/blink/renderer/core/loader/progress_tracker.h"
 #include "third_party/blink/renderer/core/mathml/mathml_element.h"
 #include "third_party/blink/renderer/core/mathml_names.h"
+#include "third_party/blink/renderer/core/navigation_api/navigation_api.h"
 #include "third_party/blink/renderer/core/page/focus_controller.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/style/computed_style_constants.h"
@@ -227,24 +228,41 @@ enum class AXAction {
 blink::KeyboardEvent* CreateKeyboardEvent(
     blink::LocalDOMWindow* local_dom_window,
     blink::WebInputEvent::Type type,
-    AXAction action) {
+    AXAction action,
+    blink::AccessibilityOrientation orientation,
+    ax::mojom::blink::WritingDirection text_direction) {
   blink::WebKeyboardEvent key(type,
                               blink::WebInputEvent::Modifiers::kNoModifiers,
                               base::TimeTicks::Now());
 
-  // TODO(crbug.com/1099069): Fire different arrow events depending on
-  // orientation and dir (RTL/LTR)
-  switch (action) {
-    case AXAction::kActionIncrement:
+  if (action == AXAction::kActionIncrement) {
+    if (orientation == blink::kAccessibilityOrientationVertical) {
       key.dom_key = ui::DomKey::ARROW_UP;
       key.dom_code = static_cast<int>(ui::DomCode::ARROW_UP);
       key.native_key_code = key.windows_key_code = blink::VKEY_UP;
-      break;
-    case AXAction::kActionDecrement:
+    } else if (text_direction == ax::mojom::blink::WritingDirection::kRtl) {
+      key.dom_key = ui::DomKey::ARROW_LEFT;
+      key.dom_code = static_cast<int>(ui::DomCode::ARROW_LEFT);
+      key.native_key_code = key.windows_key_code = blink::VKEY_LEFT;
+    } else {  // horizontal and left to right
+      key.dom_key = ui::DomKey::ARROW_RIGHT;
+      key.dom_code = static_cast<int>(ui::DomCode::ARROW_RIGHT);
+      key.native_key_code = key.windows_key_code = blink::VKEY_RIGHT;
+    }
+  } else if (action == AXAction::kActionDecrement) {
+    if (orientation == blink::kAccessibilityOrientationVertical) {
       key.dom_key = ui::DomKey::ARROW_DOWN;
       key.dom_code = static_cast<int>(ui::DomCode::ARROW_DOWN);
       key.native_key_code = key.windows_key_code = blink::VKEY_DOWN;
-      break;
+    } else if (text_direction == ax::mojom::blink::WritingDirection::kRtl) {
+      key.dom_key = ui::DomKey::ARROW_RIGHT;
+      key.dom_code = static_cast<int>(ui::DomCode::ARROW_RIGHT);
+      key.native_key_code = key.windows_key_code = blink::VKEY_RIGHT;
+    } else {  // horizontal and left to right
+      key.dom_key = ui::DomKey::ARROW_LEFT;
+      key.dom_code = static_cast<int>(ui::DomCode::ARROW_LEFT);
+      key.native_key_code = key.windows_key_code = blink::VKEY_LEFT;
+    }
   }
 
   return blink::KeyboardEvent::Create(key, local_dom_window, true);
@@ -365,9 +383,12 @@ void AXNodeObject::AlterSliderOrSpinButtonValue(bool increase) {
   AXAction action =
       increase ? AXAction::kActionIncrement : AXAction::kActionDecrement;
   LocalDOMWindow* local_dom_window = GetDocument()->domWindow();
+  AccessibilityOrientation orientation = Orientation();
+  ax::mojom::blink::WritingDirection text_direction = GetTextDirection();
 
-  KeyboardEvent* keydown = CreateKeyboardEvent(
-      local_dom_window, WebInputEvent::Type::kRawKeyDown, action);
+  KeyboardEvent* keydown =
+      CreateKeyboardEvent(local_dom_window, WebInputEvent::Type::kRawKeyDown,
+                          action, orientation, text_direction);
   GetNode()->DispatchEvent(*keydown);
 
   // TODO(crbug.com/1099069): add a brief pause between keydown and keyup?
@@ -377,8 +398,9 @@ void AXNodeObject::AlterSliderOrSpinButtonValue(bool increase) {
   if (!GetNode())
     return;
 
-  KeyboardEvent* keyup = CreateKeyboardEvent(
-      local_dom_window, WebInputEvent::Type::kKeyUp, action);
+  KeyboardEvent* keyup =
+      CreateKeyboardEvent(local_dom_window, WebInputEvent::Type::kKeyUp, action,
+                          orientation, text_direction);
   GetNode()->DispatchEvent(*keyup);
 }
 
@@ -1096,22 +1118,13 @@ ax::mojom::blink::Role AXNodeObject::NativeRoleIgnoringAria() const {
   if (GetNode()->HasTagName(html_names::kDtTag))
     return ax::mojom::blink::Role::kDescriptionListTerm;
 
-  // MathMLElement instances are not created when MathMLCore is disabled, so one
-  // cannot rely on Node::HasTagName(const MathMLQualifiedName&) to test the
-  // <math> tag. See crbug.com/1272556.
-  if (!RuntimeEnabledFeatures::MathMLCoreEnabled()) {
-    if (auto* element = DynamicTo<Element>(GetNode())) {
-      if (element->namespaceURI() == mathml_names::kNamespaceURI &&
-          element->nodeName() == mathml_names::kMathTag.LocalName()) {
-        return ax::mojom::blink::Role::kMath;
-      }
-    }
-  }
-
   // Mapping of MathML elements. See https://w3c.github.io/mathml-aam/
   if (auto* element = DynamicTo<MathMLElement>(GetNode())) {
-    if (element->HasTagName(mathml_names::kMathTag))
-      return ax::mojom::blink::Role::kMathMLMath;
+    if (element->HasTagName(mathml_names::kMathTag)) {
+      return RuntimeEnabledFeatures::MathMLCoreEnabled()
+                 ? ax::mojom::blink::Role::kMathMLMath
+                 : ax::mojom::blink::Role::kMath;
+    }
     if (element->HasTagName(mathml_names::kMfracTag))
       return ax::mojom::blink::Role::kMathMLFraction;
     if (element->HasTagName(mathml_names::kMiTag))
@@ -1492,7 +1505,19 @@ bool AXNodeObject::IsLineBreakingObject() const {
 bool AXNodeObject::IsLoaded() const {
   if (!GetDocument())
     return false;
-  return !GetDocument()->Parser();
+
+  if (GetDocument()->Parser())
+    return false;
+
+  // Check for a navigation API single-page app navigation in progress.
+  if (auto* window = GetDocument()->domWindow()) {
+    if (auto* navigation_api = NavigationApi::navigation(*window)) {
+      if (navigation_api->HasNonDroppedOngoingNavigation())
+        return false;
+    }
+  }
+
+  return true;
 }
 
 bool AXNodeObject::IsMultiSelectable() const {
@@ -2124,6 +2149,22 @@ AccessibilityOrientation AXNodeObject::Orientation() const {
   }
 }
 
+// According to the standard, the figcaption should only be the first or
+// last child: https://html.spec.whatwg.org/#the-figcaption-element
+AXObject* AXNodeObject::GetChildFigcaption() const {
+  AXObject* child = FirstChildIncludingIgnored();
+  if (!child)
+    return nullptr;
+  if (child->RoleValue() == ax::mojom::blink::Role::kFigcaption)
+    return child;
+
+  child = LastChildIncludingIgnored();
+  if (child->RoleValue() == ax::mojom::blink::Role::kFigcaption)
+    return child;
+
+  return nullptr;
+}
+
 AXObject::AXObjectVector AXNodeObject::RadioButtonsInGroup() const {
   AXObjectVector radio_buttons;
   if (!node_ || RoleValue() != ax::mojom::blink::Role::kRadioButton)
@@ -2142,9 +2183,9 @@ AXObject::AXObjectVector AXNodeObject::RadioButtonsInGroup() const {
 
   // If the immediate parent is a radio group, return all its children that are
   // radio buttons.
-  AXObject* parent = ParentObject();
+  AXObject* parent = ParentObjectUnignored();
   if (parent && parent->RoleValue() == ax::mojom::blink::Role::kRadioGroup) {
-    for (AXObject* child : parent->ChildrenIncludingIgnored()) {
+    for (AXObject* child : parent->UnignoredChildren()) {
       DCHECK(child);
       if (child->RoleValue() == ax::mojom::blink::Role::kRadioButton &&
           child->AccessibilityIsIncludedInTree()) {
@@ -2355,36 +2396,34 @@ float AXNodeObject::GetTextIndent() const {
   return text_indent / kCssPixelsPerMillimeter;
 }
 
-// Tries to extract a bitmap from an Image, a Canvas, or a Video element.
-// If |max_size| is not empty, the bitmap's size is capped at |max_size|.
-// Returns a boolean indicating whether the operation has succeeded.
-bool GetBitmapFromMediaSource(Node& node,
-                              const gfx::Size& max_size,
-                              SkBitmap& out_bitmap) {
+String AXNodeObject::ImageDataUrl(const gfx::Size& max_size) const {
+  Node* node = GetNode();
+  if (!node)
+    return String();
+
   ImageBitmapOptions* options = ImageBitmapOptions::Create();
   ImageBitmap* image_bitmap = nullptr;
-  // TODO(https://crbug.com/1285202): Consider covering OffscreenCanvas.
-  if (auto* image = DynamicTo<HTMLImageElement>(&node)) {
-    image_bitmap = MakeGarbageCollected<ImageBitmap>(
-        image, /* crop_rect */ absl::nullopt, options);
-  } else if (auto* canvas = DynamicTo<HTMLCanvasElement>(&node)) {
-    image_bitmap = MakeGarbageCollected<ImageBitmap>(
-        canvas, /* crop_rect */ absl::nullopt, options);
-  } else if (auto* video = DynamicTo<HTMLVideoElement>(&node)) {
-    image_bitmap = MakeGarbageCollected<ImageBitmap>(
-        video, /*crop_rect=*/absl::nullopt, options);
+  if (auto* image = DynamicTo<HTMLImageElement>(node)) {
+    image_bitmap =
+        MakeGarbageCollected<ImageBitmap>(image, absl::nullopt, options);
+  } else if (auto* canvas = DynamicTo<HTMLCanvasElement>(node)) {
+    image_bitmap =
+        MakeGarbageCollected<ImageBitmap>(canvas, absl::nullopt, options);
+  } else if (auto* video = DynamicTo<HTMLVideoElement>(node)) {
+    image_bitmap =
+        MakeGarbageCollected<ImageBitmap>(video, absl::nullopt, options);
   }
   if (!image_bitmap)
-    return false;
+    return String();
 
   scoped_refptr<StaticBitmapImage> bitmap_image = image_bitmap->BitmapImage();
   if (!bitmap_image)
-    return false;
+    return String();
 
   sk_sp<SkImage> image =
       bitmap_image->PaintImageForCurrentFrame().GetSwSkImage();
   if (!image || image->width() <= 0 || image->height() <= 0)
-    return false;
+    return String();
 
   // Determine the width and height of the output image, using a proportional
   // scale factor such that it's no larger than |maxSize|, if |maxSize| is not
@@ -2401,33 +2440,23 @@ bool GetBitmapFromMediaSource(Node& node,
   int height = std::round(image->height() * scale);
 
   // Draw the image into a bitmap in native format.
-  out_bitmap.allocPixels(
-      SkImageInfo::MakeN32(width, height, kPremul_SkAlphaType));
-  SkCanvas canvas(out_bitmap, SkSurfaceProps{});
-  canvas.clear(SK_ColorTRANSPARENT);
-  canvas.drawImageRect(image, SkRect::MakeIWH(width, height),
-                       SkSamplingOptions());
-  return true;
-}
-
-String AXNodeObject::ImageDataUrl(const gfx::Size& max_size) const {
-  Node* node = GetNode();
-  if (!node)
-    return String();
-
   SkBitmap bitmap;
-  if (!GetBitmapFromMediaSource(*node, max_size, bitmap) &&
-      !DataTransfer::CreateBitmapFromNode(&DocumentFrameView()->GetFrame(),
-                                          node, max_size, bitmap)) {
-    return String();
+  SkPixmap unscaled_pixmap;
+  if (scale == 1.0 && image->peekPixels(&unscaled_pixmap)) {
+    bitmap.installPixels(unscaled_pixmap);
+  } else {
+    bitmap.allocPixels(
+        SkImageInfo::MakeN32(width, height, kPremul_SkAlphaType));
+    SkCanvas canvas(bitmap, SkSurfaceProps{});
+    canvas.clear(SK_ColorTRANSPARENT);
+    canvas.drawImageRect(image, SkRect::MakeIWH(width, height),
+                         SkSamplingOptions());
   }
 
   // Copy the bits into a buffer in RGBA_8888 unpremultiplied format
   // for encoding.
-  SkImageInfo info =
-      SkImageInfo::Make(bitmap.width(), bitmap.height(), kRGBA_8888_SkColorType,
-                        kUnpremul_SkAlphaType);
-
+  SkImageInfo info = SkImageInfo::Make(width, height, kRGBA_8888_SkColorType,
+                                       kUnpremul_SkAlphaType);
   size_t row_bytes = info.minRowBytes();
   Vector<char> pixel_storage(
       SafeCast<wtf_size_t>(info.computeByteSize(row_bytes)));
@@ -3415,6 +3444,10 @@ String AXNodeObject::TextFromDescendants(
   ax::mojom::blink::NameFrom last_used_name_from =
       ax::mojom::blink::NameFrom::kUninitialized;
 
+#if defined(AX_FAIL_FAST_BUILD)
+  base::AutoReset<bool> auto_reset(&is_computing_text_from_descendants_, true);
+#endif
+
   for (AXObject* child : ChildrenIncludingIgnored()) {
     constexpr size_t kMaxDescendantsForTextAlternativeComputation = 100;
     if (visited.size() > kMaxDescendantsForTextAlternativeComputation)
@@ -3977,6 +4010,11 @@ void AXNodeObject::AddNodeChildren() {
   if (!node_)
     return;
 
+  // Ignore DOM children of frame/iframe: they do not act as fallbacks and
+  // are never part of layout.
+  if (IsA<HTMLFrameElementBase>(GetNode()))
+    return;
+
   for (Node* child = LayoutTreeBuilderTraversal::FirstChild(*node_); child;
        child = LayoutTreeBuilderTraversal::NextSibling(*child)) {
     AddNodeChild(child);
@@ -4174,6 +4212,12 @@ void AXNodeObject::CheckValidChild(AXObject* child) {
       << "\nUseAXMenuList()=" << AXObjectCacheImpl::UseAXMenuList()
       << "\nShouldCreateAXMenuListOptionFor()="
       << AXObjectCacheImpl::ShouldCreateAXMenuListOptionFor(child_node);
+
+  DCHECK(!IsA<HTMLFrameElementBase>(GetNode()) ||
+         IsA<Document>(child->GetNode()))
+      << "Cannot have a non-document child of a frame or iframe."
+      << "\nChild: " << child->ToString(true, true)
+      << "\nParent: " << child->ParentObject()->ToString(true, true);
 }
 #endif
 
@@ -4504,19 +4548,6 @@ bool AXNodeObject::OnNativeFocusAction() {
     return true;
   }
 
-  // If this node is already the currently focused node, then calling
-  // focus() won't do anything.  That is a problem when focus is removed
-  // from the webpage to chrome, and then returns.  In these cases, we need
-  // to do what keyboard and mouse focus do, which is reset focus first.
-  if (document->FocusedElement() == element) {
-    document->ClearFocusedElement();
-
-    // Calling ClearFocusedElement could result in changes to the document,
-    // like this AXObject becoming detached.
-    if (IsDetached())
-      return false;
-  }
-
   // If the object is not natively focusable but can be focused using an ARIA
   // active descendant, perform a native click instead. This will enable Web
   // apps that set accessibility focus using an active descendant to capture and
@@ -4585,7 +4616,13 @@ void AXNodeObject::ChildrenChangedWithCleanLayout() {
   // now layout is clean.
   SetNeedsToUpdateChildren();
 
-  // If this object is not included in the tree, then our parent needs to
+  // The caller, AXObjectCacheImpl::ChildrenChangedWithCleanLayout(), is only
+  // Between the time that AXObjectCacheImpl::ChildrenChanged() determines
+  // which included parent to use and now, it's possible that the parent will
+  // no longer be ignored. This is rare, but is covered by this test:
+  // external/wpt/accessibility/crashtests/delayed-ignored-change.html/
+  //
+  // If this object is no longer included in the tree, then our parent needs to
   // recompute its included-in-the-tree children vector. (And if our parent
   // isn't included in the tree either, it will recursively update its parent
   // and so on.)
@@ -4747,22 +4784,6 @@ AXObject* AXNodeObject::ErrorMessage() const {
     return nullptr;
 
   return AXObjectCache().ValidationMessageObjectIfInvalid(true);
-}
-
-// According to the standard, the figcaption should only be the first or
-// last child: https://html.spec.whatwg.org/#the-figcaption-element
-static Element* GetChildFigcaption(const Node& node) {
-  Element* element = ElementTraversal::FirstChild(node);
-  if (!element)
-    return nullptr;
-  if (element->HasTagName(html_names::kFigcaptionTag))
-    return element;
-
-  element = ElementTraversal::LastChild(node);
-  if (element->HasTagName(html_names::kFigcaptionTag))
-    return element;
-
-  return nullptr;
 }
 
 // Based on
@@ -5028,43 +5049,6 @@ String AXNodeObject::NativeTextAlternative(
       }
     }
 
-    return text_alternative;
-  }
-
-  // 5.7 figure and figcaption Elements
-  if (GetNode()->HasTagName(html_names::kFigureTag)) {
-    // figcaption
-    name_from = ax::mojom::blink::NameFrom::kRelatedElement;
-    if (name_sources) {
-      name_sources->push_back(NameSource(*found_text_alternative));
-      name_sources->back().type = name_from;
-      name_sources->back().native_source = kAXTextFromNativeHTMLFigcaption;
-    }
-    Element* figcaption = GetChildFigcaption(*(GetNode()));
-    if (figcaption) {
-      AXObject* figcaption_ax_object = AXObjectCache().GetOrCreate(figcaption);
-      if (figcaption_ax_object) {
-        text_alternative =
-            RecursiveTextAlternative(*figcaption_ax_object, nullptr, visited);
-
-        if (related_objects) {
-          local_related_objects.push_back(
-              MakeGarbageCollected<NameSourceRelatedObject>(
-                  figcaption_ax_object, text_alternative));
-          *related_objects = local_related_objects;
-          local_related_objects.clear();
-        }
-
-        if (name_sources) {
-          NameSource& source = name_sources->back();
-          source.related_objects = *related_objects;
-          source.text = text_alternative;
-          *found_text_alternative = true;
-        } else {
-          return text_alternative;
-        }
-      }
-    }
     return text_alternative;
   }
 
@@ -5396,7 +5380,7 @@ String AXNodeObject::Description(
       ids.push_back(member_element->GetIdAttribute());
 
     TokenVectorFromAttribute(element, ids, html_names::kAriaDescribedbyAttr);
-    AXObjectCache().UpdateReverseRelations(this, ids);
+    AXObjectCache().UpdateReverseTextRelations(this, ids);
 
     if (!description.IsNull()) {
       if (description_sources) {

@@ -14,12 +14,14 @@
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
+#include "base/time/time.h"
 #include "components/safe_browsing/content/browser/base_ui_manager.h"
 #include "components/safe_browsing/content/common/safe_browsing.mojom-shared.h"
 #include "components/safe_browsing/content/common/safe_browsing.mojom.h"
 #include "components/safe_browsing/core/browser/db/database_manager.h"
 #include "components/safe_browsing/core/browser/safe_browsing_token_fetcher.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+#include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
@@ -58,7 +60,9 @@ class ClientSideDetectionHost : public content::WebContentsObserver {
     virtual scoped_refptr<BaseUIManager> GetSafeBrowsingUIManager() = 0;
     virtual ClientSideDetectionService* GetClientSideDetectionService() = 0;
     virtual void AddReferrerChain(ClientPhishingRequest* verdict,
-                                  GURL current_url) = 0;
+                                  GURL current_url,
+                                  const content::GlobalRenderFrameHostId&
+                                      current_outermost_main_frame_id) = 0;
   };
 
   // The caller keeps ownership of the tab object and is responsible for
@@ -183,6 +187,8 @@ class ClientSideDetectionHost : public content::WebContentsObserver {
   // Setup a PhishingDetector Mojo connection for the given render frame.
   void InitializePhishingDetector(content::RenderFrameHost* render_frame_host);
 
+  void ClearPhishingDetector(content::GlobalRenderFrameHostId rfh_id);
+
   // This pointer may be nullptr if client-side phishing detection is
   // disabled.
   raw_ptr<ClientSideDetectionService> csd_service_;
@@ -196,10 +202,12 @@ class ClientSideDetectionHost : public content::WebContentsObserver {
   scoped_refptr<ShouldClassifyUrlRequest> classification_request_;
   // The current URL
   GURL current_url_;
+  // The current outermost main frame's id.
+  content::GlobalRenderFrameHostId current_outermost_main_frame_id_;
   // A map from the live RenderFrameHosts to their PhishingDetector. These
   // correspond to the `phishing_detector_receiver_` in the
   // PhishingClassifierDelegate.
-  base::flat_map<content::RenderFrameHost*,
+  base::flat_map<content::GlobalRenderFrameHostId,
                  mojo::Remote<mojom::PhishingDetector>>
       phishing_detectors_;
 

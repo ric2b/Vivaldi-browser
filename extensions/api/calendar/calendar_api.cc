@@ -435,7 +435,7 @@ void CalendarAPI::RegisterInternalHandlers() {
         if (!calendar_api || !calendar_api->calendar_event_router_)
           return false;
         if (!profile->GetPrefs()->GetBoolean(
-                vivaldiprefs::kCalendarHandleIcsDownloads))
+                vivaldiprefs::kCalendarHandleWebcalLinks))
           return false;
         calendar_api->calendar_event_router_->OnWebcalUrlOpened(url);
         return true;

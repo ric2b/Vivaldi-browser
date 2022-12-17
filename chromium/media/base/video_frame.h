@@ -22,6 +22,7 @@
 #include "base/memory/unsafe_shared_memory_region.h"
 #include "base/synchronization/lock.h"
 #include "base/thread_annotations.h"
+#include "base/time/time.h"
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
 #include "gpu/command_buffer/common/mailbox_holder.h"
@@ -588,9 +589,6 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   // Returns a dictionary of optional metadata.  This contains information
   // associated with the frame that downstream clients might use for frame-level
   // logging, quality/performance optimizations, signaling, etc.
-  //
-  // TODO(miu): Move some of the "extra" members of VideoFrame (below) into
-  // here as a later clean-up step.
   const VideoFrameMetadata& metadata() const { return metadata_; }
   VideoFrameMetadata& metadata() { return metadata_; }
   void set_metadata(const VideoFrameMetadata& metadata) {

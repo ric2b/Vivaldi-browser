@@ -17,15 +17,14 @@
 #include "ash/webui/shimless_rma/url_constants.h"
 #include "base/command_line.h"
 #include "base/containers/span.h"
-#include "base/memory/ptr_util.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "services/network/public/mojom/content_security_policy.mojom.h"
+#include "ui/chromeos/devicetype_utils.h"
 #include "ui/chromeos/strings/network_element_localized_strings_provider.h"
 #include "ui/resources/grit/webui_generated_resources.h"
-#include "ui/resources/grit/webui_resources.h"
 
 namespace ash {
 
@@ -71,7 +70,6 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
       {"componentKeyboard", IDS_SHIMLESS_RMA_COMPONENT_KEYBOARD},
       {"componentPowerButton", IDS_SHIMLESS_RMA_COMPONENT_POWER_BUTTON},
       // Splash screen
-      {"shimlessSplashTitle", IDS_SHIMLESS_RMA_SPLASH_TITLE},
       {"shimlessSplashRemembering", IDS_SHIMLESS_RMA_SPLASH_REMEMBERING},
       {"shimlessSplashLoading", IDS_SHIMLESS_RMA_SPLASH_LOADING},
       // Common buttons
@@ -82,7 +80,6 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
       {"okButtonLabel", IDS_SHIMLESS_RMA_OK_BUTTON},
       {"retryButtonLabel", IDS_SHIMLESS_RMA_RETRY_BUTTON},
       // Landing page
-      {"welcomeTitleText", IDS_SHIMLESS_RMA_LANDING_PAGE_TITLE},
       {"beginRmaWarningText", IDS_SHIMLESS_RMA_AUTHORIZED_TECH_ONLY_WARNING},
       {"validatingComponentsText", IDS_SHIMLESS_RMA_VALIDATING_COMPONENTS},
       {"validatedComponentsSuccessText",
@@ -132,13 +129,12 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
        IDS_SHIMLESS_RMA_CURRENT_VERSION_UP_TO_DATE},
       {"updateVersionRestartLabel",
        IDS_SHIMLESS_RMA_UPDATE_VERSION_AND_RESTART},
+      {"updatingOsVersionText", IDS_SHIMLESS_RMA_UPDATING_OS_VERSION},
       // Choose WP disable method page
       {"chooseWpDisableMethodPageTitleText",
        IDS_SHIMLESS_RMA_CHOOSE_WP_DISABLE_METHOD_PAGE_TITLE},
       {"manualWpDisableMethodOptionText",
        IDS_SHIMLESS_RMA_MANUAL_WP_DISABLE_METHOD_OPTION},
-      {"manualWpDisableMethodDescriptionText",
-       IDS_SHIMLESS_RMA_MANUAL_WP_DISABLE_METHOD_DESCRIPTION},
       {"rsuWpDisableMethodOptionText",
        IDS_SHIMLESS_RMA_RSU_WP_DISABLE_METHOD_OPTION},
       {"rsuWpDisableMethodDescriptionText",
@@ -191,13 +187,16 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
        IDS_SHIMLESS_RMA_FINALIZE_FAILED_RETRY_BUTTON_LABEL},
       // Run calibration page
       {"runCalibrationTitleText", IDS_SHIMLESS_RMA_RUN_CALIBRATION_PAGE_TITLE},
+      {"runCalibrationCompleteTitleText",
+       IDS_SHIMLESS_RMA_RUN_CALIBRATION_COMPLETE_TITLE},
       {"runCalibrationCompleteText", IDS_SHIMLESS_RMA_RUN_CALIBRATION_COMPLETE},
       {"runCalibrationStartingText", IDS_SHIMLESS_RMA_RUN_CALIBRATION_STARTING},
       {"runCalibrationCalibratingComponent",
        IDS_SHIMLESS_RMA_RUN_CALIBRATING_COMPONENT},
       // Device provisioning page
       {"provisioningPageTitleText", IDS_SHIMLESS_RMA_PROVISIONING_TITLE},
-      {"provisioningPageProgressText", IDS_SHIMLESS_RMA_PROVISIONING_PROGRESS},
+      {"provisioningPageInProgressText",
+       IDS_SHIMLESS_RMA_PROVISIONING_IN_PROGRESS},
       {"provisioningPageCompleteText", IDS_SHIMLESS_RMA_PROVISIONING_COMPLETE},
       {"provisioningPageFailedBlockingText",
        IDS_SHIMLESS_RMA_PROVISIONING_FAILED_BLOCKING},
@@ -231,6 +230,14 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
       {"rmaLogsCancelButtonText", IDS_SHIMLESS_RMA_LOGS_CANCEL_BUTTON},
       {"rmaLogsSaveToUsbButtonText", IDS_SHIMLESS_RMA_LOGS_SAVE_BUTTON},
       {"batteryShutoffTooltipText", IDS_SHIMLESS_BATTERY_SHUTOFF_TOOLTIP_TEXT},
+      {"repairCompletedPowerwashTitle",
+       IDS_SHIMLESS_RMA_REPAIR_COMPLETED_POWERWASH_TITLE},
+      {"repairCompletedPowerwashShutdownDescription",
+       IDS_SHIMLESS_RMA_REPAIR_COMPLETED_POWERWASH_SHUTDOWN_DESCRIPTION},
+      {"repairCompletedPowerwashRebootDescription",
+       IDS_SHIMLESS_RMA_REPAIR_COMPLETED_POWERWASH_REBOOT_DESCRIPTION},
+      {"repairCompletedPowerwashButton",
+       IDS_SHIMLESS_RMA_REPAIR_COMPLETED_POWERWASH_BUTTON},
 
       // Manual disable wp page
       {"manuallyDisableWpTitleText",
@@ -299,14 +306,39 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
       {"onboardingUpdatePermission",
        IDS_SHIMLESS_RMA_ONBOARDING_UPDATE_PERMISSION},
       // Critical error
-      {"criticalErrorTitleText", IDS_SHIMLESS_RMA_CRITICAL_ERROR_TITLE},
       {"criticalErrorMessageText", IDS_SHIMLESS_RMA_CRITICAL_ERROR_MESSAGE},
       {"criticalErrorExitText", IDS_SHIMLESS_RMA_CRITICAL_EXIT_BUTTON},
       {"criticalErrorRebootText", IDS_SHIMLESS_RMA_CRITICAL_REBOOT_BUTTON},
+      // Wipe device page
+      {"wipeDeviceTitleText", IDS_SHIMLESS_RMA_WIPE_DEVICE_TITLE},
+      {"wipeDeviceRemoveDataLabel",
+       IDS_SHIMLESS_RMA_WIPE_DEVICE_REMOVE_DATA_OPTION},
+      {"wipeDeviceRemoveDataDescription",
+       IDS_SHIMLESS_RMA_WIPE_DEVICE_REMOVE_DATA_OPTION_DESCRIPTION},
+      {"wipeDevicePreserveDataLabel",
+       IDS_SHIMLESS_RMA_WIPE_DEVICE_PRESERVE_DATA_OPTION},
+      {"wipeDevicePreserveDataDescription",
+       IDS_SHIMLESS_RMA_WIPE_DEVICE_PRESERVE_DATA_OPTION_DESCRIPTION},
   };
 
   html_source->AddLocalizedStrings(kLocalizedStrings);
   html_source->UseStringsJs();
+}
+
+void AddDevicePlaceholderStrings(content::WebUIDataSource* html_source) {
+  html_source->AddString(
+      "shimlessSplashTitle",
+      ui::SubstituteChromeOSDeviceType(IDS_SHIMLESS_RMA_SPLASH_TITLE));
+  html_source->AddString(
+      "welcomeTitleText",
+      ui::SubstituteChromeOSDeviceType(IDS_SHIMLESS_RMA_LANDING_PAGE_TITLE));
+  html_source->AddString(
+      "manualWpDisableMethodDescriptionText",
+      ui::SubstituteChromeOSDeviceType(
+          IDS_SHIMLESS_RMA_MANUAL_WP_DISABLE_METHOD_DESCRIPTION));
+  html_source->AddString(
+      "criticalErrorTitleText",
+      ui::SubstituteChromeOSDeviceType(IDS_SHIMLESS_RMA_CRITICAL_ERROR_TITLE));
 }
 
 }  // namespace
@@ -347,8 +379,10 @@ ShimlessRMADialogUI::ShimlessRMADialogUI(
     : ui::MojoWebDialogUI(web_ui),
       shimless_rma_manager_(std::make_unique<shimless_rma::ShimlessRmaService>(
           std::move(shimless_rma_delegate))) {
-  auto html_source = base::WrapUnique(
-      content::WebUIDataSource::Create(kChromeUIShimlessRMAHost));
+  content::WebUIDataSource* html_source =
+      content::WebUIDataSource::CreateAndAdd(
+          web_ui->GetWebContents()->GetBrowserContext(),
+          kChromeUIShimlessRMAHost);
   html_source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::ScriptSrc,
       "script-src chrome://resources chrome://test 'self';");
@@ -356,20 +390,17 @@ ShimlessRMADialogUI::ShimlessRMADialogUI(
 
   const auto resources =
       base::make_span(kAshShimlessRmaResources, kAshShimlessRmaResourcesSize);
-  SetUpWebUIDataSource(html_source.get(), resources,
-                       IDR_ASH_SHIMLESS_RMA_INDEX_HTML);
+  SetUpWebUIDataSource(html_source, resources, IDR_ASH_SHIMLESS_RMA_INDEX_HTML);
 
-  AddShimlessRmaStrings(html_source.get());
+  AddShimlessRmaStrings(html_source);
+  AddDevicePlaceholderStrings(html_source);
 
-  ui::network_element::AddLocalizedStrings(html_source.get());
-  ui::network_element::AddOncLocalizedStrings(html_source.get());
-  ui::network_element::AddDetailsLocalizedStrings(html_source.get());
-  ui::network_element::AddConfigLocalizedStrings(html_source.get());
-  ui::network_element::AddErrorLocalizedStrings(html_source.get());
-  html_source.get()->UseStringsJs();
-
-  content::WebUIDataSource::Add(web_ui->GetWebContents()->GetBrowserContext(),
-                                html_source.release());
+  ui::network_element::AddLocalizedStrings(html_source);
+  ui::network_element::AddOncLocalizedStrings(html_source);
+  ui::network_element::AddDetailsLocalizedStrings(html_source);
+  ui::network_element::AddConfigLocalizedStrings(html_source);
+  ui::network_element::AddErrorLocalizedStrings(html_source);
+  html_source->UseStringsJs();
 }
 
 ShimlessRMADialogUI::~ShimlessRMADialogUI() = default;

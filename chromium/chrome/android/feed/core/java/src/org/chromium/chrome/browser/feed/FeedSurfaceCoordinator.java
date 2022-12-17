@@ -27,8 +27,6 @@ import androidx.annotation.VisibleForTesting;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.google.android.material.color.MaterialColors;
-
 import org.chromium.base.CommandLine;
 import org.chromium.base.ObserverList;
 import org.chromium.base.supplier.Supplier;
@@ -61,6 +59,7 @@ import org.chromium.chrome.browser.xsurface.ProcessScope;
 import org.chromium.chrome.browser.xsurface.SurfaceScope;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.settings.SettingsLauncher;
+import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.components.browser_ui.widget.displaystyle.UiConfig;
 import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.feature_engagement.Tracker;
@@ -95,8 +94,6 @@ public class FeedSurfaceCoordinator
     private final boolean mShowDarkBackground;
     private final boolean mIsPlaceholderShownInitially;
     private final FeedSurfaceDelegate mDelegate;
-    private final int mDefaultMarginPixels;
-    private final int mWideMarginPixels;
     private final FeedSurfaceMediator mMediator;
     private final BottomSheetController mBottomSheetController;
     private final WindowAndroid mWindowAndroid;
@@ -274,17 +271,13 @@ public class FeedSurfaceCoordinator
         mHelpAndFeedbackLauncher = helpAndFeedbackLauncher;
 
         Resources resources = mActivity.getResources();
-        mDefaultMarginPixels = mActivity.getResources().getDimensionPixelSize(
-                R.dimen.content_suggestions_card_modern_margin);
-        mWideMarginPixels = mActivity.getResources().getDimensionPixelSize(
-                R.dimen.ntp_wide_card_lateral_margins);
 
         mRootView = new RootView(mActivity);
         mRootView.setPadding(0, resources.getDimensionPixelOffset(R.dimen.tab_strip_height), 0, 0);
         mUiConfig = new UiConfig(mRootView);
         mRecyclerView = setUpView();
-        mStreamViewResizer = FeedStreamViewResizer.createAndAttach(
-                mActivity, mRecyclerView, mUiConfig, mDefaultMarginPixels, mWideMarginPixels);
+        mStreamViewResizer =
+                FeedStreamViewResizer.createAndAttach(mActivity, mRecyclerView, mUiConfig);
 
         // Pull-to-refresh set up.
         if (mSwipeRefreshLayout != null && mSwipeRefreshLayout.getParent() == null) {
@@ -341,6 +334,9 @@ public class FeedSurfaceCoordinator
 
     private void showDiscoverIph() {
         mHandler.postDelayed(() -> {
+            // The feed header may not be visible for smaller screens or landscape mode. Scroll to
+            // show the header before showing the IPH.
+            mMediator.scrollToViewIfNecessary(1);
             UserEducationHelper helper = new UserEducationHelper(mActivity, mHandler);
             mSectionHeaderView.showHeaderIph(helper);
         }, DELAY_FEED_HEADER_IPH_MS);
@@ -558,8 +554,7 @@ public class FeedSurfaceCoordinator
             view = (RecyclerView) mHybridListRenderer.bind(mContentManager, mViewportView);
             view.setId(R.id.feed_stream_recycler_view);
             view.setClipToPadding(false);
-            view.setBackgroundColor(
-                    MaterialColors.getColor(context, R.attr.default_bg_color_dynamic, TAG));
+            view.setBackgroundColor(SemanticColorUtils.getDefaultBgColor(context));
 
             // Work around https://crbug.com/943873 where default focus highlight shows up after
             // toggling dark mode.

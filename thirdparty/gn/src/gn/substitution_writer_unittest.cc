@@ -45,6 +45,12 @@ TEST(SubstitutionWriter, ApplyPatternToSource) {
   SourceFile result = SubstitutionWriter::ApplyPatternToSource(
       nullptr, setup.settings(), pattern, SourceFile("//foo/bar/myfile.txt"));
   ASSERT_EQ("//out/Debug/gen/foo/bar/myfile.tmp", result.value());
+
+  result = SubstitutionWriter::ApplyPatternToSource(
+      nullptr, setup.settings(), pattern,
+      SourceFile("//out/Debug/gen/generated_file.cc"));
+  ASSERT_EQ("//out/Debug/gen/BUILD_DIR/gen/generated_file.tmp", result.value())
+      << result.value();
 }
 
 TEST(SubstitutionWriter, ApplyPatternToSourceAsOutputFile) {

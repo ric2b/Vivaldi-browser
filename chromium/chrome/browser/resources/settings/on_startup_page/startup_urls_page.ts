@@ -16,10 +16,9 @@ import '../settings_shared_css.js';
 import './startup_url_dialog.js';
 
 import {CrScrollableBehavior} from 'chrome://resources/cr_elements/cr_scrollable_behavior.m.js';
-import {assert} from 'chrome://resources/js/assert.m.js';
 import {focusWithoutInk} from 'chrome://resources/js/cr/ui/focus_without_ink.m.js';
 import {WebUIListenerMixin, WebUIListenerMixinInterface} from 'chrome://resources/js/web_ui_listener_mixin.js';
-import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {EDIT_STARTUP_URL_EVENT} from './startup_url_entry.js';
 import {getTemplate} from './startup_urls_page.html.js';
@@ -29,8 +28,8 @@ import {StartupPageInfo, StartupUrlsPageBrowserProxy, StartupUrlsPageBrowserProx
 const SettingsStartupUrlsPageElementBase =
     mixinBehaviors(
         [CrScrollableBehavior], WebUIListenerMixin(PolymerElement)) as {
-      new ():
-          PolymerElement & WebUIListenerMixinInterface & CrScrollableBehavior
+      new (): PolymerElement & WebUIListenerMixinInterface &
+          CrScrollableBehavior,
     };
 
 export class SettingsStartupUrlsPageElement extends
@@ -78,7 +77,7 @@ export class SettingsStartupUrlsPageElement extends
     this.startupUrlDialogAnchor_ = null;
   }
 
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
 
     this.addWebUIListener(
@@ -115,7 +114,7 @@ export class SettingsStartupUrlsPageElement extends
     this.showStartupUrlDialog_ = false;
     this.startupUrlDialogModel_ = null;
     if (this.startupUrlDialogAnchor_) {
-      focusWithoutInk(assert(this.startupUrlDialogAnchor_));
+      focusWithoutInk(this.startupUrlDialogAnchor_);
       this.startupUrlDialogAnchor_ = null;
     }
   }

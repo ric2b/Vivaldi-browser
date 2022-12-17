@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # Copyright 2019 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -59,7 +59,7 @@ def create_config(config_args, development):
 
     config_class = vivaldi_config.getCodeSignConfigClass(development)
 
-    return config_class(*config_args)
+    return config_class(**config_args)
 
 
 def _show_tool_versions():
@@ -92,6 +92,16 @@ def main():
         'associated with multiple Apple developer teams. See `xcrun altool -h. '
         'Run `iTMSTransporter -m provider -account_type itunes_connect -v off '
         '-u USERNAME -p PASSWORD` to list valid providers.')
+    parser.add_argument(
+        '--notary-team-id',
+        help='The Apple Developer Team ID used to authenticate to the Apple '
+        'notary service.')
+    parser.add_argument(
+        '--notarization-tool',
+        choices=list(model.NotarizationTool),
+        type=model.NotarizationTool,
+        default=None,
+        help='The tool to use to communicate with the Apple notary service.')
     parser.add_argument(
         '--development',
         action='store_true',
@@ -134,28 +144,56 @@ def main():
         default=None,
         help='The type of Vivaldi build')
 
-    group = parser.add_mutually_exclusive_group(required=False)
-    group.add_argument(
+    parser.add_argument(
         '--notarize',
-        dest='notarize',
-        action='store_true',
-        help='Defaults to False. Submit the signed application and DMG to '
-        'Apple for notarization.')
-    group.add_argument('--no-notarize', dest='notarize', action='store_false')
+        nargs='?',
+        choices=model.NotarizeAndStapleLevel.valid_strings(),
+        const='staple',
+        default='none',
+        help='Specifies the requested notarization actions to be taken. '
+        '`none` causes no notarization tasks to be performed. '
+        '`nowait` submits the signed application and packaging to Apple for '
+        'notarization, but does not wait for a reply. '
+        '`wait-nostaple` submits the signed application and packaging to Apple '
+        'for notarization, and waits for a reply, but does not staple the '
+        'resulting notarization ticket. '
+        '`staple` submits the signed application and packaging to Apple for '
+        'notarization, waits for a reply, and staples the resulting '
+        'notarization ticket. '
+        'If the `--notarize` argument is not present, that is the equivalent '
+        'of `--notarize none`. If the `--notarize` argument is present but '
+        'has no option specified, that is the equivalent of `--notarize '
+        'staple`.')
 
-    parser.set_defaults(notarize=False)
     args = parser.parse_args()
 
-    if args.notarize:
+    notarization = model.NotarizeAndStapleLevel.from_string(args.notarize)
+    if notarization.should_notarize():
         if not args.notary_user or not args.notary_password:
-            parser.error('The --notary-user and --notary-password arguments '
-                         'are required with --notarize.')
+            parser.error('The `--notary-user` and `--notary-password` '
+                         'arguments are required if notarizing.')
 
     config = create_config(
-        (args.identity, args.installer_identity, args.notary_user,
-         args.notary_password, args.notary_asc_provider), args.development)
+        model.pick(args, (
+            'identity',
+            'installer_identity',
+            'notary_user',
+            'notary_password',
+            'notary_asc_provider',
+            'notary_team_id',
+            'notarization_tool',
+        )), args.development)
+
     if args.vivaldi_release_kind != None:
         setattr(config, 'vivaldi_release_kind', args.vivaldi_release_kind)
+
+    if config.notarization_tool == model.NotarizationTool.NOTARYTOOL:
+        # Let the config override notary_team_id, including a potentially
+        # unspecified argument.
+        if not config.notary_team_id:
+            parser.error('The `--notarization-tool=notarytool` option requires '
+                         'a --notary-team-id.')
+
     paths = model.Paths(args.input, args.output, None)
 
     if not os.path.exists(paths.output):
@@ -167,7 +205,7 @@ def main():
         paths,
         config,
         disable_packaging=args.disable_packaging,
-        do_notarization=args.notarize,
+        notarization=notarization,
         skip_brands=args.skip_brands,
         channels=args.channels)
 

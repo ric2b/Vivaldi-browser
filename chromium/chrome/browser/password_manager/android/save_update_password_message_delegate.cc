@@ -11,8 +11,10 @@
 #include "chrome/browser/password_manager/android/password_infobar_utils.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/passwords/manage_passwords_view_utils.h"
+#include "chrome/browser/ui/passwords/ui_utils.h"
+#include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/grit/google_chrome_strings.h"
 #include "components/messages/android/message_dispatcher_bridge.h"
 #include "components/messages/android/messages_feature.h"
 #include "components/password_manager/core/browser/password_form.h"
@@ -137,11 +139,9 @@ void SaveUpdatePasswordMessageDelegate::CreateMessage(bool update_password) {
   }
   message_->SetTitle(l10n_util::GetStringUTF16(title_message_id));
 
-  const bool kIsUnifiedPasswordManager = base::FeatureList::IsEnabled(
-      password_manager::features::kUnifiedPasswordManagerAndroid);
-
   std::u16string description = GetMessageDescription(
-      pending_credentials, update_password, kIsUnifiedPasswordManager);
+      pending_credentials, update_password,
+      password_manager::features::UsesUnifiedPasswordManagerUi());
   message_->SetDescription(description);
 
   update_password_ = update_password;
@@ -155,7 +155,7 @@ void SaveUpdatePasswordMessageDelegate::CreateMessage(bool update_password) {
   message_->SetPrimaryButtonText(l10n_util::GetStringUTF16(
       GetPrimaryButtonTextId(update_password, use_followup_button_text)));
 
-  if (kIsUnifiedPasswordManager) {
+  if (password_manager::features::UsesUnifiedPasswordManagerUi()) {
     message_->SetIconResourceId(ResourceMapper::MapToJavaDrawableId(
         IDR_ANDROID_PASSWORD_MANAGER_LOGO_24DP));
     message_->DisableIconTint();
@@ -167,8 +167,10 @@ void SaveUpdatePasswordMessageDelegate::CreateMessage(bool update_password) {
   if (!update_password) {
     message_->SetSecondaryIconResourceId(
         ResourceMapper::MapToJavaDrawableId(IDR_ANDROID_MESSAGE_SETTINGS));
-    message_->SetSecondaryButtonMenuText(
-        l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_BLOCKLIST_BUTTON));
+    message_->SetSecondaryButtonMenuText(l10n_util::GetStringUTF16(
+        password_manager::features::UsesUnifiedPasswordManagerUi()
+            ? IDS_PASSWORD_MESSAGE_NEVER_SAVE_MENU_ITEM
+            : IDS_PASSWORD_MANAGER_BLOCKLIST_BUTTON));
     message_->SetSecondaryActionCallback(base::BindOnce(
         &SaveUpdatePasswordMessageDelegate::HandleNeverSaveClicked,
         base::Unretained(this)));

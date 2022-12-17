@@ -17,6 +17,7 @@ include_rules = [
   "+components/services/font/ppapi_fontconfig_matching.h",
   "+components/services/quarantine/test_support.h",
   "+components/services/quarantine/quarantine.h",
+  "+components/services/screen_ai",
   "+components/services/storage",
   "+components/services/storage/public",
   "+components/session_manager/core",
@@ -130,6 +131,9 @@ specific_include_rules = {
   ".*test\.cc": [
     "+services/network/test",
   ],
+  ".*test_utils\.(h|cc)": [
+    "+services/network/test",
+  ],
   "browser_main_loop\.cc": [
     # TODO(crbug.com/1049894): Remove.
     "+services/network/transitional_url_loader_factory_owner.h",
@@ -173,5 +177,8 @@ specific_include_rules = {
   ],
   "launch_as_mojo_client_browsertest.cc": [
     "+ui/ozone/public/ozone_switches.h",
+  ],
+  "site_per_process_mac_browsertest\.mm": [
+    "+content/app_shim_remote_cocoa",
   ],
 }

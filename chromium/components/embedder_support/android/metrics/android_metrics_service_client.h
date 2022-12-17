@@ -17,6 +17,7 @@
 #include "components/metrics/enabled_state_provider.h"
 #include "components/metrics/metrics_log_uploader.h"
 #include "components/metrics/metrics_service_client.h"
+#include "components/variations/synthetic_trial_registry.h"
 #include "components/version_info/android/channel_getter.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/notification_observer.h"
@@ -134,6 +135,7 @@ class AndroidMetricsServiceClient : public MetricsServiceClient,
   MetricsService* GetMetricsServiceIfStarted();
 
   // MetricsServiceClient
+  variations::SyntheticTrialRegistry* GetSyntheticTrialRegistry() override;
   MetricsService* GetMetricsService() override;
   ukm::UkmService* GetUkmService() override;
   void SetMetricsClientId(const std::string& client_id) override;
@@ -228,16 +230,14 @@ class AndroidMetricsServiceClient : public MetricsServiceClient,
   // return empty string. Virtual for testing.
   virtual bool CanRecordPackageNameForAppType();
 
-  // Determines if this client falls within the group for which it's acceptable
-  // to include the embedding app's package name. If this returns false,
-  // GetAppPackageNameIfLoggable() must return the empty string (for
-  // privacy/fingerprintability reasons).
+  // Determines if this client falls within the group for which the embedding
+  // app's package name may be included. If this returns false,
+  // GetAppPackageNameIfLoggable() must return the empty string.
   virtual bool ShouldRecordPackageName();
 
   // Caps the rate at which we include package names in UMA logs, expressed as a
   // per mille value. See GetSampleRatePerMille() for a description of how per
-  // mille values are handled. Including package names in logs may be privacy
-  // sensitive, see https://crbug.com/969803.
+  // mille values are handled.
   virtual int GetPackageNameLimitRatePerMille() = 0;
 
   // Called by CreateMetricsService, allows the embedder to register additional
@@ -264,6 +264,7 @@ class AndroidMetricsServiceClient : public MetricsServiceClient,
   void CreateUkmService();
 
   std::unique_ptr<MetricsStateManager> metrics_state_manager_;
+  std::unique_ptr<variations::SyntheticTrialRegistry> synthetic_trial_registry_;
   std::unique_ptr<MetricsService> metrics_service_;
   std::unique_ptr<ukm::UkmService> ukm_service_;
   content::NotificationRegistrar registrar_;

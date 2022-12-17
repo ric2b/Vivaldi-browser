@@ -15,7 +15,7 @@ try_.defaults.set(
     execution_timeout = 15 * time.minute,
     list_view = "presubmit",
     main_list_view = "try",
-    os = os.LINUX_BIONIC_SWITCH_TO_DEFAULT,
+    os = os.LINUX_DEFAULT,
     pool = try_.DEFAULT_POOL,
     # Default priority for buildbucket is 30, see
     # https://chromium.googlesource.com/infra/infra/+/bb68e62b4380ede486f65cd32d9ff3f1bbe288e4/appengine/cr-buildbucket/creation.py#42
@@ -105,7 +105,10 @@ presubmit_builder(
         ],
     },
     tryjob = try_.job(
-        location_regexp = [r".+/[+]/tools/clang/scripts/update.py"],
+        location_regexp = [
+            r".+/[+]/tools/clang/scripts/update.py",
+            r".+/[+]/DEPS",
+        ],
     ),
 )
 

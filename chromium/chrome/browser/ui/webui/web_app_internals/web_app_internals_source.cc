@@ -5,9 +5,12 @@
 #include "chrome/browser/ui/webui/web_app_internals/web_app_internals_source.h"
 
 #include "base/files/file_enumerator.h"
+#include "base/files/file_util.h"
 #include "base/json/json_writer.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/ranges/algorithm.h"
+#include "base/strings/strcat.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/task/task_runner.h"
 #include "base/task/thread_pool.h"
 #include "build/build_config.h"
@@ -80,13 +83,13 @@ base::Value BuildInstalledWebAppsJson(web_app::WebAppProvider& provider) {
        provider.registrar().GetAppsIncludingStubs()) {
     web_apps.push_back(&web_app);
   }
-  base::ranges::sort(web_apps, {}, &web_app::WebApp::name);
+  base::ranges::sort(web_apps, {}, &web_app::WebApp::untranslated_name);
 
   // Prefix with a ! so this appears at the top when serialized.
   base::Value& index = *installed_web_apps.SetKey(
       "!Index", base::Value(base::Value::Type::DICTIONARY));
   for (const web_app::WebApp* web_app : web_apps) {
-    const std::string& key = web_app->name();
+    const std::string& key = web_app->untranslated_name();
     base::Value* existing_entry = index.FindKey(key);
     if (!existing_entry) {
       index.SetStringKey(key, web_app->app_id());
@@ -232,18 +235,41 @@ base::Value BuildAppShimRegistryLocalStorageJson() {
 }
 #endif
 
-base::Value BuildWebAppDiskStateJson(Profile* profile, base::Value root) {
-  base::Value file_list(base::Value::Type::LIST);
+void BuildDirectoryState(base::FilePath file_or_folder,
+                         base::Value::Dict* folder) {
+  base::File::Info info;
+  bool success = base::GetFileInfo(file_or_folder, &info);
+  if (!success) {
+    folder->Set(file_or_folder.AsUTF8Unsafe(), "Invalid file or folder");
+    return;
+  }
+  // The path of files is fully printed to allow easy copy-paste for developer
+  // reference.
+  if (!info.is_directory) {
+    folder->Set(file_or_folder.AsUTF8Unsafe(),
+                base::StrCat({base::NumberToString(info.size / 1024), "kb"}));
+    return;
+  }
 
-  base::FileEnumerator files(web_app::GetWebAppsRootDirectory(profile), true,
-                             base::FileEnumerator::FILES);
+  base::Value::Dict contents;
+  base::FileEnumerator files(
+      file_or_folder, false,
+      base::FileEnumerator::FILES | base::FileEnumerator::DIRECTORIES);
   for (base::FilePath current = files.Next(); !current.empty();
        current = files.Next()) {
-    file_list.Append(current.AsUTF8Unsafe());
+    BuildDirectoryState(current, &contents);
   }
-  base::Value section(base::Value::Type::DICTIONARY);
-  section.SetKey(kWebAppDirectoryDiskState, std::move(file_list));
-  root.Append(std::move(section));
+  folder->Set(file_or_folder.BaseName().AsUTF8Unsafe(), std::move(contents));
+}
+
+base::Value BuildWebAppDiskStateJson(base::FilePath root_directory,
+                                     base::Value root) {
+  base::Value::Dict contents;
+  BuildDirectoryState(root_directory, &contents);
+
+  base::Value::Dict section;
+  section.Set(kWebAppDirectoryDiskState, std::move(contents));
+  root.Append(base::Value(std::move(section)));
   return root;
 }
 
@@ -264,7 +290,9 @@ void BuildWebAppInternalsJson(
 #endif
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
-      base::BindOnce(&BuildWebAppDiskStateJson, profile, std::move(root)),
+      base::BindOnce(&BuildWebAppDiskStateJson,
+                     web_app::GetWebAppsRootDirectory(profile),
+                     std::move(root)),
       std::move(callback));
 }
 

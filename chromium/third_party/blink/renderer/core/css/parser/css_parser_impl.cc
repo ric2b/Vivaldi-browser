@@ -122,13 +122,10 @@ MutableCSSPropertyValueSet::SetResult CSSParserImpl::ParseValue(
   CSSTokenizedValue tokenized_value = ConsumeValue(stream);
   parser.ConsumeDeclarationValue(tokenized_value, unresolved_property,
                                  important, rule_type);
-  bool did_parse = false;
-  bool did_change = false;
-  if (!parser.parsed_properties_.IsEmpty()) {
-    did_parse = true;
-    did_change = declaration->AddParsedProperties(parser.parsed_properties_);
+  if (parser.parsed_properties_.IsEmpty()) {
+    return MutableCSSPropertyValueSet::kParseError;
   }
-  return MutableCSSPropertyValueSet::SetResult{did_parse, did_change};
+  return declaration->AddParsedProperties(parser.parsed_properties_);
 }
 
 MutableCSSPropertyValueSet::SetResult CSSParserImpl::ParseVariableValue(
@@ -144,13 +141,11 @@ MutableCSSPropertyValueSet::SetResult CSSParserImpl::ParseVariableValue(
   CSSTokenizedValue tokenized_value = ConsumeValue(stream);
   parser.ConsumeVariableValue(tokenized_value, property_name, important,
                               is_animation_tainted);
-  bool did_parse = false;
-  bool did_change = false;
-  if (!parser.parsed_properties_.IsEmpty()) {
-    did_parse = true;
-    did_change = declaration->AddParsedProperties(parser.parsed_properties_);
+  if (parser.parsed_properties_.IsEmpty()) {
+    return MutableCSSPropertyValueSet::kParseError;
+  } else {
+    return declaration->AddParsedProperties(parser.parsed_properties_);
   }
-  return MutableCSSPropertyValueSet::SetResult{did_parse, did_change};
 }
 
 static inline void FilterProperties(
@@ -448,9 +443,7 @@ static CSSParserImpl::AllowedRulesType ComputeNewAllowedRules(
     return allowed_rules;
   DCHECK_LE(allowed_rules, CSSParserImpl::kRegularRules);
   if (rule->IsCharsetRule()) {
-    if (RuntimeEnabledFeatures::CSSCascadeLayersEnabled())
-      return CSSParserImpl::kAllowLayerStatementRules;
-    return CSSParserImpl::kAllowImportRules;
+    return CSSParserImpl::kAllowLayerStatementRules;
   }
   if (rule->IsLayerStatementRule()) {
     if (allowed_rules <= CSSParserImpl::kAllowLayerStatementRules)
@@ -722,28 +715,25 @@ StyleRuleImport* CSSParserImpl::ConsumeImportRule(
     return nullptr;  // Parse error, expected string or URI
 
   StyleRuleBase::LayerName layer;
-  if (RuntimeEnabledFeatures::CSSCascadeLayersEnabled()) {
-    if (prelude.Peek().GetType() == kIdentToken &&
-        prelude.Peek().Id() == CSSValueID::kLayer) {
-      prelude.ConsumeIncludingWhitespace();
-      layer = StyleRuleBase::LayerName({g_empty_atom});
-    } else if (prelude.Peek().GetType() == kFunctionToken &&
-               prelude.Peek().FunctionId() == CSSValueID::kLayer) {
-      CSSParserTokenRange original_prelude = prelude;
-      CSSParserTokenRange name_range =
-          css_parsing_utils::ConsumeFunction(prelude);
-      StyleRuleBase::LayerName name = ConsumeCascadeLayerName(name_range);
-      if (!name.size() || !name_range.AtEnd()) {
-        // Invalid layer() function can still be parsed as <general-enclosed>
-        prelude = original_prelude;
-      } else {
-        layer = std::move(name);
-      }
+  if (prelude.Peek().GetType() == kIdentToken &&
+      prelude.Peek().Id() == CSSValueID::kLayer) {
+    prelude.ConsumeIncludingWhitespace();
+    layer = StyleRuleBase::LayerName({g_empty_atom});
+  } else if (prelude.Peek().GetType() == kFunctionToken &&
+             prelude.Peek().FunctionId() == CSSValueID::kLayer) {
+    CSSParserTokenRange original_prelude = prelude;
+    CSSParserTokenRange name_range =
+        css_parsing_utils::ConsumeFunction(prelude);
+    StyleRuleBase::LayerName name = ConsumeCascadeLayerName(name_range);
+    if (!name.size() || !name_range.AtEnd()) {
+      // Invalid layer() function can still be parsed as <general-enclosed>
+      prelude = original_prelude;
+    } else {
+      layer = std::move(name);
     }
-
-    if (layer.size())
-      context_->Count(WebFeature::kCSSCascadeLayers);
   }
+  if (layer.size())
+    context_->Count(WebFeature::kCSSCascadeLayers);
 
   if (observer_) {
     observer_->StartRuleHeader(StyleRule::kImport, prelude_offset_start);
@@ -1103,21 +1093,28 @@ StyleRuleContainer* CSSParserImpl::ConsumeContainerRule(
   if (observer_) {
     observer_->StartRuleHeader(StyleRule::kContainer, prelude_offset_start);
     observer_->EndRuleHeader(prelude_offset_end);
-    observer_->StartRuleBody(stream.Offset());
   }
 
   ContainerQueryParser query_parser(*context_);
 
-  absl::optional<ContainerSelector> selector =
-      query_parser.ConsumeSelector(prelude);
-  if (!selector)
-    return nullptr;
+  // <container-name>
+  AtomicString name;
+  if (prelude.Peek().GetType() == kIdentToken) {
+    auto* ident = DynamicTo<CSSCustomIdentValue>(
+        css_parsing_utils::ConsumeSingleContainerName(prelude, *context_));
+    if (!ident)
+      return nullptr;
+    name = ident->Value();
+  }
 
   std::unique_ptr<MediaQueryExpNode> query = query_parser.ParseQuery(prelude);
   if (!query)
     return nullptr;
-  ContainerQuery* container_query =
-      MakeGarbageCollected<ContainerQuery>(*selector, std::move(query));
+  ContainerQuery* container_query = MakeGarbageCollected<ContainerQuery>(
+      ContainerSelector(std::move(name), *query), std::move(query));
+
+  if (observer_)
+    observer_->StartRuleBody(stream.Offset());
 
   HeapVector<Member<StyleRuleBase>> rules;
   ConsumeRuleList(stream, kRegularRuleList,
@@ -1130,8 +1127,6 @@ StyleRuleContainer* CSSParserImpl::ConsumeContainerRule(
 }
 
 StyleRuleBase* CSSParserImpl::ConsumeLayerRule(CSSParserTokenStream& stream) {
-  DCHECK(RuntimeEnabledFeatures::CSSCascadeLayersEnabled());
-
   wtf_size_t prelude_offset_start = stream.LookAheadOffset();
   CSSParserTokenRange prelude = ConsumeAtRulePrelude(stream);
   wtf_size_t prelude_offset_end = stream.LookAheadOffset();

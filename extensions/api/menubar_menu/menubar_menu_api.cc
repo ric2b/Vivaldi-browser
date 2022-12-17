@@ -6,6 +6,7 @@
 #include "base/base64.h"
 #include "base/lazy_instance.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/browser_context.h"
@@ -196,7 +197,7 @@ void MenubarMenuAPI::SendError(content::BrowserContext* browser_context,
                             browser_context);
 }
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 // Not used on Mac but we still need a stub
 MenubarMenuShowFunction::MenubarMenuShowFunction() = default;
 MenubarMenuShowFunction::~MenubarMenuShowFunction() = default;

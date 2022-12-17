@@ -18,6 +18,8 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+
+#include "components/capture/capture_page.h"
 #include "ui/vivaldi_skia_utils.h"
 
 using content::WebContents;
@@ -59,8 +61,7 @@ void ThumbnailCaptureContents::Capture(content::BrowserContext* browser_context,
                  std::move(callback));
 }
 
-ThumbnailCaptureContents::ThumbnailCaptureContents()
-    : weak_ptr_factory_(this) {}
+ThumbnailCaptureContents::ThumbnailCaptureContents() = default;
 
 ThumbnailCaptureContents::~ThumbnailCaptureContents() {
   DVLOG(1) << "Destroying ThumbnailCaptureContents for start_url="
@@ -247,7 +248,7 @@ void ThumbnailCaptureContents::TryCapture(bool last_try) {
   // We have two independent timers that call TryCapture, the one initiated
   // in DidFinishLoad with subsequent retry attempts below when last_try is
   // false and the page load timeout when last_try is true. Protect aganst one
-  // of the timers expring while another has aready succeeded to start the
+  // of the timers expring while another has already succeeded to start the
   // capturing.
   if (capture_started_) {
     return;
@@ -326,7 +327,7 @@ void ThumbnailCaptureContents::CaptureViaIpc() {
 }
 
 void ThumbnailCaptureContents::OnCopyImageReady(const SkBitmap& bitmap) {
-  if (bitmap.getPixels() && !bitmap.empty()) {
+  if (!bitmap.drawsNothing()) {
     RespondAndDelete(bitmap);
     return;
   }
@@ -335,12 +336,7 @@ void ThumbnailCaptureContents::OnCopyImageReady(const SkBitmap& bitmap) {
   CaptureViaIpc();
 }
 
-void ThumbnailCaptureContents::OnIpcCaptureDone(
-    ::vivaldi::CapturePage::Result captured) {
-  SkBitmap bitmap;
-  if (!captured.MovePixelsToBitmap(&bitmap)) {
-    bitmap = SkBitmap();
-  }
+void ThumbnailCaptureContents::OnIpcCaptureDone(SkBitmap bitmap) {
   RespondAndDelete(std::move(bitmap));
 }
 

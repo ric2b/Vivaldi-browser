@@ -165,7 +165,7 @@ bool RecurrrenceExceptionTable::DeleteRecurrenceExceptionsForCalendar(
                                  "DELETE from recurring_exceptions \
         WHERE id IN( \
           select re.id from recurring_exceptions re \
-            inner join events e on(e.id = re.exception_event_id) \
+            inner join events e on(e.id = re.parent_event_id) \
             where e.calendar_id = ?)"));
 
   statement.BindInt64(0, calendar_id);

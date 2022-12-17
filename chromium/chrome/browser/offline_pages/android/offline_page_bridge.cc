@@ -21,7 +21,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "chrome/android/chrome_jni_headers/OfflinePageBridge_jni.h"
@@ -193,6 +192,10 @@ void ValidateFileCallback(
       break;
     case offline_items_collection::LaunchLocation::DOWNLOAD_SHELF:
       NOTREACHED();
+      break;
+    case offline_items_collection::LaunchLocation::DOWNLOAD_INTERSTITIAL:
+      offline_header.reason =
+          offline_pages::OfflinePageHeader::Reason::DOWNLOAD;
       break;
   }
   offline_header.need_to_persist = true;

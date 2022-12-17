@@ -10,8 +10,7 @@
 #include <utility>
 #include <vector>
 
-// TODO(https://crbug.com/1164001): move to forward declaration.
-#include "ash/services/secure_channel/authenticated_channel.h"
+#include "ash/components/multidevice/logging/logging.h"
 #include "ash/services/secure_channel/client_connection_parameters.h"
 #include "ash/services/secure_channel/connection_attempt_delegate.h"
 #include "ash/services/secure_channel/connection_attempt_details.h"
@@ -19,11 +18,11 @@
 #include "ash/services/secure_channel/pending_connection_request.h"
 #include "ash/services/secure_channel/pending_connection_request_delegate.h"
 #include "base/time/clock.h"
-#include "chromeos/components/multidevice/logging/logging.h"
+#include "base/time/time.h"
 
-namespace chromeos {
+namespace ash::secure_channel {
 
-namespace secure_channel {
+class AuthenticatedChannel;
 
 // ConnectionAttempt represents an ongoing attempt to connect to a given device
 // over a given medium. Each ConnectionAttempt is comprised of one or
@@ -137,13 +136,6 @@ class ConnectionAttempt : public PendingConnectionRequestDelegate {
   bool has_notified_delegate_of_success_ = false;
 };
 
-}  // namespace secure_channel
-
-}  // namespace chromeos
-
-// TODO(https://crbug.com/1164001): remove after the migration is finished.
-namespace ash::secure_channel {
-using ::chromeos::secure_channel::ConnectionAttempt;
-}
+}  // namespace ash::secure_channel
 
 #endif  // ASH_SERVICES_SECURE_CHANNEL_CONNECTION_ATTEMPT_H_

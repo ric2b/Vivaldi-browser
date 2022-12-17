@@ -14,6 +14,7 @@
 #include "components/security_interstitials/core/pref_names.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
+#include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "url/origin.h"
@@ -95,9 +96,8 @@ InsecureFormNavigationThrottle::GetThrottleResultForMixedForm(
 
   // Do not set special error page HTML for insecure forms in subframes; those
   // are already hard blocked.
-  if (!handle->IsInMainFrame()) {
+  if (handle->GetParentFrameOrOuterDocument())
     return content::NavigationThrottle::PROCEED;
-  }
 
   url::Origin form_originating_origin =
       handle->GetInitiatorOrigin().value_or(url::Origin());

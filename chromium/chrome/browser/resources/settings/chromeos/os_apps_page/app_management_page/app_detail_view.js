@@ -16,7 +16,7 @@ import {assert, assertNotReached} from '//resources/js/assert.m.js';
 import {afterNextRender, flush, html, Polymer, TemplateInstanceBase, Templatizer} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {Route, Router} from '../../../router.js';
-import {routes} from '../../os_route.m.js';
+import {routes} from '../../os_route.js';
 import {RouteObserverBehavior} from '../../route_observer_behavior.js';
 
 import {updateSelectedAppId} from './actions.js';
@@ -129,7 +129,7 @@ Polymer({
   selectedAppIdChanged_(appId) {
     if (appId && this.app_) {
       recordAppManagementUserAction(
-          this.app_.type, AppManagementUserAction.ViewOpened);
+          this.app_.type, AppManagementUserAction.VIEW_OPENED);
     }
   },
 

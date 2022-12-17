@@ -7,6 +7,7 @@
 
 #include <memory>
 #include "base/time/time.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_confidential_contents.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_content_manager.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_content_restriction_set.h"
@@ -33,6 +34,8 @@ class DlpContentManagerTestHelper {
   void ChangeVisibility(content::WebContents* web_contents);
 
   void DestroyWebContents(content::WebContents* web_contents);
+
+  void CheckRunningScreenShares();
 
   void SetWarnNotifierForTesting(std::unique_ptr<DlpWarnNotifier> notifier);
 

@@ -6,8 +6,11 @@
 
 #include <memory>
 
+#include "base/callback.h"
+#include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
+#include "base/supports_user_data.h"
 #include "build/build_config.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
@@ -49,6 +52,9 @@ static constexpr SkColor kColorSelectionRect = SkColorSetRGB(0xEE, 0xEE, 0xEE);
 // Minimum selection rect edge size to treat as a valid capture region.
 static constexpr int kMinimumValidSelectionEdgePixels = 30;
 
+ScreenshotCapturedData::ScreenshotCapturedData() = default;
+ScreenshotCapturedData::~ScreenshotCapturedData() = default;
+
 ScreenshotFlow::ScreenshotFlow(content::WebContents* web_contents)
     : content::WebContentsObserver(web_contents),
       web_contents_(web_contents->GetWeakPtr()) {
@@ -80,7 +86,9 @@ void ScreenshotFlow::CreateAndAddUIOverlay() {
   bounds.Offset(-offset_bounds.x(), -offset_bounds.y());
 
   event_capture_mac_ = std::make_unique<EventCaptureMac>(
-      this, web_contents_view, web_contents_->GetTopLevelNativeWindow());
+      this,
+      base::BindOnce(&ScreenshotFlow::CancelCapture, base::Unretained(this)),
+      web_contents_view, web_contents_->GetTopLevelNativeWindow());
 #else
   const gfx::NativeWindow& native_window = web_contents_->GetNativeView();
   ui::Layer* content_layer = native_window->layer();
@@ -330,7 +338,7 @@ void ScreenshotFlow::OnPaintLayer(const ui::PaintContext& context) {
 
   auto selection_rect = gfx::BoundingRect(drag_start_, drag_end_);
   // Draw border exclusively outside selected region.
-  selection_rect.Inset(-1, -1, 0, 0);
+  selection_rect.Inset(gfx::Insets::TLBR(-1, -1, 0, 0));
   PaintSelectionLayer(canvas, selection_rect, gfx::Rect());
   paint_invalidation_ = gfx::Rect();
 }

@@ -20,10 +20,8 @@
 #include "browser/menus/vivaldi_menus.h"
 #include "browser/menus/vivaldi_profile_menu_controller.h"
 #include "browser/menus/vivaldi_pwa_link_menu_controller.h"
-#if defined(OS_MAC)
-#include "browser/menus/vivaldi_speech_menu_controller.h"
-#endif
 #include "browser/vivaldi_browser_finder.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/autocomplete/autocomplete_classifier_factory.h"
@@ -59,6 +57,10 @@
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/vivaldi_browser_window.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
+
+#if BUILDFLAG(IS_MAC)
+#include "browser/menus/vivaldi_speech_menu_controller.h"
+#endif
 
 // Comment out if original chrome menu behavior is needed.
 #define ENABLE_VIVALDI_CONTEXT_MENU
@@ -295,9 +297,11 @@ void VivaldiRenderViewContextMenu::InitMenu() {
           ContextMenuContentType::ITEM_GROUP_CURRENT_EXTENSION);
   request.support.sendpagetodevices = send_tab_to_self::ShouldOfferFeature(
       browser->tab_strip_model()->GetActiveWebContents());
-  request.support.sendlinktodevices = send_tab_to_self::ShouldOfferToShareUrl(
-      SendTabToSelfSyncServiceFactory::GetForProfile(browser->profile()),
-      params_.link_url);
+  // Link support was fully removed with ch 102. Keeping the code around to see
+  // if we can reintroduce it.
+  //request.support.sendlinktodevices = send_tab_to_self::ShouldOfferToShareUrl(
+  //    SendTabToSelfSyncServiceFactory::GetForProfile(browser->profile()),
+  //    params_.link_url);
   request.support.qrcode = QRCodeGeneratorEnabled(embedder_web_contents_);
   request.support.emoji =
       DoesInputFieldTypeSupportEmoji(params_.input_field_type) &&
@@ -560,7 +564,7 @@ bool VivaldiRenderViewContextMenu::IsCommandIdEnabled(int command_id) const {
     return extensions_controller_->get_extension_items()->IsCommandIdEnabled(
         command_id);
   }
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   if (speech_controller_ &&
       speech_controller_->IsCommandIdEnabled(command_id, &enabled)) {
     return enabled;
@@ -747,7 +751,7 @@ VivaldiRenderViewContextMenu::HandleCommand(int command_id, int event_flags) {
   } else if (sendtolink_controller_ &&
              sendtolink_controller_->HandleCommand(command_id, event_flags)) {
     return ActionChain::kStop;
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   } else if (speech_controller_ &&
              speech_controller_->HandleCommand(command_id, event_flags)) {
     return ActionChain::kStop;
@@ -771,6 +775,17 @@ VivaldiRenderViewContextMenu::HandleCommand(int command_id, int event_flags) {
       OpenURLWithExtraHeaders(params_.link_url, GetDocumentURL(params_),
                               WindowOpenDisposition::CURRENT_TAB,
                               ui::PAGE_TRANSITION_LINK, "", true);
+      break;
+    case IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD:
+      // Open a new incognito window. Reuse chrome code for this action, but we
+      // have to replace the command with IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW
+      // as its handler will always open a window of the same type from the
+      // window where it is called. IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD
+      // will only open a new incognito window if the window is a
+      // non-incognito window and otherwise a new tab in the existing window.
+      RenderViewContextMenu::ExecuteCommand(
+        embedder_web_contents_->GetBrowserContext()->IsOffTheRecord() ?
+            IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW : command_id, event_flags);
       break;
     case IDC_VIV_OPEN_IMAGE_CURRENT_TAB:
       OpenURLWithExtraHeaders(params_.src_url, GetDocumentURL(params_),
@@ -848,7 +863,7 @@ VivaldiRenderViewContextMenu::HandleCommand(int command_id, int event_flags) {
       view_host->GetWidget()->NotifyTextDirection();
       break;
     }
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
     case IDC_CONTENT_CONTEXT_LOOK_UP: {
       content::RenderWidgetHostView* view =
           GetRenderViewHost()->GetWidget()->GetView();
@@ -901,7 +916,7 @@ bool VivaldiRenderViewContextMenu::HasContainerContent(
     case context_menu::CONTAINER_CONTENT_LINKINPWA:
       return !params_.link_url.is_empty();
     case context_menu::CONTAINER_CONTENT_SPEECH:
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
       return true;
 #else
       return false;
@@ -974,7 +989,7 @@ void VivaldiRenderViewContextMenu::PopulateContainer(
       }
       break;
     case context_menu::CONTAINER_CONTENT_SPEECH:
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
       speech_controller_.reset(new SpeechMenuController(this));
       speech_controller_->Populate(menu_model);
 #endif
@@ -1070,7 +1085,7 @@ int VivaldiRenderViewContextMenu::GetStaticIdForAction(std::string command) {
 
 ui::ImageModel VivaldiRenderViewContextMenu::GetImageForAction(
     std::string command) {
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   return ui::ImageModel();
 #else
   switch (GetStaticIdForAction(command)) {

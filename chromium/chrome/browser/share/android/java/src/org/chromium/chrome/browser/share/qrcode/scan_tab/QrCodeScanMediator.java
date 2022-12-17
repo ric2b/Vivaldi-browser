@@ -25,8 +25,10 @@ import org.chromium.base.IntentUtils;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.task.AsyncTask;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.browserservices.intents.WebappConstants;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
+import org.chromium.components.search_engines.TemplateUrlService;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.permissions.ActivityAndroidPermissionDelegate;
 import org.chromium.ui.permissions.AndroidPermissionDelegate;
@@ -219,6 +221,10 @@ public class QrCodeScanMediator implements Camera.PreviewCallback {
     }
 
     private void openUrl(String url) {
+        openUrl(url, null);
+    }
+
+    private void openUrl(String url, TemplateUrlService.PostParams postParams) {
         Intent intent =
                 new Intent()
                         .setAction(Intent.ACTION_VIEW)
@@ -228,6 +234,12 @@ public class QrCodeScanMediator implements Camera.PreviewCallback {
                         .putExtra(Browser.EXTRA_APPLICATION_ID, mContext.getPackageName())
                         .putExtra(WebappConstants.REUSE_URL_MATCHING_TAB_ELSE_NEW_TAB, true);
         IntentUtils.addTrustedIntentExtras(intent);
+        if (postParams != null && !TextUtils.isEmpty(postParams.contentType) &&
+                postParams.postContent.length != 0) {
+            intent.putExtra(IntentHandler.EXTRA_POST_DATA_TYPE, postParams.contentType);
+            intent.putExtra(IntentHandler.EXTRA_POST_DATA, postParams.postContent);
+        }
+
         if (ChromeApplicationImpl.isVivaldi())
             intent.putExtra(VivaldiIntentHandler.EXTRA_SCAN_QR_CODE, true);
         mContext.startActivity(intent);
@@ -259,7 +271,7 @@ public class QrCodeScanMediator implements Camera.PreviewCallback {
             mAlertDialog = null;
         }
 
-        mAlertDialog = new AlertDialog.Builder(mContext, R.style.Theme_Chromium_AlertDialog)
+        mAlertDialog = new AlertDialog.Builder(mContext, R.style.ThemeOverlay_BrowserUI_AlertDialog)
                 .setCancelable(true)
                 .setPositiveButton(R.string.search,
                             (dialog, which) -> {
@@ -272,10 +284,16 @@ public class QrCodeScanMediator implements Camera.PreviewCallback {
                                                         scannedCode,
                                                         MAX_SEARCH_QUERY_LENGTH);
                                         if (!TextUtils.isEmpty(query)) {
+                                            TemplateUrlService.PostParams postParams =
+                                                    new TemplateUrlService.PostParams();
                                             String searchUrl =
                                                     TemplateUrlServiceFactory.get()
-                                                            .getUrlForSearchQuery(query);
-                                            openUrl(searchUrl);
+                                                            .getUrlForSearchQuery(query, null,
+                                                                    postParams,
+                                                                    TemplateUrlService
+                                                                            .DefaultSearchType
+                                                                            .DEFAULT_SEARCH_MAIN);
+                                            openUrl(searchUrl, postParams);
                                             mNavigationObserver.onNavigation();
                                         }
                                     }

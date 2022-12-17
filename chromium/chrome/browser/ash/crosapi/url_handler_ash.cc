@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ash/crosapi/url_handler_ash.h"
 
+#include "ash/webui/help_app_ui/url_constants.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -83,9 +84,11 @@ void UrlHandlerAsh::OpenUrl(const GURL& url) {
 }
 
 bool UrlHandlerAsh::OpenUrlInternal(const GURL& url) {
-  GURL target_url = crosapi::gurl_os_handler_utils::SanitizeAshURL(url);
+  GURL target_url =
+      crosapi::gurl_os_handler_utils::GetTargetURLFromLacrosURL(url);
   GURL short_target_url = crosapi::gurl_os_handler_utils::SanitizeAshURL(
-      url, /*include_path=*/false);
+      target_url, /*include_path=*/false);
+
   // Settings will be handled.
   if (short_target_url == GURL(chrome::kChromeUIOSSettingsURL)) {
     chrome::SettingsWindowManager* settings_window_manager =
@@ -112,6 +115,9 @@ bool UrlHandlerAsh::OpenUrlInternal(const GURL& url) {
     app_id = web_app::SystemAppType::FILE_MANAGER;
   } else if (target_url == GURL(chrome::kChromeUIScanningAppURL)) {
     app_id = web_app::SystemAppType::SCANNING;
+  } else if (target_url == GURL(chrome::kOsUIHelpAppURL)) {
+    app_id = web_app::SystemAppType::HELP;
+    target_url = GURL(ash::kChromeUIHelpAppURL);
   } else if (ChromeWebUIControllerFactory::GetInstance()->CanHandleUrl(
                  target_url)) {
     app_id = web_app::SystemAppType::OS_URL_HANDLER;

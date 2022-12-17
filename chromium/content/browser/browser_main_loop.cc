@@ -16,7 +16,6 @@
 #include "base/base_switches.h"
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/cxx17_backports.h"
 #include "base/feature_list.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -69,6 +68,7 @@
 #include "content/browser/compositor/viz_process_transport_factory.h"
 #include "content/browser/download/save_file_manager.h"
 #include "content/browser/field_trial_synchronizer.h"
+#include "content/browser/first_party_sets/first_party_sets_handler_impl.h"
 #include "content/browser/gpu/browser_gpu_channel_host_factory.h"
 #include "content/browser/gpu/browser_gpu_client_delegate.h"
 #include "content/browser/gpu/compositor_util.h"
@@ -138,6 +138,8 @@
 #include "services/audio/service.h"
 #include "services/data_decoder/public/cpp/service_provider.h"
 #include "services/data_decoder/public/mojom/data_decoder_service.mojom.h"
+#include "services/network/public/cpp/network_switches.h"
+#include "services/network/public/mojom/network_service.mojom.h"
 #include "services/network/transitional_url_loader_factory_owner.h"
 #include "skia/ext/event_tracer_impl.h"
 #include "skia/ext/skia_memory_dump_provider.h"
@@ -282,7 +284,7 @@ static void SetUpGLibLogHandler() {
   // Register GLib-handled assertions to go through our logging system.
   const char* const kLogDomains[] = {nullptr, "Gtk", "Gdk", "GLib",
                                      "GLib-GObject"};
-  for (size_t i = 0; i < base::size(kLogDomains); i++) {
+  for (size_t i = 0; i < std::size(kLogDomains); i++) {
     g_log_set_handler(
         kLogDomains[i],
         static_cast<GLogLevelFlags>(G_LOG_FLAG_RECURSION | G_LOG_FLAG_FATAL |
@@ -938,11 +940,8 @@ int BrowserMainLoop::CreateThreads() {
       FROM_HERE, base::SequencedTaskRunnerHandle::Get(),
       base::BindOnce(
           [](BrowserMainLoop* browser_main_loop) {
-            // Enable main thread and thread pool best effort queues. Non-best
-            // effort queues will already have been enabled. This will enable
-            // all queues on all browser threads, so we need to do this after
-            // the threads have been created, i.e. here.
-            content::BrowserTaskExecutor::EnableAllQueues();
+            // Informs BrowserTaskExecutor that startup is complete.
+            content::BrowserTaskExecutor::OnStartupComplete();
             browser_main_loop->scoped_best_effort_execution_fence_.reset();
           },
           // Main thread tasks can't run after BrowserMainLoop destruction.
@@ -982,6 +981,18 @@ int BrowserMainLoop::PreMainMessageLoopRun() {
 
   if (parts_)
     result_code_ = parts_->PreMainMessageLoopRun();
+
+  // ShellBrowserMainParts initializes a ShellBrowserContext with user data
+  // directory only in PreMainMessageLoopRun(). First-Party Sets handler needs
+  // to access this directory, hence triggering after this stage has run.
+  FirstPartySetsHandlerImpl::GetInstance()->Init(
+      GetContentClient()->browser()->GetFirstPartySetsDirectory(),
+      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+          network::switches::kUseFirstPartySet),
+      base::BindOnce([](const base::flat_map<net::SchemefulSite,
+                                             net::SchemefulSite>& sets) {
+        content::GetNetworkService()->SetFirstPartySets(sets);
+      }));
 
   variations::MaybeScheduleFakeCrash();
 

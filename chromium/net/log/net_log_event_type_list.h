@@ -687,20 +687,6 @@ EVENT_TYPE(SIGNED_CERTIFICATE_TIMESTAMPS_CHECKED)
 // }
 EVENT_TYPE(CERT_CT_COMPLIANCE_CHECKED)
 
-// The EV certificate was checked for compliance with Certificate Transparency
-// requirements.
-//
-// The following parameters are attached to the event:
-// {
-//    "certificate": <An X.509 certificate, same format as in
-//                   CERT_VERIFIER_JOB.>
-//    "policy_enforcement_required": <boolean>
-//    "build_timely": <boolean>
-//    "ct_compliance_status": <string describing compliance status>
-//    "ev_whitelist_version": <optional; string representing whitelist version>
-// }
-EVENT_TYPE(EV_CERT_CT_COMPLIANCE_CHECKED)
-
 // A Certificate Transparency log entry was audited for inclusion in the
 // log.
 //
@@ -801,6 +787,16 @@ EVENT_TYPE(HTTP_PROXY_CONNECT_JOB_CONNECT)
 
 // The start/end of the WebSocketConnectJob::Connect().
 EVENT_TYPE(WEB_SOCKET_TRANSPORT_CONNECT_JOB_CONNECT)
+
+// A TLS connection attempt failed because ECH was not negotiated. The
+// connection will be retried with a new ECHConfigList from the client-facing
+// server. If the new ECHConfigList is the empty string, the server has rolled
+// back ECH and the new attempt will have ECH disabled.
+//
+//   {
+//     "bytes": <The new ECHConfigList, base64-encoded>
+//   }
+EVENT_TYPE(SSL_CONNECT_JOB_RESTART_WITH_ECH_CONFIG_LIST)
 
 // ------------------------------------------------------------------------
 // ClientSocketPoolBaseHelper
@@ -1991,9 +1987,6 @@ EVENT_TYPE(QUIC_SESSION_GOAWAY_FRAME_RECEIVED)
 //     "reason_phrase":       <Prose justifying go-away request>,
 //   }
 EVENT_TYPE(QUIC_SESSION_GOAWAY_FRAME_SENT)
-
-// Session detected path degrading and decided to mark itself as goaway.
-EVENT_TYPE(QUIC_SESSION_CLIENT_GOAWAY_ON_PATH_DEGRADING)
 
 // Session received a PING frame.
 EVENT_TYPE(QUIC_SESSION_PING_FRAME_RECEIVED)
@@ -4039,6 +4032,22 @@ EVENT_TYPE(CHECK_CORS_PREFLIGHT_CACHE)
 //  }
 EVENT_TYPE(CORS_PREFLIGHT_RESULT)
 
+// This event is logged when PreflightController detects a failed CORS
+// preflight.
+//
+// It contains the following parameters:
+//  {
+//    "error: <A string representing the network error for the failure.
+//            "ERR_FAILED" for CORS errors.>,
+//    "cors-error": <Optional. An integer representing the more granular reason
+//                  for the CORS error, if any. Values map to
+//                  `network::mojom::CorsError`.>,
+//    "failed-parameter": <Optional, absent if `cors-error` is absent. A string
+//                        representing the parameter that failed validation,
+//                        e.g. a forbidden header.>,
+//  }
+EVENT_TYPE(CORS_PREFLIGHT_ERROR)
+
 // This event identifies the NetLogSource() for a URLRequest of the preflight
 // request.
 EVENT_TYPE(CORS_PREFLIGHT_URL_REQUEST)
@@ -4146,8 +4155,7 @@ EVENT_TYPE(WEBSOCKET_CLOSE_TIMEOUT)
 // }
 EVENT_TYPE(WEBSOCKET_INVALID_FRAME)
 
-// Temporarily added to investigate for https://crbug.com/1289379.
-// Logged at TransportSecurityState::ShouldUpgradeToSSL.
+// This event is logged at TransportSecurityState::ShouldUpgradeToSSL.
 // The following parameters are attached:
 //   {
 //     "host": <host name>

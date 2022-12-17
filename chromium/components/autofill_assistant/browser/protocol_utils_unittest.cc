@@ -48,19 +48,6 @@ class ProtocolUtilsTest : public testing::Test {
   ClientContextProto client_context_proto_;
 };
 
-void AssertClientContext(const ClientContextProto& context) {
-  EXPECT_EQ("1,2,3", context.experiment_ids());
-  EXPECT_TRUE(context.is_cct());
-  EXPECT_EQ("v", context.chrome().chrome_version());
-  EXPECT_EQ(1, context.device_context().version().sdk_int());
-  EXPECT_EQ("ma", context.device_context().manufacturer());
-  EXPECT_EQ("mo", context.device_context().model());
-  EXPECT_FALSE(context.is_onboarding_shown());
-  EXPECT_FALSE(context.is_direct_action());
-  EXPECT_THAT(context.accounts_matching_status(),
-              Eq(ClientContextProto::UNKNOWN));
-}
-
 TEST_F(ProtocolUtilsTest, ScriptMissingPath) {
   SupportedScriptProto script;
   std::vector<std::unique_ptr<Script>> scripts;
@@ -128,7 +115,7 @@ TEST_F(ProtocolUtilsTest, CreateInitialScriptActionsRequest) {
   EXPECT_THAT(initial.script_parameters(),
               UnorderedElementsAreArray(parameters.ToProto()));
 
-  AssertClientContext(request.client_context());
+  EXPECT_EQ(request.client_context(), client_context_proto_);
   EXPECT_EQ("global_payload", request.global_payload());
   EXPECT_EQ("script_payload", request.script_payload());
   EXPECT_EQ("bundle/path", initial.script_store_config().bundle_path());
@@ -139,12 +126,24 @@ TEST_F(ProtocolUtilsTest, CreateNextScriptActionsRequest) {
   ScriptActionRequestProto request;
   std::vector<ProcessedActionProto> processed_actions;
   processed_actions.emplace_back(ProcessedActionProto());
+
+  RoundtripNetworkStats network_stats;
+  network_stats.set_roundtrip_encoded_body_size_bytes(12345);
+  network_stats.set_roundtrip_decoded_body_size_bytes(23456);
+  auto* action_stats = network_stats.add_action_stats();
+  action_stats->set_action_info_case(5);
+  action_stats->set_decoded_size_bytes(35);
+  action_stats = network_stats.add_action_stats();
+  action_stats->set_action_info_case(7);
+  action_stats->set_decoded_size_bytes(15);
+
   EXPECT_TRUE(
       request.ParseFromString(ProtocolUtils::CreateNextScriptActionsRequest(
           "global_payload", "script_payload", processed_actions,
-          RoundtripTimingStats(), client_context_proto_)));
+          RoundtripTimingStats(), network_stats, client_context_proto_)));
 
-  AssertClientContext(request.client_context());
+  EXPECT_EQ(request.client_context(), client_context_proto_);
+  EXPECT_EQ(request.next_request().network_stats(), network_stats);
   EXPECT_EQ(1, request.next_request().processed_actions().size());
 }
 
@@ -154,7 +153,7 @@ TEST_F(ProtocolUtilsTest, CreateGetScriptsRequest) {
   EXPECT_TRUE(request.ParseFromString(ProtocolUtils::CreateGetScriptsRequest(
       GURL("http://example.com/"), client_context_proto_, parameters)));
 
-  AssertClientContext(request.client_context());
+  EXPECT_EQ(request.client_context(), client_context_proto_);
   EXPECT_THAT(request.script_parameters(),
               UnorderedElementsAreArray(parameters.ToProto()));
   EXPECT_EQ("http://example.com/", request.url());
@@ -231,13 +230,20 @@ TEST_F(ProtocolUtilsTest, ParseActionsParseError) {
   bool unused;
   std::vector<std::unique_ptr<Action>> unused_actions;
   std::vector<std::unique_ptr<Script>> unused_scripts;
-  EXPECT_FALSE(ProtocolUtils::ParseActions(nullptr, "invalid", nullptr, nullptr,
-                                           &unused_actions, &unused_scripts,
-                                           &unused));
+  EXPECT_FALSE(ProtocolUtils::ParseActions(
+      /* delegate= */ nullptr, /* response= */ "invalid", /* run_id= */ nullptr,
+      /* global_payload= */ nullptr,
+      /* script_payload= */ nullptr, &unused_actions, &unused_scripts,
+      /* should_update_scripts= */ &unused));
+}
+
+TEST_F(ProtocolUtilsTest, ParseActionParseError) {
+  EXPECT_EQ(ProtocolUtils::ParseAction(nullptr, "invalid"), nullptr);
 }
 
 TEST_F(ProtocolUtilsTest, ParseActionsValid) {
   ActionsResponseProto proto;
+  proto.set_run_id(1);
   proto.set_global_payload("global_payload");
   proto.set_script_payload("script_payload");
   proto.add_actions()->mutable_tell();
@@ -246,20 +252,30 @@ TEST_F(ProtocolUtilsTest, ParseActionsValid) {
   std::string proto_str;
   proto.SerializeToString(&proto_str);
 
+  uint64_t run_id;
   std::string global_payload;
   std::string script_payload;
   bool should_update_scripts = true;
   std::vector<std::unique_ptr<Action>> actions;
   std::vector<std::unique_ptr<Script>> scripts;
 
-  EXPECT_TRUE(ProtocolUtils::ParseActions(nullptr, proto_str, &global_payload,
-                                          &script_payload, &actions, &scripts,
-                                          &should_update_scripts));
+  EXPECT_TRUE(ProtocolUtils::ParseActions(
+      nullptr, proto_str, &run_id, &global_payload, &script_payload, &actions,
+      &scripts, &should_update_scripts));
+  EXPECT_EQ(1u, run_id);
   EXPECT_EQ("global_payload", global_payload);
   EXPECT_EQ("script_payload", script_payload);
   EXPECT_THAT(actions, SizeIs(2));
   EXPECT_FALSE(should_update_scripts);
   EXPECT_TRUE(scripts.empty());
+}
+
+TEST_F(ProtocolUtilsTest, ParseActionValid) {
+  ActionProto action_proto;
+  action_proto.mutable_tell()->set_message("Hello world!");
+  std::string proto_str;
+  action_proto.SerializeToString(&proto_str);
+  EXPECT_NE(ProtocolUtils::ParseAction(nullptr, proto_str), nullptr);
 }
 
 TEST_F(ProtocolUtilsTest, ParseActionsEmptyUpdateScriptList) {
@@ -274,7 +290,7 @@ TEST_F(ProtocolUtilsTest, ParseActionsEmptyUpdateScriptList) {
   std::vector<std::unique_ptr<Action>> unused_actions;
 
   EXPECT_TRUE(ProtocolUtils::ParseActions(
-      nullptr, proto_str, /* global_payload= */ nullptr,
+      nullptr, proto_str, /* run_id= */ nullptr, /* global_payload= */ nullptr,
       /* script_payload */ nullptr, &unused_actions, &scripts,
       &should_update_scripts));
   EXPECT_TRUE(should_update_scripts);
@@ -299,7 +315,7 @@ TEST_F(ProtocolUtilsTest, ParseActionsUpdateScriptListFullFeatured) {
   std::vector<std::unique_ptr<Action>> unused_actions;
 
   EXPECT_TRUE(ProtocolUtils::ParseActions(
-      nullptr, proto_str, /* global_payload= */ nullptr,
+      nullptr, proto_str, /* run_id= */ nullptr, /* global_payload= */ nullptr,
       /* script_payload= */ nullptr, &unused_actions, &scripts,
       &should_update_scripts));
   EXPECT_TRUE(should_update_scripts);
@@ -327,7 +343,7 @@ TEST_F(ProtocolUtilsTest, CreateGetTriggerScriptsRequest) {
       request.ParseFromString(ProtocolUtils::CreateGetTriggerScriptsRequest(
           GURL("http://example.com/"), client_context_proto_, parameters)));
 
-  AssertClientContext(request.client_context());
+  EXPECT_EQ(request.client_context(), client_context_proto_);
   EXPECT_THAT(request.script_parameters(),
               UnorderedElementsAreArray(
                   ScriptParameters(base::flat_map<std::string, std::string>{
@@ -582,6 +598,70 @@ TEST_F(ProtocolUtilsTest, ParseFromStringBadActionId) {
 
 TEST_F(ProtocolUtilsTest, ParseFromStringCannotParse) {
   ASSERT_FALSE(ProtocolUtils::ParseFromString(11, "\xff\xff\xff", nullptr));
+}
+
+TEST_F(ProtocolUtilsTest, CreateGetUserDataRequest) {
+  GetUserDataRequestProto request;
+  EXPECT_TRUE(request.ParseFromString(ProtocolUtils::CreateGetUserDataRequest(
+      /* run_id= */ 1, /* request_name= */ true, /* request_email= */ true,
+      /* request_phone= */ true, /* request_shipping= */ true,
+      /* request_payment_methods= */ false,
+      /* supported_card_networks= */ std::vector<std::string>(),
+      /* client_token= */ std::string())));
+  EXPECT_EQ(request.run_id(), 1u);
+  EXPECT_TRUE(request.request_name());
+  EXPECT_TRUE(request.request_email());
+  EXPECT_TRUE(request.request_phone());
+  EXPECT_TRUE(request.request_addresses());
+  EXPECT_FALSE(request.has_request_payment_methods());
+
+  EXPECT_TRUE(request.ParseFromString(ProtocolUtils::CreateGetUserDataRequest(
+      /* run_id= */ 1, /* request_name= */ true, /* request_email= */ true,
+      /* request_phone= */ true, /* request_shipping= */ true,
+      /* request_payment_methods= */ true,
+      /* supported_card_networks= */
+      std::vector<std::string>({"VISA", "MASTERCARD"}),
+      /* client_token= */ "token")));
+  EXPECT_TRUE(request.has_request_payment_methods());
+  EXPECT_EQ(request.request_payment_methods().client_token(), "token");
+  EXPECT_THAT(request.request_payment_methods().supported_card_networks(),
+              ElementsAre("VISA", "MASTERCARD"));
+}
+
+TEST_F(ProtocolUtilsTest, ComputeNetworkStats) {
+  ActionProto tell_action;
+  tell_action.mutable_tell()->set_message("Hello world!");
+  std::string serialized_tell_action;
+  tell_action.SerializeToString(&serialized_tell_action);
+
+  ActionProto stop_action;
+  stop_action.mutable_stop()->set_close_cct(false);
+  std::string serialized_stop_action;
+  stop_action.SerializeToString(&serialized_stop_action);
+
+  std::vector<std::unique_ptr<Action>> actions;
+  actions.push_back(ProtocolUtils::ParseAction(/* delegate = */ nullptr,
+                                               serialized_tell_action));
+  actions.push_back(ProtocolUtils::ParseAction(/* delegate = */ nullptr,
+                                               serialized_stop_action));
+
+  ServiceRequestSender::ResponseInfo response_info;
+  response_info.encoded_body_length = 20;
+
+  RoundtripNetworkStats expected_stats;
+  expected_stats.set_roundtrip_encoded_body_size_bytes(20);
+  expected_stats.set_roundtrip_decoded_body_size_bytes(28);
+  auto* action_stats = expected_stats.add_action_stats();
+  action_stats->set_action_info_case(11);  // == tell
+  action_stats->set_decoded_size_bytes(serialized_tell_action.size());
+  action_stats = expected_stats.add_action_stats();
+  action_stats->set_action_info_case(35);  // == stop
+  action_stats->set_decoded_size_bytes(serialized_stop_action.size());
+
+  EXPECT_EQ(ProtocolUtils::ComputeNetworkStats(
+                /* response = */ "This string is 28 bytes long", response_info,
+                actions),
+            expected_stats);
 }
 
 }  // namespace autofill_assistant

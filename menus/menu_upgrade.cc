@@ -182,12 +182,18 @@ bool MenuUpgrade::AddFromBundle(const base::Value::Dict& bundle_dict,
       }
     }
     if (const base::Value::List* children = bundle_dict.FindList("children")) {
+      // Try to position the new element at the same location as in the bundle.
+      // We only consider the index, if the user has addeed, moved or removed
+      // many elements in the menu in question the new item can be quite off.
+      bundle_index = 0;
       for (auto& child : *children) {
         if (child.is_dict()) {
-          if (!AddFromBundle(child.GetDict(), *guid, 0, profile_list)) {
+          if (!AddFromBundle(child.GetDict(), *guid, bundle_index,
+                             profile_list)) {
             return false;
           }
         }
+        bundle_index ++;
       }
     }
   }

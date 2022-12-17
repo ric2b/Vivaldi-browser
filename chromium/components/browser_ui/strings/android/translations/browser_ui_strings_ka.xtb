@@ -77,6 +77,7 @@
 <translation id="2687403674020088961">ყველა ქუქი-ჩანაწერის დაბლოკვა (არარეკომენდებული)</translation>
 <translation id="2704606927547763573">დაკოპირდა</translation>
 <translation id="2717722538473713889">ელფოსტის მისამართები</translation>
+<translation id="2750481671343847896">საიტებს შეუძლია სისტემაში შესვლის მოთხოვნების ჩვენება პირადობის მონაცემების სერვისებიდან.</translation>
 <translation id="2785051990912111074">ეს არჩევანი გაასუფთავებს ქუქი-ჩანაწერებს <ph name="WEBSITE" />-ისთვის</translation>
 <translation id="2822354292072154809">ნამდვილად გსურთ, საიტის ყველა ნებართვის გადაყენება <ph name="CHOSEN_OBJECT_NAME" />-ისთვის?</translation>
 <translation id="2870560284913253234">საიტი</translation>
@@ -112,6 +113,7 @@
 <translation id="3763247130972274048">10 წამის გამოსატოვებლად ორმაგად შეეხეთ ვიდეოს მარცხნივ ან მარჯვნივ</translation>
 <translation id="3797520601150691162">არ მსურს მუქი თემის გამოყენება კონკრეტულ საიტზე</translation>
 <translation id="381841723434055211">ტელეფონის ნომრები</translation>
+<translation id="3826050100957962900">სისტემაში შესვლა მესამე მხარის მეშვეობით</translation>
 <translation id="3835233591525155343">თქვენი მოწყობილობის გამოყენება</translation>
 <translation id="385051799172605136">უკან</translation>
 <translation id="3859306556332390985">წინ ძიება</translation>
@@ -122,7 +124,6 @@
 <translation id="3991845972263764475"><ph name="BYTES_DOWNLOADED_WITH_UNITS" /> / ?</translation>
 <translation id="4002066346123236978">სათაური</translation>
 <translation id="4008040567710660924">ქუქი-ჩანაწერების დაშვება კონკრეტული საიტისთვის.</translation>
-<translation id="4040330681741629921">შეტყობინების მიღება, როცა საიტის ჩვენება შესაძლებელია გამარტივებული ხედით</translation>
 <translation id="4046123991198612571">შემდეგი ჩანაწერი</translation>
 <translation id="4149994727733219643">გამარტივებული ხედი ვებგვერდებისთვის</translation>
 <translation id="4165986682804962316">საიტის პარამეტრები</translation>
@@ -236,6 +237,7 @@
 <translation id="6643016212128521049">გასუფთავება</translation>
 <translation id="6689172468748959065">პროფილის ფოტოები</translation>
 <translation id="6697925417670533197">მიმდინარე ჩამოტვირთვები</translation>
+<translation id="6722828510648505498">სისტემაში შესვლის მოთხოვნების დაბლოკვა პირადობის მონაცემების სერვისებიდან.</translation>
 <translation id="6746124502594467657">გადაადგილება ქვემოთ</translation>
 <translation id="6749077623962119521">გსურთ ნებართვების გადაყენება?</translation>
 <translation id="6766622839693428701">დასახურად გადაფურცლეთ ქვემოთ.</translation>
@@ -255,6 +257,7 @@
 <translation id="7087918508125750058">არჩეულია <ph name="ITEM_COUNT" />. ვარიანტები ხელმისაწვდომია ეკრანის ზედა ნაწილთან</translation>
 <translation id="7141896414559753902">საიტებისთვის გადამისამართებისა და ამომხტარი ფანჯრების ჩვენების დაბლოკვა (რეკომენდებული)</translation>
 <translation id="7176368934862295254"><ph name="KILOBYTES" /> კბაიტი</translation>
+<translation id="7180611975245234373">განახლება</translation>
 <translation id="723171743924126238">აირჩიეთ სურათები</translation>
 <translation id="7243308994586599757">ვარიანტები ხელმისაწვდომია ეკრანის ქვედა ნაწილთან</translation>
 <translation id="7250468141469952378">არჩეულია <ph name="ITEM_COUNT" /></translation>
@@ -308,7 +311,9 @@
 <translation id="83792324527827022">ეს საიტი იყენებს თქვენს კამერასა და მიკროფონს</translation>
 <translation id="8380167699614421159">ამ საიტზე ნაჩვენებია მომაბეზრებელი ან შეცდომაში შემყვანი რეკლამა</translation>
 <translation id="8394832520002899662">შეეხეთ საიტზე დასაბრუნებლად</translation>
+<translation id="8409345997656833551">შეტყობინების მიღება, როცა სტატიის ჩვენება შესაძლებელია გამარტივებული ხედით</translation>
 <translation id="8425213833346101688">შეცვლა</translation>
+<translation id="8428213095426709021">პარამეტრები</translation>
 <translation id="8441146129660941386">უკან ძიება</translation>
 <translation id="8444433999583714703"><ph name="APP_NAME" />-მა თქვენი მდებარეობით რომ ისარგებლოს, გაააქტიურეთ მდებარეობაზე წვდომის ნებართვაც <ph name="BEGIN_LINK" />Android-ის პარამეტრებიდან<ph name="END_LINK" />.</translation>
 <translation id="8447861592752582886">მოწყობილობაზე წვდომის ნებართვის გაუქმება</translation>

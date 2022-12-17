@@ -14,7 +14,6 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
-#include "base/cxx17_backports.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/memory/memory_pressure_monitor.h"
@@ -189,7 +188,7 @@ void RunClosureOnSignal(int signum) {
 void RegisterClosureOnSignal(base::OnceClosure closure) {
   DCHECK(!g_signal_closure);
   DCHECK(closure);
-  DCHECK_GT(base::size(kSignalsToRunClosure), 0U);
+  DCHECK_GT(std::size(kSignalsToRunClosure), 0U);
 
   // Memory leak on purpose, since |g_signal_closure| should live until
   // process exit.
@@ -348,8 +347,6 @@ const DefaultCommandLineSwitch kDefaultSwitches[] = {
     // Enable navigator.connection API.
     // TODO(derekjchow): Remove this switch when enabled by default.
     {switches::kEnableNetworkInformationDownlinkMax, ""},
-    // TODO(halliwell): Remove after fixing b/35422666.
-    {switches::kEnableUseZoomForDSF, "false"},
     // TODO(halliwell): Revert after fix for b/63101386.
     {switches::kDisallowNonExactResourceReuse, ""},
     // Disable pinch zoom gesture.
@@ -533,8 +530,8 @@ void CastBrowserMainParts::ToolkitInitialized() {
 
 int CastBrowserMainParts::PreCreateThreads() {
 #if BUILDFLAG(IS_ANDROID)
-  crash_reporter::ChildExitObserver::Create();
-  crash_reporter::ChildExitObserver::GetInstance()->RegisterClient(
+  child_exit_observer_ = std::make_unique<crash_reporter::ChildExitObserver>();
+  child_exit_observer_->RegisterClient(
       std::make_unique<crash_reporter::ChildProcessCrashObserver>());
 #endif
 

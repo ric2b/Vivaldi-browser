@@ -6,7 +6,7 @@ import {FakeMethodResolver} from 'chrome://resources/ash/common/fake_method_reso
 import {FakeObservables} from 'chrome://resources/ash/common/fake_observables.js';
 import {assert} from 'chrome://resources/js/assert.m.js';
 
-import {CalibrationComponentStatus, CalibrationObserverRemote, CalibrationOverallStatus, CalibrationSetupInstruction, CalibrationStatus, Component, ComponentType, ErrorObserverRemote, FinalizationObserverRemote, FinalizationStatus, HardwareVerificationStatusObserverRemote, HardwareWriteProtectionStateObserverRemote, OsUpdateObserverRemote, OsUpdateOperation, PowerCableStateObserverRemote, ProvisioningObserverRemote, ProvisioningStatus, QrCode, RmadErrorCode, ShimlessRmaServiceInterface, State, StateResult, UpdateRoFirmwareObserverRemote, UpdateRoFirmwareStatus, WriteProtectDisableCompleteAction} from './shimless_rma_types.js';
+import {CalibrationComponentStatus, CalibrationObserverRemote, CalibrationOverallStatus, CalibrationSetupInstruction, CalibrationStatus, Component, ComponentType, ErrorObserverRemote, FinalizationError, FinalizationObserverRemote, FinalizationStatus, HardwareVerificationStatusObserverRemote, HardwareWriteProtectionStateObserverRemote, OsUpdateObserverRemote, OsUpdateOperation, PowerCableStateObserverRemote, ProvisioningError, ProvisioningObserverRemote, ProvisioningStatus, QrCode, RmadErrorCode, ShimlessRmaServiceInterface, ShutdownMethod, State, StateResult, UpdateErrorCode, UpdateRoFirmwareObserverRemote, UpdateRoFirmwareStatus, WriteProtectDisableCompleteAction} from './shimless_rma_types.js';
 
 /** @implements {ShimlessRmaServiceInterface} */
 export class FakeShimlessRmaService {
@@ -79,13 +79,6 @@ export class FakeShimlessRmaService {
      * @private {boolean}
      */
     this.automaticallyTriggerPowerCableStateObservation_ = false;
-
-    /**
-     * The fake result of calling UpdatesOs, used to determine if fake
-     * observations should be triggered.
-     * @private {boolean}
-     */
-    this.osCanUpdate_ = false;
 
     /**
      * Both abortRma and forward state transitions can have significant delays
@@ -219,20 +212,17 @@ export class FakeShimlessRmaService {
     return this.methods_.resolveMethod('checkForOsUpdates');
   }
 
-  /**
-   * @param {boolean} available
-   * @param {string} version
-   */
-  setCheckForOsUpdatesResult(available, version) {
+  /** @param {string} version */
+  setCheckForOsUpdatesResult(version) {
     this.methods_.setResult(
-        'checkForOsUpdates', {updateAvailable: available, version: version});
+        'checkForOsUpdates', {updateAvailable: true, version});
   }
 
   /**
    * @return {!Promise<!{updateStarted: boolean}>}
    */
   updateOs() {
-    if (this.osCanUpdate_ && this.automaticallyTriggerOsUpdateObservation_) {
+    if (this.automaticallyTriggerOsUpdateObservation_) {
       this.triggerOsUpdateObserver(
           OsUpdateOperation.kCheckingForUpdate, 0.1, 500);
       this.triggerOsUpdateObserver(
@@ -250,7 +240,6 @@ export class FakeShimlessRmaService {
    * @param {boolean} started
    */
   setUpdateOsResult(started) {
-    this.osCanUpdate_ = started;
     this.methods_.setResult('updateOs', {updateStarted: started});
   }
 
@@ -275,6 +264,15 @@ export class FakeShimlessRmaService {
   setDifferentOwner() {
     return this.getNextStateForMethod_(
         'setDifferentOwner', State.kChooseDestination);
+  }
+
+  /**
+   * @param {boolean} shouldWipeDevice
+   * @return {!Promise<!StateResult>}
+   */
+  setWipeDevice(shouldWipeDevice) {
+    return this.getNextStateForMethod_(
+        'setWipeDevice', State.kChooseWipeDevice);
   }
 
   /**
@@ -708,32 +706,30 @@ export class FakeShimlessRmaService {
     this.methods_.setResult('getLog', {log: log, error: RmadErrorCode.kOk});
   }
 
+  /** @return {!Promise<{powerwashRequired: boolean, error: !RmadErrorCode}>} */
+  getPowerwashRequired() {
+    return this.methods_.resolveMethod('getPowerwashRequired');
+  }
+
+  /** @param {boolean} powerwashRequired */
+  setGetPowerwashRequiredResult(powerwashRequired) {
+    this.methods_.setResult(
+        'getPowerwashRequired',
+        {powerwashRequired: powerwashRequired, error: RmadErrorCode.kOk});
+  }
+
   launchDiagnostics() {
     console.log('(Fake) Launching diagnostics...');
   }
 
   /**
+   * The fake does not use the status list parameter, the fake data is never
+   * updated.
+   * @param {!ShutdownMethod} unused
    * @return {!Promise<!StateResult>}
    */
-  endRmaAndReboot() {
-    return this.getNextStateForMethod_(
-        'endRmaAndReboot', State.kRepairComplete);
-  }
-
-  /**
-   * @return {!Promise<!StateResult>}
-   */
-  endRmaAndShutdown() {
-    return this.getNextStateForMethod_(
-        'endRmaAndShutdown', State.kRepairComplete);
-  }
-
-  /**
-   * @return {!Promise<!StateResult>}
-   */
-  endRmaAndCutoffBattery() {
-    return this.getNextStateForMethod_(
-        'endRmaAndCutoffBattery', State.kRepairComplete);
+  endRma(unused) {
+    return this.getNextStateForMethod_('endRma', State.kRepairComplete);
   }
 
   /**
@@ -770,10 +766,12 @@ export class FakeShimlessRmaService {
    */
   observeOsUpdateProgress(remote) {
     this.observables_.observe(
-        'OsUpdateObserver_onOsUpdateProgressUpdated', (operation, progress) => {
+        'OsUpdateObserver_onOsUpdateProgressUpdated',
+        (operation, progress, errorCode) => {
           remote.onOsUpdateProgressUpdated(
               /** @type {!OsUpdateOperation} */ (operation),
-              /** @type {number} */ (progress));
+              /** @type {number} */ (progress),
+              /** @type {!UpdateErrorCode} */ (errorCode));
         });
   }
 
@@ -886,8 +884,7 @@ export class FakeShimlessRmaService {
           },
           9000);
       this.triggerCalibrationOverallObserver(
-          CalibrationOverallStatus.kCalibrationOverallCurrentRoundComplete,
-          10000);
+          CalibrationOverallStatus.kCalibrationOverallComplete, 10000);
     }
   }
 
@@ -897,10 +894,12 @@ export class FakeShimlessRmaService {
    */
   observeProvisioningProgress(remote) {
     this.observables_.observe(
-        'ProvisioningObserver_onProvisioningUpdated', (status, progress) => {
+        'ProvisioningObserver_onProvisioningUpdated',
+        (status, progress, error) => {
           remote.onProvisioningUpdated(
               /** @type {!ProvisioningStatus} */ (status),
-              /** @type {number} */ (progress));
+              /** @type {number} */ (progress),
+              /** @type {!ProvisioningError} */ (error));
         });
     if (this.automaticallyTriggerProvisioningObservation_) {
       // Fake progress over 4 seconds.
@@ -1016,10 +1015,12 @@ export class FakeShimlessRmaService {
    */
   observeFinalizationStatus(remote) {
     this.observables_.observe(
-        'FinalizationObserver_onFinalizationUpdated', (status, progress) => {
+        'FinalizationObserver_onFinalizationUpdated',
+        (status, progress, error) => {
           remote.onFinalizationUpdated(
               /** @type {!FinalizationStatus} */ (status),
-              /** @type {number} */ (progress));
+              /** @type {number} */ (progress),
+              /** @type {!FinalizationError} */ (error));
         });
     if (this.automaticallyTriggerFinalizationObservation_) {
       this.triggerFinalizationObserver(
@@ -1266,9 +1267,8 @@ export class FakeShimlessRmaService {
     this.methods_.register('writeProtectManuallyEnabled');
 
     this.methods_.register('getLog');
-    this.methods_.register('endRmaAndReboot');
-    this.methods_.register('endRmaAndShutdown');
-    this.methods_.register('endRmaAndCutoffBattery');
+    this.methods_.register('getPowerwashRequired');
+    this.methods_.register('endRma');
 
     // Critical error handling
     this.methods_.register('criticalErrorExitToLogin');

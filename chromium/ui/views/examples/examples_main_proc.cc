@@ -25,7 +25,6 @@
 #include "base/test/test_timeouts.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
-#include "components/viz/common/features.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "components/viz/service/display_embedder/server_shared_bitmap_manager.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
@@ -91,14 +90,6 @@ ExamplesExitCode ExamplesMainProc(bool under_test) {
   // window to not render. See http://crbug.com/936249.
   command_line->AppendSwitch(switches::kDisableDirectComposition);
 
-  // Disable skia renderer to use GL instead.
-  std::string disabled =
-      command_line->GetSwitchValueASCII(switches::kDisableFeatures);
-  if (!disabled.empty())
-    disabled += ",";
-  disabled += features::kUseSkiaRenderer.name;
-  command_line->AppendSwitchASCII(switches::kDisableFeatures, disabled);
-
   base::FeatureList::InitializeInstance(
       command_line->GetSwitchValueASCII(switches::kEnableFeatures),
       command_line->GetSwitchValueASCII(switches::kDisableFeatures));
@@ -114,7 +105,7 @@ ExamplesExitCode ExamplesMainProc(bool under_test) {
   ui::OzonePlatform::InitializeForGPU(params);
 #endif
 
-  gl::init::InitializeGLOneOff();
+  gl::init::InitializeGLOneOff(/*system_device_id=*/0);
 
   // Viz depends on the task environment to correctly tear down.
   base::test::TaskEnvironment task_environment(
@@ -122,8 +113,8 @@ ExamplesExitCode ExamplesMainProc(bool under_test) {
 
   // The ContextFactory must exist before any Compositors are created.
   auto context_factories =
-      std::make_unique<ui::TestContextFactories>(under_test);
-  context_factories->SetUseTestSurface(false);
+      std::make_unique<ui::TestContextFactories>(under_test,
+                                                 /*output_to_window=*/true);
 
   base::i18n::InitializeICU();
 
@@ -143,9 +134,6 @@ ExamplesExitCode ExamplesMainProc(bool under_test) {
 
   base::DiscardableMemoryAllocator::SetInstance(
       g_discardable_memory_allocator.Pointer());
-
-  base::PowerMonitor::Initialize(
-      std::make_unique<base::PowerMonitorDeviceSource>());
 
   gfx::InitializeFonts();
 

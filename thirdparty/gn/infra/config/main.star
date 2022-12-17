@@ -1,10 +1,9 @@
 #!/usr/bin/env lucicfg
 
-lucicfg.check_version("1.23.3", "Please update depot_tools")
+lucicfg.check_version("1.30.9", "Please update depot_tools")
 
-# Enable LUCI Realms support and launch all builds in realms-aware mode.
-lucicfg.enable_experiment("crbug.com/1085650")
-luci.builder.defaults.experiments.set({"luci.use_realms": 100})
+# Use LUCI Scheduler BBv2 names and add Scheduler realms configs.
+lucicfg.enable_experiment("crbug.com/1182002")
 
 lucicfg.config(
     config_dir = "generated",
@@ -56,6 +55,9 @@ def builder(name, bucket, os, caches = None, triggered_by = None):
         execution_timeout = 1 * time.hour,
         dimensions = {"cpu": "x86-64", "os": os, "pool": "luci.flex.%s" % bucket},
         triggered_by = triggered_by,
+        experiments = {
+            "luci.recipes.use_python3": 100,
+        },
     )
 
 luci.logdog(
@@ -136,6 +138,12 @@ luci.bucket(name = "try", acls = [
     ),
 ])
 
+luci.binding(
+    realm = "try",
+    roles = "role/swarming.taskTriggerer",
+    groups = "flex-try-led-users",
+)
+
 def try_builder(name, os, caches = None):
     builder(name, "try", os, caches)
     luci.cq_tryjob_verifier(
@@ -143,6 +151,6 @@ def try_builder(name, os, caches = None):
         cq_group = "gn",
     )
 
-try_builder("linux", "Ubuntu-16.04")
+try_builder("linux", "Ubuntu-18.04")
 try_builder("mac", "Mac-10.15", caches = [swarming.cache("macos_sdk")])
 try_builder("win", "Windows-10", caches = [swarming.cache("windows_sdk")])

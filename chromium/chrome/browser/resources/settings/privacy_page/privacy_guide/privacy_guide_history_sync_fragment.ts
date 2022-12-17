@@ -18,6 +18,7 @@ import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bu
 
 import {BaseMixin} from '../../base_mixin.js';
 import {SettingsToggleButtonElement} from '../../controls/settings_toggle_button.js';
+import {loadTimeData} from '../../i18n_setup.js';
 import {MetricsBrowserProxy, MetricsBrowserProxyImpl, PrivacyGuideSettingsStates} from '../../metrics_browser_proxy.js';
 import {SyncBrowserProxy, SyncBrowserProxyImpl, SyncPrefs, syncPrefsIndividualDataTypes} from '../../people_page/sync_browser_proxy.js';
 import {routes} from '../../route.js';
@@ -34,9 +35,9 @@ export interface PrivacyGuideHistorySyncFragmentElement {
 
 const PrivacyGuideHistorySyncFragmentElementBase =
     RouteObserverMixin(WebUIListenerMixin(BaseMixin(PolymerElement))) as {
-  new (): PolymerElement&RouteObserverMixinInterface&
-      WebUIListenerMixinInterface;
-};
+      new (): PolymerElement & RouteObserverMixinInterface &
+          WebUIListenerMixinInterface,
+    };
 
 export class PrivacyGuideHistorySyncFragmentElement extends
     PrivacyGuideHistorySyncFragmentElementBase {
@@ -69,6 +70,11 @@ export class PrivacyGuideHistorySyncFragmentElement extends
           };
         },
       },
+
+      enablePrivacyGuide2_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('privacyGuide2Enabled'),
+      },
     };
   }
 
@@ -91,7 +97,7 @@ export class PrivacyGuideHistorySyncFragmentElement extends
    */
   private firstSyncPrefUpdate_: boolean = true;
 
-  ready() {
+  override ready() {
     super.ready();
 
     this.addWebUIListener(
@@ -99,6 +105,10 @@ export class PrivacyGuideHistorySyncFragmentElement extends
         (syncPrefs: SyncPrefs) => this.onSyncPrefsChange_(syncPrefs));
     this.syncBrowserProxy_.sendSyncPrefsChanged();
     this.addEventListener('view-exit-finish', this.onViewExitFinish_);
+  }
+
+  override focus() {
+    this.shadowRoot!.querySelector<HTMLElement>('[focus-element]')!.focus();
   }
 
   private onViewExitFinish_() {
@@ -118,7 +128,7 @@ export class PrivacyGuideHistorySyncFragmentElement extends
     this.firstSyncPrefUpdate_ = true;
   }
 
-  currentRouteChanged(newRoute: Route) {
+  override currentRouteChanged(newRoute: Route) {
     if (newRoute === routes.PRIVACY_GUIDE &&
         Router.getInstance().getQueryParameters().get('step') ===
             PrivacyGuideStep.HISTORY_SYNC) {

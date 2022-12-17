@@ -88,10 +88,7 @@ void WebContentsObserverProxy::RenderFrameDeleted(
 void WebContentsObserverProxy::PrimaryMainFrameRenderProcessGone(
     base::TerminationStatus termination_status) {
   JNIEnv* env = AttachCurrentThread();
-  jboolean was_oom_protected =
-      termination_status == base::TERMINATION_STATUS_OOM_PROTECTED;
-  Java_WebContentsObserverProxy_renderProcessGone(env, java_observer_,
-                                                  was_oom_protected);
+  Java_WebContentsObserverProxy_renderProcessGone(env, java_observer_);
 }
 
 void WebContentsObserverProxy::DidStartLoading() {
@@ -137,24 +134,22 @@ void WebContentsObserverProxy::DidChangeVisibleSecurityState() {
 
 void WebContentsObserverProxy::PrimaryMainDocumentElementAvailable() {
   JNIEnv* env = AttachCurrentThread();
-  // TODO(crbug.com/1288029): Rename DocumentAvailableInMainFrame to
-  // PrimaryMainDocumentElementAvailable in java code.
-  Java_WebContentsObserverProxy_documentAvailableInMainFrame(env,
-                                                             java_observer_);
+  Java_WebContentsObserverProxy_primaryMainDocumentElementAvailable(
+      env, java_observer_);
 }
 
 void WebContentsObserverProxy::DidStartNavigation(
     NavigationHandle* navigation_handle) {
   Java_WebContentsObserverProxy_didStartNavigation(
       AttachCurrentThread(), java_observer_,
-      NavigationRequest::From(navigation_handle)->java_navigation_handle());
+      navigation_handle->GetJavaNavigationHandle());
 }
 
 void WebContentsObserverProxy::DidRedirectNavigation(
     NavigationHandle* navigation_handle) {
   Java_WebContentsObserverProxy_didRedirectNavigation(
       AttachCurrentThread(), java_observer_,
-      NavigationRequest::From(navigation_handle)->java_navigation_handle());
+      navigation_handle->GetJavaNavigationHandle());
 }
 
 void WebContentsObserverProxy::DidFinishNavigation(
@@ -164,7 +159,7 @@ void WebContentsObserverProxy::DidFinishNavigation(
 
   Java_WebContentsObserverProxy_didFinishNavigation(
       AttachCurrentThread(), java_observer_,
-      NavigationRequest::From(navigation_handle)->java_navigation_handle());
+      navigation_handle->GetJavaNavigationHandle());
 }
 
 void WebContentsObserverProxy::DidFinishLoad(RenderFrameHost* render_frame_host,

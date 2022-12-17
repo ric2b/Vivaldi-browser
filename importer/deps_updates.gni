@@ -1,5 +1,5 @@
 
-update_target("//chrome:child_dependencies") {
+update_target("//chrome:dependencies") {
   public_deps += [
     "//vivaldi/importer",
   ]

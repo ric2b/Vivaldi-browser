@@ -14,7 +14,7 @@ import '../settings_shared_css.js';
 
 import {CrToggleElement} from '//resources/cr_elements/cr_toggle/cr_toggle.m.js';
 import {PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-// <if expr="chromeos">
+// <if expr="chromeos_ash">
 import {sanitizeInnerHtml} from 'chrome://resources/js/parse_html_subset.m.js';
 
 // </if>
@@ -27,7 +27,7 @@ export interface SettingsToggleButtonElement {
   $: {
     control: CrToggleElement,
     labelWrapper: HTMLElement,
-  }
+  };
 }
 
 const SettingsToggleButtonElementBase =
@@ -62,7 +62,7 @@ export class SettingsToggleButtonElement extends
         reflectToAttribute: true,
       },
 
-      // <if expr="chromeos">
+      // <if expr="chromeos_ash">
       subLabelWithLink: {
         type: String,
         reflectToAttribute: true,
@@ -79,17 +79,17 @@ export class SettingsToggleButtonElement extends
     ];
   }
 
-  ariaLabel: string;
+  override ariaLabel: string;
   elideLabel: boolean;
   learnMoreUrl: string;
 
-  // <if expr="chromeos">
+  // <if expr="chromeos_ash">
   subLabelWithLink: string;
   // </if>
 
   subLabelIcon: string;
 
-  ready() {
+  override ready() {
     super.ready();
 
     this.addEventListener('click', this.onHostTap_);
@@ -100,7 +100,7 @@ export class SettingsToggleButtonElement extends
         new CustomEvent(eventName, {bubbles: true, composed: true}));
   }
 
-  focus() {
+  override focus() {
     this.$.control.focus();
   }
 
@@ -143,7 +143,7 @@ export class SettingsToggleButtonElement extends
     this.fire_('learn-more-clicked');
   }
 
-  // <if expr="chromeos">
+  // <if expr="chromeos_ash">
   /**
    * Set up the contents of sub label with link.
    */

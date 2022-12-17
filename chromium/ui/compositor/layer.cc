@@ -16,6 +16,7 @@
 #include "base/json/json_writer.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
+#include "base/observer_list.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/layers/mirror_layer.h"
 #include "cc/layers/nine_patch_layer.h"
@@ -43,6 +44,7 @@
 #include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/geometry/transform.h"
+#include "ui/gfx/image/image_skia_rep.h"
 #include "ui/gfx/interpolated_transform.h"
 
 namespace ui {
@@ -287,6 +289,7 @@ std::unique_ptr<Layer> Layer::Clone() const {
   clone->SetFillsBoundsOpaquely(fills_bounds_opaquely_);
   clone->SetFillsBoundsCompletely(fills_bounds_completely_);
   clone->SetRoundedCornerRadius(rounded_corner_radii());
+  clone->SetGradientMask(gradient_mask());
   clone->SetIsFastRoundedCorner(is_fast_rounded_corner());
   clone->SetName(name_);
 
@@ -715,6 +718,10 @@ void Layer::SetRoundedCornerRadius(const gfx::RoundedCornersF& corner_radii) {
   GetAnimator()->SetRoundedCorners(corner_radii);
 }
 
+void Layer::SetGradientMask(const gfx::LinearGradient& gradient_mask) {
+  GetAnimator()->SetGradientMask(gradient_mask);
+}
+
 void Layer::SetIsFastRoundedCorner(bool enable) {
   cc_layer_->SetIsFastRoundedCorner(enable);
   ScheduleDraw();
@@ -805,6 +812,7 @@ bool Layer::SwitchToLayer(scoped_refptr<cc::Layer> new_layer) {
   new_layer->SetRoundedCorner(cc_layer_->corner_radii());
   new_layer->SetIsFastRoundedCorner(cc_layer_->is_fast_rounded_corner());
   new_layer->SetMasksToBounds(cc_layer_->masks_to_bounds());
+  new_layer->SetGradientMask(cc_layer_->gradient_mask());
 
   cc_layer_ = new_layer.get();
   if (content_layer_) {
@@ -1511,7 +1519,13 @@ void Layer::SetColorFromAnimation(SkColor color, PropertyChangeReason reason) {
 
 void Layer::SetClipRectFromAnimation(const gfx::Rect& clip_rect,
                                      PropertyChangeReason reason) {
+  const gfx::Rect old_rect = cc_layer_->clip_rect();
+  if (old_rect == clip_rect)
+    return;
   cc_layer_->SetClipRect(clip_rect);
+
+  if (delegate_)
+    delegate_->OnLayerClipRectChanged(old_rect, reason);
 }
 
 void Layer::SetRoundedCornersFromAnimation(
@@ -1521,6 +1535,15 @@ void Layer::SetRoundedCornersFromAnimation(
 
   for (const auto& mirror : mirrors_)
     mirror->dest()->SetRoundedCornersFromAnimation(rounded_corners, reason);
+}
+
+void Layer::SetGradientMaskFromAnimation(
+    const gfx::LinearGradient& gradient_mask,
+    PropertyChangeReason reason) {
+  cc_layer_->SetGradientMask(gradient_mask);
+
+  for (const auto& mirror : mirrors_)
+    mirror->dest()->SetGradientMaskFromAnimation(gradient_mask, reason);
 }
 
 void Layer::ScheduleDrawForAnimation() {
@@ -1566,6 +1589,10 @@ gfx::Rect Layer::GetClipRectForAnimation() const {
 
 gfx::RoundedCornersF Layer::GetRoundedCornersForAnimation() const {
   return rounded_corner_radii();
+}
+
+gfx::LinearGradient Layer::GetGradientMaskForAnimation() const {
+  return gradient_mask();
 }
 
 float Layer::GetDeviceScaleFactor() const {

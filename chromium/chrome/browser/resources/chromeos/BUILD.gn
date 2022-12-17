@@ -9,6 +9,23 @@ import("//tools/grit/grit_rule.gni")
 
 assert(is_chromeos, "Only Chrome OS resources in //c/b/resources//chromeos.")
 
+group("resources") {
+  public_deps = [
+    ":app_icon_resources",
+    ":multidevice_setup_resources",
+    "accessibility:build",
+    "arc_account_picker:resources",
+    "assistant_optin:resources",
+    "audio:resources",
+    "emoji_picker:resources",
+    "launcher_internals:resources",
+    "login:conditional_resources",
+    "login:unconditional_resources",
+    "multidevice_internals:resources",
+    "network_ui:resources",
+  ]
+}
+
 grit("app_icon_resources") {
   source = "app_icon/app_icon_resources.grd"
   defines = chrome_grit_defines
@@ -50,6 +67,8 @@ group("closure_compile") {
     "account_manager:closure_compile",
     "account_manager/components:closure_compile",
     "add_supervision:closure_compile",
+    "arc_account_picker:closure_compile",
+    "assistant_optin:closure_compile",
     "bluetooth_pairing_dialog:closure_compile",
     "crostini_installer:closure_compile",
     "crostini_upgrader:closure_compile",
@@ -62,7 +81,6 @@ group("closure_compile") {
     "keyboard:closure_compile",
     "keyboard:closure_compile_module",
     "login:closure_compile",
-    "login:closure_compile_module",
     "multidevice_internals:closure_compile",
     "multidevice_setup:closure_compile",
     "network_ui:closure_compile",
@@ -79,7 +97,10 @@ group("closure_compile") {
 }
 
 js_type_check("closure_compile_local") {
-  deps = [ ":power" ]
+  deps = [
+    ":power",
+    ":slow",
+  ]
 }
 
 js_library("power") {
@@ -88,4 +109,12 @@ js_library("power") {
     "//ui/webui/resources/js:load_time_data.m",
     "//ui/webui/resources/js:util.m",
   ]
+}
+
+js_library("slow") {
+  deps = [
+    "//ui/webui/resources/js:cr.m",
+    "//ui/webui/resources/js:util.m",
+  ]
+  externs_list = [ "$externs_path/chrome_send.js" ]
 }

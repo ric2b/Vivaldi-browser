@@ -33,6 +33,10 @@ constexpr int kAppListProfileIdStartFrom = 0;
 // drag offset is smaller than the threshold.
 constexpr int kMouseDragThreshold = 2;
 
+// View group for launcher search result views that have a result set. Used
+// primarily in browser tests to find shown search result views.
+constexpr int kSearchResultViewGroup = 2;
+
 // Id of OEM folder in app list.
 ASH_PUBLIC_EXPORT extern const char kOemFolderId[];
 
@@ -343,8 +347,10 @@ enum class AppListSearchResultType {
   kDriveSearch,            // Drive file search results.
   kKeyboardShortcut,       // Keyboard shortcut search results.
   kOpenTab,                // Open tab search results.
+  kGames,                  // Game sarch results.
+  kPersonalization,        // Personalization search results.
   // Add new values here.
-  kMaxValue = kOpenTab,
+  kMaxValue = kPersonalization,
 };
 
 ASH_PUBLIC_EXPORT bool IsAppListSearchResultAnApp(
@@ -368,7 +374,8 @@ enum class AppListSearchResultCategory {
   kHelp = 6,
   kPlayStore = 7,
   kSearchAndAssistant = 8,
-  kMaxValue = kSearchAndAssistant,
+  kGames = 9,
+  kMaxValue = kGames,
 };
 
 // Which UI container(s) the result should be displayed in.
@@ -529,6 +536,9 @@ class ASH_PUBLIC_EXPORT SearchResultTextItem {
   gfx::ImageSkia GetImage() const;
   SearchResultTextItem& SetImage(gfx::ImageSkia icon);
 
+  bool GetElidable() const;
+  SearchResultTextItem& SetElidable(bool elidable);
+
  private:
   SearchResultTextItemType item_type;
   // used for type SearchResultTextItemType::kString.
@@ -538,6 +548,9 @@ class ASH_PUBLIC_EXPORT SearchResultTextItem {
   absl::optional<IconCode> icon_code;
   // used for type SearchResultTextItemType::kCustomIcon.
   absl::optional<gfx::ImageSkia> raw_image;
+  // Whether parts of this text item can be elided with "...". Only applicable
+  // to SearchResultTextItemType::kString.
+  bool elidable = true;
 };
 
 // A structure holding the common information which is sent from chrome to ash,
@@ -575,8 +588,17 @@ struct ASH_PUBLIC_EXPORT SearchResultMetadata {
   // The details of the result, supports embedded icons.
   std::vector<SearchResultTextItem> details_vector;
 
+  // Whether or not the details field can be split over multiple lines. UI
+  // implementation does not support multiline if the details vector has more
+  // than one text item, so if multiline_details is set then details_vector
+  // cannot have more than one element.
+  bool multiline_details = false;
+
   // Big title text to be displayed prominently on an answer card.
   std::vector<SearchResultTextItem> big_title_vector;
+
+  // Superscript text for the big title on an answer card.
+  std::vector<SearchResultTextItem> big_title_superscript_vector;
 
   // Text for keyboard shortcuts displayed below the title. Only used for
   // keyboard shortcut results.

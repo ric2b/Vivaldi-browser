@@ -16,6 +16,7 @@ import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.flags.BooleanCachedFieldTrialParameter;
 import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.flags.DoubleCachedFieldTrialParameter;
 import org.chromium.chrome.browser.flags.IntCachedFieldTrialParameter;
 import org.chromium.chrome.browser.flags.StringCachedFieldTrialParameter;
 import org.chromium.chrome.browser.tasks.ConditionalTabStripUtils;
@@ -42,6 +43,11 @@ public class TabUiFeatureUtilities {
     public static final StringCachedFieldTrialParameter TAB_GRID_LAYOUT_ANDROID_NEW_TAB_TILE =
             new StringCachedFieldTrialParameter(ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID,
                     TAB_GRID_LAYOUT_ANDROID_NEW_TAB_TILE_PARAM, "");
+
+    public static final String THUMBNAIL_ASPECT_RATIO_PARAM = "thumbnail_aspect_ratio";
+    public static final DoubleCachedFieldTrialParameter THUMBNAIL_ASPECT_RATIO =
+            new DoubleCachedFieldTrialParameter(
+                    ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID, THUMBNAIL_ASPECT_RATIO_PARAM, 0.85);
 
     private static final String SEARCH_CHIP_PARAM = "enable_search_term_chip";
     public static final BooleanCachedFieldTrialParameter ENABLE_SEARCH_CHIP =
@@ -103,7 +109,14 @@ public class TabUiFeatureUtilities {
             new BooleanCachedFieldTrialParameter(ChromeFeatureList.GRID_TAB_SWITCHER_FOR_TABLETS,
                     GRID_TAB_SWITCHER_FOR_TABLETS_POLISH_PARAM, false);
 
+    // Field trial parameter for defining tab width for tab strip improvements.
+    private static final String TAB_STRIP_IMPROVEMENTS_TAB_WIDTH_PARAM = "min_tab_width";
+    public static final DoubleCachedFieldTrialParameter TAB_STRIP_TAB_WIDTH =
+            new DoubleCachedFieldTrialParameter(ChromeFeatureList.TAB_STRIP_IMPROVEMENTS,
+                    TAB_STRIP_IMPROVEMENTS_TAB_WIDTH_PARAM, 190.f);
+
     private static Boolean sTabManagementModuleSupportedForTesting;
+    private static Boolean sGridTabSwitcherPolishEnabledForTesting;
 
     /**
      * Set whether the tab management module is supported for testing.
@@ -128,16 +141,43 @@ public class TabUiFeatureUtilities {
      * @param context The activity context.
      */
     public static boolean isGridTabSwitcherEnabled(Context context) {
-        // Only enable grid tab switcher for tablet if flag is enabled.
         // Note(david@vivaldi.com): But we want it.
         if (!ChromeApplicationImpl.isVivaldi())
         if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(context)) {
-            return CachedFeatureFlags.isEnabled(ChromeFeatureList.GRID_TAB_SWITCHER_FOR_TABLETS);
+            return isTabletGridTabSwitcherEnabled(context);
         }
 
         // Having Tab Groups or Start implies Grid Tab Switcher.
         return isTabManagementModuleSupported() || isTabGroupsAndroidEnabled(context)
                 || ReturnToChromeExperimentsUtil.isStartSurfaceEnabled(context);
+    }
+
+    /**
+     * @return Whether the tablet Grid Tab Switcher UI is enabled and available for use.
+     * @param context The activity context.
+     */
+    public static boolean isTabletGridTabSwitcherEnabled(Context context) {
+        return DeviceFormFactor.isNonMultiDisplayContextOnTablet(context)
+                && CachedFeatureFlags.isEnabled(ChromeFeatureList.GRID_TAB_SWITCHER_FOR_TABLETS);
+    }
+
+    /**
+     * Set whether the tablet grid tab switcher polish is enabled for testing.
+     */
+    public static void setTabletGridTabSwitcherPolishEnabledForTesting(@Nullable Boolean enabled) {
+        sGridTabSwitcherPolishEnabledForTesting = enabled;
+    }
+
+    /**
+     * @return Whether the tablet Grid Tab Switcher Polish is enabled.
+     * @param context The activity context.
+     */
+    public static boolean isTabletGridTabSwitcherPolishEnabled(Context context) {
+        if (sGridTabSwitcherPolishEnabledForTesting != null) {
+            return sGridTabSwitcherPolishEnabledForTesting;
+        }
+        return DeviceFormFactor.isNonMultiDisplayContextOnTablet(context)
+                && GRID_TAB_SWITCHER_FOR_TABLETS_POLISH.getValue();
     }
 
     /**
@@ -165,8 +205,9 @@ public class TabUiFeatureUtilities {
      * @param context The activity context.
      */
     public static boolean isTabGroupsAndroidContinuationEnabled(Context context) {
-        return isTabGroupsAndroidEnabled(context)
-                && CachedFeatureFlags.isEnabled(ChromeFeatureList.TAB_GROUPS_CONTINUATION_ANDROID);
+        return isTabGroupsAndroidEnabled(context); /* Vivaldi
+                 && CachedFeatureFlags.isEnabled(ChromeFeatureList.TAB_GROUPS_CONTINUATION_ANDROID);
+                 */
     }
 
     /**
@@ -177,6 +218,13 @@ public class TabUiFeatureUtilities {
         return CachedFeatureFlags.isEnabled(ChromeFeatureList.CONDITIONAL_TAB_STRIP_ANDROID)
                 && isTabManagementModuleSupported()
                 && !ConditionalTabStripUtils.getOptOutIndicator();
+    }
+
+    /**
+     * @return Whether the thumbnail_aspect_ratio field trail is set.
+     */
+    public static boolean isTabThumbnailAspectRatioNotOne() {
+        return Double.compare(1.0, THUMBNAIL_ASPECT_RATIO.getValue()) != 0;
     }
 
     public static boolean isTabGridLayoutAndroidNewTabTileEnabled() {
@@ -209,6 +257,26 @@ public class TabUiFeatureUtilities {
      */
     public static boolean isLaunchPolishEnabled() {
         return ENABLE_LAUNCH_POLISH.getValue();
+    }
+
+    private static Float sTabMinWidthForTesting;
+
+    /**
+     * Set the min tab width for testing.
+     */
+    public static void setTabMinWidthForTesting(@Nullable Float minWidth) {
+        sTabMinWidthForTesting = minWidth;
+    }
+
+    /**
+     * @return The min tab width.
+     */
+    public static float getTabMinWidth() {
+        if (sTabMinWidthForTesting != null) {
+            return sTabMinWidthForTesting;
+        }
+
+        return (float) TAB_STRIP_TAB_WIDTH.getValue();
     }
 
     /**

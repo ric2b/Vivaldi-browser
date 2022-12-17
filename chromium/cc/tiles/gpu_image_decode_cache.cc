@@ -21,6 +21,7 @@
 #include "base/memory/discardable_memory_allocator.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/notreached.h"
 #include "base/numerics/safe_math.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -40,10 +41,18 @@
 #include "gpu/command_buffer/common/sync_token.h"
 #include "gpu/config/gpu_finch_features.h"
 #include "gpu/config/gpu_info.h"
+#include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
+#include "third_party/skia/include/core/SkColorFilter.h"
+#include "third_party/skia/include/core/SkColorSpace.h"
 #include "third_party/skia/include/core/SkData.h"
-#include "third_party/skia/include/core/SkRefCnt.h"
+#include "third_party/skia/include/core/SkImageInfo.h"
+#include "third_party/skia/include/core/SkPixmap.h"
+#include "third_party/skia/include/core/SkRect.h"
+#include "third_party/skia/include/core/SkSamplingOptions.h"
+#include "third_party/skia/include/core/SkSize.h"
 #include "third_party/skia/include/core/SkSurface.h"
+#include "third_party/skia/include/core/SkYUVAPixmaps.h"
 #include "third_party/skia/include/gpu/GrBackendSurface.h"
 #include "third_party/skia/include/gpu/GrDirectContext.h"
 #include "third_party/skia/include/gpu/GrYUVABackendTextures.h"
@@ -2115,7 +2124,7 @@ void GpuImageDecodeCache::UploadImageIfNecessary(const DrawImage& draw_image,
   DCHECK_GT(image_data->decode.ref_count, 0u);
   DCHECK_GT(image_data->upload.ref_count, 0u);
 
-  sk_sp<SkColorSpace> color_space =
+  sk_sp<SkColorSpace> target_color_space =
       SupportsColorSpaceConversion() &&
               draw_image.target_color_space().IsValid()
           ? draw_image.target_color_space().ToSkColorSpace()
@@ -2126,29 +2135,35 @@ void GpuImageDecodeCache::UploadImageIfNecessary(const DrawImage& draw_image,
   // have happened at decode time.
   sk_sp<SkColorSpace> decoded_target_colorspace =
       ColorSpaceForImageDecode(draw_image, image_data->mode);
-  if (color_space && SkColorSpace::Equals(color_space.get(),
-                                          decoded_target_colorspace.get())) {
-    color_space = nullptr;
+  if (target_color_space && decoded_target_colorspace) {
+    if (!gfx::ColorSpace(*decoded_target_colorspace).IsPQOrHLG() &&
+        SkColorSpace::Equals(target_color_space.get(),
+                             decoded_target_colorspace.get())) {
+      target_color_space = nullptr;
+    }
   }
 
-  // Will be nullptr for non-HDR images or when we're using the default level.
-  const bool needs_adjusted_color_space =
-      NeedsColorSpaceAdjustedForUpload(draw_image);
-  if (needs_adjusted_color_space)
-    decoded_target_colorspace = ColorSpaceForImageUpload(draw_image);
+  absl::optional<TargetColorParams> target_color_params;
+  if (target_color_space) {
+    target_color_params = draw_image.target_color_params();
+    target_color_params->color_space = gfx::ColorSpace(*target_color_space);
+  }
 
   if (image_data->mode == DecodedDataMode::kTransferCache) {
     DCHECK(use_transfer_cache_);
     if (image_data->decode.do_hardware_accelerated_decode()) {
       UploadImageIfNecessary_TransferCache_HardwareDecode(
-          draw_image, image_data, color_space);
+          draw_image, image_data, target_color_space);
     } else if (image_data->yuva_pixmap_info.has_value()) {
+      const bool needs_tone_mapping =
+          decoded_target_colorspace &&
+          gfx::ColorSpace(*decoded_target_colorspace).IsPQOrHLG();
       UploadImageIfNecessary_TransferCache_SoftwareDecode_YUVA(
-          draw_image, image_data, decoded_target_colorspace);
+          draw_image, image_data, decoded_target_colorspace,
+          needs_tone_mapping ? target_color_params : absl::nullopt);
     } else {
       UploadImageIfNecessary_TransferCache_SoftwareDecode_RGBA(
-          draw_image, image_data, needs_adjusted_color_space,
-          decoded_target_colorspace, color_space);
+          draw_image, image_data, target_color_params);
     }
   } else {
     // Grab a reference to our decoded image. For the kCpu path, we will use
@@ -2160,11 +2175,10 @@ void GpuImageDecodeCache::UploadImageIfNecessary(const DrawImage& draw_image,
     if (image_data->yuva_pixmap_info.has_value()) {
       UploadImageIfNecessary_GpuCpu_YUVA(
           draw_image, image_data, uploaded_image, image_needs_mips,
-          decoded_target_colorspace, color_space);
+          decoded_target_colorspace, target_color_space);
     } else {
-      UploadImageIfNecessary_GpuCpu_RGBA(
-          draw_image, image_data, uploaded_image, image_needs_mips,
-          needs_adjusted_color_space, decoded_target_colorspace, color_space);
+      UploadImageIfNecessary_GpuCpu_RGBA(draw_image, image_data, uploaded_image,
+                                         image_needs_mips, target_color_space);
     }
   }
 }
@@ -2217,7 +2231,8 @@ void GpuImageDecodeCache::
     UploadImageIfNecessary_TransferCache_SoftwareDecode_YUVA(
         const DrawImage& draw_image,
         ImageData* image_data,
-        sk_sp<SkColorSpace> decoded_target_colorspace) {
+        sk_sp<SkColorSpace> decoded_target_colorspace,
+        absl::optional<TargetColorParams> target_color_params) {
   DCHECK_EQ(image_data->mode, DecodedDataMode::kTransferCache);
   DCHECK(use_transfer_cache_);
   DCHECK(!image_data->decode.do_hardware_accelerated_decode());
@@ -2234,7 +2249,7 @@ void GpuImageDecodeCache::
       image_data->yuva_pixmap_info->yuvaInfo().subsampling(),
       decoded_target_colorspace.get(),
       image_data->yuva_pixmap_info->yuvaInfo().yuvColorSpace(),
-      image_data->needs_mips);
+      image_data->needs_mips, target_color_params);
   if (!image_entry.IsValid())
     return;
   InsertTransferCacheEntry(image_entry, image_data);
@@ -2244,9 +2259,7 @@ void GpuImageDecodeCache::
     UploadImageIfNecessary_TransferCache_SoftwareDecode_RGBA(
         const DrawImage& draw_image,
         ImageData* image_data,
-        bool needs_adjusted_color_space,
-        sk_sp<SkColorSpace> decoded_target_colorspace,
-        sk_sp<SkColorSpace> color_space) {
+        absl::optional<TargetColorParams> target_color_params) {
   DCHECK_EQ(image_data->mode, DecodedDataMode::kTransferCache);
   DCHECK(use_transfer_cache_);
   DCHECK(!image_data->decode.do_hardware_accelerated_decode());
@@ -2255,11 +2268,9 @@ void GpuImageDecodeCache::
   SkPixmap pixmap;
   if (!image_data->decode.image()->peekPixels(&pixmap))
     return;
-  if (needs_adjusted_color_space)
-    pixmap.setColorSpace(decoded_target_colorspace);
 
-  ClientImageTransferCacheEntry image_entry(&pixmap, color_space.get(),
-                                            image_data->needs_mips);
+  ClientImageTransferCacheEntry image_entry(&pixmap, image_data->needs_mips,
+                                            target_color_params);
   if (!image_entry.IsValid())
     return;
   InsertTransferCacheEntry(image_entry, image_data);
@@ -2364,17 +2375,9 @@ void GpuImageDecodeCache::UploadImageIfNecessary_GpuCpu_RGBA(
     ImageData* image_data,
     sk_sp<SkImage> uploaded_image,
     GrMipMapped image_needs_mips,
-    bool needs_adjusted_color_space,
-    sk_sp<SkColorSpace> decoded_target_colorspace,
     sk_sp<SkColorSpace> color_space) {
   DCHECK(!use_transfer_cache_);
   DCHECK(!image_data->yuva_pixmap_info.has_value());
-
-  // TODO(crbug.com/1120719): The RGBX path is broken for HDR images.
-  if (needs_adjusted_color_space) {
-    uploaded_image =
-        uploaded_image->reinterpretColorSpace(decoded_target_colorspace);
-  }
 
   // RGBX decoding is below.
   // For kGpu, we upload and color convert (if necessary).
@@ -2991,35 +2994,6 @@ sk_sp<SkColorSpace> GpuImageDecodeCache::ColorSpaceForImageDecode(
   return sk_ref_sp(image.paint_image().color_space());
 }
 
-bool GpuImageDecodeCache::NeedsColorSpaceAdjustedForUpload(
-    const DrawImage& image) const {
-  bool is_hlg = false;
-  if (image.paint_image().GetContentColorUsage(&is_hlg) !=
-      gfx::ContentColorUsage::kHDR) {
-    return false;
-  }
-
-  // Attempt basic "tonemapping" of HLG content when rendering to SDR.
-  if (is_hlg && !image.target_color_space().IsHDR())
-    return true;
-
-  return image.sdr_white_level() != gfx::ColorSpace::kDefaultSDRWhiteLevel;
-}
-
-sk_sp<SkColorSpace> GpuImageDecodeCache::ColorSpaceForImageUpload(
-    const DrawImage& image) const {
-  DCHECK(NeedsColorSpaceAdjustedForUpload(image));
-  if (!image.target_color_space().IsHDR()) {
-    // HLG is designed such that treating it as 2.2 gamma content works well.
-    constexpr skcms_TransferFunction kGamma22 = {2.2, 1, 0, 0, 0, 0, 0};
-    return SkColorSpace::MakeRGB(kGamma22, SkNamedGamut::kRec2020);
-  }
-
-  return gfx::ColorSpace(*image.paint_image().color_space())
-      .GetWithSDRWhiteLevel(image.sdr_white_level())
-      .ToSkColorSpace();
-}
-
 void GpuImageDecodeCache::CheckContextLockAcquiredIfNecessary() {
   if (!context_->GetLock())
     return;
@@ -3141,9 +3115,7 @@ void GpuImageDecodeCache::UpdateMipsIfNeeded(const DrawImage& draw_image,
             ? draw_image.target_color_space().ToSkColorSpace()
             : nullptr;
     sk_sp<SkColorSpace> upload_color_space =
-        NeedsColorSpaceAdjustedForUpload(draw_image)
-            ? ColorSpaceForImageUpload(draw_image)
-            : ColorSpaceForImageDecode(draw_image, image_data->mode);
+        ColorSpaceForImageDecode(draw_image, image_data->mode);
     sk_sp<SkImage> yuv_image_with_mips_owned =
         CreateImageFromYUVATexturesInternal(
             image_y_with_mips_owned.get(), image_u_with_mips_owned.get(),
@@ -3183,15 +3155,6 @@ void GpuImageDecodeCache::UpdateMipsIfNeeded(const DrawImage& draw_image,
   // Need to generate mips. Take a reference on the image we're about to
   // delete, delaying deletion.
   sk_sp<SkImage> previous_image = image_data->upload.image();
-
-#if DCHECK_IS_ON()
-  // For already uploaded images, the correct color space should already have
-  // been set during the upload process.
-  if (NeedsColorSpaceAdjustedForUpload(draw_image)) {
-    DCHECK(SkColorSpace::Equals(previous_image->colorSpace(),
-                                ColorSpaceForImageUpload(draw_image).get()));
-  }
-#endif
 
   // Generate a new image from the previous, adding mips.
   sk_sp<SkImage> image_with_mips = previous_image->makeTextureImage(

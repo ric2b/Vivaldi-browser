@@ -8,7 +8,7 @@
  */
 import '../settings_shared_css.js';
 
-import {assert} from 'chrome://resources/js/assert.m.js';
+import {assert} from 'chrome://resources/js/assert_ts.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {SecurityKeysPhone, SecurityKeysPhonesBrowserProxy, SecurityKeysPhonesBrowserProxyImpl, SecurityKeysPhonesList} from './security_keys_browser_proxy.js';
@@ -38,7 +38,7 @@ export class SecurityKeysPhonesSubpageElement extends PolymerElement {
   private browserProxy_: SecurityKeysPhonesBrowserProxy =
       SecurityKeysPhonesBrowserProxyImpl.getInstance();
 
-  ready() {
+  override ready() {
     super.ready();
 
     this.addEventListener(

@@ -124,7 +124,7 @@ public class TabCountProvider {
             }
 
             @Override
-            public void didCloseTab(int tabId, boolean incognito) {
+            public void didCloseTab(Tab tab) {
                 updateTabCount();
             }
 

@@ -11,6 +11,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/task/post_task.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -23,19 +24,19 @@
 #include "components/datasource/local_image_data_source.h"
 #include "components/datasource/notes_attachment_data_source.h"
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 #include "components/datasource/desktop_data_source_win.h"
-#endif  // defined(OS_WIN)
+#endif  // BUILDFLAG(IS_WIN)
 
 VivaldiDataSource::VivaldiDataSource(Profile* profile)
     : profile_(profile->GetOriginalProfile()) {
   std::vector<std::pair<PathType, std::unique_ptr<VivaldiDataClassHandler>>>
       handlers;
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   handlers.emplace_back(
       PathType::kDesktopWallpaper,
       std::make_unique<DesktopWallpaperDataClassHandlerWin>());
-#endif  // defined(OS_WIN)
+#endif  // BUILDFLAG(IS_WIN)
   handlers.emplace_back(PathType::kLocalPath,
                         std::make_unique<LocalImageDataClassHandler>(
                             VivaldiImageStore::kPathMappingUrl));

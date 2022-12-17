@@ -162,8 +162,8 @@ std::string GetNotificationIdFor(const std::string& app_name,
 }
 
 bool IsAppOpenedInChrome(const AppId& app_id, Profile* profile) {
-  if (app_id.app_type() != apps::mojom::AppType::kChromeApp &&
-      app_id.app_type() != apps::mojom::AppType::kWeb) {
+  if (app_id.app_type() != apps::AppType::kChromeApp &&
+      app_id.app_type() != apps::AppType::kWeb) {
     return false;
   }
 
@@ -293,7 +293,7 @@ bool AppTimeController::IsExtensionAllowlisted(
 
 absl::optional<base::TimeDelta> AppTimeController::GetTimeLimitForApp(
     const std::string& app_service_id,
-    apps::mojom::AppType app_type) const {
+    apps::AppType app_type) const {
   const app_time::AppId app_id =
       app_service_wrapper_->AppIdFromAppServiceId(app_service_id, app_type);
   return app_registry_->GetTimeLimit(app_id);
@@ -647,8 +647,10 @@ void AppTimeController::ShowNotificationForApp(
           chromeos::kNotificationSupervisedUserIcon,
           message_center::SystemNotificationWarningLevel::NORMAL);
 
-  if (icon.has_value())
-    message_center_notification->set_icon(gfx::Image(icon.value()));
+  if (icon.has_value()) {
+    message_center_notification->set_icon(
+        ui::ImageModel::FromImageSkia(icon.value()));
+  }
 
   auto* notification_display_service =
       NotificationDisplayService::GetForProfile(profile_);

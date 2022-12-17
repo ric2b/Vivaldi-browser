@@ -111,6 +111,9 @@ enum class ContentSettingsType : int32_t {
   // Used to store whether to allow a website to detect user active/idle state.
   IDLE_DETECTION,
 
+  // Setting for enabling auto-select of all screens for getDisplayMediaSet.
+  GET_DISPLAY_MEDIA_SET_SELECT_ALL_SCREENS,
+
   // Content settings for access to serial ports. The "guard" content setting
   // stores whether to allow sites to ask for permission to access a port. The
   // permissions granted to access particular ports are stored in the "chooser
@@ -215,8 +218,8 @@ enum class ContentSettingsType : int32_t {
   INSECURE_PRIVATE_NETWORK,
 
   // Content setting which stores whether or not a site can access low-level
-  // locally installed font data using the Font Access API.
-  FONT_ACCESS,
+  // locally installed font data using the Local Fonts Access API.
+  LOCAL_FONTS,
 
   // Stores per-origin state for permission auto-revocation (for all permission
   // types).
@@ -280,6 +283,10 @@ enum class ContentSettingsType : int32_t {
   // Setting to indicate whether Chrome should request the desktop view of a
   // site instead of the mobile one.
   REQUEST_DESKTOP_SITE,
+
+  // Setting to indicate whether browser should allow signing into a website via
+  // the browser FedCM API.
+  FEDERATED_IDENTITY_API,
 
   NUM_TYPES,
 };

@@ -54,6 +54,10 @@ public class BackgroundTaskSchedulerUmaTest {
     @Test
     @Feature({"BackgroundTaskScheduler"})
     public void testToUmaEnumValueFromTaskId() {
+        // Special case - using Integer.MAX_VALUE as a "not found" task id.
+        assertEquals(BackgroundTaskSchedulerUma.BACKGROUND_TASK_NOT_FOUND,
+                BackgroundTaskSchedulerUma.toUmaEnumValueFromTaskId(Integer.MAX_VALUE));
+
         assertEquals(BackgroundTaskSchedulerUma.BACKGROUND_TASK_TEST,
                 BackgroundTaskSchedulerUma.toUmaEnumValueFromTaskId(TaskIds.TEST));
         assertEquals(BackgroundTaskSchedulerUma.BACKGROUND_TASK_OMAHA,
@@ -128,9 +132,6 @@ public class BackgroundTaskSchedulerUmaTest {
         assertEquals(BackgroundTaskSchedulerUma.BACKGROUND_TASK_WEBVIEW_COMPONENT_UPDATE,
                 BackgroundTaskSchedulerUma.toUmaEnumValueFromTaskId(
                         TaskIds.WEBVIEW_COMPONENT_UPDATE_JOB_ID));
-        assertEquals(BackgroundTaskSchedulerUma.BACKGROUND_TASK_ATTRIBUTION_PROVIDER_FLUSH,
-                BackgroundTaskSchedulerUma.toUmaEnumValueFromTaskId(
-                        TaskIds.ATTRIBUTION_PROVIDER_FLUSH_JOB_ID));
         assertEquals(BackgroundTaskSchedulerUma.BACKGROUND_TASK_COUNT, 29);
     }
 

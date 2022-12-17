@@ -21,17 +21,21 @@
 <translation id="3377025655491224618">Filă privată</translation>
 <translation id="3504699618187058974">Grupează filele</translation>
 <translation id="3518985090088779359">Acceptă și continuă</translation>
+<translation id="3571177741182643350">Articole necitite - Disponibile offline:</translation>
 <translation id="3700829948786686853">Bun venit la Vivaldi</translation>
 <translation id="3719826155360621982">Pagina de start</translation>
 <translation id="385051799172605136">Înapoi</translation>
+<translation id="399014816462153200">Articole citite:</translation>
 <translation id="4121750346708795461">Prin folosirea acestei aplicații, vă declarați de acord cu <ph name="BEGIN_LINK1" />Acordul de licență pentru utilizatorul final<ph name="END_LINK1" /> și <ph name="BEGIN_LINK2" />Politica privind confidențialitatea<ph name="END_LINK2" /> de la Vivaldi.</translation>
 <translation id="4137746084635924146">Limba actuală a dispozitivului</translation>
+<translation id="4167670741834902166">Filă privată nouă</translation>
 <translation id="4243710787042215766">Deschide într-o filă privată</translation>
 <translation id="4526803704855831732">File private</translation>
 <translation id="4759238208242260848">Descărcări</translation>
 <translation id="4883379392681899581">Părăsește modul privat</translation>
 <translation id="4943872375798546930">Niciun rezultat</translation>
 <translation id="49576331685473090">Blocare de conținut</translation>
+<translation id="5079259810715830221">Când un site web Google cere să preîncărcarce în mod privat linkuri pe pagina sa, Vivaldi criptează și preîncărcă pagini prin serverele Google fără cookie-uri. Acest lucru vă ascunde identitatea de pe site-ul web preîncărcat.</translation>
 <translation id="5118676864324397542">Spațiu de stocare <ph name="APP_NAME" /></translation>
 <translation id="5186185447130319458">Privat</translation>
 <translation id="5233638681132016545">Filă nouă</translation>
@@ -44,6 +48,7 @@ Pentru a ajusta termenul de căutare, apăsați lung pentru a selecta textul. Pe
 <translation id="6585139692466700358">Oferă traducerea paginilor în alte limbi folosind seviciul de traducere Vivaldi</translation>
 <translation id="6593061639179217415">Versiune pentru desktop</translation>
 <translation id="6610147964972079463">Închide filele private</translation>
+<translation id="7029995644714925509">Când un site web solicită să preîncarce în mod privat link-uri pe pagina sa, Vivaldi criptează și preîncarcă pagini prin serverele Google fără cookie-uri. Acest lucru vă ascunde identitatea de pe site-ul web preîncărcat.</translation>
 <translation id="706339621163631076">Politica privind confidențialitatea browserului</translation>
 <translation id="732145680195464316">Marcajul a fost salvat în <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Despre Vivaldi</translation>

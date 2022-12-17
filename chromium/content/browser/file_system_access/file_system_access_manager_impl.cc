@@ -8,13 +8,13 @@
 #include <string>
 
 #include "base/bind.h"
+#include "base/callback_forward.h"
 #include "base/callback_helpers.h"
 #include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
@@ -33,7 +33,6 @@
 #include "content/browser/file_system_access/file_system_access_transfer_token_impl.h"
 #include "content/browser/file_system_access/file_system_chooser.h"
 #include "content/browser/file_system_access/fixed_file_system_access_permission_grant.h"
-#include "content/browser/storage_partition_impl.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
@@ -530,6 +529,16 @@ void FileSystemAccessManagerImpl::SetDefaultPathAndShowPicker(
     suggested_name_path =
         net::GenerateFileName(GURL(), std::string(), std::string(),
                               suggested_name, std::string(), std::string());
+
+    auto suggested_extension = suggested_name_path.Extension();
+    // Our version of `IsShellIntegratedExtension()` is more stringent than
+    // the version used in `net::GenerateFileName()`. See
+    // `FileSystemChooser::IsShellIntegratedExtension()` for details.
+    if (FileSystemChooser::IsShellIntegratedExtension(suggested_extension)) {
+      suggested_extension = FILE_PATH_LITERAL("download");
+      suggested_name_path =
+          suggested_name_path.ReplaceExtension(suggested_extension);
+    }
   }
 
   FileSystemChooser::Options file_system_chooser_options(
@@ -1165,9 +1174,6 @@ void FileSystemAccessManagerImpl::DidVerifySensitiveDirectoryAccess(
     std::vector<FileSystemChooser::ResultEntry> entries,
     SensitiveDirectoryResult result) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  base::UmaHistogramEnumeration(
-      "NativeFileSystemAPI.SensitiveDirectoryAccessResult", result);
-
   if (result == SensitiveDirectoryResult::kAbort) {
     std::move(callback).Run(
         file_system_access_error::FromStatus(
@@ -1283,9 +1289,6 @@ void FileSystemAccessManagerImpl::DidChooseDirectory(
     const SharedHandleState& shared_handle_state,
     FileSystemAccessPermissionGrant::PermissionRequestOutcome outcome) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  base::UmaHistogramEnumeration(
-      "NativeFileSystemAPI.ConfirmReadDirectoryResult",
-      shared_handle_state.read_grant->GetStatus());
 
   std::vector<blink::mojom::FileSystemAccessEntryPtr> result_entries;
   if (shared_handle_state.read_grant->GetStatus() !=
@@ -1334,22 +1337,20 @@ void FileSystemAccessManagerImpl::RemoveFileWriter(
 }
 
 void FileSystemAccessManagerImpl::RemoveAccessHandleHost(
-    FileSystemAccessAccessHandleHostImpl* access_handle_host,
-    base::OnceCallback<void()> callback) {
+    FileSystemAccessAccessHandleHostImpl* access_handle_host) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(access_handle_host);
 
   // Capacity allocations only exist in non-incognito mode.
   if (context()->is_incognito()) {
-    DidCleanupAccessHandleCapacityAllocation(access_handle_host,
-                                             std::move(callback));
+    DidCleanupAccessHandleCapacityAllocation(access_handle_host);
     return;
   }
   CleanupAccessHandleCapacityAllocation(
       access_handle_host->url(), access_handle_host->granted_capacity(),
       base::BindOnce(&FileSystemAccessManagerImpl::
                          DidCleanupAccessHandleCapacityAllocation,
-                     weak_factory_.GetWeakPtr(), access_handle_host,
-                     std::move(callback)));
+                     weak_factory_.GetWeakPtr(), access_handle_host));
 }
 
 void FileSystemAccessManagerImpl::RemoveToken(
@@ -1432,7 +1433,7 @@ FileSystemAccessManagerImpl::GetSharedHandleStateForPath(
 void FileSystemAccessManagerImpl::CleanupAccessHandleCapacityAllocation(
     const storage::FileSystemURL& url,
     int64_t allocated_file_size,
-    base::OnceCallback<void()> callback) {
+    base::OnceClosure callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK_GE(allocated_file_size, 0);
 
@@ -1448,7 +1449,7 @@ void FileSystemAccessManagerImpl::CleanupAccessHandleCapacityAllocation(
 void FileSystemAccessManagerImpl::CleanupAccessHandleCapacityAllocationImpl(
     const storage::FileSystemURL& url,
     int64_t allocated_file_size,
-    base::OnceCallback<void()> callback,
+    base::OnceClosure callback,
     base::File::Error result,
     const base::File::Info& file_info) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -1462,7 +1463,7 @@ void FileSystemAccessManagerImpl::CleanupAccessHandleCapacityAllocationImpl(
 
   int64_t overallocation = allocated_file_size - file_info.size;
   DCHECK_GE(overallocation, 0)
-      << "An AccessHandle should not use more capacity than allocated.";
+      << "An Access Handle should not use more capacity than allocated.";
 
   context_->quota_manager_proxy()->NotifyStorageModified(
       storage::QuotaClientType::kFileSystem, url.storage_key(),
@@ -1473,14 +1474,30 @@ void FileSystemAccessManagerImpl::CleanupAccessHandleCapacityAllocationImpl(
 }
 
 void FileSystemAccessManagerImpl::DidCleanupAccessHandleCapacityAllocation(
-    FileSystemAccessAccessHandleHostImpl* access_handle_host,
-    base::OnceCallback<void()> callback) {
+    FileSystemAccessAccessHandleHostImpl* access_handle_host) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(access_handle_host);
-  std::move(callback).Run();
+
   size_t count_removed =
       access_handle_host_receivers_.erase(access_handle_host);
   DCHECK_EQ(1u, count_removed);
+}
+
+void FileSystemAccessManagerImpl::ResolveTransferToken(
+    mojo::PendingRemote<blink::mojom::FileSystemAccessTransferToken>
+        transfer_token,
+    ResolveTransferTokenCallback callback) {
+  ResolveTransferToken(std::move(transfer_token),
+                       base::BindOnce(
+                           [](ResolveTransferTokenCallback callback,
+                              FileSystemAccessTransferTokenImpl* token) {
+                             if (!token) {
+                               std::move(callback).Run(absl::nullopt);
+                               return;
+                             }
+                             std::move(callback).Run(token->url());
+                           },
+                           std::move(callback)));
 }
 
 base::WeakPtr<FileSystemAccessManagerImpl>

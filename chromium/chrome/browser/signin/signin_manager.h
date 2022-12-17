@@ -5,23 +5,54 @@
 #ifndef CHROME_BROWSER_SIGNIN_SIGNIN_MANAGER_H_
 #define CHROME_BROWSER_SIGNIN_SIGNIN_MANAGER_H_
 
+#include <memory>
+
+#include "base/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
+#include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_member.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
+
+namespace base {
+class FilePath;
+}
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+namespace signin {
+class ConsistencyCookieManager;
+}
+
+class AccountProfileMapper;
+class WebSigninHelperLacros;
+class SigninClient;
+struct CoreAccountId;
+#endif
 
 class PrefService;
 
 class SigninManager : public KeyedService,
                       public signin::IdentityManager::Observer {
  public:
-  SigninManager(PrefService* prefs, signin::IdentityManager* identity_manger);
+  SigninManager(PrefService* prefs,
+                signin::IdentityManager* identity_manger,
+                SigninClient* client);
+  ~SigninManager() override;
+
   SigninManager(const SigninManager&) = delete;
   SigninManager& operator=(const SigninManager&) = delete;
 
-  ~SigninManager() override;
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  void StartWebSigninFlow(
+      const base::FilePath& profile_path,
+      AccountProfileMapper* account_profile_mapper,
+      signin::ConsistencyCookieManager* consistency_cookie_manager,
+      base::OnceCallback<void(const CoreAccountId&)> on_completion_callback =
+          base::DoNothing());
+#endif
 
  private:
   // Updates the cached version of unconsented primary account and notifies the
@@ -48,10 +79,7 @@ class SigninManager : public KeyedService,
   // signin::IdentityManager::Observer implementation.
   void OnPrimaryAccountChanged(
       const signin::PrimaryAccountChangeEvent& event_details) override;
-  void OnRefreshTokenUpdatedForAccount(
-      const CoreAccountInfo& account_info) override;
-  void OnRefreshTokenRemovedForAccount(
-      const CoreAccountId& account_id) override;
+  void OnEndBatchOfRefreshTokenStateChanges() override;
   void OnRefreshTokensLoaded() override;
   void OnAccountsInCookieUpdated(
       const signin::AccountsInCookieJarInfo& accounts_in_cookie_jar_info,
@@ -63,6 +91,12 @@ class SigninManager : public KeyedService,
 
   void OnSigninAllowedPrefChanged();
 
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  void OnWebSigninHelperLacrosComplete(
+      base::OnceCallback<void(const CoreAccountId&)> on_completion_callback,
+      const CoreAccountId& account_id);
+#endif
+
   raw_ptr<PrefService> prefs_;
   raw_ptr<signin::IdentityManager> identity_manager_;
   base::ScopedObservation<signin::IdentityManager,
@@ -71,6 +105,13 @@ class SigninManager : public KeyedService,
 
   // Helper object to listen for changes to the signin allowed preference.
   BooleanPrefMember signin_allowed_;
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  std::unique_ptr<WebSigninHelperLacros> web_signin_helper_lacros_;
+  // Whether this is the main profile for which the primary account is
+  // the account used to signin to the device aka initial primary account.
+  bool is_main_profile_ = false;
+#endif
 
   base::WeakPtrFactory<SigninManager> weak_ptr_factory_{this};
 };

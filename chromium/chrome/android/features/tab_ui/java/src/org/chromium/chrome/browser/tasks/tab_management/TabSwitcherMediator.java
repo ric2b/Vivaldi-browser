@@ -64,7 +64,9 @@ import org.chromium.ui.modelutil.PropertyModel;
 
 import java.util.List;
 
+// Vivaldi
 import org.chromium.chrome.browser.ChromeApplicationImpl;
+import org.vivaldi.browser.tasks.tab_management.TabSwitcherView;
 
 /**
  * The Mediator that is responsible for resetting the tab grid or carousel based on visibility and
@@ -513,6 +515,17 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
             return;
         }
 
+        // The polished version of the grid tab switcher for tablets translates up over top of the
+        // browser controls.
+        if (TabUiFeatureUtilities.isTabletGridTabSwitcherPolishEnabled(mContext)) {
+            final int toolbarHeight =
+                    mContext.getResources().getDimensionPixelSize(R.dimen.toolbar_height_no_shadow);
+
+            mContainerViewModel.set(TOP_MARGIN, toolbarHeight);
+            mContainerViewModel.set(SHADOW_TOP_OFFSET, toolbarHeight);
+            return;
+        }
+
         final int contentOffset = mBrowserControlsStateProvider.getContentOffset();
 
         mContainerViewModel.set(TOP_MARGIN, contentOffset);
@@ -664,6 +677,12 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
     }
 
     private void setInitialScrollIndexOffset() {
+        // Note(david@vivaldi.com): Compute the correct scroll index for each tab switcher view.
+        if (ChromeApplicationImpl.isVivaldi()) {
+            computeInitialScrollIndexOffset();
+            return;
+        }
+
         int offset = mMode == TabListMode.CAROUSEL ? INITIAL_SCROLL_INDEX_OFFSET_CAROUSEL
                                                    : INITIAL_SCROLL_INDEX_OFFSET_GTS;
         int initialPosition = Math.max(
@@ -900,12 +919,12 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
     private void recordTabCounts() {
         final TabModel model = mTabModelSelector.getCurrentModel();
         if (model == null) return;
-        RecordHistogram.recordCountHistogram(TAB_COUNT_HISTOGRAM, model.getCount());
+        RecordHistogram.recordCount1MHistogram(TAB_COUNT_HISTOGRAM, model.getCount());
 
         final TabModelFilter filter =
                 mTabModelSelector.getTabModelFilterProvider().getCurrentTabModelFilter();
         if (filter == null) return;
-        RecordHistogram.recordCountHistogram(TAB_ENTRIES_HISTOGRAM, filter.getCount());
+        RecordHistogram.recordCount1MHistogram(TAB_ENTRIES_HISTOGRAM, filter.getCount());
     }
 
     private int getTabCount() {
@@ -916,6 +935,27 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
         } else {
             return SharedPreferencesManager.getInstance().readInt(
                     ChromePreferenceKeys.REGULAR_TAB_COUNT);
+        }
+    }
+
+    /**
+     * Vivaldi: Computes the scroll index separately for each tab switcher view.
+     */
+    private void computeInitialScrollIndexOffset() {
+        int offset = mMode == TabListMode.CAROUSEL ? INITIAL_SCROLL_INDEX_OFFSET_CAROUSEL
+                                                   : INITIAL_SCROLL_INDEX_OFFSET_GTS;
+        for (int i = 0; i <= TabSwitcherView.PAGE.PRIVATE; i++) {
+            int initPos = Math.max(mTabModelSelector.getTabModelFilterProvider()
+                                           .getTabModelFilter(i == TabSwitcherView.PAGE.PRIVATE)
+                                           .index()
+                            - offset,
+                    0);
+            // In MRU order, selected Tab is always at the first position.
+            if (mShowTabsInMruOrder) initPos = 0;
+            mContainerViewModel.set(i == TabSwitcherView.PAGE.NORMAL
+                            ? TabListContainerProperties.SCROLL_INDEX_NORMAL
+                            : TabListContainerProperties.SCROLL_INDEX_PRIVATE,
+                    initPos);
         }
     }
 }

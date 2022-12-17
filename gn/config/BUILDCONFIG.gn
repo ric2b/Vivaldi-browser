@@ -1,10 +1,11 @@
 declare_args() {
   is_vivaldi = true
   is_vivaldi_polestar = false
+  is_vivaldi_renault = false
 }
 
 declare_args() {
-  is_vivaldi_automotive = is_vivaldi_polestar
+  is_vivaldi_automotive = is_vivaldi_polestar || is_vivaldi_renault
 }
 
 assert (is_vivaldi)

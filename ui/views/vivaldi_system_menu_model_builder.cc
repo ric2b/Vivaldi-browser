@@ -32,7 +32,7 @@ void VivaldiSystemMenuModelBuilder::Init() {
   ui::SimpleMenuModel* model = new ui::SimpleMenuModel(&menu_delegate_);
   menu_model_.reset(model);
   BuildMenu(model);
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   // On Windows we put the menu items in the system menu (not at the end). Doing
   // this necessitates adding a trailing separator.
   model->AddSeparator(ui::NORMAL_SEPARATOR);
@@ -58,7 +58,7 @@ void VivaldiSystemMenuModelBuilder::BuildSystemMenuForBrowserWindow(
     model->AddSeparator(ui::NORMAL_SEPARATOR);
     model->AddItemWithStringId(IDC_TASK_MANAGER, IDS_TASK_MANAGER);
   }
-#if defined(OS_LINUX)
+#if BUILDFLAG(IS_LINUX)
   model->AddSeparator(ui::NORMAL_SEPARATOR);
   model->AddCheckItemWithStringId(IDC_USE_SYSTEM_TITLE_BAR,
                                   IDS_SHOW_WINDOW_DECORATIONS_MENU);
@@ -91,7 +91,7 @@ void VivaldiSystemMenuModelBuilder::BuildSystemMenuForAppOrPopupWindow(
     model->AddSeparator(ui::NORMAL_SEPARATOR);
     model->AddItemWithStringId(IDC_TASK_MANAGER, IDS_TASK_MANAGER);
   }
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CHROMEOS)
   model->AddSeparator(ui::NORMAL_SEPARATOR);
   model->AddItemWithStringId(IDC_CLOSE_WINDOW, IDS_CLOSE);
 #endif

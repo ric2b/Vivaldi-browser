@@ -33,11 +33,13 @@ class ChromeAppWindowTrackerAsh;
 class ClipboardAsh;
 class ClipboardHistoryAsh;
 class ContentProtectionAsh;
+class DeskTemplateAsh;
 class DeviceAttributesAsh;
 class DeviceSettingsAsh;
 class DlpAsh;
 class DownloadControllerAsh;
 class DriveIntegrationServiceAsh;
+class EchoPrivateAsh;
 class FeedbackAsh;
 class FieldTrialServiceAsh;
 class FileManagerAsh;
@@ -70,6 +72,7 @@ class SystemDisplayAsh;
 class TaskManagerAsh;
 class TimeZoneServiceAsh;
 class TtsAsh;
+class WebAppServiceAsh;
 class WebPageInfoFactoryAsh;
 class UrlHandlerAsh;
 class VideoCaptureDeviceFactoryAsh;
@@ -126,6 +129,8 @@ class CrosapiAsh : public mojom::Crosapi {
       mojo::PendingReceiver<mojom::ClipboardHistory> receiver) override;
   void BindContentProtection(
       mojo::PendingReceiver<mojom::ContentProtection> receiver) override;
+  void BindDeskTemplate(
+      mojo::PendingReceiver<mojom::DeskTemplate> receiver) override;
   void BindDeviceAttributes(
       mojo::PendingReceiver<mojom::DeviceAttributes> receiver) override;
   void BindDeviceSettingsService(
@@ -137,6 +142,8 @@ class CrosapiAsh : public mojom::Crosapi {
       mojo::PendingReceiver<mojom::DownloadController> receiver) override;
   void BindDriveIntegrationService(
       mojo::PendingReceiver<mojom::DriveIntegrationService> receiver) override;
+  void BindExtensionPublisher(
+      mojo::PendingReceiver<mojom::AppPublisher> receiver) override;
   void BindFieldTrialService(
       mojo::PendingReceiver<mojom::FieldTrialService> receiver) override;
   void BindFileManager(
@@ -207,6 +214,8 @@ class CrosapiAsh : public mojom::Crosapi {
       mojo::PendingReceiver<mojom::SyncService> receiver) override;
   void BindSystemDisplay(
       mojo::PendingReceiver<mojom::SystemDisplay> receiver) override;
+  void BindWebAppService(
+      mojo::PendingReceiver<mojom::WebAppService> receiver) override;
   void BindWebPageInfoFactory(
       mojo::PendingReceiver<mojom::WebPageInfoFactory> receiver) override;
   void BindTaskManager(
@@ -240,9 +249,13 @@ class CrosapiAsh : public mojom::Crosapi {
 
   AutomationAsh* automation_ash() { return automation_ash_.get(); }
 
+  DeskTemplateAsh* desk_template_ash() { return desk_template_ash_.get(); }
+
   DownloadControllerAsh* download_controller_ash() {
     return download_controller_ash_.get();
   }
+
+  EchoPrivateAsh* echo_private_ash() { return echo_private_ash_.get(); }
 
   ForceInstalledTrackerAsh* force_installed_tracker_ash() {
     return force_installed_tracker_ash_.get();
@@ -255,6 +268,8 @@ class CrosapiAsh : public mojom::Crosapi {
   SearchProviderAsh* search_provider_ash() {
     return search_provider_ash_.get();
   }
+
+  WebAppServiceAsh* web_app_service_ash() { return web_app_service_ash_.get(); }
 
   WebPageInfoFactoryAsh* web_page_info_factory_ash() {
     return web_page_info_factory_ash_.get();
@@ -276,6 +291,8 @@ class CrosapiAsh : public mojom::Crosapi {
     return keystore_service_ash_.get();
   }
 
+  CertDatabaseAsh* cert_database_ash() { return cert_database_ash_.get(); }
+
   LoginAsh* login_ash() { return login_ash_.get(); }
 
   LoginScreenStorageAsh* login_screen_storage_ash() {
@@ -289,6 +306,8 @@ class CrosapiAsh : public mojom::Crosapi {
   StructuredMetricsServiceAsh* structured_metrics_service_ash() {
     return structured_metrics_service_ash_.get();
   }
+
+  ScreenManagerAsh* screen_manager_ash() { return screen_manager_ash_.get(); }
 
   // Caller is responsible for ensuring that the pointer stays valid.
   void SetTestControllerForTesting(TestControllerReceiver* test_controller);
@@ -307,11 +326,13 @@ class CrosapiAsh : public mojom::Crosapi {
   std::unique_ptr<ClipboardAsh> clipboard_ash_;
   std::unique_ptr<ClipboardHistoryAsh> clipboard_history_ash_;
   std::unique_ptr<ContentProtectionAsh> content_protection_ash_;
+  std::unique_ptr<DeskTemplateAsh> desk_template_ash_;
   std::unique_ptr<DeviceAttributesAsh> device_attributes_ash_;
   std::unique_ptr<DeviceSettingsAsh> device_settings_ash_;
   std::unique_ptr<DlpAsh> dlp_ash_;
   std::unique_ptr<DownloadControllerAsh> download_controller_ash_;
   std::unique_ptr<DriveIntegrationServiceAsh> drive_integration_service_ash_;
+  std::unique_ptr<EchoPrivateAsh> echo_private_ash_;
   std::unique_ptr<FeedbackAsh> feedback_ash_;
   std::unique_ptr<FieldTrialServiceAsh> field_trial_service_ash_;
   std::unique_ptr<FileManagerAsh> file_manager_ash_;
@@ -344,6 +365,7 @@ class CrosapiAsh : public mojom::Crosapi {
       stable_video_decoder_factory_ash_;
   std::unique_ptr<StructuredMetricsServiceAsh> structured_metrics_service_ash_;
   std::unique_ptr<SystemDisplayAsh> system_display_ash_;
+  std::unique_ptr<WebAppServiceAsh> web_app_service_ash_;
   std::unique_ptr<WebPageInfoFactoryAsh> web_page_info_factory_ash_;
   std::unique_ptr<TaskManagerAsh> task_manager_ash_;
   std::unique_ptr<TimeZoneServiceAsh> time_zone_service_ash_;

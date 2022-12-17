@@ -23,10 +23,13 @@ def _sign_app(paths, config, dest_dir):
             the operations are completed.
     """
     commands.copy_files(os.path.join(paths.input, config.app_dir), paths.work)
+    commands.copy_files(os.path.join(paths.input, "UpdaterSetup"), paths.work)
     parts.sign_all(paths, config)
     commands.make_dir(dest_dir)
     commands.move_file(os.path.join(paths.work, config.app_dir),
                        os.path.join(dest_dir, config.app_dir))
+    commands.move_file(os.path.join(paths.work, "UpdaterSetup"),
+                       os.path.dirname(dest_dir))
 
 
 def _package_and_sign_dmg(paths, config):
@@ -89,7 +92,7 @@ def _package_dmg(paths, config):
 def sign_all(orig_paths,
              config,
              disable_packaging=False,
-             do_notarization=True,
+             notarization=model.NotarizeAndStapleLevel.STAPLE,
              skip_brands=[],
              channels=[]):
     """Code signs, packages, and signs the package, placing the result into
@@ -100,10 +103,9 @@ def sign_all(orig_paths,
         orig_paths: A |model.Paths| object.
         config: The |config.CodeSignConfig| object.
         disable_packaging: Ignored.
-        do_notarization: If True, the signed application bundle will be sent for
-            notarization by Apple. The resulting notarization ticket will then
-            be stapled. The stapled application will be packaged in the DMG and
-            then the DMG itself will be notarized and stapled.
+        notarization: The level of notarization to be performed. If
+            |disable_packaging| is False, the dmg will undergo the same
+            notarization.
         skip_brands: Ignored.
         channels: Ignored.
     """
@@ -115,7 +117,7 @@ def sign_all(orig_paths,
                                     config.packaging_basename)
             _sign_app(paths, config, dest_dir)
 
-            if do_notarization:
+            if notarization.should_notarize():
                 zip_file = os.path.join(notary_paths.work,
                                         config.packaging_basename + '.zip')
                 commands.run_command([
@@ -126,25 +128,29 @@ def sign_all(orig_paths,
                 uuid = notarize.submit(zip_file, config)
 
         # Wait for the app notarization result to come back and staple.
-        if do_notarization:
+        if notarization.should_wait():
             for _ in notarize.wait_for_results([uuid], config):
                 pass  # We are only waiting for a single notarization.
-            notarize.staple_bundled_parts(
-                # Only staple to the outermost app.
-                parts.get_parts(config)[-1:],
-                notary_paths.replace_work(
-                    os.path.join(notary_paths.work,
-                                 config.packaging_basename)))
+            if notarization.should_staple():
+                notarize.staple_bundled_parts(
+                    # Only staple to the outermost app.
+                    parts.get_parts(config)[-1:],
+                    notary_paths.replace_work(
+                        os.path.join(notary_paths.work,
+                                     config.packaging_basename)))
 
         # Package.
+        commands.move_file(os.path.join(notary_paths.work, "UpdaterSetup"),
+                           orig_paths.output)
         dmg_path = _package_and_sign_dmg(
             orig_paths.replace_work(
                 os.path.join(notary_paths.work, config.packaging_basename)),
             config)
 
         # Notarize the package, then staple.
-        if do_notarization:
+        if notarization.should_wait():
             for _ in notarize.wait_for_results(
                 [notarize.submit(dmg_path, config)], config):
                 pass  # We are only waiting for a single notarization.
-            notarize.staple(dmg_path)
+            if notarization.should_staple():
+                notarize.staple(dmg_path)

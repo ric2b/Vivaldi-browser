@@ -121,7 +121,8 @@ FingerprintSetupScreen::~FingerprintSetupScreen() {
 
 bool FingerprintSetupScreen::MaybeSkip(WizardContext* context) {
   if (!quick_unlock::IsFingerprintEnabled(
-          ProfileManager::GetActiveUserProfile()) ||
+          ProfileManager::GetActiveUserProfile(),
+          quick_unlock::Purpose::kAny) ||
       chrome_user_manager_util::IsPublicSessionOrEphemeralLogin()) {
     exit_callback_.Run(Result::NOT_APPLICABLE);
     return true;
@@ -144,9 +145,10 @@ void FingerprintSetupScreen::HideImpl() {
   view_->Hide();
 }
 
-void FingerprintSetupScreen::OnUserAction(const std::string& action_id) {
+void FingerprintSetupScreen::OnUserActionDeprecated(
+    const std::string& action_id) {
   if (!IsFingerprintUserAction(action_id)) {
-    BaseScreen::OnUserAction(action_id);
+    BaseScreen::OnUserActionDeprecated(action_id);
     return;
   }
   RecordUserAction(action_id);

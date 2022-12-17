@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "ash/components/multidevice/logging/logging.h"
 #include "ash/services/secure_channel/authenticated_channel_impl.h"
 #include "ash/services/secure_channel/ble_advertiser_impl.h"
 #include "ash/services/secure_channel/ble_constants.h"
@@ -19,15 +20,11 @@
 #include "base/containers/contains.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
-#include "chromeos/components/multidevice/logging/logging.h"
 #include "device/bluetooth/public/cpp/bluetooth_uuid.h"
 
 namespace ash::secure_channel {
 
 namespace {
-
-// TODO(https://crbug.com/1164001): remove after the migration is finished.
-namespace mojom = ::chromeos::secure_channel::mojom;
 
 std::vector<mojom::ConnectionCreationDetail> CreateConnectionDetails(
     ConnectionRole connection_role) {

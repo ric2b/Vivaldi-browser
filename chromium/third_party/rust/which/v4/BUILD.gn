@@ -15,9 +15,13 @@ cargo_crate("lib") {
   crate_root = "crate/src/lib.rs"
 
   # Unit tests skipped. Generate with --with-tests to include them.
-  skip_unit_tests = true
+  build_native_rust_unit_tests = false
   sources = [ "crate/src/lib.rs" ]
   edition = "2018"
+  cargo_pkg_version = "4.2.4"
+  cargo_pkg_authors = "Harry Fei <tiziyuanfang@gmail.com>"
+  cargo_pkg_name = "which"
+  cargo_pkg_description = "A Rust equivalent of Unix command 'which'. Locate installed executable in cross platforms."
   deps = [
     "//third_party/rust/either/v1:lib",
     "//third_party/rust/libc/v0_2:lib",

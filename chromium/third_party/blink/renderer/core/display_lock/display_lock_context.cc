@@ -22,10 +22,12 @@
 #include "third_party/blink/renderer/core/editing/selection_template.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
+#include "third_party/blink/renderer/core/html/html_object_element.h"
 #include "third_party/blink/renderer/core/html_element_type_helpers.h"
 #include "third_party/blink/renderer/core/inspector/inspector_trace_events.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/page/page.h"
+#include "third_party/blink/renderer/core/page/page_animator.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/pre_paint_tree_walk.h"
 #include "third_party/blink/renderer/platform/bindings/microtask.h"
@@ -308,7 +310,9 @@ bool DisplayLockContext::ShouldStyleChildren() const {
          forced_info_.is_forced(ForcedPhase::kStyleAndLayoutTree) ||
          (document_->GetDisplayLockDocumentState()
               .ActivatableDisplayLocksForced() &&
-          IsActivatable(DisplayLockActivationReason::kAny));
+          IsActivatable(DisplayLockActivationReason::kAny)) ||
+         (element_->GetLayoutObject() &&
+          element_->GetLayoutObject()->IsShapingDeferred());
 }
 
 void DisplayLockContext::DidStyleSelf() {
@@ -343,7 +347,9 @@ bool DisplayLockContext::ShouldLayoutChildren() const {
   return !is_locked_ || forced_info_.is_forced(ForcedPhase::kLayout) ||
          (document_->GetDisplayLockDocumentState()
               .ActivatableDisplayLocksForced() &&
-          IsActivatable(DisplayLockActivationReason::kAny));
+          IsActivatable(DisplayLockActivationReason::kAny)) ||
+         (element_->GetLayoutObject() &&
+          element_->GetLayoutObject()->IsShapingDeferred());
 }
 
 void DisplayLockContext::DidLayoutChildren() {
@@ -358,7 +364,9 @@ void DisplayLockContext::DidLayoutChildren() {
 }
 
 bool DisplayLockContext::ShouldPrePaintChildren() const {
-  return !is_locked_ || forced_info_.is_forced(ForcedPhase::kPrePaint);
+  return !is_locked_ || forced_info_.is_forced(ForcedPhase::kPrePaint) ||
+         (element_->GetLayoutObject() &&
+          element_->GetLayoutObject()->IsShapingDeferred());
 }
 
 bool DisplayLockContext::ShouldPaintChildren() const {
@@ -373,10 +381,8 @@ bool DisplayLockContext::IsActivatable(
   return activatable_mask_ & static_cast<uint16_t>(reason);
 }
 
-void DisplayLockContext::CommitForActivationWithSignal(
-    Element* activated_element,
+void DisplayLockContext::CommitForActivation(
     DisplayLockActivationReason reason) {
-  DCHECK(activated_element);
   DCHECK(element_);
   DCHECK(ConnectedToView());
   DCHECK(IsLocked());
@@ -605,6 +611,7 @@ bool DisplayLockContext::MarkForLayoutIfNeeded() {
       DisplayLockContext* context_;
     } scoped_force(this);
 
+    auto* layout_object = element_->GetLayoutObject();
     if (child_layout_was_blocked_ || HasStashedScrollOffset()) {
       // We've previously blocked a child traversal when doing self-layout for
       // the locked element, so we're marking it with child-needs-layout so that
@@ -622,13 +629,19 @@ bool DisplayLockContext::MarkForLayoutIfNeeded() {
       // can reach DisplayLockContext::DidLayoutChildren where we restore the
       // offset. If performance becomes an issue, then we should think of a
       // different time / opportunity to restore the offset.
-      element_->GetLayoutObject()->SetChildNeedsLayout();
+      layout_object->SetChildNeedsLayout();
       child_layout_was_blocked_ = false;
     } else {
       // Since the dirty layout propagation stops at the locked element, we need
       // to mark its ancestors as dirty here so that it will be traversed to on
       // the next layout.
-      element_->GetLayoutObject()->MarkContainerChainForLayout();
+      layout_object->MarkContainerChainForLayout();
+      if (layout_object->IsShapingDeferred()) {
+        layout_object->SetIntrinsicLogicalWidthsDirty();
+        layout_object->SetChildNeedsLayout();
+        // Make sure we don't use cached NGFragmentItem objects.
+        To<LayoutBox>(layout_object)->ClearLayoutResults();
+      }
     }
     return true;
   }
@@ -724,7 +737,7 @@ bool DisplayLockContext::IsElementDirtyForStyleRecalc() const {
 bool DisplayLockContext::IsElementDirtyForLayout() const {
   if (auto* layout_object = element_->GetLayoutObject()) {
     return layout_object->NeedsLayout() || child_layout_was_blocked_ ||
-           HasStashedScrollOffset();
+           HasStashedScrollOffset() || layout_object->IsShapingDeferred();
   }
   return false;
 }
@@ -912,6 +925,11 @@ const char* DisplayLockContext::ShouldForceUnlock() const {
     return nullptr;
   }
 
+  // Do not force-unlock for deferred elements.
+  if (element_->GetLayoutObject() &&
+      element_->GetLayoutObject()->IsShapingDeferred())
+    return nullptr;
+
   if (element_->HasDisplayContentsStyle())
     return rejection_names::kUnsupportedDisplay;
 
@@ -922,12 +940,15 @@ const char* DisplayLockContext::ShouldForceUnlock() const {
   if (!style->ContainsStyle() || !style->ContainsLayout())
     return rejection_names::kContainmentNotSatisfied;
 
-  // We allow replaced elements to be locked. This check is similar to the check
-  // in DefinitelyNewFormattingContext() in element.cc, but in this case we
-  // allow object element to get locked.
-  if (IsA<HTMLObjectElement>(*element_) || IsA<HTMLImageElement>(*element_) ||
-      element_->IsFormControlElement() || element_->IsMediaElement() ||
-      element_->IsFrameOwnerElement() || element_->IsSVGElement()) {
+  // We allow replaced elements without fallback content to be locked. This
+  // check is similar to the check in DefinitelyNewFormattingContext() in
+  // element.cc, but in this case we allow object element to get locked.
+  if (const auto* object_element = DynamicTo<HTMLObjectElement>(*element_)) {
+    if (!object_element->UseFallbackContent())
+      return nullptr;
+  } else if (IsA<HTMLImageElement>(*element_) ||
+             element_->IsFormControlElement() || element_->IsMediaElement() ||
+             element_->IsFrameOwnerElement() || element_->IsSVGElement()) {
     return nullptr;
   }
 

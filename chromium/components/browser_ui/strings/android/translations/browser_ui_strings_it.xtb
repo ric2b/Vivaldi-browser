@@ -77,6 +77,7 @@
 <translation id="2687403674020088961">Blocca tutti i cookie (non consigliato)</translation>
 <translation id="2704606927547763573">Copiata</translation>
 <translation id="2717722538473713889">Indirizzi email</translation>
+<translation id="2750481671343847896">I siti possono mostrare richieste di accesso da servizi di identità.</translation>
 <translation id="2785051990912111074">Questa selezione cancellerà i cookie per <ph name="WEBSITE" /></translation>
 <translation id="2822354292072154809">Vuoi reimpostare tutte le autorizzazioni del sito per <ph name="CHOSEN_OBJECT_NAME" />?</translation>
 <translation id="2870560284913253234">Sito</translation>
@@ -112,6 +113,7 @@
 <translation id="3763247130972274048">Tocca due volte il video a sinistra o a destra per saltare di 10 secondi</translation>
 <translation id="3797520601150691162">Non applicare il tema scuro a un sito specifico</translation>
 <translation id="381841723434055211">Numeri di telefono</translation>
+<translation id="3826050100957962900">Third-party sign-in</translation>
 <translation id="3835233591525155343">Utilizzo del tuo dispositivo</translation>
 <translation id="385051799172605136">Indietro</translation>
 <translation id="3859306556332390985">Posiziona avanti</translation>
@@ -122,7 +124,6 @@
 <translation id="3991845972263764475"><ph name="BYTES_DOWNLOADED_WITH_UNITS" /> di ?</translation>
 <translation id="4002066346123236978">Titolo</translation>
 <translation id="4008040567710660924">Consenti i cookie per un sito specifico.</translation>
-<translation id="4040330681741629921">Ricevi una notifica quando un sito può essere mostrato nella visualizzazione semplificata</translation>
 <translation id="4046123991198612571">Traccia successiva</translation>
 <translation id="4149994727733219643">Visualizzazione semplificata delle pagine web</translation>
 <translation id="4165986682804962316">Impostazioni sito</translation>
@@ -236,6 +237,7 @@
 <translation id="6643016212128521049">Cancella</translation>
 <translation id="6689172468748959065">Foto del profilo</translation>
 <translation id="6697925417670533197">Download attivi</translation>
+<translation id="6722828510648505498">Blocca le richieste di accesso da servizi di identità.</translation>
 <translation id="6746124502594467657">Sposta giù</translation>
 <translation id="6749077623962119521">Reimpostare le autorizzazioni?</translation>
 <translation id="6766622839693428701">Fai scorrere verso il basso per chiudere.</translation>
@@ -255,6 +257,7 @@
 <translation id="7087918508125750058"><ph name="ITEM_COUNT" /> elementi selezionati. Opzioni disponibili nella parte superiore dello schermo</translation>
 <translation id="7141896414559753902">Impedisci ai siti di mostrare popup e reindirizzamenti (opzione consigliata)</translation>
 <translation id="7176368934862295254"><ph name="KILOBYTES" /> kB</translation>
+<translation id="7180611975245234373">Aggiorna</translation>
 <translation id="723171743924126238">Seleziona immagini</translation>
 <translation id="7243308994586599757">Opzioni disponibili nella parte inferiore dello schermo</translation>
 <translation id="7250468141469952378"><ph name="ITEM_COUNT" /> elementi selezionati</translation>
@@ -308,7 +311,9 @@
 <translation id="83792324527827022">Un sito sta utilizzando la fotocamera e il microfono</translation>
 <translation id="8380167699614421159">Questo sito mostra annunci invasivi o fuorvianti</translation>
 <translation id="8394832520002899662">Tocca per tornare al sito.</translation>
+<translation id="8409345997656833551">Ricevi una notifica quando un articolo può essere mostrato nella visualizzazione semplificata</translation>
 <translation id="8425213833346101688">Cambia</translation>
+<translation id="8428213095426709021">Impostazioni</translation>
 <translation id="8441146129660941386">Posiziona indietro</translation>
 <translation id="8444433999583714703">Per consentire all'app <ph name="APP_NAME" /> di accedere alla tua posizione, devi attivare la posizione anche nelle <ph name="BEGIN_LINK" />Impostazioni Android<ph name="END_LINK" />.</translation>
 <translation id="8447861592752582886">Revoca autorizzazione dispositivo</translation>

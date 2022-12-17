@@ -129,7 +129,6 @@ component("web_engine_core") {
     "//gpu/command_buffer/service",
     "//media",
     "//media/fuchsia/cdm/service",
-    "//media/fuchsia/mojom:cdm_provider",
     "//media/mojo/common",
     "//media/mojo/services",
     "//mojo/public/cpp/bindings",
@@ -147,6 +146,7 @@ component("web_engine_core") {
     "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.mem",
     "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.settings",
     "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.ui.gfx",
+    "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.ui.scenic",
     "//third_party/fuchsia-sdk/sdk/pkg/fit-promise",
     "//third_party/fuchsia-sdk/sdk/pkg/scenic_cpp",
     "//third_party/fuchsia-sdk/sdk/pkg/sys_cpp",
@@ -162,6 +162,34 @@ component("web_engine_core") {
     "//ui/platform_window",
     "//ui/wm",
     "//ui/wm/public",
+  ]
+
+  assert_no_deps = [
+    # Although `enable_pdf` is true for Fuchsia, PDF code should not be linked
+    # into WebEngine because it does not have the necessary infrastructure and
+    # this would unnecessarily increase the package size.
+    "//components/pdf/*",
+    "//pdf/*",
+
+    # Pepper code should not be included as plugins are disabled.
+    # Exclude everything except "//ppapi/buildflags/*", which is allowed.
+    "//ppapi:*",
+    "//ppapi/c/*",
+    "//ppapi/cpp/*",
+    "//ppapi/host/*",
+    "//ppapi/lib/*",
+    "//ppapi/native_client/*",
+    "//ppapi/proxy/*",
+    "//ppapi/shared_impl/*",
+    "//ppapi/thunk/*",
+
+    # Although `enable_printing` is true for Fuchsia, no code should be linked.
+    # "//printing:metafile" is used by //third_party/blink/renderer/core and
+    # uses "//printing/common/*".
+    # "//printing/mojom/*" is allowed because Blink public APIs use its types.
+    "//printing:printing",
+    "//printing:printing_base",
+    "//printing/backend/*",
   ]
 
   # Technically the PAK files are only data dependencies, but specifying them
@@ -192,8 +220,6 @@ component("web_engine_core") {
     "browser/accessibility_bridge.h",
     "browser/ax_tree_converter.cc",
     "browser/ax_tree_converter.h",
-    "browser/cdm_provider_service.cc",
-    "browser/cdm_provider_service.h",
     "browser/content_directory_loader_factory.cc",
     "browser/content_directory_loader_factory.h",
     "browser/context_impl.cc",
@@ -303,10 +329,7 @@ executable("web_engine_exe") {
 }
 
 source_set("webui_resources") {
-  data = [
-    "$root_gen_dir/ui/resources/webui_generated_resources.pak",
-    "$root_gen_dir/ui/resources/webui_resources.pak",
-  ]
+  data = [ "$root_gen_dir/ui/resources/webui_generated_resources.pak" ]
   deps = [ "//ui/resources" ]
   visibility = [ ":*" ]
 }
@@ -316,8 +339,6 @@ _web_engine_excluded_files = [
   # not be included in the WebEngine package.
   # Whenever this list is updated the exclusions in the cast_runner package
   # should be updated as well (see fuchsia/runners/BUILD.gn).
-  "lib/libswiftshader_libEGL.so",
-  "lib/libswiftshader_libGLESv2.so",
   "lib/libvk_swiftshader.so",
   "vk_swiftshader_icd.json",
 ]
@@ -459,6 +480,7 @@ test("web_engine_browsertests") {
     "browser/post_message_browsertest.cc",
     "browser/request_monitoring_browsertest.cc",
     "browser/theme_manager_browsertest.cc",
+    "browser/url_request_invalidation_browsertest.cc",
     "browser/virtual_keyboard_browsertest.cc",
   ]
 
@@ -667,6 +689,7 @@ executable("web_engine_shell_exec") {
     "//fuchsia/engine/web_instance_host",
     "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.ui.policy",
     "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.web",
+    "//third_party/fuchsia-sdk/sdk/pkg/fdio",
     "//third_party/fuchsia-sdk/sdk/pkg/scenic_cpp",
     "//third_party/fuchsia-sdk/sdk/pkg/sys_cpp",
     "//url",

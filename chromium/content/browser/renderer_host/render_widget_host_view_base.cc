@@ -8,6 +8,7 @@
 #include "base/check.h"
 #include "base/containers/contains.h"
 #include "base/logging.h"
+#include "base/observer_list.h"
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
 #include "components/viz/common/features.h"
@@ -200,10 +201,6 @@ void RenderWidgetHostViewBase::SetIsInVR(bool is_in_vr) {
 
 bool RenderWidgetHostViewBase::IsInVR() const {
   return false;
-}
-
-bool RenderWidgetHostViewBase::IsInActiveWindow() const {
-  return true;
 }
 
 viz::FrameSinkId RenderWidgetHostViewBase::GetRootFrameSinkId() {
@@ -563,6 +560,16 @@ void RenderWidgetHostViewBase::UpdateScreenInfo() {
     OnSynchronizedDisplayPropertiesChanged(has_rotation_changed);
     host()->NotifyScreenInfoChanged();
   }
+}
+
+void RenderWidgetHostViewBase::UpdateActiveState(bool active) {
+  // Send active state through the delegate if there is one to make sure
+  // it stays consistent across all widgets in the tab. Not every
+  // RenderWidgetHost has a delegate (for example, drop-down widgets).
+  if (host()->delegate())
+    host()->delegate()->SendActiveState(active);
+  else
+    host()->SetActive(active);
 }
 
 void RenderWidgetHostViewBase::DidUnregisterFromTextInputManager(

@@ -64,6 +64,7 @@ source_set("unit_tests") {
     "//ios/chrome/browser/prefs:browser_prefs",
     "//ios/chrome/browser/tabs",
     "//ios/chrome/browser/ui/main:scene",
+    "//ios/chrome/browser/ui/main:scene_state_header",
     "//ios/chrome/browser/ui/main/test",
     "//ios/chrome/browser/ui/safe_mode",
     "//ios/chrome/common/app_group",
@@ -169,7 +170,7 @@ source_set("app_metrics_app_state_agent") {
     "//ios/chrome/app/application_delegate:application_delegate_internal",
     "//ios/chrome/app/application_delegate:observing_app_state_agent",
     "//ios/chrome/browser/metrics",
-    "//ios/chrome/browser/ui/main:scene",
+    "//ios/chrome/browser/ui/main:scene_state_header",
   ]
 }
 
@@ -200,8 +201,10 @@ source_set("enterprise_app_agent") {
     "//components/policy/core/common",
     "//ios/chrome/app:tests_hook",
     "//ios/chrome/app/application_delegate:app_state_header",
+    "//ios/chrome/app/application_delegate:application_delegate_internal",
     "//ios/chrome/browser",
     "//ios/chrome/browser/policy",
+    "//ios/chrome/browser/ui/first_run:utils",
     "//ios/chrome/browser/ui/main:scene_state_header",
   ]
 }
@@ -246,7 +249,7 @@ source_set("first_run_app_state_agent") {
     "//ios/chrome/browser/ui/first_run:utils",
     "//ios/chrome/browser/ui/main:browser_interface_provider",
     "//ios/chrome/browser/ui/main:observing_scene_agent",
-    "//ios/chrome/browser/ui/main:scene",
+    "//ios/chrome/browser/ui/main:scene_state_header",
     "//ios/chrome/browser/ui/screen:screen_provider",
   ]
 }
@@ -329,11 +332,12 @@ source_set("app_internal") {
     "//ios/chrome/browser/first_run",
     "//ios/chrome/browser/geolocation",
     "//ios/chrome/browser/history",
+    "//ios/chrome/browser/mailto_handler",
+    "//ios/chrome/browser/mailto_handler:mailto_handler_factory",
     "//ios/chrome/browser/main",
     "//ios/chrome/browser/memory",
     "//ios/chrome/browser/metrics",
     "//ios/chrome/browser/metrics:metrics_internal",
-    "//ios/chrome/browser/net",
     "//ios/chrome/browser/ntp:features",
     "//ios/chrome/browser/omaha",
     "//ios/chrome/browser/passwords",
@@ -355,6 +359,7 @@ source_set("app_internal") {
     "//ios/chrome/browser/ui/first_run:utils",
     "//ios/chrome/browser/ui/main",
     "//ios/chrome/browser/ui/main:scene",
+    "//ios/chrome/browser/ui/main:scene_state_header",
     "//ios/chrome/browser/ui/tab_switcher/tab_grid",
     "//ios/chrome/browser/ui/tab_switcher/tab_grid:tab_grid_ui",
     "//ios/chrome/browser/ui/table_view",
@@ -374,10 +379,10 @@ source_set("app_internal") {
     "//ios/chrome/common/app_group",
     "//ios/chrome/common/app_group:main_app",
     "//ios/chrome/common/intents",
+    "//ios/components/cookie_util",
     "//ios/net",
     "//ios/public/provider/chrome/browser",
     "//ios/public/provider/chrome/browser/app_distribution:app_distribution_api",
-    "//ios/public/provider/chrome/browser/mailto",
     "//ios/public/provider/chrome/browser/overrides:overrides_api",
     "//ios/public/provider/chrome/browser/ui_utils:ui_utils_api",
     "//ios/public/provider/chrome/browser/user_feedback",

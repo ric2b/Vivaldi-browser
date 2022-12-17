@@ -8,6 +8,7 @@
 #include "app/vivaldi_constants.h"
 #include "base/command_line.h"
 #include "browser/launch_update_notifier.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/prefs/pref_service.h"
 #include "extensions/buildflags/buildflags.h"
@@ -18,12 +19,14 @@
 #include "chrome/common/extensions/extension_metrics.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"
-
-using extensions::Extension;
 #endif
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 #include "browser/init_sparkle.h"
+#endif
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+using extensions::Extension;
 #endif
 
 namespace vivaldi {

@@ -9,7 +9,6 @@
 <translation id="1054153489933238809">Apri &amp;Immagine Originale in una Nuova Scheda</translation>
 <translation id="1056898198331236512">Avviso</translation>
 <translation id="1084824384139382525">Copia indi&amp;rizzo link</translation>
-<translation id="1128109161498068552">Non consentire ai siti di utilizzare messaggi esclusivi di sistema per accedere a dispositivi MIDI</translation>
 <translation id="1163931534039071049">&amp;Visualizza sorgente frame</translation>
 <translation id="1165039591588034296">Errore</translation>
 <translation id="1175364870820465910">&amp;Stampa...</translation>
@@ -22,7 +21,6 @@
 <translation id="1297175357211070620">Destinazione</translation>
 <translation id="1303101771013849280">File HTML Segnalibri</translation>
 <translation id="1430915738399379752">Stampa</translation>
-<translation id="1433811987160647649">Chiedi prima di accedere</translation>
 <translation id="1451375123200651445">Pagina web, singolo file</translation>
 <translation id="1465176863081977902">C&amp;opia l'indirizzo dell'audio</translation>
 <translation id="1476607407192946488">&amp;Impostazioni lingua</translation>
@@ -99,13 +97,11 @@
 <translation id="2783321960289401138">Crea scorciatoia...</translation>
 <translation id="2785873697295365461">Descrittori di file</translation>
 <translation id="2809586584051668049">e altre <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
-<translation id="2812989263793994277">Non mostrare le immagini</translation>
 <translation id="2850541429955027218">Aggiungi tema</translation>
 <translation id="2861941300086904918">Gestione sicurezza Native Client</translation>
 <translation id="2881076733170862447">Quando fai clic sull'estensione</translation>
 <translation id="2889064240420137087">Apri link con...</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> non riesce a comunicare con questa stampante. Assicurati che la stampante sia collegata e riprova.</translation>
-<translation id="2904456025988372123">Chiedi conferma quando un sito tenta di scaricare automaticamente file dopo il primo file</translation>
 <translation id="2913331724188855103">Consenti ai siti di salvare e leggere i dati dei cookie (opzione consigliata)</translation>
 <translation id="2931157624143513983">Adatta ad area stampabile</translation>
 <translation id="2932085390869194046">Suggerisci password...</translation>
@@ -126,7 +122,6 @@
 <translation id="3127156390846601284">Sanno eliminati tutti i dati memorizzati sul dispositivo relativi a tutti i siti mostrati. Continuare?</translation>
 <translation id="3129173833825111527">Margine sinistro</translation>
 <translation id="3144647712221361880">Apri link come</translation>
-<translation id="3154429428035006212">Offline per più di un mese</translation>
 <translation id="3222066309010235055">Prerenderizza: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Seleziona la directory principale dell'estensione di cui creare il pacchetto. Per aggiornare un'estensione, seleziona anche il file delle chiave privata da riutilizzare.</translation>
 <translation id="3280237271814976245">Salv&amp;a come...</translation>
@@ -143,6 +138,7 @@
 <translation id="3360297538363969800">Errore di stampa. Controlla la stampante e riprova.</translation>
 <translation id="3378572629723696641">Questa estensione potrebbe essere stata danneggiata.</translation>
 <translation id="3387614642886316601">Usa il controllo ortografico avanzato</translation>
+<translation id="3393582007140394275">Impossibile trasmettere schermo.</translation>
 <translation id="3432227430032737297">Rimuovi tutti i cookie visualizzati</translation>
 <translation id="345693547134384690">Apri &amp;immagine in una nuova scheda</translation>
 <translation id="3494769164076977169">Chiedi conferma quando un sito tenta di scaricare automaticamente file dopo il primo file (opzione consigliata)</translation>
@@ -165,7 +161,6 @@
 <translation id="3838085852053358637">Caricamento estensione non riuscito</translation>
 <translation id="383891835335927981">Non è stato aumentato o diminuito lo zoom di alcun sito</translation>
 <translation id="385051799172605136">Indietro</translation>
-<translation id="3899879303189199559">Offline per più di un anno</translation>
 <translation id="3905761538810670789">Ripara app</translation>
 <translation id="3908501907586732282">Attiva estensione</translation>
 <translation id="3909701002594999354">Mostra tutti i &amp;controlli</translation>
@@ -192,7 +187,6 @@
 <translation id="4200983522494130825">Nuova &amp;scheda</translation>
 <translation id="4225397296022057997">Su tutti i siti</translation>
 <translation id="4256316378292851214">Sal&amp;va Video Come...</translation>
-<translation id="4278390842282768270">Consenti</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> K (<ph name="NUM_KILOBYTES_LIVE" /> K effettivi)</translation>
 <translation id="4345587454538109430">Configura...</translation>
 <translation id="4348766275249686434">Raccogli errori</translation>
@@ -217,15 +211,15 @@
 <translation id="488785315393301722">Mostra dettagli</translation>
 <translation id="4907306957610201395">Categoria di autorizzazione</translation>
 <translation id="4912643508233590958">Riattivazioni</translation>
+<translation id="49265687513387605">Impossibile trasmettere schermo.  Verifica di avere confermato la richiesta di avvio della condivisione dello schermo.</translation>
 <translation id="4927753642311223124">Niente da vedere qui, vai avanti.</translation>
 <translation id="4930714375720679147">Attiva</translation>
+<translation id="4961318399572185831">Trasmissione schermo</translation>
 <translation id="4988526792673242964">Pagine</translation>
 <translation id="49896407730300355">Ruota in senso a&amp;ntiorario</translation>
 <translation id="4989966318180235467">Ispeziona pagina in &amp;secondo piano</translation>
-<translation id="4994474651455208930">Consenti ai siti di chiedere di diventare gestori predefiniti dei protocolli</translation>
 <translation id="5000922062037820727">Bloccati (opzione consigliata)</translation>
 <translation id="5027562294707732951">Aggiungi estensione</translation>
-<translation id="5036662165765606524">Non consentire ai siti di scaricare automaticamente più file</translation>
 <translation id="5039804452771397117">Consenti</translation>
 <translation id="5057110919553308744">Quando fai clic sull'estensione</translation>
 <translation id="5059526285558225588">Scegli cosa condividere</translation>
@@ -238,7 +232,6 @@
 <translation id="5233231016133573565">ID processo</translation>
 <translation id="5233736638227740678">&amp;Incolla</translation>
 <translation id="5256861893479663409">Su Tutti i Siti</translation>
-<translation id="5265562206369321422">Offline per più di una settimana</translation>
 <translation id="5269977353971873915">Stampa non riuscita</translation>
 <translation id="5284445933715251131">Continua il Trasferimento</translation>
 <translation id="52912272896845572">Il file della chiave privata non è valido.</translation>
@@ -294,7 +287,6 @@
 <translation id="6122081475643980456">La tua connessione Internet è controllata</translation>
 <translation id="6147020289383635445">Anteprima di stampa non riuscita.</translation>
 <translation id="6156863943908443225">Cache script</translation>
-<translation id="6169666352732958425">Impossibile trasmettere il desktop.</translation>
 <translation id="6196854373336333322">L'estensione "<ph name="EXTENSION_NAME" />" ha assunto il controllo delle tue impostazioni proxy, il che significa che può cambiare, interrompere o intercettare tutto ciò che fai online. Se non sei sicuro del motivo per cui si sia verificato questo cambiamento, è probabile che sia indesiderato.</translation>
 <translation id="6200151268994853226">Gestisci estensione</translation>
 <translation id="6206311232642889873">Cop&amp;ia immagine</translation>
@@ -328,7 +320,6 @@
 <translation id="6798954102094737107">Plug-in: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Mantieni le modifiche</translation>
 <translation id="6817174620439930047">Chiedi conferma quando un sito vuole utilizzare messaggi esclusivi di sistema per accedere a dispositivi MIDI (opzione consigliata)</translation>
-<translation id="682123305478866682">Trasmetti desktop</translation>
 <translation id="6824564591481349393">Copia Indirizzo &amp;Email</translation>
 <translation id="6840155290835956714">Chiedi prima di inviare</translation>
 <translation id="6886871292305414135">Apri link in un'altra &amp;scheda</translation>
@@ -346,7 +337,6 @@
 <translation id="708060913198414444">C&amp;opia l'indirizzo dell'audio</translation>
 <translation id="7175353351958621980">Caricato da:</translation>
 <translation id="7186088072322679094">Tieni nella barra degli strumenti</translation>
-<translation id="7270858098575133036">Chiedi conferma quando un sito vuole utilizzare messaggi esclusivi di sistema per accedere a dispositivi MIDI</translation>
 <translation id="7287143125007575591">Accesso negato.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7385854874724088939">Si è verificato un problema durante il tentativo di stampa. Controlla la stampante e riprova.</translation>
@@ -369,7 +359,6 @@
 <translation id="7704305437604973648">Attività</translation>
 <translation id="7710568461918838723">&amp;Trasmissione...</translation>
 <translation id="7750228210027921155">Picture in picture</translation>
-<translation id="7751260505918304024">Mostra tutto</translation>
 <translation id="7760004034676677601">È la pagina iniziale prevista?</translation>
 <translation id="7771452384635174008">Layout</translation>
 <translation id="7782102568078991263">Nessun altro suggerimento da Google</translation>
@@ -382,9 +371,7 @@
 <translation id="7849264908733290972">Apri &amp;Immagine in una Nuova Scheda</translation>
 <translation id="7857949311770343000">Questa è la pagina nuova scheda che ti aspettavi?</translation>
 <translation id="786073089922909430">Servizio: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7885253890047913815">Destinazioni recenti</translation>
 <translation id="7903925330883316394">Utilità <ph name="UTILITY_TYPE" /></translation>
-<translation id="7938594894617528435">Attualmente offline</translation>
 <translation id="7947962633355574091">C&amp;opia l'indirizzo del video</translation>
 <translation id="7966241909927244760">C&amp;opia l'indirizzo dell'immagine</translation>
 <translation id="7973394300052703468">Nuova &amp;finestra privata</translation>
@@ -427,10 +414,8 @@ Conserva il file di chiave in un luogo sicuro. Ti servirà per creare nuove vers
 <translation id="8708000541097332489">Cancella all'uscita</translation>
 <translation id="8714838604780058252">Grafica di sfondo</translation>
 <translation id="8725066075913043281">Riprova</translation>
-<translation id="8757090071857742562">Impossibile trasmettere il desktop. Verifica di avere confermato la richiesta di avvio della condivisione dello schermo.</translation>
 <translation id="8774934320277480003">Margine superiore</translation>
 <translation id="8798099450830957504">Predefinito</translation>
-<translation id="8800004011501252845">Mostra destinazioni per</translation>
 <translation id="8808478386290700967">Web Store</translation>
 <translation id="8823514049557262177">Copia testo del lin&amp;k</translation>
 <translation id="8823704566850948458">Suggerisci password...</translation>
@@ -443,7 +428,6 @@ Conserva il file di chiave in un luogo sicuro. Ti servirà per creare nuove vers
 <translation id="8962083179518285172">Nascondi dettagli</translation>
 <translation id="8973557916016709913">Rimuovi livello di zoom</translation>
 <translation id="897939795688207351">Su <ph name="ORIGIN" /></translation>
-<translation id="8996526648899750015">Aggiungi account...</translation>
 <translation id="9003647077635673607">Consentire in tutti i siti web</translation>
 <translation id="9027459031423301635">Apri Link in una Nuova &amp;Scheda</translation>
 <translation id="9056810968620647706">Nessuna corrispondenza trovata.</translation>

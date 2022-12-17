@@ -36,6 +36,7 @@ struct PreviousWin {
 // See blink.mojom.InterestGroup for documentation on individual fields.
 struct BidderWorkletNonSharedParams {
   string name;
+  url.mojom.Url? daily_update_url;
   array<string>? trusted_bidding_signals_keys;
   string? user_bidding_signals;
   array<blink.mojom.InterestGroupAd>? ads;
@@ -111,12 +112,17 @@ interface BidderWorklet {
   //  publisher page and provided to all interest groups with the same owner
   //  as the one specified `interest_group`.
   //
-  // `per_buyer_timeout` Restrict the runtime (in milliseconds) of particular
-  //  buyer's bidding scripts. Null if not provided by the publisher page. Null
-  //  will be passed to the worklet in that case.
+  // `per_buyer_timeout` Restrict the runtime of particular buyer's bidding
+  //  scripts. Any timeout higher than 500 ms will be clamped to 500 ms before
+  //  passing in as `per_buyer_timeout`. Null if not provided by the publisher
+  //  page. Null will be passed to the worklet in that case.
   //
   // `browser_signal_seller_origin` The origin of the seller script running
   //  the auction. Typically a valid, non-opaque HTTPS origin.
+  //
+  // `browser_signal_top_level_seller_origin` The top-level seller origin,
+  //  if this worklet is running as part of a component (nested) Auction.
+  //  Null, otherwise.
   //
   // `bidding_browser_signals` See BiddingBrowserSignals.
   //
@@ -127,12 +133,6 @@ interface BidderWorklet {
   // `bid` If the worklet is successfully loaded and chooses to bid in the
   //  auction, contains information about the bid. Null otherwise.
   //
-  // `debug_loss_report_url` The URL to request if the auction runs to
-  // completion and this bid does not win. All bidders are allowed to send loss
-  // report, including those who does not bid. This field has the debug prefix
-  // because it's part of an interim reporting API that will be replaced with
-  // standardized reporting APIs once available. It must be a valid HTTPS URL.
-  //
   // `bidding_signals_data_version` The value of the Data-Version header served
   //  with the trusted bidding signals.
   //
@@ -140,10 +140,16 @@ interface BidderWorklet {
   //  was present in the HTTP response for the trusted bidding signals.
   //  TODO(https://crbug.com/657632): Update when optional integers supported.
   //
+  // `debug_loss_report_url` The URL to request if the auction runs to
+  //  completion and this bid does not win. All bidders are allowed to send loss
+  //  report, including those who does not bid. This field has the debug prefix
+  //  because it's part of an interim reporting API that will be replaced with
+  //  standardized reporting APIs once available. It must be a valid HTTPS URL.
+  //
   // `debug_win_report_url` The URL to request if the auction runs to completion
-  // and this bid wins. This field has the debug prefix because it's part of an
-  // interim reporting API that will be replaced with standardized reporting
-  // APIs once available. It must be a valid HTTPS URL.
+  //  and this bid wins. This field has the debug prefix because it's part of an
+  //  interim reporting API that will be replaced with standardized reporting
+  //  APIs once available. It must be a valid HTTPS URL.
   //
   // `errors` The various error messages to be used for debugging. These are too
   //  sensitive for the renderer to see. There may be errors even when a bid
@@ -155,6 +161,7 @@ interface BidderWorklet {
       string? per_buyer_signals_json,
       mojo_base.mojom.TimeDelta? per_buyer_timeout,
       url.mojom.Origin browser_signal_seller_origin,
+      url.mojom.Origin? browser_signal_top_level_seller_origin,
       BiddingBrowserSignals bidding_browser_signals,
       mojo_base.mojom.Time auction_start_time) => (
           BidderWorkletBid? bid,
@@ -198,8 +205,21 @@ interface BidderWorklet {
   //  BidderWorklet's generateBid() method, invoked as part of BidderWorklet
   //  creation.
   //
+  // `browser_signal_bid` The numeric value of the winning bid.
+  //
+  // `browser_signal_highest_scoring_other_bid` The numeric value of the bid
+  //  that got the second highest score.
+  //
+  // `browser_signal_made_highest_scoring_other_bid` True only if owner of
+  //  the interest group that ReportWin() is being invoked on behalf of made
+  //  all the second-highest scoring bids in the auction.
+  //
   // `browser_signal_seller_origin` The origin of the seller script running
   //  the auction. Typically a valid, non-opaque HTTPS origin.
+  //
+  // `browser_signals_top_level_seller_origin` The top-level seller origin,
+  //  if this worklet is running as part of a component (nested) Auction.
+  //  Null, otherwise.
   //
   // `bidding_signals_data_version` The value of the Data-Version header served
   //  with the trusted bidding signals.
@@ -213,6 +233,9 @@ interface BidderWorklet {
   //  to the bidder. It will be null if no reports are requested, or the
   //  report script fails to run.
   //
+  // `ad_beacon_map` The map of ad reporting events to URLs for fenced frame
+  //  reporting.
+  //
   // `errors` is an array of any errors that occurred while attempting
   //  to run the worklet's reportWin() method. These are too sensitive for
   //  the renderer to see. There may be errors even when a `report_url` is
@@ -224,10 +247,14 @@ interface BidderWorklet {
             string seller_signals_json,
             url.mojom.Url browser_signal_render_url,
             double browser_signal_bid,
+            double browser_signal_highest_scoring_other_bid,
+            bool browser_signal_made_highest_scoring_other_bid,
             url.mojom.Origin browser_signal_seller_origin,
+            url.mojom.Origin? browser_signal_top_level_seller_origin,
             uint32 bidding_signals_data_version,
             bool has_bidding_signals_data_version) => (
                 url.mojom.Url? report_url,
+                map<string, url.mojom.Url> ad_beacon_map,
                 array<string> errors);
 
   // Establishes a debugger connection to the worklet.

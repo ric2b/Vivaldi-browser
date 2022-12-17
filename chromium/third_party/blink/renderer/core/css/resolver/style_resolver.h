@@ -28,20 +28,21 @@
 #include "third_party/blink/renderer/core/animation/interpolation.h"
 #include "third_party/blink/renderer/core/animation/property_handle.h"
 #include "third_party/blink/renderer/core/core_export.h"
+#include "third_party/blink/renderer/core/css/color_scheme_flags.h"
 #include "third_party/blink/renderer/core/css/element_rule_collector.h"
 #include "third_party/blink/renderer/core/css/resolver/matched_properties_cache.h"
 #include "third_party/blink/renderer/core/css/resolver/style_builder.h"
 #include "third_party/blink/renderer/core/css/selector_checker.h"
 #include "third_party/blink/renderer/core/css/selector_filter.h"
 #include "third_party/blink/renderer/core/css/style_request.h"
+#include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_map.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/wtf/deque.h"
-#include "third_party/blink/renderer/platform/wtf/hash_map.h"
-#include "third_party/blink/renderer/platform/wtf/hash_set.h"
 
 namespace blink {
 
 class CompositorKeyframeValue;
+class ContainerSelector;
 class CSSPropertyValueSet;
 class CSSValue;
 class Document;
@@ -94,6 +95,14 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
       const AtomicString& page_name);
   scoped_refptr<const ComputedStyle> StyleForText(Text*);
   scoped_refptr<ComputedStyle> StyleForViewport();
+  scoped_refptr<const ComputedStyle> StyleForCanvasFormattedText(
+      bool is_text_run,
+      const ComputedStyle& parent_style,
+      const CSSPropertyValueSet* css_property_value_set);
+  scoped_refptr<const ComputedStyle> StyleForCanvasFormattedText(
+      bool is_text_run,
+      const FontDescription& default_font,
+      const CSSPropertyValueSet* css_property_value_set);
 
   // Propagate computed values from the root or body element to the viewport
   // when specified to do so.
@@ -145,7 +154,7 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
       Element*,
       PseudoId);
 
-  Element* FindContainerForElement(Element*, const AtomicString&);
+  Element* FindContainerForElement(Element*, const ContainerSelector&);
 
   void ComputeFont(Element&, ComputedStyle*, const CSSPropertyValueSet&);
 
@@ -206,6 +215,11 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
                       const StyleRequest&,
                       StyleResolverState& state,
                       StyleCascade& cascade);
+  void ApplyBaseStyleNoCache(Element* element,
+                             const StyleRecalcContext&,
+                             const StyleRequest&,
+                             StyleResolverState& state,
+                             StyleCascade& cascade);
   void ApplyInterpolations(StyleResolverState& state,
                            StyleCascade& cascade,
                            ActiveInterpolationsMap& interpolations);
@@ -222,6 +236,7 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
   void MatchRuleSet(ElementRuleCollector&, RuleSet*);
   void MatchUARules(const Element&, ElementRuleCollector&);
   void MatchUserRules(ElementRuleCollector&);
+  void MatchPresentationalHints(StyleResolverState&, ElementRuleCollector&);
   // This matches `::part` selectors. It looks in ancestor scopes as far as
   // part mapping requires.
   void MatchPseudoPartRules(const Element&,
@@ -298,12 +313,23 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
 
   Member<StyleRuleUsageTracker> tracker_;
 
+  // This is a dummy/disconnected element that we use for CanvasFormattedText
+  // style computations; see `EnsureElementForCanvasFormattedText`.
+  Member<Element> canvas_formatted_text_element_;
+
   bool print_media_type_ = false;
   bool was_viewport_resized_ = false;
 
   FRIEND_TEST_ALL_PREFIXES(ComputedStyleTest, ApplyInternalLightDarkColor);
   friend class StyleResolverTest;
   FRIEND_TEST_ALL_PREFIXES(StyleResolverTest, TreeScopedReferences);
+
+  Element& EnsureElementForCanvasFormattedText();
+  scoped_refptr<const ComputedStyle> StyleForCanvasFormattedText(
+      bool is_text_run,
+      const FontDescription* default_font,
+      const ComputedStyle* parent_style,
+      const CSSPropertyValueSet* css_property_value_set);
 };
 
 }  // namespace blink

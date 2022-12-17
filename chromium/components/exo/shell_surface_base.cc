@@ -17,7 +17,6 @@
 #include "ash/public/cpp/window_properties.h"
 #include "ash/screen_util.h"
 #include "ash/shell.h"
-#include "ash/shell_delegate.h"
 #include "ash/wm/desks/desks_controller.h"
 #include "ash/wm/desks/desks_util.h"
 #include "ash/wm/drag_window_resizer.h"
@@ -25,7 +24,6 @@
 #include "ash/wm/screen_pinning_controller.h"
 #include "ash/wm/window_resizer.h"
 #include "ash/wm/window_state.h"
-#include "ash/wm/window_state_delegate.h"
 #include "ash/wm/window_util.h"
 #include "base/check.h"
 #include "base/logging.h"
@@ -42,9 +40,10 @@
 #include "chromeos/ui/base/window_properties.h"
 #include "chromeos/ui/base/window_state_type.h"
 #include "chromeos/ui/frame/caption_buttons/snap_controller.h"
+#include "components/app_restore/app_restore_info.h"
 #include "components/app_restore/app_restore_utils.h"
-#include "components/app_restore/full_restore_info.h"
 #include "components/app_restore/window_properties.h"
+#include "components/exo/custom_window_state_delegate.h"
 #include "components/exo/shell_surface_util.h"
 #include "components/exo/surface.h"
 #include "components/exo/window_properties.h"
@@ -277,33 +276,6 @@ class CustomWindowTargeter : public aura::WindowTargeter {
 
   ShellSurfaceBase* shell_surface_;
   views::Widget* const widget_;
-};
-
-// A place holder to disable default implementation created by
-// ash::NonClientFrameViewAsh, which triggers immersive fullscreen etc, which
-// we don't need.
-class CustomWindowStateDelegate : public ash::WindowStateDelegate {
- public:
-  CustomWindowStateDelegate() {}
-
-  CustomWindowStateDelegate(const CustomWindowStateDelegate&) = delete;
-  CustomWindowStateDelegate& operator=(const CustomWindowStateDelegate&) =
-      delete;
-
-  ~CustomWindowStateDelegate() override {}
-
-  // Overridden from ash::WindowStateDelegate:
-  bool ToggleFullscreen(ash::WindowState* window_state) override {
-    return false;
-  }
-
-  // Overridden from ash::WindowStateDelegate.
-  void ToggleLockedFullscreen(ash::WindowState* window_state) override {
-    // Sets up the shell environment as appropriate for locked Lacros or Ash
-    // chrome sessions including disabling ARC.
-    ash::Shell::Get()->shell_delegate()->SetUpEnvironmentForLockedFullscreen(
-        window_state->IsPinned());
-  }
 };
 
 void CloseAllShellSurfaceTransientChildren(aura::Window* window) {
@@ -656,10 +628,20 @@ void ShellSurfaceBase::SetGeometry(const gfx::Rect& geometry) {
     DLOG(WARNING) << "Surface geometry must be non-empty";
     return;
   }
-  if (!widget_) {
-    initial_size_ = gfx::Size(geometry.width(), geometry.height());
-  }
   pending_geometry_ = geometry;
+}
+
+void ShellSurfaceBase::SetWindowBounds(const gfx::Rect& bounds) {
+  TRACE_EVENT1("exo", "ShellSurfaceBase::SetWindowBounds", "bounds",
+               bounds.ToString());
+  if (!widget_) {
+    initial_bounds_.emplace(bounds);
+    return;
+  }
+  // TODO(crbug.com/1261321): This will not work if the full server side
+  // decoration is used.
+  DCHECK(!frame_enabled());
+  widget_->SetBounds(bounds);
 }
 
 void ShellSurfaceBase::SetDisplay(int64_t display_id) {
@@ -742,19 +724,29 @@ void ShellSurfaceBase::RebindRootSurface(Surface* root_surface,
   container_ = container;
   this->root_surface()->RemoveSurfaceObserver(this);
   root_surface->AddSurfaceObserver(this);
-  // Reset throttle status of the old root surface and apply the status to the
-  // new root surface.
-  if (widget_ && widget_->GetNativeWindow()) {
-    if (widget_->GetNativeWindow()->GetProperty(ash::kFrameRateThrottleKey)) {
-      this->root_surface()->ThrottleFrameRate(false);
-      root_surface->ThrottleFrameRate(true);
-    }
-  }
   SetRootSurface(root_surface);
   host_window()->Show();
-  if (widget_ && widget_->GetNativeWindow() &&
-      widget_->GetNativeWindow()->HasFocus()) {
-    host_window()->Focus();
+
+  // Re-apply window properties to the new root surface.
+  auto* window = widget_ ? widget_->GetNativeWindow() : nullptr;
+  if (window) {
+    // Int properties.
+    for (auto* const key :
+         {aura::client::kSkipImeProcessing, chromeos::kFrameRestoreLookKey,
+          ash::kFrameRateThrottleKey}) {
+      if (base::Contains(window->GetAllPropertyKeys(), key)) {
+        OnWindowPropertyChanged(window, key,
+                                /*old_value(unused)=*/0);
+      }
+    }
+    // Boolean property.
+    if (base::Contains(window->GetAllPropertyKeys(),
+                       aura::client::kWindowWorkspaceKey)) {
+      OnWindowPropertyChanged(window, aura::client::kWindowWorkspaceKey,
+                              /*old_value(unused)=*/0);
+    }
+    if (window->HasFocus())
+      host_window()->Focus();
   }
 
   SetCanMinimize(can_minimize_);
@@ -921,6 +913,10 @@ void ShellSurfaceBase::OnSetFrameColors(SkColor active_color,
   active_frame_color_ = SkColorSetA(active_color, SK_AlphaOPAQUE);
   inactive_frame_color_ = SkColorSetA(inactive_color, SK_AlphaOPAQUE);
   if (widget_) {
+    // Set kTrackDefaultFrameColors to false to prevent clobbering the active
+    // and inactive frame colors during theme changes.
+    widget_->GetNativeWindow()->SetProperty(chromeos::kTrackDefaultFrameColors,
+                                            false);
     widget_->GetNativeWindow()->SetProperty(chromeos::kFrameActiveColorKey,
                                             active_frame_color_);
     widget_->GetNativeWindow()->SetProperty(chromeos::kFrameInactiveColorKey,
@@ -1171,6 +1167,19 @@ void ShellSurfaceBase::OnWindowActivated(ActivationReason reason,
   }
 }
 
+// Returns true if surface is currently being resized.
+bool ShellSurfaceBase::IsDragged() const {
+  if (in_extended_drag_)
+    return true;
+
+  if (!widget_)
+    return false;
+
+  ash::WindowState* window_state =
+      ash::WindowState::Get(widget_->GetNativeWindow());
+  return window_state->is_dragged();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // ui::AcceleratorTarget overrides:
 
@@ -1241,7 +1250,10 @@ void ShellSurfaceBase::CreateShellSurfaceWidget(
   } else {
     params.parent = ash::Shell::GetContainer(root_window, container_);
   }
-  params.bounds = gfx::Rect(origin_, gfx::Size());
+  if (initial_bounds_)
+    params.bounds = *initial_bounds_;
+  else
+    params.bounds = gfx::Rect(origin_, gfx::Size());
 
   WMHelper::AppPropertyResolver::Params property_resolver_params;
   if (application_id_)
@@ -1393,9 +1405,10 @@ void ShellSurfaceBase::UpdateSurfaceBounds() {
   origin += GetSurfaceOrigin().OffsetFromOrigin();
   origin -= ToFlooredVector2d(ScaleVector2d(
       root_surface_origin().OffsetFromOrigin(), 1.f / GetScale()));
-
-  if (host_window()->bounds().origin() != origin)
-    host_window()->SetBounds(gfx::Rect(origin, host_window()->bounds().size()));
+  gfx::Rect surface_bounds(origin, host_window()->bounds().size());
+  if (host_window()->bounds() == surface_bounds)
+    return;
+  host_window()->SetBounds(surface_bounds);
 }
 
 void ShellSurfaceBase::UpdateShadow() {
@@ -1597,8 +1610,7 @@ void ShellSurfaceBase::SetParentInternal(aura::Window* parent) {
 bool ShellSurfaceBase::CalculateCanResize() const {
   if (overlay_widget_ && overlay_can_resize_.has_value())
     return *overlay_can_resize_;
-  return !movement_disabled_ &&
-         (minimum_size_.IsEmpty() || minimum_size_ != maximum_size_);
+  return !movement_disabled_ && GetCanResizeFromSizeConstraints();
 }
 
 void ShellSurfaceBase::CommitWidget() {
@@ -1666,6 +1678,10 @@ void ShellSurfaceBase::CommitWidget() {
   // Do not layout the window if the position should not be controlled by window
   // manager. (popup, emulating x11 override direct, or requested not to move)
   if (is_popup_ || movement_disabled_)
+    needs_layout_on_show_ = false;
+
+  // Do not center if the initial bounds is set.
+  if (initial_bounds_)
     needs_layout_on_show_ = false;
 
   // Show widget if needed.

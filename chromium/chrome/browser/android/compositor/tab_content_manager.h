@@ -46,7 +46,7 @@ class TabContentManager : public ThumbnailCacheObserver {
                     jint write_queue_max_size,
                     jboolean use_approximation_thumbnail,
                     jboolean save_jpeg_thumbnails,
-                    jfloat jpeg_aspect_ratio);
+                    jdouble jpeg_aspect_ratio);
 
   TabContentManager(const TabContentManager&) = delete;
   TabContentManager& operator=(const TabContentManager&) = delete;
@@ -89,15 +89,15 @@ class TabContentManager : public ThumbnailCacheObserver {
                         const base::android::JavaParamRef<jobject>& obj,
                         const base::android::JavaParamRef<jobject>& tab,
                         jfloat thumbnail_scale,
-                        jfloat aspect_ratio,
                         jboolean write_to_cache,
+                        jdouble aspect_ratio,
                         const base::android::JavaParamRef<jobject>& j_callback);
   void CacheTabWithBitmap(JNIEnv* env,
                           const base::android::JavaParamRef<jobject>& obj,
                           const base::android::JavaParamRef<jobject>& tab,
                           const base::android::JavaParamRef<jobject>& bitmap,
                           jfloat thumbnail_scale,
-                          jfloat aspect_ratio);
+                          jdouble aspect_ratio);
   void InvalidateIfChanged(JNIEnv* env,
                            const base::android::JavaParamRef<jobject>& obj,
                            jint tab_id,
@@ -115,7 +115,7 @@ class TabContentManager : public ThumbnailCacheObserver {
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
       jint tab_id,
-      jfloat aspect_ratio,
+      jdouble aspect_ratio,
       const base::android::JavaParamRef<jobject>& j_callback);
   void SetCaptureMinRequestTimeForTesting(
       JNIEnv* env,
@@ -144,14 +144,14 @@ class TabContentManager : public ThumbnailCacheObserver {
   void OnTabReadback(int tab_id,
                      base::android::ScopedJavaGlobalRef<jobject> j_callback,
                      bool write_to_cache,
+                     double aspect_ratio,
                      float thumbnail_scale,
-                     float aspect_ratio,
                      const SkBitmap& bitmap);
 
   void SendThumbnailToJava(
       base::android::ScopedJavaGlobalRef<jobject> j_callback,
       bool need_downsampling,
-      float aspect_ratio,
+      double aspect_ratio,
       bool result,
       const SkBitmap& bitmap);
 

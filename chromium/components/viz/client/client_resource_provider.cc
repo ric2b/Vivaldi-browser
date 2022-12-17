@@ -8,7 +8,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bits.h"
 #include "base/containers/cxx20_erase.h"
 #include "base/debug/stack_trace.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -24,6 +23,7 @@
 #include "gpu/command_buffer/client/raster_interface.h"
 #include "gpu/command_buffer/common/capabilities.h"
 #include "third_party/skia/include/core/SkCanvas.h"
+#include "third_party/skia/include/core/SkColorSpace.h"
 #include "third_party/skia/include/gpu/GrDirectContext.h"
 
 namespace viz {

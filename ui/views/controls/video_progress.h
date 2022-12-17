@@ -4,6 +4,7 @@
 #define UI_VIEWS_CONTROLS_VIDEO_PROGRESS_H_
 
 #include "base/compiler_specific.h"
+#include "base/timer/timer.h"
 #include "base/i18n/time_formatting.h"
 #include "services/media_session/public/mojom/media_session.mojom.h"
 #include "ui/base/metadata/metadata_header_macros.h"

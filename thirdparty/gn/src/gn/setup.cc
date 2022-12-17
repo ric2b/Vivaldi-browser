@@ -126,12 +126,14 @@ Variables
       help --root-target").
 
   script_executable [optional]
-      Path to specific Python executable or other interpreter to use in
-      action targets and exec_script calls. By default GN searches the
-      PATH for Python to execute these scripts.
+      By default, GN runs the scripts used in action targets and exec_script
+      calls using the Python interpreter found in PATH. This value specifies the
+      Python executable or other interpreter to use instead.
 
-      If set to the empty string, the path specified in action targets
-      and exec_script calls will be executed directly.
+      If set to the empty string, the scripts will be executed directly.
+
+      The command-line switch --script-executable will override this value (see
+      "gn help --script-executable")
 
   secondary_source [optional]
       Label of an alternate directory tree to find input files. When searching
@@ -787,8 +789,19 @@ bool Setup::FillPythonPath(const base::CommandLine& cmdline, Err* err) {
     if (!value->VerifyTypeIs(Value::STRING, err)) {
       return false;
     }
-    build_settings_.set_python_path(
-        ProcessFileExtensions(UTF8ToFilePath(value->string_value())));
+    // Note that an empty string value is valid, and means that the scripts
+    // invoked by actions will be run directly.
+    base::FilePath python_path;
+    if (!value->string_value().empty()) {
+      python_path =
+          ProcessFileExtensions(UTF8ToFilePath(value->string_value()));
+      if (python_path.empty()) {
+        *err = Err(Location(), "Could not find \"" + value->string_value() +
+                                   "\" from dotfile in PATH.");
+        return false;
+      }
+    }
+    build_settings_.set_python_path(python_path);
   } else {
 #if defined(OS_WIN)
     base::FilePath python_path =
@@ -1034,6 +1047,17 @@ bool Setup::FillOtherConfig(const base::CommandLine& cmdline, Err* err) {
     }
     SourceFile path(arg_file_template_value->string_value());
     build_settings_.set_arg_file_template_path(path);
+  }
+
+  // No stamp files.
+  const Value* no_stamp_files_value =
+      dotfile_scope_.GetValue("no_stamp_files", true);
+  if (no_stamp_files_value) {
+    if (!no_stamp_files_value->VerifyTypeIs(Value::BOOLEAN, err)) {
+      return false;
+    }
+    build_settings_.set_no_stamp_files(no_stamp_files_value->boolean_value());
+    CHECK(!build_settings_.no_stamp_files()) << "no_stamp_files does not work yet!";
   }
 
   return true;

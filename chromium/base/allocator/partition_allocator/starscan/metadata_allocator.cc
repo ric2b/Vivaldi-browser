@@ -8,8 +8,7 @@
 
 #include "base/no_destructor.h"
 
-namespace base {
-namespace internal {
+namespace partition_alloc::internal {
 
 namespace {
 constexpr PartitionOptions kConfig{
@@ -29,13 +28,12 @@ ThreadSafePartitionRoot& PCScanMetadataAllocator() {
 
 void ReinitPCScanMetadataAllocatorForTesting() {
   // First, purge memory owned by PCScanMetadataAllocator.
-  PCScanMetadataAllocator().PurgeMemory(PartitionPurgeDecommitEmptySlotSpans |
-                                        PartitionPurgeDiscardUnusedSystemPages);
+  PCScanMetadataAllocator().PurgeMemory(PurgeFlags::kDecommitEmptySlotSpans |
+                                        PurgeFlags::kDiscardUnusedSystemPages);
   // Then, reinit the allocator.
   PCScanMetadataAllocator().~PartitionRoot();
   memset(&PCScanMetadataAllocator(), 0, sizeof(PCScanMetadataAllocator()));
   PCScanMetadataAllocator().Init(kConfig);
 }
 
-}  // namespace internal
-}  // namespace base
+}  // namespace partition_alloc::internal

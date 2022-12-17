@@ -11,6 +11,8 @@
 #include "content/public/browser/overlay_window.h"
 #include "content/public/browser/video_picture_in_picture_window_controller.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "ui/display/display.h"
+#include "ui/display/display_observer.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/views/widget/widget.h"
 
@@ -20,7 +22,8 @@
 //
 // This class is a views::Widget. The subclasses implement the needed
 // methods for their corresponding OverlayWindow subclass.
-class OverlayWindowViews : public views::Widget {
+class OverlayWindowViews : public views::Widget,
+                           public display::DisplayObserver {
  public:
   OverlayWindowViews(const OverlayWindowViews&) = delete;
   OverlayWindowViews& operator=(const OverlayWindowViews&) = delete;
@@ -99,6 +102,10 @@ class OverlayWindowViews : public views::Widget {
     min_size_ = min_size;
   }
 
+  // display::DisplayObserver
+  void OnDisplayMetricsChanged(const display::Display& display,
+                               uint32_t changed_metrics) override;
+
  protected:
   OverlayWindowViews();
 
@@ -129,6 +136,11 @@ class OverlayWindowViews : public views::Widget {
   // Calculate and set the bounds of the controls.
   gfx::Rect CalculateControlsBounds(int x, const gfx::Size& size);
   void UpdateControlsPositions();
+
+  // Vivaldi:
+  gfx::Rect GetStoredBoundsFromPrefs();
+  void UpdateStoredBounds();
+  // Vivaldi end
 
   // These values are persisted to logs. Entries should not be renumbered and
   // numeric values should never be reused.

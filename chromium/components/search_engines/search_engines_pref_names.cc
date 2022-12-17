@@ -29,5 +29,4 @@ const char kSearchProviderOverrides[] = "search_provider_overrides";
 // The format version for the dictionary above.
 const char kSearchProviderOverridesVersion[] =
     "search_provider_overrides_version";
-
 }  // namespace prefs

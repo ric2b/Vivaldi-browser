@@ -28,7 +28,6 @@
 #include "base/logging.h"
 #include "base/memory/singleton.h"
 #include "base/posix/eintr_wrapper.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -50,6 +49,7 @@
 #include "device/bluetooth/bluez/bluetooth_local_gatt_characteristic_bluez.h"
 #include "device/bluetooth/bluez/bluetooth_remote_gatt_characteristic_bluez.h"
 #include "device/bluetooth/floss/floss_features.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/platform/platform_handle.h"
 #include "mojo/public/cpp/system/platform_handle.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -2676,6 +2676,15 @@ ArcBluetoothBridge::GetDeviceProperties(mojom::BluetoothPropertyType type,
 std::vector<mojom::BluetoothPropertyPtr>
 ArcBluetoothBridge::GetAdapterProperties(
     mojom::BluetoothPropertyType type) const {
+  // TODO(crbug.com/1227855): Since this function is invoked from ARC side, it
+  // is possible that adapter is not present or powered here. It's not
+  // meaningful to return any property when that happens.
+  const std::string adapter_address = bluetooth_adapter_->GetAddress();
+  if (adapter_address.empty()) {
+    LOG(ERROR) << "Bluetooth adapter does not have a valid address";
+    return {};
+  }
+
   std::vector<mojom::BluetoothPropertyPtr> properties;
 
   if (type == mojom::BluetoothPropertyType::ALL ||
@@ -2688,8 +2697,7 @@ ArcBluetoothBridge::GetAdapterProperties(
   if (type == mojom::BluetoothPropertyType::ALL ||
       type == mojom::BluetoothPropertyType::BDADDR) {
     mojom::BluetoothPropertyPtr btp = mojom::BluetoothProperty::New();
-    btp->set_bdaddr(
-        mojom::BluetoothAddress::From(bluetooth_adapter_->GetAddress()));
+    btp->set_bdaddr(mojom::BluetoothAddress::From(adapter_address));
     properties.push_back(std::move(btp));
   }
   if (type == mojom::BluetoothPropertyType::ALL ||
@@ -3097,15 +3105,17 @@ void ArcBluetoothBridge::BluetoothSocketConnect(
     BluetoothSocketConnectCallback callback) {
   if (!mojom::IsKnownEnumValue(sock_type)) {
     LOG(ERROR) << "Unsupported sock type " << sock_type;
-    std::move(callback).Run(mojom::BluetoothStatus::UNSUPPORTED,
-                            mojom::BluetoothConnectSocketClientRequest());
+    std::move(callback).Run(
+        mojom::BluetoothStatus::UNSUPPORTED,
+        mojo::PendingReceiver<arc::mojom::BluetoothConnectSocketClient>());
     return;
   }
 
   if (!IsValidPort(sock_type, port)) {
     LOG(ERROR) << "Invalid port number " << port;
-    std::move(callback).Run(mojom::BluetoothStatus::FAIL,
-                            mojom::BluetoothConnectSocketClientRequest());
+    std::move(callback).Run(
+        mojom::BluetoothStatus::FAIL,
+        mojo::PendingReceiver<arc::mojom::BluetoothConnectSocketClient>());
     return;
   }
 
@@ -3113,8 +3123,9 @@ void ArcBluetoothBridge::BluetoothSocketConnect(
   auto sock_wrapper = CreateBluetoothConnectSocket(
       sock_type, optval, std::move(remote_addr), static_cast<uint16_t>(port));
   if (!sock_wrapper) {
-    std::move(callback).Run(mojom::BluetoothStatus::FAIL,
-                            mojom::BluetoothConnectSocketClientRequest());
+    std::move(callback).Run(
+        mojom::BluetoothStatus::FAIL,
+        mojo::PendingReceiver<arc::mojom::BluetoothConnectSocketClient>());
     return;
   }
 

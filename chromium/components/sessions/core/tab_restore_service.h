@@ -73,6 +73,9 @@ class SESSIONS_EXPORT TabRestoreService : public KeyedService {
     // session.
     SessionID id;
 
+    // The original id of the entry when it was saved.
+    SessionID original_id;
+
     // The type of the entry.
     const Type type;
 
@@ -133,9 +136,9 @@ class SESSIONS_EXPORT TabRestoreService : public KeyedService {
     absl::optional<tab_groups::TabGroupVisualData> group_visual_data;
 
     // If non-empty external data stored on the tab.
-    std::string ext_data;
+    std::string viv_ext_data;
 
-    std::map<std::string, bool> page_action_overrides;
+    std::map<std::string, bool> viv_page_action_overrides;
   };
 
   // Represents a previously open window.
@@ -169,7 +172,7 @@ class SESSIONS_EXPORT TabRestoreService : public KeyedService {
     std::string workspace;
 
     // Ext data for the window.
-    std::string ext_data;
+    std::string viv_ext_data;
   };
 
   // Represents a previously open group.
@@ -251,8 +254,8 @@ class SESSIONS_EXPORT TabRestoreService : public KeyedService {
   virtual std::vector<LiveTab*> RestoreMostRecentEntry(
       LiveTabContext* context) = 0;
 
-  // Removes the Tab with id |id| from the list and returns it.
-  virtual std::unique_ptr<Tab> RemoveTabEntryById(SessionID id) = 0;
+  // Removes the Entry with id |id| if it is a Tab entry.
+  virtual void RemoveTabEntryById(SessionID id) = 0;
 
   // Restores an entry by id. If there is no entry with an id matching |id|,
   // this does nothing. If |context| is NULL, this creates a new window for the

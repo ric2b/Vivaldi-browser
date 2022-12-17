@@ -17,11 +17,13 @@
 #include "base/no_destructor.h"
 #include "base/sequence_checker.h"
 #include "build/build_config.h"
+#include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/gfx/image/image_skia_operations.h"
+#include "ui/gfx/image/image_skia_rep.h"
 #include "ui/gfx/image/image_skia_source.h"
 #include "ui/gfx/switches.h"
 

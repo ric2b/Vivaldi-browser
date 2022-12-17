@@ -74,6 +74,8 @@ class ChromeSigninClient
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   absl::optional<account_manager::Account> GetInitialPrimaryAccount() override;
+  absl::optional<bool> IsInitialPrimaryAccountChild() const override;
+  void RemoveAllAccounts() override;
 #endif
 
   // Used in tests to override the URLLoaderFactory returned by

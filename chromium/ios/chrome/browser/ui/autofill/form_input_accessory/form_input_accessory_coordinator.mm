@@ -12,14 +12,20 @@
 #include "base/strings/utf_string_conversions.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/common/autofill_features.h"
+#include "components/feature_engagement/public/event_constants.h"
+#include "components/feature_engagement/public/feature_constants.h"
+#include "components/feature_engagement/public/tracker.h"
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/password_manager/core/browser/manage_passwords_referrer.h"
 #include "components/password_manager/core/browser/password_ui_utils.h"
+#import "components/password_manager/ios/password_generation_provider.h"
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/autofill/personal_data_manager_factory.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#include "ios/chrome/browser/feature_engagement/tracker_factory.h"
 #import "ios/chrome/browser/main/browser.h"
 #include "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
+#import "ios/chrome/browser/passwords/password_tab_helper.h"
 #import "ios/chrome/browser/ui/alert_coordinator/alert_coordinator.h"
 #import "ios/chrome/browser/ui/autofill/form_input_accessory/form_input_accessory_mediator.h"
 #import "ios/chrome/browser/ui/autofill/form_input_accessory/form_input_accessory_view_controller.h"
@@ -226,6 +232,28 @@
   [self reset];
 }
 
+- (void)notifyPasswordSuggestionsShown {
+  // The engagement tracker can change during testing (in feature engagement app
+  // interface), therefore we retrive it here instead of storing it in the
+  // mediator.
+  feature_engagement::Tracker* engagementTracker =
+      feature_engagement::TrackerFactory::GetForBrowserState(
+          self.browser->GetBrowserState());
+  engagementTracker->NotifyEvent(
+      feature_engagement::events::kPasswordSuggestionsShown);
+}
+
+- (void)notifyPasswordSuggestionSelected {
+  // The engagement tracker can change during testing (in feature engagement app
+  // interface), therefore we retrive it here instead of storing it in the
+  // mediator.
+  feature_engagement::Tracker* engagementTracker =
+      feature_engagement::TrackerFactory::GetForBrowserState(
+          self.browser->GetBrowserState());
+  engagementTracker->NotifyEvent(
+      feature_engagement::events::kPasswordSuggestionSelected);
+}
+
 #pragma mark - ManualFillAccessoryViewControllerDelegate
 
 - (void)keyboardButtonPressed {
@@ -274,7 +302,23 @@
 }
 
 - (void)openAllPasswordsPicker {
+  [self reset];
   [self showConfirmationDialogToUseOtherPassword];
+}
+
+- (void)openPasswordSuggestion {
+  [self reset];
+  if (![self.injectionHandler canUserInjectInPasswordField:YES
+                                             requiresHTTPS:NO]) {
+    return;
+  }
+  web::WebState* active_web_state =
+      self.browser->GetWebStateList()->GetActiveWebState();
+  DCHECK(active_web_state);
+  id<PasswordGenerationProvider> generationProvider =
+      PasswordTabHelper::FromWebState(active_web_state)
+          ->GetPasswordGenerationProvider();
+  [generationProvider triggerPasswordGeneration];
 }
 
 #pragma mark - CardCoordinatorDelegate
@@ -302,6 +346,7 @@
 #pragma mark - SecurityAlertCommands
 
 - (void)presentSecurityWarningAlertWithText:(NSString*)body {
+  [self stopChildren];
   NSString* alertTitle =
       l10n_util::GetNSString(IDS_IOS_MANUAL_FALLBACK_NOT_SECURE_TITLE);
   NSString* defaultActionTitle =
@@ -325,6 +370,7 @@
 }
 
 - (void)showSetPasscodeDialog {
+  [self stopChildren];
   UIAlertController* alertController = [UIAlertController
       alertControllerWithTitle:l10n_util::GetNSString(
                                    IDS_IOS_SETTINGS_SET_UP_SCREENLOCK_TITLE)

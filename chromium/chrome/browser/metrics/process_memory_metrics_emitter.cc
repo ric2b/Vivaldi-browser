@@ -13,9 +13,9 @@
 #include "base/compiler_specific.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
-#include "base/cxx17_backports.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/process/process_metrics.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/trace_event/memory_dump_request_args.h"
@@ -24,6 +24,7 @@
 #include "chrome/browser/metrics/tab_footprint_aggregator.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "components/metrics/metrics_data_validation.h"
+#include "components/metrics/system_memory_stats_recorder.h"
 #include "components/performance_manager/public/graph/frame_node.h"
 #include "components/performance_manager/public/graph/graph.h"
 #include "components/performance_manager/public/graph/graph_operations.h"
@@ -114,6 +115,14 @@ const Metric kAllocatorDumpNamesForMetrics[] = {
     {"blink_gc", "BlinkGC.AllocatedObjects", MetricSize::kLarge,
      kAllocatedObjectsSize, EmitTo::kSizeInUkmAndUma,
      &Memory_Experimental::SetBlinkGC_AllocatedObjects},
+    {"blink_gc", "BlinkGC.Fragmentation", MetricSize::kPercentage,
+     "fragmentation", EmitTo::kSizeInUmaOnly, nullptr},
+    {"blink_gc/main", "BlinkGC.Main.Heap", MetricSize::kLarge, kEffectiveSize,
+     EmitTo::kSizeInUmaOnly, nullptr},
+    {"blink_gc/main", "BlinkGC.Main.Heap.AllocatedObjects", MetricSize::kLarge,
+     kAllocatedObjectsSize, EmitTo::kSizeInUmaOnly, nullptr},
+    {"blink_gc/main", "BlinkGC.Main.Heap.Fragmentation",
+     MetricSize::kPercentage, "fragmentation", EmitTo::kSizeInUmaOnly, nullptr},
     {"blink_objects/Document", "NumberOfDocuments", MetricSize::kTiny,
      MemoryAllocatorDump::kNameObjectCount, EmitTo::kCountsInUkmAndSizeInUma,
      &Memory_Experimental::SetNumberOfDocuments},
@@ -786,14 +795,6 @@ void EmitProcessUmaAndUkm(const GlobalMemoryDump::ProcessDump& pmd,
 #endif
   MEMORY_METRICS_HISTOGRAM_MB(GetPrivateFootprintHistogramName(process_type),
                               pmd.os_dump().private_footprint_kb / kKiB);
-  ProfileManager* profile_manager = g_browser_process->profile_manager();
-  if (process_type == HistogramProcessType::kBrowser && profile_manager &&
-      profile_manager->GetZombieProfileCount() > 0) {
-    // Measure impact of the DestroyProfileOnBrowserClose experiment.
-    MEMORY_METRICS_HISTOGRAM_MB(
-        GetPrivateFootprintHistogramName(process_type) + ".HasZombieProfile",
-        pmd.os_dump().private_footprint_kb / kKiB);
-  }
   MEMORY_METRICS_HISTOGRAM_MB(std::string(kMemoryHistogramPrefix) +
                                   process_name + ".SharedMemoryFootprint",
                               pmd.os_dump().shared_footprint_kb / kKiB);
@@ -828,7 +829,7 @@ void EmitSummedGpuMemory(const GlobalMemoryDump::ProcessDump& pmd,
                              &Memory_Experimental::SetGpuMemory};
 
   uint64_t total = 0;
-  for (size_t i = 0; i < base::size(gpu_categories); ++i) {
+  for (size_t i = 0; i < std::size(gpu_categories); ++i) {
     total +=
         pmd.GetMetric(gpu_categories[i], synthetic_metric.metric).value_or(0);
   }
@@ -1224,13 +1225,6 @@ void ProcessMemoryMetricsEmitter::CollateResults() {
 #endif
     UMA_HISTOGRAM_MEMORY_LARGE_MB("Memory.Total.PrivateMemoryFootprint",
                                   private_footprint_total_kb / kKiB);
-    ProfileManager* profile_manager = g_browser_process->profile_manager();
-    if (profile_manager && profile_manager->GetZombieProfileCount() > 0) {
-      // Measure impact of the DestroyProfileOnBrowserClose experiment.
-      UMA_HISTOGRAM_MEMORY_LARGE_MB(
-          "Memory.Total.PrivateMemoryFootprint.HasZombieProfile",
-          private_footprint_total_kb / kKiB);
-    }
     // The pseudo metric of Memory.Total.PrivateMemoryFootprint. Only used to
     // assess field trial data quality.
     UMA_HISTOGRAM_MEMORY_LARGE_MB(
@@ -1252,6 +1246,17 @@ void ProcessMemoryMetricsEmitter::CollateResults() {
     // Renderer metrics-by-tab only make sense if we're visiting all render
     // processes.
     per_tab_metrics.RecordPmfs(GetUkmRecorder());
+
+#if BUILDFLAG(IS_CHROMEOS)
+    base::SystemMemoryInfoKB system_meminfo;
+    if (base::GetSystemMemoryInfo(&system_meminfo)) {
+      int mem_used_mb =
+          (system_meminfo.total - system_meminfo.available) / 1024;
+      UMA_HISTOGRAM_LARGE_MEMORY_MB("Memory.System.MemAvailableMB",
+                                    system_meminfo.available / 1024);
+      UMA_HISTOGRAM_LARGE_MEMORY_MB("Memory.System.MemUsedMB", mem_used_mb);
+    }
+#endif
   }
 
   global_dump_ = nullptr;

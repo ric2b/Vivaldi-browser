@@ -15,6 +15,7 @@
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/shared_memory_mapping.h"
+#include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/single_thread_task_runner.h"
@@ -372,9 +373,10 @@ void HeadsUpDisplayLayerImpl::UpdateHudTexture(
     constexpr GLuint background_color = SkColorSetARGB(0, 0, 0, 0);
     constexpr GLuint msaa_sample_count = -1;
     constexpr bool can_use_lcd_text = true;
-    ri->BeginRasterCHROMIUM(
-        background_color, needs_clear, msaa_sample_count, gpu::raster::kNoMSAA,
-        can_use_lcd_text, gfx::ColorSpace::CreateSRGB(), backing->mailbox.name);
+    ri->BeginRasterCHROMIUM(background_color, needs_clear, msaa_sample_count,
+                            gpu::raster::kNoMSAA, can_use_lcd_text,
+                            /*visible=*/true, gfx::ColorSpace::CreateSRGB(),
+                            backing->mailbox.name);
     constexpr gfx::Vector2dF post_translate(0.f, 0.f);
     constexpr gfx::Vector2dF post_scale(1.f, 1.f);
     DummyImageProvider image_provider;

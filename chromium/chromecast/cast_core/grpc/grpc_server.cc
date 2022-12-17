@@ -7,11 +7,12 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/run_loop.h"
-#include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "chromecast/cast_core/grpc/grpc_call_options.h"
+#include "chromecast/cast_core/grpc/grpc_factory.h"
+#include "chromecast/cast_core/grpc/grpc_server_builder.h"
 
 namespace cast {
 namespace utils {
@@ -67,9 +68,10 @@ void GrpcServer::Start(base::StringPiece endpoint) {
   DCHECK(!server_) << "Server is already running";
   DCHECK(server_reactor_tracker_) << "Server was alreadys shutdown";
 
-  server_ = grpc::ServerBuilder()
-                .AddListeningPort(std::string(endpoint),
-                                  grpc::InsecureServerCredentials())
+  auto builder = GrpcFactory::CreateServerBuilder();
+  server_ = builder
+                ->AddListeningPort(std::string(endpoint),
+                                   grpc::InsecureServerCredentials())
                 .RegisterCallbackGenericService(this)
                 .BuildAndStart();
   DCHECK(server_) << "Failed to start server";

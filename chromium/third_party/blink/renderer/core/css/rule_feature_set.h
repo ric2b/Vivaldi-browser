@@ -69,7 +69,6 @@ class CORE_EXPORT RuleFeatureSet {
   bool UsesWindowInactiveSelector() const {
     return metadata_.uses_window_inactive_selector;
   }
-  bool UsesContainerQueries() const { return metadata_.uses_container_queries; }
   bool NeedsFullRecalcForRuleSetInvalidation() const {
     return metadata_.needs_full_recalc_for_rule_set_invalidation;
   }
@@ -155,7 +154,27 @@ class CORE_EXPORT RuleFeatureSet {
   bool NeedsHasInvalidationForElement(Element&) const;
   bool NeedsHasInvalidationForPseudoClass(
       CSSSelector::PseudoType pseudo_type) const;
-  bool NeedsHasInvalidationForPseudoStateChange() const;
+
+  inline bool NeedsHasInvalidationForClassChange() const {
+    return !classes_in_has_argument_.IsEmpty();
+  }
+  inline bool NeedsHasInvalidationForAttributeChange() const {
+    return !attributes_in_has_argument_.IsEmpty();
+  }
+  inline bool NeedsHasInvalidationForIdChange() const {
+    return !ids_in_has_argument_.IsEmpty();
+  }
+  inline bool NeedsHasInvalidationForPseudoStateChange() const {
+    return !pseudos_in_has_argument_.IsEmpty();
+  }
+  inline bool NeedsHasInvalidation() const {
+    return universal_in_has_argument_ ||
+           !tag_names_in_has_argument_.IsEmpty() ||
+           NeedsHasInvalidationForClassChange() ||
+           NeedsHasInvalidationForAttributeChange() ||
+           NeedsHasInvalidationForIdChange() ||
+           NeedsHasInvalidationForPseudoStateChange();
+  }
 
   bool HasIdsInSelectors() const { return id_invalidation_sets_.size() > 0; }
   bool InvalidatesParts() const { return metadata_.invalidates_parts; }
@@ -220,7 +239,6 @@ class CORE_EXPORT RuleFeatureSet {
 
     bool uses_first_line_rules = false;
     bool uses_window_inactive_selector = false;
-    bool uses_container_queries = false;
     bool needs_full_recalc_for_rule_set_invalidation = false;
     unsigned max_direct_adjacent_selectors = 0;
     bool invalidates_parts = false;

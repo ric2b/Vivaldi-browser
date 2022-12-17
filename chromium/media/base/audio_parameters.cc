@@ -6,9 +6,21 @@
 
 #include <sstream>
 
+#include "media/base/audio_bus.h"
 #include "media/base/limits.h"
 
 namespace media {
+
+static_assert(AudioBus::kChannelAlignment == kParametersAlignment,
+              "Audio buffer parameters struct alignment not same as AudioBus");
+static_assert(sizeof(AudioInputBufferParameters) %
+                      AudioBus::kChannelAlignment ==
+                  0,
+              "AudioInputBufferParameters not aligned");
+static_assert(sizeof(AudioOutputBufferParameters) %
+                      AudioBus::kChannelAlignment ==
+                  0,
+              "AudioOutputBufferParameters not aligned");
 
 const char* FormatToString(AudioParameters::Format format) {
   switch (format) {
@@ -134,6 +146,7 @@ bool AudioParameters::IsValid() const {
            (hardware_capabilities_->max_frames_per_buffer >=
             hardware_capabilities_->min_frames_per_buffer))) &&
          (channel_layout_ == CHANNEL_LAYOUT_DISCRETE ||
+          channel_layout_ == CHANNEL_LAYOUT_5_1_4_DOWNMIX ||
           channels_ == ChannelLayoutToChannelCount(channel_layout_));
 }
 
@@ -192,6 +205,11 @@ bool AudioParameters::IsBitstreamFormat() const {
     default:
       return false;
   }
+}
+
+bool AudioParameters::IsFormatSupportedByHardware(Format format) const {
+  return hardware_capabilities_.has_value() &&
+         (hardware_capabilities_->bitstream_formats & format);
 }
 
 // static

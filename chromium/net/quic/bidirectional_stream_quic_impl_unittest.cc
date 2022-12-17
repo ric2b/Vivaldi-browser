@@ -30,7 +30,6 @@
 #include "net/log/test_net_log_util.h"
 #include "net/quic/address_utils.h"
 #include "net/quic/mock_crypto_client_stream_factory.h"
-#include "net/quic/platform/impl/quic_test_impl.h"
 #include "net/quic/quic_chromium_alarm_factory.h"
 #include "net/quic/quic_chromium_connection_helper.h"
 #include "net/quic/quic_chromium_packet_reader.h"
@@ -46,21 +45,21 @@
 #include "net/socket/socket_test_util.h"
 #include "net/test/gtest_util.h"
 #include "net/test/test_with_task_environment.h"
-#include "net/third_party/quiche/src/common/quiche_text_utils.h"
-#include "net/third_party/quiche/src/quic/core/crypto/crypto_protocol.h"
-#include "net/third_party/quiche/src/quic/core/crypto/null_decrypter.h"
-#include "net/third_party/quiche/src/quic/core/crypto/quic_decrypter.h"
-#include "net/third_party/quiche/src/quic/core/crypto/quic_encrypter.h"
-#include "net/third_party/quiche/src/quic/core/http/spdy_utils.h"
-#include "net/third_party/quiche/src/quic/core/quic_connection.h"
-#include "net/third_party/quiche/src/quic/test_tools/crypto_test_utils.h"
-#include "net/third_party/quiche/src/quic/test_tools/mock_clock.h"
-#include "net/third_party/quiche/src/quic/test_tools/mock_random.h"
-#include "net/third_party/quiche/src/quic/test_tools/qpack/qpack_test_utils.h"
-#include "net/third_party/quiche/src/quic/test_tools/quic_connection_peer.h"
-#include "net/third_party/quiche/src/quic/test_tools/quic_session_peer.h"
-#include "net/third_party/quiche/src/quic/test_tools/quic_spdy_session_peer.h"
-#include "net/third_party/quiche/src/quic/test_tools/quic_test_utils.h"
+#include "net/third_party/quiche/src/quiche/common/quiche_text_utils.h"
+#include "net/third_party/quiche/src/quiche/quic/core/crypto/crypto_protocol.h"
+#include "net/third_party/quiche/src/quiche/quic/core/crypto/null_decrypter.h"
+#include "net/third_party/quiche/src/quiche/quic/core/crypto/quic_decrypter.h"
+#include "net/third_party/quiche/src/quiche/quic/core/crypto/quic_encrypter.h"
+#include "net/third_party/quiche/src/quiche/quic/core/http/spdy_utils.h"
+#include "net/third_party/quiche/src/quiche/quic/core/quic_connection.h"
+#include "net/third_party/quiche/src/quiche/quic/test_tools/crypto_test_utils.h"
+#include "net/third_party/quiche/src/quiche/quic/test_tools/mock_clock.h"
+#include "net/third_party/quiche/src/quiche/quic/test_tools/mock_random.h"
+#include "net/third_party/quiche/src/quiche/quic/test_tools/qpack/qpack_test_utils.h"
+#include "net/third_party/quiche/src/quiche/quic/test_tools/quic_connection_peer.h"
+#include "net/third_party/quiche/src/quiche/quic/test_tools/quic_session_peer.h"
+#include "net/third_party/quiche/src/quiche/quic/test_tools/quic_spdy_session_peer.h"
+#include "net/third_party/quiche/src/quiche/quic/test_tools/quic_test_utils.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -576,7 +575,6 @@ class BidirectionalStreamQuicImplTest
         kQuicYieldAfterPacketsRead,
         quic::QuicTime::Delta::FromMilliseconds(
             kQuicYieldAfterDurationMilliseconds),
-        /*go_away_on_path_degrading*/ false,
         client_headers_include_h2_stream_dependency_, /*cert_verify_flags=*/0,
         quic::test::DefaultQuicConfig(),
         std::make_unique<TestQuicCryptoClientConfigHandle>(&crypto_config_),
@@ -825,8 +823,8 @@ class BidirectionalStreamQuicImplTest
     if (!version_.UsesHttp3()) {
       return "";
     }
-    quic::QuicBuffer buffer = quic::HttpEncoder::SerializeDataFrameHeader(
-        body_len, quic::SimpleBufferAllocator::Get());
+    quiche::QuicheBuffer buffer = quic::HttpEncoder::SerializeDataFrameHeader(
+        body_len, quiche::SimpleBufferAllocator::Get());
     return std::string(buffer.data(), buffer.size());
   }
 

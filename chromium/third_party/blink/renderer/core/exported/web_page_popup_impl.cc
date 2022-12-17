@@ -64,6 +64,7 @@
 #include "third_party/blink/renderer/core/loader/frame_load_request.h"
 #include "third_party/blink/renderer/core/page/focus_controller.h"
 #include "third_party/blink/renderer/core/page/page.h"
+#include "third_party/blink/renderer/core/page/page_animator.h"
 #include "third_party/blink/renderer/core/page/page_popup_client.h"
 #include "third_party/blink/renderer/core/page/page_popup_controller.h"
 #include "third_party/blink/renderer/platform/animation/compositor_animation_timeline.h"
@@ -76,6 +77,7 @@
 #include "third_party/blink/renderer/platform/text/text_direction.h"
 #include "third_party/blink/renderer/platform/web_test_support.h"
 #include "third_party/blink/renderer/platform/widget/frame_widget.h"
+#include "third_party/blink/renderer/platform/widget/input/input_metrics.h"
 #include "third_party/blink/renderer/platform/widget/input/widget_input_handler_manager.h"
 #include "third_party/blink/renderer/platform/widget/widget_base.h"
 
@@ -478,7 +480,9 @@ void WebPagePopupImpl::ShowVirtualKeyboard() {
 }
 
 void WebPagePopupImpl::SetFocus(bool focus) {
-  widget_base_->SetFocus(focus);
+  widget_base_->SetFocus(focus
+                             ? mojom::blink::FocusState::kFocused
+                             : mojom::blink::FocusState::kNotFocusedAndActive);
 }
 
 bool WebPagePopupImpl::HasFocus() {
@@ -588,7 +592,7 @@ void WebPagePopupImpl::SetWindowRect(const gfx::Rect& rect_in_screen) {
                         WebFeature::kPopupDoesNotExceedOwnerWindowBounds);
     } else {
       WebFeature feature =
-          document.GetFrame()->IsMainFrame()
+          document.GetFrame()->IsOutermostMainFrame()
               ? WebFeature::kPopupExceedsOwnerWindowBounds
               : WebFeature::kPopupExceedsOwnerWindowBoundsForIframe;
       UseCounter::Count(document, feature);
@@ -734,6 +738,9 @@ WebInputEventResult WebPagePopupImpl::HandleGestureEvent(
       HitTestResult resultScroll =
           MainFrame().GetEventHandler().HitTestResultAtLocation(locationScroll);
       scrollable_node_ = FindFirstScroller(resultScroll.InnerNode());
+      RecordScrollReasonsMetric(
+          event.SourceDevice(),
+          cc::MainThreadScrollingReason::kPopupNoThreadedInput);
       return WebInputEventResult::kHandledSystem;
     }
     if (event.GetType() == WebInputEvent::Type::kGestureScrollUpdate) {
@@ -863,12 +870,14 @@ WebInputEventResult WebPagePopupImpl::HandleInputEvent(
   return PageWidgetDelegate::HandleInputEvent(*this, event, &MainFrame());
 }
 
-void WebPagePopupImpl::FocusChanged(bool enable) {
+void WebPagePopupImpl::FocusChanged(mojom::blink::FocusState focus_state) {
   if (!page_)
     return;
-  if (enable)
-    page_->GetFocusController().SetActive(true);
-  page_->GetFocusController().SetFocused(enable);
+  page_->GetFocusController().SetActive(
+      focus_state == mojom::blink::FocusState::kFocused ||
+      focus_state == mojom::blink::FocusState::kNotFocusedAndActive);
+  page_->GetFocusController().SetFocused(focus_state ==
+                                         mojom::blink::FocusState::kFocused);
 }
 
 void WebPagePopupImpl::ScheduleAnimation() {

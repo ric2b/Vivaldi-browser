@@ -124,6 +124,13 @@ Possible values
   - "arm"
   - "arm64"
   - "mipsel"
+  - "mips64el"
+  - "s390x"
+  - "ppc64"
+  - "riscv32"
+  - "riscv64"
+  - "e2k"
+  - "loong64"
 )";
 
 const char kTargetName[] = "target_name";
@@ -553,6 +560,14 @@ const char kArgs_Help[] =
   For action and action_foreach targets, args is the list of arguments to pass
   to the script. Typically you would use source expansion (see "gn help
   source_expansion") to insert the source file names.
+
+  Args can also expand the substitution patterns corresponding to config
+  variables in the same way that compiler tools (see "gn help tool") do. These
+  allow actions that run compiler or compiler-like tools to access the results
+  of propagating configs through the build graph. For example:
+
+  args = [ "{{defines}}", "{{include_dirs}}", "{{rustenv}}", "--input-file",
+           "{{source}}" ]
 
   See also "gn help action" and "gn help action_foreach".
 )";

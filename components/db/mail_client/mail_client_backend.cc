@@ -26,11 +26,11 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
-#include "base/task/sequenced_task_runner.h"
-#include "base/task/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -131,7 +131,7 @@ void MailClientBackend::Commit() {
   if (!db_)
     return;
 
-#if defined(OS_IOS)
+#if BUILDFLAG(IS_IOS)
   // Attempts to get the application running long enough to commit the database
   // transaction if it is currently being backgrounded.
   base::ios::ScopedCriticalAction scoped_critical_action;
@@ -161,9 +161,7 @@ void MailClientBackend::CreateMessages(
 void MailClientBackend::DeleteMessages(
     std::vector<SearchListID> search_list_ids,
     std::shared_ptr<bool> result) {
-  bool success = db_->DeleteMessages(search_list_ids);
-
-  *result = success;
+  *result = db_->DeleteMessages(search_list_ids);
 }
 
 void MailClientBackend::AddMessageBody(SearchListID search_list_id,
@@ -198,9 +196,10 @@ void MailClientBackend::MatchMessage(SearchListID search_list_id,
   *results = found;
 }
 
-void MailClientBackend::RebuildDatabase(std::shared_ptr<bool> result) {
-  bool found = db_->RebuildDatabase();
-  *result = found;
+void MailClientBackend::RebuildAndVacuumDatabase(std::shared_ptr<bool> result) {
+  bool rebuilt = db_->RebuildDatabase();
+  db_->Vacuum();
+  *result = rebuilt;
 }
 
 }  // namespace mail_client

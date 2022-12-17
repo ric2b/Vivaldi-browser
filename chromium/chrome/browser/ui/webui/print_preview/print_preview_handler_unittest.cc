@@ -9,14 +9,13 @@
 #include <utility>
 #include <vector>
 
-#include "base/base64.h"
 #include "base/containers/flat_set.h"
-#include "base/cxx17_backports.h"
 #include "base/i18n/number_formatting.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted_memory.h"
+#include "base/notreached.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/icu_test_util.h"
@@ -71,9 +70,9 @@ const char kEmptyPrinterName[] = "EmptyPrinter";
 const char kTestData[] = "abc";
 
 // Array of all mojom::PrinterTypes.
-constexpr mojom::PrinterType kAllTypes[] = {
-    mojom::PrinterType::kExtension, mojom::PrinterType::kPdf,
-    mojom::PrinterType::kLocal, mojom::PrinterType::kCloud};
+constexpr mojom::PrinterType kAllTypes[] = {mojom::PrinterType::kExtension,
+                                            mojom::PrinterType::kPdf,
+                                            mojom::PrinterType::kLocal};
 
 // Array of all mojom::PrinterTypes that have working PrinterHandlers.
 constexpr mojom::PrinterType kAllSupportedTypes[] = {
@@ -122,42 +121,46 @@ PrinterInfo GetEmptyPrinterInfo() {
   return empty_printer;
 }
 
-base::Value GetPrintPreviewTicket() {
-  base::Value print_ticket = GetPrintTicket(mojom::PrinterType::kLocal);
+base::Value::Dict GetPrintPreviewTicket() {
+  base::Value::Dict print_ticket = GetPrintTicket(mojom::PrinterType::kLocal);
 
   // Make some modifications to match a preview print ticket.
-  print_ticket.SetKey(kSettingPageRange, base::Value());
-  print_ticket.SetBoolKey(kIsFirstRequest, true);
-  print_ticket.SetIntKey(kPreviewRequestID, 0);
-  print_ticket.SetBoolKey(kSettingPreviewModifiable, false);
-  print_ticket.RemoveKey(kSettingPageWidth);
-  print_ticket.RemoveKey(kSettingPageHeight);
-  print_ticket.RemoveKey(kSettingShowSystemDialog);
+  print_ticket.Set(kSettingPageRange, base::Value());
+  print_ticket.Set(kIsFirstRequest, true);
+  print_ticket.Set(kPreviewRequestID, 0);
+  print_ticket.Set(kSettingPreviewModifiable, false);
+  print_ticket.Remove(kSettingPageWidth);
+  print_ticket.Remove(kSettingPageHeight);
+  print_ticket.Remove(kSettingShowSystemDialog);
 
   return print_ticket;
 }
 
-base::Value ConstructPreviewArgs(base::StringPiece callback_id,
-                                 const base::Value& print_ticket) {
-  base::Value args(base::Value::Type::LIST);
+base::Value::List ConstructPreviewArgs(base::StringPiece callback_id,
+                                       const base::Value::Dict& print_ticket) {
+  base::Value::List args;
   args.Append(callback_id);
   std::string json;
-  base::JSONWriter::Write(print_ticket, &json);
+  base::JSONWriter::Write(base::Value(print_ticket.Clone()), &json);
   args.Append(json);
   return args;
 }
 
 UserActionBuckets GetUserActionForPrinterType(mojom::PrinterType type) {
   switch (type) {
-    case mojom::PrinterType::kPrivet:
-      return UserActionBuckets::kPrintWithPrivet;
+    case mojom::PrinterType::kPrivetDeprecated:
+      NOTREACHED();
+      // Return value doesn't matter.
+      return UserActionBuckets::kPrintToPrinter;
     case mojom::PrinterType::kExtension:
       return UserActionBuckets::kPrintWithExtension;
     case mojom::PrinterType::kPdf:
       return UserActionBuckets::kPrintToPdf;
     case mojom::PrinterType::kLocal:
       return UserActionBuckets::kPrintToPrinter;
-    case mojom::PrinterType::kCloud:
+    case mojom::PrinterType::kCloudDeprecated:
+      NOTREACHED();
+      // Return value doesn't matter.
       return UserActionBuckets::kPrintWithCloudPrint;
   }
 }
@@ -177,7 +180,7 @@ void CheckHistograms(const base::HistogramTester& histograms,
 
   // All other PrintPreview.PrintSettings buckets should be empty.
   histograms.ExpectTotalCount("PrintPreview.PrintSettings",
-                              base::size(kPopulatedPrintSettingsBuckets));
+                              std::size(kPopulatedPrintSettingsBuckets));
 
   const UserActionBuckets user_action = GetUserActionForPrinterType(type);
   histograms.ExpectBucketCount("PrintPreview.UserAction", user_action, 1);
@@ -221,7 +224,7 @@ class TestPrinterHandler : public PrinterHandler {
                                GetPrinterInfoCallback callback) override {}
 
   void StartPrint(const std::u16string& job_title,
-                  base::Value settings,
+                  base::Value::Dict settings,
                   scoped_refptr<base::RefCountedMemory> print_data,
                   PrintCallback callback) override {
     std::move(callback).Run(base::Value());
@@ -346,8 +349,6 @@ class TestPrintPreviewHandler : public PrintPreviewHandler {
     return test_printer_handler_.get();
   }
 
-  bool IsCloudPrintEnabled() override { return true; }
-
   void BadMessageReceived() override { bad_messages_++; }
 
   content::WebContents* GetInitiator() override { return initiator_; }
@@ -469,7 +470,7 @@ class PrintPreviewHandlerTest : public testing::Test {
       browser_process->SetApplicationLocale(locale);
       base::test::ScopedRestoreICUDefaultLocale scoped_locale(locale);
       base::ResetFormattersForTesting();
-      handler()->HandleGetInitialSettings(args.GetListDeprecated());
+      handler()->HandleGetInitialSettings(args.GetList());
     }
     // Reset again now that |scoped_locale| has been destroyed.
     browser_process->SetApplicationLocale(original_locale);
@@ -559,8 +560,6 @@ class PrintPreviewHandlerTest : public testing::Test {
                                         base::Value::Type::BOOLEAN));
     ASSERT_TRUE(settings->FindKeyOfType("destinationsManaged",
                                         base::Value::Type::BOOLEAN));
-    ASSERT_TRUE(
-        settings->FindKeyOfType("cloudPrintURL", base::Value::Type::STRING));
   }
 
   // Returns |policy_name| entry from initial settings policies.
@@ -629,7 +628,7 @@ class PrintPreviewHandlerTest : public testing::Test {
     base::Value args(base::Value::Type::LIST);
     args.Append(callback_id_in);
     args.Append(static_cast<int>(type));
-    handler()->HandleGetPrinters(args.GetListDeprecated());
+    handler()->HandleGetPrinters(args.GetList());
   }
 
   // Validates that the printers-added Web UI event has been fired for
@@ -645,8 +644,7 @@ class PrintPreviewHandlerTest : public testing::Test {
         static_cast<mojom::PrinterType>(add_data.arg2()->GetInt());
     EXPECT_EQ(expected_type, type);
     ASSERT_TRUE(add_data.arg3());
-    base::Value::ConstListView printer_list =
-        add_data.arg3()->GetListDeprecated();
+    const base::Value::List& printer_list = add_data.arg3()->GetList();
     ASSERT_EQ(printer_list.size(), 1u);
     EXPECT_TRUE(printer_list[0].FindKeyOfType("printer_name",
                                               base::Value::Type::STRING));
@@ -661,7 +659,7 @@ class PrintPreviewHandlerTest : public testing::Test {
     args.Append(callback_id_in);
     args.Append(printer_name);
     args.Append(static_cast<int>(type));
-    handler()->HandleGetPrinterCapabilities(args.GetListDeprecated());
+    handler()->HandleGetPrinterCapabilities(args.GetList());
   }
 
   // Validates that a printer capabilities promise was resolved/rejected.
@@ -1080,7 +1078,7 @@ TEST_F(PrintPreviewHandlerTest, GetPrinters) {
   Initialize();
 
   // Check all three printer types that implement
-  for (size_t i = 0; i < base::size(kFetchableTypes); i++) {
+  for (size_t i = 0; i < std::size(kFetchableTypes); i++) {
     mojom::PrinterType type = kFetchableTypes[i];
     std::string callback_id_in =
         "test-callback-id-" + base::NumberToString(i + 1);
@@ -1116,7 +1114,7 @@ TEST_F(PrintPreviewHandlerTest, GetNoDenyListPrinters) {
   Initialize();
 
   size_t expected_callbacks = 1;
-  for (size_t i = 0; i < base::size(kFetchableTypes); i++) {
+  for (size_t i = 0; i < std::size(kFetchableTypes); i++) {
     mojom::PrinterType type = kFetchableTypes[i];
     std::string callback_id_in =
         "test-callback-id-" + base::NumberToString(i + 1);
@@ -1152,7 +1150,7 @@ TEST_F(PrintPreviewHandlerTest, GetPrinterCapabilities) {
 
   // Check all four printer types that implement
   // PrinterHandler::StartGetCapability().
-  for (size_t i = 0; i < base::size(kAllSupportedTypes); i++) {
+  for (size_t i = 0; i < std::size(kAllSupportedTypes); i++) {
     mojom::PrinterType type = kAllSupportedTypes[i];
     std::string callback_id_in =
         "test-callback-id-" + base::NumberToString(i + 1);
@@ -1169,19 +1167,19 @@ TEST_F(PrintPreviewHandlerTest, GetPrinterCapabilities) {
 
   // Run through the loop again, this time with a printer that has no
   // capabilities.
-  for (size_t i = 0; i < base::size(kAllSupportedTypes); i++) {
+  for (size_t i = 0; i < std::size(kAllSupportedTypes); i++) {
     mojom::PrinterType type = kAllSupportedTypes[i];
     std::string callback_id_in =
         "test-callback-id-" +
-        base::NumberToString(i + base::size(kAllSupportedTypes) + 1);
+        base::NumberToString(i + std::size(kAllSupportedTypes) + 1);
     handler()->reset_calls();
     SendGetPrinterCapabilities(type, callback_id_in, kEmptyPrinterName);
     EXPECT_TRUE(handler()->CalledOnlyForType(type));
 
     // Start with 1 call from initial settings plus
-    // base::size(kAllSupportedTypes) from first loop, then add 1 more for each
+    // std::size(kAllSupportedTypes) from first loop, then add 1 more for each
     // loop iteration.
-    ASSERT_EQ(1u + base::size(kAllSupportedTypes) + (i + 1),
+    ASSERT_EQ(1u + std::size(kAllSupportedTypes) + (i + 1),
               web_ui()->call_data().size());
 
     ValidatePrinterCapabilities(callback_id_in, /*expect_resolved=*/false);
@@ -1206,7 +1204,7 @@ TEST_F(PrintPreviewHandlerTest, GetNoDenyListPrinterCapabilities) {
 
   // Check all four printer types that implement
   // PrinterHandler::StartGetCapability().
-  for (size_t i = 0; i < base::size(kAllSupportedTypes); i++) {
+  for (size_t i = 0; i < std::size(kAllSupportedTypes); i++) {
     mojom::PrinterType type = kAllSupportedTypes[i];
     std::string callback_id_in =
         "test-callback-id-" + base::NumberToString(i + 1);
@@ -1228,18 +1226,18 @@ TEST_F(PrintPreviewHandlerTest, Print) {
   Initialize();
 
   // All printer types can print.
-  for (size_t i = 0; i < base::size(kAllTypes); i++) {
+  for (size_t i = 0; i < std::size(kAllTypes); i++) {
     base::HistogramTester histograms;
     handler()->reset_calls();
 
     // Send print preview request.
-    base::Value preview_ticket = GetPrintPreviewTicket();
-    preview_ticket.SetIntKey(kPreviewRequestID, i);
+    base::Value::Dict preview_ticket = GetPrintPreviewTicket();
+    preview_ticket.Set(kPreviewRequestID, static_cast<int>(i));
     std::string preview_callback_id =
         "test-callback-id-" + base::NumberToString(2 * i + 1);
-    base::Value preview_list_args =
+    base::Value::List preview_list_args =
         ConstructPreviewArgs(preview_callback_id, preview_ticket);
-    handler()->HandleGetPreview(preview_list_args.GetListDeprecated());
+    handler()->HandleGetPreview(preview_list_args);
 
     // Send printing request.
     mojom::PrinterType type = kAllTypes[i];
@@ -1247,33 +1245,20 @@ TEST_F(PrintPreviewHandlerTest, Print) {
     std::string print_callback_id =
         "test-callback-id-" + base::NumberToString(2 * (i + 1));
     print_args.Append(print_callback_id);
-    base::Value print_ticket = GetPrintTicket(type);
+    base::Value print_ticket(GetPrintTicket(type));
     std::string json;
     base::JSONWriter::Write(print_ticket, &json);
     print_args.Append(json);
-    handler()->HandlePrint(print_args.GetListDeprecated());
+    handler()->HandlePrint(print_args.GetList());
 
     CheckHistograms(histograms, type);
 
-    // Verify correct PrinterHandler was called or that no handler was requested
-    // for cloud printers.
-    if (type == mojom::PrinterType::kCloud) {
-      EXPECT_TRUE(handler()->NotCalled());
-    } else {
-      EXPECT_TRUE(handler()->CalledOnlyForType(type));
-    }
+    // Verify correct PrinterHandler was called.
+    EXPECT_TRUE(handler()->CalledOnlyForType(type));
 
     // Verify print promise was resolved successfully.
     const content::TestWebUI::CallData& data = *web_ui()->call_data().back();
     CheckWebUIResponse(data, print_callback_id, true);
-
-    // For cloud print, should also get the encoded data back as a string.
-    if (type == mojom::PrinterType::kCloud) {
-      ASSERT_TRUE(data.arg3()->is_string());
-      std::string expected_data;
-      base::Base64Encode(kTestData, &expected_data);
-      EXPECT_EQ(data.arg3()->GetString(), expected_data);
-    }
   }
 }
 
@@ -1285,10 +1270,10 @@ TEST_F(PrintPreviewHandlerTest, GetPreview) {
       GetInitiatorAssociatedInterfaceProvider());
   print_render_frame.SetCompletionClosure(run_loop.QuitClosure());
 
-  base::Value print_ticket = GetPrintPreviewTicket();
-  base::Value list_args =
+  base::Value::Dict print_ticket = GetPrintPreviewTicket();
+  base::Value::List list_args =
       ConstructPreviewArgs("test-callback-id-1", print_ticket);
-  handler()->HandleGetPreview(list_args.GetListDeprecated());
+  handler()->HandleGetPreview(list_args);
   run_loop.Run();
 
   // Verify that the preview was requested from the renderer with the
@@ -1300,7 +1285,7 @@ TEST_F(PrintPreviewHandlerTest, GetPreview) {
       preview_id_found = true;
       continue;
     }
-    const base::Value* value_in = print_ticket.FindKey(it.first);
+    const base::Value* value_in = print_ticket.Find(it.first);
     ASSERT_TRUE(value_in);
     EXPECT_EQ(*value_in, it.second);
   }
@@ -1316,9 +1301,10 @@ TEST_F(PrintPreviewHandlerTest, SendPreviewUpdates) {
   print_render_frame.SetCompletionClosure(run_loop.QuitClosure());
 
   const char callback_id_in[] = "test-callback-id-1";
-  base::Value print_ticket = GetPrintPreviewTicket();
-  base::Value list_args = ConstructPreviewArgs(callback_id_in, print_ticket);
-  handler()->HandleGetPreview(list_args.GetListDeprecated());
+  base::Value::Dict print_ticket = GetPrintPreviewTicket();
+  base::Value::List list_args =
+      ConstructPreviewArgs(callback_id_in, print_ticket);
+  handler()->HandleGetPreview(list_args);
   run_loop.Run();
   const base::Value& preview_params = print_render_frame.GetSettings();
 
@@ -1427,16 +1413,16 @@ TEST_F(PrintPreviewHandlerFailingTest, GetPrinterCapabilities) {
 
   // Check all four printer types that implement
   // PrinterHandler::StartGetCapability().
-  for (size_t i = 0; i < base::size(kAllSupportedTypes); i++) {
+  for (size_t i = 0; i < std::size(kAllSupportedTypes); i++) {
     mojom::PrinterType type = kAllSupportedTypes[i];
     handler()->reset_calls();
-    base::Value args(base::Value::Type::LIST);
+    base::Value::List args;
     std::string callback_id_in =
         "test-callback-id-" + base::NumberToString(i + 1);
     args.Append(callback_id_in);
     args.Append(kDummyPrinterName);
     args.Append(static_cast<int>(type));
-    handler()->HandleGetPrinterCapabilities(args.GetListDeprecated());
+    handler()->HandleGetPrinterCapabilities(args);
     EXPECT_TRUE(handler()->CalledOnlyForType(type));
 
     // Start with 1 call from initial settings, then add 1 more for each loop

@@ -11,8 +11,10 @@
 #include "media/mojo/clients/mojo_renderer_factory.h"
 #include "media/mojo/clients/win/media_foundation_renderer_client.h"
 #include "media/mojo/mojom/renderer_extensions.mojom.h"
+#include "media/mojo/mojom/speech_recognition_service.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 
 namespace media {
@@ -20,10 +22,14 @@ namespace media {
 MediaFoundationRendererClientFactory::MediaFoundationRendererClientFactory(
     MediaLog* media_log,
     GetDCOMPTextureWrapperCB get_dcomp_texture_cb,
-    std::unique_ptr<media::MojoRendererFactory> mojo_renderer_factory)
+    std::unique_ptr<media::MojoRendererFactory> mojo_renderer_factory,
+    mojo::Remote<media::mojom::MediaFoundationRendererNotifier>
+        media_foundation_renderer_notifier)
     : media_log_(media_log),
       get_dcomp_texture_cb_(std::move(get_dcomp_texture_cb)),
-      mojo_renderer_factory_(std::move(mojo_renderer_factory)) {
+      mojo_renderer_factory_(std::move(mojo_renderer_factory)),
+      media_foundation_renderer_notifier_(
+          std::move(media_foundation_renderer_notifier)) {
   DVLOG_FUNC(1);
 }
 
@@ -59,19 +65,35 @@ MediaFoundationRendererClientFactory::CreateRenderer(
   auto renderer_extension_receiver =
       renderer_extension_remote.InitWithNewPipeAndPassReceiver();
 
+  // Used to send messages from the MediaFoundationRenderer (MF_CDM LPAC Utility
+  // process), to the MediaFoundationRendererClient (Renderer process).
+  // The |client_extension_receiver| will be bound in
+  // MediaFoundationRendererClient.
+  mojo::PendingRemote<media::mojom::MediaFoundationRendererClientExtension>
+      client_extension_remote;
+  auto client_extension_receiver =
+      client_extension_remote.InitWithNewPipeAndPassReceiver();
+
   auto dcomp_texture = get_dcomp_texture_cb_.Run();
   DCHECK(dcomp_texture);
 
   std::unique_ptr<media::MojoRenderer> mojo_renderer =
       mojo_renderer_factory_->CreateMediaFoundationRenderer(
           std::move(media_log_pending_remote),
-          std::move(renderer_extension_receiver), media_task_runner,
+          std::move(renderer_extension_receiver),
+          std::move(client_extension_remote), media_task_runner,
           video_renderer_sink);
+
+  // Notify the browser that a Media Foundation Renderer has been created. Live
+  // Caption supports muted media so this is run regardless of whether the media
+  // is audible.
+  media_foundation_renderer_notifier_->MediaFoundationRendererCreated();
 
   // mojo_renderer's ownership is passed to MediaFoundationRendererClient.
   return std::make_unique<MediaFoundationRendererClient>(
       media_task_runner, media_log_->Clone(), std::move(mojo_renderer),
-      std::move(renderer_extension_remote), std::move(dcomp_texture),
+      std::move(renderer_extension_remote),
+      std::move(client_extension_receiver), std::move(dcomp_texture),
       video_renderer_sink);
 }
 

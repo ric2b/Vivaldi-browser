@@ -14,7 +14,6 @@
 #include <vector>
 
 #include "base/containers/span.h"
-#include "base/cxx17_backports.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/string_piece.h"
@@ -35,9 +34,7 @@
 #include "net/spdy/spdy_session.h"
 #include "net/spdy/spdy_session_pool.h"
 #include "net/ssl/ssl_config_service_defaults.h"
-#include "net/third_party/quiche/src/spdy/core/spdy_protocol.h"
-#include "net/url_request/url_request_context.h"
-#include "net/url_request/url_request_context_storage.h"
+#include "net/third_party/quiche/src/quiche/spdy/core/spdy_protocol.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if BUILDFLAG(ENABLE_REPORTING)
@@ -50,6 +47,7 @@ class GURL;
 namespace net {
 
 class CTPolicyEnforcer;
+class ClientSocketFactory;
 class HashValue;
 class HostPortPair;
 class HostResolver;
@@ -60,12 +58,13 @@ class SpdySessionKey;
 class SpdyStream;
 class SpdyStreamRequest;
 class TransportSecurityState;
+class URLRequestContextBuilder;
 
 // Default upload data used by both, mock objects and framer when creating
 // data frames.
 const char kDefaultUrl[] = "https://www.example.org/";
 const char kUploadData[] = "hello!";
-const int kUploadDataSize = base::size(kUploadData) - 1;
+const int kUploadDataSize = std::size(kUploadData) - 1;
 
 // While HTTP/2 protocol defines default SETTINGS_MAX_HEADER_LIST_SIZE_FOR_TEST
 // to be unlimited, BufferedSpdyFramer constructor requires a value.
@@ -219,17 +218,9 @@ struct SpdySessionDependencies {
   bool ignore_ip_address_changes;
 };
 
-class SpdyURLRequestContext : public URLRequestContext {
- public:
-  SpdyURLRequestContext();
-  ~SpdyURLRequestContext() override;
-
-  MockClientSocketFactory& socket_factory() { return socket_factory_; }
-
- private:
-  MockClientSocketFactory socket_factory_;
-  URLRequestContextStorage storage_;
-};
+std::unique_ptr<URLRequestContextBuilder>
+CreateSpdyTestURLRequestContextBuilder(
+    ClientSocketFactory* client_socket_factory);
 
 // Equivalent to pool->GetIfExists(spdy_session_key, NetLogWithSource()) !=
 // NULL.

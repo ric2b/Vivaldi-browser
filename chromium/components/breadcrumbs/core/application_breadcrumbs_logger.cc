@@ -9,29 +9,34 @@
 #include "base/bind.h"
 #include "base/strings/stringprintf.h"
 #include "components/breadcrumbs/core/application_breadcrumbs_not_user_action.inc"
-#include "components/breadcrumbs/core/breadcrumb_manager.h"
 #include "components/breadcrumbs/core/breadcrumb_persistent_storage_manager.h"
 #include "components/breadcrumbs/core/crash_reporter_breadcrumb_observer.h"
 
 namespace breadcrumbs {
 
 ApplicationBreadcrumbsLogger::ApplicationBreadcrumbsLogger(
-    BreadcrumbManager* breadcrumb_manager)
-    : breadcrumb_manager_(breadcrumb_manager),
-      user_action_callback_(
+    const base::FilePath& storage_dir,
+    base::RepeatingCallback<bool()> is_metrics_enabled_callback)
+    : user_action_callback_(
           base::BindRepeating(&ApplicationBreadcrumbsLogger::OnUserAction,
                               base::Unretained(this))),
       memory_pressure_listener_(std::make_unique<base::MemoryPressureListener>(
           FROM_HERE,
           base::BindRepeating(&ApplicationBreadcrumbsLogger::OnMemoryPressure,
-                              base::Unretained(this)))) {
+                              base::Unretained(this)))),
+      persistent_storage_manager_(
+          std::make_unique<BreadcrumbPersistentStorageManager>(
+              storage_dir,
+              std::move(is_metrics_enabled_callback))) {
   base::AddActionCallback(user_action_callback_);
 
   // Start crash reporter listening for breadcrumbs logged to
   // |breadcrumb_manager_|. Collected breadcrumbs will be attached to crash
   // reports.
   CrashReporterBreadcrumbObserver::GetInstance().ObserveBreadcrumbManager(
-      breadcrumb_manager_);
+      &breadcrumb_manager_);
+
+  persistent_storage_manager_->MonitorBreadcrumbManager(&breadcrumb_manager_);
 
   AddEvent("Startup");
 }
@@ -40,23 +45,9 @@ ApplicationBreadcrumbsLogger::~ApplicationBreadcrumbsLogger() {
   AddEvent("Shutdown");
   base::RemoveActionCallback(user_action_callback_);
   CrashReporterBreadcrumbObserver::GetInstance().StopObservingBreadcrumbManager(
-      breadcrumb_manager_);
-  if (persistent_storage_manager_) {
-    persistent_storage_manager_->StopMonitoringBreadcrumbManager(
-        breadcrumb_manager_);
-  }
-}
-
-void ApplicationBreadcrumbsLogger::SetPersistentStorageManager(
-    std::unique_ptr<BreadcrumbPersistentStorageManager>
-        persistent_storage_manager) {
-  if (persistent_storage_manager_) {
-    persistent_storage_manager_->StopMonitoringBreadcrumbManager(
-        breadcrumb_manager_);
-  }
-
-  persistent_storage_manager_ = std::move(persistent_storage_manager);
-  persistent_storage_manager_->MonitorBreadcrumbManager(breadcrumb_manager_);
+      &breadcrumb_manager_);
+  persistent_storage_manager_->StopMonitoringBreadcrumbManager(
+      &breadcrumb_manager_);
 }
 
 BreadcrumbPersistentStorageManager*
@@ -64,8 +55,12 @@ ApplicationBreadcrumbsLogger::GetPersistentStorageManager() const {
   return persistent_storage_manager_.get();
 }
 
+std::list<std::string> ApplicationBreadcrumbsLogger::GetEventsForTesting() {
+  return breadcrumb_manager_.GetEvents(/*event_count_limit=*/0);
+}
+
 void ApplicationBreadcrumbsLogger::AddEvent(const std::string& event) {
-  breadcrumb_manager_->AddEvent(event);
+  breadcrumb_manager_.AddEvent(event);
 }
 
 void ApplicationBreadcrumbsLogger::OnUserAction(const std::string& action,

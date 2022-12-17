@@ -14,6 +14,8 @@
 #include "base/check_op.h"
 #include "base/containers/contains.h"
 #include "base/containers/cxx20_erase.h"
+#include "base/memory/weak_ptr.h"
+#include "base/notreached.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_confidential_contents.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_content_manager_observer.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_content_restriction_set.h"
@@ -30,6 +32,8 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
+#include "ui/views/widget/widget.h"
 #include "url/gurl.h"
 
 namespace policy {
@@ -70,6 +74,26 @@ bool IsReported(RestrictionLevelAndUrl restriction_info) {
          IsBlocked(restriction_info);
 }
 
+// Maps restriction to the correct suffix used for logging WarnProceeded
+// metrics. Returns the suffix for supported restrictions and null otherwise.
+const absl::optional<std::string> RestrictionToWarnProceededUMASuffix(
+    DlpRulesManager::Restriction restriction) {
+  switch (restriction) {
+    case DlpRulesManager::Restriction::kScreenShare:
+      return absl::make_optional(dlp::kScreenShareWarnProceededUMA);
+    case DlpRulesManager::Restriction::kPrinting:
+      return absl::make_optional(dlp::kPrintingWarnProceededUMA);
+    case DlpRulesManager::Restriction::kScreenshot:
+      return absl::make_optional(dlp::kScreenshotWarnProceededUMA);
+    case DlpRulesManager::Restriction::kUnknownRestriction:
+    case DlpRulesManager::Restriction::kClipboard:
+    case DlpRulesManager::Restriction::kPrivacyScreen:
+    case DlpRulesManager::Restriction::kFiles:
+      NOTREACHED();
+      return absl::nullopt;
+  }
+}
+
 }  // namespace
 
 // static
@@ -98,6 +122,7 @@ void DlpContentManager::CheckPrintingRestriction(
       GetPrintingRestrictionInfo(web_contents);
   MaybeReportEvent(restriction_info, DlpRulesManager::Restriction::kPrinting);
   DlpBooleanHistogram(dlp::kPrintingBlockedUMA, IsBlocked(restriction_info));
+  DlpBooleanHistogram(dlp::kPrintingWarnedUMA, IsWarn(restriction_info));
   if (IsBlocked(restriction_info)) {
     ShowDlpPrintDisabledNotification();
     std::move(callback).Run(false);
@@ -111,6 +136,7 @@ void DlpContentManager::CheckPrintingRestriction(
       ReportWarningProceededEvent(restriction_info.url,
                                   DlpRulesManager::Restriction::kPrinting,
                                   reporting_manager_);
+      DlpBooleanHistogram(dlp::kPrintingWarnSilentProceededUMA, true);
       std::move(callback).Run(true);
       return;
     }
@@ -146,6 +172,7 @@ bool DlpContentManager::IsScreenshotApiRestricted(
     ReportWarningEvent(restriction_info.url,
                        DlpRulesManager::Restriction::kScreenshot);
   DlpBooleanHistogram(dlp::kScreenshotBlockedUMA, IsBlocked(restriction_info));
+  DlpBooleanHistogram(dlp::kScreenshotWarnedUMA, IsWarn(restriction_info));
   // TODO(crbug.com/1252736): Properly handle WARN for screenshots API.
   return IsBlocked(restriction_info) || IsWarn(restriction_info);
 }
@@ -270,6 +297,33 @@ void DlpContentManager::ScreenShareInfo::HideNotifications() {
   UpdateResumedNotification(/*show=*/false);
 }
 
+const RestrictionLevelAndUrl&
+DlpContentManager::ScreenShareInfo::GetLatestRestriction() const {
+  return latest_confidential_contents_info_.restriction_info;
+}
+
+const DlpConfidentialContents&
+DlpContentManager::ScreenShareInfo::GetConfidentialContents() const {
+  return latest_confidential_contents_info_.confidential_contents;
+}
+
+void DlpContentManager::ScreenShareInfo::SetConfidentialContentsInfo(
+    ConfidentialContentsInfo confidential_contents_info) {
+  latest_confidential_contents_info_ = confidential_contents_info;
+}
+
+void DlpContentManager::ScreenShareInfo::MaybeCloseDialogWidget() {
+  if (dialog_widget_) {
+    dialog_widget_->CloseWithReason(views::Widget::ClosedReason::kUnspecified);
+  }
+}
+
+void DlpContentManager::ScreenShareInfo::SetDialogWidget(
+    base::WeakPtr<views::Widget> dialog_widget) {
+  DCHECK(!dialog_widget_ || dialog_widget_->IsClosed());
+  dialog_widget_ = dialog_widget;
+}
+
 base::WeakPtr<DlpContentManager::ScreenShareInfo>
 DlpContentManager::ScreenShareInfo::GetWeakPtr() {
   return weak_factory_.GetWeakPtr();
@@ -305,13 +359,13 @@ void DlpContentManager::ScreenShareInfo::UpdateResumedNotification(bool show) {
 
 void DlpContentManager::AddObserver(DlpContentManagerObserver* observer,
                                     DlpContentRestriction restriction) {
-  observer_lists_[restriction].AddObserver(observer);
+  observer_lists_[static_cast<int>(restriction)].AddObserver(observer);
 }
 
 void DlpContentManager::RemoveObserver(
     const DlpContentManagerObserver* observer,
     DlpContentRestriction restriction) {
-  observer_lists_[restriction].RemoveObserver(observer);
+  observer_lists_[static_cast<int>(restriction)].RemoveObserver(observer);
 }
 
 DlpContentManager::DlpContentManager() {
@@ -453,11 +507,13 @@ void DlpContentManager::ProcessScreenShareRestriction(
     const std::u16string& application_title,
     ConfidentialContentsInfo info,
     OnDlpRestrictionCheckedCallback callback) {
-  MaybeReportEvent(info.restriction_info,
-                   DlpRulesManager::Restriction::kScreenShare);
   DlpBooleanHistogram(dlp::kScreenShareBlockedUMA,
                       IsBlocked(info.restriction_info));
+  DlpBooleanHistogram(dlp::kScreenShareWarnedUMA,
+                      IsWarn(info.restriction_info));
   if (IsBlocked(info.restriction_info)) {
+    MaybeReportEvent(info.restriction_info,
+                     DlpRulesManager::Restriction::kScreenShare);
     ShowDlpScreenShareDisabledNotification(application_title);
     std::move(callback).Run(false);
     return;
@@ -469,6 +525,7 @@ void DlpContentManager::ProcessScreenShareRestriction(
                           DlpRulesManager::Restriction::kScreenShare);
     if (info.confidential_contents.IsEmpty()) {
       // The user already allowed all the visible content.
+      DlpBooleanHistogram(dlp::kScreenShareWarnSilentProceededUMA, true);
       std::move(callback).Run(true);
       return;
     }
@@ -476,16 +533,17 @@ void DlpContentManager::ProcessScreenShareRestriction(
     ReportWarningEvent(info.restriction_info.url,
                        DlpRulesManager::Restriction::kScreenShare);
 
-    auto reporting_callback = base::BindOnce(
-        &MaybeReportWarningProceededEvent, info.restriction_info.url,
-        DlpRulesManager::Restriction::kScreenShare, reporting_manager_);
     // base::Unretained(this) is safe here because DlpContentManager is
     // initialized as a singleton that's always available in the system.
+    //
+    // Don't report warning proceeded events here. They are reported in
+    // DlpContentManager::CheckRunningScreenShares(), which is called when
+    // screen share starts by DlpContentManager::OnScreenShareStarted().
     warn_notifier_->ShowDlpScreenShareWarningDialog(
         base::BindOnce(&DlpContentManager::OnDlpWarnDialogReply,
                        base::Unretained(this), info.confidential_contents,
                        DlpRulesManager::Restriction::kScreenShare,
-                       std::move(reporting_callback).Then(std::move(callback))),
+                       std::move(callback)),
         info.confidential_contents, application_title);
     return;
   }
@@ -528,16 +586,40 @@ void DlpContentManager::CheckRunningScreenShares() {
   for (auto& screen_share : running_screen_shares_) {
     ConfidentialContentsInfo info = GetScreenShareConfidentialContentsInfo(
         screen_share->GetMediaId(), screen_share->GetWebContents().get());
+
+    if (IsReported(info.restriction_info) && reporting_manager_ &&
+        last_reported_screen_share_.ShouldReportAndUpdate(
+            screen_share->GetLabel(), info.confidential_contents)) {
+      ReportEvent(info.restriction_info.url,
+                  DlpRulesManager::Restriction::kScreenShare,
+                  info.restriction_info.level, reporting_manager_);
+    }
+
+    if (screen_share->GetLatestRestriction() == info.restriction_info &&
+        screen_share->GetConfidentialContents() == info.confidential_contents) {
+      // No change in restrictions that apply to this screen share.
+      continue;
+    }
+
+    if (IsWarn(screen_share->GetLatestRestriction())) {
+      // Close previously opened dialog, if any.
+      screen_share->MaybeCloseDialogWidget();
+    }
+    screen_share->SetConfidentialContentsInfo(info);
+
+    DlpBooleanHistogram(dlp::kScreenShareBlockedUMA,
+                        IsBlocked(info.restriction_info));
+    DlpBooleanHistogram(dlp::kScreenShareWarnedUMA,
+                        IsWarn(info.restriction_info));
     if (IsBlocked(info.restriction_info)) {
       if (screen_share->IsRunning()) {
         screen_share->Pause();
-        MaybeReportEvent(info.restriction_info,
-                         DlpRulesManager::Restriction::kScreenShare);
         DlpBooleanHistogram(dlp::kScreenSharePausedOrResumedUMA, true);
         screen_share->MaybeUpdateNotifications();
       }
-      return;
+      continue;
     }
+
     if (IsWarn(info.restriction_info)) {
       // Check which of the contents were already allowed and don't warn for
       // those.
@@ -545,11 +627,19 @@ void DlpContentManager::CheckRunningScreenShares() {
                             DlpRulesManager::Restriction::kScreenShare);
       if (info.confidential_contents.IsEmpty()) {
         // The user already allowed all the visible content.
+        if (reporting_manager_ &&
+            last_reported_screen_share_.ShouldReportAndUpdate(
+                screen_share->GetLabel(), info.confidential_contents)) {
+          ReportWarningProceededEvent(
+              info.restriction_info.url,
+              DlpRulesManager::Restriction::kScreenShare, reporting_manager_);
+        }
         if (!screen_share->IsRunning()) {
           screen_share->Resume();
           screen_share->MaybeUpdateNotifications();
         }
-        return;
+        DlpBooleanHistogram(dlp::kScreenShareWarnSilentProceededUMA, true);
+        continue;
       }
       if (screen_share->IsRunning()) {
         screen_share->Pause();
@@ -561,13 +651,15 @@ void DlpContentManager::CheckRunningScreenShares() {
 
       // base::Unretained(this) is safe here because DlpContentManager is
       // initialized as a singleton that's always available in the system.
-      warn_notifier_->ShowDlpScreenShareWarningDialog(
-          base::BindOnce(&DlpContentManager::OnDlpScreenShareWarnDialogReply,
-                         base::Unretained(this), info,
-                         screen_share->GetWeakPtr()),
-          info.confidential_contents, screen_share->GetApplicationTitle());
-      return;
+      screen_share->SetDialogWidget(
+          warn_notifier_->ShowDlpScreenShareWarningDialog(
+              base::BindOnce(
+                  &DlpContentManager::OnDlpScreenShareWarnDialogReply,
+                  base::Unretained(this), info, screen_share->GetWeakPtr()),
+              info.confidential_contents, screen_share->GetApplicationTitle()));
+      continue;
     }
+
     // No restrictions apply, only resume if necessary.
     if (!screen_share->IsRunning()) {
       screen_share->Resume();
@@ -588,10 +680,14 @@ void DlpContentManager::OnDlpScreenShareWarnDialogReply(
     // to do anything.
     return;
 
+  DlpBooleanHistogram(dlp::kScreenShareWarnProceededUMA, should_proceed);
   if (should_proceed) {
-    ReportWarningProceededEvent(info.restriction_info.url,
-                                DlpRulesManager::Restriction::kScreenShare,
-                                reporting_manager_);
+    if (reporting_manager_ &&
+        last_reported_screen_share_.ShouldReportAndUpdate(
+            screen_share->GetLabel(), info.confidential_contents))
+      ReportWarningProceededEvent(info.restriction_info.url,
+                                  DlpRulesManager::Restriction::kScreenShare,
+                                  reporting_manager_);
 
     screen_share->Resume();
     for (const auto& content : info.confidential_contents.GetContents()) {
@@ -612,6 +708,9 @@ void DlpContentManager::OnDlpWarnDialogReply(
     DlpRulesManager::Restriction restriction,
     OnDlpRestrictionCheckedCallback callback,
     bool should_proceed) {
+  auto suffix = RestrictionToWarnProceededUMASuffix(restriction);
+  if (suffix.has_value())
+    DlpBooleanHistogram(suffix.value(), should_proceed);
   if (should_proceed) {
     for (const auto& content : confidential_contents.GetContents()) {
       user_allowed_contents_cache_.Cache(content, restriction);
@@ -652,7 +751,8 @@ void DlpContentManager::NotifyOnConfidentialityChanged(
     const DlpContentRestrictionSet& old_restriction_set,
     const DlpContentRestrictionSet& new_restriction_set,
     content::WebContents* web_contents) {
-  for (int i = 0; i <= DlpContentRestriction::kMaxValue; ++i) {
+  for (int i = 0; i <= static_cast<int>(DlpContentRestriction::kMaxValue);
+       ++i) {
     auto restriction = static_cast<DlpContentRestriction>(i);
     auto old_level = old_restriction_set.GetRestrictionLevel(restriction);
     auto new_level = new_restriction_set.GetRestrictionLevel(restriction);
@@ -661,11 +761,36 @@ void DlpContentManager::NotifyOnConfidentialityChanged(
       // observers.
       continue;
     }
-    auto& observer_list = observer_lists_[restriction];
+    auto& observer_list = observer_lists_[static_cast<int>(restriction)];
     for (DlpContentManagerObserver& observer : observer_list) {
       observer.OnConfidentialityChanged(old_level, new_level, web_contents);
     }
   }
+}
+
+bool DlpContentManager::LastReportedScreenShare::ShouldReportAndUpdate(
+    const std::string& label,
+    const DlpConfidentialContents& confidential_contents) {
+  // Ignore reporting for empty labels. A media streams with an empty label is
+  // most likely is an audio stream.
+  if (label.empty())
+    return false;
+
+  if (label != label_) {
+    label_ = label;
+    confidential_contents_ = confidential_contents;
+    return true;
+  }
+  // TODO(1306306): Consider reporting all visible confidential urls for
+  //  onscreen restrictions.
+  if (!std::includes(confidential_contents_.GetContents().begin(),
+                     confidential_contents_.GetContents().end(),
+                     confidential_contents.GetContents().begin(),
+                     confidential_contents.GetContents().end())) {
+    confidential_contents_.UnionWith(confidential_contents);
+    return true;
+  }
+  return false;
 }
 
 }  // namespace policy

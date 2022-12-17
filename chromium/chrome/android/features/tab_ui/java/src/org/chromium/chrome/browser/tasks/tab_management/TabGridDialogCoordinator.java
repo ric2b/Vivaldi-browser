@@ -76,7 +76,7 @@ public class TabGridDialogCoordinator implements TabGridDialogMediator.DialogCon
         mTabListCoordinator = new TabListCoordinator(
                 TabUiFeatureUtilities.isTabGroupsAndroidContinuationEnabled(activity)
                                 && SysUtils.isLowEndDevice()
-                        ? TabListCoordinator.TabListMode.LIST
+                        ? TabListCoordinator.TabListMode.GRID // Vivaldi
                         : TabListCoordinator.TabListMode.GRID,
                 activity, tabModelSelector, tabContentManager::getTabThumbnailWithCallback, null,
                 false, gridCardOnClickListenerProvider, mMediator.getTabGridDialogHandler(),
@@ -101,7 +101,7 @@ public class TabGridDialogCoordinator implements TabGridDialogMediator.DialogCon
         TabSelectionEditorCoordinator.TabSelectionEditorController controller = null;
         if (TabUiFeatureUtilities.isTabGroupsAndroidContinuationEnabled(context)) {
             @TabListCoordinator.TabListMode
-            int mode = SysUtils.isLowEndDevice() ? TabListCoordinator.TabListMode.LIST
+            int mode = SysUtils.isLowEndDevice() ? TabListCoordinator.TabListMode.GRID // Vivaldi
                                                  : TabListCoordinator.TabListMode.GRID;
             mTabSelectionEditorCoordinator = new TabSelectionEditorCoordinator(context,
                     mDialogView.findViewById(R.id.dialog_container_view), tabModelSelector,

@@ -12,6 +12,7 @@
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/observer_list.h"
 #include "base/one_shot_event.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -160,7 +161,8 @@ void NotificationImageReady(const std::string extension_name,
   std::string id = kCrashedNotificationPrefix + extension_id;
   message_center::Notification notification(
       message_center::NOTIFICATION_TYPE_SIMPLE, id, std::u16string(), message,
-      notification_icon, std::u16string(), GURL("chrome://extension-crash"),
+      ui::ImageModel::FromImage(notification_icon), std::u16string(),
+      GURL("chrome://extension-crash"),
       message_center::NotifierId(message_center::NotifierType::SYSTEM_COMPONENT,
                                  kNotifierId),
       {}, delegate);

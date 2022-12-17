@@ -15,6 +15,7 @@
 #include "base/rand_util.h"
 #include "base/strings/safe_sprintf.h"
 #include "base/strings/strcat.h"
+#include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_id_helper.h"
@@ -270,7 +271,7 @@ class HistogramRule : public BackgroundTracingRule,
     int histogram_upper_value = dict.FindIntKey(kConfigRuleHistogramValue2Key)
                                     .value_or(std::numeric_limits<int>::max());
 
-    if (*histogram_lower_value >= histogram_upper_value)
+    if (*histogram_lower_value > histogram_upper_value)
       return nullptr;
 
     Units units = Units::kUnspecified;

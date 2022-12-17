@@ -16,6 +16,7 @@
 #include "ash/wm/wm_event.h"
 #include "ash/wm/workspace/phantom_window_controller.h"
 #include "ash/wm/workspace_controller.h"
+#include "base/containers/adapters.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -142,10 +143,10 @@ class WorkspaceWindowResizerTest : public AshTestBase {
   std::vector<int> WindowOrderAsIntVector(aura::Window* parent) const {
     std::vector<int> result;
     const aura::Window::Windows& windows = parent->children();
-    for (aura::Window::Windows::const_reverse_iterator i = windows.rbegin();
-         i != windows.rend(); ++i) {
-      if (*i == window_.get() || *i == window2_.get() || *i == window3_.get()) {
-        result.push_back((*i)->GetId());
+    for (aura::Window* window : base::Reversed(windows)) {
+      if (window == window_.get() || window == window2_.get() ||
+          window == window3_.get()) {
+        result.push_back(window->GetId());
       }
     }
     return result;
@@ -666,7 +667,7 @@ TEST_F(WorkspaceWindowResizerTest, ResizeSnapped) {
     resizer->Drag(CalculateDragPoint(*resizer, 10, 0), 0);
     resizer->CompleteDrag();
     EXPECT_EQ(WindowStateType::kPrimarySnapped, window_state->GetStateType());
-    snapped_bounds.Inset(0, 0, -10, 0);
+    snapped_bounds.Inset(gfx::Insets::TLBR(0, 0, 0, -10));
     EXPECT_EQ(snapped_bounds.ToString(), window_->bounds().ToString());
     EXPECT_EQ(kInitialBounds, window_state->GetRestoreBoundsInParent());
   }
@@ -693,7 +694,7 @@ TEST_F(WorkspaceWindowResizerTest, ResizeSnapped) {
     resizer->CompleteDrag();
     EXPECT_EQ(WindowStateType::kNormal, window_state->GetStateType());
     gfx::Rect expected_bounds(snapped_bounds);
-    expected_bounds.Inset(0, 0, 0, 10);
+    expected_bounds.Inset(gfx::Insets::TLBR(0, 0, 10, 0));
     EXPECT_EQ(expected_bounds.ToString(), window_->bounds().ToString());
     EXPECT_FALSE(window_state->HasRestoreBounds());
   }
@@ -734,7 +735,7 @@ TEST_F(WorkspaceWindowResizerTest, RestackAttached) {
 // Makes sure we don't allow dragging below the work area.
 TEST_F(WorkspaceWindowResizerTest, DontDragOffBottom) {
   Shell::Get()->SetDisplayWorkAreaInsets(Shell::GetPrimaryRootWindow(),
-                                         gfx::Insets(0, 0, 10, 0));
+                                         gfx::Insets::TLBR(0, 0, 10, 0));
 
   ASSERT_EQ(1, display::Screen::GetScreen()->GetNumDisplays());
 
@@ -753,7 +754,7 @@ TEST_F(WorkspaceWindowResizerTest, DontDragOffBottomWithMultiDisplay) {
   ASSERT_EQ(2, display::Screen::GetScreen()->GetNumDisplays());
 
   Shell::Get()->SetDisplayWorkAreaInsets(Shell::GetPrimaryRootWindow(),
-                                         gfx::Insets(0, 0, 10, 0));
+                                         gfx::Insets::TLBR(0, 0, 10, 0));
 
   // Positions the secondary display at the bottom the primary display.
   Shell::Get()->display_manager()->SetLayoutForCurrentDisplays(
@@ -779,7 +780,7 @@ TEST_F(WorkspaceWindowResizerTest, DontDragOffBottomWithMultiDisplay) {
   }
 
   Shell::Get()->SetDisplayWorkAreaInsets(Shell::GetPrimaryRootWindow(),
-                                         gfx::Insets(0, 0, 10, 0));
+                                         gfx::Insets::TLBR(0, 0, 10, 0));
   {
     window_->SetBounds(gfx::Rect(100, 200, 300, 400));
     std::unique_ptr<WindowResizer> resizer =
@@ -812,7 +813,7 @@ TEST_F(WorkspaceWindowResizerTest, DontDragOffBottomWithMultiDisplay) {
 // Makes sure we don't allow dragging off the top of the work area.
 TEST_F(WorkspaceWindowResizerTest, DontDragOffTop) {
   Shell::Get()->SetDisplayWorkAreaInsets(Shell::GetPrimaryRootWindow(),
-                                         gfx::Insets(10, 0, 0, 0));
+                                         gfx::Insets::TLBR(10, 0, 0, 0));
 
   window_->SetBounds(gfx::Rect(100, 200, 300, 400));
   std::unique_ptr<WindowResizer> resizer = CreateResizerForTest(window_.get());
@@ -823,7 +824,7 @@ TEST_F(WorkspaceWindowResizerTest, DontDragOffTop) {
 
 TEST_F(WorkspaceWindowResizerTest, ResizeBottomOutsideWorkArea) {
   Shell::Get()->SetDisplayWorkAreaInsets(Shell::GetPrimaryRootWindow(),
-                                         gfx::Insets(0, 0, 50, 0));
+                                         gfx::Insets::TLBR(0, 0, 50, 0));
 
   window_->SetBounds(gfx::Rect(100, 200, 300, 380));
   std::unique_ptr<WindowResizer> resizer =
@@ -835,7 +836,7 @@ TEST_F(WorkspaceWindowResizerTest, ResizeBottomOutsideWorkArea) {
 
 TEST_F(WorkspaceWindowResizerTest, ResizeWindowOutsideLeftWorkArea) {
   Shell::Get()->SetDisplayWorkAreaInsets(Shell::GetPrimaryRootWindow(),
-                                         gfx::Insets(0, 0, 50, 0));
+                                         gfx::Insets::TLBR(0, 0, 50, 0));
   int left = screen_util::GetDisplayWorkAreaBoundsInParent(window_.get()).x();
   int pixels_to_left_border = 50;
   int window_width = 300;
@@ -851,7 +852,7 @@ TEST_F(WorkspaceWindowResizerTest, ResizeWindowOutsideLeftWorkArea) {
 
 TEST_F(WorkspaceWindowResizerTest, ResizeWindowOutsideRightWorkArea) {
   Shell::Get()->SetDisplayWorkAreaInsets(Shell::GetPrimaryRootWindow(),
-                                         gfx::Insets(0, 0, 50, 0));
+                                         gfx::Insets::TLBR(0, 0, 50, 0));
   int right =
       screen_util::GetDisplayWorkAreaBoundsInParent(window_.get()).right();
   int pixels_to_right_border = 50;
@@ -871,7 +872,7 @@ TEST_F(WorkspaceWindowResizerTest, ResizeWindowOutsideRightWorkArea) {
 
 TEST_F(WorkspaceWindowResizerTest, ResizeWindowOutsideBottomWorkArea) {
   Shell::Get()->SetDisplayWorkAreaInsets(Shell::GetPrimaryRootWindow(),
-                                         gfx::Insets(0, 0, 50, 0));
+                                         gfx::Insets::TLBR(0, 0, 50, 0));
   int bottom =
       screen_util::GetDisplayWorkAreaBoundsInParent(window_.get()).bottom();
   int delta_to_bottom = 50;
@@ -892,7 +893,7 @@ TEST_F(WorkspaceWindowResizerTest, DragWindowOutsideRightToSecondaryDisplay) {
   // Only primary display.  Changes the window position to fit within the
   // display.
   Shell::Get()->SetDisplayWorkAreaInsets(Shell::GetPrimaryRootWindow(),
-                                         gfx::Insets(0, 0, 50, 0));
+                                         gfx::Insets::TLBR(0, 0, 50, 0));
   int right =
       screen_util::GetDisplayWorkAreaBoundsInParent(window_.get()).right();
   int pixels_to_right_border = 50;
@@ -910,7 +911,7 @@ TEST_F(WorkspaceWindowResizerTest, DragWindowOutsideRightToSecondaryDisplay) {
   // the position because the window is still within the secondary display.
   UpdateDisplay("1000x600,600x400");
   Shell::Get()->SetDisplayWorkAreaInsets(Shell::GetPrimaryRootWindow(),
-                                         gfx::Insets(0, 0, 50, 0));
+                                         gfx::Insets::TLBR(0, 0, 50, 0));
   window_->SetBounds(gfx::Rect(window_x, 100, window_width, 380));
   resizer->Drag(CalculateDragPoint(*resizer, window_width, 0), 0);
   EXPECT_EQ(gfx::Rect(window_x + window_width, 100, window_width, 380),
@@ -2443,7 +2444,7 @@ TEST_F(PortraitWorkspaceWindowResizerTest, ResizeSnapped) {
     resizer->Drag(CalculateDragPoint(*resizer, 0, 30), 0);
     resizer->CompleteDrag();
     EXPECT_EQ(WindowStateType::kPrimarySnapped, window_state->GetStateType());
-    expected_snap_bounds.Inset(0, 0, 0, -30);
+    expected_snap_bounds.Inset(gfx::Insets::TLBR(0, 0, -30, 0));
     EXPECT_EQ(expected_snap_bounds, window_->bounds());
     EXPECT_EQ(kInitialBounds, window_state->GetRestoreBoundsInParent());
   }
@@ -2468,7 +2469,7 @@ TEST_F(PortraitWorkspaceWindowResizerTest, ResizeSnapped) {
     resizer->Drag(CalculateDragPoint(*resizer, 30, 0), 0);
     resizer->CompleteDrag();
     EXPECT_EQ(WindowStateType::kNormal, window_state->GetStateType());
-    expected_snap_bounds.Inset(30, 0, 0, 0);
+    expected_snap_bounds.Inset(gfx::Insets::TLBR(0, 30, 0, 0));
     EXPECT_EQ(expected_snap_bounds, window_->bounds());
     EXPECT_FALSE(window_state->HasRestoreBounds());
   }

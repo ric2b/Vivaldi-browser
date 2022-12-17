@@ -9,7 +9,6 @@
 <translation id="1054153489933238809">Abrir &amp;imagem original num novo separador</translation>
 <translation id="1056898198331236512">Aviso</translation>
 <translation id="1084824384139382525">Copiar &amp;endereço da ligação</translation>
-<translation id="1128109161498068552">Não permitir que os websites utilizem mensagens exclusivas do sistema para aceder a equipamentos MIDI</translation>
 <translation id="1163931534039071049">&amp;Ver código fonte da frame</translation>
 <translation id="1165039591588034296">Erro</translation>
 <translation id="1175364870820465910">Im&amp;primir...</translation>
@@ -22,7 +21,6 @@
 <translation id="1297175357211070620">Destino</translation>
 <translation id="1303101771013849280">Ficheiro HTML de favoritos</translation>
 <translation id="1430915738399379752">Imprimir</translation>
-<translation id="1433811987160647649">Perguntar antes de aceder</translation>
 <translation id="1451375123200651445">Página Web, ficheiro único</translation>
 <translation id="1465176863081977902">&amp;Copiar endereço do áudio</translation>
 <translation id="1476607407192946488">&amp;Definições de idioma</translation>
@@ -99,13 +97,11 @@
 <translation id="2783321960289401138">Criar atalho...</translation>
 <translation id="2785873697295365461">Descritores de ficheiros</translation>
 <translation id="2809586584051668049">e mais <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
-<translation id="2812989263793994277">Não mostrar imagens</translation>
 <translation id="2850541429955027218">Adicionar tema</translation>
 <translation id="2861941300086904918">Gestor de segurança Native Client</translation>
 <translation id="2881076733170862447">Quando clica na extensão</translation>
 <translation id="2889064240420137087">Abrir ligação com...</translation>
 <translation id="2902127500170292085">A extensão <ph name="EXTENSION_NAME" /> não conseguiu comunicar com esta impressora. Certifique-se de que a impressora está ligada à corrente e tente novamente.</translation>
-<translation id="2904456025988372123">Perguntar sempre que um website tentar transferir ficheiros automaticamente após o primeiro ficheiro</translation>
 <translation id="2913331724188855103">Autorizar os websites a guardar e ler dados de cookies (recomendado)</translation>
 <translation id="2931157624143513983">Ajustar à área de impressão</translation>
 <translation id="2932085390869194046">Sugerir senha…</translation>
@@ -126,7 +122,6 @@
 <translation id="3127156390846601284">Esta ação irá eliminar todos os dados armazenados no equipamento para todos os websites apresentados. Pretende continuar?</translation>
 <translation id="3129173833825111527">Margem esquerda</translation>
 <translation id="3144647712221361880">Abrir ligação como</translation>
-<translation id="3154429428035006212">Offline há mais de um mês</translation>
 <translation id="3222066309010235055">Pré-renderizar: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Selecione o directório raiz da extensão a comprimir. Para atualizar uma extensão, selecione também o ficheiro de chave privada a reutilizar.</translation>
 <translation id="3280237271814976245">Guardar &amp;como...</translation>
@@ -143,6 +138,7 @@
 <translation id="3360297538363969800">Falha ao imprimir. Verifique a impressora e tente novamente.</translation>
 <translation id="3378572629723696641">Esta extensão pode ter sido danificada.</translation>
 <translation id="3387614642886316601">Utilizar verificação ortográfica avançada</translation>
+<translation id="3393582007140394275">Não é possível transmitir o ecrã.</translation>
 <translation id="3432227430032737297">Remover tudo o que é mostrado</translation>
 <translation id="345693547134384690">Abrir &amp;imagem num novo separador</translation>
 <translation id="3494769164076977169">Perguntar sempre que um website tentar transferir ficheiros automaticamente após o primeiro ficheiro (recomendado)</translation>
@@ -165,7 +161,6 @@
 <translation id="3838085852053358637">Falha ao carregar a extensão</translation>
 <translation id="383891835335927981">A ampliação dos websites não foi aumentada nem diminuída</translation>
 <translation id="385051799172605136">Retroceder</translation>
-<translation id="3899879303189199559">Offline há mais de um ano</translation>
 <translation id="3905761538810670789">Reparar aplicação</translation>
 <translation id="3908501907586732282">Ativar extensão</translation>
 <translation id="3909701002594999354">Mostrar todos os &amp;controlos</translation>
@@ -192,7 +187,6 @@
 <translation id="4200983522494130825">Novo &amp;separador</translation>
 <translation id="4225397296022057997">Em todos os websites</translation>
 <translation id="4256316378292851214">Gra&amp;var vídeo como...</translation>
-<translation id="4278390842282768270">Permitido</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> K (<ph name="NUM_KILOBYTES_LIVE" /> K em directo)</translation>
 <translation id="4345587454538109430">Configurar...</translation>
 <translation id="4348766275249686434">Recolher erros</translation>
@@ -217,15 +211,15 @@
 <translation id="488785315393301722">Mostrar detalhes</translation>
 <translation id="4907306957610201395">Categoria de permissões</translation>
 <translation id="4912643508233590958">Reativações após inatividade</translation>
+<translation id="49265687513387605">Não é possível transmitir o ecrã. Verifique se confirmou a mensagem para começar a partilhar o seu ecrã.</translation>
 <translation id="4927753642311223124">Continue, não há nada para ver aqui.</translation>
 <translation id="4930714375720679147">Ativar</translation>
+<translation id="4961318399572185831">Transmitir ecrã</translation>
 <translation id="4988526792673242964">Páginas</translation>
 <translation id="49896407730300355">Rodar para a &amp;esquerda</translation>
 <translation id="4989966318180235467">Inspecionar &amp;página de fundo</translation>
-<translation id="4994474651455208930">Permitir que os websites peçam para se tornarem os processadores predefinidos de protocolos</translation>
 <translation id="5000922062037820727">Bloqueado (recomendado)</translation>
 <translation id="5027562294707732951">Adicionar extensão</translation>
-<translation id="5036662165765606524">Não permitir que os websites transfiram vários ficheiros automaticamente</translation>
 <translation id="5039804452771397117">Permitir</translation>
 <translation id="5057110919553308744">Quando clica na extensão</translation>
 <translation id="5059526285558225588">Escolher o que partilhar</translation>
@@ -238,7 +232,6 @@
 <translation id="5233231016133573565">ID do processo</translation>
 <translation id="5233736638227740678">&amp;Colar</translation>
 <translation id="5256861893479663409">Em todos os websites</translation>
-<translation id="5265562206369321422">Offline há mais de uma semana</translation>
 <translation id="5269977353971873915">Falha de Impressão</translation>
 <translation id="5284445933715251131">Continuar a transferir</translation>
 <translation id="52912272896845572">O ficheiro de chave privada é inválido.</translation>
@@ -294,7 +287,6 @@
 <translation id="6122081475643980456">A sua ligação à Internet está a ser controlada</translation>
 <translation id="6147020289383635445">A pré-visualização da impressão falhou.</translation>
 <translation id="6156863943908443225">Cache de scripts</translation>
-<translation id="6169666352732958425">Não é possível transmitir o ambiente de trabalho.</translation>
 <translation id="6196854373336333322">A extensão "<ph name="EXTENSION_NAME" />" apoderou-se das suas definições de proxy, o que significa que pode alterar, interromper ou intercetar qualquer coisa que esteja a fazer online. Se não tem a certeza do motivo pelo qual aconteceu esta alteração, é provável que não a queira.</translation>
 <translation id="6200151268994853226">Gerir extensão</translation>
 <translation id="6206311232642889873">Cop&amp;iar Imagem</translation>
@@ -328,7 +320,6 @@
 <translation id="6798954102094737107">Plug-in: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Manter alterações</translation>
 <translation id="6817174620439930047">Perguntar sempre que um website pretender utilizar mensagens exclusivas do sistema para aceder a equipamentos MIDI (recomendado)</translation>
-<translation id="682123305478866682">Transmitir ambiente de trabalho</translation>
 <translation id="6824564591481349393">Copiar &amp;endereço de correio eletrónico</translation>
 <translation id="6840155290835956714">Perguntar antes de enviar</translation>
 <translation id="6886871292305414135">Abrir ligação num novo &amp;separador</translation>
@@ -346,7 +337,6 @@
 <translation id="708060913198414444">&amp;Copiar endereço do áudio</translation>
 <translation id="7175353351958621980">Carregada de:</translation>
 <translation id="7186088072322679094">Manter na barra de ferramentas</translation>
-<translation id="7270858098575133036">Perguntar quando um website pretender utilizar mensagens exclusivas do sistema para aceder a equipamentos MIDI</translation>
 <translation id="7287143125007575591">Acesso negado.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> ppp</translation>
 <translation id="7385854874724088939">Ocorreu um erro ao tentar imprimir. Verifique a impressora e tente novamente.</translation>
@@ -369,7 +359,6 @@
 <translation id="7704305437604973648">Tarefa</translation>
 <translation id="7710568461918838723">&amp;Transmitir...</translation>
 <translation id="7750228210027921155">Imagem sobre Imagem</translation>
-<translation id="7751260505918304024">Mostrar tudo</translation>
 <translation id="7760004034676677601">É esta a página inicial de que estava à espera?</translation>
 <translation id="7771452384635174008">Disposição</translation>
 <translation id="7782102568078991263">Não obter mais sugestões da Google</translation>
@@ -382,9 +371,7 @@
 <translation id="7849264908733290972">Abrir &amp;imagem num novo separador</translation>
 <translation id="7857949311770343000">É esta a página novo separador que esperava?</translation>
 <translation id="786073089922909430">Serviço: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7885253890047913815">Destinos recentes</translation>
 <translation id="7903925330883316394">Utilitário: <ph name="UTILITY_TYPE" /></translation>
-<translation id="7938594894617528435">Atualmente offline</translation>
 <translation id="7947962633355574091">&amp;Copiar endereço do vídeo</translation>
 <translation id="7966241909927244760">&amp;Copiar endereço da imagem</translation>
 <translation id="7973394300052703468">Nova janela &amp;privada</translation>
@@ -427,10 +414,8 @@ Mantenha o seu ficheiro de chave num local seguro, pois irá precisar dele para 
 <translation id="8708000541097332489">Limpar à saída</translation>
 <translation id="8714838604780058252">Imagens em segundo plano</translation>
 <translation id="8725066075913043281">Tentar novamente</translation>
-<translation id="8757090071857742562">Não é possível transmitir o ambiente de trabalho. Verifique se confirmou a mensagem para começar a partilhar o seu ecrã.</translation>
 <translation id="8774934320277480003">Margem superior</translation>
 <translation id="8798099450830957504">Predefinido</translation>
-<translation id="8800004011501252845">A mostrar destinos para</translation>
 <translation id="8808478386290700967">Web Store</translation>
 <translation id="8823514049557262177">Copiar te&amp;xto da ligação</translation>
 <translation id="8823704566850948458">Sugerir palavra-passe…</translation>
@@ -443,7 +428,6 @@ Mantenha o seu ficheiro de chave num local seguro, pois irá precisar dele para 
 <translation id="8962083179518285172">Ocultar detalhes</translation>
 <translation id="8973557916016709913">Remover nível de ampliação</translation>
 <translation id="897939795688207351">Em <ph name="ORIGIN" /></translation>
-<translation id="8996526648899750015">Adicionar conta...</translation>
 <translation id="9003647077635673607">Permitir em todos os websites</translation>
 <translation id="9027459031423301635">Abrir ligação num novo &amp;separador</translation>
 <translation id="9056810968620647706">Não foram encontradas correspondências.</translation>

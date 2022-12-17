@@ -56,7 +56,10 @@ import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider;
+import org.chromium.chrome.browser.layouts.LayoutTestUtils;
 import org.chromium.chrome.browser.layouts.LayoutType;
+import org.chromium.chrome.browser.native_page.ContextMenuManager;
+import org.chromium.chrome.browser.suggestions.tile.MvTilesLayout;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModel;
@@ -66,9 +69,11 @@ import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeApplicationTestUtils;
 import org.chromium.chrome.test.util.MenuUtils;
-import org.chromium.chrome.test.util.OverviewModeBehaviorWatcher;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
+import org.chromium.chrome.test.util.browser.suggestions.SuggestionsDependenciesRule;
+import org.chromium.chrome.test.util.browser.suggestions.mostvisited.FakeMostVisitedSites;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
+import org.chromium.content_public.browser.test.util.TestTouchUtils;
 import org.chromium.ui.test.util.UiRestriction;
 
 import java.io.IOException;
@@ -94,6 +99,8 @@ public class StartSurfaceBackButtonTest {
 
     @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
+    @Rule
+    public SuggestionsDependenciesRule mSuggestionsDeps = new SuggestionsDependenciesRule();
 
     /**
      * Whether feature {@link ChromeFeatureList#INSTANT_START} is enabled.
@@ -110,6 +117,8 @@ public class StartSurfaceBackButtonTest {
     private LayoutStateProvider.LayoutStateObserver mLayoutObserver;
     @LayoutType
     private int mCurrentlyActiveLayout;
+    private FakeMostVisitedSites mMostVisitedSites;
+
     public StartSurfaceBackButtonTest(boolean useInstantStart, boolean immediateReturn) {
         CachedFeatureFlags.setForTesting(ChromeFeatureList.INSTANT_START, useInstantStart);
 
@@ -145,6 +154,8 @@ public class StartSurfaceBackButtonTest {
                 manager.addObserver(mLayoutObserver);
             });
         });
+
+        mMostVisitedSites = StartSurfaceTestUtils.setMVTiles(mSuggestionsDeps);
     }
 
     @Test
@@ -251,11 +262,9 @@ public class StartSurfaceBackButtonTest {
                         -> Assert.assertTrue(StartSurfaceUserData.getKeepTab(
                                 cta.getTabModelSelector().getCurrentTab())));
 
-        OverviewModeBehaviorWatcher overviewModeWatcher =
-                new OverviewModeBehaviorWatcher(cta.getLayoutManager(), true, false);
         StartSurfaceTestUtils.pressBack(mActivityTestRule);
         // Verifies the new Tab isn't deleted, and Start surface is shown.
-        overviewModeWatcher.waitForBehavior();
+        LayoutTestUtils.waitForLayout(cta.getLayoutManager(), LayoutType.TAB_SWITCHER);
         TabUiTestHelper.verifyTabModelTabCount(cta, 2, 0);
 
         // Verifies Chrome is closed.
@@ -295,12 +304,11 @@ public class StartSurfaceBackButtonTest {
         StartSurfaceTestUtils.waitForTabModel(cta);
         TabUiTestHelper.verifyTabModelTabCount(cta, 1, 0);
 
-        OverviewModeBehaviorWatcher hideWatcher = TabUiTestHelper.createOverviewHideWatcher(cta);
         onViewWaiting(withId(org.chromium.chrome.start_surface.R.id.search_box_text))
                 .perform(replaceText("about:blank"));
         onView(withId(org.chromium.chrome.start_surface.R.id.url_bar))
                 .perform(pressKey(KeyEvent.KEYCODE_ENTER));
-        hideWatcher.waitForBehavior();
+        LayoutTestUtils.waitForLayout(cta.getLayoutManager(), LayoutType.BROWSING);
         TabUiTestHelper.verifyTabModelTabCount(cta, 2, 0);
 
         TabUiTestHelper.mergeAllNormalTabsToAGroup(cta);
@@ -546,6 +554,59 @@ public class StartSurfaceBackButtonTest {
         // Back gesture on the tab should take us back to the start surface homepage.
         StartSurfaceTestUtils.waitForOverviewVisible(
                 mLayoutChangedCallbackHelper, mCurrentlyActiveLayout);
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"StartSurface"})
+    @CommandLineFlags.Add({START_SURFACE_TEST_BASE_PARAMS})
+    public void testBackButtonOnIncognitoTabOpenedFromStart() throws ExecutionException {
+        // This is a test for crbug.com/1315915 to make sure when clicking back button on the
+        // incognito tab opened from Start, the non-incognito homepage should show.
+        Assume.assumeTrue(mImmediateReturn && !mUseInstantStart);
+        ChromeTabbedActivity cta = mActivityTestRule.getActivity();
+        StartSurfaceTestUtils.waitForOverviewVisible(
+                mLayoutChangedCallbackHelper, mCurrentlyActiveLayout);
+        StartSurfaceTestUtils.waitForTabModel(cta);
+        onViewWaiting(withId(org.chromium.chrome.start_surface.R.id.logo));
+
+        // Open an incognito tab from Start.
+        MvTilesLayout mvTilesLayout = mActivityTestRule.getActivity().findViewById(
+                org.chromium.chrome.tab_ui.R.id.mv_tiles_layout);
+        View tileView =
+                mvTilesLayout.getTileViewForTesting(mMostVisitedSites.getCurrentSites().get(1));
+        openMvTileInAnIncognitoTab(cta, tileView, 1);
+
+        // Go back to Start homepage.
+        TestThreadUtils.runOnUiThreadBlocking(() -> cta.getTabCreator(false).launchNTP());
+        StartSurfaceTestUtils.waitForOverviewVisible(
+                mLayoutChangedCallbackHelper, mCurrentlyActiveLayout);
+
+        // Open an incognito tab from Start again.
+        mvTilesLayout = mActivityTestRule.getActivity().findViewById(
+                org.chromium.chrome.tab_ui.R.id.mv_tiles_layout);
+        tileView = mvTilesLayout.getTileViewForTesting(mMostVisitedSites.getCurrentSites().get(1));
+        openMvTileInAnIncognitoTab(cta, tileView, 2);
+
+        // Press back button and Start homepage should show.
+        StartSurfaceTestUtils.pressBack(mActivityTestRule);
+        StartSurfaceTestUtils.waitForOverviewVisible(
+                mLayoutChangedCallbackHelper, mCurrentlyActiveLayout);
+        TabUiTestHelper.verifyTabModelTabCount(cta, 1, 1);
+        onViewWaiting(
+                allOf(withId(org.chromium.chrome.tab_ui.R.id.mv_tiles_layout), isDisplayed()));
+    }
+
+    private void openMvTileInAnIncognitoTab(
+            ChromeTabbedActivity cta, View tileView, int incognitoTabs) throws ExecutionException {
+        TestTouchUtils.performLongClickOnMainSync(
+                InstrumentationRegistry.getInstrumentation(), tileView);
+        Assert.assertTrue(InstrumentationRegistry.getInstrumentation().invokeContextMenuAction(
+                mActivityTestRule.getActivity(),
+                ContextMenuManager.ContextMenuItemId.OPEN_IN_INCOGNITO_TAB, 0));
+        CriteriaHelper.pollUiThread(() -> !cta.getLayoutManager().overviewVisible());
+        // Verifies a new incognito tab is created.
+        TabUiTestHelper.verifyTabModelTabCount(cta, 1, incognitoTabs);
     }
 
     /**

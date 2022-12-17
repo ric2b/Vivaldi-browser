@@ -393,7 +393,7 @@ TEST_F(PeopleHandlerTest, DisplayBasicLogin) {
       .WillByDefault(Return(false));
   // Ensure that the user is not signed in before calling |HandleStartSignin()|.
   identity_test_env()->ClearPrimaryAccount();
-  handler_->HandleStartSignin(base::Value::ConstListView());
+  handler_->HandleStartSignin(base::Value::List());
 
   // Sync setup hands off control to the gaia login tab.
   EXPECT_EQ(
@@ -429,7 +429,7 @@ TEST_F(PeopleHandlerTest, DisplayConfigureWithEngineDisabledAndCancel) {
   // engine will try to download control data types (e.g encryption info), but
   // that won't finish for this test as we're simulating cancelling while the
   // spinner is showing.
-  handler_->HandleShowSyncSetupUI(base::Value::ConstListView());
+  handler_->HandleShowSyncSetupUI(base::Value::List());
 
   EXPECT_EQ(
       handler_.get(),
@@ -463,7 +463,7 @@ TEST_F(PeopleHandlerTest,
               SetSyncRequested(true));
   SetDefaultExpectationsForConfigPage();
 
-  handler_->HandleShowSyncSetupUI(base::Value::ConstListView());
+  handler_->HandleShowSyncSetupUI(base::Value::List());
 
   // No data is sent yet, because the engine is not initialized.
   EXPECT_EQ(0U, web_ui_.call_data().size());
@@ -504,7 +504,7 @@ TEST_F(PeopleHandlerTest,
   EXPECT_CALL(*mock_sync_service_->GetMockUserSettings(),
               SetSyncRequested(true));
   SetDefaultExpectationsForConfigPage();
-  handler_->HandleShowSyncSetupUI(base::Value::ConstListView());
+  handler_->HandleShowSyncSetupUI(base::Value::List());
 
   // Sync engine becomes active, so |handler_| is notified.
   NotifySyncStateChanged();
@@ -546,7 +546,7 @@ TEST_F(PeopleHandlerTest, RestartSyncAfterDashboardClear) {
                 Return(syncer::SyncService::TransportState::INITIALIZING));
       });
 
-  handler_->HandleShowSyncSetupUI(base::Value::ConstListView());
+  handler_->HandleShowSyncSetupUI(base::Value::List());
 
   // Since the engine is not initialized yet, no data should be sent.
   EXPECT_EQ(0U, web_ui_.call_data().size());
@@ -579,7 +579,7 @@ TEST_F(PeopleHandlerTest,
                 Return(syncer::SyncService::TransportState::CONFIGURING));
       });
 
-  handler_->HandleShowSyncSetupUI(base::Value::ConstListView());
+  handler_->HandleShowSyncSetupUI(base::Value::List());
   // Since the engine was already running, we should *not* get a spinner - all
   // the necessary values are already available.
   ExpectSyncPrefsChanged();
@@ -629,7 +629,7 @@ TEST_F(PeopleHandlerTest, UnrecoverableErrorInitializingSync) {
   ON_CALL(*mock_sync_service_->GetMockUserSettings(), IsFirstSetupComplete())
       .WillByDefault(Return(false));
   // Open the web UI.
-  handler_->HandleShowSyncSetupUI(base::Value::ConstListView());
+  handler_->HandleShowSyncSetupUI(base::Value::List());
 
   ASSERT_FALSE(handler_->is_configuring_sync());
 }
@@ -642,7 +642,7 @@ TEST_F(PeopleHandlerTest, GaiaErrorInitializingSync) {
   ON_CALL(*mock_sync_service_->GetMockUserSettings(), IsFirstSetupComplete())
       .WillByDefault(Return(false));
   // Open the web UI.
-  handler_->HandleShowSyncSetupUI(base::Value::ConstListView());
+  handler_->HandleShowSyncSetupUI(base::Value::List());
 
   ASSERT_FALSE(handler_->is_configuring_sync());
 }
@@ -662,7 +662,7 @@ TEST_F(PeopleHandlerTest, TestSyncEverything) {
   SetupInitializedSyncService();
   EXPECT_CALL(*mock_sync_service_->GetMockUserSettings(),
               SetSelectedTypes(true, _));
-  handler_->HandleSetDatatypes(list_args.GetListDeprecated());
+  handler_->HandleSetDatatypes(list_args.GetList());
 
   ExpectPageStatusResponse(PeopleHandler::kConfigurePageStatus);
 }
@@ -691,7 +691,7 @@ TEST_F(PeopleHandlerTest, EnterCorrectExistingPassphrase) {
   base::Value list_args(base::Value::Type::LIST);
   list_args.Append(kTestCallbackId);
   list_args.Append("correct_passphrase");
-  handler_->HandleSetDecryptionPassphrase(list_args.GetListDeprecated());
+  handler_->HandleSetDecryptionPassphrase(list_args.GetList());
 
   ExpectSetPassphraseSuccess(true);
 }
@@ -719,7 +719,7 @@ TEST_F(PeopleHandlerTest, SuccessfullyCreateCustomPassphrase) {
   base::Value list_args(base::Value::Type::LIST);
   list_args.Append(kTestCallbackId);
   list_args.Append("custom_passphrase");
-  handler_->HandleSetEncryptionPassphrase(list_args.GetListDeprecated());
+  handler_->HandleSetEncryptionPassphrase(list_args.GetList());
 
   ExpectSetPassphraseSuccess(true);
 }
@@ -748,7 +748,7 @@ TEST_F(PeopleHandlerTest, EnterWrongExistingPassphrase) {
   base::Value list_args(base::Value::Type::LIST);
   list_args.Append(kTestCallbackId);
   list_args.Append("invalid_passphrase");
-  handler_->HandleSetDecryptionPassphrase(list_args.GetListDeprecated());
+  handler_->HandleSetDecryptionPassphrase(list_args.GetList());
 
   ExpectSetPassphraseSuccess(false);
 }
@@ -777,7 +777,7 @@ TEST_F(PeopleHandlerTest, CannotCreateBlankPassphrase) {
   base::Value list_args(base::Value::Type::LIST);
   list_args.Append(kTestCallbackId);
   list_args.Append("");
-  handler_->HandleSetEncryptionPassphrase(list_args.GetListDeprecated());
+  handler_->HandleSetEncryptionPassphrase(list_args.GetList());
 
   ExpectSetPassphraseSuccess(false);
 }
@@ -804,7 +804,7 @@ TEST_F(PeopleHandlerTest, TestSyncIndividualTypes) {
     EXPECT_CALL(*mock_sync_service_->GetMockUserSettings(),
                 SetSelectedTypes(false, type_to_set));
 
-    handler_->HandleSetDatatypes(list_args.GetListDeprecated());
+    handler_->HandleSetDatatypes(list_args.GetList());
     ExpectPageStatusResponse(PeopleHandler::kConfigurePageStatus);
     Mock::VerifyAndClearExpectations(mock_sync_service_);
   }
@@ -826,7 +826,7 @@ TEST_F(PeopleHandlerTest, TestSyncAllManually) {
   SetupInitializedSyncService();
   EXPECT_CALL(*mock_sync_service_->GetMockUserSettings(),
               SetSelectedTypes(false, GetAllTypes()));
-  handler_->HandleSetDatatypes(list_args.GetListDeprecated());
+  handler_->HandleSetDatatypes(list_args.GetList());
 
   ExpectPageStatusResponse(PeopleHandler::kConfigurePageStatus);
 }
@@ -854,7 +854,7 @@ TEST_F(PeopleHandlerTest, NonRegisteredType) {
   // Only the registered types are selected.
   EXPECT_CALL(*mock_sync_service_->GetMockUserSettings(),
               SetSelectedTypes(/*sync_everything=*/false, registered_types));
-  handler_->HandleSetDatatypes(list_args.GetListDeprecated());
+  handler_->HandleSetDatatypes(list_args.GetList());
 }
 
 TEST_F(PeopleHandlerTest, ShowSyncSetup) {
@@ -868,7 +868,7 @@ TEST_F(PeopleHandlerTest, ShowSyncSetup) {
   SetupInitializedSyncService();
   // This should display the sync setup dialog (not login).
   SetDefaultExpectationsForConfigPage();
-  handler_->HandleShowSyncSetupUI(base::Value::ConstListView());
+  handler_->HandleShowSyncSetupUI(base::Value::List());
 
   ExpectSyncPrefsChanged();
 }
@@ -884,7 +884,7 @@ TEST_F(PeopleHandlerTest, ShowSetupSyncEverything) {
   SetupInitializedSyncService();
   SetDefaultExpectationsForConfigPage();
   // This should display the sync setup dialog (not login).
-  handler_->HandleShowSyncSetupUI(base::Value::ConstListView());
+  handler_->HandleShowSyncSetupUI(base::Value::List());
 
   base::Value::DictStorage dictionary = ExpectSyncPrefsChanged();
   ExpectHasBoolKey(dictionary, "syncAllDataTypes", true);
@@ -917,7 +917,7 @@ TEST_F(PeopleHandlerTest, ShowSetupManuallySyncAll) {
   ON_CALL(*mock_sync_service_->GetMockUserSettings(), IsSyncEverythingEnabled())
       .WillByDefault(Return(false));
   // This should display the sync setup dialog (not login).
-  handler_->HandleShowSyncSetupUI(base::Value::ConstListView());
+  handler_->HandleShowSyncSetupUI(base::Value::List());
 
   base::Value::DictStorage dictionary = ExpectSyncPrefsChanged();
   CheckConfigDataTypeArguments(dictionary, CHOOSE_WHAT_TO_SYNC, GetAllTypes());
@@ -942,7 +942,7 @@ TEST_F(PeopleHandlerTest, ShowSetupSyncForAllTypesIndividually) {
         .WillByDefault(Return(types));
 
     // This should display the sync setup dialog (not login).
-    handler_->HandleShowSyncSetupUI(base::Value::ConstListView());
+    handler_->HandleShowSyncSetupUI(base::Value::List());
 
     // Close the config overlay.
     LoginUIServiceFactory::GetForProfile(profile())->LoginUIClosed(
@@ -971,7 +971,7 @@ TEST_F(PeopleHandlerTest, ShowSetupOldGaiaPassphraseRequired) {
   ON_CALL(*mock_sync_service_->GetMockUserSettings(), GetPassphraseType())
       .WillByDefault(Return(syncer::PassphraseType::kFrozenImplicitPassphrase));
 
-  handler_->HandleShowSyncSetupUI(base::Value::ConstListView());
+  handler_->HandleShowSyncSetupUI(base::Value::List());
 
   base::Value::DictStorage dictionary = ExpectSyncPrefsChanged();
   ExpectHasBoolKey(dictionary, "passphraseRequired", true);
@@ -996,7 +996,7 @@ TEST_F(PeopleHandlerTest, ShowSetupCustomPassphraseRequired) {
   ON_CALL(*mock_sync_service_->GetMockUserSettings(), GetPassphraseType())
       .WillByDefault(Return(syncer::PassphraseType::kCustomPassphrase));
 
-  handler_->HandleShowSyncSetupUI(base::Value::ConstListView());
+  handler_->HandleShowSyncSetupUI(base::Value::List());
 
   base::Value::DictStorage dictionary = ExpectSyncPrefsChanged();
   ExpectHasBoolKey(dictionary, "passphraseRequired", true);
@@ -1018,7 +1018,7 @@ TEST_F(PeopleHandlerTest, ShowSetupTrustedVaultKeysRequired) {
   SetDefaultExpectationsForConfigPage();
 
   // This should display the sync setup dialog (not login).
-  handler_->HandleShowSyncSetupUI(base::Value::ConstListView());
+  handler_->HandleShowSyncSetupUI(base::Value::List());
 
   base::Value::DictStorage dictionary = ExpectSyncPrefsChanged();
   ExpectHasBoolKey(dictionary, "passphraseRequired", false);
@@ -1041,7 +1041,7 @@ TEST_F(PeopleHandlerTest, ShowSetupEncryptAll) {
       .WillByDefault(Return(true));
 
   // This should display the sync setup dialog (not login).
-  handler_->HandleShowSyncSetupUI(base::Value::ConstListView());
+  handler_->HandleShowSyncSetupUI(base::Value::List());
 
   base::Value::DictStorage dictionary = ExpectSyncPrefsChanged();
   ExpectHasBoolKey(dictionary, "encryptAllData", true);
@@ -1062,7 +1062,7 @@ TEST_F(PeopleHandlerTest, ShowSetupEncryptAllDisallowed) {
       .WillByDefault(Return(false));
 
   // This should display the sync setup dialog (not login).
-  handler_->HandleShowSyncSetupUI(base::Value::ConstListView());
+  handler_->HandleShowSyncSetupUI(base::Value::List());
 
   base::Value::DictStorage dictionary = ExpectSyncPrefsChanged();
   ExpectHasBoolKey(dictionary, "encryptAllData", false);
@@ -1093,7 +1093,7 @@ TEST_F(PeopleHandlerTest, CannotCreatePassphraseIfCustomPassphraseDisallowed) {
   base::Value list_args(base::Value::Type::LIST);
   list_args.Append(kTestCallbackId);
   list_args.Append("passphrase123");
-  handler_->HandleSetEncryptionPassphrase(list_args.GetListDeprecated());
+  handler_->HandleSetEncryptionPassphrase(list_args.GetList());
 
   ExpectSetPassphraseSuccess(false);
 }
@@ -1122,7 +1122,7 @@ TEST_F(PeopleHandlerTest, CannotOverwritePassphraseWithNewOne) {
   base::Value list_args(base::Value::Type::LIST);
   list_args.Append(kTestCallbackId);
   list_args.Append("passphrase123");
-  handler_->HandleSetEncryptionPassphrase(list_args.GetListDeprecated());
+  handler_->HandleSetEncryptionPassphrase(list_args.GetList());
 
   ExpectSetPassphraseSuccess(false);
 }
@@ -1133,7 +1133,7 @@ TEST_F(PeopleHandlerTest, DashboardClearWhileSettingsOpen_ConfirmSoon) {
   // Sync starts out fully enabled.
   SetDefaultExpectationsForConfigPage();
 
-  handler_->HandleShowSyncSetupUI(base::Value::ConstListView());
+  handler_->HandleShowSyncSetupUI(base::Value::List());
 
   // Now sync gets reset from the dashboard (the user clicked the "Manage synced
   // data" link), which results in the sync-requested and first-setup-complete
@@ -1179,7 +1179,7 @@ TEST_F(PeopleHandlerTest, DashboardClearWhileSettingsOpen_ConfirmSoon) {
 
   base::Value did_abort(base::Value::Type::LIST);
   did_abort.Append(base::Value(false));
-  handler_->OnDidClosePage(did_abort.GetListDeprecated());
+  handler_->OnDidClosePage(did_abort.GetList());
 }
 
 TEST_F(PeopleHandlerTest, DashboardClearWhileSettingsOpen_ConfirmLater) {
@@ -1188,7 +1188,7 @@ TEST_F(PeopleHandlerTest, DashboardClearWhileSettingsOpen_ConfirmLater) {
   // Sync starts out fully enabled.
   SetDefaultExpectationsForConfigPage();
 
-  handler_->HandleShowSyncSetupUI(base::Value::ConstListView());
+  handler_->HandleShowSyncSetupUI(base::Value::List());
 
   // Now sync gets reset from the dashboard (the user clicked the "Manage synced
   // data" link), which results in the sync-requested and first-setup-complete
@@ -1250,7 +1250,7 @@ TEST_F(PeopleHandlerTest, DashboardClearWhileSettingsOpen_ConfirmLater) {
 
   base::Value did_abort(base::Value::Type::LIST);
   did_abort.Append(base::Value(false));
-  handler_->OnDidClosePage(did_abort.GetListDeprecated());
+  handler_->OnDidClosePage(did_abort.GetList());
 }
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
@@ -1317,7 +1317,7 @@ TEST_F(PeopleHandlerTest, TurnOffSync) {
   ASSERT_TRUE(identity_manager()->HasPrimaryAccount(ConsentLevel::kSync));
 
   CreatePeopleHandler();
-  handler_->HandleTurnOffSync(base::Value::ConstListView());
+  handler_->HandleTurnOffSync(base::Value::List());
   EXPECT_FALSE(identity_manager()->HasPrimaryAccount(ConsentLevel::kSync));
   base::Value::DictStorage status = ExpectSyncStatusChanged();
   ExpectHasBoolKey(status, "signedIn", false);

@@ -115,6 +115,11 @@ class ASH_EXPORT AppListTestApi {
   void SetFolderViewAnimationCallback(
       base::OnceClosure folder_animation_done_callback);
 
+  // Returns the toast container view from either the bubble app list or the
+  // fullscreen app list depending on which app list is being used. This method
+  // assumes that the app list has been created.
+  views::View* GetToastContainerView();
+
   // Adds a callback that runs at the end of the app list reorder. The callback
   // carries:
   // (1) A boolean parameter that is true if the reorder is aborted.
@@ -123,6 +128,10 @@ class ASH_EXPORT AppListTestApi {
   void AddReorderAnimationCallback(
       base::RepeatingCallback<void(bool, AppListReorderAnimationStatus)>
           callback);
+
+  // Adds a callback that runs right after the app list fade out animation
+  // triggered by reorder starts.
+  void AddFadeOutAnimationStartClosure(base::OnceClosure closure);
 
   // Returns true if there is any waiting reorder animation test callback.
   bool HasAnyWaitingReorderDoneCallback() const;
@@ -134,6 +143,10 @@ class ASH_EXPORT AppListTestApi {
   // drag-and-drop. `source_index` and `target_index` are view indices in the
   // root apps grid.
   void ReorderItemInRootByDragAndDrop(int source_index, int target_index);
+
+  // Returns the view at the provided index in the list of visible search result
+  // views in the launcher search UI. Expects the launcher UI to be shown.
+  views::View* GetVisibleSearchResultView(int index);
 };
 
 }  // namespace ash

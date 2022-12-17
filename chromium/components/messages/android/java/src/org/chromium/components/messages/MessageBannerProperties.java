@@ -12,6 +12,8 @@ import androidx.annotation.ColorInt;
 
 import org.chromium.base.Callback;
 import org.chromium.base.supplier.BooleanSupplier;
+import org.chromium.base.supplier.Supplier;
+import org.chromium.components.browser_ui.widget.listmenu.ListMenuButtonDelegate;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel.ReadableIntPropertyKey;
 import org.chromium.ui.modelutil.PropertyModel.WritableBooleanPropertyKey;
@@ -35,8 +37,13 @@ public class MessageBannerProperties {
     public static final ReadableIntPropertyKey MESSAGE_IDENTIFIER = new ReadableIntPropertyKey();
     public static final WritableObjectPropertyKey<String> PRIMARY_BUTTON_TEXT =
             new WritableObjectPropertyKey<>();
-    public static final WritableObjectPropertyKey<Runnable> ON_PRIMARY_ACTION =
-            new WritableObjectPropertyKey<>();
+    /**
+     * See the documentation of PrimaryActionClickBehavior in
+     * components/messages/android/message_enums.h for more information about the return value of
+     * the primary action callback.
+     */
+    public static final WritableObjectPropertyKey<Supplier</*@PrimaryActionClickBehavior*/ Integer>>
+            ON_PRIMARY_ACTION = new WritableObjectPropertyKey<>();
     public static final WritableObjectPropertyKey<Runnable> ON_SECONDARY_ACTION =
             new WritableObjectPropertyKey<>();
     public static final WritableObjectPropertyKey<String> TITLE = new WritableObjectPropertyKey<>();
@@ -84,6 +91,10 @@ public class MessageBannerProperties {
             new WritableObjectPropertyKey<>();
     public static final WritableObjectPropertyKey<String> SECONDARY_ICON_CONTENT_DESCRIPTION =
             new WritableObjectPropertyKey<>();
+    public static final WritableObjectPropertyKey<ListMenuButtonDelegate>
+            SECONDARY_MENU_BUTTON_DELEGATE = new WritableObjectPropertyKey<>();
+    public static final WritableIntPropertyKey SECONDARY_MENU_MAX_SIZE =
+            new WritableIntPropertyKey();
     // Unit: milliseconds.
     public static final WritableLongPropertyKey DISMISSAL_DURATION = new WritableLongPropertyKey();
     /**
@@ -116,5 +127,6 @@ public class MessageBannerProperties {
             SECONDARY_ICON, SECONDARY_ICON_RESOURCE_ID, SECONDARY_BUTTON_MENU_TEXT,
             ON_SECONDARY_BUTTON_CLICK, SECONDARY_ICON_CONTENT_DESCRIPTION, DISMISSAL_DURATION,
             TRANSLATION_X, TRANSLATION_Y, ALPHA, ON_TOUCH_RUNNABLE, ON_PRIMARY_ACTION,
-            ON_SECONDARY_ACTION, ON_DISMISSED, ON_STARTED_SHOWING};
+            ON_SECONDARY_ACTION, ON_DISMISSED, ON_STARTED_SHOWING, SECONDARY_MENU_BUTTON_DELEGATE,
+            SECONDARY_MENU_MAX_SIZE};
 }

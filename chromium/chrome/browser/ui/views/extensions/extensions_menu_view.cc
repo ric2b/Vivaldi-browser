@@ -52,19 +52,19 @@ constexpr int EXTENSIONS_SETTINGS_ID = 42;
 
 constexpr int kSettingsIconSize = 16;
 
-bool CompareExtensionMenuItemViews(const ExtensionsMenuItemView* a,
-                                   const ExtensionsMenuItemView* b) {
+bool CompareExtensionMenuItemViews(const InstalledExtensionMenuItemView* a,
+                                   const InstalledExtensionMenuItemView* b) {
   return base::i18n::ToLower(a->view_controller()->GetActionName()) <
          base::i18n::ToLower(b->view_controller()->GetActionName());
 }
 
-// A helper method to convert to an ExtensionsMenuItemView. This cannot be used
-// to *determine* if a view is an ExtensionsMenuItemView (it should only be used
-// when the view is known to be one). It is only used as an extra measure to
-// prevent bad static casts.
-ExtensionsMenuItemView* GetAsMenuItemView(views::View* view) {
-  DCHECK(views::IsViewClass<ExtensionsMenuItemView>(view));
-  return static_cast<ExtensionsMenuItemView*>(view);
+// A helper method to convert to an InstalledExtensionMenuItemView. This cannot
+// be used to *determine* if a view is an InstalledExtensionMenuItemView (it
+// should only be used when the view is known to be one). It is only used as an
+// extra measure to prevent bad static casts.
+InstalledExtensionMenuItemView* GetAsMenuItemView(views::View* view) {
+  DCHECK(views::IsViewClass<InstalledExtensionMenuItemView>(view));
+  return static_cast<InstalledExtensionMenuItemView*>(view);
 }
 
 }  // namespace
@@ -164,16 +164,21 @@ void ExtensionsMenuView::Populate() {
   // (space for badging). Add the same padding left and right of the icon to
   // visually align the settings icon and text with extension menu items.
   // TODO(pbos): Note that this code relies on CreateBubbleMenuItem() and
-  // ExtensionsMenuItemView using the same horizontal border size and
+  // InstalledExtensionMenuItemView using the same horizontal border size and
   // image-label spacing. This dependency should probably be more explicit.
   constexpr int kSettingsIconHorizontalPadding =
-      (ExtensionsMenuItemView::kIconSize.width() - kSettingsIconSize) / 2;
+      (InstalledExtensionMenuItemView::kIconSize.width() - kSettingsIconSize) /
+      2;
 
   footer->SetBorder(views::CreateEmptyBorder(
       footer->GetInsets() +
-      gfx::Insets(0, kSettingsIconHorizontalPadding, 0, 0)));
+      gfx::Insets::TLBR(0, kSettingsIconHorizontalPadding, 0, 0)));
   footer->SetImageLabelSpacing(footer->GetImageLabelSpacing() +
                                kSettingsIconHorizontalPadding);
+  footer->SetImageModel(
+      views::Button::STATE_NORMAL,
+      ui::ImageModel::FromVectorIcon(vector_icons::kSettingsIcon,
+                                     ui::kColorIcon, kSettingsIconSize));
 
   manage_extensions_button_ = footer.get();
   AddChildView(std::move(footer));
@@ -212,9 +217,9 @@ ExtensionsMenuView::CreateExtensionButtonsContainer() {
             ChromeTextStyle::STYLE_EMPHASIZED);
         header->SetHorizontalAlignment(gfx::ALIGN_LEFT);
         header->SetBorder(views::CreateEmptyBorder(
-            ChromeLayoutProvider::Get()->GetDistanceMetric(
-                DISTANCE_CONTROL_LIST_VERTICAL),
-            horizontal_spacing, 0, horizontal_spacing));
+            gfx::Insets::TLBR(ChromeLayoutProvider::Get()->GetDistanceMetric(
+                                  DISTANCE_CONTROL_LIST_VERTICAL),
+                              horizontal_spacing, 0, horizontal_spacing)));
         container->AddChildView(std::move(header));
 
         // Add longer text that explains the section in more detail.
@@ -224,8 +229,8 @@ ExtensionsMenuView::CreateExtensionButtonsContainer() {
             views::style::STYLE_PRIMARY);
         description->SetMultiLine(true);
         description->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-        description->SetBorder(views::CreateEmptyBorder(0, horizontal_spacing,
-                                                        0, horizontal_spacing));
+        description->SetBorder(views::CreateEmptyBorder(
+            gfx::Insets::TLBR(0, horizontal_spacing, 0, horizontal_spacing)));
         container->AddChildView(std::move(description));
 
         // Add a (currently empty) section for the menu items of the section.
@@ -272,7 +277,7 @@ void ExtensionsMenuView::SortMenuItemsByName() {
     if (section->menu_items->children().empty())
       return;
 
-    std::vector<ExtensionsMenuItemView*> menu_item_views;
+    std::vector<InstalledExtensionMenuItemView*> menu_item_views;
     for (views::View* view : section->menu_items->children())
       menu_item_views.push_back(GetAsMenuItemView(view));
 
@@ -295,16 +300,16 @@ void ExtensionsMenuView::CreateAndInsertNewItem(
 
   // The bare `new` is safe here, because InsertMenuItem is guaranteed to
   // be added to the view hierarchy, which takes ownership.
-  auto* item = new ExtensionsMenuItemView(
-      ExtensionsMenuItemView::MenuItemType::kExtensions, browser_,
-      std::move(controller), allow_pinning_);
+  auto* item = new InstalledExtensionMenuItemView(
+      browser_, std::move(controller), allow_pinning_);
   extensions_menu_items_.insert(item);
   InsertMenuItem(item);
   // Sanity check that the item was added.
   DCHECK(Contains(item));
 }
 
-void ExtensionsMenuView::InsertMenuItem(ExtensionsMenuItemView* menu_item) {
+void ExtensionsMenuView::InsertMenuItem(
+    InstalledExtensionMenuItemView* menu_item) {
   DCHECK(!Contains(menu_item))
       << "Trying to insert a menu item that is already added in a section!";
   auto site_interaction = menu_item->view_controller()->GetSiteInteraction(
@@ -329,7 +334,7 @@ void ExtensionsMenuView::UpdateSectionVisibility() {
 }
 
 void ExtensionsMenuView::Update() {
-  for (ExtensionsMenuItemView* view : extensions_menu_items_)
+  for (InstalledExtensionMenuItemView* view : extensions_menu_items_)
     view->view_controller()->UpdateState();
 
   content::WebContents* const web_contents =
@@ -338,7 +343,7 @@ void ExtensionsMenuView::Update() {
                                                          Section* section) {
     // Note: Collect the views to move separately, so that we don't change the
     // children of the view during iteration.
-    std::vector<ExtensionsMenuItemView*> views_to_move;
+    std::vector<InstalledExtensionMenuItemView*> views_to_move;
     for (views::View* view : section->menu_items->children()) {
       auto* menu_item = GetAsMenuItemView(view);
       auto site_interaction =
@@ -348,7 +353,7 @@ void ExtensionsMenuView::Update() {
       views_to_move.push_back(menu_item);
     }
 
-    for (ExtensionsMenuItemView* menu_item : views_to_move) {
+    for (InstalledExtensionMenuItemView* menu_item : views_to_move) {
       section->menu_items->RemoveChildView(menu_item);
       InsertMenuItem(menu_item);
     }
@@ -372,7 +377,7 @@ void ExtensionsMenuView::SanityCheck() {
   // Sanity checks: verify that all extensions are properly sorted and in the
   // correct section.
   auto check_section = [this, web_contents](Section* section) {
-    std::vector<ExtensionsMenuItemView*> menu_items;
+    std::vector<InstalledExtensionMenuItemView*> menu_items;
     for (views::View* view : section->menu_items->children()) {
       auto* menu_item = GetAsMenuItemView(view);
       auto site_interaction =
@@ -395,7 +400,7 @@ void ExtensionsMenuView::SanityCheck() {
   // corresponds to an item in the model (since we already checked that the size
   // is equal for |action_ids| and |extensions_menu_items_|, this implicitly
   // guarantees that we have a view per item in |action_ids| as well).
-  for (ExtensionsMenuItemView* item : extensions_menu_items_) {
+  for (InstalledExtensionMenuItemView* item : extensions_menu_items_) {
     DCHECK(Contains(item));
     DCHECK(base::Contains(action_ids, item->view_controller()->GetId()));
   }
@@ -405,23 +410,6 @@ void ExtensionsMenuView::SanityCheck() {
 std::u16string ExtensionsMenuView::GetAccessibleWindowTitle() const {
   // The title is already spoken via the call to SetTitle().
   return std::u16string();
-}
-
-void ExtensionsMenuView::OnThemeChanged() {
-  BubbleDialogDelegateView::OnThemeChanged();
-  if (manage_extensions_button_) {
-    const SkColor background_color =
-        GetColorProvider()->GetColor(ui::kColorBubbleBackground);
-    SkColor icon_color = GetColorProvider()->GetColor(ui::kColorMenuIcon);
-    if (background_color != SK_ColorTRANSPARENT) {
-      icon_color =
-          color_utils::BlendForMinContrast(icon_color, background_color).color;
-    }
-    manage_extensions_button_->SetImage(
-        views::Button::STATE_NORMAL,
-        gfx::CreateVectorIcon(vector_icons::kSettingsIcon, kSettingsIconSize,
-                              icon_color));
-  }
 }
 
 void ExtensionsMenuView::TabChangedAt(content::WebContents* contents,
@@ -449,11 +437,12 @@ void ExtensionsMenuView::OnToolbarActionAdded(
 void ExtensionsMenuView::OnToolbarActionRemoved(
     const ToolbarActionsModel::ActionId& action_id) {
   auto iter = base::ranges::find_if(
-      extensions_menu_items_, [action_id](const ExtensionsMenuItemView* item) {
+      extensions_menu_items_,
+      [action_id](const InstalledExtensionMenuItemView* item) {
         return item->view_controller()->GetId() == action_id;
       });
   DCHECK(iter != extensions_menu_items_.end());
-  ExtensionsMenuItemView* const view = *iter;
+  InstalledExtensionMenuItemView* const view = *iter;
   DCHECK(Contains(view));
   view->parent()->RemoveChildView(view);
   DCHECK(!Contains(view));
@@ -523,13 +512,13 @@ ExtensionsMenuView* ExtensionsMenuView::GetExtensionsMenuViewForTesting() {
 }
 
 // static
-std::vector<ExtensionsMenuItemView*>
+std::vector<InstalledExtensionMenuItemView*>
 ExtensionsMenuView::GetSortedItemsForSectionForTesting(
     extensions::SitePermissionsHelper::SiteInteraction site_interaction) {
   const ExtensionsMenuView::Section* section =
       GetExtensionsMenuViewForTesting()->GetSectionForSiteInteraction(
           site_interaction);
-  std::vector<ExtensionsMenuItemView*> menu_item_views;
+  std::vector<InstalledExtensionMenuItemView*> menu_item_views;
   for (views::View* view : section->menu_items->children())
     menu_item_views.push_back(GetAsMenuItemView(view));
   return menu_item_views;

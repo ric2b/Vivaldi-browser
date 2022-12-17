@@ -44,7 +44,9 @@ bool DidReserveQuota(bool accepted,
 class MockQuotaManagerProxy : public QuotaManagerProxy {
  public:
   MockQuotaManagerProxy()
-      : QuotaManagerProxy(nullptr, base::ThreadTaskRunnerHandle::Get()),
+      : QuotaManagerProxy(/*quota_manager_impl=*/nullptr,
+                          base::ThreadTaskRunnerHandle::Get(),
+                          /*profile_path=*/base::FilePath()),
         storage_modified_count_(0),
         usage_(0),
         quota_(0) {}
@@ -114,7 +116,7 @@ class QuotaBackendImplTest : public testing::Test,
     in_memory_env_ = leveldb_chrome::NewMemEnv("quota");
     file_util_ = ObfuscatedFileUtil::CreateForTesting(
         /*special_storage_policy=*/nullptr, data_dir_.GetPath(),
-        in_memory_env_.get(), is_incognito());
+        data_dir_.GetPath(), in_memory_env_.get(), is_incognito());
     backend_ = std::make_unique<QuotaBackendImpl>(
         file_task_runner(), file_util_.get(), &file_system_usage_cache_,
         quota_manager_proxy_.get());

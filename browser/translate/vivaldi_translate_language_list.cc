@@ -11,6 +11,7 @@
 #include "base/task/post_task.h"
 #include "base/vivaldi_switches.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/prefs/pref_service.h"
 #include "components/translate/core/browser/translate_download_manager.h"
@@ -24,6 +25,13 @@
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "services/network/public/cpp/simple_url_loader_stream_consumer.h"
+
+#if BUILDFLAG(IS_ANDROID)
+#include "chrome/browser/profiles/profile_manager.h"
+#else
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_finder.h"
+#endif
 
 namespace translate {
 
@@ -42,10 +50,8 @@ constexpr int kMaxListSize = 1024 * 10;
 
 }  // namespace
 
-VivaldiTranslateLanguageList::VivaldiTranslateLanguageList(
-    content::BrowserContext* context)
-    : context_(context),
-      resource_request_allowed_notifier_(
+VivaldiTranslateLanguageList::VivaldiTranslateLanguageList()
+    : resource_request_allowed_notifier_(
           g_browser_process->local_state(),
           switches::kDisableBackgroundNetworking,
           base::BindOnce(&content::GetNetworkConnectionTracker)),
@@ -170,7 +176,21 @@ void VivaldiTranslateLanguageList::StartDownload() {
         }
       })");
 
-  auto url_loader_factory = context_->GetDefaultStoragePartition()
+#if BUILDFLAG(IS_ANDROID)
+  Profile* profile = ProfileManager::GetLastUsedProfile();
+#else
+  Browser* browser = chrome::FindLastActive();
+  if (!browser) {
+    // VB-88607 [macOS] Browser crashes randomly
+    // If there is no window open GetDefaultStoragePartition will crash on macOS
+    // because the profile is destroyed when all windows are closed.
+    StartUpdateTimer();
+    return;
+  }
+  Profile* profile = browser->profile();
+#endif
+
+  auto url_loader_factory = profile->GetDefaultStoragePartition()
                                 ->GetURLLoaderFactoryForBrowserProcess();
 
   url_loader_ = network::SimpleURLLoader::Create(std::move(resource_request),

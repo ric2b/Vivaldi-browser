@@ -27,6 +27,8 @@
 #include "components/rlz/rlz_tracker.h"  // nogncheck crbug.com/1125897
 #endif
 
+#include "components/search_engines/vivaldi_pref_names.h"
+
 // static
 TemplateURLService* TemplateURLServiceFactory::GetForProfile(Profile* profile) {
   return static_cast<TemplateURLService*>(
@@ -48,6 +50,9 @@ std::unique_ptr<KeyedService> TemplateURLServiceFactory::BuildInstanceFor(
       rlz::RLZTracker::ChromeOmnibox(), rlz_lib::SET_TO_GOOGLE);
 #endif
   Profile* profile = static_cast<Profile*>(context);
+  if (!profile->GetPrefs()->HasPrefPath(prefs::kLanguageAtInstall))
+    profile->GetPrefs()->SetString(prefs::kLanguageAtInstall,
+                                   g_browser_process->GetApplicationLocale());
   return std::make_unique<TemplateURLService>(
       profile->GetPrefs(), std::make_unique<UIThreadSearchTermsData>(),
       WebDataServiceFactory::GetKeywordWebDataForProfile(
@@ -78,6 +83,7 @@ void TemplateURLServiceFactory::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
   DefaultSearchManager::RegisterProfilePrefs(registry);
   TemplateURLService::RegisterProfilePrefs(registry);
+  registry->RegisterStringPref(prefs::kLanguageAtInstall,"");
 }
 
 content::BrowserContext* TemplateURLServiceFactory::GetBrowserContextToUse(

@@ -24,6 +24,7 @@ class WEBDATA_EXPORT WebDatabase {
   };
   // Exposed publicly so the keyword table can access it.
   static const int kCurrentVersionNumber;
+  static const int kVivaldiCurrentVersionNumber;
   // The newest version of the database Chrome will NOT try to migrate.
   static const int kDeprecatedVersionNumber;
   // Use this as a path to create an in-memory database.
@@ -71,6 +72,7 @@ class WEBDATA_EXPORT WebDatabase {
   // Used by |Init()| to migration database schema from older versions to
   // current version.
   sql::InitStatus MigrateOldVersionsAsNeeded();
+  sql::InitStatus MigrateOldVivaldiVersionsAsNeeded(int chromium_version);
 
   // Migrates this database to |version|. Returns false if there was
   // migration work to do and it failed, true otherwise.

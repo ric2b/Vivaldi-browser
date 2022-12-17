@@ -128,6 +128,7 @@
     *   [framework_dirs: [directory list] Additional framework search directories.](#var_framework_dirs)
     *   [frameworks: [name list] Name of frameworks that must be linked.](#var_frameworks)
     *   [friend: [label pattern list] Allow targets to include private headers.](#var_friend)
+    *   [gen_deps: [label list] Declares targets that should generate when this one does.](#var_gen_deps)
     *   [include_dirs: [directory list] Additional include directories.](#var_include_dirs)
     *   [inputs: [file list] Additional compile-time dependencies.](#var_inputs)
     *   [ldflags: [string list] Flags passed to the linker.](#var_ldflags)
@@ -781,6 +782,7 @@
       "vs2015" - Visual Studio 2015 project/solution files.
       "vs2017" - Visual Studio 2017 project/solution files.
       "vs2019" - Visual Studio 2019 project/solution files.
+      "vs2022" - Visual Studio 2022 project/solution files.
       "xcode" - Xcode workspace/solution files.
       "qtcreator" - QtCreator project files.
       "json" - JSON file containing target information
@@ -1017,17 +1019,18 @@
     A list of target labels from which to initiate the walk.
 
   --data
-    A list of keys from which to extract data. In each target walked, its metadata
-    scope is checked for the presence of these keys. If present, the contents of
-    those variable in the scope are appended to the results list.
+    A comma-separated list of keys from which to extract data. In each target
+    walked, its metadata scope is checked for the presence of these keys. If
+    present, the contents of those variable in the scope are appended to the
+    results list.
 
   --walk (optional)
-    A list of keys from which to control the walk. In each target walked, its
-    metadata scope is checked for the presence of any of these keys. If present,
-    the contents of those variables is checked to ensure that it is a label of
-    a valid dependency of the target and then added to the set of targets to walk.
-    If the empty string ("") is present in any of these keys, all deps and data_deps
-    are added to the walk set.
+    A comma-separated list of keys from which to control the walk. In each
+    target walked, its metadata scope is checked for the presence of any of
+    these keys. If present, the contents of those variables is checked to ensure
+    that it is a label of a valid dependency of the target and then added to the
+    set of targets to walk. If the empty string ("") is present in any of these
+    keys, all deps and data_deps are added to the walk set.
 
   --rebase (optional)
     A destination directory onto which to rebase any paths found. If set, all
@@ -1042,7 +1045,7 @@
       Lists collected metaresults for the `files` key in the //base/foo:foo
       target and all of its dependency tree.
 
-  gn meta out/Debug "//base/foo" --data=files --data=other
+  gn meta out/Debug "//base/foo" --data=files,other
       Lists collected metaresults for the `files` and `other` keys in the
       //base/foo:foo target and all of its dependency tree.
 
@@ -1313,6 +1316,12 @@
   and stuff like other Python files required to run your script in the "inputs"
   variable.
 
+  Actions can take the configs and public_configs lists, as well as any of the
+  configs variables (defines, include_dirs, etc.) set directly on the target.
+  These behave exactly as they would on a binary target and can be accessed
+  using substitution patterns in the script args (see "gn help args") to
+  implement custom compiler-like tools.
+
   The "deps" and "public_deps" for an action will always be
   completed before any part of the action is run so it can depend on
   the output of previous steps. The "data_deps" will be built if the
@@ -1355,8 +1364,11 @@
 #### **Variables**
 
 ```
-  args, data, data_deps, depfile, deps, inputs, metadata, outputs*, pool,
-  response_file_contents, script*, sources
+  args, asmflags, bridge_header, cflags, cflags_c, cflags_cc, cflags_objc,
+  cflags_objcc, configs, data, data_deps, defines, depfile, deps,
+  framework_dirs, include_dirs, inputs, metadata, module_deps, module_name,
+  outputs*, pool, response_file_contents, rustenv, rustflags, script*, sources,
+  swiftflags
   * = required
 ```
 
@@ -1444,9 +1456,11 @@
 #### **Variables**
 
 ```
-  args, data, data_deps, depfile, deps, inputs, metadata, outputs*, pool,
-  response_file_contents, script*, sources*
-  * = required
+  args, asmflags, bridge_header, cflags, cflags_c, cflags_cc, cflags_objc,
+  cflags_objcc, configs, data, data_deps, defines, depfile, deps,
+  framework_dirs, include_dirs, inputs, metadata, module_deps, module_name,
+  outputs*, pool, response_file_contents, rustenv, rustflags, script*, sources,
+  swiftflags
 ```
 
 #### **Example**
@@ -1735,7 +1749,7 @@
   Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
          asmflags, defines, include_dirs, inputs, ldflags, lib_dirs,
          libs, precompiled_header, precompiled_source, rustflags,
-         rustenv, swiftflags
+         rustenv, swiftflags, testonly
   Deps: data_deps, deps, public_deps
   Dependent configs: all_dependent_configs, public_configs
   General: check_includes, configs, data, friend, inputs, metadata,
@@ -1929,7 +1943,7 @@
   Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
          asmflags, defines, include_dirs, inputs, ldflags, lib_dirs,
          libs, precompiled_header, precompiled_source, rustflags,
-         rustenv, swiftflags
+         rustenv, swiftflags, testonly
   Deps: data_deps, deps, public_deps
   Dependent configs: all_dependent_configs, public_configs
   General: check_includes, configs, data, friend, inputs, metadata,
@@ -1961,7 +1975,7 @@
   Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
          asmflags, defines, include_dirs, inputs, ldflags, lib_dirs,
          libs, precompiled_header, precompiled_source, rustflags,
-         rustenv, swiftflags
+         rustenv, swiftflags, testonly
   Deps: data_deps, deps, public_deps
   Dependent configs: all_dependent_configs, public_configs
   General: check_includes, configs, data, friend, inputs, metadata,
@@ -1996,7 +2010,7 @@
   Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
          asmflags, defines, include_dirs, inputs, ldflags, lib_dirs,
          libs, precompiled_header, precompiled_source, rustflags,
-         rustenv, swiftflags
+         rustenv, swiftflags, testonly
   Deps: data_deps, deps, public_deps
   Dependent configs: all_dependent_configs, public_configs
   General: check_includes, configs, data, friend, inputs, metadata,
@@ -2030,7 +2044,7 @@
   Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
          asmflags, defines, include_dirs, inputs, ldflags, lib_dirs,
          libs, precompiled_header, precompiled_source, rustflags,
-         rustenv, swiftflags
+         rustenv, swiftflags, testonly
   Deps: data_deps, deps, public_deps
   Dependent configs: all_dependent_configs, public_configs
   General: check_includes, configs, data, friend, inputs, metadata,
@@ -2075,7 +2089,7 @@
   Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
          asmflags, defines, include_dirs, inputs, ldflags, lib_dirs,
          libs, precompiled_header, precompiled_source, rustflags,
-         rustenv, swiftflags
+         rustenv, swiftflags, testonly
   Deps: data_deps, deps, public_deps
   Dependent configs: all_dependent_configs, public_configs
   General: check_includes, configs, data, friend, inputs, metadata,
@@ -2099,7 +2113,7 @@
   Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
          asmflags, defines, include_dirs, inputs, ldflags, lib_dirs,
          libs, precompiled_header, precompiled_source, rustflags,
-         rustenv, swiftflags
+         rustenv, swiftflags, testonly
   Deps: data_deps, deps, public_deps
   Dependent configs: all_dependent_configs, public_configs
   General: check_includes, configs, data, friend, inputs, metadata,
@@ -2208,7 +2222,7 @@
   Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
          asmflags, defines, include_dirs, inputs, ldflags, lib_dirs,
          libs, precompiled_header, precompiled_source, rustflags,
-         rustenv, swiftflags
+         rustenv, swiftflags, testonly
   Nested configs: configs
   General: visibility
 ```
@@ -4608,6 +4622,13 @@
   - "arm"
   - "arm64"
   - "mipsel"
+  - "mips64el"
+  - "s390x"
+  - "ppc64"
+  - "riscv32"
+  - "riscv64"
+  - "e2k"
+  - "loong64"
 ```
 ### <a name="var_target_gen_dir"></a>**target_gen_dir**: Directory for a target's generated files.
 
@@ -4916,6 +4937,14 @@
   For action and action_foreach targets, args is the list of arguments to pass
   to the script. Typically you would use source expansion (see "gn help
   source_expansion") to insert the source file names.
+
+  Args can also expand the substitution patterns corresponding to config
+  variables in the same way that compiler tools (see "gn help tool") do. These
+  allow actions that run compiler or compiler-like tools to access the results
+  of propagating configs through the build graph. For example:
+
+  args = [ "{{defines}}", "{{include_dirs}}", "{{rustenv}}", "--input-file",
+           "{{source}}" ]
 
   See also "gn help action" and "gn help action_foreach".
 ```
@@ -5813,6 +5842,18 @@
       ":lib",  # Required for the include to be allowed.
     ]
   }
+```
+### <a name="var_gen_deps"></a>**gen_deps**: Declares targets that should generate when this one does.
+
+```
+  A list of target labels.
+
+  Not all GN targets that get evaluated are actually turned into ninja targets
+  (see "gn help execution"). If this target is generated, then any targets in
+  the "gen_deps" list will also be generated, regardless of the usual critera.
+
+  Since "gen_deps" are not build time dependencies, there can be cycles between
+  "deps" and "gen_deps" or within "gen_deps" itself.
 ```
 ### <a name="var_include_dirs"></a>**include_dirs**: Additional include directories.
 
@@ -7139,6 +7180,13 @@
   required (directly or transitively) to build a target in the default
   toolchain.
 
+  Some targets might be associated but without a formal build dependency (for
+  example, related tools or optional variants). A target that is marked as
+  "generated" can propagate its generated state to an associated target using
+  "gen_deps". This will make the referenced dependency have Ninja rules
+  generated in the same cases the source target has but without a build-time
+  dependency and even in non-default toolchains.
+
   See also "gn help ninja_rules".
 ```
 
@@ -7345,19 +7393,20 @@
 ```
   All execution happens in the context of a scope which holds the current state
   (like variables). With the exception of loops and conditions, '{' introduces
-  a new scope that has a parent reference to the old scope.
+  a new scope.
 
-  Variable reads recursively search all nested scopes until the variable is
-  found or there are no more scopes. Variable writes always go into the current
-  scope. This means that after the closing '}' (again excepting loops and
-  conditions), all local variables will be restored to the previous values.
-  This also means that "foo = foo" can do useful work by copying a variable
-  into the current scope that was defined in a containing scope.
+  Most scopes have a parent reference to the old scope. Variable reads
+  recursively search all parent scopes until the variable is found or there are
+  no more scopes. Variable writes always go into the current scope. This means
+  that after the closing '}' (again excepting loops and conditions), all local
+  variables will be restored to the previous values.  This also means that "foo
+  = foo" can do useful work by copying a variable into the current scope that
+  was defined in a containing scope.
 
-  Scopes can also be assigned to variables. Such scopes can be created by
-  functions like exec_script, when invoking a template (the template code
-  refers to the variables set by the invoking code by the implicitly-created
-  "invoker" scope), or explicitly like:
+  Scopes can be assigned to variables. Examples of such scopes are the
+  implicitly-created "invoker" when invoking a template (which refers to the
+  variables set by the invoking code), scopes created by functions like
+  exec_script, and scopes explicitly created like
 
     empty_scope = {}
     myvalues = {
@@ -7365,10 +7414,14 @@
       bar = "something"
     }
 
-  Inside such a scope definition can be any GN code including conditionals and
-  function calls. After the close of the scope, it will contain all variables
-  explicitly set by the code contained inside it. After this, the values can be
-  read, modified, or added to:
+  In the case of explicitly created scopes and scopes created by functions like
+  exec_script, there is no reference to the parent scope. Such scopes are fully
+  self-contained and do not "inherit" values from their defining scope.
+
+  Inside an explicit scope definition can be any GN code including conditionals
+  and function calls. After the close of the scope, it will contain all
+  variables explicitly set by the code contained inside it. After this, the
+  values can be read, modified, or added to:
 
     myvalues.foo += 2
     empty_scope.new_thing = [ 1, 2, 3 ]

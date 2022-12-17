@@ -10,6 +10,7 @@
 
 #include "base/bind.h"
 #include "base/check_op.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
@@ -29,6 +30,7 @@
 #include "chrome/browser/ui/toolbar/toolbar_action_view_delegate.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/sessions/content/session_tab_helper.h"
+#include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_action.h"
 #include "extensions/browser/extension_action_manager.h"
 #include "extensions/browser/extension_registry.h"
@@ -37,8 +39,10 @@
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/permissions/api_permission.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/color/color_provider_manager.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_operations.h"
+#include "ui/native_theme/native_theme.h"
 
 using extensions::ActionInfo;
 using extensions::CommandService;
@@ -205,6 +209,12 @@ bool ExtensionActionViewController::IsEnabled(
 
 bool ExtensionActionViewController::IsShowingPopup() const {
   return popup_host_ != nullptr;
+}
+
+bool ExtensionActionViewController::IsRequestingSiteAccess(
+    content::WebContents* web_contents) const {
+  return GetSiteInteraction(web_contents) ==
+         extensions::SitePermissionsHelper::SiteInteraction::kPending;
 }
 
 void ExtensionActionViewController::HidePopup() {
@@ -461,10 +471,22 @@ std::unique_ptr<IconWithBadgeImageSource>
 ExtensionActionViewController::GetIconImageSource(
     content::WebContents* web_contents,
     const gfx::Size& size) {
-  int tab_id = sessions::SessionTabHelper::IdForTab(web_contents).id();
-  std::unique_ptr<IconWithBadgeImageSource> image_source(
-      new IconWithBadgeImageSource(size));
+  // `web_contents` may be null during tab closure or in tests.  Fall back on a
+  // generic color provider.
+  auto get_color_provider_callback = base::BindRepeating(
+      [](base::WeakPtr<content::WebContents> weak_web_contents) {
+        return weak_web_contents
+                   ? &weak_web_contents->GetColorProvider()
+                   : ui::ColorProviderManager::Get().GetColorProviderFor(
+                         ui::NativeTheme::GetInstanceForNativeUi()
+                             ->GetColorProviderKey(nullptr));
+      },
+      web_contents ? web_contents->GetWeakPtr()
+                   : base::WeakPtr<content::WebContents>());
+  auto image_source = std::make_unique<IconWithBadgeImageSource>(
+      size, std::move(get_color_provider_callback));
 
+  int tab_id = sessions::SessionTabHelper::IdForTab(web_contents).id();
   image_source->SetIcon(icon_factory_.GetIcon(tab_id));
 
   std::unique_ptr<IconWithBadgeImageSource::Badge> badge;

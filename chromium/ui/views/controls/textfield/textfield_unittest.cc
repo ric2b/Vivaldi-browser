@@ -12,7 +12,6 @@
 #include <vector>
 
 #include "base/command_line.h"
-#include "base/cxx17_backports.h"
 #include "base/format_macros.h"
 #include "base/i18n/rtl.h"
 #include "base/memory/raw_ptr.h"
@@ -159,7 +158,7 @@ class MockInputMethod : public ui::InputMethodBase {
 
   // InputMethod:
   ui::EventDispatchDetails DispatchKeyEvent(ui::KeyEvent* key) override;
-  void OnTextInputTypeChanged(const ui::TextInputClient* client) override;
+  void OnTextInputTypeChanged(ui::TextInputClient* client) override;
   void OnCaretBoundsChanged(const ui::TextInputClient* client) override {}
   void CancelComposition(const ui::TextInputClient* client) override;
   bool IsCandidatePopupOpen() const override;
@@ -274,8 +273,7 @@ ui::EventDispatchDetails MockInputMethod::DispatchKeyEvent(ui::KeyEvent* key) {
   return dispatch_details;
 }
 
-void MockInputMethod::OnTextInputTypeChanged(
-    const ui::TextInputClient* client) {
+void MockInputMethod::OnTextInputTypeChanged(ui::TextInputClient* client) {
   if (IsTextInputClientFocused(client))
     text_input_type_changed_ = true;
   InputMethodBase::OnTextInputTypeChanged(client);
@@ -1365,7 +1363,7 @@ TEST_F(TextfieldTest, DeletionWithSelection) {
   InitTextfield();
   // [Ctrl] ([Alt] on Mac) + [Delete]/[Backspace] should delete the active
   // selection, regardless of [Shift].
-  for (size_t i = 0; i < base::size(cases); ++i) {
+  for (size_t i = 0; i < std::size(cases); ++i) {
     SCOPED_TRACE(base::StringPrintf("Testing cases[%" PRIuS "]", i));
     textfield_->SetText(u"one two three");
     textfield_->SetSelectedRange(gfx::Range(2, 6));
@@ -1392,7 +1390,7 @@ TEST_F(TextfieldTest, DeletionWithMultipleSelections) {
   InitTextfield();
   // [Ctrl] ([Alt] on Mac) + [Delete]/[Backspace] should delete the active
   // selection, regardless of [Shift].
-  for (size_t i = 0; i < base::size(cases); ++i) {
+  for (size_t i = 0; i < std::size(cases); ++i) {
     SCOPED_TRACE(base::StringPrintf("Testing cases[%" PRIuS "]", i));
     textfield_->SetText(u"one two three");
     // Select: o[ne] [two] th[re]e
@@ -1420,7 +1418,7 @@ TEST_F(TextfieldTest, DeletionWithEditCommands) {
   };
 
   InitTextfield();
-  for (size_t i = 0; i < base::size(cases); ++i) {
+  for (size_t i = 0; i < std::size(cases); ++i) {
     SCOPED_TRACE(base::StringPrintf("Testing cases[%" PRIuS "]", i));
     textfield_->SetText(u"one two three");
     textfield_->SetSelectedRange(gfx::Range(4));
@@ -1733,6 +1731,36 @@ TEST_F(TextfieldTest, ShouldShowCursor) {
   textfield_->AddSecondarySelectedRange({1, 3});
   EXPECT_FALSE(test_api_->ShouldShowCursor());
 }
+
+#if BUILDFLAG(IS_MAC)
+TEST_F(TextfieldTest, MacCursorAlphaTest) {
+  InitTextfield();
+
+  const int cursor_y = GetCursorYForTesting();
+  MoveMouseTo(gfx::Point(GetCursorPositionX(0), cursor_y));
+  ClickRightMouseButton();
+  EXPECT_TRUE(textfield_->HasFocus());
+
+  const float kOpaque = 1.0;
+  EXPECT_FLOAT_EQ(kOpaque, test_api_->CursorLayerOpacity());
+
+  test_api_->FlashCursor();
+
+  const float kAlmostTransparent = 1.0 / 255.0;
+  EXPECT_FLOAT_EQ(kAlmostTransparent, test_api_->CursorLayerOpacity());
+
+  test_api_->FlashCursor();
+
+  EXPECT_FLOAT_EQ(kOpaque, test_api_->CursorLayerOpacity());
+
+  const float kTransparent = 0.0;
+  test_api_->SetCursorLayerOpacity(kTransparent);
+  ASSERT_FLOAT_EQ(kTransparent, test_api_->CursorLayerOpacity());
+
+  test_api_->UpdateCursorVisibility();
+  EXPECT_FLOAT_EQ(kOpaque, test_api_->CursorLayerOpacity());
+}
+#endif
 
 TEST_F(TextfieldTest, FocusTraversalTest) {
   InitTextfield(3);
@@ -3118,7 +3146,7 @@ TEST_F(TextfieldTest, GetCompositionCharacterBounds_ComplexText) {
       // U+0020 SPACE
       0x0020,
   };
-  const size_t kUtf16CharsCount = base::size(kUtf16Chars);
+  const size_t kUtf16CharsCount = std::size(kUtf16Chars);
 
   ui::CompositionText composition;
   composition.text.assign(kUtf16Chars, kUtf16Chars + kUtf16CharsCount);
@@ -3707,8 +3735,7 @@ TEST_F(TextfieldTest, FitToLocalBounds) {
   const int kBorderWidth = 5;
   InitTextfield();
   textfield_->SetBounds(0, 0, kDisplayRectWidth, 100);
-  textfield_->SetBorder(views::CreateEmptyBorder(
-      gfx::Insets(kBorderWidth, kBorderWidth, kBorderWidth, kBorderWidth)));
+  textfield_->SetBorder(views::CreateEmptyBorder(kBorderWidth));
   test_api_->GetRenderText()->SetDisplayRect(gfx::Rect(0, 0, 20, 20));
   ASSERT_EQ(20, test_api_->GetRenderText()->display_rect().width());
   textfield_->FitToLocalBounds();

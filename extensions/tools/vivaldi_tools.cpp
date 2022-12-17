@@ -10,6 +10,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -45,6 +46,7 @@ const char* kVivaldiKeyDivide = "/";
 const char* kVivaldiKeySubtract = "-";
 const char* kVivaldiKeyPeriod = ".";
 const char* kVivaldiKeyComma = ",";
+const char* kVivaldiKeyBackslash = "\\";
 
 ui::KeyboardCode GetFunctionKey(std::string token) {
   int size = token.size();
@@ -113,6 +115,8 @@ ui::Accelerator ParseShortcut(const std::string& accelerator,
         key = ui::VKEY_OEM_PERIOD;
       } else if (tokens[i] == kVivaldiKeyComma) {
         key = ui::VKEY_OEM_COMMA;
+      } else if (tokens[i] == kVivaldiKeyBackslash) {
+        key = ui::VKEY_OEM_5;
       } else if (tokens[i] == kVivaldiKeyEsc) {
         key = ui::VKEY_ESCAPE;
       } else if (tokens[i] == kVivaldiKeyDel) {
@@ -262,7 +266,7 @@ gfx::PointF ToUICoordinates(content::WebContents* web_contents,
   return gfx::PointF(p.x() / zoom_factor, p.y() / zoom_factor);
 }
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 
 std::u16string KeyCodeToName(ui::KeyboardCode key_code) {
   int string_id = 0;
@@ -406,7 +410,7 @@ std::string ShortcutText(int windows_key_code, int modifiers, int dom_code) {
   } else if (windows_key_code == ui::VKEY_ESCAPE) {
     shortcutText += "Esc";
   } else {
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
     // This is equivalent to js event.code and deals with a few
     // MacOS keyboard shortcuts like cmd+alt+n that fall through
     // in some languages, i.e. AcceleratorToString returns a blank.

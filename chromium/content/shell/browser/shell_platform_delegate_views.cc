@@ -2,9 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/memory/raw_ptr.h"
-#include "content/shell/browser/shell_platform_delegate.h"
-
 #include <stddef.h>
 
 #include <algorithm>
@@ -13,7 +10,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
-#include "base/cxx17_backports.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -21,6 +18,7 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "content/shell/browser/shell.h"
+#include "content/shell/browser/shell_platform_delegate.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
@@ -158,7 +156,7 @@ class ShellView : public views::BoxLayoutView,
     auto builder =
         views::Builder<views::BoxLayoutView>(this)
             .SetBackground(
-                CreateThemedSolidBackground(this, ui::kColorWindowBackground))
+                views::CreateThemedSolidBackground(ui::kColorWindowBackground))
             .SetOrientation(views::BoxLayout::Orientation::kVertical);
 
     if (!Shell::ShouldHideToolbar()) {
@@ -167,7 +165,7 @@ class ShellView : public views::BoxLayoutView,
               .CopyAddressTo(&toolbar_view_)
               .SetOrientation(views::LayoutOrientation::kHorizontal)
               // Top padding = 2, Bottom padding = 5
-              .SetProperty(views::kMarginsKey, gfx::Insets(2, 0, 5, 0))
+              .SetProperty(views::kMarginsKey, gfx::Insets::TLBR(2, 0, 5, 0))
               .AddChildren(
                   views::Builder<views::MdTextButton>()
                       .CopyAddressTo(&back_button_)
@@ -215,7 +213,7 @@ class ShellView : public views::BoxLayoutView,
                               views::MaximumFlexSizeRule::kUnbounded))
                       // Left padding  = 2, Right padding = 2
                       .SetProperty(views::kMarginsKey,
-                                   gfx::Insets(0, 2, 0, 2))));
+                                   gfx::Insets::TLBR(0, 2, 0, 2))));
     }
 
     builder.AddChild(views::Builder<views::View>()
@@ -224,13 +222,13 @@ class ShellView : public views::BoxLayoutView,
                          .CustomConfigure(base::BindOnce([](views::View* view) {
                            if (!Shell::ShouldHideToolbar()) {
                              view->SetProperty(views::kMarginsKey,
-                                               gfx::Insets(0, 2, 0, 2));
+                                               gfx::Insets::TLBR(0, 2, 0, 2));
                            }
                          })));
 
     if (!Shell::ShouldHideToolbar()) {
       builder.AddChild(views::Builder<views::View>().SetProperty(
-          views::kMarginsKey, gfx::Insets(0, 0, 5, 0)));
+          views::kMarginsKey, gfx::Insets::TLBR(0, 0, 5, 0)));
     }
 
     std::move(builder).BuildChildren();
@@ -241,7 +239,7 @@ class ShellView : public views::BoxLayoutView,
     DCHECK(GetWidget());
     static const ui::KeyboardCode keys[] = {ui::VKEY_F5, ui::VKEY_BROWSER_BACK,
                                             ui::VKEY_BROWSER_FORWARD};
-    for (size_t i = 0; i < base::size(keys); ++i) {
+    for (size_t i = 0; i < std::size(keys); ++i) {
       GetFocusManager()->RegisterAccelerator(
           ui::Accelerator(keys[i], ui::EF_NONE),
           ui::AcceleratorManager::kNormalPriority, this);

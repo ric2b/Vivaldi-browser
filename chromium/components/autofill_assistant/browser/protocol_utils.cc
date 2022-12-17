@@ -24,6 +24,7 @@
 #include "components/autofill_assistant/browser/actions/expect_navigation_action.h"
 #include "components/autofill_assistant/browser/actions/generate_password_for_form_field_action.h"
 #include "components/autofill_assistant/browser/actions/get_element_status_action.h"
+#include "components/autofill_assistant/browser/actions/js_flow_action.h"
 #include "components/autofill_assistant/browser/actions/navigate_action.h"
 #include "components/autofill_assistant/browser/actions/perform_on_single_element_action.h"
 #include "components/autofill_assistant/browser/actions/popup_message_action.h"
@@ -200,6 +201,7 @@ std::string ProtocolUtils::CreateNextScriptActionsRequest(
     const std::string& script_payload,
     const std::vector<ProcessedActionProto>& processed_actions,
     const RoundtripTimingStats& timing_stats,
+    const RoundtripNetworkStats& network_stats,
     const ClientContextProto& client_context) {
   ScriptActionRequestProto request_proto;
   request_proto.set_global_payload(global_payload);
@@ -210,6 +212,7 @@ std::string ProtocolUtils::CreateNextScriptActionsRequest(
     next_request->add_processed_actions()->MergeFrom(processed_action);
   }
   *next_request->mutable_timing_stats() = timing_stats;
+  *next_request->mutable_network_stats() = network_stats;
   *request_proto.mutable_client_context() = client_context;
   std::string serialized_request_proto;
   bool success = request_proto.SerializeToString(&serialized_request_proto);
@@ -448,6 +451,8 @@ std::unique_ptr<Action> ProtocolUtils::CreateAction(ActionDelegate* delegate,
       return std::make_unique<SaveSubmittedPasswordAction>(delegate, action);
     case ActionProto::ActionInfoCase::kExecuteJs:
       return std::make_unique<ExecuteJsAction>(delegate, action);
+    case ActionProto::ActionInfoCase::kJsFlow:
+      return std::make_unique<JsFlowAction>(delegate, action);
     case ActionProto::ActionInfoCase::ACTION_INFO_NOT_SET: {
       VLOG(1) << "Encountered action with ACTION_INFO_NOT_SET";
       return std::make_unique<UnsupportedAction>(delegate, action);
@@ -708,6 +713,10 @@ absl::optional<ActionProto> ProtocolUtils::ParseFromString(
       success = ParseActionFromString(action_id, bytes, error_message,
                                       proto.mutable_execute_js());
       break;
+    case ActionProto::ActionInfoCase::kJsFlow:
+      success = ParseActionFromString(action_id, bytes, error_message,
+                                      proto.mutable_js_flow());
+      break;
     case ActionProto::ActionInfoCase::ACTION_INFO_NOT_SET:
       // This is an "unknown action", handled as such in CreateAction.
       return proto;
@@ -726,6 +735,7 @@ absl::optional<ActionProto> ProtocolUtils::ParseFromString(
 // static
 bool ProtocolUtils::ParseActions(ActionDelegate* delegate,
                                  const std::string& response,
+                                 uint64_t* run_id,
                                  std::string* return_global_payload,
                                  std::string* return_script_payload,
                                  std::vector<std::unique_ptr<Action>>* actions,
@@ -740,6 +750,9 @@ bool ProtocolUtils::ParseActions(ActionDelegate* delegate,
     return false;
   }
 
+  if (run_id) {
+    *run_id = response_proto.run_id();
+  }
   if (return_global_payload) {
     *return_global_payload = response_proto.global_payload();
   }
@@ -765,6 +778,17 @@ bool ProtocolUtils::ParseActions(ActionDelegate* delegate,
   }
 
   return true;
+}
+
+// static
+std::unique_ptr<Action> ProtocolUtils::ParseAction(
+    ActionDelegate* delegate,
+    const std::string& serialized_action) {
+  ActionProto proto;
+  if (!proto.ParseFromString(serialized_action)) {
+    return nullptr;
+  }
+  return CreateAction(delegate, proto);
 }
 
 // static
@@ -909,6 +933,61 @@ bool ProtocolUtils::ValidateTriggerCondition(
     case TriggerScriptConditionProto::TYPE_NOT_SET:
       return true;
   }
+}
+
+// static
+std::string ProtocolUtils::CreateGetUserDataRequest(
+    uint64_t run_id,
+    bool request_name,
+    bool request_email,
+    bool request_phone,
+    bool request_shipping,
+    bool request_payment_methods,
+    const std::vector<std::string>& supported_card_networks,
+    const std::string& client_token) {
+  GetUserDataRequestProto request_proto;
+  request_proto.set_run_id(run_id);
+  request_proto.set_request_name(request_name);
+  request_proto.set_request_email(request_email);
+  request_proto.set_request_phone(request_phone);
+  request_proto.set_request_addresses(request_shipping);
+
+  if (request_payment_methods) {
+    auto* payment_methods_request =
+        request_proto.mutable_request_payment_methods();
+    payment_methods_request->set_client_token(client_token);
+    for (const std::string& supported_card_network : supported_card_networks) {
+      payment_methods_request->add_supported_card_networks(
+          supported_card_network);
+    }
+  }
+
+  std::string serialized_request_proto;
+  bool success = request_proto.SerializeToString(&serialized_request_proto);
+  DCHECK(success);
+  return serialized_request_proto;
+}
+
+// static
+RoundtripNetworkStats ProtocolUtils::ComputeNetworkStats(
+    const std::string& response,
+    const ServiceRequestSender::ResponseInfo& response_info,
+    const std::vector<std::unique_ptr<Action>>& actions) {
+  RoundtripNetworkStats stats;
+  stats.set_roundtrip_decoded_body_size_bytes(response.size());
+  stats.set_roundtrip_encoded_body_size_bytes(
+      response_info.encoded_body_length);
+  for (const auto& action : actions) {
+    RoundtripNetworkStats::ActionNetworkStats* action_stats =
+        stats.add_action_stats();
+    action_stats->set_action_info_case(
+        static_cast<int>(action->proto().action_info_case()));
+
+    std::string serialized_action;
+    action->proto().SerializeToString(&serialized_action);
+    action_stats->set_decoded_size_bytes(serialized_action.size());
+  }
+  return stats;
 }
 
 }  // namespace autofill_assistant

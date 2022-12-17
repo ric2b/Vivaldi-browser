@@ -31,7 +31,6 @@
 #include "base/strings/pattern.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/task_runner_util.h"
 #include "base/task/thread_pool.h"
@@ -94,6 +93,7 @@
 #include "components/account_id/account_id.h"
 #include "components/app_constants/constants.h"
 #include "components/favicon/content/content_favicon_driver.h"
+#include "components/services/app_service/public/cpp/app_types.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/sync_preferences/pref_service_syncable.h"
@@ -103,6 +103,7 @@
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/management_policy.h"
 #include "extensions/common/extension.h"
+#include "net/base/escape.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -112,7 +113,6 @@
 #include "ui/resources/grit/ui_resources.h"
 
 using app_constants::kChromeAppId;
-using extension_misc::kGmailAppId;
 
 namespace {
 
@@ -394,7 +394,7 @@ bool ChromeShelfController::ShouldSyncItem(const ash::ShelfItem& item) {
   return ItemTypeIsPinned(item);
 }
 
-bool ChromeShelfController::IsPinned(const ash::ShelfID& id) {
+bool ChromeShelfController::IsPinned(const ash::ShelfID& id) const {
   const ash::ShelfItem* item = GetItem(id);
   return item && ItemTypeIsPinned(*item);
 }
@@ -419,7 +419,7 @@ void ChromeShelfController::Close(const ash::ShelfID& id) {
   delegate->Close();
 }
 
-bool ChromeShelfController::IsOpen(const ash::ShelfID& id) {
+bool ChromeShelfController::IsOpen(const ash::ShelfID& id) const {
   const ash::ShelfItem* item = GetItem(id);
   return item && item->status != ash::STATUS_CLOSED;
 }
@@ -518,7 +518,7 @@ std::string ChromeShelfController::GetAppIDForWebContents(
 }
 
 ash::ShelfID ChromeShelfController::GetShelfIDForAppId(
-    const std::string& app_id) {
+    const std::string& app_id) const {
   // If there is no dedicated app item, use the browser shortcut item.
   const ash::ShelfItem* item =
       !app_id.empty() ? GetItem(ash::ShelfID(app_id)) : nullptr;
@@ -841,17 +841,23 @@ void ChromeShelfController::DoShowAppInfoFlow(Profile* profile,
 
   // Apps that are not in the App Service may call this function.
   // E.g. extensions, apps that are using their platform specific IDs.
-  if (app_type == apps::mojom::AppType::kUnknown) {
+  if (app_type == apps::AppType::kUnknown) {
     return;
   }
 
-  if (app_type == apps::mojom::AppType::kWeb ||
-      app_type == apps::mojom::AppType::kSystemWeb) {
+  if (app_type == apps::AppType::kWeb ||
+      app_type == apps::AppType::kSystemWeb) {
     chrome::ShowAppManagementPage(
         profile, app_id,
         ash::settings::AppManagementEntryPoint::kShelfContextMenuAppInfoWebApp);
   } else {
-    chrome::ShowAppManagementPage(profile, app_id,
+    // Normally app ids would only contain alphanumerics, but standalone
+    // browser extension app uses '#' as a delimiter.
+    std::string escaped_id =
+        app_type == apps::AppType::kStandaloneBrowserChromeApp
+            ? net::EscapeAllExceptUnreserved(app_id)
+            : app_id;
+    chrome::ShowAppManagementPage(profile, escaped_id,
                                   ash::settings::AppManagementEntryPoint::
                                       kShelfContextMenuAppInfoChromeApp);
   }
@@ -1025,7 +1031,7 @@ void ChromeShelfController::OnAppUninstalledPrepared(
                  &is_app_disabled](const apps::AppUpdate& update) {
           show_in_shelf_changed = update.ShowInShelfChanged();
           is_app_disabled =
-              update.Readiness() == apps::mojom::Readiness::kDisabledByPolicy;
+              update.Readiness() == apps::Readiness::kDisabledByPolicy;
         });
     // If the app is hidden and disabled, we need to update the app pin state.
     // We don't remove the pin position from the preferences, in case we want to
@@ -1497,14 +1503,10 @@ void ChromeShelfController::AttachProfile(Profile* profile_to_attach) {
       prefs::kPolicyPinnedLauncherApps,
       base::BindRepeating(&ChromeShelfController::UpdatePinnedAppsFromSync,
                           base::Unretained(this)));
-  // Handling of prefs::kArcEnabled change should be called deferred to avoid
-  // race condition when OnAppUninstalledPrepared for ARC apps is called after
-  // UpdatePinnedAppsFromSync.
   pref_change_registrar_.Add(
       arc::prefs::kArcEnabled,
-      base::BindRepeating(
-          &ChromeShelfController::ScheduleUpdatePinnedAppsFromSync,
-          base::Unretained(this)));
+      base::BindRepeating(&ChromeShelfController::UpdatePinnedAppsFromSync,
+                          base::Unretained(this)));
 
   app_list::AppListSyncableService* app_list_syncable_service =
       app_list::AppListSyncableServiceFactory::GetForProfile(profile());

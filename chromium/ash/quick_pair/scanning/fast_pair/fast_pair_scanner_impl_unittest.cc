@@ -206,11 +206,8 @@ class FastPairScannerImplTest : public testing::Test {
   std::unique_ptr<FastPairHandshake> CreateConnectedHandshake(
       scoped_refptr<Device> device,
       FastPairHandshakeLookup::OnCompleteCallback callback) {
-    std::unique_ptr<FakeFastPairHandshake> handshake =
-        std::make_unique<FakeFastPairHandshake>(adapter_, std::move(device),
-                                                std::move(callback));
-    handshake->SetConnected(true);
-    return handshake;
+    return std::make_unique<FakeFastPairHandshake>(adapter_, std::move(device),
+                                                   std::move(callback));
   }
 
   void SetUpFactoryScanner() {
@@ -350,10 +347,12 @@ TEST_F(FastPairScannerImplTest, IgnoresEventDuringActiveHandshake) {
       kTestBleDeviceAddress1));
   AddConnectedHandshake(kTestBleDeviceAddress1);
   TriggerOnDeviceLost(kTestBleDeviceAddress1);
-  EXPECT_TRUE(scanner_observer().DoesDeviceListContainTestDevice(
+  EXPECT_FALSE(scanner_observer().DoesDeviceListContainTestDevice(
       kTestBleDeviceAddress1));
   TriggerOnDeviceFound(kTestBleDeviceAddress1);
-  EXPECT_EQ(scanner_observer().on_device_found_count(), 1);
+  EXPECT_TRUE(scanner_observer().DoesDeviceListContainTestDevice(
+      kTestBleDeviceAddress1));
+  EXPECT_EQ(scanner_observer().on_device_found_count(), 2);
 }
 
 TEST_F(FastPairScannerImplTest, LowPowerMode) {
@@ -372,6 +371,24 @@ TEST_F(FastPairScannerImplTest, LowPowerMode) {
 
   TriggerOnDeviceFound(kTestBleDeviceAddress3);
   EXPECT_EQ(scanner_observer().on_device_found_count(), 2);
+}
+
+TEST_F(FastPairScannerImplTest, NoNotifyForPairedDevice) {
+  auto paired_device = base::MakeRefCounted<Device>(
+      "test_metadata_id", kTestBleDeviceAddress1, Protocol::kFastPairInitial);
+  paired_device->set_classic_address(kTestBleDeviceAddress1);
+
+  auto mock_device =
+      std::make_unique<testing::NiceMock<device::MockBluetoothDevice>>(
+          /*adapter=*/nullptr, /*bluetooth_class=*/0, kTestBleDeviceName,
+          kTestBleDeviceAddress1, /*paired=*/true, /*connected=*/true);
+  ON_CALL(*(adapter_.get()), GetDevice(kTestBleDeviceAddress1))
+      .WillByDefault(testing::Return(mock_device.get()));
+
+  scanner_->OnDevicePaired(paired_device);
+  TriggerOnDeviceFound(kTestBleDeviceAddress1);
+
+  EXPECT_EQ(scanner_observer().on_device_found_count(), 0);
 }
 
 }  // namespace quick_pair

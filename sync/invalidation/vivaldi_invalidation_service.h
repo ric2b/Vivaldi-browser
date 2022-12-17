@@ -38,6 +38,8 @@ class VivaldiInvalidationService
       invalidation::InvalidationHandler* handler) override;
   bool UpdateInterestedTopics(invalidation::InvalidationHandler* handler,
                               const invalidation::TopicSet& ids) override;
+  void UnsubscribeFromUnregisteredTopics(
+      invalidation::InvalidationHandler* handler) override;
   void UnregisterInvalidationHandler(
       invalidation::InvalidationHandler* handler) override;
   invalidation::InvalidatorState GetInvalidatorState() const override;

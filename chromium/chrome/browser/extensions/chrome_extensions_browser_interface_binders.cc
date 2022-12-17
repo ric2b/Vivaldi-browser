@@ -17,6 +17,8 @@
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/components/enhanced_network_tts/mojom/enhanced_network_tts.mojom.h"
+#include "ash/services/chromebox_for_meetings/public/cpp/appid_util.h"
+#include "ash/services/chromebox_for_meetings/public/mojom/cfm_service_manager.mojom.h"
 #include "ash/webui/camera_app_ui/camera_app_ui.h"
 #include "chrome/browser/ash/enhanced_network_tts/enhanced_network_tts_impl.h"
 #include "chrome/browser/ash/remote_apps/remote_apps_impl.h"
@@ -29,8 +31,6 @@
 #include "chromeos/components/remote_apps/mojom/remote_apps.mojom.h"
 #include "chromeos/language/language_packs/language_packs_impl.h"
 #include "chromeos/language/public/mojom/language_packs.mojom.h"
-#include "chromeos/services/chromebox_for_meetings/public/cpp/appid_util.h"
-#include "chromeos/services/chromebox_for_meetings/public/mojom/cfm_service_manager.mojom.h"
 #include "chromeos/services/media_perception/public/mojom/media_perception.mojom.h"
 #include "chromeos/services/tts/public/mojom/tts_service.mojom.h"
 #include "extensions/browser/api/extensions_api_client.h"
@@ -47,8 +47,8 @@
 #endif
 
 #if BUILDFLAG(PLATFORM_CFM)
+#include "ash/services/chromebox_for_meetings/public/cpp/service_connection.h"
 #include "chromeos/components/chromebox_for_meetings/features/features.h"
-#include "chromeos/services/chromebox_for_meetings/public/cpp/service_connection.h"
 #endif
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
@@ -61,15 +61,8 @@ namespace {
 // Resolves InputEngineManager receiver in InputMethodManager.
 void BindInputEngineManager(
     content::RenderFrameHost* render_frame_host,
-    mojo::PendingReceiver<chromeos::ime::mojom::InputEngineManager> receiver) {
+    mojo::PendingReceiver<ash::ime::mojom::InputEngineManager> receiver) {
   ash::input_method::InputMethodManager::Get()->ConnectInputEngineManager(
-      std::move(receiver));
-}
-
-void BindLanguagePacks(
-    content::RenderFrameHost* render_frame_host,
-    mojo::PendingReceiver<chromeos::language::mojom::LanguagePacks> receiver) {
-  chromeos::language_packs::LanguagePacksImpl::GetInstance().BindReceiver(
       std::move(receiver));
 }
 
@@ -82,6 +75,13 @@ void BindMachineLearningService(
       ->BindMachineLearningService(std::move(receiver));
 }
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
+
+void BindLanguagePacks(
+    content::RenderFrameHost* render_frame_host,
+    mojo::PendingReceiver<chromeos::language::mojom::LanguagePacks> receiver) {
+  chromeos::language_packs::LanguagePacksImpl::GetInstance().BindReceiver(
+      std::move(receiver));
+}
 
 void BindGoogleTtsStream(
     content::RenderFrameHost* render_frame_host,
@@ -129,7 +129,7 @@ void PopulateChromeFrameBindersForExtension(
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   // Registry InputEngineManager for official Google XKB Input only.
   if (extension->id() == ash::extension_ime_util::kXkbExtensionId) {
-    binder_map->Add<chromeos::ime::mojom::InputEngineManager>(
+    binder_map->Add<ash::ime::mojom::InputEngineManager>(
         base::BindRepeating(&BindInputEngineManager));
     binder_map->Add<chromeos::language::mojom::LanguagePacks>(
         base::BindRepeating(&BindLanguagePacks));
@@ -138,7 +138,7 @@ void PopulateChromeFrameBindersForExtension(
   }
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
-  if (chromeos::cfm::IsChromeboxForMeetingsAppId(extension->id())) {
+  if (ash::cfm::IsChromeboxForMeetingsAppId(extension->id())) {
     binder_map->Add<
         chromeos::cfm::mojom::CfmServiceContext>(base::BindRepeating(
         [](content::RenderFrameHost* frame_host,
@@ -147,7 +147,7 @@ void PopulateChromeFrameBindersForExtension(
 #if BUILDFLAG(PLATFORM_CFM)
           if (base::FeatureList::IsEnabled(
                   chromeos::cfm::features::kMojoServices)) {
-            chromeos::cfm::ServiceConnection::GetInstance()->BindServiceContext(
+            ash::cfm::ServiceConnection::GetInstance()->BindServiceContext(
                 std::move(receiver));
           } else {
             // The experimentation framework used to manage the
@@ -200,6 +200,8 @@ void PopulateChromeFrameBindersForExtension(
   if (extension->id() == extension_misc::kGoogleSpeechSynthesisExtensionId) {
     binder_map->Add<chromeos::tts::mojom::GoogleTtsStream>(
         base::BindRepeating(&BindGoogleTtsStream));
+    binder_map->Add<chromeos::language::mojom::LanguagePacks>(
+        base::BindRepeating(&BindLanguagePacks));
   }
 
   if (ash::RemoteAppsImpl::IsAllowed(render_frame_host, extension)) {

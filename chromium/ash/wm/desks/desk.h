@@ -90,8 +90,6 @@ class ASH_EXPORT Desk {
     last_day_visited_ = last_day_visited;
   }
 
-  int num_supported_windows() const { return num_supported_windows_; }
-
   bool interacted_with_this_week() const { return interacted_with_this_week_; }
   void set_interacted_with_this_week(bool interacted_with_this_week) {
     interacted_with_this_week_ = interacted_with_this_week;
@@ -132,9 +130,9 @@ class ASH_EXPORT Desk {
   void Deactivate(bool update_window_activation);
 
   // In preparation for removing this desk, moves all the windows on this desk
-  // to |target_desk| such that they become last in MRU order across all desks,
+  // to `target_desk` such that they become last in MRU order across all desks,
   // and they will be stacked at the bottom among the children of
-  // |target_desk|'s container.
+  // `target_desk`'s container.
   // Note that from a UX stand point, removing a desk is viewed as the user is
   // now done with this desk, and therefore its windows are demoted and
   // deprioritized.
@@ -177,6 +175,12 @@ class ASH_EXPORT Desk {
   // |is_active_| is true, then set |last_day_visited_| to the current day. This
   // accounts for cases where the user removes the active desk.
   void RecordAndResetConsecutiveDailyVisits(bool being_removed);
+
+  // Closes all app windows associated with this desk. If we are removing the
+  // active desk in overview, we do not want to close the non-app windows, but
+  // rather move them to the new active desk. So, we can close all of the app
+  // windows before moving the leftover windows.
+  void CloseAllAppWindows();
 
  private:
   friend class DesksTestApi;
@@ -245,12 +249,6 @@ class ASH_EXPORT Desk {
   // creation.
   int first_day_visited_ = -1;
   int last_day_visited_ = -1;
-
-  // The number of Desks Templates supported windows open on this desk with a
-  // valid Full Restore app id. A window is supported for the Desks Templates
-  // feature if its app type is supported. Used to disable the save desk as
-  // templates button if there are no supported windows open.
-  int num_supported_windows_ = 0;
 
   // Tracks whether |this| has been interacted with this week. This value is
   // reset by the DesksController.

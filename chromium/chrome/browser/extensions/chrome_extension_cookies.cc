@@ -5,21 +5,18 @@
 #include "chrome/browser/extensions/chrome_extension_cookies.h"
 
 #include "base/threading/sequenced_task_runner_handle.h"
-#include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/extensions/chrome_extension_cookies_factory.h"
-#include "chrome/browser/first_party_sets/first_party_sets_pref_names.h"
-#include "chrome/browser/first_party_sets/first_party_sets_util.h"
 #include "chrome/browser/net/profile_network_context_service.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_constants.h"
 #include "components/cookie_config/cookie_store_util.h"
-#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/cookie_store_factory.h"
+#include "content/public/browser/first_party_sets_handler.h"
 #include "extensions/common/constants.h"
 #include "net/cookies/cookie_partition_key_collection.h"
 #include "net/cookies/first_party_set_metadata.h"
@@ -31,7 +28,7 @@ namespace extensions {
 ChromeExtensionCookies::ChromeExtensionCookies(Profile* profile)
     : profile_(profile),
       first_party_sets_enabled_(
-          FirstPartySetsUtil::GetInstance()->IsFirstPartySetsEnabled()) {
+          content::FirstPartySetsHandler::GetInstance()->IsEnabled()) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   cookie_settings_ = CookieSettingsFactory::GetForProfile(profile);
   cookie_settings_observation_.Observe(cookie_settings_.get());

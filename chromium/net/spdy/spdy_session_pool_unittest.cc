@@ -9,7 +9,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/cxx17_backports.h"
+#include "base/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
@@ -38,7 +38,7 @@
 #include "net/test/test_certificate_data.h"
 #include "net/test/test_data_directory.h"
 #include "net/test/test_with_task_environment.h"
-#include "net/third_party/quiche/src/spdy/core/spdy_protocol.h"
+#include "net/third_party/quiche/src/quiche/spdy/core/spdy_protocol.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -536,7 +536,7 @@ void SpdySessionPoolTest::RunIPPoolingTest(
        "192.168.0.4,192.168.0.3"},
   };
 
-  for (size_t i = 0; i < base::size(test_hosts); i++) {
+  for (size_t i = 0; i < std::size(test_hosts); i++) {
     session_deps_.host_resolver->rules()->AddIPLiteralRule(
         test_hosts[i].name, test_hosts[i].iplist, std::string());
 
@@ -719,7 +719,7 @@ void SpdySessionPoolTest::RunIPPoolingDisabledTest(SSLSocketDataProvider* ssl) {
   };
 
   session_deps_.host_resolver->set_synchronous_mode(true);
-  for (size_t i = 0; i < base::size(test_hosts); i++) {
+  for (size_t i = 0; i < std::size(test_hosts); i++) {
     session_deps_.host_resolver->rules()->AddIPLiteralRule(
         test_hosts[i].name, test_hosts[i].iplist, std::string());
 
@@ -776,7 +776,7 @@ TEST_F(SpdySessionPoolTest, IPPoolingNetLog) {
 
   // Populate the HostResolver cache.
   session_deps_.host_resolver->set_synchronous_mode(true);
-  for (size_t i = 0; i < base::size(test_hosts); i++) {
+  for (size_t i = 0; i < std::size(test_hosts); i++) {
     session_deps_.host_resolver->rules()->AddIPLiteralRule(
         test_hosts[i].name, test_hosts[i].iplist, std::string());
 
@@ -843,7 +843,7 @@ TEST_F(SpdySessionPoolTest, IPPoolingDisabled) {
 
   // Populate the HostResolver cache.
   session_deps_.host_resolver->set_synchronous_mode(true);
-  for (size_t i = 0; i < base::size(test_hosts); i++) {
+  for (size_t i = 0; i < std::size(test_hosts); i++) {
     session_deps_.host_resolver->rules()->AddIPLiteralRule(
         test_hosts[i].name, test_hosts[i].iplist, std::string());
 
@@ -1264,7 +1264,7 @@ TEST_F(SpdySessionPoolTest, IPConnectionPoolingWithWebSockets) {
 
   // Populate the HostResolver cache.
   session_deps_.host_resolver->set_synchronous_mode(true);
-  for (size_t i = 0; i < base::size(test_hosts); i++) {
+  for (size_t i = 0; i < std::size(test_hosts); i++) {
     session_deps_.host_resolver->rules()->AddIPLiteralRule(
         test_hosts[i].name, test_hosts[i].iplist, std::string());
 
@@ -1606,7 +1606,7 @@ TEST_F(SpdySessionPoolTest, SSLConfigForServerChanged) {
   };
 
   std::vector<std::unique_ptr<StaticSocketDataProvider>> socket_data;
-  size_t num_tests = base::size(kSSLServerTests);
+  size_t num_tests = std::size(kSSLServerTests);
   for (size_t i = 0; i < num_tests; i++) {
     socket_data.push_back(std::make_unique<StaticSocketDataProvider>(
         reads, base::span<MockWrite>()));

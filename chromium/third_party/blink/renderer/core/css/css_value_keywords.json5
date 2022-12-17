@@ -195,6 +195,7 @@
     "activetext",
     "appworkspace",
     "background",
+    "buttonborder",
     "buttonface",
     "buttonhighlight",
     "buttonshadow",
@@ -213,6 +214,8 @@
     "infobackground",
     "infotext",
     "linktext",
+    "mark",
+    "marktext",
     "menutext",
     "scrollbar",
     "threeddarkshadow",
@@ -1253,6 +1256,8 @@
     "rgba",
     "hsl",
     "hsla",
+    "hwb",
+    "hwba",
     "-internal-light-dark",
 
     // transform

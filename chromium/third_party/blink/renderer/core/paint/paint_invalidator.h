@@ -6,6 +6,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_PAINT_PAINT_INVALIDATOR_H_
 
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/layout/layout_shift_tracker.h"
 #include "third_party/blink/renderer/core/paint/paint_property_tree_builder.h"
@@ -24,7 +25,9 @@ struct CORE_EXPORT PaintInvalidatorContext {
   explicit PaintInvalidatorContext(const PaintInvalidatorContext& parent)
       : parent_context(&parent),
         subtree_flags(parent.subtree_flags),
-        painting_layer(parent.painting_layer) {}
+        painting_layer(parent.painting_layer),
+        inside_opaque_layout_shift_root(
+            parent.inside_opaque_layout_shift_root) {}
 
   bool NeedsSubtreeWalk() const {
     return subtree_flags &
@@ -65,6 +68,10 @@ struct CORE_EXPORT PaintInvalidatorContext {
   PhysicalOffset old_paint_offset;
 
   const FragmentData* fragment_data = nullptr;
+
+  // Set when we have entered something that shouldn't track layout shift
+  // inside (multicol container).
+  bool inside_opaque_layout_shift_root = false;
 
  private:
   friend class PaintInvalidator;

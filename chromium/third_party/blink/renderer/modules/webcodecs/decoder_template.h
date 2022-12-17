@@ -17,13 +17,13 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_webcodecs_error_callback.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
-#include "third_party/blink/renderer/modules/webcodecs/codec_config_eval.h"
 #include "third_party/blink/renderer/modules/webcodecs/codec_logger.h"
 #include "third_party/blink/renderer/modules/webcodecs/codec_trace_names.h"
 #include "third_party/blink/renderer/modules/webcodecs/hardware_preference.h"
 #include "third_party/blink/renderer/modules/webcodecs/reclaimable_codec.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_deque.h"
+#include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_map.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/heap/member.h"
 
@@ -76,10 +76,14 @@ class MODULES_EXPORT DecoderTemplate
   void Trace(Visitor*) const override;
 
  protected:
-  // Convert a configuration to a DecoderConfig.
-  virtual CodecConfigEval MakeMediaConfig(const ConfigType& config,
-                                          MediaConfigType* out_media_config,
-                                          String* out_console_message) = 0;
+  virtual bool IsValidConfig(const ConfigType& config,
+                             String* js_error_message) = 0;
+
+  // Convert a configuration to a DecoderConfig. Returns absl::nullopt if the
+  // configuration is not supported.
+  virtual absl::optional<MediaConfigType> MakeMediaConfig(
+      const ConfigType& config,
+      String* js_error_message) = 0;
 
   // Gets the AccelerationPreference from a config.
   // If derived classes do not override this, this will default to kAllow.

@@ -188,7 +188,8 @@ class OverviewItemMoveHelper : public aura::WindowObserver {
       // will soon handle them both anyway.
       OverviewSession* session = overview_controller->overview_session();
       session->AddItemInMruOrder(window, /*reposition=*/false,
-                                 /*animate=*/false, /*restack=*/false);
+                                 /*animate=*/false, /*restack=*/false,
+                                 /*use_spawn_animation=*/false);
       OverviewItem* item = session->GetOverviewItemForWindow(window);
       DCHECK(item);
       item->SetBounds(target_item_bounds_, OVERVIEW_ANIMATION_NONE);
@@ -320,7 +321,7 @@ void OverviewWindowDragController::StartNormalDragMode(
             /*is_dragging=*/true,
             SplitViewDragIndicators::WindowDraggingState::kFromOverview,
             SplitViewController::NONE));
-    item_->HideCannotSnapWarning();
+    item_->HideCannotSnapWarning(/*animate=*/true);
 
     // Update the split view divider bar status if necessary. If splitview is
     // active when dragging the overview window, the split divider bar should be
@@ -358,8 +359,8 @@ void OverviewWindowDragController::StartNormalDragMode(
           DesksBarView::GetExpandedBarHeight(grid->root_window());
       grid_desks_bar_data.desks_bar_bounds.set_height(expanded_height);
       grid_desks_bar_data.shrink_bounds.set_height(expanded_height);
-      grid_desks_bar_data.shrink_bounds.Inset(
-          -item_no_header_size.width() / 2, -item_no_header_size.height() / 2);
+      grid_desks_bar_data.shrink_bounds.Inset(gfx::InsetsF::VH(
+          -item_no_header_size.height() / 2, -item_no_header_size.width() / 2));
       grid_desks_bar_data.shrink_region_distance =
           grid_desks_bar_data.desks_bar_bounds.origin() -
           grid_desks_bar_data.shrink_bounds.origin();
@@ -428,7 +429,7 @@ void OverviewWindowDragController::ResetGesture() {
       SplitViewController::Get(Shell::GetPrimaryRootWindow())
           ->OnWindowDragCanceled();
       overview_session_->ResetSplitViewDragIndicatorsWindowDraggingStates();
-      item_->UpdateCannotSnapWarningVisibility();
+      item_->UpdateCannotSnapWarningVisibility(/*animate=*/true);
     }
   }
   overview_session_->PositionWindows(/*animate=*/true);
@@ -635,19 +636,21 @@ OverviewWindowDragController::CompleteNormalDrag(
   const gfx::Point rounded_screen_point =
       gfx::ToRoundedPoint(location_in_screen);
   if (should_allow_split_view_) {
-    // Update the split view divider bar stuatus if necessary. The divider bar
+    // Update the split view divider bar status if necessary. The divider bar
     // should be placed above the dragged window after drag ends. Note here the
     // passed parameters |snap_position_| and |location_in_screen| won't be used
     // in this function for this case, but they are passed in as placeholders.
+    aura::Window* window = item_->GetWindow();
+    WindowState::Get(window)->set_snap_action_source(
+        WindowSnapActionSource::kDragOrSelectOverviewWindowToSnap);
     SplitViewController::Get(Shell::GetPrimaryRootWindow())
-        ->OnWindowDragEnded(item_->GetWindow(), snap_position_,
-                            rounded_screen_point);
+        ->OnWindowDragEnded(window, snap_position_, rounded_screen_point);
 
     // Update window grid bounds and |snap_position_| in case the screen
     // orientation was changed.
     UpdateDragIndicatorsAndOverviewGrid(location_in_screen);
     overview_session_->ResetSplitViewDragIndicatorsWindowDraggingStates();
-    item_->UpdateCannotSnapWarningVisibility();
+    item_->UpdateCannotSnapWarningVisibility(/*animate=*/true);
   }
 
   // This function has multiple exit positions, at each we must update the desks
@@ -812,6 +815,9 @@ void OverviewWindowDragController::SnapWindow(
   DCHECK(!SplitViewController::Get(Shell::GetPrimaryRootWindow())
               ->IsDividerAnimating());
   aura::Window* window = item_->GetWindow();
+  WindowState::Get(window)->set_snap_action_source(
+      WindowSnapActionSource::kDragOrSelectOverviewWindowToSnap);
+
   split_view_controller->SnapWindow(window, snap_position,
                                     /*activate_window=*/true);
   item_ = nullptr;

@@ -28,6 +28,11 @@ namespace blink {
 
 // Non-incognito implementation of the FileSystemAccessFileDelegate. This class
 // is a thin wrapper around an OS-level file descriptor.
+//
+// For async file operations, ownership of the file descriptor is passed to
+// `task_runner_` to ensure it stays alive while being used. Ownership is passed
+// back to the delegate once the operation completes. The delegate must not be
+// used while there is an in-progress operation.
 class FileSystemAccessRegularFileDelegate final
     : public FileSystemAccessFileDelegate {
  public:
@@ -63,7 +68,7 @@ class FileSystemAccessRegularFileDelegate final
   void GetLength(
       base::OnceCallback<void(base::FileErrorOr<int64_t>)> callback) override;
   void SetLength(int64_t new_length,
-                 base::OnceCallback<void(bool)> callback) override;
+                 base::OnceCallback<void(base::File::Error)> callback) override;
 
   void Flush(base::OnceCallback<void(bool)> callback) override;
   void Close(base::OnceClosure callback) override;
@@ -71,43 +76,66 @@ class FileSystemAccessRegularFileDelegate final
   bool IsValid() const override { return backing_file_.IsValid(); }
 
  private:
+  // All async file operations perform I/O via a worker pool, off the main
+  // thread. To keep `backing_file_` from being garbage-collected, ownership is
+  // passed to the worker thread during the file operation. Concurrent file
+  // operations is NOT supported.
+
+  // Performs the file I/O part of getSize(), off the main thread.
   static void DoGetLength(
       CrossThreadPersistent<FileSystemAccessRegularFileDelegate> delegate,
-      CrossThreadOnceFunction<void(base::FileErrorOr<int64_t>)>
-          wrapped_callback,
+      CrossThreadOnceFunction<void(base::FileErrorOr<int64_t>)> callback,
+      base::File file,
       scoped_refptr<base::SequencedTaskRunner> file_task_runner);
+  // Performs the post file I/O part of getSize(), on the main thread.
+  void DidGetLength(
+      CrossThreadOnceFunction<void(base::FileErrorOr<int64_t>)> callback,
+      base::File file,
+      base::FileErrorOr<int64_t> error_or_length);
+
+  // Performs the file I/O part of truncate(), off the main thread.
   static void DoSetLength(
       CrossThreadPersistent<FileSystemAccessRegularFileDelegate> delegate,
-      CrossThreadOnceFunction<void(bool)> wrapped_callback,
+      CrossThreadOnceFunction<void(base::File::Error)> callback,
+      base::File file,
       scoped_refptr<base::SequencedTaskRunner> task_runner,
       int64_t length);
+  // Performs the post file I/O part of truncate(), on the main thread.
+  void DidSetLength(CrossThreadOnceFunction<void(base::File::Error)> callback,
+                    int64_t new_length,
+                    base::File file,
+                    base::File::Error error);
+
+  // Performs the file I/O part of flush(), off the main thread.
   static void DoFlush(
       CrossThreadPersistent<FileSystemAccessRegularFileDelegate> delegate,
-      CrossThreadOnceFunction<void(bool)> wrapped_callback,
+      CrossThreadOnceFunction<void(bool)> callback,
+      base::File file,
       scoped_refptr<base::SequencedTaskRunner> task_runner);
+  // Performs the post file I/O part of flush(), on the main thread.
+  void DidFlush(CrossThreadOnceFunction<void(bool)> callback,
+                base::File file,
+                bool success);
+
+  // Performs the file I/O part of close(), off the main thread.
   static void DoClose(
       CrossThreadPersistent<FileSystemAccessRegularFileDelegate> delegate,
-      CrossThreadOnceClosure wrapped_callback,
+      CrossThreadOnceClosure callback,
+      base::File file,
       scoped_refptr<base::SequencedTaskRunner> task_runner);
+  // Performs the post file I/O part of close(), on the main thread.
+  void DidClose(CrossThreadOnceClosure callback, base::File file);
 
   // Called after preconditions for SetLength, including the requesting
   // additional capacity (if needed), have been performed.
   // If `request_capacity_result` is false, requesting capacity for the
   // operation failed.
-  void DidCheckSetLengthCapacity(base::OnceCallback<void(bool)> callback,
-                                 int64_t new_length,
-                                 bool request_capacity_result);
-
-  // Called after SetLength was successfully performed.
-  void DidSuccessfulSetLength(int64_t new_length,
-                              CrossThreadOnceFunction<void(bool)> callback);
+  void DidCheckSetLengthCapacity(
+      base::OnceCallback<void(base::File::Error)> callback,
+      int64_t new_length,
+      bool request_capacity_result);
 
 #if BUILDFLAG(IS_MAC)
-  void DidSetLengthIPC(base::OnceCallback<void(bool)> callback,
-                       int64_t new_length,
-                       base::File file,
-                       bool result);
-
   // We need the FileUtilitiesHost only on Mac, where we have to execute
   // base::File::SetLength on the browser process, see crbug.com/1084565.
   // We need the context_ to create the instance of FileUtilitiesHost lazily.

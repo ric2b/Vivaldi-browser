@@ -459,44 +459,17 @@ void HistoryPrivateVisitSearchFunction::VisitsComplete(
   Respond(ArgumentList(VisitSearch::Results::Create(history_item_vec)));
 }
 
-ExtensionFunction::ResponseAction
-HistoryPrivateSetKeywordSearchTermsForURLFunction::Run() {
-  std::unique_ptr<vivaldi::history_private::SetKeywordSearchTermsForURL::Params>
-      params(
-          vivaldi::history_private::SetKeywordSearchTermsForURL::Params::Create(
-              args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
-
-  GetFunctionCallerHistoryService(*this)->SetKeywordSearchTermsForURL(
-      GURL(params->url), params->keyword_id,
-      base::UTF8ToUTF16(params->search_terms));
-
-  return RespondNow(NoArguments());
-}
-
-ExtensionFunction::ResponseAction
-HistoryPrivateDeleteAllSearchTermsForKeywordFunction::Run() {
-  std::unique_ptr<
-      vivaldi::history_private::DeleteAllSearchTermsForKeyword::Params>
-      params(vivaldi::history_private::DeleteAllSearchTermsForKeyword::Params::
-                 Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
-
-  GetFunctionCallerHistoryService(*this)->DeleteAllSearchTermsForKeyword(
-      params->keyword_id);
-
-  return RespondNow(NoArguments());
-}
-
 ExtensionFunction::ResponseAction HistoryPrivateGetTypedHistoryFunction::Run() {
   std::unique_ptr<vivaldi::history_private::GetTypedHistory::Params> params(
       vivaldi::history_private::GetTypedHistory::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   history::URLDatabase::TypedUrlResults results;
+  history::KeywordID prefix_keyword_id;
+  base::StringToInt64(params->prefix_keyword_id, &prefix_keyword_id);
   GetFunctionCallerHistoryService(*this)
       ->InMemoryDatabase()
-      ->GetVivaldiTypedHistory(params->query, params->prefix_keyword_id,
+      ->GetVivaldiTypedHistory(params->query, prefix_keyword_id,
                                params->max_results, &results);
 
   std::vector<vivaldi::history_private::TypedHistoryItem> response;
@@ -504,7 +477,7 @@ ExtensionFunction::ResponseAction HistoryPrivateGetTypedHistoryFunction::Run() {
     vivaldi::history_private::TypedHistoryItem item;
     item.url.assign(result.url.spec());
     item.title.assign(result.title);
-    item.keyword_id = result.keyword_id;
+    item.keyword_id = base::NumberToString(result.keyword_id);
     item.terms.assign(result.terms);
     response.push_back(std::move(item));
   }

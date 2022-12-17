@@ -63,6 +63,7 @@ CHROMIUM_VIVALDI_RESOURCE_LIST = [
     {
       have_strings_flag = false
       pak_file_prefix="platform_locale_settings_"
+      add_mobile_locales = true
     },
   ],
   [
@@ -178,6 +179,20 @@ ANDROID_VIVALDI_RESOURCE_LIST = [
       vivaldi_translation_dir_setting = "strings"
       string_file_prefix="permissions_android_strings_"
       java_grd_name = true
+    },
+  ],
+  [
+    "//chrome/android/features/tab_ui:java_strings_grd__grit",
+    "//vivaldi/app/resources/android-tab-ui/vivaldi_android_chrome_tab_ui_strings.grd",
+    {
+      have_strings_flag = true
+      translation_dir_setting = "java/strings/translations"
+      pak_file_locale_prefix="values-"
+      pak_file_prefix="android_chrome_tab_ui_strings"
+      pak_file_extension = "xml"
+      source = "java/strings/android_chrome_tab_ui_strings.grd"
+      vivaldi_translation_dir_setting = "strings"
+      string_file_prefix="android_chrome_tab_ui_strings_"
     },
   ],
 ]

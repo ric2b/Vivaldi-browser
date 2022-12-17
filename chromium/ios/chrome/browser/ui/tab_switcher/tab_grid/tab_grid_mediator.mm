@@ -433,8 +433,13 @@ Browser* GetBrowserForTabWithId(BrowserList* browser_list,
   // possible that this method (-selectItemWithID:) is being called as part of
   // a WebStateListObserver callback, in which case even a no-op activation
   // will cause a CHECK().
-  if (index == itemWebStateList->active_index())
+  if (index == itemWebStateList->active_index()) {
+    // In search mode the consumer doesn't have any information about the
+    // selected item. So even if the active webstate is the same as the one that
+    // is being selected, make sure that the consumer update its selected item.
+    [self.consumer selectItemWithID:itemID];
     return;
+  }
 
   // Avoid a reentrant activation. This is a fix for crbug.com/1134663, although
   // ignoring the slection at this point may do weird things.
@@ -617,12 +622,33 @@ Browser* GetBrowserForTabWithId(BrowserList* browser_list,
       TabsSearchServiceFactory::GetForBrowserState(self.browserState);
   const std::u16string& searchTerm = base::SysNSStringToUTF16(searchText);
   searchService->Search(
-      searchTerm, base::BindOnce(^(std::vector<web::WebState*> results) {
-        NSMutableArray* items = [[NSMutableArray alloc] init];
-        for (web::WebState* webState : results) {
-          [items addObject:CreateItem(webState)];
+      searchTerm,
+      base::BindOnce(^(
+          std::vector<TabsSearchService::TabsSearchBrowserResults> results) {
+        NSMutableArray* currentBrowserItems = [[NSMutableArray alloc] init];
+        NSMutableArray* remainingItems = [[NSMutableArray alloc] init];
+        for (const TabsSearchService::TabsSearchBrowserResults& browserResults :
+             results) {
+          for (web::WebState* webState : browserResults.web_states) {
+            TabSwitcherItem* item = CreateItem(webState);
+            if (browserResults.browser == self.browser) {
+              [currentBrowserItems addObject:item];
+            } else {
+              [remainingItems addObject:item];
+            }
+          }
         }
-        [self.consumer populateItems:items selectedItemID:nil];
+
+        NSArray* allItems = nil;
+        // If there are results from Browsers other than the current one,
+        // append those results to the end.
+        if (remainingItems.count) {
+          allItems = [currentBrowserItems
+              arrayByAddingObjectsFromArray:remainingItems];
+        } else {
+          allItems = currentBrowserItems;
+        }
+        [self.consumer populateItems:allItems selectedItemID:nil];
       }));
 }
 

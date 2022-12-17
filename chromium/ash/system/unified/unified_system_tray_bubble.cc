@@ -47,7 +47,6 @@ UnifiedSystemTrayBubble::UnifiedSystemTrayBubble(UnifiedSystemTray* tray)
   init_params.anchor_mode = TrayBubbleView::AnchorMode::kRect;
   init_params.anchor_rect = tray->shelf()->GetSystemTrayAnchorRect();
   init_params.insets = GetTrayBubbleInsets();
-  init_params.corner_radius = kBubbleCornerRadius;
   init_params.has_shadow = false;
   init_params.close_on_deactivate = false;
   init_params.reroute_event_handler = true;
@@ -68,8 +67,9 @@ UnifiedSystemTrayBubble::UnifiedSystemTrayBubble(UnifiedSystemTray* tray)
   bubble_widget_->AddObserver(this);
 
   // Add a system shadow.
-  shadow_ = std::make_unique<SystemShadow>(SystemShadow::Type::kElevation12);
-  shadow_->SetRoundedCornerRadius(kBubbleCornerRadius);
+  shadow_ = SystemShadow::CreateShadowForWidget(
+      bubble_widget_, SystemShadow::Type::kElevation12);
+  shadow_->SetRoundedCornerRadius(init_params.corner_radius);
 
   gfx::Rect shadow_bounds = gfx::Rect(GetBoundsInScreen().size());
   // Shift the shadow origin by the insets.
@@ -77,24 +77,15 @@ UnifiedSystemTrayBubble::UnifiedSystemTrayBubble(UnifiedSystemTray* tray)
   shadow_bounds.Offset(gfx::Vector2d(insets.left(), insets.top()));
   shadow_->SetContentBounds(shadow_bounds);
 
-  // Add shadow layer at the bottom of window layer.
-  auto* window = bubble_widget_->GetNativeView();
-  window->layer()->Add(shadow_->layer());
-  window->layer()->StackAtBottom(shadow_->layer());
-
   TrayBackgroundView::InitializeBubbleAnimations(bubble_widget_);
   bubble_view_->InitializeAndShowBubble();
 
   // Notify accessibility features that the status tray has opened.
   NotifyAccessibilityEvent(ax::mojom::Event::kShow, true);
 
+  // Explicitly close the app list in clamshell mode.
   if (!Shell::Get()->tablet_mode_controller()->InTabletMode())
     Shell::Get()->app_list_controller()->DismissAppList();
-
-  tray->tray_event_filter()->AddBubble(this);
-  tray->shelf()->AddObserver(this);
-  Shell::Get()->tablet_mode_controller()->AddObserver(this);
-  Shell::Get()->activation_client()->AddObserver(this);
 }
 
 UnifiedSystemTrayBubble::~UnifiedSystemTrayBubble() {
@@ -116,6 +107,13 @@ UnifiedSystemTrayBubble::~UnifiedSystemTrayBubble() {
   }
 
   CHECK(!IsInObserverList());
+}
+
+void UnifiedSystemTrayBubble::InitializeObservers() {
+  tray_->tray_event_filter()->AddBubble(this);
+  tray_->shelf()->AddObserver(this);
+  Shell::Get()->tablet_mode_controller()->AddObserver(this);
+  Shell::Get()->activation_client()->AddObserver(this);
 }
 
 gfx::Rect UnifiedSystemTrayBubble::GetBoundsInScreen() const {
@@ -350,6 +348,10 @@ void UnifiedSystemTrayBubble::NotifyAccessibilityEvent(ax::mojom::Event event,
 
 bool UnifiedSystemTrayBubble::ShowingAudioDetailedView() const {
   return bubble_widget_ && controller_->showing_audio_detailed_view();
+}
+
+bool UnifiedSystemTrayBubble::ShowingCalendarView() const {
+  return bubble_widget_ && controller_->showing_calendar_view();
 }
 
 }  // namespace ash

@@ -21,7 +21,7 @@ bool UtilitiesGetSystemDateFormatFunction::ReadDateFormats(
   //   dd373896(v=vs.85).aspx
   wchar_t result_buffer[80];
   int len = GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_STIMEFORMAT,
-                            result_buffer, base::size(result_buffer));
+                            result_buffer, std::size(result_buffer));
 
   if (len == 0) {
     return false;
@@ -29,7 +29,7 @@ bool UtilitiesGetSystemDateFormatFunction::ReadDateFormats(
 
   std::string timeformat = base::WideToUTF8(result_buffer);
   len = GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SSHORTDATE,
-                        result_buffer, base::size(result_buffer));
+                        result_buffer, std::size(result_buffer));
 
   if (len == 0) {
     return false;
@@ -37,7 +37,7 @@ bool UtilitiesGetSystemDateFormatFunction::ReadDateFormats(
 
   std::string shortformat = base::WideToUTF8(result_buffer);
   len = GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SLONGDATE,
-                        result_buffer, base::size(result_buffer));
+                        result_buffer, std::size(result_buffer));
 
   if (len == 0) {
     return false;
@@ -45,7 +45,7 @@ bool UtilitiesGetSystemDateFormatFunction::ReadDateFormats(
 
   std::string longdateformat = base::WideToUTF8(result_buffer);
   len = GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_IFIRSTDAYOFWEEK,
-                        result_buffer, base::size(result_buffer));
+                        result_buffer, std::size(result_buffer));
 
   if (len == 0) {
     return false;

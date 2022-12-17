@@ -4,27 +4,61 @@
 
 #include "chrome/browser/signin/signin_manager.h"
 
-#include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
+#include "base/bind.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/base/signin_pref_names.h"
 #include "components/signin/public/identity_manager/accounts_in_cookie_jar_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/primary_account_mutator.h"
 
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "chrome/browser/lacros/account_manager/web_signin_helper_lacros.h"
+#include "components/signin/public/base/signin_client.h"
+#include "google_apis/gaia/core_account_id.h"
+#endif
+
 SigninManager::SigninManager(PrefService* prefs,
-                             signin::IdentityManager* identity_manager)
+                             signin::IdentityManager* identity_manager,
+                             SigninClient* client)
     : prefs_(prefs), identity_manager_(identity_manager) {
   signin_allowed_.Init(
       prefs::kSigninAllowed, prefs_,
       base::BindRepeating(&SigninManager::OnSigninAllowedPrefChanged,
                           base::Unretained(this)));
 
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  is_main_profile_ = client->GetInitialPrimaryAccount().has_value();
+#endif
+
   UpdateUnconsentedPrimaryAccount();
   identity_manager_observation_.Observe(identity_manager_);
 }
 
 SigninManager::~SigninManager() = default;
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+void SigninManager::StartWebSigninFlow(
+    const base::FilePath& profile_path,
+    AccountProfileMapper* account_profile_mapper,
+    signin::ConsistencyCookieManager* consistency_cookie_manager,
+    base::OnceCallback<void(const CoreAccountId&)> on_completion_callback) {
+  if (web_signin_helper_lacros_) {
+    // There is already a signin flow in progress.
+    // TODO(https://crbug.com/1260291): Activate the profile picker if it's
+    // already open.
+    std::move(on_completion_callback).Run(CoreAccountId());
+    return;
+  }
+
+  web_signin_helper_lacros_ = std::make_unique<WebSigninHelperLacros>(
+      profile_path, account_profile_mapper, identity_manager_,
+      consistency_cookie_manager,
+      // Using `base::Unretained()` is fine because this owns the helper.
+      base::BindOnce(&SigninManager::OnWebSigninHelperLacrosComplete,
+                     base::Unretained(this),
+                     std::move(on_completion_callback)));
+}
+#endif
 
 void SigninManager::UpdateUnconsentedPrimaryAccount() {
   // Only update the unconsented primary account only after accounts are loaded.
@@ -44,7 +78,9 @@ void SigninManager::UpdateUnconsentedPrimaryAccount() {
     }
   } else if (identity_manager_->HasPrimaryAccount(
                  signin::ConsentLevel::kSignin)) {
+#if !BUILDFLAG(IS_CHROMEOS_LACROS)
     DCHECK(!identity_manager_->HasPrimaryAccount(signin::ConsentLevel::kSync));
+#endif
     identity_manager_->GetPrimaryAccountMutator()->ClearPrimaryAccount(
         signin_metrics::USER_DELETED_ACCOUNT_COOKIES,
         signin_metrics::SignoutDelete::kIgnoreMetric);
@@ -55,21 +91,36 @@ CoreAccountInfo SigninManager::ComputeUnconsentedPrimaryAccountInfo() const {
   DCHECK(identity_manager_->AreRefreshTokensLoaded());
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-  // On Lacros, the first time an account is added to the profile, it is set as
-  // primary account. The `SigninManager` never removes the primary account.
-  // TODO(https://crbug.com/1260291): Revisit this once signout flows are
-  // defined.
-  if (identity_manager_->HasPrimaryAccount(signin::ConsentLevel::kSignin)) {
+  bool has_primary_account_with_refresh_token =
+      identity_manager_->HasPrimaryAccountWithRefreshToken(
+          signin::ConsentLevel::kSignin);
+
+  if (is_main_profile_) {
+    if (!has_primary_account_with_refresh_token) {
+      DLOG(ERROR)
+          << "The device account should not be removed from the main profile.";
+    }
     return identity_manager_->GetPrimaryAccountInfo(
         signin::ConsentLevel::kSignin);
   }
 
+  // Secondary profile.
+  // Unless the user signs out, removes the account, the UPA will stay the same.
+  if (has_primary_account_with_refresh_token) {
+    return identity_manager_->GetPrimaryAccountInfo(
+        signin::ConsentLevel::kSignin);
+  }
+
+  // No primary account or the user has turned sync off or signed out.
+  if (identity_manager_->HasPrimaryAccount(signin::ConsentLevel::kSignin)) {
+    // Clear primary account.
+    return CoreAccountInfo();
+  }
+
+  // Local profile.
   std::vector<CoreAccountInfo> accounts =
       identity_manager_->GetAccountsWithRefreshTokens();
-  if (!accounts.empty())
-    return accounts[0];
-
-  return CoreAccountInfo();
+  return accounts.empty() ? CoreAccountInfo() : accounts[0];
 #else
   // UPA is equal to the primary account with sync consent if it exists.
   if (identity_manager_->HasPrimaryAccount(signin::ConsentLevel::kSync)) {
@@ -173,13 +224,7 @@ void SigninManager::OnPrimaryAccountChanged(
                                 weak_ptr_factory_.GetWeakPtr()));
 }
 
-void SigninManager::OnRefreshTokenUpdatedForAccount(
-    const CoreAccountInfo& account_info) {
-  UpdateUnconsentedPrimaryAccount();
-}
-
-void SigninManager::OnRefreshTokenRemovedForAccount(
-    const CoreAccountId& account_id) {
+void SigninManager::OnEndBatchOfRefreshTokenStateChanges() {
   UpdateUnconsentedPrimaryAccount();
 }
 
@@ -218,3 +263,12 @@ void SigninManager::OnErrorStateOfRefreshTokenUpdatedForAccount(
 void SigninManager::OnSigninAllowedPrefChanged() {
   UpdateUnconsentedPrimaryAccount();
 }
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+void SigninManager::OnWebSigninHelperLacrosComplete(
+    base::OnceCallback<void(const CoreAccountId&)> on_completion_callback,
+    const CoreAccountId& account_id) {
+  std::move(on_completion_callback).Run(account_id);
+  web_signin_helper_lacros_.reset();
+}
+#endif

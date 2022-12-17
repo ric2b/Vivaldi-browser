@@ -62,8 +62,6 @@ if (ozone_platform_x11) {
   ozone_platforms += [ "x11" ]
   ozone_platform_deps += [ "platform/x11" ]
   ozone_platform_ui_test_support_deps += [ "platform/x11:test_support" ]
-  ozone_platform_interactive_ui_tests_sources +=
-      [ "platform/x11:interactive_uitests" ]
 }
 
 if (ozone_platform_scenic) {
@@ -89,6 +87,7 @@ component("ozone_base") {
     "public/gl_ozone.h",
     "public/gpu_platform_support_host.cc",
     "public/gpu_platform_support_host.h",
+    "public/hardware_capabilities.h",
     "public/input_controller.cc",
     "public/input_controller.h",
     "public/overlay_candidates_ozone.cc",
@@ -183,7 +182,6 @@ source_set("platform") {
     "platform_selection.cc",
     "platform_selection.h",
     "public/client_native_pixmap_factory_ozone.cc",
-    "public/ozone_gpu_test_helper.cc",
     "public/ozone_platform.cc",
     constructor_list_cc_file,
     platform_list_cc_file,
@@ -193,7 +191,6 @@ source_set("platform") {
   public = [
     "platform_object.h",
     "public/client_native_pixmap_factory_ozone.h",
-    "public/ozone_gpu_test_helper.h",
     "public/ozone_platform.h",
   ]
 
@@ -241,7 +238,10 @@ source_set("ozone_switches") {
 
   deps = [ "//base" ]
 
-  visibility += [ "//chrome/test:browser_tests_runner" ]
+  visibility += [
+    "//chrome/test:browser_tests_runner",
+    "//content/public/browser:browser_sources",
+  ]
 }
 
 component("ozone") {
@@ -306,7 +306,7 @@ static_library("ui_test_support") {
 
 source_set("ozone_interactive_ui_tests") {
   visibility = []
-  visibility = [ "//chrome/test:interactive_ui_tests" ]
+  visibility = [ "//chrome/test:interactive_ui_tests${exec_target_suffix}" ]
 
   testonly = true
 
@@ -343,6 +343,20 @@ action("generate_ozone_platform_list") {
       ] + ozone_platforms
 
   visibility += [ "//media:*" ]
+}
+
+source_set("ozone_gpu_test_support") {
+  visibility = []
+  visibility = [ "//components/viz/demo:viz_demo" ]
+
+  sources = [ "public/ozone_gpu_test_helper.cc" ]
+
+  public = [ "public/ozone_gpu_test_helper.h" ]
+
+  public_deps = [
+    ":platform",
+    "//base",
+  ]
 }
 
 action("generate_constructor_list") {

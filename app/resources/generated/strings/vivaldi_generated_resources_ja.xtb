@@ -9,7 +9,6 @@
 <translation id="1054153489933238809">元の画像を新しいタブで開く (&amp;I)</translation>
 <translation id="1056898198331236512">警告</translation>
 <translation id="1084824384139382525">リンクアドレスをコピー (&amp;E)</translation>
-<translation id="1128109161498068552">システム エクスクルーシブ メッセージを使用して MIDI デバイスにアクセスすることをサイトに許可しない</translation>
 <translation id="1163931534039071049">フレームのソースを表示 (&amp;V)</translation>
 <translation id="1165039591588034296">エラー</translation>
 <translation id="1175364870820465910">印刷... (&amp;P)</translation>
@@ -22,7 +21,6 @@
 <translation id="1297175357211070620">送信先</translation>
 <translation id="1303101771013849280">ブックマーク HTML ファイル</translation>
 <translation id="1430915738399379752">印刷</translation>
-<translation id="1433811987160647649">アクセスする前に確認する</translation>
 <translation id="1451375123200651445">ウェブページ、単一ファイル</translation>
 <translation id="1465176863081977902">オーディオ アドレスをコピー (&amp;C)</translation>
 <translation id="1476607407192946488">言語設定 (&amp;L)</translation>
@@ -99,13 +97,11 @@
 <translation id="2783321960289401138">ショートカットを作成...</translation>
 <translation id="2785873697295365461">ファイル記述子</translation>
 <translation id="2809586584051668049">、ほか <ph name="NUMBER_ADDITIONAL_DISABLED" /> 件</translation>
-<translation id="2812989263793994277">すべての画像を表示しない</translation>
 <translation id="2850541429955027218">テーマを追加</translation>
 <translation id="2861941300086904918">ネイティブクライアントセキュリティマネージャー</translation>
 <translation id="2881076733170862447">拡張機能をクリックしたとき</translation>
 <translation id="2889064240420137087">次のプログラムでリンクを開く...</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> はこのプリンターと通信できませんでした。プリンターが接続されていることを確認して、もう一度お試しください。</translation>
-<translation id="2904456025988372123">サイトが最初のファイルに続けて次のファイルを自動的にダウンロードしようとする際に確認する</translation>
 <translation id="2913331724188855103">サイトに Cookie データの保存と読み取りを許可する（推奨）</translation>
 <translation id="2931157624143513983">印刷可能領域に合わせる</translation>
 <translation id="2932085390869194046">パスワードを自動生成...</translation>
@@ -126,7 +122,6 @@
 <translation id="3127156390846601284">表示されているすべてのサイトについて、端末に保存されているデータを削除します。続行しますか？</translation>
 <translation id="3129173833825111527">左側の余白</translation>
 <translation id="3144647712221361880">別のユーザーとしてリンクを開く</translation>
-<translation id="3154429428035006212">1 ヵ月以上オフライン</translation>
 <translation id="3222066309010235055">事前レンダリング: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">パッケージ化する拡張機能のルートフォルダーを選択します。拡張機能を更新するには、再使用する秘密鍵ファイルも選択してください。</translation>
 <translation id="3280237271814976245">名前を付けて保存... (&amp;A)</translation>
@@ -143,6 +138,7 @@
 <translation id="3360297538363969800">印刷できませんでした。プリンターを確認してもう一度お試しください。</translation>
 <translation id="3378572629723696641">この拡張機能は破損している可能性があります。</translation>
 <translation id="3387614642886316601">拡張スペルチェックを使用する</translation>
+<translation id="3393582007140394275">画面をキャストできません。</translation>
 <translation id="3432227430032737297">表示中のサイトをすべて削除</translation>
 <translation id="345693547134384690">新しいタブで画像を開く (&amp;I)</translation>
 <translation id="3494769164076977169">サイトが最初のファイルに続けて次のファイルを自動的にダウンロードしようとする際に確認する（推奨）</translation>
@@ -165,7 +161,6 @@
 <translation id="3838085852053358637">拡張機能を読み込めませんでした</translation>
 <translation id="383891835335927981">拡大縮小を設定したサイトはありません</translation>
 <translation id="385051799172605136">戻る</translation>
-<translation id="3899879303189199559">1 年以上オフライン</translation>
 <translation id="3905761538810670789">アプリを修復</translation>
 <translation id="3908501907586732282">拡張機能を有効にする</translation>
 <translation id="3909701002594999354">すべてのコントロールを表示(&amp;C)</translation>
@@ -192,7 +187,6 @@
 <translation id="4200983522494130825">新しいタブ (&amp;T)</translation>
 <translation id="4225397296022057997">すべてのサイト</translation>
 <translation id="4256316378292851214">名前を付けて動画を保存... (&amp;V)</translation>
-<translation id="4278390842282768270">許可</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K（<ph name="NUM_KILOBYTES_LIVE" />K ライブ）</translation>
 <translation id="4345587454538109430">設定...</translation>
 <translation id="4348766275249686434">エラー収集</translation>
@@ -217,15 +211,15 @@
 <translation id="488785315393301722">詳細を表示</translation>
 <translation id="4907306957610201395">権限のカテゴリー</translation>
 <translation id="4912643508233590958">Idle 状態からの復帰</translation>
+<translation id="49265687513387605">画面をキャストできません。画面共有の開始を確認するメッセージで同意したかどうかを確認してください。</translation>
 <translation id="4927753642311223124">エラーは特にありませんでした。</translation>
 <translation id="4930714375720679147">オンにする</translation>
+<translation id="4961318399572185831">画面をキャスト</translation>
 <translation id="4988526792673242964">ページ</translation>
 <translation id="49896407730300355">反時計回りに回転 (&amp;O)</translation>
 <translation id="4989966318180235467">バックグラウンドページの検証 (&amp;B)</translation>
-<translation id="4994474651455208930">プロトコルのデフォルト ハンドラーへの登録要求をサイトに許可する</translation>
 <translation id="5000922062037820727">ブロック（推奨）</translation>
 <translation id="5027562294707732951">拡張機能を追加</translation>
-<translation id="5036662165765606524">複数ファイルの自動ダウンロードをどのサイトにも許可しない</translation>
 <translation id="5039804452771397117">許可</translation>
 <translation id="5057110919553308744">拡張機能をクリックしたとき</translation>
 <translation id="5059526285558225588">共有する内容を選択</translation>
@@ -238,7 +232,6 @@
 <translation id="5233231016133573565">プロセス ID</translation>
 <translation id="5233736638227740678">貼り付け (&amp;P)</translation>
 <translation id="5256861893479663409">すべてのサイト</translation>
-<translation id="5265562206369321422">1 週間以上オフライン</translation>
 <translation id="5269977353971873915">印刷が失敗しました</translation>
 <translation id="5284445933715251131">ダウンロードを続行</translation>
 <translation id="52912272896845572">秘密鍵ファイルが無効です。</translation>
@@ -294,7 +287,6 @@
 <translation id="6122081475643980456">インターネット接続が制限されています</translation>
 <translation id="6147020289383635445">印刷プレビューに失敗しました。</translation>
 <translation id="6156863943908443225">スクリプトキャッシュ</translation>
-<translation id="6169666352732958425">デスクトップをキャストできません。</translation>
 <translation id="6196854373336333322">拡張機能「<ph name="EXTENSION_NAME" />」によってプロキシー設定が制御されています。オンラインで行う操作は、この拡張機能によって変更、遮断、傍受される可能性があります。この変更が行われた理由に心当たりがない場合、これは不正な変更と考えられます。</translation>
 <translation id="6200151268994853226">拡張機能を管理</translation>
 <translation id="6206311232642889873">画像をコピー (&amp;Y)</translation>
@@ -328,7 +320,6 @@
 <translation id="6798954102094737107">プラグイン: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">変更を保持</translation>
 <translation id="6817174620439930047">サイトがシステム エクスクルーシブ メッセージを使用して MIDI デバイスにアクセスする際に確認する（推奨）</translation>
-<translation id="682123305478866682">デスクトップをキャストする</translation>
 <translation id="6824564591481349393">メールアドレスをコピー (&amp;E)</translation>
 <translation id="6840155290835956714">送信する前に確認する</translation>
 <translation id="6886871292305414135">新しいタブでリンクを開く (&amp;T)</translation>
@@ -346,7 +337,6 @@
 <translation id="708060913198414444">音声のアドレスをコピー (&amp;O)</translation>
 <translation id="7175353351958621980">ロード元:</translation>
 <translation id="7186088072322679094">ツールバーに留める</translation>
-<translation id="7270858098575133036">サイトがシステム エクスクルーシブ メッセージを使用して MIDI デバイスにアクセスする際に確認する</translation>
 <translation id="7287143125007575591">アクセスが拒否されました。</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7385854874724088939">印刷中に問題が発生しました。プリンターを確認してからもう一度お試しください。</translation>
@@ -369,7 +359,6 @@
 <translation id="7704305437604973648">タスク</translation>
 <translation id="7710568461918838723">キャスト... (&amp;C)</translation>
 <translation id="7750228210027921155">ピクチャー イン ピクチャー</translation>
-<translation id="7751260505918304024">すべて表示</translation>
 <translation id="7760004034676677601">これを起動時に開くページにしてもよろしいですか？</translation>
 <translation id="7771452384635174008">レイアウト</translation>
 <translation id="7782102568078991263">候補は以上です</translation>
@@ -382,9 +371,7 @@
 <translation id="7849264908733290972">新しいタブで画像を開く (&amp;I)</translation>
 <translation id="7857949311770343000">これを新しいタブで開くページにしてもよろしいですか？</translation>
 <translation id="786073089922909430">サービス: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7885253890047913815">最近使用した送信先</translation>
 <translation id="7903925330883316394">ユーティリティ: <ph name="UTILITY_TYPE" /></translation>
-<translation id="7938594894617528435">現在オフライン</translation>
 <translation id="7947962633355574091">動画アドレスをコピー (&amp;C)</translation>
 <translation id="7966241909927244760">画像アドレスをコピー (&amp;C)</translation>
 <translation id="7973394300052703468">新しいプライベートウィンドウ(&amp;P)</translation>
@@ -426,10 +413,8 @@
 <translation id="8708000541097332489">終了時に消去</translation>
 <translation id="8714838604780058252">背景のグラフィック</translation>
 <translation id="8725066075913043281">再試行</translation>
-<translation id="8757090071857742562">デスクトップをキャストできません。画面共有の開始を確認するメッセージで同意したかどうかを確認してください。</translation>
 <translation id="8774934320277480003">上部の余白</translation>
 <translation id="8798099450830957504">既定</translation>
-<translation id="8800004011501252845">次のアカウントの送信先を表示しています:</translation>
 <translation id="8808478386290700967">ウェブストア</translation>
 <translation id="8823514049557262177">リンクテキストをコピー (&amp;X)</translation>
 <translation id="8823704566850948458">パスワードを自動生成...</translation>
@@ -442,7 +427,6 @@
 <translation id="8962083179518285172">詳細を非表示</translation>
 <translation id="8973557916016709913">拡大縮小指定を削除</translation>
 <translation id="897939795688207351"><ph name="ORIGIN" /> のみ</translation>
-<translation id="8996526648899750015">アカウントを追加...</translation>
 <translation id="9003647077635673607">全てのウェブサイトでの実行を許可</translation>
 <translation id="9027459031423301635">新しいタブでリンクを開く (&amp;T)</translation>
 <translation id="9056810968620647706">一致する項目が見つかりません。</translation>

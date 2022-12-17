@@ -5,6 +5,7 @@
 #include "base/command_line.h"
 #include "base/strings/string_split.h"
 #include "base/version.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_observer.h"
@@ -170,7 +171,7 @@ void VivaldiInitProfile(Profile* profile) {
     new VivaldiProfileObserver(profile);
   }
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   PrefService* pref_service = profile->GetPrefs();
 
   menus::Menu_Model* menu_model =

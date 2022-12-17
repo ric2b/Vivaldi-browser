@@ -50,6 +50,8 @@ class MockMediaFoundationCdmProxy : public MediaFoundationCdmProxy {
   MOCK_METHOD2(ProcessContentEnabler,
                HRESULT(IUnknown* request, IMFAsyncResult* result));
   MOCK_METHOD0(OnHardwareContextReset, void());
+  MOCK_METHOD0(OnSignificantPlayback, void());
+  MOCK_METHOD0(OnPlaybackError, void());
 
  protected:
   ~MockMediaFoundationCdmProxy() override;
@@ -108,9 +110,8 @@ class MediaFoundationRendererTest : public testing::Test {
         std::make_unique<NullMediaLog>());
 
     // Some default actions.
-    ON_CALL(cdm_context_, GetMediaFoundationCdmProxy(_))
-        .WillByDefault(Invoke(
-            this, &MediaFoundationRendererTest::GetMediaFoundationCdmProxy));
+    ON_CALL(cdm_context_, GetMediaFoundationCdmProxy())
+        .WillByDefault(Return(mf_cdm_proxy_));
     ON_CALL(*mf_cdm_proxy_, GetPMPServer(_, _))
         .WillByDefault(
             Invoke(this, &MediaFoundationRendererTest::GetPMPServer));
@@ -137,13 +138,6 @@ class MediaFoundationRendererTest : public testing::Test {
     }
 
     return streams;
-  }
-
-  bool GetMediaFoundationCdmProxy(
-      CdmContext::GetMediaFoundationCdmProxyCB get_mf_cdm_proxy_cb) {
-    // Call the callback asynchronously per API contract.
-    BindToCurrentLoop(std::move(get_mf_cdm_proxy_cb)).Run(mf_cdm_proxy_);
-    return true;
   }
 
   HRESULT GetPMPServer(REFIID riid, LPVOID* object_result) {
@@ -241,6 +235,32 @@ TEST_F(MediaFoundationRendererTest, DirectCompositionHandle) {
   mf_renderer_->GetDCompSurface(get_dcomp_surface_cb.Get());
 
   task_environment_.RunUntilIdle();
+}
+
+TEST_F(MediaFoundationRendererTest, ClearStartsInFrameServer) {
+  if (!MediaFoundationRenderer::IsSupported())
+    return;
+
+  AddStream(DemuxerStream::AUDIO, /*encrypted=*/false);
+  AddStream(DemuxerStream::VIDEO, /*encrypted=*/false);
+
+  mf_renderer_->Initialize(&media_resource_, &renderer_client_,
+                           renderer_init_cb_.Get());
+
+  EXPECT_TRUE(mf_renderer_->InFrameServerMode());
+}
+
+TEST_F(MediaFoundationRendererTest, EncryptedStaysInDirectComposition) {
+  if (!MediaFoundationRenderer::IsSupported())
+    return;
+
+  AddStream(DemuxerStream::AUDIO, /*encrypted=*/true);
+  AddStream(DemuxerStream::VIDEO, /*encrypted=*/true);
+
+  mf_renderer_->Initialize(&media_resource_, &renderer_client_,
+                           renderer_init_cb_.Get());
+
+  EXPECT_FALSE(mf_renderer_->InFrameServerMode());
 }
 
 }  // namespace media

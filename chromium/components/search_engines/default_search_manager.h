@@ -28,6 +28,12 @@ struct TemplateURLData;
 class DefaultSearchManager {
  public:
   static const char kDefaultSearchProviderDataPrefName[];
+  static const char kDefaultPrivateSearchProviderDataPrefName[];
+  static const char kDefaultSearchFieldProviderDataPrefName[];
+  static const char kDefaultPrivateSearchFieldProviderDataPrefName[];
+  static const char kDefaultSpeeddialsSearchProviderDataPrefName[];
+  static const char kDefaultSpeeddialsPrivateSearchProviderDataPrefName[];
+  static const char kDefaultImageSearchProviderDataPrefName[];
 
   static const char kID[];
   static const char kShortName[];
@@ -48,6 +54,7 @@ class DefaultSearchManager {
   static const char kSearchURLPostParams[];
   static const char kSuggestionsURLPostParams[];
   static const char kImageURLPostParams[];
+  static const char kSideSearchParam[];
 
   static const char kSafeForAutoReplace[];
   static const char kInputEncodings[];
@@ -63,6 +70,9 @@ class DefaultSearchManager {
   static const char kCreatedFromPlayAPI[];
   static const char kPreconnectToSearchUrl[];
   static const char kIsActive[];
+  static const char kStarterPackId[];
+
+  static const char kPosition[];
 
   enum Source {
     // Default search engine chosen either from prepopulated engines set for
@@ -81,6 +91,10 @@ class DefaultSearchManager {
       base::RepeatingCallback<void(const TemplateURLData*, Source)>;
 
   DefaultSearchManager(PrefService* pref_service,
+                       const ObserverCallback& change_observer);
+
+  DefaultSearchManager(PrefService* pref_service,
+                       const char* vivaldi_default_pref,
                        const ObserverCallback& change_observer);
 
   DefaultSearchManager(const DefaultSearchManager&) = delete;
@@ -172,6 +186,8 @@ class DefaultSearchManager {
 
   // True if the default search is currently enforced by policy.
   bool default_search_controlled_by_policy_;
+
+  const char* vivaldi_default_pref_;
 };
 
 #endif  // COMPONENTS_SEARCH_ENGINES_DEFAULT_SEARCH_MANAGER_H_

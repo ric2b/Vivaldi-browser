@@ -16,6 +16,9 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 
+namespace ash {
+namespace personalization_app {
+
 namespace {
 const char kFakeCollectionId[] = "fake_collection_id";
 }  // namespace
@@ -73,6 +76,12 @@ void FakePersonalizationAppWallpaperProvider::FetchGooglePhotosCount(
   std::move(callback).Run(0);
 }
 
+void FakePersonalizationAppWallpaperProvider::FetchGooglePhotosEnabled(
+    FetchGooglePhotosEnabledCallback callback) {
+  std::move(callback).Run(
+      ash::personalization_app::mojom::GooglePhotosEnablementState::kEnabled);
+}
+
 void FakePersonalizationAppWallpaperProvider::FetchGooglePhotosPhotos(
     const absl::optional<std::string>& item_id,
     const absl::optional<std::string>& album_id,
@@ -106,6 +115,8 @@ void FakePersonalizationAppWallpaperProvider::SelectWallpaper(
 
 void FakePersonalizationAppWallpaperProvider::SelectGooglePhotosPhoto(
     const std::string& id,
+    ash::WallpaperLayout layout,
+    bool preview_mode,
     SelectGooglePhotosPhotoCallback callback) {
   std::move(callback).Run(/*success=*/true);
 }
@@ -118,7 +129,7 @@ void FakePersonalizationAppWallpaperProvider::SelectLocalImage(
   std::move(callback).Run(/*success=*/true);
 }
 
-void FakePersonalizationAppWallpaperProvider::SetCustomWallpaperLayout(
+void FakePersonalizationAppWallpaperProvider::SetCurrentWallpaperLayout(
     ash::WallpaperLayout layout) {
   return;
 }
@@ -150,3 +161,6 @@ void FakePersonalizationAppWallpaperProvider::ConfirmPreviewWallpaper() {
 void FakePersonalizationAppWallpaperProvider::CancelPreviewWallpaper() {
   return;
 }
+
+}  // namespace personalization_app
+}  // namespace ash

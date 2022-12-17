@@ -3,22 +3,23 @@
     padding: 1px;
   }
 
-  /* TODO(gavinwill): update colors to CrOS */
   :host([checked]) #componentButton {
-    background-color: lightskyblue;
+    background-color: var(--google-blue-50);
   }
 
-  /* TODO(gavinwill): update colors to CrOS */
   :host([disabled]) #componentButton {
-    background-color: lightskyblue;
-    opacity: 0.5;
+    background-color: var(--google-blue-50);
+    opacity: 0.38;
+  }
+
+  :host([disabled]) #componentName {
+    color: var(--cros-text-color-disabled);
   }
 
   #componentButton {
     --vertical-padding: 24px;
     border-radius: 8px;
-    box-shadow: var(--cr-card-shadow);
-    color: var(--shimless-component-text-color);
+    box-shadow: var(--cros-elevation-1-shadow);
     font-family: var(--shimless-component-font-family);
     font-size: var(--shimless-component-font-size);
     font-weight: var(--shimless-medium-font-weight);
@@ -30,7 +31,7 @@
   }
 
   #labelDiv {
-    color: grey;
+    color: var(--shimless-component-text-color);
     flex-basis: 155px;
     inset-inline-start: 0;
     padding-inline-start: 24px;
@@ -38,7 +39,7 @@
   }
 
   :host([checked]) #labelDiv {
-    color: blue;
+    color: var(--google-blue-700);
   }
 
   #checkIcon {
@@ -46,7 +47,7 @@
   }
 
   #infoIcon {
-    fill: red;
+    fill: var(--cros-icon-color-alert);
     margin-inline-end: 5px;
   }
 

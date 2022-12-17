@@ -21,17 +21,21 @@
 <translation id="3377025655491224618">Onglet privé</translation>
 <translation id="3504699618187058974">Piles d’onglets</translation>
 <translation id="3518985090088779359">Accepter et continuer</translation>
+<translation id="3571177741182643350">Articles non lus - Disponibles hors connexion :</translation>
 <translation id="3700829948786686853">Bienvenue dans Vivaldi</translation>
 <translation id="3719826155360621982">Page d’accueil</translation>
 <translation id="385051799172605136">Retour</translation>
+<translation id="399014816462153200">Pages lues :</translation>
 <translation id="4121750346708795461">En utilisant cette application, vous acceptez les <ph name="BEGIN_LINK1" />conditions d’utilisation<ph name="END_LINK1" /> et la <ph name="BEGIN_LINK2" />charte de confidentialité<ph name="END_LINK2" /> de Vivaldi.</translation>
 <translation id="4137746084635924146">Langue actuelle de l’appareil</translation>
+<translation id="4167670741834902166">Nouvel onglet privé</translation>
 <translation id="4243710787042215766">Ouvrir dans un onglet privé</translation>
 <translation id="4526803704855831732">Onglets privés</translation>
 <translation id="4759238208242260848">Téléchargements</translation>
 <translation id="4883379392681899581">Quitter le mode navigation privée</translation>
 <translation id="4943872375798546930">Aucun résultat</translation>
 <translation id="49576331685473090">Bloqueur de contenus</translation>
+<translation id="5079259810715830221">Quand un site Google demande de précharger confidentiellement un lien sur leur page, Vivaldi chiffre et précharge les pages via des serveurs de Google sans utiliser de cookies. Cela masque votre identité vis à vis des sites préchargés.</translation>
 <translation id="5118676864324397542">Stockage <ph name="APP_NAME" /></translation>
 <translation id="5186185447130319458">Mode privé</translation>
 <translation id="5233638681132016545">Nouvel onglet</translation>
@@ -44,6 +48,7 @@ Pour modifier le terme de recherche, appuyez dessus de manière prolongée afin 
 <translation id="6585139692466700358">Proposer de traduire les pages dans d’autres langues en utilisant le service de traduction de Vivaldi</translation>
 <translation id="6593061639179217415">Version pour ordinateur</translation>
 <translation id="6610147964972079463">Fermer les onglets privés</translation>
+<translation id="7029995644714925509">Quand un site Google demande de précharger confidentiellement un lien sur leur page, Vivaldi chiffre et précharge les pages via des serveurs de Google sans utiliser de cookies. Cela masque votre identité vis à vis des sites préchargés.</translation>
 <translation id="706339621163631076">Politique de confidentialité de Vivaldi</translation>
 <translation id="732145680195464316">Signet sauvegardé dans <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">À propos de Vivaldi</translation>

@@ -2,10 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-goog.module('__crWeb.textFragments');
-goog.module.declareLegacyNamespace();
-
-const utils = goog.require('googleChromeLabs.textFragmentPolyfill.textFragmentUtils');
+import * as utils from '//third_party/text-fragments-polyfill/src/src/text-fragment-utils.js';
 
 /**
  * @fileoverview Interface used for Chrome/WebView to call into the
@@ -17,7 +14,8 @@ const utils = goog.require('googleChromeLabs.textFragmentPolyfill.textFragmentUt
 
   __gCrWeb['textFragments'] = {};
 
-  var marks;
+  let marks;
+  let cachedFragments;
 
   /**
    * Attempts to identify and highlight the given text fragments and
@@ -102,9 +100,10 @@ const utils = goog.require('googleChromeLabs.textFragmentPolyfill.textFragmentUt
       }
     }
 
-    if (scroll && marks.length > 0)
+    if (scroll && marks.length > 0) {
+      cachedFragments = fragments;
       utils.scrollElementIntoView(marks[0]);
-
+    }
 
     // Send events back to the browser when the user taps a mark, and when the
     // user taps the page anywhere. We have to send both because one is consumed
@@ -114,7 +113,7 @@ const utils = goog.require('googleChromeLabs.textFragmentPolyfill.textFragmentUt
     // Use capture to make sure the event listener is executed immediately and
     // cannot be prevented by the event target (during bubble phase).
     document.addEventListener("click", handleClick, /*useCapture=*/true);
-    for (var mark of marks) {
+    for (let mark of marks) {
       mark.addEventListener("click", handleClickWithSender.bind(mark), true);
     }
 
@@ -134,10 +133,24 @@ const utils = goog.require('googleChromeLabs.textFragmentPolyfill.textFragmentUt
     };
 
   const handleClickWithSender = function(event) {
+    const mark = event.currentTarget;
+
+    // Traverse upwards from the mark element to see if it's a child of an <a>.
+    // If so, discard the event to prevent showing a menu while navigation is
+    // in progress.
+    let node = mark.parentNode;
+    while (node != null) {
+      if (node.tagName == 'A') {
+        return;
+      }
+      node = node.parentNode;
+    }
+
     __gCrWeb.common.sendWebKitMessage('textFragments', {
       command: 'textFragments.onClickWithSender',
-      rect: rectFromElement(event.target),
-      text: `"${event.target.innerText}"`
+      rect: rectFromElement(mark),
+      text: `"${mark.innerText}"`,
+      fragments: cachedFragments
     });
   };
 
@@ -149,5 +162,5 @@ const utils = goog.require('googleChromeLabs.textFragmentPolyfill.textFragmentUt
       width: domRect.width,
       height: domRect.height
     };
-  }
+  };
 })();

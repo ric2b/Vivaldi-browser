@@ -143,7 +143,7 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
 
   // Sets the color matrix that will be used to transform the output of this
   // display. This is only supported for GPU compositing.
-  void SetColorMatrix(const skia::Matrix44& matrix);
+  void SetColorMatrix(const SkM44& matrix);
 
   void SetDisplayColorSpaces(
       const gfx::DisplayColorSpaces& display_color_spaces);
@@ -152,12 +152,10 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   const SurfaceId& CurrentSurfaceId() const;
 
   // DisplaySchedulerClient implementation.
-  bool DrawAndSwap(base::TimeTicks frame_time,
-                   base::TimeTicks expected_display_time) override;
+  bool DrawAndSwap(const DrawAndSwapParams& params) override;
   void DidFinishFrame(const BeginFrameAck& ack) override;
   base::TimeDelta GetEstimatedDisplayDrawTime(const base::TimeDelta interval,
                                               double percentile) const override;
-  void OnObservingBeginFrameSourceChanged(bool observing) override;
 
   // OutputSurfaceClient implementation.
   void SetNeedsRedrawRect(const gfx::Rect& damage_rect) override;

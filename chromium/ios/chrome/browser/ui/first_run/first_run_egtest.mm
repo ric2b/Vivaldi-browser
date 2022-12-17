@@ -13,7 +13,6 @@
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey_ui_test_util.h"
 #import "ios/chrome/browser/ui/authentication/signin_matchers.h"
 #import "ios/chrome/browser/ui/authentication/views/views_constants.h"
-#import "ios/chrome/browser/ui/elements/instruction_view_constants.h"
 #import "ios/chrome/browser/ui/first_run/first_run_app_interface.h"
 #import "ios/chrome/browser/ui/first_run/first_run_constants.h"
 #include "ios/chrome/browser/ui/first_run/fre_field_trial.h"
@@ -36,6 +35,7 @@
 #import "ios/testing/earl_grey/earl_grey_test.h"
 #include "ui/base/l10n/l10n_util.h"
 
+#import "ios/public/provider/chrome/browser/signin/fake_chrome_identity_service_constants.h"
 #include "ios/third_party/earl_grey2/src/CommonLib/Matcher/GREYLayoutConstraint.h"  // nogncheck
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -53,20 +53,23 @@ NSString* const kScrollViewIdentifier =
 NSString* const kMetricsConsentCheckboxAccessibilityIdentifier =
     @"kMetricsConsentCheckboxAccessibilityIdentifier";
 
+NSString* const kBeginBoldTag = @"BEGIN_BOLD[ \t]*";
+NSString* const kEndBoldTag = @"[ \t]*END_BOLD";
+
 // Add the field trial variation parameters to the app launch configuration.
 void SetupVariationForConfig(AppLaunchConfiguration& config,
                              std::string position,
                              std::string stringsSet) {
   config.additional_args.push_back(
       "--enable-features=" + std::string(kEnableFREUIModuleIOS.name) + "<" +
-      std::string(kFRESecondUITrialName));
+      std::string(kFREThirdUITrialName));
 
   config.additional_args.push_back(
-      "--force-fieldtrials=" + std::string(kFRESecondUITrialName) + "/" +
+      "--force-fieldtrials=" + std::string(kFREThirdUITrialName) + "/" +
       std::string(kIdentitySwitcherInTopAndOldStringsSetGroup));
 
   config.additional_args.push_back(
-      "--force-fieldtrial-params=" + std::string(kFRESecondUITrialName) + "." +
+      "--force-fieldtrial-params=" + std::string(kFREThirdUITrialName) + "." +
       std::string(kIdentitySwitcherInTopAndOldStringsSetGroup) + ":" +
       std::string(kFREUIIdentitySwitcherPositionParam) + "/" + position + "/" +
       std::string(kFREUIStringsSetParam) + "/" + stringsSet);
@@ -623,18 +626,15 @@ GREYLayoutConstraint* BelowConstraint() {
   StringWithTag firstInstructionParsed = ParseStringWithTag(
       l10n_util::GetNSString(
           IDS_IOS_FIRST_RUN_DEFAULT_BROWSER_SCREEN_FIRST_STEP),
-      instruction_view::kInstructionViewBeginBoldTag,
-      instruction_view::kInstructionViewEndBoldTag);
+      kBeginBoldTag, kEndBoldTag);
   StringWithTag secondInstructionParsed = ParseStringWithTag(
       l10n_util::GetNSString(
           IDS_IOS_FIRST_RUN_DEFAULT_BROWSER_SCREEN_SECOND_STEP),
-      instruction_view::kInstructionViewBeginBoldTag,
-      instruction_view::kInstructionViewEndBoldTag);
+      kBeginBoldTag, kEndBoldTag);
   StringWithTag thirdInstructionParsed = ParseStringWithTag(
       l10n_util::GetNSString(
           IDS_IOS_FIRST_RUN_DEFAULT_BROWSER_SCREEN_THIRD_STEP),
-      instruction_view::kInstructionViewBeginBoldTag,
-      instruction_view::kInstructionViewEndBoldTag);
+      kBeginBoldTag, kEndBoldTag);
 
   // Verify instruction order.
   id<GREYMatcher> firstInstruction = grey_text(firstInstructionParsed.string);
@@ -916,11 +916,11 @@ GREYLayoutConstraint* BelowConstraint() {
   // automatic sign out.
   config.additional_args.push_back(std::string("-") +
                                    test_switches::kSignInAtStartup);
+  config.additional_args.push_back(
+      std::string("-") + ios::kAddFakeIdentitiesArg + "=" +
+      [FakeChromeIdentity encodeIdentitiesToBase64:@[ fakeIdentity ]]);
 
   [[AppLaunchManager sharedManager] ensureAppLaunchedWithConfiguration:config];
-
-  // Add account for the identity switcher to be shown.
-  [SigninEarlGrey addFakeIdentity:fakeIdentity];
 
   [self verifyWelcomeScreenIsDisplayed];
   [self scrollToElementAndAssertVisibility:GetAcceptButton()];

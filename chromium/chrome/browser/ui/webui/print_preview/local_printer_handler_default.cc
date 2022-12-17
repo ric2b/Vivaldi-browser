@@ -11,7 +11,6 @@
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/ref_counted_memory.h"
-#include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "build/build_config.h"
@@ -113,7 +112,7 @@ void OnDidFetchCapabilities(
       // Register that this printer requires elevated privileges.
       PrintBackendServiceManager& service_mgr =
           PrintBackendServiceManager::GetInstance();
-      service_mgr.SetPrinterDriverRequiresElevatedPrivilege(device_name);
+      service_mgr.SetPrinterDriverFoundToRequireElevatedPrivilege(device_name);
 
       // Retry the operation which should now happen at a higher privilege
       // level.
@@ -290,10 +289,10 @@ void LocalPrinterHandlerDefault::StartGetCapability(
         PrintBackendServiceManager::GetInstance();
     service_mgr.FetchCapabilities(
         device_name,
-        base::BindOnce(
-            &OnDidFetchCapabilities, device_name,
-            service_mgr.PrinterDriverRequiresElevatedPrivilege(device_name),
-            /*has_secure_protocol=*/false, std::move(cb)));
+        base::BindOnce(&OnDidFetchCapabilities, device_name,
+                       service_mgr.PrinterDriverFoundToRequireElevatedPrivilege(
+                           device_name),
+                       /*has_secure_protocol=*/false, std::move(cb)));
     return;
   }
 #endif  // BUILDFLAG(ENABLE_OOP_PRINTING)
@@ -308,7 +307,7 @@ void LocalPrinterHandlerDefault::StartGetCapability(
 
 void LocalPrinterHandlerDefault::StartPrint(
     const std::u16string& job_title,
-    base::Value settings,
+    base::Value::Dict settings,
     scoped_refptr<base::RefCountedMemory> print_data,
     PrintCallback callback) {
   StartLocalPrint(std::move(settings), std::move(print_data),

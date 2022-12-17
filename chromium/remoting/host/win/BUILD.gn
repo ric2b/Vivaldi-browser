@@ -99,6 +99,15 @@ source_set("acl_util") {
   deps = [ "//base" ]
 }
 
+source_set("trust_util") {
+  sources = [
+    "trust_util.cc",
+    "trust_util.h",
+  ]
+  deps = [ "//base" ]
+  libs = [ "Wintrust.lib" ]
+}
+
 source_set("win") {
   sources = [
     "audio_volume_filter_win.cc",
@@ -107,8 +116,6 @@ source_set("win") {
     "com_security.cc",
     "com_security.h",
     "core_resource.h",
-    "default_apps_util.cc",
-    "default_apps_util.h",
     "default_audio_device_change_detector.cc",
     "default_audio_device_change_detector.h",
     "etw_trace_consumer.h",

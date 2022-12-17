@@ -202,8 +202,8 @@ class MockDemuxerStream : public DemuxerStream {
 
   // DemuxerStream implementation.
   Type type() const override;
-  Liveness liveness() const override;
-  void Read(ReadCB read_cb) { OnRead(read_cb); }
+  StreamLiveness liveness() const override;
+  void Read(ReadCB read_cb) override { OnRead(read_cb); }
   MOCK_METHOD1(OnRead, void(ReadCB& read_cb));
   AudioDecoderConfig audio_decoder_config() override;
   VideoDecoderConfig video_decoder_config() override;
@@ -212,11 +212,11 @@ class MockDemuxerStream : public DemuxerStream {
 
   void set_audio_decoder_config(const AudioDecoderConfig& config);
   void set_video_decoder_config(const VideoDecoderConfig& config);
-  void set_liveness(Liveness liveness);
+  void set_liveness(StreamLiveness liveness);
 
  private:
   Type type_;
-  Liveness liveness_;
+  StreamLiveness liveness_ = StreamLiveness::kUnknown;
   AudioDecoderConfig audio_decoder_config_;
   VideoDecoderConfig video_decoder_config_;
 };
@@ -658,8 +658,8 @@ class MockCdmContext : public CdmContext {
 
 #if BUILDFLAG(IS_WIN)
   MOCK_METHOD0(RequiresMediaFoundationRenderer, bool());
-  MOCK_METHOD1(GetMediaFoundationCdmProxy,
-               bool(GetMediaFoundationCdmProxyCB get_mf_cdm_proxy_cb));
+  MOCK_METHOD0(GetMediaFoundationCdmProxy,
+               scoped_refptr<MediaFoundationCdmProxy>());
 #endif
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   MOCK_METHOD0(GetChromeOsCdmContext, chromeos::ChromeOsCdmContext*());
@@ -858,7 +858,6 @@ class MockMediaClient : public media::MediaClient {
 
   // MediaClient implementation.
   MOCK_METHOD1(GetSupportedKeySystems, void(GetSupportedKeySystemsCB cb));
-  MOCK_METHOD0(IsKeySystemsUpdateNeeded, bool());
   MOCK_METHOD1(IsSupportedAudioType, bool(const media::AudioType& type));
   MOCK_METHOD1(IsSupportedVideoType, bool(const media::VideoType& type));
   MOCK_METHOD1(IsSupportedBitstreamAudioCodec, bool(media::AudioCodec codec));

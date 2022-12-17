@@ -25,7 +25,7 @@
 std::u16string GetDefaultSearchEngineName(TemplateURLService* service) {
   DCHECK(service);
   const TemplateURL* const default_provider =
-      service->GetDefaultSearchProvider();
+      service->GetDefaultSearchProvider(TemplateURLService::kDefaultSearchMain);
   if (!default_provider) {
     // TODO(cpu): bug 1187517. It is possible to have no default provider.
     // returning an empty string is a stopgap measure for the crash
@@ -38,7 +38,7 @@ std::u16string GetDefaultSearchEngineName(TemplateURLService* service) {
 GURL GetDefaultSearchURLForSearchTerms(TemplateURLService* service,
                                        const std::u16string& terms) {
   DCHECK(service);
-  const TemplateURL* default_provider = service->GetDefaultSearchProvider();
+  const TemplateURL* default_provider = service->GetDefaultSearchProvider(TemplateURLService::kDefaultSearchMain);
   if (!default_provider)
     return GURL();
   const TemplateURLRef& search_url = default_provider->url_ref();
@@ -53,6 +53,21 @@ void RemoveDuplicatePrepopulateIDs(
     KeywordWebDataService* service,
     const std::vector<std::unique_ptr<TemplateURLData>>& prepopulated_urls,
     TemplateURL* default_search_provider,
+    TemplateURLService::OwnedTemplateURLVector* template_urls,
+    const SearchTermsData& search_terms_data,
+    std::set<std::string>* removed_keyword_guids) {
+  // This variation to avoid beaking unittests.
+  RemoveDuplicatePrepopulateIDs(
+      service, prepopulated_urls,
+      std::array<TemplateURL*, TemplateURLService::kDefaultSearchTypeCount>{
+          default_search_provider, nullptr, nullptr, nullptr, nullptr, nullptr},
+      template_urls, search_terms_data, removed_keyword_guids);
+}
+
+void RemoveDuplicatePrepopulateIDs(
+    KeywordWebDataService* service,
+    const std::vector<std::unique_ptr<TemplateURLData>>& prepopulated_urls,
+    std::array<TemplateURL*, TemplateURLService::kDefaultSearchTypeCount> default_search_provider,
     TemplateURLService::OwnedTemplateURLVector* template_urls,
     const SearchTermsData& search_terms_data,
     std::set<std::string>* removed_keyword_guids) {
@@ -80,11 +95,12 @@ void RemoveDuplicatePrepopulateIDs(
   std::unordered_map<int, DuplicationData> duplication_map;
 
   const auto has_default_search_keyword = [&](const auto& turl) {
-    return default_search_provider &&
-           (default_search_provider->prepopulate_id() ==
-            turl->prepopulate_id()) &&
-           default_search_provider->HasSameKeywordAs(turl->data(),
-                                                     search_terms_data);
+    for (TemplateURL* provider : default_search_provider) {
+      if (provider && provider->prepopulate_id() == turl->prepopulate_id() &&
+          provider->HasSameKeywordAs(turl->data(), search_terms_data))
+        return true;
+    }
+    return false;
   };
 
   // Deduplication phase: move elements into new vector, preserving order while
@@ -207,6 +223,7 @@ void MergeIntoPrepopulatedEngineData(const TemplateURL* original_turl,
   prepopulated_url->last_modified = original_turl->last_modified();
   prepopulated_url->created_from_play_api =
       original_turl->created_from_play_api();
+  prepopulated_url->vivaldi_position = original_turl->data().vivaldi_position;
 }
 
 ActionsFromPrepopulateData::ActionsFromPrepopulateData() {}
@@ -222,6 +239,20 @@ void MergeEnginesFromPrepopulateData(
     TemplateURLService::OwnedTemplateURLVector* template_urls,
     TemplateURL* default_search_provider,
     std::set<std::string>* removed_keyword_guids) {
+  // This variation to avoid beaking unittests.
+  MergeEnginesFromPrepopulateData(
+      service, prepopulated_urls, template_urls,
+      std::array<TemplateURL*, TemplateURLService::kDefaultSearchTypeCount>{
+          default_search_provider, nullptr, nullptr, nullptr, nullptr, nullptr},
+      removed_keyword_guids);
+}
+
+void MergeEnginesFromPrepopulateData(
+    KeywordWebDataService* service,
+    std::vector<std::unique_ptr<TemplateURLData>>* prepopulated_urls,
+    TemplateURLService::OwnedTemplateURLVector* template_urls,
+    std::array<TemplateURL*, TemplateURLService::kDefaultSearchTypeCount> default_search_provider,
+    std::set<std::string>* removed_keyword_guids) {
   DCHECK(prepopulated_urls);
   DCHECK(template_urls);
 
@@ -232,8 +263,12 @@ void MergeEnginesFromPrepopulateData(
   for (const auto* removed_engine : actions.removed_engines) {
     auto j = FindTemplateURL(template_urls, removed_engine);
     DCHECK(j != template_urls->end());
-    DCHECK(!default_search_provider ||
-           (*j)->prepopulate_id() != default_search_provider->prepopulate_id());
+    DCHECK(std::all_of(default_search_provider.begin(),
+                       default_search_provider.end(),
+                       [j](const TemplateURL* provider) {
+                         return !provider || (*j)->prepopulate_id() !=
+                                                 provider->prepopulate_id();
+                       }));
     std::unique_ptr<TemplateURL> template_url = std::move(*j);
     template_urls->erase(j);
     if (service) {
@@ -262,7 +297,7 @@ void MergeEnginesFromPrepopulateData(
 ActionsFromPrepopulateData CreateActionsFromCurrentPrepopulateData(
     std::vector<std::unique_ptr<TemplateURLData>>* prepopulated_urls,
     const TemplateURLService::OwnedTemplateURLVector& existing_urls,
-    const TemplateURL* default_search_provider) {
+    std::array<TemplateURL*, TemplateURLService::kDefaultSearchTypeCount> default_search_provider) {
   // Create a map to hold all provided |template_urls| that originally came from
   // prepopulate data (i.e. have a non-zero prepopulate_id()).
   TemplateURL* play_api_turl = nullptr;
@@ -319,10 +354,14 @@ ActionsFromPrepopulateData CreateActionsFromCurrentPrepopulateData(
   for (auto i = id_to_turl.begin(); i != id_to_turl.end(); ++i) {
     TemplateURL* template_url = i->second;
     if ((template_url->safe_for_autoreplace()) &&
-        (!default_search_provider ||
-         (template_url->prepopulate_id() !=
-          default_search_provider->prepopulate_id()) ||
-         (template_url->keyword() != default_search_provider->keyword()))) {
+        (std::all_of(default_search_provider.begin(),
+                     default_search_provider.end(),
+                     [&template_url](const TemplateURL* provider) {
+                       return !provider ||
+                              (template_url->prepopulate_id() !=
+                               provider->prepopulate_id()) ||
+                              (template_url->keyword() != provider->keyword());
+                     }))) {
       if (template_url->created_from_play_api()) {
         // Don't remove the entry created from Play API. Just reset
         // prepopulate_id for it.
@@ -343,7 +382,7 @@ void GetSearchProvidersUsingKeywordResult(
     KeywordWebDataService* service,
     PrefService* prefs,
     TemplateURLService::OwnedTemplateURLVector* template_urls,
-    TemplateURL* default_search_provider,
+    std::array<TemplateURL*, TemplateURLService::kDefaultSearchTypeCount> default_search_provider,
     const SearchTermsData& search_terms_data,
     int* new_resource_keyword_version,
     std::set<std::string>* removed_keyword_guids) {
@@ -382,7 +421,7 @@ void GetSearchProvidersUsingLoadedEngines(
     KeywordWebDataService* service,
     PrefService* prefs,
     TemplateURLService::OwnedTemplateURLVector* template_urls,
-    TemplateURL* default_search_provider,
+    std::array<TemplateURL*, TemplateURLService::kDefaultSearchTypeCount> default_search_provider,
     const SearchTermsData& search_terms_data,
     int* resource_keyword_version,
     std::set<std::string>* removed_keyword_guids) {

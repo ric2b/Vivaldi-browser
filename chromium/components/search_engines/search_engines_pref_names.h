@@ -12,7 +12,6 @@ extern const char kDefaultSearchProviderContextMenuAccessAllowed[];
 extern const char kDefaultSearchProviderEnabled[];
 extern const char kSearchProviderOverrides[];
 extern const char kSearchProviderOverridesVersion[];
-
 }  // namespace prefs
 
 #endif  // COMPONENTS_SEARCH_ENGINES_SEARCH_ENGINES_PREF_NAMES_H_

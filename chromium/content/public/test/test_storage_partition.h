@@ -82,7 +82,7 @@ class TestStoragePartition : public StoragePartition {
 
   mojo::PendingRemote<network::mojom::URLLoaderNetworkServiceObserver>
   CreateURLLoaderNetworkObserverForNavigationRequest(
-      int frame_tree_id) override;
+      NavigationRequest& navigation_request) override;
 
   void set_quota_manager(storage::QuotaManager* manager) {
     quota_manager_ = manager;
@@ -140,6 +140,12 @@ class TestStoragePartition : public StoragePartition {
   PlatformNotificationContext* GetPlatformNotificationContext() override;
 
   InterestGroupManager* GetInterestGroupManager() override;
+
+  void set_browsing_topics_site_data_manager(
+      BrowsingTopicsSiteDataManager* manager) {
+    browsing_topics_site_data_manager_ = manager;
+  }
+  BrowsingTopicsSiteDataManager* GetBrowsingTopicsSiteDataManager() override;
 
   void set_devtools_background_services_context(
       DevToolsBackgroundServicesContext* context) {
@@ -239,6 +245,8 @@ class TestStoragePartition : public StoragePartition {
   raw_ptr<SharedWorkerService> shared_worker_service_ = nullptr;
   mojo::Remote<storage::mojom::CacheStorageControl> cache_storage_control_;
   raw_ptr<GeneratedCodeCacheContext> generated_code_cache_context_ = nullptr;
+  raw_ptr<BrowsingTopicsSiteDataManager> browsing_topics_site_data_manager_ =
+      nullptr;
   raw_ptr<PlatformNotificationContext> platform_notification_context_ = nullptr;
   raw_ptr<DevToolsBackgroundServicesContext>
       devtools_background_services_context_ = nullptr;

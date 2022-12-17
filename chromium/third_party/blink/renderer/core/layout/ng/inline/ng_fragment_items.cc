@@ -71,7 +71,7 @@ NGFragmentItems::NGFragmentItems(const NGFragmentItems& other)
 }
 
 NGFragmentItems::~NGFragmentItems() {
-  for (unsigned i = 0; i < size_; ++i)
+  for (wtf_size_t i = 0; i < size_; ++i)
     items_[i].~NGFragmentItem();
 }
 
@@ -462,6 +462,22 @@ void NGFragmentItems::DirtyLinesFromNeedsLayout(
 }
 
 // static
+bool NGFragmentItems::ReplaceBoxFragment(
+    const NGPhysicalBoxFragment& old_fragment,
+    const NGPhysicalBoxFragment& new_fragment,
+    const NGPhysicalBoxFragment& containing_fragment) {
+  for (NGInlineCursor cursor(containing_fragment); cursor;
+       cursor.MoveToNext()) {
+    const NGFragmentItem* item = cursor.Current().Item();
+    if (item->BoxFragment() != &old_fragment)
+      continue;
+    item->GetMutableForOOFFragmentation().ReplaceBoxFragment(new_fragment);
+    return true;
+  }
+  return false;
+}
+
+// static
 void NGFragmentItems::LayoutObjectWillBeMoved(
     const LayoutObject& layout_object) {
   NGInlineCursor cursor;
@@ -489,5 +505,10 @@ void NGFragmentItems::CheckAllItemsAreValid() const {
     DCHECK(!item.IsLayoutObjectDestroyedOrMoved());
 }
 #endif
+
+void NGFragmentItems::Trace(Visitor* visitor) const {
+  for (const NGFragmentItem& item : Items())
+    visitor->Trace(item);
+}
 
 }  // namespace blink

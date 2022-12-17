@@ -6,12 +6,15 @@
 
 #include <utility>
 
+#include "base/feature_list.h"
 #include "base/no_destructor.h"
 #include "base/path_service.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/common/chrome_paths.h"
 #include "components/metrics_services_manager/metrics_services_manager.h"
-#include "components/segmentation_platform/internal/ukm_data_manager.h"
+#include "components/segmentation_platform/internal/dummy_ukm_data_manager.h"
+#include "components/segmentation_platform/internal/ukm_data_manager_impl.h"
+#include "components/segmentation_platform/public/features.h"
 #include "components/ukm/ukm_service.h"
 
 namespace segmentation_platform {
@@ -22,9 +25,14 @@ UkmDatabaseClient& UkmDatabaseClient::GetInstance() {
   return *instance;
 }
 
-UkmDatabaseClient::UkmDatabaseClient()
-    : ukm_data_manager_(
-          std::make_unique<segmentation_platform::UkmDataManager>()) {}
+UkmDatabaseClient::UkmDatabaseClient() {
+  if (base::FeatureList::IsEnabled(
+          segmentation_platform::features::kSegmentationPlatformUkmEngine)) {
+    ukm_data_manager_ = std::make_unique<UkmDataManagerImpl>();
+  } else {
+    ukm_data_manager_ = std::make_unique<DummyUkmDataManager>();
+  }
+}
 
 UkmDatabaseClient::~UkmDatabaseClient() = default;
 
@@ -44,8 +52,9 @@ void UkmDatabaseClient::PreProfileInit() {
   // Metrics service is created at PreCreateThreads, and should be available at
   // PreProfileInit(). If this changes the metrics service is created on-demand,
   // so will get created by calling GetMetricsServicesManager().
-  ukm_data_manager_->CanObserveUkm(
-      g_browser_process->GetMetricsServicesManager()->GetUkmService());
+  ukm_data_manager_->NotifyCanObserveUkm(
+      g_browser_process->GetMetricsServicesManager()->GetUkmService(),
+      g_browser_process->local_state());
 }
 
 void UkmDatabaseClient::PostMessageLoopRun() {
@@ -55,11 +64,6 @@ void UkmDatabaseClient::PostMessageLoopRun() {
   // UkmDataManager needs to be available. This does not tear down the
   // UkmDataManager, but only stops observing UKM.
   ukm_data_manager_->StopObservingUkm();
-}
-
-void UkmDatabaseClient::ProfileManagerDestroying() {
-  // All profiles are destroyed, it it safe to tear down the UkmDataManager.
-  ukm_data_manager_.reset();
 }
 
 }  // namespace segmentation_platform

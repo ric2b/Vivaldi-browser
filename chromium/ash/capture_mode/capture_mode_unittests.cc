@@ -45,7 +45,9 @@
 #include "ash/public/cpp/holding_space/holding_space_test_api.h"
 #include "ash/public/cpp/projector/projector_new_screencast_precondition.h"
 #include "ash/public/cpp/projector/projector_session.h"
+#include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/public/cpp/test/shell_test_api.h"
 #include "ash/root_window_controller.h"
 #include "ash/services/recording/recording_service_test_api.h"
 #include "ash/shell.h"
@@ -129,28 +131,6 @@ bool IsCursorCompositingEnabled() {
       ->is_cursor_compositing_enabled();
 }
 
-void TouchOnView(const views::View* view,
-                 ui::test::EventGenerator* event_generator) {
-  DCHECK(view);
-  DCHECK(event_generator);
-
-  const gfx::Point view_center = view->GetBoundsInScreen().CenterPoint();
-  event_generator->MoveTouch(view_center);
-  event_generator->PressTouch();
-  event_generator->ReleaseTouch();
-}
-
-// Sends a press release key combo |count| times.
-void SendKey(ui::KeyboardCode key_code,
-             ui::test::EventGenerator* event_generator,
-             bool shift_down = false,
-             int count = 1) {
-  const int flags = shift_down ? ui::EF_SHIFT_DOWN : 0;
-  for (int i = 0; i < count; ++i) {
-    event_generator->PressAndReleaseKey(key_code, flags);
-  }
-}
-
 const message_center::Notification* GetPreviewNotification() {
   const message_center::NotificationList::Notifications notifications =
       message_center::MessageCenter::Get()->GetVisibleNotifications();
@@ -205,15 +185,6 @@ std::unique_ptr<aura::Window> CreateTransientModalChildWindow(
   child->SetProperty(aura::client::kModalKey, ui::MODAL_TYPE_WINDOW);
   wm::SetModalParent(child.get(), transient_parent);
   return child;
-}
-
-// To avoid flaky failures due to mouse devices blocking entering tablet mode,
-// we detach all mouse devices. This shouldn't affect testing the cursor
-// status.
-void SwitchToTabletMode() {
-  TabletModeControllerTestApi test_api;
-  test_api.DetachAllMice();
-  test_api.EnterTabletMode();
 }
 
 void LeaveTabletMode() {
@@ -382,11 +353,6 @@ class CaptureModeTest : public AshTestBase {
     return absl::nullopt;
   }
 
-  void StartVideoRecordingImmediately() {
-    CaptureModeController::Get()->StartVideoRecordingImmediatelyForTesting();
-    WaitForRecordingToStart();
-  }
-
   // Start Capture Mode with source region and type image.
   CaptureModeController* StartImageRegionCapture() {
     return StartCaptureSession(CaptureModeSource::kRegion,
@@ -451,36 +417,6 @@ class CaptureModeTest : public AshTestBase {
     session_controller->SwitchActiveUser(AccountId::FromUserEmail(kUserEmail));
   }
 
-  void WaitForSeconds(int seconds) {
-    base::RunLoop loop;
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-        FROM_HERE, loop.QuitClosure(), base::Seconds(seconds));
-    loop.Run();
-  }
-
-  base::FilePath WaitForCaptureFileToBeSaved() {
-    base::FilePath result;
-    base::RunLoop run_loop;
-    ash::CaptureModeTestApi().SetOnCaptureFileSavedCallback(
-        base::BindLambdaForTesting([&](const base::FilePath& path) {
-          result = path;
-          run_loop.Quit();
-        }));
-    run_loop.Run();
-    return result;
-  }
-
-  base::FilePath CreateCustomFolder(const std::string& custom_folder_name) {
-    base::FilePath custom_folder = CaptureModeController::Get()
-                                       ->delegate_for_testing()
-                                       ->GetUserDefaultDownloadsFolder()
-                                       .Append(custom_folder_name);
-    base::ScopedAllowBlockingForTesting allow_blocking;
-    const bool result = base::CreateDirectory(custom_folder);
-    DCHECK(result);
-    return custom_folder;
-  }
-
   base::FilePath CreateFolderOnDriveFS(const std::string& custom_folder_name) {
     auto* test_delegate = CaptureModeController::Get()->delegate_for_testing();
     base::FilePath mount_point_path;
@@ -491,12 +427,6 @@ class CaptureModeTest : public AshTestBase {
     const bool result = base::CreateDirectory(folder_on_drive_fs);
     EXPECT_TRUE(result);
     return folder_on_drive_fs;
-  }
-
-  std::string GetCaptureModeHistogramName(std::string prefix) {
-    prefix.append(Shell::Get()->IsInTabletMode() ? ".TabletMode"
-                                                 : ".ClamshellMode");
-    return prefix;
   }
 
   void OpenSettingsView() {
@@ -1118,7 +1048,7 @@ TEST_F(CaptureModeTest, CaptureRegionCaptureButtonDoesNotIntersectCaptureBar) {
   const gfx::Rect capture_bar_bounds =
       GetCaptureModeBarWidget()->GetWindowBoundsInScreen();
   gfx::Rect region_bounds = capture_bar_bounds;
-  region_bounds.Inset(-20, -20);
+  region_bounds.Inset(-20);
   SelectRegion(region_bounds);
   EXPECT_FALSE(capture_bar_bounds.Intersects(
       GetCaptureModeLabelWidget()->GetWindowBoundsInScreen()));
@@ -2377,7 +2307,8 @@ TEST_P(CaptureModeSaveFileTest, SaveCapturedFileWithCustomFolder) {
   EXPECT_EQ(file_saved_path.DirName(), default_folder);
 
   // Now create an available custom folder and set it for custom capture folder.
-  const base::FilePath available_custom_folder = CreateCustomFolder("test");
+  const base::FilePath available_custom_folder =
+      CreateCustomFolderInUserDownloadsPath("test");
   controller->SetCustomCaptureFolder(available_custom_folder);
 
   capture_folder = controller->GetCurrentCaptureFolder();
@@ -2400,7 +2331,8 @@ TEST_P(CaptureModeSaveFileTest, CaptureModeSaveToLocationMetric) {
   // includes default downloads folder, local customized folder, root drive and
   // a specific folder on drive.
   const auto downloads_folder = test_delegate->GetUserDefaultDownloadsFolder();
-  const base::FilePath custom_folder = CreateCustomFolder("test");
+  const base::FilePath custom_folder =
+      CreateCustomFolderInUserDownloadsPath("test");
   base::FilePath mount_point_path;
   test_delegate->GetDriveFsMountPointPath(&mount_point_path);
   const auto root_drive_folder = mount_point_path.Append("root");
@@ -3433,7 +3365,7 @@ TEST_F(CaptureModeTest, KeyboardNavigationBasic) {
   EXPECT_EQ(0u, test_api.GetCurrentFocusIndex());
 
   // Tab four times to focus the last source button (window mode button).
-  SendKey(ui::VKEY_TAB, event_generator, /*shift_down=*/false, /*count=*/4);
+  SendKey(ui::VKEY_TAB, event_generator, ui::EF_NONE, /*count=*/4);
   EXPECT_EQ(FocusGroup::kTypeSource, test_api.GetCurrentFocusGroup());
   EXPECT_EQ(4u, test_api.GetCurrentFocusIndex());
 
@@ -3443,7 +3375,7 @@ TEST_F(CaptureModeTest, KeyboardNavigationBasic) {
   EXPECT_EQ(0u, test_api.GetCurrentFocusIndex());
 
   // Shift tab to focus the last source button again.
-  SendKey(ui::VKEY_TAB, event_generator, /*shift_down=*/true);
+  SendKey(ui::VKEY_TAB, event_generator, ui::EF_SHIFT_DOWN);
   EXPECT_EQ(FocusGroup::kTypeSource, test_api.GetCurrentFocusGroup());
   EXPECT_EQ(4u, test_api.GetCurrentFocusIndex());
 
@@ -3486,7 +3418,7 @@ TEST_F(CaptureModeTest, KeyboardNavigationTabThroughWindowsOnMultipleDisplays) {
   // Tab five times, we are now focusing the window mode button on the
   // capture bar.
   auto* event_generator = GetEventGenerator();
-  SendKey(ui::VKEY_TAB, event_generator, false, 5);
+  SendKey(ui::VKEY_TAB, event_generator, ui::EF_NONE, /*count=*/5);
   EXPECT_EQ(FocusGroup::kTypeSource, test_api.GetCurrentFocusGroup());
   EXPECT_EQ(4u, test_api.GetCurrentFocusIndex());
 
@@ -3532,13 +3464,13 @@ TEST_F(CaptureModeTest, KeyboardNavigationTabThroughWindowsOnMultipleDisplays) {
   EXPECT_EQ(0u, test_api.GetCurrentFocusIndex());
 
   // Shift tab to focus |window1| again.
-  SendKey(ui::VKEY_TAB, event_generator, /*shift_down=*/true);
+  SendKey(ui::VKEY_TAB, event_generator, ui::EF_SHIFT_DOWN);
   EXPECT_EQ(FocusGroup::kCaptureWindow, test_api.GetCurrentFocusGroup());
   EXPECT_EQ(2u, test_api.GetCurrentFocusIndex());
   EXPECT_EQ(window1.get(), capture_mode_session->GetSelectedWindow());
 
   // Shift tab to focus |window1_transient|.
-  SendKey(ui::VKEY_TAB, event_generator, /*shift_down=*/true);
+  SendKey(ui::VKEY_TAB, event_generator, ui::EF_SHIFT_DOWN);
   EXPECT_EQ(FocusGroup::kCaptureWindow, test_api.GetCurrentFocusGroup());
   EXPECT_EQ(1u, test_api.GetCurrentFocusIndex());
   EXPECT_EQ(window1_transient.get(), capture_mode_session->GetSelectedWindow());
@@ -3546,7 +3478,7 @@ TEST_F(CaptureModeTest, KeyboardNavigationTabThroughWindowsOnMultipleDisplays) {
 
   // Shift tab to focus |window2|. Capture mode bar will be moved to display2 as
   // well.
-  SendKey(ui::VKEY_TAB, event_generator, /*shift_down=*/true);
+  SendKey(ui::VKEY_TAB, event_generator, ui::EF_SHIFT_DOWN);
   EXPECT_EQ(FocusGroup::kCaptureWindow, test_api.GetCurrentFocusGroup());
   EXPECT_EQ(0u, test_api.GetCurrentFocusIndex());
   EXPECT_EQ(window2.get(), capture_mode_session->GetSelectedWindow());
@@ -3587,28 +3519,28 @@ TEST_F(CaptureModeTest, KeyboardNavigationSpaceToClickButtons) {
   auto* event_generator = GetEventGenerator();
 
   // Tab to the button which changes the capture type to video and hit space.
-  SendKey(ui::VKEY_TAB, event_generator, /*shift_down=*/false, 2);
+  SendKey(ui::VKEY_TAB, event_generator, ui::EF_NONE, /*count=*/2);
   SendKey(ui::VKEY_SPACE, event_generator);
   EXPECT_EQ(CaptureModeType::kVideo, controller->type());
 
   // Shift tab and space to change the capture type back to image.
-  SendKey(ui::VKEY_TAB, event_generator, /*shift_down=*/true);
+  SendKey(ui::VKEY_TAB, event_generator, ui::EF_SHIFT_DOWN);
   SendKey(ui::VKEY_SPACE, event_generator);
   EXPECT_EQ(CaptureModeType::kImage, controller->type());
 
   // Tab to the fullscreen button and hit space.
-  SendKey(ui::VKEY_TAB, event_generator, /*shift_down=*/false, 2);
+  SendKey(ui::VKEY_TAB, event_generator, ui::EF_NONE, /*count=*/2);
   SendKey(ui::VKEY_SPACE, event_generator);
   EXPECT_EQ(CaptureModeSource::kFullscreen, controller->source());
 
   // Tab to the region button and hit space to return to region capture mode.
-  SendKey(ui::VKEY_TAB, event_generator, /*shift_down=*/false);
+  SendKey(ui::VKEY_TAB, event_generator);
   SendKey(ui::VKEY_SPACE, event_generator);
   EXPECT_EQ(CaptureModeSource::kRegion, controller->source());
 
   // Tab to the capture button and hit space to perform a capture, which exits
   // capture mode.
-  SendKey(ui::VKEY_TAB, event_generator, /*shift_down=*/false, 11);
+  SendKey(ui::VKEY_TAB, event_generator, ui::EF_NONE, /*count=*/11);
   SendKey(ui::VKEY_SPACE, event_generator);
   EXPECT_FALSE(controller->IsActive());
 }
@@ -3633,7 +3565,7 @@ TEST_F(CaptureModeTest, KeyboardNavigationSelectRegion) {
   const int arrow_shift = capture_mode::kArrowKeyboardRegionChangeDp;
 
   // Hit tab until the whole region is focused.
-  SendKey(ui::VKEY_TAB, event_generator, /*shift_down=*/false, /*count=*/6);
+  SendKey(ui::VKEY_TAB, event_generator, ui::EF_NONE, /*count=*/6);
   CaptureModeSessionTestApi test_api(controller->capture_mode_session());
   EXPECT_EQ(CaptureModeSessionFocusCycler::FocusGroup::kSelection,
             test_api.GetCurrentFocusGroup());
@@ -3644,7 +3576,7 @@ TEST_F(CaptureModeTest, KeyboardNavigationSelectRegion) {
   EXPECT_EQ(capture_region.origin() + gfx::Vector2d(arrow_shift, 0),
             controller->user_capture_region().origin());
   EXPECT_EQ(capture_region.size(), controller->user_capture_region().size());
-  SendKey(ui::VKEY_RIGHT, event_generator, /*shift_down=*/true);
+  SendKey(ui::VKEY_RIGHT, event_generator, ui::EF_SHIFT_DOWN);
   EXPECT_EQ(
       capture_region.origin() +
           gfx::Vector2d(
@@ -3666,7 +3598,7 @@ TEST_F(CaptureModeTest, KeyboardNavigationSelectRegion) {
 
   // Tab until we focus the bottom right affordance circle. Left and up keys
   // should shrink the region, right and bottom keys should enlarge the region.
-  SendKey(ui::VKEY_TAB, event_generator, /*shift_down=*/false, 4);
+  SendKey(ui::VKEY_TAB, event_generator, ui::EF_NONE, /*count=*/4);
 
   SendKey(ui::VKEY_LEFT, event_generator);
   SendKey(ui::VKEY_UP, event_generator);
@@ -3710,8 +3642,7 @@ TEST_F(CaptureModeTest, KeyboardNavigationDefaultRegion) {
   // region capture mode will make the capture region the default size.
   // SelectRegion removes focus since it uses mouse clicks.
   SelectRegion(gfx::Rect());
-  SendKey(ui::VKEY_TAB, event_generator,
-          /*is_shift_down=*/false,
+  SendKey(ui::VKEY_TAB, event_generator, ui::EF_NONE,
           /*count=*/4);
   SendKey(ui::VKEY_SPACE, event_generator);
   EXPECT_EQ(expected_default_region, controller->user_capture_region());
@@ -3720,8 +3651,7 @@ TEST_F(CaptureModeTest, KeyboardNavigationDefaultRegion) {
   // in region capture mode does nothing to the capture region.
   SelectRegion(gfx::Rect());
   ClickOnView(GetWindowToggleButton(), event_generator);
-  SendKey(ui::VKEY_TAB, event_generator,
-          /*is_shift_down=*/false,
+  SendKey(ui::VKEY_TAB, event_generator, ui::EF_NONE,
           /*count=*/4);
   ASSERT_EQ(CaptureModeSessionFocusCycler::FocusGroup::kTypeSource,
             test_api.GetCurrentFocusGroup());
@@ -4621,28 +4551,17 @@ class ProjectorCaptureModeIntegrationTests
 
   static constexpr gfx::Rect kUserRegion{20, 50, 60, 70};
 
+  MockProjectorClient* projector_client() {
+    return projector_helper_.projector_client();
+  }
+
   // CaptureModeTest:
   void SetUp() override {
-    scoped_feature_list_.InitWithFeatures(
-        /*enabled_features=*/{features::kProjector,
-                              features::kProjectorAnnotator},
-        /*disabled_features=*/{});
     CaptureModeTest::SetUp();
-    auto* projector_controller = ProjectorController::Get();
-    projector_controller->SetClient(&projector_client_);
-    ON_CALL(projector_client_, StopSpeechRecognition)
-        .WillByDefault(testing::Invoke([]() {
-          ProjectorController::Get()->OnSpeechRecognitionStopped();
-        }));
-
-    // Simulate the availability of speech recognition.
-    projector_controller->OnSpeechRecognitionAvailabilityChanged(
-        SpeechRecognitionAvailability::kAvailable);
+    projector_helper_.SetUp();
     window_ = CreateTestWindow(gfx::Rect(20, 30, 200, 200));
     CaptureModeController::Get()->SetUserCaptureRegion(kUserRegion,
                                                        /*by_user=*/true);
-    EXPECT_CALL(projector_client_, IsDriveFsMounted())
-        .WillRepeatedly(testing::Return(true));
   }
 
   void TearDown() override {
@@ -4651,18 +4570,13 @@ class ProjectorCaptureModeIntegrationTests
   }
 
   void StartProjectorModeSession() {
-    auto* projector_session = ProjectorSession::Get();
-    EXPECT_FALSE(projector_session->is_active());
-    auto* projector_controller = ProjectorController::Get();
-    EXPECT_CALL(projector_client_, MinimizeProjectorApp());
-    projector_controller->StartProjectorSession("projector_data");
-    EXPECT_TRUE(projector_session->is_active());
+    projector_helper_.StartProjectorModeSession();
   }
 
   void StartRecordingForProjectorFromSource(CaptureModeSource source) {
+    StartProjectorModeSession();
     auto* controller = CaptureModeController::Get();
     controller->SetSource(source);
-    StartProjectorModeSession();
 
     switch (source) {
       case CaptureModeSource::kFullscreen:
@@ -4731,8 +4645,7 @@ class ProjectorCaptureModeIntegrationTests
   }
 
  protected:
-  base::test::ScopedFeatureList scoped_feature_list_;
-  MockProjectorClient projector_client_;
+  ProjectorCaptureModeIntegrationHelper projector_helper_;
   std::unique_ptr<aura::Window> window_;
   base::HistogramTester histogram_tester_;
 };
@@ -4846,7 +4759,7 @@ TEST_F(ProjectorCaptureModeIntegrationTests, StartEndRecording) {
   // Hit Enter to begin recording. The recording session should be marked for
   // projector.
   PressAndReleaseKey(ui::VKEY_RETURN);
-  EXPECT_CALL(projector_client_, StartSpeechRecognition());
+  EXPECT_CALL(*projector_client(), StartSpeechRecognition());
   WaitForRecordingToStart();
   histogram_tester_.ExpectBucketCount(kProjectorCreationFlowHistogramName,
                                       ProjectorCreationFlow::kRecordingStarted,
@@ -4857,8 +4770,9 @@ TEST_F(ProjectorCaptureModeIntegrationTests, StartEndRecording) {
   EXPECT_TRUE(controller->video_recording_watcher_for_testing()
                   ->is_in_projector_mode());
 
-  EXPECT_CALL(projector_client_, StopSpeechRecognition());
+  EXPECT_CALL(*projector_client(), StopSpeechRecognition());
   controller->EndVideoRecording(EndRecordingReason::kStopRecordingButton);
+  WaitForCaptureFileToBeSaved();
 
   histogram_tester_.ExpectBucketCount(kProjectorCreationFlowHistogramName,
                                       ProjectorCreationFlow::kRecordingEnded,
@@ -4890,11 +4804,22 @@ TEST_F(ProjectorCaptureModeIntegrationTests,
        ProjectorSessionNeverStartsWhenVideoRecordingIsOnGoing) {
   auto* controller = StartCaptureSession(CaptureModeSource::kFullscreen,
                                          CaptureModeType::kVideo);
+  EXPECT_CALL(
+      *projector_client(),
+      OnNewScreencastPreconditionChanged(NewScreencastPrecondition(
+          NewScreencastPreconditionState::kDisabled,
+          {NewScreencastPreconditionReason::kScreenRecordingInProgress})));
   controller->StartVideoRecordingImmediatelyForTesting();
+
   EXPECT_TRUE(controller->is_recording_in_progress());
   EXPECT_FALSE(ProjectorSession::Get()->is_active());
   EXPECT_NE(ProjectorController::Get()->GetNewScreencastPrecondition().state,
             NewScreencastPreconditionState::kEnabled);
+  // There is another OnNewScreencastPreconditionChanged() call during tear
+  // down.
+  EXPECT_CALL(*projector_client(),
+              OnNewScreencastPreconditionChanged(NewScreencastPrecondition(
+                  NewScreencastPreconditionState::kEnabled, {})));
 }
 
 namespace {
@@ -5129,21 +5054,26 @@ TEST_F(ProjectorCaptureModeIntegrationTests, RecordingOverlayWidgetTargeting) {
   auto* overlay_window = overlay_controller->GetOverlayNativeWindow();
   VerifyOverlayEnabledState(overlay_window, /*overlay_enabled_state=*/true);
 
+  // Open the annotation tray bubble.
+  auto* root_window = Shell::GetPrimaryRootWindow();
+  auto* status_area_widget =
+      RootWindowController::ForWindow(root_window)->GetStatusAreaWidget();
+  ProjectorAnnotationTray* annotations_tray =
+      status_area_widget->projector_annotation_tray();
+  annotations_tray->ShowBubble();
+  EXPECT_TRUE(annotations_tray->GetBubbleView());
+
   // Clicking anywhere outside the projector shelf pod should be targeted to the
-  // overlay widget window.
+  // overlay widget window and close the annotation tray bubble.
   EventTargetCatcher event_target_catcher;
   auto* event_generator = GetEventGenerator();
   event_generator->set_current_screen_location(gfx::Point(10, 10));
   event_generator->ClickLeftButton();
   EXPECT_EQ(overlay_window, event_target_catcher.last_event_target());
+  EXPECT_FALSE(annotations_tray->GetBubbleView());
 
   // Now move the mouse over the projector shelf pod, the overlay should not
   // consume the event, and it should instead go through to that pod.
-  auto* root_window = Shell::GetPrimaryRootWindow();
-  ProjectorAnnotationTray* annotations_tray =
-      RootWindowController::ForWindow(root_window)
-          ->GetStatusAreaWidget()
-          ->projector_annotation_tray();
   EXPECT_TRUE(annotations_tray->visible_preferred());
   event_generator->MoveMouseTo(
       annotations_tray->GetBoundsInScreen().CenterPoint());
@@ -5152,6 +5082,86 @@ TEST_F(ProjectorCaptureModeIntegrationTests, RecordingOverlayWidgetTargeting) {
 
   // The overlay status hasn't changed.
   VerifyOverlayEnabledState(overlay_window, /*overlay_enabled_state=*/true);
+
+  // Now move the mouse and then click on the stop recording button, the overlay
+  // should not consume the event. The video recording should be ended.
+  StopRecordingButtonTray* stop_recording_button =
+      status_area_widget->stop_recording_button_tray();
+  const gfx::Point stop_button_center_point =
+      stop_recording_button->GetBoundsInScreen().CenterPoint();
+  event_generator->MoveMouseTo(stop_button_center_point);
+  event_generator->ClickLeftButton();
+  EXPECT_FALSE(controller->is_recording_in_progress());
+}
+
+// Tests that auto hidden shelf can be brought back if user moves mouse to the
+// shelf activation area even while annotation is active.
+TEST_F(ProjectorCaptureModeIntegrationTests,
+       BringBackAutoHiddenShelfWhileAnnotationIsOn) {
+  auto* root_window = Shell::GetPrimaryRootWindow();
+  // Set `shelf` to always auto-hidden.
+  Shelf* shelf = RootWindowController::ForWindow(root_window)->shelf();
+  shelf->SetAutoHideBehavior(ShelfAutoHideBehavior::kAlways);
+
+  auto* controller = CaptureModeController::Get();
+  controller->SetSource(CaptureModeSource::kFullscreen);
+  StartProjectorModeSession();
+  EXPECT_TRUE(controller->IsActive());
+
+  PressAndReleaseKey(ui::VKEY_RETURN);
+  WaitForRecordingToStart();
+
+  auto* event_generator = GetEventGenerator();
+  auto* projector_controller = ProjectorControllerImpl::Get();
+
+  const gfx::Rect root_window_bounds_in_screen =
+      root_window->GetBoundsInScreen();
+  const int display_width = root_window_bounds_in_screen.width();
+  const int display_height = root_window_bounds_in_screen.height();
+  const gfx::Point display_center = root_window_bounds_in_screen.CenterPoint();
+
+  struct {
+    const std::string scope_trace;
+    const ShelfAlignment shelf_alignment;
+  } kTestCases[] = {
+      {"Shelf has botton alignment", ShelfAlignment::kBottom},
+      {"Shelf has left alignment", ShelfAlignment::kLeft},
+      {"Shelf has right alignment", ShelfAlignment::kRight},
+  };
+
+  for (const auto& test_case : kTestCases) {
+    SCOPED_TRACE(test_case.scope_trace);
+    // Enable annotation.
+    projector_controller->OnMarkerPressed();
+
+    // Verify shelf is invisible right now.
+    EXPECT_FALSE(shelf->IsVisible());
+
+    shelf->SetAlignment(test_case.shelf_alignment);
+    switch (test_case.shelf_alignment) {
+      case ShelfAlignment::kBottom:
+      case ShelfAlignment::kBottomLocked:
+        event_generator->MoveMouseTo(0, display_height);
+        break;
+      case ShelfAlignment::kLeft:
+        event_generator->MoveMouseTo(0, display_height);
+        break;
+      case ShelfAlignment::kRight:
+        event_generator->MoveMouseTo(display_width, display_height);
+        break;
+    }
+    // Verify after mouse is moved on top of the shelf activation area, shelf is
+    // brought back and visible once the animation to show shelf is finished.
+    ShellTestApi().WaitForWindowFinishAnimating(shelf->GetWindow());
+    EXPECT_TRUE(shelf->IsVisible());
+
+    // Disable annotation.
+    projector_controller->OnMarkerPressed();
+    // Move mouse to the outside of the shelf activation area, and wait for the
+    // animation to hide shelf to finish.
+    event_generator->MoveMouseTo(display_center);
+    ShellTestApi().WaitForWindowFinishAnimating(shelf->GetWindow());
+  }
 }
 
 // Tests that neither preview notification nor recording in tote is shown if in
@@ -5249,6 +5259,8 @@ TEST_F(ProjectorCaptureModeIntegrationTests,
     }
 
     StartProjectorModeSession();
+    auto* controller = CaptureModeController::Get();
+    controller->SetSource(CaptureModeSource::kRegion);
     test_api.SetUserSelectedRegion(target_region);
 
     // Resize the region twice by dragging the top right of the region out and
@@ -5262,7 +5274,7 @@ TEST_F(ProjectorCaptureModeIntegrationTests,
     test_api.PerformCapture();
     WaitForSeconds(1);
     test_api.StopVideoRecording();
-    EXPECT_FALSE(CaptureModeController::Get()->is_recording_in_progress());
+    EXPECT_FALSE(controller->is_recording_in_progress());
 
     histogram_tester_.ExpectBucketCount(
         GetCaptureModeHistogramName(
@@ -5551,7 +5563,8 @@ TEST_F(CaptureModeSettingsTest, SelectFolderFromDialog) {
 
   // Accepting the dialog with a folder selection should dismiss it and add a
   // new option for the custom selected folder in the settings menu.
-  const base::FilePath custom_folder(CreateCustomFolder("test"));
+  const base::FilePath custom_folder(
+      CreateCustomFolderInUserDownloadsPath("test"));
   dialog_factory->AcceptPath(custom_folder);
   WaitForSettingsMenuToBeRefreshed();
   EXPECT_FALSE(IsFolderSelectionDialogShown());
@@ -5610,7 +5623,8 @@ TEST_F(CaptureModeSettingsTest, DismissDialogWithoutSelection) {
 TEST_F(CaptureModeSettingsTest, AcceptUpdatedCustomFolderFromDialog) {
   // Begin a new session with a pre-configured custom folder.
   auto* controller = CaptureModeController::Get();
-  const base::FilePath custom_folder(CreateCustomFolder("test"));
+  const base::FilePath custom_folder(
+      CreateCustomFolderInUserDownloadsPath("test"));
   controller->SetCustomCaptureFolder(custom_folder);
   StartImageRegionCapture();
 
@@ -5633,7 +5647,8 @@ TEST_F(CaptureModeSettingsTest, AcceptUpdatedCustomFolderFromDialog) {
   EXPECT_TRUE(IsFolderSelectionDialogShown());
 
   auto* dialog_factory = FakeFolderSelectionDialogFactory::Get();
-  const base::FilePath new_folder(CreateCustomFolder("test1"));
+  const base::FilePath new_folder(
+      CreateCustomFolderInUserDownloadsPath("test1"));
   dialog_factory->AcceptPath(new_folder);
   WaitForSettingsMenuToBeRefreshed();
   EXPECT_FALSE(IsFolderSelectionDialogShown());
@@ -5684,7 +5699,8 @@ TEST_F(CaptureModeSettingsTest,
   EXPECT_TRUE(IsFolderSelectionDialogShown());
 
   auto* dialog_factory = FakeFolderSelectionDialogFactory::Get();
-  const base::FilePath new_folder(CreateCustomFolder("test"));
+  const base::FilePath new_folder(
+      CreateCustomFolderInUserDownloadsPath("test"));
   dialog_factory->AcceptPath(new_folder);
   WaitForSettingsMenuToBeRefreshed();
   EXPECT_EQ(custom_folder_view, test_api.GetCustomFolderOptionIfAny());
@@ -5698,7 +5714,8 @@ TEST_F(CaptureModeSettingsTest,
 TEST_F(CaptureModeSettingsTest, DeleteCustomFolderFromDialog) {
   // Begin a new session with a pre-configured custom folder.
   auto* controller = CaptureModeController::Get();
-  const base::FilePath custom_folder(CreateCustomFolder("test"));
+  const base::FilePath custom_folder(
+      CreateCustomFolderInUserDownloadsPath("test"));
   controller->SetCustomCaptureFolder(custom_folder);
   StartImageRegionCapture();
 
@@ -5765,7 +5782,8 @@ TEST_F(CaptureModeSettingsTest, AcceptDefaultDownloadsFolderFromDialog) {
 TEST_F(CaptureModeSettingsTest, SwitchWhichFolderToUserFromOptions) {
   // Begin a new session with a pre-configured custom folder.
   auto* controller = CaptureModeController::Get();
-  const base::FilePath custom_path((CreateCustomFolder("test")));
+  const base::FilePath custom_path(
+      (CreateCustomFolderInUserDownloadsPath("test")));
   controller->SetCustomCaptureFolder(custom_path);
   StartImageRegionCapture();
   auto* event_generator = GetEventGenerator();
@@ -6006,7 +6024,8 @@ TEST_F(CaptureModeSettingsTest,
        KeyboardNavigationForRemovingCustomFolderOption) {
   // Begin a new session with a pre-configured custom folder.
   auto* controller = CaptureModeController::Get();
-  const base::FilePath custom_folder(CreateCustomFolder("test"));
+  const base::FilePath custom_folder(
+      CreateCustomFolderInUserDownloadsPath("test"));
   controller->SetCustomCaptureFolder(custom_folder);
   StartImageRegionCapture();
 
@@ -6087,7 +6106,8 @@ TEST_F(CaptureModeSettingsTest, KeyboardNavigationForAddingCustomFolderOption) {
 
   // Select the custom folder. Wait for the settings menu to be refreshed. The
   // custom folder option should be added to the settings menu and checked.
-  const base::FilePath custom_folder(CreateCustomFolder("test"));
+  const base::FilePath custom_folder(
+      CreateCustomFolderInUserDownloadsPath("test"));
   controller->SetCustomCaptureFolder(custom_folder);
   auto* dialog_factory = FakeFolderSelectionDialogFactory::Get();
   dialog_factory->AcceptPath(custom_folder);
@@ -6182,7 +6202,8 @@ TEST_P(CaptureModeHistogramTest, CaptureModeSwitchToDefaultReasonMetric) {
       controller->delegate_for_testing()->GetUserDefaultDownloadsFolder();
   const base::FilePath non_available_custom_folder(
       FILE_PATH_LITERAL("/home/test"));
-  const base::FilePath available_custom_folder = CreateCustomFolder("test");
+  const base::FilePath available_custom_folder =
+      CreateCustomFolderInUserDownloadsPath("test");
 
   histogram_tester.ExpectBucketCount(
       GetCaptureModeHistogramName(kHistogramNameBase),

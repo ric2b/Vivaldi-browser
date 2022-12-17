@@ -32,7 +32,6 @@ VIZ_COMMON_EXPORT extern const base::Feature kVideoDetectorIgnoreNonVideos;
 #if BUILDFLAG(IS_ANDROID)
 VIZ_COMMON_EXPORT extern const base::Feature kDynamicColorGamut;
 #endif
-VIZ_COMMON_EXPORT extern const base::Feature kDynamicBufferQueueAllocation;
 VIZ_COMMON_EXPORT extern const base::Feature kFastSolidColorDraw;
 VIZ_COMMON_EXPORT extern const base::Feature kVizFrameSubmissionForWebView;
 VIZ_COMMON_EXPORT extern const base::Feature kUsePreferredIntervalForVideo;
@@ -48,6 +47,7 @@ VIZ_COMMON_EXPORT extern const base::Feature kWebViewVulkanIntermediateBuffer;
 VIZ_COMMON_EXPORT extern const base::Feature kUsePlatformDelegatedInk;
 #if BUILDFLAG(IS_ANDROID)
 VIZ_COMMON_EXPORT extern const base::Feature kUseSurfaceLayerForVideoDefault;
+VIZ_COMMON_EXPORT extern const base::Feature kWebViewNewInvalidateHeuristic;
 #endif
 VIZ_COMMON_EXPORT extern const base::Feature kSurfaceSyncThrottling;
 VIZ_COMMON_EXPORT extern const base::Feature kDynamicSchedulerForDraw;

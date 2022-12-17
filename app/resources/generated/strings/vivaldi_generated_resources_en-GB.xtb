@@ -9,7 +9,6 @@
 <translation id="1054153489933238809">Open Original &amp;Image in New Tab</translation>
 <translation id="1056898198331236512">Warning</translation>
 <translation id="1084824384139382525">Copy link addr&amp;ess</translation>
-<translation id="1128109161498068552">Do not allow any sites to use system exclusive messages to access MIDI devices</translation>
 <translation id="1163931534039071049">&amp;View frame source</translation>
 <translation id="1165039591588034296">Error</translation>
 <translation id="1175364870820465910">&amp;Print...</translation>
@@ -22,7 +21,6 @@
 <translation id="1297175357211070620">Destination</translation>
 <translation id="1303101771013849280">Bookmarks HTML File</translation>
 <translation id="1430915738399379752">Print</translation>
-<translation id="1433811987160647649">Ask before accessing</translation>
 <translation id="1451375123200651445">Webpage, Single File</translation>
 <translation id="1465176863081977902">C&amp;opy Audio Address</translation>
 <translation id="1476607407192946488">&amp;Language Settings</translation>
@@ -99,13 +97,11 @@
 <translation id="2783321960289401138">Create shortcut...</translation>
 <translation id="2785873697295365461">File descriptors</translation>
 <translation id="2809586584051668049">and <ph name="NUMBER_ADDITIONAL_DISABLED" /> more</translation>
-<translation id="2812989263793994277">Do not show any images</translation>
 <translation id="2850541429955027218">Add theme</translation>
 <translation id="2861941300086904918">Native Client security manager</translation>
 <translation id="2881076733170862447">When You Click the Extension</translation>
 <translation id="2889064240420137087">Open link with...</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> could not communicate with this printer. Make sure the printer is plugged in and try again.</translation>
-<translation id="2904456025988372123">Ask when a site tries to download files automatically after the first file</translation>
 <translation id="2913331724188855103">Allow sites to save and read cookie data (recommended)</translation>
 <translation id="2931157624143513983">Fit to printable area</translation>
 <translation id="2932085390869194046">Suggest Password...</translation>
@@ -126,7 +122,6 @@
 <translation id="3127156390846601284">This will delete any data stored on your device for all the sites shown. Do you want to continue?</translation>
 <translation id="3129173833825111527">Left margin</translation>
 <translation id="3144647712221361880">Open link as</translation>
-<translation id="3154429428035006212">Offline for more than a month</translation>
 <translation id="3222066309010235055">Prerender: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Select the root directory of the extension to pack. To update an extension, also select the private key file to reuse.</translation>
 <translation id="3280237271814976245">Save &amp;as...</translation>
@@ -165,7 +160,6 @@
 <translation id="3838085852053358637">Failed to load extension</translation>
 <translation id="383891835335927981">No sites have been zoomed in or out</translation>
 <translation id="385051799172605136">Back</translation>
-<translation id="3899879303189199559">Offline for more than a year</translation>
 <translation id="3905761538810670789">Repair app</translation>
 <translation id="3908501907586732282">Enable extension</translation>
 <translation id="3909701002594999354">Show All &amp;Controls</translation>
@@ -192,7 +186,6 @@
 <translation id="4200983522494130825">New &amp;tab</translation>
 <translation id="4225397296022057997">On all sites</translation>
 <translation id="4256316378292851214">Sa&amp;ve Video As...</translation>
-<translation id="4278390842282768270">Allowed</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K live)</translation>
 <translation id="4345587454538109430">Configure...</translation>
 <translation id="4348766275249686434">Collect errors</translation>
@@ -222,10 +215,8 @@
 <translation id="4988526792673242964">Pages</translation>
 <translation id="49896407730300355">Rotate c&amp;ounterclockwise</translation>
 <translation id="4989966318180235467">Inspect &amp;background page</translation>
-<translation id="4994474651455208930">Allow sites to ask to become default handlers for protocols</translation>
 <translation id="5000922062037820727">Blocked (recommended)</translation>
 <translation id="5027562294707732951">Add extension</translation>
-<translation id="5036662165765606524">Do not allow any site to download multiple files automatically</translation>
 <translation id="5039804452771397117">Allow</translation>
 <translation id="5057110919553308744">When you click the extension</translation>
 <translation id="5059526285558225588">Choose what to share</translation>
@@ -238,7 +229,6 @@
 <translation id="5233231016133573565">Process ID</translation>
 <translation id="5233736638227740678">&amp;Paste</translation>
 <translation id="5256861893479663409">On All Sites</translation>
-<translation id="5265562206369321422">Offline for more than a week</translation>
 <translation id="5269977353971873915">Print Failed</translation>
 <translation id="5284445933715251131">Continue Downloading</translation>
 <translation id="52912272896845572">Private key file is invalid.</translation>
@@ -294,7 +284,6 @@
 <translation id="6122081475643980456">Your Internet connection is being controlled</translation>
 <translation id="6147020289383635445">Print preview failed.</translation>
 <translation id="6156863943908443225">Script cache</translation>
-<translation id="6169666352732958425">Unable to cast desktop.</translation>
 <translation id="6196854373336333322">The extension "<ph name="EXTENSION_NAME" />" has taken control of your proxy settings, which means it can change, break or eavesdrop on anything you do online. If you aren't sure why this change happened, you probably don't want it.</translation>
 <translation id="6200151268994853226">Manage Extension</translation>
 <translation id="6206311232642889873">Cop&amp;y Image</translation>
@@ -328,7 +317,6 @@
 <translation id="6798954102094737107">Plug-in: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Keep changes</translation>
 <translation id="6817174620439930047">Ask when a site wants to use system exclusive messages to access MIDI devices (recommended)</translation>
-<translation id="682123305478866682">Cast desktop</translation>
 <translation id="6824564591481349393">Copy &amp;Email Address</translation>
 <translation id="6840155290835956714">Ask before sending</translation>
 <translation id="6886871292305414135">Open link in new &amp;tab</translation>
@@ -346,7 +334,6 @@
 <translation id="708060913198414444">C&amp;opy audio address</translation>
 <translation id="7175353351958621980">Loaded from:</translation>
 <translation id="7186088072322679094">Keep in Toolbar</translation>
-<translation id="7270858098575133036">Ask when a site wants to use system exclusive messages to access MIDI devices</translation>
 <translation id="7287143125007575591">Access denied.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7385854874724088939">Something went wrong when trying to print. Please check your printer and try again.</translation>
@@ -369,7 +356,6 @@
 <translation id="7704305437604973648">Task</translation>
 <translation id="7710568461918838723">&amp;Cast...</translation>
 <translation id="7750228210027921155">Picture in picture</translation>
-<translation id="7751260505918304024">Show all</translation>
 <translation id="7760004034676677601">Is this the start-up page that you were expecting?</translation>
 <translation id="7771452384635174008">Layout</translation>
 <translation id="7782102568078991263">No more suggestions from Google</translation>
@@ -382,9 +368,7 @@
 <translation id="7849264908733290972">Open &amp;Image in New Tab</translation>
 <translation id="7857949311770343000">Is this the new tab page that you were expecting?</translation>
 <translation id="786073089922909430">Service: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7885253890047913815">Recent Destinations</translation>
 <translation id="7903925330883316394">Utility: <ph name="UTILITY_TYPE" /></translation>
-<translation id="7938594894617528435">Currently offline</translation>
 <translation id="7947962633355574091">C&amp;opy Video Address</translation>
 <translation id="7966241909927244760">C&amp;opy Image Address</translation>
 <translation id="7973394300052703468">New &amp;Private Window</translation>
@@ -427,10 +411,8 @@ Keep your key file in a safe place. You will need it to create new versions of y
 <translation id="8708000541097332489">Clear on exit</translation>
 <translation id="8714838604780058252">Background graphics</translation>
 <translation id="8725066075913043281">Try again</translation>
-<translation id="8757090071857742562">Unable to cast desktop.  Check to see if you confirmed the prompt to start sharing your screen.</translation>
 <translation id="8774934320277480003">Top margin</translation>
 <translation id="8798099450830957504">Default</translation>
-<translation id="8800004011501252845">Showing destinations for</translation>
 <translation id="8808478386290700967">Web Store</translation>
 <translation id="8823514049557262177">Copy link te&amp;xt</translation>
 <translation id="8823704566850948458">Suggest password...</translation>
@@ -443,7 +425,6 @@ Keep your key file in a safe place. You will need it to create new versions of y
 <translation id="8962083179518285172">Hide Details</translation>
 <translation id="8973557916016709913">Remove zoom level</translation>
 <translation id="897939795688207351">On <ph name="ORIGIN" /></translation>
-<translation id="8996526648899750015">Add account...</translation>
 <translation id="9003647077635673607">Allow on all websites</translation>
 <translation id="9027459031423301635">Open Link in New &amp;Tab</translation>
 <translation id="9056810968620647706">No matches were found.</translation>

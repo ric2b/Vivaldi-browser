@@ -10,7 +10,6 @@
 #include "base/callback_helpers.h"
 #include "base/check_op.h"
 #include "base/containers/adapters.h"
-#include "base/cxx17_backports.h"
 #include "base/files/file_path.h"
 #include "base/memory/ptr_util.h"
 #include "base/notreached.h"
@@ -58,7 +57,7 @@ void AddActionToExtensionActivityLog(Profile* profile,
 
 ChromeExtensionMessageFilter::ChromeExtensionMessageFilter(Profile* profile)
     : BrowserMessageFilter(kExtensionFilteredMessageClasses,
-                           base::size(kExtensionFilteredMessageClasses)),
+                           std::size(kExtensionFilteredMessageClasses)),
       profile_(profile),
       activity_log_(extensions::ActivityLog::GetInstance(profile)) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -112,6 +111,11 @@ void ChromeExtensionMessageFilter::OnDestruct() const {
 void ChromeExtensionMessageFilter::OnGetExtMessageBundle(
     const std::string& extension_id, IPC::Message* reply_msg) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  // The profile may have been destroyed during the hop from the background
+  // thread to the UI thread.
+  if (!profile_)
+    return;
 
   const extensions::ExtensionSet& extension_set =
       extensions::ExtensionRegistry::Get(profile_)->enabled_extensions();

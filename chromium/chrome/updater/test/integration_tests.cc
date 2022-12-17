@@ -194,8 +194,12 @@ class IntegrationTest : public ::testing::Test {
 
   void SetServerStarts(int value) { test_commands_->SetServerStarts(value); }
 
-  void ExpectAppUnregisteredExistenceCheckerPath(const std::string& app_id) {
-    test_commands_->ExpectAppUnregisteredExistenceCheckerPath(app_id);
+  void ExpectRegistered(const std::string& app_id) {
+    test_commands_->ExpectRegistered(app_id);
+  }
+
+  void ExpectNotRegistered(const std::string& app_id) {
+    test_commands_->ExpectNotRegistered(app_id);
   }
 
   void ExpectAppVersion(const std::string& app_id,
@@ -203,8 +207,12 @@ class IntegrationTest : public ::testing::Test {
     test_commands_->ExpectAppVersion(app_id, version);
   }
 
-  void RegisterApp(const std::string& app_id) {
-    test_commands_->RegisterApp(app_id);
+  void InstallApp(const std::string& app_id) {
+    test_commands_->InstallApp(app_id);
+  }
+
+  void UninstallApp(const std::string& app_id) {
+    test_commands_->UninstallApp(app_id);
   }
 
   void RunWake(int exit_code) { test_commands_->RunWake(exit_code); }
@@ -213,7 +221,10 @@ class IntegrationTest : public ::testing::Test {
     test_commands_->RunWakeActive(exit_code);
   }
 
-  void Update(const std::string& app_id) { test_commands_->Update(app_id); }
+  void Update(const std::string& app_id,
+              const std::string& install_data_index) {
+    test_commands_->Update(app_id, install_data_index);
+  }
 
   void UpdateAll() { test_commands_->UpdateAll(); }
 
@@ -237,18 +248,19 @@ class IntegrationTest : public ::testing::Test {
 
   void ExpectUpdateSequence(ScopedServer* test_server,
                             const std::string& app_id,
+                            const std::string& install_data_index,
                             const base::Version& from_version,
                             const base::Version& to_version) {
-    test_commands_->ExpectUpdateSequence(test_server, app_id, from_version,
-                                         to_version);
+    test_commands_->ExpectUpdateSequence(
+        test_server, app_id, install_data_index, from_version, to_version);
   }
 
   void ExpectSelfUpdateSequence(ScopedServer* test_server) {
     test_commands_->ExpectSelfUpdateSequence(test_server);
   }
 
-  void ExpectRegistrationEvent(ScopedServer* test_server,
-                               const std::string& app_id) {
+  void ExpectInstallEvent(ScopedServer* test_server,
+                          const std::string& app_id) {
     test_server->ExpectOnce(
         {base::BindRepeating(
             RequestMatcherRegex,
@@ -261,8 +273,10 @@ class IntegrationTest : public ::testing::Test {
 
   void CallServiceUpdate(
       const std::string& app_id,
+      const std::string& install_data_index,
       UpdateService::PolicySameVersionUpdate policy_same_version_update) {
-    test_commands_->CallServiceUpdate(app_id, policy_same_version_update);
+    test_commands_->CallServiceUpdate(app_id, install_data_index,
+                                      policy_same_version_update);
   }
 
   void SetupFakeLegacyUpdaterData() {
@@ -330,16 +344,14 @@ TEST_F(IntegrationTest, SelfUninstallOutdatedUpdater) {
 
 TEST_F(IntegrationTest, QualifyUpdater) {
   ScopedServer test_server(test_commands_);
-  ExpectRegistrationEvent(&test_server, kUpdaterAppId);
   Install();
   ExpectInstalled();
   WaitForUpdaterExit();
   SetupFakeUpdaterLowerVersion();
   ExpectVersionNotActive(kUpdaterVersion);
 
-  ExpectRegistrationEvent(&test_server, kQualificationAppId);
-  ExpectUpdateSequence(&test_server, kQualificationAppId, base::Version("0.1"),
-                       base::Version("0.2"));
+  ExpectUpdateSequence(&test_server, kQualificationAppId, "",
+                       base::Version("0.1"), base::Version("0.2"));
 
   RunWake(0);
   WaitForUpdaterExit();
@@ -360,11 +372,10 @@ TEST_F(IntegrationTest, QualifyUpdater) {
 
 TEST_F(IntegrationTest, SelfUpdate) {
   ScopedServer test_server(test_commands_);
-  ExpectRegistrationEvent(&test_server, kUpdaterAppId);
   Install();
 
   base::Version next_version(base::StringPrintf("%s1", kUpdaterVersion));
-  ExpectUpdateSequence(&test_server, kUpdaterAppId,
+  ExpectUpdateSequence(&test_server, kUpdaterAppId, "",
                        base::Version(kUpdaterVersion), next_version);
 
   RunWake(0);
@@ -378,20 +389,17 @@ TEST_F(IntegrationTest, SelfUpdate) {
 TEST_F(IntegrationTest, ReportsActive) {
   // A longer than usual timeout is needed for this test because the macOS
   // UpdateServiceInternal server takes at least 10 seconds to shut down after
-  // Install, and RegisterApp cannot make progress until it shut downs and
+  // Install, and InstallApp cannot make progress until it shut downs and
   // releases the global prefs lock. We give it at most 18 seconds to be safe.
   base::test::ScopedRunLoopTimeout timeout(FROM_HERE, base::Seconds(18));
 
   ScopedServer test_server(test_commands_);
-  ExpectRegistrationEvent(&test_server, kUpdaterAppId);
   Install();
   ExpectInstalled();
 
-  // Register apps test1 and test2. Expect registration pings for each.
-  ExpectRegistrationEvent(&test_server, "test1");
-  RegisterApp("test1");
-  ExpectRegistrationEvent(&test_server, "test2");
-  RegisterApp("test2");
+  // Register apps test1 and test2. Expect pings for each.
+  InstallApp("test1");
+  InstallApp("test2");
 
   // Set test1 to be active and do a background updatecheck.
   SetActive("test1");
@@ -418,19 +426,18 @@ TEST_F(IntegrationTest, ReportsActive) {
 
 TEST_F(IntegrationTest, UpdateApp) {
   ScopedServer test_server(test_commands_);
-  ExpectRegistrationEvent(&test_server, kUpdaterAppId);
   Install();
 
   const std::string kAppId("test");
-  ExpectRegistrationEvent(&test_server, kAppId);
-  RegisterApp(kAppId);
+  InstallApp(kAppId);
   base::Version v1("1");
-  ExpectUpdateSequence(&test_server, kAppId, base::Version("0.1"), v1);
+  ExpectUpdateSequence(&test_server, kAppId, "", base::Version("0.1"), v1);
   RunWake(0);
 
   base::Version v2("2");
-  ExpectUpdateSequence(&test_server, kAppId, v1, v2);
-  Update(kAppId);
+  const std::string kInstallDataIndex("test_install_data_index");
+  ExpectUpdateSequence(&test_server, kAppId, kInstallDataIndex, v1, v2);
+  Update(kAppId, kInstallDataIndex);
   WaitForUpdaterExit();
   ExpectAppVersion(kAppId, v2);
   ExpectLastChecked();
@@ -442,7 +449,6 @@ TEST_F(IntegrationTest, UpdateApp) {
 
 TEST_F(IntegrationTest, MultipleWakesOneNetRequest) {
   ScopedServer test_server(test_commands_);
-  ExpectRegistrationEvent(&test_server, kUpdaterAppId);
   Install();
 
   // Only one sequence visible to the server despite multiple wakes.
@@ -456,7 +462,6 @@ TEST_F(IntegrationTest, MultipleWakesOneNetRequest) {
 
 TEST_F(IntegrationTest, MultipleUpdateAllsMultipleNetRequests) {
   ScopedServer test_server(test_commands_);
-  ExpectRegistrationEvent(&test_server, kUpdaterAppId);
   Install();
 
   ExpectNoUpdateSequence(&test_server, kUpdaterAppId);
@@ -471,17 +476,15 @@ TEST_F(IntegrationTest, MultipleUpdateAllsMultipleNetRequests) {
 #if BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
 TEST_F(IntegrationTest, LegacyUpdate3Web) {
   ScopedServer test_server(test_commands_);
-  ExpectRegistrationEvent(&test_server, kUpdaterAppId);
   Install();
 
   const char kAppId[] = "test1";
-  ExpectRegistrationEvent(&test_server, kAppId);
-  RegisterApp(kAppId);
+  InstallApp(kAppId);
 
   ExpectNoUpdateSequence(&test_server, kAppId);
   ExpectLegacyUpdate3WebSucceeds(kAppId, STATE_NO_UPDATE, S_OK);
 
-  ExpectUpdateSequence(&test_server, kAppId, base::Version("0.1"),
+  ExpectUpdateSequence(&test_server, kAppId, "", base::Version("0.1"),
                        base::Version("0.2"));
   ExpectLegacyUpdate3WebSucceeds(kAppId, STATE_INSTALL_COMPLETE, S_OK);
 
@@ -543,19 +546,20 @@ TEST_F(IntegrationTest, UninstallCmdLine) {
 TEST_F(IntegrationTest, UnregisterUninstalledApp) {
   Install();
   ExpectInstalled();
-  RegisterApp("test1");
-  RegisterApp("test2");
+  InstallApp("test1");
+  InstallApp("test2");
 
   WaitForUpdaterExit();
   ExpectVersionActive(kUpdaterVersion);
   ExpectActiveUpdater();
-  SetExistenceCheckerPath("test1", base::FilePath(FILE_PATH_LITERAL("NONE")));
+  UninstallApp("test1");
 
   RunWake(0);
 
   WaitForUpdaterExit();
   ExpectInstalled();
-  ExpectAppUnregisteredExistenceCheckerPath("test1");
+  ExpectNotRegistered("test1");
+  ExpectRegistered("test2");
 
   Uninstall();
 }
@@ -572,7 +576,7 @@ TEST_F(IntegrationTest, UninstallIfMaxServerWakesBeforeRegistrationExceeded) {
 
 TEST_F(IntegrationTest, UninstallUpdaterWhenAllAppsUninstalled) {
   Install();
-  RegisterApp("test1");
+  InstallApp("test1");
   ExpectInstalled();
   WaitForUpdaterExit();
   // TODO(crbug.com/1287235): The test is flaky without the following line.
@@ -582,7 +586,7 @@ TEST_F(IntegrationTest, UninstallUpdaterWhenAllAppsUninstalled) {
   ExpectInstalled();
   ExpectVersionActive(kUpdaterVersion);
   ExpectActiveUpdater();
-  SetExistenceCheckerPath("test1", base::FilePath(FILE_PATH_LITERAL("NONE")));
+  UninstallApp("test1");
   RunWake(0);
   WaitForUpdaterExit();
   ExpectClean();
@@ -597,15 +601,17 @@ TEST_F(IntegrationTest, UnregisterUnownedApp) {
   ExpectVersionActive(kUpdaterVersion);
   ExpectActiveUpdater();
 
-  RegisterApp("test1");
-  RegisterApp("test2");
+  InstallApp("test1");
+  InstallApp("test2");
+  WaitForUpdaterExit();
 
   SetExistenceCheckerPath("test1", GetDifferentUserPath());
 
   RunWake(0);
   WaitForUpdaterExit();
 
-  ExpectAppUnregisteredExistenceCheckerPath("test1");
+  ExpectNotRegistered("test1");
+  ExpectRegistered("test2");
 
   Uninstall();
 }
@@ -616,7 +622,13 @@ TEST_F(IntegrationTest, UnregisterUnownedApp) {
 #if !defined(COMPONENT_BUILD)
 TEST_F(IntegrationTest, SelfUpdateFromOldReal) {
   ScopedServer test_server(test_commands_);
-  ExpectRegistrationEvent(&test_server, kUpdaterAppId);
+
+  // TODO(crbug.com/1308856): Current versions of the updater do not send an
+  // eventtype=2 event for their own registration, but the old version of the
+  // updater does. When the old version is rolled to a more current version,
+  // this test may start to fail and this expectation can be safely removed.
+  ExpectInstallEvent(&test_server, kUpdaterAppId);
+
   SetupRealUpdaterLowerVersion();
   ExpectVersionNotActive(kUpdaterVersion);
 
@@ -625,9 +637,8 @@ TEST_F(IntegrationTest, SelfUpdateFromOldReal) {
   RunWakeActive(0);
 
   // Qualify the new instance.
-  ExpectRegistrationEvent(&test_server, kQualificationAppId);
-  ExpectUpdateSequence(&test_server, kQualificationAppId, base::Version("0.1"),
-                       base::Version("0.2"));
+  ExpectUpdateSequence(&test_server, kQualificationAppId, "",
+                       base::Version("0.1"), base::Version("0.2"));
   RunWake(0);
   WaitForUpdaterExit();
 
@@ -650,13 +661,11 @@ TEST_F(IntegrationTest, UpdateServiceStress) {
 
 TEST_F(IntegrationTest, SameVersionUpdate) {
   ScopedServer test_server(test_commands_);
-  ExpectRegistrationEvent(&test_server, kUpdaterAppId);
   Install();
   ExpectInstalled();
 
   const std::string app_id = "test-appid";
-  ExpectRegistrationEvent(&test_server, app_id);
-  RegisterApp(app_id);
+  InstallApp(app_id);
 
   const std::string response = base::StringPrintf(
       ")]}'\n"
@@ -678,14 +687,55 @@ TEST_F(IntegrationTest, SameVersionUpdate) {
           RequestMatcherRegex,
           R"(.*"updatecheck":{"sameversionupdate":true},"version":"0.1"}.*)")},
       response);
-  CallServiceUpdate(app_id, UpdateService::PolicySameVersionUpdate::kAllowed);
+  CallServiceUpdate(app_id, "",
+                    UpdateService::PolicySameVersionUpdate::kAllowed);
 
   test_server.ExpectOnce(
       {base::BindRepeating(RequestMatcherRegex,
                            R"(.*"updatecheck":{},"version":"0.1"}.*)")},
       response);
-  CallServiceUpdate(app_id,
+  CallServiceUpdate(app_id, "",
                     UpdateService::PolicySameVersionUpdate::kNotAllowed);
+  Uninstall();
+}
+
+TEST_F(IntegrationTest, InstallDataIndex) {
+  ScopedServer test_server(test_commands_);
+  Install();
+  ExpectInstalled();
+
+  const std::string app_id = "test-appid";
+  const std::string install_data_index = "test-install-data-index";
+
+  InstallApp(app_id);
+
+  const std::string response = base::StringPrintf(
+      ")]}'\n"
+      R"({"response":{)"
+      R"(  "protocol":"3.1",)"
+      R"(  "app":[)"
+      R"(    {)"
+      R"(      "appid":"%s",)"
+      R"(      "status":"ok",)"
+      R"(      "updatecheck":{)"
+      R"(        "status":"noupdate")"
+      R"(      })"
+      R"(    })"
+      R"(  ])"
+      R"(}})",
+      app_id.c_str());
+
+  test_server.ExpectOnce(
+      {base::BindRepeating(
+          RequestMatcherRegex,
+          base::StringPrintf(
+              R"(.*"data":\[{"index":"%s","name":"install"}],.*)",
+              install_data_index.c_str()))},
+      response);
+
+  CallServiceUpdate(app_id, install_data_index,
+                    UpdateService::PolicySameVersionUpdate::kAllowed);
+
   Uninstall();
 }
 

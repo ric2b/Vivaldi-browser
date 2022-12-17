@@ -67,14 +67,18 @@ WebSocketHttp2HandshakeStream::~WebSocketHttp2HandshakeStream() {
   RecordHandshakeResult(result_);
 }
 
+void WebSocketHttp2HandshakeStream::RegisterRequest(
+    const HttpRequestInfo* request_info) {
+  DCHECK(request_info);
+  DCHECK(request_info->traffic_annotation.is_valid());
+  request_info_ = request_info;
+}
+
 int WebSocketHttp2HandshakeStream::InitializeStream(
-    const HttpRequestInfo* request_info,
     bool can_send_early,
     RequestPriority priority,
     const NetLogWithSource& net_log,
     CompletionOnceCallback callback) {
-  DCHECK(request_info->traffic_annotation.is_valid());
-  request_info_ = request_info;
   priority_ = priority;
   net_log_ = net_log;
   return OK;
@@ -281,9 +285,9 @@ void WebSocketHttp2HandshakeStream::OnHeadersReceived(
 
   response_headers_complete_ = true;
 
-  const bool headers_valid =
+  const int rv =
       SpdyHeadersToHttpResponse(response_headers, http_response_info_);
-  DCHECK(headers_valid);
+  DCHECK_NE(rv, ERR_INCOMPLETE_HTTP2_HEADERS);
 
   http_response_info_->response_time = stream_->response_time();
   // Do not store SSLInfo in the response here, HttpNetworkTransaction will take

@@ -15,7 +15,12 @@ cargo_crate("lib") {
   crate_root = "crate/src/lib.rs"
 
   # Unit tests skipped. Generate with --with-tests to include them.
-  skip_unit_tests = true
+  build_native_rust_unit_tests = false
   sources = [ "crate/src/lib.rs" ]
   edition = "2015"
+  cargo_pkg_version = "0.1.9"
+  cargo_pkg_authors =
+      "kwantam <kwantam@gmail.com>, Manish Goregaokar <manishsmail@gmail.com>"
+  cargo_pkg_name = "unicode-width"
+  cargo_pkg_description = "Determine displayed width of `char` and `str` typesaccording to Unicode Standard Annex #11 rules."
 }

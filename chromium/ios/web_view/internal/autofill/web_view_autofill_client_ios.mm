@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/check.h"
 #include "base/memory/ptr_util.h"
 #include "base/notreached.h"
@@ -224,7 +225,12 @@ void WebViewAutofillClientIOS::ConfirmSaveAddressProfile(
     const AutofillProfile& profile,
     const AutofillProfile* original_profile,
     SaveAddressProfilePromptOptions options,
-    AddressProfileSavePromptCallback callback) {}
+    AddressProfileSavePromptCallback callback) {
+  // TODO(crbug.com/1167062): Respect SaveAddressProfilePromptOptions.
+  [bridge_ confirmSaveAddressProfile:profile
+                     originalProfile:original_profile
+                            callback:std::move(callback)];
+}
 
 bool WebViewAutofillClientIOS::HasCreditCardScanFeature() {
   return false;

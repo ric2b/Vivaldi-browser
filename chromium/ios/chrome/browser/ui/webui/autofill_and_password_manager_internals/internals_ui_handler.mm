@@ -64,7 +64,7 @@ void InternalsUIHandler::RegisterMessages() {
                                     base::Unretained(this)));
 }
 
-void InternalsUIHandler::OnLoaded(base::Value::ConstListView args) {
+void InternalsUIHandler::OnLoaded(const base::Value::List& args) {
   base::Value load_event(call_on_load_);
   base::Value empty;
   web_ui()->CallJavascriptFunction("cr.webUIListenerCallback",
@@ -111,7 +111,7 @@ void InternalsUIHandler::LogEntry(const base::Value& entry) {
   if (!registered_with_log_router_ || entry.is_none())
     return;
 
-  base::Value log_event("add-raw-log");
+  base::Value log_event("add-structured-log");
   web_ui()->CallJavascriptFunction("cr.webUIListenerCallback",
                                    {&log_event, &entry});
 }

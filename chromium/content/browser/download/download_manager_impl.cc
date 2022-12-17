@@ -18,11 +18,12 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/observer_list.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/supports_user_data.h"
 #include "base/synchronization/lock.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "components/download/database/in_progress/download_entry.h"
 #include "components/download/public/common/download_create_info.h"
@@ -501,7 +502,7 @@ void DownloadManagerImpl::DetermineDownloadTarget(
         target_path, download::DownloadItem::TARGET_DISPOSITION_OVERWRITE,
         download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
         download::DownloadItem::MixedContentStatus::UNKNOWN, target_path,
-        absl::nullopt /*download_schedule*/,
+        base::FilePath(), absl::nullopt /*download_schedule*/,
         download::DOWNLOAD_INTERRUPT_REASON_NONE);
   }
 }
@@ -711,7 +712,7 @@ void DownloadManagerImpl::StartDownloadItem(
     download::InProgressDownloadManager::StartDownloadItemCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   if (vivaldi::IsVivaldiRunning()) {
     WebContents* web_contents = WebContentsImpl::FromRenderFrameHostID(
       info->render_process_id, info->render_frame_id);
@@ -722,7 +723,7 @@ void DownloadManagerImpl::StartDownloadItem(
       info->save_info->prompt_for_save_location = downloadinfo->ask_for_target;
     }
   }
-#endif // !OS_ANDROID
+#endif // !IS_ANDROID
   if (!info->is_new_download) {
     download::DownloadItemImpl* download = downloads_by_guid_[info->guid];
     if (!download || download->GetState() == download::DownloadItem::CANCELLED)
@@ -847,8 +848,9 @@ void DownloadManagerImpl::OnFileExistenceChecked(uint32_t download_id,
   pending_disk_access_query_.erase(download_id);
 
   if (!result) {  // File does not exist.
-    if (base::Contains(downloads_, download_id))
-      downloads_[download_id]->OnDownloadedFileRemoved();
+    auto it = downloads_.find(download_id);
+    if (it != downloads_.end())
+      it->second->OnDownloadedFileRemoved();
   }
 }
 
@@ -1313,6 +1315,8 @@ int DownloadManagerImpl::InProgressCount() {
 int DownloadManagerImpl::NonMaliciousInProgressCount() {
   int count = 0;
   for (const auto& it : downloads_) {
+    if (it.second->IsTransient())
+      continue;
     if (it.second->GetState() == download::DownloadItem::IN_PROGRESS &&
         it.second->GetDangerType() !=
             download::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL &&
@@ -1333,8 +1337,8 @@ int DownloadManagerImpl::NonMaliciousInProgressCount() {
 }
 
 download::DownloadItem* DownloadManagerImpl::GetDownload(uint32_t download_id) {
-  return base::Contains(downloads_, download_id) ? downloads_[download_id].get()
-                                                 : nullptr;
+  auto it = downloads_.find(download_id);
+  return it != downloads_.end() ? it->second.get() : nullptr;
 }
 
 download::DownloadItem* DownloadManagerImpl::GetDownloadByGuid(
@@ -1345,8 +1349,8 @@ download::DownloadItem* DownloadManagerImpl::GetDownloadByGuid(
         return it.get();
     }
   }
-  return base::Contains(downloads_by_guid_, guid) ? downloads_by_guid_[guid]
-                                                  : nullptr;
+  auto it = downloads_by_guid_.find(guid);
+  return it != downloads_by_guid_.end() ? it->second : nullptr;
 }
 
 void DownloadManagerImpl::GetAllDownloads(

@@ -10,20 +10,18 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
-#include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/histogram_macros_local.h"
 #include "base/notreached.h"
 #include "base/rand_util.h"
-#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/task/post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/task_runner_util.h"
 #include "base/task/thread_pool.h"
 #include "base/time/default_clock.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/optimization_guide/core/bloom_filter.h"
 #include "components/optimization_guide/core/hint_cache.h"
@@ -33,6 +31,7 @@
 #include "components/optimization_guide/core/insertion_ordered_set.h"
 #include "components/optimization_guide/core/optimization_filter.h"
 #include "components/optimization_guide/core/optimization_guide_constants.h"
+#include "components/optimization_guide/core/optimization_guide_decision.h"
 #include "components/optimization_guide/core/optimization_guide_enums.h"
 #include "components/optimization_guide/core/optimization_guide_features.h"
 #include "components/optimization_guide/core/optimization_guide_logger.h"
@@ -218,19 +217,13 @@ class ScopedCanApplyOptimizationLogger {
         optimization_guide_logger_(optimization_guide_logger) {}
 
   ~ScopedCanApplyOptimizationLogger() {
-    if (!switches::IsDebugLogsEnabled())
+    if (!optimization_guide_logger_->ShouldEnableDebugLogs())
       return;
     DCHECK_NE(type_decision_, OptimizationTypeDecision::kUnknown);
-    OPTIMIZATION_GUIDE_LOG(
-        optimization_guide_logger_,
-        base::StrCat(
-            {"OptimizationGuide: CanApplyOptimization: ",
-             GetStringNameForOptimizationType(opt_type_),
-             "\nqueried on: ", url_.possibly_invalid_spec(),
-             "\nDecision: ", GetStringForOptimizationGuideDecision(decision_),
-             "\nTypeDecision: ",
-             base::NumberToString(static_cast<int>(type_decision_)),
-             "\nHas Metadata: ", (has_metadata_ ? "True" : "False")}));
+    OPTIMIZATION_GUIDE_LOGGER(optimization_guide_logger_)
+        << "CanApplyOptimization: " << opt_type_ << "\nqueried on: " << url_
+        << "\nDecision: " << decision_ << "\nTypeDecision: " << type_decision_
+        << "\nHas Metadata: " << (has_metadata_ ? "True" : "False");
   }
 
   void set_has_metadata() { has_metadata_ = true; }
@@ -279,31 +272,25 @@ void MaybeLogGetHintRequestInfo(
     const std::vector<GURL>& urls_to_fetch,
     const std::vector<std::string>& hosts_to_fetch,
     OptimizationGuideLogger* optimization_guide_logger) {
-  if (!switches::IsDebugLogsEnabled())
+  if (!optimization_guide_logger->ShouldEnableDebugLogs())
     return;
 
-  OPTIMIZATION_GUIDE_LOG(
-      optimization_guide_logger,
-      base::StrCat({"OptimizationGuide: Starting fetch for request context ",
-                    proto::RequestContext_Name(request_context)}));
+  OPTIMIZATION_GUIDE_LOGGER(optimization_guide_logger)
+      << "Starting fetch for request context " << request_context;
   OPTIMIZATION_GUIDE_LOG(optimization_guide_logger,
-                         "OptimizationGuide: Registered Optimization Types: ");
-  for (const auto& optimization_type : registered_optimization_types) {
-    OPTIMIZATION_GUIDE_LOG(
-        optimization_guide_logger,
-        base::StrCat({"OptimizationGuide: Optimization Type: ",
-                      proto::OptimizationType_Name(optimization_type)}));
-  }
-  OPTIMIZATION_GUIDE_LOG(optimization_guide_logger,
-                         "OptimizationGuide: URLs and Hosts: ");
-  for (const auto& url : urls_to_fetch) {
-    OPTIMIZATION_GUIDE_LOG(optimization_guide_logger,
-                           base::StrCat({"OptimizationGuide: URL: ",
-                                         url.possibly_invalid_spec()}));
-  }
-  for (const auto& host : hosts_to_fetch) {
-    OPTIMIZATION_GUIDE_LOG(optimization_guide_logger,
-                           base::StrCat({"OptimizationGuide: Host: ", host}));
+                         "Registered Optimization Types: ");
+  if (optimization_guide_logger->ShouldEnableDebugLogs()) {
+    for (const auto& optimization_type : registered_optimization_types) {
+      OPTIMIZATION_GUIDE_LOGGER(optimization_guide_logger)
+          << "Optimization Type: " << optimization_type;
+    }
+    OPTIMIZATION_GUIDE_LOG(optimization_guide_logger, " URLs and Hosts: ");
+    for (const auto& url : urls_to_fetch) {
+      OPTIMIZATION_GUIDE_LOGGER(optimization_guide_logger) << "URL: " << url;
+    }
+    for (const auto& host : hosts_to_fetch) {
+      OPTIMIZATION_GUIDE_LOGGER(optimization_guide_logger) << "Host: " << host;
+    }
   }
 }
 
@@ -734,9 +721,8 @@ void HintsManager::OnHintsForActiveTabsFetched(
     absl::optional<std::unique_ptr<proto::GetHintsResponse>>
         get_hints_response) {
   if (!get_hints_response) {
-    if (switches::IsDebugLogsEnabled()) {
-      DVLOG(0) << "OptimizationGuide: OnHintsForActiveTabsFetched failed";
-    }
+    OPTIMIZATION_GUIDE_LOG(optimization_guide_logger_,
+                           "OnHintsForActiveTabsFetched failed");
     return;
   }
 
@@ -746,11 +732,8 @@ void HintsManager::OnHintsForActiveTabsFetched(
       hosts_fetched, urls_fetched,
       base::BindOnce(&HintsManager::OnFetchedActiveTabsHintsStored,
                      weak_ptr_factory_.GetWeakPtr()));
-  if (switches::IsDebugLogsEnabled()) {
-    OPTIMIZATION_GUIDE_LOG(
-        optimization_guide_logger_,
-        "OptimizationGuide: OnHintsForActiveTabsFetched complete");
-  }
+  OPTIMIZATION_GUIDE_LOG(optimization_guide_logger_,
+                         "OnHintsForActiveTabsFetched complete");
 }
 
 void HintsManager::OnPageNavigationHintsFetched(
@@ -765,10 +748,8 @@ void HintsManager::OnPageNavigationHintsFetched(
   }
 
   if (!get_hints_response.has_value() || !get_hints_response.value()) {
-    if (switches::IsDebugLogsEnabled()) {
-      DVLOG(0) << "OptimizationGuide: OnPageNavigationHintsFetched failed";
-    }
-
+    OPTIMIZATION_GUIDE_LOG(optimization_guide_logger_,
+                           "OnPageNavigationHintsFetched failed");
     if (navigation_url) {
       PrepareToInvokeRegisteredCallbacks(*navigation_url);
     }
@@ -783,9 +764,8 @@ void HintsManager::OnPageNavigationHintsFetched(
                      weak_ptr_factory_.GetWeakPtr(), navigation_data_weak_ptr,
                      navigation_url, page_navigation_hosts_requested));
 
-  if (switches::IsDebugLogsEnabled()) {
-    DVLOG(0) << "OptimizationGuide: OnPageNavigationHintsFetched complete";
-  }
+  OPTIMIZATION_GUIDE_LOG(optimization_guide_logger_,
+                         "OnPageNavigationHintsFetched complete");
 }
 
 void HintsManager::OnFetchedActiveTabsHintsStored() {
@@ -936,11 +916,9 @@ void HintsManager::RegisterOptimizationTypes(
     }
     registered_optimization_types_.insert(optimization_type);
 
-    if (switches::IsDebugLogsEnabled()) {
-      OPTIMIZATION_GUIDE_LOG(
-          optimization_guide_logger_,
-          base::StrCat({"OptimizationGuide: Registered new OptimizationType: ",
-                        proto::OptimizationType_Name(optimization_type)}));
+    if (optimization_guide_logger_->ShouldEnableDebugLogs()) {
+      OPTIMIZATION_GUIDE_LOGGER(optimization_guide_logger_)
+          << "Registered new OptimizationType: " << optimization_type;
     }
 
     absl::optional<double> value = previously_registered_opt_types->FindBoolKey(
@@ -1087,6 +1065,33 @@ void HintsManager::CanApplyOptimizationOnDemand(
                      urls_with_pending_callback, optimization_types, callback));
 }
 
+// TODO(1313521): Improve metrics coverage between all of these apis.
+void HintsManager::CanApplyOptimization(
+    const GURL& url,
+    proto::OptimizationType optimization_type,
+    OptimizationGuideDecisionCallback callback) {
+  // Check if there is a pending fetcher for the specified URL. If there is, use
+  // the async API, otherwise use the synchronous one.
+  // TODO(1312035): We should record instances of this API being used prior to a
+  //                fetch for the URL being initiated.
+  if (IsHintBeingFetchedForNavigation(url)) {
+    CanApplyOptimizationAsync(url, optimization_type, std::move(callback));
+  } else {
+    OptimizationMetadata meta;
+    OptimizationGuideDecision decision =
+        GetOptimizationGuideDecisionFromOptimizationTypeDecision(
+            CanApplyOptimization(url, optimization_type, &meta));
+
+    base::UmaHistogramEnumeration(
+        "OptimizationGuide.ApplyDecision." +
+            optimization_guide::GetStringNameForOptimizationType(
+                optimization_type),
+        decision);
+
+    std::move(callback).Run(decision, meta);
+  }
+}
+
 void HintsManager::OnBatchUpdateHintsFetched(
     int32_t request_id,
     proto::RequestContext request_context,
@@ -1100,9 +1105,9 @@ void HintsManager::OnBatchUpdateHintsFetched(
   CleanUpBatchUpdateHintsFetcher(request_id);
 
   if (!get_hints_response.has_value() || !get_hints_response.value()) {
-    if (switches::IsDebugLogsEnabled()) {
-      DVLOG(0) << "OptimizationGuide: OnBatchUpdateHintsFetched for "
-               << proto::RequestContext_Name(request_context) << " failed";
+    if (optimization_guide_logger_->ShouldEnableDebugLogs()) {
+      OPTIMIZATION_GUIDE_LOGGER(optimization_guide_logger_)
+          << "OnBatchUpdateHintsFetched failed for " << request_context;
     }
     OnBatchUpdateHintsStored(urls_with_pending_callback, optimization_types,
                              callback);
@@ -1119,12 +1124,9 @@ void HintsManager::OnBatchUpdateHintsFetched(
                      weak_ptr_factory_.GetWeakPtr(), urls_with_pending_callback,
                      optimization_types, callback));
 
-  if (switches::IsDebugLogsEnabled()) {
-    OPTIMIZATION_GUIDE_LOG(
-        optimization_guide_logger_,
-        base::StrCat({"OptimizationGuide: OnBatchUpdateHintsFetched for ",
-                      proto::RequestContext_Name(request_context),
-                      " complete"}));
+  if (optimization_guide_logger_->ShouldEnableDebugLogs()) {
+    OPTIMIZATION_GUIDE_LOGGER(optimization_guide_logger_)
+        << "OnBatchUpdateHintsFetched for " << request_context << " complete";
   }
 }
 

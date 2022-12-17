@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/observer_list.h"
 #include "chrome/browser/hid/hid_chooser_context.h"
 #include "chrome/browser/hid/hid_chooser_context_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -31,6 +32,7 @@ ChromeHidDelegate::~ChromeHidDelegate() = default;
 std::unique_ptr<content::HidChooser> ChromeHidDelegate::RunChooser(
     content::RenderFrameHost* render_frame_host,
     std::vector<blink::mojom::HidDeviceFilterPtr> filters,
+    std::vector<blink::mojom::HidDeviceFilterPtr> exclusion_filters,
     content::HidChooser::Callback callback) {
   auto* chooser_context = GetChooserContext(render_frame_host);
   if (!device_observation_.IsObserving())
@@ -41,7 +43,8 @@ std::unique_ptr<content::HidChooser> ChromeHidDelegate::RunChooser(
   return std::make_unique<HidChooser>(chrome::ShowDeviceChooserDialog(
       render_frame_host,
       std::make_unique<HidChooserController>(
-          render_frame_host, std::move(filters), std::move(callback))));
+          render_frame_host, std::move(filters), std::move(exclusion_filters),
+          std::move(callback))));
 }
 
 bool ChromeHidDelegate::CanRequestDevicePermission(

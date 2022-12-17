@@ -12,7 +12,6 @@
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/callback.h"
-#include "base/cxx17_backports.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
@@ -20,6 +19,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "net/base/features.h"
 #include "net/base/hex_utils.h"
@@ -60,7 +60,7 @@
 #include "net/test/gtest_util.h"
 #include "net/test/test_data_directory.h"
 #include "net/test/test_with_task_environment.h"
-#include "net/third_party/quiche/src/spdy/core/spdy_test_utils.h"
+#include "net/third_party/quiche/src/quiche/spdy/core/spdy_test_utils.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/platform_test.h"
@@ -82,7 +82,7 @@ const char kHttpURLFromAnotherOrigin[] = "http://www.example2.org/a.dat";
 const char kPushedUrl[] = "https://www.example.org/a.dat";
 
 const char kBodyData[] = "Body data";
-const size_t kBodyDataSize = base::size(kBodyData);
+const size_t kBodyDataSize = std::size(kBodyData);
 const base::StringPiece kBodyDataStringPiece(kBodyData, kBodyDataSize);
 
 static base::TimeDelta g_time_delta;
@@ -6415,7 +6415,7 @@ TEST_F(SpdySessionTest, GreaseFrameTypeAfterSettings) {
       'f',  'o',  'o'          // payload
   };
   spdy::SpdySerializedFrame grease(reinterpret_cast<char*>(kRawFrameData),
-                                   base::size(kRawFrameData),
+                                   std::size(kRawFrameData),
                                    /* owns_buffer = */ false);
 
   MockWrite writes[] = {CreateMockWrite(combined_frame, 0),
@@ -7464,7 +7464,7 @@ TEST(RecordPushedStreamHistogramTest, VaryResponseHeader) {
                     {1, {"vary", "fooaccept-encoding"}, 5},
                     {1, {"vary", "foo, accept-encodingbar"}, 5}};
 
-  for (size_t i = 0; i < base::size(test_cases); ++i) {
+  for (size_t i = 0; i < std::size(test_cases); ++i) {
     spdy::Http2HeaderBlock headers;
     for (size_t j = 0; j < test_cases[i].num_headers; ++j) {
       headers[test_cases[i].headers[2 * j]] = test_cases[i].headers[2 * j + 1];

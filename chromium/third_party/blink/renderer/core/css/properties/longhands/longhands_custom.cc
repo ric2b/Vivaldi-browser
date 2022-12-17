@@ -26,6 +26,7 @@
 #include "third_party/blink/renderer/core/css/css_resolution_units.h"
 #include "third_party/blink/renderer/core/css/css_string_value.h"
 #include "third_party/blink/renderer/core/css/css_uri_value.h"
+#include "third_party/blink/renderer/core/css/css_value.h"
 #include "third_party/blink/renderer/core/css/css_value_list.h"
 #include "third_party/blink/renderer/core/css/css_value_pair.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_context.h"
@@ -42,11 +43,13 @@
 #include "third_party/blink/renderer/core/css/properties/css_parsing_utils.h"
 #include "third_party/blink/renderer/core/css/properties/longhands.h"
 #include "third_party/blink/renderer/core/css/resolver/style_builder_converter.h"
+#include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver_state.h"
 #include "third_party/blink/renderer/core/css/scoped_css_value.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/css/zoom_adjusted_pixel_value.h"
 #include "third_party/blink/renderer/core/css_value_keywords.h"
+#include "third_party/blink/renderer/core/document_transition/document_transition_style_tracker.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/layout/counter_node.h"
@@ -1535,6 +1538,7 @@ const CSSValue* Color::CSSValueFromComputedStyleInternal(
 void Color::ApplyInitial(StyleResolverState& state) const {
   state.Style()->SetColor(state.Style()->InitialColorForColorScheme());
   state.Style()->SetColorIsInherited(false);
+  state.Style()->SetColorIsCurrentColor(false);
 }
 
 void Color::ApplyInherit(StyleResolverState& state) const {
@@ -1546,6 +1550,8 @@ void Color::ApplyInherit(StyleResolverState& state) const {
     style->SetColor(state.ParentStyle()->GetColor());
   }
   style->SetColorIsInherited(true);
+  state.Style()->SetColorIsCurrentColor(
+      state.ParentStyle()->ColorIsCurrentColor());
 }
 
 void Color::ApplyValue(StyleResolverState& state, const CSSValue& value) const {
@@ -1554,6 +1560,10 @@ void Color::ApplyValue(StyleResolverState& state, const CSSValue& value) const {
   if (identifier_value &&
       identifier_value->GetValueID() == CSSValueID::kCurrentcolor) {
     ApplyInherit(state);
+    state.Style()->SetColorIsCurrentColor(true);
+    if (RuntimeEnabledFeatures::HighlightInheritanceEnabled() &&
+        state.IsForHighlight() && state.OriginatingElementStyle())
+      state.Style()->SetColor(state.OriginatingElementStyle()->GetColor());
     return;
   }
   if (value.IsInitialColorValue()) {
@@ -1564,6 +1574,7 @@ void Color::ApplyValue(StyleResolverState& state, const CSSValue& value) const {
         StyleBuilderConverter::ConvertStyleColor(state, value));
   }
   state.Style()->SetColorIsInherited(false);
+  state.Style()->SetColorIsCurrentColor(false);
 }
 
 const CSSValue* ColorInterpolation::CSSValueFromComputedStyleInternal(
@@ -1650,12 +1661,43 @@ const CSSValue* ColorScheme::InitialValue() const {
   return CSSIdentifierValue::Create(CSSValueID::kNormal);
 }
 
-void ColorScheme::ApplyInitial(StyleResolverState& state) const {
-  Settings* settings = state.GetDocument().GetSettings();
+namespace {
+
+void ApplyColorSchemeValue(StyleResolverState& state,
+                           const CSSValueList* scheme_list) {
+  ColorSchemeFlags flags =
+      static_cast<ColorSchemeFlags>(ColorSchemeFlag::kNormal);
+  Vector<AtomicString> color_schemes;
+
+  Document& document = state.GetDocument();
+  if (scheme_list) {
+    flags = StyleBuilderConverter::ExtractColorSchemes(document, *scheme_list,
+                                                       &color_schemes);
+  } else {
+    flags = document.GetStyleEngine().GetPageColorSchemes();
+  }
+
+  state.StyleRef().SetColorScheme(std::move(color_schemes));
+
+  Settings* settings = document.GetSettings();
   bool force_dark = settings ? settings->GetForceDarkModeEnabled() : false;
-  state.Style()->SetColorScheme(Vector<AtomicString>());
-  state.Style()->SetDarkColorScheme(force_dark);
-  state.Style()->SetColorSchemeForced(force_dark);
+  state.StyleRef().SetUsedColorScheme(
+      flags, document.GetStyleEngine().GetPreferredColorScheme(), force_dark);
+
+  if (flags & static_cast<ColorSchemeFlags>(ColorSchemeFlag::kDark)) {
+    // Record kColorSchemeDarkSupportedOnRoot if dark is present (though dark
+    // may not be used). This metric is also recorded in
+    // StyleEngine::UpdateColorSchemeMetrics if a meta tag supports dark.
+    if (document.documentElement() == state.GetElement()) {
+      UseCounter::Count(document, WebFeature::kColorSchemeDarkSupportedOnRoot);
+    }
+  }
+}
+
+}  // namespace
+
+void ColorScheme::ApplyInitial(StyleResolverState& state) const {
+  ApplyColorSchemeValue(state, nullptr /* scheme_list */);
 }
 
 void ColorScheme::ApplyInherit(StyleResolverState& state) const {
@@ -1666,88 +1708,11 @@ void ColorScheme::ApplyInherit(StyleResolverState& state) const {
 
 void ColorScheme::ApplyValue(StyleResolverState& state,
                              const CSSValue& value) const {
-  Settings* settings = state.GetDocument().GetSettings();
-  bool force_dark = settings ? settings->GetForceDarkModeEnabled() : false;
-  if (const auto* identifier_value = DynamicTo<CSSIdentifierValue>(value)) {
-    DCHECK(identifier_value->GetValueID() == CSSValueID::kNormal);
-    state.Style()->SetColorScheme(Vector<AtomicString>());
-    state.Style()->SetDarkColorScheme(force_dark);
-    state.Style()->SetColorSchemeForced(force_dark);
-  } else if (const auto* scheme_list = DynamicTo<CSSValueList>(value)) {
-    bool prefers_dark =
-        state.GetDocument().GetStyleEngine().GetPreferredColorScheme() ==
-        mojom::blink::PreferredColorScheme::kDark;
-    bool has_dark = false;
-    bool has_light = false;
-    bool has_only = false;
-    Vector<AtomicString> color_schemes;
-    for (auto& item : *scheme_list) {
-      if (const auto* custom_ident = DynamicTo<CSSCustomIdentValue>(*item)) {
-        color_schemes.push_back(custom_ident->Value());
-      } else if (const auto* ident = DynamicTo<CSSIdentifierValue>(*item)) {
-        color_schemes.push_back(ident->CssText());
-        switch (ident->GetValueID()) {
-          case CSSValueID::kDark:
-            has_dark = true;
-            break;
-          case CSSValueID::kLight:
-            has_light = true;
-            break;
-          case CSSValueID::kOnly:
-            if (RuntimeEnabledFeatures::CSSColorSchemeOnlyEnabled(
-                    state.GetDocument().GetExecutionContext())) {
-              has_only = true;
-            }
-            break;
-          default:
-            break;
-        }
-      } else {
-        NOTREACHED();
-      }
-    }
-    state.Style()->SetColorScheme(color_schemes);
-    bool dark_scheme =
-        // Dark scheme because the preferred scheme is dark and color-scheme
-        // contains dark.
-        (has_dark && prefers_dark) ||
-        // Dark scheme because the the only recognized color-scheme is dark.
-        (has_dark && !has_light) ||
-        // Dark scheme because we have a dark color-scheme override for forced
-        // darkening and no 'only' which opts out.
-        (force_dark && !has_only) ||
-        // Typically, forced darkening should be used with a dark preferred
-        // color-scheme. This is to support the FORCE_DARK_ONLY behavior from
-        // WebView where this combination is passed to the renderer.
-        (force_dark && !prefers_dark);
-
-    state.Style()->SetDarkColorScheme(dark_scheme);
-
-    bool forced_scheme =
-        // No dark in the color-scheme property, but we still forced it to dark.
-        (!has_dark && dark_scheme) ||
-        // Always use forced color-scheme for preferred light color-scheme with
-        // forced darkening. The combination of preferred color-scheme of light
-        // with a color-scheme property value of "light dark" chooses the light
-        // color-scheme. Typically, forced darkening should be used with a dark
-        // preferred color-scheme. This is to support the FORCE_DARK_ONLY
-        // behavior from WebView where this combination is passed to the
-        // renderer.
-        (force_dark && !prefers_dark);
-
-    state.Style()->SetColorSchemeForced(forced_scheme);
-
-    if (has_dark) {
-      // Record kColorSchemeDarkSupportedOnRoot if dark is present (though dark
-      // may not be used). This metric is also recorded in
-      // StyleEngine::UpdateColorSchemeMetrics if a meta tag supports dark.
-      auto& doc = state.GetDocument();
-      if (doc.documentElement() == state.ElementContext().GetElement())
-        UseCounter::Count(doc, WebFeature::kColorSchemeDarkSupportedOnRoot);
-    }
-  } else {
-    NOTREACHED();
-  }
+  const CSSValueList* scheme_list = DynamicTo<CSSValueList>(value);
+  DCHECK(scheme_list || (value.IsIdentifierValue() &&
+                         DynamicTo<CSSIdentifierValue>(value)->GetValueID() ==
+                             CSSValueID::kNormal));
+  ApplyColorSchemeValue(state, scheme_list);
 }
 
 const CSSValue* ColumnCount::ParseSingleValue(
@@ -3302,9 +3267,10 @@ const CSSValue* GridAutoColumns::ParseSingleValue(
 // http://lists.w3.org/Archives/Public/www-style/2013Nov/0014.html
 const CSSValue* GridAutoColumns::CSSValueFromComputedStyleInternal(
     const ComputedStyle& style,
-    const LayoutObject*,
+    const LayoutObject* layout_object,
     bool allow_visited_style) const {
-  return ComputedStyleUtils::ValueForGridTrackSizeList(kForColumns, style);
+  return ComputedStyleUtils::ValueForGridAutoTrackList(kForColumns,
+                                                       layout_object, style);
 }
 
 const CSSValue* GridAutoColumns::InitialValue() const {
@@ -3385,9 +3351,10 @@ const CSSValue* GridAutoRows::ParseSingleValue(
 
 const CSSValue* GridAutoRows::CSSValueFromComputedStyleInternal(
     const ComputedStyle& style,
-    const LayoutObject*,
+    const LayoutObject* layout_object,
     bool allow_visited_style) const {
-  return ComputedStyleUtils::ValueForGridTrackSizeList(kForRows, style);
+  return ComputedStyleUtils::ValueForGridAutoTrackList(kForRows, layout_object,
+                                                       style);
 }
 
 const CSSValue* GridAutoRows::InitialValue() const {
@@ -4915,6 +4882,13 @@ const CSSValue* ObjectFit::CSSValueFromComputedStyleInternal(
   return CSSIdentifierValue::Create(style.GetObjectFit());
 }
 
+const CSSValue* ObjectOverflow::CSSValueFromComputedStyleInternal(
+    const ComputedStyle& style,
+    const LayoutObject*,
+    bool allow_visited_style) const {
+  return CSSIdentifierValue::Create(style.GetObjectOverflow());
+}
+
 const CSSValue* ObjectPosition::ParseSingleValue(
     CSSParserTokenRange& range,
     const CSSParserContext& context,
@@ -4934,6 +4908,35 @@ const CSSValue* ObjectPosition::CSSValueFromComputedStyleInternal(
       ComputedStyleUtils::ZoomAdjustedPixelValueForLength(
           style.ObjectPosition().Y(), style),
       CSSValuePair::kKeepIdenticalValues);
+}
+
+const CSSValue* ObjectViewBox::ParseSingleValue(
+    CSSParserTokenRange& range,
+    const CSSParserContext& context,
+    const CSSParserLocalContext&) const {
+  DCHECK(RuntimeEnabledFeatures::CSSObjectViewBoxAndOverflowEnabled());
+
+  if (range.Peek().Id() == CSSValueID::kNone)
+    return css_parsing_utils::ConsumeIdent(range);
+  auto* css_value = css_parsing_utils::ConsumeBasicShape(
+      range, context, css_parsing_utils::AllowPathValue::kForbid);
+  // TODO(khushalsagar) : Also allow rect() and xywh().
+  return (css_value && css_value->IsBasicShapeInsetValue()) ? css_value
+                                                            : nullptr;
+}
+
+const CSSValue* ObjectViewBox::CSSValueFromComputedStyleInternal(
+    const ComputedStyle& style,
+    const LayoutObject*,
+    bool allow_visited_style) const {
+  if (!RuntimeEnabledFeatures::CSSObjectViewBoxAndOverflowEnabled()) {
+    DCHECK(!style.ObjectViewBox());
+    return CSSIdentifierValue::Create(CSSValueID::kNone);
+  }
+
+  if (auto* basic_shape = style.ObjectViewBox())
+    return ValueForBasicShape(style, basic_shape);
+  return CSSIdentifierValue::Create(CSSValueID::kNone);
 }
 
 const CSSValue* OffsetAnchor::ParseSingleValue(
@@ -5251,11 +5254,61 @@ const CSSValue* OverflowX::CSSValueFromComputedStyleInternal(
   return CSSIdentifierValue::Create(style.OverflowX());
 }
 
+void OverflowX::ApplyInitial(StyleResolverState& state) const {
+  state.Style()->SetOverflowX(ComputedStyleInitialValues::InitialOverflowX());
+
+  DCHECK_EQ(state.Style()->OverflowX(), EOverflow::kVisible);
+  state.Style()->SetHasExplicitOverflowXVisible();
+}
+
+void OverflowX::ApplyInherit(StyleResolverState& state) const {
+  auto parent_value = state.ParentStyle()->OverflowX();
+  state.Style()->SetOverflowX(parent_value);
+
+  if (parent_value == EOverflow::kVisible)
+    state.Style()->SetHasExplicitOverflowXVisible();
+}
+
+void OverflowX::ApplyValue(StyleResolverState& state,
+                           const CSSValue& value) const {
+  auto converted_value =
+      To<CSSIdentifierValue>(value).ConvertTo<blink::EOverflow>();
+  state.Style()->SetOverflowX(converted_value);
+
+  if (converted_value == EOverflow::kVisible)
+    state.Style()->SetHasExplicitOverflowXVisible();
+}
+
 const CSSValue* OverflowY::CSSValueFromComputedStyleInternal(
     const ComputedStyle& style,
     const LayoutObject*,
     bool allow_visited_style) const {
   return CSSIdentifierValue::Create(style.OverflowY());
+}
+
+void OverflowY::ApplyInitial(StyleResolverState& state) const {
+  state.Style()->SetOverflowY(ComputedStyleInitialValues::InitialOverflowY());
+
+  DCHECK_EQ(state.Style()->OverflowY(), EOverflow::kVisible);
+  state.Style()->SetHasExplicitOverflowYVisible();
+}
+
+void OverflowY::ApplyInherit(StyleResolverState& state) const {
+  auto parent_value = state.ParentStyle()->OverflowY();
+  state.Style()->SetOverflowY(parent_value);
+
+  if (parent_value == EOverflow::kVisible)
+    state.Style()->SetHasExplicitOverflowYVisible();
+}
+
+void OverflowY::ApplyValue(StyleResolverState& state,
+                           const CSSValue& value) const {
+  auto converted_value =
+      To<CSSIdentifierValue>(value).ConvertTo<blink::EOverflow>();
+  state.Style()->SetOverflowY(converted_value);
+
+  if (converted_value == EOverflow::kVisible)
+    state.Style()->SetHasExplicitOverflowYVisible();
 }
 
 const CSSValue* OverscrollBehaviorX::CSSValueFromComputedStyleInternal(
@@ -5457,6 +5510,28 @@ const CSSValue* Page::CSSValueFromComputedStyleInternal(
   return MakeGarbageCollected<CSSCustomIdentValue>(style.Page());
 }
 
+const CSSValue* PageTransitionTag::ParseSingleValue(
+    CSSParserTokenRange& range,
+    const CSSParserContext& context,
+    const CSSParserLocalContext&) const {
+  if (range.Peek().Id() == CSSValueID::kNone)
+    return css_parsing_utils::ConsumeIdent(range);
+  if (DocumentTransitionStyleTracker::IsReservedTransitionTag(
+          range.Peek().Value())) {
+    return nullptr;
+  }
+  return css_parsing_utils::ConsumeCustomIdent(range, context);
+}
+
+const CSSValue* PageTransitionTag::CSSValueFromComputedStyleInternal(
+    const ComputedStyle& style,
+    const LayoutObject*,
+    bool allow_visited_style) const {
+  if (style.PageTransitionTag().IsNull())
+    return CSSIdentifierValue::Create(CSSValueID::kNone);
+  return MakeGarbageCollected<CSSCustomIdentValue>(style.PageTransitionTag());
+}
+
 const CSSValue* PaintOrder::ParseSingleValue(
     CSSParserTokenRange& range,
     const CSSParserContext& context,
@@ -5535,7 +5610,7 @@ const CSSValue* PaintOrder::CSSValueFromComputedStyleInternal(
       {PT_MARKERS, PT_NONE},    // kPaintOrderMarkersFillStroke
       {PT_MARKERS, PT_STROKE},  // kPaintOrderMarkersStrokeFill
   };
-  DCHECK_LT(static_cast<size_t>(paint_order) - 1, base::size(canonical_form));
+  DCHECK_LT(static_cast<size_t>(paint_order) - 1, std::size(canonical_form));
   CSSValueList* list = CSSValueList::CreateSpaceSeparated();
   for (const auto& keyword : canonical_form[paint_order - 1]) {
     const auto paint_order_type = static_cast<EPaintOrderType>(keyword);

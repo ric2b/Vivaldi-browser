@@ -4,6 +4,9 @@
 
 #include "ash/services/secure_channel/public/cpp/client/secure_channel_client_impl.h"
 
+#include "ash/components/multidevice/remote_device.h"
+#include "ash/components/multidevice/remote_device_ref.h"
+#include "ash/components/multidevice/remote_device_test_util.h"
 #include "ash/services/secure_channel/fake_channel.h"
 #include "ash/services/secure_channel/fake_secure_channel.h"
 #include "ash/services/secure_channel/public/cpp/client/client_channel_impl.h"
@@ -20,13 +23,10 @@
 #include "base/test/null_task_runner.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_simple_task_runner.h"
-#include "chromeos/components/multidevice/remote_device_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
-namespace chromeos {
-
-namespace secure_channel {
+namespace ash::secure_channel {
 
 namespace {
 
@@ -361,6 +361,4 @@ TEST_F(SecureChannelClientImplTest, TestMultipleConnections) {
   EXPECT_NE(client_channel_1, client_channel_2);
 }
 
-}  // namespace secure_channel
-
-}  // namespace chromeos
+}  // namespace ash::secure_channel

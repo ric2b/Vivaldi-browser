@@ -16,6 +16,7 @@
 #include "notes/note_node.h"
 #include "sync/notes/note_specifics_conversions.h"
 #include "sync/notes/synced_note_tracker.h"
+#include "sync/notes/synced_note_tracker_entity.h"
 
 namespace sync_notes {
 
@@ -31,12 +32,12 @@ syncer::CommitRequestDataList NoteLocalChangesBuilder::BuildCommitRequests(
     size_t max_entries) const {
   DCHECK(note_tracker_);
 
-  const std::vector<const SyncedNoteTracker::Entity*>
+  const std::vector<const SyncedNoteTrackerEntity*>
       entities_with_local_changes =
           note_tracker_->GetEntitiesWithLocalChanges();
 
   syncer::CommitRequestDataList commit_requests;
-  for (const SyncedNoteTracker::Entity* entity : entities_with_local_changes) {
+  for (const SyncedNoteTrackerEntity* entity : entities_with_local_changes) {
     if (commit_requests.size() >= max_entries) {
       break;
     }
@@ -76,7 +77,7 @@ syncer::CommitRequestDataList NoteLocalChangesBuilder::BuildCommitRequests(
                 syncer::ClientTagHash::FromHashed(metadata->client_tag_hash()));
 
       const vivaldi::NoteNode* parent = node->parent();
-      const SyncedNoteTracker::Entity* parent_entity =
+      const SyncedNoteTrackerEntity* parent_entity =
           note_tracker_->GetEntityForNoteNode(parent);
       DCHECK(parent_entity);
       data->legacy_parent_id = parent_entity->metadata()->server_id();

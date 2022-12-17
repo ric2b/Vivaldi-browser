@@ -89,8 +89,7 @@ void RenderFrameHostDelegate::FullscreenStateChanged(
     blink::mojom::FullscreenOptionsPtr options) {}
 
 bool RenderFrameHostDelegate::ShouldRouteMessageEvent(
-    RenderFrameHostImpl* target_rfh,
-    SiteInstance* source_site_instance) const {
+    RenderFrameHostImpl* target_rfh) const {
   return false;
 }
 
@@ -169,7 +168,7 @@ bool RenderFrameHostDelegate::IsBackForwardCacheSupported() {
 }
 
 RenderWidgetHostImpl* RenderFrameHostDelegate::CreateNewPopupWidget(
-    AgentSchedulingGroupHost& agent_scheduling_group,
+    base::SafeRef<SiteInstanceGroup> site_instance_group,
     int32_t route_id,
     mojo::PendingAssociatedReceiver<blink::mojom::PopupWidgetHost>
         blink_popup_widget_host,

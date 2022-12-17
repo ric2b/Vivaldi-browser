@@ -16,6 +16,7 @@
 #include "components/app_constants/constants.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
+#include "components/services/app_service/public/cpp/app_types.h"
 #include "components/sync/model/string_ordinal.h"
 #include "extensions/common/constants.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -103,12 +104,12 @@ class ChromeShelfPrefsFake : public ChromeShelfPrefs {
     return standalone_browser_publishing_chrome_apps_;
   }
 
-  apps::mojom::AppType GetAppType(const std::string& app_id) override {
+  apps::AppType GetAppType(const std::string& app_id) override {
     // If the item isn't present this lazy constructs it with kUnknown.
     return app_type_map_[app_id];
   }
   bool IsAshExtensionApp(const std::string& app_id) override {
-    return app_type_map_[app_id] == apps::mojom::AppType::kChromeApp;
+    return app_type_map_[app_id] == apps::AppType::kChromeApp;
   }
   bool IsAshKeepListApp(const std::string& app_id) override { return false; }
 
@@ -119,7 +120,7 @@ class ChromeShelfPrefsFake : public ChromeShelfPrefs {
   bool standalone_browser_publishing_chrome_apps_ = false;
 
   // A map that returns the app type for a given app id.
-  std::map<std::string, apps::mojom::AppType> app_type_map_;
+  std::map<std::string, apps::AppType> app_type_map_;
 };
 
 // Unit tests for ChromeShelfPrefs
@@ -146,7 +147,7 @@ class ChromeShelfPrefsTest : public testing::Test {
   std::vector<std::string> StringsFromShelfIds(
       const std::vector<ash::ShelfID>& shelf_ids) {
     std::vector<std::string> results;
-    std::vector<std::string> pinned_apps_strs;
+    results.reserve(shelf_ids.size());
     for (auto& shelf_id : shelf_ids)
       results.push_back(shelf_id.app_id);
     return results;
@@ -202,6 +203,7 @@ TEST_F(ChromeShelfPrefsTest, ProfileChanged) {
   std::vector<ash::ShelfID> pinned_apps =
       shelf_prefs_->GetPinnedAppsFromSync(nullptr);
   std::vector<std::string> pinned_apps_strs;
+  pinned_apps_strs.reserve(pinned_apps.size());
   for (auto& shelf_id : pinned_apps)
     pinned_apps_strs.push_back(shelf_id.app_id);
 
@@ -243,10 +245,9 @@ TEST_F(ChromeShelfPrefsTest, TransformationForStandaloneBrowserChromeApps) {
       MakeSyncItem(kLacrosChromeAppId, ordinal2);
   syncable_service_.item_map_[kNeitherId] = MakeSyncItem(kNeitherId, ordinal3);
 
-  shelf_prefs_->app_type_map_[kAshChromeAppId] =
-      apps::mojom::AppType::kChromeApp;
+  shelf_prefs_->app_type_map_[kAshChromeAppId] = apps::AppType::kChromeApp;
   shelf_prefs_->app_type_map_[kLacrosChromeAppIdWithUsualPrefix] =
-      apps::mojom::AppType::kStandaloneBrowserChromeApp;
+      apps::AppType::kStandaloneBrowserChromeApp;
 
   std::vector<ash::ShelfID> pinned_apps =
       shelf_prefs_->GetPinnedAppsFromSync(nullptr);

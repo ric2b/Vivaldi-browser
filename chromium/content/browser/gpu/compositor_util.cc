@@ -20,6 +20,7 @@
 #include "base/system/sys_info.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "cc/base/switches.h"
 #include "components/viz/common/features.h"
 #include "content/browser/compositor/image_transport_factory.h"
@@ -107,14 +108,16 @@ const GpuFeatureData GetGpuFeatureData(
     {"canvas_oop_rasterization",
      SafeGetFeatureStatus(gpu_feature_info,
                           gpu::GPU_FEATURE_TYPE_CANVAS_OOP_RASTERIZATION),
-     !base::FeatureList::IsEnabled(features::kCanvasOopRasterization),
+     !base::FeatureList::IsEnabled(features::kCanvasOopRasterization) ||
+         command_line.HasSwitch(switches::kDisableAccelerated2dCanvas),
 #if 0
      // TODO(crbug.com/1240756): Remove the "#if 0" once OOPR-Canvas is fully
      // launched.
      DisableInfo::Problem(
          "Canvas out-of-process rasterization has been disabled, either via "
-         "blocklist, the command line, about:flags, or because out-of-process "
-         "rasterization is disabled."
+         "blocklist, the command line, about:flags, because out-of-process "
+         "rasterization is disabled, or because 2D canvas is not GPU-"
+         "accelerated."
      ),
 #else
      // As long as the Finch experiment is running, having the feature disabled
@@ -218,9 +221,17 @@ const GpuFeatureData GetGpuFeatureData(
      DisableInfo::NotProblem(), false},
     {"direct_rendering_display_compositor", gpu::kGpuFeatureStatusEnabled,
      !features::IsDrDcEnabled(), DisableInfo::NotProblem(), false},
+    {"webgpu",
+     SafeGetFeatureStatus(gpu_feature_info,
+                          gpu::GPU_FEATURE_TYPE_ACCELERATED_WEBGPU),
+     !command_line.HasSwitch(switches::kEnableUnsafeWebGPU) &&
+         !base::FeatureList::IsEnabled(features::kWebGPUService),
+     DisableInfo::Problem(
+         "WebGPU has been disabled via blocklist or the command line."),
+     false},
   };
-  DCHECK(index < base::size(kGpuFeatureData));
-  *eof = (index == base::size(kGpuFeatureData) - 1);
+  DCHECK(index < std::size(kGpuFeatureData));
+  *eof = (index == std::size(kGpuFeatureData) - 1);
   return kGpuFeatureData[index];
 }
 
@@ -272,7 +283,8 @@ base::Value GetFeatureStatusImpl(GpuFeatureInfoType type) {
         status += "_on";
       }
       if ((gpu_feature_data.name == "webgl" ||
-           gpu_feature_data.name == "webgl2") &&
+           gpu_feature_data.name == "webgl2" ||
+           gpu_feature_data.name == "webgpu") &&
           is_gpu_compositing_disabled)
         status += "_readback";
       if (gpu_feature_data.name == "rasterization") {

@@ -45,73 +45,12 @@ const base::flat_map<PackSpecPair, std::string>& GetAllDlcIds() {
   // It's a map from PackSpecPair to DLC ID. The pair is <feature id, locale>.
   // Whenever a new DLC is created, it needs to be added here.
   // Clients of Language Packs don't need to know the IDs.
-  // Note: English is not included because it's still using LongForm.
+  // TODO(b/223250258): We currently only have 2 languages. Add all remaining
+  // languages once the infra issue is fixed.
   static const base::NoDestructor<base::flat_map<PackSpecPair, std::string>>
       all_dlc_ids({
-          {{kHandwritingFeatureId, "am"}, "handwriting-am"},
-          {{kHandwritingFeatureId, "ar"}, "handwriting-ar"},
-          {{kHandwritingFeatureId, "be"}, "handwriting-be"},
-          {{kHandwritingFeatureId, "bg"}, "handwriting-bg"},
-          {{kHandwritingFeatureId, "bn"}, "handwriting-bn"},
-          {{kHandwritingFeatureId, "ca"}, "handwriting-ca"},
-          {{kHandwritingFeatureId, "cs"}, "handwriting-cs"},
-          {{kHandwritingFeatureId, "da"}, "handwriting-da"},
-          {{kHandwritingFeatureId, "de"}, "handwriting-de"},
-          {{kHandwritingFeatureId, "el"}, "handwriting-el"},
           {{kHandwritingFeatureId, "es"}, "handwriting-es"},
-          {{kHandwritingFeatureId, "et"}, "handwriting-et"},
-          {{kHandwritingFeatureId, "fa"}, "handwriting-fa"},
-          {{kHandwritingFeatureId, "fi"}, "handwriting-fi"},
-          {{kHandwritingFeatureId, "fr"}, "handwriting-fr"},
-          {{kHandwritingFeatureId, "ga"}, "handwriting-ga"},
-          {{kHandwritingFeatureId, "gu"}, "handwriting-gu"},
-          {{kHandwritingFeatureId, "hi"}, "handwriting-hi"},
-          {{kHandwritingFeatureId, "hr"}, "handwriting-hr"},
-          {{kHandwritingFeatureId, "hu"}, "handwriting-hu"},
-          {{kHandwritingFeatureId, "hy"}, "handwriting-hy"},
-          {{kHandwritingFeatureId, "id"}, "handwriting-id"},
-          {{kHandwritingFeatureId, "is"}, "handwriting-is"},
-          {{kHandwritingFeatureId, "it"}, "handwriting-it"},
-          {{kHandwritingFeatureId, "iw"}, "handwriting-iw"},
           {{kHandwritingFeatureId, "ja"}, "handwriting-ja"},
-          {{kHandwritingFeatureId, "ka"}, "handwriting-ka"},
-          {{kHandwritingFeatureId, "kk"}, "handwriting-kk"},
-          {{kHandwritingFeatureId, "km"}, "handwriting-km"},
-          {{kHandwritingFeatureId, "kn"}, "handwriting-kn"},
-          {{kHandwritingFeatureId, "ko"}, "handwriting-ko"},
-          {{kHandwritingFeatureId, "lo"}, "handwriting-lo"},
-          {{kHandwritingFeatureId, "lt"}, "handwriting-lt"},
-          {{kHandwritingFeatureId, "lv"}, "handwriting-lv"},
-          {{kHandwritingFeatureId, "ml"}, "handwriting-ml"},
-          {{kHandwritingFeatureId, "mn"}, "handwriting-mn"},
-          {{kHandwritingFeatureId, "mr"}, "handwriting-mr"},
-          {{kHandwritingFeatureId, "ms"}, "handwriting-ms"},
-          {{kHandwritingFeatureId, "mt"}, "handwriting-mt"},
-          {{kHandwritingFeatureId, "my"}, "handwriting-my"},
-          {{kHandwritingFeatureId, "ne"}, "handwriting-ne"},
-          {{kHandwritingFeatureId, "nl"}, "handwriting-nl"},
-          {{kHandwritingFeatureId, "no"}, "handwriting-no"},
-          {{kHandwritingFeatureId, "or"}, "handwriting-or"},
-          {{kHandwritingFeatureId, "pa"}, "handwriting-pa"},
-          {{kHandwritingFeatureId, "pl"}, "handwriting-pl"},
-          {{kHandwritingFeatureId, "pt"}, "handwriting-pt"},
-          {{kHandwritingFeatureId, "ro"}, "handwriting-ro"},
-          {{kHandwritingFeatureId, "ru"}, "handwriting-ru"},
-          {{kHandwritingFeatureId, "si"}, "handwriting-si"},
-          {{kHandwritingFeatureId, "sk"}, "handwriting-sk"},
-          {{kHandwritingFeatureId, "sl"}, "handwriting-sl"},
-          {{kHandwritingFeatureId, "sr"}, "handwriting-sr"},
-          {{kHandwritingFeatureId, "sv"}, "handwriting-sv"},
-          {{kHandwritingFeatureId, "ta"}, "handwriting-ta"},
-          {{kHandwritingFeatureId, "te"}, "handwriting-te"},
-          {{kHandwritingFeatureId, "th"}, "handwriting-th"},
-          {{kHandwritingFeatureId, "ti"}, "handwriting-ti"},
-          {{kHandwritingFeatureId, "tl"}, "handwriting-tl"},
-          {{kHandwritingFeatureId, "tr"}, "handwriting-tr"},
-          {{kHandwritingFeatureId, "uk"}, "handwriting-uk"},
-          {{kHandwritingFeatureId, "ur"}, "handwriting-ur"},
-          {{kHandwritingFeatureId, "vi"}, "handwriting-vi"},
-          {{kHandwritingFeatureId, "zh"}, "handwriting-zh"},
       });
 
   return *all_dlc_ids;
@@ -171,18 +110,18 @@ void OnGetDlcState(GetPackStateCallback callback,
 
 }  // namespace
 
-bool LanguagePackManager::IsPackAvailable(const std::string& pack_id,
+bool LanguagePackManager::IsPackAvailable(const std::string& feature_id,
                                           const std::string& locale) {
   // We search in the static list for the given Pack spec.
-  const PackSpecPair spec(pack_id, locale);
+  const PackSpecPair spec(feature_id, locale);
   return base::Contains(GetAllDlcIds(), spec);
 }
 
-bool LanguagePackManager::GetDlcId(const std::string& pack_id,
+bool LanguagePackManager::GetDlcId(const std::string& feature_id,
                                    const std::string& locale,
                                    std::string* const dlc_id) {
   // We search in the static list for the given Pack spec.
-  const PackSpecPair spec(pack_id, locale);
+  const PackSpecPair spec(feature_id, locale);
   const auto it = GetAllDlcIds().find(spec);
 
   if (it == GetAllDlcIds().end()) {
@@ -193,11 +132,11 @@ bool LanguagePackManager::GetDlcId(const std::string& pack_id,
   return true;
 }
 
-void LanguagePackManager::InstallPack(const std::string& pack_id,
+void LanguagePackManager::InstallPack(const std::string& feature_id,
                                       const std::string& locale,
                                       OnInstallCompleteCallback callback) {
   std::string dlc_id;
-  const bool found = GetDlcId(pack_id, locale, &dlc_id);
+  const bool found = GetDlcId(feature_id, locale, &dlc_id);
 
   // If the given Language Pack doesn't exist, run callback and don't reach the
   // DLC Service.
@@ -209,16 +148,19 @@ void LanguagePackManager::InstallPack(const std::string& pack_id,
     return;
   }
 
+  dlcservice::InstallRequest install_request;
+  install_request.set_id(dlc_id);
   DlcserviceClient::Get()->Install(
-      dlc_id, base::BindOnce(&OnInstallDlcComplete, std::move(callback)),
+      install_request,
+      base::BindOnce(&OnInstallDlcComplete, std::move(callback)),
       base::DoNothing());
 }
 
-void LanguagePackManager::GetPackState(const std::string& pack_id,
+void LanguagePackManager::GetPackState(const std::string& feature_id,
                                        const std::string& locale,
                                        GetPackStateCallback callback) {
   std::string dlc_id;
-  const bool found = GetDlcId(pack_id, locale, &dlc_id);
+  const bool found = GetDlcId(feature_id, locale, &dlc_id);
 
   // If the given Language Pack doesn't exist, run callback and don't reach the
   // DLC Service.
@@ -234,11 +176,11 @@ void LanguagePackManager::GetPackState(const std::string& pack_id,
       dlc_id, base::BindOnce(&OnGetDlcState, std::move(callback)));
 }
 
-void LanguagePackManager::RemovePack(const std::string& pack_id,
+void LanguagePackManager::RemovePack(const std::string& feature_id,
                                      const std::string& locale,
                                      OnUninstallCompleteCallback callback) {
   std::string dlc_id;
-  const bool found = GetDlcId(pack_id, locale, &dlc_id);
+  const bool found = GetDlcId(feature_id, locale, &dlc_id);
 
   // If the given Language Pack doesn't exist, run callback and don't reach the
   // DLC Service.

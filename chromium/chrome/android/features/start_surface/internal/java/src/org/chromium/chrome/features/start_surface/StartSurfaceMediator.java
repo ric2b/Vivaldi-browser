@@ -32,6 +32,7 @@ import static org.chromium.chrome.features.start_surface.StartSurfaceProperties.
 import android.content.Context;
 import android.content.res.Resources;
 import android.view.View;
+import android.view.ViewGroup;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
@@ -64,6 +65,7 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabPersistentStore.ActiveTabState;
 import org.chromium.chrome.browser.tasks.tab_management.TabManagementDelegate.TabSwitcherType;
 import org.chromium.chrome.browser.tasks.tab_management.TabSwitcher;
+import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.start_surface.R;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.components.prefs.PrefService;
@@ -105,6 +107,7 @@ class StartSurfaceMediator implements StartSurface.Controller, TabSwitcher.Overv
     private final ObserverList<StartSurface.StateObserver> mStateObservers = new ObserverList<>();
     private final boolean mHadWarmStart;
     private final boolean mExcludeQueryTiles;
+    private final Runnable mInitializeMVTilesRunnable;
 
     // Boolean histogram used to record whether cached
     // ChromePreferenceKeys.FEED_ARTICLES_LIST_VISIBLE is consistent with
@@ -164,16 +167,19 @@ class StartSurfaceMediator implements StartSurface.Controller, TabSwitcher.Overv
     private boolean mHideTabCarouselForNewSurface;
     private boolean mHideOverviewOnTabSelecting = true;
     private StartSurface.OnTabSelectingListener mOnTabSelectingListener;
+    private ViewGroup mTabSwitcherContainer;
+    private SnackbarManager mSnackbarManager;
 
-    StartSurfaceMediator(TabSwitcher.Controller controller, TabModelSelector tabModelSelector,
-            @Nullable PropertyModel propertyModel,
+    StartSurfaceMediator(TabSwitcher.Controller controller, ViewGroup tabSwitcherContainer,
+            TabModelSelector tabModelSelector, @Nullable PropertyModel propertyModel,
             @Nullable SecondaryTasksSurfaceInitializer secondaryTasksSurfaceInitializer,
             boolean isStartSurfaceEnabled, Context context,
             BrowserControlsStateProvider browserControlsStateProvider,
             ActivityStateChecker activityStateChecker, boolean excludeMVTiles,
             boolean excludeQueryTiles, OneshotSupplier<StartSurface> startSurfaceSupplier,
-            boolean hadWarmStart, JankTracker jankTracker) {
+            boolean hadWarmStart, JankTracker jankTracker, Runnable initializeMVTilesRunnable) {
         mController = controller;
+        mTabSwitcherContainer = tabSwitcherContainer;
         mTabModelSelector = tabModelSelector;
         mPropertyModel = propertyModel;
         mSecondaryTasksSurfaceInitializer = secondaryTasksSurfaceInitializer;
@@ -187,6 +193,7 @@ class StartSurfaceMediator implements StartSurface.Controller, TabSwitcher.Overv
         mHadWarmStart = hadWarmStart;
         mJankTracker = jankTracker;
         mLaunchOrigin = NewTabPageLaunchOrigin.UNKNOWN;
+        mInitializeMVTilesRunnable = initializeMVTilesRunnable;
 
         if (mPropertyModel != null) {
             assert mIsStartSurfaceEnabled;
@@ -281,9 +288,14 @@ class StartSurfaceMediator implements StartSurface.Controller, TabSwitcher.Overv
                 public void onControlsOffsetChanged(int topOffset, int topControlsMinHeightOffset,
                         int bottomOffset, int bottomControlsMinHeightOffset, boolean needsAnimate) {
                     if (mStartSurfaceState == StartSurfaceState.SHOWN_HOMEPAGE) {
-                        setTopMargin(topControlsMinHeightOffset);
+                        // Set the top margin to the top controls min height (indicator height if
+                        // it's shown) since the toolbar height as extra margin is handled by top
+                        // toolbar placeholder.
+                        setTopMargin(mBrowserControlsStateProvider.getTopControlsMinHeightOffset());
                     } else if (mStartSurfaceState == StartSurfaceState.SHOWN_TABSWITCHER) {
-                        setTopMargin(topOffset);
+                        // Set the top margin to the top controls offset (toolbar height + indicator
+                        // height).
+                        setTopMargin(mBrowserControlsStateProvider.getContentOffset());
                     } else {
                         setTopMargin(0);
                     }
@@ -328,9 +340,10 @@ class StartSurfaceMediator implements StartSurface.Controller, TabSwitcher.Overv
 
     void initWithNative(@Nullable OmniboxStub omniboxStub,
             @Nullable ExploreSurfaceCoordinatorFactory exploreSurfaceCoordinatorFactory,
-            PrefService prefService) {
+            PrefService prefService, @Nullable SnackbarManager snackbarManager) {
         mOmniboxStub = omniboxStub;
         mExploreSurfaceCoordinatorFactory = exploreSurfaceCoordinatorFactory;
+        mSnackbarManager = snackbarManager;
         if (mPropertyModel != null) {
             assert mOmniboxStub != null;
 
@@ -342,11 +355,15 @@ class StartSurfaceMediator implements StartSurface.Controller, TabSwitcher.Overv
             LensMetrics.recordShown(LensEntryPoint.TASKS_SURFACE, shouldShowLensButton);
             mPropertyModel.set(IS_LENS_BUTTON_VISIBLE, shouldShowLensButton);
 
+            // This is for Instant Start when overview is already visible while the omnibox, Feed
+            // and MV tiles haven't been set.
             if (mController.overviewVisible()) {
                 mOmniboxStub.addUrlFocusChangeListener(mUrlFocusChangeListener);
-                if (mStartSurfaceState == StartSurfaceState.SHOWN_HOMEPAGE
-                        && mExploreSurfaceCoordinatorFactory != null) {
-                    setExploreSurfaceVisibility(!mIsIncognito);
+                if (mStartSurfaceState == StartSurfaceState.SHOWN_HOMEPAGE) {
+                    if (mExploreSurfaceCoordinatorFactory != null) {
+                        setExploreSurfaceVisibility(!mIsIncognito);
+                    }
+                    if (mInitializeMVTilesRunnable != null) mInitializeMVTilesRunnable.run();
                 }
             }
         }
@@ -499,14 +516,14 @@ class StartSurfaceMediator implements StartSurface.Controller, TabSwitcher.Overv
             setSecondaryTasksSurfaceVisibility(
                     /* isVisible= */ true, /* skipUpdateController = */ true);
         } else if (mStartSurfaceState == StartSurfaceState.SHOWN_HOMEPAGE) {
-            setExploreSurfaceVisibility(!mIsIncognito && mExploreSurfaceCoordinatorFactory != null);
             boolean hasNormalTab = getNormalTabCount() > 0;
 
             // If new home surface for home button is enabled, MV tiles and carousel tab switcher
             // will not show.
+            setMVTilesVisibility(!mIsIncognito && !mHideMVForNewSurface);
             setTabCarouselVisibility(
                     hasNormalTab && !mIsIncognito && !mHideTabCarouselForNewSurface);
-            setMVTilesVisibility(!mIsIncognito && !mHideMVForNewSurface);
+            setExploreSurfaceVisibility(!mIsIncognito && mExploreSurfaceCoordinatorFactory != null);
             // TODO(qinmin): show query tiles when flag is enabled.
             setQueryTilesVisibility(false);
             setFakeBoxVisibility(!mIsIncognito);
@@ -533,7 +550,7 @@ class StartSurfaceMediator implements StartSurface.Controller, TabSwitcher.Overv
                     /* isVisible= */ true, /* skipUpdateController = */ false);
             setExploreSurfaceVisibility(false);
             setTopToolbarPlaceholderHeight(0);
-            // Set the top margin to the top controls height.
+            // Set the top margin to the top controls height (toolbar height + indicator height).
             setTopMargin(mBrowserControlsStateProvider.getTopControlsHeight());
             setBottomMargin(0);
         } else if (mStartSurfaceState == StartSurfaceState.NOT_SHOWN) {
@@ -558,6 +575,17 @@ class StartSurfaceMediator implements StartSurface.Controller, TabSwitcher.Overv
     @Override
     public int getPreviousStartSurfaceState() {
         return mPreviousStartSurfaceState;
+    }
+
+    @Override
+    public ViewGroup getTabSwitcherContainer() {
+        return mTabSwitcherContainer;
+    }
+
+    @Override
+    public void setSnackbarParentView(ViewGroup parentView) {
+        if (mSnackbarManager == null) return;
+        mSnackbarManager.setParentView(parentView);
     }
 
     @Override
@@ -681,6 +709,19 @@ class StartSurfaceMediator implements StartSurface.Controller, TabSwitcher.Overv
     public boolean inShowState() {
         return mStartSurfaceState != StartSurfaceState.NOT_SHOWN
                 && mStartSurfaceState != StartSurfaceState.DISABLED;
+    }
+
+    @Override
+    public boolean isShowingStartSurfaceHomepage() {
+        // When state is SHOWN_HOMEPAGE or SHOWING_HOMEPAGE or SHOWING_START, state surface homepage
+        // is showing. When state is StartSurfaceState.SHOWING_PREVIOUS and the previous state is
+        // SHOWN_HOMEPAGE or NOT_SHOWN, homepage is showing.
+        return mStartSurfaceState == StartSurfaceState.SHOWN_HOMEPAGE
+                || mStartSurfaceState == StartSurfaceState.SHOWING_HOMEPAGE
+                || mStartSurfaceState == StartSurfaceState.SHOWING_START
+                || (mStartSurfaceState == StartSurfaceState.SHOWING_PREVIOUS
+                        && (mPreviousStartSurfaceState == StartSurfaceState.SHOWN_HOMEPAGE
+                                || mPreviousStartSurfaceState == StartSurfaceState.NOT_SHOWN));
     }
 
     // Implements TabSwitcher.OverviewModeObserver.
@@ -913,7 +954,8 @@ class StartSurfaceMediator implements StartSurface.Controller, TabSwitcher.Overv
     }
 
     private void setMVTilesVisibility(boolean isVisible) {
-        if (mExcludeMVTiles || isVisible == mPropertyModel.get(MV_TILES_VISIBLE)) return;
+        if (mExcludeMVTiles) return;
+        if (isVisible && mInitializeMVTilesRunnable != null) mInitializeMVTilesRunnable.run();
         mPropertyModel.set(MV_TILES_VISIBLE, isVisible);
     }
 

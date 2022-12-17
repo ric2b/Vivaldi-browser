@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/policy/messaging_layer/public/report_client.h"
+#include "chrome/browser/policy/messaging_layer/public/report_client_test_util.h"
 
 #include <memory>
 #include <string>
@@ -13,7 +14,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/task/post_task.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/values.h"
@@ -21,6 +21,7 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/policy/messaging_layer/util/dm_token_retriever_provider.h"
+#include "chrome/browser/policy/messaging_layer/util/test_request_payload.h"
 #include "components/policy/core/common/cloud/mock_cloud_policy_client.h"
 #include "components/reporting/client/dm_token_retriever.h"
 #include "components/reporting/client/mock_dm_token_retriever.h"
@@ -229,20 +230,19 @@ class ReportClientTest : public ::testing::TestWithParam<bool> {
       ASSERT_TRUE(attach_encryption_settings.value());  // If set, must be true.
       ASSERT_TRUE(is_encryption_enabled());
 
-      base::Value encryption_settings{base::Value::Type::DICTIONARY};
+      base::Value::Dict encryption_settings;
       std::string public_key;
       base::Base64Encode(signed_encryption_key_.public_asymmetric_key(),
                          &public_key);
-      encryption_settings.SetStringKey("publicKey", public_key);
-      encryption_settings.SetIntKey("publicKeyId",
-                                    signed_encryption_key_.public_key_id());
+      encryption_settings.Set("publicKey", public_key);
+      encryption_settings.Set("publicKeyId",
+                              signed_encryption_key_.public_key_id());
       std::string public_key_signature;
       base::Base64Encode(signed_encryption_key_.signature(),
                          &public_key_signature);
-      encryption_settings.SetStringKey("publicKeySignature",
-                                       public_key_signature);
-      base::Value response{base::Value::Type::DICTIONARY};
-      response.SetPath("encryptionSettings", std::move(encryption_settings));
+      encryption_settings.Set("publicKeySignature", public_key_signature);
+      base::Value::Dict response;
+      response.Set("encryptionSettings", std::move(encryption_settings));
       std::move(done_cb).Run(std::move(response));
     };
   }
@@ -275,7 +275,7 @@ class ReportClientTest : public ::testing::TestWithParam<bool> {
       ASSERT_THAT(seq_info, Ne(nullptr));
       base::Value::Dict response;
       response.Set("lastSucceedUploadedRecord", seq_info->Clone());
-      std::move(done_cb).Run(base::Value(std::move(response)));
+      std::move(done_cb).Run(std::move(response));
     };
   }
 
@@ -393,7 +393,8 @@ TEST_P(ReportClientTest, EnqueueMessageAndUpload) {
     }
 
     // Uploader is available, let it set the key.
-    EXPECT_CALL(*client_, UploadEncryptedReport(_, _, _))
+    EXPECT_CALL(*client_, UploadEncryptedReport(
+                              IsEncryptionKeyRequestUploadRequestValid(), _, _))
         .WillOnce(WithArgs<0, 2>(Invoke(GetEncryptionKeyInvocation())))
         .RetiresOnSaturation();
   }
@@ -406,7 +407,8 @@ TEST_P(ReportClientTest, EnqueueMessageAndUpload) {
 
   if (StorageSelector::is_uploader_required() &&
       !StorageSelector::is_use_missive()) {
-    EXPECT_CALL(*client_, UploadEncryptedReport(_, _, _))
+    EXPECT_CALL(*client_,
+                UploadEncryptedReport(IsDataUploadRequestValid(), _, _))
         .WillOnce(WithArgs<0, 2>(Invoke(GetVerifyDataInvocation())));
   }
 
@@ -439,13 +441,18 @@ TEST_P(ReportClientTest, SpeculativelyEnqueueMessageAndUpload) {
   if (StorageSelector::is_uploader_required() &&
       !StorageSelector::is_use_missive()) {
     // Note: there does not seem to be another way to define the expectations
-    // A+B for encrypted case and just B for non-encrypted.g
+    // A+B for encrypted case and just B for non-encrypted.
     if (is_encryption_enabled()) {
-      EXPECT_CALL(*client_, UploadEncryptedReport(_, _, _))
-          .WillOnce(WithArgs<0, 2>(Invoke(GetEncryptionKeyInvocation())))
+      EXPECT_CALL(*client_,
+                  UploadEncryptedReport(
+                      IsEncryptionKeyRequestUploadRequestValid(), _, _))
+          .WillOnce(WithArgs<0, 2>(Invoke(GetEncryptionKeyInvocation())));
+      EXPECT_CALL(*client_,
+                  UploadEncryptedReport(IsDataUploadRequestValid(), _, _))
           .WillOnce(WithArgs<0, 2>(Invoke(GetVerifyDataInvocation())));
     } else {
-      EXPECT_CALL(*client_, UploadEncryptedReport(_, _, _))
+      EXPECT_CALL(*client_,
+                  UploadEncryptedReport(IsDataUploadRequestValid(), _, _))
           .WillOnce(WithArgs<0, 2>(Invoke(GetVerifyDataInvocation())));
     }
   }

@@ -52,6 +52,11 @@ class MockPasswordStoreBackend : public PasswordStoreBackend {
               (LoginsOrErrorReply callback),
               (override));
   MOCK_METHOD(void,
+              GetAllLoginsForAccountAsync,
+              (absl::optional<std::string> account,
+               LoginsOrErrorReply callback),
+              (override));
+  MOCK_METHOD(void,
               FillMatchingLoginsAsync,
               (LoginsReply callback,
                bool include_psl,
@@ -95,6 +100,10 @@ class MockPasswordStoreBackend : public PasswordStoreBackend {
               (),
               (override));
   MOCK_METHOD(void, ClearAllLocalPasswords, (), (override));
+  MOCK_METHOD(void,
+              OnSyncServiceInitialized,
+              (syncer::SyncService*),
+              (override));
 };
 
 }  // namespace password_manager

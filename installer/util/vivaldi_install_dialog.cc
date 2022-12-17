@@ -57,7 +57,7 @@ absl::optional<vivaldi::InstallType> GetInstallTypeFromComboIndex(int i) {
       vivaldi::InstallType::kForCurrentUser,
       vivaldi::InstallType::kStandalone,
   };
-  if (0 <= i && static_cast<unsigned>(i) < base::size(selection_type_map)) {
+  if (0 <= i && static_cast<unsigned>(i) < std::size(selection_type_map)) {
     return selection_type_map[i];
   }
   return absl::nullopt;
@@ -636,10 +636,20 @@ void VivaldiInstallDialog::UpdateTypeSpecificOptionsVisibility() {
        ShellUtil::CanMakeChromeDefaultUnattended());
   bool no_autoupdate_valid =
       (options_.install_type == vivaldi::InstallType::kStandalone);
+  bool for_all_users =
+      (options_.install_type == vivaldi::InstallType::kForAllUsers);
   EnableAndShowControl(IDC_CHECK_REGISTER,
                        advanced_mode_ && register_browser_valid);
   EnableAndShowControl(IDC_CHECK_NO_AUTOUPDATE,
                        advanced_mode_ && no_autoupdate_valid);
+
+  // Do not provide the option to change the destination folder from the default
+  // in UI as this may allow for insecure installations. To alter the
+  // destination the user needs to pass --vivaldi-install-dir option to the
+  // installer.
+  EnableAndShowControl(IDC_STATIC_DEST_FOLDER, !for_all_users);
+  EnableAndShowControl(IDC_EDIT_DEST_FOLDER, !for_all_users);
+  EnableAndShowControl(IDC_BTN_BROWSE, !for_all_users);
 }
 
 void VivaldiInstallDialog::EnableAndShowControl(int id, bool show) {
@@ -941,12 +951,9 @@ INT_PTR CALLBACK VivaldiInstallDialog::DlgProc(HWND hdlg,
                              this_->is_upgrade_
                                  ? this_->btn_tos_accept_update_str_.c_str()
                                  : this_->btn_tos_accept_install_str_.c_str());
-              if (this_->is_upgrade_) {
-                ShowWindow(GetDlgItem(hdlg, IDC_STATIC_WARN), SW_SHOW);
-                this_->UpdateTypeSpecificOptionsVisibility();
-              } else {
-                ShowWindow(GetDlgItem(hdlg, IDC_STATIC_WARN), SW_HIDE);
-              }
+              ShowWindow(GetDlgItem(hdlg, IDC_STATIC_WARN),
+                         this_->is_upgrade_ ? SW_SHOW : SW_HIDE);
+              this_->UpdateTypeSpecificOptionsVisibility();
             }
           }
         } break;

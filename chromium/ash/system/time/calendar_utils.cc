@@ -10,6 +10,7 @@
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/style/ash_color_provider.h"
+#include "ash/system/time/date_helper.h"
 #include "base/i18n/time_formatting.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
@@ -31,34 +32,32 @@ bool IsTheSameDay(absl::optional<base::Time> date_a,
   if (!date_a.has_value() || !date_b.has_value())
     return false;
 
-  return base::TimeFormatWithPattern(date_a.value(), "dd MM YYYY") ==
-         base::TimeFormatWithPattern(date_b.value(), "dd MM YYYY");
+  return calendar_utils::GetMonthDayYear(date_a.value()) ==
+         calendar_utils::GetMonthDayYear(date_b.value());
 }
 
-ASH_EXPORT void GetSurroundingMonthsUTC(const base::Time& selected_date,
-                                        unsigned int num_months_out,
-                                        std::set<base::Time>& months_) {
-  // Make the output is empty before we start.
-  months_.clear();
+ASH_EXPORT std::set<base::Time> GetSurroundingMonthsUTC(
+    const base::Time& selected_date,
+    int num_months_out) {
+  std::set<base::Time> months;
 
   // First month is the one that contains |selected_date|.
   base::Time selected_date_start =
       calendar_utils::GetStartOfMonthUTC(selected_date);
-  months_.emplace(selected_date_start);
+  months.emplace(selected_date_start);
 
-  // Add |num_months_out| before.
-  base::Time current = selected_date_start;
-  for (unsigned int i = 0; i < num_months_out; ++i) {
-    current = calendar_utils::GetStartOfPreviousMonthUTC(current);
-    months_.emplace(current);
+  // Add |num_months_out| before and after.
+  base::Time current_forward = selected_date_start;
+  base::Time current_backward = selected_date_start;
+  for (int i = 0; i < num_months_out; ++i) {
+    current_forward = calendar_utils::GetStartOfNextMonthUTC(current_forward);
+    months.emplace(current_forward);
+    current_backward =
+        calendar_utils::GetStartOfPreviousMonthUTC(current_backward);
+    months.emplace(current_backward);
   }
 
-  // Add |num_months_out| after.
-  current = selected_date_start;
-  for (unsigned int i = 0; i < num_months_out; ++i) {
-    current = calendar_utils::GetStartOfNextMonthUTC(current);
-    months_.emplace(current);
-  }
+  return months;
 }
 
 base::Time::Exploded GetExplodedLocal(const base::Time& date) {
@@ -73,8 +72,59 @@ base::Time::Exploded GetExplodedUTC(const base::Time& date) {
   return exploded;
 }
 
+std::u16string FormatDate(const icu::SimpleDateFormat& formatter,
+                          const base::Time date) {
+  return DateHelper::GetInstance()->GetFormattedTime(&formatter, date);
+}
+
+std::u16string GetMonthDayYear(const base::Time date) {
+  return calendar_utils::FormatDate(
+      DateHelper::GetInstance()->month_day_year_formatter(), date);
+}
+
 std::u16string GetMonthName(const base::Time date) {
-  return base::TimeFormatWithPattern(date, "MMMM");
+  return calendar_utils::FormatDate(
+      DateHelper::GetInstance()->month_name_formatter(), date);
+}
+
+std::u16string GetDayOfMonth(const base::Time date) {
+  return calendar_utils::FormatDate(
+      DateHelper::GetInstance()->day_of_month_formatter(), date);
+}
+
+std::u16string GetDayIntOfMonth(const base::Time local_date) {
+  return base::UTF8ToUTF16(base::NumberToString(
+      calendar_utils::GetExplodedUTC(local_date).day_of_month));
+}
+
+std::u16string GetMonthNameAndDayOfMonth(const base::Time date) {
+  return calendar_utils::FormatDate(
+      DateHelper::GetInstance()->month_day_formatter(), date);
+}
+
+std::u16string GetTwelveHourClockTime(const base::Time date) {
+  return calendar_utils::FormatDate(
+      DateHelper::GetInstance()->twelve_hour_clock_formatter(), date);
+}
+
+std::u16string GetTwentyFourHourClockTime(const base::Time date) {
+  return calendar_utils::FormatDate(
+      DateHelper::GetInstance()->twenty_four_hour_clock_formatter(), date);
+}
+
+std::u16string GetTimeZone(const base::Time date) {
+  return calendar_utils::FormatDate(
+      DateHelper::GetInstance()->time_zone_formatter(), date);
+}
+
+std::u16string GetYear(const base::Time date) {
+  return calendar_utils::FormatDate(DateHelper::GetInstance()->year_formatter(),
+                                    date);
+}
+
+std::u16string GetMonthNameAndYear(const base::Time date) {
+  return calendar_utils::FormatDate(
+      DateHelper::GetInstance()->month_name_year_formatter(), date);
 }
 
 void SetUpWeekColumns(views::TableLayout* layout) {
@@ -86,6 +136,13 @@ void SetUpWeekColumns(views::TableLayout* layout) {
                     views::TableLayout::ColumnSize::kFixed, 0, 0)
         .AddPaddingColumn(views::TableLayout::kFixedSize, kColumnSetPadding);
   }
+}
+
+int GetMonthsBetween(const base::Time& start_date, const base::Time& end_date) {
+  base::Time::Exploded start_exp = calendar_utils::GetExplodedUTC(start_date);
+  base::Time::Exploded end_exp = calendar_utils::GetExplodedUTC(end_date);
+  return (end_exp.year - start_exp.year) * 12 +
+         (end_exp.month - start_exp.month) % 12;
 }
 
 SkColor GetPrimaryTextColor() {
@@ -137,37 +194,7 @@ bool IsActiveUser() {
 }
 
 int GetTimeDifferenceInMinutes(base::Time date) {
-  const icu::TimeZone& time_zone =
-      system::TimezoneSettings::GetInstance()->GetTimezone();
-  const int raw_time_diff = time_zone.getRawOffset() / kMillisecondsPerMinute;
-
-  // Calculates the time difference adjust by the possible daylight savings
-  // offset. If the status of any step fails, returns the default time
-  // difference without considering daylight savings.
-
-  UErrorCode status = U_ZERO_ERROR;
-  std::unique_ptr<icu::GregorianCalendar> gregorian_calendar =
-      std::make_unique<icu::GregorianCalendar>(time_zone, status);
-  if (U_FAILURE(status))
-    return raw_time_diff;
-
-  UDate current_date =
-      static_cast<UDate>(date.ToDoubleT() * base::Time::kMillisecondsPerSecond);
-  status = U_ZERO_ERROR;
-  gregorian_calendar->setTime(current_date, status);
-  if (U_FAILURE(status))
-    return raw_time_diff;
-
-  status = U_ZERO_ERROR;
-  UBool day_light = gregorian_calendar->inDaylightTime(status);
-  if (U_FAILURE(status))
-    return raw_time_diff;
-
-  int gmt_offset = time_zone.getRawOffset();
-  if (day_light)
-    gmt_offset += time_zone.getDSTSavings();
-
-  return gmt_offset / kMillisecondsPerMinute;
+  return DateHelper::GetInstance()->GetTimeDifferenceInMinutes(date);
 }
 
 }  // namespace calendar_utils

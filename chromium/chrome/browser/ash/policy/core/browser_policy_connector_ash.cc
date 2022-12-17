@@ -13,6 +13,7 @@
 #include "ash/components/settings/cros_settings_names.h"
 #include "ash/components/settings/cros_settings_provider.h"
 #include "ash/components/settings/timezone_settings.h"
+#include "ash/components/tpm/install_attributes.h"
 #include "ash/constants/ash_paths.h"
 #include "base/bind.h"
 #include "base/check.h"
@@ -24,13 +25,11 @@
 #include "base/notreached.h"
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/ash/attestation/attestation_ca_client.h"
-#include "chrome/browser/ash/login/enrollment/auto_enrollment_controller.h"
 #include "chrome/browser/ash/notifications/adb_sideloading_policy_change_notification.h"
 #include "chrome/browser/ash/policy/active_directory/active_directory_migration_manager.h"
 #include "chrome/browser/ash/policy/active_directory/active_directory_policy_manager.h"
@@ -38,6 +37,7 @@
 #include "chrome/browser/ash/policy/core/device_local_account.h"
 #include "chrome/browser/ash/policy/core/device_local_account_policy_service.h"
 #include "chrome/browser/ash/policy/core/dm_token_storage.h"
+#include "chrome/browser/ash/policy/enrollment/auto_enrollment_type_checker.h"
 #include "chrome/browser/ash/policy/enrollment/device_cloud_policy_initializer.h"
 #include "chrome/browser/ash/policy/enrollment/enrollment_config.h"
 #include "chrome/browser/ash/policy/enrollment/enrollment_requisition_manager.h"
@@ -61,6 +61,7 @@
 #include "chrome/browser/ash/policy/remote_commands/affiliated_remote_commands_invalidator.h"
 #include "chrome/browser/ash/policy/scheduled_task_handler/device_scheduled_reboot_handler.h"
 #include "chrome/browser/ash/policy/scheduled_task_handler/device_scheduled_update_checker.h"
+#include "chrome/browser/ash/policy/scheduled_task_handler/reboot_notifications_scheduler.h"
 #include "chrome/browser/ash/policy/scheduled_task_handler/scheduled_task_executor_impl.h"
 #include "chrome/browser/ash/policy/server_backed_state/active_directory_device_state_uploader.h"
 #include "chrome/browser/ash/policy/server_backed_state/server_backed_state_keys_broker.h"
@@ -72,14 +73,13 @@
 #include "chrome/browser/policy/networking/device_network_configuration_updater_ash.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
+#include "chromeos/ash/components/dbus/upstart/upstart_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager/session_manager_client.h"
-#include "chromeos/dbus/upstart/upstart_client.h"
 #include "chromeos/network/network_cert_loader.h"
 #include "chromeos/network/network_handler.h"
 #include "chromeos/network/onc/onc_certificate_importer_impl.h"
 #include "chromeos/system/statistics_provider.h"
-#include "chromeos/tpm/install_attributes.h"
 #include "components/policy/core/common/cloud/cloud_policy_client.h"
 #include "components/policy/core/common/cloud/cloud_policy_refresh_scheduler.h"
 #include "components/policy/core/common/cloud/resource_cache.h"
@@ -114,7 +114,7 @@ MarketSegment TranslateMarketSegment(
 
 // Checks whether forced re-enrollment is enabled.
 bool IsForcedReEnrollmentEnabled() {
-  return ash::AutoEnrollmentController::IsFREEnabled();
+  return policy::AutoEnrollmentTypeChecker::IsFREEnabled();
 }
 
 std::unique_ptr<ash::attestation::AttestationFlow> CreateAttestationFlow() {
@@ -134,7 +134,7 @@ BrowserPolicyConnectorAsh::CreateBackgroundTaskRunner() {
 
 BrowserPolicyConnectorAsh::BrowserPolicyConnectorAsh()
     : attestation_flow_(CreateAttestationFlow()) {
-  DCHECK(chromeos::InstallAttributes::IsInitialized());
+  DCHECK(ash::InstallAttributes::IsInitialized());
 
   // DBusThreadManager or DeviceSettingsService may be
   // uninitialized on unit tests.
@@ -142,11 +142,11 @@ BrowserPolicyConnectorAsh::BrowserPolicyConnectorAsh()
       ash::DeviceSettingsService::IsInitialized()) {
     std::unique_ptr<DeviceCloudPolicyStoreAsh> device_cloud_policy_store =
         std::make_unique<DeviceCloudPolicyStoreAsh>(
-            ash::DeviceSettingsService::Get(),
-            chromeos::InstallAttributes::Get(), CreateBackgroundTaskRunner());
+            ash::DeviceSettingsService::Get(), ash::InstallAttributes::Get(),
+            CreateBackgroundTaskRunner());
 
-    if (chromeos::InstallAttributes::Get()->IsActiveDirectoryManaged()) {
-      chromeos::UpstartClient::Get()->StartAuthPolicyService();
+    if (ash::InstallAttributes::Get()->IsActiveDirectoryManaged()) {
+      ash::UpstartClient::Get()->StartAuthPolicyService();
 
       device_active_directory_policy_manager_ =
           new DeviceActiveDirectoryPolicyManager(
@@ -205,7 +205,7 @@ void BrowserPolicyConnectorAsh::Init(
     RestartDeviceCloudPolicyInitializer();
   }
 
-  if (!chromeos::InstallAttributes::Get()->IsActiveDirectoryManaged()) {
+  if (!ash::InstallAttributes::Get()->IsActiveDirectoryManaged()) {
     device_local_account_policy_service_ =
         std::make_unique<DeviceLocalAccountPolicyService>(
             chromeos::SessionManagerClient::Get(),
@@ -329,7 +329,8 @@ void BrowserPolicyConnectorAsh::Init(
       std::make_unique<DeviceScheduledRebootHandler>(
           ash::CrosSettings::Get(),
           std::make_unique<ScheduledTaskExecutorImpl>(
-              DeviceScheduledRebootHandler::kRebootTimerTag));
+              DeviceScheduledRebootHandler::kRebootTimerTag),
+          std::make_unique<RebootNotificationsScheduler>());
 }
 
 void BrowserPolicyConnectorAsh::PreShutdown() {
@@ -369,6 +370,8 @@ void BrowserPolicyConnectorAsh::Shutdown() {
 
   device_scheduled_update_checker_.reset();
 
+  device_scheduled_reboot_handler_.reset();
+
   // The policy handler is registered as an observer to BuildState which gets
   // destructed before BrowserPolicyConnectorAsh. So destruct the policy
   // handler here so that it can de-register itself as an observer.
@@ -388,7 +391,7 @@ void BrowserPolicyConnectorAsh::Shutdown() {
 }
 
 bool BrowserPolicyConnectorAsh::IsDeviceEnterpriseManaged() const {
-  return chromeos::InstallAttributes::Get()->IsEnterpriseManaged();
+  return ash::InstallAttributes::Get()->IsEnterpriseManaged();
 }
 
 bool BrowserPolicyConnectorAsh::HasMachineLevelPolicies() {
@@ -397,15 +400,15 @@ bool BrowserPolicyConnectorAsh::HasMachineLevelPolicies() {
 }
 
 bool BrowserPolicyConnectorAsh::IsCloudManaged() const {
-  return chromeos::InstallAttributes::Get()->IsCloudManaged();
+  return ash::InstallAttributes::Get()->IsCloudManaged();
 }
 
 bool BrowserPolicyConnectorAsh::IsActiveDirectoryManaged() const {
-  return chromeos::InstallAttributes::Get()->IsActiveDirectoryManaged();
+  return ash::InstallAttributes::Get()->IsActiveDirectoryManaged();
 }
 
 std::string BrowserPolicyConnectorAsh::GetEnterpriseEnrollmentDomain() const {
-  return chromeos::InstallAttributes::Get()->GetDomain();
+  return ash::InstallAttributes::Get()->GetDomain();
 }
 
 std::string BrowserPolicyConnectorAsh::GetEnterpriseDomainManager() const {
@@ -425,7 +428,7 @@ std::string BrowserPolicyConnectorAsh::GetSSOProfile() const {
 }
 
 std::string BrowserPolicyConnectorAsh::GetRealm() const {
-  return chromeos::InstallAttributes::Get()->GetRealm();
+  return ash::InstallAttributes::Get()->GetRealm();
 }
 
 std::string BrowserPolicyConnectorAsh::GetDeviceAssetID() const {
@@ -471,12 +474,12 @@ std::string BrowserPolicyConnectorAsh::GetCustomerLogoURL() const {
 }
 
 DeviceMode BrowserPolicyConnectorAsh::GetDeviceMode() const {
-  return chromeos::InstallAttributes::Get()->GetMode();
+  return ash::InstallAttributes::Get()->GetMode();
 }
 
-chromeos::InstallAttributes* BrowserPolicyConnectorAsh::GetInstallAttributes()
+ash::InstallAttributes* BrowserPolicyConnectorAsh::GetInstallAttributes()
     const {
-  return chromeos::InstallAttributes::Get();
+  return ash::InstallAttributes::Get();
 }
 
 EnrollmentConfig BrowserPolicyConnectorAsh::GetPrescribedEnrollmentConfig()
@@ -580,7 +583,7 @@ void BrowserPolicyConnectorAsh::RestartDeviceCloudPolicyInitializer() {
   device_cloud_policy_initializer_ =
       std::make_unique<DeviceCloudPolicyInitializer>(
           local_state_, device_management_service(),
-          chromeos::InstallAttributes::Get(), state_keys_broker_.get(),
+          ash::InstallAttributes::Get(), state_keys_broker_.get(),
           device_cloud_policy_manager_->device_store(),
           device_cloud_policy_manager_,
           chromeos::system::StatisticsProvider::GetInstance());

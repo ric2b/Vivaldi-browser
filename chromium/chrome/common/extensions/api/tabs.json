@@ -75,7 +75,7 @@
           "width": {"type": "integer", "optional": true, "description": "The width of the tab in pixels."},
           "height": {"type": "integer", "optional": true, "description": "The height of the tab in pixels."},
           "sessionId": {"type": "string", "optional": true, "description": "The session ID used to uniquely identify a tab obtained from the $(ref:sessions) API."},
-          "extData": { "type": "string", "optional": true, "description": "The ext data of the tab." }
+          "vivExtData": { "type": "string", "optional": true, "description": "The ext data of the tab." }
         }
       },
       {
@@ -215,6 +215,12 @@
                 "optional": true,
                 "minimum": 0,
                 "description": "Open a port to a specific <a href='webNavigation#frame_ids'>frame</a> identified by <code>frameId</code> instead of all frames in the tab."
+              },
+              "documentId": {
+                "type": "string",
+                "optional": true,
+                "nodoc": true,
+                "description": "Open a port to a specific <a href='webNavigation#document_ids'>document</a> identified by <code>documentId</code> instead of all frames in the tab."
               }
             },
             "optional": true
@@ -279,6 +285,12 @@
                 "optional": true,
                 "minimum": 0,
                 "description": "Send a message to a specific <a href='webNavigation#frame_ids'>frame</a> identified by <code>frameId</code> instead of all frames in the tab."
+              },
+              "documentId": {
+                "type": "string",
+                "optional": true,
+                "nodoc": true,
+                "description": "Send a message to a specific <a href='webNavigation#document_ids'>document</a> identified by <code>documentId</code> instead of all frames in the tab."
               }
             },
             "optional": true
@@ -391,7 +403,12 @@
                 "optional": true,
                 "description": "The type of page transition to use when opening the tab. Specific to Vivaldi"
               },
-              "extData": {
+              "fromUrlField": {
+                "type": "boolean",
+                "optional": true,
+                "description": "Vivaldi addition: Whether the creation request came from the url field"
+              },
+              "vivExtData": {
                 "type": "string",
                 "optional": true,
                 "description": "Ext data for the tab."
@@ -642,7 +659,7 @@
                 "optional": true,
                 "description": "Whether the tab should be discarded automatically by the browser when resources are low."
               },
-               "extData": {
+              "vivExtData": {
                 "type": "string",
                 "optional": true,
                 "description": "Ext data for the tab."
@@ -1181,7 +1198,7 @@
                 "optional": true,
                 "description": "The tab's new title."
               },
-              "extData": {
+              "vivExtData": {
                 "type": "string",
                 "optional": true,
                 "description": "The tab's new ext data."

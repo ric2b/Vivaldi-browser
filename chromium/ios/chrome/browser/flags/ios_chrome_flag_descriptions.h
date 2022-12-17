@@ -30,6 +30,11 @@ extern const char kAutofillEnableSendingBcnInGetUploadDetailsDescription[];
 extern const char kAutofillEnableUnmaskCardRequestSetInstrumentIdName[];
 extern const char kAutofillEnableUnmaskCardRequestSetInstrumentIdDescription[];
 
+// Title and description for flag to enforce delays between offering Autofill
+// opportunities.
+extern const char kAutofillEnforceDelaysInStrikeDatabaseName[];
+extern const char kAutofillEnforceDelaysInStrikeDatabaseDescription[];
+
 // Title and description for the flag to fill promo code fields with Autofill.
 extern const char kAutofillFillMerchantPromoCodeFieldsName[];
 extern const char kAutofillFillMerchantPromoCodeFieldsDescription[];
@@ -41,6 +46,10 @@ extern const char kAutofillIOSDelayBetweenFieldsDescription[];
 // Title and description for the flag to parse promo code fields in Autofill.
 extern const char kAutofillParseMerchantPromoCodeFieldsName[];
 extern const char kAutofillParseMerchantPromoCodeFieldsDescription[];
+
+// Title and description for the flag to enable autofill password rich iph.
+extern const char kAutofillPasswordRichIPHName[];
+extern const char kAutofillPasswordRichIPHDescription[];
 
 // Title and description for the flag that controls whether the maximum number
 // of Autofill suggestions shown is pruned.
@@ -68,20 +77,25 @@ extern const char kAutofillUseRendererIDsDescription[];
 extern const char kBreakpadNoDelayInitialUploadName[];
 extern const char kBreakpadNoDelayInitialUploadDescription[];
 
+// Title and description for the flag to enable the rich iph experiment on
+// bubble views.
+extern const char kBubbleRichIPHName[];
+extern const char kBubbleRichIPHDescription[];
+
 // Title and description for the flag that moves the Content Suggestions header
 // to the Discover feed ScrollView.
 extern const char kContentSuggestionsHeaderMigrationName[];
 extern const char kContentSuggestionsHeaderMigrationDescription[];
 
+// Title and description for the flag that moves the Content Suggestions to a
+// UIViewController.
+extern const char kContentSuggestionsUIViewControllerMigrationName[];
+extern const char kContentSuggestionsUIViewControllerMigrationDescription[];
+
 // Title and description for the flag to control which crash generation tool
 // is used.
 extern const char kCrashpadIOSName[];
 extern const char kCrashpadIOSDescription[];
-
-// Title and description for the flag to trigger credentials provider extension
-// promo.
-extern const char kCredentialProviderExtensionPromoName[];
-extern const char kCredentialProviderExtensionPromoDescription[];
 
 #if defined(DCHECK_IS_CONFIGURABLE)
 // Title and description for the flag to enable configurable DCHECKs.
@@ -125,9 +139,9 @@ extern const char kDetectMainThreadFreezeDescription[];
 extern const char kDiscoverFeedInNtpName[];
 extern const char kDiscoverFeedInNtpDescription[];
 
-// Title and description for the flag to enable Vcard support.
-extern const char kDownloadVcardName[];
-extern const char kDownloadVcardDescription[];
+// Title and description for the flag to enable Calendar support.
+extern const char kDownloadCalendarName[];
+extern const char kDownloadCalendarDescription[];
 
 // Title and description for the flag to enable kEditPasswordsInSettings flag on
 // iOS.
@@ -168,6 +182,11 @@ extern const char kEnableDiscoverFeedShorterCacheDescription[];
 extern const char kEnableDiscoverFeedStaticResourceServingName[];
 extern const char kEnableDiscoverFeedStaticResourceServingDescription[];
 
+// Title and description for the flag to enable favicon for the Password
+// Manager.
+extern const char kEnableFaviconForPasswordsName[];
+extern const char kEnableFaviconForPasswordsDescription[];
+
 // Title and description for the flag to test the FRE default browser promo
 // experiment.
 extern const char kEnableFREDefaultBrowserScreenTestingName[];
@@ -185,29 +204,9 @@ extern const char kEnableFullscreenAPIDescription[];
 extern const char kEnableLongMessageDurationName[];
 extern const char kEnableLongMessageDurationDescription[];
 
-// Title and description for the flag to enable UI that allows the user to
-// create a strong password even if the field wasn't parsed as a new password
-// field.
-extern const char kEnableManualPasswordGenerationName[];
-extern const char kEnableManualPasswordGenerationDescription[];
-
 // Title and description for the flag to enable the new download API.
 extern const char kEnableNewDownloadAPIName[];
 extern const char kEnableNewDownloadAPIDescription[];
-
-// Title and description for the flag to enable optimization guide.
-extern const char kEnableOptimizationGuideName[];
-extern const char kEnableOptimizationGuideDescription[];
-
-// Title and description for the flag to enable optimization guide metadata
-// validation.
-extern const char kEnableOptimizationGuideMetadataValidationName[];
-extern const char kEnableOptimizationGuideMetadataValidationDescription[];
-
-// Title and description for the flag to enable optimization guide hints
-// fetching for MSBB users.
-extern const char kEnableOptimizationHintsFetchingMSBBName[];
-extern const char kEnableOptimizationHintsFetchingMSBBDescription[];
 
 // Title and description for the flag to enable shorted password auto-fill
 // instructions and button.
@@ -228,17 +227,9 @@ extern const char kExpandedTabStripDescription[];
 extern const char kFillingAcrossAffiliatedWebsitesName[];
 extern const char kFillingAcrossAffiliatedWebsitesDescription[];
 
-// Title and description for the flag to disable all extended sync promos.
-extern const char kForceDisableExtendedSyncPromosName[];
-extern const char kForceDisableExtendedSyncPromosDescription[];
-
 // Title and description for the flag to trigger the startup sign-in promo.
 extern const char kForceStartupSigninPromoName[];
 extern const char kForceStartupSigninPromoDescription[];
-
-// Title and description for the flag to use MICe FRE.
-extern const char kFREMobileIdentityConsistencyName[];
-extern const char kFREMobileIdentityConsistencyDescription[];
 
 // Title and description for the flag to enable sign-in with a Unicorn account.
 extern const char kEnableUnicornAccountSupportName[];
@@ -329,6 +320,10 @@ extern const char kModernTabStripDescription[];
 extern const char kMuteCompromisedPasswordsName[];
 extern const char kMuteCompromisedPasswordsDescription[];
 
+// Title and description for the flag to use the new MICe FRE.
+extern const char kNewMobileIdentityConsistencyFREName[];
+extern const char kNewMobileIdentityConsistencyFREDescription[];
+
 // Title and description for the flag to enable the new overflow menu.
 extern const char kNewOverflowMenuName[];
 extern const char kNewOverflowMenuDescription[];
@@ -367,18 +362,15 @@ extern const char kOmniboxLocalHistoryZeroSuggestDescription[];
 extern const char kOmniboxNewImplementationName[];
 extern const char kOmniboxNewImplementationDescription[];
 
+// Title and description for the flag to enable the SwiftUI omnibox popup
+// implementation.
+extern const char kIOSOmniboxUpdatedPopupUIName[];
+extern const char kIOSOmniboxUpdatedPopupUIDescription[];
+
 // Title and description for the flag to enable PhishGuard password reuse
 // detection.
 extern const char kPasswordReuseDetectionName[];
 extern const char kPasswordReuseDetectionDescription[];
-
-// Title and description for the flag to enable the Reading List Messages.
-extern const char kReadingListMessagesName[];
-extern const char kReadingListMessagesDescription[];
-
-// Title and description for the flag to enable Reading List Time to Read.
-extern const char kReadingListTimeToReadName[];
-extern const char kReadingListTimeToReadDescription[];
 
 // Title and description for the flag to native restore web states.
 extern const char kRestoreSessionFromCacheName[];
@@ -408,10 +400,6 @@ extern const char kSaveSessionTabsToSeparateFilesDescription[];
 // system.
 extern const char kScreenTimeIntegrationName[];
 extern const char kScreenTimeIntegrationDescription[];
-
-// Title and description for the flag to enable the Search History Link feature.
-extern const char kSearchHistoryLinkIOSName[];
-extern const char kSearchHistoryLinkIOSDescription[];
 
 // Title and description for the flag to show a sign-in promo if the user tries
 // to use send-tab-to-self while being signed-out.
@@ -474,6 +462,15 @@ extern const char kSyncTrustedVaultPassphrasePromoDescription[];
 extern const char kSyncTrustedVaultPassphraseRecoveryName[];
 extern const char kSyncTrustedVaultPassphraseRecoveryDescription[];
 
+// Title and description for the flag to enable Sync standalone invalidations.
+extern const char kSyncInvalidationsName[];
+extern const char kSyncInvalidationsDescription[];
+
+// Title and description for the flag to enable Sync standalone invalidations
+// for the Wallet and Offer data types.
+extern const char kSyncInvalidationsWalletAndOfferName[];
+extern const char kSyncInvalidationsWalletAndOfferDescription[];
+
 // Title and description for the flag to enable tabs search feature.
 extern const char kTabsSearchName[];
 extern const char kTabsSearchDescription[];
@@ -488,6 +485,10 @@ extern const char kTabsSearchRegularResultsSuggestedActionsDescription[];
 extern const char kToolbarContainerName[];
 extern const char kToolbarContainerDescription[];
 
+// Title and description for the flag to enable -[UIView window] observing.
+extern const char kUIViewWindowObservingName[];
+extern const char kUIViewWindowObservingDescription[];
+
 // Title and description for the flag to enable removing any entry points to the
 // history UI from Incognito mode.
 extern const char kUpdateHistoryEntryPointsInIncognitoName[];
@@ -497,6 +498,12 @@ extern const char kUpdateHistoryEntryPointsInIncognitoDescription[];
 // image from the long press context menu.
 extern const char kUseLensToSearchForImageName[];
 extern const char kUseLensToSearchForImageDescription[];
+
+// Title and description for the flag to enable using the
+// loadSimulatedRequest:responseHTMLString: API for displaying error pages in
+// CRWWKNavigationHandler.
+extern const char kUseLoadSimulatedRequestForErrorPageNavigationName[];
+extern const char kUseLoadSimulatedRequestForErrorPageNavigationDescription[];
 
 // Title and description for the flag to enable the replacement of some images
 // by SFSymbols.

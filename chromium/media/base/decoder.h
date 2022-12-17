@@ -16,21 +16,21 @@ namespace media {
 // List of known AudioDecoder implementations; recorded to UKM, always add new
 // values to the end and do not reorder or delete values from this list.
 enum class AudioDecoderType : int {
-  kUnknown = 0,     // Decoder name string is not recognized or n/a.
-  kFFmpeg = 1,      // FFmpegAudioDecoder
-  kMojo = 2,        // MojoAudioDecoder
-  kDecrypting = 3,  // DecryptingAudioDecoder
-  kMediaCodec = 4,  // MediaCodecAudioDecoder (Android)
-  kBroker = 5,      // AudioDecoderBroker
+  kUnknown = 0,       // Decoder name string is not recognized or n/a.
+  kFFmpeg = 1,        // FFmpegAudioDecoder
+  kMojo = 2,          // MojoAudioDecoder
+  kDecrypting = 3,    // DecryptingAudioDecoder
+  kMediaCodec = 4,    // MediaCodecAudioDecoder (Android)
+  kBroker = 5,        // AudioDecoderBroker
+  kTesting = 6,      // Never send this to UKM, for tests only.
+  kAudioToolbox = 7,// AudioToolbox (macOS)
 
-  kVivWMFDecoder = 6,
-  kVivATAudio = 7,
-  kVivPassThrough = 8,
-
-  kTesting = 9,     // Never send this to UKM, for tests only.
+  kVivWMFDecoder,
+  kVivATAudio,
+  kVivPassThrough,
 
   // Keep this at the end and equal to the last entry.
-  kMaxValue = kTesting,
+  kMaxValue = kVivPassThrough,
 };
 
 // List of known VideoDecoder implementations; recorded to UKM, always add new
@@ -54,14 +54,14 @@ enum class VideoDecoderType : int {
   // kChromeOs = 15,  // DEPRECATED, should be kVaapi or kV4L2 instead.
   kV4L2 = 16,       // V4L2VideoDecoder
 
-  kVivWMFDecoder = 17,
-  kVivVTVideo = 18,
-  kVivPassThrough = 19,
+  kTesting = 17,  // Never send this to UKM, for tests only.
 
-  kTesting = 20,  // Never send this to UKM, for tests only.
+  kVivWMFDecoder,
+  kVivVTVideo,
+  kVivPassThrough,
 
   // Keep this at the end and equal to the last entry.
-  kMaxValue = kTesting
+  kMaxValue = kVivPassThrough
 };
 
 MEDIA_EXPORT std::string GetDecoderName(AudioDecoderType type);

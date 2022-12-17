@@ -7,7 +7,9 @@
 
 #include <vector>
 
-#include "base/callback.h"
+#include "base/containers/flat_map.h"
+#include "base/time/time.h"
+#include "components/segmentation_platform/internal/execution/query_processor.h"
 #include "components/segmentation_platform/internal/proto/model_metadata.pb.h"
 
 namespace segmentation_platform {
@@ -16,26 +18,65 @@ class FeatureProcessorState;
 // CustomInputProcessor adds support to a larger variety of data type
 // (timestamps, strings mapped to enums, etc), transforming them into valid
 // input tensor to use when executing the ML model.
-class CustomInputProcessor {
+class CustomInputProcessor : public QueryProcessor {
  public:
   explicit CustomInputProcessor();
-  virtual ~CustomInputProcessor();
-
-  // Disallow copy/assign.
-  CustomInputProcessor(const CustomInputProcessor&) = delete;
-  CustomInputProcessor& operator=(const CustomInputProcessor&) = delete;
+  explicit CustomInputProcessor(const base::Time prediction_time);
+  explicit CustomInputProcessor(
+      base::flat_map<FeatureIndex, proto::CustomInput>&& custom_inputs,
+      const base::Time prediction_time);
+  ~CustomInputProcessor() override;
 
   using FeatureListQueryProcessorCallback =
       base::OnceCallback<void(std::unique_ptr<FeatureProcessorState>)>;
 
-  // Function for processing the next CustomInput type of input for ML model.
+  // Function for processing a single CustomInput type of input for ML model.
   // When the processing is successful, the feature processor state's input
   // tensor is updated accordingly, else if an error occurred, the feature
   // processor state's error flag is set.
+  // TODO(haileywang): Clean up this class and delete this method.
   void ProcessCustomInput(
       const proto::CustomInput& custom_input,
       std::unique_ptr<FeatureProcessorState> feature_processor_state,
       FeatureListQueryProcessorCallback callback);
+
+  // Called when the processing has finished to insert the result in the state
+  // object and notify the feature list processor.
+  void OnFinishProcessing(
+      FeatureListQueryProcessorCallback callback,
+      std::unique_ptr<FeatureProcessorState> feature_processor_state,
+      IndexedTensors result);
+
+  // QueryProcessor implementation.
+  void Process(std::unique_ptr<FeatureProcessorState> feature_processor_state,
+               QueryProcessorCallback callback) override;
+
+  template <typename IndexType>
+  using TemplateCallback =
+      base::OnceCallback<void(std::unique_ptr<FeatureProcessorState>,
+                              base::flat_map<IndexType, Tensor>)>;
+
+  // Process a data mapping with a customized index type and return the tensor
+  // values in |callback|.
+  template <typename IndexType>
+  void ProcessIndexType(
+      base::flat_map<IndexType, proto::CustomInput> custom_inputs,
+      std::unique_ptr<FeatureProcessorState> feature_processor_state,
+      TemplateCallback<IndexType> callback);
+
+ private:
+  // Helper function for parsing a single custom input and return the result
+  // along with the corresponding feature index.
+  QueryProcessor::Tensor ProcessSingleCustomInput(
+      const proto::CustomInput& custom_input);
+
+  // List of custom inputs to process into input tensors.
+  base::flat_map<FeatureIndex, proto::CustomInput> custom_inputs_;
+
+  // Time at which we expect the model execution to run.
+  base::Time prediction_time_;
+
+  base::WeakPtrFactory<CustomInputProcessor> weak_ptr_factory_{this};
 };
 
 }  // namespace segmentation_platform

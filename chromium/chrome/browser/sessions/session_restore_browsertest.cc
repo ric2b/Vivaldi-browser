@@ -612,16 +612,12 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoreIndividualTabFromWindow) {
   // Add and navigate three tabs.
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url1));
   {
-    content::WindowedNotificationObserver observer(
-        content::NOTIFICATION_LOAD_STOP,
-        content::NotificationService::AllSources());
+    content::CreateAndLoadWebContentsObserver observer;
     chrome::AddSelectedTabWithURL(browser(), url2, ui::PAGE_TRANSITION_LINK);
     observer.Wait();
   }
   {
-    content::WindowedNotificationObserver observer(
-        content::NOTIFICATION_LOAD_STOP,
-        content::NotificationService::AllSources());
+    content::CreateAndLoadWebContentsObserver observer;
     chrome::AddSelectedTabWithURL(browser(), url3, ui::PAGE_TRANSITION_LINK);
     observer.Wait();
   }
@@ -805,9 +801,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, MAYBE_RestoreForeignTab) {
   // Restore in the current tab.
   content::WebContents* tab_content = nullptr;
   {
-    content::WindowedNotificationObserver observer(
-        content::NOTIFICATION_LOAD_STOP,
-        content::NotificationService::AllSources());
+    content::CreateAndLoadWebContentsObserver observer;
     tab_content = SessionRestore::RestoreForeignSessionTab(
         browser()->tab_strip_model()->GetActiveWebContents(), tab,
         WindowOpenDisposition::CURRENT_TAB);
@@ -824,9 +818,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, MAYBE_RestoreForeignTab) {
   // Restore in a new tab.
   tab_content = nullptr;
   {
-    content::WindowedNotificationObserver observer(
-        content::NOTIFICATION_LOAD_STOP,
-        content::NotificationService::AllSources());
+    content::CreateAndLoadWebContentsObserver observer;
     tab_content = SessionRestore::RestoreForeignSessionTab(
         browser()->tab_strip_model()->GetActiveWebContents(), tab,
         WindowOpenDisposition::NEW_BACKGROUND_TAB);
@@ -844,9 +836,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, MAYBE_RestoreForeignTab) {
   Browser* new_browser = nullptr;
   tab_content = nullptr;
   {
-    content::WindowedNotificationObserver observer(
-        content::NOTIFICATION_LOAD_STOP,
-        content::NotificationService::AllSources());
+    content::CreateAndLoadWebContentsObserver observer;
     tab_content = SessionRestore::RestoreForeignSessionTab(
         browser()->tab_strip_model()->GetActiveWebContents(), tab,
         WindowOpenDisposition::NEW_WINDOW);
@@ -3860,14 +3850,14 @@ IN_PROC_BROWSER_TEST_F(AppSessionRestoreTest, InvokeTwoAppsThenRestore) {
   profile_keep_alive.reset();
 }
 
-class SessionRestoreAppHistoryTest : public SessionRestoreTest {
+class SessionRestoreNavigationApiTest : public SessionRestoreTest {
   void SetUpCommandLine(base::CommandLine* command_line) override {
     command_line->AppendSwitch(
         switches::kEnableExperimentalWebPlatformFeatures);
   }
 };
 
-IN_PROC_BROWSER_TEST_F(SessionRestoreAppHistoryTest,
+IN_PROC_BROWSER_TEST_F(SessionRestoreNavigationApiTest,
                        ReferrerPolicyUrlCensored) {
   // Tests start with one browser window; navigate it to url 1.
   ui_test_utils::NavigateToURLWithDisposition(
@@ -3900,16 +3890,16 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreAppHistoryTest,
   ASSERT_EQ(1, browser()->tab_strip_model()->count());
   EXPECT_EQ(GetUrl3(), contents->GetLastCommittedURL());
 
-  // Ensure that url2 is censored in appHistory due to the no-referrer policy,
+  // Ensure that url2 is censored in navigation due to the no-referrer policy,
   // but url1 isn't.
   bool url1_is_censored = false;
   bool url2_is_censored = false;
   const char kCheckEntry1Js[] =
       "window.domAutomationController.send("
-      "appHistory.entries()[0].url == null);";
+      "navigation.entries()[0].url == null);";
   const char kCheckEntry2Js[] =
       "window.domAutomationController.send("
-      "appHistory.entries()[1].url == null);";
+      "navigation.entries()[1].url == null);";
   EXPECT_TRUE(content::ExecuteScriptAndExtractBool(contents, kCheckEntry1Js,
                                                    &url1_is_censored));
   EXPECT_TRUE(content::ExecuteScriptAndExtractBool(contents, kCheckEntry2Js,
@@ -3925,7 +3915,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreAppHistoryTest,
   // Then close all the browsers and "restart" Chromium.
   QuitBrowserAndRestore(browser());
 
-  // url2 should still be censored in appHistory after restore, url1 should not.
+  // url2 should still be censored in navigation after restore, url1 should not.
   ASSERT_EQ(1u, active_browser_list_->size());
   content::WebContents* restored_contents =
       active_browser_list_->get(0)->tab_strip_model()->GetWebContentsAt(0);
@@ -3933,7 +3923,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreAppHistoryTest,
   int entries_length = 0;
   const char kCheckEntriesLength[] =
       "window.domAutomationController.send("
-      "appHistory.entries().length);";
+      "navigation.entries().length);";
   EXPECT_TRUE(content::ExecuteScriptAndExtractInt(
       restored_contents, kCheckEntriesLength, &entries_length));
   EXPECT_EQ(entries_length, 3);

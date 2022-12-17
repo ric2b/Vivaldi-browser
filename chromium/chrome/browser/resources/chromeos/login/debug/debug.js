@@ -214,7 +214,7 @@ cr.define('cr.ui.login.debug', function() {
             screen.updateCountdownString(
                 'Your device will shut down in 60 seconds. Remove the USB \
                  before turning your device back on. Then you can start using \
-                 CloudReady 2.0.');
+                 ChromeOS Flex.');
             screen.showStep('success');
           },
         },
@@ -244,7 +244,7 @@ cr.define('cr.ui.login.debug', function() {
           id: 'error',
           trigger: (screen) => {
             screen.setError(
-                'Chrome OS was unable to connect to Public Wifi. ' +
+                'ChromeOS was unable to connect to Public Wifi. ' +
                 'Please select another network or try again.');
           }
         },
@@ -539,6 +539,10 @@ cr.define('cr.ui.login.debug', function() {
       kind: ScreenKind.NORMAL,
     },
     {
+      id: 'theme-selection',
+      kind: ScreenKind.NORMAL,
+    },
+    {
       id: 'reset',
       kind: ScreenKind.OTHER,
       states: [
@@ -600,7 +604,7 @@ cr.define('cr.ui.login.debug', function() {
         {
           id: 'allowlist-customer',
           trigger: (screen) => {
-            screen.showAllowlistCheckFailedError(true, {
+            screen.showAllowlistCheckFailedError({
               enterpriseManaged: false,
             });
           },
@@ -905,7 +909,7 @@ cr.define('cr.ui.login.debug', function() {
     {
       id: 'sync-consent',
       kind: ScreenKind.NORMAL,
-      defaultState: 'step-no-split',
+      defaultState: 'step-loaded',
       states: [
         {
           id: 'minor-mode',

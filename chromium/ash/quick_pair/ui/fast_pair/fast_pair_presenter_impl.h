@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "ash/quick_pair/proto/fastpair.pb.h"
 #include "ash/quick_pair/ui/actions.h"
 #include "ash/quick_pair/ui/fast_pair/fast_pair_notification_controller.h"
 #include "ash/quick_pair/ui/fast_pair/fast_pair_presenter.h"
@@ -61,11 +62,16 @@ class FastPairPresenterImpl : public FastPairPresenter {
                             AssociateAccountCallback callback) override;
   void ShowCompanionApp(scoped_refptr<Device> device,
                         CompanionAppCallback callback) override;
-  void RemoveNotifications(scoped_refptr<Device> device) override;
+  void RemoveNotifications() override;
 
  private:
   FastPairPresenterImpl(const FastPairPresenterImpl&) = delete;
   FastPairPresenterImpl& operator=(const FastPairPresenterImpl&) = delete;
+
+  void OnCheckOptInStatus(scoped_refptr<Device> device,
+                          DiscoveryCallback callback,
+                          DeviceMetadata* device_metadata,
+                          nearby::fastpair::OptInStatus status);
 
   void OnDiscoveryClicked(DiscoveryCallback action_callback);
   void OnDiscoveryDismissed(DiscoveryCallback callback, bool user_dismissed);

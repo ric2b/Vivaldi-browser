@@ -10,7 +10,6 @@
 
 #include "base/base64.h"
 #include "base/bind.h"
-#include "base/cxx17_backports.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/json/json_reader.h"
@@ -22,7 +21,6 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/task/post_task.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/api/messaging/incognito_connectability.h"
@@ -191,6 +189,75 @@ IN_PROC_BROWSER_TEST_F(MessagingApiTest, MessagingCrash) {
   EXPECT_TRUE(catcher.GetNextResult());
 }
 
+// Tests sendMessage cases where the listener gets disconnected before it is
+// able to reply with a message it said it would send. This is achieved by
+// closing the page the listener is registered on.
+IN_PROC_BROWSER_TEST_F(MessagingApiTest, SendMessageDisconnect) {
+  static constexpr char kManifest[] = R"(
+      {
+        "name": "sendMessageDisconnect",
+        "version": "1.0",
+        "manifest_version": 3,
+        "background": {
+          "service_worker": "test.js",
+          "type": "module"
+        }
+      })";
+
+  static constexpr char kListenerPage[] = R"(
+    <script src="listener.js"></script>
+  )";
+  static constexpr char kListenerJS[] = R"(
+    var sendResponseCallback;
+    chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+      // Store the callback and return true to indicate we intend to respond
+      // with it later. We store the callback because the port would be closed
+      // automatically if it is garbage collected.
+      sendResponseCallback = sendResponse;
+
+      // Have the page close itself after a short delay to trigger the
+      // disconnect.
+      setTimeout(window.close, 0);
+      return true;
+    });
+  )";
+  static constexpr char kTestJS[] = R"(
+    import {openTab} from '/_test_resources/test_util/tabs_util.js';
+    let expectedError = 'A listener indicated an asynchronous response by ' +
+        'returning true, but the message channel closed before a response ' +
+        'was received';
+    chrome.test.runTests([
+      async function sendMessageWithCallbackExpectingUnsentAsyncResponse() {
+        // Open the page which has the listener.
+        let tab = await openTab(chrome.runtime.getURL('listener.html'));
+        chrome.tabs.sendMessage(tab.id, 'async_true', (response) => {
+          chrome.test.assertLastError(expectedError);
+          chrome.test.succeed();
+        });
+      },
+
+      async function sendMessageWithPromiseExpectingUnsentAsyncResponse() {
+        // Open the page which has the listener.
+        let tab = await openTab(chrome.runtime.getURL('listener.html'));
+        chrome.runtime.sendMessage('async_true').then(() => {
+          chrome.test.fail('Message unexpectedly succeeded');
+        }).catch((error) => {
+          chrome.test.assertEq(expectedError, error.message);
+          chrome.test.succeed();
+        });
+      },
+    ]);
+  )";
+
+  TestExtensionDir dir;
+  dir.WriteManifest(kManifest);
+  dir.WriteFile(FILE_PATH_LITERAL("listener.html"), kListenerPage);
+  dir.WriteFile(FILE_PATH_LITERAL("listener.js"), kListenerJS);
+  dir.WriteFile(FILE_PATH_LITERAL("test.js"), kTestJS);
+
+  ASSERT_TRUE(RunExtensionTest(dir.UnpackedPath(), {}, {}));
+}
+
 // Tests that message passing from one extension to another works.
 IN_PROC_BROWSER_TEST_F(MessagingApiTest, MessagingExternal) {
   ASSERT_TRUE(LoadExtension(
@@ -319,7 +386,7 @@ class ExternallyConnectableMessagingTest : public MessagingApiTest {
 
     // Turn the array into a JS array, which effectively gets eval()ed.
     std::string as_js_array;
-    for (size_t i = 0; i < base::size(non_messaging_apis); ++i) {
+    for (size_t i = 0; i < std::size(non_messaging_apis); ++i) {
       as_js_array += as_js_array.empty() ? "[" : ",";
       as_js_array += base::StringPrintf("'%s'", non_messaging_apis[i]);
     }
@@ -1472,9 +1539,12 @@ class MessagingApiFencedFrameTest
       public testing::WithParamInterface<bool /* shadow_dom_fenced_frame */> {
  protected:
   MessagingApiFencedFrameTest() {
-    feature_list_.InitAndEnableFeatureWithParameters(
-        blink::features::kFencedFrames,
-        {{"implementation_type", GetParam() ? "shadow_dom" : "mparch"}});
+    feature_list_.InitWithFeaturesAndParameters(
+        {{blink::features::kFencedFrames,
+          {{"implementation_type", GetParam() ? "shadow_dom" : "mparch"}}},
+         {features::kPrivacySandboxAdsAPIsOverride, {}}},
+        {/* disabled_features */});
+    UseHttpsTestServer();
   }
   ~MessagingApiFencedFrameTest() override = default;
 

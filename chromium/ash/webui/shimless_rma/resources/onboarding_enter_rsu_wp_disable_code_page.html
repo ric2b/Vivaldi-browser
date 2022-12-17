@@ -13,6 +13,8 @@
     font-size: var(--shimless-hint-font-size);
     font-weight: var(--shimless-medium-font-weight);
     line-height: var(--shimless-hint-line-height);
+    padding-bottom: 8px;
+    padding-top: 8px;
   }
 
   :host([rsu-code-invalid_]) #inputValidationLabel {
@@ -23,9 +25,29 @@
     width: 275px;
   }
 
+  #rsuCode {
+    padding-bottom: 8px;
+    width: 320px;
+  }
+
   #rsuCodeDialogLink {
     color: var(--cros-link-color);
     text-decoration: none;
+  }
+
+  #qrCodeCanvas {
+      border: 1px solid;
+      border-color: var(--google-grey-200);
+      border-radius: 8px;
+      width: 268px;
+    }
+
+  #qrCodeWrapper {
+    align-items: center;
+    display: flex;
+    height: 100%;
+    justify-content: center;
+    width: 100%;
   }
 </style>
 
@@ -47,7 +69,9 @@
     </div>
   </div>
   <div slot="right-pane">
-    <canvas id="qrCodeCanvas" width="[[canvasSize_]]" height="[[canvasSize_]]">
+    <div id="qrCodeWrapper">
+      <canvas id="qrCodeCanvas" width="[[canvasSize_]]" height="[[canvasSize_]]">
+    </div>
     </canvas>
   </div>
 </base-page>
@@ -55,7 +79,7 @@
 <cr-dialog id="rsuChallengeDialog" on-cancel="closeDialog_" ignore-popstate>
   <div slot="title">[[i18n('rsuChallengeDialogTitleText')]]</div>
   <div slot="body" id="dialogBody">[[rsuChallengeLinkText_]]</div>
-  <div slot="button-container">
+  <div class="dialog-footer" slot="button-container">
     <cr-button class="action-button" on-click="closeDialog_">
       [[i18n('rsuChallengeDialogDoneButtonLabel')]]
     </cr-button>

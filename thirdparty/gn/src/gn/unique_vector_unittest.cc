@@ -28,7 +28,8 @@ TEST(UniqueVector, PushBack) {
   EXPECT_EQ(0u, foo.IndexOf(1));
   EXPECT_EQ(1u, foo.IndexOf(2));
   EXPECT_EQ(2u, foo.IndexOf(0));
-  EXPECT_EQ(static_cast<size_t>(-1), foo.IndexOf(99));
+  EXPECT_FALSE(foo.Contains(98));
+  EXPECT_EQ(foo.kIndexNone, foo.IndexOf(99));
 }
 
 TEST(UniqueVector, PushBackMove) {
@@ -42,4 +43,86 @@ TEST(UniqueVector, PushBackMove) {
   EXPECT_EQ("a", a);
 
   EXPECT_EQ(0u, vect.IndexOf("a"));
+}
+
+TEST(UniqueVector, EmplaceBack) {
+  UniqueVector<std::string> vect;
+  EXPECT_TRUE(vect.emplace_back("a"));
+  EXPECT_FALSE(vect.emplace_back("a"));
+  EXPECT_EQ(1u, vect.size());
+  EXPECT_TRUE(vect.emplace_back("b"));
+
+  EXPECT_EQ(2u, vect.size());
+  EXPECT_TRUE(vect.Contains(std::string("a")));
+  EXPECT_TRUE(vect.Contains(std::string("b")));
+}
+
+static auto MakePair(bool first, size_t second) -> std::pair<bool, size_t> {
+  return {first, second};
+}
+
+TEST(UniqueVector, PushBackWithIndex) {
+  UniqueVector<int> foo;
+
+  EXPECT_EQ(MakePair(true, 0u), foo.PushBackWithIndex(1));
+  EXPECT_EQ(MakePair(false, 0u), foo.PushBackWithIndex(1));
+  EXPECT_EQ(MakePair(true, 1u), foo.PushBackWithIndex(2));
+  EXPECT_EQ(MakePair(true, 2u), foo.PushBackWithIndex(3));
+  EXPECT_EQ(MakePair(false, 0u), foo.PushBackWithIndex(1));
+  EXPECT_EQ(MakePair(false, 1u), foo.PushBackWithIndex(2));
+  EXPECT_EQ(MakePair(false, 2u), foo.PushBackWithIndex(3));
+
+  EXPECT_TRUE(foo.Contains(1));
+  EXPECT_TRUE(foo.Contains(2));
+  EXPECT_TRUE(foo.Contains(3));
+  EXPECT_EQ(0u, foo.IndexOf(1));
+  EXPECT_EQ(1u, foo.IndexOf(2));
+  EXPECT_EQ(2u, foo.IndexOf(3));
+  EXPECT_EQ(foo.kIndexNone, foo.IndexOf(98));
+}
+
+TEST(UniqueVector, PushBackMoveWithIndex) {
+  UniqueVector<std::string> vect;
+  std::string a("a");
+  EXPECT_EQ(MakePair(true, 0), vect.PushBackWithIndex(std::move(a)));
+  EXPECT_EQ("", a);
+
+  a = "a";
+  EXPECT_EQ(MakePair(false, 0), vect.PushBackWithIndex(std::move(a)));
+  EXPECT_EQ("a", a);
+
+  EXPECT_EQ(0u, vect.IndexOf("a"));
+}
+
+TEST(UniqueVector, EmplaceBackWithIndex) {
+  UniqueVector<std::string> vect;
+  EXPECT_EQ(MakePair(true, 0u), vect.EmplaceBackWithIndex("a"));
+  EXPECT_EQ(MakePair(false, 0u), vect.EmplaceBackWithIndex("a"));
+  EXPECT_EQ(1u, vect.size());
+
+  EXPECT_EQ(MakePair(true, 1u), vect.EmplaceBackWithIndex("b"));
+  EXPECT_EQ(2u, vect.size());
+
+  EXPECT_TRUE(vect.Contains(std::string("a")));
+  EXPECT_TRUE(vect.Contains(std::string("b")));
+}
+
+TEST(UniqueVector, Release) {
+  UniqueVector<std::string> vect;
+  EXPECT_TRUE(vect.emplace_back("a"));
+  EXPECT_TRUE(vect.emplace_back("b"));
+  EXPECT_TRUE(vect.emplace_back("c"));
+
+  std::vector<std::string> v = vect.release();
+  EXPECT_TRUE(vect.empty());
+  EXPECT_FALSE(v.empty());
+
+  EXPECT_FALSE(vect.Contains(std::string("a")));
+  EXPECT_FALSE(vect.Contains(std::string("b")));
+  EXPECT_FALSE(vect.Contains(std::string("a")));
+
+  EXPECT_EQ(3u, v.size());
+  EXPECT_EQ(std::string("a"), v[0]);
+  EXPECT_EQ(std::string("b"), v[1]);
+  EXPECT_EQ(std::string("c"), v[2]);
 }

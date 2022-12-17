@@ -11,6 +11,7 @@
 
 #include "base/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
+#include "base/time/time.h"
 #include "components/autofill_assistant/browser/client.h"
 #include "components/autofill_assistant/browser/client_settings.h"
 #include "components/autofill_assistant/browser/element_area.h"
@@ -143,8 +144,6 @@ class Controller : public ScriptExecutorDelegate,
       ScriptExecutorDelegate::NavigationListener* listener) override;
   void RemoveNavigationListener(
       ScriptExecutorDelegate::NavigationListener* listener) override;
-  void AddListener(ScriptExecutorDelegate::Listener* listener) override;
-  void RemoveListener(ScriptExecutorDelegate::Listener* listener) override;
 
   void SetBrowseDomainsAllowlist(std::vector<std::string> domains) override;
 
@@ -153,7 +152,7 @@ class Controller : public ScriptExecutorDelegate,
   void SetOverlayBehavior(
       ConfigureUiStateProto::OverlayBehavior overlay_behavior) override;
   void WriteUserData(
-      base::OnceCallback<void(UserData*, UserData::FieldChange*)>) override;
+      base::OnceCallback<void(UserData*, UserDataFieldChange*)>) override;
   void OnScriptError(const std::string& error_message,
                      Metrics::DropOutReason reason);
   void OnNavigationShutdownOrError(const GURL& url,
@@ -161,8 +160,6 @@ class Controller : public ScriptExecutorDelegate,
 
   // Overrides ExecutionDelegate:
   bool NeedsUI() const override;
-  void OnStop(const std::string& message,
-              const std::string& button_label) override;
   void GetVisualViewport(RectF* visual_viewport) const override;
   ViewportMode GetViewportMode() override;
   bool IsTabSelected() override;
@@ -175,7 +172,7 @@ class Controller : public ScriptExecutorDelegate,
   bool ShouldShowOverlay() const override;
   const ClientSettings& GetClientSettings() const override;
   void ShutdownIfNecessary() override;
-  void NotifyUserDataChange(UserData::FieldChange field_change) override;
+  void NotifyUserDataChange(UserDataFieldChange field_change) override;
   void GetTouchableArea(std::vector<RectF>* area) const override;
   void GetRestrictedArea(std::vector<RectF>* area) const override;
   void OnFatalError(const std::string& error_message,
@@ -203,7 +200,8 @@ class Controller : public ScriptExecutorDelegate,
 
   void OnGetScripts(const GURL& url,
                     int http_status,
-                    const std::string& response);
+                    const std::string& response,
+                    const ServiceRequestSender::ResponseInfo& response_info);
 
   // Execute |script_path| and, if execution succeeds, enter |end_state| and
   // call |on_success|.
@@ -267,7 +265,7 @@ class Controller : public ScriptExecutorDelegate,
   void SetOverlayColors(std::unique_ptr<OverlayColors> colors);
   void ReportNavigationStateChanged();
   void SetProfile(const std::string& key,
-                  UserData::FieldChange field_change,
+                  UserDataFieldChange field_change,
                   std::unique_ptr<autofill::AutofillProfile> profile);
 
   // Show the first "Opening..." message and enter START state.
@@ -279,6 +277,9 @@ class Controller : public ScriptExecutorDelegate,
   // Configure the UI for the stopped state, clearing out visible state except
   // for the message and possibly the "Send feedback" chip.
   void SetStoppedUI();
+
+  // Notifies observers and shuts down.
+  void Shutdown(Metrics::DropOutReason reason);
 
   ElementArea* touchable_element_area();
   ScriptTracker* script_tracker();
@@ -311,7 +312,6 @@ class Controller : public ScriptExecutorDelegate,
   std::unique_ptr<TriggerContext> trigger_context_;
 
   AutofillAssistantState state_ = AutofillAssistantState::INACTIVE;
-  bool can_recover_from_stopped_ = false;
 
   // The URL passed to Start(). Used only as long as there's no committed URL.
   // Note that this is the deeplink passed by a caller.
@@ -368,8 +368,6 @@ class Controller : public ScriptExecutorDelegate,
   bool navigation_error_ = false;
   base::ObserverList<ScriptExecutorDelegate::NavigationListener>
       navigation_listeners_;
-
-  base::ObserverList<ScriptExecutorDelegate::Listener> listeners_;
 
   // The next DidStartNavigation will not cause an error.
   bool expect_navigation_ = false;

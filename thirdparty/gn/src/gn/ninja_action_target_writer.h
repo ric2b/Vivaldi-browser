@@ -50,6 +50,10 @@ class NinjaActionTargetWriter : public NinjaTargetWriter {
 
   void WriteDepfile(const SourceFile& source);
 
+  // Writes variables that we make available to all actions, irrespective
+  // of whether they're associated with a specific source file.
+  void WriteNinjaVariablesForAction();
+
   // Path output writer that doesn't do any escaping or quoting. It does,
   // however, convert slashes.  Used for
   // computing intermediate strings.

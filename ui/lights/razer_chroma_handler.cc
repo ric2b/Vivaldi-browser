@@ -4,20 +4,22 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/prefs/pref_service.h"
+
 #include "extensions/schema/vivaldi_utilities.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
-#ifndef OS_WIN
+#if !BUILDFLAG(IS_WIN)
 // static
 RazerChromaPlatformDriver*
 RazerChromaPlatformDriver::CreateRazerChromaPlatformDriver(Profile* profile) {
   // Only Windows has a Chroma SDK.
   return nullptr;
 }
-#endif  // OS_WIN
+#endif  // !IS_WIN
 
 RazerChromaHandler::RazerChromaHandler(Profile* profile) : profile_(profile) {
   platform_driver_.reset(

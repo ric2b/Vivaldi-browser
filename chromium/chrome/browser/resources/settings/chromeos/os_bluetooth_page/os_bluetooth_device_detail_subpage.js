@@ -20,14 +20,14 @@ import {assertNotReached} from '//resources/js/assert.m.js';
 import {I18nBehavior, I18nBehaviorInterface} from '//resources/js/i18n_behavior.m.js';
 import {html, mixinBehaviors, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {BatteryType} from 'chrome://resources/cr_components/chromeos/bluetooth/bluetooth_types.js';
-import {getBatteryPercentage, getDeviceName, hasAnyDetailedBatteryInfo, hasTrueWirelessImages} from 'chrome://resources/cr_components/chromeos/bluetooth/bluetooth_utils.js';
+import {getBatteryPercentage, getDeviceName, hasAnyDetailedBatteryInfo, hasDefaultImage, hasTrueWirelessImages} from 'chrome://resources/cr_components/chromeos/bluetooth/bluetooth_utils.js';
 import {getBluetoothConfig} from 'chrome://resources/cr_components/chromeos/bluetooth/cros_bluetooth_config.js';
 
 import {loadTimeData} from '../../i18n_setup.js';
 import {Route, Router} from '../../router.js';
-import {routes} from '../os_route.m.js';
+import {routes} from '../os_route.js';
 import {RouteObserverBehavior, RouteObserverBehaviorInterface} from '../route_observer_behavior.js';
-import {RouteOriginBehavior, RouteOriginBehaviorInterface} from '../route_origin_behavior.m.js';
+import {RouteOriginBehavior, RouteOriginBehaviorInterface} from '../route_origin_behavior.js';
 
 const mojom = chromeos.bluetoothConfig.mojom;
 
@@ -435,7 +435,10 @@ class SettingsBluetoothDeviceDetailSubpageElement extends
     if (!this.device_ || !this.isDeviceConnected_) {
       return false;
     }
-    return this.device_.deviceProperties.deviceType === mojom.DeviceType.kMouse;
+    return this.device_.deviceProperties.deviceType ===
+        mojom.DeviceType.kMouse ||
+        this.device_.deviceProperties.deviceType ===
+        mojom.DeviceType.kKeyboardMouseCombo;
   }
 
   /**
@@ -447,7 +450,9 @@ class SettingsBluetoothDeviceDetailSubpageElement extends
       return false;
     }
     return this.device_.deviceProperties.deviceType ===
-        mojom.DeviceType.kKeyboard;
+        mojom.DeviceType.kKeyboard ||
+        this.device_.deviceProperties.deviceType ===
+        mojom.DeviceType.kKeyboardMouseCombo;
   }
 
   /**
@@ -495,15 +500,25 @@ class SettingsBluetoothDeviceDetailSubpageElement extends
       return false;
     }
 
-    // Don't show True Wireless Images component if the device has no
-    // detailed battery info to display. This doesn't matter if the device
-    // is not connected.
-    if (!hasAnyDetailedBatteryInfo(this.device_.deviceProperties) &&
-        this.isDeviceConnected_) {
+    // The True Wireless Images component expects all True Wireless
+    // images and the default image to be displayable.
+    if (!hasDefaultImage(this.device_.deviceProperties) ||
+        !hasTrueWirelessImages(this.device_.deviceProperties)) {
       return false;
     }
 
-    return hasTrueWirelessImages(this.device_.deviceProperties);
+    // If the device is not connected, we don't need any battery info and can
+    // immediately return true.
+    if (!this.isDeviceConnected_) {
+      return true;
+    }
+
+    // Don't show True Wireless Images component if the device is connected and
+    // has no battery info to display.
+    return getBatteryPercentage(
+               this.device_.deviceProperties, BatteryType.DEFAULT) !==
+        undefined ||
+        hasAnyDetailedBatteryInfo(this.device_.deviceProperties);
   }
 
   /**

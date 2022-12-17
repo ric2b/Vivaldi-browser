@@ -74,7 +74,8 @@ class CC_EXPORT ProxyImpl : public LayerTreeHostImplClient,
                                  const ThreadUnsafeCommitState* unsafe_state,
                                  base::TimeTicks main_thread_start_time,
                                  const viz::BeginFrameArgs& commit_args,
-                                 CommitTimestamps* commit_timestamps);
+                                 CommitTimestamps* commit_timestamps,
+                                 bool commit_timeout = false);
   void SetSourceURL(ukm::SourceId source_id, const GURL& url);
   void SetUkmSmoothnessDestination(
       base::WritableSharedMemoryMapping ukm_smoothness_data);
@@ -105,7 +106,6 @@ class CC_EXPORT ProxyImpl : public LayerTreeHostImplClient,
   void SetNeedsCommitOnImplThread() override;
   void SetVideoNeedsBeginFrames(bool needs_begin_frames) override;
   bool IsInsideDraw() override;
-  bool IsBeginMainFrameExpected() override;
   void RenewTreePriority() override;
   void PostDelayedAnimationTaskOnImplThread(base::OnceClosure task,
                                             base::TimeDelta delay) override;

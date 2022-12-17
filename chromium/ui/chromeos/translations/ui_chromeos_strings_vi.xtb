@@ -31,6 +31,7 @@
 <translation id="1201402288615127009">Tiếp theo</translation>
 <translation id="1209796539517632982">Máy chủ có tên tự động</translation>
 <translation id="1210831758834677569">Tiếng Lào</translation>
+<translation id="1223825810409523901">Tiện ích của Chrome</translation>
 <translation id="1243314992276662751">Tải lên</translation>
 <translation id="1249250836236328755">Thể loại</translation>
 <translation id="1254593899333212300">Kết nối Internet trực tiếp</translation>
@@ -61,6 +62,7 @@
 <translation id="1497522201463361063">Không thể đổi tên "<ph name="FILE_NAME" />". <ph name="ERROR_MESSAGE" /></translation>
 <translation id="1499943022354839699">Tiếng Anh (Mỹ) bằng bàn phím Dvorak</translation>
 <translation id="1515909359182093592"><ph name="INPUT_LABEL" /> – Máy chủ lưu trữ</translation>
+<translation id="1521655867290435174">Google Trang tính</translation>
 <translation id="1538729222189715449">Đang mở tệp Linux...</translation>
 <translation id="1547964879613821194">Tiếng Anh ở Canada</translation>
 <translation id="1556189134700913550">Áp dụng cho tất cả</translation>
@@ -79,6 +81,7 @@
 <translation id="166439687370499867">Không cho phép thay đổi cấu hình mạng dùng chung</translation>
 <translation id="1665611772925418501">Không thể sửa đổi tệp.</translation>
 <translation id="1673103856845176271">Không thể truy cập tệp vì các lý do bảo mật.</translation>
+<translation id="16762847117768727">Hình ảnh ISO</translation>
 <translation id="169515659049020177">Shift</translation>
 <translation id="1715848075824334077">Đi xe đạp</translation>
 <translation id="1722487484194605434">Đang nén <ph name="NUMBER_OF_ITEMS" /> mục...</translation>
@@ -106,7 +109,6 @@
 <translation id="1853795129690976061">Thư mục này được chia sẻ với Linux</translation>
 <translation id="1864756863218646478">Không thể tìm thấy tệp.</translation>
 <translation id="1884013283844450420">Mạng <ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, Kết nối</translation>
-<translation id="1914901738028575085">Thiết bị CloudReady 2.0</translation>
 <translation id="1920670151694390848">Tiếng Malayalam (chuyển tự)</translation>
 <translation id="1920798810075583923">Dưa hấu</translation>
 <translation id="1924372192547904021">Đã định dạng <ph name="DRIVE_NAME" /></translation>
@@ -185,7 +187,6 @@
 <translation id="2544853746127077729">Chứng chỉ xác thực bị mạng từ chối</translation>
 <translation id="2547921442987553570">Thêm vào <ph name="EXTENSION_NAME" /></translation>
 <translation id="255937426064304553">Bàn phím quốc tế Hoa Kỳ</translation>
-<translation id="2562685439590298522">Documents</translation>
 <translation id="2563185590376525700">Ếch</translation>
 <translation id="2578394532502990878">Tiếng Tamil (phiên âm)</translation>
 <translation id="2579959351793446050">Tiếng Odia</translation>
@@ -221,9 +222,7 @@
 <translation id="2902734494705624966">Mở rộng của Hoa Kỳ</translation>
 <translation id="290843123675549676">Tiếng Maratha</translation>
 <translation id="2923240520113693977">Tiếng Estonia</translation>
-<translation id="2925966894897775835">Bảng tính</translation>
 <translation id="2938685643439809023">Tiếng Mông Cổ</translation>
-<translation id="2943400156390503548">Trang trình bày</translation>
 <translation id="2943503720238418293">Hãy sử dụng tên ngắn hơn</translation>
 <translation id="2949781154072577687">Đang định dạng <ph name="DRIVE_NAME" />...</translation>
 <translation id="2951236788251446349">Sứa</translation>
@@ -368,6 +367,7 @@
 <translation id="4215448920900139318">Đang sao lưu <ph name="FILE_COUNT" /></translation>
 <translation id="4218274196133425560">Xóa trường hợp ngoại lệ đối với <ph name="HOST_NAME" /></translation>
 <translation id="4261901459838235729">Bản trình bày Google</translation>
+<translation id="4277536868133419688">Đang bật bộ lọc <ph name="FILTER_NAME" />.</translation>
 <translation id="4290535918735525311">Đã chia sẻ 1 thư mục với Linux</translation>
 <translation id="4299729908419173967">Tiếng Braxin</translation>
 <translation id="4302605047395093221">Bất kỳ ai sử dụng thiết bị này đều cần nhập mã PIN để kết nối với mạng di động này</translation>
@@ -385,6 +385,8 @@
 <translation id="4380245540200674032">Mạng <ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, <ph name="CONNECTION_STATUS" />, Cường độ tín hiệu <ph name="SIGNAL_STRENGTH" />%, Do quản trị viên của bạn quản lý, Thông tin chi tiết</translation>
 <translation id="4387004326333427325">Chứng chỉ xác thực bị từ chối từ xa</translation>
 <translation id="4394214039309501350">Đường liên kết ngoài</translation>
+<translation id="4401287888955153199">Trích xuất tất cả</translation>
+<translation id="4410695710508688828">Thao tác trích xuất không thành công. <ph name="ERROR_MESSAGE" /></translation>
 <translation id="4418686080762064601">Tạo một lối tắt cho tệp của bạn</translation>
 <translation id="4425149324548788773">Drive của tôi</translation>
 <translation id="4439427728133035643">Mạng <ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, Cường độ tín hiệu <ph name="SIGNAL_STRENGTH" />%, Kết nối</translation>
@@ -406,6 +408,7 @@
 <translation id="457386861538956877">Thêm...</translation>
 <translation id="4579744207439506346">Đã thêm <ph name="ENTRY_NAME" /> vào lựa chọn.</translation>
 <translation id="4594543368593301662">Đang hiển thị kết quả cho <ph name="SEARCH_TERM" />.</translation>
+<translation id="4599600860674643278">Đã đặt lại bộ lọc.</translation>
 <translation id="4603392156942865207">Đang sao chép <ph name="FILE_NAME" /> sang <ph name="FOLDER_NAME" /></translation>
 <translation id="4631887759990505102">Nghệ sĩ</translation>
 <translation id="4642769377300286600">Đang cài đặt hồ sơ mạng di động, Mạng <ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" /></translation>
@@ -414,6 +417,7 @@
 <translation id="4656777537938206294">Dùng tệp khi không có mạng</translation>
 <translation id="4658782175094886150">Người trong tuyết</translation>
 <translation id="4669606053856530811">Thành viên của '<ph name="SOURCE_NAME" />' sẽ mất quyền truy cập trừ khi bạn chia sẻ các mục này với họ.</translation>
+<translation id="467809019005607715">Google Trang trình bày</translation>
 <translation id="4690246192099372265">Tiếng Thuỵ Điển</translation>
 <translation id="4693155481716051732">Sushi</translation>
 <translation id="4694604912444486114">Khỉ</translation>
@@ -528,6 +532,7 @@
 <translation id="5469868506864199649">Tiếng Ý</translation>
 <translation id="5473333559083690127">Nhập lại mã PIN mới</translation>
 <translation id="5489067830765222292">Tiếng Latvia</translation>
+<translation id="5489965683297092283">Đang tắt bộ lọc <ph name="FILTER_NAME" />.</translation>
 <translation id="5494920125229734069">Chọn tất cả</translation>
 <translation id="5500122897333236901">Tiếng Ai-xơ-len</translation>
 <translation id="5508696409934741614">Dấu chấm</translation>
@@ -594,6 +599,7 @@
 <translation id="6082256976217156453">Tệp nén lưu trữ LZMA</translation>
 <translation id="6096979789310008754">Đã xóa nội dung tìm kiếm, đang hiển thị tất cả các tệp và thư mục.</translation>
 <translation id="610101264611565198">Đang di chuyển <ph name="FILE_NAME" /> sang <ph name="FOLDER_NAME" /></translation>
+<translation id="61118516107968648">Văn bản CSV</translation>
 <translation id="6129953537138746214">Dấu cách</translation>
 <translation id="6133173853026656527">Đang di chuyển <ph name="FILE_NAME" />...</translation>
 <translation id="613750717151263950">Tiếng Nhật bằng bàn phím Anh-Mỹ</translation>
@@ -658,6 +664,7 @@
 <translation id="6732801395666424405">Không tải được chứng chỉ</translation>
 <translation id="6736329909263487977"><ph name="ISSUED_BY" /> [<ph name="ISSUED_TO" />]</translation>
 <translation id="6751256176799620176">Đã chọn 1 thư mục</translation>
+<translation id="6755827872271341378">Thiết bị ChromeOS Flex</translation>
 <translation id="6790428901817661496">Phát</translation>
 <translation id="6795884519221689054">Gấu trúc</translation>
 <translation id="6806699711453372963">Quản lý chia sẻ với Linux</translation>
@@ -735,6 +742,7 @@
 <translation id="7343393116438664539">Tiếng Việt (Telex)</translation>
 <translation id="7359359531237882347">Đang sao chép <ph name="NUMBER_OF_ITEMS" /> mục...</translation>
 <translation id="7375951387215729722">Danh sách tệp được sắp xếp giảm dần theo <ph name="COLUMN_NAME" />.</translation>
+<translation id="7402503521691663770">Thiết bị ChromeOS Flex</translation>
 <translation id="7408870451288633753">Tiếng Séc</translation>
 <translation id="7417453074306512035">Bàn phím tiếng Ethiopic</translation>
 <translation id="7417705661718309329">Bản đồ Google</translation>
@@ -810,6 +818,7 @@
 <translation id="7925686952655276919">Không sử dụng dữ liệu di động để đồng bộ hóa</translation>
 <translation id="7928710562641958568">Tháo thiết bị</translation>
 <translation id="7943385054491506837">Colemak Hoa Kỳ</translation>
+<translation id="7948417415021769876">Tệp lưu trữ 7z</translation>
 <translation id="7953739707111622108">Thiết bị này không thể mở được vì hệ thống tệp của thiết bị không được nhận dạng.</translation>
 <translation id="7969525169268594403">Tiếng Sloven</translation>
 <translation id="7972920761225148017">Tiếng Pháp (Thụy Sĩ)</translation>
@@ -824,6 +833,7 @@
 <translation id="8042602468072383151">Âm thanh <ph name="AUDIO_TYPE" /></translation>
 <translation id="8045462269890919536">Tiếng Rumani</translation>
 <translation id="8049184478152619004">Nhập khóa mở khóa cá nhân (PUK)</translation>
+<translation id="807187749540895545">Đang trích xuất <ph name="FILE_NAME" />...</translation>
 <translation id="8079530767338315840">Lặp lại</translation>
 <translation id="8087576439476816834">Tải xuống, <ph name="PROFILE_NAME" /></translation>
 <translation id="8106045200081704138">Được chia sẻ với tôi</translation>
@@ -840,7 +850,8 @@
 <translation id="8208580316430297579">Tác phẩm nghệ thuật</translation>
 <translation id="8223479393428528563">Để lưu các tệp này để sử dụng ngoại tuyến, hãy trực tuyến trở lại, nhấp chuột phải vào tệp và chọn tùy chọn <ph name="OFFLINE_CHECKBOX_NAME" />.</translation>
 <translation id="8249296373107784235">Hủy bỏ</translation>
-<translation id="8261506727792406068">Xóa</translation>
+<translation id="8250920743982581267">Tài liệu</translation>
+<translation id="8261506727792406068">Xoá</translation>
 <translation id="8261561378965667560">Tiếng Trung (bộ gõ Array)</translation>
 <translation id="8269755669432358899">Thu gọn bảng dữ liệu phản hồi về tệp</translation>
 <translation id="8280151743281770066">Phiên âm tiếng Armenia</translation>
@@ -858,6 +869,7 @@
 <translation id="8372369524088641025">Khóa WEP sai</translation>
 <translation id="8372852072747894550">Tiếng Hy Lạp</translation>
 <translation id="8386903983509584791">Đã quét xong</translation>
+<translation id="8387733224523483503">Đã giải nén <ph name="FILE_NAME" />.</translation>
 <translation id="8395901698320285466">Kích thước</translation>
 <translation id="8408068190360279472">Đang kết nối mạng <ph name="NETWORK_TYPE" /></translation>
 <translation id="8425213833346101688">Thay đổi</translation>
@@ -875,6 +887,7 @@
 <translation id="8484284835977497781">Chọn trong số các ảnh gần đây của bạn.</translation>
 <translation id="8487700953926739672">Có thể dùng khi không có mạng</translation>
 <translation id="8492972329130824181">Mạng gia đình không hoạt động. Bạn phải bật chế độ chuyển vùng dữ liệu di động để kết nối.</translation>
+<translation id="8499098729323186194">Đang trích xuất <ph name="NUMBER_OF_ITEMS" /> mục...</translation>
 <translation id="8521441079177373948">Vương quốc Anh</translation>
 <translation id="8525306231823319788">Toàn màn hình</translation>
 <translation id="853494022971700746">Tiếng Pháp (Pháp)</translation>
@@ -896,14 +909,13 @@
 <translation id="863903787380594467">Mã PIN không chính xác. Bạn còn <ph name="RETRIES" /> lần nhập.</translation>
 <translation id="8639391553632924850"><ph name="INPUT_LABEL" /> – Cổng</translation>
 <translation id="8656768832129462377">Không kiểm tra</translation>
-<translation id="8688591111840995413">Mật khẩu yếu</translation>
+<translation id="8688591111840995413">Mật khẩu không chính xác</translation>
 <translation id="8698464937041809063">Bản vẽ Google</translation>
 <translation id="8712637175834984815">Bỏ qua</translation>
 <translation id="8713112442029511308">Tiếng Malta</translation>
 <translation id="8714406895390098252">Xe đạp</translation>
 <translation id="8719721339511222681">Đã chọn <ph name="ENTRY_NAME" />.</translation>
 <translation id="872537912056138402">Tiếng Croatia</translation>
-<translation id="873847021056608403">Thiết bị CloudReady 2.0</translation>
 <translation id="8743164338060742337">Mạng <ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, Cường độ tín hiệu <ph name="SIGNAL_STRENGTH" />%, Do quản trị viên của bạn quản lý, Kết nối</translation>
 <translation id="8750438273876807512">Chạm và giữ một tệp rồi nhấn vào biểu tượng <ph name="ICON" />, sau đó chọn "Ghim vào kệ" để truy cập nhanh vào các tệp trong kệ.</translation>
 <translation id="8787254343425541995">Cho phép các proxy đối với mạng chia sẻ</translation>
@@ -950,7 +962,9 @@
 <translation id="9172592259078059678">Tiếng Gujarati (chuyển tự)</translation>
 <translation id="9173120999827300720">Tiếng Anh (Mỹ) bằng bàn phím quốc tế</translation>
 <translation id="9174050671906956834">Các mục trong thùng rác sẽ bị xóa vĩnh viễn sau 30 ngày.</translation>
+<translation id="9183302530794969518">Google Tài liệu</translation>
 <translation id="9189836632794948435">Tiếng Kazakh</translation>
+<translation id="9200427192836333033">Đã giải nén <ph name="NUMBER_OF_ITEMS" /> mục.</translation>
 <translation id="9213073329713032541">Đã bắt đầu thành công quá trình cài đặt.</translation>
 <translation id="9219103736887031265">Hình ảnh</translation>
 <translation id="9219908252191632183">Hình lưỡi liềm</translation>

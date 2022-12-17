@@ -5,6 +5,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_DOM_PSEUDO_ELEMENT_DATA_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_DOM_PSEUDO_ELEMENT_DATA_H_
 
+#include "base/notreached.h"
 #include "build/build_config.h"
 #include "third_party/blink/renderer/core/dom/transition_pseudo_element_data.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
@@ -92,18 +93,14 @@ inline void PseudoElementData::SetPseudoElement(
       previous_element = generated_first_letter_;
       generated_first_letter_ = element;
       break;
-    case kPseudoIdTransition:
-    case kPseudoIdTransitionOldContent:
-    case kPseudoIdTransitionNewContent:
-    case kPseudoIdTransitionContainer:
-      if (element) {
-        if (!transition_data_) {
-          transition_data_ =
-              MakeGarbageCollected<TransitionPseudoElementData>();
-        }
-        transition_data_->SetPseudoElement(pseudo_id, element,
-                                           document_transition_tag);
-      } else {
+    case kPseudoIdPageTransition:
+    case kPseudoIdPageTransitionContainer:
+    case kPseudoIdPageTransitionImageWrapper:
+    case kPseudoIdPageTransitionIncomingImage:
+    case kPseudoIdPageTransitionOutgoingImage:
+      if (element && !transition_data_)
+        transition_data_ = MakeGarbageCollected<TransitionPseudoElementData>();
+      if (transition_data_) {
         transition_data_->SetPseudoElement(pseudo_id, element,
                                            document_transition_tag);
         if (!transition_data_->HasPseudoElements())

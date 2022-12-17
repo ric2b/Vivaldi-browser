@@ -90,8 +90,11 @@ public class WebApkUpdateManagerTest {
 
     private List<Integer> mLastUpdateReasons;
 
-    // Whether the dialog, to warn about icon/names changing, should be shown.
-    private boolean mAllowIconOrNameUpdateDialog;
+    // Whether the dialog, to warn about icons changing, should be shown.
+    private boolean mAllowUpdateDialogForIcon;
+
+    // Whether the dialog, to warn about names changing, should be shown.
+    private boolean mAllowUpdateDialogForName;
 
     // Whether the dialog, to warn about icon/names changing, was shown.
     private boolean mIconOrNameUpdateDialogShown;
@@ -131,8 +134,13 @@ public class WebApkUpdateManagerTest {
         }
 
         @Override
-        protected boolean iconOrNameUpdateDialogEnabled() {
-            return mAllowIconOrNameUpdateDialog;
+        protected boolean iconUpdateDialogEnabled() {
+            return mAllowUpdateDialogForIcon;
+        }
+
+        @Override
+        protected boolean nameUpdateDialogEnabled() {
+            return mAllowUpdateDialogForName;
         }
 
         @Override
@@ -235,8 +243,12 @@ public class WebApkUpdateManagerTest {
         Assert.assertEquals(Arrays.asList(reasons), mLastUpdateReasons);
     }
 
-    private void enableIconOrNameUpdateDialog() {
-        mAllowIconOrNameUpdateDialog = true;
+    private void enableUpdateDialogForIcon() {
+        mAllowUpdateDialogForIcon = true;
+    }
+
+    private void enableUpdateDialogForName() {
+        mAllowUpdateDialogForName = true;
     }
 
     /**
@@ -322,7 +334,7 @@ public class WebApkUpdateManagerTest {
                 mTestServer, mTab, maskableManifestUrl);
 
         // Icon changes should trigger the warning dialog, if the platform supports maskable icons.
-        enableIconOrNameUpdateDialog();
+        enableUpdateDialogForIcon();
         Assert.assertEquals(WebappsIconUtils.doesAndroidSupportMaskableIcons(),
                 checkUpdateNeeded(creationData, /* acceptDialogIfAppears= */ true));
         boolean supportsMaskableIcons = WebappsIconUtils.doesAndroidSupportMaskableIcons();
@@ -376,64 +388,170 @@ public class WebApkUpdateManagerTest {
                 WebApkUpdateReason.NAME_DIFFERS, WebApkUpdateReason.BACKGROUND_COLOR_DIFFERS);
     }
 
-    @Test
-    @MediumTest
-    @Feature({"WebApk"})
-    public void testUpdateWarningOnNameChange() throws Exception {
+    private void testAppIdentityChange(
+            boolean changeName, boolean changeShortName, boolean changeIcon) throws Exception {
         CreationData creationData = defaultCreationData();
         creationData.startUrl =
                 mTestServer.getURL("/chrome/test/data/banners/manifest_test_page.html");
 
-        creationData.name += "!";
+        // Add to this list in order of increasing numerical value represented by the enum.
+        List<Integer> expectedUpdateReasons = new ArrayList<Integer>();
 
-        enableIconOrNameUpdateDialog();
+        if (changeIcon) {
+            creationData.iconUrlToMurmur2HashMap.put(
+                    mTestServer.getURL(WEBAPK_ICON_URL), WEBAPK_ICON_MURMUR2_HASH + "1");
+            expectedUpdateReasons.add(WebApkUpdateReason.PRIMARY_ICON_HASH_DIFFERS);
+            expectedUpdateReasons.add(WebApkUpdateReason.SPLASH_ICON_HASH_DIFFERS);
+        }
+        if (changeShortName) {
+            creationData.shortName += "!";
+            expectedUpdateReasons.add(WebApkUpdateReason.SHORT_NAME_DIFFERS);
+        }
+        if (changeName) {
+            creationData.name += "!";
+            expectedUpdateReasons.add(WebApkUpdateReason.NAME_DIFFERS);
+        }
+
+        // Always include a trivial change, to ensure there's always an update request.
+        creationData.backgroundColor -= 1;
+        expectedUpdateReasons.add(WebApkUpdateReason.BACKGROUND_COLOR_DIFFERS);
+
         WebappTestPage.navigateToServiceWorkerPageWithManifest(
                 mTestServer, mTab, WEBAPK_MANIFEST_URL);
         Assert.assertTrue(checkUpdateNeeded(creationData, /* acceptDialogIfAppears= */ true));
-        assertUpdateReasonsEqual(WebApkUpdateReason.NAME_DIFFERS);
+
+        assertUpdateReasonsEqual(
+                expectedUpdateReasons.toArray(new Integer[expectedUpdateReasons.size()]));
+        Assert.assertTrue(mUpdateRequested);
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"WebApk"})
+    public void testUpdateWarningOnIconChange() throws Exception {
+        enableUpdateDialogForIcon();
+
+        testAppIdentityChange(/* changeName= */ false,
+                /* changeShortName= */ false,
+                /* changeIcon = */ true);
 
         Assert.assertTrue(mIconOrNameUpdateDialogShown);
-        Assert.assertTrue(mUpdateRequested);
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"WebApk"})
+    public void testUpdateWarningOnNameChange() throws Exception {
+        enableUpdateDialogForName();
+
+        testAppIdentityChange(/* changeName= */ true,
+                /* changeShortName= */ false,
+                /* changeIcon = */ false);
+
+        Assert.assertTrue(mIconOrNameUpdateDialogShown);
     }
 
     @Test
     @MediumTest
     @Feature({"WebApk"})
     public void testUpdateWarningOnShortNameChange() throws Exception {
-        CreationData creationData = defaultCreationData();
-        creationData.startUrl =
-                mTestServer.getURL("/chrome/test/data/banners/manifest_test_page.html");
+        enableUpdateDialogForName();
 
-        creationData.shortName += "!";
-
-        enableIconOrNameUpdateDialog();
-        WebappTestPage.navigateToServiceWorkerPageWithManifest(
-                mTestServer, mTab, WEBAPK_MANIFEST_URL);
-        Assert.assertTrue(checkUpdateNeeded(creationData, /* acceptDialogIfAppears= */ true));
-        assertUpdateReasonsEqual(WebApkUpdateReason.SHORT_NAME_DIFFERS);
+        testAppIdentityChange(/* changeName= */ false,
+                /* changeShortName= */ true,
+                /* changeIcon = */ false);
 
         Assert.assertTrue(mIconOrNameUpdateDialogShown);
-        Assert.assertTrue(mUpdateRequested);
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"WebApk"})
+    public void testUpdateWarningOnIconChangeWrongFlag() throws Exception {
+        enableUpdateDialogForName(); // Intentional mismatch.
+
+        testAppIdentityChange(/* changeName= */ false,
+                /* changeShortName= */ false,
+                /* changeIcon = */ true);
+
+        Assert.assertFalse(mIconOrNameUpdateDialogShown);
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"WebApk"})
+    public void testUpdateWarningOnNameChangeWrongFlag() throws Exception {
+        enableUpdateDialogForIcon(); // Intentional mismatch.
+
+        testAppIdentityChange(/* changeName= */ true,
+                /* changeShortName= */ false,
+                /* changeIcon = */ false);
+
+        Assert.assertFalse(mIconOrNameUpdateDialogShown);
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"WebApk"})
+    public void testUpdateWarningOnShortNameChangeWrongFlag() throws Exception {
+        enableUpdateDialogForIcon(); // Intentional mismatch.
+
+        testAppIdentityChange(/* changeName= */ false,
+                /* changeShortName= */ true,
+                /* changeIcon = */ false);
+
+        Assert.assertFalse(mIconOrNameUpdateDialogShown);
     }
 
     @Test
     @MediumTest
     @Feature({"WebApk"})
     public void testUpdateWarningNotShown() throws Exception {
-        CreationData creationData = defaultCreationData();
-        creationData.startUrl =
-                mTestServer.getURL("/chrome/test/data/banners/manifest_test_page.html");
-
-        // Make a trivial change, which should not trigger the dialog.
-        creationData.backgroundColor -= 1;
-
-        enableIconOrNameUpdateDialog();
-        WebappTestPage.navigateToServiceWorkerPageWithManifest(
-                mTestServer, mTab, WEBAPK_MANIFEST_URL);
-        Assert.assertTrue(checkUpdateNeeded(creationData, /* acceptDialogIfAppears= */ false));
-        assertUpdateReasonsEqual(WebApkUpdateReason.BACKGROUND_COLOR_DIFFERS);
+        // Intentionally not enabling icon/name change upfront.
+        testAppIdentityChange(/* changeName= */ false,
+                /* changeShortName= */ false,
+                /* changeIcon = */ false);
 
         Assert.assertFalse(mIconOrNameUpdateDialogShown);
-        Assert.assertTrue(mUpdateRequested);
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"WebApk"})
+    public void testUpdateWarningDialogNotEnabled() throws Exception {
+        // Intentionally not enabling icon/name change upfront.
+        testAppIdentityChange(/* changeName= */ true,
+                /* changeShortName= */ true,
+                /* changeIcon = */ true);
+
+        Assert.assertFalse(mIconOrNameUpdateDialogShown);
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"WebApk"})
+    public void testUpdateWarningDialogNameFlagMissing() throws Exception {
+        enableUpdateDialogForIcon(); // Intentionally allowing only icon change.
+
+        testAppIdentityChange(/* changeName= */ true,
+                /* changeShortName= */ true,
+                /* changeIcon = */ true);
+
+        // Dialog should show, but only icons should update.
+        Assert.assertTrue(mIconOrNameUpdateDialogShown);
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"WebApk"})
+    public void testUpdateWarningDialogIconFlagMissing() throws Exception {
+        enableUpdateDialogForName(); // Intentionally allowing only name change.
+
+        testAppIdentityChange(/* changeName= */ true,
+                /* changeShortName= */ true,
+                /* changeIcon = */ true);
+
+        // Dialog should show, but only names should update.
+        Assert.assertTrue(mIconOrNameUpdateDialogShown);
     }
 }

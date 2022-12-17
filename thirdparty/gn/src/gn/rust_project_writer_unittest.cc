@@ -51,14 +51,18 @@ TEST_F(RustProjectJSONWriter, OneRustTarget) {
 #endif
   const char expected_json[] =
       "{\n"
-      "  \"roots\": [\n"
-      "    \"path/foo/\"\n"
-      "  ],\n"
       "  \"crates\": [\n"
       "    {\n"
       "      \"crate_id\": 0,\n"
       "      \"root_module\": \"path/foo/lib.rs\",\n"
       "      \"label\": \"//foo:bar\",\n"
+      "      \"source\": {\n"
+      "          \"include_dirs\": [\n"
+      "               \"path/foo/\",\n"
+      "               \"path/out/Debug/gen/foo/\"\n"
+      "          ],\n"
+      "          \"exclude_dirs\": []\n"
+      "      },\n"
       "      \"compiler_args\": [\"--cfg=feature=\\\"foo_enabled\\\"\"],\n"
       "      \"deps\": [\n"
       "      ],\n"
@@ -88,6 +92,7 @@ TEST_F(RustProjectJSONWriter, RustTargetDep) {
   dep.rust_values().set_crate_root(tlib);
   dep.rust_values().crate_name() = "tortoise";
   dep.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(dep.OnResolved(&err));
 
   Target target(setup.settings(), Label(SourceDir("//hare/"), "bar"));
   target.set_output_type(Target::RUST_LIBRARY);
@@ -111,15 +116,18 @@ TEST_F(RustProjectJSONWriter, RustTargetDep) {
 #endif
   const char expected_json[] =
       "{\n"
-      "  \"roots\": [\n"
-      "    \"hare/\",\n"
-      "    \"tortoise/\"\n"
-      "  ],\n"
       "  \"crates\": [\n"
       "    {\n"
       "      \"crate_id\": 0,\n"
       "      \"root_module\": \"tortoise/lib.rs\",\n"
       "      \"label\": \"//tortoise:bar\",\n"
+      "      \"source\": {\n"
+      "          \"include_dirs\": [\n"
+      "               \"tortoise/\",\n"
+      "               \"out/Debug/gen/tortoise/\"\n"
+      "          ],\n"
+      "          \"exclude_dirs\": []\n"
+      "      },\n"
       "      \"deps\": [\n"
       "      ],\n"
       "      \"edition\": \"2015\",\n"
@@ -132,6 +140,13 @@ TEST_F(RustProjectJSONWriter, RustTargetDep) {
       "      \"crate_id\": 1,\n"
       "      \"root_module\": \"hare/lib.rs\",\n"
       "      \"label\": \"//hare:bar\",\n"
+      "      \"source\": {\n"
+      "          \"include_dirs\": [\n"
+      "               \"hare/\",\n"
+      "               \"out/Debug/gen/hare/\"\n"
+      "          ],\n"
+      "          \"exclude_dirs\": []\n"
+      "      },\n"
       "      \"deps\": [\n"
       "        {\n"
       "          \"crate\": 0,\n"
@@ -163,6 +178,7 @@ TEST_F(RustProjectJSONWriter, RustTargetDepTwo) {
   dep.rust_values().set_crate_root(tlib);
   dep.rust_values().crate_name() = "tortoise";
   dep.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(dep.OnResolved(&err));
 
   Target dep2(setup.settings(), Label(SourceDir("//achilles/"), "bar"));
   dep2.set_output_type(Target::RUST_LIBRARY);
@@ -173,6 +189,7 @@ TEST_F(RustProjectJSONWriter, RustTargetDepTwo) {
   dep2.rust_values().set_crate_root(alib);
   dep2.rust_values().crate_name() = "achilles";
   dep2.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(dep2.OnResolved(&err));
 
   Target target(setup.settings(), Label(SourceDir("//hare/"), "bar"));
   target.set_output_type(Target::RUST_LIBRARY);
@@ -197,16 +214,18 @@ TEST_F(RustProjectJSONWriter, RustTargetDepTwo) {
 #endif
   const char expected_json[] =
       "{\n"
-      "  \"roots\": [\n"
-      "    \"achilles/\",\n"
-      "    \"hare/\",\n"
-      "    \"tortoise/\"\n"
-      "  ],\n"
       "  \"crates\": [\n"
       "    {\n"
       "      \"crate_id\": 0,\n"
       "      \"root_module\": \"tortoise/lib.rs\",\n"
       "      \"label\": \"//tortoise:bar\",\n"
+      "      \"source\": {\n"
+      "          \"include_dirs\": [\n"
+      "               \"tortoise/\",\n"
+      "               \"out/Debug/gen/tortoise/\"\n"
+      "          ],\n"
+      "          \"exclude_dirs\": []\n"
+      "      },\n"
       "      \"deps\": [\n"
       "      ],\n"
       "      \"edition\": \"2015\",\n"
@@ -219,6 +238,13 @@ TEST_F(RustProjectJSONWriter, RustTargetDepTwo) {
       "      \"crate_id\": 1,\n"
       "      \"root_module\": \"achilles/lib.rs\",\n"
       "      \"label\": \"//achilles:bar\",\n"
+      "      \"source\": {\n"
+      "          \"include_dirs\": [\n"
+      "               \"achilles/\",\n"
+      "               \"out/Debug/gen/achilles/\"\n"
+      "          ],\n"
+      "          \"exclude_dirs\": []\n"
+      "      },\n"
       "      \"deps\": [\n"
       "      ],\n"
       "      \"edition\": \"2015\",\n"
@@ -231,6 +257,13 @@ TEST_F(RustProjectJSONWriter, RustTargetDepTwo) {
       "      \"crate_id\": 2,\n"
       "      \"root_module\": \"hare/lib.rs\",\n"
       "      \"label\": \"//hare:bar\",\n"
+      "      \"source\": {\n"
+      "          \"include_dirs\": [\n"
+      "               \"hare/\",\n"
+      "               \"out/Debug/gen/hare/\"\n"
+      "          ],\n"
+      "          \"exclude_dirs\": []\n"
+      "      },\n"
       "      \"deps\": [\n"
       "        {\n"
       "          \"crate\": 0,\n"
@@ -267,18 +300,21 @@ TEST_F(RustProjectJSONWriter, RustTargetGetDepRustOnly) {
   dep.rust_values().set_crate_root(tlib);
   dep.rust_values().crate_name() = "tortoise";
   dep.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(dep.OnResolved(&err));
 
   Target dep2(setup.settings(), Label(SourceDir("//achilles/"), "bar"));
   dep2.set_output_type(Target::STATIC_LIBRARY);
   dep2.visibility().SetPublic();
   SourceFile alib("//achilles/lib.o");
   dep2.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(dep2.OnResolved(&err));
 
   Target dep3(setup.settings(), Label(SourceDir("//achilles/"), "group"));
   dep3.set_output_type(Target::GROUP);
   dep3.visibility().SetPublic();
   dep3.public_deps().push_back(LabelTargetPair(&dep));
   dep3.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(dep3.OnResolved(&err));
 
   Target dep4(setup.settings(), Label(SourceDir("//tortoise/"), "macro"));
   dep4.set_output_type(Target::RUST_PROC_MACRO);
@@ -289,6 +325,7 @@ TEST_F(RustProjectJSONWriter, RustTargetGetDepRustOnly) {
   dep4.rust_values().set_crate_root(tmlib);
   dep4.rust_values().crate_name() = "tortoise_macro";
   dep4.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(dep4.OnResolved(&err));
 
   Target target(setup.settings(), Label(SourceDir("//hare/"), "bar"));
   target.set_output_type(Target::RUST_LIBRARY);
@@ -314,16 +351,18 @@ TEST_F(RustProjectJSONWriter, RustTargetGetDepRustOnly) {
 #endif
   const char expected_json[] =
       "{\n"
-      "  \"roots\": [\n"
-      "    \"hare/\",\n"
-      "    \"tortoise/\",\n"
-      "    \"tortoise/macro/\"\n"
-      "  ],\n"
       "  \"crates\": [\n"
       "    {\n"
       "      \"crate_id\": 0,\n"
       "      \"root_module\": \"tortoise/lib.rs\",\n"
       "      \"label\": \"//tortoise:bar\",\n"
+      "      \"source\": {\n"
+      "          \"include_dirs\": [\n"
+      "               \"tortoise/\",\n"
+      "               \"out/Debug/gen/tortoise/\"\n"
+      "          ],\n"
+      "          \"exclude_dirs\": []\n"
+      "      },\n"
       "      \"deps\": [\n"
       "      ],\n"
       "      \"edition\": \"2015\",\n"
@@ -336,9 +375,19 @@ TEST_F(RustProjectJSONWriter, RustTargetGetDepRustOnly) {
       "      \"crate_id\": 1,\n"
       "      \"root_module\": \"tortoise/macro/lib.rs\",\n"
       "      \"label\": \"//tortoise:macro\",\n"
+      "      \"source\": {\n"
+      "          \"include_dirs\": [\n"
+      "               \"tortoise/macro/\",\n"
+      "               \"out/Debug/gen/tortoise/\"\n"
+      "          ],\n"
+      "          \"exclude_dirs\": []\n"
+      "      },\n"
       "      \"deps\": [\n"
       "      ],\n"
       "      \"edition\": \"2015\",\n"
+      "      \"is_proc_macro\": true,\n"
+      "      \"proc_macro_dylib_path\": "
+      "\"out/Debug/obj/tortoise/libmacro.so\",\n"
       "      \"cfg\": [\n"
       "        \"test\",\n"
       "        \"debug_assertions\"\n"
@@ -348,6 +397,13 @@ TEST_F(RustProjectJSONWriter, RustTargetGetDepRustOnly) {
       "      \"crate_id\": 2,\n"
       "      \"root_module\": \"hare/lib.rs\",\n"
       "      \"label\": \"//hare:bar\",\n"
+      "      \"source\": {\n"
+      "          \"include_dirs\": [\n"
+      "               \"hare/\",\n"
+      "               \"out/Debug/gen/hare/\"\n"
+      "          ],\n"
+      "          \"exclude_dirs\": []\n"
+      "      },\n"
       "      \"deps\": [\n"
       "        {\n"
       "          \"crate\": 0,\n"
@@ -398,14 +454,18 @@ TEST_F(RustProjectJSONWriter, OneRustTargetWithRustcTargetSet) {
 #endif
   const char expected_json[] =
       "{\n"
-      "  \"roots\": [\n"
-      "    \"path/foo/\"\n"
-      "  ],\n"
       "  \"crates\": [\n"
       "    {\n"
       "      \"crate_id\": 0,\n"
       "      \"root_module\": \"path/foo/lib.rs\",\n"
       "      \"label\": \"//foo:bar\",\n"
+      "      \"source\": {\n"
+      "          \"include_dirs\": [\n"
+      "               \"path/foo/\",\n"
+      "               \"path/out/Debug/gen/foo/\"\n"
+      "          ],\n"
+      "          \"exclude_dirs\": []\n"
+      "      },\n"
       "      \"target\": \"x86-64_unknown\",\n"
       "      \"compiler_args\": [\"--target\", \"x86-64_unknown\"],\n"
       "      \"deps\": [\n"
@@ -449,14 +509,18 @@ TEST_F(RustProjectJSONWriter, OneRustTargetWithEditionSet) {
 #endif
   const char expected_json[] =
       "{\n"
-      "  \"roots\": [\n"
-      "    \"path/foo/\"\n"
-      "  ],\n"
       "  \"crates\": [\n"
       "    {\n"
       "      \"crate_id\": 0,\n"
       "      \"root_module\": \"path/foo/lib.rs\",\n"
       "      \"label\": \"//foo:bar\",\n"
+      "      \"source\": {\n"
+      "          \"include_dirs\": [\n"
+      "               \"path/foo/\",\n"
+      "               \"path/out/Debug/gen/foo/\"\n"
+      "          ],\n"
+      "          \"exclude_dirs\": []\n"
+      "      },\n"
       "      \"compiler_args\": [\"--edition=2018\"],\n"
       "      \"deps\": [\n"
       "      ],\n"
@@ -500,14 +564,18 @@ TEST_F(RustProjectJSONWriter, OneRustTargetWithEditionSetAlternate) {
 #endif
   const char expected_json[] =
       "{\n"
-      "  \"roots\": [\n"
-      "    \"path/foo/\"\n"
-      "  ],\n"
       "  \"crates\": [\n"
       "    {\n"
       "      \"crate_id\": 0,\n"
       "      \"root_module\": \"path/foo/lib.rs\",\n"
       "      \"label\": \"//foo:bar\",\n"
+      "      \"source\": {\n"
+      "          \"include_dirs\": [\n"
+      "               \"path/foo/\",\n"
+      "               \"path/out/Debug/gen/foo/\"\n"
+      "          ],\n"
+      "          \"exclude_dirs\": []\n"
+      "      },\n"
       "      \"compiler_args\": [\"--edition\", \"2018\"],\n"
       "      \"deps\": [\n"
       "      ],\n"
@@ -516,6 +584,69 @@ TEST_F(RustProjectJSONWriter, OneRustTargetWithEditionSetAlternate) {
       "        \"test\",\n"
       "        \"debug_assertions\"\n"
       "      ]\n"
+      "    }\n"
+      "  ]\n"
+      "}\n";
+
+  ExpectEqOrShowDiff(expected_json, out);
+}
+
+TEST_F(RustProjectJSONWriter, OneRustProcMacroTarget) {
+  Err err;
+  TestWithScope setup;
+  setup.build_settings()->SetRootPath(UTF8ToFilePath("path"));
+
+  Target target(setup.settings(), Label(SourceDir("//foo/"), "bar"));
+  target.set_output_type(Target::RUST_PROC_MACRO);
+  target.visibility().SetPublic();
+  SourceFile lib("//foo/lib.rs");
+  target.sources().push_back(lib);
+  target.source_types_used().Set(SourceFile::SOURCE_RS);
+  target.rust_values().set_crate_root(lib);
+  target.config_values().rustenv().push_back("TEST_ENV_VAR=baz");
+  target.config_values().rustenv().push_back("TEST_ENV_VAR2=baz2");
+  target.rust_values().crate_name() = "foo";
+  target.config_values().rustflags().push_back("--cfg=feature=\"foo_enabled\"");
+  target.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(target.OnResolved(&err));
+
+  std::ostringstream stream;
+  std::vector<const Target*> targets;
+  targets.push_back(&target);
+  RustProjectWriter::RenderJSON(setup.build_settings(), targets, stream);
+  std::string out = stream.str();
+#if defined(OS_WIN)
+  base::ReplaceSubstringsAfterOffset(&out, 0, "\r\n", "\n");
+#endif
+  const char expected_json[] =
+      "{\n"
+      "  \"crates\": [\n"
+      "    {\n"
+      "      \"crate_id\": 0,\n"
+      "      \"root_module\": \"path/foo/lib.rs\",\n"
+      "      \"label\": \"//foo:bar\",\n"
+      "      \"source\": {\n"
+      "          \"include_dirs\": [\n"
+      "               \"path/foo/\",\n"
+      "               \"path/out/Debug/gen/foo/\"\n"
+      "          ],\n"
+      "          \"exclude_dirs\": []\n"
+      "      },\n"
+      "      \"compiler_args\": [\"--cfg=feature=\\\"foo_enabled\\\"\"],\n"
+      "      \"deps\": [\n"
+      "      ],\n"
+      "      \"edition\": \"2015\",\n"
+      "      \"is_proc_macro\": true,\n"
+      "      \"proc_macro_dylib_path\": \"path/out/Debug/obj/foo/libbar.so\",\n"
+      "      \"cfg\": [\n"
+      "        \"test\",\n"
+      "        \"debug_assertions\",\n"
+      "        \"feature=\\\"foo_enabled\\\"\"\n"
+      "      ],\n"
+      "      \"env\": {\n"
+      "        \"TEST_ENV_VAR\": \"baz\",\n"
+      "        \"TEST_ENV_VAR2\": \"baz2\"\n"
+      "      }\n"
       "    }\n"
       "  ]\n"
       "}\n";

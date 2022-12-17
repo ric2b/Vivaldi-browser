@@ -7,11 +7,11 @@
 
 #include "base/callback.h"
 
-namespace chromeos {
+namespace ash {
 
 namespace multidevice {
 struct RemoteDevice;
-}  // namespace multidevice
+}
 
 namespace secure_channel {
 
@@ -39,6 +39,6 @@ class PresenceMonitor {
 };
 
 }  // namespace secure_channel
-}  // namespace chromeos
+}  // namespace ash
 
 #endif  // ASH_SERVICES_SECURE_CHANNEL_PUBLIC_CPP_SHARED_PRESENCE_MONITOR_H_

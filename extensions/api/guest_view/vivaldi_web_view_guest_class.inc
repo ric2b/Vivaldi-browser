@@ -68,6 +68,11 @@
   std::unique_ptr<content::EyeDropper> OpenEyeDropper(
       content::RenderFrameHost* frame,
       content::EyeDropperListener* listener) override;
+  void CapturePaintPreviewOfSubframe(
+      content::WebContents* web_contents,
+      const gfx::Rect& rect,
+      const base::UnguessableToken& guid,
+      content::RenderFrameHost* render_frame_host) override;
 
   // Vivaldi WebContentsObserver implementation.
   void OnVisibilityChanged(content::Visibility visibility) override;

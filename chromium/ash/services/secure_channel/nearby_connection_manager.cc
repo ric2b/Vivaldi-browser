@@ -4,13 +4,11 @@
 
 #include "ash/services/secure_channel/nearby_connection_manager.h"
 
+#include "ash/components/multidevice/logging/logging.h"
 #include "ash/services/secure_channel/authenticated_channel.h"
 #include "base/containers/contains.h"
-#include "chromeos/components/multidevice/logging/logging.h"
 
-namespace chromeos {
-
-namespace secure_channel {
+namespace ash::secure_channel {
 
 NearbyConnectionManager::InitiatorConnectionAttemptMetadata::
     InitiatorConnectionAttemptMetadata(
@@ -137,6 +135,4 @@ void NearbyConnectionManager::RemoveRequestMetadata(
   }
 }
 
-}  // namespace secure_channel
-
-}  // namespace chromeos
+}  // namespace ash::secure_channel

@@ -61,7 +61,6 @@ class RenderFrameHost;
 class RenderWidgetHost;
 class SessionStorageNamespace;
 class SiteInstance;
-class WebContentsImpl;
 struct ContextMenuParams;
 struct DropData;
 struct MediaPlayerWatchTime;
@@ -146,7 +145,7 @@ class CONTENT_EXPORT WebContentsDelegate {
   // transfer to a different process between the start of the network load and
   // commit.  Defaults to true.
   virtual bool ShouldAllowRendererInitiatedCrossProcessNavigation(
-      bool is_main_frame_navigation);
+      bool is_outermost_main_frame_navigation);
 
   // Called to inform the delegate that the WebContents's navigation state
   // changed. The |changed_flags| indicates the parts of the navigation state
@@ -183,9 +182,9 @@ class CONTENT_EXPORT WebContentsDelegate {
   // in UI elements. It is generally true for different-document navigations and
   // false for most same-document navigations (because same-documents are
   // typically instantaneous so there's no point in flickering the UI). The
-  // exception is appHistory's transitionWhile, which is the sole type of
-  // same-document navigation that is asynchronous, and therefore a UI change is
-  // sensible.
+  // exception is the navigation API's transitionWhile(), which is the sole type
+  // of same-document navigation that is asynchronous, and therefore a UI change
+  // is sensible.
   virtual void LoadingStateChanged(WebContents* source,
                                    bool should_show_loading_ui) {}
 

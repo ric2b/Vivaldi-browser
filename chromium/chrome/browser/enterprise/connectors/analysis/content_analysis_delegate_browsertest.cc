@@ -372,7 +372,7 @@ IN_PROC_BROWSER_TEST_P(ContentAnalysisDelegateBrowserTest, Files) {
   safe_browsing::EventReportValidator validator(client());
   validator.ExpectDangerousDeepScanningResult(
       /*url*/ "about:blank",
-      /*filename*/ created_file_paths()[1].AsUTF8Unsafe(),
+      /*filename*/ "bad.exe",
       // printf "bad file content" | sha256sum |  tr '[:lower:]' '[:upper:]'
       /*sha*/
       "77AE96C38386429D28E53F5005C46C7B4D8D39BE73D757CE61E0AE65CC1A5A5D",
@@ -542,9 +542,9 @@ IN_PROC_BROWSER_TEST_P(ContentAnalysisDelegateBrowserTest, Throttled) {
   validator.ExpectUnscannedFileEvents(
       /*url*/ "about:blank",
       {
-          created_file_paths()[0].AsUTF8Unsafe(),
-          created_file_paths()[1].AsUTF8Unsafe(),
-          created_file_paths()[2].AsUTF8Unsafe(),
+          created_file_paths()[0].BaseName().AsUTF8Unsafe(),
+          created_file_paths()[1].BaseName().AsUTF8Unsafe(),
+          created_file_paths()[2].BaseName().AsUTF8Unsafe(),
       },
       {
           // printf "a content" | sha256sum | tr '[:lower:]' '[:upper:]'
@@ -676,7 +676,7 @@ IN_PROC_BROWSER_TEST_P(ContentAnalysisDelegateBlockingSettingBrowserTest,
   safe_browsing::EventReportValidator validator(client());
   validator.ExpectUnscannedFileEvent(
       /*url*/ "about:blank",
-      /*filename*/ test_zip.AsUTF8Unsafe(),
+      /*filename*/ "encrypted.zip",
       // sha256sum < chrome/test/data/safe_browsing/download_protection/\
       // encrypted.zip |  tr '[:lower:]' '[:upper:]'
       /*sha*/
@@ -750,7 +750,7 @@ IN_PROC_BROWSER_TEST_P(ContentAnalysisDelegateBlockingSettingBrowserTest,
   safe_browsing::EventReportValidator validator(client());
   validator.ExpectUnscannedFileEvent(
       /*url*/ "about:blank",
-      /*filename*/ created_file_paths()[0].AsUTF8Unsafe(),
+      /*filename*/ "a.png",
       // printf "\x89PNG\x0D\x0A\x1A\x0A" | sha256sum |  tr '[:lower:]' \
       // '[:upper:]'
       "4C4B6A3BE1314AB86138BEF4314DDE022E600960D8689A2C8F8631802D20DAB6",
@@ -787,15 +787,8 @@ IN_PROC_BROWSER_TEST_P(ContentAnalysisDelegateBlockingSettingBrowserTest,
   EXPECT_TRUE(called);
 }
 
-// TODO(https://crbug.com/1299762): Re-enable on non-mac platforms once flaky
-// timeouts are fixed.
-#if BUILDFLAG(IS_MAC)
-#define MAYBE_BlockLargeFiles BlockLargeFiles
-#else
-#define MAYBE_BlockLargeFiles DISABLED_BlockLargeFiles
-#endif
 IN_PROC_BROWSER_TEST_P(ContentAnalysisDelegateBlockingSettingBrowserTest,
-                       MAYBE_BlockLargeFiles) {
+                       BlockLargeFiles) {
   base::ScopedAllowBlockingForTesting allow_blocking;
 
   // Set up delegate and upload service.
@@ -828,9 +821,10 @@ IN_PROC_BROWSER_TEST_P(ContentAnalysisDelegateBlockingSettingBrowserTest,
   CreateFilesForTest({"large.doc"}, {std::string()}, &data);
 
   // Write data to the file in chunks to avoid memory allocation errors.
-  constexpr int64_t kLargeSize = 3ll * 1024ll * 1024ll * 1024ll;
+  constexpr int64_t kChunkSize = 50 * 1024 * 1024;  // 100 MB
+  constexpr int64_t kLargeSize = 42 * kChunkSize;   // ~2.1 GB, just over maxint
   int64_t total_size = 0;
-  std::string chunk = std::string(48 * 1024 * 1024, 'a');
+  std::string chunk = std::string(kChunkSize, 'a');
   base::File file(created_file_paths()[0],
                   base::File::FLAG_OPEN | base::File::FLAG_WRITE);
   while (total_size != kLargeSize) {
@@ -844,11 +838,11 @@ IN_PROC_BROWSER_TEST_P(ContentAnalysisDelegateBlockingSettingBrowserTest,
   safe_browsing::EventReportValidator validator(client());
   validator.ExpectUnscannedFileEvent(
       /*url*/ "about:blank",
-      /*filename*/ created_file_paths()[0].AsUTF8Unsafe(),
-      // python3 -c "print('a' * (3 * 1024 * 1024 * 1024), end='')" |\
+      /*filename*/ "large.doc",
+      // python3 -c "print('a' * (42 * 50 * 1024 * 1024), end='')" |\
       // sha256sum |  tr '[:lower:]' '[:upper:]'
       /*sha*/
-      "EFC8F27580ADA5D86CFC4451A10A142364DE63A6D70F778F1AC47B284F9D50AA",
+      "E061612733D5D991F3BD676A51F77B1F0C824282909B7C1C89BD1612FC52E073",
       /*trigger*/ SafeBrowsingPrivateEventRouter::kTriggerFileUpload,
       /*reason*/ "FILE_TOO_LARGE",
       /*mimetypes*/ DocMimeTypes(),
@@ -941,7 +935,7 @@ IN_PROC_BROWSER_TEST_P(ContentAnalysisDelegateBlockingSettingBrowserTest,
       BinaryUploadService::Result::SUCCESS, response);
   validator.ExpectDangerousDeepScanningResultAndSensitiveDataEvent(
       /*url*/ "about:blank",
-      /*filename*/ created_file_paths()[0].AsUTF8Unsafe(),
+      /*filename*/ "foo.doc",
       // printf "foo content" | sha256sum  |  tr '[:lower:]' '[:upper:]'
       /*sha*/
       "B3A2E2EDBAA3C798B4FC267792B1641B94793DE02D870124E5CBE663750B4CFC",

@@ -41,56 +41,6 @@ bool WebUIMessageHandler::IsJavascriptAllowed() {
   return javascript_allowed_ && web_ui() && web_ui()->CanCallJavascript();
 }
 
-bool WebUIMessageHandler::ExtractIntegerValue(const base::ListValue* value,
-                                              int* out_int) {
-  return WebUIMessageHandler::ExtractIntegerValue(value->GetListDeprecated(),
-                                                  out_int);
-}
-
-bool WebUIMessageHandler::ExtractIntegerValue(base::Value::ConstListView value,
-                                              int* out_int) {
-  const base::Value& single_element = value[0];
-  absl::optional<double> double_value = single_element.GetIfDouble();
-  if (double_value) {
-    *out_int = static_cast<int>(*double_value);
-    return true;
-  }
-
-  return base::StringToInt(single_element.GetString(), out_int);
-}
-
-bool WebUIMessageHandler::ExtractDoubleValue(const base::ListValue* value,
-                                             double* out_value) {
-  return WebUIMessageHandler::ExtractDoubleValue(value->GetListDeprecated(),
-                                                 out_value);
-}
-
-bool WebUIMessageHandler::ExtractDoubleValue(base::Value::ConstListView value,
-                                             double* out_value) {
-  const base::Value& single_element = value[0];
-  absl::optional<double> double_value = single_element.GetIfDouble();
-  if (double_value) {
-    *out_value = *double_value;
-    return true;
-  }
-
-  return base::StringToDouble(single_element.GetString(), out_value);
-}
-
-std::u16string WebUIMessageHandler::ExtractStringValue(
-    const base::ListValue* value) {
-  return WebUIMessageHandler::ExtractStringValue(value->GetListDeprecated());
-}
-
-std::u16string WebUIMessageHandler::ExtractStringValue(
-    base::Value::ConstListView list_view) {
-  if (0u < list_view.size() && list_view[0].is_string())
-    return base::UTF8ToUTF16(list_view[0].GetString());
-
-  NOTREACHED();
-  return std::u16string();
-}
-
 void WebUIMessageHandler::ResolveJavascriptCallback(
     const base::Value& callback_id,
     const base::Value& response) {

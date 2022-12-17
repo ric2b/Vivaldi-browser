@@ -5,6 +5,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_NG_INLINE_NG_LOGICAL_LINE_ITEM_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_NG_INLINE_NG_LOGICAL_LINE_ITEM_H_
 
+#include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/layout/geometry/logical_rect.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_item.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_item_result.h"
@@ -252,9 +253,10 @@ CORE_EXPORT std::ostream& operator<<(std::ostream& stream,
                                      const NGLogicalLineItem& item);
 
 // A vector of Child.
-// Unlike the fragment builder, chlidren are mutable.
+// Unlike the fragment builder, children are mutable.
 // Callers can add to the fragment builder in a batch once finalized.
-class NGLogicalLineItems : public GarbageCollected<NGLogicalLineItems> {
+class CORE_EXPORT NGLogicalLineItems
+    : public GarbageCollected<NGLogicalLineItems> {
  public:
   NGLogicalLineItems() = default;
   ~NGLogicalLineItems() { DCHECK(IsEmpty()); }

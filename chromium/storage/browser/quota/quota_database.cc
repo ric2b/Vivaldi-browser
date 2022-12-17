@@ -17,10 +17,12 @@
 #include "base/dcheck_is_on.h"
 #include "base/files/file_util.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/sequence_checker.h"
 #include "components/services/storage/public/cpp/buckets/constants.h"
+#include "components/services/storage/public/cpp/quota_error_or.h"
 #include "sql/database.h"
-#include "sql/error_metrics.h"
 #include "sql/meta_table.h"
+#include "sql/sqlite_result_code.h"
 #include "sql/statement.h"
 #include "sql/transaction.h"
 #include "storage/browser/quota/quota_database_migrations.h"
@@ -89,7 +91,7 @@ const QuotaDatabase::TableSchema QuotaDatabase::kTables[] = {
      " last_modified INTEGER NOT NULL,"
      " expiration INTEGER NOT NULL,"
      " quota INTEGER NOT NULL)"}};
-const size_t QuotaDatabase::kTableCount = base::size(QuotaDatabase::kTables);
+const size_t QuotaDatabase::kTableCount = std::size(QuotaDatabase::kTables);
 
 // static
 const QuotaDatabase::IndexSchema QuotaDatabase::kIndexes[] = {
@@ -99,7 +101,7 @@ const QuotaDatabase::IndexSchema QuotaDatabase::kIndexes[] = {
     {"buckets_by_last_modified", kBucketTable, "(type, last_modified)", false},
     {"buckets_by_expiration", kBucketTable, "(expiration)", false},
 };
-const size_t QuotaDatabase::kIndexCount = base::size(QuotaDatabase::kIndexes);
+const size_t QuotaDatabase::kIndexCount = std::size(QuotaDatabase::kIndexes);
 
 QuotaDatabase::BucketTableEntry::BucketTableEntry() = default;
 
@@ -127,7 +129,18 @@ QuotaDatabase::BucketTableEntry::BucketTableEntry(
       last_modified(last_modified) {}
 
 // QuotaDatabase ------------------------------------------------------------
-QuotaDatabase::QuotaDatabase(const base::FilePath& path) : db_file_path_(path) {
+QuotaDatabase::QuotaDatabase(const base::FilePath& profile_path)
+    : storage_directory_(
+          profile_path.empty()
+              ? nullptr
+              : std::make_unique<StorageDirectory>(profile_path)),
+      db_file_path_(
+          profile_path.empty()
+              ? base::FilePath()
+              : storage_directory_->path().AppendASCII(kDatabaseName)),
+      legacy_db_file_path_(profile_path.empty()
+                               ? base::FilePath()
+                               : profile_path.AppendASCII(kDatabaseName)) {
   DETACH_FROM_SEQUENCE(sequence_checker_);
 }
 
@@ -138,10 +151,12 @@ QuotaDatabase::~QuotaDatabase() {
   }
 }
 
+constexpr char QuotaDatabase::kDatabaseName[];
+
 QuotaErrorOr<int64_t> QuotaDatabase::GetHostQuota(const std::string& host,
                                                   StorageType type) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  QuotaError open_error = EnsureOpened(EnsureOpenedMode::kFailIfNotFound);
+  QuotaError open_error = EnsureOpened();
   if (open_error != QuotaError::kNone)
     return open_error;
 
@@ -163,7 +178,7 @@ QuotaError QuotaDatabase::SetHostQuota(const std::string& host,
                                        int64_t quota) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK_GE(quota, 0);
-  QuotaError open_error = EnsureOpened(EnsureOpenedMode::kCreateIfNotFound);
+  QuotaError open_error = EnsureOpened();
   if (open_error != QuotaError::kNone)
     return open_error;
 
@@ -228,16 +243,6 @@ QuotaErrorOr<BucketInfo> QuotaDatabase::CreateBucketForTesting(
     blink::mojom::StorageType storage_type) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  // TODO(crbug/1210252): Update to not execute 2 sql statements on creation.
-  QuotaErrorOr<BucketInfo> bucket_result =
-      GetBucket(storage_key, bucket_name, storage_type);
-
-  if (bucket_result.ok())
-    return QuotaError::kEntryExistsError;
-
-  if (bucket_result.error() != QuotaError::kNotFound)
-    return bucket_result.error();
-
   base::Time now = base::Time::Now();
   return CreateBucketInternal(storage_key, storage_type, bucket_name,
                               /*use_count=*/0, now, now);
@@ -248,7 +253,7 @@ QuotaErrorOr<BucketInfo> QuotaDatabase::GetBucket(
     const std::string& bucket_name,
     blink::mojom::StorageType storage_type) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  QuotaError open_error = EnsureOpened(EnsureOpenedMode::kFailIfNotFound);
+  QuotaError open_error = EnsureOpened();
   if (open_error != QuotaError::kNone)
     return open_error;
 
@@ -273,10 +278,41 @@ QuotaErrorOr<BucketInfo> QuotaDatabase::GetBucket(
                     statement.ColumnInt(2));
 }
 
+QuotaErrorOr<BucketInfo> QuotaDatabase::GetBucketById(BucketId bucket_id) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  QuotaError open_error = EnsureOpened();
+  if (open_error != QuotaError::kNone)
+    return open_error;
+
+  static constexpr char kSql[] =
+      // clang-format off
+      "SELECT storage_key, type, name, expiration, quota "
+        "FROM buckets "
+        "WHERE id = ?";
+  // clang-format on
+  sql::Statement statement(db_->GetCachedStatement(SQL_FROM_HERE, kSql));
+  statement.BindInt64(0, bucket_id.value());
+
+  if (!statement.Step()) {
+    return statement.Succeeded() ? QuotaError::kNotFound
+                                 : QuotaError::kDatabaseError;
+  }
+
+  absl::optional<StorageKey> storage_key =
+      StorageKey::Deserialize(statement.ColumnString(0));
+  if (!storage_key.has_value())
+    return QuotaError::kNotFound;
+
+  return BucketInfo(bucket_id, storage_key.value(),
+                    static_cast<StorageType>(statement.ColumnInt(1)),
+                    statement.ColumnString(2), statement.ColumnTime(3),
+                    statement.ColumnInt(4));
+}
+
 QuotaErrorOr<std::set<BucketLocator>> QuotaDatabase::GetBucketsForType(
     StorageType type) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  QuotaError open_error = EnsureOpened(EnsureOpenedMode::kFailIfNotFound);
+  QuotaError open_error = EnsureOpened();
   if (open_error != QuotaError::kNone)
     return open_error;
 
@@ -303,7 +339,7 @@ QuotaErrorOr<std::set<BucketLocator>> QuotaDatabase::GetBucketsForHost(
     const std::string& host,
     blink::mojom::StorageType storage_type) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  QuotaError open_error = EnsureOpened(EnsureOpenedMode::kFailIfNotFound);
+  QuotaError open_error = EnsureOpened();
   if (open_error != QuotaError::kNone)
     return open_error;
 
@@ -331,7 +367,7 @@ QuotaErrorOr<std::set<BucketLocator>> QuotaDatabase::GetBucketsForStorageKey(
     const StorageKey& storage_key,
     StorageType type) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  QuotaError open_error = EnsureOpened(EnsureOpenedMode::kFailIfNotFound);
+  QuotaError open_error = EnsureOpened();
   if (open_error != QuotaError::kNone)
     return open_error;
 
@@ -355,27 +391,21 @@ QuotaError QuotaDatabase::SetStorageKeyLastAccessTime(
     StorageType type,
     base::Time last_accessed) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  QuotaError open_error = EnsureOpened(EnsureOpenedMode::kFailIfNotFound);
+  QuotaError open_error = EnsureOpened();
   if (open_error != QuotaError::kNone)
     return open_error;
-
-  // Check if bucket exists first. Running an update statement on a bucket that
-  // doesn't exist fails DCHECK and crashes.
-  // TODO(crbug/1210252): Update to not execute 2 sql statements.
-  QuotaErrorOr<BucketInfo> result =
-      GetBucket(storage_key, kDefaultBucketName, type);
-  if (!result.ok())
-    return result.error();
 
   // clang-format off
   static constexpr char kSql[] =
       "UPDATE buckets "
         "SET use_count = use_count + 1, last_accessed = ? "
-        "WHERE id = ?";
+        "WHERE storage_key = ? AND type = ? AND name = ?";
   // clang-format on
   sql::Statement statement(db_->GetCachedStatement(SQL_FROM_HERE, kSql));
   statement.BindTime(0, last_accessed);
-  statement.BindInt64(1, result->id.value());
+  statement.BindString(1, storage_key.Serialize());
+  statement.BindInt(2, static_cast<int>(type));
+  statement.BindString(3, kDefaultBucketName);
 
   if (!statement.Run())
     return QuotaError::kDatabaseError;
@@ -388,16 +418,9 @@ QuotaError QuotaDatabase::SetBucketLastAccessTime(BucketId bucket_id,
                                                   base::Time last_accessed) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!bucket_id.is_null());
-  QuotaError open_error = EnsureOpened(EnsureOpenedMode::kFailIfNotFound);
+  QuotaError open_error = EnsureOpened();
   if (open_error != QuotaError::kNone)
     return open_error;
-
-  // Check if bucket exists first. Running an update statement on a bucket that
-  // doesn't exist fails DCHECK and crashes.
-  // TODO(crbug/1210252): Update to not execute 2 sql statements.
-  QuotaErrorOr<BucketTableEntry> entry = GetBucketInfo(bucket_id);
-  if (!entry.ok())
-    return entry.error();
 
   // clang-format off
   static constexpr char kSql[] =
@@ -420,16 +443,9 @@ QuotaError QuotaDatabase::SetBucketLastModifiedTime(BucketId bucket_id,
                                                     base::Time last_modified) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!bucket_id.is_null());
-  QuotaError open_error = EnsureOpened(EnsureOpenedMode::kFailIfNotFound);
+  QuotaError open_error = EnsureOpened();
   if (open_error != QuotaError::kNone)
     return open_error;
-
-  // Check if bucket exists first. Running an update statement on a bucket that
-  // doesn't exist fails DCHECK and crashes.
-  // TODO(crbug/1210252): Update to not execute 2 sql statements.
-  QuotaErrorOr<BucketTableEntry> entry = GetBucketInfo(bucket_id);
-  if (!entry.ok())
-    return entry.error();
 
   static constexpr char kSql[] =
       "UPDATE buckets SET last_modified = ? WHERE id = ?";
@@ -447,7 +463,7 @@ QuotaError QuotaDatabase::SetBucketLastModifiedTime(BucketId bucket_id,
 QuotaError QuotaDatabase::RegisterInitialStorageKeyInfo(
     base::flat_map<StorageType, std::set<StorageKey>> storage_keys_by_type) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  QuotaError open_error = EnsureOpened(EnsureOpenedMode::kCreateIfNotFound);
+  QuotaError open_error = EnsureOpened();
   if (open_error != QuotaError::kNone)
     return open_error;
 
@@ -487,7 +503,7 @@ QuotaErrorOr<QuotaDatabase::BucketTableEntry> QuotaDatabase::GetBucketInfo(
     BucketId bucket_id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!bucket_id.is_null());
-  QuotaError open_error = EnsureOpened(EnsureOpenedMode::kFailIfNotFound);
+  QuotaError open_error = EnsureOpened();
   if (open_error != QuotaError::kNone)
     return open_error;
 
@@ -525,7 +541,7 @@ QuotaErrorOr<QuotaDatabase::BucketTableEntry> QuotaDatabase::GetBucketInfo(
 QuotaError QuotaDatabase::DeleteHostQuota(const std::string& host,
                                           StorageType type) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  QuotaError open_error = EnsureOpened(EnsureOpenedMode::kFailIfNotFound);
+  QuotaError open_error = EnsureOpened();
   if (open_error != QuotaError::kNone)
     return open_error;
 
@@ -545,7 +561,7 @@ QuotaError QuotaDatabase::DeleteHostQuota(const std::string& host,
 QuotaError QuotaDatabase::DeleteBucketInfo(BucketId bucket_id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!bucket_id.is_null());
-  QuotaError open_error = EnsureOpened(EnsureOpenedMode::kFailIfNotFound);
+  QuotaError open_error = EnsureOpened();
   if (open_error != QuotaError::kNone)
     return open_error;
 
@@ -556,7 +572,19 @@ QuotaError QuotaDatabase::DeleteBucketInfo(BucketId bucket_id) {
   if (!statement.Run())
     return QuotaError::kDatabaseError;
 
+  // Scheduling this commit introduces the chance of inconsistencies
+  // between the buckets table and data stored on disk in the file system.
+  // If there is a crash or a battery failure before the transaction is
+  // committed, the bucket directory may be deleted from the file system,
+  // while an entry still may exist in the database.
+  //
+  // While this is not ideal, this does not introduce any new edge case.
+  // We should check that bucket IDs have existing associated directories,
+  // because database corruption could result in invalid bucket IDs.
+  // TODO(crbug.com/1314567): For handling inconsistencies between the db and
+  // the file system.
   ScheduleCommit();
+
   return QuotaError::kNone;
 }
 
@@ -565,7 +593,7 @@ QuotaErrorOr<BucketLocator> QuotaDatabase::GetLRUBucket(
     const std::set<BucketId>& bucket_exceptions,
     SpecialStoragePolicy* special_storage_policy) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  QuotaError open_error = EnsureOpened(EnsureOpenedMode::kFailIfNotFound);
+  QuotaError open_error = EnsureOpened();
   if (open_error != QuotaError::kNone)
     return open_error;
 
@@ -606,7 +634,7 @@ QuotaErrorOr<BucketLocator> QuotaDatabase::GetLRUBucket(
 QuotaErrorOr<std::set<StorageKey>> QuotaDatabase::GetStorageKeysForType(
     StorageType type) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  QuotaError open_error = EnsureOpened(EnsureOpenedMode::kFailIfNotFound);
+  QuotaError open_error = EnsureOpened();
   if (open_error != QuotaError::kNone)
     return open_error;
 
@@ -632,7 +660,7 @@ QuotaErrorOr<std::set<BucketLocator>> QuotaDatabase::GetBucketsModifiedBetween(
     base::Time begin,
     base::Time end) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  QuotaError open_error = EnsureOpened(EnsureOpenedMode::kFailIfNotFound);
+  QuotaError open_error = EnsureOpened();
   if (open_error != QuotaError::kNone)
     return open_error;
 
@@ -664,7 +692,7 @@ QuotaErrorOr<std::set<BucketLocator>> QuotaDatabase::GetBucketsModifiedBetween(
 
 bool QuotaDatabase::IsBootstrapped() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (EnsureOpened(EnsureOpenedMode::kCreateIfNotFound) != QuotaError::kNone)
+  if (EnsureOpened() != QuotaError::kNone)
     return false;
 
   int flag = 0;
@@ -673,7 +701,7 @@ bool QuotaDatabase::IsBootstrapped() {
 
 QuotaError QuotaDatabase::SetIsBootstrapped(bool bootstrap_flag) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  QuotaError open_error = EnsureOpened(EnsureOpenedMode::kCreateIfNotFound);
+  QuotaError open_error = EnsureOpened();
   if (open_error != QuotaError::kNone)
     return open_error;
 
@@ -685,6 +713,30 @@ QuotaError QuotaDatabase::SetIsBootstrapped(bool bootstrap_flag) {
   return meta_table_->SetValue(kBucketsTableBootstrapped, bootstrap_flag)
              ? QuotaError::kNone
              : QuotaError::kDatabaseError;
+}
+
+QuotaError QuotaDatabase::RazeAndReopen() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // Try creating a database one last time if there isn't one.
+  if (!db_) {
+    if (!db_file_path_.empty()) {
+      DCHECK(!legacy_db_file_path_.empty());
+      sql::Database::Delete(db_file_path_);
+      sql::Database::Delete(legacy_db_file_path_);
+    }
+    return EnsureOpened();
+  }
+
+  // Abort the long-running transaction.
+  db_->RollbackTransaction();
+
+  // Raze and close the database. Reset `db_` to nullptr so EnsureOpened will
+  // recreate the database.
+  if (!db_->Raze())
+    return QuotaError::kDatabaseError;
+  db_ = nullptr;
+
+  return EnsureOpened();
 }
 
 QuotaError QuotaDatabase::CorruptForTesting(
@@ -710,6 +762,11 @@ QuotaError QuotaDatabase::CorruptForTesting(
   return QuotaError::kNone;
 }
 
+void QuotaDatabase::SetDisabledForTesting(bool disable) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  is_disabled_ = disable;
+}
+
 void QuotaDatabase::Commit() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!db_)
@@ -733,7 +790,7 @@ void QuotaDatabase::ScheduleCommit() {
                &QuotaDatabase::Commit);
 }
 
-QuotaError QuotaDatabase::EnsureOpened(EnsureOpenedMode mode) {
+QuotaError QuotaDatabase::EnsureOpened() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (db_)
     return QuotaError::kNone;
@@ -743,14 +800,12 @@ QuotaError QuotaDatabase::EnsureOpened(EnsureOpenedMode mode) {
   if (is_disabled_)
     return QuotaError::kDatabaseError;
 
-  bool in_memory_only = db_file_path_.empty();
-  if (mode == EnsureOpenedMode::kFailIfNotFound &&
-      (in_memory_only || !base::PathExists(db_file_path_))) {
-    return QuotaError::kNotFound;
-  }
-
   db_ = std::make_unique<sql::Database>(sql::DatabaseOptions{
       .exclusive_locking = true,
+      // The quota database is a critical storage component. If it's corrupted,
+      // all client-side storage APIs fail, because they don't know where their
+      // data is stored.
+      .flush_to_media = true,
       .page_size = 4096,
       .cache_size = 500,
   });
@@ -765,9 +820,21 @@ QuotaError QuotaDatabase::EnsureOpened(EnsureOpenedMode mode) {
                                       sqlite_error_code);
       }));
 
+  // Migrate an existing database from the old path.
+  if (!db_file_path_.empty() && !MoveLegacyDatabase()) {
+    if (!ResetStorage()) {
+      is_disabled_ = true;
+      db_.reset();
+      meta_table_.reset();
+      return QuotaError::kDatabaseError;
+    }
+    // ResetStorage() has succeeded and database is already open.
+    return QuotaError::kNone;
+  }
+
   if (!OpenDatabase() || !EnsureDatabaseVersion()) {
     LOG(ERROR) << "Could not open the quota database, resetting.";
-    if (!ResetSchema()) {
+    if (db_file_path_.empty() || !ResetStorage()) {
       LOG(ERROR) << "Failed to reset the quota database.";
       is_disabled_ = true;
       db_.reset();
@@ -782,7 +849,36 @@ QuotaError QuotaDatabase::EnsureOpened(EnsureOpenedMode mode) {
   return QuotaError::kNone;
 }
 
+bool QuotaDatabase::MoveLegacyDatabase() {
+  // Migration was added on 04/2022 (https://crrev.com/c/3513545).
+  // Cleanup after enough time has passed.
+  if (base::PathExists(db_file_path_) ||
+      !base::PathExists(legacy_db_file_path_)) {
+    return true;
+  }
+
+  if (!base::CreateDirectory(db_file_path_.DirName()) ||
+      !base::CopyFile(legacy_db_file_path_, db_file_path_)) {
+    sql::Database::Delete(db_file_path_);
+    return false;
+  }
+
+  base::FilePath legacy_journal_path =
+      sql::Database::JournalPath(legacy_db_file_path_);
+  if (base::PathExists(legacy_journal_path) &&
+      !base::CopyFile(legacy_journal_path,
+                      sql::Database::JournalPath(db_file_path_))) {
+    sql::Database::Delete(db_file_path_);
+    return false;
+  }
+
+  sql::Database::Delete(legacy_db_file_path_);
+  return true;
+}
+
 bool QuotaDatabase::OpenDatabase() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
   // Open in memory database.
   if (db_file_path_.empty()) {
     if (db_->OpenInMemory())
@@ -844,6 +940,8 @@ bool QuotaDatabase::EnsureDatabaseVersion() {
 }
 
 bool QuotaDatabase::CreateSchema() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
   // TODO(kinuko): Factor out the common code to create databases.
   sql::Transaction transaction(db_.get());
   if (!transaction.Begin())
@@ -868,6 +966,8 @@ bool QuotaDatabase::CreateSchema() {
 }
 
 bool QuotaDatabase::CreateTable(const TableSchema& table) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
   std::string sql("CREATE TABLE ");
   sql += table.table_name;
   sql += table.columns;
@@ -879,6 +979,8 @@ bool QuotaDatabase::CreateTable(const TableSchema& table) {
 }
 
 bool QuotaDatabase::CreateIndex(const IndexSchema& index) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
   std::string sql;
   if (index.unique)
     sql += "CREATE UNIQUE INDEX ";
@@ -895,51 +997,39 @@ bool QuotaDatabase::CreateIndex(const IndexSchema& index) {
   return true;
 }
 
-bool QuotaDatabase::ResetSchema() {
+bool QuotaDatabase::ResetStorage() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!db_file_path_.empty());
-  DCHECK(base::PathExists(db_file_path_));
+  DCHECK(storage_directory_);
   DCHECK(!db_ || !db_->transaction_nesting());
   VLOG(1) << "Deleting existing quota data and starting over.";
 
   db_.reset();
   meta_table_.reset();
 
-  if (!sql::Database::Delete(db_file_path_))
-    return false;
+  sql::Database::Delete(legacy_db_file_path_);
+  sql::Database::Delete(db_file_path_);
+
+  // Explicit file deletion to try and get consistent deletion across platforms.
+  base::DeleteFile(legacy_db_file_path_);
+  base::DeleteFile(db_file_path_);
+  base::DeleteFile(sql::Database::JournalPath(legacy_db_file_path_));
+  base::DeleteFile(sql::Database::JournalPath(db_file_path_));
+
+  storage_directory_->Doom();
+  storage_directory_->ClearDoomed();
 
   // So we can't go recursive.
   if (is_recreating_)
     return false;
 
   base::AutoReset<bool> auto_reset(&is_recreating_, true);
-  return EnsureOpened(EnsureOpenedMode::kCreateIfNotFound) == QuotaError::kNone;
-}
-
-QuotaError QuotaDatabase::DumpQuotaTable(const QuotaTableCallback& callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  QuotaError open_error = EnsureOpened(EnsureOpenedMode::kCreateIfNotFound);
-  if (open_error != QuotaError::kNone)
-    return open_error;
-
-  static constexpr char kSql[] = "SELECT * FROM quota";
-  sql::Statement statement(db_->GetCachedStatement(SQL_FROM_HERE, kSql));
-
-  while (statement.Step()) {
-    QuotaTableEntry entry = {
-        .host = statement.ColumnString(0),
-        .type = static_cast<StorageType>(statement.ColumnInt(1)),
-        .quota = statement.ColumnInt64(2)};
-
-    if (!callback.Run(entry))
-      return QuotaError::kNone;
-  }
-  return statement.Succeeded() ? QuotaError::kNone : QuotaError::kDatabaseError;
+  return EnsureOpened() == QuotaError::kNone;
 }
 
 QuotaError QuotaDatabase::DumpBucketTable(const BucketTableCallback& callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  QuotaError open_error = EnsureOpened(EnsureOpenedMode::kCreateIfNotFound);
+  QuotaError open_error = EnsureOpened();
   if (open_error != QuotaError::kNone)
     return open_error;
 
@@ -983,7 +1073,7 @@ QuotaErrorOr<BucketInfo> QuotaDatabase::CreateBucketInternal(
     base::Time last_modified) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // TODO(crbug/1210259): Add DCHECKs for input validation.
-  QuotaError open_error = EnsureOpened(EnsureOpenedMode::kCreateIfNotFound);
+  QuotaError open_error = EnsureOpened();
   if (open_error != QuotaError::kNone)
     return open_error;
 
@@ -1014,24 +1104,16 @@ QuotaErrorOr<BucketInfo> QuotaDatabase::CreateBucketInternal(
   if (!statement.Run())
     return QuotaError::kDatabaseError;
 
-  ScheduleCommit();
-
   int64_t bucket_id = db_->GetLastInsertRowId();
   DCHECK_GT(bucket_id, 0);
+
+  // Commit immediately so that we persist the bucket metadata to disk before we
+  // inform other services / web apps (via the Buckets API) that we did so.
+  // Once informed, that promise should persist across power failures.
+  Commit();
+
   return BucketInfo(BucketId(bucket_id), storage_key, type, bucket_name,
                     base::Time::Max(), 0);
-}
-
-bool operator==(const QuotaDatabase::QuotaTableEntry& lhs,
-                const QuotaDatabase::QuotaTableEntry& rhs) {
-  return std::tie(lhs.host, lhs.type, lhs.quota) ==
-         std::tie(rhs.host, rhs.type, rhs.quota);
-}
-
-bool operator<(const QuotaDatabase::QuotaTableEntry& lhs,
-               const QuotaDatabase::QuotaTableEntry& rhs) {
-  return std::tie(lhs.host, lhs.type, lhs.quota) <
-         std::tie(rhs.host, rhs.type, rhs.quota);
 }
 
 bool operator<(const QuotaDatabase::BucketTableEntry& lhs,

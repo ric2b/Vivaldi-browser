@@ -414,6 +414,7 @@ void UpdateServiceProxy::UpdateAll(StateChangeCallback state_update,
 
 void UpdateServiceProxy::Update(
     const std::string& app_id,
+    const std::string& install_data_index,
     UpdateService::Priority /*priority*/,
     PolicySameVersionUpdate policy_same_version_update,
     StateChangeCallback state_update,
@@ -427,7 +428,28 @@ void UpdateServiceProxy::Update(
       base::BindOnce(&UpdateServiceProxy::InitializeSTA, this)
           .Then(base::BindOnce(
               &UpdateServiceProxy::UpdateOnSTA, this, app_id,
-              policy_same_version_update,
+              install_data_index, policy_same_version_update,
+              base::BindPostTask(main_task_runner_, state_update),
+              base::BindPostTask(main_task_runner_, std::move(callback)))));
+}
+
+void UpdateServiceProxy::RunInstaller(const std::string& app_id,
+                                      const base::FilePath& installer_path,
+                                      const std::string& install_args,
+                                      const std::string& install_data,
+                                      const std::string& install_settings,
+                                      StateChangeCallback state_update,
+                                      Callback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_main_);
+
+  // Reposts the call to the COM task runner. Adapts `callback` so that
+  // the callback runs on the main sequence.
+  com_task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&UpdateServiceProxy::InitializeSTA, this)
+          .Then(base::BindOnce(
+              &UpdateServiceProxy::RunInstallerOnSTA, this, app_id,
+              installer_path, install_args, install_data, install_settings,
               base::BindPostTask(main_task_runner_, state_update),
               base::BindPostTask(main_task_runner_, std::move(callback)))));
 }
@@ -606,6 +628,7 @@ void UpdateServiceProxy::UpdateAllOnSTA(StateChangeCallback state_update,
 
 void UpdateServiceProxy::UpdateOnSTA(
     const std::string& app_id,
+    const std::string& install_data_index,
     PolicySameVersionUpdate policy_same_version_update,
     StateChangeCallback state_update,
     Callback callback,
@@ -625,11 +648,52 @@ void UpdateServiceProxy::UpdateOnSTA(
                                                         std::move(callback));
   HRESULT hr =
       updater->Update(base::UTF8ToWide(app_id).c_str(),
+                      base::UTF8ToWide(install_data_index).c_str(),
                       policy_same_version_update ==
                           UpdateService::PolicySameVersionUpdate::kAllowed,
                       observer.Get());
   if (FAILED(hr)) {
     DVLOG(2) << "Failed to call IUpdater::UpdateAll: " << std::hex << hr;
+    observer->Disconnect().Run(Result::kServiceFailed);
+    return;
+  }
+}
+
+void UpdateServiceProxy::RunInstallerOnSTA(const std::string& app_id,
+                                           const base::FilePath& installer_path,
+                                           const std::string& install_args,
+                                           const std::string& install_data,
+                                           const std::string& install_settings,
+                                           StateChangeCallback state_update,
+                                           Callback callback,
+                                           HRESULT prev_hr) {
+  DCHECK(com_task_runner_->BelongsToCurrentThread());
+
+  if (FAILED(prev_hr)) {
+    std::move(callback).Run(Result::kServiceFailed);
+    return;
+  }
+  Microsoft::WRL::ComPtr<IUpdater> updater;
+  if (HRESULT hr = CreateUpdater(scope_, updater); FAILED(hr)) {
+    std::move(callback).Run(Result::kServiceFailed);
+    return;
+  }
+  // The COM RPC takes ownership of the `observer` and owns a reference to
+  // the `updater` object as well. As long as the `observer` retains this
+  // reference to the `updater` object, then the object is going to stay alive.
+  // Once the server has notified, then released its last reference to the
+  // `observer` object, the `observer` is destroyed, and as a result, the
+  // last reference to `updater` is released as well, which causes the
+  // destruction of the `updater` object.
+  auto observer = Microsoft::WRL::Make<UpdaterObserver>(updater, state_update,
+                                                        std::move(callback));
+  HRESULT hr = updater->RunInstaller(
+      base::UTF8ToWide(app_id).c_str(), installer_path.value().c_str(),
+      base::UTF8ToWide(install_args).c_str(),
+      base::UTF8ToWide(install_data).c_str(),
+      base::UTF8ToWide(install_settings).c_str(), observer.Get());
+  if (FAILED(hr)) {
+    DVLOG(2) << "Failed to call IUpdater::OfflineInstall: " << std::hex << hr;
     observer->Disconnect().Run(Result::kServiceFailed);
     return;
   }

@@ -101,11 +101,11 @@ int ChromeMain(int argc, const char** argv) {
 #endif
 
 #if defined(VIVALDI_BUILD)
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   if (vivaldi::IsVivaldiExiting()) {
     OpenVivaldiRunningDialog();
   }
-#endif  // defined(OS_WIN)
+#endif  // IS_WIN
 
   VivaldiMainDelegate chrome_main_delegate(
       base::TimeTicks::FromInternalValue(exe_entry_point_ticks));

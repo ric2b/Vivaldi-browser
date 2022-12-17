@@ -8,6 +8,7 @@
 #include "app/vivaldi_apptools.h"
 #include "base/memory/ptr_util.h"
 #include "base/task/post_task.h"
+#include "build/build_config.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_process.h"
@@ -79,13 +80,13 @@ VivaldiSyncServiceFactory::VivaldiSyncServiceFactory() : SyncServiceFactory() {
   // destruction order.
   DependsOn(autofill::PersonalDataManagerFactory::GetInstance());
   DependsOn(BookmarkModelFactory::GetInstance());
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   DependsOn(GlobalErrorServiceFactory::GetInstance());
 #endif
   DependsOn(HistoryServiceFactory::GetInstance());
   DependsOn(PasswordStoreFactory::GetInstance());
   DependsOn(TemplateURLServiceFactory::GetInstance());
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   DependsOn(
       extensions::ExtensionsBrowserClient::Get()->GetExtensionSystemFactory());
 #endif

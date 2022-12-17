@@ -33,6 +33,7 @@
 #include <memory>
 
 #include "base/memory/scoped_refptr.h"
+#include "base/time/time.h"
 #include "base/unguessable_token.h"
 #include "mojo/public/cpp/base/big_buffer.h"
 #include "mojo/public/cpp/bindings/shared_remote.h"
@@ -40,10 +41,12 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/loader/loading_behavior_flag.h"
 #include "third_party/blink/public/common/permissions_policy/document_policy.h"
-#include "third_party/blink/public/mojom/frame/frame.mojom-blink.h"
+#include "third_party/blink/public/mojom/fenced_frame/fenced_frame.mojom-blink.h"
+#include "third_party/blink/public/mojom/frame/triggering_event_info.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/loader/content_security_notifier.mojom-blink.h"
 #include "third_party/blink/public/mojom/loader/mhtml_load_result.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/loader/same_document_navigation_type.mojom-blink.h"
+#include "third_party/blink/public/mojom/page/page.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/page_state/page_state.mojom-blink.h"
 #include "third_party/blink/public/mojom/timing/worker_timing_container.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/scheduler/web_scoped_virtual_time_pauser.h"
@@ -167,20 +170,20 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   void DidObserveLoadingBehavior(LoadingBehaviorFlag);
 
   // https://html.spec.whatwg.org/multipage/history.html#url-and-history-update-steps
-  void RunURLAndHistoryUpdateSteps(
-      const KURL&,
-      mojom::blink::SameDocumentNavigationType,
-      scoped_refptr<SerializedScriptValue>,
-      WebFrameLoadType = WebFrameLoadType::kReplaceCurrentItem,
-      mojom::blink::ScrollRestorationType =
-          mojom::blink::ScrollRestorationType::kAuto);
+  void RunURLAndHistoryUpdateSteps(const KURL&,
+                                   HistoryItem*,
+                                   mojom::blink::SameDocumentNavigationType,
+                                   scoped_refptr<SerializedScriptValue>,
+                                   WebFrameLoadType,
+                                   bool is_browser_initiated = false,
+                                   bool is_synchronously_committed = true);
 
   // |is_synchronously_committed| is described in comment for
   // CommitSameDocumentNavigation.
   void UpdateForSameDocumentNavigation(const KURL&,
+                                       HistoryItem*,
                                        mojom::blink::SameDocumentNavigationType,
                                        scoped_refptr<SerializedScriptValue>,
-                                       mojom::blink::ScrollRestorationType,
                                        WebFrameLoadType,
                                        const SecurityOrigin* initiator_origin,
                                        bool is_browser_initiated,
@@ -237,8 +240,7 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
       const SecurityOrigin* initiator_origin,
       bool is_synchronously_committed,
       mojom::blink::TriggeringEventInfo,
-      bool is_browser_initiated,
-      std::unique_ptr<WebDocumentLoader::ExtraData>);
+      bool is_browser_initiated);
 
   void SetDefersLoading(LoaderFreezeMode);
 
@@ -351,7 +353,8 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
 
   // Notifies that the prerendering document this loader is working for is
   // activated.
-  void NotifyPrerenderingDocumentActivated(base::TimeTicks activation_start);
+  void NotifyPrerenderingDocumentActivated(
+      const mojom::blink::PrerenderPageActivationParams& params);
 
   CodeCacheHost* GetCodeCacheHost();
   void SetCodeCacheHost(
@@ -364,6 +367,10 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
 
   const absl::optional<Vector<KURL>>& AdAuctionComponents() const {
     return ad_auction_components_;
+  }
+
+  const mojom::blink::FencedFrameReportingPtr& FencedFrameReporting() const {
+    return fenced_frame_reporting_;
   }
 
  protected:
@@ -403,6 +410,15 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   void RecordUseCountersForCommit();
   void RecordConsoleMessagesForCommit();
 
+  // Use to record UMA metrics on the matches between the Content-Language
+  // response header value and the Accept-Language request header values.
+  void RecordAcceptLanguageAndContentLanguageMetric();
+
+  // Use to record UMA metrics on the matches between the parent frame's
+  // Content-Language request header value and child frame's Content-Language
+  // request header values.
+  void RecordParentAndChildContentLanguageMetric();
+
   void CreateParserPostCommit();
 
   void CommitSameDocumentNavigationInternal(
@@ -415,8 +431,7 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
       const SecurityOrigin* initiator_origin,
       bool is_browser_initiated,
       bool is_synchronously_committed,
-      mojom::blink::TriggeringEventInfo,
-      std::unique_ptr<WebDocumentLoader::ExtraData>);
+      mojom::blink::TriggeringEventInfo);
 
   // Use these method only where it's guaranteed that |m_frame| hasn't been
   // cleared.
@@ -579,8 +594,10 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   // current document or was browser-initiated.
   bool last_navigation_had_trusted_initiator_ = false;
 
-  // Whether this load request comes with a sitcky user activation.
-  const bool had_sticky_activation_ = false;
+  // Whether this load request comes with a sticky user activation. For
+  // prerendered pages, this is initially false but could be updated on
+  // prerender page activation.
+  bool had_sticky_activation_ = false;
 
   // Whether this load request was initiated by the browser.
   const bool is_browser_initiated_ = false;
@@ -634,13 +651,14 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   bool navigation_scroll_allowed_ = true;
 
   bool origin_agent_cluster_ = false;
+  bool origin_agent_cluster_left_as_default_ = true;
 
   // Whether this load request is from a cross-site navigation that swaps
   // BrowsingContextGroup.
   bool is_cross_site_cross_browsing_context_group_ = false;
 
-  WebVector<WebHistoryItem> app_history_back_entries_;
-  WebVector<WebHistoryItem> app_history_forward_entries_;
+  WebVector<WebHistoryItem> navigation_api_back_entries_;
+  WebVector<WebHistoryItem> navigation_api_forward_entries_;
 
   // This is the interface that handles generated code cache
   // requests to fetch code cache when loading resources.
@@ -652,6 +670,13 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   // contains URNs to the ad components returned by the winning bid. Null,
   // otherwise.
   absl::optional<Vector<KURL>> ad_auction_components_;
+
+  // If this is a navigation to a "opaque-ads" mode fenced frame, there might
+  // be associated reporting metadata. This is a map from destination type to
+  // reporting metadata which in turn is a map from the event type to the
+  // reporting url. `nullptr` otherwise.
+  // https://github.com/WICG/turtledove/blob/main/Fenced_Frames_Ads_Reporting.md
+  mojom::blink::FencedFrameReportingPtr fenced_frame_reporting_;
 
   // Whether the document should be anonymous or not.
   const bool anonymous_ = false;

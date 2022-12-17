@@ -27,13 +27,28 @@
 #include "platform_media/common/platform_logging_util.h"
 #include "platform_media/common/win/platform_media_init.h"
 
+#define LOG_HR_FAIL(hr, message)                                            \
+  do {                                                                      \
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__ << " Failed " \
+                 << message << ", hr=0x" << std::hex << hr;                 \
+  } while (false)
+
+#define RETURN_ON_HR_FAIL(hr, message, return_value) \
+  do {                                               \
+    HRESULT _hr_value = (hr);                        \
+    if (FAILED(_hr_value)) {                         \
+      LOG_HR_FAIL(_hr_value, message);               \
+      return (return_value);                         \
+    }                                                \
+  } while (false)
+
 namespace media {
 
 namespace {
 
 // This function is used as |no_longer_needed_cb| of
-// VideoFrame::WrapExternalYuvData to make sure we keep reference to DataBuffer
-// object as long as we need it.
+// VideoFrame::WrapExternalYuvData to make sure we keep reference to
+// DataBuffer object as long as we need it.
 void BufferHolder(const scoped_refptr<DataBuffer>& buffer) {
   /* Intentionally empty */
 }
@@ -263,39 +278,30 @@ GUID WMFDecoderImpl<DemuxerStream::VIDEO>::GetMediaObjectGUID(
 template <DemuxerStream::Type StreamType>
 Microsoft::WRL::ComPtr<IMFTransform>
 WMFDecoderImpl<StreamType>::CreateWMFDecoder(const DecoderConfig& config) {
-  Microsoft::WRL::ComPtr<IMFTransform> decoder;
-
-  // CoCreateInstance() is not avaliable in the sandbox, must "reimplement it".
+  // CoCreateInstance() is not avaliable in the sandbox, reimplement it.
   HMODULE library = GetModuleLibrary();
   if (!library)
-    return decoder;
+    return nullptr;
 
   auto* const get_class_object = reinterpret_cast<decltype(DllGetClassObject)*>(
       ::GetProcAddress(library, "DllGetClassObject"));
   if (!get_class_object) {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << " Error while retrieving class object getter function.";
-    return decoder;
+    return nullptr;
   }
 
   Microsoft::WRL::ComPtr<IClassFactory> factory;
   HRESULT hr =
       get_class_object(GetMediaObjectGUID(config), __uuidof(IClassFactory),
                        reinterpret_cast<void**>(factory.GetAddressOf()));
-  if (FAILED(hr)) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Error while getting class object.";
-    return decoder;
-  }
+  RETURN_ON_HR_FAIL(hr, "DllGetClassObject()", nullptr);
 
+  Microsoft::WRL::ComPtr<IMFTransform> decoder;
   hr =
       factory->CreateInstance(nullptr, __uuidof(IMFTransform),
                               reinterpret_cast<void**>(decoder.GetAddressOf()));
-  if (FAILED(hr)) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Error while creating decoder instance.";
-    return Microsoft::WRL::ComPtr<IMFTransform>();
-  }
+  RETURN_ON_HR_FAIL(hr, "IClassFactory::CreateInstance(wmf_decoder)", nullptr);
 
   return decoder;
 }
@@ -310,11 +316,7 @@ bool WMFDecoderImpl<StreamType>::ConfigureDecoder() {
 
   // It requires both input and output to be set.
   HRESULT hr = decoder_->GetInputStreamInfo(0, &input_stream_info_);
-  if (FAILED(hr)) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Error while getting input stream info.";
-    return false;
-  }
+  RETURN_ON_HR_FAIL(hr, "IMFTransform::GetInputStreamInfo()", false);
 
   return true;
 }
@@ -323,60 +325,38 @@ template <>
 bool WMFDecoderImpl<DemuxerStream::AUDIO>::SetInputMediaType() {
   Microsoft::WRL::ComPtr<IMFMediaType> media_type;
   HRESULT hr = MFCreateMediaType(media_type.GetAddressOf());
-  if (FAILED(hr)) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Error while creating media type.";
-    return false;
-  }
+  RETURN_ON_HR_FAIL(hr, "MFCreateMediaType()", false);
 
   hr = media_type->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Audio);
-  if (FAILED(hr)) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Error while setting media major type.";
-    return false;
-  }
+  RETURN_ON_HR_FAIL(hr, "IMFMediaType::SetGUID(MF_MT_MAJOR_TYPE)", false);
 
   hr = media_type->SetGUID(MF_MT_SUBTYPE,
                            AudioCodecToAudioSubtypeGUID(config_.codec()));
-  if (FAILED(hr)) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Error while setting media subtype.";
-    return false;
-  }
+  RETURN_ON_HR_FAIL(hr, "IMFMediaType::SetGUID(MF_MT_SUBTYPE)", false);
 
   hr = media_type->SetUINT32(
       MF_MT_AUDIO_NUM_CHANNELS,
       ChannelLayoutToChannelCount(config_.channel_layout()));
-  if (FAILED(hr)) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Error while setting channel number.";
-    return false;
-  }
-
+  RETURN_ON_HR_FAIL(hr, "IMFMediaType::SetUINT32(MF_MT_AUDIO_NUM_CHANNELS)",
+                    false);
   VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
           << " samples_per_second : " << config_.samples_per_second();
 
   hr = media_type->SetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND,
                              config_.samples_per_second());
-  if (FAILED(hr)) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Error while setting samples per second.";
-    return false;
-  }
+  RETURN_ON_HR_FAIL(
+      hr, "IMFMediaType::SetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND)", false);
 
   if (config_.codec() == AudioCodec::kAAC) {
     // For details of media_type attributes see
     // http://msdn.microsoft.com/en-us/library/windows/desktop/dd742784%28v=vs.85%29.aspx
 
-    // For ChunkDemuxer the payload contains adts_sequence() headers, for FFmpeg
-    // it is raw which is the default.
+    // For ChunkDemuxer the payload contains adts_sequence() headers, for
+    // FFmpeg it is raw which is the default.
     if (!config_.platform_media_ffmpeg_demuxer_) {
       hr = media_type->SetUINT32(MF_MT_AAC_PAYLOAD_TYPE, 0x1);
-      if (FAILED(hr)) {
-        LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                     << " Error while setting AAC payload type.";
-        return false;
-      }
+      RETURN_ON_HR_FAIL(hr, "IMFMediaType::SetUINT32(MF_MT_AAC_PAYLOAD_TYPE)",
+                        false);
     }
 
     // AAC decoder requires setting up HEAACWAVEFORMAT as a MF_MT_USER_DATA,
@@ -404,12 +384,7 @@ bool WMFDecoderImpl<DemuxerStream::AUDIO>::SetInputMediaType() {
         MF_MT_USER_DATA,
         reinterpret_cast<const uint8_t*>(&wave_format->wfInfo.wPayloadType),
         format_size - offsetof(HEAACWAVEFORMAT, wfInfo.wPayloadType));
-    if (FAILED(hr)) {
-      LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                   << " SetBlob(MF_MT_USER_DAT) failed, hresult=0x" << std::hex
-                   << hr;
-      return false;
-    }
+    RETURN_ON_HR_FAIL(hr, "IMFMediaType::SetBlob(MF_MT_USER_DATA)", false);
   }
 
   hr = decoder_->SetInputType(0, media_type.Get(), 0);  // No flags.
@@ -439,8 +414,7 @@ bool WMFDecoderImpl<DemuxerStream::AUDIO>::SetInputMediaType() {
         break;
     }
 
-    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-            << " Error while setting input type : " << error_code;
+    LOG_HR_FAIL(hr, "IMFTransform::SetInputType(), error=" << error_code);
     return false;
   }
 
@@ -451,49 +425,25 @@ template <>
 bool WMFDecoderImpl<DemuxerStream::VIDEO>::SetInputMediaType() {
   Microsoft::WRL::ComPtr<IMFMediaType> media_type;
   HRESULT hr = MFCreateMediaType(media_type.GetAddressOf());
-  if (FAILED(hr)) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Error while creating media type.";
-    return false;
-  }
+  RETURN_ON_HR_FAIL(hr, "MFCreateMediaType()", false);
 
   hr = media_type->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
-  if (FAILED(hr)) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Error while setting media major type.";
-    return false;
-  }
+  RETURN_ON_HR_FAIL(hr, "IMFMediaType::SetGUID(MF_MT_MAJOR_TYPE)", false);
 
   hr = media_type->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_H264);
-  if (FAILED(hr)) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Error while setting media subtype.";
-    return false;
-  }
+  RETURN_ON_HR_FAIL(hr, "IMFMediaType::SetGUID(MF_MT_SUBTYPE)", false);
 
   hr = media_type->SetUINT32(MF_MT_INTERLACE_MODE,
                              MFVideoInterlace_MixedInterlaceOrProgressive);
-  if (FAILED(hr)) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Error while setting interlace mode.";
-    return false;
-  }
+  RETURN_ON_HR_FAIL(hr, "IMFMediaType::SetUINT32(MF_MT_INTERLACE_MODE)", false);
 
   hr = MFSetAttributeSize(media_type.Get(), MF_MT_FRAME_SIZE,
                           config_.coded_size().width(),
                           config_.coded_size().height());
-  if (FAILED(hr)) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Error while setting frame size.";
-    return false;
-  }
+  RETURN_ON_HR_FAIL(hr, "MFSetAttributeSize()", false);
 
   hr = decoder_->SetInputType(0, media_type.Get(), 0);  // No flags.
-  if (FAILED(hr)) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Error while setting input type.";
-    return false;
-  }
+  RETURN_ON_HR_FAIL(hr, "IMFTransform::SetInputType()", false);
 
   return true;
 }
@@ -510,18 +460,13 @@ bool WMFDecoderImpl<StreamType>::SetOutputMediaType() {
        ++i) {
     GUID out_subtype = {0};
     hr = out_media_type->GetGUID(MF_MT_SUBTYPE, &out_subtype);
-    if (FAILED(hr)) {
-      LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                   << " Error while getting available output types.";
-      return false;
-    }
+    RETURN_ON_HR_FAIL(hr, "IMFMediaType::GetGUID(MF_MT_SUBTYPE)", false);
 
     hr = SetOutputMediaTypeInternal(out_subtype, out_media_type.Get());
     if (hr == S_OK) {
       break;
     } else if (hr != S_FALSE) {
-      LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                   << " SetOutputMediaTypeInternal returned an error";
+      LOG_HR_FAIL(hr, "SetOutputMediaTypeInternal()");
       return false;
     }
 
@@ -530,11 +475,8 @@ bool WMFDecoderImpl<StreamType>::SetOutputMediaType() {
 
   MFT_OUTPUT_STREAM_INFO output_stream_info = {0};
   hr = decoder_->GetOutputStreamInfo(0, &output_stream_info);
-  if (FAILED(hr)) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Error while getting stream info.";
-    return false;
-  }
+  RETURN_ON_HR_FAIL(hr, "IMFTransform::GetOutputStreamInfo()", false);
+
   output_sample_.Reset();
 
   const bool decoder_creates_samples =
@@ -545,11 +487,8 @@ bool WMFDecoderImpl<StreamType>::SetOutputMediaType() {
     output_sample_ =
         CreateSample(CalculateOutputBufferSize(output_stream_info),
                      CalculateBufferAlignment(output_stream_info.cbAlignment));
-    if (!output_sample_) {
-      VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-              << " Couldn't create sample";
+    if (!output_sample_)
       return false;
-    }
   }
 
   return true;
@@ -561,27 +500,17 @@ HRESULT WMFDecoderImpl<DemuxerStream::AUDIO>::SetOutputMediaTypeInternal(
     IMFMediaType* media_type) {
   if (subtype == MFAudioFormat_PCM) {
     HRESULT hr = decoder_->SetOutputType(0, media_type, 0);  // No flags.
-    if (FAILED(hr)) {
-      LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                   << " Error while setting output type.";
-      return hr;
-    }
+    RETURN_ON_HR_FAIL(hr, "IMFTransform::SetOutputType()", hr);
 
     hr = media_type->GetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND,
                                &output_samples_per_second_);
-    if (FAILED(hr)) {
-      LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                   << " Error while getting sample rate.";
-      return hr;
-    }
+    RETURN_ON_HR_FAIL(
+        hr, "IMFMediaType::GetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND)", hr);
 
     uint32_t output_channel_count;
     hr = media_type->GetUINT32(MF_MT_AUDIO_NUM_CHANNELS, &output_channel_count);
-    if (FAILED(hr)) {
-      LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                   << " Error while getting sample rate.";
-      return hr;
-    }
+    RETURN_ON_HR_FAIL(hr, "IMFMediaType::GetUINT32(MF_MT_AUDIO_NUM_CHANNELS)",
+                      hr);
 
     if (base::checked_cast<int>(output_channel_count) == config_.channels())
       output_channel_layout_ = config_.channel_layout();
@@ -590,11 +519,9 @@ HRESULT WMFDecoderImpl<DemuxerStream::AUDIO>::SetOutputMediaTypeInternal(
 
     hr = media_type->GetUINT32(MF_MT_AUDIO_BITS_PER_SAMPLE,
                                &output_sample_size_);
-    if (FAILED(hr)) {
-      LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                   << " Error while getting sample size.";
-      return hr;
-    }
+    RETURN_ON_HR_FAIL(
+        hr, "IMFMediaType::GetUINT32(MF_MT_AUDIO_BITS_PER_SAMPLE)", hr);
+
     // We will need size in Bytes.
     output_sample_size_ /= 8;
     return S_OK;
@@ -608,11 +535,7 @@ HRESULT WMFDecoderImpl<DemuxerStream::VIDEO>::SetOutputMediaTypeInternal(
     IMFMediaType* media_type) {
   if (subtype == MFVideoFormat_YV12) {
     HRESULT hr = decoder_->SetOutputType(0, media_type, 0);  // No flags.
-    if (FAILED(hr)) {
-      LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                   << " Error while setting output type.";
-      return hr;
-    }
+    RETURN_ON_HR_FAIL(hr, "IMFTransform::SetOutputType()", hr);
     return S_OK;
   }
   return S_FALSE;
@@ -656,11 +579,12 @@ HRESULT WMFDecoderImpl<StreamType>::ProcessInput(
 template <>
 void WMFDecoderImpl<DemuxerStream::AUDIO>::RecordInput(
     const scoped_refptr<DecoderBuffer>& input) {
-  // We use AudioDiscardHelper to calculate output audio timestamps and discard
-  // output buffers per the instructions in DecoderBuffer.  AudioDiscardHelper
-  // needs both the output buffers and the corresponsing timing for the input
-  // buffers to do its work, so we need to queue the input time info to cover
-  // the case when Decode() doesn't produce output immediately.
+  // We use AudioDiscardHelper to calculate output audio timestamps and
+  // discard output buffers per the instructions in DecoderBuffer.
+  // AudioDiscardHelper needs both the output buffers and the corresponsing
+  // timing for the input buffers to do its work, so we need to queue the
+  // input time info to cover the case when Decode() doesn't produce output
+  // immediately.
   queued_input_timing_.push_back(input->time_info());
 }
 
@@ -679,18 +603,10 @@ HRESULT WMFDecoderImpl<StreamType>::ProcessOutput() {
   // filled with data by the previous call to ProcessOutput().
   Microsoft::WRL::ComPtr<IMFMediaBuffer> buffer;
   HRESULT hr = output_sample_->ConvertToContiguousBuffer(buffer.GetAddressOf());
-  if (FAILED(hr)) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Error while converting buffer.";
-    return hr;
-  }
+  RETURN_ON_HR_FAIL(hr, "IMFSample::ConvertToContiguousBuffer()", hr);
 
   hr = buffer->SetCurrentLength(0);
-  if (FAILED(hr)) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Error while setting buffer length.";
-    return hr;
-  }
+  RETURN_ON_HR_FAIL(hr, "IMFMediaBuffer::SetCurrentLength()", hr);
 
   MFT_OUTPUT_DATA_BUFFER output_data_buffer = {0};
   output_data_buffer.pSample = output_sample_.Get();
@@ -736,6 +652,9 @@ HRESULT WMFDecoderImpl<StreamType>::ProcessOutput() {
       // This kind of change will probably prevent us from getting more
       // output.
       break;
+    default:
+      LOG_HR_FAIL(hr, "IMFTransform::ProcessOutput()");
+      break;
   }
 
   return hr;
@@ -776,8 +695,6 @@ bool WMFDecoderImpl<StreamType>::ProcessOutputLoop() {
       if (hr == MF_E_TRANSFORM_STREAM_CHANGE)
         continue;
 
-      LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                   << " ProcessOutput failed with an error.";
       return false;
     }
   }
@@ -796,50 +713,28 @@ WMFDecoderImpl<StreamType>::PrepareInputSample(
   Microsoft::WRL::ComPtr<IMFSample> sample =
       CreateSample(input->data_size(),
                    CalculateBufferAlignment(input_stream_info_.cbAlignment));
-  if (!sample) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Error while creating sample.";
-    return Microsoft::WRL::ComPtr<IMFSample>();
-  }
+  if (!sample)
+    return nullptr;
 
   Microsoft::WRL::ComPtr<IMFMediaBuffer> buffer;
   HRESULT hr = sample->GetBufferByIndex(0, buffer.GetAddressOf());
-  if (FAILED(hr)) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Error while getting buffer.";
-    return Microsoft::WRL::ComPtr<IMFSample>();
-  }
+  RETURN_ON_HR_FAIL(hr, "IMFSample::GetBufferByIndex()", nullptr);
 
   uint8_t* buff_ptr = nullptr;
   hr = buffer->Lock(&buff_ptr, nullptr, nullptr);
-  if (FAILED(hr)) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Error while locking buffer.";
-    return Microsoft::WRL::ComPtr<IMFSample>();
-  }
+  RETURN_ON_HR_FAIL(hr, "IMFMediaBuffer::Lock()", nullptr);
 
   memcpy(buff_ptr, input->data(), input->data_size());
 
   hr = buffer->Unlock();
-  if (FAILED(hr)) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Error while unlocking buffer.";
-    return Microsoft::WRL::ComPtr<IMFSample>();
-  }
+  RETURN_ON_HR_FAIL(hr, "IMFMediaBuffer::Unlock()", nullptr);
 
   hr = buffer->SetCurrentLength(input->data_size());
-  if (FAILED(hr)) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Error while setting buffer length.";
-    return Microsoft::WRL::ComPtr<IMFSample>();
-  }
+  RETURN_ON_HR_FAIL(hr, "IMFMediaBuffer::SetCurrentLength()", nullptr);
+
   // IMFSample's timestamp is expressed in hundreds of nanoseconds.
   hr = sample->SetSampleTime(input->timestamp().InMicroseconds() * 10);
-  if (FAILED(hr)) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Error while setting sample timestamp.";
-    return Microsoft::WRL::ComPtr<IMFSample>();
-  }
+  RETURN_ON_HR_FAIL(hr, "IMFSample::SetSampleTime()", nullptr);
 
   return sample;
 }
@@ -848,38 +743,29 @@ template <DemuxerStream::Type StreamType>
 scoped_refptr<typename WMFDecoderImpl<StreamType>::OutputType>
 WMFDecoderImpl<StreamType>::CreateOutputBuffer(
     const MFT_OUTPUT_DATA_BUFFER& output_data_buffer) {
+  LONGLONG sample_time = 0;
+  HRESULT hr = output_data_buffer.pSample->GetSampleTime(&sample_time);
+    RETURN_ON_HR_FAIL(hr, "IMFSample::GetSampleTime()", nullptr);
+
+  // The sample time in IMFSample is expressed in hundreds of nanoseconds.
+  const base::TimeDelta timestamp = base::Microseconds(sample_time / 10);
+
   Microsoft::WRL::ComPtr<IMFMediaBuffer> media_buffer;
-  HRESULT hr = output_data_buffer.pSample->ConvertToContiguousBuffer(
+  hr = output_data_buffer.pSample->ConvertToContiguousBuffer(
       media_buffer.GetAddressOf());
-  if (FAILED(hr)) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Error while converting buffer.";
-    return nullptr;
-  }
+  RETURN_ON_HR_FAIL(hr, "IMFSample::ConvertToContiguousBuffer()", nullptr);
 
   uint8_t* data = nullptr;
   DWORD data_size = 0;
   hr = media_buffer->Lock(&data, nullptr, &data_size);
-  if (FAILED(hr)) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Error while locking buffer.";
-    return nullptr;
-  }
-
-  LONGLONG sample_time = 0;
-  hr = output_data_buffer.pSample->GetSampleTime(&sample_time);
-  if (FAILED(hr)) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Error while getting sample time.";
-    return nullptr;
-  }
-  // The sample time in IMFSample is expressed in hundreds of nanoseconds.
-  const base::TimeDelta timestamp = base::Microseconds(sample_time / 10);
+  RETURN_ON_HR_FAIL(hr, "IMFMediaBuffer::Lock()", nullptr);
 
   scoped_refptr<typename WMFDecoderImpl<StreamType>::OutputType> output =
       CreateOutputBufferInternal(data, data_size, timestamp);
 
-  media_buffer->Unlock();
+  hr = media_buffer->Unlock();
+  RETURN_ON_HR_FAIL(hr, "IMFMediaBuffer::Unlock()", nullptr);
+
   return output;
 }
 
@@ -917,12 +803,7 @@ WMFDecoderImpl<DemuxerStream::VIDEO>::CreateOutputBufferInternal(
   LONG stride = 0;
   HRESULT hr = MFGetStrideForBitmapInfoHeader(
       MFVideoFormat_YV12.Data1, config_.coded_size().width(), &stride);
-
-  if (FAILED(hr)) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Failed to obtain stride.";
-    return nullptr;
-  }
+  RETURN_ON_HR_FAIL(hr, "MFGetStrideForBitmapInfoHeader()", nullptr);
 
   // Stride has to be divisible by 16.
   LONG adjusted_stride = ((stride + 15) & ~15);
@@ -963,27 +844,15 @@ Microsoft::WRL::ComPtr<IMFSample> WMFDecoderImpl<StreamType>::CreateSample(
     int buffer_alignment) const {
   Microsoft::WRL::ComPtr<IMFSample> sample;
   HRESULT hr = MFCreateSample(sample.GetAddressOf());
-  if (FAILED(hr)) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Error while creating sample.";
-    return Microsoft::WRL::ComPtr<IMFSample>();
-  }
+  RETURN_ON_HR_FAIL(hr, "MFCreateSample()", nullptr);
 
   Microsoft::WRL::ComPtr<IMFMediaBuffer> buffer;
   hr = MFCreateAlignedMemoryBuffer(buffer_size, buffer_alignment,
                                    buffer.GetAddressOf());
-  if (FAILED(hr)) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Error while creating buffer.";
-    return Microsoft::WRL::ComPtr<IMFSample>();
-  }
+  RETURN_ON_HR_FAIL(hr, "MFCreateAlignedMemoryBuffer()", nullptr);
 
   hr = sample->AddBuffer(buffer.Get());
-  if (FAILED(hr)) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Error while adding buffer.";
-    return Microsoft::WRL::ComPtr<IMFSample>();
-  }
+  RETURN_ON_HR_FAIL(hr, "IMFSample::AddBuffer()", nullptr);
 
   return sample;
 }

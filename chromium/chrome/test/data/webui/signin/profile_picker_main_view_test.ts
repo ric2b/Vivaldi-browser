@@ -21,12 +21,12 @@ class NavigationElement extends NavigationMixin
   changeCalled: boolean = false;
   route: string = '';
 
-  ready() {
+  override ready() {
     super.ready();
     this.reset();
   }
 
-  onRouteChange(route: Routes, _step: string) {
+  override onRouteChange(route: Routes, _step: string) {
     this.changeCalled = true;
     this.route = route;
   }
@@ -92,7 +92,7 @@ suite('ProfilePickerMainViewTest', function() {
                userName: sync ? `User${i}@gmail.com` : '',
                isManaged: i % 4 === 0,
                avatarIcon: `AvatarUrl-${i}`,
-               // <if expr="lacros">
+               // <if expr="chromeos_lacros">
                isPrimaryLacrosProfile: false,
                // </if>
              }));

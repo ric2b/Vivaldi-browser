@@ -61,7 +61,7 @@ TestStoragePartition::CreateURLLoaderNetworkObserverForFrame(int process_id,
 
 mojo::PendingRemote<network::mojom::URLLoaderNetworkServiceObserver>
 TestStoragePartition::CreateURLLoaderNetworkObserverForNavigationRequest(
-    int frame_tree_id) {
+    NavigationRequest& navigation_request) {
   return mojo::NullRemote();
 }
 
@@ -140,6 +140,11 @@ TestStoragePartition::GetPlatformNotificationContext() {
 
 InterestGroupManager* TestStoragePartition::GetInterestGroupManager() {
   return nullptr;
+}
+
+BrowsingTopicsSiteDataManager*
+TestStoragePartition::GetBrowsingTopicsSiteDataManager() {
+  return browsing_topics_site_data_manager_;
 }
 
 DevToolsBackgroundServicesContext*

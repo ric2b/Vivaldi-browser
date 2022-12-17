@@ -260,11 +260,11 @@ public class AwActivityTestRule extends BaseActivityTestRule<AwTestRunnerActivit
     public void loadUrlSyncAndExpectError(final AwContents awContents,
             CallbackHelper onPageFinishedHelper, CallbackHelper onReceivedErrorHelper,
             final String url) throws Exception {
-        int onErrorCallCount = onReceivedErrorHelper.getCallCount();
+        int onReceivedErrorCount = onReceivedErrorHelper.getCallCount();
         int onFinishedCallCount = onPageFinishedHelper.getCallCount();
         loadUrlAsync(awContents, url);
         onReceivedErrorHelper.waitForCallback(
-                onErrorCallCount, 1, WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+                onReceivedErrorCount, 1, WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         onPageFinishedHelper.waitForCallback(
                 onFinishedCallCount, 1, WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
     }

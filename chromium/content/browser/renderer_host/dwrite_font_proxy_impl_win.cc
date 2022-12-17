@@ -16,14 +16,12 @@
 
 #include "base/callback_helpers.h"
 #include "base/check_op.h"
-#include "base/cxx17_backports.h"
 #include "base/feature_list.h"
 #include "base/i18n/case_conversion.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
@@ -596,7 +594,7 @@ void DWriteFontProxyImpl::InitializeDirectWrite() {
   }
 
   // Temp code to help track down crbug.com/561873
-  for (size_t font = 0; font < base::size(kLastResortFontNames); font++) {
+  for (size_t font = 0; font < std::size(kLastResortFontNames); font++) {
     uint32_t font_index = 0;
     BOOL exists = FALSE;
     if (SUCCEEDED(collection_->FindFamilyName(kLastResortFontNames[font],

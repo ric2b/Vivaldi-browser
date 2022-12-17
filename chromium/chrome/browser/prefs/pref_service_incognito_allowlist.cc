@@ -6,7 +6,6 @@
 
 #include <vector>
 
-#include "base/cxx17_backports.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/common/pref_names.h"
@@ -68,6 +67,7 @@ const char* const kPersistentPrefNames[] = {
     ash::prefs::kAccessibilityDictationLocale,
     ash::prefs::kDockedMagnifierEnabled,
     ash::prefs::kDockedMagnifierScale,
+    ash::prefs::kDockedMagnifierScreenHeightDivisor,
     ash::prefs::kDockedMagnifierAcceleratorDialogHasBeenAccepted,
     ash::prefs::kHighContrastAcceleratorDialogHasBeenAccepted,
     ash::prefs::kScreenMagnifierAcceleratorDialogHasBeenAccepted,
@@ -88,7 +88,6 @@ const char* const kPersistentPrefNames[] = {
     bookmarks::prefs::kManagedBookmarks,
     bookmarks::prefs::kManagedBookmarksFolderName,
     bookmarks::prefs::kShowAppsShortcutInBookmarkBar,
-    bookmarks::prefs::kShowReadingListInBookmarkBar,
     bookmarks::prefs::kShowManagedBookmarksInBookmarkBar,
     bookmarks::prefs::kShowBookmarkBar,
 #if BUILDFLAG(IS_ANDROID)
@@ -168,7 +167,7 @@ namespace prefs {
 std::vector<const char*> GetIncognitoPersistentPrefsAllowlist() {
   std::vector<const char*> allowlist;
   allowlist.insert(allowlist.end(), kPersistentPrefNames,
-                   kPersistentPrefNames + base::size(kPersistentPrefNames));
+                   kPersistentPrefNames + std::size(kPersistentPrefNames));
   return allowlist;
 }
 

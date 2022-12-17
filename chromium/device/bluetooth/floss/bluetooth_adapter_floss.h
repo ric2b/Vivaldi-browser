@@ -119,6 +119,12 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterFloss final
       override;
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // Set the adapter name to one chosen from the system information. Only Ash
+  // needs to do this.
+  void SetStandardChromeOSAdapterName() override;
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
  protected:
   // BluetoothAdapter:
   void RemovePairingDelegateInternal(
@@ -155,7 +161,6 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterFloss final
                       const absl::optional<Error>& error);
 
   // Announce to observers a change in the adapter state.
-  void DiscoverableChanged(bool discoverable);
   void DiscoveringChanged(bool discovering);
   void PresentChanged(bool present);
   void NotifyAdapterPoweredChanged(bool powered);
@@ -174,6 +179,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterFloss final
   void PopulateInitialDevices();
 
   // floss::FlossAdapterClient::Observer override.
+  void DiscoverableChanged(bool discoverable) override;
   void AdapterDiscoveringChanged(bool state) override;
   void AdapterFoundDevice(const FlossDeviceId& device_found) override;
   void AdapterSspRequest(const FlossDeviceId& remote_device,

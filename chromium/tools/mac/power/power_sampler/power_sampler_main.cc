@@ -4,6 +4,7 @@
 
 #include <cstdio>
 #include <iostream>
+#include <memory>
 
 #include "base/command_line.h"
 #include "base/files/file.h"
@@ -27,6 +28,7 @@
 #include "tools/mac/power/power_sampler/sampler.h"
 #include "tools/mac/power/power_sampler/sampling_controller.h"
 #include "tools/mac/power/power_sampler/smc_sampler.h"
+#include "tools/mac/power/power_sampler/user_active_simulator.h"
 #include "tools/mac/power/power_sampler/user_idle_level_sampler.h"
 
 namespace {
@@ -50,6 +52,8 @@ constexpr char kSwitchTimeout[] = "timeout";
 constexpr char kSwitchJsonOutputFile[] = "json-output-file";
 constexpr char kSwitchSampleOnNotification[] = "sample-on-notification";
 constexpr char kSwitchResourceCoalitionPid[] = "resource-coalition-pid";
+constexpr char kSwitchSimulateUserActive[] = "simulate-user-active";
+constexpr char kSwitchNoSamplers[] = "no-samplers";
 constexpr char kUsageString[] = R"(Usage: power_sampler [options]
 
 A tool that samples power-related metrics and states. The tool outputs samples
@@ -61,11 +65,15 @@ Options:
   --sample-on-notification        Sample on power manager notifications.
       Note that interval and event notifications are mutually exclusive.
   --sample-count=<num>            Collect <num> samples before exiting.
+  --no-samplers                   Use no samplers.
   --timeout=<num>                 Stops the sampler after <num> seconds.
   --json-output-file=<path>       Produce JSON output to <path> before exit.
       By default output is in CSV format on STDOUT.
   --resource-coalition-pid=<pid>  The pid of a process that is part of a
       resource coalition for which to sample resource usage.
+  --simulate-user-active          Simulate user activity periodically, to
+                                  perform measurements in the same context as
+                                  when the user is active.
 )";
 
 // Prints main usage text.
@@ -209,9 +217,28 @@ int main(int argc, char** argv) {
   base::SingleThreadTaskExecutor executor(base::MessagePumpType::NS_RUNLOOP);
   power_sampler::SamplingController controller;
 
+  std::unique_ptr<power_sampler::UserActiveSimulator> user_active_simulator;
+  if (command_line.HasSwitch(kSwitchSimulateUserActive)) {
+    user_active_simulator =
+        std::make_unique<power_sampler::UserActiveSimulator>();
+    user_active_simulator->Start();
+  }
+
   const base::TimeTicks start_time = base::TimeTicks::Now();
 
-  bool all_samplers = sampler_names.empty();
+  if (!sampler_names.empty() && command_line.HasSwitch(kSwitchNoSamplers)) {
+    PrintUsage("samplers and no-samplers are incompatible");
+    return kStatusInvalidParam;
+  }
+
+  if (command_line.HasSwitch(kSwitchNoSamplers) &&
+      !command_line.HasSwitch(kSwitchSimulateUserActive)) {
+    PrintUsage("no samplers and not simulating active user. Nothing to do!");
+    return kStatusInvalidParam;
+  }
+
+  bool all_samplers =
+      sampler_names.empty() && !command_line.HasSwitch(kSwitchNoSamplers);
   if (ConsumeSamplerName(power_sampler::MainDisplaySampler::kSamplerName,
                          sampler_names) ||
       all_samplers) {

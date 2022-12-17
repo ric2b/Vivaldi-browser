@@ -2,9 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "extensions/renderer/native_extension_bindings_system_test_base.h"
+#include "extensions/renderer/native_extension_bindings_system.h"
 
-#include "base/cxx17_backports.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
 #include "build/build_config.h"
@@ -20,7 +19,7 @@
 #include "extensions/renderer/bindings/api_response_validator.h"
 #include "extensions/renderer/bindings/test_js_runner.h"
 #include "extensions/renderer/message_target.h"
-#include "extensions/renderer/native_extension_bindings_system.h"
+#include "extensions/renderer/native_extension_bindings_system_test_base.h"
 #include "extensions/renderer/script_context.h"
 #include "extensions/renderer/script_context_set.h"
 
@@ -115,11 +114,11 @@ TEST_F(NativeExtensionBindingsSystemUnittest, Basic) {
   EXPECT_EQ("idle.queryState", last_params().name);
   EXPECT_EQ(extension->url(), last_params().source_url);
   EXPECT_TRUE(last_params().has_callback);
-  EXPECT_EQ(last_params().arguments, *ListValueFromString("[30]"));
+  EXPECT_EQ(last_params().arguments, *DeprecatedListValueFromString("[30]"));
 
   // Respond and validate.
   bindings_system()->HandleResponse(last_params().request_id, true,
-                                    *ListValueFromString("['active']"),
+                                    ListValueFromString("['active']"),
                                     std::string());
 
   std::unique_ptr<base::Value> result_value = GetBaseValuePropertyFromObject(
@@ -180,9 +179,9 @@ TEST_F(NativeExtensionBindingsSystemUnittest, Events) {
 
   {
     TestJSRunner::AllowErrors allow_errors;
-    bindings_system()->DispatchEventInContext(
-        "idle.onStateChanged", ListValueFromString("['idle']").get(), nullptr,
-        script_context);
+    base::Value::List value = ListValueFromString("['idle']");
+    bindings_system()->DispatchEventInContext("idle.onStateChanged", value,
+                                              nullptr, script_context);
   }
 
   EXPECT_EQ("\"idle\"", GetStringPropertyFromObject(context->Global(), context,
@@ -353,7 +352,7 @@ TEST_F(NativeExtensionBindingsSystemUnittest, TestBridgingToJSCustomBindings) {
   EXPECT_EQ("idle.setDetectionInterval", last_params().name);
   EXPECT_EQ(extension->url(), last_params().source_url);
   EXPECT_FALSE(last_params().has_callback);
-  EXPECT_EQ(last_params().arguments, *ListValueFromString("[50]"));
+  EXPECT_EQ(last_params().arguments, *DeprecatedListValueFromString("[50]"));
 }
 
 TEST_F(NativeExtensionBindingsSystemUnittest, TestSendRequestHook) {
@@ -396,7 +395,7 @@ TEST_F(NativeExtensionBindingsSystemUnittest, TestSendRequestHook) {
   EXPECT_EQ("idle.queryState", last_params().name);
   EXPECT_EQ(extension->url(), last_params().source_url);
   EXPECT_TRUE(last_params().has_callback);
-  EXPECT_EQ(last_params().arguments, *ListValueFromString("[30]"));
+  EXPECT_EQ(last_params().arguments, *DeprecatedListValueFromString("[30]"));
 }
 
 // Tests that we can notify the browser as event listeners are added or removed.
@@ -431,7 +430,7 @@ TEST_F(NativeExtensionBindingsSystemUnittest, TestEventRegistration) {
               SendAddUnfilteredEventListenerIPC(script_context, kEventName))
       .Times(1);
   v8::Local<v8::Value> argv[] = {listener};
-  RunFunction(add_listener, context, base::size(argv), argv);
+  RunFunction(add_listener, context, std::size(argv), argv);
   ::testing::Mock::VerifyAndClearExpectations(ipc_message_sender());
   EXPECT_TRUE(bindings_system()->HasEventListenerInContext(
       "idle.onStateChanged", script_context));
@@ -446,7 +445,7 @@ TEST_F(NativeExtensionBindingsSystemUnittest, TestEventRegistration) {
       .Times(1);
   v8::Local<v8::Function> remove_listener =
       FunctionFromString(context, kRemoveListener);
-  RunFunction(remove_listener, context, base::size(argv), argv);
+  RunFunction(remove_listener, context, std::size(argv), argv);
   ::testing::Mock::VerifyAndClearExpectations(ipc_message_sender());
   EXPECT_FALSE(bindings_system()->HasEventListenerInContext(
       "idle.onStateChanged", script_context));
@@ -565,7 +564,7 @@ TEST_F(NativeExtensionBindingsSystemUnittest, TestLastError) {
   int first_request_id = last_params().request_id;
   // Respond with an error.
   bindings_system()->HandleResponse(last_params().request_id, false,
-                                    base::ListValue(), "Some API Error");
+                                    base::Value::List(), "Some API Error");
   EXPECT_EQ("\"Some API Error\"",
             GetStringPropertyFromObject(context->Global(), context,
                                         "lastErrorMessage"));
@@ -577,7 +576,7 @@ TEST_F(NativeExtensionBindingsSystemUnittest, TestLastError) {
   EXPECT_NE(first_request_id, last_params().request_id);
 
   bindings_system()->HandleResponse(last_params().request_id, false,
-                                    base::ListValue(), std::string());
+                                    base::Value::List(), std::string());
   EXPECT_EQ("\"Unknown error.\"",
             GetStringPropertyFromObject(context->Global(), context,
                                         "lastErrorMessage"));
@@ -852,7 +851,7 @@ TEST_F(NativeExtensionBindingsSystemUnittest, TestUpdatingPermissions) {
     // Trying to run a chrome.idle function should fail.
     v8::Local<v8::Value> args[] = {initial_idle};
     RunFunctionAndExpectError(
-        run_idle, context, base::size(args), args,
+        run_idle, context, std::size(args), args,
         "Uncaught Error: 'idle.queryState' is not available in this context.");
     EXPECT_FALSE(has_last_params());
   }
@@ -886,7 +885,7 @@ TEST_F(NativeExtensionBindingsSystemUnittest, TestUpdatingPermissions) {
   {
     // Trying to run a chrome.idle function should now succeed.
     v8::Local<v8::Value> args[] = {initial_idle};
-    RunFunction(run_idle, context, base::size(args), args);
+    RunFunction(run_idle, context, std::size(args), args);
     EXPECT_EQ("idle.queryState", last_params().name);
   }
 }
@@ -1123,7 +1122,7 @@ TEST_F(NativeExtensionBindingsSystemUnittest, APIIsInitializedByOwningContext) {
 
     v8::Context::Scope context_scope(second_context);
     v8::Local<v8::Value> args[] = {chrome};
-    RunFunction(get_idle, second_context, base::size(args), args);
+    RunFunction(get_idle, second_context, std::size(args), args);
   }
 
   // The apiBridge should have been created in the owning (original) context,
@@ -1213,7 +1212,7 @@ TEST_P(ResponseValidationNativeExtensionBindingsSystemUnittest,
   // Respond with a valid value. Validation should not fail.
   ASSERT_TRUE(has_last_params());
   bindings_system()->HandleResponse(last_params().request_id, true,
-                                    *ListValueFromString("['active']"),
+                                    ListValueFromString("['active']"),
                                     std::string());
 
   EXPECT_FALSE(validation_failure_method_name);
@@ -1223,7 +1222,7 @@ TEST_P(ResponseValidationNativeExtensionBindingsSystemUnittest,
   RunFunctionOnGlobal(call_idle_query_state, context, 0, nullptr);
   ASSERT_TRUE(has_last_params());
   bindings_system()->HandleResponse(last_params().request_id, true,
-                                    *ListValueFromString("['bad enum']"),
+                                    ListValueFromString("['bad enum']"),
                                     std::string());
 
   // Validation should fail iff response validation is enabled.

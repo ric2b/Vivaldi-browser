@@ -11,7 +11,6 @@
 #include <ostream>
 #include <set>
 
-#include "base/cxx17_backports.h"
 #include "base/guid.h"
 #include "base/hash/sha1.h"
 #include "base/i18n/case_conversion.h"
@@ -23,6 +22,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversion_utils.h"
 #include "base/strings/utf_string_conversions.h"
+#include "components/autofill/core/browser/autofill_address_util.h"
 #include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/data_model/address.h"
@@ -166,9 +166,9 @@ void GetFieldsForDistinguishingProfiles(
 
   std::vector<ServerFieldType> default_fields;
   if (!suggested_fields) {
-    default_fields.assign(kDefaultDistinguishingFields,
-                          kDefaultDistinguishingFields +
-                              base::size(kDefaultDistinguishingFields));
+    default_fields.assign(
+        kDefaultDistinguishingFields,
+        kDefaultDistinguishingFields + std::size(kDefaultDistinguishingFields));
     if (excluded_field == UNKNOWN_TYPE) {
       distinguishing_fields->swap(default_fields);
       return;
@@ -269,6 +269,7 @@ AutofillProfile& AutofillProfile::operator=(const AutofillProfile& profile) {
   company_.set_profile(this);
   phone_number_ = profile.phone_number_;
   phone_number_.set_profile(this);
+  birthdate_ = profile.birthdate_;
 
   address_ = profile.address_;
   set_language_code(profile.language_code());
@@ -319,10 +320,20 @@ void AutofillProfile::GetMatchingTypes(
 
 std::u16string AutofillProfile::GetRawInfo(ServerFieldType type) const {
   const FormGroup* form_group = FormGroupForType(AutofillType(type));
-  if (!form_group)
+  if (!form_group) {
+    NOTREACHED();
     return std::u16string();
-
+  }
   return form_group->GetRawInfo(type);
+}
+
+int AutofillProfile::GetRawInfoAsInt(ServerFieldType type) const {
+  const FormGroup* form_group = FormGroupForType(AutofillType(type));
+  if (!form_group) {
+    NOTREACHED();
+    return 0;
+  }
+  return form_group->GetRawInfoAsInt(type);
 }
 
 void AutofillProfile::SetRawInfoWithVerificationStatus(
@@ -330,9 +341,23 @@ void AutofillProfile::SetRawInfoWithVerificationStatus(
     const std::u16string& value,
     VerificationStatus status) {
   FormGroup* form_group = MutableFormGroupForType(AutofillType(type));
-  if (form_group) {
-    form_group->SetRawInfoWithVerificationStatus(type, value, status);
+  if (!form_group) {
+    NOTREACHED();
+    return;
   }
+  form_group->SetRawInfoWithVerificationStatus(type, value, status);
+}
+
+void AutofillProfile::SetRawInfoAsIntWithVerificationStatus(
+    ServerFieldType type,
+    int value,
+    VerificationStatus status) {
+  FormGroup* form_group = MutableFormGroupForType(AutofillType(type));
+  if (!form_group) {
+    NOTREACHED();
+    return;
+  }
+  form_group->SetRawInfoAsIntWithVerificationStatus(type, value, status);
 }
 
 void AutofillProfile::GetSupportedTypes(
@@ -615,7 +640,7 @@ bool AutofillProfile::MergeStructuredDataFrom(const AutofillProfile& profile,
       structured_address::AreStringTokenEquivalent(
           GetRawInfo(NAME_FULL), profile.GetRawInfo(NAME_FULL))) {
     NameInfo name;
-    if (!comparator.MergeNames(profile, *this, &name)) {
+    if (!comparator.MergeNames(profile, *this, name)) {
       NOTREACHED();
       return false;
     }
@@ -630,7 +655,7 @@ bool AutofillProfile::MergeStructuredDataFrom(const AutofillProfile& profile,
           GetRawInfo(ADDRESS_HOME_STREET_ADDRESS),
           profile.GetRawInfo(ADDRESS_HOME_STREET_ADDRESS))) {
     Address address;
-    if (!comparator.MergeAddresses(profile, *this, &address)) {
+    if (!comparator.MergeAddresses(profile, *this, address)) {
       NOTREACHED();
       return false;
     }
@@ -659,6 +684,7 @@ bool AutofillProfile::MergeDataFrom(const AutofillProfile& profile,
   CompanyInfo company(this);
   PhoneNumber phone_number(this);
   Address address;
+  Birthdate birthdate;
 
   DVLOG(1) << "Merging profiles:\nSource = " << profile << "\nDest = " << *this;
 
@@ -668,11 +694,12 @@ bool AutofillProfile::MergeDataFrom(const AutofillProfile& profile,
   // accepting updates instead of preserving the original data. I.e., passing
   // the incoming profile first accepts case and diacritic changes, for example,
   // the other ways does not.
-  if (!comparator.MergeNames(profile, *this, &name) ||
-      !comparator.MergeEmailAddresses(profile, *this, &email) ||
-      !comparator.MergeCompanyNames(profile, *this, &company) ||
-      !comparator.MergePhoneNumbers(profile, *this, &phone_number) ||
-      !comparator.MergeAddresses(profile, *this, &address)) {
+  if (!comparator.MergeNames(profile, *this, name) ||
+      !comparator.MergeEmailAddresses(profile, *this, email) ||
+      !comparator.MergeCompanyNames(profile, *this, company) ||
+      !comparator.MergePhoneNumbers(profile, *this, phone_number) ||
+      !comparator.MergeAddresses(profile, *this, address) ||
+      !comparator.MergeBirthdates(profile, *this, birthdate)) {
     NOTREACHED();
     return false;
   }
@@ -720,6 +747,11 @@ bool AutofillProfile::MergeDataFrom(const AutofillProfile& profile,
 
   if (address_ != address) {
     address_ = address;
+    modified = true;
+  }
+
+  if (birthdate_ != birthdate) {
+    birthdate_ = birthdate;
     modified = true;
   }
 
@@ -1009,15 +1041,15 @@ void AutofillProfile::CreateInferredLabelsHelper(
 
     std::vector<ServerFieldType> label_fields;
     bool found_differentiating_field = false;
-    for (auto field = fields.begin(); field != fields.end(); ++field) {
+    for (auto field : fields) {
       // Skip over empty fields.
       std::u16string field_text =
-          profile->GetInfo(AutofillType(*field), app_locale);
+          profile->GetInfo(AutofillType(field), app_locale);
       if (field_text.empty())
         continue;
 
       std::map<std::u16string, size_t>& field_text_frequencies =
-          field_text_frequencies_by_field[*field];
+          field_text_frequencies_by_field[field];
       found_differentiating_field |=
           !field_text_frequencies.count(std::u16string()) &&
           (field_text_frequencies[field_text] == 1);
@@ -1028,7 +1060,7 @@ void AutofillProfile::CreateInferredLabelsHelper(
           (field_text_frequencies.size() == 1))
         continue;
 
-      label_fields.push_back(*field);
+      label_fields.push_back(field);
 
       // If we've (1) found a differentiating field and (2) found at least
       // |num_fields_to_include| non-empty fields, we're done!
@@ -1067,6 +1099,9 @@ FormGroup* AutofillProfile::MutableFormGroupForType(const AutofillType& type) {
     case FieldTypeGroup::kAddressHome:
     case FieldTypeGroup::kAddressBilling:
       return &address_;
+
+    case FieldTypeGroup::kBirthdateField:
+      return &birthdate_;
 
     case FieldTypeGroup::kNoGroup:
     case FieldTypeGroup::kCreditCard:
@@ -1158,4 +1193,31 @@ bool AutofillProfile::HasStructuredData() {
     return !this->GetRawInfo(type).empty();
   });
 }
+
+ServerFieldTypeSet AutofillProfile::FindInaccessibleProfileValues(
+    const std::string& country_code) const {
+  ServerFieldTypeSet inaccessible_fields;
+  // Consider only AddressFields which are invisible in the settings for some
+  // countries.
+  for (const AddressField& field_type :
+       {AddressField::ADMIN_AREA, AddressField::LOCALITY,
+        AddressField::DEPENDENT_LOCALITY, AddressField::POSTAL_CODE,
+        AddressField::SORTING_CODE}) {
+    ServerFieldType server_field_type =
+        AddressFieldToServerFieldType(field_type);
+    if (!GetRawInfo(server_field_type).empty() &&
+        !::i18n::addressinput::IsFieldUsed(field_type, country_code)) {
+      inaccessible_fields.insert(server_field_type);
+    }
+  }
+  return inaccessible_fields;
+}
+
+void AutofillProfile::ClearFields(const ServerFieldTypeSet& fields) {
+  for (ServerFieldType server_field_type : fields) {
+    SetRawInfoWithVerificationStatus(server_field_type, u"",
+                                     VerificationStatus::kNoStatus);
+  }
+}
+
 }  // namespace autofill

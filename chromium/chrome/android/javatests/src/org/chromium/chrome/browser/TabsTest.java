@@ -39,6 +39,7 @@ import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.FlakyTest;
+import org.chromium.base.test.util.Manual;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.R;
@@ -68,7 +69,6 @@ import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.MenuUtils;
 import org.chromium.chrome.test.util.NewTabPageTestUtils;
-import org.chromium.chrome.test.util.OverviewModeBehaviorWatcher;
 import org.chromium.components.browser_ui.widget.gesture.SwipeGestureListener.ScrollDirection;
 import org.chromium.components.browser_ui.widget.gesture.SwipeGestureListener.SwipeHandler;
 import org.chromium.components.javascript_dialogs.JavascriptTabModalDialog;
@@ -245,7 +245,7 @@ public class TabsTest {
      * @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
      */
     @Test
-    @DisabledTest
+    @DisabledTest(message = "crbug.com/490473")
     public void testOpenAndCloseNewTabButton() {
         mTestServer = EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
         mActivityTestRule.startMainActivityWithURL(mTestServer.getURL(TEST_FILE_PATH));
@@ -255,19 +255,18 @@ public class TabsTest {
             Assert.assertEquals("Data file for TabsTest", title);
         });
         final int tabCount = mActivityTestRule.getActivity().getCurrentTabModel().getCount();
-        OverviewModeBehaviorWatcher overviewModeWatcher = new OverviewModeBehaviorWatcher(
-                mActivityTestRule.getActivity().getLayoutManager(), true, false);
         View tabSwitcherButton =
                 mActivityTestRule.getActivity().findViewById(R.id.tab_switcher_button);
         Assert.assertNotNull("'tab_switcher_button' view is not found", tabSwitcherButton);
         TouchCommon.singleClickView(tabSwitcherButton);
-        overviewModeWatcher.waitForBehavior();
-        overviewModeWatcher = new OverviewModeBehaviorWatcher(
-                mActivityTestRule.getActivity().getLayoutManager(), false, true);
+        LayoutTestUtils.waitForLayout(
+                mActivityTestRule.getActivity().getLayoutManager(), LayoutType.TAB_SWITCHER);
+
         View newTabButton = mActivityTestRule.getActivity().findViewById(R.id.new_tab_button);
         Assert.assertNotNull("'new_tab_button' view is not found", newTabButton);
         TouchCommon.singleClickView(newTabButton);
-        overviewModeWatcher.waitForBehavior();
+        LayoutTestUtils.waitForLayout(
+                mActivityTestRule.getActivity().getLayoutManager(), LayoutType.BROWSING);
 
         InstrumentationRegistry.getInstrumentation().runOnMainSync(
                 () -> Assert.assertEquals("The tab count is wrong", tabCount + 1,
@@ -460,7 +459,7 @@ public class TabsTest {
      * Bug crbug.com/166208
      */
     @Test
-    @DisabledTest
+    @DisabledTest(message = "crbug.com/575816")
     public void testOpenManyTabsSlowly() {
         int startCount = mActivityTestRule.getActivity().getCurrentTabModel().getCount();
         for (int i = 1; i <= STRESSFUL_TAB_COUNT; ++i) {
@@ -475,14 +474,10 @@ public class TabsTest {
     /**
      * Verify that we can open a large number of tabs without running out of
      * memory. This test hammers the "new tab" button quickly to stress the app.
-     *
-     * @LargeTest
-     * @TimeoutScale(10)
-     * @Feature({"Android-TabSwitcher"})
-     *
      */
     @Test
-    @FlakyTest
+    @Manual(message = "Slow test")
+    @Feature({"Android-TabSwitcher"})
     public void testOpenManyTabsQuickly() {
         int startCount = mActivityTestRule.getActivity().getCurrentTabModel().getCount();
         for (int i = 1; i <= STRESSFUL_TAB_COUNT; ++i) {
@@ -496,13 +491,10 @@ public class TabsTest {
     /**
      * Verify that we can open a burst of new tabs, even when there are already
      * a large number of tabs open.
-     * Bug: crbug.com/180718
-     * @EnormousTest
-     * @TimeoutScale(30)
-     * @Feature({"Navigation"})
      */
     @Test
-    @FlakyTest
+    @Manual(message = "Slow test")
+    @Feature({"Navigation"})
     public void testOpenManyTabsInBursts() throws TimeoutException {
         mTestServer = EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
         final int burstSize = 5;
@@ -518,13 +510,9 @@ public class TabsTest {
     /**
      * Verify opening 10 tabs at once and that each tab loads when selected.
      */
-    /*
-     * @EnormousTest
-     * @TimeoutScale(30)
-     * @Feature({"Navigation"})
-     */
     @Test
-    @FlakyTest(message = "crbug.com/223110")
+    @Manual(message = "Slow test")
+    @Feature({"Navigation"})
     public void testOpenManyTabsAtOnce10() throws TimeoutException {
         openAndVerifyManyTestTabs(10);
     }
@@ -606,14 +594,8 @@ public class TabsTest {
                 InstrumentationRegistry.getInstrumentation(), mActivityTestRule.getActivity());
     }
 
-    /**
-     * Flaky on instrumentation-yakju-clankium-ics. See https://crbug.com/431296.
-     * @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
-     * @MediumTest
-     * @Feature({"Android-TabSwitcher"})
-     */
     @Test
-    @FlakyTest
+    @FlakyTest(message = "Flaky on instrumentation-yakju-clankium-ics - https://crbug.com/431296")
     public void testQuickSwitchBetweenTabAndSwitcherMode() {
         mTestServer = EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
         final String[] urls = {
@@ -963,9 +945,8 @@ public class TabsTest {
         Assert.assertTrue("notifyChanged() was not called", mNotifyChangedCalled);
     }
 
-    // Flaky: http://crbug.com/901986
     @Test
-    @DisabledTest
+    @DisabledTest(message = "Flaky: http://crbug.com/901986")
     @MediumTest
     @Feature({"Android-TabSwitcher"})
     public void testTabsAreDestroyedOnModelDestruction() throws InterruptedException {
@@ -1003,11 +984,10 @@ public class TabsTest {
                 "WebContentsObserver was never destroyed", webContentsDestroyCalled.get());
     }
 
-    // Flaky even with RetryOnFailure: http://crbug.com/649429
     @Test
-    @DisabledTest
-    //    @MediumTest
-    //    @Feature({"Android-TabSwitcher"})
+    @DisabledTest(message = "Flaky - http://crbug.com/649429")
+    @MediumTest
+    @Feature({"Android-TabSwitcher"})
     public void testIncognitoTabsNotRestoredAfterSwipe() throws Exception {
         mTestServer = EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
         mActivityTestRule.startMainActivityWithURL(mTestServer.getURL(TEST_PAGE_FILE_PATH));

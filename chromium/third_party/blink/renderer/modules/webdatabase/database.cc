@@ -107,7 +107,6 @@ class DatabaseVersionCache {
       EXCLUSIVE_LOCKS_REQUIRED(mutex_) {
     mutex_.AssertAcquired();
     String string_id = origin + "/" + name;
-    DCHECK(string_id.IsSafeToSendToAnotherThread());
 
     DatabaseGuid guid;
     auto origin_name_to_guid_it = origin_name_to_guid_.find(string_id);
@@ -248,7 +247,6 @@ Database::Database(DatabaseContext* database_context,
       transaction_in_progress_(false),
       is_transaction_queue_enabled_(true),
       did_try_to_count_transaction_(false),
-      did_try_to_count_third_party_transaction_(false),
       feature_handle_for_scheduler_(
           database_context->GetExecutionContext()
               ->GetScheduler()
@@ -839,11 +837,6 @@ void Database::RunTransaction(
   if (!did_try_to_count_transaction_) {
     GetExecutionContext()->CountUse(WebFeature::kReadOrWriteWebDatabase);
     did_try_to_count_transaction_ = true;
-  }
-  if (!did_try_to_count_third_party_transaction_) {
-    GetExecutionContext()->CountUseOnlyInCrossSiteIframe(
-        WebFeature::kReadOrWriteWebDatabaseThirdPartyContext);
-    did_try_to_count_third_party_transaction_ = true;
   }
 
 // FIXME: Rather than passing errorCallback to SQLTransaction and then

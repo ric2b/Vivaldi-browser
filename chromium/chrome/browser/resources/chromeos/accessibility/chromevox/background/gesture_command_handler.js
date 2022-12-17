@@ -5,19 +5,17 @@
 /**
  * @fileoverview Handles gesture-based commands.
  */
+import {EventGenerator} from '../../common/event_generator.js';
 
-goog.provide('GestureCommandHandler');
+import {GestureCommandData, GestureGranularity} from '../common/gesture_command_data.js';
 
-goog.require('ChromeVoxState');
-goog.require('CommandHandler');
-goog.require('EventGenerator');
-goog.require('EventSourceState');
-goog.require('GestureCommandData');
-goog.require('PointerHandler');
+import {GestureInterface} from './gesture_interface.js';
+import {PointerHandler} from './pointer_handler.js';
 
-goog.scope(function() {
 const RoleType = chrome.automation.RoleType;
 const Gesture = chrome.accessibilityPrivate.Gesture;
+
+export const GestureCommandHandler = {};
 
 /**
  * Global setting for the enabled state of this handler.
@@ -26,6 +24,12 @@ const Gesture = chrome.accessibilityPrivate.Gesture;
 GestureCommandHandler.setEnabled = function(state) {
   GestureCommandHandler.enabled_ = state;
 };
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.target === 'GestureCommandHandler' &&
+      message.action === 'setEnabled') {
+    GestureCommandHandler.setEnabled(message.value);
+  }
+});
 
 /**
  * Global setting for the enabled state of this handler.
@@ -90,7 +94,8 @@ GestureCommandHandler.onAccessibilityGesture_ = function(gesture, x, y) {
     let inMenu = false;
     let node = range.start.node;
     while (node) {
-      if (AutomationPredicate.menuItem(node)) {
+      if (AutomationPredicate.menuItem(node) ||
+          (node.role === RoleType.POP_UP_BUTTON && node.state.expanded)) {
         inMenu = true;
         break;
       }
@@ -113,7 +118,7 @@ GestureCommandHandler.onAccessibilityGesture_ = function(gesture, x, y) {
 
   const command = commandData.command;
   if (command) {
-    CommandHandler.onCommand(command);
+    CommandHandlerInterface.instance.onCommand(command);
   }
 };
 
@@ -126,6 +131,10 @@ GestureCommandHandler.init_ = function() {
       GestureCommandHandler.onAccessibilityGesture_);
 
   GestureCommandHandler.pointerHandler_ = new PointerHandler();
+
+  GestureInterface.granularityGetter = () => GestureCommandHandler.granularity;
+  GestureInterface.granularitySetter = (granularity) =>
+      GestureCommandHandler.granularity = granularity;
 };
 
 /**
@@ -135,4 +144,3 @@ GestureCommandHandler.init_ = function() {
 GestureCommandHandler.granularity = GestureGranularity.LINE;
 
 GestureCommandHandler.init_();
-});  // goog.scope

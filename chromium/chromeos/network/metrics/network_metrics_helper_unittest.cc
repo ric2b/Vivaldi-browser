@@ -12,7 +12,9 @@
 #include "chromeos/dbus/shill/shill_device_client.h"
 #include "chromeos/dbus/shill/shill_service_client.h"
 #include "chromeos/network/network_handler_test_helper.h"
+#include "chromeos/network/network_ui_data.h"
 #include "components/prefs/testing_pref_service.h"
+#include "testing/gtest/include/gtest/gtest-spi.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
@@ -29,6 +31,8 @@ const char kCellularESimConnectResultAllHistogram[] =
     "Network.Ash.Cellular.ESim.ConnectionResult.All";
 const char kCellularPSimConnectResultAllHistogram[] =
     "Network.Ash.Cellular.PSim.ConnectionResult.All";
+const char kCellularESimPolicyConnectResultAllHistogram[] =
+    "Network.Ash.Cellular.ESim.Policy.ConnectionResult.All";
 
 // LogAllConnectionResult() VPN histograms.
 const char kVpnConnectResultAllHistogram[] =
@@ -37,6 +41,8 @@ const char kVpnBuiltInConnectResultAllHistogram[] =
     "Network.Ash.VPN.TypeBuiltIn.ConnectionResult.All";
 const char kVpnThirdPartyConnectResultAllHistogram[] =
     "Network.Ash.VPN.TypeThirdParty.ConnectionResult.All";
+const char kVpnUnknownConnectResultAllHistogram[] =
+    "Network.Ash.VPN.TypeUnknown.ConnectionResult.All";
 
 // LogAllConnectionResult() WiFi histograms.
 const char kWifiConnectResultAllHistogram[] =
@@ -61,6 +67,8 @@ const char kCellularESimConnectResultUserInitiatedHistogram[] =
     "Network.Ash.Cellular.ESim.ConnectionResult.UserInitiated";
 const char kCellularPSimConnectResultUserInitiatedHistogram[] =
     "Network.Ash.Cellular.PSim.ConnectionResult.UserInitiated";
+const char kCellularESimPolicyConnectResultUserInitiatedHistogram[] =
+    "Network.Ash.Cellular.ESim.Policy.ConnectionResult.UserInitiated";
 
 // LogUserInitiatedConnectionResult() VPN histograms.
 const char kVpnConnectResultUserInitiatedHistogram[] =
@@ -69,6 +77,8 @@ const char kVpnBuiltInConnectResultUserInitiatedHistogram[] =
     "Network.Ash.VPN.TypeBuiltIn.ConnectionResult.UserInitiated";
 const char kVpnThirdPartyConnectResultUserInitiatedHistogram[] =
     "Network.Ash.VPN.TypeThirdParty.ConnectionResult.UserInitiated";
+const char kVpnUnknownConnectResultUserInitiatedHistogram[] =
+    "Network.Ash.VPN.TypeUnknown.ConnectionResult.UserInitiated";
 
 // LogUserInitiatedConnectionResult() WiFi histograms.
 const char kWifiConnectResultUserInitiatedHistogram[] =
@@ -93,6 +103,8 @@ const char kCellularESimConnectionStateHistogram[] =
     "Network.Ash.Cellular.ESim.DisconnectionsWithoutUserAction";
 const char kCellularPSimConnectionStateHistogram[] =
     "Network.Ash.Cellular.PSim.DisconnectionsWithoutUserAction";
+const char kCellularESimPolicyConnectionStateHistogram[] =
+    "Network.Ash.Cellular.ESim.Policy.DisconnectionsWithoutUserAction";
 
 // LogConnectionStateResult() VPN histograms.
 const char kVpnConnectionStateHistogram[] =
@@ -101,6 +113,8 @@ const char kVpnBuiltInConnectionStateHistogram[] =
     "Network.Ash.VPN.TypeBuiltIn.DisconnectionsWithoutUserAction";
 const char kVpnThirdPartyConnectionStateHistogram[] =
     "Network.Ash.VPN.TypeThirdParty.DisconnectionsWithoutUserAction";
+const char kVpnUnknownConnectionStateHistogram[] =
+    "Network.Ash.VPN.TypeUnknown.DisconnectionsWithoutUserAction";
 
 // LogConnectionStateResult() WiFi histograms.
 const char kWifiConnectionStateHistogram[] =
@@ -145,6 +159,25 @@ const char kTestServicePath1[] = "/service/network1";
 const char kTestDevicePath[] = "/device/network";
 const char kTestName[] = "network_name";
 const char kTestVpnHost[] = "test host";
+const char kTestUnknownVpn[] = "test_unknown_vpn";
+
+void LogVpnResult(const std::string& provider,
+                  base::RepeatingClosure func,
+                  bool* failed_to_log_result) {
+  ASSERT_NE(failed_to_log_result, nullptr);
+
+// Emitting a metric for an unknown VPN provider will always cause a NOTREACHED
+// to be hit. This can cause a CHECK to fail, depending on the build flags. We
+// catch any failing CHECK below by asserting that we will crash when emitting.
+#if !BUILDFLAG(ENABLE_LOG_ERROR_NOT_REACHED)
+  if (provider == kTestUnknownVpn) {
+    ASSERT_DEATH({ func.Run(); }, "");
+    *failed_to_log_result = true;
+    return;
+  }
+#endif  // !BUILDFLAG(ENABLE_LOG_ERROR_NOT_REACHED)
+  func.Run();
+}
 
 }  // namespace
 
@@ -252,6 +285,49 @@ TEST_F(NetworkMetricsHelperTest, CellularESim) {
   histogram_tester_->ExpectTotalCount(kCellularPSimConnectionStateHistogram, 0);
 }
 
+TEST_F(NetworkMetricsHelperTest, CellularESimPolicy) {
+  shill_service_client_->AddService(kTestServicePath, kTestGuid, kTestName,
+                                    shill::kTypeCellular, shill::kStateIdle,
+                                    /*visible=*/true);
+  shill_service_client_->SetServiceProperty(
+      kTestServicePath, shill::kEidProperty, base::Value("eid"));
+  std::unique_ptr<NetworkUIData> ui_data =
+      NetworkUIData::CreateFromONC(::onc::ONCSource::ONC_SOURCE_DEVICE_POLICY);
+  shill_service_client_->SetServiceProperty(kTestServicePath,
+                                            shill::kUIDataProperty,
+                                            base::Value(ui_data->GetAsJson()));
+  base::RunLoop().RunUntilIdle();
+
+  NetworkMetricsHelper::LogAllConnectionResult(kTestGuid,
+                                               shill::kErrorNotRegistered);
+  histogram_tester_->ExpectTotalCount(kCellularConnectResultAllHistogram, 1);
+  histogram_tester_->ExpectTotalCount(kCellularESimConnectResultAllHistogram,
+                                      1);
+  histogram_tester_->ExpectTotalCount(
+      kCellularESimPolicyConnectResultAllHistogram, 1);
+  histogram_tester_->ExpectTotalCount(kCellularPSimConnectResultAllHistogram,
+                                      0);
+
+  NetworkMetricsHelper::LogUserInitiatedConnectionResult(
+      kTestGuid, shill::kErrorNotRegistered);
+  histogram_tester_->ExpectTotalCount(
+      kCellularConnectResultUserInitiatedHistogram, 1);
+  histogram_tester_->ExpectTotalCount(
+      kCellularESimConnectResultUserInitiatedHistogram, 1);
+  histogram_tester_->ExpectTotalCount(
+      kCellularESimPolicyConnectResultUserInitiatedHistogram, 1);
+  histogram_tester_->ExpectTotalCount(
+      kCellularPSimConnectResultUserInitiatedHistogram, 0);
+
+  NetworkMetricsHelper::LogConnectionStateResult(
+      kTestGuid, NetworkMetricsHelper::ConnectionState::kConnected);
+  histogram_tester_->ExpectTotalCount(kCellularESimConnectionStateHistogram, 1);
+  histogram_tester_->ExpectTotalCount(
+      kCellularESimPolicyConnectionStateHistogram, 1);
+  histogram_tester_->ExpectTotalCount(kCellularConnectionStateHistogram, 1);
+  histogram_tester_->ExpectTotalCount(kCellularPSimConnectionStateHistogram, 0);
+}
+
 TEST_F(NetworkMetricsHelperTest, CellularPSim) {
   shill_service_client_->AddService(kTestServicePath, kTestGuid, kTestName,
                                     shill::kTypeCellular, shill::kStateIdle,
@@ -284,19 +360,35 @@ TEST_F(NetworkMetricsHelperTest, CellularPSim) {
 
 TEST_F(NetworkMetricsHelperTest, VPN) {
   const std::vector<const std::string> kProviders{{
+      shill::kProviderIKEv2,
       shill::kProviderL2tpIpsec,
       shill::kProviderArcVpn,
       shill::kProviderOpenVpn,
       shill::kProviderThirdPartyVpn,
       shill::kProviderWireGuard,
+      kTestUnknownVpn,
   }};
 
   size_t expected_all_count = 0;
   size_t expected_user_initiated_count = 0;
   size_t expected_built_in_count = 0;
   size_t expected_third_party_count = 0;
+  size_t expected_unknown_count = 0;
+
+  base::RepeatingClosure log_all_connection_result =
+      base::BindRepeating(&NetworkMetricsHelper::LogAllConnectionResult,
+                          kTestGuid, shill::kErrorNotRegistered);
+  base::RepeatingClosure log_user_initiated_connection_result =
+      base::BindRepeating(
+          &NetworkMetricsHelper::LogUserInitiatedConnectionResult, kTestGuid,
+          shill::kErrorNotRegistered);
+  base::RepeatingClosure log_connection_state_result = base::BindRepeating(
+      &NetworkMetricsHelper::LogConnectionStateResult, kTestGuid,
+      NetworkMetricsHelper::ConnectionState::kConnected);
 
   for (const auto& provider : kProviders) {
+    bool failed_to_log_result = false;
+
     shill_service_client_->AddService(kTestServicePath, kTestGuid, kTestName,
                                       shill::kTypeVPN, shill::kStateIdle,
                                       /*visible=*/true);
@@ -307,26 +399,36 @@ TEST_F(NetworkMetricsHelperTest, VPN) {
                                               base::Value(kTestVpnHost));
     base::RunLoop().RunUntilIdle();
 
-    if (provider == shill::kProviderThirdPartyVpn ||
-        provider == shill::kProviderArcVpn) {
-      ++expected_third_party_count;
-    } else {
-      ++expected_built_in_count;
-    }
-    ++expected_all_count;
-    ++expected_user_initiated_count;
+    LogVpnResult(provider, log_all_connection_result, &failed_to_log_result);
+    LogVpnResult(provider, log_user_initiated_connection_result,
+                 &failed_to_log_result);
+    LogVpnResult(provider, log_connection_state_result, &failed_to_log_result);
 
-    NetworkMetricsHelper::LogAllConnectionResult(kTestGuid,
-                                                 shill::kErrorNotRegistered);
+    if (!failed_to_log_result) {
+      if (provider == shill::kProviderThirdPartyVpn ||
+          provider == shill::kProviderArcVpn) {
+        ++expected_third_party_count;
+      } else if (provider == shill::kProviderIKEv2 ||
+                 provider == shill::kProviderL2tpIpsec ||
+                 provider == shill::kProviderOpenVpn ||
+                 provider == shill::kProviderWireGuard) {
+        ++expected_built_in_count;
+      } else {
+        ++expected_unknown_count;
+      }
+      ++expected_all_count;
+      ++expected_user_initiated_count;
+    }
+
     histogram_tester_->ExpectTotalCount(kVpnConnectResultAllHistogram,
                                         expected_all_count);
     histogram_tester_->ExpectTotalCount(kVpnBuiltInConnectResultAllHistogram,
                                         expected_built_in_count);
     histogram_tester_->ExpectTotalCount(kVpnThirdPartyConnectResultAllHistogram,
                                         expected_third_party_count);
+    histogram_tester_->ExpectTotalCount(kVpnUnknownConnectResultAllHistogram,
+                                        expected_unknown_count);
 
-    NetworkMetricsHelper::LogUserInitiatedConnectionResult(
-        kTestGuid, shill::kErrorNotRegistered);
     histogram_tester_->ExpectTotalCount(kVpnConnectResultUserInitiatedHistogram,
                                         expected_user_initiated_count);
     histogram_tester_->ExpectTotalCount(
@@ -335,15 +437,17 @@ TEST_F(NetworkMetricsHelperTest, VPN) {
     histogram_tester_->ExpectTotalCount(
         kVpnThirdPartyConnectResultUserInitiatedHistogram,
         expected_third_party_count);
+    histogram_tester_->ExpectTotalCount(
+        kVpnUnknownConnectResultUserInitiatedHistogram, expected_unknown_count);
 
-    NetworkMetricsHelper::LogConnectionStateResult(
-        kTestGuid, NetworkMetricsHelper::ConnectionState::kConnected);
     histogram_tester_->ExpectTotalCount(kVpnConnectionStateHistogram,
                                         expected_user_initiated_count);
     histogram_tester_->ExpectTotalCount(kVpnBuiltInConnectionStateHistogram,
                                         expected_built_in_count);
     histogram_tester_->ExpectTotalCount(kVpnThirdPartyConnectionStateHistogram,
                                         expected_third_party_count);
+    histogram_tester_->ExpectTotalCount(kVpnUnknownConnectionStateHistogram,
+                                        expected_unknown_count);
 
     shill_service_client_->RemoveService(kTestServicePath);
     base::RunLoop().RunUntilIdle();

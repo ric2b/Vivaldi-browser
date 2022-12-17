@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "cc/paint/paint_flags.h"
 #include "chrome/grit/theme_resources.h"
 #include "extensions/common/draggable_region.h"
@@ -48,7 +49,7 @@ gfx::Rect VivaldiWindowFrameViewAura::GetBoundsForClientView() const {
 gfx::Rect VivaldiWindowFrameViewAura::GetWindowBoundsForClientBounds(
     const gfx::Rect& client_bounds) const {
   gfx::Rect window_bounds = client_bounds;
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CHROMEOS)
   // Get the difference between the widget's client area bounds and window
   // bounds, and grow |window_bounds| by that amount.
   gfx::Insets native_frame_insets =

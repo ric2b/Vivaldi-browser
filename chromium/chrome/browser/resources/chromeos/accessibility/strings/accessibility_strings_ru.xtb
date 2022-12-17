@@ -618,7 +618,6 @@
 <translation id="5170206230005240598">Титры шрифтом Брайля включены</translation>
 <translation id="5183440668879371625">Перейти к предыдущей строке</translation>
 <translation id="5189244881767082992">Строка.</translation>
-<translation id="5234747236692380506">напечатать слово "<ph name="TEXT" />"</translation>
 <translation id="5263034204789987535">Кукурузные рыльца</translation>
 <translation id="5263344797180442561">h2</translation>
 <translation id="528468243742722775">Завершить</translation>
@@ -685,6 +684,8 @@
 <translation id="5623842676595125836">Журнал</translation>
 <translation id="5628125749885014029">h4</translation>
 <translation id="5632083598315326067">Графический символ</translation>
+<translation id="5648939288050772726">Поздравляем! Вы изучили основы работы с ChromeVox. Меню с командами ChromeVox можно открыть в любой момент, нажав Поиск + . (точка). Подробную информацию о ChromeVox и Chrome OS можно найти в перечисленных ниже статьях.
+    Чтобы завершить работу с руководством, перейдите к кнопке "Закрыть" и нажмите ее, используя команды ChromeVox.</translation>
 <translation id="5653397561111110475">Использование сенсорного экрана Chromebook в режиме специальных возможностей</translation>
 <translation id="5655682562155942719">Команды для перехода</translation>
 <translation id="56637627897541303">Область текста.</translation>
@@ -794,6 +795,7 @@
 <translation id="641759969622533235">{COUNT,plural, =1{двоеточие}one{# двоеточие}few{# двоеточия}many{# двоеточий}other{# colons}}</translation>
 <translation id="6444046323172968959">Диалоговое окно оповещения</translation>
 <translation id="6452403590345320472">Содержание</translation>
+<translation id="6457542714329819968">ввести</translation>
 <translation id="6468049171101508116">Перейти к следующей кнопке</translation>
 <translation id="646954774886932461">Указатель</translation>
 <translation id="6475604559827479857">Цвет, которым будут выделяться слова:</translation>
@@ -965,8 +967,6 @@
 <translation id="7701196182766842984">autolst</translation>
 <translation id="7713139339518499741">Естественный голос</translation>
 <translation id="7714340021005120797">Следующего поля со списком нет</translation>
-<translation id="772146615414628379">Поздравляем! Вы изучили основы работы с ChromeVox. Меню с командами ChromeVox можно открыть в любой момент, нажав Поиск + Ю. Подробную информацию о ChromeVox и Chrome OS можно найти в перечисленных ниже статьях.
-    Чтобы завершить работу с руководством, перейдите к кнопке "Закрыть" и нажмите ее, используя команды ChromeVox.</translation>
 <translation id="7724603315864178912">Вырезать</translation>
 <translation id="7731785449856576010">Следующего виджета мультимедиа нет</translation>
 <translation id="7735498529470878067">Изучение касанием поможет быстро узнать, что есть на экране.</translation>

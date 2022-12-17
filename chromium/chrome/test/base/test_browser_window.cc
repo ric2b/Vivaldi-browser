@@ -123,7 +123,8 @@ const ui::ColorProvider* TestBrowserWindow::GetColorProvider() const {
   return ui::ColorProviderManager::Get().GetColorProviderFor(
       {ui::ColorProviderManager::ColorMode::kLight,
        ui::ColorProviderManager::ContrastMode::kNormal,
-       ui::ColorProviderManager::SystemTheme::kDefault, nullptr});
+       ui::ColorProviderManager::SystemTheme::kDefault,
+       ui::ColorProviderManager::FrameType::kChromium, nullptr});
 }
 
 ui::ElementContext TestBrowserWindow::GetElementContext() {
@@ -234,6 +235,10 @@ bool TestBrowserWindow::IsToolbarShowing() const {
   return false;
 }
 
+bool TestBrowserWindow::IsLocationBarVisible() const {
+  return false;
+}
+
 ShowTranslateBubbleResult TestBrowserWindow::ShowTranslateBubble(
     content::WebContents* contents,
     translate::TranslateStep step,
@@ -296,6 +301,10 @@ bool TestBrowserWindow::IsDownloadShelfVisible() const {
 
 DownloadShelf* TestBrowserWindow::GetDownloadShelf() {
   return &download_shelf_;
+}
+
+DownloadBubbleUIController* TestBrowserWindow::GetDownloadBubbleUIController() {
+  return nullptr;
 }
 
 std::unique_ptr<FindBar> TestBrowserWindow::CreateFindBar() {

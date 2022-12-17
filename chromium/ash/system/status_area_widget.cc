@@ -17,6 +17,7 @@
 #include "ash/shell.h"
 #include "ash/system/accessibility/dictation_button_tray.h"
 #include "ash/system/accessibility/select_to_speak/select_to_speak_tray.h"
+#include "ash/system/eche/eche_tray.h"
 #include "ash/system/holding_space/holding_space_tray.h"
 #include "ash/system/ime_menu/ime_menu_tray.h"
 #include "ash/system/media/media_tray.h"
@@ -30,6 +31,7 @@
 #include "ash/system/tray/status_area_overflow_button_tray.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_container.h"
+#include "ash/system/unified/date_tray.h"
 #include "ash/system/unified/unified_system_tray.h"
 #include "ash/system/virtual_keyboard/virtual_keyboard_tray.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
@@ -42,7 +44,6 @@
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/display/display.h"
-#include "ui/views/layout/grid_layout.h"
 
 namespace ash {
 
@@ -150,6 +151,12 @@ void StatusAreaWidget::Initialize() {
     AddTrayButton(std::move(media_tray));
   }
 
+  if (chromeos::features::IsEcheCustomWidgetEnabled()) {
+    auto eche_tray = std::make_unique<EcheTray>(shelf_);
+    eche_tray_ = eche_tray.get();
+    AddTrayButton(std::move(eche_tray));
+  }
+
   if (chromeos::features::IsPhoneHubEnabled()) {
     auto phone_hub_tray = std::make_unique<PhoneHubTray>(shelf_);
     phone_hub_tray_ = phone_hub_tray.get();
@@ -158,6 +165,11 @@ void StatusAreaWidget::Initialize() {
 
   auto unified_system_tray = std::make_unique<UnifiedSystemTray>(shelf_);
   unified_system_tray_ = unified_system_tray.get();
+  if (features::IsCalendarViewEnabled()) {
+    auto date_tray = std::make_unique<DateTray>(shelf_, unified_system_tray_);
+    date_tray_ = date_tray.get();
+    AddTrayButton(std::move(date_tray));
+  }
   AddTrayButton(std::move(unified_system_tray));
 
   auto overview_button_tray = std::make_unique<OverviewButtonTray>(shelf_);
@@ -212,6 +224,8 @@ void StatusAreaWidget::UpdateAfterLoginStatusChange(LoginStatus login_status) {
 void StatusAreaWidget::SetSystemTrayVisibility(bool visible) {
   TrayBackgroundView* tray = unified_system_tray_;
   tray->SetVisiblePreferred(visible);
+  if (features::IsCalendarViewEnabled())
+    date_tray_->SetVisiblePreferred(visible);
   if (visible) {
     Show();
   } else {
@@ -252,8 +266,10 @@ void StatusAreaWidget::LogVisiblePodCountMetric() {
   for (auto* tray_button : tray_buttons_) {
     if (tray_button == overflow_button_tray_ ||
         tray_button == overview_button_tray_ ||
-        tray_button == unified_system_tray_ || !tray_button->GetVisible())
+        tray_button == unified_system_tray_ || tray_button == date_tray_ ||
+        !tray_button->GetVisible()) {
       continue;
+    }
 
     visible_pod_count += 1;
   }
@@ -337,43 +353,15 @@ void StatusAreaWidget::UpdateTargetBoundsForGesture(int shelf_position) {
 }
 
 void StatusAreaWidget::HandleLocaleChange() {
-  if (!shelf_->IsHorizontalAlignment()) {
-    for (auto* tray_button : tray_buttons_)
-      tray_button->HandleLocaleChange();
-    return;
-  }
-
-  // During adding child views in this 'for' loop, `CalculateTargetBounds` might
-  // be called which can create a new layout manager. So
-  // `CreateScopedPauseCalculatingTargetBounds` here to disable creating layout
-  // managers.
-  auto pause =
-      status_area_widget_delegate_->CreateScopedPauseCalculatingTargetBounds();
-  // If the layout is horizontal, each child's position should be recalculated
-  // when there is a RTL change. The layer's bounds could to be updated (if
-  // needed) by re-adding the children, since the bounds updating is done in the
-  // `AddChildView` method.
+  // Here we force the layer's bounds to be updated for text direction (if
+  // needed).
   status_area_widget_delegate_->RemoveAllChildViewsWithoutDeleting();
 
-  // Gets the layout manger and inits the starting point to (0.0).
-  views::GridLayout* layout_manager = static_cast<views::GridLayout*>(
-      status_area_widget_delegate_->GetLayoutManager());
-  views::ColumnSet* columns = layout_manager->GetColumnSet(0);
-  layout_manager->StartRow(0, 0);
-
-  // It doesn't matter that the visible or invisible views are all added to the
-  // layout manager, since `CalculateTargetBounds` is called after all the views
-  // are added.
   for (auto* tray_button : tray_buttons_) {
-    columns->AddColumn(
-        views::GridLayout::CENTER, views::GridLayout::FILL, 0,
-        /*resize_percent=*/views::GridLayout::ColumnSize::kUsePreferred, 0, 0);
-    std::unique_ptr<TrayBackgroundView> tray_button_uptr(tray_button);
-    layout_manager->AddView(std::move(tray_button_uptr));
     tray_button->HandleLocaleChange();
+    status_area_widget_delegate_->AddChildView(tray_button);
   }
   EnsureTrayOrder();
-  status_area_widget_delegate_->CalculateTargetBounds();
 }
 
 void StatusAreaWidget::CalculateButtonVisibilityForCollapsedState() {

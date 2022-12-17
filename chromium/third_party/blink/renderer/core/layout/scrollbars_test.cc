@@ -114,14 +114,16 @@ class ScrollbarsTest : public PaintTestConfigurations, public SimTest {
   }
 
   void TearDown() override {
-    ScrollbarThemeSettings::SetOverlayScrollbarsEnabled(
-        original_overlay_scrollbars_enabled_);
+    SetOverlayScrollbarsEnabled(original_overlay_scrollbars_enabled_);
     mock_overlay_scrollbars_.reset();
     SimTest::TearDown();
   }
 
-  void SetOverlayScrollbarsEnabled(bool b) {
-    ScrollbarThemeSettings::SetOverlayScrollbarsEnabled(b);
+  void SetOverlayScrollbarsEnabled(bool enabled) {
+    if (enabled != ScrollbarThemeSettings::OverlayScrollbarsEnabled()) {
+      ScrollbarThemeSettings::SetOverlayScrollbarsEnabled(enabled);
+      Page::UsesOverlayScrollbarsChanged();
+    }
   }
 
   HitTestResult HitTest(int x, int y) {
@@ -261,22 +263,22 @@ class ScrollbarsTestWithVirtualTimer : public ScrollbarsTest {
  public:
   void SetUp() override {
     ScrollbarsTest::SetUp();
-    WebView().Scheduler()->EnableVirtualTime(base::Time());
+    GetVirtualTimeController()->EnableVirtualTime(base::Time());
   }
 
   void TearDown() override {
-    WebView().Scheduler()->DisableVirtualTimeForTesting();
+    GetVirtualTimeController()->DisableVirtualTimeForTesting();
     ScrollbarsTest::TearDown();
   }
 
   void TimeAdvance() {
-    WebView().Scheduler()->SetVirtualTimePolicy(
-        PageScheduler::VirtualTimePolicy::kAdvance);
+    GetVirtualTimeController()->SetVirtualTimePolicy(
+        VirtualTimeController::VirtualTimePolicy::kAdvance);
   }
 
   void StopVirtualTimeAndExitRunLoop() {
-    WebView().Scheduler()->SetVirtualTimePolicy(
-        PageScheduler::VirtualTimePolicy::kPause);
+    GetVirtualTimeController()->SetVirtualTimePolicy(
+        VirtualTimeController::VirtualTimePolicy::kPause);
     test::ExitRunLoop();
   }
 
@@ -291,6 +293,10 @@ class ScrollbarsTestWithVirtualTimer : public ScrollbarsTest {
             WTF::Unretained(this)),
         delay);
     test::EnterRunLoop();
+  }
+
+  VirtualTimeController* GetVirtualTimeController() {
+    return WebView().Scheduler()->GetVirtualTimeController();
   }
 };
 
@@ -329,9 +335,27 @@ TEST_P(ScrollbarsTest, DocumentStyleRecalcPreservesScrollbars) {
               layout_viewport->HorizontalScrollbar());
 }
 
-TEST(ScrollbarsTestWithOwnWebViewHelper, ScrollbarSizeForUseZoomDSF) {
+TEST_P(ScrollbarsTest, ScrollbarsUpdatedOnOverlaySettingsChange) {
+  ENABLE_OVERLAY_SCROLLBARS(true);
+
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
+  SimRequest request("https://example.com/test.html", "text/html");
+  LoadURL("https://example.com/test.html");
+  request.Complete(R"HTML(
+    <!DOCTYPE html>
+    <style> body { height: 3000px; } </style>)HTML");
+
+  Compositor().BeginFrame();
+  auto* layout_viewport = GetDocument().View()->LayoutViewport();
+  EXPECT_TRUE(layout_viewport->VerticalScrollbar()->IsOverlayScrollbar());
+
+  ENABLE_OVERLAY_SCROLLBARS(false);
+  Compositor().BeginFrame();
+  EXPECT_FALSE(layout_viewport->VerticalScrollbar()->IsOverlayScrollbar());
+}
+
+TEST(ScrollbarsTestWithOwnWebViewHelper, ScrollbarSizeF) {
   ScopedTestingPlatformSupport<TestingPlatformSupport> platform;
-  platform->SetUseZoomForDSF(true);
   frame_test_helpers::WebViewHelper web_view_helper;
   // Needed so visual viewport supplies its own scrollbars. We don't support
   // this setting changing after initialization, so we must set it through

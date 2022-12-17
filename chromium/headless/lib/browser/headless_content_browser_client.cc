@@ -56,7 +56,6 @@
 
 #if defined(HEADLESS_USE_POLICY)
 #include "components/policy/content/policy_blocklist_navigation_throttle.h"
-#include "components/policy/core/common/policy_service.h"  // nogncheck http://crbug.com/1227148
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/navigation_throttle.h"
 #endif  // defined(HEADLESS_USE_POLICY)
@@ -245,7 +244,7 @@ void HeadlessContentBrowserClient::AppendExtraCommandLineSwitches(
         embedder_support::kOriginTrialPublicKey,
     };
     command_line->CopySwitchesFrom(old_command_line, kSwitchNames,
-                                   base::size(kSwitchNames));
+                                   std::size(kSwitchNames));
   }
 
   if (append_command_line_flags_callback_) {
@@ -377,9 +376,8 @@ HeadlessContentBrowserClient::CreateThrottlesForNavigation(
   // Avoid creating naviagtion throttle if preferences are not available
   // (happens in tests).
   if (browser_->GetPrefs()) {
-    policy::PolicyService* policy_service = browser_->GetPolicyService();
     throttles.push_back(std::make_unique<PolicyBlocklistNavigationThrottle>(
-        handle, handle->GetWebContents()->GetBrowserContext(), policy_service));
+        handle, handle->GetWebContents()->GetBrowserContext()));
   }
 
   return throttles;

@@ -9,6 +9,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_multi_source_observation.h"
+#include "base/time/time.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
@@ -93,12 +94,9 @@ class TrustSafetySentimentService : public KeyedService,
     kMaxValue = kPrivacySandbox3NoticeSettings,
   };
 
-  // Called when the user interacts with Privacy Sandbox 3, feature_area
-  // specifies what type of interaction occurred and |product_specific_data|
-  // indicates some user state at that time.
-  virtual void InteractedWithPrivacySandbox3(
-      FeatureArea feature_area,
-      const std::map<std::string, bool>& product_specific_data);
+  // Called when the user interacts with Privacy Sandbox 3, |feature_area|
+  // specifies what type of interaction occurred.
+  virtual void InteractedWithPrivacySandbox3(FeatureArea feature_area);
 
  private:
   friend class TrustSafetySentimentServiceTest;

@@ -9,8 +9,7 @@
 <translation id="1054153489933238809">Opna &amp;originalbildet i ei ny fane</translation>
 <translation id="1056898198331236512">Åtvaring</translation>
 <translation id="1084824384139382525">Kopier len&amp;kjeadressa</translation>
-<translation id="1128109161498068552">Avvis nettstadar som ønskjer å bruka systemeksklusive meldingar for å nå MIDI-einingar</translation>
-<translation id="1163931534039071049">Sy&amp;n rammekjelda</translation>
+<translation id="1163931534039071049">Vis &amp;rammekjelda</translation>
 <translation id="1165039591588034296">Feil</translation>
 <translation id="1175364870820465910">Skriv &amp;ut …</translation>
 <translation id="1181037720776840403">Fjern</translation>
@@ -22,7 +21,6 @@
 <translation id="1297175357211070620">Mål</translation>
 <translation id="1303101771013849280">Bokmerke HTML-fil</translation>
 <translation id="1430915738399379752">Skriv ut</translation>
-<translation id="1433811987160647649">Spør før tilgang</translation>
 <translation id="1451375123200651445">Nettside, enkeltfil</translation>
 <translation id="1465176863081977902">Kopier lydfil&amp;adressa</translation>
 <translation id="1476607407192946488">Spr&amp;åkinnstillingar</translation>
@@ -32,7 +30,7 @@
 <translation id="1588438908519853928">Normal</translation>
 <translation id="1588870296199743671">Opna lenkja med …</translation>
 <translation id="159359590073980872">Bildemellomlager</translation>
-<translation id="1601560923496285236">Bruk</translation>
+<translation id="1601560923496285236">Ta i bruk</translation>
 <translation id="1603914832182249871">(Privat)</translation>
 <translation id="1627276047960621195">Fildeskriptorar</translation>
 <translation id="1682548588986054654">Nytt privatvindauge</translation>
@@ -45,9 +43,9 @@
 <translation id="1769104665586091481">Opna lenkja i eit nytt &amp;vindauge</translation>
 <translation id="1779468444204342338">Minimum</translation>
 <translation id="1815083418640426271">Lim inn som rein tekst</translation>
-<translation id="1828901632669367785">Skriv ut frå systemvindauget ...</translation>
+<translation id="1828901632669367785">Skriv ut frå systemvindauget …</translation>
 <translation id="1850508293116537636">Roter me&amp;d klokka</translation>
-<translation id="1886996562706621347">La nettstadar få lov til å spørja om å verta standard protokollhandterarar (tilrådd)</translation>
+<translation id="1886996562706621347">La nettstadar få lov til å spørja om å verta standard protokollbehandlarar (tilrådd)</translation>
 <translation id="1901303067676059328">Vel &amp;alle</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1936931585862840749">Bruk eit tal for å visa kor mange kopiar som skal skrivast ut (1 to <ph name= "MAX_COPIES" />).</translation>
@@ -77,7 +75,7 @@
 <translation id="2327492829706409234">Ta appen i bruk</translation>
 <translation id="2348176352564285430">App: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Vel utvidingsmappa.</translation>
-<translation id="2379281330731083556">Skriv ut frå systemvindauget ... <ph name="SHORTCUT_KEY" /></translation>
+<translation id="2379281330731083556">Skriv ut frå systemvindauget … <ph name="SHORTCUT_KEY" /></translation>
 <translation id="2381756643783702095">Spør før sending (tilrådd)</translation>
 <translation id="241082044617551207">Ukjent programtillegg</translation>
 <translation id="2423578206845792524">Lagra &amp;bildet som …</translation>
@@ -97,13 +95,11 @@
 <translation id="2783321960289401138">Lag snarveg …</translation>
 <translation id="2785873697295365461">Fildeskriptorar</translation>
 <translation id="2809586584051668049">og <ph name="NUMBER_ADDITIONAL_DISABLED" /> fleire</translation>
-<translation id="2812989263793994277">Vis ikkje bilete</translation>
-<translation id="2850541429955027218">Legg til drakt</translation>
+<translation id="2850541429955027218">Legg til drakta</translation>
 <translation id="2861941300086904918">Tryggleiksstyrar lokalklient</translation>
 <translation id="2881076733170862447">Når du vel utvidinga</translation>
 <translation id="2889064240420137087">Opna lenkja med …</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> klarte ikkje å kommunisera med denne skrivaren. Sjå til at skrivaren er tilkopla og prøv igjen.</translation>
-<translation id="2904456025988372123">Spør om ein nettstad prøver å lasta ned filer automatisk etter den første</translation>
 <translation id="2913331724188855103">La nettstadar lagra og lesa informasjonskapseldata (tilrådd)</translation>
 <translation id="2931157624143513983">Tilpass til utskriftbart område</translation>
 <translation id="2932085390869194046">Foreslå passord …</translation>
@@ -113,7 +109,7 @@
 <translation id="3003623123441819449">CSS-mellomlager</translation>
 <translation id="3008272652534848354">Nullstill tilgangane</translation>
 <translation id="3012631534724231212">(iframe)</translation>
-<translation id="3021678814754966447">Sy&amp;n rammekjelda</translation>
+<translation id="3021678814754966447">&amp;Vis rammekjelda</translation>
 <translation id="3036546437875325427">Slå på Flash</translation>
 <translation id="3046910703532196514">Nettside, komplett</translation>
 <translation id="3067198360141518313">Køyr dette programtillegget</translation>
@@ -124,7 +120,6 @@
 <translation id="3127156390846601284">Dette vil sletta alle dataa lagra på eininga di for alle viste nettstadar. Vil du halda fram?</translation>
 <translation id="3129173833825111527">Venstremarg</translation>
 <translation id="3144647712221361880">Opna lenkja som</translation>
-<translation id="3154429428035006212">Fråkopla i meir enn éin månad</translation>
 <translation id="3222066309010235055">Førehandsoppteikning: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Vel rotkatalogen til utvidinga som skal pakkast. For å oppdatera utvidinga må du ogso velja den private nøkkelen som skal brukast på nytt.</translation>
 <translation id="3280237271814976245">Lagra &amp;som …</translation>
@@ -136,21 +131,21 @@
 <translation id="3305661444342691068">Opna PDF i førehandsvising</translation>
 <translation id="3308134619352333507">Gøym knappen</translation>
 <translation id="3317459757438853210">Tosidig</translation>
-<translation id="3341703758641437857">Tillatt tilgang til filadresser</translation>
+<translation id="3341703758641437857">Tillat tilgang til filadresser</translation>
 <translation id="3347086966102161372">Kopier &amp;bildeadressa</translation>
 <translation id="3360297538363969800">Utskrifta feila. Sjå over skrivaren din og prøv på nytt.</translation>
 <translation id="3378572629723696641">Denne utvidinga kan ha vorten øydelagd.</translation>
 <translation id="3387614642886316601">Bruk utvida stavekontroll</translation>
 <translation id="3432227430032737297">Fjern alt synleg</translation>
 <translation id="345693547134384690">Opna &amp;bildet i ei ny fane</translation>
-<translation id="3494769164076977169">Spør om ein nettstad prøver å lasta ned filer automatisk etter den første (tilrådd)</translation>
+<translation id="3494769164076977169">Spør dersom ein nettstad prøver å lasta ned filer automatisk etter den første (tilrådd)</translation>
 <translation id="3505030558724226696">Attendekall einingstilgangen</translation>
 <translation id="3511307672085573050">Kopier len&amp;kjeadressa</translation>
 <translation id="354068948465830244">Denne kan lesa og endra nettsidedata</translation>
 <translation id="3560034655160545939">&amp;Stavekontroll</translation>
 <translation id="3587482841069643663">Alle</translation>
 <translation id="3627588569887975815">Opna lenkja i eit privat&amp;vindauge</translation>
-<translation id="3627879631695760395">Installer <ph name="APP" />...</translation>
+<translation id="3627879631695760395">Installer <ph name="APP" /> …</translation>
 <translation id="3678156199662914018">Utviding: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> Skjermdelingsførespurnad</translation>
 <translation id="3711931198657368127">Lim &amp;inn og gå til <ph name="URL" /></translation>
@@ -162,7 +157,6 @@
 <translation id="3838085852053358637">Klarte ikkje å lasta utvidinga</translation>
 <translation id="383891835335927981">Ingen nettstadar er vortne skalerte</translation>
 <translation id="385051799172605136">Attende</translation>
-<translation id="3899879303189199559">Fråkopla i meir enn eitt år</translation>
 <translation id="3905761538810670789">Reparer appen</translation>
 <translation id="3908501907586732282">Ta utvidinga i bruk</translation>
 <translation id="3909791450649380159">Klipp &amp;ut</translation>
@@ -188,12 +182,11 @@
 <translation id="4200983522494130825">Ny &amp;fane</translation>
 <translation id="4225397296022057997">På alle stadar</translation>
 <translation id="4256316378292851214">Lagra &amp;videofila som …</translation>
-<translation id="4278390842282768270">Tillate</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />kB i bruk)</translation>
 <translation id="4345587454538109430">Innstillingar …</translation>
 <translation id="4348766275249686434">Samla feil</translation>
 <translation id="4363771538994847871">Ingen overføringsmål funnen. Treng du hjelp?</translation>
-<translation id="4384652540891215547">Ta utvidinga i ruk</translation>
+<translation id="4384652540891215547">Ta utvidinga i bruk</translation>
 <translation id="4394049700291259645">Slå av</translation>
 <translation id="4409697491990005945">Margar</translation>
 <translation id="4423376891418188461">Før attende innstillingane</translation>
@@ -217,10 +210,8 @@
 <translation id="4988526792673242964">Sider</translation>
 <translation id="49896407730300355">Roter mo&amp;t klokka</translation>
 <translation id="4989966318180235467">Inspiser &amp;bakgrunnssida</translation>
-<translation id="4994474651455208930">La nettstadar få lov til å spørja om å verta standard protokollhandterarar</translation>
 <translation id="5000922062037820727">Blokkert (tilrådd)</translation>
-<translation id="5027562294707732951">Legg til utviding</translation>
-<translation id="5036662165765606524">La ingen nettstadar få lov til å lasta ned fleire filer samstundes</translation>
+<translation id="5027562294707732951">Legg til utvidinga</translation>
 <translation id="5039804452771397117">Tillat</translation>
 <translation id="5057110919553308744">Når du vel utvidinga</translation>
 <translation id="5059526285558225588">Vel kva du vil dela</translation>
@@ -233,7 +224,6 @@
 <translation id="5233231016133573565">Prosess-id</translation>
 <translation id="5233736638227740678">&amp;Lim inn</translation>
 <translation id="5256861893479663409">På alle stadar</translation>
-<translation id="5265562206369321422">Fråkopla i meir enn éi veke</translation>
 <translation id="5269977353971873915">Utskrifta feila</translation>
 <translation id="5284445933715251131">Hald fram med nedlastinga</translation>
 <translation id="52912272896845572">Privatnøkkelfila er ugyldig.</translation>
@@ -278,7 +268,7 @@
 <translation id="5867841422488265304">Søk eller skriv inn ei adresse</translation>
 <translation id="5910363049092958439">Lagra &amp;bildet som …</translation>
 <translation id="5956585768868398362">Er dette søkjesida du venta å finna?</translation>
-<translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> topp)</translation>
+<translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> høgst)</translation>
 <translation id="5965661248935608907">Ho kontrollerer ogso kva side som vert vist når du vel heim-knappen eller søkjer frå adressefeltet.</translation>
 <translation id="5978277834170881274">Bruk gr&amp;unnleggjande stavekontroll</translation>
 <translation id="5979421442488174909">&amp;Omset til <ph name="LANGUAGE" /></translation>
@@ -289,7 +279,6 @@
 <translation id="6122081475643980456">Internettsambandet ditt vert kontrollert</translation>
 <translation id="6147020289383635445">Førehandsvisinga feila.</translation>
 <translation id="6156863943908443225">Skriptmellomlager</translation>
-<translation id="6169666352732958425">Klarer ikkje å senda skrivebordet.</translation>
 <translation id="6196854373336333322">Utvidinga "<ph name="EXTENSION_NAME" />" har teke kontroll over mellom-lagerinnstillingane dine. Det betyr ho kan endra, øydeleggja eller tjuvlytta på alt du gjer på nettet. Om du ikkje veit korfor endringa skjedde, vil du sann- synlegvis ikkje ha ho.</translation>
 <translation id="6206311232642889873">Kopier b&amp;ildet</translation>
 <translation id="6239558157302047471">Last om att &amp;ramma</translation>
@@ -299,7 +288,7 @@
 <translation id="6264365405983206840">Vel &amp;alle</translation>
 <translation id="6268252012308737255">Opna med <ph name="APP" /></translation>
 <translation id="6273677812470008672">Kvalitet</translation>
-<translation id="6295158916970320988">Alle stadane</translation>
+<translation id="6295158916970320988">Alle nettstadane</translation>
 <translation id="6295855836753816081">Lagrar …</translation>
 <translation id="6308937455967653460">Lagra &amp;lenkja som …</translation>
 <translation id="6315493146179903667">Før alle fremst</translation>
@@ -320,8 +309,7 @@
 <translation id="6691936601825168937">&amp;Framover</translation>
 <translation id="6798954102094737107">Programtillegg: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Ta vare på endringane</translation>
-<translation id="6817174620439930047">Spør om ein nettstad ønskjer å bruka systemeksklusive meldingar for å nå MIDI-einingar (tilrådd)</translation>
-<translation id="682123305478866682">Speil arbeidsflata</translation>
+<translation id="6817174620439930047">Spør dersom ein nettstad ønskjer å bruka systemeksklusive meldingar for å nå MIDI-einingar (tilrådd)</translation>
 <translation id="6824564591481349393">Kopier &amp;e-postadressa</translation>
 <translation id="6840155290835956714">Spør før sending</translation>
 <translation id="6886871292305414135">Opna lenkja i ei ny &amp;fane</translation>
@@ -338,12 +326,11 @@
 <translation id="7070484045139057854">Denne kan lesa og endra nettsidedata</translation>
 <translation id="708060913198414444">Kopier lydfil&amp;adressa</translation>
 <translation id="7175353351958621980">Lasta frå:</translation>
-<translation id="7270858098575133036">Spør om ein nettstad ønskjer å bruka systemeksklusive meldingar for å nå MIDI-einingar</translation>
-<translation id="7287143125007575591">Tilgang avvist.</translation>
+<translation id="7287143125007575591">Tilgangen vart avvist.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7385854874724088939">Utskrifta feila. Sjå over skrivaren din og prøv på nytt.</translation>
 <translation id="7412226954991670867">GPU-minne</translation>
-<translation id="7421925624202799674">S&amp;yn kjeldekoden</translation>
+<translation id="7421925624202799674">Vis &amp;kjeldekoden</translation>
 <translation id="7423098979219808738">Spør først</translation>
 <translation id="7427348830195639090">Bakgrunnsside: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7453008956351770337">Ved å velja denne skrivaren, gjev du denne utvidinga løyve til å få tilgang til skrivaren din:</translation>
@@ -358,9 +345,8 @@
 <translation id="7685049629764448582">JavaScript-minne</translation>
 <translation id="7701869757853594372">BRUKAR-referansar</translation>
 <translation id="7704305437604973648">Oppgåve</translation>
-<translation id="7710568461918838723">&amp;Mediedeling ...</translation>
+<translation id="7710568461918838723">&amp;Mediedeling …</translation>
 <translation id="7750228210027921155">Bilde-i-bilde</translation>
-<translation id="7751260505918304024">Vis alt</translation>
 <translation id="7760004034676677601">Er dette oppstartsida du venta å finna?</translation>
 <translation id="7771452384635174008">Utforming</translation>
 <translation id="7782102568078991263">Ingen fleire forslag frå Google</translation>
@@ -373,9 +359,7 @@
 <translation id="7849264908733290972">Opna &amp;bildet i ei ny fane</translation>
 <translation id="7857949311770343000">Er dette den nye fanesida du venta å finna?</translation>
 <translation id="786073089922909430">Teneste: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7885253890047913815">Nylege mål</translation>
 <translation id="7903925330883316394">Verktøy: <ph name="UTILITY_TYPE" /></translation>
-<translation id="7938594894617528435">Er no fråkopla</translation>
 <translation id="7947962633355574091">Kopier v&amp;ideoadressa</translation>
 <translation id="7966241909927244760">Kopier &amp;bildeadressa</translation>
 <translation id="7973394300052703468">Nytt &amp;privatvindauge</translation>
@@ -414,14 +398,12 @@ Ta godt vare på nøkkelfila. Du treng ho for å kunna laga nye utgåver av utvi
 <translation id="8615618338313291042">Privat-app: <ph name="APP_NAME" /></translation>
 <translation id="862750493060684461">CSS-mellomlager</translation>
 <translation id="8661290697478713397">Opna lenkja i eit p&amp;rivatvindauge</translation>
-<translation id="8664389313780386848">S&amp;yn kjeldekoden</translation>
+<translation id="8664389313780386848">Vis &amp;kjeldekoden</translation>
 <translation id="8708000541097332489">Tøm ved avslutning</translation>
 <translation id="8714838604780058252">Bakgrunnsbilde</translation>
 <translation id="8725066075913043281">Prøv igjen</translation>
-<translation id="8757090071857742562">Klarer ikkje å senda skrivebordet. Sjå om du godtok spørsmålet om å dela skjermen din.</translation>
 <translation id="8774934320277480003">Toppmarg</translation>
 <translation id="8798099450830957504">Standard</translation>
-<translation id="8800004011501252845">Syner mål for</translation>
 <translation id="8808478386290700967">Nettbutikk</translation>
 <translation id="8823514049557262177">Kopier lenkje&amp;teksten</translation>
 <translation id="8823704566850948458">Foreslå passord …</translation>
@@ -433,8 +415,7 @@ Ta godt vare på nøkkelfila. Du treng ho for å kunna laga nye utgåver av utvi
 <translation id="8962083179518285172">Gøym detaljane</translation>
 <translation id="8973557916016709913">Fjern skaleringsnivået</translation>
 <translation id="897939795688207351">På <ph name="ORIGIN" /></translation>
-<translation id="8996526648899750015">Legg til konto …</translation>
-<translation id="9003647077635673607">Tillat på alle nettstader</translation>
+<translation id="9003647077635673607">Tillat på alle nettstadar</translation>
 <translation id="9027459031423301635">Opna lenkja i ei &amp;ny fane</translation>
 <translation id="9056810968620647706">Ingen treff.</translation>
 <translation id="9137916601698928395">Opna lenkja som <ph name="USER" /></translation>

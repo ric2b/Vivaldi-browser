@@ -7,6 +7,7 @@
 #include <aclapi.h>
 #include <cfgmgr32.h>
 #include <initguid.h>
+#include <lm.h>
 #include <powrprof.h>
 #include <shobjidl.h>  // Must be before propkey.
 
@@ -33,11 +34,13 @@
 
 #include <limits>
 #include <memory>
+#include <utility>
 
 #include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "base/scoped_native_library.h"
 #include "base/strings/string_util.h"
@@ -45,6 +48,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/scoped_thread_priority.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/timer/elapsed_timer.h"
 #include "base/win/access_token.h"
 #include "base/win/core_winrt_util.h"
 #include "base/win/propvarutil.h"
@@ -54,6 +58,7 @@
 #include "base/win/scoped_hstring.h"
 #include "base/win/scoped_propvariant.h"
 #include "base/win/shlwapi.h"
+#include "base/win/static_constants.h"
 #include "base/win/windows_version.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -182,6 +187,47 @@ bool* GetRegisteredWithManagementStateStorage() {
     return SUCCEEDED(hr) && is_managed;
   }();
 
+  return &state;
+}
+
+// TODO (crbug/1300219): return a DSREG_JOIN_TYPE* instead of bool*.
+bool* GetAzureADJoinStateStorage() {
+  static bool state = []() {
+    base::ElapsedTimer timer;
+
+    // Mitigate the issues caused by loading DLLs on a background thread
+    // (http://crbug/973868).
+    SCOPED_MAY_LOAD_LIBRARY_AT_BACKGROUND_PRIORITY();
+
+    ScopedNativeLibrary netapi32(
+        base::LoadSystemLibrary(FILE_PATH_LITERAL("netapi32.dll")));
+    if (!netapi32.is_valid())
+      return false;
+
+    const auto net_get_aad_join_information_function =
+        reinterpret_cast<decltype(&::NetGetAadJoinInformation)>(
+            netapi32.GetFunctionPointer("NetGetAadJoinInformation"));
+    if (!net_get_aad_join_information_function)
+      return false;
+
+    const auto net_free_aad_join_information_function =
+        reinterpret_cast<decltype(&::NetFreeAadJoinInformation)>(
+            netapi32.GetFunctionPointer("NetFreeAadJoinInformation"));
+    DPCHECK(net_free_aad_join_information_function);
+
+    DSREG_JOIN_INFO* join_info = nullptr;
+    HRESULT hr = net_get_aad_join_information_function(/*pcszTenantId=*/nullptr,
+                                                       &join_info);
+    const bool is_aad_joined =
+        SUCCEEDED(hr) && join_info && join_info->joinType != DSREG_UNKNOWN_JOIN;
+    if (join_info) {
+      net_free_aad_join_information_function(join_info);
+    }
+
+    base::UmaHistogramTimes("EnterpriseCheck.AzureADJoinStatusCheckTime",
+                            timer.Elapsed());
+    return is_aad_joined;
+  }();
   return &state;
 }
 
@@ -599,6 +645,10 @@ bool IsDeviceRegisteredWithManagement() {
   return *GetRegisteredWithManagementStateStorage();
 }
 
+bool IsJoinedToAzureAD() {
+  return *GetAzureADJoinStateStorage();
+}
+
 bool IsUser32AndGdi32Available() {
   static auto is_user32_and_gdi32_available = []() {
     // If win32k syscalls aren't disabled, then user32 and gdi32 are available.
@@ -815,6 +865,32 @@ bool IsCurrentSessionRemote() {
   return current_session_id != glass_session_id;
 }
 
+#if !defined(OFFICIAL_BUILD)
+bool IsAppVerifierEnabled(const std::wstring& process_name) {
+  RegKey key;
+
+  // Look for GlobalFlag in the IFEO\chrome.exe key. If it is present then
+  // Application Verifier or gflags.exe are configured. Most GlobalFlag
+  // settings are experimentally determined to be incompatible with renderer
+  // code integrity and a safe set is not known so any GlobalFlag entry is
+  // assumed to mean that Application Verifier (or pageheap) are enabled.
+  // The settings are propagated to both 64-bit WOW6432Node versions of the
+  // registry on 64-bit Windows, so only one check is needed.
+  return key.Open(
+             HKEY_LOCAL_MACHINE,
+             (L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Image File "
+              L"Execution Options\\" +
+              process_name)
+                 .c_str(),
+             KEY_READ | KEY_WOW64_64KEY) == ERROR_SUCCESS &&
+         key.HasValue(L"GlobalFlag");
+}
+#endif  // !defined(OFFICIAL_BUILD)
+
+bool IsAppVerifierLoaded() {
+  return GetModuleHandleA(kApplicationVerifierDllName);
+}
+
 ScopedDomainStateForTesting::ScopedDomainStateForTesting(bool state)
     : initial_state_(IsEnrolledToDomain()) {
   *GetDomainEnrollmentStateStorage() = state;
@@ -833,6 +909,13 @@ ScopedDeviceRegisteredWithManagementForTesting::
 ScopedDeviceRegisteredWithManagementForTesting::
     ~ScopedDeviceRegisteredWithManagementForTesting() {
   *GetRegisteredWithManagementStateStorage() = initial_state_;
+}
+
+ScopedAzureADJoinStateForTesting::ScopedAzureADJoinStateForTesting(bool state)
+    : initial_state_(std::exchange(*GetAzureADJoinStateStorage(), state)) {}
+
+ScopedAzureADJoinStateForTesting::~ScopedAzureADJoinStateForTesting() {
+  *GetAzureADJoinStateStorage() = initial_state_;
 }
 
 }  // namespace win

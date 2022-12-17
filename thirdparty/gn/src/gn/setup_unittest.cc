@@ -46,6 +46,63 @@ TEST_F(SetupTest, DotGNFileIsGenDep) {
   EXPECT_EQ(gen_deps[0], base::MakeAbsoluteFilePath(dot_gn_name));
 }
 
+TEST_F(SetupTest, EmptyScriptExecutableDoesNotGenerateError) {
+  base::CommandLine cmdline(base::CommandLine::NO_PROGRAM);
+
+  // Create a temp directory containing a .gn file and a BUILDCONFIG.gn file,
+  // pass it as --root.
+  base::ScopedTempDir in_temp_dir;
+  ASSERT_TRUE(in_temp_dir.CreateUniqueTempDir());
+  base::FilePath in_path = in_temp_dir.GetPath();
+  base::FilePath dot_gn_name = in_path.Append(FILE_PATH_LITERAL(".gn"));
+  WriteFile(dot_gn_name,
+            "buildconfig = \"//BUILDCONFIG.gn\"\n"
+            "script_executable = \"\"\n");
+
+  WriteFile(in_path.Append(FILE_PATH_LITERAL("BUILDCONFIG.gn")), "");
+  cmdline.AppendSwitchASCII(switches::kRoot, FilePathToUTF8(in_path));
+
+  // Create another temp dir for writing the generated files to.
+  base::ScopedTempDir build_temp_dir;
+  ASSERT_TRUE(build_temp_dir.CreateUniqueTempDir());
+
+  // Run setup and check that the .gn file is in the scheduler's gen deps.
+  Setup setup;
+  Err err;
+  EXPECT_TRUE(setup.DoSetupWithErr(FilePathToUTF8(build_temp_dir.GetPath()),
+                                   true, cmdline, &err));
+}
+
+#if defined(OS_WIN)
+TEST_F(SetupTest, MissingScriptExeGeneratesSetupErrorOnWindows) {
+  base::CommandLine cmdline(base::CommandLine::NO_PROGRAM);
+
+  // Create a temp directory containing a .gn file and a BUILDCONFIG.gn file,
+  // pass it as --root.
+  base::ScopedTempDir in_temp_dir;
+  ASSERT_TRUE(in_temp_dir.CreateUniqueTempDir());
+  base::FilePath in_path = in_temp_dir.GetPath();
+  base::FilePath dot_gn_name = in_path.Append(FILE_PATH_LITERAL(".gn"));
+  WriteFile(dot_gn_name,
+            "buildconfig = \"//BUILDCONFIG.gn\"\n"
+            "script_executable = \"this_does_not_exist\"\n");
+
+  WriteFile(in_path.Append(FILE_PATH_LITERAL("BUILDCONFIG.gn")), "");
+  cmdline.AppendSwitchASCII(switches::kRoot, FilePathToUTF8(in_path));
+
+  // Create another temp dir for writing the generated files to.
+  base::ScopedTempDir build_temp_dir;
+  ASSERT_TRUE(build_temp_dir.CreateUniqueTempDir());
+
+  // Run setup and check that the .gn file is in the scheduler's gen deps.
+  Setup setup;
+  Err err;
+  EXPECT_FALSE(setup.DoSetupWithErr(FilePathToUTF8(build_temp_dir.GetPath()),
+                                    true, cmdline, &err));
+  EXPECT_TRUE(err.has_error());
+}
+#endif  // defined(OS_WIN)
+
 static void RunExtensionCheckTest(std::string extension,
                                   bool success,
                                   const std::string& expected_error_message) {
@@ -75,7 +132,6 @@ static void RunExtensionCheckTest(std::string extension,
             setup.DoSetupWithErr(FilePathToUTF8(build_temp_dir.GetPath()), true,
                                  cmdline, &err));
   EXPECT_EQ(success, !err.has_error());
-  EXPECT_EQ(expected_error_message, err.message());
 }
 
 TEST_F(SetupTest, NoSeparatorInExtension) {

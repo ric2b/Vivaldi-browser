@@ -17,6 +17,7 @@ namespace blink {
 class LayoutBox;
 class NGBlockBreakToken;
 class NGBoxFragmentBuilder;
+class NGColumnSpannerPath;
 class NGConstraintSpace;
 class NGEarlyBreak;
 class NGFragmentItems;
@@ -38,7 +39,8 @@ class CORE_EXPORT NGBlockNode : public NGLayoutInputNode {
 
   const NGLayoutResult* Layout(const NGConstraintSpace& constraint_space,
                                const NGBlockBreakToken* break_token = nullptr,
-                               const NGEarlyBreak* = nullptr) const;
+                               const NGEarlyBreak* = nullptr,
+                               const NGColumnSpannerPath* = nullptr) const;
 
   // This method is just for use within the |NGSimplifiedLayoutAlgorithm|.
   //
@@ -96,6 +98,10 @@ class CORE_EXPORT NGBlockNode : public NGLayoutInputNode {
 
   NGBlockNode GetRenderedLegend() const;
   NGBlockNode GetFieldsetContent() const;
+
+  // Return true if this is the document root and it is paginated. A paginated
+  // root establishes a fragmentation context.
+  bool IsPaginatedRoot() const;
 
   bool IsNGTableCell() const {
     return box_->IsTableCell() && !box_->IsTableCellLegacy();
@@ -184,6 +190,9 @@ class CORE_EXPORT NGBlockNode : public NGLayoutInputNode {
   // Write back resolved margins to legacy.
   void StoreMargins(const NGConstraintSpace&, const NGBoxStrut& margins);
   void StoreMargins(const NGPhysicalBoxStrut& margins);
+
+  // Write the inline-size of columns in a multicol container to legacy.
+  void StoreColumnInlineSize(LayoutUnit);
 
   static bool CanUseNewLayout(const LayoutBox&);
   bool CanUseNewLayout() const;
@@ -288,5 +297,7 @@ class DevtoolsReadonlyLayoutScope {
 };
 
 }  // namespace blink
+
+WTF_ALLOW_CLEAR_UNUSED_SLOTS_WITH_MEM_FUNCTIONS(blink::NGBlockNode)
 
 #endif  // THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_NG_NG_BLOCK_NODE_H_

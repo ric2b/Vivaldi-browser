@@ -5,27 +5,14 @@
 #include "media/mojo/mojom/audio_processing_mojom_traits.h"
 
 #include "media/base/audio_processing.h"
+#include "media/mojo/mojom/audio_processing.mojom.h"
 #include "media/mojo/mojom/traits_test_service.mojom.h"
 #include "mojo/public/cpp/test_support/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace media {
 
-namespace {
-
-class AudioProcessingMojomTraitsTest : public testing::Test {
- public:
-  AudioProcessingMojomTraitsTest() = default;
-
-  AudioProcessingMojomTraitsTest(const AudioProcessingMojomTraitsTest&) =
-      delete;
-  AudioProcessingMojomTraitsTest& operator=(
-      const AudioProcessingMojomTraitsTest&) = delete;
-};
-
-}  // namespace
-
-TEST_F(AudioProcessingMojomTraitsTest, AudioProcessingSettings) {
+TEST(AudioProcessingMojomTraitsTest, AudioProcessingSettings) {
   AudioProcessingSettings settings_in;
   AudioProcessingSettings settings_out;
 
@@ -52,6 +39,31 @@ TEST_F(AudioProcessingMojomTraitsTest, AudioProcessingSettings) {
       settings_in, settings_out);
 
   EXPECT_EQ(settings_in, settings_out);
+}
+
+TEST(AudioProcessingMojomTraitsTest, AudioProcessingStats) {
+  AudioProcessingStats stats_in;
+  AudioProcessingStats stats_out;
+
+  mojo::test::SerializeAndDeserialize<media::mojom::AudioProcessingStats>(
+      stats_in, stats_out);
+
+  EXPECT_EQ(stats_in.echo_return_loss, stats_out.echo_return_loss);
+  EXPECT_EQ(stats_in.echo_return_loss_enhancement,
+            stats_out.echo_return_loss_enhancement);
+
+  // Set all fields to non-default values.
+  ASSERT_FALSE(stats_in.echo_return_loss);
+  ASSERT_FALSE(stats_in.echo_return_loss_enhancement);
+  stats_in.echo_return_loss = 1.0;
+  stats_in.echo_return_loss_enhancement = 2.0;
+
+  mojo::test::SerializeAndDeserialize<media::mojom::AudioProcessingStats>(
+      stats_in, stats_out);
+
+  EXPECT_EQ(stats_in.echo_return_loss, stats_out.echo_return_loss);
+  EXPECT_EQ(stats_in.echo_return_loss_enhancement,
+            stats_out.echo_return_loss_enhancement);
 }
 
 }  // namespace media

@@ -11,6 +11,8 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "third_party/skia/include/core/SkBitmap.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/event.h"
 #include "ui/gfx/geometry/insets.h"
@@ -109,16 +111,14 @@ class TestBubbleFrameView : public BubbleFrameView {
   }
 
   BubbleBorder::Arrow GetBorderArrow() const {
-    return bubble_border_for_testing()->arrow();
+    return bubble_border()->arrow();
   }
 
   SkColor GetBorderBackgroundColor() const {
-    return bubble_border_for_testing()->background_color();
+    return bubble_border()->background_color();
   }
 
-  gfx::Insets GetBorderInsets() const {
-    return bubble_border_for_testing()->GetInsets();
-  }
+  gfx::Insets GetBorderInsets() const { return bubble_border()->GetInsets(); }
 
   // BubbleFrameView:
   Widget* GetWidget() override { return widget_.get(); }

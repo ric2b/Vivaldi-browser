@@ -62,7 +62,9 @@ public class SigninFirstRunFragment extends Fragment implements FirstRunFragment
     public void onAttach(Context context) {
         super.onAttach(context);
         getPageDelegate().getPolicyLoadListener().onAvailable(
-                hasPolicies -> notifyCoordinatorWhenNativeAndPolicyAreLoaded());
+                hasPolicies -> notifyCoordinatorWhenNativePolicyAndChildStatusAreLoaded());
+        getPageDelegate().getChildAccountStatusListener().onAvailable(
+                ignored -> notifyCoordinatorWhenNativePolicyAndChildStatusAreLoaded());
         if (getPageDelegate().isLaunchedFromCct()) {
             mSkipTosDialogPolicyListener = new SkipTosDialogPolicyListener(
                     getPageDelegate().getPolicyLoadListener(), EnterpriseInfo.getInstance(), null);
@@ -134,7 +136,15 @@ public class SigninFirstRunFragment extends Fragment implements FirstRunFragment
     @Override
     public void onNativeInitialized() {
         mNativeInitialized = true;
-        notifyCoordinatorWhenNativeAndPolicyAreLoaded();
+        notifyCoordinatorWhenNativePolicyAndChildStatusAreLoaded();
+    }
+
+    /** Implements {@link FirstRunFragment}. */
+    @Override
+    public void reset() {
+        if (mSigninFirstRunCoordinator != null) {
+            mSigninFirstRunCoordinator.reset();
+        }
     }
 
     /** Implements {@link SigninFirstRunCoordinator.Delegate}. */
@@ -213,15 +223,20 @@ public class SigninFirstRunFragment extends Fragment implements FirstRunFragment
         mSigninFirstRunCoordinator = coordinator;
     }
 
-    private void notifyCoordinatorWhenNativeAndPolicyAreLoaded() {
+    /**
+     * Notifies the coordinator that native, policies and child account status has been loaded.
+     */
+    private void notifyCoordinatorWhenNativePolicyAndChildStatusAreLoaded() {
         // This may happen when the native initialized supplier in FirstRunActivity calls back after
         // the fragment has been detached from the activity. See https://crbug.com/1294998.
         if (getPageDelegate() == null) return;
 
         if (mSigninFirstRunCoordinator != null && mNativeInitialized
+                && getPageDelegate().getChildAccountStatusListener().get() != null
                 && getPageDelegate().getPolicyLoadListener().get() != null) {
-            mSigninFirstRunCoordinator.onNativeAndPolicyLoaded(
+            mSigninFirstRunCoordinator.onNativePolicyAndChildStatusLoaded(
                     getPageDelegate().getPolicyLoadListener().get());
+            getPageDelegate().recordNativeAndPoliciesLoadedHistogram();
             mAllowCrashUpload = !mSigninFirstRunCoordinator.isMetricsReportingDisabledByPolicy();
         }
     }
@@ -237,7 +252,7 @@ public class SigninFirstRunFragment extends Fragment implements FirstRunFragment
                 null, false);
         setSigninFirstRunCoordinator(new SigninFirstRunCoordinator(requireContext(), view,
                 mModalDialogManager, this, PrivacyPreferencesManagerImpl.getInstance()));
-        notifyCoordinatorWhenNativeAndPolicyAreLoaded();
+        notifyCoordinatorWhenNativePolicyAndChildStatusAreLoaded();
         return view;
     }
 }

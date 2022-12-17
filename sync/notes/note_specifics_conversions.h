@@ -32,8 +32,6 @@ struct EntityData;
 
 namespace sync_notes {
 
-class SyncedNoteTracker;
-
 // Canonicalize |node_title| similar to legacy client's implementation by
 // truncating and the appending ' ' in some cases.
 std::string FullTitleToLegacyCanonicalizedTitle(const std::string& node_title);
@@ -93,14 +91,6 @@ bool HasExpectedNoteGuid(const sync_pb::NotesSpecifics& specifics,
                          const syncer::ClientTagHash& client_tag_hash,
                          const std::string& originator_cache_guid,
                          const std::string& originator_client_item_id);
-
-// Quirk to work around data corruption issues due to crbug.com/1231450. This
-// logic can likely be cleaned up after a few milestones.
-void MaybeFixGuidInSpecificsDueToPastBug(const SyncedNoteTracker& tracker,
-                                         syncer::EntityData* update_entity);
-
-std::string BugGuid();
-
 }  // namespace sync_notes
 
 #endif  // SYNC_NOTES_NOTE_SPECIFICS_CONVERSIONS_H_

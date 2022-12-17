@@ -6,8 +6,6 @@
 
 #include <utility>
 
-#include "build/build_config.h"
-
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/containers/contains.h"
@@ -16,7 +14,9 @@
 #include "base/json/json_reader.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/observer_list.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "components/policy/core/common/cloud/client_data_delegate.h"
 #include "components/policy/core/common/cloud/cloud_policy_util.h"
 #include "components/policy/core/common/cloud/cloud_policy_validator.h"
@@ -172,6 +172,11 @@ void CloudPolicyClient::RegistrationParameters::SetPsmExecutionResult(
 void CloudPolicyClient::RegistrationParameters::SetPsmDeterminationTimestamp(
     absl::optional<int64_t> new_psm_timestamp) {
   psm_determination_timestamp = new_psm_timestamp;
+}
+
+void CloudPolicyClient::RegistrationParameters::SetLicenseType(
+    em::LicenseType_LicenseTypeEnum license_type) {
+  license_type_ = license_type;
 }
 
 CloudPolicyClient::Observer::~Observer() {}
@@ -1402,7 +1407,7 @@ void CloudPolicyClient::OnRealtimeReportUploadCompleted(
     DeviceManagementService::Job* job,
     DeviceManagementStatus status,
     int net_error,
-    const base::Value& response) {
+    absl::optional<base::Value::Dict> response) {
   status_ = status;
   if (status != DM_STATUS_SUCCESS)
     NotifyClientError();
@@ -1419,7 +1424,7 @@ void CloudPolicyClient::OnEncryptedReportUploadCompleted(
     DeviceManagementService::Job* job,
     DeviceManagementStatus status,
     int net_error,
-    const base::Value& response) {
+    absl::optional<base::Value::Dict> response) {
   if (job == nullptr) {
     std::move(callback).Run(absl::nullopt);
     return;
@@ -1428,7 +1433,7 @@ void CloudPolicyClient::OnEncryptedReportUploadCompleted(
   if (status != DM_STATUS_SUCCESS) {
     NotifyClientError();
   }
-  std::move(callback).Run(response.Clone());
+  std::move(callback).Run(std::move(response));
   RemoveJob(job);
 }
 
@@ -1703,6 +1708,10 @@ void CloudPolicyClient::CreateDeviceRegisterRequest(
   if (params.psm_determination_timestamp.has_value()) {
     request->set_psm_determination_timestamp_ms(
         params.psm_determination_timestamp.value());
+  }
+  if (params.license_type_.has_value()) {
+    request->mutable_license_type()->set_license_type(
+        params.license_type_.value());
   }
 }
 

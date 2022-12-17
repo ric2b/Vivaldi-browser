@@ -15,6 +15,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/threading/thread_restrictions.h"
+#include "build/build_config.h"
 #include "media/base/audio_bus.h"
 #include "media/base/data_source.h"
 #include "media/base/decoder_buffer.h"
@@ -28,7 +29,7 @@
 #include "platform_media/renderer/decoders/ipc_factory.h"
 #include "platform_media/renderer/pipeline/protocol_sniffer.h"
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 #include "base/mac/mac_util.h"
 #endif
 

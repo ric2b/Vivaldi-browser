@@ -8,6 +8,7 @@
 #include "components/cbor/values.h"
 #include "components/cbor/writer.h"
 #include "crypto/random.h"
+#include "device/fido/cable/cable_discovery_data.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/boringssl/src/include/openssl/ec.h"
 #include "third_party/boringssl/src/include/openssl/ec_key.h"
@@ -78,7 +79,7 @@ TEST(CableV2Encoding, EIDEncrypt) {
 TEST(CableV2Encoding, QRs) {
   std::array<uint8_t, kQRKeySize> qr_key;
   crypto::RandBytes(qr_key);
-  std::string url = qr::Encode(qr_key);
+  std::string url = qr::Encode(qr_key, FidoRequestType::kMakeCredential);
   const absl::optional<qr::Components> decoded = qr::Parse(url);
   ASSERT_TRUE(decoded.has_value()) << url;
   static_assert(EXTENT(qr_key) >= EXTENT(decoded->secret), "");
@@ -90,9 +91,205 @@ TEST(CableV2Encoding, QRs) {
   // number should only grow over time.
   EXPECT_GE(decoded->num_known_domains, 2u);
 
+  // Chromium always sets this flag.
+  EXPECT_TRUE(decoded->supports_linking.value_or(false));
+
+  EXPECT_EQ(decoded->request_type, FidoRequestType::kMakeCredential);
+
   url[0] ^= 4;
   EXPECT_FALSE(qr::Parse(url));
   EXPECT_FALSE(qr::Parse("nonsense"));
+}
+
+TEST(CableV2Encoding, KnownQRs) {
+  static const uint8_t kCompressedPoint[] = {
+      0x03, 0x36, 0x4C, 0x15, 0xEE, 0xC3, 0x43, 0x31, 0xD2, 0x86, 0x57,
+      0x57, 0x42, 0x1D, 0x49, 0x7E, 0x56, 0x9E, 0x1E, 0xBA, 0x6C, 0xFF,
+      0x9A, 0x69, 0xD3, 0x2E, 0x90, 0xF1, 0x9E, 0x7F, 0x6F, 0xD1, 0x5E,
+  };
+  static const uint8_t kQRSecret[16] = {0};
+
+  const struct {
+    std::function<void(cbor::Value::MapValue* m)> build;
+    bool is_valid;
+    int64_t num_known_domains;
+    absl::optional<bool> supports_linking;
+    FidoRequestType request_type;
+  } kTests[] = {
+      {
+          // Basic, but valid, QR.
+          [](cbor::Value::MapValue* m) {
+            m->emplace(0, base::span(kCompressedPoint));
+            m->emplace(1, base::span(kQRSecret));
+          },
+          /* is_valid= */ true,
+          /* num_known_domains= */ 0,
+          /* supports_linking= */ absl::nullopt,
+          /* request_type= */ FidoRequestType::kGetAssertion,
+      },
+      {
+          // QR with an invalid compressed point.
+          [](cbor::Value::MapValue* m) {
+            uint8_t invalid_point[sizeof(kCompressedPoint)];
+            memcpy(invalid_point, kCompressedPoint, sizeof(invalid_point));
+            invalid_point[sizeof(invalid_point) - 1] ^= 3;
+            m->emplace(0, base::span(invalid_point));
+            m->emplace(1, base::span(kQRSecret));
+          },
+          /* is_valid= */ false,
+      },
+      {
+          // Incorrect structure.
+          [](cbor::Value::MapValue* m) {
+            m->emplace(0, 42);  // invalid: not a bytestring
+            m->emplace(1, base::span(kQRSecret));
+          },
+          /* is_valid= */ false,
+      },
+      {
+          // Valid, contains number of known domains.
+          [](cbor::Value::MapValue* m) {
+            m->emplace(0, base::span(kCompressedPoint));
+            m->emplace(1, base::span(kQRSecret));
+            m->emplace(2, 4567);
+          },
+          /* is_valid= */ true,
+          /* num_known_domains= */ 4567,
+          /* supports_linking= */ absl::nullopt,
+          /* request_type= */ FidoRequestType::kGetAssertion,
+      },
+      {
+          // Incorrect structure.
+          [](cbor::Value::MapValue* m) {
+            m->emplace(0, base::span(kCompressedPoint));
+            m->emplace(1, base::span(kQRSecret));
+            m->emplace(2, "foo");  // invalid: not a number
+          },
+          /* is_valid= */ false,
+      },
+      {
+          // Supports linking.
+          [](cbor::Value::MapValue* m) {
+            m->emplace(0, base::span(kCompressedPoint));
+            m->emplace(1, base::span(kQRSecret));
+            m->emplace(4, true);
+          },
+          /* is_valid= */ true,
+          /* num_known_domains= */ 0,
+          /* supports_linking= */ true,
+          /* request_type= */ FidoRequestType::kGetAssertion,
+      },
+      {
+          // Explicitly does not support linking.
+          [](cbor::Value::MapValue* m) {
+            m->emplace(0, base::span(kCompressedPoint));
+            m->emplace(1, base::span(kQRSecret));
+            m->emplace(4, false);
+          },
+          /* is_valid= */ true,
+          /* num_known_domains= */ 0,
+          /* supports_linking= */ false,
+          /* request_type= */ FidoRequestType::kGetAssertion,
+      },
+      {
+          // Incorrect structure.
+          [](cbor::Value::MapValue* m) {
+            m->emplace(0, base::span(kCompressedPoint));
+            m->emplace(1, base::span(kQRSecret));
+            m->emplace(4, "foo");  // invalid: not a boolean
+          },
+          /* is_valid= */ false,
+      },
+      {
+          // Includes request type.
+          [](cbor::Value::MapValue* m) {
+            m->emplace(0, base::span(kCompressedPoint));
+            m->emplace(1, base::span(kQRSecret));
+            m->emplace(5, "ga");
+          },
+          /* is_valid= */ true,
+          /* num_known_domains= */ 0,
+          /* supports_linking= */ absl::nullopt,
+          /* request_type= */ FidoRequestType::kGetAssertion,
+      },
+      {
+          // Other request type.
+          [](cbor::Value::MapValue* m) {
+            m->emplace(0, base::span(kCompressedPoint));
+            m->emplace(1, base::span(kQRSecret));
+            m->emplace(5, "mc");
+          },
+          /* is_valid= */ true,
+          /* num_known_domains= */ 0,
+          /* supports_linking= */ absl::nullopt,
+          /* request_type= */ FidoRequestType::kMakeCredential,
+      },
+      {
+          // Unknown request type.
+          [](cbor::Value::MapValue* m) {
+            m->emplace(0, base::span(kCompressedPoint));
+            m->emplace(1, base::span(kQRSecret));
+            m->emplace(5, "XX");  // unknown values are mapped to "ga"
+          },
+          /* is_valid= */ true,
+          /* num_known_domains= */ 0,
+          /* supports_linking= */ absl::nullopt,
+          /* request_type= */ FidoRequestType::kGetAssertion,
+      },
+      {
+          // Incorrect structure.
+          [](cbor::Value::MapValue* m) {
+            m->emplace(0, base::span(kCompressedPoint));
+            m->emplace(1, base::span(kQRSecret));
+            m->emplace(5, 42);  // invalid: not a string
+          },
+          /* is_valid= */ false,
+      },
+      {
+          // Contains an unknown key.
+          [](cbor::Value::MapValue* m) {
+            m->emplace(0, base::span(kCompressedPoint));
+            m->emplace(1, base::span(kQRSecret));
+            m->emplace(1000, 42);  // unknown keys are ignored.
+          },
+          /* is_valid= */ true,
+          /* num_known_domains= */ 0,
+          /* supports_linking= */ absl::nullopt,
+          /* request_type= */ FidoRequestType::kGetAssertion,
+      },
+  };
+
+  int test_num = 0;
+  for (const auto& test : kTests) {
+    SCOPED_TRACE(test_num);
+    test_num++;
+
+    cbor::Value::MapValue map;
+    test.build(&map);
+    const absl::optional<std::vector<uint8_t>> qr_data =
+        cbor::Writer::Write(cbor::Value(std::move(map)));
+    const std::string qr = std::string("FIDO:/") + qr::BytesToDigits(*qr_data);
+    const absl::optional<qr::Components> decoded = qr::Parse(qr);
+
+    EXPECT_EQ(decoded.has_value(), test.is_valid);
+    if (!decoded.has_value() || !test.is_valid) {
+      continue;
+    }
+
+    EXPECT_EQ(decoded->num_known_domains, test.num_known_domains);
+    EXPECT_EQ(decoded->supports_linking, test.supports_linking);
+    EXPECT_EQ(decoded->request_type, test.request_type);
+  }
+}
+
+TEST(CableV2Encoding, RequestTypeToString) {
+  for (const auto type :
+       {FidoRequestType::kMakeCredential, FidoRequestType::kGetAssertion}) {
+    EXPECT_EQ(type, RequestTypeFromString(RequestTypeToString(type)));
+  }
+
+  EXPECT_EQ(FidoRequestType::kGetAssertion, RequestTypeFromString("nonsense"));
+  EXPECT_EQ(FidoRequestType::kGetAssertion, RequestTypeFromString(""));
 }
 
 TEST(CableV2Encoding, PaddedCBOR) {
@@ -249,6 +446,89 @@ TEST(CableV2Encoding, HandshakeSignatures) {
   EXPECT_FALSE(VerifyPairingSignature(kSeed1, authenticator_public_key,
                                       handshake_hash, signature));
   signature[0] ^= 1;
+}
+
+TEST(CableV2Encoding, ParseInvalidLinkingInformation) {
+  const std::array<uint8_t, kQRSeedSize> local_identity_seed = {1, 2, 3, 4};
+  const tunnelserver::KnownDomainID domain(0);
+  const std::array<uint8_t, 32> handshake_hash = {5, 6, 7, 8};
+  std::array<uint8_t, kP256X962Length> public_key = {9, 10, 11, 12};
+
+  EXPECT_FALSE(Pairing::Parse(cbor::Value(1), domain, local_identity_seed,
+                              handshake_hash));
+  EXPECT_FALSE(Pairing::Parse(cbor::Value("foo"), domain, local_identity_seed,
+                              handshake_hash));
+
+  {
+    cbor::Value::MapValue map;
+    map.emplace(1, handshake_hash);
+    EXPECT_FALSE(Pairing::Parse(cbor::Value(std::move(map)), domain,
+                                local_identity_seed, handshake_hash));
+  }
+
+  {
+    cbor::Value::MapValue map;
+    map.emplace(1, handshake_hash);
+    map.emplace(2, handshake_hash);
+    map.emplace(3, handshake_hash);
+    map.emplace(4, handshake_hash);
+    map.emplace(5, handshake_hash);
+    map.emplace(6, handshake_hash);
+    EXPECT_FALSE(Pairing::Parse(cbor::Value(std::move(map)), domain,
+                                local_identity_seed, handshake_hash));
+  }
+
+  {
+    cbor::Value::MapValue map;
+    map.emplace(1, handshake_hash);
+    map.emplace(2, handshake_hash);
+    map.emplace(3, handshake_hash);
+    map.emplace(4, public_key);
+    map.emplace(5, "test");
+    map.emplace(6, handshake_hash);
+    // This is structurally valid, but the public key is invalid.
+    EXPECT_FALSE(Pairing::Parse(cbor::Value(std::move(map)), domain,
+                                local_identity_seed, handshake_hash));
+  }
+
+  bssl::UniquePtr<EC_KEY> key(EC_KEY_new_by_curve_name(NID_X9_62_prime256v1));
+  CHECK(EC_KEY_generate_key(key.get()));
+  CHECK_EQ(sizeof(public_key),
+           EC_POINT_point2oct(EC_KEY_get0_group(key.get()),
+                              EC_KEY_get0_public_key(key.get()),
+                              POINT_CONVERSION_UNCOMPRESSED, public_key.data(),
+                              sizeof(public_key), /*ctx=*/nullptr));
+
+  {
+    cbor::Value::MapValue map;
+    map.emplace(1, handshake_hash);
+    map.emplace(2, handshake_hash);
+    map.emplace(3, handshake_hash);
+    map.emplace(4, public_key);
+    map.emplace(5, "test");
+    map.emplace(6, handshake_hash);
+    // This is completely valid except that the signature is wrong.
+    EXPECT_FALSE(Pairing::Parse(cbor::Value(std::move(map)), domain,
+                                local_identity_seed, handshake_hash));
+  }
+
+  {
+    bssl::UniquePtr<EC_KEY> identity_key(EC_KEY_derive_from_secret(
+        EC_KEY_get0_group(key.get()), local_identity_seed.data(),
+        local_identity_seed.size()));
+
+    cbor::Value::MapValue map;
+    map.emplace(1, handshake_hash);
+    map.emplace(2, handshake_hash);
+    map.emplace(3, handshake_hash);
+    map.emplace(4, public_key);
+    map.emplace(5, "test");
+    map.emplace(6, CalculatePairingSignature(identity_key.get(), public_key,
+                                             handshake_hash));
+    // This is fully valid.
+    EXPECT_TRUE(Pairing::Parse(cbor::Value(std::move(map)), domain,
+                               local_identity_seed, handshake_hash));
+  }
 }
 
 class CableV2HandshakeTest : public ::testing::Test {

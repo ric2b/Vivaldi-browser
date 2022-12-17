@@ -215,7 +215,7 @@ class ChromeDownloadManagerDelegate
                            ConfirmationCallback callback) override;
   void DetermineLocalPath(download::DownloadItem* download,
                           const base::FilePath& virtual_path,
-                          LocalPathCallback callback) override;
+                          download::LocalPathCallback callback) override;
   void CheckDownloadUrl(download::DownloadItem* download,
                         const base::FilePath& suggested_virtual_path,
                         CheckDownloadUrlCallback callback) override;
@@ -343,7 +343,7 @@ class ChromeDownloadManagerDelegate
   base::WeakPtrFactory<ChromeDownloadManagerDelegate> weak_ptr_factory_{this};
 
 // Vivaldi - External download manager support
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   bool DownloadWithExternalDownloadManager(gfx::NativeWindow native_window,
                           DownloadLocationDialogType dialog_type,
                           const base::FilePath& suggested_path,

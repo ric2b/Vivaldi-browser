@@ -19,7 +19,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/task/post_task.h"
 #include "base/task/task_runner_util.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread.h"
@@ -147,39 +146,6 @@ PpapiPluginProcessHost* PluginServiceImpl::FindOrStartPpapiPluginProcess(
   if (!GetContentClient()->browser()->ShouldAllowPluginCreation(embedder_origin,
                                                                 *info)) {
     return nullptr;
-  }
-
-  if (info->permissions & ppapi::PERMISSION_PDF) {
-    // Extra assertions for the PDF plugin.  These assertions do not apply to
-    // the test plugin.
-    if (0 == (info->permissions & ppapi::PERMISSION_TESTING)) {
-      // We want to limit ability to bypass |request_initiator_origin_lock| to
-      // trustworthy renderers.  PDF plugin is okay, because it is always hosted
-      // by the PDF extension (mhjfbmdgcfjbbpaeojofohoefgiehjai) or
-      // chrome://print, both of which we assume are trustworthy (the extension
-      // process can also host other extensions, but this is okay).
-      //
-      // The CHECKs below help verify that |render_process_id| does not host
-      // web-controlled content.  This is a defense-in-depth for verifying that
-      // ShouldAllowPluginCreation called above is doing the right thing.
-      auto* policy = ChildProcessSecurityPolicyImpl::GetInstance();
-      ProcessLock renderer_lock = policy->GetProcessLock(render_process_id);
-      CHECK(!renderer_lock.matches_scheme(url::kHttpScheme) &&
-            !renderer_lock.matches_scheme(url::kHttpsScheme));
-      CHECK(embedder_origin.scheme() != url::kHttpScheme);
-      CHECK(embedder_origin.scheme() != url::kHttpsScheme);
-      CHECK(!embedder_origin.opaque());
-    }
-
-    // In some scenarios, the PDF plugin can issue fetch requests that will need
-    // to be proxied by |render_process_id| - such proxying needs to bypass
-    // CORB. See also https://crbug.com/1027173.
-    //
-    // TODO(lukasza, kmoon): https://crbug.com/702993: Remove the code here once
-    // PDF support doesn't depend on PPAPI anymore.
-    DCHECK(origin_lock.has_value());
-    RenderProcessHostImpl::AddAllowedRequestInitiatorForPlugin(
-        render_process_id, origin_lock.value());
   }
 
   PpapiPluginProcessHost* plugin_host =

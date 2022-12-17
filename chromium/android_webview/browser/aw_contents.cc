@@ -89,7 +89,6 @@
 #include "content/public/browser/ssl_status.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/mhtml_generation_params.h"
-#include "content/public/common/use_zoom_for_dsf_policy.h"
 #include "net/base/auth.h"
 #include "net/cert/x509_certificate.h"
 #include "net/cert/x509_util.h"
@@ -452,12 +451,28 @@ static void JNI_AwContents_SetAwDrawSWFunctionTable(JNIEnv* env,
 static void JNI_AwContents_SetAwDrawGLFunctionTable(JNIEnv* env,
                                                     jlong function_table) {}
 
-static void JNI_AwContents_UpdateOpenWebScreenArea(JNIEnv* env,
-                                                   jint pixels,
-                                                   jint percentage) {
+static void JNI_AwContents_UpdateScreenCoverage(
+    JNIEnv* env,
+    jint global_percentage,
+    const base::android::JavaParamRef<jobjectArray>& jschemes,
+    const base::android::JavaParamRef<jintArray>& jscheme_percentages) {
+  std::vector<std::string> schemes;
+  AppendJavaStringArrayToStringVector(env, jschemes, &schemes);
+
+  std::vector<int> scheme_percentages;
+  JavaIntArrayToIntVector(env, jscheme_percentages, &scheme_percentages);
+
+  DCHECK(schemes.size() == scheme_percentages.size());
+
+  std::vector<VisibilityMetricsLogger::Scheme> scheme_enums(schemes.size());
+  for (size_t i = 0; i < schemes.size(); i++) {
+    scheme_enums[i] = VisibilityMetricsLogger::SchemeStringToEnum(schemes[i]);
+  }
+
   AwBrowserProcess::GetInstance()
       ->visibility_metrics_logger()
-      ->UpdateOpenWebScreenArea(pixels, percentage);
+      ->UpdateScreenCoverage(global_percentage, scheme_enums,
+                             scheme_percentages);
 }
 
 // static
@@ -1232,10 +1247,10 @@ void AwContents::SetDipScale(JNIEnv* env,
   SetDipScaleInternal(dip_scale);
 }
 
-jboolean AwContents::IsDisplayingOpenWebContent(
+base::android::ScopedJavaLocalRef<jstring> AwContents::GetScheme(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& obj) {
-  return GetVisibilityInfo().IsDisplayingOpenWebContent();
+  return ConvertUTF8ToJavaString(env, scheme_);
 }
 
 void AwContents::OnInputEvent(JNIEnv* env, const JavaParamRef<jobject>& obj) {
@@ -1270,8 +1285,6 @@ void AwContents::SmoothScroll(JNIEnv* env,
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   float scale = browser_view_renderer_.page_scale_factor();
-  if (!content::IsUseZoomForDSFEnabled())
-    scale *= browser_view_renderer_.dip_scale();
 
   DCHECK_GE(duration_ms, 0);
   render_view_host_ext_->SmoothScroll(target_x / scale, target_y / scale,
@@ -1296,10 +1309,7 @@ void AwContents::OnWebLayoutContentsSizeChanged(
   if (!obj)
     return;
   gfx::Size contents_size_css =
-      content::IsUseZoomForDSFEnabled()
-          ? ScaleToRoundedSize(contents_size,
-                               1 / browser_view_renderer_.dip_scale())
-          : contents_size;
+      ScaleToRoundedSize(contents_size, 1 / browser_view_renderer_.dip_scale());
   Java_AwContents_onWebLayoutContentsSizeChanged(
       env, obj, contents_size_css.width(), contents_size_css.height());
 }

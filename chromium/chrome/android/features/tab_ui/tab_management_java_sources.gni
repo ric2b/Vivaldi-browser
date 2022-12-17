@@ -38,6 +38,7 @@ tab_management_test_java_sources = [
   "//chrome/android/features/tab_ui/javatests/src/org/chromium/chrome/browser/tasks/tab_management/MessageCardProviderTest.java",
   "//chrome/android/features/tab_ui/javatests/src/org/chromium/chrome/browser/tasks/tab_management/MessageCardViewBinderTest.java",
   "//chrome/android/features/tab_ui/javatests/src/org/chromium/chrome/browser/tasks/tab_management/PriceAlertsMessageCardTest.java",
+  "//chrome/android/features/tab_ui/javatests/src/org/chromium/chrome/browser/tasks/tab_management/PriceCardViewTest.java",
   "//chrome/android/features/tab_ui/javatests/src/org/chromium/chrome/browser/tasks/tab_management/PriceTrackingDialogTest.java",
   "//chrome/android/features/tab_ui/javatests/src/org/chromium/chrome/browser/tasks/tab_management/PriceTrackingUtilitiesTest.java",
   "//chrome/android/features/tab_ui/javatests/src/org/chromium/chrome/browser/tasks/tab_management/RecyclerViewMatcherUtils.java",
@@ -62,7 +63,6 @@ tab_management_test_java_sources = [
 ]
 
 tab_management_junit_java_sources = [
-  "//chrome/android/features/tab_ui/junit/src/org/chromium/chrome/browser/tab/TabUtilsUnitTest.java",
   "//chrome/android/features/tab_ui/junit/src/org/chromium/chrome/browser/tasks/SingleTabSwitcherMediatorUnitTest.java",
   "//chrome/android/features/tab_ui/junit/src/org/chromium/chrome/browser/tasks/TasksSurfaceMediatorUnitTest.java",
   "//chrome/android/features/tab_ui/junit/src/org/chromium/chrome/browser/tasks/pseudotab/PseudoTabUnitTest.java",
@@ -74,6 +74,7 @@ tab_management_junit_java_sources = [
   "//chrome/android/features/tab_ui/junit/src/org/chromium/chrome/browser/tasks/tab_management/PriceMessageServiceUnitTest.java",
   "//chrome/android/features/tab_ui/junit/src/org/chromium/chrome/browser/tasks/tab_management/TabGridDialogMediatorUnitTest.java",
   "//chrome/android/features/tab_ui/junit/src/org/chromium/chrome/browser/tasks/tab_management/TabGridItemTouchHelperCallbackUnitTest.java",
+  "//chrome/android/features/tab_ui/junit/src/org/chromium/chrome/browser/tasks/tab_management/TabGridViewBinderUnitTest.java",
   "//chrome/android/features/tab_ui/junit/src/org/chromium/chrome/browser/tasks/tab_management/TabGroupTitleEditorUnitTest.java",
   "//chrome/android/features/tab_ui/junit/src/org/chromium/chrome/browser/tasks/tab_management/TabGroupUiMediatorUnitTest.java",
   "//chrome/android/features/tab_ui/junit/src/org/chromium/chrome/browser/tasks/tab_management/TabListMediatorUnitTest.java",

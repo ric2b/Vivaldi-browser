@@ -56,7 +56,9 @@
 #endif  // !defined(LIKELY)
 
 // Macro for telling -Wimplicit-fallthrough that a fallthrough is intentional.
-#if defined(__clang__)
+#if __cplusplus >= 201703L
+#define FALLTHROUGH [[fallthrough]]
+#elif defined(__clang__)
 #define FALLTHROUGH [[clang::fallthrough]]
 #else
 #define FALLTHROUGH

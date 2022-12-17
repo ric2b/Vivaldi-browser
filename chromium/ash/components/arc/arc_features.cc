@@ -48,6 +48,10 @@ const base::Feature kEnablePerVmCoreScheduling{
 const base::Feature kEnableThrottlingNotification{
     "ArcEnableThrottlingNotification", base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Controls whether to use ARC TTS caching to optimize ARC boot.
+const base::Feature kEnableTTSCaching{"ArcEnableTTSCaching",
+                                      base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Controls whether we should delegate audio focus requests from ARC to Chrome.
 const base::Feature kEnableUnifiedAudioFocusFeature{
     "ArcEnableUnifiedAudioFocus", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -63,14 +67,13 @@ const base::Feature kEnableUnmanagedToManagedTransitionFeature{
 const base::Feature kEnableUsap{"ArcEnableUsap",
                                 base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Controls whether ARCVM uses virtio-blk for /data in Android storage.
+const base::Feature kEnableVirtioBlkForData{"ArcEnableVirtioBlkForData",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Controls experimental file picker feature for ARC.
 const base::Feature kFilePickerExperimentFeature{
     "ArcFilePickerExperiment", base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Controls experimental key GMS Core and related services protection against to
-// be killed by low memory killer.
-const base::Feature kGmsCoreLowMemoryKillerProtection{
-    "ArcGmsCoreLowMemoryKillerProtection", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Controls whether the guest zram is enabled. This is only for ARCVM.
 const base::Feature kGuestZram{"ArcGuestZram",
@@ -93,10 +96,6 @@ const base::FeatureParam<int> kLogdConfigSize{&kLogdConfig, "size", 0};
 // Controls keyboard shortcut helper integration feature in ARC.
 const base::Feature kKeyboardShortcutHelperIntegrationFeature{
     "ArcKeyboardShortcutHelperIntegration", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Controls ARC mouse wheel smooth scroll compatibility feature.
-const base::Feature kMouseWheelSmoothScroll{"ArcMouseWheelSmoothScroll",
-                                            base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Controls experimental 64-bit native bridge support for ARC on boards that
 // have 64-bit native bridge support available but not yet enabled.
@@ -231,5 +230,10 @@ const base::FeatureParam<int> kVmBalloonPolicyCriticalKiB{
 // level LMKD will start to kill the lowest priority cached app.
 const base::FeatureParam<int> kVmBalloonPolicyReclaimKiB{&kVmBalloonPolicy,
                                                          "reclaim_kib", 322560};
+
+// Controls experimental key GMS Core and related services protection against to
+// be killed by low memory killer in ARCVM.
+const base::Feature kVmGmsCoreLowMemoryKillerProtection{
+    "ArcVmGmsCoreLowMemoryKillerProtection", base::FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace arc

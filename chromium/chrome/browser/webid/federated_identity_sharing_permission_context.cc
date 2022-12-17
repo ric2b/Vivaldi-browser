@@ -21,11 +21,8 @@ namespace {
 const char kRelyingPartyOriginKey[] = "rp-origin";
 const char kAccountIdsKey[] = "account-ids";
 
-std::string GetUniqueKey(const std::string& relying_party, bool has_accounts) {
-  if (has_accounts) {
-    return base::StringPrintf("%s|accounts", relying_party.c_str());
-  }
-  return relying_party;
+std::string GetUniqueKey(const std::string& relying_party) {
+  return base::StringPrintf("%s|accounts", relying_party.c_str());
 }
 
 }  // namespace
@@ -42,20 +39,10 @@ FederatedIdentitySharingPermissionContext::
     ~FederatedIdentitySharingPermissionContext() = default;
 
 bool FederatedIdentitySharingPermissionContext::HasSharingPermission(
-    const url::Origin& identity_provider,
-    const url::Origin& relying_party) {
-  const auto key = GetUniqueKey(relying_party.Serialize(), false);
-  auto granted_object = GetGrantedObject(identity_provider, key);
-  // Existence of a grant object for this IDP and with the RP origin unique key
-  // means we have a generic sharing permission grant for RP/IDP.
-  return !!granted_object;
-}
-
-bool FederatedIdentitySharingPermissionContext::HasSharingPermissionForAccount(
-    const url::Origin& identity_provider,
     const url::Origin& relying_party,
+    const url::Origin& identity_provider,
     const std::string& account_id) {
-  const auto key = GetUniqueKey(relying_party.Serialize(), true);
+  const auto key = GetUniqueKey(relying_party.Serialize());
   auto granted_object = GetGrantedObject(identity_provider, key);
 
   if (!granted_object)
@@ -71,19 +58,11 @@ bool FederatedIdentitySharingPermissionContext::HasSharingPermissionForAccount(
 }
 
 void FederatedIdentitySharingPermissionContext::GrantSharingPermission(
+    const url::Origin& relying_party,
     const url::Origin& identity_provider,
-    const url::Origin& relying_party) {
-  base::Value new_object(base::Value::Type::DICTIONARY);
-  new_object.SetStringKey(kRelyingPartyOriginKey, relying_party.Serialize());
-  GrantObjectPermission(identity_provider, std::move(new_object));
-}
-
-void FederatedIdentitySharingPermissionContext::
-    GrantSharingPermissionForAccount(const url::Origin& identity_provider,
-                                     const url::Origin& relying_party,
-                                     const std::string& account_id) {
+    const std::string& account_id) {
   auto rp_string = relying_party.Serialize();
-  const auto key = GetUniqueKey(rp_string, true);
+  const auto key = GetUniqueKey(rp_string);
   auto granted_object = GetGrantedObject(identity_provider, key);
   if (granted_object) {
     // There is an existing account so update its account list rather than
@@ -104,17 +83,10 @@ void FederatedIdentitySharingPermissionContext::
 }
 
 void FederatedIdentitySharingPermissionContext::RevokeSharingPermission(
+    const url::Origin& relying_party,
     const url::Origin& identity_provider,
-    const url::Origin& relying_party) {
-  const auto key = GetUniqueKey(relying_party.Serialize(), false);
-  RevokeObjectPermission(identity_provider, key);
-}
-
-void FederatedIdentitySharingPermissionContext::
-    RevokeSharingPermissionForAccount(const url::Origin& identity_provider,
-                                      const url::Origin& relying_party,
-                                      const std::string& account_id) {
-  const auto key = GetUniqueKey(relying_party.Serialize(), true);
+    const std::string& account_id) {
+  const auto key = GetUniqueKey(relying_party.Serialize());
   auto granted_object = GetGrantedObject(identity_provider, key);
   auto new_object = granted_object->value.Clone();
   auto& account_list = *new_object.FindListKey(kAccountIdsKey);
@@ -156,7 +128,6 @@ std::u16string FederatedIdentitySharingPermissionContext::GetObjectDisplayName(
 std::string FederatedIdentitySharingPermissionContext::GetKeyForObject(
     const base::Value& object) {
   DCHECK(IsValidObject(object));
-  bool has_accounts = !!object.FindListKey(kAccountIdsKey);
   const auto rp_string = *object.FindStringKey(kRelyingPartyOriginKey);
-  return GetUniqueKey(rp_string, has_accounts);
+  return GetUniqueKey(rp_string);
 }

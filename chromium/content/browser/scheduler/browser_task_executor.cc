@@ -10,9 +10,9 @@
 #include "base/message_loop/message_pump_type.h"
 #include "base/run_loop.h"
 #include "base/task/deferred_sequenced_task_runner.h"
-#include "base/task/post_task.h"
 #include "base/task/task_traits_extension.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "content/browser/browser_process_io_thread.h"
@@ -39,14 +39,6 @@ namespace features {
 // of all chrometto performance improvements.
 constexpr base::Feature kBrowserPrioritizeInputQueue{
     "BrowserPrioritizeInputQueue", base::FEATURE_ENABLED_BY_DEFAULT};
-
-// When TreatBootstrapAsDefault is enabled, the browser will execute tasks with
-// the kBootstrap task type on the default task queues (based on priority of
-// the task) rather than a dedicated high-priority task queue. Intended to
-// evaluate the impact of the already-launched prioritization of bootstrap
-// tasks (crbug.com/1258621).
-const base::Feature kTreatBootstrapTaskTypeAsDefault{
-    "TreatBootstrapAsDefault", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // When TreatPreconnectAsDefault is enabled, the browser will execute tasks with
 // the kPreconnect task type on the default task queues (based on priority of
@@ -153,7 +145,7 @@ QueueType BaseBrowserTaskExecutor::GetQueueType(
     switch (task_type) {
       case BrowserTaskType::kBootstrap:
         if (base::FeatureList::IsEnabled(
-                features::kTreatBootstrapTaskTypeAsDefault)) {
+                ::features::kTreatBootstrapAsDefault)) {
           // Defer to traits.priority() below rather than executing this task on
           // the dedicated bootstrap queue.
           break;
@@ -188,6 +180,9 @@ QueueType BaseBrowserTaskExecutor::GetQueueType(
         }
         // Defer to traits.priority() below.
         break;
+
+      case BrowserTaskType::kServiceWorkerStorageControlResponse:
+        return QueueType::kServiceWorkerStorageControlResponse;
 
       case BrowserTaskType::kDefault:
         // Defer to traits.priority() below.
@@ -350,9 +345,9 @@ void BrowserTaskExecutor::RunAllPendingTasksOnThreadForTesting(
 }
 
 // static
-void BrowserTaskExecutor::EnableAllQueues() {
-  Get()->browser_ui_thread_handle_->EnableAllQueues();
-  Get()->browser_io_thread_handle_->EnableAllQueues();
+void BrowserTaskExecutor::OnStartupComplete() {
+  Get()->browser_ui_thread_handle_->OnStartupComplete();
+  Get()->browser_io_thread_handle_->OnStartupComplete();
 }
 
 // static

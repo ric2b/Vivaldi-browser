@@ -13,13 +13,14 @@ import android.graphics.Rect;
 import android.view.Display;
 
 import androidx.annotation.Nullable;
-import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ApplicationStatus;
+import org.chromium.base.MathUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.state.CriticalPersistedTabData;
+import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.components.browser_ui.site_settings.WebsitePreferenceBridge;
 import org.chromium.components.content_settings.ContentSettingValues;
 import org.chromium.components.content_settings.ContentSettingsType;
@@ -35,8 +36,7 @@ import org.chromium.url.GURL;
  */
 public class TabUtils {
     private static final String REQUEST_DESKTOP_SCREEN_WIDTH_PARAM = "screen_width_dp";
-    @VisibleForTesting
-    static final float TAB_THUMBNAIL_ASPECT_RATIO = 0.85f;
+
     // Do not instantiate this class.
     private TabUtils() {}
 
@@ -162,18 +162,18 @@ public class TabUtils {
     }
 
     /**
-     * Return tab thumbnail aspect ratio for grid view.
-     * @param context - to retrieve info on device and layout.
-     * @return aspect ratio.
+     * Return aspect ratio for grid tab card based on form factor and orientation.
+     * @param context - Context of the application.
+     * @return Aspect ratio for the grid tab card.
      */
     public static float getTabThumbnailAspectRatio(Context context) {
-        if (context != null && DeviceFormFactor.isNonMultiDisplayContextOnTablet(context)
+        if (TabUiFeatureUtilities.isTabletGridTabSwitcherPolishEnabled(context)
                 && context.getResources().getConfiguration().orientation
                         == Configuration.ORIENTATION_LANDSCAPE) {
-            return (context.getResources().getConfiguration().screenWidthDp * 1f)
-                    / (context.getResources().getConfiguration().screenHeightDp * 1f);
+            return (context.getResources().getConfiguration().screenWidthDp * 1.f)
+                    / (context.getResources().getConfiguration().screenHeightDp * 1.f);
         }
-
-        return TAB_THUMBNAIL_ASPECT_RATIO;
+        float value = (float) TabUiFeatureUtilities.THUMBNAIL_ASPECT_RATIO.getValue();
+        return MathUtils.clamp(value, 0.5f, 2.0f);
     }
 }

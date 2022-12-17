@@ -22,6 +22,7 @@ bool IsAppListSearchResultAnApp(AppListSearchResultType result_type) {
     case AppListSearchResultType::kPlayStoreReinstallApp:
     case AppListSearchResultType::kArcAppShortcut:
     case AppListSearchResultType::kInstantApp:
+    case AppListSearchResultType::kGames:
       return true;
     case AppListSearchResultType::kUnknown:
     case AppListSearchResultType::kOmnibox:
@@ -40,6 +41,7 @@ bool IsAppListSearchResultAnApp(AppListSearchResultType result_type) {
     case AppListSearchResultType::kDriveSearch:
     case AppListSearchResultType::kKeyboardShortcut:
     case AppListSearchResultType::kOpenTab:
+    case AppListSearchResultType::kPersonalization:
       return false;
   }
 }
@@ -218,23 +220,11 @@ SearchResultTextItem::SearchResultTextItem(SearchResultTextItemType type) {
   item_type = type;
 }
 
-SearchResultTextItem::SearchResultTextItem(const SearchResultTextItem& other) {
-  item_type = other.item_type;
-  raw_text = other.raw_text;
-  text_tags = other.text_tags;
-  icon_code = other.icon_code;
-  raw_image = other.raw_image;
-}
+SearchResultTextItem::SearchResultTextItem(const SearchResultTextItem& other) =
+    default;
 
 SearchResultTextItem& SearchResultTextItem::operator=(
-    const SearchResultTextItem& other) {
-  item_type = other.item_type;
-  raw_text = other.raw_text;
-  text_tags = other.text_tags;
-  icon_code = other.icon_code;
-  raw_image = other.raw_image;
-  return *this;
-}
+    const SearchResultTextItem& other) = default;
 
 SearchResultTextItem::~SearchResultTextItem() = default;
 
@@ -331,6 +321,18 @@ SearchResultTextItem& SearchResultTextItem::SetImage(gfx::ImageSkia icon) {
   raw_image = icon;
   return *this;
 }
+
+bool SearchResultTextItem::GetElidable() const {
+  DCHECK_EQ(item_type, SearchResultTextItemType::kString);
+  return elidable;
+}
+
+SearchResultTextItem& SearchResultTextItem::SetElidable(bool elidable) {
+  DCHECK_EQ(item_type, SearchResultTextItemType::kString);
+  this->elidable = elidable;
+  return *this;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // SearchResultMetadata:
 

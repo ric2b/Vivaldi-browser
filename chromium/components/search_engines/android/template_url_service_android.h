@@ -28,7 +28,8 @@ class TemplateUrlServiceAndroid : public TemplateURLServiceObserver {
   void SetUserSelectedDefaultSearchProvider(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
-      const base::android::JavaParamRef<jstring>& jkeyword);
+      const base::android::JavaParamRef<jstring>& jkeyword,
+      const jint type);
   jboolean IsLoaded(JNIEnv* env,
                     const base::android::JavaParamRef<jobject>& obj) const;
   jboolean IsDefaultSearchManaged(
@@ -51,7 +52,9 @@ class TemplateUrlServiceAndroid : public TemplateURLServiceObserver {
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
       const base::android::JavaParamRef<jstring>& jquery,
-      const base::android::JavaParamRef<jobjectArray>& jsearch_params);
+      const base::android::JavaParamRef<jobjectArray>& jsearch_params,
+      const base::android::JavaParamRef<jobject>& post_params,
+      jint type);
   base::android::ScopedJavaLocalRef<jstring> GetSearchQueryForUrl(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
@@ -115,7 +118,19 @@ class TemplateUrlServiceAndroid : public TemplateURLServiceObserver {
   // Get current default search engine.
   base::android::ScopedJavaLocalRef<jobject> GetDefaultSearchEngine(
       JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj);
+      const base::android::JavaParamRef<jobject>& obj,
+      jint type);
+
+  void VivaldiSetDefaultOverride(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jstring>& jkeyword
+  );
+
+  void VivaldiResetDefaultOverride(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj
+  );
 
  private:
   bool IsDefaultSearchEngineGoogle();

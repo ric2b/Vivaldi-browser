@@ -448,6 +448,7 @@ if (defined(android_secondary_abi_toolchain)) {
 java_group("android_webview_no_weblayer_java") {
   deps = [
     ":browser_java",
+    "//android_webview/js_sandbox:js_sandbox_service_java",
 
     # This includes AwResource, which may be called via JNI. We're including it
     # here because there's currently no good way to enforce that it gets included
@@ -584,6 +585,7 @@ android_library("browser_java") {
     "java/src/org/chromium/android_webview/AwViewMethods.java",
     "java/src/org/chromium/android_webview/AwWebContentsDelegate.java",
     "java/src/org/chromium/android_webview/AwWebContentsDelegateAdapter.java",
+    "java/src/org/chromium/android_webview/AwWebContentsMetricsRecorder.java",
     "java/src/org/chromium/android_webview/AwWebContentsObserver.java",
     "java/src/org/chromium/android_webview/AwWebResourceInterceptResponse.java",
     "java/src/org/chromium/android_webview/AwZoomControls.java",
@@ -591,9 +593,9 @@ android_library("browser_java") {
     "java/src/org/chromium/android_webview/CleanupReference.java",
     "java/src/org/chromium/android_webview/ClientCertLookupTable.java",
     "java/src/org/chromium/android_webview/DarkModeHelper.java",
-    "java/src/org/chromium/android_webview/DarkModeHistogramRecorder.java",
     "java/src/org/chromium/android_webview/DefaultVideoPosterRequestHandler.java",
     "java/src/org/chromium/android_webview/ErrorCodeConversionHelper.java",
+    "java/src/org/chromium/android_webview/FileModeConversionHelper.java",
     "java/src/org/chromium/android_webview/FindAddress.java",
     "java/src/org/chromium/android_webview/FullScreenView.java",
     "java/src/org/chromium/android_webview/HttpAuthDatabase.java",
@@ -787,8 +789,9 @@ android_library("common_java") {
     "//components/feature_engagement/public:public_java",
     "//components/metrics:metrics_java",
     "//components/network_session_configurator/android:network_session_configurator_java",
-    "//components/power_scheduler:power_scheduler_java",
+    "//components/variations:variations_java",
     "//components/viz:viz_java",
+    "//components/webrtc:components_webrtc_java",
     "//content/public/android:content_java",
     "//content/public/common:common_java",
     "//gpu/config:config_java",
@@ -1035,7 +1038,7 @@ grit("generate_aw_resources") {
 grit("generate_aw_strings") {
   source = "ui/aw_strings.grd"
   outputs = [ "grit/aw_strings.h" ]
-  foreach(_locale, locales_with_pseudolocales) {
+  foreach(_locale, all_chrome_locales) {
     outputs += [ "aw_strings_${_locale}.pak" ]
   }
 }
@@ -1178,7 +1181,7 @@ grit("generate_components_strings") {
       process_file_template(
           android_bundle_locales_as_resources,
           [ "java/res/values-{{source_name_part}}/components_strings.xml" ]) +
-      process_file_template(locales_with_pseudolocales,
+      process_file_template(all_chrome_locales,
                             [ "components_strings_{{source_name_part}}.pak" ])
 }
 

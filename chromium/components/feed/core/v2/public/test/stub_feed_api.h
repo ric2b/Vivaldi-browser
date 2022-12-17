@@ -32,6 +32,9 @@ class StubFeedApi : public FeedApi {
   WebFeedSubscriptions& subscriptions() override;
   void AttachSurface(FeedStreamSurface*) override {}
   void DetachSurface(FeedStreamSurface*) override {}
+  void UpdateUserProfileOnLinkClick(
+      const GURL& url,
+      const std::vector<int64_t>& entity_mids) override {}
   void AddUnreadContentObserver(const StreamType& stream_type,
                                 UnreadContentObserver* observer) override {}
   void RemoveUnreadContentObserver(const StreamType& stream_type,
@@ -104,6 +107,7 @@ class StubFeedApi : public FeedApi {
                        ContentOrder content_order) override {}
   ContentOrder GetContentOrder(const StreamType& stream_type) override;
   ContentOrder GetContentOrderFromPrefs(const StreamType& stream_type) override;
+  void IncrementFollowedFromWebPageMenuCount() override {}
 
  private:
   StubWebFeedSubscriptions web_feed_subscriptions_;

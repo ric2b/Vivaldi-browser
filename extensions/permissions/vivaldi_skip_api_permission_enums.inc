@@ -35,6 +35,7 @@ void SkipVivaldiAPIPermissions(extensions::APIPermissionSet& skip) {
   skip.insert(APIPermissionID::kReadingListPrivate);
   skip.insert(APIPermissionID::kRuntimePrivate);
   skip.insert(APIPermissionID::kSavedPasswords);
+  skip.insert(APIPermissionID::kSearchEngines);
   skip.insert(APIPermissionID::kSessionsPrivate);
   skip.insert(APIPermissionID::kSettings);
   skip.insert(APIPermissionID::kSync);

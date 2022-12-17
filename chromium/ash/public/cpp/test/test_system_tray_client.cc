@@ -68,6 +68,10 @@ void TestSystemTrayClient::ShowPrivacyAndSecuritySettings() {
   show_os_settings_privacy_and_security_count_++;
 }
 
+void TestSystemTrayClient::ShowSmartPrivacySettings() {
+  show_os_smart_privacy_settings_count_++;
+}
+
 void TestSystemTrayClient::ShowEnterpriseInfo() {}
 
 void TestSystemTrayClient::ShowNetworkConfigure(const std::string& network_id) {
@@ -86,7 +90,10 @@ void TestSystemTrayClient::ShowThirdPartyVpnCreate(
 
 void TestSystemTrayClient::ShowArcVpnCreate(const std::string& app_id) {}
 
-void TestSystemTrayClient::ShowNetworkSettings(const std::string& network_id) {}
+void TestSystemTrayClient::ShowNetworkSettings(const std::string& network_id) {
+  show_network_settings_count_++;
+  last_network_settings_network_id_ = network_id;
+}
 
 void TestSystemTrayClient::ShowMultiDeviceSetup() {
   show_multi_device_setup_count_++;

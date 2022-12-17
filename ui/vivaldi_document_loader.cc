@@ -15,10 +15,11 @@
 
 VivaldiDocumentLoader::VivaldiDocumentLoader(
     Profile* profile,
-    const extensions::Extension* vivaldi_extension) {
+    const extensions::Extension* vivaldi_extension)
+    : vivaldi_extension_(vivaldi_extension) {
 
   scoped_refptr<content::SiteInstance> site_instance =
-      content::SiteInstance::CreateForURL(profile, vivaldi_extension->url());
+      content::SiteInstance::CreateForURL(profile, vivaldi_extension_->url());
 
   content::WebContents::CreateParams create_params(profile,
                                                    site_instance.get());
@@ -39,7 +40,10 @@ VivaldiDocumentLoader::VivaldiDocumentLoader(
 
   content::WebContentsObserver::Observe(vivaldi_web_contents_.get());
 
-  GURL resource_url = vivaldi_extension->GetResourceURL(VIVALDI_CORE_DOCUMENT);
+}
+
+void VivaldiDocumentLoader::Load() {
+  GURL resource_url = vivaldi_extension_->GetResourceURL(VIVALDI_CORE_DOCUMENT);
 
   content::NavigationController::LoadURLParams load_params(resource_url);
   load_params.should_replace_current_entry = true;

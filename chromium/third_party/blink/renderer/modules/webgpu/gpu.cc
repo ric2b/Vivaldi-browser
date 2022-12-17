@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/synchronization/waitable_event.h"
 #include "gpu/command_buffer/client/webgpu_interface.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_metric_builder.h"
@@ -193,7 +194,7 @@ void GPU::RecordAdapterForIdentifiability(
     GPUAdapter* adapter) const {
   constexpr IdentifiableSurface::Type type =
       IdentifiableSurface::Type::kGPU_RequestAdapter;
-  if (!IdentifiabilityStudySettings::Get()->ShouldSample(type))
+  if (!IdentifiabilityStudySettings::Get()->ShouldSampleType(type))
     return;
   ExecutionContext* context = GetExecutionContext();
   if (!context)

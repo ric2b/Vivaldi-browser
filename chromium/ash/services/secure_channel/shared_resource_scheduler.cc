@@ -4,14 +4,12 @@
 
 #include "ash/services/secure_channel/shared_resource_scheduler.h"
 
+#include "ash/components/multidevice/logging/logging.h"
 #include "base/containers/contains.h"
 #include "base/logging.h"
 #include "base/notreached.h"
-#include "chromeos/components/multidevice/logging/logging.h"
 
-namespace chromeos {
-
-namespace secure_channel {
+namespace ash::secure_channel {
 
 namespace {
 
@@ -174,6 +172,4 @@ SharedResourceScheduler::GetHighestPriorityOfScheduledRequests() {
   return absl::nullopt;
 }
 
-}  // namespace secure_channel
-
-}  // namespace chromeos
+}  // namespace ash::secure_channel

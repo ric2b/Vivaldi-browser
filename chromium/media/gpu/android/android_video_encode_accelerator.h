@@ -16,6 +16,7 @@
 #include "base/containers/queue.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
+#include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "media/base/android/media_codec_bridge_impl.h"
 #include "media/base/bitrate.h"
@@ -44,7 +45,9 @@ class MEDIA_GPU_EXPORT AndroidVideoEncodeAccelerator
 
   // VideoEncodeAccelerator implementation.
   VideoEncodeAccelerator::SupportedProfiles GetSupportedProfiles() override;
-  bool Initialize(const Config& config, Client* client) override;
+  bool Initialize(const Config& config,
+                  Client* client,
+                  std::unique_ptr<MediaLog> media_log) override;
   void Encode(scoped_refptr<VideoFrame> frame, bool force_keyframe) override;
   void UseOutputBitstreamBuffer(BitstreamBuffer buffer) override;
   void RequestEncodingParametersChange(const Bitrate& bitrate,

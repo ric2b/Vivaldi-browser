@@ -26,6 +26,8 @@ constexpr const char kMacAttributes[]{"mac/attributes"};
 constexpr const char kMacSelection[]{"mac/selection"};
 constexpr const char kMacTextMarker[]{"mac/textmarker"};
 constexpr const char kMacMethods[]{"mac/methods"};
+constexpr const char kMacParameterizedAttributes[]{
+    "mac/parameterized-attributes"};
 constexpr const char kRegression[]{"mac/regression"};
 
 #endif
@@ -82,10 +84,15 @@ class DumpAccessibilityScriptTest : public DumpAccessibilityTestBase {
     size_t length = scenario_.script_instructions.size();
     while (start_index < length) {
       std::string wait_for;
+      bool printTree = false;
       size_t index = start_index;
       for (; index < length; index++) {
         if (scenario_.script_instructions[index].IsEvent()) {
           wait_for = scenario_.script_instructions[index].AsEvent();
+          break;
+        }
+        if (scenario_.script_instructions[index].IsPrintTree()) {
+          printTree = true;
           break;
         }
       }
@@ -105,6 +112,10 @@ class DumpAccessibilityScriptTest : public DumpAccessibilityTestBase {
             actual_contents += event + '\n';
           }
         }
+      }
+
+      if (printTree) {
+        actual_contents += DumpTreeAsString() + '\n';
       }
 
       auto chunk =
@@ -202,6 +213,10 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityScriptTest, AXColumnHeaderUIElements) {
   RunTypedTest<kMacAttributes>("ax-column-header-ui-elements.html");
 }
 
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityScriptTest, AXDescription) {
+  RunTypedTest<kMacAttributes>("ax-description.html");
+}
+
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityScriptTest, AXDetailsElements) {
   RunTypedTest<kMacAttributes>("ax-details-elements.html");
 }
@@ -252,6 +267,14 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityScriptTest, AXIsMultiSelectable) {
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityScriptTest, AXKeyShortcutsValue) {
   RunTypedTest<kMacAttributes>("ax-key-shortcuts-value.html");
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityScriptTest, AXLoaded) {
+  RunTypedTest<kMacAttributes>("ax-loaded.html");
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityScriptTest, AXLoadingProgress) {
+  RunTypedTest<kMacAttributes>("ax-loading-progress.html");
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityScriptTest, AXMathBase) {
@@ -314,6 +337,14 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityScriptTest, AXRequired) {
   RunTypedTest<kMacAttributes>("ax-required.html");
 }
 
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityScriptTest, AXTitleUIElement) {
+  RunTypedTest<kMacAttributes>("ax-title-ui-element.html");
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityScriptTest, AXTitle) {
+  RunTypedTest<kMacAttributes>("ax-title.html");
+}
+
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityScriptTest, AXURL) {
   RunTypedTest<kMacAttributes>("ax-url.html");
 }
@@ -374,6 +405,10 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityScriptTest, AccessibilityIsIgnored) {
   RunTypedTest<kMacMethods>("accessibility-is-ignored.html");
 }
 
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityScriptTest, AccessibilityLabel) {
+  RunTypedTest<kMacMethods>("accessibility-label.html");
+}
+
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityScriptTest,
                        AccessibilityPlaceholderValue) {
   RunTypedTest<kMacMethods>("accessibility-placeholder-value.html");
@@ -382,6 +417,11 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityScriptTest,
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityScriptTest,
                        AccessibilityRoleDescription) {
   RunTypedTest<kMacMethods>("accessibility-role-description.html");
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityScriptTest,
+                       AccessibilityTitleUIElement) {
+  RunTypedTest<kMacMethods>("accessibility-title-ui-element.html");
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityScriptTest, AccessibilityTitle) {
@@ -394,6 +434,24 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityScriptTest, AccessibilityURL) {
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityScriptTest, IsAccessibilityElement) {
   RunTypedTest<kMacMethods>("is-accessibility-element.html");
+}
+
+// Parameterized attributes
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityScriptTest,
+                       AXAttributedStringForRange) {
+  RunTypedTest<kMacParameterizedAttributes>(
+      "ax-attributed-string-for-range.html");
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityScriptTest,
+                       AXAttributedStringForTextMarkerRange) {
+  RunTypedTest<kMacParameterizedAttributes>(
+      "ax-attributed-string-for-text-marker-range.html");
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityScriptTest, AXStringForRange) {
+  RunTypedTest<kMacParameterizedAttributes>("ax-string-for-range.html");
 }
 
 // Regression tests

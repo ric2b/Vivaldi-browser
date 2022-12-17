@@ -310,7 +310,7 @@ void SetSessionTabFromSyncData(const sync_pb::SessionTab& sync_data,
         SessionNavigationFromSyncData(i, sync_data.navigation(i)));
   }
   tab->session_storage_persistent_id.clear();
-  tab->ext_data = sync_data.ext_data();
+  tab->viv_ext_data = sync_data.viv_ext_data();
 }
 
 sync_pb::SessionTab SessionTabToSyncData(
@@ -330,7 +330,7 @@ sync_pb::SessionTab SessionTabToSyncData(
     sync_data.set_browser_type(*browser_type);
   }
 
-  sync_data.set_ext_data(tab.ext_data);
+  sync_data.set_viv_ext_data(tab.viv_ext_data);
   return sync_data;
 }
 

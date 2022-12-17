@@ -43,6 +43,14 @@ systemInfo.setSystemInfoObserver(
 const notificationGenerator =
     ash.echeApp.mojom.NotificationGenerator.getRemote();
 
+const displayStreamHandler = ash.echeApp.mojom.DisplayStreamHandler.getRemote();
+
+const streamActionObserverRouter =
+    new ash.echeApp.mojom.StreamActionObserverCallbackRouter();
+// Set up a message pipe to the browser process to monitor stream action.
+displayStreamHandler.setStreamActionObserver(
+    streamActionObserverRouter.$.bindNewPipeAndPassRemote());
+
 /**
  * A pipe through which we can send messages to the guest frame.
  * Use an undefined `target` to find the <iframe> automatically.
@@ -84,7 +92,8 @@ const notificationGenerator =
      console.log('echeapi debug on, browser_proxy.js window.close block');
    } else {
      console.log('echeapi browser_proxy.js window.close');
-     window.close();
+     displayStreamHandler.onStreamStatusChanged(
+         ash.echeApp.mojom.StreamStatus.kStreamStatusStopped);
    }
  });
 
@@ -114,6 +123,13 @@ const notificationGenerator =
        guestMessagePipe.sendMessage(
            Message.TABLET_MODE, {/** @type {boolean} */ isTabletMode});
      });
+
+ // Add stream action listener and send result via pipes.
+ streamActionObserverRouter.onStreamAction.addListener((action) => {
+   console.log(`echeapi browser_proxy.js OnStreamAction ${action}`);
+   guestMessagePipe.sendMessage(
+       Message.STREAM_ACTION, {/** @type {number} */ action});
+ });
 
  guestMessagePipe.registerHandler(
      Message.SHOW_NOTIFICATION, async (message) => {
@@ -147,6 +163,13 @@ const notificationGenerator =
            histogramData.histogram, histogramData.value,
            histogramData.maxValue);
      });
+
+ // Register START_STREAMING pipes.
+ guestMessagePipe.registerHandler(Message.START_STREAMING, async () => {
+   console.log('echeapi browser_proxy.js startStreaming');
+   displayStreamHandler.onStreamStatusChanged(
+       ash.echeApp.mojom.StreamStatus.kStreamStatusStarted);
+ });
 
  // We can't access hash change event inside iframe so parse the notification
  // info from the anchor part of the url when hash is changed and send them to

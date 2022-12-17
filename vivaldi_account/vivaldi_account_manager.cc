@@ -11,6 +11,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chromium/net/http/http_request_headers.h"
@@ -26,7 +27,7 @@
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 #include "vivaldi_account/vivaldi_account_manager_request_handler.h"
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 #include "vivaldi_account/vivaldi_account_manager_android.h"
 #endif
 
@@ -137,7 +138,7 @@ VivaldiAccountManager::FetchError::FetchError(FetchErrorType type,
 
 VivaldiAccountManager::VivaldiAccountManager(Profile* profile)
     : profile_(profile), password_handler_(profile, this) {
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   VivaldiAccountManagerAndroid::CreateNow();
 #endif
 

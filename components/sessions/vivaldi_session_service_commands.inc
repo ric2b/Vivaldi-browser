@@ -22,23 +22,23 @@ bool ReadVivaldiData(const SessionCommand* command,
   switch (command->id()) {
     case kCommandSetExtData: {
       SessionID tab_id = SessionID::InvalidValue();
-      std::string ext_data;
-      if (!vivaldi::RestoreSetExtDataCommand(*command, &tab_id, &ext_data)) {
+      std::string viv_ext_data;
+      if (!vivaldi::RestoreSetVivExtDataCommand(*command, &tab_id, &viv_ext_data)) {
         return false;
       }
 
-      GetTab(tab_id, tabs)->ext_data.swap(ext_data);
+      GetTab(tab_id, tabs)->viv_ext_data.swap(viv_ext_data);
       break;
     }
 
     case kCommandSetWindowExtData: {
       SessionID window_id = SessionID::InvalidValue();
-      std::string ext_data;
-      if (!vivaldi::RestoreSetWindowExtDataCommand(*command, &window_id,
-                                                   &ext_data))
+      std::string viv_ext_data;
+      if (!vivaldi::RestoreSetWindowVivExtDataCommand(*command, &window_id,
+                                                   &viv_ext_data))
         return false;
 
-      GetWindow(window_id, windows)->ext_data.swap(ext_data);
+      GetWindow(window_id, windows)->viv_ext_data.swap(viv_ext_data);
       break;
     }
 
@@ -46,13 +46,13 @@ bool ReadVivaldiData(const SessionCommand* command,
       SessionID tab_id = SessionID::InvalidValue();
       std::string script_path;
       bool is_enabled_override;
-      if (!vivaldi::RestorePageActionOverrideCommand(
+      if (!vivaldi::RestoreVivPageActionOverrideCommand(
               *command, &tab_id, &script_path, &is_enabled_override)) {
         return false;
       }
 
       GetTab(tab_id, tabs)
-          ->page_action_overrides.emplace(
+          ->viv_page_action_overrides.emplace(
               std::make_pair(script_path, is_enabled_override));
       break;
     }
@@ -60,12 +60,12 @@ bool ReadVivaldiData(const SessionCommand* command,
     case kCommandRemovePageActionOverrides: {
       SessionID tab_id = SessionID::InvalidValue();
       std::string script_path;
-      if (!vivaldi::RestoreRemovePageActionOverrideCommand(*command, &tab_id,
+      if (!vivaldi::RestoreRemoveVivPageActionOverrideCommand(*command, &tab_id,
                                                            &script_path)) {
         return false;
       }
 
-      GetTab(tab_id, tabs)->page_action_overrides.erase(script_path);
+      GetTab(tab_id, tabs)->viv_page_action_overrides.erase(script_path);
       break;
     }
   }

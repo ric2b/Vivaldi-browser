@@ -73,6 +73,12 @@ void BrowserAccessibilityManagerAuraLinux::FireSelectedEvent(
   FireEvent(node, ax::mojom::Event::kSelection);
 }
 
+void BrowserAccessibilityManagerAuraLinux::FireBusyChangedEvent(
+    BrowserAccessibility* node,
+    bool is_busy) {
+  ToBrowserAccessibilityAuraLinux(node)->GetNode()->OnBusyStateChanged(is_busy);
+}
+
 void BrowserAccessibilityManagerAuraLinux::FireLoadingEvent(
     BrowserAccessibility* node,
     bool is_loading) {
@@ -191,6 +197,21 @@ void BrowserAccessibilityManagerAuraLinux::FireGeneratedEvent(
     case ui::AXEventGenerator::Event::CHECKED_STATE_CHANGED:
       FireEvent(node, ax::mojom::Event::kCheckedStateChanged);
       break;
+    case ui::AXEventGenerator::Event::BUSY_CHANGED: {
+      // We reliably get busy-changed notifications when the value of aria-busy
+      // changes. We may or may not get a generated busy-changed notification
+      // for the document at the start or end of a page load. For instance,
+      // AXTree::Unserialize will not call NotifyNodeAttributesHaveBeenChanged
+      // when the root is new, which is the case when a new document has started
+      // loading. Because Orca needs the busy-changed notification to be
+      // reliably fired on the document, we do so in response to load-start and
+      // load-complete and suppress possible duplication here.
+      if (node->GetRole() == ax::mojom::Role::kRootWebArea)
+        return;
+      FireBusyChangedEvent(node, node->GetData().GetBoolAttribute(
+                                     ax::mojom::BoolAttribute::kBusy));
+      break;
+    }
     case ui::AXEventGenerator::Event::COLLAPSED:
       FireExpandedEvent(node, false);
       break;
@@ -283,7 +304,6 @@ void BrowserAccessibilityManagerAuraLinux::FireGeneratedEvent(
     case ui::AXEventGenerator::Event::ALERT:
     case ui::AXEventGenerator::Event::ATOMIC_CHANGED:
     case ui::AXEventGenerator::Event::AUTO_COMPLETE_CHANGED:
-    case ui::AXEventGenerator::Event::BUSY_CHANGED:
     case ui::AXEventGenerator::Event::CARET_BOUNDS_CHANGED:
     case ui::AXEventGenerator::Event::CHECKED_STATE_DESCRIPTION_CHANGED:
     case ui::AXEventGenerator::Event::CHILDREN_CHANGED:

@@ -5,33 +5,21 @@
 /**
  * @fileoverview Script that runs on the background page.
  */
+import {AbstractTts} from '../common/abstract_tts.js';
+import {CompositeTts} from '../common/composite_tts.js';
+import {ChromeVoxEditableTextBase, TypingEcho} from '../common/editable_text_base.js';
 
-goog.provide('ChromeVoxBackground');
-
-goog.require('ChromeVoxState');
-goog.require('ConsoleTts');
-goog.require('EventStreamLogger');
-goog.require('LogStore');
-goog.require('Msgs');
-goog.require('constants');
-goog.require('AbstractEarcons');
-goog.require('BrailleBackground');
-goog.require('BrailleCaptionsBackground');
-goog.require('ChromeVox');
-goog.require('ChromeVoxEditableTextBase');
-goog.require('ChromeVoxPrefs');
-goog.require('CompositeTts');
-goog.require('ExtensionBridge');
-goog.require('InjectedScriptLoader');
-goog.require('NavBraille');
-goog.require('QueueMode');
-goog.require('TtsBackground');
-
+import {BrailleBackground} from './braille/braille_background.js';
+import {BrailleCaptionsBackground} from './braille/braille_captions_background.js';
+import {ConsoleTts} from './console_tts.js';
+import {InjectedScriptLoader} from './injected_script_loader.js';
+import {ChromeVoxPrefs} from './prefs.js';
+import {TtsBackground} from './tts_background.js';
 
 /**
  * This is the legacy ChromeVox background object.
  */
-ChromeVoxBackground = class {
+export class ChromeVoxBackground {
   constructor() {
     ChromeVoxBackground.readPrefs();
 
@@ -351,4 +339,4 @@ ChromeVoxBackground = class {
         background.backgroundBraille_.getTranslatorManager();
     window['getCurrentVoice'] = background.getCurrentVoice.bind(background);
   }
-};
+}

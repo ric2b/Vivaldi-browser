@@ -12,7 +12,6 @@
 
 #include "base/command_line.h"
 #include "base/containers/contains.h"
-#include "base/cxx17_backports.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
@@ -223,9 +222,8 @@ void FeatureInfo::InitializeBasicState(const base::CommandLine* command_line) {
   const auto useANGLE = command_line->GetSwitchValueASCII(switches::kUseANGLE);
 
   feature_flags_.is_swiftshader_for_webgl =
-      (useGL == gl::kGLImplementationSwiftShaderForWebGLName) ||
-      ((useGL == gl::kGLImplementationANGLEName) &&
-       (useANGLE == gl::kANGLEImplementationSwiftShaderForWebGLName));
+      (useGL == gl::kGLImplementationANGLEName) &&
+      (useANGLE == gl::kANGLEImplementationSwiftShaderForWebGLName);
 
   // The shader translator is needed to translate from WebGL-conformant GLES SL
   // to normal GLES SL, enforce WebGL conformance, translate from GLES SL 1.0 to
@@ -1920,8 +1918,8 @@ void FeatureInfo::InitializeFloatAndHalfFloatFeatures(
             "GPU.RenderableFormat.RG32F.FLOAT",
             "GPU.RenderableFormat.R11F_G11F_B10F.FLOAT",
         };
-        DCHECK_EQ(base::size(kInternalFormats), base::size(kFormats));
-        for (size_t i = 0; i < base::size(kFormats); ++i) {
+        DCHECK_EQ(std::size(kInternalFormats), std::size(kFormats));
+        for (size_t i = 0; i < std::size(kFormats); ++i) {
           glTexImage2D(GL_TEXTURE_2D, 0, kInternalFormats[i], width, width, 0,
                        kFormats[i], GL_FLOAT, nullptr);
           bool supported = glCheckFramebufferStatusEXT(GL_FRAMEBUFFER) ==

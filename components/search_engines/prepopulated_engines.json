@@ -1,0 +1,886 @@
+// Copyright 2021 Vivaldi Technologies AS. All rights reserved.
+
+{
+  "int_variables": {
+    // When adding new engines, increment this number and use it as the new
+    // max ID. This is used by UMA stats and must be updated to include the full
+    // range or else not all engines will be counted in stats.
+    "kMaxPrepopulatedEngineID": 101,
+
+    // Increment this if you change the data in ways that mean users with
+    // existing data should get a new version. Otherwise, existing data may
+    // continue to be used and updates made here will not always appear.
+    "kCurrentDataVersion": 10000135
+  },
+
+  // The following engines are included in country lists and are added to the
+  // list of search engines on the first run depending on user's country.
+  "elements": {
+    "google": {
+      "name": "Google",
+      "keyword": "g",
+      "favicon_url": "https://www.google.com/images/branding/product/ico/googleg_lodp.ico",
+      "search_url": "https://www.google.com/search?q={searchTerms}&{google:originalQueryForSuggestion}{google:prefetchSource}{google:sourceId}{google:contextualSearchVersion}ie={inputEncoding}",
+      "image_url": "https://www.google.com/searchbyimage/upload",
+      "image_url_post_params": "encoded_image={google:imageThumbnail},image_url={google:imageURL},sbisrc={google:imageSearchSource},original_width={google:imageOriginalWidth},original_height={google:imageOriginalHeight}",
+      "alternate_urls": [
+        "https://www.google.com/#q={searchTerms}",
+        "https://www.google.com/search#q={searchTerms}",
+        "https://www.google.com/webhp#q={searchTerms}",
+        "https://www.google.com/s#q={searchTerms}",
+        "https://www.google.com/s?q={searchTerms}"
+      ],
+      "type": "SEARCH_ENGINE_GOOGLE",
+      // This must be 1 to match the id used by unittests.
+      "id": 1
+    },
+
+    "yahoo": {
+      "name": "Yahoo!",
+      "keyword": "y",
+      "search_url": "https://search.yahoo.com/search?p={searchTerms}",
+      "favicon_url": "https://search.yahoo.com/favicon.ico",
+      "type": "SEARCH_ENGINE_YAHOO",
+      "id": 2
+    },
+    "yahoo_ar": {
+      "name": "Yahoo!",
+      "keyword": "y",
+      "search_url": "https://ar.search.yahoo.com/yhs/search?hspart=iry&hsimp=yhs-fullyhosted_009&type=dpp_vvldnu_00_00&param1=1&param2=pa%3Ddowncoll%26b%3DVivaldi&p={searchTerms}",
+      "favicon_url": "https://ar.search.yahoo.com/favicon.ico",
+      "type": "SEARCH_ENGINE_YAHOO",
+      "id": 2
+    },
+    "yahoo_at": {
+      "name": "Yahoo!",
+      "keyword": "y",
+      "search_url": "https://at.search.yahoo.com/yhs/search?hspart=iry&hsimp=yhs-fullyhosted_009&type=dpp_vvldnu_00_00&param1=1&param2=pa%3Ddowncoll%26b%3DVivaldi&p={searchTerms}",
+      "favicon_url": "https://at.search.yahoo.com/favicon.ico",
+      "type": "SEARCH_ENGINE_YAHOO",
+      "id": 2
+    },
+    "yahoo_br": {
+      "name": "Yahoo!",
+      "keyword": "y",
+      "search_url": "https://br.search.yahoo.com/yhs/search?hspart=iry&hsimp=yhs-fullyhosted_009&type=dpp_vvldnu_00_00&param1=1&param2=pa%3Ddowncoll%26b%3DVivaldi&p={searchTerms}",
+      "favicon_url": "https://br.search.yahoo.com/favicon.ico",
+      "type": "SEARCH_ENGINE_YAHOO",
+      "id": 2
+    },
+    "yahoo_ca": {
+      "name": "Yahoo!",
+      "keyword": "y",
+      "search_url": "https://ca.search.yahoo.com/yhs/search?hspart=iry&hsimp=yhs-fullyhosted_009&type=dpp_vvldnu_00_00&param1=1&param2=pa%3Ddowncoll%26b%3DVivaldi&p={searchTerms}",
+      "favicon_url": "https://ca.search.yahoo.com/favicon.ico",
+      "type": "SEARCH_ENGINE_YAHOO",
+      "id": 2
+    },
+    "yahoo_ch": {
+      "name": "Yahoo!",
+      "keyword": "y",
+      "search_url": "https://ch.search.yahoo.com/yhs/search?hspart=iry&hsimp=yhs-fullyhosted_009&type=dpp_vvldnu_00_00&param1=1&param2=pa%3Ddowncoll%26b%3DVivaldi&p={searchTerms}",
+      "favicon_url": "https://ch.search.yahoo.com/favicon.ico",
+      "type": "SEARCH_ENGINE_YAHOO",
+      "id": 2
+    },
+    "yahoo_cl": {
+      "name": "Yahoo!",
+      "keyword": "y",
+      "search_url": "https://cl.search.yahoo.com/yhs/search?hspart=iry&hsimp=yhs-fullyhosted_009&type=dpp_vvldnu_00_00&param1=1&param2=pa%3Ddowncoll%26b%3DVivaldi&p={searchTerms}",
+      "favicon_url": "https://cl.search.yahoo.com/favicon.ico",
+      "type": "SEARCH_ENGINE_YAHOO",
+      "id": 2
+    },
+    "yahoo_co": {
+      "name": "Yahoo!",
+      "keyword": "y",
+      "search_url": "https://co.search.yahoo.com/yhs/search?hspart=iry&hsimp=yhs-fullyhosted_009&type=dpp_vvldnu_00_00&param1=1&param2=pa%3Ddowncoll%26b%3DVivaldi&p={searchTerms}",
+      "favicon_url": "https://co.search.yahoo.com/favicon.ico",
+      "type": "SEARCH_ENGINE_YAHOO",
+      "id": 2
+    },
+    "yahoo_de": {
+      "name": "Yahoo!",
+      "keyword": "y",
+      "search_url": "https://de.search.yahoo.com/yhs/search?hspart=iry&hsimp=yhs-fullyhosted_009&type=dpp_vvldnu_00_00&param1=1&param2=pa%3Ddowncoll%26b%3DVivaldi&p={searchTerms}",
+      "favicon_url": "https://de.search.yahoo.com/favicon.ico",
+      "type": "SEARCH_ENGINE_YAHOO",
+      "id": 2
+    },
+    "yahoo_dk": {
+      "name": "Yahoo!",
+      "keyword": "y",
+      "search_url": "https://dk.search.yahoo.com/yhs/search?hspart=iry&hsimp=yhs-fullyhosted_009&type=dpp_vvldnu_00_00&param1=1&param2=pa%3Ddowncoll%26b%3DVivaldi&p={searchTerms}",
+      "favicon_url": "https://dk.search.yahoo.com/favicon.ico",
+      "type": "SEARCH_ENGINE_YAHOO",
+      "id": 2
+    },
+    "yahoo_es": {
+      "name": "Yahoo!",
+      "keyword": "y",
+      "search_url": "https://es.search.yahoo.com/yhs/search?hspart=iry&hsimp=yhs-fullyhosted_009&type=dpp_vvldnu_00_00&param1=1&param2=pa%3Ddowncoll%26b%3DVivaldi&p={searchTerms}",
+      "favicon_url": "https://es.search.yahoo.com/favicon.ico",
+      "type": "SEARCH_ENGINE_YAHOO",
+      "id": 2
+    },
+    "yahoo_fi": {
+      "name": "Yahoo!",
+      "keyword": "y",
+      "search_url": "https://fi.search.yahoo.com/yhs/search?hspart=iry&hsimp=yhs-fullyhosted_009&type=dpp_vvldnu_00_00&param1=1&param2=pa%3Ddowncoll%26b%3DVivaldi&p={searchTerms}",
+      "favicon_url": "https://fi.search.yahoo.com/favicon.ico",
+      "type": "SEARCH_ENGINE_YAHOO",
+      "id": 2
+    },
+    "yahoo_fr": {
+      "name": "Yahoo!",
+      "keyword": "y",
+      "search_url": "https://fr.search.yahoo.com/yhs/search?hspart=iry&hsimp=yhs-fullyhosted_009&type=dpp_vvldnu_00_00&param1=1&param2=pa%3Ddowncoll%26b%3DVivaldi&p={searchTerms}",
+      "favicon_url": "https://fr.search.yahoo.com/favicon.ico",
+      "type": "SEARCH_ENGINE_YAHOO",
+      "id": 2
+    },
+    "yahoo_hk": {
+      "name": "Yahoo!",
+      "keyword": "y",
+      "search_url": "https://hk.search.yahoo.com/yhs/search?hspart=iry&hsimp=yhs-fullyhosted_009&type=dpp_vvldnu_00_00&param1=1&param2=pa%3Ddowncoll%26b%3DVivaldi&p={searchTerms}",
+      "favicon_url": "https://hk.search.yahoo.com/favicon.ico",
+      "type": "SEARCH_ENGINE_YAHOO",
+      "id": 2
+    },
+    "yahoo_id": {
+      "name": "Yahoo!",
+      "keyword": "y",
+      "search_url": "https://id.search.yahoo.com/yhs/search?hspart=iry&hsimp=yhs-fullyhosted_009&type=dpp_vvldnu_00_00&param1=1&param2=pa%3Ddowncoll%26b%3DVivaldi&p={searchTerms}",
+      "favicon_url": "https://id.search.yahoo.com/favicon.ico",
+      "type": "SEARCH_ENGINE_YAHOO",
+      "id": 2
+    },
+    "yahoo_ie": {
+      "name": "Yahoo!",
+      "keyword": "y",
+      "search_url": "https://ie.search.yahoo.com/yhs/search?hspart=iry&hsimp=yhs-fullyhosted_009&type=dpp_vvldnu_00_00&param1=1&param2=pa%3Ddowncoll%26b%3DVivaldi&p={searchTerms}",
+      "favicon_url": "https://ie.search.yahoo.com/favicon.ico",
+      "type": "SEARCH_ENGINE_YAHOO",
+      "id": 2
+    },
+    "yahoo_in": {
+      "name": "Yahoo!",
+      "keyword": "y",
+      "search_url": "https://in.search.yahoo.com/yhs/search?hspart=iry&hsimp=yhs-fullyhosted_009&type=dpp_vvldnu_00_00&param1=1&param2=pa%3Ddowncoll%26b%3DVivaldi&p={searchTerms}",
+      "favicon_url": "https://in.search.yahoo.com/favicon.ico",
+      "type": "SEARCH_ENGINE_YAHOO",
+      "id": 2
+    },
+    "yahoo_it": {
+      "name": "Yahoo!",
+      "keyword": "y",
+      "search_url": "https://it.search.yahoo.com/yhs/search?hspart=iry&hsimp=yhs-fullyhosted_009&type=dpp_vvldnu_00_00&param1=1&param2=pa%3Ddowncoll%26b%3DVivaldi&p={searchTerms}",
+      "favicon_url": "https://it.search.yahoo.com/favicon.ico",
+      "type": "SEARCH_ENGINE_YAHOO",
+      "id": 2
+    },
+    "yahoo_mx": {
+      "name": "Yahoo!",
+      "keyword": "y",
+      "search_url": "https://mx.search.yahoo.com/yhs/search?hspart=iry&hsimp=yhs-fullyhosted_009&type=dpp_vvldnu_00_00&param1=1&param2=pa%3Ddowncoll%26b%3DVivaldi&p={searchTerms}",
+      "favicon_url": "https://mx.search.yahoo.com/favicon.ico",
+      "type": "SEARCH_ENGINE_YAHOO",
+      "id": 2
+    },
+    "yahoo_no": {
+      "name": "Yahoo!",
+      "keyword": "y",
+      "search_url": "https://no.search.yahoo.com/yhs/search?hspart=iry&hsimp=yhs-fullyhosted_009&type=dpp_vvldnu_00_00&param1=1&param2=pa%3Ddowncoll%26b%3DVivaldi&p={searchTerms}",
+      "favicon_url": "https://no.search.yahoo.com/favicon.ico",
+      "type": "SEARCH_ENGINE_YAHOO",
+      "id": 2
+    },
+    "yahoo_pe": {
+      "name": "Yahoo!",
+      "keyword": "y",
+      "search_url": "https://pe.search.yahoo.com/yhs/search?hspart=iry&hsimp=yhs-fullyhosted_009&type=dpp_vvldnu_00_00&param1=1&param2=pa%3Ddowncoll%26b%3DVivaldi&p={searchTerms}",
+      "favicon_url": "https://pe.search.yahoo.com/favicon.ico",
+      "type": "SEARCH_ENGINE_YAHOO",
+      "id": 2
+    },
+    "yahoo_ph": {
+      "name": "Yahoo!",
+      "keyword": "y",
+      "search_url": "https://ph.search.yahoo.com/yhs/search?hspart=iry&hsimp=yhs-fullyhosted_009&type=dpp_vvldnu_00_00&param1=1&param2=pa%3Ddowncoll%26b%3DVivaldi&p={searchTerms}",
+      "favicon_url": "https://ph.search.yahoo.com/favicon.ico",
+      "type": "SEARCH_ENGINE_YAHOO",
+      "id": 2
+    },
+    "yahoo_se": {
+      "name": "Yahoo!",
+      "keyword": "y",
+      "search_url": "https://se.search.yahoo.com/yhs/search?hspart=iry&hsimp=yhs-fullyhosted_009&type=dpp_vvldnu_00_00&param1=1&param2=pa%3Ddowncoll%26b%3DVivaldi&p={searchTerms}",
+      "favicon_url": "https://se.search.yahoo.com/favicon.ico",
+      "type": "SEARCH_ENGINE_YAHOO",
+      "id": 2
+    },
+    "yahoo_sg": {
+      "name": "Yahoo!",
+      "keyword": "y",
+      "search_url": "https://sg.search.yahoo.com/yhs/search?hspart=iry&hsimp=yhs-fullyhosted_009&type=dpp_vvldnu_00_00&param1=1&param2=pa%3Ddowncoll%26b%3DVivaldi&p={searchTerms}",
+      "favicon_url": "https://sg.search.yahoo.com/favicon.ico",
+      "type": "SEARCH_ENGINE_YAHOO",
+      "id": 2
+    },
+    "yahoo_th": {
+      "name": "Yahoo!",
+      "keyword": "y",
+      "search_url": "https://th.search.yahoo.com/yhs/search?hspart=iry&hsimp=yhs-fullyhosted_009&type=dpp_vvldnu_00_00&param1=1&param2=pa%3Ddowncoll%26b%3DVivaldi&p={searchTerms}",
+      "favicon_url": "https://th.search.yahoo.com/favicon.ico",
+      "type": "SEARCH_ENGINE_YAHOO",
+      "id": 2
+    },
+    "yahoo_tw": {
+      "name": "Yahoo!",
+      "keyword": "y",
+      "search_url": "https://tw.search.yahoo.com/yhs/search?hspart=iry&hsimp=yhs-fullyhosted_009&type=dpp_vvldnu_00_00&param1=1&param2=pa%3Ddowncoll%26b%3DVivaldi&p={searchTerms}",
+      "favicon_url": "https://tw.search.yahoo.com/favicon.ico",
+      "type": "SEARCH_ENGINE_YAHOO",
+      "id": 2
+    },
+    "yahoo_uk": {
+      "name": "Yahoo!",
+      "keyword": "y",
+      "search_url": "https://uk.search.yahoo.com/yhs/search?hspart=iry&hsimp=yhs-fullyhosted_009&type=dpp_vvldnu_00_00&param1=1&param2=pa%3Ddowncoll%26b%3DVivaldi&p={searchTerms}",
+      "favicon_url": "https://uk.search.yahoo.com/favicon.ico",
+      "type": "SEARCH_ENGINE_YAHOO",
+      "id": 2
+    },
+    "yahoo_us": {
+      "name": "Yahoo!",
+      "keyword": "y",
+      "search_url": "https://us.search.yahoo.com/yhs/search?hspart=iry&hsimp=yhs-fullyhosted_009&type=dpp_vvldnu_00_00&param1=1&param2=pa%3Ddowncoll%26b%3DVivaldi&p={searchTerms}",
+      "favicon_url": "https://us.search.yahoo.com/favicon.ico",
+      "type": "SEARCH_ENGINE_YAHOO",
+      "id": 2
+    },
+    "yahoo_ve": {
+      "name": "Yahoo!",
+      "keyword": "y",
+      "search_url": "https://ve.search.yahoo.com/yhs/search?hspart=iry&hsimp=yhs-fullyhosted_009&type=dpp_vvldnu_00_00&param1=1&param2=pa%3Ddowncoll%26b%3DVivaldi&p={searchTerms}",
+      "favicon_url": "https://ve.search.yahoo.com/favicon.ico",
+      "type": "SEARCH_ENGINE_YAHOO",
+      "id": 2
+    },
+    "yahoo_vn": {
+      "name": "Yahoo!",
+      "keyword": "y",
+      "search_url": "https://vn.search.yahoo.com/yhs/search?hspart=iry&hsimp=yhs-fullyhosted_009&type=dpp_vvldnu_00_00&param1=1&param2=pa%3Ddowncoll%26b%3DVivaldi&p={searchTerms}",
+      "favicon_url": "https://vn.search.yahoo.com/favicon.ico",
+      "type": "SEARCH_ENGINE_YAHOO",
+      "id": 2
+    },
+
+    "bing": {
+      "name": "Bing",
+      "keyword": "b",
+      "favicon_url": "https://www.bing.com/sa/simg/bing_p_rr_teal_min.ico",
+      "search_url": "https://www.bing.com/search?q={searchTerms}&FORM=INCOH2{bing:Referral}",
+      "suggest_url": "https://www.bing.com/osjson.aspx?query={searchTerms}&language={language}",
+      "image_url": "https://www.bing.com/images/detail/search?iss=sbiupload&FORM=INCOH2{bing:Referral}#enterInsights",
+      "image_url_post_params": "imageBin={google:imageThumbnailBase64}",
+      "type": "SEARCH_ENGINE_BING",
+      "id": 3
+    },
+
+    "ecosia": {
+      "name": "Ecosia",
+      "keyword": "e",
+      "favicon_url": "https://cdn.ecosia.org/assets/images/ico/favicon.ico",
+      "search_url": "https://www.ecosia.org/search?q={searchTerms}&{ecosia:Referral_ZZ}",
+      "suggest_url": "https://ac.ecosia.org/autocomplete?q=%s&type=list",
+      "type": "SEARCH_ENGINE_ECOSIA",
+      "id": 4
+    },
+
+    "ecosia_by": {
+      "name": "Ecosia",
+      "keyword": "e",
+      "favicon_url": "https://cdn.ecosia.org/assets/images/ico/favicon.ico",
+      "search_url": "https://www.ecosia.org/search?q={searchTerms}&{ecosia:Referral_BY}",
+      "suggest_url": "https://ac.ecosia.org/autocomplete?q=%s&type=list",
+      "type": "SEARCH_ENGINE_ECOSIA",
+      "id": 4
+    },
+
+    "ecosia_de": {
+      "name": "Ecosia",
+      "keyword": "e",
+      "favicon_url": "https://cdn.ecosia.org/assets/images/ico/favicon.ico",
+      "search_url": "https://www.ecosia.org/search?q={searchTerms}&{ecosia:Referral_DE}",
+      "suggest_url": "https://ac.ecosia.org/autocomplete?q=%s&type=list",
+      "type": "SEARCH_ENGINE_ECOSIA",
+      "id": 4
+    },
+
+    "ecosia_ca": {
+      "name": "Ecosia",
+      "keyword": "e",
+      "favicon_url": "https://cdn.ecosia.org/assets/images/ico/favicon.ico",
+      "search_url": "https://www.ecosia.org/search?q={searchTerms}&{ecosia:Referral_CA}",
+      "suggest_url": "https://ac.ecosia.org/autocomplete?q=%s&type=list",
+      "type": "SEARCH_ENGINE_ECOSIA",
+      "id": 4
+    },
+
+    "ecosia_gb": {
+      "name": "Ecosia",
+      "keyword": "e",
+      "favicon_url": "https://cdn.ecosia.org/assets/images/ico/favicon.ico",
+      "search_url": "https://www.ecosia.org/search?q={searchTerms}&{ecosia:Referral_GB}",
+      "suggest_url": "https://ac.ecosia.org/autocomplete?q=%s&type=list",
+      "type": "SEARCH_ENGINE_ECOSIA",
+      "id": 4
+    },
+
+    "ecosia_us": {
+      "name": "Ecosia",
+      "keyword": "e",
+      "favicon_url": "https://cdn.ecosia.org/assets/images/ico/favicon.ico",
+      "search_url": "https://www.ecosia.org/search?q={searchTerms}&{ecosia:Referral_US}",
+      "suggest_url": "https://ac.ecosia.org/autocomplete?q=%s&type=list",
+      "type": "SEARCH_ENGINE_ECOSIA",
+      "id": 4
+    },
+
+    "ecosia_fr": {
+      "name": "Ecosia",
+      "keyword": "e",
+      "favicon_url": "https://cdn.ecosia.org/assets/images/ico/favicon.ico",
+      "search_url": "https://www.ecosia.org/search?q={searchTerms}&{ecosia:Referral_FR}",
+      "suggest_url": "https://ac.ecosia.org/autocomplete?q=%s&type=list",
+      "type": "SEARCH_ENGINE_ECOSIA",
+      "id": 4
+    },
+
+    "startpage_com": {
+      "name": "Startpage.com",
+      "keyword": "s",
+      "favicon_url": "https://www.startpage.com/sp/cdn/favicons/favicon--default.ico",
+      "search_url": "https://www.startpage.com/do/search?q={searchTerms}&segment=startpage.vivaldi",
+      "type": "VIVALDI_SEARCH_ENGINE_STARTPAGE_COM",
+      "id": 5
+    },
+
+    "wikipedia": {
+      "name": "Wikipedia",
+      "keyword": "w",
+      "search_url": "https://en.wikipedia.org/wiki/Special:Search?search={searchTerms}",
+      "suggest_url": "https://en.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}",
+      "favicon_url": "https://en.wikipedia.org/static/favicon/wikipedia.ico",
+      "type": "VIVALDI_SEARCH_ENGINE_WIKIPEDIA",
+      "id": 6
+    },
+    "wikipedia_be": {
+      "name": "Wikipedia",
+      "keyword": "w",
+      "search_url": "https://be.wikipedia.org/wiki/Special:Search?search={searchTerms}",
+      "suggest_url": "https://be.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}",
+      "favicon_url": "https://be.wikipedia.org/static/favicon/wikipedia.ico",
+      "type": "VIVALDI_SEARCH_ENGINE_WIKIPEDIA",
+      "id": 6
+    },
+    "wikipedia_bg": {
+      "name": "Wikipedia",
+      "keyword": "w",
+      "search_url": "https://bg.wikipedia.org/wiki/Special:Search?search={searchTerms}",
+      "suggest_url": "https://bg.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}",
+      "favicon_url": "https://bg.wikipedia.org/static/favicon/wikipedia.ico",
+      "type": "VIVALDI_SEARCH_ENGINE_WIKIPEDIA",
+      "id": 6
+    },
+    "wikipedia_cs": {
+      "name": "Wikipedia",
+      "keyword": "w",
+      "search_url": "https://cs.wikipedia.org/wiki/Special:Search?search={searchTerms}",
+      "suggest_url": "https://cs.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}",
+      "favicon_url": "https://cs.wikipedia.org/static/favicon/wikipedia.ico",
+      "type": "VIVALDI_SEARCH_ENGINE_WIKIPEDIA",
+      "id": 6
+    },
+    "wikipedia_da": {
+      "name": "Wikipedia",
+      "keyword": "w",
+      "search_url": "https://da.wikipedia.org/wiki/Special:Search?search={searchTerms}",
+      "suggest_url": "https://da.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}",
+      "favicon_url": "https://da.wikipedia.org/static/favicon/wikipedia.ico",
+      "type": "VIVALDI_SEARCH_ENGINE_WIKIPEDIA",
+      "id": 6
+    },
+    "wikipedia_de": {
+      "name": "Wikipedia",
+      "keyword": "w",
+      "search_url": "https://de.wikipedia.org/wiki/Special:Search?search={searchTerms}",
+      "suggest_url": "https://de.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}",
+      "favicon_url": "https://de.wikipedia.org/static/favicon/wikipedia.ico",
+      "type": "VIVALDI_SEARCH_ENGINE_WIKIPEDIA",
+      "id": 6
+    },
+    "wikipedia_el": {
+      "name": "Wikipedia",
+      "keyword": "w",
+      "search_url": "https://el.wikipedia.org/wiki/Special:Search?search={searchTerms}",
+      "suggest_url": "https://el.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}",
+      "favicon_url": "https://el.wikipedia.org/static/favicon/wikipedia.ico",
+      "type": "VIVALDI_SEARCH_ENGINE_WIKIPEDIA",
+      "id": 6
+    },
+    "wikipedia_es": {
+      "name": "Wikipedia",
+      "keyword": "w",
+      "search_url": "https://es.wikipedia.org/wiki/Special:Search?search={searchTerms}",
+      "suggest_url": "https://es.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}",
+      "favicon_url": "https://es.wikipedia.org/static/favicon/wikipedia.ico",
+      "type": "VIVALDI_SEARCH_ENGINE_WIKIPEDIA",
+      "id": 6
+    },
+    "wikipedia_fi": {
+      "name": "Wikipedia",
+      "keyword": "w",
+      "search_url": "https://fi.wikipedia.org/wiki/Special:Search?search={searchTerms}",
+      "suggest_url": "https://fi.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}",
+      "favicon_url": "https://fi.wikipedia.org/static/favicon/wikipedia.ico",
+      "type": "VIVALDI_SEARCH_ENGINE_WIKIPEDIA",
+      "id": 6
+    },
+    "wikipedia_fr": {
+      "name": "Wikipedia",
+      "keyword": "w",
+      "search_url": "https://fr.wikipedia.org/wiki/Special:Search?search={searchTerms}",
+      "suggest_url": "https://fr.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}",
+      "favicon_url": "https://fr.wikipedia.org/static/favicon/wikipedia.ico",
+      "type": "VIVALDI_SEARCH_ENGINE_WIKIPEDIA",
+      "id": 6
+    },
+    "wikipedia_hr": {
+      "name": "Wikipedia",
+      "keyword": "w",
+      "search_url": "https://hr.wikipedia.org/wiki/Special:Search?search={searchTerms}",
+      "suggest_url": "https://hr.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}",
+      "favicon_url": "https://hr.wikipedia.org/static/favicon/wikipedia.ico",
+      "type": "VIVALDI_SEARCH_ENGINE_WIKIPEDIA",
+      "id": 6
+    },
+    "wikipedia_hu": {
+      "name": "Wikipedia",
+      "keyword": "w",
+      "search_url": "https://hu.wikipedia.org/wiki/Special:Search?search={searchTerms}",
+      "suggest_url": "https://hu.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}",
+      "favicon_url": "https://hu.wikipedia.org/static/favicon/wikipedia.ico",
+      "type": "VIVALDI_SEARCH_ENGINE_WIKIPEDIA",
+      "id": 6
+    },
+    "wikipedia_id": {
+      "name": "Wikipedia",
+      "keyword": "w",
+      "search_url": "https://id.wikipedia.org/wiki/Special:Search?search={searchTerms}",
+      "suggest_url": "https://id.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}",
+      "favicon_url": "https://id.wikipedia.org/static/favicon/wikipedia.ico",
+      "type": "VIVALDI_SEARCH_ENGINE_WIKIPEDIA",
+      "id": 6
+    },
+    "wikipedia_it": {
+      "name": "Wikipedia",
+      "keyword": "w",
+      "search_url": "https://it.wikipedia.org/wiki/Special:Search?search={searchTerms}",
+      "suggest_url": "https://it.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}",
+      "favicon_url": "https://it.wikipedia.org/static/favicon/wikipedia.ico",
+      "type": "VIVALDI_SEARCH_ENGINE_WIKIPEDIA",
+      "id": 6
+    },
+    "wikipedia_jp": {
+      "name": "Wikipedia",
+      "keyword": "w",
+      "search_url": "https://jp.wikipedia.org/wiki/Special:Search?search={searchTerms}",
+      "suggest_url": "https://jp.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}",
+      "favicon_url": "https://jp.wikipedia.org/static/favicon/wikipedia.ico",
+      "type": "VIVALDI_SEARCH_ENGINE_WIKIPEDIA",
+      "id": 6
+    },
+    "wikipedia_ko": {
+      "name": "Wikipedia",
+      "keyword": "w",
+      "search_url": "https://ko.wikipedia.org/wiki/Special:Search?search={searchTerms}",
+      "suggest_url": "https://ko.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}",
+      "favicon_url": "https://ko.wikipedia.org/static/favicon/wikipedia.ico",
+      "type": "VIVALDI_SEARCH_ENGINE_WIKIPEDIA",
+      "id": 6
+    },
+    "wikipedia_lt": {
+      "name": "Wikipedia",
+      "keyword": "w",
+      "search_url": "https://lt.wikipedia.org/wiki/Special:Search?search={searchTerms}",
+      "suggest_url": "https://lt.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}",
+      "favicon_url": "https://lt.wikipedia.org/static/favicon/wikipedia.ico",
+      "type": "VIVALDI_SEARCH_ENGINE_WIKIPEDIA",
+      "id": 6
+    },
+    "wikipedia_nn": {
+      "name": "Wikipedia",
+      "keyword": "w",
+      "search_url": "https://nn.wikipedia.org/wiki/Special:Search?search={searchTerms}",
+      "suggest_url": "https://nn.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}",
+      "favicon_url": "https://nn.wikipedia.org/static/favicon/wikipedia.ico",
+      "type": "VIVALDI_SEARCH_ENGINE_WIKIPEDIA",
+      "id": 6
+    },
+    "wikipedia_no": {
+      "name": "Wikipedia",
+      "keyword": "w",
+      "search_url": "https://no.wikipedia.org/wiki/Special:Search?search={searchTerms}",
+      "suggest_url": "https://no.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}",
+      "favicon_url": "https://no.wikipedia.org/static/favicon/wikipedia.ico",
+      "type": "VIVALDI_SEARCH_ENGINE_WIKIPEDIA",
+      "id": 6
+    },
+    "wikipedia_pl": {
+      "name": "Wikipedia",
+      "keyword": "w",
+      "search_url": "https://pl.wikipedia.org/wiki/Special:Search?search={searchTerms}",
+      "suggest_url": "https://pl.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}",
+      "favicon_url": "https://pl.wikipedia.org/static/favicon/wikipedia.ico",
+      "type": "VIVALDI_SEARCH_ENGINE_WIKIPEDIA",
+      "id": 6
+    },
+    "wikipedia_pt": {
+      "name": "Wikipedia",
+      "keyword": "w",
+      "search_url": "https://pt.wikipedia.org/wiki/Special:Search?search={searchTerms}",
+      "suggest_url": "https://pt.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}",
+      "favicon_url": "https://pt.wikipedia.org/static/favicon/wikipedia.ico",
+      "type": "VIVALDI_SEARCH_ENGINE_WIKIPEDIA",
+      "id": 6
+    },
+    "wikipedia_ro": {
+      "name": "Wikipedia",
+      "keyword": "w",
+      "search_url": "https://ro.wikipedia.org/wiki/Special:Search?search={searchTerms}",
+      "suggest_url": "https://ro.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}",
+      "favicon_url": "https://ro.wikipedia.org/static/favicon/wikipedia.ico",
+      "type": "VIVALDI_SEARCH_ENGINE_WIKIPEDIA",
+      "id": 6
+    },
+    "wikipedia_ru": {
+      "name": "Wikipedia",
+      "keyword": "w",
+      "search_url": "https://ru.wikipedia.org/wiki/Special:Search?search={searchTerms}",
+      "suggest_url": "https://ru.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}",
+      "favicon_url": "https://ru.wikipedia.org/static/favicon/wikipedia.ico",
+      "type": "VIVALDI_SEARCH_ENGINE_WIKIPEDIA",
+      "id": 6
+    },
+    "wikipedia_se": {
+      "name": "Wikipedia",
+      "keyword": "w",
+      "search_url": "https://se.wikipedia.org/wiki/Special:Search?search={searchTerms}",
+      "suggest_url": "https://se.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}",
+      "favicon_url": "https://se.wikipedia.org/static/favicon/wikipedia.ico",
+      "type": "VIVALDI_SEARCH_ENGINE_WIKIPEDIA",
+      "id": 6
+    },
+    "wikipedia_sk": {
+      "name": "Wikipedia",
+      "keyword": "w",
+      "search_url": "https://sk.wikipedia.org/wiki/Special:Search?search={searchTerms}",
+      "suggest_url": "https://sk.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}",
+      "favicon_url": "https://sk.wikipedia.org/static/favicon/wikipedia.ico",
+      "type": "VIVALDI_SEARCH_ENGINE_WIKIPEDIA",
+      "id": 6
+    },
+    "wikipedia_sr": {
+      "name": "Wikipedia",
+      "keyword": "w",
+      "search_url": "https://sr.wikipedia.org/wiki/Special:Search?search={searchTerms}",
+      "suggest_url": "https://sr.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}",
+      "favicon_url": "https://sr.wikipedia.org/static/favicon/wikipedia.ico",
+      "type": "VIVALDI_SEARCH_ENGINE_WIKIPEDIA",
+      "id": 6
+    },
+    "wikipedia_th": {
+      "name": "Wikipedia",
+      "keyword": "w",
+      "search_url": "https://th.wikipedia.org/wiki/Special:Search?search={searchTerms}",
+      "suggest_url": "https://th.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}",
+      "favicon_url": "https://th.wikipedia.org/static/favicon/wikipedia.ico",
+      "type": "VIVALDI_SEARCH_ENGINE_WIKIPEDIA",
+      "id": 6
+    },
+    "wikipedia_tr": {
+      "name": "Wikipedia",
+      "keyword": "w",
+      "search_url": "https://tr.wikipedia.org/wiki/Special:Search?search={searchTerms}",
+      "suggest_url": "https://tr.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}",
+      "favicon_url": "https://tr.wikipedia.org/static/favicon/wikipedia.ico",
+      "type": "VIVALDI_SEARCH_ENGINE_WIKIPEDIA",
+      "id": 6
+    },
+    "wikipedia_uk": {
+      "name": "Wikipedia",
+      "keyword": "w",
+      "search_url": "https://uk.wikipedia.org/wiki/Special:Search?search={searchTerms}",
+      "suggest_url": "https://uk.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}",
+      "favicon_url": "https://uk.wikipedia.org/static/favicon/wikipedia.ico",
+      "type": "VIVALDI_SEARCH_ENGINE_WIKIPEDIA",
+      "id": 6
+    },
+    "wikipedia_vi": {
+      "name": "Wikipedia",
+      "keyword": "w",
+      "search_url": "https://vi.wikipedia.org/wiki/Special:Search?search={searchTerms}",
+      "suggest_url": "https://vi.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}",
+      "favicon_url": "https://vi.wikipedia.org/static/favicon/wikipedia.ico",
+      "type": "VIVALDI_SEARCH_ENGINE_WIKIPEDIA",
+      "id": 6
+    },
+    "wikipedia_zh": {
+      "name": "Wikipedia",
+      "keyword": "w",
+      "search_url": "https://zh.wikipedia.org/wiki/Special:Search?search={searchTerms}",
+      "suggest_url": "https://zh.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}",
+      "favicon_url": "https://zh.wikipedia.org/static/favicon/wikipedia.ico",
+      "type": "VIVALDI_SEARCH_ENGINE_WIKIPEDIA",
+      "id": 6
+    },
+
+    "duckduckgo": {
+      "name": "DuckDuckGo",
+      "keyword": "d",
+      "favicon_url": "https://duckduckgo.com/favicon.ico",
+      "search_url": "https://duckduckgo.com/?q={searchTerms}&{ddg:Referral}",
+      "suggest_url": "https://duckduckgo.com/ac/?q={searchTerms}&type=list",
+      "type": "SEARCH_ENGINE_DUCKDUCKGO",
+      "id": 7
+    },
+
+    "yandex_by": {
+      "name": "\u042f\u043d\u0434\u0435\u043a\u0441",
+      "keyword": "y",
+      "favicon_url": "https://yastatic.net/s3/web4static/_/v2/ZcejnfbLE_TlMK13nS41mdC4A88.png",
+      "search_url": "https://yandex.by/{yandex:searchPath}?text={searchTerms}&from=os&clid=2222821",
+      "suggest_url": "https://suggest.yandex.by/suggest-ff.cgi?part={searchTerms}&clid=2222821",
+      "image_url": "https://yandex.by/images/search/?rpt=imageview",
+      "image_url_post_params": "upfile={google:imageThumbnail},original_width={google:imageOriginalWidth},original_height={google:imageOriginalHeight},prg=1",
+      "type": "SEARCH_ENGINE_YANDEX",
+      "id": 8
+    },
+
+    "yandex_ru": {
+      "name": "\u042f\u043d\u0434\u0435\u043a\u0441",
+      "keyword": "y",
+      "favicon_url": "https://yastatic.net/s3/web4static/_/v2/ZcejnfbLE_TlMK13nS41mdC4A88.png",
+      "search_url": "https://yandex.ru/{yandex:searchPath}?text={searchTerms}&from=os&{yandex:vivaldiReferralID}",
+      "suggest_url": "https://suggest.yandex.ru/suggest-ff.cgi?part={searchTerms}&{yandex:vivaldiReferralID}",
+      "image_url": "https://yandex.ru/images/search/?rpt=imageview",
+      "image_url_post_params": "upfile={google:imageThumbnail},original_width={google:imageOriginalWidth},original_height={google:imageOriginalHeight},prg=1",
+      "type": "SEARCH_ENGINE_YANDEX",
+      "id": 8
+    },
+
+    "yandex_tr": {
+      "name": "\u042f\u043d\u0434\u0435\u043a\u0441",
+      "keyword": "y",
+      "favicon_url": "https://yastatic.net/s3/web4static/_/v2/v9YNE_BX0evwMHbDyd0NZv8ReK0.png",
+      "search_url": "https://yandex.com.tr/{yandex:searchPath}?text={searchTerms}",
+      "suggest_url": "https://suggest.yandex.com.tr/suggest-ff.cgi?part={searchTerms}",
+      "image_url": "https://yandex.com.tr/gorsel/search?rpt=imageview",
+      "image_url_post_params": "upfile={google:imageThumbnail},original_width={google:imageOriginalWidth},original_height={google:imageOriginalHeight},prg=1",
+      "type": "SEARCH_ENGINE_YANDEX",
+      "id": 8
+    },
+
+    "neeva": {
+      "name": "Neeva",
+      "keyword": "n",
+      "favicon_url": "https://www.neeva.com/favicon.ico",
+      "search_url": "https://neeva.com/search?q={searchTerms}&src=opensearch&pk_source=vivaldi&pk_medium=external_product&pk_campaign=neeva_vivaldi_o",
+      "suggest_url": "https://neeva.com/suggest?q={searchTerms}&src=opensearch&pk_source=vivaldi&pk_medium=external_product&pk_campaign=neeva_vivaldi_o",
+      "type": "VIVALDI_SEARCH_ENGINE_NEEVA",
+      "id": 9
+    },
+
+    "wolfram": {
+      "name": "Wolfram|Alpha",
+      "keyword": "wa",
+      "favicon_url": "https://www.wolframalpha.com/_next/static/images/favicon_fzx75d1e.ico",
+      "search_url": "https://www.wolframalpha.com/input/?i={searchTerms}",
+      "type": "VIVALDI_SEARCH_ENGINE_WOLFRAM_ALPHA",
+      "id": 10
+    },
+
+    "ozon": {
+      "name": "OZON",
+      "keyword": "o",
+      "favicon_url": "https://www.ozon.ru/public/favicon.ico",
+      "search_url": "https://www.ozon.ru/?context=search&text={searchTerms}&partner=vivaldi",
+      "type": "VIVALDI_SEARCH_ENGINE_OZON",
+      "id": 11
+    },
+
+    "amazon": {
+      "name": "Amazon",
+      "keyword": "z",
+      "favicon_url": "https://www.amazon.com/favicon.ico",
+      "search_url": "https://www.amazon.com/s/192-2405230-1137661?ie=UTF8&index=blended&keywords={searchTerms}",
+      "type": "VIVALDI_SEARCH_ENGINE_AMAZON",
+      "id": 12
+    },
+
+    "ebay": {
+      "name": "eBay",
+      "keyword": "eb",
+      "favicon_url": "https://www.ebay.com/favicon.ico",
+      "search_url": "https://www.ebay.com/sch/i.html?&_nkw={searchTerms}",
+      "type": "VIVALDI_SEARCH_ENGINE_EBAY",
+      "id": 13
+    },
+
+    "mail_ru": {
+      "name": "\u041f\u043e\u0438\u0441\u043a Mail.ru",
+      "keyword": "m",
+      "favicon_url": "https://go.mail.ru/static/common/img/favicon.ico",
+      "search_url": "https://go.mail.ru/search?fr=ps&q={searchTerms}&gp=495906",
+      "suggest_url": "https://suggests.go.mail.ru/chrome?q={searchTerms}",
+      "alternate_urls": [
+        "https://go.mail.ru/msearch?q={searchTerms}&gp=495906"
+      ],
+      "type": "SEARCH_ENGINE_MAILRU",
+      "id": 14
+    },
+
+    "qwant_ca": {
+      "name": "Qwant",
+      "keyword": "q",
+      "favicon_url":"https://www.qwant.com/public/favicon-32.c31d35a2488b8fc69760acb21042fb4b.png",
+      "search_url": "https://www.qwant.com/?client=brz-vivaldi&q={searchTerms}&t=web",
+      "suggest_url": "https://api.qwant.com/v3/suggest/?q={searchTerms}&client=opensearch&locale=ca_EN",
+      "type": "VIVALDI_SEARCH_ENGINE_QWANT",
+      "id": 15
+    },
+
+    "qwant_de": {
+      "name": "Qwant",
+      "keyword": "q",
+      "favicon_url":"https://www.qwant.com/public/favicon-32.c31d35a2488b8fc69760acb21042fb4b.png",
+      "search_url": "https://www.qwant.com/?client=brz-vivaldi&q={searchTerms}&t=web",
+      "suggest_url": "https://api.qwant.com/v3/suggest/?q={searchTerms}&client=opensearch&locale=de_DE",
+      "type": "VIVALDI_SEARCH_ENGINE_QWANT",
+      "id": 15
+    },
+
+    "qwant_es": {
+      "name": "Qwant",
+      "keyword": "q",
+      "favicon_url":"https://www.qwant.com/public/favicon-32.c31d35a2488b8fc69760acb21042fb4b.png",
+      "search_url": "https://www.qwant.com/?client=brz-vivaldi&q={searchTerms}&t=web",
+      "suggest_url": "https://api.qwant.com/v3/suggest/?q={searchTerms}&client=opensearch&locale=es_ES",
+      "type": "VIVALDI_SEARCH_ENGINE_QWANT",
+      "id": 15
+    },
+
+    "qwant_fr": {
+      "name": "Qwant",
+      "keyword": "q",
+      "favicon_url":"https://www.qwant.com/public/favicon-32.c31d35a2488b8fc69760acb21042fb4b.png",
+      "search_url": "https://www.qwant.com/?client=brz-vivaldi&q={searchTerms}&t=web",
+      "suggest_url": "https://api.qwant.com/v3/suggest/?q={searchTerms}&client=opensearch&locale=fr_FR",
+      "type": "VIVALDI_SEARCH_ENGINE_QWANT",
+      "id": 15
+    },
+
+    "qwant_gb": {
+      "name": "Qwant",
+      "keyword": "q",
+      "favicon_url":"https://www.qwant.com/public/favicon-32.c31d35a2488b8fc69760acb21042fb4b.png",
+      "search_url": "https://www.qwant.com/?client=brz-vivaldi&q={searchTerms}&t=web",
+      "suggest_url": "https://api.qwant.com/v3/suggest/?q={searchTerms}&client=opensearch&locale=en_GB",
+      "type": "VIVALDI_SEARCH_ENGINE_QWANT",
+      "id": 15
+    },
+
+    "qwant_it": {
+      "name": "Qwant",
+      "keyword": "q",
+      "favicon_url":"https://www.qwant.com/public/favicon-32.c31d35a2488b8fc69760acb21042fb4b.png",
+      "search_url": "https://www.qwant.com/?client=brz-vivaldi&q={searchTerms}&t=web",
+      "suggest_url": "https://api.qwant.com/v3/suggest/?q={searchTerms}&client=opensearch&locale=it_IT",
+      "type": "VIVALDI_SEARCH_ENGINE_QWANT",
+      "id": 15
+    },
+
+    "qwant_us": {
+      "name": "Qwant",
+      "keyword": "q",
+      "favicon_url":"https://www.qwant.com/public/favicon-32.c31d35a2488b8fc69760acb21042fb4b.png",
+      "search_url": "https://www.qwant.com/?client=brz-vivaldi&q={searchTerms}&t=web",
+      "suggest_url": "https://api.qwant.com/v3/suggest/?q={searchTerms}&client=opensearch&locale=en_US",
+      "type": "VIVALDI_SEARCH_ENGINE_QWANT",
+      "id": 15
+    },
+
+    "yelp": {
+      "name": "Yelp",
+      "keyword": "yl",
+      "favicon_url": "https://www.yelp.com/favicon.ico",
+      "search_url": "https://www.yelp.com/search?find_desc={searchTerms}&utm_source=Vivaldi&utm_medium=Partner&utm_campaign=vivaldi_search_widget&utm_content=speeddial",
+      "type": "VIVALDI_SEARCH_ENGINE_YELP",
+      "id": 16
+    },
+
+    // Unit tests rely on the google, bing and yahoo template urls to be a
+    // certain way. We swap these in in place of our own definitions for tests.
+    // It shouldn't be used otherwise.
+    "google_unittests": {
+      "name": "Google",
+      "keyword": "google.com",
+      "favicon_url": "https://www.google.com/images/branding/product/ico/googleg_lodp.ico",
+      "search_url": "{google:baseURL}search?q={searchTerms}&{google:RLZ}{google:originalQueryForSuggestion}{google:assistedQueryStats}{google:searchFieldtrialParameter}{google:iOSSearchLanguage}{google:prefetchSource}{google:searchClient}{google:sourceId}{google:contextualSearchVersion}ie={inputEncoding}",
+      "suggest_url": "{google:baseSuggestURL}search?{google:searchFieldtrialParameter}client={google:suggestClient}&gs_ri={google:suggestRid}&xssi=t&q={searchTerms}&{google:inputType}{google:omniboxFocusType}{google:cursorPosition}{google:currentPageUrl}{google:pageClassification}{google:searchVersion}{google:sessionToken}{google:prefetchQuery}sugkey={google:suggestAPIKeyParameter}",
+      "image_url": "{google:baseSearchByImageURL}upload",
+      "contextual_search_url": "{google:baseURL}_/contextualsearch?{google:contextualSearchVersion}{google:contextualSearchContextData}",
+      "image_url_post_params": "encoded_image={google:imageThumbnail},image_url={google:imageURL},sbisrc={google:imageSearchSource},original_width={google:imageOriginalWidth},original_height={google:imageOriginalHeight}",
+      "alternate_urls": [
+        "{google:baseURL}#q={searchTerms}",
+        "{google:baseURL}search#q={searchTerms}",
+        "{google:baseURL}webhp#q={searchTerms}",
+        "{google:baseURL}s#q={searchTerms}",
+        "{google:baseURL}s?q={searchTerms}"
+      ],
+      "type": "SEARCH_ENGINE_GOOGLE",
+      "preconnect_to_search_url" : "ALLOWED",
+      "id": 1
+    },
+
+    "bing_unittests": {
+      "name": "Bing",
+      "keyword": "bing.com",
+      "favicon_url": "https://www.bing.com/sa/simg/bing_p_rr_teal_min.ico",
+      "search_url": "https://www.bing.com/search?q={searchTerms}&PC=U316&FORM=CHROMN",
+      "suggest_url": "https://www.bing.com/osjson.aspx?query={searchTerms}&language={language}&PC=U316",
+      "image_url": "https://www.bing.com/images/detail/search?iss=sbiupload&FORM=CHROMI#enterInsights",
+      "new_tab_url": "https://www.bing.com/chrome/newtab",
+      "image_url_post_params": "imageBin={google:imageThumbnailBase64}",
+      "type": "SEARCH_ENGINE_BING",
+      "id": 3
+    },
+
+    "yahoo_unittests": {
+      "name": "Yahoo!",
+      "keyword": "yahoo.com",
+      "favicon_url": "https://search.yahoo.com/favicon.ico",
+      "search_url": "https://search.yahoo.com/search{google:pathWildcard}?ei={inputEncoding}&fr=crmas_sfp&p={searchTerms}",
+      "suggest_url": "https://search.yahoo.com/sugg/chrome?output=fxjson&appid=crmas_sfp&command={searchTerms}",
+      "new_tab_url": "https://search.yahoo.com?fr=crmas_sfp",
+      "type": "SEARCH_ENGINE_YAHOO",
+      "id": 2
+    }
+  },
+
+  "generate_array": {
+    "array_name": "kAllEngines"
+  }
+}

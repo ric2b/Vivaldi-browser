@@ -4,7 +4,7 @@
 
 package org.chromium.chrome.browser.settings;
 
-import static org.chromium.chrome.browser.flags.ChromeFeatureList.UNIFIED_PASSWORD_MANAGER_ANDROID;
+import static org.chromium.chrome.browser.password_manager.PasswordManagerHelper.usesUnifiedPasswordManagerUI;
 
 import android.content.Context;
 import android.content.Intent;
@@ -21,7 +21,6 @@ import androidx.preference.PreferenceFragmentCompat;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.homepage.HomepageManager;
 import org.chromium.chrome.browser.night_mode.NightModeMetrics.ThemeSettingsEntry;
 import org.chromium.chrome.browser.night_mode.NightModeUtils;
@@ -60,9 +59,14 @@ import java.util.HashMap;
 import java.util.Map;
 
 // Vivaldi
+import android.text.TextUtils;
+
 import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
+import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.ui.base.DeviceFormFactor;
+
+import org.vivaldi.browser.common.VivaldiUtils;
 import org.vivaldi.browser.preferences.AdsAndTrackerPreference;
 import org.vivaldi.browser.preferences.NewTabPositionMainPreference;
 import org.vivaldi.browser.preferences.StartPageModePreference;
@@ -208,7 +212,7 @@ public class MainSettings extends PreferenceFragmentCompat
 
         updatePasswordsPreference();
 
-        if (ChromeFeatureList.isEnabled(UNIFIED_PASSWORD_MANAGER_ANDROID)) {
+        if (usesUnifiedPasswordManagerUI()) {
             setManagedPreferenceDelegateForPreference(PREF_PASSWORDS);
         }
 
@@ -315,6 +319,11 @@ public class MainSettings extends PreferenceFragmentCompat
         pref.setSummary(StartPageModePreference.updateSummary());
         pref = getPreferenceScreen().findPreference("ads_and_tracker");
         pref.setSummary(AdsAndTrackerPreference.updateSummary());
+        SharedPreferencesManager.getInstance().addObserver(key -> {
+            if (TextUtils.equals(key, VivaldiPreferences.ADDRESS_BAR_TO_BOTTOM))
+                updateSummary();
+        });
+        updateSummary();
     }
 
     private Preference addPreferenceIfAbsent(String key) {
@@ -379,6 +388,10 @@ public class MainSettings extends PreferenceFragmentCompat
 
     private void updatePasswordsPreference() {
         Preference passwordsPreference = findPreference(PREF_PASSWORDS);
+        if (usesUnifiedPasswordManagerUI()) {
+            // TODO(crbug.com/1217070): Move this to the layout xml once the feature is rolled out
+            passwordsPreference.setTitle(R.string.password_settings_title_gpm);
+        }
         passwordsPreference.setOnPreferenceClickListener(preference -> {
             PasswordManagerLauncher.showPasswordSettings(
                     getActivity(), ManagePasswordsReferrer.CHROME_SETTINGS);
@@ -436,8 +449,7 @@ public class MainSettings extends PreferenceFragmentCompat
                 if (PREF_SEARCH_ENGINE.equals(preference.getKey())) {
                     return TemplateUrlServiceFactory.get().isDefaultSearchManaged();
                 }
-                if (ChromeFeatureList.isEnabled(UNIFIED_PASSWORD_MANAGER_ANDROID)
-                        && PREF_PASSWORDS.equals(preference.getKey())) {
+                if (usesUnifiedPasswordManagerUI() && PREF_PASSWORDS.equals(preference.getKey())) {
                     return UserPrefs.get(Profile.getLastUsedRegularProfile())
                             .isManagedPreference(Pref.CREDENTIALS_ENABLE_SERVICE);
                 }
@@ -449,8 +461,7 @@ public class MainSettings extends PreferenceFragmentCompat
                 if (PREF_SEARCH_ENGINE.equals(preference.getKey())) {
                     return TemplateUrlServiceFactory.get().isDefaultSearchManaged();
                 }
-                if (ChromeFeatureList.isEnabled(UNIFIED_PASSWORD_MANAGER_ANDROID)
-                        && PREF_PASSWORDS.equals(preference.getKey())) {
+                if (usesUnifiedPasswordManagerUI() && PREF_PASSWORDS.equals(preference.getKey())) {
                     return UserPrefs.get(Profile.getLastUsedRegularProfile())
                             .isManagedPreference(Pref.CREDENTIALS_ENABLE_SERVICE);
                 }
@@ -458,5 +469,15 @@ public class MainSettings extends PreferenceFragmentCompat
                         || isPreferenceControlledByCustodian(preference);
             }
         };
+    }
+
+    // Vivaldi
+    private void updateSummary() {
+        // Update Address bar gesture summary based on its position
+        getPreferenceScreen().findPreference(
+                VivaldiPreferences.ENABLE_ADDRESS_BAR_SWIPE_GESTURE).setSummary(
+                        VivaldiUtils.isTopToolbarOn()
+                        ? R.string.address_bar_swipe_gesture_down_summary
+                        : R.string.address_bar_swipe_gesture_up_summary);
     }
 }

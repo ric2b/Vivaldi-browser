@@ -215,6 +215,10 @@ void DefaultDecoderFactory::CreateVideoDecoders(
 #endif  // USE_SYSTEM_PROPRIETARY_CODECS
 }
 
+base::WeakPtr<DecoderFactory> DefaultDecoderFactory::GetWeakPtr() {
+  return weak_factory_.GetWeakPtr();
+}
+
 void DefaultDecoderFactory::Shutdown() {
   base::AutoLock auto_lock(shutdown_lock_);
   external_decoder_factory_.reset();

@@ -17,6 +17,7 @@
 #include "base/scoped_observation.h"
 #include "base/timer/timer.h"
 #include "ui/base/models/list_model_observer.h"
+#include "ui/compositor/layer_animator.h"
 #include "ui/views/view.h"
 
 namespace views {
@@ -28,6 +29,7 @@ namespace ash {
 
 class AppListViewDelegate;
 class ContinueTaskView;
+class SearchResultPageDialogController;
 
 // The container for the Continue Tasks results view. The view contains a preset
 // number of ContinueTaskViews that get populated based on the list of results
@@ -44,6 +46,7 @@ class ASH_EXPORT ContinueTaskContainerView : public ui::ListModelObserver,
   ContinueTaskContainerView(AppListViewDelegate* view_delegate,
                             int columns,
                             OnResultsChanged update_callback,
+                            SearchResultPageDialogController* dialog_controller,
                             bool tablet_mode);
   ContinueTaskContainerView(const ContinueTaskContainerView&) = delete;
   ContinueTaskContainerView& operator=(const ContinueTaskContainerView&) =
@@ -59,6 +62,7 @@ class ASH_EXPORT ContinueTaskContainerView : public ui::ListModelObserver,
 
   // views::View:
   void VisibilityChanged(views::View* starting_from, bool is_visible) override;
+  bool OnKeyPressed(const ui::KeyEvent& event) override;
 
   void Update();
   size_t num_results() const { return num_results_; }
@@ -67,6 +71,14 @@ class ASH_EXPORT ContinueTaskContainerView : public ui::ListModelObserver,
 
   // See AppsGridView::DisableFocusForShowingActiveFolder().
   void DisableFocusForShowingActiveFolder(bool disabled);
+
+  // Start the animation for showing the suggestions in the continue section.
+  // Suggestion views will slide in from an evenly distributed amount of
+  // `available_space` into their final positions.
+  // This animation must only be used in clamshell mode.
+  void AnimateSlideInSuggestions(int available_space,
+                                 base::TimeDelta duration,
+                                 gfx::Tween::Type tween);
 
   base::OneShotTimer* animations_timer_for_test() { return &animations_timer_; }
 
@@ -139,11 +151,23 @@ class ASH_EXPORT ContinueTaskContainerView : public ui::ListModelObserver,
   // update animation.
   void ClearAnimatingViews();
 
+  // Moves focus up by one row, or up-and-out of the section.
+  void MoveFocusUp();
+
+  // Moves focus down by one row, or down-and-out of the section.
+  void MoveFocusDown();
+
+  // Returns the index in `suggestion_tasks_views_` of the currently focused
+  // task view, or -1 if no task view is focused.
+  int GetIndexOfFocusedTaskView() const;
+
   AppListViewDelegate* const view_delegate_;
 
   // A callback to be invoked after an Update request finishes.
   OnResultsChanged update_callback_;
   SearchModel::SearchResults* results_ = nullptr;  // Owned by SearchModel.
+
+  SearchResultPageDialogController* const dialog_controller_;
 
   // Only one of the layouts is to be set.
   // `flex_layout_`  aligns the views as a single row centered in the container.

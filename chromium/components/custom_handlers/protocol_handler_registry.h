@@ -14,20 +14,23 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/task/sequenced_task_runner_helpers.h"
+#include "base/time/time.h"
 #include "base/values.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/common/custom_handlers/protocol_handler.h"
 
 namespace user_prefs {
 class PrefRegistrySyncable;
 }
 
-using content::ProtocolHandler;
+class PrefService;
+class GURL;
+
 using DefaultClientCallback = base::OnceCallback<void(bool)>;
 
 namespace custom_handlers {
+
+class ProtocolHandler;
 
 // This is where handlers for protocols registered with
 // navigator.registerProtocolHandler() are registered. Each Profile owns an
@@ -73,7 +76,7 @@ class ProtocolHandlerRegistry : public KeyedService {
   };
 
   // Creates a new instance.
-  ProtocolHandlerRegistry(content::BrowserContext* context,
+  ProtocolHandlerRegistry(PrefService* prefs,
                           std::unique_ptr<Delegate> delegate);
 
   ProtocolHandlerRegistry(const ProtocolHandlerRegistry&) = delete;
@@ -246,11 +249,11 @@ class ProtocolHandlerRegistry : public KeyedService {
 
   // Returns a JSON list of protocol handlers. The caller is responsible for
   // deleting this Value.
-  base::Value* EncodeRegisteredHandlers();
+  base::Value::List EncodeRegisteredHandlers();
 
   // Returns a JSON list of ignored protocol handlers. The caller is
   // responsible for deleting this Value.
-  base::Value* EncodeIgnoredHandlers();
+  base::Value::List EncodeIgnoredHandlers();
 
   // Notifies observers of a change to the registry.
   void NotifyChanged();
@@ -273,9 +276,12 @@ class ProtocolHandlerRegistry : public KeyedService {
   ProtocolHandlerList GetUserIgnoredHandlers(base::Time begin,
                                              base::Time end) const;
 
-  // Get the DictionaryValues stored under the given pref name that are valid
+  // Get the Dict values stored under the given pref name that are valid
   // ProtocolHandler values.
-  std::vector<const base::DictionaryValue*> GetHandlersFromPref(
+  // These pointers may be invalidated by other changes in the preferences
+  // storage, hence they must not be stored in a way that outlives the current
+  // stack frame.
+  std::vector<const base::Value::Dict*> GetHandlersFromPref(
       const char* pref_name) const;
 
   // Ignores future requests to register the given protocol handler.
@@ -337,8 +343,9 @@ class ProtocolHandlerRegistry : public KeyedService {
   // Protocol handlers that are the defaults for a given protocol.
   ProtocolHandlerMap default_handlers_;
 
-  // The browser context that owns this ProtocolHandlerRegistry.
-  raw_ptr<content::BrowserContext> context_;
+  // The PrefService to store the registered handlers in the user profile (it
+  // may be null for testing)
+  raw_ptr<PrefService> prefs_ = nullptr;
 
   // The Delegate that registers / deregisters external handlers on our behalf.
   std::unique_ptr<Delegate> delegate_;

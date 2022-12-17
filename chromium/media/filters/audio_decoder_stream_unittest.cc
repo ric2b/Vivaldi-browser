@@ -12,6 +12,7 @@
 #include "base/test/gmock_callback_support.h"
 #include "base/test/task_environment.h"
 #include "base/threading/sequenced_task_runner_handle.h"
+#include "base/time/time.h"
 #include "media/base/media_util.h"
 #include "media/base/mock_filters.h"
 #include "media/filters/decoder_stream.h"
@@ -49,7 +50,8 @@ class AudioDecoderStreamTest : public testing::Test {
       : audio_decoder_stream_(
             std::make_unique<AudioDecoderStream::StreamTraits>(
                 &media_log_,
-                CHANNEL_LAYOUT_STEREO),
+                CHANNEL_LAYOUT_STEREO,
+                kSampleFormatPlanarF32),
             task_environment_.GetMainThreadTaskRunner(),
             base::BindRepeating(&AudioDecoderStreamTest::CreateMockAudioDecoder,
                                 base::Unretained(this)),

@@ -9,7 +9,7 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
-#include "base/cxx17_backports.h"
+#include "base/containers/fixed_flat_set.h"
 #include "base/json/string_escape.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
@@ -322,7 +322,7 @@ Status ParseProxy(bool w3c_compliant,
     const std::string kSocksProxy = "socksProxy";
     const base::Value* option_value = nullptr;
     std::string proxy_servers;
-    for (size_t i = 0; i < base::size(proxy_servers_options); ++i) {
+    for (size_t i = 0; i < std::size(proxy_servers_options); ++i) {
       option_value = proxy_dict->FindPath(proxy_servers_options[i][0]);
       if (option_value == nullptr || option_value->is_none()) {
         continue;
@@ -686,12 +686,34 @@ void Switches::SetSwitch(const std::string& name, const base::FilePath& value) {
   switch_map_[name] = value.value();
 }
 
+void Switches::SetMultivaluedSwitch(const std::string& name,
+                                    const std::string& value) {
+#if BUILDFLAG(IS_WIN)
+  auto native_value = base::UTF8ToWide(value);
+  auto delimiter = L',';
+#else
+  const auto& native_value = value;
+  const auto delimiter = ',';
+#endif
+  NativeString& switch_value = switch_map_[name];
+  if (switch_value.size() > 0 && switch_value.back() != delimiter) {
+    switch_value += delimiter;
+  }
+  switch_value += native_value;
+}
+
 void Switches::SetFromSwitches(const Switches& switches) {
   for (auto iter = switches.switch_map_.begin();
        iter != switches.switch_map_.end(); ++iter) {
     switch_map_[iter->first] = iter->second;
   }
 }
+
+namespace {
+constexpr auto kMultivaluedSwitches = base::MakeFixedFlatSet<base::StringPiece>(
+    {"enable-blink-features", "disable-blink-features", "enable-features",
+     "disable-features"});
+}  // namespace
 
 void Switches::SetUnparsedSwitch(const std::string& unparsed_switch) {
   std::string value;
@@ -705,7 +727,10 @@ void Switches::SetUnparsedSwitch(const std::string& unparsed_switch) {
     start_index = 2;
   name = unparsed_switch.substr(start_index, equals_index - start_index);
 
-  SetSwitch(name, value);
+  if (kMultivaluedSwitches.contains(name))
+    SetMultivaluedSwitch(name, value);
+  else
+    SetSwitch(name, value);
 }
 
 void Switches::RemoveSwitch(const std::string& name) {

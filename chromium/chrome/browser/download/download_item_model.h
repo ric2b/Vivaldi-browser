@@ -24,10 +24,18 @@ class DownloadItemModel : public DownloadUIModel,
                           public download::DownloadItem::Observer {
  public:
   static DownloadUIModelPtr Wrap(download::DownloadItem* download);
+  static DownloadUIModelPtr Wrap(
+      download::DownloadItem* download,
+      std::unique_ptr<DownloadUIModel::StatusTextBuilderBase>
+          status_text_builder);
 
   // Constructs a DownloadItemModel. The caller must ensure that |download|
   // outlives this object.
   explicit DownloadItemModel(download::DownloadItem* download);
+
+  DownloadItemModel(download::DownloadItem* download,
+                    std::unique_ptr<DownloadUIModel::StatusTextBuilderBase>
+                        status_text_builder);
 
   DownloadItemModel(const DownloadItemModel&) = delete;
   DownloadItemModel& operator=(const DownloadItemModel&) = delete;
@@ -50,6 +58,7 @@ class DownloadItemModel : public DownloadUIModel,
   bool ShouldRemoveFromShelfWhenComplete() const override;
   bool ShouldShowDownloadStartedAnimation() const override;
   bool ShouldShowInShelf() const override;
+  bool ShouldShowInBubble() const override;
   void SetShouldShowInShelf(bool should_show) override;
   bool ShouldNotifyUI() const override;
   bool WasUINotified() const override;
@@ -76,6 +85,7 @@ class DownloadItemModel : public DownloadUIModel,
   bool GetOpenWhenComplete() const override;
   bool IsOpenWhenCompleteByPolicy() const override;
   bool TimeRemaining(base::TimeDelta* remaining) const override;
+  base::Time GetStartTime() const override;
   base::Time GetEndTime() const override;
   bool GetOpened() const override;
   void SetOpened(bool opened) override;

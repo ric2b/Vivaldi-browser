@@ -131,6 +131,22 @@ bool CalendarTable::GetAllCalendars(CalendarRows* calendars) {
   return true;
 }
 
+bool CalendarTable::GetAllCalendarIdsForAccount(CalendarIDs* calendars,
+                                                AccountID account_id) {
+  calendars->clear();
+  sql::Statement s(GetDB().GetCachedStatement(
+      SQL_FROM_HERE, "SELECT id FROM calendar where account_id=?"));
+
+  s.BindInt64(0, account_id);
+
+  while (s.Step()) {
+    CalendarID id = s.ColumnInt64(0);
+    calendars->push_back(id);
+  }
+
+  return true;
+}
+
 bool CalendarTable::UpdateCalendarRow(const CalendarRow& calendar) {
   sql::Statement statement(GetDB().GetCachedStatement(SQL_FROM_HERE,
                                                       "UPDATE calendar SET \

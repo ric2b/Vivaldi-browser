@@ -780,10 +780,6 @@ class CrostiniManagerRestartTest : public CrostiniManagerTest,
   void ExpectRestarterUmaCount(int count) {
     histogram_tester_.ExpectTotalCount("Crostini.Restarter.Started", count);
     histogram_tester_.ExpectTotalCount("Crostini.RestarterResult", count);
-    histogram_tester_.ExpectTotalCount("Crostini.CleanSession.RestarterResult",
-                                       count);
-    histogram_tester_.ExpectTotalCount(
-        "Crostini.UncleanSession.RestarterResult", 0);
     histogram_tester_.ExpectTotalCount("Crostini.Installer.Started", 0);
   }
 
@@ -851,10 +847,6 @@ TEST_F(CrostiniManagerRestartTest, UncleanRestartReportsMetricToUncleanBucket) {
             DefaultContainerUserNameForProfile(profile()));
   histogram_tester_.ExpectTotalCount("Crostini.Restarter.Started", 1);
   histogram_tester_.ExpectTotalCount("Crostini.RestarterResult", 1);
-  histogram_tester_.ExpectTotalCount("Crostini.CleanSession.RestarterResult",
-                                     0);
-  histogram_tester_.ExpectTotalCount("Crostini.UncleanSession.RestarterResult",
-                                     1);
   histogram_tester_.ExpectTotalCount("Crostini.Installer.Started", 0);
 }
 
@@ -953,7 +945,9 @@ TEST_F(CrostiniManagerRestartTest, AbortOnDiskImageCreated) {
   histogram_tester_.ExpectTotalCount(
       "Crostini.RestarterTimeInState2.InstallImageLoader", 1);
   histogram_tester_.ExpectTotalCount(
-      "Crostini.RestarterTimeInState2.CreateDiskImage", 0);
+      "Crostini.RestarterTimeInState2.CreateDiskImage", 1);
+  histogram_tester_.ExpectTotalCount(
+      "Crostini.RestarterTimeInState2.StartTerminaVm", 0);
 }
 
 TEST_F(CrostiniManagerRestartTest, TimeoutDuringCreateDiskImage) {
@@ -1265,9 +1259,9 @@ TEST_F(CrostiniManagerRestartTest,
                      base::Unretained(this), run_loop()->QuitClosure()),
       this);
 
-  task_environment_.FastForwardBy(base::Minutes(2));
+  task_environment_.FastForwardBy(base::Minutes(4));
   crostini_manager_->OnLxdContainerStarting(signal);
-  task_environment_.FastForwardBy(base::Minutes(2));
+  task_environment_.FastForwardBy(base::Minutes(4));
   ASSERT_EQ(0, restart_crostini_callback_count_);
 
   task_environment_.FastForwardBy(base::Minutes(2));
@@ -1357,6 +1351,33 @@ TEST_F(CrostiniManagerRestartTest, MultiRestartAllowed) {
   EXPECT_FALSE(crostini_manager()->IsRestartPending(id2));
   EXPECT_FALSE(crostini_manager()->IsRestartPending(id3));
   ExpectRestarterUmaCount(3);
+}
+
+TEST_F(CrostiniManagerRestartTest, FailureWithMultipleRestarts) {
+  // When multiple restarters are running, a failure in the first should cause
+  // the others to fail immediately.
+
+  vm_tools::concierge::StartVmResponse response;
+  response.set_status(vm_tools::concierge::VmStatus::VM_STATUS_FAILURE);
+  fake_concierge_client_->set_start_vm_response(response);
+
+  auto barrier_closure = base::BarrierClosure(3, run_loop()->QuitClosure());
+  auto result_callback =
+      base::BindLambdaForTesting([barrier_closure](CrostiniResult result) {
+        EXPECT_EQ(CrostiniResult::VM_START_FAILED, result);
+        barrier_closure.Run();
+      });
+  CrostiniManager::RestartId id1, id2, id3;
+  id1 = crostini_manager()->RestartCrostini(container_id(), result_callback);
+  id2 = crostini_manager()->RestartCrostini(container_id(), result_callback);
+  id3 = crostini_manager()->RestartCrostini(container_id(), result_callback);
+
+  run_loop()->Run();
+
+  EXPECT_EQ(1, fake_concierge_client_->start_termina_vm_call_count());
+  EXPECT_FALSE(crostini_manager()->IsRestartPending(id1));
+  EXPECT_FALSE(crostini_manager()->IsRestartPending(id2));
+  EXPECT_FALSE(crostini_manager()->IsRestartPending(id3));
 }
 
 TEST_F(CrostiniManagerRestartTest, IsContainerRunningFalseIfVmNotStarted) {
@@ -1631,7 +1652,7 @@ TEST_F(CrostiniManagerRestartTest, AllObservers) {
   run_loop()->Run();
   EXPECT_EQ(2, restart_crostini_callback_count_);
   EXPECT_EQ(8, observer1_count);
-  EXPECT_EQ(5, observer2.stages.size());
+  EXPECT_EQ(5u, observer2.stages.size());
 }
 
 TEST_F(CrostiniManagerRestartTest, StartVmOnly) {
@@ -1765,6 +1786,47 @@ TEST_F(CrostiniManagerRestartTest, StartVmOnlyTwice) {
                 crostini::mojom::InstallerState::kInstallImageLoader,
                 crostini::mojom::InstallerState::kCreateDiskImage,
                 crostini::mojom::InstallerState::kStartTerminaVm,
+            }),
+            observer2.stages);
+}
+
+TEST_F(CrostiniManagerRestartTest, StopAfterLxdAvailableThenFullRestart) {
+  TestRestartObserver observer1;
+  TestRestartObserver observer2;
+  CrostiniManager::RestartOptions options;
+  options.stop_after_lxd_available = true;
+  restart_id_ = crostini_manager()->RestartCrostiniWithOptions(
+      container_id(), std::move(options),
+      base::BindOnce(&CrostiniManagerRestartTest::RestartCrostiniCallback,
+                     base::Unretained(this), base::DoNothing()),
+      &observer1);
+  crostini_manager()->RestartCrostini(
+      container_id(),
+      base::BindOnce(&CrostiniManagerRestartTest::RestartCrostiniCallback,
+                     base::Unretained(this), run_loop()->QuitClosure()),
+      &observer2);
+  run_loop()->Run();
+  EXPECT_EQ(2, restart_crostini_callback_count_);
+  EXPECT_EQ(std::vector<crostini::mojom::InstallerState>({
+                crostini::mojom::InstallerState::kStart,
+                crostini::mojom::InstallerState::kInstallImageLoader,
+                crostini::mojom::InstallerState::kCreateDiskImage,
+                crostini::mojom::InstallerState::kStartTerminaVm,
+                crostini::mojom::InstallerState::kStartLxd,
+            }),
+            observer1.stages);
+  EXPECT_EQ(std::vector<crostini::mojom::InstallerState>({
+                crostini::mojom::InstallerState::kCreateDiskImage,
+                crostini::mojom::InstallerState::kStartTerminaVm,
+                crostini::mojom::InstallerState::kStartLxd,
+                crostini::mojom::InstallerState::kStart,
+                crostini::mojom::InstallerState::kInstallImageLoader,
+                crostini::mojom::InstallerState::kCreateDiskImage,
+                crostini::mojom::InstallerState::kStartTerminaVm,
+                crostini::mojom::InstallerState::kStartLxd,
+                crostini::mojom::InstallerState::kCreateContainer,
+                crostini::mojom::InstallerState::kSetupContainer,
+                crostini::mojom::InstallerState::kStartContainer,
             }),
             observer2.stages);
 }

@@ -10,7 +10,6 @@
 
 #include "base/auto_reset.h"
 #include "base/bind.h"
-#include "base/bits.h"
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
@@ -297,7 +296,7 @@ SkCanvas::SrcRectConstraint GetTextureConstraint(
   }
 
   gfx::RectF safe_texels = valid_texel_bounds;
-  safe_texels.Inset(0.5f, 0.5f);
+  safe_texels.Inset(0.5f);
 
   // Check each axis independently; tile quads may only need clamping on one
   // side (e.g. right or bottom) and this logic doesn't fully match a simple
@@ -500,9 +499,12 @@ struct SkiaRenderer::DrawQuadParams {
   // Optional restricted draw geometry, will point to a length 4 SkPoint array
   // with its points in CW order matching Skia's vertex/edge expectations.
   absl::optional<SkDrawRegion> draw_region;
-  // Optional rounded corner clip to apply. If present, it will have been
-  // transformed to device space and ShouldApplyRoundedCorner returns true.
-  absl::optional<gfx::RRectF> rounded_corner_bounds;
+  // Optional mask filter info that may contain rounded corner clip and/or a
+  // gradient mask to apply. If present, rounded corner clip will have been
+  // transformed to device space and ShouldApplyRoundedCorner returns true. If
+  // present, gradient mask will have been transformed to device space and
+  // ShouldApplyGradientMask returns true.
+  absl::optional<gfx::MaskFilterInfo> mask_filter_info;
   // Optional device space clip to apply. If present, it is equal to the current
   // |scissor_rect_| of the renderer.
   absl::optional<gfx::Rect> scissor_rect;
@@ -521,7 +523,7 @@ struct SkiaRenderer::DrawQuadParams {
   SkPath draw_region_in_path() const {
     if (draw_region) {
       return SkPath::Polygon(draw_region->points,
-                             base::size(draw_region->points),
+                             std::size(draw_region->points),
                              /*isClosed=*/true);
     }
     return SkPath();
@@ -780,12 +782,15 @@ void SkiaRenderer::FinishDrawingFrame() {
 
 void SkiaRenderer::SwapBuffers(SwapFrameData swap_frame_data) {
   DCHECK(visible_);
+  DCHECK(output_surface_->capabilities().supports_viewporter ||
+         viewport_size_for_swap_buffers() == surface_size_for_swap_buffers());
   TRACE_EVENT0("viz,benchmark", "SkiaRenderer::SwapBuffers");
   OutputSurfaceFrame output_frame;
   output_frame.latency_info = std::move(swap_frame_data.latency_info);
   output_frame.top_controls_visible_height_changed =
       swap_frame_data.top_controls_visible_height_changed;
-  output_frame.size = surface_size_for_swap_buffers();
+  output_frame.choreographer_vsync_id = swap_frame_data.choreographer_vsync_id;
+  output_frame.size = viewport_size_for_swap_buffers();
   if (use_partial_swap_) {
     swap_buffer_rect_.Intersect(gfx::Rect(surface_size_for_swap_buffers()));
     output_frame.sub_buffer_rect = swap_buffer_rect_;
@@ -810,6 +815,7 @@ void SkiaRenderer::SwapBuffersSkipped() {
   if (use_partial_swap_)
     root_pass_damage_rect.Intersect(swap_buffer_rect_);
 
+  pending_overlay_locks_.pop_back();
   skia_output_surface_->SwapBuffersSkipped(root_pass_damage_rect);
   swap_buffer_rect_ = gfx::Rect();
 
@@ -865,7 +871,10 @@ void SkiaRenderer::DidReceiveReleasedOverlays(
   for (const auto& mailbox : released_overlays) {
     auto it = awaiting_release_overlay_locks_.find(mailbox);
     if (it == awaiting_release_overlay_locks_.end()) {
+    // TODO(crbug.com/1299794): Re-enable this DCHECK on Ozone.
+#if !defined(USE_OZONE)
       DLOG(FATAL) << "Got an unexpected mailbox";
+#endif  // !defined(USE_OZONE)
       continue;
     }
     awaiting_release_overlay_locks_.erase(it);
@@ -1052,7 +1061,7 @@ void SkiaRenderer::DrawQuadInternal(const DrawQuad* quad,
 
 void SkiaRenderer::PrepareCanvas(
     const absl::optional<gfx::Rect>& scissor_rect,
-    const absl::optional<gfx::RRectF>& rounded_corner_bounds,
+    const absl::optional<gfx::MaskFilterInfo>& mask_filter_info,
     const gfx::Transform* cdt) {
   // Scissor is applied in the device space (CTM == I) and since no changes
   // to the canvas persist, CTM should already be the identity
@@ -1062,8 +1071,11 @@ void SkiaRenderer::PrepareCanvas(
     current_canvas_->clipRect(gfx::RectToSkRect(*scissor_rect));
   }
 
-  if (rounded_corner_bounds.has_value())
-    current_canvas_->clipRRect(SkRRect(*rounded_corner_bounds), true /* AA */);
+  if (mask_filter_info.has_value()) {
+    current_canvas_->clipRRect(
+        static_cast<SkRRect>(mask_filter_info->rounded_corner_bounds()),
+        /*doAntiAlias=*/true);
+  }
 
   if (cdt) {
     SkMatrix m;
@@ -1250,7 +1262,7 @@ void SkiaRenderer::PreparePaintOrCanvasForRPDQ(
 void SkiaRenderer::PrepareColorOrCanvasForRPDQ(
     const DrawRPDQParams& rpdq_params,
     DrawQuadParams* params,
-    SkColor* content_color) {
+    SkColor4f* content_color) {
   // When the draw call only takes a color and not an SkPaint, rpdq params
   // with just a color filter can be handled directly. Otherwise, the rpdq
   // params must use a layer on the canvas.
@@ -1265,7 +1277,9 @@ void SkiaRenderer::PrepareColorOrCanvasForRPDQ(
   } else if (rpdq_params.color_filter) {
     // At this point, the RPDQ effect is at most a color filter, so it can
     // modify |content_color| directly.
-    *content_color = rpdq_params.color_filter->filterColor(*content_color);
+    SkColorSpace* cs = nullptr;
+    *content_color =
+        rpdq_params.color_filter->filterColor4f(*content_color, cs, cs);
   }
 
   // Even if the color filter image filter was applied to the content color
@@ -1338,13 +1352,15 @@ SkiaRenderer::DrawQuadParams SkiaRenderer::CalculateDrawQuadParams(
     // corner_bounds is not empty and 'to_device' should just be scale+translate
     SkRRect device_bounds;
     if (corner_bounds.transform(to_device, &device_bounds)) {
-      params.rounded_corner_bounds.emplace(device_bounds);
+      params.mask_filter_info.emplace(
+          gfx::MaskFilterInfo(gfx::RRectF(device_bounds)));
     } else {
       // TODO(crbug/1220004): We used to assert transform succeeded, but an
       // unreproduceable fuzzer test case could trip it. To be safe, and to
       // match the most likely scenario that the device transform has scale=0,
       // just force the clip to empty so we don't draw anything.
-      params.rounded_corner_bounds.emplace(SkRRect::MakeEmpty());
+      params.mask_filter_info.emplace(
+          gfx::MaskFilterInfo(gfx::RRectF(SkRRect::MakeEmpty())));
     }
   }
 
@@ -1381,9 +1397,9 @@ void SkiaRenderer::DrawQuadParams::ApplyScissor(
   // gfx::Transform::IsPositiveScaleAndTranslation in that it also allows zero
   // scales. This is because in the common orthographic case the z scale is 0.
   if (!content_device_transform.IsScaleOrTranslation() ||
-      content_device_transform.matrix().get(0, 0) < 0.0f ||
-      content_device_transform.matrix().get(1, 1) < 0.0f ||
-      content_device_transform.matrix().get(2, 2) < 0.0f) {
+      content_device_transform.matrix().rc(0, 0) < 0.0f ||
+      content_device_transform.matrix().rc(1, 1) < 0.0f ||
+      content_device_transform.matrix().rc(2, 2) < 0.0f) {
     return;
   }
 
@@ -1427,34 +1443,20 @@ void SkiaRenderer::DrawQuadParams::ApplyScissor(
   // device space, it will be contained in in the original scissor.
   // Applying the scissor explicitly means avoiding a clipRect() call and
   // allows more quads to be batched together in a DrawEdgeAAImageSet call
-  float left_inset = local_scissor.x() - visible_rect.x();
-  float top_inset = local_scissor.y() - visible_rect.y();
-  float right_inset = visible_rect.right() - local_scissor.right();
-  float bottom_inset = visible_rect.bottom() - local_scissor.bottom();
+  float x_epsilon = kAAEpsilon / content_device_transform.matrix().rc(0, 0);
+  float y_epsilon = kAAEpsilon / content_device_transform.matrix().rc(1, 1);
 
-  // The scissor is a non-AA clip, so we unset the bit flag for clipped edges.
-  if (left_inset >= kAAEpsilon) {
+  // The scissor is a non-AA clip, so unset the bit flag for clipped edges.
+  if (local_scissor.x() - visible_rect.x() >= x_epsilon)
     aa_flags &= ~SkCanvas::kLeft_QuadAAFlag;
-  } else {
-    left_inset = 0;
-  }
-  if (top_inset >= kAAEpsilon) {
+  if (local_scissor.y() - visible_rect.y() >= y_epsilon)
     aa_flags &= ~SkCanvas::kTop_QuadAAFlag;
-  } else {
-    top_inset = 0;
-  }
-  if (right_inset >= kAAEpsilon) {
+  if (visible_rect.right() - local_scissor.right() >= x_epsilon)
     aa_flags &= ~SkCanvas::kRight_QuadAAFlag;
-  } else {
-    right_inset = 0;
-  }
-  if (bottom_inset >= kAAEpsilon) {
+  if (visible_rect.bottom() - local_scissor.bottom() >= y_epsilon)
     aa_flags &= ~SkCanvas::kBottom_QuadAAFlag;
-  } else {
-    bottom_inset = 0;
-  }
 
-  visible_rect.Inset(left_inset, top_inset, right_inset, bottom_inset);
+  visible_rect.Intersect(local_scissor);
   vis_tex_coords = visible_rect;
   scissor_rect.reset();
 }
@@ -1583,7 +1585,7 @@ SkiaRenderer::BypassMode SkiaRenderer::CalculateBypassParams(
     // quadrilateral to the bypass'ed quad's coordinate space so that BSP
     // splitting is still respected.
     rpdq_to_bypass.mapPoints(params->draw_region->points,
-                             base::size(params->draw_region->points));
+                             std::size(params->draw_region->points));
   }
 
   // Compute draw params for the bypass quad from scratch, but since the
@@ -1632,7 +1634,8 @@ SkiaRenderer::BypassMode SkiaRenderer::CalculateBypassParams(
 
   // Rounded corner bounds are in device space, which gets tricky when bypassing
   // the device that the RP would have represented
-  DCHECK(!bypass_params.rounded_corner_bounds.has_value());
+  DCHECK(!bypass_params.mask_filter_info.has_value());
+
   return BypassMode::kDrawBypassQuad;
 }
 
@@ -1715,8 +1718,7 @@ bool SkiaRenderer::MustFlushBatchedQuads(const DrawQuad* new_quad,
     return true;
   }
 
-  if (batched_quad_state_.rounded_corner_bounds !=
-      params.rounded_corner_bounds) {
+  if (batched_quad_state_.mask_filter_info != params.mask_filter_info) {
     return true;
   }
 
@@ -1737,7 +1739,7 @@ void SkiaRenderer::AddQuadToBatch(const SkImage* image,
   // Configure batch state if it's the first
   if (batched_quads_.empty()) {
     batched_quad_state_.scissor_rect = params->scissor_rect;
-    batched_quad_state_.rounded_corner_bounds = params->rounded_corner_bounds;
+    batched_quad_state_.mask_filter_info = params->mask_filter_info;
     batched_quad_state_.blend_mode = params->blend_mode;
     batched_quad_state_.sampling = params->sampling;
     batched_quad_state_.constraint = constraint;
@@ -1767,7 +1769,7 @@ void SkiaRenderer::FlushBatchedQuads() {
 
   SkAutoCanvasRestore acr(current_canvas_, true /* do_save */);
   PrepareCanvas(batched_quad_state_.scissor_rect,
-                batched_quad_state_.rounded_corner_bounds, nullptr);
+                batched_quad_state_.mask_filter_info, nullptr);
 
   SkPaint paint;
   sk_sp<SkColorFilter> color_filter = GetContentColorFilter();
@@ -1785,14 +1787,14 @@ void SkiaRenderer::FlushBatchedQuads() {
   batched_cdt_matrices_.clear();
 }
 
-void SkiaRenderer::DrawColoredQuad(SkColor color,
+void SkiaRenderer::DrawColoredQuad(SkColor4f color,
                                    const DrawRPDQParams* rpdq_params,
                                    DrawQuadParams* params) {
   TRACE_EVENT0("viz", "SkiaRenderer::DrawColoredQuad");
   DCHECK(batched_quads_.empty());
 
   SkAutoCanvasRestore acr(current_canvas_, true /* do_save */);
-  PrepareCanvas(params->scissor_rect, params->rounded_corner_bounds,
+  PrepareCanvas(params->scissor_rect, params->mask_filter_info,
                 &params->content_device_transform);
 
   if (rpdq_params) {
@@ -1806,20 +1808,37 @@ void SkiaRenderer::DrawColoredQuad(SkColor color,
     }
   }
 
-  sk_sp<SkColorFilter> color_filter = GetContentColorFilter();
-  if (color_filter)
-    color = color_filter->filterColor(color);
+  sk_sp<SkColorFilter> content_color_filter = GetContentColorFilter();
+  if (content_color_filter) {
+    SkColorSpace* color_space = current_canvas_->imageInfo().colorSpace();
+    color = content_color_filter->filterColor4f(
+        color, SkColorSpace::MakeSRGB().get(), color_space);
+    // DrawEdgeAAQuad lacks color filter support via SkPaint, so we apply the
+    // color filter to the quad color directly. When applying a color filter
+    // via drawRect or drawImage, Skia will first transform the src into the
+    // dst color space before applying the color filter. Thus, here we need to
+    // apply the color filter in the dst color space and then convert back to
+    // the src color space. More formally:
+    //    (C * Xfrm * CF * Xfrm_inv)[in Viz] * Xfrm[in Skia] = C * Xfrm * CF
+    if (color_space && !color_space->isSRGB()) {
+      SkPaint paint;
+      paint.setColor(color, color_space);
+      color = paint.getColor4f();
+    }
+  }
   // PrepareCanvasForRPDQ will have updated params->opacity and blend_mode to
-  // account for the layer applying those effects.
-  color = SkColorSetA(color, params->opacity * SkColorGetA(color));
+  // account for the layer applying those effects. We need to truncate to an
+  // integral value of [0, 255] to match the explicit floor workaround in
+  // blink::ConversionContext::StartEffect.
+  color.fA = floor(params->opacity * color.fA * 255.f) / 255.f;
 
   const SkPoint* draw_region =
       params->draw_region ? params->draw_region->points : nullptr;
 
   current_canvas_->experimental_DrawEdgeAAQuad(
       gfx::RectFToSkRect(params->visible_rect), draw_region,
-      static_cast<SkCanvas::QuadAAFlags>(params->aa_flags),
-      SkColor4f::FromColor(color), params->blend_mode);
+      static_cast<SkCanvas::QuadAAFlags>(params->aa_flags), color,
+      params->blend_mode);
 }
 
 void SkiaRenderer::DrawSingleImage(const SkImage* image,
@@ -1831,7 +1850,7 @@ void SkiaRenderer::DrawSingleImage(const SkImage* image,
   TRACE_EVENT0("viz", "SkiaRenderer::DrawSingleImage");
 
   SkAutoCanvasRestore acr(current_canvas_, true /* do_save */);
-  PrepareCanvas(params->scissor_rect, params->rounded_corner_bounds,
+  PrepareCanvas(params->scissor_rect, params->mask_filter_info,
                 &params->content_device_transform);
 
   int matrix_index = -1;
@@ -1879,7 +1898,7 @@ void SkiaRenderer::DrawPaintOpBuffer(const cc::PaintOpBuffer* buffer,
     FlushBatchedQuads();
 
   SkAutoCanvasRestore auto_canvas_restore(current_canvas_, true /* do_save */);
-  PrepareCanvas(params->scissor_rect, params->rounded_corner_bounds,
+  PrepareCanvas(params->scissor_rect, params->mask_filter_info,
                 &params->content_device_transform);
 
   auto visible_rect = gfx::RectFToSkRect(params->visible_rect);
@@ -1922,7 +1941,7 @@ void SkiaRenderer::DrawDebugBorderQuad(const DebugBorderDrawQuad* quad,
 
   SkAutoCanvasRestore acr(current_canvas_, true /* do_save */);
   // We need to apply the matrix manually to have pixel-sized stroke width.
-  PrepareCanvas(params->scissor_rect, params->rounded_corner_bounds, nullptr);
+  PrepareCanvas(params->scissor_rect, params->mask_filter_info, nullptr);
   SkMatrix cdt;
   gfx::TransformToFlattenedSkMatrix(params->content_device_transform, &cdt);
 
@@ -1955,7 +1974,8 @@ void SkiaRenderer::DrawPictureQuad(const PictureDrawQuad* quad,
                                        params->sampling == SkSamplingOptions();
 
   SkAutoCanvasRestore acr(current_canvas_, true /* do_save */);
-  PrepareCanvas(params->scissor_rect, params->rounded_corner_bounds,
+  PrepareCanvas(params->scissor_rect,
+                params->mask_filter_info,
                 &params->content_device_transform);
 
   // Unlike other quads which draw visible_rect or draw_region as their geometry
@@ -2004,7 +2024,7 @@ void SkiaRenderer::DrawPictureQuad(const PictureDrawQuad* quad,
 void SkiaRenderer::DrawSolidColorQuad(const SolidColorDrawQuad* quad,
                                       const DrawRPDQParams* rpdq_params,
                                       DrawQuadParams* params) {
-  DrawColoredQuad(quad->color, rpdq_params, params);
+  DrawColoredQuad(SkColor4f::FromColor(quad->color), rpdq_params, params);
 }
 
 void SkiaRenderer::DrawStreamVideoQuad(const StreamVideoDrawQuad* quad,
@@ -2062,6 +2082,15 @@ void SkiaRenderer::DrawTextureQuad(const TextureDrawQuad* quad,
   absl::optional<gfx::ColorSpace> override_color_space;
   if (needs_color_conversion_filter)
     override_color_space = CurrentRenderPassColorSpace();
+
+  // TODO(b/221643955): Some Chrome OS tests rely on the old GLRenderer
+  // behavior of skipping color space conversions if the quad's color space is
+  // invalid. Once these tests are migrated, we can remove the override here
+  // and revert to Skia's default behavior of assuming sRGB on invalid.
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  if (!src_color_space.IsValid())
+    override_color_space = CurrentRenderPassColorSpace();
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   ScopedSkImageBuilder builder(
       this, quad->resource_id(), /*maybe_concurrent_reads=*/true,
@@ -2348,9 +2377,9 @@ void SkiaRenderer::DrawUnsupportedQuad(const DrawQuad* quad,
                                        const DrawRPDQParams* rpdq_params,
                                        DrawQuadParams* params) {
 #ifdef NDEBUG
-  DrawColoredQuad(SK_ColorWHITE, rpdq_params, params);
+  DrawColoredQuad(SkColors::kWhite, rpdq_params, params);
 #else
-  DrawColoredQuad(SK_ColorMAGENTA, rpdq_params, params);
+  DrawColoredQuad(SkColors::kMagenta, rpdq_params, params);
 #endif
 }
 
@@ -2496,12 +2525,12 @@ sk_sp<SkColorFilter> SkiaRenderer::GetColorSpaceConversionFilter(
 }
 
 namespace {
-SkColorMatrix ToColorMatrix(const skia::Matrix44& mat) {
+SkColorMatrix ToColorMatrix(const SkM44& mat) {
   std::array<float, 20> values;
   values.fill(0.0f);
   for (uint32_t r = 0; r < 4; r++) {
     for (uint32_t c = 0; c < 4; c++) {
-      values[r * 5 + c] = mat.getFloat(r, c);
+      values[r * 5 + c] = mat.rc(r, c);
     }
   }
   SkColorMatrix mat_out;
@@ -2513,7 +2542,7 @@ SkColorMatrix ToColorMatrix(const skia::Matrix44& mat) {
 sk_sp<SkColorFilter> SkiaRenderer::GetContentColorFilter() {
   sk_sp<SkColorFilter> color_transform = nullptr;
   if (current_canvas_ == root_canvas_ &&
-      !output_surface_->color_matrix().isIdentity()) {
+      output_surface_->color_matrix() != SkM44()) {
     color_transform =
         SkColorFilters::Matrix(ToColorMatrix(output_surface_->color_matrix()));
   }
@@ -2532,8 +2561,7 @@ sk_sp<SkColorFilter> SkiaRenderer::GetContentColorFilter() {
       color_mat.setScale(rgb[0], rgb[1], rgb[2]);
       tint_transform = SkColorFilters::Matrix(color_mat);
     } else {
-      skia::Matrix44 mat44;
-      mat44.setColMajorf(
+      SkM44 mat44 = SkM44::ColMajor(
           cc::DebugColors::TintCompositedContentColorTransformMatrix().data());
       tint_transform = SkColorFilters::Matrix(ToColorMatrix(mat44));
     }
@@ -2723,7 +2751,7 @@ void SkiaRenderer::DrawRenderPassQuad(const AggregatedRenderPassDrawQuad* quad,
       // batching.
       if (!batched_quads_.empty())
         FlushBatchedQuads();
-      DrawColoredQuad(SK_ColorTRANSPARENT, &rpdq_params, params);
+      DrawColoredQuad(SkColors::kTransparent, &rpdq_params, params);
     } else if (mode == BypassMode::kDrawBypassQuad) {
       DrawQuadInternal(bypass->second, &rpdq_params, params);
     }  // else mode == kSkip
@@ -2985,10 +3013,10 @@ void SkiaRenderer::PrepareRenderPassOverlay(
       // Skia cannot transform a SkRRect with a matrix which contains epsilons,
       // workaround the problem by removing epsilons in the matrix.
       auto matrix = quad_to_target_transform_inverse->matrix();
-      matrix.set(0, 0, remove_epsilon(matrix.get(0, 0)));
-      matrix.set(0, 1, remove_epsilon(matrix.get(0, 1)));
-      matrix.set(1, 0, remove_epsilon(matrix.get(1, 0)));
-      matrix.set(1, 1, remove_epsilon(matrix.get(1, 1)));
+      matrix.setRC(0, 0, remove_epsilon(matrix.rc(0, 0)));
+      matrix.setRC(0, 1, remove_epsilon(matrix.rc(0, 1)));
+      matrix.setRC(1, 0, remove_epsilon(matrix.rc(1, 0)));
+      matrix.setRC(1, 1, remove_epsilon(matrix.rc(1, 1)));
       result =
           shared_quad_state->mask_filter_info.Transform(gfx::Transform(matrix));
     }
@@ -3084,15 +3112,14 @@ void SkiaRenderer::PrepareRenderPassOverlay(
                                             -filter_bounds.y());
 
   // Also adjust the |rounded_corner_bounds| to the new location.
-  if (params.rounded_corner_bounds) {
-    params.rounded_corner_bounds->Offset(-filter_bounds.x(),
-                                         -filter_bounds.y());
+  if (params.mask_filter_info) {
+    params.mask_filter_info->Transform(params.content_device_transform);
   }
 
   // When Render Pass has a single quad inside we would draw that directly.
   if (bypass != render_pass_bypass_quads_.end()) {
     if (bypass_mode == BypassMode::kDrawTransparentQuad) {
-      DrawColoredQuad(SK_ColorTRANSPARENT, &rpdq_params, &params);
+      DrawColoredQuad(SkColors::kTransparent, &rpdq_params, &params);
     } else if (bypass_mode == BypassMode::kDrawBypassQuad) {
       DrawQuadInternal(bypass->second, &rpdq_params, &params);
     } else {

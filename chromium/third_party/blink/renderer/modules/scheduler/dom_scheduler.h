@@ -12,7 +12,9 @@
 #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
+#include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_map.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
+#include "third_party/blink/renderer/platform/scheduler/public/task_id.h"
 #include "third_party/blink/renderer/platform/scheduler/public/web_scheduling_priority.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
@@ -72,6 +74,9 @@ class MODULES_EXPORT DOMScheduler : public ScriptWrappable,
                          V8SchedulerPostTaskCallback*,
                          SchedulerPostTaskOptions*,
                          ExceptionState&);
+
+  scheduler::TaskIdType taskId(ScriptState*);
+  AtomicString isAncestor(ScriptState*, scheduler::TaskIdType parent_id);
 
   void ContextDestroyed() override;
 

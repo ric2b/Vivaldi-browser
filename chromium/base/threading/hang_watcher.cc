@@ -113,6 +113,26 @@ void LogHungThreadCountHistogram(HangWatcher::ThreadType thread_type,
           break;
       }
       break;
+
+    case HangWatcher::ProcessType::kUtilityProcess:
+      switch (thread_type) {
+        case HangWatcher::ThreadType::kIOThread:
+          UMA_HISTOGRAM_BOOLEAN(
+              "HangWatcher.IsThreadHung.UtilityProcess."
+              "IOThread",
+              any_thread_hung);
+          break;
+        case HangWatcher::ThreadType::kMainThread:
+          UMA_HISTOGRAM_BOOLEAN(
+              "HangWatcher.IsThreadHung.UtilityProcess."
+              "MainThread",
+              any_thread_hung);
+          break;
+        case HangWatcher::ThreadType::kThreadPoolThread:
+          // Not recorded for now.
+          break;
+      }
+      break;
   }
 }
 
@@ -154,13 +174,13 @@ constexpr base::FeatureParam<int> kThreadPoolLogLevel{
 // GPU process.
 constexpr base::FeatureParam<int> kGPUProcessIOThreadLogLevel{
     &kEnableHangWatcher, "gpu_process_io_thread_log_level",
-    static_cast<int>(LoggingLevel::kUmaOnly)};
+    static_cast<int>(LoggingLevel::kNone)};
 constexpr base::FeatureParam<int> kGPUProcessMainThreadLogLevel{
     &kEnableHangWatcher, "gpu_process_main_thread_log_level",
-    static_cast<int>(LoggingLevel::kUmaOnly)};
+    static_cast<int>(LoggingLevel::kNone)};
 constexpr base::FeatureParam<int> kGPUProcessThreadPoolLogLevel{
     &kEnableHangWatcher, "gpu_process_threadpool_log_level",
-    static_cast<int>(LoggingLevel::kUmaOnly)};
+    static_cast<int>(LoggingLevel::kNone)};
 
 // Renderer process.
 constexpr base::FeatureParam<int> kRendererProcessIOThreadLogLevel{
@@ -171,6 +191,17 @@ constexpr base::FeatureParam<int> kRendererProcessMainThreadLogLevel{
     static_cast<int>(LoggingLevel::kUmaOnly)};
 constexpr base::FeatureParam<int> kRendererProcessThreadPoolLogLevel{
     &kEnableHangWatcher, "renderer_process_threadpool_log_level",
+    static_cast<int>(LoggingLevel::kUmaOnly)};
+
+// Utility process.
+constexpr base::FeatureParam<int> kUtilityProcessIOThreadLogLevel{
+    &kEnableHangWatcher, "utility_process_io_thread_log_level",
+    static_cast<int>(LoggingLevel::kUmaOnly)};
+constexpr base::FeatureParam<int> kUtilityProcessMainThreadLogLevel{
+    &kEnableHangWatcher, "utility_process_main_thread_log_level",
+    static_cast<int>(LoggingLevel::kUmaOnly)};
+constexpr base::FeatureParam<int> kUtilityProcessThreadPoolLogLevel{
+    &kEnableHangWatcher, "utility_process_threadpool_log_level",
     static_cast<int>(LoggingLevel::kUmaOnly)};
 
 // static
@@ -254,8 +285,9 @@ WatchHangsInScope::~WatchHangsInScope() {
   // If a hang is currently being captured we should block here so execution
   // stops and we avoid recording unrelated stack frames in the crash.
   if (current_hang_watch_state->IsFlagSet(
-          internal::HangWatchDeadline::Flag::kShouldBlockOnHang))
+          internal::HangWatchDeadline::Flag::kShouldBlockOnHang)) {
     base::HangWatcher::GetInstance()->BlockIfCaptureInProgress();
+  }
 
 #if DCHECK_IS_ON()
   // Verify that no Scope was destructed out of order.
@@ -293,8 +325,14 @@ void HangWatcher::InitializeOnMainThread(ProcessType process_type) {
   DCHECK(g_main_thread_log_level == LoggingLevel::kNone);
   DCHECK(g_threadpool_log_level == LoggingLevel::kNone);
 
-  const bool enable_hang_watcher =
-      base::FeatureList::IsEnabled(kEnableHangWatcher);
+  bool enable_hang_watcher = base::FeatureList::IsEnabled(kEnableHangWatcher);
+
+  // Do not start HangWatcher in the GPU process until the issue related to
+  // invalid magic signature in the GPU WatchDog is fixed
+  // (https://crbug.com/1297760).
+  if (process_type == ProcessType::kGPUProcess)
+    enable_hang_watcher = false;
+
   g_use_hang_watcher.store(enable_hang_watcher, std::memory_order_relaxed);
 
   // Keep the process type.
@@ -343,6 +381,18 @@ void HangWatcher::InitializeOnMainThread(ProcessType process_type) {
           std::memory_order_relaxed);
       g_main_thread_log_level.store(
           static_cast<LoggingLevel>(kRendererProcessMainThreadLogLevel.Get()),
+          std::memory_order_relaxed);
+      break;
+
+    case HangWatcher::ProcessType::kUtilityProcess:
+      g_threadpool_log_level.store(
+          static_cast<LoggingLevel>(kUtilityProcessThreadPoolLogLevel.Get()),
+          std::memory_order_relaxed);
+      g_io_thread_log_level.store(
+          static_cast<LoggingLevel>(kUtilityProcessIOThreadLogLevel.Get()),
+          std::memory_order_relaxed);
+      g_main_thread_log_level.store(
+          static_cast<LoggingLevel>(kUtilityProcessMainThreadLogLevel.Get()),
           std::memory_order_relaxed);
       break;
   }
@@ -446,7 +496,7 @@ HangWatcher::GetTimeSinceLastCriticalMemoryPressureCrashKey() {
   if (last_critical_memory_pressure_time.is_null()) {
     constexpr char kNoMemoryPressureMsg[] = "No critical memory pressure";
     static_assert(
-        base::size(kNoMemoryPressureMsg) <=
+        std::size(kNoMemoryPressureMsg) <=
             static_cast<uint64_t>(kCrashKeyContentSize),
         "The crash key is too small to hold \"No critical memory pressure\".");
     return debug::ScopedCrashKeyString(crash_key, kNoMemoryPressureMsg);
@@ -669,6 +719,16 @@ void HangWatcher::WatchStateSnapShot::Init(
         any_hung_thread_has_dumping_enabled = true;
       }
 
+      // Emit trace events for monitored threads.
+      if (ThreadTypeLoggingLevelGreaterOrEqual(watch_state.get()->thread_type(),
+                                               LoggingLevel::kUmaOnly)) {
+        const uint64_t thread_id = watch_state.get()->GetThreadID();
+        const auto track = perfetto::Track::FromPointer(
+            this, perfetto::ThreadTrack::ForThread(thread_id));
+        TRACE_EVENT_BEGIN("base", "HangWatcher::ThreadHung", track, deadline);
+        TRACE_EVENT_END("base", track, now);
+      }
+
       // Attempt to mark the thread as needing to stay within its current
       // WatchHangsInScope until capture is complete.
       bool thread_marked = watch_state->SetShouldBlockOnHang(flags, deadline);
@@ -696,8 +756,9 @@ void HangWatcher::WatchStateSnapShot::Init(
         static_cast<HangWatcher::ThreadType>(i);
     if (hang_count != kInvalidHangCount &&
         ThreadTypeLoggingLevelGreaterOrEqual(thread_type,
-                                             LoggingLevel::kUmaOnly))
+                                             LoggingLevel::kUmaOnly)) {
       LogHungThreadCountHistogram(thread_type, hang_count);
+    }
   }
 
   // Three cases can invalidate this snapshot and prevent the capture of the
@@ -886,7 +947,7 @@ void HangWatcher::SetTickClockForTesting(const base::TickClock* tick_clock) {
 
 void HangWatcher::BlockIfCaptureInProgress() {
   // Makes a best-effort attempt to block execution if a hang is currently being
-  // captured.Only block on |capture_lock| if |capture_in_progress_| hints that
+  // captured. Only block on |capture_lock| if |capture_in_progress_| hints that
   // it's already held to avoid serializing all threads on this function when no
   // hang capture is in-progress.
   if (capture_in_progress_.load(std::memory_order_relaxed))

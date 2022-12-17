@@ -20,7 +20,7 @@ import {NewTabPageProxy} from './new_tab_page_proxy.js';
 
 declare global {
   interface Window {
-    CrPolicyStrings: {[key: string]: string},
+    CrPolicyStrings: {[key: string]: string};
   }
 }
 
@@ -96,7 +96,7 @@ export class CustomizeModulesElement extends I18nMixin
 
   private setDisabledModulesListenerId_: number|null = null;
 
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
     this.setDisabledModulesListenerId_ =
         NewTabPageProxy.getInstance()
@@ -111,25 +111,27 @@ export class CustomizeModulesElement extends I18nMixin
                   });
                 });
     NewTabPageProxy.getInstance().handler.updateDisabledModules();
-    this.set(
-        'discountToggleEligible_',
-        loadTimeData.getBoolean('ruleBasedDiscountEnabled'));
-    if (!this.discountToggleEligible_) {
-      return;
+
+    if (this.modules_.some(module => module.id === 'chrome_cart')) {
+      ChromeCartProxy.getHandler().getDiscountToggleVisible().then(
+          ({toggleVisible}) => {
+            this.set('discountToggleEligible_', toggleVisible);
+          });
+
+      ChromeCartProxy.getHandler().getDiscountEnabled().then(({enabled}) => {
+        this.set('discountToggle_.enabled', enabled);
+        this.discountToggle_.initiallyEnabled = enabled;
+      });
     }
-    ChromeCartProxy.getHandler().getDiscountEnabled().then(({enabled}) => {
-      this.set('discountToggle_.enabled', enabled);
-      this.discountToggle_.initiallyEnabled = enabled;
-    });
   }
 
-  disconnectedCallback() {
+  override disconnectedCallback() {
     super.disconnectedCallback();
     NewTabPageProxy.getInstance().callbackRouter.removeListener(
         this.setDisabledModulesListenerId_!);
   }
 
-  ready() {
+  override ready() {
     // |window.CrPolicyStrings.controlledSettingPolicy| populates the tooltip
     // text of <cr-policy-indicator indicator-type="devicePolicy" /> elements.
     // Needs to be called before |super.ready()| so that the string is available

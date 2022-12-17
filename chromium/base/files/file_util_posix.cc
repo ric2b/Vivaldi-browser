@@ -20,18 +20,20 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "base/base_export.h"
 #include "base/base_switches.h"
 #include "base/bits.h"
 #include "base/command_line.h"
+#include "base/containers/adapters.h"
 #include "base/containers/contains.h"
 #include "base/containers/stack.h"
-#include "base/cxx17_backports.h"
 #include "base/environment.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_file.h"
 #include "base/logging.h"
 #include "base/memory/singleton.h"
+#include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/path_service.h"
 #include "base/posix/eintr_wrapper.h"
@@ -76,6 +78,7 @@ namespace base {
 
 namespace {
 
+#if BUILDFLAG(IS_MAC)
 // Helper for VerifyPathControlledByUser.
 bool VerifySpecificPathControlledByUser(const FilePath& path,
                                         uid_t owner_uid,
@@ -111,6 +114,7 @@ bool VerifySpecificPathControlledByUser(const FilePath& path,
 
   return true;
 }
+#endif
 
 base::FilePath GetTempTemplate() {
   return FormatTemporaryFileName("XXXXXX");
@@ -490,8 +494,7 @@ bool ReadSymbolicLink(const FilePath& symlink_path, FilePath* target_path) {
   DCHECK(!symlink_path.empty());
   DCHECK(target_path);
   char buf[PATH_MAX];
-  ssize_t count =
-      ::readlink(symlink_path.value().c_str(), buf, base::size(buf));
+  ssize_t count = ::readlink(symlink_path.value().c_str(), buf, std::size(buf));
 
 #if BUILDFLAG(IS_ANDROID) && defined(__LP64__)
   // A few 64-bit Android L/M devices return INT_MAX instead of -1 here for
@@ -708,17 +711,17 @@ bool CreateDirectoryAndGetError(const FilePath& full_path,
   }
 
   // Iterate through the parents and create the missing ones.
-  for (auto i = subpaths.rbegin(); i != subpaths.rend(); ++i) {
-    if (DirectoryExists(*i))
+  for (const FilePath& subpath : base::Reversed(subpaths)) {
+    if (DirectoryExists(subpath))
       continue;
-    if (mkdir(i->value().c_str(), 0700) == 0)
+    if (mkdir(subpath.value().c_str(), 0700) == 0)
       continue;
     // Mkdir failed, but it might have failed with EEXIST, or some other error
     // due to the directory appearing out of thin air. This can occur if
     // two processes are trying to create the same file system tree at the same
     // time. Check to see if it exists and make sure it is a directory.
     int saved_errno = errno;
-    if (!DirectoryExists(*i)) {
+    if (!DirectoryExists(subpath)) {
       if (error)
         *error = File::OSErrorToFileError(saved_errno);
       return false;
@@ -1015,6 +1018,7 @@ bool SetCurrentDirectory(const FilePath& path) {
   return chdir(path.value().c_str()) == 0;
 }
 
+#if BUILDFLAG(IS_MAC)
 bool VerifyPathControlledByUser(const FilePath& base,
                                 const FilePath& path,
                                 uid_t owner_uid,
@@ -1050,7 +1054,6 @@ bool VerifyPathControlledByUser(const FilePath& base,
   return true;
 }
 
-#if BUILDFLAG(IS_MAC)
 bool VerifyPathControlledByAdmin(const FilePath& path) {
   const unsigned kRootUid = 0;
   const FilePath kFileSystemRoot("/");
@@ -1065,7 +1068,7 @@ bool VerifyPathControlledByAdmin(const FilePath& path) {
   ScopedBlockingCall scoped_blocking_call(FROM_HERE, BlockingType::MAY_BLOCK);
 
   std::set<gid_t> allowed_group_ids;
-  for (int i = 0, ie = base::size(kAdminGroupNames); i < ie; ++i) {
+  for (int i = 0, ie = std::size(kAdminGroupNames); i < ie; ++i) {
     struct group *group_record = getgrnam(kAdminGroupNames[i]);
     if (!group_record) {
       DPLOG(ERROR) << "Could not get the group ID of group \""

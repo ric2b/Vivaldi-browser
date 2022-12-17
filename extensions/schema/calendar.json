@@ -1779,7 +1779,7 @@
       {
         "name": "deleteAccount",
         "type": "function",
-        "description": "Deletes an account.",
+        "description": "Deletes an account and its calendars, events, recurring_exceptions, notifications etc",
         "parameters": [
           {
             "type": "string",

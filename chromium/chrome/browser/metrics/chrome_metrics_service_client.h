@@ -17,6 +17,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/metrics/incognito_observer.h"
 #include "chrome/browser/metrics/metrics_memory_details.h"
 #include "chrome/browser/privacy_budget/identifiability_study_state.h"
@@ -27,6 +28,7 @@
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/ukm/observers/history_delete_observer.h"
 #include "components/ukm/observers/ukm_consent_state_observer.h"
+#include "components/variations/synthetic_trial_registry.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "ppapi/buildflags/buildflags.h"
@@ -37,7 +39,6 @@
 #endif
 
 class BrowserActivityWatcher;
-class PluginMetricsProvider;
 class Profile;
 class PrefRegistrySimple;
 
@@ -76,6 +77,7 @@ class ChromeMetricsServiceClient : public metrics::MetricsServiceClient,
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   // metrics::MetricsServiceClient:
+  variations::SyntheticTrialRegistry* GetSyntheticTrialRegistry() override;
   metrics::MetricsService* GetMetricsService() override;
   ukm::UkmService* GetUkmService() override;
   void SetMetricsClientId(const std::string& client_id) override;
@@ -97,7 +99,6 @@ class ChromeMetricsServiceClient : public metrics::MetricsServiceClient,
       override;
   base::TimeDelta GetStandardUploadInterval() override;
   void LoadingStateChanged(bool is_loading) override;
-  void OnPluginLoadingError(const base::FilePath& plugin_path) override;
   bool IsReportingPolicyManaged() override;
   metrics::EnableMetricsDefault GetMetricsReportingDefaultState() override;
   bool IsUMACellularUploadLogicEnabled() override;
@@ -197,6 +198,9 @@ class ChromeMetricsServiceClient : public metrics::MetricsServiceClient,
   // Weak pointer to the MetricsStateManager.
   const raw_ptr<metrics::MetricsStateManager> metrics_state_manager_;
 
+  // The synthetic trial registry shared by metrics_service_ and ukm_service_.
+  std::unique_ptr<variations::SyntheticTrialRegistry> synthetic_trial_registry_;
+
   // The MetricsService that |this| is a client of.
   std::unique_ptr<metrics::MetricsService> metrics_service_;
 
@@ -219,12 +223,6 @@ class ChromeMetricsServiceClient : public metrics::MetricsServiceClient,
 
   // Number of async histogram fetch requests in progress.
   int num_async_histogram_fetches_in_progress_ = 0;
-
-#if BUILDFLAG(ENABLE_PLUGINS)
-  // The PluginMetricsProvider instance that was registered with
-  // MetricsService. Has the same lifetime as |metrics_service_|.
-  raw_ptr<PluginMetricsProvider> plugin_metrics_provider_ = nullptr;
-#endif
 
   // Subscription for receiving callbacks that a URL was opened from the
   // omnibox.

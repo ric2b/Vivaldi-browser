@@ -18,6 +18,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/views/overlay/back_to_tab_image_button.h"
 #include "chrome/browser/ui/views/overlay/back_to_tab_label_button.h"
 #include "chrome/browser/ui/views/overlay/close_image_button.h"
@@ -36,6 +37,8 @@
 #include "media/base/video_util.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_header_macros.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/layer.h"
 #include "ui/gfx/color_palette.h"
@@ -68,28 +71,25 @@
 
 namespace {
 
-// The opacity of the controls scrim.
-constexpr double kControlsScrimOpacity = 0.76;
-
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 // The opacity of the resize handle control.
 constexpr double kResizeHandleOpacity = 0.38;
 #endif
 
 // Size of a primary control.
-constexpr gfx::Size kPrimaryControlSize(36, 36);
+constexpr gfx::Size kPrimaryControlSize(52, 52);
 
 // Margin from the bottom of the window for primary controls.
-constexpr int kPrimaryControlBottomMargin = 8;
+constexpr int kPrimaryControlBottomMargin = 0;
 
 // Size of a secondary control.
-constexpr gfx::Size kSecondaryControlSize(20, 20);
+constexpr gfx::Size kSecondaryControlSize(36, 36);
 
 // Margin from the bottom of the window for secondary controls.
-constexpr int kSecondaryControlBottomMargin = 16;
+constexpr int kSecondaryControlBottomMargin = 8;
 
 // Margin between controls.
-constexpr int kControlMargin = 32;
+constexpr int kControlMargin = 16;
 
 template <typename T>
 T* AddChildView(std::vector<std::unique_ptr<views::View>>* views,
@@ -97,6 +97,46 @@ T* AddChildView(std::vector<std::unique_ptr<views::View>>* views,
   views->push_back(std::move(child));
   return static_cast<T*>(views->back().get());
 }
+
+class WindowBackgroundView : public views::View {
+ public:
+  METADATA_HEADER(WindowBackgroundView);
+
+  WindowBackgroundView() = default;
+  WindowBackgroundView(const WindowBackgroundView&) = delete;
+  WindowBackgroundView& operator=(const WindowBackgroundView&) = delete;
+  ~WindowBackgroundView() override = default;
+
+  void OnThemeChanged() override {
+    views::View::OnThemeChanged();
+    layer()->SetColor(GetColorProvider()->GetColor(kColorPipWindowBackground));
+  }
+};
+
+BEGIN_METADATA(WindowBackgroundView, views::View)
+END_METADATA
+
+class ControlsBackgroundView : public views::View {
+ public:
+  METADATA_HEADER(ControlsBackgroundView);
+
+  ControlsBackgroundView() = default;
+  ControlsBackgroundView(const ControlsBackgroundView&) = delete;
+  ControlsBackgroundView& operator=(const ControlsBackgroundView&) = delete;
+  ~ControlsBackgroundView() override = default;
+
+  void OnThemeChanged() override {
+    views::View::OnThemeChanged();
+    const SkColor color =
+        GetColorProvider()->GetColor(kColorPipWindowControlsBackground);
+    layer()->SetColor(SkColorSetA(color, SK_AlphaOPAQUE));
+    layer()->SetOpacity(static_cast<float>(SkColorGetA(color)) /
+                        SK_AlphaOPAQUE);
+  }
+};
+
+BEGIN_METADATA(ControlsBackgroundView, views::View)
+END_METADATA
 
 }  // namespace
 
@@ -202,12 +242,12 @@ views::View* VideoOverlayWindowViews::GetControlsContainerView() const {
 }
 
 void VideoOverlayWindowViews::SetUpViews() {
-  // views::View that is displayed when video is hidden. ----------------------
+  // View that is displayed when video is hidden. ------------------------------
   // Adding an extra pixel to width/height makes sure controls background cover
   // entirely window when platform has fractional scale applied.
-  auto window_background_view = std::make_unique<views::View>();
+  auto window_background_view = std::make_unique<WindowBackgroundView>();
   auto video_view = std::make_unique<views::View>();
-  auto controls_scrim_view = std::make_unique<views::View>();
+  auto controls_scrim_view = std::make_unique<ControlsBackgroundView>();
   auto controls_container_view = std::make_unique<views::View>();
   auto close_controls_view =
       std::make_unique<CloseImageButton>(base::BindRepeating(
@@ -297,7 +337,6 @@ void VideoOverlayWindowViews::SetUpViews() {
 
   window_background_view->SetPaintToLayer(ui::LAYER_SOLID_COLOR);
   window_background_view->layer()->SetName("WindowBackgroundView");
-  window_background_view->layer()->SetColor(SK_ColorBLACK);
 
   // view::View that holds the video. -----------------------------------------
   video_view->SetPaintToLayer(ui::LAYER_TEXTURED);
@@ -308,8 +347,6 @@ void VideoOverlayWindowViews::SetUpViews() {
   // views::View that holds the scrim, which appears with the controls. -------
   controls_scrim_view->SetPaintToLayer(ui::LAYER_SOLID_COLOR);
   controls_scrim_view->layer()->SetName("ControlsScrimView");
-  controls_scrim_view->layer()->SetColor(gfx::kGoogleGrey900);
-  controls_scrim_view->layer()->SetOpacity(kControlsScrimOpacity);
 
   // views::View that is a parent of all the controls. Makes hiding and showing
   // all the controls at once easier.
@@ -494,7 +531,7 @@ void VideoOverlayWindowViews::OnUpdateControlsBounds() {
   // Adding an extra pixel to width/height makes sure the scrim covers the
   // entire window when the platform has fractional scaling applied.
   gfx::Rect larger_window_bounds = gfx::Rect(GetBounds().size());
-  larger_window_bounds.Inset(-1, -1);
+  larger_window_bounds.Inset(-1);
   controls_scrim_view_->SetBoundsRect(larger_window_bounds);
 
   WindowQuadrant quadrant =
@@ -781,7 +818,8 @@ void VideoOverlayWindowViews::SetSurfaceId(const viz::SurfaceId& surface_id) {
   GetCompositor()->AddChildFrameSink(surface_id.frame_sink_id());
   has_registered_frame_sink_hierarchy_ = true;
   video_view_->layer()->SetShowSurface(
-      surface_id, GetBounds().size(), SK_ColorBLACK,
+      surface_id, GetBounds().size(),
+      GetColorProvider()->GetColor(kColorPipWindowBackground),
       cc::DeadlinePolicy::UseDefaultDeadline(),
       true /* stretch_content_to_fill_bounds */);
 }

@@ -90,9 +90,9 @@ struct SESSIONS_EXPORT SessionTab {
   SerializedUserAgentOverride user_agent_override;
 
   // Ext data.
-  std::string ext_data;
+  std::string viv_ext_data;
 
-  std::map<std::string, bool> page_action_overrides;
+  std::map<std::string, bool> viv_page_action_overrides;
 
   // Timestamp for when this tab was last modified.
   base::Time timestamp;
@@ -214,7 +214,7 @@ struct SESSIONS_EXPORT SessionWindow {
   // Extra data associated with the window.
   std::map<std::string, std::string> extra_data;
 
-  std::string ext_data;
+  std::string viv_ext_data;
 };
 
 }  // namespace sessions

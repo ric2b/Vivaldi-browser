@@ -1,76 +1,65 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/first_run/signin/signin_screen_coordinator.h"
 
-#import "base/metrics/histogram_functions.h"
-#import "ios/chrome/app/application_delegate/app_state.h"
-#import "ios/chrome/app/application_delegate/app_state_observer.h"
-#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#include "ios/chrome/browser/first_run/first_run_metrics.h"
-#include "ios/chrome/browser/main/browser.h"
-#import "ios/chrome/browser/policy/policy_watcher_browser_agent.h"
-#import "ios/chrome/browser/policy/policy_watcher_browser_agent_observer_bridge.h"
+#import "ios/chrome/browser/application_context.h"
+#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/first_run/first_run_metrics.h"
+#import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
 #import "ios/chrome/browser/signin/chrome_account_manager_service.h"
 #import "ios/chrome/browser/signin/chrome_account_manager_service_factory.h"
-#include "ios/chrome/browser/signin/identity_manager_factory.h"
+#import "ios/chrome/browser/signin/identity_manager_factory.h"
+#import "ios/chrome/browser/sync/sync_service_factory.h"
 #import "ios/chrome/browser/ui/authentication/authentication_flow.h"
-#import "ios/chrome/browser/ui/authentication/enterprise/enterprise_prompt/enterprise_prompt_coordinator.h"
-#import "ios/chrome/browser/ui/authentication/enterprise/enterprise_utils.h"
 #import "ios/chrome/browser/ui/authentication/signin/signin_coordinator.h"
-#import "ios/chrome/browser/ui/authentication/signin/signin_utils.h"
 #import "ios/chrome/browser/ui/authentication/unified_consent/identity_chooser/identity_chooser_coordinator.h"
 #import "ios/chrome/browser/ui/authentication/unified_consent/identity_chooser/identity_chooser_coordinator_delegate.h"
-#import "ios/chrome/browser/ui/commands/browsing_data_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
+#import "ios/chrome/browser/ui/commands/tos_commands.h"
 #import "ios/chrome/browser/ui/first_run/first_run_screen_delegate.h"
 #import "ios/chrome/browser/ui/first_run/first_run_util.h"
-#import "ios/chrome/browser/ui/first_run/signin/signin_screen_consumer.h"
 #import "ios/chrome/browser/ui/first_run/signin/signin_screen_mediator.h"
 #import "ios/chrome/browser/ui/first_run/signin/signin_screen_view_controller.h"
-#import "ios/chrome/browser/ui/main/scene_state.h"
-#import "ios/chrome/browser/ui/main/scene_state_browser_agent.h"
-#import "ios/chrome/browser/unified_consent/unified_consent_service_factory.h"
+#import "ios/chrome/browser/ui/first_run/uma/uma_coordinator.h"
+#import "ios/chrome/browser/ui/first_run/welcome/tos_coordinator.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
-@interface SigninScreenCoordinator () <EnterprisePromptCoordinatorDelegate,
-                                       IdentityChooserCoordinatorDelegate,
-                                       PolicyWatcherBrowserAgentObserving,
-                                       SigninScreenViewControllerDelegate> {
-  // Observer for the sign-out policy changes.
-  std::unique_ptr<PolicyWatcherBrowserAgentObserverBridge>
-      _policyWatcherObserverBridge;
-}
+@interface SigninScreenCoordinator () <IdentityChooserCoordinatorDelegate,
+                                       SigninScreenViewControllerDelegate,
+                                       TOSCommands,
+                                       UMACoordinatorDelegate>
 
+// Show FRE consent.
+@property(nonatomic, assign) BOOL showFREConsent;
 // First run screen delegate.
 @property(nonatomic, weak) id<FirstRunScreenDelegate> delegate;
 // Sign-in screen view controller.
 @property(nonatomic, strong) SigninScreenViewController* viewController;
 // Sign-in screen mediator.
 @property(nonatomic, strong) SigninScreenMediator* mediator;
-// Coordinator handling choosing the account to sign in with.
+// Whether the user tapped on the TOS link.
+@property(nonatomic, assign) BOOL TOSLinkWasTapped;
+// Account manager service.
+@property(nonatomic, assign) ChromeAccountManagerService* accountManagerService;
+// Authentication service.
+@property(nonatomic, assign) AuthenticationService* authenticationService;
+// Coordinator used to manage the TOS page.
+@property(nonatomic, strong) TOSCoordinator* TOSCoordinator;
+// Coordinator to show the metric reportingn dialog.
+@property(nonatomic, strong) UMACoordinator* UMACoordinator;
+// Coordinator to choose an identity.
 @property(nonatomic, strong)
     IdentityChooserCoordinator* identityChooserCoordinator;
-// Coordinator handling adding a user account.
+// Coordinator to add an identity.
 @property(nonatomic, strong) SigninCoordinator* addAccountSigninCoordinator;
-// Whether the user attempted to sign in (the attempt can be successful, failed
-// or canceled).
-@property(nonatomic, assign) first_run::SignInAttemptStatus attemptStatus;
-// Whether there was existing accounts when the screen was presented.
-@property(nonatomic, assign) BOOL hadIdentitiesAtStartup;
-// The coordinator that manages enterprise prompts.
-@property(nonatomic, strong)
-    EnterprisePromptCoordinator* enterprisePromptCoordinator;
-// Account manager service to retrieve Chrome identities.
-@property(nonatomic, assign) ChromeAccountManagerService* accountManagerService;
-// YES if this coordinator is currently used in First Run.
-@property(nonatomic, readonly) BOOL firstRun;
+@property(nonatomic, assign) BOOL UMAReportingUserChoice;
 
 @end
 
@@ -81,6 +70,7 @@
 - (instancetype)initWithBaseNavigationController:
                     (UINavigationController*)navigationController
                                          browser:(Browser*)browser
+                                  showFREConsent:(BOOL)showFREConsent
                                         delegate:(id<FirstRunScreenDelegate>)
                                                      delegate {
   self = [super initWithBaseViewController:navigationController
@@ -88,216 +78,79 @@
   if (self) {
     DCHECK(!browser->GetBrowserState()->IsOffTheRecord());
     _baseNavigationController = navigationController;
+    _showFREConsent = showFREConsent;
     _delegate = delegate;
-    _policyWatcherObserverBridge =
-        std::make_unique<PolicyWatcherBrowserAgentObserverBridge>(self);
-
-    // Determine if the sign-in screen is used in First Run.
-    SceneState* sceneState =
-        SceneStateBrowserAgent::FromBrowser(self.browser)->GetSceneState();
-    AppState* appState = sceneState.appState;
-    _firstRun = appState.initStage == InitStageFirstRun;
+    _UMAReportingUserChoice = kDefaultMetricsReportingCheckboxValue;
   }
   return self;
 }
 
 - (void)start {
-  if (!signin::IsSigninAllowedByPolicy()) {
-    self.attemptStatus = first_run::SignInAttemptStatus::SKIPPED_BY_POLICY;
-    [self finishPresentingAndSkipRemainingScreens:NO];
-    return;
-  }
-
-  AuthenticationService* authenticationService =
-      AuthenticationServiceFactory::GetForBrowserState(
-          self.browser->GetBrowserState());
-
-  if (authenticationService->GetPrimaryIdentity(
-          signin::ConsentLevel::kSignin)) {
-    // Don't show sign in screen if there is already an account signed in (for
-    // example going through the FRE then killing the app and restarting the
-    // FRE). Don't record any metric as the user didn't take any action.
-    [self.delegate willFinishPresenting];
-    return;
-  }
-
-  PolicyWatcherBrowserAgent::FromBrowser(self.browser)
-      ->AddObserver(_policyWatcherObserverBridge.get());
-
+  [self.browser->GetCommandDispatcher()
+      startDispatchingToTarget:self
+                   forProtocol:@protocol(TOSCommands)];
+  id<TOSCommands> TOSHandler =
+      HandlerForProtocol(self.browser->GetCommandDispatcher(), TOSCommands);
   self.viewController = [[SigninScreenViewController alloc] init];
+  self.viewController.TOSHandler = TOSHandler;
   self.viewController.delegate = self;
-  self.viewController.enterpriseSignInRestrictions =
-      GetEnterpriseSignInRestrictions(self.browser->GetBrowserState());
+  self.viewController.modalInPresentation = YES;
 
+  ChromeBrowserState* browserState = self.browser->GetBrowserState();
+  self.authenticationService =
+      AuthenticationServiceFactory::GetForBrowserState(browserState);
   self.accountManagerService =
-      ChromeAccountManagerServiceFactory::GetForBrowserState(
+      ChromeAccountManagerServiceFactory::GetForBrowserState(browserState);
+  signin::IdentityManager* identityManager =
+      IdentityManagerFactory::GetForBrowserState(
           self.browser->GetBrowserState());
-
+  PrefService* localPrefService = GetApplicationContext()->GetLocalState();
+  PrefService* prefService = browserState->GetPrefs();
+  syncer::SyncService* syncService =
+      SyncServiceFactory::GetForBrowserState(browserState);
   self.mediator = [[SigninScreenMediator alloc]
       initWithAccountManagerService:self.accountManagerService
-              authenticationService:authenticationService];
-
-  self.mediator.selectedIdentity =
-      self.accountManagerService->GetDefaultIdentity();
-  self.hadIdentitiesAtStartup = self.accountManagerService->HasIdentities();
-
+              authenticationService:self.authenticationService
+                    identityManager:identityManager
+                   localPrefService:localPrefService
+                        prefService:prefService
+                        syncService:syncService
+                     showFREConsent:self.showFREConsent];
   self.mediator.consumer = self.viewController;
   BOOL animated = self.baseNavigationController.topViewController != nil;
   [self.baseNavigationController setViewControllers:@[ self.viewController ]
                                            animated:animated];
-  self.viewController.modalInPresentation = YES;
-
-  if (self.firstRun) {
-    base::UmaHistogramEnumeration("FirstRun.Stage",
-                                  first_run::kSignInScreenStart);
-  }
 }
 
 - (void)stop {
-  PolicyWatcherBrowserAgent::FromBrowser(self.browser)
-      ->RemoveObserver(_policyWatcherObserverBridge.get());
-
+  [self.identityChooserCoordinator stop];
   self.delegate = nil;
   self.viewController = nil;
   [self.mediator disconnect];
   self.mediator = nil;
-  [self.identityChooserCoordinator stop];
-  self.identityChooserCoordinator = nil;
-  // If advancedSettingsSigninCoordinator wasn't dismissed yet (which can
-  // happen when closing the scene), try to call -interruptWithAction: to
-  // properly cleanup the coordinator.
-  SigninCoordinator* signinCoordiantor = self.addAccountSigninCoordinator;
-  [self.addAccountSigninCoordinator
-      interruptWithAction:SigninCoordinatorInterruptActionNoDismiss
-               completion:^() {
-                 [signinCoordiantor stop];
-               }];
-  self.addAccountSigninCoordinator = nil;
-  [self.enterprisePromptCoordinator stop];
-  self.enterprisePromptCoordinator = nil;
+  self.accountManagerService = nil;
+  self.authenticationService = nil;
 }
 
-#pragma mark - SigninScreenViewControllerDelegate
+#pragma mark - InterruptibleChromeCoordinator
 
-- (void)showAccountPickerFromPoint:(CGPoint)point {
-  self.identityChooserCoordinator = [[IdentityChooserCoordinator alloc]
-      initWithBaseViewController:self.viewController
-                         browser:self.browser];
-  self.identityChooserCoordinator.delegate = self;
-  self.identityChooserCoordinator.origin = point;
-  [self.identityChooserCoordinator start];
-  self.identityChooserCoordinator.selectedIdentity =
-      self.mediator.selectedIdentity;
-}
-
-- (void)didTapPrimaryActionButton {
-  if (self.mediator.selectedIdentity) {
-    [self startSignIn];
-  } else {
-    [self triggerAddAccount];
-  }
-}
-
-- (void)didTapSecondaryActionButton {
-  [self finishPresentingAndSkipRemainingScreens:NO];
-  if (self.firstRun) {
-    base::UmaHistogramEnumeration(
-        "FirstRun.Stage", first_run::kSignInScreenCompletionWithoutSignIn);
-  }
-}
-
-#pragma mark - IdentityChooserCoordinatorDelegate
-
-- (void)identityChooserCoordinatorDidClose:
-    (IdentityChooserCoordinator*)coordinator {
-  CHECK_EQ(self.identityChooserCoordinator, coordinator);
-  [self.identityChooserCoordinator stop];
-  self.identityChooserCoordinator = nil;
-}
-
-- (void)identityChooserCoordinatorDidTapOnAddAccount:
-    (IdentityChooserCoordinator*)coordinator {
-  CHECK_EQ(self.identityChooserCoordinator, coordinator);
-  DCHECK(!self.addAccountSigninCoordinator);
-
-  [self triggerAddAccount];
-}
-
-- (void)identityChooserCoordinator:(IdentityChooserCoordinator*)coordinator
-                 didSelectIdentity:(ChromeIdentity*)identity {
-  CHECK_EQ(self.identityChooserCoordinator, coordinator);
-  self.mediator.selectedIdentity = identity;
-}
-
-#pragma mark - PolicyWatcherBrowserAgentObserving
-
-- (void)policyWatcherBrowserAgentNotifySignInDisabled:
-    (PolicyWatcherBrowserAgent*)policyWatcher {
-  if (self.addAccountSigninCoordinator) {
-    __weak __typeof(self) weakSelf = self;
-    [self.addAccountSigninCoordinator
-        interruptWithAction:SigninCoordinatorInterruptActionDismissWithAnimation
-                 completion:^{
-                   [weakSelf showSignedOutModal];
-                 }];
-  } else {
-    [self showSignedOutModal];
-  }
-}
-
-#pragma mark - EnterprisePromptCoordinatorDelegate
-
-- (void)hideEnterprisePrompForLearnMore:(BOOL)learnMore {
-  [self dismissSignedOutModalAndSkipScreens:learnMore];
+- (void)interruptWithAction:(SigninCoordinatorInterruptAction)action
+                 completion:(ProceduralBlock)completion {
+  // This coordinator should be used only for FRE or force sign-in. Those cases
+  // should not be interrupted.
+  NOTREACHED();
 }
 
 #pragma mark - Private
 
-// Dismisses the Signed Out modal if it is still present and |skipScreens|.
-- (void)dismissSignedOutModalAndSkipScreens:(BOOL)skipScreens {
-  [self.enterprisePromptCoordinator stop];
-  self.enterprisePromptCoordinator = nil;
-  [self finishPresentingAndSkipRemainingScreens:skipScreens];
-}
-
-// Shows the modal letting the user know that they have been signed out.
-- (void)showSignedOutModal {
-  self.attemptStatus = first_run::SignInAttemptStatus::SKIPPED_BY_POLICY;
-  self.enterprisePromptCoordinator = [[EnterprisePromptCoordinator alloc]
-      initWithBaseViewController:self.viewController
-                         browser:self.browser
-                      promptType:EnterprisePromptTypeForceSignOut];
-  self.enterprisePromptCoordinator.delegate = self;
-  [self.enterprisePromptCoordinator start];
-}
-
-// Completes the presentation of the screen, recording the metrics and notifying
-// the delegate to skip the rest of the FRE if |skipRemainingScreens| is YES, or
-// to continue the FRE.
-- (void)finishPresentingAndSkipRemainingScreens:(BOOL)skipRemainingScreens {
-  signin::IdentityManager* identityManager =
-      IdentityManagerFactory::GetForBrowserState(
-          self.browser->GetBrowserState());
-  RecordFirstRunSignInMetrics(identityManager, self.attemptStatus,
-                              self.hadIdentitiesAtStartup);
-
-  if (skipRemainingScreens) {
-    [self.delegate skipAll];
-  } else {
-    [self.delegate willFinishPresenting];
-  }
-}
-
 // Starts the coordinator to present the Add Account module.
 - (void)triggerAddAccount {
-  self.attemptStatus = first_run::SignInAttemptStatus::ATTEMPTED;
-
+  [self.mediator userAttemptedToSignin];
   self.addAccountSigninCoordinator = [SigninCoordinator
       addAccountCoordinatorWithBaseViewController:self.viewController
                                           browser:self.browser
                                       accessPoint:signin_metrics::AccessPoint::
                                                       ACCESS_POINT_START_PAGE];
-
   __weak __typeof(self) weakSelf = self;
   self.addAccountSigninCoordinator.signinCompletion =
       ^(SigninCoordinatorResult signinResult,
@@ -326,8 +179,6 @@
 - (void)startSignIn {
   DCHECK(self.mediator.selectedIdentity);
 
-  self.attemptStatus = first_run::SignInAttemptStatus::ATTEMPTED;
-
   DCHECK(self.mediator.selectedIdentity);
   AuthenticationFlow* authenticationFlow =
       [[AuthenticationFlow alloc] initWithBrowser:self.browser
@@ -335,18 +186,117 @@
                                  postSignInAction:POST_SIGNIN_ACTION_NONE
                          presentingViewController:self.viewController];
   __weak __typeof(self) weakSelf = self;
-  [self.mediator
-      startSignInWithAuthenticationFlow:authenticationFlow
-                             completion:^() {
-                               [weakSelf
-                                   finishPresentingAndSkipRemainingScreens:NO];
-                               if (self.firstRun) {
-                                 base::UmaHistogramEnumeration(
-                                     "FirstRun.Stage",
-                                     first_run::
-                                         kSignInScreenCompletionWithSignIn);
-                               }
-                             }];
+  ProceduralBlock completion = ^() {
+    [weakSelf finishPresentingWithSignIn:YES];
+  };
+  [self.mediator startSignInWithAuthenticationFlow:authenticationFlow
+                                        completion:completion];
+}
+
+// Calls the mediator and the delegate when the coordinator is finished.
+- (void)finishPresentingWithSignIn:(BOOL)signIn {
+  [self.mediator finishPresentingWithSignIn:signIn];
+  [self.delegate willFinishPresenting];
+}
+
+#pragma mark - IdentityChooserCoordinatorDelegate
+
+- (void)identityChooserCoordinatorDidClose:
+    (IdentityChooserCoordinator*)coordinator {
+  CHECK_EQ(self.identityChooserCoordinator, coordinator);
+  [self.identityChooserCoordinator stop];
+  self.identityChooserCoordinator = nil;
+}
+
+- (void)identityChooserCoordinatorDidTapOnAddAccount:
+    (IdentityChooserCoordinator*)coordinator {
+  CHECK_EQ(self.identityChooserCoordinator, coordinator);
+  DCHECK(!self.addAccountSigninCoordinator);
+  [self triggerAddAccount];
+}
+
+- (void)identityChooserCoordinator:(IdentityChooserCoordinator*)coordinator
+                 didSelectIdentity:(ChromeIdentity*)identity {
+  CHECK_EQ(self.identityChooserCoordinator, coordinator);
+  self.mediator.selectedIdentity = identity;
+}
+
+#pragma mark - PromoStyleViewControllerDelegate
+
+- (void)didTapPrimaryActionButton {
+  switch (self.authenticationService->GetServiceStatus()) {
+    case AuthenticationService::ServiceStatus::SigninForcedByPolicy:
+    case AuthenticationService::ServiceStatus::SigninAllowed:
+      if (self.mediator.selectedIdentity) {
+        [self startSignIn];
+      } else {
+        [self triggerAddAccount];
+      }
+      break;
+    case AuthenticationService::ServiceStatus::SigninDisabledByUser:
+    case AuthenticationService::ServiceStatus::SigninDisabledByPolicy:
+    case AuthenticationService::ServiceStatus::SigninDisabledByInternal:
+      [self finishPresentingWithSignIn:NO];
+      return;
+  }
+}
+
+- (void)didTapSecondaryActionButton {
+  __weak __typeof(self) weakSelf = self;
+  [self.mediator cancelSignInScreenWithCompletion:^{
+    [weakSelf finishPresentingWithSignIn:NO];
+  }];
+}
+
+#pragma mark - SigninScreenViewControllerDelegate
+
+- (void)showAccountPickerFromPoint:(CGPoint)point {
+  self.identityChooserCoordinator = [[IdentityChooserCoordinator alloc]
+      initWithBaseViewController:self.viewController
+                         browser:self.browser];
+  self.identityChooserCoordinator.delegate = self;
+  self.identityChooserCoordinator.origin = point;
+  [self.identityChooserCoordinator start];
+  self.identityChooserCoordinator.selectedIdentity =
+      self.mediator.selectedIdentity;
+}
+
+- (void)showUMADialog {
+  DCHECK(!self.UMACoordinator);
+  self.UMACoordinator = [[UMACoordinator alloc]
+      initWithBaseViewController:self.viewController
+                         browser:self.browser
+               UMAReportingValue:self.mediator.UMAReportingUserChoice];
+  self.UMACoordinator.delegate = self;
+  [self.UMACoordinator start];
+}
+
+#pragma mark - TOSCommands
+
+- (void)showTOSPage {
+  DCHECK(!self.TOSCoordinator);
+  self.TOSLinkWasTapped = YES;
+  self.TOSCoordinator =
+      [[TOSCoordinator alloc] initWithBaseViewController:self.viewController
+                                                 browser:self.browser];
+  [self.TOSCoordinator start];
+}
+
+- (void)hideTOSPage {
+  DCHECK(self.TOSCoordinator);
+  [self.TOSCoordinator stop];
+  self.TOSCoordinator = nil;
+}
+
+#pragma mark - UMACoordinatorDelegate
+
+- (void)UMACoordinatorDidRemoveWithCoordinator:(UMACoordinator*)coordinator
+                        UMAReportingUserChoice:(BOOL)UMAReportingUserChoice {
+  DCHECK(self.UMACoordinator);
+  DCHECK_EQ(self.UMACoordinator, coordinator);
+  self.UMACoordinator = nil;
+  DCHECK(self.mediator);
+  self.mediator.UMAReportingUserChoice = UMAReportingUserChoice;
 }
 
 @end

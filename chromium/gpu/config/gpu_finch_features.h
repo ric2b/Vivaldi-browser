@@ -24,6 +24,7 @@ GPU_EXPORT extern const base::Feature kAImageReader;
 GPU_EXPORT extern const base::Feature kWebViewVulkan;
 GPU_EXPORT extern const base::Feature kLimitAImageReaderMaxSizeToOne;
 GPU_EXPORT extern const base::Feature kWebViewZeroCopyVideo;
+GPU_EXPORT extern const base::Feature kWebViewThreadSafeMediaDefault;
 GPU_EXPORT extern const base::Feature kIncreaseBufferCountForHighFrameRate;
 #endif  // BUILDFLAG(IS_ANDROID)
 
@@ -45,8 +46,6 @@ GPU_EXPORT extern const base::Feature kGpuUseDisplayThreadPriority;
 GPU_EXPORT extern const base::Feature kMetal;
 #endif
 
-GPU_EXPORT extern const base::Feature kOopRasterizationDDL;
-
 GPU_EXPORT extern const base::Feature kSharedImageManager;
 
 GPU_EXPORT extern const base::Feature kVaapiJpegImageDecodeAcceleration;
@@ -64,6 +63,12 @@ GPU_EXPORT extern const base::Feature kEnableVkPipelineCache;
 GPU_EXPORT extern const base::Feature kReduceOpsTaskSplitting;
 
 GPU_EXPORT extern const base::Feature kEnableDrDc;
+
+#if BUILDFLAG(IS_ANDROID)
+// This flag is use additionally with kEnableDrDc to enable the feature for
+// vulkan enabled android devices.
+GPU_EXPORT extern const base::Feature kEnableDrDcVulkan;
+#endif  // BUILDFLAG(IS_ANDROID)
 
 GPU_EXPORT extern const base::Feature kWebGPUService;
 

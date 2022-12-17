@@ -10,6 +10,7 @@
 #include <wrl/client.h>
 
 #include <memory>
+#include <utility>
 
 #include "base/logging.h"
 #include "base/memory/free_deleter.h"
@@ -26,10 +27,90 @@
 #include "printing/backend/printing_info_win.h"
 #include "printing/backend/win_helper.h"
 #include "printing/mojom/print.mojom.h"
+#include "services/data_decoder/public/cpp/safe_xml_parser.h"
 
 namespace printing {
 
 namespace {
+
+// Elements and namespaces in XML data. The order of these elements follows
+// the Print Schema Framework elements order. Details can be found here:
+// https://docs.microsoft.com/en-us/windows/win32/printdocs/details-of-the-printcapabilities-schema
+constexpr char kPrintCapabilities[] = "psf:PrintCapabilities";
+constexpr char kFeature[] = "psf:Feature";
+constexpr char kPageOutputQuality[] = "psk:PageOutputQuality";
+constexpr char kOption[] = "psf:Option";
+constexpr char kProperty[] = "psf:Property";
+constexpr char kValue[] = "psf:Value";
+constexpr char kName[] = "name";
+
+// Wrapper class to close provider automatically.
+class ScopedProvider {
+ public:
+  explicit ScopedProvider(HPTPROVIDER provider) : provider_(provider) {}
+
+  // Once the object is destroyed, it automatically closes the provider by
+  // calling the XPSModule API.
+  ~ScopedProvider() {
+    if (provider_)
+      XPSModule::CloseProvider(provider_);
+  }
+
+ private:
+  HPTPROVIDER provider_;
+};
+mojom::ResultCode LoadPageOutputQuality(
+    const base::Value& page_output_quality,
+    PrinterSemanticCapsAndDefaults* printer_info) {
+  PageOutputQuality printer_page_output_quality;
+  std::vector<const base::Value*> options;
+  data_decoder::GetAllXmlElementChildrenWithTag(page_output_quality, kOption,
+                                                &options);
+  if (options.empty()) {
+    LOG(WARNING) << "Incorrect XML format";
+    return mojom::ResultCode::kFailed;
+  }
+  for (const auto* option : options) {
+    PageOutputQualityAttribute quality;
+    quality.name = data_decoder::GetXmlElementAttribute(*option, kName);
+    int property_count =
+        data_decoder::GetXmlElementChildrenCount(*option, kProperty);
+
+    // TODO(crbug.com/1291257): Each formatted option is expected to have zero
+    // or one property. Each property inside an option is expected to
+    // have one value.
+    // Source:
+    // https://docs.microsoft.com/en-us/windows/win32/printdocs/pageoutputquality
+    // If an option has more than one property or a property has more than one
+    // value, more work is expected here.
+
+    // In the case an option looks like <psf:Option name="psk:Text />,
+    // property_count is 0. In this case, an option only has `name`
+    // and does not have `display_name`.
+    if (property_count > 1) {
+      LOG(WARNING) << "Incorrect XML format";
+      return mojom::ResultCode::kFailed;
+    }
+    if (property_count == 1) {
+      const base::Value* property_element = data_decoder::FindXmlElementPath(
+          *option, {kOption, kProperty}, /*unique_path=*/nullptr);
+      int value_count =
+          data_decoder::GetXmlElementChildrenCount(*property_element, kValue);
+      if (value_count != 1) {
+        LOG(WARNING) << "Incorrect XML format";
+        return mojom::ResultCode::kFailed;
+      }
+      const base::Value* value_element = data_decoder::FindXmlElementPath(
+          *option, {kOption, kProperty, kValue}, /*unique_path=*/nullptr);
+      std::string text;
+      data_decoder::GetXmlElementText(*value_element, &text);
+      quality.display_name = std::move(text);
+    }
+    printer_page_output_quality.qualities.push_back(std::move(quality));
+  }
+  printer_info->page_output_quality = std::move(printer_page_output_quality);
+  return mojom::ResultCode::kSuccess;
+}
 
 // `GetResultCodeFromSystemErrorCode()` is only ever invoked when something has
 // gone wrong while interacting with the OS printing system.  If the cause of
@@ -456,10 +537,9 @@ scoped_refptr<PrintBackend> PrintBackend::CreateInstanceImpl(
   return base::MakeRefCounted<PrintBackendWin>();
 }
 
-mojom::ResultCode PrintBackend::GetPrinterCapabilitiesForXpsDriver(
+mojom::ResultCode PrintBackend::GetXmlPrinterCapabilitiesForXpsDriver(
     const std::string& printer_name,
-    PrinterSemanticCapsAndDefaults* printer_info) {
-  DCHECK(printer_info);
+    std::string& capabilities) {
   ScopedXPSInitializer xps_initializer;
   CHECK(xps_initializer.initialized());
 
@@ -470,9 +550,9 @@ mojom::ResultCode PrintBackend::GetPrinterCapabilitiesForXpsDriver(
   std::wstring wide_printer_name = base::UTF8ToWide(printer_name);
   HRESULT hr =
       XPSModule::OpenProvider(wide_printer_name, /*version=*/1, &provider);
+  ScopedProvider scoped_provider(provider);
   if (FAILED(hr) || !provider) {
     LOG(ERROR) << "Failed to open provider";
-    XPSModule::CloseProvider(provider);
     return mojom::ResultCode::kFailed;
   }
   Microsoft::WRL::ComPtr<IStream> print_capabilities_stream;
@@ -480,7 +560,6 @@ mojom::ResultCode PrintBackend::GetPrinterCapabilitiesForXpsDriver(
                              &print_capabilities_stream);
   if (FAILED(hr) || !print_capabilities_stream.Get()) {
     LOG(ERROR) << "Failed to create stream";
-    XPSModule::CloseProvider(provider);
     return mojom::ResultCode::kFailed;
   }
   base::win::ScopedBstr error;
@@ -489,28 +568,50 @@ mojom::ResultCode PrintBackend::GetPrinterCapabilitiesForXpsDriver(
                                        error.Receive());
   if (FAILED(hr)) {
     LOG(ERROR) << "Failed to get print capabilities";
-    XPSModule::CloseProvider(provider);
 
     // Failures from getting print capabilities don't give a system error,
     // so just indicate general failure.
     return mojom::ResultCode::kFailed;
   }
-  std::string print_capabilities;
-  hr = StreamOnHGlobalToString(print_capabilities_stream.Get(),
-                               &print_capabilities);
+  hr = StreamOnHGlobalToString(print_capabilities_stream.Get(), &capabilities);
 
   if (FAILED(hr)) {
     LOG(ERROR) << "Failed to convert stream to string";
-    XPSModule::CloseProvider(provider);
     return mojom::ResultCode::kFailed;
   }
   DVLOG(2) << "Printer capabilities info: Name = " << printer_name
-           << ", capabilities = " << print_capabilities;
+           << ", capabilities = " << capabilities;
+  return mojom::ResultCode::kSuccess;
+}
 
-  // TODO(crbug.com/1291257)  Need to parse the XML to extract
-  // capabilities. More work expected here.
+mojom::ResultCode PrintBackend::ParseValueForXpsPrinterCapabilities(
+    const base::Value& capabilities,
+    PrinterSemanticCapsAndDefaults* printer_info) {
+  if (!data_decoder::IsXmlElementNamed(capabilities, kPrintCapabilities)) {
+    LOG(WARNING) << "Incorrect XML format";
+    return mojom::ResultCode::kFailed;
+  }
+  std::vector<const base::Value*> features;
+  data_decoder::GetAllXmlElementChildrenWithTag(capabilities, kFeature,
+                                                &features);
+  if (features.empty()) {
+    LOG(WARNING) << "Incorrect XML format";
+    return mojom::ResultCode::kFailed;
+  }
+  for (auto* feature : features) {
+    std::string feature_name =
+        data_decoder::GetXmlElementAttribute(*feature, kName);
+    DVLOG(2) << feature_name;
+    mojom::ResultCode result_code;
+    if (feature_name == kPageOutputQuality) {
+      result_code = LoadPageOutputQuality(*feature, printer_info);
+      if (result_code == mojom::ResultCode::kFailed)
+        return result_code;
+    }
 
-  XPSModule::CloseProvider(provider);
+    // TODO(crbug.com/1291257): Each feature needs to be parsed. More work is
+    // expected here.
+  }
   return mojom::ResultCode::kSuccess;
 }
 

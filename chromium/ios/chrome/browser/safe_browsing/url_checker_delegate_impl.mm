@@ -4,16 +4,14 @@
 
 #include "ios/chrome/browser/safe_browsing/url_checker_delegate_impl.h"
 
-#include "base/task/post_task.h"
 #include "components/safe_browsing/core/browser/db/database_manager.h"
 #include "components/safe_browsing/core/browser/db/v4_protocol_manager_util.h"
 #import "components/safe_browsing/ios/browser/safe_browsing_url_allow_list.h"
 #include "components/security_interstitials/core/unsafe_resource.h"
-#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/prerender/prerender_service.h"
-#import "ios/chrome/browser/prerender/prerender_service_factory.h"
 #import "ios/chrome/browser/safe_browsing/safe_browsing_query_manager.h"
-#import "ios/chrome/browser/safe_browsing/unsafe_resource_util.h"
+#include "ios/components/security_interstitials/safe_browsing/safe_browsing_client.h"
+#include "ios/components/security_interstitials/safe_browsing/safe_browsing_client_factory.h"
+#import "ios/components/security_interstitials/safe_browsing/unsafe_resource_util.h"
 #include "ios/web/public/thread/web_task_traits.h"
 #import "ios/web/public/thread/web_thread.h"
 
@@ -33,19 +31,17 @@ void HandleBlockingPageRequestOnUIThread(
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
 
   // Send do-not-proceed signal if the WebState has been destroyed.
-  web::WebState* web_state = resource.web_state_getter.Run();
+  web::WebState* web_state = resource.weak_web_state.get();
   if (!web_state) {
     RunUnsafeResourceCallback(resource, /*proceed=*/false,
                               /*showed_interstitial=*/false);
     return;
   }
 
-  // Send do-not-proceed signal if the WebState is for a prerender tab.
-  PrerenderService* prerender_service =
-      PrerenderServiceFactory::GetForBrowserState(
-          ChromeBrowserState::FromBrowserState(web_state->GetBrowserState()));
-  if (prerender_service &&
-      prerender_service->IsWebStatePrerendered(web_state)) {
+  SafeBrowsingClient* safe_browsing_client =
+      SafeBrowsingClientFactory::GetForBrowserState(
+          web_state->GetBrowserState());
+  if (safe_browsing_client->ShouldBlockUnsafeResource(resource)) {
     RunUnsafeResourceCallback(resource, /*proceed=*/false,
                               /*showed_interstitial=*/false);
     return;
@@ -101,8 +97,8 @@ void UrlCheckerDelegateImpl::StartDisplayingBlockingPageHelper(
     bool has_user_gesture) {
   // Query the allow list on the UI thread to determine whether the navigation
   // can proceed.
-  base::PostTask(
-      FROM_HERE, {web::WebThread::UI},
+  web::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(&HandleBlockingPageRequestOnUIThread, resource));
 }
 

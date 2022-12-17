@@ -16,8 +16,10 @@
 #include "third_party/blink/renderer/core/frame/root_frame_viewport.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
+#include "third_party/blink/renderer/core/html/html_iframe_element.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
+#include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/page/scrolling/top_document_root_scroller_controller.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 #include "third_party/blink/renderer/core/scroll/scroll_alignment.h"
@@ -175,12 +177,8 @@ TEST_F(ScrollIntoViewTest, SmoothScroll) {
   Compositor().BeginFrame();  // update run_state_.
   Compositor().BeginFrame();  // Set start_time = now.
   Compositor().BeginFrame(0.2);
-  ASSERT_NEAR(
-      Window().scrollY(),
-      (base::FeatureList::IsEnabled(::features::kImpulseScrollAnimations)
-           ? 800
-           : 299),
-      1);
+  ASSERT_NEAR(Window().scrollY(),
+              (::features::IsImpulseScrollAnimationEnabled() ? 800 : 299), 1);
 
   // Finish scrolling the container
   Compositor().BeginFrame(1);
@@ -216,12 +214,8 @@ TEST_F(ScrollIntoViewTest, NestedContainer) {
   Compositor().BeginFrame();  // update run_state_.
   Compositor().BeginFrame();  // Set start_time = now.
   Compositor().BeginFrame(0.2);
-  ASSERT_NEAR(
-      Window().scrollY(),
-      (base::FeatureList::IsEnabled(::features::kImpulseScrollAnimations)
-           ? 800
-           : 299),
-      1);
+  ASSERT_NEAR(Window().scrollY(),
+              (::features::IsImpulseScrollAnimationEnabled() ? 800 : 299), 1);
   ASSERT_EQ(container->scrollTop(), 0);
 
   // Finish scrolling the outer container
@@ -232,12 +226,8 @@ TEST_F(ScrollIntoViewTest, NestedContainer) {
   // Scrolling the inner container
   Compositor().BeginFrame();  // Set start_time = now.
   Compositor().BeginFrame(0.2);
-  ASSERT_NEAR(
-      container->scrollTop(),
-      (base::FeatureList::IsEnabled(::features::kImpulseScrollAnimations)
-           ? 794
-           : 299),
-      1);
+  ASSERT_NEAR(container->scrollTop(),
+              (::features::IsImpulseScrollAnimationEnabled() ? 794 : 299), 1);
 
   // Finish scrolling the inner container
   Compositor().BeginFrame(1);
@@ -280,23 +270,16 @@ TEST_F(ScrollIntoViewTest, NewScrollIntoViewAbortsCurrentAnimation) {
   Compositor().BeginFrame();  // update run_state_.
   Compositor().BeginFrame();  // Set start_time = now.
   Compositor().BeginFrame(0.2);
-  ASSERT_NEAR(
-      Window().scrollY(),
-      (base::FeatureList::IsEnabled(::features::kImpulseScrollAnimations)
-           ? 800
-           : 299),
-      1);
+  ASSERT_NEAR(Window().scrollY(),
+              (::features::IsImpulseScrollAnimationEnabled() ? 800 : 299), 1);
   ASSERT_EQ(container1->scrollTop(), 0);
 
   content2->scrollIntoView(arg);
   Compositor().BeginFrame();  // update run_state_.
   Compositor().BeginFrame();  // Set start_time = now.
   Compositor().BeginFrame(0.2);
-  ASSERT_NEAR(
-      Window().scrollY(),
-      (base::FeatureList::IsEnabled(::features::kImpulseScrollAnimations) ? 171
-                                                                          : 61),
-      1);
+  ASSERT_NEAR(Window().scrollY(),
+              (::features::IsImpulseScrollAnimationEnabled() ? 171 : 61), 1);
   ASSERT_EQ(container1->scrollTop(), 0);  // container1 should not scroll.
 
   Compositor().BeginFrame(1);
@@ -306,12 +289,8 @@ TEST_F(ScrollIntoViewTest, NewScrollIntoViewAbortsCurrentAnimation) {
   // Scrolling content2 in container2
   Compositor().BeginFrame();  // Set start_time = now.
   Compositor().BeginFrame(0.2);
-  ASSERT_NEAR(
-      container2->scrollTop(),
-      (base::FeatureList::IsEnabled(::features::kImpulseScrollAnimations)
-           ? 952
-           : 300),
-      1);
+  ASSERT_NEAR(container2->scrollTop(),
+              (::features::IsImpulseScrollAnimationEnabled() ? 952 : 300), 1);
 
   // Finish all the animation to make sure there is no another animation queued
   // on container1.
@@ -353,12 +332,8 @@ TEST_F(ScrollIntoViewTest, ScrollWindowAbortsCurrentAnimation) {
   Compositor().BeginFrame();  // update run_state_.
   Compositor().BeginFrame();  // Set start_time = now.
   Compositor().BeginFrame(0.2);
-  ASSERT_NEAR(
-      Window().scrollY(),
-      (base::FeatureList::IsEnabled(::features::kImpulseScrollAnimations)
-           ? 800
-           : 299),
-      1);
+  ASSERT_NEAR(Window().scrollY(),
+              (::features::IsImpulseScrollAnimationEnabled() ? 800 : 299), 1);
   ASSERT_EQ(container->scrollTop(), 0);
 
   ScrollToOptions* window_option = ScrollToOptions::Create();
@@ -369,11 +344,8 @@ TEST_F(ScrollIntoViewTest, ScrollWindowAbortsCurrentAnimation) {
   Compositor().BeginFrame();  // update run_state_.
   Compositor().BeginFrame();  // Set start_time = now.
   Compositor().BeginFrame(0.2);
-  ASSERT_NEAR(
-      Window().scrollY(),
-      (base::FeatureList::IsEnabled(::features::kImpulseScrollAnimations) ? 165
-                                                                          : 58),
-      1);
+  ASSERT_NEAR(Window().scrollY(),
+              (::features::IsImpulseScrollAnimationEnabled() ? 165 : 58), 1);
 
   Compositor().BeginFrame(1);
   ASSERT_EQ(Window().scrollY(), 0);
@@ -480,12 +452,8 @@ TEST_F(ScrollIntoViewTest, SmoothAndInstantInChain) {
   Compositor().BeginFrame();  // update run_state_.
   Compositor().BeginFrame();  // Set start_time = now.
   Compositor().BeginFrame(0.2);
-  ASSERT_NEAR(
-      container->scrollTop(),
-      (base::FeatureList::IsEnabled(::features::kImpulseScrollAnimations)
-           ? 794
-           : 299),
-      1);
+  ASSERT_NEAR(container->scrollTop(),
+              (::features::IsImpulseScrollAnimationEnabled() ? 794 : 299), 1);
 
   // Finish scrolling the container
   Compositor().BeginFrame(1);
@@ -518,12 +486,8 @@ TEST_F(ScrollIntoViewTest, SmoothScrollAnchor) {
   Compositor().BeginFrame();  // update run_state_.
   Compositor().BeginFrame();  // Set start_time = now.
   Compositor().BeginFrame(0.2);
-  ASSERT_NEAR(
-      container->scrollTop(),
-      (base::FeatureList::IsEnabled(::features::kImpulseScrollAnimations)
-           ? 794
-           : 299),
-      1);
+  ASSERT_NEAR(container->scrollTop(),
+              (::features::IsImpulseScrollAnimationEnabled() ? 794 : 299), 1);
 
   // Finish scrolling the container
   Compositor().BeginFrame(1);
@@ -576,12 +540,8 @@ TEST_F(ScrollIntoViewTest, ApplyRootElementScrollBehaviorToViewport) {
   Compositor().BeginFrame();  // update run_state_.
   Compositor().BeginFrame();  // Set start_time = now.
   Compositor().BeginFrame(0.2);
-  ASSERT_NEAR(
-      Window().scrollY(),
-      (base::FeatureList::IsEnabled(::features::kImpulseScrollAnimations)
-           ? 800
-           : 299),
-      1);
+  ASSERT_NEAR(Window().scrollY(),
+              (::features::IsImpulseScrollAnimationEnabled() ? 800 : 299), 1);
 
   // Finish scrolling the container
   Compositor().BeginFrame(1);
@@ -752,12 +712,8 @@ TEST_F(ScrollIntoViewTest, SmoothUserScrollNotAbortedByProgrammaticScrolls) {
   Compositor().BeginFrame();  // update run_state_.
   Compositor().BeginFrame();  // Set start_time = now.
   Compositor().BeginFrame(0.2);
-  ASSERT_NEAR(
-      Window().scrollY(),
-      (base::FeatureList::IsEnabled(::features::kImpulseScrollAnimations)
-           ? 800
-           : 299),
-      1);
+  ASSERT_NEAR(Window().scrollY(),
+              (::features::IsImpulseScrollAnimationEnabled() ? 800 : 299), 1);
 
   // ProgrammaticScroll that could interrupt the current smooth scroll.
   Window().scrollTo(0, 0);
@@ -792,16 +748,97 @@ TEST_F(ScrollIntoViewTest, LongDistanceSmoothScrollFinishedInThreeSeconds) {
   Compositor().BeginFrame();  // update run_state_.
   Compositor().BeginFrame();  // Set start_time = now.
   Compositor().BeginFrame(0.2);
-  ASSERT_NEAR(
-      Window().scrollY(),
-      (base::FeatureList::IsEnabled(::features::kImpulseScrollAnimations)
-           ? 79389
-           : 16971),
-      1);
+  ASSERT_NEAR(Window().scrollY(),
+              (::features::IsImpulseScrollAnimationEnabled() ? 79389 : 16971),
+              1);
 
   // Finish scrolling the container
   Compositor().BeginFrame(0.5);
   ASSERT_EQ(Window().scrollY(), target->OffsetTop());
+}
+
+TEST_F(ScrollIntoViewTest, FromDisplayNoneIframe) {
+  v8::HandleScope HandleScope(v8::Isolate::GetCurrent());
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
+  SimRequest main("https://example.com/test.html", "text/html");
+  SimRequest child("https://example.com/child.html", "text/html");
+  LoadURL("https://example.com/test.html");
+  main.Complete(
+      R"HTML(
+        <!DOCTYPE html>
+        <style>
+          body {
+            width: 2000px;
+            height: 2000px;
+          }
+
+          iframe {
+            position: absolute;
+            left: 1000px;
+            top: 1200px;
+            width: 200px;
+            height: 200px;
+          }
+        </style>
+        <iframe id="childFrame" src="child.html"></iframe>
+      )HTML");
+  child.Complete(
+      R"HTML(
+        <!DOCTYPE html>
+        <style>
+          body {
+            width: 1000px;
+            height: 1000px;
+          }
+
+          div {
+            position: absolute;
+            left: 300px;
+            top: 400px;
+            background-color: red;
+          }
+        </style>
+        <div id="target">Target</div>
+      )HTML");
+
+  Compositor().BeginFrame();
+  ASSERT_EQ(Window().scrollY(), 0);
+
+  Element* child_frame = GetDocument().getElementById("childFrame");
+  ASSERT_TRUE(child_frame);
+  Document* child_document =
+      To<HTMLIFrameElement>(child_frame)->contentDocument();
+
+  Element* target = child_document->getElementById("target");
+  PhysicalRect rect(target->GetLayoutObject()->AbsoluteBoundingBoxRect());
+
+  child_frame->setAttribute(html_names::kStyleAttr, "display:none");
+  Compositor().BeginFrame();
+
+  // Calling scroll into view on an element without a LayoutObject shouldn't
+  // cause scrolling or a crash
+  ScrollIntoViewOptions* options = ScrollIntoViewOptions::Create();
+  options->setBlock("start");
+  options->setBehavior("smooth");
+  auto* arg =
+      MakeGarbageCollected<V8UnionBooleanOrScrollIntoViewOptions>(options);
+  target->scrollIntoView(arg);
+
+  EXPECT_EQ(Window().scrollY(), 0);
+  EXPECT_EQ(Window().scrollX(), 0);
+
+  // The display:none iframe can still have a LayoutView which other Blink code
+  // may call into so ensure we don't crash or do something strange since its
+  // owner element will not have a LayoutObject.
+  ASSERT_TRUE(child_document->GetLayoutView());
+  auto params = ScrollAlignment::CreateScrollIntoViewParams(
+      ScrollAlignment::LeftAlways(), ScrollAlignment::TopAlways(),
+      mojom::blink::ScrollType::kProgrammatic, false,
+      mojom::blink::ScrollBehavior::kInstant);
+  child_document->GetLayoutView()->ScrollRectToVisible(rect, std::move(params));
+
+  EXPECT_EQ(Window().scrollY(), 0);
+  EXPECT_EQ(Window().scrollX(), 0);
 }
 
 }  // namespace

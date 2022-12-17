@@ -7,10 +7,12 @@
 #include <stddef.h>
 
 #include <algorithm>
+#include <initializer_list>
 #include <map>
 #include <memory>
 #include <set>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -33,6 +35,8 @@
 #include "ash/public/cpp/window_properties.h"
 #include "ash/shelf/shelf_application_menu_model.h"
 #include "base/callback_helpers.h"
+#include "base/check.h"
+#include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/feature_list.h"
@@ -64,6 +68,7 @@
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/test_extension_system.h"
 #include "chrome/browser/prefs/browser_prefs.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/browser/ui/app_icon_loader.h"
 #include "chrome/browser/ui/app_list/app_list_syncable_service_factory.h"
@@ -99,12 +104,15 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/web_applications/externally_installed_web_app_prefs.h"
-#include "chrome/browser/web_applications/policy/web_app_policy_constants.h"
+#include "chrome/browser/web_applications/system_web_apps/system_web_app_manager.h"
 #include "chrome/browser/web_applications/system_web_apps/test/test_system_web_app_manager.h"
 #include "chrome/browser/web_applications/test/fake_web_app_provider.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
+#include "chrome/browser/web_applications/web_app_helpers.h"
+#include "chrome/browser/web_applications/web_app_id.h"
 #include "chrome/browser/web_applications/web_app_id_constants.h"
+#include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
@@ -120,7 +128,15 @@
 #include "components/app_constants/constants.h"
 #include "components/exo/shell_surface_util.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
-#include "components/prefs/pref_notifier_impl.h"
+#include "components/prefs/pref_service.h"
+#include "components/services/app_service/public/cpp/app_registry_cache.h"
+#include "components/services/app_service/public/cpp/app_types.h"
+#include "components/services/app_service/public/cpp/features.h"
+#include "components/services/app_service/public/cpp/instance.h"
+#include "components/services/app_service/public/cpp/instance_registry.h"
+#include "components/services/app_service/public/mojom/types.mojom-forward.h"
+#include "components/services/app_service/public/mojom/types.mojom-shared.h"
+#include "components/services/app_service/public/mojom/types.mojom.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/driver/sync_service.h"
 #include "components/sync/driver/sync_user_settings.h"
@@ -133,6 +149,7 @@
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "components/user_manager/fake_user_manager.h"
 #include "components/user_manager/scoped_user_manager.h"
+#include "components/viz/test/test_gpu_service_holder.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/test/test_utils.h"
@@ -161,10 +178,14 @@
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/image/image_unittest_util.h"
 #include "ui/views/widget/widget.h"
+#include "url/gurl.h"
+
+namespace content {
+class BrowserContext;
+}  // namespace content
 
 using base::ASCIIToUTF16;
 using extensions::Extension;
-using extensions::Manifest;
 using extensions::UnloadedExtensionReason;
 using extensions::mojom::ManifestLocation;
 
@@ -349,31 +370,40 @@ void UpdateAppRegistryCache(Profile* profile,
                             const std::string& app_id,
                             bool block,
                             bool pause,
-                            apps::mojom::OptionalBool show_in_shelf) {
-  std::vector<apps::mojom::AppPtr> apps;
-  apps::mojom::AppPtr app = apps::mojom::App::New();
-  app->app_type = apps::mojom::AppType::kChromeApp;
+                            absl::optional<bool> show_in_shelf) {
+  std::vector<apps::AppPtr> apps;
+  apps::AppPtr app =
+      std::make_unique<apps::App>(apps::AppType::kChromeApp, app_id);
   app->app_id = app_id;
 
   if (block)
-    app->readiness = apps::mojom::Readiness::kDisabledByPolicy;
+    app->readiness = apps::Readiness::kDisabledByPolicy;
   else
-    app->readiness = apps::mojom::Readiness::kReady;
+    app->readiness = apps::Readiness::kReady;
 
   if (pause)
-    app->paused = apps::mojom::OptionalBool::kTrue;
+    app->paused = true;
   else
-    app->paused = apps::mojom::OptionalBool::kFalse;
+    app->paused = false;
 
-  if (show_in_shelf != apps::mojom::OptionalBool::kUnknown)
+  if (show_in_shelf.has_value())
     app->show_in_shelf = show_in_shelf;
 
   apps.push_back(std::move(app));
 
-  apps::AppServiceProxyFactory::GetForProfile(profile)
-      ->AppRegistryCache()
-      .OnApps(std::move(apps), apps::mojom::AppType::kChromeApp,
-              false /* should_notify_initialized */);
+  if (base::FeatureList::IsEnabled(apps::kAppServiceOnAppUpdateWithoutMojom)) {
+    apps::AppServiceProxyFactory::GetForProfile(profile)
+        ->AppRegistryCache()
+        .OnApps(std::move(apps), apps::AppType::kChromeApp,
+                false /* should_notify_initialized */);
+  } else {
+    std::vector<apps::mojom::AppPtr> mojom_apps;
+    mojom_apps.push_back(apps::ConvertAppToMojomApp(apps[0]));
+    apps::AppServiceProxyFactory::GetForProfile(profile)
+        ->AppRegistryCache()
+        .OnApps(std::move(mojom_apps), apps::mojom::AppType::kChromeApp,
+                false /* should_notify_initialized */);
+  }
 }
 
 }  // namespace
@@ -393,7 +423,7 @@ class ChromeShelfControllerTestBase : public BrowserWithTestWindowTest {
     command_line->AppendSwitch(switches::kUseFirstDisplayAsInternal);
     // Prevent preinstalled apps from installing so these tests can control when
     // they are installed.
-    command_line->AppendSwitch(switches::kDisablePreinstalledApps);
+    command_line->AppendSwitch(switches::kDisableDefaultApps);
 
     chromeos::DBusThreadManager::Initialize();
     chromeos::ConciergeClient::InitializeFake(/*fake_cicerone_client=*/nullptr);
@@ -1012,9 +1042,10 @@ class ChromeShelfControllerTestBase : public BrowserWithTestWindowTest {
     prefs->AddAppAndShortcut(
         app_info.name, app_info.package_name, app_info.activity,
         std::string() /* intent_uri */, std::string() /* icon_resource_id */,
-        false /* sticky */, true /* notifications_enabled */,
-        true /* app_ready */, false /* suspended */, false /* shortcut */,
-        true /* launchable */, ArcAppListPrefs::WindowLayout());
+        app_info.version_name, false /* sticky */,
+        true /* notifications_enabled */, true /* app_ready */,
+        false /* suspended */, false /* shortcut */, true /* launchable */,
+        ArcAppListPrefs::WindowLayout());
     const std::string app_id =
         ArcAppListPrefs::GetAppId(app_info.package_name, app_info.activity);
     EXPECT_TRUE(prefs->GetApp(app_id));
@@ -1184,6 +1215,10 @@ class ChromeShelfControllerTest : public ChromeShelfControllerTestBase,
   bool ShouldEnableSyncSettingsCategorization() const { return GetParam(); }
 
  private:
+  // CrostiniTestHelper overrides feature list after GPU thread has started.
+  viz::TestGpuServiceHolder::ScopedAllowRacyFeatureListOverrides
+      gpu_thread_allow_racy_overrides_;
+
   base::test::ScopedFeatureList feature_list_;
 };
 
@@ -1673,7 +1708,14 @@ TEST_F(ChromeShelfControllerWithArcTest, ArcAppsHiddenFromLaunchCanBePinned) {
   EXPECT_EQ("Chrome, Play Store, Android Settings", GetPinnedAppStatus());
 }
 
-TEST_F(ChromeShelfControllerWithArcTest, ArcAppPinCrossPlatformWorkflow) {
+// crbug.com/1312611 Test Failing on linux-cfm-rel
+#if BUILDFLAG(IS_LINUX)
+#define MAYBE_ArcAppPinCrossPlatformWorkflow \
+  DISABLED_ArcAppPinCrossPlatformWorkflow
+#else
+#define MAYBE_ArcAppPinCrossPlatformWorkflow ArcAppPinCrossPlatformWorkflow
+#endif
+TEST_F(ChromeShelfControllerWithArcTest, MAYBE_ArcAppPinCrossPlatformWorkflow) {
   // Work on ARC disabled platform first.
   const std::string arc_app_id1 =
       ArcAppTest::GetAppId(*arc_test_.fake_apps()[0]);
@@ -2290,16 +2332,16 @@ TEST_F(ChromeShelfControllerWithArcTest, ArcDeferredLaunch) {
 
   EXPECT_GE(arc_test_.app_instance()->launch_intents()[0].find(
                 "component=fake.app.1/.activity;"),
-            0);
+            0u);
   EXPECT_GE(arc_test_.app_instance()->launch_intents()[0].find(
                 "S.org.chromium.arc.request.deferred.start="),
-            0);
+            0u);
   EXPECT_GE(arc_test_.app_instance()->launch_intents()[1].find(
                 "component=fake.app.2/.activity;"),
-            0);
+            0u);
   EXPECT_GE(arc_test_.app_instance()->launch_intents()[1].find(
                 "S.org.chromium.arc.request.deferred.start="),
-            0);
+            0u);
   EXPECT_EQ(arc_test_.app_instance()->launch_intents()[2].c_str(),
             shortcut.intent_uri);
 }
@@ -4885,12 +4927,19 @@ class ChromeShelfControllerDemoModeTest : public ChromeShelfControllerTestBase {
   web_app::AppId InstallExternalWebApp(std::string start_url) {
     auto web_app_info = std::make_unique<WebAppInstallInfo>();
     web_app_info->start_url = GURL(start_url);
+    const web_app::AppId expected_web_app_id = web_app::GenerateAppId(
+        /*manifest_id=*/absl::nullopt, web_app_info->start_url);
+    PrefService* prefs = browser()->profile()->GetPrefs();
+    web_app::ExternallyInstalledWebAppPrefs web_app_prefs(prefs);
+    web_app_prefs.Insert(GURL(start_url), expected_web_app_id,
+                         web_app::ExternalInstallSource::kExternalPolicy);
+    // Ensure prefs are written before the web app install process reads them.
+    base::RunLoop run_loop;
+    prefs->CommitPendingWrite(run_loop.QuitClosure());
+    run_loop.Run();
     web_app::AppId web_app_id =
         web_app::test::InstallWebApp(profile(), std::move(web_app_info));
-    web_app::ExternallyInstalledWebAppPrefs web_app_prefs(
-        browser()->profile()->GetPrefs());
-    web_app_prefs.Insert(GURL(start_url), web_app_id,
-                         web_app::ExternalInstallSource::kExternalPolicy);
+    DCHECK_EQ(expected_web_app_id, web_app_id);
     return web_app_id;
   }
 
@@ -5096,16 +5145,24 @@ TEST_P(ChromeShelfControllerTest, DoNotShowInShelf) {
   AddExtension(extension2_.get());
 
   // Set App1.show_in_shelf to false.
-  std::vector<apps::mojom::AppPtr> apps;
-  apps::mojom::AppPtr app = apps::mojom::App::New();
-  app->app_type = apps::mojom::AppType::kChromeApp;
-  app->app_id = extension1_->id();
-  app->show_in_shelf = apps::mojom::OptionalBool::kFalse;
+  std::vector<apps::AppPtr> apps;
+  apps::AppPtr app =
+      std::make_unique<apps::App>(apps::AppType::kChromeApp, extension1_->id());
+  app->show_in_shelf = false;
   apps.push_back(std::move(app));
-  apps::AppServiceProxyFactory::GetForProfile(profile())
-      ->AppRegistryCache()
-      .OnApps(std::move(apps), apps::mojom::AppType::kChromeApp,
-              false /* should_notify_initialized */);
+  if (base::FeatureList::IsEnabled(apps::kAppServiceOnAppUpdateWithoutMojom)) {
+    apps::AppServiceProxyFactory::GetForProfile(profile())
+        ->AppRegistryCache()
+        .OnApps(std::move(apps), apps::AppType::kChromeApp,
+                false /* should_notify_initialized */);
+  } else {
+    std::vector<apps::mojom::AppPtr> mojom_apps;
+    mojom_apps.push_back(apps::ConvertAppToMojomApp(apps[0]));
+    apps::AppServiceProxyFactory::GetForProfile(profile())
+        ->AppRegistryCache()
+        .OnApps(std::move(mojom_apps), apps::mojom::AppType::kChromeApp,
+                false /* should_notify_initialized */);
+  }
 
   InitShelfController();
   EXPECT_EQ("Chrome, App2", GetPinnedAppStatus());
@@ -5259,9 +5316,8 @@ TEST_P(ChromeShelfControllerTest, VerifyAppStatusForPausedApp) {
   AddExtension(extension1_.get());
 
   // Set the app as paused
-  UpdateAppRegistryCache(
-      profile(), extension1_->id(), false /* block */, true /* pause */,
-      apps::mojom::OptionalBool::kUnknown /* show_in_shelf */);
+  UpdateAppRegistryCache(profile(), extension1_->id(), false /* block */,
+                         true /* pause */, absl::nullopt /* show_in_shelf */);
 
   InitShelfController();
 
@@ -5270,21 +5326,18 @@ TEST_P(ChromeShelfControllerTest, VerifyAppStatusForPausedApp) {
   EXPECT_EQ(ash::AppStatus::kPaused, model_->items()[1].app_status);
 
   // Set the app as blocked
-  UpdateAppRegistryCache(
-      profile(), extension1_->id(), true /* block */, true /* pause */,
-      apps::mojom::OptionalBool::kUnknown /* show_in_shelf */);
+  UpdateAppRegistryCache(profile(), extension1_->id(), true /* block */,
+                         true /* pause */, absl::nullopt /* show_in_shelf */);
   EXPECT_EQ(ash::AppStatus::kBlocked, model_->items()[1].app_status);
 
   // Set the app as ready, but still paused;
-  UpdateAppRegistryCache(
-      profile(), extension1_->id(), false /* block */, true /* pause */,
-      apps::mojom::OptionalBool::kUnknown /* show_in_shelf */);
+  UpdateAppRegistryCache(profile(), extension1_->id(), false /* block */,
+                         true /* pause */, absl::nullopt /* show_in_shelf */);
   EXPECT_EQ(ash::AppStatus::kPaused, model_->items()[1].app_status);
 
   // Set the app as ready, and not paused;
-  UpdateAppRegistryCache(
-      profile(), extension1_->id(), false /* block */, false /* pause */,
-      apps::mojom::OptionalBool::kUnknown /* show_in_shelf */);
+  UpdateAppRegistryCache(profile(), extension1_->id(), false /* block */,
+                         false /* pause */, absl::nullopt /* show_in_shelf */);
   EXPECT_EQ(ash::AppStatus::kReady, model_->items()[1].app_status);
 }
 
@@ -5294,9 +5347,8 @@ TEST_P(ChromeShelfControllerTest, VerifyAppStatusForBlockedApp) {
   AddExtension(extension1_.get());
 
   // Set the app as blocked
-  UpdateAppRegistryCache(
-      profile(), extension1_->id(), true /* block */, false /* pause */,
-      apps::mojom::OptionalBool::kUnknown /* show_in_shelf */);
+  UpdateAppRegistryCache(profile(), extension1_->id(), true /* block */,
+                         false /* pause */, absl::nullopt /* show_in_shelf */);
 
   InitShelfController();
 
@@ -5305,40 +5357,34 @@ TEST_P(ChromeShelfControllerTest, VerifyAppStatusForBlockedApp) {
   EXPECT_EQ(ash::AppStatus::kBlocked, model_->items()[1].app_status);
 
   // Set the app as paused
-  UpdateAppRegistryCache(
-      profile(), extension1_->id(), true /* block */, true /* pause */,
-      apps::mojom::OptionalBool::kUnknown /* show_in_shelf */);
+  UpdateAppRegistryCache(profile(), extension1_->id(), true /* block */,
+                         true /* pause */, absl::nullopt /* show_in_shelf */);
   EXPECT_EQ(ash::AppStatus::kBlocked, model_->items()[1].app_status);
 
   // Set the app as blocked, but un-paused
-  UpdateAppRegistryCache(
-      profile(), extension1_->id(), true /* block */, false /* pause */,
-      apps::mojom::OptionalBool::kUnknown /* show_in_shelf */);
+  UpdateAppRegistryCache(profile(), extension1_->id(), true /* block */,
+                         false /* pause */, absl::nullopt /* show_in_shelf */);
   EXPECT_EQ(ash::AppStatus::kBlocked, model_->items()[1].app_status);
 
   // Set the app as ready, and not paused
-  UpdateAppRegistryCache(
-      profile(), extension1_->id(), false /* block */, false /* pause */,
-      apps::mojom::OptionalBool::kUnknown /* show_in_shelf */);
+  UpdateAppRegistryCache(profile(), extension1_->id(), false /* block */,
+                         false /* pause */, absl::nullopt /* show_in_shelf */);
   EXPECT_EQ(ash::AppStatus::kReady, model_->items()[1].app_status);
 
   // Set the app as blocked and hidden
   UpdateAppRegistryCache(profile(), extension1_->id(), true /* block */,
-                         false /* pause */,
-                         apps::mojom::OptionalBool::kFalse /* show_in_shelf */);
+                         false /* pause */, false /* show_in_shelf */);
   EXPECT_FALSE(shelf_controller_->IsAppPinned(extension1_->id()));
 
   // Set the app as blocked and visible
   UpdateAppRegistryCache(profile(), extension1_->id(), true /* block */,
-                         false /* pause */,
-                         apps::mojom::OptionalBool::kTrue /* show_in_shelf */);
+                         false /* pause */, true /* show_in_shelf */);
   EXPECT_EQ(ash::AppStatus::kBlocked, model_->items()[1].app_status);
   EXPECT_TRUE(shelf_controller_->IsAppPinned(extension1_->id()));
 
   // Set the app as ready
-  UpdateAppRegistryCache(
-      profile(), extension1_->id(), false /* block */, false /* pause */,
-      apps::mojom::OptionalBool::kUnknown /* show_in_shelf */);
+  UpdateAppRegistryCache(profile(), extension1_->id(), false /* block */,
+                         false /* pause */, absl::nullopt /* show_in_shelf */);
   EXPECT_EQ(ash::AppStatus::kReady, model_->items()[1].app_status);
 }
 
@@ -5356,13 +5402,13 @@ TEST_P(ChromeShelfControllerTest, PinnedAppsRespectShownInShelfState) {
   // longer pinned.
   UpdateAppRegistryCache(profile(), extension1_->id(), /*block=*/false,
                          /*pause=*/false,
-                         /*show_in_shelf=*/apps::mojom::OptionalBool::kFalse);
+                         /*show_in_shelf=*/false);
   EXPECT_FALSE(shelf_controller_->IsAppPinned(extension1_->id()));
 
   // Update the app so it's allowed in shelf again, verify it gets pinned.
   UpdateAppRegistryCache(profile(), extension1_->id(), /*block=*/false,
                          /*pause=*/false,
-                         /*show_in_shelf=*/apps::mojom::OptionalBool::kTrue);
+                         /*show_in_shelf=*/true);
   EXPECT_TRUE(model_->IsAppPinned(extension1_->id()));
   EXPECT_TRUE(model_->AllowedToSetAppPinState(extension1_->id(), false));
   EXPECT_EQ(1, model_->ItemIndexByAppID(extension1_->id()));
@@ -5384,13 +5430,13 @@ TEST_P(ChromeShelfControllerTest, AppIndexAfterUnhidingFirstPinnedApp) {
   // longer pinned.
   UpdateAppRegistryCache(profile(), extension1_->id(), /*block=*/false,
                          /*pause=*/false,
-                         /*show_in_shelf=*/apps::mojom::OptionalBool::kFalse);
+                         /*show_in_shelf=*/false);
   EXPECT_FALSE(shelf_controller_->IsAppPinned(extension1_->id()));
 
   // Update the app so it's allowed in shelf again, verify it gets pinned.
   UpdateAppRegistryCache(profile(), extension1_->id(), /*block=*/false,
                          /*pause=*/false,
-                         /*show_in_shelf=*/apps::mojom::OptionalBool::kTrue);
+                         /*show_in_shelf=*/true);
   EXPECT_TRUE(model_->IsAppPinned(extension1_->id()));
   EXPECT_TRUE(model_->AllowedToSetAppPinState(extension1_->id(), false));
   EXPECT_EQ(0, model_->ItemIndexByAppID(extension1_->id()));
@@ -5417,19 +5463,19 @@ TEST_P(ChromeShelfControllerTest,
   // it's no longer pinned.
   UpdateAppRegistryCache(profile(), extension1_->id(), /*block=*/false,
                          /*pause=*/false,
-                         /*show_in_shelf=*/apps::mojom::OptionalBool::kFalse);
+                         /*show_in_shelf=*/false);
   UpdateAppRegistryCache(profile(), extension2_->id(), /*block=*/false,
                          /*pause=*/false,
-                         /*show_in_shelf=*/apps::mojom::OptionalBool::kFalse);
+                         /*show_in_shelf=*/false);
   UpdateAppRegistryCache(profile(), extension5_->id(), /*block=*/false,
                          /*pause=*/false,
-                         /*show_in_shelf=*/apps::mojom::OptionalBool::kFalse);
+                         /*show_in_shelf=*/false);
   EXPECT_FALSE(shelf_controller_->IsAppPinned(extension2_->id()));
 
   // Update app 2 so it's allowed in shelf again, verify it gets pinned.
   UpdateAppRegistryCache(profile(), extension2_->id(), /*block=*/false,
                          /*pause=*/false,
-                         /*show_in_shelf=*/apps::mojom::OptionalBool::kTrue);
+                         /*show_in_shelf=*/true);
   EXPECT_TRUE(model_->IsAppPinned(extension2_->id()));
   EXPECT_TRUE(model_->AllowedToSetAppPinState(extension2_->id(), false));
   EXPECT_EQ(1, model_->ItemIndexByAppID(extension2_->id()));
@@ -5455,13 +5501,13 @@ TEST_P(ChromeShelfControllerTest, AppsHiddenFromShelfDontGetPinnedByPolicy) {
   // longer pinned.
   UpdateAppRegistryCache(profile(), extension1_->id(), /*block=*/false,
                          /*pause=*/false,
-                         /*show_in_shelf=*/apps::mojom::OptionalBool::kFalse);
+                         /*show_in_shelf=*/false);
   EXPECT_FALSE(model_->IsAppPinned(extension1_->id()));
 
   // Update the app so it's allowed in shelf again, verify it gets pinned.
   UpdateAppRegistryCache(profile(), extension1_->id(), /*block=*/false,
                          /*pause=*/false,
-                         /*show_in_shelf=*/apps::mojom::OptionalBool::kTrue);
+                         /*show_in_shelf=*/true);
   EXPECT_TRUE(model_->IsAppPinned(extension1_->id()));
   EXPECT_FALSE(model_->AllowedToSetAppPinState(extension1_->id(), false));
   EXPECT_EQ(1, model_->ItemIndexByAppID(extension1_->id()));
@@ -5478,20 +5524,20 @@ TEST_P(ChromeShelfControllerTest, AppHiddenFromShelfNotPinnedOnInstall) {
   // Block the extension so it gets removed from shelf.
   UpdateAppRegistryCache(profile(), extension1_->id(), /*block=*/true,
                          /*pause=*/false,
-                         /*show_in_shelf=*/apps::mojom::OptionalBool::kFalse);
+                         /*show_in_shelf=*/false);
   EXPECT_FALSE(model_->IsAppPinned(extension1_->id()));
 
   // Unblock the extension, but mark it as not shown in shelf - verify it
   // doesn't get pinned/added to shelf.
   UpdateAppRegistryCache(profile(), extension1_->id(), /*block=*/false,
                          /*pause=*/false,
-                         /*show_in_shelf=*/apps::mojom::OptionalBool::kFalse);
+                         /*show_in_shelf=*/false);
   EXPECT_FALSE(model_->IsAppPinned(extension1_->id()));
 
   // Allow the app to be shown in shelf, and verify it gets pinned again.
   UpdateAppRegistryCache(profile(), extension1_->id(), /*block=*/false,
                          /*pause=*/false,
-                         /*show_in_shelf=*/apps::mojom::OptionalBool::kTrue);
+                         /*show_in_shelf=*/true);
   EXPECT_TRUE(model_->IsAppPinned(extension1_->id()));
   EXPECT_TRUE(model_->AllowedToSetAppPinState(extension1_->id(), false));
   EXPECT_EQ(1, model_->ItemIndexByAppID(extension1_->id()));

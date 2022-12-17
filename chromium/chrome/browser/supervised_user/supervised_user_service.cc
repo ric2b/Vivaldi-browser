@@ -22,7 +22,6 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/values.h"
 #include "base/version.h"
@@ -87,13 +86,8 @@ namespace {
 // The URL from which to download a host denylist if no local one exists yet.
 const char kDenylistURL[] =
     "https://www.gstatic.com/chrome/supervised_user/denylist-20141001-1k.bin";
-// The filename under which we'll store the denylist (in the user data dir). The
-// old file will be used as a backup in case the new file has not been loaded
-// yet.
-const char kDenylistPrefix[] = "su-deny";
-// TODO(crbug/1243379): Remove references to the old denylist
-const char kOldDenylistPrefix[] = "su-black";
-const char kDenylistSuffix[] = "list.bin";
+// The filename under which we'll store the denylist (in the user data dir).
+const char kDenylistFilename[] = "su-denylist.bin";
 
 const char kDenylistSourceHistogramName[] = "FamilyUser.DenylistSource";
 
@@ -119,10 +113,10 @@ const char* const kCustodianInfoPrefs[] = {
     prefs::kSupervisedUserSecondCustodianProfileURL,
 };
 
-base::FilePath GetDenylistPath(base::StringPiece filePrefix) {
+base::FilePath GetDenylistPath() {
   base::FilePath denylist_dir;
   base::PathService::Get(chrome::DIR_USER_DATA, &denylist_dir);
-  return denylist_dir.AppendASCII(base::StrCat({filePrefix, kDenylistSuffix}));
+  return denylist_dir.AppendASCII(kDenylistFilename);
 }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -169,10 +163,8 @@ const char* SupervisedUserService::GetDenylistSourceHistogramForTesting() {
 }
 
 // static
-base::FilePath SupervisedUserService::GetDenylistPathForTesting(
-    bool isOldPath) {
-  return isOldPath ? GetDenylistPath(kOldDenylistPrefix)
-                   : GetDenylistPath(kDenylistPrefix);
+base::FilePath SupervisedUserService::GetDenylistPathForTesting() {
+  return GetDenylistPath();
 }
 
 void SupervisedUserService::Init() {
@@ -239,6 +231,8 @@ std::string SupervisedUserService::GetCustodianName() const {
   std::string name =
       profile_->GetPrefs()->GetString(prefs::kSupervisedUserCustodianName);
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+  // TODO(https://crbug.com/1218633): Check if additional work is needed for
+  // extensions in LaCrOS.
   // |GetActiveUser()| can return null in unit tests.
   if (name.empty() && !!user_manager::UserManager::Get()->GetActiveUser()) {
     name = base::UTF16ToUTF8(
@@ -556,7 +550,7 @@ void SupervisedUserService::OnSafeSitesSettingChanged() {
   bool use_denylist = IsSafeSitesEnabled();
   if (use_denylist != url_filter_.HasDenylist()) {
     if (use_denylist && denylist_state_ == DenylistLoadState::NOT_LOADED) {
-      LoadDenylist(GetDenylistPath(kDenylistPrefix), GURL(kDenylistURL));
+      LoadDenylist(GetDenylistPath(), GURL(kDenylistURL));
     } else if (!use_denylist || denylist_state_ == DenylistLoadState::LOADED) {
       // Either the denylist was turned off, or it was turned on but has
       // already been loaded previously. Just update the setting.
@@ -682,32 +676,9 @@ void SupervisedUserService::OnDenylistDownloadDone(
     LoadDenylistFromFile(path);
     base::UmaHistogramEnumeration(kDenylistSourceHistogramName,
                                   DenylistSource::kDenylist);
-  } else {
-    LOG(WARNING) << "Denylist download failed, trying to load the old denylist";
-    const base::FilePath& filePath = GetDenylistPath(kOldDenylistPrefix);
-    base::ThreadPool::PostTaskAndReplyWithResult(
-        FROM_HERE,
-        {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
-         base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-        base::BindOnce(&base::PathExists, filePath),
-        base::BindOnce(&SupervisedUserService::TryLoadingOldDenylist,
-                       weak_ptr_factory_.GetWeakPtr(), filePath));
-    // TODO(treib): Retry downloading after some time?
   }
+  LOG(WARNING) << "Denylist download failed";
   denylist_downloader_.reset();
-}
-
-void SupervisedUserService::TryLoadingOldDenylist(const base::FilePath& path,
-                                                  bool file_exists) {
-  if (!file_exists) {
-    LOG(WARNING) << "Old denylist is not available";
-    base::UmaHistogramEnumeration(kDenylistSourceHistogramName,
-                                  DenylistSource::kNoSource);
-    return;
-  }
-  LoadDenylistFromFile(path);
-  base::UmaHistogramEnumeration(kDenylistSourceHistogramName,
-                                DenylistSource::kOldDenylist);
 }
 
 void SupervisedUserService::OnDenylistLoaded() {
@@ -776,6 +747,8 @@ SupervisedUserService::ExtensionState SupervisedUserService::GetExtensionState(
     const Extension& extension) const {
   bool was_installed_by_default = extension.was_installed_by_default();
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+  // TODO(https://crbug.com/1218633): Check if this is needed for extensions in
+  // LaCrOS.
   // On Chrome OS all external sources are controlled by us so it means that
   // they are "default". Method was_installed_by_default returns false because
   // extensions creation flags are ignored in case of default extensions with

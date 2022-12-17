@@ -96,7 +96,8 @@ class FolderHeaderView::FolderNameView : public views::Textfield,
 
     const bool is_active = has_mouse_already_entered_ || HasFocus();
     SetBackground(views::CreateRoundedRectBackground(
-        GetFolderBackgroundColor(is_active), kFolderNameBorderRadius));
+        GetFolderBackgroundColor(is_active), kFolderNameBorderRadius,
+        kFolderNameBorderThickness));
 
     AppListColorProvider* color_provider = AppListColorProvider::Get();
     const SkColor text_color = color_provider->GetFolderTitleTextColor();
@@ -115,7 +116,7 @@ class FolderHeaderView::FolderNameView : public views::Textfield,
         views::CreateRoundedRectBorder(
             kFolderNameBorderThickness, kFolderNameBorderRadius,
             AppListColorProvider::Get()->GetFolderNameBorderColor(is_active)),
-        gfx::Insets(0, kFolderNamePadding)));
+        gfx::Insets::VH(0, kFolderNamePadding)));
     UpdateBackgroundColor(is_active);
   }
 
@@ -218,7 +219,7 @@ class FolderHeaderView::FolderNameView : public views::Textfield,
     int min_width =
         std::max(kFolderHeaderMinTapWidth, textfield_bounds.width());
     int horizontal_padding = -((min_width - textfield_bounds.width()) / 2);
-    textfield_bounds.Inset(gfx::Insets(0, horizontal_padding));
+    textfield_bounds.Inset(gfx::Insets::VH(0, horizontal_padding));
 
     return textfield_bounds.Intersects(rect);
   }

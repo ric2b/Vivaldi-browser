@@ -42,7 +42,7 @@ class BrowserLiveTabContext : public sessions::LiveTabContext {
   SessionID GetSessionID() const override;
   int GetTabCount() const override;
   int GetSelectedIndex() const override;
-  std::string GetExtData() const override;
+  std::string GetVivExtData() const override;
   std::string GetAppName() const override;
   std::string GetUserTitle() const override;
   sessions::LiveTab* GetLiveTabAt(int index) const override;
@@ -75,7 +75,7 @@ class BrowserLiveTabContext : public sessions::LiveTabContext {
       const std::map<std::string, std::string>& extra_data,
       const SessionID* tab_id,
       const std::map<std::string, bool> page_action_overrides,
-      const std::string& ext_data) override;
+      const std::string& viv_ext_data) override;
   sessions::LiveTab* ReplaceRestoredTab(
       const std::vector<sessions::SerializedNavigationEntry>& navigations,
       absl::optional<tab_groups::TabGroupId> group,
@@ -85,7 +85,7 @@ class BrowserLiveTabContext : public sessions::LiveTabContext {
       const sessions::SerializedUserAgentOverride& user_agent_override,
       const std::map<std::string, std::string>& extra_data,
       const std::map<std::string, bool> page_action_overrides,
-      const std::string& ext_data) override;
+      const std::string& viv_ext_data) override;
   void CloseTab() override;
 
   // see Browser::Create

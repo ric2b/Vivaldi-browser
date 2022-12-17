@@ -3,8 +3,10 @@
 # found in the LICENSE file.
 
 import("//build/config/rust.gni")
-import("//build/rust/rust_source_set.gni")
+import("//build/rust/rust_bindgen.gni")
+import("//build/rust/rust_static_library.gni")
 import("//build/rust/rust_unit_test.gni")
+import("//build/rust/rust_unit_tests_group.gni")
 
 # Meta target to build everything
 group("rust") {
@@ -12,10 +14,9 @@ group("rust") {
 }
 
 # Meta target to build test binaries, if supported.
-group("tests") {
-  testonly = true
+rust_unit_tests_group("mojo_rust_tests") {
   deps = []
-  if (build_rust_unit_tests) {
+  if (can_build_rust_unit_tests) {
     deps += [ ":mojo_rust_unittests" ]
   }
   if (rustc_can_link) {
@@ -24,11 +25,15 @@ group("tests") {
 }
 
 static_library("c_support") {
-  sources = [ "support.cc" ]
+  sources = [
+    "support.cc",
+    "support.h",
+  ]
   deps = [
     "//mojo/public/c/system",
     "//mojo/public/cpp/system",
   ]
+  visibility = [ ":*" ]
 }
 
 static_library("c_test_support") {
@@ -39,14 +44,34 @@ static_library("c_test_support") {
     "//mojo/core/embedder",
     "//mojo/public/cpp/bindings/tests:mojo_public_bindings_test_utils",
   ]
+  visibility = [ ":*" ]
 }
 
-rust_source_set("mojo_rust") {
+source_set("mojo_c_system_wrapper") {
+  sources = [ "system/wrapper.h" ]
+  deps = [
+    ":c_support",
+    "//mojo/public/c/system:headers",
+  ]
+  all_dependent_configs = configs
+  visibility = [ ":*" ]
+}
+
+rust_bindgen("mojo_c_system_binding") {
+  header = "system/wrapper.h"
+  deps = [ ":mojo_c_system_wrapper" ]
+  visibility = [ ":*" ]
+}
+
+rust_static_library("mojo_rust") {
   crate_root = "lib.rs"
   unit_test_target =
       "mojo_rust_unittests"  # avoids conflict with C++ target elsewhere
   crate_name = "mojo"
   edition = "2018"
+
+  # TODO(danakj): Move to a gtest target.
+  build_native_rust_unit_tests = true
   sources = [
     "bindings/decoding.rs",
     "bindings/encoding.rs",
@@ -68,7 +93,15 @@ rust_source_set("mojo_rust") {
     "system/wait_set.rs",
   ]
 
-  deps = [ ":c_support" ]
+  deps = [
+    ":c_support",
+    ":mojo_c_system_binding",
+    ":mojo_c_system_wrapper",
+  ]
+
+  bindgen_output = get_target_outputs(":mojo_c_system_binding")
+  inputs = bindgen_output
+  rustenv = [ "BINDGEN_RS_FILE=" + rebase_path(bindgen_output[0]) ]
 }
 
 if (rustc_can_link) {

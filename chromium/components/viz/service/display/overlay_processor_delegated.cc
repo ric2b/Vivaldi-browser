@@ -15,6 +15,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
+#include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -109,7 +110,7 @@ constexpr size_t kTooManyQuads = 64;
 DBG_FLAG_FBOOL("delegated.disable.delegation", disable_delegation)
 
 bool OverlayProcessorDelegated::AttemptWithStrategies(
-    const skia::Matrix44& output_color_matrix,
+    const SkM44& output_color_matrix,
     const OverlayProcessorInterface::FilterOperationsMap&
         render_pass_backdrop_filters,
     DisplayResourceProvider* resource_provider,
@@ -163,6 +164,7 @@ bool OverlayProcessorDelegated::AttemptWithStrategies(
         num_quads_skipped++;
       } else {
         DBG_DRAW_RECT("delegated.overlay.failed", display_rect);
+        DBG_LOG("delegated.overlay.failed", "error code %d", candidate_status);
       }
 
       if (candidate_status ==
@@ -187,7 +189,7 @@ bool OverlayProcessorDelegated::AttemptWithStrategies(
   }
 
   // Check for support.
-  this->CheckOverlaySupport(primary_plane, candidates);
+  this->CheckOverlaySupport(nullptr, candidates);
 
   for (auto&& each : *candidates) {
     if (!each.overlay_handled) {
@@ -215,7 +217,7 @@ gfx::RectF OverlayProcessorDelegated::GetPrimaryPlaneDisplayRect(
 void OverlayProcessorDelegated::ProcessForOverlays(
     DisplayResourceProvider* resource_provider,
     AggregatedRenderPassList* render_passes,
-    const skia::Matrix44& output_color_matrix,
+    const SkM44& output_color_matrix,
     const OverlayProcessorInterface::FilterOperationsMap& render_pass_filters,
     const OverlayProcessorInterface::FilterOperationsMap&
         render_pass_backdrop_filters,
@@ -282,6 +284,8 @@ void OverlayProcessorDelegated::AdjustOutputSurfaceOverlay(
   // remove the primary plan entirely in the case of full delegation.
   // In that case we will do "output_surface_plane->reset()" like the existing
   // fullscreen overlay code.
+  if (delegated_status_ == DelegationStatus::kFullDelegation)
+    output_surface_plane->reset();
 }
 
 }  // namespace viz

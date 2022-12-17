@@ -367,6 +367,7 @@ void SyncTest::SetUpCommandLine(base::CommandLine* cl) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   cl->AppendSwitch(ash::switches::kIgnoreUserProfileMappingForTests);
   cl->AppendSwitch(ash::switches::kDisableArcOptInVerification);
+  cl->AppendSwitch(ash::switches::kDisableLacrosKeepAliveForTesting);
   arc::SetArcAvailableCommandLineForTesting(cl);
 #endif
 }
@@ -398,6 +399,11 @@ void SyncTest::AddTestSwitches(base::CommandLine* cl) {
 
 void SyncTest::BeforeSetupClient(int index,
                                  const base::FilePath& profile_path) {}
+
+base::FilePath SyncTest::GetProfileBaseName(int index) {
+  return base::FilePath(base::StringPrintf(
+      FILE_PATH_LITERAL("SyncIntegrationTestClient%d"), index));
+}
 
 bool SyncTest::CreateProfile(int index) {
   base::FilePath profile_path;
@@ -431,8 +437,7 @@ bool SyncTest::CreateProfile(int index) {
     // a new directory, we use a deterministic name such that PRE_ tests (i.e.
     // test that span browser restarts) can reuse the same directory and carry
     // over state.
-    profile_path = user_data_dir.AppendASCII(
-        base::StringPrintf("SyncIntegrationTestClient%d", index));
+    profile_path = user_data_dir.Append(GetProfileBaseName(index));
   }
 #endif
 
@@ -1155,7 +1160,8 @@ void SyncTest::SetUpOnMainThread() {
     host_resolver()->AllowDirectLookup("*.geotrust.com");
     host_resolver()->AllowDirectLookup("*.gstatic.com");
   } else {
-    SetupMockGaiaResponsesForProfile(ProfileManager::GetActiveUserProfile());
+    SetupMockGaiaResponsesForProfile(
+        ProfileManager::GetLastUsedProfileIfLoaded());
   }
 }
 

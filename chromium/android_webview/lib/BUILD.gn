@@ -19,6 +19,7 @@ source_set("lib") {
     "//android_webview/browser/gfx",
     "//android_webview/common",
     "//android_webview/gpu",
+    "//android_webview/js_sandbox/service:js_sandbox",
     "//android_webview/renderer",
     "//base",
     "//cc/base",

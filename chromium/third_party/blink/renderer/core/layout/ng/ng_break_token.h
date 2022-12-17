@@ -47,11 +47,12 @@ class CORE_EXPORT NGBreakToken : public GarbageCollected<NGBreakToken> {
   }
 
 #if DCHECK_IS_ON()
-  virtual String ToString() const;
+  String ToString() const;
   void ShowBreakTokenTree() const;
 #endif
 
-  virtual void Trace(Visitor*) const;
+  void Trace(Visitor*) const;
+  void TraceAfterDispatch(Visitor*) const;
 
  protected:
   NGBreakToken(NGBreakTokenType type,
@@ -71,8 +72,7 @@ class CORE_EXPORT NGBreakToken : public GarbageCollected<NGBreakToken> {
  private:
   // Because |NGLayoutInputNode| has a pointer and 1 bit flag, and it's fast to
   // re-construct, keep |LayoutBox| to save the memory consumed by alignment.
-  // TODO(yukiy): Use Member here once NGPhysicalFragment gets converted to GCed
-  WeakMember<LayoutBox> box_;
+  Member<LayoutBox> box_;
 
   unsigned type_ : 1;
 

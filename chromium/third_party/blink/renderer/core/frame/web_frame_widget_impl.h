@@ -33,6 +33,7 @@
 
 #include "base/memory/weak_ptr.h"
 #include "base/task/single_thread_task_runner.h"
+#include "base/time/time.h"
 #include "base/types/pass_key.h"
 #include "build/build_config.h"
 #include "cc/input/event_listener_properties.h"
@@ -115,6 +116,13 @@ class CORE_EXPORT WebFrameWidgetImpl
     base::OnceCallback<void(gfx::CALayerResult)>
         core_animation_error_code_callback;
 #endif
+    bool IsEmpty() {
+      return (!swap_time_callback &&
+#if BUILDFLAG(IS_MAC)
+              !core_animation_error_code_callback &&
+#endif
+              !presentation_time_callback);
+    }
   };
 
   WebFrameWidgetImpl(
@@ -269,8 +277,7 @@ class CORE_EXPORT WebFrameWidgetImpl
                   int relative_cursor_pos) override;
   void FinishComposingText(bool keep_selection) override;
   bool IsProvisional() override;
-  uint64_t GetScrollableContainerIdAt(
-      const gfx::PointF& point_in_dips) override;
+  uint64_t GetScrollableContainerIdAt(const gfx::PointF& point) override;
   bool ShouldHandleImeEvents() override;
   void SetEditCommandsForNextKeyEvent(
       Vector<mojom::blink::EditCommandPtr> edit_commands) override;
@@ -690,7 +697,7 @@ class CORE_EXPORT WebFrameWidgetImpl
   WebTextInputType GetTextInputType() override;
   void SetCursorVisibilityState(bool is_visible) override;
   blink::FrameWidget* FrameWidget() override { return this; }
-  void FocusChanged(bool enable) override;
+  void FocusChanged(mojom::blink::FocusState focus_state) override;
   bool ShouldAckSyntheticInputImmediately() override;
   void UpdateVisualProperties(
       const VisualProperties& visual_properties) override;

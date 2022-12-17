@@ -37,6 +37,12 @@ class SigninFirstRunProperties {
     static final ReadableObjectPropertyKey<OnClickListener> ON_DISMISS_CLICKED =
             new ReadableObjectPropertyKey<>("on_dismiss_clicked");
 
+    // Is not initialized in #createModel(...) to avoid conflicting view changes with
+    // ARE_NATIVE_AND_POLICY_LOADED. Will be set when |Continue as ...| or dismiss button is
+    // pressed.
+    static final WritableBooleanPropertyKey SHOW_SIGNIN_PROGRESS_SPINNER =
+            new WritableBooleanPropertyKey("show_signin_progress_spinner");
+
     static final WritableBooleanPropertyKey ARE_NATIVE_AND_POLICY_LOADED =
             new WritableBooleanPropertyKey("are_native_and_policy_loaded");
 
@@ -55,6 +61,7 @@ class SigninFirstRunProperties {
             IS_SELECTED_ACCOUNT_SUPERVISED,
             ON_CONTINUE_AS_CLICKED,
             ON_DISMISS_CLICKED,
+            SHOW_SIGNIN_PROGRESS_SPINNER,
             ARE_NATIVE_AND_POLICY_LOADED,
             FRE_POLICY,
             IS_SIGNIN_SUPPORTED,

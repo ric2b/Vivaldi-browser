@@ -3,28 +3,31 @@
 // found in the LICENSE file.
 
 import {CrLottieElement} from 'chrome://resources/cr_elements/cr_lottie/cr_lottie.m.js';
+import {IronIconElement} from 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import {LegacyElementMixin} from 'chrome://resources/polymer/v3_0/polymer/lib/legacy/legacy-element-mixin.js';
 
+export const FINGERPRINT_SCANNED_ICON_DARK: string;
+export const FINGERPRINT_SCANNED_ICON_LIGHT: string;
 export const FINGERPRINT_TICK_DARK_URL: string;
 export const FINGERPRINT_TICK_LIGHT_URL: string;
+export const PROGRESS_CIRCLE_BACKGROUND_COLOR_DARK: string;
+export const PROGRESS_CIRCLE_BACKGROUND_COLOR_LIGHT: string;
+export const PROGRESS_CIRCLE_FILL_COLOR_DARK: string;
+export const PROGRESS_CIRCLE_FILL_COLOR_LIGHT: string;
 
 interface CrFingerprintProgressArcElement extends LegacyElementMixin,
                                                   HTMLElement {
   circleRadius: number;
-  canvasCircleStrokeWidth: number;
-  canvasCircleBackgroundColor: string;
-  canvasCircleProgressColor: string;
 
-  drawArc(startAngle: number, endAngle: number, color: string): void;
-  drawBackgroundCircle(): void;
-
+  reset(): void;
   setProgress(
       prevPercentComplete: number, currPercentComplete: number,
       isComplete: boolean): void;
-  reset(): void;
+  setPlay(shouldPlay: boolean): void;
   isComplete(): boolean;
   $: {
     canvas: HTMLCanvasElement,
+    fingerprintScanned: IronIconElement,
     scanningAnimation: CrLottieElement,
   };
 }

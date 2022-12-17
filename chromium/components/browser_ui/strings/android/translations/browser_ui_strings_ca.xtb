@@ -77,6 +77,7 @@
 <translation id="2687403674020088961">Bloqueja totes les galetes (opció no recomanada)</translation>
 <translation id="2704606927547763573">Copiada</translation>
 <translation id="2717722538473713889">Adreces electròniques</translation>
+<translation id="2750481671343847896">Els llocs web poden mostrar sol·licituds d'inici de sessió procedents de serveis d'identitat.</translation>
 <translation id="2785051990912111074">Amb aquesta opció, s'esborraran les galetes per a <ph name="WEBSITE" /></translation>
 <translation id="2822354292072154809">Confirmes que vols restablir tots els permisos del lloc web concedits a <ph name="CHOSEN_OBJECT_NAME" />?</translation>
 <translation id="2870560284913253234">Lloc web</translation>
@@ -112,6 +113,7 @@
 <translation id="3763247130972274048">Fes doble toc a l'esquerra o a la dreta del vídeo per saltar 10 s</translation>
 <translation id="3797520601150691162">No apliquis el tema fosc a un lloc web concret</translation>
 <translation id="381841723434055211">Números de telèfon</translation>
+<translation id="3826050100957962900">Inici de sessió de tercers</translation>
 <translation id="3835233591525155343">L'ús que fas del dispositiu</translation>
 <translation id="385051799172605136">Enrere</translation>
 <translation id="3859306556332390985">Avança</translation>
@@ -122,7 +124,6 @@
 <translation id="3991845972263764475"><ph name="BYTES_DOWNLOADED_WITH_UNITS" />/?</translation>
 <translation id="4002066346123236978">Títol</translation>
 <translation id="4008040567710660924">Permet les galetes d'un lloc web concret.</translation>
-<translation id="4040330681741629921">Rep una notificació quan un lloc web es pugui mostrar en visualització simplificada</translation>
 <translation id="4046123991198612571">Pista següent</translation>
 <translation id="4149994727733219643">Visualització simplificada de pàgines web</translation>
 <translation id="4165986682804962316">Configuració del lloc web</translation>
@@ -236,6 +237,7 @@
 <translation id="6643016212128521049">Esborra</translation>
 <translation id="6689172468748959065">Fotos de perfil</translation>
 <translation id="6697925417670533197">Baixades actives</translation>
+<translation id="6722828510648505498">Bloqueja les sol·licituds d'inici de sessió procedents de serveis d'identitat.</translation>
 <translation id="6746124502594467657">Mou avall</translation>
 <translation id="6749077623962119521">Vols restablir els permisos?</translation>
 <translation id="6766622839693428701">Llisca cap avall per tancar el full.</translation>
@@ -255,6 +257,7 @@
 <translation id="7087918508125750058"><ph name="ITEM_COUNT" /> elements seleccionats. Hi ha opcions disponibles a prop de la part superior de la pantalla.</translation>
 <translation id="7141896414559753902">Bloqueja les finestres emergents i les redireccions als llocs web (opció recomanada)</translation>
 <translation id="7176368934862295254"><ph name="KILOBYTES" /> kB</translation>
+<translation id="7180611975245234373">Actualitza</translation>
 <translation id="723171743924126238">Selecciona imatges</translation>
 <translation id="7243308994586599757">Opcions disponibles a la part inferior de la pantalla</translation>
 <translation id="7250468141469952378"><ph name="ITEM_COUNT" /> elements seleccionats</translation>
@@ -308,7 +311,9 @@
 <translation id="83792324527827022">Un lloc web està utilitzant la càmera i el micròfon</translation>
 <translation id="8380167699614421159">Aquest lloc web mostra anuncis intrusius o enganyosos</translation>
 <translation id="8394832520002899662">Toca per tornar al lloc web</translation>
+<translation id="8409345997656833551">Rep una notificació quan un article es pugui mostrar amb la visualització simplificada</translation>
 <translation id="8425213833346101688">Canvia</translation>
+<translation id="8428213095426709021">Configuració</translation>
 <translation id="8441146129660941386">Retrocedeix</translation>
 <translation id="8444433999583714703">Perquè <ph name="APP_NAME" /> pugui accedir a la teva ubicació, també has d'activar-la a la <ph name="BEGIN_LINK" />configuració d'Android<ph name="END_LINK" />.</translation>
 <translation id="8447861592752582886">Revoca el permís d'accés al dispositiu</translation>

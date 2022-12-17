@@ -17,6 +17,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/extensions/api/content_settings/content_settings_api.h"
@@ -167,7 +168,7 @@ static struct ImportItemToStringMapping {
 };
 
 const size_t kImportItemToStringMappingLength =
-    base::size(import_item_string_mapping);
+    std::size(import_item_string_mapping);
 
 const std::string ImportItemToString(importer::ImportItem item) {
   for (size_t i = 0; i < kImportItemToStringMappingLength; i++) {
@@ -276,13 +277,13 @@ bool ImportDataAPI::OpenThunderbirdMailbox(std::string path, int seek_pos) {
   }
   thunderbird_mailbox_path_ = path;
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   std::wstring wpath;
   base::UTF8ToWide(path.c_str(), path.size(), &wpath);
   thunderbird_mailbox_.open(wpath.c_str(), std::ios::binary);
 #else
   thunderbird_mailbox_.open(path, std::ios::binary);
-#endif  // defined(OS_WIN)
+#endif  // BUILDFLAG(IS_WIN)
 
   thunderbird_mailbox_.seekg(seek_pos);
   if (thunderbird_mailbox_.fail()) {
@@ -357,7 +358,7 @@ vivaldi::import_data::ImportTypes MapImportType(
     const importer::ImporterType& importer_type) {
   vivaldi::import_data::ImportTypes type;
   switch (importer_type) {
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
     case importer::TYPE_IE:
       type = vivaldi::import_data::IMPORT_TYPES_INTERNET_EXPLORER;
       break;
@@ -365,7 +366,7 @@ vivaldi::import_data::ImportTypes MapImportType(
     case importer::TYPE_FIREFOX:
       type = vivaldi::import_data::IMPORT_TYPES_FIREFOX;
       break;
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
     case importer::TYPE_SAFARI:
       type = vivaldi::import_data::IMPORT_TYPES_SAFARI;
       break;
@@ -408,7 +409,7 @@ vivaldi::import_data::ImportTypes MapImportType(
     case importer::TYPE_BRAVE:
       type = vivaldi::import_data::IMPORT_TYPES_BRAVE;
       break;
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
     case importer::TYPE_EDGE:
       type = vivaldi::import_data::IMPORT_TYPES_EDGE;
       break;
@@ -473,19 +474,19 @@ void ImportDataGetProfilesFunction::Finished() {
          source_profile.importer_type == importer::TYPE_BRAVE);
 
     profile->profile_path =
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
         base::WideToUTF8(source_profile.source_path.value());
 #else
         source_profile.source_path.value();
-#endif  // defined(OS_WIN)
+#endif  // BUILDFLAG(IS_WIN)
     profile->import_type = MapImportType(source_profile.importer_type);
 
     profile->mail_path =
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
         base::WideToUTF8(source_profile.mail_path.value());
 #else
         source_profile.mail_path.value();
-#endif  // defined(OS_WIN)
+#endif  // BUILDFLAG(IS_WIN)
     profile->has_default_install = !source_profile.source_path.empty();
 
     if (profile->supports_standalone_import) {

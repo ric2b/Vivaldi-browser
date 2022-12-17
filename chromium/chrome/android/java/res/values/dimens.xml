@@ -162,6 +162,7 @@
     <dimen name="tile_grid_layout_bleed">8dp</dimen>
     <dimen name="tile_grid_layout_vertical_spacing">6dp</dimen>
     <dimen name="tile_grid_layout_min_horizontal_spacing">4dp</dimen>
+    <dimen name="tile_grid_layout_bottom_margin">16dp</dimen>
     <dimen name="ntp_logo_height">100dp</dimen>
     <dimen name="ntp_logo_margin_top">26dp</dimen>
     <dimen name="duet_ntp_logo_top_margin">-16dp</dimen>
@@ -328,6 +329,7 @@
     <dimen name="context_menu_small_width">268dp</dimen>
     <dimen name="context_menu_small_lateral_margin">30dp</dimen>
     <dimen name="context_menu_popup_max_width">319dp</dimen>
+    <dimen name="context_menu_fading_edge_size">52dp</dimen>
 
     <dimen name="context_menu_popup_header_image_max_size">36dp</dimen>
     <dimen name="context_menu_popup_header_monogram_size">16dp</dimen>

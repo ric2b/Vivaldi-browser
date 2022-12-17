@@ -77,6 +77,7 @@
 <translation id="2687403674020088961">Bloquear todas las cookies (opción no recomendada)</translation>
 <translation id="2704606927547763573">Copiado</translation>
 <translation id="2717722538473713889">Direcciones de correo electrónico</translation>
+<translation id="2750481671343847896">Los sitios pueden mostrarte mensajes de acceso de servicios de identidad.</translation>
 <translation id="2785051990912111074">Esta acción borrará las cookies de <ph name="WEBSITE" />.</translation>
 <translation id="2822354292072154809">¿Confirmas que quieres restablecer todos los permisos de sitios para <ph name="CHOSEN_OBJECT_NAME" />?</translation>
 <translation id="2870560284913253234">Sitio</translation>
@@ -112,6 +113,7 @@
 <translation id="3763247130972274048">Presiona el video dos veces a la derecha o izquierda para avanzar o retroceder 10 s</translation>
 <translation id="3797520601150691162">No aplicar el Tema oscuro para un sitio específico</translation>
 <translation id="381841723434055211">Números de teléfono</translation>
+<translation id="3826050100957962900">Acceso de terceros</translation>
 <translation id="3835233591525155343">Uso de tu dispositivo</translation>
 <translation id="385051799172605136">Atrás</translation>
 <translation id="3859306556332390985">Buscar más adelante</translation>
@@ -122,7 +124,6 @@
 <translation id="3991845972263764475"><ph name="BYTES_DOWNLOADED_WITH_UNITS" />/?</translation>
 <translation id="4002066346123236978">Título</translation>
 <translation id="4008040567710660924">Permite las cookies para un sitio específico.</translation>
-<translation id="4040330681741629921">Notificarme cada vez que se pueda mostrar la vista simplificada de un sitio</translation>
 <translation id="4046123991198612571">Siguiente pista</translation>
 <translation id="4149994727733219643">Vista simplificada para páginas web</translation>
 <translation id="4165986682804962316">Configuración de sitios</translation>
@@ -236,6 +237,7 @@
 <translation id="6643016212128521049">Borrar</translation>
 <translation id="6689172468748959065">Fotos de perfil</translation>
 <translation id="6697925417670533197">Descargas activas</translation>
+<translation id="6722828510648505498">Bloquea los mensajes de acceso de servicios de identidad.</translation>
 <translation id="6746124502594467657">Mover hacia abajo</translation>
 <translation id="6749077623962119521">¿Deseas restablecer los permisos?</translation>
 <translation id="6766622839693428701">Desliza hacia abajo para cerrar.</translation>
@@ -255,6 +257,7 @@
 <translation id="7087918508125750058">Elementos seleccionados: <ph name="ITEM_COUNT" />. Opciones disponibles cerca de la parte superior de la pantalla</translation>
 <translation id="7141896414559753902">Bloquea las ventanas emergentes y los redireccionamientos en los sitios (recomendado)</translation>
 <translation id="7176368934862295254"><ph name="KILOBYTES" /> KB</translation>
+<translation id="7180611975245234373">Actualizar</translation>
 <translation id="723171743924126238">Seleccionar imágenes</translation>
 <translation id="7243308994586599757">Opciones disponibles junto a la parte inferior de la pantalla</translation>
 <translation id="7250468141469952378">Elementos seleccionados: <ph name="ITEM_COUNT" /></translation>
@@ -308,7 +311,9 @@
 <translation id="83792324527827022">Un sitio está utilizando la cámara y el micrófono</translation>
 <translation id="8380167699614421159">Este sitio muestra anuncios intrusivos o engañosos</translation>
 <translation id="8394832520002899662">Presiona para volver al sitio</translation>
+<translation id="8409345997656833551">Notificarme cada vez que se pueda mostrar la vista simplificada de un artículo</translation>
 <translation id="8425213833346101688">Cambiar</translation>
+<translation id="8428213095426709021">Configuración</translation>
 <translation id="8441146129660941386">Buscar más atrás</translation>
 <translation id="8444433999583714703">Para permitir que <ph name="APP_NAME" /> acceda a tu ubicación, actívala también en la <ph name="BEGIN_LINK" />Configuración de Android<ph name="END_LINK" />.</translation>
 <translation id="8447861592752582886">Revocar permiso para el dispositivo</translation>

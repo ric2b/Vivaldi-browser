@@ -33,6 +33,7 @@
 !Android.mk
 .*.sw?
 .DS_Store
+.cache
 .cipd
 .classpath
 .cproject
@@ -44,6 +45,7 @@
 .pydevproject
 .recipe_deps
 .checkstyle
+compile_commands.json
 cscope.*
 out/
 GPATH

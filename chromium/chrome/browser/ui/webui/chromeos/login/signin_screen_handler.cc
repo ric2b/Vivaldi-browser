@@ -27,7 +27,6 @@
 #include "base/system/sys_info.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "base/trace_event/trace_event.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/ash/language_preferences.h"
 #include "chrome/browser/ash/login/demo_mode/demo_session.h"
@@ -57,7 +56,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/browser/ui/ash/session_controller_client_impl.h"
-#include "chrome/browser/ui/webui/chromeos/login/core_oobe_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/error_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/l10n_util.h"
@@ -78,7 +76,6 @@
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/strings/grit/components_strings.h"
-#include "components/user_manager/known_user.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_type.h"
@@ -173,23 +170,17 @@ bool IsSigninScreen(const OobeScreenId screen) {
 // SigninScreenHandler implementation ------------------------------------------
 
 SigninScreenHandler::SigninScreenHandler(
-    JSCallsContainer* js_calls_container,
     const scoped_refptr<NetworkStateInformer>& network_state_informer,
     ErrorScreen* error_screen,
-    CoreOobeView* core_oobe_view,
     GaiaScreenHandler* gaia_screen_handler)
-    : BaseWebUIHandler(js_calls_container),
-      network_state_informer_(network_state_informer),
+    : network_state_informer_(network_state_informer),
       error_screen_(error_screen),
-      core_oobe_view_(core_oobe_view),
       proxy_auth_dialog_reload_times_(kMaxGaiaReloadForProxyAuthDialog),
       gaia_screen_handler_(gaia_screen_handler),
       histogram_helper_(
           std::make_unique<ErrorScreensHistogramHelper>("Signin")) {
   DCHECK(network_state_informer_.get());
   DCHECK(error_screen_);
-  DCHECK(core_oobe_view_);
-  DCHECK(js_calls_container);
   gaia_screen_handler_->set_signin_screen_handler(this);
   network_state_informer_->AddObserver(this);
 
@@ -206,86 +197,29 @@ SigninScreenHandler::SigninScreenHandler(
 
 SigninScreenHandler::~SigninScreenHandler() {
   weak_factory_.InvalidateWeakPtrs();
-  if (delegate_)
-    delegate_->SetWebUIHandler(nullptr);
   network_state_informer_->RemoveObserver(this);
   proximity_auth::ScreenlockBridge::Get()->SetLockHandler(nullptr);
   proximity_auth::ScreenlockBridge::Get()->SetFocusedUser(EmptyAccountId());
 }
 
 void SigninScreenHandler::DeclareLocalizedValues(
-    ::login::LocalizedValuesBuilder* builder) {
-  // Format numbers to be used on the pin keyboard.
-  for (int j = 0; j <= 9; j++) {
-    builder->Add("pinKeyboard" + base::NumberToString(j),
-                 base::FormatNumber(int64_t{j}));
-  }
-
-  builder->Add("offlineLogin", IDS_OFFLINE_LOGIN_HTML);
-
-  // Used by SAML password dialog.
-  builder->Add("nextButtonText", IDS_OFFLINE_LOGIN_NEXT_BUTTON_TEXT);
-
-  builder->Add("samlNotice", features::IsRedirectToDefaultIdPEnabled()
-                                 ? IDS_LOGIN_SAML_NOTICE_SHORT
-                                 : IDS_LOGIN_SAML_NOTICE);
-  builder->Add("samlNoticeWithVideo", IDS_LOGIN_SAML_NOTICE_WITH_VIDEO);
-  builder->Add("samlChangeProviderMessage",
-               IDS_LOGIN_SAML_CHANGE_PROVIDER_MESSAGE);
-  builder->Add("samlChangeProviderButton",
-               IDS_LOGIN_SAML_CHANGE_PROVIDER_BUTTON);
-  builder->AddF("confirmPasswordTitle", IDS_LOGIN_CONFIRM_PASSWORD_TITLE,
-                ui::GetChromeOSDeviceName());
-  builder->Add("manualPasswordTitle", IDS_LOGIN_MANUAL_PASSWORD_TITLE);
-  builder->Add("manualPasswordInputLabel",
-               IDS_LOGIN_MANUAL_PASSWORD_INPUT_LABEL);
-  builder->Add("manualPasswordMismatch",
-               IDS_LOGIN_MANUAL_PASSWORD_MISMATCH);
-  builder->Add("confirmPasswordLabel", IDS_LOGIN_CONFIRM_PASSWORD_LABEL);
-  builder->Add("confirmPasswordIncorrectPassword",
-               IDS_LOGIN_CONFIRM_PASSWORD_INCORRECT_PASSWORD);
-  builder->Add("accountSetupCancelDialogTitle",
-               IDS_LOGIN_ACCOUNT_SETUP_CANCEL_DIALOG_TITLE);
-  builder->Add("accountSetupCancelDialogNo",
-               IDS_LOGIN_ACCOUNT_SETUP_CANCEL_DIALOG_NO);
-  builder->Add("accountSetupCancelDialogYes",
-               IDS_LOGIN_ACCOUNT_SETUP_CANCEL_DIALOG_YES);
-
-  builder->Add("fatalEnrollmentError",
-               IDS_ENTERPRISE_ENROLLMENT_AUTH_FATAL_ERROR);
-  builder->Add("insecureURLEnrollmentError",
-               IDS_ENTERPRISE_ENROLLMENT_AUTH_INSECURE_URL_ERROR);
-}
+    ::login::LocalizedValuesBuilder* builder) {}
 
 void SigninScreenHandler::RegisterMessages() {
   AddCallback("launchIncognito", &SigninScreenHandler::HandleLaunchIncognito);
-  AddCallback("launchSAMLPublicSession",
-              &SigninScreenHandler::HandleLaunchSAMLPublicSession);
   AddCallback("offlineLogin", &SigninScreenHandler::HandleOfflineLogin);
-  // TODO(crbug.com/1100910): migrate logic to dedicated test api.
-  AddCallback("toggleEnrollmentScreen",
-              &SigninScreenHandler::HandleToggleEnrollmentScreen);
-  AddCallback("loginVisible", &SigninScreenHandler::HandleLoginVisible);
 
-  // TODO(crbug.com/1168114): This is also called by GAIA screen,
-  // but might not be needed anymore
-  AddCallback("loginUIStateChanged",
-              &SigninScreenHandler::HandleLoginUIStateChanged);
   AddCallback("showLoadingTimeoutError",
               &SigninScreenHandler::HandleShowLoadingTimeoutError);
 }
 
 void SigninScreenHandler::Show() {
   CHECK(delegate_);
-
-  ShowImpl();
   histogram_helper_->OnScreenShow();
 }
 
 void SigninScreenHandler::SetDelegate(SigninScreenHandlerDelegate* delegate) {
   delegate_ = delegate;
-  if (delegate_)
-    delegate_->SetWebUIHandler(this);
 }
 
 void SigninScreenHandler::UpdateState(NetworkError::ErrorReason reason) {
@@ -302,26 +236,6 @@ void SigninScreenHandler::SetOfflineTimeoutForTesting(
 }
 
 // SigninScreenHandler, private: -----------------------------------------------
-
-void SigninScreenHandler::ShowImpl() {
-  if (!page_is_ready()) {
-    show_on_init_ = true;
-    return;
-  }
-
-  gaia_screen_handler_->OnShowAddUser();
-}
-
-void SigninScreenHandler::UpdateUIState(UIState ui_state) {
-  switch (ui_state) {
-    case UI_STATE_GAIA_SIGNIN:
-      ui_state_ = UI_STATE_GAIA_SIGNIN;
-      break;
-    default:
-      NOTREACHED();
-      break;
-  }
-}
 
 // TODO(antrim@): split this method into small parts.
 // TODO(antrim@): move this logic to GaiaScreenHandler.
@@ -478,49 +392,9 @@ void SigninScreenHandler::ReloadGaia(bool force_reload) {
   gaia_screen_handler_->ReloadGaia(force_reload);
 }
 
-void SigninScreenHandler::Initialize() {
-  // `delegate_` is null when we are preloading the lock screen.
-  if (delegate_ && show_on_init_) {
-    show_on_init_ = false;
-    ShowImpl();
-  }
-}
-
 void SigninScreenHandler::RegisterPrefs(PrefRegistrySimple* registry) {
   // The pref is deprecated. Remove around 09/2022 (https://crbug.com/1297407)
   registry->RegisterDictionaryPref(prefs::kUsersLastInputMethod);
-}
-
-void SigninScreenHandler::ClearAndEnablePassword() {
-  core_oobe_view_->ResetSignInUI(false);
-}
-
-void SigninScreenHandler::OnPreferencesChanged() {
-  // Make sure that one of the login UI is fully functional now, otherwise
-  // preferences update would be picked up next time it will be shown.
-  if (!webui_visible_) {
-    LOG(WARNING) << "Login UI is not active - postponed prefs change.";
-    preferences_changed_delayed_ = true;
-    return;
-  }
-
-  preferences_changed_delayed_ = false;
-
-  if (!delegate_)
-    return;
-
-  if (delegate_->AllowNewUserChanged() || ui_state_ == UI_STATE_UNKNOWN) {
-    // We need to reload GAIA if UI_STATE_UNKNOWN or the allow new user setting
-    // has changed so that reloaded GAIA shows/hides the option to create a new
-    // account.
-    GaiaScreen* gaia_screen =
-        WizardController::default_controller()->GetScreen<GaiaScreen>();
-    gaia_screen->LoadOnline(EmptyAccountId());
-  }
-}
-
-void SigninScreenHandler::ShowAllowlistCheckFailedError() {
-  gaia_screen_handler_->ShowAllowlistCheckFailedError();
 }
 
 void SigninScreenHandler::Observe(int type,
@@ -572,18 +446,6 @@ void SigninScreenHandler::HandleLaunchIncognito() {
     delegate_->Login(context, SigninSpecifics());
 }
 
-void SigninScreenHandler::HandleLaunchSAMLPublicSession(
-    const std::string& email) {
-  if (!delegate_)
-    return;
-
-  const AccountId account_id = user_manager::known_user::GetAccountId(
-      email, std::string() /* id */, AccountType::UNKNOWN);
-
-  UserContext context(user_manager::USER_TYPE_PUBLIC_ACCOUNT, account_id);
-  delegate_->Login(context, SigninSpecifics());
-}
-
 void SigninScreenHandler::HandleOfflineLogin() {
   if (!delegate_) {
     NOTREACHED();
@@ -596,54 +458,6 @@ void SigninScreenHandler::HandleOfflineLogin() {
   HideOfflineMessage(NetworkStateInformer::OFFLINE,
                      NetworkError::ERROR_REASON_NONE);
   LoginDisplayHost::default_host()->StartWizard(OfflineLoginView::kScreenId);
-
-  UpdateUIState(UI_STATE_GAIA_SIGNIN);
-}
-
-void SigninScreenHandler::HandleToggleEnrollmentScreen() {
-  if (delegate_)
-    delegate_->ShowEnterpriseEnrollmentScreen();
-}
-
-void SigninScreenHandler::HandleToggleKioskAutolaunchScreen() {
-  if (delegate_ && !webui::IsEnterpriseManaged())
-    delegate_->ShowKioskAutolaunchScreen();
-}
-
-void SigninScreenHandler::HandleLoginVisible(const std::string& source) {
-  VLOG(1) << "Login WebUI >> loginVisible, src: " << source << ", "
-          << "webui_visible_: " << webui_visible_;
-  if (!webui_visible_) {
-    // There might be multiple messages from OOBE UI so send notifications after
-    // the first one only.
-    session_manager::SessionManager::Get()->NotifyLoginOrLockScreenVisible();
-    TRACE_EVENT_NESTABLE_ASYNC_END0(
-        "ui", "ShowLoginWebUI",
-        TRACE_ID_WITH_SCOPE(LoginDisplayHostWebUI::kShowLoginWebUIid,
-                            TRACE_ID_GLOBAL(1)));
-  }
-  webui_visible_ = true;
-  if (preferences_changed_delayed_)
-    OnPreferencesChanged();
-}
-
-void SigninScreenHandler::HandleLoginUIStateChanged(const std::string& source,
-                                                    bool active) {
-  VLOG(0) << "Login WebUI >> active: " << active << ", "
-            << "source: " << source;
-
-  if (!KioskAppManager::Get()->GetAutoLaunchApp().empty() &&
-      KioskAppManager::Get()->IsAutoLaunchRequested()) {
-    VLOG(0) << "Showing auto-launch warning";
-    // On slow devices, the wallpaper animation is not shown initially, so we
-    // must explicitly load the wallpaper. This is also the case for the
-    // account-picker and gaia-signin UI states.
-    LoginDisplayHost::default_host()->LoadSigninWallpaper();
-    HandleToggleKioskAutolaunchScreen();
-    return;
-  }
-
-  ui_state_ = UI_STATE_GAIA_SIGNIN;
 }
 
 void SigninScreenHandler::HandleShowLoadingTimeoutError() {
@@ -651,13 +465,11 @@ void SigninScreenHandler::HandleShowLoadingTimeoutError() {
 }
 
 bool SigninScreenHandler::IsGaiaVisible() {
-  return IsSigninScreen(GetCurrentScreen()) &&
-      ui_state_ == UI_STATE_GAIA_SIGNIN;
+  return IsSigninScreen(GetCurrentScreen());
 }
 
 bool SigninScreenHandler::IsGaiaHiddenByError() {
-  return IsSigninScreenHiddenByError() &&
-      ui_state_ == UI_STATE_GAIA_SIGNIN;
+  return IsSigninScreenHiddenByError();
 }
 
 bool SigninScreenHandler::IsSigninScreenHiddenByError() {

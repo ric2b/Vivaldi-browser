@@ -508,7 +508,7 @@ void ContactBackend::Commit() {
   if (!db_)
     return;
 
-#if defined(OS_IOS)
+#if BUILDFLAG(IS_IOS)
   // Attempts to get the application running long enough to commit the database
   // transaction if it is currently being backgrounded.
   base::ios::ScopedCriticalAction scoped_critical_action;

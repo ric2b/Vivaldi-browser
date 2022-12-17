@@ -40,7 +40,7 @@ VideoRotation AffineTransformToVideoRotation(
        VideoRotation::VIDEO_ROTATION_270},
   };
 
-  for (size_t i = 0; i < base::size(kRotationMap); ++i) {
+  for (size_t i = 0; i < std::size(kRotationMap); ++i) {
     if (CGAffineTransformEqualToTransform(transform, kRotationMap[i].transform))
       return kRotationMap[i].rotation;
   }

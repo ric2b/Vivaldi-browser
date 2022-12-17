@@ -14,7 +14,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 import android.widget.ImageView;
-import android.widget.ImageView.ScaleType;
 
 import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
@@ -163,23 +162,22 @@ public class TabListCoordinator
                 ViewLookupCachingFrameLayout root = (ViewLookupCachingFrameLayout) holder.itemView;
                 ImageView thumbnail = (ImageView) root.fastFindViewById(R.id.tab_thumbnail);
                 if (thumbnail == null) return;
-                if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(context)
-                        && TabUiFeatureUtilities.isGridTabSwitcherEnabled(context)) {
-                    thumbnail.setScaleType(ScaleType.CENTER_CROP);
-                } else {
-                    thumbnail.setScaleType(ScaleType.FIT_CENTER);
-                    thumbnail.setAdjustViewBounds(true);
-                }
 
                 if (TabUiFeatureUtilities.isLaunchPolishEnabled()) {
                     thumbnail.setImageDrawable(null);
                     return;
                 }
 
-                float expectedThumbnailAspectRatio = TabUtils.getTabThumbnailAspectRatio(context);
-                int height = (int) (thumbnail.getWidth() * 1.0 / expectedThumbnailAspectRatio);
-                thumbnail.setMinimumHeight(Math.min(thumbnail.getHeight(), height));
-                thumbnail.setImageDrawable(null);
+                if (TabUiFeatureUtilities.isTabThumbnailAspectRatioNotOne()) {
+                    float expectedThumbnailAspectRatio =
+                            TabUtils.getTabThumbnailAspectRatio(context);
+                    int height = (int) (thumbnail.getWidth() * 1.0 / expectedThumbnailAspectRatio);
+                    thumbnail.setMinimumHeight(Math.min(thumbnail.getHeight(), height));
+                    thumbnail.setImageDrawable(null);
+                } else {
+                    thumbnail.setImageDrawable(null);
+                    thumbnail.setMinimumHeight(thumbnail.getWidth());
+                }
             };
         } else if (mMode == TabListMode.STRIP) {
             mAdapter.registerType(UiType.STRIP, parent -> {
@@ -337,11 +335,19 @@ public class TabListCoordinator
                     mContext.getResources().getConfiguration().orientation,
                     mContext.getResources().getConfiguration().screenWidthDp);
 
+            float expectedThumbnailAspectRatio = 1.f;
+            if (TabUiFeatureUtilities.isTabThumbnailAspectRatioNotOne()) {
+                expectedThumbnailAspectRatio = TabUtils.getTabThumbnailAspectRatio(mContext);
+            }
             final int screenWidthPx = ViewUtils.dpToPx(
                     mContext, mContext.getResources().getConfiguration().screenWidthDp);
+            // Determine column width and account for margins on left and right.
             int itemWidthPx = (screenWidthPx / layoutManager.getSpanCount());
-            int itemHeightPx =
-                    ((int) ((itemWidthPx * 1f) / TabUtils.getTabThumbnailAspectRatio(mContext)));
+            // Determine thumbnail height based on width and image aspect ratio. Add top title
+            // height and account for margins on top and bottom.
+            int itemHeightPx = ((int) ((itemWidthPx * 1f) / expectedThumbnailAspectRatio))
+                    + (int) mContext.getResources().getDimension(
+                            R.dimen.tab_list_card_title_height);
             for (int i = 0; i < mModel.size(); i++) {
                 mModel.get(i).model.set(TabProperties.GRID_CARD_WIDTH, itemWidthPx);
                 mModel.get(i).model.set(TabProperties.GRID_CARD_HEIGHT, itemHeightPx);

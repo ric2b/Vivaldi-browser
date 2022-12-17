@@ -36,8 +36,13 @@ const char16_t kUrl3Title[] = u"url3";
 const char kUrl3Url[] = "http://www.url3.com";
 const char16_t kUrl4Title[] = u"url4";
 const char kUrl4Url[] = "http://www.url4.com";
+const char16_t kTrashUrl1Title[] = u"trash1";
+const char16_t kTrashUrl1Url[] = u"http://www.trashurl1.com";
+const char16_t kTrashUrl2Title[] = u"trash2";
+const char16_t kTrashUrl2Url[] = u"http://www.trashurl2.com";
 const char16_t kFolder1Title[] = u"folder1";
 const char16_t kFolder2Title[] = u"folder2";
+const char16_t kTrashFolder1Title[] = u"trashfolder1";
 
 // Helper to verify the two given notes nodes.
 void AssertNodesEqual(const NoteNode* expected, const NoteNode* actual) {
@@ -85,6 +90,9 @@ class NotesCodecTest : public testing::Test {
     const NoteNode* note_node = model->main_node();
     model->AddNote(note_node, 0, kUrl1Title, GURL(kUrl1Url),
                    ASCIIToUTF16(CreateAutoIndexedContent(index)));
+    const NoteNode* trash_node = model->trash_node();
+    model->AddNote(trash_node, 0, kTrashUrl1Title, GURL(kTrashUrl1Url),
+                   ASCIIToUTF16(CreateAutoIndexedContent(index)));
     return model.release();
   }
   NotesModel* CreateTestModel2() {
@@ -93,6 +101,9 @@ class NotesCodecTest : public testing::Test {
     model->AddNote(note_node, 0, kUrl1Title, GURL(kUrl1Url),
                    ASCIIToUTF16(CreateAutoIndexedContent()));
     model->AddNote(note_node, 1, kUrl2Title, GURL(kUrl2Url),
+                   ASCIIToUTF16(CreateAutoIndexedContent()));
+    const NoteNode* trash_node = model->trash_node();
+    model->AddNote(trash_node, 0, kTrashUrl1Title, GURL(kTrashUrl1Url),
                    ASCIIToUTF16(CreateAutoIndexedContent()));
     return model.release();
   }
@@ -103,6 +114,13 @@ class NotesCodecTest : public testing::Test {
                    ASCIIToUTF16(CreateAutoIndexedContent()));
     const NoteNode* folder1 = model->AddFolder(note_node, 1, kFolder1Title);
     model->AddNote(folder1, 0, kUrl2Title, GURL(kUrl2Url),
+                   ASCIIToUTF16(CreateAutoIndexedContent()));
+    const NoteNode* trash_node = model->trash_node();
+    model->AddNote(trash_node, 0, kTrashUrl1Title, GURL(kTrashUrl1Url),
+                   ASCIIToUTF16(CreateAutoIndexedContent()));
+    const NoteNode* trash_folder1 =
+        model->AddFolder(trash_node, 1, kTrashFolder1Title);
+    model->AddNote(trash_folder1, 0, kTrashUrl2Title, GURL(kTrashUrl2Url),
                    ASCIIToUTF16(CreateAutoIndexedContent()));
     return model.release();
   }

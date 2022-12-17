@@ -48,7 +48,7 @@ void SwiftValues::FillModuleDependencies(Target* target) {
           pair.ptr->swift_values().public_modules().end());
   }
 
-  if (target->swift_values().builds_module())
+  if (target->builds_swift_module())
     target->swift_values().public_modules_.push_back(target);
 }
 

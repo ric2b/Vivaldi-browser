@@ -8,6 +8,7 @@
 
 #include "base/auto_reset.h"
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/feature_list.h"
 #include "base/guid.h"
 #include "base/logging.h"
@@ -114,6 +115,8 @@
 #include "components/safe_browsing/android/remote_database_manager.h"
 #include "components/safe_browsing/content/browser/safe_browsing_navigation_observer.h"
 #include "components/safe_browsing/content/browser/safe_browsing_tab_observer.h"
+#include "components/site_engagement/content/site_engagement_helper.h"
+#include "components/site_engagement/content/site_engagement_service.h"
 #include "components/translate/core/browser/translate_manager.h"
 #include "ui/android/view_android.h"
 #include "ui/gfx/android/java_bitmap.h"
@@ -403,6 +406,11 @@ TabImpl::TabImpl(ProfileImpl* profile,
         std::make_unique<WebLayerSafeBrowsingTabObserverDelegate>());
   }
 
+  if (site_engagement::SiteEngagementService::IsEnabled()) {
+    site_engagement::SiteEngagementService::Helper::CreateForWebContents(
+        web_contents_.get());
+  }
+
   auto* browser_context =
       static_cast<BrowserContextImpl*>(web_contents_->GetBrowserContext());
   safe_browsing::SafeBrowsingNavigationObserver::MaybeCreateForWebContents(
@@ -580,7 +588,7 @@ void TabImpl::RemoveWebMessageHostFactory(
 void TabImpl::ExecuteScriptWithUserGestureForTests(
     const std::u16string& script) {
   web_contents_->GetMainFrame()->ExecuteJavaScriptWithUserGestureForTests(
-      script);
+      script, base::NullCallback());
 }
 
 std::unique_ptr<FaviconFetcher> TabImpl::CreateFaviconFetcher(

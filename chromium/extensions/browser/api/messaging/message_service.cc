@@ -514,6 +514,7 @@ void MessageService::OpenChannelToTab(const ChannelEndpoint& source,
                                       const PortId& source_port_id,
                                       int tab_id,
                                       int frame_id,
+                                      const std::string& document_id,
                                       const std::string& extension_id,
                                       const std::string& channel_name) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -545,9 +546,9 @@ void MessageService::OpenChannelToTab(const ChannelEndpoint& source,
 
   const PortId receiver_port_id = source_port_id.GetOppositePortId();
   std::unique_ptr<MessagePort> receiver =
-      messaging_delegate_->CreateReceiverForTab(weak_factory_.GetWeakPtr(),
-                                                extension_id, receiver_port_id,
-                                                receiver_contents, frame_id);
+      messaging_delegate_->CreateReceiverForTab(
+          weak_factory_.GetWeakPtr(), extension_id, receiver_port_id,
+          receiver_contents, frame_id, document_id);
   if (!receiver.get()) {
     opener_port->DispatchOnDisconnect(kReceivingEndDoesntExistError);
     return;
@@ -867,6 +868,20 @@ void MessageService::DispatchMessage(const PortId& source_port_id,
                                                     : channel->opener.get();
 
   dest_port->DispatchOnMessage(message);
+}
+
+void MessageService::NotifyResponsePending(const PortId& port_id,
+                                           int process_id,
+                                           const PortContext& port_context) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  DCHECK(!port_id.is_opener);
+
+  ChannelId channel_id = port_id.GetChannelId();
+  auto it = channels_.find(channel_id);
+  if (it == channels_.end())
+    return;
+
+  it->second->receiver->NotifyResponsePending();
 }
 
 bool MessageService::MaybeAddPendingLazyContextOpenChannelTask(

@@ -5,7 +5,7 @@
 
 load("//lib/branches.star", "branches")
 load("//lib/builders.star", "goma", "os")
-load("//lib/ci.star", "ci")
+load("//lib/ci.star", "ci", "rbe_instance", "rbe_jobs")
 load("//lib/consoles.star", "consoles")
 
 ci.defaults.set(
@@ -14,7 +14,7 @@ ci.defaults.set(
     executable = ci.DEFAULT_EXECUTABLE,
     execution_timeout = ci.DEFAULT_EXECUTION_TIMEOUT,
     goma_backend = goma.backend.RBE_PROD,
-    os = os.LINUX_BIONIC_SWITCH_TO_DEFAULT,
+    os = os.LINUX_DEFAULT,
     pool = ci.DEFAULT_POOL,
     service_account = ci.DEFAULT_SERVICE_ACCOUNT,
 )
@@ -193,6 +193,9 @@ ci.builder(
         short_name = "bld",
     ),
     os = os.WINDOWS_DEFAULT,
+    goma_backend = None,
+    reclient_jobs = rbe_jobs.LOW_JOBS_FOR_CI,
+    reclient_instance = rbe_instance.DEFAULT,
 )
 
 ci.builder(
@@ -203,6 +206,9 @@ ci.builder(
         short_name = "bld",
     ),
     os = os.WINDOWS_DEFAULT,
+    goma_backend = None,
+    reclient_jobs = rbe_jobs.LOW_JOBS_FOR_CI,
+    reclient_instance = rbe_instance.DEFAULT,
 )
 
 ci.builder(
@@ -213,6 +219,9 @@ ci.builder(
         short_name = "bld",
     ),
     os = os.WINDOWS_DEFAULT,
+    goma_backend = None,
+    reclient_jobs = rbe_jobs.LOW_JOBS_FOR_CI,
+    reclient_instance = rbe_instance.DEFAULT,
 )
 
 ci.builder(
@@ -223,6 +232,9 @@ ci.builder(
         short_name = "bld",
     ),
     os = os.WINDOWS_DEFAULT,
+    goma_backend = None,
+    reclient_jobs = rbe_jobs.LOW_JOBS_FOR_CI,
+    reclient_instance = rbe_instance.DEFAULT,
 )
 
 ci.thin_tester(
@@ -230,6 +242,15 @@ ci.thin_tester(
     console_view_entry = consoles.console_view_entry(
         category = "debug|win (64)",
         short_name = "7",
+    ),
+    triggered_by = ["win-updater-builder-dbg"],
+)
+
+ci.thin_tester(
+    name = "win7-updater-tester-dbg-uac",
+    console_view_entry = consoles.console_view_entry(
+        category = "debug|win (64)",
+        short_name = "UAC7",
     ),
     triggered_by = ["win-updater-builder-dbg"],
 )
@@ -274,7 +295,7 @@ ci.thin_tester(
     name = "win10-updater-tester-dbg-uac",
     console_view_entry = consoles.console_view_entry(
         category = "debug|win (64)",
-        short_name = "UAC",
+        short_name = "UAC10",
     ),
     triggered_by = ["win-updater-builder-dbg"],
 )

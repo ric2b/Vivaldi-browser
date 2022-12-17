@@ -16,18 +16,6 @@
     <output filename="generated_resources_de-CH.pak" type="data_package" lang="de-CH" />
     <output filename="generated_resources_gd.pak" type="data_package" lang="gd" />
     <if expr="not is_android">
-      <output filename="generated_resources_af.pak" type="data_package" lang="af" />
-      <output filename="generated_resources_az.pak" type="data_package" lang="az" />
-      <output filename="generated_resources_be.pak" type="data_package" lang="be" />
-      <output filename="generated_resources_eu.pak" type="data_package" lang="eu" />
-      <output filename="generated_resources_gl.pak" type="data_package" lang="gl" />
-      <output filename="generated_resources_hy.pak" type="data_package" lang="hy" />
-      <output filename="generated_resources_is.pak" type="data_package" lang="is" />
-      <output filename="generated_resources_ka.pak" type="data_package" lang="ka" />
-      <output filename="generated_resources_mk.pak" type="data_package" lang="mk" />
-      <output filename="generated_resources_pa.pak" type="data_package" lang="pa" />
-      <output filename="generated_resources_sq.pak" type="data_package" lang="sq" />
-      <output filename="generated_resources_sr-Latn.pak" type="data_package" lang="sr-Latn" />
     </if>
   </outputs>
   <translations>

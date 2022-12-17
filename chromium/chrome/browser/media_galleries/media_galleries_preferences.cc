@@ -19,7 +19,6 @@
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/values.h"
@@ -512,7 +511,7 @@ void MediaGalleriesPreferences::AddDefaultGalleries() {
     {chrome::DIR_USER_VIDEOS, MediaGalleryPrefInfo::kVideosDefault},
   };
 
-  for (size_t i = 0; i < base::size(kDirectories); ++i) {
+  for (size_t i = 0; i < std::size(kDirectories); ++i) {
     base::FilePath path;
     if (!base::PathService::Get(kDirectories[i].directory_key, &path))
       continue;

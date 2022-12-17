@@ -233,17 +233,24 @@ update_template_instance("//base:base") {
 # fmpeg changes
 # --------------------
 
-if (system_proprietary_codecs) {
-  update_target("//third_party/ffmpeg:ffmpeg_internal") {
-    sources += [
-      "libavcodec/aac_ac3_parser.c",
-      "libavcodec/aac_parser.c",
-      "libavcodec/adts_header.c",
-      "libavformat/aacdec.c",
-      "libavformat/apetag.c",
-      "libavformat/img2.c",
-    ]
+if (is_linux || is_mac || is_win) {
+  if (is_win) {
+    update_target("//third_party/ffmpeg:ffmpeg_generate_def") {
+      patched_sigs =
+          root_gen_dir + "/vivaldi/platform_media/ffmpeg/patched_ffmpeg.sigs"
+      assert(args[8] ==
+               "../../chromium/third_party/ffmpeg/chromium/ffmpeg.sigs",
+             "Check the original source path source path")
+      args_copy = args
+      args_copy[8] = rebase_path(patched_sigs)
+      args = []
+      args = args_copy
+      sources += [patched_sigs]
+      deps = ["//vivaldi/platform_media/ffmpeg:patch_ffmpeg_sigs"]
+    }
+  }
 
+  update_target("//third_party/ffmpeg:ffmpeg_internal") {
     if (is_mac) {
       # Patch audiotoolboxdec.c to replace bad filter string with NULL.
       # TODO(igor@vivaldi.com): Find out what was the intention in the code behind
@@ -260,6 +267,8 @@ if (system_proprietary_codecs) {
                 "dublicated line to patch in " + audiotoolbox_source)
           found_line_to_patch = true
           line = "FFAT_DEC(aac,          AV_CODEC_ID_AAC, NULL)"
+        } else if (line == "#include \"config_components.h\"" ) {
+          line = "#include \"third_party/ffmpeg/chromium/config/Chromium/mac/$target_cpu/config_components.h\""
         }
 
         # Adjust #include "foo.h" where foo.h is a file from libavcodec directory
@@ -286,6 +295,7 @@ if (system_proprietary_codecs) {
     if (is_win) {
       sources += [
         "//vivaldi/platform_media/ffmpeg/wmfaacdec.c",
+        "//vivaldi/platform_media/ffmpeg/wmfaacdec.h",
       ]
       libs += [
         "Mfplat.lib",

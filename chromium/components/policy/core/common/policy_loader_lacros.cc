@@ -39,6 +39,17 @@ bool IsManaged(const enterprise_management::PolicyData& policy_data) {
   return policy_data.state() == enterprise_management::PolicyData::ACTIVE;
 }
 
+// Returns whether a primary device account for this session is child.
+bool IsChildSession() {
+  const crosapi::mojom::BrowserInitParams* init_params =
+      chromeos::LacrosService::Get()->init_params();
+  if (!init_params) {
+    return false;
+  }
+  return init_params->session_type ==
+         crosapi::mojom::SessionType::kChildSession;
+}
+
 }  // namespace
 
 namespace policy {
@@ -107,15 +118,21 @@ std::unique_ptr<PolicyBundle> PolicyLoaderLacros::Load() {
   DecodeProtoFields(*(validator.payload()), external_data_manager,
                     PolicySource::POLICY_SOURCE_CLOUD_FROM_ASH,
                     PolicyScope::POLICY_SCOPE_USER, &policy_map, per_profile_);
-  switch (per_profile_) {
-    case PolicyPerProfileFilter::kTrue:
-      SetEnterpriseUsersProfileDefaults(&policy_map);
-      break;
-    case PolicyPerProfileFilter::kFalse:
-      SetEnterpriseUsersSystemWideDefaults(&policy_map);
-      break;
-    case PolicyPerProfileFilter::kAny:
-      NOTREACHED();
+
+  // We do not set enterprise defaults for child accounts, because they are
+  // consumer users. The same rule is applied to policy in Ash. See
+  // UserCloudPolicyManagerAsh.
+  if (!IsChildSession()) {
+    switch (per_profile_) {
+      case PolicyPerProfileFilter::kTrue:
+        SetEnterpriseUsersProfileDefaults(&policy_map);
+        break;
+      case PolicyPerProfileFilter::kFalse:
+        SetEnterpriseUsersSystemWideDefaults(&policy_map);
+        break;
+      case PolicyPerProfileFilter::kAny:
+        NOTREACHED();
+    }
   }
   bundle->Get(PolicyNamespace(POLICY_DOMAIN_CHROME, std::string()))
       .MergeFrom(policy_map);
@@ -146,6 +163,19 @@ enterprise_management::PolicyData* PolicyLoaderLacros::GetPolicyData() {
 }
 
 // static
+bool PolicyLoaderLacros::IsDeviceLocalAccountUser() {
+  const crosapi::mojom::BrowserInitParams* init_params =
+      chromeos::LacrosService::Get()->init_params();
+  if (!init_params) {
+    return false;
+  }
+  crosapi::mojom::SessionType session_type = init_params->session_type;
+  return session_type == crosapi::mojom::SessionType::kPublicSession ||
+         session_type == crosapi::mojom::SessionType::kWebKioskSession ||
+         session_type == crosapi::mojom::SessionType::kAppKioskSession;
+}
+
+// static
 bool PolicyLoaderLacros::IsMainUserManaged() {
   return g_is_main_user_managed_;
 }
@@ -156,6 +186,13 @@ bool PolicyLoaderLacros::IsMainUserAffiliated() {
       policy::PolicyLoaderLacros::main_user_policy_data();
   const crosapi::mojom::BrowserInitParams* init_params =
       chromeos::LacrosService::Get()->init_params();
+
+  // To align with `DeviceLocalAccountUserBase::IsAffiliated()`, a device local
+  // account user is always treated as affiliated.
+  if (IsDeviceLocalAccountUser()) {
+    return true;
+  }
+
   if (policy && !policy->user_affiliation_ids().empty() && init_params &&
       init_params->device_properties &&
       init_params->device_properties->device_affiliation_ids.has_value()) {

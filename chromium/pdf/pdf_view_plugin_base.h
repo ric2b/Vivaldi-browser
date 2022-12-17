@@ -44,7 +44,6 @@ class Vector2d;
 
 namespace chrome_pdf {
 
-class Image;
 class PDFiumEngine;
 class Thumbnail;
 class UrlLoader;
@@ -56,14 +55,11 @@ struct AccessibilityPageObjects;
 struct AccessibilityTextRunInfo;
 struct AccessibilityViewportInfo;
 
-// Common base to share code between the two plugin implementations,
-// `OutOfProcessInstance` (Pepper) and `PdfViewWebPlugin` (Blink).
+// TODO(crbug.com/1302059): Merge with PdfViewWebPlugin.
 class PdfViewPluginBase : public PDFEngine::Client,
                           public PaintManager::Client,
                           public PreviewModeClient::Client {
  public:
-  using PDFEngine::Client::ScheduleTaskOnMainThread;
-
   // Do not save files with over 100 MB. This cap should be kept in sync with
   // and is also enforced in chrome/browser/resources/pdf/pdf_viewer.js.
   static constexpr size_t kMaximumSavedFileSize = 100 * 1000 * 1000;
@@ -87,7 +83,7 @@ class PdfViewPluginBase : public PDFEngine::Client,
     kFailed,
   };
 
-  // Must match `SaveRequestType` in chrome/browser/resources/pdf/constants.js.
+  // Must match `SaveRequestType` in chrome/browser/resources/pdf/constants.ts.
   enum class SaveRequestType {
     kAnnotation = 0,
     kOriginal = 1,
@@ -111,8 +107,6 @@ class PdfViewPluginBase : public PDFEngine::Client,
                              const float* x,
                              const float* y,
                              const float* zoom) override;
-  void UpdateTickMarks(const std::vector<gfx::Rect>& tickmarks) override;
-  void NotifyNumberOfFindResultsChanged(int total, bool final_result) override;
   void NotifyTouchSelectionOccurred() override;
   void GetDocumentPassword(
       base::OnceCallback<void(const std::string&)> callback) override;
@@ -230,21 +224,18 @@ class PdfViewPluginBase : public PDFEngine::Client,
   // frame's origin.
   virtual std::unique_ptr<UrlLoader> CreateUrlLoaderInternal() = 0;
 
-  // Rewrites the request URL just before sending to the URL loader.
-  //
-  // TODO(crbug.com/1238829): This is a workaround for Pepper not supporting
-  // chrome-untrusted://print/ URLs.
-  virtual std::string RewriteRequestUrl(base::StringPiece url) const;
+  // Runs when document load completes.
+  virtual void OnDocumentLoadComplete() = 0;
 
   bool HandleInputEvent(const blink::WebInputEvent& event);
 
   // Handles `postMessage()` calls from the embedder.
-  void HandleMessage(const base::Value& message);
+  void HandleMessage(const base::Value::Dict& message);
 
   // Enqueues a "message" event carrying `message` to the embedder. Messages are
   // guaranteed to be received in the order that they are sent. This method is
   // non-blocking.
-  virtual void SendMessage(base::Value message) = 0;
+  virtual void SendMessage(base::Value::Dict message) = 0;
 
   // Invokes the "SaveAs" dialog.
   virtual void SaveAs() = 0;
@@ -272,7 +263,7 @@ class PdfViewPluginBase : public PDFEngine::Client,
   void OnGeometryChanged(double old_zoom, float old_device_scale);
 
   // Returns the plugin-specific image data buffer.
-  virtual Image GetPluginImageData() const;
+  virtual SkBitmap GetPluginImageData() const;
 
   // Updates the geometry of the plugin and its image data if the plugin rect
   // or the device scale has changed. `new_plugin_rect` must be in device
@@ -330,17 +321,6 @@ class PdfViewPluginBase : public PDFEngine::Client,
   virtual void SetAccessibilityViewportInfo(
       AccessibilityViewportInfo viewport_info) = 0;
 
-  // Find handlers.
-  bool StartFind(const std::string& text, bool case_sensitive);
-  void SelectFindResult(bool forward);
-  void StopFind();
-
-  // Notify the plugin container about the total matches for a find request.
-  virtual void NotifyFindResultsChanged(int total, bool final_result) = 0;
-
-  // Notify the frame about the tickmarks for the find request.
-  virtual void NotifyFindTickmarks(const std::vector<gfx::Rect>& tickmarks) = 0;
-
   // Returns the print preset options for the document.
   blink::WebPrintPresetOptions GetPrintPresetOptions();
 
@@ -374,11 +354,6 @@ class PdfViewPluginBase : public PDFEngine::Client,
   // Requests the plugin's render frame to set up a print dialog for the
   // document.
   virtual void InvokePrintDialog() = 0;
-
-  // Notifies the embedder about a new link under the cursor.
-  // TODO(crbug.com/702993): This is only needed by `OutOfProcessInstance`.
-  // Remove this method when that class ceases to exist.
-  virtual void NotifyLinkUnderCursor() {}
 
   // Notifies the embedder of the top-left and bottom-right coordinates of the
   // current selection.
@@ -441,25 +416,25 @@ class PdfViewPluginBase : public PDFEngine::Client,
       const gfx::Vector2dF& scroll_offset) const;
 
   // Message handlers.
-  void HandleDisplayAnnotationsMessage(const base::Value& message);
-  void HandleGetNamedDestinationMessage(const base::Value& message);
-  void HandleGetPasswordCompleteMessage(const base::Value& message);
-  void HandleGetSelectedTextMessage(const base::Value& message);
-  void HandleGetThumbnailMessage(const base::Value& message);
-  void HandleLoadPreviewPageMessage(const base::Value& message);
-  void HandlePrintMessage(const base::Value& /*message*/);
-  void HandleResetPrintPreviewModeMessage(const base::Value& message);
-  void HandleRotateClockwiseMessage(const base::Value& /*message*/);
-  void HandleRotateCounterclockwiseMessage(const base::Value& /*message*/);
-  void HandleSaveMessage(const base::Value& message);
-  void HandleSaveAttachmentMessage(const base::Value& message);
-  void HandleSelectAllMessage(const base::Value& /*message*/);
-  void HandleSetBackgroundColorMessage(const base::Value& message);
-  void HandleSetReadOnlyMessage(const base::Value& message);
-  void HandleSetTwoUpViewMessage(const base::Value& message);
-  void HandleStopScrollingMessage(const base::Value& /*message*/);
-  void HandleUpdateScrollMessage(const base::Value& message);
-  void HandleViewportMessage(const base::Value& message);
+  void HandleDisplayAnnotationsMessage(const base::Value::Dict& message);
+  void HandleGetNamedDestinationMessage(const base::Value::Dict& message);
+  void HandleGetPasswordCompleteMessage(const base::Value::Dict& message);
+  void HandleGetSelectedTextMessage(const base::Value::Dict& message);
+  void HandleGetThumbnailMessage(const base::Value::Dict& message);
+  void HandleLoadPreviewPageMessage(const base::Value::Dict& message);
+  void HandlePrintMessage(const base::Value::Dict& /*message*/);
+  void HandleResetPrintPreviewModeMessage(const base::Value::Dict& message);
+  void HandleRotateClockwiseMessage(const base::Value::Dict& /*message*/);
+  void HandleRotateCounterclockwiseMessage(
+      const base::Value::Dict& /*message*/);
+  void HandleSaveMessage(const base::Value::Dict& message);
+  void HandleSaveAttachmentMessage(const base::Value::Dict& message);
+  void HandleSelectAllMessage(const base::Value::Dict& /*message*/);
+  void HandleSetBackgroundColorMessage(const base::Value::Dict& message);
+  void HandleSetReadOnlyMessage(const base::Value::Dict& message);
+  void HandleSetTwoUpViewMessage(const base::Value::Dict& message);
+  void HandleStopScrollingMessage(const base::Value::Dict& /*message*/);
+  void HandleViewportMessage(const base::Value::Dict& message);
 
   // Sends start/stop loading notifications to the plugin's render frame
   // depending on `did_call_start_loading_`.
@@ -480,43 +455,13 @@ class PdfViewPluginBase : public PDFEngine::Client,
   void PrepareForFirstPaint(std::vector<PaintReadyRect>& ready);
 
   // Callback to clear deferred invalidates after painting finishes.
-  void ClearDeferredInvalidates(int32_t /*unused_but_required*/);
-
-  // Sends the attachments data.
-  void SendAttachments();
-
-  // Sends the bookmarks data.
-  void SendBookmarks();
-
-  // Send document metadata data.
-  void SendMetadata();
+  void ClearDeferredInvalidates();
 
   // Sends the thumbnail image data.
-  void SendThumbnail(base::Value reply, Thumbnail thumbnail);
+  void SendThumbnail(base::Value::Dict reply, Thumbnail thumbnail);
 
   // Starts loading accessibility information.
   void LoadAccessibility();
-
-  void ResetRecentlySentFindUpdate(int32_t /*unused_but_required*/);
-
-  // Records metrics about the attachment types.
-  void RecordAttachmentTypes();
-
-  // Records metrics about the document metadata.
-  void RecordDocumentMetrics();
-
-  // Adds a sample to an enumerated histogram and filters out print preview
-  // usage.
-  template <typename T>
-  void HistogramEnumeration(const char* name, T sample);
-
-  // Adds a sample to a custom counts histogram and filters out print preview
-  // usage.
-  void HistogramCustomCounts(const char* name,
-                             int32_t sample,
-                             int32_t min,
-                             int32_t max,
-                             uint32_t bucket_count);
 
   // Handles `LoadUrl()` result.
   void DidOpen(std::unique_ptr<UrlLoader> loader, int32_t result);
@@ -616,10 +561,10 @@ class PdfViewPluginBase : public PDFEngine::Client,
   // transformations are applied.
   gfx::Vector2dF scroll_offset_at_last_raster_;
 
-  // If this is true, then don't scroll the plugin in response to the messages
-  // from DidChangeView() or HandleUpdateScrollMessage(). This will be true when
-  // the extension page is in the process of zooming the plugin so that
-  // flickering doesn't occur while zooming.
+  // If this is true, then don't scroll the plugin in response to calls to
+  // `UpdateScroll()`. This will be true when the extension page is in the
+  // process of zooming the plugin so that flickering doesn't occur while
+  // zooming.
   bool stop_scrolling_ = false;
 
   // Whether the plugin has received a viewport changed message. Nothing should
@@ -646,13 +591,6 @@ class PdfViewPluginBase : public PDFEngine::Client,
   // The next accessibility page index, used to track interprocess calls when
   // reconstructing the tree for new document layouts.
   int32_t next_accessibility_page_index_ = 0;
-
-  // Whether an update to the number of find results found was sent less than
-  // `kFindResultCooldownMs` milliseconds ago.
-  bool recently_sent_find_update_ = false;
-
-  // Stores the tickmarks to be shown for the current find results.
-  std::vector<gfx::Rect> tickmarks_;
 
   // Keeps track of which unsupported features have been reported to avoid
   // spamming the metrics if a feature shows up many times per document.

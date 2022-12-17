@@ -9,6 +9,6 @@ update_target("//chrome/browser:browser") {
   ]
 }
 
-update_target("//chrome:browser_dependencies") {
+update_target("//chrome:dependencies") {
   public_deps += [ "//vivaldi/contact" ]
 }

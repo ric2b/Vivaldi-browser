@@ -6,7 +6,6 @@
 #define UI_GL_GL_IMPLEMENTATION_H_
 
 #include <memory>
-#include <optional>
 #include <string>
 #include <vector>
 
@@ -35,7 +34,8 @@ enum GLImplementation {
   kGLImplementationNone = 0,
   kGLImplementationDesktopGL = 1,
   kGLImplementationDesktopGLCoreProfile = 2,
-  kGLImplementationSwiftShaderGL = 3,
+  // Note: 3 used to be legacy SwiftShader, so 3 is skipped and should not be
+  // reused.
   kGLImplementationAppleGL = 4,
   kGLImplementationEGLGLES2 = 5,  // Native EGL/GLES2
   kGLImplementationMockGL = 6,
@@ -60,8 +60,14 @@ enum class ANGLEImplementation {
 };
 
 struct GL_EXPORT GLImplementationParts {
-  explicit GLImplementationParts(const ANGLEImplementation angle_impl);
-  explicit GLImplementationParts(const GLImplementation gl_impl);
+  constexpr explicit GLImplementationParts(const ANGLEImplementation angle_impl)
+      : gl(kGLImplementationEGLANGLE),
+        angle(MakeANGLEImplementation(kGLImplementationEGLANGLE, angle_impl)) {}
+
+  constexpr explicit GLImplementationParts(const GLImplementation gl_impl)
+      : gl(gl_impl),
+        angle(MakeANGLEImplementation(gl_impl, ANGLEImplementation::kDefault)) {
+  }
 
   GLImplementation gl = kGLImplementationNone;
   ANGLEImplementation angle = ANGLEImplementation::kNone;
@@ -81,6 +87,21 @@ struct GL_EXPORT GLImplementationParts {
   bool IsValid() const;
   bool IsAllowed(const std::vector<GLImplementationParts>& allowed_impls) const;
   std::string ToString() const;
+
+ private:
+  static constexpr ANGLEImplementation MakeANGLEImplementation(
+      const GLImplementation gl_impl,
+      const ANGLEImplementation angle_impl) {
+    if (gl_impl == kGLImplementationEGLANGLE) {
+      if (angle_impl == ANGLEImplementation::kNone) {
+        return ANGLEImplementation::kDefault;
+      } else {
+        return angle_impl;
+      }
+    } else {
+      return ANGLEImplementation::kNone;
+    }
+  }
 };
 
 struct GL_EXPORT GLWindowSystemBindingInfo {
@@ -144,12 +165,7 @@ GL_EXPORT void SetANGLEImplementation(ANGLEImplementation implementation);
 GL_EXPORT ANGLEImplementation GetANGLEImplementation();
 
 // Get the software GL implementation
-GL_EXPORT GLImplementationParts GetLegacySoftwareGLImplementation();
 GL_EXPORT GLImplementationParts GetSoftwareGLImplementation();
-
-// Returns the software GL implementation used by default on the current
-// platform
-GL_EXPORT GLImplementationParts GetSoftwareGLImplementationForPlatform();
 
 // Set the software GL implementation on the provided command line
 GL_EXPORT void SetSoftwareGLCommandLineSwitches(

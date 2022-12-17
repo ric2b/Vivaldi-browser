@@ -49,7 +49,6 @@ class WebServiceWorkerContextProxy;
 }
 
 namespace base {
-class ListValue;
 class SingleThreadTaskRunner;
 }
 
@@ -175,7 +174,7 @@ class Dispatcher : public content::RenderThreadObserver,
   // Dispatches the event named |event_name| to all render views.
   void DispatchEventHelper(const std::string& extension_id,
                            const std::string& event_name,
-                           const base::ListValue& event_args,
+                           const base::Value::List& event_args,
                            mojom::EventFilteringInfoPtr filtering_info) const;
 
   // Shared implementation of the various MessageInvoke IPCs.
@@ -183,7 +182,7 @@ class Dispatcher : public content::RenderThreadObserver,
                                 const std::string& extension_id,
                                 const std::string& module_name,
                                 const std::string& function_name,
-                                const base::ListValue& args);
+                                const base::Value::List& args);
 
   void ExecuteDeclarativeScript(content::RenderFrame* render_frame,
                                 int tab_id,
@@ -284,8 +283,10 @@ class Dispatcher : public content::RenderThreadObserver,
   void OnDispatchOnDisconnect(int worker_thread_id,
                               const PortId& port_id,
                               const std::string& error_message);
+
+  // mojom::EventDispatcher implementation.
   void DispatchEvent(mojom::DispatchEventParamsPtr params,
-                     base::Value event_args) override;
+                     base::Value::List event_args) override;
 
   // UserScriptSetManager::Observer implementation.
   void OnUserScriptsUpdated(const mojom::HostID& changed_host) override;
@@ -381,8 +382,9 @@ class Dispatcher : public content::RenderThreadObserver,
   // it is dependent on other messages sent on other associated channels.
   mojo::AssociatedReceiver<mojom::Renderer> receiver_;
 
-  // Extensions Dipsatch receiver. This is an associated receiver because
-  // it is dependent on other messages sent on other associated channels.
+  // Extensions mojom::EventDispatcher receiver. This is an associated receiver
+  // because it is dependent on other messages sent on other associated
+  // channels.
   mojo::AssociatedReceiver<mojom::EventDispatcher> dispatcher_;
 
   // Used to hold a service worker information which is ready to execute but the

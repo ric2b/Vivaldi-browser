@@ -120,7 +120,9 @@ void MockRenderProcessHost::SimulateRenderProcessExit(
   ChildProcessTerminationInfo termination_info;
   termination_info.status = status;
   termination_info.exit_code = exit_code;
+#if BUILDFLAG(IS_ANDROID)
   termination_info.renderer_has_visible_clients = VisibleClientCount() > 0;
+#endif
   NotificationService::current()->Notify(
       NOTIFICATION_RENDERER_PROCESS_CLOSED, Source<RenderProcessHost>(this),
       Details<ChildProcessTerminationInfo>(&termination_info));
@@ -270,7 +272,7 @@ bool MockRenderProcessHost::Send(IPC::Message* msg) {
   return true;
 }
 
-int MockRenderProcessHost::GetID() {
+int MockRenderProcessHost::GetID() const {
   return id_;
 }
 
@@ -296,7 +298,9 @@ void MockRenderProcessHost::Cleanup() {
       ChildProcessTerminationInfo termination_info;
       termination_info.status = base::TERMINATION_STATUS_NORMAL_TERMINATION;
       termination_info.exit_code = 0;
+#if BUILDFLAG(IS_ANDROID)
       termination_info.renderer_has_visible_clients = VisibleClientCount() > 0;
+#endif
       for (auto& observer : observers_)
         observer.RenderProcessExited(this, termination_info);
     }
@@ -502,7 +506,7 @@ void MockRenderProcessHost::SetProcessLock(
     is_renderer_locked_to_site_ = true;
 }
 
-ProcessLock MockRenderProcessHost::GetProcessLock() {
+ProcessLock MockRenderProcessHost::GetProcessLock() const {
   return ChildProcessSecurityPolicyImpl::GetInstance()->GetProcessLock(GetID());
 }
 
@@ -524,21 +528,13 @@ void MockRenderProcessHost::BindIndexedDB(
   idb_factory_receiver_ = std::move(receiver);
 }
 
-void MockRenderProcessHost::
-    CleanupNetworkServicePluginExceptionsUponDestruction() {}
-
 std::string
 MockRenderProcessHost::GetInfoForBrowserContextDestructionCrashReporting() {
   return std::string();
 }
 
-void MockRenderProcessHost::WriteIntoTrace(perfetto::TracedValue context) {
-  auto dict = std::move(context).WriteDictionary();
-  dict.Add("id", GetID());
-}
-
 void MockRenderProcessHost::WriteIntoTrace(
-    perfetto::TracedProto<perfetto::protos::pbzero::RenderProcessHost> proto) {
+    perfetto::TracedProto<TraceProto> proto) const {
   proto->set_id(GetID());
 }
 

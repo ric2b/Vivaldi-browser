@@ -12,10 +12,10 @@ class WebState;
 }
 
 @class ContentSuggestionsHeaderViewController;
+@class ContentSuggestionsViewController;
 @protocol DiscoverFeedDelegate;
-@class FeedMetricsRecorder;
-@protocol NewTabPageCommands;
 @protocol NewTabPageControllerDelegate;
+@protocol NewTabPageDelegate;
 class NotificationPromoWhatsNew;
 @class NTPHomeMediator;
 @protocol ThumbStripSupporting;
@@ -36,8 +36,16 @@ class NotificationPromoWhatsNew;
 @property(nonatomic, strong, readonly)
     ContentSuggestionsHeaderViewController* headerController;
 
+// The CollectionView that this coordinator manages.
 @property(nonatomic, strong, readonly)
-    UICollectionViewController* viewController;
+    UICollectionViewController* contentSuggestionsCollectionViewController;
+
+// The ViewController that this coordinator managers if
+// kContentSuggestionsUIViewControllerMigration is enabled.
+// TODO(crbug.com/1285378): remove |contentSuggestionsCollectionViewController|
+// once migration is finished.
+@property(nonatomic, strong, readonly)
+    ContentSuggestionsViewController* viewController;
 
 // Allows for the in-flight enabling/disabling of the thumb strip.
 @property(nonatomic, weak, readonly) id<ThumbStripSupporting>
@@ -49,11 +57,8 @@ class NotificationPromoWhatsNew;
 // mediator for non NTP logic.
 @property(nonatomic, strong) NTPHomeMediator* ntpMediator;
 
-// Command handler for NTP related commands.
-@property(nonatomic, weak) id<NewTabPageCommands> ntpCommandHandler;
-
-// Metrics recorder for the feed events related to ContentSuggestions.
-@property(nonatomic, strong) FeedMetricsRecorder* feedMetricsRecorder;
+// Delegate for NTP related actions.
+@property(nonatomic, weak) id<NewTabPageDelegate> ntpDelegate;
 
 // Delegate used to communicate to communicate events to the DiscoverFeed.
 @property(nonatomic, weak) id<DiscoverFeedDelegate> discoverFeedDelegate;

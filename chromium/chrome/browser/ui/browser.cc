@@ -38,7 +38,6 @@
 #include "chrome/browser/background/background_contents.h"
 #include "chrome/browser/background/background_contents_service.h"
 #include "chrome/browser/background/background_contents_service_factory.h"
-#include "chrome/browser/breadcrumbs/breadcrumbs_status.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/buildflags.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -160,9 +159,11 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
+#include "components/breadcrumbs/core/breadcrumbs_status.h"
 #include "components/captive_portal/core/buildflags.h"
 #include "components/content_settings/browser/page_specific_content_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/custom_handlers/protocol_handler.h"
 #include "components/custom_handlers/protocol_handler_registry.h"
 #include "components/custom_handlers/register_protocol_handler_permission_request.h"
 #include "components/favicon/content/content_favicon_driver.h"
@@ -207,7 +208,6 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_features.h"
-#include "content/public/common/custom_handlers/protocol_handler.h"
 #include "content/public/common/page_zoom.h"
 #include "content/public/common/profiling.h"
 #include "content/public/common/url_constants.h"
@@ -226,6 +226,7 @@
 #include "net/base/filename_util.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/security/protocol_handler_security_level.h"
 #include "third_party/blink/public/mojom/frame/blocked_navigation_types.mojom.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom.h"
@@ -288,7 +289,7 @@
 #include "app/vivaldi_constants.h"
 #include "browser/translate/vivaldi_translate_client.h"
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
 #include "sync/vivaldi_browser_synced_window_delegate.h"
 #endif
 
@@ -301,11 +302,11 @@ using content::NativeWebKeyboardEvent;
 using content::NavigationController;
 using content::NavigationEntry;
 using content::OpenURLParams;
-using content::ProtocolHandler;
 using content::Referrer;
 using content::RenderWidgetHostView;
 using content::SiteInstance;
 using content::WebContents;
+using custom_handlers::ProtocolHandler;
 using extensions::Extension;
 using ui::WebDialogDelegate;
 using web_modal::WebContentsModalDialogManager;
@@ -498,7 +499,7 @@ Browser::Browser(const CreateParams& params)
           new BrowserContentSettingBubbleModelDelegate(this)),
       location_bar_model_delegate_(new BrowserLocationBarModelDelegate(this)),
       live_tab_context_(new BrowserLiveTabContext(this)),
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
       synced_window_delegate_(new BrowserSyncedWindowDelegate(this)),
 #else
       synced_window_delegate_(vivaldi::IsVivaldiRunning()
@@ -512,7 +513,7 @@ Browser::Browser(const CreateParams& params)
       user_title_(params.user_title),
       signin_view_controller_(this),
       breadcrumb_manager_browser_agent_(
-          BreadcrumbsStatus::IsEnabled()
+          breadcrumbs::IsEnabled()
               ? std::make_unique<BreadcrumbManagerBrowserAgent>(this)
               : nullptr)
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -522,7 +523,7 @@ Browser::Browser(const CreateParams& params)
 #endif
       ,
       is_vivaldi_(params.is_vivaldi),
-      ext_data_(params.ext_data)
+      viv_ext_data_(params.viv_ext_data)
 {
   if (!profile_->IsOffTheRecord()) {
     profile_keep_alive_ = std::make_unique<ScopedProfileKeepAlive>(
@@ -965,7 +966,8 @@ void Browser::OnWindowClosing() {
 
   BrowserList::NotifyBrowserCloseStarted(this);
 
-  tab_strip_model_->CloseAllTabs();
+  if (!tab_strip_model_->empty())
+    tab_strip_model_->CloseAllTabs();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1283,19 +1285,13 @@ void Browser::TabGroupedStateChanged(
 }
 
 void Browser::TabStripEmpty() {
-  // Close the frame after we return to the message loop (not immediately,
-  // otherwise it will destroy this object before the stack has a chance to
-  // cleanly unwind.)
-  // Note: This will be called several times if TabStripEmpty is called several
-  //       times. This is because it does not close the window if tabs are
-  //       still present.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(
-                     [](base::WeakPtr<Browser> browser) {
-                       if (browser)
-                         browser->window()->Close();
-                     },
-                     weak_factory_.GetWeakPtr()));
+  // This function is often called with various Browser related classes on the
+  // stack. Calling code can't handle Browser being deleted here (because it
+  // may delete the classes on the stack calling into this function). Because of
+  // this, BrowserWindow::Close() is used, instead of CloseNow(). CloseNow()
+  // immediately deletes, where was Close() is a hide, and then delete after
+  // posting a task.
+  window_->Close();
 
   // Instant may have visible WebContents that need to be detached before the
   // window system closes.
@@ -1620,6 +1616,14 @@ WebContents* Browser::OpenURLFromTab(WebContents* source,
 
 void Browser::NavigationStateChanged(WebContents* source,
                                      content::InvalidateTypes changed_flags) {
+  // If we're shutting down we should refuse to process this message.
+  // See crbug.com/1306297; it's possible that a WebContents sends navigation
+  // state messages while destructing during browser tear-down. Ironically we
+  // can't use IsShuttingDown() because by this point the browser is entirely
+  // removed from the browser list.
+  if (!command_controller_)
+    return;
+
   // Only update the UI when something visible has changed.
   if (changed_flags)
     ScheduleUIUpdate(source, changed_flags);
@@ -1656,13 +1660,14 @@ void Browser::AddNewContents(WebContents* source,
                              const gfx::Rect& initial_rect,
                              bool user_gesture,
                              bool* was_blocked) {
+  FullscreenController* fullscreen_controller =
+      exclusive_access_manager_->fullscreen_controller();
 #if BUILDFLAG(IS_MAC)
-  // On the Mac, the convention is to turn popups into new tabs when in
+  // On the Mac, the convention is to turn popups into new tabs when in browser
   // fullscreen mode. Only worry about user-initiated fullscreen as showing a
   // popup in HTML5 fullscreen would have kicked the page out of fullscreen.
   if (disposition == WindowOpenDisposition::NEW_POPUP &&
-      exclusive_access_manager_->fullscreen_controller()
-          ->IsFullscreenForBrowser()) {
+      fullscreen_controller->IsFullscreenForBrowser()) {
     disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
   }
 #endif
@@ -1674,8 +1679,22 @@ void Browser::AddNewContents(WebContents* source,
                                                         source, disposition);
   }
 
+  // Postpone activating popups opened by content-fullscreen tabs. This permits
+  // popups on other screens and retains fullscreen focus for exit accelerators.
+  // Popups are activated when the opener exits fullscreen, which happens
+  // immediately if the popup would overlap the fullscreen window.
+  NavigateParams::WindowAction window_action = NavigateParams::SHOW_WINDOW;
+  if (disposition == WindowOpenDisposition::NEW_POPUP &&
+      fullscreen_controller->IsFullscreenForTabOrPending(source) &&
+      base::FeatureList::IsEnabled(
+          blink::features::kWindowPlacementFullscreenCompanionWindow)) {
+    window_action = NavigateParams::SHOW_WINDOW_INACTIVE;
+    fullscreen_controller->FullscreenTabOpeningPopup(source,
+                                                     new_contents.get());
+  }
+
   chrome::AddWebContents(this, source, std::move(new_contents), target_url,
-                         disposition, initial_rect);
+                         disposition, initial_rect, window_action);
 }
 
 void Browser::ActivateContents(WebContents* contents) {
@@ -1932,6 +1951,11 @@ void Browser::EnumerateDirectory(
 bool Browser::CanEnterFullscreenModeForTab(
     content::RenderFrameHost* requesting_frame,
     const blink::mojom::FullscreenOptions& options) {
+  // If the tab strip isn't editable then a drag session is in progress, and it
+  // is not safe to enter fullscreen. https://crbug.com/1315080
+  if (!tab_strip_model_delegate_->IsTabStripEditable())
+    return false;
+
   return exclusive_access_manager_->fullscreen_controller()
       ->CanEnterFullscreenModeForTab(requesting_frame, options.display_id);
 }
@@ -2016,8 +2040,11 @@ void Browser::RegisterProtocolHandler(
   ProtocolHandler handler = ProtocolHandler::CreateProtocolHandler(
       protocol, url, GetProtocolHandlerSecurityLevel(requesting_frame));
 
-  if (!handler.IsValid())
-    return;
+  // The parameters's normalization process defined in the spec has been already
+  // applied in the WebContentImpl class, so at this point it shouldn't be
+  // possible to create an invalid handler.
+  // https://html.spec.whatwg.org/multipage/system-state.html#normalize-protocol-handler-parameters
+  DCHECK(handler.IsValid());
 
   custom_handlers::ProtocolHandlerRegistry* registry =
       ProtocolHandlerRegistryFactory::GetForBrowserContext(context);

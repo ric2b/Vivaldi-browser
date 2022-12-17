@@ -16,7 +16,7 @@ import {I18nBehavior} from '//resources/js/i18n_behavior.m.js';
 import {afterNextRender, flush, html, Polymer, TemplateInstanceBase, Templatizer} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {Route, Router} from '../../router.js';
-import {routes} from '../os_route.m.js';
+import {routes} from '../os_route.js';
 import {RouteObserverBehavior} from '../route_observer_behavior.js';
 
 Polymer({
@@ -47,7 +47,7 @@ Polymer({
     },
   },
 
-  /** @private {?chromeos.cellularSetup.mojom.ESimProfileRemote} */
+  /** @private {?ash.cellularSetup.mojom.ESimProfileRemote} */
   esimProfileRemote_: null,
 
   /** @override */
@@ -102,13 +102,13 @@ Polymer({
   onRemoveProfileTap_(event) {
     this.esimProfileRemote_.uninstallProfile().then((response) => {
       if (response.result ===
-          chromeos.cellularSetup.mojom.ESimOperationResult.kFailure) {
+          ash.cellularSetup.mojom.ESimOperationResult.kFailure) {
         this.fire(
             'show-error-toast', this.i18n('eSimRemoveProfileDialogError'));
       }
     });
     this.$.dialog.close();
-    const params = new URLSearchParams;
+    const params = new URLSearchParams();
     params.append(
         'type',
         OncMojo.getNetworkTypeString(

@@ -62,20 +62,20 @@ MockMediaStreamVideoSource* MockMediaStreamRegistry::AddVideoTrack(
     const absl::optional<bool>& noise_reduction,
     bool is_screencast,
     double min_frame_rate) {
-  auto* source = MakeGarbageCollected<MediaStreamSource>(
-      "mock video source id", MediaStreamSource::kTypeVideo,
-      "mock video source name", false /* remote */);
   auto native_source = std::make_unique<MockMediaStreamVideoSource>();
   auto* native_source_ptr = native_source.get();
-  source->SetPlatformSource(std::move(native_source));
+  auto* source = MakeGarbageCollected<MediaStreamSource>(
+      "mock video source id", MediaStreamSource::kTypeVideo,
+      "mock video source name", false /* remote */, std::move(native_source));
 
-  auto* component =
-      MakeGarbageCollected<MediaStreamComponent>(track_id, source);
-  component->SetPlatformTrack(std::make_unique<MediaStreamVideoTrack>(
-      native_source_ptr, adapter_settings, noise_reduction, is_screencast,
-      min_frame_rate, absl::nullopt /* pan */, absl::nullopt /* tilt */,
-      absl::nullopt /* zoom */, false /* pan_tilt_zoom_allowed */,
-      MediaStreamVideoSource::ConstraintsOnceCallback(), true /* enabled */));
+  auto* component = MakeGarbageCollected<MediaStreamComponent>(
+      track_id, source,
+      std::make_unique<MediaStreamVideoTrack>(
+          native_source_ptr, adapter_settings, noise_reduction, is_screencast,
+          min_frame_rate, absl::nullopt /* pan */, absl::nullopt /* tilt */,
+          absl::nullopt /* zoom */, false /* pan_tilt_zoom_allowed */,
+          MediaStreamVideoSource::ConstraintsOnceCallback(),
+          true /* enabled */));
   descriptor_->AddRemoteTrack(component);
   return native_source_ptr;
 }
@@ -88,12 +88,11 @@ MockMediaStreamVideoSource* MockMediaStreamRegistry::AddVideoTrack(
 }
 
 void MockMediaStreamRegistry::AddAudioTrack(const String& track_id) {
-  auto* source = MakeGarbageCollected<MediaStreamSource>(
-      "mock audio source id", MediaStreamSource::kTypeAudio,
-      "mock audio source name", false /* remote */);
   auto audio_source = std::make_unique<MockCDQualityAudioSource>();
   auto* audio_source_ptr = audio_source.get();
-  source->SetPlatformSource(std::move(audio_source));
+  auto* source = MakeGarbageCollected<MediaStreamSource>(
+      "mock audio source id", MediaStreamSource::kTypeAudio,
+      "mock audio source name", false /* remote */, std::move(audio_source));
 
   auto* component = MakeGarbageCollected<MediaStreamComponent>(source);
   CHECK(audio_source_ptr->ConnectToTrack(component));

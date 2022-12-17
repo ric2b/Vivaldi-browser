@@ -63,7 +63,8 @@ class NinjaBinaryTargetWriter : public NinjaTargetWriter {
                               const std::vector<OutputFile>& extra_deps,
                               const std::vector<OutputFile>& order_only_deps,
                               const char* tool_name,
-                              const std::vector<OutputFile>& outputs);
+                              const std::vector<OutputFile>& outputs,
+                              bool can_write_source_info = true);
 
   void WriteLinkerFlags(std::ostream& out,
                         const Tool* tool,

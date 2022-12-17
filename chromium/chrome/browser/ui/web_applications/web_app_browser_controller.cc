@@ -295,20 +295,22 @@ std::u16string WebAppBrowserController::GetTitle() const {
     return base::UTF8ToUTF16(registrar().GetAppShortName(app_id()));
   }
 
-  const std::u16string raw_title = AppBrowserController::GetTitle();
+  std::u16string raw_title = AppBrowserController::GetTitle();
 
   if (!base::FeatureList::IsEnabled(features::kPrefixWebAppWindowsWithAppName))
     return raw_title;
 
-  const std::u16string app_name =
+  std::u16string app_name =
       base::UTF8ToUTF16(provider_.registrar().GetAppShortName(app_id()));
   if (base::StartsWith(raw_title, app_name)) {
     return raw_title;
-  } else if (raw_title.empty()) {
-    return app_name;
-  } else {
-    return base::StrCat({app_name, u" - ", raw_title});
   }
+
+  if (raw_title.empty()) {
+    return app_name;
+  }
+
+  return base::StrCat({app_name, u" - ", raw_title});
 }
 
 std::u16string WebAppBrowserController::GetAppShortName() const {
@@ -366,14 +368,14 @@ void WebAppBrowserController::LoadAppIcon(bool allow_placeholder_icon) const {
       apps::AppServiceProxyFactory::GetForProfile(browser()->profile());
   auto app_type = proxy->AppRegistryCache().GetAppType(app_id());
   if (base::FeatureList::IsEnabled(features::kAppServiceLoadIconWithoutMojom)) {
-    proxy->LoadIcon(apps::ConvertMojomAppTypToAppType(app_type), app_id(),
-                    apps::IconType::kStandard, kWebAppIconSmall,
-                    allow_placeholder_icon,
+    proxy->LoadIcon(app_type, app_id(), apps::IconType::kStandard,
+                    kWebAppIconSmall, allow_placeholder_icon,
                     base::BindOnce(&WebAppBrowserController::OnLoadIcon,
                                    weak_ptr_factory_.GetWeakPtr()));
   } else {
-    proxy->LoadIcon(app_type, app_id(), apps::mojom::IconType::kStandard,
-                    kWebAppIconSmall, allow_placeholder_icon,
+    proxy->LoadIcon(apps::ConvertAppTypeToMojomAppType(app_type), app_id(),
+                    apps::mojom::IconType::kStandard, kWebAppIconSmall,
+                    allow_placeholder_icon,
                     apps::MojomIconValueToIconValueCallback(
                         base::BindOnce(&WebAppBrowserController::OnLoadIcon,
                                        weak_ptr_factory_.GetWeakPtr())));

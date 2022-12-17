@@ -10,7 +10,6 @@
 
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
-#include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "media/base/video_types.h"
@@ -91,7 +90,9 @@ ImageProcessor::ImageProcessor(
     scoped_refptr<base::SequencedTaskRunner> backend_task_runner)
     : backend_(std::move(backend)),
       client_task_runner_(std::move(client_task_runner)),
-      backend_task_runner_(std::move(backend_task_runner)) {
+      backend_task_runner_(std::move(backend_task_runner)),
+      needs_linear_output_buffers_(backend_ &&
+                                   backend_->needs_linear_output_buffers()) {
   DVLOGF(2);
   DETACH_FROM_SEQUENCE(client_sequence_checker_);
 

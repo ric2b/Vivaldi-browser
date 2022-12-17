@@ -8,7 +8,6 @@
 
 #include <memory>
 
-#include "base/cxx17_backports.h"
 #include "base/strings/stringprintf.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/test_utils.h"
@@ -26,7 +25,7 @@ static const int kAllSchemes =
     URLPattern::SCHEME_CHROMEUI | URLPattern::SCHEME_EXTENSION |
     URLPattern::SCHEME_FILESYSTEM | URLPattern::SCHEME_WS |
     URLPattern::SCHEME_VIVALDIUI |
-    URLPattern::SCHEME_WSS | URLPattern::SCHEME_DATA | URLPattern::SCHEME_URN |
+    URLPattern::SCHEME_WSS | URLPattern::SCHEME_DATA |
     URLPattern::SCHEME_UUID_IN_PACKAGE;
 
 TEST(ExtensionURLPatternTest, ParseInvalid) {
@@ -49,7 +48,7 @@ TEST(ExtensionURLPatternTest, ParseInvalid) {
       {"http://bar", URLPattern::ParseResult::kEmptyPath},
       {"http://foo.*/bar", URLPattern::ParseResult::kInvalidHostWildcard}};
 
-  for (size_t i = 0; i < base::size(kInvalidPatterns); ++i) {
+  for (size_t i = 0; i < std::size(kInvalidPatterns); ++i) {
     URLPattern pattern(URLPattern::SCHEME_ALL);
     EXPECT_EQ(kInvalidPatterns[i].expected_result,
               pattern.Parse(kInvalidPatterns[i].pattern))
@@ -92,7 +91,7 @@ TEST(ExtensionURLPatternTest, Ports) {
       {"http://*.foo/bar:1234", URLPattern::ParseResult::kSuccess, "*"},
       {"http://foo/bar:1234/path", URLPattern::ParseResult::kSuccess, "*"}};
 
-  for (size_t i = 0; i < base::size(kTestPatterns); ++i) {
+  for (size_t i = 0; i < std::size(kTestPatterns); ++i) {
     URLPattern pattern(URLPattern::SCHEME_ALL);
     EXPECT_EQ(kTestPatterns[i].expected_result,
               pattern.Parse(kTestPatterns[i].pattern))
@@ -413,7 +412,7 @@ static const struct MatchPatterns {
 
 // SCHEME_ALL and specific schemes.
 TEST(ExtensionURLPatternTest, Match13) {
-  for (size_t i = 0; i < base::size(kMatch13UrlPatternTestCases); ++i) {
+  for (size_t i = 0; i < std::size(kMatch13UrlPatternTestCases); ++i) {
     URLPattern pattern(URLPattern::SCHEME_ALL);
     EXPECT_EQ(URLPattern::ParseResult::kSuccess,
               pattern.Parse(kMatch13UrlPatternTestCases[i].pattern))
@@ -556,7 +555,7 @@ static const struct GetAsStringPatterns {
 };
 
 TEST(ExtensionURLPatternTest, GetAsString) {
-  for (size_t i = 0; i < base::size(kGetAsStringTestCases); ++i) {
+  for (size_t i = 0; i < std::size(kGetAsStringTestCases); ++i) {
     URLPattern pattern(URLPattern::SCHEME_ALL);
     EXPECT_EQ(URLPattern::ParseResult::kSuccess,
               pattern.Parse(kGetAsStringTestCases[i].pattern))
@@ -642,7 +641,7 @@ TEST(ExtensionURLPatternTest, ConvertToExplicitSchemes) {
       URLPattern::SCHEME_FTP,
       "http://google.com/monkey").ConvertToExplicitSchemes());
 
-  ASSERT_EQ(12u+1, all_urls.size());
+  ASSERT_EQ(11u+1, all_urls.size());
   ASSERT_EQ(2u, all_schemes.size());
   ASSERT_EQ(1u, monkey.size());
 
@@ -656,8 +655,7 @@ TEST(ExtensionURLPatternTest, ConvertToExplicitSchemes) {
   EXPECT_EQ("ws://*/*", all_urls[7].GetAsString());
   EXPECT_EQ("wss://*/*", all_urls[8].GetAsString());
   EXPECT_EQ("data:/*", all_urls[9].GetAsString());
-  EXPECT_EQ("urn:/*", all_urls[10].GetAsString());
-  EXPECT_EQ("uuid-in-package:/*", all_urls[11].GetAsString());
+  EXPECT_EQ("uuid-in-package:/*", all_urls[10].GetAsString());
 
   EXPECT_EQ("http://google.com/foo", all_schemes[0].GetAsString());
   EXPECT_EQ("https://google.com/foo", all_schemes[1].GetAsString());
@@ -775,7 +773,7 @@ TEST(ExtensionURLPatternTest, Equals) {
     }
   };
 
-  for (size_t i = 0; i < base::size(kEqualsTestCases); ++i) {
+  for (size_t i = 0; i < std::size(kEqualsTestCases); ++i) {
     std::string message = kEqualsTestCases[i].pattern1;
     message += " ";
     message += kEqualsTestCases[i].pattern2;

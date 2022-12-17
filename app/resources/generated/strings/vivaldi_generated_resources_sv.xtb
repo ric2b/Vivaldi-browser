@@ -9,7 +9,6 @@
 <translation id="1054153489933238809">Öppna original &amp;bilden i en ny flik</translation>
 <translation id="1056898198331236512">Varning</translation>
 <translation id="1084824384139382525">Kopiera länk&amp;adress</translation>
-<translation id="1128109161498068552">Tillåt inte att några webbplatser använder systemexklusiva meddelanden för att komma åt MIDI-enheter</translation>
 <translation id="1163931534039071049">&amp;Visa ramkälla</translation>
 <translation id="1165039591588034296">Fel</translation>
 <translation id="1175364870820465910">&amp;Skriv ut...</translation>
@@ -22,7 +21,6 @@
 <translation id="1297175357211070620">Destination</translation>
 <translation id="1303101771013849280">HTML-fil med bokmärken</translation>
 <translation id="1430915738399379752">Skriv ut</translation>
-<translation id="1433811987160647649">Fråga innan informationen används</translation>
 <translation id="1451375123200651445">Webbsida, en enda fil</translation>
 <translation id="1465176863081977902">K&amp;opiera ljudadress</translation>
 <translation id="1476607407192946488">&amp;Språkinställningar</translation>
@@ -99,13 +97,11 @@
 <translation id="2783321960289401138">Skapa genväg ...</translation>
 <translation id="2785873697295365461">Filbeskrielser</translation>
 <translation id="2809586584051668049">och ytterligare <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
-<translation id="2812989263793994277">Visa inga bilder</translation>
 <translation id="2850541429955027218">Lägg till tema</translation>
 <translation id="2861941300086904918">Lokal Klient säkerhetshanterare</translation>
 <translation id="2881076733170862447">När du klickar på tillägget</translation>
 <translation id="2889064240420137087">Öppna länk med...</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> kunde inte kommunicera med den här skrivaren. Kontrollera att skrivaren är ansluten och försök igen.</translation>
-<translation id="2904456025988372123">Fråga när en webbplats försöker hämta filer till datorn automatiskt efter den första filen</translation>
 <translation id="2913331724188855103">Tillåt att webbplatser sparar och läser data i kakor (rekommenderas)</translation>
 <translation id="2931157624143513983">Anpassa till det utskrivbara området</translation>
 <translation id="2932085390869194046">Föreslå lösenord…</translation>
@@ -126,7 +122,6 @@
 <translation id="3127156390846601284">Det här tar bort alla data som lagrats på enheten av alla webbplatser som visas. Vill du fortsätta?</translation>
 <translation id="3129173833825111527">Vänstermarginal</translation>
 <translation id="3144647712221361880">Öppna länk som</translation>
-<translation id="3154429428035006212">Offline i mer än en månad</translation>
 <translation id="3222066309010235055">För-renderare <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Välj rotkatalogen för tillägget som ska packas. Om du vill uppdatera ett tillägg väljer du också den privata nyckel som ska återanvändas.</translation>
 <translation id="3280237271814976245">Spara &amp;som...</translation>
@@ -143,6 +138,7 @@
 <translation id="3360297538363969800">Utskriften misslyckades. Kontrollera skrivaren och försök igen.</translation>
 <translation id="3378572629723696641">Det här tillägget kan vara skadat.</translation>
 <translation id="3387614642886316601">Använd förbättrad stavningskontroll</translation>
+<translation id="3393582007140394275">Det gick inte att casta skärmen.</translation>
 <translation id="3432227430032737297">Ta bort alla som visas</translation>
 <translation id="345693547134384690">Öppna &amp;bild i ny flik</translation>
 <translation id="3494769164076977169">Fråga när en webbplats försöker hämta filer till datorn automatiskt efter den första filen (rekommenderas)</translation>
@@ -165,7 +161,6 @@
 <translation id="3838085852053358637">Tillägget kunde inte läsas in</translation>
 <translation id="383891835335927981">Inga webbplatser har zoomats in eller ut</translation>
 <translation id="385051799172605136">Tillbaka</translation>
-<translation id="3899879303189199559">Offline i mer än ett år</translation>
 <translation id="3905761538810670789">Reparera appen</translation>
 <translation id="3908501907586732282">Aktivera tillägg</translation>
 <translation id="3909701002594999354">Visa alla &amp;kontroller</translation>
@@ -192,7 +187,6 @@
 <translation id="4200983522494130825">Ny &amp;flik</translation>
 <translation id="4225397296022057997">På alla webbsidor</translation>
 <translation id="4256316378292851214">S&amp;para video som...</translation>
-<translation id="4278390842282768270">Tillåtet</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> K (<ph name="NUM_KILOBYTES_LIVE" /> kB aktiva)</translation>
 <translation id="4345587454538109430">Konfigurera...</translation>
 <translation id="4348766275249686434">Samla fel</translation>
@@ -217,15 +211,15 @@
 <translation id="488785315393301722">Visa detaljer</translation>
 <translation id="4907306957610201395">Behörighetskategori</translation>
 <translation id="4912643508233590958">Uppvakningar ur vila</translation>
+<translation id="49265687513387605">Det gick inte att casta skärmen. Kontrollera att du har svarat på frågan om att dela skärmen.</translation>
 <translation id="4927753642311223124">Inget att se här, gå vidare.</translation>
 <translation id="4930714375720679147">Aktivera</translation>
+<translation id="4961318399572185831">Casta skärmen</translation>
 <translation id="4988526792673242964">Sidor</translation>
 <translation id="49896407730300355">Rotera m&amp;oturs</translation>
 <translation id="4989966318180235467">Inspektera &amp;bakgrundssida</translation>
-<translation id="4994474651455208930">Tillåt att webbplatser begär att bli standardhanterare för protokoll</translation>
 <translation id="5000922062037820727">Blockerat (rekommenderas)</translation>
 <translation id="5027562294707732951">Lägg till tillägg</translation>
-<translation id="5036662165765606524">Tillåt inte att någon webbplats hämtar flera filer till datorn automatiskt</translation>
 <translation id="5039804452771397117">Tillåt</translation>
 <translation id="5057110919553308744">När du klickar på tillägget</translation>
 <translation id="5059526285558225588">Välj vad du vill dela</translation>
@@ -238,7 +232,6 @@
 <translation id="5233231016133573565">Process-ID</translation>
 <translation id="5233736638227740678">&amp;Klistra in</translation>
 <translation id="5256861893479663409">På alla webbsidor</translation>
-<translation id="5265562206369321422">Offline i mer än en vecka</translation>
 <translation id="5269977353971873915">Utskrift misslyckades</translation>
 <translation id="5284445933715251131">Fortsätt ladda ner</translation>
 <translation id="52912272896845572">Den privata nyckelfilen är ogiltig.</translation>
@@ -294,7 +287,6 @@
 <translation id="6122081475643980456">Din internetanslutning kontrolleras</translation>
 <translation id="6147020289383635445">Förhandsgranskning misslyckades.</translation>
 <translation id="6156863943908443225">Cacheminne för skript</translation>
-<translation id="6169666352732958425">Det gick inte att casta skrivbordet.</translation>
 <translation id="6196854373336333322">Tillägget <ph name="EXTENSION_NAME" /> har tagit kontroll över dina proxyinställningar, vilket innebär att det kan ändra, knäcka eller tjuvlyssna på allt du gör på webben. Om du inte vet varför den här ändringen inträffade är den troligen inte önskvärd.</translation>
 <translation id="6200151268994853226">Hantera Tillägg</translation>
 <translation id="6206311232642889873">Kopi&amp;era bild</translation>
@@ -328,7 +320,6 @@
 <translation id="6798954102094737107">Insticksprogram: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Behåll ändringarna</translation>
 <translation id="6817174620439930047">Fråga när en webbplats vill använda systemexklusiva meddelanden för att komma åt MIDI-enheter (rekommenderas)</translation>
-<translation id="682123305478866682">Casta skrivbordet</translation>
 <translation id="6824564591481349393">Kopiera &amp;e-postadress</translation>
 <translation id="6840155290835956714">Fråga innan något skickas</translation>
 <translation id="6886871292305414135">Öppna länk i ny &amp;flik</translation>
@@ -346,7 +337,6 @@
 <translation id="708060913198414444">K&amp;opiera ljudadress</translation>
 <translation id="7175353351958621980">Hämtad från:</translation>
 <translation id="7186088072322679094">Behåll i verktygsrad</translation>
-<translation id="7270858098575133036">Fråga när en webbplats vill använda systemexklusiva meddelanden för att komma åt MIDI-enheter</translation>
 <translation id="7287143125007575591">Åtkomst nekad.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7385854874724088939">Det uppstod ett problem vid utskriften.  Kontrollera skrivaren och försök igen.</translation>
@@ -369,7 +359,6 @@
 <translation id="7704305437604973648">Åtgärd</translation>
 <translation id="7710568461918838723">&amp;Casta...</translation>
 <translation id="7750228210027921155">Bild i bild</translation>
-<translation id="7751260505918304024">Visa alla</translation>
 <translation id="7760004034676677601">Är det här den startsida du förväntade dig?</translation>
 <translation id="7771452384635174008">Layout</translation>
 <translation id="7782102568078991263">Inga fler förslag från Google</translation>
@@ -382,9 +371,7 @@
 <translation id="7849264908733290972">Öppna &amp;bild i ny flik</translation>
 <translation id="7857949311770343000">Var det den här nya fliksidan du förväntade dig?</translation>
 <translation id="786073089922909430">Tjänst: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7885253890047913815">Senaste destinationerna</translation>
 <translation id="7903925330883316394">Verktyg: <ph name="UTILITY_TYPE" /></translation>
-<translation id="7938594894617528435">Offline just nu</translation>
 <translation id="7947962633355574091">K&amp;opiera videoadress</translation>
 <translation id="7966241909927244760">K&amp;opiera bildadress</translation>
 <translation id="7973394300052703468">Nytt &amp;privat fönster</translation>
@@ -427,10 +414,8 @@ Spara nyckelfilen på ett säkert ställe. Den behövs om du ska skapa nya versi
 <translation id="8708000541097332489">Töm vid avslut</translation>
 <translation id="8714838604780058252">Bakgrundsgrafik</translation>
 <translation id="8725066075913043281">Försök igen</translation>
-<translation id="8757090071857742562">Det gick inte att casta skrivbordet. Kontrollera att du har svarat på frågan om att dela skärmen.</translation>
 <translation id="8774934320277480003">Övre marginal</translation>
 <translation id="8798099450830957504">Förval</translation>
-<translation id="8800004011501252845">Visar destinationer för</translation>
 <translation id="8808478386290700967">Web Shop</translation>
 <translation id="8823514049557262177">Kopiera länkte&amp;xt</translation>
 <translation id="8823704566850948458">Föreslå lösenord…</translation>
@@ -443,7 +428,6 @@ Spara nyckelfilen på ett säkert ställe. Den behövs om du ska skapa nya versi
 <translation id="8962083179518285172">Dölj detaljer</translation>
 <translation id="8973557916016709913">Ta bort zoomnivå</translation>
 <translation id="897939795688207351">På <ph name="ORIGIN" /></translation>
-<translation id="8996526648899750015">Lägg till konto …</translation>
 <translation id="9003647077635673607">Tillåt på alla webbplatser</translation>
 <translation id="9027459031423301635">Öppna länk i ny &amp;flik</translation>
 <translation id="9056810968620647706">Inga träffar hittades.</translation>

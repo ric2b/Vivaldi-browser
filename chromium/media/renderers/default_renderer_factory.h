@@ -18,7 +18,7 @@
 #include "media/base/speech_recognition_client.h"
 #endif
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && defined(OS_WIN)
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && BUILDFLAG(IS_WIN)
 #include "media/base/win/mf_initializer.h"
 #endif
 

@@ -9,6 +9,7 @@ import android.app.Activity;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import org.chromium.base.Log;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkItem;
 import org.chromium.chrome.browser.bookmarks.BookmarkModel;
@@ -26,8 +27,13 @@ import org.chromium.url.GURL;
 import java.util.ArrayList;
 import java.util.List;
 
+// Vivaldi
+import org.chromium.chrome.browser.ChromeApplicationImpl;
+
 /** Utility functions for reading list feature. */
 public final class ReadingListUtils {
+    private static final String TAG = "ReadingListUtils";
+
     private static Boolean sReadingListSupportedForTesting;
     private static Boolean sSkipShowSaveFlowForTesting;
 
@@ -89,24 +95,36 @@ public final class ReadingListUtils {
         // remove the regular bookmark first so the save flow is shown.
         List<BookmarkId> bookmarkIds = new ArrayList<>();
         bookmarkIds.add(bookmarkId);
-        ReadingListUtils.typeSwapBookmarksIfNecessary(
-                bookmarkBridge, bookmarkIds, bookmarkBridge.getReadingListFolder());
-        if (sSkipShowSaveFlowForTesting) return true;
+        List<BookmarkId> typeSwappedBookmarks = new ArrayList<>();
+        typeSwapBookmarksIfNecessary(bookmarkBridge, bookmarkIds, typeSwappedBookmarks,
+                bookmarkBridge.getReadingListFolder());
+
+        assert typeSwappedBookmarks.size() == 1;
+        if (typeSwappedBookmarks.size() != 1) return false;
+
+        if (ChromeApplicationImpl.isVivaldi()) return true;
+        BookmarkId newBookmark = typeSwappedBookmarks.get(0);
+        if (Boolean.TRUE.equals(sSkipShowSaveFlowForTesting)) return true;
         BookmarkUtils.showSaveFlow(activity, bottomsheetController,
-                /*fromExplicitTrackUi=*/false, bookmarkIds.get(0), /*wasBookmarkMoved=*/true);
+                /*fromExplicitTrackUi=*/false, newBookmark,
+                /*wasBookmarkMoved=*/true);
         return true;
     }
 
     /**
-     * Performs type swapping on the given bookmarks if necessary.
+     * Performs type swapping on the given bookmarks if necessary. The input list will be modified,
+     * removing bookmarks that have been type swapped and thus don't need to be moved.
      *
      * @param bookmarkBridge The BookmarkBridge to perform add/delete operations.
      * @param bookmarksToMove The List of bookmarks to potentially type swap.
+     * @param typeSwappedBookmarks The list of bookmarks which have been type-swapped and thus don't
+     *         need to be moved.
      * @param newParentId The new parentId to use, the {@link BookmarkType} of this is used to
      *         determine if type-swapping is necessary.
      */
     public static void typeSwapBookmarksIfNecessary(BookmarkBridge bookmarkBridge,
-            List<BookmarkId> bookmarksToMove, BookmarkId newParentId) {
+            List<BookmarkId> bookmarksToMove, List<BookmarkId> typeSwappedBookmarks,
+            BookmarkId newParentId) {
         if (!ReadingListFeatures.shouldAllowBookmarkTypeSwapping()) return;
 
         List<BookmarkId> outputList = new ArrayList<>();
@@ -128,10 +146,12 @@ public final class ReadingListUtils {
                         existingBookmark.getTitle(), existingBookmark.getUrl());
             }
 
-            if (newBookmark != null) {
-                bookmarkBridge.deleteBookmark(bookmarkId);
-                outputList.add(newBookmark);
+            if (newBookmark == null) {
+                Log.e(TAG, "Null bookmark after typeswapping.");
+                continue;
             }
+            bookmarkBridge.deleteBookmark(bookmarkId);
+            typeSwappedBookmarks.add(newBookmark);
         }
 
         bookmarksToMove.addAll(outputList);

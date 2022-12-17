@@ -9,7 +9,8 @@ function scoreAd(adMetadata, bid, auctionConfig, trustedScoringSignals,
   validateAuctionConfig(auctionConfig);
   validateTrustedScoringSignals(trustedScoringSignals);
   validateBrowserSignals(browserSignals, /*isScoreAd=*/true);
-  return 13;
+  return {desirability: 13, allowComponentAuction: true,
+          bid:42, ad:['Replaced metadata']};
 }
 
 function reportResult(auctionConfig, browserSignals) {
@@ -37,9 +38,19 @@ function validateBid(bid) {
 function validateAuctionConfig(auctionConfig) {
   if (!auctionConfig.seller.includes('d.test'))
     throw 'Wrong seller ' + auctionConfig.seller;
-  // TODO(crbug.com/1186444): Consider validating URL fields like
-  // auctionConfig.decisionLogicUrl once we decide what to do about URL
-  // normalization.
+
+  if (auctionConfig.decisionLogicUrl !==
+      auctionConfig.seller + '/interest_group' +
+          '/component_auction_component_decision_argument_validator.js') {
+    throw 'Wrong decisionLogicUrl ' + auctionConfig.decisionLogicUrl;
+  }
+
+  if (auctionConfig.trustedScoringSignalsUrl !==
+      auctionConfig.seller + '/interest_group/trusted_scoring_signals2.json') {
+      throw 'Wrong trustedScoringSignalsUrl ' +
+          auctionConfig.trustedScoringSignalsUrl;
+  }
+
   if (auctionConfig.interestGroupBuyers.length !== 1 ||
       !auctionConfig.interestGroupBuyers[0].startsWith('https://a.test')) {
     throw 'Wrong interestGroupBuyers ' + auctionConfig.interestGroupBuyers;
@@ -53,6 +64,8 @@ function validateAuctionConfig(auctionConfig) {
   const sellerSignalsJson = JSON.stringify(auctionConfig.sellerSignals);
   if (sellerSignalsJson !== '["component seller signals"]')
     throw 'Wrong sellerSignals ' + auctionConfig.sellerSignalsJson;
+  if (auctionConfig.sellerTimeout !== 200)
+    throw 'Wrong sellerTimeout ' + auctionConfig.sellerTimeout;
   const perBuyerSignalsJson = JSON.stringify(auctionConfig.perBuyerSignals);
   if (!perBuyerSignalsJson.includes('a.test') ||
       !perBuyerSignalsJson.includes('["component buyer signals"]')) {
@@ -62,6 +75,11 @@ function validateAuctionConfig(auctionConfig) {
   if (!perBuyerTimeoutsJson.includes('a.test') ||
       !perBuyerTimeoutsJson.includes('200')) {
     throw 'Wrong perBuyerTimeouts ' + perBuyerTimeoutsJson;
+  }
+
+  if ('componentAuctions' in auctionConfig) {
+    throw 'Unexpected componentAuctions ' +
+        JSON.stringify(auctionConfig.componentAuctions);
   }
 }
 
@@ -82,6 +100,10 @@ function validateBrowserSignals(browserSignals, isScoreAd) {
   // Fields common to scoreAd() and reportResult().
   if (browserSignals.topWindowHostname !== 'c.test')
     throw 'Wrong topWindowHostname ' + browserSignals.topWindowHostname;
+  if (!browserSignals.topLevelSeller.startsWith('https://b.test'))
+    throw 'Wrong topLevelSeller ' + browserSignals.topLevelSeller;
+  if ('componentSeller' in browserSignals)
+    throw 'Wrong componentSeller ' + browserSignals.componentSeller;
   if (!browserSignals.interestGroupOwner.startsWith('https://a.test'))
     throw 'Wrong interestGroupOwner ' + browserSignals.interestGroupOwner;
   if (browserSignals.renderUrl !== "https://example.com/render")
@@ -89,7 +111,7 @@ function validateBrowserSignals(browserSignals, isScoreAd) {
 
   // Fields that vary by method.
   if (isScoreAd) {
-    if (Object.keys(browserSignals).length !== 6) {
+    if (Object.keys(browserSignals).length !== 7) {
       throw 'Wrong number of browser signals fields ' +
           JSON.stringify(browserSignals);
     }
@@ -101,14 +123,24 @@ function validateBrowserSignals(browserSignals, isScoreAd) {
     if (browserSignals.dataVersion !== 5678)
       throw 'Wrong dataVersion ' + browserSignals.dataVersion;
   } else {
-    if (Object.keys(browserSignals).length !== 6) {
+    if (Object.keys(browserSignals).length !== 10) {
       throw 'Wrong number of browser signals fields ' +
           JSON.stringify(browserSignals);
     }
     validateBid(browserSignals.bid);
     if (browserSignals.desirability !== 13)
       throw 'Wrong desireability ' + browserSignals.desirability;
+    if (browserSignals.highestScoringOtherBid !== 0) {
+      throw 'Wrong highestScoringOtherBid ' +
+          browserSignals.highestScoringOtherBid;
+    }
     if (browserSignals.dataVersion !== 5678)
       throw 'Wrong dataVersion ' + browserSignals.dataVersion;
+    if (browserSignals.modifiedBid !== 42)
+      throw 'Wrong modifiedBid ' + browserSignals.modifiedBid;
+    const topLevelSellerSignals =
+        JSON.stringify(browserSignals.topLevelSellerSignals);
+    if (topLevelSellerSignals !== '["top-level seller signals for winner"]')
+      throw 'Wrong topLevelSellerSignals ' + topLevelSellerSignals;
   }
 }

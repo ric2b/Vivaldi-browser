@@ -46,6 +46,9 @@ class ResponseBodyLoader::DelegatingBytesConsumer final
     if (loader_->IsSuspended()) {
       return Result::kShouldWait;
     }
+    if (state_ == State::kCancelled) {
+      return Result::kDone;
+    }
     auto result = bytes_consumer_->BeginRead(buffer, available);
     if (result == Result::kOk) {
       *available = std::min(*available, lookahead_bytes_);
@@ -124,15 +127,14 @@ class ResponseBodyLoader::DelegatingBytesConsumer final
     }
 
     state_ = State::kCancelled;
-    bytes_consumer_->Cancel();
 
     if (in_on_state_change_) {
       has_pending_state_change_signal_ = true;
       return;
     }
-    task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(&ResponseBodyLoader::DidCancelLoadingBody,
-                                  WrapWeakPersistent(loader_.Get())));
+    task_runner_->PostTask(FROM_HERE,
+                           base::BindOnce(&DelegatingBytesConsumer::CancelSync,
+                                          WrapWeakPersistent(this)));
   }
   PublicState GetPublicState() const override {
     if (loader_->IsAborted())
@@ -221,7 +223,7 @@ class ResponseBodyLoader::DelegatingBytesConsumer final
           loader_->DidFailLoadingBody();
           break;
         case State::kCancelled:
-          loader_->DidCancelLoadingBody();
+          CancelSync();
           break;
       }
     }
@@ -241,6 +243,11 @@ class ResponseBodyLoader::DelegatingBytesConsumer final
     kErrored,
     kCancelled,
   };
+
+  void CancelSync() {
+    bytes_consumer_->Cancel();
+    loader_->DidCancelLoadingBody();
+  }
 
   void HandleResult(Result result) {
     if (state_ != State::kLoading) {
@@ -396,7 +403,8 @@ void ResponseBodyLoader::DidReceiveData(base::span<const char> data) {
     // Track the data size for both total per-process bytes and per-request
     // bytes.
     DidBufferLoadWhileInBackForwardCache(data.size());
-    if (!CanContinueBufferingWhileInBackForwardCache()) {
+    if (!BackForwardCacheBufferLimitTracker::Get()
+             .IsUnderPerProcessBufferLimit()) {
       EvictFromBackForwardCache(
           mojom::blink::RendererEvictionReason::kNetworkExceedsBufferLimit);
     }
@@ -448,6 +456,7 @@ void ResponseBodyLoader::EvictFromBackForwardCache(
     mojom::blink::RendererEvictionReason reason) {
   if (!back_forward_cache_loader_helper_)
     return;
+  DCHECK(IsSuspendedForBackForwardCache());
   back_forward_cache_loader_helper_->EvictFromBackForwardCache(reason);
 }
 
@@ -457,12 +466,6 @@ void ResponseBodyLoader::DidBufferLoadWhileInBackForwardCache(
     return;
   back_forward_cache_loader_helper_->DidBufferLoadWhileInBackForwardCache(
       num_bytes);
-}
-
-bool ResponseBodyLoader::CanContinueBufferingWhileInBackForwardCache() {
-  return OnlyUsePerProcessBufferLimit() &&
-         BackForwardCacheBufferLimitTracker::Get()
-             .IsUnderPerProcessBufferLimit();
 }
 
 void ResponseBodyLoader::Start() {
@@ -584,7 +587,8 @@ void ResponseBodyLoader::OnStateChange() {
         // Save the read data into |body_buffer_| instead.
         DidBufferLoadWhileInBackForwardCache(available);
         body_buffer_->AddChunk(buffer, available);
-        if (!CanContinueBufferingWhileInBackForwardCache()) {
+        if (!BackForwardCacheBufferLimitTracker::Get()
+                 .IsUnderPerProcessBufferLimit()) {
           // We've read too much data while suspended for back-forward cache.
           // Evict the page from the back-forward cache.
           result = bytes_consumer_->EndRead(available);

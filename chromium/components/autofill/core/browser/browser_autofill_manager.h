@@ -61,7 +61,7 @@ struct FormData;
 struct FormFieldData;
 
 // We show the credit card signin promo only a certain number of times.
-extern const int kCreditCardSigninPromoImpressionLimit;
+constexpr int kCreditCardSigninPromoImpressionLimit = 3;
 
 // Enum for the value patterns metric. Don't renumerate existing value. They are
 // used for metrics.
@@ -447,6 +447,10 @@ class BrowserAutofillManager : public AutofillManager,
     // submits insecurely. This is only used when the user has started typing,
     // otherwise a warning is shown.
     kInsecureForm,
+    // Suggestions are not shown because the field is annotated with
+    // an unrecognized autocompelte attribute and the field is not credit card
+    // related. For credit card fields, the unrecognized attribute is ignored.
+    kAutocompleteUnrecognized,
   };
 
   // The context for the list of suggestions available for a given field to be
@@ -596,10 +600,6 @@ class BrowserAutofillManager : public AutofillManager,
   // Disambiguates address field upload types.
   static void DisambiguateAddressUploadTypes(FormStructure* form,
                                              size_t current_index);
-
-  // Disambiguates phone field upload types.
-  static void DisambiguatePhoneUploadTypes(FormStructure* form,
-                                           size_t current_index);
 
   // Disambiguates name field upload types.
   static void DisambiguateNameUploadTypes(

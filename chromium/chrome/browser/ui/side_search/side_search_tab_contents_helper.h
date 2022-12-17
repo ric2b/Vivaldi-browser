@@ -6,6 +6,8 @@
 #define CHROME_BROWSER_UI_SIDE_SEARCH_SIDE_SEARCH_TAB_CONTENTS_HELPER_H_
 
 #include "base/memory/weak_ptr.h"
+#include "base/scoped_observation.h"
+#include "chrome/browser/ui/side_search/side_search_config.h"
 #include "chrome/browser/ui/side_search/side_search_side_contents_helper.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
@@ -26,6 +28,7 @@ class SideSearchConfig;
 class SideSearchTabContentsHelper
     : public SideSearchSideContentsHelper::Delegate,
       public content::WebContentsObserver,
+      public SideSearchConfig::Observer,
       public content::WebContentsUserData<SideSearchTabContentsHelper> {
  public:
   class Delegate {
@@ -49,6 +52,13 @@ class SideSearchTabContentsHelper
     virtual void OpenSidePanel() = 0;
   };
 
+  // Holds state reflecting the current current navigation that is the result of
+  // a redirect from the side panel to this helper's tab.
+  struct SidePanelRedirectInfo {
+    GURL initiated_redirect_url;
+    bool initiated_via_link;
+  };
+
   ~SideSearchTabContentsHelper() override;
 
   // SideContentsWrapper::Delegate:
@@ -63,8 +73,13 @@ class SideSearchTabContentsHelper
       const content::OpenURLParams& params) override;
 
   // content::WebContentsObserver:
+  void DidStartNavigation(
+      content::NavigationHandle* navigation_handle) override;
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override;
+
+  // SideSearchConfig::Observer:
+  void OnSideSearchConfigChanged() override;
 
   // Gets the `side_panel_contents_` for the tab. Creates one if it does not
   // currently exist.
@@ -80,6 +95,11 @@ class SideSearchTabContentsHelper
   bool CanShowSidePanelForCommittedNavigation();
 
   void SetDelegate(base::WeakPtr<Delegate> delegate);
+
+  const absl::optional<SidePanelRedirectInfo>&
+  side_panel_initiated_redirect_info() const {
+    return side_panel_initiated_redirect_info_;
+  }
 
   bool returned_to_previous_srp() const { return returned_to_previous_srp_; }
 
@@ -110,6 +130,9 @@ class SideSearchTabContentsHelper
   // Should only be called when `side_contents_active_`.
   void UpdateSideContentsNavigation();
 
+  // Closes the side panel and resets all helper state.
+  void ClearHelperState();
+
   // Makes a HEAD request for the side search Google SRP to test for the page's
   // availability and sets `is_side_panel_srp_available_` accordingly.
   void TestSRPAvailability();
@@ -134,6 +157,13 @@ class SideSearchTabContentsHelper
   // Only used with the kSideSearchStatePerTab flag.
   bool toggled_open_ = false;
 
+  // Tracks the URL and initiation state for the side panel initiated redirect.
+  // This is used to determine if any redirects that follow belong to the
+  // initial redirected request from the side panel. It is not sufficient to
+  // rely on NavigationHandles as redirects may be client initiated and new
+  // NavigationHandles are created in these cases.
+  absl::optional<SidePanelRedirectInfo> side_panel_initiated_redirect_info_;
+
   // The side panel contents associated with this tab contents.
   // TODO(tluk): Update the way we manage the `side_panel_contents_` to avoid
   // keeping the object around when not needed by the feature.
@@ -142,6 +172,9 @@ class SideSearchTabContentsHelper
   // Used to test if the side panel SRP for `last_search_url_` is currently
   // available. Reset every time `TestSRPAvailability()` is called.
   std::unique_ptr<network::SimpleURLLoader> simple_loader_;
+
+  base::ScopedObservation<SideSearchConfig, SideSearchConfig::Observer>
+      config_observation_{this};
 
   base::WeakPtrFactory<SideSearchTabContentsHelper> weak_ptr_factory_{this};
 

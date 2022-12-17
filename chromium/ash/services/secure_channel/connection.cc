@@ -7,17 +7,15 @@
 #include <sstream>
 #include <utility>
 
+#include "ash/components/multidevice/logging/logging.h"
 #include "ash/services/secure_channel/connection_observer.h"
 #include "ash/services/secure_channel/file_transfer_update_callback.h"
 #include "ash/services/secure_channel/public/mojom/secure_channel_types.mojom.h"
 #include "ash/services/secure_channel/wire_message.h"
 #include "base/callback.h"
 #include "base/logging.h"
-#include "chromeos/components/multidevice/logging/logging.h"
 
-namespace chromeos {
-
-namespace secure_channel {
+namespace ash::secure_channel {
 
 Connection::Connection(multidevice::RemoteDeviceRef remote_device)
     : remote_device_(remote_device),
@@ -156,6 +154,4 @@ std::ostream& operator<<(std::ostream& stream,
   return stream;
 }
 
-}  // namespace secure_channel
-
-}  // namespace chromeos
+}  // namespace ash::secure_channel

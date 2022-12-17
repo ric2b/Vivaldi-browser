@@ -230,10 +230,9 @@ void FrameHandler::InjectCSS(const std::string& key,
                              const std::string& content,
                              const mojom::StylesheetOrigin origin) {
   blink::WebStyleSheetKey style_sheet_key = blink::WebString::FromASCII(key);
-  blink::WebDocument::CSSOrigin blink_css_origin =
-      origin == mojom::StylesheetOrigin::kAuthor
-          ? blink::WebDocument::kAuthorOrigin
-          : blink::WebDocument::kUserOrigin;
+  auto blink_css_origin = origin == mojom::StylesheetOrigin::kAuthor
+                              ? blink::WebCssOrigin::kAuthor
+                              : blink::WebCssOrigin::kUser;
 
   render_frame()->GetWebFrame()->GetDocument().InsertStyleSheet(
       blink::WebString::FromUTF8(content),
@@ -242,10 +241,9 @@ void FrameHandler::InjectCSS(const std::string& key,
 void FrameHandler::RemoveInjectedCSS(const std::string& key,
                                      const mojom::StylesheetOrigin origin) {
   blink::WebStyleSheetKey style_sheet_key = blink::WebString::FromASCII(key);
-  blink::WebDocument::CSSOrigin blink_css_origin =
-      origin == mojom::StylesheetOrigin::kAuthor
-          ? blink::WebDocument::kAuthorOrigin
-          : blink::WebDocument::kUserOrigin;
+  auto blink_css_origin = origin == mojom::StylesheetOrigin::kAuthor
+                              ? blink::WebCssOrigin::kAuthor
+                              : blink::WebCssOrigin::kUser;
 
   render_frame()->GetWebFrame()->GetDocument().RemoveInsertedStyleSheet(
       style_sheet_key, blink_css_origin);

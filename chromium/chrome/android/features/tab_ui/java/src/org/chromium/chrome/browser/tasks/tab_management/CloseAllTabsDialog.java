@@ -9,6 +9,7 @@ import android.content.Context;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.Supplier;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.ui.modaldialog.DialogDismissalCause;
 import org.chromium.ui.modaldialog.ModalDialogManager;
@@ -30,6 +31,11 @@ public class CloseAllTabsDialog {
     public static void show(Context context,
             Supplier<ModalDialogManager> modalDialogManagerSupplier, Runnable onCloseAll,
             boolean isIncognito) {
+        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.CLOSE_ALL_TABS_MODAL_DIALOG)) {
+            onCloseAll.run();
+            return;
+        }
+
         assert modalDialogManagerSupplier.hasValue();
         final ModalDialogManager manager = modalDialogManagerSupplier.get();
 
@@ -67,7 +73,7 @@ public class CloseAllTabsDialog {
                                 context.getString(isIncognito
                                                 ? R.string.close_all_tabs_dialog_title_incognito
                                                 : R.string.close_all_tabs_dialog_title))
-                        .with(ModalDialogProperties.MESSAGE,
+                        .with(ModalDialogProperties.MESSAGE_PARAGRAPH_1,
                                 context.getString(isIncognito
                                                 ? R.string.close_all_tabs_dialog_message_incognito
                                                 : R.string.close_all_tabs_dialog_message))

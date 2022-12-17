@@ -44,9 +44,9 @@ type AllowedDefaultModePolicySetup = {
 };
 
 class PolicyTestPluralStringProxy extends TestPluralStringProxy {
-  text: string = '';
+  override text: string = '';
 
-  getPluralString(messageName: string, itemCount: number) {
+  override getPluralString(messageName: string, itemCount: number) {
     if (messageName === 'sheetsLimitErrorMessage') {
       this.methodCalled('getPluralString', {messageName, itemCount});
     }
@@ -777,7 +777,7 @@ suite(policy_tests.suiteName, function() {
   // but is always available for Linux and ChromeOS.
   test(assert(policy_tests.TestNames.PrintPdfAsImageDefault), async () => {
     const tests = [
-      // <if expr="is_linux or chromeos">
+      // <if expr="is_linux or chromeos_ash">
       {
         // `availableAllowedMode` is irrelevant, option is always present.
         // No policy for default of "Print as image" option.

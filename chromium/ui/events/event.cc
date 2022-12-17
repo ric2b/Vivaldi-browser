@@ -342,9 +342,9 @@ Event::Event(const PlatformEvent& native_event, EventType type, int flags)
   ComputeEventLatencyOS(native_event);
 
 #if defined(USE_OZONE)
-    source_device_id_ = native_event->source_device_id();
-    if (auto* properties = native_event->properties())
-      properties_ = std::make_unique<Properties>(*properties);
+  source_device_id_ = native_event->source_device_id();
+  if (auto* properties = native_event->properties())
+    properties_ = std::make_unique<Properties>(*properties);
 #endif
 }
 
@@ -700,8 +700,8 @@ MouseWheelEvent::MouseWheelEvent(const gfx::Vector2d& offset,
 
 MouseWheelEvent::~MouseWheelEvent() = default;
 
-#if BUILDFLAG(IS_WIN)
-// This value matches windows WHEEL_DELTA.
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_FUCHSIA)
+// This value matches Windows and Fuchsia WHEEL_DELTA.
 // static
 const int MouseWheelEvent::kWheelDelta = 120;
 #else
@@ -770,10 +770,10 @@ void TouchEvent::UpdateForRootTransform(
   // given that we can run this relatively frequently we will inline execute the
   // matrix here.
   const auto& matrix = inverted_root_transform.matrix();
-  const double new_x = fabs(pointer_details_.radius_x * matrix.get(0, 0) +
-                            pointer_details_.radius_y * matrix.get(0, 1));
-  const double new_y = fabs(pointer_details_.radius_x * matrix.get(1, 0) +
-                            pointer_details_.radius_y * matrix.get(1, 1));
+  const double new_x = fabs(pointer_details_.radius_x * matrix.rc(0, 0) +
+                            pointer_details_.radius_y * matrix.rc(0, 1));
+  const double new_y = fabs(pointer_details_.radius_x * matrix.rc(1, 0) +
+                            pointer_details_.radius_y * matrix.rc(1, 1));
   pointer_details_.radius_x = new_x;
   pointer_details_.radius_y = new_y;
 
@@ -784,14 +784,14 @@ void TouchEvent::UpdateForRootTransform(
   // section.
   if (!IsNearZero(pointer_details_.tilt_x) ||
       !IsNearZero(pointer_details_.tilt_y)) {
-    if (IsNearZero(matrix.get(0, 1)) && IsNearZero(matrix.get(1, 0))) {
-      pointer_details_.tilt_x *= std::copysign(1, matrix.get(0, 0));
-      pointer_details_.tilt_y *= std::copysign(1, matrix.get(1, 1));
-    } else if (IsNearZero(matrix.get(0, 0)) && IsNearZero(matrix.get(1, 1))) {
+    if (IsNearZero(matrix.rc(0, 1)) && IsNearZero(matrix.rc(1, 0))) {
+      pointer_details_.tilt_x *= std::copysign(1, matrix.rc(0, 0));
+      pointer_details_.tilt_y *= std::copysign(1, matrix.rc(1, 1));
+    } else if (IsNearZero(matrix.rc(0, 0)) && IsNearZero(matrix.rc(1, 1))) {
       double new_tilt_x =
-          pointer_details_.tilt_y * std::copysign(1, matrix.get(0, 1));
+          pointer_details_.tilt_y * std::copysign(1, matrix.rc(0, 1));
       double new_tilt_y =
-          pointer_details_.tilt_x * std::copysign(1, matrix.get(1, 0));
+          pointer_details_.tilt_x * std::copysign(1, matrix.rc(1, 0));
       pointer_details_.tilt_x = new_tilt_x;
       pointer_details_.tilt_y = new_tilt_y;
     }

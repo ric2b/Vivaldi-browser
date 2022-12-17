@@ -10,15 +10,13 @@
 #include <tuple>
 #include <vector>
 
+#include "ash/components/multidevice/remote_device_cache.h"
 #include "ash/services/secure_channel/public/mojom/secure_channel.mojom.h"
 #include "ash/services/secure_channel/secure_channel_base.h"
-#include "chromeos/components/multidevice/remote_device_cache.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
 
-namespace chromeos {
-
-namespace secure_channel {
+namespace ash::secure_channel {
 
 // Test double SecureChannel implementation.
 class FakeSecureChannel : public SecureChannelBase {
@@ -61,8 +59,6 @@ class FakeSecureChannel : public SecureChannelBase {
   mojo::Remote<mojom::ConnectionDelegate> delegate_from_last_initiate_call_;
 };
 
-}  // namespace secure_channel
-
-}  // namespace chromeos
+}  // namespace ash::secure_channel
 
 #endif  // ASH_SERVICES_SECURE_CHANNEL_FAKE_SECURE_CHANNEL_H_

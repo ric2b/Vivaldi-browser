@@ -10,6 +10,7 @@
 
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "ui/accessibility/ax_enums.mojom-forward.h"
 #include "ui/base/class_property.h"
@@ -144,9 +145,34 @@ class VIEWS_EXPORT BubbleDialogDelegate : public DialogDelegate {
   // Miscellaneous bubble behaviors:
   //
 
+  // Represents a pin that prevents a widget from closing on deactivation, even
+  // if `close_on_deactivate` is set to true. Prevents closing on deactivation
+  // until its destruction; if it outlives the widget it does nothing.
+  class VIEWS_EXPORT CloseOnDeactivatePin {
+   public:
+    virtual ~CloseOnDeactivatePin();
+
+    CloseOnDeactivatePin(const CloseOnDeactivatePin&) = delete;
+    void operator=(const CloseOnDeactivatePin&) = delete;
+
+   private:
+    class Pins;
+    friend class BubbleDialogDelegate;
+    explicit CloseOnDeactivatePin(base::WeakPtr<Pins> pins);
+
+    const base::WeakPtr<Pins> pins_;
+  };
+
   // Whether the bubble closes when it ceases to be the active window.
-  bool close_on_deactivate() const { return close_on_deactivate_; }
   void set_close_on_deactivate(bool close) { close_on_deactivate_ = close; }
+
+  // Returns whether the bubble should close on deactivation. May not match
+  // `close_on_deactivate` if PreventCloseOnDeactivate() has been called.
+  bool ShouldCloseOnDeactivate() const;
+
+  // Prevents close-on-deactivate for the duration of the lifetime of the pin
+  // that is returned. The pin does nothing after the widget is closed.
+  std::unique_ptr<CloseOnDeactivatePin> PreventCloseOnDeactivate();
 
   // Explicitly set the button to automatically highlight when the bubble is
   // shown. By default the anchor is highlighted, if it is a button.
@@ -250,6 +276,13 @@ class VIEWS_EXPORT BubbleDialogDelegate : public DialogDelegate {
                                                   gfx::Rect anchor_rect,
                                                   gfx::Rect screen_rect);
 
+  // Resize the bubble to fit its contents, and maybe move it if needed to keep
+  // it anchored properly. This does not need to be invoked normally. This
+  // should be called only if you need to force update the bounds of the widget
+  // and/or position of the bubble, for example if the size of the bubble's
+  // content view changed.
+  void SizeToContents();
+
  protected:
   // Override this method if you want to position the bubble regardless of its
   // anchor, while retaining the other anchor view logic.
@@ -263,10 +296,6 @@ class VIEWS_EXPORT BubbleDialogDelegate : public DialogDelegate {
   // highlighting the button, but this is trivial to achieve using other
   // methods.
   virtual void UpdateHighlightedButton(bool highlight);
-
-  // Resize the bubble to fit its contents, and maybe move it if needed to keep
-  // it anchored properly.
-  void SizeToContents();
 
   // Override this to perform initialization after the Widget is created but
   // before it is shown.
@@ -360,6 +389,7 @@ class VIEWS_EXPORT BubbleDialogDelegate : public DialogDelegate {
 
   // A flag controlling bubble closure on deactivation.
   bool close_on_deactivate_ = true;
+  std::unique_ptr<CloseOnDeactivatePin::Pins> close_on_deactivate_pins_;
 
   // Whether the |anchor_widget_| (or the |highlighted_button_tracker_|, when
   // provided) should be highlighted when this bubble is shown.
@@ -460,31 +490,10 @@ VIEW_BUILDER_PROPERTY(bool, OwnedByWidget)
 VIEW_BUILDER_PROPERTY(bool, ShowCloseButton)
 VIEW_BUILDER_PROPERTY(bool, ShowIcon)
 VIEW_BUILDER_PROPERTY(bool, ShowTitle)
-// Manually define the SetTitle methods to resolve the overloads properly.
-BuilderT& SetTitle(const std::u16string& value) & {
-  auto setter = std::make_unique<::views::internal::PropertySetter<
-      ViewClass_, std::u16string,
-      decltype((static_cast<void (WidgetDelegate::*)(const std::u16string&)>(
-          &ViewClass_::SetTitle))),
-      &WidgetDelegate::SetTitle>>(value);
-  ::views::internal::ViewBuilderCore::AddPropertySetter(std::move(setter));
-  return *static_cast<BuilderT*>(this);
-}
-BuilderT&& SetTitle(const std::u16string& value) && {
-  return std::move(this->SetTitle(value));
-}
-BuilderT& SetTitle(int value) & {
-  auto setter = std::make_unique<::views::internal::PropertySetter<
-      ViewClass_, int,
-      decltype(
-          (static_cast<void (WidgetDelegate::*)(int)>(&ViewClass_::SetTitle))),
-      &WidgetDelegate::SetTitle>>(value);
-  ::views::internal::ViewBuilderCore::AddPropertySetter(std::move(setter));
-  return *static_cast<BuilderT*>(this);
-}
-BuilderT&& SetTitle(int value) && {
-  return std::move(this->SetTitle(value));
-}
+VIEW_BUILDER_OVERLOAD_METHOD_CLASS(WidgetDelegate,
+                                   SetTitle,
+                                   const std::u16string&)
+VIEW_BUILDER_OVERLOAD_METHOD_CLASS(WidgetDelegate, SetTitle, int)
 #if defined(USE_AURA)
 VIEW_BUILDER_PROPERTY(bool, CenterTitle)
 #endif
@@ -498,6 +507,7 @@ VIEW_BUILDER_METHOD(set_corner_radius, int)
 VIEW_BUILDER_METHOD(set_draggable, bool)
 VIEW_BUILDER_METHOD(set_use_custom_frame, bool)
 VIEW_BUILDER_METHOD(set_fixed_width, int)
+VIEW_BUILDER_METHOD(set_highlight_button_when_shown, bool)
 VIEW_BUILDER_PROPERTY(base::OnceClosure, AcceptCallback)
 VIEW_BUILDER_PROPERTY(base::OnceClosure, CancelCallback)
 VIEW_BUILDER_PROPERTY(base::OnceClosure, CloseCallback)

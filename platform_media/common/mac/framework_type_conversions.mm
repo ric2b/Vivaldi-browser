@@ -92,7 +92,7 @@ std::string FourCCToString(uint32_t fourcc) {
       static_cast<const char>((fourcc >> 8) & 0xff),
       static_cast<const char>((fourcc >> 0) & 0xff),
   };
-  return std::string(buffer, base::size(buffer));
+  return std::string(buffer, std::size(buffer));
 }
 
 }  // namespace media

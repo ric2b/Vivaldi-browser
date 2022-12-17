@@ -22,6 +22,7 @@
 #include "ash/wm/splitview/split_view_drag_indicators.h"
 #include "ash/wm/splitview/split_view_observer.h"
 #include "base/containers/flat_set.h"
+#include "base/guid.h"
 #include "base/scoped_observation.h"
 #include "base/time/time.h"
 #include "ui/aura/window_observer.h"
@@ -142,7 +143,8 @@ class ASH_EXPORT OverviewSession : public display::DisplayObserver,
   void AddItemInMruOrder(aura::Window* window,
                          bool reposition,
                          bool animate,
-                         bool restack);
+                         bool restack,
+                         bool use_spawn_animation);
 
   // Removes |overview_item| from the corresponding grid.
   void RemoveItem(OverviewItem* overview_item);
@@ -289,8 +291,12 @@ class ASH_EXPORT OverviewSession : public display::DisplayObserver,
   bool IsWindowActiveWindowBeforeOverview(aura::Window* window) const;
 
   // Shows the desks templates grids on all displays. If `was_zero_state` is
-  // true then we will expand the desks bars.
-  void ShowDesksTemplatesGrids(bool was_zero_state);
+  // true then we will expand the desks bars. Focuses the item which matches
+  // `item_to_focus` on the display associated with `root_window`.
+  void ShowDesksTemplatesGrids(bool was_zero_state,
+                               const base::GUID& item_to_focus,
+                               aura::Window* const root_window);
+
   void HideDesksTemplatesGrids();
   bool IsShowingDesksTemplatesGrid() const;
 
@@ -496,6 +502,9 @@ class ASH_EXPORT OverviewSession : public display::DisplayObserver,
 
   base::ScopedObservation<DesksController, DesksController::Observer>
       desks_controller_observation_{this};
+
+  base::ScopedObservation<aura::Window, aura::WindowObserver>
+      active_window_before_overview_observation_{this};
 };
 
 }  // namespace ash

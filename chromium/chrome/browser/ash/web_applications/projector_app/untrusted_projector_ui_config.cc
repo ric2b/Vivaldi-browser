@@ -6,6 +6,7 @@
 
 #include "ash/constants/ash_features.h"
 #include "ash/webui/projector_app/public/cpp/projector_app_constants.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/ash/projector/projector_utils.h"
 #include "chrome/common/channel_info.h"
@@ -21,6 +22,13 @@ void ChromeUntrustedProjectorUIDelegate::PopulateLoadTimeData(
   version_info::Channel channel = chrome::GetChannel();
   source->AddBoolean("isDevChannel", channel == version_info::Channel::DEV);
   source->AddBoolean("isDebugMode", ash::features::IsProjectorAppDebugMode());
+  source->AddBoolean("isExcludeTranscriptEnabled",
+                     ash::features::IsProjectorExcludeTranscriptEnabled());
+  source->AddBoolean("isTutorialVideoViewEnabled",
+                     ash::features::IsProjectorTutorialVideoViewEnabled());
+  source->AddBoolean("isCustomThumbnailEnabled",
+                     ash::features::IsProjectorCustomThumbnailEnabled());
+  source->AddString("appLocale", g_browser_process->GetApplicationLocale());
 }
 
 UntrustedProjectorUIConfig::UntrustedProjectorUIConfig()
@@ -32,8 +40,7 @@ UntrustedProjectorUIConfig::~UntrustedProjectorUIConfig() = default;
 bool UntrustedProjectorUIConfig::IsWebUIEnabled(
     content::BrowserContext* browser_context) {
   Profile* profile = Profile::FromBrowserContext(browser_context);
-  return ash::features::IsProjectorEnabled() &&
-         IsProjectorAllowedForProfile(profile);
+  return IsProjectorAppEnabled(profile);
 }
 
 std::unique_ptr<content::WebUIController>

@@ -19,6 +19,7 @@ import android.util.AttributeSet;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.ViewStub;
+import android.view.accessibility.AccessibilityEvent;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 
@@ -401,7 +402,7 @@ public class ToolbarTablet extends ToolbarLayout
         if (v == mReloadButton) {
             description = (mReloadButton.getDrawable().getLevel()
                                   == resources.getInteger(R.integer.reload_button_level_reload))
-                    ? resources.getString(R.string.menu_refresh)
+                    ? resources.getString(R.string.refresh)
                     : resources.getString(R.string.menu_stop_refresh);
         } else if (v == mBookmarkButton) {
             description = resources.getString(R.string.menu_bookmark);
@@ -569,7 +570,18 @@ public class ToolbarTablet extends ToolbarLayout
             MenuButtonCoordinator menuButtonCoordinator) {
         boolean isInTabSwitcherMode = mShowTabStack && inTabSwitcherMode;
         mIsInTabSwitcherMode = isInTabSwitcherMode;
-        if (isGridTabSwitcherEnabled()) {
+
+        if (isTabletGridTabSwitcherPolishEnabled()) {
+            int importantForAccessibility = inTabSwitcherMode
+                    ? View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+                    : View.IMPORTANT_FOR_ACCESSIBILITY_AUTO;
+
+            mLocationBar.setUrlBarFocusable(!mIsInTabSwitcherMode);
+            if (getImportantForAccessibility() != importantForAccessibility) {
+                setImportantForAccessibility(importantForAccessibility);
+                sendAccessibilityEvent(AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
+            }
+        } else if (isGridTabSwitcherEnabled()) {
             setTabSwitcherModeWithAnimation(delayAnimation);
         } else {
             if (mIsInTabSwitcherMode) {
@@ -884,6 +896,11 @@ public class ToolbarTablet extends ToolbarLayout
 
     private boolean isGridTabSwitcherEnabled() {
         return CachedFeatureFlags.isEnabled(ChromeFeatureList.GRID_TAB_SWITCHER_FOR_TABLETS);
+    }
+
+    private boolean isTabletGridTabSwitcherPolishEnabled() {
+        return ChromeFeatureList.getFieldTrialParamByFeatureAsBoolean(
+                ChromeFeatureList.GRID_TAB_SWITCHER_FOR_TABLETS, "enable_launch_polish", false);
     }
 
     // Vivaldi

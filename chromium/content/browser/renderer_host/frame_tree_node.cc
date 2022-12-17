@@ -14,6 +14,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/observer_list.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/timer/elapsed_timer.h"
@@ -47,10 +48,27 @@ typedef std::unordered_map<int, FrameTreeNode*> FrameTreeNodeIdMap;
 base::LazyInstance<FrameTreeNodeIdMap>::DestructorAtExit
     g_frame_tree_node_id_map = LAZY_INSTANCE_INITIALIZER;
 
+FencedFrame* FindFencedFrame(const FrameTreeNode* frame_tree_node) {
+  // TODO(crbug.com/1123606): Consider having a pointer to `FencedFrame` in
+  // `FrameTreeNode` or having a map between them.
+
+  // Try and find the `FencedFrame` that `frame_tree_node` represents.
+  DCHECK(frame_tree_node->parent());
+  std::vector<FencedFrame*> fenced_frames =
+      frame_tree_node->parent()->GetFencedFrames();
+  for (FencedFrame* fenced_frame : fenced_frames) {
+    if (frame_tree_node->frame_tree_node_id() ==
+        fenced_frame->GetOuterDelegateFrameTreeNodeId()) {
+      return fenced_frame;
+    }
+  }
+  return nullptr;
+}
+
 }  // namespace
 
 // This observer watches the opener of its owner FrameTreeNode and clears the
-// owner's opener if the opener is destroyed.
+// owner's opener if the opener is destroyed or swaps BrowsingInstance.
 class FrameTreeNode::OpenerDestroyedObserver : public FrameTreeNode::Observer {
  public:
   OpenerDestroyedObserver(FrameTreeNode* owner, bool observing_original_opener)
@@ -61,6 +79,15 @@ class FrameTreeNode::OpenerDestroyedObserver : public FrameTreeNode::Observer {
 
   // FrameTreeNode::Observer
   void OnFrameTreeNodeDestroyed(FrameTreeNode* node) override {
+    NullifyOpener(node);
+  }
+
+  // FrameTreeNode::Observer
+  void OnFrameTreeNodeDisownedOpenee(FrameTreeNode* node) override {
+    NullifyOpener(node);
+  }
+
+  void NullifyOpener(FrameTreeNode* node) {
     if (observing_original_opener_) {
       // The "original owner" is special. It's used for attribution, and clients
       // walk down the original owner chain. Therefore, if a link in the chain
@@ -108,8 +135,6 @@ FrameTreeNode::FrameTreeNode(
     FrameTree* frame_tree,
     RenderFrameHostImpl* parent,
     blink::mojom::TreeScopeType tree_scope_type,
-    const std::string& name,
-    const std::string& unique_name,
     bool is_created_by_script,
     const base::UnguessableToken& devtools_frame_token,
     const blink::mojom::FrameOwnerProperties& frame_owner_properties,
@@ -124,19 +149,14 @@ FrameTreeNode::FrameTreeNode(
       is_created_by_script_(is_created_by_script),
       devtools_frame_token_(devtools_frame_token),
       frame_owner_properties_(frame_owner_properties),
-      blame_context_(frame_tree_node_id_, FrameTreeNode::From(parent)),
-      render_manager_(this,
-                      frame_tree->manager_delegate(),
-                      name,
-                      unique_name,
-                      frame_policy) {
+      render_manager_(this, frame_tree->manager_delegate()) {
+  TRACE_EVENT_BEGIN("navigation", "FrameTreeNode",
+                    perfetto::Track::FromPointer(this),
+                    "frame_tree_node_when_created", this);
   std::pair<FrameTreeNodeIdMap::iterator, bool> result =
       g_frame_tree_node_id_map.Get().insert(
           std::make_pair(frame_tree_node_id_, this));
   CHECK(result.second);
-
-  // Note: this should always be done last in the constructor.
-  blame_context_.Initialize();
 }
 
 void FrameTreeNode::DestroyInnerFrameTreeIfExists() {
@@ -156,18 +176,7 @@ void FrameTreeNode::DestroyInnerFrameTreeIfExists() {
   }
 
   if (is_outer_dummy_node) {
-    DCHECK(parent());
-    // Try and find the `FencedFrame` that `this` represents.
-    std::vector<FencedFrame*> fenced_frames = parent()->GetFencedFrames();
-    FencedFrame* doomed_fenced_frame = nullptr;
-    for (FencedFrame* fenced_frame : fenced_frames) {
-      if (frame_tree_node_id() ==
-          fenced_frame->GetOuterDelegateFrameTreeNodeId()) {
-        doomed_fenced_frame = fenced_frame;
-        break;
-      }
-    }
-
+    FencedFrame* doomed_fenced_frame = FindFencedFrame(this);
     // `doomed_fenced_frame` might not actually exist, because some outer dummy
     // `FrameTreeNode`s might correspond to `Portal`s, which do not have their
     // lifetime managed in the same way as `FencedFrames`.
@@ -178,6 +187,7 @@ void FrameTreeNode::DestroyInnerFrameTreeIfExists() {
 }
 
 FrameTreeNode::~FrameTreeNode() {
+  TRACE_EVENT("navigation", "FrameTreeNode::~FrameTreeNode");
   // There should always be a current RenderFrameHost except during prerender
   // activation. Prerender activation moves the current RenderFrameHost from
   // the old FrameTree's FrameTreeNode to the new FrameTree's FrameTreeNode and
@@ -272,6 +282,9 @@ FrameTreeNode::~FrameTreeNode() {
 
   // IsLoading() requires that current_frame_host() is non-null.
   DCHECK(!current_frame_host() || !IsLoading());
+
+  // Matches the TRACE_EVENT_BEGIN in the constructor.
+  TRACE_EVENT_END("navigation", perfetto::Track::FromPointer(this));
 }
 
 void FrameTreeNode::AddObserver(Observer* observer) {
@@ -284,6 +297,10 @@ void FrameTreeNode::RemoveObserver(Observer* observer) {
 
 bool FrameTreeNode::IsMainFrame() const {
   return frame_tree_->root() == this;
+}
+
+bool FrameTreeNode::IsOutermostMainFrame() {
+  return !GetParentOrOuterDocument();
 }
 
 void FrameTreeNode::ResetForNavigation() {
@@ -351,6 +368,8 @@ FrameType FrameTreeNode::GetFrameType() const {
 }
 
 void FrameTreeNode::SetOpener(FrameTreeNode* opener) {
+  TRACE_EVENT("navigation", "FrameTreeNode::SetOpener",
+              ChromeTrackEvent::kFrameTreeNodeInfo, opener);
   if (opener_) {
     opener_->RemoveObserver(opener_observer_.get());
     opener_observer_.reset();
@@ -391,11 +410,10 @@ void FrameTreeNode::SetOriginalOpener(FrameTreeNode* opener) {
 
 void FrameTreeNode::SetCurrentURL(const GURL& url) {
   current_frame_host()->SetLastCommittedUrl(url);
-  blame_context_.TakeSnapshot();
 }
 
 void FrameTreeNode::SetCollapsed(bool collapsed) {
-  DCHECK(!IsMainFrame());
+  DCHECK(!IsMainFrame() || IsFencedFrameRoot());
   if (is_collapsed_ == collapsed)
     return;
 
@@ -414,37 +432,18 @@ void FrameTreeNode::SetFrameTree(FrameTree& frame_tree) {
     speculative_frame_host->SetFrameTree(frame_tree);
 }
 
-void FrameTreeNode::SetFrameName(const std::string& name,
-                                 const std::string& unique_name) {
-  if (name == render_manager_.current_replication_state().name) {
-    // |unique_name| shouldn't change unless |name| changes.
-    DCHECK_EQ(unique_name,
-              render_manager_.current_replication_state().unique_name);
-    return;
-  }
-
-  if (parent()) {
-    // Non-main frames should have a non-empty unique name.
-    DCHECK(!unique_name.empty());
-  } else {
-    // Unique name of main frames should always stay empty.
-    DCHECK(unique_name.empty());
-  }
-
-  // Note the unique name should only be able to change before the first real
-  // load is committed, but that's not strongly enforced here.
-  render_manager_.OnDidUpdateName(name, unique_name);
-  render_manager_.browsing_context_state()->set_frame_name(unique_name, name);
-}
-
 void FrameTreeNode::SetPendingFramePolicy(blink::FramePolicy frame_policy) {
-  // The |is_fenced| bit should never be able to transition from what its
-  // initial value was. Since we never expect to be in a position where it can
-  // even be updated to new value, if we catch this happening we have to kill
-  // the renderer and refuse to accept any other frame policy changes here.
-  if (pending_frame_policy_.is_fenced != frame_policy.is_fenced) {
+  // The `is_fenced` and `fenced_frame_mode` bits should never be able to
+  // transition from their initial values. Since we never expect to be in a
+  // position where it can even be updated to new value, if we catch this
+  // happening we have to kill the renderer and refuse to accept any other frame
+  // policy changes here.
+  if (pending_frame_policy_.is_fenced != frame_policy.is_fenced ||
+      pending_frame_policy_.fenced_frame_mode !=
+          frame_policy.fenced_frame_mode) {
     mojo::ReportBadMessage(
-        "The `is_fenced` FramePolicy bit is const and should never be changed");
+        "FramePolicy properties dealing with fenced frames are considered "
+        "immutable, and therefore should never be changed by the renderer.");
     return;
   }
 
@@ -511,7 +510,7 @@ void FrameTreeNode::CreatedNavigationRequest(
   DCHECK(!navigation_request->common_params().url.SchemeIs(
       url::kJavaScriptScheme));
 
-  bool was_previously_loading = frame_tree()->IsLoading();
+  bool was_previously_loading = frame_tree()->LoadingTree()->IsLoading();
 
   // There's no need to reset the state: there's still an ongoing load, and the
   // RenderFrameHostManager will take care of updates to the speculative
@@ -560,15 +559,20 @@ void FrameTreeNode::DidStartLoading(bool should_show_loading_ui,
                "should_show_loading_ui ", should_show_loading_ui);
   base::ElapsedTimer timer;
 
-  frame_tree_->DidStartLoadingNode(*this, should_show_loading_ui,
-                                   was_previously_loading);
+  frame_tree()->LoadingTree()->DidStartLoadingNode(
+      *this, should_show_loading_ui, was_previously_loading);
 
   // Set initial load progress and update overall progress. This will notify
   // the WebContents of the load progress change.
-  DidChangeLoadProgress(blink::kInitialLoadProgress);
+  //
+  // Only notify when the load is triggered from primary/prerender main frame as
+  // we only update load progress for these nodes which happens when the frame
+  // tree matches the loading tree.
+  if (frame_tree() == frame_tree()->LoadingTree())
+    DidChangeLoadProgress(blink::kInitialLoadProgress);
 
-  // Notify the RenderFrameHostManager of the event.
-  render_manager()->OnDidStartLoading();
+  // Notify the proxies of the event.
+  current_frame_host()->browsing_context_state()->OnDidStartLoading();
   base::UmaHistogramTimes(
       base::StrCat({"Navigation.DidStartLoading.",
                     IsMainFrame() ? "MainFrame" : "Subframe"}),
@@ -580,12 +584,22 @@ void FrameTreeNode::DidStopLoading() {
                frame_tree_node_id());
   // Set final load progress and update overall progress. This will notify
   // the WebContents of the load progress change.
-  DidChangeLoadProgress(blink::kFinalLoadProgress);
+  //
+  // Only notify when the load is triggered from primary/prerender main frame as
+  // we only update load progress for these nodes which happens when the frame
+  // tree matches the loading tree.
+  if (frame_tree() == frame_tree()->LoadingTree())
+    DidChangeLoadProgress(blink::kFinalLoadProgress);
 
-  // Notify the RenderFrameHostManager of the event.
-  render_manager()->OnDidStopLoading();
+  // Notify the proxies of the event.
+  current_frame_host()->browsing_context_state()->OnDidStopLoading();
 
-  frame_tree_->DidStopLoadingNode(*this);
+  FrameTree* loading_tree = frame_tree()->LoadingTree();
+  // When loading tree is null, ignore invoking DidStopLoadingNode as the frame
+  // tree is already deleted. This can happen when prerendering gets cancelled
+  // and DidStopLoading is called during FrameTree destruction.
+  if (loading_tree)
+    loading_tree->DidStopLoadingNode(*this);
 }
 
 void FrameTreeNode::DidChangeLoadProgress(double load_progress) {
@@ -614,7 +628,10 @@ void FrameTreeNode::DidFocus() {
 
 void FrameTreeNode::BeforeUnloadCanceled() {
   // TODO(clamy): Support BeforeUnload in subframes.
-  if (!IsMainFrame())
+  // TODO(crbug.com/1314749): With MPArch there may be multiple main frames and
+  // so IsMainFrame should not be used to identify subframes. Follow up to
+  // confirm correctness.
+  if (!IsOutermostMainFrame())
     return;
 
   RenderFrameHostImpl* current_frame_host =
@@ -637,29 +654,49 @@ void FrameTreeNode::BeforeUnloadCanceled() {
 
 bool FrameTreeNode::NotifyUserActivation(
     blink::mojom::UserActivationNotificationType notification_type) {
+  // User activation notifications shouldn't propagate into/out of fenced
+  // frames.
+  // For ShadowDOM, fenced frames are in the same frame tree as their embedder,
+  // so we need to perform additional checks to enforce the boundary.
+  // For MPArch, fenced frames have a separate frame tree, so this boundary is
+  // enforced by default.
+  // https://docs.google.com/document/d/1WnIhXOFycoje_sEoZR3Mo0YNSR2Ki7LABIC_HEWFaog
+  bool shadow_dom_fenced_frame_enabled =
+      blink::features::IsFencedFramesEnabled() &&
+      blink::features::IsFencedFramesShadowDOMBased();
+
   // User Activation V2 requires activating all ancestor frames in addition to
   // the current frame. See
   // https://html.spec.whatwg.org/multipage/interaction.html#tracking-user-activation.
   for (RenderFrameHostImpl* rfh = current_frame_host(); rfh;
        rfh = rfh->GetParent()) {
-    // The use of GetParent above is acceptable with fenced frames, as
-    // the caller to this function will eventually reach
-    // RenderFrameHostManager::UpdateUserActivationState, which in turn will
-    // lead to the propagation of the user activation to all ancestors.
     rfh->DidReceiveUserActivation();
     rfh->frame_tree_node()->user_activation_state_.Activate(notification_type);
+
+    if (shadow_dom_fenced_frame_enabled &&
+        rfh->frame_tree_node()->IsFencedFrameRoot()) {
+      break;
+    }
   }
 
-  render_manager_.browsing_context_state()->set_has_active_user_gesture(true);
+  current_frame_host()->browsing_context_state()->set_has_active_user_gesture(
+      true);
+
+  absl::optional<base::UnguessableToken> originator_nonce =
+      fenced_frame_nonce();
 
   // See the "Same-origin Visibility" section in |UserActivationState| class
   // doc.
   if (base::FeatureList::IsEnabled(
-          features::kUserActivationSameOriginVisibility) &&
-      frame_tree()->type() != FrameTree::Type::kFencedFrame) {
+          features::kUserActivationSameOriginVisibility)) {
     const url::Origin& current_origin =
         this->current_frame_host()->GetLastCommittedOrigin();
     for (FrameTreeNode* node : frame_tree()->Nodes()) {
+      if (shadow_dom_fenced_frame_enabled &&
+          node->fenced_frame_nonce() != originator_nonce) {
+        continue;
+      }
+
       if (node->current_frame_host()->GetLastCommittedOrigin().IsSameOriginWith(
               current_origin)) {
         node->user_activation_state_.Activate(notification_type);
@@ -674,17 +711,38 @@ bool FrameTreeNode::NotifyUserActivation(
 }
 
 bool FrameTreeNode::ConsumeTransientUserActivation() {
+  // User activation consumptions shouldn't propagate into/out of fenced
+  // frames.
+  // For ShadowDOM, fenced frames are in the same frame tree as their embedder,
+  // so we need to perform additional checks to enforce the boundary.
+  // For MPArch, fenced frames have a separate frame tree, so this boundary is
+  // enforced by default.
+  // https://docs.google.com/document/d/1WnIhXOFycoje_sEoZR3Mo0YNSR2Ki7LABIC_HEWFaog
+  bool shadow_dom_fenced_frame_enabled =
+      blink::features::IsFencedFramesEnabled() &&
+      blink::features::IsFencedFramesShadowDOMBased();
+  absl::optional<base::UnguessableToken> originator_nonce =
+      fenced_frame_nonce();
+
   bool was_active = user_activation_state_.IsActive();
-  for (FrameTreeNode* node : frame_tree()->Nodes())
+  for (FrameTreeNode* node : frame_tree()->Nodes()) {
+    if (shadow_dom_fenced_frame_enabled &&
+        node->fenced_frame_nonce() != originator_nonce) {
+      continue;
+    }
+
     node->user_activation_state_.ConsumeIfActive();
-  render_manager_.browsing_context_state()->set_has_active_user_gesture(false);
+  }
+  current_frame_host()->browsing_context_state()->set_has_active_user_gesture(
+      false);
   return was_active;
 }
 
 bool FrameTreeNode::ClearUserActivation() {
   for (FrameTreeNode* node : frame_tree()->SubtreeNodes(this))
     node->user_activation_state_.Clear();
-  render_manager_.browsing_context_state()->set_has_active_user_gesture(false);
+  current_frame_host()->browsing_context_state()->set_has_active_user_gesture(
+      false);
   return true;
 }
 
@@ -760,18 +818,13 @@ void FrameTreeNode::SetPopupCreatorOrigin(
   popup_creator_origin_ = popup_creator_origin;
 }
 
-void FrameTreeNode::WriteIntoTrace(perfetto::TracedValue context) const {
-  auto dict = std::move(context).WriteDictionary();
-  dict.Add("id", frame_tree_node_id());
-  dict.Add("is_main_frame", IsMainFrame());
-}
-
 void FrameTreeNode::WriteIntoTrace(
-    perfetto::TracedProto<perfetto::protos::pbzero::FrameTreeNodeInfo> proto) {
-  proto->set_is_main_frame(IsMainFrame());
+    perfetto::TracedProto<TraceProto> proto) const {
   proto->set_frame_tree_node_id(frame_tree_node_id());
-  proto->set_has_speculative_render_frame_host(
-      !!render_manager()->speculative_frame_host());
+  proto->set_is_main_frame(IsMainFrame());
+  proto.Set(TraceProto::kCurrentFrameHost, current_frame_host());
+  proto.Set(TraceProto::kSpeculativeFrameHost,
+            render_manager()->speculative_frame_host());
 }
 
 bool FrameTreeNode::HasNavigation() {
@@ -790,42 +843,11 @@ bool FrameTreeNode::HasNavigation() {
 }
 
 bool FrameTreeNode::IsFencedFrameRoot() const {
-  if (!blink::features::IsFencedFramesEnabled())
-    return false;
-
-  switch (blink::features::kFencedFramesImplementationTypeParam.Get()) {
-    case blink::features::FencedFramesImplementationType::kMPArch: {
-      return IsMainFrame() &&
-             frame_tree()->type() == FrameTree::Type::kFencedFrame;
-    }
-    case blink::features::FencedFramesImplementationType::kShadowDOM: {
-      return effective_frame_policy().is_fenced;
-    }
-    default:
-      return false;
-  }
+  return current_frame_host()->IsFencedFrameRootNoStatus();
 }
 
 bool FrameTreeNode::IsInFencedFrameTree() const {
-  if (!blink::features::IsFencedFramesEnabled())
-    return false;
-
-  switch (blink::features::kFencedFramesImplementationTypeParam.Get()) {
-    case blink::features::FencedFramesImplementationType::kMPArch:
-      return frame_tree()->type() == FrameTree::Type::kFencedFrame;
-    case blink::features::FencedFramesImplementationType::kShadowDOM: {
-      auto* node = this;
-      while (node) {
-        if (node->effective_frame_policy().is_fenced) {
-          return true;
-        }
-        node = node->parent() ? node->parent()->frame_tree_node() : nullptr;
-      }
-      return false;
-    }
-    default:
-      return false;
-  }
+  return current_frame_host()->IsInFencedFrameTree();
 }
 
 void FrameTreeNode::SetFencedFrameNonceIfNeeded() {
@@ -847,31 +869,49 @@ void FrameTreeNode::SetFencedFrameNonceIfNeeded() {
   fenced_frame_nonce_ = nonce;
 }
 
-void FrameTreeNode::SetFencedFrameModeIfNeeded(
-    FencedFrameMode fenced_frame_mode) {
+absl::optional<blink::mojom::FencedFrameMode>
+FrameTreeNode::GetFencedFrameMode() {
   if (!IsFencedFrameRoot())
-    return;
+    return absl::nullopt;
 
-  // TODO(crbug.com/1123606): The 'mode' attribute cannot be changed once
-  // applied to a fenced frame. This will be enforced before this point so add
-  // a DCHECK here.
+  if (blink::features::IsFencedFramesShadowDOMBased())
+    return pending_frame_policy_.fenced_frame_mode;
 
-  fenced_frame_mode_ = fenced_frame_mode;
+  FrameTreeNode* outer_delegate = render_manager()->GetOuterDelegateNode();
+  DCHECK(outer_delegate);
+
+  FencedFrame* fenced_frame = FindFencedFrame(outer_delegate);
+  DCHECK(fenced_frame);
+
+  return fenced_frame->mode();
 }
 
 bool FrameTreeNode::IsErrorPageIsolationEnabled() const {
-  // Enable error page isolation for fenced frames in both MPArch and ShadowDOM
-  // modes to address the issue with invalid urn:uuid (crbug.com/1264224).
-  //
-  // Note that `IsMainFrame()` only covers MPArch, therefore we add explicit
-  // `IsFencedFrameRoot()` check for ShadowDOM, at least until error page
-  // isolation is supported for subframes in crbug.com/1092524.
-  return SiteIsolationPolicy::IsErrorPageIsolationEnabled(IsMainFrame() ||
-                                                          IsFencedFrameRoot());
+  // Error page isolation is enabled for main frames only (crbug.com/1092524).
+  // Note that this will also enable error page isolation for fenced frames in
+  // MPArch mode, but not ShadowDOM mode.
+  // See the issue in crbug.com/1264224#c7 for why it can't be enabled for
+  // ShadowDOM mode.
+  return SiteIsolationPolicy::IsErrorPageIsolationEnabled(IsMainFrame());
 }
 
 void FrameTreeNode::SetSrcdocValue(const std::string& srcdoc_value) {
   srcdoc_value_ = srcdoc_value;
+}
+
+const scoped_refptr<BrowsingContextState>&
+FrameTreeNode::GetBrowsingContextStateForSubframe() const {
+  DCHECK(!IsMainFrame());
+  return current_frame_host()->browsing_context_state();
+}
+
+void FrameTreeNode::ClearOpenerReferences() {
+  // Simulate the FrameTreeNode being dead to opener observers. They will
+  // nullify their opener.
+  // Note: observers remove themselves from observers_, no need to take care of
+  // that manually.
+  for (auto& observer : observers_)
+    observer.OnFrameTreeNodeDisownedOpenee(this);
 }
 
 }  // namespace content

@@ -9,11 +9,14 @@
 
 #include "base/callback.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/timer/timer.h"
 #include "components/cast/message_port/message_port.h"
 #include "components/cast_streaming/browser/cast_message_port_impl.h"
+#include "components/cast_streaming/browser/playback_command_dispatcher.h"
 #include "components/cast_streaming/browser/public/receiver_session.h"
+#include "components/cast_streaming/browser/renderer_controller_config.h"
 #include "components/openscreen_platform/network_util.h"
 #include "components/openscreen_platform/task_runner.h"
 #include "media/base/audio_decoder_config.h"
@@ -91,6 +94,7 @@ class CastStreamingSession {
   // |av_constraints| specifies the supported media codecs and limitations
   // surrounding this support.
   void Start(Client* client,
+             absl::optional<RendererControllerConfig> renderer_controls,
              std::unique_ptr<ReceiverSession::AVConstraints> av_constraints,
              std::unique_ptr<cast_api_bindings::MessagePort> message_port,
              scoped_refptr<base::SequencedTaskRunner> task_runner);
@@ -98,6 +102,12 @@ class CastStreamingSession {
   // Stops the Cast Streaming Session. This can only be called once during the
   // lifespan of this object and only after a call to Start().
   void Stop();
+
+  // Return a callback that may be used to request a buffer of the specified
+  // type, to be returned asynchronously through the client API. May only be
+  // called following a call to Start() and prior to a call to Stop().
+  base::RepeatingClosure GetAudioBufferRequester();
+  base::RepeatingClosure GetVideoBufferRequester();
 
  private:
   // Owns the Open Screen ReceiverSession. The Streaming Session is tied to the
@@ -107,6 +117,7 @@ class CastStreamingSession {
    public:
     ReceiverSessionClient(
         CastStreamingSession::Client* client,
+        absl::optional<RendererControllerConfig> renderer_controls,
         std::unique_ptr<ReceiverSession::AVConstraints> av_constraints,
         std::unique_ptr<cast_api_bindings::MessagePort> message_port,
         scoped_refptr<base::SequencedTaskRunner> task_runner);
@@ -114,6 +125,12 @@ class CastStreamingSession {
 
     ReceiverSessionClient(const ReceiverSessionClient&) = delete;
     ReceiverSessionClient& operator=(const ReceiverSessionClient&) = delete;
+
+    // Requests a new buffer of the specified type, which will be provided
+    // Return a callback that may be used to request a buffer of the specified
+    // type, to be returned asynchronously through the |client_|.
+    base::RepeatingClosure GetAudioBufferRequester();
+    base::RepeatingClosure GetVideoBufferRequester();
 
    private:
     void OnInitializationTimeout();
@@ -134,6 +151,10 @@ class CastStreamingSession {
     void OnNegotiated(const openscreen::cast::ReceiverSession* session,
                       openscreen::cast::ReceiverSession::ConfiguredReceivers
                           receivers) override;
+    void OnRemotingNegotiated(
+        const openscreen::cast::ReceiverSession* session,
+        openscreen::cast::ReceiverSession::RemotingNegotiation negotiation)
+        override;
     void OnReceiversDestroying(const openscreen::cast::ReceiverSession* session,
                                ReceiversDestroyingReason reason) override;
     void OnError(const openscreen::cast::ReceiverSession* session,
@@ -147,6 +168,9 @@ class CastStreamingSession {
     CastMessagePortImpl cast_message_port_impl_;
     std::unique_ptr<openscreen::cast::ReceiverSession> receiver_session_;
     base::OneShotTimer init_timeout_timer_;
+
+    // Handles remoting messages.
+    std::unique_ptr<PlaybackCommandDispatcher> playback_command_dispatcher_;
 
     // Timer to trigger connection closure if no data is received for 15
     // seconds.

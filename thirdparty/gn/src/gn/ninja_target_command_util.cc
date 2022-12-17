@@ -51,10 +51,13 @@ void WriteOneFlag(RecursiveWriterConfig config,
                   EscapeOptions flag_escape_options,
                   PathOutput& path_output,
                   std::ostream& out,
-                  bool write_substitution) {
+                  bool write_substitution,
+                  bool indent) {
   if (!target->toolchain()->substitution_bits().used.count(subst_enum))
     return;
 
+  if (indent)
+    out << "  ";
   if (write_substitution)
     out << subst_enum->ninja_name << " =";
 

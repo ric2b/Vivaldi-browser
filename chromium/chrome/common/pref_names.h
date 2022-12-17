@@ -28,6 +28,7 @@ extern const char kPreinstalledApps[];
 extern const char kSafeBrowsingForTrustedSourcesEnabled[];
 extern const char kDisableScreenshots[];
 extern const char kDownloadRestrictions[];
+extern const char kDownloadBubbleEnabled[];
 extern const char kForceEphemeralProfiles[];
 extern const char kHomePageIsNewTabPage[];
 extern const char kHomePage[];
@@ -198,9 +199,6 @@ extern const char kPromptForDownload[];
 extern const char kQuicAllowed[];
 extern const char kNetworkQualities[];
 extern const char kNetworkEasterEggHighScore[];
-#if BUILDFLAG(IS_ANDROID)
-extern const char kLastPolicyCheckTime[];
-#endif
 extern const char kNetworkPredictionOptions[];
 extern const char kPreinstalledAppsInstallState[];
 extern const char kHideWebStoreIcon[];
@@ -292,6 +290,12 @@ extern const char kHatsArcGamesDeviceIsSelected[];
 extern const char kHatsArcGamesSurveyCycleEndTs[];
 extern const char kHatsAudioDeviceIsSelected[];
 extern const char kHatsAudioSurveyCycleEndTs[];
+extern const char kHatsPersonalizationAvatarSurveyCycleEndTs[];
+extern const char kHatsPersonalizationAvatarSurveyIsSelected[];
+extern const char kHatsPersonalizationScreensaverSurveyCycleEndTs[];
+extern const char kHatsPersonalizationScreensaverSurveyIsSelected[];
+extern const char kHatsPersonalizationWallpaperSurveyCycleEndTs[];
+extern const char kHatsPersonalizationWallpaperSurveyIsSelected[];
 extern const char kEolStatus[];
 extern const char kEndOfLifeDate[];
 extern const char kEolNotificationDismissed[];
@@ -358,6 +362,7 @@ extern const char kRestrictedManagedGuestSessionExtensionCleanupExemptList[];
 extern const char kExternalStorageDisabled[];
 extern const char kExternalStorageReadOnly[];
 extern const char kForceMaximizeOnFirstRun[];
+extern const char kInsightsExtensionEnabled[];
 extern const char kSettingsShowOSBanner[];
 extern const char kUsedPolicyCertificates[];
 #endif  // BUILDFLAG(IS_CHROMEOS)
@@ -448,7 +453,11 @@ extern const char kPrinterTypeDenyList[];
 extern const char kPrintingAllowedBackgroundGraphicsModes[];
 extern const char kPrintingBackgroundGraphicsDefault[];
 extern const char kPrintingPaperSizeDefault[];
+
+#if BUILDFLAG(ENABLE_PRINTING)
 extern const char kPrintingEnabled[];
+#endif  // BUILDFLAG(ENABLE_PRINTING)
+
 extern const char kPrintHeaderFooter[];
 extern const char kPrintPreviewDisabled[];
 extern const char kPrintPreviewDefaultDestinationSelectionRules[];
@@ -565,10 +574,6 @@ extern const char kStabilityOtherUserCrashCount[];
 extern const char kStabilityKernelCrashCount[];
 extern const char kStabilitySystemUncleanShutdownCount[];
 
-extern const char kStabilityPluginStats[];
-extern const char kStabilityPluginName[];
-extern const char kStabilityPluginCrashes[];
-
 extern const char kBrowserSuppressDefaultBrowserPrompt[];
 
 extern const char kBrowserWindowPlacement[];
@@ -583,6 +588,7 @@ extern const char kDownloadExtensionsToOpen[];
 extern const char kDownloadExtensionsToOpenByPolicy[];
 extern const char kDownloadAllowedURLsForOpenByPolicy[];
 extern const char kDownloadDirUpgraded[];
+extern const char kDownloadLastCompleteTime[];
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || \
     BUILDFLAG(IS_MAC)
 extern const char kOpenPdfDownloadInSystemReader[];
@@ -643,6 +649,9 @@ extern const char kNtpCustomBackgroundLocalToDevice[];
 extern const char kNtpDisabledModules[];
 extern const char kNtpModulesOrder[];
 extern const char kNtpModulesVisible[];
+extern const char kNtpModulesShownCount[];
+extern const char kNtpModulesFirstShownTime[];
+extern const char kNtpModulesFreVisible[];
 extern const char kNtpPromoBlocklist[];
 extern const char kNtpPromoVisible[];
 extern const char kNtpSearchSuggestionsBlocklist[];
@@ -905,6 +914,10 @@ extern const char kEnrollmentIdUploadedOnChromad[];
 extern const char kLastChromadMigrationAttemptTime[];
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
+#if BUILDFLAG(IS_WIN)
+extern const char kHardwareSecureDecryptionDisabledTimes[];
+#endif  // BUILDFLAG(IS_WIN)
+
 #if !BUILDFLAG(IS_ANDROID)
 extern const char kAttemptedToEnableAutoupdate[];
 
@@ -1069,7 +1082,6 @@ extern const char kBlockAutoplayEnabled[];
 extern const char kSandboxExternalProtocolBlocked[];
 
 #if BUILDFLAG(IS_LINUX)
-extern const char kAllowNativeNotifications[];
 extern const char kAllowSystemNotifications[];
 #endif
 

@@ -185,10 +185,6 @@ web::WebState* WebStateDelegateBrowserAgent::CreateNewWebState(
 }
 
 void WebStateDelegateBrowserAgent::CloseWebState(web::WebState* source) {
-  security_interstitials::IOSBlockingPageTabHelper* helper =
-      security_interstitials::IOSBlockingPageTabHelper::FromWebState(source);
-  DCHECK(source->HasOpener() || !source->GetNavigationItemCount() ||
-         helper->GetCurrentBlockingPage() != nullptr);
   int index = web_state_list_->GetIndexOfWebState(source);
   if (index != WebStateList::kInvalidIndex)
     web_state_list_->CloseWebStateAt(index, WebStateList::CLOSE_USER_ACTION);
@@ -209,7 +205,7 @@ web::WebState* WebStateDelegateBrowserAgent::OpenURLFromWebState(
       return tab_insertion_agent_->InsertWebState(
           load_params, source, false, TabInsertion::kPositionAutomatically,
           (params.disposition == WindowOpenDisposition::NEW_BACKGROUND_TAB),
-          /*inherit_opener=*/false);
+          /*inherit_opener=*/false, /*should_show_start_surface=*/false);
     }
     case WindowOpenDisposition::CURRENT_TAB: {
       source->GetNavigationManager()->LoadURLWithParams(load_params);
@@ -218,7 +214,8 @@ web::WebState* WebStateDelegateBrowserAgent::OpenURLFromWebState(
     case WindowOpenDisposition::NEW_POPUP: {
       return tab_insertion_agent_->InsertWebState(
           load_params, source, true, TabInsertion::kPositionAutomatically,
-          /*in_background=*/false, /*inherit_opener=*/false);
+          /*in_background=*/false, /*inherit_opener=*/false,
+          /*should_show_start_surface=*/false);
     }
     default:
       NOTIMPLEMENTED();

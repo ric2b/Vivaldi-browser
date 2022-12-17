@@ -7,6 +7,12 @@
 #include <limits>
 #include <vector>
 
+#include "third_party/skia/include/core/SkBitmap.h"
+#include "third_party/skia/include/core/SkColorSpace.h"
+#include "third_party/skia/include/core/SkImageInfo.h"
+#include "third_party/skia/include/core/SkRefCnt.h"
+#include "third_party/skia/include/core/SkSize.h"
+
 namespace cc {
 
 namespace {
@@ -72,6 +78,10 @@ TestOptionsProvider::TestOptionsProvider()
 
 TestOptionsProvider::~TestOptionsProvider() = default;
 
+sk_sp<SkColorSpace> TestOptionsProvider::color_space() {
+  return color_space_;
+}
+
 void TestOptionsProvider::PushFonts() {
   std::vector<uint8_t> font_data;
   strike_server_.writeStrikeData(&font_data);
@@ -100,9 +110,9 @@ ImageProvider::ScopedResult TestOptionsProvider::GetRasterContent(
       SkBitmap::kZeroPixels_AllocFlag);
 
   // Create a transfer cache entry for this image.
-  auto color_space = SkColorSpace::MakeSRGB();
-  ClientImageTransferCacheEntry cache_entry(&bitmap.pixmap(), color_space.get(),
-                                            false /* needs_mips */);
+  TargetColorParams target_color_params;
+  ClientImageTransferCacheEntry cache_entry(
+      &bitmap.pixmap(), false /* needs_mips */, target_color_params);
   std::vector<uint8_t> data;
   data.resize(cache_entry.SerializedSize());
   if (!cache_entry.Serialize(base::span<uint8_t>(data.data(), data.size()))) {

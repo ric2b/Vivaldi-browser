@@ -19,9 +19,9 @@
 #include "base/files/file_path.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
-#include "base/task/single_thread_task_runner.h"
 #include "base/supports_user_data.h"
 #include "base/task/cancelable_task_tracker.h"
+#include "base/task/single_thread_task_runner.h"
 #include "mail_client_database.h"
 #include "sql/init_status.h"
 
@@ -102,7 +102,7 @@ class MailClientBackend : public base::RefCountedThreadSafe<MailClientBackend> {
                     std::u16string searchValue,
                     std::shared_ptr<bool> results);
 
-  void RebuildDatabase(std::shared_ptr<bool> result);
+  void RebuildAndVacuumDatabase(std::shared_ptr<bool> result);
 
  protected:
   virtual ~MailClientBackend();

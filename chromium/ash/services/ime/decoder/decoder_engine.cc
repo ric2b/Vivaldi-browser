@@ -9,7 +9,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 
-namespace chromeos {
+namespace ash {
 namespace ime {
 
 namespace {
@@ -57,18 +57,23 @@ class ClientDelegate : public ImeClientDelegate {
 
 DecoderEngine::DecoderEngine(
     ImeCrosPlatform* platform,
-    absl::optional<ImeDecoder::EntryPoints> entry_points)
-    : platform_(platform) {
+    absl::optional<ImeDecoder::EntryPoints> entry_points) {
   if (!entry_points) {
     LOG(WARNING) << "DecoderEngine INIT INCOMPLETE.";
     return;
   }
 
   decoder_entry_points_ = *entry_points;
-  decoder_entry_points_->init_once(platform_);
+  decoder_entry_points_->init_proto_mode(platform);
 }
 
-DecoderEngine::~DecoderEngine() {}
+DecoderEngine::~DecoderEngine() {
+  if (!decoder_entry_points_) {
+    return;
+  }
+
+  decoder_entry_points_->close_proto_mode();
+}
 
 bool DecoderEngine::BindRequest(
     const std::string& ime_spec,
@@ -102,4 +107,4 @@ void DecoderEngine::ProcessMessage(const std::vector<uint8_t>& message,
 }
 
 }  // namespace ime
-}  // namespace chromeos
+}  // namespace ash

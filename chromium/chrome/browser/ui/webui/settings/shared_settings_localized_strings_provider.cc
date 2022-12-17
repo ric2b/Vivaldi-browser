@@ -13,6 +13,7 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
+#include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/chrome_features.h"
@@ -20,6 +21,7 @@
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/google/core/common/google_util.h"
+#include "components/live_caption/caption_util.h"
 #include "components/soda/constants.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/sync/base/features.h"
@@ -30,17 +32,19 @@
 #include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
-#include "ui/chromeos/devicetype_utils.h"
+
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/constants/ash_features.h"
 #include "chrome/browser/ash/crosapi/browser_util.h"
 #include "chrome/browser/nearby_sharing/common/nearby_share_features.h"
 #include "chrome/common/url_constants.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "chromeos/lacros/lacros_service.h"
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
 #endif
 
@@ -77,6 +81,14 @@ bool ShouldShowLacrosSideBySideWarningInLacros() {
          !chromeos::LacrosService::Get()
               ->init_params()
               ->standalone_browser_is_only_browser;
+}
+#endif
+
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+std::string BuildOSSettingsUrl(const std::string& sub_page) {
+  std::string os_settings_url = chrome::kChromeUIOSSettingsURL;
+  os_settings_url.append(sub_page);
+  return os_settings_url;
 }
 #endif
 
@@ -169,7 +181,7 @@ void AddLiveCaptionSectionStrings(content::WebUIDataSource* html_source) {
                                   spanishConfig->display_name);
 
   html_source->AddBoolean("enableLiveCaption",
-                          media::IsLiveCaptionFeatureEnabled());
+                          captions::IsLiveCaptionFeatureSupported());
   html_source->AddBoolean("enableLiveCaptionMultiLanguage",
                           liveCaptionMultiLanguageEnabled);
 }
@@ -181,7 +193,7 @@ void AddPersonalizationOptionsStrings(content::WebUIDataSource* html_source) {
     {"urlKeyedAnonymizedDataCollectionDesc",
      IDS_SETTINGS_ENABLE_URL_KEYED_ANONYMIZED_DATA_COLLECTION_DESC},
     {"spellingPref", IDS_SETTINGS_SPELLING_PREF},
-#if !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_CHROMEOS_LACROS)
+#if !BUILDFLAG(IS_CHROMEOS)
     {"signinAllowedTitle", IDS_SETTINGS_SIGNIN_ALLOWED},
     {"signinAllowedDescription", IDS_SETTINGS_SIGNIN_ALLOWED_DESC},
 #endif
@@ -237,7 +249,7 @@ void AddSyncAccountControlStrings(content::WebUIDataSource* html_source) {
   html_source->AddLocalizedStrings(kLocalizedStrings);
 }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS)
 void AddPasswordPromptDialogStrings(content::WebUIDataSource* html_source) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
       {"passwordPromptTitle", IDS_SETTINGS_PEOPLE_PASSWORD_PROMPT_TITLE},
@@ -248,7 +260,7 @@ void AddPasswordPromptDialogStrings(content::WebUIDataSource* html_source) {
   };
   html_source->AddLocalizedStrings(kLocalizedStrings);
 }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 void AddSyncPageStrings(content::WebUIDataSource* html_source) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
@@ -273,8 +285,6 @@ void AddSyncPageStrings(content::WebUIDataSource* html_source) {
      IDS_SETTINGS_PASSPHRASE_CONFIRMATION_PLACEHOLDER},
     {"readingListCheckboxLabel", IDS_SETTINGS_READING_LIST_CHECKBOX_LABEL},
     {"syncLoading", IDS_SETTINGS_SYNC_LOADING},
-    {"themesAndWallpapersCheckboxLabel",
-     IDS_SETTINGS_THEMES_AND_WALLPAPERS_CHECKBOX_LABEL},
     {"syncDataEncryptedText", IDS_SETTINGS_SYNC_DATA_ENCRYPTED_TEXT},
     {"sync", IDS_SETTINGS_SYNC},
     {"cancelSync", IDS_SETTINGS_SYNC_SETTINGS_CANCEL_SYNC},
@@ -297,8 +307,27 @@ void AddSyncPageStrings(content::WebUIDataSource* html_source) {
     {"syncSettingsLacrosSideBySideWarning",
      IDS_SYNC_SETTINGS_SIDE_BY_SIDE_WARNING_LACROS},
 #endif
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+    {"browserSyncFeatureLabel", IDS_BROWSER_SETTINGS_SYNC_FEATURE_LABEL},
+#endif
   };
   html_source->AddLocalizedStrings(kLocalizedStrings);
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  if (chromeos::features::IsSyncSettingsCategorizationEnabled()) {
+    html_source->AddLocalizedString("themeCheckboxLabel",
+                                    IDS_SETTINGS_THEME_CHECKBOX_LABEL);
+  } else {
+    html_source->AddLocalizedString(
+        "themeCheckboxLabel",
+        IDS_SETTINGS_THEMES_AND_WALLPAPERS_CHECKBOX_LABEL);
+  }
+#else
+  // TODO(https://crbug.com/1249845): Move this string back to the list above
+  //     after launching SyncSettingsCategorization.
+  html_source->AddLocalizedString("themeCheckboxLabel",
+                                  IDS_SETTINGS_THEME_CHECKBOX_LABEL);
+#endif
 
   std::string sync_dashboard_url =
       google_util::AppendGoogleLocaleParam(
@@ -341,9 +370,16 @@ void AddSyncPageStrings(content::WebUIDataSource* html_source) {
                           ShouldShowLacrosSideBySideWarningInLacros());
 #endif
 
+#if BUILDFLAG(IS_CHROMEOS)
+  html_source->AddString(
+      "osSyncSetupSettingsUrl",
+      BuildOSSettingsUrl(chromeos::settings::mojom::kSyncSetupSubpagePath));
+#endif
+
 #if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
-  html_source->AddString("chromeOSSyncSettingsPath",
-                         chromeos::settings::mojom::kSyncSetupSubpagePath);
+  html_source->AddString(
+      "osSyncSettingsUrl",
+      BuildOSSettingsUrl(chromeos::settings::mojom::kSyncSubpagePath));
 #endif
 
   html_source->AddString("syncErrorsHelpUrl", chrome::kSyncErrorsHelpURL);

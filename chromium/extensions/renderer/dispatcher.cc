@@ -13,7 +13,6 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
-#include "base/cxx17_backports.h"
 #include "base/debug/alias.h"
 #include "base/feature_list.h"
 #include "base/lazy_instance.h"
@@ -33,7 +32,6 @@
 #include "extensions/common/api/messaging/message.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/cors_util.h"
-#include "extensions/common/event_filtering_info_type_converters.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_api.h"
 #include "extensions/common/extension_features.h"
@@ -146,7 +144,7 @@ void CrashOnException(const v8::TryCatch& trycatch) {
 // ScriptContextSet::ForEach.
 void CallModuleMethod(const std::string& module_name,
                       const std::string& method_name,
-                      const base::ListValue* args,
+                      const base::Value::List* args,
                       ScriptContext* context) {
   v8::HandleScope handle_scope(context->isolate());
   v8::Context::Scope context_scope(context->v8_context());
@@ -155,7 +153,7 @@ void CallModuleMethod(const std::string& module_name,
       content::V8ValueConverter::Create();
 
   std::vector<v8::Local<v8::Value>> arguments;
-  for (const auto& arg : args->GetListDeprecated()) {
+  for (const auto& arg : *args) {
     arguments.push_back(converter->ToV8Value(&arg, context->v8_context()));
   }
 
@@ -654,7 +652,7 @@ void Dispatcher::WillEvaluateServiceWorkerOnWorkerThread(
       // The logging module.
       logging->NewInstance(),
   };
-  context->SafeCallFunction(main_function, base::size(args), args);
+  context->SafeCallFunction(main_function, std::size(args), args);
 
   const base::TimeDelta elapsed = base::TimeTicks::Now() - start_time;
   UMA_HISTOGRAM_TIMES(
@@ -801,21 +799,21 @@ void Dispatcher::RunScriptsAtDocumentIdle(content::RenderFrame* render_frame) {
 void Dispatcher::DispatchEventHelper(
     const std::string& extension_id,
     const std::string& event_name,
-    const base::ListValue& event_args,
+    const base::Value::List& event_args,
     mojom::EventFilteringInfoPtr filtering_info) const {
   script_context_set_->ForEach(
       extension_id, nullptr,
       base::BindRepeating(
           &NativeExtensionBindingsSystem::DispatchEventInContext,
-          base::Unretained(bindings_system_.get()), event_name, &event_args,
-          base::OwnedRef(std::move(filtering_info))));
+          base::Unretained(bindings_system_.get()), event_name,
+          std::cref(event_args), base::OwnedRef(std::move(filtering_info))));
 }
 
 void Dispatcher::InvokeModuleSystemMethod(content::RenderFrame* render_frame,
                                           const std::string& extension_id,
                                           const std::string& module_name,
                                           const std::string& function_name,
-                                          const base::ListValue& args) {
+                                          const base::Value::List& args) {
   script_context_set_->ForEach(
       extension_id, render_frame,
       base::BindRepeating(&CallModuleMethod, module_name, function_name,
@@ -1060,7 +1058,7 @@ void Dispatcher::ActivateExtension(const std::string& extension_id) {
     std::string& error = extension_load_errors_[extension_id];
     char minidump[256];
     base::debug::Alias(&minidump);
-    base::snprintf(minidump, base::size(minidump), "e::dispatcher:%s:%s",
+    base::snprintf(minidump, std::size(minidump), "e::dispatcher:%s:%s",
                    extension_id.c_str(), error.c_str());
     LOG(FATAL) << extension_id << " was never loaded: " << error;
   }
@@ -1215,14 +1213,14 @@ void Dispatcher::SuspendExtension(
   // the browser know when we are starting and stopping the event dispatch, so
   // that it still considers the extension idle despite any activity the suspend
   // event creates.
-  DispatchEventHelper(extension_id, kOnSuspendEvent, base::ListValue(),
+  DispatchEventHelper(extension_id, kOnSuspendEvent, base::Value::List(),
                       nullptr);
   std::move(callback).Run();
 }
 
 void Dispatcher::CancelSuspendExtension(const std::string& extension_id) {
-  DispatchEventHelper(extension_id, kOnSuspendCanceledEvent, base::ListValue(),
-                      nullptr);
+  DispatchEventHelper(extension_id, kOnSuspendCanceledEvent,
+                      base::Value::List(), nullptr);
 }
 
 void Dispatcher::SetSystemFont(const std::string& font_family,
@@ -1339,7 +1337,12 @@ void Dispatcher::OnDispatchOnDisconnect(int worker_thread_id,
 }
 
 void Dispatcher::DispatchEvent(mojom::DispatchEventParamsPtr params,
-                               base::Value event_args) {
+                               base::Value::List event_args) {
+  if (params->worker_thread_id != kMainThreadId) {
+    WorkerThreadDispatcher::Get()->DispatchEvent(std::move(params),
+                                                 std::move(event_args));
+    return;
+  }
   content::RenderFrame* background_frame =
       ExtensionFrameHelper::GetBackgroundPageFrame(params->extension_id);
 
@@ -1362,9 +1365,8 @@ void Dispatcher::DispatchEvent(mojom::DispatchEventParamsPtr params,
     }
   }
 
-  DispatchEventHelper(params->extension_id, params->event_name,
-                      base::Value::AsListValue(event_args),
-                      mojom::EventFilteringInfo::From(params->filtering_info));
+  DispatchEventHelper(params->extension_id, params->event_name, event_args,
+                      std::move(params->filtering_info));
 
   if (background_frame) {
     // Tell the browser process when an event has been dispatched with a lazy

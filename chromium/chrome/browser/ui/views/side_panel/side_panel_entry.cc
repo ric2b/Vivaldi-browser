@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/side_panel/side_panel_entry.h"
 
+#include "base/observer_list.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_entry_observer.h"
 
 SidePanelEntry::SidePanelEntry(
@@ -21,13 +22,23 @@ SidePanelEntry::SidePanelEntry(
 
 SidePanelEntry::~SidePanelEntry() = default;
 
-std::unique_ptr<views::View> SidePanelEntry::CreateContent() {
+std::unique_ptr<views::View> SidePanelEntry::GetContent() {
+  if (content_view_)
+    return std::move(content_view_);
   return create_content_callback_.Run();
+}
+
+void SidePanelEntry::CacheView(std::unique_ptr<views::View> view) {
+  content_view_ = std::move(view);
+}
+
+void SidePanelEntry::ClearCachedView() {
+  content_view_.reset(nullptr);
 }
 
 void SidePanelEntry::OnEntryShown() {
   for (SidePanelEntryObserver& observer : observers_)
-    observer.OnEntryShown(id_);
+    observer.OnEntryShown(this);
 }
 
 void SidePanelEntry::AddObserver(SidePanelEntryObserver* observer) {

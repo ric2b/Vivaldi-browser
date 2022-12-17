@@ -71,6 +71,35 @@ void Settings::ScopedLockedFileHandle::Destroy() {
 
 #else  // BUILDFLAG(IS_FUCHSIA)
 
+#if BUILDFLAG(IS_IOS)
+
+Settings::ScopedLockedFileHandle::ScopedLockedFileHandle(
+    const FileHandle& value)
+    : ScopedGeneric(value) {
+  ios_background_task_ = std::make_unique<internal::ScopedBackgroundTask>(
+      "ScopedLockedFileHandle");
+}
+
+Settings::ScopedLockedFileHandle::ScopedLockedFileHandle(
+    Settings::ScopedLockedFileHandle&& rvalue) {
+  ios_background_task_.reset(rvalue.ios_background_task_.release());
+  reset(rvalue.release());
+}
+
+Settings::ScopedLockedFileHandle& Settings::ScopedLockedFileHandle::operator=(
+    Settings::ScopedLockedFileHandle&& rvalue) {
+  ios_background_task_.reset(rvalue.ios_background_task_.release());
+  reset(rvalue.release());
+  return *this;
+}
+
+Settings::ScopedLockedFileHandle::~ScopedLockedFileHandle() {
+  // Call reset() to ensure the lock is released before the ios_background_task.
+  reset();
+}
+
+#endif  // BUILDFLAG(IS_IOS)
+
 namespace internal {
 
 // static
@@ -207,6 +236,10 @@ Settings::ScopedLockedFileHandle Settings::MakeScopedLockedFileHandle(
   }
   return ScopedLockedFileHandle(scoped.release(), base::FilePath());
 #else
+  // It's important to create the ScopedLockedFileHandle before calling
+  // LoggingLockFile on iOS, so a ScopedBackgroundTask is created *before*
+  // the LoggingLockFile call below.
+  ScopedLockedFileHandle handle(kInvalidFileHandle);
   if (scoped.is_valid()) {
     if (LoggingLockFile(
             scoped.get(), locking, FileLockingBlocking::kBlocking) !=
@@ -214,7 +247,8 @@ Settings::ScopedLockedFileHandle Settings::MakeScopedLockedFileHandle(
       scoped.reset();
     }
   }
-  return ScopedLockedFileHandle(scoped.release());
+  handle.reset(scoped.release());
+  return handle;
 #endif
 }
 

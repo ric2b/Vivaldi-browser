@@ -296,6 +296,11 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
+                       AccessibilityEventsAriaPressedChangesButtonRole) {
+  RunEventTest(FILE_PATH_LITERAL("aria-pressed-changes-button-role.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
                        AccessibilityEventsAriaReadonlyChanged) {
   RunEventTest(FILE_PATH_LITERAL("aria-readonly-changed.html"));
 }
@@ -446,18 +451,40 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
   RunEventTest(FILE_PATH_LITERAL("add-child-of-body.html"));
 }
 
+// TODO(crbug.com/1299885): Flaky on Win7.
+#if BUILDFLAG(IS_WIN)
+#define MAYBE_AccessibilityEventsAddDialog DISABLED_AccessibilityEventsAddDialog
+#else
+#define MAYBE_AccessibilityEventsAddDialog AccessibilityEventsAddDialog
+#endif
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
-                       AccessibilityEventsAddDialog) {
+                       MAYBE_AccessibilityEventsAddDialog) {
   RunEventTest(FILE_PATH_LITERAL("add-dialog.html"));
 }
 
+// TODO(crbug.com/1299885): Flaky on Win7.
+#if BUILDFLAG(IS_WIN)
+#define MAYBE_AccessibilityEventsAddDialogDescribedBy \
+  DISABLED_AccessibilityEventsAddDialogDescribedBy
+#else
+#define MAYBE_AccessibilityEventsAddDialogDescribedBy \
+  AccessibilityEventsAddDialogDescribedBy
+#endif
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
-                       AccessibilityEventsAddDialogDescribedBy) {
+                       MAYBE_AccessibilityEventsAddDialogDescribedBy) {
   RunEventTest(FILE_PATH_LITERAL("add-dialog-described-by.html"));
 }
 
+// TODO(crbug.com/1299885): Flaky on Win7.
+#if BUILDFLAG(IS_WIN)
+#define MAYBE_AccessibilityEventsAddDialogNoInfo \
+  DISABLED_AccessibilityEventsAddDialogNoInfo
+#else
+#define MAYBE_AccessibilityEventsAddDialogNoInfo \
+  AccessibilityEventsAddDialogNoInfo
+#endif
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
-                       AccessibilityEventsAddDialogNoInfo) {
+                       MAYBE_AccessibilityEventsAddDialogNoInfo) {
   RunEventTest(FILE_PATH_LITERAL("add-dialog-no-info.html"));
 }
 
@@ -474,6 +501,11 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
                        AccessibilityEventsAddSubtree) {
   RunEventTest(FILE_PATH_LITERAL("add-subtree.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
+                       AccessibilityEventsAnonymousBlockChildrenChanged) {
+  RunEventTest(FILE_PATH_LITERAL("anonymous-block-children-changed.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
@@ -661,8 +693,16 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
   RunEventTest(FILE_PATH_LITERAL("focus-listbox-multiselect.html"));
 }
 
+// TODO(crbug.com/1298770): Flaky on Linux.
+#if BUILDFLAG(IS_LINUX)
+#define MAYBE_AccessibilityEventsIframeSrcChanged \
+  DISABLED_AccessibilityEventsIframeSrcChanged
+#else
+#define MAYBE_AccessibilityEventsIframeSrcChanged \
+  AccessibilityEventsIframeSrcChanged
+#endif
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
-                       AccessibilityEventsIframeSrcChanged) {
+                       MAYBE_AccessibilityEventsIframeSrcChanged) {
   RunEventTest(FILE_PATH_LITERAL("iframe-src-changed.html"));
 }
 
@@ -761,13 +801,23 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
 }
 
 // TODO(crbug/1232295): Flaky on Linux and Win.
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
+// TODO(crbug.com/1230894): locks up with popup open, only on Mac
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
 #define MAYBE_AccessibilityEventsMenuListExpand \
   DISABLED_AccessibilityEventsMenuListExpand
 #else
 #define MAYBE_AccessibilityEventsMenuListExpand \
   AccessibilityEventsMenuListExpand
 #endif
+
+// TODO(crbug.com/1230894): locks up with popup open, only on Mac
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_AccessibilityEventsMenuListNext \
+  DISABLED_AccessibilityEventsMenuListNext
+#else
+#define MAYBE_AccessibilityEventsMenuListNext AccessibilityEventsMenuListNext
+#endif
+
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
                        MAYBE_AccessibilityEventsMenuListExpand) {
   RunEventTest(FILE_PATH_LITERAL("menulist-expand.html"));
@@ -779,7 +829,7 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
-                       AccessibilityEventsMenuListNext) {
+                       MAYBE_AccessibilityEventsMenuListNext) {
   RunEventTest(FILE_PATH_LITERAL("menulist-next.html"));
 }
 
@@ -812,6 +862,34 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
                        AccessibilityEventsDocumentTitleChange) {
   RunEventTest(FILE_PATH_LITERAL("document-title-change.html"));
+}
+
+class NavigationApiDumpAccessibilityEventsTest
+    : public DumpAccessibilityEventsTest {
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    command_line->AppendSwitch(
+        switches::kEnableExperimentalWebPlatformFeatures);
+  }
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    NavigationApiDumpAccessibilityEventsTest,
+    ::testing::ValuesIn(DumpAccessibilityTestHelper::EventTestPasses()),
+    DumpAccessibilityEventsTestPassToString());
+
+// This test suite is empty on some OSes.
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(
+    NavigationApiDumpAccessibilityEventsTest);
+
+IN_PROC_BROWSER_TEST_P(NavigationApiDumpAccessibilityEventsTest,
+                       AccessibilityEventsNavigationApi) {
+  RunEventTest(FILE_PATH_LITERAL("navigation-api.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(NavigationApiDumpAccessibilityEventsTest,
+                       AccessibilityEventsImmediateRefresh) {
+  RunEventTest(FILE_PATH_LITERAL("immediate-refresh.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
@@ -889,6 +967,10 @@ IN_PROC_BROWSER_TEST_P(
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
                        AccessibilityEventsSubtreeReparentedViaAriaOwns) {
   RunEventTest(FILE_PATH_LITERAL("subtree-reparented-via-aria-owns.html"));
+}
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
+                       AccessibilityEventsSubtreeReparentedViaAriaOwns2) {
+  RunEventTest(FILE_PATH_LITERAL("subtree-reparented-via-aria-owns-2.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,

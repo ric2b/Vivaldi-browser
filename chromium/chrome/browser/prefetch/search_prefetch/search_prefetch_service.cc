@@ -15,16 +15,16 @@
 #include "chrome/browser/prefetch/prefetch_prefs.h"
 #include "chrome/browser/prefetch/search_prefetch/back_forward_search_prefetch_url_loader.h"
 #include "chrome/browser/prefetch/search_prefetch/field_trial_settings.h"
-#include "chrome/browser/prefetch/search_prefetch/full_body_search_prefetch_request.h"
 #include "chrome/browser/prefetch/search_prefetch/search_prefetch_url_loader.h"
 #include "chrome/browser/prefetch/search_prefetch/streaming_search_prefetch_request.h"
+#include "chrome/browser/prerender/prerender_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/search_engines/ui_thread_search_terms_data.h"
 #include "chrome/common/pref_names.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
-#include "components/omnibox/browser/autocomplete_controller.h"
+#include "components/omnibox/browser/autocomplete_result.h"
 #include "components/omnibox/browser/base_search_provider.h"
 #include "components/omnibox/browser/omnibox_event_global_tracker.h"
 #include "components/omnibox/browser/omnibox_log.h"
@@ -182,16 +182,10 @@ bool SearchPrefetchService::MaybePrefetchURL(const GURL& url) {
     return false;
   }
 
-  std::unique_ptr<BaseSearchPrefetchRequest> prefetch_request;
-  if (StreamSearchPrefetchResponses()) {
-    prefetch_request = std::make_unique<StreamingSearchPrefetchRequest>(
-        url, base::BindOnce(&SearchPrefetchService::ReportError,
-                            base::Unretained(this)));
-  } else {
-    prefetch_request = std::make_unique<FullBodySearchPrefetchRequest>(
-        url, base::BindOnce(&SearchPrefetchService::ReportError,
-                            base::Unretained(this)));
-  }
+  std::unique_ptr<BaseSearchPrefetchRequest> prefetch_request =
+      std::make_unique<StreamingSearchPrefetchRequest>(
+          url, base::BindOnce(&SearchPrefetchService::ReportFetchResult,
+                              base::Unretained(this)));
 
   DCHECK(prefetch_request);
   if (!prefetch_request->StartPrefetchRequest(profile_)) {
@@ -234,6 +228,13 @@ void SearchPrefetchService::OnURLOpenedFromOmnibox(OmniboxLog* log) {
     return;
   }
   prefetches_[match_search_terms]->MarkPrefetchAsClicked();
+}
+
+void SearchPrefetchService::AddCacheEntryForPrerender(
+    const GURL& updated_prerendered_url,
+    const GURL& prerendering_url) {
+  DCHECK(prerender_utils::IsSearchSuggestionPrerenderEnabled());
+  AddCacheEntry(updated_prerendered_url, prerendering_url);
 }
 
 absl::optional<SearchPrefetchStatus>
@@ -388,15 +389,14 @@ void SearchPrefetchService::DeletePrefetch(std::u16string search_terms) {
   prefetch_expiry_timers_.erase(search_terms);
 }
 
-void SearchPrefetchService::ReportError() {
+void SearchPrefetchService::ReportFetchResult(bool error) {
+  UMA_HISTOGRAM_BOOLEAN("Omnibox.SearchPrefetch.FetchResult", !error);
+  if (!error)
+    return;
   last_error_time_ticks_ = base::TimeTicks::Now();
 }
 
-void SearchPrefetchService::OnResultChanged(
-    AutocompleteController* controller) {
-  const auto& result = controller->result();
-  const auto* default_match = result.default_match();
-
+void SearchPrefetchService::OnResultChanged(const AutocompleteResult& result) {
   auto* template_url_service =
       TemplateURLServiceFactory::GetForProfile(profile_);
   DCHECK(template_url_service);
@@ -404,46 +404,33 @@ void SearchPrefetchService::OnResultChanged(
   if (!default_search)
     return;
 
-  // Cancel Unneeded prefetch requests.
-  if (SearchPrefetchShouldCancelUneededInflightRequests()) {
-    // Since we limit the number of prefetches in the map, this should be fast
-    // despite the two loops.
-    for (const auto& kv_pair : prefetches_) {
-      const auto& search_terms = kv_pair.first;
-      auto& prefetch_request = kv_pair.second;
-      if (prefetch_request->current_status() !=
-              SearchPrefetchStatus::kInFlight &&
-          prefetch_request->current_status() !=
-              SearchPrefetchStatus::kCanBeServed) {
-        continue;
-      }
-      bool should_cancel_request = true;
-      for (const auto& match : result) {
-        std::u16string match_search_terms;
-        default_search->ExtractSearchTermsFromURL(
-            match.destination_url, template_url_service->search_terms_data(),
-            &match_search_terms);
+  // Cancel Unneeded prefetch requests. Since we limit the number of prefetches
+  // in the map, this should be fast despite the two loops.
+  for (const auto& kv_pair : prefetches_) {
+    const auto& search_terms = kv_pair.first;
+    auto& prefetch_request = kv_pair.second;
+    if (prefetch_request->current_status() != SearchPrefetchStatus::kInFlight &&
+        prefetch_request->current_status() !=
+            SearchPrefetchStatus::kCanBeServed) {
+      continue;
+    }
+    bool should_cancel_request = true;
+    for (const auto& match : result) {
+      std::u16string match_search_terms;
+      default_search->ExtractSearchTermsFromURL(
+          match.destination_url, template_url_service->search_terms_data(),
+          &match_search_terms);
 
-        if (search_terms == match_search_terms) {
-          should_cancel_request = false;
-          break;
-        }
-      }
-
-      // Cancel the inflight request and mark it as canceled.
-      if (should_cancel_request) {
-        prefetch_request->CancelPrefetch();
+      if (search_terms == match_search_terms) {
+        should_cancel_request = false;
+        break;
       }
     }
-  }
 
-  // One arm of the experiment only prefetches the top match when it is default.
-  if (SearchPrefetchOnlyFetchDefaultMatch()) {
-    if (default_match && BaseSearchProvider::ShouldPrefetch(*default_match)) {
-      MaybePrefetchURL(
-          GetPrefetchURLFromMatch(*default_match, template_url_service));
+    // Cancel the inflight request and mark it as canceled.
+    if (should_cancel_request) {
+      prefetch_request->CancelPrefetch();
     }
-    return;
   }
 
   for (const auto& match : result) {

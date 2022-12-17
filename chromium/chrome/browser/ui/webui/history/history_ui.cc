@@ -36,6 +36,7 @@
 #include "chrome/grit/locale_settings.h"
 #include "components/favicon_base/favicon_url_parser.h"
 #include "components/grit/components_scaled_resources.h"
+#include "components/history_clusters/core/config.h"
 #include "components/history_clusters/core/features.h"
 #include "components/history_clusters/core/history_clusters_prefs.h"
 #include "components/history_clusters/core/history_clusters_service.h"
@@ -128,10 +129,6 @@ content::WebUIDataSource* CreateHistoryUIHTMLSource(Profile* profile) {
 
   source->AddBoolean(kIsUserSignedInKey, IsUserSignedIn(profile));
 
-  // TODO(crbug.com/1286649): Remove after CSS has been updated to no longer
-  // need this attribute.
-  source->AddString("enableBrandingUpdateAttribute", "enable-branding-update");
-
   // History clusters
   auto* history_clusters_service =
       HistoryClustersServiceFactory::GetForBrowserContext(profile);
@@ -144,14 +141,12 @@ content::WebUIDataSource* CreateHistoryUIHTMLSource(Profile* profile) {
   source->AddBoolean(kIsHistoryClustersVisibleManagedByPolicyKey,
                      profile->GetPrefs()->IsManagedPreference(
                          history_clusters::prefs::kVisible));
-  source->AddBoolean(
-      "isHistoryClustersDebug",
-      base::FeatureList::IsEnabled(history_clusters::kUserVisibleDebug));
+  source->AddBoolean("isHistoryClustersDebug",
+                     history_clusters::GetConfig().user_visible_debug);
 
   static constexpr webui::LocalizedString kHistoryClustersStrings[] = {
       {"disableHistoryClusters", IDS_HISTORY_CLUSTERS_DISABLE_MENU_ITEM_LABEL},
       {"enableHistoryClusters", IDS_HISTORY_CLUSTERS_ENABLE_MENU_ITEM_LABEL},
-      {"headerText", IDS_HISTORY_CLUSTERS_HEADER_TEXT},
       {"historyClustersTabLabel", IDS_HISTORY_CLUSTERS_JOURNEYS_TAB_LABEL},
       {"historyListTabLabel", IDS_HISTORY_CLUSTERS_LIST_TAB_LABEL},
       {"loadMoreButtonLabel", IDS_HISTORY_CLUSTERS_LOAD_MORE_BUTTON_LABEL},
@@ -235,15 +230,14 @@ void HistoryUI::UpdateDataSource() {
 
   Profile* profile = Profile::FromWebUI(web_ui());
 
-  std::unique_ptr<base::DictionaryValue> update =
-      std::make_unique<base::DictionaryValue>();
-  update->SetBoolKey(kIsUserSignedInKey, IsUserSignedIn(profile));
-  update->SetBoolKey(
+  base::Value::Dict update;
+  update.Set(kIsUserSignedInKey, IsUserSignedIn(profile));
+  update.Set(
       kIsHistoryClustersVisibleKey,
       profile->GetPrefs()->GetBoolean(history_clusters::prefs::kVisible));
-  update->SetBoolKey(kIsHistoryClustersVisibleManagedByPolicyKey,
-                     profile->GetPrefs()->IsManagedPreference(
-                         history_clusters::prefs::kVisible));
+  update.Set(kIsHistoryClustersVisibleManagedByPolicyKey,
+             profile->GetPrefs()->IsManagedPreference(
+                 history_clusters::prefs::kVisible));
 
   content::WebUIDataSource::Update(profile, chrome::kChromeUIHistoryHost,
                                    std::move(update));

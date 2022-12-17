@@ -22,7 +22,7 @@
 #include "base/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/string_util.h"
-#include "components/media_message_center/media_notification_view_impl.h"
+#include "components/media_message_center/notification_theme.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -48,7 +48,7 @@ constexpr int kNoMediaTextFontSizeIncrease = 2;
 constexpr int kTitleFontSizeIncrease = 4;
 constexpr int kTitleViewHeight = 56;
 
-constexpr gfx::Insets kTitleViewInsets = gfx::Insets(0, 16, 0, 16);
+constexpr auto kTitleViewInsets = gfx::Insets::TLBR(0, 16, 0, 16);
 
 // Minimum screen diagonal (in inches) for pinning global media controls
 // on shelf by default.
@@ -100,11 +100,12 @@ class GlobalMediaControlsTitleView : public views::View {
   GlobalMediaControlsTitleView() {
     SetBorder(views::CreatePaddedBorder(
         views::CreateSolidSidedBorder(
-            0, 0, kMenuSeparatorWidth, 0,
+            gfx::Insets::TLBR(0, 0, kMenuSeparatorWidth, 0),
             AshColorProvider::Get()->GetContentLayerColor(
                 AshColorProvider::ContentLayerType::kSeparatorColor)),
-        gfx::Insets(kMenuSeparatorVerticalPadding, 0,
-                    kMenuSeparatorVerticalPadding - kMenuSeparatorWidth, 0)));
+        gfx::Insets::TLBR(kMenuSeparatorVerticalPadding, 0,
+                          kMenuSeparatorVerticalPadding - kMenuSeparatorWidth,
+                          0)));
 
     auto* box_layout = SetLayoutManager(std::make_unique<views::BoxLayout>(
         views::BoxLayout::Orientation::kHorizontal, kTitleViewInsets));

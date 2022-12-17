@@ -160,6 +160,11 @@
           },
           {
             "type": "boolean",
+            "name": "fromUrlField",
+            "description": "Whether the request came from the url field"
+          },
+          {
+            "type": "boolean",
             "name": "usePost",
             "description": "Whether to perform the navigation via POST."
           },

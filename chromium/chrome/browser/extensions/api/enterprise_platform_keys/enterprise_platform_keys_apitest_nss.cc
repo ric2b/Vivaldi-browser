@@ -8,14 +8,13 @@
 #include <memory>
 #include <string>
 
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "base/bind.h"
-#include "base/cxx17_backports.h"
 #include "base/files/file_path.h"
 #include "base/json/json_writer.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
-#include "base/task/post_task.h"
 #include "base/values.h"
 #include "chrome/browser/ash/login/test/device_state_mixin.h"
 #include "chrome/browser/ash/platform_keys/platform_keys_service_factory.h"
@@ -139,8 +138,8 @@ const unsigned char privateKeyPkcs8System[] = {
 
 base::FilePath GetExtensionDirName() {
   return base::PathService::CheckedGet(chrome::DIR_TEST_DATA)
-      .Append(
-          FILE_PATH_LITERAL("extensions/api_test/enterprise_platform_keys/"));
+      .Append(FILE_PATH_LITERAL(
+          "extensions/api_test/enterprise_platform_keys/basic/"));
 }
 
 base::FilePath GetExtensionPemFileName() {
@@ -204,12 +203,24 @@ struct Params {
 
 class EnterprisePlatformKeysTest
     : public PlatformKeysTestBase,
-      public ::testing::WithParamInterface<Params> {
+      public ::testing::WithParamInterface<std::tuple<Params, bool>> {
  public:
   EnterprisePlatformKeysTest()
-      : PlatformKeysTestBase(GetParam().system_token_status_,
-                             GetParam().enrollment_status_,
-                             GetParam().user_status_) {}
+      : PlatformKeysTestBase(std::get<0>(GetParam()).system_token_status_,
+                             std::get<0>(GetParam()).enrollment_status_,
+                             std::get<0>(GetParam()).user_status_) {
+    // TODO(crbug.com/1311355): This test is run with the feature
+    // kUseAuthsessionAuthentication enabled and disabled because of a
+    // transitive dependency of AffiliationTestHelper on that feature. Remove
+    // the parameter when kUseAuthsessionAuthentication is removed.
+    if (std::get<1>(GetParam())) {
+      feature_list_.InitAndEnableFeature(
+          ash::features::kUseAuthsessionAuthentication);
+    } else {
+      feature_list_.InitAndDisableFeature(
+          ash::features::kUseAuthsessionAuthentication);
+    }
+  }
 
   EnterprisePlatformKeysTest(const EnterprisePlatformKeysTest&) = delete;
   EnterprisePlatformKeysTest& operator=(const EnterprisePlatformKeysTest&) =
@@ -235,7 +246,7 @@ class EnterprisePlatformKeysTest
     // In order to use a prepared certificate, import a private key to the
     // user's token for which the Javscript test will import the certificate.
     ImportPrivateKeyPKCS8ToSlot(privateKeyPkcs8User,
-                                base::size(privateKeyPkcs8User),
+                                std::size(privateKeyPkcs8User),
                                 cert_db->GetPrivateSlot().get());
     std::move(done_callback).Run();
   }
@@ -255,7 +266,7 @@ class EnterprisePlatformKeysTest
     // Import a private key to the system slot.  The Javascript part of this
     // test has a prepared certificate for this key.
     ImportPrivateKeyPKCS8ToSlot(privateKeyPkcs8System,
-                                base::size(privateKeyPkcs8System),
+                                std::size(privateKeyPkcs8System),
                                 system_slot->slot());
   }
 
@@ -264,6 +275,7 @@ class EnterprisePlatformKeysTest
   // destructor).
   ash::platform_keys::test_util::ScopedChapsUtilOverride
       scoped_chaps_util_override_;
+  base::test::ScopedFeatureList feature_list_;
 };
 
 }  // namespace
@@ -300,19 +312,22 @@ IN_PROC_BROWSER_TEST_P(EnterprisePlatformKeysTest, Basic) {
 INSTANTIATE_TEST_SUITE_P(
     CheckSystemTokenAvailability,
     EnterprisePlatformKeysTest,
-    ::testing::Values(
-        Params(PlatformKeysTestBase::SystemTokenStatus::EXISTS,
-               PlatformKeysTestBase::EnrollmentStatus::ENROLLED,
-               PlatformKeysTestBase::UserStatus::MANAGED_AFFILIATED_DOMAIN),
-        Params(PlatformKeysTestBase::SystemTokenStatus::EXISTS,
-               PlatformKeysTestBase::EnrollmentStatus::ENROLLED,
-               PlatformKeysTestBase::UserStatus::MANAGED_OTHER_DOMAIN),
-        Params(PlatformKeysTestBase::SystemTokenStatus::EXISTS,
-               PlatformKeysTestBase::EnrollmentStatus::NOT_ENROLLED,
-               PlatformKeysTestBase::UserStatus::MANAGED_OTHER_DOMAIN),
-        Params(PlatformKeysTestBase::SystemTokenStatus::DOES_NOT_EXIST,
-               PlatformKeysTestBase::EnrollmentStatus::ENROLLED,
-               PlatformKeysTestBase::UserStatus::MANAGED_AFFILIATED_DOMAIN)));
+    ::testing::Combine(
+        ::testing::Values(
+            Params(PlatformKeysTestBase::SystemTokenStatus::EXISTS,
+                   PlatformKeysTestBase::EnrollmentStatus::ENROLLED,
+                   PlatformKeysTestBase::UserStatus::MANAGED_AFFILIATED_DOMAIN),
+            Params(PlatformKeysTestBase::SystemTokenStatus::EXISTS,
+                   PlatformKeysTestBase::EnrollmentStatus::ENROLLED,
+                   PlatformKeysTestBase::UserStatus::MANAGED_OTHER_DOMAIN),
+            Params(PlatformKeysTestBase::SystemTokenStatus::EXISTS,
+                   PlatformKeysTestBase::EnrollmentStatus::NOT_ENROLLED,
+                   PlatformKeysTestBase::UserStatus::MANAGED_OTHER_DOMAIN),
+            Params(
+                PlatformKeysTestBase::SystemTokenStatus::DOES_NOT_EXIST,
+                PlatformKeysTestBase::EnrollmentStatus::ENROLLED,
+                PlatformKeysTestBase::UserStatus::MANAGED_AFFILIATED_DOMAIN)),
+        ::testing::Bool()));
 
 // Ensure that extensions that are not pre-installed by policy throw an install
 // warning if they request the enterprise.platformKeys permission in the
@@ -320,12 +335,11 @@ INSTANTIATE_TEST_SUITE_P(
 // chrome.enterprise.platformKeys namespace.
 IN_PROC_BROWSER_TEST_F(ExtensionApiTest,
                        EnterprisePlatformKeysIsRestrictedToPolicyExtension) {
-  ASSERT_TRUE(RunExtensionTest("enterprise_platform_keys",
-                               {.page_url = "api_not_available.html"},
+  ASSERT_TRUE(RunExtensionTest("enterprise_platform_keys/api_not_available", {},
                                {.ignore_manifest_warnings = true}));
 
   base::FilePath extension_path =
-      test_data_dir_.AppendASCII("enterprise_platform_keys");
+      test_data_dir_.AppendASCII("enterprise_platform_keys/api_not_available");
   ExtensionRegistry* registry = ExtensionRegistry::Get(profile());
   const Extension* extension =
       GetExtensionByPath(registry->enabled_extensions(), extension_path);

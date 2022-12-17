@@ -19,8 +19,11 @@ namespace content {
 class WebUI;
 }  // namespace content
 
+namespace ash {
+namespace personalization_app {
+
 class FakePersonalizationAppWallpaperProvider
-    : public ash::PersonalizationAppWallpaperProvider {
+    : public PersonalizationAppWallpaperProvider {
  public:
   explicit FakePersonalizationAppWallpaperProvider(content::WebUI* web_ui);
 
@@ -38,6 +41,8 @@ class FakePersonalizationAppWallpaperProvider
 
   void MakeTransparent() override {}
 
+  void MakeOpaque() override {}
+
   void FetchCollections(FetchCollectionsCallback callback) override;
 
   void FetchImagesForCollection(
@@ -49,6 +54,9 @@ class FakePersonalizationAppWallpaperProvider
       FetchGooglePhotosAlbumsCallback callback) override;
 
   void FetchGooglePhotosCount(FetchGooglePhotosCountCallback callback) override;
+
+  void FetchGooglePhotosEnabled(
+      FetchGooglePhotosEnabledCallback callback) override;
 
   void FetchGooglePhotosPhotos(
       const absl::optional<std::string>& item_id,
@@ -71,6 +79,8 @@ class FakePersonalizationAppWallpaperProvider
 
   void SelectGooglePhotosPhoto(
       const std::string& id,
+      ash::WallpaperLayout layout,
+      bool preview_mode,
       SelectGooglePhotosPhotoCallback callback) override;
 
   void SelectLocalImage(const base::FilePath& path,
@@ -78,7 +88,7 @@ class FakePersonalizationAppWallpaperProvider
                         bool preview_mode,
                         SelectLocalImageCallback callback) override;
 
-  void SetCustomWallpaperLayout(ash::WallpaperLayout layout) override;
+  void SetCurrentWallpaperLayout(ash::WallpaperLayout layout) override;
 
   void SetDailyRefreshCollectionId(const std::string& collection_id) override;
 
@@ -98,5 +108,8 @@ class FakePersonalizationAppWallpaperProvider
   mojo::Receiver<ash::personalization_app::mojom::WallpaperProvider>
       wallpaper_receiver_{this};
 };
+
+}  // namespace personalization_app
+}  // namespace ash
 
 #endif  // ASH_WEBUI_PERSONALIZATION_APP_TEST_FAKE_PERSONALIZATION_APP_WALLPAPER_PROVIDER_H_

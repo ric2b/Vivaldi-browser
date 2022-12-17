@@ -29,26 +29,20 @@
 #include "base/memory/scoped_refptr.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
-#include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_decode_error_callback.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_decode_success_callback.h"
 #include "third_party/blink/renderer/core/dom/events/event_listener.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_state_observer.h"
-#include "third_party/blink/renderer/core/typed_arrays/array_buffer_view_helpers.h"
-#include "third_party/blink/renderer/core/typed_arrays/dom_typed_array.h"
-#include "third_party/blink/renderer/modules/event_target_modules.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/modules/webaudio/async_audio_decoder.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_destination_node.h"
 #include "third_party/blink/renderer/modules/webaudio/deferred_task_handler.h"
-#include "third_party/blink/renderer/modules/webaudio/iir_filter_node.h"
 #include "third_party/blink/renderer/modules/webaudio/inspector_helper_mixin.h"
-#include "third_party/blink/renderer/platform/audio/audio_bus.h"
 #include "third_party/blink/renderer/platform/audio/audio_callback_metric_reporter.h"
 #include "third_party/blink/renderer/platform/audio/audio_io_callback.h"
+#include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_set.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/heap/prefinalizer.h"
-#include "third_party/blink/renderer/platform/wtf/hash_set.h"
 #include "third_party/blink/renderer/platform/wtf/threading.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
@@ -267,9 +261,16 @@ class MODULES_EXPORT BaseAudioContext
   bool IsAudioThread() const {
     return GetDeferredTaskHandler().IsAudioThread();
   }
-  void lock() { GetDeferredTaskHandler().lock(); }
+  // NO_THREAD_SAFETY_ANALYSIS_FIXME: Stopping here, since the callers (and
+  // derived classes are not annotated).
+  void lock() NO_THREAD_SAFETY_ANALYSIS_FIXME {
+    GetDeferredTaskHandler().lock();
+  }
   bool TryLock() { return GetDeferredTaskHandler().TryLock(); }
-  void unlock() { GetDeferredTaskHandler().unlock(); }
+  void unlock() {
+    GetDeferredTaskHandler().AssertGraphOwner();
+    GetDeferredTaskHandler().unlock();
+  }
 
   // In DCHECK builds, fails if this thread does not own the context's lock.
   void AssertGraphOwner() const { GetDeferredTaskHandler().AssertGraphOwner(); }

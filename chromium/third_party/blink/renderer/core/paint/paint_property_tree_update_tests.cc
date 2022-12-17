@@ -1142,10 +1142,7 @@ TEST_P(PaintPropertyTreeUpdateTest, CompositingReasonForAnimation) {
   UpdateAllLifecyclePhasesForTest();
   EXPECT_TRUE(transform->HasDirectCompositingReasons());
   EXPECT_TRUE(transform->HasActiveTransformAnimation());
-
-  // TODO(flackr): After https://crbug.com/900241 is fixed the filter effect
-  // should no longer have direct compositing reasons due to the animation.
-  EXPECT_TRUE(filter->HasDirectCompositingReasons());
+  EXPECT_FALSE(filter->HasDirectCompositingReasons());
 
   target->setAttribute(html_names::kStyleAttr,
                        "transform: translateX(11px); filter: opacity(40%)");
@@ -1456,8 +1453,7 @@ TEST_P(PaintPropertyTreeUpdateTest, OverflowClipUpdateForImage) {
   properties = PaintPropertiesForElement("target");
   ASSERT_TRUE(properties);
   ASSERT_TRUE(properties->OverflowClip());
-  FloatRoundedRect::Radii radii(2);
-  EXPECT_CLIP_RECT(FloatRoundedRect(gfx::RectF(8, 8, 8, 8), radii),
+  EXPECT_CLIP_RECT(FloatRoundedRect(gfx::RectF(8, 8, 8, 8), 2),
                    properties->OverflowClip());
 
   // We should update clip rect on border radius change.
@@ -1466,8 +1462,7 @@ TEST_P(PaintPropertyTreeUpdateTest, OverflowClipUpdateForImage) {
   UpdateAllLifecyclePhasesForTest();
   ASSERT_EQ(properties, PaintPropertiesForElement("target"));
   ASSERT_TRUE(properties->OverflowClip());
-  radii.Expand(1);
-  EXPECT_CLIP_RECT(FloatRoundedRect(gfx::RectF(8, 8, 8, 8), radii),
+  EXPECT_CLIP_RECT(FloatRoundedRect(gfx::RectF(8, 8, 8, 8), 3),
                    properties->OverflowClip());
 
   // We should update clip rect on padding change.

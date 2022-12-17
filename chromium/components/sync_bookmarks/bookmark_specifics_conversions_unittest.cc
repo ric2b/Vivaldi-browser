@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/guid.h"
+#include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/time/time.h"
@@ -24,19 +25,24 @@
 #include "components/sync/protocol/entity_specifics.pb.h"
 #include "components/sync/protocol/model_type_state.pb.h"
 #include "components/sync_bookmarks/synced_bookmark_tracker.h"
+#include "components/sync_bookmarks/synced_bookmark_tracker_entity.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/skia/include/core/SkBitmap.h"
+#include "ui/gfx/image/image.h"
 #include "url/gurl.h"
+
+namespace sync_bookmarks {
+
+namespace {
 
 using bookmarks::TestBookmarkClient;
 using testing::_;
 using testing::Eq;
 using testing::Ge;
+using testing::IsEmpty;
+using testing::Not;
 using testing::NotNull;
-
-namespace sync_bookmarks {
-
-namespace {
 
 // Fork of enum InvalidBookmarkSpecificsError.
 enum class InvalidBookmarkSpecificsError {
@@ -57,6 +63,14 @@ sync_pb::UniquePosition RandomUniquePosition() {
   return syncer::UniquePosition::InitialPosition(
              syncer::UniquePosition::RandomSuffix())
       .ToProto();
+}
+
+// Returns a single-color 16x16 image using |color|.
+gfx::Image CreateTestImage(SkColor color) {
+  SkBitmap bitmap;
+  bitmap.allocN32Pixels(16, 16);
+  bitmap.eraseColor(color);
+  return gfx::Image::CreateFrom1xBitmap(bitmap);
 }
 
 TEST(BookmarkSpecificsConversionsTest, ShouldCreateSpecificsFromBookmarkNode) {
@@ -163,6 +177,8 @@ TEST(BookmarkSpecificsConversionsTest,
       CreateSpecificsFromBookmarkNode(node, model.get(), RandomUniquePosition(),
                                       /*force_favicon_load=*/true);
   EXPECT_TRUE(client_ptr->HasFaviconLoadTasks());
+  EXPECT_FALSE(specifics.bookmark().has_favicon());
+  EXPECT_FALSE(specifics.bookmark().has_icon_url());
 }
 
 TEST(BookmarkSpecificsConversionsTest,
@@ -183,6 +199,92 @@ TEST(BookmarkSpecificsConversionsTest,
   sync_pb::EntitySpecifics specifics = CreateSpecificsFromBookmarkNode(
       node, model.get(), RandomUniquePosition(), /*force_favicon_load=*/false);
   EXPECT_FALSE(client_ptr->HasFaviconLoadTasks());
+  EXPECT_FALSE(specifics.bookmark().has_favicon());
+  EXPECT_FALSE(specifics.bookmark().has_icon_url());
+}
+
+TEST(BookmarkSpecificsConversionsTest,
+     ShouldIncludeFaviconWhenCreatingSpecificsFromBookmarkNodeIfLoaded) {
+  const GURL kBookmarkUrl("http://www.url.com");
+  const GURL kIconUrl("http://www.icon-url.com");
+  const SkColor kColor = SK_ColorRED;
+
+  auto client = std::make_unique<TestBookmarkClient>();
+  TestBookmarkClient* client_ptr = client.get();
+
+  std::unique_ptr<bookmarks::BookmarkModel> model =
+      TestBookmarkClient::CreateModelWithClient(std::move(client));
+
+  const bookmarks::BookmarkNode* bookmark_bar_node = model->bookmark_bar_node();
+  const bookmarks::BookmarkNode* node = model->AddURL(
+      /*parent=*/bookmark_bar_node, /*index=*/0, u"Title", kBookmarkUrl);
+  ASSERT_THAT(node, NotNull());
+  ASSERT_FALSE(node->is_favicon_loaded());
+
+  // Complete the loading of the favicon as part of the test setup.
+  model->GetFavicon(node);
+  ASSERT_TRUE(client_ptr->HasFaviconLoadTasks());
+  client_ptr->SimulateFaviconLoaded(kBookmarkUrl, kIconUrl,
+                                    CreateTestImage(kColor));
+  ASSERT_TRUE(node->is_favicon_loaded());
+
+  sync_pb::EntitySpecifics specifics =
+      CreateSpecificsFromBookmarkNode(node, model.get(), RandomUniquePosition(),
+                                      /*force_favicon_load=*/false);
+  EXPECT_THAT(specifics.bookmark().favicon(), Not(IsEmpty()));
+  EXPECT_THAT(specifics.bookmark().icon_url(), Eq(kIconUrl));
+
+  // Verify that the |favicon| field is properly encoded.
+  const gfx::Image favicon = gfx::Image::CreateFrom1xPNGBytes(
+      reinterpret_cast<const unsigned char*>(
+          specifics.bookmark().favicon().data()),
+      specifics.bookmark().favicon().size());
+  EXPECT_THAT(favicon.Width(), Eq(16));
+  EXPECT_THAT(favicon.Height(), Eq(16));
+  EXPECT_THAT(favicon.AsBitmap().getColor(1, 1), Eq(kColor));
+}
+
+TEST(BookmarkSpecificsConversionsTest,
+     ShouldOmitLargeFaviconUrlWhenCreatingSpecificsFromBookmarkNode) {
+  const GURL kBookmarkUrl("http://www.url.com");
+  const GURL kIconUrl(
+      base::StrCat({"http://www.icon-url.com/", std::string(5000, 'a')}));
+  const SkColor kColor = SK_ColorRED;
+
+  // This test uses a valid but very long icon URL, larger than
+  // |kMaxFaviconUrlSize|.
+  ASSERT_TRUE(kIconUrl.is_valid());
+  ASSERT_THAT(kIconUrl.spec().size(), Ge(5000u));
+
+  auto client = std::make_unique<TestBookmarkClient>();
+  TestBookmarkClient* client_ptr = client.get();
+
+  std::unique_ptr<bookmarks::BookmarkModel> model =
+      TestBookmarkClient::CreateModelWithClient(std::move(client));
+
+  const bookmarks::BookmarkNode* bookmark_bar_node = model->bookmark_bar_node();
+  const bookmarks::BookmarkNode* node = model->AddURL(
+      /*parent=*/bookmark_bar_node, /*index=*/0, u"Title", kBookmarkUrl);
+  ASSERT_THAT(node, NotNull());
+  ASSERT_FALSE(node->is_favicon_loaded());
+
+  // Complete the loading of the favicon as part of the test setup.
+  model->GetFavicon(node);
+  ASSERT_TRUE(client_ptr->HasFaviconLoadTasks());
+  client_ptr->SimulateFaviconLoaded(kBookmarkUrl, kIconUrl,
+                                    CreateTestImage(kColor));
+  ASSERT_TRUE(node->is_favicon_loaded());
+
+  sync_pb::EntitySpecifics specifics =
+      CreateSpecificsFromBookmarkNode(node, model.get(), RandomUniquePosition(),
+                                      /*force_favicon_load=*/false);
+
+  // The icon URL should be omitted (populated with the empty string).
+  EXPECT_TRUE(specifics.bookmark().has_icon_url());
+  EXPECT_THAT(specifics.bookmark().icon_url(), IsEmpty());
+
+  // The favicon image itself should be synced.
+  EXPECT_THAT(specifics.bookmark().favicon(), Not(IsEmpty()));
 }
 
 TEST(BookmarkSpecificsConversionsTest,
@@ -282,9 +384,9 @@ TEST(BookmarkSpecificsConversionsTest, ShouldCreateFolderFromSpecifics) {
   std::unique_ptr<bookmarks::BookmarkModel> model =
       bookmarks::TestBookmarkClient::CreateModel();
   testing::NiceMock<favicon::MockFaviconService> favicon_service;
-  EXPECT_CALL(favicon_service, AddPageNoVisitForBookmark(_, _)).Times(0);
-  EXPECT_CALL(favicon_service, MergeFavicon(_, _, _, _, _)).Times(0);
-  EXPECT_CALL(favicon_service, DeleteFaviconMappings(_, _)).Times(0);
+  EXPECT_CALL(favicon_service, AddPageNoVisitForBookmark).Times(0);
+  EXPECT_CALL(favicon_service, MergeFavicon).Times(0);
+  EXPECT_CALL(favicon_service, DeleteFaviconMappings).Times(0);
   base::HistogramTester histogram_tester;
   const bookmarks::BookmarkNode* node = CreateBookmarkNodeFromSpecifics(
       bm_specifics,
@@ -914,37 +1016,6 @@ TEST(BookmarkSpecificsConversionsTest,
                                        syncer::ClientTagHash::FromHashed("foo"),
                                        /*originator_cache_guid=*/"",
                                        /*originator_client_item_id=*/""));
-}
-
-TEST(BookmarkSpecificsConversionsTest, ShouldFixGuidInSpecificsDueToPastBug) {
-  auto tracker = SyncedBookmarkTracker::CreateEmpty(sync_pb::ModelTypeState());
-
-  const std::string kSyncId = "SYNC_ID";
-  const base::GUID kGuid = base::GUID::GenerateRandomV4();
-
-  sync_pb::EntitySpecifics specifics;
-  *specifics.mutable_bookmark()->mutable_unique_position() =
-      RandomUniquePosition();
-
-  bookmarks::BookmarkNode node(/*id=*/1, kGuid, GURL());
-  const SyncedBookmarkTracker::Entity* entity =
-      tracker->Add(&node, kSyncId, /*server_version=*/0,
-                   /*creation_time=*/base::Time(), specifics);
-  ASSERT_THAT(entity, NotNull());
-
-  // Mimic in incoming update with a client tag hash but not GUID in specifics.
-  syncer::EntityData update_entity;
-  update_entity.id = kSyncId;
-  update_entity.client_tag_hash =
-      SyncedBookmarkTracker::GetClientTagHashFromGUID(kGuid);
-  // Populate at least one field in specifics so it's not considered a
-  // tombstone.
-  update_entity.specifics.mutable_bookmark()->set_creation_time_us(1);
-
-  MaybeFixGuidInSpecificsDueToPastBug(*tracker, &update_entity);
-
-  EXPECT_THAT(update_entity.specifics.bookmark().guid(),
-              Eq(kGuid.AsLowercaseString()));
 }
 
 }  // namespace

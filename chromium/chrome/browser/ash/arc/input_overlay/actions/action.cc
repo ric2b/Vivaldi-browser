@@ -16,6 +16,7 @@ namespace input_overlay {
 namespace {
 // Json strings.
 constexpr char kName[] = "name";
+constexpr char kInputSources[] = "input_sources";
 constexpr char kLocation[] = "location";
 constexpr char kType[] = "type";
 constexpr char kPosition[] = "position";
@@ -139,9 +140,32 @@ Action::~Action() = default;
 bool Action::ParseFromJson(const base::Value& value) {
   // Name can be empty.
   auto* name = value.FindStringKey(kName);
-  if (name) {
+  if (name)
     name_ = *name;
+
+  // Parse action device source.
+  auto* sources = value.FindListKey(kInputSources);
+  if (!sources || !sources->is_list()) {
+    LOG(ERROR) << "Must have input source(s) for each action.";
+    return false;
   }
+  for (auto& source : sources->GetListDeprecated()) {
+    if (!source.is_string()) {
+      LOG(ERROR) << "Must have input source(s) in string.";
+      return false;
+    }
+
+    if (source.GetString() == kMouse) {
+      parsed_input_sources_ |= InputSource::IS_MOUSE;
+    } else if (source.GetString() == kKeyboard) {
+      parsed_input_sources_ |= InputSource::IS_KEYBOARD;
+    } else {
+      LOG(ERROR) << "Input source {" << source.GetString()
+                 << "} is not supported.";
+      return false;
+    }
+  }
+
   // Location can be empty for mouse related actions.
   const base::Value* position = value.FindListKey(kLocation);
   if (position) {
@@ -152,7 +176,7 @@ bool Action::ParseFromJson(const base::Value& value) {
       on_left_or_middle_side_ = (locations_.front()->anchor().x() <= kHalf);
     }
   }
-
+  // Parse action radius.
   if (!ParsePositiveFraction(value, kRadius, &radius_))
     return false;
 
@@ -163,6 +187,65 @@ bool Action::ParseFromJson(const base::Value& value) {
   }
 
   return true;
+}
+
+bool IsBound(const InputElement& input_element) {
+  return input_element.input_sources() != InputSource::IS_NONE;
+}
+
+bool IsKeyboardBound(const InputElement& input_element) {
+  return (input_element.input_sources() & InputSource::IS_KEYBOARD) != 0;
+}
+
+bool IsMouseBound(const InputElement& input_element) {
+  return (input_element.input_sources() & InputSource::IS_MOUSE) != 0;
+}
+
+void Action::PrepareToBind(std::unique_ptr<InputElement> input_element) {
+  DCHECK(action_view_);
+  if (!action_view_)
+    return;
+  if (pending_binding_)
+    pending_binding_.reset();
+  pending_binding_ = std::move(input_element);
+  auto bounds = CalculateWindowContentBounds(target_window_);
+  action_view_->SetViewContent(BindingOption::kPending, bounds);
+  action_view_->SetDisplayMode(DisplayMode::kEdited);
+}
+
+void Action::BindPending() {
+  if (!pending_binding_)
+    return;
+  DCHECK(action_view_);
+  if (!action_view_)
+    return;
+  current_binding_.reset();
+  current_binding_ = std::move(pending_binding_);
+}
+
+void Action::CancelPendingBind(const gfx::RectF& content_bounds) {
+  if (!pending_binding_)
+    return;
+  DCHECK(action_view_);
+  if (!action_view_)
+    return;
+  action_view_->SetViewContent(BindingOption::kCurrent, content_bounds);
+  pending_binding_.reset();
+}
+
+void Action::RestoreToDefault(const gfx::RectF& content_bounds) {
+  DCHECK(action_view_);
+  if (!action_view_ || GetCurrentDisplayedBinding() == *original_binding_)
+    return;
+  pending_binding_.reset();
+  pending_binding_ = std::make_unique<InputElement>(*original_binding_);
+  action_view_->SetViewContent(BindingOption::kPending, content_bounds);
+  action_view_->SetDisplayMode(DisplayMode::kEdited);
+}
+
+const InputElement& Action::GetCurrentDisplayedBinding() {
+  DCHECK(current_binding_);
+  return pending_binding_ ? *pending_binding_ : *current_binding_;
 }
 
 absl::optional<gfx::PointF> Action::CalculateTouchPosition(

@@ -13,6 +13,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
+#include "base/observer_list.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
@@ -368,12 +369,9 @@ bool ChromePasswordProtectionService::ShouldShowPasswordReusePageInfoBubble(
   if (password_type == PasswordType::ENTERPRISE_PASSWORD)
     return service->HasUnhandledEnterprisePasswordReuse(web_contents);
 
-  bool enable_warning_for_non_sync_users = base::FeatureList::IsEnabled(
-      safe_browsing::kPasswordProtectionForSignedInUsers);
   DCHECK(password_type == PasswordType::PRIMARY_ACCOUNT_PASSWORD ||
          password_type == PasswordType::SAVED_PASSWORD ||
-         (enable_warning_for_non_sync_users &&
-          password_type == PasswordType::OTHER_GAIA_PASSWORD));
+         password_type == PasswordType::OTHER_GAIA_PASSWORD);
   // Otherwise, checks if there's any unhandled sync password reuses matches
   // this origin.
   auto* unhandled_sync_password_reuses = profile->GetPrefs()->GetDictionary(
@@ -1027,15 +1025,10 @@ void ChromePasswordProtectionService::OpenChangePasswordUrl(
             /*in_new_tab=*/true);
   } else {
 #if BUILDFLAG(IS_ANDROID)
-    if (base::FeatureList::IsEnabled(
-            safe_browsing::
-                kSafeBrowsingPasswordCheckIntegrationForSavedPasswordsAndroid)) {
-      JNIEnv* env = base::android::AttachCurrentThread();
-
-      PasswordCheckupLauncherHelper::
-          LaunchLocalCheckupFromPhishGuardWarningDialog(
-              env, web_contents->GetTopLevelNativeWindow()->GetJavaObject());
-    }
+    JNIEnv* env = base::android::AttachCurrentThread();
+    PasswordCheckupLauncherHelper::
+        LaunchLocalCheckupFromPhishGuardWarningDialog(
+            env, web_contents->GetTopLevelNativeWindow()->GetJavaObject());
 #endif
 #if BUILDFLAG(FULL_SAFE_BROWSING)
     // Opens chrome://settings/passwords/check in a new tab.
@@ -1126,10 +1119,7 @@ std::u16string ChromePasswordProtectionService::GetWarningDetailText(
         IDS_PAGE_INFO_CHANGE_PASSWORD_DETAILS_SAVED);
   }
 
-  bool enable_warning_for_non_sync_users = base::FeatureList::IsEnabled(
-      safe_browsing::kPasswordProtectionForSignedInUsers);
-  if (enable_warning_for_non_sync_users &&
-      !password_type.is_account_syncing()) {
+  if (!password_type.is_account_syncing()) {
     return l10n_util::GetStringUTF16(
         IDS_PAGE_INFO_CHANGE_PASSWORD_DETAILS_SIGNED_IN_NON_SYNC);
   }
@@ -1167,7 +1157,8 @@ void ChromePasswordProtectionService::MaybeReportPasswordReuseDetected(
     PasswordProtectionRequest* request,
     const std::string& username,
     PasswordType password_type,
-    bool is_phishing_url) {
+    bool is_phishing_url,
+    bool warning_shown) {
   auto reused_password_account_type =
       GetPasswordProtectionReusedPasswordAccountType(password_type, username);
   if (reused_password_account_type.account_type() ==
@@ -1197,7 +1188,7 @@ void ChromePasswordProtectionService::MaybeReportPasswordReuseDetected(
           static_cast<PasswordProtectionRequestContent*>(request);
       router->OnPolicySpecifiedPasswordReuseDetected(
           request_content->web_contents()->GetLastCommittedURL(),
-          username_or_email, is_phishing_url);
+          username_or_email, is_phishing_url, warning_shown);
     }
   }
 }
@@ -1348,7 +1339,8 @@ void ChromePasswordProtectionService::FillReferrerChain(
           profile_);
   SafeBrowsingNavigationObserverManager::AttributionResult result =
       navigation_observer_manager->IdentifyReferrerChainByEventURL(
-          event_url, event_tab_id, kPasswordEventAttributionUserGestureLimit,
+          event_url, event_tab_id, content::GlobalRenderFrameHostId(),
+          kPasswordEventAttributionUserGestureLimit,
           frame->mutable_referrer_chain());
   size_t referrer_chain_length = frame->referrer_chain().size();
   UMA_HISTOGRAM_COUNTS_100(
@@ -1479,6 +1471,9 @@ RequestOutcome ChromePasswordProtectionService::GetPingNotSentReason(
   }
   if (IsInPasswordAlertMode(password_type)) {
     return RequestOutcome::PASSWORD_ALERT_MODE;
+  }
+  if (url != GURL("about:blank") && !CanGetReputationOfURL(url)) {
+    return RequestOutcome::URL_NOT_VALID_FOR_REPUTATION_COMPUTING;
   }
   return RequestOutcome::DISABLED_DUE_TO_USER_POPULATION;
 }

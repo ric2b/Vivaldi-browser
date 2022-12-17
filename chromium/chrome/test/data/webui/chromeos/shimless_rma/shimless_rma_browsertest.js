@@ -31,7 +31,12 @@ this.ShimlessRMABrowserTest = class extends PolymerTest {
 
   /** @override */
   get featureList() {
-    return {enabled: ['chromeos::features::kShimlessRMAFlow']};
+    return {
+      enabled: [
+        'chromeos::features::kShimlessRMAFlow',
+        'chromeos::features::kShimlessRMAEnableStandalone'
+      ]
+    };
   }
 };
 
@@ -43,6 +48,7 @@ const debug_suites_list = [
   'CriticalErrorPageTest',
   'FakeShimlessRmaServiceTestSuite',
   'OnboardingChooseDestinationPageTest',
+  'OnboardingChooseWipeDevicePageTest',
   'OnboardingChooseWpDisableMethodPageTest',
   'OnboardingEnterRsuWpDisableCodePageTest',
   'OnboardingLandingPageTest',

@@ -5,6 +5,7 @@
 package org.chromium.chrome.features.start_surface;
 
 import android.os.SystemClock;
+import android.view.ViewGroup;
 
 import androidx.annotation.Nullable;
 
@@ -193,6 +194,24 @@ public interface StartSurface {
          * @return Whether the Start surface or the Tab switcher is shown or showing.
          */
         boolean inShowState();
+
+        /**
+         * @return The Tab switcher container view.
+         */
+        ViewGroup getTabSwitcherContainer();
+
+        /**
+         * Sets the parent view for snackbars. If <code>null</code> is given, the original parent
+         * view is restored.
+         *
+         * @param parentView The {@link ViewGroup} to attach snackbars to.
+         */
+        void setSnackbarParentView(ViewGroup parentView);
+
+        /*
+         * Returns whether start surface homepage is showing.
+         */
+        boolean isShowingStartSurfaceHomepage();
     }
 
     /**

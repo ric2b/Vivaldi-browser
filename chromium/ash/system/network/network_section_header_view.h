@@ -23,8 +23,6 @@ namespace ash {
 class IconButton;
 class TrayNetworkStateModel;
 
-namespace tray {
-
 // A header row for sections in network detailed view which contains a title and
 // a toggle button to turn on/off the section. Subclasses are given the
 // opportunity to add extra buttons before the toggle button is added.
@@ -117,10 +115,9 @@ class MobileSectionHeaderView : public NetworkSectionHeaderView,
 
   // TrayNetworkStateObserver:
   void DeviceStateListChanged() override;
+  void GlobalPolicyChanged() override;
 
-  void PerformAddExtraButtons(
-      bool enabled,
-      chromeos::network_config::mojom::GlobalPolicyPtr global_policy);
+  void UpdateAddESimButtonVisibility();
 
   void AddCellularButtonPressed();
 
@@ -150,14 +147,15 @@ class MobileSectionHeaderView : public NetworkSectionHeaderView,
   base::WeakPtrFactory<MobileSectionHeaderView> weak_ptr_factory_{this};
 };
 
-class WifiSectionHeaderView : public NetworkSectionHeaderView {
+class WifiSectionHeaderView : public NetworkSectionHeaderView,
+                              public TrayNetworkStateObserver {
  public:
   WifiSectionHeaderView();
 
   WifiSectionHeaderView(const WifiSectionHeaderView&) = delete;
   WifiSectionHeaderView& operator=(const WifiSectionHeaderView&) = delete;
 
-  ~WifiSectionHeaderView() override = default;
+  ~WifiSectionHeaderView() override;
 
   // NetworkSectionHeaderView:
   void SetToggleState(bool toggle_enabled, bool is_on) override;
@@ -166,9 +164,14 @@ class WifiSectionHeaderView : public NetworkSectionHeaderView {
   const char* GetClassName() const override;
 
  private:
+  // TrayNetworkStateObserver:
+  void DeviceStateListChanged() override;
+  void GlobalPolicyChanged() override;
+
   // NetworkSectionHeaderView:
   void OnToggleToggled(bool is_on) override;
   void AddExtraButtons(bool enabled) override;
+  void UpdateJoinButtonVisibility();
 
   void JoinButtonPressed();
 
@@ -176,7 +179,6 @@ class WifiSectionHeaderView : public NetworkSectionHeaderView {
   IconButton* join_button_ = nullptr;
 };
 
-}  // namespace tray
 }  // namespace ash
 
 #endif  // ASH_SYSTEM_NETWORK_NETWORK_SECTION_HEADER_VIEW_H_

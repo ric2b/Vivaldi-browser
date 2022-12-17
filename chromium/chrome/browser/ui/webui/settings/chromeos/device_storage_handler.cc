@@ -13,6 +13,7 @@
 #include "ash/components/arc/arc_features.h"
 #include "ash/components/disks/disk.h"
 #include "base/notreached.h"
+#include "base/values.h"
 #include "chrome/browser/ash/arc/arc_util.h"
 #include "chrome/browser/ash/file_manager/path_util.h"
 #include "chrome/browser/platform_util.h"
@@ -161,12 +162,12 @@ int64_t StorageHandler::RoundByteSize(int64_t bytes) {
 }
 
 void StorageHandler::HandleUpdateAndroidEnabled(
-    base::Value::ConstListView unused_args) {
+    const base::Value::List& unused_args) {
   // OnJavascriptAllowed() calls ArcSessionManager::AddObserver() later.
   AllowJavascript();
 }
 
-void StorageHandler::HandleUpdateStorageInfo(base::Value::ConstListView args) {
+void StorageHandler::HandleUpdateStorageInfo(const base::Value::List& args) {
   AllowJavascript();
   total_disk_space_calculator_.StartCalculation();
   free_disk_space_calculator_.StartCalculation();
@@ -177,7 +178,7 @@ void StorageHandler::HandleUpdateStorageInfo(base::Value::ConstListView args) {
   other_users_size_calculator_.StartCalculation();
 }
 
-void StorageHandler::HandleOpenMyFiles(base::Value::ConstListView unused_args) {
+void StorageHandler::HandleOpenMyFiles(const base::Value::List& unused_args) {
   const base::FilePath my_files_path =
       file_manager::util::GetMyFilesFolderForProfile(profile_);
   platform_util::OpenItem(profile_, my_files_path, platform_util::OPEN_FOLDER,
@@ -185,7 +186,7 @@ void StorageHandler::HandleOpenMyFiles(base::Value::ConstListView unused_args) {
 }
 
 void StorageHandler::HandleOpenArcStorage(
-    base::Value::ConstListView unused_args) {
+    const base::Value::List& unused_args) {
   auto* arc_storage_manager =
       arc::ArcStorageManager::GetForBrowserContext(profile_);
   if (arc_storage_manager)
@@ -193,7 +194,7 @@ void StorageHandler::HandleOpenArcStorage(
 }
 
 void StorageHandler::HandleUpdateExternalStorages(
-    base::Value::ConstListView unused_args) {
+    const base::Value::List& unused_args) {
   UpdateExternalStorages();
 }
 
@@ -227,8 +228,8 @@ void StorageHandler::UpdateExternalStorages() {
 }
 
 void StorageHandler::OnArcPlayStoreEnabledChanged(bool enabled) {
-  auto update = std::make_unique<base::DictionaryValue>();
-  update->SetKey(
+  base::Value::Dict update;
+  update.Set(
       kAndroidEnabled,
       base::Value(features::ShouldShowExternalStorageSettings(profile_)));
   content::WebUIDataSource::Update(profile_, source_name_, std::move(update));

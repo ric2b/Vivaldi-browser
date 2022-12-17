@@ -6,7 +6,6 @@
 #include <stdint.h>
 
 #include "base/base64url.h"
-#include "base/cxx17_backports.h"
 #include "components/webcrypto/algorithm_dispatch.h"
 #include "components/webcrypto/algorithms/test_helpers.h"
 #include "components/webcrypto/crypto_data.h"
@@ -128,7 +127,7 @@ TEST_F(WebCryptoRsaOaepTest, ExportPublicJwk) {
                    {blink::kWebCryptoAlgorithmIdSha256, "RSA-OAEP-256"},
                    {blink::kWebCryptoAlgorithmIdSha384, "RSA-OAEP-384"},
                    {blink::kWebCryptoAlgorithmIdSha512, "RSA-OAEP-512"}};
-  for (size_t i = 0; i < base::size(kTestData); ++i) {
+  for (size_t i = 0; i < std::size(kTestData); ++i) {
     const TestData& test_data = kTestData[i];
     SCOPED_TRACE(test_data.expected_jwk_alg);
 
@@ -155,14 +154,10 @@ TEST_F(WebCryptoRsaOaepTest, ExportPublicJwk) {
 }
 
 TEST_F(WebCryptoRsaOaepTest, EncryptDecryptKnownAnswerTest) {
-  base::Value tests;
-  ASSERT_TRUE(ReadJsonTestFileAsList("rsa_oaep.json", &tests));
+  base::Value::List tests = ReadJsonTestFileAsList("rsa_oaep.json");
+  for (const auto& test_value : tests) {
+    SCOPED_TRACE(&test_value - &tests[0]);
 
-  for (size_t test_index = 0; test_index < tests.GetListDeprecated().size();
-       ++test_index) {
-    SCOPED_TRACE(test_index);
-
-    const base::Value& test_value = tests.GetListDeprecated()[test_index];
     ASSERT_TRUE(test_value.is_dict());
     const base::DictionaryValue* test =
         &base::Value::AsDictionaryValue(test_value);
@@ -481,7 +476,7 @@ TEST_F(WebCryptoRsaOaepTest, ImportExportJwkRsaPublicKey) {
       {blink::kWebCryptoAlgorithmIdSha512, blink::kWebCryptoKeyUsageEncrypt,
        "RSA-OAEP-512"}};
 
-  for (size_t test_index = 0; test_index < base::size(kTests); ++test_index) {
+  for (size_t test_index = 0; test_index < std::size(kTests); ++test_index) {
     SCOPED_TRACE(test_index);
     const TestCase& test = kTests[test_index];
 

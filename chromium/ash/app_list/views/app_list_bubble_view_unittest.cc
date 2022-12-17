@@ -6,7 +6,6 @@
 
 #include <memory>
 #include <string>
-#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -37,7 +36,9 @@
 #include "ash/shell.h"
 #include "ash/style/ash_color_provider.h"
 #include "ash/system/tray/tray_constants.h"
+#include "ash/system/unified/unified_system_tray.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/test/layer_animation_stopped_waiter.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -50,7 +51,11 @@
 #include "ui/events/keycodes/keyboard_codes_posix.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/message_center/message_center.h"
+#include "ui/message_center/public/cpp/notification.h"
+#include "ui/message_center/public/cpp/notifier_id.h"
 #include "ui/views/accessibility/view_accessibility.h"
+#include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/controls/textfield/textfield.h"
@@ -62,7 +67,7 @@ using views::Widget;
 namespace ash {
 namespace {
 
-constexpr int kBorderSize = 2;
+constexpr int kBorderInset = 1;
 
 SearchModel* GetSearchModel() {
   return AppListModelProvider::Get()->search_model();
@@ -183,10 +188,6 @@ class AppListBubbleViewTest : public AshTestBase {
     return view ? view->GetClassName() : "none";
   }
 
-  void WaitForLayerAnimation(ui::Layer* layer) {
-    GetAppListTestHelper()->WaitForLayerAnimation(layer);
-  }
-
   base::test::ScopedFeatureList scoped_features_;
   std::unique_ptr<test::AppListTestModel> app_list_test_model_;
   std::unique_ptr<SearchModel> search_model_;
@@ -218,7 +219,7 @@ TEST_F(AppListBubbleViewTest, Layout) {
   auto* search_icon = search_box_view->search_icon();
   gfx::Rect search_icon_bounds =
       search_icon->ConvertRectToWidget(search_icon->GetLocalBounds());
-  EXPECT_EQ("18,18 24x24", search_icon_bounds.ToString());
+  EXPECT_EQ("17,17 24x24", search_icon_bounds.ToString());
 
   // Check height of search box view.
   EXPECT_EQ(56, search_box_view->height());
@@ -226,8 +227,8 @@ TEST_F(AppListBubbleViewTest, Layout) {
   // The separator is immediately under the search box.
   gfx::Point separator_origin;
   views::View::ConvertPointToWidget(GetSearchBoxSeparator(), &separator_origin);
-  EXPECT_EQ(kBorderSize, separator_origin.x());
-  EXPECT_EQ(kBorderSize + search_box_view->height(), separator_origin.y());
+  EXPECT_EQ(kBorderInset, separator_origin.x());
+  EXPECT_EQ(kBorderInset + search_box_view->height(), separator_origin.y());
 }
 
 TEST_F(AppListBubbleViewTest,
@@ -377,7 +378,7 @@ TEST_F(AppListBubbleViewTest, ShowAnimationCreatesAndDestroysLayers) {
   EXPECT_TRUE(apps_grid_view->layer());
 
   // Finish the animation.
-  WaitForLayerAnimation(apps_grid_view->layer());
+  LayerAnimationStoppedWaiter().Wait(apps_grid_view->layer());
 
   // Temporary layers are cleaned up.
   EXPECT_FALSE(continue_section->layer());
@@ -405,7 +406,7 @@ TEST_F(AppListBubbleViewTest, ShowAnimationDestroysAndRestoresGradientMask) {
 
   // Finish the animation.
   auto* apps_grid_view = GetAppsGridView();
-  WaitForLayerAnimation(apps_grid_view->layer());
+  LayerAnimationStoppedWaiter().Wait(apps_grid_view->layer());
 
   // Gradient mask layer is restored.
   EXPECT_TRUE(scroll_view->layer()->layer_mask_layer());
@@ -425,7 +426,7 @@ TEST_F(AppListBubbleViewTest, ShowAnimationDestroysAndRestoresShadow) {
 
   // Finish the animation.
   auto* apps_grid_view = GetAppsGridView();
-  WaitForLayerAnimation(apps_grid_view->layer());
+  LayerAnimationStoppedWaiter().Wait(apps_grid_view->layer());
 
   // Shadow is restored.
   EXPECT_TRUE(app_list_bubble_view->view_shadow_for_test());
@@ -443,7 +444,13 @@ TEST_F(AppListBubbleViewTest, ShowAnimationRecordsSmoothnessHistogram) {
   ShowAppList();
 
   // Wait for the animation to finish.
-  WaitForLayerAnimation(GetAppsGridView()->layer());
+  ui::Layer* layer = GetAppsGridView()->layer();
+  LayerAnimationStoppedWaiter().Wait(layer);
+
+  // Ensure there is one more frame presented after animation finishes to allow
+  // animation throughput data to be passed from cc to ui.
+  layer->GetCompositor()->ScheduleFullRedraw();
+  EXPECT_TRUE(ui::WaitForNextFrameToBePresented(layer->GetCompositor()));
 
   // Smoothness was recorded.
   histograms.ExpectTotalCount(
@@ -462,19 +469,16 @@ TEST_F(AppListBubbleViewTest, HideAnimationsRecordsSmoothnessHistogram) {
       ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
 
   AppListBubbleView* view = GetBubblePresenter()->bubble_view_for_test();
-  ui::Compositor* compositor = view->layer()->GetCompositor();
+  ui::Layer* layer = view->layer();
 
-  // Run the hide animation and wait for it to finish. This doesn't use
-  // WaitForLayerAnimation() because the view and its layer are deleted at the
-  // end of the animation.
-  base::RunLoop run_loop;
-  view->StartHideAnimation(/*is_side_shelf=*/false, run_loop.QuitClosure());
-  run_loop.Run();
+  // Run the hide animation and wait for it to finish.
+  view->StartHideAnimation(/*is_side_shelf=*/false, base::DoNothing());
+  LayerAnimationStoppedWaiter().Wait(layer);
 
   // Ensure there is one more frame presented after animation finishes to allow
   // animation throughput data to be passed from cc to ui.
-  std::ignore =
-      ui::WaitForNextFrameToBePresented(compositor, base::Milliseconds(200));
+  layer->GetCompositor()->ScheduleFullRedraw();
+  EXPECT_TRUE(ui::WaitForNextFrameToBePresented(layer->GetCompositor()));
 
   // Smoothness was recorded.
   histograms.ExpectTotalCount(
@@ -491,7 +495,7 @@ TEST_F(AppListBubbleViewTest, ShutdownDuringHideAnimationDoesNotCrash) {
   // Show the app list and wait for the show animation to finish.
   AddAppItems(5);
   ShowAppList();
-  WaitForLayerAnimation(GetAppsGridView()->layer());
+  LayerAnimationStoppedWaiter().Wait(GetAppsGridView()->layer());
 
   // Dismiss the app list, but don't wait for the animation to finish.
   GetAppListTestHelper()->Dismiss();
@@ -559,6 +563,49 @@ TEST_F(AppListBubbleViewTest, ClosingBubbleClearsSearch) {
   EXPECT_EQ(u"", client->last_search_query());
 }
 
+// Regression test for https://crbug.com/1313140
+TEST_F(AppListBubbleViewTest, CanOpenMessageCenterWithKeyboardShortcut) {
+  // Add a notification so there's something to focus in the message center.
+  auto notification = std::make_unique<message_center::Notification>(
+      message_center::NOTIFICATION_TYPE_SIMPLE, "id", u"Title", u"Message",
+      ui::ImageModel(), /*display_source=*/std::u16string(), GURL(),
+      message_center::NotifierId(), message_center::RichNotificationData(),
+      /*delegate=*/nullptr);
+  message_center::MessageCenter::Get()->AddNotification(
+      std::move(notification));
+
+  // Message center starts closed.
+  auto* system_tray = GetPrimaryUnifiedSystemTray();
+  ASSERT_FALSE(system_tray->IsMessageCenterBubbleShown());
+
+  // Open the launcher and do a search.
+  AddAppItems(1);
+  ShowAppList();
+  PressAndReleaseKey(ui::VKEY_A);
+
+  // Search box has focus.
+  views::Textfield* search_box_input = GetSearchBoxView()->search_box();
+  ASSERT_TRUE(search_box_input->HasFocus());
+
+  // Enable animations.
+  ui::ScopedAnimationDurationScaleMode duration(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+
+  // Move focus to the message center notification area with Alt-Shift-N. The
+  // message center will open and the app list will dismiss.
+  PressAndReleaseKey(ui::VKEY_N, ui::EF_ALT_DOWN | ui::EF_SHIFT_DOWN);
+
+  // Wait for the app list hide animation to finish.
+  AppListBubbleView* view = GetBubblePresenter()->bubble_view_for_test();
+  LayerAnimationStoppedWaiter().Wait(view->layer());
+
+  // Search box did not steal focus.
+  EXPECT_FALSE(search_box_input->HasFocus());
+
+  // Message center is still open.
+  EXPECT_TRUE(system_tray->IsMessageCenterBubbleShown());
+}
+
 TEST_F(AppListBubbleViewTest, SearchBoxTextUsesPrimaryTextColor) {
   ShowAppList();
 
@@ -614,7 +661,7 @@ TEST_F(AppListBubbleViewTest, AssistantPageLayout) {
   // at the bottom.
   auto* app_list_bubble_view = GetAppListTestHelper()->GetBubbleView();
   gfx::Rect expected_bounds = app_list_bubble_view->bounds();
-  expected_bounds.Inset(kBorderSize);
+  expected_bounds.Inset(kBorderInset);
   EXPECT_EQ(GetAssistantPage()->bounds(), expected_bounds);
 }
 
@@ -874,6 +921,32 @@ TEST_F(AppListBubbleViewTest, DownArrowFromRecentsSelectsSameColumnInAppsGrid) {
   }
 }
 
+TEST_F(AppListBubbleViewTest, DownArrowFromToastKeepsSameColumnInAppsGrid) {
+  AddRecentApps(5);
+  AddAppItems(5);
+  ShowAppList();
+
+  AppListController::Get()->UpdateAppListWithNewTemporarySortOrder(
+      AppListSortOrder::kColor,
+      /*animate=*/false, /*update_position_closure=*/base::OnceClosure());
+  ASSERT_TRUE(GetToastContainerView()->GetToastButton());
+
+  for (int column = 0; column < 5; column++) {
+    // Pressing down arrow from an item in recent apps selects the app in the
+    // same column in the apps grid.
+    AppListItemView* recent_app = GetRecentAppsView()->GetItemViewAt(column);
+    recent_app->RequestFocus();
+    ASSERT_TRUE(recent_app->HasFocus());
+
+    PressAndReleaseKey(ui::VKEY_DOWN);
+    EXPECT_TRUE(GetToastContainerView()->GetToastButton()->HasFocus());
+
+    PressAndReleaseKey(ui::VKEY_DOWN);
+    AppListItemView* app = GetAppsGridView()->GetItemViewAt(column);
+    EXPECT_TRUE(app->HasFocus()) << "Focus mismatch for column " << column;
+  }
+}
+
 TEST_F(AppListBubbleViewTest, DownArrowFromRecentsSelectsLastColumnInAppsGrid) {
   AddRecentApps(5);
   AddFolderWithApps(2);
@@ -938,6 +1011,32 @@ TEST_F(AppListBubbleViewTest, UpArrowFromAppsGridSelectsSameColumnInRecents) {
   }
 }
 
+TEST_F(AppListBubbleViewTest, UpArrowFromToastKeepsSameColumnInAppsGrid) {
+  AddRecentApps(5);
+  AddAppItems(5);
+  ShowAppList();
+
+  AppListController::Get()->UpdateAppListWithNewTemporarySortOrder(
+      AppListSortOrder::kColor,
+      /*animate=*/false, /*update_position_closure=*/base::OnceClosure());
+  ASSERT_TRUE(GetToastContainerView()->GetToastButton());
+
+  for (int column = 0; column < 5; column++) {
+    // Pressing up arrow from an item in the apps grid selects the app in the
+    // same column in the recents list.
+    AppListItemView* app = GetAppsGridView()->GetItemViewAt(column);
+    app->RequestFocus();
+    ASSERT_TRUE(app->HasFocus());
+
+    PressAndReleaseKey(ui::VKEY_UP);
+    EXPECT_TRUE(GetToastContainerView()->GetToastButton()->HasFocus());
+
+    PressAndReleaseKey(ui::VKEY_UP);
+    EXPECT_TRUE(GetRecentAppsView()->GetItemViewAt(column)->HasFocus())
+        << "Focus mismatch for column " << column;
+  }
+}
+
 TEST_F(AppListBubbleViewTest, UpArrowFromAppsGridSelectsLastColumnInRecents) {
   // Add 4 columns of recents, but 5 columns of apps.
   AddRecentApps(4);
@@ -981,13 +1080,13 @@ TEST_F(AppListBubbleViewTest, DownArrowMovesFocusToContinueTasks) {
   SearchBoxView* search_box_view = GetSearchBoxView();
   EXPECT_TRUE(search_box_view->search_box()->HasFocus());
 
-  // Pressing down arrow moves focus through the continue tasks. It does not
-  // trigger ScrollView scrolling.
+  // Pressing down arrow twice moves focus through the two rows of continue
+  // tasks. It does not trigger ScrollView scrolling.
   auto* focus_manager = GetAppsPage()->GetFocusManager();
-  for (int i = 0; i < 4; i++) {
+  auto* continue_section = GetContinueSectionView();
+  for (int i = 0; i < 2; i++) {
     PressAndReleaseKey(ui::VKEY_DOWN);
-    EXPECT_TRUE(
-        GetContinueSectionView()->Contains(focus_manager->GetFocusedView()));
+    EXPECT_TRUE(continue_section->Contains(focus_manager->GetFocusedView()));
   }
 
   // Pressing down arrow again moves focus into the apps grid.
@@ -1323,6 +1422,22 @@ TEST_F(AppListBubbleViewTest, AutoScrollToFitViewOnFocus) {
   // The gradient mask should not obscure the focused app view.
   EXPECT_FALSE(gradient_mask_bounds_start.Intersects(app_view_bounds));
   EXPECT_FALSE(gradient_mask_bounds_end.Intersects(app_view_bounds));
+}
+
+// Verifies that hidden app list bubble view does not attempt to change its
+// active page when app list model gets cleared.
+TEST_F(AppListBubbleViewTest, HiddenAppListPageNotSetDuringShutdown) {
+  // Show app list so AppListBubbleView gets created.
+  AddAppItems(5);
+  ShowAppList();
+
+  DismissAppList();
+  EXPECT_EQ(AppListBubblePage::kNone,
+            GetAppListTestHelper()->GetBubbleView()->current_page_for_test());
+
+  AppListModelProvider::Get()->ClearActiveModel();
+  EXPECT_EQ(AppListBubblePage::kNone,
+            GetAppListTestHelper()->GetBubbleView()->current_page_for_test());
 }
 
 }  // namespace

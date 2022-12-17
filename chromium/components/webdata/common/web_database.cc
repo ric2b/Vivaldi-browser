@@ -9,11 +9,15 @@
 #include "base/logging.h"
 #include "sql/transaction.h"
 
+#include "app/vivaldi_apptools.h"
+
 // Current version number.  Note: when changing the current version number,
 // corresponding changes must happen in the unit tests, and new migration test
 // added.  See |WebDatabaseMigrationTest::kCurrentTestedVersionNumber|.
 // static
-const int WebDatabase::kCurrentVersionNumber = 100;
+const int WebDatabase::kCurrentVersionNumber = 104;
+
+const int WebDatabase::kVivaldiCurrentVersionNumber = 1;
 
 const int WebDatabase::kDeprecatedVersionNumber = 51;
 
@@ -60,7 +64,7 @@ WebDatabase::WebDatabase()
            // quite infrequent. So we go with a small cache size.
            .cache_size = 32}) {}
 
-WebDatabase::~WebDatabase() {}
+WebDatabase::~WebDatabase() = default;
 
 void WebDatabase::AddTable(WebDatabaseTable* table) {
   tables_[table->GetTypeKey()] = table;
@@ -117,8 +121,8 @@ sql::InitStatus WebDatabase::Init(const base::FilePath& db_name) {
   }
 
   // Initialize the tables.
-  for (auto it = tables_.begin(); it != tables_.end(); ++it) {
-    it->second->Init(&db_, &meta_table_);
+  for (const auto& table : tables_) {
+    table.second->Init(&db_, &meta_table_);
   }
 
   // If the file on disk is an older database version, bring it up to date.
@@ -128,12 +132,16 @@ sql::InitStatus WebDatabase::Init(const base::FilePath& db_name) {
   if (migration_status != sql::INIT_OK)
     return migration_status;
 
+  migration_status = MigrateOldVivaldiVersionsAsNeeded(0);
+  if (migration_status != sql::INIT_OK)
+    return migration_status;
+
   // Create the desired SQL tables if they do not already exist.
   // It's important that this happen *after* the migration code runs.
   // Otherwise, the migration code would have to explicitly check for empty
   // tables created in the new format, and skip the migration in that case.
-  for (auto it = tables_.begin(); it != tables_.end(); ++it) {
-    if (!it->second->CreateTablesIfNecessary()) {
+  for (const auto& table : tables_) {
+    if (!table.second->CreateTablesIfNecessary()) {
       LOG(WARNING) << "Unable to initialize the web database.";
       return sql::INIT_FAILURE;
     }
@@ -160,14 +168,19 @@ sql::InitStatus WebDatabase::MigrateOldVersionsAsNeeded() {
     if (!MigrateToVersion(next_version, &update_compatible_version))
       return FailedMigrationTo(next_version);
 
+    sql::InitStatus vivaldi_migration_status =
+        MigrateOldVivaldiVersionsAsNeeded(next_version);
+    if (vivaldi_migration_status != sql::INIT_OK)
+      return vivaldi_migration_status;
+
     ChangeVersion(&meta_table_, next_version, update_compatible_version);
 
     // Give each table a chance to migrate to this version.
-    for (auto it = tables_.begin(); it != tables_.end(); ++it) {
+    for (const auto& table : tables_) {
       // Any of the tables may set this to true, but by default it is false.
       update_compatible_version = false;
-      if (!it->second->MigrateToVersion(next_version,
-                                        &update_compatible_version)) {
+      if (!table.second->MigrateToVersion(next_version,
+                                          &update_compatible_version)) {
         return FailedMigrationTo(next_version);
       }
 
@@ -206,4 +219,47 @@ bool WebDatabase::MigrateToVersion79DropLoginsTable() {
   return transaction.Begin() &&
          db_.Execute("DROP TABLE IF EXISTS ie7_logins") &&
          db_.Execute("DROP TABLE IF EXISTS logins") && transaction.Commit();
+}
+
+sql::InitStatus WebDatabase::MigrateOldVivaldiVersionsAsNeeded(
+    int chromium_version) {
+  const char kVivaldiVersion[] = "vivaldi_version";
+  int current_version;
+  if (!meta_table_.GetValue(kVivaldiVersion, &current_version))
+    current_version = 0;
+
+  auto failed_migration_to = [](int version_num) {
+    LOG(WARNING) << "Unable to update web database to version " << version_num
+                 << ".";
+    NOTREACHED();
+    return sql::INIT_FAILURE;
+  };
+
+  // Determines which vivaldi migrations need to be applied before which
+  // chromium migration.
+  int target_version = [chromium_version]() {
+    switch (chromium_version) {
+      case 0:
+        return kVivaldiCurrentVersionNumber;
+      case 103:
+        return 1;
+      default:
+        return 0;
+    }
+  }();
+  if (target_version == 0)  // Nothing to do
+    return sql::INIT_OK;
+
+  for (int next_version = current_version + 1; next_version <= target_version;
+       ++next_version) {
+    for (auto it = tables_.begin(); it != tables_.end(); ++it) {
+      // Any of the tables may set this to true, but by default it is false.
+      if (!it->second->MigrateToVivaldiVersion(next_version)) {
+        return failed_migration_to(next_version);
+      }
+
+      meta_table_.SetValue(kVivaldiVersion, next_version);
+    }
+  }
+  return sql::INIT_OK;
 }

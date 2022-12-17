@@ -20,7 +20,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/task/post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -350,6 +349,8 @@ void FakeSessionManagerClient::StartSession(
 void FakeSessionManagerClient::StopSession(
     login_manager::SessionStopReason reason) {
   session_stopped_ = true;
+  if (stop_session_callback_)
+    std::move(stop_session_callback_).Run();
 }
 
 void FakeSessionManagerClient::LoadShillProfile(
@@ -408,6 +409,8 @@ void FakeSessionManagerClient::NotifyLockScreenDismissed() {
 
 bool FakeSessionManagerClient::RequestBrowserDataMigration(
     const cryptohome::AccountIdentifier& cryptohome_id) {
+  request_browser_data_migration_called_ = true;
+
   return true;
 }
 

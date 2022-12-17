@@ -244,6 +244,44 @@ class OsDiagnosticsRunCpuStressRoutineFunction
   void RunIfAllowed() override;
 };
 
+class OsDiagnosticsRunDiskReadRoutineFunction
+    : public DiagnosticsApiRunRoutineFunctionBase {
+ public:
+  DECLARE_EXTENSION_FUNCTION("os.diagnostics.runDiskReadRoutine",
+                             OS_DIAGNOSTICS_RUNDISKREADROUTINE)
+
+  OsDiagnosticsRunDiskReadRoutineFunction();
+  OsDiagnosticsRunDiskReadRoutineFunction(
+      const OsDiagnosticsRunDiskReadRoutineFunction&) = delete;
+  OsDiagnosticsRunDiskReadRoutineFunction& operator=(
+      const OsDiagnosticsRunDiskReadRoutineFunction&) = delete;
+
+ private:
+  ~OsDiagnosticsRunDiskReadRoutineFunction() override;
+
+  // BaseTelemetryExtensionApiGuardFunction:
+  void RunIfAllowed() override;
+};
+
+class OsDiagnosticsRunLanConnectivityRoutineFunction
+    : public DiagnosticsApiRunRoutineFunctionBase {
+ public:
+  DECLARE_EXTENSION_FUNCTION("os.diagnostics.runLanConnectivityRoutine",
+                             OS_DIAGNOSTICS_RUNLANCONNECTIVITYROUTINE)
+
+  OsDiagnosticsRunLanConnectivityRoutineFunction();
+  OsDiagnosticsRunLanConnectivityRoutineFunction(
+      const OsDiagnosticsRunLanConnectivityRoutineFunction&) = delete;
+  OsDiagnosticsRunLanConnectivityRoutineFunction& operator=(
+      const OsDiagnosticsRunLanConnectivityRoutineFunction&) = delete;
+
+ private:
+  ~OsDiagnosticsRunLanConnectivityRoutineFunction() override;
+
+  // BaseTelemetryExtensionApiGuardFunction:
+  void RunIfAllowed() override;
+};
+
 class OsDiagnosticsRunMemoryRoutineFunction
     : public DiagnosticsApiRunRoutineFunctionBase {
  public:

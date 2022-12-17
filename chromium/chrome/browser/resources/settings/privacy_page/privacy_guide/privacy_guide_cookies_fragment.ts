@@ -15,6 +15,7 @@ import '../../privacy_page/collapse_radio_button.js';
 
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
+import {loadTimeData} from '../../i18n_setup.js';
 import {MetricsBrowserProxy, MetricsBrowserProxyImpl, PrivacyGuideSettingsStates} from '../../metrics_browser_proxy.js';
 import {PrefsMixin} from '../../prefs/prefs_mixin.js';
 import {CookiePrimarySetting} from '../../site_settings/site_settings_prefs_browser_proxy.js';
@@ -50,6 +51,11 @@ export class PrivacyGuideCookiesFragmentElement extends
         type: Object,
         value: CookiePrimarySetting,
       },
+
+      enablePrivacyGuide2_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('privacyGuide2Enabled'),
+      },
     };
   }
 
@@ -57,10 +63,14 @@ export class PrivacyGuideCookiesFragmentElement extends
       MetricsBrowserProxyImpl.getInstance();
   private startStateBlock3PIncognito_: boolean;
 
-  ready() {
+  override ready() {
     super.ready();
     this.addEventListener('view-enter-start', this.onViewEnterStart_);
     this.addEventListener('view-exit-finish', this.onViewExitFinish_);
+  }
+
+  override focus() {
+    this.shadowRoot!.querySelector<HTMLElement>('[focus-element]')!.focus();
   }
 
   private onViewEnterStart_() {
@@ -95,6 +105,18 @@ export class PrivacyGuideCookiesFragmentElement extends
   private onCookies3PClick_() {
     this.metricsBrowserProxy_.recordAction(
         'Settings.PrivacyGuide.ChangeCookiesBlock3P');
+  }
+
+  private onRadioGroupKeyDown_(event: KeyboardEvent) {
+    switch (event.key) {
+      case 'ArrowLeft':
+      case 'ArrowRight':
+        // This event got consumed by the radio group to change the radio button
+        // selection. Do not propagate further, to not cause a privacy guide
+        // navigation.
+        event.stopPropagation();
+        break;
+    }
   }
 }
 

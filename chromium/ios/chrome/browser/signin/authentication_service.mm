@@ -128,6 +128,16 @@ void AuthenticationService::Initialize(
   identity_manager_observation_.Observe(identity_manager_);
   HandleForgottenIdentity(nil, /*should_prompt=*/true,
                           device_restore_session == signin::Tribool::kTrue);
+  if (!identity_manager_->HasPrimaryAccount(signin::ConsentLevel::kSignin)) {
+    // TODO(crbug.com/1305527): Remove this once this bug is fixed.
+    // For some reasons the approved account list might not be empty when the
+    // user is signed out. To avoid a DCHECK failure in
+    // AuthenticationService::OnPrimaryAccountChanged(), when the user will
+    // sign-in again, we need to clear this list.
+    // This if() can be removed, once we understand how this account list is not
+    // cleared out on sign-ou.
+    user_approved_account_list_manager_.ClearApprovedAccountList();
+  }
 
   crash_keys::SetCurrentlySignedIn(
       HasPrimaryIdentity(signin::ConsentLevel::kSignin));
@@ -431,13 +441,21 @@ void AuthenticationService::SignInInternal(ChromeIdentity* identity) {
     // Initial sign-in to Chrome does not automatically turn on Sync features.
     // The Sync service will be enabled in a separate request to
     // |GrantSyncConsent|.
-    identity_manager_->GetPrimaryAccountMutator()->SetPrimaryAccount(
-        account_id, signin::ConsentLevel::kSignin);
+    signin::PrimaryAccountMutator::PrimaryAccountError error =
+        identity_manager_->GetPrimaryAccountMutator()->SetPrimaryAccount(
+            account_id, signin::ConsentLevel::kSignin);
+    CHECK_EQ(signin::PrimaryAccountMutator::PrimaryAccountError::kNoError,
+             error);
   }
 
   // The primary account should now be set to the expected account_id.
-  CHECK_EQ(account_id, identity_manager_->GetPrimaryAccountId(
-                           signin::ConsentLevel::kSignin));
+  // If CHECK_EQ() fails, having the CHECK() before would help to understand if
+  // the primary account is empty or different that |account_id|.
+  // Related to crbug.com/1308448.
+  CoreAccountId primary_account =
+      identity_manager_->GetPrimaryAccountId(signin::ConsentLevel::kSignin);
+  CHECK(!primary_account.empty());
+  CHECK_EQ(account_id, primary_account);
   crash_keys::SetCurrentlySignedIn(true);
 }
 

@@ -3,6 +3,7 @@
 #ifndef EXTRAPARTS_VIVALDI_CONTENT_BROWSER_CLIENT_H_
 #define EXTRAPARTS_VIVALDI_CONTENT_BROWSER_CLIENT_H_
 
+#include "build/build_config.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "mojo/public/cpp/bindings/binder_map.h"
 
@@ -19,7 +20,7 @@ class VivaldiContentBrowserClient : public ChromeContentBrowserClient {
   std::unique_ptr<content::BrowserMainParts> CreateBrowserMainParts(
       content::MainFunctionParams parameters) override;
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   std::vector<std::unique_ptr<content::NavigationThrottle>>
   CreateThrottlesForNavigation(content::NavigationHandle* handle) override;
 

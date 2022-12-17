@@ -12,8 +12,6 @@
 # Uncomment for Windows
 #export DEPOT_TOOLS_WIN_TOOLCHAIN=0
 export PATH="$PATH":$PWD/chromium/third_party/depot_tools/
-# Uncomment for proprietary media codecs support.
-#export GN_DEFINES="ffmpeg_branding=Chrome"
 # some chromium scripts require a git repo to work
 git init
 python3 scripts/runhooks.py

@@ -18,13 +18,13 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/signin_resources.h"
 #include "components/signin/public/identity_manager/account_info.h"
+#include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "ui/base/webui/resource_path.h"
 #include "ui/base/webui/web_ui_util.h"
 #include "ui/resources/grit/webui_generated_resources.h"
-#include "ui/resources/grit/webui_resources.h"
 
 ProfileCustomizationUI::ProfileCustomizationUI(content::WebUI* web_ui)
     : ui::MojoWebUIController(web_ui, /*enable_chrome_send=*/true),
@@ -67,6 +67,12 @@ ProfileCustomizationUI::ProfileCustomizationUI(content::WebUI* web_ui)
           .GetProfileAttributesWithPath(profile->GetPath());
   source->AddString("profileName",
                     base::UTF16ToUTF8(entry->GetLocalProfileName()));
+
+  if (web_ui->GetWebContents()->GetVisibleURL().query() == "debug") {
+    // Not intended to be hooked to anything. The bubble will not initialize it
+    // so we force it here.
+    Initialize(base::DoNothing());
+  }
 
   content::WebUIDataSource::Add(profile, source);
 }

@@ -15,8 +15,12 @@ cargo_crate("lib") {
   crate_root = "crate/src/lib.rs"
 
   # Unit tests skipped. Generate with --with-tests to include them.
-  skip_unit_tests = true
+  build_native_rust_unit_tests = false
   sources = [ "crate/src/lib.rs" ]
   edition = "2015"
+  cargo_pkg_version = "1.6.1"
+  cargo_pkg_authors = "bluss"
+  cargo_pkg_name = "either"
+  cargo_pkg_description = "The enum `Either` with variants `Left` and `Right` is a general purpose sum type with two cases."
   features = [ "use_std" ]
 }

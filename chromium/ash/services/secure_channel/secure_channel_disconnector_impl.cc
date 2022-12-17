@@ -4,12 +4,10 @@
 
 #include "ash/services/secure_channel/secure_channel_disconnector_impl.h"
 
+#include "ash/components/multidevice/logging/logging.h"
 #include "base/memory/ptr_util.h"
-#include "chromeos/components/multidevice/logging/logging.h"
 
-namespace chromeos {
-
-namespace secure_channel {
+namespace ash::secure_channel {
 
 // static
 SecureChannelDisconnectorImpl::Factory*
@@ -79,6 +77,4 @@ void SecureChannelDisconnectorImpl::OnSecureChannelStatusChanged(
   NOTREACHED();
 }
 
-}  // namespace secure_channel
-
-}  // namespace chromeos
+}  // namespace ash::secure_channel

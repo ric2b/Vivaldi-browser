@@ -925,6 +925,17 @@ class UtilitiesTranslateTextFunction : public ExtensionFunction {
   std::unique_ptr<::vivaldi::VivaldiTranslateServerRequest> request_;
 };
 
+class UtilitiesShowManageSSLCertificatesFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.showManageSSLCertificates",
+                             UTILITIES_SHOW_MANAGESSLCERTIFICATES)
+  UtilitiesShowManageSSLCertificatesFunction() = default;
+
+ private:
+  ~UtilitiesShowManageSSLCertificatesFunction() override = default;
+  ResponseAction Run() override;
+};
+
 }  // namespace extensions
 
 #endif  // EXTENSIONS_API_VIVALDI_UTILITIES_VIVALDI_UTILITIES_API_H_

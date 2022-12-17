@@ -157,7 +157,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Security.HttpsFirstMode.SettingChanged" enum="BooleanEnabled"
-    expires_after="2022-06-26">
+    expires_after="2022-08-28">
   <owner>cthomp@chromium.org</owner>
   <owner>trusty-transport@chromium.org</owner>
   <summary>
@@ -179,7 +179,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Security.JSONParser.ChromiumExtensionUsage"
-    enum="JsonParserExtension" expires_after="2022-06-26">
+    enum="JsonParserExtension" expires_after="2022-08-28">
   <owner>rsesek@chromium.org</owner>
   <owner>chrome-platform-security@google.com</owner>
   <summary>
@@ -201,9 +201,9 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram base="true" name="Security.PageEndReason" enum="PageEndReason"
-    expires_after="2022-04-10">
+    expires_after="2022-10-10">
   <owner>cthomp@chromium.org</owner>
-  <owner>security-enamel@chromium.org</owner>
+  <owner>trusty-transport@chromium.org</owner>
   <summary>
     Records the reason the page visit ended (e.g., reload, tab closed, new
     navigation, etc.) for page loads that committed.
@@ -221,7 +221,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Security.PageInfo.TimeOpen" units="ms"
-    expires_after="2022-07-31">
+    expires_after="2022-10-09">
   <owner>cthomp@chromium.org</owner>
   <owner>security-enamel@chromium.org</owner>
   <summary>
@@ -265,6 +265,17 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="Security.PrivateNetworkAccess.CachedResourceCheckResult"
+    enum="PrivateNetworkAccessCheckResult" expires_after="2022-12-31">
+  <owner>titouan@chromium.org</owner>
+  <owner>clamy@chromium.org</owner>
+  <owner>mkwst@chromium.org</owner>
+  <summary>
+    Same as `Security.PrivateNetworkAccess.CheckResult`, but only recorded when
+    the resource is loaded from the HTTP cache.
+  </summary>
+</histogram>
+
 <histogram name="Security.PrivateNetworkAccess.CheckResult"
     enum="PrivateNetworkAccessCheckResult" expires_after="M107">
   <owner>titouan@chromium.org</owner>
@@ -274,6 +285,20 @@ chromium-metrics-reviews@google.com.
     Result of the Private Network Access Check on a new connection. Recorded
     once per call to network::URLLoader::OnConnected(), which may be more than
     once per URL request.
+  </summary>
+</histogram>
+
+<histogram
+    name="Security.PrivateNetworkAccess.MismatchedAddressSpacesDuringRequest"
+    enum="Boolean" expires_after="2022-12-31">
+  <owner>titouan@chromium.org</owner>
+  <owner>clamy@chromium.org</owner>
+  <owner>mkwst@chromium.org</owner>
+  <summary>
+    Recorded once per network::URLLoader instantiation. True if the request
+    connected multiple times to different transports (e.g. for a
+    partially-cached range request) and not all the computed IP address spaces
+    were the same.
   </summary>
 </histogram>
 
@@ -304,7 +329,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Security.SafetyTips.GetDomainInfoTime" units="ms"
-    expires_after="2022-07-03">
+    expires_after="2022-09-11">
   <owner>jdeblasio@chromium.org</owner>
   <owner>estark@chromium.org</owner>
   <owner>blundell@chromium.org</owner>
@@ -316,7 +341,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Security.SafetyTips.GetReputationStatusWithEngagedSitesTime"
-    units="ms" expires_after="2022-07-03">
+    units="ms" expires_after="2022-09-11">
   <owner>jdeblasio@chromium.org</owner>
   <owner>estark@chromium.org</owner>
   <owner>blundell@chromium.org</owner>
@@ -327,7 +352,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Security.SafetyTips.Interaction" enum="SafetyTipInteraction"
-    expires_after="2022-08-07">
+    expires_after="2022-10-09">
   <owner>jdeblasio@chromium.org</owner>
   <owner>estark@chromium.org</owner>
   <summary>
@@ -577,7 +602,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Security.SCTAuditing.OptOut.LookupQueryResult"
-    enum="SCTLookupQueryResult" expires_after="M104">
+    enum="SCTLookupQueryResult" expires_after="2022-10-04">
   <owner>cthomp@chromium.org</owner>
   <owner>nsatragno@chromium.org</owner>
   <owner>trusty-transport@chromium.org</owner>
@@ -588,7 +613,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Security.SCTAuditing.OptOut.PopularSCTSkipped" enum="Boolean"
-    expires_after="M104">
+    expires_after="2022-09-25">
   <owner>cthomp@chromium.org</owner>
   <owner>nsatragno@chromium.org</owner>
   <owner>trusty-transport@chromium.org</owner>
@@ -639,7 +664,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Security.SecurityLevel.OnCommit" enum="SecurityLevel"
-    expires_after="2022-07-24">
+    expires_after="2022-09-25">
   <owner>cthomp@chromium.org</owner>
   <owner>security-enamel@chromium.org</owner>
   <summary>
@@ -821,6 +846,17 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="SiteIsolation.ORB.BlockingReason"
+    enum="OrbBlockingDecisionReason" expires_after="M106">
+  <owner>creis@chromium.org</owner>
+  <owner>lukasza@chromium.org</owner>
+  <summary>
+    Logs why ORB has reached a blocking decision.
+
+    Logged for each response processed by OpaqueResponseBlockingAnalyzer.
+  </summary>
+</histogram>
+
 <histogram name="SiteIsolation.ORB.CorbVsOrb" enum="CorbVsOrb"
     expires_after="M106">
   <owner>creis@chromium.org</owner>
@@ -832,6 +868,18 @@ chromium-metrics-reviews@google.com.
     Logged at the end of lifetime of the ResponseAnalyzer (i.e. after processing
     each response that is subject to CORB - most NetworkService responses, but
     also CORB-covered web bundles).
+  </summary>
+</histogram>
+
+<histogram name="SiteIsolation.ORB.CorbVsOrb.OrbBlockedAndCorbDidnt.Reason"
+    enum="OrbBlockingDecisionReason" expires_after="M106">
+  <owner>creis@chromium.org</owner>
+  <owner>lukasza@chromium.org</owner>
+  <summary>
+    Logs why ORB has reached a blocking decision.
+
+    Logged when it turned out that CORB wouldn't have blocked the response, but
+    ORB blocked the response.
   </summary>
 </histogram>
 
@@ -890,7 +938,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SiteIsolation.OutOfProcessIframes" units="oopifs"
-    expires_after="2022-08-14">
+    expires_after="2023-03-14">
   <owner>alexmos@chromium.org</owner>
   <owner>creis@chromium.org</owner>
   <owner>lukasza@chromium.org</owner>
@@ -901,7 +949,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SiteIsolation.OutOfProcessInnerFrameTrees" units="frame trees"
-    expires_after="2022-04-10">
+    expires_after="2023-03-14">
   <owner>alexmos@chromium.org</owner>
   <owner>creis@chromium.org</owner>
   <owner>lukasza@chromium.org</owner>
@@ -959,7 +1007,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SiteIsolation.SavedOAuthSites.Size" units="origins"
-    expires_after="2022-08-07">
+    expires_after="2022-10-09">
   <owner>alexmos@chromium.org</owner>
   <owner>creis@chromium.org</owner>
   <owner>lukasza@chromium.org</owner>
@@ -971,7 +1019,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SiteIsolation.SavedUserTriggeredIsolatedOrigins.Size"
-    units="origins" expires_after="2022-08-07">
+    units="origins" expires_after="2022-10-09">
   <owner>alexmos@chromium.org</owner>
   <owner>creis@chromium.org</owner>
   <owner>lukasza@chromium.org</owner>
@@ -984,7 +1032,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SiteIsolation.SavedWebTriggeredIsolatedOrigins.Size"
-    units="origins" expires_after="2022-08-07">
+    units="origins" expires_after="2022-10-09">
   <owner>alexmos@chromium.org</owner>
   <owner>creis@chromium.org</owner>
   <owner>lukasza@chromium.org</owner>

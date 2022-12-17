@@ -2,16 +2,26 @@
 # Features we either always want enable or don't want at all,
 # depending on platform settings
 
-import("//build/toolchain/cc_wrapper.gni")
-import("//build/toolchain/goma.gni")
 import("//vivaldi/gn/config/features.gni")
 import("//vivaldi/gn/config/product.gni")
 import("//vivaldi/gn/config/hermetic.gni")
+import("//vivaldi/gn/config/reclient.gni")
+
+import("//build/toolchain/cc_wrapper.gni")
+import("//build/toolchain/goma.gni")
+import("//build/toolchain/rbe.gni")
 
 declare_overrides() {
   branding_path_component = "vivaldi"
   branding_file_path = "//vivaldi/app/resources/theme/vivaldi/BRANDING"
-  ffmpeg_branding = "Chromium"
+
+  if (is_linux || is_mac || is_win) {
+    # ffmpeg_branding == Chromium disables way too much code including various
+    # utilities unrelated to codecs that we need for system proprietary media
+    # code. Instead of re-enabling the missing pieces we will black list
+    # relevant codecs explicitly in ffmpeg.
+    ffmpeg_branding = "Chrome"
+  }
   proprietary_codecs = true
   enable_widevine = true
   dcheck_always_on = is_debug # || is_component_build
@@ -48,7 +58,7 @@ declare_overrides() {
 
   enable_hangout_services_extension = true
 
-  enable_precompiled_headers = !is_official_build && cc_wrapper == "" && !use_goma
+  enable_precompiled_headers = !is_official_build && cc_wrapper == "" && !use_goma && !use_remoteexec
 
   if (is_win) {
     skip_archive_compression = is_component_build
@@ -57,8 +67,8 @@ declare_overrides() {
 
   if (is_mac) {
     use_system_xcode = true
-    #if (target_cpu == "arm64") {
-    #  mac_use_sdk = "11.0"
+    #if (getenv("CHROME_HEADLESS") == "1") {
+    #  mac_use_sdk = "12.1"
     #}
   }
 

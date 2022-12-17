@@ -6,16 +6,14 @@
  * @fileoverview Basic facillities to handle events from a single automation
  * node.
  */
+import {ChromeVoxEvent} from './custom_automation_event.js';
 
-goog.provide('BaseAutomationHandler');
-
-goog.scope(function() {
 const ActionType = chrome.automation.ActionType;
 const AutomationEvent = chrome.automation.AutomationEvent;
 const AutomationNode = chrome.automation.AutomationNode;
 const EventType = chrome.automation.EventType;
 
-BaseAutomationHandler = class {
+export class BaseAutomationHandler {
   /**
    * @param {AutomationNode|undefined} node
    */
@@ -128,10 +126,15 @@ BaseAutomationHandler = class {
    * @return {boolean}
    */
   static disallowEventFromAction(evt) {
-    return !DesktopAutomationHandler.announceActions &&
+    return !BaseAutomationHandler.announceActions &&
         evt.eventFrom === 'action' &&
         evt.eventFromAction !== ActionType.DO_DEFAULT &&
         evt.eventFromAction !== ActionType.SHOW_CONTEXT_MENU;
   }
-};
-});  // goog.scope
+}
+
+/**
+ * Controls announcement of non-user-initiated events.
+ * @type {boolean}
+ */
+BaseAutomationHandler.announceActions = false;

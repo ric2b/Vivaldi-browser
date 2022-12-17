@@ -16,7 +16,7 @@ import '../controls/settings_checkbox.js';
 import '../prefs/prefs.js';
 import '../settings_shared_css.js';
 
-import {assert} from 'chrome://resources/js/assert.m.js';
+import {assert} from 'chrome://resources/js/assert_ts.js';
 import {I18nMixin} from 'chrome://resources/js/i18n_mixin.js';
 import {WebUIListenerMixin} from 'chrome://resources/js/web_ui_listener_mixin.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -299,7 +299,7 @@ export class SettingsChromeCleanupPageElement extends
     this.renderScanOfferedByDefault_ = true;
   }
 
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
 
     this.cardStateToComponentsMap_ = this.buildCardStateToComponentsMap_();

@@ -13,11 +13,11 @@
 #include "base/memory/weak_ptr.h"
 #include "third_party/ukey2/proto/device_to_device_messages.pb.h"
 
-namespace chromeos {
+namespace ash {
 
 namespace multidevice {
 class SecureMessageDelegate;
-}  // namespace multidevice
+}
 
 namespace secure_channel {
 
@@ -192,7 +192,6 @@ class DeviceToDeviceInitiatorHelper {
 };
 
 }  // namespace secure_channel
-
-}  // namespace chromeos
+}  // namespace ash
 
 #endif  // ASH_SERVICES_SECURE_CHANNEL_DEVICE_TO_DEVICE_INITIATOR_HELPER_H_

@@ -4,6 +4,6 @@
 
 #include "content/public/browser/web_contents.h"
 
-std::string TabContentsSyncedTabDelegate::GetExtData() const {
-  return web_contents_->GetExtData();
+std::string TabContentsSyncedTabDelegate::GetVivExtData() const {
+  return web_contents_->GetVivExtData();
 }

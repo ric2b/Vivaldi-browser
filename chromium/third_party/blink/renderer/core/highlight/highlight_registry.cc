@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/core/highlight/highlight_registry.h"
 
 #include "third_party/blink/renderer/core/dom/abstract_range.h"
+#include "third_party/blink/renderer/core/dom/static_range.h"
 #include "third_party/blink/renderer/core/editing/ephemeral_range.h"
 #include "third_party/blink/renderer/core/editing/markers/document_marker_controller.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
@@ -87,13 +88,8 @@ void HighlightRegistry::ScheduleRepaint() {
   }
 }
 
-HighlightRegistry* HighlightRegistry::setForBinding(
-    ScriptState* script_state,
-    AtomicString highlight_name,
-    Member<Highlight> highlight,
-    ExceptionState& exception_state) {
-  UseCounter::Count(ExecutionContext::From(script_state),
-                    WebFeature::kHighlightAPIRegisterHighlight);
+void HighlightRegistry::SetForTesting(AtomicString highlight_name,
+                                      Highlight* highlight) {
   auto highlights_iterator = GetMapIterator(highlight_name);
   if (highlights_iterator != highlights_.end()) {
     highlights_iterator->Get()->highlight->DeregisterFrom(this);
@@ -106,6 +102,16 @@ HighlightRegistry* HighlightRegistry::setForBinding(
       highlight_name, highlight));
   highlight->RegisterIn(this);
   ScheduleRepaint();
+}
+
+HighlightRegistry* HighlightRegistry::setForBinding(
+    ScriptState* script_state,
+    AtomicString highlight_name,
+    Member<Highlight> highlight,
+    ExceptionState& exception_state) {
+  UseCounter::Count(ExecutionContext::From(script_state),
+                    WebFeature::kHighlightAPIRegisterHighlight);
+  SetForTesting(highlight_name, highlight);
   return this;
 }
 

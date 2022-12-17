@@ -79,7 +79,6 @@ class WebRuntimeFeatures {
   BLINK_PLATFORM_EXPORT static void
   EnableAccessibilityUseAXPositionForDocumentMarkers(bool);
   BLINK_PLATFORM_EXPORT static void EnableAdTagging(bool);
-  BLINK_PLATFORM_EXPORT static void EnableAllowActivationDelegationAttr(bool);
   BLINK_PLATFORM_EXPORT static void EnableBackgroundFetch(bool);
   BLINK_PLATFORM_EXPORT static void EnableBrowserVerifiedUserActivationKeyboard(
       bool);
@@ -105,9 +104,13 @@ class WebRuntimeFeatures {
   BLINK_PLATFORM_EXPORT static void EnableDevicePosture(bool enable);
   BLINK_PLATFORM_EXPORT static void EnableRemoveMobileViewportDoubleTap(
       bool enable);
+  BLINK_PLATFORM_EXPORT static void EnableZeroCopyTabCapture(bool enable);
+  BLINK_PLATFORM_EXPORT static void EnableDigitalGoodsAPI(bool);
   BLINK_PLATFORM_EXPORT static void EnableDisplayCutoutAPI(bool);
   BLINK_PLATFORM_EXPORT static void EnableDocumentPolicy(bool);
   BLINK_PLATFORM_EXPORT static void EnableDocumentPolicyNegotiation(bool);
+  BLINK_PLATFORM_EXPORT static void EnableFedCm(bool);
+  BLINK_PLATFORM_EXPORT static void EnableFedCmIdpSignout(bool);
   BLINK_PLATFORM_EXPORT static void EnableFencedFrames(bool);
   BLINK_PLATFORM_EXPORT static bool IsFencedFramesEnabled();
   BLINK_PLATFORM_EXPORT static void EnableFileSystem(bool);
@@ -136,6 +139,7 @@ class WebRuntimeFeatures {
   BLINK_PLATFORM_EXPORT static void EnablePermissionsAPI(bool);
   BLINK_PLATFORM_EXPORT static void EnablePictureInPicture(bool);
   BLINK_PLATFORM_EXPORT static void EnablePictureInPictureAPI(bool);
+  BLINK_PLATFORM_EXPORT static void EnablePictureInPictureV2(bool);
   BLINK_PLATFORM_EXPORT static void EnablePointerLockOptions(bool);
   BLINK_PLATFORM_EXPORT static void EnablePortals(bool);
   BLINK_PLATFORM_EXPORT static bool IsPortalsEnabled();
@@ -149,6 +153,7 @@ class WebRuntimeFeatures {
   BLINK_PLATFORM_EXPORT static void EnableDirectSockets(bool);
   BLINK_PLATFORM_EXPORT static void EnableRemotePlaybackAPI(bool);
   BLINK_PLATFORM_EXPORT static void EnableSecurePaymentConfirmation(bool);
+  BLINK_PLATFORM_EXPORT static void EnableSecurePaymentConfirmationAPIV3(bool);
   BLINK_PLATFORM_EXPORT static void EnableSecurePaymentConfirmationDebug(bool);
   BLINK_PLATFORM_EXPORT static void EnableScriptedSpeechRecognition(bool);
   BLINK_PLATFORM_EXPORT static void EnableScriptedSpeechSynthesis(bool);
@@ -174,7 +179,6 @@ class WebRuntimeFeatures {
   BLINK_PLATFORM_EXPORT static void EnableWebGLDraftExtensions(bool);
   BLINK_PLATFORM_EXPORT static void EnableWebGLImageChromium(bool);
   BLINK_PLATFORM_EXPORT static void EnableWebGPU(bool);
-  BLINK_PLATFORM_EXPORT static void EnableWebID(bool);
   BLINK_PLATFORM_EXPORT static void EnableWebNfc(bool);
   BLINK_PLATFORM_EXPORT static void EnableWebOTPAssertionFeaturePolicy(bool);
   BLINK_PLATFORM_EXPORT static void EnableWebShare(bool);
@@ -232,12 +236,11 @@ class WebRuntimeFeatures {
   BLINK_PLATFORM_EXPORT static void EnableContentIndex(bool);
   BLINK_PLATFORM_EXPORT static void EnableRestrictGamepadAccess(bool);
 
-  BLINK_PLATFORM_EXPORT static void EnableTargetBlankImpliesNoOpener(bool);
-
-  BLINK_PLATFORM_EXPORT static void EnableParseUrlProtocolHandler(bool);
-
   BLINK_PLATFORM_EXPORT static void EnableDocumentTransition(bool);
   BLINK_PLATFORM_EXPORT static void EnableCLSScrollAnchoring(bool);
+  BLINK_PLATFORM_EXPORT static void EnableAndroidDownloadableFontsMatching(bool);
+  BLINK_PLATFORM_EXPORT static void EnableWebAuthenticationRemoteDesktopSupport(
+      bool);
 
  private:
   WebRuntimeFeatures();

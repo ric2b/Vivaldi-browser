@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "base/memory/safe_ref.h"
 #include "base/supports_user_data.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/frame_type.h"
@@ -29,9 +30,13 @@
 #include "third_party/blink/public/common/navigation/impression.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/loader/referrer.mojom.h"
-#include "third_party/blink/public/mojom/loader/transferrable_url_loader.mojom.h"
+#include "third_party/blink/public/mojom/loader/transferrable_url_loader.mojom-forward.h"
 #include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
 #include "ui/base/page_transition_types.h"
+
+#if BUILDFLAG(IS_ANDROID)
+#include "base/android/scoped_java_ref.h"
+#endif
 
 class GURL;
 
@@ -41,7 +46,12 @@ class HttpResponseHeaders;
 class ProxyServer;
 }  // namespace net
 
+namespace perfetto::protos::pbzero {
+class NavigationHandle;
+}  // namespace perfetto::protos::pbzero
+
 namespace content {
+class CommitDeferringCondition;
 struct GlobalRenderFrameHostId;
 struct GlobalRequestID;
 class NavigationEntry;
@@ -117,10 +127,15 @@ class CONTENT_EXPORT NavigationHandle : public base::SupportsUserData {
   // constant over the navigation lifetime.
   virtual bool IsInPrerenderedMainFrame() = 0;
 
-  // Prerender2
+  // Prerender2:
   // Returns true if this navigation will activate a prerendered page. It is
   // only meaningful to call this after BeginNavigation().
   virtual bool IsPrerenderedPageActivation() = 0;
+
+  // FencedFrame:
+  // Returns true if the navigation is taking place in a frame in a fenced frame
+  // tree.
+  virtual bool IsInFencedFrameTree() = 0;
 
   // Returns the type of the frame in which this navigation is taking place.
   virtual FrameType GetNavigatingFrameType() const = 0;
@@ -256,7 +271,7 @@ class CONTENT_EXPORT NavigationHandle : public base::SupportsUserData {
   // changes that occur during navigation.) This can only be accessed after a
   // response has been delivered for processing, or after the navigation fails
   // with an error page.
-  virtual RenderFrameHost* GetRenderFrameHost() = 0;
+  virtual RenderFrameHost* GetRenderFrameHost() const = 0;
 
   // Returns the id of the RenderFrameHost this navigation is committing from.
   // In case a navigation happens within the same RenderFrameHost,
@@ -292,13 +307,13 @@ class CONTENT_EXPORT NavigationHandle : public base::SupportsUserData {
   // This returns true for either successful commits or error pages that
   // replace the previous page (distinguished by |IsErrorPage|), and false for
   // errors that leave the user on the previous page.
-  virtual bool HasCommitted() = 0;
+  virtual bool HasCommitted() const = 0;
 
   // Whether the navigation committed an error page.
   //
   // DO NOT use this before the navigation commit. It would always return false.
   // You can use it from WebContentsObserver::DidFinishNavigation().
-  virtual bool IsErrorPage() = 0;
+  virtual bool IsErrorPage() const = 0;
 
   // Not all committed subframe navigations (i.e., !IsInMainFrame &&
   // HasCommitted) end up causing a change of the current NavigationEntry. For
@@ -514,8 +529,10 @@ class CONTENT_EXPORT NavigationHandle : public base::SupportsUserData {
   // Whether this navigation is for PDF content in a PDF-specific renderer.
   virtual bool IsPdf() = 0;
 
+  using TraceProto = perfetto::protos::pbzero::NavigationHandle;
   // Write a representation of this object into a trace.
-  virtual void WriteIntoTrace(perfetto::TracedValue context) = 0;
+  virtual void WriteIntoTrace(
+      perfetto::TracedProto<TraceProto> context) const = 0;
 
   // Sets an overall request timeout for this navigation, which will cause the
   // navigation to fail if it expires before the navigation commits. This is
@@ -529,6 +546,9 @@ class CONTENT_EXPORT NavigationHandle : public base::SupportsUserData {
   // Used for metrics.
   virtual PrerenderTriggerType GetPrerenderTriggerType() = 0;
   virtual std::string GetPrerenderEmbedderHistogramSuffix() = 0;
+
+  // Returns a SafeRef to this handle.
+  virtual base::SafeRef<NavigationHandle> GetSafeRef() = 0;
 
   // Testing methods ----------------------------------------------------------
   //
@@ -547,6 +567,16 @@ class CONTENT_EXPORT NavigationHandle : public base::SupportsUserData {
   // Returns whether this navigation is currently deferred.
   virtual bool IsDeferredForTesting() = 0;
   virtual bool IsCommitDeferringConditionDeferredForTesting() = 0;
+
+#if BUILDFLAG(IS_ANDROID)
+  // Returns a reference to NavigationHandle Java counterpart.
+  virtual const base::android::JavaRef<jobject>& GetJavaNavigationHandle() = 0;
+#endif
+
+  // Returns the CommitDeferringCondition that is currently preventing this
+  // navigation from committing, or nullptr if the navigation isn't currently
+  // blocked on a CommitDeferringCondition.
+  virtual CommitDeferringCondition* GetCommitDeferringConditionForTesting() = 0;
 };
 
 }  // namespace content

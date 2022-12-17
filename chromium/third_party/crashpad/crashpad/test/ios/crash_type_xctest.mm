@@ -103,6 +103,9 @@
   NSNumber* report_exception;
   XCTAssertTrue([rootObject_ pendingReportException:&report_exception]);
   XCTAssertEqual(report_exception.unsignedIntValue, exception);
+
+  NSString* rawLogContents = [rootObject_ rawLogContents];
+  XCTAssertFalse([rawLogContents containsString:@"allocator used in handler."]);
 }
 
 - (void)testEDO {
@@ -160,6 +163,22 @@
   XCTAssertTrue([[dict[@"objects"][1] valueForKeyPath:@"exceptionReason"]
       isEqualToString:@"Intentionally throwing error."]);
   XCTAssertTrue([[dict[@"objects"][2] valueForKeyPath:@"exceptionName"]
+      isEqualToString:@"NSInternalInconsistencyException"]);
+}
+
+- (void)testUnhandledNSException {
+  [rootObject_ crashUnhandledNSException];
+  [self verifyCrashReportException:crashpad::kMachExceptionFromNSException];
+  NSDictionary* dict = [rootObject_ getAnnotations];
+  NSString* uncaught_flag =
+      [dict[@"objects"][0] valueForKeyPath:@"UncaughtNSException"];
+  XCTAssertTrue([uncaught_flag containsString:@"true"]);
+  NSString* userInfo =
+      [dict[@"objects"][1] valueForKeyPath:@"exceptionUserInfo"];
+  XCTAssertTrue([userInfo containsString:@"Error Object=<CPTestSharedObject"]);
+  XCTAssertTrue([[dict[@"objects"][2] valueForKeyPath:@"exceptionReason"]
+      isEqualToString:@"Intentionally throwing error."]);
+  XCTAssertTrue([[dict[@"objects"][3] valueForKeyPath:@"exceptionName"]
       isEqualToString:@"NSInternalInconsistencyException"]);
 }
 
@@ -297,6 +316,69 @@
       isEqualToString:@"same-name 3"]);
   XCTAssertTrue([[dict[@"objects"][2] valueForKeyPath:@"#TEST# one"]
       isEqualToString:@"moocow"]);
+}
+
+- (void)testDumpWithoutCrash {
+  [rootObject_ generateDumpWithoutCrash:10 threads:3];
+
+  // The app should not crash
+  XCTAssertTrue(app_.state == XCUIApplicationStateRunningForeground);
+
+  XCTAssertEqual([rootObject_ pendingReportCount], 30);
+}
+
+- (void)testSimultaneousCrash {
+  [rootObject_ crashConcurrentSignalAndMach];
+
+  // Confirm the app is not running.
+  XCTAssertTrue([app_ waitForState:XCUIApplicationStateNotRunning timeout:15]);
+  XCTAssertTrue(app_.state == XCUIApplicationStateNotRunning);
+
+  [app_ launch];
+  XCTAssertTrue(app_.state == XCUIApplicationStateRunningForeground);
+  rootObject_ = [EDOClientService rootObjectWithPort:12345];
+  XCTAssertEqual([rootObject_ pendingReportCount], 1);
+}
+
+- (void)testCrashInHandlerReentrant {
+  XCTAssertTrue(app_.state == XCUIApplicationStateRunningForeground);
+  rootObject_ = [EDOClientService rootObjectWithPort:12345];
+
+  [rootObject_ crashInHandlerReentrant];
+
+  // Confirm the app is not running.
+  XCTAssertTrue([app_ waitForState:XCUIApplicationStateNotRunning timeout:15]);
+  XCTAssertTrue(app_.state == XCUIApplicationStateNotRunning);
+
+  [app_ launch];
+  XCTAssertTrue(app_.state == XCUIApplicationStateRunningForeground);
+  rootObject_ = [EDOClientService rootObjectWithPort:12345];
+
+  XCTAssertEqual([rootObject_ pendingReportCount], 0);
+
+  NSString* rawLogContents = [rootObject_ rawLogContents];
+  NSString* errmsg = @"Cannot DumpExceptionFromSignal without writer";
+  XCTAssertTrue([rawLogContents containsString:errmsg]);
+}
+
+- (void)testFailureWhenHandlerAllocates {
+  XCTAssertTrue(app_.state == XCUIApplicationStateRunningForeground);
+  rootObject_ = [EDOClientService rootObjectWithPort:12345];
+
+  [rootObject_ allocateWithForbiddenAllocators];
+
+  // Confirm the app is not running.
+  XCTAssertTrue([app_ waitForState:XCUIApplicationStateNotRunning timeout:15]);
+  XCTAssertTrue(app_.state == XCUIApplicationStateNotRunning);
+
+  [app_ launch];
+  XCTAssertTrue(app_.state == XCUIApplicationStateRunningForeground);
+  rootObject_ = [EDOClientService rootObjectWithPort:12345];
+
+  XCTAssertEqual([rootObject_ pendingReportCount], 0);
+
+  NSString* rawLogContents = [rootObject_ rawLogContents];
+  XCTAssertTrue([rawLogContents containsString:@"allocator used in handler."]);
 }
 
 @end

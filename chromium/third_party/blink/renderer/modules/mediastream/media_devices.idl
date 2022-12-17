@@ -29,7 +29,12 @@
     ] Promise<MediaStream>
     getDisplayMedia(optional MediaStreamConstraints constraints = {});
 
-    // https://wicg.github.io/capture-handle/
+    [
+      RuntimeEnabled = GetDisplayMediaSet, CallWith = ScriptState, RaisesException
+    ] Promise<sequence<MediaStream>>
+    getDisplayMediaSet(optional MediaStreamConstraints constraints = {});
+
+    // https://w3c.github.io/mediacapture-handle/identity/
     // Allows an application APP to opt-in to exposing certain information to
     // applications which end up capturing APP.
     [

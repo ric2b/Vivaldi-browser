@@ -11,7 +11,6 @@
 
 #include "base/at_exit.h"
 #include "base/bind.h"
-#include "base/cxx17_backports.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
@@ -32,6 +31,7 @@
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/fake_safe_browsing_database_manager.h"
 #include "chrome/browser/extensions/forced_extensions/install_stage_tracker.h"
+#include "chrome/browser/extensions/scoped_database_manager_for_test.h"
 #include "chrome/browser/extensions/scripting_permissions_modifier.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -55,6 +55,7 @@
 #include "extensions/browser/install/sandboxed_unpacker_failure_reason.h"
 #include "extensions/browser/management_policy.h"
 #include "extensions/browser/notification_types.h"
+#include "extensions/browser/permissions_manager.h"
 #include "extensions/browser/renderer_startup_helper.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_builder.h"
@@ -528,7 +529,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTestWithExperimentalApis,
 IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest, AllowOffStore) {
   const bool kTestData[] = {false, true};
 
-  for (size_t i = 0; i < base::size(kTestData); ++i) {
+  for (size_t i = 0; i < std::size(kTestData); ++i) {
     std::unique_ptr<MockPromptProxy> mock_prompt =
         CreateMockPromptProxyForBrowser(browser());
 
@@ -645,7 +646,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest,
 IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest, Blocklist) {
   scoped_refptr<FakeSafeBrowsingDatabaseManager> blocklist_db(
       new FakeSafeBrowsingDatabaseManager(true));
-  Blocklist::ScopedDatabaseManagerForTest scoped_blocklist_db(blocklist_db);
+  ScopedDatabaseManagerForTest scoped_blocklist_db(blocklist_db);
 
   const std::string extension_id = "gllekhaobjnhgeagipipnkpmmmpchacm";
   blocklist_db->SetUnsafe(extension_id);
@@ -1140,8 +1141,10 @@ IN_PROC_BROWSER_TEST_P(ExtensionCrxInstallerTestWithWithholdingUI,
       GetInstalledExtension(mock_prompt->extension_id());
   ScriptingPermissionsModifier modifier(browser()->profile(), extension);
   EXPECT_EQ(should_check_box, modifier.HasWithheldHostPermissions());
-  const ScriptingPermissionsModifier::SiteAccess site_access =
-      modifier.GetSiteAccess(GURL("https://google.com"));
+
+  const PermissionsManager::ExtensionSiteAccess site_access =
+      PermissionsManager::Get(profile())->GetSiteAccess(
+          *extension, GURL("https://google.com"));
   EXPECT_EQ(should_check_box, site_access.withheld_site_access);
   EXPECT_EQ(!should_check_box, site_access.has_site_access);
 }

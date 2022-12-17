@@ -5,6 +5,7 @@
 #ifndef ASH_WEBUI_PERSONALIZATION_APP_TEST_FAKE_PERSONALIZATION_APP_AMBIENT_PROVIDER_H_
 #define ASH_WEBUI_PERSONALIZATION_APP_TEST_FAKE_PERSONALIZATION_APP_AMBIENT_PROVIDER_H_
 
+#include "ash/constants/ambient_animation_theme.h"
 #include "ash/webui/personalization_app/personalization_app_ambient_provider.h"
 
 #include <stdint.h>
@@ -19,6 +20,7 @@ class WebUI;
 }  // namespace content
 
 namespace ash {
+namespace personalization_app {
 
 class FakePersonalizationAppAmbientProvider
     : public PersonalizationAppAmbientProvider {
@@ -43,13 +45,21 @@ class FakePersonalizationAppAmbientProvider
       mojo::PendingRemote<ash::personalization_app::mojom::AmbientObserver>
           observer) override {}
   void SetAmbientModeEnabled(bool enabled) override {}
+  void SetAnimationTheme(ash::AmbientAnimationTheme animation_theme) override {}
   void SetTopicSource(ash::AmbientModeTopicSource topic_source) override {}
+  void SetTemperatureUnit(
+      ash::AmbientModeTemperatureUnit temperature_unit) override {}
+  void SetAlbumSelected(const std::string& id,
+                        ash::AmbientModeTopicSource topic_source,
+                        bool selected) override {}
+  void SetPageViewed() override {}
 
  private:
   mojo::Receiver<ash::personalization_app::mojom::AmbientProvider>
       ambient_receiver_{this};
 };
 
+}  // namespace personalization_app
 }  // namespace ash
 
 #endif  // ASH_WEBUI_PERSONALIZATION_APP_TEST_FAKE_PERSONALIZATION_APP_AMBIENT_PROVIDER_H_

@@ -21,17 +21,21 @@
 <translation id="3377025655491224618">Soukromý list</translation>
 <translation id="3504699618187058974">Seskupit listy</translation>
 <translation id="3518985090088779359">Přijmout a pokračovat</translation>
+<translation id="3571177741182643350">Nepřečtené články – dostupné offline:</translation>
 <translation id="3700829948786686853">Vítá vás Vivaldi</translation>
 <translation id="3719826155360621982">Domovská stránka</translation>
 <translation id="385051799172605136">Zpět</translation>
+<translation id="399014816462153200">Přečtené články:</translation>
 <translation id="4121750346708795461">Používáním této aplikace vyjadřujete souhlas se <ph name="BEGIN_LINK1" />smluvními podmínkami<ph name="END_LINK1" /> a <ph name="BEGIN_LINK2" />zásadami ochrany soukromí<ph name="END_LINK2" /> prohlížeče Vivaldi.</translation>
 <translation id="4137746084635924146">Aktuální jazyk zařízení</translation>
+<translation id="4167670741834902166">Nový soukromý list</translation>
 <translation id="4243710787042215766">Otevřít v soukromém listu</translation>
 <translation id="4526803704855831732">Soukromé listy</translation>
 <translation id="4759238208242260848">Stahování</translation>
 <translation id="4883379392681899581">Opustit soukromý režim</translation>
 <translation id="4943872375798546930">Žádné výsledky</translation>
 <translation id="49576331685473090">Blokování obsahu</translation>
+<translation id="5079259810715830221">Když Google požádá o soukromé přednačtení odkazů na jejich stránce, Vivaldi zašifruje a přednačte stránky pomocí Google serverů bez cookies. Tím je vaše identita skryta před přednačítanou stránkou.</translation>
 <translation id="5118676864324397542">Úložiště aplikace <ph name="APP_NAME" /></translation>
 <translation id="5186185447130319458">Soukromí</translation>
 <translation id="5233638681132016545">Nový list</translation>
@@ -44,6 +48,7 @@ Chcete-li vyhledávací dotaz upravit, proveďte výběr dlouhým stisknutím. C
 <translation id="6585139692466700358">Navrhovat překlad stránek v jiných jazycích pomocí překladatelské služby Vivaldi</translation>
 <translation id="6593061639179217415">Stránky pro počítač</translation>
 <translation id="6610147964972079463">Zavřít soukromé listy</translation>
+<translation id="7029995644714925509">Když web požádá o soukromé přednačtení odkazů na jejich stránce, Vivaldi zašifruje a přednačte stránky pomocí Google serverů bez cookies. Tím je vaše identita skryta před přednačítanou stránkou.</translation>
 <translation id="706339621163631076">Nakládání se soukromím</translation>
 <translation id="732145680195464316">Záložka uložena v <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">O aplikaci</translation>

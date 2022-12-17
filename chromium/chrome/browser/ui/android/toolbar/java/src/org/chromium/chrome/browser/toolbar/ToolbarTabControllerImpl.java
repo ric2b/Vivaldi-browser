@@ -141,10 +141,6 @@ public class ToolbarTabControllerImpl implements ToolbarTabController {
         if (tab == null || tracker == null) return;
 
         tracker.notifyEvent(EventConstants.HOMEPAGE_BUTTON_CLICKED);
-
-        if (UrlUtilities.isNTPUrl(homepageUrl)) {
-            tracker.notifyEvent(EventConstants.NTP_HOME_BUTTON_CLICKED);
-        }
     }
 
     private void recordHomeButtonUserPerProfileType() {

@@ -5,7 +5,7 @@
 #include "chrome/browser/password_manager/android/generated_password_saved_message_delegate.h"
 #include "chrome/browser/android/android_theme_resources.h"
 #include "chrome/browser/android/resource_mapper.h"
-#include "chrome/browser/ui/passwords/manage_passwords_view_utils.h"
+#include "chrome/browser/ui/passwords/ui_utils.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/messages/android/message_dispatcher_bridge.h"
 #include "components/password_manager/core/common/password_manager_features.h"
@@ -35,6 +35,8 @@ void GeneratedPasswordSavedMessageDelegate::HandleDismissCallback(
 void GeneratedPasswordSavedMessageDelegate::ShowPrompt(
     content::WebContents* web_contents,
     std::unique_ptr<password_manager::PasswordFormManagerForUI> saved_form) {
+  using password_manager::features::UsesUnifiedPasswordManagerUi;
+
   message_ = std::make_unique<messages::MessageWrapper>(
       messages::MessageIdentifier::GENERATED_PASSWORD_SAVED,
       base::OnceCallback<void()>(),
@@ -45,11 +47,8 @@ void GeneratedPasswordSavedMessageDelegate::ShowPrompt(
   message_->SetTitle(
       l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_CONFIRM_SAVED_TITLE));
 
-  const bool kIsUnifiedPasswordManager = base::FeatureList::IsEnabled(
-      password_manager::features::kUnifiedPasswordManagerAndroid);
-
   std::u16string description;
-  if (kIsUnifiedPasswordManager) {
+  if (UsesUnifiedPasswordManagerUi()) {
     description = l10n_util::GetStringUTF16(
         IDS_PASSWORD_MANAGER_GENERATED_PASSWORD_SAVED_MESSAGE_DESCRIPTION);
   } else {
@@ -64,7 +63,7 @@ void GeneratedPasswordSavedMessageDelegate::ShowPrompt(
 
   message_->SetDescription(description);
   message_->SetPrimaryButtonText(l10n_util::GetStringUTF16(IDS_OK));
-  if (kIsUnifiedPasswordManager) {
+  if (UsesUnifiedPasswordManagerUi()) {
     message_->SetIconResourceId(ResourceMapper::MapToJavaDrawableId(
         IDR_ANDROID_PASSWORD_MANAGER_LOGO_24DP));
     message_->DisableIconTint();

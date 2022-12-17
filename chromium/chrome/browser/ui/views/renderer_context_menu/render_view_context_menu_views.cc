@@ -10,6 +10,7 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
+#include "base/observer_list.h"
 #include "base/scoped_observation.h"
 #include "base/task/current_thread.h"
 #include "build/build_config.h"
@@ -17,6 +18,7 @@
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/side_panel/side_panel_coordinator.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/renderer_context_menu/views/toolkit_delegate_views.h"
@@ -350,6 +352,13 @@ void RenderViewContextMenuViews::AppendPlatformEditableItems() {
       IDC_WRITING_DIRECTION_MENU,
       l10n_util::GetStringUTF16(IDS_CONTENT_CONTEXT_WRITING_DIRECTION_MENU),
       &bidi_submenu_model_);
+}
+
+void RenderViewContextMenuViews::ExecOpenInReadAnything() {
+  Browser* browser = GetBrowser();
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
+  browser_view->side_panel_coordinator()->Show(
+      SidePanelEntry::Id::kReadAnything);
 }
 
 void RenderViewContextMenuViews::Show() {

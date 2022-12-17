@@ -20,6 +20,7 @@
 #include "base/allocator/partition_allocator/address_pool_manager.h"
 #include "base/allocator/partition_allocator/address_pool_manager_bitmap.h"
 #include "base/allocator/partition_allocator/allocation_guard.h"
+#include "base/allocator/partition_allocator/base/bits.h"
 #include "base/allocator/partition_allocator/page_allocator.h"
 #include "base/allocator/partition_allocator/page_allocator_constants.h"
 #include "base/allocator/partition_allocator/partition_address_space.h"
@@ -39,7 +40,6 @@
 #include "base/allocator/partition_allocator/starscan/stats_reporter.h"
 #include "base/allocator/partition_allocator/tagging.h"
 #include "base/allocator/partition_allocator/thread_cache.h"
-#include "base/bits.h"
 #include "base/compiler_specific.h"
 #include "base/cpu.h"
 #include "base/debug/alias.h"
@@ -62,10 +62,14 @@
 #define PA_SCAN_INLINE ALWAYS_INLINE
 #endif
 
-namespace base {
-namespace internal {
+namespace partition_alloc::internal {
 
-[[noreturn]] BASE_EXPORT NOINLINE NOT_TAIL_CALLED void DoubleFreeAttempt() {
+namespace base {
+using ::base::MakeRefCounted;
+using ::base::RefCountedThreadSafe;
+}  // namespace base
+
+[[noreturn]] NOINLINE NOT_TAIL_CALLED void DoubleFreeAttempt() {
   NO_CODE_FOLDING();
   IMMEDIATE_CRASH();
 }
@@ -138,10 +142,8 @@ class QuarantineCardTable final {
   // Avoid the load of the base of the regular pool.
   ALWAYS_INLINE static QuarantineCardTable& GetFrom(uintptr_t address) {
     PA_SCAN_DCHECK(IsManagedByPartitionAllocRegularPool(address));
-    constexpr uintptr_t kRegularPoolBaseMask =
-        PartitionAddressSpace::RegularPoolBaseMask();
-    return *reinterpret_cast<QuarantineCardTable*>(address &
-                                                   kRegularPoolBaseMask);
+    return *reinterpret_cast<QuarantineCardTable*>(
+        address & PartitionAddressSpace::RegularPoolBaseMask());
   }
 
   ALWAYS_INLINE void Quarantine(uintptr_t begin, size_t size) {
@@ -168,10 +170,9 @@ class QuarantineCardTable final {
 
   QuarantineCardTable() = default;
 
-  ALWAYS_INLINE static constexpr size_t Byte(uintptr_t address) {
-    constexpr uintptr_t kRegularPoolBaseMask =
-        PartitionAddressSpace::RegularPoolBaseMask();
-    return (address & ~kRegularPoolBaseMask) / kCardSize;
+  ALWAYS_INLINE static size_t Byte(uintptr_t address) {
+    return (address & ~PartitionAddressSpace::RegularPoolBaseMask()) /
+           kCardSize;
   }
 
   ALWAYS_INLINE void SetImpl(uintptr_t begin, size_t size, bool value) {
@@ -348,8 +349,9 @@ class SuperPageSnapshot final {
   static constexpr size_t kStateBitmapMinReservedSize =
       __builtin_constant_p(ReservedStateBitmapSize())
           ? ReservedStateBitmapSize()
-          : base::bits::AlignUp(sizeof(AllocationStateMap),
-                                kMinPartitionPageSize);
+          : partition_alloc::internal::base::bits::AlignUp(
+                sizeof(AllocationStateMap),
+                kMinPartitionPageSize);
   // Take into account guard partition page at the end of super-page.
   static constexpr size_t kGuardPagesSize = 2 * kMinPartitionPageSize;
 
@@ -582,12 +584,12 @@ class PCScanTask final : public base::RefCountedThreadSafe<PCScanTask>,
   // Scan individual areas.
   void ScanNormalArea(PCScanInternal& pcscan,
                       PCScanScanLoop& scan_loop,
-                      uintptr_t* begin,
-                      uintptr_t* end);
+                      uintptr_t begin,
+                      uintptr_t end);
   void ScanLargeArea(PCScanInternal& pcscan,
                      PCScanScanLoop& scan_loop,
-                     uintptr_t* begin,
-                     uintptr_t* end,
+                     uintptr_t begin,
+                     uintptr_t end,
                      size_t slot_size);
 
   // Scans all registered partitions and marks reachable quarantined slots.
@@ -777,10 +779,10 @@ class PCScanScanLoop final : public ScanLoop<PCScanScanLoop> {
 
  private:
 #if defined(PA_HAS_64_BITS_POINTERS)
-  ALWAYS_INLINE uintptr_t CageBase() const {
+  ALWAYS_INLINE static uintptr_t CageBase() {
     return PartitionAddressSpace::RegularPoolBase();
   }
-  ALWAYS_INLINE static constexpr uintptr_t CageMask() {
+  ALWAYS_INLINE static uintptr_t CageMask() {
     return PartitionAddressSpace::RegularPoolBaseMask();
   }
 #endif  // defined(PA_HAS_64_BITS_POINTERS)
@@ -801,14 +803,14 @@ class PCScanTask::StackVisitor final : public internal::StackVisitor {
 
   void VisitStack(uintptr_t* stack_ptr, uintptr_t* stack_top) override {
     static constexpr size_t kMinimalAlignment = 32;
-    stack_ptr = reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(stack_ptr) & ~(kMinimalAlignment - 1));
-    stack_top = reinterpret_cast<uintptr_t*>(
+    uintptr_t begin =
+        reinterpret_cast<uintptr_t>(stack_ptr) & ~(kMinimalAlignment - 1);
+    uintptr_t end =
         (reinterpret_cast<uintptr_t>(stack_top) + kMinimalAlignment - 1) &
-        ~(kMinimalAlignment - 1));
-    PA_CHECK(stack_ptr < stack_top);
+        ~(kMinimalAlignment - 1);
+    PA_CHECK(begin < end);
     PCScanScanLoop loop(task_);
-    loop.Run(stack_ptr, stack_top);
+    loop.Run(begin, end);
     quarantine_size_ += loop.quarantine_size();
   }
 
@@ -847,37 +849,34 @@ void PCScanTask::ScanStack() {
 
 void PCScanTask::ScanNormalArea(PCScanInternal& pcscan,
                                 PCScanScanLoop& scan_loop,
-                                uintptr_t* begin,
-                                uintptr_t* end) {
+                                uintptr_t begin,
+                                uintptr_t end) {
   // Protect slot span before scanning it.
-  pcscan.ProtectPages(reinterpret_cast<uintptr_t>(begin),
-                      (end - begin) * sizeof(uintptr_t));
+  pcscan.ProtectPages(begin, end - begin);
   scan_loop.Run(begin, end);
 }
 
 void PCScanTask::ScanLargeArea(PCScanInternal& pcscan,
                                PCScanScanLoop& scan_loop,
-                               uintptr_t* begin,
-                               uintptr_t* end,
+                               uintptr_t begin,
+                               uintptr_t end,
                                size_t slot_size) {
   // For scanning large areas, it's worthwhile checking whether the range that
   // is scanned contains allocated slots. It also helps to skip discarded
   // freed slots.
   // Protect slot span before scanning it.
-  pcscan.ProtectPages(reinterpret_cast<uintptr_t>(begin),
-                      (end - begin) * sizeof(uintptr_t));
+  pcscan.ProtectPages(begin, end - begin);
 
-  auto* bitmap = StateBitmapFromAddr(reinterpret_cast<uintptr_t>(begin));
-  const size_t slot_size_in_words = slot_size / sizeof(uintptr_t);
+  auto* bitmap = StateBitmapFromAddr(begin);
 
-  for (uintptr_t* current_slot = begin; current_slot < end;
-       current_slot += slot_size_in_words) {
+  for (uintptr_t current_slot = begin; current_slot < end;
+       current_slot += slot_size) {
     // It is okay to skip slots as the object they hold has been zapped at this
     // point, which means that the pointers no longer retain other slots.
-    if (!bitmap->IsAllocated(reinterpret_cast<uintptr_t>(current_slot))) {
+    if (!bitmap->IsAllocated(current_slot)) {
       continue;
     }
-    uintptr_t* current_slot_end = current_slot + slot_size_in_words;
+    uintptr_t current_slot_end = current_slot + slot_size;
     // |slot_size| may be larger than |raw_size| for single-slot slot spans.
     scan_loop.Run(current_slot, std::min(current_slot_end, end));
   }
@@ -902,10 +901,14 @@ void PCScanTask::ScanPartitions() {
         SuperPageSnapshot super_page_snapshot(super_page);
 
         for (const auto& scan_area : super_page_snapshot.scan_areas()) {
-          auto* const begin = reinterpret_cast<uintptr_t*>(
+          const uintptr_t begin =
               super_page |
-              (scan_area.offset_within_page_in_words * sizeof(uintptr_t)));
-          auto* const end = begin + scan_area.size_in_words;
+              (scan_area.offset_within_page_in_words * sizeof(uintptr_t));
+          PA_SCAN_DCHECK(begin ==
+                         super_page + (scan_area.offset_within_page_in_words *
+                                       sizeof(uintptr_t)));
+          const uintptr_t end =
+              begin + scan_area.size_in_words * sizeof(uintptr_t);
 
           if (UNLIKELY(scan_area.slot_size_in_words >=
                        kLargeScanAreaThresholdInWords)) {
@@ -986,9 +989,9 @@ void UnmarkInCardTable(uintptr_t slot_start,
     const size_t slot_size = slot_span->bucket->slot_size;
     if (slot_size >= SystemPageSize()) {
       const uintptr_t discard_end =
-          bits::AlignDown(slot_start + slot_size, SystemPageSize());
+          base::bits::AlignDown(slot_start + slot_size, SystemPageSize());
       const uintptr_t discard_begin =
-          bits::AlignUp(slot_start, SystemPageSize());
+          base::bits::AlignUp(slot_start, SystemPageSize());
       const intptr_t discard_size = discard_end - discard_begin;
       if (discard_size > 0) {
         DiscardSystemPages(discard_begin, discard_size);
@@ -1189,12 +1192,12 @@ class PCScan::PCScanThread final {
       std::lock_guard<std::mutex> lock(mutex_);
       PA_DCHECK(!posted_task_.get());
       posted_task_ = std::move(task);
-      wanted_delay_ = TimeDelta();
+      wanted_delay_ = base::TimeDelta();
     }
     condvar_.notify_one();
   }
 
-  void PostDelayedTask(TimeDelta delay) {
+  void PostDelayedTask(base::TimeDelta delay) {
     {
       std::lock_guard<std::mutex> lock(mutex_);
       if (posted_task_.get()) {
@@ -1258,7 +1261,7 @@ class PCScan::PCScanThread final {
         // Differentiate between a posted task and a delayed task schedule.
         if (posted_task_.get()) {
           std::swap(current_task, posted_task_);
-          wanted_delay_ = TimeDelta();
+          wanted_delay_ = base::TimeDelta();
         } else {
           PA_DCHECK(wanted_delay_.is_zero());
         }
@@ -1277,7 +1280,7 @@ class PCScan::PCScanThread final {
   std::mutex mutex_;
   std::condition_variable condvar_;
   TaskHandle posted_task_;
-  TimeDelta wanted_delay_;
+  base::TimeDelta wanted_delay_;
 };
 
 PCScanInternal::PCScanInternal() : simd_support_(DetectSimdSupport()) {}
@@ -1308,7 +1311,7 @@ void PCScanInternal::Initialize(PCScan::InitConfig config) {
   scannable_roots_ = RootsMap();
   nonscannable_roots_ = RootsMap();
 
-  static StatsReporter s_no_op_reporter;
+  static partition_alloc::StatsReporter s_no_op_reporter;
   PCScan::Instance().RegisterStatsReporter(&s_no_op_reporter);
 
   // Don't initialize PCScanThread::Instance() as otherwise sandbox complains
@@ -1375,7 +1378,7 @@ void PCScanInternal::PerformScanIfNeeded(
     PerformScan(invocation_mode);
 }
 
-void PCScanInternal::PerformDelayedScan(TimeDelta delay) {
+void PCScanInternal::PerformDelayedScan(base::TimeDelta delay) {
   PCScan::PCScanThread::Instance().PostDelayedTask(delay);
 }
 
@@ -1563,14 +1566,16 @@ void PCScanInternal::ProtectPages(uintptr_t begin, size_t size) {
   // slot-spans doesn't need to be protected (the allocator will enter the
   // safepoint before trying to allocate from it).
   PA_SCAN_DCHECK(write_protector_.get());
-  write_protector_->ProtectPages(begin,
-                                 base::bits::AlignUp(size, SystemPageSize()));
+  write_protector_->ProtectPages(
+      begin,
+      partition_alloc::internal::base::bits::AlignUp(size, SystemPageSize()));
 }
 
 void PCScanInternal::UnprotectPages(uintptr_t begin, size_t size) {
   PA_SCAN_DCHECK(write_protector_.get());
-  write_protector_->UnprotectPages(begin,
-                                   base::bits::AlignUp(size, SystemPageSize()));
+  write_protector_->UnprotectPages(
+      begin,
+      partition_alloc::internal::base::bits::AlignUp(size, SystemPageSize()));
 }
 
 void PCScanInternal::ClearRootsForTesting() {
@@ -1608,15 +1613,15 @@ void PCScanInternal::FinishScanForTesting() {
   current_task->RunFromScanner();
 }
 
-void PCScanInternal::RegisterStatsReporter(StatsReporter* reporter) {
+void PCScanInternal::RegisterStatsReporter(
+    partition_alloc::StatsReporter* reporter) {
   PA_DCHECK(reporter);
   stats_reporter_ = reporter;
 }
 
-StatsReporter& PCScanInternal::GetReporter() {
+partition_alloc::StatsReporter& PCScanInternal::GetReporter() {
   PA_DCHECK(stats_reporter_);
   return *stats_reporter_;
 }
 
-}  // namespace internal
-}  // namespace base
+}  // namespace partition_alloc::internal

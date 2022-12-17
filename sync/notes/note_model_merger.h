@@ -27,9 +27,8 @@ class SyncedNoteTracker;
 
 // Responsible for merging local and remote note models when note sync
 // is enabled for the first time by the user (i.e. no sync metadata exists
-// locally), so we need a best-effort merge based on similarity. It implements
-// similar logic to that in NoteModelAssociator::AssociateModels() to be
-// used by the NoteModelTypeProcessor().
+// locally), so we need a best-effort merge based on similarity. It is used by
+// the NoteModelTypeProcessor().
 class NoteModelMerger {
  public:
   // |note_model| and |note_tracker| must not be

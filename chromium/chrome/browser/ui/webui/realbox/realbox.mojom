@@ -94,8 +94,11 @@ struct AutocompleteResult {
 struct SearchBoxTheme {
   skia.mojom.SkColor bg;
   skia.mojom.SkColor bg_hovered;
+  skia.mojom.SkColor border_color;
   skia.mojom.SkColor icon;
   skia.mojom.SkColor icon_selected;
+  // True if the theme is dark (i.e. NTP background color is dark).
+  bool is_dark;
   skia.mojom.SkColor ntp_bg;
   skia.mojom.SkColor placeholder;
   skia.mojom.SkColor results_bg;

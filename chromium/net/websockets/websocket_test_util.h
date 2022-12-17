@@ -16,7 +16,7 @@
 #include "net/http/http_request_headers.h"
 #include "net/http/http_stream_parser.h"
 #include "net/socket/client_socket_handle.h"
-#include "net/third_party/quiche/src/spdy/core/spdy_header_block.h"
+#include "net/third_party/quiche/src/quiche/spdy/core/spdy_header_block.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_request_test_util.h"
 #include "net/websockets/websocket_handshake_stream_create_helper.h"
@@ -54,25 +54,24 @@ HttpRequestHeaders WebSocketExtraHeadersToHttpRequestHeaders(
     const WebSocketExtraHeaders& headers);
 
 // Generates a standard WebSocket handshake request. The challenge key used is
-// "dGhlIHNhbXBsZSBub25jZQ==". Each header in |extra_headers| must be terminated
-// with "\r\n".
+// "dGhlIHNhbXBsZSBub25jZQ==".
 std::string WebSocketStandardRequest(
     const std::string& path,
     const std::string& host,
     const url::Origin& origin,
-    const std::string& send_additional_request_headers,
-    const std::string& extra_headers);
+    const WebSocketExtraHeaders& send_additional_request_headers,
+    const WebSocketExtraHeaders& extra_headers);
 
 // Generates a standard WebSocket handshake request. The challenge key used is
 // "dGhlIHNhbXBsZSBub25jZQ==". |cookies| must be empty or terminated with
-// "\r\n". Each header in |extra_headers| must be terminated with "\r\n".
+// "\r\n".
 std::string WebSocketStandardRequestWithCookies(
     const std::string& path,
     const std::string& host,
     const url::Origin& origin,
-    const std::string& cookies,
-    const std::string& send_additional_request_headers,
-    const std::string& extra_headers);
+    const WebSocketExtraHeaders& cookies,
+    const WebSocketExtraHeaders& send_additional_request_headers,
+    const WebSocketExtraHeaders& extra_headers);
 
 // A response with the appropriate accept header to match the above
 // challenge key. Each header in |extra_headers| must be terminated with

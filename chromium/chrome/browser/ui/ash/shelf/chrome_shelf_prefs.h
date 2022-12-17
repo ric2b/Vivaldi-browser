@@ -8,20 +8,16 @@
 #include <string>
 #include <vector>
 
-#include "ash/public/cpp/shelf_types.h"
-#include "base/feature_list.h"
-#include "base/metrics/field_trial_params.h"
 #include "chrome/browser/ui/app_list/app_list_syncable_service.h"
-#include "components/prefs/pref_change_registrar.h"
-#include "components/services/app_service/public/mojom/types.mojom.h"
+#include "components/services/app_service/public/cpp/app_types.h"
 
 class ShelfControllerHelper;
 class PrefService;
 class Profile;
 
-namespace app_list {
-class AppListSyncableService;
-}  // namespace app_list
+namespace ash {
+struct ShelfID;
+}  // namespace ash
 
 namespace user_prefs {
 class PrefRegistrySyncable;
@@ -58,7 +54,8 @@ class ChromeShelfPrefs : public app_list::AppListSyncableService::Observer {
   std::vector<ash::ShelfID> GetPinnedAppsFromSync(
       ShelfControllerHelper* helper);
 
-  // Gets the ordered list of apps that have been pinned by policy.
+  // Gets the ordered list of apps that have been pinned by policy. May contain
+  // duplicates.
   std::vector<std::string> GetAppsPinnedByPolicy(ShelfControllerHelper* helper);
 
   // Removes information about pin position from sync model for the app.
@@ -121,7 +118,7 @@ class ChromeShelfPrefs : public app_list::AppListSyncableService::Observer {
   //
   // This method returns whether the consistency migrations need to be run
   // again.
-  bool ShouldPerformConsistencyMigrations();
+  bool ShouldPerformConsistencyMigrations() const;
 
   // During Lacros development, there is a period of time when we wish to deploy
   // a transparent migration to Lacros, while still allowing users to fall back
@@ -165,7 +162,7 @@ class ChromeShelfPrefs : public app_list::AppListSyncableService::Observer {
   virtual bool IsStandaloneBrowserPublishingChromeApps();
 
   // Virtual for testing. Returns the app type associated with an app id.
-  virtual apps::mojom::AppType GetAppType(const std::string& app_id);
+  virtual apps::AppType GetAppType(const std::string& app_id);
 
   // Virtual for testing. Returns whether this app_id corresponds to an ash
   // extension-based platform app.

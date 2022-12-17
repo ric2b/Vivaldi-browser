@@ -1429,9 +1429,7 @@ std::unique_ptr<TabDragController> TabDragController::Detach(
 
   TabStripModel* attached_model = attached_context_->GetTabStripModel();
 
-  std::vector<TabRendererData> tab_data;
   for (size_t i = first_tab_index(); i < drag_data_.size(); ++i) {
-    tab_data.push_back(static_cast<Tab*>(drag_data_[i].attached_view)->data());
     int index = attached_model->GetIndexOfWebContents(drag_data_[i].contents);
     DCHECK_NE(-1, index);
 
@@ -1682,7 +1680,7 @@ void TabDragController::EndDragImpl(EndDragType type) {
     if (previous_state != DragState::kNotStarted) {
       // After the drag ends, sometimes it shouldn't restore the focus, because
       // - if |attached_context_| is showing in overview mode, overview mode
-      //   may be ended unexpectly because of the window activation.
+      //   may be ended unexpectedly because of the window activation.
       // - Some dragging gesture (like fling down) minimizes the window, but the
       //   window activation cancels minimized status. See
       //   https://crbug.com/902897
@@ -1912,11 +1910,18 @@ void TabDragController::RevertDragAt(size_t drag_index) {
     int index = attached_context_->GetTabStripModel()->GetIndexOfWebContents(
         data->contents);
     if (attached_context_ != source_context_) {
+      std::unique_ptr<base::AutoReset<bool>> removing_last_tab_setter;
+      if (attached_context_->GetTabStripModel()->count() == 1) {
+        removing_last_tab_setter = std::make_unique<base::AutoReset<bool>>(
+            &is_removing_last_tab_for_revert_, true);
+      }
       // The Tab was inserted into another TabDragContext. We need to
       // put it back into the original one.
       std::unique_ptr<content::WebContents> detached_web_contents =
           attached_context_->GetTabStripModel()
               ->DetachWebContentsAtForInsertion(index);
+      // No-longer removing the last tab, so reset state.
+      removing_last_tab_setter.reset();
       // TODO(beng): (Cleanup) seems like we should use Attach() for this
       //             somehow.
       source_context_->GetTabStripModel()->InsertWebContentsAt(
@@ -1972,15 +1977,19 @@ void TabDragController::CompleteDrag() {
       }
 
       // If source window was maximized - maximize the new window as well.
-#if !BUILDFLAG(IS_WIN)
+#if !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_MAC)
+
       // Keeping maximized state breaks snap to Grid on Windows when dragging
       // tabs from maximized windows. TODO:(crbug.com/727051) Explore doing this
       // for other desktop OS's. kMaximizedStateRetainedOnTabDrag in
       // tab_drag_controller_interactive_uitest.cc will need to be initialized
       // to false on each desktop OS that changes this behavior.
+      // macOS opts out since this maps maximize to fullscreen, which can
+      // violate user expectations and interacts poorly with some window
+      // management actions.
       if (was_source_maximized_ || was_source_fullscreen_)
         MaximizeAttachedWindow();
-#endif  // BUILDFLAG(IS_WIN)
+#endif  // !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_LINUX)
     }
     attached_context_->StoppedDragging(
         GetViewsMatchingDraggedContents(attached_context_),
@@ -2138,8 +2147,7 @@ gfx::Rect TabDragController::CalculateDraggedBrowserBounds(
   if (new_bounds.size().width() >= work_area.size().width() &&
       new_bounds.size().height() >= work_area.size().height()) {
     new_bounds = work_area;
-    new_bounds.Inset(kMaximizedWindowInset, kMaximizedWindowInset,
-                     kMaximizedWindowInset, kMaximizedWindowInset);
+    new_bounds.Inset(kMaximizedWindowInset);
     // Behave as if the |source| was maximized at the start of a drag since this
     // is consistent with a browser window creation logic in case of windows
     // that are as large as the |work_area|. Note: Some platforms do not support

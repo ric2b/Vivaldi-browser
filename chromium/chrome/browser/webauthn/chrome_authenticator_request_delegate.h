@@ -55,11 +55,16 @@ class ChromeWebAuthenticationDelegate
 
 #if !BUILDFLAG(IS_ANDROID)
   // content::WebAuthenticationDelegate:
+  bool OverrideCallerOriginAndRelyingPartyIdValidation(
+      content::BrowserContext* browser_context,
+      const url::Origin& caller_origin,
+      const std::string& relying_party_id) override;
   absl::optional<std::string> MaybeGetRelyingPartyIdOverride(
       const std::string& claimed_relying_party_id,
       const url::Origin& caller_origin) override;
   bool ShouldPermitIndividualAttestation(
       content::BrowserContext* browser_context,
+      const url::Origin& caller_origin,
       const std::string& relying_party_id) override;
   bool SupportsResidentKeys(
       content::RenderFrameHost* render_frame_host) override;
@@ -77,10 +82,10 @@ class ChromeWebAuthenticationDelegate
   absl::optional<TouchIdAuthenticatorConfig> GetTouchIdAuthenticatorConfig(
       content::BrowserContext* browser_context) override;
 #endif  // BUILDFLAG(IS_MAC)
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   ChromeOSGenerateRequestIdCallback GetGenerateRequestIdCallback(
       content::RenderFrameHost* render_frame_host) override;
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 };
 
 class ChromeAuthenticatorRequestDelegate
@@ -178,7 +183,17 @@ class ChromeAuthenticatorRequestDelegate
   void OnCancelRequest() override;
   void OnManageDevicesClicked() override;
 
- private:
+  // A non-const version of dialog_model().
+  raw_ptr<AuthenticatorRequestDialogModel> GetDialogModelForTesting();
+
+  // SetPassEmptyUsbDeviceManagerForTesting controls whether the
+  // `DiscoveryFactory` will be given an empty USB device manager. This is
+  // needed in tests because creating a real `device::mojom::UsbDeviceManager`
+  // can create objects on thread-pool threads. Those objects aren't scheduled
+  // for deletion until after the thread-pool is shutdown when testing, causing
+  // "leaks" to be reported.
+  void SetPassEmptyUsbDeviceManagerForTesting(bool value);
+
   FRIEND_TEST_ALL_PREFIXES(ChromeAuthenticatorRequestDelegateTest,
                            TestTransportPrefType);
   FRIEND_TEST_ALL_PREFIXES(ChromeAuthenticatorRequestDelegateTest,
@@ -197,7 +212,7 @@ class ChromeAuthenticatorRequestDelegate
   // information that will be broadcast by the device.
   bool ShouldPermitCableExtension(const url::Origin& origin);
 
-  void HandleCablePairingEvent(device::cablev2::PairingEvent pairing);
+  void OnInvalidatedCablePairing(size_t failed_contact_index);
 
   const content::GlobalRenderFrameHostId render_frame_host_id_;
   // Holds ownership of AuthenticatorRequestDialogModel until
@@ -226,6 +241,10 @@ class ChromeAuthenticatorRequestDelegate
   // credentials on the device.
   bool is_conditional_ = false;
 
+  // See `SetPassEmptyUsbDeviceManagerForTesting`.
+  bool pass_empty_usb_device_manager_ = false;
+
+ private:
   base::WeakPtrFactory<ChromeAuthenticatorRequestDelegate> weak_ptr_factory_{
       this};
 };

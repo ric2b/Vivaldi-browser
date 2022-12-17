@@ -10,11 +10,13 @@
 #include "base/strings/utf_string_conversions.h"
 #include "components/sync/base/unique_position.h"
 #include "components/sync/engine/commit_and_get_updates_types.h"
+#include "components/sync/protocol/entity_metadata.pb.h"
 #include "components/sync/protocol/entity_specifics.pb.h"
 #include "notes/note_node.h"
 #include "notes/notes_model.h"
 #include "sync/notes/note_specifics_conversions.h"
 #include "sync/notes/synced_note_tracker.h"
+#include "sync/notes/synced_note_tracker_entity.h"
 #include "sync/vivaldi_hash_util.h"
 
 namespace sync_notes {
@@ -52,7 +54,7 @@ void NotesModelObserverImpl::NotesNodeMoved(vivaldi::NotesModel* model,
   // We shouldn't see changes to the top-level nodes.
   DCHECK(!model->is_permanent_node(node));
 
-  const SyncedNoteTracker::Entity* entity =
+  const SyncedNoteTrackerEntity* entity =
       note_tracker_->GetEntityForNoteNode(node);
   DCHECK(entity);
 
@@ -76,6 +78,10 @@ void NotesModelObserverImpl::NotesNodeAdded(vivaldi::NotesModel* model,
                                             size_t index) {
   const vivaldi::NoteNode* node = parent->children()[index].get();
 
+  const SyncedNoteTrackerEntity* parent_entity =
+      note_tracker_->GetEntityForNoteNode(parent);
+  DCHECK(parent_entity);
+
   const syncer::UniquePosition unique_position =
       ComputePosition(*parent, index, node->guid().AsLowercaseString());
 
@@ -85,16 +91,14 @@ void NotesModelObserverImpl::NotesNodeAdded(vivaldi::NotesModel* model,
   // It is possible that a created note was restored after deletion and
   // the tombstone was not committed yet. In that case the existing entity
   // should be updated.
-  const SyncedNoteTracker::Entity* entity =
+  const SyncedNoteTrackerEntity* entity =
       note_tracker_->GetEntityForGUID(node->guid());
   const base::Time creation_time = base::Time::Now();
   if (entity) {
     // If there is a tracked entity with the same client tag hash (effectively
     // the same note GUID), it must be a tombstone. Otherwise it means
     // the note model contains to notes with the same GUID.
-    // TODO(crbug.com/516866): The below CHECK is added to debug some crashes.
-    // Should be removed after figuring out the reason for the crash.
-    CHECK(!entity->note_node()) << "Added note with duplicate GUID";
+    DCHECK(!entity->note_node()) << "Added note with duplicate GUID";
     note_tracker_->UndeleteTombstoneForNoteNode(entity, node);
     note_tracker_->Update(entity, entity->metadata()->server_version(),
                           creation_time, specifics);
@@ -147,7 +151,7 @@ void NotesModelObserverImpl::NotesNodeChanged(vivaldi::NotesModel* model,
   // We shouldn't see changes to the top-level nodes.
   DCHECK(!model->is_permanent_node(node));
 
-  const SyncedNoteTracker::Entity* entity =
+  const SyncedNoteTrackerEntity* entity =
       note_tracker_->GetEntityForNoteNode(node);
   if (!entity) {
     // If the node hasn't been added to the tracker yet, we do nothing. It
@@ -205,7 +209,7 @@ void NotesModelObserverImpl::NotesNodeChildrenReordered(
 
   syncer::UniquePosition position;
   for (const auto& child : node->children()) {
-    const SyncedNoteTracker::Entity* entity =
+    const SyncedNoteTrackerEntity* entity =
         note_tracker_->GetEntityForNoteNode(child.get());
     DCHECK(entity);
 
@@ -236,8 +240,8 @@ syncer::UniquePosition NotesModelObserverImpl::ComputePosition(
   const std::string& suffix = syncer::GenerateSyncableNotesHash(
       note_tracker_->model_type_state().cache_guid(), sync_id);
   DCHECK(!parent.children().empty());
-  const SyncedNoteTracker::Entity* predecessor_entity = nullptr;
-  const SyncedNoteTracker::Entity* successor_entity = nullptr;
+  const SyncedNoteTrackerEntity* predecessor_entity = nullptr;
+  const SyncedNoteTrackerEntity* successor_entity = nullptr;
 
   // Look for the first tracked predecessor.
   for (auto i = parent.children().crend() - index;
@@ -295,7 +299,7 @@ void NotesModelObserverImpl::ProcessDelete(const vivaldi::NoteNode* parent,
   for (const auto& child : node->children())
     ProcessDelete(node, child.get());
   // Process the current node.
-  const SyncedNoteTracker::Entity* entity =
+  const SyncedNoteTrackerEntity* entity =
       note_tracker_->GetEntityForNoteNode(node);
   // Shouldn't try to delete untracked entities.
   DCHECK(entity);

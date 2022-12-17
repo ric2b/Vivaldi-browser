@@ -12,6 +12,7 @@
 #include "ash/components/arc/metrics/stability_metrics_manager.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
+#include "ash/services/multidevice_setup/public/cpp/multidevice_setup_client.h"
 #include "base/barrier_closure.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
@@ -23,7 +24,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/sys_byteorder.h"
-#include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "chrome/browser/ash/accessibility/accessibility_manager.h"
@@ -38,7 +38,6 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
-#include "chromeos/services/multidevice_setup/public/cpp/multidevice_setup_client.h"
 #include "chromeos/system/statistics_provider.h"
 #include "components/metrics/metrics_service.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -73,11 +72,11 @@ std::string GetFullHardwareClassOnBackgroundThread() {
 }
 
 bool IsFeatureEnabled(
-    const chromeos::multidevice_setup::MultiDeviceSetupClient::FeatureStatesMap&
+    const ash::multidevice_setup::MultiDeviceSetupClient::FeatureStatesMap&
         feature_states_map,
-    chromeos::multidevice_setup::mojom::Feature feature) {
+    ash::multidevice_setup::mojom::Feature feature) {
   return feature_states_map.find(feature)->second ==
-         chromeos::multidevice_setup::mojom::FeatureState::kEnabledByUser;
+         ash::multidevice_setup::mojom::FeatureState::kEnabledByUser;
 }
 
 }  // namespace
@@ -267,17 +266,17 @@ void ChromeOSMetricsProvider::ProvideCurrentSessionData(
 
 void ChromeOSMetricsProvider::WriteLinkedAndroidPhoneProto(
     metrics::SystemProfileProto* system_profile_proto) {
-  chromeos::multidevice_setup::MultiDeviceSetupClient* client =
+  ash::multidevice_setup::MultiDeviceSetupClient* client =
       ash::multidevice_setup::MultiDeviceSetupClientFactory::GetForProfile(
           cached_profile_->GetMetricsProfile());
 
   if (!client)
     return;
 
-  const chromeos::multidevice_setup::MultiDeviceSetupClient::
-      HostStatusWithDevice& host_status_with_device = client->GetHostStatus();
+  const ash::multidevice_setup::MultiDeviceSetupClient::HostStatusWithDevice&
+      host_status_with_device = client->GetHostStatus();
   if (host_status_with_device.first !=
-      chromeos::multidevice_setup::mojom::HostStatus::kHostVerified) {
+      ash::multidevice_setup::mojom::HostStatus::kHostVerified) {
     return;
   }
 
@@ -287,17 +286,15 @@ void ChromeOSMetricsProvider::WriteLinkedAndroidPhoneProto(
       variations::HashName(host_status_with_device.second->pii_free_name());
   linked_android_phone_data->set_phone_model_name_hash(hashed_name);
 
-  const chromeos::multidevice_setup::MultiDeviceSetupClient::FeatureStatesMap&
+  const ash::multidevice_setup::MultiDeviceSetupClient::FeatureStatesMap&
       feature_states_map = client->GetFeatureStates();
   linked_android_phone_data->set_is_smartlock_enabled(IsFeatureEnabled(
-      feature_states_map,
-      chromeos::multidevice_setup::mojom::Feature::kSmartLock));
+      feature_states_map, ash::multidevice_setup::mojom::Feature::kSmartLock));
   linked_android_phone_data->set_is_instant_tethering_enabled(IsFeatureEnabled(
       feature_states_map,
-      chromeos::multidevice_setup::mojom::Feature::kInstantTethering));
-  linked_android_phone_data->set_is_messages_enabled(
-      IsFeatureEnabled(feature_states_map,
-                       chromeos::multidevice_setup::mojom::Feature::kMessages));
+      ash::multidevice_setup::mojom::Feature::kInstantTethering));
+  linked_android_phone_data->set_is_messages_enabled(IsFeatureEnabled(
+      feature_states_map, ash::multidevice_setup::mojom::Feature::kMessages));
 }
 
 void ChromeOSMetricsProvider::UpdateMultiProfileUserCount(

@@ -23,9 +23,9 @@
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
+#include "components/ukm/test_ukm_recorder.h"
 #include "content/browser/browser_url_handler_impl.h"
 #include "content/browser/child_process_security_policy_impl.h"
-#include "content/browser/network_service_instance_impl.h"
 #include "content/browser/renderer_host/navigation_request.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/content_navigation_policy.h"
@@ -279,6 +279,15 @@ class NavigationBaseBrowserTest : public ContentBrowserTest {
  public:
   NavigationBaseBrowserTest() {}
 
+  void PreRunTestOnMainThread() override {
+    ContentBrowserTest::PreRunTestOnMainThread();
+    test_ukm_recorder_ = std::make_unique<ukm::TestAutoSetUkmRecorder>();
+  }
+
+  const ukm::TestAutoSetUkmRecorder& test_ukm_recorder() const {
+    return *test_ukm_recorder_;
+  }
+
  protected:
   void SetUpOnMainThread() override {
     host_resolver()->AddRule("*", "127.0.0.1");
@@ -295,6 +304,9 @@ class NavigationBaseBrowserTest : public ContentBrowserTest {
   RenderFrameHostImpl* current_frame_host() {
     return main_frame()->current_frame_host();
   }
+
+ private:
+  std::unique_ptr<ukm::TestAutoSetUkmRecorder> test_ukm_recorder_;
 };
 
 class NavigationBrowserTest : public NavigationBaseBrowserTest {
@@ -327,6 +339,24 @@ class NetworkIsolationNavigationBrowserTest : public ContentBrowserTest {
     ASSERT_TRUE(embedded_test_server()->Start());
     ContentBrowserTest::SetUpOnMainThread();
   }
+};
+
+class NetworkDoubleKeyIsolationNavigationBrowserTest
+    : public ContentBrowserTest {
+ public:
+  NetworkDoubleKeyIsolationNavigationBrowserTest() {
+    scoped_feature_list_.InitAndEnableFeature(
+        net::features::kForceIsolationInfoFrameOriginToTopLevelFrame);
+  }
+
+ protected:
+  void SetUpOnMainThread() override {
+    ASSERT_TRUE(embedded_test_server()->Start());
+    ContentBrowserTest::SetUpOnMainThread();
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 class NavigationBrowserTestReferrerPolicy
@@ -407,6 +437,11 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, BrowserInitiatedNavigations) {
 
   // The RenderFrameHost should have changed.
   EXPECT_NE(second_rfh, current_frame_host());
+
+  // Check the UKM for navigation responses received.
+  EXPECT_EQ(3u, test_ukm_recorder()
+                    .GetEntriesByName("Navigation.ReceivedResponse")
+                    .size());
 }
 
 // Ensure that renderer initiated same-site navigations work.
@@ -526,6 +561,10 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, FailedNavigation) {
     EXPECT_TRUE(NavigateToURL(shell(), url));
     EXPECT_EQ(url, observer.last_navigation_url());
     EXPECT_TRUE(observer.last_navigation_succeeded());
+    // Check the UKM for navigation responses received.
+    EXPECT_EQ(1u, test_ukm_recorder()
+                      .GetEntriesByName("Navigation.ReceivedResponse")
+                      .size());
   }
 
   // Now navigate to an unreachable url.
@@ -539,6 +578,11 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, FailedNavigation) {
     NavigationEntry* entry =
         web_contents()->GetController().GetLastCommittedEntry();
     EXPECT_EQ(PAGE_TYPE_ERROR, entry->GetPageType());
+    // No response on an unreachable URL, so the ReceivedResponse event should
+    // not have increased.
+    EXPECT_EQ(1u, test_ukm_recorder()
+                      .GetEntriesByName("Navigation.ReceivedResponse")
+                      .size());
   }
 }
 
@@ -894,6 +938,46 @@ IN_PROC_BROWSER_TEST_F(NetworkIsolationNavigationBrowserTest,
                                  net::SiteForCookies::FromOrigin(origin),
                                  std::set<net::SchemefulSite>())
           .IsEqualForTesting(iframe_request->trusted_params->isolation_info));
+}
+
+IN_PROC_BROWSER_TEST_F(NetworkDoubleKeyIsolationNavigationBrowserTest,
+                       SubframeDoubleKeyNetworkIsolation) {
+  GURL url_top(embedded_test_server()->GetURL("/page_with_iframe.html"));
+  GURL url_iframe = embedded_test_server()->GetURL("/title1.html");
+  url::Origin origin = url::Origin::Create(url_top);
+  URLLoaderMonitor monitor({url_iframe});
+  EXPECT_TRUE(NavigateToURL(shell(), url_top));
+  monitor.WaitForUrls();
+
+  absl::optional<network::ResourceRequest> main_frame_request =
+      monitor.GetRequestInfo(url_top);
+  ASSERT_TRUE(main_frame_request.has_value());
+  ASSERT_TRUE(main_frame_request->trusted_params);
+  EXPECT_TRUE(net::IsolationInfo::Create(
+                  net::IsolationInfo::RequestType::kMainFrame, origin, origin,
+                  net::SiteForCookies::FromOrigin(origin),
+                  std::set<net::SchemefulSite>())
+                  .IsEqualForTesting(
+                      main_frame_request->trusted_params->isolation_info));
+
+  absl::optional<network::ResourceRequest> iframe_request =
+      monitor.GetRequestInfo(url_iframe);
+  ASSERT_TRUE(iframe_request->trusted_params);
+
+  // IsolationInfo and NIK of subframe should only reflect the main_frame's
+  // origin when these flags are on because double key does not include the
+  // subframe's origin.
+  EXPECT_TRUE(
+      net::IsolationInfo::Create(net::IsolationInfo::RequestType::kSubFrame,
+                                 origin, origin,
+                                 net::SiteForCookies::FromOrigin(origin),
+                                 std::set<net::SchemefulSite>())
+          .IsEqualForTesting(iframe_request->trusted_params->isolation_info));
+
+  EXPECT_EQ(
+      main_frame_request->trusted_params->isolation_info
+          .network_isolation_key(),
+      iframe_request->trusted_params->isolation_info.network_isolation_key());
 }
 
 // Tests that the initiator is not set for a browser initiated top frame
@@ -1764,6 +1848,11 @@ IN_PROC_BROWSER_TEST_F(NavigationBaseBrowserTest, AddRequestHeaderOnRedirect) {
   response_2.WaitForRequest();
   EXPECT_EQ("header_value",
             response_2.http_request()->headers.at("header_name"));
+
+  // Redirect should not record a ReceivedResponse event.
+  EXPECT_EQ(0u, test_ukm_recorder()
+                    .GetEntriesByName("Navigation.ReceivedResponse")
+                    .size());
 }
 
 // Add header on request start, modify it on redirect.
@@ -3389,6 +3478,11 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
   EXPECT_FALSE(navigation_2.was_same_document());
 
   EXPECT_EQ(wc->GetMainFrame()->GetLastCommittedURL(), url2);
+
+  // Redirect should not record a ReceivedResponse event.
+  EXPECT_EQ(1u, test_ukm_recorder()
+                    .GetEntriesByName("Navigation.ReceivedResponse")
+                    .size());
 }
 
 // 1. The browser navigates to a.html.
@@ -4521,14 +4615,6 @@ class SubresourceLoadingTest : public NavigationBrowserTest {
     EXPECT_EQ(target_frame->GetSiteInstance(),
               initiator_frame->GetSiteInstance());
 
-    // Start monitoring NetworkService for crashes.
-    //
-    // TODO(https://crbug.com/1169431): This should be part of BrowserTestBase.
-    // (with optional opt-out for things like NetworkServiceRestartBrowserTest).
-    bool did_network_service_crash = false;
-    base::CallbackListSubscription crash_monitoring_subscription =
-        RegisterNetworkServiceCrashHandler(base::BindLambdaForTesting(
-            [&]() { did_network_service_crash = true; }));
     // Ask for cookies in the `target_frame`.  One implicit verification here
     // is whether this step will hit any `cookie_url`-related NOTREACHED or DwoC
     // in RestrictedCookieManager::ValidateAccessToCookiesAt.  This verification
@@ -4537,21 +4623,6 @@ class SubresourceLoadingTest : public NavigationBrowserTest {
     // ignores possible Blink-side caching, but this is the first time the
     // renderer needs the cookies and so this is okay for this test).
     EXPECT_EQ("", EvalJs(target_frame, "document.cookie"));
-    // |network_context| might receive an error notification, but it's not
-    // guaranteed to have arrived at this point. Flush the remote to make sure
-    // the notification has been received.
-    //
-    // We flush via `initiator_frame`, because in the current set of tests, the
-    // `initiator_frame` always has a mojo connection to the NetworkService via
-    // the `network_service_disconnect_handler_holder_mojo` field of
-    // RenderFrameHostImpl.  (This is not true for the `target_frame` in tests
-    // where that frame uses the process-wide URLLoaderFactory fallback rather
-    // than creating a URLLoaderFactory via RenderFrameHostImpl.)
-    //
-    // TODO(https://crbug.com/1169431): This should be part of BrowserTestBase.
-    if (!IsInProcessNetworkService())
-      initiator_frame->FlushNetworkAndNavigationInterfacesForTesting();
-    EXPECT_FALSE(did_network_service_crash);
 
     // Verify that the "about:blank" frame is able to load an image.
     VerifyImageSubresourceLoads(target_frame);

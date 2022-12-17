@@ -402,7 +402,7 @@ class NoStatePrefetchBrowserTest
     if (new_web_contents) {
       NewTabNavigationOrSwapObserver observer;
       render_frame_host->ExecuteJavaScriptWithUserGestureForTests(
-          base::ASCIIToUTF16(javascript));
+          base::ASCIIToUTF16(javascript), base::NullCallback());
       observer.Wait();
     } else {
       NavigationOrSwapObserver observer(current_browser()->tab_strip_model(),
@@ -1585,10 +1585,7 @@ class NoStatePrefetchOmniboxBrowserTest : public NoStatePrefetchBrowserTest {
     std::unique_ptr<TestPrerender> prerender =
         ExpectPrerender(expected_final_status);
     content::WebContents* web_contents = GetActiveWebContents();
-    AutocompleteMatch match;
-    match.type = AutocompleteMatchType::URL_WHAT_YOU_TYPED;
-    match.destination_url = url;
-    GetAutocompleteActionPredictor()->StartPrerendering(match, *web_contents,
+    GetAutocompleteActionPredictor()->StartPrerendering(url, *web_contents,
                                                         gfx::Size(50, 50));
     prerender->WaitForStart();
     return prerender;

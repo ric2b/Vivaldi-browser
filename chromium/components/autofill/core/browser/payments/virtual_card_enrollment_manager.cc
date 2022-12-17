@@ -3,7 +3,9 @@
 // found in the LICENSE file.
 
 #include "components/autofill/core/browser/payments/virtual_card_enrollment_manager.h"
+#include <string>
 
+#include "base/strings/string_number_conversions.h"
 #include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/metrics/payments/virtual_card_enrollment_metrics.h"
@@ -12,7 +14,9 @@
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/strike_database.h"
 #include "components/autofill/core/browser/strike_database_base.h"
+#include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
+#include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image.h"
 
 namespace autofill {
@@ -41,10 +45,14 @@ VirtualCardEnrollmentManager::VirtualCardEnrollmentManager(
     : autofill_client_(autofill_client),
       personal_data_manager_(personal_data_manager),
       payments_client_(payments_client) {
-  if (autofill_client_) {
-    StrikeDatabaseBase* strike_database = autofill_client->GetStrikeDatabase();
+  // |autofill_client_| does not exist on Clank settings page where this flow
+  // can also be triggered.
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillEnableUpdateVirtualCardEnrollment) &&
+      autofill_client_ && autofill_client_->GetStrikeDatabase()) {
     virtual_card_enrollment_strike_database_ =
-        std::make_unique<VirtualCardEnrollmentStrikeDatabase>(strike_database);
+        std::make_unique<VirtualCardEnrollmentStrikeDatabase>(
+            autofill_client_->GetStrikeDatabase());
   }
 }
 
@@ -57,6 +65,15 @@ void VirtualCardEnrollmentManager::OfferVirtualCardEnroll(
     RiskAssessmentFunction risk_assessment_function,
     VirtualCardEnrollmentFieldsLoadedCallback
         virtual_card_enrollment_fields_loaded_callback) {
+  // If at strike limit, exit enrollment flow.
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillEnableUpdateVirtualCardEnrollment) &&
+      IsVirtualCardEnrollmentBlockedDueToMaxStrikes(
+          base::NumberToString(credit_card.instrument_id()),
+          virtual_card_enrollment_source)) {
+    return;
+  }
+
   Reset();
   DCHECK_NE(virtual_card_enrollment_source, VirtualCardEnrollmentSource::kNone);
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
@@ -65,19 +82,25 @@ void VirtualCardEnrollmentManager::OfferVirtualCardEnroll(
   DCHECK(autofill_client_);
   autofill_client_->HideVirtualCardEnrollBubbleAndIconIfVisible();
 #endif
+
   state_.virtual_card_enrollment_fields.credit_card = credit_card;
   risk_assessment_function_ = std::move(risk_assessment_function);
   virtual_card_enrollment_fields_loaded_callback_ =
       std::move(virtual_card_enrollment_fields_loaded_callback);
+
   // The |card_art_image| might not be synced yet from the sync server which
-  // will result in a nullptr. This situation can occur in the upstream flow. If
-  // it is not synced, GetCreditCardArtImageForUrl() will send a fetch request
-  // to sync the |card_art_image|, and before showing the
-  // VirtualCardEnrollmentBubble we will try to fetch the |card_art_image| from
-  // the local cache.
-  state_.virtual_card_enrollment_fields.card_art_image =
+  // will result in a nullptr. This situation can occur in the upstream flow.
+  // If it is not synced, GetCreditCardArtImageForUrl() will send a fetch
+  // request to sync the |card_art_image|, and before showing the
+  // VirtualCardEnrollmentBubble we will try to fetch the |card_art_image|
+  // from the local cache.
+  raw_ptr<gfx::Image> card_art_image =
       personal_data_manager_->GetCreditCardArtImageForUrl(
           credit_card.card_art_url());
+  if (card_art_image && !card_art_image->IsEmpty()) {
+    state_.virtual_card_enrollment_fields.card_art_image =
+        card_art_image->ToImageSkia();
+  }
 
   state_.virtual_card_enrollment_fields.virtual_card_enrollment_source =
       virtual_card_enrollment_source;
@@ -111,6 +134,8 @@ void VirtualCardEnrollmentManager::Enroll() {
       VirtualCardEnrollmentRequestType::kEnroll;
   request_details.billing_customer_number =
       payments::GetBillingCustomerId(personal_data_manager_);
+  request_details.instrument_id =
+      state_.virtual_card_enrollment_fields.credit_card.instrument_id();
   request_details.vcn_context_token = state_.vcn_context_token;
 
   payments_client_->UpdateVirtualCardEnrollment(
@@ -119,6 +144,11 @@ void VirtualCardEnrollmentManager::Enroll() {
                          OnDidGetUpdateVirtualCardEnrollmentResponse,
                      weak_ptr_factory_.GetWeakPtr(),
                      VirtualCardEnrollmentRequestType::kEnroll));
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillEnableUpdateVirtualCardEnrollment)) {
+    RemoveAllStrikesToBlockOfferingVirtualCardEnrollment(base::NumberToString(
+        state_.virtual_card_enrollment_fields.credit_card.instrument_id()));
+  }
 }
 
 void VirtualCardEnrollmentManager::Unenroll(int64_t instrument_id) {
@@ -149,28 +179,61 @@ void VirtualCardEnrollmentManager::Unenroll(int64_t instrument_id) {
                      VirtualCardEnrollmentRequestType::kUnenroll));
 }
 
-bool VirtualCardEnrollmentManager::IsVirtualCardEnrollmentBlocked(
-    const std::string& guid) const {
-  return GetVirtualCardEnrollmentStrikeDatabase() &&
-         GetVirtualCardEnrollmentStrikeDatabase()->IsMaxStrikesLimitReached(
-             guid);
+bool VirtualCardEnrollmentManager::
+    IsVirtualCardEnrollmentBlockedDueToMaxStrikes(
+        const std::string& instrument_id,
+        VirtualCardEnrollmentSource virtual_card_enrollment_source) const {
+  if (virtual_card_enrollment_source ==
+      VirtualCardEnrollmentSource::kSettingsPage)
+    return false;
+
+  if (!GetVirtualCardEnrollmentStrikeDatabase())
+    return false;
+
+  bool max_strikes_limit_reached =
+      GetVirtualCardEnrollmentStrikeDatabase()->IsMaxStrikesLimitReached(
+          instrument_id);
+  if (max_strikes_limit_reached) {
+    LogVirtualCardEnrollmentBubbleMaxStrikesLimitReached(
+        virtual_card_enrollment_source);
+  }
+  return max_strikes_limit_reached;
 }
 
 void VirtualCardEnrollmentManager::
-    AddStrikeToBlockOfferingVirtualCardEnrollment(const std::string& guid) {
+    AddStrikeToBlockOfferingVirtualCardEnrollment(
+        const std::string& instrument_id) {
   if (!GetVirtualCardEnrollmentStrikeDatabase())
     return;
 
-  GetVirtualCardEnrollmentStrikeDatabase()->AddStrike(guid);
+  GetVirtualCardEnrollmentStrikeDatabase()->AddStrike(instrument_id);
+
+  // Log that a strike has been recorded.
+  LogVirtualCardEnrollmentStrikeDatabaseEvent(
+      state_.virtual_card_enrollment_fields.virtual_card_enrollment_source,
+      VirtualCardEnrollmentStrikeDatabaseEvent::
+          VIRTUAL_CARD_ENROLLMENT_STRIKE_DATABASE_STRIKE_LOGGED);
 }
 
 void VirtualCardEnrollmentManager::
     RemoveAllStrikesToBlockOfferingVirtualCardEnrollment(
-        const std::string& guid) {
+        const std::string& instrument_id) {
   if (!GetVirtualCardEnrollmentStrikeDatabase())
     return;
 
-  GetVirtualCardEnrollmentStrikeDatabase()->ClearStrikes(guid);
+  GetVirtualCardEnrollmentStrikeDatabase()->ClearStrikes(instrument_id);
+
+  // Log that strikes are being cleared.
+  LogVirtualCardEnrollmentStrikeDatabaseEvent(
+      state_.virtual_card_enrollment_fields.virtual_card_enrollment_source,
+      VirtualCardEnrollmentStrikeDatabaseEvent::
+          VIRTUAL_CARD_ENROLLMENT_STRIKE_DATABASE_STRIKES_CLEARED);
+}
+
+void VirtualCardEnrollmentManager::SetSaveCardBubbleAcceptedTimestamp(
+    const base::Time& save_card_bubble_accepted_timestamp) {
+  save_card_bubble_accepted_timestamp_ =
+      std::move(save_card_bubble_accepted_timestamp);
 }
 
 void VirtualCardEnrollmentManager::OnDidGetUpdateVirtualCardEnrollmentResponse(
@@ -212,6 +275,32 @@ void VirtualCardEnrollmentManager::LoadRiskDataAndContinueFlow(
 
 void VirtualCardEnrollmentManager::ShowVirtualCardEnrollBubble() {
   DCHECK(autofill_client_);
+  if (state_.virtual_card_enrollment_fields.virtual_card_enrollment_source ==
+          VirtualCardEnrollmentSource::kUpstream &&
+      save_card_bubble_accepted_timestamp_.has_value()) {
+    LogVirtualCardEnrollBubbleLatencySinceUpstream(
+        AutofillClock::Now() - save_card_bubble_accepted_timestamp_.value());
+    save_card_bubble_accepted_timestamp_.reset();
+  }
+
+  // Check in StrikeDatabase whether enrollment has been offered for this card
+  // and got declined before and whether this is the last time this offer is
+  // shown before previous records expire.
+  state_.virtual_card_enrollment_fields.previously_declined = false;
+  state_.virtual_card_enrollment_fields.last_show = false;
+  if (GetVirtualCardEnrollmentStrikeDatabase()) {
+    std::string card_instrument_id = base::NumberToString(
+        state_.virtual_card_enrollment_fields.credit_card.instrument_id());
+    if (GetVirtualCardEnrollmentStrikeDatabase()->GetStrikes(
+            card_instrument_id) > 0) {
+      state_.virtual_card_enrollment_fields.previously_declined = true;
+    }
+    if (GetVirtualCardEnrollmentStrikeDatabase()->IsLastOffer(
+            card_instrument_id)) {
+      state_.virtual_card_enrollment_fields.last_show = true;
+    }
+  }
+
   autofill_client_->ShowVirtualCardEnrollDialog(
       state_.virtual_card_enrollment_fields,
       base::BindOnce(&VirtualCardEnrollmentManager::Enroll,
@@ -283,15 +372,27 @@ void VirtualCardEnrollmentManager::OnDidGetDetailsForEnrollResponse(
   state_.vcn_context_token = response.vcn_context_token;
 
   // Tries to get the card art image again from the local cache. If the card art
-  // image is not available, then |state_|'s |virtual_card_enrollment_fields|'s
-  // |card_art_image| will be nullptr. The view will set it to the network image
-  // if it ends up being nullptr. The card art image might not be present
-  // in the upstream flow if the sync server has not synced the card art image
-  // yet.
+  // image is not available, then we fall back to the network image instead. The
+  // card art image might not be present in the upstream flow if the chrome sync
+  // server has not synced down the card art url yet for the card just uploaded.
   if (!state_.virtual_card_enrollment_fields.card_art_image) {
-    state_.virtual_card_enrollment_fields.card_art_image =
+    raw_ptr<gfx::Image> cached_card_art_image =
         personal_data_manager_->GetCachedCardArtImageForUrl(
             state_.virtual_card_enrollment_fields.credit_card.card_art_url());
+    if (cached_card_art_image && !cached_card_art_image->IsEmpty()) {
+      // We found a card art image in the cache, so set |state_|'s
+      // |virtual_card_enrollment_fields|'s |card_art_image| to it.
+      state_.virtual_card_enrollment_fields.card_art_image =
+          cached_card_art_image->ToImageSkia();
+    } else {
+      // We did not find a card art image in the cache, so set |state_|'s
+      // |virtual_card_enrollment_fields|'s |card_art_image| to the network
+      // image instead.
+      state_.virtual_card_enrollment_fields.card_art_image =
+          ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
+              CreditCard::IconResourceId(
+                  state_.virtual_card_enrollment_fields.credit_card.network()));
+    }
   }
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -319,6 +420,11 @@ void VirtualCardEnrollmentManager::OnDidGetDetailsForEnrollResponse(
 }
 
 void VirtualCardEnrollmentManager::OnVirtualCardEnrollmentBubbleCancelled() {
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillEnableUpdateVirtualCardEnrollment)) {
+    AddStrikeToBlockOfferingVirtualCardEnrollment(base::NumberToString(
+        state_.virtual_card_enrollment_fields.credit_card.instrument_id()));
+  }
   Reset();
 }
 

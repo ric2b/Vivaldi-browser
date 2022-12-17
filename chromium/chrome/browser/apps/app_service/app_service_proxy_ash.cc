@@ -128,6 +128,12 @@ apps::InstanceRegistry& AppServiceProxyAsh::InstanceRegistry() {
   return instance_registry_;
 }
 
+apps::AppPlatformMetrics* AppServiceProxyAsh::AppPlatformMetrics() {
+  return app_platform_metrics_service_
+             ? app_platform_metrics_service_->AppPlatformMetrics()
+             : nullptr;
+}
+
 apps::BrowserAppInstanceTracker*
 AppServiceProxyAsh::BrowserAppInstanceTracker() {
   return browser_app_instance_tracker_.get();
@@ -138,10 +144,12 @@ AppServiceProxyAsh::BrowserAppInstanceRegistry() {
   return browser_app_instance_registry_.get();
 }
 
-apps::AppPlatformMetrics* AppServiceProxyAsh::AppPlatformMetrics() {
-  return app_platform_metrics_service_
-             ? app_platform_metrics_service_->AppPlatformMetrics()
-             : nullptr;
+void AppServiceProxyAsh::RegisterCrosApiSubScriber(
+    SubscriberCrosapi* subscriber) {
+  if (base::FeatureList::IsEnabled(AppServiceCrosApiOnAppsWithoutMojom)) {
+    crosapi_subscriber_ = subscriber;
+    crosapi_subscriber_->OnApps(app_registry_cache_.GetAllApps());
+  }
 }
 
 void AppServiceProxyAsh::Uninstall(
@@ -151,6 +159,24 @@ void AppServiceProxyAsh::Uninstall(
   UninstallImpl(app_id, uninstall_source, parent_window, base::DoNothing());
 }
 
+void AppServiceProxyAsh::OnApps(std::vector<AppPtr> deltas,
+                                AppType app_type,
+                                bool should_notify_initialized) {
+  if (crosapi_subscriber_) {
+    crosapi_subscriber_->OnApps(deltas);
+  }
+
+  AppServiceProxyBase::OnApps(std::move(deltas), app_type,
+                              should_notify_initialized);
+}
+
+void AppServiceProxyAsh::OnApps(std::vector<apps::mojom::AppPtr> deltas,
+                                apps::mojom::AppType app_type,
+                                bool should_notify_initialized) {
+  AppServiceProxyBase::OnApps(std::move(deltas), app_type,
+                              should_notify_initialized);
+}
+
 void AppServiceProxyAsh::PauseApps(
     const std::map<std::string, PauseData>& pause_data) {
   if (!app_service_.is_connected()) {
@@ -158,21 +184,22 @@ void AppServiceProxyAsh::PauseApps(
   }
 
   for (auto& data : pause_data) {
-    apps::mojom::AppType app_type = app_registry_cache_.GetAppType(data.first);
-    if (app_type == apps::mojom::AppType::kUnknown) {
+    auto app_type = app_registry_cache_.GetAppType(data.first);
+    if (app_type == AppType::kUnknown) {
       continue;
     }
 
     app_registry_cache_.ForOneApp(
         data.first, [this](const apps::AppUpdate& update) {
-          if (update.Paused() != apps::mojom::OptionalBool::kTrue) {
+          if (!update.Paused().value_or(false)) {
             pending_pause_requests_.MaybeAddApp(update.AppId());
           }
         });
 
     // The app pause dialog can't be loaded for unit tests.
     if (!data.second.should_show_pause_dialog || is_using_testing_profile_) {
-      app_service_->PauseApp(app_type, data.first);
+      app_service_->PauseApp(ConvertAppTypeToMojomAppType(app_type),
+                             data.first);
       continue;
     }
 
@@ -193,21 +220,22 @@ void AppServiceProxyAsh::UnpauseApps(const std::set<std::string>& app_ids) {
   }
 
   for (auto& app_id : app_ids) {
-    apps::mojom::AppType app_type = app_registry_cache_.GetAppType(app_id);
-    if (app_type == apps::mojom::AppType::kUnknown) {
+    auto app_type = app_registry_cache_.GetAppType(app_id);
+    if (app_type == AppType::kUnknown) {
       continue;
     }
 
     pending_pause_requests_.MaybeRemoveApp(app_id);
-    app_service_->UnpauseApp(app_type, app_id);
+    app_service_->UnpauseApp(ConvertAppTypeToMojomAppType(app_type), app_id);
   }
 }
 
 void AppServiceProxyAsh::SetResizeLocked(const std::string& app_id,
                                          apps::mojom::OptionalBool locked) {
   if (app_service_.is_connected()) {
-    apps::mojom::AppType app_type = app_registry_cache_.GetAppType(app_id);
-    app_service_->SetResizeLocked(app_type, app_id, locked);
+    auto app_type = app_registry_cache_.GetAppType(app_id);
+    app_service_->SetResizeLocked(ConvertAppTypeToMojomAppType(app_type),
+                                  app_id, locked);
   }
 }
 
@@ -243,9 +271,10 @@ void AppServiceProxyAsh::SetDialogCreatedCallbackForTesting(
   dialog_created_callback_ = std::move(callback);
 }
 
-void AppServiceProxyAsh::UninstallForTesting(const std::string& app_id,
-                                             gfx::NativeWindow parent_window,
-                                             base::OnceClosure callback) {
+void AppServiceProxyAsh::UninstallForTesting(
+    const std::string& app_id,
+    gfx::NativeWindow parent_window,
+    OnUninstallForTestingCallback callback) {
   UninstallImpl(app_id, apps::mojom::UninstallSource::kUnknown, parent_window,
                 std::move(callback));
 }
@@ -257,6 +286,8 @@ void AppServiceProxyAsh::SetAppPlatformMetricsServiceForTesting(
 }
 
 void AppServiceProxyAsh::Shutdown() {
+  crosapi_subscriber_ = nullptr;
+
   app_platform_metrics_service_.reset();
 
   uninstall_dialogs_.clear();
@@ -270,31 +301,47 @@ void AppServiceProxyAsh::UninstallImpl(
     const std::string& app_id,
     apps::mojom::UninstallSource uninstall_source,
     gfx::NativeWindow parent_window,
-    base::OnceClosure callback) {
+    OnUninstallForTestingCallback callback) {
   if (!app_service_.is_connected()) {
+    if (!callback.is_null()) {
+      std::move(callback).Run(false);
+    }
+    return;
+  }
+
+  // If the dialog exists for the app id, we bring the dialog to the front
+  auto it = uninstall_dialogs_.find(app_id);
+  if (it != uninstall_dialogs_.end()) {
+    if (it->second->GetWidget()) {
+      it->second->GetWidget()->Show();
+    }
+    if (!callback.is_null()) {
+      std::move(callback).Run(false);
+    }
     return;
   }
 
   app_registry_cache_.ForOneApp(app_id, [this, uninstall_source, parent_window,
                                          &callback](
                                             const apps::AppUpdate& update) {
-    apps::mojom::IconKeyPtr icon_key = update.IconKey();
+    auto icon_key = update.IconKey();
+    DCHECK(icon_key.has_value());
+    auto app_type = update.AppType();
     auto uninstall_dialog_ptr = std::make_unique<UninstallDialog>(
-        profile_, update.AppType(), update.AppId(), update.Name(),
-        parent_window,
+        profile_, app_type, update.AppId(), update.Name(), parent_window,
         base::BindOnce(&AppServiceProxyAsh::OnUninstallDialogClosed,
-                       weak_ptr_factory_.GetWeakPtr(), update.AppType(),
-                       update.AppId(), uninstall_source));
+                       weak_ptr_factory_.GetWeakPtr(), app_type, update.AppId(),
+                       uninstall_source));
     UninstallDialog* uninstall_dialog = uninstall_dialog_ptr.get();
     uninstall_dialog_ptr->SetDialogCreatedCallbackForTesting(
         std::move(callback));
-    uninstall_dialogs_.emplace(std::move(uninstall_dialog_ptr));
-    uninstall_dialog->PrepareToShow(std::move(icon_key), this);
+    uninstall_dialogs_.emplace(update.AppId(), std::move(uninstall_dialog_ptr));
+    uninstall_dialog->PrepareToShow(std::move(icon_key.value()), this);
   });
 }
 
 void AppServiceProxyAsh::OnUninstallDialogClosed(
-    apps::mojom::AppType app_type,
+    apps::AppType app_type,
     const std::string& app_id,
     apps::mojom::UninstallSource uninstall_source,
     bool uninstall,
@@ -304,14 +351,14 @@ void AppServiceProxyAsh::OnUninstallDialogClosed(
   if (uninstall) {
     app_registry_cache_.ForOneApp(app_id, RecordAppBounce);
 
-    app_service_->Uninstall(app_type, app_id, uninstall_source, clear_site_data,
-                            report_abuse);
+    app_service_->Uninstall(ConvertAppTypeToMojomAppType(app_type), app_id,
+                            uninstall_source, clear_site_data, report_abuse);
 
     PerformPostUninstallTasks(app_type, app_id, uninstall_source);
   }
 
   DCHECK(uninstall_dialog);
-  auto it = uninstall_dialogs_.find(uninstall_dialog);
+  auto it = uninstall_dialogs_.find(app_id);
   DCHECK(it != uninstall_dialogs_.end());
   uninstall_dialogs_.erase(it);
 }
@@ -324,7 +371,7 @@ bool AppServiceProxyAsh::MaybeShowLaunchPreventionDialog(
 
   // Return true, and load the icon for the app block dialog when the app
   // is blocked by policy.
-  if (update.Readiness() == apps::mojom::Readiness::kDisabledByPolicy) {
+  if (update.Readiness() == apps::Readiness::kDisabledByPolicy) {
     LoadIconForDialog(
         update, base::BindOnce(&AppServiceProxyAsh::OnLoadIconForBlockDialog,
                                weak_ptr_factory_.GetWeakPtr(), update.Name()));
@@ -333,7 +380,7 @@ bool AppServiceProxyAsh::MaybeShowLaunchPreventionDialog(
 
   // Return true, and load the icon for the app pause dialog when the app
   // is paused.
-  if (update.Paused() == apps::mojom::OptionalBool::kTrue ||
+  if (update.Paused().value_or(false) ||
       pending_pause_requests_.IsPaused(update.AppId())) {
     ash::app_time::AppTimeLimitInterface* app_limit =
         ash::app_time::AppTimeLimitInterface::Get(profile_);
@@ -358,9 +405,24 @@ bool AppServiceProxyAsh::MaybeShowLaunchPreventionDialog(
   return false;
 }
 
+void AppServiceProxyAsh::OnLaunched(LaunchCallback callback,
+                                    LaunchResult&& launch_result) {
+  base::RepeatingCallback<bool(void)> ready_to_run_callback =
+      base::BindRepeating(&AppServiceProxyAsh::CanRunLaunchCallback,
+                          base::Unretained(this), launch_result.instance_ids);
+  base::OnceClosure launch_callback =
+      base::BindOnce(std::move(callback), std::move(launch_result));
+  if (ready_to_run_callback.Run()) {
+    std::move(launch_callback).Run();
+  } else {
+    callback_list_.emplace_back(
+        std::make_pair(ready_to_run_callback, std::move(launch_callback)));
+  }
+}
+
 void AppServiceProxyAsh::LoadIconForDialog(const apps::AppUpdate& update,
                                            apps::LoadIconCallback callback) {
-  apps::mojom::IconKeyPtr mojom_icon_key = update.IconKey();
+  auto icon_key = update.IconKey();
   constexpr bool kAllowPlaceholderIcon = false;
   constexpr int32_t kIconSize = 48;
   auto app_type = update.AppType();
@@ -374,18 +436,22 @@ void AppServiceProxyAsh::LoadIconForDialog(const apps::AppUpdate& update,
   if (!dialog_created_callback_.is_null() || !profile_->IsChild()) {
     if (base::FeatureList::IsEnabled(
             features::kAppServiceLoadIconWithoutMojom)) {
-      if (!mojom_icon_key) {
+      if (!icon_key.has_value()) {
         std::move(callback).Run(std::make_unique<IconValue>());
         return;
       }
-      std::unique_ptr<IconKey> icon_key =
-          ConvertMojomIconKeyToIconKey(mojom_icon_key);
-      LoadIconFromIconKey(ConvertMojomAppTypToAppType(app_type), update.AppId(),
-                          *icon_key, icon_type, kIconSize,
-                          kAllowPlaceholderIcon, std::move(callback));
+      LoadIconFromIconKey(app_type, update.AppId(), icon_key.value(), icon_type,
+                          kIconSize, kAllowPlaceholderIcon,
+                          std::move(callback));
     } else {
+      if (!icon_key.has_value()) {
+        MojomIconValueToIconValueCallback(std::move(callback))
+            .Run(apps::mojom::IconValue::New());
+        return;
+      }
       LoadIconFromIconKey(
-          app_type, update.AppId(), std::move(mojom_icon_key),
+          ConvertAppTypeToMojomAppType(app_type), update.AppId(),
+          ConvertIconKeyToMojomIconKey(icon_key.value()),
           apps::mojom::IconType::kStandard, kIconSize, kAllowPlaceholderIcon,
           MojomIconValueToIconValueCallback(std::move(callback)));
     }
@@ -414,7 +480,7 @@ void AppServiceProxyAsh::OnLoadIconForBlockDialog(const std::string& app_name,
   }
 }
 
-void AppServiceProxyAsh::OnLoadIconForPauseDialog(apps::mojom::AppType app_type,
+void AppServiceProxyAsh::OnLoadIconForPauseDialog(apps::AppType app_type,
                                                   const std::string& app_id,
                                                   const std::string& app_name,
                                                   const PauseData& pause_data,
@@ -435,25 +501,24 @@ void AppServiceProxyAsh::OnLoadIconForPauseDialog(apps::mojom::AppType app_type,
   }
 }
 
-void AppServiceProxyAsh::OnPauseDialogClosed(apps::mojom::AppType app_type,
+void AppServiceProxyAsh::OnPauseDialogClosed(apps::AppType app_type,
                                              const std::string& app_id) {
   bool should_pause_app = pending_pause_requests_.IsPaused(app_id);
   if (!should_pause_app) {
     app_registry_cache_.ForOneApp(
         app_id, [&should_pause_app](const apps::AppUpdate& update) {
-          if (update.Paused() == apps::mojom::OptionalBool::kTrue) {
+          if (update.Paused().value_or(false)) {
             should_pause_app = true;
           }
         });
   }
   if (should_pause_app) {
-    app_service_->PauseApp(app_type, app_id);
+    app_service_->PauseApp(ConvertAppTypeToMojomAppType(app_type), app_id);
   }
 }
 
 void AppServiceProxyAsh::OnAppUpdate(const apps::AppUpdate& update) {
-  if ((update.PausedChanged() &&
-       update.Paused() == apps::mojom::OptionalBool::kTrue) ||
+  if ((update.PausedChanged() && update.Paused().value_or(false)) ||
       (update.ReadinessChanged() &&
        !apps_util::IsInstalled(update.Readiness()))) {
     pending_pause_requests_.MaybeRemoveApp(update.AppId());
@@ -470,8 +535,8 @@ void AppServiceProxyAsh::RecordAppPlatformMetrics(
     const apps::AppUpdate& update,
     apps::mojom::LaunchSource launch_source,
     apps::mojom::LaunchContainer container) {
-  RecordAppLaunchMetrics(profile, ConvertMojomAppTypToAppType(update.AppType()),
-                         update.AppId(), launch_source, container);
+  RecordAppLaunchMetrics(profile, update.AppType(), update.AppId(),
+                         launch_source, container);
 }
 
 void AppServiceProxyAsh::InitAppPlatformMetrics() {
@@ -482,13 +547,13 @@ void AppServiceProxyAsh::InitAppPlatformMetrics() {
 }
 
 void AppServiceProxyAsh::PerformPostUninstallTasks(
-    apps::mojom::AppType app_type,
+    apps::AppType app_type,
     const std::string& app_id,
     apps::mojom::UninstallSource uninstall_source) {
   if (app_platform_metrics_service_ &&
       app_platform_metrics_service_->AppPlatformMetrics()) {
     app_platform_metrics_service_->AppPlatformMetrics()->RecordAppUninstallUkm(
-        ConvertMojomAppTypToAppType(app_type), app_id, uninstall_source);
+        app_type, app_id, uninstall_source);
   }
 }
 
@@ -504,12 +569,14 @@ void AppServiceProxyAsh::OnInstanceUpdate(const apps::InstanceUpdate& update) {
     return;
   }
 
-  for (auto& callback : callback_list_[update.InstanceId()]) {
-    auto launch_result = LaunchResult();
-    launch_result.instance_id = update.InstanceId();
-    std::move(callback).Run(std::move(launch_result));
-  }
-  callback_list_.erase(update.InstanceId());
+  callback_list_.remove_if([](std::pair<base::RepeatingCallback<bool(void)>,
+                                        base::OnceClosure>& callbacks) {
+    if (callbacks.first.Run()) {
+      std::move(callbacks.second).Run();
+      return true;
+    }
+    return false;
+  });
 }
 
 void AppServiceProxyAsh::OnInstanceRegistryWillBeDestroyed(
@@ -517,17 +584,18 @@ void AppServiceProxyAsh::OnInstanceRegistryWillBeDestroyed(
   instance_registry_observer_.Reset();
 }
 
-void AppServiceProxyAsh::OnLaunched(LaunchCallback callback,
-                                    LaunchResult&& launch_result) {
-  bool exists = false;
-  InstanceRegistry().ForOneInstance(
-      launch_result.instance_id,
-      [&exists](const apps::InstanceUpdate& update) { exists = true; });
-  if (exists) {
-    std::move(callback).Run(std::move(launch_result));
-  } else {
-    callback_list_[launch_result.instance_id].push_back(std::move(callback));
+bool AppServiceProxyAsh::CanRunLaunchCallback(
+    const std::vector<base::UnguessableToken>& instance_ids) {
+  for (const base::UnguessableToken& instance_id : instance_ids) {
+    bool exists = false;
+    InstanceRegistry().ForOneInstance(
+        instance_id,
+        [&exists](const apps::InstanceUpdate& update) { exists = true; });
+    if (!exists)
+      return false;
   }
+
+  return true;
 }
 
 }  // namespace apps

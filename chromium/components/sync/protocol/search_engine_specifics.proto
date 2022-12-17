@@ -18,6 +18,8 @@ option optimize_for = LITE_RUNTIME;
 
 package sync_pb;
 
+import "components/sync/protocol/unique_position.proto";
+
 // Properties of custom search engine sync objects.
 message SearchEngineSpecifics {
   // The description of the search engine.
@@ -92,4 +94,6 @@ message SearchEngineSpecifics {
   // Whether a search engine is 'active' and can be triggered via the omnibox by
   // typing in the relevant keyword.
   optional ActiveStatus is_active = 27;
+
+  optional UniquePosition unique_position = 10000;
 }

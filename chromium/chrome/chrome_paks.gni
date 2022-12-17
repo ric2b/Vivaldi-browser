@@ -28,6 +28,7 @@ template("chrome_repack_percent") {
     forward_variables_from(invoker,
                            [
                              "copy_data_to_bundle",
+                             "mark_as_data",
                              "repack_allowlist",
                              "visibility",
                            ])
@@ -89,6 +90,7 @@ template("chrome_extra_paks") {
     forward_variables_from(invoker,
                            [
                              "copy_data_to_bundle",
+                             "mark_as_data",
                              "repack_allowlist",
                              "visibility",
                            ])
@@ -109,7 +111,6 @@ template("chrome_extra_paks") {
       "$root_gen_dir/third_party/blink/public/resources/blink_resources.pak",
       "$root_gen_dir/third_party/blink/public/resources/inspector_overlay_resources.pak",
       "$root_gen_dir/ui/resources/webui_generated_resources.pak",
-      "$root_gen_dir/ui/resources/webui_resources.pak",
     ]
     deps = [
       "//base/tracing/protos:chrome_track_event_resources",
@@ -118,6 +119,7 @@ template("chrome_extra_paks") {
       "//chrome/browser/resources/segmentation_internals:resources",
       "//chrome/common:resources",
       "//components/autofill/core/browser:autofill_address_rewriter_resources",
+      "//components/history_clusters/history_clusters_internals/resources",
       "//components/optimization_guide/optimization_guide_internals/resources",
       "//components/resources",
       "//content:content_resources",
@@ -148,7 +150,7 @@ template("chrome_extra_paks") {
         "$root_gen_dir/chrome/download_shelf_resources.pak",
         "$root_gen_dir/chrome/downloads_resources.pak",
         "$root_gen_dir/chrome/feed_resources.pak",
-        "$root_gen_dir/chrome/feedback_resources.pak",
+        "$root_gen_dir/chrome/feedback_webui_resources.pak",
         "$root_gen_dir/chrome/gaia_auth_host_resources.pak",
         "$root_gen_dir/chrome/history_resources.pak",
         "$root_gen_dir/chrome/image_editor_resources.pak",
@@ -158,8 +160,8 @@ template("chrome_extra_paks") {
         "$root_gen_dir/chrome/new_tab_page_resources.pak",
         "$root_gen_dir/chrome/new_tab_page_third_party_resources.pak",
         "$root_gen_dir/chrome/privacy_sandbox_resources.pak",
-        "$root_gen_dir/chrome/read_later_resources.pak",
         "$root_gen_dir/chrome/settings_resources.pak",
+        "$root_gen_dir/chrome/side_panel_resources.pak",
         "$root_gen_dir/chrome/signin_resources.pak",
         "$root_gen_dir/chrome/support_tool_resources.pak",
         "$root_gen_dir/chrome/tab_search_resources.pak",
@@ -189,8 +191,8 @@ template("chrome_extra_paks") {
         "//chrome/browser/resources/new_tab_page_instant:resources",
         "//chrome/browser/resources/new_tab_page_third_party:resources",
         "//chrome/browser/resources/privacy_sandbox:resources",
-        "//chrome/browser/resources/read_later:resources",
         "//chrome/browser/resources/settings:resources",
+        "//chrome/browser/resources/side_panel:resources",
         "//chrome/browser/resources/signin:resources",
         "//chrome/browser/resources/support_tool:resources",
         "//chrome/browser/resources/tab_search:resources",
@@ -235,6 +237,8 @@ template("chrome_extra_paks") {
         "$root_gen_dir/ash/webui/connectivity_diagnostics_resources.pak",
         "$root_gen_dir/ash/webui/file_manager/resources/file_manager_swa_resources.pak",
         "$root_gen_dir/ash/webui/file_manager/untrusted_resources/file_manager_untrusted_resources.pak",
+        "$root_gen_dir/chrome/arc_account_picker_resources.pak",
+        "$root_gen_dir/chrome/assistant_optin_resources.pak",
         "$root_gen_dir/chrome/audio_resources.pak",
         "$root_gen_dir/chrome/bluetooth_pairing_dialog_resources.pak",
         "$root_gen_dir/chrome/browser/supervised_user/supervised_user_unscaled_resources.pak",
@@ -294,6 +298,8 @@ template("chrome_extra_paks") {
         "//chrome/browser/resources:internet_config_dialog_resources",
         "//chrome/browser/resources:internet_detail_dialog_resources",
         "//chrome/browser/resources/chromeos:multidevice_setup_resources",
+        "//chrome/browser/resources/chromeos/arc_account_picker:resources",
+        "//chrome/browser/resources/chromeos/assistant_optin:resources",
         "//chrome/browser/resources/chromeos/audio:resources",
         "//chrome/browser/resources/chromeos/emoji_picker:resources",
         "//chrome/browser/resources/chromeos/launcher_internals:resources",
@@ -361,6 +367,11 @@ template("chrome_extra_paks") {
       deps += [ "//chrome/browser/resources/browser_switch:resources" ]
     }
 
+    if (is_win || is_mac || is_linux || is_chromeos || is_fuchsia) {
+      sources += [ "$root_gen_dir/chrome/discards_resources.pak" ]
+      deps += [ "//chrome/browser/resources/discards:resources" ]
+    }
+
     if (enable_extensions) {
       sources += [
         "$root_gen_dir/chrome/extensions_resources.pak",
@@ -410,6 +421,7 @@ template("chrome_extra_paks") {
 #     for.
 #   copy_data_to_bundle:
 #   deps:
+#   mark_as_data:
 #   output_dir:
 #   public_deps:
 #   repack_allowlist:
@@ -423,6 +435,7 @@ template("chrome_paks") {
                            [
                              "copy_data_to_bundle",
                              "deps",
+                             "mark_as_data",
                              "output_dir",
                              "repack_allowlist",
                              "visibility",
@@ -436,6 +449,7 @@ template("chrome_paks") {
                              [
                                "copy_data_to_bundle",
                                "deps",
+                               "mark_as_data",
                                "output_dir",
                                "repack_allowlist",
                                "visibility",
@@ -448,6 +462,7 @@ template("chrome_paks") {
                            [
                              "copy_data_to_bundle",
                              "deps",
+                             "mark_as_data",
                              "output_dir",
                              "repack_allowlist",
                              "visibility",
@@ -462,6 +477,7 @@ template("chrome_paks") {
                            [
                              "copy_data_to_bundle",
                              "deps",
+                             "mark_as_data",
                              "visibility",
                            ])
     if (defined(invoker.locale_allowlist)) {
@@ -474,7 +490,7 @@ template("chrome_paks") {
     output_dir = "${invoker.output_dir}/locales"
 
     if (is_mac) {
-      output_locales = locales_as_mac_outputs
+      output_locales = locales_as_apple_outputs
     } else {
       output_locales = platform_pak_locales
     }
@@ -489,9 +505,6 @@ template("chrome_paks") {
     ]
     if (enable_hidpi) {
       public_deps += [ ":${target_name}_200_percent" ]
-    }
-    if (!defined(invoker.copy_data_to_bundle) || !invoker.copy_data_to_bundle) {
-      data_deps = public_deps
     }
     if (defined(invoker.public_deps)) {
       public_deps += invoker.public_deps

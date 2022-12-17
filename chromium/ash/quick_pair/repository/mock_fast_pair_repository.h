@@ -26,10 +26,6 @@ class MockFastPairRepository : public FastPairRepository {
                DeviceMetadataCallback callback),
               (override));
   MOCK_METHOD(void,
-              IsValidModelId,
-              (const std::string& hex_model_id, ValidModelIdCallback callback),
-              (override));
-  MOCK_METHOD(void,
               CheckAccountKeys,
               (const AccountKeyFilter& account_key_filter,
                CheckAccountKeysCallback callback),
@@ -58,6 +54,28 @@ class MockFastPairRepository : public FastPairRepository {
   MOCK_METHOD(absl::optional<chromeos::bluetooth_config::DeviceImageInfo>,
               GetImagesForDevice,
               (const std::string& device_id),
+              (override));
+  MOCK_METHOD(void,
+              CheckOptInStatus,
+              (CheckOptInStatusCallback callback),
+              (override));
+  MOCK_METHOD(void,
+              UpdateOptInStatus,
+              (nearby::fastpair::OptInStatus opt_in_status,
+               UpdateOptInStatusCallback callback),
+              (override));
+  MOCK_METHOD(void,
+              DeleteAssociatedDeviceByAccountKey,
+              (const std::vector<uint8_t>& account_key,
+               DeleteAssociatedDeviceByAccountKeyCallback callback),
+              (override));
+  MOCK_METHOD(void,
+              GetSavedDevices,
+              (GetSavedDevicesCallback callback),
+              (override));
+  MOCK_METHOD(bool,
+              IsAccountKeyPairedLocally,
+              (const std::vector<uint8_t>& account_key),
               (override));
 };
 

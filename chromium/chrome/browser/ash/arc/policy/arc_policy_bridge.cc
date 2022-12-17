@@ -61,10 +61,12 @@ void MapBoolToBool(const std::string& arc_policy_name,
                    const policy::PolicyMap& policy_map,
                    bool invert_bool_value,
                    base::Value* filtered_policies) {
-  const base::Value* const policy_value = policy_map.GetValue(policy_name);
-  if (!policy_value)
+  if (!policy_map.IsPolicySet(policy_name))
     return;
-  if (!policy_value->is_bool()) {
+
+  const base::Value* const policy_value =
+      policy_map.GetValue(policy_name, base::Value::Type::BOOLEAN);
+  if (!policy_value) {
     NOTREACHED() << "Policy " << policy_name << " is not a boolean.";
     return;
   }
@@ -79,10 +81,12 @@ void MapIntToBool(const std::string& arc_policy_name,
                   const policy::PolicyMap& policy_map,
                   int int_true,
                   base::Value* filtered_policies) {
-  const base::Value* const policy_value = policy_map.GetValue(policy_name);
-  if (!policy_value)
+  if (!policy_map.IsPolicySet(policy_name))
     return;
-  if (!policy_value->is_int()) {
+
+  const base::Value* const policy_value =
+      policy_map.GetValue(policy_name, base::Value::Type::INTEGER);
+  if (!policy_value) {
     NOTREACHED() << "Policy " << policy_name << " is not an integer.";
     return;
   }
@@ -112,10 +116,12 @@ void MapObjectToPresenceBool(const std::string& arc_policy_name,
                              const policy::PolicyMap& policy_map,
                              base::Value* filtered_policies,
                              const std::vector<std::string>& fields) {
-  const base::Value* const policy_value = policy_map.GetValue(policy_name);
-  if (!policy_value)
+  if (!policy_map.IsPolicySet(policy_name))
     return;
-  if (!policy_value->is_dict()) {
+
+  const base::Value* const policy_value =
+      policy_map.GetValue(policy_name, base::Value::Type::DICT);
+  if (!policy_value) {
     NOTREACHED() << "Policy " << policy_name << " is not an object.";
     return;
   }
@@ -128,24 +134,25 @@ void MapObjectToPresenceBool(const std::string& arc_policy_name,
 
 void AddOncCaCertsToPolicies(const policy::PolicyMap& policy_map,
                              base::Value* filtered_policies) {
-  const base::Value* const policy_value =
-      policy_map.GetValue(policy::key::kArcCertificatesSyncMode);
+  const base::Value* const policy_value = policy_map.GetValue(
+      policy::key::kArcCertificatesSyncMode, base::Value::Type::INTEGER);
   // Old certs should be uninstalled if the sync is disabled or policy is not
   // set.
-  if (!policy_value || !policy_value->is_int() ||
+  if (!policy_value ||
       policy_value->GetInt() != ArcCertsSyncMode::COPY_CA_CERTS) {
+    return;
+  }
+
+  if (!policy_map.IsPolicySet(policy::key::kOpenNetworkConfiguration)) {
+    VLOG(1) << "onc policy is not set.";
     return;
   }
 
   // Importing CA certificates from device policy is not allowed.
   // Import only from user policy.
-  const base::Value* onc_policy_value =
-      policy_map.GetValue(policy::key::kOpenNetworkConfiguration);
+  const base::Value* onc_policy_value = policy_map.GetValue(
+      policy::key::kOpenNetworkConfiguration, base::Value::Type::STRING);
   if (!onc_policy_value) {
-    VLOG(1) << "onc policy is not set.";
-    return;
-  }
-  if (!onc_policy_value->is_string()) {
     LOG(ERROR) << "Value of onc policy has invalid format.";
     return;
   }
@@ -268,7 +275,8 @@ void ReplaceManagedConfigurationVariables(const Profile* profile,
   if (applications) {
     base::Value::ListView list_view = applications->GetListDeprecated();
     for (base::Value& entry : list_view) {
-      base::Value* config = entry.FindDictKey("managedConfiguration");
+      base::Value* config =
+          entry.FindDictKey(ArcPolicyBridge::kManagedConfiguration);
       if (config)
         RecursivelyReplaceManagedConfigurationVariables(profile, config);
     }
@@ -286,10 +294,12 @@ std::string GetFilteredJSONPolicies(policy::PolicyService* const policy_service,
       policy_service->GetPolicies(policy_namespace);
 
   base::Value filtered_policies(base::Value::Type::DICTIONARY);
+  // It is safe to use `GetValueUnsafe()` because type checking is performed
+  // before the value is used.
   // Parse ArcPolicy as JSON string before adding other policies to the
   // dictionary.
   const base::Value* const app_policy_value =
-      policy_map.GetValue(policy::key::kArcPolicy);
+      policy_map.GetValueUnsafe(policy::key::kArcPolicy);
   if (app_policy_value) {
     absl::optional<base::Value> app_policy_dict;
     if (app_policy_value->is_string()) {
@@ -344,13 +354,15 @@ std::string GetFilteredJSONPolicies(policy::PolicyService* const policy_service,
     if (applications_value) {
       base::Value::ListView list_view = applications_value->GetListDeprecated();
       for (base::Value& entry : list_view) {
-        const std::string* packageName = entry.FindStringKey("packageName");
+        const std::string* packageName =
+            entry.FindStringKey(ArcPolicyBridge::kPackageName);
         if (packageName && *packageName != kPlayStorePackageName)
           continue;
         base::Value management_entry(base::Value::Type::DICTIONARY);
         management_entry.SetStringKey("allowed_accounts",
                                       profile->GetProfileUserName());
-        entry.SetKey("managedConfiguration", std::move(management_entry));
+        entry.SetKey(ArcPolicyBridge::kManagedConfiguration,
+                     std::move(management_entry));
       }
     }
   }
@@ -459,6 +471,12 @@ class ArcPolicyBridgeFactory
 
 // static
 const char ArcPolicyBridge::kApplications[] = "applications";
+
+// static
+const char ArcPolicyBridge::kPackageName[] = "packageName";
+
+// static
+const char ArcPolicyBridge::kManagedConfiguration[] = "managedConfiguration";
 
 // static
 const char ArcPolicyBridge::kResetAndroidIdEnabled[] = "resetAndroidIdEnabled";

@@ -10,6 +10,7 @@
 #include <memory>
 #include <set>
 #include <utility>
+#include <vector>
 
 #include "ash/components/arc/arc_prefs.h"
 #include "ash/components/disks/disk.h"
@@ -38,6 +39,7 @@
 #include "chrome/browser/ash/file_manager/path_util.h"
 #include "chrome/browser/ash/file_manager/volume_manager.h"
 #include "chrome/browser/ash/file_system_provider/provided_file_system_info.h"
+#include "chrome/browser/ash/guest_os/public/guest_os_service.h"
 #include "chrome/browser/ash/login/lock/screen_locker.h"
 #include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/plugin_vm/plugin_vm_features.h"
@@ -106,7 +108,7 @@ bool IsRecoveryToolRunning(Profile* profile) {
       "jndclpdbaamdhonoechobihbbiimdgai"   // Recovery tool prod
   };
 
-  for (size_t i = 0; i < base::size(kRecoveryToolIds); ++i) {
+  for (size_t i = 0; i < std::size(kRecoveryToolIds); ++i) {
     const std::string extension_id = kRecoveryToolIds[i];
     if (extension_prefs->IsExtensionRunning(extension_id))
       return true;
@@ -199,20 +201,20 @@ MountErrorToMountCompletedStatus(chromeos::MountError error) {
 
 file_manager_private::CopyOrMoveProgressStatusType
 CopyOrMoveProgressTypeToCopyOrMoveProgressStatusType(
-    storage::FileSystemOperation::CopyOrMoveProgressType type) {
+    FileManagerCopyOrMoveHookDelegate::ProgressType type) {
   switch (type) {
-    case storage::FileSystemOperation::CopyOrMoveProgressType::kBegin:
+    case FileManagerCopyOrMoveHookDelegate::ProgressType::kBegin:
       return file_manager_private::COPY_OR_MOVE_PROGRESS_STATUS_TYPE_BEGIN;
-    case storage::FileSystemOperation::CopyOrMoveProgressType::kProgress:
+    case FileManagerCopyOrMoveHookDelegate::ProgressType::kProgress:
       return file_manager_private::COPY_OR_MOVE_PROGRESS_STATUS_TYPE_PROGRESS;
-    case storage::FileSystemOperation::CopyOrMoveProgressType::kEndCopy:
+    case FileManagerCopyOrMoveHookDelegate::ProgressType::kEndCopy:
       return file_manager_private::COPY_OR_MOVE_PROGRESS_STATUS_TYPE_END_COPY;
-    case storage::FileSystemOperation::CopyOrMoveProgressType::kEndMove:
+    case FileManagerCopyOrMoveHookDelegate::ProgressType::kEndMove:
       return file_manager_private::COPY_OR_MOVE_PROGRESS_STATUS_TYPE_END_MOVE;
-    case storage::FileSystemOperation::CopyOrMoveProgressType::kEndRemoveSource:
+    case FileManagerCopyOrMoveHookDelegate::ProgressType::kEndRemoveSource:
       return file_manager_private::
           COPY_OR_MOVE_PROGRESS_STATUS_TYPE_END_REMOVE_SOURCE;
-    case storage::FileSystemOperation::CopyOrMoveProgressType::kError:
+    case FileManagerCopyOrMoveHookDelegate::ProgressType::kError:
       return file_manager_private::COPY_OR_MOVE_PROGRESS_STATUS_TYPE_ERROR;
   }
   NOTREACHED();
@@ -245,10 +247,12 @@ file_manager_private::IOTaskType GetIOTaskType(
   switch (type) {
     case file_manager::io_task::OperationType::kCopy:
       return file_manager_private::IO_TASK_TYPE_COPY;
-    case file_manager::io_task::OperationType::kMove:
-      return file_manager_private::IO_TASK_TYPE_MOVE;
     case file_manager::io_task::OperationType::kDelete:
       return file_manager_private::IO_TASK_TYPE_DELETE;
+    case file_manager::io_task::OperationType::kExtract:
+      return file_manager_private::IO_TASK_TYPE_EXTRACT;
+    case file_manager::io_task::OperationType::kMove:
+      return file_manager_private::IO_TASK_TYPE_MOVE;
     case file_manager::io_task::OperationType::kZip:
       return file_manager_private::IO_TASK_TYPE_ZIP;
     default:
@@ -332,7 +336,7 @@ bool ShouldShowNotificationForVolume(
   // If the disable-default-apps flag is on, the Files app is not opened
   // automatically on device mount not to obstruct the manual test.
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDisablePreinstalledApps)) {
+          switches::kDisableDefaultApps)) {
     return false;
   }
 
@@ -582,6 +586,12 @@ void EventRouter::Shutdown() {
       chromeos::PowerManagerClient::Get();
   power_manager_client->RemoveObserver(device_event_router_.get());
 
+  if (base::FeatureList::IsEnabled(chromeos::features::kGuestOsFiles)) {
+    auto* registry = guest_os::GuestOsService::GetForProfile(profile_)
+                         ->MountProviderRegistry();
+    registry->RemoveObserver(this);
+  }
+
   profile_ = nullptr;
 }
 
@@ -674,6 +684,12 @@ void EventRouter::ObserveEvents() {
   ash::TabletMode* tablet_mode = ash::TabletMode::Get();
   if (tablet_mode)
     tablet_mode->AddObserver(this);
+
+  if (base::FeatureList::IsEnabled(chromeos::features::kGuestOsFiles)) {
+    auto* registry = guest_os::GuestOsService::GetForProfile(profile_)
+                         ->MountProviderRegistry();
+    registry->AddObserver(this);
+  }
 }
 
 // File watch setup routines.
@@ -762,7 +778,7 @@ void EventRouter::OnCopyCompleted(int copy_id,
 
 void EventRouter::OnCopyProgress(
     int copy_id,
-    storage::FileSystemOperation::CopyOrMoveProgressType type,
+    FileManagerCopyOrMoveHookDelegate::ProgressType type,
     const GURL& source_url,
     const GURL& destination_url,
     int64_t size) {
@@ -771,27 +787,27 @@ void EventRouter::OnCopyProgress(
   file_manager_private::CopyOrMoveProgressStatus status;
   status.type = CopyOrMoveProgressTypeToCopyOrMoveProgressStatusType(type);
   status.source_url = std::make_unique<std::string>(source_url.spec());
-  if (type == storage::FileSystemOperation::CopyOrMoveProgressType::kError) {
+  if (type == FileManagerCopyOrMoveHookDelegate::ProgressType::kError) {
     // For cross-filesystems moves, no destination_url is provided when an error
     // occurs. This translates into to a non-valid destination GURL.
     // status.destination_url should never be used in this case.
     status.destination_url =
         std::make_unique<std::string>(destination_url.possibly_invalid_spec());
-  } else if (type != storage::FileSystemOperation::CopyOrMoveProgressType::
+  } else if (type != FileManagerCopyOrMoveHookDelegate::ProgressType::
                          kEndRemoveSource) {
     status.destination_url =
         std::make_unique<std::string>(destination_url.spec());
   }
 
-  if (type == storage::FileSystemOperation::CopyOrMoveProgressType::kError)
+  if (type == FileManagerCopyOrMoveHookDelegate::ProgressType::kError)
     status.error = std::make_unique<std::string>(
         FileErrorToErrorName(base::File::FILE_ERROR_FAILED));
-  if (type == storage::FileSystemOperation::CopyOrMoveProgressType::kProgress)
+  if (type == FileManagerCopyOrMoveHookDelegate::ProgressType::kProgress)
     status.size = std::make_unique<double>(size);
 
   // Discard error progress since current JS code cannot handle this properly.
   // TODO(yawano): Remove this after JS side is implemented correctly.
-  if (type == storage::FileSystemOperation::CopyOrMoveProgressType::kError)
+  if (type == FileManagerCopyOrMoveHookDelegate::ProgressType::kError)
     return;
 
   // Should not skip events other than TYPE_PROGRESS.
@@ -1224,10 +1240,12 @@ void EventRouter::OnIOTaskStatus(const io_task::ProgressStatus& status) {
       event_status.remaining_seconds = status.remaining_seconds;
     }
 
-    GURL destination_folder_gurl(status.destination_folder.ToGURL());
-    if (destination_folder_gurl.is_valid()) {
+    if (status.destination_folder.is_valid()) {
       event_status.destination_name =
-          util::GetDisplayableFileName(destination_folder_gurl);
+          util::GetDisplayablePath(profile_, status.destination_folder)
+              .value_or(base::FilePath())
+              .BaseName()
+              .value();
     }
 
     size_t processed = 0;
@@ -1247,7 +1265,10 @@ void EventRouter::OnIOTaskStatus(const io_task::ProgressStatus& status) {
 
     if (status.sources.size() > 0) {
       event_status.source_name =
-          util::GetDisplayableFileName(status.sources.front().url);
+          util::GetDisplayablePath(profile_, status.sources.front().url)
+              .value_or(base::FilePath())
+              .BaseName()
+              .value();
     }
     event_status.bytes_transferred = status.bytes_transferred;
     event_status.total_bytes = status.total_bytes;
@@ -1278,12 +1299,39 @@ void EventRouter::OnIOTaskStatus(const io_task::ProgressStatus& status) {
       }
     }
 
-    return;
+    // Send the progress report to the system notification regardless of whether
+    // Files app window exists as we may need to remove an existing
+    // notification.
   }
 
-  // If no Files app window exists we send the progress to the system
-  // notification.
   notification_manager_->HandleIOTaskProgress(status);
+}
+void EventRouter::OnRegistered(guest_os::GuestOsMountProviderRegistry::Id id,
+                               guest_os::GuestOsMountProvider* provider) {
+  OnMountableGuestsChanged();
+}
+
+void EventRouter::OnUnregistered(
+    guest_os::GuestOsMountProviderRegistry::Id id) {
+  OnMountableGuestsChanged();
+}
+
+void EventRouter::OnMountableGuestsChanged() {
+  auto* registry = guest_os::GuestOsService::GetForProfile(profile_)
+                       ->MountProviderRegistry();
+  std::vector<file_manager_private::MountableGuest> guests;
+  for (const auto id : registry->List()) {
+    file_manager_private::MountableGuest guest;
+    auto* provider = registry->Get(id);
+    guest.id = id;
+    guest.display_name = provider->DisplayName();
+    guests.push_back(std::move(guest));
+  }
+  BroadcastEvent(
+      profile_,
+      extensions::events::FILE_MANAGER_PRIVATE_ON_IO_TASK_PROGRESS_STATUS,
+      file_manager_private::OnMountableGuestsChanged::kEventName,
+      file_manager_private::OnMountableGuestsChanged::Create(guests));
 }
 
 }  // namespace file_manager

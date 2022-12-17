@@ -41,6 +41,8 @@ class CalendarTable {
 
   CalendarID CreateCalendar(CalendarRow row);
   bool GetAllCalendars(CalendarRows* calendars);
+  bool GetAllCalendarIdsForAccount(CalendarIDs* calendars,
+                                   AccountID account_id);
   bool GetRowForCalendar(CalendarID calendar_id, CalendarRow* out_calendar);
   bool UpdateCalendarRow(const CalendarRow& calendar);
   bool DeleteCalendar(CalendarID calendar_id);

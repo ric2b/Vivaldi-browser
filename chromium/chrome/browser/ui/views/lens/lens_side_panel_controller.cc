@@ -67,18 +67,14 @@ LensSidePanelController::~LensSidePanelController() = default;
 
 void LensSidePanelController::OpenWithURL(
     const content::OpenURLParams& params) {
-  // Hide Chrome side panel (Reading List/Bookmarks) if enabled and showing.
-  if (browser_view_->toolbar()->side_panel_button() &&
-      browser_view_->right_aligned_side_panel()->GetVisible()) {
+  if (browser_view_->CloseOpenRightAlignedSidePanel(
+          /*exclude_lens=*/true,
+          /*exclude_side_search=*/false)) {
     base::RecordAction(
         base::UserMetricsAction("LensSidePanel.HideChromeSidePanel"));
-    browser_view_->toolbar()->side_panel_button()->HideSidePanel();
   }
 
-  if (browser_view_->toolbar()->side_panel_button()) {
-    browser_view_->toolbar()->side_panel_button()->SetTooltipText(
-        l10n_util::GetStringUTF16(IDS_TOOLTIP_SIDE_PANEL_HIDE));
-  }
+  browser_view_->MaybeClobberAllSideSearchSidePanels();
 
   side_panel_view_->GetWebContents()->GetController().LoadURLWithParams(
       content::NavigationController::LoadURLParams(params));
@@ -104,11 +100,8 @@ void LensSidePanelController::Close() {
         GURL(), content::Referrer(), ui::PAGE_TRANSITION_FROM_API,
         std::string());
     side_panel_->SetVisible(false);
+    browser_view_->RightAlignedSidePanelWasClosed();
     base::RecordAction(base::UserMetricsAction("LensSidePanel.Hide"));
-  }
-  if (browser_view_->toolbar()->side_panel_button()) {
-    browser_view_->toolbar()->side_panel_button()->SetTooltipText(
-        l10n_util::GetStringUTF16(IDS_TOOLTIP_SIDE_PANEL_SHOW));
   }
   std::move(close_callback_).Run();
 }
@@ -151,8 +144,12 @@ void LensSidePanelController::DidOpenRequestedURL(
     ui::PageTransition transition,
     bool started_from_context_menu,
     bool renderer_initiated) {
-  content::OpenURLParams params(url, content::Referrer(), disposition,
-                                transition, renderer_initiated);
+  content::OpenURLParams params(url, referrer, disposition, transition,
+                                renderer_initiated);
+  // If the navigation is initiated by the renderer process, we must set an
+  // initiator origin.
+  if (renderer_initiated)
+    params.initiator_origin = url::Origin::Create(url);
   browser_view_->browser()->OpenURL(params);
   base::RecordAction(base::UserMetricsAction("LensSidePanel.ResultLinkClick"));
 }

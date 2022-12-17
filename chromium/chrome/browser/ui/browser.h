@@ -300,7 +300,7 @@ class Browser : public TabStripModelObserver,
     bool is_vivaldi = false;
 
     // Ext data for the browser/window.
-    std::string ext_data;
+    std::string viv_ext_data;
 
    private:
     friend class Browser;
@@ -730,9 +730,9 @@ class Browser : public TabStripModelObserver,
 
   // Vivaldi
   bool is_vivaldi() const { return is_vivaldi_; }
-  const std::string& ext_data() const { return ext_data_; }
+  const std::string& viv_ext_data() const { return viv_ext_data_; }
   // Set the ext data.
-  void set_ext_data(const std::string& ext_data);
+  void set_viv_ext_data(const std::string& viv_ext_data);
 
   // Invoked from the WebContentsDelegate (GuestView) when the
   // beforeunload handling is done for this tab.
@@ -1015,11 +1015,6 @@ class Browser : public TabStripModelObserver,
 
   // Getters for UI ///////////////////////////////////////////////////////////
 
-  // TODO(beng): remove, and provide AutomationProvider a better way to access
-  //             the LocationBarView's edit.
-  friend class AutomationProvider;
-  friend class BrowserProxy;
-
   // Returns the StatusBubble from the current toolbar. It is possible for
   // this to return NULL if called before the toolbar has initialized.
   // TODO(beng): remove this.
@@ -1287,7 +1282,7 @@ class Browser : public TabStripModelObserver,
   bool is_vivaldi_;
 
   // Addtional data/properties of the browser/window.
-  std::string ext_data_;
+  std::string viv_ext_data_;
 
   // The following factory is used for chrome update coalescing.
   base::WeakPtrFactory<Browser> chrome_updater_factory_{this};

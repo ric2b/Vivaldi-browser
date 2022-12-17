@@ -36,6 +36,7 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_value_converter.h"
 #include "base/json/json_writer.h"
+#include "base/json/values_util.h"
 #include "base/no_destructor.h"
 #include "base/path_service.h"
 #include "base/ranges/algorithm.h"
@@ -45,10 +46,12 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
+#include "base/value_iterators.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
@@ -67,6 +70,8 @@
 #include "chrome/browser/ash/file_manager/mount_test_util.h"
 #include "chrome/browser/ash/file_manager/path_util.h"
 #include "chrome/browser/ash/file_manager/volume_manager.h"
+#include "chrome/browser/ash/guest_os/public/guest_os_mount_provider.h"
+#include "chrome/browser/ash/guest_os/public/guest_os_service.h"
 #include "chrome/browser/ash/smb_client/smb_service.h"
 #include "chrome/browser/ash/smb_client/smb_service_factory.h"
 #include "chrome/browser/browser_process.h"
@@ -395,6 +400,7 @@ struct AddEntriesMessage {
     EntryCapabilities capabilities;   // Entry permissions.
     EntryFolderFeature folder_feature;  // Entry folder feature.
     bool pinned = false;                // Whether the file should be pinned.
+    std::string alternate_url;          // Entry's alternate URL on Drive.
 
     TestEntryInfo& SetSharedOption(SharedOption option) {
       shared_option = option;
@@ -443,6 +449,11 @@ struct AddEntriesMessage {
       return *this;
     }
 
+    TestEntryInfo& SetAlternateUrl(const std::string& new_alternate_url) {
+      alternate_url = new_alternate_url;
+      return *this;
+    }
+
     // Registers the member information to the given converter.
     static void RegisterJSONConverter(
         base::JSONValueConverter<TestEntryInfo>* converter) {
@@ -470,6 +481,8 @@ struct AddEntriesMessage {
       converter->RegisterNestedField("folderFeature",
                                      &TestEntryInfo::folder_feature);
       converter->RegisterBoolField("pinned", &TestEntryInfo::pinned);
+      converter->RegisterStringField("alternateUrl",
+                                     &TestEntryInfo::alternate_url);
     }
 
     // Maps |value| to an EntryType. Returns true on success.
@@ -507,7 +520,7 @@ struct AddEntriesMessage {
 
     // Maps |value| to base::Time. Returns true on success.
     static bool MapStringToTime(base::StringPiece value, base::Time* time) {
-      return base::Time::FromString(std::string(value).c_str(), time);
+      return base::Time::FromString(value.data(), time);
     }
   };
 };
@@ -803,6 +816,7 @@ std::ostream& operator<<(std::ostream& out,
   PRINT_IF_NOT_DEFAULT(photos_documents_provider)
   PRINT_IF_NOT_DEFAULT(single_partition_format)
   PRINT_IF_NOT_DEFAULT(tablet_mode)
+  PRINT_IF_NOT_DEFAULT(enable_guest_os_files)
 
 #undef PRINT_IF_NOT_DEFAULT
 
@@ -819,7 +833,7 @@ class FileManagerBrowserTestBase::MockFileTasksObserver
   MOCK_METHOD2(OnFilesOpenedImpl,
                void(const std::string& path, OpenType open_type));
 
-  void OnFilesOpened(const std::vector<FileOpenEvent>& opens) {
+  void OnFilesOpened(const std::vector<FileOpenEvent>& opens) override {
     ASSERT_TRUE(!opens.empty());
     for (auto& open : opens) {
       OnFilesOpenedImpl(open.path.value(), open.open_type);
@@ -1235,7 +1249,7 @@ class DriveFsTestVolume : public TestVolume {
         {entry.folder_feature.is_machine_root,
          entry.folder_feature.is_arbitrary_sync_folder,
          entry.folder_feature.is_external_media},
-        "");
+        "", entry.alternate_url);
 
     ASSERT_TRUE(UpdateModifiedTime(entry));
   }
@@ -1646,6 +1660,51 @@ class SmbfsTestVolume : public LocalTestVolume {
   mojo::Remote<smbfs::mojom::SmbFsDelegate> delegate_;
 };
 
+class MockGuestOsMountProvider : public guest_os::GuestOsMountProvider {
+ public:
+  MockGuestOsMountProvider(Profile* profile, std::string name)
+      : profile_(profile), name_(name) {}
+
+  MockGuestOsMountProvider(const MockGuestOsMountProvider&) = delete;
+  MockGuestOsMountProvider& operator=(const MockGuestOsMountProvider&) = delete;
+
+  std::string DisplayName() override { return name_; }
+  Profile* profile() override { return profile_; }
+  crostini::ContainerId ContainerId() override {
+    return crostini::ContainerId::GetDefault();
+  }
+
+  int cid_;
+  int cid() override { return cid_; }
+
+ private:
+  Profile* profile_;
+  std::string name_;
+  std::unique_ptr<GuestOsTestVolume> volume_;
+};
+
+// GuestOsTestVolume: local test volume for the "Guest OS" directories.
+class GuestOsTestVolume : public LocalTestVolume {
+ public:
+  explicit GuestOsTestVolume(Profile* profile,
+                             MockGuestOsMountProvider* provider)
+      : LocalTestVolume(util::GetGuestOsMountPointName(
+            profile,
+            crostini::ContainerId::GetDefault())),
+        provider_(provider) {}
+
+  GuestOsTestVolume(const GuestOsTestVolume&) = delete;
+  GuestOsTestVolume& operator=(const GuestOsTestVolume&) = delete;
+
+  ~GuestOsTestVolume() override = default;
+
+  bool Mount(Profile* profile) override { return CreateRootDirectory(profile); }
+
+  const base::FilePath& mount_path() const { return root_path(); }
+
+  MockGuestOsMountProvider* provider_;
+};
+
 FileManagerBrowserTestBase::FileManagerBrowserTestBase() = default;
 
 FileManagerBrowserTestBase::~FileManagerBrowserTestBase() = default;
@@ -1783,6 +1842,12 @@ void FileManagerBrowserTestBase::SetUpCommandLine(
         chromeos::features::kDriveFsBidirectionalNativeMessaging);
   }
 
+  if (options.extract_archive) {
+    enabled_features.push_back(chromeos::features::kFilesExtractArchive);
+  } else {
+    disabled_features.push_back(chromeos::features::kFilesExtractArchive);
+  }
+
   if (options.single_partition_format) {
     enabled_features.push_back(chromeos::features::kFilesSinglePartitionFormat);
   }
@@ -1809,6 +1874,24 @@ void FileManagerBrowserTestBase::SetUpCommandLine(
       options.guest_mode != IN_INCOGNITO) {
     devtools_code_coverage_dir_ =
         command_line->GetSwitchValuePath(switches::kDevtoolsCodeCoverage);
+  }
+
+  if (options.enable_guest_os_files) {
+    enabled_features.push_back(chromeos::features::kGuestOsFiles);
+  } else {
+    disabled_features.push_back(chromeos::features::kGuestOsFiles);
+  }
+
+  if (options.enable_filters_in_recents) {
+    enabled_features.push_back(chromeos::features::kFiltersInRecents);
+  } else {
+    disabled_features.push_back(chromeos::features::kFiltersInRecents);
+  }
+
+  if (options.enable_filters_in_recents_v2) {
+    enabled_features.push_back(chromeos::features::kFiltersInRecentsV2);
+  } else {
+    disabled_features.push_back(chromeos::features::kFiltersInRecentsV2);
   }
 
   // This is destroyed in |TearDown()|. We cannot initialize this in the
@@ -1901,6 +1984,11 @@ void FileManagerBrowserTestBase::SetUpOnMainThread() {
         dbus_thread_manager->GetCrosDisksClient())
         ->AddCustomMountPointCallback(
             base::BindRepeating(&FileManagerBrowserTestBase::MaybeMountCrostini,
+                                base::Unretained(this)));
+    static_cast<chromeos::FakeCrosDisksClient*>(
+        dbus_thread_manager->GetCrosDisksClient())
+        ->AddCustomMountPointCallback(
+            base::BindRepeating(&FileManagerBrowserTestBase::MaybeMountGuestOs,
                                 base::Unretained(this)));
 
     if (arc::IsArcAvailable()) {
@@ -2332,8 +2420,7 @@ void FileManagerBrowserTestBase::OnCommand(const std::string& name,
           drive::DriveIntegrationServiceFactory::GetForProfile(profile());
       if (drive_integration_service->IsMounted()) {
         const auto drive_mount_name =
-            base::FilePath(drive_integration_service->GetMountPointPath())
-                .BaseName();
+            drive_integration_service->GetMountPointPath().BaseName();
         dictionary.SetStringKey(
             "drive", base::StrCat({"/", drive_mount_name.value(), "/root"}));
       }
@@ -2856,6 +2943,11 @@ void FileManagerBrowserTestBase::OnCommand(const std::string& name,
     return;
   }
 
+  if (name == "isFiltersInRecentsEnabled") {
+    *output = options.enable_filters_in_recents ? "true" : "false";
+    return;
+  }
+
   if (name == "switchLanguage") {
     const std::string* language = value.FindStringKey("language");
     ASSERT_TRUE(language);
@@ -2969,7 +3061,50 @@ void FileManagerBrowserTestBase::OnCommand(const std::string& name,
     return;
   }
 
+  if (HandleGuestOsCommands(name, value, output)) {
+    return;
+  }
+
   FAIL() << "Unknown test message: " << name;
+}
+
+bool FileManagerBrowserTestBase::HandleGuestOsCommands(
+    const std::string& name,
+    const base::DictionaryValue& value,
+    std::string* output) {
+  if (name == "registerMountableGuest") {
+    auto* displayName = value.GetDict().FindString("displayName");
+    auto* canMount = value.GetDict().Find("canMount");
+    CHECK(displayName != nullptr);
+    auto* registry = guest_os::GuestOsService::GetForProfile(profile())
+                         ->MountProviderRegistry();
+    auto id = registry->Register(
+        std::make_unique<MockGuestOsMountProvider>(profile(), *displayName));
+    MockGuestOsMountProvider* ptr =
+        reinterpret_cast<MockGuestOsMountProvider*>(registry->Get(id));
+    ptr->cid_ = id;
+    if (canMount && canMount->GetBool()) {
+      // If we ask for the volume to be mountable we add it to the map, and it's
+      // mountable. If not then it's an unknown volume and the mount request
+      // fails.
+      guest_os_volumes_[base::StringPrintf("sftp://%d:0", id)] =
+          std::make_unique<GuestOsTestVolume>(profile(), ptr);
+    }
+
+    base::JSONWriter::Write(base::Value(id), output);
+    return true;
+  }
+  if (name == "unregisterMountableGuest") {
+    int id;
+    auto* str = value.GetDict().FindString("guestId");
+    CHECK(str != nullptr);
+    CHECK(base::StringToInt(*str, &id));
+    auto* registry = guest_os::GuestOsService::GetForProfile(profile())
+                         ->MountProviderRegistry();
+    registry->Unregister(id);
+    return true;
+  }
+  return false;
 }
 
 drive::DriveIntegrationService*
@@ -3005,6 +3140,21 @@ base::FilePath FileManagerBrowserTestBase::MaybeMountCrostini(
   }
   CHECK(crostini_volume_->Mount(profile()));
   return crostini_volume_->mount_path();
+}
+
+base::FilePath FileManagerBrowserTestBase::MaybeMountGuestOs(
+    const std::string& source_path,
+    const std::vector<std::string>& mount_options) {
+  GURL source_url(source_path);
+  DCHECK(source_url.is_valid());
+  if (source_url.scheme() != "sftp") {
+    return {};
+  }
+  if (!guest_os_volumes_.contains(source_path)) {
+    return {};
+  }
+  guest_os_volumes_[source_path]->Mount(profile());
+  return guest_os_volumes_[source_path]->mount_path();
 }
 
 void FileManagerBrowserTestBase::EnableVirtualKeyboard() {

@@ -127,6 +127,12 @@ bool TaskManagerView::IsColumnVisible(int column_id) const {
 }
 
 void TaskManagerView::SetColumnVisibility(int column_id, bool new_visibility) {
+  // Check if there is at least 1 visible column before changing the visibility.
+  // If this column would be the last column to be visible and its hiding, then
+  // prevent this column visibility change. see crbug.com/1320307 for details.
+  if (!new_visibility && tab_table_->visible_columns().size() <= 1)
+    return;
+
   tab_table_->SetColumnVisibility(column_id, new_visibility);
 }
 
@@ -349,7 +355,7 @@ void TaskManagerView::Init() {
       provider->GetInsetsMetric(views::INSETS_DIALOG);
   // We don't use ChromeLayoutProvider::GetDialogInsetsForContentType because we
   // don't have a title.
-  const gfx::Insets content_insets(
+  const auto content_insets = gfx::Insets::TLBR(
       dialog_insets.top(), dialog_insets.left(),
       provider->GetDistanceMetric(
           views::DISTANCE_DIALOG_CONTENT_MARGIN_BOTTOM_CONTROL),

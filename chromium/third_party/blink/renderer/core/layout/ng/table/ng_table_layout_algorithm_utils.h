@@ -16,7 +16,6 @@ class NGBoxFragment;
 class NGConstraintSpaceBuilder;
 class NGTableBorders;
 enum class NGCacheSlot;
-struct LogicalSize;
 
 // Table size distribution algorithms.
 class NGTableAlgorithmUtils {
@@ -30,6 +29,19 @@ class NGTableAlgorithmUtils {
            align == EVerticalAlign::kLength;
   }
 
+  // Computes a cell's block-size, and if its initial block-size should be
+  // considered indefinite.
+  struct CellBlockSizeData {
+    LayoutUnit block_size;
+    bool is_initial_block_size_indefinite;
+  };
+  static CellBlockSizeData ComputeCellBlockSize(
+      const NGTableTypes::CellBlockConstraint& cell_block_constraint,
+      const NGTableTypes::Rows& rows,
+      wtf_size_t row_index,
+      const LogicalSize& border_spacing,
+      bool is_table_block_size_specified);
+
   // Creates a constraint space builder for a table-cell.
   //
   // In order to make the cache as effective as possible, we try and keep
@@ -38,18 +50,18 @@ class NGTableAlgorithmUtils {
       const WritingDirectionMode table_writing_direction,
       const NGBlockNode cell,
       const NGBoxStrut& cell_borders,
-      LogicalSize cell_size,
+      const Vector<NGTableColumnLocation>& column_locations,
+      LayoutUnit cell_block_size,
       LayoutUnit percentage_inline_size,
       absl::optional<LayoutUnit> alignment_baseline,
-      wtf_size_t column_index,
+      wtf_size_t start_column,
       bool is_initial_block_size_indefinite,
       bool is_restricted_block_size_table,
-      bool is_hidden_for_paint,
       bool has_collapsed_borders,
       NGCacheSlot);
 
   static wtf_size_t ComputeMaximumNonMergeableColumnCount(
-      const Vector<NGBlockNode>& columns,
+      const HeapVector<NGBlockNode>& columns,
       bool is_fixed_layout);
 
   static scoped_refptr<NGTableTypes::Columns> ComputeColumnConstraints(
@@ -62,7 +74,7 @@ class NGTableAlgorithmUtils {
       const NGBlockNode& section,
       const LayoutUnit cell_percentage_resolution_inline_size,
       const bool is_table_block_size_specified,
-      const NGTableTypes::ColumnLocations& column_locations,
+      const Vector<NGTableColumnLocation>& column_locations,
       const NGTableBorders& table_borders,
       const LayoutUnit block_border_spacing,
       wtf_size_t section_index,
@@ -124,7 +136,7 @@ class NGRowBaselineTabulator {
 
   LayoutUnit ComputeBaseline(const LayoutUnit row_block_size);
 
-  bool ComputeBaselineDependsOnPercentageBlockDescendant();
+  bool BaselineDependsOnPercentageBlockDescendant();
 
  private:
   // Cell baseline is computed from baseline-aligned cells.

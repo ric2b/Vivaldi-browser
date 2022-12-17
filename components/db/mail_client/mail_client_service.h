@@ -22,8 +22,8 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/sequence_checker.h"
-#include "base/task/sequenced_task_runner.h"
 #include "base/task/cancelable_task_tracker.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "content/public/browser/notification_observer.h"
@@ -104,7 +104,7 @@ class MailClientService : public KeyedService {
       ResultCallback callback,
       base::CancelableTaskTracker* tracker);
 
-  base::CancelableTaskTracker::TaskId RebuildDatabase(
+  base::CancelableTaskTracker::TaskId RebuildAndVacuumDatabase(
       ResultCallback callback,
       base::CancelableTaskTracker* tracker);
 

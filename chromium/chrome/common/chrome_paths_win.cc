@@ -45,7 +45,7 @@ bool GetUserDirectory(int csidl_folder, base::FilePath* result) {
 }  // namespace
 
 bool GetDefaultUserDataDirectory(base::FilePath* result) {
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   if (vivaldi::GetVivaldiStandaloneUserDataDirectory(result))
     return true;
 #endif

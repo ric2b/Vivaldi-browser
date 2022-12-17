@@ -5,6 +5,7 @@
 #import "ios/chrome/browser/ui/alert_coordinator/repost_form_coordinator.h"
 
 #include "base/check.h"
+#include "base/memory/weak_ptr.h"
 #include "base/notreached.h"
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
@@ -22,7 +23,7 @@ using completion_block_util::GetSafeDecidePolicyCompletion;
 
 @interface RepostFormCoordinator () {
   // WebState which requested this dialog.
-  web::WebState* _webState;
+  base::WeakPtr<web::WebState> _webState;
   // View Controller representing the dialog.
   UIAlertController* _dialogController;
   // Number of attempts to show the repost form action sheet.
@@ -51,7 +52,7 @@ using completion_block_util::GetSafeDecidePolicyCompletion;
   DCHECK(completionHandler);
   self = [super initWithBaseViewController:viewController browser:browser];
   if (self) {
-    _webState = webState;
+    _webState = webState->GetWeakPtr();
     CGRect sourceRect = CGRectMake(dialogLocation.x, dialogLocation.y, 1, 1);
     DecidePolicyCallback safeCallback =
         GetSafeDecidePolicyCompletion(completionHandler);
@@ -70,7 +71,11 @@ using completion_block_util::GetSafeDecidePolicyCompletion;
 }
 
 - (void)start {
-  if (!_webState->IsWebUsageEnabled())
+  // The WebState may have been destroyed since the RepostFormCoordinator was
+  // created, in that case, there is nothing to do (as the tab would have been
+  // closed).
+  web::WebState* webState = _webState.get();
+  if (!webState || !webState->IsWebUsageEnabled())
     return;
 
   // Check to see if an action sheet can be shown.
@@ -114,6 +119,7 @@ using completion_block_util::GetSafeDecidePolicyCompletion;
                          completion:_dismissCompletionHandler];
   _repostAttemptCount = 0;
   _dismissCompletionHandler = nil;
+  _webState.reset();
 }
 
 #pragma mark - Private

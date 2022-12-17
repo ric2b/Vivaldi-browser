@@ -29,16 +29,11 @@
 #include "content/public/browser/browser_thread.h"
 #include "third_party/re2/src/re2/re2.h"
 #include "ui/gfx/image/image_skia.h"
-#include "ui/gfx/image/image_skia_rep_default.h"
+#include "ui/gfx/image/image_skia_rep.h"
 
 namespace web_app {
 
 namespace {
-
-#if BUILDFLAG(IS_LINUX)
-// Aligns with other platform implementations that only support 10 items.
-constexpr int kMaxApplicationDockMenuItems = 10;
-#endif  // BUILDFLAG(IS_LINUX)
 
 // UMA metric name for shortcuts creation result.
 constexpr const char* kCreationResultMetric =
@@ -244,8 +239,8 @@ void WebAppShortcutManager::OnShortcutInfoRetrievedCreateShortcuts(
   locations.applications_menu_location = APP_MENU_LOCATION_SUBDIR_CHROMEAPPS;
 
   internals::ScheduleCreatePlatformShortcuts(
-      std::move(shortcut_data_dir), locations, SHORTCUT_CREATION_BY_USER,
-      std::move(info), std::move(callback));
+      shortcut_data_dir, locations, SHORTCUT_CREATION_BY_USER, std::move(info),
+      std::move(callback));
 }
 
 void WebAppShortcutManager::OnShortcutsMenuIconsReadRegisterShortcutsMenu(
@@ -359,8 +354,10 @@ std::unique_ptr<ShortcutInfo> WebAppShortcutManager::BuildShortcutInfoForWebApp(
 
   shortcut_info->extension_id = app->app_id();
   shortcut_info->url = app->start_url();
-  shortcut_info->title = base::UTF8ToUTF16(app->name());
-  shortcut_info->description = base::UTF8ToUTF16(app->description());
+  shortcut_info->title =
+      base::UTF8ToUTF16(registrar_->GetAppShortName(app->app_id()));
+  shortcut_info->description =
+      base::UTF8ToUTF16(registrar_->GetAppDescription(app->app_id()));
   shortcut_info->profile_path = profile_->GetPath();
   shortcut_info->profile_name =
       profile_->GetPrefs()->GetString(prefs::kProfileName);
@@ -385,10 +382,8 @@ std::unique_ptr<ShortcutInfo> WebAppShortcutManager::BuildShortcutInfoForWebApp(
 #if BUILDFLAG(IS_LINUX)
   const std::vector<WebAppShortcutsMenuItemInfo>& shortcuts_menu_item_infos =
       app->shortcuts_menu_item_infos();
-  int num_entries = std::min(static_cast<int>(shortcuts_menu_item_infos.size()),
-                             kMaxApplicationDockMenuItems);
-  for (int i = 0; i < num_entries; i++) {
-    const auto& shortcuts_menu_item_info = shortcuts_menu_item_infos[i];
+  DCHECK_LE(shortcuts_menu_item_infos.size(), kMaxApplicationDockMenuItems);
+  for (const auto& shortcuts_menu_item_info : shortcuts_menu_item_infos) {
     if (!shortcuts_menu_item_info.name.empty() &&
         !shortcuts_menu_item_info.url.is_empty()) {
       // Generates ID from the name by replacing all characters that are not

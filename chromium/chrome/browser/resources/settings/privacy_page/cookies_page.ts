@@ -21,7 +21,7 @@ import './do_not_track_toggle.js';
 import '../controls/settings_radio_group.js';
 
 import {CrToastElement} from 'chrome://resources/cr_elements/cr_toast/cr_toast.js';
-import {assert} from 'chrome://resources/js/assert.m.js';
+import {assert} from 'chrome://resources/js/assert_ts.js';
 import {focusWithoutInk} from 'chrome://resources/js/cr/ui/focus_without_ink.m.js';
 import {I18nMixin, I18nMixinInterface} from 'chrome://resources/js/i18n_mixin.js';
 import {WebUIListenerMixin, WebUIListenerMixinInterface} from 'chrome://resources/js/web_ui_listener_mixin.js';
@@ -67,9 +67,9 @@ export interface SettingsCookiesPageElement {
 const SettingsCookiesPageElementBase =
     RouteObserverMixin(
         WebUIListenerMixin(I18nMixin(PrefsMixin(PolymerElement)))) as {
-      new ():
-          PolymerElement & I18nMixinInterface & WebUIListenerMixinInterface &
-      PrefsMixinInterface & RouteObserverMixinInterface
+      new (): PolymerElement & I18nMixinInterface &
+          WebUIListenerMixinInterface & PrefsMixinInterface &
+          RouteObserverMixinInterface,
     };
 
 export class SettingsCookiesPageElement extends SettingsCookiesPageElementBase {
@@ -176,8 +176,9 @@ export class SettingsCookiesPageElement extends SettingsCookiesPageElementBase {
             routes.SITE_SETTINGS_ALL :
             routes.SITE_SETTINGS_SITE_DATA);
     const selectSiteDataLinkRow = () => {
-      focusWithoutInk(
-          assert(this.shadowRoot!.querySelector('#site-data-trigger')!));
+      const toFocus = this.shadowRoot!.querySelector('#site-data-trigger');
+      assert(toFocus);
+      focusWithoutInk(toFocus);
     };
     if (this.enableConsolidatedSiteStorageControls_) {
       this.focusConfig.set(
@@ -189,7 +190,7 @@ export class SettingsCookiesPageElement extends SettingsCookiesPageElementBase {
     }
   }
 
-  currentRouteChanged(route: Route) {
+  override currentRouteChanged(route: Route) {
     if (route !== routes.COOKIES) {
       this.$.toast.hide();
     }
@@ -256,13 +257,20 @@ export class SettingsCookiesPageElement extends SettingsCookiesPageElementBase {
     // the privacy sandbox toast should be shown.
     const currentCookieSetting =
         this.getPref('generated.cookie_primary_setting').value;
-    if (this.getPref('privacy_sandbox.apis_enabled').value &&
+    const privacySandboxEnabled =
+        loadTimeData.getBoolean('privacySandboxSettings3Enabled') ?
+        this.getPref('privacy_sandbox.apis_enabled_v2').value :
+        this.getPref('privacy_sandbox.apis_enabled').value;
+
+    if (privacySandboxEnabled &&
         (currentCookieSetting === CookiePrimarySetting.ALLOW_ALL ||
          currentCookieSetting ===
              CookiePrimarySetting.BLOCK_THIRD_PARTY_INCOGNITO) &&
         (selection === CookiePrimarySetting.BLOCK_THIRD_PARTY ||
          selection === CookiePrimarySetting.BLOCK_ALL)) {
-      this.$.toast.show();
+      if (!loadTimeData.getBoolean('isPrivacySandboxRestricted')) {
+        this.$.toast.show();
+      }
       this.metricsBrowserProxy_.recordAction(
           'Settings.PrivacySandbox.Block3PCookies');
     } else if (

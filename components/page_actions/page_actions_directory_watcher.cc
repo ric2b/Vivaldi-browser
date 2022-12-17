@@ -7,8 +7,9 @@
 #include "base/task/thread_pool.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/values.h"
+#include "build/build_config.h"
 
-#ifdef OS_ANDROID
+#if BUILDFLAG(IS_ANDROID)
 #include "base/android/apk_assets.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/logging.h"
@@ -22,7 +23,7 @@ const base::FilePath::CharType kJSExtension[] = FILE_PATH_LITERAL(".js");
 constexpr base::TimeDelta kUpdateCooldownTime = base::Milliseconds(500);
 
 std::unique_ptr<base::Value> ReadApkAssets(base::FilePath apk_assets) {
-#ifdef OS_ANDROID
+#if BUILDFLAG(IS_ANDROID)
   base::MemoryMappedFile::Region region;
   base::MemoryMappedFile mapped_file;
   int json_fd = base::android::OpenApkAsset(apk_assets.AsUTF8Unsafe(), &region);
@@ -71,7 +72,7 @@ DirectoryWatcher::DirectoryWatcher(ChangesCallback callback,
       callback_task_runner_(base::SequencedTaskRunnerHandle::Get()),
       apk_assets_(apk_assets),
       task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
-          {base::MayBlock(), base::TaskPriority::BEST_EFFORT})) {
+          {base::MayBlock(), base::TaskPriority::USER_BLOCKING})) {
   DETACH_FROM_SEQUENCE(sequence_checker_);
 }
 
@@ -80,21 +81,21 @@ DirectoryWatcher::~DirectoryWatcher() {
 }
 
 void DirectoryWatcher::Deleter::operator()(const DirectoryWatcher* ptr) {
-  ptr->task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(&DirectoryWatcher::Destroy, base::Unretained(ptr)));
+  ptr->task_runner_->PostTask(FROM_HERE,
+                              base::BindOnce(&DirectoryWatcher::Destroy,
+                                             ptr->weak_factory_.GetWeakPtr()));
 }
 
 void DirectoryWatcher::AddPaths(const std::vector<base::FilePath>& paths) {
   task_runner_->PostTask(FROM_HERE,
                          base::BindOnce(&DirectoryWatcher::DoAddPaths,
-                                        base::Unretained(this), paths));
+                                        weak_factory_.GetWeakPtr(), paths));
 }
 
 void DirectoryWatcher::RemovePath(const base::FilePath& path) {
   task_runner_->PostTask(FROM_HERE,
                          base::BindOnce(&DirectoryWatcher::DoRemovePath,
-                                        base::Unretained(this), path));
+                                        weak_factory_.GetWeakPtr(), path));
 }
 
 void DirectoryWatcher::DoAddPaths(const std::vector<base::FilePath>& paths) {
@@ -113,10 +114,9 @@ void DirectoryWatcher::DoAddPaths(const std::vector<base::FilePath>& paths) {
     DCHECK(path_watchers_.count(path) == 0);
     pending_paths_.insert(path);
     auto watcher = std::make_unique<base::FilePathWatcher>();
-    // Unretained OK because we own the watcher.
     if (!watcher->Watch(path, base::FilePathWatcher::Type::kRecursive,
                         base::BindRepeating(&DirectoryWatcher::OnPathChanged,
-                                            base::Unretained(this))))
+                                            weak_factory_.GetWeakPtr())))
       continue;
     path_watchers_.insert({path, std::move(watcher)});
   }
@@ -132,15 +132,20 @@ void DirectoryWatcher::DoRemovePath(const base::FilePath& path) {
 void DirectoryWatcher::OnPathChanged(const base::FilePath& path, bool error) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   pending_paths_.insert(path);
-  ReportChanges();
+  // OnPathChanged might only called for the first of multiple changes.
+  // Wait a short delay to make sure all changes have gone through. If there
+  // is sufficient activity to trigger more path change notifications in short
+  // sequence, this will also cause the changes reports to be batched.
+  if (timer_.IsRunning()) {
+    timer_.Reset();
+  } else {
+    timer_.Start(FROM_HERE, kUpdateCooldownTime,
+                 base::BindOnce(&DirectoryWatcher::ReportChanges,
+                                weak_factory_.GetWeakPtr()));
+  }
 }
 
 void DirectoryWatcher::ReportChanges() {
-  if (in_update_cooldown_)
-    return;
-
-  in_update_cooldown_ = true;
-
   UpdatedFileContents updated_contents;
   std::vector<base::FilePath> invalid_paths;
 
@@ -178,12 +183,6 @@ void DirectoryWatcher::ReportChanges() {
     callback_task_runner_->PostTask(
         FROM_HERE, base::BindOnce(callback_, std::move(updated_contents),
                                   std::move(invalid_paths)));
-
-  task_runner_->PostDelayedTask(
-      FROM_HERE,
-      base::BindOnce(&DirectoryWatcher::end_update_cooldown,
-                     base::Unretained(this)),
-      kUpdateCooldownTime);
 }
 
 DirectoryWatcher::FilePathTimesMap DirectoryWatcher::GetModificationTimes(

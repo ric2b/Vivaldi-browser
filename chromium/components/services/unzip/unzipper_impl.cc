@@ -16,60 +16,92 @@
 #include "components/services/filesystem/public/mojom/directory.mojom.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/ced/src/compact_enc_det/compact_enc_det.h"
+#include "third_party/zlib/google/redact.h"
 #include "third_party/zlib/google/zip.h"
 #include "third_party/zlib/google/zip_reader.h"
 
 namespace unzip {
-
 namespace {
-
-std::string PathToMojoString(const base::FilePath& path) {
-#if BUILDFLAG(IS_WIN)
-  return base::WideToUTF8(path.value());
-#else
-  return path.value();
-#endif
-}
 
 // Modifies output_dir to point to the final directory.
 bool CreateDirectory(filesystem::mojom::Directory* output_dir,
                      const base::FilePath& path) {
   base::File::Error err = base::File::Error::FILE_OK;
-  return output_dir->OpenDirectory(PathToMojoString(path), mojo::NullReceiver(),
+  return output_dir->OpenDirectory(path.AsUTF8Unsafe(), mojo::NullReceiver(),
                                    filesystem::mojom::kFlagOpenAlways, &err) &&
          err == base::File::Error::FILE_OK;
 }
 
-std::unique_ptr<zip::WriterDelegate> MakeFileWriterDelegateNoParent(
-    filesystem::mojom::Directory* output_dir,
-    const base::FilePath& path) {
-  auto file = std::make_unique<base::File>();
-  base::File::Error err;
-  if (!output_dir->OpenFileHandle(PathToMojoString(path),
-                                  filesystem::mojom::kFlagCreate |
-                                      filesystem::mojom::kFlagWrite |
-                                      filesystem::mojom::kFlagWriteAttributes,
-                                  &err, file.get()) ||
-      err != base::File::Error::FILE_OK) {
-    return nullptr;
+// A file writer that uses a mojom::Directory.
+class Writer : public zip::FileWriterDelegate {
+ public:
+  Writer(mojo::Remote<filesystem::mojom::Directory> output_dir,
+         base::FilePath path)
+      : FileWriterDelegate(base::File()),
+        owned_output_dir_(std::move(output_dir)),
+        output_dir_(owned_output_dir_.get()),
+        path_(std::move(path)) {
+    DCHECK(output_dir_);
   }
-  return std::make_unique<zip::FileWriterDelegate>(std::move(file));
-}
+
+  Writer(filesystem::mojom::Directory* output_dir, base::FilePath path)
+      : FileWriterDelegate(base::File()),
+        output_dir_(output_dir),
+        path_(std::move(path)) {
+    DCHECK(output_dir_);
+  }
+
+  // Creates the output file.
+  bool PrepareOutput() override {
+    if (base::File::Error err;
+        !output_dir_->OpenFileHandle(
+            path_.AsUTF8Unsafe(),
+            filesystem::mojom::kFlagCreate | filesystem::mojom::kFlagWrite |
+                filesystem::mojom::kFlagWriteAttributes,
+            &err, &owned_file_) ||
+        err != base::File::Error::FILE_OK) {
+      LOG(ERROR) << "Cannot create extracted file " << zip::Redact(path_);
+      return false;
+    }
+
+    return FileWriterDelegate::PrepareOutput();
+  }
+
+  // Deletes the output file.
+  void OnError() override {
+    FileWriterDelegate::OnError();
+    owned_file_.Close();
+
+    if (base::File::Error err;
+        !output_dir_->Delete(path_.AsUTF8Unsafe(), 0, &err) ||
+        err != base::File::Error::FILE_OK) {
+      LOG(ERROR) << "Cannot delete extracted file " << zip::Redact(path_);
+    }
+  }
+
+ private:
+  const mojo::Remote<filesystem::mojom::Directory> owned_output_dir_;
+  filesystem::mojom::Directory* const output_dir_;
+  const base::FilePath path_;
+};
 
 std::unique_ptr<zip::WriterDelegate> MakeFileWriterDelegate(
     filesystem::mojom::Directory* output_dir,
     const base::FilePath& path) {
   if (path == path.BaseName())
-    return MakeFileWriterDelegateNoParent(output_dir, path);
+    return std::make_unique<Writer>(output_dir, path);
+
   mojo::Remote<filesystem::mojom::Directory> parent;
-  base::File::Error err;
-  if (!output_dir->OpenDirectory(PathToMojoString(path.DirName()),
+
+  if (base::File::Error err;
+      !output_dir->OpenDirectory(path.DirName().AsUTF8Unsafe(),
                                  parent.BindNewPipeAndPassReceiver(),
                                  filesystem::mojom::kFlagOpenAlways, &err) ||
       err != base::File::Error::FILE_OK) {
     return nullptr;
   }
-  return MakeFileWriterDelegateNoParent(parent.get(), path.BaseName());
+
+  return std::make_unique<Writer>(std::move(parent), path.BaseName());
 }
 
 bool Filter(const mojo::Remote<mojom::UnzipFilter>& filter,
@@ -89,7 +121,8 @@ std::string GetRawFileNamesFromZip(const base::File& zip_file) {
   // Open ZIP archive for reading.
   zip::ZipReader reader;
   if (!reader.OpenFromPlatformFile(zip_file.GetPlatformFile())) {
-    LOG(ERROR) << "Cannot decode ZIP archive";
+    LOG(ERROR) << "Cannot decode ZIP archive from file handle "
+               << zip_file.GetPlatformFile();
     return result;
   }
 
@@ -121,36 +154,11 @@ UnzipperImpl::UnzipperImpl(mojo::PendingReceiver<mojom::Unzipper> receiver)
 
 UnzipperImpl::~UnzipperImpl() = default;
 
-void UnzipperImpl::Unzip(
-    base::File zip_file,
-    mojo::PendingRemote<filesystem::mojom::Directory> output_dir_remote,
-    mojo::PendingRemote<mojom::UnzipFilter> filter_remote,
-    UnzipCallback callback) {
-  DCHECK(zip_file.IsValid());
-  mojo::Remote<filesystem::mojom::Directory> output_dir(
-      std::move(output_dir_remote));
-  zip::FilterCallback filter_cb;
-  if (filter_remote) {
-    filter_cb = base::BindRepeating(
-        &Filter, mojo::Remote<mojom::UnzipFilter>(std::move(filter_remote)));
-  }
-
-  std::move(callback).Run(
-      zip::Unzip(zip_file.GetPlatformFile(),
-                 base::BindRepeating(&MakeFileWriterDelegate, output_dir.get()),
-                 base::BindRepeating(&CreateDirectory, output_dir.get()),
-                 {.filter = std::move(filter_cb)}));
-}
-
-void UnzipperImpl::DetectEncoding(base::File zip_file,
-                                  DetectEncodingCallback callback) {
-  DCHECK(zip_file.IsValid());
-
+Encoding GetEncoding(const base::File& zip_file) {
   // Accumulate raw filenames.
   const std::string all_names = GetRawFileNamesFromZip(zip_file);
   if (all_names.empty()) {
-    std::move(callback).Run(UNKNOWN_ENCODING);
-    return;
+    return UNKNOWN_ENCODING;
   }
 
   // Detect encoding.
@@ -170,6 +178,47 @@ void UnzipperImpl::DetectEncoding(base::File zip_file,
   LOG_IF(ERROR, encoding == UNKNOWN_ENCODING)
       << "Cannot detect encoding of filenames in ZIP archive";
 
+  return encoding;
+}
+
+void UnzipperImpl::Unzip(
+    base::File zip_file,
+    mojo::PendingRemote<filesystem::mojom::Directory> output_dir_remote,
+    mojom::UnzipOptionsPtr set_options,
+    mojo::PendingRemote<mojom::UnzipFilter> filter_remote,
+    UnzipCallback callback) {
+  DCHECK(zip_file.IsValid());
+
+  mojo::Remote<filesystem::mojom::Directory> output_dir(
+      std::move(output_dir_remote));
+
+  zip::FilterCallback filter_cb;
+  if (filter_remote) {
+    filter_cb = base::BindRepeating(
+        &Filter, mojo::Remote<mojom::UnzipFilter>(std::move(filter_remote)));
+  }
+
+  std::string encoding_name;
+  if (set_options->encoding == "auto") {
+    Encoding encoding = GetEncoding(zip_file);
+    if (IsShiftJisOrVariant(encoding) || encoding == RUSSIAN_CP866) {
+      encoding_name = MimeEncodingName(encoding);
+    }
+  } else {
+    encoding_name = set_options->encoding;
+  }
+  std::move(callback).Run(zip::Unzip(
+      zip_file.GetPlatformFile(),
+      base::BindRepeating(&MakeFileWriterDelegate, output_dir.get()),
+      base::BindRepeating(&CreateDirectory, output_dir.get()),
+      {.encoding = std::move(encoding_name), .filter = std::move(filter_cb)}));
+}
+
+void UnzipperImpl::DetectEncoding(base::File zip_file,
+                                  DetectEncodingCallback callback) {
+  DCHECK(zip_file.IsValid());
+
+  const Encoding encoding = GetEncoding(zip_file);
   std::move(callback).Run(encoding);
 }
 

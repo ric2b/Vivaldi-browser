@@ -16,22 +16,26 @@
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> faqeshënues}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> faqeshënues}}</translation>
-<translation id="3076631378407175873">Kopirajti <ph name="YEAR" /> Vivaldi Technologies AS. Të drejtat janë rezervuar.</translation>
+<translation id="3076631378407175873">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Gjithë të drejtat janë rezervuar.</translation>
 <translation id="3234355010754616171">Skedë të re private</translation>
 <translation id="3377025655491224618">Skedë private</translation>
 <translation id="3504699618187058974">Grupoj skedat</translation>
 <translation id="3518985090088779359">Pranoj dhe vazhdoj</translation>
+<translation id="3571177741182643350">Artikujt e palexuar - Hapen pa internet:</translation>
 <translation id="3700829948786686853">Mirësevini te Vivaldi</translation>
 <translation id="3719826155360621982">Faqja kryesore</translation>
 <translation id="385051799172605136">Prapa</translation>
-<translation id="4121750346708795461">Nëse e përdorni aplikacionin, miratoni <ph name="BEGIN_LINK1" />Marrëveshjen e Licensimit për Klientët<ph name="END_LINK1" /> dhe <ph name="BEGIN_LINK2" />Politikat e konfidencialitetit<ph name="END_LINK2" /> të Vivaldit.</translation>
+<translation id="399014816462153200">Artikujt e lexuar:</translation>
+<translation id="4121750346708795461">Nëse e përdorni aplikacionin, miratoni <ph name="BEGIN_LINK1" />Marrëveshjen e licensimit për klientët<ph name="END_LINK1" /> dhe <ph name="BEGIN_LINK2" />Politikën e konfidencialitetit<ph name="END_LINK2" /> të Vivaldit.</translation>
 <translation id="4137746084635924146">Gjuha e aparatit aktual</translation>
+<translation id="4167670741834902166">Skedë private të re</translation>
 <translation id="4243710787042215766">Hap në skedën private</translation>
 <translation id="4526803704855831732">Skedat private</translation>
 <translation id="4759238208242260848">Shkarkimet</translation>
 <translation id="4883379392681899581">Dal nga këndi privat</translation>
 <translation id="4943872375798546930">Pa rezultat</translation>
 <translation id="49576331685473090">Bllokuesi i materialeve</translation>
+<translation id="5079259810715830221">Kur uebsajtet e Google kërkojnë që t'i hapin paraprakisht lidhjet brenda tyre, Vivaldi i shifron dhe e kryen hapjen e faqeve nëpërmjet serverave të Google pa cookies. Kështu faqja nuk mund ta zbulojë identitetin juaj.</translation>
 <translation id="5118676864324397542">Arkivi i <ph name="APP_NAME" /></translation>
 <translation id="5186185447130319458">Privat</translation>
 <translation id="5233638681132016545">Skedë të re</translation>
@@ -44,12 +48,13 @@ Termin që kërkoni mund ta ndryshoni duke e mbajtur gjatë shtypur. Për ta pë
 <translation id="6585139692466700358">Propozoj përkthimin e faqeve në gjuhë të tjera nëpërmjet shërbimit të Vivaldit</translation>
 <translation id="6593061639179217415">Varianti për kompjuter</translation>
 <translation id="6610147964972079463">Mbyll skedat private</translation>
-<translation id="706339621163631076">Politikat e konfidencialitetit të shfletuesit</translation>
+<translation id="7029995644714925509">Kur uebsajtet kërkojnë që t'i hapin paraprakisht lidhjet brenda tyre, Vivaldi i shifron dhe e kryen hapjen e faqeve nëpërmjet serverave të Google pa cookies. Kështu faqja nuk mund ta zbulojë identitetin juaj.</translation>
+<translation id="706339621163631076">Politika e konfidencialitetit e shfletuesit</translation>
 <translation id="732145680195464316">Regjistroi faqen interesante në <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Për Vivaldin</translation>
 <translation id="7465104139234185284">Mbyll të gjitha skedat private</translation>
 <translation id="7519434535192513364">Kërkimi me Shtypje është funksion që mundësohet vetëm kur Google caktohet si motori standard i kërkimit në Vivaldi. Fjala që kërkoni dhe faqja aktuale dërgohen te Google Search. Mund ta çaktivizoni te <ph name="BEGIN_LINK" />Parametrat<ph name="END_LINK" />.</translation>
-<translation id="804786196054284061">Marrëveshja e Licensimit për Klientët</translation>
+<translation id="804786196054284061">Marrëveshja e licensimit për klientët</translation>
 <translation id="85991616550051997">Shkoj te faqja kryesore</translation>
 <translation id="8820817407110198400">Faqet interesante</translation>
 <translation id="9063523880881406963">Çaktivizoj opsionin për faqet e variantit për kompjuter</translation>

@@ -5,10 +5,9 @@
 #ifndef BASE_ALLOCATOR_PARTITION_ALLOCATOR_PARTITION_ALLOC_CONSTANTS_H_
 #define BASE_ALLOCATOR_PARTITION_ALLOCATOR_PARTITION_ALLOC_CONSTANTS_H_
 
-#include <limits.h>
-#include <cstddef>
-
 #include <algorithm>
+#include <climits>
+#include <cstddef>
 #include <limits>
 
 #include "base/allocator/partition_allocator/address_pool_manager_types.h"
@@ -22,7 +21,28 @@
 #include <mach/vm_page_size.h>
 #endif
 
-namespace partition_alloc::internal {
+namespace partition_alloc {
+
+// Bit flag constants used at `flag` argument of PartitionRoot::AllocWithFlags,
+// AlignedAllocWithFlags, etc.
+struct AllocFlags {
+  // In order to support bit operations like `flag_a | flag_b`, the old-
+  // fashioned enum (+ surrounding named struct) is used instead of enum class.
+  enum : int {
+    kReturnNull = 1 << 0,
+    kZeroFill = 1 << 1,
+    kNoHooks = 1 << 2,  // Internal only.
+    // If the allocation requires a "slow path" (such as allocating/committing a
+    // new slot span), return nullptr instead. Note this makes all large
+    // allocations return nullptr, such as direct-mapped ones, and even for
+    // smaller ones, a nullptr value is common.
+    kFastPathOrReturnNull = 1 << 3,  // Internal only.
+
+    kLastFlag = kFastPathOrReturnNull
+  };
+};
+
+namespace internal {
 
 // Size of a cache line. Not all CPUs in the world have a 64 bytes cache line
 // size, but as of 2021, most do. This is in particular the case for almost all
@@ -59,10 +79,11 @@ PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR ALWAYS_INLINE size_t
 PartitionPageShift() {
   return 18;  // 256 KiB
 }
-#elif BUILDFLAG(IS_APPLE) && defined(ARCH_CPU_64_BITS)
+#elif (BUILDFLAG(IS_APPLE) && defined(ARCH_CPU_64_BITS)) || \
+    (BUILDFLAG(IS_LINUX) && defined(ARCH_CPU_ARM64))
 PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR ALWAYS_INLINE size_t
 PartitionPageShift() {
-  return vm_page_shift + 2;
+  return PageAllocationGranularityShift() + 2;
 }
 #else
 PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR ALWAYS_INLINE size_t
@@ -131,6 +152,7 @@ MaxRegularSlotSpanSize() {
 //     | Guard page (4 KiB)    |
 //     | Metadata page (4 KiB) |
 //     | Guard pages (8 KiB)   |
+//     | TagBitmap             |
 //     | *Scan State Bitmap    |
 //     | Slot span             |
 //     | Slot span             |
@@ -139,7 +161,9 @@ MaxRegularSlotSpanSize() {
 //     | Guard pages (16 KiB)  |
 //     +-----------------------+
 //
-// State Bitmap is inserted for partitions that may have quarantine enabled.
+// TagBitmap is only present when
+// defined(PA_USE_MTE_CHECKED_PTR_WITH_64_BITS_POINTERS) is true. State Bitmap
+// is inserted for partitions that may have quarantine enabled.
 //
 // If refcount_at_end_allocation is enabled, RefcountBitmap(4KiB) is inserted
 // after the Metadata page for BackupRefPtr. The guard pages after the bitmap
@@ -217,11 +241,14 @@ constexpr size_t kNumPools = 3;
 // to keep for now only because nothing uses PartitionAlloc on iOS yet.
 #if BUILDFLAG(IS_IOS)
 constexpr size_t kPoolMaxSize = kGiB / 4;
-#elif BUILDFLAG(IS_MAC)
+#elif BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 // Special-case macOS. Contrary to other platforms, there is no sandbox limit
 // there, meaning that a single renderer could "happily" consume >8GiB. So the
 // 8GiB pool size is a regression. Make the limit higher on this platform only
 // to be consistent with previous behavior. See crbug.com/1232567 for details.
+//
+// On Linux, reserving memory is not costly, and we have cases where heaps can
+// grow to more than 8GiB without being a memory leak.
 constexpr size_t kPoolMaxSize = 16 * kGiB;
 #else
 constexpr size_t kPoolMaxSize = 8 * kGiB;
@@ -245,14 +272,14 @@ static constexpr pool_handle kConfigurablePoolHandle = 3;
 constexpr size_t kMaxMemoryTaggingSize = 1024;
 
 #if defined(PA_HAS_MEMORY_TAGGING)
-// Returns whether the tag of a pointer/slot overflowed and slot needs to be
-// moved to quarantine.
-constexpr ALWAYS_INLINE bool HasOverflowTag(uintptr_t ptr) {
+// Returns whether the tag of |object| overflowed and the containing slot needs
+// to be moved to quarantine.
+ALWAYS_INLINE bool HasOverflowTag(void* object) {
   // The tag with which the slot is put to quarantine.
   constexpr uintptr_t kOverflowTag = 0x0f00000000000000uLL;
   static_assert((kOverflowTag & ~kMemTagUnmask) != 0,
                 "Overflow tag must be in tag bits");
-  return (ptr & ~kMemTagUnmask) == kOverflowTag;
+  return (reinterpret_cast<uintptr_t>(object) & ~kMemTagUnmask) == kOverflowTag;
 }
 #endif  // defined(PA_HAS_MEMORY_TAGGING)
 
@@ -333,7 +360,6 @@ constexpr size_t kMinDirectMappedDownsize = kMaxBucketed + 1;
 // Intentionally set to less than 2GiB to make sure that a 2GiB allocation
 // fails. This is a security choice in Chrome, to help making size_t vs int bugs
 // harder to exploit.
-//
 
 PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR ALWAYS_INLINE size_t
 MaxDirectMapped() {
@@ -342,7 +368,7 @@ MaxDirectMapped() {
   return (1UL << 31) - kSuperPageSize;
 }
 
-// Max alignment supported by AlignedAllocFlags().
+// Max alignment supported by AlignedAllocWithFlags().
 // kSuperPageSize alignment can't be easily supported, because each super page
 // starts with guard pages & metadata.
 constexpr size_t kMaxSupportedAlignment = kSuperPageSize / 2;
@@ -370,7 +396,7 @@ constexpr size_t kBitsPerSizeT = sizeof(void*) * CHAR_BIT;
 // *possibly* empty SlotSpans.
 //
 // In all cases, PartitionRoot::PurgeMemory() with the
-// PartitionPurgeDecommitEmptySlotSpans flag will eagerly decommit all entries
+// PurgeFlags::kDecommitEmptySlotSpans flag will eagerly decommit all entries
 // in the ring buffer, so with periodic purge enabled, this typically happens
 // every few seconds.
 constexpr size_t kEmptyCacheIndexBits = 7;
@@ -397,26 +423,15 @@ constexpr unsigned char kQuarantinedByte = 0xEF;
 // static_cast<uint32_t>(-1) is too close to a "real" size.
 constexpr size_t kInvalidBucketSize = 1;
 
-// Flags for `PartitionAllocFlags`.
-enum PartitionAllocFlags {
-  PartitionAllocReturnNull = 1 << 0,
-  PartitionAllocZeroFill = 1 << 1,
-  PartitionAllocNoHooks = 1 << 2,  // Internal only.
-  // If the allocation requires a "slow path" (such as allocating/committing a
-  // new slot span), return nullptr instead. Note this makes all large
-  // allocations return nullptr, such as direct-mapped ones, and even for
-  // smaller ones, a nullptr value is common.
-  PartitionAllocFastPathOrReturnNull = 1 << 3,  // Internal only.
+}  // namespace internal
 
-  PartitionAllocLastFlag = PartitionAllocFastPathOrReturnNull
-};
-
-}  // namespace partition_alloc::internal
+}  // namespace partition_alloc
 
 namespace base {
 
 // TODO(https://crbug.com/1288247): Remove these 'using' declarations once
 // the migration to the new namespaces gets done.
+using ::partition_alloc::AllocFlags;
 using ::partition_alloc::internal::DirectMapAllocationGranularity;
 using ::partition_alloc::internal::DirectMapAllocationGranularityOffsetMask;
 using ::partition_alloc::internal::DirectMapAllocationGranularityShift;
@@ -464,12 +479,6 @@ using ::partition_alloc::internal::MaxSuperPagesInPool;
 using ::partition_alloc::internal::MaxSystemPagesPerRegularSlotSpan;
 using ::partition_alloc::internal::NumPartitionPagesPerSuperPage;
 using ::partition_alloc::internal::NumSystemPagesPerPartitionPage;
-using ::partition_alloc::internal::PartitionAllocFastPathOrReturnNull;
-using ::partition_alloc::internal::PartitionAllocFlags;
-using ::partition_alloc::internal::PartitionAllocLastFlag;
-using ::partition_alloc::internal::PartitionAllocNoHooks;
-using ::partition_alloc::internal::PartitionAllocReturnNull;
-using ::partition_alloc::internal::PartitionAllocZeroFill;
 using ::partition_alloc::internal::PartitionPageBaseMask;
 using ::partition_alloc::internal::PartitionPageOffsetMask;
 using ::partition_alloc::internal::PartitionPageShift;

@@ -11,8 +11,8 @@
 #include "ash/webui/grit/ash_os_feedback_resources_map.h"
 #include "ash/webui/os_feedback_ui/backend/help_content_provider.h"
 #include "ash/webui/os_feedback_ui/mojom/os_feedback_ui.mojom.h"
+#include "ash/webui/os_feedback_ui/os_feedback_delegate.h"
 #include "ash/webui/os_feedback_ui/url_constants.h"
-#include "base/memory/ptr_util.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
@@ -39,10 +39,14 @@ void SetUpWebUIDataSource(content::WebUIDataSource* source,
 
 }  // namespace
 
-OSFeedbackUI::OSFeedbackUI(content::WebUI* web_ui)
-    : MojoWebUIController(web_ui) {
-  auto source = base::WrapUnique(
-      content::WebUIDataSource::Create(kChromeUIOSFeedbackHost));
+OSFeedbackUI::OSFeedbackUI(
+    content::WebUI* web_ui,
+    std::unique_ptr<OsFeedbackDelegate> feedback_delegate)
+    : MojoWebUIController(web_ui),
+      feedback_delegate_(std::move(feedback_delegate)) {
+  auto* browser_context = web_ui->GetWebContents()->GetBrowserContext();
+  content::WebUIDataSource* source = content::WebUIDataSource::CreateAndAdd(
+      browser_context, kChromeUIOSFeedbackHost);
 
   // Add ability to request chrome-untrusted://os-feedback URLs.
   web_ui->AddRequestableScheme(content::kChromeUIUntrustedScheme);
@@ -60,10 +64,7 @@ OSFeedbackUI::OSFeedbackUI(content::WebUI* web_ui)
 
   const auto resources =
       base::make_span(kAshOsFeedbackResources, kAshOsFeedbackResourcesSize);
-  SetUpWebUIDataSource(source.get(), resources, IDR_ASH_OS_FEEDBACK_INDEX_HTML);
-
-  auto* browser_context = web_ui->GetWebContents()->GetBrowserContext();
-  content::WebUIDataSource::Add(browser_context, source.release());
+  SetUpWebUIDataSource(source, resources, IDR_ASH_OS_FEEDBACK_INDEX_HTML);
 
   // Register common permissions for chrome-untrusted:// pages.
   // TODO(https://crbug.com/1113568): Remove this after common permissions are
@@ -74,7 +75,8 @@ OSFeedbackUI::OSFeedbackUI(content::WebUI* web_ui)
   webui_allowlist->RegisterAutoGrantedPermission(
       untrusted_origin, ContentSettingsType::JAVASCRIPT);
 
-  helpContentProvider_ = std::make_unique<feedback::HelpContentProvider>();
+  helpContentProvider_ = std::make_unique<feedback::HelpContentProvider>(
+      feedback_delegate_->GetApplicationLocale(), browser_context);
 }
 
 OSFeedbackUI::~OSFeedbackUI() = default;
@@ -85,4 +87,5 @@ void OSFeedbackUI::BindInterface(
   helpContentProvider_->BindInterface(std::move(receiver));
 }
 
+WEB_UI_CONTROLLER_TYPE_IMPL(OSFeedbackUI)
 }  // namespace ash

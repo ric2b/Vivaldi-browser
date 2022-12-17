@@ -158,7 +158,7 @@ MIMETypeRegistry::SupportsType MIMETypeRegistry::SupportsMediaMIMEType(
     const String& codecs) {
   const std::string ascii_mime_type = ToLowerASCIIOrEmpty(mime_type);
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && defined(OS_MAC)
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && BUILDFLAG(IS_MAC)
   // Some containers are known to be partially supported.
   if (ascii_mime_type == "video/quicktime")
     return kMayBeSupported;

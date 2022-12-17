@@ -15,6 +15,7 @@
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/frame/browser_frame.h"
@@ -82,10 +83,6 @@
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
 namespace {
-
-// Color for the window title text.
-constexpr SkColor kNormalWindowTitleTextColor = SkColorSetRGB(40, 40, 40);
-constexpr SkColor kIncognitoWindowTitleTextColor = SK_ColorWHITE;
 
 // The indicator for teleported windows has 8 DIPs before and below it.
 constexpr int kProfileIndicatorPadding = 8;
@@ -186,18 +183,15 @@ void BrowserNonClientFrameViewChromeOS::Init() {
   if (frame()->ShouldDrawFrameHeader())
     frame_header_ = CreateFrameHeader();
 
-  if (browser_view()->GetIsWebAppType() && !browser->is_type_app_popup()) {
+  if (browser_view()->GetIsWebAppType() &&
+      (!browser->is_type_app_popup() ||
+       browser_view()->AppUsesWindowControlsOverlay())) {
     // Add the container for extra web app buttons (e.g app menu button).
     set_web_app_frame_toolbar(AddChildView(
         std::make_unique<WebAppFrameToolbarView>(frame(), browser_view())));
   }
 
   browser_view()->immersive_mode_controller()->AddObserver(this);
-
-  // Init caption button's WCO state on creation.
-  caption_button_container_->OnWindowControlsOverlayEnabledChanged(
-      browser_view()->IsWindowControlsOverlayEnabled(),
-      GetFrameHeaderColor(browser_view()->IsActive()));
 }
 
 gfx::Rect BrowserNonClientFrameViewChromeOS::GetBoundsForTabStripRegion(
@@ -502,7 +496,9 @@ gfx::Size BrowserNonClientFrameViewChromeOS::GetMinimumSize() const {
 
 void BrowserNonClientFrameViewChromeOS::OnThemeChanged() {
   OnUpdateFrameColor();
-  OnUpdateBackgroundColor();
+  caption_button_container_->OnWindowControlsOverlayEnabledChanged(
+      browser_view()->IsWindowControlsOverlayEnabled(),
+      GetFrameHeaderColor(browser_view()->IsActive()));
   BrowserNonClientFrameView::OnThemeChanged();
   MaybeAnimateThemeChanged();
 }
@@ -544,9 +540,7 @@ views::View::Views BrowserNonClientFrameViewChromeOS::GetChildrenInZOrder() {
 }
 
 SkColor BrowserNonClientFrameViewChromeOS::GetTitleColor() {
-  return browser_view()->GetRegularOrGuestSession()
-             ? kNormalWindowTitleTextColor
-             : kIncognitoWindowTitleTextColor;
+  return GetColorProvider()->GetColor(kColorCaptionForeground);
 }
 
 SkColor BrowserNonClientFrameViewChromeOS::GetFrameHeaderColor(bool active) {
@@ -939,38 +933,6 @@ bool BrowserNonClientFrameViewChromeOS::GetHideCaptionButtonsForFullscreen()
     return true;
 
   return immersive_controller->ShouldHideTopViews();
-}
-
-void BrowserNonClientFrameViewChromeOS::OnUpdateBackgroundColor() {
-  if (!browser_view())
-    return;
-
-  // If `browser` is not associated with a system web app, background color will
-  // be resolved from web contents and does not need to be overridden.
-  auto* browser = browser_view()->browser();
-  if (!browser || !web_app::IsSystemWebApp(browser))
-    return;
-
-  // If the system web app associated with the `browser` does not prefer the
-  // manifest background color, it will most likely be resolved from web
-  // contents and does not need to be overridden. Background color will fall
-  // back to the manifest background color in the event that web contents cannot
-  // resolve a background color.
-  auto* app_controller = browser->app_controller();
-  if (!app_controller->system_app()->PreferManifestBackgroundColor())
-    return;
-
-  auto* contents_web_view = browser_view()->contents_web_view();
-  if (!contents_web_view)
-    return;
-
-  // When a system web app prefers the manifest background color over web
-  // contents background color, it should be immediately overridden on theme
-  // changes. This circumvents a lack of synchronization with the `browser`
-  // frame header transition that would otherwise occur if we waited for web
-  // contents' background changed event to propagate back to native UI.
-  contents_web_view->SetBackgroundColorOverride(
-      app_controller->GetBackgroundColor());
 }
 
 void BrowserNonClientFrameViewChromeOS::OnUpdateFrameColor() {

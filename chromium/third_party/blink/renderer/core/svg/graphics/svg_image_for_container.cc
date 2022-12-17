@@ -41,6 +41,12 @@ SVGImageForContainer::SVGImageForContainer(
   image_->SetPreferredColorScheme(preferred_color_scheme);
 }
 
+SVGImageForContainer::SVGImageForContainer(SVGImage* image,
+                                           const gfx::SizeF& container_size,
+                                           float zoom,
+                                           const KURL& url)
+    : image_(image), container_size_(container_size), zoom_(zoom), url_(url) {}
+
 void SVGImageForContainer::Draw(cc::PaintCanvas* canvas,
                                 const cc::PaintFlags& flags,
                                 const gfx::RectF& dst_rect,
@@ -64,7 +70,6 @@ void SVGImageForContainer::DrawPattern(GraphicsContext& context,
 
 bool SVGImageForContainer::ApplyShader(cc::PaintFlags& flags,
                                        const SkMatrix& local_matrix,
-                                       const gfx::RectF& dst_rect,
                                        const gfx::RectF& src_rect,
                                        const ImageDrawOptions& draw_options) {
   const SVGImage::DrawInfo draw_info(container_size_, zoom_, url_,

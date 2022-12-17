@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {CurrentWallpaper, FetchGooglePhotosAlbumsResponse, FetchGooglePhotosPhotosResponse, GooglePhotosAlbum, GooglePhotosPhoto, OnlineImageType, WallpaperCollection, WallpaperImage, WallpaperLayout, WallpaperObserverInterface, WallpaperObserverRemote, WallpaperProviderInterface, WallpaperType} from 'chrome://personalization/trusted/personalization_app.mojom-webui.js';
+import {CurrentWallpaper, FetchGooglePhotosAlbumsResponse, FetchGooglePhotosPhotosResponse, GooglePhotosAlbum, GooglePhotosEnablementState, GooglePhotosPhoto, OnlineImageType, WallpaperCollection, WallpaperImage, WallpaperLayout, WallpaperObserverInterface, WallpaperObserverRemote, WallpaperProviderInterface, WallpaperType} from 'chrome://personalization/trusted/personalization_app.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {FilePath} from 'chrome://resources/mojo/mojo/public/mojom/base/file_path.mojom-webui.js';
 import {assertTrue} from 'chrome://webui-test/chai_assert.js';
@@ -14,10 +14,12 @@ export class TestWallpaperProvider extends
   constructor() {
     super([
       'makeTransparent',
+      'makeOpaque',
       'fetchCollections',
       'fetchImagesForCollection',
       'fetchGooglePhotosAlbums',
       'fetchGooglePhotosCount',
+      'fetchGooglePhotosEnabled',
       'fetchGooglePhotosPhotos',
       'getLocalImages',
       'getLocalImageThumbnail',
@@ -25,7 +27,7 @@ export class TestWallpaperProvider extends
       'selectGooglePhotosPhoto',
       'selectWallpaper',
       'selectLocalImage',
-      'setCustomWallpaperLayout',
+      'setCurrentWallpaperLayout',
       'setDailyRefreshCollectionId',
       'getDailyRefreshCollectionId',
       'updateDailyRefreshWallpaper',
@@ -41,12 +43,20 @@ export class TestWallpaperProvider extends
       {
         id: 'id_0',
         name: 'zero',
-        preview: {url: 'https://collections.googleusercontent.com/0'}
+        previews: [{url: 'https://collections.googleusercontent.com/0'}]
       },
       {
         id: 'id_1',
         name: 'one',
-        preview: {url: 'https://collections.googleusercontent.com/1'}
+        previews: [{url: 'https://collections.googleusercontent.com/1'}]
+      },
+      {
+        id: 'id_2',
+        name: 'dark-light',
+        previews: [
+          {url: 'https://collections.googleusercontent.com/2'},
+          {url: 'https://collections.googleusercontent.com/3'}
+        ]
       },
     ];
 
@@ -96,10 +106,16 @@ export class TestWallpaperProvider extends
   private collections_: WallpaperCollection[]|null;
   private images_: WallpaperImage[]|null;
   private googlePhotosAlbums_: GooglePhotosAlbum[]|undefined = [];
+  private googlePhotosAlbumsResumeToken_: string|undefined;
   private googlePhotosCount_: number = 0;
+  private googlePhotosEnabled_: GooglePhotosEnablementState =
+      GooglePhotosEnablementState.kEnabled;
   private googlePhotosPhotos_: GooglePhotosPhoto[]|undefined = [];
+  private googlePhotosPhotosResumeToken_: string|undefined;
   private googlePhotosPhotosByAlbumId_:
       Record<string, GooglePhotosPhoto[]|undefined> = {};
+  private googlePhotosPhotosByAlbumIdResumeTokens_:
+      Record<string, string|undefined> = {};
   localImages: FilePath[]|null;
   localImageData: Record<string, string>;
   currentWallpaper: CurrentWallpaper;
@@ -122,6 +138,10 @@ export class TestWallpaperProvider extends
     this.methodCalled('makeTransparent');
   }
 
+  makeOpaque() {
+    this.methodCalled('makeOpaque');
+  }
+
   fetchCollections() {
     this.methodCalled('fetchCollections');
     return Promise.resolve({collections: this.collections_});
@@ -137,14 +157,14 @@ export class TestWallpaperProvider extends
     return Promise.resolve({images: this.images_});
   }
 
-  fetchGooglePhotosAlbums() {
-    this.methodCalled('fetchGooglePhotosAlbums');
+  fetchGooglePhotosAlbums(resumeToken: string|null) {
+    this.methodCalled('fetchGooglePhotosAlbums', resumeToken);
     const response = new FetchGooglePhotosAlbumsResponse();
     response.albums =
         loadTimeData.getBoolean('isGooglePhotosIntegrationEnabled') ?
         this.googlePhotosAlbums_ :
         undefined;
-    response.resumeToken = undefined;
+    response.resumeToken = this.googlePhotosAlbumsResumeToken_;
     return Promise.resolve({response});
   }
 
@@ -156,15 +176,26 @@ export class TestWallpaperProvider extends
     return Promise.resolve({count});
   }
 
-  fetchGooglePhotosPhotos(itemId: string, albumId: string) {
-    this.methodCalled('fetchGooglePhotosPhotos', itemId, albumId);
+  fetchGooglePhotosEnabled() {
+    this.methodCalled('fetchGooglePhotosEnabled');
+    const state = loadTimeData.getBoolean('isGooglePhotosIntegrationEnabled') ?
+        this.googlePhotosEnabled_ :
+        GooglePhotosEnablementState.kError;
+    return Promise.resolve({state});
+  }
+
+  fetchGooglePhotosPhotos(
+      itemId: string, albumId: string, resumeToken: string) {
+    this.methodCalled('fetchGooglePhotosPhotos', itemId, albumId, resumeToken);
     const response = new FetchGooglePhotosPhotosResponse();
     response.photos =
         loadTimeData.getBoolean('isGooglePhotosIntegrationEnabled') ?
         albumId ? this.googlePhotosPhotosByAlbumId_[albumId] :
                   this.googlePhotosPhotos_ :
         undefined;
-    response.resumeToken = undefined;
+    response.resumeToken = albumId ?
+        this.googlePhotosPhotosByAlbumIdResumeTokens_[albumId] :
+        this.googlePhotosPhotosResumeToken_;
     return Promise.resolve({response});
   }
 
@@ -202,8 +233,8 @@ export class TestWallpaperProvider extends
     return Promise.resolve({success: this.selectLocalImageResponse});
   }
 
-  setCustomWallpaperLayout(layout: WallpaperLayout) {
-    this.methodCalled('setCustomWallpaperLayout', layout);
+  setCurrentWallpaperLayout(layout: WallpaperLayout) {
+    this.methodCalled('setCurrentWallpaperLayout', layout);
   }
 
   setDailyRefreshCollectionId(collectionId: string) {
@@ -245,17 +276,37 @@ export class TestWallpaperProvider extends
     this.googlePhotosAlbums_ = googlePhotosAlbums;
   }
 
+  setGooglePhotosAlbumsResumeToken(googlePhotosAlbumsResumeToken: string|
+                                   undefined) {
+    this.googlePhotosAlbumsResumeToken_ = googlePhotosAlbumsResumeToken;
+  }
+
   setGooglePhotosCount(googlePhotosCount: number) {
     this.googlePhotosCount_ = googlePhotosCount;
+  }
+
+  setGooglePhotosEnabled(googlePhotosEnabled: GooglePhotosEnablementState) {
+    this.googlePhotosEnabled_ = googlePhotosEnabled;
   }
 
   setGooglePhotosPhotos(googlePhotosPhotos: GooglePhotosPhoto[]|undefined) {
     this.googlePhotosPhotos_ = googlePhotosPhotos;
   }
 
+  setGooglePhotosPhotosResumeToken(googlePhotosPhotosResumeToken: string|
+                                   undefined) {
+    this.googlePhotosPhotosResumeToken_ = googlePhotosPhotosResumeToken;
+  }
+
   setGooglePhotosPhotosByAlbumId(
       albumId: string, googlePhotosPhotos: GooglePhotosPhoto[]|undefined) {
     this.googlePhotosPhotosByAlbumId_[albumId] = googlePhotosPhotos;
+  }
+
+  setGooglePhotosPhotosByAlbumIdResumeToken(
+      albumId: string, googlePhotosPhotosResumeToken: string|undefined) {
+    this.googlePhotosPhotosByAlbumIdResumeTokens_[albumId] =
+        googlePhotosPhotosResumeToken;
   }
 
   setImages(images: WallpaperImage[]) {

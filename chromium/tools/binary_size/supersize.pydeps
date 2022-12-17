@@ -51,6 +51,7 @@ libsupersize/console.py
 libsupersize/data_quality.py
 libsupersize/demangle.py
 libsupersize/describe.py
+libsupersize/dex_disassembly.py
 libsupersize/diff.py
 libsupersize/dir_metadata.py
 libsupersize/dwarfdump.py
@@ -62,6 +63,7 @@ libsupersize/main.py
 libsupersize/match_util.py
 libsupersize/models.py
 libsupersize/native.py
+libsupersize/native_disassembly.py
 libsupersize/ninja_parser.py
 libsupersize/nm.py
 libsupersize/obj_analyzer.py

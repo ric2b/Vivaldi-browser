@@ -11,6 +11,7 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/task/bind_post_task.h"
 #include "base/time/default_tick_clock.h"
+#include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "media/base/media_switches.h"
@@ -358,8 +359,8 @@ bool VideoFrameCompositor::ProcessNewFrame(
     bool repaint_duplicate_frame) {
   DCHECK(task_runner_->BelongsToCurrentThread());
 
-  if (frame && GetCurrentFrame() && !repaint_duplicate_frame &&
-      frame->unique_id() == GetCurrentFrame()->unique_id()) {
+  if (!frame || (GetCurrentFrame() && !repaint_duplicate_frame &&
+                 frame->unique_id() == GetCurrentFrame()->unique_id())) {
     return false;
   }
 

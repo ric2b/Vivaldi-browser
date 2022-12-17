@@ -3,11 +3,11 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/signin/chrome_signin_client.h"
+
 #include <memory>
 #include <utility>
 
 #include "base/bind.h"
-#include "base/cxx17_backports.h"
 #include "base/memory/raw_ptr.h"
 #include "base/notreached.h"
 #include "base/run_loop.h"
@@ -286,6 +286,9 @@ bool IsSignoutDisallowedByPolicy(
       // PrimaryAccountManager won't actually invoke PreSignOut in this case,
       // thus it is fine for ChromeSigninClient to not have any special-casing.
       return true;
+    case signin_metrics::ProfileSignout::
+        USER_CLICKED_REVOKE_SYNC_CONSENT_SETTINGS:
+      return false;
     case signin_metrics::ProfileSignout::NUM_PROFILE_SIGNOUT_METRICS:
       NOTREACHED();
       return false;
@@ -422,8 +425,10 @@ const signin_metrics::ProfileSignout kSignoutSources[] = {
     signin_metrics::ProfileSignout::ACCOUNT_ID_MIGRATION,
     signin_metrics::ProfileSignout::
         IOS_ACCOUNT_REMOVED_FROM_DEVICE_AFTER_RESTORE,
+    signin_metrics::ProfileSignout::USER_CLICKED_REVOKE_SYNC_CONSENT_SETTINGS,
+
 };
-static_assert(base::size(kSignoutSources) ==
+static_assert(std::size(kSignoutSources) ==
                   signin_metrics::ProfileSignout::NUM_PROFILE_SIGNOUT_METRICS,
               "kSignoutSources should enumerate all ProfileSignout values");
 

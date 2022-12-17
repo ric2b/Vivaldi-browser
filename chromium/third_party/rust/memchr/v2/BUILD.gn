@@ -15,9 +15,13 @@ cargo_crate("lib") {
   crate_root = "crate/src/lib.rs"
 
   # Unit tests skipped. Generate with --with-tests to include them.
-  skip_unit_tests = true
+  build_native_rust_unit_tests = false
   sources = [ "crate/src/lib.rs" ]
   edition = "2018"
+  cargo_pkg_version = "2.4.1"
+  cargo_pkg_authors = "Andrew Gallant <jamslam@gmail.com>, bluss"
+  cargo_pkg_name = "memchr"
+  cargo_pkg_description = "Safe interface to memchr."
   features = [ "std" ]
   build_root = "crate/build.rs"
   build_sources = [ "crate/build.rs" ]

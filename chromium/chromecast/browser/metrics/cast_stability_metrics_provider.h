@@ -41,7 +41,7 @@ class CastStabilityMetricsProvider : public ::metrics::MetricsProvider,
 
   ~CastStabilityMetricsProvider() override = default;
 
-  // metrics::MetricsDataProvider implementation:
+  // metrics::MetricsProvider implementation:
   void OnRecordingEnabled() override;
   void OnRecordingDisabled() override;
   void ProvideStabilityMetrics(
@@ -60,9 +60,6 @@ class CastStabilityMetricsProvider : public ::metrics::MetricsProvider,
   void LogRendererCrash(content::RenderProcessHost* host,
                         base::TerminationStatus status,
                         int exit_code);
-
-  // Records a renderer process hang.
-  void LogRendererHang();
 
   // Increments the specified pref by 1.
   void IncrementPrefValue(const char* path);

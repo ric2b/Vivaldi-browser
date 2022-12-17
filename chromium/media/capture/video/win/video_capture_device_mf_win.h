@@ -21,6 +21,7 @@
 #include "base/callback_forward.h"
 #include "base/containers/queue.h"
 #include "base/sequence_checker.h"
+#include "base/synchronization/waitable_event.h"
 #include "media/base/win/dxgi_device_manager.h"
 #include "media/capture/capture_export.h"
 #include "media/capture/video/video_capture_device.h"
@@ -75,8 +76,7 @@ class CAPTURE_EXPORT VideoCaptureDeviceMFWin : public VideoCaptureDevice {
   void GetPhotoState(GetPhotoStateCallback callback) override;
   void SetPhotoOptions(mojom::PhotoSettingsPtr settings,
                        SetPhotoOptionsCallback callback) override;
-  void OnUtilizationReport(int frame_feedback_id,
-                           media::VideoCaptureFeedback feedback) override;
+  void OnUtilizationReport(media::VideoCaptureFeedback feedback) override;
 
   // Captured new video data.
   void OnIncomingCapturedData(IMFMediaBuffer* buffer,

@@ -142,6 +142,11 @@
     "dependencies": [ "permission:savedpasswords" ],
     "contexts": [ "blessed_extension" ]
   },
+  "searchEngines": {
+    "vivaldi": true,
+    "dependencies": [ "permission:searchEngines" ],
+    "contexts": [ "blessed_extension" ]
+  },
   "sessionsPrivate": {
     "vivaldi": true,
     "dependencies": [ "permission:sessionsPrivate" ],

@@ -17,7 +17,8 @@
 #include "third_party/blink/renderer/modules/file_system_access/file_system_access_file_delegate.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
-#include "third_party/blink/renderer/platform/wtf/cross_thread_copier.h"
+#include "third_party/blink/renderer/platform/wtf/cross_thread_copier_base.h"
+#include "third_party/blink/renderer/platform/wtf/cross_thread_copier_mojo.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/wtf/wtf.h"
 #include "third_party/blink/renderer/platform/wtf/wtf_size_t.h"
@@ -154,6 +155,7 @@ base::FileErrorOr<int> FileSystemAccessIncognitoFileDelegate::Write(
 
 void FileSystemAccessIncognitoFileDelegate::GetLength(
     base::OnceCallback<void(base::FileErrorOr<int64_t>)> callback) {
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   mojo_ptr_->GetLength(WTF::Bind(
       [](base::OnceCallback<void(base::FileErrorOr<int64_t>)> callback,
          base::File::Error file_error, uint64_t length) {
@@ -165,7 +167,7 @@ void FileSystemAccessIncognitoFileDelegate::GetLength(
 
 void FileSystemAccessIncognitoFileDelegate::SetLength(
     int64_t length,
-    base::OnceCallback<void(bool)> callback) {
+    base::OnceCallback<void(base::File::Error)> callback) {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
   if (length < 0) {
     // This method is expected to finish asynchronously, so post a task to the
@@ -192,9 +194,9 @@ void FileSystemAccessIncognitoFileDelegate::Flush(
 }
 
 void FileSystemAccessIncognitoFileDelegate::Close(base::OnceClosure callback) {
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   mojo_ptr_.reset();
 
-  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   task_runner_->PostTask(FROM_HERE, std::move(callback));
 }
 

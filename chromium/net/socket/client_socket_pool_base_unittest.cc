@@ -2,10 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/memory/raw_ptr.h"
-#include "net/socket/transport_client_socket_pool.h"
-
 #include <stdint.h>
+
 #include <utility>
 #include <vector>
 
@@ -13,8 +11,8 @@
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/check_op.h"
-#include "base/cxx17_backports.h"
 #include "base/location.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/notreached.h"
@@ -25,6 +23,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "base/values.h"
 #include "net/base/features.h"
 #include "net/base/host_port_pair.h"
@@ -57,6 +56,7 @@
 #include "net/socket/socket_test_util.h"
 #include "net/socket/ssl_client_socket.h"
 #include "net/socket/stream_socket.h"
+#include "net/socket/transport_client_socket_pool.h"
 #include "net/socket/transport_connect_job.h"
 #include "net/ssl/ssl_cert_request_info.h"
 #include "net/test/gtest_util.h"
@@ -1277,7 +1277,7 @@ TEST_F(ClientSocketPoolBaseTest, StallAndThenCancelAndTriggerAvailableSocket) {
                   pool_.get(), NetLogWithSource()));
 
   ClientSocketHandle handles[4];
-  for (size_t i = 0; i < base::size(handles); ++i) {
+  for (size_t i = 0; i < std::size(handles); ++i) {
     EXPECT_EQ(ERR_IO_PENDING,
               handles[i].Init(
                   TestGroupId("b"), params_, absl::nullopt, DEFAULT_PRIORITY,
@@ -1289,7 +1289,7 @@ TEST_F(ClientSocketPoolBaseTest, StallAndThenCancelAndTriggerAvailableSocket) {
   // One will be stalled, cancel all the handles now.
   // This should hit the OnAvailableSocketSlot() code where we previously had
   // stalled groups, but no longer have any.
-  for (size_t i = 0; i < base::size(handles); ++i)
+  for (size_t i = 0; i < std::size(handles); ++i)
     handles[i].Reset();
 }
 

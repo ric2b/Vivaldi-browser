@@ -30,9 +30,12 @@
 
 #include <algorithm>
 #include <ostream>
+
+#include "base/auto_reset.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/input/web_menu_source_type.h"
 #include "third_party/blink/public/mojom/frame/user_activation_notification_type.mojom-blink.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink.h"
@@ -52,6 +55,7 @@
 #include "third_party/blink/renderer/core/fullscreen/fullscreen.h"
 #include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
 #include "third_party/blink/renderer/core/html/custom/element_internals.h"
+#include "third_party/blink/renderer/core/html/fenced_frame/html_fenced_frame_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_select_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_text_area_element.h"
@@ -636,6 +640,26 @@ void AXObject::Init(AXObject* parent) {
     AXObjectCache().MaybeNewRelationTarget(*GetNode(), this);
 
   UpdateCachedAttributeValuesIfNeeded(false);
+
+  // The recently introduced CHECK below fails for shadowDOM fenced
+  // frame, so bypass the CHECK below if it's a shadowDOM fenced frame.
+  // TODO(crbug.com/1316348): see if AXNodeObject::AddNodeChildren() needs to
+  // change for fenced frames similar to iframes and whether this change would
+  // then still be necessary.
+  bool is_shadow_dom_fenced_frame = false;
+  if (parent_ && parent_->GetNode()) {
+    is_shadow_dom_fenced_frame =
+        parent_ && blink::features::IsFencedFramesEnabled() &&
+        blink::features::IsFencedFramesShadowDOMBased() &&
+        IsA<HTMLFencedFrameElement>(*parent_->GetNode());
+  }
+
+  SANITIZER_CHECK(!parent_ || is_shadow_dom_fenced_frame ||
+                  parent_->RoleValue() != ax::mojom::blink::Role::kIframe ||
+                  RoleValue() == ax::mojom::blink::Role::kDocument)
+      << "An iframe can only have a document child."
+      << "\n* Child = " << ToString(true, true)
+      << "\n* Parent =  " << parent_->ToString(true, true);
 }
 
 void AXObject::Detach() {
@@ -723,6 +747,7 @@ void AXObject::SetParent(AXObject* new_parent) const {
     // Ideally we will also ensure |this| is in the parent's children now, so
     // that ClearChildren() can later find the child to detach from the parent.
   }
+
 #endif
   parent_ = new_parent;
 }
@@ -747,6 +772,13 @@ void AXObject::RepairMissingParent() const {
   DCHECK(IsMissingParent());
 
   SetParent(ComputeParent());
+
+  SANITIZER_CHECK(!parent_ ||
+                  parent_->RoleValue() != ax::mojom::blink::Role::kIframe ||
+                  RoleValue() == ax::mojom::blink::Role::kDocument)
+      << "An iframe can only have a document child."
+      << "\n* Child = " << ToString(true, true)
+      << "\n* Parent =  " << parent_->ToString(true, true);
 }
 
 // In many cases, ComputeParent() is not called, because the parent adding
@@ -1459,6 +1491,16 @@ void AXObject::SerializeOtherScreenReaderAttributes(
     ui::AXNodeData* node_data) const {
   DCHECK_NE(node_data->role, ax::mojom::blink::Role::kUnknown);
   DCHECK_NE(node_data->role, ax::mojom::blink::Role::kNone);
+
+  if (node_data->role == ax::mojom::blink::Role::kFigure) {
+    AXObject* fig_caption = GetChildFigcaption();
+    if (fig_caption) {
+      std::vector<int32_t> ids;
+      ids.push_back(GetChildFigcaption()->AXObjectID());
+      node_data->AddIntListAttribute(
+          ax::mojom::blink::IntListAttribute::kDetailsIds, ids);
+    }
+  }
 
   if (ui::IsPlatformDocument(node_data->role) && !IsLoaded())
     node_data->AddBoolAttribute(ax::mojom::blink::BoolAttribute::kBusy, true);
@@ -2592,6 +2634,14 @@ bool AXObject::ComputeIsInertViaStyle(const ComputedStyle* style,
       return true;
     } else if (IsBlockedByAriaModalDialog(ignored_reasons)) {
       return true;
+    } else if (const LocalFrame* frame = GetNode()->GetDocument().GetFrame()) {
+      // Inert frames don't expose the inertness to the style of their contents,
+      // but accessibility should consider them inert anyways.
+      if (frame->IsInert()) {
+        if (ignored_reasons)
+          ignored_reasons->push_back(IgnoredReason(kAXInertSubtree));
+        return true;
+      }
     }
   } else {
     // Either GetNode() is null, or it's locked by content-visibility, or we
@@ -3671,7 +3721,7 @@ String AXObject::AriaTextAlternative(
         text_alternative = TextFromElements(
             true, visited_copy, elements_from_attribute, related_objects);
         if (!ids.IsEmpty())
-          AXObjectCache().UpdateReverseRelations(this, ids);
+          AXObjectCache().UpdateReverseTextRelations(this, ids);
         if (!text_alternative.IsNull()) {
           if (name_sources) {
             NameSource& source = name_sources->back();
@@ -3853,6 +3903,8 @@ AccessibilityOrientation AXObject::Orientation() const {
   // horizontal to undefined.
   return kAccessibilityOrientationUndefined;
 }
+
+AXObject* AXObject::GetChildFigcaption() const { return nullptr; }
 
 void AXObject::LoadInlineTextBoxes() {}
 
@@ -4875,6 +4927,10 @@ void AXObject::ClearChildren() const {
   CHECK(!is_adding_children_)
       << "Should not attempt to simultaneously add and clear children on: "
       << ToString(true, true);
+  CHECK(!is_computing_text_from_descendants_)
+      << "Should not attempt to simultaneously compute text from descendants "
+         "and clear children on: "
+      << ToString(true, true);
 #endif
 
   for (const auto& child : children_) {
@@ -5504,6 +5560,7 @@ bool AXObject::PerformAction(const ui::AXActionData& action_data) {
     case ax::mojom::blink::Action::kLoadInlineTextBoxes:
     case ax::mojom::blink::Action::kNone:
     case ax::mojom::blink::Action::kReplaceSelectedText:
+    case ax::mojom::blink::Action::kRunScreenAi:
     case ax::mojom::blink::Action::kScrollBackward:
     case ax::mojom::blink::Action::kScrollDown:
     case ax::mojom::blink::Action::kScrollForward:
@@ -6003,9 +6060,25 @@ bool AXObject::SupportsNameFromContents(bool recursive) const {
       result = false;
       break;
 
+    // ----- role="row" -------
+    // Spec says we should always expose the name on rows,
+    // but for performance reasons we only do it
+    // if the row might receive focus.
+    case ax::mojom::blink::Role::kRow:
+      return CanSetFocusAttribute();
+
     // ----- Conditional: contribute to ancestor only, unless focusable -------
     // Some objects can contribute their contents to ancestor names, but
     // only have their own name if they are focusable
+    case ax::mojom::blink::Role::kGenericContainer:
+      // The <body> and <html> element can pass information up to the the root
+      // for a portal name.
+      if (IsA<HTMLBodyElement>(GetNode()) ||
+          GetNode() == GetDocument()->documentElement()) {
+        return recursive && GetDocument()->GetPage() &&
+               GetDocument()->GetPage()->InsidePortal();
+      }
+      [[fallthrough]];
     case ax::mojom::blink::Role::kAbbr:
     case ax::mojom::blink::Role::kCanvas:
     case ax::mojom::blink::Role::kCaption:
@@ -6021,7 +6094,6 @@ bool AXObject::SupportsNameFromContents(bool recursive) const {
     case ax::mojom::blink::Role::kFigcaption:
     case ax::mojom::blink::Role::kFooter:
     case ax::mojom::blink::Role::kFooterAsNonLandmark:
-    case ax::mojom::blink::Role::kGenericContainer:
     case ax::mojom::blink::Role::kHeaderAsNonLandmark:
     case ax::mojom::blink::Role::kInlineTextBox:
     case ax::mojom::blink::Role::kLabelText:
@@ -6036,10 +6108,6 @@ bool AXObject::SupportsNameFromContents(bool recursive) const {
     case ax::mojom::blink::Role::kParagraph:
     case ax::mojom::blink::Role::kPre:
     case ax::mojom::blink::Role::kRegion:
-    // Spec says we should always expose the name on rows,
-    // but for performance reasons we only do it
-    // if the row might receive focus
-    case ax::mojom::blink::Role::kRow:
     case ax::mojom::blink::Role::kRuby:
     case ax::mojom::blink::Role::kSection:
     case ax::mojom::blink::Role::kStrong:
@@ -6050,7 +6118,7 @@ bool AXObject::SupportsNameFromContents(bool recursive) const {
         // Use contents if part of a recursive name computation.
         result = true;
       } else {
-        // Use contents if focusable, so that there is a name in the case
+        // Use contents if tabbable, so that there is a name in the case
         // where the author mistakenly forgot to provide one.
         // Exceptions:
         // 1.Elements with contenteditable, where using the contents as a name
@@ -6065,10 +6133,15 @@ bool AXObject::SupportsNameFromContents(bool recursive) const {
         result = false;
         if (!IsEditable() && !GetAOMPropertyOrARIAAttribute(
                                  AOMRelationProperty::kActiveDescendant)) {
-          bool is_focusable_scrollable =
-              RuntimeEnabledFeatures::KeyboardFocusableScrollersEnabled() &&
-              IsUserScrollable();
-          result = is_focusable_scrollable || CanSetFocusAttribute();
+          if (RuntimeEnabledFeatures::KeyboardFocusableScrollersEnabled() &&
+              IsUserScrollable()) {
+            return true;
+          }
+          // Don't repair name from contents to focusable elements unless
+          // tabbable, because providing a repaired accessible name often
+          // leads to redundant verbalizations.
+          return GetElement() && GetElement()->tabIndex() >= 0 &&
+                 CanSetFocusAttribute();
         }
       }
       break;

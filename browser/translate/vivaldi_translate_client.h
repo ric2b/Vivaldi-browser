@@ -19,6 +19,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "extensions/buildflags/buildflags.h"
+
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/schema/tabs_private.h"
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
@@ -110,7 +111,7 @@ class VivaldiTranslateClient
   void OnLanguageDetermined(
       const translate::LanguageDetectionDetails& details) override;
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   std::unique_ptr<infobars::InfoBar> CreateInfoBar(
       std::unique_ptr<translate::TranslateInfoBarDelegate> delegate)
       const override;
@@ -137,7 +138,7 @@ class VivaldiTranslateClient
       per_frame_translate_driver_;
   std::unique_ptr<translate::TranslateManager> translate_manager_;
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   // Whether to trigger a manual translation when ready.
   // See ChromeTranslateClient::ManualTranslateOnReady
   bool manual_translate_on_ready_ = false;

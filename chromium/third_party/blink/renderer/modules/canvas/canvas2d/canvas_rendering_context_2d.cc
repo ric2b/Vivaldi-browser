@@ -62,6 +62,7 @@
 #include "third_party/blink/renderer/core/layout/layout_theme.h"
 #include "third_party/blink/renderer/core/scroll/scroll_alignment.h"
 #include "third_party/blink/renderer/core/typed_arrays/array_buffer/array_buffer_contents.h"
+#include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_formatted_text.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_style.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/path_2d.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
@@ -232,15 +233,8 @@ void CanvasRenderingContext2D::DidSetSurfaceSize() {
   DCHECK(context_lost_mode_ != kNotLostContext && !IsPaintable());
 
   if (CanCreateCanvas2dResourceProvider()) {
-    if (RuntimeEnabledFeatures::NewCanvas2DAPIEnabled(
-            canvas()->GetTopExecutionContext())) {
-      dispatch_context_restored_event_timer_.StartOneShot(base::TimeDelta(),
-                                                          FROM_HERE);
-    } else {
-      // legacy synchronous context restoration.
-      Reset();
-      context_lost_mode_ = kNotLostContext;
-    }
+    dispatch_context_restored_event_timer_.StartOneShot(base::TimeDelta(),
+                                                        FROM_HERE);
   }
 }
 
@@ -932,7 +926,8 @@ void CanvasRenderingContext2D::fillFormattedText(
     CanvasFormattedText* formatted_text,
     double x,
     double y,
-    double wrap_width) {
+    double wrap_width,
+    double height) {
   if (!formatted_text)
     return;
   // TODO(crbug.com/1234113): Instrument new canvas APIs.
@@ -944,7 +939,7 @@ void CanvasRenderingContext2D::fillFormattedText(
   gfx::RectF bounds;
   sk_sp<PaintRecord> recording = formatted_text->PaintFormattedText(
       canvas()->GetDocument(), GetState().GetFontDescription(), x, y,
-      wrap_width, bounds);
+      wrap_width, height, bounds);
   Draw<OverdrawOp::kNone>(
       [recording](cc::PaintCanvas* c,
                   const cc::PaintFlags* flags)  // draw lambda
@@ -1105,9 +1100,7 @@ CanvasRenderingContext2D::getContextAttributes() const {
   if (RuntimeEnabledFeatures::CanvasColorManagementV2Enabled())
     settings->setPixelFormat(color_params_.GetPixelFormatAsString());
   settings->setDesynchronized(Host()->LowLatencyEnabled());
-  if (RuntimeEnabledFeatures::NewCanvas2DAPIEnabled(
-          canvas()->GetTopExecutionContext()))
-    settings->setWillReadFrequently(CreationAttributes().will_read_frequently);
+  settings->setWillReadFrequently(CreationAttributes().will_read_frequently);
   return settings;
 }
 

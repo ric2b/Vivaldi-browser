@@ -7,6 +7,8 @@
 #include "base/command_line.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
+#include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h"
 #include "chrome/browser/ui/browser.h"
@@ -19,8 +21,12 @@
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_action.h"
 #include "extensions/browser/extension_action_manager.h"
+#include "extensions/browser/extension_function_histogram_value.h"
 #include "extensions/browser/extension_host_test_helper.h"
+#include "extensions/browser/extension_util.h"
 #include "extensions/browser/process_manager.h"
+#include "extensions/common/extension_features.h"
+#include "extensions/common/features/feature_developer_mode_only.h"
 #include "extensions/common/mojom/view_type.mojom.h"
 #include "extensions/common/switches.h"
 #include "extensions/test/extension_test_message_listener.h"
@@ -52,6 +58,27 @@ class NativeBindingsApiTest : public ExtensionApiTest {
     ExtensionApiTest::SetUpOnMainThread();
     host_resolver()->AddRule("*", "127.0.0.1");
   }
+};
+
+// And end-to-end test for extension APIs restricted to developer mode using
+// native bindings.
+class NativeBindingsRestrictedToDeveloperModeApiTest
+    : public NativeBindingsApiTest {
+ public:
+  NativeBindingsRestrictedToDeveloperModeApiTest() {
+    scoped_feature_list_.InitAndEnableFeature(
+        extensions_features::kRestrictDeveloperModeAPIs);
+  }
+
+  NativeBindingsRestrictedToDeveloperModeApiTest(
+      const NativeBindingsRestrictedToDeveloperModeApiTest&) = delete;
+  NativeBindingsRestrictedToDeveloperModeApiTest& operator=(
+      const NativeBindingsRestrictedToDeveloperModeApiTest&) = delete;
+
+  ~NativeBindingsRestrictedToDeveloperModeApiTest() override = default;
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 IN_PROC_BROWSER_TEST_F(NativeBindingsApiTest, SimpleEndToEndTest) {
@@ -297,6 +324,7 @@ IN_PROC_BROWSER_TEST_F(NativeBindingsApiTest, APICreationFromNewContext) {
 // End-to-end test for promise support on bindings for MV3 extensions, using a
 // few tabs APIs. Also ensures callbacks still work for the API as expected.
 IN_PROC_BROWSER_TEST_F(NativeBindingsApiTest, PromiseBasedAPI) {
+  base::HistogramTester histogram_tester;
   ASSERT_TRUE(StartEmbeddedTestServer());
 
   TestExtensionDir test_dir;
@@ -435,12 +463,25 @@ IN_PROC_BROWSER_TEST_F(NativeBindingsApiTest, PromiseBasedAPI) {
   ResultCatcher catcher;
   ASSERT_TRUE(LoadExtension(test_dir.UnpackedPath()));
   ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
+
+  // The above test makes 2 calls to chrome.tabs.create, so check that those
+  // have been logged in the histograms we expect them to be.
+  EXPECT_EQ(2, histogram_tester.GetBucketCount(
+                   "Extensions.Functions.ExtensionCalls",
+                   functions::HistogramValue::TABS_CREATE));
+  EXPECT_EQ(2, histogram_tester.GetBucketCount(
+                   "Extensions.Functions.ExtensionServiceWorkerCalls",
+                   functions::HistogramValue::TABS_CREATE));
+  EXPECT_EQ(2, histogram_tester.GetBucketCount(
+                   "Extensions.Functions.ExtensionMV3Calls",
+                   functions::HistogramValue::TABS_CREATE));
 }
 
 // Tests that calling an API which supports promises using an MV2 extension does
 // not get a promise based return and still needs to use callbacks when
 // required.
 IN_PROC_BROWSER_TEST_F(NativeBindingsApiTest, MV2PromisesNotSupported) {
+  base::HistogramTester histogram_tester;
   ASSERT_TRUE(StartEmbeddedTestServer());
 
   TestExtensionDir test_dir;
@@ -530,6 +571,61 @@ IN_PROC_BROWSER_TEST_F(NativeBindingsApiTest, MV2PromisesNotSupported) {
   ResultCatcher catcher;
   ASSERT_TRUE(LoadExtension(test_dir.UnpackedPath()));
   ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
+
+  // The above test makes 2 calls to chrome.tabs.create, so check that those
+  // have been logged in the histograms we expect, but not to the histograms
+  // specifcally tracking service worker and MV3 calls.
+  EXPECT_EQ(2, histogram_tester.GetBucketCount(
+                   "Extensions.Functions.ExtensionCalls",
+                   functions::HistogramValue::TABS_CREATE));
+  EXPECT_EQ(0, histogram_tester.GetBucketCount(
+                   "Extensions.Functions.ExtensionServiceWorkerCalls",
+                   functions::HistogramValue::TABS_CREATE));
+  EXPECT_EQ(0, histogram_tester.GetBucketCount(
+                   "Extensions.Functions.ExtensionMV3Calls",
+                   functions::HistogramValue::TABS_CREATE));
+}
+
+IN_PROC_BROWSER_TEST_F(
+    NativeBindingsRestrictedToDeveloperModeApiTest,
+    DeveloperModeOnlyWithAPIPermissionUserIsNotInDeveloperMode) {
+  // With kDeveloperModeRestriction enabled, developer mode-only APIs
+  // should not be available if the user is not in developer mode.
+  SetCustomArg("not_in_developer_mode");
+  SetCurrentDeveloperMode(util::GetBrowserContextId(profile()), false);
+  ASSERT_TRUE(RunExtensionTest(
+      "native_bindings/developer_mode_only_with_api_permission"))
+      << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(
+    NativeBindingsRestrictedToDeveloperModeApiTest,
+    DeveloperModeOnlyWithAPIPermissionUserIsInDeveloperMode) {
+  // With kDeveloperModeRestriction enabled, developer mode-only APIs
+  // should be available if the user is in developer mode.
+  SetCustomArg("in_developer_mode");
+  SetCurrentDeveloperMode(util::GetBrowserContextId(profile()), true);
+  ASSERT_TRUE(RunExtensionTest(
+      "native_bindings/developer_mode_only_with_api_permission"))
+      << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(
+    NativeBindingsRestrictedToDeveloperModeApiTest,
+    DeveloperModeOnlyWithoutAPIPermissionUserIsNotInDeveloperMode) {
+  SetCurrentDeveloperMode(util::GetBrowserContextId(profile()), false);
+  ASSERT_TRUE(RunExtensionTest(
+      "native_bindings/developer_mode_only_without_api_permission"))
+      << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(
+    NativeBindingsRestrictedToDeveloperModeApiTest,
+    DeveloperModeOnlyWithoutAPIPermissionUserIsInDeveloperMode) {
+  SetCurrentDeveloperMode(util::GetBrowserContextId(profile()), true);
+  ASSERT_TRUE(RunExtensionTest(
+      "native_bindings/developer_mode_only_without_api_permission"))
+      << message_;
 }
 
 }  // namespace extensions

@@ -4,7 +4,6 @@
 
 #include "components/feature_engagement/public/feature_list.h"
 
-#include "base/cxx17_backports.h"
 #include "build/build_config.h"
 #include "components/feature_engagement/public/feature_constants.h"
 
@@ -62,7 +61,6 @@ const base::Feature* const kAllFeatures[] = {
     &kIPHFeatureNotificationGuideVoiceSearchUsedFeature,
     &kIPHFeedCardMenuFeature,
     &kIPHGenericAlwaysTriggerHelpUiFeature,
-    &kIPHHomepagePromoCardFeature,
     &kIPHIdentityDiscFeature,
     &kIPHInstanceSwitcherFeature,
     &kIPHKeyboardAccessoryAddressFillingFeature,
@@ -119,6 +117,7 @@ const base::Feature* const kAllFeatures[] = {
     &kIPHBadgedTranslateManualTriggerFeature,
     &kIPHDiscoverFeedHeaderFeature,
     &kIPHDefaultSiteViewFeature,
+    &kIPHPasswordSuggestionsFeature,
 #endif  // BUILDFLAG(IS_IOS)
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_LINUX) || \
     BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_FUCHSIA)
@@ -139,6 +138,7 @@ const base::Feature* const kAllFeatures[] = {
     &kIPHProfileSwitchFeature,
     &kIPHUpdatedConnectionSecurityIndicatorsFeature,
     &kIPHDesktopSharedHighlightingFeature,
+    &kIPHIntentChipFeature,
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_LINUX) ||
         // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_FUCHSIA)
 
@@ -155,7 +155,7 @@ const char kIPHDemoModeFeatureChoiceParam[] = "chosen_feature";
 
 std::vector<const base::Feature*> GetAllFeatures() {
   return std::vector<const base::Feature*>(
-      kAllFeatures, kAllFeatures + base::size(kAllFeatures));
+      kAllFeatures, kAllFeatures + std::size(kAllFeatures));
 }
 
 }  // namespace feature_engagement

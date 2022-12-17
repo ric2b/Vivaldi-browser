@@ -41,6 +41,14 @@ const base::Feature kForceShowContinueSection{
     "ForceShowContinueSection", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kSearchResultInlineIcon{"SearchResultInlineIcon",
                                             base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kDynamicSearchUpdateAnimation{
+    "DynamicSearchUpdateAnimation", base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kLauncherLacrosIntegration{
+    "LauncherLacrosIntegration", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kFeedbackOnContinueSectionRemove{
+    "FeedbackOnContinueSectionRemove", base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kCompactBubbleLauncher{"CompactBubbleLauncher",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
 bool IsAppRankerEnabled() {
   return base::FeatureList::IsEnabled(kEnableAppRanker);
@@ -110,12 +118,38 @@ bool IsSearchResultInlineIconEnabled() {
          base::FeatureList::IsEnabled(kSearchResultInlineIcon);
 }
 
+bool IsDynamicSearchUpdateAnimationEnabled() {
+  // Search update animations are only supported for categorical search.
+  return IsCategoricalSearchEnabled() &&
+         base::FeatureList::IsEnabled(kDynamicSearchUpdateAnimation);
+}
+
+bool IsLauncherLacrosIntegrationEnabled() {
+  return base::FeatureList::IsEnabled(chromeos::features::kLacrosSupport) &&
+         base::FeatureList::IsEnabled(kLauncherLacrosIntegration);
+}
+
 std::string CategoricalSearchType() {
   return GetFieldTrialParamValueByFeature(kCategoricalSearch, "ranking");
 }
 
+base::TimeDelta DynamicSearchUpdateAnimationDuration() {
+  int ms = base::GetFieldTrialParamByFeatureAsInt(
+      kDynamicSearchUpdateAnimation, "animation_time", /*default value =*/100);
+  return base::TimeDelta(base::Milliseconds(ms));
+}
+
 bool IsForceShowContinueSectionEnabled() {
   return base::FeatureList::IsEnabled(kForceShowContinueSection);
+}
+
+bool IsFeedbackOnContinueSectionRemoveEnabled() {
+  return ash::features::IsProductivityLauncherEnabled() &&
+         base::FeatureList::IsEnabled(kFeedbackOnContinueSectionRemove);
+}
+
+bool IsCompactBubbleLauncherEnabled() {
+  return base::FeatureList::IsEnabled(kCompactBubbleLauncher);
 }
 
 }  // namespace app_list_features

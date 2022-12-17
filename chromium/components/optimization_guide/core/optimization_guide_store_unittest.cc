@@ -17,10 +17,14 @@
 #include "components/leveldb_proto/testing/fake_db.h"
 #include "components/optimization_guide/core/model_util.h"
 #include "components/optimization_guide/core/optimization_guide_features.h"
+#include "components/optimization_guide/core/optimization_guide_prefs.h"
 #include "components/optimization_guide/core/optimization_guide_util.h"
 #include "components/optimization_guide/core/store_update_data.h"
 #include "components/optimization_guide/proto/hint_cache.pb.h"
 #include "components/optimization_guide/proto/models.pb.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/scoped_user_pref_update.h"
+#include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -79,9 +83,17 @@ class OptimizationGuideStoreTest : public testing::Test {
   OptimizationGuideStoreTest& operator=(const OptimizationGuideStoreTest&) =
       delete;
 
-  void SetUp() override { ASSERT_TRUE(temp_dir_.CreateUniqueTempDir()); }
+  void SetUp() override {
+    ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
 
-  void TearDown() override { last_loaded_hint_.reset(); }
+    pref_service_ = std::make_unique<TestingPrefServiceSimple>();
+    prefs::RegisterProfilePrefs(pref_service_->registry());
+  }
+
+  void TearDown() override {
+    last_loaded_hint_.reset();
+    pref_service_.reset();
+  }
 
   // Initializes the entries contained within the database on startup.
   void SeedInitialData(
@@ -199,7 +211,8 @@ class OptimizationGuideStoreTest : public testing::Test {
     db_ = db.get();
 
     guide_store_ = std::make_unique<OptimizationGuideStore>(
-        std::move(db), task_environment_.GetMainThreadTaskRunner());
+        std::move(db), task_environment_.GetMainThreadTaskRunner(),
+        pref_service_.get());
   }
 
   void InitializeDatabase(bool success, bool purge_existing_data = false) {
@@ -403,6 +416,12 @@ class OptimizationGuideStoreTest : public testing::Test {
     last_loaded_prediction_model_ = std::move(loaded_prediction_model);
   }
 
+  bool IsStoreFilesToDeletePrefEmpty() {
+    DictionaryPrefUpdate pref_update(pref_service_.get(),
+                                     prefs::kStoreFilePathsToDelete);
+    return pref_update.Get()->DictEmpty();
+  }
+
   void RunUntilIdle() { task_environment_.RunUntilIdle(); }
 
   MOCK_METHOD0(OnInitialized, void());
@@ -410,6 +429,7 @@ class OptimizationGuideStoreTest : public testing::Test {
 
  private:
   base::test::TaskEnvironment task_environment_;
+  std::unique_ptr<TestingPrefServiceSimple> pref_service_;
   raw_ptr<FakeDB<proto::StoreEntry>> db_;
   StoreEntryMap db_store_;
   std::unique_ptr<OptimizationGuideStore> guide_store_;
@@ -2275,12 +2295,23 @@ TEST_F(OptimizationGuideStoreTest, UpdatePredictionModelsDeletesOldFile) {
   UpdatePredictionModels(std::move(update_data2));
   RunUntilIdle();
 
-  // Make sure old file is deleted when model updated for target.
+  // Make sure new file exists.
+  EXPECT_TRUE(base::PathExists(new_file_path));
+  EXPECT_TRUE(base::PathExists(new_dir));
+
+  // Make sure the path to delete gets stored in the pref.
+  EXPECT_FALSE(IsStoreFilesToDeletePrefEmpty());
+
+  // Re-create the database so the old file gets deleted.
+  CreateDatabase();
+  RunUntilIdle();
+
+  // Make sure old file is deleted when store is deleted.
   EXPECT_FALSE(base::PathExists(old_file_path));
   EXPECT_FALSE(base::PathExists(old_dir));
 
-  EXPECT_TRUE(base::PathExists(new_file_path));
-  EXPECT_TRUE(base::PathExists(new_dir));
+  // Make sure the pref gets cleared out.
+  EXPECT_TRUE(IsStoreFilesToDeletePrefEmpty());
 }
 
 TEST_F(OptimizationGuideStoreTest,
@@ -2331,6 +2362,12 @@ TEST_F(OptimizationGuideStoreTest,
   UpdatePredictionModels(std::move(update_data2));
   RunUntilIdle();
 
+  EXPECT_FALSE(IsStoreFilesToDeletePrefEmpty());
+
+  // Re-create database so files get deleted.
+  CreateDatabase();
+  RunUntilIdle();
+
   // The old file should have been deleted, but not its containing directory
   // because that is recognized as the OptGuideModel parent storage directory.
   EXPECT_FALSE(base::PathExists(old_file_path));
@@ -2341,6 +2378,8 @@ TEST_F(OptimizationGuideStoreTest,
 
   EXPECT_TRUE(base::PathExists(new_file_path));
   EXPECT_TRUE(base::PathExists(new_dir));
+
+  EXPECT_TRUE(IsStoreFilesToDeletePrefEmpty());
 }
 
 TEST_F(OptimizationGuideStoreTest, RemovePredictionModelEntryKeyDeletesFile) {
@@ -2379,9 +2418,18 @@ TEST_F(OptimizationGuideStoreTest, RemovePredictionModelEntryKeyDeletesFile) {
   EXPECT_FALSE(guide_store()->FindPredictionModelEntryKey(
       proto::OPTIMIZATION_TARGET_PAINFUL_PAGE_LOAD, &entry_key));
 
+  // Ensure that file to delete gets persisted so it can be deleted later.
+  EXPECT_FALSE(IsStoreFilesToDeletePrefEmpty());
+
+  // Re-create the database so files get deleted.
+  CreateDatabase();
   RunUntilIdle();
-  // Make sure file is deleted when model is removed.
+  // Make sure file is deleted when model is removed and store is getting
+  // cleaned up.
   EXPECT_FALSE(base::PathExists(file_path));
+
+  // Make sure pref gets cleaned up when path gets deleted.
+  EXPECT_TRUE(IsStoreFilesToDeletePrefEmpty());
 }
 
 TEST_F(OptimizationGuideStoreTest, PurgeInactiveModels) {
@@ -2401,10 +2449,11 @@ TEST_F(OptimizationGuideStoreTest, PurgeInactiveModels) {
   ASSERT_TRUE(update_data);
   base::FilePath old_file_path = temp_dir().AppendASCII("model_v1.tflite");
   ASSERT_EQ(static_cast<int32_t>(3), base::WriteFile(old_file_path, "boo", 3));
+  proto::ModelInfo model_info;
+  model_info.set_version(123);
   SeedPredictionModelUpdateData(
       update_data.get(), proto::OPTIMIZATION_TARGET_PAINFUL_PAGE_LOAD,
-      old_file_path,
-      /*info=*/{},
+      old_file_path, model_info,
       update_time - optimization_guide::features::StoredModelsValidDuration());
   UpdatePredictionModels(std::move(update_data));
 
@@ -2432,7 +2481,6 @@ TEST_F(OptimizationGuideStoreTest, PurgeInactiveModels) {
   // The expired model should be removed.
   EXPECT_FALSE(guide_store()->FindPredictionModelEntryKey(
       proto::OPTIMIZATION_TARGET_PAINFUL_PAGE_LOAD, &entry_key));
-  EXPECT_FALSE(base::PathExists(old_file_path));
 
   // Should not purge models that are still active.
   EXPECT_TRUE(guide_store()->FindPredictionModelEntryKey(
@@ -2440,8 +2488,25 @@ TEST_F(OptimizationGuideStoreTest, PurgeInactiveModels) {
 
   histogram_tester.ExpectUniqueSample(
       "OptimizationGuide.PredictionModelExpired.PainfulPageLoad", true, 1);
+  histogram_tester.ExpectUniqueSample(
+      "OptimizationGuide.PredictionModelExpiredVersion.PainfulPageLoad", 123,
+      1);
   histogram_tester.ExpectTotalCount(
       "OptimizationGuide.PredictionModelExpired.LanguageDetection", 0);
+  histogram_tester.ExpectTotalCount(
+      "OptimizationGuide.PredictionModelExpiredVersion.LanguageDetection", 0);
+
+  // Make sure old file path gets persisted to be deleted later.
+  EXPECT_FALSE(IsStoreFilesToDeletePrefEmpty());
+
+  // Reset database to clean up old files.
+  CreateDatabase();
+  RunUntilIdle();
+
+  EXPECT_FALSE(base::PathExists(old_file_path));
+
+  // Make sure pref gets cleaned up when file path gets deleted.
+  EXPECT_TRUE(IsStoreFilesToDeletePrefEmpty());
 }
 
 struct ValidityTestCase {
@@ -2475,6 +2540,7 @@ TEST_P(OptimizationGuideStoreValidityTest, PurgeInactiveModels) {
       guide_store()->CreateUpdateDataForPredictionModels(update_time);
   ASSERT_TRUE(update_data);
   proto::ModelInfo info;
+  info.set_version(123);
   info.set_keep_beyond_valid_duration(test_case.keep_beyond_valid_duration);
   base::FilePath old_file_path = temp_dir().AppendASCII("model_v1.tflite");
   ASSERT_EQ(static_cast<int32_t>(3), base::WriteFile(old_file_path, "boo", 3));
@@ -2511,20 +2577,38 @@ TEST_P(OptimizationGuideStoreValidityTest, PurgeInactiveModels) {
   EXPECT_EQ(test_case.expect_kept,
             guide_store()->FindPredictionModelEntryKey(
                 proto::OPTIMIZATION_TARGET_PAINFUL_PAGE_LOAD, &entry_key));
-  EXPECT_EQ(test_case.expect_kept, base::PathExists(old_file_path));
 
   if (test_case.expect_kept) {
     histogram_tester.ExpectTotalCount(
         "OptimizationGuide.PredictionModelExpired.PainfulPageLoad", 0);
-  } else {
     histogram_tester.ExpectTotalCount(
-        "OptimizationGuide.PredictionModelExpired.PainfulPageLoad", 1);
+        "OptimizationGuide.PredictionModelExpiredVersion.PainfulPageLoad", 0);
+  } else {
+    histogram_tester.ExpectUniqueSample(
+        "OptimizationGuide.PredictionModelExpired.PainfulPageLoad", true, 1);
+    histogram_tester.ExpectUniqueSample(
+        "OptimizationGuide.PredictionModelExpiredVersion.PainfulPageLoad", 123,
+        1);
   }
   // Verify that the other model is not deleted.
   EXPECT_TRUE(guide_store()->FindPredictionModelEntryKey(
       proto::OPTIMIZATION_TARGET_LANGUAGE_DETECTION, &entry_key));
   histogram_tester.ExpectTotalCount(
       "OptimizationGuide.PredictionModelExpired.LanguageDetection", 0);
+  histogram_tester.ExpectTotalCount(
+      "OptimizationGuide.PredictionModelExpiredVersion.LanguageDetection", 0);
+
+  // Make sure file to delete gets put in pref to delete later, if applicable.
+  EXPECT_EQ(test_case.expect_kept, IsStoreFilesToDeletePrefEmpty());
+
+  // Reset database to delete files.
+  CreateDatabase();
+  RunUntilIdle();
+
+  // Make sure old file is deleted if we expect it to.
+  EXPECT_EQ(test_case.expect_kept, base::PathExists(old_file_path));
+  // Make sure pref doesn't have any items in it.
+  EXPECT_TRUE(IsStoreFilesToDeletePrefEmpty());
 }
 INSTANTIATE_TEST_SUITE_P(
     OptimizationGuideStoreValidityTests,

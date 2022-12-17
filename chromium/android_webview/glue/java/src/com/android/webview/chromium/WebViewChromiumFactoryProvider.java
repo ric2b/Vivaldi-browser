@@ -55,8 +55,6 @@ import org.chromium.base.PackageUtils;
 import org.chromium.base.PathUtils;
 import org.chromium.base.StrictModeContext;
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.annotations.VerifiesOnN;
-import org.chromium.base.annotations.VerifiesOnP;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.ScopedSysTraceEvent;
 import org.chromium.build.BuildConfig;
@@ -123,7 +121,6 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
      * verification does not occur until it is actually used for N and above.
      */
     @RequiresApi(Build.VERSION_CODES.N)
-    @VerifiesOnN
     private static class ObjectHolderForN {
         public ServiceWorkerController mServiceWorkerController;
     }
@@ -133,7 +130,6 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
      * verification does not occur until it is actually used for P and above.
      */
     @RequiresApi(Build.VERSION_CODES.P)
-    @VerifiesOnP
     private static class ObjectHolderForP {
         public TracingController mTracingController;
     }
@@ -330,6 +326,7 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
             // WebView needs to make sure to always use the wrapped application context.
             ctx = ClassLoaderContextWrapperFactory.get(ctx);
             ContextUtils.initApplicationContext(ctx);
+            ContextUtils.setSdkSandboxProcess(isSdkSandboxProcess());
 
             // Find the package ID for the package that WebView's resources come from.
             // This will be the donor package if there is one, not our main package.
@@ -866,6 +863,12 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
 
     boolean shouldEnableSimplifiedDarkMode() {
         // TODO: Put the downstream implementation inline and remove this method.
+        return false;
+    }
+
+    boolean isSdkSandboxProcess() {
+        // TODO: This shall be removed and ContextUtil.isSdkSandboxProcess() calls
+        // Process.isSdkSandbox() directly.
         return false;
     }
 }

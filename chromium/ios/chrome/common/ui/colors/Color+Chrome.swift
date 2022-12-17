@@ -16,6 +16,11 @@ extension Color {
     return Color(kTertiaryBackgroundColor)
   }
 
+  /// The primary grouped background color.
+  public static var cr_groupedPrimaryBackground: Color {
+    return Color(kGroupedPrimaryBackgroundColor)
+  }
+
   /// The secondary grouped background color.
   public static var cr_groupedSecondaryBackground: Color {
     return Color(kGroupedSecondaryBackgroundColor)
@@ -39,5 +44,10 @@ extension Color {
   /// The blue500 color.
   public static var cr_blue500: Color {
     return Color(kBlue500Color)
+  }
+
+  /// The table row view highlight color.
+  public static var cr_tableRowViewHighlight: Color {
+    return Color(kTableViewRowHighlightColor)
   }
 }

@@ -12,14 +12,13 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/task/post_task.h"
 #include "base/values.h"
 #include "build/branding_buildflags.h"
-#include "chrome/browser/ash/login/enrollment/auto_enrollment_controller.h"
 #include "chrome/browser/ash/login/screens/error_screen.h"
 #include "chrome/browser/ash/login/screens/network_error.h"
 #include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
+#include "chrome/browser/ash/policy/enrollment/auto_enrollment_type_checker.h"
 #include "chrome/browser/ash/reset/metrics.h"
 #include "chrome/browser/ash/settings/cros_settings.h"
 #include "chrome/browser/ash/tpm_firmware_update.h"
@@ -144,10 +143,10 @@ void ResetScreen::CheckIfPowerwashAllowed(
   // and thus pending for enterprise management. These should not be allowed to
   // powerwash either. Note that taking consumer device ownership has the side
   // effect of dropping the FRE requirement if it was previously in effect.
-  std::move(callback).Run(
-      AutoEnrollmentController::GetFRERequirement() !=
-          AutoEnrollmentController::FRERequirement::kExplicitlyRequired,
-      absl::nullopt);
+  const auto is_reset_allowed =
+      policy::AutoEnrollmentTypeChecker::GetFRERequirementAccordingToVPD() !=
+      policy::AutoEnrollmentTypeChecker::FRERequirement::kExplicitlyRequired;
+  std::move(callback).Run(is_reset_allowed, absl::nullopt);
 }
 
 ResetScreen::ResetScreen(ResetView* view,
@@ -283,7 +282,7 @@ void ResetScreen::OnViewDestroyed(ResetView* view) {
     view_ = nullptr;
 }
 
-void ResetScreen::OnUserAction(const std::string& action_id) {
+void ResetScreen::OnUserActionDeprecated(const std::string& action_id) {
   if (action_id == kUserActionCancelReset)
     OnCancel();
   else if (action_id == kUserActionResetRestartPressed)
@@ -301,7 +300,7 @@ void ResetScreen::OnUserAction(const std::string& action_id) {
   else if (action_id == kUserActionTPMFirmwareUpdateLearnMore)
     ShowHelpArticle(HelpAppLauncher::HELP_TPM_FIRMWARE_UPDATE);
   else
-    BaseScreen::OnUserAction(action_id);
+    BaseScreen::OnUserActionDeprecated(action_id);
 }
 
 void ResetScreen::OnCancel() {

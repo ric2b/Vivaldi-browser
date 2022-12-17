@@ -127,8 +127,14 @@ void ScrollableArea::Dispose() {
 void ScrollableArea::ClearScrollableArea() {
   if (mac_scrollbar_animator_)
     mac_scrollbar_animator_->Dispose();
-  scroll_animator_.Clear();
-  programmatic_scroll_animator_.Clear();
+  if (scroll_animator_) {
+    scroll_animator_->DetachElement();
+    scroll_animator_.Clear();
+  }
+  if (programmatic_scroll_animator_) {
+    programmatic_scroll_animator_->DetachElement();
+    programmatic_scroll_animator_.Clear();
+  }
   if (fade_overlay_scrollbars_timer_)
     fade_overlay_scrollbars_timer_->Value().Stop();
 }
@@ -279,7 +285,8 @@ void ScrollableArea::SetScrollOffset(const ScrollOffset& offset,
   ScrollOffset previous_offset = GetScrollOffset();
 
   ScrollOffset clamped_offset = ClampScrollOffset(offset);
-  if (clamped_offset == previous_offset) {
+  if (clamped_offset == previous_offset &&
+      scroll_type != mojom::blink::ScrollType::kProgrammatic) {
     return;
   }
 
@@ -353,6 +360,13 @@ void ScrollableArea::ProgrammaticScrollHelper(
     // animation already in progress. We don't want two scroll animations
     // running at the same time.
     CancelScrollAnimation();
+  }
+
+  if (offset == GetScrollOffset()) {
+    CancelProgrammaticScrollAnimation();
+    if (on_finish)
+      std::move(on_finish).Run();
+    return;
   }
 
   ScrollCallback callback = std::move(on_finish);
@@ -1040,6 +1054,10 @@ void ScrollableArea::InjectGestureScrollEvent(
   // We shouldn't be injecting scrolls for the visual viewport scrollbar, since
   // it is not hit-testable.
   DCHECK(GetLayoutBox());
+
+  // Speculative fix for crash reports (crbug.com/1307510).
+  if (!GetLayoutBox() || !GetLayoutBox()->GetFrame())
+    return;
 
   if (granularity == ui::ScrollGranularity::kScrollByPrecisePixel ||
       granularity == ui::ScrollGranularity::kScrollByPixel) {

@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/containers/flat_set.h"
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "components/autofill/core/browser/autofill_client.h"
@@ -29,12 +30,14 @@
 #include "components/autofill/core/common/mojom/autofill_types.mojom.h"
 #include "components/autofill/core/common/signatures.h"
 #include "components/security_state/core/security_state.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 
 namespace autofill {
 
 class AutofillField;
 class CreditCard;
+class FormEventLoggerBase;
 struct AutofillOfferData;
 
 // A given maximum is enforced to minimize the number of buckets generated.
@@ -42,12 +45,6 @@ extern const int kMaxBucketsCount;
 
 class AutofillMetrics {
  public:
-  enum class MeasurementTime {
-    kFillTimeBeforeSecurityPolicy,
-    kFillTimeAfterSecurityPolicy,
-    kSubmissionTime,
-  };
-
   enum AutofillProfileAction {
     EXISTING_PROFILE_USED,
     EXISTING_PROFILE_UPDATED,
@@ -1179,34 +1176,50 @@ class AutofillMetrics {
     kMaxValue = kOtpMismatchError,
   };
 
-  // Emits a value that indicates which fields of a credit card form were
-  // filled:
-  //
-  // +-------------------------------------------------------------+
-  // |                            | Name | Number | Exp Date | CVC |
-  // |----------------------------+------+--------+----------+-----|
-  // | kFullFill                  |  X   |   X    |    X     |  X  |
-  // +----------------------------+------+--------+----------+-----+
-  // | kOptionalNameMissing       |      |   X    |    X     |  X  |
-  // +----------------------------+------+--------+----------+-----+
-  // | kOptionalCvcMissing        |  X   |   X    |    X     |     |
-  // +----------------------------+------+--------+----------+-----+
-  // | kOptionalNameAndCvcMissing |      |   X    |    X     |     |
-  // +----------------------------+------+--------+----------+-----+
-  // | kFullFillButExpDateMissing |  X   |   X    |          |  X  |
-  // +----------------------------+------+--------+----------+-----+
-  // | kPartialFill               |           otherwise            |
-  // +-------------------------------------------------------------+
-  //
-  // Keep consistent with FORM_EVENT_CREDIT_CARD_SEAMLESSNESS_*.
-  enum class CreditCardSeamlessFillMetric {
-    kFullFill = 0,
-    kOptionalNameMissing = 1,
-    kOptionalCvcMissing = 2,
-    kOptionalNameAndCvcMissing = 3,
-    kFullFillButExpDateMissing = 4,
-    kPartialFill = 5,
-    kMaxValue = kPartialFill,
+  // Utility class for determining the seamlessness of a credit card fill.
+  class CreditCardSeamlessness {
+   public:
+    // A qualitative representation of a fill seamlessness.
+    //
+    // Keep consistent with FORM_EVENT_CREDIT_CARD_SEAMLESSNESS_*.
+    //
+    // The different meaning of the categories is as follows:
+    enum class Metric {                // | Name | Number | Exp Date | CVC |
+      kFullFill = 0,                   // |  X   |   X    |    X     |  X  |
+      kOptionalNameMissing = 1,        // |      |   X    |    X     |  X  |
+      kOptionalCvcMissing = 2,         // |  X   |   X    |    X     |     |
+      kOptionalNameAndCvcMissing = 3,  // |      |   X    |    X     |     |
+      kFullFillButExpDateMissing = 4,  // |  X   |   X    |          |  X  |
+      kPartialFill = 5,                // |           otherwise            |
+      kMaxValue = kPartialFill,
+    };
+
+    explicit CreditCardSeamlessness(const ServerFieldTypeSet& filled_types);
+
+    explicit operator bool() const { return is_valid(); }
+    bool is_valid() const { return name_ || number_ || exp_ || cvc_; }
+
+    Metric QualitativeMetric() const;
+
+    uint64_t QualitativeMetricAsInt() const {
+      return static_cast<uint64_t>(QualitativeMetric());
+    }
+
+    // TODO(crbug.com/1275953): Remove once the new UKM metric has gained
+    // traction.
+    FormEvent QualitativeFillableFormEvent() const;
+    FormEvent QualitativeFillFormEvent() const;
+
+    // Returns a four-bit bitmask.
+    uint8_t BitmaskMetric() const;
+
+    static uint8_t BitmaskExclusiveMax() { return true << 4; }
+
+   private:
+    bool name_ = false;
+    bool number_ = false;
+    bool exp_ = false;
+    bool cvc_ = false;
   };
 
   // These values are persisted to logs. Entries should not be renumbered and
@@ -1226,6 +1239,9 @@ class AutofillMetrics {
 
     bool has_pinned_timestamp() const { return !pinned_timestamp_.is_null(); }
     void set_pinned_timestamp(base::TimeTicks t) { pinned_timestamp_ = t; }
+
+    ukm::builders::Autofill_CreditCardFill CreateCreditCardFillBuilder() const;
+    void Record(ukm::builders::Autofill_CreditCardFill&& builder);
 
     // Initializes this logger with a source_id. Unless forms is parsed no
     // autofill UKM is recorded. However due to autofill_manager resets,
@@ -1795,18 +1811,30 @@ class AutofillMetrics {
   static void LogNumberOfFramesWithAutofilledCreditCardFields(
       size_t num_frames);
 
-  // Logs the Autofill.CreditCard.SeamlessFills metric. See the enum for
-  // details. Note that this function does not check whether the form contains a
-  // credit card field.
-  // Returns the emitted metric, if any.
-  static absl::optional<CreditCardSeamlessFillMetric>
-  LogCreditCardSeamlessFills(const ServerFieldTypeSet& autofilled_types,
-                             MeasurementTime measurement_time);
+  struct LogCreditCardSeamlessnessParam {
+    const FormEventLoggerBase& event_logger;
+    const FormStructure& form;
+    const AutofillField& field;
+    const base::flat_set<FieldGlobalId>& newly_filled_fields;
+    const base::flat_set<FieldGlobalId>& safe_fields;
+    ukm::builders::Autofill_CreditCardFill& builder;
+  };
 
-  // Logs the Autofill.CreditCard.NumberFills metric.
-  static void LogCreditCardNumberFills(
-      const ServerFieldTypeSet& autofilled_types,
-      MeasurementTime measurement_time);
+  // Logs several metrics about seamlessness. These are qualitative and bitmask
+  // UMA and UKM metrics as well as a UKM metric indicating whether
+  // "shared-autofill" did or would make a difference.
+  //
+  // The metrics are:
+  // - UMA metrics "Autofill.CreditCard.Seamless{Fillable,Fills}.AtFillTime
+  //   {Before,After}SecurityPolicy[.Bitmask]".
+  // - UKM event "Autofill.CreditCardSeamlessness".
+  // - UKM event "Autofill.FormEvent" for FORM_EVENT_CREDIT_CARD_*.
+  static void LogCreditCardSeamlessnessAtFillTime(
+      const LogCreditCardSeamlessnessParam& p);
+
+  // Logs Autofill.CreditCard.SeamlessFills.AtSubmissionTime.
+  static void LogCreditCardSeamlessnessAtSubmissionTime(
+      const ServerFieldTypeSet& autofilled_types);
 
   // This should be called when determining the heuristic types for a form's
   // fields.
@@ -1928,11 +1956,24 @@ class AutofillMetrics {
       size_t number_of_accepted_fields,
       size_t number_of_corrected_fields);
 
+  // Logs the number of autofilled fields with unrecognized autocomplete
+  // attribute at submission time.
+  static void
+  LogNumberOfAutofilledFieldsWithAutocompleteUnrecognizedAtSubmission(
+      size_t number_of_accepted_fields,
+      size_t number_of_corrected_fields);
+
   // Logs the type of a profile import.
   static void LogProfileImportType(AutofillProfileImportType import_type);
 
   // Logs the type of a profile import that are used for the silent updates.
   static void LogSilentUpdatesProfileImportType(
+      AutofillProfileImportType import_type);
+
+  // Logs the type of profile import used for a silent update, which was only
+  // possible after an invalid phone number was removed.
+  // TODO(crbug.com/1298424): Cleanup when launched.
+  static void LogSilentUpdatesWithRemovedPhoneNumberProfileImportType(
       AutofillProfileImportType import_type);
 
   // Logs the user decision for importing a new profile.
@@ -1943,6 +1984,12 @@ class AutofillMetrics {
   // country.
   // TODO(crbug.com/1297032): Cleanup when launched.
   static void LogNewProfileWithComplementedCountryImportDecision(
+      AutofillClient::SaveAddressProfileOfferUserDecision decision);
+
+  // Logs the user decision for importing a new profile, which was only possible
+  // after an invalid phone number was removed.
+  // TODO(crbug.com/1298424): Cleanup when launched.
+  static void LogNewProfileWithRemovedPhoneNumberImportDecision(
       AutofillClient::SaveAddressProfileOfferUserDecision decision);
 
   // Logs that a specific type was edited in a save prompt.
@@ -1963,6 +2010,12 @@ class AutofillMetrics {
   // complemented country.
   // TODO(crbug.com/1297032): Cleanup when launched.
   static void LogProfileUpdateWithComplementedCountryImportDecision(
+      AutofillClient::SaveAddressProfileOfferUserDecision decision);
+
+  // Logs the user decision for updating an existing profile, which was only
+  // possible after an invalid phone number was removed.
+  // TODO(crbug.com/1298424): Cleanup when launched.
+  static void LogProfileUpdateWithRemovedPhoneNumberImportDecision(
       AutofillClient::SaveAddressProfileOfferUserDecision decision);
 
   // Logs that a specific type changed in a profile update that received the
@@ -1988,6 +2041,15 @@ class AutofillMetrics {
   static void LogUpdateProfileNumberOfAffectedFields(
       int number_of_affected_fields,
       AutofillClient::SaveAddressProfileOfferUserDecision decision);
+
+  // Records if at least one setting-inaccessible field was removed on import.
+  static void LogRemovedSettingInaccessibleFields(bool did_remove);
+
+  // Records that |field| was removed in a profile of |country| on import,
+  // because |field| is inaccessible in the |country|-specific settings.
+  static void LogRemovedSettingInaccessibleField(
+      const std::string& country_code,
+      ServerFieldType field);
 
   // Logs when the virtual card metadata for one card have been updated.
   static void LogVirtualCardMetadataSynced(bool existing_card);

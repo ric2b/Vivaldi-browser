@@ -29,7 +29,7 @@
 #include "net/spdy/spdy_log_util.h"
 #include "net/ssl/ssl_cert_request_info.h"
 #include "net/ssl/ssl_config.h"
-#include "net/third_party/quiche/src/spdy/core/spdy_header_block.h"
+#include "net/third_party/quiche/src/quiche/spdy/core/spdy_header_block.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "url/gurl.h"
 
@@ -237,7 +237,7 @@ void BidirectionalStream::OnStreamReady(bool request_headers_sent) {
 void BidirectionalStream::OnHeadersReceived(
     const spdy::Http2HeaderBlock& response_headers) {
   HttpResponseInfo response_info;
-  if (!SpdyHeadersToHttpResponse(response_headers, &response_info)) {
+  if (SpdyHeadersToHttpResponse(response_headers, &response_info) != OK) {
     DLOG(WARNING) << "Invalid headers";
     NotifyFailed(ERR_FAILED);
     return;

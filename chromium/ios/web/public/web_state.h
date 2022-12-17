@@ -20,6 +20,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_piece.h"
 #include "base/supports_user_data.h"
+#include "base/time/time.h"
 #include "ios/web/public/deprecated/url_verification_constants.h"
 #include "ios/web/public/navigation/referrer.h"
 #include "mojo/public/cpp/bindings/generic_pending_receiver.h"
@@ -183,19 +184,6 @@ class WebState : public base::SupportsUserData {
 
   ~WebState() override {}
 
-  // A callback that returns a pointer to a WebState. The callback can always be
-  // used, but it may return nullptr if the info used to instantiate the
-  // callback can no longer be used to return a WebState.
-  using Getter = base::RepeatingCallback<WebState*(void)>;
-  // Use this variant for instances that will only run the callback a single
-  // time.
-  using OnceGetter = base::OnceCallback<WebState*(void)>;
-
-  // Creates default WebState getters that return this WebState, or nullptr if
-  // the WebState has been deallocated.
-  virtual Getter CreateDefaultGetter() = 0;
-  virtual OnceGetter CreateDefaultOnceGetter() = 0;
-
   // Gets/Sets the delegate.
   virtual WebStateDelegate* GetDelegate() = 0;
   virtual void SetDelegate(WebStateDelegate* delegate) = 0;
@@ -266,9 +254,25 @@ class WebState : public base::SupportsUserData {
   // Gets the BrowserState associated with this WebState. Can never return null.
   virtual BrowserState* GetBrowserState() const = 0;
 
+  // Returns a weak pointer.
+  virtual base::WeakPtr<WebState> GetWeakPtr() = 0;
+
   // Opens a URL with the given disposition.  The transition specifies how this
   // navigation should be recorded in the history system (for example, typed).
   virtual void OpenURL(const OpenURLParams& params) = 0;
+
+  // Loads the web content from the HTML you provide as if the HTML were the
+  // response to the request.
+  virtual void LoadSimulatedRequest(const GURL& url,
+                                    NSString* response_html_string)
+      API_AVAILABLE(ios(15.0)) = 0;
+
+  // Loads the web content from the data you provide as if the data were the
+  // response to the request.
+  virtual void LoadSimulatedRequest(const GURL& url,
+                                    NSData* response_data,
+                                    NSString* mime_type)
+      API_AVAILABLE(ios(15.0)) = 0;
 
   // Stops any pending navigation.
   virtual void Stop() = 0;

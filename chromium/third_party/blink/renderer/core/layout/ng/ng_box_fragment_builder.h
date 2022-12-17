@@ -7,8 +7,10 @@
 
 #include "base/dcheck_is_on.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/layout/geometry/box_sides.h"
 #include "third_party/blink/renderer/core/layout/geometry/physical_rect.h"
+#include "third_party/blink/renderer/core/layout/ng/flex/ng_flex_data.h"
 #include "third_party/blink/renderer/core/layout/ng/geometry/ng_box_strut.h"
 #include "third_party/blink/renderer/core/layout/ng/geometry/ng_fragment_geometry.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_fragment_items_builder.h"
@@ -68,6 +70,8 @@ class CORE_EXPORT NGBoxFragmentBuilder final
         initial_fragment_geometry.border + initial_fragment_geometry.padding;
     border_scrollbar_padding_ =
         border_padding_ + initial_fragment_geometry.scrollbar;
+    original_border_scrollbar_padding_block_start_ =
+        border_scrollbar_padding_.block_start;
     if (space_) {
       child_available_size_ = CalculateChildAvailableSize(
           *space_, To<NGBlockNode>(node_), size_, border_scrollbar_padding_);
@@ -166,6 +170,9 @@ class CORE_EXPORT NGBoxFragmentBuilder final
     DCHECK(initial_fragment_geometry_);
     return border_scrollbar_padding_;
   }
+  LayoutUnit OriginalBorderScrollbarPaddingBlockStart() const {
+    return original_border_scrollbar_padding_block_start_;
+  }
   // The child available-size is subtly different from the content-box size of
   // an element. For an anonymous-block the child available-size is equal to
   // its non-anonymous parent (similar to percentages).
@@ -196,12 +203,15 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   // computed ahead of time. If so, a |relative_offset| will be passed
   // in. Otherwise, the relative offset will be calculated as normal.
   // |inline_container| is passed when adding an OOF that is contained by a
-  // non-atomic inline.
+  // non-atomic inline. If |flex_column_break_after| is supplied, we are running
+  // layout for a column flex container, in which case, we need to update the
+  // break-after value for the column itself.
   void AddResult(
       const NGLayoutResult&,
       const LogicalOffset,
       absl::optional<LogicalOffset> relative_offset = absl::nullopt,
-      const NGInlineContainer<LogicalOffset>* inline_container = nullptr);
+      const NGInlineContainer<LogicalOffset>* inline_container = nullptr,
+      EBreakBetween* flex_column_break_after = nullptr);
 
   // Add a child fragment and propagate info from it. Called by AddResult().
   // Other callers should call AddResult() instead of this when possible, since
@@ -477,7 +487,9 @@ class CORE_EXPORT NGBoxFragmentBuilder final
     box_type_ = box_type;
   }
   bool IsFragmentainerBoxType() const {
-    return BoxType() == NGPhysicalFragment::kColumnBox;
+    NGPhysicalFragment::NGBoxType box_type = BoxType();
+    return box_type == NGPhysicalFragment::kColumnBox ||
+           box_type == NGPhysicalFragment::kPageBox;
   }
   void SetIsFieldsetContainer() { is_fieldset_container_ = true; }
   void SetIsTableNGPart() { is_table_ng_part_ = true; }
@@ -588,25 +600,28 @@ class CORE_EXPORT NGBoxFragmentBuilder final
       std::unique_ptr<NGGridLayoutData> grid_layout_data) {
     grid_layout_data_ = std::move(grid_layout_data);
   }
+  void TransferFlexLayoutData(
+      std::unique_ptr<DevtoolsFlexInfo> flex_layout_data) {
+    flex_layout_data_ = std::move(flex_layout_data);
+  }
 
   const NGGridLayoutData& GridLayoutData() const {
     DCHECK(grid_layout_data_);
     return *grid_layout_data_.get();
   }
 
-  bool HasBreakTokenData() const { return break_token_data_.get(); }
+  bool HasBreakTokenData() const { return break_token_data_; }
 
   NGBlockBreakTokenData* EnsureBreakTokenData() {
     if (!HasBreakTokenData())
-      break_token_data_ = std::make_unique<NGBlockBreakTokenData>();
-    return break_token_data_.get();
+      break_token_data_ = MakeGarbageCollected<NGBlockBreakTokenData>();
+    return break_token_data_;
   }
 
-  NGBlockBreakTokenData* GetBreakTokenData() { return break_token_data_.get(); }
+  NGBlockBreakTokenData* GetBreakTokenData() { return break_token_data_; }
 
-  void SetBreakTokenData(
-      std::unique_ptr<NGBlockBreakTokenData> break_token_data) {
-    break_token_data_ = std::move(break_token_data);
+  void SetBreakTokenData(NGBlockBreakTokenData* break_token_data) {
+    break_token_data_ = break_token_data;
   }
 
   // The |NGFragmentItemsBuilder| for the inline formatting context of this box.
@@ -629,10 +644,12 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   // any baselines, OOFs, etc, are also moved by the appropriate amount).
   void MoveChildrenInBlockDirection(LayoutUnit offset);
 
-  void SetMathItalicCorrection(LayoutUnit italic_correction);
+  void SetMathItalicCorrection(LayoutUnit italic_correction) {
+    math_italic_correction_ = italic_correction;
+  }
 
-  void AdjustOffsetsForFragmentainerDescendant(
-      NGLogicalOutOfFlowPositionedNode& descendant,
+  void AdjustFragmentainerDescendant(
+      NGLogicalOOFNodeForFragmentation& descendant,
       bool only_fixedpos_containing_block = false);
   void AdjustFixedposContainingBlockForFragmentainerDescendants();
   void AdjustFixedposContainingBlockForInnerMulticols();
@@ -657,13 +674,23 @@ class CORE_EXPORT NGBoxFragmentBuilder final
     minimal_space_shortage_ = LayoutUnit::Max();
   }
 
+  bool HasForcedBreak() const { return has_forced_break_; }
+
+  const NGBreakToken* LastChildBreakToken() const {
+    DCHECK(!child_break_tokens_.IsEmpty());
+    return child_break_tokens_.back().Get();
+  }
+
   void InsertLegacyPositionedObject(const NGBlockNode& positioned) const {
     positioned.InsertIntoLegacyPositionedObjectsOf(
         To<LayoutBlock>(layout_object_));
   }
 
   // Propagate the break-before/break-after of the child (if applicable).
-  void PropagateChildBreakValues(const NGLayoutResult& child_layout_result);
+  // Update the break-after value for |flex_column_break_after|, if supplied.
+  void PropagateChildBreakValues(
+      const NGLayoutResult& child_layout_result,
+      EBreakBetween* flex_column_break_after = nullptr);
 
  private:
   // Propagate fragmentation details. This includes checking whether we have
@@ -676,6 +703,10 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   const NGFragmentGeometry* initial_fragment_geometry_ = nullptr;
   NGBoxStrut border_padding_;
   NGBoxStrut border_scrollbar_padding_;
+  // We clamp the block-start of |border_scrollbar_padding_| after an item
+  // fragments. Store the original block-start, as well, for cases where it is
+  // needed.
+  LayoutUnit original_border_scrollbar_padding_block_start_;
   LogicalSize child_available_size_;
   LayoutUnit intrinsic_block_size_;
   absl::optional<LogicalRect> inflow_bounds_;
@@ -720,11 +751,11 @@ class CORE_EXPORT NGBoxFragmentBuilder final
 
   absl::optional<LayoutUnit> baseline_;
   absl::optional<LayoutUnit> last_baseline_;
+  LayoutUnit math_italic_correction_;
 
   // Table specific types.
   absl::optional<PhysicalRect> table_grid_rect_;
-  absl::optional<NGTableFragmentData::ColumnGeometries>
-      table_column_geometries_;
+  NGTableFragmentData::ColumnGeometries table_column_geometries_;
   scoped_refptr<const NGTableBorders> table_collapsed_borders_;
   std::unique_ptr<NGTableFragmentData::CollapsedBordersGeometry>
       table_collapsed_borders_geometry_;
@@ -733,17 +764,18 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   // Table cell specific types.
   absl::optional<wtf_size_t> table_cell_column_index_;
 
-  std::unique_ptr<NGBlockBreakTokenData> break_token_data_;
+  NGBlockBreakTokenData* break_token_data_ = nullptr;
 
   // Grid specific types.
   std::unique_ptr<NGGridLayoutData> grid_layout_data_;
+
+  std::unique_ptr<DevtoolsFlexInfo> flex_layout_data_;
 
   LogicalBoxSides sides_to_include_;
 
   scoped_refptr<SerializedScriptValue> custom_layout_data_;
 
   std::unique_ptr<NGMathMLPaintInfo> mathml_paint_info_;
-  absl::optional<NGLayoutResult::MathData> math_data_;
 
   const NGBlockBreakToken* previous_break_token_ = nullptr;
 

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 # Copyright 2018 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
@@ -18,8 +18,6 @@ The toolchain version can be overridden by setting MAC_TOOLCHAIN_REVISION with
 the full revision, e.g. 9A235.
 """
 
-from __future__ import print_function
-
 import argparse
 import os
 import pkg_resources
@@ -32,21 +30,19 @@ import sys
 
 def LoadPList(path):
   """Loads Plist at |path| and returns it as a dictionary."""
-  if sys.version_info.major == 2:
-    return plistlib.readPlist(path)
   with open(path, 'rb') as f:
     return plistlib.load(f)
 
 
-# This contains binaries from Xcode 13.2.1 13C100, along with the macOS 12 SDK
-# (12.1 21C46). To build these packages, see comments in
+# This contains binaries from Xcode 13.3 13E113, along with the macOS 12 SDK
+# (12.3 21E226). To build these packages, see comments in
 # build/xcode_binaries.yaml
 MAC_BINARIES_LABEL = 'infra_internal/ios/xcode/xcode_binaries/mac-amd64'
-MAC_BINARIES_TAG = 'fE3bk9-nINNxwK4pUcZYcJlGZ-9KSirXzoQuzuvoHV8C'
+MAC_BINARIES_TAG = 'wl06XDJZIYEGTVAMGES--4LcpP_WANb1erYsmeWyJNMC'
 
 # The toolchain will not be downloaded if the minimum OS version is not met. 19
-# is the major version number for macOS 10.15. Xcode 13.2 13C90 only runs on
-# 11.3 and newer, but some bots are still running older OS versions. 10.15.4,
+# is the major version number for macOS 10.15. Xcode 13.3 13E113 only runs on
+# 12.0 and newer, but some bots are still running older OS versions. 10.15.4,
 # the OS minimum through Xcode 12.4, still seems to work.
 MAC_MINIMUM_OS_VERSION = [19, 4]
 

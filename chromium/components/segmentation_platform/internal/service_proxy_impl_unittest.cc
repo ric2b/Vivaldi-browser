@@ -4,7 +4,9 @@
 
 #include "components/segmentation_platform/internal/service_proxy_impl.h"
 
+#include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/test/task_environment.h"
 #include "components/leveldb_proto/public/proto_database.h"
 #include "components/leveldb_proto/testing/fake_db.h"
 #include "components/optimization_guide/core/model_util.h"
@@ -12,7 +14,10 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/segmentation_platform/internal/constants.h"
+#include "components/segmentation_platform/internal/execution/feature_list_query_processor.h"
+#include "components/segmentation_platform/internal/execution/model_executor.h"
 #include "components/segmentation_platform/internal/platform_options.h"
+#include "components/segmentation_platform/internal/scheduler/execution_service.h"
 #include "components/segmentation_platform/internal/scheduler/model_execution_scheduler.h"
 #include "components/segmentation_platform/internal/selection/segment_selector_impl.h"
 #include "components/segmentation_platform/internal/selection/segmentation_result_prefs.h"
@@ -21,10 +26,14 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 using testing::_;
+using testing::Invoke;
 
 namespace segmentation_platform {
 
 namespace {
+
+constexpr char kTestSegmentationKey[] = "test_key";
+
 // Adds a segment info into a map, and return a copy of it.
 proto::SegmentInfo AddSegmentInfo(
     std::map<std::string, proto::SegmentInfo>* db_entries,
@@ -41,7 +50,7 @@ proto::SegmentInfo AddSegmentInfo(
 class MockModelExecutionScheduler : public ModelExecutionScheduler {
  public:
   MockModelExecutionScheduler() = default;
-  MOCK_METHOD(void, RequestModelExecution, (OptimizationTarget));
+  MOCK_METHOD(void, RequestModelExecution, (const proto::SegmentInfo&));
   MOCK_METHOD(void, OnNewModelInfoReady, (const proto::SegmentInfo&));
   MOCK_METHOD(void, RequestModelExecutionForEligibleSegments, (bool));
   MOCK_METHOD(void,
@@ -54,14 +63,15 @@ class MockModelExecutionScheduler : public ModelExecutionScheduler {
 
 class FakeSegmentSelectorImpl : public SegmentSelectorImpl {
  public:
-  FakeSegmentSelectorImpl(SegmentationResultPrefs* result_prefs,
+  FakeSegmentSelectorImpl(TestingPrefServiceSimple* pref_service,
                           const Config* config)
       : SegmentSelectorImpl(nullptr,
                             nullptr,
-                            result_prefs,
+                            pref_service,
                             config,
                             nullptr,
-                            PlatformOptions::CreateDefault()) {}
+                            PlatformOptions::CreateDefault(),
+                            nullptr) {}
   ~FakeSegmentSelectorImpl() override = default;
 
   void UpdateSelectedSegment(OptimizationTarget new_selection) override {
@@ -82,7 +92,7 @@ class ServiceProxyImplTest : public testing::Test,
 
   void SetUp() override {
     auto config = std::make_unique<Config>();
-    config->segmentation_key = "test";
+    config->segmentation_key = kTestSegmentationKey;
     configs_.emplace_back(std::move(config));
     pref_service_.registry()->RegisterDictionaryPref(kSegmentationResultPref);
   }
@@ -96,9 +106,9 @@ class ServiceProxyImplTest : public testing::Test,
     db_ = db.get();
     segment_db_ = std::make_unique<SegmentInfoDatabase>(std::move(db));
 
-    result_prefs_ = std::make_unique<SegmentationResultPrefs>(&pref_service_);
-    segment_selectors_["test"] = std::make_unique<FakeSegmentSelectorImpl>(
-        result_prefs_.get(), configs_.at(0).get());
+    segment_selectors_[kTestSegmentationKey] =
+        std::make_unique<FakeSegmentSelectorImpl>(&pref_service_,
+                                                  configs_.at(0).get());
     service_proxy_impl_ = std::make_unique<ServiceProxyImpl>(
         segment_db_.get(), nullptr, &configs_, &segment_selectors_);
     service_proxy_impl_->AddObserver(this);
@@ -123,6 +133,7 @@ class ServiceProxyImplTest : public testing::Test,
   }
 
  protected:
+  base::test::TaskEnvironment task_environment_;
   bool is_initialized_ = false;
   int status_flag_ = 0;
 
@@ -135,7 +146,6 @@ class ServiceProxyImplTest : public testing::Test,
   base::flat_map<std::string, std::unique_ptr<SegmentSelectorImpl>>
       segment_selectors_;
   TestingPrefServiceSimple pref_service_;
-  std::unique_ptr<SegmentationResultPrefs> result_prefs_;
 };
 
 TEST_F(ServiceProxyImplTest, GetServiceStatus) {
@@ -166,7 +176,7 @@ TEST_F(ServiceProxyImplTest, GetSegmentationInfoFromDB) {
   service_proxy_impl_->OnServiceStatusChanged(true, 7);
   db_->LoadCallback(true);
   ASSERT_EQ(client_info_.size(), 1u);
-  ASSERT_EQ(client_info_.at(0).segmentation_key, "test");
+  ASSERT_EQ(client_info_.at(0).segmentation_key, kTestSegmentationKey);
   ASSERT_EQ(client_info_.at(0).segment_status.size(), 1u);
   ServiceProxy::SegmentStatus status = client_info_.at(0).segment_status.at(0);
   ASSERT_EQ(status.segment_id,
@@ -185,21 +195,35 @@ TEST_F(ServiceProxyImplTest, ExecuteModel) {
   service_proxy_impl_->OnServiceStatusChanged(true, 7);
   db_->LoadCallback(true);
 
-  MockModelExecutionScheduler scheduler;
+  segment_db_->UpdateSegment(
+      OptimizationTarget::OPTIMIZATION_TARGET_SEGMENTATION_NEW_TAB, info,
+      base::DoNothing());
+  db_->UpdateCallback(true);
+
+  auto scheduler_moved = std::make_unique<MockModelExecutionScheduler>();
+  MockModelExecutionScheduler* scheduler = scheduler_moved.get();
+  ExecutionService execution;
+  execution.InitForTesting(nullptr, nullptr, std::move(scheduler_moved));
+
   // Scheduler is not set, ExecuteModel() will do nothing.
-  EXPECT_CALL(scheduler, RequestModelExecution(_)).Times(0);
+  EXPECT_CALL(*scheduler, RequestModelExecution(_)).Times(0);
   service_proxy_impl_->ExecuteModel(
       OptimizationTarget::OPTIMIZATION_TARGET_SEGMENTATION_NEW_TAB);
 
-  service_proxy_impl_->SetModelExecutionScheduler(&scheduler);
-  EXPECT_CALL(scheduler,
-              RequestModelExecution(
-                  OptimizationTarget::OPTIMIZATION_TARGET_SEGMENTATION_NEW_TAB))
-      .Times(1);
+  service_proxy_impl_->SetExecutionService(&execution);
+  base::RunLoop wait_for_execution;
+  EXPECT_CALL(*scheduler, RequestModelExecution(_))
+      .WillOnce(Invoke(
+          [&info, &wait_for_execution](const proto::SegmentInfo actual_info) {
+            EXPECT_EQ(info.segment_id(), actual_info.segment_id());
+            wait_for_execution.QuitClosure().Run();
+          }));
   service_proxy_impl_->ExecuteModel(
       OptimizationTarget::OPTIMIZATION_TARGET_SEGMENTATION_NEW_TAB);
+  db_->GetCallback(true);
+  wait_for_execution.Run();
 
-  EXPECT_CALL(scheduler, RequestModelExecution(_)).Times(0);
+  EXPECT_CALL(*scheduler, RequestModelExecution(_)).Times(0);
   service_proxy_impl_->ExecuteModel(
       OptimizationTarget::OPTIMIZATION_TARGET_UNKNOWN);
 }
@@ -213,30 +237,33 @@ TEST_F(ServiceProxyImplTest, OverwriteResult) {
   service_proxy_impl_->OnServiceStatusChanged(true, 7);
   db_->LoadCallback(true);
 
-  MockModelExecutionScheduler scheduler;
+  auto scheduler_moved = std::make_unique<MockModelExecutionScheduler>();
+  MockModelExecutionScheduler* scheduler = scheduler_moved.get();
+  ExecutionService execution;
+  execution.InitForTesting(nullptr, nullptr, std::move(scheduler_moved));
 
   // Scheduler is not set, OverwriteValue() will do nothing.
-  EXPECT_CALL(scheduler, OnModelExecutionCompleted(_, _)).Times(0);
+  EXPECT_CALL(*scheduler, OnModelExecutionCompleted(_, _)).Times(0);
   service_proxy_impl_->OverwriteResult(
       OptimizationTarget::OPTIMIZATION_TARGET_SEGMENTATION_NEW_TAB, 0.7);
 
   // Test with invalid values.
-  service_proxy_impl_->SetModelExecutionScheduler(&scheduler);
-  EXPECT_CALL(scheduler, OnModelExecutionCompleted(_, _)).Times(0);
+  service_proxy_impl_->SetExecutionService(&execution);
+  EXPECT_CALL(*scheduler, OnModelExecutionCompleted(_, _)).Times(0);
   service_proxy_impl_->OverwriteResult(
       OptimizationTarget::OPTIMIZATION_TARGET_SEGMENTATION_NEW_TAB, 1.1);
   service_proxy_impl_->OverwriteResult(
       OptimizationTarget::OPTIMIZATION_TARGET_SEGMENTATION_NEW_TAB, -0.1);
 
   EXPECT_CALL(
-      scheduler,
+      *scheduler,
       OnModelExecutionCompleted(
           OptimizationTarget::OPTIMIZATION_TARGET_SEGMENTATION_NEW_TAB, _))
       .Times(1);
   service_proxy_impl_->OverwriteResult(
       OptimizationTarget::OPTIMIZATION_TARGET_SEGMENTATION_NEW_TAB, 0.7);
 
-  EXPECT_CALL(scheduler, OnModelExecutionCompleted(_, _)).Times(0);
+  EXPECT_CALL(*scheduler, OnModelExecutionCompleted(_, _)).Times(0);
   service_proxy_impl_->OverwriteResult(
       OptimizationTarget::OPTIMIZATION_TARGET_UNKNOWN, 0.7);
 }
@@ -251,10 +278,11 @@ TEST_F(ServiceProxyImplTest, SetSelectSegment) {
   db_->LoadCallback(true);
 
   service_proxy_impl_->SetSelectedSegment(
-      "test", OptimizationTarget::OPTIMIZATION_TARGET_SEGMENTATION_NEW_TAB);
-  ASSERT_EQ(
-      OptimizationTarget::OPTIMIZATION_TARGET_SEGMENTATION_NEW_TAB,
-      static_cast<FakeSegmentSelectorImpl*>(segment_selectors_["test"].get())
-          ->new_selection());
+      kTestSegmentationKey,
+      OptimizationTarget::OPTIMIZATION_TARGET_SEGMENTATION_NEW_TAB);
+  ASSERT_EQ(OptimizationTarget::OPTIMIZATION_TARGET_SEGMENTATION_NEW_TAB,
+            static_cast<FakeSegmentSelectorImpl*>(
+                segment_selectors_[kTestSegmentationKey].get())
+                ->new_selection());
 }
 }  // namespace segmentation_platform

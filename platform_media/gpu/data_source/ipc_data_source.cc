@@ -8,6 +8,7 @@
 #include "base/logging.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/numerics/safe_conversions.h"
+#include "build/build_config.h"
 
 #include <algorithm>
 #include <memory>
@@ -77,11 +78,11 @@ void WriteMediaLog(const void* hash_key,
     if (i == media_log_items.end())
       return;
   }
-#ifdef OS_WIN
+#if BUILDFLAG(IS_WIN)
   _fseeki64(i->second.fp, position, SEEK_SET);
 #else
   fseeko(i->second.fp, position, SEEK_SET);
-#endif  // OS_WIN
+#endif  // IS_WIN
   fwrite(data, 1, size, i->second.fp);
   LOG(INFO) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " position=" << position
             << " write_size=" << size;

@@ -27,7 +27,7 @@ class PasswordStoreSync;
 // This is achieved by implementing the interface ModelTypeSyncBridge, which
 // ClientTagBasedModelTypeProcessor will use to interact, ultimately, with the
 // sync server. See
-// https://chromium.googlesource.com/chromium/src/+/HEAD/docs/sync/model_api.md#Implementing-ModelTypeSyncBridge
+// https://www.chromium.org/developers/design-documents/sync/model-api/#implementing-modeltypesyncbridge
 // for details.
 class PasswordSyncBridge : public syncer::ModelTypeSyncBridge {
  public:
@@ -63,6 +63,8 @@ class PasswordSyncBridge : public syncer::ModelTypeSyncBridge {
   bool SupportsGetStorageKey() const override;
   void ApplyStopSyncChanges(std::unique_ptr<syncer::MetadataChangeList>
                                 delete_metadata_change_list) override;
+  sync_pb::EntitySpecifics TrimRemoteSpecificsForCaching(
+      const sync_pb::EntitySpecifics& entity_specifics) override;
 
   static std::string ComputeClientTagForTesting(
       const sync_pb::PasswordSpecificsData& password_data);

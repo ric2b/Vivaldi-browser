@@ -40,6 +40,7 @@
 #include "mojo/public/cpp/bindings/type_converter.h"
 #include "third_party/blink/public/common/blob/blob_utils.h"
 #include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
+#include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "third_party/blink/public/mojom/frame/user_activation_update_types.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/modules/service_worker/web_service_worker_provider.h"
 #include "third_party/blink/public/platform/modules/service_worker/web_service_worker_provider_client.h"
@@ -452,9 +453,11 @@ void LocalFrameClientImpl::DispatchDidCommitLoad(
 
       web_frame_->FrameWidgetImpl()->DidNavigate();
 
-      // UKM metrics are only collected for the main frame. Ensure after
-      // a navigation on the main frame we setup the appropriate structures.
+      // UKM metrics are only collected for the outermost main frame. Ensure
+      // after a navigation on the main frame we setup the appropriate
+      // structures.
       if (web_frame_->GetFrame()->IsMainFrame() &&
+          !web_frame_->IsInFencedFrameTree() &&
           web_frame_->ViewImpl()->does_composite()) {
         WebFrameWidgetImpl* frame_widget = web_frame_->FrameWidgetImpl();
 
@@ -500,6 +503,7 @@ void LocalFrameClientImpl::BeginNavigation(
     NavigationPolicy policy,
     WebFrameLoadType frame_load_type,
     bool is_client_redirect,
+    bool is_unfenced_top_navigation,
     mojom::blink::TriggeringEventInfo triggering_event_info,
     HTMLFormElement* form,
     network::mojom::CSPDisposition
@@ -526,6 +530,7 @@ void LocalFrameClientImpl::BeginNavigation(
   navigation_info->navigation_type = type;
   navigation_info->navigation_policy = static_cast<WebNavigationPolicy>(policy);
   navigation_info->has_transient_user_activation = request.HasUserGesture();
+  navigation_info->is_unfenced_top_navigation = is_unfenced_top_navigation;
   navigation_info->frame_load_type = frame_load_type;
   navigation_info->is_client_redirect = is_client_redirect;
   navigation_info->triggering_event_info = triggering_event_info;
@@ -709,10 +714,9 @@ void LocalFrameClientImpl::DidObserveInputDelay(base::TimeDelta input_delay) {
 
 void LocalFrameClientImpl::DidObserveUserInteraction(
     base::TimeDelta max_event_duration,
-    base::TimeDelta total_event_duration,
     UserInteractionType interaction_type) {
-  web_frame_->Client()->DidObserveUserInteraction(
-      max_event_duration, total_event_duration, interaction_type);
+  web_frame_->Client()->DidObserveUserInteraction(max_event_duration,
+                                                  interaction_type);
 }
 
 void LocalFrameClientImpl::DidChangeCpuTiming(base::TimeDelta time) {
@@ -746,12 +750,6 @@ void LocalFrameClientImpl::DidObserveLayoutNg(uint32_t all_block_count,
     client->DidObserveLayoutNg(all_block_count, ng_block_count, all_call_count,
                                ng_call_count);
   }
-}
-
-void LocalFrameClientImpl::DidObserveLazyLoadBehavior(
-    WebLocalFrameClient::LazyLoadBehavior lazy_load_behavior) {
-  if (WebLocalFrameClient* client = web_frame_->Client())
-    client->DidObserveLazyLoadBehavior(lazy_load_behavior);
 }
 
 void LocalFrameClientImpl::PreloadSubresourceOptimizationsForOrigins(
@@ -792,18 +790,17 @@ DocumentLoader* LocalFrameClientImpl::CreateDocumentLoader(
   return document_loader;
 }
 
-void LocalFrameClientImpl::UpdateDocumentLoader(
-    DocumentLoader* document_loader,
-    std::unique_ptr<WebDocumentLoader::ExtraData> extra_data) {
-  static_cast<WebDocumentLoaderImpl*>(document_loader)
-      ->SetExtraData(std::move(extra_data));
+String LocalFrameClientImpl::UserAgentOverride() {
+  return web_frame_->Client()
+             ? String(web_frame_->Client()->UserAgentOverride())
+             : g_empty_string;
 }
 
 String LocalFrameClientImpl::UserAgent() {
-  WebString override =
-      web_frame_->Client() ? web_frame_->Client()->UserAgentOverride() : "";
-  if (!override.IsEmpty())
+  String override = UserAgentOverride();
+  if (!override.IsEmpty()) {
     return override;
+  }
 
   if (user_agent_.IsEmpty())
     user_agent_ = Platform::Current()->UserAgent();
@@ -849,10 +846,10 @@ String LocalFrameClientImpl::UserAgent() {
 }
 
 String LocalFrameClientImpl::ReducedUserAgent() {
-  WebString override =
-      web_frame_->Client() ? web_frame_->Client()->UserAgentOverride() : "";
-  if (!override.IsEmpty())
+  String override = UserAgentOverride();
+  if (!override.IsEmpty()) {
     return override;
+  }
 
   if (reduced_user_agent_.IsEmpty())
     reduced_user_agent_ = Platform::Current()->ReducedUserAgent();
@@ -860,10 +857,10 @@ String LocalFrameClientImpl::ReducedUserAgent() {
 }
 
 String LocalFrameClientImpl::FullUserAgent() {
-  WebString override =
-      web_frame_->Client() ? web_frame_->Client()->UserAgentOverride() : "";
-  if (!override.IsEmpty())
+  String override = UserAgentOverride();
+  if (!override.IsEmpty()) {
     return override;
+  }
 
   if (full_user_agent_.IsEmpty())
     full_user_agent_ = Platform::Current()->FullUserAgent();
@@ -918,8 +915,9 @@ RemoteFrame* LocalFrameClientImpl::AdoptPortal(HTMLPortalElement* portal) {
 RemoteFrame* LocalFrameClientImpl::CreateFencedFrame(
     HTMLFencedFrameElement* fenced_frame,
     mojo::PendingAssociatedReceiver<mojom::blink::FencedFrameOwnerHost>
-        receiver) {
-  return web_frame_->CreateFencedFrame(fenced_frame, std::move(receiver));
+        receiver,
+    mojom::blink::FencedFrameMode mode) {
+  return web_frame_->CreateFencedFrame(fenced_frame, std::move(receiver), mode);
 }
 
 WebPluginContainerImpl* LocalFrameClientImpl::CreatePlugin(

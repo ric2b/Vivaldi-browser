@@ -10,6 +10,7 @@
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/sys_string_conversions.h"
+#include "base/time/time.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/strings/grit/components_strings.h"
@@ -266,7 +267,6 @@
   // A modal may be presented on top of the Recent Tabs or tab grid.
   [self.baseViewController dismissModals];
   self.baseViewController.tabGridMode = TabGridModeNormal;
-  [self showFullscreen:NO];
 
   [self dismissPopovers];
 
@@ -304,8 +304,7 @@
   if (self.isThumbStripEnabled) {
     ViewRevealState currentState =
         self.thumbStripCoordinator.panHandler.currentState;
-    return currentState == ViewRevealState::Revealed ||
-           currentState == ViewRevealState::Fullscreen;
+    return currentState == ViewRevealState::Revealed;
   }
   return self.bvcContainer == nil && !self.firstPresentation;
 }
@@ -321,8 +320,7 @@
 - (void)showTabGrid {
   BOOL animated = !self.animationsDisabledForTesting;
 
-  if (ShowThumbStripInTraitCollection(
-          self.baseViewController.traitCollection)) {
+  if ([self isThumbStripEnabled]) {
     [self.thumbStripCoordinator.panHandler
         setNextState:ViewRevealState::Revealed
             animated:animated
@@ -446,6 +444,9 @@
   self.bvcContainer = [[BVCContainerViewController alloc] init];
   self.bvcContainer.currentBVC = viewController;
   self.bvcContainer.incognito = incognito;
+  // Set fallback presenter, because currentBVC can be nil if the tab grid is
+  // up but no tabs exist in current page.
+  self.bvcContainer.fallbackPresenterViewController = self.baseViewController;
 
   BOOL animated = !self.animationsDisabledForTesting;
   // Never animate the first time.
@@ -458,6 +459,12 @@
   // Finally, the launch mask view should be removed.
   ProceduralBlock extendedCompletion = ^{
     [self.delegate tabGridDismissTransitionDidEnd:self];
+    if (self.baseViewController.tabGridMode == TabGridModeSearch) {
+      // In search mode, the tabgrid mode is not reset before the animation so
+      // the animation can start from the correct cell. Once the animation is
+      // complete, reset the tab grid mode.
+      self.baseViewController.tabGridMode = TabGridModeNormal;
+    }
     if (!GetFirstResponder()) {
       // It is possible to already have a first responder (for example the
       // omnibox). In that case, we don't want to mark BVC as first responder.
@@ -541,13 +548,14 @@
 
   // Create a BVC add it to this view controller if not present. The thumb strip
   // always needs a BVC container on screen.
-  self.bvcContainer =
-      self.bvcContainer ?: [[BVCContainerViewController alloc] init];
+  if (!self.bvcContainer) {
+    self.bvcContainer = [[BVCContainerViewController alloc] init];
+    self.bvcContainer.fallbackPresenterViewController = self.baseViewController;
+  }
   if (!self.bvcContainer.view.superview) {
     [self.baseViewController addChildViewController:self.bvcContainer];
     self.bvcContainer.view.frame = self.baseViewController.view.bounds;
     [self.baseViewController.view addSubview:self.bvcContainer.view];
-    self.bvcContainer.view.accessibilityViewIsModal = YES;
     [self.bvcContainer didMoveToParentViewController:self.baseViewController];
   }
 
@@ -791,8 +799,8 @@
                focusOmnibox:(BOOL)focusOmnibox
                closeTabGrid:(BOOL)closeTabGrid {
   DCHECK(self.regularBrowser && self.incognitoBrowser);
-  DCHECK(closeTabGrid || ShowThumbStripInTraitCollection(
-                             self.baseViewController.traitCollection));
+  DCHECK(closeTabGrid || [self isThumbStripEnabled]);
+
   Browser* activeBrowser = nullptr;
   switch (page) {
     case TabGridPageIncognitoTabs:
@@ -924,22 +932,18 @@
   [handler openURLInNewTab:[OpenNewTabCommand commandWithURLFromChrome:URL]];
 }
 
-- (void)showFullscreen:(BOOL)fullscreen {
+- (void)dismissBVC {
   if (![self isThumbStripEnabled]) {
     return;
   }
-  ViewRevealingVerticalPanHandler* panHandler =
-      self.thumbStripCoordinator.panHandler;
-  if (fullscreen && panHandler.currentState == ViewRevealState::Revealed) {
-    [panHandler setNextState:ViewRevealState::Fullscreen
-                    animated:YES
-                     trigger:ViewRevealTrigger::Fullscreen];
-  } else if (!fullscreen &&
-             panHandler.currentState == ViewRevealState::Fullscreen) {
-    [panHandler setNextState:ViewRevealState::Revealed
-                    animated:YES
-                     trigger:ViewRevealTrigger::Fullscreen];
-  }
+  [self showTabViewController:nil
+                    incognito:NO
+           shouldCloseTabGrid:NO
+                   completion:nil];
+}
+
+- (void)setBVCAccessibilityViewModal:(BOOL)modal {
+  self.bvcContainer.view.accessibilityViewIsModal = modal;
 }
 
 - (void)openSearchResultsPageForSearchText:(NSString*)searchText {
@@ -1084,7 +1088,6 @@
   base::RecordAction(
       base::UserMetricsAction("MobileTabGridTabContextMenuSelectTabs"));
   self.baseViewController.tabGridMode = TabGridModeSelection;
-  [self showFullscreen:YES];
 }
 
 - (void)removeSessionAtTableSectionWithIdentifier:(NSInteger)sectionIdentifier {
@@ -1123,6 +1126,11 @@
 
 - (void)viewController:(UIViewController*)viewController
     traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
+  SceneState* sceneState =
+      SceneStateBrowserAgent::FromBrowser(self.regularBrowser)->GetSceneState();
+  if (sceneState.activationLevel < SceneActivationLevelForegroundInactive) {
+    return;
+  }
   BOOL canShowThumbStrip =
       ShowThumbStripInTraitCollection(viewController.traitCollection);
   if (canShowThumbStrip != [self isThumbStripEnabled]) {

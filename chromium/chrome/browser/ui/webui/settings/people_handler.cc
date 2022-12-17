@@ -66,7 +66,7 @@
 #include "chrome/browser/ui/webui/profile_helper.h"
 #endif
 
-#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+#if BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "chrome/browser/signin/account_consistency_mode_manager.h"
 #endif
 
@@ -148,7 +148,7 @@ bool GetConfiguration(const std::string& json, SyncConfigInfo* config) {
 }
 
 // Guaranteed to return a valid result (or crash).
-void ParseConfigurationArguments(base::Value::ConstListView args,
+void ParseConfigurationArguments(const base::Value::List& args,
                                  SyncConfigInfo* config,
                                  const base::Value** callback_id) {
   const std::string& json = args[1].GetString();
@@ -274,10 +274,12 @@ void PeopleHandler::RegisterMessages() {
       base::BindRepeating(&PeopleHandler::HandleStartSignin,
                           base::Unretained(this)));
 #endif
-#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+#if BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS_LACROS)
   web_ui()->RegisterMessageCallback(
       "SyncSetupSignout", base::BindRepeating(&PeopleHandler::HandleSignout,
                                               base::Unretained(this)));
+#endif
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
   web_ui()->RegisterMessageCallback(
       "SyncSetupPauseSync", base::BindRepeating(&PeopleHandler::HandlePauseSync,
                                                 base::Unretained(this)));
@@ -373,7 +375,7 @@ void PeopleHandler::DisplayGaiaLoginInNewTabOrWindow(
 }
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
-void PeopleHandler::OnDidClosePage(base::Value::ConstListView args) {
+void PeopleHandler::OnDidClosePage(const base::Value::List& args) {
   // Don't mark setup as complete if "didAbort" is true, or if authentication
   // is still needed.
   if (!args[0].GetBool() && !IsProfileAuthNeededOrHasErrors()) {
@@ -389,7 +391,7 @@ syncer::SyncService* PeopleHandler::GetSyncService() const {
              : nullptr;
 }
 
-void PeopleHandler::HandleSetDatatypes(base::Value::ConstListView args) {
+void PeopleHandler::HandleSetDatatypes(const base::Value::List& args) {
   SyncConfigInfo configuration;
   const base::Value* callback_id = nullptr;
   ParseConfigurationArguments(args, &configuration, &callback_id);
@@ -425,7 +427,7 @@ void PeopleHandler::HandleSetDatatypes(base::Value::ConstListView args) {
     ProfileMetrics::LogProfileSyncInfo(ProfileMetrics::SYNC_CHOOSE);
 }
 
-void PeopleHandler::HandleGetStoredAccounts(base::Value::ConstListView args) {
+void PeopleHandler::HandleGetStoredAccounts(const base::Value::List& args) {
   AllowJavascript();
   CHECK_EQ(1U, args.size());
   const base::Value& callback_id = args[0];
@@ -446,8 +448,8 @@ base::Value PeopleHandler::GetStoredAccountsList() {
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
   if (AccountConsistencyModeManager::IsDiceEnabledForProfile(profile_)) {
     // If dice is enabled, show all the accounts.
-    for (const auto& account :
-         signin_ui_util::GetAccountsForDicePromos(profile_)) {
+    for (const auto& account : signin_ui_util::GetOrderedAccountsForDisplay(
+             profile_, /*restrict_to_accounts_eligible_for_sync=*/true)) {
       accounts.Append(GetAccountValue(account));
     }
     return accounts;
@@ -467,10 +469,10 @@ base::Value PeopleHandler::GetStoredAccountsList() {
   return accounts;
 }
 
-void PeopleHandler::HandleStartSyncingWithEmail(
-    base::Value::ConstListView args) {
-#if BUILDFLAG(ENABLE_DICE_SUPPORT)
-  DCHECK(AccountConsistencyModeManager::IsDiceEnabledForProfile(profile_));
+void PeopleHandler::HandleStartSyncingWithEmail(const base::Value::List& args) {
+#if BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS_LACROS)
+  DCHECK(AccountConsistencyModeManager::IsDiceEnabledForProfile(profile_) ||
+         AccountConsistencyModeManager::IsMirrorEnabledForProfile(profile_));
   const base::Value& email = args[0];
   const base::Value& is_default_promo_account = args[1];
 
@@ -486,13 +488,12 @@ void PeopleHandler::HandleStartSyncingWithEmail(
       signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS,
       is_default_promo_account.GetBool());
 #else
-  // TODO(jamescook): Enable sync on non-DICE platforms (e.g. Chrome OS).
   NOTIMPLEMENTED();
 #endif
 }
 
 void PeopleHandler::HandleSetEncryptionPassphrase(
-    base::Value::ConstListView args) {
+    const base::Value::List& args) {
   const base::Value& callback_id = args[0];
 
   // Check the SyncService is up and running before retrieving SyncUserSettings,
@@ -533,7 +534,7 @@ void PeopleHandler::HandleSetEncryptionPassphrase(
 }
 
 void PeopleHandler::HandleSetDecryptionPassphrase(
-    base::Value::ConstListView args) {
+    const base::Value::List& args) {
   const base::Value& callback_id = args[0];
 
   // Check the SyncService is up and running before retrieving SyncUserSettings,
@@ -561,7 +562,7 @@ void PeopleHandler::HandleSetDecryptionPassphrase(
   ResolveJavascriptCallback(callback_id, base::Value(successfully_set));
 }
 
-void PeopleHandler::HandleShowSyncSetupUI(base::Value::ConstListView args) {
+void PeopleHandler::HandleShowSyncSetupUI(const base::Value::List& args) {
   AllowJavascript();
 
   syncer::SyncService* service = GetSyncService();
@@ -593,17 +594,17 @@ void PeopleHandler::HandleShowSyncSetupUI(base::Value::ConstListView args) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 // On ChromeOS, we need to sign out the user session to fix an auth error, so
 // the user goes through the real signin flow to generate a new auth token.
-void PeopleHandler::HandleAttemptUserExit(base::Value::ConstListView args) {
+void PeopleHandler::HandleAttemptUserExit(const base::Value::List& args) {
   DVLOG(1) << "Signing out the user to fix a sync error.";
   chrome::AttemptUserExit();
 }
 
-void PeopleHandler::HandleTurnOnSync(base::Value::ConstListView args) {
+void PeopleHandler::HandleTurnOnSync(const base::Value::List& args) {
   // TODO(https://crbug.com/1050677)
   NOTIMPLEMENTED();
 }
 
-void PeopleHandler::HandleTurnOffSync(base::Value::ConstListView args) {
+void PeopleHandler::HandleTurnOffSync(const base::Value::List& args) {
   auto* identity_manager = IdentityManagerFactory::GetForProfile(profile_);
   DCHECK(identity_manager->HasPrimaryAccount(ConsentLevel::kSync));
   DCHECK(signin_util::IsUserSignoutAllowedForProfile(profile_));
@@ -615,7 +616,7 @@ void PeopleHandler::HandleTurnOffSync(base::Value::ConstListView args) {
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
-void PeopleHandler::HandleStartSignin(base::Value::ConstListView args) {
+void PeopleHandler::HandleStartSignin(const base::Value::List& args) {
   AllowJavascript();
 
   // Should only be called if the user is not already signed in, has a auth
@@ -628,8 +629,10 @@ void PeopleHandler::HandleStartSignin(base::Value::ConstListView args) {
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
+#if BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS_LACROS)
+void PeopleHandler::HandleSignout(const base::Value::List& args) {
+  // TODO(https://crbug.com/1260291): add support for signed out profiles.
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
-void PeopleHandler::HandleSignout(base::Value::ConstListView args) {
   bool delete_profile = false;
   if (args[0].is_bool())
     delete_profile = args[0].GetBool();
@@ -675,9 +678,12 @@ void PeopleHandler::HandleSignout(base::Value::ConstListView args) {
     webui::DeleteProfileAtPath(profile_path,
                                ProfileMetrics::DELETE_PROFILE_SETTINGS);
   }
+#endif
 }
+#endif
 
-void PeopleHandler::HandlePauseSync(base::Value::ConstListView args) {
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+void PeopleHandler::HandlePauseSync(const base::Value::List& args) {
   DCHECK(AccountConsistencyModeManager::IsDiceEnabledForProfile(profile_));
   auto* identity_manager = IdentityManagerFactory::GetForProfile(profile_);
   DCHECK(identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSync));
@@ -688,7 +694,7 @@ void PeopleHandler::HandlePauseSync(base::Value::ConstListView args) {
 }
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
-void PeopleHandler::HandleStartKeyRetrieval(base::Value::ConstListView args) {
+void PeopleHandler::HandleStartKeyRetrieval(const base::Value::List& args) {
   Browser* browser =
       chrome::FindBrowserWithWebContents(web_ui()->GetWebContents());
   if (!browser)
@@ -698,7 +704,7 @@ void PeopleHandler::HandleStartKeyRetrieval(base::Value::ConstListView args) {
       browser, syncer::TrustedVaultUserActionTriggerForUMA::kSettings);
 }
 
-void PeopleHandler::HandleGetSyncStatus(base::Value::ConstListView args) {
+void PeopleHandler::HandleGetSyncStatus(const base::Value::List& args) {
   AllowJavascript();
 
   CHECK_EQ(1U, args.size());
@@ -707,13 +713,13 @@ void PeopleHandler::HandleGetSyncStatus(base::Value::ConstListView args) {
   ResolveJavascriptCallback(callback_id, GetSyncStatusDictionary());
 }
 
-void PeopleHandler::HandleSyncPrefsDispatch(base::Value::ConstListView args) {
+void PeopleHandler::HandleSyncPrefsDispatch(const base::Value::List& args) {
   AllowJavascript();
   PushSyncPrefs();
 }
 
 void PeopleHandler::HandleTrustedVaultBannerStateDispatch(
-    base::Value::ConstListView args) {
+    const base::Value::List& args) {
   AllowJavascript();
   PushTrustedVaultBannerState();
 }

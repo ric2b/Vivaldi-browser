@@ -155,6 +155,12 @@ void WebApps::LaunchAppWithParams(apps::AppLaunchParams&& params,
   std::move(callback).Run(apps::LaunchResult());
 }
 
+void WebApps::LaunchShortcut(const std::string& app_id,
+                             const std::string& shortcut_id,
+                             int64_t display_id) {
+  publisher_helper().ExecuteContextMenuCommand(app_id, shortcut_id, display_id);
+}
+
 void WebApps::Connect(
     mojo::PendingRemote<apps::mojom::Subscriber> subscriber_remote,
     apps::mojom::ConnectOptionsPtr opts) {
@@ -231,6 +237,10 @@ void WebApps::SetRunOnOsLoginMode(
 }
 
 void WebApps::PublishWebApps(std::vector<apps::AppPtr> apps) {
+  if (!is_ready_) {
+    return;
+  }
+
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   const WebApp* web_app = GetWebApp(ash::kChromeUITrustedProjectorSwaAppId);
   if (web_app) {
@@ -245,7 +255,8 @@ void WebApps::PublishWebApps(std::vector<apps::AppPtr> apps) {
   }
 
   std::vector<apps::mojom::AppPtr> mojom_apps;
-  for (apps::AppPtr& app : apps) {
+  mojom_apps.reserve(apps.size());
+  for (const apps::AppPtr& app : apps) {
     mojom_apps.push_back(apps::ConvertAppToMojomApp(app));
   }
 
@@ -262,6 +273,7 @@ void WebApps::PublishWebApps(std::vector<apps::AppPtr> apps) {
   }
   for (auto& subscriber : subscribers_) {
     std::vector<apps::mojom::AppPtr> cloned_apps;
+    cloned_apps.reserve(mojom_apps.size());
     for (const auto& app : mojom_apps)
       cloned_apps.push_back(app.Clone());
     subscriber->OnApps(std::move(cloned_apps),
@@ -271,6 +283,10 @@ void WebApps::PublishWebApps(std::vector<apps::AppPtr> apps) {
 }
 
 void WebApps::PublishWebApp(apps::AppPtr app) {
+  if (!is_ready_) {
+    return;
+  }
+
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   if (app->app_id == ash::kChromeUITrustedProjectorSwaAppId) {
     // After OOBE, PublishWebApps() above could execute before the intent filter
@@ -322,6 +338,8 @@ void WebApps::ConvertWebApps(std::vector<apps::mojom::AppPtr>* apps_out) {
 }
 
 void WebApps::InitWebApps() {
+  is_ready_ = true;
+
   RegisterPublisher(app_type_);
 
   std::vector<apps::AppPtr> apps = CreateWebApps();
@@ -331,6 +349,8 @@ void WebApps::InitWebApps() {
 
 void WebApps::StartPublishingWebApps(
     mojo::PendingRemote<apps::mojom::Subscriber> subscriber_remote) {
+  is_ready_ = true;
+
   std::vector<apps::mojom::AppPtr> apps;
   ConvertWebApps(&apps);
 
@@ -389,16 +409,18 @@ void WebApps::GetMenuModel(const std::string& app_id,
                            ->system_web_app_manager()
                            .GetSystemApp(swa_type);
     if (system_app && system_app->ShouldShowNewWindowMenuOption()) {
-      apps::AddCommandItem(ash::MENU_OPEN_NEW,
+      apps::AddCommandItem(menu_type == apps::mojom::MenuType::kAppList
+                               ? ash::LAUNCH_NEW
+                               : ash::MENU_OPEN_NEW,
                            IDS_APP_LIST_CONTEXT_MENU_NEW_WINDOW, &menu_items);
     }
   } else {
-    apps::CreateOpenNewSubmenu(menu_type,
-                               publisher_helper().GetWindowMode(app_id) ==
-                                       apps::mojom::WindowMode::kBrowser
-                                   ? IDS_APP_LIST_CONTEXT_MENU_NEW_TAB
-                                   : IDS_APP_LIST_CONTEXT_MENU_NEW_WINDOW,
-                               &menu_items);
+    apps::CreateOpenNewSubmenu(
+        menu_type,
+        publisher_helper().GetWindowMode(app_id) == apps::WindowMode::kBrowser
+            ? IDS_APP_LIST_CONTEXT_MENU_NEW_TAB
+            : IDS_APP_LIST_CONTEXT_MENU_NEW_WINDOW,
+        &menu_items);
   }
 
   if (app_id == crostini::kCrostiniTerminalSystemAppId) {

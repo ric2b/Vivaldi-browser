@@ -316,9 +316,10 @@ bool DevtoolsConnectorItem::HandleKeyboardEvent(
       DevToolsWindow::OpenDevToolsWindow(source);
     }
   }
-  if (devtools_delegate_) {
-    return devtools_delegate_->HandleKeyboardEvent(source, event);
-  }
+  // Do not pass on keyboard events to the delegate, aka. our BrowserWindow,
+  // so we no longer need special handling of shortcuts when devtools is running
+  // docked as shortcuts entered in devtools are no longer sent to our shortcut
+  // handling code.
   return false;
 }
 

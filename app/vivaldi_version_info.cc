@@ -5,6 +5,7 @@
 #include "base/check.h"
 #include "base/no_destructor.h"
 #include "base/version.h"
+#include "build/build_config.h"
 #include "components/version_info/version_info_values.h"
 
 namespace vivaldi {
@@ -27,5 +28,11 @@ bool IsBetaOrFinal() {
   return false;
 #endif
 }
+
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+std::string GetVivaldiMailVersionString() {
+  return VIVALDI_MAIL_VERSION;
+}
+#endif
 
 }  // namespace vivaldi

@@ -13,6 +13,7 @@
 #include "base/message_loop/message_pump.h"
 #include "base/task/task_features.h"
 #include "base/threading/hang_watcher.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/tick_clock.h"
 #include "base/trace_event/base_tracing.h"
 #include "build/build_config.h"
@@ -184,7 +185,7 @@ void ThreadControllerWithMessagePumpImpl::SetNextDelayedDoWork(
     // |pump_| can't be null as all postTasks are cross-thread before binding,
     // and delayed cross-thread postTasks do the thread hop through an immediate
     // task.
-    pump_->ScheduleDelayedWork(run_time);
+    pump_->ScheduleDelayedWork({run_time, lazy_now->Now()});
   }
 }
 

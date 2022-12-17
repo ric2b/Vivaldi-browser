@@ -3,10 +3,10 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/extensions/extension_action_view_controller.h"
+#include <memory>
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
-#include "base/cxx17_backports.h"
 #include "base/json/json_reader.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
@@ -45,6 +45,8 @@
 #include "extensions/common/user_script.h"
 #include "extensions/test/test_extension_dir.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/gfx/image/image_skia_rep.h"
+#include "ui/native_theme/native_theme.h"
 
 using extensions::mojom::ManifestLocation;
 using SiteInteraction = extensions::SitePermissionsHelper::SiteInteraction;
@@ -111,11 +113,25 @@ class ExtensionActionViewControllerUnitTest : public BrowserWithTestWindowTest {
   scoped_refptr<const extensions::Extension> CreateAndAddExtension(
       const std::string& name,
       extensions::ActionInfo::Type action_type) {
+    return CreateAndAddExtensionWithGrantedHostPermissions(name, action_type,
+                                                           {});
+  }
+
+  scoped_refptr<const extensions::Extension>
+  CreateAndAddExtensionWithGrantedHostPermissions(
+      const std::string& name,
+      extensions::ActionInfo::Type action_type,
+      const std::vector<std::string>& permissions) {
     scoped_refptr<const extensions::Extension> extension =
         extensions::ExtensionBuilder(name)
             .SetAction(action_type)
             .SetLocation(ManifestLocation::kInternal)
+            .AddPermissions(permissions)
             .Build();
+
+    if (!permissions.empty())
+      extension_service()->GrantPermissions(extension.get());
+
     extension_service()->AddExtension(extension.get());
     return extension;
   }
@@ -169,15 +185,10 @@ TEST_F(ExtensionActionViewControllerUnitTest,
 
 // Tests the appearance of browser actions with blocked script actions.
 TEST_F(ExtensionActionViewControllerUnitTest, BrowserActionBlockedActions) {
-  scoped_refptr<const extensions::Extension> extension =
-      extensions::ExtensionBuilder("browser action")
-          .SetAction(extensions::ActionInfo::TYPE_BROWSER)
-          .SetLocation(ManifestLocation::kInternal)
-          .AddPermission("https://www.google.com/*")
-          .Build();
+  auto extension = CreateAndAddExtensionWithGrantedHostPermissions(
+      "browser_action", extensions::ActionInfo::TYPE_BROWSER,
+      {"https://www.google.com/*"});
 
-  extension_service()->GrantPermissions(extension.get());
-  extension_service()->AddExtension(extension.get());
   extensions::ScriptingPermissionsModifier permissions_modifier(profile(),
                                                                 extension);
   permissions_modifier.SetWithholdHostPermissions(true);
@@ -217,15 +228,10 @@ TEST_F(ExtensionActionViewControllerUnitTest, BrowserActionBlockedActions) {
 
 // Tests the appearance of page actions with blocked script actions.
 TEST_F(ExtensionActionViewControllerUnitTest, PageActionBlockedActions) {
-  scoped_refptr<const extensions::Extension> extension =
-      extensions::ExtensionBuilder("page action")
-          .SetAction(extensions::ActionInfo::TYPE_PAGE)
-          .SetLocation(ManifestLocation::kInternal)
-          .AddPermission("https://www.google.com/*")
-          .Build();
+  auto extension = CreateAndAddExtensionWithGrantedHostPermissions(
+      "page_action", extensions::ActionInfo::TYPE_PAGE,
+      {"https://www.google.com/*"});
 
-  extension_service()->GrantPermissions(extension.get());
-  extension_service()->AddExtension(extension.get());
   extensions::ScriptingPermissionsModifier permissions_modifier(profile(),
                                                                 extension);
   permissions_modifier.SetWithholdHostPermissions(true);
@@ -252,6 +258,13 @@ TEST_F(ExtensionActionViewControllerUnitTest, PageActionBlockedActions) {
                                                                  view_size());
   EXPECT_FALSE(image_source->grayscale());
   EXPECT_TRUE(image_source->paint_blocked_actions_decoration());
+
+  // Simulate NativeTheme update after `image_source` is created.
+  // `image_source` should paint fine without hitting use-after-free in such
+  // case.  See http://crbug.com/1315967
+  ui::NativeTheme* theme = ui::NativeTheme::GetInstanceForNativeUi();
+  theme->NotifyOnNativeThemeUpdated();
+  image_source->GetImageForScale(1.0f);
 }
 
 // Tests the appearance of extension actions for extensions without a browser or
@@ -469,7 +482,7 @@ void ExtensionActionViewControllerGrayscaleTest::RunGrayscaleTest(
       extensions::ExtensionActionRunner::GetForWebContents(web_contents);
   int tab_id = sessions::SessionTabHelper::IdForTab(web_contents).id();
 
-  for (size_t i = 0; i < base::size(test_cases); ++i) {
+  for (size_t i = 0; i < std::size(test_cases); ++i) {
     SCOPED_TRACE(
         base::StringPrintf("Running test case %d", static_cast<int>(i)));
     const auto& test_case = test_cases[i];
@@ -577,14 +590,9 @@ TEST_F(ExtensionActionViewControllerGrayscaleTest,
 }
 
 TEST_F(ExtensionActionViewControllerUnitTest, RuntimeHostsTooltip) {
-  scoped_refptr<const extensions::Extension> extension =
-      extensions::ExtensionBuilder("extension name")
-          .SetAction(extensions::ActionInfo::TYPE_BROWSER)
-          .SetLocation(ManifestLocation::kInternal)
-          .AddPermission("https://www.google.com/*")
-          .Build();
-  extension_service()->GrantPermissions(extension.get());
-  extension_service()->AddExtension(extension.get());
+  auto extension = CreateAndAddExtensionWithGrantedHostPermissions(
+      "extension name", extensions::ActionInfo::TYPE_BROWSER,
+      {"https://www.google.com/*"});
 
   extensions::ScriptingPermissionsModifier permissions_modifier(profile(),
                                                                 extension);
@@ -696,12 +704,8 @@ TEST_F(ExtensionActionViewControllerUnitTest, ActiveTabIconAppearance) {
 // Tests that an extension with the activeTab permission is shown to be pending
 // user approval for normal web pages, but not for restricted URLs.
 TEST_F(ExtensionActionViewControllerUnitTest, GetSiteInteractionWithActiveTab) {
-  scoped_refptr<const extensions::Extension> extension =
-      extensions::ExtensionBuilder("active tab")
-          .SetAction(extensions::ActionInfo::TYPE_BROWSER)
-          .AddPermission("activeTab")
-          .Build();
-  extension_service()->AddExtension(extension.get());
+  auto extension = CreateAndAddExtensionWithGrantedHostPermissions(
+      "active tab", extensions::ActionInfo::TYPE_BROWSER, {"activeTab"});
 
   // Navigate the browser to google.com. Since clicking the extension would
   // grant access to the page, the page interaction status should show as
@@ -794,14 +798,9 @@ TEST_F(ExtensionActionViewControllerUnitTest,
 // (though it's a bit unclear when this is the case).
 // See https://crbug.com/888121
 TEST_F(ExtensionActionViewControllerUnitTest, TestGetIconWithNullWebContents) {
-  scoped_refptr<const extensions::Extension> extension =
-      extensions::ExtensionBuilder("extension name")
-          .SetAction(extensions::ActionInfo::TYPE_BROWSER)
-          .AddPermission("https://example.com/")
-          .Build();
-
-  extension_service()->GrantPermissions(extension.get());
-  extension_service()->AddExtension(extension.get());
+  auto extension = CreateAndAddExtensionWithGrantedHostPermissions(
+      "extension name", extensions::ActionInfo::TYPE_BROWSER,
+      {"https://example.com/"});
 
   extensions::ScriptingPermissionsModifier permissions_modifier(profile(),
                                                                 extension);

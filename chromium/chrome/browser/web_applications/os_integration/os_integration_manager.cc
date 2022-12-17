@@ -16,7 +16,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_util.h"
-#include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "build/build_config.h"
@@ -333,13 +332,6 @@ const apps::FileHandlers* OsIntegrationManager::GetEnabledFileHandlers(
   return file_handler_manager_->GetEnabledFileHandlers(app_id);
 }
 
-const absl::optional<GURL> OsIntegrationManager::GetMatchingFileHandlerURL(
-    const AppId& app_id,
-    const std::vector<base::FilePath>& launch_files) {
-  DCHECK(file_handler_manager_);
-  return file_handler_manager_->GetMatchingFileHandlerURL(app_id, launch_files);
-}
-
 absl::optional<GURL> OsIntegrationManager::TranslateProtocolUrl(
     const AppId& app_id,
     const GURL& protocol_url) {
@@ -349,44 +341,38 @@ absl::optional<GURL> OsIntegrationManager::TranslateProtocolUrl(
   return protocol_handler_manager_->TranslateProtocolUrl(app_id, protocol_url);
 }
 
-std::vector<ProtocolHandler> OsIntegrationManager::GetHandlersForProtocol(
-    const std::string& protocol) {
+std::vector<custom_handlers::ProtocolHandler>
+OsIntegrationManager::GetHandlersForProtocol(const std::string& protocol) {
   if (!protocol_handler_manager_)
-    return std::vector<ProtocolHandler>();
+    return std::vector<custom_handlers::ProtocolHandler>();
 
   return protocol_handler_manager_->GetHandlersFor(protocol);
 }
 
-std::vector<ProtocolHandler> OsIntegrationManager::GetAppProtocolHandlers(
-    const AppId& app_id) {
+std::vector<custom_handlers::ProtocolHandler>
+OsIntegrationManager::GetAppProtocolHandlers(const AppId& app_id) {
   if (!protocol_handler_manager_)
-    return std::vector<ProtocolHandler>();
+    return std::vector<custom_handlers::ProtocolHandler>();
 
   return protocol_handler_manager_->GetAppProtocolHandlers(app_id);
 }
 
-std::vector<ProtocolHandler>
+std::vector<custom_handlers::ProtocolHandler>
 OsIntegrationManager::GetAllowedHandlersForProtocol(
     const std::string& protocol) {
   if (!protocol_handler_manager_)
-    return std::vector<ProtocolHandler>();
+    return std::vector<custom_handlers::ProtocolHandler>();
 
   return protocol_handler_manager_->GetAllowedHandlersForProtocol(protocol);
 }
 
-std::vector<ProtocolHandler>
+std::vector<custom_handlers::ProtocolHandler>
 OsIntegrationManager::GetDisallowedHandlersForProtocol(
     const std::string& protocol) {
   if (!protocol_handler_manager_)
-    return std::vector<ProtocolHandler>();
+    return std::vector<custom_handlers::ProtocolHandler>();
 
   return protocol_handler_manager_->GetDisallowedHandlersForProtocol(protocol);
-}
-
-WebAppFileHandlerManager&
-OsIntegrationManager::file_handler_manager_for_testing() {
-  DCHECK(file_handler_manager_);
-  return *file_handler_manager_;
 }
 
 UrlHandlerManager& OsIntegrationManager::url_handler_manager_for_testing() {

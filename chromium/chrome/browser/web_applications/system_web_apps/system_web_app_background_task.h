@@ -78,11 +78,6 @@ class SystemAppBackgroundTask {
   // For up to an hour.
   static const int kIdlePollMaxTimeToWaitSeconds = 3600;
 
-  // The duration we polled for before becoming idle and starting the background
-  // task.
-  static constexpr char kBackgroundStartDelayHistogramName[] =
-      "Webapp.SystemApps.BackgroundTaskStartDelay";
-
   SystemAppBackgroundTask(Profile* profile,
                           const SystemAppBackgroundTaskInfo& info);
   ~SystemAppBackgroundTask();
@@ -156,9 +151,9 @@ class SystemAppBackgroundTask {
   TimerState state_;
   GURL url_;
   absl::optional<base::TimeDelta> period_;
-  unsigned long opened_count_;
-  unsigned long timer_activated_count_;
-  bool open_immediately_;
+  unsigned long opened_count_ = 0U;
+  unsigned long timer_activated_count_ = 0U;
+  bool open_immediately_ = false;
   base::Time polling_since_time_;
   CloseDelegate delegate_;
 

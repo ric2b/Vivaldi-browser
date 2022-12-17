@@ -5,6 +5,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_GRAPHICS_CANVAS_RESOURCE_PROVIDER_H_
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_GRAPHICS_CANVAS_RESOURCE_PROVIDER_H_
 
+#include "base/notreached.h"
 #include "cc/paint/skia_paint_canvas.h"
 #include "cc/raster/playback_image_provider.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
@@ -15,6 +16,7 @@
 #include "third_party/blink/renderer/platform/graphics/paint/paint_recorder.h"
 #include "third_party/blink/renderer/platform/instrumentation/canvas_memory_dump_provider.h"
 #include "third_party/blink/renderer/platform/wtf/thread_specific.h"
+#include "third_party/blink/renderer/platform/wtf/vector.h"
 #include "third_party/skia/include/core/SkSurface.h"
 
 class GrDirectContext;

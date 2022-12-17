@@ -17,7 +17,6 @@ struct FilteredRequestInfo {
       uint64_t request_id,
       int render_process_id,
       int render_frame_id,
-      int32_t view_routing_id,
       const network::ResourceRequest& request,
       content::ContentBrowserClient::URLLoaderFactoryType loader_factory_type,
       bool is_async,
@@ -39,7 +38,6 @@ struct FilteredRequestInfo {
   network::mojom::URLResponseHeadPtr response;
 
   // The routing ID of the object which initiated the request, if applicable.
-  const int view_routing_id = MSG_ROUTING_NONE;
 
   // The ID of the render process which runs the frame where the request
   // happens.

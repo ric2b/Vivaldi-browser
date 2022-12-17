@@ -39,12 +39,21 @@ class ASH_EXPORT AppListNudgeController {
   // Registers profile prefs.
   static void RegisterProfilePrefs(PrefRegistrySimple* registry);
 
+  // Clears nudges profile perfs. Used when a new user session is added in the
+  // app list controller. This feature can be toggled in chrome:://flags with
+  // launcher-nudge-session-reset flag.
+  static void ResetPrefsForNewUserSession(PrefService* prefs);
+
   // Gets the number of times that the nudge with type `type` has been shown.
   static int GetShownCount(PrefService* prefs, NudgeType type);
 
-  // Set the value of global variable `g_nudge_disabled_for_test` to disable
-  // showing the nudge.
-  static void SetNudgeDisabledForTest(bool is_disabled);
+  // Set the value of global variable `g_reorder_nudge_disabled_for_test` to
+  // disable showing the nudge.
+  static void SetReorderNudgeDisabledForTest(bool is_disabled);
+
+  // Set the value of global variable `g_privacy_nudge_accepted_for_test` to
+  // disable showing the nudge.
+  static void SetPrivacyNoticeAcceptedForTest(bool is_accepted);
 
   // Returns true if the reorder nudge should be shown.
   bool ShouldShowReorderNudge() const;
@@ -53,6 +62,22 @@ class ASH_EXPORT AppListNudgeController {
   // indicates that the temporary sort order is cleared.
   void OnTemporarySortOrderChanged(
       const absl::optional<AppListSortOrder>& new_order);
+
+  // Updates the privacy notice's accepted pref. The
+  // caller of this function is responsible for the actual creation and removal
+  // of the nudge view.
+  void SetPrivacyNoticeAcceptedPref(bool accepted);
+
+  // Updates the privacy notice's shown pref. The
+  // caller of this function is responsible for the actual creation and removal
+  // of the nudge view.
+  void SetPrivacyNoticeShownPref(bool shown);
+
+  // Whether the user has already accepted the privacy notice.
+  bool IsPrivacyNoticeAccepted() const;
+
+  // Whether the user has already seen the privacy notice.
+  bool WasPrivacyNoticeShown() const;
 
   // Updates the nudge type when the privacy notice is showing or hiding. The
   // caller of this function is responsible for the actual creation and removal
@@ -69,6 +94,10 @@ class ASH_EXPORT AppListNudgeController {
   // nudge view. Note that inactive nudge state does not necessarily mean that
   // the nudge is hidden. A inactive nudge could be visible in the background.
   void SetNudgeActive(bool is_nudge_active, NudgeType type);
+
+  // Called when the reorder nudge is dismissed. Updates the pref so the reorder
+  // nudge will not show again.
+  void OnReorderNudgeConfirmed();
 
   // Updates the the current nudge state in prefs to determine if a nudge should
   // be showing.

@@ -14,9 +14,9 @@
 
 #include "client/crash_report_database.h"
 
+#import <Foundation/Foundation.h>
 #include <errno.h>
 #include <fcntl.h>
-#import <Foundation/Foundation.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <sys/stat.h>
@@ -25,9 +25,9 @@
 #include <unistd.h>
 #include <uuid/uuid.h>
 
+#include <iterator>
 #include <tuple>
 
-#include "base/cxx17_backports.h"
 #include "base/logging.h"
 #include "base/mac/scoped_nsautorelease_pool.h"
 #include "base/posix/eintr_wrapper.h"
@@ -42,6 +42,10 @@
 #include "util/mac/xattr.h"
 #include "util/misc/initialization_state_dcheck.h"
 #include "util/misc/metrics.h"
+
+#if BUILDFLAG(IS_IOS)
+#include "util/ios/scoped_background_task.h"
+#endif  // BUILDFLAG(IS_IOS)
 
 namespace crashpad {
 
@@ -179,6 +183,11 @@ class CrashReportDatabaseMac : public CrashReportDatabase {
   //! \brief A private extension of the Report class that maintains bookkeeping
   //!    information of the database.
   struct UploadReportMac : public UploadReport {
+#if BUILDFLAG(IS_IOS)
+    //! \brief Obtain a background task assertion while a flock is in use.
+    //!     Ensure this is defined first so it is destroyed last.
+    internal::ScopedBackgroundTask ios_background_task{"UploadReportMac"};
+#endif  // BUILDFLAG(IS_IOS)
     //! \brief Stores the flock of the file for the duration of
     //!     GetReportForUploading() and RecordUploadAttempt().
     base::ScopedFD lock_fd;
@@ -282,7 +291,7 @@ bool CrashReportDatabaseMac::Initialize(bool may_create) {
   }
 
   // Create the three processing directories for the database.
-  for (size_t i = 0; i < base::size(kReportDirectories); ++i) {
+  for (size_t i = 0; i < std::size(kReportDirectories); ++i) {
     if (!CreateOrEnsureDirectoryExists(base_dir_.Append(kReportDirectories[i])))
       return false;
   }

@@ -9,7 +9,6 @@
 <translation id="1054153489933238809">گشودن &amp;تصویر اصلی در زبانه‌ی جدید</translation>
 <translation id="1056898198331236512">اخطار</translation>
 <translation id="1084824384139382525">کپی آدر&amp;س پیوند</translation>
-<translation id="1128109161498068552">‏به هیچ سایتی اجازه داده نشود که برای دسترسی به دستگاه‌های MIDI از پیام‌های انحصاری سیستم استفاده کند</translation>
 <translation id="1163931534039071049">&amp;مشاهده‌ی منبع قاب</translation>
 <translation id="1165039591588034296">خطا</translation>
 <translation id="1175364870820465910">&amp;چاپ...</translation>
@@ -22,7 +21,6 @@
 <translation id="1297175357211070620">مقصد</translation>
 <translation id="1303101771013849280">‏فایل HTML نشانک‌ها</translation>
 <translation id="1430915738399379752">چاپ</translation>
-<translation id="1433811987160647649">پیش از دسترسی سؤال شود</translation>
 <translation id="1451375123200651445">صفحه وب، فایل تکی</translation>
 <translation id="1465176863081977902">کپی آدرس صوت</translation>
 <translation id="1476607407192946488">&amp;تنظیمات زبان</translation>
@@ -99,13 +97,11 @@
 <translation id="2783321960289401138">ایجاد میان‌بر...</translation>
 <translation id="2785873697295365461">توصیف‌گرهای فایل</translation>
 <translation id="2809586584051668049">و <ph name="NUMBER_ADDITIONAL_DISABLED" /> مورد دیگر</translation>
-<translation id="2812989263793994277">تصویری نشان داده نشود</translation>
 <translation id="2850541429955027218">افزودن قالب</translation>
 <translation id="2861941300086904918">‏مدیر امنیت Native Client</translation>
 <translation id="2881076733170862447">وقتی روی افزونه کلیک می‌کنید</translation>
 <translation id="2889064240420137087">گشودن پیوند با...</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> نتوانست با این چاپگر ارتباط برقرار کند. مطمئن شوید چاپگر روشن است و دوباره امتحان کنید.</translation>
-<translation id="2904456025988372123">هنگامی که سایتی پس از اولین فایل سعی در دانلود خودکار سایر فایل‌ها دارد، از کاربر سوال شود</translation>
 <translation id="2913331724188855103">اجازه به سایت‌ها برای ذخیره‌سازی و خواندن اطلاعات کوکی (توصیه می‌شود)</translation>
 <translation id="2931157624143513983">متناسب با ناحیه‌ی قابل چاپ</translation>
 <translation id="2932085390869194046">پیشنهاد رمز عبور…</translation>
@@ -126,7 +122,6 @@
 <translation id="3127156390846601284">این کار باعث حذف تمام داده‌های ذخیره‌شده روی دستگاهتان برای همه سایت‌های نشان‌داده‌شده می‌شود. می‌خواهید ادامه دهید؟</translation>
 <translation id="3129173833825111527">حاشیه چپ</translation>
 <translation id="3144647712221361880">گشودن پیوند به‌عنوان</translation>
-<translation id="3154429428035006212">آفلاین برای مدت بیش از یک ماه</translation>
 <translation id="3222066309010235055">پیش رندر: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">دایرکتوری ریشه برنامهٔ افزودنی را برای فشرده کردن انتخاب کنید. همچنین برای به‌روزرسانی برنامهٔ افزودنی، فایل کلید خصوصی را برای استفاده مجدد انتخاب کنید.</translation>
 <translation id="3280237271814976245">ذخیره &amp;به‌عنوان...</translation>
@@ -143,6 +138,7 @@
 <translation id="3360297538363969800">چاپ ناموفق بود. لطفاً چاپگرتان را بررسی کنید و دوباره امتحان کنید.</translation>
 <translation id="3378572629723696641">ممکن است این برنامه افزودنی خراب شده باشد.</translation>
 <translation id="3387614642886316601">استفاده از غلط‌گیر املایی بهبودیافته</translation>
+<translation id="3393582007140394275">اشتراک‌گذاری محتوای صفحه نمایش ممکن نیست.</translation>
 <translation id="3432227430032737297">حذف همه‌ی موارد نشان‌ داده شده</translation>
 <translation id="345693547134384690">گشودن &amp;تصویر در زبانه‌ی جدید</translation>
 <translation id="3494769164076977169">هنگامی که سایتی پس از اولین فایل سعی در دانلود خودکار سایر فایل‌ها دارد، از کاربر سوال شود (توصیه می‌شود)</translation>
@@ -165,7 +161,6 @@
 <translation id="3838085852053358637">افزونه بارگذاری نشد</translation>
 <translation id="383891835335927981">هیچ سایتی بزرگ‌نمایی یا کوچک‌نمایی نشده است</translation>
 <translation id="385051799172605136">بازگشت</translation>
-<translation id="3899879303189199559">آفلاین برای مدت بیش از یک سال</translation>
 <translation id="3905761538810670789">تعمیر برنامه</translation>
 <translation id="3908501907586732282">فعال کردن برنامه افزودنی</translation>
 <translation id="3909701002594999354">نمایش همه &amp;کنترل‌ها</translation>
@@ -192,7 +187,6 @@
 <translation id="4200983522494130825">&amp;زبانه‌ی جدید</translation>
 <translation id="4225397296022057997">در همه‌ی سایت‌ها</translation>
 <translation id="4256316378292851214">ذ&amp;خیره‌ی فایل ویدیویی به‌عنوان...</translation>
-<translation id="4278390842282768270">مجاز است</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> کیلوبایت (<ph name="NUM_KILOBYTES_LIVE" />کیلوبایت زنده)</translation>
 <translation id="4345587454538109430">پیکربندی...</translation>
 <translation id="4348766275249686434">جمع‌آوری خطاها</translation>
@@ -217,15 +211,15 @@
 <translation id="488785315393301722">نمایش جزئیات</translation>
 <translation id="4907306957610201395">دسته‌بندی مجوز</translation>
 <translation id="4912643508233590958">خروج از حالت بیکار</translation>
+<translation id="49265687513387605">اشتراک‌گذاری محتوای صفحه نمایش ممکن نیست. برای شروع اشتراک‌گذاری صفحه، از تأیید پیام مربوط به آن اطمینان حاصل کنید.</translation>
 <translation id="4927753642311223124">در اینجا چیزی برای مشاهده وجود ندارد، به حرکت ادامه دهید.</translation>
 <translation id="4930714375720679147">فعال‌سازی</translation>
+<translation id="4961318399572185831">به اشتراک‌گذاری صفحه نمایش</translation>
 <translation id="4988526792673242964">صفحات</translation>
 <translation id="49896407730300355">چرخش &amp;خلاف جهت عقربه‌های ساعت</translation>
 <translation id="4989966318180235467">بازرسی صفحه‌ی &amp;پس‌زمینه</translation>
-<translation id="4994474651455208930">به سایت‌ها اجازه داده شود درخواست کنند تا کنترل کننده پیش‌فرض برای پروتکل ها شوند</translation>
 <translation id="5000922062037820727">مسدود (توصیه می‌شود)</translation>
 <translation id="5027562294707732951">افزودن افزونه</translation>
-<translation id="5036662165765606524">اجازه‌ی دانلود خودکار چند فایل به هیچ سایتی داده نشود</translation>
 <translation id="5039804452771397117">اجازه دادن</translation>
 <translation id="5057110919553308744">وقتی روی افزونه کلیک می‌کنید</translation>
 <translation id="5059526285558225588">انتخاب موارد قابل اشتراک‌گذاری</translation>
@@ -238,7 +232,6 @@
 <translation id="5233231016133573565">شناسه فرایند</translation>
 <translation id="5233736638227740678">&amp;چسباندن</translation>
 <translation id="5256861893479663409">در همه‌ی سایت‌ها</translation>
-<translation id="5265562206369321422">آفلاین برای مدت بیش از یک هفته</translation>
 <translation id="5269977353971873915">چاپ نشد</translation>
 <translation id="5284445933715251131">ادامه‌ی دانلود</translation>
 <translation id="52912272896845572">فایل کلید خصوصی نامعتبر است.</translation>
@@ -294,7 +287,6 @@
 <translation id="6122081475643980456">اتصال اینترنت شما کنترل می‌شود</translation>
 <translation id="6147020289383635445">پیش‌نمایش چاپ کار نمی‌کند.</translation>
 <translation id="6156863943908443225">حافظه‌ی نهان اسکریپت</translation>
-<translation id="6169666352732958425">ارسال محتوای میزکار امکان‌پذیر نیست.</translation>
 <translation id="6196854373336333322">افزونه «<ph name="EXTENSION_NAME" />»، کنترل تنظیمات پروکسی شما را در اختیار گرفته است یعنی می‌تواند هر چیزی که در حالت آنلاین انجام می‌دهید تغییر دهد، خراب کند یا استراق سمع کند. اگر مطمئن نیستید چرا این تغییر انجام شده است، احتمالاً این افزونه را نمی‌خواهید.</translation>
 <translation id="6200151268994853226">مدیریت افزونه</translation>
 <translation id="6206311232642889873">&amp;کپی تصویر</translation>
@@ -328,7 +320,6 @@
 <translation id="6798954102094737107">افزایه: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">حفظ تغییرات</translation>
 <translation id="6817174620439930047">‏اگر سایتی می‌خواهد از پیام‌های انحصاری سیستم برای دسترسی به دستگاه‌های MIDI استفاده کند سؤال شود (توصیه می‌شود)</translation>
-<translation id="682123305478866682">ارسال محتوای میزکار</translation>
 <translation id="6824564591481349393">کپی آدرس &amp;ایمیل</translation>
 <translation id="6840155290835956714">پیش از ارسال سؤال شود</translation>
 <translation id="6886871292305414135">گشودن پیوند در &amp;زبانه‌ی جدید</translation>
@@ -346,7 +337,6 @@
 <translation id="708060913198414444">کپی آدرس صوت</translation>
 <translation id="7175353351958621980">بارگذاری شده از:</translation>
 <translation id="7186088072322679094">نگهداری در نوار ابزار</translation>
-<translation id="7270858098575133036">‏اگر سایتی می‌خواهد از پیام‌های انحصاری سیستم برای دسترسی به دستگاه‌های MIDI استفاده کند سؤال شود</translation>
 <translation id="7287143125007575591">دسترسی رد شد.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />×<ph name="VERTICAL_DPI" /> نقطه در اینچ</translation>
 <translation id="7385854874724088939">هنگام چاپ، اشتباهی رخ داده است. لطفاً چاپگر خود را بررسی کنید و دوباره امتحان کنید.</translation>
@@ -369,7 +359,6 @@
 <translation id="7704305437604973648">کار</translation>
 <translation id="7710568461918838723">&amp;ارسال محتوا...</translation>
 <translation id="7750228210027921155">تصویر در تصویر</translation>
-<translation id="7751260505918304024">نمایش همه</translation>
 <translation id="7760004034676677601">آیا این صفحه راه‌اندازی مورد انتظار شماست؟</translation>
 <translation id="7771452384635174008">صفحه آرایی</translation>
 <translation id="7782102568078991263">‏پیشنهاد دیگری از Google وجود ندارد</translation>
@@ -382,9 +371,7 @@
 <translation id="7849264908733290972">گشودن &amp;تصویر در زبانه‌ی جدید</translation>
 <translation id="7857949311770343000">این صفحه برگه جدیدی است که منتظرش بودید؟</translation>
 <translation id="786073089922909430">سرویس: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7885253890047913815">مقصدهای اخیر</translation>
 <translation id="7903925330883316394">ابزار: <ph name="UTILITY_TYPE" /></translation>
-<translation id="7938594894617528435">در حال حاضر آفلاین</translation>
 <translation id="7947962633355574091">کپی آدرس ویدیو</translation>
 <translation id="7966241909927244760">کپی آدرس تصویر</translation>
 <translation id="7973394300052703468">پنجره‌ی &amp;خصوصی جدید</translation>
@@ -427,10 +414,8 @@
 <translation id="8708000541097332489">پاک‌سازی در هنگام خروج</translation>
 <translation id="8714838604780058252">گرافیک‌های پس‌زمینه</translation>
 <translation id="8725066075913043281">تلاش مجدد</translation>
-<translation id="8757090071857742562">ارسال محتوای میزکار امکان‌پذیر نیست.  ببینید آیا فرمان شروع اشتراک‌گذاری صفحه‌تان را تأیید کرده‌اید.</translation>
 <translation id="8774934320277480003">حاشیه بالا</translation>
 <translation id="8798099450830957504">پیش‌فرض</translation>
-<translation id="8800004011501252845">نمایش مقصدها برای</translation>
 <translation id="8808478386290700967">فروشگاه وب</translation>
 <translation id="8823514049557262177">کپی &amp;متن پیوند</translation>
 <translation id="8823704566850948458">پیشنهاد رمز عبور…</translation>
@@ -443,7 +428,6 @@
 <translation id="8962083179518285172">پنهان کردن جزئیات</translation>
 <translation id="8973557916016709913">حذف میزان بزرگ‌نمایی</translation>
 <translation id="897939795688207351">بر روی <ph name="ORIGIN" /></translation>
-<translation id="8996526648899750015">افزودن حساب...</translation>
 <translation id="9003647077635673607">اجازه‌ی کار بر روی همه‌ی وب‌سایت‌ها</translation>
 <translation id="9027459031423301635">گشودن پیوند در &amp;زبانه‌ی جدید</translation>
 <translation id="9056810968620647706">مورد منطبقی یافت نشد.</translation>

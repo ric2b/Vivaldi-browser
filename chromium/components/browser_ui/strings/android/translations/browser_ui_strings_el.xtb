@@ -77,6 +77,7 @@
 <translation id="2687403674020088961">Αποκλεισμός όλων των cookie (δεν συνιστάται)</translation>
 <translation id="2704606927547763573">Αντιγράφ.</translation>
 <translation id="2717722538473713889">Διευθύνσεις ηλεκτρονικού ταχυδρομείου</translation>
+<translation id="2750481671343847896">Οι ιστότοποι μπορούν πλέον να εμφανίζουν προτροπές σύνδεσης από υπηρεσίες ταυτότητας.</translation>
 <translation id="2785051990912111074">Αυτή η επιλογή θα διαγράψει τα cookie για τον ιστότοπο <ph name="WEBSITE" />.</translation>
 <translation id="2822354292072154809">Είστε βέβαοι ότι θέλετε να αναιρεθούν όλες οι άδειες ιστοτόπου για το αντικείμενο <ph name="CHOSEN_OBJECT_NAME" />;</translation>
 <translation id="2870560284913253234">Ιστότοπος</translation>
@@ -112,6 +113,7 @@
 <translation id="3763247130972274048">Πατήστε δύο φορές στην αριστερή ή τη δεξιά πλευρά του βίντεο για παράβλεψη 10 δ.</translation>
 <translation id="3797520601150691162">Να μην εφαρμόζεται σκούρο θέμα για έναν συγκεκριμένο ιστότοπο</translation>
 <translation id="381841723434055211">Αριθμοί τηλεφώνου</translation>
+<translation id="3826050100957962900">Σύνδεση τρίτων μερών</translation>
 <translation id="3835233591525155343">Χρήση της συσκευής σας</translation>
 <translation id="385051799172605136">Πίσω</translation>
 <translation id="3859306556332390985">Αναζήτηση προς τα εμπρός</translation>
@@ -122,7 +124,6 @@
 <translation id="3991845972263764475"><ph name="BYTES_DOWNLOADED_WITH_UNITS" /> / ?</translation>
 <translation id="4002066346123236978">Τίτλος</translation>
 <translation id="4008040567710660924">Επιτρέπει τα cookie για έναν συγκεκριμένο ιστότοπο.</translation>
-<translation id="4040330681741629921">Λάβετε ειδοποίηση όταν ένας ιστότοπος μπορεί να εμφανιστεί σε απλοποιημένη προβολή</translation>
 <translation id="4046123991198612571">Επόμενο κομμάτι</translation>
 <translation id="4149994727733219643">Απλοποιημένη προβολή για ιστοσελίδες</translation>
 <translation id="4165986682804962316">Ρυθμίσεις ιστότοπου</translation>
@@ -236,6 +237,7 @@
 <translation id="6643016212128521049">Διαγραφή</translation>
 <translation id="6689172468748959065">Φωτογραφίες προφίλ</translation>
 <translation id="6697925417670533197">Ενεργές λήψεις</translation>
+<translation id="6722828510648505498">Αποκλείστε τις προτροπές σύνδεσης από υπηρεσίες ταυτότητας.</translation>
 <translation id="6746124502594467657">Μετακίνηση προς τα κάτω</translation>
 <translation id="6749077623962119521">Επαναφορά αδειών;</translation>
 <translation id="6766622839693428701">Σύρετε προς τα κάτω για κλείσιμο.</translation>
@@ -255,6 +257,7 @@
 <translation id="7087918508125750058">Επιλέχθηκαν <ph name="ITEM_COUNT" />. Οι επιλογές είναι διαθέσιμες κοντά στο επάνω μέρος της οθόνης</translation>
 <translation id="7141896414559753902">Αποκλεισμός εμφάνισης αναδυόμενων παραθύρων και ανακατευθύνσεων σε ιστοτόπους (συνιστάται)</translation>
 <translation id="7176368934862295254"><ph name="KILOBYTES" /> KB</translation>
+<translation id="7180611975245234373">Ανανέωση</translation>
 <translation id="723171743924126238">Επιλέξτε εικόνες</translation>
 <translation id="7243308994586599757">Διαθέσιμες επιλογές κοντά κάτω μέρος της οθόνης</translation>
 <translation id="7250468141469952378">Επιλέχθηκαν <ph name="ITEM_COUNT" /></translation>
@@ -308,7 +311,9 @@
 <translation id="83792324527827022">Ένας ιστότοπος χρησιμοποιεί την κάμερα και το μικρόφωνό σας.</translation>
 <translation id="8380167699614421159">Αυτός ο ιστότοπος εμφανίζει παρεμβατικές ή παραπλανητικές διαφημίσεις</translation>
 <translation id="8394832520002899662">Πατήστε για επιστροφή στον ιστότοπο</translation>
+<translation id="8409345997656833551">Λάβετε ειδοποίηση όταν ένα άρθρο μπορεί να εμφανιστεί σε απλοποιημένη προβολή.</translation>
 <translation id="8425213833346101688">Αλλαγή</translation>
+<translation id="8428213095426709021">Ρυθμίσεις</translation>
 <translation id="8441146129660941386">Αναζήτηση προς τα πίσω</translation>
 <translation id="8444433999583714703">Για να επιτρέψετε στην εφαρμογή <ph name="APP_NAME" /> να αποκτήσει πρόσβαση στην τοποθεσία σας, ενεργοποιήστε επίσης την τοποθεσία στις <ph name="BEGIN_LINK" />Ρυθμίσεις Android<ph name="END_LINK" />.</translation>
 <translation id="8447861592752582886">Ανάκληση άδειας συσκευής</translation>

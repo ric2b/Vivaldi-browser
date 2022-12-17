@@ -66,6 +66,10 @@ WebUILoginView* FakeLoginDisplayHost::GetWebUILoginView() const {
 
 void FakeLoginDisplayHost::BeforeSessionStart() {}
 
+bool FakeLoginDisplayHost::IsFinalizing() {
+  return false;
+}
+
 void FakeLoginDisplayHost::Finalize(base::OnceClosure) {}
 
 void FakeLoginDisplayHost::FinalizeImmediately() {}
@@ -99,8 +103,6 @@ void FakeLoginDisplayHost::CancelUserAdding() {}
 
 void FakeLoginDisplayHost::StartSignInScreen() {}
 
-void FakeLoginDisplayHost::OnPreferencesChanged() {}
-
 void FakeLoginDisplayHost::StartKiosk(const KioskAppId& kiosk_app_id,
                                       bool is_auto_launch) {}
 
@@ -127,6 +129,8 @@ bool FakeLoginDisplayHost::IsUserAllowlisted(
 }
 
 void FakeLoginDisplayHost::ShowGaiaDialog(const AccountId& prefilled_account) {}
+
+void FakeLoginDisplayHost::ShowAllowlistCheckFailedError() {}
 
 void FakeLoginDisplayHost::ShowOsInstallScreen() {}
 

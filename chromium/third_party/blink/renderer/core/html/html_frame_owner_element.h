@@ -32,6 +32,7 @@
 #include "third_party/blink/renderer/core/html/html_element.h"
 #include "third_party/blink/renderer/core/permissions_policy/permissions_policy_parser.h"
 #include "third_party/blink/renderer/core/scroll/scroll_types.h"
+#include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_set.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/weborigin/security_policy.h"
 #include "third_party/blink/renderer/platform/wtf/casting.h"
@@ -197,7 +198,6 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
   void SetIsSwappingFrames(bool is_swapping) override {
     is_swapping_frames_ = is_swapping;
   }
-  bool IsLazyLoadableAd() const;
 
   // Check if the frame should be lazy-loaded and apply when conditions are
   // passed. Return true when lazy-load is applied.

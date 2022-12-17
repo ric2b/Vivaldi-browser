@@ -17,12 +17,12 @@
     }                                                                      \
                                                                            \
     SessionID window_id = SessionID::InvalidValue();                       \
-    std::string ext_data;                                                  \
-    if (!vivaldi::RestoreSetWindowExtDataCommand(command, &window_id,      \
-                                                 &ext_data))               \
+    std::string viv_ext_data;                                              \
+    if (!vivaldi::RestoreSetWindowVivExtDataCommand(command, &window_id,   \
+                                                 &viv_ext_data))           \
       return;                                                              \
                                                                            \
-    current_window->first->ext_data.swap(ext_data);                               \
+    current_window->first->viv_ext_data.swap(viv_ext_data);                \
     break;                                                                 \
   }                                                                        \
                                                                            \
@@ -32,11 +32,11 @@
       return;                                                              \
     }                                                                      \
     SessionID tab_id = SessionID::InvalidValue();                          \
-    std::string ext_data;                                                  \
-    if (!vivaldi::RestoreSetExtDataCommand(command, &tab_id, &ext_data)) { \
+    std::string viv_ext_data;                                              \
+    if (!vivaldi::RestoreSetVivExtDataCommand(command, &tab_id, &viv_ext_data)) { \
       return;                                                              \
     }                                                                      \
-    current_tab->ext_data.swap(ext_data);                                  \
+    current_tab->viv_ext_data.swap(viv_ext_data);                          \
     break;                                                                 \
   }                                                                        \
                                                                            \
@@ -46,11 +46,11 @@
     SessionID tab_id = SessionID::InvalidValue();                          \
     std::string script_path;                                               \
     bool is_enabled_override;                                              \
-    if (!vivaldi::RestorePageActionOverrideCommand(                        \
+    if (!vivaldi::RestoreVivPageActionOverrideCommand(                     \
             command, &tab_id, &script_path, &is_enabled_override)) {       \
       return;                                                              \
     }                                                                      \
-    current_tab->page_action_overrides.emplace(                            \
+    current_tab->viv_page_action_overrides.emplace(                        \
         std::make_pair(script_path, is_enabled_override));                 \
     break;                                                                 \
   }
@@ -58,26 +58,26 @@
 void VivaldiScheduleTabCommands(
     CommandStorageManager* command_storage_manager,
     const TabRestoreService::Tab& tab) {
-  if (!tab.ext_data.empty()) {
+  if (!tab.viv_ext_data.empty()) {
     command_storage_manager->ScheduleCommand(
-        vivaldi::CreateSetTabExtDataCommand(kCommandSetExtData, tab.id,
-                                            tab.ext_data));
+        vivaldi::CreateSetTabVivExtDataCommand(kCommandSetExtData, tab.id,
+                                            tab.viv_ext_data));
   }
 
-  for (const auto& page_action_override : tab.page_action_overrides) {
+  for (const auto& viv_page_action_override : tab.viv_page_action_overrides) {
     command_storage_manager->ScheduleCommand(
-        vivaldi::CreatePageActionOverrideCommand(
-            kCommandPageActionOverrides, tab.id, page_action_override.first,
-            page_action_override.second));
+        vivaldi::CreateVivPageActionOverrideCommand(
+            kCommandPageActionOverrides, tab.id, viv_page_action_override.first,
+            viv_page_action_override.second));
   }
 }
 
 void VivaldiWindowsScheduleExtCommand(
     CommandStorageManager* command_storage_manager,
     const TabRestoreService::Window& window) {
-  if (!window.ext_data.empty()) {
+  if (!window.viv_ext_data.empty()) {
     command_storage_manager->ScheduleCommand(
-        vivaldi::CreateSetWindowExtDataCommand(kCommandSetWindowExtData,
-                                               window.id, window.ext_data));
+        vivaldi::CreateSetWindowVivExtDataCommand(kCommandSetWindowExtData,
+                                               window.id, window.viv_ext_data));
   }
 }

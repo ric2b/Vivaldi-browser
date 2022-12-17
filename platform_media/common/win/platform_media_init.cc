@@ -139,9 +139,22 @@ void InitForUtilityProcess(const base::CommandLine& command_line) {
   }
 }
 
-void OnFFmpegInit() {
+void OnFFmpegInit(FFWMF_LogInfo* info) {
   // Check that AAC library was preloaded.
   GetWMFLibraryForAAC();
+
+  info->max_verbosity = ::logging::GetVlogLevelHelper(
+      info->file_path, strlen(info->file_path) + 1);
+
+  info->log_function = [](int verbosity_level, const char* file_path,
+                          int line_number, const char* function_name,
+                          const char* message) -> void {
+    ::logging::LogMessage msg(file_path, line_number, -verbosity_level);
+    if (function_name) {
+      msg.stream() << function_name << ": ";
+    }
+    msg.stream() << message;
+  };
 }
 
 }  // namespace platform_media_init

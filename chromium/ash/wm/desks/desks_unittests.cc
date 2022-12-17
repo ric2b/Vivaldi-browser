@@ -40,6 +40,8 @@
 #include "ash/style/close_button.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/desks/desk.h"
+#include "ash/wm/desks/desk_action_context_menu.h"
+#include "ash/wm/desks/desk_action_view.h"
 #include "ash/wm/desks/desk_animation_base.h"
 #include "ash/wm/desks/desk_mini_view.h"
 #include "ash/wm/desks/desk_name_view.h"
@@ -343,6 +345,29 @@ class TestDeskObserver : public Desk::Observer {
 
  private:
   int notify_counts_ = 0;
+};
+
+class FullScreenStateObserver : public ShellObserver {
+ public:
+  FullScreenStateObserver() { Shell::Get()->AddShellObserver(this); }
+
+  FullScreenStateObserver(const FullScreenStateObserver&) = delete;
+  FullScreenStateObserver& operator=(const FullScreenStateObserver&) = delete;
+
+  ~FullScreenStateObserver() override {
+    Shell::Get()->RemoveShellObserver(this);
+  }
+
+  // ShellObserver:
+  void OnFullscreenStateChanged(bool is_fullscreen,
+                                aura::Window* container) override {
+    is_fullscreen_ = is_fullscreen;
+  }
+
+  bool is_fullscreen() const { return is_fullscreen_; }
+
+ private:
+  bool is_fullscreen_ = false;
 };
 
 // Defines a test fixture to test Virtual Desks behavior, parameterized to run
@@ -1859,6 +1884,75 @@ TEST_F(DesksTest, NewDeskButtonStateAndColor) {
             DesksTestApi::GetNewDeskButtonBackgroundColor());
 }
 
+// Tests that the fullscreen state in shell is updated when switching between
+// desks that have active windows in different fullscreen states.
+TEST_F(DesksTest, FullscreenStateUpdatedAcrossDesks) {
+  FullScreenStateObserver full_screen_state_observer;
+  auto* controller = DesksController::Get();
+  WMEvent event_toggle_fullscreen(WM_EVENT_TOGGLE_FULLSCREEN);
+
+  // Create one new desks.
+  NewDesk();
+  EXPECT_EQ(2u, controller->desks().size());
+
+  // Create one window in each desk.
+  std::vector<std::unique_ptr<aura::Window>> windows;
+  for (int i = 0; i < 2; i++) {
+    windows.push_back(CreateAppWindow());
+    controller->SendToDeskAtIndex(windows[i].get(), i);
+    EXPECT_EQ(i, windows[i]->GetProperty(aura::client::kWindowWorkspaceKey));
+  }
+
+  WindowState* win0_state = WindowState::Get(windows[0].get());
+  WindowState* win1_state = WindowState::Get(windows[1].get());
+
+  EXPECT_FALSE(full_screen_state_observer.is_fullscreen());
+
+  // Set window on desk 0 to fullscreen.
+  win0_state->OnWMEvent(&event_toggle_fullscreen);
+  EXPECT_EQ(windows[0].get(), window_util::GetActiveWindow());
+  EXPECT_TRUE(win0_state->IsFullscreen());
+  EXPECT_TRUE(full_screen_state_observer.is_fullscreen());
+
+  // Switch to desk 1 and expect the fullscreen state to change.
+  ActivateDesk(controller->desks()[1].get());
+
+  EXPECT_EQ(windows[1].get(), window_util::GetActiveWindow());
+  EXPECT_FALSE(win1_state->IsFullscreen());
+  EXPECT_FALSE(full_screen_state_observer.is_fullscreen());
+
+  // Cycle back to desk 0 and expect the fullscreen state to change back.
+  ActivateDesk(controller->desks()[0].get());
+
+  EXPECT_EQ(windows[0].get(), window_util::GetActiveWindow());
+  EXPECT_TRUE(win0_state->IsFullscreen());
+  EXPECT_TRUE(full_screen_state_observer.is_fullscreen());
+}
+
+// Tests the Ash.Desks.AnimationLatency.DeskActivation histogram.
+TEST_F(DesksTest, AnimationLatencyDeskActivation) {
+  NewDesk();
+  auto* controller = DesksController::Get();
+  ASSERT_EQ(2u, controller->desks().size());
+
+  base::HistogramTester histogram_tester;
+  ActivateDesk(controller->desks()[1].get());
+  histogram_tester.ExpectTotalCount("Ash.Desks.AnimationLatency.DeskActivation",
+                                    1);
+}
+
+// Tests the Ash.Desks.AnimationLatency.DeskRemoval histogram.
+TEST_F(DesksTest, AnimationLatencyDeskRemoval) {
+  NewDesk();
+  auto* controller = DesksController::Get();
+  ASSERT_EQ(2u, controller->desks().size());
+
+  base::HistogramTester histogram_tester;
+  RemoveDesk(controller->desks()[0].get());
+  histogram_tester.ExpectTotalCount("Ash.Desks.AnimationLatency.DeskRemoval",
+                                    1);
+}
+
 class DesksWithMultiDisplayOverview : public AshTestBase {
  public:
   DesksWithMultiDisplayOverview() = default;
@@ -2735,6 +2829,24 @@ TEST_F(TabletModeDesksTest, RemoveDeskWithMaximizedWindowAndMergeWithSnapped) {
   EXPECT_EQ(nullptr, split_view_controller()->right_window());
   EXPECT_EQ(SplitViewController::State::kLeftSnapped,
             split_view_controller()->state());
+}
+
+// Tests that closing the active desk while in overview does not quit overview.
+// Regression test for https://crbug.com/1309175.
+TEST_F(TabletModeDesksTest, RemovingActiveDeskDoesNotExitOverview) {
+  auto* desks_controller = DesksController::Get();
+  NewDesk();
+  ASSERT_EQ(2u, desks_controller->desks().size());
+  Desk* desk_2 = desks_controller->desks()[1].get();
+  ActivateDesk(desk_2);
+
+  auto* overview_controller = Shell::Get()->overview_controller();
+  EnterOverview();
+  ASSERT_TRUE(overview_controller->InOverviewSession());
+
+  // Remove `desk_2`, which is the active test. We should stay in overview.
+  RemoveDesk(desk_2);
+  EXPECT_TRUE(overview_controller->InOverviewSession());
 }
 
 TEST_F(TabletModeDesksTest, BackdropsStacking) {
@@ -5893,15 +6005,23 @@ TEST_F(DesksTest, PrimaryUserHasUsedDesksRecently) {
   desks_restore_util::OverrideClockForTesting(nullptr);
 }
 
+class DesksBentoBarTest : public DesksTest {
+ public:
+  DesksBentoBarTest() {
+    // Enable the bento bar feature through FeatureList instead of command line.
+    auto feature_list = std::make_unique<base::FeatureList>();
+    feature_list->RegisterFieldTrialOverride(
+        features::kBentoBar.name, base::FeatureList::OVERRIDE_ENABLE_FEATURE,
+        base::FieldTrialList::CreateFieldTrial("FooTrial", "Group1"));
+    scoped_feature_list_.InitWithFeatureList(std::move(feature_list));
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
 // Tests the visibility of the vertical dots button inside desks bar.
-TEST_F(DesksTest, VerticalDotsButtonVisibility) {
-  // Enable the bento bar feature through FeatureList instead of command line.
-  base::test::ScopedFeatureList scoped_feature_list;
-  auto feature_list = std::make_unique<base::FeatureList>();
-  feature_list->RegisterFieldTrialOverride(
-      features::kBentoBar.name, base::FeatureList::OVERRIDE_ENABLE_FEATURE,
-      base::FieldTrialList::CreateFieldTrial("FooTrial", "Group1"));
-  scoped_feature_list.InitWithFeatureList(std::move(feature_list));
+TEST_F(DesksBentoBarTest, VerticalDotsButtonVisibility) {
   ASSERT_FALSE(desks_restore_util::HasPrimaryUserUsedDesksRecently());
   EXPECT_TRUE(features::IsBentoBarEnabled());
 
@@ -6876,6 +6996,171 @@ TEST_F(DragWindowToNewDeskTest, DragWindowAtMaximumDesksState) {
   EXPECT_EQ(desks_util::kMaxNumberOfDesks, controller->desks().size());
   EXPECT_TRUE(base::Contains(controller->desks()[0]->windows(), win1.get()));
 }
+
+// A class that maintains a window created inside of a test. If the window is
+// destroyed from outside of the class, it releases the window's unique pointer
+// to prevent use-after-free issues.
+class WindowHolder : public aura::WindowObserver {
+ public:
+  explicit WindowHolder(std::unique_ptr<aura::Window> window)
+      : window_(std::move(window)) {
+    DCHECK(window_);
+    window_->AddObserver(this);
+  }
+
+  WindowHolder(const WindowHolder&) = delete;
+  WindowHolder& operator=(const WindowHolder&) = delete;
+
+  ~WindowHolder() override {
+    if (window_)
+      window_->RemoveObserver(this);
+    // `window_` is destroyed automatically here through the unique pointer.
+  }
+
+  aura::Window* window() { return window_.get(); }
+
+  bool is_valid() const { return !!window_; }
+
+  // aura::WindowObserver:
+  void OnWindowDestroying(aura::Window* window) override {
+    // The window was destroyed from outside of this WindowHolder (such as
+    // through the `Desk::CloseAllAppWindows` function). In this case, we do not
+    // want the unique pointer `window_` to try to destroy the already-destroyed
+    // window, so we need to remove this observer and release the unique
+    // pointer.
+    DCHECK_EQ(window, window_.get());
+    window_->RemoveObserver(this);
+    window_.release();
+  }
+
+ private:
+  std::unique_ptr<aura::Window> window_;
+};
+
+class DesksCloseAllTest : public DesksTest {
+ public:
+  DesksCloseAllTest() = default;
+  DesksCloseAllTest(const DesksCloseAllTest&) = delete;
+  DesksCloseAllTest& operator=(const DesksCloseAllTest&) = delete;
+  ~DesksCloseAllTest() override = default;
+
+  // Clicks on the close-all button for the desk at index `index`.
+  void ClickOnCloseAllButtonForDesk(size_t index) {
+    ASSERT_TRUE(Shell::Get()->overview_controller()->InOverviewSession());
+    const auto* desks_bar_view = GetPrimaryRootDesksBarView();
+    ASSERT_LT(index, desks_bar_view->mini_views().size());
+
+    auto* event_generator = GetEventGenerator();
+    ClickOnView(desks_bar_view->mini_views()[index]
+                    ->desk_action_view()
+                    ->close_all_button(),
+                event_generator);
+  }
+
+  // Executes the close-all context menu command for the desk at index `index`.
+  void ExecuteContextMenuCloseAllForDesk(size_t index) {
+    ASSERT_TRUE(Shell::Get()->overview_controller()->InOverviewSession());
+    const auto* desks_bar_view = GetPrimaryRootDesksBarView();
+    ASSERT_LT(index, desks_bar_view->mini_views().size());
+
+    // Run the context menu command for closing a desk with all of its windows.
+    auto* menu_controller = DesksTestApi::GetContextMenuForDesk(index);
+    menu_controller->ExecuteCommand(
+        static_cast<int>(DeskActionContextMenu::CommandId::kCloseAll),
+        /*event_flags=*/0);
+  }
+
+  // DesksTest:
+  void SetUp() override {
+    scoped_feature_list_.InitAndEnableFeature(features::kDesksCloseAll);
+    DesksTest::SetUp();
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+// Runs through test cases for closing active and inactive desks with windows in
+// overview.
+TEST_F(DesksCloseAllTest, CloseDesksWithWindowsInOverview) {
+  // Possible sources for "close all" actions. `kCloseAllButton` means that we
+  // will be trying to close the desk through the designated button on the
+  // desk's `DeskActionView`, while `kContextMenu` means we will be trying to
+  // close the desk by executing the desk's "close all" context menu option. As
+  // we add more ways to perform a "close all" action (such as through an
+  // accelerator) we can add more cases to this enum.
+  enum class CloseAllSource {
+    kCloseAllButton,
+    kContextMenu,
+  };
+
+  struct {
+    const std::string scope_trace;
+    const CloseAllSource source;
+  } kTestCases[] = {
+      {"Remove desks using close all button", CloseAllSource::kCloseAllButton},
+      {"Remove desks using close all context menu option",
+       CloseAllSource::kContextMenu},
+  };
+
+  auto* controller = DesksController::Get();
+
+  for (const auto& test_case : kTestCases) {
+    SCOPED_TRACE(test_case.scope_trace);
+
+    // Create three desks so that we can close one inactive desk and one active
+    // desk.
+    NewDesk();
+    NewDesk();
+    ASSERT_EQ(3u, controller->desks().size());
+    Desk* desk_1 = controller->desks()[0].get();
+    Desk* desk_2 = controller->desks()[1].get();
+    Desk* desk_3 = controller->desks()[2].get();
+    ASSERT_TRUE(desk_1->is_active());
+
+    // Create two `WindowHolder`s and assign one window to each desk.
+    WindowHolder win1(CreateAppWindow());
+    WindowHolder win2(CreateAppWindow());
+    controller->SendToDeskAtIndex(win1.window(), 0);
+    controller->SendToDeskAtIndex(win2.window(), 1);
+    ASSERT_EQ(1u, desk_1->windows().size());
+    ASSERT_EQ(1u, desk_2->windows().size());
+
+    EnterOverview();
+    ASSERT_TRUE(Shell::Get()->overview_controller()->InOverviewSession());
+
+    // Execute and evaluate a test case for an inactive desk and an active desk.
+    // We do it in this order so that we do not switch the active desk.
+    if (test_case.source == CloseAllSource::kCloseAllButton) {
+      ClickOnCloseAllButtonForDesk(1);
+      EXPECT_TRUE(win1.is_valid());
+      EXPECT_FALSE(win2.is_valid());
+
+      ClickOnCloseAllButtonForDesk(0);
+      EXPECT_FALSE(win1.is_valid());
+    } else if (test_case.source == CloseAllSource::kContextMenu) {
+      ExecuteContextMenuCloseAllForDesk(1);
+      EXPECT_TRUE(win1.is_valid());
+      EXPECT_FALSE(win2.is_valid());
+
+      ExecuteContextMenuCloseAllForDesk(0);
+      EXPECT_FALSE(win1.is_valid());
+    }
+
+    // Desk activation should have changed to `desk_3` and we should still be in
+    // overview.
+    EXPECT_TRUE(desk_3->is_active());
+    EXPECT_TRUE(Shell::Get()->overview_controller()->InOverviewSession());
+
+    // We should have one desk remaining, which means that `desks_bar_view` will
+    // be in zero state, meaning that it will have no `DeskMiniView`s.
+    EXPECT_TRUE(GetPrimaryRootDesksBarView()->mini_views().empty());
+  }
+}
+
+// TODO(crbug.com/1308429): Should have tests for opening and closing the
+// DeskActionContextMenu (which should also add and remove the highlight
+// overview on the desk preview).
 
 // TODO(afakhry): Add more tests:
 // - Always on top windows are not tracked by any desk.

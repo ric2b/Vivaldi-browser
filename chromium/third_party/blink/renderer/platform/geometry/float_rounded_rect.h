@@ -98,21 +98,15 @@ class PLATFORM_EXPORT FloatRoundedRect {
              bottom_left_.IsZero() && bottom_right_.IsZero();
     }
 
-    void Scale(float factor);
-
-    void Expand(const gfx::OutsetsF& outsets);
-    void Expand(float size) { Expand(gfx::OutsetsF(size)); }
-
-    void Shrink(const gfx::InsetsF& insets);
-    void Shrink(float size) { Shrink(gfx::InsetsF(size)); }
-
-    // Reshapes the corners based on the algorithm in
-    // https://drafts.csswg.org/css-backgrounds-3/#shadow-shape.
-    void Reshape(float inflation);
-
     String ToString() const;
 
    private:
+    friend class FloatRoundedRect;
+    void Scale(float factor);
+    void Outset(const gfx::OutsetsF& outsets);
+    void OutsetForMarginOrShadow(float outset);
+    void OutsetForShapeMargin(float outset);
+
     gfx::SizeF top_left_;
     gfx::SizeF top_right_;
     gfx::SizeF bottom_left_;
@@ -142,22 +136,34 @@ class PLATFORM_EXPORT FloatRoundedRect {
   void SetRadii(const Radii& radii) { radii_ = radii; }
 
   void Move(const gfx::Vector2dF& offset) { rect_.Offset(offset); }
-  void InflateWithRadii(int size);
-  void Inflate(float size) { rect_.Outset(size); }
 
-  // Inflates the rect and reshapes the corners based on the algorithm in
+  // Inflates/shrinks the rounded rect by the specified amount on each side and
+  // corner. Zero widths and heights of radii are kept zero so that sharp
+  // corners are still sharp. Each side of |outsets|/|insets| can be positive,
+  // zero or negative independently.
+  void Outset(const gfx::OutsetsF& outsets);
+  void Outset(float outset) { Outset(gfx::OutsetsF(outset)); }
+  void Inset(const gfx::InsetsF& insets) { Outset(insets.ToOutsets()); }
+  void Inset(float inset) { Inset(gfx::InsetsF(inset)); }
+
+  // Inflates (or shrinks if |outset| is negative) the rect and the corners
+  // based on the margin edge algorithm in
+  // https://drafts.csswg.org/css-backgrounds-3/#corner-shaping which is the
+  // same as the shadow spread algorithm in
   // https://drafts.csswg.org/css-backgrounds-3/#shadow-shape.
-  void InflateAndReshape(float size);
+  // TODO(wangxianzhu): Consider merging this into Outset()/Inset() to apply
+  // the margin/shadow algorithm to all outsets except shape-margin. For now
+  // this is blocked by a problem of the algorithm
+  // (https://github.com/w3c/csswg-drafts/issues/7103).
+  void OutsetForMarginOrShadow(float outset);
 
-  // expandRadii() does not have any effect on corner radii which have zero
-  // width or height. This is because the process of expanding the radius of a
-  // corner is not allowed to make sharp corners non-sharp. This applies when
-  // "spreading" a shadow or a box shape.
-  void ExpandRadii(float size) { radii_.Expand(size); }
-  void ShrinkRadii(float size) { radii_.Shrink(size); }
-
-  // Returns a quickly computed rect enclosed by the rounded rect.
-  gfx::RectF RadiusCenterRect() const;
+  // Inflates the rounded rect by the specified amount on each side and corner
+  // for shape-margin. |outset| must be non-negative. This is different from
+  // other outset methods in that it always expands by radial distance (always
+  // produces rounding) rather than following rules for sharp corner
+  // preservation and cubic reduction of the radius. See
+  // https://drafts.csswg.org/css-shapes/#shape-margin-property.
+  void OutsetForShapeMargin(float outset);
 
   constexpr gfx::RectF TopLeftCorner() const {
     return gfx::RectF(rect_.x(), rect_.y(), radii_.TopLeft().width(),

@@ -46,7 +46,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
-#include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/platform_thread.h"
@@ -55,8 +54,8 @@
 #include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
 #include "chromeos/components/sensors/buildflags.h"
+#include "chromeos/dbus/common/dbus_method_call_status.h"
 #include "chromeos/dbus/concierge/concierge_client.h"
-#include "chromeos/dbus/dbus_method_call_status.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/debug_daemon/debug_daemon_client.h"
 #include "chromeos/dbus/session_manager/session_manager_client.h"
@@ -95,6 +94,10 @@ constexpr int kLogdConfigSizeSmall = 256;   // kBytes
 constexpr int kLogdConfigSizeMed = 512;     // kBytes
 constexpr int kLogdConfigSizeLarge = 1024;  // kBytes
 
+// Disk size of virtio-blk image for /data.
+// TODO(b/217650747): Optimize this value.
+constexpr int64_t kDataDiskSizeBytes = 5LL * 1024 * 1024 * 1024;  // 5GB
+
 // The owner ID that ARCVM is started with for mini-ARCVM. On UpgradeArc,
 // the owner ID is set to the logged-in user.
 constexpr const char kArcVmDefaultOwner[] = "ARCVM_DEFAULT_OWNER";
@@ -104,6 +107,8 @@ constexpr int64_t kInvalidCid = -1;
 constexpr base::TimeDelta kConnectTimeoutLimit = base::Seconds(20);
 constexpr base::TimeDelta kConnectSleepDurationInitial =
     base::Milliseconds(100);
+
+constexpr const char kEmptyDiskPath[] = "/dev/null";
 
 absl::optional<base::TimeDelta> g_connect_timeout_limit_for_testing;
 absl::optional<base::TimeDelta> g_connect_sleep_duration_initial_for_testing;
@@ -217,12 +222,6 @@ std::vector<std::string> GenerateKernelCmdline(
   VLOG(1) << "Setting ARCVM guest's zram size to " << guest_zram_size;
 
   std::vector<std::string> result = {
-      // Note: Do not change the value "bertha". This string is checked in
-      // platform2/metrics/process_meter.cc to detect ARCVM's crosvm processes,
-      // for example.
-      "androidboot.hardware=bertha",
-
-      "androidboot.container=1",
       base::StringPrintf("androidboot.native_bridge=%s", native_bridge.c_str()),
       base::StringPrintf("androidboot.dev_mode=%d", is_dev_mode),
       base::StringPrintf("androidboot.disable_runas=%d", !is_dev_mode),
@@ -273,6 +272,11 @@ std::vector<std::string> GenerateKernelCmdline(
 
   if (start_params.arc_generate_play_auto_install)
     result.push_back("androidboot.arc_generate_pai=1");
+
+  if (base::FeatureList::IsEnabled(kEnableVirtioBlkForData))
+    result.push_back("androidboot.arcvm_virtio_blk_data=1");
+  else
+    result.push_back("androidboot.arcvm_virtio_blk_data=0");
 
   // Conditionally sets some properties based on |start_params|.
   switch (start_params.play_store_auto_update) {
@@ -355,12 +359,19 @@ std::vector<std::string> GenerateKernelCmdline(
   if (start_params.disable_download_provider)
     result.push_back("androidboot.disable_download_provider=1");
 
+  if (base::FeatureList::IsEnabled(arc::kVmGmsCoreLowMemoryKillerProtection))
+    result.push_back("androidboot.arc_enable_gmscore_lmk_protection=1");
+
+  if (start_params.enable_tts_caching)
+    result.push_back("androidboot.arc.tts.caching=1");
+
   return result;
 }
 
 vm_tools::concierge::StartArcVmRequest CreateStartArcVmRequest(
     uint32_t cpus,
     const base::FilePath& demo_session_apps_path,
+    const absl::optional<base::FilePath>& data_image_path,
     const FileSystemStatus& file_system_status,
     bool use_per_vm_core_scheduling,
     std::vector<std::string> kernel_cmdline,
@@ -371,26 +382,19 @@ vm_tools::concierge::StartArcVmRequest CreateStartArcVmRequest(
   request.set_owner_id(kArcVmDefaultOwner);
   request.set_use_per_vm_core_scheduling(use_per_vm_core_scheduling);
 
-  request.add_params("root=/dev/vda");
   if (file_system_status.is_host_rootfs_writable() &&
       file_system_status.is_system_image_ext_format()) {
     request.add_params("rw");
   }
-  request.add_params("init=/init");
 
   for (auto& entry : kernel_cmdline)
     request.add_params(std::move(entry));
-
-  vm_tools::concierge::VirtualMachineSpec* vm = request.mutable_vm();
-
-  vm->set_kernel(file_system_status.guest_kernel_path().value());
 
   const bool should_set_blocksize =
       !base::FeatureList::IsEnabled(arc::kUseDefaultBlockSize);
   constexpr uint32_t kBlockSize = 4096;
 
   // Add rootfs as /dev/vda.
-  vm->set_rootfs(file_system_status.system_image_path().value());
   request.set_rootfs_writable(file_system_status.is_host_rootfs_writable() &&
                               file_system_status.is_system_image_ext_format());
   if (should_set_blocksize)
@@ -407,19 +411,56 @@ vm_tools::concierge::StartArcVmRequest CreateStartArcVmRequest(
     disk_image->set_block_size(kBlockSize);
 
   // Add /run/imageloader/.../android_demo_apps.squash as /dev/block/vdc if
-  // needed.
+  // needed. If it's not needed we pass /dev/null so that /dev/block/vdc
+  // always corresponds to the demo image.
+  disk_image = request.add_disks();
+  disk_image->set_image_type(vm_tools::concierge::DISK_IMAGE_AUTO);
+  disk_image->set_writable(false);
+  disk_image->set_do_mount(true);
   if (!demo_session_apps_path.empty()) {
-    disk_image = request.add_disks();
     disk_image->set_path(demo_session_apps_path.value());
-    disk_image->set_image_type(vm_tools::concierge::DISK_IMAGE_AUTO);
-    disk_image->set_writable(false);
-    disk_image->set_do_mount(true);
     if (should_set_blocksize)
       disk_image->set_block_size(kBlockSize);
+  } else {
+    // This should never be mounted as it's only mounted if
+    // ro.boot.arc_demo_mode is set.
+    disk_image->set_path(kEmptyDiskPath);
   }
 
-  // Add Android fstab.
-  request.set_fstab(file_system_status.fstab_path().value());
+  // Add /opt/google/vms/android/apex/payload.img as /dev/block/vdd if
+  // needed. If it's not needed we pass /dev/null so that /dev/block/vdd
+  // always corresponds to the block apex composite disk.
+  disk_image = request.add_disks();
+  disk_image->set_image_type(vm_tools::concierge::DISK_IMAGE_AUTO);
+  disk_image->set_writable(false);
+  disk_image->set_do_mount(true);
+  if (!file_system_status.block_apex_path().empty()) {
+    disk_image->set_path(file_system_status.block_apex_path().value());
+  } else {
+    // Android will not mount this is the system property
+    // apexd.payload_metadata.path is not set, and it should
+    // always be set if the block apex payload exists.
+    disk_image->set_path(kEmptyDiskPath);
+  }
+
+  // Add /home/root/<hash>/crosvm/YXJjdm0=.img as /dev/block/vde for mounting
+  // Android /data if kEnableVirtioBlkForData is enabled.
+  disk_image = request.add_disks();
+  disk_image->set_image_type(vm_tools::concierge::DISK_IMAGE_AUTO);
+  disk_image->set_do_mount(true);
+  if (data_image_path) {
+    disk_image->set_path(data_image_path->value());
+    disk_image->set_writable(true);
+    if (should_set_blocksize)
+      disk_image->set_block_size(kBlockSize);
+  } else {
+    // This should never be mounted as it's only mounted if
+    // ro.boot.arcvm_virtio_blk_data=1 is set.
+    disk_image->set_path(kEmptyDiskPath);
+    // Ensure to set writable to false, otherwise crosvm will exit with
+    // "failed to lock disk image" error.
+    disk_image->set_writable(false);
+  }
 
   // Add cpus.
   request.set_cpus(cpus);
@@ -762,18 +803,18 @@ class ArcVmClientAdapter : public ArcClientAdapter,
 
   // ConnectionObserver<arc::mojom::AppInstance> overrides:
   void OnConnectionReady() override {
-    VLOG(2) << "Enabling VM's RT vCPU";
+    VLOG(2) << "Sending ArcVmCompleteBoot Request";
 
     auto* arc_service_manager = arc::ArcServiceManager::Get();
     DCHECK(arc_service_manager);
     arc_service_manager->arc_bridge_service()->app()->RemoveObserver(this);
 
-    vm_tools::concierge::MakeRtVcpuRequest request;
-    request.set_name(kArcVmName);
+    vm_tools::concierge::ArcVmCompleteBootRequest request;
     DCHECK(!user_id_hash_.empty());
     request.set_owner_id(user_id_hash_);
-    GetConciergeClient()->MakeRtVcpu(
-        request, base::BindOnce(&ArcVmClientAdapter::OnMakeRtVcpu));
+    GetConciergeClient()->ArcVmCompleteBoot(
+        request,
+        base::BindOnce(&ArcVmClientAdapter::OnArcVmCompleteBootResponse));
   }
 
   void set_delegate_for_testing(  // IN-TEST
@@ -951,6 +992,61 @@ class ArcVmClientAdapter : public ArcClientAdapter,
 
   void OnDemoResourcesLoaded(chromeos::VoidDBusMethodCallback callback,
                              FileSystemStatus file_system_status) {
+    if (!base::FeatureList::IsEnabled(kEnableVirtioBlkForData)) {
+      // Use virtio-fs for /data.
+      StartArcVm(std::move(callback), std::move(file_system_status),
+                 /*data_image_path=*/absl::nullopt);
+      return;
+    }
+
+    // Use virtio-blk for /data.
+    vm_tools::concierge::CreateDiskImageRequest request;
+    request.set_cryptohome_id(user_id_hash_);
+    request.set_vm_name(kArcVmName);
+    request.set_disk_size(kDataDiskSizeBytes);
+    request.set_image_type(vm_tools::concierge::DISK_IMAGE_AUTO);
+    request.set_storage_location(vm_tools::concierge::STORAGE_CRYPTOHOME_ROOT);
+
+    GetConciergeClient()->CreateDiskImage(
+        std::move(request),
+        base::BindOnce(&ArcVmClientAdapter::OnDataDiskImageCreated,
+                       weak_factory_.GetWeakPtr(), std::move(callback),
+                       std::move(file_system_status)));
+  }
+
+  void OnDataDiskImageCreated(
+      chromeos::VoidDBusMethodCallback callback,
+      FileSystemStatus file_system_status,
+      absl::optional<vm_tools::concierge::CreateDiskImageResponse> res) {
+    if (!res) {
+      LOG(ERROR) << "Failed to create a disk image for /data. Empty response.";
+      std::move(callback).Run(false);
+      return;
+    }
+
+    switch (res->status()) {
+      case vm_tools::concierge::DISK_STATUS_CREATED:
+        VLOG(1) << "Created a disk image for /data at " << res->disk_path();
+        StartArcVm(std::move(callback), std::move(file_system_status),
+                   base::FilePath(res->disk_path()));
+        return;
+      case vm_tools::concierge::DISK_STATUS_EXISTS:
+        VLOG(1) << "Disk image for /data already exists: " << res->disk_path();
+        StartArcVm(std::move(callback), std::move(file_system_status),
+                   base::FilePath(res->disk_path()));
+        return;
+      // TODO(niwa): Also handle DISK_STATUS_NOT_ENOUGH_SPACE.
+      default:
+        LOG(ERROR) << "Failed to create a disk image for /data. Status:"
+                   << res->status() << " Reason:" << res->failure_reason();
+        std::move(callback).Run(false);
+        return;
+    }
+  }
+
+  void StartArcVm(chromeos::VoidDBusMethodCallback callback,
+                  FileSystemStatus file_system_status,
+                  absl::optional<base::FilePath> data_image_path) {
     const base::FilePath demo_session_apps_path =
         demo_mode_delegate_->GetDemoAppsPath();
     const bool use_per_vm_core_scheduling =
@@ -975,7 +1071,7 @@ class ArcVmClientAdapter : public ArcClientAdapter,
         start_params_, file_system_status, *is_dev_mode_, is_host_on_vm_,
         GetChromeOsChannelFromLsbRelease());
     auto start_request = CreateStartArcVmRequest(
-        cpus, demo_session_apps_path, file_system_status,
+        cpus, demo_session_apps_path, data_image_path, file_system_status,
         use_per_vm_core_scheduling, std::move(kernel_cmdline), delegate_.get());
 
     GetConciergeClient()->StartArcVm(
@@ -1203,23 +1299,16 @@ class ArcVmClientAdapter : public ArcClientAdapter,
     std::move(callback).Run(success, failure_reason);
   }
 
-  static void OnMakeRtVcpu(
-      absl::optional<vm_tools::concierge::MakeRtVcpuResponse> reply) {
-    bool success = false;
-    std::string failure_reason;
+  static void OnArcVmCompleteBootResponse(
+      absl::optional<vm_tools::concierge::ArcVmCompleteBootResponse> reply) {
+    vm_tools::concierge::ArcVmCompleteBootResult result =
+        reply.has_value()
+            ? reply.value().result()
+            : vm_tools::concierge::ArcVmCompleteBootResult::BAD_REQUEST;
 
-    if (!reply.has_value()) {
-      failure_reason = "Empty response";
-    } else {
-      const vm_tools::concierge::MakeRtVcpuResponse& response = reply.value();
-      success = response.success();
-      if (!success)
-        failure_reason = response.failure_reason();
-    }
-
-    VLOG(2) << "Enabling VM's RT vCPU: result=" << success;
-    if (!success)
-      LOG(WARNING) << "Failed to enable RT vCPU: reason=" << failure_reason;
+    VLOG(2) << "ArcVmCompleteBoot: result=" << result;
+    if (result != vm_tools::concierge::ArcVmCompleteBootResult::SUCCESS)
+      LOG(WARNING) << "Failed ArcVmCompleteBoot: result=" << result;
   }
 
   std::unique_ptr<ArcVmClientAdapterDelegate> delegate_;

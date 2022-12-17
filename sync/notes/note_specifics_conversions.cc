@@ -26,7 +26,6 @@
 #include "components/sync_bookmarks/switches.h"
 #include "notes/note_node.h"
 #include "notes/notes_model.h"
-#include "sync/notes/synced_note_tracker.h"
 #include "url/gurl.h"
 
 namespace sync_notes {
@@ -408,48 +407,6 @@ bool HasExpectedNoteGuid(const sync_pb::NotesSpecifics& specifics,
 
   return specifics.guid() == InferGuidForLegacyNote(originator_cache_guid,
                                                     originator_client_item_id);
-}
-
-void MaybeFixGuidInSpecificsDueToPastBug(const SyncedNoteTracker& tracker,
-                                         syncer::EntityData* update_entity) {
-  DCHECK(update_entity);
-
-  // Permanent entities and tombstones have no GUID to fix.
-  if (!update_entity->server_defined_unique_tag.empty() ||
-      update_entity->is_deleted()) {
-    return;
-  }
-
-  // If the GUID in specifics is populated (inferred or otherwise), there's
-  // nothing to populate.
-  if (!update_entity->specifics.notes().guid().empty()) {
-    return;
-  }
-
-  // The bug that motivates this function (crbug.com/1231450) only affected
-  // notes created with a client tag hash. Skip all other updates.
-  if (update_entity->client_tag_hash.value().empty()) {
-    return;
-  }
-
-  const SyncedNoteTracker::Entity* const tracked_entity =
-      tracker.GetEntityForSyncId(update_entity->id);
-  if (!tracked_entity || !tracked_entity->note_node()) {
-    // The entity is not tracked locally or it has been deleted, so the GUID is
-    // unknown.
-    return;
-  }
-
-  // Reaching this point should guarantee that the local GUID is correct, but
-  // to double check, let's verify that client tag hash matches the GUID.
-  const base::GUID local_guid = tracked_entity->note_node()->guid();
-  if (update_entity->client_tag_hash !=
-      SyncedNoteTracker::GetClientTagHashFromGUID(local_guid)) {
-    return;
-  }
-
-  update_entity->specifics.mutable_notes()->set_guid(
-      local_guid.AsLowercaseString());
 }
 
 }  // namespace sync_notes

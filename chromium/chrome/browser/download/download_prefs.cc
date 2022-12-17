@@ -209,6 +209,7 @@ DownloadPrefs::DownloadPrefs(Profile* profile) : profile_(profile) {
   safebrowsing_for_trusted_sources_enabled_.Init(
       prefs::kSafeBrowsingForTrustedSourcesEnabled, prefs);
   download_restriction_.Init(prefs::kDownloadRestrictions, prefs);
+  download_bubble_enabled_.Init(prefs::kDownloadBubbleEnabled, prefs);
 
   pref_change_registrar_.Add(
       prefs::kDownloadExtensionsToOpenByPolicy,
@@ -278,6 +279,7 @@ void DownloadPrefs::RegisterProfilePrefs(
   registry->RegisterIntegerPref(prefs::kSaveFileType,
                                 content::SAVE_PAGE_TYPE_AS_COMPLETE_HTML);
   registry->RegisterIntegerPref(prefs::kDownloadRestrictions, 0);
+  registry->RegisterBooleanPref(prefs::kDownloadBubbleEnabled, true);
   registry->RegisterBooleanPref(prefs::kSafeBrowsingForTrustedSourcesEnabled,
                                 true);
 
@@ -286,6 +288,8 @@ void DownloadPrefs::RegisterProfilePrefs(
                                  default_download_path);
   registry->RegisterFilePathPref(prefs::kSaveFileDefaultDirectory,
                                  default_download_path);
+  registry->RegisterTimePref(prefs::kDownloadLastCompleteTime,
+                             /*default_value=*/base::Time());
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || \
     BUILDFLAG(IS_MAC)
   registry->RegisterBooleanPref(prefs::kOpenPdfDownloadInSystemReader, false);
@@ -368,6 +372,15 @@ void DownloadPrefs::SetSaveFilePath(const base::FilePath& path) {
 
 void DownloadPrefs::SetSaveFileType(int type) {
   save_file_type_.SetValue(type);
+}
+
+base::Time DownloadPrefs::GetLastCompleteTime() {
+  return profile_->GetPrefs()->GetTime(prefs::kDownloadLastCompleteTime);
+}
+
+void DownloadPrefs::SetLastCompleteTime(const base::Time& last_complete_time) {
+  profile_->GetPrefs()->SetTime(prefs::kDownloadLastCompleteTime,
+                                last_complete_time);
 }
 
 bool DownloadPrefs::PromptForDownload() const {

@@ -461,6 +461,7 @@ void PrerenderInProcessBrowserTest::CreatedBrowserMainParts(
           content::GetIOThreadTaskRunner({})));
   safe_browsing::SafeBrowsingService::RegisterFactory(
       safe_browsing_factory_.get());
+  InProcessBrowserTest::CreatedBrowserMainParts(browser_main_parts);
 }
 
 void PrerenderInProcessBrowserTest::SetUpOnMainThread() {

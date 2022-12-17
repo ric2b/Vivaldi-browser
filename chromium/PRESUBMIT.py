@@ -7,6 +7,11 @@
 See http://dev.chromium.org/developers/how-tos/depottools/presubmit-scripts
 for more details about the presubmit API built into depot_tools.
 """
+
+from typing import Optional
+from typing import Sequence
+from dataclasses import dataclass
+
 PRESUBMIT_VERSION = '2.0.0'
 
 # This line is 'magic' in that git-cl looks for it to decide whether to
@@ -104,51 +109,73 @@ _TEST_ONLY_WARNING = (
     'release apk.')
 
 
-_INCLUDE_ORDER_WARNING = (
-    'Your #include order seems to be broken. Remember to use the right '
-    'collation (LC_COLLATE=C) and check\nhttps://google.github.io/styleguide/'
-    'cppguide.html#Names_and_Order_of_Includes')
+@dataclass
+class BanRule:
+  # String pattern. If the pattern begins with a slash, the pattern will be
+  # treated as a regular expression instead.
+  pattern: str
+  # Explanation as a sequence of strings. Each string in the sequence will be
+  # printed on its own line.
+  explanation: Sequence[str]
+  # Whether or not to treat this ban as a fatal error. If unspecified, defaults
+  # to true.
+  treat_as_error: Optional[bool] = None
+  # Paths that should be excluded from the ban check. Each string is a regular
+  # expression that will be matched against the path of the file being checked
+  # relative to the root of the source tree.
+  excluded_paths: Optional[Sequence[str]] = None
 
-# Format: Sequence of tuples containing:
-# * Full import path.
-# * Sequence of strings to show when the pattern matches.
-# * Sequence of path or filename exceptions to this rule
-_BANNED_JAVA_IMPORTS = ((
-    'java.net.URI;',
-    ('Use org.chromium.url.GURL instead of java.net.URI, where possible.', ),
-    (
-        'net/android/javatests/src/org/chromium/net/'
-        'AndroidProxySelectorTest.java',
-        'components/cronet/',
-        'third_party/robolectric/local/',
+
+_BANNED_JAVA_IMPORTS : Sequence[BanRule] = (
+    BanRule(
+      'import java.net.URI;',
+      (
+       'Use org.chromium.url.GURL instead of java.net.URI, where possible.',
+      ),
+      excluded_paths=(
+        (r'net/android/javatests/src/org/chromium/net/'
+         'AndroidProxySelectorTest\.java'),
+        r'components/cronet/',
+        r'third_party/robolectric/local/',
+      ),
     ),
-), (
-    'android.annotation.TargetApi;',
-    ('Do not use TargetApi, use @androidx.annotation.RequiresApi instead. '
-     'RequiresApi ensures that any calls are guarded by the appropriate '
-     'SDK_INT check. See https://crbug.com/1116486.', ),
-    (),
-), (
-    'android.support.test.rule.UiThreadTestRule;',
-    ('Do not use UiThreadTestRule, just use '
-     '@org.chromium.base.test.UiThreadTest on test methods that should run '
-     'on the UI thread. See https://crbug.com/1111893.', ),
-    (),
-), ('android.support.test.annotation.UiThreadTest;',
-    ('Do not use android.support.test.annotation.UiThreadTest, use '
-     'org.chromium.base.test.UiThreadTest instead. See '
-     'https://crbug.com/1111893.', ),
-    ()), ('android.support.test.rule.ActivityTestRule;',
-          ('Do not use ActivityTestRule, use '
-           'org.chromium.base.test.BaseActivityTestRule instead.', ),
-          ('components/cronet/', )))
+    BanRule(
+      'import android.annotation.TargetApi;',
+      (
+       'Do not use TargetApi, use @androidx.annotation.RequiresApi instead. '
+       'RequiresApi ensures that any calls are guarded by the appropriate '
+       'SDK_INT check. See https://crbug.com/1116486.',
+      ),
+    ),
+    BanRule(
+      'import android.support.test.rule.UiThreadTestRule;',
+      (
+       'Do not use UiThreadTestRule, just use '
+       '@org.chromium.base.test.UiThreadTest on test methods that should run '
+       'on the UI thread. See https://crbug.com/1111893.',
+      ),
+    ),
+    BanRule(
+      'import android.support.test.annotation.UiThreadTest;',
+      ('Do not use android.support.test.annotation.UiThreadTest, use '
+       'org.chromium.base.test.UiThreadTest instead. See '
+       'https://crbug.com/1111893.',
+      ),
+    ),
+    BanRule(
+      'import android.support.test.rule.ActivityTestRule;',
+      (
+       'Do not use ActivityTestRule, use '
+       'org.chromium.base.test.BaseActivityTestRule instead.',
+      ),
+      excluded_paths=(
+        'components/cronet/',
+      ),
+    ),
+)
 
-# Format: Sequence of tuples containing:
-# * String pattern or, if starting with a slash, a regular expression.
-# * Sequence of strings to show when the pattern matches.
-# * Error flag. True if a match is a presubmit error, otherwise it's a warning.
-_BANNED_JAVA_FUNCTIONS = (
-    (
+_BANNED_JAVA_FUNCTIONS : Sequence[BanRule] = (
+    BanRule(
       'StrictMode.allowThreadDiskReads()',
       (
        'Prefer using StrictModeContext.allowDiskReads() to using StrictMode '
@@ -156,7 +183,7 @@ _BANNED_JAVA_FUNCTIONS = (
       ),
       False,
     ),
-    (
+    BanRule(
       'StrictMode.allowThreadDiskWrites()',
       (
        'Prefer using StrictModeContext.allowDiskWrites() to using StrictMode '
@@ -164,7 +191,7 @@ _BANNED_JAVA_FUNCTIONS = (
       ),
       False,
     ),
-    (
+    BanRule(
       '.waitForIdleSync()',
       (
        'Do not use waitForIdleSync as it masks underlying issues. There is '
@@ -174,12 +201,8 @@ _BANNED_JAVA_FUNCTIONS = (
     ),
 )
 
-# Format: Sequence of tuples containing:
-# * String pattern or, if starting with a slash, a regular expression.
-# * Sequence of strings to show when the pattern matches.
-# * Error flag. True if a match is a presubmit error, otherwise it's a warning.
-_BANNED_OBJC_FUNCTIONS = (
-    (
+_BANNED_OBJC_FUNCTIONS : Sequence[BanRule] = (
+    BanRule(
       'addTrackingRect:',
       (
        'The use of -[NSView addTrackingRect:owner:userData:assumeInside:] is'
@@ -188,7 +211,7 @@ _BANNED_OBJC_FUNCTIONS = (
       ),
       False,
     ),
-    (
+    BanRule(
       r'/NSTrackingArea\W',
       (
        'The use of NSTrackingAreas is prohibited. Please use CrTrackingArea',
@@ -197,7 +220,7 @@ _BANNED_OBJC_FUNCTIONS = (
       ),
       False,
     ),
-    (
+    BanRule(
       'convertPointFromBase:',
       (
        'The use of -[NSView convertPointFromBase:] is almost certainly wrong.',
@@ -206,7 +229,7 @@ _BANNED_OBJC_FUNCTIONS = (
       ),
       True,
     ),
-    (
+    BanRule(
       'convertPointToBase:',
       (
        'The use of -[NSView convertPointToBase:] is almost certainly wrong.',
@@ -215,7 +238,7 @@ _BANNED_OBJC_FUNCTIONS = (
       ),
       True,
     ),
-    (
+    BanRule(
       'convertRectFromBase:',
       (
        'The use of -[NSView convertRectFromBase:] is almost certainly wrong.',
@@ -224,7 +247,7 @@ _BANNED_OBJC_FUNCTIONS = (
       ),
       True,
     ),
-    (
+    BanRule(
       'convertRectToBase:',
       (
        'The use of -[NSView convertRectToBase:] is almost certainly wrong.',
@@ -233,7 +256,7 @@ _BANNED_OBJC_FUNCTIONS = (
       ),
       True,
     ),
-    (
+    BanRule(
       'convertSizeFromBase:',
       (
        'The use of -[NSView convertSizeFromBase:] is almost certainly wrong.',
@@ -242,7 +265,7 @@ _BANNED_OBJC_FUNCTIONS = (
       ),
       True,
     ),
-    (
+    BanRule(
       'convertSizeToBase:',
       (
        'The use of -[NSView convertSizeToBase:] is almost certainly wrong.',
@@ -251,7 +274,7 @@ _BANNED_OBJC_FUNCTIONS = (
       ),
       True,
     ),
-    (
+    BanRule(
       r"/\s+UTF8String\s*]",
       (
        'The use of -[NSString UTF8String] is dangerous as it can return null',
@@ -260,7 +283,7 @@ _BANNED_OBJC_FUNCTIONS = (
       ),
       True,
     ),
-    (
+    BanRule(
       r'__unsafe_unretained',
       (
         'The use of __unsafe_unretained is almost certainly wrong, unless',
@@ -269,7 +292,7 @@ _BANNED_OBJC_FUNCTIONS = (
       ),
       False,
     ),
-    (
+    BanRule(
       'freeWhenDone:NO',
       (
         'The use of "freeWhenDone:NO" with the NoCopy creation of ',
@@ -279,12 +302,8 @@ _BANNED_OBJC_FUNCTIONS = (
     ),
 )
 
-# Format: Sequence of tuples containing:
-# * String pattern or, if starting with a slash, a regular expression.
-# * Sequence of strings to show when the pattern matches.
-# * Error flag. True if a match is a presubmit error, otherwise it's a warning.
 _BANNED_IOS_OBJC_FUNCTIONS = (
-    (
+    BanRule(
       r'/\bTEST[(]',
       (
         'TEST() macro should not be used in Objective-C++ code as it does not ',
@@ -294,7 +313,7 @@ _BANNED_IOS_OBJC_FUNCTIONS = (
       ),
       True,
     ),
-    (
+    BanRule(
       r'/\btesting::Test\b',
       (
         'testing::Test should not be used in Objective-C++ code as it does ',
@@ -305,12 +324,8 @@ _BANNED_IOS_OBJC_FUNCTIONS = (
     ),
 )
 
-# Format: Sequence of tuples containing:
-# * String pattern or, if starting with a slash, a regular expression.
-# * Sequence of strings to show when the pattern matches.
-# * Error flag. True if a match is a presubmit error, otherwise it's a warning.
-_BANNED_IOS_EGTEST_FUNCTIONS = (
-    (
+_BANNED_IOS_EGTEST_FUNCTIONS : Sequence[BanRule] = (
+    BanRule(
       r'/\bEXPECT_OCMOCK_VERIFY\b',
       (
         'EXPECT_OCMOCK_VERIFY should not be used in EarlGrey tests because ',
@@ -320,13 +335,8 @@ _BANNED_IOS_EGTEST_FUNCTIONS = (
     ),
 )
 
-# Format: Sequence of tuples containing:
-# * String pattern or, if starting with a slash, a regular expression.
-# * Sequence of strings to show when the pattern matches.
-# * Error flag. True if a match is a presubmit error, otherwise it's a warning.
-# * Sequence of paths to *not* check (regexps).
-_BANNED_CPP_FUNCTIONS = (
-    (
+_BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
+    BanRule(
       r'/\busing namespace ',
       (
        'Using directives ("using namespace x") are banned by the Google Style',
@@ -339,7 +349,7 @@ _BANNED_CPP_FUNCTIONS = (
     # Make sure that gtest's FRIEND_TEST() macro is not used; the
     # FRIEND_TEST_ALL_PREFIXES() macro from base/gtest_prod_util.h should be
     # used instead since that allows for FLAKY_ and DISABLED_ prefixes.
-    (
+    BanRule(
       'FRIEND_TEST(',
       (
        'Chromium code should not use gtest\'s FRIEND_TEST() macro. Include',
@@ -348,7 +358,7 @@ _BANNED_CPP_FUNCTIONS = (
       False,
       (),
     ),
-    (
+    BanRule(
       'setMatrixClip',
       (
         'Overriding setMatrixClip() is prohibited; ',
@@ -357,7 +367,7 @@ _BANNED_CPP_FUNCTIONS = (
       True,
       (),
     ),
-    (
+    BanRule(
       'SkRefPtr',
       (
         'The use of SkRefPtr is prohibited. ',
@@ -366,7 +376,7 @@ _BANNED_CPP_FUNCTIONS = (
       True,
       (),
     ),
-    (
+    BanRule(
       'SkAutoRef',
       (
         'The indirect use of SkRefPtr via SkAutoRef is prohibited. ',
@@ -375,7 +385,7 @@ _BANNED_CPP_FUNCTIONS = (
       True,
       (),
     ),
-    (
+    BanRule(
       'SkAutoTUnref',
       (
         'The use of SkAutoTUnref is dangerous because it implicitly ',
@@ -384,7 +394,7 @@ _BANNED_CPP_FUNCTIONS = (
       True,
       (),
     ),
-    (
+    BanRule(
       'SkAutoUnref',
       (
         'The indirect use of SkAutoTUnref through SkAutoUnref is dangerous ',
@@ -394,7 +404,7 @@ _BANNED_CPP_FUNCTIONS = (
       True,
       (),
     ),
-    (
+    BanRule(
       r'/HANDLE_EINTR\(.*close',
       (
        'HANDLE_EINTR(close) is invalid. If close fails with EINTR, the file',
@@ -405,7 +415,7 @@ _BANNED_CPP_FUNCTIONS = (
       True,
       (),
     ),
-    (
+    BanRule(
       r'/IGNORE_EINTR\((?!.*close)',
       (
        'IGNORE_EINTR is only valid when wrapping close. To wrap other system',
@@ -418,7 +428,7 @@ _BANNED_CPP_FUNCTIONS = (
         r'^ppapi[\\/]tests[\\/]test_broker\.cc$',
       ),
     ),
-    (
+    BanRule(
       r'/v8::Extension\(',
       (
         'Do not introduce new v8::Extensions into the code base, use',
@@ -429,7 +439,7 @@ _BANNED_CPP_FUNCTIONS = (
         r'extensions[\\/]renderer[\\/]safe_builtins\.*',
       ),
     ),
-    (
+    BanRule(
       '#pragma comment(lib,',
       (
         'Specify libraries to link with in build files and not in the source.',
@@ -440,7 +450,7 @@ _BANNED_CPP_FUNCTIONS = (
           r'^third_party[\\/]abseil-cpp[\\/].*',
       ),
     ),
-    (
+    BanRule(
       r'/base::SequenceChecker\b',
       (
         'Consider using SEQUENCE_CHECKER macros instead of the class directly.',
@@ -448,7 +458,7 @@ _BANNED_CPP_FUNCTIONS = (
       False,
       (),
     ),
-    (
+    BanRule(
       r'/base::ThreadChecker\b',
       (
         'Consider using THREAD_CHECKER macros instead of the class directly.',
@@ -456,7 +466,7 @@ _BANNED_CPP_FUNCTIONS = (
       False,
       (),
     ),
-    (
+    BanRule(
       r'/(Time(|Delta|Ticks)|ThreadTicks)::FromInternalValue|ToInternalValue',
       (
         'base::TimeXXX::FromInternalValue() and ToInternalValue() are',
@@ -471,7 +481,7 @@ _BANNED_CPP_FUNCTIONS = (
       False,
       (),
     ),
-    (
+    BanRule(
       'CallJavascriptFunctionUnsafe',
       (
         "Don't use CallJavascriptFunctionUnsafe() in new code. Instead, use",
@@ -485,7 +495,7 @@ _BANNED_CPP_FUNCTIONS = (
         r'^content[\\/]public[\\/]test[\\/]test_web_ui\.(cc|h)$',
       ),
     ),
-    (
+    BanRule(
       'leveldb::DB::Open',
       (
         'Instead of leveldb::DB::Open() use leveldb_env::OpenDB() from',
@@ -497,7 +507,7 @@ _BANNED_CPP_FUNCTIONS = (
         r'^third_party/leveldatabase/.*\.(cc|h)$',
       ),
     ),
-    (
+    BanRule(
       'leveldb::NewMemEnv',
       (
         'Instead of leveldb::NewMemEnv() use leveldb_chrome::NewMemEnv() from',
@@ -509,7 +519,7 @@ _BANNED_CPP_FUNCTIONS = (
         r'^third_party/leveldatabase/.*\.(cc|h)$',
       ),
     ),
-    (
+    BanRule(
       'RunLoop::QuitCurrent',
       (
         'Please migrate away from RunLoop::QuitCurrent*() methods. Use member',
@@ -518,7 +528,7 @@ _BANNED_CPP_FUNCTIONS = (
       False,
       (),
     ),
-    (
+    BanRule(
       'base::ScopedMockTimeMessageLoopTaskRunner',
       (
         'ScopedMockTimeMessageLoopTaskRunner is deprecated. Prefer',
@@ -530,7 +540,7 @@ _BANNED_CPP_FUNCTIONS = (
       False,
       (),
     ),
-    (
+    BanRule(
       'std::regex',
       (
         'Using std::regex adds unnecessary binary size to Chrome. Please use',
@@ -540,7 +550,7 @@ _BANNED_CPP_FUNCTIONS = (
       # Abseil's benchmarks never linked into chrome.
       ['third_party/abseil-cpp/.*_benchmark.cc'],
     ),
-    (
+    BanRule(
       r'/\bstd::stoi\b',
       (
         'std::stoi uses exceptions to communicate results. ',
@@ -549,7 +559,7 @@ _BANNED_CPP_FUNCTIONS = (
       True,
       [_THIRD_PARTY_EXCEPT_BLINK],  # Don't warn in third_party folders.
     ),
-    (
+    BanRule(
       r'/\bstd::stol\b',
       (
         'std::stol uses exceptions to communicate results. ',
@@ -558,7 +568,7 @@ _BANNED_CPP_FUNCTIONS = (
       True,
       [_THIRD_PARTY_EXCEPT_BLINK],  # Don't warn in third_party folders.
     ),
-    (
+    BanRule(
       r'/\bstd::stoul\b',
       (
         'std::stoul uses exceptions to communicate results. ',
@@ -567,7 +577,7 @@ _BANNED_CPP_FUNCTIONS = (
       True,
       [_THIRD_PARTY_EXCEPT_BLINK],  # Don't warn in third_party folders.
     ),
-    (
+    BanRule(
       r'/\bstd::stoll\b',
       (
         'std::stoll uses exceptions to communicate results. ',
@@ -576,7 +586,7 @@ _BANNED_CPP_FUNCTIONS = (
       True,
       [_THIRD_PARTY_EXCEPT_BLINK],  # Don't warn in third_party folders.
     ),
-    (
+    BanRule(
       r'/\bstd::stoull\b',
       (
         'std::stoull uses exceptions to communicate results. ',
@@ -585,7 +595,7 @@ _BANNED_CPP_FUNCTIONS = (
       True,
       [_THIRD_PARTY_EXCEPT_BLINK],  # Don't warn in third_party folders.
     ),
-    (
+    BanRule(
       r'/\bstd::stof\b',
       (
         'std::stof uses exceptions to communicate results. ',
@@ -596,7 +606,7 @@ _BANNED_CPP_FUNCTIONS = (
       True,
       [_THIRD_PARTY_EXCEPT_BLINK],  # Don't warn in third_party folders.
     ),
-    (
+    BanRule(
       r'/\bstd::stod\b',
       (
         'std::stod uses exceptions to communicate results. ',
@@ -607,7 +617,7 @@ _BANNED_CPP_FUNCTIONS = (
       True,
       [_THIRD_PARTY_EXCEPT_BLINK],  # Don't warn in third_party folders.
     ),
-    (
+    BanRule(
       r'/\bstd::stold\b',
       (
         'std::stold uses exceptions to communicate results. ',
@@ -618,7 +628,7 @@ _BANNED_CPP_FUNCTIONS = (
       True,
       [_THIRD_PARTY_EXCEPT_BLINK],  # Don't warn in third_party folders.
     ),
-    (
+    BanRule(
       r'/\bstd::to_string\b',
       (
         'std::to_string is locale dependent and slower than alternatives.',
@@ -630,7 +640,7 @@ _BANNED_CPP_FUNCTIONS = (
       False,  # Only a warning since it is already used.
       [_THIRD_PARTY_EXCEPT_BLINK],  # Don't warn in third_party folders.
     ),
-    (
+    BanRule(
       r'/\bstd::shared_ptr\b',
       (
         'std::shared_ptr should not be used. Use scoped_refptr instead.',
@@ -654,7 +664,7 @@ _BANNED_CPP_FUNCTIONS = (
        '^tools/clang/plugins/tests/',
        _THIRD_PARTY_EXCEPT_BLINK],  # Not an error in third_party folders.
     ),
-    (
+    BanRule(
       r'/\bstd::weak_ptr\b',
       (
         'std::weak_ptr should not be used. Use base::WeakPtr instead.',
@@ -662,7 +672,7 @@ _BANNED_CPP_FUNCTIONS = (
       True,
       [_THIRD_PARTY_EXCEPT_BLINK],  # Not an error in third_party folders.
     ),
-    (
+    BanRule(
       r'/\blong long\b',
       (
         'long long is banned. Use stdint.h if you need a 64 bit number.',
@@ -670,16 +680,16 @@ _BANNED_CPP_FUNCTIONS = (
       False,  # Only a warning since it is already used.
       [_THIRD_PARTY_EXCEPT_BLINK],  # Don't warn in third_party folders.
     ),
-    (
+    BanRule(
       r'\b(absl|std)::any\b',
       (
-        'absl::any / std::any are not safe to use in a component build.'
+        'absl::any / std::any are not safe to use in a component build.',
       ),
       True,
       # Not an error in third party folders, though it probably should be :)
       [_THIRD_PARTY_EXCEPT_BLINK],
     ),
-    (
+    BanRule(
       r'/\bstd::bind\b',
       (
         'std::bind is banned because of lifetime risks.',
@@ -688,7 +698,7 @@ _BANNED_CPP_FUNCTIONS = (
       True,
       [_THIRD_PARTY_EXCEPT_BLINK],  # Not an error in third_party folders.
     ),
-    (
+    BanRule(
       r'/\bstd::optional\b',
       (
         'std::optional is banned. Use absl::optional instead.',
@@ -696,7 +706,7 @@ _BANNED_CPP_FUNCTIONS = (
       True,
       [_THIRD_PARTY_EXCEPT_BLINK],  # Not an error in third_party folders.
     ),
-    (
+    BanRule(
       r'/\b#include <chrono>\b',
       (
         '<chrono> overlaps with Time APIs in base. Keep using',
@@ -705,7 +715,7 @@ _BANNED_CPP_FUNCTIONS = (
       True,
       [_THIRD_PARTY_EXCEPT_BLINK],  # Not an error in third_party folders.
     ),
-    (
+    BanRule(
       r'/\b#include <exception>\b',
       (
         'Exceptions are banned and disabled in Chromium.',
@@ -713,7 +723,7 @@ _BANNED_CPP_FUNCTIONS = (
       True,
       [_THIRD_PARTY_EXCEPT_BLINK],  # Not an error in third_party folders.
     ),
-    (
+    BanRule(
       r'/\bstd::function\b',
       (
         'std::function is banned. Instead use base::OnceCallback or ',
@@ -723,7 +733,7 @@ _BANNED_CPP_FUNCTIONS = (
       False,  # Only a warning since it is already used.
       [_THIRD_PARTY_EXCEPT_BLINK],  # Do not warn in third_party folders.
     ),
-    (
+    BanRule(
       r'/\b#include <random>\b',
       (
         'Do not use any random number engines from <random>. Instead',
@@ -732,7 +742,7 @@ _BANNED_CPP_FUNCTIONS = (
       True,
       [_THIRD_PARTY_EXCEPT_BLINK],  # Not an error in third_party folders.
     ),
-    (
+    BanRule(
       r'/\b#include <X11/',
       (
         'Do not use Xlib. Use xproto (from //ui/gfx/x:xproto) instead.',
@@ -740,7 +750,7 @@ _BANNED_CPP_FUNCTIONS = (
       True,
       [_THIRD_PARTY_EXCEPT_BLINK],  # Not an error in third_party folders.
     ),
-    (
+    BanRule(
       r'/\bstd::ratio\b',
       (
         'std::ratio is banned by the Google Style Guide.',
@@ -748,7 +758,7 @@ _BANNED_CPP_FUNCTIONS = (
       True,
       [_THIRD_PARTY_EXCEPT_BLINK],  # Not an error in third_party folders.
     ),
-    (
+    BanRule(
       ('base::ThreadRestrictions::ScopedAllowIO'),
       (
         'ScopedAllowIO is deprecated, use ScopedAllowBlocking instead.',
@@ -756,7 +766,7 @@ _BANNED_CPP_FUNCTIONS = (
       False,
       (),
     ),
-    (
+    BanRule(
       r'/\bRunMessageLoop\b',
       (
           'RunMessageLoop is deprecated, use RunLoop instead.',
@@ -764,7 +774,7 @@ _BANNED_CPP_FUNCTIONS = (
       False,
       (),
     ),
-    (
+    BanRule(
       'RunThisRunLoop',
       (
           'RunThisRunLoop is deprecated, use RunLoop directly instead.',
@@ -772,7 +782,7 @@ _BANNED_CPP_FUNCTIONS = (
       False,
       (),
     ),
-    (
+    BanRule(
       'RunAllPendingInMessageLoop()',
       (
           "Prefer RunLoop over RunAllPendingInMessageLoop, please contact gab@",
@@ -781,7 +791,7 @@ _BANNED_CPP_FUNCTIONS = (
       False,
       (),
     ),
-    (
+    BanRule(
       'RunAllPendingInMessageLoop(BrowserThread',
       (
           'RunAllPendingInMessageLoop is deprecated. Use RunLoop for',
@@ -792,7 +802,7 @@ _BANNED_CPP_FUNCTIONS = (
       False,
       (),
     ),
-    (
+    BanRule(
       r'MessageLoopRunner',
       (
           'MessageLoopRunner is deprecated, use RunLoop instead.',
@@ -800,7 +810,7 @@ _BANNED_CPP_FUNCTIONS = (
       False,
       (),
     ),
-    (
+    BanRule(
       'GetDeferredQuitTaskForRunLoop',
       (
           "GetDeferredQuitTaskForRunLoop shouldn't be needed, please contact",
@@ -809,7 +819,7 @@ _BANNED_CPP_FUNCTIONS = (
       False,
       (),
     ),
-    (
+    BanRule(
       'sqlite3_initialize(',
       (
         'Instead of calling sqlite3_initialize(), depend on //sql, ',
@@ -821,7 +831,7 @@ _BANNED_CPP_FUNCTIONS = (
         r'^third_party/sqlite/.*\.(c|cc|h)$',
       ),
     ),
-    (
+    BanRule(
       'std::random_shuffle',
       (
         'std::random_shuffle is deprecated in C++14, and removed in C++17. Use',
@@ -830,7 +840,7 @@ _BANNED_CPP_FUNCTIONS = (
       True,
       (),
     ),
-    (
+    BanRule(
       'ios/web/public/test/http_server',
       (
         'web::HTTPserver is deprecated use net::EmbeddedTestServer instead.',
@@ -838,7 +848,7 @@ _BANNED_CPP_FUNCTIONS = (
       False,
       (),
     ),
-    (
+    BanRule(
       'GetAddressOf',
       (
         'Improper use of Microsoft::WRL::ComPtr<T>::GetAddressOf() has been ',
@@ -849,7 +859,7 @@ _BANNED_CPP_FUNCTIONS = (
       True,
       (),
     ),
-    (
+    BanRule(
       'SHFileOperation',
       (
         'SHFileOperation was deprecated in Windows Vista, and there are less ',
@@ -859,7 +869,7 @@ _BANNED_CPP_FUNCTIONS = (
       True,
       (),
     ),
-    (
+    BanRule(
       'StringFromGUID2',
       (
         'StringFromGUID2 introduces an unnecessary dependency on ole32.dll.',
@@ -867,10 +877,10 @@ _BANNED_CPP_FUNCTIONS = (
       ),
       True,
       (
-        r'/base/win/win_util_unittest.cc'
+        r'/base/win/win_util_unittest.cc',
       ),
     ),
-    (
+    BanRule(
       'StringFromCLSID',
       (
         'StringFromCLSID introduces an unnecessary dependency on ole32.dll.',
@@ -878,10 +888,10 @@ _BANNED_CPP_FUNCTIONS = (
       ),
       True,
       (
-        r'/base/win/win_util_unittest.cc'
+        r'/base/win/win_util_unittest.cc',
       ),
     ),
-    (
+    BanRule(
       'kCFAllocatorNull',
       (
         'The use of kCFAllocatorNull with the NoCopy creation of ',
@@ -890,7 +900,7 @@ _BANNED_CPP_FUNCTIONS = (
       True,
       (),
     ),
-    (
+    BanRule(
       'mojo::ConvertTo',
       (
         'mojo::ConvertTo and TypeConverter are deprecated. Please consider',
@@ -906,7 +916,7 @@ _BANNED_CPP_FUNCTIONS = (
         r'^content/renderer/.*\.(cc|h)$',
       ),
     ),
-    (
+    BanRule(
       'GetInterfaceProvider',
       (
         'InterfaceProvider is deprecated.',
@@ -916,7 +926,7 @@ _BANNED_CPP_FUNCTIONS = (
       False,
       (),
     ),
-    (
+    BanRule(
       'CComPtr',
       (
         'New code should use Microsoft::WRL::ComPtr from wrl/client.h as a ',
@@ -926,7 +936,7 @@ _BANNED_CPP_FUNCTIONS = (
       False,
       (),
     ),
-    (
+    BanRule(
       r'/\b(IFACE|STD)METHOD_?\(',
       (
         'IFACEMETHOD() and STDMETHOD() make code harder to format and read.',
@@ -935,7 +945,7 @@ _BANNED_CPP_FUNCTIONS = (
       False,
       [_THIRD_PARTY_EXCEPT_BLINK],  # Not an error in third_party folders.
     ),
-    (
+    BanRule(
       'set_owned_by_client',
       (
         'set_owned_by_client is deprecated.',
@@ -946,7 +956,7 @@ _BANNED_CPP_FUNCTIONS = (
       False,
       (),
     ),
-    (
+    BanRule(
       'RemoveAllChildViewsWithoutDeleting',
       (
         'RemoveAllChildViewsWithoutDeleting is deprecated.',
@@ -956,7 +966,7 @@ _BANNED_CPP_FUNCTIONS = (
       False,
       (),
     ),
-    (
+    BanRule(
       r'/\bTRACE_EVENT_ASYNC_',
       (
           'Please use TRACE_EVENT_NESTABLE_ASYNC_.. macros instead',
@@ -968,7 +978,7 @@ _BANNED_CPP_FUNCTIONS = (
         r'^base/tracing/.*',
       ),
     ),
-    (
+    BanRule(
       r'/\bbase::debug::DumpWithoutCrashingUnthrottled[(][)]',
       (
           'base::debug::DumpWithoutCrashingUnthrottled() does not throttle',
@@ -978,7 +988,7 @@ _BANNED_CPP_FUNCTIONS = (
       False,
       (),
     ),
-    (
+    BanRule(
       'RoInitialize',
       (
         'Improper use of [base::win]::RoInitialize() has been implicated in a ',
@@ -987,56 +997,21 @@ _BANNED_CPP_FUNCTIONS = (
       ),
       True,
       (
-          r'^base[\\/]win[\\/]scoped_winrt_initializer\.cc$'
+          r'^base[\\/]win[\\/]scoped_winrt_initializer\.cc$',
       ),
     ),
 )
 
-# Format: Sequence of tuples containing:
-# * String pattern or, if starting with a slash, a regular expression.
-# * Sequence of strings to show when the pattern matches.
-_DEPRECATED_MOJO_TYPES = (
-    (
-      r'/\bmojo::AssociatedInterfacePtrInfo\b',
-      (
-        'mojo::AssociatedInterfacePtrInfo<Interface> is deprecated.',
-        'Use mojo::PendingAssociatedRemote<Interface> instead.',
-      ),
-    ),
-    (
-      r'/\bmojo::AssociatedInterfaceRequest\b',
-      (
-        'mojo::AssociatedInterfaceRequest<Interface> is deprecated.',
-        'Use mojo::PendingAssociatedReceiver<Interface> instead.',
-      ),
-    ),
-    (
-      r'/\bmojo::InterfacePtr\b',
-      (
-        'mojo::InterfacePtr<Interface> is deprecated.',
-        'Use mojo::Remote<Interface> instead.',
-      ),
-    ),
-    (
-      r'/\bmojo::InterfacePtrInfo\b',
-      (
-        'mojo::InterfacePtrInfo<Interface> is deprecated.',
-        'Use mojo::PendingRemote<Interface> instead.',
-      ),
-    ),
-    (
-      r'/\bmojo::InterfaceRequest\b',
-      (
-        'mojo::InterfaceRequest<Interface> is deprecated.',
-        'Use mojo::PendingReceiver<Interface> instead.',
-      ),
-    ),
-    (
-      r'/\bmojo::MakeRequest\b',
-      (
-        'mojo::MakeRequest is deprecated.',
-        'Use mojo::Remote::BindNewPipeAndPassReceiver() instead.',
-      ),
+_BANNED_MOJOM_PATTERNS : Sequence[BanRule] = (
+    BanRule(
+        'handle<shared_buffer>',
+        (
+         'Please use one of the more specific shared memory types instead:',
+         '  mojo_base.mojom.ReadOnlySharedMemoryRegion',
+         '  mojo_base.mojom.WritableSharedMemoryRegion',
+         '  mojo_base.mojom.UnsafeSharedMemoryRegion',
+        ),
+        True,
     ),
 )
 
@@ -1151,11 +1126,17 @@ _GENERIC_PYDEPS_FILES = [
     'net/tools/testserver/testserver.pydeps',
     'testing/scripts/run_android_wpt.pydeps',
     'testing/scripts/run_isolated_script_test.pydeps',
+    'testing/merge_scripts/standard_isolated_script_merge.pydeps',
+    'testing/merge_scripts/standard_gtest_merge.pydeps',
+    'testing/merge_scripts/code_coverage/merge_results.pydeps',
+    'testing/merge_scripts/code_coverage/merge_steps.pydeps',
     'third_party/android_platform/development/scripts/stack.pydeps',
     'third_party/blink/renderer/bindings/scripts/build_web_idl_database.pydeps',
     'third_party/blink/renderer/bindings/scripts/collect_idl_files.pydeps',
     'third_party/blink/renderer/bindings/scripts/generate_bindings.pydeps',
     'third_party/blink/renderer/bindings/scripts/validate_web_idl.pydeps',
+    'third_party/blink/tools/blinkpy/web_tests/merge_results.pydeps',
+    'third_party/blink/tools/merge_web_test_results.pydeps',
     'tools/binary_size/sizes.pydeps',
     'tools/binary_size/supersize.pydeps',
 ]
@@ -1600,7 +1581,7 @@ def CheckValidHostsInDEPSOnUpload(input_api, output_api):
 
 
 def _GetMessageForMatchingType(input_api, affected_file, line_number, line,
-                               type_name, message):
+                               ban_rule):
     """Helper method for CheckNoBannedFunctions and CheckNoDeprecatedMojoTypes.
 
     Returns an string composed of the name of the file, the line number where the
@@ -1609,25 +1590,25 @@ def _GetMessageForMatchingType(input_api, affected_file, line_number, line,
     """
     result = []
 
-    if input_api.re.search(r"^ *//",
-                           line):  # Ignore comments about banned types.
+    # Ignore comments about banned types.
+    if input_api.re.search(r"^ *//", line):
         return result
-    if line.endswith(
-            " nocheck"):  # A // nocheck comment will bypass this error.
+    # A // nocheck comment will bypass this error.
+    if line.endswith(" nocheck"):
         return result
 
     matched = False
-    if type_name[0:1] == '/':
-        regex = type_name[1:]
+    if ban_rule.pattern[0:1] == '/':
+        regex = ban_rule.pattern[1:]
         if input_api.re.search(regex, line):
             matched = True
-    elif type_name in line:
+    elif ban_rule.pattern in line:
         matched = True
 
     if matched:
         result.append('    %s:%d:' % (affected_file.LocalPath(), line_number))
-        for message_line in message:
-            result.append('      %s' % message_line)
+        for line in ban_rule.explanation:
+            result.append('      %s' % line)
 
     return result
 
@@ -1638,6 +1619,9 @@ def CheckNoBannedFunctions(input_api, output_api):
     errors = []
 
     def IsExcludedFile(affected_file, excluded_paths):
+        if not excluded_paths:
+            return False
+
         local_path = affected_file.LocalPath()
         for item in excluded_paths:
             if input_api.re.match(item, local_path):
@@ -1657,12 +1641,15 @@ def CheckNoBannedFunctions(input_api, output_api):
                 return True
         return False
 
-    def CheckForMatch(affected_file, line_num, line, func_name, message,
-                      error):
+    def CheckForMatch(affected_file, line_num: int, line: str,
+                      ban_rule: BanRule):
+        if IsExcludedFile(affected_file, ban_rule.excluded_paths):
+            return
+
         problems = _GetMessageForMatchingType(input_api, f, line_num, line,
-                                              func_name, message)
+                                              ban_rule)
         if problems:
-            if error:
+            if ban_rule.treat_as_error is not None and ban_rule.treat_as_error:
                 errors.extend(problems)
             else:
                 warnings.extend(problems)
@@ -1670,33 +1657,38 @@ def CheckNoBannedFunctions(input_api, output_api):
     file_filter = lambda f: f.LocalPath().endswith(('.java'))
     for f in input_api.AffectedFiles(file_filter=file_filter):
         for line_num, line in f.ChangedContents():
-            for func_name, message, error in _BANNED_JAVA_FUNCTIONS:
-                CheckForMatch(f, line_num, line, func_name, message, error)
+            for ban_rule in _BANNED_JAVA_FUNCTIONS:
+                CheckForMatch(f, line_num, line, ban_rule)
 
     file_filter = lambda f: f.LocalPath().endswith(('.mm', '.m', '.h'))
     for f in input_api.AffectedFiles(file_filter=file_filter):
         for line_num, line in f.ChangedContents():
-            for func_name, message, error in _BANNED_OBJC_FUNCTIONS:
-                CheckForMatch(f, line_num, line, func_name, message, error)
+            for ban_rule in _BANNED_OBJC_FUNCTIONS:
+                CheckForMatch(f, line_num, line, ban_rule)
 
     for f in input_api.AffectedFiles(file_filter=IsIosObjcFile):
         for line_num, line in f.ChangedContents():
-            for func_name, message, error in _BANNED_IOS_OBJC_FUNCTIONS:
-                CheckForMatch(f, line_num, line, func_name, message, error)
+            for ban_rule in _BANNED_IOS_OBJC_FUNCTIONS:
+                CheckForMatch(f, line_num, line, ban_rule)
 
     egtest_filter = lambda f: f.LocalPath().endswith(('_egtest.mm'))
     for f in input_api.AffectedFiles(file_filter=egtest_filter):
         for line_num, line in f.ChangedContents():
-            for func_name, message, error in _BANNED_IOS_EGTEST_FUNCTIONS:
-                CheckForMatch(f, line_num, line, func_name, message, error)
+            for ban_rule in _BANNED_IOS_EGTEST_FUNCTIONS:
+                CheckForMatch(f, line_num, line, ban_rule)
 
     file_filter = lambda f: f.LocalPath().endswith(('.cc', '.mm', '.h'))
     for f in input_api.AffectedFiles(file_filter=file_filter):
         for line_num, line in f.ChangedContents():
-            for func_name, message, error, excluded_paths in _BANNED_CPP_FUNCTIONS:
-                if IsExcludedFile(f, excluded_paths):
-                    continue
-                CheckForMatch(f, line_num, line, func_name, message, error)
+            for ban_rule in _BANNED_CPP_FUNCTIONS:
+                CheckForMatch(f, line_num, line, ban_rule)
+
+    file_filter = lambda f: f.LocalPath().endswith(('.mojom'))
+    for f in input_api.AffectedFiles(file_filter=file_filter):
+        for line_num, line in f.ChangedContents():
+            for ban_rule in _BANNED_MOJOM_PATTERNS:
+                CheckForMatch(f, line_num, line, ban_rule)
+
 
     result = []
     if (warnings):
@@ -1714,70 +1706,22 @@ def _CheckAndroidNoBannedImports(input_api, output_api):
     """Make sure that banned java imports are not used."""
     errors = []
 
-    def IsException(path, exceptions):
-        for exception in exceptions:
-            if (path.startswith(exception)):
-                return True
-        return False
-
     file_filter = lambda f: f.LocalPath().endswith(('.java'))
     for f in input_api.AffectedFiles(file_filter=file_filter):
         for line_num, line in f.ChangedContents():
-            for import_name, message, exceptions in _BANNED_JAVA_IMPORTS:
-                if IsException(f.LocalPath(), exceptions):
-                    continue
+            for ban_rule in _BANNED_JAVA_IMPORTS:
+                # Consider merging this into the above function. There is no
+                # real difference anymore other than helping with a little
+                # bit of boilerplate text. Doing so means things like
+                # `treat_as_error` will also be uniformly handled.
                 problems = _GetMessageForMatchingType(input_api, f, line_num,
-                                                      line,
-                                                      'import ' + import_name,
-                                                      message)
+                                                      line, ban_rule)
                 if problems:
                     errors.extend(problems)
     result = []
     if (errors):
         result.append(
             output_api.PresubmitError('Banned imports were used.\n' +
-                                      '\n'.join(errors)))
-    return result
-
-
-def CheckNoDeprecatedMojoTypes(input_api, output_api):
-    """Make sure that old Mojo types are not used."""
-    warnings = []
-    errors = []
-
-    # For any path that is not an "ok" or an "error" path, a warning will be
-    # raised if deprecated mojo types are found.
-    ok_paths = ['components/arc']
-    error_paths = ['third_party/blink', 'content']
-
-    file_filter = lambda f: f.LocalPath().endswith(('.cc', '.mm', '.h'))
-    for f in input_api.AffectedFiles(file_filter=file_filter):
-        # Don't check //components/arc, not yet migrated (see crrev.com/c/1868870).
-        if any(map(lambda path: f.LocalPath().startswith(path), ok_paths)):
-            continue
-
-        for line_num, line in f.ChangedContents():
-            for func_name, message in _DEPRECATED_MOJO_TYPES:
-                problems = _GetMessageForMatchingType(input_api, f, line_num,
-                                                      line, func_name, message)
-
-                if problems:
-                    # Raise errors inside |error_paths| and warnings everywhere else.
-                    if any(
-                            map(lambda path: f.LocalPath().startswith(path),
-                                error_paths)):
-                        errors.extend(problems)
-                    else:
-                        warnings.extend(problems)
-
-    result = []
-    if (warnings):
-        result.append(
-            output_api.PresubmitPromptWarning(
-                'Banned Mojo types were used.\n' + '\n'.join(warnings)))
-    if (errors):
-        result.append(
-            output_api.PresubmitError('Banned Mojo types were used.\n' +
                                       '\n'.join(errors)))
     return result
 
@@ -2354,7 +2298,6 @@ def CheckSpamLogging(input_api, output_api):
             r"dll_hash_main\.cc$",
             r"^chrome[\\/]installer[\\/]setup[\\/].*",
             r"^chromecast[\\/]",
-            r"^cloud_print[\\/]",
             r"^components[\\/]browser_watcher[\\/]"
             r"dump_stability_report_main_win.cc$",
             r"^components[\\/]media_control[\\/]renderer[\\/]"
@@ -2642,7 +2585,7 @@ def _GetIDLParseError(input_api, filename):
                                             'tools', 'json_schema_compiler',
                                             'idl_schema.py')
         process = input_api.subprocess.Popen(
-            [input_api.python_executable, idl_schema],
+            [input_api.python3_executable, idl_schema],
             stdin=input_api.subprocess.PIPE,
             stdout=input_api.subprocess.PIPE,
             stderr=input_api.subprocess.PIPE,
@@ -3129,13 +3072,14 @@ def CheckSetNoParent(input_api, output_api):
         # Check that every set noparent line has a corresponding file:// line
         # listed in build/OWNERS.setnoparent. An exception is made for top level
         # directories since src/OWNERS shouldn't review them.
-        if (f.LocalPath().count('/') != 1
-                and (not f.LocalPath() in _EXCLUDED_SET_NO_PARENT_PATHS)):
+        linux_path = f.LocalPath().replace(input_api.os_path.sep, '/')
+        if (linux_path.count('/') != 1
+                and (not linux_path in _EXCLUDED_SET_NO_PARENT_PATHS)):
             for set_noparent_line in found_set_noparent_lines:
                 if set_noparent_line in found_owners_files:
                     continue
                 errors.append('  %s:%d' %
-                              (f.LocalPath(),
+                              (linux_path,
                                found_set_noparent_lines[set_noparent_line]))
 
     results = []
@@ -4536,8 +4480,9 @@ def ChecksCommon(input_api, output_api):
         input_api.RunTests(
             input_api.canned_checks.CheckVPythonSpec(input_api, output_api)))
 
+    dirmd = 'dirmd.bat' if input_api.is_windows else 'dirmd'
     dirmd_bin = input_api.os_path.join(input_api.PresubmitLocalPath(),
-                                       'third_party', 'depot_tools', 'dirmd')
+                                       'third_party', 'depot_tools', dirmd)
     results.extend(
         input_api.RunTests(
             input_api.canned_checks.CheckDirMetadataFormat(
@@ -4681,7 +4626,8 @@ def CheckForSuperfluousStlIncludesInHeaders(input_api, output_api):
                 has_stl_include = True
                 continue
 
-            if not uses_std_namespace and std_namespace_re.search(line):
+            if not uses_std_namespace and (std_namespace_re.search(line)
+                    or 'no-std-usage-because-pch-file' in line):
                 uses_std_namespace = True
                 continue
 
@@ -4829,7 +4775,8 @@ def CheckForLongPathnames(input_api, output_api):
 def CheckForIncludeGuards(input_api, output_api):
     """Check that header files have proper guards against multiple inclusion.
     If a file should not have such guards (and it probably should) then it
-    should include the string "no-include-guard-because-multiply-included".
+    should include the string "no-include-guard-because-multiply-included" or
+    "no-include-guard-because-pch-file".
     """
 
     def is_chromium_header_file(f):
@@ -4889,7 +4836,8 @@ def CheckForIncludeGuards(input_api, output_api):
                                              guard_name_pattern + ')')
 
         for line_number, line in enumerate(f.NewContents()):
-            if 'no-include-guard-because-multiply-included' in line:
+            if ('no-include-guard-because-multiply-included' in line
+                    or 'no-include-guard-because-pch-file' in line):
                 guard_name = 'DUMMY'  # To not trigger check outside the loop.
                 break
 
@@ -4902,8 +4850,8 @@ def CheckForIncludeGuards(input_api, output_api):
                     # We allow existing files to use include guards whose names
                     # don't match the chromium style guide, but new files should
                     # get it right.
-                    if not f.OldContents():
-                        if guard_name != expected_guard:
+                    if guard_name != expected_guard:
+                        if not f.OldContents():
                             errors.append(
                                 output_api.PresubmitPromptWarning(
                                     'Header using the wrong include guard name %s'
@@ -4938,11 +4886,11 @@ def CheckForIncludeGuards(input_api, output_api):
         if guard_name is None:
             errors.append(
                 output_api.PresubmitPromptWarning(
-                    'Missing include guard %s' % expected_guard,
-                    [f.LocalPath()], 'Missing include guard in %s\n'
+                    'Missing include guard in %s\n'
                     'Recommended name: %s\n'
                     'This check can be disabled by having the string\n'
-                    'no-include-guard-because-multiply-included in the header.'
+                    '"no-include-guard-because-multiply-included" or\n'
+                    '"no-include-guard-because-pch-file" in the header.'
                     % (f.LocalPath(), expected_guard)))
 
     return errors
@@ -4952,7 +4900,7 @@ def CheckForWindowsLineEndings(input_api, output_api):
     """Check source code and known ascii text files for Windows style line
     endings.
     """
-    known_text_files = r'.*\.(txt|html|htm|mhtml|py|gyp|gypi|gn|isolate|icon)$'
+    known_text_files = r'.*\.(txt|html|htm|py|gyp|gypi|gn|isolate|icon)$'
 
     file_inclusion_pattern = (known_text_files,
                               r'.+%s' % _IMPLEMENTATION_EXTENSIONS,
@@ -4962,6 +4910,9 @@ def CheckForWindowsLineEndings(input_api, output_api):
     source_file_filter = lambda f: input_api.FilterSourceFile(
         f, files_to_check=file_inclusion_pattern, files_to_skip=None)
     for f in input_api.AffectedSourceFiles(source_file_filter):
+        # Ignore test files that contain crlf intentionally.
+        if f.LocalPath().endswith('crlf.txt'):
+          continue
         include_file = False
         for line in input_api.ReadFile(f, 'r').splitlines(True):
             if line.endswith('\r\n'):
@@ -5539,8 +5490,6 @@ def CheckStableMojomChanges(input_api, output_api):
 
     delta = []
     for mojom in changed_mojoms:
-        old_contents = ''.join(mojom.OldContents()) or None
-        new_contents = ''.join(mojom.NewContents()) or None
         delta.append({
             'filename': mojom.LocalPath(),
             'old': '\n'.join(mojom.OldContents()) or None,
@@ -5548,7 +5497,7 @@ def CheckStableMojomChanges(input_api, output_api):
         })
 
     process = input_api.subprocess.Popen([
-        input_api.python_executable,
+        input_api.python3_executable,
         input_api.os_path.join(
             input_api.PresubmitLocalPath(), 'mojo', 'public', 'tools', 'mojom',
             'check_stable_mojom_compatibility.py'), '--src-root',
@@ -5759,10 +5708,14 @@ def CheckMPArchApiUsage(input_api, output_api):
         'GetMainFrame',
         'GetFrameTreeNodeId',
     ]
+    concerning_ftn_methods = [
+        'IsMainFrame',
+    ]
     concerning_method_pattern = input_api.re.compile(r'(' + r'|'.join(
         item for sublist in [
             concerning_wco_methods, concerning_nav_handle_methods,
-            concerning_web_contents_methods, concerning_rfh_methods
+            concerning_web_contents_methods, concerning_rfh_methods,
+            concerning_ftn_methods,
         ] for item in sublist) + r')\(')
 
     used_apis = set()

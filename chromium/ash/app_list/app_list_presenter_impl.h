@@ -14,11 +14,13 @@
 #include "ash/ash_export.h"
 #include "ash/public/cpp/pagination/pagination_model_observer.h"
 #include "ash/public/cpp/shelf_types.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shelf/shelf_layout_manager_observer.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/scoped_observation.h"
+#include "base/time/time.h"
 #include "ui/aura/client/focus_change_observer.h"
 #include "ui/aura/window_observer.h"
 #include "ui/compositor/layer_animation_observer.h"
@@ -46,6 +48,15 @@ class ASH_EXPORT AppListPresenterImpl
       public display::DisplayObserver,
       public ShelfLayoutManagerObserver {
  public:
+  static constexpr std::array<int, 7> kIdsOfContainersThatWontHideAppList = {
+      kShellWindowId_AppListContainer,
+      kShellWindowId_HomeScreenContainer,
+      kShellWindowId_MenuContainer,
+      kShellWindowId_PowerMenuContainer,
+      kShellWindowId_SettingBubbleContainer,
+      kShellWindowId_ShelfBubbleContainer,
+      kShellWindowId_ShelfContainer};
+
   // Callback which fills out the passed settings object. Used by
   // UpdateYPositionAndOpacityForHomeLauncher so different callers can do
   // similar animations with different settings.
@@ -205,6 +216,9 @@ class ASH_EXPORT AppListPresenterImpl
   // https://crbug.com/884889).
   void SnapAppListBoundsToDisplayEdge();
 
+  // Called when the reorder animation completes.
+  void OnAppListReorderAnimationDone();
+
   // Owns |this|.
   AppListControllerImpl* const controller_;
 
@@ -235,6 +249,8 @@ class ASH_EXPORT AppListPresenterImpl
   // Data we need to store for metrics.
   absl::optional<base::Time> last_open_time_;
   absl::optional<AppListShowSource> last_open_source_;
+
+  base::WeakPtrFactory<AppListPresenterImpl> weak_ptr_factory_{this};
 };
 
 }  // namespace ash

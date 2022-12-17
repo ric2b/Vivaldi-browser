@@ -8,13 +8,13 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bits.h"
 #include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/task/single_thread_task_runner.h"
+#include "base/time/time.h"
 #include "net/http/http_byte_range.h"
 #include "net/http/http_request_headers.h"
 #include "services/network/public/cpp/cors/cors.h"

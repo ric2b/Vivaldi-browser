@@ -112,6 +112,19 @@ constexpr int kNotificationBubbleGapHeight = 6;
 // the auto-hidden shelf when the shelf is on the boundary between displays.
 constexpr int kMaxAutoHideShowShelfRegionSize = 10;
 
+// Returns the `aura::client::DragDropClient` for the given `shelf_widget`. Note
+// that this may return `nullptr` if the browser is performing its shutdown
+// sequence.
+aura::client::DragDropClient* GetDragDropClient(ShelfWidget* shelf_widget) {
+  if (shelf_widget) {
+    if (aura::Window* window = shelf_widget->GetNativeWindow()) {
+      if (aura::Window* root_window = window->GetRootWindow())
+        return aura::client::GetDragDropClient(root_window);
+    }
+  }
+  return nullptr;
+}
+
 aura::Window* GetDragHandleNudgeWindow(ShelfWidget* shelf_widget) {
   if (!shelf_widget->GetDragHandle())
     return nullptr;
@@ -295,12 +308,7 @@ class HotseatEventHandler : public ui::EventHandler,
 
 }  // namespace
 
-ShelfLayoutManager::State::State()
-    : visibility_state(SHELF_VISIBLE),
-      auto_hide_state(SHELF_AUTO_HIDE_HIDDEN),
-      window_state(WorkspaceWindowState::kDefault),
-      pre_lock_screen_animation_active(false),
-      session_state(session_manager::SessionState::UNKNOWN) {}
+ShelfLayoutManager::State::State() = default;
 
 bool ShelfLayoutManager::State::IsAddingSecondaryUser() const {
   return session_state == session_manager::SessionState::LOGIN_SECONDARY;
@@ -398,6 +406,7 @@ ShelfLayoutManager::~ShelfLayoutManager() {
 }
 
 void ShelfLayoutManager::InitObservers() {
+  shelf_->AddObserver(this);
   auto* shell = Shell::Get();
   shell->AddShellObserver(this);
   SplitViewController::Get(shelf_widget_->GetNativeWindow())->AddObserver(this);
@@ -434,6 +443,7 @@ void ShelfLayoutManager::PrepareForShutdown() {
 
   SplitViewController::Get(shelf_widget_->GetNativeWindow())
       ->RemoveObserver(this);
+  shelf_->RemoveObserver(this);
 }
 
 bool ShelfLayoutManager::IsVisible() const {
@@ -999,8 +1009,7 @@ void ShelfLayoutManager::SetChildBounds(aura::Window* child,
   }
 }
 
-void ShelfLayoutManager::OnShelfAutoHideBehaviorChanged(
-    aura::Window* root_window) {
+void ShelfLayoutManager::OnShelfAutoHideBehaviorChanged() {
   UpdateVisibilityState();
 }
 
@@ -1268,12 +1277,15 @@ void ShelfLayoutManager::SetState(ShelfVisibilityState visibility_state) {
   if (visibility_state == SHELF_AUTO_HIDE &&
       state_.visibility_state != SHELF_AUTO_HIDE) {
     DCHECK(!drag_drop_observer_);
-    drag_drop_observer_ = std::make_unique<ScopedDragDropObserver>(
-        /*client=*/aura::client::GetDragDropClient(
-            shelf_->GetWindow()->GetRootWindow()),
-        /*event_callback=*/base::BindRepeating(
-            &ShelfLayoutManager::UpdateAutoHideForDragDrop,
-            base::Unretained(this)));
+    // It's possible that the `drag_drop_client` might be `nullptr` if the
+    // browser is performing its shutdown sequence.
+    if (auto* drag_drop_client = GetDragDropClient(shelf_widget_)) {
+      drag_drop_observer_ = std::make_unique<ScopedDragDropObserver>(
+          drag_drop_client,
+          /*event_callback=*/base::BindRepeating(
+              &ShelfLayoutManager::UpdateAutoHideForDragDrop,
+              base::Unretained(this)));
+    }
   } else if (visibility_state != SHELF_AUTO_HIDE &&
              state_.visibility_state == SHELF_AUTO_HIDE) {
     drag_drop_observer_.reset();
@@ -1669,9 +1681,9 @@ gfx::Insets ShelfLayoutManager::CalculateTargetBounds(
                           ShelfConfig::Get()->in_app_shelf_size())
           : default_shelf_inset;
   return shelf_->SelectValueForShelfAlignment(
-      gfx::Insets(0, 0, horizontal_inset, 0),
-      gfx::Insets(0, default_shelf_inset, 0, 0),
-      gfx::Insets(0, 0, 0, default_shelf_inset));
+      gfx::Insets::TLBR(0, 0, horizontal_inset, 0),
+      gfx::Insets::TLBR(0, default_shelf_inset, 0, 0),
+      gfx::Insets::TLBR(0, 0, 0, default_shelf_inset));
 }
 
 void ShelfLayoutManager::CalculateTargetBoundsAndUpdateWorkArea() {
@@ -2000,11 +2012,12 @@ ShelfLayoutManager::CalculateAutoHideStateBasedOnDragLocation() const {
     // Increase the the hit test area to prevent the shelf from disappearing
     // when the drag is over the bubble gap.
     ShelfAlignment alignment = shelf_->alignment();
-    shelf_region.Inset(
-        alignment == ShelfAlignment::kRight ? -kNotificationBubbleGapHeight : 0,
+    shelf_region.Inset(gfx::Insets::TLBR(
         shelf_->IsHorizontalAlignment() ? -kNotificationBubbleGapHeight : 0,
-        alignment == ShelfAlignment::kLeft ? -kNotificationBubbleGapHeight : 0,
-        0);
+        alignment == ShelfAlignment::kRight ? -kNotificationBubbleGapHeight : 0,
+        0,
+        alignment == ShelfAlignment::kLeft ? -kNotificationBubbleGapHeight
+                                           : 0));
   }
 
   if (shelf_region.Contains(last_drag_drop_position_in_screen_))
@@ -2043,11 +2056,12 @@ ShelfLayoutManager::CalculateAutoHideStateBasedOnCursorLocation() const {
     // Increase the the hit test area to prevent the shelf from disappearing
     // when the mouse is over the bubble gap.
     ShelfAlignment alignment = shelf_->alignment();
-    shelf_region.Inset(
-        alignment == ShelfAlignment::kRight ? -kNotificationBubbleGapHeight : 0,
+    shelf_region.Inset(gfx::Insets::TLBR(
         shelf_->IsHorizontalAlignment() ? -kNotificationBubbleGapHeight : 0,
-        alignment == ShelfAlignment::kLeft ? -kNotificationBubbleGapHeight : 0,
-        0);
+        alignment == ShelfAlignment::kRight ? -kNotificationBubbleGapHeight : 0,
+        0,
+        alignment == ShelfAlignment::kLeft ? -kNotificationBubbleGapHeight
+                                           : 0));
   }
 
   gfx::Point cursor_position_in_screen =
@@ -2366,10 +2380,19 @@ bool ShelfLayoutManager::StartAppListDrag(
 
 bool ShelfLayoutManager::StartShelfDrag(const ui::LocatedEvent& event_in_screen,
                                         const gfx::Vector2dF& scroll_hint) {
+  const bool is_tablet_mode = Shell::Get()->IsInTabletMode();
   // Disable the shelf dragging if the fullscreen app list is opened.
   if (Shell::Get()->app_list_controller()->IsVisible(display_.id()) &&
-      !Shell::Get()->IsInTabletMode())
+      !is_tablet_mode) {
     return false;
+  }
+
+  // Clamshell ProductivityLauncher does not support shelf drags unless autohide
+  // is enabled.
+  if (!is_tablet_mode && features::IsProductivityLauncherEnabled() &&
+      CalculateShelfVisibility() != SHELF_AUTO_HIDE) {
+    return false;
+  }
 
   drag_status_ = kDragInProgress;
   drag_auto_hide_state_ =

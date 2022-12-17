@@ -26,7 +26,6 @@
 #include "content/public/test/browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/shell/browser/shell.h"
-#include "net/base/escape.h"
 #include "ui/accessibility/platform/inspect/ax_api_type.h"
 
 #if BUILDFLAG(IS_MAC)
@@ -117,15 +116,7 @@ void DumpAccessibilityTreeTest::SetUpCommandLine(
 std::vector<std::string> DumpAccessibilityTreeTest::Dump() {
   WaitForFinalTreeContents();
 
-  std::unique_ptr<AXTreeFormatter> formatter(CreateFormatter());
-  formatter->SetPropertyFilters(scenario_.property_filters,
-                                AXTreeFormatter::kFiltersDefaultSet);
-  formatter->SetNodeFilters(scenario_.node_filters);
-  std::string actual_contents =
-      formatter->Format(GetRootAccessibilityNode(GetWebContents()));
-  std::string escaped_contents = net::EscapeNonASCII(actual_contents);
-
-  return base::SplitString(escaped_contents, "\n", base::KEEP_WHITESPACE,
+  return base::SplitString(DumpTreeAsString(), "\n", base::KEEP_WHITESPACE,
                            base::SPLIT_WANT_NONEMPTY);
 }
 
@@ -504,8 +495,15 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAOnclick) {
   RunHtmlTest(FILE_PATH_LITERAL("a-onclick.html"));
 }
 
+// TODO(https://crbug.com/1309941): This test is failing on Fuchsia.
+#if BUILDFLAG(IS_FUCHSIA)
+#define MAYBE_AccessibilityANestedStructure \
+  DISABLED_AccessibilityANestedStructure
+#else
+#define MAYBE_AccessibilityANestedStructure AccessibilityANestedStructure
+#endif  // BUILDFLAG(IS_FUCHSIA)
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
-                       AccessibilityANestedStructure) {
+                       MAYBE_AccessibilityANestedStructure) {
   RunHtmlTest(FILE_PATH_LITERAL("a-nested-structure.html"));
 }
 
@@ -1874,7 +1872,14 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityFieldset) {
   RunHtmlTest(FILE_PATH_LITERAL("fieldset.html"));
 }
 
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityFigcaption) {
+// TODO(crbug.com/1307316): failing on Linux bots and flaky on Fuchsia bots.
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_FUCHSIA)
+#define MAYBE_AccessibilityFigcaption DISABLED_AccessibilityFigcaption
+#else
+#define MAYBE_AccessibilityFigcaption AccessibilityFigcaption
+#endif
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       MAYBE_AccessibilityFigcaption) {
   RunHtmlTest(FILE_PATH_LITERAL("figcaption.html"));
 }
 
@@ -1894,6 +1899,12 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityFooter) {
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
                        AccessibilityFooterInsideOtherSection) {
   RunHtmlTest(FILE_PATH_LITERAL("footer-inside-other-section.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityFooterInsideSectionRoleGeneric) {
+  RunRegressionTest(
+      FILE_PATH_LITERAL("footer-inside-section-role-generic.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityForm) {
@@ -1950,6 +1961,12 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityHeader) {
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
                        AccessibilityHeaderInsideOtherSection) {
   RunHtmlTest(FILE_PATH_LITERAL("header-inside-other-section.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityHeaderInsideSectionRoleGeneric) {
+  RunRegressionTest(
+      FILE_PATH_LITERAL("header-inside-section-role-generic.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityHeading) {
@@ -2094,8 +2111,9 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
   RunHtmlTest(FILE_PATH_LITERAL("iframe-with-invalid-children.html"));
 }
 
+// Failing under multiple platforms. crbug.com/1314860
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
-                       AccessibilityIframeWithInvalidChildrenAdded) {
+                       DISABLED_AccessibilityIframeWithInvalidChildrenAdded) {
   RunHtmlTest(FILE_PATH_LITERAL("iframe-with-invalid-children-added.html"));
 }
 
@@ -2124,9 +2142,8 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityInPageLinks) {
   RunHtmlTest(FILE_PATH_LITERAL("in-page-links.html"));
 }
 
-// TODO(crbug.com/1298003): Fails on Linux CFI
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTestWithIgnoredNodes,
-                       DISABLED_InertAttribute) {
+                       InertAttribute) {
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
       switches::kEnableBlinkFeatures, "InertAttribute");
   RunHtmlTest(FILE_PATH_LITERAL("inert-attribute.html"));
@@ -2166,8 +2183,18 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityInputDate) {
   RunHtmlTest(FILE_PATH_LITERAL("input-date.html"));
 }
 
+// TODO: date and time controls drop their children, including the popup button,
+// on Android
+#if BUILDFLAG(IS_ANDROID)
+#define MAYBE_AccessibilityInputDateWithPopupOpen \
+  DISABLED_AccessibilityInputDateWithPopupOpen
+#else
+#define MAYBE_AccessibilityInputDateWithPopupOpen \
+  AccessibilityInputDateWithPopupOpen
+#endif
+
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
-                       AccessibilityInputDateWithPopupOpen) {
+                       MAYBE_AccessibilityInputDateWithPopupOpen) {
   RunHtmlTest(FILE_PATH_LITERAL("input-date-with-popup-open.html"));
 }
 
@@ -2187,7 +2214,9 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
 }
 
 // TODO(crbug.com/1201658): Flakes heavily on Linux.
-#if BUILDFLAG(IS_LINUX)
+// TODO: date and time controls drop their children, including the popup button,
+// on Android
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_ANDROID)
 #define MAYBE_AccessibilityInputTimeWithPopupOpen \
   DISABLED_AccessibilityInputTimeWithPopupOpen
 #else
@@ -2347,7 +2376,7 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
 
 #if BUILDFLAG(IS_MAC)
 // TODO(1038813): The /blink test pass is different on Windows and Mac, versus
-// Linux.
+// Linux. Also, see https://crbug.com/1314896.
 #define MAYBE_AccessibilityInputTime DISABLED_AccessibilityInputTime
 #else
 #define MAYBE_AccessibilityInputTime AccessibilityInputTime
@@ -2392,6 +2421,11 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityIns) {
   RunHtmlTest(FILE_PATH_LITERAL("ins.html"));
 }
 
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityInteractiveControlsWithLabels) {
+  RunHtmlTest(FILE_PATH_LITERAL("interactive-controls-with-labels.html"));
+}
+
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityLabel) {
   RunHtmlTest(FILE_PATH_LITERAL("label.html"));
 }
@@ -2433,6 +2467,15 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityList) {
   RunHtmlTest(FILE_PATH_LITERAL("list.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityListText) {
+  RunHtmlTest(FILE_PATH_LITERAL("list-text.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityListTextAddition) {
+  RunHtmlTest(FILE_PATH_LITERAL("list-text-addition.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
@@ -2810,7 +2853,8 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
   RunHtmlTest(FILE_PATH_LITERAL("selectmenu-open.html"));
 }
 
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+// TODO(https://crbug.com/1309941): Flaky on Fuchsia
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_FUCHSIA)
 #define MAYBE_AccessibilitySource DISABLED_AccessibilitySource
 #else
 #define MAYBE_AccessibilitySource AccessibilitySource
@@ -3080,15 +3124,23 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
   RunHtmlTest(FILE_PATH_LITERAL("node-changed-crash-in-editable-text.html"));
 }
 
-// TODO(crbug.com/916003): Fix race condition.
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
-                       DISABLED_AccessibilityNoSourceVideo) {
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityNoSourceVideo) {
+#if BUILDFLAG(IS_MAC)
+  // The /blink test pass is different on macOS than on other platforms. See
+  // https://crbug.com/1314896.
+  if (GetParam() == ui::AXApiType::kBlink)
+    return;
+#endif
   RunHtmlTest(FILE_PATH_LITERAL("no-source-video.html"));
 }
 
-// TODO(crbug.com/916003): Fix race condition.
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
-                       DISABLED_AccessibilityVideoControls) {
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityVideoControls) {
+#if BUILDFLAG(IS_MAC)
+  // The /blink test pass is different on macOS than on other platforms. See
+  // https://crbug.com/1314896.
+  if (GetParam() == ui::AXApiType::kBlink)
+    return;
+#endif
   RunHtmlTest(FILE_PATH_LITERAL("video-controls.html"));
 }
 
@@ -3180,6 +3232,11 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, DisplayLockingAllCommitted) {
 // they test a specific web page that crashed or had some bad behavior
 // in the past.
 //
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AriaPressedChangesButtonRole) {
+  RunRegressionTest(FILE_PATH_LITERAL("aria-pressed-changes-button-role.html"));
+}
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
                        AddChildOfNotIncludedInTreeChain) {

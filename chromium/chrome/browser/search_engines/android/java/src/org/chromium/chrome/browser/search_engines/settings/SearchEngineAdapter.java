@@ -45,10 +45,10 @@ import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 
-import java.util.Locale;
+// Vivaldi
+import java.net.MalformedURLException;
+import java.net.URL;
 
-//
-import org.chromium.build.BuildConfig;
 /**
  * A custom adapter for listing search engines.
  */
@@ -169,7 +169,8 @@ public class SearchEngineAdapter extends BaseAdapter
         List<TemplateUrl> templateUrls = templateUrlService.getTemplateUrls();
         TemplateUrl defaultSearchEngineTemplateUrl =
                 templateUrlService.getDefaultSearchEngineTemplateUrl();
-        sortAndFilterUnnecessaryTemplateUrl(templateUrls, defaultSearchEngineTemplateUrl);
+        // In Vivaldi, we get everything sorted on the native side.
+        //sortAndFilterUnnecessaryTemplateUrl(templateUrls, defaultSearchEngineTemplateUrl);
         boolean forceRefresh = mIsLocationPermissionChanged;
         mIsLocationPermissionChanged = false;
         if (!didSearchEnginesChange(templateUrls)) {
@@ -261,6 +262,9 @@ public class SearchEngineAdapter extends BaseAdapter
 
     private static @TemplateUrlSourceType int getSearchEngineSourceType(
             TemplateUrl templateUrl, TemplateUrl defaultSearchEngine) {
+        // We don't separate PREPOPULATED and others in the Vivaldi UI
+        return TemplateUrlSourceType.PREPOPULATED;
+        /*
         if (templateUrl.getIsPrepopulated()) {
             return TemplateUrlSourceType.PREPOPULATED;
         } else if (templateUrl.equals(defaultSearchEngine)) {
@@ -268,6 +272,7 @@ public class SearchEngineAdapter extends BaseAdapter
         } else {
             return TemplateUrlSourceType.RECENT;
         }
+        */
     }
 
     private static boolean containsTemplateUrl(
@@ -367,15 +372,6 @@ public class SearchEngineAdapter extends BaseAdapter
                             : R.layout.search_engine,
                     null);
         }
-
-        if (BuildConfig.IS_VIVALDI) {
-            TextView shortcut = view.findViewById(R.id.shortcut);
-            assert shortcut != null;
-            TemplateUrl tUrl = (TemplateUrl) getItem(position);
-            String text = tUrl.getShortName().substring(0, 1).toLowerCase(Locale.getDefault());
-            shortcut.setText(text);
-        }
-
         if (itemViewType == VIEW_TYPE_DIVIDER) return view;
 
         view.setOnClickListener(this);
@@ -416,6 +412,14 @@ public class SearchEngineAdapter extends BaseAdapter
             }
         });
 
+
+        // Vivaldi - Custom search engine changes
+        TextView shortcut = view.findViewById(R.id.shortcut);
+        shortcut.setText(templateUrl.getKeyword());
+        try {
+            URL itemUrl = new URL(templateUrl.getURL());
+            url.setText(itemUrl.getHost());
+        } catch (MalformedURLException ignored) {}
         return view;
     }
 

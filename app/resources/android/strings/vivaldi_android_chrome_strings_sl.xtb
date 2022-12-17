@@ -21,17 +21,21 @@
 <translation id="3377025655491224618">Zasebni zavihek</translation>
 <translation id="3504699618187058974">Zloži zavihke</translation>
 <translation id="3518985090088779359">Sprejmi in nadaljuj</translation>
+<translation id="3571177741182643350">Neprebrani članki – na voljo brez povezave:</translation>
 <translation id="3700829948786686853">Dobrodošli v Vivaldi</translation>
 <translation id="3719826155360621982">Domača stran</translation>
 <translation id="385051799172605136">Nazaj</translation>
+<translation id="399014816462153200">Preberite članke:</translation>
 <translation id="4121750346708795461">Z uporabo te aplikacije se strinjate z Vivaldijevo <ph name="BEGIN_LINK1" />Licenčno pogodba za končnega uporabnika<ph name="END_LINK1" /> in <ph name="BEGIN_LINK2" />Pravilnikom o zasebnosti<ph name="END_LINK2" />.</translation>
 <translation id="4137746084635924146">Trenutni jezik naprave</translation>
+<translation id="4167670741834902166">Nov zasebni zavihek</translation>
 <translation id="4243710787042215766">Odpri na zasebnem zavihku</translation>
 <translation id="4526803704855831732">Zasebni zavihki</translation>
 <translation id="4759238208242260848">Prenosi</translation>
 <translation id="4883379392681899581">Zapusti zasebni način</translation>
 <translation id="4943872375798546930">Ni rezultatov</translation>
 <translation id="49576331685473090">Blokator vsebine</translation>
+<translation id="5079259810715830221">Ko Googlovo spletno mesto zahteva zasebno vnaprejšnje nalaganje povezav na svojo stran, Vivaldi šifrira in vnaprej naloži strani prek Googlovih strežnikov brez piškotkov. To skrije vašo identiteto na prednaloženem spletnem mestu.</translation>
 <translation id="5118676864324397542"><ph name="APP_NAME" /> shramba</translation>
 <translation id="5186185447130319458">Zasebno</translation>
 <translation id="5233638681132016545">Nov zavihek</translation>
@@ -44,6 +48,7 @@
 <translation id="6585139692466700358">Ponudite prevod strani v druge jezike z uporabo storitve prevajanja Vivaldi</translation>
 <translation id="6593061639179217415">Namizno spletno mesto</translation>
 <translation id="6610147964972079463">Zapri zasebne zavihke</translation>
+<translation id="7029995644714925509">Ko spletno mesto zahteva zasebno prednalaganje povezav na svojo stran, Vivaldi šifrira in vnaprej naloži strani prek Googlovih strežnikov brez piškotkov. To skrije vašo identiteto na prednaloženem spletnem mestu.</translation>
 <translation id="706339621163631076">Pravilnik o zasebnosti brskalnika</translation>
 <translation id="732145680195464316">Zaznamek je shranjen v <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">O brskalniku Vivaldi</translation>

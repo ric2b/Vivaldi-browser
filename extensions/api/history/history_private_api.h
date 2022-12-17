@@ -148,28 +148,6 @@ class HistoryPrivateVisitSearchFunction : public HistoryFunctionWithCallback {
   void VisitsComplete(const history::Visit::VisitsList& visit_list);
 };
 
-class HistoryPrivateSetKeywordSearchTermsForURLFunction
-    : public HistoryFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("historyPrivate.setKeywordSearchTermsForURL",
-                             HISTORYPRIVATE_SETKEYWORDSEARCHTERMSFORURL)
-
- private:
-  ~HistoryPrivateSetKeywordSearchTermsForURLFunction() override = default;
-  ExtensionFunction::ResponseAction Run() override;
-};
-
-class HistoryPrivateDeleteAllSearchTermsForKeywordFunction
-    : public HistoryFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("historyPrivate.deleteAllSearchTermsForKeyword",
-                             HISTORYPRIVATE_DELETEALLSEARCHTERMSFORKEYWORD)
-
- private:
-  ~HistoryPrivateDeleteAllSearchTermsForKeywordFunction() override = default;
-  ExtensionFunction::ResponseAction Run() override;
-};
-
 class HistoryPrivateGetTypedHistoryFunction : public HistoryFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("historyPrivate.getTypedHistory",

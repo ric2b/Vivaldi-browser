@@ -185,9 +185,13 @@ OverlayWindowViews::OverlayWindowViews()
           base::Milliseconds(2500),
           base::BindRepeating(&OverlayWindowViews::UpdateControlsVisibility,
                               base::Unretained(this),
-                              false /* is_visible */)) {}
+                              false /* is_visible */)) {
+  display::Screen::GetScreen()->AddObserver(this);
+}
 
-OverlayWindowViews::~OverlayWindowViews() = default;
+OverlayWindowViews::~OverlayWindowViews() {
+  display::Screen::GetScreen()->RemoveObserver(this);
+}
 
 gfx::Size& OverlayWindowViews::GetNaturalSize() {
   return natural_size_;
@@ -197,8 +201,12 @@ gfx::Rect OverlayWindowViews::CalculateAndUpdateWindowBounds() {
   gfx::Rect work_area = GetWorkAreaForWindow();
 
   UpdateMaxSize(work_area);
-
+#if defined(VIVALDI_BUILD)
+  const gfx::Rect bounds = GetStoredBoundsFromPrefs();
+  const gfx::Point stored_origin = bounds.origin();
+#else
   const gfx::Rect bounds = native_widget() ? GetRestoredBounds() : gfx::Rect();
+#endif  // VIVALDI_BUILD
 
   gfx::Size window_size = bounds.size();
   if (!has_been_shown_)
@@ -239,6 +247,10 @@ gfx::Rect OverlayWindowViews::CalculateAndUpdateWindowBounds() {
     window_size = window_rect.size();
 
     UpdateLayerBoundsWithLetterboxing(window_size);
+
+#if defined(VIVALDI_BUILD)
+    UpdateStoredBounds();
+#endif  // defined(VIVALDI_BUILD)
   }
 
   // Use the previous window origin location, if exists.
@@ -256,7 +268,11 @@ gfx::Rect OverlayWindowViews::CalculateAndUpdateWindowBounds() {
 
   if (has_been_shown_) {
     // Make sure window is displayed entirely in the work area.
+#if defined(VIVALDI_BUILD)
+    origin.SetToMin(stored_origin);
+#else
     origin.SetToMin(default_origin);
+#endif  // defined(VIVALDI_BUILD)
   } else {
     origin = default_origin;
   }
@@ -339,6 +355,10 @@ void OverlayWindowViews::OnNativeWidgetMove() {
   // Update the maximum size of the widget in case we have moved to another
   // window.
   UpdateMaxSize(GetWorkAreaForWindow());
+
+#if defined(VIVALDI_BUILD)
+  UpdateStoredBounds();
+#endif  // defined(VIVALDI_BUILD)
 }
 
 void OverlayWindowViews::OnNativeWidgetSizeChanged(const gfx::Size& new_size) {
@@ -348,6 +368,10 @@ void OverlayWindowViews::OnNativeWidgetSizeChanged(const gfx::Size& new_size) {
 
   // Update the view layers to scale to |new_size|.
   UpdateLayerBoundsWithLetterboxing(new_size);
+
+#if defined(VIVALDI_BUILD)
+  UpdateStoredBounds();
+#endif  // defined(VIVALDI_BUILD)
 
   views::Widget::OnNativeWidgetSizeChanged(new_size);
 }
@@ -490,6 +514,19 @@ void OverlayWindowViews::UpdateControlsBounds() {
 bool OverlayWindowViews::IsLayoutPendingForTesting() const {
   return update_controls_bounds_timer_ &&
          update_controls_bounds_timer_->IsRunning();
+}
+
+void OverlayWindowViews::OnDisplayMetricsChanged(
+    const display::Display& display,
+    uint32_t changed_metrics) {
+  // Some display metric changes, such as display scaling, can affect the work
+  // area, so max size needs to be updated.
+  if (changed_metrics & display::DisplayObserver::DISPLAY_METRIC_WORK_AREA &&
+      display.id() == display::Screen::GetScreen()
+                          ->GetDisplayNearestWindow(GetNativeWindow())
+                          .id()) {
+    UpdateMaxSize(GetWorkAreaForWindow());
+  }
 }
 
 gfx::Rect OverlayWindowViews::GetWorkAreaForWindow() const {

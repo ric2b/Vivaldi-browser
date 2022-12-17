@@ -16,6 +16,7 @@
 #import "ios/web/public/session/crw_session_storage.h"
 #import "ios/web/session/session_certificate_policy_cache_impl.h"
 #import "ios/web/web_state/global_web_state_event_tracker.h"
+#import "ios/web/web_state/ui/crw_web_controller.h"
 #import "ios/web/web_state/web_state_impl_realized_web_state.h"
 #import "ios/web/web_state/web_state_impl_serialized_data.h"
 #import "url/gurl.h"
@@ -26,10 +27,6 @@
 
 namespace web {
 namespace {
-// Function used to implement the default WebState getters.
-WebState* ReturnWeakReference(base::WeakPtr<WebStateImpl> weak_web_state) {
-  return weak_web_state.get();
-}
 
 // With |kEnableUnrealizedWebStates|, detect inefficient usage of WebState
 // realization. Various bugs have triggered the realization of the entire
@@ -319,14 +316,6 @@ void WebStateImpl::RemoveAllWebFrames() {
 
 #pragma mark - WebState implementation
 
-WebState::Getter WebStateImpl::CreateDefaultGetter() {
-  return base::BindRepeating(&ReturnWeakReference, weak_factory_.GetWeakPtr());
-}
-
-WebState::OnceGetter WebStateImpl::CreateDefaultOnceGetter() {
-  return base::BindOnce(&ReturnWeakReference, weak_factory_.GetWeakPtr());
-}
-
 WebStateDelegate* WebStateImpl::GetDelegate() {
   return LIKELY(pimpl_) ? pimpl_->GetDelegate() : nullptr;
 }
@@ -419,8 +408,30 @@ BrowserState* WebStateImpl::GetBrowserState() const {
   return LIKELY(pimpl_) ? pimpl_->GetBrowserState() : saved_->GetBrowserState();
 }
 
+base::WeakPtr<WebState> WebStateImpl::GetWeakPtr() {
+  return weak_factory_.GetWeakPtr();
+}
+
 void WebStateImpl::OpenURL(const WebState::OpenURLParams& params) {
   RealizedState()->OpenURL(params);
+}
+
+void WebStateImpl::LoadSimulatedRequest(const GURL& url,
+                                        NSString* response_html_string) {
+  CRWWebController* web_controller = GetWebController();
+  DCHECK(web_controller);
+  [web_controller loadSimulatedRequest:url
+                    responseHTMLString:response_html_string];
+}
+
+void WebStateImpl::LoadSimulatedRequest(const GURL& url,
+                                        NSData* response_data,
+                                        NSString* mime_type) {
+  CRWWebController* web_controller = GetWebController();
+  DCHECK(web_controller);
+  [web_controller loadSimulatedRequest:url
+                          responseData:response_data
+                              MIMEType:mime_type];
 }
 
 void WebStateImpl::Stop() {

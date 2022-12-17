@@ -30,7 +30,9 @@
 #include "chrome/grit/os_settings_resources.h"
 #include "components/app_restore/features.h"
 #include "components/prefs/pref_service.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_ui_data_source.h"
+#include "ui/accessibility/accessibility_features.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
 #include "ui/chromeos/devicetype_utils.h"
@@ -172,10 +174,32 @@ const std::vector<SearchConcept>& GetOnStartupSearchConcepts() {
 void AddAppManagementStrings(content::WebUIDataSource* html_source) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
       {"appManagementAppDetailsTitle", IDS_APP_MANAGEMENT_APP_DETAILS_TITLE},
+      {"appManagementAppDetailsTypeAndroid",
+       IDS_APP_MANAGEMENT_APP_DETAILS_TYPE_ANDROID},
+      {"appManagementAppDetailsTypeChrome",
+       IDS_APP_MANAGEMENT_APP_DETAILS_TYPE_CHROME},
+      {"appManagementAppDetailsTypeWeb",
+       IDS_APP_MANAGEMENT_APP_DETAILS_TYPE_WEB},
+      {"appManagementAppDetailsTypeSystem",
+       IDS_APP_MANAGEMENT_APP_DETAILS_TYPE_SYSTEM},
+      {"appManagementAppDetailsTypeCrosSystem",
+       IDS_APP_MANAGEMENT_APP_DETAILS_TYPE_CROS_SYSTEM},
+      {"appManagementAppDetailsInstallSourceWebStore",
+       IDS_APP_MANAGEMENT_APP_DETAILS_INSTALL_SOURCE_WEB_STORE},
+      {"appManagementAppDetailsInstallSourcePlayStore",
+       IDS_APP_MANAGEMENT_APP_DETAILS_INSTALL_SOURCE_PLAY_STORE},
+      {"appManagementAppDetailsInstallSourceBrowser",
+       IDS_APP_MANAGEMENT_APP_DETAILS_INSTALL_SOURCE_BROWSER},
+      {"appManagementAppDetailsTypeAndSourceCombined",
+       IDS_APP_MANAGEMENT_APP_DETAILS_TYPE_AND_SOURCE_COMBINED},
+      {"appManagementAppDetailsVersion",
+       IDS_APP_MANAGEMENT_APP_DETAILS_VERSION},
       {"appManagementAppInstalledByPolicyLabel",
        IDS_APP_MANAGEMENT_POLICY_APP_POLICY_STRING},
       {"appManagementCameraPermissionLabel", IDS_APP_MANAGEMENT_CAMERA},
       {"appManagementContactsPermissionLabel", IDS_APP_MANAGEMENT_CONTACTS},
+      {"appManagementFileHandlingHeader",
+       IDS_APP_MANAGEMENT_FILE_HANDLING_HEADER},
       {"appManagementIntentOverlapChangeButton",
        IDS_APP_MANAGEMENT_INTENT_OVERLAP_CHANGE_BUTTON},
       {"appManagementIntentOverlapDialogText1App",
@@ -227,6 +251,11 @@ void AddAppManagementStrings(content::WebUIDataSource* html_source) {
       {"appManagementSearchPrompt", IDS_APP_MANAGEMENT_SEARCH_PROMPT},
       {"appManagementStoragePermissionLabel", IDS_APP_MANAGEMENT_STORAGE},
       {"appManagementUninstallLabel", IDS_APP_MANAGEMENT_UNINSTALL_APP},
+      {"close", IDS_CLOSE},
+      {"fileHandlingOverflowDialogTitle",
+       IDS_APP_MANAGEMENT_FILE_HANDLING_OVERFLOW_DIALOG_TITLE},
+      {"fileHandlingSetDefaults",
+       IDS_APP_MANAGEMENT_FILE_HANDLING_SET_DEFAULTS_LINK},
   };
   html_source->AddLocalizedStrings(kLocalizedStrings);
 }
@@ -379,6 +408,10 @@ void AppsSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       "showArcvmManageUsb",
       arc::IsArcVmEnabled() &&
           base::FeatureList::IsEnabled(arc::kUsbDeviceDefaultAttachToArcVm));
+
+  html_source->AddBoolean(
+      "isAccessibilityOSSettingsVisibilityEnabled",
+      ::features::IsAccessibilityOSSettingsVisibilityEnabled());
 
   AddAppManagementStrings(html_source);
   AddGuestOsStrings(html_source);

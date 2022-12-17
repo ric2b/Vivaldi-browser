@@ -552,7 +552,7 @@ This feature forces omitting type names. Its use should follow
 See [discussion thread](https://groups.google.com/a/chromium.org/g/cxx/c/ExfSorNLNf4).
 ***
 
-### Inline variables
+### Inline variables <sup>[allowed]</sup>
 
 ```c++
 struct S {
@@ -606,7 +606,7 @@ requirements exceed `__STDCPP_DEFAULT_NEW_ALIGNMENT__`.
 None
 ***
 
-### Type trait variable templates <sup>[tbd]</sup>
+### Type trait variable templates <sup>[allowed]</sup>
 
 ```c++
 bool b = std::is_same_v<int, std::int32_t>;
@@ -659,6 +659,37 @@ require default-constructibility of the mapped type.
 **Notes:**
 *** promo
 [Discussion thread](https://groups.google.com/a/chromium.org/g/cxx/c/Uv2tUfIwUfQ/m/ffMxCk9uAAAJ)
+***
+
+### Non-member std::size/std::empty/std::data <sup>[allowed]</sup>
+
+```c++
+char buffer[260];
+memcpy(std::data(buffer), source_str.data(), std::size(buffer));
+
+if (!std::empty(container)) { ... }
+```
+
+**Description:** Non-member versions of what are often member functions on STL
+containers. Primarily useful when:
+- using `std::size()` as a replacement for the old `arraysize()` macro.
+- writing code that needs to generically operate across things like
+  `std::vector` and `std::list` (which provide `size()`, `empty()`, and `data()
+  member functions), `std::array` and `std::initialize_list` (which only provide
+  a subset of the aforementioned member functions), and regular arrays (which
+  have no member functions at all).
+
+**Documentation:**
+[std::size](https://en.cppreference.com/w/cpp/iterator/size),
+[std::empty](https://en.cppreference.com/w/cpp/iterator/empty),
+[std::data](https://en.cppreference.com/w/cpp/iterator/data)
+
+**Notes:**
+*** promo
+[Discussion thread](https://groups.google.com/a/chromium.org/g/cxx/c/58qlA3zk5ZI/m/7kKok65xAAAJ)
+
+Prefer range-based for loops over `std::size()`: range-based for loops work even
+for regular arrays.
 ***
 
 ## C++17 Banned Library Features {#library-blocklist-17}
@@ -788,6 +819,67 @@ std::chrono::round<std::chrono::seconds>(time_pt);
 **Notes:**
 *** promo
 Banned since `std::chrono` is banned.
+***
+
+### std::variant <sup>[banned]</sup>
+
+```c++
+std::variant<int, double> v = 12;
+```
+
+**Description:** The class template `std::variant` represents a type-safe
+`union`. An instance of `std::variant` at any given time holds a value of one of
+its alternative types (it's also possible for it to be valueless).
+
+**Documentation:**
+[std::variant](https://en.cppreference.com/w/cpp/utility/variant)
+
+**Notes:**
+*** promo
+Banned for now because it does not provide safety guarantees in the case of
+misuse. The Chromium C++ team is investigating the possibility of hardening the
+C++ library so that the standard version can be used. In the meanwhile, use
+`absl::variant` instead.
+***
+
+### std::optional <sup>[banned]</sup>
+
+```c++
+std::optional<std::string> s;
+```
+
+**Description:** The class template `std::optional` manages an optional
+contained value, i.e. a value that may or may not be present. A common use case
+for optional is the return value of a function that may fail.
+
+**Documentation:**
+[std::optional](https://en.cppreference.com/w/cpp/utility/optional)
+
+**Notes:**
+*** promo
+Banned for now because it does not provide safety guarantees in the case of
+misuse. The Chromium C++ team is investigating the possibility of hardening the
+C++ library so that the standard version can be used. In the meanwhile, use
+`absl::optional` instead.
+***
+
+### std::clamp <sup>[banned]</sup>
+
+```c++
+int x = std::clamp(inp, 0, 100);
+```
+
+**Description:** Clamps a value between a minimum and a maximum.
+
+**Documentation:**
+[std::clamp](https://en.cppreference.com/w/cpp/algorithm/clamp)
+
+**Notes:**
+*** promo
+Banned for now because it does not provide safety guarantees in the case of
+misuse. The Chromium C++ team is investigating the possibility of hardening the
+C++ library so that the standard version can be used. In the meanwhile, use
+`base::clamp` instead.
 ***
 
 ## C++17 TBD Language Features {#core-review-17}
@@ -929,42 +1021,6 @@ None
 The following C++17 library features are not allowed in the Chromium codebase.
 See the top of this page on how to propose moving a feature from this list into
 the allowed or banned sections.
-
-### std::variant <sup>[tbd]</sup>
-
-```c++
-std::variant<int, double> v = 12;
-```
-
-**Description:** The class template `std::variant` represents a type-safe
-`union`. An instance of `std::variant` at any given time holds a value of one of
-its alternative types (it's also possible for it to be valueless).
-
-**Documentation:**
-[std::variant](https://en.cppreference.com/w/cpp/utility/variant)
-
-**Notes:**
-*** promo
-See also `absl::variant`.
-***
-
-### std::optional <sup>[tbd]</sup>
-
-```c++
-std::optional<std::string> s;
-```
-
-**Description:** The class template `std::optional` manages an optional
-contained value, i.e. a value that may or may not be present. A common use case
-for optional is the return value of a function that may fail.
-
-**Documentation:**
-[std::optional](https://en.cppreference.com/w/cpp/utility/optional)
-
-**Notes:**
-*** promo
-See also `absl::optional`.
-***
 
 ### std::string_view <sup>[tbd]</sup>
 
@@ -1290,22 +1346,6 @@ objects with the same value have the same object representation.
 None
 ***
 
-### std::clamp <sup>[tbd]</sup>
-
-```c++
-int x = base::clamp(inp, 0, 100);
-```
-
-**Description:** Clamps a value between a minimum and a maximum.
-
-**Documentation:**
-[std::clamp](https://en.cppreference.com/w/cpp/algorithm/clamp)
-
-**Notes:**
-*** promo
-See also `base::clamp`.
-***
-
 ### std::reduce <sup>[tbd]</sup>
 
 ```c++
@@ -1388,27 +1428,6 @@ static_assert(std::lcm(12, 18) == 36);
 **Notes:**
 *** promo
 None
-***
-
-### Non-member std::size/std::empty/std::data <sup>[tbd]</sup>
-
-```c++
-for (std::size_t i = 0; i < std::size(c); ++i) { ...
-if (!std::empty(c)) { ...
-std::strcpy(arr, std::data(str));
-```
-
-**Description:** Non-member versions of what are normally member functions, for
-symmetrical use with things like arrays and initializer_lists.
-
-**Documentation:**
-[std::size](https://en.cppreference.com/w/cpp/iterator/size),
-[std::empty](https://en.cppreference.com/w/cpp/iterator/empty),
-[std::data](https://en.cppreference.com/w/cpp/iterator/data)
-
-**Notes:**
-*** promo
-See `base::size`, `base::empty`, and `base::data`.
 ***
 
 ### Mathematical special functions <sup>[tbd]</sup>

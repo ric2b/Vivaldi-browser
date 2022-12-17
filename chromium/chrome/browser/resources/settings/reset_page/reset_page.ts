@@ -18,7 +18,6 @@ import '../incompatible_applications_page/incompatible_applications_page.js';
 // </if>
 
 import {CrLazyRenderElement} from 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.m.js';
-import {assert} from 'chrome://resources/js/assert.m.js';
 import {focusWithoutInk} from 'chrome://resources/js/cr/ui/focus_without_ink.m.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
@@ -76,7 +75,7 @@ export class SettingsResetPageElement extends SettingsResetPageElementBase {
   /**
    * RouteObserverMixin
    */
-  currentRouteChanged(route: Route) {
+  override currentRouteChanged(route: Route) {
     const lazyRender = this.$.resetProfileDialog;
 
     if (route === routes.TRIGGERED_RESET_DIALOG ||
@@ -96,8 +95,8 @@ export class SettingsResetPageElement extends SettingsResetPageElementBase {
   }
 
   private onResetProfileDialogClose_() {
-    Router.getInstance().navigateToPreviousRoute();
-    focusWithoutInk(assert(this.$.resetProfile));
+    Router.getInstance().navigateTo(routes.RESET_DIALOG.parent!);
+    focusWithoutInk(this.$.resetProfile);
   }
 
   // <if expr="_google_chrome and is_win">

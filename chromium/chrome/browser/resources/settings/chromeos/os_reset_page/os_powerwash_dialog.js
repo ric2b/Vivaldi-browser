@@ -11,7 +11,7 @@ import '//resources/cr_elements/cr_button/cr_button.m.js';
 import '//resources/cr_elements/cr_checkbox/cr_checkbox.m.js';
 import '//resources/cr_elements/cr_dialog/cr_dialog.m.js';
 import '//resources/polymer/v3_0/iron-list/iron-list.js';
-import '//resources/cr_components/chromeos/localized_link/localized_link.js';
+import '//resources/cr_components/localized_link/localized_link.js';
 import '../../settings_shared_css.js';
 import './os_powerwash_dialog_esim_item.js';
 
@@ -20,8 +20,8 @@ import {OncMojo} from 'chrome://resources/cr_components/chromeos/network/onc_moj
 
 import {LifetimeBrowserProxyImpl} from '../../lifetime_browser_proxy.js';
 import {Router} from '../../router.js';
-import {recordSettingChange} from '../metrics_recorder.m.js';
-import {routes} from '../os_route.m.js';
+import {recordSettingChange} from '../metrics_recorder.js';
+import {routes} from '../os_route.js';
 
 import {OsResetBrowserProxy, OsResetBrowserProxyImpl} from './os_reset_browser_proxy.js';
 
@@ -36,7 +36,7 @@ Polymer({
     },
 
     /**
-     * @type {!Array<!chromeos.cellularSetup.mojom.ESimProfileRemote>}
+     * @type {!Array<!ash.cellularSetup.mojom.ESimProfileRemote>}
      * @private
      */
     installedESimProfiles: {
@@ -94,7 +94,7 @@ Polymer({
   onMobileSettingsLinkClicked_(event) {
     event.detail.event.preventDefault();
 
-    const params = new URLSearchParams;
+    const params = new URLSearchParams();
     params.append(
         'type',
         OncMojo.getNetworkTypeString(

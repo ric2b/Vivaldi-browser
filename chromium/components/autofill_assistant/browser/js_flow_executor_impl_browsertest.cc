@@ -9,6 +9,7 @@
 #include <string>
 #include <type_traits>
 
+#include "base/base64.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_forward.h"
@@ -17,14 +18,24 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/gmock_callback_support.h"
+#include "base/test/mock_callback.h"
 #include "base/values.h"
 #include "components/autofill_assistant/browser/base_browsertest.h"
 #include "components/autofill_assistant/browser/client_status.h"
+#include "components/autofill_assistant/browser/fake_script_executor_delegate.h"
+#include "components/autofill_assistant/browser/fake_script_executor_ui_delegate.h"
 #include "components/autofill_assistant/browser/js_flow_executor_impl.h"
+#include "components/autofill_assistant/browser/mock_script_executor_delegate.h"
 #include "components/autofill_assistant/browser/model.pb.h"
+#include "components/autofill_assistant/browser/script.h"
+#include "components/autofill_assistant/browser/script_executor.h"
 #include "components/autofill_assistant/browser/service.pb.h"
+#include "components/autofill_assistant/browser/service/mock_service.h"
+#include "components/autofill_assistant/browser/trigger_context.h"
+#include "components/autofill_assistant/browser/web/mock_web_controller.h"
 #include "content/public/test/browser_test.h"
 #include "content/shell/browser/shell.h"
+#include "net/http/http_status_code.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -36,12 +47,14 @@ using ::base::test::RunOnceCallback;
 using ::testing::_;
 using ::testing::ElementsAre;
 using ::testing::Eq;
+using ::testing::Field;
 using ::testing::Ne;
 using ::testing::NiceMock;
 using ::testing::Pair;
 using ::testing::Pointee;
 using ::testing::Property;
 using ::testing::SizeIs;
+using ::testing::StrictMock;
 using ::testing::WithArg;
 
 class MockJsFlowExecutorImplDelegate : public JsFlowExecutorImpl::Delegate {
@@ -60,10 +73,8 @@ class MockJsFlowExecutorImplDelegate : public JsFlowExecutorImpl::Delegate {
       (override));
 };
 
-class JsFlowExecutorImplTest : public autofill_assistant::BaseBrowserTest {
+class JsFlowExecutorImplTest : public BaseBrowserTest {
  public:
-  JsFlowExecutorImplTest() {}
-
   void SetUpOnMainThread() override {
     BaseBrowserTest::SetUpOnMainThread();
 
@@ -127,7 +138,8 @@ IN_PROC_BROWSER_TEST_F(JsFlowExecutorImplTest, RunNativeActionWithReturnValue) {
               "keyF": true,
               "keyG": 123.45,
               "keyH": null
-            }
+            },
+            "keyI": [1,2,3,4]
           }
         )")));
 
@@ -146,29 +158,29 @@ IN_PROC_BROWSER_TEST_F(JsFlowExecutorImplTest, RunNativeActionWithReturnValue) {
                         if (status != 2) { // ACTION_APPLIED
                           return status;
                         }
+
+                        // Remove non-allowed types from return value.
+                        delete value.keyB;
+                        delete value.keyC;
+                        delete value.keyD.keyE;
+
+                        // Make some changes just to check that this propagates.
                         value.keyA += 3;
-                        value.keyB += '!';
                         value.keyD.keyF = false;
+                        value.keyI.push(5);
                         return value;
                       )",
                       js_return_value),
               Property(&ClientStatus::proto_status, ACTION_APPLIED));
   EXPECT_EQ(*js_return_value, *base::JSONReader::Read(R"(
     {
-       "result": {
-          "type": "object",
-          "value": {
-             "keyA": 12348,
-             "keyB": "Hello world!",
-             "keyC": [ "array", "of", "strings" ],
-             "keyD": {
-                "keyE": "nested",
-                "keyF": false,
-                "keyG": 123.45,
-                "keyH": null
-             }
-          }
-       }
+      "keyA": 12348,
+      "keyD": {
+        "keyF": false,
+        "keyG": 123.45,
+        "keyH": null
+      },
+      "keyI": [1,2,3,4,5]
     }
     )"));
 }
@@ -188,15 +200,8 @@ IN_PROC_BROWSER_TEST_F(JsFlowExecutorImplTest, RunNativeActionAsBase64String) {
   )",
                       result),
               Property(&ClientStatus::proto_status, ACTION_APPLIED));
-  EXPECT_EQ(*result, *base::JSONReader::Read(R"(
-      {
-        "result": {
-          "description": "2",
-          "type": "number",
-          "value": 2
-        }
-      }
-    )"));
+  // ACTION_APPLIED == 2.
+  EXPECT_EQ(*result, base::Value(2));
 }
 
 IN_PROC_BROWSER_TEST_F(JsFlowExecutorImplTest,
@@ -218,15 +223,7 @@ IN_PROC_BROWSER_TEST_F(JsFlowExecutorImplTest,
   )",
                       result),
               Property(&ClientStatus::proto_status, ACTION_APPLIED));
-  EXPECT_EQ(*result, *base::JSONReader::Read(R"(
-      {
-        "result": {
-          "description": "2",
-          "type": "number",
-          "value": 2
-        }
-      }
-    )"));
+  EXPECT_EQ(*result, base::Value(2));
 }
 
 IN_PROC_BROWSER_TEST_F(JsFlowExecutorImplTest, RunMultipleNativeActions) {
@@ -257,44 +254,25 @@ IN_PROC_BROWSER_TEST_F(JsFlowExecutorImplTest, RunMultipleNativeActions) {
                       )",
                       result),
               Property(&ClientStatus::proto_status, ACTION_APPLIED));
-  EXPECT_EQ(*result, *base::JSONReader::Read(R"(
-      {
-        "result": {
-          "description": "3",
-          "type": "number",
-          "value": 3
-        }
-      }
-    )"));
+  // OTHER_ACTION_STATUS == 3
+  EXPECT_EQ(*result, base::Value(3));
 }
 
 IN_PROC_BROWSER_TEST_F(JsFlowExecutorImplTest, ReturnInteger) {
   std::unique_ptr<base::Value> result;
   ClientStatus status = RunTest("return 12345;", result);
   EXPECT_EQ(status.proto_status(), ACTION_APPLIED);
-  EXPECT_EQ(*result, *base::JSONReader::Read(R"(
-      {
-        "result": {
-          "description": "12345",
-          "type": "number",
-          "value": 12345
-        }
-      }
-    )"));
+  EXPECT_EQ(*result, base::Value(12345));
 }
 
-IN_PROC_BROWSER_TEST_F(JsFlowExecutorImplTest, ReturnString) {
+IN_PROC_BROWSER_TEST_F(JsFlowExecutorImplTest, ReturningStringFails) {
+  // Return value checking is more comprehensively tested in
+  // js_flow_util::ContainsOnlyAllowedValues. This test is just to ensure that
+  // that util is actually used for JS flow return values.
   std::unique_ptr<base::Value> result;
-  ClientStatus status = RunTest("return 'Hello world!';", result);
-  EXPECT_EQ(status.proto_status(), ACTION_APPLIED);
-  EXPECT_EQ(*result, *base::JSONReader::Read(R"(
-      {
-        "result": {
-          "type": "string",
-          "value": "Hello world!"
-        }
-      }
-    )"));
+  ClientStatus status = RunTest("return 'Strings are not allowed!';", result);
+  EXPECT_EQ(status.proto_status(), INVALID_ACTION);
+  EXPECT_THAT(result, Eq(nullptr));
 }
 
 IN_PROC_BROWSER_TEST_F(JsFlowExecutorImplTest, ReturnDictionary) {
@@ -303,34 +281,25 @@ IN_PROC_BROWSER_TEST_F(JsFlowExecutorImplTest, ReturnDictionary) {
       R"(
           return {
             "keyA":12345,
-            "keyB":"Hello world!",
-            "keyC": ["array", "of", "strings"],
-            "keyD": {
-              "keyE": "nested",
-              "keyF": true,
-              "keyG": 123.45,
-              "keyH": null
-            }
+            "keyB": {
+              "keyC": true,
+              "keyD": 123.45,
+              "keyE": null
+            },
+            "keyF": [false, false, true]
           };
         )",
       result);
   EXPECT_EQ(status.proto_status(), ACTION_APPLIED);
   EXPECT_EQ(*result, *base::JSONReader::Read(R"(
       {
-        "result": {
-          "type": "object",
-          "value": {
-            "keyA": 12345,
-            "keyB": "Hello world!",
-            "keyC": ["array", "of", "strings"],
-            "keyD": {
-                "keyE": "nested",
-                "keyF": true,
-                "keyG": 123.45,
-                "keyH": null
-            }
-          }
-        }
+        "keyA":12345,
+          "keyB": {
+            "keyC": true,
+            "keyD": 123.45,
+            "keyE": null
+          },
+        "keyF": [false, false, true]
       }
     )"));
 }
@@ -339,62 +308,43 @@ IN_PROC_BROWSER_TEST_F(JsFlowExecutorImplTest, ReturnNothing) {
   std::unique_ptr<base::Value> result;
   ClientStatus status = RunTest("", result);
   EXPECT_EQ(status.proto_status(), ACTION_APPLIED);
-  EXPECT_EQ(*result, *base::JSONReader::Read(R"(
-      {
-        "result": {
-          "type": "undefined"
-        }
-      }
-    )"));
+  EXPECT_THAT(result, Eq(nullptr));
+}
+
+IN_PROC_BROWSER_TEST_F(JsFlowExecutorImplTest, ReturnNonJsonObjectFails) {
+  std::unique_ptr<base::Value> result;
+  ClientStatus status = RunTest(R"(
+    function test() {
+      console.log('something');
+    }
+    return test;
+  )",
+                                result);
+  EXPECT_EQ(status.proto_status(), INVALID_ACTION);
+  EXPECT_THAT(result, Eq(nullptr));
 }
 
 IN_PROC_BROWSER_TEST_F(JsFlowExecutorImplTest, ReturnNull) {
   std::unique_ptr<base::Value> result;
   ClientStatus status = RunTest("return null;", result);
   EXPECT_EQ(status.proto_status(), ACTION_APPLIED);
-  EXPECT_EQ(*result, *base::JSONReader::Read(R"(
-      {
-        "result": {
-          "subtype": "null",
-          "type": "object",
-          "value": null
-        }
-      }
-    )"));
+  EXPECT_EQ(*result, *base::JSONReader::Read("null"));
 }
 
 IN_PROC_BROWSER_TEST_F(JsFlowExecutorImplTest, ExceptionReporting) {
   std::unique_ptr<base::Value> result;
-  ClientStatus status = RunTest("throw new Error('Hello world!');", result);
+  ClientStatus status = RunTest("notdefined;", result);
   EXPECT_EQ(status.proto_status(), UNEXPECTED_JS_ERROR);
-  ASSERT_NE(result, nullptr);
+  ASSERT_THAT(result, Eq(nullptr));
 
-  absl::optional<base::Value> exceptionDetails =
-      result->ExtractKey("exceptionDetails");
-  ASSERT_NE(exceptionDetails, absl::nullopt);
-
-  EXPECT_THAT(exceptionDetails->ExtractKey("text")->GetIfString(),
-              Pointee(Eq("Uncaught (in promise) Error: Hello world!")));
-
-  // We can't currently check the contents of the reported stack frames since
-  // they depend on the internal wrapper. For now, we simply test that this is
-  // not empty. For reference, at the time of writing, this was the full output:
-  // "exceptionDetails": {
-  //    "columnNumber": 0,
-  //    "exception": {
-  //       "className": "Error",
-  //       "description": "Error: Hello world!
-  //                          at <anonymous>:13:11
-  //                          at <anonymous>:13:41",
-  //       "objectId": "1450023673453216843.4.1",
-  //       "subtype": "error",
-  //       "type": "object"
-  //    },
-  //    "exceptionId": 2,
-  //    "lineNumber": 0,
-  //    "text": "Uncaught (in promise) Error: Hello world!"
-  // }
-  EXPECT_THAT(exceptionDetails->ExtractKey("exception"), Ne(absl::nullopt));
+  // NOTE: Do not change the values here. The above script should output exactly
+  // one stack frame with 0:0.
+  EXPECT_THAT(
+      status.details().unexpected_error_info().js_exception_line_numbers(),
+      ElementsAre(0));
+  EXPECT_THAT(
+      status.details().unexpected_error_info().js_exception_column_numbers(),
+      ElementsAre(0));
 }
 
 IN_PROC_BROWSER_TEST_F(JsFlowExecutorImplTest, RunMultipleConsecutiveFlows) {
@@ -403,7 +353,7 @@ IN_PROC_BROWSER_TEST_F(JsFlowExecutorImplTest, RunMultipleConsecutiveFlows) {
     ClientStatus status =
         RunTest(base::StrCat({"return ", base::NumberToString(i)}), result);
     EXPECT_EQ(status.proto_status(), ACTION_APPLIED);
-    EXPECT_EQ(result->ExtractKey("result")->ExtractKey("value")->GetIfInt(), i);
+    EXPECT_EQ(*result, base::Value(i));
   }
 }
 
@@ -455,15 +405,7 @@ IN_PROC_BROWSER_TEST_F(JsFlowExecutorImplTest, StartWhileAlreadyRunningFails) {
       )",
       result);
   EXPECT_EQ(status.proto_status(), ACTION_APPLIED);
-  EXPECT_EQ(*result, *base::JSONReader::Read(R"(
-      {
-        "result": {
-          "description": "2",
-          "type": "number",
-          "value": 2
-        }
-      }
-    )"));
+  EXPECT_EQ(*result, base::Value(2));
 }
 
 IN_PROC_BROWSER_TEST_F(JsFlowExecutorImplTest,
@@ -473,15 +415,112 @@ IN_PROC_BROWSER_TEST_F(JsFlowExecutorImplTest,
   std::unique_ptr<base::Value> result;
   EXPECT_EQ(RunTest("return globalFlowState.i;", result).proto_status(),
             ACTION_APPLIED);
-  EXPECT_EQ(*result, *base::JSONReader::Read(R"(
-      {
-        "result": {
-          "description": "5",
-          "type": "number",
-          "value": 5
-        }
-      }
-    )"));
+  EXPECT_EQ(*result, base::Value(5));
+}
+
+class JsFlowExecutorImplScriptExecutorTest : public BaseBrowserTest {
+ public:
+  void SetUpOnMainThread() override {
+    BaseBrowserTest::SetUpOnMainThread();
+
+    web_controller_ = WebController::CreateForWebContents(
+        shell()->web_contents(), &user_data_, &log_info_, nullptr,
+        /*enable_full_stack_traces= */ true);
+
+    fake_script_executor_delegate_.SetService(&mock_service_);
+    fake_script_executor_delegate_.SetWebController(web_controller_.get());
+    fake_script_executor_delegate_.SetCurrentURL(GURL("http://example.com/"));
+    fake_script_executor_delegate_.SetWebContents(shell()->web_contents());
+
+    script_executor_ = std::make_unique<ScriptExecutor>(
+        /* script_path= */ "",
+        /* additional_context= */ std::make_unique<TriggerContext>(),
+        /* global_payload= */ "",
+        /* script_payload= */ "",
+        /* listener= */ nullptr, &ordered_interrupts_,
+        &fake_script_executor_delegate_, &fake_script_executor_ui_delegate_);
+  }
+
+ protected:
+  void Run(const std::string& js_flow,
+           const ProcessedActionStatusProto& result) {
+    ActionsResponseProto actions_response;
+    actions_response.add_actions()->mutable_js_flow()->set_js_flow(js_flow);
+    /* actions_response.add_actions() */
+    /*     ->mutable_release_elements() */
+    /*     ->add_client_ids() */
+    /*     ->set_identifier("client_id"); */
+
+    EXPECT_CALL(mock_service_, GetActions)
+        .WillOnce(RunOnceCallback<5>(net::HTTP_OK,
+                                     actions_response.SerializeAsString(),
+                                     ServiceRequestSender::ResponseInfo{}));
+
+    EXPECT_CALL(mock_service_,
+                GetNextActions(_, _, _,
+                               ElementsAre(Property(
+                                   &ProcessedActionProto::status, result)),
+                               _, _, _))
+        .WillOnce(RunOnceCallback<6>(net::HTTP_OK,
+                                     ActionsResponseProto().SerializeAsString(),
+                                     ServiceRequestSender::ResponseInfo{}));
+
+    base::RunLoop run_loop;
+    script_executor_->Run(
+        &user_data_,
+        base::BindOnce(&JsFlowExecutorImplScriptExecutorTest::OnFlowFinished,
+                       base::Unretained(this), run_loop.QuitClosure()));
+    run_loop.Run();
+  }
+
+  void OnFlowFinished(base::OnceClosure done_callback,
+                      const ScriptExecutor::Result& result) {
+    EXPECT_TRUE(result.success);
+    std::move(done_callback).Run();
+  }
+
+  std::vector<std::unique_ptr<Script>> ordered_interrupts_;
+
+  ProcessedActionStatusDetailsProto log_info_;
+  std::unique_ptr<WebController> web_controller_;
+
+  FakeScriptExecutorDelegate fake_script_executor_delegate_;
+  FakeScriptExecutorUiDelegate fake_script_executor_ui_delegate_;
+  UserData user_data_;
+
+  NiceMock<MockService> mock_service_;
+  std::unique_ptr<ScriptExecutor> script_executor_;
+};
+
+IN_PROC_BROWSER_TEST_F(JsFlowExecutorImplScriptExecutorTest,
+                       WaitForDomSucceeds) {
+  WaitForDomProto wait_for_dom;
+  wait_for_dom.mutable_wait_condition()
+      ->mutable_match()
+      ->add_filters()
+      ->set_css_selector("#button");
+  std::string wait_for_dom_base64;
+  base::Base64Encode(wait_for_dom.SerializeAsString(), &wait_for_dom_base64);
+
+  Run(R"(const [status, value] = await runNativeAction(19, ')" +
+          wait_for_dom_base64 + R"(');
+      return {status};)",
+      ACTION_APPLIED);
+}
+
+IN_PROC_BROWSER_TEST_F(JsFlowExecutorImplScriptExecutorTest, WaitForDomFails) {
+  WaitForDomProto wait_for_dom;
+  wait_for_dom.mutable_wait_condition()
+      ->mutable_match()
+      ->add_filters()
+      ->set_css_selector("#not-found");
+  std::string wait_for_dom_base64;
+  base::Base64Encode(wait_for_dom.SerializeAsString(), &wait_for_dom_base64);
+
+  Run(R"(const [status, value] = await runNativeAction(19, ')" +
+          wait_for_dom_base64 + R"(');
+      return {status};)",
+      ELEMENT_RESOLUTION_FAILED);
 }
 
 }  // namespace

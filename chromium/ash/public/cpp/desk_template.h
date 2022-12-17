@@ -30,6 +30,14 @@ enum class ASH_PUBLIC_EXPORT DeskTemplateSource {
   kPolicy
 };
 
+enum class ASH_PUBLIC_EXPORT DeskTemplateType {
+  // Regular desk template.
+  kTemplate = 0,
+
+  // Desk saved for Save & Recall.
+  kSaveAndRecall,
+};
+
 // Class to represent a desk template. It can be used to create a desk with
 // a certain set of application windows specified in |desk_restore_data_|.
 class ASH_PUBLIC_EXPORT DeskTemplate {
@@ -65,14 +73,23 @@ class ASH_PUBLIC_EXPORT DeskTemplate {
     template_name_ = template_name;
   }
 
-  const app_restore::RestoreData* desk_restore_data() const {
+  DeskTemplateType type() const { return type_; }
+  void set_type(DeskTemplateType type) { type_ = type; }
+
+  const ::app_restore::RestoreData* desk_restore_data() const {
+    return desk_restore_data_.get();
+  }
+  ::app_restore::RestoreData* mutable_desk_restore_data() {
     return desk_restore_data_.get();
   }
 
   void set_desk_restore_data(
-      std::unique_ptr<app_restore::RestoreData> restore_data) {
+      std::unique_ptr<::app_restore::RestoreData> restore_data) {
     desk_restore_data_ = std::move(restore_data);
   }
+
+  void set_launch_id(int32_t launch_id) { launch_id_ = launch_id; }
+  int32_t launch_id() const { return launch_id_; }
 
   // Used in cases where copies of a DeskTemplate are needed to be made.
   // This specifically used in the DeskSyncBridge which requires a map
@@ -93,17 +110,21 @@ class ASH_PUBLIC_EXPORT DeskTemplate {
   // Indicates whether this template can be modified by user.
   bool IsModifiable() const { return source_ == DeskTemplateSource::kUser; }
 
+  // Sets `desk_index` as the desk to launch on for all windows in the template.
+  void SetDeskIndex(int desk_index);
+
   // Returns `this` in string format. Used for debugging and in feedback logs.
   std::string ToString() const;
 
  private:
-  DeskTemplate();
-
   const base::GUID uuid_;  // We utilize the string based base::GUID to uniquely
                            // identify the template.
 
   // Indicates the source where this desk template originates from.
   const DeskTemplateSource source_;
+
+  // The type of this desk template.
+  DeskTemplateType type_ = DeskTemplateType::kTemplate;
 
   const base::Time created_time_;  // Template creation time.
 
@@ -114,10 +135,14 @@ class ASH_PUBLIC_EXPORT DeskTemplate {
 
   std::u16string template_name_;
 
+  // The id associated with a particular launch of this template. Must be
+  // positive when launching.
+  int32_t launch_id_ = 0;
+
   // Contains the app launching and window information that can be used to
   // create a new desk instance with the same set of apps/windows specified in
   // it.
-  std::unique_ptr<app_restore::RestoreData> desk_restore_data_;
+  std::unique_ptr<::app_restore::RestoreData> desk_restore_data_;
 };
 
 }  // namespace ash

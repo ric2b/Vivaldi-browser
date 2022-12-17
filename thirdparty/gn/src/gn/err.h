@@ -5,6 +5,7 @@
 #ifndef TOOLS_GN_ERR_H_
 #define TOOLS_GN_ERR_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -24,11 +25,27 @@ class Value;
 // An error can also have sub-errors which are additionally printed out
 // below. They can provide additional context.
 class Err {
+ private:
+  struct ErrInfo {
+    ErrInfo(const Location& loc, const std::string& msg, const std::string& help)
+        : location(loc), message(msg), help_text(help) {}
+
+    Location location;
+    Label toolchain_label;
+
+    std::vector<LocationRange> ranges;
+
+    std::string message;
+    std::string help_text;
+
+    std::vector<Err> sub_errs;
+  };
+
  public:
   using RangeList = std::vector<LocationRange>;
 
   // Indicates no error.
-  Err();
+  Err() = default;
 
   // Error at a single point.
   Err(const Location& location,
@@ -52,25 +69,27 @@ class Err {
 
   // Error at a given value.
   Err(const Value& value,
-      const std::string msg,
+      const std::string& msg,
       const std::string& help_text = std::string());
 
   Err(const Err& other);
+  Err(Err&& other) = default;
 
-  ~Err();
+  Err& operator=(const Err&);
+  Err& operator=(Err&&) = default;
 
-  Err& operator=(const Err&) = default;
+  bool has_error() const { return !!info_; }
 
-  bool has_error() const { return has_error_; }
-  const Location& location() const { return location_; }
-  const std::string& message() const { return message_; }
-  const std::string& help_text() const { return help_text_; }
+  // All getters and setters below require has_error() returns true.
+  const Location& location() const { return info_->location; }
+  const std::string& message() const { return info_->message; }
+  const std::string& help_text() const { return info_->help_text; }
 
-  void AppendRange(const LocationRange& range) { ranges_.push_back(range); }
-  const RangeList& ranges() const { return ranges_; }
+  void AppendRange(const LocationRange& range) { info_->ranges.push_back(range); }
+  const RangeList& ranges() const { return info_->ranges; }
 
   void set_toolchain_label(const Label& toolchain_label) {
-    toolchain_label_ = toolchain_label;
+    info_->toolchain_label = toolchain_label;
   }
 
   void AppendSubErr(const Err& err);
@@ -92,16 +111,7 @@ class Err {
  private:
   void InternalPrintToStdout(bool is_sub_err, bool is_fatal) const;
 
-  bool has_error_;
-  Location location_;
-  Label toolchain_label_;
-
-  std::vector<LocationRange> ranges_;
-
-  std::string message_;
-  std::string help_text_;
-
-  std::vector<Err> sub_errs_;
+  std::unique_ptr<ErrInfo> info_;  // Non-null indicates error.
 };
 
 #endif  // TOOLS_GN_ERR_H_

@@ -63,8 +63,6 @@ class WebAppUiManagerImpl : public BrowserListObserver, public WebAppUiManager {
   void ReparentAppTabToWindow(content::WebContents* contents,
                               const AppId& app_id,
                               bool shortcut_created) override;
-  content::WebContents* NavigateExistingWindow(const AppId& app_id,
-                                               const GURL& url) override;
   void ShowWebAppIdentityUpdateDialog(
       const std::string& app_id,
       bool title_change,
@@ -92,7 +90,7 @@ class WebAppUiManagerImpl : public BrowserListObserver, public WebAppUiManager {
 
   // Returns AppId of the Browser's installed App, |IsBrowserForInstalledApp|
   // must be true.
-  const AppId GetAppIdForBrowser(Browser* browser);
+  AppId GetAppIdForBrowser(Browser* browser);
 
   void OnExtensionSystemReady();
 

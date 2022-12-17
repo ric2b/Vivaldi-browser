@@ -10,7 +10,9 @@
 
 #include "ash/ash_export.h"
 #include "ash/display/persistent_window_info.h"
+#include "ash/public/cpp/presentation_time_recorder.h"
 #include "ash/wm/drag_details.h"
+#include "ash/wm/wm_metrics.h"
 #include "base/gtest_prod_util.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
@@ -222,6 +224,11 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   // If window is not horizontally shrinkable, return false.
   bool HorizontallyShrinkWindow(const gfx::Rect& work_area);
 
+  // Updates the PIP bounds if necessary. This may need to happen when the
+  // display work area changes, or if system ui regions like the virtual
+  // keyboard position changes.
+  void UpdatePipBounds();
+
   // Replace the State object of a window with a state handler which can
   // implement a new window manager type. The passed object will be owned
   // by this object and the returned object will be owned by the caller.
@@ -349,8 +356,9 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   // Sets the currently stored restore bounds and clears the restore bounds.
   void SetAndClearRestoreBounds();
 
-  // Notifies that the drag operation has been started.
-  void OnDragStarted(int window_component);
+  // Notifies that the drag operation has been started. Optionally returns
+  // a presentation time recorder for the drag.
+  std::unique_ptr<PresentationTimeRecorder> OnDragStarted(int window_component);
 
   // Notifies that the drag operation has been either completed or reverted.
   // |location| is the last position of the pointer device used to drag.
@@ -369,6 +377,10 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   // Returns a pointer to DragDetails during drag operations.
   const DragDetails* drag_details() const { return drag_details_.get(); }
   DragDetails* drag_details() { return drag_details_.get(); }
+
+  void set_snap_action_source(WindowSnapActionSource type) {
+    snap_action_source_ = type;
+  }
 
   const std::vector<chromeos::WindowStateType>&
   window_state_restore_history_for_testing() const {
@@ -480,11 +492,6 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   // window animation type, upon state change.
   void OnPostPipStateChange(chromeos::WindowStateType old_window_state_type);
 
-  // Update the PIP bounds if necessary. This may need to happen when the
-  // display work area changes, or if system ui regions like the virtual
-  // keyboard position changes.
-  void UpdatePipBounds();
-
   // Collects PIP enter and exit metrics:
   void CollectPipEnterExitMetrics(bool enter);
 
@@ -511,6 +518,15 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
                              ui::PropertyChangeReason reason) override;
 
   bool CanUnresizableSnapOnDisplay(display::Display display) const;
+
+  void RecordAndResetWindowSnapActionSource(
+      chromeos::WindowStateType current_type,
+      chromeos::WindowStateType new_type);
+
+  // Read out the window cycle snap action through ChromeVox. It can be snap a
+  // window to the left, right or unsnapped window. `message_id` provides the
+  // text will be read out.
+  void ReadOutWindowCycleSnapAction(int message_id);
 
   // The owner of this window settings.
   aura::Window* window_;
@@ -576,6 +592,10 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   // can restore back to. See kWindowStateRestoreHistoryLayerMap in the cc file
   // for what window state types that can be put in the restore history stack.
   std::vector<chromeos::WindowStateType> window_state_restore_history_;
+
+  // This is used to record where the current snap window state change request
+  // comes from.
+  WindowSnapActionSource snap_action_source_ = WindowSnapActionSource::kOthers;
 };
 
 }  // namespace ash

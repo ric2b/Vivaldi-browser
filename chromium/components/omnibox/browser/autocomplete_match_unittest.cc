@@ -9,9 +9,10 @@
 #include <utility>
 
 #include "autocomplete_match.h"
-#include "base/cxx17_backports.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
+#include "components/omnibox/browser/autocomplete_provider.h"
+#include "components/omnibox/browser/fake_autocomplete_provider.h"
 #include "components/omnibox/browser/test_scheme_classifier.h"
 #include "components/omnibox/common/omnibox_features.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -76,7 +77,7 @@ TEST(AutocompleteMatchTest, MoreRelevant) {
   AutocompleteMatch m2(nullptr, 0, false,
                        AutocompleteMatchType::URL_WHAT_YOU_TYPED);
 
-  for (size_t i = 0; i < base::size(cases); ++i) {
+  for (size_t i = 0; i < std::size(cases); ++i) {
     m1.relevance = cases[i].r1;
     m2.relevance = cases[i].r2;
     EXPECT_EQ(cases[i].expected_result,
@@ -400,7 +401,7 @@ TEST(AutocompleteMatchTest, Duplicates) {
     { L"http://www./", "http://www./", "http://google.com/", false },
   };
 
-  for (size_t i = 0; i < base::size(cases); ++i) {
+  for (size_t i = 0; i < std::size(cases); ++i) {
     CheckDuplicateCase(cases[i]);
   }
 }
@@ -420,7 +421,7 @@ TEST(AutocompleteMatchTest, DedupeDriveURLs) {
        "https://drive.google.com/open?id=another-doc-id", false},
   };
 
-  for (size_t i = 0; i < base::size(cases); ++i) {
+  for (size_t i = 0; i < std::size(cases); ++i) {
     CheckDuplicateCase(cases[i]);
   }
 }
@@ -826,4 +827,44 @@ TEST(AutocompleteMatchTest, TryRichAutocompletionSplit) {
     SCOPED_TRACE("primary split, incorrect order");
     test("x_y_z", "z_y_x_", "x_z_y_", false, {}, "", false);
   }
+}
+
+TEST(AutocompleteMatchTest, BetterDuplicate) {
+  const auto create_match = [](scoped_refptr<FakeAutocompleteProvider> provider,
+                               int relevance) {
+    return AutocompleteMatch{provider.get(), relevance, false,
+                             AutocompleteMatchType::URL_WHAT_YOU_TYPED};
+  };
+
+  scoped_refptr<FakeAutocompleteProvider> document_provider =
+      new FakeAutocompleteProvider(AutocompleteProvider::Type::TYPE_DOCUMENT);
+
+  scoped_refptr<FakeAutocompleteProvider> bookmark_provider =
+      new FakeAutocompleteProvider(AutocompleteProvider::Type::TYPE_BOOKMARK);
+
+  scoped_refptr<FakeAutocompleteProvider> history_provider =
+      new FakeAutocompleteProvider(
+          AutocompleteProvider::Type::TYPE_HISTORY_QUICK);
+
+  // Prefer document provider matches over other providers, even if scored
+  // lower.
+  EXPECT_TRUE(
+      AutocompleteMatch::BetterDuplicate(create_match(document_provider, 0),
+                                         create_match(history_provider, 1000)));
+
+  // Prefer document provider matches over other providers, even if scored
+  // lower.
+  EXPECT_TRUE(
+      AutocompleteMatch::BetterDuplicate(create_match(bookmark_provider, 0),
+                                         create_match(history_provider, 1000)));
+
+  // Prefer document provider matches over bookmark provider matches.
+  EXPECT_TRUE(AutocompleteMatch::BetterDuplicate(
+      create_match(document_provider, 0),
+      create_match(bookmark_provider, 1000)));
+
+  // Prefer more relevant matches.
+  EXPECT_FALSE(
+      AutocompleteMatch::BetterDuplicate(create_match(history_provider, 500),
+                                         create_match(history_provider, 510)));
 }

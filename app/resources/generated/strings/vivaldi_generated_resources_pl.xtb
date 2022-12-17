@@ -9,7 +9,6 @@
 <translation id="1054153489933238809">Otwórz oryginalny &amp;obraz w nowej karcie</translation>
 <translation id="1056898198331236512">Ostrzeżenie</translation>
 <translation id="1084824384139382525">Kopiuj adr&amp;es linku</translation>
-<translation id="1128109161498068552">Nie zezwalaj żadnym stronom na używanie wiadomości zarezerwowanych dla systemu w celu uzyskania dostępu do urządzeń MIDI</translation>
 <translation id="1163931534039071049">&amp;Wyświetl źródło ramki</translation>
 <translation id="1165039591588034296">Błąd</translation>
 <translation id="1175364870820465910">&amp;Drukuj...</translation>
@@ -22,7 +21,6 @@
 <translation id="1297175357211070620">Drukarka</translation>
 <translation id="1303101771013849280">Plik HTML z zakładkami</translation>
 <translation id="1430915738399379752">Drukuj</translation>
-<translation id="1433811987160647649">Pytaj przed uzyskaniem dostępu</translation>
 <translation id="1451375123200651445">Strona internetowa, pojedynczy plik</translation>
 <translation id="1465176863081977902">K&amp;opiuj adres dźwięku</translation>
 <translation id="1476607407192946488">&amp;Ustawienia języka</translation>
@@ -99,13 +97,11 @@
 <translation id="2783321960289401138">Utwórz skrót...</translation>
 <translation id="2785873697295365461">Deskryptory plików</translation>
 <translation id="2809586584051668049">i <ph name="NUMBER_ADDITIONAL_DISABLED" /> więcej</translation>
-<translation id="2812989263793994277">Nie pokazuj żadnych obrazów</translation>
 <translation id="2850541429955027218">Dodaj motyw</translation>
 <translation id="2861941300086904918">Menedżer zabezpieczeń klienta natywnego</translation>
 <translation id="2881076733170862447">Gdy klikniesz w rozszerzenie</translation>
 <translation id="2889064240420137087">Otwórz link za pomocą...</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> nie może skomunikować się z tą drukarką. Upewnij się, że jest ona podłączona i spróbuj ponownie.</translation>
-<translation id="2904456025988372123">Pytaj gdy strona próbuje automatycznie pobrać pliki po pobraniu pierwszego</translation>
 <translation id="2913331724188855103">Zezwalaj stronom na zapisywanie danych w ciasteczkach i ich odczytywanie (zalecane)</translation>
 <translation id="2931157624143513983">Dopasuj do obszaru wydruku</translation>
 <translation id="2932085390869194046">Zaproponuj hasło...</translation>
@@ -126,7 +122,6 @@
 <translation id="3127156390846601284">Spowoduje to usunięcie wszystkich zapisanych na urządzeniu danych dotyczących wyświetlonych stron. Czy chcesz kontynuować?</translation>
 <translation id="3129173833825111527">Lewy margines</translation>
 <translation id="3144647712221361880">Otwórz link jako</translation>
-<translation id="3154429428035006212">Offline od ponad miesiąca</translation>
 <translation id="3222066309010235055">Wstępne renderowanie: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Wybierz katalog główny rozszerzenia, które chcesz umieścić w pakiecie. Aby zaktualizować rozszerzenie, wybierz również plik kluczy prywatnych do ponownego użycia.</translation>
 <translation id="3280237271814976245">Zapisz &amp;jako...</translation>
@@ -143,6 +138,7 @@
 <translation id="3360297538363969800">Drukowanie nie powiodło się. Sprawdź drukarkę i spróbuj ponownie.</translation>
 <translation id="3378572629723696641">To rozszerzenie może być uszkodzone.</translation>
 <translation id="3387614642886316601">Używaj ulepszonego sprawdzania pisowni</translation>
+<translation id="3393582007140394275">Nie udało się przesłać ekranu.</translation>
 <translation id="3432227430032737297">Usuń wszystkie wyświetlone</translation>
 <translation id="345693547134384690">Otwórz &amp;obraz w nowej karcie</translation>
 <translation id="3494769164076977169">Pytaj gdy strona próbuje automatycznie pobrać pliki po pobraniu pierwszego (zalecane)</translation>
@@ -165,7 +161,6 @@
 <translation id="3838085852053358637">Nie udało się wczytać rozszerzenia</translation>
 <translation id="383891835335927981">Żadna strona nie jest powiększana ani pomniejszana</translation>
 <translation id="385051799172605136">Wstecz</translation>
-<translation id="3899879303189199559">Offline od ponad roku</translation>
 <translation id="3905761538810670789">Napraw aplikację</translation>
 <translation id="3908501907586732282">Włącz rozszerzenie</translation>
 <translation id="3909701002594999354">Pokaż wszystkie &amp;elementy sterujące</translation>
@@ -192,7 +187,6 @@
 <translation id="4200983522494130825">Nowa &amp;karta</translation>
 <translation id="4225397296022057997">Na wszystkich stronach</translation>
 <translation id="4256316378292851214">&amp;Zapisz film jako...</translation>
-<translation id="4278390842282768270">Dozwolone</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> KB (aktywne <ph name="NUM_KILOBYTES_LIVE" /> KB)</translation>
 <translation id="4345587454538109430">Konfiguruj...</translation>
 <translation id="4348766275249686434">Gromadź błędy</translation>
@@ -217,15 +211,15 @@
 <translation id="488785315393301722">Pokaż szczegóły</translation>
 <translation id="4907306957610201395">Kategoria uprawnień</translation>
 <translation id="4912643508233590958">Wznowienia z bezczynności</translation>
+<translation id="49265687513387605">Nie udało się przesłać ekranu. Upewnij się, że prośba o rozpoczęcie udostępniania ekranu została potwierdzona.</translation>
 <translation id="4927753642311223124">Nie ma tu nic do oglądania, przejdź dalej.</translation>
 <translation id="4930714375720679147">Włącz</translation>
+<translation id="4961318399572185831">Przesyłanie ekranu</translation>
 <translation id="4988526792673242964">Strony</translation>
 <translation id="49896407730300355">&amp;Obróć w lewo</translation>
 <translation id="4989966318180235467">Zbadaj &amp;stronę tła</translation>
-<translation id="4994474651455208930">Zezwalaj stronom na wyświetlanie monitu o skonfigurowanie ich jako domyślnego modułu obsługi protokołu</translation>
 <translation id="5000922062037820727">Zablokowane (zalecane)</translation>
 <translation id="5027562294707732951">Dodaj rozszerzenie</translation>
-<translation id="5036662165765606524">Nie zezwalaj żadnym stronom na automatyczne pobieranie wielu plików</translation>
 <translation id="5039804452771397117">Zezwalaj</translation>
 <translation id="5057110919553308744">Gdy klikniesz w rozszerzenie</translation>
 <translation id="5059526285558225588">Wybierz, co chcesz udostępnić</translation>
@@ -238,7 +232,6 @@
 <translation id="5233231016133573565">ID procesu</translation>
 <translation id="5233736638227740678">&amp;Wklej</translation>
 <translation id="5256861893479663409">Na wszystkich stronach</translation>
-<translation id="5265562206369321422">Offline od ponad tygodnia</translation>
 <translation id="5269977353971873915">Drukowanie nie powiodło się</translation>
 <translation id="5284445933715251131">Kontynuuj pobieranie</translation>
 <translation id="52912272896845572">Plik kluczy prywatnych jest nieprawidłowy.</translation>
@@ -294,7 +287,6 @@
 <translation id="6122081475643980456">Twoje połączenie internetowe jest kontrolowane</translation>
 <translation id="6147020289383635445">Wyświetlenie podglądu wydruku nie powiodło się.</translation>
 <translation id="6156863943908443225">Pamięć podręczna skryptów</translation>
-<translation id="6169666352732958425">Nie można przesłać pulpitu.</translation>
 <translation id="6196854373336333322">Rozszerzenie "<ph name="EXTENSION_NAME" />" przejęło kontrolę nad ustawieniami serwera proxy, co oznacza, że może zmieniać, przerywać lub podglądać wszystko, co robisz online. Jeśli nie masz pewności skąd wzięła się ta zmiana, prawdopodobnie jej nie chcesz.</translation>
 <translation id="6200151268994853226">Zarządzaj rozszerzeniem</translation>
 <translation id="6206311232642889873">Kop&amp;iuj obraz</translation>
@@ -328,7 +320,6 @@
 <translation id="6798954102094737107">Wtyczka: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Zachowaj zmiany</translation>
 <translation id="6817174620439930047">Pytaj gdy strona chce użyć komunikatów systemowych by uzyskać dostęp do urządzeń MIDI (zalecane)</translation>
-<translation id="682123305478866682">Przesyłaj pulpit</translation>
 <translation id="6824564591481349393">Kopiuj adres &amp;e-mail</translation>
 <translation id="6840155290835956714">Pytaj przed wysłaniem</translation>
 <translation id="6886871292305414135">Otwórz link w nowej &amp;karcie</translation>
@@ -346,7 +337,6 @@
 <translation id="708060913198414444">&amp;Kopiuj adres dźwięku</translation>
 <translation id="7175353351958621980">Załadowano z:</translation>
 <translation id="7186088072322679094">Trzymaj na pasku narzędzi</translation>
-<translation id="7270858098575133036">Pytaj gdy strona chce użyć komunikatów systemowych by uzyskać dostęp do urządzeń MIDI</translation>
 <translation id="7287143125007575591">Odmowa dostępu.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7385854874724088939">Wystąpił błąd przy próbie drukowania. Sprawdź drukarkę i spróbuj ponownie.</translation>
@@ -369,7 +359,6 @@
 <translation id="7704305437604973648">Zadanie</translation>
 <translation id="7710568461918838723">&amp;Przesyłaj...</translation>
 <translation id="7750228210027921155">Obraz w obrazie</translation>
-<translation id="7751260505918304024">Pokaż wszystkie</translation>
 <translation id="7760004034676677601">Czy to oczekiwana strona startowa?</translation>
 <translation id="7771452384635174008">Układ</translation>
 <translation id="7782102568078991263">Nie pokazuj sugestii od Google</translation>
@@ -382,9 +371,7 @@
 <translation id="7849264908733290972">Otwórz &amp;obraz w nowej karcie</translation>
 <translation id="7857949311770343000">Czy to oczekiwana strona nowej karty?</translation>
 <translation id="786073089922909430">Usługa: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7885253890047913815">Ostatnie drukarki</translation>
 <translation id="7903925330883316394">Narzędzie: <ph name="UTILITY_TYPE" /></translation>
-<translation id="7938594894617528435">Aktualnie offline</translation>
 <translation id="7947962633355574091">K&amp;opiuj adres filmu</translation>
 <translation id="7966241909927244760">K&amp;opiuj adres obrazu</translation>
 <translation id="7973394300052703468">Nowe okno &amp;prywatne</translation>
@@ -426,10 +413,8 @@ Przechowuj plik klucza w bezpiecznym miejscu. Będzie on potrzebny do utworzenia
 <translation id="8708000541097332489">Wyczyść przy zamykaniu</translation>
 <translation id="8714838604780058252">Obraz w tle</translation>
 <translation id="8725066075913043281">Spróbuj ponownie</translation>
-<translation id="8757090071857742562">Nie udało się przesłać pulpitu. Sprawdź, czy potwierdzono prośbę o rozpoczęcie udostępniania ekranu.</translation>
 <translation id="8774934320277480003">Górny margines</translation>
 <translation id="8798099450830957504">Domyślny</translation>
-<translation id="8800004011501252845">Pokaż drukarki dla</translation>
 <translation id="8808478386290700967">Web Store</translation>
 <translation id="8823514049557262177">Kopiuj te&amp;kst linku</translation>
 <translation id="8823704566850948458">Zaproponuj hasło…</translation>
@@ -442,7 +427,6 @@ Przechowuj plik klucza w bezpiecznym miejscu. Będzie on potrzebny do utworzenia
 <translation id="8962083179518285172">Ukryj szczegóły</translation>
 <translation id="8973557916016709913">Usuń poziom powiększenia</translation>
 <translation id="897939795688207351">Na <ph name="ORIGIN" /></translation>
-<translation id="8996526648899750015">Dodaj konto...</translation>
 <translation id="9003647077635673607">Zezwalaj na wszystkich stronach</translation>
 <translation id="9027459031423301635">Otwórz link w nowej &amp;karcie</translation>
 <translation id="9056810968620647706">Nie znaleziono żadnych dopasowań.</translation>

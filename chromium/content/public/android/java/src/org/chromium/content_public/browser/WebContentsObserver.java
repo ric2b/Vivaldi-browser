@@ -44,7 +44,7 @@ public abstract class WebContentsObserver {
      */
     public void renderFrameDeleted(GlobalRenderFrameHostId id) {}
 
-    public void renderProcessGone(boolean wasOomProtected) {}
+    public void renderProcessGone() {}
 
     /**
      * Called when the browser process starts a navigation.
@@ -135,7 +135,7 @@ public abstract class WebContentsObserver {
     /**
      * Called once the window.document object of the main frame was created.
      */
-    public void documentAvailableInMainFrame() {}
+    public void primaryMainDocumentElementAvailable() {}
 
     /**
      * Notifies that a load has finished for a given frame.

@@ -37,6 +37,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_client.h"
+#include "content/public/common/content_switches.h"
 #include "crypto/sha2.h"
 #include "device/base/features.h"
 #include "device/fido/attestation_statement.h"
@@ -67,7 +68,7 @@
 #include "device/fido/mac/credential_metadata.h"
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "device/fido/cros/authenticator.h"
 #endif
 
@@ -380,25 +381,20 @@ base::flat_set<device::FidoTransportProtocol> GetWebAuthnTransports(
     transports.insert(device::FidoTransportProtocol::kInternal);
   }
 
-  // caBLE devices don't yet support discoverable credentials and so we
-  // shouldn't offer them for such requests unless forced by a feature flag.
-  if (!uses_discoverable_creds ||
-      base::FeatureList::IsEnabled(device::kWebAuthCableDisco)) {
-    if (base::FeatureList::IsEnabled(features::kWebAuthCable)) {
-      transports.insert(
-          device::FidoTransportProtocol::kCloudAssistedBluetoothLowEnergy);
-    }
-
-    // kAndroidAccessory doesn't work on Windows because of USB stack issues.
-    // Note: even if this value were inserted it wouldn't take effect on Windows
-    // versions with a native API because FidoRequestHandlerBase filters out
-    // non-kCloudAssistedBluetoothLowEnergy transports in that case.
-#if !BUILDFLAG(IS_WIN)
-    // In order for AOA to be active the |AuthenticatorRequestClientDelegate|
-    // must still configure a |UsbDeviceManager|.
-    transports.insert(device::FidoTransportProtocol::kAndroidAccessory);
-#endif
+  if (base::FeatureList::IsEnabled(features::kWebAuthCable)) {
+    transports.insert(
+        device::FidoTransportProtocol::kCloudAssistedBluetoothLowEnergy);
   }
+
+  // kAndroidAccessory doesn't work on Windows because of USB stack issues.
+  // Note: even if this value were inserted it wouldn't take effect on Windows
+  // versions with a native API because FidoRequestHandlerBase filters out
+  // non-kCloudAssistedBluetoothLowEnergy transports in that case.
+#if !BUILDFLAG(IS_WIN)
+  // In order for AOA to be active the |AuthenticatorRequestClientDelegate|
+  // must still configure a |UsbDeviceManager|.
+  transports.insert(device::FidoTransportProtocol::kAndroidAccessory);
+#endif
 
   return transports;
 }
@@ -440,7 +436,7 @@ std::unique_ptr<device::FidoDiscoveryFactory> MakeDiscoveryFactory(
   }
 #endif  // BUILDFLAG(IS_WIN)
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   // Ignore the ChromeOS u2fd virtual U2F HID device for WebAuthn requests so
   // that it doesn't collide with the ChromeOS platform authenticator, also
   // implemented in u2fd.
@@ -452,7 +448,7 @@ std::unique_ptr<device::FidoDiscoveryFactory> MakeDiscoveryFactory(
         GetWebAuthenticationDelegate()->GetGenerateRequestIdCallback(
             render_frame_host));
   }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
   return discovery_factory;
 }
@@ -551,7 +547,7 @@ void AuthenticatorCommon::StartGetAssertionRequest(
   request_delegate_->ConfigureCable(caller_origin_,
                                     device::FidoRequestType::kGetAssertion,
                                     cable_pairings, discovery_factory());
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   discovery_factory()->set_get_assertion_request_for_legacy_credential_check(
       *ctap_get_assertion_request_);
 #endif
@@ -637,6 +633,18 @@ void AuthenticatorCommon::MakeCredential(
 
   BeginRequestTimeout(options->timeout);
 
+  if (options->remote_desktop_client_override) {
+    // TODO(crbug.com/1314480): Implement remoteDesktopClientOverride
+    // browser-side.
+    if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+            switches::kWebAuthRemoteDesktopSupport)) {
+      mojo::ReportBadMessage("--webauthn-remote-desktop-support not enabled");
+    }
+    CompleteMakeCredentialRequest(
+        blink::mojom::AuthenticatorStatus::NOT_ALLOWED_ERROR);
+    return;
+  }
+
   WebAuthRequestSecurityChecker::RequestType request_type =
       options->is_payment_credential_creation
           ? WebAuthRequestSecurityChecker::RequestType::kMakePaymentCredential
@@ -658,6 +666,13 @@ void AuthenticatorCommon::MakeCredential(
     return;
   }
 
+  status = security_checker_->ValidateDomainAndRelyingPartyID(
+      caller_origin, options->relying_party.id, request_type);
+  if (status != blink::mojom::AuthenticatorStatus::SUCCESS) {
+    CompleteMakeCredentialRequest(status);
+    return;
+  }
+
   request_delegate_ = MaybeCreateRequestDelegate();
   if (!request_delegate_) {
     CompleteMakeCredentialRequest(
@@ -665,26 +680,8 @@ void AuthenticatorCommon::MakeCredential(
     return;
   }
 
-  absl::optional<std::string> rp_id =
-      GetWebAuthenticationDelegate()->MaybeGetRelyingPartyIdOverride(
-          options->relying_party.id, caller_origin);
-
-  if (!rp_id) {
-    // If the delegate didn't override RP ID selection then apply standard
-    // rules.
-    rp_id = std::move(options->relying_party.id);
-    status = security_checker_->ValidateDomainAndRelyingPartyID(
-        caller_origin, *rp_id, request_type);
-    if (status != blink::mojom::AuthenticatorStatus::SUCCESS) {
-      CompleteMakeCredentialRequest(status);
-      return;
-    }
-  }
-
   caller_origin_ = caller_origin;
-  relying_party_id_ = *rp_id;
-  options->relying_party.id = std::move(*rp_id);
-  request_delegate_->SetRelyingPartyId(relying_party_id_);
+  relying_party_id_ = options->relying_party.id;
 
   // If there is an active webAuthenticationProxy extension, let it handle the
   // request.
@@ -696,6 +693,17 @@ void AuthenticatorCommon::MakeCredential(
                        weak_factory_.GetWeakPtr()));
     return;
   }
+
+  // Let the embedder override the RP ID to use for the request. In practice
+  // this rewrites the RP ID that Chrome extensions use.
+  absl::optional<std::string> rp_id_override =
+      GetWebAuthenticationDelegate()->MaybeGetRelyingPartyIdOverride(
+          options->relying_party.id, caller_origin);
+  if (rp_id_override) {
+    options->relying_party.id = *rp_id_override;
+    relying_party_id_ = *rp_id_override;
+  }
+  request_delegate_->SetRelyingPartyId(relying_party_id_);
 
   device::fido_filter::MaybeInitialize();
   switch (device::fido_filter::Evaluate(
@@ -891,7 +899,7 @@ void AuthenticatorCommon::MakeCredential(
   if (attestation == device::AttestationConveyancePreference::
                          kEnterpriseIfRPListedOnAuthenticator &&
       GetWebAuthenticationDelegate()->ShouldPermitIndividualAttestation(
-          GetBrowserContext(),
+          GetBrowserContext(), caller_origin,
           u2f_credential_app_id_override.value_or(relying_party_id_))) {
     attestation =
         device::AttestationConveyancePreference::kEnterpriseApprovedByBrowser;
@@ -926,6 +934,18 @@ void AuthenticatorCommon::GetAssertion(
   DCHECK(get_assertion_response_callback_.is_null());
   get_assertion_response_callback_ = std::move(callback);
 
+  if (options->remote_desktop_client_override) {
+    // TODO(crbug.com/1314480): Implement remoteDesktopClientOverride
+    // browser-side.
+    if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+            switches::kWebAuthRemoteDesktopSupport)) {
+      mojo::ReportBadMessage("--webauthn-remote-desktop-support not enabled");
+    }
+    CompleteGetAssertionRequest(
+        blink::mojom::AuthenticatorStatus::NOT_ALLOWED_ERROR);
+    return;
+  }
+
   if (!options->is_conditional) {
     BeginRequestTimeout(options->timeout);
   }
@@ -958,6 +978,13 @@ void AuthenticatorCommon::GetAssertion(
     return;
   }
 
+  status = security_checker_->ValidateDomainAndRelyingPartyID(
+      caller_origin, options->relying_party_id, request_type);
+  if (status != blink::mojom::AuthenticatorStatus::SUCCESS) {
+    CompleteGetAssertionRequest(status);
+    return;
+  }
+
   request_delegate_ = MaybeCreateRequestDelegate();
   if (!request_delegate_) {
     CompleteGetAssertionRequest(
@@ -965,28 +992,8 @@ void AuthenticatorCommon::GetAssertion(
     return;
   }
 
-  absl::optional<std::string> rp_id =
-      GetWebAuthenticationDelegate()->MaybeGetRelyingPartyIdOverride(
-          options->relying_party_id, caller_origin);
-
-  if (!rp_id) {
-    // If the delegate didn't override RP ID selection then apply standard
-    // rules.
-    status = security_checker_->ValidateDomainAndRelyingPartyID(
-        caller_origin, options->relying_party_id, request_type);
-    if (status != blink::mojom::AuthenticatorStatus::SUCCESS) {
-      CompleteGetAssertionRequest(status);
-      return;
-    }
-
-    rp_id = std::move(options->relying_party_id);
-  }
-
   caller_origin_ = caller_origin;
-  relying_party_id_ = *rp_id;
-  options->relying_party_id = std::move(*rp_id);
-  request_delegate_->SetRelyingPartyId(relying_party_id_);
-
+  relying_party_id_ = options->relying_party_id;
   WebAuthenticationRequestProxy* proxy = GetWebAuthnRequestProxyIfActive();
   if (proxy) {
     pending_proxied_request_id_ = proxy->SignalGetRequest(
@@ -995,6 +1002,17 @@ void AuthenticatorCommon::GetAssertion(
                        weak_factory_.GetWeakPtr()));
     return;
   }
+
+  // Let the embedder override the RP ID to use for the request. In practice
+  // this rewrites the RP ID that Chrome extension use.
+  absl::optional<std::string> rp_id_override =
+      GetWebAuthenticationDelegate()->MaybeGetRelyingPartyIdOverride(
+          options->relying_party_id, caller_origin);
+  if (rp_id_override) {
+    options->relying_party_id = *rp_id_override;
+    relying_party_id_ = *rp_id_override;
+  }
+  request_delegate_->SetRelyingPartyId(relying_party_id_);
 
   const bool origin_is_crypto_token_extension =
       WebAuthRequestSecurityChecker::OriginIsCryptoTokenExtension(
@@ -1182,7 +1200,7 @@ void AuthenticatorCommon::IsUserVerifyingPlatformAuthenticatorAvailable(
                                      std::move(uma_decorated_callback));
 #elif BUILDFLAG(IS_WIN)
   IsUVPlatformAuthenticatorAvailable(std::move(uma_decorated_callback));
-#elif BUILDFLAG(IS_CHROMEOS_ASH)
+#elif BUILDFLAG(IS_CHROMEOS)
   IsUVPlatformAuthenticatorAvailable(std::move(uma_decorated_callback));
 #else
   std::move(uma_decorated_callback).Run(false);
@@ -1315,7 +1333,8 @@ void AuthenticatorCommon::OnRegisterResponse(
 
 #if BUILDFLAG(IS_WIN)
       GetWebAuthenticationDelegate()->OperationSucceeded(
-          GetBrowserContext(), authenticator->IsWinNativeApiAuthenticator());
+          GetBrowserContext(), authenticator->GetType() ==
+                                   device::FidoAuthenticator::Type::kWinNative);
 #endif
 
       absl::optional<device::FidoTransportProtocol> transport =
@@ -1341,7 +1360,7 @@ void AuthenticatorCommon::OnRegisterResponse(
       if (!origin_is_crypto_token_extension &&
           response_data->attestation_should_be_filtered &&
           !GetWebAuthenticationDelegate()->ShouldPermitIndividualAttestation(
-              GetBrowserContext(), relying_party_id_)) {
+              GetBrowserContext(), caller_origin_, relying_party_id_)) {
         attestation_erasure =
             AttestationErasureOption::kEraseAttestationAndAaguid;
       } else if (origin_is_crypto_token_extension &&
@@ -1436,7 +1455,7 @@ void AuthenticatorCommon::OnRegisterResponseAttestationDecided(
   // tokens with inappropriate certs.
   if (response_data.IsAttestationCertificateInappropriatelyIdentifying() &&
       !GetWebAuthenticationDelegate()->ShouldPermitIndividualAttestation(
-          GetBrowserContext(), relying_party_id_)) {
+          GetBrowserContext(), caller_origin_, relying_party_id_)) {
     // The attestation response is incorrectly individually identifiable, but
     // the consent is for make & model information about a token, not for
     // individually-identifiable information. Erase the attestation to stop it
@@ -1540,7 +1559,8 @@ void AuthenticatorCommon::OnSignResponse(
 
 #if BUILDFLAG(IS_WIN)
   GetWebAuthenticationDelegate()->OperationSucceeded(
-      GetBrowserContext(), authenticator->IsWinNativeApiAuthenticator());
+      GetBrowserContext(),
+      authenticator->GetType() == device::FidoAuthenticator::Type::kWinNative);
 #endif
 
   // Show an account picker for requests with empty allow lists.

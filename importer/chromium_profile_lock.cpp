@@ -4,8 +4,9 @@
 
 #include "base/files/file_path.h"
 #include "base/threading/thread_restrictions.h"
+#include "build/build_config.h"
 
-#if defined(OS_POSIX)
+#if BUILDFLAG(IS_POSIX)
 const base::FilePath::CharType* ChromiumProfileLock::kLockFileName =
     FILE_PATH_LITERAL("SingletonLock");
 #else

@@ -108,6 +108,8 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/models/list_selection_model.h"
 #include "ui/base/ui_base_types.h"
+#include "ui/display/screen.h"
+#include "ui/gfx/geometry/rect.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ui/ash/window_pin_util.h"
@@ -438,6 +440,18 @@ void SetLockedFullscreenState(Browser* browser, bool pinned) {
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
+// Returns whether the given `bounds` intersect with at least 50% of all the
+// displays.
+bool WindowBoundsIntersectDisplays(const gfx::Rect& bounds) {
+  int intersect_area = 0;
+  for (const auto& display : display::Screen::GetScreen()->GetAllDisplays()) {
+    gfx::Rect display_bounds = display.bounds();
+    display_bounds.Intersect(bounds);
+    intersect_area += display_bounds.size().GetArea();
+  }
+  return intersect_area >= (bounds.size().GetArea() / 2);
+}
+
 // Vivaldi
 ui::PageTransition HistoryExtensionTransitionToUiTransition(
     extensions::api::history::TransitionType transition) {
@@ -597,9 +611,10 @@ ExtensionFunction::ResponseAction WindowsGetAllFunction::Run() {
                                           extractor.type_filters())) {
       continue;
     }
-    window_list->Append(ExtensionTabUtil::CreateWindowValueForExtension(
-        *controller->GetBrowser(), extension(), populate_tab_behavior,
-        source_context_type()));
+    window_list->Append(base::Value::FromUniquePtrValue(
+        ExtensionTabUtil::CreateWindowValueForExtension(
+            *controller->GetBrowser(), extension(), populate_tab_behavior,
+            source_context_type())));
   }
 
   return RespondNow(
@@ -768,19 +783,32 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
     WindowSizer::GetBrowserWindowBoundsAndShowState(
         gfx::Rect(), nullptr, &window_bounds, &ignored_show_state);
 
-    // Any part of the bounds can optionally be set by the caller.
-    if (create_data->left)
+    // Update the window bounds if the bounds from the create parameters
+    // intersect the displays.
+    bool set_window_bounds = false;
+    if (create_data->left) {
       window_bounds.set_x(*create_data->left);
-
-    if (create_data->top)
+      set_window_bounds = true;
+    }
+    if (create_data->top) {
       window_bounds.set_y(*create_data->top);
-
-    if (create_data->width)
+      set_window_bounds = true;
+    }
+    if (create_data->width) {
       window_bounds.set_width(*create_data->width);
-
-    if (create_data->height)
+      set_window_bounds = true;
+    }
+    if (create_data->height) {
       window_bounds.set_height(*create_data->height);
+      set_window_bounds = true;
+    }
 
+    if (!is_vivaldi) {  // NOTE(andre@vivaldi.com) : This would cause us to fail
+                        // to create windows with more than 50% of the window
+                        // outside the display. VB-89447
+    if (set_window_bounds && !WindowBoundsIntersectDisplays(window_bounds))
+      return RespondNow(Error(tabs_constants::kInvalidWindowBoundsError));
+    } //!is_vivaldi
     if (create_data->focused)
       focused = *create_data->focused;
   }
@@ -812,8 +840,8 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
         ConvertToWindowShowState(create_data->state);
   }
   create_params.is_vivaldi = is_vivaldi;
-  if (create_data && create_data->ext_data) {
-    create_params.ext_data = *create_data->ext_data;
+  if (create_data && create_data->viv_ext_data) {
+    create_params.viv_ext_data = *create_data->viv_ext_data;
   }
 
   Browser* new_window = Browser::Create(create_params);
@@ -826,6 +854,10 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
     // set them.
     transition =
         HistoryExtensionTransitionToUiTransition(create_data->transition);
+    if (create_data->from_url_field && *create_data->from_url_field) {
+      transition = ui::PageTransitionFromInt(
+          transition | ui::PAGE_TRANSITION_FROM_ADDRESS_BAR);
+    }
   }
 
   for (const GURL& url : urls) {
@@ -946,37 +978,38 @@ ExtensionFunction::ResponseAction WindowsUpdateFunction::Run() {
 
   // Before changing any of a window's state, validate the update parameters.
   // This prevents Chrome from performing "half" an update.
+
+  // Update the window bounds if the bounds from the update parameters intersect
+  // the displays.
+  gfx::Rect window_bounds = browser->window()->IsMinimized()
+                                ? browser->window()->GetRestoredBounds()
+                                : browser->window()->GetBounds();
+  bool set_window_bounds = false;
+  if (params->update_info.left) {
+    window_bounds.set_x(*params->update_info.left);
+    set_window_bounds = true;
+  }
+  if (params->update_info.top) {
+    window_bounds.set_y(*params->update_info.top);
+    set_window_bounds = true;
+  }
+  if (params->update_info.width) {
+    window_bounds.set_width(*params->update_info.width);
+    set_window_bounds = true;
+  }
+  if (params->update_info.height) {
+    window_bounds.set_height(*params->update_info.height);
+    set_window_bounds = true;
+  }
+
+  if (set_window_bounds && !WindowBoundsIntersectDisplays(window_bounds))
+    return RespondNow(Error(tabs_constants::kInvalidWindowBoundsError));
+
   ui::WindowShowState show_state =
       ConvertToWindowShowState(params->update_info.state);
-  gfx::Rect bounds = browser->window()->IsMinimized()
-                         ? browser->window()->GetRestoredBounds()
-                         : browser->window()->GetBounds();
-  bool set_bounds = false;
-
-  // Any part of the bounds can optionally be set by the caller.
-  if (params->update_info.left) {
-    bounds.set_x(*params->update_info.left);
-    set_bounds = true;
-  }
-
-  if (params->update_info.top) {
-    bounds.set_y(*params->update_info.top);
-    set_bounds = true;
-  }
-
-  if (params->update_info.width) {
-    bounds.set_width(*params->update_info.width);
-    set_bounds = true;
-  }
-
-  if (params->update_info.height) {
-    bounds.set_height(*params->update_info.height);
-    set_bounds = true;
-  }
-
-  if (set_bounds && (show_state == ui::SHOW_STATE_MINIMIZED ||
-                     show_state == ui::SHOW_STATE_MAXIMIZED ||
-                     show_state == ui::SHOW_STATE_FULLSCREEN)) {
+  if (set_window_bounds && (show_state == ui::SHOW_STATE_MINIMIZED ||
+                            show_state == ui::SHOW_STATE_MAXIMIZED ||
+                            show_state == ui::SHOW_STATE_FULLSCREEN)) {
     return RespondNow(Error(tabs_constants::kInvalidWindowStateError));
   }
 
@@ -1034,10 +1067,10 @@ ExtensionFunction::ResponseAction WindowsUpdateFunction::Run() {
       break;
   }
 
-  if (set_bounds) {
+  if (set_window_bounds) {
     // TODO(varkha): Updating bounds during a drag can cause problems and a more
     // general solution is needed. See http://crbug.com/251813 .
-    browser->window()->SetBounds(bounds);
+    browser->window()->SetBounds(window_bounds);
   }
 
   if (params->update_info.focused) {
@@ -1051,8 +1084,8 @@ ExtensionFunction::ResponseAction WindowsUpdateFunction::Run() {
   if (params->update_info.draw_attention)
     browser->window()->FlashFrame(*params->update_info.draw_attention);
 
-  if (params->update_info.ext_data) {
-    browser->set_ext_data(*params->update_info.ext_data);
+  if (params->update_info.viv_ext_data) {
+    browser->set_viv_ext_data(*params->update_info.viv_ext_data);
   }
 
   return RespondNow(OneArgument(base::Value::FromUniquePtrValue(
@@ -1325,9 +1358,10 @@ ExtensionFunction::ResponseAction TabsQueryFunction::Run() {
         continue;
       }
 
-      result->Append(CreateTabObjectHelper(web_contents, extension(),
-                                           source_context_type(), tab_strip, i)
-                         ->ToValue());
+      result->Append(base::Value::FromUniquePtrValue(
+          CreateTabObjectHelper(web_contents, extension(),
+                                source_context_type(), tab_strip, i)
+              ->ToValue()));
     }
   }
 
@@ -1356,10 +1390,17 @@ ExtensionFunction::ResponseAction TabsCreateFunction::Run() {
   if (extension() && ::vivaldi::IsVivaldiApp(extension()->id())) {
     // Vivaldi-specific properties, no extension are allowed to
     // set them.
-    AssignOptionalValue(params->create_properties.ext_data, &options.ext_data);
-    options.transition.reset(
-        new ui::PageTransition(HistoryExtensionTransitionToUiTransition(
-            params->create_properties.transition)));
+    AssignOptionalValue(params->create_properties.viv_ext_data,
+                        &options.viv_ext_data);
+    ui::PageTransition transition = HistoryExtensionTransitionToUiTransition(
+        params->create_properties.transition);
+    if (params->create_properties.from_url_field &&
+        *params->create_properties.from_url_field) {
+      transition = ui::PageTransitionFromInt(
+          transition | ui::PAGE_TRANSITION_FROM_ADDRESS_BAR);
+    }
+
+    options.transition = std::make_unique<ui::PageTransition>(transition);
   }
 
   std::string error;
@@ -1667,8 +1708,8 @@ ExtensionFunction::ResponseAction TabsUpdateFunction::Run() {
         web_contents_)
         ->SetAutoDiscardable(state);
   }
-  if (params->update_properties.ext_data.get()) {
-    web_contents_->SetExtData(*params->update_properties.ext_data);
+  if (params->update_properties.viv_ext_data.get()) {
+    web_contents_->SetVivExtData(*params->update_properties.viv_ext_data);
   }
 
   return RespondNow(GetResult());
@@ -1843,10 +1884,11 @@ bool TabsMoveFunction::MoveTab(int tab_id,
       content::WebContents* web_contents =
           tab_strip_model->GetWebContentsAt(inserted_index);
 
-      tab_values->Append(CreateTabObjectHelper(web_contents, extension(),
-                                               source_context_type(),
-                                               tab_strip_model, inserted_index)
-                             ->ToValue());
+      tab_values->Append(base::Value::FromUniquePtrValue(
+          CreateTabObjectHelper(web_contents, extension(),
+                                source_context_type(), tab_strip_model,
+                                inserted_index)
+              ->ToValue()));
     }
 
     // Insert the tabs one after another.
@@ -1867,10 +1909,10 @@ bool TabsMoveFunction::MoveTab(int tab_id,
         source_tab_strip->MoveWebContentsAt(tab_index, *new_index, false);
 
   if (has_callback()) {
-    tab_values->Append(CreateTabObjectHelper(contents, extension(),
-                                             source_context_type(),
-                                             source_tab_strip, *new_index)
-                           ->ToValue());
+    tab_values->Append(base::Value::FromUniquePtrValue(
+        CreateTabObjectHelper(contents, extension(), source_context_type(),
+                              source_tab_strip, *new_index)
+            ->ToValue()));
   }
 
   // Insert the tabs one after another.

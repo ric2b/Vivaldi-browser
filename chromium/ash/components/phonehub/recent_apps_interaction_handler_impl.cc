@@ -4,22 +4,23 @@
 
 #include "ash/components/phonehub/recent_apps_interaction_handler_impl.h"
 
+#include "ash/components/multidevice/logging/logging.h"
 #include "ash/components/phonehub/notification.h"
 #include "ash/components/phonehub/pref_names.h"
-#include "chromeos/components/multidevice/logging/logging.h"
+#include "ash/constants/ash_features.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 
 namespace ash {
 namespace phonehub {
 
-using ::chromeos::multidevice_setup::mojom::Feature;
-using ::chromeos::multidevice_setup::mojom::FeatureState;
-using ::chromeos::multidevice_setup::mojom::HostStatus;
+using multidevice_setup::mojom::Feature;
+using multidevice_setup::mojom::FeatureState;
+using multidevice_setup::mojom::HostStatus;
 using HostStatusWithDevice =
-    ::chromeos::multidevice_setup::MultiDeviceSetupClient::HostStatusWithDevice;
+    multidevice_setup::MultiDeviceSetupClient::HostStatusWithDevice;
 using FeatureStatesMap =
-    ::chromeos::multidevice_setup::MultiDeviceSetupClient::FeatureStatesMap;
+    multidevice_setup::MultiDeviceSetupClient::FeatureStatesMap;
 
 const size_t kMaxMostRecentApps = 5;
 const size_t kMaxSavedRecentApps = 10;
@@ -33,17 +34,17 @@ void RecentAppsInteractionHandlerImpl::RegisterPrefs(
 RecentAppsInteractionHandlerImpl::RecentAppsInteractionHandlerImpl(
     PrefService* pref_service,
     multidevice_setup::MultiDeviceSetupClient* multidevice_setup_client,
-    NotificationAccessManager* notification_access_manager)
+    MultideviceFeatureAccessManager* multidevice_feature_access_manager)
     : pref_service_(pref_service),
       multidevice_setup_client_(multidevice_setup_client),
-      notification_access_manager_(notification_access_manager) {
+      multidevice_feature_access_manager_(multidevice_feature_access_manager) {
   multidevice_setup_client_->AddObserver(this);
-  notification_access_manager_->AddObserver(this);
+  multidevice_feature_access_manager_->AddObserver(this);
 }
 
 RecentAppsInteractionHandlerImpl::~RecentAppsInteractionHandlerImpl() {
   multidevice_setup_client_->RemoveObserver(this);
-  notification_access_manager_->RemoveObserver(this);
+  multidevice_feature_access_manager_->RemoveObserver(this);
 }
 
 void RecentAppsInteractionHandlerImpl::AddRecentAppClickObserver(
@@ -105,6 +106,14 @@ RecentAppsInteractionHandlerImpl::GetUserIdsWithDisplayRecentApps() {
   for (auto& user : user_states()) {
     if (user.is_enabled) {
       user_ids.emplace(user.user_id);
+    }
+  }
+  // Skip filtering recent apps when not receiving user states.
+  if (user_ids.empty()) {
+    for (auto const& it : recent_app_metadata_list_) {
+      if (!user_ids.contains(it.first.user_id)) {
+        user_ids.emplace(it.first.user_id);
+      }
     }
   }
   return user_ids;
@@ -174,6 +183,10 @@ void RecentAppsInteractionHandlerImpl::OnNotificationAccessChanged() {
   ComputeAndUpdateUiState();
 }
 
+void RecentAppsInteractionHandlerImpl::OnAppsAccessChanged() {
+  ComputeAndUpdateUiState();
+}
+
 void RecentAppsInteractionHandlerImpl::ComputeAndUpdateUiState() {
   ui_state_ = RecentAppsUiState::HIDDEN;
 
@@ -187,7 +200,14 @@ void RecentAppsInteractionHandlerImpl::ComputeAndUpdateUiState() {
   // 3. Otherwise, no recent apps view will be shown.
   bool allow_streaming = multidevice_setup_client_->GetFeatureState(
                              Feature::kEche) == FeatureState::kEnabledByUser;
-  if (!allow_streaming) {
+
+  bool is_apps_access_required =
+      features::IsEchePhoneHubPermissionsOnboarding() &&
+      multidevice_feature_access_manager_->GetAppsAccessStatus() ==
+          phonehub::MultideviceFeatureAccessManager::AccessStatus::
+              kAvailableButNotGranted;
+
+  if (!allow_streaming || is_apps_access_required) {
     NotifyRecentAppsViewUiStateUpdated();
     return;
   }
@@ -196,8 +216,8 @@ void RecentAppsInteractionHandlerImpl::ComputeAndUpdateUiState() {
         multidevice_setup_client_->GetFeatureState(
             Feature::kPhoneHubNotifications) == FeatureState::kEnabledByUser;
     bool grant_notification_access_on_host =
-        notification_access_manager_->GetAccessStatus() ==
-        phonehub::NotificationAccessManager::AccessStatus::kAccessGranted;
+        multidevice_feature_access_manager_->GetNotificationAccessStatus() ==
+        phonehub::MultideviceFeatureAccessManager::AccessStatus::kAccessGranted;
     if (notifications_enabled && grant_notification_access_on_host)
       ui_state_ = RecentAppsUiState::PLACEHOLDER_VIEW;
   } else {

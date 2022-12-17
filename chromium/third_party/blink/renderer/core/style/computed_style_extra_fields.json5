@@ -149,22 +149,6 @@
       custom_copy: true,
       custom_compare: true,
     },
-    {
-      name: "AffectedByPseudoInSubjectHas",
-      field_template: "monotonic_flag",
-      default_value: "false",
-      custom_copy: true,
-      custom_compare: true,
-    },
-    {
-      name: "DynamicRestyleFlagsForSubjectHas",
-      field_template: "primitive",
-      field_group: "*",
-      field_size: 4,
-      default_value: "0",
-      type_name: "unsigned",
-      inherited: true,
-    },
     // A non-inherited property references a variable or @apply is used
     {
       name: "HasVariableReferenceFromNonInheritedProperty",
@@ -794,6 +778,14 @@
       default_value: "false",
     },
     {
+      name: "ColorIsCurrentColor",
+      field_template: "primitive",
+      field_group: "inherited",
+      type_name: "bool",
+      default_value: "true",
+      inherited: true,
+    },
+    {
       name: "WillChangeProperties",
       field_template: "external",
       type_name: "Vector<CSSPropertyID>",
@@ -1097,5 +1089,41 @@
       field_group: "*",
       computed_style_custom_functions: ["getter", "setter"],
     },
+    {
+      // We need to go through LayoutObject::SetStyle with
+      // ApplyStyleChanges::kYes if the body changes from being the first body
+      // element to a secondary one because the same style could lead to
+      // different need for scrollbars depending on whether the body element
+      // propagates its scrollbars to the viewport or not. This flag is merely
+      // for making the old and new ComputedStyles different in such a case.
+      name: "IsSecondaryBodyElement",
+      field_template: "monotonic_flag",
+      default_value: "false",
+      field_group: "*",
+    },
+    {
+      name: "InlineStyleLostCascade",
+      field_template: "primitive",
+      type_name: "bool",
+      field_group: "*",
+      default_value: "false",
+      custom_compare: true,
+    },
+    {
+      name: "HasExplicitOverflowXVisible",
+      field_template: "primitive",
+      type_name: "bool",
+      field_group: "*",
+      default_value: "false",
+      computed_style_custom_functions: ["setter"],
+    },
+    {
+      name: "HasExplicitOverflowYVisible",
+      field_template: "primitive",
+      type_name: "bool",
+      field_group: "*",
+      default_value: "false",
+      computed_style_custom_functions: ["setter"],
+    }
   ],
 }

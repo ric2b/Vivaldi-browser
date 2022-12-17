@@ -11,9 +11,11 @@
 #include "base/i18n/rtl.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
+#include "base/observer_list.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/supports_user_data.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -141,8 +143,24 @@ DownloadUIModel::DownloadUIModelPtr DownloadItemModel::Wrap(
   return model;
 }
 
+// static
+DownloadUIModel::DownloadUIModelPtr DownloadItemModel::Wrap(
+    download::DownloadItem* download,
+    std::unique_ptr<DownloadUIModel::StatusTextBuilderBase>
+        status_text_builder) {
+  DownloadUIModel::DownloadUIModelPtr model(
+      new DownloadItemModel(download, std::move(status_text_builder)),
+      base::OnTaskRunnerDeleter(base::ThreadTaskRunnerHandle::Get()));
+  return model;
+}
+
 DownloadItemModel::DownloadItemModel(DownloadItem* download)
-    : download_(download) {
+    : DownloadItemModel(download, std::make_unique<StatusTextBuilder>()) {}
+
+DownloadItemModel::DownloadItemModel(
+    download::DownloadItem* download,
+    std::unique_ptr<DownloadUIModel::StatusTextBuilderBase> status_text_builder)
+    : DownloadUIModel(std::move(status_text_builder)), download_(download) {
   download_->AddObserver(this);
 }
 
@@ -342,6 +360,23 @@ void DownloadItemModel::SetShouldShowInShelf(bool should_show) {
   data->should_show_in_shelf_ = should_show;
 }
 
+bool DownloadItemModel::ShouldShowInBubble() const {
+  // Downloads blocked by local policies should be notified, otherwise users
+  // won't get any feedback that the download has failed.
+  bool should_notify =
+      download_->GetLastReason() ==
+          download::DOWNLOAD_INTERRUPT_REASON_FILE_BLOCKED &&
+      download_->GetMixedContentStatus() !=
+          download::DownloadItem::MixedContentStatus::SILENT_BLOCK;
+
+  // Wait until the target path is determined.
+  if (download_->GetTargetFilePath().empty() && !should_notify) {
+    return false;
+  }
+
+  return DownloadUIModel::ShouldShowInBubble();
+}
+
 bool DownloadItemModel::ShouldNotifyUI() const {
   if (download_->IsTransient())
     return false;
@@ -492,6 +527,10 @@ bool DownloadItemModel::TimeRemaining(base::TimeDelta* remaining) const {
   return download_->TimeRemaining(remaining);
 }
 
+base::Time DownloadItemModel::GetStartTime() const {
+  return download_->GetStartTime();
+}
+
 base::Time DownloadItemModel::GetEndTime() const {
   return download_->GetEndTime();
 }
@@ -614,7 +653,6 @@ bool DownloadItemModel::IsCommandEnabled(
     case DownloadCommands::CANCEL:
     case DownloadCommands::RESUME:
     case DownloadCommands::COPY_TO_CLIPBOARD:
-    case DownloadCommands::ANNOTATE:
     case DownloadCommands::DISCARD:
     case DownloadCommands::KEEP:
     case DownloadCommands::LEARN_MORE_SCANNING:
@@ -659,7 +697,6 @@ bool DownloadItemModel::IsCommandChecked(
     case DownloadCommands::LEARN_MORE_INTERRUPTED:
     case DownloadCommands::LEARN_MORE_MIXED_CONTENT:
     case DownloadCommands::COPY_TO_CLIPBOARD:
-    case DownloadCommands::ANNOTATE:
     case DownloadCommands::DEEP_SCAN:
     case DownloadCommands::BYPASS_DEEP_SCANNING:
       return false;
@@ -698,6 +735,7 @@ void DownloadItemModel::ExecuteCommand(DownloadCommands* download_commands,
     case DownloadCommands::BYPASS_DEEP_SCANNING:
 #if BUILDFLAG(FULL_SAFE_BROWSING)
       CompleteSafeBrowsingScan();
+      SetOpenWhenComplete(true);
 #endif
       [[fallthrough]];
     case DownloadCommands::KEEP:
@@ -709,6 +747,9 @@ void DownloadItemModel::ExecuteCommand(DownloadCommands* download_commands,
       }
       if (IsMixedContent()) {
         download_->ValidateMixedContentDownload();
+        break;
+      }
+      if (GetDangerType() == download::DOWNLOAD_DANGER_TYPE_ASYNC_SCANNING) {
         break;
       }
       DCHECK(IsDangerous());
@@ -789,7 +830,6 @@ void DownloadItemModel::ExecuteCommand(DownloadCommands* download_commands,
     case DownloadCommands::PAUSE:
     case DownloadCommands::RESUME:
     case DownloadCommands::COPY_TO_CLIPBOARD:
-    case DownloadCommands::ANNOTATE:
       DownloadUIModel::ExecuteCommand(download_commands, command);
       break;
     case DownloadCommands::DEEP_SCAN:

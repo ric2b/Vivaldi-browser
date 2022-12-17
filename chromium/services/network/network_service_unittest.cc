@@ -9,12 +9,12 @@
 
 #include "base/base64.h"
 #include "base/bind.h"
-#include "base/command_line.h"
 #include "base/containers/span.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/json/json_file_value_serializer.h"
 #include "base/path_service.h"
+#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -37,10 +37,12 @@
 #include "net/dns/host_resolver_manager.h"
 #include "net/dns/public/dns_over_https_config.h"
 #include "net/dns/public/dns_protocol.h"
+#include "net/dns/public/doh_provider_entry.h"
 #include "net/http/http_auth_handler_factory.h"
 #include "net/http/http_auth_scheme.h"
 #include "net/http/http_network_session.h"
 #include "net/http/http_transaction_factory.h"
+#include "net/http/transport_security_state.h"
 #include "net/net_buildflags.h"
 #include "net/socket/client_socket_pool_manager.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -629,10 +631,22 @@ TEST_F(NetworkServiceTest, DnsOverHttpsEnableDisable) {
 }
 
 TEST_F(NetworkServiceTest, DisableDohUpgradeProviders) {
+  auto FindProviderFeature = [](base::StringPiece provider) -> base::Feature {
+    const auto it =
+        base::ranges::find(net::DohProviderEntry::GetList(), provider,
+                           &net::DohProviderEntry::provider);
+    CHECK(it != net::DohProviderEntry::GetList().end())
+        << "Provider named \"" << provider
+        << "\" not found in DoH provider list.";
+    return (*it)->feature;
+  };
+
   base::test::ScopedFeatureList scoped_features;
-  scoped_features.InitAndEnableFeatureWithParameters(
-      features::kDnsOverHttpsUpgrade,
-      {{"DisabledProviders", "CleanBrowsingSecure, , Cloudflare,Unexpected"}});
+  scoped_features.InitWithFeatures(
+      /*enabled_features=*/{features::kDnsOverHttpsUpgrade},
+      /*disabled_features=*/{FindProviderFeature("CleanBrowsingSecure"),
+                             FindProviderFeature("Cloudflare")});
+
   service()->ConfigureStubHostResolver(
       /*insecure_dns_client_enabled=*/true, net::SecureDnsMode::kAutomatic,
       /*dns_over_https_config=*/{},
@@ -652,15 +666,11 @@ TEST_F(NetworkServiceTest, DisableDohUpgradeProviders) {
   // Non-upgradeable IP
   net::IPAddress dns_ip4(1, 2, 3, 4);
 
-  config.nameservers.push_back(
-      net::IPEndPoint(dns_ip0, net::dns_protocol::kDefaultPort));
-  config.nameservers.push_back(
-      net::IPEndPoint(dns_ip1, net::dns_protocol::kDefaultPort));
-  config.nameservers.push_back(net::IPEndPoint(dns_ip2, 54));
-  config.nameservers.push_back(
-      net::IPEndPoint(dns_ip3, net::dns_protocol::kDefaultPort));
-  config.nameservers.push_back(
-      net::IPEndPoint(dns_ip4, net::dns_protocol::kDefaultPort));
+  config.nameservers.emplace_back(dns_ip0, net::dns_protocol::kDefaultPort);
+  config.nameservers.emplace_back(dns_ip1, net::dns_protocol::kDefaultPort);
+  config.nameservers.emplace_back(dns_ip2, 54);
+  config.nameservers.emplace_back(dns_ip3, net::dns_protocol::kDefaultPort);
+  config.nameservers.emplace_back(dns_ip4, net::dns_protocol::kDefaultPort);
 
   auto dns_client = net::DnsClient::CreateClient(nullptr /* net_log */);
   dns_client->SetSystemConfig(config);
@@ -945,6 +955,34 @@ TEST_F(NetworkServiceTest, SetMaxConnectionsPerProxy) {
   service()->SetMaxConnectionsPerProxy(kDefault);
 }
 
+#if BUILDFLAG(IS_CT_SUPPORTED)
+// Tests that disabling CT enforcement disables the feature for both existing
+// and new network contexts.
+TEST_F(NetworkServiceTest, DisableCTEnforcement) {
+  mojo::Remote<mojom::NetworkContext> network_context_remote;
+  NetworkContext network_context(
+      service(), network_context_remote.BindNewPipeAndPassReceiver(),
+      CreateContextParams());
+  net::TransportSecurityState* transport_security_state =
+      network_context.url_request_context()->transport_security_state();
+  EXPECT_FALSE(
+      transport_security_state->is_ct_emergency_disabled_for_testing());
+
+  base::RunLoop run_loop;
+  service()->SetCtEnforcementEnabled(false, run_loop.QuitClosure());
+  run_loop.Run();
+  EXPECT_TRUE(transport_security_state->is_ct_emergency_disabled_for_testing());
+
+  mojo::Remote<mojom::NetworkContext> new_network_context_remote;
+  NetworkContext new_network_context(
+      service(), new_network_context_remote.BindNewPipeAndPassReceiver(),
+      CreateContextParams());
+  transport_security_state =
+      new_network_context.url_request_context()->transport_security_state();
+  EXPECT_TRUE(transport_security_state->is_ct_emergency_disabled_for_testing());
+}
+#endif  // BUILDFLAG(IS_CT_SUPPORTED)
+
 class NetworkServiceTestWithService : public testing::Test {
  public:
   NetworkServiceTestWithService()
@@ -957,16 +995,10 @@ class NetworkServiceTestWithService : public testing::Test {
   ~NetworkServiceTestWithService() override {}
 
   void SetUp() override {
-    base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
     test_server_.AddDefaultHandlers(base::FilePath(kServicesTestData));
     ASSERT_TRUE(test_server_.Start());
     service_ = NetworkService::CreateForTesting();
     service_->Bind(network_service_.BindNewPipeAndPassReceiver());
-    service_->first_party_sets()->SetEnabledForTesting(true);
-    service_->first_party_sets()->SetManuallySpecifiedSet(
-        command_line->GetSwitchValueASCII(switches::kUseFirstPartySet));
-    // Set required input to make sure FirstPartySets receives the merged sets.
-    service_->first_party_sets()->ParseAndSet(base::File());
   }
 
   void CreateNetworkContext() {
@@ -1206,24 +1238,6 @@ TEST_F(NetworkServiceTestWithService, GetNetworkList) {
             }
             run_loop.Quit();
           }));
-  run_loop.Run();
-}
-
-TEST_F(NetworkServiceTestWithService,
-       SetPersistedFirstPartySetsAndGetCurrentSets) {
-  base::ScopedTempDir temp_dir;
-  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
-  base::FilePath sets_file_path(temp_dir.GetPath().AppendASCII("sets_file"));
-  ASSERT_TRUE(base::WriteFile(sets_file_path, ""));
-
-  base::RunLoop run_loop;
-  network_service_->SetPersistedFirstPartySetsAndGetCurrentSets(
-      "", base::BindLambdaForTesting([&](const std::string& got) {
-        EXPECT_EQ(got, "{}");
-        run_loop.Quit();
-      }));
-  network_service_->SetFirstPartySets(base::File(
-      sets_file_path, base::File::FLAG_OPEN | base::File::FLAG_READ));
   run_loop.Run();
 }
 

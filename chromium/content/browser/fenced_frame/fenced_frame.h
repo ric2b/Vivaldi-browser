@@ -35,7 +35,8 @@ class CONTENT_EXPORT FencedFrame : public blink::mojom::FencedFrameOwnerHost,
                                    public NavigationControllerDelegate {
  public:
   explicit FencedFrame(
-      base::SafeRef<RenderFrameHostImpl> owner_render_frame_host);
+      base::SafeRef<RenderFrameHostImpl> owner_render_frame_host,
+      blink::mojom::FencedFrameMode mode);
   ~FencedFrame() override;
 
   void Bind(mojo::PendingAssociatedReceiver<blink::mojom::FencedFrameOwnerHost>
@@ -43,13 +44,19 @@ class CONTENT_EXPORT FencedFrame : public blink::mojom::FencedFrameOwnerHost,
     receiver_.Bind(std::move(receiver));
   }
 
+  // Called when a fenced frame is created from a synchronous IPC from the
+  // renderer. This creates a proxy to the main frame of the inner `FrameTree`,
+  // for use by the embedding RenderFrameHostImpl.
+  void CreateProxyAndAttachToOuterFrameTree();
+
   // blink::mojom::FencedFrameOwnerHost implementation.
-  void Navigate(const GURL& url) override;
+  void Navigate(const GURL& url,
+                base::TimeTicks navigation_start_time) override;
 
   // FrameTree::Delegate.
   void DidStartLoading(FrameTreeNode* frame_tree_node,
                        bool should_show_loading_ui) override {}
-  void DidStopLoading() override;
+  void DidStopLoading() override {}
   void DidChangeLoadProgress() override {}
   bool IsHidden() override;
   void NotifyPageChanged(PageImpl& page) override {}
@@ -63,10 +70,9 @@ class CONTENT_EXPORT FencedFrame : public blink::mojom::FencedFrameOwnerHost,
   // main frame.
   const base::UnguessableToken& GetDevToolsFrameToken() const;
 
-  // For testing only.
-  void WaitForDidStopLoadingForTesting();
-
   RenderFrameHostImpl* GetInnerRoot() { return frame_tree_->GetMainFrame(); }
+
+  blink::mojom::FencedFrameMode mode() const { return mode_; }
 
  private:
   // NavigationControllerDelegate
@@ -82,11 +88,6 @@ class CONTENT_EXPORT FencedFrame : public blink::mojom::FencedFrameOwnerHost,
   bool ShouldPreserveAbortedURLs() override;
   WebContents* DeprecatedGetWebContents() override;
   void UpdateOverridingUserAgent() override;
-
-  // Called when a fenced frame is created from a synchronous IPC from the
-  // renderer. This creates a proxy to the main frame of the inner `FrameTree`,
-  // for use by the embedding RenderFrameHostImpl.
-  void CreateProxyAndAttachToOuterFrameTree();
 
   const raw_ptr<WebContentsImpl> web_contents_;
 
@@ -115,7 +116,12 @@ class CONTENT_EXPORT FencedFrame : public blink::mojom::FencedFrameOwnerHost,
   // The FrameTree that we create to host the "inner" fenced frame contents.
   std::unique_ptr<FrameTree> frame_tree_;
 
-  base::OnceClosure on_did_finish_loading_callback_for_testing_;
+  // The `mode` attribute set on the fenced frame. The mode will stay the same
+  // across navigations to avoid privacy leak. Since each mode might have
+  // different access constraints, privacy leak might occur if the mode is
+  // mutable as a fenced frame can pass the information it learned in one mode
+  // to the other mode if mode was changed across navigations.
+  const blink::mojom::FencedFrameMode mode_;
 
   // Receives messages from the frame owner element in Blink.
   mojo::AssociatedReceiver<blink::mojom::FencedFrameOwnerHost> receiver_{this};

@@ -20,4 +20,7 @@ public interface TabGroupUi extends BottomControlsContentDelegate {
 
     // Vivaldi
     void setThemeColorProvider(ThemeColorProvider provider);
+
+    /** Vivaldi **/
+    void resetTabListForCurrentTab();
 }

@@ -11,7 +11,7 @@
 #include "base/base_export.h"
 #include "base/compiler_specific.h"
 
-namespace base {
+namespace partition_alloc {
 
 BASE_EXPORT void PartitionAllocGlobalInit(OomFunction on_out_of_memory);
 BASE_EXPORT void PartitionAllocGlobalUninitForTesting();
@@ -36,6 +36,16 @@ struct BASE_EXPORT PartitionAllocator {
 }  // namespace internal
 
 using PartitionAllocator = internal::PartitionAllocator<internal::ThreadSafe>;
+
+}  // namespace partition_alloc
+
+namespace base {
+
+// TODO(https://crbug.com/1288247): Remove these 'using' declarations once
+// the migration to the new namespaces gets done.
+using ::partition_alloc::PartitionAllocator;
+using ::partition_alloc::PartitionAllocGlobalInit;
+using ::partition_alloc::PartitionAllocGlobalUninitForTesting;
 
 }  // namespace base
 

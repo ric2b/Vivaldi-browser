@@ -18,9 +18,9 @@
 #include "ash/components/disks/mock_disk_mount_manager.h"
 #include "ash/components/settings/cros_settings_names.h"
 #include "ash/components/settings/timezone_settings.h"
+#include "ash/components/tpm/stub_install_attributes.h"
 #include "ash/constants/ash_features.h"
 #include "base/bind.h"
-#include "base/cxx17_backports.h"
 #include "base/environment.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -38,8 +38,10 @@
 #include "base/test/scoped_path_override.h"
 #include "base/test/simple_test_clock.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
+#include "chrome/browser/apps/app_service/publisher_host.h"
 #include "chrome/browser/ash/app_mode/arc/arc_kiosk_app_manager.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_data.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_manager.h"
@@ -86,13 +88,15 @@
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
 #include "chromeos/system/fake_statistics_provider.h"
-#include "chromeos/tpm/stub_install_attributes.h"
 #include "components/account_id/account_id.h"
 #include "components/ownership/mock_owner_key_util.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/testing_pref_service.h"
+#include "components/services/app_service/public/cpp/app_registry_cache.h"
+#include "components/services/app_service/public/cpp/app_types.h"
+#include "components/services/app_service/public/cpp/features.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/upload_list/upload_list.h"
 #include "components/user_manager/scoped_user_manager.h"
@@ -173,6 +177,7 @@ constexpr char kFakeVersionReleaseChannel[] = "stable-channel";
 // System V2 test values:
 constexpr char kFakeOsInfoCodeName[] = "OsInfo Code Name";
 constexpr char kFakeOSInfoMarketingName[] = "OsInfo Marketing Name";
+constexpr char kFakeOSInfoOemName[] = "OsInfo OEM Name";
 constexpr cros_healthd::BootMode kFakeOsInfoBootMode =
     cros_healthd::BootMode::kCrosSecure;
 constexpr em::BootInfo::BootMethod kFakeOsInfoBootMethod =
@@ -589,7 +594,7 @@ cros_healthd::SystemResultV2Ptr CreateSystemResultV2() {
               cros_healthd::OsVersion::New(
                   kFakeVersionMilestone, kFakeVersionBuildNumber,
                   kFakeVersionPatchNumber, kFakeVersionReleaseChannel),
-              kFakeOsInfoBootMode),
+              kFakeOsInfoBootMode, kFakeOSInfoOemName),
           cros_healthd::VpdInfo::New(kFakeSerialNumber, kFakeVpdInfoRegion,
                                      kFakeManufactureDate, kFakeFirstPowerDate,
                                      kFakeSkuNumber, kFakeModelName),
@@ -1203,7 +1208,7 @@ class DeviceStatusCollectorTest : public testing::Test {
   ChromeContentBrowserClient browser_content_client_;
   chromeos::system::ScopedFakeStatisticsProvider fake_statistics_provider_;
   DiskMountManager::MountPointMap mount_point_map_;
-  chromeos::ScopedStubInstallAttributes scoped_stub_install_attributes_;
+  ash::ScopedStubInstallAttributes scoped_stub_install_attributes_;
   ash::ScopedTestingCrosSettings scoped_testing_cros_settings_;
   ash::FakeOwnerSettingsService owner_settings_service_{
       scoped_testing_cros_settings_.device_settings(), nullptr};
@@ -1234,6 +1239,11 @@ class DeviceStatusCollectorTest : public testing::Test {
   std::unique_ptr<base::RunLoop> run_loop_;
   base::test::ScopedFeatureList scoped_feature_list_;
   base::SimpleTestClock test_clock_;
+
+  apps::ScopedOmitBorealisAppsForTesting scoped_omit_borealis_apps_for_testing_;
+  apps::ScopedOmitBuiltInAppsForTesting scoped_omit_built_in_apps_for_testing_;
+  apps::ScopedOmitPluginVmAppsForTesting
+      scoped_omit_plugin_vm_apps_for_testing_;
 
   // This property is required to instantiate the session manager, a singleton
   // which is used by the device status collector.
@@ -1315,7 +1325,7 @@ TEST_F(DeviceStatusCollectorTest, MixedStatesForKiosk) {
   };
   chromeos::LoginState::Get()->SetLoggedInState(
       chromeos::LoginState::LOGGED_IN_ACTIVE,
-      chromeos::LoginState::LOGGED_IN_USER_KIOSK_APP);
+      chromeos::LoginState::LOGGED_IN_USER_KIOSK);
   scoped_testing_cros_settings_.device_settings()->SetBoolean(
       ash::kReportDeviceActivityTimes, true);
   status_collector_->Simulate(test_states,
@@ -1334,7 +1344,7 @@ TEST_F(DeviceStatusCollectorTest, MixedStatesForArcKiosk) {
   };
   chromeos::LoginState::Get()->SetLoggedInState(
       chromeos::LoginState::LOGGED_IN_ACTIVE,
-      chromeos::LoginState::LOGGED_IN_USER_KIOSK_APP);
+      chromeos::LoginState::LOGGED_IN_USER_KIOSK);
   scoped_testing_cros_settings_.device_settings()->SetBoolean(
       ash::kReportDeviceActivityTimes, true);
   status_collector_->Simulate(test_states,
@@ -2648,7 +2658,7 @@ TEST_F(DeviceStatusCollectorTest, ReportOsUpdateStatusUpToDate) {
 
   const char* kRequiredPlatformVersions[] = {"1234", "1234.0", "1234.0.0"};
 
-  for (size_t i = 0; i < base::size(kRequiredPlatformVersions); ++i) {
+  for (size_t i = 0; i < std::size(kRequiredPlatformVersions); ++i) {
     MockAutoLaunchKioskAppWithRequiredPlatformVersion(
         fake_kiosk_device_local_account_, kRequiredPlatformVersions[i]);
 
@@ -2700,7 +2710,7 @@ TEST_F(DeviceStatusCollectorTest, ReportOsUpdateStatus) {
       update_engine::Operation::FINALIZING,
   };
 
-  for (size_t i = 0; i < base::size(kUpdateEngineOps); ++i) {
+  for (size_t i = 0; i < std::size(kUpdateEngineOps); ++i) {
     update_status.set_current_operation(kUpdateEngineOps[i]);
     update_status.set_new_version("1235.1.2");
     update_engine_client_->PushLastStatus(update_status);
@@ -2749,7 +2759,7 @@ TEST_F(DeviceStatusCollectorTest, ReportOsUpdateStatus_NonKiosk) {
       update_engine::Operation::FINALIZING,
   };
 
-  for (size_t i = 0; i < base::size(kUpdateEngineOps); ++i) {
+  for (size_t i = 0; i < std::size(kUpdateEngineOps); ++i) {
     update_status.set_current_operation(kUpdateEngineOps[i]);
     update_status.set_new_version("1235.1.2");
     update_engine_client_->PushLastStatus(update_status);
@@ -2801,7 +2811,7 @@ TEST_F(DeviceStatusCollectorTest, ReportLastCheckedTimestamp) {
   // change accordingly.
   const int64 kLastCheckedTimes[] = {10, 20, 30};
 
-  for (size_t i = 0; i < base::size(kLastCheckedTimes); ++i) {
+  for (size_t i = 0; i < std::size(kLastCheckedTimes); ++i) {
     update_engine::StatusResult update_status;
     update_status.set_new_version(kDefaultPlatformVersion);
     update_status.set_last_checked_time(kLastCheckedTimes[i]);
@@ -3752,16 +3762,23 @@ TEST_F(DeviceStatusCollectorTest, GenerateAppInfo) {
   managed_session_service_->OnUserProfileLoaded(account_id);
   auto* app_proxy =
       apps::AppServiceProxyFactory::GetForProfile(testing_profile_.get());
-  auto app1 = apps::mojom::App::New();
-  app1->app_id = "id";
-  auto app2 = apps::mojom::App::New();
-  app2->app_id = "id2";
-  std::vector<apps::mojom::AppPtr> apps;
-  apps.push_back(std::move(app1));
-  apps.push_back(std::move(app2));
-  app_proxy->AppRegistryCache().OnApps(std::move(apps),
-                                       apps::mojom::AppType::kUnknown,
-                                       false /* should_notify_initialized */);
+  auto app1 = std::make_unique<apps::App>(apps::AppType::kChromeApp, "id");
+  auto app2 = std::make_unique<apps::App>(apps::AppType::kChromeApp, "id2");
+  if (base::FeatureList::IsEnabled(apps::kAppServiceOnAppUpdateWithoutMojom)) {
+    std::vector<apps::AppPtr> apps;
+    apps.push_back(std::move(app1));
+    apps.push_back(std::move(app2));
+    app_proxy->AppRegistryCache().OnApps(std::move(apps),
+                                         apps::AppType::kUnknown,
+                                         /*should_notify_initialized=*/false);
+  } else {
+    std::vector<apps::mojom::AppPtr> mojom_deltas;
+    mojom_deltas.push_back(apps::ConvertAppToMojomApp(app1));
+    mojom_deltas.push_back(apps::ConvertAppToMojomApp(app2));
+    app_proxy->AppRegistryCache().OnApps(std::move(mojom_deltas),
+                                         apps::mojom::AppType::kUnknown,
+                                         /*should_notify_initialized=*/false);
+  }
 
   // Start app instance
   base::Time start_time;
@@ -3857,12 +3874,12 @@ struct FakeNetworkState {
 // by convention shill will not report a signal strength of 0 for a visible
 // network, so we use 1 below.
 static const FakeNetworkState kFakeNetworks[] = {
-    {"offline", "/device/wifi", shill::kTypeWifi, 35, -85, shill::kStateOffline,
+    {"offline", "/device/wifi", shill::kTypeWifi, 35, -72, shill::kStateOffline,
      em::NetworkState::OFFLINE, "", "", true},
     {"ethernet", "/device/ethernet", shill::kTypeEthernet, 0, 0,
      shill::kStateOnline, em::NetworkState::ONLINE, "192.168.0.1", "8.8.8.8",
      true},
-    {"wifi", "/device/wifi", shill::kTypeWifi, 23, -97,
+    {"wifi", "/device/wifi", shill::kTypeWifi, 23, -77,
      shill::kStateNoConnectivity, em::NetworkState::PORTAL, "", "", true},
     {"idle", "/device/cellular1", shill::kTypeCellular, 0, 0, shill::kStateIdle,
      em::NetworkState::IDLE, "", "", true},
@@ -3876,12 +3893,12 @@ static const FakeNetworkState kFakeNetworks[] = {
     // to test that we only report signal_strength for wifi connections.
     {"ready", "/device/cellular1", shill::kTypeCellular, -20, 0,
      shill::kStateReady, em::NetworkState::READY, "", "", true},
-    {"failure", "/device/wifi", shill::kTypeWifi, 1, -119, shill::kStateFailure,
+    {"failure", "/device/wifi", shill::kTypeWifi, 1, -87, shill::kStateFailure,
      em::NetworkState::FAILURE, "", "", true},
     {"activation-failure", "/device/cellular1", shill::kTypeCellular, 0, 0,
      shill::kStateActivationFailure, em::NetworkState::ACTIVATION_FAILURE, "",
      "", true},
-    {"unknown", "", shill::kTypeWifi, 1, -119, shill::kStateIdle,
+    {"unknown", "", shill::kTypeWifi, 1, -87, shill::kStateIdle,
      em::NetworkState::IDLE, "", "", true},
 };
 
@@ -4007,7 +4024,7 @@ class DeviceStatusCollectorNetworkTest : public DeviceStatusCollectorTest {
         false,  // visible_only,
         0,      // no limit to number of results
         &state_list);
-    ASSERT_EQ(base::size(kFakeNetworks), state_list.size());
+    ASSERT_EQ(std::size(kFakeNetworks), state_list.size());
   }
 
   void TearDown() override { DeviceStatusCollectorTest::TearDown(); }
@@ -4058,7 +4075,7 @@ class DeviceStatusCollectorNetworkInterfacesTest
             (iface->type() != em::NetworkInterface::TYPE_CELLULAR ||
              base::ranges::equal(iface->eids().begin(), iface->eids().end(),
                                  kFakeSimSlots,
-                                 kFakeSimSlots + base::size(kFakeSimSlots),
+                                 kFakeSimSlots + std::size(kFakeSimSlots),
                                  base::ranges::equal_to(), base::identity(),
                                  &FakeSimSlotInfo::eid))) {
           found_match = true;
@@ -4200,7 +4217,7 @@ class DeviceStatusCollectorNetworkStateTest
     : public DeviceStatusCollectorNetworkTest {
  protected:
   void VerifyReporting() override {
-    EXPECT_EQ(base::size(kFakeNetworks),
+    EXPECT_EQ(std::size(kFakeNetworks),
               static_cast<size_t>(device_status_.network_states_size()));
     for (const FakeNetworkState& state : kFakeNetworks) {
       bool found_match = false;

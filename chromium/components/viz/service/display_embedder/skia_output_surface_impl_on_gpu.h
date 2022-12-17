@@ -133,25 +133,21 @@ class SkiaOutputSurfaceImplOnGpu
   }
   gl::GLSurface* gl_surface() const { return gl_surface_.get(); }
 
-  void Reshape(const gfx::Size& size,
-               float device_scale_factor,
+  void Reshape(const SkSurfaceCharacterization& characterization,
                const gfx::ColorSpace& color_space,
-               gfx::BufferFormat format,
-               bool use_stencil,
+               float device_scale_factor,
                gfx::OverlayTransform transform);
   void FinishPaintCurrentFrame(sk_sp<SkDeferredDisplayList> ddl,
                                sk_sp<SkDeferredDisplayList> overdraw_ddl,
                                std::vector<ImageContextImpl*> image_contexts,
                                std::vector<gpu::SyncToken> sync_tokens,
                                base::OnceClosure on_finished,
-                               absl::optional<gfx::Rect> draw_rectangle,
-                               bool allocate_frame_buffer);
+                               absl::optional<gfx::Rect> draw_rectangle);
   void ScheduleOutputSurfaceAsOverlay(
       const OverlayProcessorInterface::OutputSurfaceOverlayPlane&
           output_surface_plane);
-  void SwapBuffers(OutputSurfaceFrame frame, bool release_frame_buffer);
-  void AllocateFrameBuffers(size_t n);
-  void ReleaseFrameBuffers(size_t n);
+  void SwapBuffers(OutputSurfaceFrame frame);
+  void EnsureMinNumberOfBuffers(int n);
 
   void SetDependenciesResolvedTimings(base::TimeTicks task_ready);
   void SetDrawTimings(base::TimeTicks task_ready);
@@ -172,7 +168,7 @@ class SkiaOutputSurfaceImplOnGpu
       std::vector<AggregatedRenderPassId> ids,
       std::vector<std::unique_ptr<ImageContextImpl>> image_contexts);
   void CopyOutput(AggregatedRenderPassId id,
-                  copy_output::RenderPassGeometry geometry,
+                  const copy_output::RenderPassGeometry& geometry,
                   const gfx::ColorSpace& color_space,
                   std::unique_ptr<CopyOutputRequest> request,
                   const gpu::Mailbox& mailbox);
@@ -360,6 +356,7 @@ class SkiaOutputSurfaceImplOnGpu
       const gfx::ColorSpace& color_space,
       std::array<PlaneAccessData, CopyOutputResult::kNV12MaxPlanes>&
           plane_access_datas);
+
   // Imports surfaces needed to store the data in NV12 format from a blit
   // request. |plane_access_datas| will be populated with information needed to
   // access the NV12 planes.
@@ -367,6 +364,11 @@ class SkiaOutputSurfaceImplOnGpu
       const BlitRequest& blit_request,
       std::array<PlaneAccessData, CopyOutputResult::kNV12MaxPlanes>&
           plane_access_datas);
+
+  // Helper, blends `BlendBitmap`s set on the |blit_request| over the |canvas|.
+  // Used to implement handling of `CopyOutputRequest`s that contain
+  // `BlitRequest`s.
+  void BlendBitmapOverlays(SkCanvas* canvas, const BlitRequest& blit_request);
 
   // Schedules a task to check if any skia readback requests have completed
   // after a short delay. Will not schedule a task if there is already a
@@ -437,7 +439,6 @@ class SkiaOutputSurfaceImplOnGpu
 
   gpu::GpuPreferences gpu_preferences_;
   gfx::Size size_;
-  gfx::ColorSpace color_space_;
   scoped_refptr<gl::GLSurface> gl_surface_;
   scoped_refptr<gpu::SharedContextState> context_state_;
   size_t max_resource_cache_bytes_ = 0u;

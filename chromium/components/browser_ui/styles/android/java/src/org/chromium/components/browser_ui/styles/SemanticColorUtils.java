@@ -56,6 +56,12 @@ public class SemanticColorUtils {
         return resolve(R.attr.colorPrimary, R.color.default_text_color_blue_baseline, context);
     }
 
+    /** Returns the semantic color value that corresponds to default_text_color_on_accent1. */
+    public static @ColorInt int getDefaultTextColorOnAccent1(Context context) {
+        return resolve(
+                R.attr.colorOnPrimary, R.color.default_text_color_on_accent1_baseline, context);
+    }
+
     /** Returns the semantic color value that corresponds to default_text_color_secondary. */
     public static @ColorInt int getDefaultTextColorSecondary(Context context) {
         return resolve(R.attr.colorOnSurfaceVariant, R.color.default_text_color_secondary_baseline,
@@ -87,6 +93,11 @@ public class SemanticColorUtils {
     /** Returns the semantic color value that corresponds to divider_line_bg_color. */
     public static @ColorInt int getDividerLineBgColor(Context context) {
         return resolve(R.attr.colorSurfaceVariant, R.color.divider_line_bg_color_baseline, context);
+    }
+
+    /** Returns the semantic color value that corresponds to bottom_system_nav_color. */
+    public static @ColorInt int getBottomSystemNavColor(Context context) {
+        return getDefaultBgColor(context);
     }
 
     /** Returns the semantic color value that corresponds to bottom_system_nav_divider_color. */
@@ -130,6 +141,11 @@ public class SemanticColorUtils {
         return getDefaultBgColorElev2(context);
     }
 
+    /** Returns the semantic color value that corresponds to drag_handlebar_color. */
+    public static @ColorInt int getDragHandlebarColor(Context context) {
+        return getDividerLineBgColor(context);
+    }
+
     /** Returns the surface color value of the conceptual dialog_bg_color. */
     public static @ColorInt int getDialogBgColor(Context context) {
         return resolveSurfaceColorElev(
@@ -151,6 +167,7 @@ public class SemanticColorUtils {
     // Colors that will be experimented with. This is independent of |IS_FULL_DYNAMIC_COLORS|.
     /** Returns the semantic color value that corresponds to default_text_color_link. */
     public static @ColorInt int getDefaultTextColorLink(Context context) {
-        return context.getColor(R.color.default_text_color_link_baseline);
+        final @ColorInt int fallback = context.getColor(R.color.default_text_color_link_baseline);
+        return MaterialColors.getColor(context, R.attr.globalLinkTextColor, fallback);
     }
 }

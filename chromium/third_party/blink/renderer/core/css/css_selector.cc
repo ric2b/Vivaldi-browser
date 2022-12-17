@@ -29,7 +29,6 @@
 #include <algorithm>
 #include <memory>
 
-#include "base/cxx17_backports.h"
 #include "third_party/blink/renderer/core/css/css_markup.h"
 #include "third_party/blink/renderer/core/css/css_selector_list.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_context.h"
@@ -250,14 +249,16 @@ PseudoId CSSSelector::GetPseudoId(PseudoType type) {
       return kPseudoIdSpellingError;
     case kPseudoGrammarError:
       return kPseudoIdGrammarError;
-    case kPseudoTransition:
-      return kPseudoIdTransition;
-    case kPseudoTransitionContainer:
-      return kPseudoIdTransitionContainer;
-    case kPseudoTransitionOldContent:
-      return kPseudoIdTransitionOldContent;
-    case kPseudoTransitionNewContent:
-      return kPseudoIdTransitionNewContent;
+    case kPseudoPageTransition:
+      return kPseudoIdPageTransition;
+    case kPseudoPageTransitionContainer:
+      return kPseudoIdPageTransitionContainer;
+    case kPseudoPageTransitionImageWrapper:
+      return kPseudoIdPageTransitionImageWrapper;
+    case kPseudoPageTransitionOutgoingImage:
+      return kPseudoIdPageTransitionOutgoingImage;
+    case kPseudoPageTransitionIncomingImage:
+      return kPseudoIdPageTransitionIncomingImage;
     case kPseudoUnknown:
     case kPseudoEmpty:
     case kPseudoFirstChild:
@@ -353,6 +354,7 @@ PseudoId CSSSelector::GetPseudoId(PseudoType type) {
     case kPseudoVideoPersistentAncestor:
     case kPseudoXrOverlay:
     case kPseudoModal:
+    case kPseudoSelectorFragmentAnchor:
     case kPseudoHas:
     case kPseudoRelativeLeftmost:
       return kPseudoIdNone;
@@ -381,8 +383,9 @@ const static NameToPseudoStruct kPseudoTypeWithoutArgumentsMap[] = {
      CSSSelector::kPseudoWebKitCustomElement},
     {"-internal-modal", CSSSelector::kPseudoModal},
     {"-internal-multi-select-focus", CSSSelector::kPseudoMultiSelectFocus},
-    {"-internal-popup-open", CSSSelector::kPseudoPopupOpen},
     {"-internal-relative-leftmost", CSSSelector::kPseudoRelativeLeftmost},
+    {"-internal-selector-fragment-anchor",
+     CSSSelector::kPseudoSelectorFragmentAnchor},
     {"-internal-shadow-host-has-appearance",
      CSSSelector::kPseudoHostHasAppearance},
     {"-internal-spatial-navigation-focus",
@@ -451,12 +454,14 @@ const static NameToPseudoStruct kPseudoTypeWithoutArgumentsMap[] = {
     {"only-of-type", CSSSelector::kPseudoOnlyOfType},
     {"optional", CSSSelector::kPseudoOptional},
     {"out-of-range", CSSSelector::kPseudoOutOfRange},
+    {"page-transition", CSSSelector::kPseudoPageTransition},
     {"past", CSSSelector::kPseudoPastCue},
     {"paused", CSSSelector::kPseudoPaused},
     {"picture-in-picture", CSSSelector::kPseudoPictureInPicture},
     {"placeholder", CSSSelector::kPseudoPlaceholder},
     {"placeholder-shown", CSSSelector::kPseudoPlaceholderShown},
     {"playing", CSSSelector::kPseudoPlaying},
+    {"popup-open", CSSSelector::kPseudoPopupOpen},
     {"read-only", CSSSelector::kPseudoReadOnly},
     {"read-write", CSSSelector::kPseudoReadWrite},
     {"required", CSSSelector::kPseudoRequired},
@@ -469,7 +474,6 @@ const static NameToPseudoStruct kPseudoTypeWithoutArgumentsMap[] = {
     {"start", CSSSelector::kPseudoStart},
     {"target", CSSSelector::kPseudoTarget},
     {"target-text", CSSSelector::kPseudoTargetText},
-    {"transition", CSSSelector::kPseudoTransition},
     {"valid", CSSSelector::kPseudoValid},
     {"vertical", CSSSelector::kPseudoVertical},
     {"visited", CSSSelector::kPseudoVisited},
@@ -492,11 +496,15 @@ const static NameToPseudoStruct kPseudoTypeWithArgumentsMap[] = {
     {"nth-last-child", CSSSelector::kPseudoNthLastChild},
     {"nth-last-of-type", CSSSelector::kPseudoNthLastOfType},
     {"nth-of-type", CSSSelector::kPseudoNthOfType},
+    {"page-transition-container", CSSSelector::kPseudoPageTransitionContainer},
+    {"page-transition-image-wrapper",
+     CSSSelector::kPseudoPageTransitionImageWrapper},
+    {"page-transition-incoming-image",
+     CSSSelector::kPseudoPageTransitionIncomingImage},
+    {"page-transition-outgoing-image",
+     CSSSelector::kPseudoPageTransitionOutgoingImage},
     {"part", CSSSelector::kPseudoPart},
     {"slotted", CSSSelector::kPseudoSlotted},
-    {"transition-container", CSSSelector::kPseudoTransitionContainer},
-    {"transition-new-content", CSSSelector::kPseudoTransitionNewContent},
-    {"transition-old-content", CSSSelector::kPseudoTransitionOldContent},
     {"where", CSSSelector::kPseudoWhere},
 };
 
@@ -510,11 +518,11 @@ CSSSelector::PseudoType CSSSelector::NameToPseudoType(const AtomicString& name,
   if (has_arguments) {
     pseudo_type_map = kPseudoTypeWithArgumentsMap;
     pseudo_type_map_end =
-        kPseudoTypeWithArgumentsMap + base::size(kPseudoTypeWithArgumentsMap);
+        kPseudoTypeWithArgumentsMap + std::size(kPseudoTypeWithArgumentsMap);
   } else {
     pseudo_type_map = kPseudoTypeWithoutArgumentsMap;
     pseudo_type_map_end = kPseudoTypeWithoutArgumentsMap +
-                          base::size(kPseudoTypeWithoutArgumentsMap);
+                          std::size(kPseudoTypeWithoutArgumentsMap);
   }
   const NameToPseudoStruct* match = std::lower_bound(
       pseudo_type_map, pseudo_type_map_end, name,
@@ -552,6 +560,11 @@ CSSSelector::PseudoType CSSSelector::NameToPseudoType(const AtomicString& name,
 
   if (match->type == CSSSelector::kPseudoPlaying &&
       !RuntimeEnabledFeatures::CSSPseudoPlayingPausedEnabled())
+    return CSSSelector::kPseudoUnknown;
+
+  if (match->type == CSSSelector::kPseudoPopupOpen &&
+      !RuntimeEnabledFeatures::HTMLPopupElementEnabled() &&
+      !RuntimeEnabledFeatures::HTMLPopupAttributeEnabled())
     return CSSSelector::kPseudoUnknown;
 
   if (match->type == CSSSelector::kPseudoTargetText &&
@@ -666,10 +679,11 @@ void CSSSelector::UpdatePseudoType(const AtomicString& value,
     case kPseudoHighlight:
     case kPseudoSpellingError:
     case kPseudoGrammarError:
-    case kPseudoTransition:
-    case kPseudoTransitionContainer:
-    case kPseudoTransitionOldContent:
-    case kPseudoTransitionNewContent:
+    case kPseudoPageTransition:
+    case kPseudoPageTransitionContainer:
+    case kPseudoPageTransitionImageWrapper:
+    case kPseudoPageTransitionOutgoingImage:
+    case kPseudoPageTransitionIncomingImage:
       if (match_ != kPseudoElement)
         pseudo_type_ = kPseudoUnknown;
       break;
@@ -683,7 +697,6 @@ void CSSSelector::UpdatePseudoType(const AtomicString& value,
     case kPseudoListBox:
     case kPseudoModal:
     case kPseudoMultiSelectFocus:
-    case kPseudoPopupOpen:
     case kPseudoSpatialNavigationFocus:
     case kPseudoSpatialNavigationInterest:
     case kPseudoVideoPersistent:
@@ -705,8 +718,8 @@ void CSSSelector::UpdatePseudoType(const AtomicString& value,
     case kPseudoDecrement:
     case kPseudoDefault:
     case kPseudoDefined:
-    case kPseudoDisabled:
     case kPseudoDir:
+    case kPseudoDisabled:
     case kPseudoDoubleButton:
     case kPseudoDrag:
     case kPseudoEmpty:
@@ -731,12 +744,11 @@ void CSSSelector::UpdatePseudoType(const AtomicString& value,
     case kPseudoIncrement:
     case kPseudoIndeterminate:
     case kPseudoInvalid:
-    case kPseudoWhere:
+    case kPseudoIs:
     case kPseudoLang:
     case kPseudoLastChild:
     case kPseudoLastOfType:
     case kPseudoLink:
-    case kPseudoIs:
     case kPseudoNoButton:
     case kPseudoNot:
     case kPseudoNthChild:
@@ -746,18 +758,20 @@ void CSSSelector::UpdatePseudoType(const AtomicString& value,
     case kPseudoOnlyChild:
     case kPseudoOnlyOfType:
     case kPseudoOptional:
-    case kPseudoPaused:
-    case kPseudoPictureInPicture:
-    case kPseudoPlaying:
-    case kPseudoPlaceholderShown:
     case kPseudoOutOfRange:
     case kPseudoPastCue:
+    case kPseudoPaused:
+    case kPseudoPictureInPicture:
+    case kPseudoPlaceholderShown:
+    case kPseudoPlaying:
+    case kPseudoPopupOpen:
     case kPseudoReadOnly:
     case kPseudoReadWrite:
     case kPseudoRelativeLeftmost:
     case kPseudoRequired:
     case kPseudoRoot:
     case kPseudoScope:
+    case kPseudoSelectorFragmentAnchor:
     case kPseudoSingleButton:
     case kPseudoStart:
     case kPseudoState:
@@ -766,8 +780,9 @@ void CSSSelector::UpdatePseudoType(const AtomicString& value,
     case kPseudoValid:
     case kPseudoVertical:
     case kPseudoVisited:
-    case kPseudoWebkitAnyLink:
     case kPseudoWebKitAutofill:
+    case kPseudoWebkitAnyLink:
+    case kPseudoWhere:
     case kPseudoWindowInactive:
     case kPseudoXrOverlay:
       if (match_ != kPseudoClass)

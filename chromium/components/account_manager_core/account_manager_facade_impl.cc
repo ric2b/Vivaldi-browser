@@ -84,7 +84,6 @@ bool GetIsAvailableInArcBySource(
     case AccountManagerFacade::AccountAdditionSource::kOnboarding:
       return true;
     // Accounts added from the browser should not be available in ARC.
-    case AccountManagerFacade::AccountAdditionSource::kPrintPreviewDialog:
     case AccountManagerFacade::AccountAdditionSource::kChromeProfileCreation:
     case AccountManagerFacade::AccountAdditionSource::kOgbAddAccount:
       return false;
@@ -96,6 +95,10 @@ bool GetIsAvailableInArcBySource(
     case AccountManagerFacade::AccountAdditionSource::
         kAvatarBubbleReauthAccountButton:
     case AccountManagerFacade::AccountAdditionSource::kChromeExtensionReauth:
+      NOTREACHED();
+      return false;
+    // Unused enums that cannot be deleted.
+    case AccountManagerFacade::AccountAdditionSource::kPrintPreviewDialogUnused:
       NOTREACHED();
       return false;
   }
@@ -222,7 +225,7 @@ class AccountManagerFacadeImpl::AccessTokenFetcher
 
     CancelRequest();
     FireOnGetTokenFailure(
-        GoogleServiceAuthError(GoogleServiceAuthError::State::SERVICE_ERROR));
+        GoogleServiceAuthError::FromServiceError("Mojo pipe disconnected"));
   }
 
   AccountManagerFacadeImpl* const account_manager_facade_impl_;
@@ -391,7 +394,7 @@ AccountManagerFacadeImpl::CreateAccessTokenFetcher(
             << " for CreateAccessTokenFetcher";
     return std::make_unique<OAuth2AccessTokenFetcherImmediateError>(
         consumer,
-        GoogleServiceAuthError(GoogleServiceAuthError::State::SERVICE_ERROR));
+        GoogleServiceAuthError::FromServiceError("Mojo pipe disconnected"));
   }
 
   auto access_token_fetcher = std::make_unique<AccessTokenFetcher>(

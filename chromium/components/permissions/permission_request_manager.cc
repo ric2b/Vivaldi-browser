@@ -12,8 +12,10 @@
 #include "base/command_line.h"
 #include "base/containers/circular_deque.h"
 #include "base/feature_list.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
+#include "base/observer_list.h"
 #include "base/stl_util.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "build/build_config.h"
@@ -37,6 +39,10 @@
 #include "content/public/browser/web_contents.h"
 #include "url/gurl.h"
 #include "url/origin.h"
+
+#if BUILDFLAG(IS_ANDROID)
+#include "components/permissions/android/android_permission_util.h"
+#endif
 
 namespace permissions {
 
@@ -174,6 +180,28 @@ void PermissionRequestManager::AddRequest(
     return;
   }
 
+#if BUILDFLAG(IS_ANDROID)
+  if (request->GetContentSettingsType() == ContentSettingsType::NOTIFICATIONS) {
+    bool app_level_settings_allow_site_notifications =
+        enabled_app_level_notification_permission_for_testing_.has_value()
+            ? enabled_app_level_notification_permission_for_testing_.value()
+            : DoesAppLevelSettingsAllowSiteNotifications();
+    base::UmaHistogramBoolean(
+        "Permissions.Prompt.Notifications.EnabledAppLevel",
+        app_level_settings_allow_site_notifications);
+
+    if (!app_level_settings_allow_site_notifications &&
+        base::FeatureList::IsEnabled(
+            features::kBlockNotificationPromptsIfDisabledOnAppLevel)) {
+      // Automatically cancel site Notification requests when Chrome is not able
+      // to send notifications in an app level.
+      request->Cancelled();
+      request->RequestFinished();
+      return;
+    }
+  }
+#endif  // BUILDFLAG(IS_ANDROID)
+
   if (is_notification_prompt_cooldown_active_ &&
       request->GetContentSettingsType() == ContentSettingsType::NOTIFICATIONS) {
     // Short-circuit by canceling rather than denying to avoid creating a large
@@ -200,8 +228,8 @@ void PermissionRequestManager::AddRequest(
   // correct behavior on interstitials -- we probably want to basically queue
   // any request for which GetVisibleURL != GetLastCommittedURL.
   CHECK_EQ(source_frame->GetMainFrame(), web_contents()->GetMainFrame());
-  const GURL& main_frame_origin =
-      PermissionUtil::GetLastCommittedOriginAsURL(web_contents());
+  const GURL main_frame_origin =
+      PermissionUtil::GetLastCommittedOriginAsURL(source_frame->GetMainFrame());
   bool is_main_frame =
       url::IsSameOriginWith(main_frame_origin, request->requesting_origin());
 
@@ -458,7 +486,8 @@ GURL PermissionRequestManager::GetRequestingOrigin() const {
 }
 
 GURL PermissionRequestManager::GetEmbeddingOrigin() const {
-  return PermissionUtil::GetLastCommittedOriginAsURL(web_contents());
+  return PermissionUtil::GetLastCommittedOriginAsURL(
+      web_contents()->GetMainFrame());
 }
 
 void PermissionRequestManager::Accept() {
@@ -695,7 +724,8 @@ void PermissionRequestManager::ShowBubble() {
       switch (*quiet_ui_reason) {
         case QuietUiReason::kEnabledInPrefs:
         case QuietUiReason::kTriggeredByCrowdDeny:
-        case QuietUiReason::kPredictedVeryUnlikelyGrant:
+        case QuietUiReason::kServicePredictedVeryUnlikelyGrant:
+        case QuietUiReason::kOnDevicePredictedVeryUnlikelyGrant:
           break;
         case QuietUiReason::kTriggeredDueToAbusiveRequests:
           LogWarningToConsole(kAbusiveNotificationRequestsEnforcementMessage);
@@ -735,6 +765,7 @@ void PermissionRequestManager::ResetViewStateForCurrentRequest() {
   current_request_prompt_disposition_.reset();
   prediction_grant_likelihood_.reset();
   current_request_ui_to_use_.reset();
+  was_decision_held_back_.reset();
   selector_decisions_.clear();
   should_dismiss_current_request_ = false;
   did_show_bubble_ = false;
@@ -767,8 +798,8 @@ void PermissionRequestManager::FinalizeCurrentRequests(
       requests_, web_contents(), permission_action, time_to_decision,
       DetermineCurrentRequestUIDisposition(),
       DetermineCurrentRequestUIDispositionReasonForUMA(),
-      prediction_grant_likelihood_, did_show_bubble_, did_click_manage_,
-      did_click_learn_more_);
+      prediction_grant_likelihood_, was_decision_held_back_, did_show_bubble_,
+      did_click_manage_, did_click_learn_more_);
 
   content::BrowserContext* browser_context =
       web_contents()->GetBrowserContext();
@@ -790,7 +821,8 @@ void PermissionRequestManager::FinalizeCurrentRequests(
     PermissionsClient::Get()->OnPromptResolved(
         browser_context, request->request_type(), permission_action,
         request->requesting_origin(), DetermineCurrentRequestUIDisposition(),
-        quiet_ui_reason);
+        DetermineCurrentRequestUIDispositionReasonForUMA(),
+        request->GetGestureType(), quiet_ui_reason);
 
     PermissionEmbargoStatus embargo_status =
         PermissionEmbargoStatus::NOT_EMBARGOED;
@@ -941,7 +973,8 @@ bool PermissionRequestManager::ShouldDropCurrentRequestIfCannotShowQuietly()
   if (quiet_ui_reason.has_value()) {
     switch (quiet_ui_reason.value()) {
       case QuietUiReason::kEnabledInPrefs:
-      case QuietUiReason::kPredictedVeryUnlikelyGrant:
+      case QuietUiReason::kServicePredictedVeryUnlikelyGrant:
+      case QuietUiReason::kOnDevicePredictedVeryUnlikelyGrant:
       case QuietUiReason::kTriggeredByCrowdDeny:
         return false;
       case QuietUiReason::kTriggeredDueToAbusiveRequests:
@@ -996,6 +1029,11 @@ void PermissionRequestManager::OnPermissionUiSelectorDone(
                                          ->PredictedGrantLikelihoodForUKM();
     }
 
+    if (!was_decision_held_back_.has_value()) {
+      was_decision_held_back_ = permission_ui_selectors_[decision_index]
+                                    ->WasSelectorDecisionHeldback();
+    }
+
     if (current_decision.quiet_ui_reason.has_value()) {
       current_request_ui_to_use_ = current_decision;
       break;
@@ -1034,8 +1072,10 @@ PermissionRequestManager::DetermineCurrentRequestUIDispositionReasonForUMA() {
     case QuietUiReason::kTriggeredDueToAbusiveRequests:
     case QuietUiReason::kTriggeredDueToAbusiveContent:
       return PermissionPromptDispositionReason::SAFE_BROWSING_VERDICT;
-    case QuietUiReason::kPredictedVeryUnlikelyGrant:
+    case QuietUiReason::kServicePredictedVeryUnlikelyGrant:
       return PermissionPromptDispositionReason::PREDICTION_SERVICE;
+    case QuietUiReason::kOnDevicePredictedVeryUnlikelyGrant:
+      return PermissionPromptDispositionReason::ON_DEVICE_PREDICTION_MODEL;
   }
 }
 

@@ -5,6 +5,7 @@
 #include "components/search_engines/template_url_service.h"
 
 #include <algorithm>
+#include <numeric>
 
 #include "base/auto_reset.h"
 #include "base/base64.h"
@@ -15,8 +16,10 @@
 #include "base/containers/contains.h"
 #include "base/debug/crash_logging.h"
 #include "base/format_macros.h"
+#include "base/hash/hash.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/observer_list.h"
 #include "base/rand_util.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_split.h"
@@ -46,6 +49,8 @@
 #endif
 
 #include "app/vivaldi_apptools.h"
+#include "components/sync/base/client_tag_hash.h"
+#include "components/search_engines/vivaldi_pref_names.h"
 
 typedef SearchHostToURLsMap::TemplateURLSet TemplateURLSet;
 typedef TemplateURLService::SyncDataMap SyncDataMap;
@@ -201,6 +206,33 @@ bool IsCreatedByExtension(const TemplateURL* template_url) {
          template_url->type() == TemplateURL::OMNIBOX_API_EXTENSION;
 }
 
+std::string VivaldiGetPositionSuffix(const TemplateURL* template_url) {
+  return syncer::ClientTagHash::FromUnhashed(syncer::SEARCH_ENGINES,
+                                             template_url->sync_guid())
+      .value();
+}
+
+const char* VivaldiGetDefaultProviderGuidPrefForType(
+    TemplateURLService::DefaultSearchType type) {
+  switch (type) {
+    case TemplateURLService::kDefaultSearchMain:
+      return prefs::kSyncedDefaultSearchProviderGUID;
+    case TemplateURLService::kDefaultSearchPrivate:
+      return prefs::kSyncedDefaultPrivateSearchProviderGUID;
+    case TemplateURLService::kDefaultSearchField:
+      return prefs::kSyncedDefaultSearchFieldProviderGUID;
+    case TemplateURLService::kDefaultSearchFieldPrivate:
+      return prefs::kSyncedDefaultPrivateSearchFieldProviderGUID;
+    case TemplateURLService::kDefaultSearchSpeeddials:
+      return prefs::kSyncedDefaultSpeedDialsSearchProviderGUID;
+    case TemplateURLService::kDefaultSearchSpeeddialsPrivate:
+      return prefs::kSyncedDefaultSpeedDialsPrivateSearchProviderGUID;
+    case TemplateURLService::kDefaultSearchImage:
+      return prefs::kSyncedDefaultImageSearchProviderGUID;
+  }
+  return nullptr;
+}
+
 }  // namespace
 
 // TemplateURLService::LessWithPrefix -----------------------------------------
@@ -290,20 +322,86 @@ TemplateURLService::TemplateURLService(
       web_data_service_(web_data_service),
       client_(std::move(client)),
       dsp_change_callback_(dsp_change_callback),
-      default_search_manager_(
-          prefs_,
-          base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
-                              base::Unretained(this))) {
+      default_search_manager_{
+          {{prefs_, DefaultSearchManager::kDefaultSearchProviderDataPrefName,
+            base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
+                                base::Unretained(this),
+                                kDefaultSearchMain)},
+           {prefs_,
+            DefaultSearchManager::kDefaultPrivateSearchProviderDataPrefName,
+            base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
+                                base::Unretained(this),
+                                kDefaultSearchPrivate)},
+           {prefs_,
+            DefaultSearchManager::kDefaultSearchFieldProviderDataPrefName,
+            base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
+                                base::Unretained(this),
+                                kDefaultSearchField)},
+           {prefs_,
+            DefaultSearchManager::
+                kDefaultPrivateSearchFieldProviderDataPrefName,
+            base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
+                                base::Unretained(this),
+                                kDefaultSearchFieldPrivate)},
+           {prefs_,
+            DefaultSearchManager::kDefaultSpeeddialsSearchProviderDataPrefName,
+            base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
+                                base::Unretained(this),
+                                kDefaultSearchSpeeddials)},
+           {prefs_,
+            DefaultSearchManager::
+                kDefaultSpeeddialsPrivateSearchProviderDataPrefName,
+            base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
+                                base::Unretained(this),
+                                kDefaultSearchSpeeddialsPrivate)},
+           {prefs_,
+            DefaultSearchManager::kDefaultImageSearchProviderDataPrefName,
+            base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
+                                base::Unretained(this),
+                                kDefaultSearchImage)}}} {
   DCHECK(search_terms_data_);
   Init(nullptr, 0);
 }
 
 TemplateURLService::TemplateURLService(const Initializer* initializers,
                                        const int count)
-    : default_search_manager_(
-          prefs_,
-          base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
-                              base::Unretained(this))) {
+    : default_search_manager_{
+          {{prefs_, DefaultSearchManager::kDefaultSearchProviderDataPrefName,
+            base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
+                                base::Unretained(this),
+                                kDefaultSearchMain)},
+           {prefs_,
+            DefaultSearchManager::kDefaultPrivateSearchProviderDataPrefName,
+            base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
+                                base::Unretained(this),
+                                kDefaultSearchPrivate)},
+           {prefs_,
+            DefaultSearchManager::kDefaultSearchFieldProviderDataPrefName,
+            base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
+                                base::Unretained(this),
+                                kDefaultSearchField)},
+           {prefs_,
+            DefaultSearchManager::
+                kDefaultPrivateSearchFieldProviderDataPrefName,
+            base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
+                                base::Unretained(this),
+                                kDefaultSearchFieldPrivate)},
+           {prefs_,
+            DefaultSearchManager::kDefaultSpeeddialsSearchProviderDataPrefName,
+            base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
+                                base::Unretained(this),
+                                kDefaultSearchSpeeddials)},
+           {prefs_,
+            DefaultSearchManager::
+                kDefaultSpeeddialsPrivateSearchProviderDataPrefName,
+            base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
+                                base::Unretained(this),
+                                kDefaultSearchSpeeddialsPrivate)},
+           {prefs_,
+            DefaultSearchManager::kDefaultImageSearchProviderDataPrefName,
+            base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
+                                base::Unretained(this),
+                                kDefaultSearchImage)}}} {
   Init(initializers, count);
 }
 
@@ -322,14 +420,15 @@ void TemplateURLService::LogSearchTemplateURLEvent(
 // static
 void TemplateURLService::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
-#if BUILDFLAG(IS_IOS) || BUILDFLAG(IS_ANDROID)
+#if !defined(VIVALDI_BUILD) && (BUILDFLAG(IS_IOS) || BUILDFLAG(IS_ANDROID))
   uint32_t flags = PrefRegistry::NO_REGISTRATION_FLAGS;
 #else
   uint32_t flags = user_prefs::PrefRegistrySyncable::SYNCABLE_PREF;
 #endif
-  registry->RegisterStringPref(prefs::kSyncedDefaultSearchProviderGUID,
-                               std::string(),
-                               flags);
+  for (int i = 0; i < kDefaultSearchTypeCount; i++)
+    registry->RegisterStringPref(
+        VivaldiGetDefaultProviderGuidPrefForType(DefaultSearchType(i)),
+        std::string(), flags);
   registry->RegisterBooleanPref(prefs::kDefaultSearchProviderEnabled, true);
   registry->RegisterBooleanPref(
       prefs::kDefaultSearchProviderContextMenuAccessAllowed, true);
@@ -379,7 +478,7 @@ bool TemplateURLService::IsPrepopulatedOrCreatedByPolicy(
 }
 
 bool TemplateURLService::ShowInDefaultList(const TemplateURL* t_url) const {
-  return t_url == default_search_provider_ ||
+  return t_url == default_search_provider_[kDefaultSearchMain] ||
       IsPrepopulatedOrCreatedByPolicy(t_url);
 }
 
@@ -413,10 +512,21 @@ const TemplateURL* TemplateURLService::GetTemplateURLForKeyword(
         ->second.first;
   }
 
-  return (!loaded_ && initial_default_search_provider_ &&
-          (initial_default_search_provider_->keyword() == keyword))
-             ? initial_default_search_provider_.get()
-             : nullptr;
+  if (loaded_)
+    return nullptr;
+  const TemplateURL* init = nullptr;
+  return std::accumulate(
+      initial_default_search_provider_.begin(),
+      initial_default_search_provider_.end(), init,
+      [&keyword](const TemplateURL* selected,
+                 const std::unique_ptr<TemplateURL>& candidate) {
+        return (candidate &&
+                (candidate->keyword() != keyword ||
+                 (selected && selected->IsBetterThanEngineWithConflictingKeyword(
+                                 candidate.get()))))
+                   ? selected
+                   : candidate.get();
+      });
 }
 
 TemplateURL* TemplateURLService::GetTemplateURLForGUID(
@@ -431,10 +541,16 @@ const TemplateURL* TemplateURLService::GetTemplateURLForGUID(
   auto elem(guid_to_turl_.find(sync_guid));
   if (elem != guid_to_turl_.end())
     return elem->second;
-  return (!loaded_ && initial_default_search_provider_ &&
-          (initial_default_search_provider_->sync_guid() == sync_guid))
-             ? initial_default_search_provider_.get()
-             : nullptr;
+  if (loaded_)
+    return nullptr;
+  auto* result =
+      std::find_if(initial_default_search_provider_.begin(),
+                   initial_default_search_provider_.end(),
+                   [&sync_guid](const std::unique_ptr<TemplateURL>& turl) {
+                     return turl && turl->sync_guid() == sync_guid;
+                   });
+  return (result != initial_default_search_provider_.end()) ? (*result).get()
+                                                            : nullptr;
 }
 
 TemplateURL* TemplateURLService::GetTemplateURLForHost(
@@ -448,12 +564,16 @@ const TemplateURL* TemplateURLService::GetTemplateURLForHost(
     const std::string& host) const {
   if (loaded_)
     return provider_map_->GetTemplateURLForHost(host);
-  TemplateURL* initial_dsp = initial_default_search_provider_.get();
-  return (initial_dsp &&
-          (initial_dsp->GenerateSearchURL(search_terms_data()).host_piece() ==
-           host))
-             ? initial_dsp
-             : nullptr;
+  auto* result = std::find_if(
+      initial_default_search_provider_.begin(),
+      initial_default_search_provider_.end(),
+      [&host, this](const std::unique_ptr<TemplateURL>& initial_dsp) {
+        return initial_dsp &&
+               initial_dsp->GenerateSearchURL(search_terms_data())
+                       .host_piece() == host;
+      });
+  return result != initial_default_search_provider_.end() ? (*result).get()
+                                                          : nullptr;
 }
 
 TemplateURL* TemplateURLService::Add(
@@ -464,6 +584,28 @@ TemplateURL* TemplateURLService::Add(
       (!FindTemplateURLForExtension(template_url->extension_info_->extension_id,
                                     template_url->type()) &&
        template_url->id() == kInvalidTemplateURLID));
+
+  // Vivaldi addition.
+  // In chromium, on startup, search engine added by extensions are added before
+  // other search engines are loaded from the database. They are given
+  // sequential ids, starting at two (since nothing else is loaded).
+  // As a result, they can end up with ids that are identical to "normal"
+  // search engines, which causes all sorts of confusion. In particular,
+  // the association between search engine and urls uses these ids, meaning
+  // they need to be disambiguated somehow when producing typed history.
+  // Chromium has ways to handle it, mostly by checking if a URL matches a
+  // search engine, but for our desktop code, that means additional calls to
+  // the extension API. Instead, the whole issue is sidestepped by giving
+  // extension search engines afixed negative id, based on the extension id and
+  // actual url. This should hopefully avoid collision, especially since it's
+  // unlikely a user would have more than a few search-providing extensions.
+  // Negative ids start at -2 to help avoiding possible -1 sentinels.
+  if (IsCreatedByExtension(template_url.get())) {
+    template_url->data_.id = -2;
+    template_url->data_.id -= base::PersistentHash(
+        template_url->extension_info_->extension_id + template_url->url());
+    return Add(std::move(template_url), false);
+  }
 
   return Add(std::move(template_url), true);
 }
@@ -487,8 +629,9 @@ void TemplateURLService::Remove(const TemplateURL* template_url) {
   // This has happened before, and causes permanent damage to the user Profile,
   // which can then be Synced to other installations. It's better to crash
   // immediately, and that's why this isn't a DCHECK. https://crbug.com/1164024
-  {
-    const TemplateURL* default_provider = GetDefaultSearchProvider();
+  for (int i = 0; i < kDefaultSearchTypeCount; i++) {
+    const TemplateURL* default_provider =
+        GetDefaultSearchProvider(DefaultSearchType(i));
 
     // TODO(tommycli): Once we are sure this never happens in practice, we can
     // remove this CrashKeyString, but we should keep the CHECK.
@@ -516,6 +659,9 @@ void TemplateURLService::Remove(const TemplateURL* template_url) {
     }
   }
 
+  if (vivaldi_default_override_ == template_url)
+    VivaldiResetDefaultOverride();
+
   auto i = FindTemplateURL(&template_urls_, template_url);
   if (i == template_urls_.end())
     return;
@@ -540,10 +686,16 @@ void TemplateURLService::Remove(const TemplateURL* template_url) {
     // The default search engine can't be deleted. But the user defined DSE can
     // be hidden by an extension or policy and then deleted. Clean up the user
     // prefs then.
-    if (prefs_ &&
-        (template_url->sync_guid() ==
-         prefs_->GetString(prefs::kSyncedDefaultSearchProviderGUID))) {
-      prefs_->SetString(prefs::kSyncedDefaultSearchProviderGUID, std::string());
+    if (prefs_) {
+      for (int i = 0; i < kDefaultSearchTypeCount; i++) {
+        if (template_url->sync_guid() ==
+            prefs_->GetString(VivaldiGetDefaultProviderGuidPrefForType(
+                DefaultSearchType(i)))) {
+          prefs_->SetString(
+              VivaldiGetDefaultProviderGuidPrefForType(DefaultSearchType(i)),
+              std::string());
+        }
+      }
     }
 
     UMA_HISTOGRAM_ENUMERATION(kDeleteSyncedEngineHistogramName,
@@ -561,8 +713,8 @@ void TemplateURLService::RemoveExtensionControlledTURL(
   if (!url)
     return;
   // NULL this out so that we can call Remove.
-  if (default_search_provider_ == url)
-    default_search_provider_ = nullptr;
+  if (default_search_provider_[kDefaultSearchMain] == url)
+    default_search_provider_[kDefaultSearchMain] = nullptr;
   Remove(url);
 }
 
@@ -667,6 +819,42 @@ void TemplateURLService::SetIsActiveTemplateURL(TemplateURL* url,
   Update(url, TemplateURL(data));
 }
 
+void TemplateURLService::VivaldiMoveTemplateURL(TemplateURL* url,
+                                                const TemplateURL* successor) {
+  DCHECK(!IsCreatedByExtension(url));
+  DCHECK(url != successor);
+  syncer::UniquePosition invalid;
+  syncer::UniquePosition after;
+  if (successor)
+    after = successor->data().vivaldi_position;
+  const syncer::UniquePosition before = std::accumulate(
+      template_urls_.begin(), template_urls_.end(), invalid,
+      [after](const auto& position, const auto& template_url) {
+        if (!template_url->data().vivaldi_position.IsValid())
+          return position;
+        if (position.IsValid() &&
+            template_url->data().vivaldi_position.LessThan(position))
+          return position;
+        if (!after.IsValid() ||
+            template_url->data().vivaldi_position.LessThan(after))
+          return template_url->data().vivaldi_position;
+        return position;
+      });
+  TemplateURLData data(url->data());
+  if (after.IsValid() && before.IsValid())
+    data.vivaldi_position = syncer::UniquePosition::Between(
+        before, after, VivaldiGetPositionSuffix(url));
+  else if (after.IsValid())
+    data.vivaldi_position =
+        syncer::UniquePosition::Before(after, VivaldiGetPositionSuffix(url));
+  else if (before.IsValid())
+    data.vivaldi_position =
+        syncer::UniquePosition::After(before, VivaldiGetPositionSuffix(url));
+  else  // We don't need to reorder if there is only one orderable item.
+    return;
+  Update(url, TemplateURL(data));
+}
+
 TemplateURL* TemplateURLService::CreatePlayAPISearchEngine(
     const std::u16string& title,
     const std::u16string& keyword,
@@ -727,18 +915,26 @@ void TemplateURLService::UpdateProviderFavicons(
   }
 }
 
-bool TemplateURLService::CanMakeDefault(const TemplateURL* url) const {
+bool TemplateURLService::CanMakeDefault(const TemplateURL* url, DefaultSearchType type) const {
   return
-      ((default_search_provider_source_ == DefaultSearchManager::FROM_USER) ||
-       (default_search_provider_source_ ==
+      ((default_search_provider_source_[type] == DefaultSearchManager::FROM_USER) ||
+       (default_search_provider_source_[type] ==
         DefaultSearchManager::FROM_FALLBACK)) &&
-      (url != GetDefaultSearchProvider()) &&
+      (url != GetDefaultSearchProvider(type)) &&
       url->url_ref().SupportsReplacement(search_terms_data()) &&
       (url->type() == TemplateURL::NORMAL);
 }
 
 void TemplateURLService::SetUserSelectedDefaultSearchProvider(
     TemplateURL* url) {
+  Scoper scoper(this);
+
+  for (int i = 0; i < kDefaultSearchTypeCount; i++)
+    SetUserSelectedDefaultSearchProvider(url, DefaultSearchType(i));
+}
+
+void TemplateURLService::SetUserSelectedDefaultSearchProvider(
+    TemplateURL* url, DefaultSearchType type) {
   // Omnibox keywords cannot be made default. Extension-controlled search
   // engines can be made default only by the extension itself because they
   // aren't persisted.
@@ -748,32 +944,34 @@ void TemplateURLService::SetUserSelectedDefaultSearchProvider(
   }
   if (load_failed_) {
     // Skip the DefaultSearchManager, which will persist to user preferences.
-    if ((default_search_provider_source_ == DefaultSearchManager::FROM_USER) ||
-        (default_search_provider_source_ ==
+    if ((default_search_provider_source_[type] == DefaultSearchManager::FROM_USER) ||
+        (default_search_provider_source_[type] ==
          DefaultSearchManager::FROM_FALLBACK)) {
-      ApplyDefaultSearchChange(url ? &url->data() : nullptr,
+      ApplyDefaultSearchChange(type, url ? &url->data() : nullptr,
                                DefaultSearchManager::FROM_USER);
     }
   } else {
     // We rely on the DefaultSearchManager to call ApplyDefaultSearchChange if,
     // in fact, the effective DSE changes.
     if (url) {
-      default_search_manager_.SetUserSelectedDefaultSearchEngine(url->data());
+      default_search_manager_[type].SetUserSelectedDefaultSearchEngine(url->data());
     } else {
-      default_search_manager_.ClearUserSelectedDefaultSearchEngine();
+      default_search_manager_[type].ClearUserSelectedDefaultSearchEngine();
     }
   }
 }
 
-const TemplateURL* TemplateURLService::GetDefaultSearchProvider() const {
-  return loaded_ ? default_search_provider_.get()
-                 : initial_default_search_provider_.get();
+const TemplateURL* TemplateURLService::GetDefaultSearchProvider(DefaultSearchType type) const {
+  if (vivaldi_default_override_ && type == kDefaultSearchMain)
+    return vivaldi_default_override_;
+  return loaded_ ? default_search_provider_[type].get()
+                 : initial_default_search_provider_[type].get();
 }
 
 const TemplateURL*
 TemplateURLService::GetDefaultSearchProviderIgnoringExtensions() const {
   std::unique_ptr<TemplateURLData> next_search =
-      default_search_manager_.GetDefaultSearchEngineIgnoringExtensions();
+      default_search_manager_[kDefaultSearchMain].GetDefaultSearchEngineIgnoringExtensions();
   if (!next_search)
     return nullptr;
 
@@ -789,13 +987,26 @@ TemplateURLService::GetDefaultSearchProviderIgnoringExtensions() const {
 
 bool TemplateURLService::IsSearchResultsPageFromDefaultSearchProvider(
     const GURL& url) const {
-  const TemplateURL* default_provider = GetDefaultSearchProvider();
+  const TemplateURL* default_provider = GetDefaultSearchProvider(kDefaultSearchMain);
   return default_provider &&
       default_provider->IsSearchURL(url, search_terms_data());
 }
 
+bool TemplateURLService::IsSideSearchSupportedForDefaultSearchProvider() const {
+  const TemplateURL* default_provider = GetDefaultSearchProvider();
+  return default_provider && default_provider->IsSideSearchSupported();
+}
+
+GURL TemplateURLService::GenerateSideSearchURLForDefaultSearchProvider(
+    const GURL& search_url,
+    const std::string& version) const {
+  DCHECK(IsSideSearchSupportedForDefaultSearchProvider());
+  return GetDefaultSearchProvider()->GenerateSideSearchURL(search_url, version,
+                                                           search_terms_data());
+}
+
 bool TemplateURLService::IsExtensionControlledDefaultSearch() const {
-  return default_search_provider_source_ ==
+  return default_search_provider_source_[kDefaultSearchMain] ==
       DefaultSearchManager::FROM_EXTENSION;
 }
 
@@ -805,19 +1016,25 @@ void TemplateURLService::RepairPrepopulatedSearchEngines() {
 
   Scoper scoper(this);
 
-  if ((default_search_provider_source_ == DefaultSearchManager::FROM_USER) ||
-      (default_search_provider_source_ ==
+  for (int i = 0; i < kDefaultSearchTypeCount; i++) {
+  if ((default_search_provider_source_[i] == DefaultSearchManager::FROM_USER) ||
+      (default_search_provider_source_[i] ==
           DefaultSearchManager::FROM_FALLBACK)) {
     // Clear |default_search_provider_| in case we want to remove the engine it
     // points to. This will get reset at the end of the function anyway.
-    default_search_provider_ = nullptr;
+    default_search_provider_[i] = nullptr;
+  }
   }
 
   std::vector<std::unique_ptr<TemplateURLData>> prepopulated_urls =
       TemplateURLPrepopulateData::GetPrepopulatedEngines(prefs_, nullptr);
   DCHECK(!prepopulated_urls.empty());
+  std::array<TemplateURL*, TemplateURLService::kDefaultSearchTypeCount> dsp;
+  std::transform(default_search_provider_.begin(),
+                 default_search_provider_.end(), dsp.begin(),
+                 [](const raw_ptr<TemplateURL>& ptr) { return ptr.get(); });
   ActionsFromPrepopulateData actions(CreateActionsFromCurrentPrepopulateData(
-      &prepopulated_urls, template_urls_, default_search_provider_));
+      &prepopulated_urls, template_urls_, dsp));
 
   // Remove items.
   for (auto i = actions.removed_engines.begin();
@@ -842,13 +1059,14 @@ void TemplateURLService::RepairPrepopulatedSearchEngines() {
   base::AutoReset<DefaultSearchChangeOrigin> change_origin(
       &dsp_change_origin_, DSP_CHANGE_PROFILE_RESET);
 
-  default_search_manager_.ClearUserSelectedDefaultSearchEngine();
+  for (int i = 0; i < kDefaultSearchTypeCount; i++) {
+  default_search_manager_[i].ClearUserSelectedDefaultSearchEngine();
 
-  if (default_search_provider_) {
+  if (default_search_provider_[i]) {
     // Set fallback engine as user selected, because repair is considered a user
     // action and we are expected to sync new fallback engine to other devices.
     const TemplateURLData* fallback_engine_data =
-        default_search_manager_.GetFallbackSearchEngine();
+        default_search_manager_[i].GetFallbackSearchEngine();
     if (fallback_engine_data) {
       TemplateURL* fallback_engine =
           FindPrepopulatedTemplateURL(fallback_engine_data->prepopulate_id);
@@ -859,7 +1077,7 @@ void TemplateURLService::RepairPrepopulatedSearchEngines() {
       // Write the fallback engine's GUID to prefs, which will cause
       // OnSyncedDefaultSearchProviderGUIDChanged() to set it as the new
       // user-selected engine.
-      prefs_->SetString(prefs::kSyncedDefaultSearchProviderGUID,
+      prefs_->SetString(VivaldiGetDefaultProviderGuidPrefForType(DefaultSearchType(i)),
                         fallback_engine->sync_guid());
     }
   } else {
@@ -870,8 +1088,9 @@ void TemplateURLService::RepairPrepopulatedSearchEngines() {
     // repaired).
     DefaultSearchManager::Source source;
     const TemplateURLData* new_dse =
-        default_search_manager_.GetDefaultSearchEngine(&source);
-    ApplyDefaultSearchChange(new_dse, source);
+        default_search_manager_[i].GetDefaultSearchEngine(&source);
+    ApplyDefaultSearchChange(DefaultSearchType(i), new_dse, source);
+  }
   }
 }
 
@@ -919,11 +1138,18 @@ void TemplateURLService::OnWebDataServiceRequestDone(
       std::make_unique<OwnedTemplateURLVector>();
   int new_resource_keyword_version = 0;
   {
+    std::array<TemplateURL*, kDefaultSearchTypeCount> default_search_provider;
+    for (int i = 0; i < kDefaultSearchTypeCount; i++) {
+      default_search_provider[i] =
+          (default_search_provider_source_[i] ==
+           DefaultSearchManager::FROM_USER)
+              ? initial_default_search_provider_[i].get()
+              : nullptr;
+    }
+
     GetSearchProvidersUsingKeywordResult(
         *result, web_data_service_.get(), prefs_, template_urls.get(),
-        (default_search_provider_source_ == DefaultSearchManager::FROM_USER)
-            ? initial_default_search_provider_.get()
-            : nullptr,
+        default_search_provider,
         search_terms_data(), &new_resource_keyword_version, &pre_sync_deletes_);
   }
 
@@ -947,10 +1173,10 @@ void TemplateURLService::OnWebDataServiceRequestDone(
       web_data_service_->SetBuiltinKeywordVersion(new_resource_keyword_version);
   }
 
-  if (default_search_provider_) {
+  if (default_search_provider_[kDefaultSearchMain]) {
     UMA_HISTOGRAM_ENUMERATION(
         "Search.DefaultSearchProviderType",
-        default_search_provider_->GetEngineType(search_terms_data()),
+        default_search_provider_[kDefaultSearchMain]->GetEngineType(search_terms_data()),
         SEARCH_ENGINE_MAX);
   }
 }
@@ -972,16 +1198,14 @@ std::u16string TemplateURLService::GetKeywordShortName(
 }
 
 void TemplateURLService::OnHistoryURLVisited(const URLVisitedDetails& details) {
-#if defined(VIVALDI_BUILD)
-  // This interferes with keyword storage in history
-  // and we do not use it at the moment anyway
-  return;
-#else
+  // Vivaldi doesn't keep track of keyword navigation when visiting
+  // search engine pages-
+  if (!details.vivaldi_is_from_url_field && vivaldi::IsVivaldiRunning())
+    return;
   if (!loaded_)
     visits_to_add_.push_back(details);
   else
     UpdateKeywordSearchTermsForURL(details);
-#endif
 }
 
 void TemplateURLService::Shutdown() {
@@ -1085,7 +1309,12 @@ absl::optional<syncer::ModelError> TemplateURLService::ProcessSyncChanges(
       //
       // In the past, we tried re-creating the deleted TemplateURL, but it was
       // likely a source of duplicate search engine entries. crbug.com/1022775
-      if (existing_turl != GetDefaultSearchProvider()) {
+      bool remove_turl = true;
+      for (int i = 0; i < kDefaultSearchTypeCount; i++) {
+        if (existing_turl == GetDefaultSearchProvider(DefaultSearchType(i)))
+          remove_turl = false;
+      }
+      if (remove_turl) {
         Remove(existing_turl);
         LogSearchTemplateURLEvent(SYNC_DELETE_SUCCESS);
       } else {
@@ -1116,7 +1345,8 @@ absl::optional<syncer::ModelError> TemplateURLService::ProcessSyncChanges(
 
       TemplateURL* added = Add(std::make_unique<TemplateURL>(data));
       if (added) {
-        MaybeUpdateDSEViaPrefs(added);
+        for (int i = 0; i < kDefaultSearchTypeCount; i++)
+        MaybeUpdateDSEViaPrefs(DefaultSearchType(i), added);
 
         LogSearchTemplateURLEvent(SYNC_ADD_SUCCESS);
       } else {
@@ -1139,7 +1369,8 @@ absl::optional<syncer::ModelError> TemplateURLService::ProcessSyncChanges(
       bool update_success = Update(existing_turl, *turl);
       DCHECK(update_success);
 
-      MaybeUpdateDSEViaPrefs(existing_turl);
+      for (int i = 0; i < kDefaultSearchTypeCount; i++)
+      MaybeUpdateDSEViaPrefs(DefaultSearchType(i), existing_turl);
       LogSearchTemplateURLEvent(SYNC_UPDATE_SUCCESS);
     }
   }
@@ -1394,6 +1625,8 @@ syncer::SyncData TemplateURLService::CreateSyncDataFromTemplateURL(
   for (size_t i = 0; i < turl.alternate_urls().size(); ++i)
     se_specifics->add_alternate_urls(turl.alternate_urls()[i]);
   se_specifics->set_is_active(ActiveStatusToSync(turl.is_active()));
+  *se_specifics->mutable_unique_position() =
+      turl.data().vivaldi_position.ToProto();
 
   return syncer::SyncData::CreateLocalData(se_specifics->sync_guid(),
                                            se_specifics->keyword(),
@@ -1416,7 +1649,10 @@ TemplateURLService::CreateTemplateURLFromTemplateURLAndSyncData(
 
   // Past bugs might have caused either of these fields to be empty.  Just
   // delete this data off the server.
-  if (specifics.url().empty() || specifics.sync_guid().empty()) {
+  // Vivaldi addition: We use the unique position filed to detect turls added to
+  // sync before we started actively using the template url code for ourselves-
+  // Any of those old turls can be disposed of.
+  if (specifics.url().empty() || specifics.sync_guid().empty() || (!specifics.unique_position().has_custom_compressed_v1() && !existing_turl)) {
     change_list->push_back(
         syncer::SyncChange(FROM_HERE,
                            syncer::SyncChange::ACTION_DELETE,
@@ -1466,6 +1702,8 @@ TemplateURLService::CreateTemplateURLFromTemplateURLAndSyncData(
   for (int i = 0; i < specifics.alternate_urls_size(); ++i)
     data.alternate_urls.push_back(specifics.alternate_urls(i));
   data.is_active = ActiveStatusFromSync(specifics.is_active());
+  data.vivaldi_position =
+      syncer::UniquePosition::FromProto(specifics.unique_position());
 
   std::unique_ptr<TemplateURL> turl(new TemplateURL(data));
   // If this TemplateURL matches a built-in prepopulated template URL, it's
@@ -1515,20 +1753,24 @@ void TemplateURLService::Init(const Initializer* initializers,
 
   if (prefs_) {
     pref_change_registrar_.Init(prefs_);
+    for (int i = 0; i < kDefaultSearchTypeCount; i++) {
     pref_change_registrar_.Add(
-        prefs::kSyncedDefaultSearchProviderGUID,
+        VivaldiGetDefaultProviderGuidPrefForType(DefaultSearchType(i)),
         base::BindRepeating(
             &TemplateURLService::OnSyncedDefaultSearchProviderGUIDChanged,
-            base::Unretained(this)));
+            base::Unretained(this), DefaultSearchType(i)));
+    }
   }
-
-  DefaultSearchManager::Source source = DefaultSearchManager::FROM_USER;
-  const TemplateURLData* dse =
-      default_search_manager_.GetDefaultSearchEngine(&source);
 
   Scoper scoper(this);
 
-  ApplyDefaultSearchChange(dse, source);
+  for (int i = 0; i < kDefaultSearchTypeCount; i++) {
+  DefaultSearchManager::Source source = DefaultSearchManager::FROM_USER;
+  const TemplateURLData* dse =
+      default_search_manager_[i].GetDefaultSearchEngine(&source);
+
+  ApplyDefaultSearchChange(DefaultSearchType(i), dse, source);
+  }
 
   if (num_initializers > 0) {
     // This path is only hit by test code and is used to simulate a loaded
@@ -1547,11 +1789,13 @@ void TemplateURLService::Init(const Initializer* initializers,
       data.SetShortName(base::UTF8ToUTF16(initializers[i].content));
       data.SetKeyword(base::UTF8ToUTF16(initializers[i].keyword));
       data.SetURL(initializers[i].url);
+      // Set all to active by default for testing purposes.
+      data.is_active = TemplateURLData::ActiveStatus::kTrue;
       Add(std::make_unique<TemplateURL>(data));
 
       // Set the first provided identifier to be the default.
       if (i == 0)
-        default_search_manager_.SetUserSelectedDefaultSearchEngine(data);
+        default_search_manager_[kDefaultSearchMain].SetUserSelectedDefaultSearchEngine(data);
     }
   }
 }
@@ -1631,12 +1875,17 @@ void TemplateURLService::ChangeToLoadedState() {
   provider_map_->Init(template_urls_, search_terms_data());
   loaded_ = true;
 
+  // If several defaults point to the same engine, we want the values from the
+  // main one to be the one to apply.
+  for (int i = kDefaultSearchTypeCount - 1; i >= 0; i--) {
   ApplyDefaultSearchChangeNoMetrics(
-      initial_default_search_provider_
-          ? &initial_default_search_provider_->data()
+      DefaultSearchType(i),
+      initial_default_search_provider_[i]
+          ? &initial_default_search_provider_[i]->data()
           : nullptr,
-      default_search_provider_source_);
-  initial_default_search_provider_.reset();
+      default_search_provider_source_[i]);
+  initial_default_search_provider_[i].reset();
+  }
 
   if (on_loaded_callback_for_sync_)
     std::move(on_loaded_callback_for_sync_).Run();
@@ -1689,8 +1938,11 @@ bool TemplateURLService::Update(TemplateURL* existing_turl,
 
   // Even if the DSE is controlled by an extension or policy, update the user
   // preferences as they may take over later.
-  if (default_search_provider_source_ != DefaultSearchManager::FROM_FALLBACK)
-    MaybeUpdateDSEViaPrefs(existing_turl);
+  for (int i = 0; i < kDefaultSearchTypeCount; i++) {
+    if (default_search_provider_source_[i] !=
+        DefaultSearchManager::FROM_FALLBACK)
+      MaybeUpdateDSEViaPrefs(DefaultSearchType(i), existing_turl);
+  }
 
   return true;
 }
@@ -1709,16 +1961,17 @@ void TemplateURLService::UpdateTemplateURLIfPrepopulated(
   for (const auto& url : prepopulated_urls) {
     if (url->prepopulate_id == prepopulate_id) {
       MergeIntoPrepopulatedEngineData(template_url, url.get());
+      url.get()->is_active = template_url->is_active();
       template_url->CopyFrom(TemplateURL(*url));
     }
   }
 }
 
-void TemplateURLService::MaybeUpdateDSEViaPrefs(TemplateURL* synced_turl) {
+void TemplateURLService::MaybeUpdateDSEViaPrefs(DefaultSearchType type, TemplateURL* synced_turl) {
   if (prefs_ &&
       (synced_turl->sync_guid() ==
-          prefs_->GetString(prefs::kSyncedDefaultSearchProviderGUID))) {
-    default_search_manager_.SetUserSelectedDefaultSearchEngine(
+          prefs_->GetString(VivaldiGetDefaultProviderGuidPrefForType(type)))) {
+    default_search_manager_[type].SetUserSelectedDefaultSearchEngine(
         synced_turl->data());
   }
 }
@@ -1739,7 +1992,9 @@ void TemplateURLService::UpdateKeywordSearchTermsForURL(
     if ((*i)->ExtractSearchTermsFromURL(details.url, search_terms_data(),
                                         &search_terms) &&
         !search_terms.empty()) {
-      if (details.is_keyword_transition) {
+      // We don't really use these in Vivaldi and they can cause trouble with
+      // our single-letter keywords.
+      if (details.is_keyword_transition && !vivaldi::IsVivaldiRunning()) {
         // The visit is the result of the user entering a keyword, generate a
         // KEYWORD_GENERATED visit for the KEYWORD so that the keyword typed
         // count is boosted.
@@ -1789,21 +2044,24 @@ void TemplateURLService::AddTabToSearchVisit(const TemplateURL& t_url) {
 }
 
 void TemplateURLService::ApplyDefaultSearchChange(
+    DefaultSearchType type,
     const TemplateURLData* data,
     DefaultSearchManager::Source source) {
-  if (!ApplyDefaultSearchChangeNoMetrics(data, source))
+  if (!ApplyDefaultSearchChangeNoMetrics(type, data, source))
     return;
 
+  if (type == kDefaultSearchMain)
   UMA_HISTOGRAM_ENUMERATION(
       "Search.DefaultSearchChangeOrigin", dsp_change_origin_, DSP_CHANGE_MAX);
 
-  if (GetDefaultSearchProvider() &&
-      GetDefaultSearchProvider()->HasGoogleBaseURLs(search_terms_data()) &&
+  if (type == kDefaultSearchMain && GetDefaultSearchProvider(type) &&
+      GetDefaultSearchProvider(type)->HasGoogleBaseURLs(search_terms_data()) &&
       !dsp_change_callback_.is_null())
     dsp_change_callback_.Run();
 }
 
 bool TemplateURLService::ApplyDefaultSearchChangeNoMetrics(
+    DefaultSearchType type,
     const TemplateURLData* data,
     DefaultSearchManager::Source source) {
   // We do not want any sort of reentrancy while changing the default search
@@ -1820,26 +2078,26 @@ bool TemplateURLService::ApplyDefaultSearchChangeNoMetrics(
     // of keywords from Web Data is the owner of everything including the
     // default.
     bool changed = !TemplateURL::MatchesData(
-        initial_default_search_provider_.get(), data, search_terms_data());
+        initial_default_search_provider_[type].get(), data, search_terms_data());
     TemplateURL::Type initial_engine_type =
         (source == DefaultSearchManager::FROM_EXTENSION)
             ? TemplateURL::NORMAL_CONTROLLED_BY_EXTENSION
             : TemplateURL::NORMAL;
-    initial_default_search_provider_ =
+    initial_default_search_provider_[type] =
         data ? std::make_unique<TemplateURL>(*data, initial_engine_type)
              : nullptr;
-    default_search_provider_source_ = source;
+    default_search_provider_source_[type] = source;
     return changed;
   }
 
   // This may be deleted later. Use exclusively for pointer comparison to detect
   // a change.
-  TemplateURL* previous_default_search_engine = default_search_provider_;
+  TemplateURL* previous_default_search_engine = default_search_provider_[type];
 
   Scoper scoper(this);
 
-  if (default_search_provider_source_ == DefaultSearchManager::FROM_POLICY ||
-      source == DefaultSearchManager::FROM_POLICY) {
+  if (type == kDefaultSearchMain && (default_search_provider_source_[type] == DefaultSearchManager::FROM_POLICY ||
+      source == DefaultSearchManager::FROM_POLICY)) {
     // We do this both to remove any no-longer-applicable policy-defined DSE as
     // well as to add the new one, if appropriate.
     UpdateProvidersCreatedByPolicy(
@@ -1849,63 +2107,66 @@ bool TemplateURLService::ApplyDefaultSearchChangeNoMetrics(
 
   // |default_search_provider_source_| must be set before calling Update(),
   // since that function needs to know the source of the update in question.
-  default_search_provider_source_ = source;
+  default_search_provider_source_[type] = source;
 
   if (!data) {
-    default_search_provider_ = nullptr;
+    default_search_provider_[type] = nullptr;
   } else if (source == DefaultSearchManager::FROM_EXTENSION) {
-    default_search_provider_ = FindMatchingDefaultExtensionTemplateURL(*data);
-    DCHECK(default_search_provider_);
+    default_search_provider_[type] = FindMatchingDefaultExtensionTemplateURL(*data);
+    DCHECK(default_search_provider_[type]);
   } else if (source == DefaultSearchManager::FROM_FALLBACK) {
-    default_search_provider_ =
+    default_search_provider_[type] =
         FindPrepopulatedTemplateURL(data->prepopulate_id);
-    if (default_search_provider_) {
+    if (default_search_provider_[type]) {
       TemplateURLData update_data(*data);
-      update_data.sync_guid = default_search_provider_->sync_guid();
+      update_data.sync_guid = default_search_provider_[type]->sync_guid();
 
       // Now that we are auto-updating the favicon_url as the user browses,
       // respect the favicon_url entry in the database, instead of falling back
       // to the one in the prepopulated list.
-      update_data.favicon_url = default_search_provider_->favicon_url();
+      update_data.favicon_url = default_search_provider_[type]->favicon_url();
 
-      if (!default_search_provider_->safe_for_autoreplace()) {
+      update_data.vivaldi_position =
+          default_search_provider_[type]->data().vivaldi_position;
+
+      if (!default_search_provider_[type]->safe_for_autoreplace()) {
         update_data.safe_for_autoreplace = false;
-        update_data.SetKeyword(default_search_provider_->keyword());
-        update_data.SetShortName(default_search_provider_->short_name());
+        update_data.SetKeyword(default_search_provider_[type]->keyword());
+        update_data.SetShortName(default_search_provider_[type]->short_name());
       }
-      Update(default_search_provider_, TemplateURL(update_data));
+      Update(default_search_provider_[type], TemplateURL(update_data));
     } else {
       // Normally the prepopulated fallback should be present in
       // |template_urls_|, but in a few cases it might not be:
       // (1) Tests that initialize the TemplateURLService in peculiar ways.
       // (2) If the user deleted the pre-populated default and we subsequently
       // lost their user-selected value.
-      default_search_provider_ = Add(std::make_unique<TemplateURL>(*data));
-      DCHECK(default_search_provider_)
+      default_search_provider_[type] = Add(std::make_unique<TemplateURL>(*data));
+      DCHECK(default_search_provider_[type])
           << "Add() to repair the DSE must never fail.";
     }
   } else if (source == DefaultSearchManager::FROM_USER) {
-    default_search_provider_ = GetTemplateURLForGUID(data->sync_guid);
-    if (!default_search_provider_ && data->prepopulate_id) {
-      default_search_provider_ =
+    default_search_provider_[type] = GetTemplateURLForGUID(data->sync_guid);
+    if (!default_search_provider_[type] && data->prepopulate_id) {
+      default_search_provider_[type] =
           FindPrepopulatedTemplateURL(data->prepopulate_id);
     }
     TemplateURLData new_data(*data);
-    if (default_search_provider_) {
-      Update(default_search_provider_, TemplateURL(new_data));
+    if (default_search_provider_[type]) {
+      Update(default_search_provider_[type], TemplateURL(new_data));
     } else {
       new_data.id = kInvalidTemplateURLID;
-      default_search_provider_ = Add(std::make_unique<TemplateURL>(new_data));
-      DCHECK(default_search_provider_)
+      default_search_provider_[type] = Add(std::make_unique<TemplateURL>(new_data));
+      DCHECK(default_search_provider_[type])
           << "Add() to repair the DSE must never fail.";
     }
-    if (default_search_provider_ && prefs_) {
-      prefs_->SetString(prefs::kSyncedDefaultSearchProviderGUID,
-                        default_search_provider_->sync_guid());
+    if (default_search_provider_[type] && prefs_) {
+      prefs_->SetString(VivaldiGetDefaultProviderGuidPrefForType(type),
+                        default_search_provider_[type]->sync_guid());
     }
   }
 
-  bool changed = default_search_provider_ != previous_default_search_engine;
+  bool changed = default_search_provider_[type] != previous_default_search_engine;
   if (changed) {
     model_mutated_notification_pending_ = true;
   }
@@ -1931,6 +2192,28 @@ TemplateURL* TemplateURLService::Add(std::unique_ptr<TemplateURL> template_url,
   // No need to inform either Sync or flag on the model-mutated in that case.
   if (RemoveDuplicateReplaceableEnginesOf(template_url.get())) {
     return nullptr;
+  }
+
+  if (template_url->type() == TemplateURL::NORMAL &&
+      !template_url->data().vivaldi_position.IsValid()) {
+    syncer::UniquePosition invalid;
+    const syncer::UniquePosition position = std::accumulate(
+        template_urls_.begin(), template_urls_.end(), invalid,
+        [](const auto& position, const auto& template_url) {
+          if (!template_url->data().vivaldi_position.IsValid())
+            return position;
+          if (!position.IsValid() ||
+              position.LessThan(template_url->data().vivaldi_position))
+            return template_url->data().vivaldi_position;
+          return position;
+        });
+    if (position.IsValid())
+      template_url->data_.vivaldi_position = syncer::UniquePosition::After(
+          position, VivaldiGetPositionSuffix(template_url.get()));
+    else
+      template_url->data_.vivaldi_position =
+          syncer::UniquePosition::InitialPosition(
+              VivaldiGetPositionSuffix(template_url.get()));
   }
 
   TemplateURL* template_url_ptr = template_url.get();
@@ -1977,7 +2260,7 @@ void TemplateURLService::UpdateProvidersCreatedByPolicy(
         // by policy, and the default search provider from the preferences
         // is also set by policy and they are the same, keep the entry in the
         // database and the |default_search_provider|.
-        default_search_provider_ = template_url;
+        default_search_provider_[kDefaultSearchMain] = template_url;
         // Prevent us from saving any other entries, or creating a new one.
         default_from_prefs = nullptr;
         ++i;
@@ -1995,8 +2278,8 @@ void TemplateURLService::UpdateProvidersCreatedByPolicy(
   }
 
   if (default_from_prefs) {
-    default_search_provider_ = nullptr;
-    default_search_provider_source_ = DefaultSearchManager::FROM_POLICY;
+    default_search_provider_[kDefaultSearchMain] = nullptr;
+    default_search_provider_source_[kDefaultSearchMain] = DefaultSearchManager::FROM_POLICY;
     TemplateURLData new_data(*default_from_prefs);
     if (new_data.sync_guid.empty())
       new_data.GenerateSyncGUID();
@@ -2007,7 +2290,7 @@ void TemplateURLService::UpdateProvidersCreatedByPolicy(
         std::make_unique<TemplateURL>(new_data);
     TemplateURL* new_dse = new_dse_ptr.get();
     if (Add(std::move(new_dse_ptr)))
-      default_search_provider_ = new_dse;
+      default_search_provider_[kDefaultSearchMain] = new_dse;
   }
 }
 
@@ -2058,11 +2341,17 @@ void TemplateURLService::MergeInSyncTemplateURL(
       continue;
     }
 
+    bool is_default_search = false;
+    for (int i = 0; i < kDefaultSearchTypeCount; i++) {
+      if (conflicting_turl == GetDefaultSearchProvider(DefaultSearchType(i)))
+        is_default_search = true;
+    }
+
     // |conflicting_turl| is not yet known to Sync. If it is better, then we
     // want to transfer its values up to sync. Otherwise, we remove it and
     // allow the entry from Sync to overtake it in the model.
     const std::string guid = conflicting_turl->sync_guid();
-    if (conflicting_turl == GetDefaultSearchProvider() ||
+    if (is_default_search ||
         conflicting_turl->IsBetterThanEngineWithConflictingKeyword(sync_turl)) {
       ResetTemplateURLGUID(conflicting_turl, sync_turl->sync_guid());
       syncer::SyncData updated_sync_data =
@@ -2076,7 +2365,7 @@ void TemplateURLService::MergeInSyncTemplateURL(
     } else {
       // We guarantee that this isn't the local search provider. Otherwise,
       // local would have won.
-      DCHECK(conflicting_turl != GetDefaultSearchProvider());
+      DCHECK(!is_default_search);
       Remove(conflicting_turl);
     }
     // This TemplateURL was either removed or overwritten in the local model.
@@ -2110,20 +2399,25 @@ void TemplateURLService::MergeInSyncTemplateURL(
         sync_turl->IsBetterThanEngineWithConflictingKeyword(
             conflicting_prepopulated_turl)) {
       std::string guid = conflicting_prepopulated_turl->sync_guid();
-      if (conflicting_prepopulated_turl == default_search_provider_) {
+      auto* default_search_provider = std::find(
+          default_search_provider_.begin(), default_search_provider_.end(),
+          conflicting_prepopulated_turl);
+
+      if (default_search_provider != default_search_provider_.end()) {
+        auto type = std::distance(default_search_provider_.begin(), default_search_provider);
         bool pref_matched =
-            prefs_->GetString(prefs::kSyncedDefaultSearchProviderGUID) ==
-            default_search_provider_->sync_guid();
+            prefs_->GetString(VivaldiGetDefaultProviderGuidPrefForType(DefaultSearchType(type))) ==
+            (*default_search_provider)->sync_guid();
         // Update the existing engine in-place.
-        Update(default_search_provider_, TemplateURL(sync_turl->data()));
+        Update(*default_search_provider, TemplateURL(sync_turl->data()));
         // If prefs::kSyncedDefaultSearchProviderGUID matched
         // |default_search_provider_|'s GUID before, then update it to match its
         // new GUID. If the pref didn't match before, then it probably refers to
         // a new search engine from Sync which just hasn't been added locally
         // yet, so leave it alone in that case.
         if (pref_matched) {
-          prefs_->SetString(prefs::kSyncedDefaultSearchProviderGUID,
-                            default_search_provider_->sync_guid());
+          prefs_->SetString(VivaldiGetDefaultProviderGuidPrefForType(DefaultSearchType(type)),
+                            (*default_search_provider)->sync_guid());
         }
 
         should_add_sync_turl = false;
@@ -2145,7 +2439,8 @@ void TemplateURLService::MergeInSyncTemplateURL(
     base::AutoReset<DefaultSearchChangeOrigin> change_origin(
         &dsp_change_origin_, DSP_CHANGE_SYNC_ADD);
     if (Add(std::move(added_ptr)))
-      MaybeUpdateDSEViaPrefs(added);
+      for (int i = 0; i < kDefaultSearchTypeCount; i++)
+      MaybeUpdateDSEViaPrefs(DefaultSearchType(i), added);
   }
 }
 
@@ -2163,20 +2458,20 @@ void TemplateURLService::PatchMissingSyncGUIDs(
   }
 }
 
-void TemplateURLService::OnSyncedDefaultSearchProviderGUIDChanged() {
+void TemplateURLService::OnSyncedDefaultSearchProviderGUIDChanged(DefaultSearchType type) {
   base::AutoReset<DefaultSearchChangeOrigin> change_origin(
       &dsp_change_origin_, DSP_CHANGE_SYNC_PREF);
 
   std::string new_guid =
-      prefs_->GetString(prefs::kSyncedDefaultSearchProviderGUID);
+      prefs_->GetString(VivaldiGetDefaultProviderGuidPrefForType(type));
   if (new_guid.empty()) {
-    default_search_manager_.ClearUserSelectedDefaultSearchEngine();
+    default_search_manager_[type].ClearUserSelectedDefaultSearchEngine();
     return;
   }
 
   const TemplateURL* turl = GetTemplateURLForGUID(new_guid);
   if (turl)
-    default_search_manager_.SetUserSelectedDefaultSearchEngine(turl->data());
+    default_search_manager_[type].SetUserSelectedDefaultSearchEngine(turl->data());
 }
 
 void TemplateURLService::MaybeSetIsActiveSearchEngines(
@@ -2334,9 +2629,85 @@ bool TemplateURLService::RemoveDuplicateReplaceableEnginesOf(
 
 bool TemplateURLService::MatchesDefaultSearchProvider(TemplateURL* turl) const {
   DCHECK(turl);
-  const TemplateURL* default_provider = GetDefaultSearchProvider();
+  for (int i = 0; i < kDefaultSearchTypeCount; i++) {
+  const TemplateURL* default_provider = GetDefaultSearchProvider(DefaultSearchType(i));
   if (!default_provider)
-    return false;
+    continue;
 
   return turl->sync_guid() == default_provider->sync_guid();
+  }
+  return false;
+}
+
+void TemplateURLService::ResetTemplateURL(
+    TemplateURL* url,
+    const std::u16string& title,
+    const std::u16string& keyword,
+    const std::string& search_url,
+    const std::string& search_post_params,
+    const std::string& suggest_url,
+    const std::string& suggest_post_params,
+    const std::string& image_url,
+    const std::string& image_post_params,
+    const GURL& favicon_url) {
+  DCHECK(!IsCreatedByExtension(url));
+  DCHECK(!keyword.empty());
+  DCHECK(!search_url.empty());
+  TemplateURLData data(url->data());
+  // If we change anything fundamental about a prepopulated engine,
+  // it needs to be removed and re-added as a new engine instead of
+  // simply updated
+  bool reset_prepopulated =
+      data.prepopulate_id > 0 &&
+      (search_url != data.url() ||
+       search_post_params != data.search_url_post_params ||
+       suggest_url != data.suggestions_url ||
+       suggest_post_params != data.suggestions_url_post_params ||
+       image_url != data.image_url ||
+       image_post_params != data.image_url_post_params);
+
+  data.SetShortName(title);
+  data.SetKeyword(keyword);
+  data.SetURL(search_url);
+  data.search_url_post_params = search_post_params;
+  data.suggestions_url = suggest_url;
+  data.suggestions_url_post_params = suggest_post_params;
+  data.image_url = image_url;
+  data.image_url_post_params = image_post_params;
+  data.favicon_url = favicon_url;
+  data.safe_for_autoreplace = false;
+  data.last_modified = clock_->Now();
+  data.is_active = TemplateURLData::ActiveStatus::kTrue;
+
+  if (!reset_prepopulated) {
+    Update(url, TemplateURL(data));
+    return;
+  }
+
+  data.prepopulate_id = 0;
+  Update(url, TemplateURL(data));
+
+  for (int i = 0; i < kDefaultSearchTypeCount; i++) {
+    if (url == default_search_provider_[i] &&
+        (!prefs_ || prefs_
+                        ->GetString(VivaldiGetDefaultProviderGuidPrefForType(
+                            DefaultSearchType(i)))
+                        .empty()))
+      default_search_manager_[i].SetUserSelectedDefaultSearchEngine(
+          url->data());
+  }
+}
+
+void TemplateURLService::VivaldiSetDefaultOverride(TemplateURL* url) {
+  vivaldi_default_override_ = url;
+  for (auto& observer : model_observers_) {
+    observer.OnTemplateURLServiceChanged();
+  }
+}
+
+void TemplateURLService::VivaldiResetDefaultOverride() {
+  vivaldi_default_override_ = nullptr;
+  for (auto& observer : model_observers_) {
+    observer.OnTemplateURLServiceChanged();
+  }
 }

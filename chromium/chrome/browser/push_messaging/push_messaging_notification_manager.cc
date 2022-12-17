@@ -15,7 +15,6 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/notifications/platform_notification_service_factory.h"
@@ -298,7 +297,7 @@ bool PushMessagingNotificationManager::ShouldSkipUserVisibleOnlyRequirements(
   // This is a short-term exception to user visible only enforcement added
   // to support for "Messages for Web" integration on ChromeOS.
 
-  chromeos::multidevice_setup::MultiDeviceSetupClient* multidevice_setup_client;
+  ash::multidevice_setup::MultiDeviceSetupClient* multidevice_setup_client;
   if (test_multidevice_setup_client_) {
     multidevice_setup_client = test_multidevice_setup_client_;
   } else {
@@ -312,8 +311,8 @@ bool PushMessagingNotificationManager::ShouldSkipUserVisibleOnlyRequirements(
 
   // Check if messages feature is enabled
   if (multidevice_setup_client->GetFeatureState(
-          chromeos::multidevice_setup::mojom::Feature::kMessages) !=
-      chromeos::multidevice_setup::mojom::FeatureState::kEnabledByUser) {
+          ash::multidevice_setup::mojom::Feature::kMessages) !=
+      ash::multidevice_setup::mojom::FeatureState::kEnabledByUser) {
     return false;
   }
 
@@ -341,8 +340,7 @@ bool PushMessagingNotificationManager::ShouldSkipUserVisibleOnlyRequirements(
 }
 
 void PushMessagingNotificationManager::SetTestMultiDeviceSetupClient(
-    chromeos::multidevice_setup::MultiDeviceSetupClient*
-        multidevice_setup_client) {
+    ash::multidevice_setup::MultiDeviceSetupClient* multidevice_setup_client) {
   test_multidevice_setup_client_ = multidevice_setup_client;
 }
 

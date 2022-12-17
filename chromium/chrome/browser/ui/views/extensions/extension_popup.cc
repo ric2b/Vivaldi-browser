@@ -110,7 +110,7 @@ void ExtensionPopup::AddedToWidget() {
   const bool contents_has_rounded_corners =
       extension_view_->holder()->SetCornerRadii(gfx::RoundedCornersF(radius));
   SetBorder(views::CreateEmptyBorder(
-      gfx::Insets(contents_has_rounded_corners ? 0 : radius, 0)));
+      gfx::Insets::VH(contents_has_rounded_corners ? 0 : radius, 0)));
 }
 
 void ExtensionPopup::OnWidgetActivationChanged(views::Widget* widget,
@@ -190,12 +190,17 @@ void ExtensionPopup::OnExtensionUnloaded(
     RemoveChildViewT(extension_view_.get());
 
     extension_host_observation_.Reset();
+    // Note: it's important that we unregister the devtools observation *before*
+    // we destroy `host_`. Otherwise, destroying `host_` can synchronously cause
+    // the associated WebContents to be destroyed, which will cause devtools to
+    // detach, which will notify our observer, where we rely on `host_` - all
+    // synchronously.
+    scoped_devtools_observation_.reset();
     host_.reset();
-    // Stop observing the registry and devtools immediately to prevent any
-    // subsequent notifications, since Widget::Close is asynchronous.
+    // Stop observing the registry immediately to prevent any subsequent
+    // notifications, since Widget::Close is asynchronous.
     DCHECK(extension_registry_observation_.IsObserving());
     extension_registry_observation_.Reset();
-    scoped_devtools_observation_.reset();
 
     GetWidget()->Close();
   }

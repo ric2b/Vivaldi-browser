@@ -269,6 +269,14 @@ class GaiaSigninElement extends GaiaSigninElementBase {
         type: Boolean,
         value: loadTimeData.getBoolean('isRedirectToDefaultIdPEnabled'),
       },
+
+      /**
+       * @private {string}
+       */
+      allowlistError_: {
+        type: String,
+        value: 'allowlistErrorConsumer',
+      },
     };
   }
 
@@ -326,13 +334,6 @@ class GaiaSigninElement extends GaiaSigninElementBase {
     this.authCompleted_ = false;
 
     /**
-     * SAML password confirmation attempt count.
-     * @type {number}
-     * @private
-     */
-    this.samlPasswordConfirmAttempt_ = 0;
-
-    /**
      * Whether the result was reported to the handler for the most recent PIN
      * dialog.
      * @type {boolean}
@@ -370,11 +371,6 @@ class GaiaSigninElement extends GaiaSigninElementBase {
   /** @override */
   ready() {
     super.ready();
-    this.authenticator_.confirmPasswordCallback =
-        this.onAuthConfirmPassword_.bind(this);
-    this.authenticator_.onePasswordCallback =
-        this.onAuthOnePassword_.bind(this);
-    this.authenticator_.noPasswordCallback = this.onAuthNoPassword_.bind(this);
     this.authenticator_.insecureContentBlockedCallback =
         this.onInsecureContentBlocked_.bind(this);
     this.authenticator_.missingGaiaInfoCallback =
@@ -382,16 +378,6 @@ class GaiaSigninElement extends GaiaSigninElementBase {
     this.authenticator_.samlApiUsedCallback = this.samlApiUsed_.bind(this);
     this.authenticator_.recordSAMLProviderCallback =
         this.recordSAMLProvider_.bind(this);
-    this.authenticator_.getIsSamlUserPasswordlessCallback =
-        this.getIsSamlUserPasswordless_.bind(this);
-
-    this.$['gaia-allowlist-error'].addEventListener('buttonclick', function() {
-      this.showAllowlistCheckFailedError(false);
-    }.bind(this));
-
-    this.$['gaia-allowlist-error'].addEventListener('linkclick', function() {
-      chrome.send('launchHelpApp', [HELP_CANT_ACCESS_ACCOUNT]);
-    });
 
     this.initializeLoginScreen('GaiaSigninScreen', {
       resetAllowed: true,
@@ -445,6 +431,7 @@ class GaiaSigninElement extends GaiaSigninElementBase {
    */
   loadAuthenticator_(doSamlRedirect) {
     this.loadingFrameContents_ = true;
+    this.isAllowlistErrorShown_ = false;
     this.isDefaultSsoProvider_ = doSamlRedirect;
     this.startLoadingTimer_();
 
@@ -536,15 +523,6 @@ class GaiaSigninElement extends GaiaSigninElementBase {
    * @param {Object} data Screen init payload
    */
   onBeforeShow(data) {
-    // Show spinner early.
-    // this.loadingFrameContents_ = true;
-    chrome.send('loginUIStateChanged', ['gaia-signin', true]);
-
-    // Ensure that GAIA signin (or loading UI) is actually visible.
-    window.requestAnimationFrame(function() {
-      chrome.send('loginVisible', ['gaia-loading']);
-    });
-
     // Re-enable navigation in case it was disabled before refresh.
     this.navigationEnabled_ = true;
 
@@ -592,7 +570,6 @@ class GaiaSigninElement extends GaiaSigninElementBase {
    * Event handler that is invoked just before the screen is hidden.
    */
   onBeforeHide() {
-    chrome.send('loginUIStateChanged', ['gaia-signin', false]);
     this.isShown_ = false;
   }
 
@@ -622,7 +599,6 @@ class GaiaSigninElement extends GaiaSigninElementBase {
     // Reset SAML
     this.isSaml_ = false;
     this.usedSaml_ = false;
-    this.samlPasswordConfirmAttempt_ = 0;
 
     // Reset the PIN dialog, in case it's shown.
     this.closePinDialog();
@@ -751,20 +727,6 @@ class GaiaSigninElement extends GaiaSigninElementBase {
   }
 
   /**
-   * Invoked when the authenticator requests whether the specified user is a
-   * user without a password (neither a manually entered one nor one provided
-   * via Credentials Passing API).
-   * @param {string} email
-   * @param {string} gaiaId
-   * @param {function(boolean)} callback
-   * @private
-   */
-  getIsSamlUserPasswordless_(email, gaiaId, callback) {
-    cr.sendWithPromise('getIsSamlUserPasswordless', email, gaiaId)
-        .then(callback);
-  }
-
-  /**
    * Invoked when the authenticator emits 'showView' event or when corresponding
    * guard time fires.
    * @private
@@ -784,92 +746,6 @@ class GaiaSigninElement extends GaiaSigninElementBase {
    */
   onLoginUIVisible_() {
     chrome.send('loginWebuiReady');
-    chrome.send('loginVisible', ['gaia-signin']);
-  }
-
-  /**
-   * TODO(crbug.com/1229130) - Remove suppression.
-   * login.ConfirmSamlPasswordScreen has a `show` method exposed through its
-   * usage of LoginScreenBehavior. Suppressing for now, but this should be
-   * improved.
-   *
-   * Invoked when the user has successfully authenticated via SAML,
-   * the Chrome Credentials Passing API was not used and the authenticator needs
-   * the user to confirm the scraped password.
-   * @param {string} email The authenticated user's e-mail.
-   * @param {number} passwordCount The number of passwords that were scraped.
-   * @private
-   * @suppress {missingProperties}
-   */
-  onAuthConfirmPassword_(email, passwordCount) {
-    if (this.samlPasswordConfirmAttempt_ == 0)
-      chrome.send('scrapedPasswordCount', [passwordCount]);
-
-    if (this.samlPasswordConfirmAttempt_ < 2) {
-      window.login.ConfirmSamlPasswordScreen.show(
-          email, false /* manual password entry */,
-          this.samlPasswordConfirmAttempt_,
-          this.onConfirmPasswordCollected_.bind(this));
-    } else {
-      chrome.send('scrapedPasswordVerificationFailed');
-      this.showFatalAuthError_(
-          OobeTypes.FatalErrorCode.SCRAPED_PASSWORD_VERIFICATION_FAILURE);
-    }
-  }
-
-  /**
-   * Invoked when the user has successfully authenticated via SAML,
-   * the Chrome Credentials Passing API was not used and exactly one password
-   * was scraped (so we didn't have to ask the user to confirm their password).
-   * @private
-   */
-  onAuthOnePassword_() {
-    chrome.send('scrapedPasswordCount', [1]);
-  }
-
-  /**
-   * Invoked when the confirm password screen is dismissed.
-   * @param {string} password The password entered at the confirm screen.
-   * @private
-   */
-  onConfirmPasswordCollected_(password) {
-    this.samlPasswordConfirmAttempt_++;
-    this.authenticator_.verifyConfirmedPassword(password);
-
-    // Shows signin UI again without changing states.
-    Oobe.showScreen({id: SCREEN_GAIA_SIGNIN});
-  }
-
-  /**
-   * TODO(crbug.com/1229130) - Remove suppression
-   * login.ConfirmSamlPasswordScreen has a `show` method exposed through its
-   * usage of LoginScreenBehavior. Suppressing for now, but this should be
-   * improved.
-   * Invoked when the user has successfully authenticated via SAML, the
-   * Chrome Credentials Passing API was not used and no passwords
-   * could be scraped.
-   * The user will be asked to pick a manual password for the device.
-   * @param {string} email The authenticated user's e-mail.
-   * @private
-   * @suppress {missingProperties} login.ConfirmSamlPasswordScreen
-   */
-  onAuthNoPassword_(email) {
-    chrome.send('scrapedPasswordCount', [0]);
-    window.login.ConfirmSamlPasswordScreen.show(
-        email, true /* manual password entry */,
-        this.samlPasswordConfirmAttempt_,
-        this.onManualPasswordCollected_.bind(this));
-  }
-
-  /**
-   * Invoked when the dialog where the user enters a manual password for the
-   * device, when password scraping fails.
-   * @param {string} password The password the user entered. Not necessarily
-   *     the same as their SAML password.
-   * @private
-   */
-  onManualPasswordCollected_(password) {
-    this.authenticator_.completeAuthWithManualPassword(password);
   }
 
   /**
@@ -933,8 +809,9 @@ class GaiaSigninElement extends GaiaSigninElementBase {
     } else {
       chrome.send('completeAuthentication', [
         credentials.gaiaId, credentials.email, credentials.password,
-        credentials.usingSAML, credentials.services,
-        credentials.passwordAttributes, credentials.syncTrustedVaultKeys || {}
+        credentials.scrapedSAMLPasswords, credentials.usingSAML,
+        credentials.services, credentials.passwordAttributes,
+        credentials.syncTrustedVaultKeys || {}
       ]);
     }
 
@@ -998,18 +875,6 @@ class GaiaSigninElement extends GaiaSigninElementBase {
   }
 
   /**
-   * Clears input fields and switches to input mode.
-   * @param {boolean} takeFocus True to take focus.
-   */
-  reset(takeFocus) {
-    // Reload and show the sign-in UI if needed.
-    this.authenticator_.resetStates();
-    if (takeFocus) {
-      Oobe.getInstance().setOobeUIState(OOBE_UI_STATE.GAIA_SIGNIN);
-    }
-  }
-
-  /**
    * Reloads extension frame.
    */
   doReload() {
@@ -1017,6 +882,7 @@ class GaiaSigninElement extends GaiaSigninElementBase {
       return;
     this.authenticator_.reload();
     this.loadingFrameContents_ = true;
+    this.isAllowlistErrorShown_ = false;
     this.startLoadingTimer_();
     this.authCompleted_ = false;
   }
@@ -1085,39 +951,27 @@ class GaiaSigninElement extends GaiaSigninElementBase {
   /**
    * Show/Hide error when user is not in allowlist. When UI is hidden GAIA is
    * reloaded.
-   * @param {boolean} show Show/hide error UI.
    * @param {!Object=} opt_data Optional additional information.
    */
-  showAllowlistCheckFailedError(show, opt_data) {
-    if (show) {
-      const isManaged = opt_data && opt_data.enterpriseManaged;
-      const isFamilyLinkAllowed = opt_data && opt_data.familyLinkAllowed;
-      let errorMessage = '';
-      if (isManaged && isFamilyLinkAllowed) {
-        errorMessage = 'allowlistErrorEnterpriseAndFamilyLink';
-      } else if (isManaged) {
-        errorMessage = 'allowlistErrorEnterprise';
-      } else {
-        errorMessage = 'allowlistErrorConsumer';
-      }
-
-      this.$['gaia-allowlist-error'].textContent =
-          loadTimeData.getValue(errorMessage);
-      // To make animations correct, we need to make sure Gaia is completely
-      // reloaded. Otherwise ChromeOS overlays hide and Gaia page is shown
-      // somewhere in the middle of animations.
-      if (this.screenMode_ == ScreenAuthMode.DEFAULT)
-        this.authenticator_.resetWebview();
-
-      // It might show the OOBE screen id=SCREEN_CONFIRM_PASSWORD.
-      // Ensures showing the screen id=SCREEN_GAIA_SIGNIN.
-      Oobe.showScreen({id: SCREEN_GAIA_SIGNIN});
-      this.$['gaia-allowlist-error'].submitButton.focus();
+  showAllowlistCheckFailedError(opt_data) {
+    const isManaged = opt_data && opt_data.enterpriseManaged;
+    const isFamilyLinkAllowed = opt_data && opt_data.familyLinkAllowed;
+    if (isManaged && isFamilyLinkAllowed) {
+      this.allowlistError_ = 'allowlistErrorEnterpriseAndFamilyLink';
+    } else if (isManaged) {
+      this.allowlistError_ = 'allowlistErrorEnterprise';
     } else {
-      Oobe.showSigninUI('');
+      this.allowlistError_ = 'allowlistErrorConsumer';
     }
 
-    this.isAllowlistErrorShown_ = show;
+    // To make animations correct, we need to make sure Gaia is completely
+    // reloaded. Otherwise ChromeOS overlays hide and Gaia page is shown
+    // somewhere in the middle of animations.
+    if (this.screenMode_ == ScreenAuthMode.DEFAULT)
+      this.authenticator_.resetWebview();
+
+    this.$['gaia-allowlist-error'].submitButton.focus();
+    this.isAllowlistErrorShown_ = true;
   }
 
   /**
@@ -1304,6 +1158,14 @@ class GaiaSigninElement extends GaiaSigninElementBase {
       return this.i18n('samlNoticeWithVideo', authDomain);
     }
     return '';
+  }
+
+  onAllowlistErrorTryAgainClick_() {
+    this.userActed('retry');
+  }
+
+  onAllowlistErrorLinkClick_() {
+    chrome.send('launchHelpApp', [HELP_CANT_ACCESS_ACCOUNT]);
   }
 }
 

@@ -28,14 +28,14 @@ import {loadTimeData} from '//resources/js/load_time_data.m.js';
 import {DEFAULT_CROSTINI_VM, DEFAULT_CROSTINI_CONTAINER, CrostiniPortProtocol, CrostiniPortSetting, CrostiniDiskInfo, CrostiniPortActiveSetting, CrostiniBrowserProxy, CrostiniBrowserProxyImpl, PortState, MIN_VALID_PORT_NUMBER, MAX_VALID_PORT_NUMBER} from './crostini_browser_proxy.js';
 import './crostini_confirmation_dialog.js';
 import {PrefsBehavior} from '../prefs_behavior.js';
-import {DeepLinkingBehavior} from '../deep_linking_behavior.m.js';
-import {routes} from '../os_route.m.js';
+import {DeepLinkingBehavior} from '../deep_linking_behavior.js';
+import {routes} from '../os_route.js';
 import {Router, Route} from '../../router.js';
 import {RouteObserverBehavior} from '../route_observer_behavior.js';
-import {RouteOriginBehaviorImpl, RouteOriginBehavior} from '../route_origin_behavior.m.js';
+import {RouteOriginBehaviorImpl, RouteOriginBehavior} from '../route_origin_behavior.js';
 import {WebUIListenerBehavior} from '//resources/js/web_ui_listener_behavior.m.js';
 import '../../settings_shared_css.js';
-import {recordSettingChange, recordSearch, setUserActionRecorderForTesting, recordPageFocus, recordPageBlur, recordClick, recordNavigation} from '../metrics_recorder.m.js';
+import {recordSettingChange} from '../metrics_recorder.js';
 import './crostini_disk_resize_dialog.js';
 import './crostini_disk_resize_confirmation_dialog.js';
 import './crostini_port_forwarding.js';
@@ -324,7 +324,7 @@ Polymer({
               }
             },
             reason => {
-              console.log(`Unable to get info: ${reason}`);
+              console.warn(`Unable to get info: ${reason}`);
             });
   },
 

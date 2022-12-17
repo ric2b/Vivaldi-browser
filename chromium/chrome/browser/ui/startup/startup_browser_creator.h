@@ -79,9 +79,10 @@ class StartupBrowserCreator {
   StartupBrowserCreator& operator=(const StartupBrowserCreator&) = delete;
   ~StartupBrowserCreator();
 
-  // Adds a url to be opened during first run. This overrides the standard
+  // Adds urls to be opened during first run. This overrides the standard
   // tabs shown at first run.
-  void AddFirstRunTab(const GURL& url);
+  // Invalid URLs (per `GURL::is_valid()`) are skipped.
+  void AddFirstRunTabs(const std::vector<GURL>& urls);
 
 #if BUILDFLAG(IS_WIN)
   // Configures the instance to include the specified "welcome back" page in a
@@ -146,6 +147,10 @@ class StartupBrowserCreator {
       StartupProfileInfo profile_info,
       const Profiles& last_opened_profiles);
 
+  // Returns true if we're in the process of restoring the session for the
+  // last opened profiles in `LaunchBrowserForLastProfiles()`.
+  static bool IsLaunchingBrowserForLastProfiles();
+
   // Returns true during browser process startup if the previous browser was
   // restarted. This only returns true before the first StartupBrowserCreator
   // destructs. WasRestarted() will update prefs::kWasRestarted to false, but
@@ -164,23 +169,12 @@ class StartupBrowserCreator {
   static void RegisterLocalStatePrefs(PrefRegistrySimple* registry);
   static void RegisterProfilePrefs(PrefRegistrySimple* registry);
 
-#if BUILDFLAG(IS_MAC)
-  // Searches for web apps to handle `urls` and prompts the user to pick one.
-  // Runs `on_urls_unhandled_cb` (either synchronously or asynchronously) if no
-  // web app is found or selected to open `urls`.
-  static void MaybeHandleProfileAgnosticUrls(
-      const std::vector<GURL>& urls,
-      base::OnceClosure on_urls_unhandled_cb);
-#endif
-
   // Returns true if Chrome is intended to load a profile and launch without any
   // window.
   static bool ShouldLoadProfileWithoutWindow(
       const base::CommandLine& command_line);
 
  private:
-  friend class CloudPrintProxyPolicyTest;
-  friend class CloudPrintProxyPolicyStartupTest;
   friend class StartupBrowserCreatorImpl;
   friend class StartupBrowserCreatorInfobarsTest;
   friend class StartupBrowserCreatorInfobarsWithoutStartupWindowTest;
@@ -276,6 +270,8 @@ class StartupBrowserCreator {
   static bool was_restarted_read_;
 
   static bool in_synchronous_profile_launch_;
+
+  static bool is_launching_browser_for_last_profiles_;
 };
 
 // Returns true if |profile| has exited uncleanly and has not been launched

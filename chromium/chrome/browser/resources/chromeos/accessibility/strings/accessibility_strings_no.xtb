@@ -181,7 +181,7 @@ For å åpne Chrome-menyen, trykk på Alt+F.</translation>
 <translation id="2203046366315513658">Reduser verdien</translation>
 <translation id="2216790501338699346">Nettadresse for link: <ph name="LINK_URL" /></translation>
 <translation id="2220205454259065436">Flytt bakover ett tegn</translation>
-<translation id="2220529011494928058">Rapportér et problem</translation>
+<translation id="2220529011494928058">Rapporter et problem</translation>
 <translation id="2243633977138166243">Trykk på venstre- eller høyrepilen for å navigere; trykk på Enter for å aktivere</translation>
 <translation id="224426591676115802">Tale er ikke tilgjengelig for dette språket: <ph name="LANGUAGE" /></translation>
 <translation id="2247700577781885251">Avslutter læremodus</translation>
@@ -618,7 +618,6 @@ For å åpne Chrome-menyen, trykk på Alt+F.</translation>
 <translation id="5170206230005240598">Punktskrift-teksting er slått på</translation>
 <translation id="5183440668879371625">Punktskrift – forrige linje</translation>
 <translation id="5189244881767082992">Linje</translation>
-<translation id="5234747236692380506">skriv <ph name="TEXT" /></translation>
 <translation id="5263034204789987535">Lys maisgul</translation>
 <translation id="5263344797180442561">h2</translation>
 <translation id="528468243742722775">Avslutt</translation>
@@ -685,6 +684,8 @@ For å åpne Chrome-menyen, trykk på Alt+F.</translation>
 <translation id="5623842676595125836">Logg</translation>
 <translation id="5628125749885014029">h4</translation>
 <translation id="5632083598315326067">Grafikksymbol</translation>
+<translation id="5648939288050772726">Gratulerer! Du har lært det grunnleggende som trengs for å bruke ChromeVox. Husk at du kan åpne kommandomenyen i ChromeVox når som helst ved å trykke på søketasten + punktum. For å finne ut enda mer om ChromeVox og ChromeOS, les artiklene nedenfor.
+    Hvis du er ferdig med veiledningen, kan du bruke ChromeVox til å navigere til Lukk-knappen og klikke på den.</translation>
 <translation id="5653397561111110475">Bruk tilgjengelighetsfunksjonene for berøringsskjermen på Chromebook</translation>
 <translation id="5655682562155942719">Gå til-kommandoer</translation>
 <translation id="56637627897541303">Tekstområde</translation>
@@ -794,6 +795,7 @@ For å åpne Chrome-menyen, trykk på Alt+F.</translation>
 <translation id="641759969622533235">{COUNT,plural, =1{kolon}other{# kolontegn}}</translation>
 <translation id="6444046323172968959">Varseldialog</translation>
 <translation id="6452403590345320472">Innhold</translation>
+<translation id="6457542714329819968">type</translation>
 <translation id="6468049171101508116">Neste-knappen</translation>
 <translation id="646954774886932461">Stikkordregister</translation>
 <translation id="6475604559827479857">Farge for fremheving av ord:</translation>
@@ -966,8 +968,6 @@ For å åpne Chrome-menyen, trykk på Alt+F.</translation>
 <translation id="7701196182766842984">autolst</translation>
 <translation id="7713139339518499741">Naturlig stemme</translation>
 <translation id="7714340021005120797">Det finnes ingen flere kombinasjonsfelt</translation>
-<translation id="772146615414628379">Gratulerer! Du har lært det grunnleggende som trengs for å bruke ChromeVox. Husk at du kan åpne kommandomenyen i ChromeVox når som helst ved å trykke på Søk+punktum. For å finne ut enda mer om ChromeVox og Chrome OS, les artiklene nedenfor.
-    Hvis du er ferdig med veiledningen, kan du bruke ChromeVox til å navigere til Lukk-knappen og klikke på den.</translation>
 <translation id="7724603315864178912">Klipp ut</translation>
 <translation id="7731785449856576010">Det finnes ingen flere mediemoduler</translation>
 <translation id="7735498529470878067">Med berøringsutforskning kan du raskt få inntrykk av hva som er på skjermen.</translation>

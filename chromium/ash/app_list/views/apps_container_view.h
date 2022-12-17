@@ -14,8 +14,10 @@
 #include "ash/app_list/views/app_list_folder_controller.h"
 #include "ash/app_list/views/app_list_nudge_controller.h"
 #include "ash/app_list/views/app_list_page.h"
+#include "ash/app_list/views/app_list_toast_container_view.h"
 #include "ash/app_list/views/paged_apps_grid_view.h"
 #include "ash/app_list/views/recent_apps_view.h"
+#include "ash/app_list/views/search_result_page_dialog_controller.h"
 #include "ash/ash_export.h"
 #include "ash/public/cpp/pagination/pagination_model_observer.h"
 #include "base/callback_helpers.h"
@@ -28,11 +30,11 @@ class ApplicationDragAndDropHost;
 class AppListFolderItem;
 class AppListFolderView;
 class AppListNudgeController;
-class AppListToastContainerView;
 class ContentsView;
 class ContinueSectionView;
 class FolderBackgroundView;
 class PageSwitcher;
+class SearchResultPageAnchoredDialog;
 class SuggestionChipContainerView;
 class GradientLayerDelegate;
 
@@ -45,7 +47,8 @@ class ASH_EXPORT AppsContainerView
       public AppListFolderController,
       public PaginationModelObserver,
       public PagedAppsGridView::ContainerDelegate,
-      public RecentAppsView::Delegate {
+      public RecentAppsView::Delegate,
+      public AppListToastContainerView::Delegate {
  public:
   explicit AppsContainerView(ContentsView* contents_view);
 
@@ -116,6 +119,7 @@ class ASH_EXPORT AppsContainerView
   const char* GetClassName() const override;
   void OnGestureEvent(ui::GestureEvent* event) override;
   void OnBoundsChanged(const gfx::Rect& old_bounds) override;
+  void OnThemeChanged() override;
 
   // AppListPage overrides:
   void OnShown() override;
@@ -146,7 +150,8 @@ class ASH_EXPORT AppsContainerView
 
   // AppListFolderController:
   void ShowFolderForItemView(AppListItemView* folder_item_view,
-                             bool focus_name_input) override;
+                             bool focus_name_input,
+                             base::OnceClosure hide_callback) override;
   void ShowApps(AppListItemView* folder_item_view, bool select_folder) override;
   void ReparentFolderItemTransit(AppListFolderItem* folder_item) override;
   void ReparentDragEnded() override;
@@ -170,24 +175,36 @@ class ASH_EXPORT AppsContainerView
   void MoveFocusUpFromRecents() override;
   void MoveFocusDownFromRecents(int column) override;
 
+  // AppListToastContainerView::Delegate:
+  bool MoveFocusUpFromToast(int column) override;
+  bool MoveFocusDownFromToast(int column) override;
+  void OnNudgeRemoved() override;
+
   // Handles `AppListController::UpdateAppListWithNewSortingOrder()` for the
   // app list container.
   void UpdateForNewSortingOrder(
       const absl::optional<AppListSortOrder>& new_order,
       bool animate,
-      base::OnceClosure update_position_closure);
+      base::OnceClosure update_position_closure,
+      base::OnceClosure animation_done_closure);
 
   // Called when the app list temporary sort order changes. If `new_order` is
   // null, the temporary sort order is cleared.
   void OnTemporarySortOrderChanged(
       const absl::optional<AppListSortOrder>& new_order);
 
+  // Called by app list controller when the app list visibility is about to
+  // change - when the app list is about to be shown, initiates zero state
+  // search in order to update set of apps shown in recent apps and continue
+  // section contents.
+  void OnAppListVisibilityWillChange(bool visible);
+
   // Updates the nudge in `toast_container_` when app list visibility changes.
   void OnAppListVisibilityChanged(bool shown);
 
   ContinueSectionView* GetContinueSection();
   RecentAppsView* GetRecentApps();
-  views::View* GetSeparatorView();
+  views::Separator* separator() { return separator_; }
   PagedAppsGridView* apps_grid_view() { return apps_grid_view_; }
   FolderBackgroundView* folder_background_view() {
     return folder_background_view_;
@@ -209,14 +226,23 @@ class ASH_EXPORT AppsContainerView
     return app_list_nudge_controller_.get();
   }
 
-  // Updates recent apps from app list model.
-  void UpdateRecentApps();
+  // Updates recent apps from app list model. `needs_layout` indicates whether
+  // the apps container relaid out when the recent apps results are updated.
+  void UpdateRecentApps(bool needs_layout);
+
   // Updates suggestion chips from app list model.
   void UpdateSuggestionChips();
 
   // Temporarily disables blur on suggestion chips view background. The blur
   // will remained disabled until the returned closure runner goes out of scope.
   base::ScopedClosureRunner DisableSuggestionChipsBlur();
+
+  // Gets the height of the `separator_` including its vertical margin.
+  int GetSeparatorHeight();
+
+  SearchResultPageAnchoredDialog* dialog_for_test() {
+    return dialog_controller_->dialog();
+  }
 
  private:
   enum ShowState {
@@ -297,7 +323,7 @@ class ASH_EXPORT AppsContainerView
 
   // Called when the animation to fade out app list items is completed.
   // `aborted` indicates whether the fade out animation is aborted.
-  void OnAppsGridViewFadeOutAnimationEneded(
+  void OnAppsGridViewFadeOutAnimationEnded(
       const absl::optional<AppListSortOrder>& new_order,
       bool aborted);
 
@@ -305,9 +331,14 @@ class ASH_EXPORT AppsContainerView
   // `aborted` indicates whether the fade in animation is aborted.
   void OnAppsGridViewFadeInAnimationEnded(bool aborted);
 
-  // Called when the animation to fade in children views such as the undo toast
-  // is completed. `aborted` is true if the animation is aborted.
-  void OnFadeInChildrenAnimationEnded(bool aborted);
+  // Called at the end of the reorder animation. In detail, it is executed in
+  // the following scenarios:
+  // (1) At the end of the fade out animation when the fade out is aborted, or
+  // (2) At the end of the fade in animation.
+  void OnReorderAnimationEnded();
+
+  // Called after sort to handle focus.
+  void HandleFocusAfterSort();
 
   // While true, the gradient mask will not be removed as a mask layer until
   // cardified state ends.
@@ -321,6 +352,9 @@ class ASH_EXPORT AppsContainerView
 
   std::unique_ptr<AppListNudgeController> app_list_nudge_controller_;
 
+  // Controller for showing a modal dialog in the continue section.
+  std::unique_ptr<SearchResultPageDialogController> dialog_controller_;
+
   // The number of active requests to disable blur.
   size_t suggestion_chips_blur_disabler_count_ = 0;
 
@@ -331,6 +365,7 @@ class ASH_EXPORT AppsContainerView
   // The views below are owned by views hierarchy.
   SuggestionChipContainerView* suggestion_chip_container_view_ = nullptr;
   ContinueContainer* continue_container_ = nullptr;
+  views::Separator* separator_ = nullptr;
   AppListToastContainerView* toast_container_ = nullptr;
   PagedAppsGridView* apps_grid_view_ = nullptr;
   AppListFolderView* app_list_folder_view_ = nullptr;
@@ -364,9 +399,8 @@ class ASH_EXPORT AppsContainerView
   // out animation when items are reordered.
   base::OnceClosure update_position_closure_;
 
-  // The handle to abort the toast/continue section fade in animation triggered
-  // by app list reorder.
-  std::unique_ptr<views::AnimationAbortHandle> fade_in_abort_handle_;
+  // A closure that runs at the end of the reorder animation.
+  base::OnceClosure reorder_animation_done_closure_;
 
   base::WeakPtrFactory<AppsContainerView> weak_ptr_factory_{this};
 };

@@ -27,6 +27,7 @@
 #include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/storage_partition.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
+#include "third_party/blink/public/common/permissions_policy/policy_helper_public.h"
 #include "url/gurl.h"
 
 namespace {
@@ -129,30 +130,29 @@ apps::ShareTarget CreateRandomShareTarget(uint32_t suffix) {
   return share_target;
 }
 
-std::vector<PermissionsPolicyDeclaration> CreateRandomPermissionsPolicy(
+blink::ParsedPermissionsPolicy CreateRandomPermissionsPolicy(
     RandomHelper& random) {
   const int num_permissions_policy_declarations =
       random.next_uint(features.size());
 
-  std::vector<std::string> available_features;
-  for (const auto& feature : features)
-    available_features.push_back(feature);
+  std::vector<std::string> available_features = features;
 
   const auto suffix = random.next_uint();
   std::default_random_engine rng;
   std::shuffle(available_features.begin(), available_features.end(), rng);
 
-  std::vector<PermissionsPolicyDeclaration> permissions_policy(
+  blink::ParsedPermissionsPolicy permissions_policy(
       num_permissions_policy_declarations);
+  const auto& feature_name_map = blink::GetPermissionsPolicyNameToFeatureMap();
   for (int i = 0; i < num_permissions_policy_declarations; ++i) {
-    permissions_policy[i].feature = available_features[i];
+    permissions_policy[i].feature = feature_name_map.begin()->second;
     for (unsigned int j = 0; j < 5; ++j) {
       std::string suffix_str =
           base::NumberToString(suffix) + base::NumberToString(j);
 
       const auto origin =
           url::Origin::Create(GURL("https://app-" + suffix_str + ".com/"));
-      permissions_policy[i].allowlist.push_back(origin.Serialize());
+      permissions_policy[i].allowed_origins.push_back(origin);
     }
   }
   return permissions_policy;
@@ -236,7 +236,7 @@ std::vector<WebAppShortcutsMenuItemInfo> CreateRandomShortcutsMenuItemInfos(
     shortcut_info.SetShortcutIconInfosForPurpose(
         IconPurpose::MONOCHROME, std::move(shortcut_icons_monochrome));
 
-    shortcuts_menu_item_infos.emplace_back(std::move(shortcut_info));
+    shortcuts_menu_item_infos.push_back(std::move(shortcut_info));
   }
   return shortcuts_menu_item_infos;
 }
@@ -250,11 +250,9 @@ std::vector<IconSizes> CreateRandomDownloadedShortcutsMenuIconsSizes(
     std::vector<SquareSizePx> shortcuts_menu_icon_sizes_maskable;
     std::vector<SquareSizePx> shortcuts_menu_icon_sizes_monochrome;
     for (unsigned int j = 0; j < i; ++j) {
-      shortcuts_menu_icon_sizes_any.emplace_back(random.next_uint(256) + 1);
-      shortcuts_menu_icon_sizes_maskable.emplace_back(random.next_uint(256) +
-                                                      1);
-      shortcuts_menu_icon_sizes_monochrome.emplace_back(random.next_uint(256) +
-                                                        1);
+      shortcuts_menu_icon_sizes_any.push_back(random.next_uint(256) + 1);
+      shortcuts_menu_icon_sizes_maskable.push_back(random.next_uint(256) + 1);
+      shortcuts_menu_icon_sizes_monochrome.push_back(random.next_uint(256) + 1);
     }
     result.SetSizesForPurpose(IconPurpose::ANY,
                               std::move(shortcuts_menu_icon_sizes_any));
@@ -262,7 +260,7 @@ std::vector<IconSizes> CreateRandomDownloadedShortcutsMenuIconsSizes(
                               std::move(shortcuts_menu_icon_sizes_maskable));
     result.SetSizesForPurpose(IconPurpose::MONOCHROME,
                               std::move(shortcuts_menu_icon_sizes_monochrome));
-    results.emplace_back(std::move(result));
+    results.push_back(std::move(result));
   }
   return results;
 }
@@ -270,7 +268,7 @@ std::vector<IconSizes> CreateRandomDownloadedShortcutsMenuIconsSizes(
 }  // namespace
 
 std::unique_ptr<WebApp> CreateWebApp(const GURL& start_url,
-                                     Source::Type source_type) {
+                                     WebAppManagement::Type source_type) {
   const AppId app_id = GenerateAppId(/*manifest_id=*/absl::nullopt, start_url);
 
   auto web_app = std::make_unique<WebApp>(app_id);
@@ -305,18 +303,18 @@ std::unique_ptr<WebApp> CreateRandomWebApp(const GURL& base_url,
 
   // Generate all possible permutations of field values in a random way:
   if (AreSystemWebAppsSupported() && random.next_bool())
-    app->AddSource(Source::kSystem);
+    app->AddSource(WebAppManagement::kSystem);
   if (random.next_bool())
-    app->AddSource(Source::kPolicy);
+    app->AddSource(WebAppManagement::kPolicy);
   if (random.next_bool())
-    app->AddSource(Source::kWebAppStore);
+    app->AddSource(WebAppManagement::kWebAppStore);
   if (random.next_bool())
-    app->AddSource(Source::kSync);
+    app->AddSource(WebAppManagement::kSync);
   if (random.next_bool())
-    app->AddSource(Source::kDefault);
+    app->AddSource(WebAppManagement::kDefault);
   // Must always be at least one source.
   if (!app->HasAnySources())
-    app->AddSource(Source::kSync);
+    app->AddSource(WebAppManagement::kSync);
 
   if (random.next_bool()) {
     dark_mode_theme_color = SkColorSetA(random.next_uint(), SK_AlphaOPAQUE);
@@ -459,11 +457,8 @@ std::unique_ptr<WebApp> CreateRandomWebApp(const GURL& base_url,
   app->SetSyncFallbackData(std::move(sync_fallback_data));
 
   if (random.next_bool()) {
-    LaunchHandler launch_handler;
-    launch_handler.route_to = random.next_enum<LaunchHandler::RouteTo>();
-    launch_handler.navigate_existing_client =
-        random.next_enum<LaunchHandler::NavigateExistingClient>();
-    app->SetLaunchHandler(launch_handler);
+    app->SetLaunchHandler(
+        LaunchHandler{random.next_enum<LaunchHandler::RouteTo>()});
   }
 
   const base::Time manifest_update_time =
@@ -502,7 +497,6 @@ std::unique_ptr<WebApp> CreateRandomWebApp(const GURL& base_url,
 void TestAcceptDialogCallback(
     content::WebContents* initiator_web_contents,
     std::unique_ptr<WebAppInstallInfo> web_app_info,
-    ForInstallableSite for_installable_site,
     WebAppInstallationAcceptanceCallback acceptance_callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(std::move(acceptance_callback), true /*accept*/,
@@ -512,7 +506,6 @@ void TestAcceptDialogCallback(
 void TestDeclineDialogCallback(
     content::WebContents* initiator_web_contents,
     std::unique_ptr<WebAppInstallInfo> web_app_info,
-    ForInstallableSite for_installable_site,
     WebAppInstallationAcceptanceCallback acceptance_callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(std::move(acceptance_callback),
@@ -548,11 +541,11 @@ void CheckServiceWorkerStatus(const GURL& url,
   run_loop.Run();
 }
 
-void SetWebAppSettingsDictPref(Profile* profile, const base::StringPiece pref) {
+void SetWebAppSettingsListPref(Profile* profile, const base::StringPiece pref) {
   base::JSONReader::ValueWithError result =
       base::JSONReader::ReadAndReturnValueWithError(
           pref, base::JSONParserOptions::JSON_ALLOW_TRAILING_COMMAS);
-  DCHECK(result.value && result.value->is_dict()) << result.error_message;
+  DCHECK(result.value && result.value->is_list()) << result.error_message;
   profile->GetPrefs()->Set(prefs::kWebAppSettings, std::move(*result.value));
 }
 

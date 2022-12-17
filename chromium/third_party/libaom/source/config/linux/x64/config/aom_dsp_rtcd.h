@@ -29,6 +29,27 @@ unsigned int aom_avg_8x8_c(const uint8_t*, int p);
 unsigned int aom_avg_8x8_sse2(const uint8_t*, int p);
 #define aom_avg_8x8 aom_avg_8x8_sse2
 
+void aom_avg_8x8_quad_c(const uint8_t* s,
+                        int p,
+                        int x16_idx,
+                        int y16_idx,
+                        int* avg);
+void aom_avg_8x8_quad_sse2(const uint8_t* s,
+                           int p,
+                           int x16_idx,
+                           int y16_idx,
+                           int* avg);
+void aom_avg_8x8_quad_avx2(const uint8_t* s,
+                           int p,
+                           int x16_idx,
+                           int y16_idx,
+                           int* avg);
+RTCD_EXTERN void (*aom_avg_8x8_quad)(const uint8_t* s,
+                                     int p,
+                                     int x16_idx,
+                                     int y16_idx,
+                                     int* avg);
+
 void aom_blend_a64_hmask_c(uint8_t* dst,
                            uint32_t dst_stride,
                            const uint8_t* src0,
@@ -1961,6 +1982,31 @@ unsigned int aom_get_mb_ss_c(const int16_t*);
 unsigned int aom_get_mb_ss_sse2(const int16_t*);
 #define aom_get_mb_ss aom_get_mb_ss_sse2
 
+void aom_get_sse_sum_8x8_quad_c(const uint8_t* src_ptr,
+                                int source_stride,
+                                const uint8_t* ref_ptr,
+                                int ref_stride,
+                                unsigned int* sse,
+                                int* sum);
+void aom_get_sse_sum_8x8_quad_sse2(const uint8_t* src_ptr,
+                                   int source_stride,
+                                   const uint8_t* ref_ptr,
+                                   int ref_stride,
+                                   unsigned int* sse,
+                                   int* sum);
+void aom_get_sse_sum_8x8_quad_avx2(const uint8_t* src_ptr,
+                                   int source_stride,
+                                   const uint8_t* ref_ptr,
+                                   int ref_stride,
+                                   unsigned int* sse,
+                                   int* sum);
+RTCD_EXTERN void (*aom_get_sse_sum_8x8_quad)(const uint8_t* src_ptr,
+                                             int source_stride,
+                                             const uint8_t* ref_ptr,
+                                             int ref_stride,
+                                             unsigned int* sse,
+                                             int* sum);
+
 void aom_h_predictor_16x16_c(uint8_t* dst,
                              ptrdiff_t y_stride,
                              const uint8_t* above,
@@ -2146,6 +2192,19 @@ void aom_hadamard_8x8_sse2(const int16_t* src_diff,
                            tran_low_t* coeff);
 #define aom_hadamard_8x8 aom_hadamard_8x8_sse2
 
+void aom_hadamard_8x8_dual_c(const int16_t* src_diff,
+                             ptrdiff_t src_stride,
+                             int16_t* coeff);
+void aom_hadamard_8x8_dual_sse2(const int16_t* src_diff,
+                                ptrdiff_t src_stride,
+                                int16_t* coeff);
+void aom_hadamard_8x8_dual_avx2(const int16_t* src_diff,
+                                ptrdiff_t src_stride,
+                                int16_t* coeff);
+RTCD_EXTERN void (*aom_hadamard_8x8_dual)(const int16_t* src_diff,
+                                          ptrdiff_t src_stride,
+                                          int16_t* coeff);
+
 void aom_hadamard_lp_16x16_c(const int16_t* src_diff,
                              ptrdiff_t src_stride,
                              int16_t* coeff);
@@ -2292,6 +2351,27 @@ void aom_lpf_horizontal_14_dual_sse2(uint8_t* s,
                                      const uint8_t* thresh1);
 #define aom_lpf_horizontal_14_dual aom_lpf_horizontal_14_dual_sse2
 
+void aom_lpf_horizontal_14_quad_c(uint8_t* s,
+                                  int pitch,
+                                  const uint8_t* blimit0,
+                                  const uint8_t* limit0,
+                                  const uint8_t* thresh0);
+void aom_lpf_horizontal_14_quad_sse2(uint8_t* s,
+                                     int pitch,
+                                     const uint8_t* blimit0,
+                                     const uint8_t* limit0,
+                                     const uint8_t* thresh0);
+void aom_lpf_horizontal_14_quad_avx2(uint8_t* s,
+                                     int pitch,
+                                     const uint8_t* blimit0,
+                                     const uint8_t* limit0,
+                                     const uint8_t* thresh0);
+RTCD_EXTERN void (*aom_lpf_horizontal_14_quad)(uint8_t* s,
+                                               int pitch,
+                                               const uint8_t* blimit0,
+                                               const uint8_t* limit0,
+                                               const uint8_t* thresh0);
+
 void aom_lpf_horizontal_4_c(uint8_t* s,
                             int pitch,
                             const uint8_t* blimit,
@@ -2321,6 +2401,18 @@ void aom_lpf_horizontal_4_dual_sse2(uint8_t* s,
                                     const uint8_t* limit1,
                                     const uint8_t* thresh1);
 #define aom_lpf_horizontal_4_dual aom_lpf_horizontal_4_dual_sse2
+
+void aom_lpf_horizontal_4_quad_c(uint8_t* s,
+                                 int pitch,
+                                 const uint8_t* blimit0,
+                                 const uint8_t* limit0,
+                                 const uint8_t* thresh0);
+void aom_lpf_horizontal_4_quad_sse2(uint8_t* s,
+                                    int pitch,
+                                    const uint8_t* blimit0,
+                                    const uint8_t* limit0,
+                                    const uint8_t* thresh0);
+#define aom_lpf_horizontal_4_quad aom_lpf_horizontal_4_quad_sse2
 
 void aom_lpf_horizontal_6_c(uint8_t* s,
                             int pitch,
@@ -2352,6 +2444,27 @@ void aom_lpf_horizontal_6_dual_sse2(uint8_t* s,
                                     const uint8_t* thresh1);
 #define aom_lpf_horizontal_6_dual aom_lpf_horizontal_6_dual_sse2
 
+void aom_lpf_horizontal_6_quad_c(uint8_t* s,
+                                 int pitch,
+                                 const uint8_t* blimit0,
+                                 const uint8_t* limit0,
+                                 const uint8_t* thresh0);
+void aom_lpf_horizontal_6_quad_sse2(uint8_t* s,
+                                    int pitch,
+                                    const uint8_t* blimit0,
+                                    const uint8_t* limit0,
+                                    const uint8_t* thresh0);
+void aom_lpf_horizontal_6_quad_avx2(uint8_t* s,
+                                    int pitch,
+                                    const uint8_t* blimit0,
+                                    const uint8_t* limit0,
+                                    const uint8_t* thresh0);
+RTCD_EXTERN void (*aom_lpf_horizontal_6_quad)(uint8_t* s,
+                                              int pitch,
+                                              const uint8_t* blimit0,
+                                              const uint8_t* limit0,
+                                              const uint8_t* thresh0);
+
 void aom_lpf_horizontal_8_c(uint8_t* s,
                             int pitch,
                             const uint8_t* blimit,
@@ -2381,6 +2494,27 @@ void aom_lpf_horizontal_8_dual_sse2(uint8_t* s,
                                     const uint8_t* limit1,
                                     const uint8_t* thresh1);
 #define aom_lpf_horizontal_8_dual aom_lpf_horizontal_8_dual_sse2
+
+void aom_lpf_horizontal_8_quad_c(uint8_t* s,
+                                 int pitch,
+                                 const uint8_t* blimit0,
+                                 const uint8_t* limit0,
+                                 const uint8_t* thresh0);
+void aom_lpf_horizontal_8_quad_sse2(uint8_t* s,
+                                    int pitch,
+                                    const uint8_t* blimit0,
+                                    const uint8_t* limit0,
+                                    const uint8_t* thresh0);
+void aom_lpf_horizontal_8_quad_avx2(uint8_t* s,
+                                    int pitch,
+                                    const uint8_t* blimit0,
+                                    const uint8_t* limit0,
+                                    const uint8_t* thresh0);
+RTCD_EXTERN void (*aom_lpf_horizontal_8_quad)(uint8_t* s,
+                                              int pitch,
+                                              const uint8_t* blimit0,
+                                              const uint8_t* limit0,
+                                              const uint8_t* thresh0);
 
 void aom_lpf_vertical_14_c(uint8_t* s,
                            int pitch,
@@ -2412,6 +2546,18 @@ void aom_lpf_vertical_14_dual_sse2(uint8_t* s,
                                    const uint8_t* thresh1);
 #define aom_lpf_vertical_14_dual aom_lpf_vertical_14_dual_sse2
 
+void aom_lpf_vertical_14_quad_c(uint8_t* s,
+                                int pitch,
+                                const uint8_t* blimit0,
+                                const uint8_t* limit0,
+                                const uint8_t* thresh0);
+void aom_lpf_vertical_14_quad_sse2(uint8_t* s,
+                                   int pitch,
+                                   const uint8_t* blimit0,
+                                   const uint8_t* limit0,
+                                   const uint8_t* thresh0);
+#define aom_lpf_vertical_14_quad aom_lpf_vertical_14_quad_sse2
+
 void aom_lpf_vertical_4_c(uint8_t* s,
                           int pitch,
                           const uint8_t* blimit,
@@ -2441,6 +2587,18 @@ void aom_lpf_vertical_4_dual_sse2(uint8_t* s,
                                   const uint8_t* limit1,
                                   const uint8_t* thresh1);
 #define aom_lpf_vertical_4_dual aom_lpf_vertical_4_dual_sse2
+
+void aom_lpf_vertical_4_quad_c(uint8_t* s,
+                               int pitch,
+                               const uint8_t* blimit0,
+                               const uint8_t* limit0,
+                               const uint8_t* thresh0);
+void aom_lpf_vertical_4_quad_sse2(uint8_t* s,
+                                  int pitch,
+                                  const uint8_t* blimit0,
+                                  const uint8_t* limit0,
+                                  const uint8_t* thresh0);
+#define aom_lpf_vertical_4_quad aom_lpf_vertical_4_quad_sse2
 
 void aom_lpf_vertical_6_c(uint8_t* s,
                           int pitch,
@@ -2472,6 +2630,18 @@ void aom_lpf_vertical_6_dual_sse2(uint8_t* s,
                                   const uint8_t* thresh1);
 #define aom_lpf_vertical_6_dual aom_lpf_vertical_6_dual_sse2
 
+void aom_lpf_vertical_6_quad_c(uint8_t* s,
+                               int pitch,
+                               const uint8_t* blimit0,
+                               const uint8_t* limit0,
+                               const uint8_t* thresh0);
+void aom_lpf_vertical_6_quad_sse2(uint8_t* s,
+                                  int pitch,
+                                  const uint8_t* blimit0,
+                                  const uint8_t* limit0,
+                                  const uint8_t* thresh0);
+#define aom_lpf_vertical_6_quad aom_lpf_vertical_6_quad_sse2
+
 void aom_lpf_vertical_8_c(uint8_t* s,
                           int pitch,
                           const uint8_t* blimit,
@@ -2501,6 +2671,18 @@ void aom_lpf_vertical_8_dual_sse2(uint8_t* s,
                                   const uint8_t* limit1,
                                   const uint8_t* thresh1);
 #define aom_lpf_vertical_8_dual aom_lpf_vertical_8_dual_sse2
+
+void aom_lpf_vertical_8_quad_c(uint8_t* s,
+                               int pitch,
+                               const uint8_t* blimit0,
+                               const uint8_t* limit0,
+                               const uint8_t* thresh0);
+void aom_lpf_vertical_8_quad_sse2(uint8_t* s,
+                                  int pitch,
+                                  const uint8_t* blimit0,
+                                  const uint8_t* limit0,
+                                  const uint8_t* thresh0);
+#define aom_lpf_vertical_8_quad aom_lpf_vertical_8_quad_sse2
 
 unsigned int aom_masked_sad128x128_c(const uint8_t* src,
                                      int src_stride,
@@ -4350,6 +4532,20 @@ RTCD_EXTERN void (*aom_paeth_predictor_8x8)(uint8_t* dst,
                                             ptrdiff_t y_stride,
                                             const uint8_t* above,
                                             const uint8_t* left);
+
+void aom_pixel_scale_c(const int16_t* src_diff,
+                       ptrdiff_t src_stride,
+                       int16_t* coeff,
+                       int log_scale,
+                       int h8,
+                       int w8);
+void aom_pixel_scale_sse2(const int16_t* src_diff,
+                          ptrdiff_t src_stride,
+                          int16_t* coeff,
+                          int log_scale,
+                          int h8,
+                          int w8);
+#define aom_pixel_scale aom_pixel_scale_sse2
 
 void aom_quantize_b_c(const tran_low_t* coeff_ptr,
                       intptr_t n_coeffs,
@@ -8378,6 +8574,9 @@ static void setup_rtcd_internal(void) {
 
   (void)flags;
 
+  aom_avg_8x8_quad = aom_avg_8x8_quad_sse2;
+  if (flags & HAS_AVX2)
+    aom_avg_8x8_quad = aom_avg_8x8_quad_avx2;
   aom_blend_a64_hmask = aom_blend_a64_hmask_c;
   if (flags & HAS_SSE4_1)
     aom_blend_a64_hmask = aom_blend_a64_hmask_sse4_1;
@@ -8613,6 +8812,9 @@ static void setup_rtcd_internal(void) {
   aom_get_blk_sse_sum = aom_get_blk_sse_sum_sse2;
   if (flags & HAS_AVX2)
     aom_get_blk_sse_sum = aom_get_blk_sse_sum_avx2;
+  aom_get_sse_sum_8x8_quad = aom_get_sse_sum_8x8_quad_sse2;
+  if (flags & HAS_AVX2)
+    aom_get_sse_sum_8x8_quad = aom_get_sse_sum_8x8_quad_avx2;
   aom_h_predictor_32x32 = aom_h_predictor_32x32_sse2;
   if (flags & HAS_AVX2)
     aom_h_predictor_32x32 = aom_h_predictor_32x32_avx2;
@@ -8622,6 +8824,9 @@ static void setup_rtcd_internal(void) {
   aom_hadamard_32x32 = aom_hadamard_32x32_sse2;
   if (flags & HAS_AVX2)
     aom_hadamard_32x32 = aom_hadamard_32x32_avx2;
+  aom_hadamard_8x8_dual = aom_hadamard_8x8_dual_sse2;
+  if (flags & HAS_AVX2)
+    aom_hadamard_8x8_dual = aom_hadamard_8x8_dual_avx2;
   aom_hadamard_lp_16x16 = aom_hadamard_lp_16x16_sse2;
   if (flags & HAS_AVX2)
     aom_hadamard_lp_16x16 = aom_hadamard_lp_16x16_avx2;
@@ -8639,6 +8844,15 @@ static void setup_rtcd_internal(void) {
     aom_lowbd_blend_a64_d16_mask = aom_lowbd_blend_a64_d16_mask_sse4_1;
   if (flags & HAS_AVX2)
     aom_lowbd_blend_a64_d16_mask = aom_lowbd_blend_a64_d16_mask_avx2;
+  aom_lpf_horizontal_14_quad = aom_lpf_horizontal_14_quad_sse2;
+  if (flags & HAS_AVX2)
+    aom_lpf_horizontal_14_quad = aom_lpf_horizontal_14_quad_avx2;
+  aom_lpf_horizontal_6_quad = aom_lpf_horizontal_6_quad_sse2;
+  if (flags & HAS_AVX2)
+    aom_lpf_horizontal_6_quad = aom_lpf_horizontal_6_quad_avx2;
+  aom_lpf_horizontal_8_quad = aom_lpf_horizontal_8_quad_sse2;
+  if (flags & HAS_AVX2)
+    aom_lpf_horizontal_8_quad = aom_lpf_horizontal_8_quad_avx2;
   aom_masked_sad128x128 = aom_masked_sad128x128_c;
   if (flags & HAS_SSSE3)
     aom_masked_sad128x128 = aom_masked_sad128x128_ssse3;

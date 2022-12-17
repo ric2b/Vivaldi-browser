@@ -17,7 +17,7 @@ import {CrButtonElement} from 'chrome://resources/cr_elements/cr_button/cr_butto
 import {CrCheckboxElement} from 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.m.js';
 import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
 import {CrInputElement} from 'chrome://resources/cr_elements/cr_input/cr_input.m.js';
-import {assert} from 'chrome://resources/js/assert.m.js';
+import {assert} from 'chrome://resources/js/assert_ts.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {loadTimeData} from '../i18n_setup.js';
@@ -51,11 +51,6 @@ export class AddSiteDialogElement extends AddSiteDialogElementBase {
   static get properties() {
     return {
       /**
-       * What kind of setting, e.g. Location, Camera, Cookies, and so on.
-       */
-      category: String,
-
-      /**
        * Whether this is about an Allow, Block, SessionOnly, or other.
        */
       contentSetting: String,
@@ -77,13 +72,12 @@ export class AddSiteDialogElement extends AddSiteDialogElementBase {
     };
   }
 
-  category: ContentSettingsTypes;
   contentSetting: ContentSetting;
   hasIncognito: boolean;
   private site_: string;
   private errorMessage_: string;
 
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
 
     assert(this.category);

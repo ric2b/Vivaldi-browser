@@ -16,11 +16,14 @@
 #include "components/services/quarantine/quarantine.h"
 #include "content/browser/file_system_access/file_system_access_error.h"
 #include "content/public/browser/content_browser_client.h"
+#include "content/public/browser/global_routing_id.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/common/content_client.h"
 #include "crypto/secure_hash.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
+#include "storage/browser/file_system/copy_or_move_hook_delegate.h"
 #include "storage/browser/file_system/file_stream_reader.h"
 #include "storage/browser/file_system/file_system_context.h"
 #include "storage/browser/file_system/file_system_operation.h"
@@ -98,7 +101,7 @@ class HashCalculator : public base::RefCounted<HashCalculator> {
     }
     if (bytes_read == 0) {
       std::string hash_str(hash_->GetHashLength(), 0);
-      hash_->Finish(base::data(hash_str), hash_str.size());
+      hash_->Finish(std::data(hash_str), hash_str.size());
       std::move(callback_).Run(base::File::FILE_OK, hash_str, file_size_);
       return;
     }
@@ -197,12 +200,18 @@ void SafeMoveHelper::DoAfterWriteCheck(base::File::Error hash_result,
     return;
   }
 
+  content::GlobalRenderFrameHostId outermost_main_frame_id;
+  auto* rfh = content::RenderFrameHost::FromID(context_.frame_id);
+  if (rfh)
+    outermost_main_frame_id = rfh->GetOutermostMainFrame()->GetGlobalId();
+
   auto item = std::make_unique<FileSystemAccessWriteItem>();
   item->target_file_path = dest_url().path();
   item->full_path = source_url().path();
   item->sha256_hash = hash;
   item->size = size;
   item->frame_url = context_.url;
+  item->outermost_main_frame_id = outermost_main_frame_id;
   item->has_user_gesture = has_transient_user_activation_;
   manager_->permission_context()->PerformAfterWriteChecks(
       std::move(item), context_.frame_id,
@@ -250,7 +259,7 @@ void SafeMoveHelper::DidAfterWriteCheck(
       FROM_HERE, &storage::FileSystemOperationRunner::Move,
       std::move(result_callback), source_url(), dest_url(), options_,
       storage::FileSystemOperationRunner::ErrorBehavior::ERROR_BEHAVIOR_ABORT,
-      storage::FileSystemOperation::CopyOrMoveProgressCallback());
+      std::make_unique<storage::CopyOrMoveHookDelegate>());
 }
 
 void SafeMoveHelper::DidFileSkipQuarantine(base::File::Error result) {

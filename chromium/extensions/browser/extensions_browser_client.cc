@@ -135,4 +135,27 @@ void ExtensionsBrowserClient::NotifyExtensionApiTabExecuteScript(
     const ExtensionId& extension_id,
     const std::string& code) const {}
 
+bool ExtensionsBrowserClient::IsExtensionTelemetryServiceEnabled(
+    content::BrowserContext* context) const {
+  return false;
+}
+
+bool ExtensionsBrowserClient::
+    IsExtensionTelemetryRemoteHostContactedSignalEnabled() const {
+  return false;
+}
+
+void ExtensionsBrowserClient::NotifyExtensionRemoteHostContacted(
+    content::BrowserContext* context,
+    const ExtensionId& extension_id,
+    const GURL& url) const {}
+
+bool ExtensionsBrowserClient::IsUsbDeviceAllowedByPolicy(
+    content::BrowserContext* context,
+    const ExtensionId& extension_id,
+    int vendor_id,
+    int product_id) const {
+  return false;
+}
+
 }  // namespace extensions

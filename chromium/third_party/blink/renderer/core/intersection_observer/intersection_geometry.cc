@@ -150,8 +150,9 @@ LayoutView* LocalRootView(const LayoutObject& object) {
 //
 //   https://w3c.github.io/IntersectionObserver/v2/#calculate-visibility-algo
 bool ComputeIsVisible(const LayoutObject* target, const PhysicalRect& rect) {
-  if (target->GetDocument().GetFrame()->LocalFrameRoot().GetOcclusionState() !=
-      mojom::blink::FrameOcclusionState::kGuaranteedNotOccluded) {
+  if (!target->GetDocument().GetFrame() ||
+      target->GetDocument().GetFrame()->LocalFrameRoot().GetOcclusionState() !=
+          mojom::blink::FrameOcclusionState::kGuaranteedNotOccluded) {
     return false;
   }
   if (target->HasDistortingVisualEffects())
@@ -486,7 +487,8 @@ bool IntersectionGeometry::ClipToRoot(const LayoutObject* root,
   // Map and clip rect into root element coordinates.
   // TODO(szager): the writing mode flipping needs a test.
   const LayoutBox* local_ancestor = nullptr;
-  if (!RootIsImplicit() || root->GetDocument().IsInMainFrame())
+  if (!RootIsImplicit() ||
+      root->GetDocument().GetFrame()->IsOutermostMainFrame())
     local_ancestor = To<LayoutBox>(root);
 
   unsigned flags = kDefaultVisualRectFlags | kEdgeInclusive |

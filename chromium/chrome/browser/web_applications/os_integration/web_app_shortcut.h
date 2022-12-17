@@ -47,8 +47,10 @@ struct ScopedShortcutOverrideForTesting {
   base::ScopedTempDir startup;
 #elif BUILDFLAG(IS_MAC)
   base::ScopedTempDir chrome_apps_folder;
+  std::map<base::FilePath, bool> startup_enabled;
 #elif BUILDFLAG(IS_LINUX)
   base::ScopedTempDir desktop;
+  base::ScopedTempDir startup;
 #endif
 };
 

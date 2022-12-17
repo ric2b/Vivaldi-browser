@@ -42,7 +42,7 @@ void VivaldiAddRendererProcessFlags(content::BrowserContext* browser_context,
 
   AddBaseSwitches(renderer_command_line);
 
-#ifndef OS_ANDROID
+#if !BUILDFLAG(IS_ANDROID)
   const base::CommandLine& browser_command_line =
       *base::CommandLine::ForCurrentProcess();
   if (browser_command_line.HasSwitch(switches::kVivaldiDisableIPCDemuxer) ||
@@ -59,6 +59,6 @@ void VivaldiAddGpuProcessFlags(base::CommandLine& gpu_command_line) {
   static const char* const kSwitchesToCopy[] = {
       switches::kVivaldiPlatformMedia,
   };
-  CopyBrowserSwitches(kSwitchesToCopy, base::size(kSwitchesToCopy),
+  CopyBrowserSwitches(kSwitchesToCopy, std::size(kSwitchesToCopy),
                       gpu_command_line);
 }

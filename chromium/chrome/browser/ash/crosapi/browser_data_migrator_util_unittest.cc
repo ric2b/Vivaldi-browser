@@ -9,20 +9,23 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/json/json_reader.h"
+#include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "chrome/browser/ash/crosapi/fake_migration_progress_tracker.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/leveldatabase/env_chromium.h"
+#include "third_party/leveldatabase/src/include/leveldb/write_batch.h"
 
-namespace ash {
-namespace browser_data_migrator_util {
+namespace ash::browser_data_migrator_util {
 
 namespace {
 
 constexpr char kDownloadsPath[] = "Downloads";
-constexpr char kLoginDataPath[] = "Login Data";
+constexpr char kPolicyDataPath[] = "Policy";
 constexpr char kBookmarksPath[] = "Bookmarks";
 constexpr char kCookiesPath[] = "Cookies";
 constexpr char kCachePath[] = "Cache";
@@ -30,6 +33,7 @@ constexpr char kCodeCachePath[] = "Code Cache";
 constexpr char kCodeCacheUMAName[] = "CodeCache";
 constexpr char kTextFileContent[] = "Hello, World!";
 constexpr int kTextFileSize = sizeof(kTextFileContent);
+constexpr char kMoveExtensionId[] = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
 
 struct TargetItemComparator {
   bool operator()(const TargetItem& t1, const TargetItem& t2) const {
@@ -55,6 +59,56 @@ bool IsSameFile(const base::FilePath& file1, const base::FilePath& file2) {
   return (st_1.st_ino == st_2.st_ino);
 }
 
+// Prepare LocalStorage-like LevelDB.
+void SetUpLocalStorage(const base::FilePath& path,
+                       std::unique_ptr<leveldb::DB>& db) {
+  using std::string_literals::operator""s;
+
+  leveldb_env::Options options;
+  options.create_if_missing = true;
+  leveldb::Status status = leveldb_env::OpenDB(options, path.value(), &db);
+  ASSERT_TRUE(status.ok());
+
+  leveldb::WriteBatch batch;
+  batch.Put("VERSION", "1");
+
+  std::string keep_extension_id =
+      browser_data_migrator_util::kExtensionsAshOnly[0];
+  batch.Put("META:chrome-extension://" + keep_extension_id, "meta");
+  batch.Put("_chrome-extension://" + keep_extension_id + "\x00key1"s, "value1");
+
+  std::string move_extension_id = kMoveExtensionId;
+  batch.Put("META:chrome-extension://" + move_extension_id, "meta");
+  batch.Put("_chrome-extension://" + move_extension_id + "\x00key1"s, "value1");
+
+  leveldb::WriteOptions write_options;
+  write_options.sync = true;
+  status = db->Write(write_options, &batch);
+  ASSERT_TRUE(status.ok());
+}
+
+// Prepare StateStore-like LevelDB.
+void SetUpStateStore(const base::FilePath& path,
+                     std::unique_ptr<leveldb::DB>& db) {
+  leveldb_env::Options options;
+  options.create_if_missing = true;
+  leveldb::Status status = leveldb_env::OpenDB(options, path.value(), &db);
+  ASSERT_TRUE(status.ok());
+
+  leveldb::WriteBatch batch;
+  std::string keep_extension_id =
+      browser_data_migrator_util::kExtensionsAshOnly[0];
+  batch.Put(keep_extension_id + ".key1", "value1");
+  batch.Put(keep_extension_id + ".key2", "value2");
+  batch.Put(std::string(kMoveExtensionId) + ".key1", "value1");
+  batch.Put(std::string(kMoveExtensionId) + ".key2", "value2");
+
+  leveldb::WriteOptions write_options;
+  write_options.sync = true;
+  status = db->Write(write_options, &batch);
+  ASSERT_TRUE(status.ok());
+}
+
 }  // namespace
 
 TEST(BrowserDataMigratorUtilTest, NoPathOverlaps) {
@@ -65,7 +119,7 @@ TEST(BrowserDataMigratorUtilTest, NoPathOverlaps) {
   base::span<const char* const> deletable_paths =
       base::make_span(kDeletablePaths);
   base::span<const char* const> common_data_paths =
-      base::make_span(kNeedCopyDataPaths);
+      base::make_span(kNeedCopyForMoveDataPaths);
 
   std::vector<base::span<const char* const>> paths_groups{
       remain_in_ash_paths, lacros_data_paths, deletable_paths,
@@ -139,6 +193,130 @@ TEST(BrowserDataMigratorUtilTest, GetUMAItemName) {
       GetUMAItemName(profile_data_dir.Append(FILE_PATH_LITERAL("abcd")))
           .c_str(),
       kUnknownUMAName);
+}
+
+TEST(BrowserDataMigratorUtilTest, GetExtensionKeys) {
+  using std::string_literals::operator""s;
+
+  base::ScopedTempDir scoped_temp_dir;
+  ASSERT_TRUE(scoped_temp_dir.CreateUniqueTempDir());
+
+  // Prepare LocalStorage-like LevelDB.
+  std::unique_ptr<leveldb::DB> db;
+  SetUpLocalStorage(
+      scoped_temp_dir.GetPath().Append(FILE_PATH_LITERAL("localstorage")), db);
+
+  ExtensionKeys keys;
+  leveldb::Status status =
+      GetExtensionKeys(db.get(), LevelDBType::kLocalStorage, &keys);
+  EXPECT_TRUE(status.ok());
+  db.reset();
+
+  std::string keep_extension_id =
+      browser_data_migrator_util::kExtensionsAshOnly[0];
+  ExtensionKeys expected_keys = {
+      {keep_extension_id,
+       {
+           "META:chrome-extension://" + keep_extension_id,
+           "_chrome-extension://" + keep_extension_id + "\x00key1"s,
+       }},
+      {kMoveExtensionId,
+       {
+           "META:chrome-extension://" + std::string(kMoveExtensionId),
+           "_chrome-extension://" + std::string(kMoveExtensionId) + "\x00key1"s,
+       }},
+  };
+  EXPECT_EQ(expected_keys, keys);
+  keys.clear();
+
+  // Prepare StateStore-like LevelDB.
+  SetUpStateStore(
+      scoped_temp_dir.GetPath().Append(FILE_PATH_LITERAL("statestore")), db);
+
+  status = GetExtensionKeys(db.get(), LevelDBType::kStateStore, &keys);
+  EXPECT_TRUE(status.ok());
+
+  expected_keys = {
+      {keep_extension_id,
+       {
+           keep_extension_id + ".key1",
+           keep_extension_id + ".key2",
+       }},
+      {kMoveExtensionId,
+       {
+           std::string(kMoveExtensionId) + ".key1",
+           std::string(kMoveExtensionId) + ".key2",
+       }},
+  };
+  EXPECT_EQ(expected_keys, keys);
+}
+
+TEST(BrowserDataMigratorUtilTest, MigrateLevelDB) {
+  using std::string_literals::operator""s;
+
+  base::ScopedTempDir scoped_temp_dir;
+  ASSERT_TRUE(scoped_temp_dir.CreateUniqueTempDir());
+
+  // Prepare LocalStorage-like LevelDB.
+  std::unique_ptr<leveldb::DB> db;
+  const base::FilePath localstorage_db_path =
+      scoped_temp_dir.GetPath().Append(FILE_PATH_LITERAL("localstorage"));
+  const base::FilePath localstorage_new_db_path =
+      localstorage_db_path.AddExtension(".new");
+  SetUpLocalStorage(localstorage_db_path, db);
+  db.reset();
+
+  EXPECT_TRUE(MigrateLevelDB(localstorage_db_path, localstorage_new_db_path,
+                             LevelDBType::kLocalStorage));
+
+  leveldb_env::Options options;
+  options.create_if_missing = false;
+  leveldb::Status status =
+      leveldb_env::OpenDB(options, localstorage_new_db_path.value(), &db);
+  EXPECT_TRUE(status.ok());
+
+  ExtensionKeys keys;
+  status = GetExtensionKeys(db.get(), LevelDBType::kLocalStorage, &keys);
+  EXPECT_TRUE(status.ok());
+  db.reset();
+
+  std::string keep_extension_id =
+      browser_data_migrator_util::kExtensionsAshOnly[0];
+  ExtensionKeys expected_keys = {
+      {keep_extension_id,
+       {
+           "META:chrome-extension://" + keep_extension_id,
+           "_chrome-extension://" + keep_extension_id + "\x00key1"s,
+       }},
+  };
+  EXPECT_EQ(expected_keys, keys);
+  keys.clear();
+
+  // Prepare StateStore-like LevelDB.
+  const base::FilePath statestore_db_path =
+      scoped_temp_dir.GetPath().Append(FILE_PATH_LITERAL("statestore"));
+  const base::FilePath statestore_new_db_path =
+      statestore_db_path.AddExtension(".new");
+  SetUpStateStore(statestore_db_path, db);
+  db.reset();
+
+  EXPECT_TRUE(MigrateLevelDB(statestore_db_path, statestore_new_db_path,
+                             LevelDBType::kStateStore));
+
+  status = leveldb_env::OpenDB(options, statestore_new_db_path.value(), &db);
+  EXPECT_TRUE(status.ok());
+
+  status = GetExtensionKeys(db.get(), LevelDBType::kStateStore, &keys);
+  EXPECT_TRUE(status.ok());
+
+  expected_keys = {
+      {keep_extension_id,
+       {
+           keep_extension_id + ".key1",
+           keep_extension_id + ".key2",
+       }},
+  };
+  EXPECT_EQ(expected_keys, keys);
 }
 
 TEST(BrowserDataMigratorUtilTest, RecordUserDataSize) {
@@ -275,7 +453,8 @@ TEST(BrowserDataMigratorUtilTest, HasEnoughDiskSpace) {
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
   const int64_t free_disk_space =
       base::SysInfo::AmountOfFreeDiskSpace(temp_dir.GetPath());
-  ASSERT_GE(free_disk_space, kBuffer);
+  ASSERT_GE(free_disk_space, 0);
+  ASSERT_GE(static_cast<uint64_t>(free_disk_space), kBuffer);
 
   // If total copy size is the same as `free_disk_space` then the disk is
   // exactly `kBuffer` bytes short of free space.
@@ -287,13 +466,13 @@ TEST(BrowserDataMigratorUtilTest, HasEnoughDiskSpace) {
   // has just enough space for the migration.
   EXPECT_EQ(ExtraBytesRequiredToBeFreed(free_disk_space - kBuffer,
                                         temp_dir.GetPath()),
-            0);
+            0u);
   EXPECT_TRUE(
       HasEnoughDiskSpace(free_disk_space - kBuffer, temp_dir.GetPath()));
 
   // If there is nothing to be copied then as long as `free_disk_space >=
   // kBuffer`, there should be no extra space required to be freed.
-  EXPECT_EQ(ExtraBytesRequiredToBeFreed(0, temp_dir.GetPath()), 0);
+  EXPECT_EQ(ExtraBytesRequiredToBeFreed(0, temp_dir.GetPath()), 0u);
   EXPECT_TRUE(HasEnoughDiskSpace(0, temp_dir.GetPath()));
 }
 
@@ -314,7 +493,7 @@ class BrowserDataMigratorUtilWithTargetsTest : public ::testing::Test {
     // |- Downloads/     /* remain in ash */
     //     |- file
     //     |- file 2
-    // |- Login Data     /* need to copy */
+    // |- Policy         /* need to copy */
     // |- Cache          /* deletable */
     // |- Code Cache/    /* deletable */
     //     |- file
@@ -337,7 +516,7 @@ class BrowserDataMigratorUtilWithTargetsTest : public ::testing::Test {
                                 kTextFileContent, kTextFileSize));
 
     // Need to copy items.
-    ASSERT_TRUE(base::WriteFile(profile_data_dir_.Append(kLoginDataPath),
+    ASSERT_TRUE(base::WriteFile(profile_data_dir_.Append(kPolicyDataPath),
                                 kTextFileContent, kTextFileSize));
 
     // Deletable items.
@@ -387,10 +566,10 @@ TEST_F(BrowserDataMigratorUtilWithTargetsTest, GetTargetItems) {
 
   // Check for items that need copies in lacros.
   std::vector<TargetItem> expected_need_copy_items = {
-      {profile_data_dir_.Append(kLoginDataPath), kTextFileSize,
+      {profile_data_dir_.Append(kPolicyDataPath), kTextFileSize,
        TargetItem::ItemType::kFile}};
   TargetItems need_copy_items =
-      GetTargetItems(profile_data_dir_, ItemType::kNeedCopy);
+      GetTargetItems(profile_data_dir_, ItemType::kNeedCopyForMove);
   EXPECT_EQ(need_copy_items.total_size, kTextFileSize);
   ASSERT_EQ(need_copy_items.items.size(), expected_need_copy_items.size());
   EXPECT_EQ(need_copy_items.items[0], expected_need_copy_items[0]);
@@ -427,9 +606,9 @@ TEST_F(BrowserDataMigratorUtilWithTargetsTest, DryRunToCollectUMA) {
   const std::string uma_name_downloads =
       std::string(browser_data_migrator_util::kUserDataStatsRecorderDataSize) +
       "Downloads";
-  const std::string uma_name_login_data =
+  const std::string uma_name_policy =
       std::string(browser_data_migrator_util::kUserDataStatsRecorderDataSize) +
-      "LoginData";
+      "Policy";
   const std::string uma_name_cache =
       std::string(browser_data_migrator_util::kUserDataStatsRecorderDataSize) +
       "Cache";
@@ -443,7 +622,7 @@ TEST_F(BrowserDataMigratorUtilWithTargetsTest, DryRunToCollectUMA) {
                                      kTextFileSize / 1024 / 1024, 1);
   histogram_tester.ExpectBucketCount(uma_name_downloads,
                                      kTextFileSize * 2 / 1024 / 1024, 1);
-  histogram_tester.ExpectBucketCount(uma_name_login_data,
+  histogram_tester.ExpectBucketCount(uma_name_policy,
                                      kTextFileSize / 1024 / 1024, 1);
   histogram_tester.ExpectBucketCount(uma_name_cache,
                                      kTextFileSize / 1024 / 1024, 1);
@@ -467,5 +646,178 @@ TEST_F(BrowserDataMigratorUtilWithTargetsTest, DryRunToCollectUMA) {
       kDryRunDeleteAndCopyMigrationHasEnoughDiskSpace, 1);
 }
 
-}  // namespace browser_data_migrator_util
-}  // namespace ash
+TEST(BrowserDataMigratorUtilTest, UpdatePreferencesKeyByType) {
+  const std::string keep_extension_dict_key =
+      std::string("extensions.settings.") + kExtensionsAshOnly[0];
+  const std::string move_extension_dict_key =
+      std::string("extensions.settings.") + kMoveExtensionId;
+
+  base::Value::List extension_list;
+  extension_list.Append(kExtensionsAshOnly[0]);
+  extension_list.Append(kMoveExtensionId);
+  const std::string extension_list_key = "extensions.pinned_extensions";
+
+  // List of dictionaries instead of list of strings as expected.
+  // {"extensions.toolbar": [
+  //   { <kExtensionsAshOnly[0]> : "test1"},
+  //   { <kMoveExtensionId> : "test2"},
+  // ]}
+  base::Value::Dict wrong_type_value1;
+  wrong_type_value1.Set(kExtensionsAshOnly[0], "test1");
+  base::Value::Dict wrong_type_value2;
+  wrong_type_value2.Set(kMoveExtensionId, "test2");
+  base::Value::List wrong_type_list;
+  wrong_type_list.Append(std::move(wrong_type_value1));
+  wrong_type_list.Append(std::move(wrong_type_value2));
+  const std::string wrong_type_key = "extensions.toolbar";
+
+  base::Value::Dict ash_dict;
+  ash_dict.SetByDottedPath(keep_extension_dict_key, "test1");
+  ash_dict.SetByDottedPath(move_extension_dict_key, "test2");
+  ash_dict.SetByDottedPath(extension_list_key, std::move(extension_list));
+  ash_dict.SetByDottedPath(wrong_type_key, std::move(wrong_type_list));
+  base::Value::Dict lacros_dict = ash_dict.Clone();
+
+  UpdatePreferencesKeyByType(&ash_dict, "extensions.settings",
+                             ChromeType::kAsh);
+  UpdatePreferencesKeyByType(&lacros_dict, "extensions.settings",
+                             ChromeType::kLacros);
+
+  // Test Ash against expected results.
+  base::Value::Dict* d = ash_dict.FindDictByDottedPath("extensions.settings");
+  EXPECT_NE(nullptr, d);
+  EXPECT_EQ(1, d->size());
+  EXPECT_EQ(kExtensionsAshOnly[0], d->begin()->first);
+  // If a type other than string is found in a list, it will be left unchanged.
+  base::Value::List* l = ash_dict.FindListByDottedPath(wrong_type_key);
+  EXPECT_NE(nullptr, l);
+  EXPECT_EQ(2, l->size());
+
+  // Test Lacros against expected results.
+  d = lacros_dict.FindDictByDottedPath("extensions.settings");
+  EXPECT_NE(nullptr, d);
+  EXPECT_EQ(1, d->size());
+  EXPECT_EQ(kMoveExtensionId, d->begin()->first);
+  l = lacros_dict.FindListByDottedPath(wrong_type_key);
+  EXPECT_NE(nullptr, l);
+  EXPECT_EQ(2, l->size());
+}
+
+TEST(BrowserDataMigratorUtilTest, MigratePreferencesContents) {
+  const std::string keep_extension_dict_key =
+      std::string("extensions.settings.") + kExtensionsAshOnly[0];
+  const std::string move_extension_dict_key =
+      std::string("extensions.settings.") + kMoveExtensionId;
+
+  base::Value::List extension_list;
+  extension_list.Append(kExtensionsAshOnly[0]);
+  extension_list.Append(kMoveExtensionId);
+  const std::string extension_list_key = "extensions.pinned_extensions";
+
+  std::string original_contents;
+  base::Value::Dict dict;
+  dict.SetByDottedPath(kLacrosOnlyPreferencesKeys[0], "test1");
+  dict.SetByDottedPath(kAshOnlyPreferencesKeys[0], "test2");
+  dict.SetByDottedPath("unrelated.key", "test3");
+  dict.SetByDottedPath(keep_extension_dict_key, "test4");
+  dict.SetByDottedPath(move_extension_dict_key, "test5");
+  dict.SetByDottedPath(extension_list_key, std::move(extension_list));
+  base::JSONWriter::Write(dict, &original_contents);
+
+  auto contents = MigratePreferencesContents(original_contents);
+  EXPECT_TRUE(contents.has_value());
+
+  absl::optional<base::Value> ash_root = base::JSONReader::Read(contents->ash);
+  EXPECT_TRUE(ash_root.has_value());
+  base::Value::Dict* ash_root_dict = ash_root->GetIfDict();
+  EXPECT_NE(nullptr, ash_root_dict);
+  EXPECT_EQ(nullptr, ash_root_dict->FindStringByDottedPath(
+                         kLacrosOnlyPreferencesKeys[0]));
+  EXPECT_EQ("test2",
+            *ash_root_dict->FindStringByDottedPath(kAshOnlyPreferencesKeys[0]));
+  EXPECT_EQ("test3", *ash_root_dict->FindStringByDottedPath("unrelated.key"));
+  EXPECT_EQ("test4",
+            *ash_root_dict->FindStringByDottedPath(keep_extension_dict_key));
+  EXPECT_EQ(nullptr,
+            ash_root_dict->FindStringByDottedPath(move_extension_dict_key));
+  base::Value::List* ash_extension_list =
+      ash_root_dict->FindListByDottedPath(extension_list_key);
+  EXPECT_NE(nullptr, ash_extension_list);
+  EXPECT_EQ(1, ash_extension_list->size());
+  EXPECT_EQ(kExtensionsAshOnly[0], ash_extension_list->front().GetString());
+
+  absl::optional<base::Value> lacros_root =
+      base::JSONReader::Read(contents->lacros);
+  EXPECT_TRUE(lacros_root.has_value());
+  base::Value::Dict* lacros_root_dict = lacros_root->GetIfDict();
+  EXPECT_NE(nullptr, lacros_root_dict);
+  EXPECT_EQ("test1", *lacros_root_dict->FindStringByDottedPath(
+                         kLacrosOnlyPreferencesKeys[0]));
+  EXPECT_EQ(nullptr, lacros_root_dict->FindStringByDottedPath(
+                         kAshOnlyPreferencesKeys[0]));
+  EXPECT_EQ("test3",
+            *lacros_root_dict->FindStringByDottedPath("unrelated.key"));
+  EXPECT_EQ(nullptr,
+            lacros_root_dict->FindStringByDottedPath(keep_extension_dict_key));
+  EXPECT_EQ("test5",
+            *lacros_root_dict->FindStringByDottedPath(move_extension_dict_key));
+  base::Value::List* lacros_extension_list =
+      lacros_root_dict->FindListByDottedPath(extension_list_key);
+  EXPECT_NE(nullptr, lacros_extension_list);
+  EXPECT_EQ(1, lacros_extension_list->size());
+  EXPECT_EQ(kMoveExtensionId, lacros_extension_list->front().GetString());
+}
+
+TEST(BrowserDataMigratorUtilTest, MigratePreferences) {
+  base::ScopedTempDir scoped_temp_dir;
+  ASSERT_TRUE(scoped_temp_dir.CreateUniqueTempDir());
+
+  const base::FilePath original_preferences_path =
+      scoped_temp_dir.GetPath().Append("Preferences.original");
+  const base::FilePath ash_preferences_path =
+      scoped_temp_dir.GetPath().Append("Preferences.ash");
+  const base::FilePath lacros_preferences_path =
+      scoped_temp_dir.GetPath().Append("Preferences.lacros");
+
+  std::string original_contents;
+  base::Value::Dict dict;
+  dict.SetByDottedPath(kLacrosOnlyPreferencesKeys[0], "test1");
+  dict.SetByDottedPath(kAshOnlyPreferencesKeys[0], "test2");
+  dict.SetByDottedPath("unrelated.key", "test3");
+  ASSERT_TRUE(base::JSONWriter::Write(dict, &original_contents));
+  ASSERT_TRUE(base::WriteFile(original_preferences_path, original_contents));
+
+  EXPECT_TRUE(browser_data_migrator_util::MigratePreferences(
+      original_preferences_path, ash_preferences_path,
+      lacros_preferences_path));
+
+  std::string ash_contents;
+  std::string lacros_contents;
+  EXPECT_TRUE(base::ReadFileToString(ash_preferences_path, &ash_contents));
+  EXPECT_TRUE(
+      base::ReadFileToString(lacros_preferences_path, &lacros_contents));
+
+  absl::optional<base::Value> ash_root = base::JSONReader::Read(ash_contents);
+  EXPECT_TRUE(ash_root.has_value());
+  base::Value::Dict* ash_root_dict = ash_root->GetIfDict();
+  EXPECT_NE(nullptr, ash_root_dict);
+  EXPECT_EQ(nullptr, ash_root_dict->FindStringByDottedPath(
+                         kLacrosOnlyPreferencesKeys[0]));
+  EXPECT_EQ("test2",
+            *ash_root_dict->FindStringByDottedPath(kAshOnlyPreferencesKeys[0]));
+  EXPECT_EQ("test3", *ash_root_dict->FindStringByDottedPath("unrelated.key"));
+
+  absl::optional<base::Value> lacros_root =
+      base::JSONReader::Read(lacros_contents);
+  EXPECT_TRUE(lacros_root.has_value());
+  base::Value::Dict* lacros_root_dict = lacros_root->GetIfDict();
+  EXPECT_NE(nullptr, lacros_root_dict);
+  EXPECT_EQ(nullptr, lacros_root_dict->FindStringByDottedPath(
+                         kAshOnlyPreferencesKeys[0]));
+  EXPECT_EQ("test1", *lacros_root_dict->FindStringByDottedPath(
+                         kLacrosOnlyPreferencesKeys[0]));
+  EXPECT_EQ("test3",
+            *lacros_root_dict->FindStringByDottedPath("unrelated.key"));
+}
+
+}  // namespace ash::browser_data_migrator_util

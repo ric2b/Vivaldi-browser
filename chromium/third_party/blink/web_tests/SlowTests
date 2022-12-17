@@ -69,6 +69,10 @@ crbug.com/237245 [ Debug Win7 ] editing/selection/programmatic-selection-on-mac-
 # Most DevTools tests are slow in Debug.
 webkit.org/b/90488 [ Debug ] http/tests/devtools/* [ Slow ]
 webkit.org/b/90488 [ Debug ] inspector-protocol/* [ Slow ]
+webkit.org/b/90488 [ Debug ] http/tests/inspector-protocol/* [ Slow ]
+
+# Conversion tests are slow on Windows
+crbug.com/1306848 [ Win ] http/tests/inspector-protocol/conversion/* [ Slow ]
 
 # DevTools tests cause flakes on slow hardware in Release as well.
 crbug.com/1063051 [ Release ] http/tests/devtools/* [ Slow ]
@@ -198,6 +202,8 @@ crbug.com/1081534 [ Mac ] virtual/oopr-canvas2d/fast/canvas/fillrect_gradient.ht
 crbug.com/1081534 virtual/oopr-canvas2d/fast/canvas/color-space/canvas-createImageBitmap-e_srgb.html [ Slow ]
 crbug.com/1081534 virtual/oopr-canvas2d/fast/canvas/color-space/canvas-createImageBitmap-rec2020.html [ Slow ]
 crbug.com/1041847 virtual/oopr-canvas2d/fast/canvas/color-space/canvas-colorManaged-convertToBlob-roundtrip.html [ Slow ]
+crbug.com/1302791 [ Linux ] virtual/oopr-canvas2d/fast/canvas/canvas-blending-image-over-pattern.html [ Slow ]
+crbug.com/1302791 [ Mac ] virtual/oopr-canvas2d/fast/canvas/canvas-blending-image-over-pattern.html [ Slow ]
 
 # Slow canvas tests
 crbug.com/1170041 external/wpt/html/canvas/element/manual/wide-gamut-canvas/canvas-createImageBitmap-e_srgb.html [ Slow ]
@@ -354,9 +360,9 @@ crbug.com/874695 fast/webgl/webgl-composite-modes-tabswitching.html [ Slow ]
 crbug.com/874695 fast/workers/chromium/worker-document-leak.html [ Slow ]
 crbug.com/874695 fullscreen/full-screen-restrictions.html [ Slow ]
 crbug.com/874695 http/tests/cookies/same-site/framed.https.html [ Slow ]
-crbug.com/874695 http/tests/credentialmanager/credentialscontainer-create-with-virtual-authenticator.html [ Slow ]
-crbug.com/874695 http/tests/credentialmanager/credentialscontainer-get-origins.html [ Slow ]
-crbug.com/874695 http/tests/credentialmanager/register-then-sign.html [ Slow ]
+crbug.com/874695 http/tests/credentialmanagement/credentialscontainer-create-with-virtual-authenticator.html [ Slow ]
+crbug.com/874695 http/tests/credentialmanagement/credentialscontainer-get-origins.html [ Slow ]
+crbug.com/874695 http/tests/credentialmanagement/register-then-sign.html [ Slow ]
 crbug.com/874695 http/tests/fetch/serviceworker/body-mixin-base-https-other-https.html [ Slow ]
 crbug.com/874695 http/tests/fetch/serviceworker/body-mixin.html [ Slow ]
 crbug.com/874695 http/tests/fetch/serviceworker/stream-reader-base-https-other-https.html [ Slow ]
@@ -507,7 +513,7 @@ crbug.com/914981 [ Mac ] fast/events/no-fake-mousemove.html [ Slow ]
 
 crbug.com/951895 [ Debug Mac ] transforms/2d/transform-2d.html [ Slow ]
 
-crbug.com/980804 fast/scrolling/scrollbars/mouse-autoscrolling-on-scrollbar.html [ Slow ]
+crbug.com/980804 virtual/threaded-prefer-compositing/fast/scrolling/scrollbars/mouse-autoscrolling-on-scrollbar.html [ Slow ]
 
 crbug.com/983642 virtual/gpu/fast/canvas/canvas-composite-alpha.html [ Slow ]
 crbug.com/983642 [ Debug Mac ] fast/canvas/canvas-composite-alpha.html [ Slow ]
@@ -795,3 +801,10 @@ crbug.com/1195814 [ Mac11 ] storage/indexeddb/odd-strings.html [ Slow ]
 crbug.com/1263580 editing/deleting/delete-many-lines-of-text.html [ Slow ]
 
 crbug.com/1255482 external/wpt/css/css-fonts/crash-large-grapheme-cluster.html [ Slow ]
+
+crbug.com/1298800 http/tests/misc/drag-bookmark.html [ Slow ]
+
+crbug.com/1314927 external/wpt/IndexedDB/idbobjectstore_batchGetAll_largeValue.tentative.any.worker.html [ Slow ]
+crbug.com/1314927 external/wpt/IndexedDB/idbobjectstore_batchGetAll_largeValue.tentative.any.html [ Slow ]
+
+crbug.com/1307791 external/wpt/credential-management/fedcm-logout.sub.https.html [ Slow ]

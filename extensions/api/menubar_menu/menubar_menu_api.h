@@ -6,6 +6,7 @@
 
 #include <map>
 
+#include "build/build_config.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_function.h"
@@ -66,7 +67,7 @@ class MenubarMenuAPI : public BrowserContextKeyedAPI {
   std::string hover_url_;
 };
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 // Not used on Mac but we still need a stub
 class MenubarMenuShowFunction : public ExtensionFunction {
  public:

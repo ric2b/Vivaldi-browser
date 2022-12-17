@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 
 // Disable everything on windows only. http://crbug.com/306144
+#include "chrome/browser/extensions/api/downloads/downloads_api.h"
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -12,7 +14,6 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/containers/circular_deque.h"
-#include "base/cxx17_backports.h"
 #include "base/files/file_util.h"
 #include "base/guid.h"
 #include "base/json/json_reader.h"
@@ -25,6 +26,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/download/download_core_service.h"
 #include "chrome/browser/download/download_core_service_factory.h"
@@ -32,7 +34,6 @@
 #include "chrome/browser/download/download_open_prompt.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/download/download_test_file_activity_observer.h"
-#include "chrome/browser/extensions/api/downloads/downloads_api.h"
 #include "chrome/browser/extensions/api/downloads_internal/downloads_internal_api.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_function_test_utils.h"
@@ -1174,7 +1175,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
       {FILE_PATH_LITERAL("fake.txt"), DownloadItem::COMPLETE,
        download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS}};
   DownloadManager::DownloadVector all_downloads;
-  ASSERT_TRUE(CreateHistoryDownloads(kHistoryInfo, base::size(kHistoryInfo),
+  ASSERT_TRUE(CreateHistoryDownloads(kHistoryInfo, std::size(kHistoryInfo),
                                      &all_downloads));
 
   base::FilePath real_path = all_downloads[0]->GetTargetFilePath();
@@ -1268,7 +1269,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
       {FILE_PATH_LITERAL("baz"), DownloadItem::COMPLETE,
        download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS}};
   DownloadManager::DownloadVector all_downloads;
-  ASSERT_TRUE(CreateHistoryDownloads(kHistoryInfo, base::size(kHistoryInfo),
+  ASSERT_TRUE(CreateHistoryDownloads(kHistoryInfo, std::size(kHistoryInfo),
                                      &all_downloads));
 
   std::unique_ptr<base::Value> result(RunFunctionAndReturnResult(
@@ -1329,7 +1330,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
        download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS}};
   DownloadManager::DownloadVector items;
   ASSERT_TRUE(
-      CreateHistoryDownloads(kHistoryInfo, base::size(kHistoryInfo), &items));
+      CreateHistoryDownloads(kHistoryInfo, std::size(kHistoryInfo), &items));
 
   std::unique_ptr<base::Value> result(RunFunctionAndReturnResult(
       new DownloadsSearchFunction(), "[{\"orderBy\": [\"filename\"]}]"));
@@ -1359,7 +1360,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
        download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS}};
   DownloadManager::DownloadVector items;
   ASSERT_TRUE(
-      CreateHistoryDownloads(kHistoryInfo, base::size(kHistoryInfo), &items));
+      CreateHistoryDownloads(kHistoryInfo, std::size(kHistoryInfo), &items));
 
   std::unique_ptr<base::Value> result(RunFunctionAndReturnResult(
       new DownloadsSearchFunction(), "[{\"orderBy\": []}]"));
@@ -1393,7 +1394,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
        download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS}};
   DownloadManager::DownloadVector items;
   ASSERT_TRUE(
-      CreateHistoryDownloads(kHistoryInfo, base::size(kHistoryInfo), &items));
+      CreateHistoryDownloads(kHistoryInfo, std::size(kHistoryInfo), &items));
 
   std::unique_ptr<base::Value> result(RunFunctionAndReturnResult(
       new DownloadsSearchFunction(), "[{\"danger\": \"content\"}]"));
@@ -1462,7 +1463,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
   };
   DownloadManager::DownloadVector items;
   ASSERT_TRUE(
-      CreateHistoryDownloads(kHistoryInfo, base::size(kHistoryInfo), &items));
+      CreateHistoryDownloads(kHistoryInfo, std::size(kHistoryInfo), &items));
 
   std::unique_ptr<base::Value> result(
       RunFunctionAndReturnResult(new DownloadsSearchFunction(),
@@ -1801,6 +1802,33 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
                           result_id)));
 }
 
+// Test that if file name with disallowed characters are provided, the
+// characters will be replaced.
+IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
+                       DownloadExtensionTest_Disallowed_Character_In_Filename) {
+  LoadExtension("downloads_split");
+  ASSERT_TRUE(StartEmbeddedTestServer());
+  std::string download_url = embedded_test_server()->GetURL("/slow?0").spec();
+  GoOnTheRecord();
+
+  // Start downloading a file.
+  std::unique_ptr<base::Value> result(RunFunctionAndReturnResult(
+      new DownloadsDownloadFunction(),
+      base::StringPrintf("[{\"url\": \"%s\", \"filename\": \"foo%%bar\"}]",
+                         download_url.c_str())));
+  ASSERT_TRUE(result.get());
+  ASSERT_TRUE(result->is_int());
+  int result_id = result->GetInt();
+  DownloadItem* item = GetCurrentManager()->GetDownload(result_id);
+  ASSERT_TRUE(item);
+  ScopedCancellingItem canceller(item);
+  ASSERT_EQ(download_url, item->GetOriginalUrl().spec());
+  std::unique_ptr<content::DownloadTestObserver> obs(CreateDownloadObserver(1));
+  obs->WaitForFinished();
+  EXPECT_EQ(FILE_PATH_LITERAL("foo_bar"),
+            item->GetFileNameToReportUser().value());
+}
+
 namespace {
 
 class CustomResponse : public net::test_server::HttpResponse {
@@ -1950,7 +1978,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
       "Access-Control-Request-Method",
   };
 
-  for (size_t index = 0; index < base::size(kUnsafeHeaders); ++index) {
+  for (size_t index = 0; index < std::size(kUnsafeHeaders); ++index) {
     std::string download_url = embedded_test_server()->GetURL("/slow?0").spec();
     EXPECT_STREQ(errors::kInvalidHeaderUnsafe,
                   RunFunctionAndReturnError(new DownloadsDownloadFunction(),

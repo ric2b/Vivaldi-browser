@@ -10,6 +10,18 @@
       "[START_DIR]/gn"
     ],
     "infra_step": true,
+    "luci_context": {
+      "realm": {
+        "name": "gn:ci"
+      },
+      "resultdb": {
+        "current_invocation": {
+          "name": "invocations/build:8945511751514863184",
+          "update_token": "token"
+        },
+        "hostname": "rdbhost"
+      }
+    },
     "name": "git.init",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@"
@@ -25,6 +37,18 @@
     ],
     "cwd": "[START_DIR]/gn",
     "infra_step": true,
+    "luci_context": {
+      "realm": {
+        "name": "gn:ci"
+      },
+      "resultdb": {
+        "current_invocation": {
+          "name": "invocations/build:8945511751514863184",
+          "update_token": "token"
+        },
+        "hostname": "rdbhost"
+      }
+    },
     "name": "git.fetch",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@"
@@ -38,6 +62,18 @@
     ],
     "cwd": "[START_DIR]/gn",
     "infra_step": true,
+    "luci_context": {
+      "realm": {
+        "name": "gn:ci"
+      },
+      "resultdb": {
+        "current_invocation": {
+          "name": "invocations/build:8945511751514863184",
+          "update_token": "token"
+        },
+        "hostname": "rdbhost"
+      }
+    },
     "name": "git.checkout",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@"
@@ -51,6 +87,18 @@
     ],
     "cwd": "[START_DIR]/gn",
     "infra_step": true,
+    "luci_context": {
+      "realm": {
+        "name": "gn:ci"
+      },
+      "resultdb": {
+        "current_invocation": {
+          "name": "invocations/build:8945511751514863184",
+          "update_token": "token"
+        },
+        "hostname": "rdbhost"
+      }
+    },
     "name": "git.rev-parse",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@"
@@ -70,6 +118,18 @@
       "/path/to/tmp/json"
     ],
     "infra_step": true,
+    "luci_context": {
+      "realm": {
+        "name": "gn:ci"
+      },
+      "resultdb": {
+        "current_invocation": {
+          "name": "invocations/build:8945511751514863184",
+          "update_token": "token"
+        },
+        "hostname": "rdbhost"
+      }
+    },
     "name": "ensure_installed",
     "~followup_annotations": [
       "@@@STEP_LOG_LINE@json.output@{@@@",
@@ -105,6 +165,18 @@
       "init",
       "[START_DIR]/rpmalloc"
     ],
+    "luci_context": {
+      "realm": {
+        "name": "gn:ci"
+      },
+      "resultdb": {
+        "current_invocation": {
+          "name": "invocations/build:8945511751514863184",
+          "update_token": "token"
+        },
+        "hostname": "rdbhost"
+      }
+    },
     "name": "rpmalloc.init",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@"
@@ -116,10 +188,22 @@
       "fetch",
       "--tags",
       "https://fuchsia.googlesource.com/third_party/github.com/mjansson/rpmalloc",
-      "f4b7c52c858675f732a76bd1c73447e0fcf84b1e"
+      "+upstream/develop"
     ],
     "cwd": "[START_DIR]/rpmalloc",
     "infra_step": true,
+    "luci_context": {
+      "realm": {
+        "name": "gn:ci"
+      },
+      "resultdb": {
+        "current_invocation": {
+          "name": "invocations/build:8945511751514863184",
+          "update_token": "token"
+        },
+        "hostname": "rdbhost"
+      }
+    },
     "name": "rpmalloc.fetch",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@"
@@ -129,13 +213,87 @@
     "cmd": [
       "git",
       "checkout",
-      "FETCH_HEAD"
+      "b097fd0916500439721a114bb9cd8d14bd998683"
     ],
     "cwd": "[START_DIR]/rpmalloc",
     "infra_step": true,
+    "luci_context": {
+      "realm": {
+        "name": "gn:ci"
+      },
+      "resultdb": {
+        "current_invocation": {
+          "name": "invocations/build:8945511751514863184",
+          "update_token": "token"
+        },
+        "hostname": "rdbhost"
+      }
+    },
     "name": "rpmalloc.checkout",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@"
+    ]
+  },
+  {
+    "cmd": [
+      "vpython",
+      "-u",
+      "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
+      "--json-output",
+      "/path/to/tmp/json",
+      "copy",
+      "[START_DIR]/rpmalloc/build/ninja/clang.py",
+      "/path/to/tmp/"
+    ],
+    "infra_step": true,
+    "luci_context": {
+      "realm": {
+        "name": "gn:ci"
+      },
+      "resultdb": {
+        "current_invocation": {
+          "name": "invocations/build:8945511751514863184",
+          "update_token": "token"
+        },
+        "hostname": "rdbhost"
+      }
+    },
+    "name": "rpmalloc.read [START_DIR]/rpmalloc/build/ninja/clang.py",
+    "~followup_annotations": [
+      "@@@STEP_NEST_LEVEL@1@@@",
+      "@@@STEP_LOG_LINE@clang.py@CXXFLAGS = ['-Wall', '-Weverything', '-Wfoo']@@@",
+      "@@@STEP_LOG_END@clang.py@@@"
+    ]
+  },
+  {
+    "cmd": [
+      "vpython",
+      "-u",
+      "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
+      "--json-output",
+      "/path/to/tmp/json",
+      "copy",
+      "CXXFLAGS = ['-Wall', '-Weverything', '-Wfoo']",
+      "[START_DIR]/rpmalloc/build/ninja/clang.py"
+    ],
+    "infra_step": true,
+    "luci_context": {
+      "realm": {
+        "name": "gn:ci"
+      },
+      "resultdb": {
+        "current_invocation": {
+          "name": "invocations/build:8945511751514863184",
+          "update_token": "token"
+        },
+        "hostname": "rdbhost"
+      }
+    },
+    "name": "rpmalloc.write [START_DIR]/rpmalloc/build/ninja/clang.py",
+    "~followup_annotations": [
+      "@@@STEP_NEST_LEVEL@1@@@",
+      "@@@STEP_LOG_LINE@clang.py@CXXFLAGS = ['-Wall', '-Weverything', '-Wfoo']@@@",
+      "@@@STEP_LOG_END@clang.py@@@"
     ]
   },
   {
@@ -164,6 +322,18 @@
       "CXX": "[START_DIR]/cipd/bin/clang++",
       "LDFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -static-libstdc++"
     },
+    "luci_context": {
+      "realm": {
+        "name": "gn:ci"
+      },
+      "resultdb": {
+        "current_invocation": {
+          "name": "invocations/build:8945511751514863184",
+          "update_token": "token"
+        },
+        "hostname": "rdbhost"
+      }
+    },
     "name": "rpmalloc.build rpmalloc-linux-amd64.configure",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@2@@@"
@@ -181,6 +351,18 @@
       "CFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot",
       "CXX": "[START_DIR]/cipd/bin/clang++",
       "LDFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -static-libstdc++"
+    },
+    "luci_context": {
+      "realm": {
+        "name": "gn:ci"
+      },
+      "resultdb": {
+        "current_invocation": {
+          "name": "invocations/build:8945511751514863184",
+          "update_token": "token"
+        },
+        "hostname": "rdbhost"
+      }
     },
     "name": "rpmalloc.build rpmalloc-linux-amd64.ninja",
     "~followup_annotations": [
@@ -213,6 +395,18 @@
       "CXX": "[START_DIR]/cipd/bin/clang++",
       "LDFLAGS": "--target=aarch64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -static-libstdc++"
     },
+    "luci_context": {
+      "realm": {
+        "name": "gn:ci"
+      },
+      "resultdb": {
+        "current_invocation": {
+          "name": "invocations/build:8945511751514863184",
+          "update_token": "token"
+        },
+        "hostname": "rdbhost"
+      }
+    },
     "name": "rpmalloc.build rpmalloc-linux-arm64.configure",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@2@@@"
@@ -230,6 +424,18 @@
       "CFLAGS": "--target=aarch64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot",
       "CXX": "[START_DIR]/cipd/bin/clang++",
       "LDFLAGS": "--target=aarch64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -static-libstdc++"
+    },
+    "luci_context": {
+      "realm": {
+        "name": "gn:ci"
+      },
+      "resultdb": {
+        "current_invocation": {
+          "name": "invocations/build:8945511751514863184",
+          "update_token": "token"
+        },
+        "hostname": "rdbhost"
+      }
     },
     "name": "rpmalloc.build rpmalloc-linux-arm64.ninja",
     "~followup_annotations": [
@@ -262,6 +468,18 @@
       "CXX": "[START_DIR]/cipd/bin/clang++",
       "LDFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -static-libstdc++"
     },
+    "luci_context": {
+      "realm": {
+        "name": "gn:ci"
+      },
+      "resultdb": {
+        "current_invocation": {
+          "name": "invocations/build:8945511751514863184",
+          "update_token": "token"
+        },
+        "hostname": "rdbhost"
+      }
+    },
     "name": "debug.linux-amd64.generate",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@2@@@"
@@ -281,6 +499,18 @@
       "CXX": "[START_DIR]/cipd/bin/clang++",
       "LDFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -static-libstdc++"
     },
+    "luci_context": {
+      "realm": {
+        "name": "gn:ci"
+      },
+      "resultdb": {
+        "current_invocation": {
+          "name": "invocations/build:8945511751514863184",
+          "update_token": "token"
+        },
+        "hostname": "rdbhost"
+      }
+    },
     "name": "debug.linux-amd64.build",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@2@@@"
@@ -297,6 +527,18 @@
       "CFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot",
       "CXX": "[START_DIR]/cipd/bin/clang++",
       "LDFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -static-libstdc++"
+    },
+    "luci_context": {
+      "realm": {
+        "name": "gn:ci"
+      },
+      "resultdb": {
+        "current_invocation": {
+          "name": "invocations/build:8945511751514863184",
+          "update_token": "token"
+        },
+        "hostname": "rdbhost"
+      }
     },
     "name": "debug.linux-amd64.test",
     "~followup_annotations": [
@@ -331,6 +573,18 @@
       "CXX": "[START_DIR]/cipd/bin/clang++",
       "LDFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -static-libstdc++"
     },
+    "luci_context": {
+      "realm": {
+        "name": "gn:ci"
+      },
+      "resultdb": {
+        "current_invocation": {
+          "name": "invocations/build:8945511751514863184",
+          "update_token": "token"
+        },
+        "hostname": "rdbhost"
+      }
+    },
     "name": "release.linux-amd64.generate",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@2@@@"
@@ -350,6 +604,18 @@
       "CXX": "[START_DIR]/cipd/bin/clang++",
       "LDFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -static-libstdc++"
     },
+    "luci_context": {
+      "realm": {
+        "name": "gn:ci"
+      },
+      "resultdb": {
+        "current_invocation": {
+          "name": "invocations/build:8945511751514863184",
+          "update_token": "token"
+        },
+        "hostname": "rdbhost"
+      }
+    },
     "name": "release.linux-amd64.build",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@2@@@"
@@ -366,6 +632,18 @@
       "CFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot",
       "CXX": "[START_DIR]/cipd/bin/clang++",
       "LDFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -static-libstdc++"
+    },
+    "luci_context": {
+      "realm": {
+        "name": "gn:ci"
+      },
+      "resultdb": {
+        "current_invocation": {
+          "name": "invocations/build:8945511751514863184",
+          "update_token": "token"
+        },
+        "hostname": "rdbhost"
+      }
     },
     "name": "release.linux-amd64.test",
     "~followup_annotations": [
@@ -399,6 +677,18 @@
       "CFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot",
       "CXX": "[START_DIR]/cipd/bin/clang++",
       "LDFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -static-libstdc++"
+    },
+    "luci_context": {
+      "realm": {
+        "name": "gn:ci"
+      },
+      "resultdb": {
+        "current_invocation": {
+          "name": "invocations/build:8945511751514863184",
+          "update_token": "token"
+        },
+        "hostname": "rdbhost"
+      }
     },
     "name": "release.linux-amd64.upload.build gn/gn/linux-amd64",
     "~followup_annotations": [
@@ -436,6 +726,18 @@
       "CXX": "[START_DIR]/cipd/bin/clang++",
       "LDFLAGS": "--target=aarch64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -static-libstdc++"
     },
+    "luci_context": {
+      "realm": {
+        "name": "gn:ci"
+      },
+      "resultdb": {
+        "current_invocation": {
+          "name": "invocations/build:8945511751514863184",
+          "update_token": "token"
+        },
+        "hostname": "rdbhost"
+      }
+    },
     "name": "release.linux-arm64.generate",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@2@@@"
@@ -454,6 +756,18 @@
       "CFLAGS": "--target=aarch64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot",
       "CXX": "[START_DIR]/cipd/bin/clang++",
       "LDFLAGS": "--target=aarch64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -static-libstdc++"
+    },
+    "luci_context": {
+      "realm": {
+        "name": "gn:ci"
+      },
+      "resultdb": {
+        "current_invocation": {
+          "name": "invocations/build:8945511751514863184",
+          "update_token": "token"
+        },
+        "hostname": "rdbhost"
+      }
     },
     "name": "release.linux-arm64.build",
     "~followup_annotations": [
@@ -487,6 +801,18 @@
       "CFLAGS": "--target=aarch64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot",
       "CXX": "[START_DIR]/cipd/bin/clang++",
       "LDFLAGS": "--target=aarch64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -static-libstdc++"
+    },
+    "luci_context": {
+      "realm": {
+        "name": "gn:ci"
+      },
+      "resultdb": {
+        "current_invocation": {
+          "name": "invocations/build:8945511751514863184",
+          "update_token": "token"
+        },
+        "hostname": "rdbhost"
+      }
     },
     "name": "release.linux-arm64.upload.build gn/gn/linux-arm64",
     "~followup_annotations": [

@@ -24,7 +24,7 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
-#include "base/task/post_task.h"
+#include "base/synchronization/waitable_event.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_restrictions.h"
@@ -526,11 +526,6 @@ RendererBlinkPlatformImpl::SynchronousCompositorGetSkCanvasForAndroidWebView() {
 }
 #endif
 
-bool RendererBlinkPlatformImpl::IsUseZoomForDSFEnabled() {
-  RenderThread* thread = RenderThread::Get();
-  return thread ? thread->IsUseZoomForDSF() : true;
-}
-
 bool RendererBlinkPlatformImpl::IsLcdTextEnabled() {
   RenderThreadImpl* thread = RenderThreadImpl::current();
   return thread ? thread->IsLcdTextEnabled() : false;
@@ -621,6 +616,11 @@ RendererBlinkPlatformImpl::SharedCompositorWorkerContextProvider() {
 scoped_refptr<gpu::GpuChannelHost>
 RendererBlinkPlatformImpl::EstablishGpuChannelSync() {
   return RenderThreadImpl::current()->EstablishGpuChannelSync();
+}
+
+void RendererBlinkPlatformImpl::EstablishGpuChannel(
+    EstablishGpuChannelCallback callback) {
+  RenderThreadImpl::current()->EstablishGpuChannel(std::move(callback));
 }
 
 bool RendererBlinkPlatformImpl::RTCSmoothnessAlgorithmEnabled() {
@@ -1074,10 +1074,12 @@ RendererBlinkPlatformImpl::MediaThreadTaskRunner() {
   return render_thread->GetMediaThreadTaskRunner();
 }
 
-media::DecoderFactory* RendererBlinkPlatformImpl::GetMediaDecoderFactory() {
-  auto* render_thread = RenderThreadImpl::current();
-  DCHECK(!!render_thread);
-  return render_thread->GetMediaDecoderFactory();
+base::WeakPtr<media::DecoderFactory>
+RendererBlinkPlatformImpl::GetMediaDecoderFactory() {
+  blink::WebLocalFrame* const web_frame =
+      blink::WebLocalFrame::FrameForCurrentContext();
+  RenderFrameImpl* render_frame = RenderFrameImpl::FromWebFrame(web_frame);
+  return render_frame->GetMediaDecoderFactory();
 }
 
 void RendererBlinkPlatformImpl::SetRenderingColorSpace(

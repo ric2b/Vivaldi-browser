@@ -13,11 +13,12 @@ import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {PluralStringProxyImpl} from 'chrome://resources/js/plural_string_proxy.js';
 import {IronA11yAnnouncer} from 'chrome://resources/polymer/v3_0/iron-a11y-announcer/iron-a11y-announcer.js';
 // </if>
-import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {Destination, GooglePromotedDestinationId} from '../data/destination.js';
-import {getPrinterTypeForDestination, PrinterType} from '../data/destination_match.js';
+import {Destination, PrinterType} from '../data/destination.js';
 import {State} from '../data/state.js';
+
+import {getTemplate} from './button_strip.html.js';
 
 
 export class PrintPreviewButtonStripElement extends PolymerElement {
@@ -26,7 +27,7 @@ export class PrintPreviewButtonStripElement extends PolymerElement {
   }
 
   static get template() {
-    return html`{__html_template__}`;
+    return getTemplate();
   }
 
   static get properties() {
@@ -99,16 +100,14 @@ export class PrintPreviewButtonStripElement extends PolymerElement {
     this.fire_('cancel-requested');
   }
 
-  private isPdfOrDrive_(): boolean {
+  private isPdf_(): boolean {
     return this.destination &&
-        (getPrinterTypeForDestination(this.destination) ===
-             PrinterType.PDF_PRINTER ||
-         this.destination.id === GooglePromotedDestinationId.DOCS);
+        this.destination.type === PrinterType.PDF_PRINTER;
   }
 
   private updatePrintButtonLabel_() {
-    this.printButtonLabel_ = loadTimeData.getString(
-        this.isPdfOrDrive_() ? 'saveButton' : 'printButton');
+    this.printButtonLabel_ =
+        loadTimeData.getString(this.isPdf_() ? 'saveButton' : 'printButton');
   }
 
   private updatePrintButtonEnabled_() {
@@ -120,10 +119,10 @@ export class PrintPreviewButtonStripElement extends PolymerElement {
         // <if expr="chromeos_ash or chromeos_lacros">
         this.printButtonEnabled_ = !this.printButtonDisabled_();
         // </if>
-        // <if expr="not chromeos and not lacros">
+        // <if expr="not chromeos_ash and not chromeos_lacros">
         this.printButtonEnabled_ = true;
         // </if>
-        if (this.firstLoad) {
+        if (this.firstLoad || this.lastState_ === State.PRINTING) {
           this.shadowRoot!
               .querySelector<CrButtonElement>(
                   'cr-button.action-button')!.focus();
@@ -146,7 +145,7 @@ export class PrintPreviewButtonStripElement extends PolymerElement {
     // * This is "real" printing, i.e. not saving to PDF/Drive.
     // * Sheets policy is present.
     // * Either number of sheets is not calculated or exceeds policy limit.
-    return !this.isPdfOrDrive_() && this.maxSheets > 0 &&
+    return !this.isPdf_() && this.maxSheets > 0 &&
         (this.sheetCount === 0 || this.sheetCount > this.maxSheets);
   }
 

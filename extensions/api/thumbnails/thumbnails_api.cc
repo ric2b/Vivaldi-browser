@@ -24,6 +24,7 @@
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -31,8 +32,10 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/drop_data.h"
 #include "extensions/common/api/extension_types.h"
 #include "extensions/common/error_utils.h"
+#include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/codec/png_codec.h"
@@ -42,20 +45,39 @@
 
 #include "app/vivaldi_apptools.h"
 #include "browser/vivaldi_browser_finder.h"
+#include "components/capture/capture_page.h"
 #include "components/datasource/vivaldi_image_store.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "ui/vivaldi_browser_window.h"
+#include "ui/vivaldi_skia_utils.h"
 #include "ui/vivaldi_ui_utils.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
+
+namespace extensions {
+
+struct CaptureData {
+  // Input parameters
+  ::vivaldi::skia_utils::ImageFormat image_format =
+      ::vivaldi::skia_utils::ImageFormat::kPNG;
+  int encode_quality = 90;
+  bool show_file_in_path = false;
+  bool copy_to_clipboard = false;
+  bool save_to_disk = false;
+  std::string save_folder;
+  std::string save_file_pattern;
+  GURL url;
+  std::string title;
+
+  // Output parameters
+  absl::optional<bool> success;
+  std::string base64;
+  base::FilePath image_path;
+};
 
 namespace {
 
 const int kMaximumPageHeight = 30000;
 const int kMaximumFilenameLength = 100;
-
-}  // namespace
-
-namespace extensions {
 
 /*
 Patterns supported:
@@ -194,9 +216,9 @@ base::FilePath ConstructCaptureFilename(
       new_string = truncated;
     }
 
-#if defined(OS_POSIX)
+#if BUILDFLAG(IS_POSIX)
     base_path = base_path.Append(new_string);
-#elif defined(OS_WIN)
+#elif BUILDFLAG(IS_WIN)
     base_path = base_path.Append(base::UTF8ToWide(new_string));
 #endif
   }
@@ -211,46 +233,106 @@ base::FilePath ConstructCaptureFilename(
   return base_path;
 }
 
-bool SaveBitmapOnWorkerThread(SkBitmap bitmap,
-                              const CaptureFormat& format,
-                              std::string* image_data,
-                              base::FilePath* file_path) {
-  DCHECK(image_data->empty());
-  DCHECK(file_path->empty());
-  if (!format.save_to_disk) {
-    *image_data = ::vivaldi::skia_utils::EncodeBitmapAsDataUrl(
-        std::move(bitmap), format.image_format, format.encode_quality);
-    return !image_data->empty();
+std::unique_ptr<CaptureData> SaveBitmapOnWorkerThread(
+    std::unique_ptr<CaptureData> data,
+    SkBitmap bitmap) {
+  DCHECK(!data->success.has_value());
+  DCHECK(!data->copy_to_clipboard);
+  DCHECK(!bitmap.drawsNothing());
+  do {
+    if (!data->save_to_disk) {
+      std::string image_data = ::vivaldi::skia_utils::EncodeBitmapAsDataUrl(
+          std::move(bitmap), data->image_format, data->encode_quality);
+      if (!image_data.empty()) {
+        data->base64 = std::move(image_data);
+        data->success = true;
+      }
+      break;
+    }
+    std::vector<unsigned char> image_bytes =
+        ::vivaldi::skia_utils::EncodeBitmap(
+            std::move(bitmap), data->image_format, data->encode_quality);
+    if (image_bytes.empty())
+      break;
+    base::FilePath path = base::FilePath::FromUTF8Unsafe(data->save_folder);
+    if (!base::PathExists(path)) {
+      base::CreateDirectory(path);
+    }
+    base::FilePath::StringPieceType ext = FILE_PATH_LITERAL(".jpg");
+    if (data->image_format == ::vivaldi::skia_utils::ImageFormat::kPNG) {
+      ext = FILE_PATH_LITERAL(".png");
+    }
+    path = ConstructCaptureFilename(std::move(path), data->save_file_pattern,
+                                    data->url, data->title, ext);
+    int nwritten =
+        base::WriteFile(path, reinterpret_cast<const char*>(&image_bytes[0]),
+                        static_cast<int>(image_bytes.size()));
+    if (nwritten < 0 || static_cast<size_t>(nwritten) != image_bytes.size()) {
+      LOG(ERROR) << "Failed to write to " << path;
+      break;
+    }
+    data->image_path = std::move(path);
+    data->success = true;
+  } while (false);
+
+  if (!data->success.has_value()) {
+    data->success = false;
   }
-  std::vector<unsigned char> data = ::vivaldi::skia_utils::EncodeBitmap(
-      std::move(bitmap), format.image_format, format.encode_quality);
-  if (data.empty())
-    return false;
-  base::FilePath path = base::FilePath::FromUTF8Unsafe(format.save_folder);
-  if (!base::PathExists(path)) {
-    base::CreateDirectory(path);
-  }
-  base::FilePath::StringPieceType ext = FILE_PATH_LITERAL(".jpg");
-  if (format.image_format == ::vivaldi::skia_utils::ImageFormat::kPNG) {
-    ext = FILE_PATH_LITERAL(".png");
-  }
-  path = ConstructCaptureFilename(std::move(path), format.save_file_pattern,
-                                  format.url, format.title, ext);
-  int nwritten = base::WriteFile(path, reinterpret_cast<const char*>(&data[0]),
-                                 static_cast<int>(data.size()));
-  if (nwritten < 0 || static_cast<size_t>(nwritten) != data.size()) {
-    LOG(ERROR) << "Failed to write to " << path;
-    return false;
-  }
-  *file_path = std::move(path);
-  return true;
+  return data;
 }
 
-CaptureFormat::CaptureFormat() = default;
-CaptureFormat::~CaptureFormat() = default;
+using SaveCapturedBitmapCallback =
+    base::OnceCallback<void(std::unique_ptr<CaptureData> data)>;
 
-ThumbnailsCaptureUIFunction::ThumbnailsCaptureUIFunction() = default;
-ThumbnailsCaptureUIFunction::~ThumbnailsCaptureUIFunction() = default;
+void FinishSaveBitmapOnUIThread(SaveCapturedBitmapCallback callback,
+                                std::unique_ptr<CaptureData> data) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  if (!*data->success) {
+    LOG(ERROR) << "Failed to capture " << data->url.possibly_invalid_spec();
+  }
+  std::move(callback).Run(std::move(data));
+}
+
+// Order of arguments allows to bind the first two and be called with `bitmap`
+// later.
+void SaveCapturedBitmap(std::unique_ptr<CaptureData> data,
+                        SaveCapturedBitmapCallback callback,
+                        SkBitmap bitmap) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  DCHECK(!data->success.has_value());
+  if (bitmap.drawsNothing()) {
+    data->success = false;
+  } else if (data->copy_to_clipboard) {
+    // Clipboard must be accessed on UI thread.
+    ui::ScopedClipboardWriter scw(ui::ClipboardBuffer::kCopyPaste);
+    scw.Reset();
+    scw.WriteImage(bitmap);
+
+    // We no longer need the bitmap.
+    bitmap = SkBitmap();
+    data->success = true;
+  } else {
+    base::ThreadPool::PostTaskAndReplyWithResult(
+        FROM_HERE,
+        {base::TaskPriority::USER_VISIBLE, base::MayBlock(),
+         base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
+        base::BindOnce(&SaveBitmapOnWorkerThread, std::move(data),
+                       std::move(bitmap)),
+        base::BindOnce(&FinishSaveBitmapOnUIThread, std::move(callback)));
+    return;
+  }
+  FinishSaveBitmapOnUIThread(std::move(callback), std::move(data));
+}
+
+void ShowFolderIfNecessary(content::BrowserContext* browser_context,
+                           CaptureData& data) {
+  if (data.success && data.show_file_in_path && !data.image_path.empty()) {
+    Profile* profile = Profile::FromBrowserContext(browser_context);
+    platform_util::ShowItemInFolder(profile, data.image_path);
+  }
+}
+
+}  // namespace
 
 ExtensionFunction::ResponseAction ThumbnailsCaptureUIFunction::Run() {
   using vivaldi::thumbnails::CaptureUI::Params;
@@ -264,37 +346,38 @@ ExtensionFunction::ResponseAction ThumbnailsCaptureUIFunction::Run() {
     return RespondNow(Error("No such window"));
   }
 
+  auto data = std::make_unique<CaptureData>();
   if (params->params.save_file_pattern) {
-    format_.save_file_pattern = *params->params.save_file_pattern;
+    data->save_file_pattern = *params->params.save_file_pattern;
   }
   if (params->params.encode_format.get()) {
-    format_.image_format = *params->params.encode_format == "jpg"
-                               ? ::vivaldi::skia_utils::ImageFormat::kJPEG
-                               : ::vivaldi::skia_utils::ImageFormat::kPNG;
+    data->image_format = *params->params.encode_format == "jpg"
+                             ? ::vivaldi::skia_utils::ImageFormat::kJPEG
+                             : ::vivaldi::skia_utils::ImageFormat::kPNG;
   }
   if (params->params.encode_quality.get()) {
-    format_.encode_quality = *params->params.encode_quality.get();
+    data->encode_quality = *params->params.encode_quality.get();
   }
   if (params->params.save_to_disk.get()) {
-    format_.save_to_disk = *params->params.save_to_disk;
+    data->save_to_disk = *params->params.save_to_disk;
   }
-  if (format_.save_to_disk) {
+  if (data->save_to_disk) {
     if (params->params.show_file_in_path) {
-      format_.show_file_in_path = *params->params.show_file_in_path;
+      data->show_file_in_path = *params->params.show_file_in_path;
     }
     Profile* profile = Profile::FromBrowserContext(browser_context());
-    format_.save_folder =
+    data->save_folder =
         profile->GetPrefs()->GetString(vivaldiprefs::kWebpagesCaptureDirectory);
   }
   if (params->params.copy_to_clipboard.get()) {
-    format_.copy_to_clipboard = *params->params.copy_to_clipboard;
+    data->copy_to_clipboard = *params->params.copy_to_clipboard;
   }
 
   content::WebContents* tab =
       window->browser()->tab_strip_model()->GetActiveWebContents();
   if (tab) {
-    format_.url = tab->GetVisibleURL();
-    format_.title = base::UTF16ToUTF8(tab->GetTitle());
+    data->url = tab->GetVisibleURL();
+    data->title = base::UTF16ToUTF8(tab->GetTitle());
   }
 
   gfx::RectF rect(params->params.pos_x, params->params.pos_y,
@@ -302,63 +385,37 @@ ExtensionFunction::ResponseAction ThumbnailsCaptureUIFunction::Run() {
   ::vivaldi::FromUICoordinates(window->web_contents(), &rect);
   ::vivaldi::CapturePage::CaptureVisible(
       window->web_contents(), rect,
-      base::BindOnce(&ThumbnailsCaptureUIFunction::OnCaptureDone, this));
+      base::BindOnce(&ThumbnailsCaptureUIFunction::OnCaptureDone, this,
+                     std::move(data)));
   return did_respond() ? AlreadyResponded() : RespondLater();
 }
 
-void ThumbnailsCaptureUIFunction::OnCaptureDone(bool success,
-                                                float device_scale_factor,
-                                                const SkBitmap& bitmap) {
+void ThumbnailsCaptureUIFunction::OnCaptureDone(
+    std::unique_ptr<CaptureData> data,
+    bool success,
+    float device_scale_factor,
+    const SkBitmap& bitmap) {
   if (!success) {
-    SendResult(false);
+    SendResult(std::move(data));
     return;
   }
 
   // TODO(igor@vivaldi.com): Consider using device_scale_factor to embed
   // DPI comments into the resulting image.
 
-  if (format_.copy_to_clipboard) {
-    // Ignore everything else, we copy it raw to the clipboard.
-    ui::ScopedClipboardWriter scw(ui::ClipboardBuffer::kCopyPaste);
-    scw.Reset();
-    scw.WriteImage(bitmap);
-    SendResult(true);
-    return;
-  }
-
-  base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::TaskPriority::USER_VISIBLE, base::MayBlock(),
-       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
-      base::BindOnce(&ThumbnailsCaptureUIFunction::ProcessImageOnWorkerThread,
-                     this, bitmap),
-      base::BindOnce(&ThumbnailsCaptureUIFunction::SendResult, this));
+  SaveCapturedBitmap(
+      std::move(data),
+      base::BindOnce(&ThumbnailsCaptureUIFunction::SendResult, this),
+      std::move(bitmap));
 }
 
-bool ThumbnailsCaptureUIFunction::ProcessImageOnWorkerThread(SkBitmap bitmap) {
-  return SaveBitmapOnWorkerThread(std::move(bitmap), format_, &image_data_,
-                                  &file_path_);
-}
-
-void ThumbnailsCaptureUIFunction::SendResult(bool success) {
+void ThumbnailsCaptureUIFunction::SendResult(
+    std::unique_ptr<CaptureData> data) {
   namespace Results = vivaldi::thumbnails::CaptureUI::Results;
 
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  if (!success) {
-    LOG(ERROR) << "Failed to capture UI "
-               << format_.url.possibly_invalid_spec();
-  }
-  Respond(ArgumentList(Results::Create(success, image_data_)));
-
-  if (success && format_.show_file_in_path && !format_.copy_to_clipboard) {
-    Profile* profile = Profile::FromBrowserContext(browser_context());
-    platform_util::ShowItemInFolder(profile, file_path_);
-  }
+  Respond(ArgumentList(Results::Create(*data->success, data->base64)));
+  ShowFolderIfNecessary(browser_context(), *data);
 }
-
-ThumbnailsCaptureTabFunction::ThumbnailsCaptureTabFunction() = default;
-
-ThumbnailsCaptureTabFunction::~ThumbnailsCaptureTabFunction() = default;
 
 ExtensionFunction::ResponseAction ThumbnailsCaptureTabFunction::Run() {
   using vivaldi::thumbnails::CaptureTab::Params;
@@ -366,16 +423,17 @@ ExtensionFunction::ResponseAction ThumbnailsCaptureTabFunction::Run() {
   std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
+  auto data = std::make_unique<CaptureData>();
   if (params->params.save_file_pattern) {
-    format_.save_file_pattern = *params->params.save_file_pattern;
+    data->save_file_pattern = *params->params.save_file_pattern;
   }
   if (params->params.encode_format) {
-    format_.image_format = *params->params.encode_format == "jpg"
-                               ? ::vivaldi::skia_utils::ImageFormat::kJPEG
-                               : ::vivaldi::skia_utils::ImageFormat::kPNG;
+    data->image_format = *params->params.encode_format == "jpg"
+                             ? ::vivaldi::skia_utils::ImageFormat::kJPEG
+                             : ::vivaldi::skia_utils::ImageFormat::kPNG;
   }
   if (params->params.encode_quality) {
-    format_.encode_quality = *params->params.encode_quality;
+    data->encode_quality = *params->params.encode_quality;
   }
   bool capture_full_page = false;
   if (params->params.full_page) {
@@ -397,7 +455,7 @@ ExtensionFunction::ResponseAction ThumbnailsCaptureTabFunction::Run() {
     out_dimension.set_width(*params->params.width);
   }
   if (params->params.save_to_disk) {
-    format_.save_to_disk = *params->params.save_to_disk;
+    data->save_to_disk = *params->params.save_to_disk;
   }
   // If full-page capture and no crop-rect set a default height.
   if (capture_full_page && rect.height() == 0) {
@@ -405,16 +463,16 @@ ExtensionFunction::ResponseAction ThumbnailsCaptureTabFunction::Run() {
   }
   // Sanitize the user input.
   rect.set_height(std::min(kMaximumPageHeight, rect.height()));
-  if (format_.save_to_disk) {
+  if (data->save_to_disk) {
     if (params->params.show_file_in_path) {
-      format_.show_file_in_path = *params->params.show_file_in_path;
+      data->show_file_in_path = *params->params.show_file_in_path;
     }
     Profile* profile = Profile::FromBrowserContext(browser_context());
-    format_.save_folder =
+    data->save_folder =
         profile->GetPrefs()->GetString(vivaldiprefs::kWebpagesCaptureDirectory);
   }
   if (params->params.copy_to_clipboard) {
-    format_.copy_to_clipboard = *params->params.copy_to_clipboard;
+    data->copy_to_clipboard = *params->params.copy_to_clipboard;
   }
   if (capture_full_page && !out_dimension.IsEmpty()) {
     return RespondNow(
@@ -434,8 +492,8 @@ ExtensionFunction::ResponseAction ThumbnailsCaptureTabFunction::Run() {
   if (!tabstrip_contents)
     return RespondNow(Error("No such tab - " + std::to_string(tab_id)));
 
-  format_.url = tabstrip_contents->GetVisibleURL();
-  format_.title = base::UTF16ToUTF8(tabstrip_contents->GetTitle());
+  data->url = tabstrip_contents->GetVisibleURL();
+  data->title = base::UTF16ToUTF8(tabstrip_contents->GetTitle());
 
   ::vivaldi::CapturePage::CaptureParams capture_params;
   capture_params.full_page = capture_full_page;
@@ -454,58 +512,21 @@ ExtensionFunction::ResponseAction ThumbnailsCaptureTabFunction::Run() {
 
   ::vivaldi::CapturePage::Capture(
       tabstrip_contents, capture_params,
-      base::BindOnce(&ThumbnailsCaptureTabFunction::OnTabCaptureCompleted,
-                     this));
+      base::BindOnce(
+          &SaveCapturedBitmap, std::move(data),
+          base::BindOnce(&ThumbnailsCaptureTabFunction::SendResult, this)));
 
   // did_respond() is true  when the capture method above called the callback
   // immediately due to errors.
   return did_respond() ? AlreadyResponded() : RespondLater();
 }
 
-void ThumbnailsCaptureTabFunction::OnTabCaptureCompleted(
-    ::vivaldi::CapturePage::Result captured) {
-  base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::TaskPriority::USER_VISIBLE, base::MayBlock(),
-       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
-      base::BindOnce(&ThumbnailsCaptureTabFunction::ConvertImageOnWorkerThread,
-                     this, std::move(captured)),
-      base::BindOnce(&ThumbnailsCaptureTabFunction::SendResult, this));
-}
-
-bool ThumbnailsCaptureTabFunction::ConvertImageOnWorkerThread(
-    ::vivaldi::CapturePage::Result captured) {
-  if (!captured.MovePixelsToBitmap(&bitmap_))
-    return false;
-  if (format_.copy_to_clipboard)
-    return true;
-  return SaveBitmapOnWorkerThread(std::move(bitmap_), format_, &image_data_,
-                                  &file_path_);
-}
-
-void ThumbnailsCaptureTabFunction::SendResult(bool success) {
+void ThumbnailsCaptureTabFunction::SendResult(
+    std::unique_ptr<CaptureData> data) {
   namespace Results = vivaldi::thumbnails::CaptureTab::Results;
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  if (!success) {
-    LOG(ERROR) << "Failed to capture tab "
-               << format_.url.possibly_invalid_spec();
-    Respond(ArgumentList(Results::Create(false, std::string())));
-    return;
-  }
-
-  if (format_.copy_to_clipboard) {
-    // Ignore everything else, we copy it raw to the clipboard.
-    ui::ScopedClipboardWriter scw(ui::ClipboardBuffer::kCopyPaste);
-    scw.Reset();
-    scw.WriteImage(bitmap_);
-  }
-  Respond(ArgumentList(Results::Create(true, image_data_)));
-
-  if (format_.show_file_in_path && !format_.copy_to_clipboard) {
-    Profile* profile = Profile::FromBrowserContext(browser_context());
-    platform_util::ShowItemInFolder(profile, file_path_);
-  }
+  Respond(ArgumentList(Results::Create(*data->success, data->base64)));
+  ShowFolderIfNecessary(browser_context(), *data);
 }
 
 ThumbnailsCaptureBookmarkFunction::ThumbnailsCaptureBookmarkFunction() =

@@ -7,6 +7,23 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+
+  @media (prefers-color-scheme: dark) {
+    :host([is-current-destination-cros-local_]) #statusText {
+      color: var(--google-red-300);
+    }
+  }
+
+  a[href] {
+    color: var(--google-blue-600);
+    text-decoration: none;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    a[href] {
+      color: var(--cr-link-color);
+    }
+  }
 </style>
 <iron-media-query query="(prefers-color-scheme: dark)"
     query-matches="{{isDarkModeActive_}}">

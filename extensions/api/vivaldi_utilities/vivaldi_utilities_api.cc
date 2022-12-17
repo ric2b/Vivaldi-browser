@@ -95,7 +95,7 @@
 #include "ui/vivaldi_skia_utils.h"
 #include "ui/vivaldi_ui_utils.h"
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 #if !defined(NTDDI_WIN10_19H1)
 #error Windows 10.0.18362.0 SDK or higher required.
 #endif
@@ -103,7 +103,7 @@
 #include <windows.h>
 #include "base/win/windows_version.h"
 #include "chrome/browser/password_manager/password_manager_util_win.h"
-#elif defined(OS_MAC)
+#elif BUILDFLAG(IS_MAC)
 #include "chrome/browser/password_manager/password_manager_util_mac.h"
 #endif
 
@@ -114,6 +114,23 @@ namespace extensions {
 namespace {
 constexpr char kMutexNameKey[] = "name";
 constexpr char kMutexReleaseTokenKey[] = "release_token";
+
+// Helper for version testing. It is assumed that each array hold at least two
+// elements.
+static bool HasVersionChanged(std::vector<std::string> version,
+                              std::vector<std::string> last_seen) {
+  int last_seen_major, version_major, last_seen_minor, version_minor;
+  if (base::StringToInt(version[0], &version_major) &&
+      base::StringToInt(last_seen[0], &last_seen_major) &&
+      base::StringToInt(version[1], &version_minor) &&
+      base::StringToInt(last_seen[1], &last_seen_minor)) {
+    return (version_major > last_seen_major) ||
+           ((version_minor > last_seen_minor) &&
+            (version_major >= last_seen_major));
+  } else {
+    return false;
+  }
+}
 
 ContentSetting vivContentSettingFromString(const std::string& name) {
   ContentSetting setting;
@@ -326,11 +343,11 @@ void VivaldiUtilitiesAPI::OsReauthCall(
     password_manager::ReauthPurpose purpose,
     password_manager::PasswordAccessAuthenticator::AuthResultCallback
         callback) {
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   bool result =
       password_manager_util_win::AuthenticateUser(native_window_, purpose);
   std::move(callback).Run(result);
-#elif defined(OS_MAC)
+#elif BUILDFLAG(IS_MAC)
   bool result = password_manager_util_mac::AuthenticateUser(purpose);
   std::move(callback).Run(result);
 #else
@@ -847,7 +864,7 @@ ExtensionFunction::ResponseAction UtilitiesGetVersionFunction::Run() {
 
 ExtensionFunction::ResponseAction UtilitiesGetFFMPEGStateFunction::Run() {
   namespace Results = vivaldi::utilities::GetFFMPEGState::Results;
-#if defined(OS_LINUX)
+#if BUILDFLAG(IS_LINUX)
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
   if (!command_line.HasSwitch(switches::kAutoTestMode)) {
@@ -1409,31 +1426,41 @@ ExtensionFunction::ResponseAction UtilitiesCanShowWhatsNewPageFunction::Run() {
         Profile::FromBrowserContext(browser_context())->GetOriginalProfile();
     bool version_changed = false;
     std::string version = ::vivaldi::GetVivaldiVersionString();
+    std::string mail_version = ::vivaldi::GetVivaldiMailVersionString();
     std::string last_seen_version =
         profile->GetPrefs()->GetString(vivaldiprefs::kStartupLastSeenVersion);
+    std::string last_seen_mail_version =
+        profile->GetPrefs()->GetString(
+            vivaldiprefs::kStartupLastSeenMailVersion);
 
     std::vector<std::string> version_array = base::SplitString(
         version, ".", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+    std::vector<std::string> mail_version_array = base::SplitString(
+        mail_version, ".", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
     std::vector<std::string> last_seen_array =
         base::SplitString(last_seen_version, ".", base::KEEP_WHITESPACE,
                           base::SPLIT_WANT_NONEMPTY);
+    std::vector<std::string> last_seen_mail_array =
+        base::SplitString(last_seen_mail_version, ".", base::KEEP_WHITESPACE,
+                          base::SPLIT_WANT_NONEMPTY);
 
-    if (version_array.size() != 4 || last_seen_array.size() != 4) {
+    if (version_array.size() != 4 || last_seen_array.size() != 4 ||
+        mail_version_array.size() != 4 || last_seen_mail_array.size() != 4) {
       version_changed = true;
       results.firstrun = last_seen_array.size() == 0;
       profile->GetPrefs()->SetString(vivaldiprefs::kStartupLastSeenVersion,
                                      version);
+      profile->GetPrefs()->SetString(vivaldiprefs::kStartupLastSeenMailVersion,
+                                     mail_version);
     } else {
-      int last_seen_major, version_major, last_seen_minor, version_minor;
-      if (base::StringToInt(version_array[0], &version_major) &&
-          base::StringToInt(last_seen_array[0], &last_seen_major) &&
-          base::StringToInt(version_array[1], &version_minor) &&
-          base::StringToInt(last_seen_array[1], &last_seen_minor)) {
-        version_changed = (version_major > last_seen_major) ||
-                          ((version_minor > last_seen_minor) &&
-                           (version_major >= last_seen_major));
+      version_changed =
+        HasVersionChanged(version_array, last_seen_array) ||
+        HasVersionChanged(mail_version_array, last_seen_mail_array);
+      if (version_changed) {
         profile->GetPrefs()->SetString(vivaldiprefs::kStartupLastSeenVersion,
                                        version);
+        profile->GetPrefs()->SetString(
+            vivaldiprefs::kStartupLastSeenMailVersion, mail_version);
       }
     }
 
@@ -1642,7 +1669,7 @@ ExtensionFunction::ResponseAction
 UtilitiesGetMediaAvailableStateFunction::Run() {
   namespace Results = vivaldi::utilities::GetMediaAvailableState::Results;
   bool is_available = true;
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
   if (!command_line.HasSwitch(switches::kAutoTestMode)) {
@@ -2016,6 +2043,28 @@ void UtilitiesTranslateTextFunction::OnTranslateFinished(
   result.error = ConvertTranslateErrorCodeToAPIErrorCode(error);
 
   Respond(ArgumentList(Results::Create(result)));
+}
+
+ExtensionFunction::ResponseAction
+UtilitiesShowManageSSLCertificatesFunction::Run() {
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+  using vivaldi::utilities::ShowManageSSLCertificates::Params;
+  namespace Results = vivaldi::utilities::ShowManageSSLCertificates::Results;
+
+  std::unique_ptr<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  VivaldiBrowserWindow* window =
+      VivaldiBrowserWindow::FromId(params->window_id);
+  if (!window) {
+    return RespondNow(Error("No such window"));
+  }
+  settings_utils::ShowManageSSLCertificates(window->web_contents());
+
+  return RespondNow(ArgumentList(Results::Create()));
+#else
+  return RespondNow(Error("API not available on this platform"));
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
 }
 
 }  // namespace extensions

@@ -48,12 +48,14 @@ import java.util.Set;
 // Vivaldi
 import android.content.Intent;
 
+import org.chromium.ui.base.DeviceFormFactor;
 import org.vivaldi.browser.VivaldiNonSelectionActionModeCallback;
 import org.vivaldi.browser.common.VivaldiUrlConstants;
 import org.vivaldi.browser.notes.NoteAppendActivity;
 import org.vivaldi.browser.notes.NoteSelectionPopupController;
 import org.vivaldi.browser.notes.NotesModel;
 import org.vivaldi.browser.panels.PanelUtils;
+import org.vivaldi.browser.translate.VivaldiTranslateBridge;
 
 /**
  * A class that handles selection action mode for the active {@link Tab}.
@@ -122,6 +124,8 @@ public class ChromeActionModeHandler {
         private final Consumer<Boolean> mActionBarObserver;
         private final Callback<String> mSearchCallback;
         private final Supplier<ShareDelegate> mShareDelegateSupplier;
+        // Vivaldi
+        private String mTranslateText;
 
         // Used for recording UMA histograms.
         private long mContextMenuStartTime;
@@ -259,9 +263,37 @@ public class ChromeActionModeHandler {
                 mHelper.finishActionMode();
             }  else if (item.getItemId()
                     == org.chromium.chrome.R.id.select_action_menu_translate) { // Vivaldi
-                PanelUtils.showPanel(TabUtils.getActivity(mTab), VivaldiUrlConstants.TRANSLATE_PANEL_URL,
-                        false, false, mHelper.getSelectedText());
+                mTranslateText = mHelper.getSelectedText();
+                if (!DeviceFormFactor.isNonMultiDisplayContextOnTablet(TabUtils.getActivity(mTab))) {
+                    VivaldiTranslateBridge bridge = new VivaldiTranslateBridge();
+                    bridge.addObserver(new VivaldiTranslateBridge.TranslationObserver() {
+                        @Override
+                        public void textTranslated(int error,
+                                                   String origLang,
+                                                   String origText,
+                                                   String translatedLang,
+                                                   String translatedText) {
+                        }
 
+                        @Override
+                        public void onTranslatedTextAdded(String id,
+                                                          String origLang,
+                                                          String origText,
+                                                          String translatedCode,
+                                                          String translatedText) {
+                        }
+
+                        @Override
+                        public void onLanguageDetermined(String langCode) {
+                            PanelUtils.translateText(TabUtils.getActivity(mTab),
+                                    mTranslateText, langCode);
+                        }
+                    });
+                    bridge.determineTextLanguage(mTab.getWebContents(), mHelper.getSelectedText());
+                } else { // tablet
+                    PanelUtils.translateTextFromAutodetectLang(TabUtils.getActivity(mTab),
+                            mHelper.getSelectedText());
+                }
                 mHelper.finishActionMode();
             } else {
                 return mHelper.onActionItemClicked(mode, item);

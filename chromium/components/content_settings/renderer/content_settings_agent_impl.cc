@@ -18,7 +18,6 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/origin_util.h"
 #include "content/public/common/url_constants.h"
-#include "content/public/renderer/document_state.h"
 #include "content/public/renderer/render_frame.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
@@ -41,23 +40,9 @@ using blink::WebSecurityOrigin;
 using blink::WebString;
 using blink::WebURL;
 using blink::WebView;
-using content::DocumentState;
 
 namespace content_settings {
 namespace {
-
-GURL GetOriginOrURL(const WebFrame* frame) {
-  url::Origin top_origin = url::Origin(frame->Top()->GetSecurityOrigin());
-  // The `top_origin` is unique ("null") e.g., for file:// URLs. Use the
-  // document URL as the primary URL in those cases.
-  // TODO(alexmos): This is broken for --site-per-process, since top() can be a
-  // WebRemoteFrame which does not have a document(), and the WebRemoteFrame's
-  // URL is not replicated.  See https://crbug.com/628759.
-  if (top_origin.opaque() && frame->Top()->IsWebLocalFrame())
-    return frame->Top()->ToWebLocalFrame()->GetDocument().Url();
-  return top_origin.GetURL();
-}
-
 bool IsFrameWithOpaqueOrigin(WebFrame* frame) {
   // Storage access is keyed off the top origin and the frame's origin.
   // It will be denied any opaque origins so have this method to return early
@@ -129,16 +114,6 @@ ContentSettingsAgentImpl::GetContentSettingsManager() {
   return *content_settings_manager_;
 }
 
-void ContentSettingsAgentImpl::SetContentSettingRules(
-    const RendererContentSettingRules* content_setting_rules) {
-  content_setting_rules_ = content_setting_rules;
-}
-
-const RendererContentSettingRules*
-ContentSettingsAgentImpl::GetContentSettingRules() {
-  return content_setting_rules_;
-}
-
 void ContentSettingsAgentImpl::DidBlockContentType(
     ContentSettingsType settings_type) {
   bool newly_blocked = content_blocked_.insert(settings_type).second;
@@ -146,10 +121,10 @@ void ContentSettingsAgentImpl::DidBlockContentType(
     GetContentSettingsManager().OnContentBlocked(routing_id(), settings_type);
 }
 
+namespace {
 template <typename URL>
-ContentSetting GetContentSettingFromRulesImpl(
+ContentSetting GetContentSettingFromRules(
     const ContentSettingsForOneType& rules,
-    const WebFrame* frame,
     const URL& secondary_url) {
   // If there is only one rule, it's the default rule and we don't need to match
   // the patterns.
@@ -158,31 +133,21 @@ ContentSetting GetContentSettingFromRulesImpl(
     DCHECK(rules[0].secondary_pattern == ContentSettingsPattern::Wildcard());
     return rules[0].GetContentSetting();
   }
-  const GURL& primary_url = GetOriginOrURL(frame);
+  // The primary pattern has already been matched in the browser process (see
+  // PageSpecificContentSettings::WebContentsHandler::ReadyToCommitNavigation),
+  // and the rules received by the renderer are a subset of the existing rules
+  // that have the correct primary pattern. So we only need to check the
+  // secondary pattern below.
   const GURL& secondary_gurl = secondary_url;
   for (const auto& rule : rules) {
-    if (rule.primary_pattern.Matches(primary_url) &&
-        rule.secondary_pattern.Matches(secondary_gurl)) {
+    if (rule.secondary_pattern.Matches(secondary_gurl)) {
       return rule.GetContentSetting();
     }
   }
   NOTREACHED();
   return CONTENT_SETTING_DEFAULT;
 }
-
-ContentSetting ContentSettingsAgentImpl::GetContentSettingFromRules(
-    const ContentSettingsForOneType& rules,
-    const WebFrame* frame,
-    const GURL& secondary_url) {
-  return GetContentSettingFromRulesImpl(rules, frame, secondary_url);
-}
-
-ContentSetting ContentSettingsAgentImpl::GetContentSettingFromRules(
-    const ContentSettingsForOneType& rules,
-    const WebFrame* frame,
-    const blink::WebURL& secondary_url) {
-  return GetContentSettingFromRulesImpl(rules, frame, secondary_url);
-}
+}  // namespace
 
 void ContentSettingsAgentImpl::BindContentSettingsManager(
     mojo::Remote<mojom::ContentSettingsManager>* manager) {
@@ -193,16 +158,16 @@ void ContentSettingsAgentImpl::BindContentSettingsManager(
 
 void ContentSettingsAgentImpl::DidCommitProvisionalLoad(
     ui::PageTransition transition) {
-  blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
-  if (frame->Parent())
-    return;  // Not a top-level navigation.
-
   // Clear "block" flags for the new page. This needs to happen before any of
   // `allowScript()`, `allowScriptFromSource()`, `allowImage()`, or
   // `allowPlugins()` is called for the new page so that these functions can
   // correctly detect that a piece of content flipped from "not blocked" to
   // "blocked".
   ClearBlockedContentSettings();
+
+  blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
+  if (frame->Parent())
+    return;  // Not a top-level navigation.
 
   if (!base::FeatureList::IsEnabled(
           features::kNavigationThreadingOptimizations)) {
@@ -236,6 +201,12 @@ void ContentSettingsAgentImpl::SetAllowRunningInsecureContent() {
 
 void ContentSettingsAgentImpl::SetDisabledMixedContentUpgrades() {
   mixed_content_autoupgrades_disabled_ = true;
+}
+
+void ContentSettingsAgentImpl::SendRendererContentSettingRules(
+    const RendererContentSettingRules& renderer_settings) {
+  content_setting_rules_ = std::make_unique<RendererContentSettingRules>(
+      std::move(renderer_settings));
 }
 
 void ContentSettingsAgentImpl::OnContentSettingsAgentRequest(
@@ -328,7 +299,6 @@ bool ContentSettingsAgentImpl::AllowImage(bool enabled_per_settings,
 
     if (content_setting_rules_) {
       allow = GetContentSettingFromRules(content_setting_rules_->image_rules,
-                                         render_frame()->GetWebFrame(),
                                          image_url) != CONTENT_SETTING_BLOCK;
     }
   }
@@ -352,7 +322,7 @@ bool ContentSettingsAgentImpl::AllowScript(bool enabled_per_settings) {
   bool allow = true;
   if (content_setting_rules_) {
     ContentSetting setting = GetContentSettingFromRules(
-        content_setting_rules_->script_rules, frame,
+        content_setting_rules_->script_rules,
         url::Origin(frame->GetDocument().GetSecurityOrigin()).GetURL());
     allow = setting != CONTENT_SETTING_BLOCK;
   }
@@ -370,9 +340,8 @@ bool ContentSettingsAgentImpl::AllowScriptFromSource(
 
   bool allow = true;
   if (content_setting_rules_) {
-    ContentSetting setting =
-        GetContentSettingFromRules(content_setting_rules_->script_rules,
-                                   render_frame()->GetWebFrame(), script_url);
+    ContentSetting setting = GetContentSettingFromRules(
+        content_setting_rules_->script_rules, script_url);
     allow = setting != CONTENT_SETTING_BLOCK;
   }
   return allow || IsAllowlistedForContentSettings();
@@ -386,8 +355,7 @@ bool ContentSettingsAgentImpl::AllowAutoDarkWebContent(
   bool allow = true;
   if (content_setting_rules_) {
     ContentSetting setting = GetContentSettingFromRules(
-        content_setting_rules_->auto_dark_content_rules,
-        render_frame()->GetWebFrame(), GURL());
+        content_setting_rules_->auto_dark_content_rules, GURL());
     allow = setting != CONTENT_SETTING_BLOCK;
   }
   allow = allow || IsAllowlistedForContentSettings();
@@ -413,9 +381,8 @@ bool ContentSettingsAgentImpl::AllowRunningInsecureContent(
     return true;
 
   if (content_setting_rules_) {
-    blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
     ContentSetting setting = GetContentSettingFromRules(
-        content_setting_rules_->mixed_content_rules, frame, GURL());
+        content_setting_rules_->mixed_content_rules, GURL());
     if (setting == CONTENT_SETTING_ALLOW)
       return true;
   }
@@ -428,7 +395,7 @@ bool ContentSettingsAgentImpl::AllowPopupsAndRedirects(bool default_value) {
     return default_value;
   blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
   return GetContentSettingFromRules(
-             content_setting_rules_->popup_redirect_rules, frame,
+             content_setting_rules_->popup_redirect_rules,
              url::Origin(frame->GetDocument().GetSecurityOrigin()).GetURL()) ==
          CONTENT_SETTING_ALLOW;
 }
@@ -438,12 +405,21 @@ bool ContentSettingsAgentImpl::ShouldAutoupgradeMixedContent() {
     return false;
 
   if (content_setting_rules_) {
-    auto setting =
-        GetContentSettingFromRules(content_setting_rules_->mixed_content_rules,
-                                   render_frame()->GetWebFrame(), GURL());
+    auto setting = GetContentSettingFromRules(
+        content_setting_rules_->mixed_content_rules, GURL());
     return setting != CONTENT_SETTING_ALLOW;
   }
   return false;
+}
+
+RendererContentSettingRules*
+ContentSettingsAgentImpl::GetRendererContentSettingRules() {
+  return content_setting_rules_.get();
+}
+
+void ContentSettingsAgentImpl::SetRendererContentSettingRulesForTest(
+    const RendererContentSettingRules& rules) {
+  content_setting_rules_ = std::make_unique<RendererContentSettingRules>(rules);
 }
 
 void ContentSettingsAgentImpl::DidNotAllowScript() {

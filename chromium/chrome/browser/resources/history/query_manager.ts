@@ -12,7 +12,7 @@ import {HistoryRouterElement} from './router.js';
 
 declare global {
   interface HTMLElementTagNameMap {
-    'history-query-manager': HistoryQueryManagerElement,
+    'history-query-manager': HistoryQueryManagerElement;
   }
 }
 
@@ -62,8 +62,7 @@ export class HistoryQueryManagerElement extends PolymerElement {
     };
   }
 
-  /** @override */
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
     this.eventTracker_.add(
         document, 'change-query', this.onChangeQuery_.bind(this));
@@ -71,8 +70,7 @@ export class HistoryQueryManagerElement extends PolymerElement {
         document, 'query-history', this.onQueryHistory_.bind(this));
   }
 
-  /** @override */
-  disconnectedCallback() {
+  override disconnectedCallback() {
     super.disconnectedCallback();
     this.eventTracker_.removeAll();
   }

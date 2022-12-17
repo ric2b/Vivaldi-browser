@@ -287,17 +287,11 @@ if (!is_ios) {
       "//crypto",
       "//mojo/core/test:test_support",
       "//testing/gtest",
+      "//third_party/ipcz/src:ipcz_tests_sources_chromium",
     ]
 
     if (is_mac) {
       deps += [ "//sandbox/mac:seatbelt" ]
-    }
-
-    if (is_fuchsia) {
-      sources -= [
-        # No AF_UNIX domain sockets on Fuchsia.
-        "sync_socket_unittest.cc",
-      ]
     }
   }
 

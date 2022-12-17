@@ -41,10 +41,6 @@ const char kChromeSyncOAuth2Scope[] =
 const char kChromeSyncSupervisedOAuth2Scope[] =
     "https://www.googleapis.com/auth/chromesync_playpen";
 
-// OAuth2 scope for access to Kid Management API.
-const char kKidManagementOAuth2Scope[] =
-    "https://www.googleapis.com/auth/kid.management";
-
 // OAuth2 scope for parental consent logging for secondary account addition.
 const char kKidManagementPrivilegedOAuth2Scope[] =
     "https://www.googleapis.com/auth/kid.management.privileged";
@@ -95,6 +91,10 @@ const char kTachyonOAuthScope[] = "https://www.googleapis.com/auth/tachyon";
 
 // OAuth2 scope for access to the Photos API.
 const char kPhotosOAuth2Scope[] = "https://www.googleapis.com/auth/photos";
+
+// OAuth2 scope for access to the SecureConnect API.
+extern const char kSecureConnectOAuth2Scope[] =
+    "https://www.googleapis.com/auth/bce.secureconnect";
 
 // OAuth2 scope for access to Cast backdrop API.
 const char kCastBackdropOAuth2Scope[] =

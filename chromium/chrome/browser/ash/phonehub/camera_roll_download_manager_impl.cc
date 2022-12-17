@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "ash/components/multidevice/logging/logging.h"
 #include "ash/components/phonehub/camera_roll_download_manager.h"
 #include "ash/components/phonehub/proto/phonehub_api.pb.h"
 #include "ash/public/cpp/holding_space/holding_space_progress.h"
@@ -29,7 +30,6 @@
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "chrome/browser/ui/ash/holding_space/holding_space_keyed_service.h"
-#include "chromeos/components/multidevice/logging/logging.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace ash {
@@ -51,15 +51,15 @@ bool HasEnoughDiskSpace(const base::FilePath& root_path,
          item_metadata.file_size_bytes();
 }
 
-chromeos::secure_channel::mojom::PayloadFilesPtr DoCreatePayloadFiles(
+secure_channel::mojom::PayloadFilesPtr DoCreatePayloadFiles(
     const base::FilePath& file_path) {
   base::File output_file =
       base::File(file_path, base::File::Flags::FLAG_CREATE_ALWAYS |
                                 base::File::Flags::FLAG_WRITE);
   base::File input_file = base::File(
       file_path, base::File::Flags::FLAG_OPEN | base::File::Flags::FLAG_READ);
-  return chromeos::secure_channel::mojom::PayloadFiles::New(
-      std::move(input_file), std::move(output_file));
+  return secure_channel::mojom::PayloadFiles::New(std::move(input_file),
+                                                  std::move(output_file));
 }
 
 }  // namespace
@@ -152,7 +152,7 @@ void CameraRollDownloadManagerImpl::OnPayloadFilesCreated(
     const base::FilePath& file_path,
     int64_t file_size_bytes,
     CreatePayloadFilesCallback payload_files_callback,
-    chromeos::secure_channel::mojom::PayloadFilesPtr payload_files) {
+    secure_channel::mojom::PayloadFilesPtr payload_files) {
   const std::string& holding_space_item_id =
       holding_space_keyed_service_->AddPhoneHubCameraRollItem(
           file_path,
@@ -167,7 +167,7 @@ void CameraRollDownloadManagerImpl::OnPayloadFilesCreated(
 }
 
 void CameraRollDownloadManagerImpl::UpdateDownloadProgress(
-    chromeos::secure_channel::mojom::FileTransferUpdatePtr update) {
+    secure_channel::mojom::FileTransferUpdatePtr update) {
   auto it = pending_downloads_.find(update->payload_id);
   if (it == pending_downloads_.end()) {
     PA_LOG(ERROR) << "Received unexpected FileTransferUpdate for payload "
@@ -179,20 +179,19 @@ void CameraRollDownloadManagerImpl::UpdateDownloadProgress(
   holding_space_keyed_service_->UpdateItem(download_item.holding_space_item_id)
       ->SetProgress(ash::HoldingSpaceProgress(update->bytes_transferred,
                                               update->total_bytes))
-      .SetInvalidateImage(
-          update->status ==
-          chromeos::secure_channel::mojom::FileTransferStatus::kSuccess);
+      .SetInvalidateImage(update->status ==
+                          secure_channel::mojom::FileTransferStatus::kSuccess);
 
   switch (update->status) {
-    case chromeos::secure_channel::mojom::FileTransferStatus::kInProgress:
+    case secure_channel::mojom::FileTransferStatus::kInProgress:
       return;
-    case chromeos::secure_channel::mojom::FileTransferStatus::kFailure:
-    case chromeos::secure_channel::mojom::FileTransferStatus::kCanceled:
+    case secure_channel::mojom::FileTransferStatus::kFailure:
+    case secure_channel::mojom::FileTransferStatus::kCanceled:
       // Delete files created for failed and canceled items, in addition to
       // removing the DownloadItem objects.
       DeleteFile(update->payload_id);
       return;
-    case chromeos::secure_channel::mojom::FileTransferStatus::kSuccess:
+    case secure_channel::mojom::FileTransferStatus::kSuccess:
       base::UmaHistogramCounts100000(
           "PhoneHub.CameraRoll.DownloadItem.TransferRate",
           CalculateItemTransferRate(download_item));

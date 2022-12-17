@@ -49,6 +49,12 @@ class FeedApi {
   virtual void AttachSurface(FeedStreamSurface*) = 0;
   virtual void DetachSurface(FeedStreamSurface*) = 0;
 
+  // Notifies |this| that the user clicked on a feed card with its |url| and
+  // |entity_mids| entities.
+  virtual void UpdateUserProfileOnLinkClick(
+      const GURL& url,
+      const std::vector<int64_t>& entity_mids) = 0;
+
   // Begin/stop observing a stream type. An observer instance should not be
   // added twice without first being removed.
   virtual void AddUnreadContentObserver(const StreamType& stream_type,
@@ -207,6 +213,9 @@ class FeedApi {
       const feedui::StreamUpdate& stream_update) = 0;
   // Returns the time of the last successful content fetch.
   virtual base::Time GetLastFetchTime(const StreamType& stream_type) = 0;
+  // Increase the count of the number of times the user has followed from the
+  // web page menu.
+  virtual void IncrementFollowedFromWebPageMenuCount() = 0;
 };
 
 }  // namespace feed

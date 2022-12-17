@@ -19,6 +19,7 @@
 #include "base/values.h"
 #include "browser/menus/vivaldi_menus.h"
 #include "browser/vivaldi_browser_finder.h"
+#include "build/build_config.h"
 #include "chrome/browser/apps/platform_apps/audio_focus_web_contents_observer.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/devtools/devtools_contents_resizing_strategy.h"
@@ -34,6 +35,7 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/renderer_preferences_util.h"
 #include "chrome/browser/sharing/sharing_dialog_data.h"
+#include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_dialogs.h"
@@ -95,7 +97,7 @@
 #include "ui/vivaldi_ui_utils.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 #include "chrome/browser/win/jumplist_factory.h"
 #endif
 
@@ -208,6 +210,10 @@ std::unique_ptr<content::WebContents> CreateBrowserWebContents(
 
   std::unique_ptr<content::WebContents> web_contents =
       content::WebContents::Create(create_params);
+
+  // Create this early as it's used in GetOrCreateWebPreferences's call to
+  // VivaldiContentBrowserClientParts::OverrideWebkitPrefs.
+  extensions::VivaldiAppHelper::CreateForWebContents(web_contents.get());
 
   blink::RendererPreferences* render_prefs =
       web_contents->GetMutableRendererPrefs();
@@ -333,7 +339,7 @@ void VivaldiBrowserWindow::CreateWebContents(
     window_type_ = SETTINGS;
   }
   location_bar_ = std::make_unique<VivaldiLocationBar>(*this);
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   JumpListFactory::GetForProfile(browser_->profile());
 #endif
   DCHECK(!extension_);
@@ -379,8 +385,6 @@ void VivaldiBrowserWindow::CreateWebContents(
   web_modal::WebContentsModalDialogManager::FromWebContents(web_contents())
       ->SetDelegate(this);
 
-  extensions::VivaldiAppHelper::CreateForWebContents(web_contents());
-
   views_ = VivaldiNativeAppWindowViews::Create();
   views_->Init(this, params);
 
@@ -414,7 +418,8 @@ void VivaldiBrowserWindow::CreateWebContents(
   // Set this as a listener for the root document holding portal-windows.
   root_doc_handler_ =
       extensions::VivaldiRootDocumentHandlerFactory::GetForBrowserContext(
-          web_contents_->GetBrowserContext());
+          GetProfile());
+
   DCHECK(root_doc_handler_);
   root_doc_handler_->AddObserver(this);
 }
@@ -453,7 +458,7 @@ void VivaldiBrowserWindow::ContentsDidStartNavigation() {
 }
 
 void VivaldiBrowserWindow::Show() {
-#if !defined(OS_WIN)
+#if !BUILDFLAG(IS_WIN)
   // The Browser associated with this browser window must become the active
   // browser at the time |Show()| is called. This is the natural behavior under
   // Windows and Ash, but other platforms will not trigger
@@ -553,7 +558,7 @@ void VivaldiBrowserWindow::MovePinnedTabsToOtherWindowIfNeeded() {
 
 // Similar to |BrowserView::CanClose|
 bool VivaldiBrowserWindow::ConfirmWindowClose() {
-#if !defined(OS_MAC)
+#if !BUILDFLAG(IS_MAC)
   // Is window closing due to a profile being closed?
   bool closed_due_to_profile =
       extensions::VivaldiWindowsAPI::IsWindowClosingBecauseProfileClose(
@@ -608,7 +613,7 @@ bool VivaldiBrowserWindow::ConfirmWindowClose() {
       }
     }
   }
-#endif  // !defined(OS_MAC)
+#endif  // !BUILDFLAG(IS_MAC)
   if (!browser()->ShouldCloseWindow())
     return false;
 
@@ -652,11 +657,16 @@ void VivaldiBrowserWindow::ContinueClose(bool quiting,
   }
 }
 
+DownloadBubbleUIController*
+VivaldiBrowserWindow::GetDownloadBubbleUIController() {
+  return nullptr;
+}
+
 void VivaldiBrowserWindow::ConfirmBrowserCloseWithPendingDownloads(
     int download_count,
     Browser::DownloadCloseType dialog_type,
     base::OnceCallback<void(bool)> callback) {
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   // We allow closing the window here since the real quit decision on Mac is
   // made in [AppController quit:].
   std::move(callback).Run(true);
@@ -781,7 +791,7 @@ VivaldiBrowserWindow::PreHandleKeyboardEvent(
 bool VivaldiBrowserWindow::HandleKeyboardEvent(
     const content::NativeWebKeyboardEvent& event) {
   bool is_auto_repeat;
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   is_auto_repeat = event.GetModifiers() & blink::WebInputEvent::kIsAutoRepeat;
 #else
   // Ideally we should do what we do above for Mac, but it is not 100% reliable
@@ -795,7 +805,7 @@ bool VivaldiBrowserWindow::HandleKeyboardEvent(
              event.GetType() != blink::WebInputEvent::Type::kChar) {
     last_key_code_ = 0;
   }
-#endif  // defined(OS_MAC)
+#endif  // BUILDFLAG(IS_MAC)
 
   extensions::VivaldiUIEvents::SendKeyboardShortcutEvent(id(), browser_->profile(),
                                                          event, is_auto_repeat);
@@ -847,7 +857,7 @@ void VivaldiBrowserWindow::VivaldiShowWebsiteSettingsAt(
 #if defined(USE_AURA)
   PageInfoBubbleView::ShowPopupAtPos(pos, profile, web_contents, url,
                                      browser_.get(), GetNativeWindow());
-#elif defined(OS_MAC)
+#elif BUILDFLAG(IS_MAC)
   gfx::Rect anchor_rect = gfx::Rect(pos, gfx::Size());
   views::BubbleDialogDelegateView* bubble =
       PageInfoBubbleView::CreatePageInfoBubble(
@@ -1011,6 +1021,11 @@ void VivaldiBrowserWindow::ResetDockingState(int tab_id) {
 bool VivaldiBrowserWindow::IsToolbarShowing() const {
   return false;
 }
+
+bool VivaldiBrowserWindow::IsLocationBarVisible() const {
+  return false;
+}
+
 
 views::View* VivaldiBrowserWindow::GetContentsView() const {
   return views_.get();
@@ -1241,7 +1256,7 @@ ui::NativeTheme* VivaldiBrowserWindow::GetNativeTheme() {
 }
 
 const ui::ThemeProvider* VivaldiBrowserWindow::GetThemeProvider() const {
-  return nullptr;
+  return &ThemeService::GetThemeProviderForProfile(browser_->profile());
 }
 
 const ui::ColorProvider* VivaldiBrowserWindow::GetColorProvider() const {
@@ -1402,8 +1417,9 @@ FeaturePromoController* VivaldiBrowserWindow::GetFeaturePromoController() {
   return nullptr;
 }
 
-bool VivaldiBrowserWindow::IsFeaturePromoActive(const base::Feature& iph_feature,
-                          bool include_continued_promos) const {
+bool VivaldiBrowserWindow::IsFeaturePromoActive(
+    const base::Feature& iph_feature,
+    bool include_continued_promos) const {
   return false;
 }
 
@@ -1418,7 +1434,14 @@ bool VivaldiBrowserWindow::CloseFeaturePromo(const base::Feature& iph_feature) {
   return false;
 }
 
-FeaturePromoController::PromoHandle VivaldiBrowserWindow::CloseFeaturePromoAndContinue(
+FeaturePromoController::PromoHandle
+VivaldiBrowserWindow::CloseFeaturePromoAndContinue(
     const base::Feature& iph_feature) {
   return {};
 }
+
+#if BUILDFLAG(ENABLE_SIDE_SEARCH)
+bool VivaldiBrowserWindow::IsSideSearchPanelVisible() const {
+  return false;
+}
+#endif

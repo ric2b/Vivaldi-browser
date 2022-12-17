@@ -64,6 +64,7 @@
 #include "ui/base/ime/ash/ime_bridge.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/compositor/layer.h"
+#include "ui/compositor/layer_animator.h"
 #include "ui/compositor/presentation_time_recorder.h"
 #include "ui/compositor/throughput_tracker.h"
 #include "ui/display/types/display_constants.h"
@@ -288,6 +289,9 @@ class SplitViewController::TabDraggedWindowObserver
   void EndTabDragging(aura::Window* window, bool is_being_destroyed) {
     dragged_window_->RemoveObserver(this);
     dragged_window_ = nullptr;
+
+    WindowState::Get(window)->set_snap_action_source(
+        WindowSnapActionSource::kDragTabToSnap);
     split_view_controller_->EndWindowDragImpl(window, is_being_destroyed,
                                               desired_snap_position_,
                                               last_location_in_screen_);
@@ -564,6 +568,8 @@ class SplitViewController::AutoSnapController
 
     // Snap the window on the non-default side of the screen if split view mode
     // is active.
+    WindowState::Get(window)->set_snap_action_source(
+        WindowSnapActionSource::kAutoSnapBySplitview);
     split_view_controller_->SnapWindow(
         window, (split_view_controller_->default_snap_position() == LEFT)
                     ? RIGHT
@@ -804,11 +810,11 @@ bool SplitViewController::CanSnapWindow(aura::Window* window) const {
 
   // Windows created by window restore are not activatable while being restored.
   // However, we still want to be able to snap these windows at this point.
-  bool restoring_snap_state =
-      WindowRestoreController::Get()->is_restoring_snap_state();
+  const bool is_to_be_restored_window =
+      window == WindowRestoreController::Get()->to_be_snapped_window();
 
   // TODO(sammiequon): Investigate if we need to check for window activation.
-  if (!restoring_snap_state && !wm::CanActivateWindow(window))
+  if (!is_to_be_restored_window && !wm::CanActivateWindow(window))
     return false;
 
   return GetMinimumWindowLength(window, IsLayoutHorizontal(window)) <=
@@ -871,9 +877,8 @@ void SplitViewController::OnWindowSnapWMEvent(aura::Window* window,
   const int32_t window_id =
       window->GetProperty(app_restore::kRestoreWindowIdKey);
   if (in_overview &&
-      WindowRestoreController::Get()->IsRestoringWindow(window) &&
+      window == WindowRestoreController::Get()->to_be_snapped_window() &&
       app_restore::DeskTemplateReadHandler::Get()->GetWindowInfo(window_id)) {
-    DCHECK(WindowRestoreController::Get()->is_restoring_snap_state());
     return;
   }
 
@@ -1032,7 +1037,7 @@ gfx::Rect SplitViewController::GetSnappedWindowBoundsInParent(
     aura::Window* window_for_minimum_size) {
   gfx::Rect bounds =
       GetSnappedWindowBoundsInScreen(snap_position, window_for_minimum_size);
-  ::wm::ConvertRectFromScreen(root_window_, &bounds);
+  wm::ConvertRectFromScreen(root_window_, &bounds);
   return bounds;
 }
 
@@ -1047,7 +1052,7 @@ gfx::Rect SplitViewController::GetSnappedWindowBoundsInScreen(
 
   if (window_for_minimum_size && ShouldUseWindowBoundsDuringFastResize()) {
     gfx::Rect bounds = window_for_minimum_size->bounds();
-    ::wm::ConvertRectToScreen(window_for_minimum_size->parent(), &bounds);
+    wm::ConvertRectToScreen(window_for_minimum_size->parent(), &bounds);
     return bounds;
   }
   const bool horizontal = IsLayoutHorizontal(root_window_);
@@ -1060,8 +1065,25 @@ gfx::Rect SplitViewController::GetSnappedWindowBoundsInScreen(
   // mode to `GetSnappedWindowBounds()` in window_positioning_utils.cc.
   const bool in_tablet = Shell::Get()->tablet_mode_controller()->InTabletMode();
   const int work_area_size = GetDividerEndPosition();
-  const int divider_position =
+  int divider_position =
       divider_position_ < 0 ? GetDefaultDividerPosition() : divider_position_;
+
+  // Edit `divider_position` if window restore is currently restoring a snapped
+  // window; take into account the snap percentage saved by the window. Only do
+  // this for clamshell mode; in tablet mode we are OK with restoring to the
+  // default half snap state.
+  if (divider_position_ < 0 && !in_tablet) {
+    if (auto* window = WindowRestoreController::Get()->to_be_snapped_window()) {
+      app_restore::WindowInfo* window_info =
+          window->GetProperty(app_restore::kWindowInfoKey);
+      if (window_info && window_info->snap_percentage) {
+        const int snap_percentage = *window_info->snap_percentage;
+        divider_position = snap_percentage * work_area_size / 100;
+        if (!snap_left_or_top)
+          divider_position = work_area_size - divider_position;
+      }
+    }
+  }
 
   int window_size;
   if (snap_left_or_top) {
@@ -1404,6 +1426,9 @@ void SplitViewController::OnOverviewButtonTrayLongPressed(
       OverviewStartAction::kOverviewButtonLongPress,
       OverviewEnterExitType::kImmediateEnter);
 
+  WindowState::Get(target_window)
+      ->set_snap_action_source(
+          WindowSnapActionSource::kLongPressOverviewButtonToSnap);
   SnapWindow(target_window, SplitViewController::LEFT,
              /*activate_window=*/true);
   base::RecordAction(
@@ -1714,6 +1739,9 @@ void SplitViewController::OnOverviewModeEnding(
       // is notified.
       overview_item->RestoreWindow(/*reset_transform=*/false);
       overview_session->RemoveItem(overview_item.get());
+
+      WindowState::Get(window)->set_snap_action_source(
+          WindowSnapActionSource::kAutoSnapBySplitview);
       SnapWindow(window, (default_snap_position_ == LEFT) ? RIGHT : LEFT);
       // If ending overview causes a window to snap, also do not do exiting
       // overview animation.
@@ -1895,8 +1923,12 @@ void SplitViewController::OnKeyboardOccludedBoundsChanged(
     return;
   }
 
-  // Get caret bounds.
+  // Get current active input field.
   auto* text_input_client = GetCurrentInputMethod()->GetTextInputClient();
+  if (!text_input_client)
+    return;
+
+  // Get caret bounds.
   const gfx::Rect caret_bounds = text_input_client->GetCaretBounds();
   if (caret_bounds == gfx::Rect())
     return;
@@ -2559,7 +2591,8 @@ void SplitViewController::InsertWindowToOverview(aura::Window* window,
   if (!window || !GetOverviewSession())
     return;
   GetOverviewSession()->AddItemInMruOrder(window, /*reposition=*/true, animate,
-                                          /*restack=*/true);
+                                          /*restack=*/true,
+                                          /*use_spawn_animation=*/false);
 }
 
 void SplitViewController::FinishWindowResizing(aura::Window* window) {

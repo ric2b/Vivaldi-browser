@@ -23,17 +23,7 @@
 #
 # The range of ID values, which is used by pak files, is from 0 to 2^16 - 1.
 #
-# IMPORTANT: Update instructions:
-# * If adding items, manually assign draft start IDs so that numerical order is
-#   preserved. Usually it suffices to +1 from previous tag.
-#   * If updating items with repeated, be sure to add / update
-#     "META": {"join": <duplicate count>},
-#     for the item following duplicates. Be sure to look for duplicates that
-#     may appear earlier than those that immediately precede the item.
-# * Periodically we might need to refresh this file to make more space for
-#   numbers. The command lines to do this (from current directory) are:
-#   $ python ../grit/grit.py update_resource_ids --fake resource_ids.spec > temp
-#   $ mv temp resource_ids.spec
+# IMPORTANT: For update instructions, see README.md.
 {
   # The first entry in the file, SRCDIR, is special: It is a relative path from
   # this file to the base of your checkout.
@@ -110,7 +100,8 @@
     "includes": [1220],
     "structures": [1240],
   },
-  "chrome/browser/resources/feedback_webui/feedback_resources.grd": {
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/feedback_webui/resources.grd": {
+    "META": {"sizes": {"includes": [20],}},
     "includes": [1260],
   },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/app_service_internals/resources.grd": {
@@ -124,6 +115,14 @@
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/browser_switch/resources.grd": {
     "META": {"sizes": {"includes": [10],}},
     "includes": [1320],
+  },
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/chromeos/arc_account_picker/resources.grd": {
+    "META": {"sizes": {"includes": [10],}},
+    "includes": [1330],
+  },
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/chromeos/assistant_optin/assistant_optin_resources.grd": {
+    "META": {"sizes": {"includes": [80]}},
+    "includes": [1340],
   },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/chromeos/emoji_picker/resources.grd": {
     "META": {"sizes": {"includes": [20]}},
@@ -169,12 +168,16 @@
     "META": {"sizes": {"includes": [15]}},
     "includes": [1580],
   },
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/discards/discards_resources.grd": {
+    "META": {"sizes": {"includes": [20],}},
+    "includes": [1585],
+  },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/downloads/downloads_resources.grd": {
     "META": {"sizes": {"includes": [50],}},
     "includes": [1590],
   },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/extensions/extensions_resources.grd": {
-    "META": {"sizes": {"includes": [50],}},
+    "META": {"sizes": {"includes": [80],}},
     "includes": [1600],
   },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/history/history_resources.grd": {
@@ -244,13 +247,13 @@
     "META": {"sizes": {"includes": [20],}},
     "includes": [1910],
   },
-  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/read_later/read_later_resources.grd": {
-    "META": {"sizes": {"includes": [10],}},
-    "includes": [1920],
-  },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/segmentation_internals/resources.grd": {
     "META": {"sizes": {"includes": [10]}},
     "includes": [1930],
+  },
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/side_panel/side_panel_resources.grd": {
+    "META": {"sizes": {"includes": [10],}},
+    "includes": [1935],
   },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/settings/chromeos/os_settings_resources.grd": {
     "META": {"sizes": {"includes": [1000],}},
@@ -269,7 +272,7 @@
     "includes": [2000],
   },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/support_tool/resources.grd": {
-    "META": {"sizes": {"includes": [10]}},
+    "META": {"sizes": {"includes": [20]}},
     "includes": [2010],
   },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/tab_search/tab_search_resources.grd": {
@@ -332,6 +335,10 @@
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/chromeos/network_ui/network_ui_resources.grd": {
     "META": {"sizes": {"includes": [10]}},
     "includes": [2300],
+  },
+  "<(SHARED_INTERMEDIATE_DIR)/components/history_clusters/history_clusters_internals/resources/resources.grd": {
+    "META": {"sizes": {"includes": [10]}},
+    "includes": [2310],
   },
   "<(SHARED_INTERMEDIATE_DIR)/components/download/resources/download_internals/resources.grd": {
     "META": {"sizes": {"includes": [10]}},
@@ -818,11 +825,6 @@
   },
   "chromecast/renderer/resources/extensions_renderer_resources.grd": {
     "includes": [4180],
-  },
-
-  "cloud_print/virtual_driver/win/install/virtual_driver_setup_resources.grd": {
-    "includes": [4200],
-    "messages": [4220],
   },
 
   "device/bluetooth/bluetooth_strings.grd": {

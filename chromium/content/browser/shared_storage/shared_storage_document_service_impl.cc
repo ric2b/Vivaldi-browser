@@ -4,10 +4,14 @@
 
 #include "content/browser/shared_storage/shared_storage_document_service_impl.h"
 
+#include "components/services/storage/shared_storage/shared_storage_database.h"
+#include "components/services/storage/shared_storage/shared_storage_manager.h"
 #include "content/browser/shared_storage/shared_storage_worklet_host.h"
 #include "content/browser/shared_storage/shared_storage_worklet_host_manager.h"
 #include "content/browser/storage_partition_impl.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_process_host.h"
+#include "third_party/blink/public/common/shared_storage/shared_storage_utils.h"
 
 namespace content {
 
@@ -62,19 +66,48 @@ void SharedStorageDocumentServiceImpl::RunURLSelectionOperationOnWorklet(
     const std::vector<GURL>& urls,
     const std::vector<uint8_t>& serialized_data,
     RunURLSelectionOperationOnWorkletCallback callback) {
-  if (urls.size() >
-      static_cast<size_t>(
-          blink::features::kSharedStorageURLSelectionOperationInputURLSizeLimit
-              .Get())) {
+  if (!blink::IsValidSharedStorageURLsArrayLength(urls.size())) {
     // This could indicate a compromised renderer, so let's terminate it.
     receiver_.ReportBadMessage(
-        "Attempted to execute RunURLSelectionOperationOnWorklet with URLs "
-        "array length exceeding the size limit.");
+        "Attempted to execute RunURLSelectionOperationOnWorklet with invalid "
+        "URLs array length.");
     return;
   }
 
   GetSharedStorageWorkletHost()->RunURLSelectionOperationOnWorklet(
       name, urls, serialized_data, std::move(callback));
+}
+
+void SharedStorageDocumentServiceImpl::SharedStorageSet(
+    const std::u16string& key,
+    const std::u16string& value,
+    bool ignore_if_present) {
+  storage::SharedStorageDatabase::SetBehavior set_behavior =
+      ignore_if_present
+          ? storage::SharedStorageDatabase::SetBehavior::kIgnoreIfPresent
+          : storage::SharedStorageDatabase::SetBehavior::kDefault;
+
+  GetSharedStorageManager()->Set(render_frame_host().GetLastCommittedOrigin(),
+                                 key, value, base::DoNothing(), set_behavior);
+}
+
+void SharedStorageDocumentServiceImpl::SharedStorageAppend(
+    const std::u16string& key,
+    const std::u16string& value) {
+  GetSharedStorageManager()->Append(
+      render_frame_host().GetLastCommittedOrigin(), key, value,
+      base::DoNothing());
+}
+
+void SharedStorageDocumentServiceImpl::SharedStorageDelete(
+    const std::u16string& key) {
+  GetSharedStorageManager()->Delete(
+      render_frame_host().GetLastCommittedOrigin(), key, base::DoNothing());
+}
+
+void SharedStorageDocumentServiceImpl::SharedStorageClear() {
+  GetSharedStorageManager()->Clear(render_frame_host().GetLastCommittedOrigin(),
+                                   base::DoNothing());
 }
 
 base::WeakPtr<SharedStorageDocumentServiceImpl>
@@ -92,6 +125,21 @@ SharedStorageDocumentServiceImpl::GetSharedStorageWorkletHost() {
              render_frame_host().GetProcess()->GetStoragePartition())
       ->GetSharedStorageWorkletHostManager()
       ->GetOrCreateSharedStorageWorkletHost(this);
+}
+
+storage::SharedStorageManager*
+SharedStorageDocumentServiceImpl::GetSharedStorageManager() {
+  storage::SharedStorageManager* shared_storage_manager =
+      static_cast<StoragePartitionImpl*>(
+          render_frame_host().GetProcess()->GetStoragePartition())
+          ->GetSharedStorageManager();
+
+  // This `SharedStorageDocumentServiceImpl` is created only if
+  // `kSharedStorageAPI` is enabled, in which case the `shared_storage_manager`
+  // must be valid.
+  DCHECK(shared_storage_manager);
+
+  return shared_storage_manager;
 }
 
 DOCUMENT_USER_DATA_KEY_IMPL(SharedStorageDocumentServiceImpl);

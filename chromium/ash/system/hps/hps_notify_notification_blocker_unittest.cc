@@ -11,20 +11,30 @@
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/test/shell_test_api.h"
+#include "ash/public/cpp/test/test_system_tray_client.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/session/test_session_controller_client.h"
 #include "ash/shell.h"
+#include "ash/system/hps/hps_notify_notification_blocker_internal.h"
 #include "ash/system/message_center/message_center_controller.h"
+#include "ash/system/message_center/unified_message_center_bubble.h"
 #include "ash/system/network/sms_observer.h"
 #include "ash/system/unified/hps_notify_controller.h"
+#include "ash/system/unified/unified_system_tray.h"
+#include "ash/system/unified/unified_system_tray_bubble.h"
 #include "ash/test/ash_test_base.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/no_destructor.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_command_line.h"
 #include "base/test/scoped_feature_list.h"
 #include "chromeos/dbus/hps/fake_hps_dbus_client.h"
 #include "chromeos/dbus/hps/hps_dbus_client.h"
 #include "chromeos/dbus/hps/hps_service.pb.h"
+#include "components/account_id/account_id.h"
+#include "components/services/app_service/public/cpp/app_types.h"
+#include "components/services/app_service/public/cpp/app_update.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/image/image.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/public/cpp/notification.h"
@@ -63,7 +73,7 @@ void AddNotification(const std::string& notification_id,
   message_center::MessageCenter::Get()->AddNotification(
       std::make_unique<message_center::Notification>(
           message_center::NOTIFICATION_TYPE_BASE_FORMAT, notification_id,
-          u"test-title", u"test-message", /*icon=*/gfx::Image(),
+          u"test-title", u"test-message", /*icon=*/ui::ImageModel(),
           /*display_source=*/std::u16string(), /*origin_url=*/GURL(),
           notifier_id, message_center::RichNotificationData(),
           base::MakeRefCounted<message_center::NotificationDelegate>()));
@@ -127,6 +137,42 @@ class IdPopupBlocker : public message_center::NotificationBlocker {
   std::string target_id_;
 };
 
+// An app registry cache that can be used to register test app names.
+class FakeAppRegistryCache {
+ public:
+  // The following methods match the interface of apps::AppRegistryCacheWrapper.
+
+  static FakeAppRegistryCache& Get() {
+    static base::NoDestructor<FakeAppRegistryCache> kInstance;
+    return *kInstance;
+  }
+
+  // In the real class, returns the cache for the given user. We only maintain a
+  // single fake cache.
+  FakeAppRegistryCache* GetAppRegistryCache(const AccountId&) { return this; }
+
+  template <typename FunctionType>
+  bool ForApp(const std::string& app_id, FunctionType f) {
+    for (const std::unique_ptr<apps::AppUpdate>& app : apps_) {
+      if (app_id == app->AppId()) {
+        f(*app);
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  // Test-only method to populate fake apps.
+  void AddApp(std::unique_ptr<apps::AppUpdate> app) {
+    apps_.push_back(std::move(app));
+  }
+
+ private:
+  // Use pointers as we need a default constructor.
+  std::vector<std::unique_ptr<apps::AppUpdate>> apps_;
+};
+
 // A test fixture that gives access to the HPS notify controller (to fake
 // snooping events).
 class HpsNotifyNotificationBlockerTest : public AshTestBase {
@@ -169,6 +215,28 @@ class HpsNotifyNotificationBlockerTest : public AshTestBase {
     message_center_ = message_center::MessageCenter::Get();
   }
 
+  UnifiedMessageCenterBubble* GetMessageCenterBubble() {
+    return GetPrimaryUnifiedSystemTray()->message_center_bubble();
+  }
+
+  bool HasHpsNotification() {
+    message_center::Notification* notification =
+        message_center::MessageCenter::Get()->FindVisibleNotificationById(
+            HpsNotifyNotificationBlocker::kInfoNotificationId);
+    return notification != nullptr;
+  }
+
+  void SimulateClick(int button_index) {
+    message_center::Notification* notification =
+        message_center::MessageCenter::Get()->FindVisibleNotificationById(
+            HpsNotifyNotificationBlocker::kInfoNotificationId);
+    notification->delegate()->Click(button_index, absl::nullopt);
+  }
+
+  int GetNumOsSmartPrivacySettingsOpened() {
+    return GetSystemTrayClient()->show_os_smart_privacy_settings_count();
+  }
+
  protected:
   HpsNotifyController* controller_ = nullptr;
   message_center::MessageCenter* message_center_ = nullptr;
@@ -199,7 +267,7 @@ TEST_F(HpsNotifyNotificationBlockerTest, Snooping) {
   AddNotification("notification-3", u"notifier-3");
   EXPECT_EQ(VisiblePopupCount(), 1u);  // Only our info popup.
   EXPECT_TRUE(InfoPopupVisible());
-  EXPECT_EQ(VisibleNotificationCount(), 3u);
+  EXPECT_EQ(VisibleNotificationCount(), 4u);
 
   // Simulate snooper absence. We wait for a moment to bypass the controller's
   // hysteresis logic.
@@ -212,7 +280,7 @@ TEST_F(HpsNotifyNotificationBlockerTest, Snooping) {
   EXPECT_EQ(VisibleNotificationCount(), 3u);
 }
 
-TEST_F(HpsNotifyNotificationBlockerTest, DISABLED_Pref) {
+TEST_F(HpsNotifyNotificationBlockerTest, Pref) {
   SetBlockerPref(false);
 
   // Start with one notification that shouldn't be hidden.
@@ -226,21 +294,23 @@ TEST_F(HpsNotifyNotificationBlockerTest, DISABLED_Pref) {
 
   // Notifications should be visible up until the user enables the feature.
   EXPECT_EQ(VisiblePopupCount(), 1u);
+  EXPECT_FALSE(InfoPopupVisible());
   EXPECT_EQ(VisibleNotificationCount(), 1u);
   SetBlockerPref(true);
 
-  // The only popup now visible should be our info popup. Note that, since
-  // notification-1 has been previously shown, it won't be shown again.
-  EXPECT_EQ(VisiblePopupCount(), 1u);
-  EXPECT_TRUE(InfoPopupVisible());
+  // Since notification 1 has been shown, we aren't blocking any popups and our
+  // info popup need not be shown.
+  EXPECT_EQ(VisiblePopupCount(), 0u);
+  EXPECT_FALSE(InfoPopupVisible());
   EXPECT_EQ(VisibleNotificationCount(), 1u);
 
-  // Add a notification while the feature is disabled.
+  // Add notifications while the feature is disabled. This should cause our info
+  // popup and no other popups to be shown.
   AddNotification("notification-2", u"notifier-2");
   AddNotification("notification-3", u"notifier-3");
   EXPECT_EQ(VisiblePopupCount(), 1u);
   EXPECT_TRUE(InfoPopupVisible());
-  EXPECT_EQ(VisibleNotificationCount(), 3u);
+  EXPECT_EQ(VisibleNotificationCount(), 4u);
 
   // Notifications should be shown if *either* the whole setting or the
   // subfeature is enabled.
@@ -277,9 +347,9 @@ TEST_F(HpsNotifyNotificationBlockerTest, SystemNotification) {
   // Regular notification disappears because it was already shown before the
   // snooper arrived.
   EXPECT_EQ(PositionInInfoPopupMessage(u"notifier-1"), std::u16string::npos);
-  // Title used for system popups is currently Web.
-  EXPECT_NE(PositionInInfoPopupMessage(u"Web"), std::u16string::npos);
-  EXPECT_EQ(VisibleNotificationCount(), 3u);
+  // Check that the system notification is labled as such.
+  EXPECT_NE(PositionInInfoPopupMessage(u"System"), std::u16string::npos);
+  EXPECT_EQ(VisibleNotificationCount(), 4u);
 }
 
 TEST_F(HpsNotifyNotificationBlockerTest, InfoPopup) {
@@ -294,7 +364,7 @@ TEST_F(HpsNotifyNotificationBlockerTest, InfoPopup) {
   EXPECT_EQ(VisiblePopupCount(), 1u);  // Only our info popup.
   EXPECT_NE(PositionInInfoPopupMessage(u"notifier-1"), std::u16string::npos);
   EXPECT_NE(PositionInInfoPopupMessage(u"notifier-2"), std::u16string::npos);
-  EXPECT_EQ(VisibleNotificationCount(), 2u);
+  EXPECT_EQ(VisibleNotificationCount(), 3u);
 
   // Check that the user can remove the info popup and it will return.
   RemoveNotification(HpsNotifyNotificationBlocker::kInfoNotificationId);
@@ -325,7 +395,7 @@ TEST_F(HpsNotifyNotificationBlockerTest, InfoPopupOtherBlocker) {
   // Do not report that we're blocking a notification when it won't show up
   // after snooping ends.
   EXPECT_EQ(PositionInInfoPopupMessage(u"notifier-2"), std::u16string::npos);
-  EXPECT_EQ(VisibleNotificationCount(), 2u);
+  EXPECT_EQ(VisibleNotificationCount(), 3u);
 
   // Now update our other blocker not to block either notification.
   other_blocker.SetTargetId("notification-3");
@@ -334,7 +404,7 @@ TEST_F(HpsNotifyNotificationBlockerTest, InfoPopupOtherBlocker) {
   EXPECT_EQ(VisiblePopupCount(), 1u);
   EXPECT_NE(PositionInInfoPopupMessage(u"notifier-1"), std::u16string::npos);
   EXPECT_NE(PositionInInfoPopupMessage(u"notifier-2"), std::u16string::npos);
-  EXPECT_EQ(VisibleNotificationCount(), 2u);
+  EXPECT_EQ(VisibleNotificationCount(), 3u);
 }
 
 // Test that the info popup message is changed as relevant notifications are
@@ -382,6 +452,125 @@ TEST_F(HpsNotifyNotificationBlockerTest, InfoPopupChangingNotifications) {
     EXPECT_NE(pos_1, std::u16string::npos);
     EXPECT_EQ(pos_2, std::u16string::npos);
   }
+}
+
+// Test that message center is visible when click "Show" button.
+TEST_F(HpsNotifyNotificationBlockerTest, ShowButtonClicked) {
+  SetBlockerPref(true);
+
+  // Simulate snooper presence.
+  controller_->OnHpsNotifyChanged(/*snooper=*/hps::HpsResult::POSITIVE);
+
+  AddNotification("notification-1", u"notifier-1");
+  AddNotification("notification-2", u"notifier-2");
+
+  EXPECT_TRUE(HasHpsNotification());
+
+  // Click on show button.
+  SimulateClick(/*button_index=*/0);
+  EXPECT_TRUE(GetMessageCenterBubble()->IsMessageCenterVisible());
+}
+
+// Test that message center is visible when click Settings button.
+TEST_F(HpsNotifyNotificationBlockerTest, SettingsButtonClicked) {
+  SetBlockerPref(true);
+
+  // Simulate snooper presence.
+  controller_->OnHpsNotifyChanged(/*snooper=*/hps::HpsResult::POSITIVE);
+
+  AddNotification("notification-1", u"notifier-1");
+  AddNotification("notification-2", u"notifier-2");
+
+  EXPECT_TRUE(HasHpsNotification());
+
+  // Click on show button.
+  SimulateClick(/*button_index=*/1);
+  EXPECT_EQ(1, GetNumOsSmartPrivacySettingsOpened());
+}
+
+TEST(HpsNotifyNotificationBlockerInternalTest, WebsiteNotifierTitles) {
+  // Website without title uses a generic "web" string.
+  const message_center::NotifierId untrusted_notifier(
+      GURL("http://untrusted.com:443"));
+  const std::u16string untrusted_title =
+      hps_internal::GetNotifierTitle<FakeAppRegistryCache>(untrusted_notifier,
+                                                           AccountId());
+  EXPECT_EQ(untrusted_title,
+            l10n_util::GetStringUTF16(
+                IDS_ASH_SMART_PRIVACY_SNOOPING_NOTIFICATION_WEB_TITLE_LOWER));
+
+  // Website with a trusted title uses the title.
+  const message_center::NotifierId trusted_notifier(
+      GURL("https://trusted.com:443"), u"Trusted");
+  const std::u16string trusted_title =
+      hps_internal::GetNotifierTitle<FakeAppRegistryCache>(trusted_notifier,
+                                                           AccountId());
+  EXPECT_EQ(trusted_title, u"Trusted");
+}
+
+TEST(HpsNotifyNotificationBlockerInternalTest, AppNotifierTitles) {
+  // App without known title uses a generic "app" string.
+  const message_center::NotifierId unknown_app_notifier(
+      message_center::NotifierType::APPLICATION, "unknown-app");
+  const std::u16string unknown_app_title =
+      hps_internal::GetNotifierTitle<FakeAppRegistryCache>(unknown_app_notifier,
+                                                           AccountId());
+  EXPECT_EQ(unknown_app_title,
+            l10n_util::GetStringUTF16(
+                IDS_ASH_SMART_PRIVACY_SNOOPING_NOTIFICATION_APP_TITLE_LOWER));
+
+  // Create an app cache with one used and one unused app.
+  auto* app_cache =
+      FakeAppRegistryCache::Get().GetAppRegistryCache(AccountId());
+  apps::App crostini_app_state(apps::AppType::kCrostini, "crostini-app");
+  crostini_app_state.short_name = "Signal Messenger";
+  auto crostini_app = std::make_unique<apps::AppUpdate>(
+      &crostini_app_state, /*delta=*/nullptr, AccountId());
+  app_cache->AddApp(std::move(crostini_app));
+  apps::App arc_app_state(apps::AppType::kArc, "arc-app");
+  arc_app_state.short_name = "Discord";
+  auto arc_app = std::make_unique<apps::AppUpdate>(
+      &arc_app_state, /*delta=*/nullptr, AccountId());
+  app_cache->AddApp(std::move(arc_app));
+
+  // App with a registered name uses that name.
+  const message_center::NotifierId crostini_app_notifier(
+      message_center::NotifierType::CROSTINI_APPLICATION, "crostini-app");
+  const std::u16string crostini_app_title =
+      hps_internal::GetNotifierTitle<FakeAppRegistryCache>(
+          crostini_app_notifier, AccountId());
+  EXPECT_EQ(crostini_app_title, u"Signal Messenger");
+}
+
+TEST(HpsNotifyNotificationBlockerInternalTest, PopupMessage) {
+  // Proper app names should be presented as-is.
+  const std::vector<std::u16string> list_1 = {u"App title"};
+  const std::u16string list_1_msg =
+      hps_internal::GetTitlesBlockedMessage(list_1);
+  EXPECT_TRUE(list_1_msg.find(u"App title") != std::u16string::npos);
+
+  // Improper app names should use a reasonable default. In this case, the
+  // default should be capitalized since it is the first word in the message.
+  const std::vector<std::u16string> list_2 = {l10n_util::GetStringUTF16(
+      IDS_ASH_SMART_PRIVACY_SNOOPING_NOTIFICATION_WEB_TITLE_LOWER)};
+  const std::u16string list_2_msg =
+      hps_internal::GetTitlesBlockedMessage(list_2);
+  EXPECT_TRUE(
+      list_2_msg.find(l10n_util::GetStringUTF16(
+          IDS_ASH_SMART_PRIVACY_SNOOPING_NOTIFICATION_WEB_TITLE_UPPER)) !=
+      std::u16string::npos);
+
+  // Subsequent improper app names should not be capitalized.
+  const std::vector<std::u16string> list_3 = {
+      u"App title",
+      l10n_util::GetStringUTF16(
+          IDS_ASH_SMART_PRIVACY_SNOOPING_NOTIFICATION_WEB_TITLE_LOWER)};
+  const std::u16string list_3_msg =
+      hps_internal::GetTitlesBlockedMessage(list_3);
+  EXPECT_TRUE(
+      list_3_msg.find(l10n_util::GetStringUTF16(
+          IDS_ASH_SMART_PRIVACY_SNOOPING_NOTIFICATION_WEB_TITLE_UPPER)) ==
+      std::u16string::npos);
 }
 
 }  // namespace

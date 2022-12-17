@@ -22,6 +22,7 @@
 #import "ios/chrome/browser/autofill/form_suggestion_view.h"
 #import "ios/chrome/browser/autofill/manual_fill/passwords_fetcher.h"
 #import "ios/chrome/browser/passwords/password_generation_utils.h"
+#import "ios/chrome/browser/ui/autofill/features.h"
 #import "ios/chrome/browser/ui/autofill/form_input_accessory/form_input_accessory_chromium_text_data.h"
 #import "ios/chrome/browser/ui/autofill/form_input_accessory/form_input_accessory_consumer.h"
 #import "ios/chrome/browser/ui/commands/security_alert_commands.h"
@@ -516,23 +517,24 @@ const base::Feature kFormInputKeyboardReloadInputViews{
         }];
 }
 
-// Post the passed |suggestionView| to the consumer. In case suggestions are
-// disabled, it's keep for later.
+// Post the passed |suggestions| to the consumer.
 - (void)updateWithProvider:(id<FormInputSuggestionsProvider>)provider
                suggestions:(NSArray<FormSuggestion*>*)suggestions {
-  // If the suggestions are disabled, post this view with no suggestions to the
-  // consumer. This allows the navigation buttons be in sync.
-  if (self.suggestionsDisabled) {
+  if (self.suggestionsDisabled)
     return;
-  } else {
-    // If suggestions are enabled update |currentProvider|.
-    self.currentProvider = provider;
-    // Post it to the consumer.
-    [self.consumer showAccessorySuggestions:suggestions];
-    if (suggestions.count) {
-      if (provider.type == SuggestionProviderTypeAutofill) {
-        LogLikelyInterestedDefaultBrowserUserActivity(
-            DefaultPromoTypeMadeForIOS);
+
+  // If suggestions are enabled, update |currentProvider|.
+  self.currentProvider = provider;
+  // Post it to the consumer.
+  [self.consumer showAccessorySuggestions:suggestions];
+  if (suggestions.count) {
+    if (provider.type == SuggestionProviderTypeAutofill) {
+      LogLikelyInterestedDefaultBrowserUserActivity(DefaultPromoTypeMadeForIOS);
+    }
+    if (provider.type == SuggestionProviderTypePassword) {
+      [self.handler notifyPasswordSuggestionsShown];
+      if (base::FeatureList::IsEnabled(kAutofillPasswordRichIPH)) {
+        [self.consumer animateSuggestionLabel];
       }
     }
   }
@@ -550,10 +552,15 @@ const base::Feature kFormInputKeyboardReloadInputViews{
                           ReauthenticationEvent::kAttempt);
   __weak __typeof(self) weakSelf = self;
   auto suggestionHandler = ^() {
-    if (weakSelf.currentProvider.type == SuggestionProviderTypePassword) {
-      LogLikelyInterestedDefaultBrowserUserActivity(DefaultPromoTypeStaySafe);
+    __typeof(self) strongSelf = weakSelf;
+    if (!strongSelf) {
+      return;
     }
-    [weakSelf.currentProvider didSelectSuggestion:formSuggestion];
+    if (strongSelf.currentProvider.type == SuggestionProviderTypePassword) {
+      LogLikelyInterestedDefaultBrowserUserActivity(DefaultPromoTypeStaySafe);
+      [self.handler notifyPasswordSuggestionSelected];
+    }
+    [strongSelf.currentProvider didSelectSuggestion:formSuggestion];
   };
 
   if (!formSuggestion.requiresReauth) {

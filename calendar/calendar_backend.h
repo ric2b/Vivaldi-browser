@@ -151,7 +151,7 @@ class CalendarBackend
   void CreateAccount(AccountRow account_row,
                      std::shared_ptr<CreateAccountResult> result);
 
-  void DeleteAccount(calendar::AccountID id,
+  void DeleteAccount(calendar::AccountID account_id,
                      std::shared_ptr<DeleteAccountResult> result);
 
   void UpdateAccount(calendar::AccountRow account_row,

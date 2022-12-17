@@ -13,7 +13,8 @@
 #include "ash/ambient/ui/ambient_view_ids.h"
 #include "ash/assistant/assistant_interaction_controller_impl.h"
 #include "ash/assistant/model/assistant_interaction_model.h"
-#include "ash/public/cpp/ambient/ambient_animation_theme.h"
+#include "ash/constants/ambient_animation_theme.h"
+#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/ambient/ambient_prefs.h"
 #include "ash/public/cpp/ambient/ambient_ui_model.h"
 #include "ash/public/cpp/assistant/controller/assistant_interaction_controller.h"
@@ -22,6 +23,7 @@
 #include "ash/system/power/power_status.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
 #include "build/buildflag.h"
 #include "chromeos/assistant/buildflags.h"
@@ -640,9 +642,7 @@ TEST_P(AmbientControllerTestForAnyTheme, ShouldDismissAndThenComesBack) {
 
 TEST_P(AmbientControllerTestForAnyTheme, ShouldDismissContainerViewOnKeyEvent) {
   // Without user interaction, should show ambient mode.
-  ambient_controller()->ShowUi();
-  EXPECT_FALSE(WidgetsVisible());
-  FastForwardTiny();
+  ShowAmbientScreen();
   EXPECT_TRUE(WidgetsVisible());
   CloseAmbientScreen();
 
@@ -1101,25 +1101,18 @@ TEST_P(AmbientControllerTestForAnyTheme,
   EXPECT_FALSE(ambient_controller()->IsShown());
 }
 
+// For all test cases that depend on ash ambient resources (lottie files, image
+// assets, etc) being present to run.
 #if BUILDFLAG(HAS_ASH_AMBIENT_ANIMATION_RESOURCES)
-#define MAYBE_RendersCorrectView RendersCorrectView
+#define ANIMATION_TEST_WITH_RESOURCES(test_case_name) test_case_name
 #else
-#define MAYBE_RendersCorrectView DISABLED_RendersCorrectView
+#define ANIMATION_TEST_WITH_RESOURCES(test_case_name) DISABLED_##test_case_name
 #endif  // BUILDFLAG(HAS_ASH_AMBIENT_ANIMATION_RESOURCES)
-TEST_F(AmbientControllerTest, MAYBE_RendersCorrectView) {
-  SetAmbientAnimationTheme(AmbientAnimationTheme::kSlideshow);
 
-  LockScreen();
-  FastForwardToLockScreenTimeout();
-  FastForwardTiny();
-
-  ASSERT_TRUE(GetContainerView());
-  EXPECT_TRUE(
-      GetContainerView()->GetViewByID(AmbientViewID::kAmbientPhotoView));
-  EXPECT_FALSE(
-      GetContainerView()->GetViewByID(AmbientViewID::kAmbientAnimationView));
-
-  UnlockScreen();
+TEST_F(AmbientControllerTest,
+       ANIMATION_TEST_WITH_RESOURCES(RendersCorrectView)) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(features::kPersonalizationHub);
   SetAmbientAnimationTheme(AmbientAnimationTheme::kFeelTheBreeze);
 
   LockScreen();
@@ -1144,6 +1137,46 @@ TEST_F(AmbientControllerTest, MAYBE_RendersCorrectView) {
       GetContainerView()->GetViewByID(AmbientViewID::kAmbientPhotoView));
   EXPECT_FALSE(
       GetContainerView()->GetViewByID(AmbientViewID::kAmbientAnimationView));
+
+  UnlockScreen();
+  SetAmbientAnimationTheme(AmbientAnimationTheme::kFeelTheBreeze);
+
+  LockScreen();
+  FastForwardToLockScreenTimeout();
+  FastForwardTiny();
+
+  ASSERT_TRUE(GetContainerView());
+  EXPECT_FALSE(
+      GetContainerView()->GetViewByID(AmbientViewID::kAmbientPhotoView));
+  EXPECT_TRUE(
+      GetContainerView()->GetViewByID(AmbientViewID::kAmbientAnimationView));
+}
+
+TEST_F(AmbientControllerTest,
+       ANIMATION_TEST_WITH_RESOURCES(ClearsCacheWhenSwitchingThemes)) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(features::kPersonalizationHub);
+  SetAmbientAnimationTheme(AmbientAnimationTheme::kSlideshow);
+
+  LockScreen();
+  FastForwardToLockScreenTimeout();
+  FastForwardTiny();
+
+  ASSERT_TRUE(GetContainerView());
+  ASSERT_FALSE(GetCachedFiles().empty());
+
+  UnlockScreen();
+  SetAmbientAnimationTheme(AmbientAnimationTheme::kFeelTheBreeze);
+
+  // Mimic a network outage where no photos can be downloaded. Since the cache
+  // should have been cleared when we switched ambient animation themes, the
+  // UI shouldn't start with a photo cached during slideshow mode.
+  SetDownloadPhotoData(/*data=*/"");
+  LockScreen();
+  FastForwardToLockScreenTimeout();
+  FastForwardTiny();
+  EXPECT_FALSE(GetContainerView());
+  EXPECT_TRUE(GetCachedFiles().empty());
 }
 
 }  // namespace ash

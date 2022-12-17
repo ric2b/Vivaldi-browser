@@ -135,7 +135,6 @@ class VivaldiNativeAppWindowViews : public views::WidgetDelegateView,
   bool ShouldDescendIntoChildForEventHandling(
       gfx::NativeView child,
       const gfx::Point& location) override;
-  bool ExecuteWindowsCommand(int command_id) override;
   void HandleKeyboardCode(ui::KeyboardCode code) override;
   ui::ImageModel GetWindowAppIcon() override;
   ui::ImageModel GetWindowIcon() override;

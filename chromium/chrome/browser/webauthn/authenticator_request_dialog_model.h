@@ -35,6 +35,7 @@ struct VectorIcon;
 
 namespace device {
 class AuthenticatorGetAssertionResponse;
+class DiscoverableCredentialMetadata;
 }
 
 // Encapsulates the model behind the Web Authentication request dialog's UX
@@ -456,7 +457,7 @@ class AuthenticatorRequestDialogModel {
   // |responses()|.
   void OnAccountSelected(size_t index);
 
-  // Called when an account from |ephemeral_state_.users_| is selected from the
+  // Called when an account from |ephemeral_state_.creds_| is selected from the
   // Conditional UI prompt.
   void OnAccountPreselected(const std::vector<uint8_t>& id);
 
@@ -480,6 +481,12 @@ class AuthenticatorRequestDialogModel {
 
   // SetCurrentStepForTesting forces the model to the specified step.
   void SetCurrentStepForTesting(Step step);
+
+  void ReplaceCredListForTesting(
+      std::vector<device::DiscoverableCredentialMetadata> creds);
+
+  absl::optional<device::PublicKeyCredentialUserEntity>
+  GetPreselectedAccountForTesting();
 
   ObservableAuthenticatorList& saved_authenticators() {
     return ephemeral_state_.saved_authenticators_;
@@ -518,8 +525,15 @@ class AuthenticatorRequestDialogModel {
   void RequestAttestationPermission(bool is_enterprise_attestation,
                                     base::OnceCallback<void(bool)> callback);
 
-  const std::vector<device::PublicKeyCredentialUserEntity>& users() {
-    return ephemeral_state_.users_;
+  // If ephemeral_state_.creds_ has been set, this invokes the callback
+  // immediately with the user list. If not, it waits until a user list is
+  // obtained from processing a Conditional UI getAssertion request.
+  void GetCredentialListForConditionalUi(
+      base::OnceCallback<
+          void(const std::vector<device::DiscoverableCredentialMetadata>&)>);
+
+  const std::vector<device::DiscoverableCredentialMetadata>& creds() {
+    return ephemeral_state_.creds_;
   }
 
   device::ResidentKeyRequirement resident_key_requirement() const {
@@ -569,9 +583,9 @@ class AuthenticatorRequestDialogModel {
     // authenticator has responded to a request.
     std::vector<device::AuthenticatorGetAssertionResponse> responses_;
 
-    // users_ contains possible accounts to select between before or after an
+    // creds_ contains possible credentials to select between before or after an
     // authenticator has responded to a request.
-    std::vector<device::PublicKeyCredentialUserEntity> users_;
+    std::vector<device::DiscoverableCredentialMetadata> creds_;
   };
 
   void SetCurrentStep(Step step);
@@ -708,6 +722,14 @@ class AuthenticatorRequestDialogModel {
   base::RepeatingCallback<void(size_t)> contact_phone_callback_;
 
   absl::optional<std::string> cable_qr_string_;
+
+  // Callback for a request for a Conditional UI user list. This is set when
+  // password manager sees an input field that will accept WebAuthn
+  // credentials, but the signing request has not yet been received from the
+  // renderer.
+  base::OnceCallback<void(
+      const std::vector<device::DiscoverableCredentialMetadata>&)>
+      conditional_ui_user_list_callback_;
 
   base::WeakPtrFactory<AuthenticatorRequestDialogModel> weak_factory_{this};
 };

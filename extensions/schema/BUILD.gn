@@ -30,6 +30,7 @@ function_registration("generated_api_registration") {
     "//chrome/common/extensions/api",
     "//chrome/services/qrcode_generator/public/mojom",
     "//components/autofill/core/common/mojom:mojo_types",
+    "//components/guest_view/common:mojom",
     "//components/omnibox/browser:buildflags",
     "//components/paint_preview/buildflags:buildflags",
     "//components/translate/content/common",

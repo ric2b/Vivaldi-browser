@@ -58,9 +58,8 @@ public class CachedFeatureFlags {
                     .put(ChromeFeatureList.DOWNLOADS_AUTO_RESUMPTION_NATIVE, true)
                     .put(ChromeFeatureList.EARLY_LIBRARY_LOAD, false)
                     .put(ChromeFeatureList.ELASTIC_OVERSCROLL, true)
-                    .put(ChromeFeatureList.ELIDE_PRIORITIZATION_OF_PRE_NATIVE_BOOTSTRAP_TASKS,
-                            false)
-                    .put(ChromeFeatureList.ELIDE_TAB_PRELOAD_AT_STARTUP, false)
+                    .put(ChromeFeatureList.ELIDE_PRIORITIZATION_OF_PRE_NATIVE_BOOTSTRAP_TASKS, true)
+                    .put(ChromeFeatureList.ELIDE_TAB_PRELOAD_AT_STARTUP, true)
                     .put(ChromeFeatureList
                                     .GIVE_JAVA_UI_THREAD_DEFAULT_TASK_TRAITS_USER_BLOCKING_PRIORITY,
                             false)
@@ -78,6 +77,7 @@ public class CachedFeatureFlags {
                     .put(ChromeFeatureList.CLOSE_TAB_SUGGESTIONS, false)
                     .put(ChromeFeatureList.CRITICAL_PERSISTED_TAB_DATA, false)
                     .put(ChromeFeatureList.DYNAMIC_COLOR_ANDROID, true)
+                    .put(ChromeFeatureList.DYNAMIC_COLOR_BUTTONS_ANDROID, false)
                     .put(ChromeFeatureList.INSTANT_START, false)
                     .put(ChromeFeatureList.TAB_TO_GTS_ANIMATION, true)
                     .put(ChromeFeatureList.TEST_DEFAULT_DISABLED, false)
@@ -92,7 +92,6 @@ public class CachedFeatureFlags {
                     .put(ChromeFeatureList.EXPERIMENTS_FOR_AGSA, true)
                     .put(ChromeFeatureList.APP_MENU_MOBILE_SITE_OPTION, false)
                     .put(ChromeFeatureList.OPTIMIZATION_GUIDE_PUSH_NOTIFICATIONS, false)
-                    .put(ChromeFeatureList.APP_TO_WEB_ATTRIBUTION, false)
                     .put(ChromeFeatureList.NEW_WINDOW_APP_MENU, true)
                     .put(ChromeFeatureList.CCT_RESIZABLE_90_MAXIMUM_HEIGHT, false)
                     .put(ChromeFeatureList.CCT_RESIZABLE_ALLOW_RESIZE_BY_USER_GESTURE, false)

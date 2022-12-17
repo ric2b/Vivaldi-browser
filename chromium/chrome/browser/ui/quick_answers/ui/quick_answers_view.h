@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include "base/memory/weak_ptr.h"
 #include "chrome/browser/ui/quick_answers/ui/quick_answers_focus_search.h"
 #include "ui/events/event_handler.h"
 #include "ui/views/focus/focus_manager.h"
@@ -23,6 +24,7 @@ class QuickAnswersPreTargetHandler;
 
 namespace quick_answers {
 struct QuickAnswer;
+struct PhoneticsInfo;
 }  // namespace quick_answers
 
 // A bubble style view to show QuickAnswer.
@@ -31,7 +33,7 @@ class QuickAnswersView : public views::View {
   QuickAnswersView(const gfx::Rect& anchor_view_bounds,
                    const std::string& title,
                    bool is_internal,
-                   QuickAnswersUiController* controller);
+                   base::WeakPtr<QuickAnswersUiController> controller);
 
   QuickAnswersView(const QuickAnswersView&) = delete;
   QuickAnswersView& operator=(const QuickAnswersView&) = delete;
@@ -61,7 +63,9 @@ class QuickAnswersView : public views::View {
   void InitWidget();
   void AddContentView();
   void AddSettingsButton();
-  void AddPhoneticsAudioButton(const GURL& phonetics_audio, View* container);
+  void AddPhoneticsAudioButton(
+      const quick_answers::PhoneticsInfo& phonetics_info,
+      View* container);
   void AddAssistantIcon();
   void AddGoogleIcon();
   void ResetContentView();
@@ -73,10 +77,11 @@ class QuickAnswersView : public views::View {
   std::vector<views::View*> GetFocusableViews();
 
   // Invoked when user clicks the phonetics audio button.
-  void OnPhoneticsAudioButtonPressed(const GURL& phonetics_audio);
+  void OnPhoneticsAudioButtonPressed(
+      const quick_answers::PhoneticsInfo& phonetics_info);
 
   gfx::Rect anchor_view_bounds_;
-  QuickAnswersUiController* const controller_;
+  base::WeakPtr<QuickAnswersUiController> controller_;
   bool has_second_row_answer_ = false;
   std::string title_;
   bool is_internal_ = false;

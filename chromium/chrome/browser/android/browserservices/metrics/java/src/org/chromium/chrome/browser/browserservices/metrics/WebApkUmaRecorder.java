@@ -172,7 +172,7 @@ public class WebApkUmaRecorder {
         // Don't use an enumerated histogram as there are > 30 potential error codes. In practice,
         // a given client will always get the same error code.
         RecordHistogram.recordSparseHistogram(
-                "WebApk.Install.GooglePlayErrorCode", Math.min(errorCode, 1000));
+                "WebApk.Install.GooglePlayErrorCode", Math.min(errorCode, 10000));
     }
 
     /**
@@ -213,7 +213,7 @@ public class WebApkUmaRecorder {
 
     /** Records to UMA the count of old "WebAPK update request" files. */
     public static void recordNumberOfStaleWebApkUpdateRequestFiles(int count) {
-        RecordHistogram.recordCountHistogram("WebApk.Update.NumStaleUpdateRequestFiles", count);
+        RecordHistogram.recordCount1MHistogram("WebApk.Update.NumStaleUpdateRequestFiles", count);
     }
 
     /** Records whether Chrome could bind to the WebAPK service. */

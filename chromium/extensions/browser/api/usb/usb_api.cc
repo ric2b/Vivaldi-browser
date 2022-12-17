@@ -219,14 +219,14 @@ const char* ConvertTransferStatusToApi(const UsbTransferStatus status) {
   }
 }
 
-std::unique_ptr<base::Value> PopulateConnectionHandle(int handle,
-                                                      int vendor_id,
-                                                      int product_id) {
+base::Value PopulateConnectionHandle(int handle,
+                                     int vendor_id,
+                                     int product_id) {
   ConnectionHandle result;
   result.handle = handle;
   result.vendor_id = vendor_id;
   result.product_id = product_id;
-  return result.ToValue();
+  return base::Value::FromUniquePtrValue(result.ToValue());
 }
 
 TransferType ConvertTransferTypeToApi(const UsbTransferType& input) {
@@ -386,6 +386,14 @@ UsbDeviceManager* UsbExtensionFunction::usb_device_manager() {
   return usb_device_manager_;
 }
 
+bool UsbExtensionFunction::IsUsbDeviceAllowedByPolicy(int vendor_id,
+                                                      int product_id) {
+  ExtensionsBrowserClient* client = ExtensionsBrowserClient::Get();
+  DCHECK(client);
+  return client->IsUsbDeviceAllowedByPolicy(browser_context(), extension_id(),
+                                            vendor_id, product_id);
+}
+
 UsbPermissionCheckingFunction::UsbPermissionCheckingFunction()
     : device_permissions_manager_(nullptr) {}
 
@@ -411,6 +419,10 @@ bool UsbPermissionCheckingFunction::HasDevicePermission(
       UsbDevicePermission::CheckParam::ForUsbDevice(extension(), device);
   if (extension()->permissions_data()->CheckAPIPermissionWithParam(
           mojom::APIPermissionID::kUsbDevice, param.get())) {
+    return true;
+  }
+
+  if (IsUsbDeviceAllowedByPolicy(device.vendor_id, device.product_id)) {
     return true;
   }
 
@@ -480,7 +492,8 @@ void UsbTransferFunction::OnCompleted(
         OneArgument(base::Value::FromUniquePtrValue(std::move(transfer_info))));
   } else {
     auto error_args = std::make_unique<base::ListValue>();
-    error_args->Append(std::move(transfer_info));
+    error_args->Append(
+        base::Value::FromUniquePtrValue(std::move(transfer_info)));
     // Using ErrorWithArguments is discouraged but required to provide the
     // detailed transfer info as the transfer may have partially succeeded.
     Respond(ErrorWithArguments(std::move(error_args),
@@ -591,7 +604,8 @@ ExtensionFunction::ResponseAction UsbFindDevicesFunction::Run() {
       UsbDevicePermission::CheckParam::ForDeviceWithAnyInterfaceClass(
           extension(), vendor_id_, product_id_, interface_id);
   if (!extension()->permissions_data()->CheckAPIPermissionWithParam(
-          mojom::APIPermissionID::kUsbDevice, param.get())) {
+          mojom::APIPermissionID::kUsbDevice, param.get()) &&
+      !IsUsbDeviceAllowedByPolicy(vendor_id_, product_id_)) {
     return RespondNow(Error(kErrorPermissionDenied));
   }
 
@@ -630,7 +644,8 @@ void UsbFindDevicesFunction::OnGetDevicesComplete(
         UsbDevicePermission::CheckParam::ForUsbDevice(extension(),
                                                       *device_info);
     if (!extension()->permissions_data()->CheckAPIPermissionWithParam(
-            mojom::APIPermissionID::kUsbDevice, param.get())) {
+            mojom::APIPermissionID::kUsbDevice, param.get()) &&
+        !IsUsbDeviceAllowedByPolicy(vendor_id_, product_id_)) {
       barrier_.Run();
     } else {
       mojo::Remote<device::mojom::UsbDevice> device;
@@ -710,7 +725,7 @@ void UsbGetDevicesFunction::OnGetDevicesComplete(
         HasDevicePermission(*device)) {
       Device api_device;
       usb_device_manager()->GetApiDevice(*device, &api_device);
-      result->Append(api_device.ToValue());
+      result->Append(base::Value::FromUniquePtrValue(api_device.ToValue()));
     }
   }
 
@@ -771,7 +786,7 @@ void UsbGetUserSelectedDevicesFunction::OnDevicesChosen(
   for (const auto& device : devices) {
     Device api_device;
     device_manager->GetApiDevice(*device, &api_device);
-    result->Append(api_device.ToValue());
+    result->Append(base::Value::FromUniquePtrValue(api_device.ToValue()));
   }
 
   Respond(OneArgument(base::Value::FromUniquePtrValue(std::move(result))));
@@ -815,7 +830,7 @@ ExtensionFunction::ResponseAction UsbGetConfigurationsFunction::Run() {
         config->configuration_value == active_config_value) {
       api_config.active = true;
     }
-    configs->Append(api_config.ToValue());
+    configs->Append(base::Value::FromUniquePtrValue(api_config.ToValue()));
   }
   return RespondNow(
       OneArgument(base::Value::FromUniquePtrValue(std::move(configs))));
@@ -890,9 +905,9 @@ void UsbOpenDeviceFunction::OnDeviceOpened(
   DCHECK(device_info);
   UsbDeviceResource* resource = new UsbDeviceResource(
       extension_id(), device_info->guid, std::move(device));
-  Respond(OneArgument(base::Value::FromUniquePtrValue(
-      PopulateConnectionHandle(manager->Add(resource), device_info->vendor_id,
-                               device_info->product_id))));
+  Respond(OneArgument(PopulateConnectionHandle(manager->Add(resource),
+                                               device_info->vendor_id,
+                                               device_info->product_id)));
 }
 
 void UsbOpenDeviceFunction::OnDisconnect() {
@@ -993,7 +1008,8 @@ ExtensionFunction::ResponseAction UsbListInterfacesFunction::Run() {
       ConfigDescriptor api_config = ConvertConfigDescriptor(*config);
       std::unique_ptr<base::ListValue> result(new base::ListValue);
       for (size_t i = 0; i < api_config.interfaces.size(); ++i) {
-        result->Append(api_config.interfaces[i].ToValue());
+        result->Append(base::Value::FromUniquePtrValue(
+            api_config.interfaces[i].ToValue()));
       }
       return RespondNow(
           OneArgument(base::Value::FromUniquePtrValue(std::move(result))));

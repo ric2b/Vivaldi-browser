@@ -32,6 +32,23 @@ namespace {
 
 bool g_fallback_search_engines_disabled = false;
 
+TemplateURLPrepopulateData::SearchType GetPrepopulatedType(
+    const char* pref_name) {
+  if (pref_name ==
+          DefaultSearchManager::kDefaultPrivateSearchProviderDataPrefName ||
+      pref_name == DefaultSearchManager::
+                       kDefaultPrivateSearchFieldProviderDataPrefName ||
+      pref_name == DefaultSearchManager::
+                       kDefaultSpeeddialsPrivateSearchProviderDataPrefName) {
+    return TemplateURLPrepopulateData::SearchType::kPrivate;
+  }
+  if (pref_name ==
+      DefaultSearchManager::kDefaultImageSearchProviderDataPrefName) {
+    return TemplateURLPrepopulateData::SearchType::kImage;
+  }
+  return TemplateURLPrepopulateData::SearchType::kMain;
+}
+
 }  // namespace
 
 // A dictionary to hold all data related to the Default Search Engine.
@@ -39,6 +56,21 @@ bool g_fallback_search_engines_disabled = false;
 // default_search_provider.* prefs.
 const char DefaultSearchManager::kDefaultSearchProviderDataPrefName[] =
     "default_search_provider_data.template_url_data";
+const char DefaultSearchManager::kDefaultPrivateSearchProviderDataPrefName[] =
+    "default_search_provider_data.private_template_url_data";
+const char DefaultSearchManager::kDefaultSearchFieldProviderDataPrefName[] =
+    "default_search_provider_data.search_field_emplate_url_data";
+const char
+    DefaultSearchManager::kDefaultPrivateSearchFieldProviderDataPrefName[] =
+        "default_search_provider_data.private_search_field_template_url_data";
+const char
+    DefaultSearchManager::kDefaultSpeeddialsSearchProviderDataPrefName[] =
+        "default_search_provider_data.speeddials_template_url_data";
+const char DefaultSearchManager::
+    kDefaultSpeeddialsPrivateSearchProviderDataPrefName[] =
+        "default_search_provider_data.speeddials_private_template_url_data";
+const char DefaultSearchManager::kDefaultImageSearchProviderDataPrefName[] =
+    "default_search_provider_data.image_template_url_data";
 
 const char DefaultSearchManager::kID[] = "id";
 const char DefaultSearchManager::kShortName[] = "short_name";
@@ -63,6 +95,7 @@ const char DefaultSearchManager::kSuggestionsURLPostParams[] =
     "suggestions_url_post_params";
 const char DefaultSearchManager::kImageURLPostParams[] =
     "image_url_post_params";
+const char DefaultSearchManager::kSideSearchParam[] = "side_search_param";
 
 const char DefaultSearchManager::kSafeForAutoReplace[] = "safe_for_autoreplace";
 const char DefaultSearchManager::kInputEncodings[] = "input_encodings";
@@ -80,17 +113,29 @@ const char DefaultSearchManager::kCreatedFromPlayAPI[] =
 const char DefaultSearchManager::kPreconnectToSearchUrl[] =
     "preconnect_to_search_url";
 const char DefaultSearchManager::kIsActive[] = "is_active";
+const char DefaultSearchManager::kStarterPackId[] = "starter_pack_id";
+
+const char DefaultSearchManager::kPosition[] = "position";
 
 DefaultSearchManager::DefaultSearchManager(
     PrefService* pref_service,
     const ObserverCallback& change_observer)
+    : DefaultSearchManager(pref_service,
+                           kDefaultSearchProviderDataPrefName,
+                           change_observer) {}
+
+DefaultSearchManager::DefaultSearchManager(
+    PrefService* pref_service,
+    const char* vivaldi_default_pref,
+    const ObserverCallback& change_observer)
     : pref_service_(pref_service),
       change_observer_(change_observer),
-      default_search_controlled_by_policy_(false) {
+      default_search_controlled_by_policy_(false),
+      vivaldi_default_pref_(vivaldi_default_pref) {
   if (pref_service_) {
     pref_change_registrar_.Init(pref_service_);
     pref_change_registrar_.Add(
-        kDefaultSearchProviderDataPrefName,
+        vivaldi_default_pref_,
         base::BindRepeating(&DefaultSearchManager::OnDefaultSearchPrefChanged,
                             base::Unretained(this)));
     pref_change_registrar_.Add(
@@ -109,6 +154,15 @@ DefaultSearchManager::~DefaultSearchManager() {
 void DefaultSearchManager::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterDictionaryPref(kDefaultSearchProviderDataPrefName);
+  registry->RegisterDictionaryPref(kDefaultPrivateSearchProviderDataPrefName);
+  registry->RegisterDictionaryPref(kDefaultSearchFieldProviderDataPrefName);
+  registry->RegisterDictionaryPref(
+      kDefaultPrivateSearchFieldProviderDataPrefName);
+  registry->RegisterDictionaryPref(
+      kDefaultSpeeddialsSearchProviderDataPrefName);
+  registry->RegisterDictionaryPref(
+      kDefaultSpeeddialsPrivateSearchProviderDataPrefName);
+  registry->RegisterDictionaryPref(kDefaultImageSearchProviderDataPrefName);
 }
 
 // static
@@ -163,7 +217,7 @@ DefaultSearchManager::GetDefaultSearchEngineIgnoringExtensions() const {
   // |prefs_default_search_| may not be populated even if there is a user
   // preference; check prefs directly as the source of truth.
   const base::Value* user_value =
-      pref_service_->GetUserPrefValue(kDefaultSearchProviderDataPrefName);
+      pref_service_->GetUserPrefValue(vivaldi_default_pref_);
   if (user_value && user_value->is_dict()) {
     auto turl_data = TemplateURLDataFromDictionary(*user_value);
     if (turl_data)
@@ -198,13 +252,13 @@ void DefaultSearchManager::SetUserSelectedDefaultSearchEngine(
     return;
   }
 
-  pref_service_->Set(kDefaultSearchProviderDataPrefName,
+  pref_service_->Set(vivaldi_default_pref_,
                      *TemplateURLDataToDictionary(data));
 }
 
 void DefaultSearchManager::ClearUserSelectedDefaultSearchEngine() {
   if (pref_service_) {
-    pref_service_->ClearPref(kDefaultSearchProviderDataPrefName);
+    pref_service_->ClearPref(vivaldi_default_pref_);
   } else {
     prefs_default_search_.reset();
     NotifyObserver();
@@ -272,6 +326,7 @@ void DefaultSearchManager::MergePrefsDataWithPrepopulated() {
   engine->last_modified = prefs_default_search_->last_modified;
   engine->last_visited = prefs_default_search_->last_visited;
   engine->favicon_url = prefs_default_search_->favicon_url;
+  engine->vivaldi_position = prefs_default_search_->vivaldi_position;
 
   prefs_default_search_ = std::move(engine);
 }
@@ -283,12 +338,13 @@ void DefaultSearchManager::LoadDefaultSearchEngineFromPrefs() {
   prefs_default_search_.reset();
   extension_default_search_.reset();
   const PrefService::Preference* pref =
-      pref_service_->FindPreference(kDefaultSearchProviderDataPrefName);
+      pref_service_->FindPreference(vivaldi_default_pref_);
   DCHECK(pref);
-  default_search_controlled_by_policy_ = pref->IsManaged();
+  default_search_controlled_by_policy_ =
+      pref->IsManaged() || pref->IsRecommended();
 
   const base::Value* url_dict =
-      pref_service_->GetDictionary(kDefaultSearchProviderDataPrefName);
+      pref_service_->GetDictionary(vivaldi_default_pref_);
   if (url_dict->DictEmpty())
     return;
 
@@ -312,7 +368,7 @@ void DefaultSearchManager::LoadDefaultSearchEngineFromPrefs() {
 
 void DefaultSearchManager::LoadPrepopulatedDefaultSearch() {
   std::unique_ptr<TemplateURLData> data =
-      TemplateURLPrepopulateData::GetPrepopulatedDefaultSearch(pref_service_);
+      TemplateURLPrepopulateData::GetPrepopulatedDefaultSearch(pref_service_, GetPrepopulatedType(vivaldi_default_pref_));
   fallback_default_search_ = std::move(data);
   MergePrefsDataWithPrepopulated();
 }

@@ -19,7 +19,10 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
+#include "base/strings/strcat.h"
+#include "base/task/bind_post_task.h"
 #include "base/task/thread_pool.h"
+#include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -64,6 +67,7 @@
 #include "chrome/browser/profiles/keep_alive/scoped_profile_keep_alive.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
+#include "chrome/browser/safe_browsing/verdict_cache_manager_factory.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/share/share_history.h"
 #include "chrome/browser/share/share_ranking.h"
@@ -94,6 +98,7 @@
 #include "components/crash/core/app/crashpad.h"
 #include "components/custom_handlers/protocol_handler_registry.h"
 #include "components/device_event_log/device_event_log.h"
+#include "components/feed/buildflags.h"
 #include "components/heavy_ad_intervention/heavy_ad_blocklist.h"
 #include "components/heavy_ad_intervention/heavy_ad_service.h"
 #include "components/history/core/browser/history_service.h"
@@ -114,6 +119,7 @@
 #include "components/permissions/permission_decision_auto_blocker.h"
 #include "components/prefs/pref_service.h"
 #include "components/privacy_sandbox/privacy_sandbox_settings.h"
+#include "components/safe_browsing/core/browser/verdict_cache_manager.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/web_cache/browser/web_cache_manager.h"
 #include "components/webrtc_logging/browser/log_cleanup.h"
@@ -139,7 +145,7 @@
 #include "chrome/browser/android/explore_sites/explore_sites_service_factory.h"
 #include "chrome/browser/android/oom_intervention/oom_intervention_decider.h"
 #include "chrome/browser/android/webapps/webapp_registry.h"
-#include "chrome/browser/feed/android/feed_service_factory.h"
+#include "chrome/browser/feed/feed_service_factory.h"
 #include "chrome/browser/offline_pages/offline_page_model_factory.h"
 #include "chrome/browser/profiles/profile_android.h"
 #include "components/cdm/browser/media_drm_storage_impl.h"  // nogncheck crbug.com/1125897
@@ -193,17 +199,11 @@ const base::TimeDelta kSlowTaskTimeout = base::Seconds(180);
 
 // Generic functions but currently only used when ENABLE_NACL.
 #if BUILDFLAG(ENABLE_NACL)
-void UIThreadTrampolineHelper(base::OnceClosure callback) {
-  content::GetUIThreadTaskRunner({})->PostTask(FROM_HERE, std::move(callback));
-}
-
 // Convenience method to create a callback that can be run on any thread and
 // will post the given |callback| back to the UI thread.
 base::OnceClosure UIThreadTrampoline(base::OnceClosure callback) {
-  // We could directly bind &base::PostTask, but that would require
-  // evaluating FROM_HERE when this method is called, as opposed to when the
-  // task is actually posted.
-  return base::BindOnce(&UIThreadTrampolineHelper, std::move(callback));
+  return base::BindPostTask(content::GetUIThreadTaskRunner({}),
+                            std::move(callback));
 }
 #endif  // BUILDFLAG(ENABLE_NACL)
 
@@ -622,6 +622,9 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
     if (sb_service)
       safe_browsing_context = sb_service->GetNetworkContext(profile_);
 
+    browsing_data::RemoveFederatedSiteSettingsData(delete_begin_, delete_end_,
+                                                   host_content_settings_map_);
+
     if (!filter_builder->IsCrossSiteClearSiteData()) {
       browsing_data::RemoveEmbedderCookieData(
           delete_begin, delete_end, filter_builder, host_content_settings_map_,
@@ -629,11 +632,13 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
           base::BindOnce(
               &ChromeBrowsingDataRemoverDelegate::CreateTaskCompletionClosure,
               base::Unretained(this), TracingDataType::kCookies));
+      safe_browsing::VerdictCacheManagerFactory::GetForProfile(profile_)
+          ->OnCookiesDeleted();
     }
 
     if (filter_builder->GetMode() ==
         BrowsingDataFilterBuilder::Mode::kPreserve) {
-      PrivacySandboxSettings* privacy_sandbox_settings =
+      auto* privacy_sandbox_settings =
           PrivacySandboxSettingsFactory::GetForProfile(profile_);
       if (privacy_sandbox_settings)
         privacy_sandbox_settings->OnCookiesCleared();
@@ -823,6 +828,9 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
           delete_begin_, delete_end_,
           CreateTaskCompletionClosure(TracingDataType::kWebAuthnCredentials));
     }
+
+    browsing_data::RemoveFederatedSiteSettingsData(delete_begin_, delete_end_,
+                                                   host_content_settings_map_);
   }
 
   if (remove_mask & constants::DATA_TYPE_ACCOUNT_PASSWORDS) {
@@ -1225,6 +1233,7 @@ void ChromeBrowsingDataRemoverDelegate::OnTaskStarted(
 void ChromeBrowsingDataRemoverDelegate::OnTaskComplete(
     TracingDataType data_type,
     uint64_t data_type_mask,
+    base::TimeTicks started,
     bool success) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   size_t num_erased = pending_sub_tasks_.erase(data_type);
@@ -1234,6 +1243,10 @@ void ChromeBrowsingDataRemoverDelegate::OnTaskComplete(
       TRACE_ID_WITH_SCOPE("ChromeBrowsingDataRemoverDelegate",
                           static_cast<int>(data_type)),
       "data_type", static_cast<int>(data_type));
+  base::UmaHistogramMediumTimes(
+      base::StrCat({"History.ClearBrowsingData.Duration.ChromeTask.",
+                    GetHistogramSuffix(data_type)}),
+      base::TimeTicks::Now() - started);
 
   if (!success) {
     base::UmaHistogramEnumeration("History.ClearBrowsingData.FailedTasksChrome",
@@ -1263,6 +1276,92 @@ void ChromeBrowsingDataRemoverDelegate::OnTaskComplete(
   std::move(callback_).Run(failed_data_types_);
 }
 
+const char* ChromeBrowsingDataRemoverDelegate::GetHistogramSuffix(
+    TracingDataType task) {
+  switch (task) {
+    case TracingDataType::kSynchronous:
+      return "Synchronous";
+    case TracingDataType::kHistory:
+      return "History";
+    case TracingDataType::kHostNameResolution:
+      return "HostNameResolution";
+    case TracingDataType::kNaclCache:
+      return "NaclCache";
+    case TracingDataType::kPnaclCache:
+      return "PnaclCache";
+    case TracingDataType::kAutofillData:
+      return "AutofillData";
+    case TracingDataType::kAutofillOrigins:
+      return "AutofillOrigins";
+    case TracingDataType::kPluginData:
+      return "PluginData";
+    case TracingDataType::kDomainReliability:
+      return "DomainReliability";
+    case TracingDataType::kNetworkPredictor:
+      return "NetworkPredictor";
+    case TracingDataType::kWebrtcLogs:
+      return "WebrtcLogs";
+    case TracingDataType::kVideoDecodeHistory:
+      return "VideoDecodeHistory";
+    case TracingDataType::kCookies:
+      return "Cookies";
+    case TracingDataType::kPasswords:
+      return "Passwords";
+    case TracingDataType::kHttpAuthCache:
+      return "HttpAuthCache";
+    case TracingDataType::kDisableAutoSignin:
+      return "DisableAutoSignin";
+    case TracingDataType::kPasswordsStatistics:
+      return "PasswordsStatistics";
+    case TracingDataType::kKeywordsModel:
+      return "KeywordsModel";
+    case TracingDataType::kReportingCache:
+      return "ReportingCache";
+    case TracingDataType::kNetworkErrorLogging:
+      return "NetworkErrorLogging";
+    case TracingDataType::kFlashDeauthorization:
+      return "FlashDeauthorization";
+    case TracingDataType::kOfflinePages:
+      return "OfflinePages";
+    case TracingDataType::kExploreSites:
+      return "ExploreSites";
+    case TracingDataType::kLegacyStrikes:
+      return "LegacyStrikes";
+    case TracingDataType::kWebrtcEventLogs:
+      return "WebrtcEventLogs";
+    case TracingDataType::kCdmLicenses:
+      return "CdmLicenses";
+    case TracingDataType::kHostCache:
+      return "HostCache";
+    case TracingDataType::kTpmAttestationKeys:
+      return "TpmAttestationKeys";
+    case TracingDataType::kStrikes:
+      return "Strikes";
+    case TracingDataType::kFieldInfo:
+      return "FieldInfo";
+    case TracingDataType::kCompromisedCredentials:
+      return "CompromisedCredentials";
+    case TracingDataType::kUserDataSnapshot:
+      return "UserDataSnapshot";
+    case TracingDataType::kMediaFeeds:
+      return "MediaFeeds";
+    case TracingDataType::kAccountPasswords:
+      return "AccountPasswords";
+    case TracingDataType::kAccountPasswordsSynced:
+      return "AccountPasswordsSynced";
+    case TracingDataType::kAccountCompromisedCredentials:
+      return "AccountCompromisedCredentials";
+    case TracingDataType::kFaviconCacheExpiration:
+      return "FaviconCacheExpiration";
+    case TracingDataType::kSecurePaymentConfirmationCredentials:
+      return "SecurePaymentConfirmationCredentials";
+    case TracingDataType::kWebAppHistory:
+      return "WebAppHistory";
+    case TracingDataType::kWebAuthnCredentials:
+      return "WebAuthnCredentials";
+  }
+}
+
 void ChromeBrowsingDataRemoverDelegate::OnStartRemoving() {
   profile_keep_alive_ = std::make_unique<ScopedProfileKeepAlive>(
       profile_->GetOriginalProfile(),
@@ -1288,7 +1387,7 @@ ChromeBrowsingDataRemoverDelegate::CreateTaskCompletionCallback(
   OnTaskStarted(data_type);
   return base::BindOnce(&ChromeBrowsingDataRemoverDelegate::OnTaskComplete,
                         weak_ptr_factory_.GetWeakPtr(), data_type,
-                        data_type_mask);
+                        data_type_mask, base::TimeTicks::Now());
 }
 
 base::OnceClosure
@@ -1301,7 +1400,8 @@ ChromeBrowsingDataRemoverDelegate::CreateTaskCompletionClosureForMojo(
       CreateTaskCompletionClosure(data_type),
       base::BindOnce(&ChromeBrowsingDataRemoverDelegate::OnTaskComplete,
                      weak_ptr_factory_.GetWeakPtr(), data_type,
-                     /*data_type_mask=*/0, /*success=*/true));
+                     /*data_type_mask=*/0, base::TimeTicks::Now(),
+                     /*success=*/true));
 }
 
 void ChromeBrowsingDataRemoverDelegate::RecordUnfinishedSubTasks() {

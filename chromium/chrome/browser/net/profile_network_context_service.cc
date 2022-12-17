@@ -18,7 +18,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/strings/string_split.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -107,8 +106,10 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-#include "chrome/browser/lacros/cert_db_initializer_factory.h"
-#include "chrome/browser/lacros/client_cert_store_lacros.h"
+#include "chrome/browser/lacros/cert/cert_db_initializer_factory.h"
+#include "chrome/browser/lacros/cert/client_cert_store_lacros.h"
+#include "chrome/browser/profiles/incognito_helpers.h"
+#include "chromeos/lacros/lacros_service.h"
 #endif
 
 namespace {
@@ -343,12 +344,12 @@ void ProfileNetworkContextService::RegisterProfilePrefs(
   registry->RegisterBooleanPref(prefs::kQuicAllowed, true);
   registry->RegisterBooleanPref(prefs::kGloballyScopeHTTPAuthCacheEnabled,
                                 false);
+  registry->RegisterListPref(prefs::kHSTSPolicyBypassList);
 }
 
 // static
 void ProfileNetworkContextService::RegisterLocalStatePrefs(
     PrefRegistrySimple* registry) {
-  registry->RegisterListPref(prefs::kHSTSPolicyBypassList);
   registry->RegisterIntegerPref(
       prefs::kAmbientAuthenticationInPrivateModesEnabled,
       static_cast<int>(net::AmbientAuthAllowedProfileTypes::REGULAR_ONLY));
@@ -614,9 +615,14 @@ ProfileNetworkContextService::CreateClientCertStore() {
           base::BindRepeating(&CreateCryptoModuleBlockingPasswordDelegate,
                               kCryptoModulePasswordClientAuth));
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-  if (!profile_->IsMainProfile()) {
-    // TODO(crbug.com/1148298): return some cert store for secondary profiles in
-    // Lacros-Chrome.
+
+  if (!Profile::FromBrowserContext(
+           chrome::GetBrowserContextRedirectedInIncognito(profile_))
+           ->IsMainProfile()) {
+    // TODO(crbug.com/1148298): At the moment client certs are only enabled for
+    // the main profile and its incognito profile (similarly to how it worked in
+    // Ash-Chrome). Return some cert store for secondary profiles in
+    // Lacros-Chrome when certs are supported there.
     return nullptr;
   }
 
@@ -743,7 +749,7 @@ void ProfileNetworkContextService::ConfigureNetworkContextParamsInternal(
         local_state->GetFilePath(prefs::kDiskCacheDir);
     if (!disk_cache_dir.empty())
       base_cache_path = disk_cache_dir.Append(base_cache_path.BaseName());
-    network_context_params->http_cache_path =
+    network_context_params->http_cache_directory =
         base_cache_path.Append(chrome::kCacheDirname);
     network_context_params->http_cache_max_size =
         local_state->GetInteger(prefs::kDiskCacheSize);
@@ -751,7 +757,7 @@ void ProfileNetworkContextService::ConfigureNetworkContextParamsInternal(
     network_context_params->file_paths =
         ::network::mojom::NetworkContextFilePaths::New();
 
-    network_context_params->file_paths->data_path =
+    network_context_params->file_paths->data_directory =
         path.Append(chrome::kNetworkDataDirname);
     network_context_params->file_paths->unsandboxed_data_path = path;
     network_context_params->file_paths->trigger_migration =
@@ -787,7 +793,7 @@ void ProfileNetworkContextService::ConfigureNetworkContextParamsInternal(
         base::FilePath(chrome::kSCTAuditingPendingReportsFileName);
   }
   const base::Value* hsts_policy_bypass_list =
-      g_browser_process->local_state()->GetList(prefs::kHSTSPolicyBypassList);
+      profile_->GetPrefs()->GetList(prefs::kHSTSPolicyBypassList);
   for (const auto& value : hsts_policy_bypass_list->GetListDeprecated()) {
     const std::string* string_value = value.GetIfString();
     if (!string_value)
@@ -890,6 +896,22 @@ void ProfileNetworkContextService::ConfigureNetworkContextParamsInternal(
   }
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
+  // Configure cert verifier to use the same software NSS database as Chrome is
+  // currently using (secondary profiles don't have their own databases at the
+  // moment).
+  cert_verifier_creation_params->nss_full_path.reset();
+  if (profile_->IsMainProfile()) {
+    DCHECK(chromeos::LacrosService::Get());
+    DCHECK(chromeos::LacrosService::Get()->init_params());
+    const crosapi::mojom::DefaultPathsPtr& default_paths =
+        chromeos::LacrosService::Get()->init_params()->default_paths;
+    // `default_paths` can be nullptr in tests.
+    if (default_paths && default_paths->user_nss_database.has_value()) {
+      cert_verifier_creation_params->nss_full_path =
+          default_paths->user_nss_database.value();
+    }
+  }
+
   PopulateInitialAdditionalCerts(relative_partition_path,
                                  network_context_params);
 #endif

@@ -270,7 +270,7 @@ export class MostVisitedElement extends MostVisitedElementBase {
     this.dragOffset_ = null;
   }
 
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
 
     this.isRtl_ = window.getComputedStyle(this)['direction'] === 'rtl';
@@ -297,7 +297,7 @@ export class MostVisitedElement extends MostVisitedElementBase {
     FocusOutlineManager.forDocument(document);
   }
 
-  disconnectedCallback() {
+  override disconnectedCallback() {
     super.disconnectedCallback();
     this.mediaListenerWideWidth_.removeListener(
         assert(this.boundOnWidthChange_));
@@ -308,7 +308,7 @@ export class MostVisitedElement extends MostVisitedElementBase {
     this.eventTracker_.removeAll();
   }
 
-  ready() {
+  override ready() {
     super.ready();
 
     this.boundOnWidthChange_ = this.updateScreenWidth_.bind(this);
@@ -440,7 +440,7 @@ export class MostVisitedElement extends MostVisitedElementBase {
       return;
     }
     const dragIndex = (this.$.tiles.modelForElement(dragElement) as unknown as {
-                        index: number
+                        index: number,
                       }).index;
     dragElement.classList.remove('dragging');
     this.tileElements_.forEach(el => resetTilePosition(el));
@@ -481,7 +481,7 @@ export class MostVisitedElement extends MostVisitedElementBase {
       return;
     }
     const dragIndex = (this.$.tiles.modelForElement(dragElement) as unknown as {
-                        index: number
+                        index: number,
                       }).index;
     setTilePosition(dragElement, {
       x: x - this.dragOffset_!.x,

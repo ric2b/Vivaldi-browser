@@ -44,10 +44,10 @@ _CONFIG = [
             # //base constructs that are allowed everywhere
             'base::AdoptRef',
             'base::ApplyMetadataToPastSamples',
+            'base::SampleMetadataScope',
             'base::AutoReset',
             'base::Contains',
             'base::CpuReductionExperimentFilter',
-            'base::CreateSequencedTaskRunner',
             'base::ValuesEquivalent',
             'base::Days',
             'base::DefaultTickClock',
@@ -113,7 +113,6 @@ _CONFIG = [
             'absl::nullopt_t',
             'base::ranges::.+',
             'base::sequence_manager::TaskTimeObserver',
-            'base::size',
             'base::span',
             'logging::GetVlogLevel',
             'logging::SetLogItems',
@@ -159,9 +158,6 @@ _CONFIG = [
 
             # //base/memory/ptr_util.h.
             'base::WrapUnique',
-
-            # //base/allocator/partition_allocator/oom_callback.h.
-            'base::SetPartitionAllocOomCallback',
 
             # //base/containers/adapters.h
             'base::Reversed',
@@ -345,12 +341,12 @@ _CONFIG = [
             'gfx::RectFToSkRect',
             'gfx::RectToSkIRect',
             'gfx::RectToSkRect',
-            'gfx::ScalePoint',
             'gfx::ScaleToCeiledSize',
             'gfx::ScaleToEnclosingRect',
             'gfx::ScaleToFlooredSize',
             'gfx::ScaleToRoundedRect',
             'gfx::ScaleToRoundedSize',
+            'gfx::ScaleRect',
             'gfx::ScaleSize',
             'gfx::ScalePoint',
             'gfx::ScaleToRoundedPoint',
@@ -435,6 +431,20 @@ _CONFIG = [
 
             # Animation
             'cc::AnimationHost',
+            "cc::AnimationIdProvider",
+            "cc::FilterKeyframe",
+            "cc::KeyframedFilterAnimationCurve",
+            "cc::KeyframeModel",
+            "cc::ScrollOffsetAnimationCurveFactory",
+            "cc::TargetProperty",
+            "gfx::AnimationCurve",
+            "gfx::ColorKeyframe",
+            "gfx::FloatKeyframe",
+            "gfx::KeyframedColorAnimationCurve",
+            "gfx::KeyframedFloatAnimationCurve",
+            "gfx::KeyframedTransformAnimationCurve",
+            "gfx::TransformKeyframe",
+            "gfx::TransformOperations",
 
             # UMA Enums
             'cc::PaintHoldingCommitTrigger',
@@ -488,6 +498,7 @@ _CONFIG = [
             "power_scheduler::.+",
 
             # Nested namespaces under the blink namespace
+            'attribution_response_parsing::.+',
             'bindings::.+',
             'canvas_heuristic_parameters::.+',
             'compositor_target_property::.+',
@@ -557,6 +568,7 @@ _CONFIG = [
 
             # CanonicalCookie and related headers
             'net::CanonicalCookie',
+            'net::CookieInclusionStatus',
             'net::CookiePriority',
             'net::CookieSameSite',
             'net::CookieSourceScheme',
@@ -572,6 +584,9 @@ _CONFIG = [
 
             # Used in network service types.
             'net::SiteForCookies',
+
+            # PartitionAlloc
+            'partition_alloc::.+',
 
             # Some test helpers live in the blink::test namespace.
             'test::.+',
@@ -1015,10 +1030,21 @@ _CONFIG = [
     },
     {
         'paths': [
-            'third_party/blink/renderer/bindings/core/v8/v8_code_cache.cc',
-            'third_party/blink/renderer/bindings/core/v8/v8_code_cache.h',
             'third_party/blink/renderer/core/loader/document_loader.cc',
             'third_party/blink/renderer/core/loader/document_loader.h',
+        ],
+        'allowed': [
+            'base::flat_map',
+            # TODO(mythria): Allow use of non-blink mojo interface. Once
+            # //content/renderer/loader is moved to Blink as a part of onion
+            # soup we can update all uses to blink::mojom::blink::CodeCacheHost.
+            'blink::mojom::CodeCacheHost',
+        ],
+    },
+    {
+        'paths': [
+            'third_party/blink/renderer/bindings/core/v8/v8_code_cache.cc',
+            'third_party/blink/renderer/bindings/core/v8/v8_code_cache.h',
             'third_party/blink/renderer/core/workers/worklet_global_scope.h',
             'third_party/blink/renderer/core/workers/worklet_global_scope.cc',
             'third_party/blink/renderer/core/workers/worker_global_scope.cc',
@@ -1124,6 +1150,8 @@ _CONFIG = [
             'third_party/blink/renderer/modules/breakout_box/',
         ],
         'allowed': [
+            # Required to initialize WebGraphicsContext3DVideoFramePool.
+            'gpu::GpuMemoryBufferManager',
             'media::.+',
             # Some media APIs require std::vector.
             "std::vector",
@@ -1215,7 +1243,7 @@ _CONFIG = [
             'third_party/blink/renderer/modules/mediarecorder/',
         ],
         'allowed': [
-            'base::data',
+            'std::data',
             # TODO(crbug.com/960665): Remove base::queue once it is replaced with a WTF equivalent.
             'base::queue',
             'base::SharedMemory',
@@ -1438,7 +1466,7 @@ _CONFIG = [
         'paths': [
             'third_party/blink/renderer/modules/webaudio/',
         ],
-        'allowed': ['audio_utilities::.+'],
+        'allowed': ['audio_utilities::.+', 'media::.+'],
     },
     {
         'paths': [
@@ -1639,7 +1667,6 @@ _CONFIG = [
     {
         'paths': [
             'third_party/blink/renderer/modules/webdatabase/dom_window_web_database.cc',
-            'third_party/blink/renderer/controller/blink_initializer.cc',
         ],
         'allowed': [
             'base::CommandLine',

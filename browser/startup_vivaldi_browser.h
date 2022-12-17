@@ -4,6 +4,7 @@
 #define BROWSER_STARTUP_VIVALDI_BROWSER_H_
 
 #include <vector>
+
 #include "base/supports_user_data.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "url/gurl.h"

@@ -205,9 +205,18 @@ void AutocompleteMatch::UpdateClipboardContent(JNIEnv* env) {
 void AutocompleteMatch::UpdateJavaDestinationUrl() {
   if (java_match_) {
     JNIEnv* env = base::android::AttachCurrentThread();
+
+    ScopedJavaLocalRef<jstring> j_post_content_type;
+    ScopedJavaLocalRef<jbyteArray> j_post_content;
+    if (post_content && !post_content->first.empty() &&
+        !post_content->second.empty()) {
+      j_post_content_type = ConvertUTF8ToJavaString(env, post_content->first);
+      j_post_content = ToJavaByteArray(env, post_content->second);
+    }
+
     Java_AutocompleteMatch_setDestinationUrl(
         env, *java_match_,
-        url::GURLAndroid::FromNativeGURL(env, destination_url));
+        url::GURLAndroid::FromNativeGURL(env, destination_url), j_post_content_type, j_post_content);
   }
 }
 

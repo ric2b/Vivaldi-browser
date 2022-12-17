@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include "base/guid.h"
 #include "ui/aura/window_observer.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/animation/bounds_animator.h"
@@ -42,14 +43,19 @@ class DesksTemplatesGridView : public views::View, public aura::WindowObserver {
   // Updates the UI by creating a grid layout and populating the grid with the
   // provided list of desk templates.
   void PopulateGridUI(const std::vector<DeskTemplate*>& desk_templates,
-                      const gfx::Rect& grid_bounds);
+                      const gfx::Rect& grid_bounds,
+                      const base::GUID& last_saved_template_uuid);
+
+  // Updates `grid_items_` to ensure the templates grid is sorted.
+  void SortTemplateGridItems(const base::GUID& last_saved_template_uuid);
 
   // Updates existing templates and adds new templates to the grid. Also sorts
   // `grid_items_` in alphabetical order. This will animate the `grid_items_` to
   // their final positions if `initializing_grid_view` is false. Currently only
   // allows a maximum of 6 templates to be shown in the grid.
   void AddOrUpdateTemplates(const std::vector<const DeskTemplate*>& entries,
-                            bool initializing_grid_view);
+                            bool initializing_grid_view,
+                            const base::GUID& last_saved_template_uuid);
 
   // Removes templates from the grid by UUID. Will trigger an animation to
   // shuffle `grid_items_` to their final positions.
@@ -66,10 +72,14 @@ class DesksTemplatesGridView : public views::View, public aura::WindowObserver {
   // Returns whether the given `point_in_screen` intersect with any grid item.
   bool IntersectsWithGridItem(const gfx::Point& point_in_screen);
 
+  // Returns the item view associated with `uuid`.
+  DesksTemplatesItemView* GetItemForUUID(const base::GUID& uuid);
+
   // views::View:
   void Layout() override;
   void AddedToWidget() override;
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
+  void OnThemeChanged() override;
 
   // aura::WindowObserver:
   void OnWindowDestroying(aura::Window* window) override;

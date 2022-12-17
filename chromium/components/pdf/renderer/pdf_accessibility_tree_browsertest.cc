@@ -985,7 +985,7 @@ TEST_F(PdfAccessibilityTreeTest, TestListboxNodeCreation) {
     EXPECT_TRUE(listbox_node->HasState(ax::mojom::State::kMultiselectable));
     EXPECT_TRUE(listbox_node->HasState(ax::mojom::State::kFocusable));
     EXPECT_EQ(kExpectedBounds[0], listbox_node->data().relative_bounds.bounds);
-    ASSERT_EQ(base::size(kExpectedOptions[0]), listbox_node->children().size());
+    ASSERT_EQ(std::size(kExpectedOptions[0]), listbox_node->children().size());
     const std::vector<ui::AXNode*>& listbox_child_nodes =
         listbox_node->children();
     for (size_t i = 0; i < listbox_child_nodes.size(); i++) {
@@ -1017,7 +1017,7 @@ TEST_F(PdfAccessibilityTreeTest, TestListboxNodeCreation) {
     EXPECT_FALSE(listbox_node->HasState(ax::mojom::State::kMultiselectable));
     EXPECT_TRUE(listbox_node->HasState(ax::mojom::State::kFocusable));
     EXPECT_EQ(kExpectedBounds[1], listbox_node->data().relative_bounds.bounds);
-    ASSERT_EQ(base::size(kExpectedOptions[1]), listbox_node->children().size());
+    ASSERT_EQ(std::size(kExpectedOptions[1]), listbox_node->children().size());
     const std::vector<ui::AXNode*>& listbox_child_nodes =
         listbox_node->children();
     for (size_t i = 0; i < listbox_child_nodes.size(); i++) {
@@ -1200,7 +1200,7 @@ TEST_F(PdfAccessibilityTreeTest, TestComboboxNodeCreation) {
         combobox_popup_node->HasState(ax::mojom::State::kMultiselectable));
     EXPECT_EQ(kExpectedBounds[0],
               combobox_popup_node->data().relative_bounds.bounds);
-    ASSERT_EQ(base::size(kExpectedOptions[0]),
+    ASSERT_EQ(std::size(kExpectedOptions[0]),
               combobox_popup_node->children().size());
     const std::vector<ui::AXNode*>& popup_child_nodes =
         combobox_popup_node->children();
@@ -1259,7 +1259,7 @@ TEST_F(PdfAccessibilityTreeTest, TestComboboxNodeCreation) {
               combobox_popup_node->data().GetRestriction());
     EXPECT_EQ(kExpectedBounds[1],
               combobox_popup_node->data().relative_bounds.bounds);
-    ASSERT_EQ(base::size(kExpectedOptions[1]),
+    ASSERT_EQ(std::size(kExpectedOptions[1]),
               combobox_popup_node->children().size());
     const std::vector<ui::AXNode*>& popup_child_nodes =
         combobox_popup_node->children();
@@ -1934,7 +1934,6 @@ TEST_F(PdfAccessibilityTreeTest, TestZoomAndScaleChanges) {
   float new_zoom = 1.5f;
   viewport_info_.zoom = new_zoom;
   viewport_info_.scale = new_device_scale;
-  SetUseZoomForDSFEnabled(true);
   pdf_accessibility_tree.SetAccessibilityViewportInfo(viewport_info_);
 
   rect = para_node->data().relative_bounds.bounds;
@@ -1942,15 +1941,6 @@ TEST_F(PdfAccessibilityTreeTest, TestZoomAndScaleChanges) {
   ASSERT_TRUE(transform);
   transform->TransformRect(&rect);
   CompareRect({{186.75f, 509.25f}, {189.00f, 29.25f}}, rect);
-
-  SetUseZoomForDSFEnabled(false);
-  pdf_accessibility_tree.SetAccessibilityViewportInfo(viewport_info_);
-
-  rect = para_node->data().relative_bounds.bounds;
-  transform = root_node->data().relative_bounds.transform.get();
-  ASSERT_TRUE(transform);
-  transform->TransformRect(&rect);
-  CompareRect({{124.5f, 339.5f}, {126.0f, 19.5f}}, rect);
 }
 
 TEST_F(PdfAccessibilityTreeTest, TestSelectionActionDataConversion) {

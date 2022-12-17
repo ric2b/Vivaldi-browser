@@ -14,6 +14,8 @@
 #include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/debug/dump_without_crashing.h"
+#include "base/notreached.h"
 #include "base/values.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
@@ -26,6 +28,8 @@
 #include "chrome/browser/defaults.h"
 #include "chrome/browser/infobars/simple_alert_infobar_creator.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
+#include "chrome/browser/privacy_sandbox/privacy_sandbox_service.h"
+#include "chrome/browser/privacy_sandbox/privacy_sandbox_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_io_data.h"
 #include "chrome/browser/sessions/app_session_service.h"
@@ -380,8 +384,13 @@ Browser* StartupBrowserCreatorImpl::OpenTabsInBrowser(
 StartupBrowserCreatorImpl::LaunchResult
 StartupBrowserCreatorImpl::DetermineURLsAndLaunch(
     chrome::startup::IsProcessStartup process_startup) {
-  if (StartupBrowserCreator::ShouldLoadProfileWithoutWindow(command_line_))
+  if (StartupBrowserCreator::ShouldLoadProfileWithoutWindow(command_line_)) {
+    // Checking the flags this late in the launch should be redundant.
+    // TODO(https://crbug.com/1300109): Remove by M104.
+    NOTREACHED();
+    base::debug::DumpWithoutCrashing();
     return LaunchResult::kNormally;
+  }
 
   const bool is_incognito_or_guest = profile_->IsOffTheRecord();
   bool is_post_crash_launch = HasPendingUncleanExit(profile_);
@@ -428,7 +437,14 @@ StartupBrowserCreatorImpl::DetermineURLsAndLaunch(
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
   bool whats_new_enabled =
-      promotional_tabs_enabled && whats_new::ShouldShowForState(local_state);
+      whats_new::ShouldShowForState(local_state, promotional_tabs_enabled);
+
+  auto* privacy_sandbox_serivce =
+      PrivacySandboxServiceFactory::GetForProfile(profile_);
+  const bool privacy_sandbox_confirmation_required =
+      privacy_sandbox_serivce &&
+      privacy_sandbox_serivce->GetRequiredDialogType() !=
+          PrivacySandboxService::DialogType::kNone;
 
   if (vivaldi::IsVivaldiRunning()) {
     // Vivaldi always open the same sets of tabs even if the prev. session
@@ -448,7 +464,8 @@ StartupBrowserCreatorImpl::DetermineURLsAndLaunch(
   auto result = DetermineStartupTabs(
       StartupTabProviderImpl(), process_startup, is_incognito_or_guest,
       is_post_crash_launch, has_incompatible_applications,
-      promotional_tabs_enabled, welcome_enabled, whats_new_enabled);
+      promotional_tabs_enabled, welcome_enabled, whats_new_enabled,
+      privacy_sandbox_confirmation_required);
   StartupTabs tabs = std::move(result.tabs);
 
   // Return immediately if we start an async restore, since the remainder of
@@ -519,7 +536,8 @@ StartupBrowserCreatorImpl::DetermineStartupTabs(
     bool has_incompatible_applications,
     bool promotional_tabs_enabled,
     bool welcome_enabled,
-    bool whats_new_enabled) {
+    bool whats_new_enabled,
+    bool privacy_sandbox_confirmation_required) {
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   {
     // If URLs are passed via crosapi, forcibly opens those tabs.
@@ -533,6 +551,11 @@ StartupBrowserCreatorImpl::DetermineStartupTabs(
       provider.GetCommandLineTabs(command_line_, cur_dir_, profile_);
   LaunchResult launch_result =
       tabs.empty() ? LaunchResult::kNormally : LaunchResult::kWithGivenUrls;
+
+  if (whats_new_enabled && (launch_result == LaunchResult::kWithGivenUrls ||
+                            is_incognito_or_guest || is_post_crash_launch)) {
+    whats_new::LogStartupType(whats_new::StartupType::kIneligible);
+  }
 
   // Only the New Tab Page or command line URLs may be shown in incognito mode.
   // A similar policy exists for crash recovery launches, to prevent getting the
@@ -620,6 +643,8 @@ StartupBrowserCreatorImpl::DetermineStartupTabs(
         StartupTabs new_features_tabs;
         new_features_tabs = provider.GetNewFeaturesTabs(whats_new_enabled);
         AppendTabs(new_features_tabs, &tabs);
+      } else if (whats_new_enabled) {
+        whats_new::LogStartupType(whats_new::StartupType::kOverridden);
       }
     }
 
@@ -634,6 +659,14 @@ StartupBrowserCreatorImpl::DetermineStartupTabs(
     // URLs from preferences are explicitly meant to override showing the NTP.
     if (onboarding_tabs.empty() && prefs_tabs.empty())
       AppendTabs(provider.GetNewTabPageTabs(command_line_, profile_), &tabs);
+
+    // Potentially add a tab appropriate to display the Privacy Sandbox
+    // confirmaton dialog on top of. Ideally such a tab will already exist
+    // in |tabs|, and no additional tab will be required.
+    if (onboarding_tabs.empty() && privacy_sandbox_confirmation_required &&
+        launch_result == LaunchResult::kNormally) {
+      AppendTabs(provider.GetPrivacySandboxTabs(profile_, tabs), &tabs);
+    }
   }
 
   if (!is_incognito_or_guest) {

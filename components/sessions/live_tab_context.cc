@@ -6,7 +6,7 @@
 
 namespace sessions {
 
-std::string LiveTabContext::GetExtData() const {
+std::string LiveTabContext::GetVivExtData() const {
   return std::string();
 }
 
@@ -44,8 +44,8 @@ LiveTab* LiveTabContext::AddRestoredTab(
     const sessions::SerializedUserAgentOverride& user_agent_override,
     const std::map<std::string, std::string>& extra_data,
     const SessionID* tab_id,
-    const std::map<std::string, bool> page_action_overrides,
-    const std::string& ext_data) {
+    const std::map<std::string, bool> viv_page_action_overrides,
+    const std::string& viv_ext_data) {
   return AddRestoredTab(navigations, tab_index, selected_navigation,
                         extension_app_id, group, group_visual_data, select, pin,
                         tab_platform_data, user_agent_override, extra_data, tab_id);
@@ -75,15 +75,15 @@ LiveTab* LiveTabContext::ReplaceRestoredTab(
     const PlatformSpecificTabData* tab_platform_data,
     const sessions::SerializedUserAgentOverride& user_agent_override,
     const std::map<std::string, std::string>& extra_data,
-    const std::map<std::string, bool> page_action_overrides,
-    const std::string& ext_data) {
+    const std::map<std::string, bool> viv_page_action_overrides,
+    const std::string& viv_ext_data) {
   return ReplaceRestoredTab(navigations, group, selected_navigation,
                             extension_app_id, tab_platform_data,
                             user_agent_override, extra_data);
 }
 
-const std::string& ContentLiveTab::GetExtData() const {
-  return web_contents()->GetExtData();
+const std::string& ContentLiveTab::GetVivExtData() const {
+  return web_contents()->GetVivExtData();
 }
 
 }  // namespace sessions

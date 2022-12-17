@@ -9,33 +9,7 @@
 
 import '//resources/mojo/mojo/public/js/mojo_bindings_lite.js';
 import '//resources/mojo/url/mojom/url.mojom-lite.js';
-import '//resources/mojo/mojo/public/mojom/base/big_buffer.mojom-lite.js';
-import '//resources/mojo/mojo/public/mojom/base/string16.mojom-lite.js';
 import './mojom/os_feedback_ui.mojom-lite.js';
-
-// TODO(xiangdongkong): Remove the following two functions once they have been
-// added to ash/common.
-/**
- * Converts a JS string to mojo_base::mojom::String16 object.
- * @param {string} str
- * @return {!mojoBase.mojom.String16}
- */
-export function stringToMojoString16(str) {
-  const arr = [];
-  for (let i = 0; i < str.length; i++) {
-    arr[i] = str.charCodeAt(i);
-  }
-  return {data: arr};
-}
-
-/**
- * Converts mojo_base::mojom::String16 to a JS string.
- * @param {!mojoBase.mojom.String16} str16
- * @return {string}
- */
-export function mojoString16ToString(str16) {
-  return str16.data.map(ch => String.fromCodePoint(ch)).join('');
-}
 
 /**
  * Type alias for HelpContentType.
@@ -68,8 +42,48 @@ export const SearchRequest = ash.osFeedbackUi.mojom.SearchRequest;
 export const SearchResponse = ash.osFeedbackUi.mojom.SearchResponse;
 
 /**
+ * Type alias for search result. When isPopularContent is true, the contentList
+ * contains top popular help contents, i.e. returned where the search query is
+ * empty. The isQueryEmpty is true when the current query is empty. The
+ * isPopularContent is true when the current query is not empty and no matches
+ * are found.
+ * @typedef {{
+ *   contentList: HelpContentList,
+ *   isQueryEmpty: boolean,
+ *   isPopularContent: boolean
+ * }}
+ */
+export let SearchResult;
+
+/**
  * Type alias for the HelpContentProviderInterface.
  * @typedef {ash.osFeedbackUi.mojom.HelpContentProviderInterface}
  */
 export const HelpContentProviderInterface =
     ash.osFeedbackUi.mojom.HelpContentProviderInterface;
+
+/**
+ * Type alias for the HelpContentProvider.
+ * @typedef {ash.osFeedbackUi.mojom.HelpContentProvider}
+ */
+export const HelpContentProvider = ash.osFeedbackUi.mojom.HelpContentProvider;
+
+/**
+ * Type alias for feedback context. It contains context information such as
+ * the signed user email, the URL of active page, etc.
+ * @typedef {{
+ *   email: string,
+ *   pageUrl: url.mojom.Url
+ * }}
+ */
+export let FeedbackContext;
+
+/**
+ * Type alias for the FeedbackServiceProviderInterface.
+ * TODO(xiangdongkong): Replace with a real mojo type when implemented.
+ * @typedef {{
+ *   getFeedbackContext: !function(): !Promise<{
+ *       feedbackContext: !FeedbackContext}>,
+ * }}
+ */
+export let FeedbackServiceProviderInterface;

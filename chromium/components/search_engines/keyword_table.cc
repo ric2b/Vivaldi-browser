@@ -18,6 +18,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/time/time.h"
 #include "base/values.h"
 #include "components/database_utils/url_converter.h"
 #include "components/history/core/browser/url_database.h"
@@ -27,6 +28,8 @@
 #include "sql/statement.h"
 #include "sql/transaction.h"
 #include "url/gurl.h"
+
+#include "components/sync/protocol/unique_position.pb.h"
 
 using base::Time;
 
@@ -38,8 +41,9 @@ namespace {
 
 // Keys used in the meta table.
 const char kBuiltinKeywordVersion[] = "Builtin Keyword Version";
+const char kStarterPackKeywordVersion[] = "Starter Pack Keyword Version";
 
-const std::string ColumnsForVersion(int version, bool concatenated) {
+const std::string ColumnsForVersion(int version, int vivaldi_version, bool concatenated) {
   std::vector<base::StringPiece> columns;
 
   columns.push_back("id");
@@ -105,8 +109,17 @@ const std::string ColumnsForVersion(int version, bool concatenated) {
     columns.push_back("created_from_play_api");
   }
   if (version >= 97) {
-    // Column added in version 97
+    // Column added in version 97.
     columns.push_back("is_active");
+  }
+
+  if (vivaldi_version >= 1) {
+    columns.push_back("position");
+  }
+
+  if (version >= 103) {
+    // Column added in version 103.
+    columns.push_back("starter_pack_id");
   }
 
   return base::JoinString(columns, std::string(concatenated ? " || " : ", "));
@@ -164,6 +177,15 @@ void BindURLToStatement(const TemplateURLData& data,
                data.last_visited.since_origin().InMicroseconds());
   s->BindBool(starting_column + 21, data.created_from_play_api);
   s->BindInt(starting_column + 22, static_cast<int>(data.is_active));
+
+  // The column added by Vivaldi offsets future columns added by chromium.
+  // Chromium additions after this point must have their column number shifted
+  // by one
+  std::string position;
+  data.vivaldi_position.SerializeToString(&position);
+  s->BindString(starting_column + 23, position);
+
+  s->BindInt(starting_column + 24, data.starter_pack_id);
 }
 
 WebDatabaseTable::TypeKey GetKey() {
@@ -215,7 +237,9 @@ bool KeywordTable::CreateTablesIfNecessary() {
              "new_tab_url VARCHAR,"
              "last_visited INTEGER DEFAULT 0, "
              "created_from_play_api INTEGER DEFAULT 0, "
-             "is_active INTEGER DEFAULT 0)");
+             "is_active INTEGER DEFAULT 0, "
+             "position VARCHAR, " //Vivaldi addition, must follow is_active
+             "starter_pack_id INTEGER DEFAULT 0)");
 }
 
 bool KeywordTable::IsSyncable() {
@@ -247,6 +271,8 @@ bool KeywordTable::MigrateToVersion(int version,
       return MigrateToVersion82AddCreatedFromPlayApiColumn();
     case 97:
       return MigrateToVersion97AddIsActiveColumn();
+    case 103:
+      return MigrateToVersion103AddStarterPackIdColumn();
   }
 
   return true;
@@ -317,9 +343,19 @@ int KeywordTable::GetBuiltinKeywordVersion() {
   return meta_table_->GetValue(kBuiltinKeywordVersion, &version) ? version : 0;
 }
 
+bool KeywordTable::SetStarterPackKeywordVersion(int version) {
+  return meta_table_->SetValue(kStarterPackKeywordVersion, version);
+}
+
+int KeywordTable::GetStarterPackKeywordVersion() {
+  int version = 0;
+  return meta_table_->GetValue(kStarterPackKeywordVersion, &version) ? version
+                                                                     : 0;
+}
+
 // static
 std::string KeywordTable::GetKeywordColumns() {
-  return ColumnsForVersion(WebDatabase::kCurrentVersionNumber, false);
+  return ColumnsForVersion(WebDatabase::kCurrentVersionNumber, WebDatabase::kVivaldiCurrentVersionNumber, false);
 }
 
 bool KeywordTable::MigrateToVersion53AddNewTabURLColumn() {
@@ -340,7 +376,7 @@ bool KeywordTable::MigrateToVersion68RemoveShowInDefaultListColumn() {
   sql::Transaction transaction(db_);
   std::string query_str =
       std::string("INSERT INTO temp_keywords SELECT " +
-                  ColumnsForVersion(68, false) + " FROM keywords");
+                  ColumnsForVersion(68, 0, false) + " FROM keywords");
   const char* clone_query = query_str.c_str();
   return transaction.Begin() &&
          db_->Execute(
@@ -387,7 +423,7 @@ bool KeywordTable::MigrateToVersion76RemoveInstantColumns() {
   sql::Transaction transaction(db_);
   std::string query_str =
       std::string("INSERT INTO temp_keywords SELECT " +
-                  ColumnsForVersion(76, false) + " FROM keywords");
+                  ColumnsForVersion(76, 0, false) + " FROM keywords");
   const char* clone_query = query_str.c_str();
   return transaction.Begin() &&
          db_->Execute(
@@ -466,6 +502,11 @@ bool KeywordTable::MigrateToVersion97AddIsActiveColumn() {
       "ALTER TABLE keywords ADD COLUMN is_active INTEGER DEFAULT 0");
 }
 
+bool KeywordTable::MigrateToVersion103AddStarterPackIdColumn() {
+  return db_->Execute(
+      "ALTER TABLE keywords ADD COLUMN starter_pack_id INTEGER DEFAULT 0");
+}
+
 // static
 bool KeywordTable::GetKeywordDataFromStatement(sql::Statement& s,
                                                TemplateURLData* data) {
@@ -500,6 +541,7 @@ bool KeywordTable::GetKeywordDataFromStatement(sql::Statement& s,
   data->prepopulate_id = s.ColumnInt(11);
   data->sync_guid = s.ColumnString(14);
   data->is_active = static_cast<TemplateURLData::ActiveStatus>(s.ColumnInt(23));
+  data->starter_pack_id = s.ColumnInt(25);  // Vivaldi change: Column number is higher, because of position.
 
   data->alternate_urls.clear();
   absl::optional<base::Value> value(base::JSONReader::Read(s.ColumnString(15)));
@@ -513,14 +555,24 @@ bool KeywordTable::GetKeywordDataFromStatement(sql::Statement& s,
 
   data->last_visited = base::Time() + base::Microseconds(s.ColumnInt64(21));
 
+  // Searches without a unique postion were added by versions of Vivaldi before
+  // the search engine sync task was added. It's better to clear them off before
+  // any migration from the desktop searches takes place.
+  if (s.ColumnString(24).empty())
+    return false;
+  sync_pb::UniquePosition position;
+  position.MergeFromString(s.ColumnString(24));
+  data->vivaldi_position = syncer::UniquePosition::FromProto(position);
+
   return true;
 }
 
 bool KeywordTable::AddKeyword(const TemplateURLData& data) {
   DCHECK(data.id);
-  std::string query("INSERT INTO keywords (" + GetKeywordColumns() +
-                    ") "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+  std::string query(
+      "INSERT INTO keywords (" + GetKeywordColumns() +
+      ") "
+      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
   sql::Statement s(db_->GetCachedStatement(SQL_FROM_HERE, query.c_str()));
   BindURLToStatement(data, &s, 0, 1);
 
@@ -538,6 +590,7 @@ bool KeywordTable::RemoveKeyword(TemplateURLID id) {
 
 bool KeywordTable::UpdateKeyword(const TemplateURLData& data) {
   DCHECK(data.id);
+  //position is a Vivaldi addition. Must follow is_active
   sql::Statement s(db_->GetCachedStatement(
       SQL_FROM_HERE,
       "UPDATE keywords SET short_name=?, keyword=?, favicon_url=?, url=?, "
@@ -546,8 +599,8 @@ bool KeywordTable::UpdateKeyword(const TemplateURLData& data) {
       "created_by_policy=?, last_modified=?, sync_guid=?, alternate_urls=?, "
       "image_url=?, search_url_post_params=?, suggest_url_post_params=?, "
       "image_url_post_params=?, new_tab_url=?, last_visited=?, "
-      "created_from_play_api=?, is_active=? WHERE id=?"));
-  BindURLToStatement(data, &s, 23, 0);  // "23" binds id() as the last item.
+      "created_from_play_api=?, is_active=?, position=?, starter_pack_id=? WHERE id=?"));
+  BindURLToStatement(data, &s, 25, 0);  // "25" binds id() as the last item. Vivaldi change from 24 to 25 because we have one more field
 
   return s.Run();
 }
@@ -556,7 +609,7 @@ bool KeywordTable::GetKeywordAsString(TemplateURLID id,
                                       const std::string& table_name,
                                       std::string* result) {
   std::string query("SELECT " +
-      ColumnsForVersion(WebDatabase::kCurrentVersionNumber, true) +
+      ColumnsForVersion(WebDatabase::kCurrentVersionNumber, WebDatabase::kVivaldiCurrentVersionNumber, true) +
       " FROM " + table_name + " WHERE id=?");
   sql::Statement s(db_->GetUniqueStatement(query.c_str()));
   s.BindInt64(0, id);

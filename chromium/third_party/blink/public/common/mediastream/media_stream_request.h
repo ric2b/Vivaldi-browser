@@ -28,6 +28,7 @@ enum MediaStreamRequestType {
   MEDIA_DEVICE_ACCESS = 0,
   MEDIA_DEVICE_UPDATE,
   MEDIA_GENERATE_STREAM,
+  MEDIA_GET_OPEN_DEVICE,
   MEDIA_OPEN_DEVICE_PEPPER_ONLY  // Only used in requests made by Pepper.
 };
 
@@ -114,8 +115,8 @@ struct BLINK_COMMON_EXPORT MediaStreamDevice {
   media::AudioParameters input =
       media::AudioParameters::UnavailableDeviceParams();
 
-  // This field is optional and available only for display media devices.
-  absl::optional<media::mojom::DisplayMediaInformationPtr> display_media_info;
+  // This field is only non-null for display media devices.
+  media::mojom::DisplayMediaInformationPtr display_media_info;
 
  private:
   // Id for this capture session. Unique for all sessions of the same type.

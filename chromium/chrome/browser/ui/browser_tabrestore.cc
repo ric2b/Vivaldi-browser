@@ -67,8 +67,8 @@ std::unique_ptr<WebContents> CreateRestoredTab(
     const std::map<std::string, std::string>& extra_data,
     bool initially_hidden,
     bool from_session_restore,
-    const std::map<std::string, bool> page_action_overrides,
-    const std::string& ext_data) {
+    const std::map<std::string, bool> viv_page_action_overrides,
+    const std::string& viv_ext_data) {
   GURL restore_url = navigations.at(selected_navigation).virtual_url();
   // TODO(ajwong): Remove the temporary session_storage_namespace_map when
   // we teach session restore to understand that one tab can have multiple
@@ -106,13 +106,13 @@ std::unique_ptr<WebContents> CreateRestoredTab(
       user_agent_override.opaque_ua_metadata_override);
   web_contents->SetUserAgentOverride(ua_override, false);
 
-  web_contents->SetExtData(ext_data);
-  for (const auto& page_action_override : page_action_overrides) {
+  web_contents->SetVivExtData(viv_ext_data);
+  for (const auto& viv_page_action_override : viv_page_action_overrides) {
     page_actions::ServiceFactory::GetForBrowserContext(browser->profile())
         ->SetScriptOverrideForTab(
             web_contents.get(),
-            base::FilePath::FromUTF8Unsafe(page_action_override.first),
-            page_action_override.second
+            base::FilePath::FromUTF8Unsafe(viv_page_action_override.first),
+            viv_page_action_override.second
                 ? page_actions::Service::kEnabledOverride
                 : page_actions::Service::kDisabledOverride);
   }
@@ -265,14 +265,14 @@ WebContents* AddRestoredTab(
     const sessions::SerializedUserAgentOverride& user_agent_override,
     const std::map<std::string, std::string>& extra_data,
     bool from_session_restore,
-    const std::map<std::string, bool> page_action_overrides,
-    const std::string& ext_data) {
+    const std::map<std::string, bool> viv_page_action_overrides,
+    const std::string& viv_ext_data) {
   const bool initially_hidden = !select || browser->window()->IsMinimized();
   std::unique_ptr<WebContents> web_contents = CreateRestoredTab(
       browser, navigations, selected_navigation, extension_app_id,
       last_active_time, session_storage_namespace, user_agent_override,
       extra_data, initially_hidden, from_session_restore,
-      page_action_overrides, ext_data);
+      viv_page_action_overrides, viv_ext_data);
 
   // Always allow lazyload/discard the webcontents. We must load it after it has been attached in a webview .
   web_contents->SetUserData(&vivaldi::LazyLoadService::kLazyLoadIsSafe,
@@ -318,13 +318,13 @@ WebContents* ReplaceRestoredTab(
     const sessions::SerializedUserAgentOverride& user_agent_override,
     const std::map<std::string, std::string>& extra_data,
     bool from_session_restore,
-    const std::map<std::string, bool> page_action_overrides,
-    const std::string& ext_data) {
+    const std::map<std::string, bool> viv_page_action_overrides,
+    const std::string& viv_ext_data) {
   std::unique_ptr<WebContents> web_contents = CreateRestoredTab(
       browser, navigations, selected_navigation, extension_app_id,
       base::TimeTicks(), session_storage_namespace, user_agent_override,
       extra_data, false, from_session_restore,
-      page_action_overrides, ext_data);
+      viv_page_action_overrides, viv_ext_data);
   WebContents* raw_web_contents = web_contents.get();
 
   // ReplaceWebContentsAt won't animate in the restoration, so manually do the

@@ -32,7 +32,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -84,6 +83,7 @@
 #include "content/web_test/common/web_test_constants.h"
 #include "content/web_test/common/web_test_string_util.h"
 #include "content/web_test/common/web_test_switches.h"
+#include "ipc/ipc_channel_proxy.h"
 #include "mojo/public/cpp/bindings/sync_call_restrictions.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/mojom/network_context.mojom.h"
@@ -1106,8 +1106,7 @@ void WebTestControlHost::RenderProcessExited(
   }
 }
 
-void WebTestControlHost::OnGpuProcessCrashed(
-    base::TerminationStatus exit_code) {
+void WebTestControlHost::OnGpuProcessCrashed() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   printer_->AddErrorMessage("#CRASHED - gpu");
   DiscardMainWindow();
@@ -1818,6 +1817,12 @@ void WebTestControlHost::PrepareRendererForNextWebTest() {
   params.transition_type = ui::PageTransitionFromInt(ui::PAGE_TRANSITION_TYPED);
   params.should_clear_history_list = true;
   params.initiator_origin = url::Origin();  // Opaque initiator.
+  // We should always reset the browsing instance, but it slows down tests
+  // significantly. For efficiency, this is limited to tests known to be
+  // affected.
+  params.force_new_browsing_instance =
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kResetBrowsingInstanceBetweenTests);
   web_contents->GetController().LoadURLWithParams(params);
 
   // The navigation might have to wait for before unload handler to execute. The

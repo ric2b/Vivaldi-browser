@@ -17,8 +17,8 @@ import './smb_shares_page.js';
 import {afterNextRender, flush, html, Polymer, TemplateInstanceBase, Templatizer} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {Route, Router} from '../../router.js';
-import {DeepLinkingBehavior} from '../deep_linking_behavior.m.js';
-import {routes} from '../os_route.m.js';
+import {DeepLinkingBehavior} from '../deep_linking_behavior.js';
+import {routes} from '../os_route.js';
 import {RouteObserverBehavior} from '../route_observer_behavior.js';
 
 Polymer({

@@ -73,5 +73,7 @@ void ChromeTemplateURLServiceClient::OnURLVisited(
   visited_details.url = row.url();
   visited_details.is_keyword_transition =
       ui::PageTransitionCoreTypeIs(transition, ui::PAGE_TRANSITION_KEYWORD);
+  visited_details.vivaldi_is_from_url_field =
+      (transition & ui::PAGE_TRANSITION_FROM_ADDRESS_BAR);
   owner_->OnHistoryURLVisited(visited_details);
 }

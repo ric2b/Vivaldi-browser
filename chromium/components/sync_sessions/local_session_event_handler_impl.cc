@@ -161,7 +161,7 @@ void LocalSessionEventHandlerImpl::AssociateWindows(ReloadTabsOption option,
              << " windows from previous session.";
   }
 
-  for (auto& [unused, window_delegate] : window_delegates) {
+  for (auto& [window_id, window_delegate] : window_delegates) {
     // Make sure the window is viewable and is not about to be closed. The
     // viewable window check is necessary because, for example, when a browser
     // is closed the destructor is not necessarily run immediately. This means
@@ -176,8 +176,7 @@ void LocalSessionEventHandlerImpl::AssociateWindows(ReloadTabsOption option,
       continue;
     }
 
-    // TODO(crbug.com/1286934): Can we use the `unused` variable above instead?
-    SessionID window_id = window_delegate->GetSessionId();
+    DCHECK_EQ(window_id, window_delegate->GetSessionId());
     DVLOG(1) << "Associating window " << window_id.id() << " with "
              << window_delegate->GetTabCount() << " tabs.";
 
@@ -363,7 +362,7 @@ sync_pb::SessionTab LocalSessionEventHandlerImpl::GetTabSpecificsFromDelegate(
   specifics.set_pinned(
       window_delegate ? window_delegate->IsTabPinned(&tab_delegate) : false);
   specifics.set_extension_app_id(tab_delegate.GetExtensionAppId());
-  specifics.set_ext_data(tab_delegate.GetExtData());
+  specifics.set_viv_ext_data(tab_delegate.GetVivExtData());
   const int current_index = tab_delegate.GetCurrentEntryIndex();
   const int min_index = std::max(0, current_index - kMaxSyncNavigationCount);
   const int max_index = std::min(current_index + kMaxSyncNavigationCount,

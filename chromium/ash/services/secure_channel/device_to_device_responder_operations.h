@@ -7,16 +7,17 @@
 
 #include <string>
 
-#include "ash/services/secure_channel/session_keys.h"
 #include "base/callback_forward.h"
 
-namespace chromeos {
+namespace ash {
 
 namespace multidevice {
 class SecureMessageDelegate;
-}  // namespace multidevice
+}
 
 namespace secure_channel {
+
+class SessionKeys;
 
 // Utility class containing operations in the DeviceToDevice protocol that the
 // initiator needs to perform. For Smart Lock, in which a phone unlocks a
@@ -120,7 +121,6 @@ class DeviceToDeviceResponderOperations {
 };
 
 }  // namespace secure_channel
-
-}  // namespace chromeos
+}  // namespace ash
 
 #endif  // ASH_SERVICES_SECURE_CHANNEL_DEVICE_TO_DEVICE_RESPONDER_OPERATIONS_H_

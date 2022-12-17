@@ -621,12 +621,12 @@ void FaviconHandler::OnFaviconDataForInitialURLFromFaviconService(
     // url) we'll fetch later on. This way the user doesn't see a flash of the
     // default favicon.
     NotifyFaviconUpdated(favicon_bitmap_results);
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   } else if (vivaldi::IsVivaldiRunning()) {
       const gfx::Image image;
       delegate_->OnFaviconUpdated(last_page_url_, handler_type_, GURL(), true,
                                   image);
-#endif  // !OS_ANDROID
+#endif  // !IS_ANDROID
   }
 
   if (final_candidates_)

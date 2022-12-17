@@ -6,8 +6,6 @@
 
 #include <string>
 
-#include "base/cxx17_backports.h"
-
 namespace ash {
 namespace {
 
@@ -52,6 +50,10 @@ const LoginAcceleratorData kLoginAcceleratorData[] = {
        ui::VKEY_E, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN,
        false, kScopeOobe,
     }, {
+       kStartKioskEnrollment,
+       ui::VKEY_K, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN,
+       false, kScopeOobe,
+    }, {
        kStartDemoMode,
        ui::VKEY_D, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN,
        false, kScopeOobe,
@@ -69,7 +71,7 @@ const LoginAcceleratorData kLoginAcceleratorData[] = {
        false, kScopeOobe,
     }, {
        kEnableConsumerKiosk,
-       ui::VKEY_K, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN,
+       ui::VKEY_K, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN | ui::EF_SHIFT_DOWN,
        false, kScopeOobe,
     }, {
        kLaunchDiagnostics,
@@ -79,7 +81,7 @@ const LoginAcceleratorData kLoginAcceleratorData[] = {
 };
 // clang-format on
 
-const size_t kLoginAcceleratorDataLength = base::size(kLoginAcceleratorData);
+const size_t kLoginAcceleratorDataLength = std::size(kLoginAcceleratorData);
 
 std::string MapToWebUIAccelerator(LoginAcceleratorAction action) {
   switch (action) {
@@ -95,6 +97,7 @@ std::string MapToWebUIAccelerator(LoginAcceleratorAction action) {
       return kAccelNameCancel;
     case LoginAcceleratorAction::kShowFeedback:
     case LoginAcceleratorAction::kStartEnrollment:
+    case LoginAcceleratorAction::kStartKioskEnrollment:
     case LoginAcceleratorAction::kEnableConsumerKiosk:
     case LoginAcceleratorAction::kEnableDebugging:
     case LoginAcceleratorAction::kEditDeviceRequisition:

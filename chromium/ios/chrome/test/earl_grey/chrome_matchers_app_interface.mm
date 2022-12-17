@@ -7,6 +7,7 @@
 #include "base/mac/foundation_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/password_manager/core/common/password_manager_features.h"
+#include "components/safe_browsing/core/common/features.h"
 #include "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/autofill/form_suggestion_constants.h"
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_constants.h"
@@ -21,8 +22,8 @@
 #import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_password_mediator.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/password_view_controller.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_ui_constants.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_view_controller.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_constants.h"
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
 #import "ios/chrome/browser/ui/history/history_ui_constants.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_constants.h"
@@ -30,6 +31,7 @@
 #import "ios/chrome/browser/ui/ntp/new_tab_page_constants.h"
 #import "ios/chrome/browser/ui/omnibox/keyboard_assist/omnibox_assistive_keyboard_views_utils.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_text_field_ios.h"
+#import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_accessibility_identifier_constants.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_constants.h"
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_constants.h"
 #import "ios/chrome/browser/ui/settings/autofill/autofill_add_credit_card_view_controller.h"
@@ -47,12 +49,14 @@
 #import "ios/chrome/browser/ui/settings/settings_root_table_constants.h"
 #import "ios/chrome/browser/ui/settings/settings_table_view_controller_constants.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_constants.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/plus_sign_cell.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_constants.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_switch_cell.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_switch_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_url_item.h"
 #import "ios/chrome/browser/ui/toolbar/primary_toolbar_view.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
+#include "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/ui_util.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
@@ -317,7 +321,9 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
 }
 
 + (id<GREYMatcher>)pageSecurityInfoIndicator {
-  return grey_accessibilityLabel(@"Page Security Info");
+  return grey_allOf(grey_accessibilityLabel(@"Page Security Info"),
+                    grey_ancestor(grey_kindOfClass([PrimaryToolbarView class])),
+                    nil);
 }
 
 + (id<GREYMatcher>)omniboxText:(NSString*)text {
@@ -550,6 +556,20 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
   return grey_accessibilityID(kPopupMenuToolsMenuTableViewId);
 }
 
++ (id<GREYMatcher>)omniboxPopupRow {
+  if (!base::FeatureList::IsEnabled(kIOSOmniboxUpdatedPopupUI)) {
+    return grey_kindOfClassName(@"OmniboxPopupRowCell");
+  } else {
+    return grey_allOf(
+        grey_kindOfClassName(@"SwiftUI.AccessibilityNode"),
+        grey_ancestor(grey_kindOfClassName(@"OmniboxPopupContainerView")), nil);
+  }
+}
+
++ (id<GREYMatcher>)omniboxPopupList {
+  return grey_accessibilityID(kOmniboxPopupTableViewAccessibilityIdentifier);
+}
+
 + (id<GREYMatcher>)OKButton {
   return [ChromeMatchersAppInterface buttonWithAccessibilityLabelID:(IDS_OK)];
 }
@@ -636,6 +656,11 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
 }
 
 + (id<GREYMatcher>)settingsMenuPrivacyButton {
+  if (base::FeatureList::IsEnabled(safe_browsing::kEnhancedProtection)) {
+    return [ChromeMatchersAppInterface
+        buttonWithAccessibilityLabelID:(IDS_IOS_SETTINGS_PRIVACY_TITLE)];
+  }
+
   return [ChromeMatchersAppInterface
       buttonWithAccessibilityLabelID:
           (IDS_OPTIONS_ADVANCED_SECTION_TITLE_PRIVACY)];
@@ -869,6 +894,7 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
 
 + (id<GREYMatcher>)tabGridCellAtIndex:(unsigned int)index {
   return grey_allOf(grey_accessibilityID(IdentifierForCellAtIndex(index)),
+                    grey_not(grey_kindOfClass([PlusSignCell class])),
                     grey_sufficientlyVisible(), nil);
 }
 
@@ -921,6 +947,18 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
 
 + (id<GREYMatcher>)tabGridOtherDevicesPanelButton {
   return grey_accessibilityID(kTabGridRemoteTabsPageButtonIdentifier);
+}
+
++ (id<GREYMatcher>)tabGridNormalModePageControl {
+  return grey_allOf(
+      grey_kindOfClassName(@"UIControl"),
+      grey_descendant(
+          [ChromeMatchersAppInterface tabGridIncognitoTabsPanelButton]),
+      grey_descendant([ChromeMatchersAppInterface tabGridOpenTabsPanelButton]),
+      grey_descendant(
+          [ChromeMatchersAppInterface tabGridOtherDevicesPanelButton]),
+      grey_ancestor(grey_kindOfClassName(@"UIToolbar")),
+      grey_sufficientlyVisible(), nil);
 }
 
 + (id<GREYMatcher>)tabGridBackground {
@@ -1189,6 +1227,30 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
 + (id<GREYMatcher>)tabGridEditShareButton {
   return grey_allOf(grey_accessibilityID(kTabGridEditShareButtonIdentifier),
                     grey_sufficientlyVisible(), nil);
+}
+
+#pragma mark - Tab Grid Search Mode
++ (id<GREYMatcher>)tabGridSearchTabsButton {
+  return grey_allOf(grey_accessibilityID(kTabGridSearchButtonIdentifier),
+                    grey_sufficientlyVisible(), nil);
+}
+
++ (id<GREYMatcher>)tabGridSearchBar {
+  return grey_allOf(grey_accessibilityID(kTabGridSearchBarIdentifier),
+                    grey_sufficientlyVisible(), nil);
+}
+
++ (id<GREYMatcher>)tabGridSearchCancelButton {
+  return grey_allOf(grey_accessibilityID(kTabGridCancelButtonIdentifier),
+                    grey_sufficientlyVisible(), nil);
+}
+
++ (id<GREYMatcher>)tabGridSearchModeToolbar {
+  return grey_allOf(
+      grey_kindOfClassName(@"UIToolbar"),
+      grey_descendant([ChromeMatchersAppInterface tabGridSearchBar]),
+      grey_descendant([ChromeMatchersAppInterface tabGridSearchCancelButton]),
+      grey_sufficientlyVisible(), nil);
 }
 
 @end

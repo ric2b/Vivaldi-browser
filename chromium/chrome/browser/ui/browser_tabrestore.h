@@ -54,8 +54,8 @@ content::WebContents* AddRestoredTab(
     const sessions::SerializedUserAgentOverride& user_agent_override,
     const std::map<std::string, std::string>& extra_data,
     bool from_session_restore,
-    const std::map<std::string, bool> page_action_overrides = {},
-    const std::string& ext_data = {});
+    const std::map<std::string, bool> viv_page_action_overrides = {},
+    const std::string& viv_ext_data = {});
 
 // Same functionality as AddRestoreTab, except that the |web_contents| is
 // passed as it was never deleted. Used when restoring entry from
@@ -83,8 +83,8 @@ content::WebContents* ReplaceRestoredTab(
     const sessions::SerializedUserAgentOverride& user_agent_override,
     const std::map<std::string, std::string>& extra_data,
     bool from_session_restore,
-    const std::map<std::string, bool> page_action_overrides,
-    const std::string& ext_data = {});
+    const std::map<std::string, bool> viv_page_action_overrides,
+    const std::string& viv_ext_data = {});
 
 }  // namespace chrome
 

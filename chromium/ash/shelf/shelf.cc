@@ -376,6 +376,13 @@ void Shelf::ActivateShelfItemOnDisplay(int item_index, int64_t display_id) {
                               base::DoNothing(), base::NullCallback());
 }
 
+// static
+void Shelf::UpdateShelfVisibility() {
+  for (auto* root : Shell::Get()->GetAllRootWindows()) {
+    Shelf::ForWindow(root)->UpdateVisibilityState();
+  }
+}
+
 void Shelf::CreateNavigationWidget(aura::Window* container) {
   DCHECK(container);
   DCHECK(!navigation_widget_);
@@ -507,8 +514,9 @@ void Shelf::SetAutoHideBehavior(ShelfAutoHideBehavior auto_hide_behavior) {
     return;
 
   auto_hide_behavior_ = auto_hide_behavior;
-  Shell::Get()->NotifyShelfAutoHideBehaviorChanged(
-      GetWindow()->GetRootWindow());
+
+  for (auto& observer : observers_)
+    observer.OnShelfAutoHideBehaviorChanged();
 }
 
 ShelfAutoHideState Shelf::GetAutoHideState() const {

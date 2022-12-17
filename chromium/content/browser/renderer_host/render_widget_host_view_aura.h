@@ -31,11 +31,11 @@
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/renderer_host/render_widget_host_view_event_handler.h"
 #include "content/browser/renderer_host/text_input_manager.h"
-#include "content/browser/renderer_host/virtual_keyboard_controller_win.h"
 #include "content/common/content_export.h"
 #include "content/common/cursors/webcursor.h"
 #include "content/public/browser/context_menu_params.h"
 #include "content/public/browser/visibility.h"
+#include "third_party/blink/public/mojom/input/input_handler.mojom-forward.h"
 #include "third_party/blink/public/mojom/widget/record_content_to_visible_time_request.mojom-forward.h"
 #include "third_party/skia/include/core/SkRegion.h"
 #include "ui/aura/client/cursor_client_observer.h"
@@ -48,8 +48,11 @@
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/selection_bound.h"
-#include "ui/wm/public/activation_change_observer.h"
 #include "ui/wm/public/activation_delegate.h"
+
+#if BUILDFLAG(IS_WIN)
+#include "content/browser/renderer_host/virtual_keyboard_controller_win.h"
+#endif
 
 namespace aura_extra {
 class WindowPositionInRootMonitor;
@@ -96,7 +99,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
       public aura::WindowTreeHostObserver,
       public aura::WindowDelegate,
       public wm::ActivationDelegate,
-      public wm::ActivationChangeObserver,
       public aura::client::FocusChangeObserver,
       public aura::client::CursorClientObserver {
  public:
@@ -208,7 +210,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   // TODO(lanwei): Use TestApi interface to write functions that are used in
   // tests and remove FRIEND_TEST_ALL_PREFIXES.
   void SetLastPointerType(ui::EventPointerType last_pointer_type) override;
-  bool IsInActiveWindow() const override;
 
   // Overridden from ui::TextInputClient:
   void SetCompositionText(const ui::CompositionText& composition) override;
@@ -280,6 +281,12 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
       const gfx::Range& range,
       const std::u16string& active_composition_text,
       bool is_composition_committed) override;
+
+  // Returns the editing context of the active web content.
+  // This is currently used by TSF to  to fetch the URL of the active web
+  // content.
+  // https://docs.microsoft.com/en-us/windows/win32/tsf/predefined-properties
+  ui::TextInputClient::EditingContext GetTextEditingContext() override;
 #endif
 
   // Overridden from display::DisplayObserver:
@@ -318,11 +325,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
 
   // Overridden from wm::ActivationDelegate:
   bool ShouldActivate() const override;
-
-  // Overridden from wm::ActivationChangeObserver:
-  void OnWindowActivated(ActivationReason reason,
-                         aura::Window* gained_active,
-                         aura::Window* lost_active) override;
 
   // Overridden from aura::client::CursorClientObserver:
   void OnCursorVisibilityChanged(bool is_visible) override;
@@ -422,6 +424,9 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
       blink::mojom::RecordContentToVisibleTimeRequestPtr visible_time_request)
       final;
   void CancelPresentationTimeRequestForHostAndDelegate() final;
+
+  // May be overridden in tests.
+  virtual bool ShouldSkipCursorUpdate() const;
 
  private:
   friend class DelegatedFrameHostClientAura;
@@ -780,8 +785,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   absl::optional<DisplayFeature> display_feature_;
 
   absl::optional<display::ScopedDisplayObserver> display_observer_;
-
-  bool is_in_active_window_ = false;
 
   base::WeakPtrFactory<RenderWidgetHostViewAura> weak_ptr_factory_{this};
 };

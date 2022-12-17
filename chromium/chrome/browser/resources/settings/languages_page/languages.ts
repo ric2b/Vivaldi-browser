@@ -12,7 +12,7 @@
 
 import '../prefs/prefs.js';
 
-import {assert} from '//resources/js/assert.m.js';
+import {assert} from '//resources/js/assert_ts.js';
 import {PromiseResolver} from '//resources/js/promise_resolver.m.js';
 import {PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
@@ -183,7 +183,7 @@ class SettingsLanguagesElement extends SettingsLanguagesElementBase implements
         this.browserProxy_.getLanguageSettingsPrivate();
   }
 
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
 
     const promises: Array<Promise<any>> = [];
@@ -270,7 +270,7 @@ class SettingsLanguagesElement extends SettingsLanguagesElementBase implements
     });
   }
 
-  disconnectedCallback() {
+  override disconnectedCallback() {
     super.disconnectedCallback();
 
     // <if expr="not is_macosx">
@@ -897,7 +897,7 @@ class SettingsLanguagesElement extends SettingsLanguagesElementBase implements
     }
 
     if (enable) {
-      const spellCheckPref = this.getPref('spellcheck.dictionaries');
+      this.getPref('spellcheck.dictionaries');
       this.appendPrefListItem('spellcheck.dictionaries', languageCode);
     } else {
       this.deletePrefListItem('spellcheck.dictionaries', languageCode);

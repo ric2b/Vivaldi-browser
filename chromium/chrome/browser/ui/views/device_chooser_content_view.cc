@@ -7,7 +7,6 @@
 #include <string>
 
 #include "base/bind.h"
-#include "base/cxx17_backports.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/strcat.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
@@ -92,7 +91,7 @@ DeviceChooserContentView::DeviceChooserContentView(
         views::BoxLayout::MainAxisAlignment::kCenter);
     layout->set_cross_axis_alignment(
         views::BoxLayout::CrossAxisAlignment::kCenter);
-    layout->set_inside_border_insets(gfx::Insets(0, 6));
+    layout->set_inside_border_insets(gfx::Insets::VH(0, 6));
     container->AddChildView(std::move(view));
     return container;
   };
@@ -174,7 +173,7 @@ ui::ImageModel DeviceChooserContentView::GetIcon(int row) {
 
   if (chooser_controller_->IsConnected(row)) {
     return ui::ImageModel::FromVectorIcon(vector_icons::kBluetoothConnectedIcon,
-                                          gfx::kChromeIconGrey,
+                                          ui::kColorIcon,
                                           TableModel::kIconSize);
   }
 
@@ -187,7 +186,7 @@ ui::ImageModel DeviceChooserContentView::GetIcon(int row) {
       IDR_SIGNAL_4_BAR};
   DCHECK_GE(level, 0);
   DCHECK_LT(static_cast<size_t>(level),
-            base::size(kSignalStrengthLevelImageIds));
+            std::size(kSignalStrengthLevelImageIds));
   return ui::ImageModel::FromImageSkia(
       *ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
           kSignalStrengthLevelImageIds[level]));

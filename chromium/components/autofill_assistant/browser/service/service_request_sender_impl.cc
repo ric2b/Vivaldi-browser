@@ -7,6 +7,7 @@
 #include "base/feature_list.h"
 #include "base/strings/strcat.h"
 #include "components/autofill_assistant/browser/features.h"
+#include "components/autofill_assistant/browser/metrics.h"
 #include "components/autofill_assistant/browser/service.pb.h"
 #include "components/autofill_assistant/browser/service/cup.h"
 #include "components/autofill_assistant/browser/service/cup_impl.h"
@@ -41,6 +42,10 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
           policy_exception_justification: "Not implemented."
         })");
 
+// We want to retry the "get user data" call in case it fails as users cannot
+// continue the flow without proper data.
+constexpr int kMaxRetriesGetUserData = 2;
+
 void OnURLLoaderComplete(
     autofill_assistant::ServiceRequestSender::ResponseCallback callback,
     std::unique_ptr<::network::SimpleURLLoader> loader,
@@ -51,12 +56,17 @@ void OnURLLoaderComplete(
   }
 
   int response_code = 0;
-  if (loader->ResponseInfo() && loader->ResponseInfo()->headers) {
-    response_code = loader->ResponseInfo()->headers->response_code();
+  autofill_assistant::ServiceRequestSender::ResponseInfo response_info;
+  if (loader->ResponseInfo()) {
+    response_info.encoded_body_length =
+        loader->ResponseInfo()->encoded_body_length;
+    if (loader->ResponseInfo()->headers) {
+      response_code = loader->ResponseInfo()->headers->response_code();
+    }
   }
   VLOG(3) << "Received response: status=" << response_code << ", "
           << response_str.length() << " bytes";
-  std::move(callback).Run(response_code, response_str);
+  std::move(callback).Run(response_code, response_str, response_info);
 }
 
 std::unique_ptr<::network::ResourceRequest> CreateResourceRequest(GURL url) {
@@ -71,11 +81,17 @@ std::unique_ptr<::network::ResourceRequest> CreateResourceRequest(GURL url) {
 void SendRequestImpl(
     std::unique_ptr<::network::ResourceRequest> request,
     const std::string& request_body,
+    int max_retries,
     content::BrowserContext* context,
     autofill_assistant::SimpleURLLoaderFactory* loader_factory,
     autofill_assistant::ServiceRequestSender::ResponseCallback callback) {
   auto loader =
       loader_factory->CreateLoader(std::move(request), kTrafficAnnotation);
+  if (max_retries > 0) {
+    loader->SetRetryOptions(
+        max_retries, network::SimpleURLLoader::RETRY_ON_NETWORK_CHANGE |
+                         network::SimpleURLLoader::RETRY_ON_NAME_NOT_RESOLVED);
+  }
   loader->AttachStringForUpload(request_body, "application/x-protobuffer");
 #ifndef NDEBUG
   loader->SetAllowHttpErrorResults(true);
@@ -92,6 +108,7 @@ void SendRequestImpl(
 void SendRequestNoAuth(
     const GURL& url,
     const std::string& request_body,
+    int max_retries,
     content::BrowserContext* context,
     autofill_assistant::SimpleURLLoaderFactory* loader_factory,
     const std::string& api_key,
@@ -101,7 +118,8 @@ void SendRequestNoAuth(
   }
   if (api_key.empty()) {
     LOG(ERROR) << "no api key provided";
-    std::move(callback).Run(net::HTTP_UNAUTHORIZED, std::string());
+    std::move(callback).Run(net::HTTP_UNAUTHORIZED, std::string(),
+                            /* response_info = */ {});
     return;
   }
 
@@ -116,22 +134,48 @@ void SendRequestNoAuth(
 #else
   VLOG(2) << "Sending request with api key to backend: " << modified_url;
 #endif
-  SendRequestImpl(CreateResourceRequest(modified_url), request_body, context,
-                  loader_factory, std::move(callback));
+  SendRequestImpl(CreateResourceRequest(modified_url), request_body,
+                  max_retries, context, loader_factory, std::move(callback));
 }
 
-void VerifyCupResponse(
+void MaybeVerifyCupResponse(
     std::unique_ptr<autofill_assistant::cup::CUP> cup,
+    autofill_assistant::RpcType rpc_type,
     autofill_assistant::ServiceRequestSender::ResponseCallback callback,
     int http_status,
-    const std::string& response) {
+    const std::string& response,
+    const autofill_assistant::ServiceRequestSender::ResponseInfo&
+        response_info) {
+  if (!autofill_assistant::cup::IsRpcTypeSupported(rpc_type)) {
+    return std::move(callback).Run(http_status, response, response_info);
+  }
+  if (http_status != net::HTTP_OK) {
+    autofill_assistant::Metrics::RecordCupRpcVerificationEvent(
+        autofill_assistant::Metrics::CupRpcVerificationEvent::HTTP_FAILED);
+    return std::move(callback).Run(http_status, std::string(),
+                                   /* response_info = */ {});
+  }
+  if (!autofill_assistant::cup::ShouldSignRequests(rpc_type)) {
+    autofill_assistant::Metrics::RecordCupRpcVerificationEvent(
+        autofill_assistant::Metrics::CupRpcVerificationEvent::SIGNING_DISABLED);
+    return std::move(callback).Run(http_status, response, response_info);
+  }
+  if (!autofill_assistant::cup::ShouldVerifyResponses(rpc_type)) {
+    autofill_assistant::Metrics::RecordCupRpcVerificationEvent(
+        autofill_assistant::Metrics::CupRpcVerificationEvent::
+            VERIFICATION_DISABLED);
+    return std::move(callback).Run(http_status, response, response_info);
+  }
+
   absl::optional<std::string> unpacked_response = cup->UnpackResponse(response);
   if (!unpacked_response) {
     LOG(ERROR) << "Failed to unpack or verify a response.";
-    return std::move(callback).Run(net::HTTP_UNAUTHORIZED, std::string());
+    return std::move(callback).Run(net::HTTP_UNAUTHORIZED, std::string(),
+                                   /* response_info = */ {});
   }
 
-  return std::move(callback).Run(http_status, *unpacked_response);
+  return std::move(callback).Run(http_status, *unpacked_response,
+                                 response_info);
 }
 
 }  // namespace
@@ -143,92 +187,105 @@ ServiceRequestSenderImpl::ServiceRequestSenderImpl(
     AccessTokenFetcher* access_token_fetcher,
     std::unique_ptr<cup::CUPFactory> cup_factory,
     std::unique_ptr<SimpleURLLoaderFactory> loader_factory,
-    const std::string& api_key,
-    bool auth_enabled,
-    bool disable_auth_if_no_access_token)
+    const std::string& api_key)
     : context_(context),
       access_token_fetcher_(access_token_fetcher),
       cup_factory_(std::move(cup_factory)),
       loader_factory_(std::move(loader_factory)),
-      api_key_(api_key),
-      auth_enabled_(auth_enabled),
-      disable_auth_if_no_access_token_(disable_auth_if_no_access_token) {
-  DCHECK(!auth_enabled || access_token_fetcher != nullptr);
-  DCHECK(auth_enabled || !api_key.empty());
-}
+      api_key_(api_key) {}
 ServiceRequestSenderImpl::~ServiceRequestSenderImpl() = default;
 
-void ServiceRequestSenderImpl::SendRequest(const GURL& url,
-                                           const std::string& request_body,
-                                           ResponseCallback callback,
-                                           RpcType rpc_type) {
-  if (!cup::ShouldSignRequests(rpc_type)) {
-    InternalSendRequest(url, request_body, std::move(callback));
+void ServiceRequestSenderImpl::SendRequest(
+    const GURL& url,
+    const std::string& request_body,
+    ServiceRequestSender::AuthMode auth_mode,
+    ResponseCallback callback,
+    RpcType rpc_type) {
+  int max_retries = 0;
+  if (rpc_type == RpcType::GET_USER_DATA) {
+    max_retries = kMaxRetriesGetUserData;
+  }
+
+  if (!cup::IsRpcTypeSupported(rpc_type)) {
+    InternalSendRequest(url, request_body, auth_mode, max_retries,
+                        std::move(callback));
     return;
   }
 
-  std::unique_ptr<cup::CUP> cup =
-      cup_factory_->CreateInstance(RpcType::GET_ACTIONS);
-  std::string signed_request = cup->PackAndSignRequest(request_body);
-
-  auto maybe_wrapped_callback = std::move(callback);
-  if (cup::ShouldVerifyResponses(rpc_type)) {
-    maybe_wrapped_callback = base::BindOnce(&VerifyCupResponse, std::move(cup),
-                                            std::move(maybe_wrapped_callback));
+  std::unique_ptr<cup::CUP> cup = cup_factory_->CreateInstance(rpc_type);
+  std::string maybe_signed_request = request_body;
+  if (cup::ShouldSignRequests(rpc_type)) {
+    maybe_signed_request = cup->PackAndSignRequest(request_body);
   }
 
-  InternalSendRequest(url, signed_request, std::move(maybe_wrapped_callback));
+  auto wrapped_callback = base::BindOnce(
+      &MaybeVerifyCupResponse, std::move(cup), rpc_type, std::move(callback));
+
+  InternalSendRequest(url, maybe_signed_request, auth_mode, max_retries,
+                      std::move(wrapped_callback));
 }
 
 void ServiceRequestSenderImpl::InternalSendRequest(
     const GURL& url,
     const std::string& request_body,
+    ServiceRequestSender::AuthMode auth_mode,
+    int max_retries,
     ResponseCallback callback) {
-  if (auth_enabled_ && access_token_fetcher_ == nullptr) {
+  if (OAuthEnabled(auth_mode) && access_token_fetcher_ == nullptr) {
     LOG(ERROR) << "auth requested, but no access token fetcher provided";
-    std::move(callback).Run(net::HTTP_UNAUTHORIZED, std::string());
+    std::move(callback).Run(net::HTTP_UNAUTHORIZED, std::string(),
+                            /* response_info = */ {});
     return;
   }
-  if (auth_enabled_) {
+  if (OAuthEnabled(auth_mode)) {
     access_token_fetcher_->FetchAccessToken(
         base::BindOnce(&ServiceRequestSenderImpl::OnFetchAccessToken,
                        weak_ptr_factory_.GetWeakPtr(), url, request_body,
-                       std::move(callback)));
+                       auth_mode, max_retries, std::move(callback)));
     return;
   }
 
-  SendRequestNoAuth(url, request_body, context_, loader_factory_.get(),
-                    api_key_, std::move(callback));
+  DCHECK(!api_key_.empty());
+  SendRequestNoAuth(url, request_body, max_retries, context_,
+                    loader_factory_.get(), api_key_, std::move(callback));
 }
 
 void ServiceRequestSenderImpl::OnFetchAccessToken(
     GURL url,
     std::string request_body,
+    ServiceRequestSender::AuthMode auth_mode,
+    int max_retries,
     ResponseCallback callback,
     bool access_token_fetched,
     const std::string& access_token) {
   if (!access_token_fetched || access_token.empty()) {
-    if (disable_auth_if_no_access_token_) {
+    if (auth_mode != ServiceRequestSender::AuthMode::OAUTH_STRICT) {
       // Give up on authentication for this run. Without access token, requests
       // might be successful or rejected, depending on the server configuration.
-      auth_enabled_ = false;
+      failed_to_fetch_oauth_token_ = true;
       VLOG(1) << "No access token, falling back to api key";
-      SendRequestNoAuth(url, request_body, context_, loader_factory_.get(),
-                        api_key_, std::move(callback));
+      SendRequestNoAuth(url, request_body, max_retries, context_,
+                        loader_factory_.get(), api_key_, std::move(callback));
       return;
     }
-    VLOG(1) << "No access token, but disable_auth_if_no_access_token not set";
-    std::move(callback).Run(net::HTTP_UNAUTHORIZED, std::string());
+    VLOG(1) << "No access token but authentication is required.";
+    std::move(callback).Run(net::HTTP_UNAUTHORIZED, std::string(),
+                            /* response_info = */ {});
     return;
   }
 
-  SendRequestAuth(url, request_body, access_token, std::move(callback));
+  failed_to_fetch_oauth_token_ = false;
+  SendRequestAuth(url, request_body, access_token, auth_mode, max_retries,
+                  std::move(callback));
 }
 
-void ServiceRequestSenderImpl::SendRequestAuth(const GURL& url,
-                                               const std::string& request_body,
-                                               const std::string& access_token,
-                                               ResponseCallback callback) {
+void ServiceRequestSenderImpl::SendRequestAuth(
+    const GURL& url,
+    const std::string& request_body,
+    const std::string& access_token,
+    ServiceRequestSender::AuthMode auth_mode,
+    int max_retries,
+    ResponseCallback callback) {
   if (callback.IsCancelled()) {
     return;
   }
@@ -239,35 +296,48 @@ void ServiceRequestSenderImpl::SendRequestAuth(const GURL& url,
   if (!retried_with_fresh_access_token_) {
     callback = base::BindOnce(&ServiceRequestSenderImpl::RetryIfUnauthorized,
                               weak_ptr_factory_.GetWeakPtr(), url, access_token,
-                              request_body, std::move(callback));
+                              request_body, auth_mode, max_retries,
+                              std::move(callback));
   }
 #ifdef NDEBUG
   VLOG(2) << "Sending request with access token to backend";
 #else
   VLOG(2) << "Sending request with access token to backend: " << url;
 #endif
-  SendRequestImpl(std::move(resource_request), request_body, context_,
-                  loader_factory_.get(), std::move(callback));
+  SendRequestImpl(std::move(resource_request), request_body, max_retries,
+                  context_, loader_factory_.get(), std::move(callback));
 }
 
 void ServiceRequestSenderImpl::RetryIfUnauthorized(
     const GURL& url,
     const std::string& access_token,
     const std::string& request_body,
+    ServiceRequestSender::AuthMode auth_mode,
+    int max_retries,
     ResponseCallback callback,
     int http_status,
-    const std::string& response) {
+    const std::string& response,
+    const ResponseInfo& response_info) {
   // On first UNAUTHORIZED error, invalidate access token and try again.
-  if (auth_enabled_ && http_status == net::HTTP_UNAUTHORIZED) {
+  if (OAuthEnabled(auth_mode) && http_status == net::HTTP_UNAUTHORIZED) {
     VLOG(1) << "Request with access token returned with 401 UNAUTHORIZED, "
                "fetching a fresh access token and trying again";
     DCHECK(!retried_with_fresh_access_token_);
     retried_with_fresh_access_token_ = true;
     access_token_fetcher_->InvalidateAccessToken(access_token);
-    InternalSendRequest(url, request_body, std::move(callback));
+    InternalSendRequest(url, request_body, auth_mode, max_retries,
+                        std::move(callback));
     return;
   }
-  std::move(callback).Run(http_status, response);
+  std::move(callback).Run(http_status, response, response_info);
+}
+
+bool ServiceRequestSenderImpl::OAuthEnabled(
+    ServiceRequestSender::AuthMode auth_mode) {
+  return auth_mode == ServiceRequestSender::AuthMode::OAUTH_STRICT ||
+         (auth_mode ==
+              ServiceRequestSender::AuthMode::OAUTH_WITH_API_KEY_FALLBACK &&
+          !failed_to_fetch_oauth_token_);
 }
 
 }  // namespace autofill_assistant

@@ -53,7 +53,7 @@ OSStatus MenuBarChangedHandler(EventHandlerCallRef handler,
     eventSpecs[1].eventKind = kEventMenuBarHidden;
 
     InstallApplicationEventHandler(NewEventHandlerUPP(&vivaldi::MenuBarChangedHandler),
-                                   base::size(eventSpecs), eventSpecs, self,
+                                   std::size(eventSpecs), eventSpecs, self,
                                    &menubarTrackingHandler_);
   }
   return self;

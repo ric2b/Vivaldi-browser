@@ -9,10 +9,16 @@
 #include <memory>
 #include <utility>
 
+#include "ash/components/multidevice/logging/logging.h"
+#include "ash/components/multidevice/remote_device_ref.h"
+#include "ash/components/multidevice/remote_device_test_util.h"
+#include "ash/services/secure_channel/ble_weave_packet_generator.h"
+#include "ash/services/secure_channel/ble_weave_packet_receiver.h"
 #include "ash/services/secure_channel/connection_observer.h"
 #include "ash/services/secure_channel/fake_wire_message.h"
 #include "ash/services/secure_channel/wire_message.h"
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/test/gmock_move_support.h"
@@ -21,9 +27,6 @@
 #include "base/test/test_simple_task_runner.h"
 #include "base/timer/mock_timer.h"
 #include "base/timer/timer.h"
-#include "chromeos/components/multidevice/logging/logging.h"
-#include "chromeos/components/multidevice/remote_device_ref.h"
-#include "chromeos/components/multidevice/remote_device_test_util.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 #include "device/bluetooth/test/mock_bluetooth_adapter.h"
 #include "device/bluetooth/test/mock_bluetooth_device.h"

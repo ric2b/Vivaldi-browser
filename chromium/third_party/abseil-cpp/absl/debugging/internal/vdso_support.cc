@@ -33,7 +33,7 @@
 #endif
 #include <unistd.h>
 
-#if defined(__GLIBC__) && \
+#if !defined(__UCLIBC__) && defined(__GLIBC__) && \
     (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 16))
 #define ABSL_HAVE_GETAUXVAL
 #endif
@@ -50,6 +50,10 @@
 #define AT_SYSINFO_EHDR 33  // for crosstoolv10
 #endif
 
+#if defined(__NetBSD__)
+using Elf32_auxv_t = Aux32Info;
+using Elf64_auxv_t = Aux64Info;
+#endif
 #if defined(__FreeBSD__)
 #if defined(__ELF_WORD_SIZE) && __ELF_WORD_SIZE == 64
 using Elf64_auxv_t = Elf64_Auxinfo;
@@ -106,8 +110,13 @@ const void *VDSOSupport::Init() {
     ElfW(auxv_t) aux;
     while (read(fd, &aux, sizeof(aux)) == sizeof(aux)) {
       if (aux.a_type == AT_SYSINFO_EHDR) {
+#if defined(__NetBSD__)
+        vdso_base_.store(reinterpret_cast<void *>(aux.a_v),
+                         std::memory_order_relaxed);
+#else
         vdso_base_.store(reinterpret_cast<void *>(aux.a_un.a_val),
                          std::memory_order_relaxed);
+#endif
         break;
       }
     }

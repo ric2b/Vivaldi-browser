@@ -54,12 +54,16 @@ PushableMediaStreamVideoSource* CreatePushableVideoSource() {
   PushableMediaStreamVideoSource* pushable_video_source =
       new PushableMediaStreamVideoSource(
           scheduler::GetSingleThreadTaskRunnerForTesting());
-  MediaStreamSource* media_stream_source =
-      MakeGarbageCollected<MediaStreamSource>(
-          "source_id", MediaStreamSource::kTypeVideo, "source_name",
-          /*remote=*/false);
-  media_stream_source->SetPlatformSource(
-      base::WrapUnique(pushable_video_source));
+  // The constructor of MediaStreamSource sets itself as the Owner
+  // of the PushableMediaStreamVideoSource, so as long as the test calls
+  // CreateVideoMediaStreamTrack() with the returned pushable_video_source,
+  // there will be a Member reference to this MediaStreamSource, and we
+  // can drop the reference here.
+  // TODO(crbug.com/1302689): Fix this ownership nonsense, just have a single
+  // class which is GC owned.
+  MakeGarbageCollected<MediaStreamSource>(
+      "source_id", MediaStreamSource::kTypeVideo, "source_name",
+      /*remote=*/false, base::WrapUnique(pushable_video_source));
   return pushable_video_source;
 }
 
@@ -71,15 +75,14 @@ MediaStreamTrack* CreateAudioMediaStreamTrack(
   MediaStreamSource* media_stream_source =
       MakeGarbageCollected<MediaStreamSource>(
           "source_id", MediaStreamSource::kTypeAudio, "source_name",
-          /*remote=*/false);
-  media_stream_source->SetPlatformSource(std::move(source));
+          /*remote=*/false, std::move(source));
 
   MediaStreamComponent* component =
       MakeGarbageCollected<MediaStreamComponent>(media_stream_source);
 
   source_ptr->ConnectToTrack(component);
 
-  return MakeGarbageCollected<MediaStreamTrack>(context, component);
+  return MakeGarbageCollected<MediaStreamTrackImpl>(context, component);
 }
 
 }  // namespace

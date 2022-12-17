@@ -618,7 +618,6 @@
 <translation id="5170206230005240598">Titulky v Braillově písmu jsou zapnuty</translation>
 <translation id="5183440668879371625">Braille – předchozí řádek</translation>
 <translation id="5189244881767082992">Řádek</translation>
-<translation id="5234747236692380506">napsat <ph name="TEXT" /></translation>
 <translation id="5263034204789987535">Režná</translation>
 <translation id="5263344797180442561">nadp 2</translation>
 <translation id="528468243742722775">Konec</translation>
@@ -685,6 +684,8 @@
 <translation id="5623842676595125836">Protokol</translation>
 <translation id="5628125749885014029">nadp 4</translation>
 <translation id="5632083598315326067">Grafický symbol</translation>
+<translation id="5648939288050772726">Gratulujeme! Naučili jste se základy používání nástroje ChromeVox. Nabídku příkazů nástroje ChromeVox můžete kdykoliv otevřít stisknutím kláves Hledat + Tečka. Další informace o nástroji ChromeVox a systému ChromeOS najdete v následujících článcích.
+    Pokud výukový program chcete ukončit, přejděte pomocí nástroje ChromeVox na tlačítko Zavřít a klikněte na něj.</translation>
 <translation id="5653397561111110475">Používání funkcí přístupnosti Chromebooku pro dotykové obrazovky</translation>
 <translation id="5655682562155942719">Přeskakovací příkazy</translation>
 <translation id="56637627897541303">Textová oblast</translation>
@@ -794,6 +795,7 @@
 <translation id="641759969622533235">{COUNT,plural, =1{dvojtečka}few{# dvojtečky}many{# colons}other{# dvojteček}}</translation>
 <translation id="6444046323172968959">Dialog upozornění</translation>
 <translation id="6452403590345320472">Obsah</translation>
+<translation id="6457542714329819968">napiš</translation>
 <translation id="6468049171101508116">Další tlačítko</translation>
 <translation id="646954774886932461">Rejstřík</translation>
 <translation id="6475604559827479857">Barva zvýraznění slov:</translation>
@@ -965,8 +967,6 @@
 <translation id="7701196182766842984">auto sezn</translation>
 <translation id="7713139339518499741">Přirozený hlas</translation>
 <translation id="7714340021005120797">Žádné další pole se seznamem není</translation>
-<translation id="772146615414628379">Gratulujeme! Naučili jste se základy používání nástroje ChromeVox. Nabídku příkazů nástroje ChromeVox můžete kdykoliv otevřít stisknutím kláves Hledat + Tečka. Další informace o nástroji ChromeVox a systému Chrome OS najdete v následujících článcích.
-    Chcete-li výukový program ukončit, přejděte pomocí nástroje ChromeVox na tlačítko Zavřít a klikněte na něj.</translation>
 <translation id="7724603315864178912">Vyjmout</translation>
 <translation id="7731785449856576010">Žádný další mediální widget není k dispozici</translation>
 <translation id="7735498529470878067">Pomocí Prozkoumání dotykem si můžete rychle udělat představu o obsahu na obrazovce.</translation>

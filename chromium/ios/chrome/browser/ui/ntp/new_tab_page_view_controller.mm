@@ -8,10 +8,12 @@
 
 #import "base/check.h"
 #import "ios/chrome/browser/ui/bubble/bubble_presenter.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_feature.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_synchronizing.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_view_controller.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_layout.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
 #import "ios/chrome/browser/ui/gestures/view_revealing_vertical_pan_handler.h"
 #import "ios/chrome/browser/ui/ntp/discover_feed_wrapper_view_controller.h"
@@ -46,6 +48,9 @@
 // top.
 // TODO(crbug.com/1277504): Modify this comment when Web Channels is released.
 @property(nonatomic, assign, getter=isScrolledIntoFeed) BOOL scrolledIntoFeed;
+
+// Whether or not the fake omnibox is pineed to the top of the NTP.
+@property(nonatomic, assign) BOOL fakeOmniboxPinnedToTop;
 
 // The collection view layout for the uppermost content suggestions collection
 // view.
@@ -104,11 +109,11 @@
   [super viewDidLoad];
 
   DCHECK(self.discoverFeedWrapperViewController);
-  DCHECK(self.contentSuggestionsViewController);
+  DCHECK([self contentSuggestionsViewController]);
 
   // TODO(crbug.com/1262536): Remove this when bug is fixed.
   [self.discoverFeedWrapperViewController loadViewIfNeeded];
-  [self.contentSuggestionsViewController loadViewIfNeeded];
+  [[self contentSuggestionsViewController] loadViewIfNeeded];
 
   // Prevent the NTP from spilling behind the toolbar and tab strip.
   self.view.clipsToBounds = YES;
@@ -122,20 +127,23 @@
   singleTapRecognizer.delegate = self;
   [self.view addGestureRecognizer:singleTapRecognizer];
 
-  // Ensures that there is never any nested scrolling, since we are nesting the
-  // content suggestions collection view in the feed collection view.
-  self.contentSuggestionsViewController.collectionView.bounces = NO;
-  self.contentSuggestionsViewController.collectionView.alwaysBounceVertical =
-      NO;
-  self.contentSuggestionsViewController.collectionView.scrollEnabled = NO;
+  if (!IsContentSuggestionsUIViewControllerMigrationEnabled()) {
+    // Ensures that there is never any nested scrolling, since we are nesting
+    // the content suggestions collection view in the feed collection view.
+    self.contentSuggestionsCollectionViewController.collectionView.bounces = NO;
+    self.contentSuggestionsCollectionViewController.collectionView
+        .alwaysBounceVertical = NO;
+    self.contentSuggestionsCollectionViewController.collectionView
+        .scrollEnabled = NO;
+
+    self.contentSuggestionsLayout = static_cast<ContentSuggestionsLayout*>(
+        self.contentSuggestionsCollectionViewController.collectionView
+            .collectionViewLayout);
+    self.contentSuggestionsLayout.isScrolledIntoFeed = self.isScrolledIntoFeed;
+    self.contentSuggestionsLayout.omniboxPositioner = self;
+  }
 
   self.view.backgroundColor = ntp_home::kNTPBackgroundColor();
-
-  self.contentSuggestionsLayout = static_cast<ContentSuggestionsLayout*>(
-      self.contentSuggestionsViewController.collectionView
-          .collectionViewLayout);
-  self.contentSuggestionsLayout.isScrolledIntoFeed = self.isScrolledIntoFeed;
-  self.contentSuggestionsLayout.omniboxPositioner = self;
 
   [self registerNotifications];
 
@@ -186,6 +194,12 @@
 
   [self.bubblePresenter presentDiscoverFeedHeaderTipBubble];
 
+  // Scrolls NTP into feed initially if |shouldScrollIntoFeed|.
+  if (self.shouldScrollIntoFeed) {
+    [self setContentOffset:[self offsetWhenScrolledIntoFeed]];
+    self.shouldScrollIntoFeed = NO;
+  }
+
   self.viewDidAppear = YES;
 }
 
@@ -222,12 +236,12 @@
                                                         .contentOffset.y
                                               force:YES];
 
-    // Redraw the ContentSuggestionsViewController to properly caclculate the
-    // new adjustedContentSuggestionsHeight value.
+    // Redraw the ContentSuggestionsViewController to properly
+    // caclculate the new adjustedContentSuggestionsHeight value.
     // TODO(crbug.com/1170995): Remove once the Feed supports a custom
     // header.
-    [self.contentSuggestionsViewController.view setNeedsLayout];
-    [self.contentSuggestionsViewController.view layoutIfNeeded];
+    [[self contentSuggestionsViewController].view setNeedsLayout];
+    [[self contentSuggestionsViewController].view layoutIfNeeded];
 
     CGFloat heightAboveFeedDifference =
         [self heightAboveFeed] - heightAboveFeedBeforeRotation;
@@ -238,8 +252,8 @@
       weakSelf.collectionView.contentOffset =
           CGPointMake(0, yOffsetBeforeRotation - heightAboveFeedDifference);
       [weakSelf updateNTPLayout];
-    } else {
-      [weakSelf.contentSuggestionsViewController.collectionView
+    } else if (!IsContentSuggestionsUIViewControllerMigrationEnabled()) {
+      [weakSelf.contentSuggestionsCollectionViewController.collectionView
               .collectionViewLayout invalidateLayout];
     }
     [weakSelf.view setNeedsLayout];
@@ -269,15 +283,17 @@
 
   if (previousTraitCollection.horizontalSizeClass !=
       self.traitCollection.horizontalSizeClass) {
-    [self.contentSuggestionsViewController.view setNeedsLayout];
-    [self.contentSuggestionsViewController.view layoutIfNeeded];
+    [[self contentSuggestionsViewController].view setNeedsLayout];
+    [[self contentSuggestionsViewController].view layoutIfNeeded];
     [self.ntpContentDelegate reloadContentSuggestions];
   }
 
   if (previousTraitCollection.preferredContentSizeCategory !=
       self.traitCollection.preferredContentSizeCategory) {
-    [self.contentSuggestionsViewController.collectionView
-            .collectionViewLayout invalidateLayout];
+    if (!IsContentSuggestionsUIViewControllerMigrationEnabled()) {
+      [self.contentSuggestionsCollectionViewController.collectionView
+              .collectionViewLayout invalidateLayout];
+    }
     [self.headerSynchronizer updateFakeOmniboxForScrollPosition];
   }
 
@@ -289,7 +305,7 @@
 
 - (void)layoutContentInParentCollectionView {
   DCHECK(self.discoverFeedWrapperViewController);
-  DCHECK(self.contentSuggestionsViewController);
+  DCHECK([self contentSuggestionsViewController]);
 
   // Ensure the view is loaded so we can set the accessibility identifier.
   [self.discoverFeedWrapperViewController loadViewIfNeeded];
@@ -306,10 +322,11 @@
 
   // Configures the content suggestions in the view hierarchy.
   // TODO(crbug.com/1262536): Remove this when issue is fixed.
-  if (self.contentSuggestionsViewController.parentViewController) {
-    [self.contentSuggestionsViewController willMoveToParentViewController:nil];
-    [self.contentSuggestionsViewController.view removeFromSuperview];
-    [self.contentSuggestionsViewController removeFromParentViewController];
+  if ([self contentSuggestionsViewController].parentViewController) {
+    [[self contentSuggestionsViewController]
+        willMoveToParentViewController:nil];
+    [[self contentSuggestionsViewController].view removeFromSuperview];
+    [[self contentSuggestionsViewController] removeFromParentViewController];
     [self.feedMetricsRecorder
         recordBrokenNTPHierarchy:BrokenNTPHierarchyRelationship::
                                      kContentSuggestionsReset];
@@ -317,9 +334,11 @@
   UIViewController* parentViewController =
       self.isFeedVisible ? self.discoverFeedWrapperViewController.discoverFeed
                          : self.discoverFeedWrapperViewController;
-  [self addViewController:self.contentSuggestionsViewController
+  [self addViewController:[self contentSuggestionsViewController]
       toParentViewController:parentViewController];
-  self.contentSuggestionsLayout.parentCollectionView = self.collectionView;
+  if (!IsContentSuggestionsUIViewControllerMigrationEnabled()) {
+    self.contentSuggestionsLayout.parentCollectionView = self.collectionView;
+  }
 
   // Configures the feed header in the view hierarchy if it is visible.
   if (self.feedHeaderViewController) {
@@ -338,7 +357,7 @@
           constraintEqualToAnchor:self.headerController.view.leadingAnchor],
       [[self containerView].safeAreaLayoutGuide.trailingAnchor
           constraintEqualToAnchor:self.headerController.view.trailingAnchor],
-      [self.contentSuggestionsViewController.view.topAnchor
+      [[self contentSuggestionsViewController].view.topAnchor
           constraintEqualToAnchor:self.headerController.view.bottomAnchor],
     ];
     [NSLayoutConstraint activateConstraints:self.defaultFakeOmniboxConstraints];
@@ -403,8 +422,10 @@
   // presented in front of the NTP.
   [self.headerSynchronizer
       updateFakeOmniboxOnNewWidth:self.collectionView.bounds.size.width];
-  [self.contentSuggestionsViewController.collectionView
-          .collectionViewLayout invalidateLayout];
+  if (!IsContentSuggestionsUIViewControllerMigrationEnabled()) {
+    [self.contentSuggestionsCollectionViewController.collectionView
+            .collectionViewLayout invalidateLayout];
+  }
   // Ensure initial fake omnibox layout.
   [self.headerSynchronizer updateFakeOmniboxForScrollPosition];
 
@@ -437,9 +458,12 @@
 
 - (void)resetViewHierarchy {
   [self removeFromViewHierarchy:self.discoverFeedWrapperViewController];
-  [self removeFromViewHierarchy:self.contentSuggestionsViewController];
+  [self removeFromViewHierarchy:[self contentSuggestionsViewController]];
   if (self.feedHeaderViewController) {
     [self removeFromViewHierarchy:self.feedHeaderViewController];
+  }
+  if (self.headerController) {
+    [self removeFromViewHierarchy:self.headerController];
   }
   self.contentSuggestionsHeightConstraint.active = NO;
 }
@@ -449,8 +473,9 @@
 - (void)scrollViewDidScroll:(UIScrollView*)scrollView {
   // Scroll events should not be handled until the content suggestions have been
   // layed out.
-  if (!self.contentSuggestionsViewController.collectionView.contentSize
-           .height) {
+  if (!IsContentSuggestionsUIViewControllerMigrationEnabled() &&
+      !self.contentSuggestionsCollectionViewController.collectionView
+           .contentSize.height) {
     return;
   }
 
@@ -463,8 +488,9 @@
   CGFloat scrollPosition = scrollView.contentOffset.y;
   // Fixes the content suggestions collection view layout so that the header
   // scrolls at the same rate as the rest.
-  if (scrollPosition > -[self heightAboveFeed]) {
-    [self.contentSuggestionsViewController.collectionView
+  if (scrollPosition > -[self heightAboveFeed] &&
+      !IsContentSuggestionsUIViewControllerMigrationEnabled()) {
+    [self.contentSuggestionsCollectionViewController.collectionView
             .collectionViewLayout invalidateLayout];
   }
   [self handleStickyElementsForScrollPosition:scrollPosition force:NO];
@@ -492,8 +518,6 @@
                   willDecelerate:(BOOL)decelerate {
   [self.overscrollActionsController scrollViewDidEndDragging:scrollView
                                               willDecelerate:decelerate];
-  [self.panGestureHandler scrollViewDidEndDragging:scrollView
-                                    willDecelerate:decelerate];
   [self.feedMetricsRecorder
       recordFeedScrolled:scrollView.contentOffset.y - self.scrollStartPosition];
 }
@@ -508,6 +532,7 @@
 
 - (void)scrollViewDidEndDecelerating:(UIScrollView*)scrollView {
   // TODO(crbug.com/1114792): Handle scrolling.
+  [self.panGestureHandler scrollViewDidEndDecelerating:scrollView];
 }
 
 - (void)scrollViewDidEndScrollingAnimation:(UIScrollView*)scrollView {
@@ -607,30 +632,16 @@
   }
 }
 
-// Pins sticky elements to the top of the NTP. This includes the fake omnibox
-// and if Web Channels is enabled, the feed header.
-// TODO(crbug.com/1277504): Modify this comment when Web Channels is released.
-- (void)pinStickyElements {
-  [self setIsScrolledIntoFeed:YES];
-
+// Pins the fake omnibox to the top of the NTP.
+- (void)pinFakeOmniboxToTop {
+  self.fakeOmniboxPinnedToTop = YES;
   [self stickFakeOmniboxToTop];
-
-  if (IsWebChannelsEnabled() && self.feedHeaderViewController) {
-    [self stickFeedHeaderToTop];
-  }
 }
 
-// Resets the sticky elements to their original position. This includes the fake
-// omnibox and if Web Channels is enabled, the feed header.
-// TODO(crbug.com/1277504): Modify this comment when Web Channels is released.
-- (void)resetStickyElements {
-  [self setIsScrolledIntoFeed:NO];
-
+// Resets the fake omnibox to its original position.
+- (void)resetFakeOmniboxConstraints {
+  self.fakeOmniboxPinnedToTop = NO;
   [self resetFakeOmnibox];
-
-  if (IsWebChannelsEnabled()) {
-    [self setInitialFeedHeaderConstraints];
-  }
 }
 
 // Lets this view own the fake omnibox and sticks it to the top of the NTP.
@@ -696,6 +707,14 @@
   [self.headerController.view removeFromSuperview];
 
   if (IsContentSuggestionsHeaderMigrationEnabled()) {
+    // If |self.headerController| is nil after removing it from the view
+    // hierarchy it means its no longer owned by anyone (e.g. The coordinator
+    // might have been stopped.) and it should not be added in that case.
+    // TODO(crbug.com/1321820): Remove once owner of |headerController| is the
+    // primary driver of its lifecycle.
+    if (!self.headerController)
+      return;
+
     UIViewController* parentViewController =
         self.isFeedVisible ? self.discoverFeedWrapperViewController.discoverFeed
                            : self.discoverFeedWrapperViewController;
@@ -722,31 +741,35 @@
 // omnibox.
 - (void)stickFeedHeaderToTop {
   DCHECK(self.feedHeaderViewController);
-
+  DCHECK(IsWebChannelsEnabled());
   [NSLayoutConstraint deactivateConstraints:self.feedHeaderConstraints];
-
   self.feedHeaderConstraints = @[
     [self.feedHeaderViewController.view.topAnchor
-        constraintEqualToAnchor:self.headerController.view.bottomAnchor],
+        constraintEqualToAnchor:self.headerController.view.bottomAnchor
+                       constant:-(content_suggestions::headerBottomPadding() +
+                                  [self.feedHeaderViewController
+                                          customSearchEngineViewHeight])],
     [self.collectionView.topAnchor
-        constraintEqualToAnchor:self.contentSuggestionsViewController.view
-                                    .bottomAnchor],
+        constraintEqualToAnchor:[self contentSuggestionsViewController]
+                                    .view.bottomAnchor],
   ];
-
+  [self.feedHeaderViewController toggleBackgroundBlur:YES animated:YES];
   [NSLayoutConstraint activateConstraints:self.feedHeaderConstraints];
 }
 
 // Sets initial feed header constraints, between content suggestions and feed.
 - (void)setInitialFeedHeaderConstraints {
+  DCHECK(self.feedHeaderViewController);
   [NSLayoutConstraint deactivateConstraints:self.feedHeaderConstraints];
   self.feedHeaderConstraints = @[
     [self.feedHeaderViewController.view.topAnchor
-        constraintEqualToAnchor:self.contentSuggestionsViewController.view
-                                    .bottomAnchor],
+        constraintEqualToAnchor:[self contentSuggestionsViewController]
+                                    .view.bottomAnchor],
     [self.collectionView.topAnchor
         constraintEqualToAnchor:self.feedHeaderViewController.view
                                     .bottomAnchor],
   ];
+  [self.feedHeaderViewController toggleBackgroundBlur:NO animated:YES];
   [NSLayoutConstraint activateConstraints:self.feedHeaderConstraints];
 }
 
@@ -765,8 +788,8 @@
                    -[self feedHeaderHeight], self.view.frame.size.width,
                    [self feedHeaderHeight]);
   }
-  self.contentSuggestionsViewController.view.frame = CGRectMake(
-      self.contentSuggestionsViewController.view.frame.origin.x,
+  [self contentSuggestionsViewController].view.frame = CGRectMake(
+      [self contentSuggestionsViewController].view.frame.origin.x,
       -[self contentSuggestionsContentHeight] - [self feedHeaderHeight],
       self.view.frame.size.width, [self contentSuggestionsContentHeight]);
 
@@ -804,12 +827,28 @@
 // TODO(crbug.com/1277504): Modify this comment when Web Channels is released.
 - (void)handleStickyElementsForScrollPosition:(CGFloat)scrollPosition
                                         force:(BOOL)force {
-  if ((!self.isScrolledIntoFeed || force) &&
-      scrollPosition > [self offsetToStickOmniboxAndHeader]) {
-    [self pinStickyElements];
-  } else if ((self.isScrolledIntoFeed || force) &&
-             scrollPosition <= [self offsetToStickOmniboxAndHeader]) {
-    [self resetStickyElements];
+  if (scrollPosition > [self offsetToStickOmnibox] &&
+      !self.fakeOmniboxPinnedToTop) {
+    [self pinFakeOmniboxToTop];
+  } else if (scrollPosition <= [self offsetToStickOmnibox] &&
+             self.fakeOmniboxPinnedToTop) {
+    [self resetFakeOmniboxConstraints];
+  }
+
+  if (IsWebChannelsEnabled()) {
+    if ((!self.isScrolledIntoFeed || force) &&
+        scrollPosition > [self offsetWhenScrolledIntoFeed]) {
+      [self setIsScrolledIntoFeed:YES];
+      if (self.feedHeaderViewController) {
+        [self stickFeedHeaderToTop];
+      }
+    } else if ((self.isScrolledIntoFeed || force) &&
+               scrollPosition <= [self offsetWhenScrolledIntoFeed]) {
+      [self setIsScrolledIntoFeed:NO];
+      if (IsWebChannelsEnabled()) {
+        [self setInitialFeedHeaderConstraints];
+      }
+    }
   }
 
   // Content suggestions header will sometimes glitch when swiping quickly from
@@ -840,12 +879,11 @@
 // Applies constraints to the NTP collection view, along with the constraints
 // for the content suggestions within it.
 - (void)applyCollectionViewConstraints {
-  UIView* contentSuggestionsView = self.contentSuggestionsViewController.view;
+  UIView* contentSuggestionsView = [self contentSuggestionsViewController].view;
   contentSuggestionsView.translatesAutoresizingMaskIntoConstraints = NO;
 
   self.contentSuggestionsHeightConstraint = [contentSuggestionsView.heightAnchor
-      constraintEqualToConstant:self.contentSuggestionsViewController
-                                    .collectionView.contentSize.height];
+      constraintEqualToConstant:[self contentSuggestionsContentHeight]];
 
   if (self.feedHeaderViewController) {
     [NSLayoutConstraint activateConstraints:@[
@@ -874,21 +912,57 @@
 // Sets minimum height for the NTP collection view, allowing it to scroll enough
 // to focus the omnibox.
 - (void)setMinimumHeight {
-  CGFloat minimumNTPHeight =
-      [self.contentSuggestionsLayout minimumNTPHeight] - [self heightAboveFeed];
-  if (IsContentSuggestionsHeaderMigrationEnabled()) {
-    minimumNTPHeight += [self.headerController headerHeight];
-  }
+  CGFloat minimumNTPHeight = [self minimumNTPHeight] - [self heightAboveFeed];
   self.collectionView.contentSize =
       CGSizeMake(self.view.frame.size.width, minimumNTPHeight);
 }
 
 #pragma mark - Helpers
 
+- (UIViewController*)contentSuggestionsViewController {
+  return IsContentSuggestionsUIViewControllerMigrationEnabled()
+             ? _contentSuggestionsViewController
+             : self.contentSuggestionsCollectionViewController;
+}
+
+- (CGFloat)minimumNTPHeight {
+  if (IsContentSuggestionsHeaderMigrationEnabled()) {
+    CGFloat collectionViewHeight = self.collectionView.bounds.size.height;
+    CGFloat headerHeight = [self.headerController headerHeight];
+
+    // The minimum height for the collection view content should be the height
+    // of the header plus the height of the collection view minus the height of
+    // the NTP bottom bar. This allows the Most Visited cells to be scrolled up
+    // to the top of the screen. Also computes the total NTP scrolling height
+    // for Discover infinite feed.
+    CGFloat ntpHeight = collectionViewHeight + headerHeight;
+    CGFloat minimumHeight =
+        ntpHeight - ntp_header::kScrolledToTopOmniboxBottomMargin;
+    if (!IsRegularXRegularSizeClass(self.collectionView)) {
+      CGFloat toolbarHeight =
+          IsSplitToolbarMode(self.collectionView)
+              ? ToolbarExpandedHeight([UIApplication sharedApplication]
+                                          .preferredContentSizeCategory)
+              : 0;
+      CGFloat additionalHeight =
+          toolbarHeight + self.collectionView.contentInset.bottom;
+      minimumHeight -= additionalHeight;
+    }
+
+    return minimumHeight;
+  } else {
+    return [self.contentSuggestionsLayout minimumNTPHeight];
+  }
+}
+
 // Returns the current height of the content suggestions content.
 - (CGFloat)contentSuggestionsContentHeight {
-  return self.contentSuggestionsViewController.collectionView.contentSize
-      .height;
+  if (IsContentSuggestionsUIViewControllerMigrationEnabled()) {
+    return [self.contentSuggestionsViewController contentSuggestionsHeight];
+  } else {
+    return self.contentSuggestionsCollectionViewController.collectionView
+        .contentSize.height;
+  }
 }
 
 // Content suggestions height adjusted with the safe area top insets.
@@ -899,15 +973,27 @@
 // Height of the feed header, returns 0 if it is not visible.
 - (CGFloat)feedHeaderHeight {
   return self.feedHeaderViewController
-             ? self.feedHeaderViewController.view.frame.size.height
+             ? [self.feedHeaderViewController feedHeaderHeight] +
+                   [self.feedHeaderViewController customSearchEngineViewHeight]
              : 0;
 }
 
-// The y-position content offset for when the feed header and fake omnibox
+// The y-position content offset for when the user has completely scrolled into
+// the Feed.
+- (CGFloat)offsetWhenScrolledIntoFeed {
+  return -(self.headerController.view.frame.size.height -
+           [self stickyOmniboxHeight] -
+           [self.feedHeaderViewController customSearchEngineViewHeight] -
+           content_suggestions::headerBottomPadding());
+}
+
+// The y-position content offset for when the fake omnibox
 // should stick to the top of the NTP.
-- (CGFloat)offsetToStickOmniboxAndHeader {
-  CGFloat offset = -(self.headerController.view.frame.size.height -
-                     [self stickyOmniboxHeight]);
+- (CGFloat)offsetToStickOmnibox {
+  CGFloat offset =
+      -(self.headerController.view.frame.size.height -
+        [self stickyOmniboxHeight] -
+        [self.feedHeaderViewController customSearchEngineViewHeight]);
   if (IsSplitToolbarMode(self) &&
       IsContentSuggestionsHeaderMigrationEnabled()) {
     return offset - [self contentSuggestionsContentHeight];
@@ -933,21 +1019,23 @@
   // self.discoverFeedWrapperViewController.discoverFeed.view ->
   // self.collectionView -> self.contentSuggestionsViewController.view.
   if (![self.collectionView.subviews
-          containsObject:self.contentSuggestionsViewController.view]) {
+          containsObject:[self contentSuggestionsViewController].view]) {
     // Remove child VC from old parent.
-    [self.contentSuggestionsViewController willMoveToParentViewController:nil];
-    [self.contentSuggestionsViewController removeFromParentViewController];
-    [self.contentSuggestionsViewController.view removeFromSuperview];
-    [self.contentSuggestionsViewController didMoveToParentViewController:nil];
+    [[self contentSuggestionsViewController]
+        willMoveToParentViewController:nil];
+    [[self contentSuggestionsViewController] removeFromParentViewController];
+    [[self contentSuggestionsViewController].view removeFromSuperview];
+    [[self contentSuggestionsViewController] didMoveToParentViewController:nil];
 
     // Add child VC to new parent.
-    [self.contentSuggestionsViewController
+    [[self contentSuggestionsViewController]
         willMoveToParentViewController:self.discoverFeedWrapperViewController
                                            .discoverFeed];
     [self.discoverFeedWrapperViewController.discoverFeed
-        addChildViewController:self.contentSuggestionsViewController];
-    [self.collectionView addSubview:self.contentSuggestionsViewController.view];
-    [self.contentSuggestionsViewController
+        addChildViewController:[self contentSuggestionsViewController]];
+    [self.collectionView
+        addSubview:[self contentSuggestionsViewController].view];
+    [[self contentSuggestionsViewController]
         didMoveToParentViewController:self.discoverFeedWrapperViewController
                                           .discoverFeed];
 
@@ -1051,7 +1139,11 @@
 // position.
 - (void)setContentOffset:(CGFloat)offset {
   self.collectionView.contentOffset = CGPointMake(0, offset);
-  self.scrolledIntoFeed = offset > -[self offsetToStickOmniboxAndHeader];
+  self.scrolledIntoFeed = offset > -[self offsetWhenScrolledIntoFeed];
+  if (self.feedHeaderViewController) {
+    [self.feedHeaderViewController toggleBackgroundBlur:self.scrolledIntoFeed
+                                               animated:NO];
+  }
 }
 
 @end

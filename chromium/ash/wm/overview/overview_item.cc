@@ -231,6 +231,8 @@ void OverviewItem::HideForDesksTemplatesGrid(bool animate) {
   item_widget_event_blocker_ =
       std::make_unique<aura::ScopedWindowEventTargetingBlocker>(
           item_widget_->GetNativeWindow());
+
+  HideCannotSnapWarning(animate);
 }
 
 void OverviewItem::RevertHideForDesksTemplatesGrid(bool animate) {
@@ -244,6 +246,8 @@ void OverviewItem::RevertHideForDesksTemplatesGrid(bool animate) {
   }
 
   item_widget_event_blocker_.reset();
+
+  UpdateCannotSnapWarningVisibility(animate);
 }
 
 void OverviewItem::OnMovingWindowToAnotherDesk() {
@@ -493,8 +497,8 @@ void OverviewItem::CloseWindow() {
   SetShadowBounds(absl::nullopt);
 
   gfx::RectF inset_bounds(target_bounds_);
-  inset_bounds.Inset(target_bounds_.width() * kPreCloseScale,
-                     target_bounds_.height() * kPreCloseScale);
+  inset_bounds.Inset(gfx::InsetsF::VH(target_bounds_.height() * kPreCloseScale,
+                                      target_bounds_.width() * kPreCloseScale));
   // Scale down both the window and label.
   SetBounds(inset_bounds, OVERVIEW_ANIMATION_CLOSING_OVERVIEW_ITEM);
   // First animate opacity to an intermediate value concurrently with the
@@ -509,7 +513,7 @@ void OverviewItem::CloseWindow() {
   transform_window_.Close();
 }
 
-void OverviewItem::UpdateCannotSnapWarningVisibility() {
+void OverviewItem::UpdateCannotSnapWarningVisibility(bool animate) {
   // Windows which can snap will never show this warning. Or if the window is
   // the drop target window, also do not show this warning.
   bool visible = true;
@@ -546,21 +550,28 @@ void OverviewItem::UpdateCannotSnapWarningVisibility() {
     GetWindow()->parent()->StackChildAbove(
         cannot_snap_widget_->GetNativeWindow(), GetWindow());
   }
-
-  DoSplitviewOpacityAnimation(cannot_snap_widget_->GetNativeWindow()->layer(),
-                              visible
-                                  ? SPLITVIEW_ANIMATION_OVERVIEW_ITEM_FADE_IN
-                                  : SPLITVIEW_ANIMATION_OVERVIEW_ITEM_FADE_OUT);
+  if (animate) {
+    DoSplitviewOpacityAnimation(
+        cannot_snap_widget_->GetLayer(),
+        visible ? SPLITVIEW_ANIMATION_OVERVIEW_ITEM_FADE_IN
+                : SPLITVIEW_ANIMATION_OVERVIEW_ITEM_FADE_OUT);
+  } else {
+    cannot_snap_widget_->GetLayer()->SetOpacity(visible ? 1.f : 0.f);
+  }
   const gfx::Rect bounds =
       ToStableSizeRoundedRect(GetWindowTargetBoundsWithInsets());
   cannot_snap_widget_->SetBoundsCenteredIn(bounds, /*animate=*/false);
 }
 
-void OverviewItem::HideCannotSnapWarning() {
+void OverviewItem::HideCannotSnapWarning(bool animate) {
   if (!cannot_snap_widget_)
     return;
-  DoSplitviewOpacityAnimation(cannot_snap_widget_->GetNativeWindow()->layer(),
-                              SPLITVIEW_ANIMATION_OVERVIEW_ITEM_FADE_OUT);
+  if (animate) {
+    DoSplitviewOpacityAnimation(cannot_snap_widget_->GetLayer(),
+                                SPLITVIEW_ANIMATION_OVERVIEW_ITEM_FADE_OUT);
+  } else {
+    cannot_snap_widget_->GetLayer()->SetOpacity(0.f);
+  }
 }
 
 void OverviewItem::OnSelectorItemDragStarted(OverviewItem* item) {
@@ -621,8 +632,9 @@ gfx::Rect OverviewItem::GetBoundsOfSelectedItem() {
 
 void OverviewItem::ScaleUpSelectedItem(OverviewAnimationType animation_type) {
   gfx::RectF scaled_bounds = target_bounds();
-  scaled_bounds.Inset(-scaled_bounds.width() * kDragWindowScale,
-                      -scaled_bounds.height() * kDragWindowScale);
+  scaled_bounds.Inset(
+      gfx::InsetsF::VH(-scaled_bounds.height() * kDragWindowScale,
+                       -scaled_bounds.width() * kDragWindowScale));
   if (unclipped_size_) {
     // If a clipped item is scaled up, we need to recalculate the unclipped
     // size.
@@ -721,7 +733,7 @@ void OverviewItem::SetShadowBounds(
   shadow_->layer()->SetVisible(true);
   gfx::Rect bounds_in_item =
       gfx::Rect(item_widget_->GetNativeWindow()->GetTargetBounds().size());
-  bounds_in_item.Inset(0, kHeaderHeightDp, 0, 0);
+  bounds_in_item.Inset(gfx::Insets::TLBR(kHeaderHeightDp, 0, 0, 0));
   bounds_in_item.ClampToCenteredSize(
       gfx::ToRoundedSize(bounds_in_screen->size()));
   shadow_->SetContentBounds(bounds_in_item);
@@ -787,7 +799,7 @@ void OverviewItem::OnStartingAnimationComplete() {
   const bool show_backdrop =
       GetWindowDimensionsType() != OverviewGridWindowFillMode::kNormal;
   overview_item_view_->SetBackdropVisibility(show_backdrop);
-  UpdateCannotSnapWarningVisibility();
+  UpdateCannotSnapWarningVisibility(/*animate=*/true);
 }
 
 void OverviewItem::StopWidgetAnimation() {
@@ -1075,8 +1087,8 @@ gfx::Rect OverviewItem::GetShadowBoundsForTesting() {
 
 gfx::RectF OverviewItem::GetWindowTargetBoundsWithInsets() const {
   gfx::RectF window_target_bounds = target_bounds_;
-  window_target_bounds.Inset(kWindowMargin, kWindowMargin);
-  window_target_bounds.Inset(0, kHeaderHeightDp, 0, 0);
+  window_target_bounds.Inset(kWindowMargin);
+  window_target_bounds.Inset(gfx::InsetsF::TLBR(kHeaderHeightDp, 0, 0, 0));
   return window_target_bounds;
 }
 
@@ -1190,7 +1202,7 @@ void OverviewItem::SetItemBounds(const gfx::RectF& target_bounds,
 
   // |target_bounds| are the bounds of the |item_widget|, which include a
   // border.
-  transformed_bounds.Inset(kWindowMargin, kWindowMargin);
+  transformed_bounds.Inset(kWindowMargin);
 
   // Update |transformed_bounds| to match the unclipped size of the window, so
   // we transform the window to the correct size.

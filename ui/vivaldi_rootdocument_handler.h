@@ -82,6 +82,18 @@ class VivaldiRootDocumentHandler : public KeyedService,
  private:
   ~VivaldiRootDocumentHandler() override;
 
+  class DocumentContentsObserver : public content::WebContentsObserver {
+   public:
+    DocumentContentsObserver(VivaldiRootDocumentHandler* router,
+                             content::WebContents* contents);
+
+    // content::WebContentsObserver overrides.
+    void PrimaryMainDocumentElementAvailable() override;
+
+   private:
+    raw_ptr<VivaldiRootDocumentHandler> root_doc_handler_;
+  };
+
   // KeyedService implementation.
   void Shutdown() override;
 
@@ -95,15 +107,21 @@ class VivaldiRootDocumentHandler : public KeyedService,
                            const extensions::Extension* extension,
                            extensions::UnloadedExtensionReason reason) override;
 
-  // content::WebContentsObserver overrides.
-  void DidFinishNavigation(
-      content::NavigationHandle* navigation_handle) override;
+  void InformObservers();
+
+  content::WebContents* GetWebContents();
+  content::WebContents* GetOTRWebContents();
 
   // These are the WebContents holders for our portal-windows. One document for
   // regular-windows and one for incognito-windows. Incognito is lazy loaded and
   // destroyed on the last private window closure.
   VivaldiDocumentLoader* vivaldi_document_loader_ = nullptr;
   VivaldiDocumentLoader* vivaldi_document_loader_off_the_record_ = nullptr;
+
+  // Observer handlers for the webcontents owned by the two
+  // VivaldiDocumentLoaders.
+  std::unique_ptr<DocumentContentsObserver> document_observer_;
+  std::unique_ptr<DocumentContentsObserver> otr_document_observer_;
 
   bool document_loader_is_ready_ = false;
   bool otr_document_loader_is_ready_ = false;

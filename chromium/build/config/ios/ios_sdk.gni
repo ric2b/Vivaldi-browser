@@ -87,11 +87,6 @@ declare_args() {
   primary_fat_toolchain_name = ""
 }
 
-# Official builds may not use goma.
-assert(!((use_goma || use_remoteexec) && is_chrome_branded &&
-             is_official_build && target_cpu == "arm64"),
-       "goma/re-client use is forbidden for official iOS builds.")
-
 assert(custom_toolchain == "" || additional_target_cpus == [],
        "cannot define both custom_toolchain and additional_target_cpus")
 
@@ -195,4 +190,9 @@ if (target_environment == "device" && ios_enable_code_signing) {
                                             find_signing_identity_args,
                                             "trim string")
   }
+}
+
+if (ios_use_shared_bundle_id_for_test_apps) {
+  shared_bundle_id_for_test_apps =
+      "$ios_app_bundle_id_prefix.chrome.unittests.dev"
 }

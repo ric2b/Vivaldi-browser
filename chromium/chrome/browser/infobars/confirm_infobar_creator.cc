@@ -13,7 +13,7 @@
 #include "chrome/browser/ui/views/infobars/confirm_infobar.h"
 #endif
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
 #include "app/vivaldi_apptools.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"

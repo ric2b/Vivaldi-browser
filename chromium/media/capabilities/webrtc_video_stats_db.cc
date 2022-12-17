@@ -7,8 +7,10 @@
 #include "base/check_op.h"
 #include "base/format_macros.h"
 #include "base/metrics/field_trial_params.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "media/base/media_switches.h"
+#include "media/capabilities/bucket_utility.h"
 
 namespace media {
 
@@ -22,41 +24,27 @@ constexpr int kMaxEntriesPerConfigDefault = 10;
 constexpr char kMaxDaysToKeepStatsParamName[] = "db_days_to_keep_stats";
 constexpr char kMaxEntriesPerConfigParamName[] = "db_max_entries_per_cpnfig";
 
-// Validates the codec profile enum in case it's been compromised. Returns
-// VIDEO_CODEC_PROFILE_UNKNOWN if `codec_profile` is outside the valid range.
-VideoCodecProfile ValidateVideoCodecProfile(VideoCodecProfile codec_profile) {
-  if (codec_profile > VIDEO_CODEC_PROFILE_MIN &&
-      codec_profile <= VIDEO_CODEC_PROFILE_MAX) {
-    return codec_profile;
+// Group similar codec profiles to the same entry. Returns
+// VIDEO_CODEC_PROFILE_UNKNOWN if `codec_profile` is outside the valid range or
+// not tracked. The reason to not track all codec profiles is to limit the
+// fingerprinting surface.
+VideoCodecProfile GetWebrtcCodecProfileBucket(VideoCodecProfile codec_profile) {
+  if (codec_profile >= H264PROFILE_MIN && codec_profile <= H264PROFILE_MAX) {
+    return H264PROFILE_MIN;
+  }
+  if (codec_profile >= VP8PROFILE_MIN && codec_profile <= VP8PROFILE_MAX) {
+    return VP8PROFILE_MIN;
+  }
+  if (codec_profile == VP9PROFILE_PROFILE0) {
+    return VP9PROFILE_PROFILE0;
+  }
+  if (codec_profile == VP9PROFILE_PROFILE2) {
+    return VP9PROFILE_PROFILE2;
+  }
+  if (codec_profile >= AV1PROFILE_MIN && codec_profile <= AV1PROFILE_MAX) {
+    return AV1PROFILE_MIN;
   }
   return VIDEO_CODEC_PROFILE_UNKNOWN;
-}
-
-template <typename T, size_t N>
-constexpr size_t array_size(T (&)[N]) {
-  return N;
-}
-
-int GetPixelsBucket(int pixels) {
-  constexpr int kPixelsBuckets[] = {1280 * 720, 1920 * 1080, 3840 * 2160};
-  // The boundaries between buckets are calculated as the point between the two
-  // buckets.
-  constexpr int kPixelsBoundaries[] = {
-      (kPixelsBuckets[0] + kPixelsBuckets[1]) / 2,
-      (kPixelsBuckets[1] + kPixelsBuckets[2]) / 2};
-  // Static assert to make sure that `kPixelBoundaries[]` is updated if new
-  // pixel sizes are added to kPixelsBuckets[]`.
-  static_assert(array_size(kPixelsBoundaries) + 1 ==
-                array_size(kPixelsBuckets));
-
-  const int* pixels_bucket_it = std::lower_bound(
-      std::begin(kPixelsBoundaries), std::end(kPixelsBoundaries), pixels);
-  // The output from std::lower_bound is in the range [begin, end], hence the
-  // subtraction below is well defined.
-  int pixels_bucket_index = (pixels_bucket_it - std::begin(kPixelsBoundaries));
-  DCHECK_GE(pixels_bucket_index, 0);
-  DCHECK_LT(pixels_bucket_index, static_cast<int>(array_size(kPixelsBuckets)));
-  return kPixelsBuckets[pixels_bucket_index];
 }
 
 }  // namespace
@@ -70,8 +58,9 @@ WebrtcVideoStatsDB::VideoDescKey::MakeBucketedKey(
     int pixels) {
   // Bucket pixel size to prevent an explosion of one-off values in the
   // database and add basic guards against fingerprinting.
-  return VideoDescKey(is_decode_stats, ValidateVideoCodecProfile(codec_profile),
-                      hardware_accelerated, GetPixelsBucket(pixels));
+  return VideoDescKey(is_decode_stats,
+                      GetWebrtcCodecProfileBucket(codec_profile),
+                      hardware_accelerated, GetWebrtcPixelsBucket(pixels));
 }
 
 WebrtcVideoStatsDB::VideoDescKey::VideoDescKey(bool is_decode_stats,
@@ -91,8 +80,32 @@ std::string WebrtcVideoStatsDB::VideoDescKey::Serialize() const {
   return video_part;
 }
 
+std::string WebrtcVideoStatsDB::VideoDescKey::SerializeWithoutPixels() const {
+  std::string video_part =
+      base::StringPrintf("%d|%d|%d|", is_decode_stats,
+                         static_cast<int>(codec_profile), hardware_accelerated);
+
+  return video_part;
+}
+
 std::string WebrtcVideoStatsDB::VideoDescKey::ToLogStringForDebug() const {
   return "Key {" + Serialize() + "}";
+}
+
+// static
+absl::optional<int> WebrtcVideoStatsDB::VideoDescKey::ParsePixelsFromKey(
+    std::string key) {
+  constexpr size_t kMinimumIndexOfLastSeparator = 5;
+  size_t last_separator_index = key.rfind("|");
+  if (last_separator_index != std::string::npos &&
+      last_separator_index >= kMinimumIndexOfLastSeparator &&
+      (last_separator_index + 1) < key.size()) {
+    int parsed_pixels;
+    if (base::StringToInt(&key.c_str()[last_separator_index + 1],
+                          &parsed_pixels))
+      return parsed_pixels;
+  }
+  return absl::nullopt;
 }
 
 WebrtcVideoStatsDB::VideoStats::VideoStats(double timestamp,
@@ -153,10 +166,10 @@ bool operator!=(const WebrtcVideoStatsDB::VideoStats& x,
 }
 
 // static
-int WebrtcVideoStatsDB::GetMaxDaysToKeepStats() {
-  return base::GetFieldTrialParamByFeatureAsInt(
+base::TimeDelta WebrtcVideoStatsDB::GetMaxTimeToKeepStats() {
+  return base::Days(base::GetFieldTrialParamByFeatureAsInt(
       kWebrtcMediaCapabilitiesParameters, kMaxDaysToKeepStatsParamName,
-      kMaxDaysToKeepStatsDefault);
+      kMaxDaysToKeepStatsDefault));
 }
 
 // static

@@ -68,21 +68,22 @@ struct FileHeader {
 
 }  // namespace
 
-void SessionService::SetWindowExtData(const SessionID& window_id,
-                                      const std::string& ext_data) {
+void SessionService::SetWindowVivExtData(const SessionID& window_id,
+                                         const std::string& viv_ext_data) {
   if (!ShouldTrackChangesToWindow(window_id))
     return;
 
-  ScheduleCommand(sessions::CreateSetWindowExtDataCommand(window_id, ext_data));
+  ScheduleCommand(
+      sessions::CreateSetWindowVivExtDataCommand(window_id, viv_ext_data));
 }
 
-void SessionService::SetTabExtData(const SessionID& window_id,
-                                   const SessionID& tab_id,
-                                   const std::string& ext_data) {
+void SessionService::SetTabVivExtData(const SessionID& window_id,
+                                      const SessionID& tab_id,
+                                      const std::string& viv_ext_data) {
   if (!ShouldTrackChangesToWindow(window_id))
     return;
 
-  ScheduleCommand(sessions::CreateSetExtDataCommand(tab_id, ext_data));
+  ScheduleCommand(sessions::CreateSetVivExtDataCommand(tab_id, viv_ext_data));
 }
 
 void SessionService::OnExtDataUpdated(content::WebContents* web_contents) {
@@ -91,21 +92,21 @@ void SessionService::OnExtDataUpdated(content::WebContents* web_contents) {
   if (!session_tab_helper)
     return;
 
-  SetTabExtData(session_tab_helper->window_id(),
-                session_tab_helper->session_id(), web_contents->GetExtData());
+  SetTabVivExtData(session_tab_helper->window_id(),
+                session_tab_helper->session_id(), web_contents->GetVivExtData());
 }
 
 /* static */
 bool SessionServiceBase::ShouldTrackVivaldiBrowser(Browser* browser) {
   base::JSONParserOptions options = base::JSON_PARSE_RFC;
   absl::optional<base::Value> json =
-      base::JSONReader::Read(browser->ext_data(), options);
+      base::JSONReader::Read(browser->viv_ext_data(), options);
   if (json) {
     if (const base::Value::Dict* dict = json->GetIfDict()) {
       if (const std::string* window_type = dict->FindString("windowType")) {
         // Don't track popup windows (like settings) in the session.
         // We have "", "popup" and "settings".
-        // TODO(pettern): Popup windows still rely on extData, this
+        // TODO(pettern): Popup windows still rely on vivExtData, this
         // should go away and we should use the type sent to the apis
         // instead.
         if (*window_type == "popup" || *window_type == "settings") {
@@ -297,9 +298,9 @@ void VivaldiSessionService::BuildCommandsForTab(const SessionID& window_id,
         session_id, extensions_tab_helper->GetExtensionAppId()));
   }
 #endif
-  if (!tab->GetExtData().empty()) {
+  if (!tab->GetVivExtData().empty()) {
     ScheduleCommand(
-        sessions::CreateSetExtDataCommand(session_id, tab->GetExtData()));
+        sessions::CreateSetVivExtDataCommand(session_id, tab->GetVivExtData()));
   }
   const blink::UserAgentOverride& ua_override = tab->GetUserAgentOverride();
   if (!ua_override.ua_string_override.empty()) {
@@ -349,9 +350,9 @@ void VivaldiSessionService::BuildCommandsForBrowser(Browser* browser,
     ScheduleCommand(sessions::CreateSetWindowAppNameCommand(
         browser->session_id(), browser->app_name()));
   }
-  if (!browser->ext_data().empty()) {
-    ScheduleCommand(sessions::CreateSetWindowExtDataCommand(
-        browser->session_id(), browser->ext_data()));
+  if (!browser->viv_ext_data().empty()) {
+    ScheduleCommand(sessions::CreateSetWindowVivExtDataCommand(
+        browser->session_id(), browser->viv_ext_data()));
   }
   TabStripModel* tab_strip = browser->tab_strip_model();
   for (int i = 0; i < tab_strip->count(); ++i) {
@@ -541,7 +542,7 @@ content::WebContents* VivaldiSessionService::RestoreTab(
       group, false,  // select
       tab.pinned, base::TimeTicks(), session_storage_namespace.get(),
       tab.user_agent_override, tab.extra_data, true /* from_session_restore */,
-      tab.page_action_overrides, tab.ext_data);
+      tab.viv_page_action_overrides, tab.viv_ext_data);
   // Regression check: check that the tab didn't start loading right away. The
   // focused tab will be loaded by Browser, and TabLoader will load the rest.
   DCHECK(web_contents->GetController().NeedsReload());
@@ -634,7 +635,7 @@ Browser* VivaldiSessionService::ProcessSessionWindows(
     if ((*i)->window_id == active_window_id) {
       browser_to_activate = browser;
     }
-    browser->set_ext_data((*i)->ext_data);
+    browser->set_viv_ext_data((*i)->viv_ext_data);
 
     RestoreTabsToBrowser(*(*i), browser, initial_tab_count, selected_tab_index,
                          created_contents);

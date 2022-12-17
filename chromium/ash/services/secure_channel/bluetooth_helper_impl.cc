@@ -4,6 +4,10 @@
 
 #include "ash/services/secure_channel/bluetooth_helper_impl.h"
 
+#include "ash/components/multidevice/beacon_seed.h"
+#include "ash/components/multidevice/logging/logging.h"
+#include "ash/components/multidevice/remote_device_cache.h"
+#include "ash/components/multidevice/remote_device_ref.h"
 #include "ash/constants/ash_features.h"
 #include "ash/services/secure_channel/background_eid_generator.h"
 #include "ash/services/secure_channel/ble_advertisement_generator.h"
@@ -11,14 +15,8 @@
 #include "ash/services/secure_channel/foreground_eid_generator.h"
 #include "base/containers/flat_map.h"
 #include "base/memory/ptr_util.h"
-#include "chromeos/components/multidevice/beacon_seed.h"
-#include "chromeos/components/multidevice/logging/logging.h"
-#include "chromeos/components/multidevice/remote_device_cache.h"
-#include "chromeos/components/multidevice/remote_device_ref.h"
 
-namespace chromeos {
-
-namespace secure_channel {
+namespace ash::secure_channel {
 
 namespace {
 
@@ -235,6 +233,4 @@ void BluetoothHelperImpl::SetTestDoubles(
   foreground_eid_generator_ = std::move(foreground_eid_generator);
 }
 
-}  // namespace secure_channel
-
-}  // namespace chromeos
+}  // namespace ash::secure_channel

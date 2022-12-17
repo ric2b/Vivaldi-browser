@@ -14,7 +14,6 @@
 #include <string>
 #include <vector>
 
-#include "base/cxx17_backports.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
@@ -249,6 +248,12 @@ ShortcutsDatabase::Shortcut MakeShortcut(
 
 }  // namespace
 
+class MockHistoryService : public history::HistoryService {
+ public:
+  MockHistoryService() = default;
+  MOCK_METHOD1(DeleteURLs, void(const std::vector<GURL>&));
+};
+
 // ShortcutsProviderTest ------------------------------------------------------
 
 class ShortcutsProviderTest : public testing::Test {
@@ -275,21 +280,22 @@ class ShortcutsProviderTest : public testing::Test {
   scoped_refptr<ShortcutsProvider> provider_;
 };
 
-ShortcutsProviderTest::ShortcutsProviderTest() {
-  // `scoped_feature_list_` needs to be initialized as early as possible, to
-  // avoid data races caused by tasks on other threads accessing it.
-  scoped_feature_list_.InitAndDisableFeature(
-      omnibox::kPreserveLongerShortcutsText);
-}
+ShortcutsProviderTest::ShortcutsProviderTest() = default;
 
 void ShortcutsProviderTest::SetUp() {
   client_ = std::make_unique<FakeAutocompleteProviderClient>();
+  client_->set_history_service(std::make_unique<MockHistoryService>());
+  auto shortcuts_backend = base::MakeRefCounted<ShortcutsBackend>(
+      client_->GetTemplateURLService(), std::make_unique<SearchTermsData>(),
+      client_->GetHistoryService(), base::FilePath(), true);
+  shortcuts_backend->Init();
+  client_->set_shortcuts_backend(std::move(shortcuts_backend));
 
   ASSERT_TRUE(client_->GetShortcutsBackend());
   provider_ = base::MakeRefCounted<ShortcutsProvider>(client_.get());
   PopulateShortcutsBackendWithTestData(client_->GetShortcutsBackend(),
                                        shortcut_test_db,
-                                       base::size(shortcut_test_db));
+                                       std::size(shortcut_test_db));
 }
 
 void ShortcutsProviderTest::TearDown() {
@@ -540,10 +546,16 @@ TEST_F(ShortcutsProviderTest, DaysAgoMatches) {
 }
 
 TEST_F(ShortcutsProviderTest, CalculateScore) {
-  auto shortcut = MakeShortcut(u"test");
+  auto shortcut = MakeShortcut(u"test123");
 
   // Maximal score.
-  const int kMaxScore = CalculateScore("test", shortcut);
+  const int kMaxScore = CalculateScore("test123", shortcut);
+
+  // Score does not decrease when the input is at most 3 chars shorter than the
+  // shortcut text.
+  EXPECT_EQ(CalculateScore("test12", shortcut), kMaxScore);
+  EXPECT_EQ(CalculateScore("test1", shortcut), kMaxScore);
+  EXPECT_EQ(CalculateScore("test", shortcut), kMaxScore);
 
   // Score decreases as percent of the match is decreased.
   int score_three_quarters = CalculateScore("tes", shortcut);
@@ -581,31 +593,11 @@ TEST_F(ShortcutsProviderTest, CalculateScore) {
   EXPECT_LT(score_more_popular_two_weeks_old, kMaxScore);
 }
 
-class ShortcutsProviderPreserveLongerShortcutsTest
-    : public ShortcutsProviderTest {
- public:
-  ShortcutsProviderPreserveLongerShortcutsTest() {
-    // `scoped_feature_list_` needs to be initialized as early as possible, to
-    // avoid data races caused by tasks on other threads accessing it.
-    scoped_feature_list_.Reset();
-    scoped_feature_list_.InitAndEnableFeature(
-        omnibox::kPreserveLongerShortcutsText);
-  }
-};
-
-TEST_F(ShortcutsProviderPreserveLongerShortcutsTest,
-       CalculateScore_LongTextFeature) {
-  auto long_shortcut = MakeShortcut(u"test Yerevan");
-  // Maximal score.
-  const int kMaxScore = CalculateScore("test Yerevan", long_shortcut);
-  // Score does not decrease when up to 3 chars are missing.
-  EXPECT_EQ(CalculateScore("test Yere", long_shortcut), kMaxScore);
-  // Score decreases if more than 3 chars are missing.
-  EXPECT_LT(CalculateScore("test Yer", long_shortcut), kMaxScore);
-
-  auto short_shortcut = MakeShortcut(u"ab");
+TEST_F(ShortcutsProviderTest, CalculateScore_ShortShortcutText) {
   // Make sure there's no negative or weird scores when the shortcut text is
   // shorter than the 3 char adjustment.
+  const int kMaxScore = CalculateScore("test", MakeShortcut(u"test"));
+  auto short_shortcut = MakeShortcut(u"ab");
   EXPECT_EQ(CalculateScore("ab", short_shortcut), kMaxScore);
   EXPECT_EQ(CalculateScore("a", short_shortcut), kMaxScore);
 }
@@ -636,7 +628,7 @@ TEST_F(ShortcutsProviderTest, DeleteMatch) {
   size_t original_shortcuts_count = backend->shortcuts_map().size();
 
   PopulateShortcutsBackendWithTestData(backend, shortcuts_to_test_delete,
-                                       base::size(shortcuts_to_test_delete));
+                                       std::size(shortcuts_to_test_delete));
 
   EXPECT_EQ(original_shortcuts_count + 4, backend->shortcuts_map().size());
   EXPECT_FALSE(backend->shortcuts_map().end() ==

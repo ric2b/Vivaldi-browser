@@ -69,8 +69,7 @@ declare_args() {
 # lacros-chrome switches to target_os="chromeos"
 enable_scrambled_message_ids =
     enable_mojom_message_id_scrambling &&
-    (is_mac || is_win ||
-     (is_linux && !is_chromeos_ash && !is_chromecast && !is_chromeos_lacros) ||
+    (is_mac || is_win || (is_linux && !is_chromecast) ||
      ((enable_nacl || is_nacl) &&
       (target_os != "chromeos" && !chromeos_is_browser_only)))
 
@@ -956,6 +955,9 @@ template("mojom") {
     if (defined(shared_component_impl_macro)) {
       defines = [ shared_component_impl_macro ]
     }
+
+    # TODO(crbug.com/1292951): Remove this line.
+    configs -= [ "//build/config/compiler:prevent_unsafe_narrowing" ]
   }
 
   shared_cpp_library_target_name = "${target_name}_shared"
@@ -966,6 +968,9 @@ template("mojom") {
       }
       output_name = "$shared_component_output_name"
       public_deps = [ ":$shared_cpp_sources_target_name" ]
+
+      # TODO(crbug.com/1292951): Remove this line.
+      configs -= [ "//build/config/compiler:prevent_unsafe_narrowing" ]
     }
   } else {
     group(shared_cpp_library_target_name) {
@@ -1360,6 +1365,9 @@ template("mojom") {
             public_deps += config.traits_public_deps
           }
         }
+
+        # TODO(crbug.com/1292951): Remove this line.
+        configs -= [ "//build/config/compiler:prevent_unsafe_narrowing" ]
       }
     }
 

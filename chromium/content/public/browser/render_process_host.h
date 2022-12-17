@@ -20,7 +20,7 @@
 #include "base/tracing/protos/chrome_track_event.pbzero.h"
 #include "build/build_config.h"
 #include "content/common/content_export.h"
-#include "ipc/ipc_channel_proxy.h"
+#include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
 #include "media/media_buildflags.h"
 #include "media/mojo/mojom/video_decode_perf_history.mojom-forward.h"
@@ -64,6 +64,10 @@ class Token;
 namespace blink {
 class StorageKey;
 }  // namespace blink
+
+namespace IPC {
+class ChannelProxy;
+}  // namespace IPC
 
 namespace network {
 struct CrossOriginEmbedderPolicy;
@@ -269,7 +273,7 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // plugins, etc.
   //
   // This will never return ChildProcessHost::kInvalidUniqueID.
-  virtual int GetID() = 0;
+  virtual int GetID() const = 0;
 
   // Returns true iff the Init() was called and the process hasn't died yet.
   //
@@ -534,7 +538,7 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // This method is public so that it can be called from within //content, and
   // used by MockRenderProcessHost. It isn't meant to be called outside of
   // //content.
-  virtual ProcessLock GetProcessLock() = 0;
+  virtual ProcessLock GetProcessLock() const = 0;
 
   // Returns true if this process is locked to a particular site-specific
   // ProcessLock.  See the SetProcessLock() call above.
@@ -614,26 +618,15 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // Forces the renderer process to crash ASAP.
   virtual void ForceCrash() {}
 
-  // Controls whether the destructor of RenderProcessHost*Impl* will end up
-  // cleaning the memory used by the exception added via
-  // RenderProcessHostImpl::AddAllowedRequestInitiatorForPlugin.
-  //
-  // TODO(lukasza): https://crbug.com/652474: This method shouldn't be part of
-  // the //content public API, because it shouldn't be called by anyone other
-  // than RenderProcessHostImpl (from underneath
-  // RenderProcessHostImpl::AddAllowedRequestInitiatorForPlugin).
-  virtual void CleanupNetworkServicePluginExceptionsUponDestruction() = 0;
-
   // Returns a string that contains information useful for debugging
   // crashes related to RenderProcessHost objects staying alive longer than
   // the BrowserContext they are associated with.
   virtual std::string GetInfoForBrowserContextDestructionCrashReporting() = 0;
 
+  using TraceProto = perfetto::protos::pbzero::RenderProcessHost;
   // Write a representation of this object into a trace.
-  virtual void WriteIntoTrace(perfetto::TracedValue context) = 0;
   virtual void WriteIntoTrace(
-      perfetto::TracedProto<perfetto::protos::pbzero::RenderProcessHost>
-          proto) = 0;
+      perfetto::TracedProto<TraceProto> proto) const = 0;
 
 #if BUILDFLAG(CLANG_PROFILING_INSIDE_SANDBOX)
   // Ask the renderer process to dump its profiling data to disk. Invokes

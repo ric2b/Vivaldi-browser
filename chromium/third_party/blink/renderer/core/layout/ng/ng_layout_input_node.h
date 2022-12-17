@@ -20,7 +20,6 @@
 namespace blink {
 
 class ComputedStyle;
-class DisplayLockContext;
 class Document;
 class LayoutObject;
 class LayoutBox;
@@ -240,8 +239,8 @@ class CORE_EXPORT NGLayoutInputNode {
     return box_->ShouldApplyBlockSizeContainment();
   }
 
-  bool IsContainerForContainerQueries() const {
-    return box_->IsContainerForContainerQueries();
+  bool CanMatchSizeContainerQueries() const {
+    return box_->CanMatchSizeContainerQueries();
   }
 
   LogicalAxes ContainedAxes() const {
@@ -283,11 +282,6 @@ class CORE_EXPORT NGLayoutInputNode {
     return box_->DefaultIntrinsicContentBlockSize();
   }
 
-  // Display locking functionality.
-  const DisplayLockContext& GetDisplayLockContext() const {
-    DCHECK(box_->GetDisplayLockContext());
-    return *box_->GetDisplayLockContext();
-  }
   bool ChildLayoutBlockedByDisplayLock() const {
     return box_->ChildLayoutBlockedByDisplayLock();
   }
@@ -321,6 +315,8 @@ class CORE_EXPORT NGLayoutInputNode {
   void ShowNodeTree() const;
 #endif
 
+  void Trace(Visitor* visitor) const { visitor->Trace(box_); }
+
  protected:
   NGLayoutInputNode(LayoutBox* box, NGLayoutInputNodeType type)
       : box_(box), type_(type) {}
@@ -329,7 +325,7 @@ class CORE_EXPORT NGLayoutInputNode {
       absl::optional<LayoutUnit>* computed_inline_size,
       absl::optional<LayoutUnit>* computed_block_size) const;
 
-  UntracedMember<LayoutBox> box_;
+  Member<LayoutBox> box_;
 
   unsigned type_ : 1;  // NGLayoutInputNodeType
 };

@@ -37,7 +37,8 @@
             "description": "The title of the page when it was last loaded."
           },
           "keywordId": {
-            "type": "integer",
+            "type": "string",
+            "serialized_type": "int64",
             "description": "The database identifier of the used keyword for a search or -1 if this wasn't a search."
           },
           "terms": {
@@ -270,40 +271,6 @@
         }
       },
       {
-        "name": "setKeywordSearchTermsForURL",
-        "type": "function",
-        "description":"Stores the search terms and keyword used for a search of which the URL is present in history",
-        "parameters": [
-          {
-            "name": "url",
-            "type": "string",
-            "description": "The URL for which to add search terms"
-          },
-          {
-            "name": "keywordId",
-            "type": "integer",
-            "description": "A number identifying the keyword that was used"
-          },
-          {
-            "name": "searchTerms",
-            "type": "string",
-            "description": "The search terms to store"
-          }
-        ]
-      },
-      {
-        "name": "deleteAllSearchTermsForKeyword",
-        "type": "function",
-        "description": "Removes all search terms stored in history for a given keyword",
-        "parameters": [
-          {
-            "name": "keywordId",
-            "type": "integer",
-            "description": "A number identifying the keyword that was used"
-          }
-        ]
-      },
-      {
         "name": "getTypedHistory",
         "type": "function",
         "description": "Retrieves a list of items used to populate the typed URL results of the address bar",
@@ -315,7 +282,8 @@
           },
           {
             "name": "prefixKeywordId",
-            "type": "integer",
+            "type": "string",
+            "serialized_type": "int64",
             "description": "A number identifying a possible keyword prefixing the query or -1 if none."
           },
           {

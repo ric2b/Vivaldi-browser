@@ -8,7 +8,9 @@ import static androidx.test.espresso.Espresso.onView;
 import static androidx.test.espresso.action.ViewActions.click;
 import static androidx.test.espresso.assertion.ViewAssertions.doesNotExist;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
+import static androidx.test.espresso.matcher.ViewMatchers.hasDescendant;
 import static androidx.test.espresso.matcher.ViewMatchers.hasSibling;
+import static androidx.test.espresso.matcher.ViewMatchers.isChecked;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withChild;
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
@@ -21,6 +23,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.startsWith;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -29,6 +32,7 @@ import android.os.Bundle;
 import android.view.View;
 
 import androidx.annotation.StringRes;
+import androidx.test.espresso.contrib.RecyclerViewActions;
 import androidx.test.filters.SmallTest;
 
 import org.hamcrest.BaseMatcher;
@@ -58,8 +62,10 @@ import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.content_public.browser.test.NativeLibraryTestUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.test.util.RenderTestRule;
+import org.chromium.ui.test.util.ViewUtils;
 
 import java.io.IOException;
+import java.util.concurrent.ExecutionException;
 
 /** Tests {@link PrivacySandboxSettingsFragment}. */
 @RunWith(ChromeJUnit4ClassRunner.class)
@@ -80,7 +86,9 @@ public final class PrivacySandboxSettingsFragmentV3Test {
 
     @Rule
     public ChromeRenderTestRule mRenderTestRule =
-            ChromeRenderTestRule.Builder.withPublicCorpus().build();
+            ChromeRenderTestRule.Builder.withPublicCorpus()
+                    .setBugComponent(ChromeRenderTestRule.Component.UI_SETTINGS_PRIVACY)
+                    .build();
 
     @Rule
     public HistogramTestRule mHistogramTestRule = new HistogramTestRule();
@@ -116,6 +124,7 @@ public final class PrivacySandboxSettingsFragmentV3Test {
         fragmentArgs.putInt(PrivacySandboxSettingsFragment.PRIVACY_SANDBOX_REFERRER,
                 PrivacySandboxReferrer.PRIVACY_SETTINGS);
         mSettingsActivityTestRule.startSettingsActivity(fragmentArgs);
+        ViewUtils.onViewWaiting(withText(R.string.privacy_sandbox_trials_title));
     }
 
     private View getRootView(@StringRes int text) {
@@ -129,6 +138,15 @@ public final class PrivacySandboxSettingsFragmentV3Test {
         // Click on the image_button of the preference with |text|.
         onView(allOf(withId(R.id.image_button), withParent(hasSibling(withChild(withText(text))))))
                 .perform(click());
+    }
+
+    private void scrollToSetting(Matcher<View> matcher) {
+        onView(withId(R.id.recycler_view))
+                .perform(RecyclerViewActions.scrollTo(hasDescendant(matcher)));
+    }
+
+    private boolean isPrivacySandboxEnabled() throws ExecutionException {
+        return TestThreadUtils.runOnUiThreadBlocking(PrivacySandboxBridge::isPrivacySandboxEnabled);
     }
 
     @Test
@@ -147,7 +165,7 @@ public final class PrivacySandboxSettingsFragmentV3Test {
         mFakePrivacySandboxBridge.setCurrentTopTopics("Generated sample data", "More made up data");
         openPrivacySandboxSettings();
         onView(withText(R.string.privacy_sandbox_ad_personalization_title)).perform(click());
-        mRenderTestRule.render(getRootView(R.string.privacy_sandbox_topic_interests_category),
+        mRenderTestRule.render(getRootView(R.string.privacy_sandbox_topic_interests_subtitle),
                 "privacy_sandbox_ad_personalization_view");
     }
 
@@ -158,7 +176,7 @@ public final class PrivacySandboxSettingsFragmentV3Test {
         openPrivacySandboxSettings();
         onView(withText(R.string.privacy_sandbox_ad_personalization_title)).perform(click());
         onView(withText(R.string.privacy_sandbox_remove_interest_title)).perform(click());
-        mRenderTestRule.render(getRootView(R.string.privacy_sandbox_topic_interests_category),
+        mRenderTestRule.render(getRootView(R.string.privacy_sandbox_topic_interests_subtitle),
                 "privacy_sandbox_removed_interests_view");
     }
 
@@ -167,21 +185,57 @@ public final class PrivacySandboxSettingsFragmentV3Test {
     @Feature({"RenderTest"})
     public void testRenderLearnMoreView() throws IOException {
         openPrivacySandboxSettings();
-        onView(withText(containsString("Learn more"))).perform(click());
+        onView(withText(containsString("About"))).perform(click());
         mRenderTestRule.render(getRootView(R.string.privacy_sandbox_learn_more_title),
                 "privacy_sandbox_learn_more_view");
     }
 
     @Test
     @SmallTest
-    public void testMainSettingsView() throws IOException {
+    @Feature({"RenderTest"})
+    public void testRenderAdMeasurementView() throws IOException {
         openPrivacySandboxSettings();
-        assertTrue(PrivacySandboxBridge.isPrivacySandboxEnabled());
-        // Toggle sandbox settings.
+        onView(withText(R.string.privacy_sandbox_ad_measurement_title)).perform(click());
+        onView(withText(containsString("Ad measurement allows sites")))
+                .check(matches(isDisplayed()));
+        mRenderTestRule.render(getRootView(R.string.privacy_sandbox_ad_measurement_title),
+                "privacy_sandbox_ad_measurement_view");
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"RenderTest"})
+    public void testRenderSpamFraudView() throws IOException {
+        openPrivacySandboxSettings();
+        scrollToSetting(withText(R.string.privacy_sandbox_spam_fraud_title));
+        onView(withText(R.string.privacy_sandbox_spam_fraud_title)).perform(click());
+        mRenderTestRule.render(
+                getRootView(R.string.privacy_sandbox_spam_fraud_description_trials_on),
+                "privacy_sandbox_spam_fraud_view");
+    }
+
+    @Test
+    @SmallTest
+    public void testMainSettingsView() throws IOException, ExecutionException {
+        // Reset mock to test the real instance.
+        mocker.mock(PrivacySandboxBridgeJni.TEST_HOOKS, null);
+        Matcher<View> sandboxCheckboxMatcher = allOf(withId(R.id.switchWidget),
+                withParent(withParent(
+                        hasDescendant(withText(R.string.privacy_sandbox_trials_title)))));
+        // Initially setting is off.
+        openPrivacySandboxSettings();
+        onView(sandboxCheckboxMatcher).check(matches(not(isChecked())));
+        assertFalse("Disabled initially", isPrivacySandboxEnabled());
+
+        // Toggle sandbox settings on.
         onView(withText(R.string.privacy_sandbox_trials_title)).perform(click());
-        assertFalse(PrivacySandboxBridge.isPrivacySandboxEnabled());
+        onView(sandboxCheckboxMatcher).check(matches(isChecked()));
+        assertTrue("Then enabled", isPrivacySandboxEnabled());
+
+        // Toggle sandbox settings off.
         onView(withText(R.string.privacy_sandbox_trials_title)).perform(click());
-        assertTrue(PrivacySandboxBridge.isPrivacySandboxEnabled());
+        onView(sandboxCheckboxMatcher).check(matches(not(isChecked())));
+        assertFalse("And disabled again", isPrivacySandboxEnabled());
     }
 
     @Test
@@ -191,6 +245,8 @@ public final class PrivacySandboxSettingsFragmentV3Test {
         openPrivacySandboxSettings();
         onView(withText(R.string.privacy_sandbox_ad_personalization_title)).perform(click());
         onView(withText(R.string.privacy_sandbox_remove_interest_title))
+                .check(matches(isDisplayed()));
+        onView(withText(R.string.privacy_sandbox_ad_personalization_description_trials_on))
                 .check(matches(isDisplayed()));
         onView(withText(R.string.privacy_sandbox_topic_empty_state)).check(doesNotExist());
 
@@ -216,8 +272,59 @@ public final class PrivacySandboxSettingsFragmentV3Test {
         mFakePrivacySandboxBridge.setBlockedTopics();
         openPrivacySandboxSettings();
         onView(withText(R.string.privacy_sandbox_ad_personalization_title)).perform(click());
+        onView(withText(R.string.privacy_sandbox_ad_personalization_description_no_items))
+                .check(matches(isDisplayed()));
         onView(withText(R.string.privacy_sandbox_remove_interest_title)).check(doesNotExist());
         onView(withText(R.string.privacy_sandbox_topic_empty_state)).check(matches(isDisplayed()));
+    }
+
+    @Test
+    @SmallTest
+    public void testAdPersonalizationEmptyViewTrialsOff() throws IOException {
+        PrivacySandboxBridge.setPrivacySandboxEnabled(false);
+        openPrivacySandboxSettings();
+        onView(withText(R.string.privacy_sandbox_ad_personalization_title)).perform(click());
+        onView(withText(R.string.privacy_sandbox_ad_personalization_description_trials_off))
+                .check(matches(isDisplayed()));
+    }
+
+    @Test
+    @SmallTest
+    public void testAdMeasurementView() {
+        openPrivacySandboxSettings();
+        onView(withText(R.string.privacy_sandbox_ad_measurement_title)).perform(click());
+        onView(withText(startsWith("Ad measurement allows sites"))).check(matches(isDisplayed()));
+    }
+
+    @Test
+    @SmallTest
+    public void testAdMeasurementViewTrialsOff() {
+        PrivacySandboxBridge.setPrivacySandboxEnabled(false);
+        openPrivacySandboxSettings();
+        onView(withText(R.string.privacy_sandbox_ad_measurement_title)).perform(click());
+        onView(withText(startsWith("When trials are on, Ad measurement allows")))
+                .check(matches(isDisplayed()));
+    }
+
+    @Test
+    @SmallTest
+    public void testSpamFraudView() {
+        openPrivacySandboxSettings();
+        scrollToSetting(withText(R.string.privacy_sandbox_spam_fraud_title));
+        onView(withText(R.string.privacy_sandbox_spam_fraud_title)).perform(click());
+        onView(withText(R.string.privacy_sandbox_spam_fraud_description_trials_on))
+                .check(matches(isDisplayed()));
+    }
+
+    @Test
+    @SmallTest
+    public void testSpamFraudViewTrialsOff() {
+        PrivacySandboxBridge.setPrivacySandboxEnabled(false);
+        openPrivacySandboxSettings();
+        scrollToSetting(withText(R.string.privacy_sandbox_spam_fraud_title));
+        onView(withText(R.string.privacy_sandbox_spam_fraud_title)).perform(click());
+        onView(withText(R.string.privacy_sandbox_spam_fraud_description_trials_off))
+                .check(matches(isDisplayed()));
     }
 
     @Test

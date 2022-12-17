@@ -85,12 +85,14 @@ bool PWAMenuController::HandleCommand(int command_id) {
   switch (command_id) {
     case IDC_CREATE_SHORTCUT:
       web_app::CreateWebAppFromCurrentWebContents(
-          browser_, true /* force_shortcut_app */);
+          browser_,
+          web_app::WebAppInstallManager::WebAppInstallFlow::kCreateShortcut);
       return true;
 
     case IDC_INSTALL_PWA:
       web_app::CreateWebAppFromCurrentWebContents(
-          browser_, false /* force_shortcut_app */);
+          browser_,
+          web_app::WebAppInstallManager::WebAppInstallFlow::kInstallSite);
       return true;
 
     case IDC_OPEN_IN_PWA_WINDOW:

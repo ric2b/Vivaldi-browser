@@ -21,17 +21,21 @@
 <translation id="3377025655491224618">隐私标签</translation>
 <translation id="3504699618187058974">标签组</translation>
 <translation id="3518985090088779359">接受并继续</translation>
+<translation id="3571177741182643350">未读文章-离线可用：</translation>
 <translation id="3700829948786686853">欢迎使用 Vivaldi</translation>
 <translation id="3719826155360621982">首页</translation>
 <translation id="385051799172605136">上一页</translation>
+<translation id="399014816462153200">阅读文章：</translation>
 <translation id="4121750346708795461">使用此应用即表示您同意遵守 Vivaldi 的<ph name="BEGIN_LINK1" />最终用户许可协议<ph name="END_LINK1" />和<ph name="BEGIN_LINK2" />隐私政策<ph name="END_LINK2" />。</translation>
 <translation id="4137746084635924146">当前设备所用语言</translation>
+<translation id="4167670741834902166">新建隐身标签</translation>
 <translation id="4243710787042215766">在隐私标签中打开</translation>
 <translation id="4526803704855831732">隐私标签</translation>
 <translation id="4759238208242260848">下载</translation>
 <translation id="4883379392681899581">离开隐私模式</translation>
 <translation id="4943872375798546930">无结果</translation>
 <translation id="49576331685473090">内容拦截</translation>
+<translation id="5079259810715830221">当谷歌网站在其页面上要求加密预下载链接内容时，Vivaldi将通过谷歌服务器加密和预加载页面而不使用Cookie。这将对预加载页面隐藏您的身份。</translation>
 <translation id="5118676864324397542"><ph name="APP_NAME" /> 存储数据</translation>
 <translation id="5186185447130319458">隐私</translation>
 <translation id="5233638681132016545">新建标签</translation>
@@ -44,6 +48,7 @@
 <translation id="6585139692466700358">借助 Vivaldi 的翻译服务将网站翻译为其他语言</translation>
 <translation id="6593061639179217415">桌面版网站</translation>
 <translation id="6610147964972079463">关闭隐私标签</translation>
+<translation id="7029995644714925509">当某个网站在其页面上要求加密预下载链接内容时，Vivaldi将通过谷歌服务器加密和预加载页面而不使用Cookie。这将对预加载页面隐藏您的身份。</translation>
 <translation id="706339621163631076">浏览器隐私政策</translation>
 <translation id="732145680195464316">书签已保存至 <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">关于 Vivaldi</translation>

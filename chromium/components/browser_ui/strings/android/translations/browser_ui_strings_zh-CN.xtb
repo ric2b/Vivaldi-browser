@@ -77,6 +77,7 @@
 <translation id="2687403674020088961">阻止所有 Cookie（不建议）</translation>
 <translation id="2704606927547763573">已复制</translation>
 <translation id="2717722538473713889">电子邮件地址</translation>
+<translation id="2750481671343847896">网站可以显示来自身份服务的登录提示。</translation>
 <translation id="2785051990912111074">此选项会清除 <ph name="WEBSITE" /> 的 Cookie</translation>
 <translation id="2822354292072154809">确定要重置<ph name="CHOSEN_OBJECT_NAME" />的所有网站权限吗？</translation>
 <translation id="2870560284913253234">网站</translation>
@@ -112,6 +113,7 @@
 <translation id="3763247130972274048">在视频左侧或右侧点按两次即可跳过 10 秒</translation>
 <translation id="3797520601150691162">不对特定网站应用深色主题</translation>
 <translation id="381841723434055211">电话号码</translation>
+<translation id="3826050100957962900">第三方登录</translation>
 <translation id="3835233591525155343">您的设备使用情况</translation>
 <translation id="385051799172605136">返回</translation>
 <translation id="3859306556332390985">前进</translation>
@@ -122,7 +124,6 @@
 <translation id="3991845972263764475">已下载 <ph name="BYTES_DOWNLOADED_WITH_UNITS" />，总大小不明</translation>
 <translation id="4002066346123236978">标题</translation>
 <translation id="4008040567710660924">允许特定网站使用 Cookie。</translation>
-<translation id="4040330681741629921">当网站能以简化版视图显示时通知我</translation>
 <translation id="4046123991198612571">下一曲</translation>
 <translation id="4149994727733219643">使用简化版视图查看网页</translation>
 <translation id="4165986682804962316">网站设置</translation>
@@ -236,6 +237,7 @@
 <translation id="6643016212128521049">清除</translation>
 <translation id="6689172468748959065">个人资料照片</translation>
 <translation id="6697925417670533197">正在下载内容</translation>
+<translation id="6722828510648505498">屏蔽来自身份服务的登录提示。</translation>
 <translation id="6746124502594467657">下移</translation>
 <translation id="6749077623962119521">重置权限？</translation>
 <translation id="6766622839693428701">向下滑动即可关闭。</translation>
@@ -255,6 +257,7 @@
 <translation id="7087918508125750058">已选择 <ph name="ITEM_COUNT" /> 项。选项位于屏幕顶部附近</translation>
 <translation id="7141896414559753902">禁止网站显示弹出式窗口和重定向（推荐）</translation>
 <translation id="7176368934862295254"><ph name="KILOBYTES" /> KB</translation>
+<translation id="7180611975245234373">刷新</translation>
 <translation id="723171743924126238">选择图片</translation>
 <translation id="7243308994586599757">选项在靠近屏幕底部的位置</translation>
 <translation id="7250468141469952378">已选择 <ph name="ITEM_COUNT" /> 项</translation>
@@ -308,7 +311,9 @@
 <translation id="83792324527827022">有一个网站正在使用您的摄像头和麦克风</translation>
 <translation id="8380167699614421159">此网站会展示侵扰性或误导性广告</translation>
 <translation id="8394832520002899662">点按即可返回到网站</translation>
+<translation id="8409345997656833551">当文章能以简化版视图显示时通知我</translation>
 <translation id="8425213833346101688">更改</translation>
+<translation id="8428213095426709021">设置</translation>
 <translation id="8441146129660941386">后退</translation>
 <translation id="8444433999583714703">若要允许 <ph name="APP_NAME" /> 获取您的位置信息，您还需在 <ph name="BEGIN_LINK" />Android 设置<ph name="END_LINK" />中开启位置信息服务。</translation>
 <translation id="8447861592752582886">撤消设备权限</translation>

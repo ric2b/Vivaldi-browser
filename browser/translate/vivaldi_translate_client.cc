@@ -15,6 +15,7 @@
 #include "base/files/file_util.h"
 #include "base/strings/string_util.h"
 #include "base/vivaldi_switches.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/language/language_model_manager_factory.h"
@@ -55,7 +56,7 @@
 #include "ui/base/ui_base_features.h"
 #include "url/gurl.h"
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/android/android_theme_resources.h"
 #include "chrome/browser/ui/android/infobars/translate_compact_infobar.h"
 #else
@@ -107,10 +108,10 @@ std::string& VivaldiTranslateClient::GetTranslateScript() {
   return *translate_script;
 }
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
 constexpr base::FilePath::StringPieceType kTranslateBundleName(
     FILE_PATH_LITERAL("translate-bundle.js"));
-#endif  // !defined(OS_ANDROID)
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 namespace {
 std::string ReplaceServerUrl(std::string& script) {
@@ -127,7 +128,7 @@ std::string ReplaceServerUrl(std::string& script) {
 
 /* static */
 void VivaldiTranslateClient::LoadTranslationScript() {
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   base::CommandLine& command_line = *base::CommandLine::ForCurrentProcess();
   if (command_line.HasSwitch(apps::kLoadAndLaunchApp)) {
     base::CommandLine::StringType path =
@@ -143,7 +144,7 @@ void VivaldiTranslateClient::LoadTranslationScript() {
       }
     }
   }
-#endif  // !defined(OS_ANDROID)
+#endif  // !BUILDFLAG(IS_ANDROID)
   if (VivaldiTranslateClient::GetTranslateScript().empty()) {
     std::string script =
         ui::ResourceBundle::GetSharedInstance().LoadDataResourceString(
@@ -292,7 +293,7 @@ bool VivaldiTranslateClient::ShowTranslateUI(
   }
 
 // Translate uses a an infobar on Android (here)
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   // Infobar UI.
   DCHECK(!TranslateService::IsTranslateBubbleEnabled());
   translate::TranslateInfoBarDelegate::Create(
@@ -332,7 +333,7 @@ bool VivaldiTranslateClient::ShowTranslateUI(
         web_contents()->GetBrowserContext());
   }
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
-#endif  // OS_ANDROID
+#endif  // IS_ANDROID
 
   return true;
 }
@@ -359,7 +360,7 @@ VivaldiTranslateClient::GetTranslateAcceptLanguages() {
   return GetTranslateAcceptLanguages(web_contents()->GetBrowserContext());
 }
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 std::unique_ptr<infobars::InfoBar> VivaldiTranslateClient::CreateInfoBar(
     std::unique_ptr<translate::TranslateInfoBarDelegate> delegate) const {
   return std::make_unique<TranslateCompactInfoBar>(std::move(delegate));
@@ -414,7 +415,7 @@ void VivaldiTranslateClient::OnLanguageDetermined(
     GetTranslateManager()->NotifyLanguageDetected(details);
   }
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   // See ChromeTranslateClient::ManualTranslateOnReady
   if (manual_translate_on_ready_) {
     GetTranslateManager()->ShowTranslateUI(true);
@@ -424,7 +425,7 @@ void VivaldiTranslateClient::OnLanguageDetermined(
 }
 
 // The bubble is implemented only on the desktop platforms.
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
 #if 0
 ShowTranslateBubbleResult VivaldiTranslateClient::ShowBubble(
     translate::TranslateStep step,

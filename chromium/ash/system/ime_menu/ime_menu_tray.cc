@@ -9,6 +9,7 @@
 #include "ash/keyboard/keyboard_controller_impl.h"
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
 #include "ash/keyboard/virtual_keyboard_controller.h"
+#include "ash/metrics/user_metrics_recorder.h"
 #include "ash/public/cpp/system_tray_client.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/root_window_controller.h"
@@ -18,6 +19,7 @@
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_provider.h"
 #include "ash/style/icon_button.h"
+#include "ash/style/system_shadow.h"
 #include "ash/system/ime_menu/ime_list_view.h"
 #include "ash/system/model/system_tray_model.h"
 #include "ash/system/tray/detailed_view_delegate.h"
@@ -60,7 +62,7 @@ namespace {
 const int kEmojiButtonId = 1;
 
 // Insets for the title view (dp).
-constexpr gfx::Insets kTitleViewPadding(0, 0, 0, 16);
+constexpr auto kTitleViewPadding = gfx::Insets::TLBR(0, 0, 0, 16);
 
 // Returns the height range of ImeListView.
 gfx::Range GetImeListViewRange() {
@@ -93,7 +95,7 @@ class ImeMenuLabel : public views::Label {
     // Sometimes the label will be more than 2 characters, e.g. INTL and EXTD.
     // This border makes sure we only leave room for ~2 and the others are
     // truncated.
-    SetBorder(views::CreateEmptyBorder(gfx::Insets(0, 6)));
+    SetBorder(views::CreateEmptyBorder(gfx::Insets::VH(0, 6)));
   }
   ImeMenuLabel(const ImeMenuLabel&) = delete;
   ImeMenuLabel& operator=(const ImeMenuLabel&) = delete;
@@ -113,7 +115,9 @@ class ImeMenuImageView : public views::ImageView {
  public:
   METADATA_HEADER(ImeMenuImageView);
 
-  ImeMenuImageView() { SetBorder(views::CreateEmptyBorder(gfx::Insets(0, 6))); }
+  ImeMenuImageView() {
+    SetBorder(views::CreateEmptyBorder(gfx::Insets::VH(0, 6)));
+  }
   ImeMenuImageView(const ImeMenuImageView&) = delete;
   ImeMenuImageView& operator=(const ImeMenuImageView&) = delete;
   ~ImeMenuImageView() override = default;
@@ -130,18 +134,19 @@ class ImeTitleView : public views::BoxLayoutView {
     auto* color_provider = AshColorProvider::Get();
     SetBorder(views::CreatePaddedBorder(
         views::CreateSolidSidedBorder(
-            0, 0, kMenuSeparatorWidth, 0,
+            gfx::Insets::TLBR(0, 0, kMenuSeparatorWidth, 0),
             color_provider->GetContentLayerColor(
                 AshColorProvider::ContentLayerType::kSeparatorColor)),
-        gfx::Insets(kMenuSeparatorVerticalPadding - kMenuSeparatorWidth, 0)));
+        gfx::Insets::VH(kMenuSeparatorVerticalPadding - kMenuSeparatorWidth,
+                        0)));
     SetOrientation(views::BoxLayout::Orientation::kHorizontal);
     SetInsideBorderInsets(kTitleViewPadding);
     SetMinimumCrossAxisSize(kTrayPopupItemMinHeight);
 
     auto* title_label = AddChildView(std::make_unique<views::Label>(
         l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_IME)));
-    title_label->SetBorder(
-        views::CreateEmptyBorder(0, kMenuEdgeEffectivePadding, 1, 0));
+    title_label->SetBorder(views::CreateEmptyBorder(
+        gfx::Insets::TLBR(0, kMenuEdgeEffectivePadding, 1, 0)));
     title_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     title_label->SetEnabledColor(color_provider->GetContentLayerColor(
         AshColorProvider::ContentLayerType::kTextColorPrimary));
@@ -210,11 +215,11 @@ class ImeButtonsView : public views::View {
     SetLayoutManager(std::move(box_layout));
     SetBorder(views::CreatePaddedBorder(
         views::CreateSolidSidedBorder(
-            kMenuSeparatorWidth, 0, 0, 0,
+            gfx::Insets::TLBR(kMenuSeparatorWidth, 0, 0, 0),
             AshColorProvider::Get()->GetContentLayerColor(
                 AshColorProvider::ContentLayerType::kSeparatorColor)),
-        gfx::Insets(kMenuSeparatorVerticalPadding - kMenuSeparatorWidth,
-                    kMenuExtraMarginFromLeftEdge)));
+        gfx::Insets::VH(kMenuSeparatorVerticalPadding - kMenuSeparatorWidth,
+                        kMenuExtraMarginFromLeftEdge)));
 
     if (show_emoji) {
       emoji_button_ = new SystemMenuButton(
@@ -378,6 +383,12 @@ void ImeMenuTray::ShowImeMenuBubbleInternal() {
 
   bubble_ = std::make_unique<TrayBubbleWrapper>(this, bubble_view);
   SetIsActive(true);
+
+  // Create a system shadow for the tray bubble.
+  shadow_ = SystemShadow::CreateShadowForWidget(
+      bubble_->GetBubbleWidget(), SystemShadow::Type::kElevation12);
+  shadow_->SetRoundedCornerRadius(kTrayItemCornerRadius);
+  shadow_->SetContentBounds(gfx::Rect(bubble_view->GetBoundsInScreen().size()));
 }
 
 void ImeMenuTray::ShowKeyboardWithKeyset(input_method::ImeKeyset keyset) {
@@ -457,6 +468,7 @@ bool ImeMenuTray::PerformAction(const ui::Event& event) {
 
 void ImeMenuTray::CloseBubble() {
   bubble_.reset();
+  shadow_.reset();
   ime_list_view_ = nullptr;
   SetIsActive(false);
   shelf()->UpdateAutoHideState();

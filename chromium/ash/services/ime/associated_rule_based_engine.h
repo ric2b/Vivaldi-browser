@@ -5,7 +5,6 @@
 #ifndef ASH_SERVICES_IME_ASSOCIATED_RULE_BASED_ENGINE_H_
 #define ASH_SERVICES_IME_ASSOCIATED_RULE_BASED_ENGINE_H_
 
-#include "ash/services/ime/input_engine.h"
 #include "ash/services/ime/public/cpp/rulebased/engine.h"
 #include "ash/services/ime/public/cpp/suggestions.h"
 #include "ash/services/ime/public/mojom/input_method.mojom.h"
@@ -15,14 +14,13 @@
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 
-namespace chromeos {
+namespace ash {
 namespace ime {
 
 // Handles rule-based input methods such as Arabic and Vietnamese.
 // Rule-based input methods are based off deterministic rules and do not
 // provide features such as suggestions.
-class AssociatedRuleBasedEngine : public InputEngine,
-                                  public mojom::InputMethod {
+class AssociatedRuleBasedEngine : public mojom::InputMethod {
  public:
   // Returns nullptr if |ime_spec| is not valid for this RuleBasedEngine.
   static std::unique_ptr<AssociatedRuleBasedEngine> Create(
@@ -35,8 +33,7 @@ class AssociatedRuleBasedEngine : public InputEngine,
       delete;
   ~AssociatedRuleBasedEngine() override;
 
-  // InputEngine:
-  bool IsConnected() override;
+  bool IsConnected();
 
   // mojom::InputMethod overrides:
   // Most of these methods are deliberately empty because rule-based input
@@ -74,6 +71,6 @@ class AssociatedRuleBasedEngine : public InputEngine,
 };
 
 }  // namespace ime
-}  // namespace chromeos
+}  // namespace ash
 
 #endif  // ASH_SERVICES_IME_ASSOCIATED_RULE_BASED_ENGINE_H_

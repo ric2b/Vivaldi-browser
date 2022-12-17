@@ -5,7 +5,6 @@
 #include "chrome/browser/web_applications/adjustments/preinstalled_web_app_duplication_fixer.h"
 
 #include "base/metrics/histogram_functions.h"
-#include "base/task/post_task.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -100,13 +99,13 @@ void PreinstalledWebAppDuplicationFixer::ScanForDuplication() {
       ->AppRegistryCache()
       .ForAllApps([&installed_web_apps,
                    &installed_chrome_apps](const apps::AppUpdate& update) {
-        if (update.GetReadiness() != apps::Readiness::kReady)
+        if (update.Readiness() != apps::Readiness::kReady)
           return;
 
-        if (update.GetAppType() == apps::AppType::kWeb)
-          installed_web_apps.push_back(update.GetAppId());
-        else if (update.GetAppType() == apps::AppType::kChromeApp)
-          installed_chrome_apps.push_back(update.GetAppId());
+        if (update.AppType() == apps::AppType::kWeb)
+          installed_web_apps.push_back(update.AppId());
+        else if (update.AppType() == apps::AppType::kChromeApp)
+          installed_chrome_apps.push_back(update.AppId());
       });
 
   size_t fix_count = 0;

@@ -10,7 +10,6 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
@@ -123,7 +122,8 @@ HeadlessBrowserPolicyConnector::CreatePlatformProvider() {
   std::unique_ptr<AsyncPolicyLoader> loader(PolicyLoaderWin::Create(
       base::ThreadPool::CreateSequencedTaskRunner(
           {base::MayBlock(), base::TaskPriority::BEST_EFFORT}),
-      &platform_management_service_, kRegistryChromePolicyKey));
+      policy::PlatformManagementService::GetInstance(),
+      kRegistryChromePolicyKey));
   return std::make_unique<AsyncPolicyProvider>(GetSchemaRegistry(),
                                                std::move(loader));
 #elif BUILDFLAG(IS_MAC)

@@ -4,7 +4,6 @@
 
 #include <memory>
 
-#include "base/cxx17_backports.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
@@ -157,27 +156,26 @@ IN_PROC_BROWSER_TEST_F(FontUniqueNameBrowserTest,
 
   unsigned num_added_nodes = static_cast<unsigned>(
       content::EvalJs(shell(), "addTestNodes()").ExtractInt());
-  ASSERT_EQ(num_added_nodes, base::size(kExpectedFontFamilyNames));
+  ASSERT_EQ(num_added_nodes, std::size(kExpectedFontFamilyNames));
 
   std::unique_ptr<base::DictionaryValue> params =
       std::make_unique<base::DictionaryValue>();
   params->SetInteger("depth", 0);
   base::Value* result = SendCommand("DOM.getDocument", std::move(params));
-  result = result->FindPath({"root", "nodeId"});
-  ASSERT_TRUE(result);
-  ASSERT_TRUE(result->is_int());
+  absl::optional<int> nodeId =
+      result->GetDict().FindIntByDottedPath("root.nodeId");
+  ASSERT_TRUE(nodeId);
 
   params = std::make_unique<base::DictionaryValue>();
-  params->SetInteger("nodeId", result->GetInt());
+  params->SetInteger("nodeId", *nodeId);
   params->SetString("selector", ".testnode");
   result = SendCommand("DOM.querySelectorAll", std::move(params));
   // This needs a Clone() because node_list otherwise gets invalid after the
   // next SendCommand call.
-  base::Value node_list =
-      result->FindKeyOfType("nodeIds", base::Value::Type::LIST)->Clone();
-  base::Value::ConstListView nodes_view = node_list.GetListDeprecated();
+  const base::Value::List nodes_view =
+      result->GetDict().FindList("nodeIds")->Clone();
   ASSERT_EQ(nodes_view.size(), num_added_nodes);
-  ASSERT_EQ(nodes_view.size(), base::size(kExpectedFontFamilyNames));
+  ASSERT_EQ(nodes_view.size(), std::size(kExpectedFontFamilyNames));
   for (size_t i = 0; i < nodes_view.size(); ++i) {
     const base::Value& nodeId = nodes_view[i];
     params = std::make_unique<base::DictionaryValue>();
@@ -186,19 +184,16 @@ IN_PROC_BROWSER_TEST_F(FontUniqueNameBrowserTest,
         SendCommand("CSS.getPlatformFontsForNode", std::move(params));
     ASSERT_TRUE(font_info);
     ASSERT_TRUE(font_info->is_dict());
-    const base::Value* font_list = font_info->FindKey("fonts");
+    const base::Value::List* font_list = font_info->GetDict().FindList("fonts");
     ASSERT_TRUE(font_list);
-    ASSERT_TRUE(font_list->is_list());
-    base::span<const base::Value> font_info_list =
-        font_list->GetListDeprecated();
-    ASSERT_TRUE(font_info_list.size());
-    const base::Value& first_font_info = font_info_list[0];
+    ASSERT_TRUE(font_list->size());
+    const base::Value& first_font_info = font_list->front();
     ASSERT_TRUE(first_font_info.is_dict());
-    const base::Value* first_font_name = first_font_info.FindKey("familyName");
+    const std::string* first_font_name =
+        first_font_info.GetDict().FindString("familyName");
     ASSERT_TRUE(first_font_name);
-    ASSERT_TRUE(first_font_name->is_string());
-    ASSERT_GT(first_font_name->GetString().size(), 0u);
-    ASSERT_EQ(first_font_name->GetString(), kExpectedFontFamilyNames[i]);
+    ASSERT_GT(first_font_name->size(), 0u);
+    ASSERT_EQ(*first_font_name, kExpectedFontFamilyNames[i]);
   }
 }
 #endif

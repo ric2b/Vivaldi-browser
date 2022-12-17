@@ -9,7 +9,6 @@
 <translation id="1054153489933238809">Åpne det opprinnelige b&amp;ildet i en ny fane</translation>
 <translation id="1056898198331236512">Advarsel</translation>
 <translation id="1084824384139382525">Kopier lenkadr&amp;esse</translation>
-<translation id="1128109161498068552">Avvis sider som vil bruke systemeksklusive meldinger for å få tilgang til MIDI-enheter</translation>
 <translation id="1163931534039071049">&amp;Vis rammekilde</translation>
 <translation id="1165039591588034296">Feil</translation>
 <translation id="1175364870820465910">&amp;Skriv ut...</translation>
@@ -22,7 +21,6 @@
 <translation id="1297175357211070620">Mål</translation>
 <translation id="1303101771013849280">HTML-fil med bokmerker</translation>
 <translation id="1430915738399379752">Skriv ut</translation>
-<translation id="1433811987160647649">Spør før tilgang gis</translation>
 <translation id="1451375123200651445">Nettside, enkeltfil</translation>
 <translation id="1465176863081977902">K&amp;opier lydadressen</translation>
 <translation id="1476607407192946488">&amp;Språkinnstillinger</translation>
@@ -99,13 +97,11 @@
 <translation id="2783321960289401138">Opprett snarvei …</translation>
 <translation id="2785873697295365461">Filbeskrivelser</translation>
 <translation id="2809586584051668049">og <ph name="NUMBER_ADDITIONAL_DISABLED" /> til</translation>
-<translation id="2812989263793994277">Ikke vis noen bilder</translation>
 <translation id="2850541429955027218">Legg til tema</translation>
 <translation id="2861941300086904918">Sikkerhetsadministrator for Native Client</translation>
 <translation id="2881076733170862447">Når du klikker på utvidelsen</translation>
 <translation id="2889064240420137087">Åpne lenken med...</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> kunne ikke kommunisere med skriveren. Sørg for at skriveren er plugget i, og prøv igjen.</translation>
-<translation id="2904456025988372123">Spør når et nettsted prøver å laste ned filer automatisk etter første fil</translation>
 <translation id="2913331724188855103">Tillat sider å lagre og lese infokapsler (anbefales)</translation>
 <translation id="2931157624143513983">Tilpass til det utskrivbare området</translation>
 <translation id="2932085390869194046">Foreslå passord...</translation>
@@ -126,7 +122,6 @@
 <translation id="3127156390846601284">Dette sletter all data lagret på din enhet for alle viste nettsider. Ønsker du å fortsette?</translation>
 <translation id="3129173833825111527">Venstremarg</translation>
 <translation id="3144647712221361880">Åpne lenken som</translation>
-<translation id="3154429428035006212">Offline i mer enn en måned</translation>
 <translation id="3222066309010235055">Forhåndsrendring: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Velg rotmappen til utvidelsen som skal pakkes. For å oppdatere en utvidelse må du også velge den private nøkkelen som skal brukes.</translation>
 <translation id="3280237271814976245">L&amp;agre som...</translation>
@@ -165,7 +160,6 @@
 <translation id="3838085852053358637">Utvidelsen kunne ikke lastes inn</translation>
 <translation id="383891835335927981">Forvalgt forstørrelsesnivå for alle sider</translation>
 <translation id="385051799172605136">Tilbake</translation>
-<translation id="3899879303189199559">Offline i mer enn et år</translation>
 <translation id="3905761538810670789">Reparer app</translation>
 <translation id="3908501907586732282">Aktiver utvidelse</translation>
 <translation id="3909701002594999354">Vis alle &amp;kontroller</translation>
@@ -192,7 +186,6 @@
 <translation id="4200983522494130825">Ny &amp;fane</translation>
 <translation id="4225397296022057997">På alle nettsteder</translation>
 <translation id="4256316378292851214">La&amp;gre video som...</translation>
-<translation id="4278390842282768270">Tillatt</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K aktivt)</translation>
 <translation id="4345587454538109430">Konfigurer...</translation>
 <translation id="4348766275249686434">Samle feil</translation>
@@ -222,10 +215,8 @@
 <translation id="4988526792673242964">Sider</translation>
 <translation id="49896407730300355">Roter mot klokken</translation>
 <translation id="4989966318180235467">Inspiser &amp;bakgrunnsside</translation>
-<translation id="4994474651455208930">Tillat sider å spørre om overtagelse av protokollhåndtering</translation>
 <translation id="5000922062037820727">Blokkert (anbefales)</translation>
 <translation id="5027562294707732951">Legg til utvidelse</translation>
-<translation id="5036662165765606524">Ikke tillat noen sider å laste ned flere filer automatisk</translation>
 <translation id="5039804452771397117">Tillat</translation>
 <translation id="5057110919553308744">Når du klikker på utvidelsen</translation>
 <translation id="5059526285558225588">Velg hva du vil dele</translation>
@@ -238,7 +229,6 @@
 <translation id="5233231016133573565">Prosess-ID</translation>
 <translation id="5233736638227740678">&amp;Lim inn</translation>
 <translation id="5256861893479663409">På alle nettsteder</translation>
-<translation id="5265562206369321422">Offline i mer enn en uke</translation>
 <translation id="5269977353971873915">Utskrift mislyktes</translation>
 <translation id="5284445933715251131">Fortsett nedlastingen</translation>
 <translation id="52912272896845572">Fil med privat nøkkel er ugyldig.</translation>
@@ -294,7 +284,6 @@
 <translation id="6122081475643980456">Din internettilkobling blir kontrollert</translation>
 <translation id="6147020289383635445">Forhåndsvisning av utskrift feilet.</translation>
 <translation id="6156863943908443225">Skriptbuffer</translation>
-<translation id="6169666352732958425">Kunne ikke caste skrivebord.</translation>
 <translation id="6196854373336333322">Utvidelsen "<ph name="EXTENSION_NAME" />" har tatt kontroll over proxy-innstillingene dine, noe som betyr at den kan endre, ødelegge og tjuvlytte på alt du gjør på nettet. Hvis du er usikker på hvorfor denne endringen oppstod, vil du trolig ikke beholde den.</translation>
 <translation id="6200151268994853226">Administrer utvidelsen</translation>
 <translation id="6206311232642889873">Kop&amp;ier bilde</translation>
@@ -328,7 +317,6 @@
 <translation id="6798954102094737107">Programtillegg: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Behold endringene</translation>
 <translation id="6817174620439930047">Spør når en side ønsker å bruke systemeksklusive meldinger for tilgang til MIDI-enheter (anbefales)</translation>
-<translation id="682123305478866682">Cast skrivebordet</translation>
 <translation id="6824564591481349393">Kopier &amp;e-postadresse</translation>
 <translation id="6840155290835956714">Spør før sending</translation>
 <translation id="6886871292305414135">Åpne lenken i en ny &amp;fane</translation>
@@ -346,7 +334,6 @@
 <translation id="708060913198414444">K&amp;opier lydadressen</translation>
 <translation id="7175353351958621980">Lastet fra:</translation>
 <translation id="7186088072322679094">Behold i verktøylinjen</translation>
-<translation id="7270858098575133036">Spør når en side ønsker å sende systemeksklusive meldinger for tilgang til MIDI-enheter</translation>
 <translation id="7287143125007575591">Ingen tilgang.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7385854874724088939">Noe gikk galt under utskriften.  Sjekk printeren og prøv igjen.</translation>
@@ -369,7 +356,6 @@
 <translation id="7704305437604973648">Oppgave</translation>
 <translation id="7710568461918838723">&amp;Cast...</translation>
 <translation id="7750228210027921155">Bilde-i-bilde</translation>
-<translation id="7751260505918304024">Vis alle</translation>
 <translation id="7760004034676677601">Er dette oppstartssiden du forventet?</translation>
 <translation id="7771452384635174008">Oppsett</translation>
 <translation id="7782102568078991263">Ingen flere forslag fra Google</translation>
@@ -382,9 +368,7 @@
 <translation id="7849264908733290972">Åpne b&amp;ilde i ny fane</translation>
 <translation id="7857949311770343000">Er dette ny fane-siden du forventet?</translation>
 <translation id="786073089922909430">Tjeneste: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7885253890047913815">Nylige mål</translation>
 <translation id="7903925330883316394">Verktøy: <ph name="UTILITY_TYPE" /></translation>
-<translation id="7938594894617528435">For øyeblikket offline</translation>
 <translation id="7947962633355574091">K&amp;opier videoadressen</translation>
 <translation id="7966241909927244760">K&amp;opier bildeadressen</translation>
 <translation id="7973394300052703468">Nytt &amp;privatvindu</translation>
@@ -427,10 +411,8 @@ Ta godt vare på nøkkelfilen. Du vil trenge den for å lage nye versjoner av ut
 <translation id="8708000541097332489">Tøm ved avslutning</translation>
 <translation id="8714838604780058252">Bakgrunnsgrafikk</translation>
 <translation id="8725066075913043281">Prøv igjen</translation>
-<translation id="8757090071857742562">Kunne ikke caste skrivebord.  Sjekk om du godtok forespørselen om å starte skjermdeling.</translation>
 <translation id="8774934320277480003">Toppmarg</translation>
 <translation id="8798099450830957504">Forvalg</translation>
-<translation id="8800004011501252845">Viser mål for</translation>
 <translation id="8808478386290700967">Nettmarked</translation>
 <translation id="8823514049557262177">Kopier lenkte&amp;kst</translation>
 <translation id="8823704566850948458">Foreslå passord…</translation>
@@ -443,7 +425,6 @@ Ta godt vare på nøkkelfilen. Du vil trenge den for å lage nye versjoner av ut
 <translation id="8962083179518285172">Skjul detaljer</translation>
 <translation id="8973557916016709913">Opphev forstørrelsesnivå</translation>
 <translation id="897939795688207351">På <ph name="ORIGIN" /></translation>
-<translation id="8996526648899750015">Legg til konto...</translation>
 <translation id="9003647077635673607">Tillat på alle nettsider</translation>
 <translation id="9027459031423301635">Åpne lenken i ny &amp;fane</translation>
 <translation id="9056810968620647706">Ingen treff.</translation>

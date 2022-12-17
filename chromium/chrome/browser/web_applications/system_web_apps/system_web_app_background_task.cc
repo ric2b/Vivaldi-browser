@@ -28,9 +28,6 @@ SystemAppBackgroundTaskInfo::SystemAppBackgroundTaskInfo(
     bool open_immediately)
     : period(period), url(url), open_immediately(open_immediately) {}
 
-// static
-const char SystemAppBackgroundTask::kBackgroundStartDelayHistogramName[];
-
 SystemAppBackgroundTask::SystemAppBackgroundTask(
     Profile* profile,
     const SystemAppBackgroundTaskInfo& info)
@@ -40,8 +37,6 @@ SystemAppBackgroundTask::SystemAppBackgroundTask(
       timer_(std::make_unique<base::OneShotTimer>()),
       url_(info.url),
       period_(info.period),
-      opened_count_(0),
-      timer_activated_count_(0),
       open_immediately_(info.open_immediately),
       delegate_(this) {}
 
@@ -104,9 +99,6 @@ void SystemAppBackgroundTask::MaybeOpenPage() {
                   base::BindOnce(&SystemAppBackgroundTask::MaybeOpenPage,
                                  weak_ptr_factory_.GetWeakPtr()));
   }
-
-  base::UmaHistogramLongTimes(kBackgroundStartDelayHistogramName,
-                              polling_duration);
 
   polling_since_time_ = base::Time();
   state_ = WAIT_PERIOD;

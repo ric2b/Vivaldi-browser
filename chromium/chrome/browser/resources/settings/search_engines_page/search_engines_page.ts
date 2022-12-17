@@ -45,7 +45,6 @@ type SearchEngineDeleteEvent = CustomEvent<{
 
 export interface SettingsSearchEnginesPageElement {
   $: {
-    addSearchEngine: HTMLElement,
     extensions: IronListElement,
     keyboardShortcutSettingGroup: SettingsRadioGroupElement,
   };
@@ -174,7 +173,7 @@ export class SettingsSearchEnginesPageElement extends
   private browserProxy_: SearchEnginesBrowserProxy =
       SearchEnginesBrowserProxyImpl.getInstance();
 
-  ready() {
+  override ready() {
     super.ready();
 
     this.browserProxy_.getSearchEnginesList().then(
@@ -248,7 +247,8 @@ export class SettingsSearchEnginesPageElement extends
 
   private onAddSearchEngineTap_(e: Event) {
     e.preventDefault();
-    this.openEditDialog_(null, this.$.addSearchEngine);
+    this.openEditDialog_(
+        null, this.shadowRoot!.querySelector('#addSearchEngine')!);
   }
 
   private computeShowExtensionsList_(): boolean {

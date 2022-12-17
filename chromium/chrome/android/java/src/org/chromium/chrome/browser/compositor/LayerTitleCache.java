@@ -28,6 +28,10 @@ import org.chromium.ui.resources.dynamics.BitmapDynamicResource;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 import org.chromium.url.GURL;
 
+// Vivaldi
+import org.chromium.chrome.browser.tab.state.CriticalPersistedTabData;
+import org.vivaldi.browser.common.VivaldiUtils;
+
 /**
  * A version of the {@link LayerTitleCache} that builds native cc::Layer objects
  * that represent the cached title textures.
@@ -52,6 +56,9 @@ public class LayerTitleCache {
     protected TitleBitmapFactory mStandardTitleBitmapFactory;
     /** Responsible for building incognito or dark theme titles. */
     protected TitleBitmapFactory mDarkTitleBitmapFactory;
+
+    // Vivaldi
+    boolean mIsStackStrip;
 
     /**
      * Builds an instance of the LayerTitleCache.
@@ -97,7 +104,7 @@ public class LayerTitleCache {
         if (mTabModelSelector == null) return;
 
         Tab tab = mTabModelSelector.getTabById(tabId);
-        if (tab == null) return;
+        if (tab == null || tab.isDestroyed()) return;
 
         getUpdatedTitle(tab, "");
     }
@@ -109,6 +116,16 @@ public class LayerTitleCache {
         boolean fetchFaviconFromHistory = tab.isNativePage() || tab.getWebContents() == null;
 
         String titleString = getTitleForTab(tab, defaultTitle);
+
+        // Note(david@vivaldi.com): Retrieve group title if applicable.
+        if (VivaldiUtils.hasRelatedTabs(mTabModelSelector, tab.getId()) && !mIsStackStrip) {
+            int rootId = CriticalPersistedTabData.from(tab).getRootId();
+            String rootString =
+                    mContext.getSharedPreferences("tab_group_titles", Context.MODE_PRIVATE)
+                            .getString(String.valueOf(rootId), null);
+            if (rootString != null && !mIsStackStrip) titleString = rootString;
+        }
+
         getUpdatedTitleInternal(tab, titleString, fetchFaviconFromHistory);
         if (fetchFaviconFromHistory) fetchFaviconForTab(tab);
         return titleString;
@@ -269,6 +286,11 @@ public class LayerTitleCache {
         public int getTitleResId() {
             return mTitle.getResId();
         }
+    }
+
+    /** Vivaldi **/
+    public void setIsStackStrip(boolean isStackStrip) {
+        mIsStackStrip = isStackStrip;
     }
 
     @NativeMethods

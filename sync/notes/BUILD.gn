@@ -24,6 +24,8 @@ static_library("sync_notes") {
     "parent_guid_preprocessing.h",
     "synced_note_tracker.cc",
     "synced_note_tracker.h",
+    "synced_note_tracker_entity.cc",
+    "synced_note_tracker_entity.h",
   ]
 
   deps = [

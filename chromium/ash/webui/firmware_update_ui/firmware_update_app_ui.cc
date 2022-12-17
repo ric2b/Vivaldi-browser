@@ -19,7 +19,6 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "ui/resources/grit/webui_generated_resources.h"
-#include "ui/resources/grit/webui_resources.h"
 #include "ui/webui/mojo_web_ui_controller.h"
 
 namespace ash {
@@ -61,7 +60,8 @@ void AddFirmwareUpdateAppStrings(content::WebUIDataSource* source) {
       {"restartingFooterText", IDS_FIRMWARE_RESTARTING_FOOTER_TEXT},
       {"restartingTitleText", IDS_FIRMWARE_RESTARTING_TITLE_TEXT},
       {"upToDate", IDS_FIRMWARE_UP_TO_DATE_TEXT},
-      {"versionText", IDS_FIRMWARE_VERSION_TEXT}};
+      {"versionText", IDS_FIRMWARE_VERSION_TEXT},
+      {"proceedConfirmationText", IDS_FIRMWARE_PROCEED_UPDATE_CONFIRMATION}};
 
   source->AddLocalizedStrings(kLocalizedStrings);
   source->UseStringsJs();
@@ -71,8 +71,9 @@ void AddFirmwareUpdateAppStrings(content::WebUIDataSource* source) {
 
 FirmwareUpdateAppUI::FirmwareUpdateAppUI(content::WebUI* web_ui)
     : ui::MojoWebDialogUI(web_ui) {
-  auto source = base::WrapUnique(
-      content::WebUIDataSource::Create(kChromeUIFirmwareUpdateAppHost));
+  content::WebUIDataSource* source = content::WebUIDataSource::CreateAndAdd(
+      web_ui->GetWebContents()->GetBrowserContext(),
+      kChromeUIFirmwareUpdateAppHost);
   source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::ScriptSrc,
       "script-src chrome://resources chrome://test 'self';");
@@ -80,13 +81,10 @@ FirmwareUpdateAppUI::FirmwareUpdateAppUI(content::WebUI* web_ui)
 
   const auto resources = base::make_span(kAshFirmwareUpdateAppResources,
                                          kAshFirmwareUpdateAppResourcesSize);
-  SetUpWebUIDataSource(source.get(), resources,
+  SetUpWebUIDataSource(source, resources,
                        IDR_ASH_FIRMWARE_UPDATE_APP_INDEX_HTML);
 
-  AddFirmwareUpdateAppStrings(source.get());
-
-  auto* browser_context = web_ui->GetWebContents()->GetBrowserContext();
-  content::WebUIDataSource::Add(browser_context, source.release());
+  AddFirmwareUpdateAppStrings(source);
 }
 
 FirmwareUpdateAppUI::~FirmwareUpdateAppUI() = default;

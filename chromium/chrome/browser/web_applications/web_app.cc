@@ -19,6 +19,7 @@
 #include "chrome/browser/web_applications/web_app_utils.h"
 #include "components/sync/base/time.h"
 #include "third_party/blink/public/common/manifest/manifest_util.h"
+#include "third_party/blink/public/common/permissions_policy/policy_helper_public.h"
 #include "third_party/blink/public/mojom/manifest/manifest.mojom.h"
 #include "ui/gfx/color_utils.h"
 
@@ -55,8 +56,6 @@ std::string OsIntegrationStateToString(OsIntegrationState state) {
 
 WebApp::WebApp(const AppId& app_id)
     : app_id_(app_id),
-      display_mode_(DisplayMode::kUndefined),
-      user_display_mode_(DisplayMode::kUndefined),
       chromeos_data_(IsChromeOsDataMandatory()
                          ? absl::make_optional<WebAppChromeOsData>()
                          : absl::nullopt) {}
@@ -78,11 +77,11 @@ const SortedSizesPx& WebApp::downloaded_icon_sizes(IconPurpose purpose) const {
   }
 }
 
-void WebApp::AddSource(Source::Type source) {
+void WebApp::AddSource(WebAppManagement::Type source) {
   sources_[source] = true;
 }
 
-void WebApp::RemoveSource(Source::Type source) {
+void WebApp::RemoveSource(WebAppManagement::Type source) {
   sources_[source] = false;
 }
 
@@ -90,7 +89,7 @@ bool WebApp::HasAnySources() const {
   return sources_.any();
 }
 
-bool WebApp::HasOnlySource(Source::Type source) const {
+bool WebApp::HasOnlySource(WebAppManagement::Type source) const {
   WebAppSources specified_sources;
   specified_sources[source] = true;
   return HasAnySpecifiedSourcesAndNoOtherSources(sources_, specified_sources);
@@ -101,27 +100,27 @@ WebAppSources WebApp::GetSources() const {
 }
 
 bool WebApp::IsSynced() const {
-  return sources_[Source::kSync];
+  return sources_[WebAppManagement::kSync];
 }
 
 bool WebApp::IsPreinstalledApp() const {
-  return sources_[Source::kDefault];
+  return sources_[WebAppManagement::kDefault];
 }
 
 bool WebApp::IsPolicyInstalledApp() const {
-  return sources_[Source::kPolicy];
+  return sources_[WebAppManagement::kPolicy];
 }
 
 bool WebApp::IsSystemApp() const {
-  return sources_[Source::kSystem];
+  return sources_[WebAppManagement::kSystem];
 }
 
 bool WebApp::IsWebAppStoreInstalledApp() const {
-  return sources_[Source::kWebAppStore];
+  return sources_[WebAppManagement::kWebAppStore];
 }
 
 bool WebApp::IsSubAppInstalledApp() const {
-  return sources_[Source::kSubApp];
+  return sources_[WebAppManagement::kSubApp];
 }
 
 bool WebApp::CanUserUninstallWebApp() const {
@@ -129,20 +128,22 @@ bool WebApp::CanUserUninstallWebApp() const {
 }
 
 bool WebApp::WasInstalledByUser() const {
-  return sources_[Source::kSync] || sources_[Source::kWebAppStore];
+  return sources_[WebAppManagement::kSync] ||
+         sources_[WebAppManagement::kWebAppStore];
 }
 
-Source::Type WebApp::GetHighestPrioritySource() const {
+WebAppManagement::Type WebApp::GetHighestPrioritySource() const {
   // Enumerators in Source enum are declaretd in the order of priority.
   // Top priority sources are declared first.
-  for (int i = Source::kMinValue; i <= Source::kMaxValue; ++i) {
-    auto source = static_cast<Source::Type>(i);
+  for (int i = WebAppManagement::kMinValue; i <= WebAppManagement::kMaxValue;
+       ++i) {
+    auto source = static_cast<WebAppManagement::Type>(i);
     if (sources_[source])
       return source;
   }
 
   NOTREACHED();
-  return Source::kMaxValue;
+  return WebAppManagement::kMaxValue;
 }
 
 void WebApp::SetName(const std::string& name) {
@@ -380,7 +381,7 @@ void WebApp::SetParentAppId(const absl::optional<AppId>& parent_app_id) {
 }
 
 void WebApp::SetPermissionsPolicy(
-    std::vector<PermissionsPolicyDeclaration> permissions_policy) {
+    blink::ParsedPermissionsPolicy permissions_policy) {
   permissions_policy_ = std::move(permissions_policy);
 }
 
@@ -409,6 +410,9 @@ WebApp::SyncFallbackData::~SyncFallbackData() = default;
 
 WebApp::SyncFallbackData::SyncFallbackData(
     const SyncFallbackData& sync_fallback_data) = default;
+
+WebApp::SyncFallbackData::SyncFallbackData(
+    SyncFallbackData&& sync_fallback_data) noexcept = default;
 
 WebApp::SyncFallbackData& WebApp::SyncFallbackData::operator=(
     SyncFallbackData&& sync_fallback_data) = default;
@@ -626,9 +630,6 @@ base::Value WebApp::AsDebugValue() const {
         "launch_handler", base::Value(base::Value::Type::DICTIONARY));
     launch_handler_json.SetStringKey(
         "route_to", ConvertToString(launch_handler_->route_to));
-    launch_handler_json.SetStringKey(
-        "navigate_existing_client",
-        ConvertToString(launch_handler_->navigate_existing_client));
   } else {
     root.SetKey("launch_handler", base::Value());
   }
@@ -651,13 +652,21 @@ base::Value WebApp::AsDebugValue() const {
   if (!permissions_policy_.empty()) {
     base::Value& policy_list = *root.SetKey(
         "permissions_policy", base::Value(base::Value::Type::LIST));
+    const auto& feature_to_name_map =
+        blink::GetPermissionsPolicyFeatureToNameMap();
     for (const auto& decl : permissions_policy_) {
       base::Value json_decl(base::Value::Type::DICTIONARY);
-      json_decl.SetStringKey("feature", decl.feature);
-      base::Value& allowlist_json =
-          *json_decl.SetKey("allowlist", base::Value(base::Value::Type::LIST));
-      for (const std::string& origin : decl.allowlist)
-        allowlist_json.Append(origin);
+      const auto& feature_name = feature_to_name_map.find(decl.feature);
+      if (feature_name == feature_to_name_map.end()) {
+        continue;
+      }
+      json_decl.SetStringKey("feature", feature_name->second);
+      base::Value& allowlist_json = *json_decl.SetKey(
+          "allowed_origins", base::Value(base::Value::Type::LIST));
+      for (const auto& origin : decl.allowed_origins)
+        allowlist_json.Append(origin.Serialize().c_str());
+      json_decl.SetBoolKey("matches_all_origins", decl.matches_all_origins);
+      json_decl.SetBoolKey("matches_opaque_src", decl.matches_opaque_src);
       policy_list.Append(std::move(json_decl));
     }
   }
@@ -682,15 +691,15 @@ base::Value WebApp::AsDebugValue() const {
 
   base::Value& sources =
       *root.SetKey("sources", base::Value(base::Value::Type::LIST));
-  for (int i = Source::Type::kMinValue; i <= Source::Type::kMaxValue; ++i) {
+  for (int i = WebAppManagement::Type::kMinValue;
+       i <= WebAppManagement::Type::kMaxValue; ++i) {
     if (sources_[i])
-      sources.Append(ConvertToString(static_cast<Source::Type>(i)));
+      sources.Append(ConvertToString(static_cast<WebAppManagement::Type>(i)));
   }
 
   root.SetStringKey("start_url", ConvertToString(start_url_));
 
-  root.SetKey("sync_fallback_data",
-              base::Value(sync_fallback_data_.AsDebugValue()));
+  root.SetKey("sync_fallback_data", sync_fallback_data_.AsDebugValue());
 
   root.SetStringKey("theme_color", ColorToString(theme_color_));
 

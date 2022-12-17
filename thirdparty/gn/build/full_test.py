@@ -33,7 +33,7 @@ def Trial(gn_path_to_use, save_out_dir=None):
 
 def main():
   if len(sys.argv) < 3 or len(sys.argv) > 4:
-    print 'Usage: full_test.py /chrome/tree/at/762a25542878 rel_gn_path [clean]'
+    print('Usage: full_test.py /chrome/tree/at/762a25542878 rel_gn_path [clean]')
     return 1
 
   if len(sys.argv) == 4:
@@ -57,7 +57,7 @@ def main():
 
   # First, do a comparison to make sure the output between the two gn binaries
   # actually matches.
-  print 'Confirming output matches...'
+  print('Confirming output matches...')
   dir_a = os.path.join('out', 'a')
   dir_b = os.path.join('out', 'b')
   Trial(in_chrome_tree_gn, dir_a)
@@ -66,13 +66,13 @@ def main():
 
   # Then, some time trials.
   TRIALS = 5
-  print 'Comparing performance... (takes a while)'
+  print('Comparing performance... (takes a while)')
   time_a = timeit.timeit('Trial("%s")' % in_chrome_tree_gn, number=TRIALS,
                          setup='from __main__ import Trial')
   time_b = timeit.timeit('Trial("%s")' % our_gn, number=TRIALS,
                          setup='from __main__ import Trial')
-  print 'In-tree gn avg: %.3fs' % (time_a / TRIALS)
-  print 'Our gn avg: %.3fs' % (time_b / TRIALS)
+  print('In-tree gn avg: %.3fs' % (time_a / TRIALS))
+  print('Our gn avg: %.3fs' % (time_b / TRIALS))
 
   return 0
 

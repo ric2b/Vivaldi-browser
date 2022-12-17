@@ -12,6 +12,7 @@ const RECT_COLOR = 'rgba(249, 171, 0, 0.8)';
 /**
  * Rotates the given coordinates in [0, 1] square space by the given
  * orientation.
+ *
  * @return The rotated [x, y].
  */
 function rotate(x: number, y: number, orientation: number): [number, number] {
@@ -24,8 +25,9 @@ function rotate(x: number, y: number, orientation: number): [number, number] {
       return [1.0 - x, 1.0 - y];
     case 270:
       return [1.0 - y, x];
+    default:
+      assertNotReached('Unexpected orientation');
   }
-  assertNotReached('Unexpected orientation');
 }
 
 /**
@@ -33,9 +35,11 @@ function rotate(x: number, y: number, orientation: number): [number, number] {
  */
 export class FaceOverlay {
   private readonly canvas = dom.get('#preview-face-overlay', HTMLCanvasElement);
+
   private readonly ctx: CanvasRenderingContext2D;
 
   /**
+   * @param activeArraySize The active array size of the device.
    * @param orientation Counter-clockwise angles to apply rotation to
    *     the face rectangles.
    */
@@ -49,6 +53,7 @@ export class FaceOverlay {
   /**
    * Shows the given rectangles on overlay. The old rectangles would be
    * cleared, if any.
+   *
    * @param rects An array of [x1, y1, x2, y2] to represent rectangles in the
    *     coordinate system of active array in sensor.
    */
@@ -84,17 +89,17 @@ export class FaceOverlay {
         x2 *= this.canvas.width;
         y2 = (Math.max(y2 - clipped, 0) / normalizedCanvasHeight) *
             this.canvas.height;
-      } else if (canvasAspectRatio < sensorAspectRatio) {
+      } else {
         // Canvas has taller aspect than the sensor, e.g. when we're showing a
         // 4:3 stream captured from a 16:9 sensor. Based on our hardware
         // requirement, we assume the stream is cropped into pillarbox from the
         // active array.
         const normalizedCanvasWidth = canvasAspectRatio / sensorAspectRatio;
         const clipped = (1 - normalizedCanvasWidth) / 2;
-        x1 = (Math.max(x1 - clipped, 0) * normalizedCanvasWidth) *
+        x1 = (Math.max(x1 - clipped, 0) / normalizedCanvasWidth) *
             this.canvas.width;
         y1 *= this.canvas.height;
-        x2 = (Math.max(x2 - clipped, 0) * normalizedCanvasWidth) *
+        x2 = (Math.max(x2 - clipped, 0) / normalizedCanvasWidth) *
             this.canvas.width;
         y2 *= this.canvas.height;
       }

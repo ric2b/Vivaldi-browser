@@ -2,8 +2,13 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="ar">
 <translation id="2139186145475833000">الإضافة إلى الشاشة الرئيسية</translation>
+<translation id="2306442503286132111">العلامات المحفوظة في ملف <ph name="FOLDER_NAME" /></translation>
 <translation id="3518985090088779359">القبول والمتابعة</translation>
 <translation id="385051799172605136">عودة</translation>
 <translation id="5118676864324397542">‏مساحة تخزين <ph name="APP_NAME" /> Vivaldi</translation>
+<translation id="6150320133806434356">العلامات المحفوظة</translation>
+<translation id="706339621163631076">سياسة خصوصية المتصفح</translation>
+<translation id="732145680195464316">العلامة حفظت في <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">‏لمحة عن Vivaldi</translation>
+<translation id="8820817407110198400">العلامات</translation>
 </translationbundle>

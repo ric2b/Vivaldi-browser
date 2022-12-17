@@ -109,7 +109,7 @@ class DiscardableImageMapTest : public testing::Test {
     std::vector<gfx::Rect> result;
     for (auto& image : images) {
       result.push_back(image.image_rect);
-      result.back().Inset(1, 1, 1, 1);
+      result.back().Inset(1);
     }
     return result;
   }
@@ -1100,7 +1100,7 @@ TEST_F(DiscardableImageMapTest, TracksImageRegions) {
                                   gfx::Rect(400, 400, 100, 100)};
   Region expected_region;
   for (auto& rect : rects) {
-    rect.Inset(-1, -1);
+    rect.Inset(-1);
     expected_region.Union(rect);
   }
 
@@ -1189,7 +1189,7 @@ TEST_F(DiscardableImageMapTest,
   content_layer_client.add_draw_skottie(FakeContentLayerClient::SkottieData(
       CreateSkottie(gfx::Size(2048, 2048), /*duration_secs=*/1.f),
       /*dst=*/gfx::Rect(2048, 2048), /*t=*/0.1f, SkottieFrameDataMap(),
-      SkottieColorMap()));
+      SkottieColorMap(), SkottieTextPropertyValueMap()));
 
   scoped_refptr<DisplayItemList> display_list =
       content_layer_client.PaintContentsToDisplayList();
@@ -1219,7 +1219,7 @@ TEST_F(DiscardableImageMapTest, GetDiscardableImagesInRectSkottieWithImages) {
   content_layer_client.add_draw_skottie(FakeContentLayerClient::SkottieData(
       CreateSkottieFromString(kLottieDataWith2Assets),
       /*dst=*/gfx::Rect(1024, 0, 1024, 2048),
-      /*t=*/0.1f, images_in, SkottieColorMap()));
+      /*t=*/0.1f, images_in, SkottieColorMap(), SkottieTextPropertyValueMap()));
 
   scoped_refptr<DisplayItemList> display_list =
       content_layer_client.PaintContentsToDisplayList();
@@ -1259,7 +1259,7 @@ TEST_F(DiscardableImageMapTest,
   content_layer_client.add_draw_skottie(FakeContentLayerClient::SkottieData(
       CreateSkottieFromString(kLottieDataWith2Assets),
       /*dst=*/visible_rect,
-      /*t=*/0.1f, images_in, SkottieColorMap()));
+      /*t=*/0.1f, images_in, SkottieColorMap(), SkottieTextPropertyValueMap()));
 
   scoped_refptr<DisplayItemList> display_list =
       content_layer_client.PaintContentsToDisplayList();

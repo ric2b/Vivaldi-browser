@@ -21,17 +21,21 @@
 <translation id="3377025655491224618">プライベートタブ</translation>
 <translation id="3504699618187058974">タブスタックする</translation>
 <translation id="3518985090088779359">OK、いこう</translation>
+<translation id="3571177741182643350">未読記事 - オフラインでも読めるで：</translation>
 <translation id="3700829948786686853">Vivaldiへ、いらっしゃ～い</translation>
 <translation id="3719826155360621982">ホームページ</translation>
 <translation id="385051799172605136">戻る</translation>
+<translation id="399014816462153200">読んだ記事：</translation>
 <translation id="4121750346708795461">このアプリケーション使うってことは、Vivaldiの<ph name="BEGIN_LINK1" />エンドユーザー用使用許諾契約<ph name="END_LINK1" />と<ph name="BEGIN_LINK2" />プライバシーポリシー<ph name="END_LINK2" />に同意したってことになるで。</translation>
 <translation id="4137746084635924146">デバイスが今使ってる言語</translation>
+<translation id="4167670741834902166">さらのプライベートタブ</translation>
 <translation id="4243710787042215766">プライベートタブで開く</translation>
 <translation id="4526803704855831732">プライベートタブ</translation>
 <translation id="4759238208242260848">ダウンロード</translation>
 <translation id="4883379392681899581">プライベートモードを離れるで</translation>
 <translation id="4943872375798546930">見つからへんわ</translation>
 <translation id="49576331685473090">コンテンツブロッカー</translation>
+<translation id="5079259810715830221">Googleのサイトがページ上のリンクを非公開でプリロードするように要求したら、VivaldiはCookiesなしで、Google サーバー介してページを暗号化してプリロードするで。これで、プリロードされたサイトから自分の情報隠せるようになるねん。</translation>
 <translation id="5118676864324397542"><ph name="APP_NAME" /> 容れもん</translation>
 <translation id="5186185447130319458">プライベート</translation>
 <translation id="5233638681132016545">さらのタブ</translation>
@@ -44,6 +48,7 @@
 <translation id="6585139692466700358">Vivaldiの翻訳サービス使うて他の言語に翻訳するか聞く</translation>
 <translation id="6593061639179217415">デスクトップ用サイト</translation>
 <translation id="6610147964972079463">プライベートタブをほかす</translation>
+<translation id="7029995644714925509">サイトがページ上のリンクを非公開でプリロードするように要求したら、VivaldiはCookiesなしで、Googleサーバー介してページを暗号化してプリロードするねん。これで、プリロードされたサイトから自分の情報隠せるようになるねん。</translation>
 <translation id="706339621163631076">プライバシー守るいうやつ</translation>
 <translation id="732145680195464316">ブックマーク、<ph name="PRODUCT_NAME" /> に保存したで</translation>
 <translation id="7427132068601343474">Vivaldiって何や</translation>

@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/guid.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -19,9 +20,11 @@
 #include "components/bookmarks/test/test_bookmark_client.h"
 #include "components/favicon/core/test/mock_favicon_service.h"
 #include "components/sync/base/unique_position.h"
+#include "components/sync/protocol/entity_metadata.pb.h"
 #include "components/sync_bookmarks/bookmark_specifics_conversions.h"
 #include "components/sync_bookmarks/switches.h"
 #include "components/sync_bookmarks/synced_bookmark_tracker.h"
+#include "components/sync_bookmarks/synced_bookmark_tracker_entity.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -184,7 +187,7 @@ syncer::UpdateResponseData CreateBookmarkBarNodeUpdateData() {
 
 syncer::UniquePosition PositionOf(const bookmarks::BookmarkNode* node,
                                   const SyncedBookmarkTracker& tracker) {
-  const SyncedBookmarkTracker::Entity* entity =
+  const SyncedBookmarkTrackerEntity* entity =
       tracker.GetEntityForBookmarkNode(node);
   return syncer::UniquePosition::FromProto(
       entity->metadata()->unique_position());
@@ -207,11 +210,9 @@ bool PositionsInTrackerMatchModel(const bookmarks::BookmarkNode* node,
     }
     last_pos = pos;
   }
-  return std::all_of(node->children().cbegin(), node->children().cend(),
-                     [&tracker](const auto& child) {
-                       return PositionsInTrackerMatchModel(child.get(),
-                                                           tracker);
-                     });
+  return base::ranges::all_of(node->children(), [&tracker](const auto& child) {
+    return PositionsInTrackerMatchModel(child.get(), tracker);
+  });
 }
 
 std::unique_ptr<SyncedBookmarkTracker> Merge(
@@ -413,12 +414,12 @@ TEST(BookmarkModelMergerTest, ShouldMergeLocalAndRemoteModels) {
 
   // Verify the tracker contents.
   EXPECT_THAT(tracker->TrackedEntitiesCountForTest(), Eq(11U));
-  std::vector<const SyncedBookmarkTracker::Entity*> local_changes =
+  std::vector<const SyncedBookmarkTrackerEntity*> local_changes =
       tracker->GetEntitiesWithLocalChanges();
 
   EXPECT_THAT(local_changes.size(), Eq(4U));
   std::vector<const bookmarks::BookmarkNode*> nodes_with_local_changes;
-  for (const SyncedBookmarkTracker::Entity* local_change : local_changes) {
+  for (const SyncedBookmarkTrackerEntity* local_change : local_changes) {
     nodes_with_local_changes.push_back(local_change->bookmark_node());
   }
   // Verify that url2(http://www.url2.com), Folder 2 and children have
@@ -516,7 +517,7 @@ TEST(BookmarkModelMergerTest, ShouldMergeRemoteReorderToLocalModel) {
   EXPECT_THAT(tracker->TrackedEntitiesCountForTest(), Eq(4U));
 
   // There should be no local changes.
-  std::vector<const SyncedBookmarkTracker::Entity*> local_changes =
+  std::vector<const SyncedBookmarkTrackerEntity*> local_changes =
       tracker->GetEntitiesWithLocalChanges();
   EXPECT_THAT(local_changes.size(), Eq(0U));
 
@@ -1662,7 +1663,7 @@ TEST(BookmarkModelMergerTest,
   // Verify the tracker contents.
   EXPECT_THAT(tracker->TrackedEntitiesCountForTest(), Eq(5U));
 
-  std::vector<const SyncedBookmarkTracker::Entity*> local_changes =
+  std::vector<const SyncedBookmarkTrackerEntity*> local_changes =
       tracker->GetEntitiesWithLocalChanges();
 
   ASSERT_THAT(local_changes.size(), Eq(1U));

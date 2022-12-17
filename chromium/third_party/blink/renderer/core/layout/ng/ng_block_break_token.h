@@ -80,7 +80,7 @@ class CORE_EXPORT NGBlockBreakToken final : public NGBreakToken {
 
   const NGBlockBreakTokenData* TokenData() const {
     DCHECK(data_);
-    return data_.get();
+    return data_;
   }
 
   // Return true if this is a break token that was produced without any
@@ -145,7 +145,7 @@ class CORE_EXPORT NGBlockBreakToken final : public NGBreakToken {
   const NGInlineBreakToken* InlineBreakTokenFor(const LayoutBox&) const;
 
 #if DCHECK_IS_ON()
-  String ToString() const override;
+  String ToString() const;
 #endif
 
   using PassKey = base::PassKey<NGBlockBreakToken>;
@@ -181,10 +181,10 @@ class CORE_EXPORT NGBlockBreakToken final : public NGBreakToken {
     return MutableForOutOfFlow(this);
   }
 
-  void Trace(Visitor*) const override;
+  void TraceAfterDispatch(Visitor*) const;
 
  private:
-  std::unique_ptr<NGBlockBreakTokenData> data_;
+  Member<NGBlockBreakTokenData> data_;
 
   const wtf_size_t const_num_children_;
   // This must be the last member, because it is a flexible array.

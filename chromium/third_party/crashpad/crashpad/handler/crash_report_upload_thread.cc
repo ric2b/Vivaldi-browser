@@ -44,6 +44,10 @@
 #include "handler/mac/file_limit_annotation.h"
 #endif  // BUILDFLAG(IS_APPLE)
 
+#if BUILDFLAG(IS_IOS)
+#include "util/ios/scoped_background_task.h"
+#endif  // BUILDFLAG(IS_IOS)
+
 namespace crashpad {
 
 namespace {
@@ -97,6 +101,10 @@ void CrashReportUploadThread::Stop() {
 }
 
 void CrashReportUploadThread::ProcessPendingReports() {
+#if BUILDFLAG(IS_IOS)
+  internal::ScopedBackgroundTask scoper("CrashReportUploadThread");
+#endif  // BUILDFLAG(IS_IOS)
+
   std::vector<UUID> known_report_uuids = known_pending_report_uuids_.Drain();
   for (const UUID& report_uuid : known_report_uuids) {
     CrashReportDatabase::Report report;
@@ -175,7 +183,7 @@ void CrashReportUploadThread::ProcessPendingReport(
 #if BUILDFLAG(IS_IOS)
   if (ShouldRateLimitRetry(report))
     return;
-#endif
+#endif  // BUILDFLAG(IS_IOS)
 
   std::unique_ptr<const CrashReportDatabase::UploadReport> upload_report;
   CrashReportDatabase::OperationStatus status =
@@ -303,7 +311,13 @@ CrashReportUploadThread::UploadResult CrashReportUploadThread::UploadReport(
   }
   http_transport->SetBodyStream(http_multipart_builder.GetBodyStream());
   // TODO(mark): The timeout should be configurable by the client.
-  http_transport->SetTimeout(60.0);  // 1 minute.
+#if BUILDFLAG(IS_IOS)
+  // iOS background assertions only last 30 seconds, keep the timeout shorter.
+  double timeout_seconds = 20;
+#else
+  double timeout_seconds = 60;
+#endif
+  http_transport->SetTimeout(timeout_seconds);
 
   std::string url = url_;
   if (options_.identify_client_via_url) {

@@ -13,7 +13,6 @@
 #include "base/build_time.h"
 #include "base/check_op.h"
 #include "base/compiler_specific.h"
-#include "base/cxx17_backports.h"
 #include "base/environment.h"
 #include "base/test/gtest_util.h"
 #include "base/threading/platform_thread.h"
@@ -187,7 +186,7 @@ class TimeTest : public testing::Test {
 // Test conversion to/from TimeDeltas elapsed since the Windows epoch.
 // Conversions should be idempotent and non-lossy.
 TEST_F(TimeTest, DeltaSinceWindowsEpoch) {
-  const TimeDelta delta = Microseconds(123);
+  constexpr TimeDelta delta = Microseconds(123);
   EXPECT_EQ(delta,
             Time::FromDeltaSinceWindowsEpoch(delta).ToDeltaSinceWindowsEpoch());
 
@@ -202,6 +201,14 @@ TEST_F(TimeTest, DeltaSinceWindowsEpoch) {
   const Time should_be_null =
       Time::FromDeltaSinceWindowsEpoch(Time().ToDeltaSinceWindowsEpoch());
   EXPECT_TRUE(should_be_null.is_null());
+
+  {
+    constexpr Time constexpr_time =
+        Time::FromDeltaSinceWindowsEpoch(Microseconds(123));
+    constexpr TimeDelta constexpr_delta =
+        constexpr_time.ToDeltaSinceWindowsEpoch();
+    static_assert(constexpr_delta == delta, "");
+  }
 }
 
 // Test conversion to/from time_t.
@@ -478,7 +485,7 @@ TEST_F(TimeTest, ParseTimeTest1) {
   char time_buf[64] = {};
 #if BUILDFLAG(IS_WIN)
   localtime_s(&local_time, &current_time);
-  asctime_s(time_buf, base::size(time_buf), &local_time);
+  asctime_s(time_buf, std::size(time_buf), &local_time);
 #elif BUILDFLAG(IS_POSIX) || BUILDFLAG(IS_FUCHSIA)
   localtime_r(&current_time, &local_time);
   asctime_r(&local_time, time_buf);
@@ -1486,12 +1493,31 @@ TEST(TimeTicks, Android_FromUptimeMillis_ClocksMatch) {
       android::MethodID::Get<android::MethodID::TYPE_STATIC>(
           env, clazz.obj(), "uptimeMillis", "()J");
   ASSERT_FALSE(!method_id);
-  // Subtract 1ms from the expected lower bound to allow millisecon-level
+  // Subtract 1ms from the expected lower bound to allow millisecond-level
   // truncation performed in uptimeMillis().
   const TimeTicks lower_bound_ticks = TimeTicks::Now() - Milliseconds(1);
   const TimeTicks converted_ticks = TimeTicks::FromUptimeMillis(
       env->CallStaticLongMethod(clazz.obj(), method_id));
   const TimeTicks upper_bound_ticks = TimeTicks::Now();
+  EXPECT_LE(lower_bound_ticks, converted_ticks);
+  EXPECT_GE(upper_bound_ticks, converted_ticks);
+}
+
+TEST(TimeTicks, Android_FromJavaNanoTime_ClocksMatch) {
+  JNIEnv* const env = android::AttachCurrentThread();
+  android::ScopedJavaLocalRef<jclass> clazz(
+      android::GetClass(env, "java/lang/System"));
+  ASSERT_TRUE(clazz.obj());
+  const jmethodID method_id =
+      android::MethodID::Get<android::MethodID::TYPE_STATIC>(env, clazz.obj(),
+                                                             "nanoTime", "()J");
+  ASSERT_FALSE(!method_id);
+  const TimeTicks lower_bound_ticks = TimeTicks::Now();
+  const TimeTicks converted_ticks = TimeTicks::FromJavaNanoTime(
+      env->CallStaticLongMethod(clazz.obj(), method_id));
+  // Add 1us to the expected upper bound to allow microsecond-level
+  // truncation performed in TimeTicks::Now().
+  const TimeTicks upper_bound_ticks = TimeTicks::Now() + Microseconds(1);
   EXPECT_LE(lower_bound_ticks, converted_ticks);
   EXPECT_GE(upper_bound_ticks, converted_ticks);
 }

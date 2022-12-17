@@ -14,6 +14,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/values.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
@@ -111,6 +112,10 @@ content::WebUIDataSource* CreateExtensionsSource(Profile* profile,
     {"viewInStore", IDS_EXTENSIONS_ITEM_CHROME_WEB_STORE},
     {"extensionWebsite", IDS_EXTENSIONS_ITEM_EXTENSION_WEBSITE},
     {"dropToInstall", IDS_EXTENSIONS_INSTALL_DROP_TARGET},
+    {"editSitePermissionsAllowAllExtensions",
+     IDS_EXTENSIONS_EDIT_SITE_PERMISSIONS_ALLOW_ALL_EXTENSIONS},
+    {"editSitePermissionsRestrictExtensions",
+     IDS_EXTENSIONS_EDIT_SITE_PERMISSIONS_RESTRICT_EXTENSIONS},
     {"errorsPageHeading", IDS_EXTENSIONS_ERROR_PAGE_HEADING},
     {"clearActivities", IDS_EXTENSIONS_CLEAR_ACTIVITIES},
     {"clearAll", IDS_EXTENSIONS_ERROR_CLEAR_ALL},
@@ -228,6 +233,8 @@ content::WebUIDataSource* CreateExtensionsSource(Profile* profile,
     {"loadErrorErrorLabel", IDS_EXTENSIONS_LOAD_ERROR_ERROR_LABEL},
     {"loadErrorRetry", IDS_EXTENSIONS_LOAD_ERROR_RETRY},
     {"loadingActivities", IDS_EXTENSIONS_LOADING_ACTIVITIES},
+    {"matchingRestrictedSitesWarning",
+     IDS_EXTENSIONS_MATCHING_RESTRICTED_SITES_WARNING},
     {"missingOrUninstalledExtension", IDS_MISSING_OR_UNINSTALLED_EXTENSION},
     {"noActivities", IDS_EXTENSIONS_NO_ACTIVITIES},
     {"noErrorsToShow", IDS_EXTENSIONS_ERROR_NO_ERRORS_CODE_MESSAGE},
@@ -253,10 +260,17 @@ content::WebUIDataSource* CreateExtensionsSource(Profile* profile,
     {"sitePermissionsPageTitle", IDS_EXTENSIONS_SITE_PERMISSIONS_PAGE_TITLE},
     {"sitePermissionsAddSiteDialogTitle",
      IDS_EXTENSIONS_SITE_PERMISSIONS_ADD_SITE_DIALOG_TITLE},
+    {"sitePermissionsEditSiteDialogTitle",
+     IDS_EXTENSIONS_SITE_PERMISSIONS_EDIT_SITE_DIALOG_TITLE},
     {"sitePermissionsDialogInputError",
      IDS_EXTENSIONS_SITE_PERMISSIONS_DIALOG_INPUT_ERROR},
     {"sitePermissionsDialogInputLabel",
      IDS_EXTENSIONS_SITE_PERMISSIONS_DIALOG_INPUT_LABEL},
+    {"sitePermissionsEditPermissions",
+     IDS_EXTENSIONS_SITE_PERMISSIONS_EDIT_PERMISSIONS},
+    {"sitePermissionsEditPermissionsDialogTitle",
+     IDS_EXTENSIONS_SITE_PERMISSIONS_EDIT_PERMISSIONS_DIALOG_TITLE},
+    {"sitePermissionsEditUrl", IDS_EXTENSIONS_SITE_PERMISSIONS_EDIT_URL},
     {"sitePermissionsViewAllSites",
      IDS_EXTENSIONS_SITE_PERMISSIONS_VIEW_ALL_SITES},
     {"permittedSites", IDS_EXTENSIONS_PERMITTED_SITES},
@@ -347,10 +361,6 @@ content::WebUIDataSource* CreateExtensionsSource(Profile* profile,
                      base::CommandLine::ForCurrentProcess()->HasSwitch(
                          ::switches::kEnableExtensionActivityLogging));
 
-  // TODO(crbug.com/1286649): Remove after CSS has been updated to no longer
-  // need this attribute.
-  source->AddString("enableBrandingUpdateAttribute", "enable-branding-update");
-
   source->AddString(kLoadTimeClassesKey, GetLoadTimeClasses(in_dev_mode));
 
   source->AddBoolean(
@@ -413,9 +423,9 @@ void ExtensionsUI::RegisterProfilePrefs(
 // Normally volatile data does not belong in loadTimeData, but in this case
 // prevents flickering on a very prominent surface (top of the landing page).
 void ExtensionsUI::OnDevModeChanged() {
-  auto update = std::make_unique<base::DictionaryValue>();
-  update->SetBoolKey(kInDevModeKey, *in_dev_mode_);
-  update->SetStringKey(kLoadTimeClassesKey, GetLoadTimeClasses(*in_dev_mode_));
+  base::Value::Dict update;
+  update.Set(kInDevModeKey, *in_dev_mode_);
+  update.Set(kLoadTimeClassesKey, GetLoadTimeClasses(*in_dev_mode_));
   content::WebUIDataSource::Update(Profile::FromWebUI(web_ui()),
                                    chrome::kChromeUIExtensionsHost,
                                    std::move(update));

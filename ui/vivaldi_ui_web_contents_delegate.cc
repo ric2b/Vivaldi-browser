@@ -6,6 +6,7 @@
 
 #include "ui/vivaldi_ui_web_contents_delegate.h"
 
+#include "build/build_config.h"
 #include "chrome/browser/file_select_helper.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
@@ -29,6 +30,10 @@
 #include "app/vivaldi_constants.h"
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_native_app_window_views.h"
+
+#if BUILDFLAG(ENABLE_PAINT_PREVIEW)
+#include "components/paint_preview/browser/paint_preview_client.h"
+#endif
 
 namespace {
 
@@ -106,14 +111,14 @@ bool VivaldiUIWebContentsDelegate::PreHandleGestureEvent(
     const blink::WebGestureEvent& event) {
   // When called this means the user has attempted a gesture on the UI. We do
   // not allow that.
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   if (event.GetType() == blink::WebInputEvent::Type::kGestureDoubleTap)
     return true;
 #endif
   return blink::WebInputEvent::IsPinchGestureEventType(event.GetType());
 }
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 std::unique_ptr<content::ColorChooser>
 VivaldiUIWebContentsDelegate::OpenColorChooser(
     content::WebContents* web_contents,
@@ -338,3 +343,17 @@ VivaldiUIWebContentsDelegate::OpenEyeDropper(
     content::EyeDropperListener* listener) {
   return window_->OpenEyeDropper(frame, listener);
 }
+
+#if BUILDFLAG(ENABLE_PAINT_PREVIEW)
+void VivaldiUIWebContentsDelegate::CapturePaintPreviewOfSubframe(
+    content::WebContents* web_contents,
+    const gfx::Rect& rect,
+    const base::UnguessableToken& guid,
+    content::RenderFrameHost* render_frame_host) {
+  auto* client =
+      paint_preview::PaintPreviewClient::FromWebContents(web_contents);
+  if (client) {
+    client->CaptureSubframePaintPreview(guid, rect, render_frame_host);
+  }
+}
+#endif

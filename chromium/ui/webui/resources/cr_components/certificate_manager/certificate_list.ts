@@ -13,12 +13,21 @@ import './certificate_shared_css.js';
 
 import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {assertNotReached} from '../../js/assert.m.js';
+import {assertNotReached} from '../../js/assert_ts.js';
 import {I18nMixin} from '../../js/i18n_mixin.js';
 import {loadTimeData} from '../../js/load_time_data.m.js';
 
-import {CertificateAction, CertificateActionEvent, CertificateActionEventDetail} from './certificate_manager_types.js';
-import {CertificatesBrowserProxy, CertificatesBrowserProxyImpl, CertificatesError, CertificatesImportError, CertificatesOrgGroup, CertificateType, NewCertificateSubNode} from './certificates_browser_proxy.js';
+import {CertificateAction, CertificateActionEvent} from './certificate_manager_types.js';
+import {CertificatesBrowserProxyImpl, CertificatesError, CertificatesImportError, CertificatesOrgGroup, CertificateType, NewCertificateSubNode} from './certificates_browser_proxy.js';
+
+export interface CertificateListElement {
+  $: {
+    import: HTMLElement,
+    // <if expr="chromeos_ash or chromeos_lacros">
+    importAndBind: HTMLElement,
+    // </if>
+  };
+}
 
 const CertificateListElementBase = I18nMixin(PolymerElement);
 
@@ -85,9 +94,9 @@ export class CertificateListElement extends CertificateListElementBase {
         return this.i18n('certificateManagerAuthoritiesDescription');
       case CertificateType.OTHER:
         return this.i18n('certificateManagerOthersDescription');
+      default:
+        assertNotReached();
     }
-
-    assertNotReached();
   }
 
   private canImport_(): boolean {
@@ -109,8 +118,9 @@ export class CertificateListElement extends CertificateListElementBase {
       anchor: HTMLElement,
       error: CertificatesError|CertificatesImportError|null) {
     if (error === null) {
-      // Nothing to do here. Null indicates that the user clicked "cancel" on
-      // a native file chooser dialog.
+      // Nothing to do here. Null indicates that the user clicked "cancel" on a
+      // native file chooser dialog or that the request was ignored by the
+      // handler due to being received while another was still being processed.
       return;
     }
 
@@ -166,6 +176,12 @@ export class CertificateListElement extends CertificateListElementBase {
     } else {
       assertNotReached();
     }
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'certificate-list': CertificateListElement;
   }
 }
 

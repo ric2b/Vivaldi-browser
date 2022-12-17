@@ -15,6 +15,8 @@
 #include "third_party/blink/public/platform/web_security_origin.h"
 #include "third_party/blink/public/platform/web_string.h"
 
+#include "third_party/blink/public/platform/web_url.h"
+
 namespace content_injection {
 
 Manager::Manager() = default;

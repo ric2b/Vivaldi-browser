@@ -13,8 +13,7 @@
 #include "components/segmentation_platform/internal/proto/types.pb.h"
 #include "components/segmentation_platform/public/config.h"
 
-namespace segmentation_platform {
-namespace stats {
+namespace segmentation_platform::stats {
 namespace {
 // Should map to SegmentationModel variant in
 // //tools/metrics/histograms/metadata/segmentation_platform/histograms.xml.
@@ -197,18 +196,23 @@ SegmentationModel OptimizationTargetToSegmentationModel(
 
 // Should map to ModelExecutionStatus variant string in
 // //tools/metrics/histograms/metadata/segmentation_platform/histograms.xml.
-std::string ModelExecutionStatusToHistogramVariant(
+absl::optional<base::StringPiece> ModelExecutionStatusToHistogramVariant(
     ModelExecutionStatus status) {
   switch (status) {
     case ModelExecutionStatus::kSuccess:
       return "Success";
     case ModelExecutionStatus::kExecutionError:
       return "ExecutionError";
-    case ModelExecutionStatus::kInvalidMetadata:
-      return "InvalidMetadata";
-    default:
-      NOTREACHED();
-      return "Unknown";
+
+    // Only record duration histograms when tflite model is executed. These
+    // cases mean the execution was skipped.
+    case ModelExecutionStatus::kSkippedInvalidMetadata:
+    case ModelExecutionStatus::kSkippedModelNotReady:
+    case ModelExecutionStatus::kSkippedHasFreshResults:
+    case ModelExecutionStatus::kSkippedNotEnoughSignals:
+    case ModelExecutionStatus::kSkippedResultNotExpired:
+    case ModelExecutionStatus::kFailedToSaveResultAfterSuccess:
+      return absl::nullopt;
   }
 }
 
@@ -423,20 +427,28 @@ void RecordModelExecutionDurationModel(OptimizationTarget segment_id,
                                        base::TimeDelta duration) {
   ModelExecutionStatus status = success ? ModelExecutionStatus::kSuccess
                                         : ModelExecutionStatus::kExecutionError;
+  absl::optional<base::StringPiece> status_variant =
+      ModelExecutionStatusToHistogramVariant(status);
+  if (!status_variant)
+    return;
   base::UmaHistogramTimes(
-      "SegmentationPlatform.ModelExecution.Duration.Model." +
-          OptimizationTargetToHistogramVariant(segment_id) + "." +
-          ModelExecutionStatusToHistogramVariant(status),
+      base::StrCat({"SegmentationPlatform.ModelExecution.Duration.Model.",
+                    OptimizationTargetToHistogramVariant(segment_id), ".",
+                    *status_variant}),
       duration);
 }
 
 void RecordModelExecutionDurationTotal(OptimizationTarget segment_id,
                                        ModelExecutionStatus status,
                                        base::TimeDelta duration) {
+  absl::optional<base::StringPiece> status_variant =
+      ModelExecutionStatusToHistogramVariant(status);
+  if (!status_variant)
+    return;
   base::UmaHistogramTimes(
-      "SegmentationPlatform.ModelExecution.Duration.Total." +
-          OptimizationTargetToHistogramVariant(segment_id) + "." +
-          ModelExecutionStatusToHistogramVariant(status),
+      base::StrCat({"SegmentationPlatform.ModelExecution.Duration.Total.",
+                    OptimizationTargetToHistogramVariant(segment_id), ".",
+                    *status_variant}),
       duration);
 }
 
@@ -456,11 +468,19 @@ void RecordModelExecutionSaveResult(OptimizationTarget segment_id,
 }
 
 void RecordModelExecutionStatus(OptimizationTarget segment_id,
+                                bool default_provider,
                                 ModelExecutionStatus status) {
-  base::UmaHistogramEnumeration(
-      "SegmentationPlatform.ModelExecution.Status." +
-          OptimizationTargetToHistogramVariant(segment_id),
-      status);
+  if (!default_provider) {
+    base::UmaHistogramEnumeration(
+        "SegmentationPlatform.ModelExecution.Status." +
+            OptimizationTargetToHistogramVariant(segment_id),
+        status);
+  } else {
+    base::UmaHistogramEnumeration(
+        "SegmentationPlatform.ModelExecution.DefaultProvider.Status." +
+            OptimizationTargetToHistogramVariant(segment_id),
+        status);
+  }
 }
 
 void RecordModelExecutionZeroValuePercent(OptimizationTarget segment_id,
@@ -514,9 +534,12 @@ void RecordSignalsListeningCount(
       histogram_value_count);
 }
 
-void RecordSegmentSelectionFailure(SegmentationSelectionFailureReason reason) {
-  base::UmaHistogramEnumeration("SegmentationPlatform.SelectionFailedReason",
-                                reason);
+void RecordSegmentSelectionFailure(const std::string& segmentation_key,
+                                   SegmentationSelectionFailureReason reason) {
+  base::UmaHistogramEnumeration(
+      base::StrCat({"SegmentationPlatform.SelectionFailedReason.",
+                    SegmentationKeyToUmaName(segmentation_key)}),
+      reason);
 }
 
 void RecordModelAvailability(OptimizationTarget segment_id,
@@ -533,5 +556,12 @@ void RecordTooManyInputTensors(int tensor_size) {
       tensor_size);
 }
 
-}  // namespace stats
-}  // namespace segmentation_platform
+void RecordTrainingDataCollectionEvent(OptimizationTarget segment_id,
+                                       TrainingDataCollectionEvent event) {
+  base::UmaHistogramEnumeration(
+      "SegmentationPlatform.TrainingDataCollectionEvents." +
+          OptimizationTargetToHistogramVariant(segment_id),
+      event);
+}
+
+}  // namespace segmentation_platform::stats

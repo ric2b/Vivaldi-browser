@@ -47,6 +47,9 @@ import org.chromium.ui.modelutil.PropertyModel;
 
 import java.util.List;
 
+// Vivaldi
+import org.chromium.chrome.browser.ChromeTabbedActivity;
+
 /**
  * A mediator for the TabGridDialog component, responsible for communicating
  * with the components' coordinator as well as managing the business logic
@@ -585,6 +588,12 @@ public class TabGridDialogMediator implements SnackbarManager.SnackbarController
         }
         mModel.set(TabGridPanelProperties.HEADER_TITLE, mCurrentGroupModifiedTitle);
         RecordUserAction.record("TabGridDialog.TabGroupNamedInDialog");
+
+        // Note(david@vivaldi.com): Close soft keyboard and update strip tab title.
+        mModel.set(TabGridPanelProperties.IS_KEYBOARD_VISIBLE, false);
+        ChromeTabbedActivity activity = (ChromeTabbedActivity) mContext;
+        activity.getLayoutManager().getStripLayoutHelperManager().updateTitleForTab(currentTab);
+
         mCurrentGroupModifiedTitle = null;
     }
 

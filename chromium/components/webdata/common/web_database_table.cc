@@ -11,3 +11,7 @@ void WebDatabaseTable::Init(sql::Database* db, sql::MetaTable* meta_table) {
   db_ = db;
   meta_table_ = meta_table;
 }
+
+bool WebDatabaseTable::MigrateToVivaldiVersion(int version) {
+  return true;
+}

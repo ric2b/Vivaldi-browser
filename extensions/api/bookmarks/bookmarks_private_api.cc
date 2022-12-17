@@ -10,14 +10,10 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/history/top_sites_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#if defined(OS_WIN)
-#include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/browser/win/jumplist.h"
-#include "chrome/browser/win/jumplist_factory.h"
-#endif
 #include "chrome/common/extensions/api/bookmarks.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
@@ -34,6 +30,12 @@
 #include "extensions/tools/vivaldi_tools.h"
 #include "ui/vivaldi_browser_window.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
+
+#if BUILDFLAG(IS_WIN)
+#include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/win/jumplist.h"
+#include "chrome/browser/win/jumplist_factory.h"
+#endif
 
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
@@ -248,7 +250,7 @@ BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction::Run() {
   std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   Browser* browser = FindVivaldiBrowser();
   if (browser && browser->is_vivaldi()) {
     JumpList* jump_list = JumpListFactory::GetForProfile(browser->profile());

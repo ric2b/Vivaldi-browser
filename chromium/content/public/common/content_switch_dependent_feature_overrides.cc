@@ -51,9 +51,6 @@ GetSwitchDependentFeatureOverrides(const base::CommandLine& command_line) {
      std::cref(features::kOriginIsolationHeader),
      base::FeatureList::OVERRIDE_ENABLE_FEATURE},
     {switches::kEnableExperimentalWebPlatformFeatures,
-     std::cref(features::kEnableNewCanvas2DAPI),
-     base::FeatureList::OVERRIDE_ENABLE_FEATURE},
-    {switches::kEnableExperimentalWebPlatformFeatures,
      std::cref(features::kEnableCanvas2DLayers),
      base::FeatureList::OVERRIDE_ENABLE_FEATURE},
     {switches::kEnableExperimentalWebPlatformFeatures,
@@ -99,9 +96,6 @@ GetSwitchDependentFeatureOverrides(const base::CommandLine& command_line) {
      std::cref(blink::features::kClipboardCustomFormats),
      base::FeatureList::OVERRIDE_ENABLE_FEATURE},
     {switches::kEnableExperimentalWebPlatformFeatures,
-     std::cref(blink::features::kCanvas2dStaysGPUOnReadback),
-     base::FeatureList::OVERRIDE_ENABLE_FEATURE},
-    {switches::kEnableExperimentalWebPlatformFeatures,
      std::cref(blink::features::kEditContext),
      base::FeatureList::OVERRIDE_ENABLE_FEATURE},
 
@@ -114,6 +108,9 @@ GetSwitchDependentFeatureOverrides(const base::CommandLine& command_line) {
      base::FeatureList::OVERRIDE_ENABLE_FEATURE},
     {switches::kEnableExperimentalCookieFeatures,
      std::cref(net::features::kSchemefulSameSite),
+     base::FeatureList::OVERRIDE_ENABLE_FEATURE},
+    {switches::kEnableExperimentalCookieFeatures,
+     std::cref(net::features::kPartitionedCookies),
      base::FeatureList::OVERRIDE_ENABLE_FEATURE},
 
     // Overrides for --isolation-by-default.
@@ -139,6 +136,11 @@ GetSwitchDependentFeatureOverrides(const base::CommandLine& command_line) {
     // Override for --durable-client-hints-cache.
     {switches::kDurableClientHintsCache,
      std::cref(blink::features::kDurableClientHintsCache),
+     base::FeatureList::OVERRIDE_ENABLE_FEATURE},
+
+    // Override for --reduce-user-agent-minor-version.
+    {switches::kReduceUserAgentMinorVersion,
+     std::cref(blink::features::kReduceUserAgentMinorVersion),
      base::FeatureList::OVERRIDE_ENABLE_FEATURE},
   };
 

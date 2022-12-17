@@ -16,6 +16,7 @@
 #include "base/cxx17_backports.h"
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/time/time.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/ash/crosapi/browser_manager.h"
 #include "chrome/browser/ash/crosapi/browser_util.h"
@@ -45,7 +46,6 @@
 #include "components/user_manager/user_type.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/notification_service.h"
-#include "mojo/public/cpp/bindings/equals_traits.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/chromeos/resources/grit/ui_chromeos_resources.h"
 #include "ui/gfx/image/image_skia.h"
@@ -128,20 +128,6 @@ void OnAcceptMultiprofilesIntroDialog(bool accept, bool never_show_again) {
 }
 
 }  // namespace
-
-namespace mojo {
-
-// When comparing two mojom::UserSession objects we need to decide if the avatar
-// images are changed. Consider them equal if they have the same storage rather
-// than comparing the backing pixels.
-template <>
-struct EqualsTraits<gfx::ImageSkia> {
-  static bool Equals(const gfx::ImageSkia& a, const gfx::ImageSkia& b) {
-    return a.BackedBySameObjectAs(b);
-  }
-};
-
-}  // namespace mojo
 
 SessionControllerClientImpl::SessionControllerClientImpl() {
   SessionManager::Get()->AddObserver(this);

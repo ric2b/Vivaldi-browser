@@ -38,6 +38,7 @@ namespace cast_streaming {
 
 CastStreamingSession::ReceiverSessionClient::ReceiverSessionClient(
     CastStreamingSession::Client* client,
+    absl::optional<RendererControllerConfig> renderer_controls,
     std::unique_ptr<ReceiverSession::AVConstraints> av_constraints,
     std::unique_ptr<cast_api_bindings::MessagePort> message_port,
     scoped_refptr<base::SequencedTaskRunner> task_runner)
@@ -56,11 +57,33 @@ CastStreamingSession::ReceiverSessionClient::ReceiverSessionClient(
       this, &environment_, &cast_message_port_impl_,
       std::move(*av_constraints));
 
+  if (renderer_controls) {
+    playback_command_dispatcher_ = std::make_unique<PlaybackCommandDispatcher>(
+        task_runner,
+        std::move(renderer_controls.value().control_configuration));
+    playback_command_dispatcher_->RegisterCommandSource(
+        std::move(renderer_controls.value().external_renderer_controls));
+  }
+
   init_timeout_timer_.Start(
       FROM_HERE, kInitTimeout,
       base::BindOnce(
           &CastStreamingSession::ReceiverSessionClient::OnInitializationTimeout,
           base::Unretained(this)));
+}
+
+base::RepeatingClosure
+CastStreamingSession::ReceiverSessionClient::GetAudioBufferRequester() {
+  DCHECK(audio_consumer_);
+  return base::BindRepeating(&StreamConsumer::ReadFrame,
+                             audio_consumer_->GetWeakPtr());
+}
+
+base::RepeatingClosure
+CastStreamingSession::ReceiverSessionClient::GetVideoBufferRequester() {
+  DCHECK(video_consumer_);
+  return base::BindRepeating(&StreamConsumer::ReadFrame,
+                             video_consumer_->GetWeakPtr());
 }
 
 CastStreamingSession::ReceiverSessionClient::~ReceiverSessionClient() = default;
@@ -213,12 +236,24 @@ void CastStreamingSession::ReceiverSessionClient::OnNegotiated(
   }
 }
 
+void CastStreamingSession::ReceiverSessionClient::OnRemotingNegotiated(
+    const openscreen::cast::ReceiverSession* session,
+    openscreen::cast::ReceiverSession::RemotingNegotiation negotiation) {
+  DCHECK(playback_command_dispatcher_);
+  OnNegotiated(session, std::move(negotiation.receivers));
+  playback_command_dispatcher_->OnRemotingSessionNegotiated(
+      negotiation.messenger);
+}
+
 void CastStreamingSession::ReceiverSessionClient::OnReceiversDestroying(
     const openscreen::cast::ReceiverSession* session,
     ReceiversDestroyingReason reason) {
   // This can be called when |receiver_session_| is being destroyed, so we
   // do not sanity-check |session| here.
   DVLOG(1) << __func__;
+  if (playback_command_dispatcher_) {
+    playback_command_dispatcher_->OnRemotingSessionEnded();
+  }
 
   switch (reason) {
     case ReceiversDestroyingReason::kEndOfSession:
@@ -243,12 +278,12 @@ void CastStreamingSession::ReceiverSessionClient::OnError(
 }
 
 void CastStreamingSession::ReceiverSessionClient::OnDataTimeout() {
-  DVLOG(1) << __func__;
+  DLOG(ERROR) << __func__ << ": Session ended due to timeout";
   receiver_session_.reset();
 }
 
 void CastStreamingSession::ReceiverSessionClient::OnCastChannelClosed() {
-  DVLOG(1) << __func__;
+  DLOG(ERROR) << __func__ << ": Session ended due to cast channel closure";
   receiver_session_.reset();
 }
 
@@ -258,6 +293,7 @@ CastStreamingSession::~CastStreamingSession() = default;
 
 void CastStreamingSession::Start(
     Client* client,
+    absl::optional<RendererControllerConfig> renderer_controls,
     std::unique_ptr<ReceiverSession::AVConstraints> av_constraints,
     std::unique_ptr<cast_api_bindings::MessagePort> message_port,
     scoped_refptr<base::SequencedTaskRunner> task_runner) {
@@ -265,13 +301,24 @@ void CastStreamingSession::Start(
   DCHECK(client);
   DCHECK(!receiver_session_);
   receiver_session_ = std::make_unique<ReceiverSessionClient>(
-      client, std::move(av_constraints), std::move(message_port), task_runner);
+      client, std::move(renderer_controls), std::move(av_constraints),
+      std::move(message_port), task_runner);
 }
 
 void CastStreamingSession::Stop() {
   DVLOG(1) << __func__;
   DCHECK(receiver_session_);
   receiver_session_.reset();
+}
+
+base::RepeatingClosure CastStreamingSession::GetAudioBufferRequester() {
+  DCHECK(receiver_session_);
+  return receiver_session_->GetAudioBufferRequester();
+}
+
+base::RepeatingClosure CastStreamingSession::GetVideoBufferRequester() {
+  DCHECK(receiver_session_);
+  return receiver_session_->GetVideoBufferRequester();
 }
 
 }  // namespace cast_streaming

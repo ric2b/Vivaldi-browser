@@ -55,6 +55,9 @@ class ChromeSearchResult {
 
   virtual ~ChromeSearchResult();
 
+  // TODO(crbug.com/1258415): the |title| and |details| related methods should
+  // be replaced with convenience wrapper around |title_vector| and
+  // |details_vector|.
   const std::u16string& title() const { return metadata_->title; }
   const Tags& title_tags() const { return metadata_->title_tags; }
   const std::u16string& details() const { return metadata_->details; }
@@ -66,8 +69,12 @@ class ChromeSearchResult {
   const TextVector& details_text_vector() const {
     return metadata_->details_vector;
   }
+  bool multiline_details() const { return metadata_->multiline_details; }
   const TextVector& big_title_text_vector() const {
     return metadata_->big_title_vector;
+  }
+  const TextVector& big_title_superscript_text_vector() const {
+    return metadata_->big_title_superscript_vector;
   }
   const TextVector& keyboard_shortcut_text_vector() const {
     return metadata_->keyboard_shortcut_vector;
@@ -111,7 +118,9 @@ class ChromeSearchResult {
   void MaybeUpdateDetailsVector();
   void SetTitleTextVector(const TextVector& text_vector);
   void SetDetailsTextVector(const TextVector& text_vector);
+  void SetMultilineDetails(bool multiline_details);
   void SetBigTitleTextVector(const TextVector& text_vector);
+  void SetBigTitleSuperscriptTextVector(const TextVector& text_vector);
   void SetKeyboardShortcutTextVector(const TextVector& text_vector);
   void SetAccessibleName(const std::u16string& name);
   void SetRating(float rating);

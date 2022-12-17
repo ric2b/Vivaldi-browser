@@ -15,9 +15,13 @@ cargo_crate("lib") {
   crate_root = "crate/src/lib.rs"
 
   # Unit tests skipped. Generate with --with-tests to include them.
-  skip_unit_tests = true
+  build_native_rust_unit_tests = false
   sources = [ "crate/src/lib.rs" ]
   edition = "2018"
+  cargo_pkg_version = "1.5.4"
+  cargo_pkg_authors = "The Rust Project Developers"
+  cargo_pkg_name = "regex"
+  cargo_pkg_description = "An implementation of regular expressions for Rust. This implementation usesfinite automata and guarantees linear time matching on all inputs."
   deps = [
     "//third_party/rust/aho_corasick/v0_7:lib",
     "//third_party/rust/memchr/v2:lib",

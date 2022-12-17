@@ -25,7 +25,6 @@
 
 #include <bitset>
 
-#include "base/cxx17_backports.h"
 #include "base/memory/values_equivalent.h"
 #include "third_party/blink/renderer/core/animation/css/css_animation_data.h"
 #include "third_party/blink/renderer/core/css/css_custom_property_declaration.h"
@@ -694,25 +693,25 @@ bool StylePropertySerializer::AppendFontLonghandValueIfNotNormal(
 String StylePropertySerializer::ContainerValue() const {
   CHECK_EQ(containerShorthand().length(), 2u);
   CHECK_EQ(containerShorthand().properties()[0],
-           &GetCSSPropertyContainerType());
-  CHECK_EQ(containerShorthand().properties()[1],
            &GetCSSPropertyContainerName());
+  CHECK_EQ(containerShorthand().properties()[1],
+           &GetCSSPropertyContainerType());
 
   CSSValueList* list = CSSValueList::CreateSlashSeparated();
 
-  const CSSValue* type =
-      property_set_.GetPropertyCSSValue(GetCSSPropertyContainerType());
   const CSSValue* name =
       property_set_.GetPropertyCSSValue(GetCSSPropertyContainerName());
+  const CSSValue* type =
+      property_set_.GetPropertyCSSValue(GetCSSPropertyContainerType());
 
-  DCHECK(type);
   DCHECK(name);
+  DCHECK(type);
 
-  list->Append(*type);
+  list->Append(*name);
 
-  if (!(IsA<CSSIdentifierValue>(name) &&
-        To<CSSIdentifierValue>(*name).GetValueID() == CSSValueID::kNone)) {
-    list->Append(*name);
+  if (!(IsA<CSSIdentifierValue>(type) &&
+        To<CSSIdentifierValue>(*type).GetValueID() == CSSValueID::kNone)) {
+    list->Append(*type);
   }
 
   return list->CssText();
@@ -1222,13 +1221,16 @@ String StylePropertySerializer::GetShorthandValue(
 namespace {
 
 String NamedGridAreaTextForPosition(const NamedGridAreaMap& grid_area_map,
-                                    wtf_size_t index) {
+                                    wtf_size_t row,
+                                    wtf_size_t column) {
   for (const auto& item : grid_area_map) {
     const GridArea& area = item.value;
-    if (index >= area.rows.StartLine() && index < area.rows.EndLine())
+    if (row >= area.rows.StartLine() && row < area.rows.EndLine() &&
+        column >= area.columns.StartLine() && column < area.columns.EndLine()) {
       return item.key;
+    }
   }
-  return g_empty_string;
+  return ".";
 }
 
 }  // namespace
@@ -1256,6 +1258,16 @@ String StylePropertySerializer::GetShorthandValueForGrid(
           CSSValueID::kAuto) {
     return GetShorthandValueForGridTemplate(shorthand);
   }
+
+  // If we have grid-auto-{flow,row,column} along with named lines, we can't
+  // serialize as a "grid" shorthand, as a syntax that combines the two is not
+  // valid per the grammar.
+  const CSSValue* template_area_value =
+      property_set_.GetPropertyCSSValue(*shorthand.properties()[2]);
+  if (*template_area_value !=
+      *(To<Longhand>(GetCSSPropertyGridTemplateAreas()).InitialValue()))
+    return String();
+
   const CSSValue* template_row_values =
       property_set_.GetPropertyCSSValue(*shorthand.properties()[0]);
   const CSSValue* template_column_values =
@@ -1338,6 +1350,7 @@ String StylePropertySerializer::GetShorthandValueForGridTemplate(
         DynamicTo<cssvalue::CSSGridTemplateAreasValue>(template_area_values);
     DCHECK(template_areas);
     const NamedGridAreaMap& grid_area_map = template_areas->GridAreaMap();
+    wtf_size_t grid_area_column_count = template_areas->ColumnCount();
     wtf_size_t grid_area_index = 0;
     for (const auto& row_value : *template_row_value_list) {
       const String row_value_text = row_value->CssText();
@@ -1347,8 +1360,13 @@ String StylePropertySerializer::GetShorthandValueForGridTemplate(
         result.Append(row_value_text);
         continue;
       }
-      const String grid_area_text =
-          NamedGridAreaTextForPosition(grid_area_map, grid_area_index);
+      StringBuilder grid_area_text;
+      for (wtf_size_t column = 0; column < grid_area_column_count; ++column) {
+        grid_area_text.Append(NamedGridAreaTextForPosition(
+            grid_area_map, grid_area_index, column));
+        if (column != grid_area_column_count - 1)
+          grid_area_text.Append(' ');
+      }
       if (!grid_area_text.IsEmpty()) {
         if (!result.IsEmpty())
           result.Append(' ');
@@ -1357,11 +1375,9 @@ String StylePropertySerializer::GetShorthandValueForGridTemplate(
         result.Append('"');
         ++grid_area_index;
       }
-      if (row_value_text != "auto") {
-        if (!result.IsEmpty())
-          result.Append(' ');
-        result.Append(row_value_text);
-      }
+      if (!result.IsEmpty())
+        result.Append(' ');
+      result.Append(row_value_text);
     }
   }
   if (!(IsA<CSSIdentifierValue>(template_column_values) &&
@@ -1434,7 +1450,7 @@ String StylePropertySerializer::BorderImagePropertyValue() const {
       &GetCSSPropertyBorderImageSource(), &GetCSSPropertyBorderImageSlice(),
       &GetCSSPropertyBorderImageWidth(), &GetCSSPropertyBorderImageOutset(),
       &GetCSSPropertyBorderImageRepeat()};
-  size_t length = base::size(properties);
+  size_t length = std::size(properties);
   for (size_t i = 0; i < length; ++i) {
     const CSSValue& value = *property_set_.GetPropertyCSSValue(*properties[i]);
     if (!result.IsEmpty())

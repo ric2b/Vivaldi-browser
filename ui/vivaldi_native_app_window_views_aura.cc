@@ -20,7 +20,7 @@
 #include "ui/vivaldi_browser_window.h"
 #include "ui/wm/core/easy_resize_window_targeter.h"
 
-#if defined(OS_LINUX)
+#if BUILDFLAG(IS_LINUX)
 #include "chrome/browser/shell_integration_linux.h"
 #endif
 
@@ -90,7 +90,7 @@ ui::WindowShowState VivaldiNativeAppWindowViewsAura::GetRestorableState(
 
 void VivaldiNativeAppWindowViewsAura::OnBeforeWidgetInit(
     views::Widget::InitParams& init_params) {
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CHROMEOS)
   init_params.wm_class_name = shell_integration_linux::GetProgramClassName();
   init_params.wm_class_class = shell_integration_linux::GetProgramClassClass();
   const char kX11WindowRoleBrowser[] = "browser";

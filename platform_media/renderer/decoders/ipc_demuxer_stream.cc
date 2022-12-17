@@ -9,8 +9,10 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "build/build_config.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/media_util.h"
+
 #include "platform_media/common/platform_logging_util.h"
 #include "platform_media/common/platform_media_pipeline_types.h"
 #include "platform_media/renderer/pipeline/ipc_media_pipeline_host.h"
@@ -169,7 +171,7 @@ void IPCDemuxerStream::EnableBitstreamConverter() {
 
 bool IPCDemuxerStream::SupportsConfigChanges() {
   DCHECK(thread_checker_.CalledOnValidThread());
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   return true;
 #else
   return false;

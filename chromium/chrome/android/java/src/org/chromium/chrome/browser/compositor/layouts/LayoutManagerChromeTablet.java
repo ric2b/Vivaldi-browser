@@ -14,6 +14,7 @@ import org.chromium.chrome.browser.compositor.LayerTitleCache;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperManager;
 import org.chromium.chrome.browser.device.DeviceClassManager;
+import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
@@ -21,11 +22,13 @@ import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
 import org.chromium.chrome.features.start_surface.StartSurface;
+import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 
 // Vivaldi
 import java.util.ArrayList;
 import java.util.List;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * {@link LayoutManagerChromeTablet} is the specialization of {@link LayoutManagerChrome} for
@@ -50,26 +53,32 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
      * @param tabContentManagerSupplier Supplier of the {@link TabContentManager} instance.
      * @param overviewModeBehaviorSupplier Supplier of the {@link OverviewModeBehavior}.
      * @param topUiThemeColorProvider {@link ThemeColorProvider} for top UI.
+     * @param startSurfaceScrimAnchor {@link ViewGroup} used by start surface layout to show scrim
+     *         when overview is visible.
+     * @param scrimCoordinator {@link ScrimCoordinator} to show/hide scrim.
      */
     public LayoutManagerChromeTablet(LayoutManagerHost host, ViewGroup contentContainer,
             StartSurface startSurface,
             ObservableSupplier<TabContentManager> tabContentManagerSupplier,
             OneshotSupplierImpl<OverviewModeBehavior> overviewModeBehaviorSupplier,
-            Supplier<TopUiThemeColorProvider> topUiThemeColorProvider, JankTracker jankTracker) {
+            Supplier<TopUiThemeColorProvider> topUiThemeColorProvider, JankTracker jankTracker,
+            ViewGroup startSurfaceScrimAnchor, ScrimCoordinator scrimCoordinator,
+            ActivityLifecycleDispatcher lifecycleDispatcher) {
         super(host, contentContainer,
                 TabUiFeatureUtilities.isGridTabSwitcherEnabled(host.getContext()), startSurface,
                 tabContentManagerSupplier, overviewModeBehaviorSupplier, topUiThemeColorProvider,
-                jankTracker);
+                jankTracker, startSurfaceScrimAnchor, scrimCoordinator);
 
         mTabStripLayoutHelperManager = new StripLayoutHelperManager(host.getContext(), this,
-                mHost.getLayoutRenderHost(), () -> mLayerTitleCache);
+                mHost.getLayoutRenderHost(), () -> mLayerTitleCache, lifecycleDispatcher);
 
         // Note(david@vivaldi.com): We create two tab strips here. The first one is the main strip.
         // The second one is the stack strip.
         for (int i = 0; i < 2; i++) {
             mTabStrips.add(new StripLayoutHelperManager(mHost.getContext(), this,
-                    mHost.getLayoutRenderHost(), () -> mLayerTitleCache));
+                    mHost.getLayoutRenderHost(), () -> mLayerTitleCache, lifecycleDispatcher));
             mTabStrips.get(i).setIsStackStrip(i != 0);
+            addObserver(mTabStrips.get(i).getTabSwitcherObserver());
             addSceneOverlay(mTabStrips.get(i));
         }
 
@@ -151,6 +160,8 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
 
     @Override
     public StripLayoutHelperManager getStripLayoutHelperManager() {
+        // Vivaldi: We always return our main strip here.
+        if (ChromeApplicationImpl.isVivaldi()) return mTabStrips.get(0);
         return mTabStripLayoutHelperManager;
     }
 }

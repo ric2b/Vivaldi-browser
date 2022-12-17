@@ -787,7 +787,7 @@ std::wstring GetInstallHash(bool for_task_scheduler) {
     // derive the hash both from the user name and the installation path to
     // ensure hash uniqueness.
     wchar_t user_name[UNLEN + 1];
-    DWORD n = base::size(user_name);
+    DWORD n = std::size(user_name);
     if (!::GetUserName(user_name, &n)) {
       LOG(ERROR) << LastWin32Error("GetUserName");
       return std::wstring();

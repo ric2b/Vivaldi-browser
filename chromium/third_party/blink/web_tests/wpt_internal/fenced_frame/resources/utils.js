@@ -1,23 +1,6 @@
 const STORE_URL = '/wpt_internal/fenced_frame/resources/key-value-store.py';
 const REMOTE_EXECUTOR_URL = '/wpt_internal/fenced_frame/resources/remote-context-executor.https.html';
 
-// This is a dictionary of stash keys to access a specific piece of the
-// server-side stash. In order to communicate between browsing contexts that
-// cannot otherwise talk, the two browsing contexts (the producer and consumer)
-// must use the same key, which is impossible to obtain as you normally would
-// via the common API's token() method (which returns a UUID). Therefore in this
-// file, for each piece of data we're interested in communicating between the
-// fenced frame's embedder and the fenced frame itself, we have to fix a key so
-// that both frames can reference it. We need a separate stash key for each
-// test that passes data, since multiple tests can run in parallel and would
-// otherwise interfere with each other's server state.
-const KEYS = {
-  "embed_coep_require_corp"                     : "00000000-0000-0000-0000-000000000031",
-  "embed_no_coep"                               : "00000000-0000-0000-0000-000000000032",
-  // Don't use the KEYS system; use token() instead. For details, see
-  // third_party/blink/web_tests/wpt_internal/fenced_frame/README.md.
-}
-
 // Creates a URL that includes a list of stash key UUIDs that are being used
 // in the test. This allows us to generate UUIDs on the fly and let anything
 // (iframes, fenced frames, pop-ups, etc...) that wouldn't have access to the
@@ -29,6 +12,36 @@ function generateURL(href, keylist) {
   const ret_url = new URL(href, location.href);
   ret_url.searchParams.append("keylist", keylist.join(','));
   return ret_url;
+}
+
+function getRemoteContextURL(origin) {
+  return new URL(REMOTE_EXECUTOR_URL, origin);
+}
+
+// Similar to generateURL, but creates a urn:uuid that a fenced frame can
+// navigate to. This relies on a mock Shared Storage auction, since it is the
+// simplest WP-exposed way to turn a url into a urn:uuid.
+// Note: this function, unlike generateURL, is asynchronous and needs to be
+// called with an await operator.
+// @param {string} href - The base url of the page being navigated to
+// @param {string list} keylist - The list of key UUIDs to be used. Note that
+//                                order matters when extracting the keys
+async function generateURN(href, keylist = []) {
+  try {
+    await sharedStorage.worklet.addModule(
+      "/wpt_internal/shared_storage/resources/simple-module.js");
+  } catch (e) {
+    // Shared Storage needs to have a module added before we can operate on it.
+    // It is generated on the fly with this call, and since there's no way to
+    // tell through the API if a module already exists, wrap the addModule call
+    // in a try/catch so that if it runs a second time in a test, it will
+    // gracefully fail rather than bring the whole test down.
+  }
+
+  const full_url = generateURL(href, keylist);
+  return await sharedStorage.runURLSelectionOperation(
+      "test-url-selection-operation", [full_url], {data: {'mockResult': 0}}
+  );
 }
 
 // Extracts a list of UUIDs from the from the current page's URL.
@@ -53,20 +66,20 @@ function getRemoteOriginURL(url, https=true) {
   return new URL(url.toString().replace(same_origin, cross_origin));
 }
 
-// Attaches a frame that waits for scripts to execute from RemoteContext.
-// Returns a proxy for the frame that first resolves to the frame HTML element,
+// Attaches an object that waits for scripts to execute from RemoteContext.
+// (In practice, this is either a frame or a window.)
+// Returns a proxy for the object that first resolves to the object itself,
 // then resolves to the RemoteContext if the property isn't found.
 // The proxy also has an extra attribute `execute`, which is an alias for the
 // remote context's `execute_script(fn, args=[])`.
-function attachFrameContext(element_name, html, headers) {
+function attachContext(object_constructor, html, headers, origin) {
 
-  // Create the frame, passing the unique id for the parent/child channel.
-  const frame = document.createElement(element_name);
+  // Generate the unique id for the parent/child channel.
   const uuid = token();
 
   // Use the absolute path of the remote context executor source file, so that
-  // nested frames will work.
-  const url = new URL(REMOTE_EXECUTOR_URL, location.origin);
+  // nested contexts will work.
+  const url = getRemoteContextURL(origin ? origin : location.origin);
   url.searchParams.append('uuid', uuid);
 
   // Add the header to allow loading in a fenced frame.
@@ -79,8 +92,7 @@ function attachFrameContext(element_name, html, headers) {
   });
   url.searchParams.append('pipe', formatted_headers.join("|"));
 
-  frame.src = url;
-  document.body.append(frame);
+  const object = object_constructor(url);
 
   // https://github.com/web-platform-tests/wpt/blob/master/common/dispatcher/README.md
   const context = new RemoteContext(uuid);
@@ -100,7 +112,7 @@ function attachFrameContext(element_name, html, headers) {
         return context.execute_script;
       }
       if (key == "element") {
-        return frame;
+        return object;
       }
       if (key in target) {
         return target[key];
@@ -113,24 +125,51 @@ function attachFrameContext(element_name, html, headers) {
     }
   };
 
-  const proxy = new Proxy(frame, handler);
+  const proxy = new Proxy(object, handler);
   return proxy;
+}
+
+function attachFrameContext(element_name, html, headers, attributes, origin) {
+  frame_constructor = (url) => {
+    frame = document.createElement(element_name);
+    attributes.forEach(attribute => {
+      frame.setAttribute(attribute[0], attribute[1]);
+    });
+    frame.src = url;
+    document.body.append(frame);
+    return frame;
+  };
+
+  return attachContext(frame_constructor, html, headers, origin);
 }
 
 // Attach a fenced frame that waits for scripts to execute.
 // Takes as input a(n optional) dictionary of configs:
 // - html: extra HTML source code to inject into the loaded frame
 // - headers: an array of header pairs [[key, value], ...]
+// - attributes: an array of attribute pairs to set on the frame [[key, value], ...]
+// - origin: origin of the url, default to location.origin if not set
 // Returns a proxy that acts like the frame HTML element, but with an extra
 // function `execute`. See `attachFrameContext` or the README for more details.
-function attachFencedFrameContext({html = "", headers=[]} = {}) {
-  return attachFrameContext('fencedframe', html, headers);
+function attachFencedFrameContext({html = "", headers=[], attributes=[], origin=""} = {}) {
+  return attachFrameContext('fencedframe', html, headers, attributes, origin);
 }
 
 // Attach an iframe that waits for scripts to execute.
 // See `attachFencedFrameContext` for more details.
-function attachIFrameContext({html = "", headers=[]} = {}) {
-  return attachFrameContext('iframe', html, headers);
+function attachIFrameContext({html = "", headers=[], attributes=[], origin=""} = {}) {
+  return attachFrameContext('iframe', html, headers, attributes, origin);
+}
+
+// Open a window that waits for scripts to execute.
+// Returns a proxy that acts like the window object, but with an extra
+// function `execute`. See `attachContext` for more details.
+function attachWindowContext({target="_blank", html = "", headers=[], origin=""} = {}) {
+  window_constructor = (url) => {
+    return window.open(url, target);
+  }
+
+  return attachContext(window_constructor, html, headers, origin);
 }
 
 // Converts a key string into a key uuid using a cryptographic hash function.
@@ -152,12 +191,16 @@ async function stringToStashKey(string) {
   return digest_slices.join('-');
 }
 
-function attachFencedFrame(url) {
+function attachFencedFrame(url, mode='') {
   assert_implements(
       window.HTMLFencedFrameElement,
       'The HTMLFencedFrameElement should be exposed on the window object');
 
   const fenced_frame = document.createElement('fencedframe');
+  assert_true('mode' in fenced_frame);
+  if (mode) {
+    fenced_frame.mode = mode;
+  }
   fenced_frame.src = url;
   document.body.append(fenced_frame);
   return fenced_frame;
@@ -216,24 +259,11 @@ async function writeValueToServer(key, value, origin = '') {
   await fetch(serverUrl, {"mode": "no-cors"});
 }
 
-// Simulates a user gesture and calls `callback` when `mouseup` happens.
-function simulateGesture(callback) {
-  // Get or create the target element.
-  let target = document.getElementById('target');
-  if (!target) {
-    target = document.createElement('button');
-    target.textContent = '\u2573';
-    target.id = 'target';
-    document.body.appendChild(target);
+// Simulates a user gesture.
+async function simulateGesture() {
+  // Wait until the window size is initialized.
+  while (window.innerWidth == 0) {
+    await new Promise(resolve => requestAnimationFrame(resolve));
   }
-  target.addEventListener('mouseup', callback);
-
-  requestAnimationFrame(() => {
-    if (eventSender) {
-      eventSender.mouseMoveTo(target.getBoundingClientRect().x,
-                              target.getBoundingClientRect().y);
-      eventSender.mouseDown();
-      eventSender.mouseUp();
-    }
-  });
+  await test_driver.bless('simulate gesture');
 }

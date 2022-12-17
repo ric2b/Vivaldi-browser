@@ -20,6 +20,10 @@ namespace base {
 class SequencedTaskRunner;
 }  // namespace base
 
+namespace syncer {
+class SyncService;
+}  // namespace syncer
+
 namespace password_manager {
 
 class LoginDatabase;
@@ -50,6 +54,8 @@ class PasswordStoreBuiltInBackend : public PasswordStoreBackend,
   void Shutdown(base::OnceClosure shutdown_completed) override;
   void GetAllLoginsAsync(LoginsOrErrorReply callback) override;
   void GetAutofillableLoginsAsync(LoginsOrErrorReply callback) override;
+  void GetAllLoginsForAccountAsync(absl::optional<std::string> account,
+                                   LoginsOrErrorReply callback) override;
   void FillMatchingLoginsAsync(
       LoginsReply callback,
       bool include_psl,
@@ -78,6 +84,7 @@ class PasswordStoreBuiltInBackend : public PasswordStoreBackend,
   std::unique_ptr<syncer::ProxyModelTypeControllerDelegate>
   CreateSyncControllerDelegate() override;
   void ClearAllLocalPasswords() override;
+  void OnSyncServiceInitialized(syncer::SyncService* sync_service) override;
 
   // SmartBubbleStatsStore:
   void AddSiteStats(const InteractionsStats& stats) override;

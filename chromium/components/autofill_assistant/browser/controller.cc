@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/feature_list.h"
 #include "base/no_destructor.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
@@ -34,6 +35,7 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
+#include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
@@ -100,13 +102,17 @@ const GURL& Controller::GetScriptURL() {
 }
 
 Service* Controller::GetService() {
+  DCHECK(service_);
   return service_.get();
 }
 
 WebController* Controller::GetWebController() {
   if (!web_controller_) {
     web_controller_ = WebController::CreateForWebContents(
-        web_contents(), &user_data_, &log_info_, annotate_dom_model_service_);
+        web_contents(), &user_data_, &log_info_, annotate_dom_model_service_,
+        base::FeatureList::IsEnabled(
+            autofill_assistant::features::
+                kAutofillAssistantFullJsSnippetStackTraces));
   }
   return web_controller_.get();
 }
@@ -197,14 +203,6 @@ void Controller::AddNavigationListener(
 void Controller::RemoveNavigationListener(
     ScriptExecutorDelegate::NavigationListener* listener) {
   navigation_listeners_.RemoveObserver(listener);
-}
-
-void Controller::AddListener(ScriptExecutorDelegate::Listener* listener) {
-  listeners_.AddObserver(listener);
-}
-
-void Controller::RemoveListener(ScriptExecutorDelegate::Listener* listener) {
-  listeners_.RemoveObserver(listener);
 }
 
 void Controller::SetBrowseDomainsAllowlist(std::vector<std::string> domains) {
@@ -315,10 +313,10 @@ void Controller::ShutdownIfNecessary() {
     // We expect the DropOutReason to be already reported when we reach this
     // point and therefore the reason we pass here in the argument should be
     // ignored.
-    client_->Shutdown(Metrics::DropOutReason::UI_CLOSED_UNEXPECTEDLY);
+    Shutdown(Metrics::DropOutReason::UI_CLOSED_UNEXPECTEDLY);
   } else if (NeedsUI()) {
     needs_ui_ = false;
-    client_->DestroyUI();
+    client_->DestroyUISoon();
   }
 }
 
@@ -348,14 +346,9 @@ bool Controller::EnterState(AutofillAssistantState state) {
   VLOG(2) << __func__ << ": " << state_ << " -> " << state;
 
   // The only valid way of leaving the STOPPED state is to go back to tracking
-  // mode - or going back to RUNNING if it was a recoverable STOPPED state.
-  DCHECK(
-      state_ != AutofillAssistantState::STOPPED ||
-      (state == AutofillAssistantState::TRACKING && tracking_) ||
-      (state == AutofillAssistantState::RUNNING && can_recover_from_stopped_));
-  if (state_ == AutofillAssistantState::STOPPED) {
-    can_recover_from_stopped_ = false;
-  }
+  // mode.
+  DCHECK(state_ != AutofillAssistantState::STOPPED ||
+         (state == AutofillAssistantState::TRACKING && tracking_));
   state_ = state;
 
   bool should_suppress_keyboard = ShouldSuppressKeyboardForState(state_);
@@ -474,9 +467,11 @@ void Controller::OnPeriodicScriptCheck() {
       settings_.periodic_script_check_interval);
 }
 
-void Controller::OnGetScripts(const GURL& url,
-                              int http_status,
-                              const std::string& response) {
+void Controller::OnGetScripts(
+    const GURL& url,
+    int http_status,
+    const std::string& response,
+    const ServiceRequestSender::ResponseInfo& response_info) {
   if (state_ == AutofillAssistantState::STOPPED)
     return;
 
@@ -626,7 +621,7 @@ void Controller::OnScriptExecuted(const std::string& script_path,
   switch (result.at_end) {
     case ScriptExecutor::SHUTDOWN:
       if (!tracking_) {
-        client_->Shutdown(Metrics::DropOutReason::SCRIPT_SHUTDOWN);
+        Shutdown(Metrics::DropOutReason::SCRIPT_SHUTDOWN);
         return;
       }
       needs_ui_ = false;
@@ -649,7 +644,7 @@ void Controller::OnScriptExecuted(const std::string& script_path,
         observer.CloseCustomTab();
       }
       if (!tracking_) {
-        client_->Shutdown(Metrics::DropOutReason::CUSTOM_TAB_CLOSED);
+        Shutdown(Metrics::DropOutReason::CUSTOM_TAB_CLOSED);
         return;
       }
       needs_ui_ = false;
@@ -813,6 +808,13 @@ void Controller::ShowFirstMessageAndStart() {
   EnterState(AutofillAssistantState::STARTING);
 }
 
+void Controller::Shutdown(Metrics::DropOutReason reason) {
+  for (ControllerObserver& observer : observers_) {
+    observer.OnShutdown(reason);
+  }
+  client_->Shutdown(reason);
+}
+
 AutofillAssistantState Controller::GetState() const {
   return state_;
 }
@@ -918,17 +920,7 @@ void Controller::RecordDropOutOrShutdown(Metrics::DropOutReason reason) {
     // if the tab is closed).
     client_->RecordDropOut(reason);
   } else {
-    client_->Shutdown(reason);
-  }
-}
-
-void Controller::OnStop(const std::string& message,
-                        const std::string& button_label) {
-  DCHECK(state_ != AutofillAssistantState::STOPPED);
-
-  can_recover_from_stopped_ = true;
-  for (auto& listener : listeners_) {
-    listener.OnPause(message, button_label);
+    Shutdown(reason);
   }
 }
 
@@ -938,7 +930,7 @@ void Controller::PerformDelayedShutdownIfNecessary() {
     Metrics::DropOutReason reason = delayed_shutdown_reason_.value();
     delayed_shutdown_reason_ = absl::nullopt;
     tracking_ = false;
-    client_->Shutdown(reason);
+    Shutdown(reason);
   }
 }
 
@@ -1041,7 +1033,7 @@ void Controller::OnNavigationShutdownOrError(const GURL& url,
   if (google_util::IsGoogleDomainUrl(
           url, google_util::ALLOW_SUBDOMAIN,
           google_util::DISALLOW_NON_STANDARD_PORTS)) {
-    client_->Shutdown(reason);
+    Shutdown(reason);
   } else {
     OnScriptError(
         GetDisplayStringUTF8(ClientSettingsProto::GIVE_UP, GetSettings()),
@@ -1074,15 +1066,6 @@ void Controller::DidStartNavigation(
   if (state_ == AutofillAssistantState::STOPPED &&
       is_user_initiated_or_back_forward &&
       !navigation_handle->WasServerRedirect()) {
-    if (can_recover_from_stopped_) {
-      // Usually when in STOPPED (e.g. through |OnScriptError|) the
-      // |DropOutReason| has been recorded. In the case of a recoverable stop,
-      // e.g. with the back button, this is not the case. Record the reason as
-      // |NAVIGATION| here.
-      client_->Shutdown(Metrics::DropOutReason::NAVIGATION);
-      return;
-    }
-
     ShutdownIfNecessary();
     return;
   }
@@ -1186,7 +1169,7 @@ void Controller::PrimaryMainDocumentElementAvailable() {
 
 void Controller::PrimaryMainFrameRenderProcessGone(
     base::TerminationStatus status) {
-  client_->Shutdown(Metrics::DropOutReason::RENDER_PROCESS_GONE);
+  Shutdown(Metrics::DropOutReason::RENDER_PROCESS_GONE);
 }
 
 void Controller::OnWebContentsFocused(
@@ -1225,17 +1208,16 @@ void Controller::OnTouchableAreaChanged(
 }
 
 void Controller::WriteUserData(
-    base::OnceCallback<void(UserData*, UserData::FieldChange*)>
-        write_callback) {
-  UserData::FieldChange field_change = UserData::FieldChange::NONE;
+    base::OnceCallback<void(UserData*, UserDataFieldChange*)> write_callback) {
+  UserDataFieldChange field_change = UserDataFieldChange::NONE;
   std::move(write_callback).Run(&user_data_, &field_change);
-  if (field_change == UserData::FieldChange::NONE) {
+  if (field_change == UserDataFieldChange::NONE) {
     return;
   }
   NotifyUserDataChange(field_change);
 }
 
-void Controller::NotifyUserDataChange(UserData::FieldChange field_change) {
+void Controller::NotifyUserDataChange(UserDataFieldChange field_change) {
   for (ControllerObserver& observer : observers_) {
     observer.OnUserDataChanged(user_data_, field_change);
   }
@@ -1273,6 +1255,7 @@ ElementArea* Controller::touchable_element_area() {
 
 ScriptTracker* Controller::script_tracker() {
   if (!script_tracker_) {
+    DCHECK(client_->GetScriptExecutorUiDelegate());
     script_tracker_ = std::make_unique<ScriptTracker>(
         /* delegate= */ this,
         /* ui_delegate= */ client_->GetScriptExecutorUiDelegate(),

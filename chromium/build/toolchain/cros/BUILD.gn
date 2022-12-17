@@ -197,12 +197,12 @@ if (also_build_lacros_chrome_for_architecture != "") {
       lacros_args =
           read_file("//build/args/chromeos/amd64-generic-crostoolchain.gni",
                     "scope")
-      lacros_v8_snapshot_sysroot = "//build/linux/debian_sid_amd64-sysroot"
+      lacros_v8_snapshot_sysroot = "//build/linux/debian_bullseye_amd64-sysroot"
     } else if (also_build_lacros_chrome_for_architecture == "arm") {
       lacros_args =
           read_file("//build/args/chromeos/arm-generic-crostoolchain.gni",
                     "scope")
-      lacros_v8_snapshot_sysroot = "//build/linux/debian_sid_i386-sysroot"
+      lacros_v8_snapshot_sysroot = "//build/linux/debian_bullseye_i386-sysroot"
     } else {
       assert(false,
              "also_build_lacros_chrome_for_architecture is not " +
@@ -211,6 +211,20 @@ if (also_build_lacros_chrome_for_architecture != "") {
 
     toolchain_args = {
       forward_variables_from(lacros_args, "*")
+
+      # TODO(crbug.com/1298821) Change to a better way to set gn args.
+      # The following gn args are present in ash config like
+      # //build/args/chromeos/atlas.gni but not in
+      # //build/args/chromeos/amd64-generic-crostoolchain.gni.
+      # So we need to reset them to the default value where Lacros needs.
+      # Starts from here.
+      ozone_auto_platforms = true
+      ozone_platform = ""
+      ozone_platform_gbm = -1
+      ozone_platform_headless = false
+
+      # Ends here.
+
       cros_v8_snapshot_sysroot = lacros_v8_snapshot_sysroot
       current_os = "chromeos"
       target_os = "chromeos"
@@ -218,7 +232,7 @@ if (also_build_lacros_chrome_for_architecture != "") {
       also_build_lacros_chrome_for_architecture = ""
       chromeos_is_browser_only = true
       use_clang_coverage = false
-      cros_host_sysroot = "//build/linux/debian_sid_amd64-sysroot"
+      cros_host_sysroot = "//build/linux/debian_bullseye_amd64-sysroot"
     }
     if (!lacros_use_chromium_toolchain) {
       # These are args for the template.

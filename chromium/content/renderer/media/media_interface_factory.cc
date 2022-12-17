@@ -7,6 +7,7 @@
 #include <string>
 
 #include "base/bind.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "media/mojo/mojom/content_decryption_module.mojom.h"
 #include "media/mojo/mojom/renderer.mojom.h"
@@ -50,16 +51,25 @@ void MediaInterfaceFactory::CreateAudioDecoder(
 }
 
 void MediaInterfaceFactory::CreateVideoDecoder(
-    mojo::PendingReceiver<media::mojom::VideoDecoder> receiver) {
+    mojo::PendingReceiver<media::mojom::VideoDecoder> receiver,
+    mojo::PendingRemote<media::stable::mojom::StableVideoDecoder>
+        dst_video_decoder) {
+  // The renderer process cannot act as a proxy for video decoding.
+  DCHECK(!dst_video_decoder);
   if (!task_runner_->BelongsToCurrentThread()) {
     task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(&MediaInterfaceFactory::CreateVideoDecoder,
-                                  weak_this_, std::move(receiver)));
+        FROM_HERE,
+        base::BindOnce(
+            &MediaInterfaceFactory::CreateVideoDecoder, weak_this_,
+            std::move(receiver),
+            /*dst_video_decoder=*/
+            mojo::PendingRemote<media::stable::mojom::StableVideoDecoder>()));
     return;
   }
 
   DVLOG(1) << __func__;
-  GetMediaInterfaceFactory()->CreateVideoDecoder(std::move(receiver));
+  GetMediaInterfaceFactory()->CreateVideoDecoder(std::move(receiver),
+                                                 /*dst_video_decoder=*/{});
 }
 
 void MediaInterfaceFactory::CreateAudioEncoder(
@@ -157,21 +167,25 @@ void MediaInterfaceFactory::CreateMediaFoundationRenderer(
     mojo::PendingRemote<media::mojom::MediaLog> media_log_remote,
     mojo::PendingReceiver<media::mojom::Renderer> receiver,
     mojo::PendingReceiver<media::mojom::MediaFoundationRendererExtension>
-        renderer_extension_receiver) {
+        renderer_extension_receiver,
+    mojo::PendingRemote<media::mojom::MediaFoundationRendererClientExtension>
+        client_extension_remote) {
   if (!task_runner_->BelongsToCurrentThread()) {
     task_runner_->PostTask(
         FROM_HERE,
         base::BindOnce(&MediaInterfaceFactory::CreateMediaFoundationRenderer,
                        weak_this_, std::move(media_log_remote),
                        std::move(receiver),
-                       std::move(renderer_extension_receiver)));
+                       std::move(renderer_extension_receiver),
+                       std::move(client_extension_remote)));
     return;
   }
 
   DVLOG(1) << __func__;
   GetMediaInterfaceFactory()->CreateMediaFoundationRenderer(
       std::move(media_log_remote), std::move(receiver),
-      std::move(renderer_extension_receiver));
+      std::move(renderer_extension_receiver),
+      std::move(client_extension_remote));
 }
 #endif  // BUILDFLAG(IS_WIN)
 

@@ -14,10 +14,13 @@
 #include "content/browser/browsing_data/browsing_data_remover_impl.h"
 #include "content/browser/download/download_manager_impl.h"
 #include "content/browser/permissions/permission_controller_impl.h"
+#include "content/browser/speculation_rules/prefetch/prefetch_service.h"
 #include "content/browser/speech/tts_controller_impl.h"
 #include "content/browser/storage_partition_impl_map.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/render_process_host.h"
+#include "content/public/browser/shared_worker_service.h"
 #include "media/capabilities/webrtc_video_stats_db_impl.h"
 #include "media/learning/common/media_learning_tasks.h"
 #include "media/learning/impl/learning_session_impl.h"
@@ -290,6 +293,18 @@ storage::ExternalMountPoints* BrowserContextImpl::GetMountPoints() {
 #else
   return nullptr;
 #endif
+}
+
+PrefetchService* BrowserContextImpl::GetPrefetchService() {
+  if (!prefetch_service_)
+    prefetch_service_ = PrefetchService::CreateIfPossible(self_);
+
+  return prefetch_service_.get();
+}
+
+void BrowserContextImpl::WriteIntoTrace(
+    perfetto::TracedProto<TraceProto> proto) const {
+  proto->set_id(UniqueId());
 }
 
 }  // namespace content

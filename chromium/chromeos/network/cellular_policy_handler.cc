@@ -11,16 +11,19 @@
 #include "chromeos/dbus/hermes/hermes_profile_client.h"
 #include "chromeos/network/cellular_esim_installer.h"
 #include "chromeos/network/cellular_utils.h"
+#include "chromeos/network/managed_cellular_pref_handler.h"
 #include "chromeos/network/managed_network_configuration_handler.h"
 #include "chromeos/network/network_event_log.h"
 #include "chromeos/network/network_profile_handler.h"
+#include "chromeos/network/network_state_handler.h"
 #include "chromeos/network/policy_util.h"
+#include "third_party/cros_system_api/dbus/shill/dbus-constants.h"
 
 namespace chromeos {
 
 namespace {
 
-const int kInstallRetryLimit = 3;
+const int kInstallRetryLimit = 10;
 
 constexpr net::BackoffEntry::Policy kRetryBackoffPolicy = {
     0,               // Number of initial errors to ignore.
@@ -34,8 +37,8 @@ constexpr net::BackoffEntry::Policy kRetryBackoffPolicy = {
 
 // Timeout waiting for EUICC to become available in Hermes.
 constexpr base::TimeDelta kEuiccWaitTime = base::Minutes(3);
-// Timeout waiting for profile list to be refreshed.
-constexpr base::TimeDelta kProfileRefreshWaitTime = base::Seconds(90);
+// Timeout waiting for cellular device to become available.
+constexpr base::TimeDelta kCellularDeviceWaitTime = base::Seconds(30);
 
 }  // namespace
 
@@ -51,22 +54,29 @@ CellularPolicyHandler::InstallPolicyESimRequest::~InstallPolicyESimRequest() =
 
 CellularPolicyHandler::CellularPolicyHandler() = default;
 
-CellularPolicyHandler::~CellularPolicyHandler() = default;
+CellularPolicyHandler::~CellularPolicyHandler() {
+  OnShuttingDown();
+}
 
 void CellularPolicyHandler::Init(
     CellularESimProfileHandler* cellular_esim_profile_handler,
     CellularESimInstaller* cellular_esim_installer,
     NetworkProfileHandler* network_profile_handler,
+    NetworkStateHandler* network_state_handler,
+    ManagedCellularPrefHandler* managed_cellular_pref_handler,
     ManagedNetworkConfigurationHandler* managed_network_configuration_handler) {
   cellular_esim_profile_handler_ = cellular_esim_profile_handler;
   cellular_esim_installer_ = cellular_esim_installer;
   network_profile_handler_ = network_profile_handler;
+  network_state_handler_ = network_state_handler;
+  managed_cellular_pref_handler_ = managed_cellular_pref_handler;
   managed_network_configuration_handler_ =
       managed_network_configuration_handler;
 
   hermes_observation_.Observe(HermesManagerClient::Get());
   cellular_esim_profile_handler_observation_.Observe(
       cellular_esim_profile_handler);
+  network_state_handler_->AddObserver(this, FROM_HERE);
 }
 
 void CellularPolicyHandler::InstallESim(const std::string& smdp_address,
@@ -83,6 +93,20 @@ void CellularPolicyHandler::OnESimProfileListUpdated() {
   ResumeInstallIfNeeded();
 }
 
+void CellularPolicyHandler::DeviceListChanged() {
+  ResumeInstallIfNeeded();
+}
+
+void CellularPolicyHandler::OnShuttingDown() {
+  if (!network_state_handler_) {
+    return;
+  }
+  if (network_state_handler_->HasObserver(this)) {
+    network_state_handler_->RemoveObserver(this, FROM_HERE);
+  }
+  network_state_handler_ = nullptr;
+}
+
 void CellularPolicyHandler::ResumeInstallIfNeeded() {
   if (!is_installing_ || !wait_timer_.IsRunning()) {
     return;
@@ -92,8 +116,10 @@ void CellularPolicyHandler::ResumeInstallIfNeeded() {
 }
 
 void CellularPolicyHandler::ProcessRequests() {
-  if (remaining_install_requests_.empty())
+  if (remaining_install_requests_.empty()) {
+    need_refresh_profile_list_ = true;
     return;
+  }
 
   // Another install request is already underway; wait until it has completed
   // before starting a new request.
@@ -110,40 +136,69 @@ void CellularPolicyHandler::ProcessRequests() {
 void CellularPolicyHandler::AttemptInstallESim() {
   DCHECK(is_installing_);
 
+  const DeviceState* cellular_device =
+      network_state_handler_->GetDeviceStateByType(
+          NetworkTypePattern::Cellular());
+  if (!cellular_device) {
+    // Cellular device may not be ready. Wait for DeviceListChanged notification
+    // before continuing with installation.
+    NET_LOG(EVENT) << "Cellular device is not available when attempting to "
+                   << "install eSIM profile for SMDP address: "
+                   << GetCurrentSmdpAddress()
+                   << ". Waiting for device list change.";
+    wait_timer_.Start(FROM_HERE, kCellularDeviceWaitTime,
+                      base::BindOnce(&CellularPolicyHandler::OnWaitTimeout,
+                                     weak_ptr_factory_.GetWeakPtr()));
+    return;
+  }
+
   absl::optional<dbus::ObjectPath> euicc_path = GetCurrentEuiccPath();
   if (!euicc_path) {
     // Hermes may not be ready and available euicc list is empty. Wait for
     // AvailableEuiccListChanged notification to continue with installation.
     NET_LOG(EVENT) << "No EUICC found when attempting to install eSIM profile "
-                      "for SMDP address: "
-                   << GetCurrentSmdpAddress() << ". Waiting for EUICC.";
+                   << "for SMDP address: " << GetCurrentSmdpAddress()
+                   << ". Waiting for EUICC.";
     wait_timer_.Start(FROM_HERE, kEuiccWaitTime,
                       base::BindOnce(&CellularPolicyHandler::OnWaitTimeout,
                                      weak_ptr_factory_.GetWeakPtr()));
     return;
   }
 
-  if (!cellular_esim_profile_handler_->HasRefreshedProfilesForEuicc(
-          *euicc_path)) {
-    // Profile list for current euicc may not have been refreshed. Wait for
-    // ProfileListChanged notification to continue with installation.
-    NET_LOG(EVENT) << "Profile list not refreshed for EUICC when attempting to "
-                      "install eSIM profile for SMDP address: "
-                   << GetCurrentSmdpAddress()
-                   << ". Waiting for profile list change.";
-    wait_timer_.Start(FROM_HERE, kProfileRefreshWaitTime,
-                      base::BindOnce(&CellularPolicyHandler::OnWaitTimeout,
-                                     weak_ptr_factory_.GetWeakPtr()));
+  if (need_refresh_profile_list_) {
+    // Profile list for current euicc may not have been refreshed, so explicitly
+    // refresh profile list before processing installation requests.
+    cellular_esim_profile_handler_->RefreshProfileListAndRestoreSlot(
+        *euicc_path,
+        base::BindOnce(&CellularPolicyHandler::OnRefreshProfileList,
+                       weak_ptr_factory_.GetWeakPtr(), *euicc_path));
     return;
   }
 
-  NET_LOG(EVENT) << "Attempt setup policy eSIM profile with SMDP address: "
-                 << GetCurrentSmdpAddress()
-                 << " on euicc path: " << euicc_path->value();
   SetupESim(*euicc_path);
 }
 
+void CellularPolicyHandler::OnRefreshProfileList(
+    const dbus::ObjectPath& euicc_path,
+    std::unique_ptr<CellularInhibitor::InhibitLock> inhibit_lock) {
+  if (!inhibit_lock) {
+    NET_LOG(ERROR) << "Refresh profile list failed due to inhibit error, path: "
+                   << euicc_path.value();
+    SetupESim(euicc_path);
+    return;
+  }
+
+  need_refresh_profile_list_ = false;
+  // Reset the inhibit_lock so that the device will be uninhibited
+  // automatically.
+  inhibit_lock.reset();
+  SetupESim(euicc_path);
+}
+
 void CellularPolicyHandler::SetupESim(const dbus::ObjectPath& euicc_path) {
+  NET_LOG(EVENT) << "Attempt setup policy eSIM profile with SMDP address: "
+                 << GetCurrentSmdpAddress()
+                 << " on euicc path: " << euicc_path.value();
   base::Value new_shill_properties = GetNewShillProperties();
   absl::optional<dbus::ObjectPath> profile_path =
       FindExistingMatchingESimProfile();
@@ -155,6 +210,15 @@ void CellularPolicyHandler::SetupESim(const dbus::ObjectPath& euicc_path) {
         std::move(new_shill_properties), euicc_path, *profile_path,
         base::BindOnce(&CellularPolicyHandler::OnConfigureESimService,
                        weak_ptr_factory_.GetWeakPtr()));
+    return;
+  }
+
+  if (!HasNonCellularInternetConnectivity()) {
+    NET_LOG(ERROR) << "No non-cellular type Internet connectivity.";
+    auto current_request = std::move(remaining_install_requests_.front());
+    PopRequest();
+    ScheduleRetry(std::move(current_request));
+    ProcessRequests();
     return;
   }
 
@@ -198,15 +262,18 @@ void CellularPolicyHandler::OnConfigureESimService(
 
   auto current_request = std::move(remaining_install_requests_.front());
   PopRequest();
-  if (service_path) {
-    NET_LOG(EVENT)
-        << "Successfully configured service for existing eSIM profile";
-    current_request->retry_backoff.InformOfRequest(/*succeeded=*/true);
+  if (!service_path) {
+    ScheduleRetry(std::move(current_request));
     ProcessRequests();
     return;
   }
 
-  ScheduleRetry(std::move(current_request));
+  NET_LOG(EVENT) << "Successfully configured service for existing eSIM profile";
+  current_request->retry_backoff.InformOfRequest(/*succeeded=*/true);
+  const std::string* iccid =
+      policy_util::GetIccidFromONC(current_request->onc_config);
+  managed_cellular_pref_handler_->AddIccidSmdpPair(
+      *iccid, current_request->smdp_address);
   ProcessRequests();
 }
 
@@ -218,18 +285,23 @@ void CellularPolicyHandler::OnESimProfileInstallAttemptComplete(
 
   auto current_request = std::move(remaining_install_requests_.front());
   PopRequest();
-  if (hermes_status == HermesResponseStatus::kSuccess) {
-    NET_LOG(EVENT) << "Successfully installed eSIM profile with SMDP address: "
-                   << current_request->smdp_address;
-    current_request->retry_backoff.InformOfRequest(/*succeeded=*/true);
-    managed_network_configuration_handler_->NotifyPolicyAppliedToNetwork(
-        *service_path);
-
+  if (hermes_status != HermesResponseStatus::kSuccess) {
+    ScheduleRetry(std::move(current_request));
     ProcessRequests();
     return;
   }
 
-  ScheduleRetry(std::move(current_request));
+  NET_LOG(EVENT) << "Successfully installed eSIM profile with SMDP address: "
+                 << current_request->smdp_address;
+  current_request->retry_backoff.InformOfRequest(/*succeeded=*/true);
+  HermesProfileClient::Properties* profile_properties =
+      HermesProfileClient::Get()->GetProperties(*profile_path);
+  managed_cellular_pref_handler_->AddIccidSmdpPair(
+      profile_properties->iccid().value(), current_request->smdp_address);
+
+  managed_network_configuration_handler_->NotifyPolicyAppliedToNetwork(
+      *service_path);
+
   ProcessRequests();
 }
 
@@ -275,15 +347,8 @@ void CellularPolicyHandler::PopRequest() {
 
 absl::optional<dbus::ObjectPath>
 CellularPolicyHandler::FindExistingMatchingESimProfile() {
-  const base::Value* cellular_properties =
-      remaining_install_requests_.front()->onc_config.FindDictKey(
-          ::onc::network_config::kCellular);
-  if (!cellular_properties) {
-    NET_LOG(ERROR) << "Missing Cellular properties in ONC config.";
-    return absl::nullopt;
-  }
-  const std::string* iccid =
-      cellular_properties->FindStringKey(::onc::cellular::kICCID);
+  const std::string* iccid = policy_util::GetIccidFromONC(
+      remaining_install_requests_.front()->onc_config);
   if (!iccid) {
     return absl::nullopt;
   }
@@ -304,6 +369,13 @@ void CellularPolicyHandler::OnWaitTimeout() {
   PopRequest();
   ScheduleRetry(std::move(current_request));
   ProcessRequests();
+}
+
+bool CellularPolicyHandler::HasNonCellularInternetConnectivity() {
+  const NetworkState* default_network =
+      network_state_handler_->DefaultNetwork();
+  return default_network && default_network->type() != shill::kTypeCellular &&
+         default_network->IsOnline();
 }
 
 }  // namespace chromeos

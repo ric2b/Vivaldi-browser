@@ -31,6 +31,7 @@
 <translation id="1201402288615127009">அடுத்து</translation>
 <translation id="1209796539517632982">தானியங்கி பெயர் சேவையகங்கள்</translation>
 <translation id="1210831758834677569">லாவோ</translation>
+<translation id="1223825810409523901">Chrome நீட்டிப்பு</translation>
 <translation id="1243314992276662751">பதிவேற்று</translation>
 <translation id="1249250836236328755">ஆடியோ வகை</translation>
 <translation id="1254593899333212300">நேரடி இணைய இணைப்பு</translation>
@@ -61,6 +62,7 @@
 <translation id="1497522201463361063">"<ph name="FILE_NAME" />" க்கு மறுபெயரிட முடியவில்லை. <ph name="ERROR_MESSAGE" /></translation>
 <translation id="1499943022354839699">ஆங்கிலம் (யூஎஸ்) - டிவோரக் கீபோர்டு</translation>
 <translation id="1515909359182093592"><ph name="INPUT_LABEL" /> - ஹோஸ்ட்</translation>
+<translation id="1521655867290435174">Google Sheets</translation>
 <translation id="1538729222189715449">Linux ஃபைல்களைத் திறக்கிறது...</translation>
 <translation id="1547964879613821194">கனடியன் ஆங்கிலம்</translation>
 <translation id="1556189134700913550">எல்லாவற்றிற்கும் பயன்படுத்து</translation>
@@ -79,6 +81,7 @@
 <translation id="166439687370499867">பகிர்ந்த நெட்வொர்க் உள்ளமைவுகளை மாற்றுவதற்கு அனுமதியில்லை</translation>
 <translation id="1665611772925418501">ஃபைலை மாற்ற முடியவில்லை.</translation>
 <translation id="1673103856845176271">பாதுகாப்பு காரணங்களுக்காக ஃபைலை அணுக முடியவில்லை.</translation>
+<translation id="16762847117768727">ISO படம்</translation>
 <translation id="169515659049020177">Shift</translation>
 <translation id="1715848075824334077">பைக் ஓட்டும் நபர்</translation>
 <translation id="1722487484194605434"><ph name="NUMBER_OF_ITEMS" /> உள்ளடக்கங்களை ஜிப் செய்கிறது...</translation>
@@ -106,7 +109,6 @@
 <translation id="1853795129690976061">இந்த ஃபோல்டரானது Linux உடன் பகிரப்பட்டுள்ளது</translation>
 <translation id="1864756863218646478">ஃபைலைக் கண்டறிய முடியவில்லை.</translation>
 <translation id="1884013283844450420">நெட்வொர்க்: <ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, இணை</translation>
-<translation id="1914901738028575085">CloudReady 2.0 சாதனம்</translation>
 <translation id="1920670151694390848">மலையாள ஒலிபெயர்ப்பு</translation>
 <translation id="1920798810075583923">தர்பூசணி</translation>
 <translation id="1924372192547904021"><ph name="DRIVE_NAME" /> ஃபார்மேட் செய்யப்பட்டது</translation>
@@ -185,7 +187,6 @@
 <translation id="2544853746127077729">அங்கீகரிப்புச் சான்றிதழ் நெட்வொர்க்கால் நிராகரிக்கப்பட்டது</translation>
 <translation id="2547921442987553570"><ph name="EXTENSION_NAME" /> இல் சேர்</translation>
 <translation id="255937426064304553">யு.எஸ். இன்டர்நேஷனல்</translation>
-<translation id="2562685439590298522">Docs</translation>
 <translation id="2563185590376525700">தவளை</translation>
 <translation id="2578394532502990878">தமிழ் ஒலிப்புமுறை</translation>
 <translation id="2579959351793446050">ஒடியா</translation>
@@ -221,9 +222,7 @@
 <translation id="2902734494705624966">யு.எஸ். விரிவாக்கப்பட்டது</translation>
 <translation id="290843123675549676">மராத்தி</translation>
 <translation id="2923240520113693977">எஸ்தோனியன்</translation>
-<translation id="2925966894897775835">Sheets</translation>
 <translation id="2938685643439809023">மங்கோலியன்</translation>
-<translation id="2943400156390503548">Slides</translation>
 <translation id="2943503720238418293">சிறிய பெயரைப் பயன்படுத்தவும்</translation>
 <translation id="2949781154072577687"><ph name="DRIVE_NAME" /> ஐ ஃபார்மேட் செய்கிறது...</translation>
 <translation id="2951236788251446349">ஜெல்லிஃபிஷ்</translation>
@@ -368,6 +367,7 @@
 <translation id="4215448920900139318"><ph name="FILE_COUNT" /> கோப்புகளைக் காப்புப் பிரதி எடுக்கிறது</translation>
 <translation id="4218274196133425560"><ph name="HOST_NAME" /> க்கான விதிவிலக்கை அகற்றும்</translation>
 <translation id="4261901459838235729">Google விளக்கக்காட்சி</translation>
+<translation id="4277536868133419688"><ph name="FILTER_NAME" /> வடிப்பான் இயக்கப்பட்டுள்ளது.</translation>
 <translation id="4290535918735525311">Linuxஸுடன் 1 ஃபோல்டர் பகிரப்பட்டது</translation>
 <translation id="4299729908419173967">பிரேசிலியன்</translation>
 <translation id="4302605047395093221">இந்த மொபைல் நெட்வொர்க்குடன் இணைக்க இந்தச் சாதனத்தைப் பயன்படுத்தும் எவரும் பின்னை (PIN) உள்ளிட வேண்டும்</translation>
@@ -385,6 +385,8 @@
 <translation id="4380245540200674032">நெட்வொர்க்: <ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, <ph name="CONNECTION_STATUS" />, சிக்னல் வலிமை: <ph name="SIGNAL_STRENGTH" />%, உங்கள் நிர்வாகி நிர்வகிக்கிறார், விவரங்கள்</translation>
 <translation id="4387004326333427325">அங்கீகரிப்புச் சான்றிதழ் தொலைநிலையில் நிராகரிக்கப்பட்டது</translation>
 <translation id="4394214039309501350">வெளிப்புற இணைப்பு</translation>
+<translation id="4401287888955153199">அனைத்தையும் பிரி</translation>
+<translation id="4410695710508688828">பிரித்தெடுக்க முடியவில்லை. <ph name="ERROR_MESSAGE" /></translation>
 <translation id="4418686080762064601">உங்கள் ஃபைல்களுக்கான ஷார்ட்கட்டை உருவாக்குதல்</translation>
 <translation id="4425149324548788773">எனது இயக்ககம்</translation>
 <translation id="4439427728133035643">நெட்வொர்க்: <ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, சிக்னல் வலிமை: <ph name="SIGNAL_STRENGTH" />%, இணை</translation>
@@ -406,6 +408,7 @@
 <translation id="457386861538956877">மேலும்...</translation>
 <translation id="4579744207439506346">தேர்வுக்கு <ph name="ENTRY_NAME" /> சேர்க்கப்பட்டது.</translation>
 <translation id="4594543368593301662"><ph name="SEARCH_TERM" /> என்பதற்கான தேடல் முடிவுகளைக் காட்டுகிறது.</translation>
+<translation id="4599600860674643278">வடிப்பான் மீட்டமைக்கப்பட்டது.</translation>
 <translation id="4603392156942865207"><ph name="FILE_NAME" /> ஐ <ph name="FOLDER_NAME" />க்கு நகலெடுக்கிறது</translation>
 <translation id="4631887759990505102">கலைஞர்</translation>
 <translation id="4642769377300286600">மொபைல் சுயவிவரத்தை நிறுவுகிறது: நெட்வொர்க் <ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" /></translation>
@@ -414,6 +417,7 @@
 <translation id="4656777537938206294">ஃபைல்களை ஆஃப்லைனில் பயன்படுத்தலாம்</translation>
 <translation id="4658782175094886150">பனியில் இருக்கும் நபர்</translation>
 <translation id="4669606053856530811">இந்த ஃபைல்களை '<ph name="SOURCE_NAME" />' இன் உறுப்பினர்களுடன் பகிரவில்லை எனில், அவர்கள் அவற்றுக்கான அணுகலை இழப்பார்கள்.</translation>
+<translation id="467809019005607715">Google Slides</translation>
 <translation id="4690246192099372265">ஸ்வீடிஷ்</translation>
 <translation id="4693155481716051732">சூஷி</translation>
 <translation id="4694604912444486114">குரங்கு</translation>
@@ -528,6 +532,7 @@
 <translation id="5469868506864199649">இத்தாலியன்</translation>
 <translation id="5473333559083690127">புதிய பின்னை மீண்டும் உள்ளிடவும்</translation>
 <translation id="5489067830765222292">லாட்வியன்</translation>
+<translation id="5489965683297092283"><ph name="FILTER_NAME" /> வடிப்பான் முடக்கப்பட்டுள்ளது.</translation>
 <translation id="5494920125229734069">எல்லாவற்றையும் தேர்ந்தெடு</translation>
 <translation id="5500122897333236901">ஐஸ்லாண்டிக்</translation>
 <translation id="5508696409934741614">புள்ளிகள்</translation>
@@ -594,6 +599,7 @@
 <translation id="6082256976217156453">LZMA சுருக்கப்பட்ட காப்பகம்</translation>
 <translation id="6096979789310008754">தேடல் உரை அழிக்கப்பட்டது, அனைத்துக் கோப்புகளையும் ஃபோல்டர்களையும் காட்டுகிறது.</translation>
 <translation id="610101264611565198"><ph name="FILE_NAME" /> ஐ <ph name="FOLDER_NAME" />க்கு நகர்த்துகிறது</translation>
+<translation id="61118516107968648">CSV வார்த்தை</translation>
 <translation id="6129953537138746214">இடைவெளி</translation>
 <translation id="6133173853026656527"><ph name="FILE_NAME" /> ஐ நகர்த்துகிறது...</translation>
 <translation id="613750717151263950">ஜாப்பனீஸ் - யூஎஸ் கீபோர்டு</translation>
@@ -658,6 +664,7 @@
 <translation id="6732801395666424405">சான்றிதழ்கள் ஏற்றப்படவில்லை</translation>
 <translation id="6736329909263487977"><ph name="ISSUED_BY" /> [<ph name="ISSUED_TO" />]</translation>
 <translation id="6751256176799620176">1 ஃபோல்டர் தேர்ந்தெடுக்கப்பட்டது</translation>
+<translation id="6755827872271341378">ChromeOS Flex சாதனம்</translation>
 <translation id="6790428901817661496">இயக்கு</translation>
 <translation id="6795884519221689054">பாண்டா</translation>
 <translation id="6806699711453372963">Linux பகிர்வை நிர்வகி</translation>
@@ -715,7 +722,7 @@
 <translation id="7135561821015524160">கன்னட ஒலிப்புமுறை</translation>
 <translation id="714034171374937760">Chromebase</translation>
 <translation id="7165320105431587207">நெட்வொர்க் உள்ளமைவு தோல்வியடைந்தது</translation>
-<translation id="7170041865419449892">வரம்புக்கு வெளியே</translation>
+<translation id="7170041865419449892">வரம்பிற்கு வெளியே உள்ளது</translation>
 <translation id="7180611975245234373">புதுப்பி</translation>
 <translation id="7189874332498648577"><ph name="NUMBER_OF_GB" /> ஜி.பை.</translation>
 <translation id="7191454237977785534">ஃபைலை இவ்வாறு சேமி </translation>
@@ -735,6 +742,7 @@
 <translation id="7343393116438664539">வியட்நாமீஸ் (டெலெக்ஸ்)</translation>
 <translation id="7359359531237882347"><ph name="NUMBER_OF_ITEMS" /> உள்ளடக்கங்களை நகலெடுக்கிறது...</translation>
 <translation id="7375951387215729722"><ph name="COLUMN_NAME" /> அடிப்படையில் ஃபைல் பட்டியல் இறங்கு வரிசையில் காட்டப்பட்டுள்ளது.</translation>
+<translation id="7402503521691663770">ChromeOS Flex சாதனங்கள்</translation>
 <translation id="7408870451288633753">செக்</translation>
 <translation id="7417453074306512035">எத்தியோபிக் கீபோர்டு</translation>
 <translation id="7417705661718309329">Google Maps</translation>
@@ -810,6 +818,7 @@
 <translation id="7925686952655276919">ஒத்திசைப்பதற்கு, மொபைல் டேட்டா பயன்படுத்தாதே</translation>
 <translation id="7928710562641958568">சாதனத்தை வெளித்தள்ளு</translation>
 <translation id="7943385054491506837">யு.எஸ். கோல்மேக்</translation>
+<translation id="7948417415021769876">7z காப்பகம்</translation>
 <translation id="7953739707111622108">இந்த சாதனத்தின் கோப்புமுறைமை அறியப்படாததால், இந்த சாதனத்தை திறக்க முடியவில்லை.</translation>
 <translation id="7969525169268594403">ஸ்லோவேனியன்</translation>
 <translation id="7972920761225148017">ஃபிரெஞ்சு (சுவிட்சர்லாந்து)</translation>
@@ -824,6 +833,7 @@
 <translation id="8042602468072383151"><ph name="AUDIO_TYPE" /> ஆடியோ</translation>
 <translation id="8045462269890919536">ரோமானியன்</translation>
 <translation id="8049184478152619004">தடுப்பை நீக்குவதற்கான தனிப்பட்ட குறியீட்டை (Personal Unblocking Key - PUK) உள்ளிடவும்</translation>
+<translation id="807187749540895545"><ph name="FILE_NAME" />ஐப் பிரித்தெடுக்கிறது...</translation>
 <translation id="8079530767338315840">மீண்டும் இயக்கு</translation>
 <translation id="8087576439476816834">பதிவிறக்கும், <ph name="PROFILE_NAME" /></translation>
 <translation id="8106045200081704138">என்னுடன் பகிர்ந்தவை</translation>
@@ -840,6 +850,7 @@
 <translation id="8208580316430297579">கலைப்பணி</translation>
 <translation id="8223479393428528563">இந்த ஃபைல்களை ஆஃப்லைனில் பயன்படுத்துவதற்காகச் சேமிக்க, ஆன்லைனிற்கு சென்று, ஃபைல்களில் வலது-கிளிக் செய்து, <ph name="OFFLINE_CHECKBOX_NAME" /> விருப்பத்தைத் தேர்தெடுக்கவும்.</translation>
 <translation id="8249296373107784235">கைவிடு</translation>
+<translation id="8250920743982581267">ஆவணங்கள்</translation>
 <translation id="8261506727792406068">நீக்கு</translation>
 <translation id="8261561378965667560">சீனம் (அரே)</translation>
 <translation id="8269755669432358899">ஃபைல்கள்  காட்டப்படும் பேனல்களைச் சுருக்கும்</translation>
@@ -858,6 +869,7 @@
 <translation id="8372369524088641025">மோசமான WEP விசை</translation>
 <translation id="8372852072747894550">கிரேக்கம்</translation>
 <translation id="8386903983509584791">ஸ்கேன் செய்வது முடிந்தது</translation>
+<translation id="8387733224523483503"><ph name="FILE_NAME" /> பிரிக்கப்பட்டது.</translation>
 <translation id="8395901698320285466">பரிமாணங்கள்</translation>
 <translation id="8408068190360279472"><ph name="NETWORK_TYPE" /> நெட்வொர்க், இணைக்கிறது</translation>
 <translation id="8425213833346101688">மாற்று</translation>
@@ -875,6 +887,7 @@
 <translation id="8484284835977497781">உங்கள் சமீபத்திய படங்களில் இருந்து தேர்வுசெய்யுங்கள்.</translation>
 <translation id="8487700953926739672">ஆஃப்லைனில் இருக்கிறது</translation>
 <translation id="8492972329130824181">வீட்டு நெட்வொர்க் கிடைக்கவில்லை. இணைக்க மொபைல் டேட்டா ரோமிங்கை இயக்க வேண்டும்.</translation>
+<translation id="8499098729323186194"><ph name="NUMBER_OF_ITEMS" /> ஃபைல்களைப் பிரித்தெடுக்கிறது...</translation>
 <translation id="8521441079177373948">யு.கே.</translation>
 <translation id="8525306231823319788">முழுத்திரை</translation>
 <translation id="853494022971700746">ஃபிரெஞ்சு (ஃபிரான்ஸ்)</translation>
@@ -903,7 +916,6 @@
 <translation id="8714406895390098252">சைக்கிள்</translation>
 <translation id="8719721339511222681"><ph name="ENTRY_NAME" /> தேர்ந்தெடுக்கப்பட்டுள்ளது.</translation>
 <translation id="872537912056138402">குரோஷியன்</translation>
-<translation id="873847021056608403">CloudReady 2.0 சாதனங்கள்</translation>
 <translation id="8743164338060742337">நெட்வொர்க்: <ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, சிக்னல் வலிமை: <ph name="SIGNAL_STRENGTH" />%, உங்கள் நிர்வாகி நிர்வகிக்கிறார், இணை</translation>
 <translation id="8750438273876807512">ஃபைலைத் தொட்டுப் பிடித்து <ph name="ICON" /> ஐகானைத் தட்டி, "ஷெல்ஃபில் பின் செய்" என்பதைத் தேர்ந்தெடுக்கவும், இதன் மூலம் ஷெல்ஃபிலுள்ள ஃபைல்களுக்கான விரைவு அணுகலைப் பெறலாம்.</translation>
 <translation id="8787254343425541995">பகிர்ந்த பிணையங்களில் புராக்ஸிகளை அனுமதி</translation>
@@ -950,7 +962,9 @@
 <translation id="9172592259078059678">குஜராத்தி ஒலிபெயர்ப்பு</translation>
 <translation id="9173120999827300720">ஆங்கிலம் (யூஎஸ்) - சர்வதேசக் கீபோர்டு</translation>
 <translation id="9174050671906956834">‘நீக்கியவையில்’ உள்ளவை 30 நாட்களுக்குப் பின் நிரந்தரமாக நீக்கப்படும்.</translation>
+<translation id="9183302530794969518">Google Docs</translation>
 <translation id="9189836632794948435">கஸக்</translation>
+<translation id="9200427192836333033"><ph name="NUMBER_OF_ITEMS" /> ஃபைல்கள்/டைரக்டரிகள் பிரிக்கப்பட்டன.</translation>
 <translation id="9213073329713032541">நிறுவல் தொடங்கியது.</translation>
 <translation id="9219103736887031265">Images</translation>
 <translation id="9219908252191632183">லூனார்</translation>

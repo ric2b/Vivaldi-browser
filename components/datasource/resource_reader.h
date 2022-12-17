@@ -28,7 +28,7 @@ class ResourceReader {
   static bool IsResourceURL(base::StringPiece url,
                             std::string* subpath = nullptr);
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   // Get directory holding Vivaldi resource files. To simplify development in
   // non-official builds this may return source directory of vivapp/src, not the
   // directory from the build or installation. This way the changes to it can be

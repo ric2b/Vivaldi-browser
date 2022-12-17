@@ -9,13 +9,10 @@ import androidx.annotation.NonNull;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
-import org.chromium.blink.mojom.Impression;
 import org.chromium.net.NetError;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.url.GURL;
 import org.chromium.url.Origin;
-
-import java.nio.ByteBuffer;
 
 /**
  * JNI bridge with content::NavigationHandle
@@ -29,6 +26,7 @@ public class NavigationHandle {
     private @PageTransition int mPageTransition;
     private GURL mUrl;
     private GURL mReferrerUrl;
+    private GURL mBaseUrlForDataUrl;
     private boolean mHasCommitted;
     private boolean mIsDownload;
     private boolean mIsErrorPage;
@@ -37,33 +35,35 @@ public class NavigationHandle {
     private @NetError int mErrorCode;
     private int mHttpStatusCode;
     private final Origin mInitiatorOrigin;
-    private final Impression mImpression;
     private final boolean mIsPost;
     private final boolean mHasUserGesture;
-    private final boolean mIsRedirect;
+    private boolean mIsRedirect;
     private final boolean mIsExternalProtocol;
     private final long mNavigationId;
+    private final boolean mIsPageActivation;
 
     @CalledByNative
-    public NavigationHandle(long nativeNavigationHandleProxy, GURL url, GURL referrerUrl,
+    public NavigationHandle(long nativeNavigationHandleProxy, @NonNull GURL url,
+            @NonNull GURL referrerUrl, @NonNull GURL baseUrlForDataUrl,
             boolean isInPrimaryMainFrame, boolean isSameDocument, boolean isRendererInitiated,
-            Origin initiatorOrigin, ByteBuffer impressionData, @PageTransition int transition,
-            boolean isPost, boolean hasUserGesture, boolean isRedirect, boolean isExternalProtocol,
-            long navigationId) {
+            Origin initiatorOrigin, @PageTransition int transition, boolean isPost,
+            boolean hasUserGesture, boolean isRedirect, boolean isExternalProtocol,
+            long navigationId, boolean isPageActivation) {
         mNativeNavigationHandleProxy = nativeNavigationHandleProxy;
         mUrl = url;
         mReferrerUrl = referrerUrl;
+        mBaseUrlForDataUrl = baseUrlForDataUrl;
         mIsInPrimaryMainFrame = isInPrimaryMainFrame;
         mIsSameDocument = isSameDocument;
         mIsRendererInitiated = isRendererInitiated;
         mInitiatorOrigin = initiatorOrigin;
-        mImpression = impressionData != null ? Impression.deserialize(impressionData) : null;
         mPageTransition = transition;
         mIsPost = isPost;
         mHasUserGesture = hasUserGesture;
         mIsRedirect = isRedirect;
         mIsExternalProtocol = isExternalProtocol;
         mNavigationId = navigationId;
+        mIsPageActivation = isPageActivation;
     }
 
     /**
@@ -73,6 +73,7 @@ public class NavigationHandle {
     @CalledByNative
     private void didRedirect(GURL url) {
         mUrl = url;
+        mIsRedirect = true;
     }
 
     /**
@@ -109,13 +110,23 @@ public class NavigationHandle {
      * The URL the frame is navigating to.  This may change during the navigation when encountering
      * a server redirect.
      */
+    @NonNull
     public GURL getUrl() {
         return mUrl;
     }
 
     /** The referrer URL for the navigation. */
+    @NonNull
     public GURL getReferrerUrl() {
         return mReferrerUrl;
+    }
+
+    /**
+     * Used for specifying a base URL for pages loaded via data URLs.
+     */
+    @NonNull
+    public GURL getBaseUrlForDataUrl() {
+        return mBaseUrlForDataUrl;
     }
 
     /**
@@ -254,13 +265,6 @@ public class NavigationHandle {
         return mInitiatorOrigin;
     }
 
-    /**
-     * Return the blink::Impression associated with this navigation, if any.
-     */
-    public Impression getImpression() {
-        return mImpression;
-    }
-
     /** True if the the navigation method is "POST". */
     public boolean isPost() {
         return mIsPost;
@@ -286,6 +290,14 @@ public class NavigationHandle {
      */
     public long getNavigationId() {
         return mNavigationId;
+    }
+
+    /*
+     * Whether this navigation is activating an existing page (e.g. served from
+     * the BackForwardCache or Prerender).
+     */
+    public boolean isPageActivation() {
+        return mIsPageActivation;
     }
 
     @NativeMethods

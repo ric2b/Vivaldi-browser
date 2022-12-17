@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "ios/chrome/browser/policy/reporting/report_scheduler_ios.h"
+#include "base/time/time.h"
 #include "components/enterprise/browser/reporting/real_time_report_generator.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -360,6 +361,26 @@ TEST_F(ReportSchedulerIOSTest, TimerDelayUpdate) {
 
   ::testing::Mock::VerifyAndClearExpectations(client_);
   ::testing::Mock::VerifyAndClearExpectations(generator_);
+}
+
+TEST_F(ReportSchedulerIOSTest, IgnoreFrequencyWithoutReportEnabled) {
+  Init(false, kDMToken, kClientId);
+  CreateScheduler();
+  EXPECT_FALSE(scheduler_->IsNextReportScheduledForTesting());
+
+  SetReportFrequency(kUploadFrequency);
+  EXPECT_FALSE(scheduler_->IsNextReportScheduledForTesting());
+
+  // Toggle reporting on and off.
+  EXPECT_CALL_SetupRegistration();
+  ToggleCloudReport(true);
+  ToggleCloudReport(false);
+
+  EXPECT_FALSE(scheduler_->IsNextReportScheduledForTesting());
+
+  SetReportFrequency(kNewUploadFrequency);
+
+  EXPECT_FALSE(scheduler_->IsNextReportScheduledForTesting());
 }
 
 TEST_F(ReportSchedulerIOSTest,

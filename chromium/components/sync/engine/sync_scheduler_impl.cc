@@ -11,12 +11,12 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/observer_list.h"
 #include "base/rand_util.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "components/sync/base/features.h"
-#include "components/sync/base/logging.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/engine/backoff_delay_provider.h"
 #include "components/sync/protocol/sync_enums.pb.h"
@@ -882,6 +882,14 @@ void SyncSchedulerImpl::OnReceivedMigrationRequest(ModelTypeSet types) {
 
   for (SyncEngineEventListener& observer : *cycle_context_->listeners())
     observer.OnMigrationRequested(types);
+}
+
+void SyncSchedulerImpl::OnReceivedQuotaParamsForExtensionTypes(
+    absl::optional<int> max_tokens,
+    absl::optional<base::TimeDelta> refill_interval,
+    absl::optional<base::TimeDelta> depleted_quota_nudge_delay) {
+  nudge_tracker_.SetQuotaParamsForExtensionTypes(max_tokens, refill_interval,
+                                                 depleted_quota_nudge_delay);
 }
 
 void SyncSchedulerImpl::SetNotificationsEnabled(bool notifications_enabled) {

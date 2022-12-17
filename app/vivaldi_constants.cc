@@ -7,7 +7,7 @@ namespace vivaldi {
 
 // All constants in alphabetical order. The constants should be documented
 
-const char kExtDataKey[] = "extData";
+const char kExtDataKey[] = "vivExtData";
 
 // Bookmark error message
 const char kNicknameExists[] = "Nickname exists.";
@@ -53,7 +53,7 @@ const char kVivaldiWebUIURL[] =
 const char kVivaldiThumbURL[] =
     VIVALDI_DATA_URL_SCHEME "://" VIVALDI_THUMB_URL_HOST "/";
 
-const char kWindowExtDataKey[] = "extData";
+const char kWindowExtDataKey[] = "vivExtData";
 
 const char kSparkleAutoInstallSettingName[] = "SUAutomaticallyUpdate";
 const char kSparkleLastCheckTimeSettingName[] = "SULastCheckTime";

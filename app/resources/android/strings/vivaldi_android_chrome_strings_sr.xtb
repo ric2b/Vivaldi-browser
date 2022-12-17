@@ -21,17 +21,21 @@
 <translation id="3377025655491224618">Приватна картица</translation>
 <translation id="3504699618187058974">Групиши картице</translation>
 <translation id="3518985090088779359">Прихвати и настави</translation>
+<translation id="3571177741182643350">Непрочитани чланци - доступни ван мреже:</translation>
 <translation id="3700829948786686853">Добро дошли у Vivaldi</translation>
 <translation id="3719826155360621982">Матична страница</translation>
 <translation id="385051799172605136">Назад</translation>
+<translation id="399014816462153200">Прочитани чланци:</translation>
 <translation id="4121750346708795461">Коришћењем ове апликације прихватате Vivaldi <ph name="BEGIN_LINK1" />Уговор о лиценцирању са крајњим корисником<ph name="END_LINK1" /> и <ph name="BEGIN_LINK2" />Политику приватности<ph name="END_LINK2" />.</translation>
 <translation id="4137746084635924146">Тренутни језик уређаја</translation>
+<translation id="4167670741834902166">Нова приватна картица</translation>
 <translation id="4243710787042215766">Отвори у приватној картици</translation>
 <translation id="4526803704855831732">Приватне картице</translation>
 <translation id="4759238208242260848">Преузимања</translation>
 <translation id="4883379392681899581">Напусти приватни режим</translation>
 <translation id="4943872375798546930">Нема резултата</translation>
 <translation id="49576331685473090">Блокатор садржаја</translation>
+<translation id="5079259810715830221">Када Google сајт затражи да приватно унапред учита везе на својој страници, Vivaldi шифрује и учитава странице преко Google сервера без колачића. Ово скрива ваш идентитет од унапред учитаног сајта.</translation>
 <translation id="5118676864324397542"><ph name="APP_NAME" /> складиште</translation>
 <translation id="5186185447130319458">Приватно</translation>
 <translation id="5233638681132016545">Нова картица</translation>
@@ -44,6 +48,7 @@
 <translation id="6585139692466700358">Понуди превод страница на друге језике користећи Vivald-јеву услугу превођења</translation>
 <translation id="6593061639179217415">Десктоп верзија сајта</translation>
 <translation id="6610147964972079463">Затвори приватне картице</translation>
+<translation id="7029995644714925509">Када сајт затражи да приватно унапред учита везе на својој страници, Vivaldi шифрује и учитава странице преко Google сервера без колачића. Ово скрива ваш идентитет од унапред учитаног сајта.</translation>
 <translation id="706339621163631076">Политика приватности прегледача</translation>
 <translation id="732145680195464316">Обележивач је сачуван у <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">О Vivaldi прегледачу</translation>

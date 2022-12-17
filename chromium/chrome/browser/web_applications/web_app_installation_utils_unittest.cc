@@ -19,8 +19,6 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
-using base::UTF8ToUTF16;
-
 namespace web_app {
 
 namespace {
@@ -48,8 +46,8 @@ TEST(WebAppInstallationUtils, SetWebAppManifestFields_Summary) {
   SetWebAppManifestFields(web_app_info, *web_app);
 
   EXPECT_EQ(web_app->scope(), GURL("https://www.chromium.org/"));
-  EXPECT_EQ(web_app->name(), "App Name");
-  EXPECT_EQ(web_app->description(), "App Description");
+  EXPECT_EQ(web_app->untranslated_name(), "App Name");
+  EXPECT_EQ(web_app->untranslated_description(), "App Description");
   EXPECT_TRUE(web_app->theme_color().has_value());
   EXPECT_EQ(*web_app->theme_color(), SK_ColorCYAN);
   EXPECT_TRUE(web_app->dark_mode_theme_color().has_value());

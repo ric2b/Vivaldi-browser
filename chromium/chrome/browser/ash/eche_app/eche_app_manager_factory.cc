@@ -13,9 +13,11 @@
 #include "ash/services/secure_channel/public/cpp/shared/presence_monitor.h"
 #include "ash/webui/eche_app_ui/apps_access_manager_impl.h"
 #include "ash/webui/eche_app_ui/eche_app_manager.h"
+#include "ash/webui/eche_app_ui/eche_tray_stream_status_observer.h"
 #include "ash/webui/eche_app_ui/eche_uid_provider.h"
 #include "ash/webui/eche_app_ui/system_info.h"
 #include "base/bind.h"
+#include "base/check.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
@@ -40,6 +42,7 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/chromeos/devicetype_utils.h"
+#include "ui/gfx/image/image.h"
 #include "url/gurl.h"
 
 namespace ash {
@@ -47,20 +50,6 @@ namespace eche_app {
 
 namespace {
 
-void CloseEcheApp(Profile* profile) {
-  for (auto* browser : *(BrowserList::GetInstance())) {
-    if (browser->profile() != profile)
-      continue;
-    if (!browser->app_controller() ||
-        !browser->app_controller()->system_app() ||
-        browser->app_controller()->system_app()->GetType() !=
-            web_app::SystemAppType::ECHE) {
-      continue;
-    }
-    browser->window()->Close();
-    return;
-  }
-}
 // Enumeration of possible interactions with a PhoneHub notification. Keep in
 // sync with corresponding enum in tools/metrics/histograms/enums.xml. These
 // values are persisted to logs. Entries should not be renumbered and numeric
@@ -71,18 +60,25 @@ enum class NotificationInteraction {
   kMaxValue = kOpenAppStreaming,
 };
 
-void LaunchSystemWebApp(Profile* profile,
-                        const std::string& package_name,
-                        const absl::optional<int64_t>& notification_id,
-                        const std::u16string& visible_name,
-                        const absl::optional<int64_t>& user_id) {
+void EnsureStreamClose(Profile* profile) {
+  EcheAppManager* eche_app_manager =
+      EcheAppManagerFactory::GetForProfile(profile);
+  eche_app_manager->CloseStream();
+}
+
+void LaunchWebApp(const std::string& package_name,
+                  const absl::optional<int64_t>& notification_id,
+                  const std::u16string& visible_name,
+                  const absl::optional<int64_t>& user_id,
+                  const gfx::Image& icon,
+                  Profile* profile) {
   EcheAppManagerFactory::GetInstance()->SetLastLaunchedAppInfo(
       LaunchedAppInfo::Builder()
           .SetPackageName(package_name)
           .SetVisibleName(visible_name)
           .SetUserId(user_id)
+          .SetIcon(icon)
           .Build());
-
   std::u16string url;
   // Use hash mark(#) to send params to webui so we don't need to reload the
   // whole eche window.
@@ -107,35 +103,43 @@ void LaunchSystemWebApp(Profile* profile,
     url.append(u"&user_id=");
     url.append(base::NumberToString16(user_id.value()));
   }
+  const auto gurl = GURL(url);
 
+  if (features::IsEcheCustomWidgetEnabled()) {
+    return LaunchBubble(gurl, icon, visible_name,
+                        base::BindOnce(&EnsureStreamClose, profile));
+  }
   web_app::SystemAppLaunchParams params;
-  params.url = GURL(url);
+  params.url = gurl;
   web_app::LaunchSystemWebAppAsync(profile, web_app::SystemAppType::ECHE,
                                    params);
-}
-
-void LaunchEcheApp(Profile* profile,
-                   const absl::optional<int64_t>& notification_id,
-                   const std::string& package_name,
-                   const std::u16string& visible_name,
-                   const absl::optional<int64_t>& user_id) {
-  LaunchSystemWebApp(profile, package_name, notification_id, visible_name,
-                     user_id);
-  base::UmaHistogramEnumeration("Eche.NotificationClicked",
-                                NotificationInteraction::kOpenAppStreaming);
-  EcheAppManagerFactory::GetInstance()
-      ->CloseConnectionOrLaunchErrorNotifications();
 }
 
 void RelaunchLast(Profile* profile) {
   std::unique_ptr<LaunchedAppInfo> last_launched_app_info =
       EcheAppManagerFactory::GetInstance()->GetLastLaunchedAppInfo();
-  LaunchEcheApp(profile, absl::nullopt, last_launched_app_info->package_name(),
-                last_launched_app_info->visible_name(),
-                last_launched_app_info->user_id());
+  EcheAppManagerFactory::LaunchEcheApp(
+      profile, absl::nullopt, last_launched_app_info->package_name(),
+      last_launched_app_info->visible_name(), last_launched_app_info->user_id(),
+      last_launched_app_info->icon());
 }
 
 }  // namespace
+
+LaunchedAppInfo::LaunchedAppInfo() = default;
+LaunchedAppInfo::~LaunchedAppInfo() = default;
+LaunchedAppInfo::LaunchedAppInfo(const std::string& package_name,
+                                 const std::u16string& visible_name,
+                                 const absl::optional<int64_t>& user_id,
+                                 const gfx::Image& icon) {
+  package_name_ = package_name;
+  visible_name_ = visible_name;
+  user_id_ = user_id;
+  icon_ = icon;
+}
+
+LaunchedAppInfo::Builder::Builder() = default;
+LaunchedAppInfo::Builder::~Builder() = default;
 
 // static
 EcheAppManager* EcheAppManagerFactory::GetForProfile(Profile* profile) {
@@ -168,17 +172,48 @@ void EcheAppManagerFactory::ShowNotification(
             info->type()) ==
         LaunchAppHelper::NotificationInfo::NotificationType::kScreenLock) {
       weak_ptr->notification_controller_->ShowScreenLockNotification(title);
-    } else if (absl::get<LaunchAppHelper::NotificationInfo::NotificationType>(
-                   info->type()) == LaunchAppHelper::NotificationInfo::
-                                        NotificationType::kDisabledByPhone) {
-      weak_ptr->notification_controller_->ShowDisabledByPhoneNotification(
-          title);
     }
   } else if (info->category() ==
              LaunchAppHelper::NotificationInfo::Category::kWebUI) {
     weak_ptr->notification_controller_->ShowNotificationFromWebUI(
         title, message, info->type());
   }
+}
+
+// static
+void EcheAppManagerFactory::CloseEche(Profile* profile) {
+  if (features::IsEcheCustomWidgetEnabled()) {
+    CloseBubble();
+    return;
+  }
+  for (auto* browser : *(BrowserList::GetInstance())) {
+    if (browser->profile() != profile)
+      continue;
+    if (!browser->app_controller() ||
+        !browser->app_controller()->system_app() ||
+        browser->app_controller()->system_app()->GetType() !=
+            web_app::SystemAppType::ECHE) {
+      continue;
+    }
+    browser->window()->Close();
+    return;
+  }
+}
+
+// static
+void EcheAppManagerFactory::LaunchEcheApp(
+    Profile* profile,
+    const absl::optional<int64_t>& notification_id,
+    const std::string& package_name,
+    const std::u16string& visible_name,
+    const absl::optional<int64_t>& user_id,
+    const gfx::Image& icon) {
+  LaunchWebApp(package_name, notification_id, visible_name, user_id, icon,
+               profile);
+  base::UmaHistogramEnumeration("Eche.NotificationClicked",
+                                NotificationInteraction::kOpenAppStreaming);
+  EcheAppManagerFactory::GetInstance()
+      ->CloseConnectionOrLaunchErrorNotifications();
 }
 
 EcheAppManagerFactory::EcheAppManagerFactory()
@@ -236,8 +271,8 @@ KeyedService* EcheAppManagerFactory::BuildServiceInstanceFor(
       profile->GetPrefs(), GetSystemInfo(profile), phone_hub_manager,
       device_sync_client, multidevice_setup_client, secure_channel_client,
       std::move(presence_monitor_client),
-      base::BindRepeating(&LaunchEcheApp, profile),
-      base::BindRepeating(&CloseEcheApp, profile),
+      base::BindRepeating(&EcheAppManagerFactory::LaunchEcheApp, profile),
+      base::BindRepeating(&EcheAppManagerFactory::CloseEche, profile),
       base::BindRepeating(&EcheAppManagerFactory::ShowNotification,
                           weak_ptr_factory_.GetWeakPtr(), profile));
 }

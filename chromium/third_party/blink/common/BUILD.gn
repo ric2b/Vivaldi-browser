@@ -107,6 +107,7 @@ source_set("common") {
     "device_memory/approximated_device_memory.cc",
     "dom_storage/session_storage_namespace_id.cc",
     "features.cc",
+    "fenced_frame/fenced_frame_utils.cc",
     "fetch/fetch_api_request_body_mojom_traits.cc",
     "frame/event_page_show_persisted.cc",
     "frame/frame_ad_evidence.cc",
@@ -182,6 +183,7 @@ source_set("common") {
     "notifications/notification_mojom_traits.cc",
     "notifications/notification_resources.cc",
     "notifications/platform_notification_data.cc",
+    "origin_trials/manual_completion_origin_trial_features.cc",
     "origin_trials/navigation_origin_trial_features.cc",
     "origin_trials/trial_token.cc",
     "origin_trials/trial_token_result.cc",
@@ -207,6 +209,8 @@ source_set("common") {
     "service_worker/service_worker_scope_match.cc",
     "service_worker/service_worker_status_code.cc",
     "service_worker/service_worker_type_converters.cc",
+    "shared_storage/shared_storage_mojom_traits.cc",
+    "shared_storage/shared_storage_utils.cc",
     "storage_key/storage_key.cc",
     "storage_key/storage_key_mojom_traits.cc",
     "switches.cc",
@@ -219,6 +223,7 @@ source_set("common") {
     "web_package/web_package_request_matcher.cc",
     "web_preferences/web_preferences.cc",
     "web_preferences/web_preferences_mojom_traits.cc",
+    "widget/constants.cc",
     "widget/device_emulation_params_mojom_traits.cc",
     "widget/visual_properties.cc",
     "widget/visual_properties_mojom_traits.cc",
@@ -298,11 +303,14 @@ test("blink_common_unittests") {
   }
 
   if (is_fuchsia) {
-    use_cfv2 = false
-    additional_manifest_fragments = [
-      # TODO(crbug.com/1185811): Figure out why jit_capabilities is needed.
-      "//build/config/fuchsia/test/jit_capabilities.test-cmx",
-    ]
+    # TODO(https://crbug.com/1185811): Investigate removing the requirement for
+    # job_policy_ambient_mark_vmo_exec for the sake of V8's allocator in tests.
+    test_runner_shard = "//build/config/fuchsia/test/elf_test_ambient_exec_runner.shard.test-cml"
+
+    # TODO(crbug.com/1313103): Remove and apply use_cfv1=false once the roller
+    # is updated to launch the test via the .cm manifest.
+    additional_manifest_fragments =
+        [ "//build/config/fuchsia/test/jit_capabilities.test-cmx" ]
   }
 
   data_deps = [ ":common_unittests_data" ]
@@ -345,6 +353,7 @@ source_set("common_unittests_sources") {
     "scheduler/web_scheduler_tracked_feature_unittest.cc",
     "security/address_space_feature_unittest.cc",
     "service_worker/service_worker_scope_match_unittest.cc",
+    "shared_storage/shared_storage_mojom_traits_unittest.cc",
     "storage_key/storage_key_mojom_traits_unittest.cc",
     "storage_key/storage_key_unittest.cc",
     "test/run_all_unittests.cc",

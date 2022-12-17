@@ -691,6 +691,9 @@ void NGBoxFragmentPainter::PaintBlockFlowContents(
   const LayoutObject* layout_object = fragment.GetLayoutObject();
   DCHECK(fragment.IsInlineFormattingContext());
 
+  if (layout_object && layout_object->IsShapingDeferred())
+    return;
+
   // When the layout-tree gets into a bad state, we can end up trying to paint
   // a fragment with inline children, without a paint fragment. See:
   // http://crbug.com/1022545
@@ -1027,10 +1030,6 @@ void NGBoxFragmentPainter::PaintBoxDecorationBackground(
   } else {
     paint_rect.offset = paint_offset;
     paint_rect.size = box_fragment_.Size();
-    if (layout_object.IsTableCell() && !box_fragment_.IsTableNGCell()) {
-      paint_rect.size =
-          PhysicalSize(To<LayoutBox>(layout_object).PixelSnappedSize());
-    }
     background_client = &GetDisplayItemClient();
     visual_rect = VisualRect(paint_offset);
   }
@@ -1294,17 +1293,12 @@ void NGBoxFragmentPainter::PaintColumnRules(
 
     PhysicalRect rule;
     BoxSide box_side;
-    if (previous_column.Y() == current_column.Y() ||
-        previous_column.Bottom() == current_column.Bottom()) {
-      // Horizontal writing-mode.
-      DCHECK(style.IsHorizontalWritingMode());
+    if (style.IsHorizontalWritingMode()) {
       LayoutUnit center;
-      if (previous_column.X() < current_column.X()) {
-        // Left to right.
+      if (style.IsLeftToRightDirection()) {
         center = (previous_column.X() + current_column.Right()) / 2;
         box_side = BoxSide::kLeft;
       } else {
-        // Right to left.
         center = (current_column.X() + previous_column.Right()) / 2;
         box_side = BoxSide::kRight;
       }
@@ -1317,7 +1311,7 @@ void NGBoxFragmentPainter::PaintColumnRules(
     } else {
       // Vertical writing-mode.
       LayoutUnit center;
-      if (previous_column.Y() < current_column.Y()) {
+      if (style.IsLeftToRightDirection()) {
         // Top to bottom.
         center = (previous_column.Y() + current_column.Bottom()) / 2;
         box_side = BoxSide::kTop;
@@ -1958,8 +1952,22 @@ bool NGBoxFragmentPainter::NodeAtPoint(const HitTestContext& hit_test,
     return false;
 
   // Now hit test ourselves.
-  if (hit_test_self &&
-      IsVisibleToHitTest(box_fragment_, hit_test.result->GetHitTestRequest())) {
+  if (hit_test_self) {
+    if (UNLIKELY(!IsVisibleToHitTest(fragment,
+                                     hit_test.result->GetHitTestRequest())))
+      return false;
+    if (UNLIKELY(fragment.IsOpaque()))
+      return false;
+  } else if (UNLIKELY(fragment.IsOpaque() &&
+                      hit_test.result->HasListBasedResult() &&
+                      IsVisibleToHitTest(
+                          fragment, hit_test.result->GetHitTestRequest()))) {
+    // Opaque fragments should not hit, but they are still ancestors in the DOM
+    // tree. They should be added to the list-based result as ancestors if
+    // descendants hit.
+    hit_test_self = true;
+  }
+  if (hit_test_self) {
     PhysicalRect bounds_rect(physical_offset, size);
     if (UNLIKELY(
             hit_test.result->GetHitTestRequest().IsHitTestVisualOverflow())) {
@@ -1985,10 +1993,6 @@ bool NGBoxFragmentPainter::NodeAtPoint(const HitTestContext& hit_test,
       // See http://crbug.com/1043471
       DCHECK(!box_item_ || box_item_->BoxFragment() == &fragment);
       if (box_item_ && box_item_->IsInlineBox()) {
-        // Opaque fragments should be included only for list-based hit-testing.
-        if (fragment.IsOpaque() &&
-            !hit_test.result->GetHitTestRequest().ListBased())
-          return false;
         DCHECK(inline_box_cursor_);
         if (hit_test.AddNodeToResultWithContentOffset(
                 fragment.NodeForHitTest(),
@@ -2306,11 +2310,6 @@ bool NGBoxFragmentPainter::HitTestChildren(
   }
   // Check descendants of this fragment because floats may be in the
   // |NGFragmentItems| of the descendants.
-  if (hit_test.action == kHitTestFloat &&
-      box_fragment_.HasFloatingDescendantsForPaint()) {
-    return HitTestFloatingChildren(hit_test, box_fragment_, accumulated_offset);
-  }
-
   if (hit_test.action == kHitTestFloat) {
     return box_fragment_.HasFloatingDescendantsForPaint() &&
            HitTestFloatingChildren(hit_test, box_fragment_, accumulated_offset);
@@ -2410,7 +2409,7 @@ bool NGBoxFragmentPainter::ShouldHitTestCulledInlineAncestors(
     // inline, e.g. <span>a<div>b</div></span>.
     return false;
   }
-  return !item.IsBlockInInline();
+  return true;
 }
 
 bool NGBoxFragmentPainter::HitTestItemsChildren(

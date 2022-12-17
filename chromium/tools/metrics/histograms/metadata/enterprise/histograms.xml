@@ -27,6 +27,8 @@ chromium-metrics-reviews@google.com.
   <variant name="Clipboard" summary="Handler for clipboard"/>
   <variant name="Extension" summary="Handler for extensions"/>
   <variant name="Files" summary="Handler for files"/>
+  <variant name="Lacros" summary="Handler which calls cleanup on Lacros"/>
+  <variant name="LacrosBrowsingData" summary="Handler for files on Lacros"/>
   <variant name="OpenWindows" summary="Handler for open browser windows"/>
   <variant name="PrintJobs" summary="Handler for print jobs"/>
 </variants>
@@ -77,7 +79,7 @@ chromium-metrics-reviews@google.com.
 <histogram name="Enterprise.ActiveDirectoryJoin"
     enum="ActiveDirectoryDomainJoinType" expires_after="M104">
   <owner>fsandrade@chromium.org</owner>
-  <owner>tomdobro@chromium.org</owner>
+  <owner>src/chrome/browser/ash/authpolicy/OWNERS</owner>
   <summary>
     The way device is joined to the Active Directory domain. This will be
     recorded during successful enterprise enrollment and domain join.
@@ -416,7 +418,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.CloudReportingBasicRequestSize" units="KB"
-    expires_after="2022-06-19">
+    expires_after="2022-08-21">
   <owner>zmin@chromium.org</owner>
   <owner>pastarmovj@chromium.org</owner>
   <summary>
@@ -427,7 +429,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.CloudReportingRequestCount" units="requests"
-    expires_after="2022-06-26">
+    expires_after="2022-08-28">
   <owner>zmin@chromium.org</owner>
   <owner>pastarmovj@chromium.org</owner>
   <summary>
@@ -437,7 +439,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.CloudReportingRequestSize" units="KB"
-    expires_after="2022-06-26">
+    expires_after="2022-08-28">
   <owner>zmin@chromium.org</owner>
   <owner>pastarmovj@chromium.org</owner>
   <summary>
@@ -447,7 +449,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.CloudReportingResponse"
-    enum="EnterpriseCloudReportingResponse" expires_after="2022-06-19">
+    enum="EnterpriseCloudReportingResponse" expires_after="2022-08-21">
   <owner>zmin@chromium.org</owner>
   <owner>pastarmovj@chromium.org</owner>
   <summary>
@@ -772,6 +774,16 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="Enterprise.Dlp.CaptureModeInitWarned" enum="BooleanWarned"
+    expires_after="2022-12-01">
+  <owner>aidazolic@chromium.org</owner>
+  <owner>chromeos-dlp@google.com</owner>
+  <summary>
+    Recorded when the user is warned by Data Leak Prevention before capture mode
+    initialization.
+  </summary>
+</histogram>
+
 <histogram name="Enterprise.Dlp.ClipboardReadBlocked" enum="BooleanBlocked"
     expires_after="2022-12-01">
   <owner>poromov@chromium.org</owner>
@@ -848,6 +860,38 @@ chromium-metrics-reviews@google.com.
   <owner>poromov@chromium.org</owner>
   <owner>chromeos-dlp@google.com</owner>
   <summary>Result of Data Leak Prevention evaluation for printing.</summary>
+</histogram>
+
+<histogram name="Enterprise.Dlp.PrintingWarned" enum="BooleanWarned"
+    expires_after="2022-12-01">
+  <owner>aidazolic@chromium.org</owner>
+  <owner>chromeos-dlp@google.com</owner>
+  <summary>
+    Recorded when there is a &quot;warn&quot; level Data Leak Prevention
+    evaluation for printing.
+  </summary>
+</histogram>
+
+<histogram name="Enterprise.Dlp.PrintingWarnProceeded" enum="Boolean"
+    expires_after="2022-12-01">
+  <owner>aidazolic@chromium.org</owner>
+  <owner>chromeos-dlp@google.com</owner>
+  <summary>
+    Recorded when the user proceeded with (True) or canceled (False) the action
+    after a Data Leak Prevention warning for printing.
+  </summary>
+</histogram>
+
+<histogram name="Enterprise.Dlp.PrintingWarnSilentProceeded" enum="Boolean"
+    expires_after="2022-12-01">
+  <owner>aidazolic@chromium.org</owner>
+  <owner>chromeos-dlp@google.com</owner>
+  <summary>
+    Recorded when there is a &quot;warn&quot; level Data Leak Prevention
+    evaluation for a screen share, but it is caused by the content that the user
+    was already warned about and decided to proceed, so no new warning is shown
+    and printing is silently allowed.
+  </summary>
 </histogram>
 
 <histogram name="Enterprise.Dlp.PrivacyScreenEnforced" enum="BooleanForced"
@@ -938,6 +982,38 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="Enterprise.Dlp.ScreenShareWarned" enum="BooleanWarned"
+    expires_after="2022-12-01">
+  <owner>aidazolic@chromium.org</owner>
+  <owner>chromeos-dlp@google.com</owner>
+  <summary>
+    Recorded when there is a &quot;warn&quot; level Data Leak Prevention
+    evaluation for a screen share.
+  </summary>
+</histogram>
+
+<histogram name="Enterprise.Dlp.ScreenShareWarnProceeded" enum="Boolean"
+    expires_after="2022-12-01">
+  <owner>aidazolic@chromium.org</owner>
+  <owner>chromeos-dlp@google.com</owner>
+  <summary>
+    Recorded when the user proceeded with (True) or canceled (False) the action
+    after a Data Leak Prevention warning for a screen share.
+  </summary>
+</histogram>
+
+<histogram name="Enterprise.Dlp.ScreenShareWarnSilentProceeded" enum="Boolean"
+    expires_after="2022-12-01">
+  <owner>aidazolic@chromium.org</owner>
+  <owner>chromeos-dlp@google.com</owner>
+  <summary>
+    Recorded when there is a &quot;warn&quot; level Data Leak Prevention
+    evaluation for a screen share, but it is caused by the content that the user
+    was already warned about and decided to proceed, so no new warning is shown
+    and the screen share is silently allowed.
+  </summary>
+</histogram>
+
 <histogram name="Enterprise.Dlp.ScreenshotBlocked" enum="BooleanBlocked"
     expires_after="2022-12-01">
   <owner>poromov@chromium.org</owner>
@@ -945,6 +1021,40 @@ chromium-metrics-reviews@google.com.
   <summary>
     Result of Data Leak Prevention evaluation for taking a screenshot or a video
     capture.
+  </summary>
+</histogram>
+
+<histogram name="Enterprise.Dlp.ScreenshotWarned" enum="BooleanWarned"
+    expires_after="2022-12-01">
+  <owner>aidazolic@chromium.org</owner>
+  <owner>chromeos-dlp@google.com</owner>
+  <summary>
+    Recorded when there is a &quot;warn&quot; level Data Leak Prevention
+    evaluation for taking a screenshot or a video capture.
+  </summary>
+</histogram>
+
+<histogram name="Enterprise.Dlp.ScreenshotWarnProceeded" enum="Boolean"
+    expires_after="2022-12-01">
+  <owner>aidazolic@chromium.org</owner>
+  <owner>chromeos-dlp@google.com</owner>
+  <summary>
+    Recorded when the user proceeded with (True) or canceled (False) the action
+    after a Data Leak Prevention warning shown at the capture mode
+    initialization or before taking a screenshot or a video capture.
+  </summary>
+</histogram>
+
+<histogram name="Enterprise.Dlp.ScreenshotWarnSilentProceeded" enum="Boolean"
+    expires_after="2022-12-01">
+  <owner>aidazolic@chromium.org</owner>
+  <owner>chromeos-dlp@google.com</owner>
+  <summary>
+    Recorded when there is a &quot;warn&quot; level Data Leak Prevention
+    evaluation for initiating capture mode, or taking a screenshot or a video
+    capture, but it is caused by the content that the user was already warned
+    about and decided to proceed, so no new warning is shown and the screen
+    share is silently allowed.
   </summary>
 </histogram>
 
@@ -1075,43 +1185,6 @@ chromium-metrics-reviews@google.com.
   </token>
 </histogram>
 
-<histogram
-    name="Enterprise.EncryptedRealtimeReportingCompressionThresholdCount"
-    enum="CompressedRecordThresholdMetricEvent" expires_after="2022-02-01">
-  <owner>gbj@google.com</owner>
-  <owner>src/components/enterprise/OWNERS</owner>
-  <summary>
-    Enumeration that is recorded when compression is enabled and when the report
-    enters the report queue and before the record is encrypted. The enumeration
-    keeps track of how many records are under the compression threshold and are
-    not compressed.
-  </summary>
-</histogram>
-
-<histogram
-    name="Enterprise.EncryptedRealtimeReportingSnappyCompressedRecordSize"
-    units="KB" expires_after="2022-02-01">
-  <owner>gbj@google.com</owner>
-  <owner>src/components/enterprise/OWNERS</owner>
-  <summary>
-    The size of a WrappedRecord after it is compressed with snappy. This metric
-    is recorded when the report enters the report queue and before the record is
-    encrypted.
-  </summary>
-</histogram>
-
-<histogram
-    name="Enterprise.EncryptedRealtimeReportingSnappyUncompressedRecordSize"
-    units="KB" expires_after="2022-02-01">
-  <owner>gbj@google.com</owner>
-  <owner>src/components/enterprise/OWNERS</owner>
-  <summary>
-    The size of a WrappedRecord before it is compressed with snappy. This metric
-    is recorded when the report enters the report queue and before the record is
-    encrypted.
-  </summary>
-</histogram>
-
 <histogram name="Enterprise.EnrolledPolicyHasDMToken" enum="Boolean"
     expires_after="never">
 <!-- expires-never: Used for monitoring the health of device policy. -->
@@ -1127,7 +1200,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.Enrollment" enum="EnterpriseEnrollmentType"
-    expires_after="2022-04-03">
+    expires_after="2023-02-01">
   <owner>raleksandrov@google.com</owner>
   <owner>cros-oac@google.com</owner>
   <summary>
@@ -1145,6 +1218,38 @@ chromium-metrics-reviews@google.com.
 
     Warning: this histogram was expired from 2021-12-05 to 2022-02-01. Data may
     be missing.
+  </summary>
+</histogram>
+
+<histogram
+    name="Enterprise.EnrollmentAttestationBased.EnrollmentCertificateStatus.InitialAttempt"
+    enum="EnrollmentAttestationBasedCertificateStatus"
+    expires_after="2023-03-01">
+  <owner>asumaneev@google.com</owner>
+  <owner>chromeos-commercial-remote-management@google.com</owner>
+  <summary>
+    Status of possibly existing cached enrollment certificate recorded at the
+    first registration attempt during attestation-based enrollment.
+
+    Note that the certificate request status is not in the scope of this metric
+    and is recorded on &quot;EnterpriseEnrollmentType&quot; events by
+    &quot;Enterprise.Enrollment*&quot; metrics.
+  </summary>
+</histogram>
+
+<histogram
+    name="Enterprise.EnrollmentAttestationBased.EnrollmentCertificateStatus.SubsequentAttempt"
+    enum="EnrollmentAttestationBasedCertificateStatus"
+    expires_after="2023-03-01">
+  <owner>asumaneev@google.com</owner>
+  <owner>chromeos-commercial-remote-management@google.com</owner>
+  <summary>
+    Status of refreshed enrollment certificate recorded at the subsequent
+    registration attempt during attestation-based enrollment.
+
+    Note that the certificate request status is not in the scope of this metric
+    and is recorded on &quot;EnterpriseEnrollmentType&quot; events by
+    &quot;Enterprise.Enrollment*&quot; metrics.
   </summary>
 </histogram>
 
@@ -1225,7 +1330,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.EnrollmentTime.Cancel" units="ms"
-    expires_after="2022-04-24">
+    expires_after="2023-02-01">
   <owner>raleksandrov@google.com</owner>
   <owner>cros-oac@google.com</owner>
   <summary>
@@ -1234,7 +1339,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.EnrollmentTime.Failure" units="ms"
-    expires_after="2022-04-17">
+    expires_after="2023-02-01">
   <owner>raleksandrov@google.com</owner>
   <owner>cros-oac@google.com</owner>
   <summary>
@@ -1243,7 +1348,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.EnrollmentTime.Success" units="ms"
-    expires_after="2022-04-10">
+    expires_after="2023-02-01">
   <owner>raleksandrov@google.com</owner>
   <owner>cros-oac@google.com</owner>
   <summary>
@@ -1505,7 +1610,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.InvalidDevicePolicyFilesStatus"
-    enum="InvalidDevicePolicyFilesStatus" expires_after="2022-04-17">
+    enum="InvalidDevicePolicyFilesStatus" expires_after="2023-02-01">
   <owner>emaxx@chromium.org</owner>
   <owner>igorcov@chromium.org</owner>
   <owner>vsavu@google.com</owner>
@@ -1606,13 +1711,13 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram
-    name="Enterprise.ManagementAuthorityThrustworthyness.Cache.ValueChange"
+    name="Enterprise.ManagementAuthorityThrustworthiness.Cache.ValueChange"
     enum="BooleanChanged" expires_after="2023-01-15">
   <owner>ydago@chromium.org</owner>
   <owner>zmin@chromium.org</owner>
   <summary>
     Recorded after the ManagementStatus cache is updated. Reports whether the
-    Management authority thrustworthyness changed after the cache update.
+    Management authority thrustworthiness changed after the cache update.
   </summary>
 </histogram>
 
@@ -1628,7 +1733,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.MultipartDataPipe.WriteRate"
-    units="kilobytes per second" expires_after="2022-06-17">
+    units="kilobytes per second" expires_after="2022-08-21">
   <owner>domfc@chromium.org</owner>
   <owner>anthonyvd@chromium.org</owner>
   <summary>
@@ -1639,7 +1744,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.OnBulkDataEntry.DataSize" units="bytes"
-    expires_after="2022-06-26">
+    expires_after="2022-08-28">
   <owner>domfc@chromium.org</owner>
   <owner>webprotect-team@google.com</owner>
   <summary>
@@ -1656,7 +1761,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.Policies" enum="EnterprisePolicies"
-    expires_after="2022-06-26">
+    expires_after="2022-08-28">
   <owner>mnissler@chromium.org</owner>
   <summary>
     A set of enterprise policy rules that are in use. This is recorded every 24
@@ -1665,7 +1770,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.Policies.IgnoredByPolicyGroup"
-    enum="EnterprisePolicies" expires_after="2022-06-26">
+    enum="EnterprisePolicies" expires_after="2022-08-28">
   <owner>ydago@chromium.org</owner>
   <owner>pastarmovj@chromium.org</owner>
   <summary>
@@ -1677,9 +1782,9 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.Policies.{PolicyLevel}" enum="EnterprisePolicies"
-    expires_after="2022-03-15">
-  <owner>qiutanw@google.com</owner>
+    expires_after="2023-03-01">
   <owner>zmin@chromium.org</owner>
+  <owner>qiutanw@google.com</owner>
   <summary>
     A set of {PolicyLevel} enterprise policy rules that are in use. This is
     recorded for each {PolicyLevel} policy every 24 hours and at startup, if the
@@ -1769,7 +1874,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.PolicyUserVerification"
-    enum="EnterprisePolicyUserVerification" expires_after="2022-06-19">
+    enum="EnterprisePolicyUserVerification" expires_after="2022-08-21">
   <owner>poromov@chromium.org</owner>
   <owner>chromeos-commercial-remote-management@google.com</owner>
   <summary>Tracking the results of policy user verification.</summary>
@@ -1875,14 +1980,14 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.SystemLogUploadResult"
-    enum="EnterpriseSystemLogUploadResult" expires_after="2022-07-03">
+    enum="EnterpriseSystemLogUploadResult" expires_after="2022-09-11">
   <owner>bmalcolm@chromium.org</owner>
   <owner>cros-client-wa@google.com</owner>
   <summary>Result of a single attempt to upload system logs.</summary>
 </histogram>
 
 <histogram name="Enterprise.UserPolicyChromeOS.ChildUser.OAuthTokenError"
-    enum="GoogleServiceAuthError" expires_after="2022-06-26">
+    enum="GoogleServiceAuthError" expires_after="2022-08-28">
   <owner>agawronska@chromium.org</owner>
   <owner>michaelpg@chromium.org</owner>
   <summary>Failure reason for OAuth token fetch for child user.</summary>
@@ -1991,7 +2096,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.UserSession.Logins"
-    enum="EnterpriseUserSessionLogins" expires_after="2022-04-24">
+    enum="EnterpriseUserSessionLogins" expires_after="2023-04-24">
   <owner>xiyuan@chromium.org</owner>
   <owner>sduraisamy@chromium.org</owner>
   <summary>Tracks the sign-in events on an enrolled device.</summary>
@@ -2014,7 +2119,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.VpdUpdateStatus" units="units"
-    expires_after="2022-07-17">
+    expires_after="2022-09-18">
   <owner>igorcov@chromium.org</owner>
   <owner>tnagel@chromium.org</owner>
   <summary>
@@ -2022,8 +2127,21 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="EnterpriseCheck.AzureADJoinStatusCheckTime" units="ms"
+    expires_after="2022-12-12">
+  <owner>igorruvinov@chromium.org</owner>
+  <owner>ydago@chromium.org</owner>
+  <owner>pastarmovj@chromium.org</owner>
+  <owner>rogerta@chromium.org</owner>
+  <owner>zmin@chromium.org</owner>
+  <summary>
+    Time elapsed for checking the Azure AD join status. This is only recorded
+    once during the first successful join status check.
+  </summary>
+</histogram>
+
 <histogram name="EnterpriseCheck.InDomain" enum="BooleanEnabled"
-    expires_after="2022-04-30">
+    expires_after="2023-04-30">
   <owner>pastarmovj@chromium.org</owner>
   <owner>rogerta@chromium.org</owner>
   <summary>
@@ -2068,7 +2186,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="EnterpriseCheck.IsDomainJoined" enum="BooleanEnabled"
-    expires_after="2022-06-19">
+    expires_after="2022-08-21">
   <owner>pastarmovj@chromium.org</owner>
   <owner>rogerta@chromium.org</owner>
   <owner>zmin@chromium.org</owner>
@@ -2079,7 +2197,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="EnterpriseCheck.IsEnterpriseUser" enum="BooleanEnabled"
-    expires_after="2022-06-19">
+    expires_after="2022-08-21">
   <owner>pastarmovj@chromium.org</owner>
   <owner>rogerta@chromium.org</owner>
   <owner>zmin@chromium.org</owner>
@@ -2091,13 +2209,27 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="EnterpriseCheck.IsFullyManaged2" enum="IsFullyManagedBoolean"
-    expires_after="2022-06-19">
+    expires_after="2022-08-21">
   <owner>twellington@google.com</owner>
   <owner>tedchcoc@chromium.org</owner>
   <summary>
     On Android (OS version Lollipop+): Whether the device has a &quot;device
     owner&quot; app installed. This check is performed once on application
     start-up.
+  </summary>
+</histogram>
+
+<histogram name="EnterpriseCheck.IsJoinedToAzureAD" enum="BooleanEnabled"
+    expires_after="2022-12-12">
+  <owner>igorruvinov@chromium.org</owner>
+  <owner>ydago@chromium.org</owner>
+  <owner>pastarmovj@chromium.org</owner>
+  <owner>rogerta@chromium.org</owner>
+  <owner>zmin@chromium.org</owner>
+  <summary>
+    Whether the machine is joined to an Azure AD domain or the user has added
+    one or more work/school accounts to their login session. This check is
+    performed once at start-up on Windows.
   </summary>
 </histogram>
 

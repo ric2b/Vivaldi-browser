@@ -31,7 +31,7 @@
 #include "sql/statement.h"
 #include "sql/transaction.h"
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 #include "base/mac/backup_util.h"
 #endif
 
@@ -94,7 +94,7 @@ sql::InitStatus MailClientDatabase::Init(
   if (!committer.Begin())
     return sql::INIT_FAILURE;
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   // Exclude the mail db file from backups.
   base::mac::SetBackupExclusion(mail_client_name);
 #endif

@@ -20,9 +20,13 @@ bool IsFedCmAutoSigninEnabled() {
       features::kFedCm, features::kFedCmAutoSigninFieldTrialParamName, false);
 }
 
-bool IsFedCmInterceptionEnabled() {
+bool IsFedCmIdpSignoutEnabled() {
   return GetFieldTrialParamByFeatureAsBool(
-      features::kFedCm, features::kFedCmInterceptionFieldTrialParamName, false);
+      features::kFedCm, features::kFedCmIdpSignoutFieldTrialParamName, false);
+}
+
+bool IsFedCmManifestValidationEnabled() {
+  return base::FeatureList::IsEnabled(features::kFedCmManifestValidation);
 }
 
 }  // namespace content

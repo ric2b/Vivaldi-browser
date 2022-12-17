@@ -21,12 +21,16 @@
 #include "components/services/unzip/unzipper_impl.h"
 #include "components/webapps/services/web_app_origin_association/public/mojom/web_app_origin_association_parser.mojom.h"
 #include "components/webapps/services/web_app_origin_association/web_app_origin_association_parser_impl.h"
-#include "content/public/common/content_features.h"
 #include "content/public/utility/utility_thread.h"
 #include "extensions/buildflags/buildflags.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/service_factory.h"
 #include "printing/buildflags/buildflags.h"
+#include "ui/accessibility/accessibility_features.h"
+
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+#include "components/services/screen_ai/screen_ai_service_impl.h"
+#endif
 
 #if BUILDFLAG(IS_WIN)
 #include "chrome/services/util_win/processor_metrics.h"
@@ -106,6 +110,8 @@
 #include "chromeos/assistant/buildflags.h"  // nogncheck
 #include "chromeos/components/local_search_service/local_search_service.h"
 #include "chromeos/components/local_search_service/public/mojom/local_search_service.mojom.h"
+#include "chromeos/components/quick_answers/public/cpp/service/spell_check_service.h"
+#include "chromeos/components/quick_answers/public/mojom/spell_check.mojom.h"
 #include "chromeos/services/tts/public/mojom/tts_service.mojom.h"
 #include "chromeos/services/tts/tts_service.h"
 
@@ -209,6 +215,13 @@ auto RunSpeechRecognitionService(
 }
 #endif  // !BUILDFLAG(IS_ANDROID)
 
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+auto RunScreenAIService(
+    mojo::PendingReceiver<screen_ai::mojom::ScreenAIService> receiver) {
+  return std::make_unique<screen_ai::ScreenAIService>(std::move(receiver));
+}
+#endif
+
 #if BUILDFLAG(ENABLE_PRINTING) && BUILDFLAG(IS_CHROMEOS_ASH)
 auto RunCupsIppParser(
     mojo::PendingReceiver<ipp_parser::mojom::IppParser> receiver) {
@@ -288,10 +301,10 @@ auto RunPrintCompositor(
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 auto RunImeService(
-    mojo::PendingReceiver<chromeos::ime::mojom::ImeService> receiver) {
-  return std::make_unique<chromeos::ime::ImeService>(
-      std::move(receiver), chromeos::ime::ImeDecoderImpl::GetInstance(),
-      std::make_unique<chromeos::ime::FieldTrialParamsRetrieverImpl>());
+    mojo::PendingReceiver<ash::ime::mojom::ImeService> receiver) {
+  return std::make_unique<ash::ime::ImeService>(
+      std::move(receiver), ash::ime::ImeDecoderImpl::GetInstance(),
+      std::make_unique<ash::ime::FieldTrialParamsRetrieverImpl>());
 }
 
 auto RunRecordingService(
@@ -319,6 +332,12 @@ auto RunLocalSearchService(
 auto RunQuickPairService(
     mojo::PendingReceiver<ash::quick_pair::mojom::QuickPairService> receiver) {
   return std::make_unique<ash::quick_pair::QuickPairService>(
+      std::move(receiver));
+}
+
+auto RunQuickAnswersSpellCheckService(
+    mojo::PendingReceiver<quick_answers::mojom::SpellCheckService> receiver) {
+  return std::make_unique<quick_answers::SpellCheckService>(
       std::move(receiver));
 }
 
@@ -361,6 +380,11 @@ void RegisterMainThreadServices(mojo::ServiceFactory& services) {
   services.Add(RunProfileImporter);
   services.Add(RunMirroringService);
   services.Add(RunSpeechRecognitionService);
+#endif
+
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+  if (features::IsScreenAIEnabled())
+    services.Add(RunScreenAIService);
 #endif
 
 #if BUILDFLAG(IS_WIN)
@@ -420,6 +444,7 @@ void RegisterMainThreadServices(mojo::ServiceFactory& services) {
   services.Add(RunTtsService);
   services.Add(RunLocalSearchService);
   services.Add(RunQuickPairService);
+  services.Add(RunQuickAnswersSpellCheckService);
 #if BUILDFLAG(ENABLE_CROS_LIBASSISTANT)
   services.Add(RunAssistantAudioDecoder);
   services.Add(RunLibassistantService);

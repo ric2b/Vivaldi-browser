@@ -10,10 +10,6 @@
 #include "chromeos/dbus/services/cros_dbus_service.h"
 #include "dbus/exported_object.h"
 
-namespace borealis {
-class BorealisCapabilities;
-}
-
 namespace ash {
 
 class VmLaunchServiceProvider
@@ -33,14 +29,26 @@ class VmLaunchServiceProvider
   void StartWaylandServer(dbus::MethodCall* method_call,
                           dbus::ExportedObject::ResponseSender response_sender);
 
-  void OnWaylandServerStarted(
-      dbus::MethodCall* method_call,
-      dbus::ExportedObject::ResponseSender response_sender,
-      borealis::BorealisCapabilities* capabilities,
-      const base::FilePath& path);
-
   void StopWaylandServer(dbus::MethodCall* method_call,
                          dbus::ExportedObject::ResponseSender response_sender);
+
+  // Sets the token used by certain VMs to authorize their usage. This method
+  // expects a string for the token, and optionally a boolean to control whether
+  // we should install/launch on successfully setting the token, or just return.
+  //
+  // Example usage:
+  // dbus-send --print-reply --system --type=method_call                 \
+  //   --dest=org.chromium.VmLaunchService /org/chromium/VmLaunchService \
+  //   org.chromium.VmLaunchService.ProvideVmToken                       \
+  //   string:<TOKEN> boolean:<bool>
+  //
+  // TODO(b/218403711): This API is temporary, and will be removed. Criteria for
+  // its removal is documented in the linked bug.
+  void ProvideVmToken(dbus::MethodCall* method_call,
+                      dbus::ExportedObject::ResponseSender response_sender);
+
+  void EnsureVmLaunched(dbus::MethodCall* method_call,
+                        dbus::ExportedObject::ResponseSender response_sender);
 
   base::WeakPtrFactory<VmLaunchServiceProvider> weak_ptr_factory_{this};
 };

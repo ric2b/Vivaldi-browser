@@ -29,6 +29,7 @@ class VivaldiBrowserMainExtraParts : public ChromeBrowserMainExtraParts {
 
   void PostProfileInit(Profile* profile, bool is_initial_profile) override;
 
+  void PreMainMessageLoopRun() override;
   void PostMainMessageLoopRun() override;
 
   static std::unique_ptr<VivaldiBrowserMainExtraParts> Create();

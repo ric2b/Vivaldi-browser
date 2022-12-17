@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/command_line.h"
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/path_service.h"
@@ -28,6 +29,7 @@
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
+#include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/account_id/account_id.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
@@ -59,9 +61,6 @@ constexpr char kAppAllUrl[] = "https://www.google.com/all";
 constexpr char kAppGuestUrl[] = "https://www.google.com/guest";
 constexpr char kAppManagedUrl[] = "https://www.google.com/managed";
 constexpr char kAppUnmanagedUrl[] = "https://www.google.com/unmanaged";
-#endif
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
 constexpr char kAppChildUrl[] = "https://www.google.com/child";
 #endif
 
@@ -134,7 +133,7 @@ class PreinstalledWebAppManagerTest : public testing::Test {
     base::RunLoop run_loop;
     preinstalled_web_app_manager->LoadForTesting(base::BindLambdaForTesting(
         [&](std::vector<ExternalInstallOptions> install_options_list) {
-          result = install_options_list;
+          result = std::move(install_options_list);
           run_loop.Quit();
         }));
     run_loop.Run();
@@ -494,6 +493,13 @@ TEST_F(PreinstalledWebAppManagerTest, ManagedUser) {
   profile->GetProfilePolicyConnector()->OverrideIsManagedForTesting(true);
   VerifySetOfApps(profile.get(), {GURL(kAppAllUrl), GURL(kAppManagedUrl)});
 }
+
+TEST_F(PreinstalledWebAppManagerTest, ChildUser) {
+  const auto profile = CreateProfileAndLogin();
+  profile->SetIsSupervisedProfile();
+  EXPECT_TRUE(profile->IsChild());
+  VerifySetOfApps(profile.get(), {GURL(kAppAllUrl), GURL(kAppChildUrl)});
+}
 #else
 // No app is expected for non-ChromeOS builds.
 TEST_F(PreinstalledWebAppManagerTest, NoApp) {
@@ -502,13 +508,6 @@ TEST_F(PreinstalledWebAppManagerTest, NoApp) {
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-// TODO(crbug.com/1252273): Enable test for Lacros.
-TEST_F(PreinstalledWebAppManagerTest, ChildUser) {
-  const auto profile = CreateProfileAndLogin();
-  profile->SetIsSupervisedProfile();
-  VerifySetOfApps(profile.get(), {GURL(kAppAllUrl), GURL(kAppChildUrl)});
-}
-
 TEST_F(PreinstalledWebAppManagerTest, NonPrimaryProfile) {
   VerifySetOfApps(CreateProfile().get(),
                   {GURL(kAppAllUrl), GURL(kAppUnmanagedUrl)});
@@ -538,5 +537,20 @@ TEST_F(PreinstalledWebAppManagerTest, ExtraWebAppsNoMatchingDirectory) {
   ExpectHistograms(/*enabled=*/0, /*disabled=*/0, /*errors=*/0);
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+#if BUILDFLAG(IS_CHROMEOS)
+class DisabledPreinstalledWebAppManagerTest
+    : public PreinstalledWebAppManagerTest {
+ public:
+  DisabledPreinstalledWebAppManagerTest() {
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        switches::kDisableDefaultApps);
+  }
+};
+
+TEST_F(DisabledPreinstalledWebAppManagerTest, LoadConfigsWhileDisabled) {
+  EXPECT_EQ(LoadApps(kGoodJsonTestDir).size(), 0u);
+}
+#endif  // #if BUILDFLAG(IS_CHROMEOS)
 
 }  // namespace web_app

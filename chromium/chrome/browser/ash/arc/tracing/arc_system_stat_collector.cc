@@ -20,11 +20,11 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/system/sys_info.h"
-#include "base/task/post_task.h"
 #include "base/task/task_runner_util.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/ash/arc/tracing/arc_system_model.h"
@@ -669,7 +669,7 @@ ArcSystemStatCollector::ReadSystemStatOnBackgroundThread(
        false},
   };
 
-  for (size_t i = 0; i < base::size(one_value_readers); ++i) {
+  for (size_t i = 0; i < std::size(one_value_readers); ++i) {
     if (!context->system_readers[one_value_readers[i].reader].is_valid() ||
         !ParseStatFile(
             context->system_readers[one_value_readers[i].reader].get(),

@@ -86,57 +86,59 @@ void OutputHighlighedPosition(const Location& location,
 
 }  // namespace
 
-Err::Err() : has_error_(false) {}
+Err::Err(const Err& other) {
+  if (other.info_)
+    info_ = std::make_unique<ErrInfo>(*other.info_);
+}
 
 Err::Err(const Location& location,
          const std::string& msg,
          const std::string& help)
-    : has_error_(true), location_(location), message_(msg), help_text_(help) {}
+    : info_(std::make_unique<ErrInfo>(location, msg, help)) {}
 
 Err::Err(const LocationRange& range,
          const std::string& msg,
          const std::string& help)
-    : has_error_(true),
-      location_(range.begin()),
-      message_(msg),
-      help_text_(help) {
-  ranges_.push_back(range);
+    : info_(std::make_unique<ErrInfo>(range.begin(), msg, help)) {
+  info_->ranges.push_back(range);
 }
 
 Err::Err(const Token& token, const std::string& msg, const std::string& help)
-    : has_error_(true),
-      location_(token.location()),
-      message_(msg),
-      help_text_(help) {
-  ranges_.push_back(token.range());
+    : info_(std::make_unique<ErrInfo>(token.location(), msg, help)) {
+  info_->ranges.push_back(token.range());
 }
 
 Err::Err(const ParseNode* node,
          const std::string& msg,
          const std::string& help_text)
-    : has_error_(true), message_(msg), help_text_(help_text) {
+    : info_(std::make_unique<ErrInfo>(Location(), msg, help_text)) {
   // Node will be null in certain tests.
   if (node) {
     LocationRange range = node->GetRange();
-    location_ = range.begin();
-    ranges_.push_back(range);
+    info_->location = range.begin();
+    info_->ranges.push_back(range);
   }
 }
 
 Err::Err(const Value& value,
-         const std::string msg,
+         const std::string& msg,
          const std::string& help_text)
-    : has_error_(true), message_(msg), help_text_(help_text) {
+    : info_(std::make_unique<ErrInfo>(Location(), msg, help_text)) {
   if (value.origin()) {
     LocationRange range = value.origin()->GetRange();
-    location_ = range.begin();
-    ranges_.push_back(range);
+    info_->location = range.begin();
+    info_->ranges.push_back(range);
   }
 }
 
-Err::Err(const Err& other) = default;
-
-Err::~Err() = default;
+Err& Err::operator=(const Err& other) {
+  if (other.info_) {
+    info_ = std::make_unique<ErrInfo>(*other.info_);
+  } else {
+    info_.reset();
+  }
+  return *this;
+}
 
 void Err::PrintToStdout() const {
   InternalPrintToStdout(false, true);
@@ -147,11 +149,11 @@ void Err::PrintNonfatalToStdout() const {
 }
 
 void Err::AppendSubErr(const Err& err) {
-  sub_errs_.push_back(err);
+  info_->sub_errs.push_back(err);
 }
 
 void Err::InternalPrintToStdout(bool is_sub_err, bool is_fatal) const {
-  DCHECK(has_error_);
+  DCHECK(info_);
 
   if (!is_sub_err) {
     if (is_fatal)
@@ -161,40 +163,40 @@ void Err::InternalPrintToStdout(bool is_sub_err, bool is_fatal) const {
   }
 
   // File name and location.
-  const InputFile* input_file = location_.file();
-  std::string loc_str = location_.Describe(true);
+  const InputFile* input_file = info_->location.file();
+  std::string loc_str = info_->location.Describe(true);
   if (!loc_str.empty()) {
     if (is_sub_err)
       loc_str.insert(0, "See ");
     else
       loc_str.insert(0, "at ");
-    if (!toolchain_label_.is_null())
+    if (!info_->toolchain_label.is_null())
       loc_str += " ";
   }
   std::string toolchain_str;
-  if (!toolchain_label_.is_null()) {
-    toolchain_str += "(" + toolchain_label_.GetUserVisibleName(false) + ")";
+  if (!info_->toolchain_label.is_null()) {
+    toolchain_str += "(" + info_->toolchain_label.GetUserVisibleName(false) + ")";
   }
   std::string colon;
   if (!loc_str.empty() || !toolchain_str.empty())
     colon = ": ";
-  OutputString(loc_str + toolchain_str + colon + message_ + "\n");
+  OutputString(loc_str + toolchain_str + colon + info_->message + "\n");
 
   // Quoted line.
   if (input_file) {
     std::string line =
-        GetNthLine(input_file->contents(), location_.line_number());
+        GetNthLine(input_file->contents(), info_->location.line_number());
     if (!base::ContainsOnlyChars(line, base::kWhitespaceASCII)) {
       OutputString(line + "\n", DECORATION_DIM);
-      OutputHighlighedPosition(location_, ranges_, line.size());
+      OutputHighlighedPosition(info_->location, info_->ranges, line.size());
     }
   }
 
   // Optional help text.
-  if (!help_text_.empty())
-    OutputString(help_text_ + "\n");
+  if (!info_->help_text.empty())
+    OutputString(info_->help_text + "\n");
 
   // Sub errors.
-  for (const auto& sub_err : sub_errs_)
+  for (const auto& sub_err : info_->sub_errs)
     sub_err.InternalPrintToStdout(true, is_fatal);
 }

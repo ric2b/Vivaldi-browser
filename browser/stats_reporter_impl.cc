@@ -753,6 +753,10 @@ void StatsReporterImpl::DoReporting(FileHolder os_profile_reporting_data_file,
   std::string request_url;
   std::string body;
   base::TimeDelta next_reporting_time_interval;
+
+  // Screen info should only be missing if we reach this too early in the
+  // startup process.
+  DCHECK(display::Screen::GetScreen());
   if (!GeneratePingRequest(
           now, legacy_user_id_,
           display::Screen::GetScreen()->GetPrimaryDisplay().GetSizeInPixel(),

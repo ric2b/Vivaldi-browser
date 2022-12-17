@@ -511,7 +511,8 @@ class HeadlessCrashObserverTest : public HeadlessAsyncDevTooledBrowserTest,
     // ASan's normal error exit code is 1, which base categorizes as the process
     // being killed.
     EXPECT_EQ(base::TERMINATION_STATUS_PROCESS_WAS_KILLED, status);
-#elif BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+#elif BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_FUCHSIA)
     EXPECT_EQ(base::TERMINATION_STATUS_PROCESS_CRASHED, status);
 #else
     EXPECT_EQ(base::TERMINATION_STATUS_ABNORMAL_TERMINATION, status);
@@ -522,7 +523,12 @@ class HeadlessCrashObserverTest : public HeadlessAsyncDevTooledBrowserTest,
   content::ScopedAllowRendererCrashes scoped_allow_renderer_crashes_;
 };
 
+// TODO(1272554): HeadlessCrashObserverTest.RunAsyncTest is flaky on Win debug.
+#if BUILDFLAG(IS_WIN) && !defined(NDEBUG)
+DISABLED_HEADLESS_ASYNC_DEVTOOLED_TEST_F(HeadlessCrashObserverTest);
+#else
 HEADLESS_ASYNC_DEVTOOLED_TEST_F(HeadlessCrashObserverTest);
+#endif
 
 class HeadlessDevToolsClientAttachTest
     : public HeadlessAsyncDevTooledBrowserTest {

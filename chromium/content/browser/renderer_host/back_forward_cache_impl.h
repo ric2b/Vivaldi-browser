@@ -16,6 +16,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "content/browser/renderer_host/back_forward_cache_can_store_document_result.h"
+#include "content/browser/renderer_host/back_forward_cache_metrics.h"
 #include "content/browser/renderer_host/page_impl.h"
 #include "content/browser/renderer_host/render_process_host_internal_observer.h"
 #include "content/browser/renderer_host/stored_page.h"
@@ -66,10 +67,11 @@ const base::Feature kBackForwardCacheMediaSessionPlaybackStateChange{
     "BackForwardCacheMediaSessionPlaybackStateChange",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enable back/forward cache for screen reader users. This flag should be
-// removed once the https://crbug.com/1271450 is resolved.
-const base::Feature kEnableBackForwardCacheForScreenReader{
-    "EnableBackForwardCacheForScreenReader", base::FEATURE_DISABLED_BY_DEFAULT};
+// Enables controlling the time to live for pages in the backforward cache.
+// The time to live is defined by the param 'time_to_live_seconds'; if this
+// param is not specified then this feature is ignored and the default is used.
+const base::Feature kBackForwardCacheTimeToLiveControl{
+    "BackForwardCacheTimeToLiveControl", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Combines a flattened list and a tree of the reasons why each document cannot
 // enter the back/forward cache (might be empty if it can). The tree saves the
@@ -99,6 +101,9 @@ struct CONTENT_EXPORT BackForwardCacheCanStoreDocumentResultWithTree {
 class CONTENT_EXPORT BackForwardCacheImpl
     : public BackForwardCache,
       public RenderProcessHostInternalObserver {
+  friend class BackForwardCacheCanStoreTreeResult;
+  friend class BackForwardCacheMetrics;
+
  public:
   enum MessageHandlingPolicyWhenCached {
     kMessagePolicyNone,
@@ -203,8 +208,16 @@ class CONTENT_EXPORT BackForwardCacheImpl
   // |render_frame_host|, which means nothing about the page can change (usage
   // of blocklisted features, pending navigations, load state, etc.) anymore.
   // Note that criteria for storing and restoring can be different.
+  // |include_ccns| indicates whether or not we should consider cache-control:
+  // no-store related reasons. We don't include those reasons in the default
+  // case to allow pages with cache-control:no-store in back/forward cache
+  // temporarily for metrics collection, but those pages should never be
+  // restored. When trying to restore a page, |include_ccns| is set to true to
+  // include cache-control:no-store reasons, so that the pages containing them
+  // will not be restored.
   BackForwardCacheCanStoreDocumentResultWithTree CanStorePageNow(
-      RenderFrameHostImpl* render_frame_host);
+      RenderFrameHostImpl* render_frame_host,
+      bool include_ccns = false);
 
   // Whether a RenderFrameHost could be stored into the BackForwardCache at some
   // point in the future. Different than CanStorePageNow() above, we won't check
@@ -329,6 +342,18 @@ class CONTENT_EXPORT BackForwardCacheImpl
       SiteInstanceId site_instance_id);
   bool IsProxyInBackForwardCacheForDebugging(RenderFrameProxyHost* proxy);
 
+  // Construct a tree of NotRestoredReasons for |rfh| without checking the
+  // eligibility of all the documents in the frame tree. This should be only
+  // used for evicting the back/forward cache entry where we know why the entry
+  // is not eligible and which document is causing it.
+  // This preserves the frame tree structure after eviction, because the actual
+  // page and frame tree is not kept around after eviction.
+  // |rfh| will be marked as having |eviction_reason| as not restored reasons.
+  static std::unique_ptr<BackForwardCacheCanStoreTreeResult>
+  CreateEvictionBackForwardCacheCanStoreTreeResult(
+      RenderFrameHostImpl& rfh,
+      BackForwardCacheCanStoreDocumentResult& eviction_reason);
+
  private:
   // Destroys all evicted frames in the BackForwardCache.
   void DestroyEvictedFrames();
@@ -353,18 +378,6 @@ class CONTENT_EXPORT BackForwardCacheImpl
   // result.
   std::unique_ptr<BackForwardCacheCanStoreTreeResult> PopulateReasonsForPage(
       RenderFrameHostImpl* rfh,
-      BackForwardCacheCanStoreDocumentResult& flattened_result,
-      bool include_non_sticky,
-      bool create_tree);
-
-  // Populates the reasons why this |rfh| and its subframes cannot enter the
-  // back/forward cache.
-  // |main_origin| is the origin of the outermost document. Refer to
-  // |PopulateReasonsForPage| for other params.
-  std::unique_ptr<BackForwardCacheCanStoreTreeResult>
-  PopulateReasonsForDocumentAndDescendants(
-      RenderFrameHostImpl* rfh,
-      const url::Origin& main_origin,
       BackForwardCacheCanStoreDocumentResult& flattened_result,
       bool include_non_sticky,
       bool create_tree);
@@ -459,6 +472,79 @@ class CONTENT_EXPORT BackForwardCacheImpl
   const std::unordered_set<std::string> blocked_cgi_params_;
 
   const UnloadSupportStrategy unload_strategy_;
+
+  // Helper class to iterate through the frame tree in the page and populate the
+  // NotRestoredReasons.
+  class NotRestoredReasonBuilder {
+   public:
+    // Construct a tree of NotRestoredReasons by checking the eligibility of
+    // each frame in the frame tree rooted at |root_rfh|.
+    // |root_rfh| represents the root document of the page. |include_non_sticky|
+    // controls whether or not we should record non-sticky reasons in the tree,
+    // and |create_tree| controls whether or not we should build
+    // |BackForwardCacheCanStoreTreeResult|. If |create_tree| is false, we only
+    // record them in a flattened list.
+    NotRestoredReasonBuilder(RenderFrameHostImpl* root_rfh,
+                             bool include_non_sticky,
+                             bool create_tree);
+
+    // Struct for containing the RenderFrameHostImpl that is going to be
+    // evicted if applicable. |reasons| represent why |rfh_to_be_evicted| will
+    // be evicted.
+    struct EvictionInfo {
+      EvictionInfo(RenderFrameHostImpl& rfh,
+                   BackForwardCacheCanStoreDocumentResult* reasons)
+          : rfh_to_be_evicted(&rfh), reasons(reasons) {}
+      RenderFrameHostImpl* const rfh_to_be_evicted;
+      const BackForwardCacheCanStoreDocumentResult* reasons;
+    };
+
+    NotRestoredReasonBuilder(RenderFrameHostImpl* root_rfh,
+                             bool include_non_sticky,
+                             bool create_tree,
+                             absl::optional<EvictionInfo> eviction_info);
+
+    ~NotRestoredReasonBuilder();
+
+    // Access the populated result.
+    BackForwardCacheCanStoreDocumentResult GetFlattenedResult() {
+      // TODO(yuzus): Check that |flattened_result_| and the tree result match.
+      return flattened_result_;
+    }
+
+    std::unique_ptr<BackForwardCacheCanStoreTreeResult> GetTreeResult() {
+      return std::move(tree_result_);
+    }
+
+   private:
+    // Populate NotRestoredReasons for the subtree whose root is |rfh| by
+    // iterating the frame tree and populating NotRestoredReasons in
+    // |flattened_result_|. This will return nullptr if |create_tree| is false,
+    // and returns a NotRestoredReason tree otherwise.
+    std::unique_ptr<BackForwardCacheCanStoreTreeResult>
+    PopulateReasonsAndReturnSubtreeIfNeededFor(RenderFrameHostImpl* rfh);
+
+    // Root document of the tree.
+    RenderFrameHostImpl* const root_rfh_;
+    // BackForwardCacheImpl instance to access eligibility check functions.
+    BackForwardCacheImpl& bfcache_;
+    // Flattened list of NotRestoredReasons for the tree. This is empty at the
+    // start and has to be merged using |GetFlattenedResult()|.
+    BackForwardCacheCanStoreDocumentResult flattened_result_;
+    // Tree result of NotRestoredReasons. This is populated in the constructor.
+    std::unique_ptr<BackForwardCacheCanStoreTreeResult> tree_result_;
+    // If true, check both non-sticky reasons and sticky reasons. If false,
+    // check only sticky reasons.
+    const bool include_non_sticky_;
+    // If true, construct a tree of NotRestoredReasons representing the frame
+    // tree structure. If false, only populate |flattened_result_|.
+    const bool create_tree_;
+    // Contains the information of the RenderFrameHost that causes eviction, if
+    // applicable. If set, the result returned by the builder will only contain
+    // the NotRestoredReason for the RenderFrameHost that causes eviction
+    // (instead of the reasons for the whole tree).
+    absl::optional<EvictionInfo> eviction_info_;
+  };
 
   base::WeakPtrFactory<BackForwardCacheImpl> weak_factory_;
 };

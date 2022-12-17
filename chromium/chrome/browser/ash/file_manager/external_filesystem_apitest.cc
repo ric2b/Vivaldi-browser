@@ -12,6 +12,7 @@
 #include "base/path_service.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
+#include "base/time/time.h"
 #include "chrome/browser/ash/drive/drive_integration_service.h"
 #include "chrome/browser/ash/drive/drivefs_test_support.h"
 #include "chrome/browser/ash/file_manager/file_manager_test_util.h"
@@ -741,8 +742,7 @@ IN_PROC_BROWSER_TEST_F(FileSystemExtensionApiTestWithApps, OpenGalleryForPng) {
 // LocalFileSystemExtensionApiTests.
 //
 
-IN_PROC_BROWSER_TEST_F(LocalFileSystemExtensionApiTest,
-                       DISABLED_FileSystemOperations) {
+IN_PROC_BROWSER_TEST_F(LocalFileSystemExtensionApiTest, FileSystemOperations) {
   EXPECT_TRUE(RunFileSystemExtensionApiTest(
       "file_browser/filesystem_operations_test",
       FILE_PATH_LITERAL("manifest.json"),
@@ -816,7 +816,7 @@ IN_PROC_BROWSER_TEST_F(DriveFileSystemExtensionApiTest,
       FLAGS_NONE)) << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(DriveFileSystemExtensionApiTest, FileWatch) {
+IN_PROC_BROWSER_TEST_F(DriveFileSystemExtensionApiTest, DISABLED_FileWatch) {
   EXPECT_TRUE(RunFileSystemExtensionApiTest(
       "file_browser/file_watcher_test",
       FILE_PATH_LITERAL("manifest.json"),

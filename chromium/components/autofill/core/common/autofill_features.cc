@@ -102,6 +102,14 @@ const base::Feature kAutofillConsiderVariationCountryCodeForPhoneNumbers{
 const base::Feature kAutofillCreateDataForTest{
     "AutofillCreateDataForTest", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// If enabled, we try to fill and import from fields based on available
+// heuristic or server suggestions even if the autocomplete attribute is not
+// specified by the web standard. This does not affect the moments when the UI
+// is shown.
+// TODO(crbug.com/1295728): Remove the feature when the experiment is completed.
+const base::Feature kAutofillFillAndImportFromMoreFields{
+    "AutofillFillAndImportFromMoreFields", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // If enabled, AutofillPopupControllerImpl is destructed not immediately in its
 // HideViewAndDie() function, but as a delayed task.
 // TODO(crbug.com/1277218): Cleanup when launched.
@@ -123,7 +131,7 @@ const base::Feature kAutofillDisableAddressImport{
     "AutofillDisableAddressImport", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Controls if the heuristic field parsing utilizes shared labels.
-// TODO(crbug/1165780): Remove once shared labels are launched.
+// TODO(crbug.com/1165780): Remove once shared labels are launched.
 const base::Feature kAutofillEnableSupportForParsingWithSharedLabels{
     "AutofillEnableSupportForParsingWithSharedLabels",
     base::FEATURE_DISABLED_BY_DEFAULT};
@@ -153,15 +161,20 @@ const base::Feature kAutofillEnableAugmentedPhoneCountryCode{
     "AutofillEnableAugmentedPhoneCountryCode",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
+// This feature guards the logic for Autofills future compatibility launch of
+// birthdates. Currently filling is not supported and this effectively
+// disables the birthdate merging logic, reads/writes to the AutofillTable and
+// reading/writing from the sync proto.
+// TODO(crbug.com/1305940):  Remove once launched.
+const base::Feature kAutofillEnableCompatibilitySupportForBirthdates{
+    "AutofillEnableCompatibilitySupportForBirthdates",
+    base::FEATURE_ENABLED_BY_DEFAULT};
+
 // Controls if Autofill parses ADDRESS_HOME_DEPENDENT_LOCALITY.
 // TODO(crbug.com/1157405): Remove once launched.
 const base::Feature kAutofillEnableDependentLocalityParsing{
     "AutofillEnableDependentLocalityParsing",
     base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Controls whether we show "Hide suggestions" item in the suggestions menu.
-const base::Feature kAutofillEnableHideSuggestionsUI{
-    "AutofillEnableHideSuggestionsUI", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Controls whether to save the first number in a form with multiple phone
 // numbers instead of aborting the import.
@@ -214,7 +227,14 @@ const base::Feature kAutofillEnableSupportForHonorificPrefixes{
     "AutofillEnableSupportForHonorificPrefixes",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enables autofill to function within a FencedFrame, and is disabled by default
+// If enabled, trunk prefix-related phone number types are added to the
+// supported and matching types of |PhoneNumber|.
+const base::Feature kAutofillEnableSupportForPhoneNumberTrunkTypes{
+    "AutofillEnableSupportForPhoneNumberTrunkTypes",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables autofill to function within a FencedFrame, and is disabled by
+// default.
 // TODO(crbug.com/1294378): Remove once launched.
 const base::Feature kAutofillEnableWithinFencedFrame{
     "AutofillEnableWithinFencedFrame", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -249,13 +269,6 @@ const base::Feature kAutofillFixFillableFieldTypes{
 const base::Feature kAutofillFixServerQueriesIfPasswordManagerIsEnabled{
     "AutofillFixServerQueriesIfPasswordManagerIsEnabled",
     base::FEATURE_DISABLED_BY_DEFAULT};
-
-// The autocomplete attribute may prevent Autofill import, crbug/1213301. This
-// feature addresses the issue. For now, the fix only concerns fields with the
-// signature 2281611779.
-// TODO(crbug/1213301): Remove this.
-const base::Feature kAutofillIgnoreAutocompleteForImport{
-    "AutofillIgnoreAutocompleteForImport", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // When enabled, the Autofill popup ignores second clicks for a certain period
 // (kAutofillIgnoreEarlyClicksOnPopupDuration) after the Autofill popup was
@@ -363,6 +376,20 @@ const base::Feature kAutofillProfileImportFromUnfocusableFields{
     "AutofillProfileImportFromUnfocusableFields",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Clear fields which are not visible in the settings for a profile's country,
+// both during profile import and on startup.
+// TODO(crbug.com/1299435): Cleanup when launched.
+const base::Feature kAutofillRemoveInaccessibleProfileValues{
+    "AutofillRemoveInaccessibleProfileValues",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
+// If enabled, invalid phone numbers are removed on profile import, rather than
+// invalidating the entire profile.
+// TODO(crbug.com/1298424): Cleanup when launched.
+const base::Feature kAutofillRemoveInvalidPhoneNumberOnImport{
+    "AutofillRemoveInvalidPhoneNumberOnImport",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Controls whether or not overall prediction are retrieved from the cache.
 const base::Feature kAutofillRetrieveOverallPredictionsFromCache{
     "AutofillRetrieveOverallPredictionsFromCache",
@@ -388,9 +415,13 @@ const base::Feature kAutofillServerCommunication{
 
 // Controls whether Autofill may fill across origins as part of the
 // AutofillAcrossIframes experiment.
-// TODO(crbug.com/1220038): Clean up when launched.
+// TODO(crbug.com/1304721): Clean up when launched.
 const base::Feature kAutofillSharedAutofill{"AutofillSharedAutofill",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
+// Relaxes the conditions under which a field is safe to fill.
+// See FormForest::GetRendererFormsOfBrowserForm() for details.
+const base::FeatureParam<bool> kAutofillSharedAutofillRelaxedParam{
+    &kAutofillSharedAutofill, "relax_shared_autofill", false};
 
 // Controls attaching the autofill type predictions to their respective
 // element in the DOM.

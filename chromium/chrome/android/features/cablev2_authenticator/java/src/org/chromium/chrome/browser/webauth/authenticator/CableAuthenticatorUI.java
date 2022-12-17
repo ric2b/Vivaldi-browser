@@ -84,6 +84,8 @@ public class CableAuthenticatorUI extends Fragment implements OnClickListener {
     private static final int ERROR_UNEXPECTED_EOF = 100;
     private static final int ERROR_NO_SCREENLOCK = 110;
     private static final int ERROR_NO_BLUETOOTH_PERMISSION = 111;
+    private static final int ERROR_AUTHENTICATOR_SELECTION_RECEIVED = 114;
+    private static final int ERROR_DISCOVERABLE_CREDENTIALS_REQUEST = 115;
 
     // These entries duplicate some of the enum values from
     // `CableV2MobileEvent`. The C++ enum is the source of truth for these
@@ -317,7 +319,8 @@ public class CableAuthenticatorUI extends Fragment implements OnClickListener {
                         return;
                     }
 
-                    if (BuildInfo.isAtLeastS() && requestBluetoothPermissions()) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                            && requestBluetoothPermissions()) {
                         mState = State.ENABLE_BLUETOOTH_PERMISSION_REQUESTED;
                         return;
                     }
@@ -352,7 +355,8 @@ public class CableAuthenticatorUI extends Fragment implements OnClickListener {
 
                     // In Android 12 and above there is a new BLUETOOTH_ADVERTISE runtime
                     // permission.
-                    if (BuildInfo.isAtLeastS() && requestBluetoothPermissions()) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                            && requestBluetoothPermissions()) {
                         mState = State.BLUETOOTH_ADVERTISE_PERMISSION_REQUESTED;
                         mAuthenticator.maybeRecordEvent(
                                 EVENT_BLUETOOTH_ADVERTISE_PERMISSION_REQUESTED);
@@ -381,7 +385,8 @@ public class CableAuthenticatorUI extends Fragment implements OnClickListener {
 
                 case ERROR:
                     if (event == Event.RESUMED && mErrorCode == ERROR_NO_BLUETOOTH_PERMISSION
-                            && BuildInfo.isAtLeastS() && haveBluetoothPermissions()) {
+                            && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                            && haveBluetoothPermissions()) {
                         // The user navigated away and came back, but now we have the needed
                         // permission.
                         mState = State.ENABLE_BLUETOOTH;
@@ -757,6 +762,11 @@ public class CableAuthenticatorUI extends Fragment implements OnClickListener {
             case ERROR_NO_SCREENLOCK:
                 desc = getResources().getString(R.string.cablev2_error_no_screenlock, packageLabel);
                 settingsButtonVisible = true;
+                break;
+
+            case ERROR_AUTHENTICATOR_SELECTION_RECEIVED:
+            case ERROR_DISCOVERABLE_CREDENTIALS_REQUEST:
+                desc = getResources().getString(R.string.cablev2_error_disco_cred, packageLabel);
                 break;
 
             default:

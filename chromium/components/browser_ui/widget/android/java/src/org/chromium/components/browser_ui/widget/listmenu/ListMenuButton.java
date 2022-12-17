@@ -38,15 +38,16 @@ public class ListMenuButton
         default void onPopupMenuDismissed() {}
     }
 
-    private final int mMenuMaxWidth;
     private final boolean mMenuVerticalOverlapAnchor;
     private final boolean mMenuHorizontalOverlapAnchor;
 
+    private int mMenuMaxWidth;
     private AnchoredPopupWindow mPopupMenu;
     private ListMenuButtonDelegate mDelegate;
     private ObserverList<PopupMenuShownListener> mPopupListeners = new ObserverList<>();
     private boolean mTryToFitLargestItem;
     private boolean mPositionedAtEnd;
+    private boolean mIsAttachedToWindow;
 
     /**
      * Creates a new {@link ListMenuButton}.
@@ -87,14 +88,32 @@ public class ListMenuButton
 
     /**
      * Sets the delegate this menu will rely on for populating the popup menu and handling selection
-     * responses.  The menu will not show or work without it.
+     * responses. The OnClickListener will be overridden by default to show menu. The menu will not
+     * show or work without the delegate.
      *
      * @param delegate The {@link ListMenuButtonDelegate} to use for menu creation and selection
      *         handling.
      */
     public void setDelegate(ListMenuButtonDelegate delegate) {
+        setDelegate(delegate, true);
+    }
+
+    /**
+     * Sets the delegate this menu will rely on for populating the popup menu and handling selection
+     * responses. The menu will not
+     * show or work without the delegate.
+     *
+     * @param delegate The {@link ListMenuButtonDelegate} to use for menu creation and selection
+     *         handling.
+     * @param overrideOnClickListener Whether to override the click listener which can trigger
+     *        the popup menu.
+     */
+    public void setDelegate(ListMenuButtonDelegate delegate, boolean overrideOnClickListener) {
         dismiss();
         mDelegate = delegate;
+        if (overrideOnClickListener) {
+            setOnClickListener((view) -> showMenu());
+        }
     }
 
     /**
@@ -110,9 +129,18 @@ public class ListMenuButton
      * Shows a popupWindow built by ListMenuButton
      */
     public void showMenu() {
+        if (!mIsAttachedToWindow) return;
         initPopupWindow();
         mPopupMenu.show();
         notifyPopupListeners(true);
+    }
+
+    /**
+     * Set the max width of the popup menu.
+     * @param maxWidth The max width of the popup.
+     */
+    public void setMenuMaxWidth(int maxWidth) {
+        mMenuMaxWidth = maxWidth;
     }
 
     /**
@@ -197,12 +225,18 @@ public class ListMenuButton
     protected void onFinishInflate() {
         super.onFinishInflate();
         if (TextUtils.isEmpty(getContentDescription())) setContentDescriptionContext("");
-        setOnClickListener((view) -> showMenu());
+    }
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        mIsAttachedToWindow = true;
     }
 
     @Override
     protected void onDetachedFromWindow() {
         dismiss();
+        mIsAttachedToWindow = false;
         super.onDetachedFromWindow();
     }
 

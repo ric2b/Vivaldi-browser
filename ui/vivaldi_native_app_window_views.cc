@@ -12,6 +12,7 @@
 #include "base/command_line.h"
 #include "base/stl_util.h"
 #include "browser/vivaldi_browser_finder.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -56,9 +57,9 @@
 #include "ui/aura/window.h"
 #endif
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 #include "browser/win/vivaldi_utils.h"
-#endif  // defined(OS_WIN)
+#endif  // BUILDFLAG(IS_WIN)
 
 // Colors for the flash screen.
 #define DEFAULT_DARK_BACKGROUND_COLOR SkColorSetARGB(0xFF, 0x2d, 0x2d, 0x2d)
@@ -235,12 +236,12 @@ void VivaldiNativeAppWindowViews::Init(
 }
 
 void VivaldiNativeAppWindowViews::UpdateEventTargeterWithInset() {
-#if !defined(OS_MAC)
+#if !BUILDFLAG(IS_MAC)
   bool is_maximized = IsMaximized();
   aura::Window* window = widget()->GetNativeWindow();
   int resize_inside =
       is_maximized ? 0 : 5;  // frame->resize_inside_bounds_size();
-  gfx::Insets inset(resize_inside, resize_inside, resize_inside, resize_inside);
+  gfx::Insets inset= gfx::Insets::TLBR(resize_inside, resize_inside, resize_inside, resize_inside);
   // Add the EasyResizeWindowTargeter on the window, not its root window. The
   // root window does not have a delegate, which is needed to handle the event
   // in Linux.
@@ -505,23 +506,6 @@ bool VivaldiNativeAppWindowViews::ShouldDescendIntoChildForEventHandling(
   return true;
 }
 
-bool VivaldiNativeAppWindowViews::ExecuteWindowsCommand(int command_id) {
-#if defined(OS_WIN)
-  // Note: All these commands are context relative to active webview.
-  switch (command_id) {
-    case APPCOMMAND_BROWSER_BACKWARD:
-      HandleKeyboardCode(ui::VKEY_BROWSER_BACK);
-      return true;
-    case APPCOMMAND_BROWSER_FORWARD:
-      HandleKeyboardCode(ui::VKEY_BROWSER_FORWARD);
-      return true;
-    default:
-      break;
-  }
-#endif  // OS_WIN
-  return false;
-}
-
 void VivaldiNativeAppWindowViews::HandleKeyboardCode(ui::KeyboardCode code) {
   Browser* browser = window()->browser();
   if (!browser)
@@ -683,7 +667,7 @@ void VivaldiNativeAppWindowViews::Close() {
   extensions::DevtoolsConnectorAPI::CloseDevtoolsForBrowser(
       window_->GetProfile(), window_->browser());
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   // This must be as early as possible.
   bool should_quit_if_last_browser =
       browser_shutdown::IsTryingToQuit() ||
@@ -691,7 +675,7 @@ void VivaldiNativeAppWindowViews::Close() {
   if (should_quit_if_last_browser) {
     vivaldi::OnShutdownStarted();
   }
-#endif  // defined(OS_WIN)
+#endif  // BUILDFLAG(IS_WIN)
   if (widget_) {
     widget_->Close();
   }

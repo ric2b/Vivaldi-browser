@@ -36,11 +36,6 @@ var MediaAppUIGtestBrowserTest = class extends testing.Test {
   }
 
   /** @override */
-  get runAccessibilityChecks() {
-    return false;
-  }
-
-  /** @override */
   get typedefCppFixture() {
     return 'MediaAppUiBrowserTest';
   }
@@ -294,10 +289,6 @@ TEST_F('MediaAppUIGtestBrowserTest', 'SaveAsIPC', () => {
 
 TEST_F('MediaAppUIGtestBrowserTest', 'SaveAsErrorHandling', () => {
   runMediaAppTest('SaveAsErrorHandling');
-});
-
-TEST_F('MediaAppUIGtestBrowserTest', 'OpenFileIPC', () => {
-  runMediaAppTest('OpenFileIPC');
 });
 
 TEST_F('MediaAppUIGtestBrowserTest', 'OpenFilesWithFilePickerIPC', () => {

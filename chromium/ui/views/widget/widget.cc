@@ -13,6 +13,7 @@
 #include "base/containers/adapters.h"
 #include "base/i18n/rtl.h"
 #include "base/notreached.h"
+#include "base/observer_list.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -35,7 +36,6 @@
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/focus/focus_manager_factory.h"
 #include "ui/views/focus/widget_focus_manager.h"
-#include "ui/views/image_model_utils.h"
 #include "ui/views/views_delegate.h"
 #include "ui/views/widget/any_widget_observer_singleton.h"
 #include "ui/views/widget/native_widget_private.h"
@@ -655,9 +655,9 @@ void Widget::CloseWithReason(ClosedReason closed_reason) {
     return;
   }
   if (non_client_view_ && non_client_view_->OnWindowCloseRequested() ==
-                              CloseRequestResult::kCannotClose)
+                              CloseRequestResult::kCannotClose) {
     return;
-
+  }
   // This is the last chance to cancel closing.
   if (widget_delegate_ && !widget_delegate_->OnCloseRequested(closed_reason))
     return;
@@ -668,8 +668,9 @@ void Widget::CloseWithReason(ClosedReason closed_reason) {
       (g_disable_activation_change_handling_ ==
            DisableActivationChangeHandlingType::kIgnore ||
        g_disable_activation_change_handling_ ==
-           DisableActivationChangeHandlingType::kIgnoreDeactivationOnly))
+           DisableActivationChangeHandlingType::kIgnoreDeactivationOnly)) {
     return;
+  }
 
   // The actions below can cause this function to be called again, so mark
   // |this| as closed early. See crbug.com/714334
@@ -694,6 +695,10 @@ void Widget::Close() {
 }
 
 void Widget::CloseNow() {
+  // Set this so that Widget::Close() early outs. In general this operation is
+  // a one-way and can't be undone.
+  widget_closed_ = true;
+
   for (WidgetObserver& observer : observers_)
     observer.OnWidgetClosing(this);
   internal::AnyWidgetObserverSingleton::GetInstance()->OnAnyWidgetClosing(this);
@@ -800,12 +805,19 @@ bool Widget::IsMinimized() const {
   return native_widget_->IsMinimized();
 }
 
-void Widget::SetFullscreen(bool fullscreen, base::TimeDelta delay) {
-  if (IsFullscreen() == fullscreen)
+void Widget::SetFullscreen(bool fullscreen,
+                           base::TimeDelta delay,
+                           int64_t target_display_id) {
+  // It isn't valid to specify `target_display_id` when exiting fullscreen.
+  if (!fullscreen)
+    DCHECK(target_display_id == display::kInvalidDisplayId);
+  if (IsFullscreen() == fullscreen &&
+      target_display_id == display::kInvalidDisplayId) {
     return;
+  }
 
   auto weak_ptr = GetWeakPtr();
-  native_widget_->SetFullscreen(fullscreen, delay);
+  native_widget_->SetFullscreen(fullscreen, delay, target_display_id);
   if (!weak_ptr)
     return;
 
@@ -859,7 +871,8 @@ const ui::ThemeProvider* Widget::GetThemeProvider() const {
                                               : nullptr;
 }
 
-ui::ColorProviderManager::InitializerSupplier* Widget::GetCustomTheme() const {
+ui::ColorProviderManager::ThemeInitializerSupplier* Widget::GetCustomTheme()
+    const {
   return nullptr;
 }
 
@@ -967,8 +980,8 @@ void Widget::UpdateWindowIcon() {
   if (non_client_view_)
     non_client_view_->UpdateWindowIcon();
 
-  gfx::ImageSkia window_icon = GetImageSkiaFromImageModel(
-      widget_delegate_->GetWindowIcon(), GetColorProvider());
+  gfx::ImageSkia window_icon =
+      widget_delegate_->GetWindowIcon().Rasterize(GetColorProvider());
 
   // In general, icon information is read from a |widget_delegate_| and then
   // passed to |native_widget_|. On ChromeOS, for lacros-chrome to support the
@@ -983,8 +996,8 @@ void Widget::UpdateWindowIcon() {
       window_icon = *icon;
   }
 
-  gfx::ImageSkia app_icon = GetImageSkiaFromImageModel(
-      widget_delegate_->GetWindowAppIcon(), GetColorProvider());
+  gfx::ImageSkia app_icon =
+      widget_delegate_->GetWindowAppIcon().Rasterize(GetColorProvider());
   if (app_icon.isNull()) {
     const gfx::ImageSkia* icon = native_widget_->GetWindowAppIcon();
     if (icon && !icon->isNull())
@@ -1330,7 +1343,19 @@ bool Widget::OnNativeWidgetActivationChanged(bool active) {
 
   // Widgets in a widget tree should share the same ShouldPaintAsActive().
   // Lock the parent as paint-as-active when this widget becomes active.
-  if (!active && !paint_as_active_refcount_)
+  // If we're in the process of closing the widget, delay resetting the
+  // `parent_paint_as_active_lock_` until the owning native widget destroys this
+  // widget (i.e. wait until widget destruction). Do this as closing a widget
+  // may result in synchronously calling into this method, which can cause the
+  // parent to immediately paint as inactive. This is an issue if, after this
+  // widget has been closed, the parent widget is the next widget to receive
+  // activation. If using a desktop native widget, the next widget to receive
+  // activation may be determined by the system's window manager and this may
+  // not happen synchronously with closing the Widget. By waiting for the owning
+  // native widget to destroy this widget we ensure that resetting the paint
+  // lock happens synchronously with the activation the next widget (see
+  // crbug/1303549).
+  if (!active && !paint_as_active_refcount_ && !widget_closed_)
     parent_paint_as_active_lock_.reset();
   else if (parent())
     parent_paint_as_active_lock_ = parent()->LockPaintAsActive();
@@ -1753,13 +1778,18 @@ void Widget::OnNativeThemeUpdated(ui::NativeTheme* observed_theme) {
 ////////////////////////////////////////////////////////////////////////////////
 // Widget, ui::ColorProviderSource:
 
-const ui::ColorProvider* Widget::GetColorProvider() const {
+ui::ColorProviderManager::Key Widget::GetColorProviderKey() const {
   ui::ColorProviderManager::Key key =
       GetNativeTheme()->GetColorProviderKey(GetCustomTheme());
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   key.elevation_mode = background_elevation_;
 #endif
-  return ui::ColorProviderManager::Get().GetColorProviderFor(key);
+  return key;
+}
+
+const ui::ColorProvider* Widget::GetColorProvider() const {
+  return ui::ColorProviderManager::Get().GetColorProviderFor(
+      GetColorProviderKey());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

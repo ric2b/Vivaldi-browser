@@ -8,7 +8,6 @@
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
-#include "base/cxx17_backports.h"
 #include "base/files/file_path.h"
 #include "base/json/json_writer.h"
 #include "base/strings/string_number_conversions.h"
@@ -18,6 +17,7 @@
 #include "content/browser/accessibility/accessibility_tree_formatter_blink.h"
 #include "content/browser/accessibility/browser_accessibility_android.h"
 #include "content/public/browser/ax_inspect_factory.h"
+#include "ui/accessibility/ax_role_properties.h"
 
 using base::StringPrintf;
 
@@ -34,7 +34,6 @@ const char* const BOOL_ATTRIBUTES[] = {
     "collection_item",
     "content_invalid",
     "disabled",
-    "dismissable",
     "editable_text",
     "expanded",
     "focusable",
@@ -174,7 +173,6 @@ void AccessibilityTreeFormatterAndroid::AddProperties(
   dict->SetBoolKey("collection_item", android_node->IsCollectionItem());
   dict->SetBoolKey("content_invalid", android_node->IsContentInvalid());
   dict->SetBoolKey("disabled", !android_node->IsEnabled());
-  dict->SetBoolKey("dismissable", android_node->IsDismissable());
   dict->SetBoolKey("editable_text", android_node->IsTextField());
   dict->SetBoolKey("expanded", android_node->IsExpanded());
   dict->SetBoolKey("focusable", android_node->IsFocusable());
@@ -186,7 +184,7 @@ void AccessibilityTreeFormatterAndroid::AddProperties(
   dict->SetBoolKey("heading", android_node->IsHeading());
   dict->SetBoolKey("hierarchical", android_node->IsHierarchical());
   dict->SetBoolKey("invisible", !android_node->IsVisibleToUser());
-  dict->SetBoolKey("link", android_node->IsLink());
+  dict->SetBoolKey("link", ui::IsLink(android_node->GetRole()));
   dict->SetBoolKey("multiline", android_node->IsMultiLine());
   dict->SetBoolKey("multiselectable", android_node->IsMultiselectable());
   dict->SetBoolKey("range", android_node->GetData().IsRangeValueSupported());
@@ -256,14 +254,14 @@ std::string AccessibilityTreeFormatterAndroid::ProcessTreeForOutput(
         &line);
   }
 
-  for (unsigned i = 0; i < base::size(BOOL_ATTRIBUTES); i++) {
+  for (unsigned i = 0; i < std::size(BOOL_ATTRIBUTES); i++) {
     const char* attribute_name = BOOL_ATTRIBUTES[i];
     absl::optional<bool> value = dict.FindBoolPath(attribute_name);
     if (value && *value)
       WriteAttribute(true, attribute_name, &line);
   }
 
-  for (unsigned i = 0; i < base::size(STRING_ATTRIBUTES); i++) {
+  for (unsigned i = 0; i < std::size(STRING_ATTRIBUTES); i++) {
     const char* attribute_name = STRING_ATTRIBUTES[i];
     std::string value;
     if (!dict.GetString(attribute_name, &value) || value.empty())
@@ -272,7 +270,7 @@ std::string AccessibilityTreeFormatterAndroid::ProcessTreeForOutput(
                    &line);
   }
 
-  for (unsigned i = 0; i < base::size(INT_ATTRIBUTES); i++) {
+  for (unsigned i = 0; i < std::size(INT_ATTRIBUTES); i++) {
     const char* attribute_name = INT_ATTRIBUTES[i];
     int value = dict.FindIntKey(attribute_name).value_or(0);
     if (value == 0)
@@ -280,7 +278,7 @@ std::string AccessibilityTreeFormatterAndroid::ProcessTreeForOutput(
     WriteAttribute(true, StringPrintf("%s=%d", attribute_name, value), &line);
   }
 
-  for (unsigned i = 0; i < base::size(ACTION_ATTRIBUTES); i++) {
+  for (unsigned i = 0; i < std::size(ACTION_ATTRIBUTES); i++) {
     const char* attribute_name = ACTION_ATTRIBUTES[i];
     absl::optional<bool> value = dict.FindBoolPath(attribute_name);
     if (value && *value) {

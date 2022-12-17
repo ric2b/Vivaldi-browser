@@ -6,6 +6,7 @@
 #include "base/logging.h"
 #include "base/no_destructor.h"
 #include "browser/vivaldi_browser_finder.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -615,7 +616,7 @@ bool VivaldiUIEvents::DoHandleWheelEventAfterChild(
   using blink::WebInputEvent;
   using blink::WebMouseWheelEvent;
   constexpr int zoom_modifier =
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
       WebInputEvent::kMetaKey
 #else
       WebInputEvent::kControlKey
@@ -668,7 +669,7 @@ bool VivaldiUIEvents::DoHandleDragEnd(content::WebContents* web_contents,
   ::vivaldi::SetTabDragInProgress(false);
 
   bool cancelled = false;
-#ifdef OS_WIN
+#if BUILDFLAG(IS_WIN)
   if (::vivaldi::g_cancelled_drag) {
     cancelled = true;
   }

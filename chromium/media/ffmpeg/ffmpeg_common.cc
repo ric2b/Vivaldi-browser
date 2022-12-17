@@ -22,6 +22,9 @@
 
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
 #include "media/formats/mp4/aac.h"
+#if BUILDFLAG(ENABLE_PLATFORM_HEVC)
+#include "media/formats/mp4/hevc.h"
+#endif
 #endif
 
 namespace media {
@@ -342,10 +345,11 @@ bool AVCodecContextToAudioDecoderConfig(const AVCodecContext* codec_context,
       codec_context->sample_fmt, codec_context->codec_id);
 
   ChannelLayout channel_layout =
-      codec_context->channels > 8
+      codec_context->ch_layout.nb_channels > 8
           ? CHANNEL_LAYOUT_DISCRETE
-          : ChannelLayoutToChromeChannelLayout(codec_context->channel_layout,
-                                               codec_context->channels);
+          : ChannelLayoutToChromeChannelLayout(
+                codec_context->ch_layout.u.mask,
+                codec_context->ch_layout.nb_channels);
 
   int sample_rate = codec_context->sample_rate;
   switch (codec) {
@@ -398,7 +402,7 @@ bool AVCodecContextToAudioDecoderConfig(const AVCodecContext* codec_context,
                      extra_data, encryption_scheme, seek_preroll,
                      codec_context->delay);
   if (channel_layout == CHANNEL_LAYOUT_DISCRETE)
-    config->SetChannelsForDiscrete(codec_context->channels);
+    config->SetChannelsForDiscrete(codec_context->ch_layout.nb_channels);
 
 #if BUILDFLAG(ENABLE_PLATFORM_AC3_EAC3_AUDIO)
   // These are bitstream formats unknown to ffmpeg, so they don't have
@@ -467,7 +471,7 @@ void AudioDecoderConfigToAVCodecContext(const AudioDecoderConfig& config,
 
   // TODO(scherkus): should we set |channel_layout|? I'm not sure if FFmpeg uses
   // said information to decode.
-  codec_context->channels = config.channels();
+  codec_context->ch_layout.nb_channels = config.channels();
   codec_context->sample_rate = config.samples_per_second();
 
   if (config.extra_data().empty()) {
@@ -542,7 +546,39 @@ bool AVStreamToVideoDecoderConfig(const AVStream* stream,
         profile = H264PROFILE_BASELINE;
       break;
     }
-#endif
+#if BUILDFLAG(ENABLE_PLATFORM_HEVC)
+    case VideoCodec::kHEVC: {
+      int hevc_profile = FF_PROFILE_UNKNOWN;
+      if ((codec_context->profile < FF_PROFILE_HEVC_MAIN ||
+           codec_context->profile > FF_PROFILE_HEVC_REXT) &&
+          codec_context->extradata && codec_context->extradata_size) {
+        mp4::HEVCDecoderConfigurationRecord hevc_config;
+        if (hevc_config.Parse(codec_context->extradata,
+                              codec_context->extradata_size)) {
+          hevc_profile = hevc_config.general_profile_idc;
+        }
+      } else {
+        hevc_profile = codec_context->profile;
+      }
+      switch (hevc_profile) {
+        case FF_PROFILE_HEVC_MAIN:
+          profile = HEVCPROFILE_MAIN;
+          break;
+        case FF_PROFILE_HEVC_MAIN_10:
+          profile = HEVCPROFILE_MAIN10;
+          break;
+        case FF_PROFILE_HEVC_MAIN_STILL_PICTURE:
+          profile = HEVCPROFILE_MAIN_STILL_PICTURE;
+          break;
+        default:
+          // Always assign a default if all heuristics fail.
+          profile = HEVCPROFILE_MAIN;
+          break;
+      }
+      break;
+    }
+#endif  // BUILDFLAG(ENABLE_PLATFORM_HEVC)
+#endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
     case VideoCodec::kVP8:
       profile = VP8PROFILE_ANY;
       break;
@@ -568,11 +604,6 @@ bool AVStreamToVideoDecoderConfig(const AVStream* stream,
     case VideoCodec::kAV1:
       profile = AV1PROFILE_PROFILE_MAIN;
       break;
-#if BUILDFLAG(ENABLE_PLATFORM_HEVC)
-    case VideoCodec::kHEVC:
-      profile = HEVCPROFILE_MAIN;
-      break;
-#endif
     case VideoCodec::kTheora:
       profile = THEORAPROFILE_ANY;
       break;

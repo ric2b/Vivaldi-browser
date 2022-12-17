@@ -21,11 +21,10 @@
 
 using infobars::InfoBar;
 
-// TODO(crbug.com/1289645): Use appropriate images.
 namespace {
 
 // Name of the camera icon image for the permissions banner.
-NSString* const kCameraImageName = @"infobar_permissions_camera";
+NSString* const kCameraImageName = @"infobar_permissions_camera_fill";
 // Name of the microphone icon image for the permissions banner.
 NSString* const kMicrophoneSystemImageName = @"mic.fill";
 

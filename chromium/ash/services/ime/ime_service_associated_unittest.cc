@@ -25,7 +25,7 @@
 
 using testing::_;
 
-namespace chromeos {
+namespace ash {
 namespace ime {
 
 namespace {
@@ -94,8 +94,8 @@ class TestImeDecoder : public ImeDecoder {
     g_test_decoder_state = new TestDecoderState();
 
     entry_points_ = {
-        .init_once = [](ImeCrosPlatform* platform) {},
-        .close = []() {},
+        .init_proto_mode = [](ImeCrosPlatform* platform) {},
+        .close_proto_mode = []() {},
         .supports =
             [](const char* ime_spec) {
               return strcmp(kInvalidImeSpec, ime_spec) != 0;
@@ -103,6 +103,8 @@ class TestImeDecoder : public ImeDecoder {
         .activate_ime = [](const char* ime_spec,
                            ImeClientDelegate* delegate) { return true; },
         .process = [](const uint8_t* data, size_t size) {},
+        .init_mojo_mode = [](ImeCrosPlatform* platform) {},
+        .close_mojo_mode = []() {},
         .connect_to_input_method =
             [](const char* ime_spec, uint32_t receiver_pipe_handle,
                uint32_t host_pipe_handle,
@@ -200,8 +202,8 @@ class ImeServiceAssociatedTest : public testing::Test,
   void HandleAutocorrect(mojom::AutocorrectSpanPtr autocorrect_span) override {}
   void RequestSuggestions(mojom::SuggestionsRequestPtr request,
                           RequestSuggestionsCallback callback) override {}
-  void DisplaySuggestions(const std::vector<::chromeos::ime::TextSuggestion>&
-                              suggestions) override {}
+  void DisplaySuggestions(
+      const std::vector<TextSuggestion>& suggestions) override {}
   void UpdateCandidatesWindow(mojom::CandidatesWindowPtr window) override {}
   void RecordUkm(mojom::UkmEntryPtr entry) override {}
   void ReportKoreanAction(mojom::KoreanAction action) override {}
@@ -840,4 +842,4 @@ TEST_F(ImeServiceAssociatedTest, GetFieldTrialParamValueByFeatureConsidered) {
 }
 
 }  // namespace ime
-}  // namespace chromeos
+}  // namespace ash

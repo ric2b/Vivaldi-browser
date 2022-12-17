@@ -38,7 +38,7 @@ struct LoaderImpl::LoadID {
       : file(f), toolchain_name(tc_name) {}
 
   bool operator<(const LoadID& other) const {
-    if (file.value() == other.file.value())
+    if (file == other.file)
       return toolchain_name < other.toolchain_name;
     return file < other.file;
   }

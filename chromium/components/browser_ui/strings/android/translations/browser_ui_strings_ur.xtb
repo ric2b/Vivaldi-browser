@@ -77,6 +77,7 @@
 <translation id="2687403674020088961">سبھی کوکیز مسدود کریں (تجویز نہیں کی جاتی ہے)</translation>
 <translation id="2704606927547763573">کاپی کیا</translation>
 <translation id="2717722538473713889">ای میل پتے</translation>
+<translation id="2750481671343847896">سائٹس شناختی سروسز سے سائن ان پرامپٹس دکھا سکتی ہیں۔</translation>
 <translation id="2785051990912111074">یہ انتخاب <ph name="WEBSITE" /> کے لیے کوکیز کو صاف کرے گا</translation>
 <translation id="2822354292072154809">کیا آپ واقعی <ph name="CHOSEN_OBJECT_NAME" /> کے لیے سائٹ کی سبھی اجازتوں کو دوبارہ ترتیب دینا چاہتے ہیں؟</translation>
 <translation id="2870560284913253234">سائٹ</translation>
@@ -112,6 +113,7 @@
 <translation id="3763247130972274048">10 سیکنڈ کو نظر انداز کرنے کے لیے، دائیں یا بائیں ویڈیو پر دوبار تھپتھپائیں</translation>
 <translation id="3797520601150691162">کسی مخصوص سائٹ کیلئے گہری تھیم لاگو نہ کریں</translation>
 <translation id="381841723434055211">فون نمبرز</translation>
+<translation id="3826050100957962900">فریق ثالث سائن ان</translation>
 <translation id="3835233591525155343">آپ کے آلے کا استعمال</translation>
 <translation id="385051799172605136">پیچھے</translation>
 <translation id="3859306556332390985">آگے لے جائیں</translation>
@@ -122,7 +124,6 @@
 <translation id="3991845972263764475"><ph name="BYTES_DOWNLOADED_WITH_UNITS" /> / ?</translation>
 <translation id="4002066346123236978">عنوان</translation>
 <translation id="4008040567710660924">مخصوص سائٹ کے لیے کوکیز کی اجازت دیں۔</translation>
-<translation id="4040330681741629921">کسی سائٹ کو سادہ منظر میں دکھائے جانے پر اطلاع حاصل کریں</translation>
 <translation id="4046123991198612571">اگلا ٹریک</translation>
 <translation id="4149994727733219643">ویب صفحات کیلئے سادہ منظر</translation>
 <translation id="4165986682804962316">سائٹ کی ترتیبات</translation>
@@ -236,6 +237,7 @@
 <translation id="6643016212128521049">صاف کریں</translation>
 <translation id="6689172468748959065">پروفائل کی تصاویر</translation>
 <translation id="6697925417670533197">فعال ڈاؤن لوڈز</translation>
+<translation id="6722828510648505498">شناختی سروسز سے سائن ان کے پرامپٹس مسدود کریں۔</translation>
 <translation id="6746124502594467657">نیچے منتقل کریں</translation>
 <translation id="6749077623962119521">اجازتیں ری سیٹ کریں؟</translation>
 <translation id="6766622839693428701">بند کرنے کے لئے نیچے سوائپ کریں۔</translation>
@@ -255,6 +257,7 @@
 <translation id="7087918508125750058"><ph name="ITEM_COUNT" /> منتخب ہو گئے۔ اختیارات اسکرین کے اوپری حصہ کے قریب دستیاب ہیں</translation>
 <translation id="7141896414559753902">سائٹس کو پاپ اپس اور ری ڈائریکٹس دکھانے سے مسدود کریں (تجویز کردہ)</translation>
 <translation id="7176368934862295254"><ph name="KILOBYTES" /> KB</translation>
+<translation id="7180611975245234373">ریفریش کریں</translation>
 <translation id="723171743924126238">تصاویر منتخب کریں</translation>
 <translation id="7243308994586599757">اسکرین کے نچلے حصہ کے قریب اختیارات دستیاب ہیں</translation>
 <translation id="7250468141469952378"><ph name="ITEM_COUNT" /> منتخب ہو گئے</translation>
@@ -308,7 +311,9 @@
 <translation id="83792324527827022">ایک سائٹ آپ کا کیمرا اور مائیکروفون استعمال کر رہی ہے</translation>
 <translation id="8380167699614421159">یہ سائٹ دخل انداز یا گمراہ کن اشتہارات دکھاتی ہے</translation>
 <translation id="8394832520002899662">سائٹ پر واپس جانے کے لیے تھپتھپائیں</translation>
+<translation id="8409345997656833551">جب کوئی مضمون آسان منظر میں دکھایا جا سکتا ہے تو مطلع کریں</translation>
 <translation id="8425213833346101688">تبدیل کریں</translation>
+<translation id="8428213095426709021">ترتیبات</translation>
 <translation id="8441146129660941386">پیچھے لے جائیں</translation>
 <translation id="8444433999583714703">‏<ph name="APP_NAME" /> کو اپنے مقام تک رسائی دینے کے لیے، <ph name="BEGIN_LINK" />Android کی ترتیبات<ph name="END_LINK" /> میں بھی مقام آن کریں۔</translation>
 <translation id="8447861592752582886">آلہ کی اجازت کالعدم کریں</translation>

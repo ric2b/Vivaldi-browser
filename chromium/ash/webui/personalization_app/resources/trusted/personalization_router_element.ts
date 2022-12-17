@@ -9,13 +9,17 @@
 
 import 'chrome://resources/polymer/v3_0/iron-location/iron-location.js';
 import 'chrome://resources/polymer/v3_0/iron-location/iron-query-params.js';
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
-import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {GooglePhotosAlbum, WallpaperCollection} from './personalization_app.mojom-webui.js';
+import {assert} from 'chrome://resources/js/assert.m.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
+import {GooglePhotosAlbum, TopicSource, WallpaperCollection} from './personalization_app.mojom-webui.js';
+import {getTemplate} from './personalization_router_element.html.js';
 
 export enum Paths {
   Ambient = '/ambient',
+  AmbientAlbums = '/ambient/albums',
   CollectionImages = '/wallpaper/collection',
   Collections = '/wallpaper',
   GooglePhotosCollection = '/wallpaper/google-photos',
@@ -28,19 +32,40 @@ export function isPersonalizationHubEnabled(): boolean {
   return loadTimeData.getBoolean('isPersonalizationHubEnabled');
 }
 
+export function isAmbientModeAllowed(): boolean {
+  return loadTimeData.getBoolean('isAmbientModeAllowed');
+}
+
+export function isPathValid(path: string|null): boolean {
+  return !!path && Object.values(Paths).includes(path as Paths);
+}
+
+export function isAmbientPath(path: string|null): boolean {
+  return !!path && path.startsWith(Paths.Ambient);
+}
+
+export function isAmbientPathAllowed(path: string|null): boolean {
+  return isAmbientPath(path) && isAmbientModeAllowed();
+}
+
+export function isAmbientPathNotAllowed(path: string|null): boolean {
+  return isAmbientPath(path) && !isAmbientModeAllowed();
+}
+
 export class PersonalizationRouter extends PolymerElement {
   static get is() {
     return 'personalization-router';
   }
 
   static get template() {
-    return html`{__html_template__}`;
+    return getTemplate();
   }
 
   static get properties() {
     return {
       path_: {
         type: String,
+        observer: 'onPathChanged_',
       },
 
       query_: {
@@ -54,7 +79,8 @@ export class PersonalizationRouter extends PolymerElement {
   }
   private path_: string;
   private query_: string;
-  private queryParams_: {id?: string; googlePhotosAlbumId?: string;};
+  private queryParams_:
+      {id?: string, googlePhotosAlbumId?: string, topicSource?: string};
 
   static instance(): PersonalizationRouter {
     return document.querySelector(PersonalizationRouter.is) as
@@ -68,7 +94,14 @@ export class PersonalizationRouter extends PolymerElement {
     window.location.replace(Paths.Collections);
   }
 
-  connectedCallback() {
+  /**
+   * Reload the application at the ambient subpage.
+   */
+  static reloadAtAmbient() {
+    window.location.replace(Paths.Ambient);
+  }
+
+  override connectedCallback() {
     super.connectedCallback();
     // Force the user onto the wallpaper subpage if personalization hub feature
     // is not enabled, and the user is not already on a wallpaper page.
@@ -100,28 +133,78 @@ export class PersonalizationRouter extends PolymerElement {
         Paths.GooglePhotosCollection, {googlePhotosAlbumId: album.id});
   }
 
+  /** Navigate to albums subpage of specific topic source. */
+  selectAmbientAlbums(topicSource: TopicSource) {
+    this.goToRoute(Paths.AmbientAlbums, {topicSource: topicSource.toString()});
+  }
+
   goToRoute(path: Paths, queryParams: Object = {}) {
     this.setProperties({path_: path, queryParams_: queryParams});
   }
 
   private shouldShowRootPage_(path: string|null): boolean {
-    return isPersonalizationHubEnabled() && path === Paths.Root;
+    if (!isPersonalizationHubEnabled()) {
+      return false;
+    }
+
+    // If the ambient mode is not allowed, will not show Ambient/AmbientAlbums
+    // subpages.
+    return (path === Paths.Root) || (isAmbientPathNotAllowed(path));
   }
 
   private shouldShowAmbientSubpage_(path: string|null): boolean {
-    return isPersonalizationHubEnabled() && !!path?.startsWith(Paths.Ambient);
+    return isPersonalizationHubEnabled() && isAmbientPathAllowed(path);
   }
 
   private shouldShowUserSubpage_(path: string|null): boolean {
-    return isPersonalizationHubEnabled() && !!path?.startsWith(Paths.User);
+    return isPersonalizationHubEnabled() && path === Paths.User;
   }
 
   private shouldShowWallpaperSubpage_(path: string|null): boolean {
-    return !!path?.startsWith(Paths.Collections);
+    return !!path && path.startsWith(Paths.Collections);
   }
 
   private shouldShowBreadcrumb_(path: string|null): boolean {
     return path !== Paths.Root;
+  }
+
+  /**
+   * When entering a wrong path or navigating to Ambient/AmbientAlbums
+   * subpages, but the ambient mode is not allowed, reset path to root.
+   */
+  private onPathChanged_(path: string|null) {
+    if (!isPathValid(path) || isAmbientPathNotAllowed(path)) {
+      // Reset the path to root.
+      this.setProperties({path_: Paths.Root, queryParams_: {}});
+    }
+
+    // Update the page title when the path changes.
+    // TODO(b/228967523): Wallpaper related pages have been handled in their
+    // specific Polymer elements so they are skipped here. See if we can move
+    // them here.
+    switch (path) {
+      case Paths.Root:
+        document.title = loadTimeData.getString('personalizationTitle');
+        break;
+      case Paths.Ambient:
+        document.title = loadTimeData.getString('screensaverLabel');
+        break;
+      case Paths.AmbientAlbums: {
+        assert(!!this.queryParams_.topicSource);
+        if (this.queryParams_.topicSource ===
+            TopicSource.kGooglePhotos.toString()) {
+          document.title =
+              loadTimeData.getString('ambientModeTopicSourceGooglePhotos');
+        } else {
+          document.title =
+              loadTimeData.getString('ambientModeTopicSourceArtGallery');
+        }
+        break;
+      }
+      case Paths.User:
+        document.title = loadTimeData.getString('avatarLabel');
+        break;
+    }
   }
 }
 

@@ -12,7 +12,6 @@ import android.graphics.Rect;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.Process;
 import android.os.SystemClock;
 import android.provider.Settings;
 import android.provider.Settings.SettingNotFoundException;
@@ -27,7 +26,6 @@ import androidx.annotation.CallSuper;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.StrictModeContext;
 import org.chromium.base.SysUtils;
 import org.chromium.base.TraceEvent;
@@ -170,8 +168,7 @@ public abstract class AsyncInitializationActivity
 
     @Override
     public final void setContentViewAndLoadLibrary(Runnable onInflationCompleteCallback) {
-        boolean enableInstantStart =
-                TabUiFeatureUtilities.supportInstantStart(isTablet(), this) && !mHadWarmStart;
+        boolean enableInstantStart = isInstantStartEnabled() && !mHadWarmStart;
         mOnInflationCompleteCallback = onInflationCompleteCallback;
         if (enableInstantStart) {
             triggerLayoutInflation();
@@ -231,7 +228,7 @@ public abstract class AsyncInitializationActivity
             mFirstDrawComplete = true;
             StartSurfaceConfiguration.recordHistogram(FIRST_DRAW_COMPLETED_TIME_MS_UMA,
                     SystemClock.elapsedRealtime() - getOnCreateTimestampMs(),
-                    TabUiFeatureUtilities.supportInstantStart(isTablet(), this));
+                    isInstantStartEnabled());
             if (!mStartupDelayed) {
                 onFirstDrawComplete();
             }
@@ -403,19 +400,7 @@ public abstract class AsyncInitializationActivity
             return;
         } else {
             assert dispatchAction == LaunchIntentDispatcher.Action.FINISH_ACTIVITY_REMOVE_TASK;
-            ApiCompatibilityUtils.finishAndRemoveTask(this);
-
-            if (Build.VERSION.SDK_INT == Build.VERSION_CODES.LOLLIPOP
-                    || Build.VERSION.SDK_INT == Build.VERSION_CODES.LOLLIPOP_MR1) {
-                // On L ApiCompatibilityUtils.finishAndRemoveTask() sometimes fails, which causes
-                // NPE in onStart() later, see crbug.com/781396. We can't let this activity to
-                // start, and we don't want to crash either. So try finishing one more time and
-                // suicide if that fails.
-                if (!isFinishing()) {
-                    finish();
-                    if (!isFinishing()) Process.killProcess(Process.myPid());
-                }
-            }
+            finishAndRemoveTask();
         }
         overridePendingTransition(0, R.anim.no_anim);
     }
@@ -728,6 +713,13 @@ public abstract class AsyncInitializationActivity
      */
     public boolean isTablet() {
         return mIsTablet;
+    }
+
+    /**
+     * Returns whether the instant start is enabled.
+     */
+    protected boolean isInstantStartEnabled() {
+        return TabUiFeatureUtilities.supportInstantStart(isTablet(), this);
     }
 
     /**

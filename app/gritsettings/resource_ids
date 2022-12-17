@@ -85,5 +85,8 @@
   },
   "app/resources/locale/vivaldi_locale_strings.grd": {
     "messages": [92000],
+  },
+  "app/resources/android-tab-ui/vivaldi_android_chrome_tab_ui_strings.grd": {
+    "messages": [92100],
   }
 }

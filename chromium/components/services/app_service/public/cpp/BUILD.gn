@@ -51,8 +51,11 @@ component("app_types") {
     "app_types.h",
     "intent_filter.cc",
     "intent_filter.h",
+    "macros.h",
     "permission.cc",
     "permission.h",
+    "shortcut.cc",
+    "shortcut.h",
   ]
 
   defines = [ "IS_APP_TYPES_IMPL" ]
@@ -187,6 +190,7 @@ component("icon_types") {
 component("run_on_os_login") {
   output_name = "LOGIN_MODE"
   sources = [
+    "macros.h",
     "run_on_os_login_types.cc",
     "run_on_os_login_types.h",
   ]
@@ -198,8 +202,8 @@ component("run_on_os_login") {
 
 source_set("intents") {
   sources = [
-    "intent_constants.cc",
-    "intent_constants.h",
+    "intent.cc",
+    "intent.h",
     "intent_filter_util.cc",
     "intent_filter_util.h",
     "intent_util.cc",
@@ -226,6 +230,8 @@ source_set("protocol_handling") {
 
 source_set("preferred_apps") {
   sources = [
+    "preferred_apps.cc",
+    "preferred_apps.h",
     "preferred_apps_converter.cc",
     "preferred_apps_converter.h",
     "preferred_apps_list.cc",
@@ -235,9 +241,11 @@ source_set("preferred_apps") {
   ]
 
   deps = [
+    ":app_types",
     ":intents",
     "//base",
     "//components/services/app_service/public/mojom",
+    "//content/public/browser",
     "//url",
   ]
 }
@@ -260,6 +268,7 @@ source_set("test_support") {
   ]
 
   deps = [
+    ":app_types",
     ":intents",
     "//components/services/app_service/public/mojom",
   ]

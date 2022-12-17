@@ -10,7 +10,6 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
-#include "base/cxx17_backports.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/string_split.h"
 #include "build/build_config.h"
@@ -847,7 +846,7 @@ GLES2Decoder::Error GLES2DecoderPassthroughImpl::DoCommandsImpl(
 
     const unsigned int arg_count = size - 1;
     unsigned int command_index = command - kFirstGLES2Command;
-    if (command_index < base::size(command_info)) {
+    if (command_index < std::size(command_info)) {
       const CommandInfo& info = command_info[command_index];
       unsigned int info_arg_count = static_cast<unsigned int>(info.arg_count);
       if ((info.arg_flags == cmd::kFixed && arg_count == info_arg_count) ||
@@ -994,7 +993,7 @@ gpu::ContextResult GLES2DecoderPassthroughImpl::Initialize(
     };
     RequestExtensions(api(), requestable_extensions,
                       kRequiredFunctionalityExtensions,
-                      base::size(kRequiredFunctionalityExtensions));
+                      std::size(kRequiredFunctionalityExtensions));
 
     if (request_optional_extensions_) {
       static constexpr const char* kOptionalFunctionalityExtensions[] = {
@@ -1039,7 +1038,7 @@ gpu::ContextResult GLES2DecoderPassthroughImpl::Initialize(
       };
       RequestExtensions(api(), requestable_extensions,
                         kOptionalFunctionalityExtensions,
-                        base::size(kOptionalFunctionalityExtensions));
+                        std::size(kOptionalFunctionalityExtensions));
     }
 
     context->ReinitializeDynamicBindings();
@@ -1085,9 +1084,12 @@ gpu::ContextResult GLES2DecoderPassthroughImpl::Initialize(
                        IsWebGLContextType(attrib_helper.context_type),
                    "missing GL_ANGLE_webgl_compatibility");
   FAIL_INIT_IF_NOT(feature_info_->feature_flags().angle_request_extension,
-                   "missing  GL_ANGLE_request_extension");
+                   "missing GL_ANGLE_request_extension");
   FAIL_INIT_IF_NOT(feature_info_->feature_flags().khr_debug,
                    "missing GL_KHR_debug");
+  FAIL_INIT_IF_NOT(!attrib_helper.fail_if_major_perf_caveat ||
+                       !feature_info_->feature_flags().is_swiftshader_for_webgl,
+                   "fail_if_major_perf_caveat + swiftshader");
   FAIL_INIT_IF_NOT(!attrib_helper.enable_oop_rasterization,
                    "oop rasterization not supported");
   FAIL_INIT_IF_NOT(!IsES31ForTestingContextType(attrib_helper.context_type) ||

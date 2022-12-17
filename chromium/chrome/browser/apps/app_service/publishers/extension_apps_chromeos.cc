@@ -26,6 +26,7 @@
 #include "base/values.h"
 #include "chrome/browser/apps/app_service/app_icon/app_icon_factory.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
+#include "chrome/browser/apps/app_service/extension_apps_utils.h"
 #include "chrome/browser/apps/app_service/intent_util.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/apps/app_service/menu_util.h"
@@ -186,8 +187,7 @@ void ExtensionAppsChromeOs::LaunchAppWithParamsImpl(AppLaunchParams&& params,
     return;
   }
 
-  bool is_quickoffice =
-      extension->id() == extension_misc::kQuickOfficeComponentExtensionId;
+  bool is_quickoffice = extension_misc::IsQuickOfficeExtension(extension->id());
   if (extension->is_app() || is_quickoffice) {
     auto launch_source = params.launch_source;
     content::WebContents* web_contents = LaunchImpl(std::move(params));
@@ -222,8 +222,7 @@ void ExtensionAppsChromeOs::LaunchAppWithIntent(
     std::move(callback).Run(/*success=*/false);
     return;
   }
-  bool is_quickoffice =
-      extension->id() == extension_misc::kQuickOfficeComponentExtensionId;
+  bool is_quickoffice = extension_misc::IsQuickOfficeExtension(extension->id());
   if (extension->is_app() || is_quickoffice) {
     content::WebContents* web_contents = LaunchAppWithIntentImpl(
         app_id, event_flags, std::move(intent), launch_source,
@@ -698,7 +697,7 @@ void ExtensionAppsChromeOs::OnSystemFeaturesPrefChanged() {
   is_disabled_apps_mode_hidden_ = is_pref_disabled_mode_hidden;
 
   UpdateAppDisabledState(disabled_system_features_pref,
-                         policy::SystemFeature::kWebStore,
+                         static_cast<int>(policy::SystemFeature::kWebStore),
                          extensions::kWebStoreAppId, is_disabled_mode_changed);
 }
 
@@ -708,7 +707,7 @@ bool ExtensionAppsChromeOs::Accepts(const extensions::Extension* extension) {
       return false;
     }
     // QuickOffice has file_handlers which we need to register.
-    if (extension->id() == extension_misc::kQuickOfficeComponentExtensionId) {
+    if (extension_misc::IsQuickOfficeExtension(extension->id())) {
       return true;
     }
     // Only accept extensions with file_browser_handlers.
@@ -723,6 +722,15 @@ bool ExtensionAppsChromeOs::Accepts(const extensions::Extension* extension) {
   if (!extension->is_app() || IsBlocklisted(extension->id())) {
     return false;
   }
+
+  //  Do not publish hosted apps in Ash if hosted apps should run in
+  //  Lacros.
+  if (extension->is_hosted_app() &&
+      extension->id() != app_constants::kChromeAppId &&
+      apps::ShouldHostedAppsRunInLacros()) {
+    return false;
+  }
+
   return true;
 }
 
@@ -748,7 +756,7 @@ void ExtensionAppsChromeOs::SetShowInFields(
   // extensions are only published if they have file_browser_handlers, which
   // means they need to handle intents.
   if (extension->id() == file_manager::kAudioPlayerAppId ||
-      extension->id() == extension_misc::kQuickOfficeComponentExtensionId ||
+      extension_misc::IsQuickOfficeExtension(extension->id()) ||
       extension->is_extension()) {
     app.handles_intents = true;
   }
@@ -778,7 +786,7 @@ void ExtensionAppsChromeOs::SetShowInFields(
   // Explicitly mark these apps as being able to handle intents even though they
   // are otherwise hidden from the user.
   if (extension->id() == file_manager::kAudioPlayerAppId ||
-      extension->id() == extension_misc::kQuickOfficeComponentExtensionId) {
+      extension_misc::IsQuickOfficeExtension(extension->id())) {
     app->handles_intents = apps::mojom::OptionalBool::kTrue;
   }
 
@@ -816,6 +824,7 @@ AppPtr ExtensionAppsChromeOs::CreateApp(const extensions::Extension* extension,
     app->show_in_launcher = false;
     app->show_in_search = false;
     app->show_in_shelf = false;
+    app->handles_intents = false;
   }
   if (disable_for_lacros)
     app->show_in_management = false;
@@ -823,9 +832,8 @@ AppPtr ExtensionAppsChromeOs::CreateApp(const extensions::Extension* extension,
   app->has_badge = app_notifications_.HasNotification(extension->id());
   app->paused = paused;
 
-  bool is_quickoffice =
-      extension->is_extension() &&
-      extension->id() == extension_misc::kQuickOfficeComponentExtensionId;
+  bool is_quickoffice = extension->is_extension() &&
+                        extension_misc::IsQuickOfficeExtension(extension->id());
   if (extension->is_app() || is_quickoffice) {
     app->intent_filters = apps_util::CreateIntentFiltersForChromeApp(extension);
   } else if (extension->is_extension()) {
@@ -865,13 +873,13 @@ apps::mojom::AppPtr ExtensionAppsChromeOs::Convert(
     app->show_in_launcher = apps::mojom::OptionalBool::kFalse;
     app->show_in_search = apps::mojom::OptionalBool::kFalse;
     app->show_in_shelf = apps::mojom::OptionalBool::kFalse;
+    app->handles_intents = apps::mojom::OptionalBool::kFalse;
   }
   if (disable_for_lacros)
     app->show_in_management = apps::mojom::OptionalBool::kFalse;
 
-  bool is_quickoffice =
-      extension->is_extension() &&
-      extension->id() == extension_misc::kQuickOfficeComponentExtensionId;
+  bool is_quickoffice = extension->is_extension() &&
+                        extension_misc::IsQuickOfficeExtension(extension->id());
   if (extension->is_app() || is_quickoffice) {
     base::Extend(app->intent_filters,
                  apps_util::CreateChromeAppIntentFilters(extension));

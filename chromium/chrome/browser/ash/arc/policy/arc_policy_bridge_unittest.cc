@@ -35,9 +35,9 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
+#include "chromeos/ash/components/dbus/upstart/fake_upstart_client.h"
 #include "chromeos/dbus/concierge/concierge_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/dbus/upstart/fake_upstart_client.h"
 #include "chromeos/system/fake_statistics_provider.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/keyed_service/core/keyed_service.h"
@@ -609,23 +609,27 @@ TEST_F(ArcPolicyBridgeTest, DeveloperToolsPolicyDisallowedTest) {
 }
 
 TEST_F(ArcPolicyBridgeTest, ManagedConfigurationVariablesTest) {
-  policy_map().Set(policy::key::kArcPolicy, policy::POLICY_LEVEL_MANDATORY,
-                   policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
-                   base::Value("{\"applications\":"
-                               "[{\"packageName\":\"de.blinkt.openvpn\","
-                               "\"installType\":\"REQUIRED\","
-                               "\"managedConfiguration\":"
-                               "{\"email\":\"${USER_EMAIL}\","
-                               "\"other_attribute\":\"untouched\"}"
-                               "}],"
-                               "\"defaultPermissionPolicy\":\"GRANT\"}"),
-                   nullptr);
+  policy_map().Set(
+      policy::key::kArcPolicy, policy::POLICY_LEVEL_MANDATORY,
+      policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
+      base::Value(
+          "{\"applications\":"
+          "[{\"packageName\":\"de.blinkt.openvpn\","
+          "\"installType\":\"REQUIRED\","
+          "\"managedConfiguration\":"
+          "{\"email\":\"${USER_EMAIL}\","
+          "\"special_chars\":\"${`~!@#$%^&*(),_-+={[}}|\\\\:,;\\\"',>.?/{}\","
+          "\"other_attribute\":\"untouched\"}"
+          "}],"
+          "\"defaultPermissionPolicy\":\"GRANT\"}"),
+      nullptr);
   GetPoliciesAndVerifyResult(
       "{\"apkCacheEnabled\":true,\"applications\":"
       "[{\"installType\":\"REQUIRED\","
       "\"managedConfiguration\":"
       "{\"email\":\"user@gmail.com\","
-      "\"other_attribute\":\"untouched\"},"
+      "\"other_attribute\":\"untouched\","
+      "\"special_chars\":\"${`~!@#$%^&*(),_-+={[}}|\\\\:,;\\\"',>.?/{}\"},"
       "\"packageName\":\"de.blinkt.openvpn\""
       "}],"
       "\"defaultPermissionPolicy\":\"GRANT\","
@@ -787,7 +791,7 @@ TEST_F(ArcPolicyBridgeTest, DisableAppsInSnapshot) {
   chromeos::DBusThreadManager::Initialize();
   chromeos::ConciergeClient::InitializeFake(/*fake_cicerone_client=*/nullptr);
 
-  auto upstart_client = std::make_unique<chromeos::FakeUpstartClient>();
+  auto upstart_client = std::make_unique<ash::FakeUpstartClient>();
   arc::prefs::RegisterLocalStatePrefs(
       profile()->GetTestingPrefService()->registry());
   auto arc_session_manager =

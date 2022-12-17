@@ -14,11 +14,14 @@
 #include "base/test/task_environment.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/platform_thread.h"
+#include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/timer/timer.h"
 #include "net/proxy_resolution/win/dhcp_pac_file_adapter_fetcher_win.h"
 #include "net/test/gtest_util.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
+#include "net/url_request/url_request_context.h"
+#include "net/url_request/url_request_context_builder.h"
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -49,7 +52,7 @@ TEST(DhcpPacFileFetcherWin, AdapterNamesAndPacURLFromDhcp) {
 class RealFetchTester {
  public:
   RealFetchTester()
-      : context_(new TestURLRequestContext),
+      : context_(CreateTestURLRequestContextBuilder()->Build()),
         fetcher_(new DhcpPacFileFetcherWin(context_.get())),
         finished_(false),
         on_completion_is_error_(false) {
@@ -376,11 +379,10 @@ class MockDhcpPacFileFetcherWin : public DhcpPacFileFetcherWin {
 class FetcherClient {
  public:
   FetcherClient()
-      : context_(new TestURLRequestContext),
+      : context_(CreateTestURLRequestContextBuilder()->Build()),
         fetcher_(context_.get()),
         finished_(false),
-        result_(ERR_UNEXPECTED) {
-  }
+        result_(ERR_UNEXPECTED) {}
 
   void RunTest() {
     int result = fetcher_.Fetch(
@@ -440,9 +442,10 @@ class FetcherClient {
 // We separate out each test's logic so that we can easily implement
 // the ReuseFetcher test at the bottom.
 void TestNormalCaseURLConfiguredOneAdapter(FetcherClient* client) {
-  TestURLRequestContext context;
+  auto context = CreateTestURLRequestContextBuilder()->Build();
   std::unique_ptr<DummyDhcpPacFileAdapterFetcher> adapter_fetcher(
-      new DummyDhcpPacFileAdapterFetcher(&context, client->GetTaskRunner()));
+      new DummyDhcpPacFileAdapterFetcher(context.get(),
+                                         client->GetTaskRunner()));
   adapter_fetcher->Configure(true, OK, u"bingo", 1);
   client->fetcher_.PushBackAdapter("a", adapter_fetcher.release());
   client->RunTest();
@@ -612,9 +615,10 @@ TEST(DhcpPacFileFetcherWin, ShortCircuitLessPreferredAdapters) {
 }
 
 void TestImmediateCancel(FetcherClient* client) {
-  TestURLRequestContext context;
+  auto context = CreateTestURLRequestContextBuilder()->Build();
   std::unique_ptr<DummyDhcpPacFileAdapterFetcher> adapter_fetcher(
-      new DummyDhcpPacFileAdapterFetcher(&context, client->GetTaskRunner()));
+      new DummyDhcpPacFileAdapterFetcher(context.get(),
+                                         client->GetTaskRunner()));
   adapter_fetcher->Configure(true, OK, u"bingo", 1);
   client->fetcher_.PushBackAdapter("a", adapter_fetcher.release());
   client->RunTest();
@@ -673,9 +677,10 @@ TEST(DhcpPacFileFetcherWin, OnShutdown) {
   base::test::TaskEnvironment task_environment;
 
   FetcherClient client;
-  TestURLRequestContext context;
+  auto context = CreateTestURLRequestContextBuilder()->Build();
   std::unique_ptr<DummyDhcpPacFileAdapterFetcher> adapter_fetcher(
-      new DummyDhcpPacFileAdapterFetcher(&context, client.GetTaskRunner()));
+      new DummyDhcpPacFileAdapterFetcher(context.get(),
+                                         client.GetTaskRunner()));
   adapter_fetcher->Configure(true, OK, u"bingo", 1);
   client.fetcher_.PushBackAdapter("a", adapter_fetcher.release());
   client.RunTest();
@@ -686,7 +691,7 @@ TEST(DhcpPacFileFetcherWin, OnShutdown) {
 
   client.ResetTestState();
   EXPECT_THAT(client.RunTestThatMayFailSync(), IsError(ERR_CONTEXT_SHUT_DOWN));
-  EXPECT_EQ(0u, context.url_requests()->size());
+  EXPECT_EQ(0u, context->url_requests()->size());
 }
 
 }  // namespace

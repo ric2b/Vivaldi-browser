@@ -5,6 +5,8 @@
 #include "components/history_clusters/core/on_device_clustering_util.h"
 
 #include "base/containers/contains.h"
+#include "base/time/time.h"
+#include "components/history_clusters/core/config.h"
 #include "components/history_clusters/core/history_clusters_util.h"
 #include "components/history_clusters/core/on_device_clustering_features.h"
 
@@ -100,8 +102,8 @@ void SortClusters(std::vector<history::Cluster>* clusters) {
 
 bool IsNoisyVisit(const history::ClusterVisit& visit) {
   return visit.engagement_score >
-             features::NoisyClusterVisitEngagementThreshold() &&
-         visit.search_terms.empty();
+             GetConfig().noisy_cluster_visits_engagement_threshold &&
+         visit.annotated_visit.content_annotations.search_terms.empty();
 }
 
 }  // namespace history_clusters

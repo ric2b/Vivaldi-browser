@@ -618,7 +618,6 @@
 <translation id="5170206230005240598">زیرنویس بریل فعال شد</translation>
 <translation id="5183440668879371625">خط قبلی بریل</translation>
 <translation id="5189244881767082992">خط</translation>
-<translation id="5234747236692380506">تایپ کردن <ph name="TEXT" /></translation>
 <translation id="5263034204789987535">کاهی</translation>
 <translation id="5263344797180442561">h2</translation>
 <translation id="528468243742722775">پایان</translation>
@@ -685,6 +684,8 @@
 <translation id="5623842676595125836">گزارش</translation>
 <translation id="5628125749885014029">h4</translation>
 <translation id="5632083598315326067">نماد گرافیکی</translation>
+<translation id="5648939288050772726">‏تبریک می‌گوییم! اصول اولیه استفاده از ChromeVox را باموفقیت یاد گرفتید. به‌خاطر داشته باشید هرزمان بخواهید می‌توانید منوی فرمان ChromeVox را با فشار دادن کلید «جستجو + نقطه» باز کنید. برای اینکه درباره ChromeVox و ChromeOS اطلاعات بیشتری کسب کنید، از مقاله‌های زیر بازدید کنید.
+    اگر آموزش گام‌به‌گام را به‌پایان رسانده‌اید، بااستفاده از ChromeVox به دکمه «بستن» پیمایش کنید و روی آن کلیک کنید.</translation>
 <translation id="5653397561111110475">‏استفاده از قابلیت‌های دسترس‌پذیری صفحه لمسی Chromebook</translation>
 <translation id="5655682562155942719">پرش از فرمان‌ها</translation>
 <translation id="56637627897541303">قسمت نوشتاری</translation>
@@ -794,6 +795,7 @@
 <translation id="641759969622533235">{COUNT,plural, =1{دونقطه}one{# دونقطه}other{# دونقطه}}</translation>
 <translation id="6444046323172968959">گفتگوی هشدار</translation>
 <translation id="6452403590345320472">فهرست مطالب</translation>
+<translation id="6457542714329819968">نوع</translation>
 <translation id="6468049171101508116">دکمه بعدی</translation>
 <translation id="646954774886932461">فهرست موضوعی</translation>
 <translation id="6475604559827479857">رنگ برای برجسته کردن کلمه‌:</translation>
@@ -966,8 +968,6 @@
 <translation id="7701196182766842984">autolst</translation>
 <translation id="7713139339518499741">صدای طبیعی</translation>
 <translation id="7714340021005120797">کادر ترکیبی بعدی وجود ندارد</translation>
-<translation id="772146615414628379">‏تبریک! اصول اولیه استفاده از ChromeVox را باموفقیت یاد گرفتید. به‌یاد داشته باشید هرزمان که بخواهید می‌توانید منوی فرمان ChromeVox را با فشار دادن Search+Period باز کنید. برای اینکه درباره ChromeVox و سیستم‌عامل Chrome از این هم بیشتر بدانید، مقاله‌های زیر را ببینید.
-    اگر آموزش گام‌به‌گام را به پایان رسانده‌اید، بااستفاده از ChromeVox به دکمه «بستن» پیمایش کنید و روی آن کلیک کنید.</translation>
 <translation id="7724603315864178912">برش</translation>
 <translation id="7731785449856576010">ابزارک رسانه بعدی وجود ندارد</translation>
 <translation id="7735498529470878067">کاوش با لمس به شما کمک می‌کند به‌سرعت از آنچه روی صفحه است اطلاعاتی به‌دست آورید.</translation>

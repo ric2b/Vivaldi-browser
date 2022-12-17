@@ -278,12 +278,13 @@ public class StartSurfaceCoordinator implements StartSurface {
 
         TabSwitcher.Controller controller =
                 mTabSwitcher != null ? mTabSwitcher.getController() : mTasksSurface.getController();
-        mStartSurfaceMediator =
-                new StartSurfaceMediator(controller, mTabModelSelector, mPropertyModel,
-                        mIsStartSurfaceEnabled ? this::initializeSecondaryTasksSurface : null,
-                        mIsStartSurfaceEnabled, mActivity, mBrowserControlsManager,
-                        this::isActivityFinishingOrDestroyed, excludeMVTiles, excludeQueryTiles,
-                        startSurfaceOneshotSupplier, hadWarmStart, jankTracker);
+        mStartSurfaceMediator = new StartSurfaceMediator(controller, containerView,
+                mTabModelSelector, mPropertyModel,
+                mIsStartSurfaceEnabled ? this::initializeSecondaryTasksSurface : null,
+                mIsStartSurfaceEnabled, mActivity, mBrowserControlsManager,
+                this::isActivityFinishingOrDestroyed, excludeMVTiles, excludeQueryTiles,
+                startSurfaceOneshotSupplier, hadWarmStart, jankTracker,
+                mTasksSurface != null ? mTasksSurface::initializeMVTiles : null);
 
         // Show feed loading image.
         if (mStartSurfaceMediator.shouldShowFeedPlaceholder()) {
@@ -398,7 +399,7 @@ public class StartSurfaceCoordinator implements StartSurface {
         mStartSurfaceMediator.initWithNative(
                 mIsStartSurfaceEnabled ? mOmniboxStubSupplier.get() : null,
                 mExploreSurfaceCoordinatorFactory,
-                UserPrefs.get(Profile.getLastUsedRegularProfile()));
+                UserPrefs.get(Profile.getLastUsedRegularProfile()), mSnackbarManager);
 
         if (mTabSwitcher != null) {
             mTabSwitcher.initWithNative(mActivity, mTabContentManager,

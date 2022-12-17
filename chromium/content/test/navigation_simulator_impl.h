@@ -10,6 +10,7 @@
 
 #include "base/callback.h"
 #include "base/memory/raw_ptr.h"
+#include "base/time/time.h"
 #include "content/browser/renderer_host/navigation_request.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_throttle.h"
@@ -80,6 +81,7 @@ class NavigationSimulatorImpl : public NavigationSimulator,
   RenderFrameHost* GetFinalRenderFrameHost() override;
   void Wait() override;
   bool IsDeferred() override;
+  bool HasFailed() override;
   void SetInitiatorFrame(RenderFrameHost* initiator_frame_host) override;
   void SetTransition(ui::PageTransition transition) override;
   void SetHasUserGesture(bool has_user_gesture) override;
@@ -320,6 +322,10 @@ class NavigationSimulatorImpl : public NavigationSimulator,
   // prerendering/BFCache.
   bool NeedsPreCommitChecks() const;
 
+  // See comments of `force_before_unload_for_browser_initiated_` for details
+  // on what this does.
+  void AddBeforeUnloadHandlerIfNecessary();
+
   enum State {
     INITIALIZATION,
     WAITING_BEFORE_UNLOAD,
@@ -460,6 +466,12 @@ class NavigationSimulatorImpl : public NavigationSimulator,
   // renderer process side. This member interface will never be bound.
   mojo::PendingAssociatedReceiver<mojom::NavigationClient>
       navigation_client_receiver_;
+
+  // If true, the RenderFrameHost is told there is a before-unload handler. This
+  // is done for compat, as this code and consuming code was written assuming
+  // navigations would always result in querying for before-unload handlers even
+  // if one wasn't present.
+  const bool force_before_unload_for_browser_initiated_;
 
   base::WeakPtrFactory<NavigationSimulatorImpl> weak_factory_{this};
 };

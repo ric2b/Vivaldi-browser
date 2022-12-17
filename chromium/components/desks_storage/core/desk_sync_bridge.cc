@@ -27,6 +27,7 @@
 #include "components/desks_storage/core/desk_template_util.h"
 #include "components/services/app_service/public/cpp/app_registry_cache.h"
 #include "components/services/app_service/public/cpp/app_registry_cache_wrapper.h"
+#include "components/services/app_service/public/cpp/app_types.h"
 #include "components/sync/model/entity_change.h"
 #include "components/sync/model/metadata_batch.h"
 #include "components/sync/model/metadata_change_list.h"
@@ -36,6 +37,11 @@
 #include "components/sync/protocol/workspace_desk_specifics.pb.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/ui_base_types.h"
+#include "ui/base/window_open_disposition.h"
+
+#if !BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "chromeos/crosapi/cpp/lacros_startup_state.h"  // nogncheck
+#endif  // !BUILDFLAG(IS_CHROMEOS_LACROS)
 
 namespace desks_storage {
 
@@ -46,8 +52,15 @@ using ArcApp = sync_pb::WorkspaceDeskSpecifics_ArcApp;
 using ArcAppWindowSize = sync_pb::WorkspaceDeskSpecifics_ArcApp_WindowSize;
 using ash::DeskTemplate;
 using ash::DeskTemplateSource;
+using ash::DeskTemplateType;
+using SyncDeskType = sync_pb::WorkspaceDeskSpecifics_DeskType;
 using WindowState = sync_pb::WorkspaceDeskSpecifics_WindowState;
 using WindowBound = sync_pb::WorkspaceDeskSpecifics_WindowBound;
+using LaunchContainer = sync_pb::WorkspaceDeskSpecifics_LaunchContainer;
+// Use name prefixed with Sync here to avoid name collision with original class
+// which isn't defined in a namespace.
+using SyncWindowOpenDisposition =
+    sync_pb::WorkspaceDeskSpecifics_WindowOpenDisposition;
 using ProgressiveWebApp = sync_pb::WorkspaceDeskSpecifics_ProgressiveWebApp;
 using ChromeApp = sync_pb::WorkspaceDeskSpecifics_ChromeApp;
 using WorkspaceDeskSpecifics_App = sync_pb::WorkspaceDeskSpecifics_App;
@@ -67,6 +80,8 @@ constexpr std::size_t kMaxTemplateCount = 6u;
 constexpr std::size_t kMaxTemplateSize = 8192u;
 
 // Allocate a EntityData and copies |specifics| into it.
+//
+// TODO(crbug/1304465): Switch symbol identifiers to new standard.
 std::unique_ptr<syncer::EntityData> CopyToEntityData(
     const sync_pb::WorkspaceDeskSpecifics& specifics) {
   auto entity_data = std::make_unique<syncer::EntityData>();
@@ -128,17 +143,27 @@ std::string GetAppId(const sync_pb::WorkspaceDeskSpecifics_App& app) {
     case sync_pb::WorkspaceDeskSpecifics_AppOneOf::AppCase::APP_NOT_SET:
       // Return an empty string to indicate this app is unsupported.
       return std::string();
-    case sync_pb::WorkspaceDeskSpecifics_AppOneOf::AppCase::kBrowserAppWindow:
+    case sync_pb::WorkspaceDeskSpecifics_AppOneOf::AppCase::kBrowserAppWindow: {
+      const bool is_lacros =
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+          true;
+#else
+          // Note that this will launch the browser as lacros if it is enabled,
+          // even if it was saved as a non-lacros window (and vice-versa).
+          crosapi::lacros_startup_state::IsLacrosEnabled() &&
+          crosapi::lacros_startup_state::IsLacrosPrimaryEnabled();
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+
       // Browser app has a known app ID.
-      return std::string(app_constants::kChromeAppId);
+      return std::string(is_lacros ? app_constants::kLacrosAppId
+                                   : app_constants::kChromeAppId);
+    }
     case sync_pb::WorkspaceDeskSpecifics_AppOneOf::AppCase::kChromeApp:
       return app.app().chrome_app().app_id();
     case sync_pb::WorkspaceDeskSpecifics_AppOneOf::AppCase::kProgressWebApp:
       return app.app().progress_web_app().app_id();
     case sync_pb::WorkspaceDeskSpecifics_AppOneOf::AppCase::kArcApp:
       return app.app().arc_app().app_id();
-      // Leave out the default case to let compiler to ensure we have
-      // exhaustively handled all cases.
   }
 }
 
@@ -151,11 +176,34 @@ std::unique_ptr<app_restore::AppLaunchInfo> ConvertToAppLaunchInfo(
   if (app_id.empty())
     return nullptr;
 
-  std::unique_ptr<app_restore::AppLaunchInfo> app_launch_info =
+  auto app_launch_info =
       std::make_unique<app_restore::AppLaunchInfo>(app_id, window_id);
 
   if (app.has_display_id())
     app_launch_info->display_id = app.display_id();
+
+  if (app.has_container()) {
+    app_launch_info->container = static_cast<int32_t>(
+        desk_template_conversion::ToMojomLaunchContainer(app.container()));
+  }
+
+  if (app.has_disposition()) {
+    app_launch_info->disposition = static_cast<int32_t>(
+        desk_template_conversion::ToBaseWindowOpenDisposition(
+            app.disposition()));
+  }
+
+  if (app.has_app_name())
+    app_launch_info->app_name = app.app_name();
+
+  // This is a short-term fix as |event_flag| is required to launch ArcApp.
+  // Currently we don't support persisting user action in template
+  // so always default to 0 which is no action.
+  // https://source.chromium.org/chromium/chromium/src/
+  // +/main:ui/base/window_open_disposition.cc;l=34
+  //
+  // TODO(crbug.com/1311801): Add support for actual event_flag values.
+  app_launch_info->event_flag = 0;
 
   switch (app.app().app_case()) {
     case sync_pb::WorkspaceDeskSpecifics_AppOneOf::AppCase::APP_NOT_SET:
@@ -173,6 +221,10 @@ std::unique_ptr<app_restore::AppLaunchInfo> ConvertToAppLaunchInfo(
       FillUrlList(&app_launch_info->urls.value(),
                   app.app().browser_app_window());
 
+      if (app.app().browser_app_window().has_show_as_app())
+        app_launch_info->app_type_browser =
+            app.app().browser_app_window().show_as_app();
+
       break;
     case sync_pb::WorkspaceDeskSpecifics_AppOneOf::AppCase::kChromeApp:
       // |app_id| is enough to identify a Chrome app.
@@ -183,8 +235,6 @@ std::unique_ptr<app_restore::AppLaunchInfo> ConvertToAppLaunchInfo(
     case sync_pb::WorkspaceDeskSpecifics_AppOneOf::AppCase::kArcApp:
       // |app_id| is enough to identify an Arc app.
       break;
-      // Leave out the default case to let compiler to ensure we have
-      // exhaustively handled all cases.
   }
 
   return app_launch_info;
@@ -208,8 +258,6 @@ ui::WindowShowState ToUiWindowState(WindowState state) {
       return ui::WindowShowState::SHOW_STATE_NORMAL;
     case WindowState::WorkspaceDeskSpecifics_WindowState_SECONDARY_SNAPPED:
       return ui::WindowShowState::SHOW_STATE_NORMAL;
-      // Leave out the default case to let compiler to ensure we have
-      // exhaustively handled all cases.
   }
 }
 
@@ -231,8 +279,6 @@ chromeos::WindowStateType ToChromeOsWindowState(WindowState state) {
       return chromeos::WindowStateType::kPrimarySnapped;
     case WindowState::WorkspaceDeskSpecifics_WindowState_SECONDARY_SNAPPED:
       return chromeos::WindowStateType::kSecondarySnapped;
-      // Leave out the default case to let compiler to ensure we have
-      // exhaustively handled all cases.
   }
 }
 
@@ -257,8 +303,6 @@ WindowState FromChromeOsWindowState(chromeos::WindowStateType state) {
       return WindowState::WorkspaceDeskSpecifics_WindowState_PRIMARY_SNAPPED;
     case chromeos::WindowStateType::kSecondarySnapped:
       return WindowState::WorkspaceDeskSpecifics_WindowState_SECONDARY_SNAPPED;
-      // Leave out the default case to let compiler to ensure we have
-      // exhaustively handled all cases.
   }
 }
 
@@ -276,8 +320,6 @@ WindowState FromUiWindowState(ui::WindowShowState state) {
       return WindowState::WorkspaceDeskSpecifics_WindowState_MAXIMIZED;
     case ui::WindowShowState::SHOW_STATE_FULLSCREEN:
       return WindowState::WorkspaceDeskSpecifics_WindowState_FULLSCREEN;
-      // Leave out the default case to let compiler to ensure we have
-      // exhaustively handled all cases.
   }
 }
 
@@ -305,6 +347,11 @@ void FillBrowserAppWindow(BrowserAppWindow* out_browser_app_window,
   if (app_restore_data->active_tab_index.has_value()) {
     out_browser_app_window->set_active_tab_index(
         app_restore_data->active_tab_index.value());
+  }
+
+  if (app_restore_data->app_type_browser.has_value()) {
+    out_browser_app_window->set_show_as_app(
+        app_restore_data->app_type_browser.value());
   }
 }
 
@@ -340,6 +387,12 @@ void FillAppWithWindowInfo(WorkspaceDeskSpecifics_App* out_app,
         FromUiWindowState(window_info->pre_minimized_show_state_type.value()));
   }
 
+  if (window_info->snap_percentage.has_value())
+    out_app->set_snap_percentage(window_info->snap_percentage.value());
+
+  if (window_info->app_title.has_value())
+    out_app->set_title(base::UTF16ToUTF8(window_info->app_title.value()));
+
   // AppRestoreData.GetWindowInfo does not include |display_id| in the returned
   // WindowInfo. Therefore, we are not filling |display_id| here.
 }
@@ -349,6 +402,44 @@ void FillAppWithDisplayId(WorkspaceDeskSpecifics_App* out_app,
                           const app_restore::AppRestoreData* app_restore_data) {
   if (app_restore_data->display_id.has_value())
     out_app->set_display_id(app_restore_data->display_id.value());
+}
+
+//  Fill `out_app` with `container` from `app_restore_data`.
+void FillAppWithLaunchContainer(
+    const app_restore::AppRestoreData* app_restore_data,
+    WorkspaceDeskSpecifics_App* out_app) {
+  if (app_restore_data->container.has_value()) {
+    out_app->set_container(desk_template_conversion::FromMojomLaunchContainer(
+        static_cast<apps::mojom::LaunchContainer>(
+            app_restore_data->container.value())));
+  }
+}
+
+// Fill `out_app` with `disposition` from `app_restore_data`.
+void FillAppWithWindowOpenDisposition(
+    const app_restore::AppRestoreData* app_restore_data,
+    WorkspaceDeskSpecifics_App* out_app) {
+  if (app_restore_data->disposition.has_value()) {
+    out_app->set_disposition(
+        desk_template_conversion::FromBaseWindowOpenDisposition(
+            static_cast<WindowOpenDisposition>(
+                app_restore_data->disposition.value())));
+  }
+}
+
+// Fills `out_app` with `app_name` and `title` from `app_restore_data`.
+void FillAppWithAppNameAndTitle(
+    const app_restore::AppRestoreData* app_restore_data,
+    WorkspaceDeskSpecifics_App* out_app) {
+  if (app_restore_data->app_name.has_value() &&
+      !app_restore_data->app_name.value().empty()) {
+    out_app->set_app_name(app_restore_data->app_name.value());
+  }
+
+  if (app_restore_data->title.has_value() &&
+      !app_restore_data->title.value().empty()) {
+    out_app->set_title(base::UTF16ToUTF8(app_restore_data->title.value()));
+  }
 }
 
 void FillArcAppSize(ArcAppWindowSize* out_window_size, const gfx::Size& size) {
@@ -373,18 +464,30 @@ void FillArcApp(ArcApp* out_app,
     FillArcAppSize(out_app->mutable_maximum_size(),
                    app_restore_data->maximum_size.value());
   }
-  if (app_restore_data->title.has_value())
-    out_app->set_title(base::UTF16ToUTF8(app_restore_data->title.value()));
   if (app_restore_data->bounds_in_root.has_value()) {
     FillArcBoundsInRoot(out_app->mutable_bounds_in_root(),
                         app_restore_data->bounds_in_root.value());
   }
 }
 
+// Fills an app with container and open disposition.  This is only done in the
+// specific cases of Chrome Apps and PWAs.
+void FillAppWithLaunchContainerAndOpenDisposition(
+    const app_restore::AppRestoreData* app_restore_data,
+    WorkspaceDeskSpecifics_App* out_app) {
+  // If present, fills the proto's `container` field with the information stored
+  // in the `app_restore_data`'s `container` field.
+  FillAppWithLaunchContainer(app_restore_data, out_app);
+
+  // If present, fills the proto's `disposition` field with the information
+  // stored in the `app_restore_data`'s `disposition` field.
+  FillAppWithWindowOpenDisposition(app_restore_data, out_app);
+}
+
 // Fill |out_app| with |app_restore_data|.
 void FillApp(WorkspaceDeskSpecifics_App* out_app,
              const std::string& app_id,
-             const apps::mojom::AppType app_type,
+             const apps::AppType app_type,
              const app_restore::AppRestoreData* app_restore_data) {
   FillAppWithWindowInfo(out_app, app_restore_data->GetWindowInfo().get());
 
@@ -392,11 +495,18 @@ void FillApp(WorkspaceDeskSpecifics_App* out_app,
   // WindowInfo. We need to fill the |display_id| from AppRestoreData.
   FillAppWithDisplayId(out_app, app_restore_data);
 
+  // If present, fills the proto's `app_name` and `title` fields with the
+  // information stored in the `app_restore_data`'s `app_name` and `title`
+  // fields.
+  FillAppWithAppNameAndTitle(app_restore_data, out_app);
+
   // See definition components/services/app_service/public/mojom/types.mojom
   switch (app_type) {
-    case apps::mojom::AppType::kWeb: {
-      if (app_constants::kChromeAppId == app_id) {
-        // Chrome Browser Window.
+    case apps::AppType::kWeb:
+    case apps::AppType::kStandaloneBrowser: {
+      if (app_constants::kChromeAppId == app_id ||
+          app_constants::kLacrosAppId == app_id) {
+        // Chrome or Lacros Browser Window.
         BrowserAppWindow* browser_app_window =
             out_app->mutable_app()->mutable_browser_app_window();
         FillBrowserAppWindow(browser_app_window, app_restore_data);
@@ -405,31 +515,19 @@ void FillApp(WorkspaceDeskSpecifics_App* out_app,
         ProgressiveWebApp* pwa_window =
             out_app->mutable_app()->mutable_progress_web_app();
         pwa_window->set_app_id(app_id);
-        if (app_restore_data->title.has_value()) {
-          pwa_window->set_title(
-              base::UTF16ToUTF8(app_restore_data->title.value()));
-        }
+        FillAppWithLaunchContainerAndOpenDisposition(app_restore_data, out_app);
       }
       break;
     }
-    case apps::mojom::AppType::kStandaloneBrowser: {
-      // Lacros Browser App. This is currently unsupported.
-      // Note, Lacros-chrome has app ID kLacrosAppId, that is different than
-      // kChromeAppId.
-      break;
-    }
-    case apps::mojom::AppType::kChromeApp: {
+    case apps::AppType::kChromeApp: {
       // Chrome extension backed app, Chrome Apps
       ChromeApp* chrome_app_window =
           out_app->mutable_app()->mutable_chrome_app();
       chrome_app_window->set_app_id(app_id);
-      if (app_restore_data->title.has_value()) {
-        chrome_app_window->set_title(
-            base::UTF16ToUTF8(app_restore_data->title.value()));
-      }
+      FillAppWithLaunchContainerAndOpenDisposition(app_restore_data, out_app);
       break;
     }
-    case apps::mojom::AppType::kArc: {
+    case apps::AppType::kArc: {
       ArcApp* arc_app = out_app->mutable_app()->mutable_arc_app();
       arc_app->set_app_id(app_id);
       FillArcApp(arc_app, app_restore_data);
@@ -455,8 +553,7 @@ void FillArcExtraInfoFromProto(app_restore::WindowInfo* out_window_info,
     arc_info.maximum_size.emplace(app.maximum_size().width(),
                                   app.maximum_size().height());
   }
-  if (app.has_title())
-    arc_info.title.emplace(base::UTF8ToUTF16(app.title()));
+
   if (app.has_bounds_in_root()) {
     arc_info.bounds_in_root.emplace(
         app.bounds_in_root().left(), app.bounds_in_root().top(),
@@ -486,10 +583,22 @@ void FillWindowInfoFromProto(app_restore::WindowInfo* out_window_info,
     out_window_info->display_id.emplace(app.display_id());
 
   if (app.has_pre_minimized_window_state() &&
-      sync_pb::WorkspaceDeskSpecifics_WindowState_IsValid(app.window_state())) {
+      app.window_state() ==
+          sync_pb::WorkspaceDeskSpecifics_WindowState_MINIMIZED) {
     out_window_info->pre_minimized_show_state_type.emplace(
         ToUiWindowState(app.pre_minimized_window_state()));
   }
+
+  if (app.has_snap_percentage() &&
+      (app.window_state() ==
+           sync_pb::WorkspaceDeskSpecifics_WindowState_PRIMARY_SNAPPED ||
+       app.window_state() ==
+           sync_pb::WorkspaceDeskSpecifics_WindowState_SECONDARY_SNAPPED)) {
+    out_window_info->snap_percentage.emplace(app.snap_percentage());
+  }
+
+  if (app.has_title())
+    out_window_info->app_title.emplace(base::UTF8ToUTF16(app.title()));
 
   if (app.app().app_case() ==
       sync_pb::WorkspaceDeskSpecifics_AppOneOf::AppCase::kArcApp) {
@@ -500,8 +609,7 @@ void FillWindowInfoFromProto(app_restore::WindowInfo* out_window_info,
 // Convert a desk template to |app_restore::RestoreData|.
 std::unique_ptr<app_restore::RestoreData> ConvertToRestoreData(
     const sync_pb::WorkspaceDeskSpecifics& entry_proto) {
-  std::unique_ptr<app_restore::RestoreData> restore_data =
-      std::make_unique<app_restore::RestoreData>();
+  auto restore_data = std::make_unique<app_restore::RestoreData>();
 
   for (auto app_proto : entry_proto.desk().apps()) {
     std::unique_ptr<app_restore::AppLaunchInfo> app_launch_info =
@@ -542,16 +650,45 @@ void FillWorkspaceDeskSpecifics(
           window_id_to_launch_info.second.get();
       // The apps cache returns kChromeApp for browser windows, therefore we
       // short circuit the cache retrieval if we get the browser ID.
-      const apps::mojom::AppType app_type =
-          app_id == app_constants::kChromeAppId
-              ? apps::mojom::AppType::kWeb
-              : apps_cache->GetAppType(app_id);
+      const auto app_type = app_id == app_constants::kChromeAppId
+                                ? apps::AppType::kWeb
+                                : apps_cache->GetAppType(app_id);
 
       WorkspaceDeskSpecifics_App* app =
           out_entry_proto->mutable_desk()->add_apps();
       app->set_window_id(window_id);
       FillApp(app, app_id, app_type, app_restore_data);
     }
+  }
+}
+
+// Fill a desk template `out_entry_proto` with the type of desk based on the
+// desk's type field.
+void FillDeskType(sync_pb::WorkspaceDeskSpecifics* out_entry_proto,
+                  const DeskTemplate* desk_template) {
+  switch (desk_template->type()) {
+    case DeskTemplateType::kTemplate:
+      out_entry_proto->set_desk_type(
+          SyncDeskType::WorkspaceDeskSpecifics_DeskType_TEMPLATE);
+      return;
+    case DeskTemplateType::kSaveAndRecall:
+      out_entry_proto->set_desk_type(
+          SyncDeskType::WorkspaceDeskSpecifics_DeskType_SAVE_AND_RECALL);
+      return;
+  }
+}
+
+// Takes in the Proto enum for a desk type `proto_type` and returns it's
+// DeskTemplateType equivalent.
+DeskTemplateType GetDeskTemplateTypeFromProtoType(
+    const SyncDeskType& proto_type) {
+  switch (proto_type) {
+    // Treat unknown desk types as templates.
+    case SyncDeskType::WorkspaceDeskSpecifics_DeskType_UNKNOWN_TYPE:
+    case SyncDeskType::WorkspaceDeskSpecifics_DeskType_TEMPLATE:
+      return DeskTemplateType::kTemplate;
+    case SyncDeskType::WorkspaceDeskSpecifics_DeskType_SAVE_AND_RECALL:
+      return DeskTemplateType::kSaveAndRecall;
   }
 }
 
@@ -582,12 +719,19 @@ std::unique_ptr<DeskTemplate> DeskSyncBridge::FromSyncProto(
       pb_entry.created_time_windows_epoch_micros());
 
   // Protobuf parsing enforces UTF-8 encoding for all strings.
-  std::unique_ptr<DeskTemplate> desk_template = std::make_unique<DeskTemplate>(
+  auto desk_template = std::make_unique<DeskTemplate>(
       uuid, ash::DeskTemplateSource::kUser, pb_entry.name(), created_time);
 
   if (pb_entry.has_updated_time_windows_epoch_micros()) {
     desk_template->set_updated_time(desk_template_conversion::ProtoTimeToTime(
         pb_entry.updated_time_windows_epoch_micros()));
+  }
+
+  if (pb_entry.has_desk_type()) {
+    desk_template->set_type(
+        GetDeskTemplateTypeFromProtoType(pb_entry.desk_type()));
+  } else {
+    desk_template->set_type(DeskTemplateType::kTemplate);
   }
 
   desk_template->set_desk_restore_data(ConvertToRestoreData(pb_entry));
@@ -810,7 +954,8 @@ void DeskSyncBridge::AddOrUpdateEntry(std::unique_ptr<DeskTemplate> new_entry,
   change_processor()->Put(uuid.AsLowercaseString(), std::move(entity_data),
                           batch->GetMetadataChangeList());
 
-  entries_[uuid] = std::move(entry);
+  std::unique_ptr<DeskTemplate> persisted_entry = FromSyncProto(sync_proto);
+  entries_[uuid] = std::move(persisted_entry);
   const DeskTemplate* result = GetUserEntryByUUID(uuid);
 
   batch->WriteData(uuid.AsLowercaseString(),
@@ -915,6 +1060,8 @@ sync_pb::WorkspaceDeskSpecifics DeskSyncBridge::ToSyncProto(
   DCHECK(cache);
 
   sync_pb::WorkspaceDeskSpecifics pb_entry;
+
+  FillDeskType(&pb_entry, desk_template);
 
   pb_entry.set_uuid(desk_template->uuid().AsLowercaseString());
   pb_entry.set_name(base::UTF16ToUTF8(desk_template->template_name()));

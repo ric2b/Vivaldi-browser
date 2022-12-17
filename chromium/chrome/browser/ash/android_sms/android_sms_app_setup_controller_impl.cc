@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "ash/components/multidevice/logging/logging.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/containers/flat_map.h"
@@ -18,10 +19,10 @@
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_install_finalizer.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
-#include "chromeos/components/multidevice/logging/logging.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/webapps/browser/install_result_code.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
+#include "components/webapps/browser/uninstall_result_code.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/storage_partition.h"
 #include "net/base/url_util.h"
@@ -77,8 +78,14 @@ void AndroidSmsAppSetupControllerImpl::PwaDelegate::RemovePwa(
   }
 
   provider->install_finalizer().UninstallExternalWebApp(
-      app_id, webapps::WebappUninstallSource::kInternalPreinstalled,
-      std::move(callback));
+      app_id, web_app::WebAppManagement::kDefault,
+      webapps::WebappUninstallSource::kInternalPreinstalled,
+      base::BindOnce(
+          [](SuccessCallback callback, webapps::UninstallResultCode code) {
+            std::move(callback).Run(code ==
+                                    webapps::UninstallResultCode::kSuccess);
+          },
+          std::move(callback)));
 }
 
 AndroidSmsAppSetupControllerImpl::AndroidSmsAppSetupControllerImpl(

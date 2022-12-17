@@ -11,6 +11,9 @@
 
 namespace chrome {
 
+const char kAccessCodeCastLearnMoreURL[] =
+    "https://support.google.com/chrome/a/?p=cast_to_class_teacher";
+
 const char kAccessibilityLabelsLearnMoreURL[] =
     "https://support.google.com/chrome/?p=image_descriptions";
 
@@ -99,19 +102,6 @@ const char kChromeUIUntrustedNewTabPageUrl[] =
     "chrome-untrusted://new-tab-page/";
 
 const char kChromiumProjectURL[] = "https://www.chromium.org/";
-
-const char kCloudPrintCertificateErrorLearnMoreURL[] =
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-    "https://support.google.com/chromebook?p=cloudprint_error_troubleshoot";
-#elif BUILDFLAG(IS_MAC)
-    "https://support.google.com/cloudprint?p=cloudprint_error_offline_mac";
-#elif BUILDFLAG(IS_WIN)
-    "https://support.google.com/"
-    "cloudprint?p=cloudprint_error_offline_windows";
-#else
-        "https://support.google.com/"
-        "cloudprint?p=cloudprint_error_offline_linux";
-#endif
 
 const char kContentSettingsExceptionsLearnMoreURL[] =
     "https://support.google.com/chrome/?p=settings_manage_exceptions";
@@ -281,7 +271,7 @@ const char kSyncErrorsHelpURL[] =
     "https://support.google.com/chrome/?p=settings_sync_error";
 
 const char kSyncGoogleDashboardURL[] =
-    "https://www.google.com/settings/chrome/sync/";
+    "https://www.google.com/settings/chrome/sync";
 
 const char kSyncLearnMoreURL[] =
     "https://support.google.com/chrome/?p=settings_sign_in";
@@ -406,6 +396,9 @@ const char kLinuxAppsLearnMoreURL[] =
 const char kNaturalScrollHelpURL[] =
     "https://support.google.com/chromebook/?p=simple_scrolling";
 
+const char kHapticFeedbackHelpURL[] =
+    "https://support.google.com/chromebook?p=haptic_feedback_m100";
+
 const char kOemEulaURLPath[] = "oem";
 
 const char kGoogleEulaOnlineURLPath[] =
@@ -456,7 +449,7 @@ extern const char kFingerprintLearnMoreURL[] =
 const char kChromeEnterpriseSignInLearnMoreURL[] =
     "https://support.google.com/chromebook/answer/1331549";
 
-const char kMac10_10_ObsoleteURL[] =
+const char kMacOsObsoleteURL[] =
     "https://support.google.com/chrome/?p=unsupported_mac";
 #endif
 
@@ -481,5 +474,11 @@ const char kOutdatedPluginLearnMoreURL[] =
 // TODO (b/184137843): Use real link to phone hub notifications and apps access.
 const char kPhoneHubPermissionLearnMoreURL[] =
     "https://support.google.com/chromebook/?p=multidevice";
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_FUCHSIA)
+const char kChromeAppsDeprecationLearnMoreURL[] =
+    "https://support.google.com/chrome/?p=chrome_app_deprecation";
+#endif
 
 }  // namespace chrome

@@ -181,7 +181,7 @@ void InputMethodAsh::ProcessKeyEventDone(ui::KeyEvent* event, bool is_handled) {
   handling_key_event_ = false;
 }
 
-void InputMethodAsh::OnTextInputTypeChanged(const TextInputClient* client) {
+void InputMethodAsh::OnTextInputTypeChanged(TextInputClient* client) {
   if (!IsTextInputClientFocused(client))
     return;
 
@@ -485,6 +485,23 @@ bool InputMethodAsh::SetSelectionRange(uint32_t start, uint32_t end) {
 void InputMethodAsh::ConfirmCompositionText(bool reset_engine,
                                             bool keep_selection) {
   TextInputClient* client = GetTextInputClient();
+  // TODO(b/223075193): Quick fix for the case where we have a pending commit.
+  // Without this, then we would lose the pending commit after confirming the
+  // composition text.
+  // Fix this properly by getting rid of the pending mechanism completely.
+  if (pending_commit_ && !pending_composition_range_ && !pending_composition_) {
+    // Only a pending commit, so confirming the composition is a no-op.
+    return;
+  }
+  // TODO(b/225723475): Similar to the comment above, this is a quick fix to
+  // solve the autocorrect issue outlined in the linked bug. This is due to the
+  // pending composition being reset before it could be applied to the current
+  // text. Again we need to fix this properly by removing the pending mechanism.
+  if (pending_composition_ && !pending_commit_ && !pending_composition_range_) {
+    GetTextInputClient()->SetCompositionText(*pending_composition_);
+    pending_composition_ = absl::nullopt;
+    composition_changed_ = false;
+  }
   if (client && client->HasCompositionText()) {
     const uint32_t characters_committed =
         client->ConfirmCompositionText(keep_selection);
@@ -629,16 +646,9 @@ void InputMethodAsh::MaybeProcessPendingInputMethodResult(ui::KeyEvent* event,
   DCHECK(client);
 
   if (pending_commit_) {
-    if (handled && NeedInsertChar()) {
-      for (const auto& ch : pending_commit_->text) {
-        KeyEvent ch_event(ET_KEY_PRESSED, VKEY_UNKNOWN, EF_NONE);
-        ch_event.set_character(ch);
-        client->InsertChar(ch_event);
-      }
-    } else if (pending_commit_->text.empty()) {
+    if (pending_commit_->text.empty()) {
       client->InsertText(
           u"", TextInputClient::InsertTextCursorBehavior::kMoveCursorAfterText);
-      composing_text_ = false;
     } else {
       // Split the commit into two separate commits, one for the substring
       // before the cursor and one for the substring after.
@@ -656,8 +666,8 @@ void InputMethodAsh::MaybeProcessPendingInputMethodResult(ui::KeyEvent* event,
             after_cursor,
             TextInputClient::InsertTextCursorBehavior::kMoveCursorBeforeText);
       }
-      composing_text_ = false;
     }
+    composing_text_ = false;
     typing_session_manager_.CommitCharacters(pending_commit_->text.length());
   }
 

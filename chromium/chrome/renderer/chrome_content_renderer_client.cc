@@ -20,6 +20,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -48,6 +49,7 @@
 #include "chrome/renderer/chrome_render_frame_observer.h"
 #include "chrome/renderer/chrome_render_thread_observer.h"
 #include "chrome/renderer/loadtimes_extension_bindings.h"
+#include "chrome/renderer/media/chrome_key_systems.h"
 #include "chrome/renderer/media/flash_embed_rewrite.h"
 #include "chrome/renderer/media/webrtc_logging_agent_impl.h"
 #include "chrome/renderer/net/net_error_helper.h"
@@ -65,6 +67,7 @@
 #include "components/autofill/content/renderer/autofill_assistant_agent.h"
 #include "components/autofill/content/renderer/password_autofill_agent.h"
 #include "components/autofill/content/renderer/password_generation_agent.h"
+#include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill_assistant/content/renderer/autofill_assistant_agent.h"
 #include "components/content_capture/common/content_capture_features.h"
 #include "components/content_capture/renderer/content_capture_sender.h"
@@ -81,7 +84,7 @@
 #include "components/error_page/common/localized_error.h"
 #include "components/feed/buildflags.h"
 #include "components/grit/components_scaled_resources.h"
-#include "components/history_clusters/core/features.h"
+#include "components/history_clusters/core/config.h"
 #include "components/network_hints/renderer/web_prescient_networking_impl.h"
 #include "components/no_state_prefetch/common/prerender_url_loader_throttle.h"
 #include "components/no_state_prefetch/renderer/no_state_prefetch_client.h"
@@ -90,6 +93,7 @@
 #include "components/no_state_prefetch/renderer/prerender_render_frame_observer.h"
 #include "components/page_load_metrics/renderer/metrics_render_frame_observer.h"
 #include "components/paint_preview/buildflags/buildflags.h"
+#include "components/password_manager/core/common/password_manager_features.h"
 #include "components/safe_browsing/buildflags.h"
 #include "components/safe_browsing/content/renderer/threat_dom_details.h"
 #include "components/spellcheck/spellcheck_buildflags.h"
@@ -219,11 +223,6 @@
 #include "printing/metafile_agent.h"  // nogncheck
 #endif
 
-#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
-#include "chrome/renderer/pepper/chrome_pdf_print_client.h"
-#include "components/pdf/renderer/pepper_pdf_host.h"
-#endif
-
 #if BUILDFLAG(ENABLE_PAINT_PREVIEW)
 #include "components/paint_preview/renderer/paint_preview_recorder_impl.h"  // nogncheck
 #endif
@@ -344,7 +343,7 @@ void MaybeEnableWebShare() {
 #if BUILDFLAG(ENABLE_NACL) && BUILDFLAG(ENABLE_EXTENSIONS) && \
     BUILDFLAG(IS_CHROMEOS_ASH)
 bool IsTerminalSystemWebAppNaClPage(GURL url) {
-  url::Replacements<char> replacements;
+  GURL::Replacements replacements;
   replacements.ClearQuery();
   replacements.ClearRef();
   url = url.ReplaceComponents(replacements);
@@ -482,11 +481,6 @@ void ChromeContentRendererClient::RenderThreadStarted() {
   WebSecurityPolicy::RegisterURLSchemeAsNotAllowingJavascriptURLs(
       chrome_search_scheme);
 
-#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
-  pdf_print_client_ = std::make_unique<ChromePDFPrintClient>();
-  pdf::PepperPDFHost::SetPrintClient(pdf_print_client_.get());
-#endif
-
   for (auto& scheme :
        secure_origin_allowlist::GetSchemesBypassingSecureContextCheck()) {
     WebSecurityPolicy::AddSchemeToSecureContextSafelist(
@@ -538,8 +532,6 @@ void ChromeContentRendererClient::RenderFrameCreated(
           render_frame, should_allow_for_content_settings,
           std::move(content_settings_delegate));
   if (chrome_observer_.get()) {
-    content_settings->SetContentSettingRules(
-        chrome_observer_->content_setting_rules());
     if (chrome_observer_->content_settings_manager()) {
       mojo::Remote<content_settings::mojom::ContentSettingsManager> manager;
       chrome_observer_->content_settings_manager()->Clone(
@@ -587,12 +579,16 @@ void ChromeContentRendererClient::RenderFrameCreated(
 
 #if BUILDFLAG(IS_ANDROID)
   const bool search_result_extractor_enabled =
+      render_frame->IsMainFrame() &&
       base::FeatureList::IsEnabled(features::kContinuousSearch);
 #else
   const bool search_result_extractor_enabled =
-      history_clusters::IsJourneysEnabled(RenderThread::Get()->GetLocale());
+      render_frame->IsMainFrame() &&
+      history_clusters::GetConfig().is_journeys_enabled_no_locale_check &&
+      history_clusters::IsApplicationLocaleSupportedByJourneys(
+          RenderThread::Get()->GetLocale());
 #endif
-  if (render_frame->IsMainFrame() && search_result_extractor_enabled) {
+  if (search_result_extractor_enabled) {
     continuous_search::SearchResultExtractorImpl::Create(render_frame);
   }
 
@@ -632,16 +628,24 @@ void ChromeContentRendererClient::RenderFrameCreated(
 
   blink::AssociatedInterfaceRegistry* associated_interfaces =
       render_frame_observer->associated_interfaces();
-  PasswordAutofillAgent* password_autofill_agent =
-      new PasswordAutofillAgent(render_frame, associated_interfaces);
-  PasswordGenerationAgent* password_generation_agent =
-      new PasswordGenerationAgent(render_frame, password_autofill_agent,
-                                  associated_interfaces);
-  autofill::AutofillAssistantAgent* autofill_assistant_agent =
-      new autofill::AutofillAssistantAgent(render_frame);
-  new AutofillAgent(render_frame, password_autofill_agent,
-                    password_generation_agent, autofill_assistant_agent,
-                    associated_interfaces);
+
+  if (!render_frame->IsInFencedFrameTree() ||
+      base::FeatureList::IsEnabled(
+          autofill::features::kAutofillEnableWithinFencedFrame) ||
+      base::FeatureList::IsEnabled(
+          password_manager::features::
+              kEnablePasswordManagerWithinFencedFrame)) {
+    PasswordAutofillAgent* password_autofill_agent =
+        new PasswordAutofillAgent(render_frame, associated_interfaces);
+    PasswordGenerationAgent* password_generation_agent =
+        new PasswordGenerationAgent(render_frame, password_autofill_agent,
+                                    associated_interfaces);
+    autofill::AutofillAssistantAgent* autofill_assistant_agent =
+        new autofill::AutofillAssistantAgent(render_frame);
+    new AutofillAgent(render_frame, password_autofill_agent,
+                      password_generation_agent, autofill_assistant_agent,
+                      associated_interfaces);
+  }
 
 #if BUILDFLAG(IS_ANDROID)
   new autofill_assistant::AutofillAssistantAgent(render_frame,
@@ -694,9 +698,9 @@ void ChromeContentRendererClient::RenderFrameCreated(
     new SearchBox(render_frame);
   }
 
-  // We should create CommerceHintAgent only for a primary main frame. A fenced
-  // frame is the main frame as well, so we should check if |render_frame|
-  // is the primary main frame.
+  // We should create CommerceHintAgent only for a main frame except a fenced
+  // frame that is the main frame as well, so we should check if |render_frame|
+  // is the fenced frame.
   if (base::FeatureList::IsEnabled(ntp_features::kNtpChromeCartModule) &&
       render_frame->IsMainFrame() && !render_frame->IsInFencedFrameTree()) {
     new cart::CommerceHintAgent(render_frame);
@@ -774,8 +778,7 @@ bool ChromeContentRendererClient::IsPluginHandledExternally(
     return false;
   }
 #if BUILDFLAG(ENABLE_PDF)
-  if (plugin_info->actual_mime_type == pdf::kInternalPluginMimeType &&
-      pdf::IsInternalPluginExternallyHandled()) {
+  if (plugin_info->actual_mime_type == pdf::kInternalPluginMimeType) {
     // Only actually treat the internal PDF plugin as externally handled if
     // used within an origin allowed to create the internal PDF plugin;
     // otherwise, let Blink try to create the in-process PDF plugin.
@@ -1072,7 +1075,7 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
         if (info.name ==
             ASCIIToUTF16(ChromeContentClient::kPDFInternalPluginName)) {
           return pdf::CreateInternalPlugin(
-              info, std::move(params), render_frame,
+              std::move(params), render_frame,
               std::make_unique<ChromePdfInternalPluginDelegate>());
         }
 #endif  // BUILDFLAG(ENABLE_PDF)
@@ -1488,11 +1491,7 @@ ChromeContentRendererClient::CreateWebSocketHandshakeThrottleProvider() {
 
 void ChromeContentRendererClient::GetSupportedKeySystems(
     media::GetSupportedKeySystemsCB cb) {
-  key_systems_provider_.GetSupportedKeySystems(std::move(cb));
-}
-
-bool ChromeContentRendererClient::IsKeySystemsUpdateNeeded() {
-  return key_systems_provider_.IsKeySystemsUpdateNeeded();
+  GetChromeKeySystems(std::move(cb));
 }
 
 bool ChromeContentRendererClient::ShouldReportDetailedMessageForSource(

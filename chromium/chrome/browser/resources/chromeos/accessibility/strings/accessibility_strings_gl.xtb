@@ -618,7 +618,6 @@
 <translation id="5170206230005240598">Subtítulos en braille: activados</translation>
 <translation id="5183440668879371625">Liña anterior en braille</translation>
 <translation id="5189244881767082992">Liña</translation>
-<translation id="5234747236692380506">escribe "<ph name="TEXT" />"</translation>
 <translation id="5263034204789987535">Barba de millo</translation>
 <translation id="5263344797180442561">h2</translation>
 <translation id="528468243742722775">Final</translation>
@@ -685,6 +684,8 @@
 <translation id="5623842676595125836">Rexistro</translation>
 <translation id="5628125749885014029">h4</translation>
 <translation id="5632083598315326067">Símbolo gráfico</translation>
+<translation id="5648939288050772726">Parabéns! Xa aprendiches os conceptos básicos para utilizar ChromeVox correctamente. Lembra que podes abrir o menú de comandos de ChromeVox en calquera momento premendo a tecla de busca + punto. Para consultar aínda máis información sobre ChromeVox e Chrome OS, consulta os seguintes artigos.
+    Se remataches este titorial, utiliza ChromeVox para ir ao botón Pechar e fai clic nel.</translation>
 <translation id="5653397561111110475">Utilizar as funcións de accesibilidade de pantalla táctil de Chromebook</translation>
 <translation id="5655682562155942719">Saltar comandos</translation>
 <translation id="56637627897541303">Área de texto</translation>
@@ -794,6 +795,7 @@
 <translation id="641759969622533235">{COUNT,plural, =1{dous puntos}other{# dous puntos}}</translation>
 <translation id="6444046323172968959">Caixa de diálogo de alerta</translation>
 <translation id="6452403590345320472">Índice</translation>
+<translation id="6457542714329819968">escribe</translation>
 <translation id="6468049171101508116">Botón Seguinte</translation>
 <translation id="646954774886932461">Índice</translation>
 <translation id="6475604559827479857">Cor para destacar palabras:</translation>
@@ -966,8 +968,6 @@
 <translation id="7701196182766842984">autolst</translation>
 <translation id="7713139339518499741">Voz natural</translation>
 <translation id="7714340021005120797">Non hai ningunha caixa de combinación posterior</translation>
-<translation id="772146615414628379">Parabéns! Xa aprendiches os conceptos básicos para utilizar ChromeVox correctamente. Lembra que podes abrir o menú de comandos de ChromeVox en calquera momento premendo a tecla de busca + punto. Para consultar aínda máis información sobre ChromeVox e Chrome OS, consulta os seguintes artigos.
-    Se remataches este titorial, utiliza ChromeVox para ir ao botón Pechar e fai clic nel.</translation>
 <translation id="7724603315864178912">Cortar</translation>
 <translation id="7731785449856576010">Non hai ningún widget multimedia posterior</translation>
 <translation id="7735498529470878067">A función Exploración táctil pode axudarche a saber rapidamente o que aparece na pantalla.</translation>

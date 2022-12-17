@@ -54,6 +54,8 @@ const int kSearchBarTrailingSpace = 24;
 }
 
 - (void)setPage:(TabGridPage)page {
+  if (_page == page)
+    return;
   _page = page;
   [self setItemsForTraitCollection:self.traitCollection];
 }
@@ -294,16 +296,6 @@ const int kSearchBarTrailingSpace = 24;
   else
     _leadingButton = _closeAllOrUndoButton;
 
-  if (ShowThumbStripInTraitCollection(traitCollection)) {
-    // The new tab button is only used if the thumb strip is enabled. In other
-    // cases, there is a floating new tab button on the bottom.
-    [self setItems:@[
-      _leadingButton, _spaceItem, centralItem, _spaceItem, _newTabButton,
-      _iconButtonAdditionalSpaceItem, trailingButton
-    ]];
-    return;
-  }
-
   if (_mode == TabGridModeSelection) {
     // In the selection mode, Done button is much smaller than SelectAll
     // we need to calculate the difference on the width and use it as a
@@ -313,19 +305,35 @@ const int kSearchBarTrailingSpace = 24;
     _leadingButton = _selectAllButton;
   }
 
+  // Build item list based on priority: tab search takes precedence over thumb
+  // strip.
+
+  BOOL animated = NO;
+  NSMutableArray* items = [[NSMutableArray alloc] init];
+
+  [items addObject:_leadingButton];
+
   if (IsTabsSearchEnabled() && _mode == TabGridModeNormal) {
-    [self setItems:@[
-      _leadingButton, _iconButtonAdditionalSpaceItem, _searchButton, _spaceItem,
-      centralItem, _spaceItem, trailingButton
-    ]
-          animated:YES];
-    return;
+    animated = YES;
+    [items
+        addObjectsFromArray:@[ _iconButtonAdditionalSpaceItem, _searchButton ]];
   }
 
-  [self setItems:@[
-    _leadingButton, _spaceItem, centralItem, _spaceItem,
-    _selectionModeFixedSpace, trailingButton
-  ]];
+  [items addObjectsFromArray:@[ _spaceItem, centralItem, _spaceItem ]];
+
+  if (ShowThumbStripInTraitCollection(traitCollection) &&
+      _mode == TabGridModeNormal) {
+    // The new tab button is only used if the thumb strip is enabled. In other
+    // cases, there is a floating new tab button on the bottom.
+    [items
+        addObjectsFromArray:@[ _newTabButton, _iconButtonAdditionalSpaceItem ]];
+  } else if (!IsTabsSearchEnabled() || _mode != TabGridModeNormal) {
+    [items addObject:_selectionModeFixedSpace];
+  }
+
+  [items addObject:trailingButton];
+
+  [self setItems:items animated:animated];
 }
 
 // Calculates the space width to use for selection mode.

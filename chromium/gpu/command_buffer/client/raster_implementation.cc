@@ -42,6 +42,7 @@
 #include "gpu/command_buffer/client/raster_cmd_helper.h"
 #include "gpu/command_buffer/client/shared_memory_limits.h"
 #include "gpu/command_buffer/client/transfer_buffer.h"
+#include "third_party/skia/include/core/SkColorSpace.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/rect.h"
@@ -1335,13 +1336,14 @@ void RasterImplementation::BeginRasterCHROMIUM(
     GLuint msaa_sample_count,
     MsaaMode msaa_mode,
     GLboolean can_use_lcd_text,
+    GLboolean visible,
     const gfx::ColorSpace& color_space,
     const GLbyte* mailbox) {
   DCHECK(!raster_properties_);
 
   helper_->BeginRasterCHROMIUMImmediate(sk_color, needs_clear,
                                         msaa_sample_count, msaa_mode,
-                                        can_use_lcd_text, mailbox);
+                                        can_use_lcd_text, visible, mailbox);
 
   raster_properties_.emplace(sk_color, can_use_lcd_text,
                              color_space.ToSkColorSpace());

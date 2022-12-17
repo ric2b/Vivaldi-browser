@@ -16,6 +16,7 @@
 #include "base/callback_forward.h"
 #include "base/component_export.h"
 #include "base/files/file.h"
+#include "base/files/file_error_or.h"
 #include "base/files/file_path.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
@@ -111,6 +112,7 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) ObfuscatedFileUtil
   // deleted when one StorageKey/type pair is deleted.
   ObfuscatedFileUtil(scoped_refptr<SpecialStoragePolicy> special_storage_policy,
                      const base::FilePath& file_system_directory,
+                     const base::FilePath& bucket_base_path,
                      leveldb::Env* env_override,
                      GetTypeStringForURLCallback get_type_string_for_url,
                      const std::set<std::string>& known_type_strings,
@@ -236,12 +238,12 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) ObfuscatedFileUtil
   static std::unique_ptr<ObfuscatedFileUtil> CreateForTesting(
       scoped_refptr<SpecialStoragePolicy> special_storage_policy,
       const base::FilePath& file_system_directory,
+      const base::FilePath& bucket_base_path,
       leveldb::Env* env_override,
       bool is_incognito);
 
-  base::FilePath GetDirectoryForURL(const FileSystemURL& url,
-                                    bool create,
-                                    base::File::Error* error_code);
+  base::FileErrorOr<base::FilePath> GetDirectoryForURL(const FileSystemURL& url,
+                                                       bool create);
 
   // This just calls get_type_string_for_url_ callback that is given in ctor.
   std::string CallGetTypeStringForURL(const FileSystemURL& url);
@@ -302,6 +304,14 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) ObfuscatedFileUtil
                                            bool create,
                                            base::File::Error* error_code);
 
+  // Returns a valid file path to the directory corresponding to the specified
+  // non-default `bucket` and `file_type.` Will return a FileError if an invalid
+  // file path is found.
+  base::FileErrorOr<base::FilePath> GetDirectoryWithBucket(
+      bool create,
+      BucketLocator bucket,
+      std::string file_type);
+
   void InvalidateUsageCache(FileSystemOperationContext* context,
                             const blink::StorageKey& storage_key,
                             FileSystemType type);
@@ -331,6 +341,7 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) ObfuscatedFileUtil
   std::unique_ptr<SandboxOriginDatabaseInterface> origin_database_;
   scoped_refptr<SpecialStoragePolicy> special_storage_policy_;
   base::FilePath file_system_directory_;
+  base::FilePath bucket_base_path_;
   raw_ptr<leveldb::Env> env_override_;
   bool is_incognito_;
 

@@ -4,7 +4,6 @@
 
 #include "third_party/blink/renderer/core/streams/readable_stream.h"
 
-#include "base/cxx17_backports.h"
 #include "third_party/blink/renderer/bindings/core/v8/native_value_traits_impl.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_function.h"
 #include "third_party/blink/renderer/bindings/core/v8/to_v8_traits.h"
@@ -849,8 +848,11 @@ class ReadableStream::TeeEngine::PullAlgorithm final : public StreamAlgorithm {
 
         // TODO(ricea): Implement https://github.com/whatwg/streams/pull/1045 so
         // this step can be numbered correctly.
-        // Resolve |cancelPromise| with undefined.
-        engine_->cancel_promise_->ResolveWithUndefined(script_state);
+        // If canceled1 is false or canceled2 is false, resolve |cancelPromise|
+        // with undefined.
+        if (!engine_->canceled_[0] || !engine_->canceled_[1]) {
+          engine_->cancel_promise_->ResolveWithUndefined(script_state);
+        }
 
         //    3. Set closed to true.
         engine_->closed_ = true;
@@ -1067,8 +1069,11 @@ void ReadableStream::TeeEngine::Start(ScriptState* script_state,
 
       // TODO(ricea): Implement https://github.com/whatwg/streams/pull/1045 so
       // this step can be numbered correctly.
-      // Resolve |cancelPromise| with undefined.
-      engine_->cancel_promise_->ResolveWithUndefined(script_state);
+      // If canceled1 is false or canceled2 is false, resolve |cancelPromise|
+      // with undefined.
+      if (!engine_->canceled_[0] || !engine_->canceled_[1]) {
+        engine_->cancel_promise_->ResolveWithUndefined(script_state);
+      }
     }
 
     void Trace(Visitor* visitor) const override {
@@ -1882,10 +1887,10 @@ v8::Local<v8::Value> ReadableStream::CreateReadResult(
   v8::Local<v8::Name> names[2] = {value_string, done_string};
   v8::Local<v8::Value> values[2] = {value, done_value};
 
-  static_assert(base::size(names) == base::size(values),
+  static_assert(std::size(names) == std::size(values),
                 "names and values arrays must be the same size");
   return v8::Object::New(isolate, v8::Null(isolate), names, values,
-                         base::size(names));
+                         std::size(names));
 }
 
 void ReadableStream::Error(ScriptState* script_state,

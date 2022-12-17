@@ -57,6 +57,8 @@ class WEBDATA_EXPORT WebDatabaseTable {
   virtual bool MigrateToVersion(int version,
                                 bool* update_compatible_version) = 0;
 
+  virtual bool MigrateToVivaldiVersion(int version);
+
  protected:
   // Non-owning. These are owned by WebDatabase, valid as long as that
   // class exists. Since lifetime of WebDatabaseTable objects slightly

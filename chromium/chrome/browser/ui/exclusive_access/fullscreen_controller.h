@@ -13,6 +13,7 @@
 #include "ui/display/types/display_constants.h"
 
 class GURL;
+class PopunderPreventer;
 
 namespace content {
 class WebContents;
@@ -128,9 +129,17 @@ class FullscreenController : public ExclusiveAccessControllerBase {
   // |web_contents| represents the tab that requests to no longer be fullscreen.
   void ExitFullscreenModeForTab(content::WebContents* web_contents);
 
+  base::WeakPtr<FullscreenController> GetWeakPtr() {
+    return ptr_factory_.GetWeakPtr();
+  }
+
+  // Called when fullscreen tabs open popups, to track potential popunders.
+  void FullscreenTabOpeningPopup(content::WebContents* opener,
+                                 content::WebContents* popup);
+
   // Platform Fullscreen ///////////////////////////////////////////////////////
 
-  // Overrde from ExclusiveAccessControllerBase.
+  // Override from ExclusiveAccessControllerBase.
   void OnTabDeactivated(content::WebContents* web_contents) override;
   void OnTabDetachedFromView(content::WebContents* web_contents) override;
   void OnTabClosing(content::WebContents* web_contents) override;
@@ -200,6 +209,8 @@ class FullscreenController : public ExclusiveAccessControllerBase {
   // The state before entering tab fullscreen mode via webkitRequestFullScreen.
   // When not in tab fullscreen, it is STATE_INVALID.
   PriorFullscreenState state_prior_to_tab_fullscreen_ = STATE_INVALID;
+  // The display that the window was on before entering tab fullscreen mode.
+  int64_t display_id_prior_to_tab_fullscreen_ = display::kInvalidDisplayId;
   // True if the site has entered into fullscreen.
   bool tab_fullscreen_ = false;
 
@@ -212,6 +223,11 @@ class FullscreenController : public ExclusiveAccessControllerBase {
 
   // Used in testing to set the state to tab fullscreen.
   bool is_tab_fullscreen_for_testing_ = false;
+
+  // Tracks related popups that lost activation or were shown without activation
+  // during content fullscreen sessions. This also activates the popups when
+  // fullscreen exits, to prevent sites from creating persisent popunders.
+  std::unique_ptr<PopunderPreventer> popunder_preventer_;
 
   base::ObserverList<FullscreenObserver> observer_list_;
 

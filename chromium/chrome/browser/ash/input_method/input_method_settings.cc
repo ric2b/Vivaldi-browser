@@ -6,13 +6,14 @@
 
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
+#include "base/feature_list.h"
 #include "chrome/common/pref_names.h"
 
 namespace ash {
 namespace input_method {
 namespace {
 
-namespace mojom = chromeos::ime::mojom;
+namespace mojom = ::ash::ime::mojom;
 
 // The values here should be kept in sync with
 // chrome/browser/resources/settings/chromeos/os_languages_page/input_method_util.js
@@ -101,6 +102,7 @@ mojom::LatinSettingsPtr CreateLatinSettings(
   settings->autocorrect =
       base::StartsWith(engine_id, "experimental_",
                        base::CompareCase::SENSITIVE) ||
+      base::FeatureList::IsEnabled(features::kAutocorrectParamsTuning) ||
       input_method_specific_pref
               .FindIntKey("physicalKeyboardAutoCorrectionLevel")
               .value_or(0) > 0;

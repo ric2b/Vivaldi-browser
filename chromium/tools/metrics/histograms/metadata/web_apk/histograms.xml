@@ -59,7 +59,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebApk.Install.GooglePlayErrorCode"
-    enum="WebApkInstallGooglePlayErrorCode" expires_after="2022-08-07">
+    enum="WebApkInstallGooglePlayErrorCode" expires_after="2022-10-09">
   <owner>hartmanng@chromium.org</owner>
   <owner>
     src/chrome/android/java/src/org/chromium/chrome/browser/webapps/OWNERS
@@ -71,7 +71,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebApk.Install.GooglePlayInstallResult"
-    enum="WebApkGooglePlayInstallResult" expires_after="2022-07-24">
+    enum="WebApkGooglePlayInstallResult" expires_after="2022-09-25">
   <owner>hartmanng@chromium.org</owner>
   <owner>
     src/chrome/android/java/src/org/chromium/chrome/browser/webapps/OWNERS
@@ -83,7 +83,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebApk.Install.InstallDuration" units="ms"
-    expires_after="2022-06-19">
+    expires_after="2022-08-21">
   <owner>hartmanng@chromium.org</owner>
   <owner>
     src/chrome/android/java/src/org/chromium/chrome/browser/webapps/OWNERS
@@ -96,7 +96,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebApk.Install.InstallEvent" enum="WebApkInstallEvent"
-    expires_after="2022-06-26">
+    expires_after="2022-08-28">
   <owner>hartmanng@chromium.org</owner>
   <owner>
     src/chrome/android/java/src/org/chromium/chrome/browser/webapps/OWNERS
@@ -105,6 +105,19 @@ chromium-metrics-reviews@google.com.
     WebAPKs are PWAs wrapped in an Android apk, installed from an app banner or
     the add to homescreen menu item. This stat tracks WebAPK installation
     events.
+  </summary>
+</histogram>
+
+<histogram name="WebApk.Install.InstallResult" enum="WebApkInstallResult"
+    expires_after="2022-08-28">
+  <owner>eirage@chromium.org</owner>
+  <owner>hartmanng@chromium.org</owner>
+  <owner>
+    src/chrome/android/java/src/org/chromium/chrome/browser/webapps/OWNERS
+  </owner>
+  <summary>
+    Record whether installing a WebAPK succeeded. If not record the reason that
+    the install failed.
   </summary>
 </histogram>
 
@@ -124,7 +137,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebApk.Install.RequestTokenDurationV2" units="ms"
-    expires_after="2022-07-31">
+    expires_after="2022-10-02">
   <owner>hartmanng@chromium.org</owner>
   <owner>rayankans@chromium.org</owner>
   <owner>
@@ -164,7 +177,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebApk.Notification.Permission.Status"
-    enum="BooleanWebApkNotificationPermission" expires_after="2022-08-01">
+    enum="BooleanWebApkNotificationPermission" expires_after="2022-10-04">
   <owner>hartmanng@chromium.org</owner>
   <owner>
     src/chrome/android/java/src/org/chromium/chrome/browser/webapps/OWNERS
@@ -237,7 +250,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebApk.Startup.Cold.ShellLaunchToSplashscreenVisible"
-    units="ms" expires_after="2022-07-31">
+    units="ms" expires_after="2022-10-02">
   <owner>mheikal@chromium.org</owner>
   <owner>yfriedman@chromium.org</owner>
   <summary>
@@ -265,7 +278,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebApk.Update.GooglePlayUpdateResult"
-    enum="WebApkGooglePlayInstallResult" expires_after="2022-07-31">
+    enum="WebApkGooglePlayInstallResult" expires_after="2022-10-02">
   <owner>hartmanng@chromium.org</owner>
   <owner>
     src/chrome/android/java/src/org/chromium/chrome/browser/webapps/OWNERS
@@ -314,7 +327,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebApk.WebApkService.BindSuccess" enum="BooleanSuccess"
-    expires_after="2022-03-19">
+    expires_after="2022-06-01">
   <owner>hartmanng@chromium.org</owner>
   <owner>
     src/chrome/android/java/src/org/chromium/chrome/browser/webapps/OWNERS
@@ -326,7 +339,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebApk.WebappRegistry.NumberOfOrigins" units="count"
-    expires_after="2022-07-03">
+    expires_after="2022-09-11">
   <owner>eirage@chromium.org</owner>
   <owner>
     src/chrome/android/java/src/org/chromium/chrome/browser/webapps/OWNERS

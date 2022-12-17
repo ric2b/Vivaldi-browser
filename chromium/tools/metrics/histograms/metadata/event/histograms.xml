@@ -71,7 +71,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Event.AsyncTargeting.ResponseTime" units="ms"
-    expires_after="2022-08-07">
+    expires_after="2022-10-09">
   <owner>sadrul@chromium.org</owner>
   <owner>event-targeting@chromium.org</owner>
   <summary>
@@ -265,7 +265,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Event.Latency.EndToEnd.KeyPress" units="microseconds"
-    expires_after="2022-07-24">
+    expires_after="2022-09-25">
   <owner>flackr@chromium.org</owner>
   <owner>input-dev@chromium.org</owner>
   <summary>
@@ -308,7 +308,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Event.Latency.EndToEnd.TouchpadPinch2" units="microseconds"
-    expires_after="2022-08-07">
+    expires_after="2022-10-09">
   <owner>nzolghadr@chromium.org</owner>
   <owner>input-dev@chromium.org</owner>
   <summary>
@@ -328,7 +328,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Event.Latency.HitTest" units="microseconds"
-    expires_after="2022-08-07">
+    expires_after="2022-10-09">
   <owner>schenney@chromium.org</owner>
   <owner>paint-dev@chromium.org</owner>
   <summary>
@@ -347,7 +347,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Event.Latency.HitTestRecursive" units="microseconds"
-    expires_after="2022-08-07">
+    expires_after="2022-10-09">
   <owner>schenney@chromium.org</owner>
   <owner>paint-dev@chromium.org</owner>
   <summary>
@@ -364,29 +364,15 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Event.Latency.OS" units="microseconds" expires_after="M92">
+<histogram name="Event.Latency.OS2.{EventType}" units="ms"
+    expires_after="2022-08-14">
   <owner>flackr@chromium.org</owner>
+  <owner>joenotcharles@google.com</owner>
   <owner>input-dev@chromium.org</owner>
   <summary>
     Time between input event received by OS and sent to Chrome, recorded for
-    each event when it is received by Chrome. This is obsoleted by
-    Event.Latency.OS2 and should be removed after they've been run side-by-side
-    for M92.
-
-    Warning: This metric may include reports from clients with low-resolution
-    clocks (i.e. on Windows, ref. |TimeTicks::IsHighResolution()|). Such reports
-    will cause this metric to have an abnormal distribution. When considering
-    revising this histogram, see UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES for the
-    solution.
-  </summary>
-</histogram>
-
-<histogram name="Event.Latency.OS2" units="ms" expires_after="2022-08-14">
-  <owner>flackr@chromium.org</owner>
-  <owner>input-dev@chromium.org</owner>
-  <summary>
-    Time between input event received by OS and sent to Chrome, recorded for
-    each event when it is received by Chrome.
+    each event when it is received by Chrome. Replaced Event.Latency.OS which
+    was calculated incorrectly on Windows.
 
     Warning: On Windows, the timestamps of most events come from a clock with a
     several msec resolution so will have an abnormal distribution even when
@@ -394,20 +380,14 @@ chromium-metrics-reviews@google.com.
     which usually come from the high-resolution clock when
     TimeTicks::IsHighResolution returns true.
   </summary>
-</histogram>
-
-<histogram name="Event.Latency.OS_NO_VALIDATION.POSITIVE" units="ms"
-    expires_after="2021-08-09">
-  <owner>sullivan@chromium.org</owner>
-  <owner>input-dev@chromium.org</owner>
-  <summary>
-    For Mac, a version of Event.Latency.OS that has the positive values it would
-    contain if ValidateEventTimeClock() were not called on the timestamps.
-
-    This metric is intended to debug http://crbug.com/1039833 where very high
-    numbers are seen for PageLoad.InputDelay3. The units of this metric are the
-    same as PageLoad.InputDelay3 for consistency while debugging.
-  </summary>
+  <token key="EventType">
+    <variant name="KEY_PRESSED"/>
+    <variant name="MOUSE_PRESSED"/>
+    <variant name="MOUSE_WHEEL"/>
+    <variant name="TOUCH_MOVED"/>
+    <variant name="TOUCH_PRESSED"/>
+    <variant name="TOUCH_RELEASED"/>
+  </token>
 </histogram>
 
 <histogram name="Event.Latency.Scroll.Wheel.TimeToHandled2"
@@ -433,7 +413,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Event.Latency.ScrollBegin.Scrollbar.BrowserNotifiedToBeforeGpuSwap2"
-    units="microseconds" expires_after="2022-06-01">
+    units="microseconds" expires_after="2022-08-28">
   <owner>flackr@chromium.org</owner>
   <owner>gerchiko@microsoft.com</owner>
   <owner>input-dev@chromium.org</owner>
@@ -520,7 +500,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Event.Latency.ScrollBegin.Scrollbar.TimeToHandled2"
-    units="microseconds" expires_after="2022-07-31">
+    units="microseconds" expires_after="2022-10-09">
   <owner>flackr@chromium.org</owner>
   <owner>gerchiko@microsoft.com</owner>
   <owner>input-dev@chromium.org</owner>
@@ -542,7 +522,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Event.Latency.ScrollBegin.Scrollbar.TimeToScrollUpdateSwapBegin4"
-    units="microseconds" expires_after="2022-06-26">
+    units="microseconds" expires_after="2022-08-28">
   <owner>nzolghadr@chromium.org</owner>
   <owner>gerchiko@microsoft.com</owner>
   <owner>input-dev@chromium.org</owner>
@@ -566,7 +546,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Event.Latency.ScrollBegin.TimeToScrollUpdateSwapBegin2"
-    units="microseconds" expires_after="2022-07-24">
+    units="microseconds" expires_after="2022-09-25">
   <owner>nzolghadr@chromium.org</owner>
   <summary>
     Time between initial creation of a wheel/touch event and start of the frame
@@ -651,7 +631,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Event.Latency.ScrollBegin.Touch.GpuSwap2" units="microseconds"
-    expires_after="2022-07-31">
+    expires_after="2022-10-04">
   <owner>flackr@chromium.org</owner>
   <owner>input-dev@chromium.org</owner>
   <summary>
@@ -847,7 +827,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Event.Latency.ScrollBegin.Wheel.TimeToScrollUpdateSwapBegin4"
-    units="microseconds" expires_after="2022-07-11">
+    units="microseconds" expires_after="2022-09-11">
   <owner>flackr@chromium.org</owner>
   <summary>
     Time between initial creation of a wheel event and the start of the frame
@@ -977,7 +957,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Event.Latency.ScrollJank" enum="Boolean"
-    expires_after="2022-08-07">
+    expires_after="2022-10-09">
   <owner>ddrone@google.com</owner>
   <owner>chrometto-team@google.com</owner>
   <summary>
@@ -988,7 +968,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Event.Latency.ScrollUpdate.JankyDuration" units="ms"
-    expires_after="2022-07-24">
+    expires_after="2022-09-25">
   <owner>ddrone@google.com</owner>
   <owner>chrometto-team@google.com</owner>
   <summary>
@@ -999,7 +979,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Event.Latency.ScrollUpdate.JankyDurationPercentage" units="%"
-    expires_after="2022-07-15">
+    expires_after="2022-09-18">
   <owner>ddrone@google.com</owner>
   <owner>chrometto-team@google.com</owner>
   <summary>
@@ -1009,7 +989,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Event.Latency.ScrollUpdate.JankyEvents" units="counts"
-    expires_after="2022-07-24">
+    expires_after="2022-09-25">
   <owner>ddrone@google.com</owner>
   <owner>chrometto-team@google.com</owner>
   <summary>
@@ -1106,7 +1086,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Event.Latency.ScrollUpdate.Scrollbar.TimeToHandled2"
-    units="microseconds" expires_after="2022-07-31">
+    units="microseconds" expires_after="2022-10-04">
   <owner>flackr@chromium.org</owner>
   <owner>arakeri@microsoft.com</owner>
   <owner>input-dev@chromium.org</owner>
@@ -1151,7 +1131,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Event.Latency.ScrollUpdate.TimeToScrollUpdateSwapBegin2"
-    units="microseconds" expires_after="2022-06-26">
+    units="microseconds" expires_after="2022-08-28">
   <owner>nzolghadr@chromium.org</owner>
   <summary>
     Time between initial creation of a wheel/touch event and start of the frame
@@ -1175,7 +1155,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Event.Latency.ScrollUpdate.TotalDuration" units="ms"
-    expires_after="2022-07-24">
+    expires_after="2022-09-25">
   <owner>ddrone@google.com</owner>
   <owner>chrometto-team@google.com</owner>
   <summary>
@@ -1185,7 +1165,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Event.Latency.ScrollUpdate.TotalEvents" units="counts"
-    expires_after="2022-07-24">
+    expires_after="2022-09-25">
   <owner>ddrone@google.com</owner>
   <owner>chrometto-team@google.com</owner>
   <summary>
@@ -1194,7 +1174,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Event.Latency.ScrollUpdate.Touch.AverageLagPresentation"
-    units="pixels" expires_after="2022-05-08">
+    units="pixels" expires_after="2022-08-21">
   <owner>flackr@chromium.org</owner>
   <owner>joalmei@microsoft.com</owner>
   <owner>input-dev@chromium.org</owner>
@@ -1315,7 +1295,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Event.Latency.ScrollUpdate.Touch.GpuSwap2"
-    units="microseconds" expires_after="2022-06-01">
+    units="microseconds" expires_after="2022-08-21">
   <owner>flackr@chromium.org</owner>
   <owner>input-dev@chromium.org</owner>
   <summary>
@@ -1333,7 +1313,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Event.Latency.ScrollUpdate.Touch.HandledToRendererSwap2"
-    units="microseconds" expires_after="2022-06-01">
+    units="microseconds" expires_after="2022-08-21">
   <owner>flackr@chromium.org</owner>
   <owner>input-dev@chromium.org</owner>
   <summary>
@@ -1353,7 +1333,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Event.Latency.ScrollUpdate.Touch.RendererSwapToBrowserNotified2"
-    units="microseconds" expires_after="2022-06-01">
+    units="microseconds" expires_after="2022-08-21">
   <owner>flackr@chromium.org</owner>
   <owner>input-dev@chromium.org</owner>
   <summary>
@@ -1371,7 +1351,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Event.Latency.ScrollUpdate.Touch.TimeToHandled2"
-    units="microseconds" expires_after="2022-06-01">
+    units="microseconds" expires_after="2022-08-21">
   <owner>flackr@chromium.org</owner>
   <owner>input-dev@chromium.org</owner>
   <summary>
@@ -1497,7 +1477,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Event.Latency.ScrollUpdate.Wheel.TimeToHandled2"
-    units="microseconds" expires_after="2022-07-31">
+    units="microseconds" expires_after="2022-10-04">
   <owner>flackr@chromium.org</owner>
   <owner>input-dev@chromium.org</owner>
   <summary>
@@ -1519,7 +1499,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Event.Latency.ScrollUpdate.Wheel.TimeToScrollUpdateSwapBegin4"
-    units="microseconds" expires_after="2022-07-11">
+    units="microseconds" expires_after="2022-09-11">
   <owner>flackr@chromium.org</owner>
   <summary>
     Time between initial creation of a wheel event and start of the frame swap
@@ -1551,7 +1531,9 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Event.MaxDragDistance.{ToolType}" units="dips"
-    expires_after="2022-03-30">
+    expires_after="never">
+<!-- expires-never: Needed for long-term tracking of dragging vs clicking behavior. -->
+
   <owner>mustaq@chromium.org</owner>
   <owner>input-dev@chromium.org</owner>
   <summary>

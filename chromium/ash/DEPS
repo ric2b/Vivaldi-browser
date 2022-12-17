@@ -26,6 +26,7 @@ include_rules = [
   "+components/viz/common",
   "+components/viz/host",
   "+components/wallpaper",
+  "+crypto",
   "+dbus",
   "+extensions/common/constants.h",
   "+gpu/config",
@@ -57,9 +58,10 @@ include_rules = [
   "-chromeos",
   # //ash can use chromeos components that sit below it in the dependency tree.
   "+chromeos/components/feature_usage",
-  "+chromeos/components/multidevice",
+  "+chromeos/components/hps",
   "+chromeos/components/quick_answers",
   "+chromeos/components/sensors",
+  "+chromeos/components/webauthn",
   "+chromeos/constants",
   # crosapi is an API to support lacros.
   "+chromeos/crosapi",
@@ -79,7 +81,6 @@ include_rules = [
   "+chromeos/services/bluetooth_config",
   "+chromeos/services/libassistant/public",
   "+chromeos/services/machine_learning/public",
-  "+chromeos/services/multidevice_setup/public",
   "+chromeos/services/network_config/public",
   "+chromeos/services/power/public",
   "+chromeos/strings",

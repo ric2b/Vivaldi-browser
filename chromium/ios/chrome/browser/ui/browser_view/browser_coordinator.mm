@@ -43,6 +43,7 @@
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/browser_coordinator_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
+#import "ios/chrome/browser/ui/commands/feed_commands.h"
 #import "ios/chrome/browser/ui/commands/find_in_page_commands.h"
 #import "ios/chrome/browser/ui/commands/infobar_commands.h"
 #import "ios/chrome/browser/ui/commands/page_info_commands.h"
@@ -63,15 +64,18 @@
 #import "ios/chrome/browser/ui/default_promo/tailored_promo_coordinator.h"
 #import "ios/chrome/browser/ui/download/ar_quick_look_coordinator.h"
 #import "ios/chrome/browser/ui/download/features.h"
-#import "ios/chrome/browser/ui/download/mobileconfig_coordinator.h"
 #import "ios/chrome/browser/ui/download/pass_kit_coordinator.h"
+#import "ios/chrome/browser/ui/download/safari_download_coordinator.h"
 #import "ios/chrome/browser/ui/download/vcard_coordinator.h"
 #import "ios/chrome/browser/ui/elements/activity_overlay_coordinator.h"
 #import "ios/chrome/browser/ui/find_bar/find_bar_controller_ios.h"
 #import "ios/chrome/browser/ui/find_bar/find_bar_coordinator.h"
+#import "ios/chrome/browser/ui/follow/first_follow_coordinator.h"
+#import "ios/chrome/browser/ui/follow/followed_web_channel.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_controller.h"
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_mediator.h"
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_scene_agent.h"
+#import "ios/chrome/browser/ui/lens/lens_coordinator.h"
 #import "ios/chrome/browser/ui/main/default_browser_scene_agent.h"
 #import "ios/chrome/browser/ui/main/scene_state_browser_agent.h"
 #import "ios/chrome/browser/ui/open_in/open_in_coordinator.h"
@@ -85,6 +89,7 @@
 #import "ios/chrome/browser/ui/qr_scanner/qr_scanner_legacy_coordinator.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_coordinator.h"
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_coordinator.h"
+#import "ios/chrome/browser/ui/sad_tab/sad_tab_coordinator.h"
 #import "ios/chrome/browser/ui/settings/autofill/autofill_add_credit_card_coordinator.h"
 #import "ios/chrome/browser/ui/sharing/sharing_coordinator.h"
 #import "ios/chrome/browser/ui/text_fragments/text_fragments_coordinator.h"
@@ -177,13 +182,17 @@
 // Coordinator for the find bar.
 @property(nonatomic, strong) FindBarCoordinator* findBarCoordinator;
 
+// Coordinator for the First Follow modal.
+@property(nonatomic, strong) FirstFollowCoordinator* firstFollowCoordinator;
+
 // Coordinator in charge of the presenting autofill options above the
 // keyboard.
 @property(nonatomic, strong)
     FormInputAccessoryCoordinator* formInputAccessoryCoordinator;
 
 // Presents a SFSafariViewController in order to download .mobileconfig file.
-@property(nonatomic, strong) MobileConfigCoordinator* mobileConfigCoordinator;
+@property(nonatomic, strong)
+    SafariDownloadCoordinator* SafariDownloadCoordinator;
 
 // Opens downloaded Vcard.
 @property(nonatomic, strong) VcardCoordinator* vcardCoordinator;
@@ -219,6 +228,9 @@
 // Coordinator for the QR scanner.
 @property(nonatomic, strong) QRScannerLegacyCoordinator* qrScannerCoordinator;
 
+// Coordinator that manages Lens features.
+@property(nonatomic, strong) LensCoordinator* lensCoordinator;
+
 // Coordinator for displaying the Reading List.
 @property(nonatomic, strong) ReadingListCoordinator* readingListCoordinator;
 
@@ -227,6 +239,9 @@
 
 // Coordinator for displaying Repost Form dialog.
 @property(nonatomic, strong) RepostFormCoordinator* repostFormCoordinator;
+
+// Coordinator for displaying Sad Tab.
+@property(nonatomic, strong) SadTabCoordinator* sadTabCoordinator;
 
 // Coordinator for sharing scenarios.
 @property(nonatomic, strong) SharingCoordinator* sharingCoordinator;
@@ -294,6 +309,7 @@
     @protocol(BrowserCoordinatorCommands),
     @protocol(DefaultPromoCommands),
     @protocol(DefaultBrowserPromoNonModalCommands),
+    @protocol(FeedCommands),
     @protocol(FindInPageCommands),
     @protocol(PageInfoCommands),
     @protocol(PasswordBreachCommands),
@@ -485,17 +501,15 @@
   self.formInputAccessoryCoordinator.navigator = self;
   [self.formInputAccessoryCoordinator start];
 
-  self.mobileConfigCoordinator = [[MobileConfigCoordinator alloc]
+  self.SafariDownloadCoordinator = [[SafariDownloadCoordinator alloc]
       initWithBaseViewController:self.viewController
                          browser:self.browser];
-  [self.mobileConfigCoordinator start];
+  [self.SafariDownloadCoordinator start];
 
-  if (base::FeatureList::IsEnabled(kDownloadVcard)) {
-    self.vcardCoordinator =
-        [[VcardCoordinator alloc] initWithBaseViewController:self.viewController
-                                                     browser:self.browser];
-    [self.vcardCoordinator start];
-  }
+  self.vcardCoordinator =
+      [[VcardCoordinator alloc] initWithBaseViewController:self.viewController
+                                                   browser:self.browser];
+  [self.vcardCoordinator start];
 
   self.passKitCoordinator =
       [[PassKitCoordinator alloc] initWithBaseViewController:self.viewController
@@ -508,6 +522,11 @@
       initWithBaseViewController:self.viewController
                          browser:self.browser];
   [self.qrScannerCoordinator start];
+
+  self.lensCoordinator =
+      [[LensCoordinator alloc] initWithBaseViewController:self.viewController
+                                                  browser:self.browser];
+  [self.lensCoordinator start];
 
   /* NetExportCoordinator is created and started by a delegate method */
 
@@ -522,6 +541,14 @@
   /* RecentTabsCoordinator is created and started by a BrowserCommand */
 
   /* RepostFormCoordinator is created and started by a delegate method */
+
+  // TODO(crbug.com/1298934): Should start when the Sad Tab UI appears.
+  self.sadTabCoordinator =
+      [[SadTabCoordinator alloc] initWithBaseViewController:self.viewController
+                                                    browser:self.browser];
+  [self.sadTabCoordinator setOverscrollDelegate:self.viewController];
+  self.viewController.sadTabViewController =
+      self.sadTabCoordinator.viewController;
 
   /* SharingCoordinator is created and started by an ActivityServiceCommand */
 
@@ -565,11 +592,14 @@
   [self.findBarCoordinator stop];
   self.findBarCoordinator = nil;
 
+  [self.firstFollowCoordinator stop];
+  self.firstFollowCoordinator = nil;
+
   [self.formInputAccessoryCoordinator stop];
   self.formInputAccessoryCoordinator = nil;
 
-  [self.mobileConfigCoordinator stop];
-  self.mobileConfigCoordinator = nil;
+  [self.SafariDownloadCoordinator stop];
+  self.SafariDownloadCoordinator = nil;
 
   [self.vcardCoordinator stop];
   self.vcardCoordinator = nil;
@@ -594,6 +624,9 @@
   [self.qrScannerCoordinator stop];
   self.qrScannerCoordinator = nil;
 
+  [self.lensCoordinator stop];
+  self.lensCoordinator = nil;
+
   [self.readingListCoordinator stop];
   self.readingListCoordinator = nil;
 
@@ -602,6 +635,11 @@
 
   [self.repostFormCoordinator stop];
   self.repostFormCoordinator = nil;
+
+  // TODO(crbug.com/1298934): Should stop when the Sad Tab UI appears.
+  [self.sadTabCoordinator stop];
+  [self.sadTabCoordinator disconnect];
+  self.sadTabCoordinator = nil;
 
   [self.sharingCoordinator stop];
   self.sharingCoordinator = nil;
@@ -647,7 +685,6 @@
   dependencies.prerenderService =
       PrerenderServiceFactory::GetForBrowserState(browserState);
   dependencies.sideSwipeController = browserViewController.sideSwipeController;
-  dependencies.sadTabCoordinator = browserViewController.sadTabCoordinator;
   dependencies.downloadManagerCoordinator =
       browserViewController.downloadManagerCoordinator;
   dependencies.baseViewController = browserViewController;
@@ -835,6 +872,16 @@
   self.tailoredPromoCoordinator = nil;
 }
 
+#pragma mark - FeedCommands
+
+- (void)showFirstFollowUIForWebChannel:(FollowedWebChannel*)followedWebChannel {
+  self.firstFollowCoordinator = [[FirstFollowCoordinator alloc]
+      initWithBaseViewController:self.viewController
+                         browser:self.browser];
+  self.firstFollowCoordinator.followedWebChannel = followedWebChannel;
+  [self.firstFollowCoordinator start];
+}
+
 #pragma mark - FindInPageCommands
 
 - (void)openFindInPage {
@@ -971,7 +1018,7 @@
 
 - (void)openCreditCardSettings {
   [HandlerForProtocol(self.dispatcher, ApplicationCommands)
-      showCreditCardSettingsFromViewController:self.viewController];
+      showCreditCardSettings];
 }
 
 #pragma mark - RepostFormTabHelperDelegate
@@ -1182,13 +1229,14 @@
         self.viewController);
   }
 
-  PassKitTabHelper::CreateForWebState(webState, self.passKitCoordinator);
+  PassKitTabHelper::FromWebState(webState)->SetDelegate(
+      self.passKitCoordinator);
 
   if (PrintTabHelper::FromWebState(webState)) {
     PrintTabHelper::FromWebState(webState)->set_printer(self.printController);
   }
 
-  RepostFormTabHelper::CreateForWebState(webState, self);
+  RepostFormTabHelper::FromWebState(webState)->SetDelegate(self);
 
   if (StoreKitTabHelper::FromWebState(webState)) {
     StoreKitTabHelper::FromWebState(webState)->SetLauncher(
@@ -1198,9 +1246,17 @@
 
 // Uninstalls delegates for |webState|.
 - (void)uninstallDelegatesForWebState:(web::WebState*)webState {
+  if (AutofillTabHelper::FromWebState(webState)) {
+    AutofillTabHelper::FromWebState(webState)->SetBaseViewController(nil);
+  }
+
+  PassKitTabHelper::FromWebState(webState)->SetDelegate(nil);
+
   if (PrintTabHelper::FromWebState(webState)) {
     PrintTabHelper::FromWebState(webState)->set_printer(nil);
   }
+
+  RepostFormTabHelper::FromWebState(webState)->SetDelegate(nil);
 
   if (StoreKitTabHelper::FromWebState(webState)) {
     StoreKitTabHelper::FromWebState(webState)->SetLauncher(nil);

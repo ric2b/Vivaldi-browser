@@ -141,6 +141,7 @@ class NativeMethod(object):
 
     self.proxy_name = kwargs.get('proxy_name', self.name)
     self.hashed_proxy_name = kwargs.get('hashed_proxy_name', None)
+    self.switch_num = None
 
     if self.params:
       assert type(self.params) is list
@@ -159,6 +160,8 @@ class NativeMethod(object):
     else:
       self.type = 'function'
     self.method_id_var_name = kwargs.get('method_id_var_name', None)
+    self.return_and_signature = (self.return_type,
+                                 tuple(p.datatype for p in self.params))
 
 
 class CalledByNative(object):
@@ -976,12 +979,17 @@ class JNIFromJavaSource(object):
 class HeaderFileGeneratorHelper(object):
   """Include helper methods for header generators."""
 
-  def __init__(self, class_name, fully_qualified_class, use_proxy_hash,
-               split_name):
+  def __init__(self,
+               class_name,
+               fully_qualified_class,
+               use_proxy_hash,
+               split_name=None,
+               enable_jni_multiplexing=False):
     self.class_name = class_name
     self.fully_qualified_class = fully_qualified_class
     self.use_proxy_hash = use_proxy_hash
     self.split_name = split_name
+    self.enable_jni_multiplexing = enable_jni_multiplexing
 
   def GetStubName(self, native):
     """Return the name of the stub function for this native method.
@@ -998,7 +1006,9 @@ class HeaderFileGeneratorHelper(object):
       else:
         method_name = EscapeClassName(native.proxy_name)
       return 'Java_%s_%s' % (EscapeClassName(
-          ProxyHelpers.GetQualifiedClass(self.use_proxy_hash)), method_name)
+          ProxyHelpers.GetQualifiedClass(
+              self.use_proxy_hash
+              or self.enable_jni_multiplexing)), method_name)
 
     template = Template('Java_${JAVA_NAME}_native${NAME}')
 
@@ -1013,8 +1023,9 @@ class HeaderFileGeneratorHelper(object):
     ret = collections.OrderedDict()
     for entry in origin:
       if isinstance(entry, NativeMethod) and entry.is_proxy:
-        ret[ProxyHelpers.GetClass(self.use_proxy_hash)] \
-          = ProxyHelpers.GetQualifiedClass(self.use_proxy_hash)
+        use_hash = self.use_proxy_hash or self.enable_jni_multiplexing
+        ret[ProxyHelpers.GetClass(use_hash)] \
+          = ProxyHelpers.GetQualifiedClass(use_hash)
         continue
       ret[self.class_name] = self.fully_qualified_class
 
@@ -1047,7 +1058,8 @@ const char kClassPath_${JAVA_CLASS}[] = \
       }
       # Since all proxy methods use the same class, defining this in every
       # header file would result in duplicated extern initializations.
-      if full_clazz != ProxyHelpers.GetQualifiedClass(self.use_proxy_hash):
+      if full_clazz != ProxyHelpers.GetQualifiedClass(
+          self.use_proxy_hash or self.enable_jni_multiplexing):
         ret += [template.substitute(values)]
 
     class_getter = """\
@@ -1078,7 +1090,8 @@ JNI_REGISTRATION_EXPORT std::atomic<jclass> g_${JAVA_CLASS}_clazz(nullptr);
       }
       # Since all proxy methods use the same class, defining this in every
       # header file would result in duplicated extern initializations.
-      if full_clazz != ProxyHelpers.GetQualifiedClass(self.use_proxy_hash):
+      if full_clazz != ProxyHelpers.GetQualifiedClass(
+          self.use_proxy_hash or self.enable_jni_multiplexing):
         ret += [template.substitute(values)]
 
     return ''.join(ret)
@@ -1098,10 +1111,12 @@ class InlHeaderFileGenerator(object):
     self.constant_fields = constant_fields
     self.jni_params = jni_params
     self.options = options
-    self.helper = HeaderFileGeneratorHelper(self.class_name,
-                                            fully_qualified_class,
-                                            self.options.use_proxy_hash,
-                                            self.options.split_name)
+    self.helper = HeaderFileGeneratorHelper(
+        self.class_name,
+        fully_qualified_class,
+        self.options.use_proxy_hash,
+        split_name=self.options.split_name,
+        enable_jni_multiplexing=self.options.enable_jni_multiplexing)
 
   def GetContent(self):
     """Returns the content of the JNI binding file."""
@@ -1604,6 +1619,9 @@ See SampleForTests.java for more details.
       action='store_true',
       help='Hashes the native declaration of methods used '
       'in @JniNatives interface.')
+  parser.add_argument('--enable_jni_multiplexing',
+                      action='store_true',
+                      help='Enables JNI multiplexing for Java native methods')
   parser.add_argument(
       '--split_name',
       help='Split name that the Java classes should be loaded from.')

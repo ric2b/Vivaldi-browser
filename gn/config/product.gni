@@ -64,4 +64,7 @@ if (release_kind == "final") {
 }
 if (is_vivaldi_automotive && !is_vivaldi_polestar) {
   android_vivaldi_manifest_package += ".automotive"
+  if (is_vivaldi_renault) {
+    android_vivaldi_manifest_package += ".renault"
+  }
 }

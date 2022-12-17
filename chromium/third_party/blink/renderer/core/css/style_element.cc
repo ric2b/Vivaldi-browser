@@ -31,6 +31,7 @@
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/html/blocking_attribute.h"
 #include "third_party/blink/renderer/core/html/html_style_element.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/core/svg/svg_style_element.h"
@@ -46,10 +47,12 @@ static bool IsCSS(const Element& element, const AtomicString& type) {
 }
 
 StyleElement::StyleElement(Document* document, bool created_by_parser)
-    : created_by_parser_(created_by_parser),
+    : has_finished_parsing_children_(!created_by_parser),
       loading_(false),
       registered_as_candidate_(false),
-      start_position_(TextPosition::BelowRangePosition()) {
+      created_by_parser_(created_by_parser),
+      start_position_(TextPosition::BelowRangePosition()),
+      pending_sheet_type_(PendingSheetType::kNone) {
   if (created_by_parser && document &&
       document->GetScriptableDocumentParser() &&
       !document->IsInDocumentWrite()) {
@@ -68,7 +71,7 @@ StyleElement::ProcessingResult StyleElement::ProcessStyleSheet(
 
   registered_as_candidate_ = true;
   document.GetStyleEngine().AddStyleSheetCandidateNode(element);
-  if (created_by_parser_)
+  if (!has_finished_parsing_children_)
     return kProcessingSuccessful;
 
   return Process(element);
@@ -91,7 +94,7 @@ void StyleElement::RemovedFrom(Element& element,
 }
 
 StyleElement::ProcessingResult StyleElement::ChildrenChanged(Element& element) {
-  if (created_by_parser_)
+  if (!has_finished_parsing_children_)
     return kProcessingSuccessful;
   probe::WillChangeStyleElement(&element);
   return Process(element);
@@ -100,7 +103,7 @@ StyleElement::ProcessingResult StyleElement::ChildrenChanged(Element& element) {
 StyleElement::ProcessingResult StyleElement::FinishParsingChildren(
     Element& element) {
   ProcessingResult result = Process(element);
-  created_by_parser_ = false;
+  has_finished_parsing_children_ = true;
   return result;
 }
 
@@ -114,8 +117,12 @@ void StyleElement::ClearSheet(Element& owner_element) {
   DCHECK(sheet_);
 
   if (sheet_->IsLoading()) {
-    owner_element.GetDocument().GetStyleEngine().RemovePendingSheet(
-        owner_element, style_engine_context_);
+    DCHECK(IsSameObject(owner_element));
+    if (pending_sheet_type_ == PendingSheetType::kBlocking) {
+      owner_element.GetDocument().GetStyleEngine().RemovePendingSheet(
+          owner_element);
+    }
+    pending_sheet_type_ = PendingSheetType::kNone;
   }
 
   sheet_.Release()->ClearOwnerNode();
@@ -129,6 +136,7 @@ static bool IsInUserAgentShadowDOM(const Element& element) {
 StyleElement::ProcessingResult StyleElement::CreateSheet(Element& element,
                                                          const String& text) {
   DCHECK(element.isConnected());
+  DCHECK(IsSameObject(element));
   Document& document = element.GetDocument();
 
   ContentSecurityPolicy* csp =
@@ -153,17 +161,29 @@ StyleElement::ProcessingResult StyleElement::CreateSheet(Element& element,
   if (IsCSS(element, type) && passes_content_security_policy_checks) {
     scoped_refptr<MediaQuerySet> media_queries;
     const AtomicString& media_string = media();
+    bool media_query_matches = true;
     if (!media_string.IsEmpty()) {
       media_queries =
           MediaQuerySet::Create(media_string, element.GetExecutionContext());
+      if (LocalFrame* frame = document.GetFrame()) {
+        MediaQueryEvaluator evaluator(frame);
+        media_query_matches = evaluator.Eval(*media_queries);
+      }
     }
+    pending_sheet_type_ =
+        media_query_matches &&
+                (created_by_parser_ ||
+                 (RuntimeEnabledFeatures::BlockingAttributeEnabled() &&
+                  blocking() && blocking()->IsRenderBlocking()))
+            ? PendingSheetType::kBlocking
+            : PendingSheetType::kNonBlocking;
     loading_ = true;
     TextPosition start_position =
         start_position_ == TextPosition::BelowRangePosition()
             ? TextPosition::MinimumPosition()
             : start_position_;
     new_sheet = document.GetStyleEngine().CreateSheet(
-        element, text, start_position, style_engine_context_);
+        element, text, start_position, pending_sheet_type_);
     new_sheet->SetMediaQueries(media_queries);
     loading_ = false;
   }
@@ -189,13 +209,18 @@ bool StyleElement::SheetLoaded(Document& document) {
   if (IsLoading())
     return false;
 
-  document.GetStyleEngine().RemovePendingSheet(*sheet_->ownerNode(),
-                                               style_engine_context_);
+  DCHECK(IsSameObject(*sheet_->ownerNode()));
+  if (pending_sheet_type_ == PendingSheetType::kBlocking)
+    document.GetStyleEngine().RemovePendingSheet(*sheet_->ownerNode());
+  pending_sheet_type_ = PendingSheetType::kNone;
   return true;
 }
 
-void StyleElement::StartLoadingDynamicSheet(Document& document) {
-  document.GetStyleEngine().AddPendingSheet(style_engine_context_);
+void StyleElement::SetToPendingState(Document& document, Element& element) {
+  DCHECK(IsSameObject(element));
+  DCHECK_LT(pending_sheet_type_, PendingSheetType::kBlocking);
+  pending_sheet_type_ = PendingSheetType::kBlocking;
+  document.GetStyleEngine().AddPendingSheet(element);
 }
 
 void StyleElement::Trace(Visitor* visitor) const {

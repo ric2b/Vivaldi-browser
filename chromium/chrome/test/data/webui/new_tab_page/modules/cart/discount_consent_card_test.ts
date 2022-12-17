@@ -1,10 +1,11 @@
 // Copyright 2022 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-import 'chrome://new-tab-page/new_tab_page.js';
+
+import 'chrome://new-tab-page/lazy_load.js';
 import 'chrome://webui-test/mojo_webui_test_support.js';
 
-import {DiscountConsentCard} from 'chrome://new-tab-page/new_tab_page.js';
+import {DiscountConsentCard} from 'chrome://new-tab-page/lazy_load.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {assertEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {flushTasks} from 'chrome://webui-test/test_util.js';
@@ -161,7 +162,7 @@ suite('NewTabPageDiscountConsentCartTest', () => {
       });
 
   function buildFaviconUrl(merchantUrl: string): string {
-    return 'chrome://favicon2/?size=24&scale_factor=1x&show_fallback_monogram=&page_url=' +
+    return 'chrome://favicon2/?size=20&scale_factor=1x&show_fallback_monogram=&page_url=' +
         encodeURIComponent(merchantUrl);
   }
 

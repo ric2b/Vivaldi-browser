@@ -17,6 +17,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/memory/raw_ptr.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_entropy_provider.h"
 #include "base/test/scoped_field_trial_list_resetter.h"
@@ -317,6 +318,7 @@ class TestVariationsFieldTrialCreator : public VariationsFieldTrialCreator {
         metrics_state_manager);
   }
 
+#if BUILDFLAG(FIELDTRIAL_TESTING_ENABLED)
   // We override this method so that a mock testing config is used instead of
   // the one defined in fieldtrial_testing_config.json.
   void ApplyFieldTrialTestingConfig(base::FeatureList* feature_list) override {
@@ -326,6 +328,7 @@ class TestVariationsFieldTrialCreator : public VariationsFieldTrialCreator {
                             base::Unretained(this)),
         GetPlatform(), GetCurrentFormFactor(), feature_list);
   }
+#endif  // BUILDFLAG(FIELDTRIAL_TESTING_ENABLED)
 
  private:
   VariationsSeedStore* GetSeedStore() override { return &seed_store_; }
@@ -1317,8 +1320,7 @@ TEST_F(FieldTrialCreatorSafeModeExperimentTest,
   // Assign the client to a specific experiment group before creating the
   // TestVariationsFieldTrialCreator so that the CleanExitBeacon uses the
   // desired group.
-  int active_group =
-      SetUpExtendedSafeModeExperiment(kSignalAndWriteViaFileUtilGroup);
+  int active_group = SetUpExtendedSafeModeExperiment(kEnabledGroup);
   TestVariationsFieldTrialCreator field_trial_creator(
       local_state(), &variations_service_client, &safe_seed_manager, channel,
       user_data_dir_path());

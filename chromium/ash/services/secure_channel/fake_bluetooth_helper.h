@@ -10,14 +10,12 @@
 #include <unordered_map>
 #include <utility>
 
+#include "ash/components/multidevice/remote_device_ref.h"
 #include "ash/services/secure_channel/bluetooth_helper.h"
 #include "ash/services/secure_channel/data_with_timestamp.h"
-#include "chromeos/components/multidevice/remote_device_ref.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
-namespace chromeos {
-
-namespace secure_channel {
+namespace ash::secure_channel {
 
 // Test BluetoothHelper implementation.
 class FakeBluetoothHelper : public BluetoothHelper {
@@ -65,13 +63,6 @@ class FakeBluetoothHelper : public BluetoothHelper {
       device_id_to_bluetooth_public_address_map_;
 };
 
-}  // namespace secure_channel
-
-}  // namespace chromeos
-
-// TODO(https://crbug.com/1164001): remove after the migration is finished.
-namespace ash::secure_channel {
-using ::chromeos::secure_channel::FakeBluetoothHelper;
-}
+}  // namespace ash::secure_channel
 
 #endif  // ASH_SERVICES_SECURE_CHANNEL_FAKE_BLUETOOTH_HELPER_H_

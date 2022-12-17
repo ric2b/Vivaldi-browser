@@ -13,7 +13,7 @@ function scoreAd(adMetadata, bid, auctionConfig, trustedScoringSignals,
   if (browserSignals.biddingDurationMsec < 0)
     throw 'Wrong biddingDurationMsec ' + browserSignals.biddingDurationMsec;
 
-  return 37;
+  return {desirability: 37, allowComponentAuction: true};
 }
 
 function reportResult(auctionConfig, browserSignals) {
@@ -26,25 +26,33 @@ function reportResult(auctionConfig, browserSignals) {
 
 function validateAdMetadata(adMetadata) {
   const adMetadataJSON = JSON.stringify(adMetadata);
-  if (adMetadataJSON !==
-      '{"renderUrl":"https://example.com/render",' +
-      '"metadata":{"ad":"metadata","here":[1,2,3]}}') {
+  if (adMetadataJSON !== '["Replaced metadata"]') {
     throw 'Wrong adMetadata ' + adMetadataJSON;
   }
 }
 
 function validateBid(bid) {
-  if (bid !== 2)
+  if (bid !== 42)
     throw 'Wrong bid ' + bid;
 }
 
 function validateAuctionConfig(auctionConfig) {
   if (!auctionConfig.seller.includes('b.test'))
     throw 'Wrong seller ' + auctionConfig.seller;
-  // TODO(crbug.com/1186444): Consider validating URL fields like
-  // auctionConfig.decisionLogicUrl once we decide what to do about URL
-  // normalization.
-  if (auctionConfig.interestGroupBuyers !== undefined) {
+
+  if (auctionConfig.decisionLogicUrl !==
+      auctionConfig.seller + '/interest_group' +
+          '/component_auction_top_level_decision_argument_validator.js') {
+    throw 'Wrong decisionLogicUrl ' + auctionConfig.decisionLogicUrl;
+  }
+
+  if (auctionConfig.trustedScoringSignalsUrl !==
+      auctionConfig.seller + '/interest_group/trusted_scoring_signals.json') {
+      throw 'Wrong trustedScoringSignalsUrl ' +
+          auctionConfig.trustedScoringSignalsUrl;
+  }
+
+  if ('interestGroupBuyers' in auctionConfig) {
     throw 'Wrong interestGroupBuyers ' + auctionConfig.interestGroupBuyers;
   }
   // If auctionSignals is passed as a JSON string instead of an object,
@@ -56,6 +64,8 @@ function validateAuctionConfig(auctionConfig) {
   const sellerSignalsJson = JSON.stringify(auctionConfig.sellerSignals);
   if (sellerSignalsJson !== '["top-level seller signals"]')
     throw 'Wrong sellerSignals ' + auctionConfig.sellerSignalsJSON;
+  if (auctionConfig.sellerTimeout !== 300)
+    throw 'Wrong sellerTimeout ' + auctionConfig.sellerTimeout;
   const perBuyerSignalsJson = JSON.stringify(auctionConfig.perBuyerSignals);
   if (!perBuyerSignalsJson.includes('a.test') ||
       !perBuyerSignalsJson.includes('["top-level buyer signals"]')) {
@@ -66,6 +76,23 @@ function validateAuctionConfig(auctionConfig) {
       !perBuyerTimeoutsJson.includes('110') ||
       auctionConfig.perBuyerTimeouts['*'] != 150) {
     throw 'Wrong perBuyerTimeouts ' + perBuyerTimeoutsJson;
+  }
+
+  // Check componentAuctions. Don't check all fields of the expected component
+  // auction, just a sampling of them.
+  if (!('componentAuctions' in auctionConfig))
+    throw 'componentAuctions missing';
+  if (auctionConfig.componentAuctions.length != 1)
+    throw 'Wrong componentAuctions ' + JSON.stringify(componentAuctions);
+  const componentAuction = auctionConfig.componentAuctions[0];
+  if (!componentAuction.seller.startsWith('https://d.test') ||
+      componentAuction.decisionLogicUrl != componentAuction.seller +
+          '/interest_group' +
+          '/component_auction_component_decision_argument_validator.js' ||
+      componentAuction.trustedScoringSignalsUrl !== componentAuction.seller +
+          '/interest_group/trusted_scoring_signals2.json' ||
+      componentAuction.sellerTimeout !== 200) {
+    throw 'Wrong componentAuction ' + JSON.stringify(componentAuction);
   }
 }
 
@@ -86,6 +113,10 @@ function validateBrowserSignals(browserSignals, isScoreAd) {
   // Fields common to scoreAd() and reportResult().
   if (browserSignals.topWindowHostname !== 'c.test')
     throw 'Wrong topWindowHostname ' + browserSignals.topWindowHostname;
+  if ('topLeverSeller' in browserSignals)
+    throw 'Wrong topLeverSeller ' + browserSignals.topLeverSeller;
+  if (!browserSignals.componentSeller.startsWith('https://d.test'))
+    throw 'Wrong componentSeller ' + browserSignals.componentSeller;
   if (!browserSignals.interestGroupOwner.startsWith('https://a.test'))
     throw 'Wrong interestGroupOwner ' + browserSignals.interestGroupOwner;
   if (browserSignals.renderUrl !== "https://example.com/render")
@@ -93,7 +124,7 @@ function validateBrowserSignals(browserSignals, isScoreAd) {
 
   // Fields that vary by method.
   if (isScoreAd) {
-    if (Object.keys(browserSignals).length !== 6) {
+    if (Object.keys(browserSignals).length !== 7) {
       throw 'Wrong number of browser signals fields ' +
           JSON.stringify(browserSignals);
     }
@@ -105,13 +136,17 @@ function validateBrowserSignals(browserSignals, isScoreAd) {
     if (browserSignals.dataVersion !== 1234)
       throw 'Wrong dataVersion ' + browserSignals.dataVersion;
   } else {
-    if (Object.keys(browserSignals).length !== 6) {
+    if (Object.keys(browserSignals).length !== 8) {
       throw 'Wrong number of browser signals fields ' +
           JSON.stringify(browserSignals);
     }
     validateBid(browserSignals.bid);
     if (browserSignals.desirability !== 37)
       throw 'Wrong desireability ' + browserSignals.desirability;
+    if (browserSignals.highestScoringOtherBid !== 0) {
+      throw 'Wrong highestScoringOtherBid ' +
+          browserSignals.highestScoringOtherBid;
+    }
     if (browserSignals.dataVersion !== 1234)
       throw 'Wrong dataVersion ' + browserSignals.dataVersion;
   }

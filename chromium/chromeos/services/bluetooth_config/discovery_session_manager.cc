@@ -45,6 +45,8 @@ void DiscoverySessionManager::StartDiscovery(
   if (!had_client_before_call) {
     BLUETOOTH_LOG(EVENT) << "StartDiscovery() called as the first client";
     OnHasAtLeastOneDiscoveryClientChanged();
+    NotifyHasAtLeastOneDiscoverySessionChanged(
+        /*has_at_least_one_discovery_session=*/true);
     return;
   }
 
@@ -83,6 +85,8 @@ void DiscoverySessionManager::NotifyDiscoveryStoppedAndClearActiveClients() {
 
   // The number of clients has decreased from >0 to 0.
   OnHasAtLeastOneDiscoveryClientChanged();
+  NotifyHasAtLeastOneDiscoverySessionChanged(
+      /*has_at_least_one_discovery_session=*/false);
 }
 
 bool DiscoverySessionManager::HasAtLeastOneDiscoveryClient() const {
@@ -114,22 +118,8 @@ DiscoverySessionManager::RegisterNewDevicePairingHandler(
     mojo::RemoteSetElementId id) {
   mojo::PendingRemote<mojom::DevicePairingHandler> remote;
   id_to_pairing_handler_map_[id] = CreateDevicePairingHandler(
-      adapter_state_controller_, remote.InitWithNewPipeAndPassReceiver(),
-      base::BindOnce(&DiscoverySessionManager::OnPairingFinished,
-                     weak_ptr_factory_.GetWeakPtr(), id));
+      adapter_state_controller_, remote.InitWithNewPipeAndPassReceiver());
   return remote;
-}
-
-void DiscoverySessionManager::OnPairingFinished(mojo::RemoteSetElementId id) {
-  // This can be called when we delete a handler such as if it is disconnected
-  // or discovery stops. At this point, delegates_ won't contain |id| anymore.
-  if (!delegates_.Contains(id))
-    return;
-
-  delegates_.Remove(id);
-
-  // Manually call the disconnect handler since it's not automatically called.
-  OnDelegateDisconnected(id);
 }
 
 bool DiscoverySessionManager::IsBluetoothEnabled() const {
@@ -147,6 +137,8 @@ void DiscoverySessionManager::OnDelegateDisconnected(
     BLUETOOTH_LOG(EVENT)
         << "The number of discovery clients has decreased from 1 to 0";
     OnHasAtLeastOneDiscoveryClientChanged();
+    NotifyHasAtLeastOneDiscoverySessionChanged(
+        /*has_at_least_one_discovery_session=*/false);
   }
 }
 

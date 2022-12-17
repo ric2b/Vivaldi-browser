@@ -15,16 +15,17 @@
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_piece.h"
 #include "base/threading/thread_checker.h"
+#include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "media/base/audio_parameters.h"
 #include "media/base/audio_processing.h"
+#include "media/media_buildflags.h"
 #include "media/mojo/mojom/audio_processing.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
-#include "services/audio/buildflags.h"
 #include "services/audio/stream_monitor.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -38,10 +39,12 @@ class UserInputMonitor;
 
 namespace audio {
 class AudioProcessorHandler;
+class AecdumpRecordingManager;
 class AudioCallback;
 class OutputTapper;
 class DeviceOutputListener;
 class InputStreamActivityMonitor;
+class ProcessingAudioFifo;
 
 // Only do power monitoring for non-mobile platforms to save resources.
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
@@ -49,6 +52,35 @@ class InputStreamActivityMonitor;
 #endif
 
 // All public methods of InputController must be called from the audio thread.
+//
+// Audio data flow through InputController:
+//
+// * Without any audio processing:
+//     InputController::|audio_callback_|::OnData()
+//     -> InputController::OnData()
+//     --> InputController::|sync_writer_|::Write()
+//
+// * With audio processing but no dedicated processing thread:
+//     InputController::|audio_callback_|::OnData()
+//     -> InputController::OnData()
+//     --> InputController::|audio_processor_handler_|::ProcessCapturedAudio()
+//     ---> InputController::DeliverProcessedAudio()
+//     ----> InputController::|sync_writer_|::Write()
+//
+// * With audio processing and a dedicated processing thread:
+//   Audio capture device thread:
+//     InputController::|audio_callback_|::OnData()
+//     -> InputController::OnData()
+//     --> InputController::|processing_fifo_|::PushData()
+//   Audio processing thread:
+//     ---> InputController::|audio_processor_handler_|::ProcessCapturedAudio()
+//     ----> InputController::DeliverProcessedAudio()
+//     -----> InputController::|sync_writer_|::Write()
+//
+//     - InputController::|audio_processor_handler_| changes format from the
+//     AudioInputStream format to |params| provided to
+//     InputController::Create().
+//
 class InputController final : public StreamMonitor {
  public:
   // Error codes to make native logging more clear. These error codes are added
@@ -152,6 +184,7 @@ class InputController final : public StreamMonitor {
       media::UserInputMonitor* user_input_monitor,
       InputStreamActivityMonitor* activity_monitor,
       DeviceOutputListener* device_output_listener,
+      AecdumpRecordingManager* aecdump_recording_manager,
       media::mojom::AudioProcessingConfigPtr processing_config,
       const media::AudioParameters& params,
       const std::string& device_id,
@@ -177,8 +210,7 @@ class InputController final : public StreamMonitor {
   void OnStreamInactive(Snoopable* snoopable) override;
 
  private:
-  // TODO(https://crbug.com/1224845): Remove after the output mixing experiment.
-  class NoopReferenceOutputListener;
+  friend class InputControllerTestHelper;
 
   // Used to log the result of capture startup.
   // This was previously logged as a boolean with only the no callback and OK
@@ -205,8 +237,10 @@ class InputController final : public StreamMonitor {
                   media::UserInputMonitor* user_input_monitor,
                   InputStreamActivityMonitor* activity_monitor,
                   DeviceOutputListener* device_output_listener,
+                  AecdumpRecordingManager* aecdump_recording_manager,
                   media::mojom::AudioProcessingConfigPtr processing_config,
-                  const media::AudioParameters& params,
+                  const media::AudioParameters& output_params,
+                  const media::AudioParameters& device_params,
                   StreamType type);
 
   void DoCreate(media::AudioManager* audio_manager,
@@ -255,16 +289,24 @@ class InputController final : public StreamMonitor {
   void ReportIsAlive();
 
   // Receives new input data on the hw callback thread.
-  void DeliverDataToSyncWriter(const media::AudioBus* source,
-                               base::TimeTicks capture_time,
-                               double volume);
+  void OnData(const media::AudioBus* source,
+              base::TimeTicks capture_time,
+              double volume);
 
 #if BUILDFLAG(CHROME_WIDE_ECHO_CANCELLATION)
   // Called from the constructor. Helper to isolate logic setting up audio
   // processing components.
   void MaybeSetUpAudioProcessing(
       media::mojom::AudioProcessingConfigPtr processing_config,
-      DeviceOutputListener* device_output_listener);
+      const media::AudioParameters& processing_output_params,
+      const media::AudioParameters& device_params,
+      DeviceOutputListener* device_output_listener,
+      AecdumpRecordingManager* aecdump_recording_manager);
+
+  // Used as a callback for |audio_processor_handler_|.
+  void DeliverProcessedAudio(const media::AudioBus& audio_bus,
+                             base::TimeTicks audio_capture_time,
+                             absl::optional<double> new_volume);
 #endif
 
   static StreamType ParamsToStreamType(const media::AudioParameters& params);
@@ -292,13 +334,12 @@ class InputController final : public StreamMonitor {
   // Handles audio processing effects applied to the microphone capture audio.
   std::unique_ptr<AudioProcessorHandler> audio_processor_handler_;
 
-  // Placeholder for `audio_processor_handler_` when it is not created but
-  // `output_tapper_` still needs a ReferenceOutput::Listener to subscribe.
-  // TODO(https://crbug.com/1224845): Remove after the output mixing experiment.
-  std::unique_ptr<NoopReferenceOutputListener> noop_reference_output_listener_;
+  // Offloads processing captured data to its own real time thread.
+  // Note: Ordering is important, as |processing_fifo_| must be destroyed before
+  // |audio_processing_handler_|.
+  std::unique_ptr<ProcessingAudioFifo> processing_fifo_;
 
-  // Manages the `audio_processor_handler_` or
-  // `noop_reference_output_listener_` subscription to output audio.
+  // Manages the |audio_processor_handler_| subscription to output audio.
   std::unique_ptr<OutputTapper> output_tapper_;
 #endif
 

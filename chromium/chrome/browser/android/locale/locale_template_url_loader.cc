@@ -15,6 +15,8 @@
 #include "components/search_engines/template_url_service.h"
 #include "components/search_engines/util.h"
 
+#include "chrome/browser/browser_process.h"
+
 using base::android::JavaParamRef;
 using base::android::ScopedJavaGlobalRef;
 using base::android::ScopedJavaLocalRef;
@@ -96,8 +98,15 @@ void LocaleTemplateUrlLoader::RemoveTemplateUrls(JNIEnv* env) {
   while (!prepopulate_ids_.empty()) {
     TemplateURL* turl = FindURLByPrepopulateID(
         template_url_service_->GetTemplateURLs(), prepopulate_ids_.back());
-    if (turl && template_url_service_->GetDefaultSearchProvider() != turl) {
-      template_url_service_->Remove(turl);
+    if (turl) {
+      bool is_default = false;
+      for (int i = 0; i < TemplateURLService::kDefaultSearchTypeCount; i++) {
+        if (template_url_service_->GetDefaultSearchProvider(
+                TemplateURLService::DefaultSearchType(i)) == turl)
+          is_default = true;
+      }
+      if (!is_default)
+        template_url_service_->Remove(turl);
     }
     prepopulate_ids_.pop_back();
   }
@@ -139,11 +148,11 @@ void LocaleTemplateUrlLoader::SetGoogleAsDefaultSearch(JNIEnv* env) {
 
 std::vector<std::unique_ptr<TemplateURLData>>
 LocaleTemplateUrlLoader::GetLocalPrepopulatedEngines() {
-  return TemplateURLPrepopulateData::GetLocalPrepopulatedEngines(locale_);
+  return TemplateURLPrepopulateData::GetLocalPrepopulatedEngines(locale_, g_browser_process->GetApplicationLocale());
 }
 
 int LocaleTemplateUrlLoader::GetDesignatedSearchEngineForChina() {
-  return TemplateURLPrepopulateData::sogou.id;
+  return TemplateURLPrepopulateData::bing.id;
 }
 
 LocaleTemplateUrlLoader::~LocaleTemplateUrlLoader() {}

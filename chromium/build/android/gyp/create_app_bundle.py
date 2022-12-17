@@ -197,6 +197,9 @@ def _GenerateBundleConfigJson(uncompressed_assets, compress_dex,
   # Locale-specific pak files stored in bundle splits need not be compressed.
   uncompressed_globs.extend(
       ['assets/locales#lang_*/*.pak', 'assets/fallback-locales/*.pak'])
+  # Vivaldi needs these resources to be uncompressed.
+  uncompressed_globs.extend(
+      ['assets/default-bookmarks/*.json', 'assets/adblocker_resources/*.json'])
   uncompressed_globs.extend('assets/' + x for x in uncompressed_assets)
   # NOTE: Use '**' instead of '*' to work through directories!
   uncompressed_globs.extend('**.' + ext for ext in _UNCOMPRESSED_FILE_EXTS)

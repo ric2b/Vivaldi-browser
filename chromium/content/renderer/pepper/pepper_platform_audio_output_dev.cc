@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/synchronization/waitable_event.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -313,7 +314,7 @@ void PepperPlatformAudioOutputDev::CreateStreamOnIOThread(
     case IDLE:
       if (did_receive_auth_.IsSignaled() && device_id_.empty()) {
         state_ = CREATING_STREAM;
-        ipc_->CreateStream(this, params, absl::nullopt);
+        ipc_->CreateStream(this, params);
       } else {
         RequestDeviceAuthorizationOnIOThread();
         start_on_authorized_ = true;
@@ -326,7 +327,7 @@ void PepperPlatformAudioOutputDev::CreateStreamOnIOThread(
 
     case AUTHORIZED:
       state_ = CREATING_STREAM;
-      ipc_->CreateStream(this, params, absl::nullopt);
+      ipc_->CreateStream(this, params);
       start_on_authorized_ = false;
       break;
 

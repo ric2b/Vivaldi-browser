@@ -75,6 +75,8 @@ public class AboutChromeSettings
         }
         if (BuildConfig.IS_OEM_POLESTAR_BUILD) {
             version = version.concat("(PS)");
+        } else if (BuildConfig.IS_OEM_RENAULT_BUILD) {
+            version = version.concat("(RNO)");
         }
         if (VersionInfo.isOfficialBuild()) {
             return version;

@@ -15,18 +15,6 @@
     <output filename="components_strings_sc.pak" type="data_package" lang="sc" />
     <output filename="components_strings_nn.pak" type="data_package" lang="nn" />
     <if expr="not is_android">
-      <output filename="components_strings_af.pak" type="data_package" lang="af" />
-      <output filename="components_strings_az.pak" type="data_package" lang="az" />
-      <output filename="components_strings_be.pak" type="data_package" lang="be" />
-      <output filename="components_strings_eu.pak" type="data_package" lang="eu" />
-      <output filename="components_strings_gl.pak" type="data_package" lang="gl" />
-      <output filename="components_strings_hy.pak" type="data_package" lang="hy" />
-      <output filename="components_strings_is.pak" type="data_package" lang="is" />
-      <output filename="components_strings_ka.pak" type="data_package" lang="ka" />
-      <output filename="components_strings_mk.pak" type="data_package" lang="mk" />
-      <output filename="components_strings_pa.pak" type="data_package" lang="pa" />
-      <output filename="components_strings_sq.pak" type="data_package" lang="sq" />
-      <output filename="components_strings_sr-Latn.pak" type="data_package" lang="sr-Latn" />
     </if>
   </outputs>
   <translations>

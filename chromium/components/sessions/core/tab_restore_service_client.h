@@ -48,22 +48,24 @@ class SESSIONS_EXPORT TabRestoreServiceClient {
   // return nullptr (e.g., if the embedder does not support LiveTabContext
   // functionality).
   virtual LiveTabContext* CreateLiveTabContext(
+      LiveTabContext* existing_context,
       const std::string& app_name,
       const gfx::Rect& bounds,
       ui::WindowShowState show_state,
       const std::string& workspace,
       const std::string& user_title,
       const std::map<std::string, std::string>& extra_data);
-  // NOTE(andre@vivaldi.com) : We added ext_data to be able to restore a browser
-  // window with the saved ext_data.
+  // NOTE(andre@vivaldi.com) : We added viv_ext_data to be able to restore a browser
+  // window with the saved viv_ext_data.
   virtual LiveTabContext* CreateLiveTabContext(
-    const std::string& app_name,
-    const gfx::Rect& bounds,
-    ui::WindowShowState show_state,
-    const std::string& workspace,
-    const std::string& user_title,
-    const std::map<std::string, std::string>& extra_data,
-    const std::string& ext_data);
+      LiveTabContext* existing_context,
+      const std::string& app_name,
+      const gfx::Rect& bounds,
+      ui::WindowShowState show_state,
+      const std::string& workspace,
+      const std::string& user_title,
+      const std::map<std::string, std::string>& extra_data,
+      const std::string& viv_ext_data);
 
   // Returns the LiveTabContext instance that is associated with
   // |tab|, or null if there is no such instance.

@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/memory/raw_ptr.h"
+#include "base/time/time.h"
 #include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/payments/payments_client.h"
 #include "components/autofill/core/browser/payments/virtual_card_enrollment_flow.h"
@@ -16,10 +17,6 @@
 
 namespace content {
 class WebContents;
-}
-
-namespace gfx {
-class Image;
 }
 
 namespace autofill {
@@ -39,9 +36,12 @@ struct VirtualCardEnrollmentFields {
   ~VirtualCardEnrollmentFields();
   // The credit card to enroll.
   CreditCard credit_card;
-  // Raw pointer to the image for the card art. The |card_art_image| object is
-  // owned by PersonalDataManager.
-  raw_ptr<gfx::Image> card_art_image = nullptr;
+  // Raw pointer to the image skia for the card art. If the card art is not yet
+  // available, this pointer will be set to the network image after we receive a
+  // GetDetailsForEnrollResponse. The |card_art_image| object is owned by
+  // PersonalDataManager if it is the card art, or by the resource bundle if it
+  // is the network icon.
+  raw_ptr<const gfx::ImageSkia> card_art_image = nullptr;
   // The Google-specific legal messages that the user must accept before
   // opting-in to virtual card enrollment.
   LegalMessageLines google_legal_message;
@@ -51,6 +51,13 @@ struct VirtualCardEnrollmentFields {
   // The source for which the VirtualCardEnrollmentBubble will be shown.
   VirtualCardEnrollmentSource virtual_card_enrollment_source =
       VirtualCardEnrollmentSource::kNone;
+  // A boolean value indicating if this will be the final time the user will see
+  // this offer, until strikes eventually expire.  Determined by the number of
+  // existing strikes.
+  bool last_show = false;
+  // A boolean value indicating if such enrollment offer for the card has been
+  // declined before.
+  bool previously_declined = false;
 };
 
 // This struct is used to track the state of the virtual card enrollment
@@ -140,19 +147,28 @@ class VirtualCardEnrollmentManager {
   // Unenrolls the card mapped to the given |instrument_id|.
   void Unenroll(int64_t instrument_id);
 
-  // Returns true if a credit card identified by its |guid| is blocked for
-  // virtual card enrollment. Does nothing if the strike database is not
+  // Returns true if a credit card identified by its |instrument_id| is
+  // blocked for virtual card enrollment and is not attempting to enroll from
+  // the settings page. Does nothing if the strike database is not available.
+  bool IsVirtualCardEnrollmentBlockedDueToMaxStrikes(
+      const std::string& instrument_id,
+      VirtualCardEnrollmentSource virtual_card_enrollment_source) const;
+
+  // Adds a strike to block enrollment for credit card identified by its
+  // |instrument_id|. Does nothing if the strike database is not available.
+  void AddStrikeToBlockOfferingVirtualCardEnrollment(
+      const std::string& instrument_id);
+
+  // Removes potential strikes to block a credit card identified by its
+  // |instrument_id| for enrollment. Does nothing if the strike database is not
   // available.
-  bool IsVirtualCardEnrollmentBlocked(const std::string& guid) const;
-
-  // Adds a strike to block enrollment for credit card identified by its |guid|.
-  // Does nothing if the strike database is not available.
-  void AddStrikeToBlockOfferingVirtualCardEnrollment(const std::string& guid);
-
-  // Removes potential strikes to block a credit card identified by its |guid|
-  // for enrollment. Does nothing if the strike database is not available.
   void RemoveAllStrikesToBlockOfferingVirtualCardEnrollment(
-      const std::string& guid);
+      const std::string& instrument_id);
+
+  // Sets |save_card_bubble_accepted_timestamp_|, which will be the start time
+  // for the LatencySinceUpstream metrics.
+  void SetSaveCardBubbleAcceptedTimestamp(
+      const base::Time& save_card_bubble_accepted_timestamp);
 
  protected:
   // Handles the response from the UpdateVirtualCardEnrollmentRequest. |type|
@@ -211,6 +227,26 @@ class VirtualCardEnrollmentManager {
       virtual_card_enrollment_fields_loaded_callback_;
 
  private:
+  friend class VirtualCardEnrollmentManagerTest;
+  FRIEND_TEST_ALL_PREFIXES(VirtualCardEnrollmentManagerTest,
+                           OnDidGetDetailsForEnrollResponse);
+  FRIEND_TEST_ALL_PREFIXES(VirtualCardEnrollmentManagerTest,
+                           OnDidGetDetailsForEnrollResponse_Reset);
+  FRIEND_TEST_ALL_PREFIXES(VirtualCardEnrollmentManagerTest,
+                           OnRiskDataLoadedForVirtualCard);
+  FRIEND_TEST_ALL_PREFIXES(VirtualCardEnrollmentManagerTest,
+                           OnVirtualCardEnrollmentBubbleAccepted);
+  FRIEND_TEST_ALL_PREFIXES(VirtualCardEnrollmentManagerTest,
+                           StrikeDatabase_BubbleAccepted);
+  FRIEND_TEST_ALL_PREFIXES(VirtualCardEnrollmentManagerTest,
+                           StrikeDatabase_BubbleBlocked);
+  FRIEND_TEST_ALL_PREFIXES(VirtualCardEnrollmentManagerTest,
+                           StrikeDatabase_BubbleCanceled);
+  FRIEND_TEST_ALL_PREFIXES(VirtualCardEnrollmentManagerTest,
+                           StrikeDatabase_SettingsPageNotBlocked);
+  FRIEND_TEST_ALL_PREFIXES(VirtualCardEnrollmentManagerTest,
+                           VirtualCardEnrollmentFields_LastShow);
+
   // Called once the risk data is loaded. The |risk_data| will be used with
   // |state_|'s |virtual_card_enrollment_fields|'s |credit_card|'s
   // |instrument_id_| field to make a GetDetailsForEnroll request, and
@@ -262,14 +298,23 @@ class VirtualCardEnrollmentManager {
   // server.
   raw_ptr<payments::PaymentsClient> payments_client_;
 
-  // The database that is used to count guid-keyed strikes to suppress prompting
-  // users to enroll in virtual cards.
+  // The database that is used to count instrument_id-keyed strikes to suppress
+  // prompting users to enroll in virtual cards.
   std::unique_ptr<VirtualCardEnrollmentStrikeDatabase>
       virtual_card_enrollment_strike_database_;
 
   // Used in scenarios where we do not have access to web contents, and need to
   // pass in a callback to the overloaded risk_util::LoadRiskData.
   RiskAssessmentFunction risk_assessment_function_;
+
+  // Used to track the latency metrics between SaveCardBubble accept and
+  // VirtualCardEnrollBubble show. Set in ChromeAutofillClient once
+  // SaveCardBubble is accepted for upload save, so that we can track the
+  // starting timestamp of the latency. Right before showing the
+  // VirtualCardEnrollBubble, we will take the difference between the current
+  // timestamp and |save_card_bubble_accepted_timestamp_| to log as the latency
+  // metric. |save_card_bubble_accepted_timestamp_| will then be reset.
+  absl::optional<base::Time> save_card_bubble_accepted_timestamp_;
 
   base::WeakPtrFactory<VirtualCardEnrollmentManager> weak_ptr_factory_{this};
 };

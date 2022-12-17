@@ -60,6 +60,7 @@
           selectable-elements="cr-radio-button, settings-collapse-radio-button"
           on-change="onSafeBrowsingRadioChange_">
         <settings-collapse-radio-button id="safeBrowsingEnhanced"
+            style="display:none"
             name="[[safeBrowsingSettingEnum_.ENHANCED]]"
             pref="[[prefs.generated.safe_browsing]]"
             label="$i18n{safeBrowsingEnhanced}"
@@ -125,7 +126,7 @@
               </div>
             </div>
           </div>
-          <div slot="noSelectionCollapse">
+          <div slot="noSelectionCollapse" style="display:none">
             <settings-toggle-button id="safeBrowsingReportingToggle"
                 pref="{{prefs.safebrowsing.scout_reporting_enabled}}"
                 label="$i18n{safeBrowsingStandardReportingLabel}"
@@ -208,6 +209,7 @@
 </if>
     <cr-link-row id="advanced-protection-program-link"
         class="hr"
+        style="display:none"
         label="$i18n{advancedProtectionProgramTitle}"
         sub-label="$i18n{advancedProtectionProgramDesc}"
         on-click="onAdvancedProtectionProgramLinkClick_"

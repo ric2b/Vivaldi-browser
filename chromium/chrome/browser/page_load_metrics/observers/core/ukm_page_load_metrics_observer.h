@@ -58,8 +58,7 @@ class UkmPageLoadMetricsObserver
   ObservePolicy OnRedirect(
       content::NavigationHandle* navigation_handle) override;
 
-  ObservePolicy OnCommit(content::NavigationHandle* navigation_handle,
-                         ukm::SourceId source_id) override;
+  ObservePolicy OnCommit(content::NavigationHandle* navigation_handle) override;
 
   ObservePolicy ShouldObserveMimeType(
       const std::string& mime_type) const override;
@@ -146,6 +145,7 @@ class UkmPageLoadMetricsObserver
 
   void RecordInputTimingMetrics();
   void RecordSmoothnessMetrics();
+  void RecordResponsivenessMetrics();
 
   void RecordMobileFriendlinessMetrics();
   void RecordPageLoadTimestampMetrics(ukm::builders::PageLoad& builder);

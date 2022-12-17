@@ -32,6 +32,7 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/custom_handlers/protocol_handler.h"
 #include "components/custom_handlers/protocol_handler_registry.h"
 #include "components/network_session_configurator/common/network_switches.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
@@ -458,8 +459,8 @@ class ProtocolHandlerTest : public InProcessBrowserTest {
   void AddProtocolHandler(const std::string& scheme,
                           const std::string& redirect_template) {
     protocol_handler_registry()->OnAcceptRegisterProtocolHandler(
-        ProtocolHandler::CreateProtocolHandler(scheme,
-                                               GURL(redirect_template)));
+        custom_handlers::ProtocolHandler::CreateProtocolHandler(
+            scheme, GURL(redirect_template)));
   }
 
   custom_handlers::ProtocolHandlerRegistry* protocol_handler_registry() {
@@ -533,22 +534,19 @@ class KeepaliveDurationOnShutdownTest : public InProcessBrowserTest,
 };
 
 IN_PROC_BROWSER_TEST_F(KeepaliveDurationOnShutdownTest, DefaultValue) {
-  Profile* profile =
-      g_browser_process->profile_manager()->GetPrimaryUserProfile();
+  Profile* profile = browser()->profile();
   EXPECT_EQ(client_->GetKeepaliveTimerTimeout(profile), base::TimeDelta());
 }
 
 IN_PROC_BROWSER_TEST_F(KeepaliveDurationOnShutdownTest, PolicySettings) {
-  Profile* profile =
-      g_browser_process->profile_manager()->GetPrimaryUserProfile();
+  Profile* profile = browser()->profile();
   profile->GetPrefs()->SetInteger(prefs::kFetchKeepaliveDurationOnShutdown, 2);
 
   EXPECT_EQ(client_->GetKeepaliveTimerTimeout(profile), base::Seconds(2));
 }
 
 IN_PROC_BROWSER_TEST_F(KeepaliveDurationOnShutdownTest, DynamicUpdate) {
-  Profile* profile =
-      g_browser_process->profile_manager()->GetPrimaryUserProfile();
+  Profile* profile = browser()->profile();
   profile->GetPrefs()->SetInteger(prefs::kFetchKeepaliveDurationOnShutdown, 2);
 
   EXPECT_EQ(client_->GetKeepaliveTimerTimeout(profile), base::Seconds(2));

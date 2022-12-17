@@ -9,17 +9,17 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/check.h"
 #include "base/containers/contains.h"
-#include "base/cxx17_backports.h"
 #include "base/files/file_util.h"
 #include "base/i18n/number_formatting.h"
 #include "base/i18n/string_compare.h"
 #include "base/logging.h"
+#include "base/memory/ref_counted_memory.h"
 #include "base/observer_list.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "base/task/task_runner_util.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
@@ -563,7 +563,7 @@ bool ProfileAttributesStorage::IsDefaultProfileName(
     return true;
 
   // Check if it's one of the old-style profile names.
-  for (size_t i = 0; i < base::size(kDefaultNames); ++i) {
+  for (size_t i = 0; i < std::size(kDefaultNames); ++i) {
     if (name == l10n_util::GetStringUTF16(kDefaultNames[i]))
       return true;
   }

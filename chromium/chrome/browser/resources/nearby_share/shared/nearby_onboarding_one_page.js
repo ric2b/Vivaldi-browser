@@ -2,6 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import '//resources/cr_elements/shared_style_css.m.js';
+import '//resources/cr_elements/shared_vars_css.m.js';
+import '//resources/cr_elements/cr_icons_css.m.js';
+import '//resources/cr_elements/cr_input/cr_input.m.js';
+import '//resources/polymer/v3_0/iron-icon/iron-icon.js';
+import '//resources/polymer/v3_0/iron-media-query/iron-media-query.js';
+import './nearby_page_template.js';
+
+import {I18nBehavior} from '//resources/js/i18n_behavior.m.js';
+import {html, Polymer} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
+import {NearbyShareOnboardingFinalState, processOnePageOnboardingCancelledMetrics, processOnePageOnboardingCompleteMetrics, processOnePageOnboardingInitiatedMetrics, processOnePageOnboardingVisibilityButtonOnInitialPageClickedMetrics} from './nearby_metrics_logger.js';
+import {getNearbyShareSettings} from './nearby_share_settings.js';
+import {NearbySettings} from './nearby_share_settings_behavior.js';
+
 /**
  * @fileoverview The 'nearby-onboarding-one-page' component handles the Nearby
  * Share onboarding flow. It is embedded in chrome://os-settings,
@@ -21,12 +36,13 @@ const ONE_PAGE_ONBOARDING_SPLASH_DARK_ICON =
     'nearby-images:nearby-onboarding-splash-dark';
 
 Polymer({
+  _template: html`{__html_template__}`,
   is: 'nearby-onboarding-one-page',
 
   behaviors: [I18nBehavior],
 
   properties: {
-    /** @type {?nearby_share.NearbySettings} */
+    /** @type {?NearbySettings} */
     settings: {
       type: Object,
     },
@@ -61,7 +77,8 @@ Polymer({
 
   /** @private */
   onClose_() {
-    // TODO(crbug.com/1265562): Add new metrics
+    processOnePageOnboardingCancelledMetrics(
+        NearbyShareOnboardingFinalState.INITIAL_PAGE);
     this.fire('onboarding-cancelled');
   },
 
@@ -80,12 +97,12 @@ Polymer({
   /** @private */
   onViewEnterStart_() {
     this.$$('#deviceName').focus();
-    // TODO(crbug.com/1265562): Add new metrics
+    processOnePageOnboardingInitiatedMetrics(new URL(document.URL));
   },
 
   /** @private */
   onDeviceNameInput_() {
-    nearby_share.getNearbyShareSettings()
+    getNearbyShareSettings()
         .validateDeviceName(this.$.deviceName.value)
         .then((result) => {
           this.updateErrorMessage_(result.result);
@@ -94,7 +111,7 @@ Polymer({
 
   /** @private */
   finishOnboarding_() {
-    nearby_share.getNearbyShareSettings()
+    getNearbyShareSettings()
         .setDeviceName(this.$.deviceName.value)
         .then((result) => {
           this.updateErrorMessage_(result.result);
@@ -108,6 +125,9 @@ Polymer({
             this.set('settings.visibility', this.getDefaultVisibility_());
             this.set('settings.isOnboardingComplete', true);
             this.set('settings.enabled', true);
+            processOnePageOnboardingCompleteMetrics(
+                NearbyShareOnboardingFinalState.INITIAL_PAGE,
+                this.getDefaultVisibility_());
             this.fire('onboarding-complete');
           }
         });
@@ -125,6 +145,7 @@ Polymer({
      * nearby_share_prefs.cc:kNearbySharingBackgroundVisibilityName
      */
     this.set('settings.visibility', this.getDefaultVisibility_());
+    processOnePageOnboardingVisibilityButtonOnInitialPageClickedMetrics();
     this.fire('change-page', {page: 'visibility'});
   },
 
@@ -181,7 +202,7 @@ Polymer({
    * setting visibility selection to 'all contacts' in nearby_visibility_page in
    * existing onboarding workflow.
    *
-   * @return {number} default visibility
+   * @return {?nearbyShare.mojom.Visibility} default visibility
    *
    * TODO(crbug.com/1265562): remove this function once the old onboarding is
    * deprecated and default visibility is changed in
@@ -226,7 +247,7 @@ Polymer({
       case nearbyShare.mojom.Visibility.kSelectedContacts:
         return 'contact-group';
       case nearbyShare.mojom.Visibility.kNoOne:
-        return 'visibility-off"';
+        return 'visibility-off';
       default:
         return 'contact-all';
     }

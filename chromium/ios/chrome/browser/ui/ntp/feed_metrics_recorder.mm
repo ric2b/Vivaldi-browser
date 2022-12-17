@@ -9,7 +9,9 @@
 #import "base/metrics/histogram_macros.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
+#include "base/time/time.h"
 #import "components/feed/core/v2/public/common_enums.h"
+#import "ios/chrome/browser/ui/content_suggestions/ntp_home_metrics.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -106,10 +108,26 @@ const char kDiscoverFeedUserActionPreviewTapped[] =
     "ContentSuggestions.Feed.CardAction.TapPreview";
 
 // User action names for feed header menu.
+const char kDiscoverFeedUserActionManageTapped[] =
+    "ContentSuggestions.Feed.HeaderAction.Manage";
 const char kDiscoverFeedUserActionManageActivityTapped[] =
     "ContentSuggestions.Feed.HeaderAction.ManageActivity";
 const char kDiscoverFeedUserActionManageInterestsTapped[] =
     "ContentSuggestions.Feed.HeaderAction.ManageInterests";
+const char kDiscoverFeedUserActionManageHiddenTapped[] =
+    "ContentSuggestions.Feed.HeaderAction.ManageHidden";
+const char kDiscoverFeedUserActionManageFollowingTapped[] =
+    "ContentSuggestions.Feed.HeaderAction.ManageFollowing";
+
+// User action names for management surface.
+const char kDiscoverFeedUserActionManagementTappedUnfollow[] =
+    "ContentSuggestions.Feed.Management.TappedUnfollow";
+const char
+    kDiscoverFeedUserActionManagementTappedRefollowAfterUnfollowOnSnackbar[] =
+        "ContentSuggestions.Feed.Management."
+        "TappedRefollowAfterUnfollowOnSnackbar";
+const char kDiscoverFeedUserActionManagementTappedUnfollowTryAgainOnSnackbar[] =
+    "ContentSuggestions.Feed.Management.TappedUnfollowTryAgainOnSnackbar";
 
 // User action name for engaging with feed.
 const char kDiscoverFeedUserActionEngaged[] = "ContentSuggestions.Feed.Engaged";
@@ -240,6 +258,13 @@ const int kMinutesBetweenSessions = 5;
       base::UserMetricsAction(kDiscoverFeedUserActionLearnMoreTapped));
 }
 
+- (void)recordHeaderMenuManageTapped {
+  [self
+      recordDiscoverFeedUserActionHistogram:FeedUserActionType::kTappedManage];
+  base::RecordAction(
+      base::UserMetricsAction(kDiscoverFeedUserActionManageTapped));
+}
+
 - (void)recordHeaderMenuManageActivityTapped {
   [self recordDiscoverFeedUserActionHistogram:FeedUserActionType::
                                                   kTappedManageActivity];
@@ -252,6 +277,41 @@ const int kMinutesBetweenSessions = 5;
                                                   kTappedManageInterests];
   base::RecordAction(
       base::UserMetricsAction(kDiscoverFeedUserActionManageInterestsTapped));
+}
+
+- (void)recordHeaderMenuManageHiddenTapped {
+  [self recordDiscoverFeedUserActionHistogram:FeedUserActionType::
+                                                  kTappedManageHidden];
+  base::RecordAction(
+      base::UserMetricsAction(kDiscoverFeedUserActionManageHiddenTapped));
+}
+
+- (void)recordHeaderMenuManageFollowingTapped {
+  [self recordDiscoverFeedUserActionHistogram:FeedUserActionType::
+                                                  kTappedManageFollowing];
+  base::RecordAction(
+      base::UserMetricsAction(kDiscoverFeedUserActionManageFollowingTapped));
+}
+
+- (void)recordManagementTappedUnfollow {
+  [self recordDiscoverFeedUserActionHistogram:
+            FeedUserActionType::kTappedUnfollowOnManagementSurface];
+  base::RecordAction(
+      base::UserMetricsAction(kDiscoverFeedUserActionManagementTappedUnfollow));
+}
+
+- (void)recordManagementTappedRefollowAfterUnfollowOnSnackbar {
+  [self recordDiscoverFeedUserActionHistogram:
+            FeedUserActionType::kTappedRefollowAfterUnfollowOnSnackbar];
+  base::RecordAction(base::UserMetricsAction(
+      kDiscoverFeedUserActionManagementTappedRefollowAfterUnfollowOnSnackbar));
+}
+
+- (void)recordManagementTappedUnfollowTryAgainOnSnackbar {
+  [self recordDiscoverFeedUserActionHistogram:
+            FeedUserActionType::kTappedUnfollowTryAgainOnSnackbar];
+  base::RecordAction(base::UserMetricsAction(
+      kDiscoverFeedUserActionManagementTappedUnfollowTryAgainOnSnackbar));
 }
 
 - (void)recordDiscoverFeedVisibilityChanged:(BOOL)visible {
@@ -524,6 +584,14 @@ const int kMinutesBetweenSessions = 5;
 // Records that a URL was opened regardless of the target surface (e.g. New Tab,
 // Same Tab, Incognito Tab, etc.)
 - (void)recordOpenURL {
+  if (self.isShownOnStartSurface) {
+    UMA_HISTOGRAM_ENUMERATION("IOS.ContentSuggestions.ActionOnStartSurface",
+                              IOSContentSuggestionsActionType::kFeedCard);
+  } else {
+    UMA_HISTOGRAM_ENUMERATION("IOS.ContentSuggestions.ActionOnNTP",
+                              IOSContentSuggestionsActionType::kFeedCard);
+  }
+
   // TODO(crbug.com/1174088): Add card Index and the max number of suggestions.
   UMA_HISTOGRAM_EXACT_LINEAR(kDiscoverFeedURLOpened, 0, 1);
 }

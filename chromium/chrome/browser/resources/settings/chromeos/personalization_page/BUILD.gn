@@ -22,12 +22,11 @@ js_type_check("closure_compile_module") {
 js_library("change_picture") {
   deps = [
     ":change_picture_browser_proxy",
-    "..:deep_linking_behavior.m",
-    "..:metrics_recorder.m",
-    "..:os_route.m",
+    "..:deep_linking_behavior",
+    "..:metrics_recorder",
+    "..:os_route",
     "..:route_observer_behavior",
     "../..:router",
-    "//third_party/polymer/v3_0/components-chromium/iron-a11y-announcer:iron-a11y-announcer",
     "//third_party/polymer/v3_0/components-chromium/iron-selector:iron-selector",
     "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
     "//ui/webui/resources/cr_elements/chromeos/cr_picture:cr_picture_list",
@@ -40,6 +39,7 @@ js_library("change_picture") {
     "//ui/webui/resources/js:util.m",
     "//ui/webui/resources/js:web_ui_listener_behavior.m",
   ]
+  externs_list = [ "//ui/webui/resources/cr_elements/cr_a11y_announcer/cr_a11y_announcer_externs.js" ]
 }
 
 js_library("change_picture_browser_proxy") {
@@ -48,7 +48,7 @@ js_library("change_picture_browser_proxy") {
 
 js_library("dark_mode_subpage") {
   deps = [
-    "..:os_route.m",
+    "..:os_route",
     "..:prefs_behavior",
     "..:route_observer_behavior",
     "../..:router",
@@ -60,8 +60,8 @@ js_library("personalization_page") {
   deps = [
     ":personalization_hub_browser_proxy",
     ":wallpaper_browser_proxy",
-    "..:deep_linking_behavior.m",
-    "..:os_route.m",
+    "..:deep_linking_behavior",
+    "..:os_route",
     "..:route_observer_behavior",
     "../..:router",
     "../ambient_mode_page:ambient_mode_browser_proxy",

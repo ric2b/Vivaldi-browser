@@ -37,6 +37,7 @@ SANDBOX_POLICY_EXPORT extern const char kPrintCompositorSandbox[];
 SANDBOX_POLICY_EXPORT extern const char kAudioSandbox[];
 SANDBOX_POLICY_EXPORT extern const char kServiceSandbox[];
 SANDBOX_POLICY_EXPORT extern const char kServiceSandboxWithJit[];
+SANDBOX_POLICY_EXPORT extern const char kScreenAISandbox[];
 SANDBOX_POLICY_EXPORT extern const char kSpeechRecognitionSandbox[];
 SANDBOX_POLICY_EXPORT extern const char kVideoCaptureSandbox[];
 
@@ -52,8 +53,11 @@ SANDBOX_POLICY_EXPORT extern const char kWindowsSystemProxyResolverSandbox[];
 SANDBOX_POLICY_EXPORT extern const char kMirroringSandbox[];
 #endif  // BUILDFLAG(IS_MAC)
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_ASH)
 SANDBOX_POLICY_EXPORT extern const char kHardwareVideoDecodingSandbox[];
+#endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_ASH)
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 SANDBOX_POLICY_EXPORT extern const char kImeSandbox[];
 SANDBOX_POLICY_EXPORT extern const char kTtsSandbox[];
 #if BUILDFLAG(ENABLE_CROS_LIBASSISTANT)

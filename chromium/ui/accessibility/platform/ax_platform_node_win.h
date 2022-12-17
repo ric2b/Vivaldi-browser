@@ -381,6 +381,7 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
                         public IAccessibleTable,
                         public IAccessibleTable2,
                         public IAccessibleTableCell,
+                        public IAccessibleTextSelectionContainer,
                         public IAccessibleValue,
                         public IAnnotationProvider,
                         public IExpandCollapseProvider,
@@ -423,6 +424,7 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
     COM_INTERFACE_ENTRY(IAccessibleTable)
     COM_INTERFACE_ENTRY(IAccessibleTable2)
     COM_INTERFACE_ENTRY(IAccessibleTableCell)
+    COM_INTERFACE_ENTRY(IAccessibleTextSelectionContainer)
     COM_INTERFACE_ENTRY(IAccessibleValue)
     COM_INTERFACE_ENTRY(IChromeAccessible)
     COM_INTERFACE_ENTRY(IAnnotationProvider)
@@ -985,6 +987,16 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
   IFACEMETHODIMP get_table(IUnknown** table) override;
 
   //
+  // IAccessibleTextSelectionContainer methods.
+  //
+
+  IFACEMETHODIMP
+  get_selections(IA2TextSelection** selections, LONG* nSelections) override;
+
+  IFACEMETHODIMP setSelections(LONG nSelections,
+                               IA2TextSelection* selections) override;
+
+  //
   // IAccessibleHypertext methods not implemented.
   //
 
@@ -1134,22 +1146,19 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
   void GetRuntimeIdArray(RuntimeIdArray& runtime_id);
 
   // Updates the active composition range and fires UIA text edit event about
-  // composition (active or committed)
+  // composition (active or committed).
   void OnActiveComposition(const gfx::Range& range,
                            const std::u16string& active_composition_text,
                            bool is_composition_committed);
-  // Returns true if there is an active composition
+  // Returns true if there is an active composition.
   bool HasActiveComposition() const;
-  // Returns the start/end offsets of the active composition
+  // Returns the start/end offsets of the active composition.
   gfx::Range GetActiveCompositionOffsets() const;
-
-  // Helper to recursively find live-regions and fire a change event on them
-  void FireLiveRegionChangeRecursive();
 
   // Returns the first ancestor node that is accessible for UIA.
   AXPlatformNodeWin* GetLowestAccessibleElementForUIA();
 
-  // Returns the first |IsTextOnlyObject| descendant using
+  // Returns the first |IsTextOnlyObject| descendant using.
   // depth-first pre-order traversal.
   AXPlatformNodeWin* GetFirstTextOnlyDescendant();
 
@@ -1272,6 +1281,8 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
   bool ShouldNodeHaveFocusableState() const;
   int GetAnnotationTypeImpl() const;
   void AugmentNameWithImageAnnotationIfApplicable(std::wstring* name) const;
+
+  bool IsPlatformDocumentWithContent() const;
 
   // Get the value attribute as a Bstr, this means something different depending
   // on the type of element being queried. (e.g. kColorWell uses kColorValue).

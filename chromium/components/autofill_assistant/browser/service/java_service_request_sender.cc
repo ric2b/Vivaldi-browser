@@ -22,10 +22,12 @@ JavaServiceRequestSender::JavaServiceRequestSender(
     : jservice_request_sender_(jservice_request_sender) {}
 JavaServiceRequestSender::~JavaServiceRequestSender() = default;
 
-void JavaServiceRequestSender::SendRequest(const GURL& url,
-                                           const std::string& request_body,
-                                           ResponseCallback callback,
-                                           RpcType rpc_type) {
+void JavaServiceRequestSender::SendRequest(
+    const GURL& url,
+    const std::string& request_body,
+    ServiceRequestSender::AuthMode auth_mode,
+    ResponseCallback callback,
+    RpcType rpc_type) {
   DCHECK(!callback_)
       << __func__
       << " invoked while still waiting for response to previous request";
@@ -47,7 +49,8 @@ void JavaServiceRequestSender::OnResponse(
   if (jresponse) {
     base::android::JavaByteArrayToString(env, jresponse, &response);
   }
-  std::move(callback_).Run(http_status, response);
+  // Note: it is currently not necessary to mock the response info in ITs.
+  std::move(callback_).Run(http_status, response, ResponseInfo{});
 }
 
 }  // namespace autofill_assistant

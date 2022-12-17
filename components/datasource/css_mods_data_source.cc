@@ -9,11 +9,13 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_restrictions.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/datasource/vivaldi_data_url_utils.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 void CSSModsDataClassHandler::GetData(
@@ -65,9 +67,9 @@ CSSModsDataClassHandler::GetDataForIdOnBlockingThread(base::FilePath dir_path,
       // in our app, investigate if and how it can be done.
       std::string import_statement =
           base::StringPrintf("@import url('%s');\n",
-#if defined(OS_POSIX)
+#if BUILDFLAG(IS_POSIX)
                              path.BaseName().value().c_str()
-#elif defined(OS_WIN)
+#elif BUILDFLAG(IS_WIN)
                              base::WideToUTF8(path.BaseName().value()).c_str()
 #endif
           );

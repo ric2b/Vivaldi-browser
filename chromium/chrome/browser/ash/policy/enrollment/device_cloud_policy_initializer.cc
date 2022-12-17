@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "ash/components/cryptohome/cryptohome_parameters.h"
+#include "ash/components/tpm/install_attributes.h"
 #include "ash/constants/ash_switches.h"
 #include "base/bind.h"
 #include "base/logging.h"
@@ -24,7 +25,6 @@
 #include "chrome/common/chrome_content_client.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/system/statistics_provider.h"
-#include "chromeos/tpm/install_attributes.h"
 #include "components/policy/core/common/cloud/cloud_policy_core.h"
 #include "components/policy/core/common/cloud/device_management_service.h"
 #include "components/prefs/pref_service.h"
@@ -44,7 +44,7 @@ std::string GetString(const base::Value& dict, base::StringPiece key) {
 DeviceCloudPolicyInitializer::DeviceCloudPolicyInitializer(
     PrefService* local_state,
     DeviceManagementService* enterprise_service,
-    chromeos::InstallAttributes* install_attributes,
+    ash::InstallAttributes* install_attributes,
     ServerBackedStateKeysBroker* state_keys_broker,
     DeviceCloudPolicyStoreAsh* policy_store,
     DeviceCloudPolicyManagerAsh* policy_manager,
@@ -173,13 +173,13 @@ EnrollmentConfig DeviceCloudPolicyInitializer::GetPrescribedEnrollmentConfig()
   }
 
   if (license_type == kDeviceStateLicenseTypeEnterprise) {
-    config.license_type = EnrollmentConfig::LicenseType::kEnterprise;
+    config.license_type = LicenseType::kEnterprise;
   } else if (license_type == kDeviceStateLicenseTypeEducation) {
-    config.license_type = EnrollmentConfig::LicenseType::kEducation;
+    config.license_type = LicenseType::kEducation;
   } else if (license_type == kDeviceStateLicenseTypeTerminal) {
-    config.license_type = EnrollmentConfig::LicenseType::kTerminal;
+    config.license_type = LicenseType::kTerminal;
   } else {
-    config.license_type = EnrollmentConfig::LicenseType::kNone;
+    config.license_type = LicenseType::kNone;
   }
 
   const bool pref_enrollment_auto_start_present =
@@ -275,6 +275,15 @@ void DeviceCloudPolicyInitializer::TryToStartConnection() {
     return;
   }
 
+  if (!policy_store_->is_initialized() || !policy_store_->has_policy()) {
+    return;
+  }
+
+  if (!policy_manager_store_ready_notified_) {
+    policy_manager_store_ready_notified_ = true;
+    policy_manager_->OnPolicyStoreReady(install_attributes_);
+  }
+
   // TODO(crbug.com/1304636): Move this and all other checks from here to a
   // separate method.
   if (!policy_manager_->HasSchemaRegistry()) {
@@ -291,10 +300,10 @@ void DeviceCloudPolicyInitializer::TryToStartConnection() {
   // policy on state keys being available on reven.
   // TODO(b/208705225): Remove this special case when reven supports state keys.
   const bool allow_init_without_state_keys = ash::switches::IsRevenBranding();
+
   // TODO(b/181140445): If we had a separate state keys upload request to DM
   // Server we could drop the `state_keys_broker_->available()` requirement.
-  if (policy_store_->is_initialized() && policy_store_->has_policy() &&
-      (allow_init_without_state_keys || state_keys_broker_->available())) {
+  if (allow_init_without_state_keys || state_keys_broker_->available()) {
     StartConnection(CreateClient(enterprise_service_));
   }
 }

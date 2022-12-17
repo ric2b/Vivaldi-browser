@@ -543,8 +543,9 @@ void KeywordProvider::FillInURLAndContents(
     TemplateURLRef::SearchTermsArgs search_terms_args(remaining_input);
     search_terms_args.append_extra_query_params_from_command_line =
         element == GetTemplateURLService()->GetDefaultSearchProvider();
+    match->post_content = std::make_unique<TemplateURLRef::PostContent>();
     match->destination_url = GURL(element_ref.ReplaceSearchTerms(
-        search_terms_args, GetTemplateURLService()->search_terms_data()));
+        search_terms_args, GetTemplateURLService()->search_terms_data(), match->post_content.get()));
     match->contents = remaining_input;
     match->contents_class.emplace_back(0, ACMatchClassification::NONE);
   }

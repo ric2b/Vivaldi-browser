@@ -52,7 +52,7 @@ class TabContentsSyncedTabDelegate : public sync_sessions::SyncedTabDelegate {
   int64_t GetParentTaskIdForNavigationId(int nav_id) const override;
   int64_t GetRootTaskIdForNavigationId(int nav_id) const override;
 
-  std::string GetExtData() const override;
+  std::string GetVivExtData() const override;
 
  protected:
   const content::WebContents* web_contents() const;

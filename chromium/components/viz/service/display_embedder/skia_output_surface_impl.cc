@@ -12,7 +12,9 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/no_destructor.h"
+#include "base/observer_list.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/system/sys_info.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
@@ -28,6 +30,7 @@
 #include "components/viz/service/display_embedder/image_context_impl.h"
 #include "components/viz/service/display_embedder/skia_output_surface_dependency.h"
 #include "components/viz/service/display_embedder/skia_output_surface_impl_on_gpu.h"
+#include "gpu/command_buffer/common/gpu_memory_buffer_support.h"
 #include "gpu/command_buffer/common/swap_buffers_complete_params.h"
 #include "gpu/command_buffer/service/scheduler.h"
 #include "gpu/command_buffer/service/shared_image_factory.h"
@@ -115,7 +118,7 @@ void SkiaOutputSurfaceImpl::FrameBufferDamageTracker::SwappedWithDamage(
     const gfx::Rect& damage) {
   damage_between_frames_.push_back(damage);
   // Keep at most `number_of_buffers_` frames.
-  if (damage_between_frames_.size() >= number_of_buffers_) {
+  if (damage_between_frames_.size() > number_of_buffers_) {
     damage_between_frames_.pop_front();
   }
   cached_current_damage_.reset();
@@ -143,14 +146,17 @@ SkiaOutputSurfaceImpl::FrameBufferDamageTracker::GetCurrentFrameBufferDamage()
 
 gfx::Rect SkiaOutputSurfaceImpl::FrameBufferDamageTracker::
     ComputeCurrentFrameBufferDamage() const {
-  // First few frames after `FrameBuffersChanged`.
-  if (damage_between_frames_.size() < number_of_buffers_ - 1) {
+  // First `number_of_buffers_` frames has full frame damage.
+  if (damage_between_frames_.size() < number_of_buffers_) {
     return gfx::Rect(frame_buffer_size_);
   }
 
+  // Subsequent frames has `number_of_buffers_ - 1` frames of incremental
+  // damange unioned. Note index 0 is specifically skipped over its the damage
+  // that's last drawn into that's drawn into the current frame buffer.
   gfx::Rect result;
-  for (auto& damage : damage_between_frames_) {
-    result.Union(damage);
+  for (size_t i = 1; i < damage_between_frames_.size(); ++i) {
+    result.Union(damage_between_frames_[i]);
   }
   return result;
 }
@@ -182,10 +188,11 @@ SkiaOutputSurfaceImpl::SkiaOutputSurfaceImpl(
       renderer_settings_(renderer_settings),
       debug_settings_(debug_settings),
       display_compositor_controller_(display_controller),
-      gpu_task_scheduler_(
-          display_compositor_controller_->gpu_task_scheduler()) {
+      gpu_task_scheduler_(display_compositor_controller_->gpu_task_scheduler()),
+      is_using_raw_draw_(features::IsUsingRawDraw()),
+      is_raw_draw_using_msaa_(features::IsRawDrawUsingMSAA()) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  if (features::IsUsingRawDraw()) {
+  if (is_using_raw_draw_) {
     auto* manager = dependency_->GetSharedImageManager();
     DCHECK(manager->is_thread_safe());
     representation_factory_ =
@@ -300,23 +307,39 @@ void SkiaOutputSurfaceImpl::Reshape(const gfx::Size& size,
     frame_buffer_damage_tracker_->FrameBuffersChanged(size);
   }
 
+  if (is_using_raw_draw_ && is_raw_draw_using_msaa_) {
+    if (base::SysInfo::IsLowEndDevice()) {
+      // On "low-end" devices use 4 samples per pixel to save memory.
+      sample_count_ = 4;
+    } else {
+      sample_count_ = device_scale_factor >= 2.0f ? 4 : 8;
+    }
+  } else {
+    sample_count_ = 1;
+  }
+
+  const auto format_index = static_cast<int>(format);
+  const auto& color_type = capabilities_.sk_color_types[format_index];
+  DCHECK(color_type != kUnknown_SkColorType)
+      << "SkColorType is invalid for buffer format_index: " << format_index;
+
+  auto sk_color_space = color_space.ToSkColorSpace();
+  characterization_ = CreateSkSurfaceCharacterization(
+      size, color_type, /*mipmap=*/false, std::move(sk_color_space),
+      /*is_root_render_pass=*/true, /*is_overlay=*/false);
+
   // impl_on_gpu_ is released on the GPU thread by a posted task from
   // SkiaOutputSurfaceImpl::dtor. So it is safe to use base::Unretained.
-  auto task = base::BindOnce(&SkiaOutputSurfaceImplOnGpu::Reshape,
-                             base::Unretained(impl_on_gpu_.get()), size,
-                             device_scale_factor, color_space, format,
-                             use_stencil, GetDisplayTransform());
+  auto task =
+      base::BindOnce(&SkiaOutputSurfaceImplOnGpu::Reshape,
+                     base::Unretained(impl_on_gpu_.get()), characterization_,
+                     color_space, device_scale_factor, GetDisplayTransform());
   EnqueueGpuTask(std::move(task), {}, /*make_current=*/true,
                  /*need_framebuffer=*/!dependency_->IsOffscreen());
   FlushGpuTasks(SyncMode::kNoWait);
 
-  color_space_ = color_space;
-  is_hdr_ = color_space_.IsHDR();
   size_ = size;
   format_ = format;
-  characterization_ = CreateSkSurfaceCharacterization(
-      size, format, false /* mipmap */, color_space_.ToSkColorSpace(),
-      true /* is_root_render_pass */);
   RecreateRootRecorder();
 }
 
@@ -367,9 +390,10 @@ SkCanvas* SkiaOutputSurfaceImpl::BeginPaintCurrentFrame() {
   nway_canvas_->addCanvas(current_paint_->recorder()->getCanvas());
 
   SkSurfaceCharacterization characterization = CreateSkSurfaceCharacterization(
-      gfx::Size(characterization_.width(), characterization_.height()), format_,
-      false /* mipmap */, characterization_.refColorSpace(),
-      false /* is_root_render_pass */);
+      gfx::Size(characterization_.width(), characterization_.height()),
+      characterization_.colorType(),
+      /*mipmap=*/false, characterization_.refColorSpace(),
+      /*is_root_render_pass=*/false, /*is_overlay=*/false);
   if (characterization.isValid()) {
     overdraw_surface_recorder_.emplace(characterization);
     overdraw_canvas_.emplace((overdraw_surface_recorder_->getCanvas()));
@@ -516,37 +540,18 @@ void SkiaOutputSurfaceImpl::SwapBuffers(OutputSurfaceFrame frame) {
   // If current_buffer_modified_ is false, it means SkiaRenderer doesn't draw
   // anything for current frame. So this SwapBuffer() must be a empty swap, so
   // the previous buffer will be used for this frame.
-  idle_drop_frame_buffer_timer_.Stop();
   if (frame_buffer_damage_tracker_ && current_buffer_modified_) {
     gfx::Rect damage_rect =
         frame.sub_buffer_rect ? *frame.sub_buffer_rect : gfx::Rect(size_);
     frame_buffer_damage_tracker_->SwappedWithDamage(damage_rect);
   }
-  pending_swaps_.push_back(current_buffer_modified_);
   current_buffer_modified_ = false;
-
-  int available_buffers_lower_bound = AvailableBuffersLowerBound();
-  if (available_buffers_lower_bound > 0) {
-    consecutive_frames_with_extra_buffer_++;
-  } else {
-    consecutive_frames_with_extra_buffer_ = 0;
-  }
-
-  constexpr int kFreeBufferThreshold = 10;
-  bool release_one_buffer =
-      capabilities_.use_dynamic_frame_buffer_allocation &&
-      consecutive_frames_with_extra_buffer_ > kFreeBufferThreshold &&
-      available_buffers_lower_bound > 0;
-  if (release_one_buffer) {
-    consecutive_frames_with_extra_buffer_ = 0;
-    num_allocated_buffers_--;
-  }
 
   // impl_on_gpu_ is released on the GPU thread by a posted task from
   // SkiaOutputSurfaceImpl::dtor. So it is safe to use base::Unretained.
-  auto callback = base::BindOnce(&SkiaOutputSurfaceImplOnGpu::SwapBuffers,
-                                 base::Unretained(impl_on_gpu_.get()),
-                                 std::move(frame), release_one_buffer);
+  auto callback =
+      base::BindOnce(&SkiaOutputSurfaceImplOnGpu::SwapBuffers,
+                     base::Unretained(impl_on_gpu_.get()), std::move(frame));
   EnqueueGpuTask(std::move(callback), std::move(resource_sync_tokens_),
                  /*make_current=*/true,
                  /*need_framebuffer=*/!dependency_->IsOffscreen());
@@ -605,9 +610,11 @@ SkCanvas* SkiaOutputSurfaceImpl::BeginPaintRenderPass(
   DCHECK(!current_paint_);
   DCHECK(resource_sync_tokens_.empty());
 
+  SkColorType color_type =
+      ResourceFormatToClosestSkColorType(true /* gpu_compositing */, format);
   SkSurfaceCharacterization characterization = CreateSkSurfaceCharacterization(
-      surface_size, BufferFormat(format), mipmap, std::move(color_space),
-      false /* is_root_render_pass */);
+      surface_size, color_type, mipmap, std::move(color_space),
+      /*is_root_render_pass=*/false, /*is_overlay=*/false);
   if (!characterization.isValid())
     return nullptr;
 
@@ -624,10 +631,11 @@ SkCanvas* SkiaOutputSurfaceImpl::BeginPaintRenderPassOverlay(
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   // Make sure there is no unsubmitted PaintFrame or PaintRenderPass.
   DCHECK(!current_paint_);
-
+  SkColorType color_type =
+      ResourceFormatToClosestSkColorType(true /* gpu_compositing */, format);
   SkSurfaceCharacterization characterization = CreateSkSurfaceCharacterization(
-      size, BufferFormat(format), mipmap, std::move(color_space),
-      true /* is_root_render_pass */);
+      size, color_type, mipmap, std::move(color_space),
+      /*is_root_render_pass=*/false, /*is_overlay=*/true);
   if (!characterization.isValid())
     return nullptr;
 
@@ -675,10 +683,6 @@ void SkiaOutputSurfaceImpl::EndPaint(base::OnceClosure on_finished) {
     EnqueueGpuTask(std::move(task), std::move(resource_sync_tokens_),
                    /*make_current=*/true, /*need_framebuffer=*/false);
   } else {
-    bool allocate_new_buffer = ShouldCreateNewBufferForNextSwap();
-    if (allocate_new_buffer)
-      num_allocated_buffers_++;
-
     // Draw on the root render pass.
     current_buffer_modified_ = true;
     sk_sp<SkDeferredDisplayList> overdraw_ddl;
@@ -694,8 +698,7 @@ void SkiaOutputSurfaceImpl::EndPaint(base::OnceClosure on_finished) {
         &SkiaOutputSurfaceImplOnGpu::FinishPaintCurrentFrame,
         base::Unretained(impl_on_gpu_.get()), std::move(ddl),
         std::move(overdraw_ddl), std::move(images_in_current_paint_),
-        resource_sync_tokens_, std::move(on_finished), draw_rectangle_,
-        allocate_new_buffer);
+        resource_sync_tokens_, std::move(on_finished), draw_rectangle_);
     EnqueueGpuTask(std::move(task), std::move(resource_sync_tokens_),
                    /*make_current=*/true, /*need_framebuffer=*/true);
     draw_rectangle_.reset();
@@ -782,7 +785,7 @@ void SkiaOutputSurfaceImpl::CopyOutput(
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   if (request->has_blit_request()) {
-    for (const auto& mailbox_holder : request->blit_request().mailboxes) {
+    for (const auto& mailbox_holder : request->blit_request().mailboxes()) {
       if (mailbox_holder.sync_token.HasData()) {
         resource_sync_tokens_.push_back(mailbox_holder.sync_token);
       }
@@ -924,10 +927,11 @@ void SkiaOutputSurfaceImpl::InitializeOnGpuThread(
 SkSurfaceCharacterization
 SkiaOutputSurfaceImpl::CreateSkSurfaceCharacterization(
     const gfx::Size& surface_size,
-    gfx::BufferFormat format,
+    SkColorType color_type,
     bool mipmap,
     sk_sp<SkColorSpace> color_space,
-    bool is_root_render_pass) {
+    bool is_root_render_pass,
+    bool is_overlay) {
   if (!gr_context_thread_safe_) {
     DLOG(ERROR) << "gr_context_thread_safe_ is null.";
     return SkSurfaceCharacterization();
@@ -936,15 +940,22 @@ SkiaOutputSurfaceImpl::CreateSkSurfaceCharacterization(
   auto cache_max_resource_bytes = impl_on_gpu_->max_resource_cache_bytes();
   SkSurfaceProps surface_props{0, kUnknown_SkPixelGeometry};
   if (is_root_render_pass) {
-    const auto format_index = static_cast<int>(format);
-    const auto& color_type = capabilities_.sk_color_types[format_index];
-    const auto backend_format = gr_context_thread_safe_->defaultBackendFormat(
+    DCHECK(!is_overlay);
+    int sample_count = std::min(
+        sample_count_,
+        gr_context_thread_safe_->maxSurfaceSampleCountForColorType(color_type));
+    auto backend_format = gr_context_thread_safe_->defaultBackendFormat(
         color_type, GrRenderable::kYes);
-    DCHECK(color_type != kUnknown_SkColorType)
-        << "SkColorType is invalid for buffer format_index: " << format_index;
+#if BUILDFLAG(IS_MAC)
+    DCHECK_EQ(dependency_->gr_context_type(), gpu::GrContextType::kGL);
+    // For root rander pass, IOSurface will be used, and we may need using
+    // GL_TEXTURE_RECTANGLE_ARB as texture target.
+    backend_format =
+        GrBackendFormat::MakeGL(backend_format.asGLFormatEnum(),
+                                gpu::GetPlatformSpecificTextureTarget());
+#endif
     DCHECK(backend_format.isValid())
-        << "GrBackendFormat is invalid for buffer format_index: "
-        << format_index;
+        << "GrBackendFormat is invalid for color_type: " << color_type;
     auto surface_origin =
         capabilities_.output_surface_origin == gfx::SurfaceOrigin::kBottomLeft
             ? kBottomLeft_GrSurfaceOrigin
@@ -955,18 +966,24 @@ SkiaOutputSurfaceImpl::CreateSkSurfaceCharacterization(
     DCHECK((capabilities_.uses_default_gl_framebuffer &&
             dependency_->gr_context_type() == gpu::GrContextType::kGL) ||
            !capabilities_.uses_default_gl_framebuffer);
+    // Skia doesn't support set desired MSAA count for default gl framebuffer.
+    if (capabilities_.uses_default_gl_framebuffer)
+      sample_count = 1;
+    bool is_textureable =
+        !capabilities_.uses_default_gl_framebuffer &&
+        !capabilities_.root_is_vulkan_secondary_command_buffer;
     auto characterization = gr_context_thread_safe_->createCharacterization(
-        cache_max_resource_bytes, image_info, backend_format,
-        0 /* sampleCount */, surface_origin, surface_props, mipmap,
-        capabilities_.uses_default_gl_framebuffer, false /* isTextureable */,
-        GrProtected::kNo, false /* vkRTSupportsInputAttachment */,
+        cache_max_resource_bytes, image_info, backend_format, sample_count,
+        surface_origin, surface_props, mipmap,
+        capabilities_.uses_default_gl_framebuffer, is_textureable,
+        GrProtected::kNo, /*vkRTSupportsInputAttachment=*/false,
         capabilities_.root_is_vulkan_secondary_command_buffer);
 #if BUILDFLAG(ENABLE_VULKAN)
     VkFormat vk_format = VK_FORMAT_UNDEFINED;
 #endif
     LOG_IF(DFATAL, !characterization.isValid())
         << "\n  surface_size=" << surface_size.ToString()
-        << "\n  format=" << static_cast<int>(format)
+        << "\n  format=" << static_cast<int>(color_type)
         << "\n  color_type=" << static_cast<int>(color_type)
         << "\n  backend_format.isValid()=" << backend_format.isValid()
         << "\n  backend_format.backend()="
@@ -979,25 +996,36 @@ SkiaOutputSurfaceImpl::CreateSkSurfaceCharacterization(
         << "\n  backend_format.asVkFormat() vk_format="
         << static_cast<int>(vk_format)
 #endif
+        << "\n  sample_count=" << sample_count
         << "\n  surface_origin=" << static_cast<int>(surface_origin)
         << "\n  willGlFBO0=" << capabilities_.uses_default_gl_framebuffer;
     return characterization;
   }
 
-  auto resource_format = GetResourceFormat(format);
-  auto color_type = ResourceFormatToClosestSkColorType(
-      true /* gpu_compositing */, resource_format);
+  const int sample_count = std::min(
+      sample_count_,
+      gr_context_thread_safe_->maxSurfaceSampleCountForColorType(color_type));
   auto backend_format = gr_context_thread_safe_->defaultBackendFormat(
       color_type, GrRenderable::kYes);
   DCHECK(backend_format.isValid());
+#if BUILDFLAG(IS_MAC)
+  if (is_overlay) {
+    DCHECK_EQ(dependency_->gr_context_type(), gpu::GrContextType::kGL);
+    // For overlay, IOSurface will be used, and we may need using
+    // GL_TEXTURE_RECTANGLE_ARB as texture target.
+    backend_format =
+        GrBackendFormat::MakeGL(backend_format.asGLFormatEnum(),
+                                gpu::GetPlatformSpecificTextureTarget());
+  }
+#endif
   auto image_info =
       SkImageInfo::Make(surface_size.width(), surface_size.height(), color_type,
                         kPremul_SkAlphaType, std::move(color_space));
 
   auto characterization = gr_context_thread_safe_->createCharacterization(
-      cache_max_resource_bytes, image_info, backend_format, 0 /* sampleCount */,
+      cache_max_resource_bytes, image_info, backend_format, sample_count,
       kTopLeft_GrSurfaceOrigin, surface_props, mipmap,
-      false /* willUseGLFBO0 */, true /* isTextureable */, GrProtected::kNo);
+      /*willUseGLFBO0=*/false, /*isTextureable=*/true, GrProtected::kNo);
   DCHECK(characterization.isValid());
   return characterization;
 }
@@ -1016,8 +1044,6 @@ void SkiaOutputSurfaceImpl::DidSwapBuffersComplete(
     if (frame_buffer_damage_tracker_)
       frame_buffer_damage_tracker_->FrameBuffersChanged(size_);
   }
-
-  pending_swaps_.pop_front();
 
   if (use_damage_area_from_skia_output_device_) {
     damage_of_current_buffer_ = params.frame_buffer_damage_area;
@@ -1043,12 +1069,15 @@ void SkiaOutputSurfaceImpl::BufferPresented(
   DCHECK(client_);
   client_->DidReceivePresentationFeedback(feedback);
   if (update_vsync_parameters_callback_ &&
-      feedback.flags & gfx::PresentationFeedback::kVSync) {
+      (feedback.flags & gfx::PresentationFeedback::kVSync ||
+       refresh_interval_ != feedback.interval)) {
     // TODO(brianderson): We should not be receiving 0 intervals.
     update_vsync_parameters_callback_.Run(
         feedback.timestamp, feedback.interval.is_zero()
                                 ? BeginFrameArgs::DefaultInterval()
                                 : feedback.interval);
+    // Update |refresh_interval_|, so we only update when interval is changed.
+    refresh_interval_ = feedback.interval;
   }
 }
 
@@ -1251,54 +1280,6 @@ gpu::SharedImageInterface* SkiaOutputSurfaceImpl::GetSharedImageInterface() {
   return display_compositor_controller_->shared_image_interface();
 }
 
-void SkiaOutputSurfaceImpl::OnObservingBeginFrameSourceChanged(bool observing) {
-  if (!capabilities_.use_dynamic_frame_buffer_allocation)
-    return;
-  idle_drop_frame_buffer_timer_.Stop();
-  if (observing) {
-    if (size_.IsEmpty())
-      return;
-
-    int num_new_buffers =
-        num_preallocate_frame_buffer_ - num_allocated_buffers_;
-    num_preallocate_frame_buffer_ = 0;
-    if (num_new_buffers <= 0)
-      return;
-    num_allocated_buffers_ += num_new_buffers;
-    if (frame_buffer_damage_tracker_)
-      frame_buffer_damage_tracker_->FrameBuffersChanged(size_);
-    gpu_task_scheduler_->ScheduleOrRetainGpuTask(
-        base::BindOnce(&SkiaOutputSurfaceImplOnGpu::AllocateFrameBuffers,
-                       base::Unretained(impl_on_gpu_.get()), num_new_buffers),
-        {});
-    return;
-  }
-
-  if (num_allocated_buffers_ <= 1)
-    return;
-
-  constexpr base::TimeDelta kDropFrameBufferDelay = base::Seconds(5);
-  idle_drop_frame_buffer_timer_.Start(
-      FROM_HERE, kDropFrameBufferDelay,
-      base::BindOnce(
-          [](SkiaOutputSurfaceImpl* self) {
-            int available_buffers_lower_bound =
-                self->AvailableBuffersLowerBound();
-            if (available_buffers_lower_bound > 0) {
-              self->num_preallocate_frame_buffer_ =
-                  self->num_allocated_buffers_;
-              self->num_allocated_buffers_ -= available_buffers_lower_bound;
-              self->gpu_task_scheduler_->ScheduleOrRetainGpuTask(
-                  base::BindOnce(
-                      &SkiaOutputSurfaceImplOnGpu::ReleaseFrameBuffers,
-                      base::Unretained(self->impl_on_gpu_.get()),
-                      available_buffers_lower_bound),
-                  {});
-            }
-          },
-          base::Unretained(this)));
-}
-
 void SkiaOutputSurfaceImpl::AddContextLostObserver(
     ContextLostObserver* observer) {
   observers_.AddObserver(observer);
@@ -1323,6 +1304,29 @@ gpu::SyncToken SkiaOutputSurfaceImpl::Flush() {
   return sync_token;
 }
 
+bool SkiaOutputSurfaceImpl::EnsureMinNumberOfBuffers(int n) {
+  DCHECK(capabilities_.supports_dynamic_frame_buffer_allocation);
+  DCHECK_GT(n, 0);
+  DCHECK_LE(n, capabilities_.number_of_buffers);
+
+  if (cached_number_of_buffers_ >= n)
+    return false;
+
+  cached_number_of_buffers_ = n;
+  if (frame_buffer_damage_tracker_) {
+    frame_buffer_damage_tracker_->FrameBuffersChanged(size_);
+  }
+
+  auto task =
+      base::BindOnce(&SkiaOutputSurfaceImplOnGpu::EnsureMinNumberOfBuffers,
+                     base::Unretained(impl_on_gpu_.get()), n);
+  EnqueueGpuTask(std::move(task), std::vector<gpu::SyncToken>(),
+                 /*make_current=*/true,
+                 /*need_framebuffer=*/false);
+  FlushGpuTasks(SyncMode::kNoWait);
+  return true;
+}
+
 void SkiaOutputSurfaceImpl::ContextLost() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DLOG(ERROR) << "SkiaOutputSurfaceImpl::ContextLost()";
@@ -1339,11 +1343,6 @@ gfx::Rect SkiaOutputSurfaceImpl::GetCurrentFramebufferDamage() const {
 
   if (!frame_buffer_damage_tracker_) {
     return gfx::Rect();
-  }
-
-  // Allocating brand new buffer, so need to draw whole frame.
-  if (ShouldCreateNewBufferForNextSwap()) {
-    return gfx::Rect(size_);
   }
 
   return frame_buffer_damage_tracker_->GetCurrentFrameBufferDamage();
@@ -1372,23 +1371,6 @@ void SkiaOutputSurfaceImpl::InitDelegatedInkPointRendererReceiver(
       base::Unretained(impl_on_gpu_.get()), std::move(pending_receiver));
   EnqueueGpuTask(std::move(task), {}, /*make_current=*/false,
                  /*need_framebuffer=*/false);
-}
-
-int SkiaOutputSurfaceImpl::AvailableBuffersLowerBound() const {
-  // Up to 1 buffer may be held for display, and each pending swap with damage
-  // can use up to 1 buffer. Note the result can be negative.
-  int pending_swaps_with_damage = 0;
-  for (bool has_damage : pending_swaps_) {
-    if (has_damage)
-      pending_swaps_with_damage++;
-  }
-  return num_allocated_buffers_ - 1 - pending_swaps_with_damage;
-}
-
-bool SkiaOutputSurfaceImpl::ShouldCreateNewBufferForNextSwap() const {
-  return capabilities_.use_dynamic_frame_buffer_allocation &&
-         AvailableBuffersLowerBound() <= 0 &&
-         num_allocated_buffers_ < capabilities_.number_of_buffers;
 }
 
 }  // namespace viz

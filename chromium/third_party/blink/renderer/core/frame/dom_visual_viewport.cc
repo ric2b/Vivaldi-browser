@@ -27,10 +27,12 @@
 
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
+#include "third_party/blink/renderer/core/event_target_names.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
+#include "third_party/blink/renderer/core/geometry/dom_rect.h"
 #include "third_party/blink/renderer/core/layout/adjust_for_absolute_zoom.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
@@ -59,7 +61,7 @@ ExecutionContext* DOMVisualViewport::GetExecutionContext() const {
 
 float DOMVisualViewport::offsetLeft() const {
   LocalFrame* frame = window_->GetFrame();
-  if (!frame || !frame->IsMainFrame())
+  if (!frame || !frame->IsOutermostMainFrame())
     return 0;
 
   if (Page* page = frame->GetPage())
@@ -70,7 +72,7 @@ float DOMVisualViewport::offsetLeft() const {
 
 float DOMVisualViewport::offsetTop() const {
   LocalFrame* frame = window_->GetFrame();
-  if (!frame || !frame->IsMainFrame())
+  if (!frame || !frame->IsOutermostMainFrame())
     return 0;
 
   if (Page* page = frame->GetPage())
@@ -112,6 +114,10 @@ float DOMVisualViewport::pageTop() const {
   if (!view || !view->LayoutViewport())
     return 0;
 
+  // TODO(bokan): This is wrong for iframes, we shouldn't be adding the visual
+  // viewport offset from the page to the iframe's scroll offset.
+  // https://crbug.com/1313970.
+
   frame->GetDocument()->UpdateStyleAndLayout(DocumentUpdateReason::kJavaScript);
   float viewport_y = page->GetVisualViewport().GetScrollOffset().y() +
                      view->LayoutViewport()->GetScrollOffset().y();
@@ -124,7 +130,7 @@ double DOMVisualViewport::width() const {
   if (!frame)
     return 0;
 
-  if (!frame->IsMainFrame()) {
+  if (!frame->IsOutermostMainFrame()) {
     // Update layout to ensure scrollbars are up-to-date.
     frame->GetDocument()->UpdateStyleAndLayout(
         DocumentUpdateReason::kJavaScript);
@@ -146,7 +152,7 @@ double DOMVisualViewport::height() const {
   if (!frame)
     return 0;
 
-  if (!frame->IsMainFrame()) {
+  if (!frame->IsOutermostMainFrame()) {
     // Update layout to ensure scrollbars are up-to-date.
     frame->GetDocument()->UpdateStyleAndLayout(
         DocumentUpdateReason::kJavaScript);
@@ -168,7 +174,7 @@ double DOMVisualViewport::scale() const {
   if (!frame)
     return 0;
 
-  if (!frame->IsMainFrame())
+  if (!frame->IsOutermostMainFrame())
     return 1;
 
   if (Page* page = window_->GetFrame()->GetPage())
@@ -180,7 +186,7 @@ double DOMVisualViewport::scale() const {
 absl::optional<HeapVector<Member<DOMRect>>> DOMVisualViewport::segments()
     const {
   LocalFrame* frame = window_->GetFrame();
-  if (!frame || !frame->IsMainFrame())
+  if (!frame || !frame->IsOutermostMainFrame())
     return absl::nullopt;
 
   WebVector<gfx::Rect> web_segments =
@@ -195,9 +201,9 @@ absl::optional<HeapVector<Member<DOMRect>>> DOMVisualViewport::segments()
   // frame/widget. This doesn't take the page's zoom factor into account so we
   // must scale by the inverse of the page zoom in order to get correct client
   // coordinates.
-  // Note that when use-zoom-for-dsf is enabled, WindowToViewportScalar will
-  // be the device scale factor, and PageZoomFactor will be the combination
-  // of the device scale factor and the zoom percent of the page.
+  // WindowToViewportScalar is the device scale factor, and PageZoomFactor is
+  // the combination of the device scale factor and the zoom percent of the
+  // page.
   HeapVector<Member<DOMRect>> viewport_segments;
   const float dips_to_blink =
       frame->GetWidgetForLocalRoot()->DIPsToBlinkSpace(1.0f);

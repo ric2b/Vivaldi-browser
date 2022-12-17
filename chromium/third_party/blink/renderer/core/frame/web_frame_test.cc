@@ -28,15 +28,12 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "third_party/blink/public/web/web_frame.h"
-
 #include <initializer_list>
 #include <limits>
 #include <memory>
 #include <tuple>
 
 #include "base/callback_helpers.h"
-#include "base/cxx17_backports.h"
 #include "base/strings/stringprintf.h"
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
@@ -87,6 +84,7 @@
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_document_loader.h"
 #include "third_party/blink/public/web/web_form_element.h"
+#include "third_party/blink/public/web/web_frame.h"
 #include "third_party/blink/public/web/web_frame_widget.h"
 #include "third_party/blink/public/web/web_history_item.h"
 #include "third_party/blink/public/web/web_local_frame.h"
@@ -859,7 +857,7 @@ TEST_F(WebFrameTest, RequestExecuteV8Function) {
       ->MainFrame()
       ->ToWebLocalFrame()
       ->RequestExecuteV8Function(context, function, v8::Undefined(isolate),
-                                 base::size(args), args, &callback_helper);
+                                 std::size(args), args, &callback_helper);
   RunPendingTasks();
   EXPECT_TRUE(callback_helper.DidComplete());
   EXPECT_EQ("hello", callback_helper.SingleStringValue());
@@ -1751,19 +1749,10 @@ TEST_F(WebFrameTest, DeviceScaleFactorUsesDefaultWithoutViewportTag) {
       ->SetDeviceScaleFactorForTesting(2.f);
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
 
-  if (Platform::Current()->IsUseZoomForDSFEnabled()) {
-    EXPECT_EQ(
-        1,
-        web_view_helper.GetWebView()->GetPage()->DeviceScaleFactorDeprecated());
-    auto* frame =
-        To<LocalFrame>(web_view_helper.GetWebView()->GetPage()->MainFrame());
-    DCHECK(frame);
-    EXPECT_EQ(2, frame->DevicePixelRatio());
-  } else {
-    EXPECT_EQ(
-        2,
-        web_view_helper.GetWebView()->GetPage()->DeviceScaleFactorDeprecated());
-  }
+  auto* frame =
+      To<LocalFrame>(web_view_helper.GetWebView()->GetPage()->MainFrame());
+  DCHECK(frame);
+  EXPECT_EQ(2, frame->DevicePixelRatio());
 
   // Device scale factor should be independent of page scale.
   web_view_helper.GetWebView()->SetDefaultPageScaleLimits(1, 2);
@@ -2184,14 +2173,14 @@ TEST_F(WebFrameTest, SmallPermanentInitialPageScaleFactorIsClobbered) {
       "viewport-auto-initial-scale.html",
       "viewport-target-densitydpi-device-and-fixed-width.html"};
   float page_scale_factors[] = {0.5f, 1.0f};
-  for (size_t i = 0; i < base::size(pages); ++i)
+  for (size_t i = 0; i < std::size(pages); ++i)
     RegisterMockedHttpURLLoad(pages[i]);
 
   int viewport_width = 400;
   int viewport_height = 300;
   float enforced_page_scale_factor = 0.75f;
 
-  for (size_t i = 0; i < base::size(pages); ++i) {
+  for (size_t i = 0; i < std::size(pages); ++i) {
     for (int quirk_enabled = 0; quirk_enabled <= 1; ++quirk_enabled) {
       frame_test_helpers::WebViewHelper web_view_helper;
       web_view_helper.InitializeAndLoad(base_url_ + pages[i], nullptr, nullptr,
@@ -2204,7 +2193,7 @@ TEST_F(WebFrameTest, SmallPermanentInitialPageScaleFactorIsClobbered) {
       web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
 
       float expected_page_scale_factor =
-          quirk_enabled && i < base::size(page_scale_factors)
+          quirk_enabled && i < std::size(page_scale_factors)
               ? page_scale_factors[i]
               : enforced_page_scale_factor;
       EXPECT_EQ(expected_page_scale_factor,
@@ -2830,7 +2819,7 @@ TEST_F(WebFrameTest, targetDensityDpiHigh) {
   int viewport_width = 640;
   int viewport_height = 480;
 
-  for (size_t i = 0; i < base::size(device_scale_factors); ++i) {
+  for (size_t i = 0; i < std::size(device_scale_factors); ++i) {
     float device_scale_factor = device_scale_factors[i];
     float device_dpi = device_scale_factor * 160.0f;
 
@@ -2879,7 +2868,7 @@ TEST_F(WebFrameTest, targetDensityDpiDevice) {
   int viewport_width = 640;
   int viewport_height = 480;
 
-  for (size_t i = 0; i < base::size(device_scale_factors); ++i) {
+  for (size_t i = 0; i < std::size(device_scale_factors); ++i) {
     frame_test_helpers::WebViewHelper web_view_helper;
     web_view_helper.InitializeAndLoad(
         base_url_ + "viewport-target-densitydpi-device.html", nullptr, nullptr,
@@ -2908,16 +2897,11 @@ TEST_F(WebFrameTest, targetDensityDpiDevice) {
                     ->GetLayoutSize()
                     .height(),
                 1.0f);
-    if (Platform::Current()->IsUseZoomForDSFEnabled()) {
-      EXPECT_NEAR(1.0f, web_view_helper.GetWebView()->PageScaleFactor(), 0.01f);
-      auto* frame =
-          To<LocalFrame>(web_view_helper.GetWebView()->GetPage()->MainFrame());
-      DCHECK(frame);
-      EXPECT_EQ(device_scale_factors[i], frame->DevicePixelRatio());
-    } else {
-      EXPECT_NEAR(1.0f / device_scale_factors[i],
-                  web_view_helper.GetWebView()->PageScaleFactor(), 0.01f);
-    }
+    EXPECT_NEAR(1.0f, web_view_helper.GetWebView()->PageScaleFactor(), 0.01f);
+    auto* frame =
+        To<LocalFrame>(web_view_helper.GetWebView()->GetPage()->MainFrame());
+    DCHECK(frame);
+    EXPECT_EQ(device_scale_factors[i], frame->DevicePixelRatio());
   }
 }
 
@@ -2930,7 +2914,7 @@ TEST_F(WebFrameTest, targetDensityDpiDeviceAndFixedWidth) {
   int viewport_width = 640;
   int viewport_height = 480;
 
-  for (size_t i = 0; i < base::size(device_scale_factors); ++i) {
+  for (size_t i = 0; i < std::size(device_scale_factors); ++i) {
     frame_test_helpers::WebViewHelper web_view_helper;
     web_view_helper.InitializeAndLoad(
         base_url_ + "viewport-target-densitydpi-device-and-fixed-width.html",
@@ -3000,16 +2984,12 @@ TEST_F(WebFrameTest, NoWideViewportAndScaleLessThanOne) {
                   ->GetLayoutSize()
                   .height(),
               1.0f);
-  if (Platform::Current()->IsUseZoomForDSFEnabled()) {
+
     EXPECT_NEAR(0.25f, web_view_helper.GetWebView()->PageScaleFactor(), 0.01f);
     auto* frame =
         To<LocalFrame>(web_view_helper.GetWebView()->GetPage()->MainFrame());
     DCHECK(frame);
     EXPECT_EQ(device_scale_factor, frame->DevicePixelRatio());
-  } else {
-    EXPECT_NEAR(1.0f / device_scale_factor,
-                web_view_helper.GetWebView()->PageScaleFactor(), 0.01f);
-  }
 }
 
 TEST_F(WebFrameTest, NoWideViewportAndScaleLessThanOneWithDeviceWidth) {
@@ -3051,17 +3031,13 @@ TEST_F(WebFrameTest, NoWideViewportAndScaleLessThanOneWithDeviceWidth) {
                   ->GetLayoutSize()
                   .height(),
               4.0f);
-  if (Platform::Current()->IsUseZoomForDSFEnabled()) {
+
     EXPECT_NEAR(kPageZoom, web_view_helper.GetWebView()->PageScaleFactor(),
                 0.01f);
     auto* frame =
         To<LocalFrame>(web_view_helper.GetWebView()->GetPage()->MainFrame());
     DCHECK(frame);
     EXPECT_EQ(device_scale_factor, frame->DevicePixelRatio());
-  } else {
-    EXPECT_NEAR(1.0f / device_scale_factor,
-                web_view_helper.GetWebView()->PageScaleFactor(), 0.01f);
-  }
 }
 
 TEST_F(WebFrameTest, NoWideViewportAndNoViewportWithInitialPageScaleOverride) {
@@ -3172,16 +3148,12 @@ TEST_F(WebFrameTest,
                   ->GetLayoutSize()
                   .height(),
               1.0f);
-  if (Platform::Current()->IsUseZoomForDSFEnabled()) {
+
     EXPECT_NEAR(2.0f, web_view_helper.GetWebView()->PageScaleFactor(), 0.01f);
     auto* frame =
         To<LocalFrame>(web_view_helper.GetWebView()->GetPage()->MainFrame());
     DCHECK(frame);
     EXPECT_EQ(device_scale_factor, frame->DevicePixelRatio());
-  } else {
-    EXPECT_NEAR(1.0f / device_scale_factor,
-                web_view_helper.GetWebView()->PageScaleFactor(), 0.01f);
-  }
 }
 
 TEST_F(WebFrameTest, NoUserScalableQuirkIgnoresViewportScaleForWideViewport) {
@@ -3498,7 +3470,6 @@ TEST_F(WebFrameTest, DivAutoZoomParamsTest) {
   web_view_helper.InitializeAndLoad(
       base_url_ + "get_scale_for_auto_zoom_into_div_test.html", nullptr,
       nullptr, ConfigureAndroid);
-  web_view_helper.GetWebView()->SetDeviceScaleFactor(kDeviceScaleFactor);
   web_view_helper.GetWebView()->SetDefaultPageScaleLimits(0.01f, 4);
   web_view_helper.GetWebView()->SetPageScaleFactor(0.5f);
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
@@ -3563,7 +3534,8 @@ TEST_F(WebFrameTest, DivAutoZoomWideDivTest) {
       base_url_ + "get_wide_div_for_auto_zoom_test.html", nullptr, nullptr,
       ConfigureAndroid);
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
-  web_view_helper.GetWebView()->SetDeviceScaleFactor(kDeviceScaleFactor);
+  web_view_helper.GetWebView()->SetZoomFactorForDeviceScaleFactor(
+      kDeviceScaleFactor);
   web_view_helper.GetWebView()->SetPageScaleFactor(1.0f);
   UpdateAllLifecyclePhases(web_view_helper.GetWebView());
 
@@ -3601,7 +3573,8 @@ TEST_F(WebFrameTest, DivAutoZoomVeryTallTest) {
   web_view_helper.InitializeAndLoad(base_url_ + "very_tall_div.html", nullptr,
                                     nullptr, ConfigureAndroid);
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
-  web_view_helper.GetWebView()->SetDeviceScaleFactor(kDeviceScaleFactor);
+  web_view_helper.GetWebView()->SetZoomFactorForDeviceScaleFactor(
+      kDeviceScaleFactor);
   web_view_helper.GetWebView()->SetPageScaleFactor(1.0f);
   UpdateAllLifecyclePhases(web_view_helper.GetWebView());
 
@@ -3631,7 +3604,6 @@ TEST_F(WebFrameTest, DivAutoZoomMultipleDivsTest) {
       ConfigureAndroid);
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
   web_view_helper.GetWebView()->SetDefaultPageScaleLimits(0.5f, 4);
-  web_view_helper.GetWebView()->SetDeviceScaleFactor(kDeviceScaleFactor);
   web_view_helper.GetWebView()->SetPageScaleFactor(0.5f);
   web_view_helper.GetWebView()->SetMaximumLegibleScale(1.f);
   UpdateAllLifecyclePhases(web_view_helper.GetWebView());
@@ -3700,7 +3672,6 @@ TEST_F(WebFrameTest, DivAutoZoomScaleBoundsTest) {
       base_url_ + "get_scale_bounds_check_for_auto_zoom_test.html", nullptr,
       nullptr, ConfigureAndroid);
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
-  web_view_helper.GetWebView()->SetDeviceScaleFactor(1.5f);
   web_view_helper.GetWebView()->SetMaximumLegibleScale(1.f);
   UpdateAllLifecyclePhases(web_view_helper.GetWebView());
 
@@ -7992,7 +7963,7 @@ TEST_F(WebFrameTest, SameDocumentHistoryNavigationCommitType) {
       false /* has_transient_user_activation */, /*initiator_origin=*/nullptr,
       /*is_synchronously_committed=*/false,
       mojom::blink::TriggeringEventInfo::kNotFromEvent,
-      true /* is_browser_initiated */, nullptr /* extra_data */);
+      true /* is_browser_initiated */);
   EXPECT_EQ(kWebBackForwardCommit, client.LastCommitType());
 }
 
@@ -12868,7 +12839,7 @@ TEST_F(WebFrameSimTest, ScrollFocusedEditableIntoViewNoLayoutObject) {
 TEST_F(WebFrameSimTest, ScrollEditContextIntoView) {
   WebView().MainFrameViewWidget()->Resize(gfx::Size(500, 600));
   WebView().GetPage()->GetSettings().SetTextAutosizingEnabled(false);
-  WebView().SetDeviceScaleFactor(2.0f);
+  WebView().SetZoomFactorForDeviceScaleFactor(2.0f);
 
   SimRequest r("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
@@ -13415,9 +13386,8 @@ TEST_F(WebFrameTest, RecordSameDocumentNavigationToHistogram) {
       SerializeString("message", ToScriptStateForMainWorld(frame));
   tester.ExpectTotalCount(histogramName, 0);
   document_loader.UpdateForSameDocumentNavigation(
-      ToKURL("about:blank"),
+      ToKURL("about:blank"), nullptr,
       mojom::blink::SameDocumentNavigationType::kHistoryApi, message,
-      mojom::blink::ScrollRestorationType::kAuto,
       WebFrameLoadType::kReplaceCurrentItem,
       frame->DomWindow()->GetSecurityOrigin(), false /* is_browser_initiated */,
       true /* is_synchronously_committed */);
@@ -13426,17 +13396,15 @@ TEST_F(WebFrameTest, RecordSameDocumentNavigationToHistogram) {
   tester.ExpectBucketCount(histogramName,
                            kSPANavTypeHistoryPushStateOrReplaceState, 1);
   document_loader.UpdateForSameDocumentNavigation(
-      ToKURL("about:blank"),
+      ToKURL("about:blank"), MakeGarbageCollected<HistoryItem>(),
       mojom::blink::SameDocumentNavigationType::kFragment, message,
-      mojom::blink::ScrollRestorationType::kManual,
       WebFrameLoadType::kBackForward, frame->DomWindow()->GetSecurityOrigin(),
       false /* is_browser_initiated */, true /* is_synchronously_committed */);
   tester.ExpectBucketCount(histogramName,
                            kSPANavTypeSameDocumentBackwardOrForward, 1);
   document_loader.UpdateForSameDocumentNavigation(
-      ToKURL("about:blank"),
+      ToKURL("about:blank"), nullptr,
       mojom::blink::SameDocumentNavigationType::kFragment, message,
-      mojom::blink::ScrollRestorationType::kManual,
       WebFrameLoadType::kReplaceCurrentItem,
       frame->DomWindow()->GetSecurityOrigin(), false /* is_browser_initiated */,
       true /* is_synchronously_committed */);
@@ -13759,11 +13727,11 @@ TEST_F(WebFrameSimTest, MainFrameTransformOffsetPixelSnapped) {
                   ->main_frame_transform.IsIdentityOrIntegerTranslation());
   EXPECT_EQ(remote_frame_host.GetIntersectionState()
                 ->main_frame_transform.matrix()
-                .get(0, 3),
+                .rc(0, 3),
             14.f);
   EXPECT_EQ(remote_frame_host.GetIntersectionState()
                 ->main_frame_transform.matrix()
-                .get(1, 3),
+                .rc(1, 3),
             7.f);
   MainFrame().FirstChild()->Detach();
 }

@@ -18,7 +18,7 @@ URLDatabase::TypedUrlResult& URLDatabase::TypedUrlResult::operator=(
 URLDatabase::TypedUrlResult::TypedUrlResult(const TypedUrlResult&) = default;
 
 bool URLDatabase::GetVivaldiTypedHistory(const std::string query,
-                                         int prefix_keyword,
+                                         KeywordID prefix_keyword,
                                          int max_results,
                                          TypedUrlResults* results) {
   results->clear();
@@ -40,7 +40,7 @@ bool URLDatabase::GetVivaldiTypedHistory(const std::string query,
   statement.BindString(0, wild8 + query + wild8);
   statement.BindString16(1, wild + lower_query + wild);
   if (prefix_keyword != -1) {
-    statement.BindInt(2, prefix_keyword);
+    statement.BindInt64(2, prefix_keyword);
     statement.BindString16(
         3,
         wild + lower_query.substr(lower_query.find_first_of(u" ") + 1) + wild);
@@ -55,7 +55,7 @@ bool URLDatabase::GetVivaldiTypedHistory(const std::string query,
     result.title = statement.ColumnString(1);
     bool is_keyword = statement.ColumnBool(2);
     if (is_keyword) {
-      result.keyword_id = statement.ColumnInt(3);
+      result.keyword_id = statement.ColumnInt64(3);
       result.terms = statement.ColumnString(4);
     } else {
       result.keyword_id = -1;

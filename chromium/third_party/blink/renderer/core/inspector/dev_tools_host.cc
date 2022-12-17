@@ -29,6 +29,8 @@
 
 #include "third_party/blink/renderer/core/inspector/dev_tools_host.h"
 
+#include <utility>
+
 #include "base/json/json_reader.h"
 #include "third_party/blink/public/common/context_menu_data/menu_item_info.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
@@ -148,8 +150,7 @@ float DevToolsHost::zoomFactor() {
   if (!frontend_frame_)
     return 1;
   float zoom_factor = frontend_frame_->PageZoomFactor();
-  // Cancel the device scale factor applied to the zoom factor in
-  // use-zoom-for-dsf mode.
+  // Cancel the device scale factor applied to the zoom factor.
   const ChromeClient* client =
       frontend_frame_->View()->GetChromeClient();
   float window_to_viewport_ratio =
@@ -177,11 +178,11 @@ void DevToolsHost::sendMessageToEmbedder(const String& message) {
                 : "Message to embedder couldn't be JSON-deserialized");
       return;
     }
-    client_->SendMessageToEmbedder(std::move(*value));
+    client_->SendMessageToEmbedder(std::move(value->GetDict()));
   }
 }
 
-void DevToolsHost::sendMessageToEmbedder(base::Value message) {
+void DevToolsHost::sendMessageToEmbedder(base::Value::Dict message) {
   if (client_)
     client_->SendMessageToEmbedder(std::move(message));
 }

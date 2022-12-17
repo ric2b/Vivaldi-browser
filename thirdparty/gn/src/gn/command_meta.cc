@@ -35,17 +35,18 @@ Arguments
     A list of target labels from which to initiate the walk.
 
   --data
-    A list of keys from which to extract data. In each target walked, its metadata
-    scope is checked for the presence of these keys. If present, the contents of
-    those variable in the scope are appended to the results list.
+    A comma-separated list of keys from which to extract data. In each target
+    walked, its metadata scope is checked for the presence of these keys. If
+    present, the contents of those variable in the scope are appended to the
+    results list.
 
   --walk (optional)
-    A list of keys from which to control the walk. In each target walked, its
-    metadata scope is checked for the presence of any of these keys. If present,
-    the contents of those variables is checked to ensure that it is a label of
-    a valid dependency of the target and then added to the set of targets to walk.
-    If the empty string ("") is present in any of these keys, all deps and data_deps
-    are added to the walk set.
+    A comma-separated list of keys from which to control the walk. In each
+    target walked, its metadata scope is checked for the presence of any of
+    these keys. If present, the contents of those variables is checked to ensure
+    that it is a label of a valid dependency of the target and then added to the
+    set of targets to walk. If the empty string ("") is present in any of these
+    keys, all deps and data_deps are added to the walk set.
 
   --rebase (optional)
     A destination directory onto which to rebase any paths found. If set, all
@@ -58,7 +59,7 @@ Examples
       Lists collected metaresults for the `files` key in the //base/foo:foo
       target and all of its dependency tree.
 
-  gn meta out/Debug "//base/foo" --data=files --data=other
+  gn meta out/Debug "//base/foo" --data=files,other
       Lists collected metaresults for the `files` and `other` keys in the
       //base/foo:foo target and all of its dependency tree.
 
@@ -86,12 +87,9 @@ int RunMeta(const std::vector<std::string>& args) {
     return 1;
 
   const base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
-  std::string rebase_dir =
-      cmdline->GetSwitchValueASCII(switches::kMetaRebaseFiles);
-  std::string data_keys_str =
-      cmdline->GetSwitchValueASCII(switches::kMetaDataKeys);
-  std::string walk_keys_str =
-      cmdline->GetSwitchValueASCII(switches::kMetaWalkKeys);
+  std::string rebase_dir = cmdline->GetSwitchValueASCII("rebase");
+  std::string data_keys_str = cmdline->GetSwitchValueASCII("data");
+  std::string walk_keys_str = cmdline->GetSwitchValueASCII("walk");
 
   std::vector<std::string> inputs(args.begin() + 1, args.end());
 

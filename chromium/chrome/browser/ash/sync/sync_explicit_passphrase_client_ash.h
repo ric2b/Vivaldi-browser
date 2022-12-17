@@ -14,10 +14,6 @@
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote_set.h"
 
-namespace syncer {
-class Nigori;
-}
-
 namespace ash {
 
 class SyncExplicitPassphraseClientAsh
@@ -58,7 +54,8 @@ class SyncExplicitPassphraseClientAsh
 
   const base::raw_ptr<syncer::SyncService> sync_service_;
 
-  bool previous_passphrase_required_state_;
+  bool is_passphrase_required_;
+  bool is_passphrase_available_;
 
   // Don't add new members below this. `receivers_` and `observers_` should be
   // destroyed as soon as `this` is getting destroyed so that we don't deal
@@ -67,9 +64,6 @@ class SyncExplicitPassphraseClientAsh
   mojo::RemoteSet<crosapi::mojom::SyncExplicitPassphraseClientObserver>
       observers_;
 };
-
-crosapi::mojom::NigoriKeyPtr NigoriToMojoForTesting(
-    const syncer::Nigori& nigori);
 
 }  // namespace ash
 

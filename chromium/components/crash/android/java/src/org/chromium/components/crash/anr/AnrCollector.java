@@ -23,6 +23,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -96,9 +97,15 @@ public class AnrCollector {
 
     private static Pair<AnrData, String> getAnrPair(ApplicationExitInfo reason) {
         AnrData anr = null;
-        try (BufferedReader in =
-                        new BufferedReader(new InputStreamReader(reason.getTraceInputStream()))) {
-            anr = parseAnrFromReport(in);
+        try (InputStream is = reason.getTraceInputStream()) {
+            // This can be null - this was causing crashes in crbug.com/1298852.
+            if (is == null) {
+                return null;
+            }
+
+            try (BufferedReader in = new BufferedReader(new InputStreamReader(is))) {
+                anr = parseAnrFromReport(in);
+            }
         } catch (IOException e) {
             Log.e(TAG, "Couldn't read ANR from system", e);
             RecordHistogram.recordEnumeratedHistogram(ANR_UPLOAD_UMA,
@@ -107,7 +114,7 @@ public class AnrCollector {
         }
 
         byte[] versionBytes = reason.getProcessStateSummary();
-        if (versionBytes.length == 0) {
+        if (versionBytes == null || versionBytes.length == 0) {
             // We have gotten an ANR without an attached process state summary and thus
             // can't be be confident which version this ANR happened on. This would
             // happen if we ANRed before Chrome had set the process state summary.

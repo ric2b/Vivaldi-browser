@@ -15,7 +15,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/task/post_task.h"
 #include "base/time/time.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/child_process_security_policy_impl.h"
@@ -24,6 +23,7 @@
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/permission_controller.h"
 #include "content/public/browser/permission_type.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
@@ -324,15 +324,14 @@ void PushMessagingManager::Register(PushMessagingManager::RegisterData data) {
               blink::mojom::ConsoleMessageLevel::kError,
               kIncognitoPushUnsupportedMessage);
 
-          BrowserContext* browser_context =
-              render_frame_host->GetBrowserContext();
-
           // Request notifications permission (which will fail, since
           // notifications aren't supported in incognito), so the website can't
           // detect whether incognito is active.
           url::Origin requesting_origin = data.requesting_origin;
           bool user_gesture = data.user_gesture;
-          PermissionControllerImpl::FromBrowserContext(browser_context)
+
+          render_frame_host->GetBrowserContext()
+              ->GetPermissionController()
               ->RequestPermission(
                   PermissionType::NOTIFICATIONS, render_frame_host,
                   requesting_origin.GetURL(), user_gesture,

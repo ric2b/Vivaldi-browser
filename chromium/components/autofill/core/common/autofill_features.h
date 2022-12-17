@@ -53,6 +53,8 @@ extern const base::Feature kAutofillEnableWithinFencedFrame;
 COMPONENT_EXPORT(AUTOFILL)
 extern const base::Feature kAutofillCreateDataForTest;
 COMPONENT_EXPORT(AUTOFILL)
+extern const base::Feature kAutofillFillAndImportFromMoreFields;
+COMPONENT_EXPORT(AUTOFILL)
 extern const base::Feature kAutofillDelayPopupControllerDeletion;
 COMPONENT_EXPORT(AUTOFILL) extern const base::Feature kAutofillDisableFilling;
 COMPONENT_EXPORT(AUTOFILL)
@@ -64,9 +66,9 @@ extern const base::Feature kAutofillEnableAccountWalletStorage;
 COMPONENT_EXPORT(AUTOFILL)
 extern const base::Feature kAutofillEnableAugmentedPhoneCountryCode;
 COMPONENT_EXPORT(AUTOFILL)
-extern const base::Feature kAutofillEnableDependentLocalityParsing;
+extern const base::Feature kAutofillEnableCompatibilitySupportForBirthdates;
 COMPONENT_EXPORT(AUTOFILL)
-extern const base::Feature kAutofillEnableHideSuggestionsUI;
+extern const base::Feature kAutofillEnableDependentLocalityParsing;
 COMPONENT_EXPORT(AUTOFILL)
 extern const base::Feature kAutofillEnableImportWhenMultiplePhoneNumbers;
 COMPONENT_EXPORT(AUTOFILL)
@@ -90,13 +92,13 @@ extern const base::Feature kAutofillEnableSupportForHonorificPrefixes;
 COMPONENT_EXPORT(AUTOFILL)
 extern const base::Feature kAutofillExtractAllDatalists;
 COMPONENT_EXPORT(AUTOFILL)
+extern const base::Feature kAutofillEnableSupportForPhoneNumberTrunkTypes;
+COMPONENT_EXPORT(AUTOFILL)
 extern const base::Feature kAutofillTypeSpecificPopupWidth;
 COMPONENT_EXPORT(AUTOFILL)
 extern const base::Feature kAutofillFixFillableFieldTypes;
 COMPONENT_EXPORT(AUTOFILL)
 extern const base::Feature kAutofillFixServerQueriesIfPasswordManagerIsEnabled;
-COMPONENT_EXPORT(AUTOFILL)
-extern const base::Feature kAutofillIgnoreAutocompleteForImport;
 COMPONENT_EXPORT(AUTOFILL)
 extern const base::Feature kAutofillIgnoreEarlyClicksOnPopup;
 COMPONENT_EXPORT(AUTOFILL)
@@ -134,6 +136,10 @@ extern const base::Feature kAutofillProbableFormSubmissionInBrowser;
 COMPONENT_EXPORT(AUTOFILL)
 extern const base::Feature kAutofillProfileImportFromUnfocusableFields;
 COMPONENT_EXPORT(AUTOFILL)
+extern const base::Feature kAutofillRemoveInvalidPhoneNumberOnImport;
+COMPONENT_EXPORT(AUTOFILL)
+extern const base::Feature kAutofillRemoveInaccessibleProfileValues;
+COMPONENT_EXPORT(AUTOFILL)
 extern const base::Feature kAutofillRetrieveOverallPredictionsFromCache;
 COMPONENT_EXPORT(AUTOFILL) extern const base::Feature kAutofillSaveAndFillVPA;
 COMPONENT_EXPORT(AUTOFILL)
@@ -142,6 +148,8 @@ COMPONENT_EXPORT(AUTOFILL)
 extern const base::Feature kAutofillServerCommunication;
 COMPONENT_EXPORT(AUTOFILL)
 extern const base::Feature kAutofillSharedAutofill;
+COMPONENT_EXPORT(AUTOFILL)
+extern const base::FeatureParam<bool> kAutofillSharedAutofillRelaxedParam;
 COMPONENT_EXPORT(AUTOFILL)
 extern const base::Feature kAutofillShowTypePredictions;
 COMPONENT_EXPORT(AUTOFILL)

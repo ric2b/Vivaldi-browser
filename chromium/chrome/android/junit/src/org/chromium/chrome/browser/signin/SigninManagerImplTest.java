@@ -31,6 +31,7 @@ import org.chromium.chrome.browser.signin.services.SigninManager;
 import org.chromium.chrome.browser.sync.SyncService;
 import org.chromium.components.externalauth.ExternalAuthUtils;
 import org.chromium.components.signin.AccountUtils;
+import org.chromium.components.signin.base.AccountCapabilities;
 import org.chromium.components.signin.base.AccountInfo;
 import org.chromium.components.signin.base.CoreAccountId;
 import org.chromium.components.signin.identitymanager.AccountInfoServiceProvider;
@@ -45,6 +46,7 @@ import org.chromium.components.signin.metrics.SignoutDelete;
 import org.chromium.components.signin.metrics.SignoutReason;
 import org.chromium.components.sync.ModelType;
 
+import java.util.HashMap;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -56,7 +58,7 @@ public class SigninManagerImplTest {
     private static final long NATIVE_IDENTITY_MANAGER = 10002L;
     private static final AccountInfo ACCOUNT_INFO =
             new AccountInfo(new CoreAccountId("gaia-id-user"), "user@domain.com", "gaia-id-user",
-                    "full name", "given name", null);
+                    "full name", "given name", null, new AccountCapabilities(new HashMap<>()));
 
     @Rule
     public final JniMocker mocker = new JniMocker();
@@ -185,7 +187,7 @@ public class SigninManagerImplTest {
         mSigninManager.signOut(SignoutReason.SIGNOUT_TEST);
 
         // PrimaryAccountChanged should be called *before* clearing any account data.
-        // http://crbug.com/589028
+        // For more information see crbug.com/589028.
         verify(mNativeMock, never()).wipeProfileData(anyLong(), any());
         verify(mNativeMock, never()).wipeGoogleServiceWorkerCaches(anyLong(), any());
 
@@ -206,7 +208,7 @@ public class SigninManagerImplTest {
         mSigninManager.signOut(SignoutReason.SIGNOUT_TEST);
 
         // PrimaryAccountChanged should be called *before* clearing any account data.
-        // http://crbug.com/589028
+        // For more information see crbug.com/589028.
         verify(mNativeMock, never()).wipeProfileData(anyLong(), any());
         verify(mNativeMock, never()).wipeGoogleServiceWorkerCaches(anyLong(), any());
 
@@ -224,7 +226,7 @@ public class SigninManagerImplTest {
         mSigninManager.signOut(SignoutReason.SIGNOUT_TEST);
 
         // PrimaryAccountChanged should be called *before* clearing any account data.
-        // http://crbug.com/589028
+        // For more information see crbug.com/589028.
         verify(mNativeMock, never()).wipeProfileData(anyLong(), any());
         verify(mNativeMock, never()).wipeGoogleServiceWorkerCaches(anyLong(), any());
 
@@ -248,7 +250,7 @@ public class SigninManagerImplTest {
         mSigninManager.signOut(SignoutReason.SIGNOUT_TEST);
 
         // PrimaryAccountCleared should be called *before* clearing any account data.
-        // http://crbug.com/589028
+        // For more information see crbug.com/589028.
         verify(mNativeMock, never()).wipeProfileData(anyLong(), any());
         verify(mNativeMock, never()).wipeGoogleServiceWorkerCaches(anyLong(), any());
 
@@ -271,7 +273,7 @@ public class SigninManagerImplTest {
         mSigninManager.signOut(SignoutReason.SIGNOUT_TEST, null, true);
 
         // PrimaryAccountCleared should be called *before* clearing any account data.
-        // http://crbug.com/589028
+        // For more information see crbug.com/589028.
         verify(mNativeMock, never()).wipeProfileData(anyLong(), any());
         verify(mNativeMock, never()).wipeGoogleServiceWorkerCaches(anyLong(), any());
 
@@ -319,6 +321,34 @@ public class SigninManagerImplTest {
         // Turning off sync should only clear service worker caches when the account is not managed.
         verify(mNativeMock, never()).wipeProfileData(anyLong(), any());
         verify(mNativeMock).wipeGoogleServiceWorkerCaches(eq(NATIVE_SIGNIN_MANAGER), any());
+    }
+
+    // TODO(crbug.com/1294761): add test for revokeSyncConsentFromJavaWithManagedDomain() and
+    // revokeSyncConsentFromJavaWipeData() - this requires making the BookmarkModel mockable in
+    // SigninManagerImpl.
+
+    @Test
+    public void revokeSyncConsentFromJavaWithNullDomain() {
+        SigninManager.SignOutCallback callback = mock(SigninManager.SignOutCallback.class);
+        when(mIdentityManagerNativeMock.getPrimaryAccountInfo(
+                     eq(NATIVE_IDENTITY_MANAGER), anyInt()))
+                .thenReturn(ACCOUNT_INFO);
+
+        mSigninManager.revokeSyncConsent(SignoutReason.SIGNOUT_TEST, callback, false);
+
+        // PrimaryAccountChanged should be called *before* clearing any account data.
+        // For more information see crbug.com/589028.
+        verify(mNativeMock, never()).wipeProfileData(anyLong(), any());
+        verify(mNativeMock, never()).wipeGoogleServiceWorkerCaches(anyLong(), any());
+
+        // Simulate native callback to trigger clearing of account data.
+        mIdentityManager.onPrimaryAccountChanged(new PrimaryAccountChangeEvent(
+                PrimaryAccountChangeEvent.Type.CLEARED, PrimaryAccountChangeEvent.Type.NONE));
+
+        // Disabling sync should only clear the service worker cache when the user is neither
+        // managed or syncing.
+        verify(mNativeMock, never()).wipeProfileData(anyLong(), any());
+        verify(mNativeMock).wipeGoogleServiceWorkerCaches(anyLong(), any());
     }
 
     @Test

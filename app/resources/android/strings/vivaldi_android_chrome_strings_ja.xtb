@@ -21,21 +21,25 @@
 <translation id="3377025655491224618">プライベートタブ</translation>
 <translation id="3504699618187058974">タブをスタックする</translation>
 <translation id="3518985090088779359">同意して続行</translation>
+<translation id="3571177741182643350">未読記事 - オフラインで利用可能：</translation>
 <translation id="3700829948786686853">Vivaldi へようこそ</translation>
 <translation id="3719826155360621982">ホームページ</translation>
 <translation id="385051799172605136">戻る</translation>
+<translation id="399014816462153200">既読記事：</translation>
 <translation id="4121750346708795461">このアプリケーションを使用すると、Vivaldi の <ph name="BEGIN_LINK1" />Vivaldi 利用規約<ph name="END_LINK1" />と<ph name="BEGIN_LINK2" />プライバシーポリシー<ph name="END_LINK2" />に同意したことになります。</translation>
 <translation id="4137746084635924146">現在のデバイスの言語</translation>
+<translation id="4167670741834902166">新しいプライベートタブ</translation>
 <translation id="4243710787042215766">プライベートタブで開く</translation>
 <translation id="4526803704855831732">プライベートタブ</translation>
 <translation id="4759238208242260848">ダウンロード</translation>
 <translation id="4883379392681899581">プライベートモードを離れる</translation>
 <translation id="4943872375798546930">見つかりません</translation>
 <translation id="49576331685473090">コンテンツブロッカー</translation>
+<translation id="5079259810715830221">Google サイトがページ上のリンクを非公開でプリロードするように要求すると、Vivaldi は Cookies なしで Google サーバーを介してページを暗号化してプリロードします。これにより、プリロードされたサイトから ID が非表示になります。</translation>
 <translation id="5118676864324397542"><ph name="APP_NAME" /> ストレージ</translation>
 <translation id="5186185447130319458">プライベート</translation>
 <translation id="5233638681132016545">新しいタブ</translation>
-<translation id="572328651809341494">最近使ったタブ</translation>
+<translation id="572328651809341494">最近閉じたタブ</translation>
 <translation id="5840488417521835756">ウェブサイト上のトピックについて、ページを移動せずに調べられます。 Google が Vivaldi のデフォルト検索エンジンに設定されている場合のみ使用可能な「タップして検索」機能では、単語とその周囲のコンテキストが Google 検索に送信され、定義、画像、検索結果などの情報が返されます。
 
 検索用語を長押しするとその用語が選択され、選択範囲を調整できます。検索結果を絞り込むには、パネルを上にスライドして検索ボックスをタップします。</translation>
@@ -44,6 +48,7 @@
 <translation id="6585139692466700358">Vivaldi の翻訳機能で他の言語に翻訳するかを尋ねる</translation>
 <translation id="6593061639179217415">デスクトップ用サイト</translation>
 <translation id="6610147964972079463">プライベートタブを閉じる</translation>
+<translation id="7029995644714925509">サイトがページ上のリンクを非公開でプリロードするように要求すると、Vivaldi は Cookies なしで Google サーバーを介してページを暗号化してプリロードします。これにより、プリロードされたサイトから ID が非表示になります。</translation>
 <translation id="706339621163631076">ブラウザ プライバシーポリシー</translation>
 <translation id="732145680195464316">ブックマークを <ph name="PRODUCT_NAME" /> に保存しました</translation>
 <translation id="7427132068601343474">Vivaldi について</translation>

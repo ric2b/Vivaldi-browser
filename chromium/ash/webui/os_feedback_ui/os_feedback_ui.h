@@ -17,18 +17,25 @@ class WebUI;
 
 namespace ash {
 
+class OsFeedbackDelegate;
+
 class OSFeedbackUI : public ui::MojoWebUIController {
  public:
-  explicit OSFeedbackUI(content::WebUI* web_ui);
+  OSFeedbackUI(content::WebUI* web_ui,
+               std::unique_ptr<OsFeedbackDelegate> feedback_delegate);
   OSFeedbackUI(const OSFeedbackUI&) = delete;
   OSFeedbackUI& operator=(const OSFeedbackUI&) = delete;
   ~OSFeedbackUI() override;
 
- private:
   void BindInterface(
       mojo::PendingReceiver<os_feedback_ui::mojom::HelpContentProvider>
           receiver);
+
+ private:
+  std::unique_ptr<OsFeedbackDelegate> feedback_delegate_;
   std::unique_ptr<feedback::HelpContentProvider> helpContentProvider_;
+
+  WEB_UI_CONTROLLER_TYPE_DECL();
 };
 
 }  // namespace ash

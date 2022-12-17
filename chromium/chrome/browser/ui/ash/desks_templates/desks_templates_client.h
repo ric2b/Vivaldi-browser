@@ -5,19 +5,22 @@
 #ifndef CHROME_BROWSER_UI_ASH_DESKS_TEMPLATES_DESKS_TEMPLATES_CLIENT_H_
 #define CHROME_BROWSER_UI_ASH_DESKS_TEMPLATES_DESKS_TEMPLATES_CLIENT_H_
 
+#include <map>
 #include <memory>
 
-#include "ash/public/cpp/desk_template.h"
 #include "ash/public/cpp/session/session_observer.h"
 #include "base/callback.h"
 #include "base/containers/flat_map.h"
+#include "base/guid.h"
 #include "base/memory/weak_ptr.h"
-#include "chrome/browser/profiles/profile.h"
+#include "base/time/time.h"
 #include "components/desks_storage/core/desk_model.h"
 
 class DesksTemplatesAppLaunchHandler;
+class Profile;
 
 namespace ash {
+class Desk;
 class DeskTemplate;
 class DesksController;
 }  // namespace ash
@@ -114,6 +117,7 @@ class DesksTemplatesClient : public ash::SessionObserver {
   // Uses `app_launch_handler_` to launch apps from the restore data found in
   // `desk_template`.
   void LaunchAppsFromTemplate(std::unique_ptr<ash::DeskTemplate> desk_template,
+                              base::Time time_launch_started,
                               base::TimeDelta delay);
 
   // Returns either the local desk storage backend or Chrome sync desk storage
@@ -125,20 +129,19 @@ class DesksTemplatesClient : public ash::SessionObserver {
                                       std::unique_ptr<std::string> data);
   void RemovePolicyPreconfiguredTemplate(const AccountId& account_id);
 
+  // Notifies launch performance trackers that an app has been moved rather
+  // than launched.
+  void NotifyMovedSingleInstanceApp(int32_t window_id);
+
  private:
+  class LaunchPerformanceTracker;
   friend class DesksTemplatesClientTest;
   friend class ScopedDesksTemplatesAppLaunchHandlerSetter;
-
-  // Attempts to create `app_launch_handler_` if it doesn't already exist.
-  void MaybeCreateAppLaunchHandler();
-
-  void RecordWindowAndTabCountHistogram(ash::DeskTemplate* desk_template);
-  void RecordLaunchFromTemplateHistogram();
-  void RecordTemplateCountHistogram();
 
   // Launches DeskTemplate after retrieval from storage.
   void OnGetTemplateForDeskLaunch(
       LaunchDeskTemplateCallback callback,
+      base::Time time_launch_started,
       desks_storage::DeskModel::GetEntryByUuidStatus status,
       std::unique_ptr<ash::DeskTemplate> entry);
 
@@ -147,7 +150,8 @@ class DesksTemplatesClient : public ash::SessionObserver {
   void OnCreateAndActivateNewDesk(
       std::unique_ptr<ash::DeskTemplate> desk_template,
       LaunchDeskTemplateCallback callback,
-      bool on_create_activate_success);
+      base::Time time_launch_started,
+      const ash::Desk* new_desk);
 
   // Callback function that allows the |CaptureActiveDeskAndSaveTemplate|
   // |callback| to be called as a |desks_storage::AddOrUpdateEntryCallback|.
@@ -193,14 +197,22 @@ class DesksTemplatesClient : public ash::SessionObserver {
                          desks_storage::DeskModel::GetTemplateJsonStatus status,
                          const std::string& json_representation);
 
+  // Callback function that clears the data associated with a specific launch.
+  void OnLaunchComplete(int32_t launch_id);
+
+  // Called by a launch performance tracker when it has completed monitoring the
+  // launch of a template.
+  void RemoveLaunchPerformanceTracker(base::GUID tracker_uuid);
+
   // Convenience pointer to ash::DesksController. Guaranteed to be not null for
   // the duration of `this`.
   ash::DesksController* const desks_controller_;
 
   Profile* active_profile_ = nullptr;
 
-  // The object that handles launching apps.
-  std::unique_ptr<DesksTemplatesAppLaunchHandler> app_launch_handler_;
+  // Maps launch id to a launch handler.
+  std::map<int32_t, std::unique_ptr<DesksTemplatesAppLaunchHandler>>
+      app_launch_handlers_;
 
   // A test only template for testing `LaunchDeskTemplate`.
   std::unique_ptr<ash::DeskTemplate> launch_template_for_test_;
@@ -210,6 +222,11 @@ class DesksTemplatesClient : public ash::SessionObserver {
 
   // The stored JSON values of preconfigured desk templates
   base::flat_map<AccountId, std::string> preconfigured_desk_templates_json_;
+
+  // Mapping of template ids that are being launched to their launch performance
+  // trackers.
+  base::flat_map<base::GUID, std::unique_ptr<LaunchPerformanceTracker>>
+      template_ids_to_launch_performance_trackers_;
 
   base::WeakPtrFactory<DesksTemplatesClient> weak_ptr_factory_{this};
 };

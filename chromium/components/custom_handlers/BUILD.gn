@@ -6,6 +6,8 @@ static_library("custom_handlers") {
   sources = [
     "pref_names.cc",
     "pref_names.h",
+    "protocol_handler.cc",
+    "protocol_handler.h",
     "protocol_handler_registry.cc",
     "protocol_handler_registry.h",
     "protocol_handler_throttle.cc",
@@ -14,12 +16,15 @@ static_library("custom_handlers") {
 
   deps = [
     "//build:chromeos_buildflags",
+    "//components/keyed_service/content",
     "//components/keyed_service/core",
     "//components/pref_registry",
     "//components/prefs",
+    "//components/strings",
     "//components/user_prefs",
     "//content/public/browser",
     "//content/public/common",
+    "//net",
     "//services/network/public/cpp:cpp_base",
     "//third_party/blink/public/common:headers",
   ]
@@ -32,7 +37,6 @@ static_library("custom_handlers") {
 
     deps += [
       "//components/permissions",
-      "//components/strings",
       "//ui/base",
     ]
   }
@@ -41,12 +45,15 @@ static_library("custom_handlers") {
 source_set("test_support") {
   testonly = true
   sources = [
+    "simple_protocol_handler_registry_factory.cc",
+    "simple_protocol_handler_registry_factory.h",
     "test_protocol_handler_registry_delegate.cc",
     "test_protocol_handler_registry_delegate.h",
   ]
   deps = [
     ":custom_handlers",
     "//base",
+    "//components/keyed_service/content",
   ]
 }
 
@@ -69,5 +76,23 @@ source_set("unit_tests") {
     "//testing/gmock",
     "//testing/gtest",
     "//third_party/blink/public/common:headers",
+  ]
+}
+
+source_set("browser_tests") {
+  testonly = true
+  defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+  sources = [ "protocol_handler_registry_browsertest.cc" ]
+  deps = [
+    ":custom_handlers",
+    ":test_support",
+    "//base/test:test_support",
+    "//components/keyed_service/content",
+    "//content/shell:content_shell_lib",
+    "//content/test:browsertest_support",
+    "//content/test:test_support",
+    "//net:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
   ]
 }

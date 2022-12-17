@@ -30,11 +30,13 @@
 #include "chrome/browser/ash/crosapi/clipboard_ash.h"
 #include "chrome/browser/ash/crosapi/clipboard_history_ash.h"
 #include "chrome/browser/ash/crosapi/content_protection_ash.h"
+#include "chrome/browser/ash/crosapi/desk_template_ash.h"
 #include "chrome/browser/ash/crosapi/device_attributes_ash.h"
 #include "chrome/browser/ash/crosapi/device_settings_ash.h"
 #include "chrome/browser/ash/crosapi/dlp_ash.h"
 #include "chrome/browser/ash/crosapi/download_controller_ash.h"
 #include "chrome/browser/ash/crosapi/drive_integration_service_ash.h"
+#include "chrome/browser/ash/crosapi/echo_private_ash.h"
 #include "chrome/browser/ash/crosapi/feedback_ash.h"
 #include "chrome/browser/ash/crosapi/field_trial_service_ash.h"
 #include "chrome/browser/ash/crosapi/file_manager_ash.h"
@@ -69,6 +71,7 @@
 #include "chrome/browser/ash/crosapi/time_zone_service_ash.h"
 #include "chrome/browser/ash/crosapi/url_handler_ash.h"
 #include "chrome/browser/ash/crosapi/video_capture_device_factory_ash.h"
+#include "chrome/browser/ash/crosapi/web_app_service_ash.h"
 #include "chrome/browser/ash/crosapi/web_page_info_ash.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ash/sync/sync_service_ash.h"
@@ -139,12 +142,14 @@ CrosapiAsh::CrosapiAsh()
       clipboard_ash_(std::make_unique<ClipboardAsh>()),
       clipboard_history_ash_(std::make_unique<ClipboardHistoryAsh>()),
       content_protection_ash_(std::make_unique<ContentProtectionAsh>()),
+      desk_template_ash_(std::make_unique<DeskTemplateAsh>()),
       device_attributes_ash_(std::make_unique<DeviceAttributesAsh>()),
       device_settings_ash_(std::make_unique<DeviceSettingsAsh>()),
       dlp_ash_(std::make_unique<DlpAsh>()),
       download_controller_ash_(std::make_unique<DownloadControllerAsh>()),
       drive_integration_service_ash_(
           std::make_unique<DriveIntegrationServiceAsh>()),
+      echo_private_ash_(std::make_unique<EchoPrivateAsh>()),
       feedback_ash_(std::make_unique<FeedbackAsh>()),
       field_trial_service_ash_(std::make_unique<FieldTrialServiceAsh>()),
       file_manager_ash_(std::make_unique<FileManagerAsh>()),
@@ -183,6 +188,7 @@ CrosapiAsh::CrosapiAsh()
       structured_metrics_service_ash_(
           std::make_unique<StructuredMetricsServiceAsh>()),
       system_display_ash_(std::make_unique<SystemDisplayAsh>()),
+      web_app_service_ash_(std::make_unique<WebAppServiceAsh>()),
       web_page_info_factory_ash_(std::make_unique<WebPageInfoFactoryAsh>()),
       task_manager_ash_(std::make_unique<TaskManagerAsh>()),
       time_zone_service_ash_(std::make_unique<TimeZoneServiceAsh>()),
@@ -283,13 +289,22 @@ void CrosapiAsh::BindChromeAppPublisher(
     mojo::PendingReceiver<mojom::AppPublisher> receiver) {
   Profile* profile = ProfileManager::GetPrimaryUserProfile();
   apps::StandaloneBrowserExtensionApps* chrome_apps =
-      apps::StandaloneBrowserExtensionAppsFactory::GetForProfile(profile);
-  chrome_apps->RegisterChromeAppsCrosapiHost(std::move(receiver));
+      apps::StandaloneBrowserExtensionAppsFactoryForApp::GetForProfile(profile);
+  chrome_apps->RegisterCrosapiHost(std::move(receiver));
 }
 
 void CrosapiAsh::BindChromeAppWindowTracker(
     mojo::PendingReceiver<mojom::AppWindowTracker> receiver) {
   chrome_app_window_tracker_ash_->BindReceiver(std::move(receiver));
+}
+
+void CrosapiAsh::BindExtensionPublisher(
+    mojo::PendingReceiver<mojom::AppPublisher> receiver) {
+  Profile* profile = ProfileManager::GetPrimaryUserProfile();
+  apps::StandaloneBrowserExtensionApps* extensions =
+      apps::StandaloneBrowserExtensionAppsFactoryForExtension::GetForProfile(
+          profile);
+  extensions->RegisterCrosapiHost(std::move(receiver));
 }
 
 void CrosapiAsh::BindFieldTrialService(
@@ -476,6 +491,11 @@ void CrosapiAsh::BindTts(mojo::PendingReceiver<mojom::Tts> receiver) {
   tts_ash_->BindReceiver(std::move(receiver));
 }
 
+void CrosapiAsh::BindWebAppService(
+    mojo::PendingReceiver<mojom::WebAppService> receiver) {
+  web_app_service_ash_->BindReceiver(std::move(receiver));
+}
+
 void CrosapiAsh::BindWebPageInfoFactory(
     mojo::PendingReceiver<mojom::WebPageInfoFactory> receiver) {
   web_page_info_factory_ash_->BindReceiver(std::move(receiver));
@@ -494,6 +514,11 @@ void CrosapiAsh::BindClipboardHistory(
 void CrosapiAsh::BindContentProtection(
     mojo::PendingReceiver<mojom::ContentProtection> receiver) {
   content_protection_ash_->BindReceiver(std::move(receiver));
+}
+
+void CrosapiAsh::BindDeskTemplate(
+    mojo::PendingReceiver<mojom::DeskTemplate> receiver) {
+  desk_template_ash_->BindReceiver(std::move(receiver));
 }
 
 void CrosapiAsh::BindDeviceAttributes(

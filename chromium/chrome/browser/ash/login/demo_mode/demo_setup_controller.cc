@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "ash/components/arc/arc_util.h"
+#include "ash/components/tpm/install_attributes.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
@@ -17,18 +18,17 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/stringprintf.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
 #include "chrome/browser/ash/login/demo_mode/demo_resources.h"
 #include "chrome/browser/ash/login/demo_mode/demo_session.h"
-#include "chrome/browser/ash/login/enrollment/auto_enrollment_controller.h"
 #include "chrome/browser/ash/login/startup_utils.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
 #include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
 #include "chrome/browser/ash/policy/core/device_local_account.h"
 #include "chrome/browser/ash/policy/core/device_local_account_policy_service.h"
+#include "chrome/browser/ash/policy/enrollment/auto_enrollment_type_checker.h"
 #include "chrome/browser/ash/policy/enrollment/enrollment_config.h"
 #include "chrome/browser/ash/policy/enrollment/enrollment_requisition_manager.h"
 #include "chrome/browser/browser_process.h"
@@ -37,7 +37,6 @@
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/system/statistics_provider.h"
-#include "chromeos/tpm/install_attributes.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -45,10 +44,9 @@
 #include "ui/base/l10n/l10n_util.h"
 
 namespace ash {
+
 namespace {
 
-// TODO(https://crbug.com/1164001): remove after moving to ash::
-using ::chromeos::InstallAttributes;
 using ErrorCode = DemoSetupController::DemoSetupError::ErrorCode;
 using RecoveryMethod = DemoSetupController::DemoSetupError::RecoveryMethod;
 
@@ -115,14 +113,14 @@ absl::optional<std::string> ReadFileToOptionalString(
 
 // Returns whether online FRE check is required.
 bool IsOnlineFreCheckRequired() {
-  AutoEnrollmentController::FRERequirement fre_requirement =
-      AutoEnrollmentController::GetFRERequirement();
+  policy::AutoEnrollmentTypeChecker::FRERequirement fre_requirement =
+      policy::AutoEnrollmentTypeChecker::GetFRERequirementAccordingToVPD();
   bool enrollment_check_required =
+      fre_requirement != policy::AutoEnrollmentTypeChecker::FRERequirement::
+                             kExplicitlyNotRequired &&
       fre_requirement !=
-          AutoEnrollmentController::FRERequirement::kExplicitlyNotRequired &&
-      fre_requirement !=
-          AutoEnrollmentController::FRERequirement::kNotRequired &&
-      AutoEnrollmentController::IsFREEnabled();
+          policy::AutoEnrollmentTypeChecker::FRERequirement::kNotRequired &&
+      policy::AutoEnrollmentTypeChecker::IsFREEnabled();
 
   if (!enrollment_check_required)
     return false;
@@ -642,7 +640,8 @@ void DemoSetupController::OnDemoResourcesCrOSComponentLoaded() {
   config.management_domain = policy::kDemoModeDomain;
 
   enrollment_helper_ = EnterpriseEnrollmentHelper::Create(
-      this, nullptr, config, policy::kDemoModeDomain);
+      this, nullptr, config, policy::kDemoModeDomain,
+      policy::LicenseType::kEnterprise);
   enrollment_helper_->EnrollUsingAttestation();
 }
 
@@ -675,7 +674,8 @@ void DemoSetupController::EnrollOffline() {
   config.offline_policy_path =
       policy_dir.AppendASCII(kOfflineDevicePolicyFileName);
   enrollment_helper_ = EnterpriseEnrollmentHelper::Create(
-      this, nullptr /* ad_join_delegate */, config, policy::kDemoModeDomain);
+      this, nullptr /* ad_join_delegate */, config, policy::kDemoModeDomain,
+      policy::LicenseType::kEnterprise);
   enrollment_helper_->EnrollForOfflineDemo();
 }
 

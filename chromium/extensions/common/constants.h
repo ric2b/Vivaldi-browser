@@ -68,6 +68,9 @@ EXTENSIONS_EXPORT extern const char kDecodedMessageCatalogsFilename[];
 // background.scripts.
 EXTENSIONS_EXPORT extern const char kGeneratedBackgroundPageFilename[];
 
+// The URL piece between the extension ID and favicon URL.
+EXTENSIONS_EXPORT extern const char kFaviconSourcePath[];
+
 // Path to imported modules.
 EXTENSIONS_EXPORT extern const char kModulesDir[];
 
@@ -312,6 +315,12 @@ EXTENSIONS_EXPORT extern const char kGeForceNowAppId[];
 // The extension id of the Zoom PWA.
 EXTENSIONS_EXPORT extern const char kZoomAppId[];
 
+// The extension id of the Sumo PWA.
+EXTENSIONS_EXPORT extern const char kSumoAppId[];
+
+// The extension id of the Sumo PWA.
+EXTENSIONS_EXPORT extern const char kAdobeSparkAppId[];
+
 // The extension id of the Google Docs application.
 EXTENSIONS_EXPORT extern const char kGoogleDocsAppId[];
 
@@ -349,6 +358,9 @@ EXTENSIONS_EXPORT extern const char kGuestModeTestExtensionId[];
 // for example the file manager.
 EXTENSIONS_EXPORT bool IsSystemUIApp(base::StringPiece extension_id);
 #endif
+
+// True if the id matches any of the QuickOffice extension ids.
+EXTENSIONS_EXPORT bool IsQuickOfficeExtension(const std::string& id);
 
 // Returns if the app is managed by extension default apps. This is a hardcoded
 // list of default apps for Windows/Linux/MacOS platforms that should be

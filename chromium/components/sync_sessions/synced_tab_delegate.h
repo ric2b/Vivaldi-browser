@@ -46,7 +46,7 @@ class SyncedTabDelegate {
   virtual void GetSerializedNavigationAtIndex(
       int i,
       sessions::SerializedNavigationEntry* serialized_entry) const = 0;
-  virtual std::string  GetExtData() const;
+  virtual std::string  GetVivExtData() const;
 
   // Methods to restrict navigation for child account users.
   virtual bool ProfileHasChildAccount() const = 0;

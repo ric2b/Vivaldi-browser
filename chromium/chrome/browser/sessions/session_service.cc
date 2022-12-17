@@ -189,8 +189,10 @@ bool SessionService::ShouldRestore(Browser* browser) {
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   // Restore should trigger for lacros-chrome if handling a restart.
-  if (StartupBrowserCreator::WasRestarted())
+  if (StartupBrowserCreator::WasRestarted() ||
+      StartupBrowserCreator::IsLaunchingBrowserForLastProfiles()) {
     return true;
+  }
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
   // If the on startup setting is not restore, sessions should not be
@@ -355,7 +357,7 @@ void SessionService::WindowOpened(Browser* browser) {
   SetWindowVisibleOnAllWorkspaces(
       browser->session_id(), browser->window()->IsVisibleOnAllWorkspaces());
 
-  SetWindowExtData(browser->session_id(), browser->ext_data());
+  SetWindowVivExtData(browser->session_id(), browser->viv_ext_data());
 }
 
 void SessionService::WindowClosing(const SessionID& window_id) {
@@ -601,16 +603,16 @@ void SessionService::BuildCommandsForTab(
         sessions::CreatePinnedStateCommand(session_id, true));
   }
 
-  if (!tab->GetExtData().empty()) {
+  if (!tab->GetVivExtData().empty()) {
     command_storage_manager()->AppendRebuildCommand(
-        sessions::CreateSetExtDataCommand(session_id, tab->GetExtData()));
+        sessions::CreateSetVivExtDataCommand(session_id, tab->GetVivExtData()));
   }
 
-  auto* page_actions_helper = page_actions::TabHelper::FromWebContents(tab);
-  if (page_actions_helper) {
+  auto* viv_page_actions_helper = page_actions::TabHelper::FromWebContents(tab);
+  if (viv_page_actions_helper) {
     for (const auto& script_overrides :
-         page_actions_helper->GetScriptOverrides()) {
-      sessions::CreatePageActionOverrideCommand(
+         viv_page_actions_helper->GetScriptOverrides()) {
+      sessions::CreateVivPageActionOverrideCommand(
           session_id, script_overrides.first.AsUTF8Unsafe(),
           script_overrides.second);
     }

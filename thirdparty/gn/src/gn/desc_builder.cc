@@ -136,7 +136,7 @@ class BaseDescBuilder {
     for (const auto& v : vector)
       res->Append(RenderValue(v));
 
-    return std::move(res);
+    return res;
   }
 
   ValuePtr RenderValue(const std::string& s, bool optional = false) {
@@ -712,7 +712,7 @@ class TargetDescBuilder : public BaseDescBuilder {
       }
     }
 
-    return std::move(res);
+    return res;
   }
 
   ValuePtr RenderGenDeps() {
@@ -724,7 +724,7 @@ class TargetDescBuilder : public BaseDescBuilder {
     std::sort(gen_deps.begin(), gen_deps.end());
     for (const auto& dep : gen_deps)
       res->AppendString(dep);
-    return std::move(res);
+    return res;
   }
 
   ValuePtr RenderRuntimeDeps() {
@@ -750,7 +750,7 @@ class TargetDescBuilder : public BaseDescBuilder {
       res->AppendString(str + pair.first.value());
     }
 
-    return std::move(res);
+    return res;
   }
 
   void FillInSourceOutputs(base::DictionaryValue* res) {

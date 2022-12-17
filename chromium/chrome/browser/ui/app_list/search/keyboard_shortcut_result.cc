@@ -16,6 +16,7 @@
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/ui/app_list/search/common/icon_constants.h"
+#include "chrome/browser/ui/app_list/search/common/search_result_util.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/components/string_matching/tokenized_string_match.h"
 #include "chromeos/ui/vector_icons/vector_icons.h"
@@ -36,26 +37,6 @@ using IconCode = ash::SearchResultTextItem::IconCode;
 using KeyboardCode = ui::KeyboardCode;
 
 constexpr char kKeyboardShortcutScheme[] = "keyboard_shortcut://";
-
-TextItem CreateStringTextItem(const std::u16string& text) {
-  TextItem text_item(TextType::kString);
-  text_item.SetText(text);
-  text_item.SetTextTags({});
-  return text_item;
-}
-
-TextItem CreateIconifiedTextTextItem(const std::u16string& text) {
-  TextItem text_item(TextType::kIconifiedText);
-  text_item.SetText(text);
-  text_item.SetTextTags({});
-  return text_item;
-}
-
-TextItem CreateIconCodeTextItem(const IconCode icon_code) {
-  TextItem text_item(TextType::kIconCode);
-  text_item.SetIconCode(icon_code);
-  return text_item;
-}
 
 }  // namespace
 
@@ -109,7 +90,7 @@ TextVector KeyboardShortcutResult::CreateTextVectorFromTemplateString(
 
   auto pieces = base::SplitString(template_string, u"$", base::KEEP_WHITESPACE,
                                   base::SPLIT_WANT_NONEMPTY);
-  DCHECK_GT(pieces.size(), 0);
+  DCHECK_GT(pieces.size(), 0u);
   TextVector text_vector;
 
   const bool starts_with_placeholder = template_string[0] == '$';
@@ -164,7 +145,6 @@ TextVector KeyboardShortcutResult::CreateTextVectorFromTemplateString(
   return text_vector;
 }
 
-// TODO(crbug.com/1290682): Complete implementation.
 KeyboardShortcutResult::KeyboardShortcutResult(Profile* profile,
                                                const KeyboardShortcutData& data,
                                                double relevance)
@@ -310,8 +290,6 @@ double KeyboardShortcutResult::CalculateRelevance(
 }
 
 void KeyboardShortcutResult::UpdateIcon() {
-  // TODO(crbug.com/1290682): Set the icon to a larger size when a
-  // KeyboardShortcutResult is promoted to an answer card.
   gfx::ImageSkia icon =
       gfx::CreateVectorIcon(chromeos::kKeyboardShortcutsIcon,
                             GetAppIconDimension(), SK_ColorTRANSPARENT);

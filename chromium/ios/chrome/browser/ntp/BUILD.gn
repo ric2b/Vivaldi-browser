@@ -4,8 +4,8 @@
 
 source_set("ntp") {
   sources = [
-    "browser_policy_new_tab_page_rewriter.cc",
     "browser_policy_new_tab_page_rewriter.h",
+    "browser_policy_new_tab_page_rewriter.mm",
     "new_tab_page_tab_helper.h",
     "new_tab_page_tab_helper.mm",
     "new_tab_page_tab_helper_delegate.h",
@@ -19,6 +19,7 @@ source_set("ntp") {
     "//components/url_formatter",
     "//ios/chrome/browser",
     "//ios/chrome/browser/browser_state",
+    "//ios/chrome/browser/discover_feed:constants",
     "//ios/chrome/browser/ui:feature_flags",
     "//ios/components/webui:url_constants",
     "//ios/web/common:features",

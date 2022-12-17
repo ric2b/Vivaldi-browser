@@ -3,19 +3,21 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/policy/messaging_layer/upload/upload_client.h"
+#include "chrome/browser/policy/messaging_layer/util/test_request_payload.h"
 
 #include <tuple>
 
-#include "base/base64.h"
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/json/json_writer.h"
+#include "base/strings/stringprintf.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/policy/messaging_layer/upload/record_handler_impl.h"
+#include "chrome/browser/policy/messaging_layer/util/test_response_payload.h"
 #include "components/account_id/account_id.h"
 #include "components/policy/core/common/cloud/dm_token.h"
 #include "components/policy/core/common/cloud/mock_cloud_policy_client.h"
@@ -57,51 +59,6 @@ MATCHER_P(EqualsProto,
   message.SerializeToString(&expected_serialized);
   arg.SerializeToString(&actual_serialized);
   return expected_serialized == actual_serialized;
-}
-
-// Helper function composes JSON represented as base::Value from Sequence
-// information in request.
-base::Value ValueFromSucceededSequenceInfo(const base::Value::Dict& request,
-                                           bool force_confirm_flag) {
-  base::Value::Dict response;
-
-  // Retrieve and process data
-  const base::Value::List* const encrypted_record_list =
-      request.FindList("encryptedRecord");
-  EXPECT_TRUE(encrypted_record_list != nullptr);
-  EXPECT_FALSE(encrypted_record_list->empty());
-
-  // Retrieve and process sequence information
-  const base::Value::Dict* seq_info =
-      (*encrypted_record_list)[encrypted_record_list->size() - 1]
-          .GetDict()
-          .FindDict("sequenceInformation");
-  EXPECT_TRUE(seq_info != nullptr);
-  response.Set("lastSucceedUploadedRecord", seq_info->Clone());
-
-  // If forceConfirm confirm is expected, set it.
-  if (force_confirm_flag) {
-    response.Set("forceConfirm", true);
-  }
-
-  // If attach_encryption_settings it true, process that.
-  const auto attach_encryption_settings =
-      request.FindBool("attachEncryptionSettings");
-  if (attach_encryption_settings.has_value() &&
-      attach_encryption_settings.value()) {
-    base::Value encryption_settings{base::Value::Type::DICTIONARY};
-    std::string public_key;
-    base::Base64Encode("PUBLIC KEY", &public_key);
-    encryption_settings.SetStringKey("publicKey", public_key);
-    encryption_settings.SetIntKey("publicKeyId", 12345);
-    std::string public_key_signature;
-    base::Base64Encode("PUBLIC KEY SIG", &public_key_signature);
-    encryption_settings.SetStringKey("publicKeySignature",
-                                     public_key_signature);
-    response.Set("encryptionSettings", std::move(encryption_settings));
-  }
-
-  return base::Value(std::move(response));
 }
 
 class UploadClientTest : public ::testing::TestWithParam<
@@ -197,16 +154,41 @@ TEST_P(UploadClientTest, CreateUploadClientAndUploadRecords) {
   client->SetDMToken(
       policy::DMToken::CreateValidTokenForTesting("FAKE_DM_TOKEN").value());
 
-  const bool force_confirm_flag = force_confirm();
-  EXPECT_CALL(*client, UploadEncryptedReport(_, _, _))
-      .WillOnce(WithArgs<0, 2>(
-          Invoke([&force_confirm_flag](
-                     base::Value::Dict request,
-                     policy::CloudPolicyClient::ResponseCallback response_cb) {
-            std::move(response_cb)
-                .Run(ValueFromSucceededSequenceInfo(std::move(request),
-                                                    force_confirm_flag));
-          })));
+  static constexpr char matched_record_template[] =
+      R"JSON(
+{
+  "sequenceInformation": {
+    "generationId": "1234",
+    "priority": 1,
+    "sequencingId": "%d"
+  }
+}
+)JSON";
+  EXPECT_CALL(*client, UploadEncryptedReport(
+                           AllOf(IsDataUploadRequestValid(),
+                                 DoesRequestContainRecord(base::StringPrintf(
+                                     matched_record_template, 0)),
+                                 DoesRequestContainRecord(base::StringPrintf(
+                                     matched_record_template, 1)),
+                                 DoesRequestContainRecord(base::StringPrintf(
+                                     matched_record_template, 2)),
+                                 DoesRequestContainRecord(base::StringPrintf(
+                                     matched_record_template, 3)),
+                                 DoesRequestContainRecord(base::StringPrintf(
+                                     matched_record_template, 4)),
+                                 DoesRequestContainRecord(base::StringPrintf(
+                                     matched_record_template, 5)),
+                                 DoesRequestContainRecord(base::StringPrintf(
+                                     matched_record_template, 6)),
+                                 DoesRequestContainRecord(base::StringPrintf(
+                                     matched_record_template, 7)),
+                                 DoesRequestContainRecord(base::StringPrintf(
+                                     matched_record_template, 8)),
+                                 DoesRequestContainRecord(base::StringPrintf(
+                                     matched_record_template, 9))),
+                           _, _))
+      .WillOnce(MakeUploadEncryptedReportAction(
+          std::move(ResponseBuilder().SetForceConfirm(force_confirm()))));
 
   test::TestMultiEvent<SequenceInformation, bool> upload_success;
   UploadClient::ReportSuccessfulUploadCallback upload_success_cb =
@@ -227,10 +209,10 @@ TEST_P(UploadClientTest, CreateUploadClientAndUploadRecords) {
       encryption_key_attached_cb);
   EXPECT_TRUE(enqueue_result.ok());
 
-  auto upload_succes_result = upload_success.result();
-  EXPECT_THAT(std::get<0>(upload_succes_result),
+  auto upload_success_result = upload_success.result();
+  EXPECT_THAT(std::get<0>(upload_success_result),
               EqualsProto(last_record_seq_info));
-  EXPECT_THAT(std::get<1>(upload_succes_result), Eq(force_confirm()));
+  EXPECT_THAT(std::get<1>(upload_success_result), Eq(force_confirm()));
 }
 
 INSTANTIATE_TEST_SUITE_P(

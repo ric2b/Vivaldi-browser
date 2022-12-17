@@ -35,7 +35,6 @@ std::string ProtocolSerializerJSON::Serialize(
   request_node->SetKey("@updater", Value(request.updatername));
   request_node->SetKey("prodversion", Value(request.updaterversion));
   request_node->SetKey("updaterversion", Value(request.prodversion));
-  request_node->SetKey("lang", Value(request.lang));
   request_node->SetKey("@os", Value(request.operating_system));
   request_node->SetKey("arch", Value(request.arch));
   request_node->SetKey("nacl_arch", Value(request.nacl_arch));
@@ -101,6 +100,8 @@ std::string ProtocolSerializerJSON::Serialize(
       app_node.SetKey("ap", Value(app.ap));
     if (!app.brand_code.empty())
       app_node.SetKey("brand", Value(app.brand_code));
+    if (!app.lang.empty())
+      app_node.SetKey("lang", Value(app.lang));
     if (!app.install_source.empty())
       app_node.SetKey("installsource", Value(app.install_source));
     if (!app.install_location.empty())
@@ -145,6 +146,24 @@ std::string ProtocolSerializerJSON::Serialize(
             "targetversionprefix",
             Value(app.update_check->target_version_prefix));
       }
+    }
+
+    if (!app.data.empty()) {
+      std::vector<Value> data_nodes;
+      for (const auto& data : app.data) {
+        Value data_node(Value::Type::DICTIONARY);
+
+        data_node.SetKey("name", Value(data.name));
+        if (data.name == "install")
+          data_node.SetKey("index", Value(data.install_data_index));
+        else if (data.name == "untrusted")
+          data_node.SetKey("#text", Value(data.untrusted_data));
+
+        data_nodes.push_back(std::move(data_node));
+      }
+
+      if (!data_nodes.empty())
+        app_node.SetKey("data", Value(std::move(data_nodes)));
     }
 
     if (app.ping) {

@@ -235,7 +235,7 @@ std::vector<base::win::ScopedHandle> GetRunningProcessesForPath(
       continue;
 
     wchar_t process_image_name[MAX_PATH];
-    DWORD size = base::size(process_image_name);
+    DWORD size = std::size(process_image_name);
     if (QueryFullProcessImageName(process.Get(), 0, process_image_name,
                                   &size) == FALSE)
       continue;

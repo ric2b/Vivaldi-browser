@@ -18,6 +18,7 @@
 #include "components/crx_file/id_util.h"
 #include "components/webapps/browser/install_result_code.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
+#include "components/webapps/browser/uninstall_result_code.h"
 
 namespace web_app {
 
@@ -48,16 +49,19 @@ void FakeInstallFinalizer::FinalizeUpdate(const WebAppInstallInfo& web_app_info,
 
 void FakeInstallFinalizer::UninstallExternalWebApp(
     const AppId& app_id,
-    webapps::WebappUninstallSource webapp_uninstall_source,
+    WebAppManagement::Type source,
+    webapps::WebappUninstallSource uninstall_surface,
     UninstallWebAppCallback callback) {
   user_uninstalled_external_apps_.erase(app_id);
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(std::move(callback), /*uninstalled=*/true));
+      FROM_HERE, base::BindOnce(std::move(callback),
+                                webapps::UninstallResultCode::kSuccess));
 }
 
 void FakeInstallFinalizer::UninstallExternalWebAppByUrl(
     const GURL& app_url,
-    webapps::WebappUninstallSource webapp_uninstall_source,
+    WebAppManagement::Type source,
+    webapps::WebappUninstallSource uninstall_surface,
     UninstallWebAppCallback callback) {
   DCHECK(base::Contains(next_uninstall_external_web_app_results_, app_url));
   uninstall_external_web_app_urls_.push_back(app_url);
@@ -65,7 +69,7 @@ void FakeInstallFinalizer::UninstallExternalWebAppByUrl(
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindLambdaForTesting(
                      [this, app_url, callback = std::move(callback)]() mutable {
-                       bool result =
+                       webapps::UninstallResultCode result =
                            next_uninstall_external_web_app_results_[app_url];
                        next_uninstall_external_web_app_results_.erase(app_url);
                        std::move(callback).Run(result);
@@ -124,9 +128,9 @@ void FakeInstallFinalizer::SetNextFinalizeInstallResult(
 
 void FakeInstallFinalizer::SetNextUninstallExternalWebAppResult(
     const GURL& app_url,
-    bool uninstalled) {
+    webapps::UninstallResultCode code) {
   DCHECK(!base::Contains(next_uninstall_external_web_app_results_, app_url));
-  next_uninstall_external_web_app_results_[app_url] = uninstalled;
+  next_uninstall_external_web_app_results_[app_url] = code;
 }
 
 void FakeInstallFinalizer::SimulateExternalAppUninstalledByUser(

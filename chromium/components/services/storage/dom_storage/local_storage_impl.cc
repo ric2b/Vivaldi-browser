@@ -25,7 +25,6 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
-#include "base/task/post_task.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/task_runner_util.h"
 #include "base/task/thread_pool.h"
@@ -93,8 +92,8 @@ DomStorageDatabase::Key CreateMetaDataKey(
   std::vector<uint8_t> serialized_storage_key(storage_key_str.begin(),
                                               storage_key_str.end());
   DomStorageDatabase::Key key;
-  key.reserve(base::size(kMetaPrefix) + serialized_storage_key.size());
-  key.insert(key.end(), kMetaPrefix, kMetaPrefix + base::size(kMetaPrefix));
+  key.reserve(std::size(kMetaPrefix) + serialized_storage_key.size());
+  key.insert(key.end(), kMetaPrefix, kMetaPrefix + std::size(kMetaPrefix));
   key.insert(key.end(), serialized_storage_key.begin(),
              serialized_storage_key.end());
   return key;
@@ -102,11 +101,11 @@ DomStorageDatabase::Key CreateMetaDataKey(
 
 absl::optional<blink::StorageKey> ExtractStorageKeyFromMetaDataKey(
     const DomStorageDatabase::Key& key) {
-  DCHECK_GT(key.size(), base::size(kMetaPrefix));
+  DCHECK_GT(key.size(), std::size(kMetaPrefix));
   const base::StringPiece key_string(reinterpret_cast<const char*>(key.data()),
                                      key.size());
   return blink::StorageKey::Deserialize(
-      key_string.substr(base::size(kMetaPrefix)));
+      key_string.substr(std::size(kMetaPrefix)));
 }
 
 void SuccessResponse(base::OnceClosure callback, bool success) {

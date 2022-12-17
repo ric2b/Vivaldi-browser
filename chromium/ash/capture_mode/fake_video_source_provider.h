@@ -5,9 +5,10 @@
 #ifndef ASH_CAPTURE_MODE_FAKE_VIDEO_SOURCE_PROVIDER_H_
 #define ASH_CAPTURE_MODE_FAKE_VIDEO_SOURCE_PROVIDER_H_
 
+#include <memory>
 #include <string>
-#include <vector>
 
+#include "ash/capture_mode/fake_camera_device.h"
 #include "base/callback_forward.h"
 #include "media/capture/video/video_capture_device_info.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -33,6 +34,9 @@ class FakeVideoSourceProvider
   void Bind(mojo::PendingReceiver<video_capture::mojom::VideoSourceProvider>
                 pending_receiver);
 
+  // Simulates a fatal error on the camera device whose `device_id` is given.
+  void TriggerFatalErrorOnCamera(const std::string& device_id);
+
   // Simulate connecting and disconnecting a camera device with the given
   // `device_id`, `display_name` and `model_id`.
   void AddFakeCamera(const std::string& device_id,
@@ -42,9 +46,9 @@ class FakeVideoSourceProvider
 
   // video_capture::mojom::VideoSourceProvider:
   void GetSourceInfos(GetSourceInfosCallback callback) override;
-  void GetVideoSource(const std::string& source_id,
-                      mojo::PendingReceiver<video_capture::mojom::VideoSource>
-                          stream) override {}
+  void GetVideoSource(
+      const std::string& source_id,
+      mojo::PendingReceiver<video_capture::mojom::VideoSource> stream) override;
   void AddSharedMemoryVirtualDevice(
       const media::VideoCaptureDeviceInfo& device_info,
       mojo::PendingRemote<video_capture::mojom::Producer> producer,
@@ -64,7 +68,8 @@ class FakeVideoSourceProvider
  private:
   mojo::Receiver<video_capture::mojom::VideoSourceProvider> receiver_{this};
 
-  std::vector<media::VideoCaptureDeviceInfo> devices_;
+  base::flat_map</*device_id=*/std::string, std::unique_ptr<FakeCameraDevice>>
+      devices_map_;
 
   // A callback that's triggered after this source provider replies back to its
   // client in GetSourceInfos().

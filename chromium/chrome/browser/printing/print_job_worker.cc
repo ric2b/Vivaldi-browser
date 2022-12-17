@@ -25,6 +25,7 @@
 #include "components/device_event_log/device_event_log.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "printing/backend/print_backend.h"
@@ -62,7 +63,7 @@ namespace {
 
 class PrintingContextDelegate : public PrintingContext::Delegate {
  public:
-  PrintingContextDelegate(int render_process_id, int render_frame_id);
+  explicit PrintingContextDelegate(content::GlobalRenderFrameHostId rfh_id);
 
   PrintingContextDelegate(const PrintingContextDelegate&) = delete;
   PrintingContextDelegate& operator=(const PrintingContextDelegate&) = delete;
@@ -75,21 +76,17 @@ class PrintingContextDelegate : public PrintingContext::Delegate {
   // Not exposed to PrintingContext::Delegate because of dependency issues.
   content::WebContents* GetWebContents();
 
-  int render_process_id() const { return render_process_id_; }
-  int render_frame_id() const { return render_frame_id_; }
+  content::GlobalRenderFrameHostId rfh_id() const { return rfh_id_; }
 
  private:
-  const int render_process_id_;
-  const int render_frame_id_;
+  const content::GlobalRenderFrameHostId rfh_id_;
 };
 
-PrintingContextDelegate::PrintingContextDelegate(int render_process_id,
-                                                 int render_frame_id)
-    : render_process_id_(render_process_id),
-      render_frame_id_(render_frame_id) {}
+PrintingContextDelegate::PrintingContextDelegate(
+    content::GlobalRenderFrameHostId rfh_id)
+    : rfh_id_(rfh_id) {}
 
-PrintingContextDelegate::~PrintingContextDelegate() {
-}
+PrintingContextDelegate::~PrintingContextDelegate() = default;
 
 gfx::NativeView PrintingContextDelegate::GetParentView() {
   content::WebContents* wc = GetWebContents();
@@ -98,8 +95,7 @@ gfx::NativeView PrintingContextDelegate::GetParentView() {
 
 content::WebContents* PrintingContextDelegate::GetWebContents() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  auto* rfh =
-      content::RenderFrameHost::FromID(render_process_id_, render_frame_id_);
+  auto* rfh = content::RenderFrameHost::FromID(rfh_id_);
   return rfh ? content::WebContents::FromRenderFrameHost(rfh) : nullptr;
 }
 
@@ -127,10 +123,9 @@ void FailedNotificationCallback(PrintJob* print_job) {
 
 }  // namespace
 
-PrintJobWorker::PrintJobWorker(int render_process_id, int render_frame_id)
+PrintJobWorker::PrintJobWorker(content::GlobalRenderFrameHostId rfh_id)
     : printing_context_delegate_(
-          std::make_unique<PrintingContextDelegate>(render_process_id,
-                                                    render_frame_id)),
+          std::make_unique<PrintingContextDelegate>(rfh_id)),
       printing_context_(
           PrintingContext::Create(printing_context_delegate_.get(),
                                   ShouldPrintingContextSkipSystemCalls())),
@@ -155,35 +150,31 @@ void PrintJobWorker::SetPrintJob(PrintJob* print_job) {
   print_job_ = print_job;
 }
 
-void PrintJobWorker::GetSettings(bool ask_user_for_settings,
-                                 uint32_t document_page_count,
-                                 bool has_selection,
-                                 mojom::MarginType margin_type,
-                                 bool is_scripted,
-                                 bool is_modifiable,
-                                 SettingsCallback callback) {
+void PrintJobWorker::GetDefaultSettings(SettingsCallback callback) {
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
+  DCHECK_EQ(page_number_, PageNumber::npos());
+
+  printing_context_->set_margin_type(
+      printing::mojom::MarginType::kDefaultMargins);
+
+  InvokeUseDefaultSettings(std::move(callback));
+}
+
+void PrintJobWorker::GetSettingsFromUser(uint32_t document_page_count,
+                                         bool has_selection,
+                                         mojom::MarginType margin_type,
+                                         bool is_scripted,
+                                         SettingsCallback callback) {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK_EQ(page_number_, PageNumber::npos());
 
   printing_context_->set_margin_type(margin_type);
-  printing_context_->set_is_modifiable(is_modifiable);
 
-  // When we delegate to a destination, we don't ask the user for settings.
-  // TODO(mad): Ask the destination for settings.
-  if (ask_user_for_settings) {
-    content::GetUIThreadTaskRunner({})->PostTask(
-        FROM_HERE,
-        base::BindOnce(&PrintJobWorker::GetSettingsWithUI,
-                       base::Unretained(this), document_page_count,
-                       has_selection, is_scripted, std::move(callback)));
-  } else {
-    content::GetUIThreadTaskRunner({})->PostTask(
-        FROM_HERE, base::BindOnce(&PrintJobWorker::UseDefaultSettings,
-                                  base::Unretained(this), std::move(callback)));
-  }
+  InvokeGetSettingsWithUI(document_page_count, has_selection, is_scripted,
+                          std::move(callback));
 }
 
-void PrintJobWorker::SetSettings(base::Value new_settings,
+void PrintJobWorker::SetSettings(base::Value::Dict new_settings,
                                  SettingsCallback callback) {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
@@ -206,13 +197,13 @@ void PrintJobWorker::SetSettingsFromPOD(
 }
 #endif
 
-void PrintJobWorker::UpdatePrintSettings(base::Value new_settings,
+void PrintJobWorker::UpdatePrintSettings(base::Value::Dict new_settings,
                                          SettingsCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   std::unique_ptr<crash_keys::ScopedPrinterInfo> crash_key;
   mojom::PrinterType type = static_cast<mojom::PrinterType>(
-      new_settings.FindIntKey(kSettingPrinterType).value());
+      new_settings.FindInt(kSettingPrinterType).value());
   if (type == mojom::PrinterType::kLocal) {
 #if BUILDFLAG(IS_WIN)
     // Blocking is needed here because Windows printer drivers are oftentimes
@@ -221,7 +212,7 @@ void PrintJobWorker::UpdatePrintSettings(base::Value new_settings,
 #endif
     scoped_refptr<PrintBackend> print_backend =
         PrintBackend::CreateInstance(g_browser_process->GetApplicationLocale());
-    std::string printer_name = *new_settings.FindStringKey(kSettingDeviceName);
+    std::string printer_name = *new_settings.FindString(kSettingDeviceName);
     crash_key = std::make_unique<crash_keys::ScopedPrinterInfo>(
         print_backend->GetPrinterDriverInfo(printer_name));
 
@@ -229,12 +220,11 @@ void PrintJobWorker::UpdatePrintSettings(base::Value new_settings,
     PrinterBasicInfo basic_info;
     if (print_backend->GetPrinterBasicInfo(printer_name, &basic_info) ==
         mojom::ResultCode::kSuccess) {
-      base::Value advanced_settings(base::Value::Type::DICTIONARY);
+      base::Value::Dict advanced_settings;
       for (const auto& pair : basic_info.options)
-        advanced_settings.SetStringKey(pair.first, pair.second);
+        advanced_settings.Set(pair.first, pair.second);
 
-      new_settings.SetKey(kSettingAdvancedSettings,
-                          std::move(advanced_settings));
+      new_settings.Set(kSettingAdvancedSettings, std::move(advanced_settings));
     }
 #endif  // BUILDFLAG(IS_LINUX) && defined(USE_CUPS)
   }
@@ -267,6 +257,23 @@ void PrintJobWorker::GetSettingsDone(SettingsCallback callback,
   std::move(callback).Run(printing_context_->TakeAndResetSettings(), result);
 }
 
+void PrintJobWorker::InvokeUseDefaultSettings(SettingsCallback callback) {
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(&PrintJobWorker::UseDefaultSettings,
+                                base::Unretained(this), std::move(callback)));
+}
+
+void PrintJobWorker::InvokeGetSettingsWithUI(uint32_t document_page_count,
+                                             bool has_selection,
+                                             bool is_scripted,
+                                             SettingsCallback callback) {
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE,
+      base::BindOnce(&PrintJobWorker::GetSettingsWithUI, base::Unretained(this),
+                     document_page_count, has_selection, is_scripted,
+                     std::move(callback)));
+}
+
 void PrintJobWorker::GetSettingsWithUI(uint32_t document_page_count,
                                        bool has_selection,
                                        bool is_scripted,
@@ -294,8 +301,8 @@ void PrintJobWorker::GetSettingsWithUI(uint32_t document_page_count,
       PrintingContextAndroid::SetPendingPrint(
           web_contents->GetTopLevelNativeWindow(),
           GetPrintableForTab(tab->GetJavaObject()),
-          printing_context_delegate->render_process_id(),
-          printing_context_delegate->render_frame_id());
+          printing_context_delegate->rfh_id().child_id,
+          printing_context_delegate->rfh_id().frame_routing_id);
     }
   }
 #endif
@@ -402,7 +409,7 @@ void PrintJobWorker::OnNewPage() {
   if (!document_)
     return;
 
-  bool do_spool_job = true;
+  bool do_spool_document = true;
 #if BUILDFLAG(IS_WIN)
   const bool source_is_pdf =
       !print_job_->document()->settings().is_modifiable();
@@ -411,16 +418,17 @@ void PrintJobWorker::OnNewPage() {
     if (!OnNewPageHelperGdi())
       return;
 
-    do_spool_job = false;
+    do_spool_document = false;
   }
 #endif  // BUILDFLAG(IS_WIN)
 
-  if (do_spool_job) {
+  if (do_spool_document) {
     if (!document_->GetMetafile()) {
       PostWaitForPage();
       return;
     }
-    SpoolJob();
+    if (!SpoolDocument())
+      return;
   }
 
   OnDocumentDone();
@@ -447,7 +455,8 @@ bool PrintJobWorker::OnNewPageHelperGdi() {
       return false;
     }
     // The page is there, print it.
-    SpoolPage(page.get());
+    if (!SpoolPage(page.get()))
+      return false;
     ++page_number_;
     if (page_number_ == PageNumber::npos())
       break;
@@ -489,7 +498,6 @@ bool PrintJobWorker::Start() {
 void PrintJobWorker::CheckDocumentSpoolingComplete() {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK_EQ(page_number_, PageNumber::npos());
-  DCHECK(document_);
   // PrintJob must own this, because only PrintJob can send notifications.
   DCHECK(print_job_);
 }
@@ -507,6 +515,7 @@ void PrintJobWorker::OnDocumentDone() {
 }
 
 void PrintJobWorker::FinishDocumentDone(int job_id) {
+  DCHECK(document_);
   print_job_->PostTask(
       FROM_HERE, base::BindOnce(&DocDoneNotificationCallback,
                                 base::RetainedRef(print_job_.get()), job_id,
@@ -517,7 +526,7 @@ void PrintJobWorker::FinishDocumentDone(int job_id) {
 }
 
 #if BUILDFLAG(IS_WIN)
-void PrintJobWorker::SpoolPage(PrintedPage* page) {
+bool PrintJobWorker::SpoolPage(PrintedPage* page) {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK_NE(page_number_, PageNumber::npos());
 
@@ -525,7 +534,7 @@ void PrintJobWorker::SpoolPage(PrintedPage* page) {
   if (document_->RenderPrintedPage(*page, printing_context_.get()) !=
       mojom::ResultCode::kSuccess) {
     OnFailure();
-    return;
+    return false;
   }
 
   // Signal everyone that the page is printed.
@@ -534,10 +543,11 @@ void PrintJobWorker::SpoolPage(PrintedPage* page) {
       FROM_HERE,
       base::BindOnce(&PrintJob::OnPageDone, base::RetainedRef(print_job_.get()),
                      base::RetainedRef(page)));
+  return true;
 }
 #endif  // BUILDFLAG(IS_WIN)
 
-void PrintJobWorker::SpoolJob() {
+bool PrintJobWorker::SpoolDocument() {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
   mojom::ResultCode result =
       document_->RenderPrintedDocument(printing_context_.get());
@@ -545,7 +555,9 @@ void PrintJobWorker::SpoolJob() {
     PRINTER_LOG(ERROR) << "Failure to render printed document - error "
                        << result;
     OnFailure();
+    return false;
   }
+  return true;
 }
 
 void PrintJobWorker::OnFailure() {

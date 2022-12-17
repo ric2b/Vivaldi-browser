@@ -1242,9 +1242,11 @@ public class BookmarkBridge {
             BookmarkItem oldParent, int oldIndex, BookmarkItem newParent, int newIndex) {
         if (mIsDoingExtensiveChanges) return;
 
+        try { // Vivaldi: Catch potential exceptions here to avoid native crash. Ref. VAB-5621.
         for (BookmarkModelObserver observer : mObservers) {
             observer.bookmarkNodeMoved(oldParent, oldIndex, newParent, newIndex);
         }
+        } catch (Exception ignored) {}
     }
 
     @CalledByNative

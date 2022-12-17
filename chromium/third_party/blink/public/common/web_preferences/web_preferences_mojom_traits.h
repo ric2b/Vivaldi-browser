@@ -137,11 +137,6 @@ struct BLINK_COMMON_EXPORT StructTraits<blink::mojom::WebPreferencesDataView,
     return r.data_saver_enabled;
   }
 
-  static bool data_saver_holdback_web_api_enabled(
-      const blink::web_pref::WebPreferences& r) {
-    return r.data_saver_holdback_web_api_enabled;
-  }
-
   static bool local_storage_enabled(const blink::web_pref::WebPreferences& r) {
     return r.local_storage_enabled;
   }
@@ -186,19 +181,6 @@ struct BLINK_COMMON_EXPORT StructTraits<blink::mojom::WebPreferencesDataView,
     return r.pepper_3d_enabled;
   }
 
-  static bool flash_3d_enabled(const blink::web_pref::WebPreferences& r) {
-    return r.flash_3d_enabled;
-  }
-
-  static bool flash_stage3d_enabled(const blink::web_pref::WebPreferences& r) {
-    return r.flash_stage3d_enabled;
-  }
-
-  static bool flash_stage3d_baseline_enabled(
-      const blink::web_pref::WebPreferences& r) {
-    return r.flash_stage3d_baseline_enabled;
-  }
-
   static bool privileged_webgl_extensions_enabled(
       const blink::web_pref::WebPreferences& r) {
     return r.privileged_webgl_extensions_enabled;
@@ -216,11 +198,6 @@ struct BLINK_COMMON_EXPORT StructTraits<blink::mojom::WebPreferencesDataView,
   static bool accelerated_2d_canvas_enabled(
       const blink::web_pref::WebPreferences& r) {
     return r.accelerated_2d_canvas_enabled;
-  }
-
-  static bool new_canvas_2d_api_enabled(
-      const blink::web_pref::WebPreferences& r) {
-    return r.new_canvas_2d_api_enabled;
   }
 
   static bool canvas_2d_layers_enabled(
@@ -651,6 +628,10 @@ struct BLINK_COMMON_EXPORT StructTraits<blink::mojom::WebPreferencesDataView,
   static bool disable_accelerated_small_canvases(
       const blink::web_pref::WebPreferences& r) {
     return r.disable_accelerated_small_canvases;
+  }
+
+  static bool disable_webauthn(const blink::web_pref::WebPreferences& r) {
+    return r.disable_webauthn;
   }
 #endif
 

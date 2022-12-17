@@ -6,23 +6,16 @@
  * @fileoverview Processes events related to editing text and emits the
  * appropriate spoken and braille feedback.
  */
+import {AbstractTts} from '../../common/abstract_tts.js';
+import {ChromeVoxEditableTextBase, TextChangeEvent} from '../../common/editable_text_base.js';
 
-goog.provide('editing.TextEditHandler');
+import {BrailleBackground} from '../braille/braille_background.js';
+import {Color} from '../color.js';
+import {ChromeVoxEvent} from '../custom_automation_event.js';
 
-goog.require('AutomationTreeWalker');
-goog.require('AutomationUtil');
-goog.require('IntentHandler');
-goog.require('Output');
-goog.require('OutputEventType');
-goog.require('TreePathRecoveryStrategy');
-goog.require('cursors.Cursor');
-goog.require('cursors.Range');
-goog.require('editing.EditableLine');
-goog.require('BrailleBackground');
-goog.require('ChromeVoxEditableTextBase');
-goog.require('LibLouis.FormType');
+import {EditableLine} from './editable_line.js';
+import {IntentHandler} from './intent_handler.js';
 
-goog.scope(function() {
 const AutomationEvent = chrome.automation.AutomationEvent;
 const AutomationIntent = chrome.automation.AutomationIntent;
 const AutomationNode = chrome.automation.AutomationNode;
@@ -40,7 +33,7 @@ const Unit = cursors.Unit;
  * A handler for automation events in a focused text field or editable root
  * such as a |contenteditable| subtree.
  */
-editing.TextEditHandler = class {
+export class TextEditHandler {
   /**
    * @param {!AutomationNode} node
    */
@@ -164,16 +157,16 @@ editing.TextEditHandler = class {
   /**
    * @param {!AutomationNode} node The root editable node, i.e. the root of a
    *     contenteditable subtree or a text field.
-   * @return {editing.TextEditHandler}
+   * @return {TextEditHandler}
    */
   static createForNode(node) {
     if (!node.state.editable) {
       throw new Error('Expected editable node.');
     }
 
-    return new editing.TextEditHandler(node);
+    return new TextEditHandler(node);
   }
-};
+}
 
 
 /**
@@ -347,14 +340,14 @@ const AutomationRichEditableText = class extends AutomationEditableText {
       return;
     }
 
-    this.startLine_ = new editing.EditableLine(
+    this.startLine_ = new EditableLine(
         root.selectionStartObject, root.selectionStartOffset,
         root.selectionStartObject, root.selectionStartOffset);
-    this.endLine_ = new editing.EditableLine(
+    this.endLine_ = new EditableLine(
         root.selectionEndObject, root.selectionEndOffset,
         root.selectionEndObject, root.selectionEndOffset);
 
-    this.line_ = new editing.EditableLine(
+    this.line_ = new EditableLine(
         root.selectionStartObject, root.selectionStartOffset,
         root.selectionEndObject, root.selectionEndOffset);
 
@@ -432,10 +425,10 @@ const AutomationRichEditableText = class extends AutomationEditableText {
       return;
     }
 
-    const startLine = new editing.EditableLine(
+    const startLine = new EditableLine(
         root.selectionStartObject, root.selectionStartOffset,
         root.selectionStartObject, root.selectionStartOffset);
-    const endLine = new editing.EditableLine(
+    const endLine = new EditableLine(
         root.selectionEndObject, root.selectionEndOffset,
         root.selectionEndObject, root.selectionEndOffset);
 
@@ -453,7 +446,7 @@ const AutomationRichEditableText = class extends AutomationEditableText {
       // Nothing changed, return.
       return;
     } else {
-      cur = new editing.EditableLine(
+      cur = new EditableLine(
           root.selectionStartObject, root.selectionStartOffset,
           root.selectionEndObject, root.selectionEndOffset, baseLineOnStart);
     }
@@ -467,12 +460,12 @@ const AutomationRichEditableText = class extends AutomationEditableText {
   }
 
   /**
-   * @param {!editing.EditableLine} cur
-   * @param {!editing.EditableLine} prev
-   * @param {!editing.EditableLine} startLine
-   * @param {!editing.EditableLine} endLine
-   * @param {!editing.EditableLine} prevStartLine
-   * @param {!editing.EditableLine} prevEndLine
+   * @param {!EditableLine} cur
+   * @param {!EditableLine} prev
+   * @param {!EditableLine} startLine
+   * @param {!EditableLine} endLine
+   * @param {!EditableLine} prevStartLine
+   * @param {!EditableLine} prevEndLine
    * @param {boolean} baseLineOnStart
    * @param {!Array<AutomationIntent>} intents
    * @private
@@ -917,7 +910,7 @@ const AutomationRichEditableText = class extends AutomationEditableText {
 
   /**
    * @private
-   * @param {editing.EditableLine} cur Current line.
+   * @param {EditableLine} cur Current line.
    */
   updateIntraLineState_(cur) {
     let text = cur.text;
@@ -931,8 +924,8 @@ const AutomationRichEditableText = class extends AutomationEditableText {
 
   /**
    * @param {!Array<AutomationIntent>} intents
-   * @param {!editing.EditableLine} cur
-   * @param {!editing.EditableLine} prev
+   * @param {!EditableLine} cur
+   * @param {!EditableLine} prev
    * @return {boolean}
    * @private
    */
@@ -947,7 +940,7 @@ const AutomationRichEditableText = class extends AutomationEditableText {
   }
 
   /**
-   * @param {!editing.EditableLine} cur
+   * @param {!EditableLine} cur
    * @private
    */
   speakAllMarkers_(cur) {
@@ -970,13 +963,17 @@ const AutomationRichEditableText = class extends AutomationEditableText {
  * table output when over email or url text fields.
  * @implements {ChromeVoxStateObserver}
  */
-editing.EditingChromeVoxStateObserver = class {
+class EditingChromeVoxStateObserver {
   constructor() {
     ChromeVoxState.addObserver(this);
   }
 
-  /** @override */
-  onCurrentRangeChanged(range) {
+  /**
+   * @param {cursors.Range} range
+   * @param {boolean=} opt_fromEditing
+   * @override
+   */
+  onCurrentRangeChanged(range, opt_fromEditing) {
     const inputType = range && range.start.node.inputType;
     if (inputType === 'email' || inputType === 'url') {
       BrailleBackground.getInstance().getTranslatorManager().refresh(
@@ -986,11 +983,10 @@ editing.EditingChromeVoxStateObserver = class {
     BrailleBackground.getInstance().getTranslatorManager().refresh(
         localStorage['brailleTable']);
   }
-};
+}
 
 
 /**
  * @private {ChromeVoxStateObserver}
  */
-editing.observer_ = new editing.EditingChromeVoxStateObserver();
-});  // goog.scope
+EditingChromeVoxStateObserver.instance_ = new EditingChromeVoxStateObserver();

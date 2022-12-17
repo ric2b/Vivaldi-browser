@@ -120,12 +120,6 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
   if (self.traitCollection.horizontalSizeClass !=
       previousTraitCollection.horizontalSizeClass) {
     [self updateFakeboxDisplay];
-    if (IsContentSuggestionsHeaderMigrationEnabled()) {
-      self.headerViewHeightConstraint.constant =
-          content_suggestions::heightForLogoHeader(
-              self.logoIsShowing, self.logoVendor.isShowingDoodle,
-              self.promoCanShow, YES, [self topInset], self.traitCollection);
-    }
   }
 }
 
@@ -210,12 +204,8 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
 }
 
 - (CGFloat)pinnedOffsetY {
-  CGFloat headerHeight = content_suggestions::heightForLogoHeader(
-      self.logoIsShowing, self.logoVendor.isShowingDoodle, self.promoCanShow,
-      YES, [self topInset], self.traitCollection);
-
   CGFloat offsetY =
-      headerHeight - ntp_header::kScrolledToTopOmniboxBottomMargin;
+      [self headerHeight] - ntp_header::kScrolledToTopOmniboxBottomMargin;
   if (IsSplitToolbarMode(self)) {
     offsetY -= ToolbarExpandedHeight(
                    self.traitCollection.preferredContentSizeCategory) +
@@ -519,7 +509,15 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
                       self.logoVendor.isShowingDoodle, self.traitCollection)];
   self.fakeOmnibox.hidden =
       IsRegularXRegularSizeClass(self) && !self.logoIsShowing;
-  [self.collectionSynchronizer invalidateLayout];
+  if (IsContentSuggestionsHeaderMigrationEnabled()) {
+    [self.headerView layoutIfNeeded];
+    self.headerViewHeightConstraint.constant =
+        content_suggestions::heightForLogoHeader(
+            self.logoIsShowing, self.logoVendor.isShowingDoodle,
+            self.promoCanShow, YES, [self topInset], self.traitCollection);
+  } else {
+    [self.collectionSynchronizer invalidateLayout];
+  }
 }
 
 // If Google is not the default search engine, hides the logo, doodle and
@@ -738,6 +736,12 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
       setConstant:content_suggestions::doodleHeight(self.logoVendor.showingLogo,
                                                     doodleShowing,
                                                     self.traitCollection)];
+  if (IsContentSuggestionsHeaderMigrationEnabled()) {
+    self.headerViewHeightConstraint.constant =
+        content_suggestions::heightForLogoHeader(
+            self.logoIsShowing, self.logoVendor.isShowingDoodle,
+            self.promoCanShow, YES, [self topInset], self.traitCollection);
+  }
   [self.commandHandler updateForHeaderSizeChange];
 }
 

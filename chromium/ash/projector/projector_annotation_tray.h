@@ -13,10 +13,15 @@ namespace ash {
 class HoverHighlightView;
 class TrayBubbleWrapper;
 
+// Pen colors.
+constexpr SkColor kProjectorMagentaPenColor = SkColorSetRGB(0xFF, 0x00, 0xE5);
+constexpr SkColor kProjectorRedPenColor = SkColorSetRGB(0xE9, 0x42, 0x35);
+constexpr SkColor kProjectorYellowPenColor = SkColorSetRGB(0xFB, 0xF1, 0x04);
+constexpr SkColor kProjectorBluePenColor = SkColorSetRGB(0x42, 0x85, 0xF4);
+
 // Status area tray which allows you to access the annotation tools for
 // Projector.
-class ProjectorAnnotationTray : public TrayBackgroundView,
-                                public ViewClickListener {
+class ProjectorAnnotationTray : public TrayBackgroundView {
  public:
   explicit ProjectorAnnotationTray(Shelf* shelf);
   ProjectorAnnotationTray(const ProjectorAnnotationTray&) = delete;
@@ -33,13 +38,17 @@ class ProjectorAnnotationTray : public TrayBackgroundView,
   void ShowBubble() override;
   TrayBubbleView* GetBubbleView() override;
   views::Widget* GetBubbleWidget() const override;
+  void OnMouseEvent(ui::MouseEvent* event) override;
+  void OnGestureEvent(ui::GestureEvent* event) override;
   void OnThemeChanged() override;
 
-  // ViewClickListener:
-  void OnViewClicked(views::View* sender) override;
+  void HideAnnotationTray();
 
  private:
-  // Deactives any annotation tool that is currently enabled and update the UI.
+  void ToggleAnnotator();
+  void EnableAnnotatorTool();
+  // Deactivates any annotation tool that is currently enabled and updates the
+  // UI.
   void DeactivateActiveTool();
 
   // Updates the icon in the status area.
@@ -47,14 +56,19 @@ class ProjectorAnnotationTray : public TrayBackgroundView,
 
   void OnPenColorPressed(SkColor color);
 
+  // Returns the message ID of the accessible name for the color.
+  int GetAccessibleNameForColor(SkColor color);
+
   // Image view of the tray icon.
   views::ImageView* const image_view_;
 
-  HoverHighlightView* laser_view_;
   HoverHighlightView* pen_view_;
 
   // The bubble that appears after clicking the annotation tools tray button.
   std::unique_ptr<TrayBubbleWrapper> bubble_;
+
+  // The last selected pen color.
+  SkColor current_pen_color_;
 };
 
 }  // namespace ash

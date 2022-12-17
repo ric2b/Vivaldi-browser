@@ -14,7 +14,6 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/callback_forward.h"
 #include "base/compiler_specific.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "content/public/browser/global_routing_id.h"
 
@@ -52,9 +51,6 @@ class AwContentsIoThreadClient {
     LOAD_NO_CACHE = 2,
     LOAD_CACHE_ONLY = 3,
   };
-
-  // Called when AwContents is created before there is a Java client.
-  static void RegisterPendingContents(content::WebContents* web_contents);
 
   // Associates the |jclient| instance (which must implement the
   // AwContentsIoThreadClient Java interface) with the |web_contents|.

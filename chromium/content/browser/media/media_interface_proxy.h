@@ -56,7 +56,9 @@ class MediaInterfaceProxy final : public DocumentUserData<MediaInterfaceProxy>,
   void CreateAudioDecoder(
       mojo::PendingReceiver<media::mojom::AudioDecoder> receiver) final;
   void CreateVideoDecoder(
-      mojo::PendingReceiver<media::mojom::VideoDecoder> receiver) final;
+      mojo::PendingReceiver<media::mojom::VideoDecoder> receiver,
+      mojo::PendingRemote<media::stable::mojom::StableVideoDecoder>
+          dst_video_decoder) final;
   void CreateAudioEncoder(
       mojo::PendingReceiver<media::mojom::AudioEncoder> receiver) final;
   void CreateDefaultRenderer(
@@ -85,7 +87,9 @@ class MediaInterfaceProxy final : public DocumentUserData<MediaInterfaceProxy>,
       mojo::PendingRemote<media::mojom::MediaLog> media_log_remote,
       mojo::PendingReceiver<media::mojom::Renderer> receiver,
       mojo::PendingReceiver<media::mojom::MediaFoundationRendererExtension>
-          renderer_extension_receiver) final;
+          renderer_extension_receiver,
+      mojo::PendingRemote<media::mojom::MediaFoundationRendererClientExtension>
+          client_extension_remote) final;
 #endif  // BUILDFLAG(IS_WIN)
   void CreateCdm(const media::CdmConfig& cdm_config,
                  CreateCdmCallback create_cdm_cb) final;

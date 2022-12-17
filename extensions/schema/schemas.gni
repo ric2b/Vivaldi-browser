@@ -32,6 +32,7 @@ schema_sources = [
   "reading_list_private.json",
   "runtime_private.json",
   "savedpasswords.json",
+  "search_engines.json",
   "settings.json",
   "sync.json",
   "tabs_private.json",

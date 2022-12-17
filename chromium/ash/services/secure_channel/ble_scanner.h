@@ -7,6 +7,7 @@
 
 #include <ostream>
 
+#include "ash/components/multidevice/remote_device_ref.h"
 #include "ash/services/secure_channel/connection_attempt_details.h"
 #include "ash/services/secure_channel/connection_role.h"
 #include "ash/services/secure_channel/device_id_pair.h"
@@ -14,7 +15,6 @@
 #include "base/containers/flat_set.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
-#include "chromeos/components/multidevice/remote_device_ref.h"
 
 namespace device {
 class BluetoothDevice;
@@ -83,10 +83,5 @@ class BleScanner {
 };
 
 }  // namespace ash::secure_channel
-
-// TODO(https://crbug.com/1164001): remove after the migration is finished.
-namespace chromeos::secure_channel {
-using ::ash::secure_channel::BleScanner;
-}
 
 #endif  // ASH_SERVICES_SECURE_CHANNEL_BLE_SCANNER_H_

@@ -36,20 +36,20 @@ std::vector<std::string> AllowlistedSchemes() {
 
 std::vector<std::string> AllowlistedSchemes(const char* scheme1) {
   const char* schemes[] = {scheme1};
-  return std::vector<std::string>(schemes, schemes + base::size(schemes));
+  return std::vector<std::string>(schemes, schemes + std::size(schemes));
 }
 
 std::vector<std::string> AllowlistedSchemes(const char* scheme1,
                                             const char* scheme2) {
   const char* schemes[] = {scheme1, scheme2};
-  return std::vector<std::string>(schemes, schemes + base::size(schemes));
+  return std::vector<std::string>(schemes, schemes + std::size(schemes));
 }
 
 std::vector<std::string> AllowlistedSchemes(const char* scheme1,
                                             const char* scheme2,
                                             const char* scheme3) {
   const char* schemes[] = {scheme1, scheme2, scheme3};
-  return std::vector<std::string>(schemes, schemes + base::size(schemes));
+  return std::vector<std::string>(schemes, schemes + std::size(schemes));
 }
 
 std::set<ContentSetting> ValidSettings() {
@@ -59,14 +59,14 @@ std::set<ContentSetting> ValidSettings() {
 std::set<ContentSetting> ValidSettings(ContentSetting setting1,
                                        ContentSetting setting2) {
   ContentSetting settings[] = {setting1, setting2};
-  return std::set<ContentSetting>(settings, settings + base::size(settings));
+  return std::set<ContentSetting>(settings, settings + std::size(settings));
 }
 
 std::set<ContentSetting> ValidSettings(ContentSetting setting1,
                                        ContentSetting setting2,
                                        ContentSetting setting3) {
   ContentSetting settings[] = {setting1, setting2, setting3};
-  return std::set<ContentSetting>(settings, settings + base::size(settings));
+  return std::set<ContentSetting>(settings, settings + std::size(settings));
 }
 
 std::set<ContentSetting> ValidSettings(ContentSetting setting1,
@@ -74,7 +74,7 @@ std::set<ContentSetting> ValidSettings(ContentSetting setting1,
                                        ContentSetting setting3,
                                        ContentSetting setting4) {
   ContentSetting settings[] = {setting1, setting2, setting3, setting4};
-  return std::set<ContentSetting>(settings, settings + base::size(settings));
+  return std::set<ContentSetting>(settings, settings + std::size(settings));
 }
 
 }  // namespace
@@ -162,6 +162,16 @@ void ContentSettingsRegistry::Init() {
            WebsiteSettingsRegistry::DESKTOP |
                WebsiteSettingsRegistry::PLATFORM_ANDROID,
            ContentSettingsInfo::INHERIT_IN_INCOGNITO,
+           ContentSettingsInfo::PERSISTENT,
+           ContentSettingsInfo::EXCEPTIONS_ON_SECURE_AND_INSECURE_ORIGINS);
+
+  Register(ContentSettingsType::GET_DISPLAY_MEDIA_SET_SELECT_ALL_SCREENS,
+           "get-display-media-set-select-all-screens", CONTENT_SETTING_BLOCK,
+           WebsiteSettingsInfo::SYNCABLE, AllowlistedSchemes(),
+           ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_BLOCK),
+           WebsiteSettingsInfo::SINGLE_ORIGIN_ONLY_SCOPE,
+           WebsiteSettingsRegistry::ALL_PLATFORMS,
+           ContentSettingsInfo::INHERIT_IF_LESS_PERMISSIVE,
            ContentSettingsInfo::PERSISTENT,
            ContentSettingsInfo::EXCEPTIONS_ON_SECURE_AND_INSECURE_ORIGINS);
 
@@ -583,7 +593,7 @@ void ContentSettingsRegistry::Init() {
            ContentSettingsInfo::PERSISTENT,
            ContentSettingsInfo::EXCEPTIONS_ON_SECURE_AND_INSECURE_ORIGINS);
 
-  Register(ContentSettingsType::FONT_ACCESS, "font-access", CONTENT_SETTING_ASK,
+  Register(ContentSettingsType::LOCAL_FONTS, "local-fonts", CONTENT_SETTING_ASK,
            WebsiteSettingsInfo::SYNCABLE, AllowlistedSchemes(),
            ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_ASK,
                          CONTENT_SETTING_BLOCK),
@@ -648,6 +658,16 @@ void ContentSettingsRegistry::Init() {
            ContentSettingsInfo::INHERIT_IN_INCOGNITO,
            ContentSettingsInfo::PERSISTENT,
            ContentSettingsInfo::EXCEPTIONS_ON_SECURE_AND_INSECURE_ORIGINS);
+
+  Register(ContentSettingsType::FEDERATED_IDENTITY_API, "webid-api",
+           CONTENT_SETTING_ALLOW, WebsiteSettingsInfo::UNSYNCABLE,
+           AllowlistedSchemes(),
+           ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_BLOCK),
+           WebsiteSettingsInfo::SINGLE_ORIGIN_ONLY_SCOPE,
+           WebsiteSettingsRegistry::ALL_PLATFORMS,
+           ContentSettingsInfo::INHERIT_IN_INCOGNITO,
+           ContentSettingsInfo::PERSISTENT,
+           ContentSettingsInfo::EXCEPTIONS_ON_SECURE_ORIGINS_ONLY);
 }
 
 void ContentSettingsRegistry::Register(

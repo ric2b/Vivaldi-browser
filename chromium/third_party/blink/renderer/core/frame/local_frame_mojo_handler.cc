@@ -23,7 +23,7 @@
 #include "third_party/blink/public/web/web_local_frame_client.h"
 #include "third_party/blink/public/web/web_plugin.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
-#include "third_party/blink/renderer/core/app_history/app_history.h"
+#include "third_party/blink/renderer/bindings/core/v8/script_evaluation_result.h"
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
 #include "third_party/blink/renderer/core/dom/ignore_opens_during_unload_count_incrementer.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
@@ -55,6 +55,7 @@
 #include "third_party/blink/renderer/core/layout/layout_embedded_content.h"
 #include "third_party/blink/renderer/core/loader/mixed_content_checker.h"
 #include "third_party/blink/renderer/core/messaging/message_port.h"
+#include "third_party/blink/renderer/core/navigation_api/navigation_api.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/focus_controller.h"
 #include "third_party/blink/renderer/core/page/page.h"
@@ -192,13 +193,13 @@ v8::MaybeLocal<v8::Value> GetProperty(v8::Local<v8::Context> context,
 v8::MaybeLocal<v8::Value> CallMethodOnFrame(LocalFrame* local_frame,
                                             const String& object_name,
                                             const String& method_name,
-                                            base::Value arguments,
+                                            base::Value::List arguments,
                                             WebV8ValueConverter* converter) {
   v8::Local<v8::Context> context = MainWorldScriptContext(local_frame);
 
   v8::Context::Scope context_scope(context);
   WTF::Vector<v8::Local<v8::Value>> args;
-  for (auto const& argument : arguments.GetListDeprecated()) {
+  for (const auto& argument : arguments) {
     args.push_back(converter->ToV8Value(&argument, context));
   }
 
@@ -280,8 +281,9 @@ Vector<v8::Local<v8::Value>> JavaScriptIsolatedWorldRequest::Execute(
   ClassicScript* classic_script = ClassicScript::CreateUnspecifiedScript(
       script_, ScriptSourceLocationType::kInternal,
       SanitizeScriptErrors::kDoNotSanitize);
-  return {classic_script->RunScriptInIsolatedWorldAndReturnValue(window,
-                                                                 world_id_)};
+  return {
+      classic_script->RunScriptInIsolatedWorldAndReturnValue(window, world_id_)
+          .GetSuccessValueOrEmpty()};
 }
 
 void JavaScriptIsolatedWorldRequest::Completed(
@@ -753,7 +755,7 @@ void LocalFrameMojoHandler::AdvanceFocusInFrame(
       focus_type, source_frame, frame_);
 }
 
-void LocalFrameMojoHandler::AdvanceFocusInForm(
+void LocalFrameMojoHandler::AdvanceFocusForIME(
     mojom::blink::FocusType focus_type) {
   auto* focused_frame = GetPage()->GetFocusController().FocusedFrame();
   if (focused_frame != frame_)
@@ -765,7 +767,7 @@ void LocalFrameMojoHandler::AdvanceFocusInForm(
     return;
 
   Element* next_element =
-      GetPage()->GetFocusController().NextFocusableElementInForm(element,
+      GetPage()->GetFocusController().NextFocusableElementForIME(element,
                                                                  focus_type);
   if (!next_element)
     return;
@@ -777,8 +779,9 @@ void LocalFrameMojoHandler::AdvanceFocusInForm(
 void LocalFrameMojoHandler::ReportContentSecurityPolicyViolation(
     network::mojom::blink::CSPViolationPtr violation) {
   auto source_location = std::make_unique<SourceLocation>(
-      violation->source_location->url, violation->source_location->line,
-      violation->source_location->column, nullptr);
+      violation->source_location->url, String(),
+      violation->source_location->line, violation->source_location->column,
+      nullptr);
 
   frame_->Console().AddMessage(MakeGarbageCollected<ConsoleMessage>(
       mojom::blink::ConsoleMessageSource::kSecurity,
@@ -835,7 +838,7 @@ void LocalFrameMojoHandler::PostMessageEvent(
 void LocalFrameMojoHandler::JavaScriptMethodExecuteRequest(
     const String& object_name,
     const String& method_name,
-    base::Value arguments,
+    base::Value::List arguments,
     bool wants_result,
     JavaScriptMethodExecuteRequestCallback callback) {
   TRACE_EVENT_INSTANT0("test_tracing", "JavaScriptMethodExecuteRequest",
@@ -878,7 +881,8 @@ void LocalFrameMojoHandler::JavaScriptExecuteRequest(
   v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
   v8::Local<v8::Value> result =
       ClassicScript::CreateUnspecifiedScript(javascript)
-          ->RunScriptAndReturnValue(DomWindow());
+          ->RunScriptAndReturnValue(DomWindow())
+          .GetSuccessValueOrEmpty();
 
   if (wants_result) {
     std::unique_ptr<WebV8ValueConverter> converter =
@@ -920,12 +924,14 @@ void LocalFrameMojoHandler::JavaScriptExecuteRequestForTests(
       SanitizeScriptErrors::kDoNotSanitize);
 
   if (world_id == DOMWrapperWorld::kMainWorldId) {
-    result = script->RunScriptAndReturnValue(DomWindow());
+    result =
+        script->RunScriptAndReturnValue(DomWindow()).GetSuccessValueOrEmpty();
   } else {
     CHECK_GT(world_id, DOMWrapperWorld::kMainWorldId);
     CHECK_LT(world_id, DOMWrapperWorld::kDOMWrapperWorldEmbedderWorldIdLimit);
     result =
-        script->RunScriptInIsolatedWorldAndReturnValue(DomWindow(), world_id);
+        script->RunScriptInIsolatedWorldAndReturnValue(DomWindow(), world_id)
+            .GetSuccessValueOrEmpty();
   }
 
   if (wants_result) {
@@ -1077,7 +1083,7 @@ void LocalFrameMojoHandler::MixedContentFound(
     network::mojom::blink::SourceLocationPtr source_location) {
   std::unique_ptr<SourceLocation> source;
   if (source_location) {
-    source = std::make_unique<SourceLocation>(source_location->url,
+    source = std::make_unique<SourceLocation>(source_location->url, String(),
                                               source_location->line,
                                               source_location->column, nullptr);
   }
@@ -1149,10 +1155,11 @@ void LocalFrameMojoHandler::GetCanonicalUrlForSharing(
 #endif
 }
 
-void LocalFrameMojoHandler::SetAppHistoryEntriesForRestore(
-    mojom::blink::AppHistoryEntryArraysPtr entry_arrays) {
-  if (AppHistory* app_history = AppHistory::appHistory(*frame_->DomWindow()))
-    app_history->SetEntriesForRestore(entry_arrays);
+void LocalFrameMojoHandler::SetNavigationApiHistoryEntriesForRestore(
+    mojom::blink::NavigationApiHistoryEntryArraysPtr entry_arrays) {
+  if (NavigationApi* navigation_api =
+          NavigationApi::navigation(*frame_->DomWindow()))
+    navigation_api->SetEntriesForRestore(entry_arrays);
 }
 
 void LocalFrameMojoHandler::AnimateDoubleTapZoom(const gfx::Point& point,
@@ -1185,7 +1192,8 @@ void LocalFrameMojoHandler::ClosePage(
   // when unloading itself.
   IgnoreOpensDuringUnloadCountIncrementer ignore_opens_during_unload(
       frame_->GetDocument());
-  frame_->Loader().DispatchUnloadEvent(/*unload_timing_info=*/nullptr);
+  frame_->Loader().DispatchUnloadEventAndFillOldDocumentInfoIfNeeded(
+      false /* need_unload_info_for_new_document */);
 
   std::move(completion_callback).Run();
 }
@@ -1293,7 +1301,7 @@ void LocalFrameMojoHandler::UpdateBrowserControlsState(
     cc::BrowserControlsState constraints,
     cc::BrowserControlsState current,
     bool animate) {
-  DCHECK(frame_->IsMainFrame());
+  DCHECK(frame_->IsOutermostMainFrame());
   TRACE_EVENT2("renderer", "LocalFrame::UpdateBrowserControlsState",
                "Constraint", static_cast<int>(constraints), "Current",
                static_cast<int>(current));

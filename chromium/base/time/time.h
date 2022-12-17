@@ -69,6 +69,7 @@
 #include <limits>
 
 #include "base/base_export.h"
+#include "base/check.h"
 #include "base/check_op.h"
 #include "base/numerics/clamped_math.h"
 #include "build/build_config.h"
@@ -110,6 +111,10 @@ struct DateTime;
 namespace base {
 
 class PlatformThreadHandle;
+class TimeDelta;
+
+template <typename T>
+constexpr TimeDelta Microseconds(T n);
 
 // TimeDelta ------------------------------------------------------------------
 
@@ -472,6 +477,21 @@ class TimeBase {
   int64_t us_;
 };
 
+#if BUILDFLAG(IS_WIN)
+#if defined(ARCH_CPU_ARM64)
+// TSCTicksPerSecond is not supported on Windows on Arm systems because the
+// cycle-counting methods use the actual CPU cycle count, and not a consistent
+// incrementing counter.
+#else
+// Returns true if the CPU support constant rate TSC.
+[[nodiscard]] BASE_EXPORT bool HasConstantRateTSC();
+
+// Returns the frequency of the TSC in ticks per second, or 0 if it hasn't
+// been measured yet. Needs to be guarded with a call to HasConstantRateTSC().
+[[nodiscard]] BASE_EXPORT double TSCTicksPerSecond();
+#endif
+#endif  // BUILDFLAG(IS_WIN)
+
 }  // namespace time_internal
 
 template <class TimeClass>
@@ -589,8 +609,13 @@ class BASE_EXPORT Time : public time_internal::TimeBase<Time> {
   //       base::Microseconds(LoadFromDatabase()));
   //
   // Do not use `FromInternalValue()` or `ToInternalValue()` for this purpose.
-  static Time FromDeltaSinceWindowsEpoch(TimeDelta delta);
-  TimeDelta ToDeltaSinceWindowsEpoch() const;
+  static constexpr Time FromDeltaSinceWindowsEpoch(TimeDelta delta) {
+    return Time(delta.InMicroseconds());
+  }
+
+  constexpr TimeDelta ToDeltaSinceWindowsEpoch() const {
+    return Microseconds(us_);
+  }
 
   // Converts to/from time_t in UTC and a Time class.
   static constexpr Time FromTimeT(time_t tt);
@@ -1012,11 +1037,34 @@ class BASE_EXPORT TimeTicks : public time_internal::TimeBase<TimeTicks> {
 
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS_ASH)
   // Converts to TimeTicks the value obtained from SystemClock.uptimeMillis().
-  // Note: this convertion may be non-monotonic in relation to previously
+  // Note: this conversion may be non-monotonic in relation to previously
   // obtained TimeTicks::Now() values because of the truncation (to
   // milliseconds) performed by uptimeMillis().
   static TimeTicks FromUptimeMillis(int64_t uptime_millis_value);
-#endif
+
+#endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS_ASH)
+
+#if BUILDFLAG(IS_ANDROID)
+  // Converts to TimeTicks the value obtained from System.nanoTime(). This
+  // conversion will be monotonic in relation to previously obtained
+  // TimeTicks::Now() values as the clocks are based on the same posix monotonic
+  // clock, with nanoTime() potentially providing higher resolution.
+  static TimeTicks FromJavaNanoTime(int64_t nano_time_value);
+
+  // Truncates the TimeTicks value to the precision of SystemClock#uptimeMillis.
+  // Note that the clocks already share the same monotonic clock source.
+  jlong ToUptimeMillis() const;
+
+  // Returns the TimeTicks value as microseconds in the timebase of
+  // SystemClock#uptimeMillis.
+  // Note that the clocks already share the same monotonic clock source.
+  //
+  // System.nanoTime() may be used to get sub-millisecond precision in Java code
+  // and may be compared against this value as the two share the same clock
+  // source (though be sure to convert nanos to micros).
+  jlong ToUptimeMicros() const;
+
+#endif  // BUILDFLAG(IS_ANDROID)
 
   // Get an estimate of the TimeTick value at the time of the UnixEpoch. Because
   // Time and TimeTicks respond differently to user-set time and NTP
@@ -1134,20 +1182,6 @@ class BASE_EXPORT ThreadTicks : public time_internal::TimeBase<ThreadTicks> {
   constexpr explicit ThreadTicks(int64_t us) : TimeBase(us) {}
 
 #if BUILDFLAG(IS_WIN)
-  FRIEND_TEST_ALL_PREFIXES(TimeTicks, TSCTicksPerSecond);
-
-#if defined(ARCH_CPU_ARM64)
-  // TSCTicksPerSecond is not supported on Windows on Arm systems because the
-  // cycle-counting methods use the actual CPU cycle count, and not a consistent
-  // incrementing counter.
-#else
-  // Returns the frequency of the TSC in ticks per second, or 0 if it hasn't
-  // been measured yet. Needs to be guarded with a call to IsSupported().
-  // This method is declared here rather than in the anonymous namespace to
-  // allow testing.
-  static double TSCTicksPerSecond();
-#endif
-
   [[nodiscard]] static bool IsSupportedWin();
   static void WaitUntilInitializedWin();
 #endif

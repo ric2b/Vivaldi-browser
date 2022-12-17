@@ -9,6 +9,20 @@
 namespace policy {
 namespace policy_prefs {
 
+#if BUILDFLAG(IS_WIN)
+// Integer pref that stores Azure Active Directory management authority.
+const char kAzureActiveDirectoryManagement[] =
+    "management.platform.azure_active_directory";
+
+// Integer pref that stores the Windows enterprise MDM management authority.
+const char kEnterpriseMDMManagementWindows[] =
+    "management.platform.enterprise_mdm_win";
+#elif BUILDFLAG(IS_MAC)
+// Integer pref that stores the Mac enterprise MDM management authority.
+const char kEnterpriseMDMManagementMac[] =
+    "management.platform.enterprise_mdm_mac";
+#endif
+
 // 64-bit serialization of the time last policy usage statistics were collected
 // by UMA_HISTOGRAM_ENUMERATION.
 const char kLastPolicyStatisticsUpdate[] = "policy.last_statistics_update";
@@ -62,29 +76,39 @@ const char kNativeWindowOcclusionEnabled[] =
 const char kIntensiveWakeUpThrottlingEnabled[] =
     "policy.intensive_wake_up_throttling_enabled";
 
-// Boolean that controls whether a window spawned from an anchor targeting
-// _blank receives an opener. TODO(crbug.com/898942): Remove this in Chrome 95.
-const char kTargetBlankImpliesNoOpener[] =
-    "policy.target_blank_implies_noopener";
+// Boolean policy preference for force enabling or disabling the
+// SetTimeoutWithoutClamp web feature.
+const char kSetTimeoutWithout1MsClampEnabled[] =
+    "policy.set_timeout_without_1ms_clamp";
 
 #if BUILDFLAG(IS_ANDROID)
 // Boolean policy preference to disable the BackForwardCache feature.
 const char kBackForwardCacheEnabled[] = "policy.back_forward_cache_enabled";
 #endif  // BUILDFLAG(IS_ANDROID)
 
-// Boolean policy to force enable WebSQL in third-party contexts.
-const char kWebSQLInThirdPartyContextEnabled[] =
-    "policy.web_sql_in_third_party_context_enabled";
-
 // Boolean policy preference to disable the User-Agent Client Hints
 // updated GREASE algorithm feature.
 const char kUserAgentClientHintsGREASEUpdateEnabled[] =
     "policy.user_agent_client_hints_grease_update_enabled";
 
-// Boolean policy to enable/disable Direct Sockets API.
-// If true, the default API behavior is observed (secure context / cli flags
-// required). If false, the API gets blocked unconditionally.
-const char kEnableDirectSockets[] = "policy.enable_direct_sockets";
+// Boolean policy preference to disable the URL parameter
+// filter.
+const char kUrlParamFilterEnabled[] = "policy.url_param_filter_enabled";
+
+// Boolean policy to allow isolated apps developer mode.
+const char kIsolatedAppsDeveloperModeAllowed[] =
+    "policy.isolated_apps_developer_mode_allowed";
+
+// Boolean policy to force WebSQL to be enabled.
+const char kWebSQLAccess[] = "policy.web_sql_access";
+
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+// Last time that a check for cloud policy management was done. This time is
+// recorded on Android and iOS so that retries aren't attempted on every
+// startup. Instead the cloud policy registration is retried at least 1 or 3
+// days later.
+const char kLastPolicyCheckTime[] = "policy.last_policy_check_time";
+#endif
 
 }  // namespace policy_prefs
 }  // namespace policy

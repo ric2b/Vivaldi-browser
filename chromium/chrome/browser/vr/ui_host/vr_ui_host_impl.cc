@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
@@ -153,7 +152,7 @@ VRUiHostImpl::~VRUiHostImpl() {
   // destroyed, it means the corresponding device has been removed from
   // XRRuntimeManager, and the BrowserXRRuntime has been destroyed.
   if (web_contents_)
-    SetWebXRWebContents(nullptr);
+    WebXRWebContentsChanged(nullptr);
 }
 
 bool IsValidInfo(device::mojom::VRDisplayInfoPtr& info) {
@@ -168,7 +167,7 @@ bool IsValidInfo(device::mojom::VRDisplayInfoPtr& info) {
                         &device::mojom::XRView::eye);
 }
 
-void VRUiHostImpl::SetWebXRWebContents(content::WebContents* contents) {
+void VRUiHostImpl::WebXRWebContentsChanged(content::WebContents* contents) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   if (!IsValidInfo(info_)) {
@@ -237,7 +236,7 @@ void VRUiHostImpl::SetWebXRWebContents(content::WebContents* contents) {
   }
 }
 
-void VRUiHostImpl::SetFramesThrottled(bool throttled) {
+void VRUiHostImpl::WebXRFramesThrottledChanged(bool throttled) {
   frames_throttled_ = throttled;
 
   if (!ui_rendering_thread_) {
@@ -248,7 +247,7 @@ void VRUiHostImpl::SetFramesThrottled(bool throttled) {
   ui_rendering_thread_->SetFramesThrottled(frames_throttled_);
 }
 
-void VRUiHostImpl::SetVRDisplayInfo(
+void VRUiHostImpl::VRDisplayInfoChanged(
     device::mojom::VRDisplayInfoPtr display_info) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   // On Windows this is getting logged every frame, so set to 3.

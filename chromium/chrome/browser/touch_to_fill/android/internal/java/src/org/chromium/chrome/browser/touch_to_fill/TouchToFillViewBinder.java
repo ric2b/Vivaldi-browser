@@ -8,15 +8,19 @@ import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.Cr
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.CredentialProperties.FAVICON_OR_FALLBACK;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.CredentialProperties.FORMATTED_ORIGIN;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.CredentialProperties.ON_CLICK_LISTENER;
+import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.CredentialProperties.SHOW_SUBMIT_BUTTON;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.DISMISS_HANDLER;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.HeaderProperties.FORMATTED_URL;
+import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.HeaderProperties.IMAGE_DRAWABLE_ID;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.HeaderProperties.ORIGIN_SECURE;
+import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.HeaderProperties.SHOW_SUBMIT_SUBTITLE;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.HeaderProperties.SINGLE_CREDENTIAL;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.ON_CLICK_MANAGE;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.SHEET_ITEMS;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.VISIBLE;
 import static org.chromium.components.embedder_support.util.UrlUtilities.stripScheme;
 
+import android.content.Context;
 import android.text.method.PasswordTransformationMethod;
 import android.view.View;
 import android.view.ViewGroup;
@@ -24,7 +28,9 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.StringRes;
+import androidx.appcompat.content.res.AppCompatResources;
 
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.CredentialProperties;
 import org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.ItemType;
 import org.chromium.chrome.browser.touch_to_fill.data.Credential;
@@ -118,7 +124,7 @@ class TouchToFillViewBinder {
             CredentialProperties.FaviconOrFallback data = model.get(FAVICON_OR_FALLBACK);
             imageView.setImageDrawable(FaviconUtils.getIconDrawableWithoutFilter(data.mIcon,
                     data.mUrl, data.mFallbackColor,
-                    FaviconUtils.createCircularIconGenerator(view.getResources()),
+                    FaviconUtils.createCircularIconGenerator(view.getContext()),
                     view.getResources(), data.mIconSize));
         } else if (propertyKey == ON_CLICK_LISTENER) {
             view.setOnClickListener(
@@ -141,6 +147,8 @@ class TouchToFillViewBinder {
             TextView passwordText = view.findViewById(R.id.password);
             passwordText.setText(credential.getPassword());
             passwordText.setTransformationMethod(new PasswordTransformationMethod());
+        } else if (propertyKey == SHOW_SUBMIT_BUTTON) {
+            // Whether Touch To Fill should auto-submit a form doesn't affect the credentials list.
         } else {
             assert false : "Unhandled update to property:" + propertyKey;
         }
@@ -158,11 +166,64 @@ class TouchToFillViewBinder {
         if (propertyKey == ON_CLICK_LISTENER) {
             view.setOnClickListener(
                     clickedView -> { model.get(ON_CLICK_LISTENER).onResult(credential); });
+        } else if (propertyKey == SHOW_SUBMIT_BUTTON) {
+            TextView buttonTitleText = view.findViewById(R.id.touch_to_fill_button_title);
+            if (ChromeFeatureList.isEnabled(ChromeFeatureList.TOUCH_TO_FILL_PASSWORD_SUBMISSION)) {
+                buttonTitleText.setText(view.getContext().getString(model.get(SHOW_SUBMIT_BUTTON)
+                                ? R.string.touch_to_fill_signin
+                                : R.string.touch_to_fill_continue));
+            } else {
+                buttonTitleText.setText(R.string.touch_to_fill_continue);
+            }
         } else if (propertyKey == FAVICON_OR_FALLBACK || propertyKey == FORMATTED_ORIGIN
                 || propertyKey == CREDENTIAL) {
-            // The button appearance is static.
+            // Credential properties don't affect the button.
         } else {
             assert false : "Unhandled update to property:" + propertyKey;
+        }
+    }
+
+    /**
+     * Helper function to infer the title of Touch To Fill sheet.
+     * @param model The observed {@link PropertyModel}. Its data need to be reflected in the view.
+     * @param context The {@link Context} of the header to update.
+     * @return The title of Touch To Fill sheet.
+     */
+    private static String getTitle(PropertyModel model, Context context) {
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.TOUCH_TO_FILL_PASSWORD_SUBMISSION)) {
+            return context.getString(R.string.touch_to_fill_sheet_uniform_title);
+        } else {
+            @StringRes
+            int titleStringId;
+            if (model.get(SINGLE_CREDENTIAL)) {
+                titleStringId = R.string.touch_to_fill_sheet_title_single;
+            } else {
+                titleStringId = R.string.touch_to_fill_sheet_title;
+            }
+            return context.getString(titleStringId);
+        }
+    }
+
+    /**
+     * Helper function to infer the subtitle of Touch To Fill sheet.
+     * @param model The observed {@link PropertyModel}. Its data need to be reflected in the view.
+     * @param context The {@link Context} of the header to update.
+     * @return The title of Touch To Fill sheet.
+     */
+    private static String getSubtitle(PropertyModel model, Context context) {
+        if (model.get(SHOW_SUBMIT_SUBTITLE)) {
+            assert ChromeFeatureList.isEnabled(ChromeFeatureList.TOUCH_TO_FILL_PASSWORD_SUBMISSION);
+            return String.format(
+                    context.getString(model.get(ORIGIN_SECURE)
+                                    ? R.string.touch_to_fill_sheet_subtitle_submission
+                                    : R.string.touch_to_fill_sheet_subtitle_insecure_submission),
+                    model.get(FORMATTED_URL));
+        } else {
+            return model.get(ORIGIN_SECURE)
+                    ? model.get(FORMATTED_URL)
+                    : String.format(
+                            context.getString(R.string.touch_to_fill_sheet_subtitle_not_secure),
+                            model.get(FORMATTED_URL));
         }
     }
 
@@ -173,25 +234,17 @@ class TouchToFillViewBinder {
      * @param key The {@link PropertyKey} which changed.
      */
     private static void bindHeaderView(PropertyModel model, View view, PropertyKey key) {
-        if (key == SINGLE_CREDENTIAL || key == FORMATTED_URL || key == ORIGIN_SECURE) {
+        if (key == SHOW_SUBMIT_SUBTITLE || key == SINGLE_CREDENTIAL || key == FORMATTED_URL
+                || key == ORIGIN_SECURE || key == IMAGE_DRAWABLE_ID) {
             TextView sheetTitleText = view.findViewById(R.id.touch_to_fill_sheet_title);
-            @StringRes
-            int titleStringId;
-            if (model.get(SINGLE_CREDENTIAL)) {
-                titleStringId = R.string.touch_to_fill_sheet_title_single;
-            } else {
-                titleStringId = R.string.touch_to_fill_sheet_title;
-            }
-            sheetTitleText.setText(view.getContext().getString(titleStringId));
+            sheetTitleText.setText(getTitle(model, view.getContext()));
+
             TextView sheetSubtitleText = view.findViewById(R.id.touch_to_fill_sheet_subtitle);
-            if (model.get(ORIGIN_SECURE)) {
-                sheetSubtitleText.setText(model.get(FORMATTED_URL));
-            } else {
-                sheetSubtitleText.setText(
-                        String.format(view.getContext().getString(
-                                              R.string.touch_to_fill_sheet_subtitle_not_secure),
-                                model.get(FORMATTED_URL)));
-            }
+            sheetSubtitleText.setText(getSubtitle(model, view.getContext()));
+
+            ImageView sheetHeaderImage = view.findViewById(R.id.touch_to_fill_sheet_header_image);
+            sheetHeaderImage.setImageDrawable(AppCompatResources.getDrawable(
+                    view.getContext(), model.get(IMAGE_DRAWABLE_ID)));
         } else {
             assert false : "Unhandled update to property:" + key;
         }

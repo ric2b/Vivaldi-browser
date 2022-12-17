@@ -343,6 +343,8 @@ void SyncServiceCrypto::SetEncryptionPassphrase(const std::string& passphrase) {
 
 bool SyncServiceCrypto::SetDecryptionPassphrase(const std::string& passphrase) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // This should only be called when the engine has been initialized.
+  DCHECK(state_.engine);
 
   // We should never be called with an empty passphrase.
   DCHECK(!passphrase.empty());
@@ -368,16 +370,12 @@ bool SyncServiceCrypto::SetDecryptionPassphrase(const std::string& passphrase) {
       state_.passphrase_key_derivation_params, passphrase);
   DCHECK(nigori);
 
-  std::string bootstrap_token = SerializeNigoriAsBootstrapToken(*nigori);
-  if (SetDecryptionKeyWithoutUpdatingBootstrapToken(std::move(nigori))) {
-    // Update the bootstrap token immediately, even if engine has new pending
-    // keys, which aren't decryptable with |nigori|, this is harmless as
-    // bootstrap token is ignored if it doesn't contain the right key.
-    delegate_->SetEncryptionBootstrapToken(bootstrap_token);
-    return true;
-  }
+  // Update the bootstrap token immediately, this is harmless as bootstrap token
+  // is ignored if it doesn't contain the right key.
+  delegate_->SetEncryptionBootstrapToken(
+      SerializeNigoriAsBootstrapToken(*nigori));
 
-  return false;
+  return SetDecryptionKeyWithoutUpdatingBootstrapToken(std::move(nigori));
 }
 
 void SyncServiceCrypto::SetDecryptionNigoriKey(std::unique_ptr<Nigori> nigori) {
@@ -389,12 +387,16 @@ void SyncServiceCrypto::SetDecryptionNigoriKey(std::unique_ptr<Nigori> nigori) {
     return;
   }
 
-  std::string bootstrap_token = SerializeNigoriAsBootstrapToken(*nigori);
-  if (SetDecryptionKeyWithoutUpdatingBootstrapToken(std::move(nigori))) {
-    // Update the bootstrap token immediately, even if engine has new pending
-    // keys, which aren't decryptable with |nigori|, this is harmless as
-    // bootstrap token is ignored if it doesn't contain the right key.
-    delegate_->SetEncryptionBootstrapToken(bootstrap_token);
+  // Update the bootstrap token immediately, this is harmless as bootstrap token
+  // is ignored if it doesn't contain the right key.
+  delegate_->SetEncryptionBootstrapToken(
+      SerializeNigoriAsBootstrapToken(*nigori));
+
+  if (state_.engine) {
+    // Engine being initialized isn't a precondition of this method. In case
+    // it's not initialized, decryption passphrase will be set later, upon
+    // initialization.
+    SetDecryptionKeyWithoutUpdatingBootstrapToken(std::move(nigori));
   }
 }
 

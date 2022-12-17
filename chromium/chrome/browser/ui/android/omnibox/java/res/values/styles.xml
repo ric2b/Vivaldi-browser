@@ -5,10 +5,7 @@
 
 <resources xmlns:tools="http://schemas.android.com/tools">
 
-    <style name="Base.Theme.Chromium.TabbedMode" parent="Theme.Chromium.WithWindowAnimation">
-        <!-- Attributes for material design component. See https://crbug.com/1186712 -->
-        <item name="colorSurface">@color/material_color_surface</item>
-    </style>
+    <style name="Base.Theme.Chromium.TabbedMode" parent="Theme.Chromium.WithWindowAnimation" />
     <style name="Theme.Chromium.TabbedMode" parent="Base.Theme.Chromium.TabbedMode" />
 
     <!-- Omnibox -->
@@ -39,6 +36,8 @@
     <style name="OmniboxPedalChip" parent="SuggestionChip">
         <item name="iconWidth">@dimen/omnibox_pedal_suggestion_icon_size</item>
         <item name="iconHeight">@dimen/omnibox_pedal_suggestion_icon_size</item>
+        <item name="allowMultipleLines">true</item>
+        <item name="multiLineVerticalPadding">@dimen/omnibox_pedal_suggestion_text_vertical_padding</item>
         <item name="textAlignStart">true</item>
     </style>
 

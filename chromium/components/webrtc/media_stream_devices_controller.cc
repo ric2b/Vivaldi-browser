@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/metrics/histogram_functions.h"
 #include "build/build_config.h"
 #include "components/permissions/permission_manager.h"
 #include "components/permissions/permission_result.h"
@@ -117,8 +116,6 @@ void MediaStreamDevicesController::RequestPermissions(
     bool has_pan_tilt_zoom_camera = controller->HasAvailableDevices(
         ContentSettingsType::CAMERA_PAN_TILT_ZOOM,
         request.requested_video_device_id);
-    base::UmaHistogramBoolean("WebRTC.MediaStreamDevices.HasPanTiltZoomCamera",
-                              has_pan_tilt_zoom_camera);
 
     // Request CAMERA_PAN_TILT_ZOOM only if the website requested the
     // pan-tilt-zoom permission and there are suitable PTZ capable devices
@@ -355,6 +352,13 @@ MediaStreamDevices MediaStreamDevicesController::GetDevices(
             web_contents_->GetBrowserContext(), get_default_audio_device,
             get_default_video_device, &devices);
       }
+      break;
+    }
+    case blink::MEDIA_GET_OPEN_DEVICE: {
+      // Transferred tracks, that use blink::MEDIA_GET_OPEN_DEVICE type, do not
+      // need to get permissions for MediaStreamDevice as those are controlled
+      // by the original context.
+      NOTREACHED();
       break;
     }
     case blink::MEDIA_DEVICE_ACCESS: {

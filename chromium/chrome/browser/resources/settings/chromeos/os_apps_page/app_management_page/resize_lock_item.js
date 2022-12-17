@@ -8,7 +8,7 @@ import {assert, assertNotReached} from '//resources/js/assert.m.js';
 import {afterNextRender, flush, html, Polymer, TemplateInstanceBase, Templatizer} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {recordAppManagementUserAction} from 'chrome://resources/cr_components/app_management/util.js';
 
-import {recordClick, recordNavigation, recordPageBlur, recordPageFocus, recordSearch, recordSettingChange, setUserActionRecorderForTesting} from '../../metrics_recorder.m.js';
+import {recordSettingChange} from '../../metrics_recorder.js';
 
 import {BrowserProxy} from './browser_proxy.js';
 
@@ -70,8 +70,9 @@ Polymer({
         newState,
     );
     recordSettingChange();
-    const userAction = newState ? AppManagementUserAction.ResizeLockTurnedOn :
-                                  AppManagementUserAction.ResizeLockTurnedOff;
+    const userAction = newState ?
+        AppManagementUserAction.RESIZE_LOCK_TURNED_ON :
+        AppManagementUserAction.RESIZE_LOCK_TURNED_OFF;
     recordAppManagementUserAction(this.app.type, userAction);
   },
 

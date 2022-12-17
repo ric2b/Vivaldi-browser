@@ -219,8 +219,10 @@ public class AutocompleteMatch {
     }
 
     @CalledByNative
-    private void setDestinationUrl(GURL url) {
+    private void setDestinationUrl(GURL url, @Nullable String postContentType, @Nullable byte[] postData) {
         mUrl = url;
+        mPostContentType = postContentType;
+        mPostData = postData;
     }
 
     @CalledByNative

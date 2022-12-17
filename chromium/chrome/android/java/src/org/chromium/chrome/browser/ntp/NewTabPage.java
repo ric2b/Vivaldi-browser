@@ -20,8 +20,6 @@ import androidx.annotation.VisibleForTesting;
 import androidx.core.view.ViewCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.google.android.material.color.MaterialColors;
-
 import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
 import org.chromium.base.TimeUtils;
@@ -84,6 +82,7 @@ import org.chromium.chrome.browser.vr.VrModuleProvider;
 import org.chromium.chrome.browser.xsurface.FeedLaunchReliabilityLogger.SurfaceType;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.styles.ChromeColors;
+import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.components.feature_engagement.EventConstants;
@@ -349,7 +348,7 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
 
         mContext = activity;
         mTitle = activity.getResources().getString(R.string.new_tab_title);
-        mBackgroundColor = MaterialColors.getColor(mContext, R.attr.default_bg_color_dynamic, TAG);
+        mBackgroundColor = SemanticColorUtils.getDefaultBgColor(mContext);
         mIsTablet = isTablet;
         TemplateUrlServiceFactory.get().addObserver(this);
 
@@ -358,8 +357,7 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
             public void onShown(Tab tab, @TabSelectionType int type) {
                 // Showing the NTP is only meaningful when the page has been loaded already.
                 if (mIsLoaded) recordNTPShown();
-
-                mNewTabPageLayout.getTileGroup().onSwitchToForeground(/* trackLoadTask = */ false);
+                mNewTabPageLayout.onSwitchToForeground();
             }
 
             @Override
@@ -437,8 +435,8 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
                 mSearchProviderHasLogo,
                 TemplateUrlServiceFactory.get().isDefaultSearchEngineGoogle(),
                 mFeedSurfaceProvider.getScrollDelegate(), mContextMenuManager,
-                mFeedSurfaceProvider.getUiConfig(), activityTabProvider, lifecycleDispatcher, uma,
-                mTab.isIncognito(), windowAndroid);
+                mFeedSurfaceProvider.getTouchEnabledDelegate(), mFeedSurfaceProvider.getUiConfig(),
+                activityTabProvider, lifecycleDispatcher, uma, mTab.isIncognito(), windowAndroid);
         TraceEvent.end(TAG);
     }
 
@@ -487,8 +485,6 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
 
         // Record the timestamp at which the new tab page's construction started.
         uma.trackTimeToFirstDraw(mFeedSurfaceProvider.getView(), mConstructedTimeNs);
-
-        TrackerFactory.getTrackerForProfile(profile).notifyEvent(EventConstants.NTP_SHOWN);
     }
 
     /**

@@ -66,12 +66,15 @@ class WebController {
  public:
   // Create web controller for a given |web_contents|. |user_data|, |log_info|
   // and |annotate_dom_model_service| (if not nullptr) must be valid
-  // for the lifetime of the controller.
+  // for the lifetime of the controller. |enable_full_stack_traces| should only
+  // be enabled if the thrown exceptions will be caught and handled, otherwise
+  // this will unnecessarily decrease performance.
   static std::unique_ptr<WebController> CreateForWebContents(
       content::WebContents* web_contents,
       const UserData* user_data,
       ProcessedActionStatusDetailsProto* log_info,
-      AnnotateDomModelService* annotate_dom_model_service);
+      AnnotateDomModelService* annotate_dom_model_service,
+      bool enable_full_stack_traces);
 
   // |web_contents|, |user_data|, |log_info| and |annotate_dom_model_service|
   // (if not nullptr) must outlive this web controller.
@@ -101,7 +104,7 @@ class WebController {
 
   // Find the element given by |selector| starting from the given
   // |start_element|. Returns results or errors based on the |result_type|.
-  virtual void RunElementFinder(const ElementFinder::Result& start_element,
+  virtual void RunElementFinder(const ElementFinderResult& start_element,
                                 const Selector& selector,
                                 ElementFinder::ResultType result_type,
                                 ElementFinder::Callback callback);
@@ -125,14 +128,14 @@ class WebController {
       const std::string& animation,
       const std::string& vertical_alignment,
       const std::string& horizontal_alignment,
-      const ElementFinder::Result& element,
+      const ElementFinderResult& element,
       base::OnceCallback<void(const ClientStatus&)> callback);
 
   // Scroll the |element| into view only if needed. |center| the element if
   // requested.
   virtual void ScrollIntoViewIfNeeded(
       bool center,
-      const ElementFinder::Result& element,
+      const ElementFinderResult& element,
       base::OnceCallback<void(const ClientStatus&)> callback);
 
   // Scroll the window by |scroll_distance|. |animation| defines the transition
@@ -141,7 +144,7 @@ class WebController {
   virtual void ScrollWindow(
       const ScrollDistance& scroll_distance,
       const std::string& animation,
-      const ElementFinder::Result& optional_frame,
+      const ElementFinderResult& optional_frame,
       base::OnceCallback<void(const ClientStatus&)> callback);
 
   // Scroll the |element| by |scroll_distance|. |animation| defines the
@@ -150,19 +153,19 @@ class WebController {
   virtual void ScrollContainer(
       const ScrollDistance& scroll_distance,
       const std::string& animation,
-      const ElementFinder::Result& element,
+      const ElementFinderResult& element,
       base::OnceCallback<void(const ClientStatus&)> callback);
 
   // Send a JS click to the |element|.
   virtual void JsClickElement(
-      const ElementFinder::Result& element,
+      const ElementFinderResult& element,
       base::OnceCallback<void(const ClientStatus&)> callback);
 
   // Perform a mouse left button click or a touch tap on the |element|
   // return the result through callback.
   virtual void ClickOrTapElement(
       ClickType click_type,
-      const ElementFinder::Result& element,
+      const ElementFinderResult& element,
       base::OnceCallback<void(const ClientStatus&)> callback);
 
   // Get a stable position of the given element. Fail with ELEMENT_UNSTABLE if
@@ -170,20 +173,20 @@ class WebController {
   virtual void WaitUntilElementIsStable(
       int max_rounds,
       base::TimeDelta check_interval,
-      const ElementFinder::Result& element,
+      const ElementFinderResult& element,
       base::OnceCallback<void(const ClientStatus&, base::TimeDelta)> callback);
 
   // Check whether the center given element is on top. Fail with
   // ELEMENT_NOT_ON_TOP if the center of the element is covered.
   virtual void CheckOnTop(
-      const ElementFinder::Result& element,
+      const ElementFinderResult& element,
       base::OnceCallback<void(const ClientStatus&)> callback);
 
   // Fill the address form given by |element| with the given address
   // |profile|.
   virtual void FillAddressForm(
       std::unique_ptr<autofill::AutofillProfile> profile,
-      const ElementFinder::Result& element,
+      const ElementFinderResult& element,
       base::OnceCallback<void(const ClientStatus&)> callback);
 
   // Fill the card form given by |element| with the given |card| and its
@@ -191,7 +194,7 @@ class WebController {
   virtual void FillCardForm(
       std::unique_ptr<autofill::CreditCard> card,
       const std::u16string& cvc,
-      const ElementFinder::Result& element,
+      const ElementFinderResult& element,
       base::OnceCallback<void(const ClientStatus&)> callback);
 
   // Return |FormData| and |FormFieldData| for the element identified with
@@ -209,19 +212,19 @@ class WebController {
       bool case_sensitive,
       SelectOptionProto::OptionComparisonAttribute option_comparison_attribute,
       bool strict,
-      const ElementFinder::Result& element,
+      const ElementFinderResult& element,
       base::OnceCallback<void(const ClientStatus&)> callback);
 
   // Set the selected |option| of the |element|.
   virtual void SelectOptionElement(
-      const ElementFinder::Result& option,
-      const ElementFinder::Result& element,
+      const ElementFinderResult& option,
+      const ElementFinderResult& element,
       base::OnceCallback<void(const ClientStatus&)> callback);
 
   // Check if the selected option of the |element| is the expected |option|.
   virtual void CheckSelectedOptionElement(
-      const ElementFinder::Result& option,
-      const ElementFinder::Result& element,
+      const ElementFinderResult& option,
+      const ElementFinderResult& element,
       base::OnceCallback<void(const ClientStatus&)> callback);
 
   // Scrolls |container| to an |element|'s position. |top_padding|
@@ -229,9 +232,9 @@ class WebController {
   // container. If |scrollable_element| is not specified, the window will be
   // scrolled instead.
   virtual void ScrollToElementPosition(
-      std::unique_ptr<ElementFinder::Result> container,
+      std::unique_ptr<ElementFinderResult> container,
       const TopPadding& top_padding,
-      const ElementFinder::Result& element,
+      const ElementFinderResult& element,
       base::OnceCallback<void(const ClientStatus&)> callback);
 
   // Get the value attribute of an |element| and return the result through
@@ -240,7 +243,7 @@ class WebController {
   //
   // Normally done through BatchElementChecker.
   virtual void GetFieldValue(
-      const ElementFinder::Result& element,
+      const ElementFinderResult& element,
       base::OnceCallback<void(const ClientStatus&, const std::string&)>
           callback);
 
@@ -249,7 +252,7 @@ class WebController {
   // An empty result does not mean an error.
   virtual void GetStringAttribute(
       const std::vector<std::string>& attributes,
-      const ElementFinder::Result& element,
+      const ElementFinderResult& element,
       base::OnceCallback<void(const ClientStatus&, const std::string&)>
           callback);
 
@@ -257,29 +260,29 @@ class WebController {
   // trigger an onchange event.
   virtual void SetValueAttribute(
       const std::string& value,
-      const ElementFinder::Result& element,
+      const ElementFinderResult& element,
       base::OnceCallback<void(const ClientStatus&)> callback);
 
   // Set the nested |attributes| of an |element| to the specified |value|.
   virtual void SetAttribute(
       const std::vector<std::string>& attributes,
       const std::string& value,
-      const ElementFinder::Result& element,
+      const ElementFinderResult& element,
       base::OnceCallback<void(const ClientStatus&)> callback);
 
   // Select the current value in a text |element|.
   virtual void SelectFieldValue(
-      const ElementFinder::Result& element,
+      const ElementFinderResult& element,
       base::OnceCallback<void(const ClientStatus&)> callback);
 
   // Focus the current |element|.
   virtual void FocusField(
-      const ElementFinder::Result& element,
+      const ElementFinderResult& element,
       base::OnceCallback<void(const ClientStatus&)> callback);
 
   // Blur the current |element| that might have focus to remove its focus.
   virtual void BlurField(
-      const ElementFinder::Result& element,
+      const ElementFinderResult& element,
       base::OnceCallback<void(const ClientStatus&)> callback);
 
   // Inputs the specified codepoints into |element|. Expects the |element| to
@@ -289,7 +292,7 @@ class WebController {
   virtual void SendKeyboardInput(
       const std::vector<UChar32>& codepoints,
       int key_press_delay_in_millisecond,
-      const ElementFinder::Result& element,
+      const ElementFinderResult& element,
       base::OnceCallback<void(const ClientStatus&)> callback);
 
   // Inputs the specified |value| into |element| with keystrokes per character.
@@ -299,19 +302,19 @@ class WebController {
   virtual void SendTextInput(
       int key_press_delay_in_millisecond,
       const std::string& value,
-      const ElementFinder::Result& element,
+      const ElementFinderResult& element,
       base::OnceCallback<void(const ClientStatus&)> callback);
 
   // Sends the specified key event. Expects |element| to have focus.
   virtual void SendKeyEvent(
       const KeyEvent& key_event,
-      const ElementFinder::Result& element,
+      const ElementFinderResult& element,
       base::OnceCallback<void(const ClientStatus&)> callback);
 
   // Return the outerHTML of |element|.
   virtual void GetOuterHtml(
       bool include_all_inner_text,
-      const ElementFinder::Result& element,
+      const ElementFinderResult& element,
       base::OnceCallback<void(const ClientStatus&, const std::string&)>
           callback);
 
@@ -319,14 +322,14 @@ class WebController {
   // the object ID of a JS array containing the elements.
   virtual void GetOuterHtmls(
       bool include_all_inner_text,
-      const ElementFinder::Result& elements,
+      const ElementFinderResult& elements,
       base::OnceCallback<void(const ClientStatus&,
                               const std::vector<std::string>&)> callback);
 
   // Return the tag of the |element|. In case of an error, will return an empty
   // string.
   virtual void GetElementTag(
-      const ElementFinder::Result& element,
+      const ElementFinderResult& element,
       base::OnceCallback<void(const ClientStatus&, const std::string&)>
           callback);
 
@@ -343,7 +346,7 @@ class WebController {
   // If successful, the callback gets a success status with a set of
   // (left, top, right, bottom) coordinates rect, expressed in absolute CSS
   // coordinates.
-  virtual void GetElementRect(const ElementFinder::Result& element,
+  virtual void GetElementRect(const ElementFinderResult& element,
                               ElementRectGetter::ElementRectCallback callback);
 
   // Calls the callback once the main document window has been resized.
@@ -353,14 +356,14 @@ class WebController {
   // Gets the value of document.readyState for |optional_frame_element| or, if
   // it is empty, in the main document.
   virtual void GetDocumentReadyState(
-      const ElementFinder::Result& optional_frame_element,
+      const ElementFinderResult& optional_frame_element,
       base::OnceCallback<void(const ClientStatus&, DocumentReadyState)>
           callback);
 
   // Waits for the value of Document.readyState to satisfy |min_ready_state| in
   // |optional_frame_element| or, if it is empty, in the main document.
   virtual void WaitForDocumentReadyState(
-      const ElementFinder::Result& optional_frame_element,
+      const ElementFinderResult& optional_frame_element,
       DocumentReadyState min_ready_state,
       base::OnceCallback<void(const ClientStatus&,
                               DocumentReadyState,
@@ -368,7 +371,7 @@ class WebController {
 
   // Trigger a "change" event on the |element|.
   virtual void SendChangeEvent(
-      const ElementFinder::Result& element,
+      const ElementFinderResult& element,
       base::OnceCallback<void(const ClientStatus&)> callback);
 
   // Dispatch a custom JS event 'duplexweb'.
@@ -379,7 +382,7 @@ class WebController {
   // will refer to the |element|.
   virtual void ExecuteJS(
       const std::string& js_snippet,
-      const ElementFinder::Result& element,
+      const ElementFinderResult& element,
       base::OnceCallback<void(const ClientStatus&)> callback);
 
   virtual base::WeakPtr<WebController> GetWeakPtr() const;
@@ -407,7 +410,7 @@ class WebController {
       const DevtoolsClient::ReplyStatus& reply_status,
       std::unique_ptr<runtime::CallFunctionOnResult> result);
   void ExecuteJsWithoutArguments(
-      const ElementFinder::Result& element,
+      const ElementFinderResult& element,
       const std::string& js_snippet,
       WebControllerErrorInfoProto::WebAction web_action,
       base::OnceCallback<void(const ClientStatus&)> callback);
@@ -437,7 +440,7 @@ class WebController {
   void OnFindElementResult(ElementFinder* finder_to_release,
                            ElementFinder::Callback callback,
                            const ClientStatus& status,
-                           std::unique_ptr<ElementFinder::Result> result);
+                           std::unique_ptr<ElementFinderResult> result);
 
   void OnSelectorObserverFinished(SelectorObserver* observer);
   void OnFindElementForRetrieveElementFormAndFieldData(
@@ -446,22 +449,22 @@ class WebController {
                               const autofill::FormFieldData& field_data)>
           callback,
       const ClientStatus& element_status,
-      std::unique_ptr<ElementFinder::Result> element_result);
+      std::unique_ptr<ElementFinderResult> element_result);
   void GetElementFormAndFieldData(
-      const ElementFinder::Result& element,
+      const ElementFinderResult& element,
       base::OnceCallback<void(const ClientStatus&,
                               autofill::ContentAutofillDriver* driver,
                               const autofill::FormData&,
                               const autofill::FormFieldData&)> callback);
   void GetBackendNodeId(
-      const ElementFinder::Result& element,
+      const ElementFinderResult& element,
       base::OnceCallback<void(const ClientStatus&, int)> callback);
   void OnGetBackendNodeId(
       base::OnceCallback<void(const ClientStatus&, int)> callback,
       const DevtoolsClient::ReplyStatus& reply_status,
       std::unique_ptr<dom::DescribeNodeResult> result);
   void OnGetBackendNodeIdForFormAndFieldData(
-      const ElementFinder::Result& element,
+      const ElementFinderResult& element,
       base::OnceCallback<void(const ClientStatus&,
                               autofill::ContentAutofillDriver* driver,
                               const autofill::FormData&,
@@ -487,7 +490,7 @@ class WebController {
       const autofill::FormData& form_data,
       const autofill::FormFieldData& form_field);
   void OnGetFormAndFieldDataForRetrieving(
-      std::unique_ptr<ElementFinder::Result> element,
+      std::unique_ptr<ElementFinderResult> element,
       base::OnceCallback<void(const ClientStatus&,
                               const autofill::FormData& form_data,
                               const autofill::FormFieldData& field_data)>
@@ -505,7 +508,7 @@ class WebController {
   void SendKeyEvents(WebControllerErrorInfoProto::WebAction web_action,
                      const std::vector<KeyEvent>& key_events,
                      int key_press_delay,
-                     const ElementFinder::Result& element,
+                     const ElementFinderResult& element,
                      base::OnceCallback<void(const ClientStatus&)> callback);
   void OnSendKeyboardInputDone(
       SendKeyboardInputWorker* worker_to_release,

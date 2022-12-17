@@ -338,15 +338,15 @@ std::unique_ptr<PreflightResult> CreatePreflightResult(
 }
 
 absl::optional<CorsErrorStatus> CheckPreflightResult(
-    PreflightResult* result,
+    const PreflightResult& result,
     const ResourceRequest& original_request,
     NonWildcardRequestHeadersSupport non_wildcard_request_headers_support) {
   absl::optional<CorsErrorStatus> status =
-      result->EnsureAllowedCrossOriginMethod(original_request.method);
+      result.EnsureAllowedCrossOriginMethod(original_request.method);
   if (status)
     return status;
 
-  return result->EnsureAllowedCrossOriginHeaders(
+  return result.EnsureAllowedCrossOriginHeaders(
       original_request.headers, original_request.is_revalidating,
       non_wildcard_request_headers_support);
 }
@@ -404,6 +404,17 @@ class PreflightController::PreflightLoader final {
       options |= mojom::kURLLoadOptionUseHeaderClient;
     }
     loader_->SetURLLoaderFactoryOptions(options);
+
+    // When private network access preflights are sent in warning mode, we
+    // should not wait around forever for a response. Certain servers never
+    // respond, and that should not fail the overall request. Instead, we should
+    // wait a short while then move on. See also https://crbug.com/1299382.
+    if (request.target_ip_address_space != mojom::IPAddressSpace::kUnknown &&
+        client_security_state_ &&
+        client_security_state_->private_network_request_policy ==
+            mojom::PrivateNetworkRequestPolicy::kPreflightWarn) {
+      loader_->SetTimeoutDuration(base::Milliseconds(100));
+    }
   }
 
   PreflightLoader(const PreflightLoader&) = delete;
@@ -471,21 +482,17 @@ class PreflightController::PreflightLoader final {
 
       // Preflight succeeded. Check `original_request_` with `result`.
       DCHECK(!detected_error_status);
-      detected_error_status =
-          CheckPreflightResult(result.get(), original_request_,
-                               non_wildcard_request_headers_support_);
+      detected_error_status = CheckPreflightResult(
+          *result, original_request_, non_wildcard_request_headers_support_);
       has_authorization_covered_by_wildcard =
           result->HasAuthorizationCoveredByWildcard(original_request_.headers);
     }
 
     if (!(original_request_.load_flags & net::LOAD_DISABLE_CACHE) &&
-        // TODO(https://crbug.com/1268312): Key the cache by target address
-        // space and remove this guard.
-        original_request_.target_ip_address_space ==
-            mojom::IPAddressSpace::kUnknown &&
         !detected_error_status) {
       controller_->AppendToCache(*original_request_.request_initiator,
                                  original_request_.url, network_isolation_key_,
+                                 original_request_.target_ip_address_space,
                                  std::move(result));
     }
 
@@ -612,13 +619,10 @@ void PreflightController::PerformPreflightCheck(
                 ? request.trusted_params->isolation_info.network_isolation_key()
                 : net::NetworkIsolationKey();
   if (!RetrieveCacheFlags(request.load_flags) &&
-      // TODO(https://crbug.com/1268312): Key the cache by target address space
-      // and remove this guard.
-      request.target_ip_address_space == mojom::IPAddressSpace::kUnknown &&
       cache_.CheckIfRequestCanSkipPreflight(
           request.request_initiator.value(), request.url, network_isolation_key,
-          request.credentials_mode, request.method, request.headers,
-          request.is_revalidating, net_log)) {
+          request.target_ip_address_space, request.credentials_mode,
+          request.method, request.headers, request.is_revalidating, net_log)) {
     std::move(callback).Run(net::OK, absl::nullopt, false);
     return;
   }
@@ -642,8 +646,10 @@ void PreflightController::AppendToCache(
     const url::Origin& origin,
     const GURL& url,
     const net::NetworkIsolationKey& network_isolation_key,
+    mojom::IPAddressSpace target_ip_address_space,
     std::unique_ptr<PreflightResult> result) {
-  cache_.AppendEntry(origin, url, network_isolation_key, std::move(result));
+  cache_.AppendEntry(origin, url, network_isolation_key,
+                     target_ip_address_space, std::move(result));
 }
 
 }  // namespace cors

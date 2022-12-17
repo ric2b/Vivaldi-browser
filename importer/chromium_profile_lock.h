@@ -5,12 +5,12 @@
 
 #include "build/build_config.h"
 
-#if defined(OS_WIN)
-#include <windows.h>
-#endif
-
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
+
+#if BUILDFLAG(IS_WIN)
+#include <windows.h>
+#endif
 
 class ChromiumProfileLock {
  public:
@@ -35,7 +35,7 @@ class ChromiumProfileLock {
   base::FilePath lock_file_;
 
 // The handle of the lock file.
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   HANDLE lock_handle_;
 #endif
 };

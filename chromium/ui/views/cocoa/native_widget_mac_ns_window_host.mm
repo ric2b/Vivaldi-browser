@@ -9,9 +9,11 @@
 
 #include "base/base64.h"
 #include "base/containers/contains.h"
+#include "base/feature_list.h"
 #include "base/mac/foundation_util.h"
 #include "base/no_destructor.h"
 #include "base/strings/sys_string_conversions.h"
+#include "base/time/time.h"
 #include "components/remote_cocoa/app_shim/mouse_capture.h"
 #include "components/remote_cocoa/app_shim/native_widget_mac_nswindow.h"
 #include "components/remote_cocoa/app_shim/native_widget_ns_window_bridge.h"
@@ -38,6 +40,7 @@
 #include "ui/views/controls/menu/menu_config.h"
 #include "ui/views/controls/menu/menu_controller.h"
 #include "ui/views/views_delegate.h"
+#include "ui/views/views_features.h"
 #include "ui/views/widget/native_widget_mac.h"
 #include "ui/views/widget/widget_delegate.h"
 #include "ui/views/window/dialog_delegate.h"
@@ -244,8 +247,7 @@ NativeWidgetMacNSWindowHost::NativeWidgetMacNSWindowHost(NativeWidgetMac* owner)
       native_widget_mac_(owner),
       root_view_id_(remote_cocoa::GetNewNSViewId()),
       accessibility_focus_overrider_(this),
-      text_input_host_(new TextInputHost(this)),
-      weak_factory_(this) {
+      text_input_host_(new TextInputHost(this)) {
   DCHECK(GetIdToWidgetHostImplMap().find(widget_id_) ==
          GetIdToWidgetHostImplMap().end());
   GetIdToWidgetHostImplMap().emplace(widget_id_, this);
@@ -476,7 +478,8 @@ void NativeWidgetMacNSWindowHost::SetBoundsInScreen(const gfx::Rect& bounds) {
 }
 
 void NativeWidgetMacNSWindowHost::SetFullscreen(bool fullscreen,
-                                                base::TimeDelta delay) {
+                                                base::TimeDelta delay,
+                                                int64_t target_display_id) {
   // Note that when the NSWindow begins a fullscreen transition, the value of
   // |target_fullscreen_state_| updates via OnWindowFullscreenTransitionStart.
   // The update here is necessary for the case where we are currently in
@@ -492,6 +495,7 @@ void NativeWidgetMacNSWindowHost::SetFullscreen(bool fullscreen,
     // i.e. so BrowserView::ProcessFullscreen will still hide its frame, etc.
     // TODO(crbug.com/1034783): Refine cross-display fullscreen implementations.
     // TODO(crbug.com/1210548): Find a better solution to avoid key resignation.
+    DCHECK_EQ(target_display_id, display::kInvalidDisplayId);
     auto callback = base::BindOnce(
         &NativeWidgetMacNSWindowHost::SetFullscreenAfterDelay, widget_id_);
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
@@ -499,7 +503,14 @@ void NativeWidgetMacNSWindowHost::SetFullscreen(bool fullscreen,
     return;
   }
 
-  GetNSWindowMojo()->SetFullscreen(target_fullscreen_state_);
+  if (base::FeatureList::IsEnabled(features::kFullscreenControllerMac)) {
+    if (target_fullscreen_state_)
+      GetNSWindowMojo()->EnterFullscreen(target_display_id);
+    else
+      GetNSWindowMojo()->ExitFullscreen();
+  } else {
+    GetNSWindowMojo()->SetFullscreen(fullscreen);
+  }
 }
 
 void NativeWidgetMacNSWindowHost::SetRootView(views::View* root_view) {
@@ -600,6 +611,7 @@ void NativeWidgetMacNSWindowHost::DestroyCompositor() {
 // static
 void NativeWidgetMacNSWindowHost::SetFullscreenAfterDelay(
     uint64_t bridged_native_widget_id) {
+  DCHECK(!base::FeatureList::IsEnabled(features::kFullscreenControllerMac));
   if (NativeWidgetMacNSWindowHost* host = GetFromId(bridged_native_widget_id))
     host->GetNSWindowMojo()->SetFullscreen(host->target_fullscreen_state_);
 }
@@ -1534,9 +1546,28 @@ void NativeWidgetMacNSWindowHost::AcceleratedWidgetCALayerParamsUpdated() {
   if (display_link_) {
     base::TimeTicks timebase;
     base::TimeDelta interval;
-    if (display_link_->GetVSyncParameters(&timebase, &interval))
+    bool register_for_vsync_update = display_link_->IsVSyncPotentiallyStale();
+    if (display_link_->GetVSyncParameters(&timebase, &interval)) {
       compositor_->compositor()->SetDisplayVSyncParameters(timebase, interval);
+    } else {
+      register_for_vsync_update = true;
+    }
+    if (register_for_vsync_update) {
+      if (!weak_factory_for_vsync_update_.HasWeakPtrs()) {
+        display_link_->RegisterCallbackForNextVSyncUpdate(base::BindOnce(
+            &NativeWidgetMacNSWindowHost::OnVSyncParametersUpdated,
+            weak_factory_for_vsync_update_.GetWeakPtr()));
+      }
+    } else {
+      weak_factory_for_vsync_update_.InvalidateWeakPtrs();
+    }
   }
+}
+
+void NativeWidgetMacNSWindowHost::OnVSyncParametersUpdated(
+    base::TimeTicks timebase,
+    base::TimeDelta interval) {
+  compositor_->compositor()->SetDisplayVSyncParameters(timebase, interval);
 }
 
 }  // namespace views

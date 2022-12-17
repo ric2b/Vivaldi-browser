@@ -57,7 +57,7 @@ GURL GetSimplifiedURL(const GURL& url) {
   if (!url.is_valid() || !url.IsStandard())
     return GURL();
 
-  url::Replacements<char> replacements;
+  GURL::Replacements replacements;
   replacements.ClearUsername();
   replacements.ClearPassword();
   replacements.ClearQuery();
@@ -150,6 +150,8 @@ bool IsSafeBrowsingEnabled(const PrefService& prefs) {
 }
 
 bool IsEnhancedProtectionEnabled(const PrefService& prefs) {
+  if (vivaldi::IsVivaldiRunning())
+    return false;
   // SafeBrowsingEnabled is checked too due to devices being out
   // of sync or not on a version that includes SafeBrowsingEnhanced pref.
   return base::FeatureList::IsEnabled(kEnhancedProtection) &&

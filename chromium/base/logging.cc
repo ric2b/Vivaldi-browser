@@ -21,6 +21,7 @@
 #include <tuple>
 #include <vector>
 
+#include "base/base_export.h"
 #include "base/cxx17_backports.h"
 #include "base/debug/crash_logging.h"
 #include "base/pending_task.h"
@@ -143,7 +144,7 @@ VlogInfo* g_vlog_info = nullptr;
 VlogInfo* g_vlog_info_prev = nullptr;
 
 const char* const log_severity_names[] = {"INFO", "WARNING", "ERROR", "FATAL"};
-static_assert(LOGGING_NUM_SEVERITIES == base::size(log_severity_names),
+static_assert(LOGGING_NUM_SEVERITIES == std::size(log_severity_names),
               "Incorrect number of log_severity_names");
 
 const char* log_severity_name(int severity) {
@@ -301,8 +302,8 @@ bool InitializeLogFileHandle() {
     // try the current directory
     wchar_t system_buffer[MAX_PATH];
     system_buffer[0] = 0;
-    DWORD len = ::GetCurrentDirectory(base::size(system_buffer), system_buffer);
-    if (len == 0 || len > base::size(system_buffer))
+    DWORD len = ::GetCurrentDirectory(std::size(system_buffer), system_buffer);
+    if (len == 0 || len > std::size(system_buffer))
       return false;
 
     *g_log_file_name = system_buffer;
@@ -714,7 +715,7 @@ LogMessage::~LogMessage() {
       // By default, messages are only readable by the admin group. Explicitly
       // make them readable by the user generating the messages.
       char euid_string[12];
-      snprintf(euid_string, base::size(euid_string), "%d", geteuid());
+      snprintf(euid_string, std::size(euid_string), "%d", geteuid());
       asl_set(asl_message.get(), ASL_KEY_READ_UID, euid_string);
 
       // Map Chrome log severities to ASL log levels.
@@ -877,7 +878,7 @@ LogMessage::~LogMessage() {
       tracker->RecordLogMessage(str_newline);
 
     char str_stack[1024];
-    base::strlcpy(str_stack, str_newline.data(), base::size(str_stack));
+    base::strlcpy(str_stack, str_newline.data(), std::size(str_stack));
     base::debug::Alias(&str_stack);
 
     if (!GetLogAssertHandlerStack().empty()) {
@@ -904,12 +905,9 @@ LogMessage::~LogMessage() {
         DisplayDebugMessageInDialog(stream_.str());
       }
 #endif
+
       // Crash the process to generate a dump.
-#if defined(OFFICIAL_BUILD) && defined(NDEBUG)
       IMMEDIATE_CRASH();
-#else
-      base::debug::BreakDebugger();
-#endif
     }
   }
 }
@@ -1005,7 +1003,7 @@ BASE_EXPORT std::string SystemErrorCodeToString(SystemErrorCode error_code) {
   char msgbuf[kErrorMessageBufferSize];
   DWORD flags = FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS;
   DWORD len = FormatMessageA(flags, nullptr, error_code, 0, msgbuf,
-                             base::size(msgbuf), nullptr);
+                             std::size(msgbuf), nullptr);
   if (len) {
     // Messages returned by system end with line breaks.
     return base::CollapseWhitespaceASCII(msgbuf, true) +
@@ -1142,7 +1140,7 @@ void RawLog(int level, const char* message) {
   }
 
   if (level == LOGGING_FATAL)
-    base::debug::BreakDebuggerAsyncSafe();
+    IMMEDIATE_CRASH();
 }
 
 // This was defined at the beginning of this file.

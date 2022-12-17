@@ -25,6 +25,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_CSS_RESOLVER_MATCH_RESULT_H_
 
 #include "base/memory/scoped_refptr.h"
+#include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/css/cascade_layer_map.h"
 #include "third_party/blink/renderer/core/css/resolver/cascade_expansion.h"
 #include "third_party/blink/renderer/core/css/resolver/cascade_filter.h"
@@ -75,58 +76,6 @@ WTF_ALLOW_MOVE_AND_INIT_WITH_MEM_FUNCTIONS(blink::MatchedProperties)
 namespace blink {
 
 using MatchedPropertiesVector = HeapVector<MatchedProperties, 64>;
-
-class MatchedExpansionsIterator {
-  STACK_ALLOCATED();
-  using Iterator = MatchedPropertiesVector::const_iterator;
-
- public:
-  MatchedExpansionsIterator(Iterator iterator,
-                            const Document& document,
-                            CascadeFilter filter,
-                            wtf_size_t index)
-      : iterator_(iterator),
-        document_(document),
-        filter_(filter),
-        index_(index) {}
-
-  void operator++() {
-    iterator_++;
-    index_++;
-  }
-  bool operator==(const MatchedExpansionsIterator& o) const {
-    return iterator_ == o.iterator_;
-  }
-  bool operator!=(const MatchedExpansionsIterator& o) const {
-    return iterator_ != o.iterator_;
-  }
-
-  CascadeExpansion operator*() const {
-    return CascadeExpansion(*iterator_, document_, filter_, index_);
-  }
-
- private:
-  Iterator iterator_;
-  const Document& document_;
-  CascadeFilter filter_;
-  wtf_size_t index_;
-};
-
-class MatchedExpansionsRange {
-  STACK_ALLOCATED();
-
- public:
-  MatchedExpansionsRange(MatchedExpansionsIterator begin,
-                         MatchedExpansionsIterator end)
-      : begin_(begin), end_(end) {}
-
-  MatchedExpansionsIterator begin() const { return begin_; }
-  MatchedExpansionsIterator end() const { return end_; }
-
- private:
-  MatchedExpansionsIterator begin_;
-  MatchedExpansionsIterator end_;
-};
 
 class AddMatchedPropertiesOptions {
   STACK_ALLOCATED();
@@ -195,6 +144,7 @@ class CORE_EXPORT MatchResult {
 
   void FinishAddingUARules();
   void FinishAddingUserRules();
+  void FinishAddingPresentationalHints();
   void FinishAddingAuthorRulesForTreeScope(const TreeScope&);
 
   void SetIsCacheable(bool cacheable) { is_cacheable_ = cacheable; }
@@ -221,8 +171,6 @@ class CORE_EXPORT MatchResult {
   bool ConditionallyAffectsAnimations() const {
     return conditionally_affects_animations_;
   }
-
-  MatchedExpansionsRange Expansions(const Document&, CascadeFilter) const;
 
   const MatchedPropertiesVector& GetMatchedProperties() const {
     return matched_properties_;

@@ -17,13 +17,14 @@
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
-#include "chrome/browser/browser_process.h"
+#include "chrome/browser/privacy_sandbox/privacy_sandbox_service.h"
+#include "chrome/browser/privacy_sandbox/privacy_sandbox_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/ui/hats/hats_service.h"
 #include "chrome/browser/ui/hats/hats_service_factory.h"
 #include "chrome/browser/ui/managed_ui.h"
-#include "chrome/browser/ui/passwords/manage_passwords_view_utils.h"
+#include "chrome/browser/ui/passwords/ui_utils.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/webui/favicon_source.h"
 #include "chrome/browser/ui/webui/managed_ui_handler.h"
@@ -71,13 +72,13 @@
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/core/common/features.h"
 #include "components/signin/public/base/signin_pref_names.h"
+#include "components/signin/public/base/signin_switches.h"
 #include "content/public/browser/url_data_source.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "crypto/crypto_buildflags.h"
 #include "printing/buildflags/buildflags.h"
-#include "ui/resources/grit/webui_resources.h"
 
 #if BUILDFLAG(IS_WIN)
 #include "chrome/browser/safe_browsing/chrome_cleaner/chrome_cleaner_controller_win.h"
@@ -114,6 +115,7 @@
 #include "chrome/browser/ash/multidevice_setup/multidevice_setup_client_factory.h"
 #include "chrome/browser/ash/phonehub/phone_hub_manager_factory.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/ui/webui/certificate_provisioning_ui_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/account_manager_handler.h"
@@ -139,12 +141,6 @@
 #elif BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
 #include "chrome/browser/ui/webui/settings/native_certificates_handler.h"
 #endif  // BUILDFLAG(USE_NSS_CERTS)
-
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || \
-    (BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CHROMEOS_LACROS))
-#include "chrome/browser/ui/webui/settings/url_handlers_handler.h"
-#include "chrome/browser/web_applications/web_app_provider.h"
-#endif
 
 namespace settings {
 
@@ -237,19 +233,18 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
   AddSettingsPageUIHandler(std::make_unique<DefaultBrowserHandler>());
   AddSettingsPageUIHandler(std::make_unique<ManageProfileHandler>(profile));
   AddSettingsPageUIHandler(std::make_unique<SystemHandler>());
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  html_source->AddBoolean("isSecondaryUser", !profile->IsMainProfile());
+  html_source->AddBoolean(
+      "nonSyncingProfilesEnabled",
+      base::FeatureList::IsEnabled(switches::kLacrosNonSyncingProfiles));
+#endif
+
 #endif
 
 #if BUILDFLAG(IS_WIN)
   AddSettingsPageUIHandler(std::make_unique<ChromeCleanupHandler>(profile));
 #endif  // BUILDFLAG(IS_WIN)
-
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || \
-    (BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CHROMEOS_LACROS))
-  if (web_app::WebAppProvider::GetForWebApps(profile) != nullptr) {
-    AddSettingsPageUIHandler(std::make_unique<UrlHandlersHandler>(
-        g_browser_process->local_state(), profile));
-  }
-#endif
 
 #if BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
   bool has_incompatible_applications =
@@ -262,11 +257,6 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
     AddSettingsPageUIHandler(
         std::make_unique<IncompatibleApplicationsHandler>());
 #endif  // BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
-
-  // TODO(crbug.com/1286649): Remove after CSS has been updated to no longer
-  // need this attribute.
-  html_source->AddString("enableBrandingUpdateAttribute",
-                         "enable-branding-update");
 
   html_source->AddBoolean("signinAllowed", !profile->IsGuestSession() &&
                                                profile->GetPrefs()->GetBoolean(
@@ -284,6 +274,10 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
   html_source->AddBoolean(
       "enablePasswordNotes",
       base::FeatureList::IsEnabled(password_manager::features::kPasswordNotes));
+
+  html_source->AddBoolean(
+      "enableSendPasswords",
+      base::FeatureList::IsEnabled(password_manager::features::kSendPasswords));
 
 #if !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_CHROMEOS_LACROS)
   html_source->AddBoolean("enableDesktopRestructuredLanguageSettings",
@@ -318,17 +312,21 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
   html_source->AddBoolean("userCannotManuallyEnterPassword", false);
 #endif  // !BUILDFLAG(IS_CHROMEOS_LACROS)
 
+  bool privacy_guide_enabled =
+      !chrome::ShouldDisplayManagedUi(profile) && !profile->IsChild() &&
+      !PrivacySandboxServiceFactory::GetForProfile(profile)
+           ->IsPrivacySandboxRestricted() &&
+      base::FeatureList::IsEnabled(features::kPrivacyGuide);
+  html_source->AddBoolean("privacyGuideEnabled", privacy_guide_enabled);
+
   html_source->AddBoolean(
-      "privacyGuideEnabled",
-      !chrome::ShouldDisplayManagedUi(profile) &&
-          base::FeatureList::IsEnabled(features::kPrivacyGuide));
+      "privacyGuide2Enabled",
+      // #privacy-guide-2 only has effect if #privacy-guide is enabled too.
+      privacy_guide_enabled &&
+          base::FeatureList::IsEnabled(features::kPrivacyGuide2));
 
   AddSettingsPageUIHandler(std::make_unique<AboutHandler>(profile));
   AddSettingsPageUIHandler(std::make_unique<ResetSettingsHandler>(profile));
-
-  html_source->AddBoolean(
-      "searchHistoryLink",
-      base::FeatureList::IsEnabled(features::kSearchHistoryLink));
 
   // Add a handler to provide pluralized strings.
   auto plural_string_handler = std::make_unique<PluralStringHandler>();
@@ -369,8 +367,15 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
                    profile, chrome::FaviconUrlFormat::kFavicon2));
 
   // Privacy Sandbox
-  html_source->AddResourcePath(
-      "privacySandbox", IDR_SETTINGS_PRIVACY_SANDBOX_PRIVACY_SANDBOX_HTML);
+  bool isPrivacySandboxRestricted =
+      PrivacySandboxServiceFactory::GetForProfile(profile)
+          ->IsPrivacySandboxRestricted();
+  html_source->AddBoolean("isPrivacySandboxRestricted",
+                          isPrivacySandboxRestricted);
+  if (!isPrivacySandboxRestricted) {
+    html_source->AddResourcePath(
+        "privacySandbox", IDR_SETTINGS_PRIVACY_SANDBOX_PRIVACY_SANDBOX_HTML);
+  }
 
   TryShowHatsSurveyWithTimeout();
 }
@@ -416,8 +421,9 @@ void SettingsUI::InitBrowserSettingsWebUIHandlers() {
         profile->GetPrefs(),
         ash::multidevice_setup::MultiDeviceSetupClientFactory::GetForProfile(
             profile),
-        phone_hub_manager ? phone_hub_manager->GetNotificationAccessManager()
-                          : nullptr,
+        phone_hub_manager
+            ? phone_hub_manager->GetMultideviceFeatureAccessManager()
+            : nullptr,
         android_sms_service
             ? android_sms_service->android_sms_pairing_state_tracker()
             : nullptr,

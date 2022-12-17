@@ -5,6 +5,7 @@
 #ifndef TOOLS_GN_TRACE_H_
 #define TOOLS_GN_TRACE_H_
 
+#include <memory>
 #include <string>
 #include <thread>
 
@@ -80,7 +81,7 @@ class ScopedTrace {
   void Done();
 
  private:
-  TraceItem* item_;
+  std::unique_ptr<TraceItem> item_;
   bool done_;
 };
 
@@ -90,8 +91,8 @@ void EnableTracing();
 // Returns whether tracing is enabled.
 bool TracingEnabled();
 
-// Adds a trace event to the log. Takes ownership of the pointer.
-void AddTrace(TraceItem* item);
+// Adds a trace event to the log.
+void AddTrace(std::unique_ptr<TraceItem> item);
 
 // Returns a summary of the current traces, or the empty string if tracing is
 // not enabled.

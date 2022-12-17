@@ -11,6 +11,7 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
+#include "chrome/browser/extensions/api/omnibox/suggestion_parser.h"
 #include "chrome/browser/extensions/extension_icon_manager.h"
 #include "chrome/common/extensions/api/omnibox.h"
 #include "components/omnibox/browser/autocomplete_match.h"
@@ -35,7 +36,6 @@ class Image;
 }
 
 namespace extensions {
-struct DescriptionAndStyles;
 
 // Event router class for events related to the omnibox API.
 class ExtensionOmniboxEventRouter {
@@ -77,13 +77,25 @@ class ExtensionOmniboxEventRouter {
 
 class OmniboxSendSuggestionsFunction : public ExtensionFunction {
  public:
+  OmniboxSendSuggestionsFunction();
+
   DECLARE_EXTENSION_FUNCTION("omnibox.sendSuggestions", OMNIBOX_SENDSUGGESTIONS)
 
  protected:
-  ~OmniboxSendSuggestionsFunction() override {}
+  ~OmniboxSendSuggestionsFunction() override;
 
   // ExtensionFunction:
   ResponseAction Run() override;
+
+ private:
+  // Called with the result of parsing the omnibox suggestions.
+  void OnParsedDescriptionsAndStyles(DescriptionAndStylesResult result);
+
+  // Notifies the omnibox that the suggestions have been prepared.
+  void NotifySuggestionsReady();
+
+  // The suggestion parameters passed by the extension API call.
+  std::unique_ptr<api::omnibox::SendSuggestions::Params> params_;
 };
 
 class OmniboxAPI : public BrowserContextKeyedAPI,
@@ -160,8 +172,7 @@ class OmniboxSetDefaultSuggestionFunction : public ExtensionFunction {
 
   // Called asynchronously with the parsed description and styles for the
   // default suggestion.
-  void OnParsedDescriptionAndStyles(
-      std::unique_ptr<DescriptionAndStyles> description_and_styles);
+  void OnParsedDescriptionAndStyles(DescriptionAndStylesResult result);
 
   // Sets the default suggestion in the extension preferences.
   void SetDefaultSuggestion(

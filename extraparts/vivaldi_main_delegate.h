@@ -5,14 +5,14 @@
 
 #include "build/build_config.h"
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 #include "chrome/app/android/chrome_main_delegate_android.h"
 #else
 #include "chrome/app/chrome_main_delegate.h"
 #endif
 
 class VivaldiMainDelegate
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
     : public ChromeMainDelegateAndroid
 #else
     : public ChromeMainDelegate
@@ -20,20 +20,20 @@ class VivaldiMainDelegate
 {
  public:
   VivaldiMainDelegate();
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   explicit VivaldiMainDelegate(base::TimeTicks exe_entry_point_ticks);
 #endif
   ~VivaldiMainDelegate() override;
   content::ContentBrowserClient* CreateContentBrowserClient() override;
 };
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
 class VivaldiTestMainDelegate : public VivaldiMainDelegate {
  public:
   VivaldiTestMainDelegate() : VivaldiMainDelegate() {}
   explicit VivaldiTestMainDelegate(base::TimeTicks exe_entry_point_ticks)
       : VivaldiMainDelegate(exe_entry_point_ticks) {}
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   bool ShouldHandleConsoleControlEvents() override;
 #endif
 };

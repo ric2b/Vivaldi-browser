@@ -15,5 +15,5 @@ source_set("shared") {
     "presence_monitor.h",
   ]
 
-  deps = [ "//base" ]
+  public_deps = [ "//base" ]
 }

@@ -8,6 +8,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
@@ -112,7 +113,7 @@ base::TimeDelta TimeElapsedBetweenVisits(const history::VisitRow& visit1,
 
 // Returns with the provided `url` matches the provided `history_url`
 // which must be either the basic history URL or history_clusters URL.
-bool IsHistoryPage(GURL url, GURL history_url) {
+bool IsHistoryPage(GURL url, const GURL& history_url) {
   GURL::Replacements replacements;
   replacements.ClearQuery();
   return url.ReplaceComponents(replacements) == history_url;

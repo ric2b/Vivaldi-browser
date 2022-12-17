@@ -19,6 +19,8 @@ with open(options.chromium, "tr") as f:
 for x in chromium_json["archive_datas"]:
   new_entry = dict([(i,x[i]) for i in ["files", "file_globs", "archive_type", "dirs"] if i in x])
   if x["archive_type"] == "ARCHIVE_TYPE_ZIP":
+    if "rename_dirs" not in x:
+      continue
     target_name = x["rename_dirs"][0]["to_dir"]
   elif "files" in x:
     target_name = x["files"][0]
@@ -26,7 +28,6 @@ for x in chromium_json["archive_datas"]:
     target_name = x["file_globs"][0]
     new_entry["name_after_glob"]=True
   else:
-    raise Exception("No target name")
     continue # ignore if no name can be determined
 
   output_target[target_name] = new_entry

@@ -22,6 +22,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/manifest/manifest.mojom.h"
+#include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/image/image_unittest_util.h"
 #include "ui/gfx/skia_util.h"
@@ -117,10 +118,13 @@ TEST(WebAppInstallUtils, UpdateWebAppInfoFromManifest) {
   }
 
   {
-    auto declaration =
-        blink::mojom::ManifestPermissionsPolicyDeclaration::New();
-    declaration->feature = "bluetooth";
-    declaration->allowlist = {"*"};
+    blink::ParsedPermissionsPolicyDeclaration declaration;
+    declaration.feature = blink::mojom::PermissionsPolicyFeature::kFullscreen;
+    declaration.allowed_origins = {
+        url::Origin::Create(GURL("https://www.example.com"))};
+    declaration.matches_all_origins = false;
+    declaration.matches_opaque_src = false;
+
     manifest.permissions_policy.push_back(std::move(declaration));
   }
 
@@ -216,9 +220,13 @@ TEST(WebAppInstallUtils, UpdateWebAppInfoFromManifest) {
   // Check permissions policy was updated.
   EXPECT_EQ(1u, web_app_info.permissions_policy.size());
   auto declaration = web_app_info.permissions_policy[0];
-  EXPECT_EQ(declaration.feature, "bluetooth");
-  EXPECT_EQ(1u, declaration.allowlist.size());
-  EXPECT_EQ("*", declaration.allowlist[0]);
+  EXPECT_EQ(declaration.feature,
+            blink::mojom::PermissionsPolicyFeature::kFullscreen);
+  EXPECT_EQ(1u, declaration.allowed_origins.size());
+  EXPECT_EQ("https://www.example.com",
+            declaration.allowed_origins[0].Serialize());
+  EXPECT_FALSE(declaration.matches_all_origins);
+  EXPECT_FALSE(declaration.matches_opaque_src);
 }
 
 TEST(WebAppInstallUtils, UpdateWebAppInfoFromManifest_EmptyName) {
@@ -526,10 +534,28 @@ TEST(WebAppInstallUtils, UpdateWebAppInfoFromManifestWithShortcuts) {
   EXPECT_TRUE(url_handler.has_origin_wildcard);
 }
 
+// Tests that we limit the number of shortcut menu items.
+TEST(WebAppInstallUtils, UpdateWebAppInfoFromManifestTooManyShortcuts) {
+  blink::mojom::Manifest manifest;
+  const unsigned kMaxShortcuts = 10U;
+  for (unsigned int i = 1; i <= kMaxShortcuts + 1; ++i) {
+    blink::Manifest::ShortcutItem shortcut_item;
+    shortcut_item.name = kShortcutItemTestName + base::NumberToString16(i);
+    shortcut_item.url = GURL("http://www.chromium.org/shortcuts/action");
+    manifest.shortcuts.push_back(shortcut_item);
+  }
+  EXPECT_LT(kMaxShortcuts, manifest.shortcuts.size());
+  WebAppInstallInfo web_app_info;
+  UpdateWebAppInfoFromManifest(
+      manifest, GURL("http://www.chromium.org/manifest.json"), &web_app_info);
+
+  EXPECT_EQ(kMaxShortcuts, web_app_info.shortcuts_menu_item_infos.size());
+}
+
 // Tests that we limit the number of icons declared by a site.
 TEST(WebAppInstallUtils, UpdateWebAppInfoFromManifestTooManyIcons) {
   blink::mojom::Manifest manifest;
-  for (int i = 0; i < 50; ++i) {
+  for (unsigned int i = 0; i < kNumTestIcons; ++i) {
     blink::Manifest::ImageResource icon;
     icon.src = GURL("fav1.png");
     icon.purpose.push_back(Purpose::ANY);
@@ -540,24 +566,34 @@ TEST(WebAppInstallUtils, UpdateWebAppInfoFromManifestTooManyIcons) {
 
   UpdateWebAppInfoFromManifest(
       manifest, GURL("http://www.chromium.org/manifest.json"), &web_app_info);
+  ASSERT_GT(kNumTestIcons, web_app_info.manifest_icons.size());
   EXPECT_EQ(20U, web_app_info.manifest_icons.size());
 }
 
-// Tests that we limit the number of shortcut icons declared by a site.
+// Tests that we limit the number of shortcut icons, verifying that at most 20
+// shortcut icons are stored per web app.
+//
+// The test previously created 30 shortcuts, each with 1 icon. Due to the new
+// limit of 10 shortcuts per web app, we now create 5 shortcuts, with 6 icons
+// each.
 TEST(WebAppInstallUtils, UpdateWebAppInfoFromManifestTooManyShortcutIcons) {
   blink::mojom::Manifest manifest;
-  for (unsigned int i = 0; i < kNumTestIcons; ++i) {
+  const unsigned kNumShortcuts = 5;
+
+  for (unsigned int i = 0; i < kNumShortcuts; ++i) {
     blink::Manifest::ShortcutItem shortcut_item;
     shortcut_item.name = kShortcutItemTestName + base::NumberToString16(i);
     shortcut_item.url = GURL("http://www.chromium.org/shortcuts/action");
 
-    blink::Manifest::ImageResource icon;
-    icon.src = GURL("http://www.chromium.org/shortcuts/icon1.png");
-    icon.sizes.emplace_back(i, i);
-    icon.purpose.emplace_back(IconPurpose::ANY);
-    shortcut_item.icons.push_back(std::move(icon));
+    for (unsigned int j = 1; j <= kNumTestIcons / kNumShortcuts; ++j) {
+      blink::Manifest::ImageResource icon;
+      icon.src = GURL("http://www.chromium.org/shortcuts/icon1.png");
+      icon.sizes.emplace_back(j, j);
+      icon.purpose.emplace_back(IconPurpose::ANY);
+      shortcut_item.icons.push_back(std::move(icon));
+    }
 
-    manifest.shortcuts.push_back(shortcut_item);
+    manifest.shortcuts.push_back(std::move(shortcut_item));
   }
   WebAppInstallInfo web_app_info;
   UpdateWebAppInfoFromManifest(
@@ -577,20 +613,21 @@ TEST(WebAppInstallUtils, UpdateWebAppInfoFromManifestTooManyShortcutIcons) {
 // Tests that we limit the size of icons declared by a site.
 TEST(WebAppInstallUtils, UpdateWebAppInfoFromManifestIconsTooLarge) {
   blink::mojom::Manifest manifest;
-  for (int i = 1; i <= 20; ++i) {
+  for (int size = 1023; size <= 1026; ++size) {
     blink::Manifest::ImageResource icon;
     icon.src = GURL("fav1.png");
     icon.purpose.push_back(Purpose::ANY);
-    const int size = i * 100;
     icon.sizes.emplace_back(size, size);
     manifest.icons.push_back(std::move(icon));
   }
 
   WebAppInstallInfo web_app_info;
+  // Icons exceeding size 1024 are discarded.
   UpdateWebAppInfoFromManifest(
       manifest, GURL("http://www.chromium.org/manifest.json"), &web_app_info);
 
-  EXPECT_EQ(10U, web_app_info.manifest_icons.size());
+  // Only the early icons are within the size limit.
+  EXPECT_EQ(2U, web_app_info.manifest_icons.size());
   for (const apps::IconInfo& icon : web_app_info.manifest_icons) {
     EXPECT_LE(icon.square_size_px, 1024);
   }
@@ -599,21 +636,22 @@ TEST(WebAppInstallUtils, UpdateWebAppInfoFromManifestIconsTooLarge) {
 // Tests that we limit the size of shortcut icons declared by a site.
 TEST(WebAppInstallUtils, UpdateWebAppInfoFromManifestShortcutIconsTooLarge) {
   blink::mojom::Manifest manifest;
-  for (int i = 1; i <= 20; ++i) {
+  for (int size = 1023; size <= 1026; ++size) {
     blink::Manifest::ShortcutItem shortcut_item;
-    shortcut_item.name = kShortcutItemTestName + base::NumberToString16(i);
+    shortcut_item.name = kShortcutItemTestName + base::NumberToString16(size);
     shortcut_item.url = GURL("http://www.chromium.org/shortcuts/action");
 
     blink::Manifest::ImageResource icon;
     icon.src = GURL("http://www.chromium.org/shortcuts/icon1.png");
     icon.purpose.push_back(Purpose::ANY);
-    const int size = i * 100;
     icon.sizes.emplace_back(size, size);
     shortcut_item.icons.push_back(std::move(icon));
 
     manifest.shortcuts.push_back(shortcut_item);
   }
+
   WebAppInstallInfo web_app_info;
+  // Icons exceeding size 1024 are discarded.
   UpdateWebAppInfoFromManifest(
       manifest, GURL("http://www.chromium.org/manifest.json"), &web_app_info);
 
@@ -624,7 +662,8 @@ TEST(WebAppInstallUtils, UpdateWebAppInfoFromManifestShortcutIconsTooLarge) {
       all_icons.push_back(icon_info);
     }
   }
-  EXPECT_EQ(10U, all_icons.size());
+  // Only the early icons are within the size limit.
+  EXPECT_EQ(2U, all_icons.size());
 }
 
 // Tests that SkBitmaps associated with shortcut item icons are populated in
@@ -868,21 +907,19 @@ TEST(WebAppInstallUtils, UpdateWebAppInfoFromManifest_Translations) {
   UpdateWebAppInfoFromManifest(manifest, kAppManifestUrl, &web_app_info);
 
   EXPECT_EQ(3u, web_app_info.translations.size());
-  EXPECT_EQ(web_app_info.translations[u"language 1"].name, "name 1");
-  EXPECT_EQ(web_app_info.translations[u"language 1"].short_name,
-            "short name 1");
-  EXPECT_EQ(web_app_info.translations[u"language 1"].description,
+  EXPECT_EQ(web_app_info.translations["language 1"].name, "name 1");
+  EXPECT_EQ(web_app_info.translations["language 1"].short_name, "short name 1");
+  EXPECT_EQ(web_app_info.translations["language 1"].description,
             "description 1");
 
-  EXPECT_FALSE(web_app_info.translations[u"language 2"].name);
-  EXPECT_EQ(web_app_info.translations[u"language 2"].short_name,
-            "short name 2");
-  EXPECT_EQ(web_app_info.translations[u"language 2"].description,
+  EXPECT_FALSE(web_app_info.translations["language 2"].name);
+  EXPECT_EQ(web_app_info.translations["language 2"].short_name, "short name 2");
+  EXPECT_EQ(web_app_info.translations["language 2"].description,
             "description 2");
 
-  EXPECT_EQ(web_app_info.translations[u"language 3"].name, "name 3");
-  EXPECT_FALSE(web_app_info.translations[u"language 3"].short_name);
-  EXPECT_FALSE(web_app_info.translations[u"language 3"].description);
+  EXPECT_EQ(web_app_info.translations["language 3"].name, "name 3");
+  EXPECT_FALSE(web_app_info.translations["language 3"].short_name);
+  EXPECT_FALSE(web_app_info.translations["language 3"].description);
 }
 
 class FileHandlersFromManifestTest : public ::testing::TestWithParam<bool> {
@@ -1103,13 +1140,13 @@ TEST_F(RegisterOsSettingsTest, MaybeRegisterOsUninstall) {
 
   // Scenario 1.
   auto web_app = std::make_unique<WebApp>(app_id);
-  web_app->AddSource(Source::kDefault);
-  web_app->AddSource(Source::kPolicy);
+  web_app->AddSource(WebAppManagement::kDefault);
+  web_app->AddSource(WebAppManagement::kPolicy);
   EXPECT_FALSE(web_app->CanUserUninstallWebApp());
 
   base::RunLoop run_loop;
   MaybeRegisterOsUninstall(
-      web_app.get(), Source::kPolicy, manager,
+      web_app.get(), WebAppManagement::kPolicy, manager,
       base::BindLambdaForTesting(
           [&](OsHooksErrors os_hooks_errors) { run_loop.Quit(); }));
   run_loop.Run();
@@ -1139,19 +1176,19 @@ TEST_F(RegisterOsSettingsTest, MaybeRegisterOsSettings_NoRegistration) {
 
   // Scenario 2.
   auto web_app = std::make_unique<WebApp>(app_id);
-  web_app->AddSource(Source::kSync);
-  web_app->AddSource(Source::kPolicy);
+  web_app->AddSource(WebAppManagement::kSync);
+  web_app->AddSource(WebAppManagement::kPolicy);
   EXPECT_FALSE(web_app->CanUserUninstallWebApp());
-  MaybeRegisterOsUninstall(web_app.get(), Source::kSync, manager,
+  MaybeRegisterOsUninstall(web_app.get(), WebAppManagement::kSync, manager,
                            base::DoNothing());
 
   // Scenario 3.
   auto web_app2 = std::make_unique<WebApp>(app_id);
-  web_app2->AddSource(Source::kDefault);
-  web_app2->AddSource(Source::kSync);
-  web_app2->AddSource(Source::kWebAppStore);
+  web_app2->AddSource(WebAppManagement::kDefault);
+  web_app2->AddSource(WebAppManagement::kSync);
+  web_app2->AddSource(WebAppManagement::kWebAppStore);
   EXPECT_TRUE(web_app2->CanUserUninstallWebApp());
-  MaybeRegisterOsUninstall(web_app2.get(), Source::kDefault, manager,
+  MaybeRegisterOsUninstall(web_app2.get(), WebAppManagement::kDefault, manager,
                            base::DoNothing());
 }
 
@@ -1172,9 +1209,9 @@ TEST_F(RegisterOsSettingsTest, MaybeUnregisterOsUninstall) {
 
   // Scenario 1.
   auto web_app = std::make_unique<WebApp>(app_id);
-  web_app->AddSource(Source::kDefault);
+  web_app->AddSource(WebAppManagement::kDefault);
   EXPECT_TRUE(web_app->CanUserUninstallWebApp());
-  MaybeUnregisterOsUninstall(web_app.get(), Source::kPolicy, manager);
+  MaybeUnregisterOsUninstall(web_app.get(), WebAppManagement::kPolicy, manager);
 }
 
 TEST_F(RegisterOsSettingsTest, MaybeUnregisterOsSettings_NoUnregistration) {
@@ -1200,15 +1237,16 @@ TEST_F(RegisterOsSettingsTest, MaybeUnregisterOsSettings_NoUnregistration) {
 
   // Scenario 2.
   auto web_app = std::make_unique<WebApp>(app_id);
-  web_app->AddSource(Source::kPolicy);
+  web_app->AddSource(WebAppManagement::kPolicy);
   EXPECT_FALSE(web_app->CanUserUninstallWebApp());
-  MaybeUnregisterOsUninstall(web_app.get(), Source::kSync, manager);
+  MaybeUnregisterOsUninstall(web_app.get(), WebAppManagement::kSync, manager);
 
   // Scenario 3.
   auto web_app2 = std::make_unique<WebApp>(app_id);
-  web_app2->AddSource(Source::kSync);
+  web_app2->AddSource(WebAppManagement::kSync);
   EXPECT_TRUE(web_app2->CanUserUninstallWebApp());
-  MaybeUnregisterOsUninstall(web_app2.get(), Source::kDefault, manager);
+  MaybeUnregisterOsUninstall(web_app2.get(), WebAppManagement::kDefault,
+                             manager);
 }
 
 #endif  // BUILDFLAG(IS_WIN)

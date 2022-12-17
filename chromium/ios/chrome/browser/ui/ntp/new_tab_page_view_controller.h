@@ -53,9 +53,12 @@
 
 // View controller representing the NTP content suggestions. These suggestions
 // include the most visited site tiles, the shortcut tiles, the fake omnibox and
-// the Google doodle.
+// the Google doodle. |contentSuggestionsUIViewController| is used if
+// kContentSuggestionsUIViewControllerMigration is enabled.
 @property(nonatomic, strong)
-    UICollectionViewController* contentSuggestionsViewController;
+    UICollectionViewController* contentSuggestionsCollectionViewController;
+@property(nonatomic, strong)
+    ContentSuggestionsViewController* contentSuggestionsViewController;
 
 // Feed metrics recorder.
 @property(nonatomic, strong) FeedMetricsRecorder* feedMetricsRecorder;
@@ -72,6 +75,9 @@
 // Whether or not this NTP has fully appeared for the first time yet. This value
 // remains YES if viewDidAppear has been called.
 @property(nonatomic, assign) BOOL viewDidAppear;
+
+// Whether the NTP should initially be scrolled into the feed.
+@property(nonatomic, assign) BOOL shouldScrollIntoFeed;
 
 // Initializes the new tab page view controller.
 - (instancetype)init NS_DESIGNATED_INITIALIZER;

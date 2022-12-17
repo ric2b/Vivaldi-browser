@@ -105,10 +105,9 @@ void UpdateVirtualCardEnrollmentRequest::BuildEnrollRequestDictionary(
          VirtualCardEnrollmentRequestType::kEnroll);
 
   // If it is an enroll request, we should always have a context token from the
-  // previous GetDetailsForEnroll request and we should not have an instrument
-  // id set in |request_details_|.
+  // previous GetDetailsForEnroll request and an instrument id.
   DCHECK(request_details_.vcn_context_token.has_value() &&
-         !request_details_.instrument_id.has_value());
+         request_details_.instrument_id.has_value());
 
   // Builds the context and channel_type for this enroll request.
   base::Value context(base::Value::Type::DICTIONARY);
@@ -146,6 +145,11 @@ void UpdateVirtualCardEnrollmentRequest::BuildEnrollRequestDictionary(
   request_dict->SetKey("virtual_card_enrollment_flow",
                        base::Value("ENROLL_WITH_TOS"));
 
+  // Sets the instrument_id field in this enroll request.
+  request_dict->SetKey("instrument_id",
+                       base::Value(base::NumberToString(
+                           request_details_.instrument_id.value())));
+
   // Sets the context_token field in this enroll request which is used by the
   // server to link this enroll request to the previous
   // GetDetailsForEnrollRequest, as well as to retrieve the specific credit card
@@ -164,15 +168,17 @@ void UpdateVirtualCardEnrollmentRequest::BuildUnenrollRequestDictionary(
   DCHECK(request_details_.instrument_id.has_value() &&
          !request_details_.vcn_context_token.has_value());
 
-  // Builds the context for this unenroll request if a billing customer number
-  // is present.
+  // Builds the context for this unenroll request with the billable service
+  // number and the billing customer number if present.
+  base::Value context(base::Value::Type::DICTIONARY);
   if (request_details_.billing_customer_number != 0) {
-    base::Value context(base::Value::Type::DICTIONARY);
     context.SetKey("customer_context",
                    BuildCustomerContextDictionary(
                        request_details_.billing_customer_number));
-    request_dict->SetKey("context", std::move(context));
   }
+  context.SetKey("billable_service",
+                 base::Value(kUnmaskCardBillableServiceNumber));
+  request_dict->SetKey("context", std::move(context));
 
   // Sets the instrument_id field in this unenroll request which is used by
   // the server to get the appropriate credit card to unenroll.

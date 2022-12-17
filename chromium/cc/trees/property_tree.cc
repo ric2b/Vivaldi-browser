@@ -23,6 +23,7 @@
 #include "cc/trees/scroll_node.h"
 #include "cc/trees/transform_node.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
+#include "ui/gfx/geometry/outsets_f.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/transform_util.h"
 #include "ui/gfx/geometry/vector2d_conversions.h"
@@ -56,6 +57,8 @@ PropertyTree<T>& PropertyTree<T>::operator=(const PropertyTree<T>&) = default;
 TransformTree::TransformTree(PropertyTrees* property_trees)
     : PropertyTree<TransformNode>(property_trees),
       page_scale_factor_(1.f),
+      overscroll_node_id_(kInvalidPropertyNodeId),
+      fixed_elements_dont_overscroll_(false),
       device_scale_factor_(1.f),
       device_transform_scale_factor_(1.f) {
   cached_data_.push_back(TransformCachedNodeData());
@@ -125,6 +128,8 @@ void TransformTree::clear() {
   PropertyTree<TransformNode>::clear();
 
   page_scale_factor_ = 1.f;
+  overscroll_node_id_ = kInvalidPropertyNodeId;
+  fixed_elements_dont_overscroll_ = false;
   device_scale_factor_ = 1.f;
   device_transform_scale_factor_ = 1.f;
   nodes_affected_by_outer_viewport_bounds_delta_.clear();
@@ -147,6 +152,10 @@ bool TransformTree::OnTransformAnimated(ElementId element_id,
                                         const gfx::Transform& transform) {
   TransformNode* node = FindNodeFromElementId(element_id);
   DCHECK(node);
+  // TODO(crbug.com/1307498): Remove this when we no longer animate
+  // non-existent nodes.
+  if (!node)
+    return false;
   if (node->local == transform)
     return false;
   node->local = transform;
@@ -171,7 +180,7 @@ void TransformTree::UpdateTransforms(int id) {
   DCHECK(parent_node);
   // TODO(flackr): Only dirty when scroll offset changes.
   if (node->sticky_position_constraint_id >= 0 ||
-      node->needs_local_transform_update) {
+      node->needs_local_transform_update || ShouldUndoOverscroll(node)) {
     UpdateLocalTransform(node);
   } else {
     UndoSnapping(node);
@@ -256,8 +265,6 @@ void TransformTree::CombineTransformsBetween(int source_id,
     // loop below.
     DCHECK(IsDescendant(dest_id, current->id));
     CombineInversesBetween(current->id, dest_id, &combined_transform);
-    DCHECK(combined_transform.IsApproximatelyIdentityOrTranslation(
-        SkDoubleToScalar(1e-4)));
   }
 
   size_t source_to_destination_size = source_to_destination.size();
@@ -447,20 +454,59 @@ gfx::Vector2dF TransformTree::StickyPositionOffset(TransformNode* node) {
   return gfx::ToRoundedVector2d(sticky_offset);
 }
 
+bool TransformTree::ShouldUndoOverscroll(const TransformNode* node) const {
+  return fixed_elements_dont_overscroll_ && node && node->is_fixed_to_viewport;
+}
+
+void TransformTree::UpdateFixedNodeTransformAndClip(
+    const TransformNode* node,
+    gfx::Vector2dF& fixed_position_adjustment) {
+  if (!ShouldUndoOverscroll(node) ||
+      overscroll_node_id_ == kInvalidPropertyNodeId)
+    return;
+
+  const TransformNode* overscroll_node = Node(overscroll_node_id_);
+  const gfx::Vector2dF overscroll_offset =
+      overscroll_node->scroll_offset.OffsetFromOrigin();
+  if (overscroll_offset.IsZero())
+    return;
+
+  fixed_position_adjustment +=
+      gfx::ScaleVector2d(overscroll_offset, 1.f / page_scale_factor());
+
+  ClipTree& clip_tree = property_trees()->clip_tree_mutable();
+  ClipNode* clip_node = clip_tree.Node(clip_tree.overscroll_node_id());
+
+  if (clip_node) {
+    // Inflate the clip rect based on the overscroll direction.
+    gfx::OutsetsF outsets;
+    fixed_position_adjustment.x() < 0
+        ? outsets.set_left(-fixed_position_adjustment.x())
+        : outsets.set_right(fixed_position_adjustment.x());
+    fixed_position_adjustment.y() < 0
+        ? outsets.set_top(-fixed_position_adjustment.y())
+        : outsets.set_bottom(fixed_position_adjustment.y());
+
+    clip_node->clip.Outset(outsets);
+    clip_tree.set_needs_update(true);
+  }
+}
+
 void TransformTree::UpdateLocalTransform(TransformNode* node) {
   gfx::Transform transform;
   transform.Translate3d(node->post_translation.x() + node->origin.x(),
                         node->post_translation.y() + node->origin.y(),
                         node->origin.z());
 
-  float fixed_position_adjustment = 0;
+  gfx::Vector2dF fixed_position_adjustment;
   if (node->moved_by_outer_viewport_bounds_delta_y) {
-    fixed_position_adjustment =
-        property_trees()->outer_viewport_container_bounds_delta().y();
+    fixed_position_adjustment.set_y(
+        property_trees()->outer_viewport_container_bounds_delta().y());
   }
 
-  transform.Translate(-node->scroll_offset.x(),
-                      -node->scroll_offset.y() + fixed_position_adjustment);
+  UpdateFixedNodeTransformAndClip(node, fixed_position_adjustment);
+  transform.Translate(fixed_position_adjustment -
+                      node->scroll_offset.OffsetFromOrigin());
   transform.Translate(StickyPositionOffset(node));
   transform.PreconcatTransform(node->local);
   transform.Translate3d(gfx::Point3F() - node->origin);
@@ -663,6 +709,9 @@ void TransformTree::SetToScreen(int node_id, const gfx::Transform& transform) {
 bool TransformTree::operator==(const TransformTree& other) const {
   return PropertyTree::operator==(other) &&
          page_scale_factor_ == other.page_scale_factor() &&
+         overscroll_node_id_ == other.overscroll_node_id() &&
+         fixed_elements_dont_overscroll_ ==
+             other.fixed_elements_dont_overscroll() &&
          device_scale_factor_ == other.device_scale_factor() &&
          device_transform_scale_factor_ ==
              other.device_transform_scale_factor() &&
@@ -707,7 +756,7 @@ void EffectTree::clear() {
   PropertyTree<EffectNode>::clear();
   render_surfaces_.clear();
   render_surfaces_.push_back(nullptr);
-  document_transition_layer_to_node_index_.clear();
+  transition_pseudo_element_effect_nodes_.clear();
 
 #if DCHECK_IS_ON()
   EffectTree tree;
@@ -802,7 +851,8 @@ void EffectTree::UpdateHasMaskingChild(EffectNode* node,
 void EffectTree::UpdateOnlyDrawsVisibleContent(EffectNode* node,
                                                EffectNode* parent_node) {
   node->only_draws_visible_content =
-      !node->has_copy_request && !node->subtree_capture_id.is_valid();
+      !node->has_copy_request && !node->subtree_capture_id.is_valid() &&
+      !node->shared_element_resource_id.IsValid();
   if (parent_node)
     node->only_draws_visible_content &= parent_node->only_draws_visible_content;
   if (!node->backdrop_filters.IsEmpty()) {
@@ -840,6 +890,10 @@ void EffectTree::UpdateSurfaceContentsScale(EffectNode* effect_node) {
 bool EffectTree::OnOpacityAnimated(ElementId id, float opacity) {
   EffectNode* node = FindNodeFromElementId(id);
   DCHECK(node);
+  // TODO(crbug.com/1307498): Remove this when we no longer animate
+  // non-existent nodes.
+  if (!node)
+    return false;
   if (node->opacity == opacity)
     return false;
   node->opacity = opacity;
@@ -853,6 +907,10 @@ bool EffectTree::OnFilterAnimated(ElementId id,
                                   const FilterOperations& filters) {
   EffectNode* node = FindNodeFromElementId(id);
   DCHECK(node);
+  // TODO(crbug.com/1307498): Remove this when we no longer animate
+  // non-existent nodes.
+  if (!node)
+    return false;
   if (node->filters == filters)
     return false;
   node->filters = filters;
@@ -867,6 +925,10 @@ bool EffectTree::OnBackdropFilterAnimated(
     const FilterOperations& backdrop_filters) {
   EffectNode* node = FindNodeFromElementId(id);
   DCHECK(node);
+  // TODO(crbug.com/1307498): Remove this when we no longer animate
+  // non-existent nodes.
+  if (!node)
+    return false;
   if (node->backdrop_filters == backdrop_filters)
     return false;
   node->backdrop_filters = backdrop_filters;
@@ -888,7 +950,18 @@ void EffectTree::UpdateEffects(int id) {
   UpdateBackfaceVisibility(node, parent_node);
   UpdateHasMaskingChild(node, parent_node);
   UpdateOnlyDrawsVisibleContent(node, parent_node);
+  UpdateClosestAncestorSharedElement(node, parent_node);
   UpdateSurfaceContentsScale(node);
+}
+
+void EffectTree::UpdateClosestAncestorSharedElement(EffectNode* node,
+                                                    EffectNode* parent_node) {
+  if (node->shared_element_resource_id.IsValid()) {
+    node->closest_ancestor_with_shared_element_id = node->id;
+  } else if (parent_node) {
+    node->closest_ancestor_with_shared_element_id =
+        parent_node->closest_ancestor_with_shared_element_id;
+  }
 }
 
 void EffectTree::AddCopyRequest(
@@ -1042,26 +1115,26 @@ int EffectTree::LowestCommonAncestorWithRenderSurface(int id_1,
   return id_1;
 }
 
-void EffectTree::SetSharedElementResourceIdForNodeId(
-    int node_id,
-    viz::SharedElementResourceId resource_id) {
-  document_transition_layer_to_node_index_[resource_id] = node_id;
+void EffectTree::ClearTransitionPseudoElementEffectNodes() {
+  transition_pseudo_element_effect_nodes_.clear();
 }
 
-EffectNode* EffectTree::FindNodeFromSharedElementResourceId(
-    viz::SharedElementResourceId resource_id) {
-  auto iterator = document_transition_layer_to_node_index_.find(resource_id);
-  if (iterator == document_transition_layer_to_node_index_.end())
-    return nullptr;
-  return Node(iterator->second);
+void EffectTree::AddTransitionPseudoElementEffectId(int id) {
+  transition_pseudo_element_effect_nodes_.insert(id);
 }
 
-const EffectNode* EffectTree::FindNodeFromSharedElementResourceId(
-    viz::SharedElementResourceId resource_id) const {
-  auto iterator = document_transition_layer_to_node_index_.find(resource_id);
-  if (iterator == document_transition_layer_to_node_index_.end())
-    return nullptr;
-  return Node(iterator->second);
+std::vector<RenderSurfaceImpl*>
+EffectTree::GetTransitionPseudoElementRenderSurfaces() {
+  std::vector<RenderSurfaceImpl*> result;
+  for (auto effect_id : transition_pseudo_element_effect_nodes_) {
+    // Add the render surface if there is one. Otherwise, add the target render
+    // surface.
+    if (auto* render_surface = GetRenderSurface(effect_id))
+      result.push_back(render_surface);
+    else if (auto* target = GetRenderSurface(Node(effect_id)->target_id))
+      result.push_back(target);
+  }
+  return result;
 }
 
 bool EffectTree::ContributesToDrawnSurface(int id) const {
@@ -1192,7 +1265,8 @@ EffectTree::CopyRequestMap EffectTree::TakeCopyRequests() {
 }
 
 ClipTree::ClipTree(PropertyTrees* property_trees)
-    : PropertyTree<ClipNode>(property_trees) {}
+    : PropertyTree<ClipNode>(property_trees),
+      overscroll_node_id_(kInvalidPropertyNodeId) {}
 
 void ClipTree::SetViewportClip(gfx::RectF viewport_rect) {
   if (size() < 2)
@@ -1212,15 +1286,16 @@ gfx::RectF ClipTree::ViewportClip() const {
 
 #if DCHECK_IS_ON()
 bool ClipTree::operator==(const ClipTree& other) const {
-  return PropertyTree::operator==(other);
+  return PropertyTree::operator==(other) &&
+         overscroll_node_id_ == other.overscroll_node_id();
 }
 #endif
 
 EffectTree& EffectTree::operator=(const EffectTree& from) {
   PropertyTree::operator=(from);
   render_surfaces_.resize(size());
-  document_transition_layer_to_node_index_ =
-      from.document_transition_layer_to_node_index_;
+  transition_pseudo_element_effect_nodes_ =
+      from.transition_pseudo_element_effect_nodes_;
   // copy_requests_ are omitted here, since these need to be moved rather
   // than copied or assigned.
 
@@ -1230,8 +1305,8 @@ EffectTree& EffectTree::operator=(const EffectTree& from) {
 #if DCHECK_IS_ON()
 bool EffectTree::operator==(const EffectTree& other) const {
   return PropertyTree::operator==(other) &&
-         document_transition_layer_to_node_index_ ==
-             other.document_transition_layer_to_node_index_;
+         transition_pseudo_element_effect_nodes_ ==
+             other.transition_pseudo_element_effect_nodes_;
 }
 #endif
 

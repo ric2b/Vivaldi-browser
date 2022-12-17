@@ -8,9 +8,8 @@
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/weak_ptr.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/geometry/rect_f.h"
-
-class SkBitmap;
 
 namespace vivaldi {
 
@@ -19,37 +18,14 @@ class CapturePage : private content::WebContentsObserver {
   struct CaptureParams {
     gfx::Rect rect;
     gfx::Size target_size;
-    int client_id = 0;
     bool full_page = false;
   };
 
-  // Move only wrapper around results.
-  class Result {
-   public:
-    Result();
-    Result(Result&& other);
-    ~Result();
-    Result& operator=(Result&& other);
-
-    // This is a heavy operation and should be called from a worker thread.
-    // Return false if unsuccessful. This should only be called once per Result
-    // instance.
-    bool MovePixelsToBitmap(SkBitmap* bitmap);
-    int client_id();
-
-   private:
-    friend class CapturePage;
-
-    SkImageInfo image_info_;
-    base::ReadOnlySharedMemoryRegion region_;
-    int client_id_;
-  };
-
-  using DoneCallback = base::OnceCallback<void(Result capture_result)>;
+  using BitmapCallback = base::OnceCallback<void(SkBitmap bitmap)>;
 
   static void Capture(content::WebContents* contents,
                       const CaptureParams& params,
-                      DoneCallback callback);
+                      BitmapCallback callback);
 
   // Start capturing the given area of the window corresponding to the given
   // WebContents and send the result to the callback. The rect should be in
@@ -73,9 +49,10 @@ class CapturePage : private content::WebContentsObserver {
   // Start the actual capture of the content.
   void CaptureImpl(content::WebContents* contents,
                    const CaptureParams& params,
-                   DoneCallback callback);
+                   BitmapCallback callback);
 
-  void RespondAndDelete(Result captured = Result());
+  void RespondAndDelete(SkBitmap bitmap = SkBitmap());
+  void OnCaptureDone(SkBitmap bitmap);
 
   void OnCaptureTimeout();
 
@@ -89,11 +66,10 @@ class CapturePage : private content::WebContentsObserver {
       const gfx::Size& image_size,
       base::ReadOnlySharedMemoryRegion region);
 
-  DoneCallback capture_callback_;
-  int client_id_ = 0;
+  BitmapCallback capture_callback_;
   gfx::Size target_size_;
 
-  base::WeakPtrFactory<CapturePage> weak_ptr_factory_;
+  base::WeakPtrFactory<CapturePage> weak_ptr_factory_{this};
 };
 
 }  // namespace vivaldi

@@ -16,7 +16,6 @@
 #include "base/callback.h"
 #include "base/check_op.h"
 #include "base/containers/span.h"
-#include "base/cxx17_backports.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/guid.h"
@@ -26,14 +25,13 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/synchronization/waitable_event_watcher.h"
-#include "base/task/post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_clock.h"
-#include "components/services/storage/indexed_db/scopes/disjoint_range_lock_manager.h"
+#include "components/services/storage/indexed_db/locks/disjoint_range_lock_manager.h"
 #include "components/services/storage/indexed_db/scopes/varint_coding.h"
 #include "components/services/storage/indexed_db/transactional_leveldb/leveldb_write_batch.h"
 #include "components/services/storage/indexed_db/transactional_leveldb/transactional_leveldb_database.h"
@@ -358,11 +356,11 @@ class IndexedDBBackingStoreTest : public testing::Test {
         storage_key_state_handle_.storage_key_state()->lock_manager();
   }
 
-  std::vector<ScopeLock> CreateDummyLock() {
+  std::vector<LeveledLock> CreateDummyLock() {
     base::RunLoop loop;
-    ScopesLocksHolder locks_receiver;
+    LeveledLockHolder locks_receiver;
     bool success = lock_manager_->AcquireLocks(
-        {{0, {"01", "11"}, ScopesLockManager::LockType::kShared}},
+        {{0, {"01", "11"}, LeveledLockManager::LockType::kShared}},
         locks_receiver.AsWeakPtr(),
         base::BindLambdaForTesting([&loop]() { loop.Quit(); }));
     EXPECT_TRUE(success);
@@ -1009,7 +1007,7 @@ TEST_P(IndexedDBBackingStoreTestWithExternalObjects, DeleteRange) {
       IndexedDBKeyRange(keys[1], keys[3], false, true),
       IndexedDBKeyRange(keys[0], keys[3], true, true)};
 
-  for (size_t i = 0; i < base::size(ranges); ++i) {
+  for (size_t i = 0; i < std::size(ranges); ++i) {
     const int64_t database_id = 1;
     const int64_t object_store_id = i + 1;
     const IndexedDBKeyRange& range = ranges[i];
@@ -1104,7 +1102,7 @@ TEST_P(IndexedDBBackingStoreTestWithExternalObjects, DeleteRangeEmptyRange) {
       IndexedDBKeyRange(keys[2], keys[1], false, false),
       IndexedDBKeyRange(keys[2], keys[1], true, true)};
 
-  for (size_t i = 0; i < base::size(ranges); ++i) {
+  for (size_t i = 0; i < std::size(ranges); ++i) {
     const int64_t database_id = 1;
     const int64_t object_store_id = i + 1;
     const IndexedDBKeyRange& range = ranges[i];

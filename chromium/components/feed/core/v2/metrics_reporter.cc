@@ -552,6 +552,11 @@ void MetricsReporter::OtherUserAction(const StreamType& stream_type,
           base::UserMetricsAction("ContentSuggestions.Feed.CardAction.Manage"));
       RecordInteraction(stream_type);
       break;
+    case FeedUserActionType::kTappedManageHidden:
+      base::RecordAction(base::UserMetricsAction(
+          "ContentSuggestions.Feed.CardAction.ManageHidden"));
+      RecordInteraction(stream_type);
+      break;
     case FeedUserActionType::kEphemeralChange:
     case FeedUserActionType::kEphemeralChangeRejected:
     case FeedUserActionType::kTappedTurnOn:
@@ -578,6 +583,7 @@ void MetricsReporter::OtherUserAction(const StreamType& stream_type,
     case FeedUserActionType::kTappedDismissPostFollowActiveHelp:
     case FeedUserActionType::kTappedDiscoverFeedPreview:
     case FeedUserActionType::kOpenedAutoplaySettings:
+    case FeedUserActionType::kTappedFollowButton:
       // Nothing additional for these actions. Note that some of these are iOS
       // only.
 

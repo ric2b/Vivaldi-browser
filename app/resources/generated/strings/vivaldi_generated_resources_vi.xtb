@@ -9,7 +9,6 @@
 <translation id="1054153489933238809">Mở &amp;Hình ảnh Gốc trong Tab Mới</translation>
 <translation id="1056898198331236512">Cảnh báo</translation>
 <translation id="1084824384139382525">S&amp;ao chép địa chỉ liên kết</translation>
-<translation id="1128109161498068552">Không cho phép bất cứ trang web nào sử dụng thông báo dành riêng cho hệ thống để truy cập thiết bị MIDI</translation>
 <translation id="1163931534039071049">&amp;Xem nguồn khung</translation>
 <translation id="1165039591588034296">Lỗi</translation>
 <translation id="1175364870820465910">&amp;In...</translation>
@@ -22,7 +21,6 @@
 <translation id="1297175357211070620">Máy in đích</translation>
 <translation id="1303101771013849280">Tệp dấu trang HTML</translation>
 <translation id="1430915738399379752">In</translation>
-<translation id="1433811987160647649">Hỏi trước khi truy cập</translation>
 <translation id="1451375123200651445">Trang web, Tệp Đơn</translation>
 <translation id="1465176863081977902">S&amp;ao chép Địa chỉ Âm thanh</translation>
 <translation id="1476607407192946488">&amp;Thiết lập Ngôn ngữ</translation>
@@ -96,13 +94,11 @@
 <translation id="2721037002783622288">&amp;Tìm kiếm hình ảnh trên <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2785873697295365461">Phần mô tả tệp</translation>
 <translation id="2809586584051668049">và <ph name="NUMBER_ADDITIONAL_DISABLED" /> mục khác</translation>
-<translation id="2812989263793994277">Không hiển thị bất kỳ hình ảnh nào</translation>
 <translation id="2850541429955027218">Thêm chủ đề</translation>
 <translation id="2861941300086904918">Trình quản lý bảo mật Native Client</translation>
 <translation id="2881076733170862447">Khi Bạn Nhấp vào Tiện ích</translation>
 <translation id="2889064240420137087">Mở liên kết bằng...</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> không thể giao tiếp với máy in này. Hãy đảm bảo rằng bạn đã cắm máy in rồi thử lại.</translation>
-<translation id="2904456025988372123">Hỏi khi trang web cố gắng tự động tải tệp xuống sau tệp đầu tiên</translation>
 <translation id="2913331724188855103">Cho phép trang web lưu và đọc dữ liệu cookie (được đề xuất)</translation>
 <translation id="2931157624143513983">Vừa với vùng in được</translation>
 <translation id="2932085390869194046">Đề xuất Mật khẩu...</translation>
@@ -123,7 +119,6 @@
 <translation id="3127156390846601284">Thao tác này sẽ xóa mọi dữ liệu được lưu trữ trên thiết bị của bạn cho tất cả trang web hiển thị. Bạn có muốn tiếp tục không?</translation>
 <translation id="3129173833825111527">Lề trái</translation>
 <translation id="3144647712221361880">Mở liên kết bằng tài khoản</translation>
-<translation id="3154429428035006212">Ngoại tuyến hơn một tháng</translation>
 <translation id="3222066309010235055">Trình kết xuất trước: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Chọn thư mục gốc của tiện ích để đóng gói. Để cập nhật tiện ích, bạn cũng chọn tệp khóa cá nhân để sử dụng lại.</translation>
 <translation id="3280237271814976245">Lưu &amp;dưới dạng...</translation>
@@ -160,7 +155,6 @@
 <translation id="3838085852053358637">Không tải được tiện ích</translation>
 <translation id="383891835335927981">Không có trang web nào được phóng to hoặc thu nhỏ</translation>
 <translation id="385051799172605136">Quay lại</translation>
-<translation id="3899879303189199559">Ngoại tuyến hơn một năm</translation>
 <translation id="3905761538810670789">Sửa ứng dụng</translation>
 <translation id="3908501907586732282">Bật tiện ích</translation>
 <translation id="3909791450649380159">Cắ&amp;t</translation>
@@ -186,7 +180,6 @@
 <translation id="4200983522494130825">&amp;Tab mới</translation>
 <translation id="4225397296022057997">Trên tất cả các trang web</translation>
 <translation id="4256316378292851214">Lưu &amp;Video Dưới dạng...</translation>
-<translation id="4278390842282768270">Được phép</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K hiện có)</translation>
 <translation id="4345587454538109430">Định cấu hình...</translation>
 <translation id="4348766275249686434">Thu thập lỗi</translation>
@@ -215,10 +208,8 @@
 <translation id="4988526792673242964">Trang</translation>
 <translation id="49896407730300355">Xoay &amp;nghịch kim đồng hồ</translation>
 <translation id="4989966318180235467">Kiểm tra trang &amp;nền</translation>
-<translation id="4994474651455208930">Cho phép các trang web yêu cầu trở thành trình xử lý mặc định cho giao thức</translation>
 <translation id="5000922062037820727">Bị chặn (được đề xuất)</translation>
 <translation id="5027562294707732951">Thêm tiện ích</translation>
-<translation id="5036662165765606524">Không cho phép bất kỳ trang web nào tự động tải nhiều tệp xuống</translation>
 <translation id="5039804452771397117">Cho phép</translation>
 <translation id="5057110919553308744">Khi bạn nhấp vào tiện ích</translation>
 <translation id="5063480226653192405">Sử dụng</translation>
@@ -230,7 +221,6 @@
 <translation id="5233231016133573565">ID Tiến trình</translation>
 <translation id="5233736638227740678">&amp;Dán</translation>
 <translation id="5256861893479663409">Trên Tất cả các Trang web</translation>
-<translation id="5265562206369321422">Ngoại tuyến hơn một tuần</translation>
 <translation id="5269977353971873915">Lỗi In</translation>
 <translation id="5284445933715251131">Tiếp tục Tải xuống</translation>
 <translation id="52912272896845572">Tệp khóa cá nhân không hợp lệ.</translation>
@@ -285,7 +275,6 @@
 <translation id="6122081475643980456">Kết nối Internet của bạn đang bị kiểm soát</translation>
 <translation id="6147020289383635445">Không thể xem trước bản in.</translation>
 <translation id="6156863943908443225">Bộ nhớ đệm tập lệnh</translation>
-<translation id="6169666352732958425">Không thể truyền màn hình.</translation>
 <translation id="6196854373336333322">Tiện ích "<ph name="EXTENSION_NAME" />" đã chiếm quyền kiểm soát cài đặt proxy của bạn, điều đó có nghĩa là tiện ích này có thể thay đổi, làm gián đoạn hoặc nghe trộm bất kỳ điều gì bạn thực hiện trực tuyến. Nếu bạn không chắc chắn về lý do thay đổi này diễn ra, bạn có thể không cần tiện ích này.</translation>
 <translation id="6206311232642889873">Sao ché&amp;p Hình ảnh</translation>
 <translation id="6239558157302047471">Tải lại &amp;khung</translation>
@@ -317,7 +306,6 @@
 <translation id="6798954102094737107">Plugin: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Giữ lại thay đổi</translation>
 <translation id="6817174620439930047">Hỏi tôi khi có trang web muốn sử dụng thông báo dành riêng cho hệ thống để truy cập thiết bị MIDI (được đề xuất)</translation>
-<translation id="682123305478866682">Truyền màn hình</translation>
 <translation id="6824564591481349393">Sao chép Địa chỉ &amp;Email</translation>
 <translation id="6840155290835956714">Hỏi trước khi gửi</translation>
 <translation id="6886871292305414135">Mở liên kết trong &amp;tab mới</translation>
@@ -334,7 +322,6 @@
 <translation id="7070484045139057854">Tiện ích này Có thể Đọc và Thay đổi Dữ liệu Trang web</translation>
 <translation id="708060913198414444">S&amp;ao chép địa chỉ âm thanh</translation>
 <translation id="7175353351958621980">Được nạp từ:</translation>
-<translation id="7270858098575133036">Hỏi tôi khi có trang web muốn sử dụng thông báo dành riêng cho hệ thống để truy cập thiết bị MIDI</translation>
 <translation id="7287143125007575591">Truy cập bị từ chối.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7385854874724088939">Có trục trặc xảy ra khi in. Hãy kiểm tra máy in của bạn và thử lại.</translation>
@@ -356,7 +343,6 @@
 <translation id="7704305437604973648">Tác vụ</translation>
 <translation id="7710568461918838723">&amp;Truyền...</translation>
 <translation id="7750228210027921155">Ảnh trong Ảnh</translation>
-<translation id="7751260505918304024">Hiển thị tất cả</translation>
 <translation id="7760004034676677601">Đây có phải là trang khởi động bạn muốn không?</translation>
 <translation id="7771452384635174008">Bố cục</translation>
 <translation id="7782102568078991263">Không có đề xuất nào khác từ Google</translation>
@@ -369,9 +355,7 @@
 <translation id="7849264908733290972">Mở &amp;Hình ảnh trong Tab Mới</translation>
 <translation id="7857949311770343000">Đây có phải là trang tab mới bạn muốn không?</translation>
 <translation id="786073089922909430">Dịch vụ: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7885253890047913815">Máy in đích Gần đây</translation>
 <translation id="7903925330883316394">Tiện ích: <ph name="UTILITY_TYPE" /></translation>
-<translation id="7938594894617528435">Hiện đang ngoại tuyến</translation>
 <translation id="7947962633355574091">S&amp;ao chép Địa chỉ Video</translation>
 <translation id="7966241909927244760">S&amp;ao chép Địa chỉ Hình ảnh</translation>
 <translation id="7973394300052703468">Cửa sổ &amp;Riêng tư Mới</translation>
@@ -414,10 +398,8 @@ Giữ tệp khóa của bạn ở nơi an toàn. Bạn sẽ cần tệp khóa đ
 <translation id="8708000541097332489">Xóa khi thoát</translation>
 <translation id="8714838604780058252">Đồ họa nền</translation>
 <translation id="8725066075913043281">Thử lại</translation>
-<translation id="8757090071857742562">Không thể truyền màn hình nền. Kiểm tra xem bạn đã xác nhận lời nhắc để bắt đầu chia sẻ màn hình hay chưa.</translation>
 <translation id="8774934320277480003">Lề trên</translation>
 <translation id="8798099450830957504">Mặc định</translation>
-<translation id="8800004011501252845">Hiển thị điểm đến cho</translation>
 <translation id="8808478386290700967">Cửa hàng Trực tuyến</translation>
 <translation id="8823514049557262177">Sao chép &amp;văn bản liên kết</translation>
 <translation id="8823704566850948458">Đề xuất mật khẩu...</translation>
@@ -429,7 +411,6 @@ Giữ tệp khóa của bạn ở nơi an toàn. Bạn sẽ cần tệp khóa đ
 <translation id="8962083179518285172">Ẩn chi tiết</translation>
 <translation id="8973557916016709913">Xóa mức thu phóng</translation>
 <translation id="897939795688207351">Trên <ph name="ORIGIN" /></translation>
-<translation id="8996526648899750015">Thêm tài khoản...</translation>
 <translation id="9003647077635673607">Cho phép trên tất cả các website</translation>
 <translation id="9027459031423301635">Mở Liên kết trong &amp;Tab Mới</translation>
 <translation id="9056810968620647706">Không có kết quả phù hợp nào được tìm thấy.</translation>

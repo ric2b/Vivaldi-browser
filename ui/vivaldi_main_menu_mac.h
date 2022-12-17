@@ -33,6 +33,7 @@ class FaviconLoaderMac {
       NSMenuItem* item,
       const favicon_base::FaviconImageResult& image_result);
   void CancelPendingRequests();
+  void UpdateProfile(Profile* profile);
 
  private:
   std::unique_ptr<base::CancelableTaskTracker> cancelable_task_tracker_;

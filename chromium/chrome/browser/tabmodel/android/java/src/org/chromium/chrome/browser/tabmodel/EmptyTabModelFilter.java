@@ -63,11 +63,6 @@ public class EmptyTabModelFilter extends TabModelFilter {
         return getTabModel().indexOf(tab);
     }
 
-    @Override
-    public boolean isClosurePending(int tabId) {
-        return getTabModel().isClosurePending(tabId);
-    }
-
     /**
      * Vivaldi: Only notify observers when tab stack is disabled.
      */

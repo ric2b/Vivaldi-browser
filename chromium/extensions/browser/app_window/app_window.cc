@@ -77,7 +77,7 @@
 #include "extensions/helper/vivaldi_app_helper.h"
 #include "ui/vivaldi_ui_utils.h"
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 #include "base/win/windows_version.h"
 #include "ui/display/win/screen_win.h"
 #endif
@@ -301,7 +301,7 @@ void AppWindow::Init(const GURL& url,
   window_type_ = new_params.window_type;
   window_key_ = new_params.window_key;
 
-#if !defined(OS_MAC)
+#if !BUILDFLAG(IS_MAC)
   // NOTE(tomas@vivaldi.com): don't do this on osx, will cause VB-4330 to
   // reappear.
   // NOTE(andre@vivaldi.com): override restore to fullscreen. Open as maximized

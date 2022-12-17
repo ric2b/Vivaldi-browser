@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2016 Vivaldi Technologies. All Rights Reserved.
+// Copyright (c) 2015-2022 Vivaldi Technologies. All Rights Reserved.
 
 #ifndef PREFS_VIVALDI_PREF_NAMES_H_
 #define PREFS_VIVALDI_PREF_NAMES_H_
@@ -12,6 +12,7 @@ extern const char kAutoUpdateEnabled[];
 extern const char kVivaldiAccountPendingRegistration[];
 extern const char kVivaldiExperiments[];
 extern const char kVivaldiLastTopSitesVacuumDate[];
+extern const char kVivaldiPIPPlacement[];
 
 // Local state prefs go here.
 extern const char kVivaldiAutoUpdateStandalone[];

@@ -465,6 +465,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method constructor
 [Worker]     method createWritable
 [Worker]     method getFile
+[Worker]     method move
 [Worker] interface FileSystemHandle
 [Worker]     attribute @@toStringTag
 [Worker]     getter kind
@@ -704,6 +705,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     attribute @@toStringTag
 [Worker]     method constructor
 [Worker]     method decodingInfo
+[Worker]     method encodingInfo
 [Worker] interface MessageChannel
 [Worker]     attribute @@toStringTag
 [Worker]     getter port1

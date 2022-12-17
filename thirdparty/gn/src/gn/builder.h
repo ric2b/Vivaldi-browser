@@ -6,10 +6,11 @@
 #define TOOLS_GN_BUILDER_H_
 
 #include <functional>
-#include <map>
 #include <memory>
+#include <unordered_map>
 
 #include "gn/builder_record.h"
+#include "gn/builder_record_map.h"
 #include "gn/label.h"
 #include "gn/label_ptr.h"
 #include "gn/unique_vector.h"
@@ -58,6 +59,9 @@ class Builder {
 
   // If there are any undefined references, returns false and sets the error.
   bool CheckForBadItems(Err* err) const;
+
+  // Get or create an empty record for unit-testing.
+  BuilderRecord* GetOrCreateRecordForTesting(const Label& label);
 
  private:
   bool TargetDefined(BuilderRecord* record, Err* err);
@@ -138,7 +142,7 @@ class Builder {
   // Non owning pointer.
   Loader* loader_;
 
-  std::map<Label, std::unique_ptr<BuilderRecord>> records_;
+  BuilderRecordMap records_;
 
   ResolvedGeneratedCallback resolved_and_generated_callback_;
 

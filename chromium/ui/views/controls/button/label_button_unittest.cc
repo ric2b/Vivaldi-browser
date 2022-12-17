@@ -222,8 +222,8 @@ TEST_F(LabelButtonTest, LabelPreferredSizeWithMaxWidth) {
 
     bool preferred_size_is_sometimes_narrower_than_max = false;
 
-    for (size_t i = 0; i < base::size(text_cases); ++i) {
-      for (size_t j = 0; j < base::size(width_cases); ++j) {
+    for (size_t i = 0; i < std::size(text_cases); ++i) {
+      for (size_t j = 0; j < std::size(width_cases); ++j) {
         button_->SetText(ASCIIToUTF16(text_cases[i]));
         button_->SetMaxSize(gfx::Size(width_cases[j], 30));
 
@@ -721,7 +721,8 @@ TEST_F(LabelButtonTest, ImageOrLabelGetClipped) {
 
   button_->SetBoundsRect(gfx::Rect(button_->GetPreferredSize()));
   // The border size + the content height is more than button's preferred size.
-  button_->SetBorder(CreateEmptyBorder(image_size / 2, 0, image_size / 2, 0));
+  button_->SetBorder(CreateEmptyBorder(
+      gfx::Insets::TLBR(image_size / 2, 0, image_size / 2, 0)));
   button_->Layout();
 
   // Ensure that content (image and label) doesn't get clipped by the border.

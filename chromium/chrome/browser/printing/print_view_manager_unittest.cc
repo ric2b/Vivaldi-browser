@@ -25,6 +25,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "components/printing/common/print.mojom.h"
+#include "content/public/browser/global_routing_id.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_renderer_host.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
@@ -53,8 +54,7 @@ class TestPrintQueriesQueue : public PrintQueriesQueue {
   // settings indicated by `printable_offset_x_`, `printable_offset_y_`, and
   // `print_driver_type_`.
   std::unique_ptr<PrinterQuery> CreatePrinterQuery(
-      int render_process_id,
-      int render_frame_id) override;
+      content::GlobalRenderFrameHostId rfh_id) override;
 
   // Sets the printer's printable area offsets to `offset_x` and `offset_y`,
   // which should be in pixels. Used to fill in printer settings that would
@@ -81,7 +81,7 @@ class TestPrinterQuery : public PrinterQuery {
  public:
   // Can only be called on the IO thread, since this inherits from
   // `PrinterQuery`.
-  TestPrinterQuery(int render_process_id, int render_frame_id);
+  explicit TestPrinterQuery(content::GlobalRenderFrameHostId rfh_id);
   TestPrinterQuery(const TestPrinterQuery&) = delete;
   TestPrinterQuery& operator=(const TestPrinterQuery&) = delete;
   ~TestPrinterQuery() override;
@@ -89,7 +89,7 @@ class TestPrinterQuery : public PrinterQuery {
   // Updates the current settings with `new_settings` dictionary values. Also
   // fills in the settings with values from `offsets_` and `printer_type_` that
   // would normally be filled in by the `PrintingContext`.
-  void SetSettings(base::Value new_settings,
+  void SetSettings(base::Value::Dict new_settings,
                    base::OnceClosure callback) override;
 
 #if BUILDFLAG(IS_WIN)
@@ -113,10 +113,8 @@ class TestPrinterQuery : public PrinterQuery {
 };
 
 std::unique_ptr<PrinterQuery> TestPrintQueriesQueue::CreatePrinterQuery(
-    int render_process_id,
-    int render_frame_id) {
-  auto test_query =
-      std::make_unique<TestPrinterQuery>(render_process_id, render_frame_id);
+    content::GlobalRenderFrameHostId rfh_id) {
+  auto test_query = std::make_unique<TestPrinterQuery>(rfh_id);
 #if BUILDFLAG(IS_WIN)
   test_query->SetPrinterLanguageType(printer_language_type_);
 #endif
@@ -137,12 +135,12 @@ void TestPrintQueriesQueue::SetupPrinterLanguageType(
 }
 #endif
 
-TestPrinterQuery::TestPrinterQuery(int render_process_id, int render_frame_id)
-    : PrinterQuery(render_process_id, render_frame_id) {}
+TestPrinterQuery::TestPrinterQuery(content::GlobalRenderFrameHostId rfh_id)
+    : PrinterQuery(rfh_id) {}
 
 TestPrinterQuery::~TestPrinterQuery() = default;
 
-void TestPrinterQuery::SetSettings(base::Value new_settings,
+void TestPrinterQuery::SetSettings(base::Value::Dict new_settings,
                                    base::OnceClosure callback) {
   DCHECK(offsets_);
 #if BUILDFLAG(IS_WIN)
@@ -164,13 +162,14 @@ void TestPrinterQuery::SetSettings(base::Value new_settings,
                 settings->requested_media().size_microns.height() /
                     device_microns_per_device_unit);
   gfx::Rect paper_rect(0, 0, paper_size.width(), paper_size.height());
-  paper_rect.Inset(offsets_->x(), offsets_->y());
+  paper_rect.Inset(gfx::Insets::VH(offsets_->y(), offsets_->x()));
   settings->SetPrinterPrintableArea(paper_size, paper_rect, true);
 #if BUILDFLAG(IS_WIN)
   settings->set_printer_language_type(*printer_language_type_);
 #endif
 
-  GetSettingsDone(std::move(callback), std::move(settings), result);
+  GetSettingsDone(std::move(callback), /*maybe_is_modifiable=*/absl::nullopt,
+                  std::move(settings), result);
 }
 
 #if BUILDFLAG(IS_WIN)
@@ -323,7 +322,7 @@ TEST_F(PrintViewManagerTest, PostScriptHasCorrectOffsets) {
 
   print_view_manager->PrintPreviewNow(web_contents->GetMainFrame(), false);
 
-  base::Value print_ticket = GetPrintTicket(mojom::PrinterType::kLocal);
+  base::Value::Dict print_ticket = GetPrintTicket(mojom::PrinterType::kLocal);
   const char kTestData[] = "abc";
   auto print_data = base::MakeRefCounted<base::RefCountedStaticMemory>(
       kTestData, sizeof(kTestData));

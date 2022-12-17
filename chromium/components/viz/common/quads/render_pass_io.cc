@@ -28,6 +28,7 @@
 #include "components/viz/common/quads/video_hole_draw_quad.h"
 #include "components/viz/common/quads/yuv_video_draw_quad.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/skia/include/third_party/skcms/skcms.h"
 
 namespace gl {
 struct HDRMetadata;
@@ -330,12 +331,34 @@ bool RRectFFromDict(const base::Value& dict, gfx::RRectF* out) {
   return true;
 }
 
+base::Value MaskFilterInfoToDict(const gfx::MaskFilterInfo& mask_filter_info) {
+  base::Value dict(base::Value::Type::DICTIONARY);
+  dict.SetKey("rounded_corner_bounds",
+              RRectFToDict(mask_filter_info.rounded_corner_bounds()));
+  return dict;
+}
+
+bool MaskFilterInfoFromDict(const base::Value& dict, gfx::MaskFilterInfo* out) {
+  DCHECK(out);
+  if (!dict.is_dict())
+    return false;
+  const base::Value* rounded_corner_bounds =
+      dict.FindDictKey("rounded_corner_bounds");
+  if (!rounded_corner_bounds)
+    return false;
+  gfx::RRectF t_rounded_corner_bounds;
+  if (!RRectFFromDict(*rounded_corner_bounds, &t_rounded_corner_bounds))
+    return false;
+  *out = gfx::MaskFilterInfo(t_rounded_corner_bounds);
+  return true;
+}
+
 base::Value TransformToList(const gfx::Transform& transform) {
   base::Value list(base::Value::Type::LIST);
-  double data[16];
-  transform.matrix().asColMajord(data);
-  for (size_t ii = 0; ii < 16; ++ii)
-    list.Append(data[ii]);
+  float data[16];
+  transform.matrix().getColMajor(data);
+  for (float value : data)
+    list.Append(value);
   return list;
 }
 
@@ -345,13 +368,13 @@ bool TransformFromList(const base::Value& list, gfx::Transform* transform) {
     return false;
   if (list.GetListDeprecated().size() != 16)
     return false;
-  double data[16];
+  float data[16];
   for (size_t ii = 0; ii < 16; ++ii) {
     if (!list.GetListDeprecated()[ii].is_double())
       return false;
     data[ii] = list.GetListDeprecated()[ii].GetDouble();
   }
-  transform->matrix().setColMajord(data);
+  transform->matrix().setColMajor(data);
   return true;
 }
 
@@ -949,29 +972,6 @@ int GetSharedQuadStateIndex(const SharedQuadStateList& shared_quad_state_list,
   return -1;
 }
 
-#define MAP_MATERIAL_TO_STRING(NAME) \
-  case DrawQuad::Material::NAME:     \
-    return #NAME;
-const char* DrawQuadMaterialToString(DrawQuad::Material material) {
-  switch (material) {
-    MAP_MATERIAL_TO_STRING(kInvalid)
-    MAP_MATERIAL_TO_STRING(kDebugBorder)
-    MAP_MATERIAL_TO_STRING(kPictureContent)
-    MAP_MATERIAL_TO_STRING(kCompositorRenderPass)
-    MAP_MATERIAL_TO_STRING(kSolidColor)
-    MAP_MATERIAL_TO_STRING(kStreamVideoContent)
-    MAP_MATERIAL_TO_STRING(kSurfaceContent)
-    MAP_MATERIAL_TO_STRING(kTextureContent)
-    MAP_MATERIAL_TO_STRING(kTiledContent)
-    MAP_MATERIAL_TO_STRING(kYuvVideoContent)
-    MAP_MATERIAL_TO_STRING(kVideoHole)
-    default:
-      NOTREACHED();
-      return "";
-  }
-}
-#undef MAP_MATERIAL_TO_STRING
-
 #define MAP_STRING_TO_MATERIAL(NAME) \
   if (str == #NAME)                  \
     return static_cast<int>(DrawQuad::Material::NAME);
@@ -980,6 +980,7 @@ int StringToDrawQuadMaterial(const std::string& str) {
   MAP_STRING_TO_MATERIAL(kDebugBorder)
   MAP_STRING_TO_MATERIAL(kPictureContent)
   MAP_STRING_TO_MATERIAL(kCompositorRenderPass)
+  MAP_STRING_TO_MATERIAL(kSharedElement)
   MAP_STRING_TO_MATERIAL(kSolidColor)
   MAP_STRING_TO_MATERIAL(kStreamVideoContent)
   MAP_STRING_TO_MATERIAL(kSurfaceContent)
@@ -1668,47 +1669,6 @@ bool QuadListFromList(const base::Value& list,
 #undef GET_QUAD_FROM_DICT
 #undef UNEXPECTED_DRAW_QUAD_TYPE
 
-#define MAP_BLEND_MODE_TO_STRING(NAME) \
-  case SkBlendMode::NAME:              \
-    return #NAME;
-const char* BlendModeToString(SkBlendMode blend_mode) {
-  switch (blend_mode) {
-    MAP_BLEND_MODE_TO_STRING(kClear)
-    MAP_BLEND_MODE_TO_STRING(kSrc)
-    MAP_BLEND_MODE_TO_STRING(kDst)
-    MAP_BLEND_MODE_TO_STRING(kSrcOver)
-    MAP_BLEND_MODE_TO_STRING(kDstOver)
-    MAP_BLEND_MODE_TO_STRING(kSrcIn)
-    MAP_BLEND_MODE_TO_STRING(kDstIn)
-    MAP_BLEND_MODE_TO_STRING(kSrcOut)
-    MAP_BLEND_MODE_TO_STRING(kDstOut)
-    MAP_BLEND_MODE_TO_STRING(kSrcATop)
-    MAP_BLEND_MODE_TO_STRING(kDstATop)
-    MAP_BLEND_MODE_TO_STRING(kXor)
-    MAP_BLEND_MODE_TO_STRING(kPlus)
-    MAP_BLEND_MODE_TO_STRING(kModulate)
-    MAP_BLEND_MODE_TO_STRING(kScreen)
-    MAP_BLEND_MODE_TO_STRING(kOverlay)
-    MAP_BLEND_MODE_TO_STRING(kDarken)
-    MAP_BLEND_MODE_TO_STRING(kLighten)
-    MAP_BLEND_MODE_TO_STRING(kColorDodge)
-    MAP_BLEND_MODE_TO_STRING(kColorBurn)
-    MAP_BLEND_MODE_TO_STRING(kHardLight)
-    MAP_BLEND_MODE_TO_STRING(kSoftLight)
-    MAP_BLEND_MODE_TO_STRING(kDifference)
-    MAP_BLEND_MODE_TO_STRING(kExclusion)
-    MAP_BLEND_MODE_TO_STRING(kMultiply)
-    MAP_BLEND_MODE_TO_STRING(kHue)
-    MAP_BLEND_MODE_TO_STRING(kSaturation)
-    MAP_BLEND_MODE_TO_STRING(kColor)
-    MAP_BLEND_MODE_TO_STRING(kLuminosity)
-    default:
-      NOTREACHED();
-      return "";
-  }
-}
-#undef MAP_BLEND_MODE_TO_STRING
-
 base::Value SharedQuadStateToDict(const SharedQuadState& sqs) {
   base::Value dict(base::Value::Type::DICTIONARY);
   dict.SetKey("quad_to_target_transform",
@@ -1716,8 +1676,7 @@ base::Value SharedQuadStateToDict(const SharedQuadState& sqs) {
   dict.SetKey("quad_layer_rect", RectToDict(sqs.quad_layer_rect));
   dict.SetKey("visible_quad_layer_rect",
               RectToDict(sqs.visible_quad_layer_rect));
-  dict.SetKey("rounded_corner_bounds",
-              RRectFToDict(sqs.mask_filter_info.rounded_corner_bounds()));
+  dict.SetKey("mask_filter_info", MaskFilterInfoToDict(sqs.mask_filter_info));
   if (sqs.clip_rect) {
     dict.SetKey("clip_rect", RectToDict(*sqs.clip_rect));
   }
@@ -1776,8 +1735,7 @@ bool SharedQuadStateFromDict(const base::Value& dict, SharedQuadState* sqs) {
   const base::Value* quad_layer_rect = dict.FindDictKey("quad_layer_rect");
   const base::Value* visible_quad_layer_rect =
       dict.FindDictKey("visible_quad_layer_rect");
-  const base::Value* rounded_corner_bounds =
-      dict.FindDictKey("rounded_corner_bounds");
+  const base::Value* mask_filter_info = dict.FindDictKey("mask_filter_info");
   const base::Value* clip_rect = dict.FindDictKey("clip_rect");
   absl::optional<bool> is_clipped = dict.FindBoolKey("is_clipped");
   absl::optional<bool> are_contents_opaque =
@@ -1792,19 +1750,19 @@ bool SharedQuadStateFromDict(const base::Value& dict, SharedQuadState* sqs) {
       dict.FindDoubleKey("de_jelly_delta_y");
 
   if (!quad_to_target_transform || !quad_layer_rect ||
-      !visible_quad_layer_rect || !rounded_corner_bounds ||
-      !are_contents_opaque || !opacity || !blend_mode || !sorting_context_id ||
+      !visible_quad_layer_rect || !mask_filter_info || !are_contents_opaque ||
+      !opacity || !blend_mode || !sorting_context_id ||
       !is_fast_rounded_corner || !de_jelly_delta_y) {
     return false;
   }
   gfx::Transform t_quad_to_target_transform;
   gfx::Rect t_quad_layer_rect, t_visible_quad_layer_rect, t_clip_rect;
-  gfx::RRectF t_rounded_corner_bounds;
+  gfx::MaskFilterInfo t_mask_filter_info;
   if (!TransformFromList(*quad_to_target_transform,
                          &t_quad_to_target_transform) ||
       !RectFromDict(*quad_layer_rect, &t_quad_layer_rect) ||
       !RectFromDict(*visible_quad_layer_rect, &t_visible_quad_layer_rect) ||
-      !RRectFFromDict(*rounded_corner_bounds, &t_rounded_corner_bounds) ||
+      !MaskFilterInfoFromDict(*mask_filter_info, &t_mask_filter_info) ||
       (clip_rect && !RectFromDict(*clip_rect, &t_clip_rect))) {
     return false;
   }
@@ -1824,9 +1782,8 @@ bool SharedQuadStateFromDict(const base::Value& dict, SharedQuadState* sqs) {
   if (blend_mode_index < 0)
     return false;
   SkBlendMode t_blend_mode = static_cast<SkBlendMode>(blend_mode_index);
-  gfx::MaskFilterInfo mask_filter_info(t_rounded_corner_bounds);
   sqs->SetAll(t_quad_to_target_transform, t_quad_layer_rect,
-              t_visible_quad_layer_rect, mask_filter_info, clip_rect_opt,
+              t_visible_quad_layer_rect, t_mask_filter_info, clip_rect_opt,
               are_contents_opaque.value(), static_cast<float>(opacity.value()),
               t_blend_mode, sorting_context_id.value());
   sqs->is_fast_rounded_corner = is_fast_rounded_corner.value();
@@ -1881,6 +1838,71 @@ base::Value GetRenderPassListMetadata(
 }
 
 }  // namespace
+
+#define MAP_BLEND_MODE_TO_STRING(NAME) \
+  case SkBlendMode::NAME:              \
+    return #NAME;
+const char* BlendModeToString(SkBlendMode blend_mode) {
+  switch (blend_mode) {
+    MAP_BLEND_MODE_TO_STRING(kClear)
+    MAP_BLEND_MODE_TO_STRING(kSrc)
+    MAP_BLEND_MODE_TO_STRING(kDst)
+    MAP_BLEND_MODE_TO_STRING(kSrcOver)
+    MAP_BLEND_MODE_TO_STRING(kDstOver)
+    MAP_BLEND_MODE_TO_STRING(kSrcIn)
+    MAP_BLEND_MODE_TO_STRING(kDstIn)
+    MAP_BLEND_MODE_TO_STRING(kSrcOut)
+    MAP_BLEND_MODE_TO_STRING(kDstOut)
+    MAP_BLEND_MODE_TO_STRING(kSrcATop)
+    MAP_BLEND_MODE_TO_STRING(kDstATop)
+    MAP_BLEND_MODE_TO_STRING(kXor)
+    MAP_BLEND_MODE_TO_STRING(kPlus)
+    MAP_BLEND_MODE_TO_STRING(kModulate)
+    MAP_BLEND_MODE_TO_STRING(kScreen)
+    MAP_BLEND_MODE_TO_STRING(kOverlay)
+    MAP_BLEND_MODE_TO_STRING(kDarken)
+    MAP_BLEND_MODE_TO_STRING(kLighten)
+    MAP_BLEND_MODE_TO_STRING(kColorDodge)
+    MAP_BLEND_MODE_TO_STRING(kColorBurn)
+    MAP_BLEND_MODE_TO_STRING(kHardLight)
+    MAP_BLEND_MODE_TO_STRING(kSoftLight)
+    MAP_BLEND_MODE_TO_STRING(kDifference)
+    MAP_BLEND_MODE_TO_STRING(kExclusion)
+    MAP_BLEND_MODE_TO_STRING(kMultiply)
+    MAP_BLEND_MODE_TO_STRING(kHue)
+    MAP_BLEND_MODE_TO_STRING(kSaturation)
+    MAP_BLEND_MODE_TO_STRING(kColor)
+    MAP_BLEND_MODE_TO_STRING(kLuminosity)
+    default:
+      NOTREACHED();
+      return "";
+  }
+}
+#undef MAP_BLEND_MODE_TO_STRING
+
+#define MAP_MATERIAL_TO_STRING(NAME) \
+  case DrawQuad::Material::NAME:     \
+    return #NAME;
+const char* DrawQuadMaterialToString(DrawQuad::Material material) {
+  switch (material) {
+    MAP_MATERIAL_TO_STRING(kInvalid)
+    MAP_MATERIAL_TO_STRING(kDebugBorder)
+    MAP_MATERIAL_TO_STRING(kPictureContent)
+    MAP_MATERIAL_TO_STRING(kCompositorRenderPass)
+    MAP_MATERIAL_TO_STRING(kSharedElement)
+    MAP_MATERIAL_TO_STRING(kSolidColor)
+    MAP_MATERIAL_TO_STRING(kStreamVideoContent)
+    MAP_MATERIAL_TO_STRING(kSurfaceContent)
+    MAP_MATERIAL_TO_STRING(kTextureContent)
+    MAP_MATERIAL_TO_STRING(kTiledContent)
+    MAP_MATERIAL_TO_STRING(kYuvVideoContent)
+    MAP_MATERIAL_TO_STRING(kVideoHole)
+    default:
+      NOTREACHED();
+      return "";
+  }
+}
+#undef MAP_MATERIAL_TO_STRING
 
 base::Value CompositorRenderPassToDict(
     const CompositorRenderPass& render_pass) {

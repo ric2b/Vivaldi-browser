@@ -13,7 +13,6 @@
 #include "content/public/browser/permission_controller_delegate.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
-#include "content/public/browser/web_contents.h"
 #include "third_party/blink/public/mojom/permissions/permission_status.mojom.h"
 
 class GURL;
@@ -62,7 +61,7 @@ PermissionToSchedulingFeature(PermissionType permission_name) {
     case PermissionType::VR:
     case PermissionType::CAMERA_PAN_TILT_ZOOM:
     case PermissionType::WINDOW_PLACEMENT:
-    case PermissionType::FONT_ACCESS:
+    case PermissionType::LOCAL_FONTS:
     case PermissionType::DISPLAY_CAPTURE:
     case PermissionType::GEOLOCATION:
       return absl::nullopt;
@@ -100,7 +99,7 @@ void MergeOverriddenAndDelegatedResults(
   full_results.reserve(overridden_results.size());
   auto delegated_it = delegated_results.begin();
   for (auto& status : overridden_results) {
-    if (!status.has_value()) {
+    if (!status) {
       CHECK(delegated_it != delegated_results.end());
       status.emplace(*delegated_it++);
     }
@@ -117,7 +116,8 @@ PermissionControllerImpl::PermissionControllerImpl(
     BrowserContext* browser_context)
     : browser_context_(browser_context) {}
 
-// static
+// TODO(https://crbug.com/1271543): Remove this method and use
+// `PermissionController` instead. static
 PermissionControllerImpl* PermissionControllerImpl::FromBrowserContext(
     BrowserContext* browser_context) {
   return static_cast<PermissionControllerImpl*>(
@@ -151,9 +151,18 @@ PermissionControllerImpl::GetSubscriptionCurrentValue(
     return GetPermissionStatusForFrame(subscription.permission, rfh,
                                        subscription.requesting_origin);
   }
-  return GetPermissionStatus(subscription.permission,
-                             subscription.requesting_origin,
-                             subscription.embedding_origin);
+
+  content::RenderProcessHost* rph =
+      content::RenderProcessHost::FromID(subscription.render_process_id);
+  if (rph) {
+    return GetPermissionStatusForWorker(
+        subscription.permission, rph,
+        url::Origin::Create(subscription.requesting_origin));
+  }
+
+  return DeprecatedGetPermissionStatus(subscription.permission,
+                                       subscription.requesting_origin,
+                                       subscription.embedding_origin);
 }
 
 PermissionControllerImpl::SubscriptionsStatusMap
@@ -329,14 +338,27 @@ void PermissionControllerImpl::RequestPermissions(
                                std::move(wrapper));
 }
 
-blink::mojom::PermissionStatus PermissionControllerImpl::GetPermissionStatus(
+void PermissionControllerImpl::RequestPermissionFromCurrentDocument(
+    PermissionType permission,
+    RenderFrameHost* render_frame_host,
+    bool user_gesture,
+    base::OnceCallback<void(blink::mojom::PermissionStatus)> callback) {
+  // TODO(https://crbug.com/1271543): `RequestPermissionFromCurrentDocument`
+  // into `PermissionControllerDelegate` and use it here.
+  RequestPermission(permission, render_frame_host,
+                    render_frame_host->GetLastCommittedOrigin().GetURL(),
+                    user_gesture, std::move(callback));
+}
+
+blink::mojom::PermissionStatus
+PermissionControllerImpl::DeprecatedGetPermissionStatus(
     PermissionType permission,
     const GURL& requesting_origin,
     const GURL& embedding_origin) {
   absl::optional<blink::mojom::PermissionStatus> status =
       devtools_permission_overrides_.Get(url::Origin::Create(requesting_origin),
                                          permission);
-  if (status.has_value())
+  if (status)
     return *status;
 
   PermissionControllerDelegate* delegate =
@@ -348,6 +370,50 @@ blink::mojom::PermissionStatus PermissionControllerImpl::GetPermissionStatus(
 }
 
 blink::mojom::PermissionStatus
+PermissionControllerImpl::GetPermissionStatusForWorker(
+    PermissionType permission,
+    RenderProcessHost* render_process_host,
+    const url::Origin& worker_origin) {
+  absl::optional<blink::mojom::PermissionStatus> status =
+      devtools_permission_overrides_.Get(worker_origin, permission);
+  if (status.has_value())
+    return *status;
+
+  PermissionControllerDelegate* delegate =
+      browser_context_->GetPermissionControllerDelegate();
+  if (!delegate)
+    return blink::mojom::PermissionStatus::DENIED;
+  return delegate->GetPermissionStatusForWorker(permission, render_process_host,
+                                                worker_origin.GetURL());
+}
+
+blink::mojom::PermissionStatus
+PermissionControllerImpl::GetPermissionStatusForCurrentDocument(
+    PermissionType permission,
+    RenderFrameHost* render_frame_host) {
+  absl::optional<blink::mojom::PermissionStatus> status =
+      devtools_permission_overrides_.Get(
+          render_frame_host->GetLastCommittedOrigin(), permission);
+  if (status)
+    return *status;
+
+  PermissionControllerDelegate* delegate =
+      browser_context_->GetPermissionControllerDelegate();
+  if (!delegate)
+    return blink::mojom::PermissionStatus::DENIED;
+  return delegate->GetPermissionStatusForCurrentDocument(permission,
+                                                         render_frame_host);
+}
+
+blink::mojom::PermissionStatus
+PermissionControllerImpl::GetPermissionStatusForOriginWithoutContext(
+    PermissionType permission,
+    const url::Origin& origin) {
+  return DeprecatedGetPermissionStatus(permission, origin.GetURL(),
+                                       origin.GetURL());
+}
+
+blink::mojom::PermissionStatus
 PermissionControllerImpl::GetPermissionStatusForFrame(
     PermissionType permission,
     RenderFrameHost* render_frame_host,
@@ -355,7 +421,7 @@ PermissionControllerImpl::GetPermissionStatusForFrame(
   absl::optional<blink::mojom::PermissionStatus> status =
       devtools_permission_overrides_.Get(url::Origin::Create(requesting_origin),
                                          permission);
-  if (status.has_value())
+  if (status)
     return *status;
 
   PermissionControllerDelegate* delegate =
@@ -397,10 +463,12 @@ void PermissionControllerImpl::OnDelegatePermissionStatusChange(
 PermissionControllerImpl::SubscriptionId
 PermissionControllerImpl::SubscribePermissionStatusChange(
     PermissionType permission,
+    RenderProcessHost* render_process_host,
     RenderFrameHost* render_frame_host,
     const GURL& requesting_origin,
     const base::RepeatingCallback<void(blink::mojom::PermissionStatus)>&
         callback) {
+  DCHECK(!render_process_host || !render_frame_host);
   auto subscription = std::make_unique<Subscription>();
   subscription->permission = permission;
   subscription->callback = callback;
@@ -408,16 +476,16 @@ PermissionControllerImpl::SubscribePermissionStatusChange(
 
   // The RFH may be null if the request is for a worker.
   if (render_frame_host) {
-    content::WebContents* web_contents =
-        content::WebContents::FromRenderFrameHost(render_frame_host);
     subscription->embedding_origin =
-        PermissionUtil::GetLastCommittedOriginAsURL(web_contents);
+        PermissionUtil::GetLastCommittedOriginAsURL(
+            render_frame_host->GetMainFrame());
     subscription->render_frame_id = render_frame_host->GetRoutingID();
     subscription->render_process_id = render_frame_host->GetProcess()->GetID();
   } else {
     subscription->embedding_origin = requesting_origin;
     subscription->render_frame_id = -1;
-    subscription->render_process_id = -1;
+    subscription->render_process_id =
+        render_process_host ? render_process_host->GetID() : -1;
   }
 
   auto id = subscription_id_generator_.GenerateNextId();
@@ -426,7 +494,8 @@ PermissionControllerImpl::SubscribePermissionStatusChange(
   if (delegate) {
     subscription->delegate_subscription_id =
         delegate->SubscribePermissionStatusChange(
-            permission, render_frame_host, requesting_origin,
+            permission, render_process_host, render_frame_host,
+            requesting_origin,
             base::BindRepeating(
                 &PermissionControllerImpl::OnDelegatePermissionStatusChange,
                 base::Unretained(this), id));

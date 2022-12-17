@@ -14,7 +14,6 @@
 
 #include "base/bind.h"
 #include "base/containers/contains.h"
-#include "base/cxx17_backports.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/json/values_util.h"
@@ -25,6 +24,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
+#include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -617,7 +617,7 @@ void FileSystemChooseEntryFunction::ConfirmDirectoryAccessAsync(
     return;
   }
 
-  for (size_t i = 0; i < base::size(kGraylistedPaths); i++) {
+  for (size_t i = 0; i < std::size(kGraylistedPaths); i++) {
     base::FilePath graylisted_path;
     if (!base::PathService::Get(kGraylistedPaths[i], &graylisted_path))
       continue;
@@ -731,7 +731,9 @@ void FileSystemChooseEntryFunction::BuildSuggestion(
     base::FilePath* suggested_name,
     base::FilePath::StringType* suggested_extension) {
   if (opt_name) {
-    *suggested_name = base::FilePath::FromUTF8Unsafe(*opt_name);
+    std::string name;
+    base::ReplaceChars(*opt_name, "%", "_", &name);
+    *suggested_name = base::FilePath::FromUTF8Unsafe(name);
 
     // Don't allow any path components; shorten to the base name. This should
     // result in a relative path, but in some cases may not. Clear the

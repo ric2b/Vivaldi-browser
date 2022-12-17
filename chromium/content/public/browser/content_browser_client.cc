@@ -11,7 +11,7 @@
 // declarations instead of including more headers. If that is infeasible, adjust
 // the limit. For more info, see
 // https://chromium.googlesource.com/chromium/src/+/HEAD/docs/wmax_tokens.md
-#pragma clang max_tokens_here 850000
+#pragma clang max_tokens_here 880000
 
 #include <utility>
 
@@ -24,6 +24,7 @@
 #include "base/notreached.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
+#include "base/values.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "content/public/browser/authenticator_request_client_delegate.h"
@@ -44,6 +45,7 @@
 #include "content/public/browser/url_loader_request_interceptor.h"
 #include "content/public/browser/vpn_service_proxy.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/alternative_error_page_override_info.mojom.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/url_utils.h"
 #include "media/audio/audio_manager.h"
@@ -67,6 +69,7 @@
 #include "third_party/blink/public/common/loader/url_loader_throttle.h"
 #include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
+#include "third_party/blink/public/mojom/browsing_topics/browsing_topics.mojom.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/shell_dialogs/select_file_policy.h"
 #include "url/gurl.h"
@@ -328,7 +331,7 @@ bool ContentBrowserClient::ShouldUrlUseApplicationIsolationLevel(
   return false;
 }
 
-bool ContentBrowserClient::AreDirectSocketsAllowedByPolicy(
+bool ContentBrowserClient::IsIsolatedAppsDeveloperModeAllowed(
     BrowserContext* context) {
   return true;
 }
@@ -487,10 +490,9 @@ bool ContentBrowserClient::IsConversionMeasurementOperationAllowed(
   return true;
 }
 
-void ContentBrowserClient::CanSendSCTAuditingReport(
-    BrowserContext* browser_context,
-    base::OnceCallback<void(bool)> callback) {
-  std::move(callback).Run(false);
+bool ContentBrowserClient::CanSendSCTAuditingReport(
+    BrowserContext* browser_context) {
+  return false;
 }
 
 scoped_refptr<QuotaPermissionContext>
@@ -629,6 +631,10 @@ base::FilePath ContentBrowserClient::GetGrShaderDiskCacheDirectory() {
 }
 
 base::FilePath ContentBrowserClient::GetNetLogDefaultDirectory() {
+  return base::FilePath();
+}
+
+base::FilePath ContentBrowserClient::GetFirstPartySetsDirectory() {
   return base::FilePath();
 }
 
@@ -936,6 +942,10 @@ bool ContentBrowserClient::
     ShouldIgnoreInitialNavigationEntryNavigationStateChangedForLegacySupport() {
   return false;
 }
+
+bool ContentBrowserClient::SupportsAvoidUnnecessaryBeforeUnloadCheckSync() {
+  return true;
+}
 #endif
 
 bool ContentBrowserClient::AllowRenderingMhtmlOverHttp(
@@ -1027,10 +1037,10 @@ std::unique_ptr<LoginDelegate> ContentBrowserClient::CreateLoginDelegate(
 bool ContentBrowserClient::HandleExternalProtocol(
     const GURL& url,
     WebContents::Getter web_contents_getter,
-    int child_id,
     int frame_tree_node_id,
     NavigationUIData* navigation_data,
-    bool is_main_frame,
+    bool is_primary_main_frame,
+    bool is_in_fenced_frame_tree,
     network::mojom::WebSandboxFlags sandbox_flags,
     ui::PageTransition page_transition,
     bool has_user_gesture,
@@ -1159,6 +1169,13 @@ void ContentBrowserClient::AugmentNavigationDownloadPolicy(
     bool user_gesture,
     blink::NavigationDownloadPolicy* download_policy) {}
 
+std::vector<blink::mojom::EpochTopicPtr>
+ContentBrowserClient::GetBrowsingTopicsForJsApi(
+    const url::Origin& context_origin,
+    RenderFrameHost* main_frame) {
+  return {};
+}
+
 bool ContentBrowserClient::IsBluetoothScanningBlocked(
     content::BrowserContext* browser_context,
     const url::Origin& requesting_origin,
@@ -1170,10 +1187,6 @@ void ContentBrowserClient::BlockBluetoothScanning(
     content::BrowserContext* browser_context,
     const url::Origin& requesting_origin,
     const url::Origin& embedding_origin) {}
-
-bool ContentBrowserClient::ShouldLoadExtraIcuDataFile(std::string* split_name) {
-  return false;
-}
 
 bool ContentBrowserClient::ArePersistentMediaDeviceIDsAllowed(
     content::BrowserContext* browser_context,
@@ -1307,11 +1320,6 @@ bool ContentBrowserClient::IsFindInPageDisabledForOrigin(
 
 void ContentBrowserClient::OnWebContentsCreated(WebContents* web_contents) {}
 
-void ContentBrowserClient::FlushBackgroundAttributions(
-    base::OnceClosure callback) {
-  std::move(callback).Run();
-}
-
 bool ContentBrowserClient::ShouldDisableOriginAgentClusterDefault(
     BrowserContext* browser_context) {
   return false;
@@ -1324,6 +1332,10 @@ bool ContentBrowserClient::ShouldPreconnectNavigation(
 
 bool ContentBrowserClient::IsFirstPartySetsEnabled() {
   return base::FeatureList::IsEnabled(features::kFirstPartySets);
+}
+
+base::Value::Dict ContentBrowserClient::GetFirstPartySetsOverrides() {
+  return base::Value::Dict();
 }
 
 mojom::AlternativeErrorPageOverrideInfoPtr

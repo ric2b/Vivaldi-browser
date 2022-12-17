@@ -32,13 +32,14 @@ class FakeInstallFinalizer final : public WebAppInstallFinalizer {
                        InstallFinalizedCallback callback) override;
   void FinalizeUpdate(const WebAppInstallInfo& web_app_info,
                       InstallFinalizedCallback callback) override;
-  void UninstallExternalWebApp(
-      const AppId& app_id,
-      webapps::WebappUninstallSource external_install_source,
-      UninstallWebAppCallback callback) override;
+  void UninstallExternalWebApp(const AppId& app_id,
+                               WebAppManagement::Type source,
+                               webapps::WebappUninstallSource uninstall_surface,
+                               UninstallWebAppCallback callback) override;
   void UninstallExternalWebAppByUrl(
       const GURL& app_url,
-      webapps::WebappUninstallSource external_install_source,
+      WebAppManagement::Type source,
+      webapps::WebappUninstallSource uninstall_surface,
       UninstallWebAppCallback callback) override;
   void UninstallWithoutRegistryUpdateFromSync(
       const std::vector<AppId>& web_apps,
@@ -61,7 +62,7 @@ class FakeInstallFinalizer final : public WebAppInstallFinalizer {
   void SetNextFinalizeInstallResult(const AppId& app_id,
                                     webapps::InstallResultCode code);
   void SetNextUninstallExternalWebAppResult(const GURL& app_url,
-                                            bool uninstalled);
+                                            webapps::UninstallResultCode code);
 
   // Uninstall the app and add |app_id| to the map of external extensions
   // uninstalled by the user. May be called on an app that isn't installed to
@@ -80,7 +81,7 @@ class FakeInstallFinalizer final : public WebAppInstallFinalizer {
     return uninstall_external_web_app_urls_;
   }
 
-  int num_reparent_tab_calls() { return num_reparent_tab_calls_; }
+  int num_reparent_tab_calls() const { return num_reparent_tab_calls_; }
 
  private:
   void Finalize(const WebAppInstallInfo& web_app_info,
@@ -93,7 +94,8 @@ class FakeInstallFinalizer final : public WebAppInstallFinalizer {
 
   absl::optional<AppId> next_app_id_;
   absl::optional<webapps::InstallResultCode> next_result_code_;
-  std::map<GURL, bool> next_uninstall_external_web_app_results_;
+  std::map<GURL, webapps::UninstallResultCode>
+      next_uninstall_external_web_app_results_;
   std::set<AppId> user_uninstalled_external_apps_;
 
   int num_reparent_tab_calls_ = 0;

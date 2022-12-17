@@ -83,15 +83,17 @@ webrtc_public_deps = [
   "//third_party/webrtc/p2p:rtc_p2p",
   "//third_party/webrtc/pc:ice_server_parsing",
   "//third_party/webrtc/pc:libjingle_peerconnection",
+  "//third_party/webrtc/pc:media_session",
   "//third_party/webrtc/pc:peerconnection",
   "//third_party/webrtc/pc:rtc_pc",
-  "//third_party/webrtc/pc:rtc_pc_base",
   "//third_party/webrtc/pc:session_description",
   "//third_party/webrtc/pc:webrtc_sdp",
   "//third_party/webrtc/rtc_base",
   "//third_party/webrtc/rtc_base:async_resolver_interface",
   "//third_party/webrtc/rtc_base:ip_address",
+  "//third_party/webrtc/rtc_base:logging",
   "//third_party/webrtc/rtc_base:net_helpers",
+  "//third_party/webrtc/rtc_base:refcount",
   "//third_party/webrtc/rtc_base:rtc_base",
   "//third_party/webrtc/rtc_base:rtc_base_approved",
   "//third_party/webrtc/rtc_base:rtc_task_queue",
@@ -167,6 +169,7 @@ source_set("init_webrtc") {
   deps = [
     "//base",
     "//third_party/webrtc/rtc_base",
+    "//third_party/webrtc/rtc_base:logging",
     "//third_party/webrtc/rtc_base/system:rtc_export",
     "//third_party/webrtc/system_wrappers",
   ]
@@ -195,8 +198,6 @@ source_set("task_queue_factory") {
     # third_party/blink/renderer/platform/peerconnection/coalesced_tasks_test.cc
     "coalesced_tasks.cc",
     "coalesced_tasks.h",
-    "metronome_provider.cc",
-    "metronome_provider.h",
 
     # Tested in
     # third_party/blink/renderer/platform/peerconnection/metronome_source_test.cc
@@ -257,8 +258,10 @@ if (is_android) {
   java_cpp_features("java_features_srcjar") {
     # External code should depend on ":webrtc_overrides_java" instead.
     visibility = [ ":*" ]
-    sources =
-        [ "//third_party/webrtc_overrides/metronome_task_queue_factory.cc" ]
+    sources = [
+      "//third_party/webrtc_overrides/metronome_task_queue_factory.cc",
+      "//third_party/webrtc_overrides/webrtc_timer.cc",
+    ]
     template = "//third_party/webrtc_overrides/java_templates/WebRtcOverridesFeatures.java.tmpl"
   }
   android_library("webrtc_overrides_java") {

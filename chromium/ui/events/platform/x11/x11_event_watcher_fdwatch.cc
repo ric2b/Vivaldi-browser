@@ -62,6 +62,7 @@ void X11EventWatcherFdWatch::OnFileCanReadWithoutBlocking(int fd) {
   if (!connection->HasPendingResponses())
     connection->ReadResponses();
   connection->Dispatch();
+  connection->Flush();
 
   // We may deadlock if there are more events to dispatch but the socket is not
   // readable. To prevent this, write a byte to the pipe so that the message

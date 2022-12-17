@@ -29,6 +29,7 @@
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
+#include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/core/css/css_primitive_value.h"
 #include "third_party/blink/renderer/core/css/css_property_name.h"
@@ -49,7 +50,7 @@
 #include "third_party/blink/renderer/core/layout/layout_image.h"
 #include "third_party/blink/renderer/core/layout/layout_video.h"
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_image.h"
-#include "third_party/blink/renderer/core/loader/importance_attribute.h"
+#include "third_party/blink/renderer/core/loader/fetch_priority_attribute.h"
 #include "third_party/blink/renderer/core/loader/lazy_image_helper.h"
 #include "third_party/blink/renderer/core/probe/async_task_context.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
@@ -373,10 +374,10 @@ static void ConfigureRequest(
 
   if (RuntimeEnabledFeatures::PriorityHintsEnabled(
           element.GetExecutionContext())) {
-    mojom::FetchImportanceMode importance_mode =
-        GetFetchImportanceAttributeValue(
-            element.FastGetAttribute(html_names::kImportanceAttr));
-    params.SetFetchImportanceMode(importance_mode);
+    mojom::blink::FetchPriorityHint fetch_priority_hint =
+        GetFetchPriorityAttributeValue(
+            element.FastGetAttribute(html_names::kFetchpriorityAttr));
+    params.SetFetchPriorityHint(fetch_priority_hint);
   }
 
   auto* html_image_element = DynamicTo<HTMLImageElement>(element);
@@ -472,7 +473,7 @@ void ImageLoader::DoUpdateFromElement(
     resource_loader_options.initiator_info.name = GetElement()->localName();
     ResourceRequest resource_request(url);
     if (update_behavior == kUpdateForcedReload) {
-      resource_request.SetCacheMode(mojom::FetchCacheMode::kBypassCache);
+      resource_request.SetCacheMode(mojom::blink::FetchCacheMode::kBypassCache);
     }
 
     resource_request.SetReferrerPolicy(referrer_policy);
@@ -535,10 +536,6 @@ void ImageLoader::DoUpdateFromElement(
             was_deferred_explicitly_ =
                 (loading_attr == LoadingAttributeValue::kLazy);
             params.SetLazyImageDeferred();
-            if (frame->Client()) {
-              frame->Client()->DidObserveLazyLoadBehavior(
-                  WebLocalFrameClient::LazyLoadBehavior::kDeferredImage);
-            }
             break;
           case LazyImageHelper::Eligibility::kDisabled:
             break;
@@ -944,11 +941,6 @@ void ImageLoader::LoadDeferredImage(
 
   // If the image has been fully deferred (no placeholder fetch), report it as
   // fully loaded now.
-  LocalFrame* frame = element_->GetDocument().GetFrame();
-  if (frame && frame->Client()) {
-    frame->Client()->DidObserveLazyLoadBehavior(
-        WebLocalFrameClient::LazyLoadBehavior::kLazyLoadedImage);
-  }
   UpdateFromElement(kUpdateNormal, referrer_policy, force_blocking);
 }
 

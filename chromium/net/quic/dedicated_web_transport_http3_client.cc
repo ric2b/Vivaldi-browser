@@ -19,9 +19,9 @@
 #include "net/quic/crypto/proof_verifier_chromium.h"
 #include "net/quic/quic_chromium_alarm_factory.h"
 #include "net/spdy/spdy_http_utils.h"
-#include "net/third_party/quiche/src/quic/core/http/web_transport_http3.h"
-#include "net/third_party/quiche/src/quic/core/quic_connection.h"
-#include "net/third_party/quiche/src/quic/core/quic_utils.h"
+#include "net/third_party/quiche/src/quiche/quic/core/http/web_transport_http3.h"
+#include "net/third_party/quiche/src/quiche/quic/core/quic_connection.h"
+#include "net/third_party/quiche/src/quiche/quic/core/quic_utils.h"
 #include "net/url_request/url_request_context.h"
 #include "url/scheme_host_port.h"
 
@@ -700,7 +700,13 @@ void DedicatedWebTransportHttp3Client::OnSessionReady(
     const spdy::SpdyHeaderBlock& spdy_headers) {
   session_ready_ = true;
   http_response_info_ = std::make_unique<HttpResponseInfo>();
-  SpdyHeadersToHttpResponse(spdy_headers, http_response_info_.get());
+  const int rv =
+      SpdyHeadersToHttpResponse(spdy_headers, http_response_info_.get());
+  if (rv != OK) {
+    SetErrorIfNecessary(ERR_QUIC_PROTOCOL_ERROR);
+    TransitionToState(WebTransportState::FAILED);
+    return;
+  }
   // TODO(vasilvv): add support for this header in downstream tests and remove
   // this.
   http_response_info_->headers->RemoveHeader("sec-webtransport-http3-draft");

@@ -20,6 +20,7 @@ constexpr char kUserActionCancel[] = "cancel";
 constexpr char kUserActionStartEnrollment[] = "startEnrollment";
 constexpr char kUserActionReloadDefault[] = "reloadDefault";
 constexpr char kUserActionSAMLVideoTimeout[] = "samlVideoTimeout";
+constexpr char kUserActionRetry[] = "retry";
 
 }  // namespace
 
@@ -82,6 +83,12 @@ void GaiaScreen::LoadOnlineForChildSignin() {
   view_->LoadGaiaAsync(EmptyAccountId());
 }
 
+void GaiaScreen::ShowAllowlistCheckFailedError() {
+  if (!view_)
+    return;
+  view_->ShowAllowlistCheckFailedError();
+}
+
 void GaiaScreen::ShowImpl() {
   // Landed on the login screen. No longer skipping enrollment for tests.
   context()->skip_to_login_for_tests = false;
@@ -93,7 +100,7 @@ void GaiaScreen::HideImpl() {
   view_->Hide();
 }
 
-void GaiaScreen::OnUserAction(const std::string& action_id) {
+void GaiaScreen::OnUserActionDeprecated(const std::string& action_id) {
   if (action_id == kUserActionBack) {
     exit_callback_.Run(Result::BACK);
   } else if (action_id == kUserActionCancel) {
@@ -103,11 +110,13 @@ void GaiaScreen::OnUserAction(const std::string& action_id) {
   } else if (action_id == kUserActionReloadDefault) {
     DCHECK(features::IsRedirectToDefaultIdPEnabled());
     LoadOnline(EmptyAccountId());
+  } else if (action_id == kUserActionRetry) {
+    LoadOnline(EmptyAccountId());
   } else if (action_id == kUserActionSAMLVideoTimeout) {
     DCHECK(features::IsRedirectToDefaultIdPEnabled());
     exit_callback_.Run(Result::SAML_VIDEO_TIMEOUT);
   } else {
-    BaseScreen::OnUserAction(action_id);
+    BaseScreen::OnUserActionDeprecated(action_id);
   }
 }
 

@@ -12,11 +12,11 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/metrics/user_metrics.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "chrome/browser/autocomplete/autocomplete_classifier_factory.h"
 #include "chrome/browser/defaults.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -24,7 +24,6 @@
 #include "chrome/browser/ui/views/frame/browser_frame.h"
 #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
-#include "chrome/browser/ui/views/tabs/tab_strip_controller.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/browser/ui/views/touch_uma/touch_uma.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
@@ -225,19 +224,6 @@ void BrowserRootView::OnDragExited() {
   drop_info_.reset();
 }
 
-DragOperation BrowserRootView::OnPerformDrop(const ui::DropTargetEvent& event) {
-  using base::UserMetricsAction;
-
-  if (!drop_info_)
-    return DragOperation::kNone;
-
-  auto cb = GetDropCallback(event);
-  ui::mojom::DragOperation output_drag_op = ui::mojom::DragOperation::kNone;
-  std::move(cb).Run(event, output_drag_op);
-
-  return output_drag_op;
-}
-
 views::View::DropCallback BrowserRootView::GetDropCallback(
     const ui::DropTargetEvent& event) {
   if (!drop_info_)
@@ -342,7 +328,7 @@ void BrowserRootView::PaintChildren(const views::PaintInfo& paint_info) {
     const int width = std::round(toolbar_bounds.width() * scale);
 
     gfx::ScopedCanvas scoped_canvas(canvas);
-    int active_tab_index = tabstrip()->controller()->GetActiveIndex();
+    int active_tab_index = tabstrip()->GetActiveIndex();
     if (active_tab_index != ui::ListSelectionModel::kUnselectedIndex) {
       Tab* active_tab = tabstrip()->tab_at(active_tab_index);
       if (active_tab && active_tab->GetVisible()) {
@@ -353,8 +339,16 @@ void BrowserRootView::PaintChildren(const views::PaintInfo& paint_info) {
     }
     canvas->UndoDeviceScaleFactor();
 
+    const auto* widget = GetWidget();
+    DCHECK(widget);
+    const SkColor toolbar_top_separator_color =
+        widget->GetThemeProvider()->GetColor(
+            tabstrip()->ShouldPaintAsActiveFrame()
+                ? ThemeProperties::COLOR_TOOLBAR_TOP_SEPARATOR_FRAME_ACTIVE
+                : ThemeProperties::COLOR_TOOLBAR_TOP_SEPARATOR_FRAME_INACTIVE);
+
     cc::PaintFlags flags;
-    flags.setColor(tabstrip()->GetToolbarTopSeparatorColor());
+    flags.setColor(toolbar_top_separator_color);
     flags.setStyle(cc::PaintFlags::kFill_Style);
     flags.setAntiAlias(true);
     canvas->DrawRect(gfx::RectF(x, bottom - scale, width, scale), flags);
@@ -376,20 +370,23 @@ void BrowserRootView::OnEventProcessingStarted(ui::Event* event) {
 
 BrowserRootView::DropTarget* BrowserRootView::GetDropTarget(
     const ui::DropTargetEvent& event) {
+  BrowserRootView::DropTarget* target = nullptr;
+
   // See if we should drop links onto tabstrip first.
-  if (tabstrip()->GetVisible()) {
-    // Allow the drop as long as the mouse is over tabstrip or vertically
-    // before it.
-    gfx::Point tabstrip_loc_in_host;
-    ConvertPointToTarget(tabstrip(), this, &tabstrip_loc_in_host);
-    if (event.y() < tabstrip_loc_in_host.y() + tabstrip()->height())
-      return tabstrip();
-  }
+  gfx::Point loc_in_tabstrip(event.location());
+  ConvertPointToTarget(this, tabstrip(), &loc_in_tabstrip);
+  target = tabstrip()->GetDropTarget(loc_in_tabstrip);
 
   // See if we can drop links onto toolbar.
-  gfx::Point loc_in_toolbar(event.location());
-  ConvertPointToTarget(this, toolbar(), &loc_in_toolbar);
-  return toolbar()->HitTestPoint(loc_in_toolbar) ? toolbar() : nullptr;
+  if (!target) {
+    gfx::Point loc_in_toolbar(event.location());
+    ConvertPointToTarget(this, toolbar(), &loc_in_toolbar);
+    target =
+        static_cast<BrowserRootView::DropTarget*>(toolbar())->GetDropTarget(
+            loc_in_toolbar);
+  }
+
+  return target;
 }
 
 BrowserRootView::DropIndex BrowserRootView::GetDropIndexForEvent(

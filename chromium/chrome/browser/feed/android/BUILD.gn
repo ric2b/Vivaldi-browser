@@ -161,6 +161,7 @@ android_resources("feed_java_resources") {
     "java/res/color/chip_hairline_color.xml",
     "java/res/color/header_title_text_color_list.xml",
     "java/res/color/menu_footer_chip_background.xml",
+    "java/res/color/menu_footer_chip_background_baseline.xml",
     "java/res/color/tab_layout_text_color_list.xml",
     "java/res/drawable-hdpi/follow_accelerator_shadow.9.png",
     "java/res/drawable-mdpi/follow_accelerator_shadow.9.png",
@@ -168,6 +169,7 @@ android_resources("feed_java_resources") {
     "java/res/drawable-v24/header_title_tab_selected_background.xml",
     "java/res/drawable-xhdpi/follow_accelerator_shadow.9.png",
     "java/res/drawable-xxhdpi/follow_accelerator_shadow.9.png",
+    "java/res/drawable/back_arrow.xml",
     "java/res/drawable/back_to_top_arrow.xml",
     "java/res/drawable/header_title_section_tab_background.xml",
     "java/res/drawable/header_title_tab_selected_background.xml",
@@ -303,17 +305,19 @@ android_library("junit") {
   ]
 
   deps = [
+    ":feed_java_resources",
     ":java",
     "//base:base_java",
     "//base:base_java_test_support",
     "//base:base_junit_test_support",
-    "//chrome/android:chrome_java",
     "//chrome/browser/feature_engagement:java",
+    "//chrome/browser/feedback/android:java",
     "//chrome/browser/flags:java",
     "//chrome/browser/preferences:java",
     "//chrome/browser/privacy:java",
     "//chrome/browser/profiles/android:java",
     "//chrome/browser/settings:test_support_java",
+    "//chrome/browser/share:java",
     "//chrome/browser/tab:java",
     "//chrome/browser/ui/android/appmenu:java",
     "//chrome/browser/ui/messages/android:java",
@@ -322,6 +326,7 @@ android_library("junit") {
     "//chrome/test/android:chrome_java_test_support",
     "//components/browser_ui/bottomsheet/android:java",
     "//components/browser_ui/settings/android:java",
+    "//components/browser_ui/theme/android:java_resources",
     "//components/browser_ui/widget/android:java",
     "//components/embedder_support/android:junit_test_support",
     "//components/favicon/android:java",
@@ -357,4 +362,5 @@ android_library("junit") {
     "//url:gurl_junit_shadows",
     "//url:gurl_junit_test_support",
   ]
+  resources_package = "org.chromium.chrome.browser.feed.test"
 }

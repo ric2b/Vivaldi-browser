@@ -51,7 +51,10 @@ export function createTestProxy(addResult, castResult, castCallback) {
     async isQrScanningAvailable() {
       return Promise.resolve(true);
     },
-    closeDialog() {}
+    closeDialog() {},
+    isDialog() {
+      return true;
+    }
   };
 }
 
@@ -178,59 +181,85 @@ suite('AccessCodeCastAppTest', () => {
     }
   );
 
-  test('addSinkAndCast surfaces errors', async () => {
-    let testProxy = createTestProxy(
-      AddSinkResultCode.UNKNOWN_ERROR,
-      RouteRequestResultCode.OK,
-      () => {}
-    );
-    BrowserProxy.setInstance(testProxy);
-    app.setAccessCodeForTest('qwerty');
+  test(
+      'addSinkAndCast surfaces errors and hides errors when user starts ' +
+          'editing',
+      async () => {
+        let testProxy = createTestProxy(
+            AddSinkResultCode.UNKNOWN_ERROR, RouteRequestResultCode.OK,
+            () => {});
+        BrowserProxy.setInstance(testProxy);
+        app.setAccessCodeForTest('qwerty');
 
-    assertEquals(0, app.$.errorMessage.getMessageCode());
-    await app.addSinkAndCast();
-    assertEquals(1, app.$.errorMessage.getMessageCode());
+        assertEquals(0, app.$.errorMessage.getMessageCode());
+        await app.addSinkAndCast();
+        assertEquals(1, app.$.errorMessage.getMessageCode());
 
-    testProxy = createTestProxy(
-      AddSinkResultCode.INVALID_ACCESS_CODE,
-      RouteRequestResultCode.OK,
-      () => {}
-    );
-    BrowserProxy.setInstance(testProxy);
+        app.setAccessCodeForTest('qwert');
+        assertEquals(0, app.$.errorMessage.getMessageCode());
 
-    await app.addSinkAndCast();
-    assertEquals(2, app.$.errorMessage.getMessageCode());
+        testProxy = createTestProxy(
+            AddSinkResultCode.INVALID_ACCESS_CODE, RouteRequestResultCode.OK,
+            () => {});
+        BrowserProxy.setInstance(testProxy);
 
-    testProxy = createTestProxy(
-      AddSinkResultCode.SERVICE_NOT_PRESENT,
-      RouteRequestResultCode.OK,
-      () => {}
-    );
-    BrowserProxy.setInstance(testProxy);
+        app.setAccessCodeForTest('qwerty');
+        await app.addSinkAndCast();
+        assertEquals(2, app.$.errorMessage.getMessageCode());
 
-    await app.addSinkAndCast();
-    assertEquals(3, app.$.errorMessage.getMessageCode());
+        app.setAccessCodeForTest('qwert');
+        assertEquals(0, app.$.errorMessage.getMessageCode());
 
-    testProxy = createTestProxy(
-      AddSinkResultCode.AUTH_ERROR,
-      RouteRequestResultCode.OK,
-      () => {}
-    );
-    BrowserProxy.setInstance(testProxy);
+        testProxy = createTestProxy(
+            AddSinkResultCode.SERVICE_NOT_PRESENT, RouteRequestResultCode.OK,
+            () => {});
+        BrowserProxy.setInstance(testProxy);
 
-    await app.addSinkAndCast();
-    assertEquals(4, app.$.errorMessage.getMessageCode());
+        app.setAccessCodeForTest('qwerty');
+        await app.addSinkAndCast();
+        assertEquals(3, app.$.errorMessage.getMessageCode());
 
-    testProxy = createTestProxy(
-      AddSinkResultCode.TOO_MANY_REQUESTS,
-      RouteRequestResultCode.OK,
-      () => {}
-    );
-    BrowserProxy.setInstance(testProxy);
+        app.setAccessCodeForTest('qwert');
+        assertEquals(0, app.$.errorMessage.getMessageCode());
 
-    await app.addSinkAndCast();
-    assertEquals(5, app.$.errorMessage.getMessageCode());
-  });
+        testProxy = createTestProxy(
+            AddSinkResultCode.AUTH_ERROR, RouteRequestResultCode.OK, () => {});
+        BrowserProxy.setInstance(testProxy);
+
+        app.setAccessCodeForTest('qwerty');
+        await app.addSinkAndCast();
+        assertEquals(4, app.$.errorMessage.getMessageCode());
+
+        app.setAccessCodeForTest('qwert');
+        assertEquals(0, app.$.errorMessage.getMessageCode());
+
+        testProxy = createTestProxy(
+            AddSinkResultCode.TOO_MANY_REQUESTS, RouteRequestResultCode.OK,
+            () => {});
+        BrowserProxy.setInstance(testProxy);
+
+        app.setAccessCodeForTest('qwerty');
+        await app.addSinkAndCast();
+        assertEquals(5, app.$.errorMessage.getMessageCode());
+      });
+
+  test(
+      'addSinkAndCast hides errors when user removes all access code',
+      async () => {
+        let testProxy = createTestProxy(
+            AddSinkResultCode.UNKNOWN_ERROR, RouteRequestResultCode.OK,
+            () => {});
+        BrowserProxy.setInstance(testProxy);
+        app.setAccessCodeForTest('qwerty');
+
+        assertEquals(0, app.$.errorMessage.getMessageCode());
+        await app.addSinkAndCast();
+        assertEquals(1, app.$.errorMessage.getMessageCode());
+
+        app.setAccessCodeForTest('');
+        assertEquals(0, app.$.errorMessage.getMessageCode());
+      });
+
 
   test('enter key press can cast', async () => {
     let visited = false;
@@ -241,13 +270,46 @@ suite('AccessCodeCastAppTest', () => {
     };
 
     // Enter does nothing if the access code isn't the right length
-    document.dispatchEvent(new KeyboardEvent('keydown', {"key": "Enter"}));
+    document.dispatchEvent(new KeyboardEvent('keydown', {'key': 'Enter'}));
     await waitAfterNextRender();
     assertFalse(visited);
 
     app.setAccessCodeForTest('qwerty');
-    document.dispatchEvent(new KeyboardEvent('keydown', {"key": "Enter"}));
+    document.dispatchEvent(new KeyboardEvent('keydown', {'key': 'Enter'}));
     await waitAfterNextRender();
     assertTrue(visited);
+  });
+
+  test('submit button disabled during cast attempt', () => {
+    app.setAccessCodeForTest('foobar');
+    assertFalse(app.$.castButton.disabled);
+    let testProxy = createTestProxy(
+      AddSinkResultCode.OK,
+      RouteRequestResultCode.OK,
+      () => {
+        assertTrue(app.$.castButton.disabled);
+      }
+    );
+    BrowserProxy.setInstance(testProxy);
+    app.addSinkAndCast();
+  });
+
+  test('input is refocused after unsuccessful cast attempts', async () => {
+    let testProxy = createTestProxy(
+      AddSinkResultCode.OK,
+      RouteRequestResultCode.UNKNOWN_ERROR,
+      () => {
+        // Unfocus the code input during execution of addSinkAndCast.
+        app.$.castButton.focus();
+        assertFalse(app.$.codeInput.focused);
+      }
+    );
+    BrowserProxy.setInstance(testProxy);
+    app.setAccessCodeForTest('foobar');
+    // Code input must be focused in order for addSinkAndCast to execute.
+    app.$.codeInput.focusInput();
+
+    await app.addSinkAndCast();
+    assertTrue(app.$.codeInput.focused);
   });
 });

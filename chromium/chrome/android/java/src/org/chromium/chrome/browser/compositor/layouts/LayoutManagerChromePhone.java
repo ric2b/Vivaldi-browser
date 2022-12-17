@@ -28,6 +28,7 @@ import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 
 // Vivaldi
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperManager;
+import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 
@@ -63,16 +64,18 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
             StartSurface startSurface,
             ObservableSupplier<TabContentManager> tabContentManagerSupplier,
             OneshotSupplierImpl<OverviewModeBehavior> overviewModeBehaviorSupplier,
-            Supplier<TopUiThemeColorProvider> topUiThemeColorProvider, JankTracker jankTracker) {
+            Supplier<TopUiThemeColorProvider> topUiThemeColorProvider, JankTracker jankTracker,
+            ActivityLifecycleDispatcher lifecycleDispatcher) { // Vivaldi
         super(host, contentContainer, true, startSurface, tabContentManagerSupplier,
-                overviewModeBehaviorSupplier, topUiThemeColorProvider, jankTracker);
+                overviewModeBehaviorSupplier, topUiThemeColorProvider, jankTracker, null, null);
 
         // Note(david@vivaldi.com): We create two tab strips here. The first one is the main strip.
         // The second one is the stack strip.
         for (int i = 0; i < 2; i++) {
             mTabStrips.add(new StripLayoutHelperManager(mHost.getContext(), this,
-                    mHost.getLayoutRenderHost(), () -> mLayerTitleCache));
+                    mHost.getLayoutRenderHost(), () -> mLayerTitleCache, lifecycleDispatcher));
             mTabStrips.get(i).setIsStackStrip(i != 0);
+            addObserver(mTabStrips.get(i).getTabSwitcherObserver());
         }
 
         mTabStripAdded = false;
@@ -128,14 +131,14 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
     }
 
     @Override
-    public boolean closeAllTabsRequest(boolean incognito) {
+    public void onTabsAllClosing(boolean incognito) {
         if (getActiveLayout() == mStaticLayout && !incognito) {
             startShowing(DeviceClassManager.enableAccessibilityLayout(mHost.getContext())
                             ? mOverviewListLayout
                             : mOverviewLayout,
                     /* animate= */ false);
         }
-        return super.closeAllTabsRequest(incognito);
+        super.onTabsAllClosing(incognito);
     }
 
     @Override
@@ -287,5 +290,12 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
     public void releaseResourcesForTab(int tabId) {
         super.releaseResourcesForTab(tabId);
         mLayerTitleCache.remove(tabId);
+    }
+
+    /** Vivaldi **/
+    @Override
+    public StripLayoutHelperManager getStripLayoutHelperManager() {
+        // We always return our main strip here.
+        return mTabStrips.get(0);
     }
 }

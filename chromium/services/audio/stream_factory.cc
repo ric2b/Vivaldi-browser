@@ -12,6 +12,7 @@
 #include "base/unguessable_token.h"
 #include "build/chromecast_buildflags.h"
 #include "media/audio/audio_device_description.h"
+#include "media/base/media_switches.h"
 #include "services/audio/input_stream.h"
 #include "services/audio/local_muter.h"
 #include "services/audio/loopback_stream.h"
@@ -25,13 +26,11 @@
 namespace audio {
 
 #if BUILDFLAG(CHROME_WIDE_ECHO_CANCELLATION)
-const base::Feature kMixingForChromeWideAec{"MixingForChromeWideAec",
-                                            base::FEATURE_DISABLED_BY_DEFAULT};
 namespace {
 
 std::unique_ptr<OutputDeviceMixerManager> MaybeCreateOutputDeviceMixerManager(
     media::AudioManager* audio_manager) {
-  if (!base::FeatureList::IsEnabled(kMixingForChromeWideAec))
+  if (!media::IsChromeWideEchoCancellationEnabled())
     return nullptr;
 
   return std::make_unique<OutputDeviceMixerManager>(
@@ -39,10 +38,12 @@ std::unique_ptr<OutputDeviceMixerManager> MaybeCreateOutputDeviceMixerManager(
 }
 
 }  // namespace
-#endif
+#endif  // BUILDFLAG(CHROME_WIDE_ECHO_CANCELLATION)
 
-StreamFactory::StreamFactory(media::AudioManager* audio_manager)
+StreamFactory::StreamFactory(media::AudioManager* audio_manager,
+                             AecdumpRecordingManager* aecdump_recording_manager)
     : audio_manager_(audio_manager),
+      aecdump_recording_manager_(aecdump_recording_manager),
 #if BUILDFLAG(CHROME_WIDE_ECHO_CANCELLATION)
       output_device_mixer_manager_(
           MaybeCreateOutputDeviceMixerManager(audio_manager)),
@@ -84,7 +85,7 @@ void StreamFactory::CreateInputStream(
   input_streams_.insert(std::make_unique<InputStream>(
       std::move(created_callback), std::move(deleter_callback),
       std::move(stream_receiver), std::move(client), std::move(observer),
-      std::move(pending_log), audio_manager_,
+      std::move(pending_log), audio_manager_, aecdump_recording_manager_,
       UserInputMonitor::Create(std::move(key_press_count_buffer)),
       &stream_count_metric_reporter_,
 #if BUILDFLAG(CHROME_WIDE_ECHO_CANCELLATION)

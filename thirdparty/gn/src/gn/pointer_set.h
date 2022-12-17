@@ -63,7 +63,7 @@ class PointerSet : public HashTableBase<PointerSetNode> {
   PointerSet() = default;
 
   // Allow copying pointer sets.
-  PointerSet(const PointerSet& other) { insert(other); }
+  PointerSet(const PointerSet& other) : BaseType() { insert(other); }
   PointerSet& operator=(const PointerSet& other) {
     if (this != &other) {
       this->~PointerSet();

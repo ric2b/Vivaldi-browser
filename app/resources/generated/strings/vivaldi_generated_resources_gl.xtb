@@ -9,7 +9,6 @@
 <translation id="1054153489933238809">Abrir a &amp;imaxe orixinal nunha nova lapela</translation>
 <translation id="1056898198331236512">AVISO</translation>
 <translation id="1084824384139382525">Copiar &amp;enderezo da ligazón</translation>
-<translation id="1128109161498068552">Non permitir aos sitios usar mensaxes exclusivos do sistema para acceder aos dispositivos MIDI</translation>
 <translation id="1163931534039071049">&amp;Ver código fonte do marco</translation>
 <translation id="1165039591588034296">Erro</translation>
 <translation id="1175364870820465910">Im&amp;primir...</translation>
@@ -22,7 +21,6 @@
 <translation id="1297175357211070620">Destino</translation>
 <translation id="1303101771013849280">Ficheiro HTML dos marcadores</translation>
 <translation id="1430915738399379752">Imprimir</translation>
-<translation id="1433811987160647649">Preguntar antes de acceder</translation>
 <translation id="1451375123200651445">Páxina web, ficheiro único</translation>
 <translation id="1465176863081977902">C&amp;opiar o enderezo do audio</translation>
 <translation id="1476607407192946488">&amp;Configuración do idioma</translation>
@@ -99,13 +97,11 @@
 <translation id="2783321960289401138">Crear atallo...</translation>
 <translation id="2785873697295365461">Descritores do ficheiro</translation>
 <translation id="2809586584051668049">e <ph name="NUMBER_ADDITIONAL_DISABLED" /> máis</translation>
-<translation id="2812989263793994277">Non ensinar ningunha imaxe</translation>
 <translation id="2850541429955027218">Engadir tema</translation>
 <translation id="2861941300086904918">Administrador de seguranza do cliente nativo</translation>
 <translation id="2881076733170862447">Cando premas na extensión</translation>
 <translation id="2889064240420137087">Abrir ligazón con…</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> non se puido conectar coa impresora. Comproba que a impresora está enchufada e inténtao de novo.</translation>
-<translation id="2904456025988372123">Preguntar cando un sitio intenta descargar ficheiros automaticamente despois do primeiro ficheiro</translation>
 <translation id="2913331724188855103">Permitir aos sitios gardar e ler datos das cookies (recomendado)</translation>
 <translation id="2931157624143513983">Axustar a área de impresión</translation>
 <translation id="2932085390869194046">Suxerir contrasinal…</translation>
@@ -126,7 +122,6 @@
 <translation id="3127156390846601284">Isto eliminará calquera dato gardado no teu dispositivo para todos os sitios ensinados. Quere continuar?</translation>
 <translation id="3129173833825111527">Marxe esquerda</translation>
 <translation id="3144647712221361880">Abrir ligazón como</translation>
-<translation id="3154429428035006212">Sen conexión por máis dun mes</translation>
 <translation id="3222066309010235055">Renderizar previamente: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Selecciona o cartafol raíz das extensións a empaquetar. Para actualizar unha extensión, selecciona tamén o ficheiro de chave privada para volver empregar.</translation>
 <translation id="3280237271814976245">G&amp;ardar como...</translation>
@@ -165,7 +160,6 @@
 <translation id="3838085852053358637">Fallou ao cargar a extensión</translation>
 <translation id="383891835335927981">Ningún sitio foi ampliado ou reducido</translation>
 <translation id="385051799172605136">Volver</translation>
-<translation id="3899879303189199559">Sen conexión por máis dun ano</translation>
 <translation id="3905761538810670789">Reparar aplicativo</translation>
 <translation id="3908501907586732282">Activar extensión</translation>
 <translation id="3909701002594999354">Amosar todos os &amp;controis</translation>
@@ -192,7 +186,6 @@
 <translation id="4200983522494130825">Nova &amp;lapela</translation>
 <translation id="4225397296022057997">En todos os sitios</translation>
 <translation id="4256316378292851214">Gar&amp;dar vídeo como…</translation>
-<translation id="4278390842282768270">Permitido</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />KB (<ph name="NUM_KILOBYTES_LIVE" />KB activos)</translation>
 <translation id="4345587454538109430">Configurar…</translation>
 <translation id="4348766275249686434">Recompilar erros</translation>
@@ -222,10 +215,8 @@
 <translation id="4988526792673242964">Páxinas</translation>
 <translation id="49896407730300355">Xirar á &amp;esquerda</translation>
 <translation id="4989966318180235467">Inspeccionar páxina do &amp;fondo</translation>
-<translation id="4994474651455208930">Permitir aos sitios solicitar converterse en controladores por defecto de protocolos</translation>
 <translation id="5000922062037820727">Bloqueado (recomendado)</translation>
 <translation id="5027562294707732951">Engadir extensión</translation>
-<translation id="5036662165765606524">Non permitir aos sitios descargar múltiples ficheiros automaticamente</translation>
 <translation id="5039804452771397117">Permitir</translation>
 <translation id="5057110919553308744">Cando premas a extensión</translation>
 <translation id="5059526285558225588">Escoller o que se compartirá</translation>
@@ -238,7 +229,6 @@
 <translation id="5233231016133573565">ID do proceso</translation>
 <translation id="5233736638227740678">&amp;Pegar</translation>
 <translation id="5256861893479663409">En todos os sitios</translation>
-<translation id="5265562206369321422">Sen conexión por máis dunha semana</translation>
 <translation id="5269977353971873915">Fallou a impresión</translation>
 <translation id="5284445933715251131">Continuar descargando</translation>
 <translation id="52912272896845572">O ficheiro de chave privada non é correcto.</translation>
@@ -294,7 +284,6 @@
 <translation id="6122081475643980456">A conexión a Internet está sendo controlada</translation>
 <translation id="6147020289383635445">Fallou a previsualización da impresión.</translation>
 <translation id="6156863943908443225">Caché de script</translation>
-<translation id="6169666352732958425">Non se puido transmitir o escritorio.</translation>
 <translation id="6196854373336333322">A extensión "<ph name="EXTENSION_NAME" />" tomou o control dea túa configuración do proxy, o que significa que pode cambiar, interromper ou espiar o que fagas en liña. Se non estás seguro de por que ocorreu este cambio, probablemente non o queiras manter.</translation>
 <translation id="6200151268994853226">Xestionar extensión</translation>
 <translation id="6206311232642889873">Cop&amp;iar imaxe</translation>
@@ -328,7 +317,6 @@
 <translation id="6798954102094737107">Complemento: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Manter cambios</translation>
 <translation id="6817174620439930047">Preguntar cando un sitio intente usar mensaxes exclusivos do sistema para acceder aos dispositivos MIDI (recomendado)</translation>
-<translation id="682123305478866682">Transmitir escritorio</translation>
 <translation id="6824564591481349393">Copiar o enderezo &amp;electrónico</translation>
 <translation id="6840155290835956714">Preguntar antes de enviar</translation>
 <translation id="6886871292305414135">Abrir ligazón nunha &amp;lapela nova</translation>
@@ -346,7 +334,6 @@
 <translation id="708060913198414444">C&amp;opiar do enderezo do audio</translation>
 <translation id="7175353351958621980">Cargado desde:</translation>
 <translation id="7186088072322679094">Manter na barra de ferramentas</translation>
-<translation id="7270858098575133036">Preguntar cando un sitio intente usar mensaxes exclusivos do sistema para acceder aos dispositivos MIDI</translation>
 <translation id="7287143125007575591">Acceso denegado.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> ppp</translation>
 <translation id="7385854874724088939">Algo pasou cando se intentaba imprimir. Por favor, comproba a túa impresora e inténtao de novo.</translation>
@@ -369,7 +356,6 @@
 <translation id="7704305437604973648">Tarefas</translation>
 <translation id="7710568461918838723">&amp;Transmitir...</translation>
 <translation id="7750228210027921155">Imaxe sobre imaxe</translation>
-<translation id="7751260505918304024">Amosar todo</translation>
 <translation id="7760004034676677601">É esta a páxina de inicio que esperabas?</translation>
 <translation id="7771452384635174008">Deseño</translation>
 <translation id="7782102568078991263">Non hai máis suxestións de Google</translation>
@@ -382,9 +368,7 @@
 <translation id="7849264908733290972">Abri &amp;imaxe na nova lapela</translation>
 <translation id="7857949311770343000">É esta a páxina de lapela nova que esperabas?</translation>
 <translation id="786073089922909430">Servizo: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7885253890047913815">Destinos recentes</translation>
 <translation id="7903925330883316394">Utilidade: <ph name="UTILITY_TYPE" /></translation>
-<translation id="7938594894617528435">Sen conexión actualmente</translation>
 <translation id="7947962633355574091">C&amp;opiar o enderezo do vídeo</translation>
 <translation id="7966241909927244760">C&amp;opiar o enderezo do imaxe</translation>
 <translation id="7973394300052703468">Nova xanela &amp;privada</translation>
@@ -427,10 +411,8 @@ Garda o teu ficheiro de clave nun lugar seguro. Necesitaralo para crear versión
 <translation id="8708000541097332489">Borrar ao saír</translation>
 <translation id="8714838604780058252">Gráfico de fondo</translation>
 <translation id="8725066075913043281">Inténtao de novo</translation>
-<translation id="8757090071857742562">Nonse puido retransmitir o escritorio. Comproba para ver se confirmaches o aviso para comezar a compartir a túa pantalla.</translation>
 <translation id="8774934320277480003">Marxe superior</translation>
 <translation id="8798099450830957504">Predeterminado</translation>
-<translation id="8800004011501252845">Amosando destinos para</translation>
 <translation id="8808478386290700967">Tenda virtual</translation>
 <translation id="8823514049557262177">Copiar te&amp;xto da ligazón</translation>
 <translation id="8823704566850948458">Suxerir contrasinal…</translation>
@@ -443,7 +425,6 @@ Garda o teu ficheiro de clave nun lugar seguro. Necesitaralo para crear versión
 <translation id="8962083179518285172">Agochar detalles</translation>
 <translation id="8973557916016709913">Eliminar o nivel de ampliación</translation>
 <translation id="897939795688207351">En <ph name="ORIGIN" /></translation>
-<translation id="8996526648899750015">Engadir conta…</translation>
 <translation id="9003647077635673607">Permitir en todos os sitios web</translation>
 <translation id="9027459031423301635">Abrir ligazón nunha nova &amp;lapela</translation>
 <translation id="9056810968620647706">Non se atoparon coincidencias.</translation>

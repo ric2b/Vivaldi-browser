@@ -165,6 +165,13 @@ void FaviconLoaderMac::CancelPendingRequests() {
   cancelable_task_tracker_.reset(new base::CancelableTaskTracker);
 }
 
+void FaviconLoaderMac::UpdateProfile(Profile* profile) {
+  if (profile_ != profile) {
+    profile_ = profile;
+    favicon_service_ = nullptr;
+  }
+}
+
 // Shortcut parsing
 
 // Assumes all lowercase
@@ -654,6 +661,10 @@ void CreateVivaldiMainMenu(
                                               max_tag:max_id];
       windowMenuItem.submenu.delegate = g_window_menu_delegate;
     }
+  } else {
+    // Ensure correct profile. We use a service that depends on the profile.
+    // Should the profile be removed the service will no longer be valid.
+    [g_window_menu_delegate faviconLoader]->UpdateProfile(profile);
   }
 
   if (mode == menubar::MODE_ALL) {

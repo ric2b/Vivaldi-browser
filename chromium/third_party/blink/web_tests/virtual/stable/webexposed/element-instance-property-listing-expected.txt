@@ -42,6 +42,7 @@ namespace http://www.w3.org/1999/xhtml
     property ariaExpanded
     property ariaHasPopup
     property ariaHidden
+    property ariaInvalid
     property ariaKeyShortcuts
     property ariaLabel
     property ariaLevel
@@ -122,6 +123,7 @@ namespace http://www.w3.org/1999/xhtml
     property hasPointerCapture
     property hidden
     property id
+    property inert
     property innerHTML
     property innerText
     property inputMode
@@ -161,6 +163,7 @@ namespace http://www.w3.org/1999/xhtml
     property onauxclick
     property onbeforecopy
     property onbeforecut
+    property onbeforematch
     property onbeforepaste
     property onbeforexrselect
     property onblur
@@ -654,6 +657,7 @@ html element img
     property currentSrc
     property decode
     property decoding
+    property fetchPriority
     property height
     property hspace
     property isMap
@@ -750,6 +754,7 @@ html element link
     property charset
     property crossOrigin
     property disabled
+    property fetchPriority
     property href
     property hreflang
     property imageSizes
@@ -896,6 +901,7 @@ html element script
     property crossOrigin
     property defer
     property event
+    property fetchPriority
     property htmlFor
     property integrity
     property noModule
@@ -1215,6 +1221,7 @@ namespace http://www.w3.org/2000/svg
     property ariaExpanded
     property ariaHasPopup
     property ariaHidden
+    property ariaInvalid
     property ariaKeyShortcuts
     property ariaLabel
     property ariaLevel
@@ -1317,6 +1324,7 @@ namespace http://www.w3.org/2000/svg
     property onauxclick
     property onbeforecopy
     property onbeforecut
+    property onbeforematch
     property onbeforepaste
     property onbeforexrselect
     property onblur

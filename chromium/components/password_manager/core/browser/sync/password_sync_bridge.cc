@@ -18,7 +18,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "components/password_manager/core/browser/insecure_credentials_table.h"
 #include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_store_change.h"
@@ -78,41 +77,7 @@ PasswordForm PasswordFromEntityChange(const syncer::EntityChange& entity_change,
   DCHECK(entity_change.data().specifics.has_password());
   const sync_pb::PasswordSpecificsData& password_data =
       entity_change.data().specifics.password().client_only_encrypted_data();
-
-  PasswordForm password;
-  password.scheme = static_cast<PasswordForm::Scheme>(password_data.scheme());
-  password.signon_realm = password_data.signon_realm();
-  password.url = GURL(password_data.origin());
-  password.action = GURL(password_data.action());
-  password.username_element =
-      base::UTF8ToUTF16(password_data.username_element());
-  password.password_element =
-      base::UTF8ToUTF16(password_data.password_element());
-  password.username_value = base::UTF8ToUTF16(password_data.username_value());
-  password.password_value = base::UTF8ToUTF16(password_data.password_value());
-  if (password_data.has_date_last_used()) {
-    password.date_last_used = ConvertToBaseTime(password_data.date_last_used());
-  } else if (password_data.preferred()) {
-    // For legacy passwords that don't have the |date_last_used| field set, we
-    // should it similar to the logic in login database migration.
-    password.date_last_used =
-        base::Time::FromDeltaSinceWindowsEpoch(base::Days(1));
-  }
-  password.date_password_modified = ConvertToBaseTime(
-      password_data.has_date_password_modified_windows_epoch_micros()
-          ? password_data.date_password_modified_windows_epoch_micros()
-          : password_data.date_created());
-  password.date_created = ConvertToBaseTime(password_data.date_created());
-  password.blocked_by_user = password_data.blacklisted();
-  password.type = static_cast<PasswordForm::Type>(password_data.type());
-  password.times_used = password_data.times_used();
-  password.display_name = base::UTF8ToUTF16(password_data.display_name());
-  password.icon_url = GURL(password_data.avatar_url());
-  password.federation_origin =
-      url::Origin::Create(GURL(password_data.federation_url()));
-  password.password_issues = PasswordIssuesMapFromProto(password_data);
-
-  return password;
+  return PasswordFromSpecifics(password_data);
 }
 
 std::unique_ptr<syncer::EntityData> CreateEntityData(const PasswordForm& form) {
@@ -361,7 +326,8 @@ absl::optional<syncer::ModelError> PasswordSyncBridge::MergeSyncData(
       password_store_sync_->ReadAllLogins(&key_to_local_form_map);
 
   if (read_result == FormRetrievalResult::kDbError) {
-    metrics_util::LogPasswordSyncState(metrics_util::NOT_SYNCING_FAILED_READ);
+    metrics_util::LogPasswordSyncState(
+        metrics_util::PasswordSyncState::kNotSyncingFailedRead);
     return syncer::ModelError(FROM_HERE,
                               "Failed to load entries from password store.");
   }
@@ -370,7 +336,7 @@ absl::optional<syncer::ModelError> PasswordSyncBridge::MergeSyncData(
           FormRetrievalResult::kEncryptionServiceFailureWithPartialData) {
     if (!ShouldRecoverPasswordsDuringMerge()) {
       metrics_util::LogPasswordSyncState(
-          metrics_util::NOT_SYNCING_FAILED_DECRYPTION);
+          metrics_util::PasswordSyncState::kNotSyncingFailedDecryption);
       return syncer::ModelError(FROM_HERE,
                                 "Failed to load entries from password store. "
                                 "Encryption service failure.");
@@ -378,14 +344,13 @@ absl::optional<syncer::ModelError> PasswordSyncBridge::MergeSyncData(
     absl::optional<syncer::ModelError> cleanup_result_error =
         CleanupPasswordStore();
     if (cleanup_result_error) {
-      metrics_util::LogPasswordSyncState(
-          metrics_util::NOT_SYNCING_FAILED_CLEANUP);
       return cleanup_result_error;
     }
     // Clean up done successfully, try to read again.
     read_result = password_store_sync_->ReadAllLogins(&key_to_local_form_map);
     if (read_result != FormRetrievalResult::kSuccess) {
-      metrics_util::LogPasswordSyncState(metrics_util::NOT_SYNCING_FAILED_READ);
+      metrics_util::LogPasswordSyncState(
+          metrics_util::PasswordSyncState::kNotSyncingFailedRead);
       return syncer::ModelError(
           FROM_HERE,
           "Failed to load entries from password store after cleanup.");
@@ -481,7 +446,7 @@ absl::optional<syncer::ModelError> PasswordSyncBridge::MergeSyncData(
             update_login_error);
         if (changes.empty()) {
           metrics_util::LogPasswordSyncState(
-              metrics_util::NOT_SYNCING_FAILED_UPDATE);
+              metrics_util::PasswordSyncState::kNotSyncingFailedUpdate);
           return syncer::ModelError(
               FROM_HERE, "Failed to update an entry in the password store.");
         }
@@ -527,7 +492,7 @@ absl::optional<syncer::ModelError> PasswordSyncBridge::MergeSyncData(
       if (changes.empty()) {
         DCHECK_NE(add_login_error, AddLoginError::kNone);
         metrics_util::LogPasswordSyncState(
-            metrics_util::NOT_SYNCING_FAILED_ADD);
+            metrics_util::PasswordSyncState::kNotSyncingFailedAdd);
         // If the remote update is invalid, direct the processor to ignore and
         // move on.
         if (add_login_error == AddLoginError::kConstraintViolation) {
@@ -570,7 +535,8 @@ absl::optional<syncer::ModelError> PasswordSyncBridge::MergeSyncData(
         sync_metadata_store_change_list.TakeError();
     if (error) {
       metrics_util::LogPasswordSyncState(
-          metrics_util::NOT_SYNCING_FAILED_METADATA_PERSISTENCE);
+          metrics_util::PasswordSyncState::
+              kNotSyncingFailedMetadataPersistence);
       return error;
     }
     transaction.Commit();
@@ -584,7 +550,8 @@ absl::optional<syncer::ModelError> PasswordSyncBridge::MergeSyncData(
     password_store_sync_->NotifyLoginsChanged(password_store_changes);
   }
 
-  metrics_util::LogPasswordSyncState(metrics_util::SYNCING_OK);
+  metrics_util::LogPasswordSyncState(
+      metrics_util::PasswordSyncState::kSyncingOk);
   if (password_store_sync_->IsAccountStore()) {
     int password_count = base::ranges::count_if(
         entity_data,
@@ -877,6 +844,17 @@ void PasswordSyncBridge::ApplyStopSyncChanges(
   sync_enabled_or_disabled_cb_.Run();
 }
 
+sync_pb::EntitySpecifics PasswordSyncBridge::TrimRemoteSpecificsForCaching(
+    const sync_pb::EntitySpecifics& entity_specifics) {
+  DCHECK(entity_specifics.has_password());
+  sync_pb::EntitySpecifics trimmed_entity_specifics;
+  *trimmed_entity_specifics.mutable_password()
+       ->mutable_client_only_encrypted_data() =
+      TrimPasswordSpecificsDataForCaching(
+          entity_specifics.password().client_only_encrypted_data());
+  return trimmed_entity_specifics;
+}
+
 std::set<FormPrimaryKey> PasswordSyncBridge::GetUnsyncedPasswordsStorageKeys() {
   std::set<FormPrimaryKey> storage_keys;
   DCHECK(password_store_sync_);
@@ -913,13 +891,13 @@ absl::optional<syncer::ModelError> PasswordSyncBridge::CleanupPasswordStore() {
       break;
     case DatabaseCleanupResult::kEncryptionUnavailable:
       metrics_util::LogPasswordSyncState(
-          metrics_util::NOT_SYNCING_FAILED_DECRYPTION);
+          metrics_util::PasswordSyncState::kNotSyncingFailedDecryption);
       return syncer::ModelError(
           FROM_HERE, "Failed to get encryption key during database cleanup.");
     case DatabaseCleanupResult::kItemFailure:
     case DatabaseCleanupResult::kDatabaseUnavailable:
       metrics_util::LogPasswordSyncState(
-          metrics_util::NOT_SYNCING_FAILED_CLEANUP);
+          metrics_util::PasswordSyncState::kNotSyncingFailedCleanup);
       return syncer::ModelError(FROM_HERE, "Failed to cleanup database.");
   }
   return absl::nullopt;

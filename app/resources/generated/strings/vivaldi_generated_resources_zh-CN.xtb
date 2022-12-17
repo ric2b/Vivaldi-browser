@@ -9,7 +9,6 @@
 <translation id="1054153489933238809">在新标签页中打开原始图片(&amp;I)</translation>
 <translation id="1056898198331236512">警告</translation>
 <translation id="1084824384139382525">复制链接地址(&amp;E)</translation>
-<translation id="1128109161498068552">禁止任何网站使用系统专有消息访问 MIDI 设备</translation>
 <translation id="1163931534039071049">查看框架的源码(&amp;V)</translation>
 <translation id="1165039591588034296">错误</translation>
 <translation id="1175364870820465910">打印(&amp;P)...</translation>
@@ -22,7 +21,6 @@
 <translation id="1297175357211070620">目标打印机</translation>
 <translation id="1303101771013849280">以前导出的书签（HTML文件）</translation>
 <translation id="1430915738399379752">打印</translation>
-<translation id="1433811987160647649">访问前先询问</translation>
 <translation id="1451375123200651445">网页（单个文件）</translation>
 <translation id="1465176863081977902">复制音频地址(&amp;O)</translation>
 <translation id="1476607407192946488">语言设置(&amp;L)</translation>
@@ -99,13 +97,11 @@
 <translation id="2783321960289401138">创建快捷方式…</translation>
 <translation id="2785873697295365461">文件描述符数量</translation>
 <translation id="2809586584051668049">及另外<ph name="NUMBER_ADDITIONAL_DISABLED" />个扩展程序</translation>
-<translation id="2812989263793994277">不显示任何图片</translation>
 <translation id="2850541429955027218">添加主题背景</translation>
 <translation id="2861941300086904918">Native Client 安全管理器</translation>
 <translation id="2881076733170862447">当您点击此扩展程序时</translation>
 <translation id="2889064240420137087">链接打开方式...</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" />无法与此打印机通信。请确保此打印机已插好并重试。</translation>
-<translation id="2904456025988372123">当网站下载第一个文件后要自动下载更多文件时询问您</translation>
 <translation id="2913331724188855103">允许网站保存和读取 Cookie 数据（推荐）</translation>
 <translation id="2931157624143513983">适配可打印区域</translation>
 <translation id="2932085390869194046">建议密码…</translation>
@@ -126,7 +122,6 @@
 <translation id="3127156390846601284">此操作会删除所显示的全部网站在您设备上存储的所有数据。要继续吗？</translation>
 <translation id="3129173833825111527">左侧页边距</translation>
 <translation id="3144647712221361880">以其他身份打开链接</translation>
-<translation id="3154429428035006212">离线超过 1 个月</translation>
 <translation id="3222066309010235055">预渲染：<ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">选择要打包的扩展程序的根目录。要更新某个扩展程序，还需选择要再次使用的私有密钥文件。</translation>
 <translation id="3280237271814976245">另存为(&amp;A)...</translation>
@@ -143,6 +138,7 @@
 <translation id="3360297538363969800">打印失败。请检查您的打印机，然后重试。</translation>
 <translation id="3378572629723696641">此扩展程序可能已损坏。</translation>
 <translation id="3387614642886316601">使用增强的“拼写检查”功能</translation>
+<translation id="3393582007140394275">无法投屏。</translation>
 <translation id="3432227430032737297">移除显示的所有 Cookie</translation>
 <translation id="345693547134384690">在新标签中打开图片(&amp;I)</translation>
 <translation id="3494769164076977169">当网站下载第一个文件后要自动下载更多文件时询问您（推荐）</translation>
@@ -165,7 +161,6 @@
 <translation id="3838085852053358637">加载扩展程序失败</translation>
 <translation id="383891835335927981">未对任何网站设置缩放级别</translation>
 <translation id="385051799172605136">后退</translation>
-<translation id="3899879303189199559">离线超过 1 年</translation>
 <translation id="3905761538810670789">修复应用</translation>
 <translation id="3908501907586732282">启用扩展程序</translation>
 <translation id="3909701002594999354">显示所有控件 (&amp;C)</translation>
@@ -192,7 +187,6 @@
 <translation id="4200983522494130825">新建标签(&amp;T)</translation>
 <translation id="4225397296022057997">在所有网站上</translation>
 <translation id="4256316378292851214">视频另存为(&amp;V)...</translation>
-<translation id="4278390842282768270">允许</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> 千字节（实际大小 <ph name="NUM_KILOBYTES_LIVE" /> 千字节）</translation>
 <translation id="4345587454538109430">配置...</translation>
 <translation id="4348766275249686434">收集错误信息</translation>
@@ -217,15 +211,15 @@
 <translation id="488785315393301722">显示细节</translation>
 <translation id="4907306957610201395">权限类别</translation>
 <translation id="4912643508233590958">闲置状态唤醒</translation>
+<translation id="49265687513387605">无法投屏，请查看您是否已确认开始共享屏幕的提示。</translation>
 <translation id="4927753642311223124">一切皆空，继续前行。</translation>
 <translation id="4930714375720679147">开启</translation>
+<translation id="4961318399572185831">投屏</translation>
 <translation id="4988526792673242964">页码</translation>
 <translation id="49896407730300355">逆时针旋转(&amp;O)</translation>
 <translation id="4989966318180235467">检查背景页(&amp;B)</translation>
-<translation id="4994474651455208930">允许网站请求成为协议的默认处理程序</translation>
 <translation id="5000922062037820727">已阻止（推荐）</translation>
 <translation id="5027562294707732951">添加扩展程序</translation>
-<translation id="5036662165765606524">禁止任何网站自动下载多个文件</translation>
 <translation id="5039804452771397117">允许</translation>
 <translation id="5057110919553308744">当您点击此扩展程序时</translation>
 <translation id="5059526285558225588">选择分享内容</translation>
@@ -238,7 +232,6 @@
 <translation id="5233231016133573565">进程 ID</translation>
 <translation id="5233736638227740678">粘贴(&amp;P)</translation>
 <translation id="5256861893479663409">在所有网站上</translation>
-<translation id="5265562206369321422">离线超过 1 周</translation>
 <translation id="5269977353971873915">打印失败</translation>
 <translation id="5284445933715251131">继续下载</translation>
 <translation id="52912272896845572">私有密钥文件无效。</translation>
@@ -294,7 +287,6 @@
 <translation id="6122081475643980456">您的互联网连接受到控制</translation>
 <translation id="6147020289383635445">打印预览失败。</translation>
 <translation id="6156863943908443225">脚本缓存</translation>
-<translation id="6169666352732958425">无法投射桌面。</translation>
 <translation id="6196854373336333322">“<ph name="EXTENSION_NAME" />”扩展程序控制了您的代理设置，也就是说，它可以更改、中断或窃听您在网上执行的任何操作。如果您不确定出现这种变化的原因，那么这种变化可能并不是您所希望的。</translation>
 <translation id="6200151268994853226">管理扩展程序</translation>
 <translation id="6206311232642889873">复制图片(&amp;Y)</translation>
@@ -328,7 +320,6 @@
 <translation id="6798954102094737107">插件：<ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">保存更改</translation>
 <translation id="6817174620439930047">当网站要使用系统专有消息访问 MIDI 设备时询问您（推荐）</translation>
-<translation id="682123305478866682">投射桌面</translation>
 <translation id="6824564591481349393">复制电子邮件地址(&amp;E)</translation>
 <translation id="6840155290835956714">发送前先询问</translation>
 <translation id="6886871292305414135">在新标签中打开链接(&amp;T)</translation>
@@ -346,7 +337,6 @@
 <translation id="708060913198414444">复制音频地址(&amp;O)</translation>
 <translation id="7175353351958621980">加载自:</translation>
 <translation id="7186088072322679094">保留在工具栏</translation>
-<translation id="7270858098575133036">当网站要使用系统专有消息访问 MIDI 设备时询问您</translation>
 <translation id="7287143125007575591">访问遭拒。</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7385854874724088939">尝试打印时出现错误。请检查您的打印机，然后重试。</translation>
@@ -369,7 +359,6 @@
 <translation id="7704305437604973648">任务</translation>
 <translation id="7710568461918838723">投影(&amp;C)...</translation>
 <translation id="7750228210027921155">画中画</translation>
-<translation id="7751260505918304024">全部显示</translation>
 <translation id="7760004034676677601">这是您想要的启动页吗？</translation>
 <translation id="7771452384635174008">布局</translation>
 <translation id="7782102568078991263">Google 无法提供更多建议</translation>
@@ -382,9 +371,7 @@
 <translation id="7849264908733290972">在新标签页中打开图片(&amp;I)</translation>
 <translation id="7857949311770343000">这是您想要的新标签页吗？</translation>
 <translation id="786073089922909430">服务：<ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7885253890047913815">近期使用过的目标打印机</translation>
 <translation id="7903925330883316394">实用程序：<ph name="UTILITY_TYPE" /></translation>
-<translation id="7938594894617528435">当前离线</translation>
 <translation id="7947962633355574091">复制视频地址(&amp;O)</translation>
 <translation id="7966241909927244760">复制图片地址(&amp;O)</translation>
 <translation id="7973394300052703468">新建隐身窗口(&amp;P)</translation>
@@ -427,10 +414,8 @@
 <translation id="8708000541097332489">退出时清除</translation>
 <translation id="8714838604780058252">背景图形</translation>
 <translation id="8725066075913043281">重试</translation>
-<translation id="8757090071857742562">无法投射桌面，请查看您是否已确认开始共享屏幕的提示。</translation>
 <translation id="8774934320277480003">上边距</translation>
 <translation id="8798099450830957504">默认</translation>
-<translation id="8800004011501252845">显示目标打印机</translation>
 <translation id="8808478386290700967">Vivaldi 网上应用店</translation>
 <translation id="8823514049557262177">复制链接文本(&amp;X)</translation>
 <translation id="8823704566850948458">建议密码…</translation>
@@ -443,7 +428,6 @@
 <translation id="8962083179518285172">隐藏细节</translation>
 <translation id="8973557916016709913">移除缩放级别</translation>
 <translation id="897939795688207351">在 <ph name="ORIGIN" /> 上</translation>
-<translation id="8996526648899750015">添加帐号…</translation>
 <translation id="9003647077635673607">允许在所有网站运行</translation>
 <translation id="9027459031423301635">在新标签页中打开链接(&amp;T)</translation>
 <translation id="9056810968620647706">未找到匹配项。</translation>

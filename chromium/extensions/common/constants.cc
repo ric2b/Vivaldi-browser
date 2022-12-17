@@ -4,7 +4,6 @@
 
 #include "extensions/common/constants.h"
 
-#include "base/cxx17_backports.h"
 #include "base/strings/string_piece.h"
 #include "build/build_config.h"
 #include "build/chromecast_buildflags.h"
@@ -43,6 +42,8 @@ const char kDecodedMessageCatalogsFilename[] = "DECODED_MESSAGE_CATALOGS";
 
 const char kGeneratedBackgroundPageFilename[] =
     "_generated_background_page.html";
+
+const char kFaviconSourcePath[] = "_favicon/";
 
 const char kModulesDir[] = "_modules";
 
@@ -105,7 +106,7 @@ const uint8_t kWebstoreSignaturesPublicKey[] = {
     0xcd, 0x02, 0x03, 0x01, 0x00, 0x01};
 
 const size_t kWebstoreSignaturesPublicKeySize =
-    base::size(kWebstoreSignaturesPublicKey);
+    std::size(kWebstoreSignaturesPublicKey);
 
 const char kUpdateURLData[] = "update_url_data";
 
@@ -157,6 +158,8 @@ const char kBeFunkyAppId[] = "fjoomcalbeohjbnlcneddljemclcekeg";
 const char kClipchampAppId[] = "pfepfhbcedkbjdkanpimmmdjfgoddhkg";
 const char kGeForceNowAppId[] = "egmafekfmcnknbdlbfbhafbllplmjlhn";
 const char kZoomAppId[] = "jldpdkiafafcejhceeincjmlkmibemgj";
+const char kSumoAppId[] = "mfknjekfflbfdchhohffdpkokgfbfmdc";
+const char kAdobeSparkAppId[] = "magefboookdoiehjohjmbjmkepngibhm";
 const char kGoogleDocsAppId[] = "aohghmighlieiainnegkcijnfilokake";
 const char kGoogleSheetsAppId[] = "felcaaldnbdncclmgdcncolpebgiejap";
 const char kGoogleSlidesAppId[] = "aapocclcgogkmnckokdopfmhonfmgoek";
@@ -190,6 +193,11 @@ bool IsSystemUIApp(base::StringPiece extension_id) {
   return false;
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+bool IsQuickOfficeExtension(const std::string& id) {
+  return id == kQuickOfficeComponentExtensionId ||
+         id == kQuickOfficeInternalExtensionId || id == kQuickOfficeExtensionId;
+}
 
 // TODO(https://crbug.com/1257275): remove after default app migration is done.
 bool IsPreinstalledAppId(const std::string& app_id) {

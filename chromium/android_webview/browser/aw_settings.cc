@@ -78,6 +78,9 @@ AwSettings::AwSettings(JNIEnv* env,
       javascript_can_open_windows_automatically_(false),
       allow_third_party_cookies_(false),
       allow_file_access_(false),
+      enterprise_authentication_app_link_policy_enabled_(
+          true),  // TODO(b/222053757,ayushsha): Change this policy to be by
+                  // default false from next Android version(Maybe Android U).
       aw_settings_(env, obj) {
   web_contents->SetUserData(kAwSettingsUserDataKey,
                             std::make_unique<AwSettingsUserData>(this));
@@ -531,13 +534,30 @@ void AwSettings::PopulateWebPreferencesLocked(JNIEnv* env,
         Java_AwSettings_getForceDarkBehaviorLocked(env, obj),
         Java_AwSettings_isAlgorithmicDarkeningAllowedLocked(env, obj));
   }
+
+  // WebView does not support WebAuthn yet.
+  web_prefs->disable_webauthn = true;
 }
 
-bool AwSettings::IsDarkMode(JNIEnv* env, const JavaParamRef<jobject>& obj) {
+bool AwSettings::IsForceDarkApplied(JNIEnv* env,
+                                    const JavaParamRef<jobject>& obj) {
   if (AwDarkMode* aw_dark_mode = AwDarkMode::FromWebContents(web_contents())) {
-    return aw_dark_mode->is_dark_mode();
+    return aw_dark_mode->is_force_dark_applied();
   }
   return false;
+}
+
+void AwSettings::SetEnterpriseAuthenticationAppLinkPolicyEnabled(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    jboolean enabled) {
+  enterprise_authentication_app_link_policy_enabled_ = enabled;
+}
+
+bool AwSettings::GetEnterpriseAuthenticationAppLinkPolicyEnabled(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
+  return enterprise_authentication_app_link_policy_enabled();
 }
 
 bool AwSettings::GetAllowFileAccess() {

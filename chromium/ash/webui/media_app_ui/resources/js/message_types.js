@@ -19,7 +19,6 @@ export const Message = {
   NAVIGATE: 'navigate',
   NOTIFY_CURRENT_FILE: 'notify-current-file',
   OPEN_FEEDBACK_DIALOG: 'open-feedback-dialog',
-  OPEN_FILE: 'open-file',
   OPEN_FILES_WITH_PICKER: 'open-files-with-picker',
   OVERWRITE_FILE: 'overwrite-file',
   RENAME_FILE: 'rename-file',
@@ -27,6 +26,7 @@ export const Message = {
   SAVE_AS: 'save-as',
   OPEN_ALLOWED_FILE: 'open-allowed-file',
   TOGGLE_BROWSER_FULLSCREEN_MODE: 'toggle-browser-fullscreen-mode',
+  OPEN_IN_SANDBOXED_VIEWER: 'open-in-sandboxed-viewer',
 };
 
 /**
@@ -148,9 +148,11 @@ export let RequestSaveFileMessage;
  * The `accept` array contains keys of preconfigured file filters to include on
  * the file picker file type dropdown. These are keys such as "AUDIO", "IMAGE",
  * "PDF", etc. that are known on both sides of API boundary.
+ * `isSingleFile` prevents a user selecting more than one file.
  * @typedef {{
  *   startInToken: number,
- *   accept: !Array<string>
+ *   accept: !Array<string>,
+ *   isSingleFile: ?boolean,
  * }}
  */
 export let OpenFilesWithPickerMessage;
@@ -174,6 +176,14 @@ export let RequestSaveFileResponse;
  * @typedef {{blob: !Blob, oldFileToken: ?number, pickedFileToken: number}}
  */
 export let SaveAsMessage;
+
+/**
+ * Message sent from the app to open a sandboxed viewer for a Blob in a popup.
+ * `title` is the window title for the popup and `blobUuid` is the UUID of the
+ * blob which will be reconstructed as a blob URL in the sandbox.
+ * @typedef {{title: string, blobUuid: string}}
+ */
+export let OpenInSandboxedViewerMessage;
 
 /**
  * Response message sent by the privileged context with the name of the new

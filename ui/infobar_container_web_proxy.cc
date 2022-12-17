@@ -18,11 +18,17 @@ using extensions::vivaldi::infobars::InfobarButton;
 
 ConfirmInfoBarWebProxy::ConfirmInfoBarWebProxy(
     std::unique_ptr<ConfirmInfoBarDelegate> delegate)
-    : infobars::InfoBar(std::move(delegate)) {}
+    : InfoBarView(std::move(delegate)) {}
 
 ConfirmInfoBarWebProxy::~ConfirmInfoBarWebProxy() {}
 
 void ConfirmInfoBarWebProxy::PlatformSpecificShow(bool animate) {
+  // In some rare and specific cases, the infobar might show up
+  // in a Chromium PWA window even though it's been created like
+  // a web proxy infobar. Let the base class have a go at it first
+  // to handle that case.  See also VB-85190.
+  InfoBarView::PlatformSpecificShow(animate);
+
   ConfirmInfoBarDelegate* delegate = GetDelegate();
   content::WebContents* web_contents =
       infobars::ContentInfoBarManager::WebContentsFromInfoBar(this);
@@ -71,10 +77,6 @@ void ConfirmInfoBarWebProxy::PlatformSpecificShow(bool animate) {
 ConfirmInfoBarDelegate* ConfirmInfoBarWebProxy::GetDelegate() {
   return delegate()->AsConfirmInfoBarDelegate();
 }
-
-void ConfirmInfoBarWebProxy::PlatformSpecificOnCloseSoon() {}
-
-void ConfirmInfoBarWebProxy::PlatformSpecificHide(bool animate) {}
 
 InfoBarContainerWebProxy::InfoBarContainerWebProxy(Delegate* delegate)
     : infobars::InfoBarContainer(delegate) {}

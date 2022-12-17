@@ -11,7 +11,6 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/cxx17_backports.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/task/bind_post_task.h"
@@ -175,6 +174,14 @@ int32_t WebrtcVideoEncoderWrapper::Encode(
 
   auto now = base::TimeTicks::Now();
 
+  // Simulcast is unsupported, so only the first vector element is needed.
+  bool key_frame_requested =
+      (frame_types && !frame_types->empty() &&
+       ((*frame_types)[0] == webrtc::VideoFrameType::kVideoFrameKey));
+  if (key_frame_requested) {
+    pending_key_frame_request_ = true;
+  }
+
   bool webrtc_dropped_frame = false;
   if (next_frame_id_ != frame.id()) {
     webrtc_dropped_frame = true;
@@ -255,6 +262,7 @@ int32_t WebrtcVideoEncoderWrapper::Encode(
   // Limit the encoding and sending of empty frames to |kKeepAliveInterval|.
   // This is done to save on network bandwidth and CPU usage.
   if (desktop_frame->updated_region().is_empty() && !top_off_active_ &&
+      !pending_key_frame_request_ &&
       (now - latest_frame_encode_start_time_ < kKeepAliveInterval)) {
     // Drop the frame. There is no need to track the update-rect as the
     // frame being dropped is empty.
@@ -283,10 +291,8 @@ int32_t WebrtcVideoEncoderWrapper::Encode(
   frame_params.vpx_max_quantizer = kMaxQuantizer;
   frame_params.clear_active_map = !top_off_active_;
 
-  // Simulcast is unsupported, so only the first vector element is needed.
-  frame_params.key_frame =
-      (frame_types && !frame_types->empty() &&
-       ((*frame_types)[0] == webrtc::VideoFrameType::kVideoFrameKey));
+  frame_params.key_frame = pending_key_frame_request_;
+  pending_key_frame_request_ = false;
 
   encode_pending_ = true;
 
@@ -335,7 +341,7 @@ WebrtcVideoEncoderWrapper::ReturnEncodedFrame(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   const uint8_t* buffer =
-      reinterpret_cast<const uint8_t*>(base::data(frame.data));
+      reinterpret_cast<const uint8_t*>(std::data(frame.data));
   size_t buffer_size = frame.data.size();
 
   // TODO(crbug.com/1208215): Avoid copying/allocating frame data here, by

@@ -40,6 +40,8 @@
 #include "ash/wm/window_restore/window_restore_controller.h"
 #include "ash/wm/window_restore/window_restore_util.h"
 #include "ash/wm/window_util.h"
+#include "ash/wm/workspace/workspace_layout_manager.h"
+#include "ash/wm/workspace_controller.h"
 #include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/check.h"
@@ -47,7 +49,6 @@
 #include "base/containers/contains.h"
 #include "base/containers/unique_ptr_adapters.h"
 #include "base/cxx17_backports.h"
-#include "base/guid.h"
 #include "base/i18n/number_formatting.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -426,7 +427,8 @@ void DesksController::NewDesk(DesksCreationRemovalSource source) {
 }
 
 void DesksController::RemoveDesk(const Desk* desk,
-                                 DesksCreationRemovalSource source) {
+                                 DesksCreationRemovalSource source,
+                                 bool close_windows) {
   DCHECK(CanRemoveDesks());
   DCHECK(HasDesk(desk));
 
@@ -449,7 +451,7 @@ void DesksController::RemoveDesk(const Desk* desk,
     return;
   }
 
-  RemoveDeskInternal(desk, source);
+  RemoveDeskInternal(desk, source, close_windows);
 }
 
 void DesksController::ReorderDesk(int old_index, int new_index) {
@@ -660,7 +662,9 @@ bool DesksController::MoveWindowFromActiveDeskTo(
   if (!base::Contains(active_desk_->windows(), window))
     return false;
 
-  if (desks_util::IsWindowVisibleOnAllWorkspaces(window)) {
+  const bool visible_on_all_desks =
+      desks_util::IsWindowVisibleOnAllWorkspaces(window);
+  if (visible_on_all_desks) {
     if (source == DesksMoveWindowFromActiveDeskSource::kDragAndDrop) {
       // Since a visible on all desks window is on all desks, prevent users from
       // moving them manually in overview.
@@ -686,12 +690,17 @@ bool DesksController::MoveWindowFromActiveDeskTo(
   if (in_overview) {
     auto* overview_session = overview_controller->overview_session();
     auto* item = overview_session->GetOverviewItemForWindow(window);
-    // |item| can be null when we are switching users and we're moving visible
-    // on all desks windows, so skip if |item| is null.
+    // `item` can be null when we are switching users.
     if (item) {
       item->OnMovingWindowToAnotherDesk();
       // The item no longer needs to be in the overview grid.
       overview_session->RemoveItem(item);
+    } else if (visible_on_all_desks) {
+      // Create an item for a visible on all desks window if it doesn't have one
+      // already. This can happen when launching a template. When we are in the
+      // templates grid, there are no items.
+      overview_session->AppendItem(window,
+                                   /*reposition=*/true, /*animate=*/true);
     }
   }
 
@@ -896,75 +905,23 @@ void DesksController::SendToDeskAtIndex(aura::Window* window, int desk_index) {
 
 void DesksController::CaptureActiveDeskAsTemplate(
     GetDeskTemplateCallback callback,
+    DeskTemplateType template_type,
     aura::Window* root_window_to_show) const {
   DCHECK(current_account_id_.is_valid());
 
-  // Construct |restore_data| for |desk_template|.
-  auto restore_data = std::make_unique<app_restore::RestoreData>();
-  auto* shell = Shell::Get();
-  auto mru_windows =
-      shell->mru_window_tracker()->BuildMruWindowList(kActiveDesk);
-  auto* delegate = shell->desks_templates_delegate();
-  std::vector<aura::Window*> unsupported_apps;
-  for (auto* window : mru_windows) {
-    if (!delegate->IsWindowSupportedForDeskTemplate(window) &&
-        !wm::GetTransientParent(window)) {
-      unsupported_apps.push_back(window);
-      continue;
-    }
-
-    // Exclude window that does not asscociate with a full restore app id,
-    // silently omitting them.
-    const std::string app_id = full_restore::GetAppId(window);
-    if (app_id.empty())
-      continue;
-
-    std::unique_ptr<app_restore::AppLaunchInfo> app_launch_info =
-        delegate->GetAppLaunchDataForDeskTemplate(window);
-    if (!app_launch_info)
-      continue;
-
-    // We need to copy |app_launch_info->app_id| to |app_id| as the below
-    // function AddAppLaunchInfo() will destroy |app_launch_info|.
-    const int32_t window_id = window->GetProperty(app_restore::kWindowIdKey);
-    restore_data->AddAppLaunchInfo(std::move(app_launch_info));
-
-    std::unique_ptr<app_restore::WindowInfo> window_info = BuildWindowInfo(
-        window, /*activation_index=*/absl::nullopt, mru_windows);
-    // Clear WindowInfo's |desk_id| as a window in template will always launch
-    // to a newly created desk.
-    window_info->desk_id.reset();
-    restore_data->ModifyWindowInfo(app_id, window_id, *window_info);
-  }
-
-  std::unique_ptr<DeskTemplate> desk_template = std::make_unique<DeskTemplate>(
-      base::GUID::GenerateRandomV4().AsLowercaseString(),
-      DeskTemplateSource::kUser, base::UTF16ToUTF8(active_desk_->name()),
-      base::Time::Now());
-
-  desk_template->set_desk_restore_data(std::move(restore_data));
-
-  if (!unsupported_apps.empty() &&
-      shell->overview_controller()->InOverviewSession()) {
-    // There were some unsupported apps in the active desk so open up a dialog
-    // to let the user know.
-    DCHECK(root_window_to_show);
-    DesksTemplatesDialogController::Get()->ShowUnsupportedAppsDialog(
-        root_window_to_show, unsupported_apps, std::move(callback),
-        std::move(desk_template));
-    return;
-  }
-
-  std::move(callback).Run(std::move(desk_template));
+  restore_data_collector_.CaptureActiveDeskAsTemplate(
+      std::move(callback), template_type,
+      base::UTF16ToUTF8(active_desk_->name()), root_window_to_show);
 }
 
-void DesksController::CreateAndActivateNewDeskForTemplate(
+void DesksController::CreateNewDeskForTemplate(
     const std::u16string& template_name,
-    base::OnceCallback<void(bool)> callback) {
+    bool activate_desk,
+    base::OnceCallback<void(const Desk*)> callback) {
   DCHECK(!callback.is_null());
 
   if (!CanCreateDesks()) {
-    std::move(callback).Run(/*success=*/false);
+    std::move(callback).Run(nullptr);
     return;
   }
 
@@ -988,34 +945,38 @@ void DesksController::CreateAndActivateNewDeskForTemplate(
   // Force update user prefs because `SetName()` does not trigger it.
   desks_restore_util::UpdatePrimaryUserDeskNamesPrefs();
 
-  // We're staying in overview mode, so move desks bar window and the save
-  // template button to the new desk. They would otherwise disappear when the
-  // new desk is activated.
-  DCHECK(active_desk_);
+  if (activate_desk) {
+    // We're staying in overview mode, so move desks bar window and the save
+    // template button to the new desk. They would otherwise disappear when the
+    // new desk is activated.
+    DCHECK(active_desk_);
 
-  // Since we're going to move certain windows from the currently active desk,
-  // this is going to implicitly modify that list. We therefore grab a copy of
-  // it to avoid issues with concurrent iteration and modification of the list.
-  auto active_desk_windows = active_desk_->windows();
-  for (aura::Window* window : active_desk_windows) {
-    if (window->GetId() == kShellWindowId_DesksBarWindow ||
-        window->GetId() == kShellWindowId_SaveDeskAsTemplateWindow) {
-      aura::Window* destination_container =
-          desk->GetDeskContainerForRoot(window->GetRootWindow());
-      destination_container->AddChild(window);
+    // Since we're going to move certain windows from the currently active desk,
+    // this is going to implicitly modify that list. We therefore grab a copy of
+    // it to avoid issues with concurrent iteration and modification of the
+    // list.
+    auto active_desk_windows = active_desk_->windows();
+    for (aura::Window* window : active_desk_windows) {
+      if (window->GetId() == kShellWindowId_DesksBarWindow ||
+          window->GetId() == kShellWindowId_SaveDeskButtonContainer) {
+        aura::Window* destination_container =
+            desk->GetDeskContainerForRoot(window->GetRootWindow());
+        destination_container->AddChild(window);
+      }
     }
+
+    if (auto* session =
+            Shell::Get()->overview_controller()->overview_session()) {
+      session->HideDesksTemplatesGrids();
+      for (auto& grid : session->grid_list())
+        grid->RemoveAllItemsForDesksTemplatesLaunch();
+    }
+
+    ActivateDesk(desk, DesksSwitchSource::kLaunchTemplate);
+    DCHECK(!animation_);
   }
 
-  if (auto* session = Shell::Get()->overview_controller()->overview_session()) {
-    session->HideDesksTemplatesGrids();
-    for (auto& grid : session->grid_list())
-      grid->RemoveAllItemsForDesksTemplatesLaunch();
-  }
-
-  ActivateDesk(desk, DesksSwitchSource::kLaunchTemplate);
-  DCHECK(!animation_);
-
-  std::move(callback).Run(/*success=*/true);
+  std::move(callback).Run(desk);
 }
 
 bool DesksController::OnSingleInstanceAppLaunchingFromTemplate(
@@ -1069,20 +1030,91 @@ bool DesksController::OnSingleInstanceAppLaunchingFromTemplate(
   // function, then we are dealing with a single instance app and there should
   // be at most one entry in the launch list.
   DCHECK_LE(launch_list.size(), 1u);
-  if (!launch_list.empty()) {
-    if (const auto& app_restore_data = launch_list.begin()->second) {
-      if (app_restore_data->current_bounds) {
-        existing_app_instance_window->SetBounds(
-            *app_restore_data->current_bounds);
-      }
-      if (app_restore_data->activation_index) {
-        existing_app_instance_window->SetProperty(
-            app_restore::kActivationIndexKey,
-            *app_restore_data->activation_index);
+  if (launch_list.empty())
+    return false;
+
+  if (const auto& app_restore_data = launch_list.begin()->second) {
+    if (app_restore_data->current_bounds) {
+      existing_app_instance_window->SetBounds(
+          *app_restore_data->current_bounds);
+    }
+    // Handle window state and window bounds.
+    if (app_restore_data->window_state_type) {
+      chromeos::WindowStateType target_state =
+          *app_restore_data->window_state_type;
+
+      // Not all window states are supported.
+      const bool restoreable_state =
+          chromeos::IsNormalWindowStateType(target_state) ||
+          target_state == chromeos::WindowStateType::kMinimized ||
+          target_state == chromeos::WindowStateType::kMaximized ||
+          target_state == chromeos::WindowStateType::kPrimarySnapped ||
+          target_state == chromeos::WindowStateType::kSecondarySnapped;
+
+      if (restoreable_state) {
+        WindowState* window_state =
+            WindowState::Get(existing_app_instance_window);
+        DCHECK(window_state);
+
+        if (target_state != window_state->GetStateType()) {
+          switch (target_state) {
+            case chromeos::WindowStateType::kDefault:
+            case chromeos::WindowStateType::kNormal: {
+              const WMEvent event(WM_EVENT_NORMAL);
+              window_state->OnWMEvent(&event);
+              break;
+            }
+            case chromeos::WindowStateType::kMinimized:
+              if (window_state->CanMinimize()) {
+                window_state->Minimize();
+                window_state->set_unminimize_to_restore_bounds(true);
+              }
+              break;
+            case chromeos::WindowStateType::kMaximized:
+              if (window_state->CanMaximize())
+                window_state->Maximize();
+              break;
+            case chromeos::WindowStateType::kPrimarySnapped:
+            case chromeos::WindowStateType::kSecondarySnapped:
+              if (window_state->CanSnap()) {
+                window_state->set_snap_action_source(
+                    WindowSnapActionSource::kOthers);
+
+                const WMEvent event(
+                    target_state == chromeos::WindowStateType::kPrimarySnapped
+                        ? WM_EVENT_SNAP_PRIMARY
+                        : WM_EVENT_SNAP_SECONDARY);
+                window_state->OnWMEvent(&event);
+              }
+              break;
+            case chromeos::WindowStateType::kInactive:
+            case chromeos::WindowStateType::kFullscreen:
+            case chromeos::WindowStateType::kAutoPositioned:
+            case chromeos::WindowStateType::kPinned:
+            case chromeos::WindowStateType::kTrustedPinned:
+            case chromeos::WindowStateType::kPip:
+              NOTREACHED();
+              break;
+          }
+        }
+
+        // For states with restore bounds (maximized, snapped, minimized), the
+        // restore bounds are stored in `current_bounds`.
+        const gfx::Rect restore_bounds =
+            app_restore_data->current_bounds.value_or(gfx::Rect());
+        if (!restore_bounds.IsEmpty())
+          window_state->SetRestoreBoundsInScreen(restore_bounds);
       }
     }
-    WindowRestoreController::Get()->StackWindow(existing_app_instance_window);
+
+    if (app_restore_data->activation_index) {
+      existing_app_instance_window->SetProperty(
+          app_restore::kActivationIndexKey,
+          *app_restore_data->activation_index);
+    }
   }
+
+  WindowRestoreController::Get()->StackWindow(existing_app_instance_window);
 
   // TODO(sammiequon): Read something for chromevox, either here or when the
   // whole template launches.
@@ -1212,6 +1244,15 @@ void DesksController::ActivateDeskInternal(const Desk* desk,
   old_active->Deactivate(update_window_activation);
   active_desk_->Activate(update_window_activation);
 
+  // Content is normally updated in
+  // `MoveVisibleOnAllDesksWindowsFromActiveDeskTo`. However, the layers for a
+  // visible on all desk window aren't mirrored for the active desk. When
+  // `MoveVisibleOnAllDesksWindowFromActiveDeskTo` is called, `desk` is not
+  // considered the active desk, so we force an update here to apply the changes
+  // for a visible on all desk window.
+  if (!visible_on_all_desks_windows_.empty())
+    old_active->NotifyContentChanged();
+
   MaybeUpdateShelfItems(old_active->windows(), active_desk_->windows());
 
   // If in the middle of a window cycle gesture, reset the window cycle list
@@ -1224,6 +1265,8 @@ void DesksController::ActivateDeskInternal(const Desk* desk,
   for (auto& observer : observers_)
     observer.OnDeskActivationChanged(active_desk_, old_active);
 
+  NotifyFullScreenStateChangedAcrossDesksIfNeeded(old_active);
+
   // Only update active desk prefs when a primary user switches a desk.
   if (shell->session_controller()->IsUserPrimary()) {
     desks_restore_util::UpdatePrimaryUserActiveDeskPrefs(
@@ -1232,7 +1275,8 @@ void DesksController::ActivateDeskInternal(const Desk* desk,
 }
 
 void DesksController::RemoveDeskInternal(const Desk* desk,
-                                         DesksCreationRemovalSource source) {
+                                         DesksCreationRemovalSource source,
+                                         bool close_windows) {
   DCHECK(CanRemoveDesks());
 
   base::AutoReset<bool> in_progress(&are_desks_being_modified_, true);
@@ -1243,6 +1287,7 @@ void DesksController::RemoveDeskInternal(const Desk* desk,
   DCHECK(iter != desks_.end());
 
   const int removed_desk_index = std::distance(desks_.begin(), iter);
+
   // Update workspaces of windows in desks that have higher indices than the
   // removed desk since indices of those desks shift by one.
   for (int i = removed_desk_index + 1; i < static_cast<int>(desks_.size());
@@ -1254,7 +1299,7 @@ void DesksController::RemoveDeskInternal(const Desk* desk,
     }
   }
 
-  // Record |desk|'s lifetime before it's removed from |desks_|.
+  // Record `desk`'s lifetime before it's removed from `desks_`.
   auto* non_const_desk = const_cast<Desk*>(desk);
   non_const_desk->RecordLifetimeHistogram();
   non_const_desk->RecordAndResetConsecutiveDailyVisits(/*being_removed=*/true);
@@ -1277,28 +1322,14 @@ void DesksController::RemoveDeskInternal(const Desk* desk,
   auto removed_desk_mini_views_pauser =
       removed_desk->GetScopedNotifyContentChangedDisabler();
 
-  // - Move windows in removed desk (if any) to the currently active desk.
   // - If the active desk is the one being removed, activate the desk to its
   //   left, if no desk to the left, activate one on the right.
+  // - If we are not closing the windows, move the windows in removed desk (if
+  //   any) to the currently active desk.
+  // - Finally, if we are closing the windows and the active desk is not being
+  // removed, we just need to clear all of the windows in `removed_desk`.
   const bool will_switch_desks = (removed_desk.get() == active_desk_);
-  if (!will_switch_desks) {
-    // We will refresh the mini_views of the active desk only once at the end.
-    auto active_desk_mini_view_pauser =
-        active_desk_->GetScopedNotifyContentChangedDisabler();
-
-    removed_desk->MoveWindowsToDesk(active_desk_);
-
-    MaybeUpdateShelfItems({}, removed_desk_windows);
-
-    // If overview mode is active, we add the windows of the removed desk to the
-    // overview grid in the order of the new MRU (which changes after removing a
-    // desk by making the windows of the removed desk as the least recently used
-    // across all desks). Note that this can only be done after the windows have
-    // moved to the active desk in `MoveWindowsToDesk()` above, so that building
-    // the window MRU list should contain those windows.
-    if (in_overview)
-      AppendWindowsToOverview(removed_desk_windows);
-  } else {
+  if (will_switch_desks) {
     Desk* target_desk = nullptr;
     if (iter_after == desks_.begin()) {
       // Nothing before this desk.
@@ -1330,6 +1361,12 @@ void DesksController::RemoveDeskInternal(const Desk* desk,
     if (in_overview)
       RemoveAllWindowsFromOverview();
 
+    // TODO(crbug.com/1311314): Closing app windows before moving non-app
+    // windows may work for now, but when we add in the ability to save desks we
+    // will need to find a way to still maintain the app windows.
+    if (close_windows)
+      removed_desk->CloseAllAppWindows();
+
     // If overview mode is active, change desk activation without changing
     // window activation. Activation should remain on the dummy
     // "OverviewModeFocusedWidget" while overview mode is active.
@@ -1347,6 +1384,28 @@ void DesksController::RemoveDeskInternal(const Desk* desk,
     // all to the grid in the order of the new MRU.
     if (in_overview)
       AppendWindowsToOverview(target_desk->windows());
+  } else if (!close_windows) {
+    // We will refresh the mini_views of the active desk only once at the end.
+    auto active_desk_mini_view_pauser =
+        active_desk_->GetScopedNotifyContentChangedDisabler();
+
+    removed_desk->MoveWindowsToDesk(active_desk_);
+
+    MaybeUpdateShelfItems({}, removed_desk_windows);
+
+    // If overview mode is active, we add the windows of the removed desk to the
+    // overview grid in the order of the new MRU (which changes after removing a
+    // desk by making the windows of the removed desk as the least recently used
+    // across all desks). Note that this can only be done after the windows have
+    // moved to the active desk in `MoveWindowsToDesk()` above, so that building
+    // the window MRU list should contain those windows.
+    if (in_overview)
+      AppendWindowsToOverview(removed_desk_windows);
+  } else {
+    // In this case, we know that `close_windows` is true but that the desk we
+    // are closing is not currently active. So all that we need to do at this
+    // point is call `CloseAllAppWindows` on `removed_desk`.
+    removed_desk->CloseAllAppWindows();
   }
 
   // It's OK now to refresh the mini_views of *only* the active desk, and only
@@ -1406,6 +1465,26 @@ void DesksController::MoveVisibleOnAllDesksWindowsFromActiveDeskTo(
   }
 
   mru_tracker->SetIgnoreActivations(false);
+}
+
+void DesksController::NotifyFullScreenStateChangedAcrossDesksIfNeeded(
+    const Desk* previous_active_desk) {
+  Shell* shell = Shell::Get();
+  for (aura::Window* root : Shell::GetAllRootWindows()) {
+    aura::Window* active_desk_container =
+        active_desk_->GetDeskContainerForRoot(root);
+    const bool is_active_desk_fullscreen =
+        GetWorkspaceController(active_desk_container)
+            ->layout_manager()
+            ->is_fullscreen();
+    if (GetWorkspaceController(
+            previous_active_desk->GetDeskContainerForRoot(root))
+            ->layout_manager()
+            ->is_fullscreen() != is_active_desk_fullscreen) {
+      shell->NotifyFullscreenStateChanged(is_active_desk_fullscreen,
+                                          active_desk_container);
+    }
+  }
 }
 
 void DesksController::RestackVisibleOnAllDesksWindowsOnActiveDesk() {

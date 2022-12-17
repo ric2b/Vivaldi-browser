@@ -72,6 +72,17 @@ bool EnumTraits<media::mojom::VideoEncodeAccelerator_Error,
 }
 
 // static
+bool StructTraits<media::mojom::VariableBitratePeakDataView, uint32_t>::Read(
+    media::mojom::VariableBitratePeakDataView data,
+    uint32_t* out_peak_bps) {
+  uint32_t peak_bps = data.bps();
+  if (peak_bps == 0)
+    return false;
+  *out_peak_bps = peak_bps;
+  return true;
+}
+
+// static
 std::vector<uint32_t> StructTraits<media::mojom::VideoBitrateAllocationDataView,
                                    media::VideoBitrateAllocation>::
     bitrates(const media::VideoBitrateAllocation& bitrate_allocation) {
@@ -98,6 +109,16 @@ bool StructTraits<media::mojom::VideoBitrateAllocationDataView,
                   media::VideoBitrateAllocation>::
     Read(media::mojom::VideoBitrateAllocationDataView data,
          media::VideoBitrateAllocation* out_bitrate_allocation) {
+  absl::optional<uint32_t> peak_bps;
+  if (!data.ReadVariableBitratePeak(&peak_bps))
+    return false;
+  if (peak_bps.has_value()) {
+    *out_bitrate_allocation =
+        media::VideoBitrateAllocation(media::Bitrate::Mode::kVariable);
+  } else {
+    *out_bitrate_allocation =
+        media::VideoBitrateAllocation(media::Bitrate::Mode::kConstant);
+  }
   ArrayDataView<uint32_t> bitrates;
   data.GetBitratesDataView(&bitrates);
   size_t size = bitrates.size();
@@ -113,6 +134,14 @@ bool StructTraits<media::mojom::VideoBitrateAllocationDataView,
       return false;
     }
   }
+
+  if (peak_bps.has_value()) {
+    if (!out_bitrate_allocation->SetPeakBps(*peak_bps)) {
+      // Invalid (too low) peak for the sum of the bitrates.
+      return false;
+    }
+  }
+
   return true;
 }
 
@@ -329,48 +358,49 @@ bool StructTraits<media::mojom::SpatialLayerDataView,
 }
 
 // static
-media::mojom::Bitrate_Mode
-EnumTraits<media::mojom::Bitrate_Mode, media::Bitrate::Mode>::ToMojom(
-    media::Bitrate::Mode input) {
-  switch (input) {
+bool StructTraits<media::mojom::ConstantBitrateDataView, media::Bitrate>::Read(
+    media::mojom::ConstantBitrateDataView input,
+    media::Bitrate* output) {
+  *output = media::Bitrate::ConstantBitrate(input.target_bps());
+  return true;
+}
+
+// static
+bool StructTraits<media::mojom::VariableBitrateDataView, media::Bitrate>::Read(
+    media::mojom::VariableBitrateDataView input,
+    media::Bitrate* output) {
+  if (input.target_bps() > input.peak_bps())
+    return false;
+  if (input.peak_bps() == 0u)
+    return false;
+  *output =
+      media::Bitrate::VariableBitrate(input.target_bps(), input.peak_bps());
+  return true;
+}
+
+// static
+media::mojom::BitrateDataView::Tag
+UnionTraits<media::mojom::BitrateDataView, media::Bitrate>::GetTag(
+    const media::Bitrate& input) {
+  switch (input.mode()) {
     case media::Bitrate::Mode::kConstant:
-      return media::mojom::Bitrate_Mode::kConstant;
+      return media::mojom::BitrateDataView::Tag::kConstant;
     case media::Bitrate::Mode::kVariable:
-      return media::mojom::Bitrate_Mode::kVariable;
+      return media::mojom::BitrateDataView::Tag::kVariable;
   }
   NOTREACHED();
-  return media::mojom::Bitrate_Mode::kConstant;
+  return media::mojom::BitrateDataView::Tag::kConstant;
 }
 
 // static
-bool EnumTraits<media::mojom::Bitrate_Mode, media::Bitrate::Mode>::FromMojom(
-    media::mojom::Bitrate_Mode input,
-    media::Bitrate::Mode* output) {
-  switch (input) {
-    case media::mojom::Bitrate_Mode::kConstant:
-      *output = media::Bitrate::Mode::kConstant;
-      return true;
-    case media::mojom::Bitrate_Mode::kVariable:
-      *output = media::Bitrate::Mode::kVariable;
-      return true;
-  }
-  NOTREACHED();
-  return false;
-}
-
-// static
-bool StructTraits<media::mojom::BitrateDataView, media::Bitrate>::Read(
+bool UnionTraits<media::mojom::BitrateDataView, media::Bitrate>::Read(
     media::mojom::BitrateDataView input,
     media::Bitrate* output) {
-  switch (input.mode()) {
-    case media::mojom::Bitrate_Mode::kConstant:
-      if (input.peak() != 0u)
-        return false;
-      *output = media::Bitrate::ConstantBitrate(input.target());
-      return true;
-    case media::mojom::Bitrate_Mode::kVariable:
-      *output = media::Bitrate::VariableBitrate(input.target(), input.peak());
-      return true;
+  switch (input.tag()) {
+    case media::mojom::BitrateDataView::Tag::kConstant:
+      return input.ReadConstant(output);
+    case media::mojom::BitrateDataView::Tag::kVariable:
+      return input.ReadVariable(output);
   }
 
   NOTREACHED();
@@ -397,10 +427,8 @@ bool StructTraits<media::mojom::VideoEncodeAcceleratorConfigDataView,
   media::Bitrate bitrate;
   if (!input.ReadBitrate(&bitrate))
     return false;
-  if (bitrate.mode() == media::Bitrate::Mode::kConstant &&
-      bitrate.peak() != 0u) {
-    return false;
-  }
+  DCHECK((bitrate.mode() == media::Bitrate::Mode::kConstant) ==
+         (bitrate.peak_bps() == 0u));
 
   absl::optional<uint32_t> initial_framerate;
   if (input.has_initial_framerate())

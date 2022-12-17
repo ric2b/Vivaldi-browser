@@ -15,7 +15,6 @@
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/cursor_manager_test_api.h"
-#include "base/command_line.h"
 #include "base/synchronization/waitable_event.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window_event_dispatcher.h"
@@ -26,7 +25,6 @@
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/display/display.h"
 #include "ui/display/display_layout.h"
-#include "ui/display/display_switches.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/manager/managed_display_info.h"
 #include "ui/display/screen.h"
@@ -151,12 +149,8 @@ class RootWindowTransformersTest : public AshTestBase {
 class UnifiedRootWindowTransformersTest : public RootWindowTransformersTest {
  public:
   void SetUp() override {
-    // kEnableUnifiedDesktop switch needs to be added before DisplayManager
-    // creation. Hence before calling SetUp.
-    base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        switches::kEnableUnifiedDesktop);
-
     RootWindowTransformersTest::SetUp();
+    display_manager()->SetUnifiedDesktopEnabled(true);
   }
 };
 
@@ -437,13 +431,13 @@ TEST_F(RootWindowTransformersTest, LetterBoxPillarBox) {
   std::unique_ptr<RootWindowTransformer> transformer(
       CreateCurrentRootWindowTransformerForMirroring());
   // Y margin must be margin is (400 - 500/400 * 200) / 2 = 75
-  EXPECT_EQ(gfx::Insets(0, 75, 0, 75), transformer->GetHostInsets());
+  EXPECT_EQ(gfx::Insets::TLBR(0, 75, 0, 75), transformer->GetHostInsets());
 
   // Pillar boxed
   UpdateDisplay("200x400,500x400");
   // X margin must be margin is (500 - 200) / 2 = 150
   transformer = CreateCurrentRootWindowTransformerForMirroring();
-  EXPECT_EQ(gfx::Insets(150, 0, 150, 0), transformer->GetHostInsets());
+  EXPECT_EQ(gfx::Insets::TLBR(150, 0, 150, 0), transformer->GetHostInsets());
 }
 
 TEST_F(RootWindowTransformersTest, MirrorWithRotation) {
@@ -466,7 +460,7 @@ TEST_F(RootWindowTransformersTest, MirrorWithRotation) {
     // Y margin is (400 - 500/400 * 200) / 2 = 75 for no rotation. Transposed
     // on 90/270 degree.
     gfx::Insets expected_insets =
-        need_transpose ? gfx::Insets(75, 0) : gfx::Insets(0, 75);
+        need_transpose ? gfx::Insets::VH(75, 0) : gfx::Insets::VH(0, 75);
     EXPECT_EQ(expected_insets, transformer->GetHostInsets());
 
     // Expected rect in mirror of the source root, with y margin applied for no
@@ -599,7 +593,7 @@ TEST_F(UnifiedRootWindowTransformersTest,
 
   // Use different sized displays with primary display rotated to the right.
   UpdateDisplay("1920x1080*2/r,800x600");
-  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(display_manager()->IsInUnifiedMode());
 
   // Has only one logical root window.
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
@@ -676,7 +670,7 @@ TEST_F(UnifiedRootWindowTransformersTest,
 
   // Use different sized displays with secondary display rotated to the right.
   UpdateDisplay("1920x1080*2,800x600/r");
-  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(display_manager()->IsInUnifiedMode());
 
   // Has only one logical root window.
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
@@ -742,7 +736,7 @@ TEST_F(UnifiedRootWindowTransformersTest,
 
   // Now rotate the 2nd display to the left.
   UpdateDisplay("1920x1080*2,800x600/l");
-  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(display_manager()->IsInUnifiedMode());
 
   hosts = test_api.GetHosts();
   // Have 2 WindowTreeHosts, one per display.

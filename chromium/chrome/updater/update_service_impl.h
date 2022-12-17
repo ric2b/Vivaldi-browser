@@ -9,10 +9,13 @@
 #include <vector>
 
 #include "base/callback_forward.h"
+#include "base/containers/flat_map.h"
 #include "base/containers/queue.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/sequence_checker.h"
+#include "base/values.h"
 #include "chrome/updater/update_service.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace base {
 class SequencedTaskRunner;
@@ -28,6 +31,8 @@ class Configurator;
 class PersistedData;
 struct RegistrationRequest;
 struct RegistrationResponse;
+
+using AppInstallDataIndex = base::flat_map<std::string, std::string>;
 
 // All functions and callbacks must be called on the same sequence.
 class UpdateServiceImpl : public UpdateService {
@@ -45,10 +50,18 @@ class UpdateServiceImpl : public UpdateService {
   void RunPeriodicTasks(base::OnceClosure callback) override;
   void UpdateAll(StateChangeCallback state_update, Callback callback) override;
   void Update(const std::string& app_id,
+              const std::string& install_data_index,
               Priority priority,
               PolicySameVersionUpdate policy_same_version_update,
               StateChangeCallback state_update,
               Callback callback) override;
+  void RunInstaller(const std::string& app_id,
+                    const base::FilePath& installer_path,
+                    const std::string& install_args,
+                    const std::string& install_data,
+                    const std::string& install_settings,
+                    StateChangeCallback state_update,
+                    Callback callback) override;
 
   void Uninitialize() override;
 
@@ -76,7 +89,7 @@ class UpdateServiceImpl : public UpdateService {
   void OnShouldBlockUpdateForMeteredNetwork(
       StateChangeCallback state_update,
       Callback callback,
-      const std::vector<std::string>& ids,
+      const AppInstallDataIndex& app_install_data_index,
       Priority priority,
       PolicySameVersionUpdate policy_same_version_update,
       bool update_blocked);

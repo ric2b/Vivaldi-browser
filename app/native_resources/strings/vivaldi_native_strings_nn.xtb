@@ -10,21 +10,21 @@
 <translation id="1411638389238344450">Send lenkja som e-post</translation>
 <translation id="1454726940098520109">Syn ikkje stadfestinga igjen</translation>
 <translation id="1462666970065907900">Vil du verkeleg lukka dette vindauget?</translation>
-<translation id="1526344461589023948">Klarte ikkje å lagra den nedlasta oppdateringa. Sjå til at maskina har nok lagringsplass og prøv igjen.</translation>
+<translation id="1526344461589023948">Klarte ikkje å lagra den nedlasta oppdateringa. Sjå til at maskina har nok lagringsplass og prøv igjen seinare.</translation>
 <translation id="1657174850639146440">Monster 9</translation>
 <translation id="1676595396635191120">Nytt privatvindauge</translation>
 <translation id="1702758681952953055">Om feilen ikkje forsvinn, gjer vel og meld frå og ta med desse detaljane:</translation>
 <translation id="1728549374069268714">Lim inn og hald fram</translation>
 <translation id="1756026472674246267">Opna lenkja i ei ny fane</translation>
 <translation id="1759842336958782510">Chrome</translation>
-<translation id="1769904678986817931">Bildeeigenskapar ...</translation>
+<translation id="1769904678986817931">Bildeeigenskapar …</translation>
 <translation id="1920297417712412573">Kopier til notat</translation>
 <translation id="1921101374471252440">Last &amp;bildet på nytt</translation>
 <translation id="1924750141060565109">Landskap 15</translation>
 <translation id="19598411548897379">Allmenn</translation>
 <translation id="1985669426322966465">Programoppdatering</translation>
 <translation id="2079036669923635404">Klikk her for å oppdatera Vivaldi til utgåve <ph name="VERSION" />.</translation>
-<translation id="2141974047387702305">Klarte ikkje å lasta ned oppdateringsfilene. Sjå over internettsambandet ditt og prøv igjen.</translation>
+<translation id="2141974047387702305">Klarte ikkje å lasta ned oppdateringsfilene. Sjå over internettsambandet ditt og prøv igjen seinare.</translation>
 <translation id="2339641773402824483">Ser etter oppdateringar …</translation>
 <translation id="2441056087170876076">Monster 2</translation>
 <translation id="2444387452209867610">Sett inn notat</translation>
@@ -58,7 +58,7 @@
 <translation id="3542768452570884558">Opna lenkja i eit nytt vindauge</translation>
 <translation id="3588820906588687999">Opna bildet i ei ny fane</translation>
 <translation id="3601066750251199488">Monster 3</translation>
-<translation id="3680031241659195730">Ein ny versjon av Vivaldi er tilgjengeleg!</translation>
+<translation id="3680031241659195730">Ei ny utgåve av Vivaldi er tilgjengeleg.</translation>
 <translation id="3708982624815781692">Nedlastinga vart avbroten.</translation>
 <translation id="3732157130969736834">Lag bokmerke av lenkja</translation>
 <translation id="3732388226447288666">Dyr 2</translation>
@@ -88,7 +88,7 @@
 <translation id="4881695831933465202">Opna</translation>
 <translation id="498766871928286903"><ph name="DOWNLOADED" /> av <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Importerte snøggval</translation>
-<translation id="5092656712000637858">Legg sida til nettpanelet</translation>
+<translation id="5092656712000637858">Lagra sida som eit nettpanel</translation>
 <translation id="5177818338935286353">Monster 7</translation>
 <translation id="5213743983876949565">Dyr 1</translation>
 <translation id="5238244642230426581">Importerte bokmerke</translation>
@@ -116,7 +116,7 @@
 <translation id="6477028720702061455">Vel Opera-profilmappa som skal importerast</translation>
 <translation id="6510706699590490869">&amp;Oppdater Vivaldi</translation>
 <translation id="6538338088414940408">Opna lenkja i bakgrunnsfane</translation>
-<translation id="6551219277044048123">Legg til som &amp;søkjemotor ...</translation>
+<translation id="6551219277044048123">Legg til som &amp;søkjemotor …</translation>
 <translation id="6630781781151951863">Landskap 8</translation>
 <translation id="6635049669875534328">Utgjevingsmerknader:</translation>
 <translation id="6693585104974197539">Vel profilmappa for Edge for å importera</translation>
@@ -131,7 +131,7 @@
 <translation id="7658239707568436148">Avbryt</translation>
 <translation id="7715497554424665066">&amp;Ignorer oppdateringa</translation>
 <translation id="7724603315864178912">Klipp</translation>
-<translation id="7727481996062361502">Bekrefter oppdateringa...</translation>
+<translation id="7727481996062361502">Stadfestar oppdateringa …</translation>
 <translation id="7793738202466490491">Legg til som kalenderhending</translation>
 <translation id="7848222781052558334">Klarte ikkje å stadfesta den digitale signaturen til dei nedlasta filene.</translation>
 <translation id="7865983598101744945">Stadfest lukking</translation>
@@ -148,7 +148,7 @@
 <translation id="8446668873108041390">Køyring av JavaScript gjennom AppleScript er slått av. Under Innstillingar &gt; Personvern &gt; Apple-hendingar er det ei innstilling for å tillata JavaScript frå Apple-hendingar.</translation>
 <translation id="8539196077526389150">Landskap 13</translation>
 <translation id="8562339533180097902">Lukk Vivaldi og installer no</translation>
-<translation id="8567452685425968223">Pakkar ut oppdateringa...</translation>
+<translation id="8567452685425968223">Pakkar ut oppdateringa …</translation>
 <translation id="8624587806981488221">Last &amp;bildet på nytt</translation>
 <translation id="864444594187862076">Opera utgåve 15+ (utviklar)</translation>
 <translation id="8651348004684669199">Legg til aktiv fane</translation>
@@ -157,7 +157,7 @@
 <translation id="8768970203213061953">Landskap 14</translation>
 <translation id="8773635261052182196">Du vil ikkje lenger sjå desse varsla. Du kan slå dei på att frå Vivaldi- innstillingane.</translation>
 <translation id="8813277370772331957">Varsla meg seinare</translation>
-<translation id="8894900864683381599">Legg lenkja til nettpanelet</translation>
+<translation id="8894900864683381599">Lagra lenkja som eit nettpanel</translation>
 <translation id="8912720443398351457">Vil du verkeleg avslutta Vivaldi?</translation>
 <translation id="8947109330183116400">Vel HTML-bokmerkefil</translation>
 <translation id="9017566390391482291">Vel Vivaldi-profilmappa som skal importerast</translation>

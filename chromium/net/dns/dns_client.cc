@@ -17,7 +17,6 @@
 #include "net/base/address_list.h"
 #include "net/dns/address_sorter.h"
 #include "net/dns/dns_session.h"
-#include "net/dns/dns_socket_allocator.h"
 #include "net/dns/dns_transaction.h"
 #include "net/dns/dns_util.h"
 #include "net/dns/public/dns_over_https_config.h"
@@ -33,14 +32,6 @@
 namespace net {
 
 namespace {
-
-// Creates NetLog parameters for the DNS_CONFIG_CHANGED event.
-base::Value NetLogDnsConfigParams(const DnsConfig* config) {
-  if (!config)
-    return base::Value(base::Value::Type::DICTIONARY);
-
-  return config->ToValue();
-}
 
 bool IsEqual(const absl::optional<DnsConfig>& c1, const DnsConfig* c2) {
   if (!c1.has_value() && c2 == nullptr)
@@ -62,10 +53,8 @@ void UpdateConfigForDohUpgrade(DnsConfig* config) {
     // If we're in strict mode on Android, only attempt to upgrade the
     // specified DoT hostname.
     if (!config->dns_over_tls_hostname.empty()) {
-      config->doh_config =
-          DnsOverHttpsConfig(GetDohUpgradeServersFromDotHostname(
-              config->dns_over_tls_hostname,
-              config->disabled_upgrade_providers));
+      config->doh_config = DnsOverHttpsConfig(
+          GetDohUpgradeServersFromDotHostname(config->dns_over_tls_hostname));
       has_doh_servers = !config->doh_config.servers().empty();
       UMA_HISTOGRAM_BOOLEAN("Net.DNS.UpgradeConfig.DotUpgradeSucceeded",
                             has_doh_servers);
@@ -80,9 +69,8 @@ void UpdateConfigForDohUpgrade(DnsConfig* config) {
       UMA_HISTOGRAM_BOOLEAN("Net.DNS.UpgradeConfig.HasPublicInsecureNameserver",
                             !all_local);
 
-      config->doh_config =
-          DnsOverHttpsConfig(GetDohUpgradeServersFromNameservers(
-              config->nameservers, config->disabled_upgrade_providers));
+      config->doh_config = DnsOverHttpsConfig(
+          GetDohUpgradeServersFromNameservers(config->nameservers));
       has_doh_servers = !config->doh_config.servers().empty();
       UMA_HISTOGRAM_BOOLEAN("Net.DNS.UpgradeConfig.InsecureUpgradeSucceeded",
                             has_doh_servers);
@@ -97,12 +85,8 @@ void UpdateConfigForDohUpgrade(DnsConfig* config) {
 
 class DnsClientImpl : public DnsClient {
  public:
-  DnsClientImpl(NetLog* net_log,
-                ClientSocketFactory* socket_factory,
-                const RandIntCallback& rand_int_callback)
-      : net_log_(net_log),
-        socket_factory_(socket_factory),
-        rand_int_callback_(rand_int_callback) {}
+  DnsClientImpl(NetLog* net_log, const RandIntCallback& rand_int_callback)
+      : net_log_(net_log), rand_int_callback_(rand_int_callback) {}
 
   DnsClientImpl(const DnsClientImpl&) = delete;
   DnsClientImpl& operator=(const DnsClientImpl&) = delete;
@@ -225,6 +209,19 @@ class DnsClientImpl : public DnsClient {
     insecure_fallback_failures_ = 0;
   }
 
+  base::Value GetDnsConfigAsValueForNetLog() const override {
+    const DnsConfig* config = GetEffectiveConfig();
+    if (config == nullptr)
+      return base::Value(base::Value::Dict());
+    base::Value value = config->ToValue();
+    DCHECK(value.is_dict());
+    base::Value::Dict& dict = value.GetDict();
+    dict.Set("can_use_secure_dns_transactions", CanUseSecureDnsTransactions());
+    dict.Set("can_use_insecure_dns_transactions",
+             CanUseInsecureDnsTransactions());
+    return value;
+  }
+
   absl::optional<DnsConfig> GetSystemConfigForTesting() const override {
     return system_config_;
   }
@@ -276,8 +273,8 @@ class DnsClientImpl : public DnsClient {
     UpdateSession(std::move(new_effective_config));
 
     if (net_log_) {
-      net_log_->AddGlobalEntry(NetLogEventType::DNS_CONFIG_CHANGED, [&] {
-        return NetLogDnsConfigParams(GetEffectiveConfig());
+      net_log_->AddGlobalEntry(NetLogEventType::DNS_CONFIG_CHANGED, [this] {
+        return GetDnsConfigAsValueForNetLog();
       });
     }
 
@@ -291,11 +288,8 @@ class DnsClientImpl : public DnsClient {
     if (new_effective_config) {
       DCHECK(new_effective_config.value().IsValid());
 
-      auto socket_allocator = std::make_unique<DnsSocketAllocator>(
-          socket_factory_, new_effective_config.value().nameservers, net_log_);
       session_ = new DnsSession(std::move(new_effective_config).value(),
-                                std::move(socket_allocator), rand_int_callback_,
-                                net_log_);
+                                rand_int_callback_, net_log_);
       factory_ = DnsTransactionFactory::CreateFactory(session_.get());
     }
   }
@@ -314,7 +308,6 @@ class DnsClientImpl : public DnsClient {
 
   raw_ptr<NetLog> net_log_;
 
-  raw_ptr<ClientSocketFactory> socket_factory_;
   const RandIntCallback rand_int_callback_;
 };
 
@@ -322,18 +315,15 @@ class DnsClientImpl : public DnsClient {
 
 // static
 std::unique_ptr<DnsClient> DnsClient::CreateClient(NetLog* net_log) {
-  return std::make_unique<DnsClientImpl>(
-      net_log, ClientSocketFactory::GetDefaultFactory(),
-      base::BindRepeating(&base::RandInt));
+  return std::make_unique<DnsClientImpl>(net_log,
+                                         base::BindRepeating(&base::RandInt));
 }
 
 // static
 std::unique_ptr<DnsClient> DnsClient::CreateClientForTesting(
     NetLog* net_log,
-    ClientSocketFactory* socket_factory,
     const RandIntCallback& rand_int_callback) {
-  return std::make_unique<DnsClientImpl>(net_log, socket_factory,
-                                         rand_int_callback);
+  return std::make_unique<DnsClientImpl>(net_log, rand_int_callback);
 }
 
 }  // namespace net

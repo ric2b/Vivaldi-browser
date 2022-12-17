@@ -12,7 +12,7 @@
 #include "base/feature_list.h"
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
-#include "base/task/post_task.h"
+#include "base/ranges/algorithm.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
 #include "components/feed/core/common/pref_names.h"
@@ -89,7 +89,9 @@ WebFeedSubscriptionCoordinator::HooksForTesting::~HooksForTesting() = default;
 WebFeedSubscriptionCoordinator::WebFeedSubscriptionCoordinator(
     Delegate* delegate,
     FeedStream* feed_stream)
-    : delegate_(delegate), feed_stream_(feed_stream) {
+    : delegate_(delegate),
+      feed_stream_(feed_stream),
+      datastore_provider_(&feed_stream->GetGlobalXsurfaceDatastore()) {
   base::TimeDelta delay = GetFeedConfig().fetch_web_feed_info_delay;
   if (IsSignedInAndWebFeedsEnabled() && !delay.is_zero()) {
     base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
@@ -133,6 +135,8 @@ void WebFeedSubscriptionCoordinator::Populate(
         startup_data.subscribed_web_feeds.feeds_size());
   }
 
+  SubscriptionsChanged();
+
   auto on_populated = std::move(on_populated_);
   for (base::OnceClosure& callback : on_populated) {
     std::move(callback).Run();
@@ -157,6 +161,7 @@ void WebFeedSubscriptionCoordinator::ClearAllFinished() {
   }
   FetchRecommendedWebFeedsIfStale();
   FetchSubscribedWebFeedsIfStale(base::DoNothing());
+  SubscriptionsChanged();
 
   if (hooks_for_testing_)
     hooks_for_testing_->after_clear_all.Run();
@@ -178,7 +183,6 @@ void WebFeedSubscriptionCoordinator::FollowWebFeedFromUrlStart(
     const WebFeedPageInformation& page_info,
     base::OnceCallback<void(FollowWebFeedResult)> callback) {
   DCHECK(model_);
-  WebFeedIndex::Entry entry = index_.FindWebFeed(page_info);
 
   SubscribeToWebFeedTask::Request request;
   request.page_info = page_info;
@@ -277,6 +281,9 @@ void WebFeedSubscriptionCoordinator::FollowWebFeedComplete(
     model_->OnSubscribed(result.web_feed_info);
     feed_stream_->SetStreamStale(kWebFeedStream, true);
   }
+
+  SubscriptionsChanged();
+
   WebFeedSubscriptionInfo info =
       model_->GetSubscriptionInfo(result.followed_web_feed_id);
   FollowWebFeedResult callback_result;
@@ -355,6 +362,8 @@ void WebFeedSubscriptionCoordinator::UnfollowWebFeedComplete(
     }
   }
 
+  SubscriptionsChanged();
+
   UnfollowWebFeedResult callback_result;
   callback_result.request_status = result.request_status;
   callback_result.subscription_count = index_.SubscriptionCount();
@@ -411,6 +420,21 @@ void WebFeedSubscriptionCoordinator::FindWebFeedInfoForWebFeedIdStart(
   DCHECK(model_);
   LookupWebFeedDataAndRespond(web_feed_id,
                               /*maybe_page_info=*/nullptr, std::move(callback));
+}
+
+WebFeedSubscriptionStatus
+WebFeedSubscriptionCoordinator::GetWebFeedSubscriptionStatus(
+    const std::string& web_feed_id) const {
+  const WebFeedInFlightChange* in_flight_change =
+      FindInflightChange(web_feed_id, nullptr);
+  if (in_flight_change) {
+    return in_flight_change->subscribing
+               ? WebFeedSubscriptionStatus::kSubscribeInProgress
+               : WebFeedSubscriptionStatus::kUnsubscribeInProgress;
+  }
+  return index_.FindWebFeed(web_feed_id).followed()
+             ? WebFeedSubscriptionStatus::kSubscribed
+             : WebFeedSubscriptionStatus::kNotSubscribed;
 }
 
 void WebFeedSubscriptionCoordinator::LookupWebFeedDataAndRespond(
@@ -513,11 +537,20 @@ void WebFeedSubscriptionCoordinator::WithModel(base::OnceClosure closure) {
     if (!loading_model_) {
       loading_model_ = true;
       loading_token_ = token_generator_.Token();
-      feed_stream_->GetStore().ReadWebFeedStartupData(
-          base::BindOnce(&WebFeedSubscriptionCoordinator::ModelDataLoaded,
-                         base::Unretained(this)));
+      feed_stream_->GetTaskQueue().AddTask(
+          FROM_HERE,
+          std::make_unique<offline_pages::ClosureTask>(base::BindOnce(
+              &WebFeedSubscriptionCoordinator::ReadWebFeedStartupDataTask,
+              base::Unretained(this))));
     }
   }
+}
+
+void WebFeedSubscriptionCoordinator::ReadWebFeedStartupDataTask() {
+  DCHECK(populated_);
+  feed_stream_->GetStore().ReadWebFeedStartupData(
+      base::BindOnce(&WebFeedSubscriptionCoordinator::ModelDataLoaded,
+                     base::Unretained(this)));
 }
 
 void WebFeedSubscriptionCoordinator::ModelDataLoaded(
@@ -554,6 +587,7 @@ void WebFeedSubscriptionCoordinator::EnqueueInFlightChange(
   change.page_information = std::move(page_information);
   change.web_feed_info = std::move(info);
   in_flight_changes_.push_back(std::move(change));
+  SubscriptionsChanged();
 }
 
 WebFeedInFlightChange WebFeedSubscriptionCoordinator::DequeueInflightChange() {
@@ -568,7 +602,7 @@ WebFeedInFlightChange WebFeedSubscriptionCoordinator::DequeueInflightChange() {
 // `maybe_page_info`, ignoring changes before ClearAll.
 const WebFeedInFlightChange* WebFeedSubscriptionCoordinator::FindInflightChange(
     const std::string& web_feed_id,
-    const WebFeedPageInformation* maybe_page_info) {
+    const WebFeedPageInformation* maybe_page_info) const {
   const WebFeedInFlightChange* result = nullptr;
   if (metadata_model_) {
     result = metadata_model_->FindInFlightChange(web_feed_id);
@@ -744,18 +778,27 @@ void WebFeedSubscriptionCoordinator::FetchSubscribedWebFeedsStart() {
 
 void WebFeedSubscriptionCoordinator::FetchSubscribedWebFeedsComplete(
     FetchSubscribedWebFeedsTask::Result result) {
+  if (result.status ==
+      WebFeedRefreshStatus::kAbortFetchWebFeedPendingClearAll) {
+    // Retry the task if it was cancelled by a ClearAll, and don't call the
+    // callbacks.
+    fetching_subscribed_web_feeds_ = false;
+    FetchSubscribedWebFeedsStart();
+    return;
+  }
+
   feed_stream_->GetMetricsReporter().RefreshSubscribedWebFeedsAttempted(
       fetching_subscribed_web_feeds_because_stale_, result.status,
       result.subscribed_web_feeds.size());
 
-  if (result.status !=
-      WebFeedRefreshStatus::kAbortFetchWebFeedPendingClearAll) {
-    DCHECK(model_);
-    fetching_subscribed_web_feeds_because_stale_ = false;
-    fetching_subscribed_web_feeds_ = false;
-    if (result.status == WebFeedRefreshStatus::kSuccess)
-      model_->UpdateSubscribedFeeds(std::move(result.subscribed_web_feeds));
-  }
+  DCHECK(model_);
+  fetching_subscribed_web_feeds_because_stale_ = false;
+  fetching_subscribed_web_feeds_ = false;
+
+  if (result.status == WebFeedRefreshStatus::kSuccess)
+    model_->UpdateSubscribedFeeds(std::move(result.subscribed_web_feeds));
+
+  SubscriptionsChanged();
 
   CallRefreshCompleteCallbacks(
       RefreshResult{result.status == WebFeedRefreshStatus::kSuccess});
@@ -782,6 +825,43 @@ void WebFeedSubscriptionCoordinator::SubscribedWebFeedCount(
   FetchSubscribedWebFeedsIfStale(base::BindOnce(
       &WebFeedSubscriptionCoordinator::SubscribedWebFeedCountDone,
       base::Unretained(this), std::move(callback)));
+}
+
+std::vector<std::pair<std::string, WebFeedSubscriptionStatus>>
+WebFeedSubscriptionCoordinator::GetAllWebFeedSubscriptionStatus() const {
+  // Collect all the WebFeed IDs, using kNotSubscribed as a placeholder.
+  std::vector<std::pair<std::string, WebFeedSubscriptionStatus>> result;
+  for (const WebFeedInFlightChange& change : in_flight_changes_) {
+    if (!change.web_feed_info || change.web_feed_info->web_feed_id().empty())
+      continue;
+    result.emplace_back(change.web_feed_info->web_feed_id(),
+                        WebFeedSubscriptionStatus::kNotSubscribed);
+  }
+
+  for (const WebFeedMetadataModel::Operation& op :
+       metadata_model_->pending_operations()) {
+    result.emplace_back(op.operation.web_feed_id(),
+                        WebFeedSubscriptionStatus::kNotSubscribed);
+  }
+  for (const WebFeedIndex::Entry& entry : index_.GetSubscribedEntries()) {
+    result.emplace_back(entry.web_feed_id,
+                        WebFeedSubscriptionStatus::kNotSubscribed);
+  }
+
+  // Remove duplicates, and fetch WebFeed status.
+  base::ranges::sort(result);
+  result.erase(base::ranges::unique(result), result.end());
+  for (auto& entry : result) {
+    entry.second = GetWebFeedSubscriptionStatus(entry.first);
+  }
+
+  return result;
+}
+
+void WebFeedSubscriptionCoordinator::SubscriptionsChanged() {
+  if (!populated_)
+    return;
+  datastore_provider_.Update(GetAllWebFeedSubscriptionStatus());
 }
 
 void WebFeedSubscriptionCoordinator::DumpStateForDebugging(std::ostream& os) {

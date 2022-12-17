@@ -16,7 +16,7 @@ GEN('#include "content/public/test/browser_test.h"');
 var CrComponentsMojoBrowserTest = class extends PolymerTest {
   /** @override */
   get browsePreload() {
-    throw 'this is abstract and should be overriden by subclasses';
+    throw new Error('this is abstract and should be overriden by subclasses');
   }
 };
 
@@ -24,7 +24,7 @@ var CrComponentsCustomizeThemesTest =
     class extends CrComponentsMojoBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=cr_components/customize_themes_test.js';
+    return 'chrome://new-tab-page/test_loader.html?module=cr_components/customize_themes_test.js&host=webui-test';
   }
 };
 

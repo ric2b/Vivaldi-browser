@@ -26,7 +26,6 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.settings.SettingsActivityTestRule;
@@ -34,8 +33,6 @@ import org.chromium.chrome.browser.sync.SyncService;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.chrome.test.util.browser.signin.AccountManagerTestRule;
 import org.chromium.components.search_engines.TemplateUrl;
 import org.chromium.components.search_engines.TemplateUrlService;
@@ -68,7 +65,9 @@ public class ClearBrowsingDataFragmentBasicTest {
 
     @Rule
     public ChromeRenderTestRule mRenderTestRule =
-            ChromeRenderTestRule.Builder.withPublicCorpus().build();
+            ChromeRenderTestRule.Builder.withPublicCorpus()
+                    .setBugComponent(ChromeRenderTestRule.Component.PRIVACY)
+                    .build();
 
     @Mock
     private SyncService mMockSyncService;
@@ -128,36 +127,6 @@ public class ClearBrowsingDataFragmentBasicTest {
     @Test
     @LargeTest
     @Feature({"RenderTest"})
-    @DisableFeatures(ChromeFeatureList.SEARCH_HISTORY_LINK)
-    public void testRenderNotSignedIn() throws IOException {
-        mSettingsActivityTestRule.startSettingsActivity();
-        waitForOptionsMenu();
-        View view = mSettingsActivityTestRule.getActivity()
-                            .findViewById(android.R.id.content)
-                            .getRootView();
-        mRenderTestRule.render(view, "clear_browsing_data_basic_signed_out");
-    }
-
-    @Test
-    @LargeTest
-    @Feature({"RenderTest"})
-    @DisableFeatures(ChromeFeatureList.SEARCH_HISTORY_LINK)
-    public void testRenderSignedInNotSyncing() throws IOException {
-        mAccountManagerTestRule.addTestAccountThenSigninAndEnableSync();
-        // Simulate that Sync was stopped but the primary account remained.
-        setSyncable(false);
-        mSettingsActivityTestRule.startSettingsActivity();
-        waitForOptionsMenu();
-        View view = mSettingsActivityTestRule.getActivity()
-                            .findViewById(android.R.id.content)
-                            .getRootView();
-        mRenderTestRule.render(view, "clear_browsing_data_basic_signed_in_no_sync");
-    }
-
-    @Test
-    @LargeTest
-    @Feature({"RenderTest"})
-    @DisableFeatures(ChromeFeatureList.SEARCH_HISTORY_LINK)
     public void testRenderSignedInAndSyncing() throws IOException {
         mAccountManagerTestRule.addTestAccountThenSigninAndEnableSync();
         setSyncable(true);
@@ -172,7 +141,6 @@ public class ClearBrowsingDataFragmentBasicTest {
     @Test
     @LargeTest
     @Feature({"RenderTest"})
-    @EnableFeatures(ChromeFeatureList.SEARCH_HISTORY_LINK)
     public void testRenderSearchHistoryLinkSignedOutGoogleDSE() throws IOException {
         mSettingsActivityTestRule.startSettingsActivity();
         waitForOptionsMenu();
@@ -185,7 +153,6 @@ public class ClearBrowsingDataFragmentBasicTest {
     @Test
     @LargeTest
     @Feature({"RenderTest"})
-    @EnableFeatures(ChromeFeatureList.SEARCH_HISTORY_LINK)
     public void testRenderSearchHistoryLinkSignedInGoogleDSE() throws IOException {
         mAccountManagerTestRule.addTestAccountThenSignin();
         setSyncable(false);
@@ -200,7 +167,6 @@ public class ClearBrowsingDataFragmentBasicTest {
     @Test
     @LargeTest
     @Feature({"RenderTest"})
-    @EnableFeatures(ChromeFeatureList.SEARCH_HISTORY_LINK)
     public void testRenderSearchHistoryLinkSignedInKnownNonGoogleDSE() throws IOException {
         mAccountManagerTestRule.addTestAccountThenSigninAndEnableSync();
         setSyncable(false);
@@ -219,7 +185,6 @@ public class ClearBrowsingDataFragmentBasicTest {
     @Test
     @LargeTest
     @Feature({"RenderTest"})
-    @EnableFeatures(ChromeFeatureList.SEARCH_HISTORY_LINK)
     public void testRenderSearchHistoryLinkSignedInUnknownNonGoogleDSE() throws IOException {
         mAccountManagerTestRule.addTestAccountThenSigninAndEnableSync();
         setSyncable(false);
@@ -238,7 +203,6 @@ public class ClearBrowsingDataFragmentBasicTest {
     @Test
     @LargeTest
     @Feature({"RenderTest"})
-    @EnableFeatures(ChromeFeatureList.SEARCH_HISTORY_LINK)
     public void testRenderSearchHistoryLinkSignedOutKnownNonGoogleDSE() throws IOException {
         configureMockSearchEngine();
         Mockito.doReturn(false).when(mMockTemplateUrlService).isDefaultSearchEngineGoogle();
@@ -255,7 +219,6 @@ public class ClearBrowsingDataFragmentBasicTest {
     @Test
     @LargeTest
     @Feature({"RenderTest"})
-    @EnableFeatures(ChromeFeatureList.SEARCH_HISTORY_LINK)
     public void testRenderSearchHistoryLinkSignedOutUnknownNonGoogleDSE() throws IOException {
         configureMockSearchEngine();
         Mockito.doReturn(false).when(mMockTemplateUrlService).isDefaultSearchEngineGoogle();

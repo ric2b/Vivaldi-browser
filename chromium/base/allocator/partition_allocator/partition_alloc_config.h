@@ -30,6 +30,12 @@ static_assert(sizeof(void*) != 8, "");
 #define PA_STARSCAN_NEON_SUPPORTED
 #endif
 
+#if 0
+// Use dynamically sized GigaCage. This allows to query the size at run-time,
+// before initialization, instead of using a hardcoded constexpr.
+#define PA_USE_DYNAMICALLY_SIZED_GIGA_CAGE
+#endif
+
 #if defined(PA_HAS_64_BITS_POINTERS) && \
     (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_ANDROID))
 #include <linux/version.h>
@@ -37,7 +43,8 @@ static_assert(sizeof(void*) != 8, "");
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0)
 #define PA_STARSCAN_UFFD_WRITE_PROTECTOR_SUPPORTED
 #endif
-#endif
+#endif  // defined(PA_HAS_64_BITS_POINTERS) &&
+        // (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_ANDROID))
 
 #if defined(PA_HAS_64_BITS_POINTERS)
 // Use card table to avoid races for PCScan configuration without safepoints.
@@ -47,7 +54,7 @@ static_assert(sizeof(void*) != 8, "");
 #else
 // The card table is permanently disabled for 32-bit.
 #define PA_STARSCAN_USE_CARD_TABLE 0
-#endif
+#endif  // defined(PA_HAS_64_BITS_POINTERS)
 
 #if PA_STARSCAN_USE_CARD_TABLE && !defined(PA_ALLOW_PCSCAN)
 #error "Card table can only be used when *Scan is allowed"
@@ -197,5 +204,39 @@ constexpr bool kUseLazyCommit = false;
     (DCHECK_IS_ON() || BUILDFLAG(ENABLE_BACKUP_REF_PTR_SLOW_CHECKS))
 #define PA_REF_COUNT_CHECK_COOKIE
 #endif
+
+// Use available space in the reference count to store the initially requested
+// size from the application. This is used for debugging, hence disabled by
+// default.
+// #define PA_REF_COUNT_STORE_REQUESTED_SIZE
+
+#if defined(PA_REF_COUNT_STORE_REQUESTED_SIZE) && \
+    defined(PA_REF_COUNT_CHECK_COOKIE)
+#error "Cannot use a cookie *and* store the allocation size"
+#endif
+
+// Prefer smaller slot spans.
+//
+// Smaller slot spans may improve dirty memory fragmentation, but may also
+// increase address space usage.
+//
+// This is intended to roll out more broadly, but only enabled on Linux for now
+// to get performance bot and real-world data pre-A/B experiment.
+//
+// Also enabled on ARM64 macOS, as the 16kiB pages on this platform lead to
+// larger slot spans.
+#if BUILDFLAG(IS_LINUX) || (BUILDFLAG(IS_MAC) && defined(ARCH_CPU_ARM64))
+#define PA_PREFER_SMALLER_SLOT_SPANS
+#endif  // BUILDFLAG(IS_LINUX)
+
+// Build MTECheckedPtr code.
+//
+// Only applicable to code with 64-bit pointers. Currently conflicts with true
+// hardware MTE.
+#if BUILDFLAG(USE_MTE_CHECKED_PTR) && defined(PA_HAS_64_BITS_POINTERS) && \
+    !defined(PA_HAS_MEMORY_TAGGING)
+#define PA_USE_MTE_CHECKED_PTR_WITH_64_BITS_POINTERS
+#endif  // BUILDFLAG(USE_MTE_CHECKED_PTR) && defined(PA_HAS_64_BITS_POINTERS) &&
+        // !defined(PA_HAS_MEMORY_TAGGING)
 
 #endif  // BASE_ALLOCATOR_PARTITION_ALLOCATOR_PARTITION_ALLOC_CONFIG_H_

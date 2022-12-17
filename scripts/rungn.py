@@ -13,6 +13,7 @@ sourcedir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 is_windows = platform.system() == "Windows"
 is_linux = platform.system() == "Linux"
 is_mac = platform.system() == "Darwin"
+is_mac_arm64 = is_mac and platform.processor() == "arm"
 is_android = os.access(os.path.join(sourcedir, ".enable_android"), os.F_OK)
 use_gn_ide_all = os.access(os.path.join(sourcedir, ".enable_gn_all_ide"), os.F_OK)
 use_gn_unique_name = os.access(os.path.join(sourcedir, ".enable_gn_unique_name"), os.F_OK)
@@ -163,10 +164,12 @@ if args.refresh or args.bootstrap or not os.access(gn_path, os.F_OK):
       extra_bootstrap_args = []
       if os.access(os.path.join(sourcedir, "thirdparty", "gn", "src", "last_commit_position.h"), os.F_OK):
         extra_bootstrap_args.append("--no-last-commit-position")
+      if is_windows:
+        extra_bootstrap_args.extend(["--platform", "msvc"])
       if subprocess.call(["python3",
         os.path.join(sourcedir, "thirdparty", "gn", "build",
                      "gen.py"),
-        "--out-path", gn_releasedir,
+        "--out-path", gn_releasedir.replace("\\", "/"),
         ] + extra_bootstrap_args,
         cwd = sourcedir,
         env = bootstrap_env,
@@ -212,6 +215,8 @@ if  args.goma or use_gn_goma:
   if is_windows:
     goma_cc = goma_cc+".exe"
     goma_path = goma_path+"win"
+  elif is_mac_arm64:
+    goma_path = goma_path+"mac-arm64"
   elif is_mac:
     goma_path = goma_path+"mac"
   else:
@@ -247,7 +252,7 @@ if args.refresh or not args.args:
   produce_ide = not args.no_ide and ide_kind != "None" and not is_builder
   if produce_ide and not ide_kind:
     if platform.system() == "Windows":
-      ide_kind = "vs2017"
+      ide_kind = "vs2019"
     elif platform.system()== "Darwin":
       ide_kind = "xcode"
     else:

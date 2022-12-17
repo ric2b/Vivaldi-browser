@@ -40,6 +40,7 @@ class GpuIntegrationTest(
   _cached_expectations = None
   _also_run_disabled_tests = False
   _disable_log_uploads = False
+  _extra_intel_device_id_with_overlays = None
 
   # Several of the tests in this directory need to be able to relaunch
   # the browser on demand with a new set of command line arguments
@@ -105,6 +106,9 @@ class GpuIntegrationTest(
         default=False,
         help=('Whether a test filter has been applied. Can be used as a proxy '
               'for whether this is a retry without patch on a trybot.'))
+    parser.add_option('--extra-intel-device-id-with-overlays',
+                      dest='extra_intel_device_id_with_overlays',
+                      help='The extra Intel device id with overlays')
 
   @classmethod
   def GenerateBrowserArgs(cls, additional_args):
@@ -232,11 +236,14 @@ class GpuIntegrationTest(
   @classmethod
   def GenerateTestCases__RunGpuTest(cls, options):
     cls._disable_log_uploads = options.disable_log_uploads
+    cls._extra_intel_device_id_with_overlays = (
+        options.extra_intel_device_id_with_overlays)
     for test_name, url, args in cls.GenerateGpuTests(options):
       yield test_name, (url, test_name, args)
 
   @classmethod
   def StartBrowser(cls):
+    cls._ModifyBrowserEnvironment()
     # We still need to retry the browser's launch even though
     # desktop_browser_finder does so too, because it wasn't possible
     # to push the fetch of the first tab into the lower retry loop
@@ -270,6 +277,27 @@ class GpuIntegrationTest(
     # Re-raise the last exception thrown. Only happens if all the retries
     # fail.
     raise last_exception
+
+  @classmethod
+  def StopBrowser(cls):
+    super(GpuIntegrationTest, cls).StopBrowser()
+    cls._RestoreBrowserEnvironment()
+
+  @classmethod
+  def _ModifyBrowserEnvironment(cls):
+    """Modify the environment before browser startup, if necessary.
+
+    If overridden by a child class, the parent's implementation should be run
+    first.
+    """
+
+  @classmethod
+  def _RestoreBrowserEnvironment(cls):
+    """Restore the environment after browser shutdown, if necessary.
+
+    If overridden by a child class, the parent's implementation should be run
+    last.
+    """
 
   @classmethod
   def _RestartBrowser(cls, reason):
@@ -603,6 +631,12 @@ class GpuIntegrationTest(
         if gpu_device_id in _SUPPORTED_WIN_AMD_GPUS_WITH_NV12_OVERLAYS:
           config['nv12_overlay_support'] = 'SCALING'
       elif gpu_vendor_id == 0x8086:
+        if self._extra_intel_device_id_with_overlays:
+          extra_device_id = int(self._extra_intel_device_id_with_overlays, 16)
+          _SUPPORTED_WIN_INTEL_GPUS.append(extra_device_id)
+          _SUPPORTED_WIN_INTEL_GPUS_WITH_YUY2_OVERLAYS.append(extra_device_id)
+          _SUPPORTED_WIN_INTEL_GPUS_WITH_NV12_OVERLAYS.append(extra_device_id)
+
         assert gpu_device_id in _SUPPORTED_WIN_INTEL_GPUS
         gpu_device_and_driver = ('%x-' + gpu.driver_version) % gpu_device_id
         if gpu_device_id in _SUPPORTED_WIN_INTEL_GPUS_WITH_YUY2_OVERLAYS:
@@ -745,7 +779,7 @@ class GpuIntegrationTest(
         'qualcomm-adreno-(tm)-540',  # android-pixel-2
         'qualcomm-adreno-(tm)-640',  # android-pixel-4
         'arm-mali-g78',  # android-pixel-6
-        'nvidia-nvidia-tegra',  # android-nexus-9 and android-shield-android-tv
+        'nvidia-nvidia-tegra',  # android-shield-android-tv
         'vmware,',  # VMs
         'vmware,-0x1050',  # ChromeOS VMs
         'mesa/x.org',  # ChromeOS VMs

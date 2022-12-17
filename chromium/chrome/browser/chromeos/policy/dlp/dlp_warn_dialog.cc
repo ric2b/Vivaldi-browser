@@ -10,7 +10,6 @@
 
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_confidential_contents.h"
-#include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/vector_icons/vector_icons.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -22,6 +21,7 @@
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/layout/box_layout.h"
+#include "ui/views/layout/layout_provider.h"
 #include "ui/views/widget/widget.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -37,16 +37,16 @@ namespace {
 constexpr int kDialogCornerRadius = 12;
 
 // The dialog insets.
-constexpr gfx::Insets kMarginInsets(20, 0, 20, 0);
+constexpr auto kMarginInsets = gfx::Insets::TLBR(20, 0, 20, 0);
 
 // The insets in the upper part of the dialog.
-constexpr gfx::Insets kTopPanelInsets(0, 24, 16, 24);
+constexpr auto kTopPanelInsets = gfx::Insets::TLBR(0, 24, 16, 24);
 
 // The insests in the container holding the list of confidential contents.
-constexpr gfx::Insets kConfidentialListInsets(8, 24, 8, 24);
+constexpr auto kConfidentialListInsets = gfx::Insets::TLBR(8, 24, 8, 24);
 
 // The insets of a single confidential content row.
-constexpr gfx::Insets kConfidentialRowInsets(6, 0, 6, 0);
+constexpr auto kConfidentialRowInsets = gfx::Insets::TLBR(6, 0, 6, 0);
 
 // The spacing between the elements in a box layout.
 constexpr int kBetweenChildSpacing = 16;

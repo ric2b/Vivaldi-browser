@@ -236,6 +236,10 @@ VISIT_PROTO_FIELDS(const sync_pb::AutofillProfileSpecifics& proto) {
   VISIT_REP(phone_home_whole_number);
   VISIT(validity_state_bitfield);
   VISIT(disallow_settings_visible_updates);
+
+  VISIT(birthdate_day);
+  VISIT(birthdate_month);
+  VISIT(birthdate_year);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::AutofillSpecifics& proto) {
@@ -287,6 +291,9 @@ VISIT_PROTO_FIELDS(const sync_pb::ClientCommand& proto) {
   VISIT(client_invalidation_hint_buffer_size);
   VISIT(gu_retry_delay_seconds);
   VISIT_REP(custom_nudge_delays);
+  VISIT(extension_types_max_tokens);
+  VISIT(extension_types_refill_interval_seconds);
+  VISIT(extension_types_depleted_quota_nudge_delay_seconds);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::ClientConfigParams& proto) {
@@ -819,6 +826,7 @@ VISIT_PROTO_FIELDS(const sync_pb::SearchEngineSpecifics& proto) {
   VISIT(image_url_post_params);
   VISIT(new_tab_url);
   VISIT_ENUM(is_active);
+  VISIT(unique_position);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::SendTabToSelfSpecifics& proto) {
@@ -915,7 +923,6 @@ VISIT_PROTO_FIELDS(const sync_pb::SyncEntity& proto) {
   VISIT(specifics);
   VISIT(folder);
   VISIT(client_defined_unique_tag);
-  VISIT_BYTES(ordinal_in_parent);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::SyncInvalidationsPayload& proto) {
@@ -1147,6 +1154,7 @@ VISIT_PROTO_FIELDS(const sync_pb::WalletMaskedCreditCard& proto) {
   VISIT(instrument_id);
   VISIT_ENUM(virtual_card_enrollment_state);
   VISIT(card_art_url);
+  VISIT(product_description);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::WalletMetadataSpecifics& proto) {
@@ -1240,6 +1248,7 @@ VISIT_PROTO_FIELDS(const sync_pb::WorkspaceDeskSpecifics& proto) {
   VISIT(created_time_windows_epoch_micros);
   VISIT(updated_time_windows_epoch_micros);
   VISIT(desk);
+  VISIT_ENUM(desk_type);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::WorkspaceDeskSpecifics::App& proto) {
@@ -1250,6 +1259,11 @@ VISIT_PROTO_FIELDS(const sync_pb::WorkspaceDeskSpecifics::App& proto) {
   VISIT(window_id);
   VISIT(display_id);
   VISIT_ENUM(pre_minimized_window_state);
+  VISIT(snap_percentage);
+  VISIT_ENUM(container);
+  VISIT_ENUM(disposition);
+  VISIT(app_name);
+  VISIT(title);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::WorkspaceDeskSpecifics::AppOneOf& proto) {
@@ -1263,6 +1277,7 @@ VISIT_PROTO_FIELDS(
     const sync_pb::WorkspaceDeskSpecifics::BrowserAppWindow& proto) {
   VISIT_REP(tabs);
   VISIT(active_tab_index);
+  VISIT(show_as_app);
 }
 
 VISIT_PROTO_FIELDS(
@@ -1296,7 +1311,6 @@ VISIT_PROTO_FIELDS(const sync_pb::WorkspaceDeskSpecifics::ArcApp& proto) {
   VISIT(app_id);
   VISIT(minimum_size);
   VISIT(maximum_size);
-  VISIT(title);
   VISIT(bounds_in_root);
 }
 

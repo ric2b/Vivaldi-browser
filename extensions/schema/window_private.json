@@ -60,7 +60,7 @@
             "optional": true,
             "description": "The url to be added as a new tab, this will be added to the tab model. Not used for settings, popups, etc."
           },
-          "extData" : {
+          "vivExtData": {
             "type": "string",
             "optional": true,
             "description": "Extra data to attach to the window."

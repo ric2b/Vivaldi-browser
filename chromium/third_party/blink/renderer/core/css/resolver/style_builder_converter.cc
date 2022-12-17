@@ -1671,6 +1671,17 @@ void StyleBuilderConverter::CountSystemColorComputeToSelfUsage(
   }
 }
 
+AtomicString StyleBuilderConverter::ConvertPageTransitionTag(
+    StyleResolverState& state,
+    const CSSValue& value) {
+  if (auto* custom_ident_value = DynamicTo<CSSCustomIdentValue>(value))
+    return AtomicString(custom_ident_value->Value());
+  DCHECK(DynamicTo<CSSIdentifierValue>(value));
+  DCHECK_EQ(DynamicTo<CSSIdentifierValue>(value)->GetValueID(),
+            CSSValueID::kNone);
+  return AtomicString();
+}
+
 StyleColor StyleBuilderConverter::ConvertStyleColor(StyleResolverState& state,
                                                     const CSSValue& value,
                                                     bool for_visited_link) {
@@ -2012,6 +2023,13 @@ scoped_refptr<BasicShape> StyleBuilderConverter::ConvertOffsetPath(
   return ConvertPathOrNone(state, value);
 }
 
+scoped_refptr<BasicShape> StyleBuilderConverter::ConvertObjectViewBox(
+    StyleResolverState& state,
+    const CSSValue& value) {
+  return value.IsBasicShapeInsetValue() ? BasicShapeForValue(state, value)
+                                        : nullptr;
+}
+
 static const CSSValue& ComputeRegisteredPropertyValue(
     const Document& document,
     const StyleResolverState* state,
@@ -2268,6 +2286,7 @@ ScrollbarGutter StyleBuilderConverter::ConvertScrollbarGutter(
 Vector<AtomicString> StyleBuilderConverter::ConvertContainerName(
     StyleResolverState& state,
     const CSSValue& value) {
+  HashSet<AtomicString> seen;
   Vector<AtomicString> names;
 
   if (auto* ident = DynamicTo<CSSIdentifierValue>(value)) {
@@ -2275,8 +2294,12 @@ Vector<AtomicString> StyleBuilderConverter::ConvertContainerName(
     return names;
   }
 
-  for (const auto& item : To<CSSValueList>(value))
-    names.push_back(To<CSSCustomIdentValue>(item.Get())->Value());
+  for (const auto& item : To<CSSValueList>(value)) {
+    const AtomicString& value = To<CSSCustomIdentValue>(item.Get())->Value();
+    if (!seen.insert(value).is_new_entry)
+      continue;
+    names.push_back(value);
+  }
 
   return names;
 }
@@ -2315,4 +2338,41 @@ StyleBuilderConverter::ConvertIntrinsicDimension(
 
   return StyleIntrinsicLength(has_auto, ConvertLength(state, *primitive_value));
 }
+
+ColorSchemeFlags StyleBuilderConverter::ExtractColorSchemes(
+    const Document& document,
+    const CSSValueList& scheme_list,
+    Vector<AtomicString>* color_schemes) {
+  ColorSchemeFlags flags =
+      static_cast<ColorSchemeFlags>(ColorSchemeFlag::kNormal);
+  for (auto& item : scheme_list) {
+    if (const auto* custom_ident = DynamicTo<CSSCustomIdentValue>(*item)) {
+      if (color_schemes)
+        color_schemes->push_back(custom_ident->Value());
+    } else if (const auto* ident = DynamicTo<CSSIdentifierValue>(*item)) {
+      if (color_schemes)
+        color_schemes->push_back(ident->CssText());
+      switch (ident->GetValueID()) {
+        case CSSValueID::kDark:
+          flags |= static_cast<ColorSchemeFlags>(ColorSchemeFlag::kDark);
+          break;
+        case CSSValueID::kLight:
+          flags |= static_cast<ColorSchemeFlags>(ColorSchemeFlag::kLight);
+          break;
+        case CSSValueID::kOnly:
+          if (RuntimeEnabledFeatures::CSSColorSchemeOnlyEnabled(
+                  document.GetExecutionContext())) {
+            flags |= static_cast<ColorSchemeFlags>(ColorSchemeFlag::kOnly);
+          }
+          break;
+        default:
+          break;
+      }
+    } else {
+      NOTREACHED();
+    }
+  }
+  return flags;
+}
+
 }  // namespace blink

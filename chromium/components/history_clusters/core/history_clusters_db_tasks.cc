@@ -7,11 +7,14 @@
 #include <algorithm>
 
 #include "base/containers/contains.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/ranges/algorithm.h"
 #include "base/time/time.h"
+#include "base/timer/elapsed_timer.h"
 #include "components/history/core/browser/history_backend.h"
 #include "components/history/core/browser/history_database.h"
 #include "components/history/core/browser/history_types.h"
+#include "components/history_clusters/core/config.h"
 #include "components/history_clusters/core/features.h"
 
 namespace history_clusters {
@@ -54,6 +57,8 @@ GetAnnotatedVisitsToCluster::~GetAnnotatedVisitsToCluster() = default;
 bool GetAnnotatedVisitsToCluster::RunOnDBThread(
     history::HistoryBackend* backend,
     history::HistoryDatabase* db) {
+  base::ElapsedThreadTimer query_visits_timer;
+
   history::QueryOptions options;
 
   // History Clusters wants a complete navigation graph and internally handles
@@ -61,16 +66,14 @@ bool GetAnnotatedVisitsToCluster::RunOnDBThread(
   options.duplicate_policy = history::QueryOptions::KEEP_ALL_DUPLICATES;
 
   // Accumulate 1 day at a time of visits to avoid breaking up clusters.
-  // We stop once we meet `visit_soft_cap_`. Also hard cap at
-  // `options.max_count` which is enforced at the database level to avoid any
-  // one day blasting past the hard cap, causing OOM errors.
-  bool limited_by_max_count = false;
-  while (!exhausted_history_ && !limited_by_max_count &&
-         annotated_visits_.size() < visit_soft_cap_) {
+  // We hard cap at `options.max_count` which is enforced at the database level
+  // to avoid any one day blasting past the hard cap, causing OOM errors.
+  while (annotated_visits_.empty() && !exhausted_history_) {
     // Provide a parameter-controlled hard-cap of the max visits to fetch.
     // Note in most cases we stop fetching visits far before reaching this
     // number. This is to prevent OOM errors. See https://crbug.com/1262016.
-    options.max_count = kMaxVisitsToCluster.Get() - annotated_visits_.size();
+    options.max_count =
+        GetConfig().max_visits_to_cluster - annotated_visits_.size();
 
     // Bound visits by `original_end_time_` and `begin_time_limit_`, fetching
     // the more recent visits 1st.
@@ -78,14 +81,17 @@ bool GetAnnotatedVisitsToCluster::RunOnDBThread(
     options.begin_time = std::max(begin_time_limit_,
                                   GetBeginTimeOnDayBoundary(options.end_time));
 
-    auto newly_fetched_annotated_visits =
-        backend->GetAnnotatedVisits(options, &limited_by_max_count);
+    // Tack on all the newly fetched visits onto our accumulator vector.
+    bool limited_by_max_count = AddUnclusteredVisits(backend, options);
 
-    // If we didn't get enough visits, ask for another day's worth from
-    // History and call this method again when done.
-    if (limited_by_max_count && !newly_fetched_annotated_visits.empty()) {
-      continuation_end_time_ =
-          newly_fetched_annotated_visits.back().visit_row.visit_time;
+    // If we didn't get enough visits, ask for another day's worth from History
+    // and call this method again when done.
+    // If `limited_by_max_count` is true, `annotated_visits_` "shouldn't" be
+    // empty. But it actually can be if a visit's URL is missing from the URL
+    // table. `limited_by_max_count` is set before visits are filtered to
+    // those whose URL is found.
+    if (limited_by_max_count && !annotated_visits_.empty()) {
+      continuation_end_time_ = annotated_visits_.back().visit_row.visit_time;
     } else {
       continuation_end_time_ = options.begin_time;
     }
@@ -98,12 +104,31 @@ bool GetAnnotatedVisitsToCluster::RunOnDBThread(
     // or `original_end_time_` can be older than now.
     exhausted_history_ =
         !limited_by_max_count && continuation_end_time_ <= begin_time_limit_;
-
-    // Tack on all the newly fetched visits onto our accumulator vector.
-    base::ranges::move(newly_fetched_annotated_visits,
-                       std::back_inserter(annotated_visits_));
   }
 
+  AddIncompleteVisits(backend);
+
+  RemoveVisitsFromSync();
+
+  base::UmaHistogramTimes(
+      "History.Clusters.Backend.QueryAnnotatedVisits.ThreadTime",
+      query_visits_timer.Elapsed());
+
+  return true;
+}
+
+bool GetAnnotatedVisitsToCluster::AddUnclusteredVisits(
+    history::HistoryBackend* backend,
+    history::QueryOptions options) {
+  bool limited_by_max_count = false;
+  base::ranges::move(
+      backend->GetAnnotatedVisits(options, &limited_by_max_count),
+      std::back_inserter(annotated_visits_));
+  return limited_by_max_count;
+}
+
+void GetAnnotatedVisitsToCluster::AddIncompleteVisits(
+    history::HistoryBackend* backend) {
   // Now we have enough visits for clustering, add all incomplete visits
   // between the current `options.begin_time` and `original_end_time`, as
   // otherwise they will be mysteriously missing from the Clusters UI. They
@@ -136,8 +161,8 @@ bool GetAnnotatedVisitsToCluster::RunOnDBThread(
     }
 
     // Discard any incomplete visits that were already fetched from History.
-    // This can happen when History finishes writing the rows after we
-    // snapshot the incomplete visits at the beginning of this task.
+    // This can happen when History finishes writing the rows after we snapshot
+    // the incomplete visits at the beginning of this task.
     // https://crbug.com/1252047.
     history::VisitID visit_id =
         incomplete_visit_context_annotations.visit_row.visit_id;
@@ -173,7 +198,9 @@ bool GetAnnotatedVisitsToCluster::RunOnDBThread(
          first_redirect.opener_visit,
          visit_source});
   }
+}
 
+void GetAnnotatedVisitsToCluster::RemoveVisitsFromSync() {
   // Filter out visits from sync.
   // TODO(manukh): Consider allowing the clustering backend to handle sync
   //  visits.
@@ -184,8 +211,6 @@ bool GetAnnotatedVisitsToCluster::RunOnDBThread(
                                        history::SOURCE_SYNCED;
                               }),
       annotated_visits_.end());
-
-  return true;
 }
 
 void GetAnnotatedVisitsToCluster::DoneRunOnMainThread() {

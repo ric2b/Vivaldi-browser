@@ -6,12 +6,14 @@
 // This file is an original work developed by Opera Software ASA
 
 #include "platform_media/renderer/pipeline/protocol_sniffer.h"
-#include "platform_media/renderer/decoders/ipc_demuxer.h"
 
 #include "base/bind.h"
 #include "base/logging.h"
+#include "build/build_config.h"
 #include "media/base/container_names.h"
 #include "media/base/data_source.h"
+
+#include "platform_media/renderer/decoders/ipc_demuxer.h"
 
 namespace media {
 
@@ -146,7 +148,7 @@ void SniffReadDone(std::unique_ptr<uint8_t[]> data,
 // static
 bool ProtocolSniffer::ShouldSniffProtocol(const std::string& content_type) {
   bool should_sniff = !IPCDemuxer::CanPlayType(content_type);
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   // NOTE(jarle@vivalid.com): We cannot trust this mime type. Use the sniffer
   // to determine the content type, so the correct decoder can be selected.
   // Ref. VB-40530, VB-43812.

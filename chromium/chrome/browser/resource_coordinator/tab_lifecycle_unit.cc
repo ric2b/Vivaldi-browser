@@ -509,7 +509,7 @@ void TabLifecycleUnitSource::TabLifecycleUnit::FinishDiscard(
   bool fast_shutdown_success =
       GetRenderProcessHost()->FastShutdownIfPossible(1u, false);
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   if (!fast_shutdown_success &&
       discard_reason == LifecycleUnitDiscardReason::URGENT) {
     content::RenderFrameHost* main_frame = old_contents->GetMainFrame();
@@ -545,7 +545,7 @@ void TabLifecycleUnitSource::TabLifecycleUnit::FinishDiscard(
 
   if (vivaldi::IsVivaldiRunning()) {
     // Vivaldi stores vital tab info in extdata.
-    raw_null_contents->SetExtData(old_contents->GetExtData());
+    raw_null_contents->SetVivExtData(old_contents->GetVivExtData());
 
     // In Vivaldi the frametree structure will break down if we release the
     // webcontents here the frametree is not updated as the proxies are gone

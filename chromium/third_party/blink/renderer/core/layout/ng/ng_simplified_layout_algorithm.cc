@@ -67,17 +67,13 @@ NGSimplifiedLayoutAlgorithm::NGSimplifiedLayoutAlgorithm(
     if (result.LinesUntilClamp())
       container_builder_.SetLinesUntilClamp(result.LinesUntilClamp());
 
-    NGExclusionSpace exclusion_space = result.ExclusionSpace();
-    container_builder_.SetExclusionSpace(std::move(exclusion_space));
+    container_builder_.SetExclusionSpace(result.ExclusionSpace());
 
     if (result.IsSelfCollapsing())
       container_builder_.SetIsSelfCollapsing();
     if (result.IsPushedByFloats())
       container_builder_.SetIsPushedByFloats();
     container_builder_.SetAdjoiningObjectTypes(result.AdjoiningObjectTypes());
-
-    if (physical_fragment.LastBaseline())
-      container_builder_.SetLastBaseline(*physical_fragment.LastBaseline());
 
     if (ConstraintSpace().IsTableCell()) {
       container_builder_.SetHasCollapsedBorders(
@@ -107,8 +103,6 @@ NGSimplifiedLayoutAlgorithm::NGSimplifiedLayoutAlgorithm(
     DCHECK(!result.IsSelfCollapsing());
     DCHECK(!result.IsPushedByFloats());
     DCHECK_EQ(result.AdjoiningObjectTypes(), kAdjoiningNone);
-
-    DCHECK(!physical_fragment.LastBaseline());
 
     if (physical_fragment.IsFieldsetContainer())
       container_builder_.SetIsFieldsetContainer();
@@ -150,8 +144,10 @@ NGSimplifiedLayoutAlgorithm::NGSimplifiedLayoutAlgorithm(
   if (physical_fragment.IsHiddenForPaint())
     container_builder_.SetIsHiddenForPaint(true);
 
-  if (physical_fragment.Baseline())
-    container_builder_.SetBaseline(*physical_fragment.Baseline());
+  if (auto baseline = physical_fragment.Baseline())
+    container_builder_.SetBaseline(*baseline);
+  if (auto last_baseline = physical_fragment.LastBaseline())
+    container_builder_.SetLastBaseline(*last_baseline);
   if (physical_fragment.IsTableNGPart())
     container_builder_.SetIsTableNGPart();
 
@@ -162,15 +158,17 @@ NGSimplifiedLayoutAlgorithm::NGSimplifiedLayoutAlgorithm(
   } else {
     container_builder_.SetIntrinsicBlockSize(result.IntrinsicBlockSize());
 
-    LayoutUnit new_block_size = ComputeBlockSizeForFragment(
-        ConstraintSpace(), Style(), BorderPadding(),
-        result.IntrinsicBlockSize(),
-        container_builder_.InitialBorderBoxSize().inline_size);
+    auto ComputeNewBlockSize = [&]() -> LayoutUnit {
+      return ComputeBlockSizeForFragment(
+          ConstraintSpace(), Style(), BorderPadding(),
+          result.IntrinsicBlockSize(),
+          container_builder_.InitialBorderBoxSize().inline_size);
+    };
 
     // Only block-flow is allowed to change its block-size during "simplified"
     // layout, all other layout types must remain the same size.
     if (is_block_flow) {
-      container_builder_.SetFragmentBlockSize(new_block_size);
+      container_builder_.SetFragmentBlockSize(ComputeNewBlockSize());
     } else {
       LayoutUnit old_block_size =
           NGFragment(writing_direction_, physical_fragment).BlockSize();
@@ -179,7 +177,7 @@ NGSimplifiedLayoutAlgorithm::NGSimplifiedLayoutAlgorithm(
       if (!physical_fragment.IsTableNG() &&
           !physical_fragment.IsTableNGSection() &&
           !physical_fragment.IsTableNGRow())
-        DCHECK_EQ(old_block_size, new_block_size);
+        DCHECK_EQ(old_block_size, ComputeNewBlockSize());
 #endif
       container_builder_.SetFragmentBlockSize(old_block_size);
     }
@@ -291,6 +289,9 @@ const NGLayoutResult* NGSimplifiedLayoutAlgorithm::Layout() {
       previous_fragment.MayHaveDescendantAboveBlockStart());
   container_builder_.SetHasDescendantThatDependsOnPercentageBlockSize(
       previous_result_.HasDescendantThatDependsOnPercentageBlockSize());
+  container_builder_.SetInitialBreakBefore(
+      previous_result_.InitialBreakBefore());
+  container_builder_.SetPreviousBreakAfter(previous_result_.FinalBreakAfter());
 
   NGOutOfFlowLayoutPart(Node(), ConstraintSpace(), &container_builder_).Run();
 

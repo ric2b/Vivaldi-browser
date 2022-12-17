@@ -5,6 +5,7 @@
 #include "ash/webui/personalization_app/personalization_app_ui.h"
 
 #include "ash/constants/ash_features.h"
+#include "ash/public/cpp/ambient/ambient_client.h"
 #include "ash/webui/grit/ash_personalization_app_resources.h"
 #include "ash/webui/grit/ash_personalization_app_resources_map.h"
 #include "ash/webui/personalization_app/personalization_app_ambient_provider.h"
@@ -13,34 +14,36 @@
 #include "ash/webui/personalization_app/personalization_app_user_provider.h"
 #include "ash/webui/personalization_app/personalization_app_wallpaper_provider.h"
 #include "base/strings/strcat.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/common/url_constants.h"
 #include "services/network/public/mojom/content_security_policy.mojom-shared.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/resources/grit/webui_generated_resources.h"
 #include "ui/webui/mojo_web_ui_controller.h"
 
 namespace ash {
+namespace personalization_app {
 
 namespace {
 
-bool ShouldIncludeResource(const webui::ResourcePath& resource) {
-  return base::StartsWith(resource.path, "trusted") ||
-         base::StartsWith(resource.path, "common") ||
-         resource.id == IDR_ASH_PERSONALIZATION_APP_ICON_192_PNG;
+inline constexpr char kGooglePhotosURL[] = "https://photos.google.com";
+
+GURL GetGooglePhotosURL() {
+  return GURL(kGooglePhotosURL);
+}
+
+bool IsAmbientModeAllowed() {
+  return ash::AmbientClient::Get() &&
+         ash::AmbientClient::Get()->IsAmbientModeAllowed();
 }
 
 void AddResources(content::WebUIDataSource* source) {
   source->AddResourcePath("", IDR_ASH_PERSONALIZATION_APP_TRUSTED_INDEX_HTML);
-
-  const auto resources = base::make_span(kAshPersonalizationAppResources,
-                                         kAshPersonalizationAppResourcesSize);
-
-  for (const auto& resource : resources) {
-    if (ShouldIncludeResource(resource))
-      source->AddResourcePath(resource.path, resource.id);
-  }
+  source->AddResourcePaths(base::make_span(
+      kAshPersonalizationAppResources, kAshPersonalizationAppResourcesSize));
   source->AddResourcePath("test_loader.html", IDR_WEBUI_HTML_TEST_LOADER_HTML);
   source->AddResourcePath("test_loader.js", IDR_WEBUI_JS_TEST_LOADER_JS);
   source->AddResourcePath("test_loader_util.js",
@@ -83,17 +86,42 @@ void AddStrings(content::WebUIDataSource* source) {
       {"ariaLabelExitFullscreen",
        IDS_PERSONALIZATION_APP_ARIA_LABEL_EXIT_FULL_SCREEN},
       {"setAsWallpaper", IDS_PERSONALIZATION_APP_SET_AS_WALLPAPER},
+      {"zeroImages", IDS_PERSONALIZATION_APP_NO_IMAGES},
+      {"oneImage", IDS_PERSONALIZATION_APP_ONE_IMAGE},
+      {"multipleImages", IDS_PERSONALIZATION_APP_MULTIPLE_IMAGES},
+      {"managedSetting", IDS_PERSONALIZATION_APP_MANAGED_SETTING},
+      {"ariaLabelChangeWallpaper",
+       IDS_PERSONALIZATION_APP_ARIA_LABEL_CHANGE_WALLPAPER},
+      {"ariaLabelHome", IDS_PERSONALIZATION_APP_ARIA_LABEL_HOME},
+
+      // Theme related strings.
       {"themeLabel", IDS_PERSONALIZATION_APP_THEME_LABEL},
       {"darkColorMode", IDS_PERSONALIZATION_APP_THEME_DARK_COLOR_MODE},
       {"lightColorMode", IDS_PERSONALIZATION_APP_THEME_LIGHT_COLOR_MODE},
       {"autoColorMode", IDS_PERSONALIZATION_APP_THEME_AUTO_COLOR_MODE},
-      {"zeroImages", IDS_PERSONALIZATION_APP_NO_IMAGES},
-      {"oneImage", IDS_PERSONALIZATION_APP_ONE_IMAGE},
-      {"multipleImages", IDS_PERSONALIZATION_APP_MULTIPLE_IMAGES},
+      {"ariaLabelEnableDarkColorMode",
+       IDS_PERSONALIZATION_APP_ARIA_LABEL_ENABLE_DARK_COLOR_MODE},
+      {"ariaLabelEnableLightColorMode",
+       IDS_PERSONALIZATION_APP_ARIA_LABEL_ENABLE_LIGHT_COLOR_MODE},
+      {"ariaLabelEnableAutoColorMode",
+       IDS_PERSONALIZATION_APP_ARIA_LABEL_ENABLE_AUTO_COLOR_MODE},
 
       // User/avatar related strings.
       {"avatarLabel", IDS_PERSONALIZATION_APP_AVATAR_LABEL},
       {"takeWebcamPhoto", IDS_PERSONALIZATION_APP_AVATAR_TAKE_PHOTO},
+      {"takeWebcamVideo", IDS_PERSONALIZATION_APP_AVATAR_TAKE_VIDEO},
+      {"confirmWebcamPhoto", IDS_PERSONALIZATION_APP_AVATAR_CONFIRM_PHOTO},
+      {"confirmWebcamVideo", IDS_PERSONALIZATION_APP_AVATAR_CONFIRM_VIDEO},
+      {"rejectWebcamPhoto", IDS_PERSONALIZATION_APP_AVATAR_REJECT_PHOTO},
+      {"ariaLabelChangeAvatar",
+       IDS_PERSONALIZATION_APP_ARIA_LABEL_CHANGE_AVATAR},
+      {"ariaLabelGoToAccountSettings",
+       IDS_PERSONALIZATION_APP_ARIA_LABEL_GO_TO_ACCOUNT_SETTINGS},
+      {"googleProfilePhoto",
+       IDS_PERSONALIZATION_APP_AVATAR_GOOGLE_PROFILE_PHOTO},
+      {"chooseAFile", IDS_PERSONALIZATION_APP_AVATAR_CHOOSE_A_FILE},
+      {"lastExternalImageTitle",
+       IDS_PERSONALIZATION_APP_AVATAR_LAST_EXTERNAL_IMAGE},
 
       // Ambient mode related string.
       {"screensaverLabel", IDS_PERSONALIZATION_APP_SCREENSAVER_LABEL},
@@ -123,6 +151,38 @@ void AddStrings(content::WebUIDataSource* source) {
        IDS_PERSONALIZATION_APP_AMBIENT_MODE_WEATHER_UNIT_FAHRENHEIT},
       {"ambientModeWeatherUnitCelsius",
        IDS_PERSONALIZATION_APP_AMBIENT_MODE_WEATHER_UNIT_CELSIUS},
+      {"ambientModeAlbumsSubpageRecentHighlightsDesc",
+       IDS_PERSONALIZATION_APP_AMBIENT_MODE_ALBUMS_SUBPAGE_RECENT_DESC},
+      {"ambientModeAlbumsSubpagePhotosNumPluralDesc",
+       IDS_PERSONALIZATION_APP_AMBIENT_MODE_ALBUMS_SUBPAGE_PHOTOS_NUM_PLURAL},
+      {"ambientModeAlbumsSubpagePhotosNumSingularDesc",
+       IDS_PERSONALIZATION_APP_AMBIENT_MODE_ALBUMS_SUBPAGE_PHOTOS_NUM_SINGULAR},
+      {"ambientModeAlbumsSubpageAlbumSelected",
+       IDS_PERSONALIZATION_APP_AMBIENT_MODE_ALBUMS_SUBPAGE_ALBUM_SELECTED},
+      {"ambientModeAlbumsSubpageAlbumUnselected",
+       IDS_PERSONALIZATION_APP_AMBIENT_MODE_ALBUMS_SUBPAGE_ALBUM_UNSELECTED},
+      {"ambientModeLastArtAlbumMessage",
+       IDS_PERONSONALIZATION_APP_AMBIENT_MODE_LAST_ART_ALBUM_MESSAGE},
+      {"ambientModeArtAlbumDialogCloseButtonLabel",
+       IDS_PERONSONALIZATION_APP_AMBIENT_MODE_ART_ALBUM_DIALOG_CLOSE_BUTTON_LABEL},
+      {"ambientModeAnimationTitle",
+       IDS_PERSONALIZATION_APP_AMBIENT_MODE_ANIMATION_TITLE},
+      {"ambientModeAnimationSlideshowLabel",
+       IDS_PERSONALIZATION_APP_AMBIENT_MODE_ANIMATION_SLIDESHOW_LABEL},
+      {"ambientModeAnimationFeelTheBreezeLabel",
+       IDS_PERSONALIZATION_APP_AMBIENT_MODE_ANIMATION_FEEL_THE_BREEZE_LABEL},
+      {"ambientModeAnimationFloatOnByLabel",
+       IDS_PERSONALIZATION_APP_AMBIENT_MODE_ANIMATION_FLOAT_ON_BY_LABEL},
+      {"ambientModeZeroStateMessage",
+       IDS_PERSONALIZATION_APP_AMBIENT_MODE_ZERO_STATE_MESSAGE},
+      {"ambientModeMultipleAlbumsDesc",
+       IDS_PERSONALIZATION_APP_AMBIENT_MODE_MULTIPLE_ALBUMS_DESC},
+      {"ambientModeMainPageZeroStateMessage",
+       IDS_PERSONALIZATION_APP_AMBIENT_MODE_MAIN_PAGE_ZERO_STATE_MESSAGE},
+      {"ambientModeTurnOnLabel",
+       IDS_PERSONALIZATION_APP_AMBIENT_MODE_TURN_ON_LABEL},
+      {"ariaLabelChangeScreensaver",
+       IDS_PERSONALIZATION_APP_ARIA_LABEL_CHANGE_SCREENSAVER},
 
       // Google Photos strings
       {"googlePhotosLabel", IDS_PERSONALIZATION_APP_GOOGLE_PHOTOS},
@@ -134,6 +194,18 @@ void AddStrings(content::WebUIDataSource* source) {
        IDS_PERSONALIZATION_APP_GOOGLE_PHOTOS_ZERO_STATE_MESSAGE}};
 
   source->AddLocalizedStrings(kLocalizedStrings);
+
+  source->AddString(
+      "ambientModeAlbumsSubpageGooglePhotosTitle",
+      l10n_util::GetStringFUTF16(
+          IDS_PERSONALIZATION_APP_AMBIENT_MODE_ALBUMS_SUBPAGE_GOOGLE_PHOTOS_TITLE,
+          base::UTF8ToUTF16(GetGooglePhotosURL().spec())));
+  source->AddString(
+      "ambientModeAlbumsSubpageGooglePhotosNoAlbum",
+      l10n_util::GetStringFUTF16(
+          IDS_PERSONALIZATION_APP_AMBIENT_MODE_ALBUMS_SUBPAGE_GOOGLE_PHOTOS_NO_ALBUM,
+          base::UTF8ToUTF16(GetGooglePhotosURL().spec())));
+
   source->UseStringsJs();
   source->EnableReplaceI18nInJS();
 }
@@ -150,6 +222,8 @@ void AddBooleans(content::WebUIDataSource* source) {
 
   source->AddBoolean("isDarkLightModeEnabled",
                      features::IsDarkLightModeEnabled());
+
+  source->AddBoolean("isAmbientModeAllowed", IsAmbientModeAllowed());
 }
 
 }  // namespace
@@ -167,30 +241,21 @@ PersonalizationAppUI::PersonalizationAppUI(
       wallpaper_provider_(std::move(wallpaper_provider)) {
   DCHECK(wallpaper_provider_);
 
-  std::unique_ptr<content::WebUIDataSource> source = base::WrapUnique(
-      content::WebUIDataSource::Create(kChromeUIPersonalizationAppHost));
+  content::WebUIDataSource* source = content::WebUIDataSource::CreateAndAdd(
+      web_ui->GetWebContents()->GetBrowserContext(),
+      kChromeUIPersonalizationAppHost);
 
   source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::ScriptSrc,
       "script-src chrome://resources chrome://test chrome://webui-test "
       "'self';");
 
-  // Allow requesting a chrome-untrusted://personalization/ iframe.
-  web_ui->AddRequestableScheme(content::kChromeUIUntrustedScheme);
-  source->OverrideContentSecurityPolicy(
-      network::mojom::CSPDirectiveName::FrameSrc,
-      base::StrCat(
-          {"frame-src ", kChromeUIUntrustedPersonalizationAppURL, ";"}));
-
   // TODO(crbug.com/1098690): Trusted Type Polymer
   source->DisableTrustedTypesCSP();
 
-  AddResources(source.get());
-  AddStrings(source.get());
-  AddBooleans(source.get());
-
-  auto* browser_context = web_ui->GetWebContents()->GetBrowserContext();
-  content::WebUIDataSource::Add(browser_context, source.release());
+  AddResources(source);
+  AddStrings(source);
+  AddBooleans(source);
 }
 
 PersonalizationAppUI::~PersonalizationAppUI() = default;
@@ -219,4 +284,5 @@ void PersonalizationAppUI::BindInterface(
 
 WEB_UI_CONTROLLER_TYPE_IMPL(PersonalizationAppUI)
 
+}  // namespace personalization_app
 }  // namespace ash

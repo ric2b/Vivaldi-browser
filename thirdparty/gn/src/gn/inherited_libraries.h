@@ -7,9 +7,10 @@
 
 #include <stddef.h>
 
-#include <map>
 #include <utility>
 #include <vector>
+
+#include "gn/unique_vector.h"
 
 class Target;
 
@@ -30,7 +31,7 @@ class InheritedLibraries {
 
   // Returns the list of dependencies in order, optionally with the flag
   // indicating whether the dependency is public.
-  std::vector<const Target*> GetOrdered() const;
+  std::vector<const Target*> GetOrdered() const { return targets_.vector(); }
   std::vector<std::pair<const Target*, bool>> GetOrderedAndPublicFlag() const;
 
   // Adds a single dependency to the end of the list. See note on adding above.
@@ -52,16 +53,8 @@ class InheritedLibraries {
                                    bool is_public);
 
  private:
-  struct Node {
-    Node() : index(static_cast<size_t>(-1)), is_public(false) {}
-    Node(size_t i, bool p) : index(i), is_public(p) {}
-
-    size_t index;
-    bool is_public;
-  };
-
-  using LibraryMap = std::map<const Target*, Node>;
-  LibraryMap map_;
+  UniqueVector<const Target*> targets_;
+  std::vector<bool> public_flags_;
 
   InheritedLibraries(const InheritedLibraries&) = delete;
   InheritedLibraries& operator=(const InheritedLibraries&) = delete;

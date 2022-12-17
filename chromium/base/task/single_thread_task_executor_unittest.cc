@@ -24,7 +24,6 @@
 #include "base/run_loop.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/current_thread.h"
-#include "base/task/post_task.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/task_observer.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
@@ -538,10 +537,6 @@ class SingleThreadTaskExecutorTypedTest
       case MessagePumpType::NS_RUNLOOP:
         break;
 #endif  // BUILDFLAG(IS_APPLE)
-#if BUILDFLAG(IS_WIN)
-      case MessagePumpType::UI_WITH_WM_QUIT_SUPPORT:
-        break;
-#endif  // BUILDFLAG(IS_WIN)
     }
     NOTREACHED();
     return "";

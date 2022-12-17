@@ -194,6 +194,17 @@ void TabLifecycleUnitSource::UpdateFocusedTab() {
       focused_web_contents ? GetTabLifecycleUnit(focused_web_contents)
                            : nullptr;
 
+  //  Note(andre@vivaldi.com): Vivaldi need to do this client-side after the
+  //  guestview containing the tab is initialized. VB-87945 et al.
+  Browser* const focused_browser =
+      focused_web_contents
+          ? chrome::FindBrowserWithWebContents(focused_web_contents)
+          : nullptr;
+  if (focused_browser && focused_browser->is_vivaldi() &&
+      focused_browser->is_session_restore()) {
+    return;
+  }
+
   // TODO(sangwoo.ko) We are refactoring TabStripModel API and this is
   // workaround to avoid DCHECK failure on Chromium os. This DCHECK is supposing
   // that OnTabInserted() is always called before OnBrowserSetLastActive is

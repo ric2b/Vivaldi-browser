@@ -162,9 +162,9 @@ bool ChromePageInfoUiDelegate::IsMultipleTabsOpen() {
   return count > 1;
 }
 
-void ChromePageInfoUiDelegate::ShowPrivacySandboxSettings() {
+void ChromePageInfoUiDelegate::ShowPrivacySandboxAdPersonalization() {
   Browser* browser = chrome::FindBrowserWithWebContents(web_contents_);
-  chrome::ShowPrivacySandboxSettings(browser);
+  chrome::ShowPrivacySandboxAdPersonalization(browser);
 }
 
 std::u16string ChromePageInfoUiDelegate::GetPermissionDetail(
@@ -186,7 +186,7 @@ bool ChromePageInfoUiDelegate::IsBlockAutoPlayEnabled() {
 permissions::PermissionResult ChromePageInfoUiDelegate::GetPermissionStatus(
     ContentSettingsType type) {
   return PermissionManagerFactory::GetForProfile(GetProfile())
-      ->GetPermissionStatus(type, site_url_, site_url_);
+      ->GetPermissionStatusForDisplayOnSettingsUI(type, site_url_);
 }
 
 Profile* ChromePageInfoUiDelegate::GetProfile() const {

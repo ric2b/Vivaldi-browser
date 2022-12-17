@@ -14,6 +14,7 @@
 #include "base/containers/contains.h"
 #include "base/containers/cxx20_erase.h"
 #include "base/feature_list.h"
+#include "base/observer_list.h"
 #include "base/strings/string_util.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
@@ -21,12 +22,15 @@
 #include "chrome/browser/web_applications/app_registrar_observer.h"
 #include "chrome/browser/web_applications/externally_installed_web_app_prefs.h"
 #include "chrome/browser/web_applications/policy/web_app_policy_manager.h"
+#include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_prefs_utils.h"
+#include "chrome/browser/web_applications/web_app_translation_manager.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
 #include "chrome/common/chrome_features.h"
 #include "content/public/common/content_features.h"
+#include "third_party/blink/public/common/features.h"
 
 namespace web_app {
 
@@ -45,6 +49,26 @@ bool WebAppExposed(const WebApp& web_app) {
   return true;
 }
 
+UserDisplayMode CreateUserDisplayModeFromDisplayMode(
+    blink::mojom::DisplayMode display_mode) {
+  using DisplayMode = blink::mojom::DisplayMode;
+  switch (display_mode) {
+    case DisplayMode::kBrowser:
+      return UserDisplayMode::kBrowser;
+    case DisplayMode::kTabbed:
+      return UserDisplayMode::kTabbed;
+    case DisplayMode::kStandalone:
+      return UserDisplayMode::kStandalone;
+
+    case DisplayMode::kFullscreen:
+    case DisplayMode::kWindowControlsOverlay:
+    case DisplayMode::kMinimalUi:
+    case DisplayMode::kUndefined:
+      NOTREACHED();
+      return UserDisplayMode::kBrowser;
+  }
+}
+
 }  // namespace
 
 WebAppRegistrar::WebAppRegistrar(Profile* profile) : profile_(profile) {}
@@ -59,11 +83,11 @@ bool WebAppRegistrar::IsLocallyInstalled(const GURL& start_url) const {
       GenerateAppId(/*manifest_id=*/absl::nullopt, start_url));
 }
 
-std::vector<PermissionsPolicyDeclaration> WebAppRegistrar::GetPermissionsPolicy(
+blink::ParsedPermissionsPolicy WebAppRegistrar::GetPermissionsPolicy(
     const AppId& app_id) const {
   auto* web_app = GetAppById(app_id);
   return web_app ? web_app->permissions_policy()
-                 : std::vector<PermissionsPolicyDeclaration>();
+                 : blink::ParsedPermissionsPolicy();
 }
 
 bool WebAppRegistrar::IsPlaceholderApp(const AppId& app_id) const {
@@ -356,8 +380,10 @@ DisplayMode WebAppRegistrar::GetAppEffectiveDisplayMode(
 
   std::vector<DisplayMode> display_mode_overrides =
       GetAppDisplayModeOverride(app_id);
-  return ResolveEffectiveDisplayMode(app_display_mode, display_mode_overrides,
-                                     user_display_mode);
+  return ResolveEffectiveDisplayMode(
+      app_display_mode, display_mode_overrides,
+      CreateUserDisplayModeFromDisplayMode(user_display_mode),
+      IsIsolated(app_id));
 }
 
 DisplayMode WebAppRegistrar::GetEffectiveDisplayModeFromManifest(
@@ -433,8 +459,11 @@ void WebAppRegistrar::Shutdown() {
     g_browser_process->profile_manager()->RemoveObserver(this);
 }
 
-void WebAppRegistrar::SetSubsystems(WebAppPolicyManager* policy_manager) {
+void WebAppRegistrar::SetSubsystems(
+    WebAppPolicyManager* policy_manager,
+    WebAppTranslationManager* translation_manager) {
   policy_manager_ = policy_manager;
+  translation_manager_ = translation_manager;
 }
 
 bool WebAppRegistrar::IsInstalled(const AppId& app_id) const {
@@ -455,9 +484,14 @@ bool WebAppRegistrar::IsLocallyInstalled(const AppId& app_id) const {
              : false;
 }
 
+bool WebAppRegistrar::IsIsolated(const AppId& app_id) const {
+  auto* web_app = GetAppById(app_id);
+  return web_app ? web_app->IsStorageIsolated() : false;
+}
+
 bool WebAppRegistrar::WasInstalledByDefaultOnly(const AppId& app_id) const {
   const WebApp* web_app = GetAppById(app_id);
-  return web_app && web_app->HasOnlySource(Source::Type::kDefault);
+  return web_app && web_app->HasOnlySource(WebAppManagement::Type::kDefault);
 }
 
 bool WebAppRegistrar::WasInstalledByUser(const AppId& app_id) const {
@@ -478,7 +512,7 @@ bool WebAppRegistrar::WasInstalledBySubApp(const AppId& app_id) const {
 
 bool WebAppRegistrar::IsAllowedLaunchProtocol(
     const AppId& app_id,
-    std::string protocol_scheme) const {
+    const std::string& protocol_scheme) const {
   const WebApp* web_app = GetAppById(app_id);
   return web_app &&
          base::Contains(web_app->allowed_launch_protocols(), protocol_scheme);
@@ -486,7 +520,7 @@ bool WebAppRegistrar::IsAllowedLaunchProtocol(
 
 bool WebAppRegistrar::IsDisallowedLaunchProtocol(
     const AppId& app_id,
-    std::string protocol_scheme) const {
+    const std::string& protocol_scheme) const {
   const WebApp* web_app = GetAppById(app_id);
   return web_app && base::Contains(web_app->disallowed_launch_protocols(),
                                    protocol_scheme);
@@ -523,13 +557,29 @@ int WebAppRegistrar::CountUserInstalledApps() const {
 }
 
 std::string WebAppRegistrar::GetAppShortName(const AppId& app_id) const {
+  if (base::FeatureList::IsEnabled(
+          blink::features::kWebAppEnableTranslations)) {
+    std::string translated_name =
+        translation_manager_->GetTranslatedName(app_id);
+    if (!translated_name.empty()) {
+      return translated_name;
+    }
+  }
   auto* web_app = GetAppById(app_id);
-  return web_app ? web_app->name() : std::string();
+  return web_app ? web_app->untranslated_name() : std::string();
 }
 
 std::string WebAppRegistrar::GetAppDescription(const AppId& app_id) const {
+  if (base::FeatureList::IsEnabled(
+          blink::features::kWebAppEnableTranslations)) {
+    std::string translated_description =
+        translation_manager_->GetTranslatedDescription(app_id);
+    if (!translated_description.empty()) {
+      return translated_description;
+    }
+  }
   auto* web_app = GetAppById(app_id);
-  return web_app ? web_app->description() : std::string();
+  return web_app ? web_app->untranslated_description() : std::string();
 }
 
 absl::optional<SkColor> WebAppRegistrar::GetAppThemeColor(
@@ -579,13 +629,6 @@ const apps::ShareTarget* WebAppRegistrar::GetAppShareTarget(
   return (web_app && web_app->share_target().has_value())
              ? &web_app->share_target().value()
              : nullptr;
-}
-
-blink::mojom::CaptureLinks WebAppRegistrar::GetAppCaptureLinks(
-    const AppId& app_id) const {
-  auto* web_app = GetAppById(app_id);
-  return web_app ? web_app->capture_links()
-                 : blink::mojom::CaptureLinks::kUndefined;
 }
 
 blink::mojom::HandleLinks WebAppRegistrar::GetAppHandleLinks(
@@ -855,11 +898,11 @@ WebAppRegistrar::AppSet::const_iterator WebAppRegistrar::AppSet::end() const {
                         registrar_->registry_.end(), filter_);
 }
 
-const WebAppRegistrar::AppSet WebAppRegistrar::GetAppsIncludingStubs() const {
+WebAppRegistrar::AppSet WebAppRegistrar::GetAppsIncludingStubs() const {
   return AppSet(this, nullptr, /*empty=*/registry_profile_being_deleted_);
 }
 
-const WebAppRegistrar::AppSet WebAppRegistrar::GetApps() const {
+WebAppRegistrar::AppSet WebAppRegistrar::GetApps() const {
   return AppSet(
       this,
       [](const WebApp& web_app) {
@@ -874,7 +917,7 @@ void WebAppRegistrar::SetRegistry(Registry&& registry) {
   registry_ = std::move(registry);
 }
 
-const WebAppRegistrar::AppSet WebAppRegistrar::FilterApps(Filter filter) const {
+WebAppRegistrar::AppSet WebAppRegistrar::FilterApps(Filter filter) const {
   return AppSet(this, filter, /*empty=*/registry_profile_being_deleted_);
 }
 

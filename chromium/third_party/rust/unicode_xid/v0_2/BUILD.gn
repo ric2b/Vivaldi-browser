@@ -15,7 +15,11 @@ cargo_crate("lib") {
   crate_root = "crate/src/lib.rs"
 
   # Unit tests skipped. Generate with --with-tests to include them.
-  skip_unit_tests = true
+  build_native_rust_unit_tests = false
   sources = [ "crate/src/lib.rs" ]
   edition = "2015"
+  cargo_pkg_version = "0.2.2"
+  cargo_pkg_authors = "erick.tryzelaar <erick.tryzelaar@gmail.com>, kwantam <kwantam@gmail.com>, Manish Goregaokar <manishsmail@gmail.com>"
+  cargo_pkg_name = "unicode-xid"
+  cargo_pkg_description = "Determine whether characters have the XID_Startor XID_Continue properties according toUnicode Standard Annex #31."
 }

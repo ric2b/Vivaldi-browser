@@ -21,17 +21,21 @@
 <translation id="3377025655491224618">Scheda privata</translation>
 <translation id="3504699618187058974">Raggruppa le schede</translation>
 <translation id="3518985090088779359">Accetta e continua</translation>
+<translation id="3571177741182643350">Articoli non letti - Disponibili offline:</translation>
 <translation id="3700829948786686853">Benvenuto in Vivaldi</translation>
 <translation id="3719826155360621982">Pagina iniziale</translation>
 <translation id="385051799172605136">Indietro</translation>
+<translation id="399014816462153200">Leggi articoli:</translation>
 <translation id="4121750346708795461">Se utilizzi questa applicazione, accetti il <ph name="BEGIN_LINK1" />Contratto di licenza con l'utente finale<ph name="END_LINK1" /> e l'<ph name="BEGIN_LINK2" />Informativa sulla privacy<ph name="END_LINK2" /> di Vivaldi.</translation>
 <translation id="4137746084635924146">Lingua del dispositivo</translation>
+<translation id="4167670741834902166">Nuova scheda privata</translation>
 <translation id="4243710787042215766">Apri in scheda privata</translation>
 <translation id="4526803704855831732">Schede private</translation>
 <translation id="4759238208242260848">Trasferimenti</translation>
 <translation id="4883379392681899581">Esci dalla modalità privata</translation>
 <translation id="4943872375798546930">Nessun risultato</translation>
 <translation id="49576331685473090">Blocco dei contenuti</translation>
+<translation id="5079259810715830221">Quando un sito di Google chiede di precaricare privatamente i collegamenti sulla propria pagina, Vivaldi crittografa e precarica le pagine attraverso i server di Google senza cookie. Questo nasconde la tua identità dal sito precaricato.</translation>
 <translation id="5118676864324397542">Spazio di archiviazione di <ph name="APP_NAME" /></translation>
 <translation id="5186185447130319458">Privato</translation>
 <translation id="5233638681132016545">Nuova scheda</translation>
@@ -44,6 +48,7 @@ Per modificare il termine di ricerca, premere a lungo per selezionare. Per affin
 <translation id="6585139692466700358">Offre di tradurre le pagine in altre lingue usando il servizio di traduzione di Vivaldi</translation>
 <translation id="6593061639179217415">Sito desktop</translation>
 <translation id="6610147964972079463">Chiudi le schede private</translation>
+<translation id="7029995644714925509">Quando un sito chiede di precaricare privatamente i link sulla propria pagina, Vivaldi crittografa e precarica le pagine attraverso i server di Google senza cookie. Questo nasconde la tua identità dal sito precaricato.</translation>
 <translation id="706339621163631076">Informativa sulla privacy di Vivaldi</translation>
 <translation id="732145680195464316">Segnalibro salvato in <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Informazioni su Vivaldi</translation>

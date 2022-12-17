@@ -8,7 +8,6 @@
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/task/post_task.h"
 #include "components/optimization_guide/core/optimization_guide_model_provider.h"
 #include "components/optimization_guide/proto/models.pb.h"
 #include "content/public/browser/browser_thread.h"
@@ -129,6 +128,14 @@ void AnnotateDomModelService::NotifyOnModelFileAvailable(
     return;
   }
   std::move(callback).Run(false);
+}
+
+void AnnotateDomModelService::SetModelFileForTest(base::File model_file) {
+  annotate_dom_model_file_ = std::move(model_file);
+  for (auto& pending_request : pending_model_requests_) {
+    std::move(pending_request).Run(true);
+  }
+  pending_model_requests_.clear();
 }
 
 }  // namespace autofill_assistant

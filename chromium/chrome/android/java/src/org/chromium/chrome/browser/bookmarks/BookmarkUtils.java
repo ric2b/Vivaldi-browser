@@ -76,6 +76,7 @@ import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.document.TabDelegate;
 import org.chromium.content_public.browser.LoadUrlParams;
+import org.chromium.ui.widget.Toast;
 
 import org.vivaldi.browser.common.VivaldiBookmarkUtils;
 import org.vivaldi.browser.panels.PanelUtils;
@@ -284,6 +285,13 @@ public class BookmarkUtils {
 
             TrackerFactory.getTrackerForProfile(Profile.getLastUsedRegularProfile())
                     .notifyEvent(EventConstants.READ_LATER_ARTICLE_SAVED);
+        }
+        // Vivaldi - Display adding reading list result toast
+        if (ChromeApplicationImpl.isVivaldi() && context instanceof ChromeTabbedActivity) {
+            int message = bookmarkId == null
+                    ? R.string.add_page_to_reading_list_error
+                    : R.string.add_page_to_reading_list_confirm;
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show();
         }
         return bookmarkId;
     }

@@ -374,7 +374,7 @@ bool CoreAudioDemuxer::IsSupported(const std::string& content_type,
     if (!net::GetMimeTypeFromFile(file, &mime_type))
       return false;
   }
-  for (size_t i = 0; i < base::size(kSupportedMimeTypes); i++) {
+  for (size_t i = 0; i < std::size(kSupportedMimeTypes); i++) {
     if (!mime_type.compare(kSupportedMimeTypes[i]))
       return true;
   }

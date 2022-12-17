@@ -7,15 +7,12 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/task/post_task.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "content/browser/indexed_db/indexed_db_context_impl.h"
 #include "content/browser/indexed_db/indexed_db_database_error.h"
 #include "content/browser/indexed_db/indexed_db_dispatcher_host.h"
 #include "content/browser/indexed_db/indexed_db_transaction.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
-
-using blink::mojom::IDBDatabaseCallbacksAssociatedPtrInfo;
 
 namespace content {
 

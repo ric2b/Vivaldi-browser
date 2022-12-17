@@ -14,15 +14,15 @@
 
 namespace content {
 
-void WebContentsImpl::SetExtData(const std::string& ext_data) {
-  ext_data_ = ext_data;
-  observers_.NotifyObservers(&WebContentsObserver::ExtDataSet, this);
+void WebContentsImpl::SetVivExtData(const std::string& viv_ext_data) {
+  viv_ext_data_ = viv_ext_data;
+  observers_.NotifyObservers(&WebContentsObserver::VivExtDataSet, this);
 
   vivaldi::GetExtDataUpdatedCallbackList().Notify(this);
 }
 
-const std::string& WebContentsImpl::GetExtData() const {
-  return ext_data_;
+const std::string& WebContentsImpl::GetVivExtData() const {
+  return viv_ext_data_;
 }
 
 void WebContentsImpl::FrameTreeNodeDestroyed() {

@@ -168,6 +168,10 @@ void AppBannerManagerAndroid::PerformInstallableChecks() {
 }
 
 void AppBannerManagerAndroid::PerformInstallableWebAppCheck() {
+  if (!manifest_url_.SchemeIsHTTPOrHTTPS()) {
+    Stop(MANIFEST_URL_SCHEME_NOT_SUPPORTED_FOR_WEBAPK);
+    return;
+  }
   if (!webapps::WebappsUtils::AreWebManifestUrlsWebApkCompatible(manifest())) {
     Stop(URL_NOT_SUPPORTED_FOR_WEBAPK);
     return;
@@ -518,7 +522,9 @@ void AppBannerManagerAndroid::Install(
 
 void AppBannerManagerAndroid::MaybeShowAmbientBadge() {
   if (!base::FeatureList::IsEnabled(
-          features::kInstallableAmbientBadgeInfoBar)) {
+          features::kInstallableAmbientBadgeInfoBar) &&
+      !base::FeatureList::IsEnabled(
+          features::kInstallableAmbientBadgeMessage)) {
     return;
   }
 

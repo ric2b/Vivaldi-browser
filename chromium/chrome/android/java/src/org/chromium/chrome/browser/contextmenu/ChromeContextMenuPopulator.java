@@ -75,6 +75,7 @@ import org.chromium.ui.modelutil.MVCListAdapter.ListItem;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.url.GURL;
+import org.chromium.url.Origin;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -96,6 +97,7 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
     private final Supplier<ShareDelegate> mShareDelegateSupplier;
     private final ExternalAuthUtils mExternalAuthUtils;
     private final ContextMenuParams mParams;
+    private final @Nullable Origin mInitiatingOrigin;
     private @Nullable UkmRecorder.Bridge mUkmRecorderBridge;
     private ContextMenuNativeDelegate mNativeDelegate;
     private static final String LENS_SEARCH_MENU_ITEM_KEY = "searchWithGoogleLensMenuItem";
@@ -262,6 +264,18 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
         static void record(WebContents webContents, ContextMenuParams params, @Action int action) {
             String histogramName = String.format("ContextMenu.SelectedOptionAndroid.%s",
                     ContextMenuUtils.getContextMenuTypeForHistogram(params));
+
+            // Record SharedHighlightingInteraction only for Shared Highlighting V2 menu options
+            // (share highlight, remove highlight and learn more).
+            if (params.getOpenedFromHighlight() && !params.isVideo() && !params.isImage()) {
+                assert histogramName.equals(
+                        "ContextMenu.SelectedOptionAndroid.SharedHighlightingInteraction");
+                if (action != Action.SHARE_HIGHLIGHT || action != Action.REMOVE_HIGHLIGHT
+                        || action != Action.LEARN_MORE) {
+                    histogramName = "ContextMenu.SelectedOptionAndroid.Link";
+                }
+            }
+
             RecordHistogram.recordEnumeratedHistogram(histogramName, action, Action.NUM_ENTRIES);
 
             if (params.isAnchor() && !params.isVideo() && !params.getOpenedFromHighlight()) {
@@ -370,6 +384,13 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
         mExternalAuthUtils = externalAuthUtils;
         mContext = context;
         mParams = params;
+        if (itemDelegate.getWebContents() != null
+                && itemDelegate.getWebContents().getFocusedFrame() != null) {
+            mInitiatingOrigin =
+                    itemDelegate.getWebContents().getFocusedFrame().getLastCommittedOrigin();
+        } else {
+            mInitiatingOrigin = null;
+        }
         mNativeDelegate = nativeDelegate;
     }
 
@@ -661,13 +682,14 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
                 mItemDelegate.onOpenInNewTabForeground(
                         mParams.getUrl().getSpec(), mParams.getReferrer());
             else
-            mItemDelegate.onOpenInNewTab(mParams.getUrl(), mParams.getReferrer());
+            mItemDelegate.onOpenInNewTab(
+                    mParams.getUrl(), mParams.getReferrer(), /*navigateToTab=*/false);
         } else if (itemId == R.id.contextmenu_open_in_new_tab_in_group) {
             recordContextMenuSelection(ContextMenuUma.Action.OPEN_IN_NEW_TAB_IN_GROUP);
             mItemDelegate.onOpenInNewTabInGroup(mParams.getUrl(), mParams.getReferrer());
         } else if (itemId == R.id.contextmenu_open_in_incognito_tab) {
             recordContextMenuSelection(ContextMenuUma.Action.OPEN_IN_INCOGNITO_TAB);
-            mItemDelegate.onOpenInNewIncognitoTab(mParams.getUrl());
+            mItemDelegate.onOpenInNewIncognitoTab(mParams.getUrl(), mInitiatingOrigin);
         } else if (itemId == R.id.contextmenu_open_in_other_window) {
             recordContextMenuSelection(ContextMenuUma.Action.OPEN_IN_OTHER_WINDOW);
             mItemDelegate.onOpenInOtherWindow(mParams.getUrl(), mParams.getReferrer());
@@ -810,10 +832,11 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
         } else if (itemId == R.id.contextmenu_learn_more) {
             recordContextMenuSelection(ContextMenuUma.Action.LEARN_MORE);
             mItemDelegate.onOpenInNewTab(new GURL(LinkToTextHelper.SHARED_HIGHLIGHTING_SUPPORT_URL),
-                    mParams.getReferrer());
+                    mParams.getReferrer(), /*navigateToTab=*/true);
         } else if (itemId == R.id.contextmenu_open_in_new_tab_background) { // Vivaldi
             recordContextMenuSelection(ContextMenuUma.Action.OPEN_IMAGE_IN_NEW_TAB);
-            mItemDelegate.onOpenInNewTab(mParams.getUrl(), mParams.getReferrer());
+            mItemDelegate.onOpenInNewTab(
+                    mParams.getUrl(), mParams.getReferrer(), /*navigateToTab=*/false);
         } else {
             assert false;
         }

@@ -9,7 +9,6 @@
 #include <ostream>
 
 #include "base/check_op.h"
-#include "base/cxx17_backports.h"
 #include "base/strings/string_piece.h"
 #include "base/values.h"
 #include "build/chromeos_buildflags.h"
@@ -22,12 +21,12 @@
 
 namespace {
 const char kLeader[] = "$i18n";
-const size_t kLeaderSize = base::size(kLeader) - 1;
+const size_t kLeaderSize = std::size(kLeader) - 1;
 const char kKeyOpen = '{';
 const char kKeyClose = '}';
 const char kHtmlTemplateEnd[] = "<!--_html_template_end_-->";
 const char kHtmlTemplateStart[] = "<!--_html_template_start_-->";
-const size_t kHtmlTemplateStartSize = base::size(kHtmlTemplateStart) - 1;
+const size_t kHtmlTemplateStartSize = std::size(kHtmlTemplateStart) - 1;
 
 enum HtmlTemplateType { INVALID = 0, NONE = 1, VALID = 2 };
 
@@ -213,9 +212,9 @@ bool ReplaceTemplateExpressionsInternal(
 namespace ui {
 
 void TemplateReplacementsFromDictionaryValue(
-    const base::Value& dictionary,
+    const base::Value::Dict& dictionary,
     TemplateReplacements* replacements) {
-  for (auto pair : dictionary.DictItems()) {
+  for (auto pair : dictionary) {
     const std::string* value = pair.second.GetIfString();
     if (value)
       (*replacements)[pair.first] = pair.second.GetString();

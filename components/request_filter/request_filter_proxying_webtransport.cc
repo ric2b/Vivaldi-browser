@@ -260,8 +260,7 @@ void StartWebRequestProxyingWebTransport(
 
   const int process_id = render_process_host.GetID();
   FilteredRequestInfo params = FilteredRequestInfo(
-      request_id, process_id, frame_routing_id,
-      /*view_routing_id=*/MSG_ROUTING_NONE, request,
+      request_id, process_id, frame_routing_id, request,
       content::ContentBrowserClient::URLLoaderFactoryType::kDocumentSubResource,
       /*is_async=*/true, /*is_webtransport=*/true,
       /*navigation_id=*/absl::nullopt);

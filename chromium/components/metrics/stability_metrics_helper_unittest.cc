@@ -47,6 +47,7 @@ class StabilityMetricsHelperTest : public testing::Test {
 
 }  // namespace
 
+#if !BUILDFLAG(IS_ANDROID)
 TEST_F(StabilityMetricsHelperTest, LogRendererCrash) {
   StabilityMetricsHelper helper(prefs());
   base::HistogramTester histogram_tester;
@@ -74,7 +75,6 @@ TEST_F(StabilityMetricsHelperTest, LogRendererCrash) {
   helper.ProvideStabilityMetrics(&system_profile);
 
   EXPECT_EQ(3, system_profile.stability().renderer_crash_count());
-  EXPECT_EQ(1, system_profile.stability().renderer_failed_launch_count());
   EXPECT_EQ(0, system_profile.stability().extension_renderer_crash_count());
 
   histogram_tester.ExpectUniqueSample("CrashExitCodes.Renderer", 1, 3);
@@ -100,6 +100,7 @@ TEST_F(StabilityMetricsHelperTest, LogRendererCrash) {
   histogram_tester.ExpectBucketCount(
       "BrowserRenderProcessHost.ChildLaunchFailureCodes", 1, 1);
 }
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 // Note: ENABLE_EXTENSIONS is set to false in Android
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -120,8 +121,6 @@ TEST_F(StabilityMetricsHelperTest, LogRendererCrashEnableExtensions) {
   helper.ProvideStabilityMetrics(&system_profile);
 
   EXPECT_EQ(0, system_profile.stability().renderer_crash_count());
-  EXPECT_EQ(
-      1, system_profile.stability().extension_renderer_failed_launch_count());
   EXPECT_EQ(2, system_profile.stability().extension_renderer_crash_count());
 
   histogram_tester.ExpectBucketCount("Stability.Counts2",

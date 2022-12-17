@@ -6,17 +6,15 @@
 
 #include <memory>
 
+#include "ash/components/multidevice/logging/logging.h"
+#include "ash/components/multidevice/remote_device_ref.h"
 #include "ash/services/secure_channel/ble_constants.h"
 #include "ash/services/secure_channel/ble_synchronizer_base.h"
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
-#include "chromeos/components/multidevice/logging/logging.h"
-#include "chromeos/components/multidevice/remote_device_ref.h"
 
-namespace chromeos {
-
-namespace secure_channel {
+namespace ash::secure_channel {
 
 namespace {
 
@@ -224,6 +222,4 @@ void ErrorTolerantBleAdvertisementImpl::OnErrorUnregisteringAdvertisement(
   UpdateRegistrationStatus();
 }
 
-}  // namespace secure_channel
-
-}  // namespace chromeos
+}  // namespace ash::secure_channel

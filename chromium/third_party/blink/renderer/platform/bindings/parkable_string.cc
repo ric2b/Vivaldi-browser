@@ -33,6 +33,8 @@
 #include "third_party/blink/renderer/platform/scheduler/public/worker_pool.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/partitions.h"
+#include "third_party/blink/renderer/platform/wtf/cross_thread_copier_base.h"
+#include "third_party/blink/renderer/platform/wtf/cross_thread_copier_std.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/sanitizers.h"
@@ -129,9 +131,10 @@ class NullableCharBuffer final {
 
  public:
   explicit NullableCharBuffer(size_t size) {
-    data_ =
-        reinterpret_cast<char*>(WTF::Partitions::BufferPartition()->AllocFlags(
-            base::PartitionAllocReturnNull, size, "NullableCharBuffer"));
+    data_ = reinterpret_cast<char*>(
+        WTF::Partitions::BufferPartition()->AllocWithFlags(
+            partition_alloc::AllocFlags::kReturnNull, size,
+            "NullableCharBuffer"));
     size_ = size;
   }
 

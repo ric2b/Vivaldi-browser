@@ -4,6 +4,7 @@
 
 #include "chrome/browser/component_updater/registration.h"
 
+#include "base/callback.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/metrics/histogram_functions.h"
@@ -13,7 +14,8 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/buildflags.h"
-#include "chrome/browser/component_updater/autofill_regex_component_installer.h"
+#include "chrome/browser/component_updater/app_provisioning_component_installer.h"
+#include "chrome/browser/component_updater/autofill_regex_remover.h"
 #include "chrome/browser/component_updater/chrome_client_side_phishing_component_installer.h"
 #include "chrome/browser/component_updater/chrome_origin_trials_component_installer.h"
 #include "chrome/browser/component_updater/crl_set_component_installer.h"
@@ -26,6 +28,7 @@
 #include "chrome/browser/component_updater/ssl_error_assistant_component_installer.h"
 #include "chrome/browser/component_updater/subresource_filter_component_installer.h"
 #include "chrome/browser/component_updater/trust_token_key_commitments_component_installer.h"
+#include "chrome/browser/component_updater/url_param_classification_component_installer.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_paths.h"
 #include "components/component_updater/component_updater_service.h"
@@ -59,8 +62,9 @@
 #endif  // BUILDFLAG(IS_ANDROID)
 
 #if !BUILDFLAG(IS_ANDROID)
+#include "chrome/browser/component_updater/commerce_heuristics_component_installer.h"
+#include "chrome/browser/component_updater/desktop_screenshot_editor_component_installer.h"
 #include "chrome/browser/component_updater/desktop_sharing_hub_component_installer.h"
-#include "chrome/browser/component_updater/soda_component_installer.h"
 #include "chrome/browser/component_updater/zxcvbn_data_component_installer.h"
 #include "chrome/browser/resource_coordinator/tab_manager.h"
 #include "media/base/media_switches.h"
@@ -85,6 +89,10 @@
 #if BUILDFLAG(ENABLE_WIDEVINE_CDM_COMPONENT)
 #include "chrome/browser/component_updater/widevine_cdm_component_installer.h"
 #endif  // BUILDFLAG(ENABLE_WIDEVINE_CDM_COMPONENT)
+
+#if BUILDFLAG(IS_LINUX)
+#include "chrome/browser/component_updater/screen_ai_component_installer.h"
+#endif  // BUILDFLAG(IS_LINUX)
 
 #if defined(USE_AURA)
 #include "ui/aura/env.h"
@@ -138,6 +146,8 @@ void RegisterComponentsForUpdate() {
     // the old file.
     component_updater::DeleteLegacyCRLSet(path);
 
+    component_updater::DeleteAutofillRegex(path);
+
 #if BUILDFLAG(IS_ANDROID)
     // Clean up any desktop sharing hubs that were installed on Android.
     component_updater::DeleteDesktopSharingHub(path);
@@ -186,6 +196,7 @@ void RegisterComponentsForUpdate() {
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   RegisterSmartDimComponent(cus);
+  RegisterAppProvisioningComponent(cus);
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if BUILDFLAG(USE_MINIKIN_HYPHENATION) && !BUILDFLAG(IS_ANDROID)
@@ -193,15 +204,21 @@ void RegisterComponentsForUpdate() {
 #endif
 
 #if !BUILDFLAG(IS_ANDROID)
+  RegisterDesktopScreenshotEditorComponent(cus);
   RegisterDesktopSharingHubComponent(cus);
   RegisterZxcvbnDataComponent(cus);
+  RegisterCommerceHeuristicsComponent(cus);
 #endif  // !BUILDFLAG(IS_ANDROID)
 
   RegisterAutofillStatesComponent(cus, g_browser_process->local_state());
 
-  RegisterAutofillRegexComponent(cus);
-
   RegisterClientSidePhishingComponent(cus);
+
+#if BUILDFLAG(IS_LINUX)
+  RegisterScreenAIComponent(cus, g_browser_process->local_state());
+#endif  // BUILDFLAG(IS_LINUX)
+
+  RegisterUrlParamClassificationComponent(cus);
 }
 
 }  // namespace component_updater

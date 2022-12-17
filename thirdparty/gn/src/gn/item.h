@@ -38,6 +38,9 @@ class Item {
   const ParseNode* defined_from() const { return defined_from_; }
   void set_defined_from(const ParseNode* df) { defined_from_ = df; }
 
+  bool testonly() const { return testonly_; }
+  void set_testonly(bool value) { testonly_ = value; }
+
   Visibility& visibility() { return visibility_; }
   const Visibility& visibility() const { return visibility_; }
 
@@ -69,11 +72,14 @@ class Item {
   virtual bool OnResolved(Err* err);
 
  private:
+  bool CheckTestonly(Err* err) const;
+
   const Settings* settings_;
   Label label_;
   SourceFileSet build_dependency_files_;
   const ParseNode* defined_from_;
 
+  bool testonly_ = false;
   Visibility visibility_;
 };
 

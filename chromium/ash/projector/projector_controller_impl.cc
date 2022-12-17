@@ -9,6 +9,7 @@
 #include "ash/projector/projector_metadata_controller.h"
 #include "ash/projector/projector_metrics.h"
 #include "ash/projector/projector_ui_controller.h"
+#include "ash/public/cpp/projector/annotator_tool.h"
 #include "ash/public/cpp/projector/projector_client.h"
 #include "ash/public/cpp/projector/projector_new_screencast_precondition.h"
 #include "ash/public/cpp/projector/projector_session.h"
@@ -21,6 +22,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/current_thread.h"
 #include "base/task/thread_pool.h"
+#include "base/time/time.h"
 #include "media/mojo/mojom/speech_recognition_service.mojom.h"
 
 namespace ash {
@@ -90,6 +92,7 @@ void ProjectorControllerImpl::StartProjectorSession(
 
   auto* controller = CaptureModeController::Get();
   if (!controller->is_recording_in_progress()) {
+    controller->SetSource(CaptureModeSource::kFullscreen);
     // A capture mode session can be blocked by many factors, such as policy,
     // DLP, ... etc. We don't start a Projector session until we're sure a
     // capture session started.
@@ -211,12 +214,12 @@ ProjectorControllerImpl::GetNewScreencastPrecondition() const {
 
     if (!client_->IsDriveFsMounted()) {
       result.state = NewScreencastPreconditionState::kDisabled;
-      result.reasons = {NewScreencastPreconditionReason::kOthers};
+      result.reasons = {
+          client_->IsDriveFsMountFailed()
+              ? NewScreencastPreconditionReason::kDriveFsMountFailed
+              : NewScreencastPreconditionReason::kDriveFsUnmounted};
       return result;
     }
-
-    // TODO(crbug.com/1165435) Disable New Screencast button when out of disk
-    // space or drive quota.
   }
 
   if (projector_session_->is_active()) {
@@ -269,15 +272,13 @@ void ProjectorControllerImpl::OnRecordingStarted(bool is_in_projector_mode) {
 }
 
 void ProjectorControllerImpl::OnRecordingEnded(bool is_in_projector_mode) {
-  if (!is_in_projector_mode) {
-    OnNewScreencastPreconditionChanged();
+  if (!is_in_projector_mode)
     return;
-  }
 
   DCHECK(projector_session_->is_active());
 
   // TODO(b/197152209): move closing selfie cam to ProjectorUiController.
-  if (client_->IsSelfieCamVisible())
+  if (client_ && client_->IsSelfieCamVisible())
     client_->CloseSelfieCam();
 
   // Close Projector toolbar if ui controller is present.
@@ -288,9 +289,18 @@ void ProjectorControllerImpl::OnRecordingEnded(bool is_in_projector_mode) {
 
   // At this point, the screencast might not synced to Drive yet. Open
   // Projector App which shows the Gallery view by default.
-  client_->OpenProjectorApp();
+  if (client_)
+    client_->OpenProjectorApp();
 
   RecordCreationFlowMetrics(ProjectorCreationFlow::kRecordingEnded);
+}
+
+void ProjectorControllerImpl::OnDlpRestrictionCheckedAtVideoEnd(
+    bool is_in_projector_mode,
+    bool user_deleted_video_file,
+    const gfx::ImageSkia& thumbnail) {
+  if (!is_in_projector_mode)
+    OnNewScreencastPreconditionChanged();
 }
 
 void ProjectorControllerImpl::OnRecordingStartAborted() {
@@ -307,14 +317,10 @@ void ProjectorControllerImpl::OnRecordingStartAborted() {
 
   projector_session_->Stop();
 
-  client_->OpenProjectorApp();
+  if (client_)
+    client_->OpenProjectorApp();
 
   RecordCreationFlowMetrics(ProjectorCreationFlow::kRecordingAborted);
-}
-
-void ProjectorControllerImpl::OnLaserPointerPressed() {
-  DCHECK(ui_controller_);
-  ui_controller_->OnLaserPointerPressed();
 }
 
 void ProjectorControllerImpl::OnMarkerPressed() {
@@ -322,13 +328,14 @@ void ProjectorControllerImpl::OnMarkerPressed() {
   ui_controller_->OnMarkerPressed();
 }
 
+void ProjectorControllerImpl::SetAnnotatorTool(const AnnotatorTool& tool) {
+  DCHECK(ui_controller_);
+  ui_controller_->SetAnnotatorTool(tool);
+}
+
 void ProjectorControllerImpl::ResetTools() {
   if (ui_controller_)
     ui_controller_->ResetTools();
-}
-
-bool ProjectorControllerImpl::IsLaserPointerEnabled() {
-  return ui_controller_ && ui_controller_->IsLaserPointerEnabled();
 }
 
 bool ProjectorControllerImpl::IsAnnotatorEnabled() {
@@ -368,27 +375,25 @@ bool ProjectorControllerImpl::IsInputDeviceAvailable() const {
 }
 
 void ProjectorControllerImpl::StartSpeechRecognition() {
-  if (ProjectorController::AreExtendedProjectorFeaturesDisabled())
+  if (ProjectorController::AreExtendedProjectorFeaturesDisabled() || !client_)
     return;
 
   DCHECK(speech_recognition_availability_ ==
          SpeechRecognitionAvailability::kAvailable);
   DCHECK(!is_speech_recognition_on_);
-  DCHECK_NE(client_, nullptr);
   client_->StartSpeechRecognition();
   is_speech_recognition_on_ = true;
 }
 
 void ProjectorControllerImpl::MaybeStopSpeechRecognition() {
   if (ProjectorController::AreExtendedProjectorFeaturesDisabled() ||
-      !is_speech_recognition_on_) {
+      !is_speech_recognition_on_ || !client_) {
     OnSpeechRecognitionStopped();
     return;
   }
 
   DCHECK(speech_recognition_availability_ ==
          SpeechRecognitionAvailability::kAvailable);
-  DCHECK_NE(client_, nullptr);
   client_->StopSpeechRecognition();
   is_speech_recognition_on_ = false;
 }

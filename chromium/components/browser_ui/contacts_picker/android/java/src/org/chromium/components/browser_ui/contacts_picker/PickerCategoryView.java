@@ -16,7 +16,6 @@ import androidx.annotation.VisibleForTesting;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.task.AsyncTask;
 import org.chromium.components.browser_ui.util.BitmapCache;
@@ -158,8 +157,7 @@ public class PickerCategoryView extends OptimizedFrameLayout
         mSelectionDelegate.addObserver(this);
 
         Resources resources = context.getResources();
-        int iconColor =
-                ApiCompatibilityUtils.getColor(resources, R.color.default_favicon_background_color);
+        int iconColor = context.getColor(R.color.default_favicon_background_color);
         mIconGenerator = new RoundedIconGenerator(resources, ICON_SIZE_DP, ICON_SIZE_DP,
                 ICON_CORNER_RADIUS_DP, iconColor, ICON_TEXT_SIZE_DP);
 
@@ -459,8 +457,8 @@ public class PickerCategoryView extends OptimizedFrameLayout
             int percentageShared, int propertiesRequested) {
         RecordHistogram.recordEnumeratedHistogram(
                 "Android.ContactsPicker.DialogAction", action, ACTION_BOUNDARY);
-        RecordHistogram.recordCountHistogram("Android.ContactsPicker.ContactCount", contactCount);
-        RecordHistogram.recordCountHistogram("Android.ContactsPicker.SelectCount", selectCount);
+        RecordHistogram.recordCount1MHistogram("Android.ContactsPicker.ContactCount", contactCount);
+        RecordHistogram.recordCount1MHistogram("Android.ContactsPicker.SelectCount", selectCount);
         RecordHistogram.recordPercentageHistogram(
                 "Android.ContactsPicker.SelectPercentage", percentageShared);
         RecordHistogram.recordEnumeratedHistogram("Android.ContactsPicker.PropertiesRequested",

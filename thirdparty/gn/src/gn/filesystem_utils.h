@@ -226,6 +226,12 @@ enum class BuildDirType {
 
   // Output file directory.
   OBJ,
+
+  // Phony file directory. As the name implies, this is not a real file
+  // directory, but a path that is used for the declaration of phony targets.
+  // This is done to avoid duplicate target names between real files and phony
+  // aliases that point to them.
+  PHONY,
 };
 
 // In different contexts, different information is known about the toolchain in

@@ -60,13 +60,13 @@
 #include "third_party/blink/renderer/core/events/mouse_event.h"
 #include "third_party/blink/renderer/core/exported/web_plugin_container_impl.h"
 #include "third_party/blink/renderer/core/fragment_directive/text_fragment_handler.h"
+#include "third_party/blink/renderer/core/frame/attribution_src_loader.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/picture_in_picture_controller.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/web_frame_widget_impl.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
-#include "third_party/blink/renderer/core/html/conversion_measurement_parsing.h"
 #include "third_party/blink/renderer/core/html/forms/html_form_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html/html_anchor_element.h"
@@ -86,10 +86,10 @@
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/platform/exported/wrapped_resource_response.h"
 
-#if !defined(OS_ANDROID) && defined(VIVALDI_BUILD)
+#if !BUILDFLAG(IS_ANDROID) && defined(VIVALDI_BUILD)
 #include "app/vivaldi_apptools.h"
 #include "components/blink/vivaldi_add_search_context_menu.h"
-#endif  // !OS_ANDROID && VIVALDI_BUILD
+#endif  // !IS_ANDROID && VIVALDI_BUILD
 
 namespace blink {
 
@@ -173,8 +173,8 @@ void ContextMenuController::DocumentDetached(Document* document) {
 void ContextMenuController::HandleContextMenuEvent(MouseEvent* mouse_event) {
   DCHECK(mouse_event->type() == event_type_names::kContextmenu);
   LocalFrame* frame = mouse_event->target()->ToNode()->GetDocument().GetFrame();
-  PhysicalOffset location = PhysicalOffset::FromPointFRound(
-      gfx::PointF(mouse_event->AbsoluteLocation()));
+  PhysicalOffset location =
+      PhysicalOffset::FromPointFRound(mouse_event->AbsoluteLocation());
 
   if (ShowContextMenu(frame, location, mouse_event->GetMenuSourceType(),
                       mouse_event))
@@ -707,7 +707,7 @@ bool ContextMenuController::ShowContextMenu(LocalFrame* frame,
         data.dictionary_suggestions = suggestions.ReleaseVector();
       }
     }
-#if !defined(OS_ANDROID) && defined(VIVALDI_BUILD)
+#if !BUILDFLAG(IS_ANDROID) && defined(VIVALDI_BUILD)
     if (vivaldi::IsVivaldiRunning()) {
       // Collect information of input field so that we can use it to set up
       // correct menu content.
@@ -727,16 +727,16 @@ bool ContextMenuController::ShowContextMenu(LocalFrame* frame,
         }
       }
     }
-#endif  // !OS_ANDROID && VIVALDI_BUILD
+#endif  // !IS_ANDROID && VIVALDI_BUILD
   }
 
-#if !defined(OS_ANDROID) && defined(VIVALDI_BUILD)
+#if !BUILDFLAG(IS_ANDROID) && defined(VIVALDI_BUILD)
   WebURL web_url = vivaldi::GetWebSearchableUrl(
       selected_frame->Selection(), DynamicTo<HTMLInputElement>(result.InnerNode()));
   if (web_url.IsValid())
     data.vivaldi_keyword_url = GURL(web_url.GetString().Utf8(),
                                     web_url.GetParsed(), web_url.IsValid());
-#endif  // !OS_ANDROID && VIVALDI_BUILD
+#endif  // !IS_ANDROID && VIVALDI_BUILD
   if (EditingStyle::SelectionHasStyle(*selected_frame,
                                       CSSPropertyID::kDirection,
                                       "ltr") != EditingTriState::kFalse) {
@@ -773,17 +773,22 @@ bool ContextMenuController::ShowContextMenu(LocalFrame* frame,
 
     data.link_text = anchor->innerText().Utf8();
 
-    if (anchor->HasImpression()) {
-      absl::optional<WebImpression> web_impression =
-          GetImpressionForAnchor(anchor);
-      data.impression =
-          web_impression.has_value()
-              ? absl::optional<Impression>(
-                    ConvertWebImpressionToImpression(web_impression.value()))
-              : absl::nullopt;
+    if (anchor->FastHasAttribute(html_names::kAttributionsrcAttr)) {
+      const AtomicString& attribution_src_value =
+          anchor->FastGetAttribute(html_names::kAttributionsrcAttr);
+      if (!attribution_src_value.IsNull()) {
+        absl::optional<WebImpression> web_impression =
+            selected_frame->GetAttributionSrcLoader()->RegisterNavigation(
+                selected_frame->GetDocument()->CompleteURL(
+                    attribution_src_value));
+        if (web_impression.has_value()) {
+          data.impression =
+              ConvertWebImpressionToImpression(web_impression.value());
+        }
+      }
     }
   }
-#if !defined(OS_ANDROID) && defined(VIVALDI_BUILD)
+#if !BUILDFLAG(IS_ANDROID) && defined(VIVALDI_BUILD)
   // NOTE(david@vivaldi): We should at least display the URL as a link_text when
   // we don't get the correct link_text. This is mostly the case when we have
   // pdf's.
@@ -791,7 +796,7 @@ bool ContextMenuController::ShowContextMenu(LocalFrame* frame,
     if (data.link_text.empty() && !data.link_url.is_empty())
       data.link_text = data.link_url.spec();
   }
-#endif  // !OS_ANDROID && VIVALDI_BUILD
+#endif  // !IS_ANDROID && VIVALDI_BUILD
 
   data.input_field_type = ComputeInputFieldType(result);
   data.selection_rect = ComputeSelectionRect(selected_frame);

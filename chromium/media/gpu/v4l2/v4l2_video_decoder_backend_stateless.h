@@ -11,6 +11,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/time/time.h"
 #include "media/base/decoder_status.h"
 #include "media/base/video_decoder.h"
 #include "media/gpu/chromeos/dmabuf_video_frame_pool.h"
@@ -185,6 +186,9 @@ class V4L2StatelessVideoDecoderBackend : public V4L2VideoDecoderBackend,
 
   // Map of enqueuing timestamps to wall clock, for histogramming purposes.
   base::small_map<std::map<int64_t, base::TimeTicks>> enqueuing_timestamps_;
+  // Same but with ScopedDecodeTrace for chrome:tracing purposes.
+  base::small_map<std::map<base::TimeDelta, std::unique_ptr<ScopedDecodeTrace>>>
+      buffer_tracers_ GUARDED_BY_CONTEXT(sequence_checker_);
 
   base::WeakPtr<V4L2StatelessVideoDecoderBackend> weak_this_;
   base::WeakPtrFactory<V4L2StatelessVideoDecoderBackend> weak_this_factory_{

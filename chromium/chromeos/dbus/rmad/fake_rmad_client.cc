@@ -4,6 +4,7 @@
 
 #include "chromeos/dbus/rmad/fake_rmad_client.h"
 
+#include "base/callback_forward.h"
 #include "base/logging.h"
 #include "base/threading/thread_task_runner_handle.h"
 
@@ -324,9 +325,11 @@ bool FakeRmadClient::WasRmaStateDetected() {
   return NumStates() > 0;
 }
 
-bool FakeRmadClient::WasRmaStateDetectedForSessionManager(
-    base::OnceCallback<void()> session_manager_callback) {
-  return NumStates() > 0;
+void FakeRmadClient::SetRmaRequiredCallbackForSessionManager(
+    base::OnceClosure session_manager_callback) {
+  if (NumStates() > 0) {
+    std::move(session_manager_callback).Run();
+  }
 }
 
 void FakeRmadClient::SetAbortable(bool abortable) {
@@ -366,10 +369,12 @@ void FakeRmadClient::TriggerCalibrationOverallProgressObservation(
 
 void FakeRmadClient::TriggerProvisioningProgressObservation(
     rmad::ProvisionStatus::Status status,
-    double progress) {
+    double progress,
+    rmad::ProvisionStatus::Error error) {
   rmad::ProvisionStatus status_proto;
   status_proto.set_status(status);
   status_proto.set_progress(progress);
+  status_proto.set_error(error);
   for (auto& observer : observers_)
     observer.ProvisioningProgress(status_proto);
 }
@@ -397,10 +402,12 @@ void FakeRmadClient::TriggerHardwareVerificationResultObservation(
 
 void FakeRmadClient::TriggerFinalizationProgressObservation(
     rmad::FinalizeStatus::Status status,
-    double progress) {
+    double progress,
+    rmad::FinalizeStatus::Error error) {
   rmad::FinalizeStatus finalizationStatus;
   finalizationStatus.set_status(status);
   finalizationStatus.set_progress(progress);
+  finalizationStatus.set_error(error);
   for (auto& observer : observers_)
     observer.FinalizationProgress(finalizationStatus);
 }

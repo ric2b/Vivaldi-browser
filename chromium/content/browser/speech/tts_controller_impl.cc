@@ -15,7 +15,9 @@
 #include "base/json/json_reader.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
+#include "base/observer_list.h"
 #include "base/strings/string_util.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -701,7 +703,8 @@ void TtsControllerImpl::StripSSML(
 
   // Parse using safe, out-of-process Xml Parser.
   data_decoder::DataDecoder::ParseXmlIsolated(
-      utterance, data_decoder::mojom::XmlParser::WhitespaceBehavior::kIgnore,
+      utterance,
+      data_decoder::mojom::XmlParser::WhitespaceBehavior::kPreserveSignificant,
       base::BindOnce(&TtsControllerImpl::StripSSMLHelper, utterance,
                      std::move(on_ssml_parsed)));
 }

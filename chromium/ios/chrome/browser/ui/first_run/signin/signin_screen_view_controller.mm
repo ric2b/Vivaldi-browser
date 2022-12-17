@@ -1,11 +1,13 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/first_run/signin/signin_screen_view_controller.h"
 
-#include "base/strings/sys_string_conversions.h"
+#import "base/notreached.h"
+#import "base/strings/sys_string_conversions.h"
 #import "ios/chrome/browser/ui/authentication/views/identity_button_control.h"
+#import "ios/chrome/browser/ui/commands/tos_commands.h"
 #import "ios/chrome/browser/ui/elements/activity_overlay_view.h"
 #import "ios/chrome/browser/ui/first_run/first_run_constants.h"
 #import "ios/chrome/browser/ui/settings/elements/enterprise_info_popover_view_controller.h"
@@ -13,9 +15,9 @@
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/elements/popover_label_view_controller.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
-#include "ios/chrome/grit/ios_google_chrome_strings.h"
-#include "ios/chrome/grit/ios_strings.h"
-#include "ui/base/l10n/l10n_util.h"
+#import "ios/chrome/grit/ios_google_chrome_strings.h"
+#import "ios/chrome/grit/ios_strings.h"
+#import "ui/base/l10n/l10n_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -24,15 +26,70 @@
 namespace {
 
 // Width of the identity control if nothing is contraining it.
-const CGFloat kIdentityControlMaxWidth = 327;
-const CGFloat kIdentityTopMargin = 16;
+constexpr CGFloat kIdentityControlMaxWidth = 327.;
+// Margin above the identity button.
+constexpr CGFloat kIdentityTopMargin = 0.;
+// Margin between elements in the bottom view.
+constexpr CGFloat kBottomViewInnerVerticalMargin = 8.;
 
-// URL for the learn more text.
-// Need to set a value so the delegate gets called.
-NSString* const kLearnMoreUrl = @"internal://learn-more";
+// Banner at the top of the view.
+NSString* const kSigninBannerName = @"signin_banner";
+// Enterprise icon in the bottom view.
+NSString* const kEnterpriseIconName = @"enterprise_icon";
 
-NSString* const kLearnMoreTextViewAccessibilityIdentifier =
-    @"kLearnMoreTextViewAccessibilityIdentifier";
+// URL for the terms of service text.
+NSString* const kTermsOfServiceURL = @"internal://terms-of-service";
+// URL for the metric reporting text.
+NSString* const kMetricReportingURL = @"internal://metric-reporting";
+
+// Returns the attribute for the footer UITextView.
+NSDictionary* FooterTextAttributes() {
+  NSMutableParagraphStyle* paragraph_style =
+      [[NSParagraphStyle defaultParagraphStyle] mutableCopy];
+  paragraph_style.alignment = NSTextAlignmentCenter;
+
+  return @{
+    NSForegroundColorAttributeName : [UIColor colorNamed:kTextSecondaryColor],
+    NSFontAttributeName :
+        [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote],
+    NSParagraphStyleAttributeName : paragraph_style
+  };
+}
+
+// Adds |attributedString| as a new inline in |footer_attributed_string|.
+void AddNewLineToFooterString(
+    NSAttributedString* attributed_string,
+    NSMutableAttributedString* footer_attributed_string) {
+  DCHECK(footer_attributed_string);
+  if (footer_attributed_string.length > 0) {
+    NSDictionary* attributes = FooterTextAttributes();
+    NSAttributedString* end_of_line =
+        [[NSAttributedString alloc] initWithString:@" " attributes:attributes];
+    [footer_attributed_string appendAttributedString:end_of_line];
+  }
+  [footer_attributed_string appendAttributedString:attributed_string];
+}
+
+// Creates an attributed string with the footer style based on |message_id|.
+NSAttributedString* FooterAttributedStringWithMessageID(int message_id) {
+  NSString* string = l10n_util::GetNSString(message_id);
+  NSDictionary* textAttributes = FooterTextAttributes();
+  return [[NSAttributedString alloc] initWithString:string
+                                         attributes:textAttributes];
+}
+
+// Creates an attributed string with the footer style based on |message_id|
+// (with an URL in it).
+NSAttributedString* FooterAttributedStringWithMessageIDAndURL(
+    int message_id,
+    NSString* url_string) {
+  NSString* string = l10n_util::GetNSString(message_id);
+  NSDictionary* textAttributes = FooterTextAttributes();
+  NSDictionary* linkAttributes =
+      @{NSLinkAttributeName : [NSURL URLWithString:url_string]};
+  return AttributedStringFromStringWithLink(string, textAttributes,
+                                            linkAttributes);
+}
 
 }  // namespace
 
@@ -40,28 +97,24 @@ NSString* const kLearnMoreTextViewAccessibilityIdentifier =
 
 // Button controlling the display of the selected identity.
 @property(nonatomic, strong) IdentityButtonControl* identityControl;
-
 // The string to be displayed in the "Cotinue" button to personalize it. Usually
 // the given name, or the email address if no given name.
 @property(nonatomic, copy) NSString* personalizedButtonPrompt;
-
 // Scrim displayed above the view when the UI is disabled.
 @property(nonatomic, strong) ActivityOverlayView* overlay;
-
-// Text view that displays an attributed string with the "Learn More" link that
-// opens a popover.
-@property(nonatomic, strong) UITextView* learnMoreTextView;
-
-// Popover shown when "Details" link is tapped.
-@property(nonatomic, strong)
-    EnterpriseInfoPopoverViewController* bubbleViewController;
+// View with all the bottom details (image and text).
+@property(nonatomic, strong) UIStackView* bottomView;
 
 @end
 
 @implementation SigninScreenViewController
-@dynamic delegate;
 
-#pragma mark - Public
+@dynamic delegate;
+@synthesize managedEnabled = _managedEnabled;
+@synthesize screenIntent = _screenIntent;
+@synthesize signinStatus = _signinStatus;
+
+#pragma mark - UIViewController
 
 - (void)viewDidLoad {
   self.view.accessibilityIdentifier =
@@ -71,87 +124,99 @@ NSString* const kLearnMoreTextViewAccessibilityIdentifier =
   self.readMoreString =
       l10n_util::GetNSString(IDS_IOS_FIRST_RUN_SCREEN_READ_MORE);
 
-  self.titleText = l10n_util::GetNSString(IDS_IOS_FIRST_RUN_SIGNIN_TITLE);
-  if (self.enterpriseSignInRestrictions == kNoEnterpriseRestriction) {
-    self.subtitleText =
-        l10n_util::GetNSString(IDS_IOS_FIRST_RUN_SIGNIN_SUBTITLE);
-  } else {
-    self.subtitleText =
-        l10n_util::GetNSString(IDS_IOS_FIRST_RUN_SIGNIN_SUBTITLE_MANAGED);
+  // Set banner.
+  self.bannerImage = [UIImage imageNamed:kSigninBannerName];
+
+  // Set |self.titleText| and |self.subtitleText|.
+  switch (self.signinStatus) {
+    case SigninScreenConsumerSigninStatusAvailable: {
+      self.titleText = l10n_util::GetNSString(IDS_IOS_FIRST_RUN_SIGNIN_TITLE);
+      self.subtitleText =
+          l10n_util::GetNSString(IDS_IOS_FIRST_RUN_SIGNIN_SUBTITLE);
+      break;
+    }
+    case SigninScreenConsumerSigninStatusForced: {
+      self.titleText =
+          l10n_util::GetNSString(IDS_IOS_FIRST_RUN_SIGNIN_TITLE_SIGNIN_FORCED);
+      self.subtitleText = l10n_util::GetNSString(
+          IDS_IOS_FIRST_RUN_SIGNIN_SUBTITLE_SIGNIN_FORCED);
+      break;
+    }
+    case SigninScreenConsumerSigninStatusDisabled: {
+      UIUserInterfaceIdiom idiom =
+          [[UIDevice currentDevice] userInterfaceIdiom];
+      if (idiom == UIUserInterfaceIdiomPad) {
+        self.titleText =
+            l10n_util::GetNSString(IDS_IOS_FIRST_RUN_WELCOME_SCREEN_TITLE_IPAD);
+      } else {
+        self.titleText = l10n_util::GetNSString(
+            IDS_IOS_FIRST_RUN_WELCOME_SCREEN_TITLE_IPHONE);
+      }
+      self.subtitleText =
+          l10n_util::GetNSString(IDS_IOS_FIRST_RUN_WELCOME_SCREEN_SUBTITLE);
+      break;
+    }
   }
-  if (!self.primaryActionString) {
-    // |primaryActionString| could already be set using the consumer methods.
-    self.primaryActionString =
-        l10n_util::GetNSString(IDS_IOS_FIRST_RUN_SIGNIN_SIGN_IN_ACTION);
-  }
 
-  [self.specificContentView addSubview:self.identityControl];
+  NSLayoutYAxisAnchor* topAnchorForBottomView =
+      self.specificContentView.topAnchor;
+  // Add |self.identityControl| if needed.
+  if (self.signinStatus != SigninScreenConsumerSigninStatusDisabled) {
+    [self.specificContentView addSubview:self.identityControl];
 
-  // Add Learn More text label according to EnterpriseSignInRestrictions.
-  if (self.enterpriseSignInRestrictions != kNoEnterpriseRestriction) {
-    self.learnMoreTextView.delegate = self;
-    [self.specificContentView addSubview:self.learnMoreTextView];
-
+    NSLayoutConstraint* widthConstraint = [self.identityControl.widthAnchor
+        constraintEqualToConstant:kIdentityControlMaxWidth];
+    widthConstraint.priority = UILayoutPriorityDefaultHigh;
     [NSLayoutConstraint activateConstraints:@[
-      [self.learnMoreTextView.topAnchor
-          constraintGreaterThanOrEqualToAnchor:self.identityControl
-                                                   .bottomAnchor],
-      [self.learnMoreTextView.bottomAnchor
-          constraintEqualToAnchor:self.specificContentView.bottomAnchor],
-      [self.learnMoreTextView.centerXAnchor
+      [self.identityControl.topAnchor
+          constraintEqualToAnchor:self.specificContentView.topAnchor
+                         constant:kIdentityTopMargin],
+      [self.identityControl.centerXAnchor
           constraintEqualToAnchor:self.specificContentView.centerXAnchor],
-      [self.learnMoreTextView.widthAnchor
+      [self.identityControl.widthAnchor
           constraintLessThanOrEqualToAnchor:self.specificContentView
                                                 .widthAnchor],
+      widthConstraint,
+      [self.identityControl.bottomAnchor
+          constraintLessThanOrEqualToAnchor:self.specificContentView
+                                                .bottomAnchor],
     ]];
+
+    topAnchorForBottomView = self.identityControl.bottomAnchor;
   }
 
-  bool forceSignInEnabled =
-      self.enterpriseSignInRestrictions & kEnterpriseForceSignIn;
-  bool signinRestricted =
-      self.enterpriseSignInRestrictions || forceSignInEnabled;
+  // Add bottom view.
+  [self.specificContentView addSubview:self.bottomView];
+  [NSLayoutConstraint activateConstraints:@[
+    [self.bottomView.topAnchor
+        constraintGreaterThanOrEqualToAnchor:topAnchorForBottomView
+                                    constant:kIdentityTopMargin],
+    [self.bottomView.bottomAnchor
+        constraintEqualToAnchor:self.specificContentView.bottomAnchor],
+    [self.bottomView.centerXAnchor
+        constraintEqualToAnchor:self.specificContentView.centerXAnchor],
+    [self.bottomView.widthAnchor
+        constraintLessThanOrEqualToAnchor:self.specificContentView.widthAnchor],
+  ]];
 
-  self.bannerImage =
-      [UIImage imageNamed:signinRestricted ? @"forced_signin_screen_banner"
-                                           : @"signin_screen_banner"];
-  // Only add "Don't Sign In" button when signin is not required.
-  if (!forceSignInEnabled) {
+  // Set primary button if sign-in is disabled. For other cases, the primary
+  // button is set with |setSelectedIdentityUserName:email:givenName:avatar:|
+  // or |noIdentityAvailable|.
+  DCHECK(self.primaryActionString ||
+         self.signinStatus == SigninScreenConsumerSigninStatusDisabled);
+  if (self.signinStatus == SigninScreenConsumerSigninStatusDisabled) {
+    self.primaryActionString =
+        l10n_util::GetNSString(IDS_IOS_FIRST_RUN_SIGNIN_CONTINUE);
+  }
+  // Set secondary button.
+  if (self.signinStatus == SigninScreenConsumerSigninStatusAvailable) {
     self.secondaryActionString =
         l10n_util::GetNSString(IDS_IOS_FIRST_RUN_SIGNIN_DONT_SIGN_IN);
   }
 
-  NSLayoutConstraint* widthConstraint = [self.identityControl.widthAnchor
-      constraintEqualToConstant:kIdentityControlMaxWidth];
-  widthConstraint.priority = UILayoutPriorityDefaultHigh;
-
-  [NSLayoutConstraint activateConstraints:@[
-    [self.identityControl.topAnchor
-        constraintEqualToAnchor:self.specificContentView.topAnchor
-                       constant:kIdentityTopMargin],
-    [self.identityControl.centerXAnchor
-        constraintEqualToAnchor:self.specificContentView.centerXAnchor],
-    [self.identityControl.widthAnchor
-        constraintLessThanOrEqualToAnchor:self.specificContentView.widthAnchor],
-    widthConstraint,
-    [self.identityControl.bottomAnchor
-        constraintLessThanOrEqualToAnchor:self.specificContentView
-                                              .bottomAnchor],
-  ]];
-
   // Call super after setting up the strings and others, as required per super
   // class.
   [super viewDidLoad];
-}
-
-- (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
-  [super traitCollectionDidChange:previousTraitCollection];
-
-  // Close popover when font size changed for accessibility because it does not
-  // resize properly and the arrow is not aligned.
-  if (self.bubbleViewController) {
-    [self.bubbleViewController dismissViewControllerAnimated:YES
-                                                  completion:nil];
-  }
 }
 
 #pragma mark - Properties
@@ -183,75 +248,80 @@ NSString* const kLearnMoreTextViewAccessibilityIdentifier =
   return _overlay;
 }
 
-- (UITextView*)learnMoreTextView {
-  if (!_learnMoreTextView) {
-    _learnMoreTextView = [[UITextView alloc] init];
-    _learnMoreTextView.backgroundColor = UIColor.clearColor;
-    _learnMoreTextView.scrollEnabled = NO;
-    _learnMoreTextView.editable = NO;
-    _learnMoreTextView.adjustsFontForContentSizeCategory = YES;
-    _learnMoreTextView.textContainerInset = UIEdgeInsetsZero;
-    _learnMoreTextView.textContainer.lineFragmentPadding = 0;
-    _learnMoreTextView.accessibilityIdentifier =
-        kLearnMoreTextViewAccessibilityIdentifier;
-
-    _learnMoreTextView.linkTextAttributes =
-        @{NSForegroundColorAttributeName : [UIColor colorNamed:kBlueColor]};
-    _learnMoreTextView.translatesAutoresizingMaskIntoConstraints = NO;
-
-    NSMutableParagraphStyle* paragraphStyle =
-        [[NSParagraphStyle defaultParagraphStyle] mutableCopy];
-    paragraphStyle.alignment = NSTextAlignmentCenter;
-
-    NSDictionary* textAttributes = @{
-      NSForegroundColorAttributeName : [UIColor colorNamed:kTextSecondaryColor],
-      NSFontAttributeName :
-          [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote],
-      NSParagraphStyleAttributeName : paragraphStyle
-    };
-
-    NSDictionary* linkAttributes =
-        @{NSLinkAttributeName : [NSURL URLWithString:kLearnMoreUrl]};
-
-    NSAttributedString* learnMoreTextAttributedString =
-        AttributedStringFromStringWithLink(
-            l10n_util::GetNSString(IDS_IOS_ENTERPRISE_MANAGED_SIGNIN_DETAILS),
-            textAttributes, linkAttributes);
-
-    _learnMoreTextView.attributedText = learnMoreTextAttributedString;
+- (UIStackView*)bottomView {
+  if (!_bottomView) {
+    _bottomView = [[UIStackView alloc] init];
+    _bottomView.translatesAutoresizingMaskIntoConstraints = NO;
+    _bottomView.axis = UILayoutConstraintAxisVertical;
+    _bottomView.alignment = UIStackViewAlignmentCenter;
+    _bottomView.distribution = UIStackViewDistributionEqualSpacing;
+    _bottomView.spacing = kBottomViewInnerVerticalMargin;
+    // Add the enterprise icon if needed.
+    if (self.managedEnabled) {
+      UIImage* image = [UIImage imageNamed:kEnterpriseIconName];
+      UIImageView* enterpriseImageView =
+          [[UIImageView alloc] initWithImage:image];
+      [_bottomView addArrangedSubview:enterpriseImageView];
+    }
+    // Add the footer string if needed.
+    NSAttributedString* footerAttributedString =
+        [self generateFooterAttributedString];
+    if (footerAttributedString.length > 0) {
+      UITextView* footerTextView = [[UITextView alloc] init];
+      footerTextView.textContainerInset = UIEdgeInsetsMake(0, 0, 0, 0);
+      footerTextView.scrollEnabled = NO;
+      footerTextView.editable = NO;
+      footerTextView.adjustsFontForContentSizeCategory = YES;
+      footerTextView.delegate = self;
+      footerTextView.backgroundColor = UIColor.clearColor;
+      footerTextView.linkTextAttributes =
+          @{NSForegroundColorAttributeName : [UIColor colorNamed:kBlueColor]};
+      footerTextView.translatesAutoresizingMaskIntoConstraints = NO;
+      footerTextView.attributedText = footerAttributedString;
+      [_bottomView addArrangedSubview:footerTextView];
+    }
   }
-  return _learnMoreTextView;
-}
-
-#pragma mark - SignInScreenConsumer
-
-- (void)setSelectedIdentityUserName:(NSString*)userName
-                              email:(NSString*)email
-                          givenName:(NSString*)givenName
-                             avatar:(UIImage*)avatar {
-  DCHECK(email);
-  DCHECK(avatar);
-  self.personalizedButtonPrompt = givenName ? givenName : email;
-  [self updateUIForIdentityAvailable:YES];
-  [self.identityControl setIdentityName:userName email:email];
-  [self.identityControl setIdentityAvatar:avatar];
-}
-
-- (void)noIdentityAvailable {
-  [self updateUIForIdentityAvailable:NO];
-}
-
-- (void)setUIEnabled:(BOOL)UIEnabled {
-  if (UIEnabled) {
-    [self.overlay removeFromSuperview];
-  } else {
-    [self.view addSubview:self.overlay];
-    AddSameConstraints(self.view, self.overlay);
-    [self.overlay.indicator startAnimating];
-  }
+  return _bottomView;
 }
 
 #pragma mark - Private
+
+// Generates the footer string.
+- (NSAttributedString*)generateFooterAttributedString {
+  NSMutableAttributedString* footerAttributedString =
+      [[NSMutableAttributedString alloc] init];
+  if (self.managedEnabled) {
+    NSAttributedString* footerLine = FooterAttributedStringWithMessageID(
+        IDS_IOS_FIRST_RUN_WELCOME_SCREEN_BROWSER_MANAGED);
+    AddNewLineToFooterString(footerLine, footerAttributedString);
+  }
+  switch (self.screenIntent) {
+    case SigninScreenConsumerScreenIntentSigninOnly: {
+      break;
+    }
+    case SigninScreenConsumerScreenIntentWelcomeAndSignin: {
+      NSAttributedString* footerLine =
+          FooterAttributedStringWithMessageIDAndURL(
+              IDS_IOS_FIRST_RUN_WELCOME_SCREEN_TERMS_OF_SERVICE,
+              kTermsOfServiceURL);
+      AddNewLineToFooterString(footerLine, footerAttributedString);
+      footerLine = FooterAttributedStringWithMessageIDAndURL(
+          IDS_IOS_FIRST_RUN_WELCOME_SCREEN_METRIC_REPORTING,
+          kMetricReportingURL);
+      AddNewLineToFooterString(footerLine, footerAttributedString);
+      break;
+    }
+    case SigninScreenConsumerScreenIntentWelcomeWithoutUMAAndSignin: {
+      NSAttributedString* footerLine =
+          FooterAttributedStringWithMessageIDAndURL(
+              IDS_IOS_FIRST_RUN_WELCOME_SCREEN_TERMS_OF_SERVICE,
+              kTermsOfServiceURL);
+      AddNewLineToFooterString(footerLine, footerAttributedString);
+      break;
+    }
+  }
+  return footerAttributedString;
+}
 
 // Callback for |identityControl|.
 - (void)identityButtonControlTapped:(id)sender forEvent:(UIEvent*)event {
@@ -266,10 +336,39 @@ NSString* const kLearnMoreTextViewAccessibilityIdentifier =
     self.primaryActionString = l10n_util::GetNSStringF(
         IDS_IOS_FIRST_RUN_SIGNIN_CONTINUE_AS,
         base::SysNSStringToUTF16(self.personalizedButtonPrompt));
-    ;
   } else {
     self.primaryActionString =
         l10n_util::GetNSString(IDS_IOS_FIRST_RUN_SIGNIN_SIGN_IN_ACTION);
+  }
+}
+
+#pragma mark - SigninScreenConsumer
+
+- (void)setSelectedIdentityUserName:(NSString*)userName
+                              email:(NSString*)email
+                          givenName:(NSString*)givenName
+                             avatar:(UIImage*)avatar {
+  DCHECK_NE(self.signinStatus, SigninScreenConsumerSigninStatusDisabled);
+  DCHECK(email);
+  DCHECK(avatar);
+  self.personalizedButtonPrompt = givenName ? givenName : email;
+  [self updateUIForIdentityAvailable:YES];
+  [self.identityControl setIdentityName:userName email:email];
+  [self.identityControl setIdentityAvatar:avatar];
+}
+
+- (void)noIdentityAvailable {
+  DCHECK_NE(self.signinStatus, SigninScreenConsumerSigninStatusDisabled);
+  [self updateUIForIdentityAvailable:NO];
+}
+
+- (void)setUIEnabled:(BOOL)UIEnabled {
+  if (UIEnabled) {
+    [self.overlay removeFromSuperview];
+  } else {
+    [self.view addSubview:self.overlay];
+    AddSameConstraints(self.view, self.overlay);
+    [self.overlay.indicator startAnimating];
   }
 }
 
@@ -279,51 +378,24 @@ NSString* const kLearnMoreTextViewAccessibilityIdentifier =
     shouldInteractWithURL:(NSURL*)URL
                   inRange:(NSRange)characterRange
               interaction:(UITextItemInteraction)interaction {
-  DCHECK(textView == self.learnMoreTextView);
-
-  NSMutableString* detailsMessage = [[NSMutableString alloc] init];
-  NSString* detailsPadding = @"\n\n";
-  if (self.enterpriseSignInRestrictions & kEnterpriseForceSignIn) {
-    [detailsMessage appendString:l10n_util::GetNSString(
-                                     IDS_IOS_ENTERPRISE_FORCED_SIGNIN_MESSAGE)];
+  if ([URL.absoluteString isEqualToString:kTermsOfServiceURL]) {
+    [self.TOSHandler showTOSPage];
+  } else if ([URL.absoluteString isEqualToString:kMetricReportingURL]) {
+    [self.delegate showUMADialog];
+  } else {
+    NOTREACHED() << std::string("Unknown URL ")
+                 << base::SysNSStringToUTF8(URL.absoluteString);
   }
-  if (self.enterpriseSignInRestrictions & kEnterpriseRestrictAccounts) {
-    if ([detailsMessage length])
-      [detailsMessage appendString:detailsPadding];
-    [detailsMessage
-        appendString:
-            l10n_util::GetNSString(
-                IDS_IOS_ENTERPRISE_RESTRICTED_ACCOUNTS_TO_PATTERNS_MESSAGE)];
-  }
-
-  // Open signin popover.
-  self.bubbleViewController = [[EnterpriseInfoPopoverViewController alloc]
-             initWithMessage:detailsMessage
-              enterpriseName:nil  // TODO(crbug.com/1251986): Remove this
-                                  // variable.
-      isPresentingFromButton:NO
-            addLearnMoreLink:NO];
-  [self presentViewController:self.bubbleViewController
-                     animated:YES
-                   completion:nil];
-
-  // Set the anchor and arrow direction of the bubble.
-  self.bubbleViewController.popoverPresentationController.sourceView =
-      self.learnMoreTextView;
-  self.bubbleViewController.popoverPresentationController.sourceRect =
-      TextViewLinkBound(textView, characterRange);
-  self.bubbleViewController.popoverPresentationController
-      .permittedArrowDirections =
-      UIPopoverArrowDirectionUp | UIPopoverArrowDirectionDown;
-
-  // The handler is already handling the tap.
   return NO;
 }
 
 - (void)textViewDidChangeSelection:(UITextView*)textView {
   // Always force the |selectedTextRange| to |nil| to prevent users from
   // selecting text. Setting the |selectable| property to |NO| doesn't help
-  // since it makes links inside the text view untappable.
+  // since it makes links inside the text view untappable. Another solution is
+  // to subclass |UITextView| and override |canBecomeFirstResponder| to return
+  // NO, but that workaround only works on iOS 13.5+. This is the simplest
+  // approach that works well on iOS 12, 13 & 14.
   textView.selectedTextRange = nil;
 }
 

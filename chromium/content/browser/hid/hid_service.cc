@@ -146,6 +146,7 @@ void HidService::GetDevices(GetDevicesCallback callback) {
 
 void HidService::RequestDevice(
     std::vector<blink::mojom::HidDeviceFilterPtr> filters,
+    std::vector<blink::mojom::HidDeviceFilterPtr> exclusion_filters,
     RequestDeviceCallback callback) {
   HidDelegate* delegate = GetContentClient()->browser()->GetHidDelegate();
   if (!delegate->CanRequestDevicePermission(render_frame_host())) {
@@ -154,7 +155,7 @@ void HidService::RequestDevice(
   }
 
   chooser_ = delegate->RunChooser(
-      render_frame_host(), std::move(filters),
+      render_frame_host(), std::move(filters), std::move(exclusion_filters),
       base::BindOnce(&HidService::FinishRequestDevice,
                      weak_factory_.GetWeakPtr(), std::move(callback)));
 }
@@ -228,6 +229,19 @@ void HidService::OnDeviceAdded(
 
 void HidService::OnDeviceRemoved(
     const device::mojom::HidDeviceInfo& device_info) {
+  size_t watchers_removed =
+      base::EraseIf(watcher_ids_, [&](const auto& watcher_entry) {
+        if (watcher_entry.first != device_info.guid)
+          return false;
+
+        watchers_.Remove(watcher_entry.second);
+        return true;
+      });
+
+  // If needed, decrement the active frame count.
+  if (watchers_removed > 0)
+    OnWatcherRemoved(/*cleanup_watcher_ids=*/false);
+
   auto* delegate = GetContentClient()->browser()->GetHidDelegate();
   if (!delegate->HasDevicePermission(render_frame_host(), device_info)) {
     return;

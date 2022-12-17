@@ -157,19 +157,19 @@ TEST_F(NGInlineLayoutAlgorithmTest, BreakToken) {
   container_builder.SetItemsBuilder(&items_builder);
   context.SetItemsBuilder(&items_builder);
   const NGLayoutResult* layout_result =
-      inline_node.Layout(constraint_space, nullptr, &context);
+      inline_node.Layout(constraint_space, nullptr, nullptr, &context);
   const auto& line1 = layout_result->PhysicalFragment();
   EXPECT_TRUE(line1.BreakToken());
 
   // Perform 2nd layout with the break token from the 1st line.
-  const NGLayoutResult* layout_result2 =
-      inline_node.Layout(constraint_space, line1.BreakToken(), &context);
+  const NGLayoutResult* layout_result2 = inline_node.Layout(
+      constraint_space, line1.BreakToken(), nullptr, &context);
   const auto& line2 = layout_result2->PhysicalFragment();
   EXPECT_TRUE(line2.BreakToken());
 
   // Perform 3rd layout with the break token from the 2nd line.
-  const NGLayoutResult* layout_result3 =
-      inline_node.Layout(constraint_space, line2.BreakToken(), &context);
+  const NGLayoutResult* layout_result3 = inline_node.Layout(
+      constraint_space, line2.BreakToken(), nullptr, &context);
   const auto& line3 = layout_result3->PhysicalFragment();
   EXPECT_FALSE(line3.BreakToken());
 }
@@ -526,14 +526,14 @@ TEST_F(NGInlineLayoutAlgorithmTest, BlockInInlineAppend) {
     </div>
   )HTML");
   Element* container_element = GetElementById("container");
-  scoped_refptr<const NGPhysicalLineBoxFragment> before_append =
+  const NGPhysicalLineBoxFragment* before_append =
       FindBlockInInlineLineBoxFragment(container_element);
   ASSERT_TRUE(before_append);
 
   Document& doc = GetDocument();
   container_element->appendChild(doc.createTextNode("12345678"));
   UpdateAllLifecyclePhasesForTest();
-  scoped_refptr<const NGPhysicalLineBoxFragment> after_append =
+  const NGPhysicalLineBoxFragment* after_append =
       FindBlockInInlineLineBoxFragment(container_element);
   EXPECT_NE(before_append, after_append);
 }
@@ -590,7 +590,7 @@ TEST_F(NGInlineLayoutAlgorithmTest, InkOverflow) {
 
 // See also NGInlineLayoutAlgorithmTest.TextCombineFake
 TEST_F(NGInlineLayoutAlgorithmTest, TextCombineBasic) {
-  ScopedLayoutNGTextCombineForTest enable_layout_ng_text_combine(true);
+  ScopedLayoutNGForTest enable_layout_ng(true);
   LoadAhem();
   InsertStyleElement(
       "body { margin: 0px; font: 100px/110px Ahem; }"
@@ -618,7 +618,7 @@ TEST_F(NGInlineLayoutAlgorithmTest, TextCombineBasic) {
 
 // See also NGInlineLayoutAlgorithmTest.TextCombineBasic
 TEST_F(NGInlineLayoutAlgorithmTest, TextCombineFake) {
-  ScopedLayoutNGTextCombineForTest enable_layout_ng_text_combine(true);
+  ScopedLayoutNGForTest enable_layout_ng(true);
   LoadAhem();
   InsertStyleElement(
       "body { margin: 0px; font: 100px/110px Ahem; }"

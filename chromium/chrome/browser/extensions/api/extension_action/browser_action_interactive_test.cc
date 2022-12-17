@@ -4,6 +4,7 @@
 
 #include <memory>
 
+#include "base/files/file_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/scoped_observation.h"
@@ -628,7 +629,7 @@ IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveTest, MAYBE_BrowserActionPopup) {
   // from setting and storing the size for the next iteration, resulting in test
   // flakiness.
   const gfx::Size kExpectedSizes[] = {maxSize, middleSize, minSize};
-  for (size_t i = 0; i < base::size(kExpectedSizes); i++) {
+  for (size_t i = 0; i < std::size(kExpectedSizes); i++) {
     content::WebContentsAddedObserver popup_observer;
     actions_bar->Press(extension->id());
     content::WebContents* popup = popup_observer.GetWebContents();

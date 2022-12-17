@@ -316,6 +316,45 @@
               }
             }
           },
+          "actionChanged": {
+            "description": "An action has changed. Message contains the new settings",
+            "type": "object",
+            "optional": true,
+            "properties": {
+              "command": {
+                "description": "Action name.",
+                "type": "string"
+              },
+              "shortcuts": {
+                "description": "Shortcuts for the action. If omitted there are no shortcuts.",
+                "optional": true,
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "gestures": {
+                "description": "Gestures for the action. If omitted there are no gestures.",
+                "optional": true,
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "actionsRestored": {
+            "description": "Section has been reset",
+            "type": "object",
+            "optional": true,
+            "properties": {
+              "dummy": {
+                "description": "One arg must be present",
+                "optional": true,
+                "type": "string"
+              }
+            }
+          },
           "calendar": {
             "description": "Control data handling and turning on/off change listeners.",
             "type": "object",
@@ -525,6 +564,31 @@
             "type": "string",
             "optional": true,
             "description":  "URL formatted for security display, meaning formatted in unicode in a way to avoid IDN homograph attack."
+          },
+          "tldForSecurityDisplay": {
+            "type": "string",
+            "optional": true,
+            "description": "TLD for security display"
+          },
+          "hostForSecurityDisplay": {
+            "type": "string",
+            "optional": true,
+            "description": "Host for security display"
+          },
+          "pathForSecurityDisplay": {
+            "type": "string",
+            "optional": true,
+            "description": "Path for security display"
+          },
+          "queryForSecurityDisplay": {
+            "type": "string",
+            "optional": true,
+            "description": "Query for security display"
+          },
+          "refForSecurityDisplay": {
+            "type": "string",
+            "optional": true,
+            "description": "ref for security display"
           }
         }
       },
@@ -723,6 +787,10 @@
           "chromiumVersion": {
             "type": "string",
             "description": "The Chromium version as a string."
+          },
+          "mailVersion": {
+            "type": "string",
+            "description": "The Vivaldi mail version as a string."
           }
         }
       },
@@ -1892,6 +1960,22 @@
               "$ref": "TranslateTextResponse"
             }
           ]
+        }
+      },
+      {
+        "name": "showManageSSLCertificates",
+        "type": "function",
+        "description": "Show the OS manage certificates dialog.",
+        "parameters": [
+          {
+            "name": "windowId",
+            "type": "integer",
+            "description": "The window to use as parent window for the dialog"
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": []
         }
       }
     ],

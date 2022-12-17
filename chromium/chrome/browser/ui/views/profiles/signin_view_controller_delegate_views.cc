@@ -19,6 +19,7 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/webui/signin/profile_customization_ui.h"
 #include "chrome/browser/ui/webui/signin/signin_url_utils.h"
+#include "chrome/browser/ui/webui/signin/signin_utils.h"
 #include "chrome/browser/ui/webui/signin/sync_confirmation_ui.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/common/webui_url_constants.h"
@@ -30,6 +31,7 @@
 #include "content/public/browser/web_contents.h"
 #include "google_apis/gaia/core_account_id.h"
 #include "google_apis/gaia/gaia_urls.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/views/bubble/bubble_frame_view.h"
@@ -143,8 +145,10 @@ std::unique_ptr<views::WebView>
 SigninViewControllerDelegateViews::CreateEnterpriseConfirmationWebView(
     Browser* browser,
     const AccountInfo& account_info,
+    bool profile_creation_required_by_policy,
+    bool show_link_data_option,
     SkColor profile_color,
-    base::OnceCallback<void(bool)> callback) {
+    signin::SigninChoiceCallback callback) {
   std::unique_ptr<views::WebView> web_view = CreateDialogWebView(
       browser, GURL(chrome::kChromeUIEnterpriseProfileWelcomeURL),
       kSyncConfirmationDialogHeight, kSyncConfirmationDialogWidth,
@@ -159,7 +163,8 @@ SigninViewControllerDelegateViews::CreateEnterpriseConfirmationWebView(
   web_dialog_ui->Initialize(
       browser,
       EnterpriseProfileWelcomeUI::ScreenType::kEnterpriseAccountCreation,
-      account_info, profile_color, std::move(callback));
+      account_info, profile_creation_required_by_policy, show_link_data_option,
+      profile_color, std::move(callback));
 
   return web_view;
 }
@@ -349,10 +354,13 @@ void SigninViewControllerDelegateViews::DisplayModal() {
       modal_signin_widget_ = constrained_window::CreateWebModalDialogViews(
           this, host_web_contents);
       if (should_show_close_button_) {
-        GetBubbleFrameView()->SetBubbleBorder(
-            std::make_unique<views::BubbleBorder>(
-                views::BubbleBorder::NONE, views::BubbleBorder::STANDARD_SHADOW,
-                SK_ColorWHITE));
+        // TODO(https://crbug.com/1315194): stop forcing the light theme once
+        // the reauth dialog supports the dark mode.
+        auto bubble_border = std::make_unique<views::BubbleBorder>(
+            views::BubbleBorder::NONE, views::BubbleBorder::STANDARD_SHADOW,
+            SK_ColorWHITE);
+        bubble_border->set_use_theme_background_color(true);
+        GetBubbleFrameView()->SetBubbleBorder(std::move(bubble_border));
       }
       constrained_window::ShowModalDialog(
           modal_signin_widget_->GetNativeWindow(), host_web_contents);
@@ -419,11 +427,14 @@ SigninViewControllerDelegate*
 SigninViewControllerDelegate::CreateEnterpriseConfirmationDelegate(
     Browser* browser,
     const AccountInfo& account_info,
+    bool profile_creation_required_by_policy,
+    bool show_link_data_option,
     SkColor profile_color,
-    base::OnceCallback<void(bool)> callback) {
+    signin::SigninChoiceCallback callback) {
   return new SigninViewControllerDelegateViews(
       SigninViewControllerDelegateViews::CreateEnterpriseConfirmationWebView(
-          browser, account_info, profile_color, std::move(callback)),
+          browser, account_info, profile_creation_required_by_policy,
+          show_link_data_option, profile_color, std::move(callback)),
       browser, ui::MODAL_TYPE_WINDOW, true, false);
 }
 #endif

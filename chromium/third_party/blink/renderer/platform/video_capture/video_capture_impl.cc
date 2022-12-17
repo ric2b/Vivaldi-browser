@@ -17,7 +17,6 @@
 #include <utility>
 
 #include <GLES2/gl2extchromium.h>
-
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
@@ -127,17 +126,20 @@ struct VideoCaptureImpl::BufferContext
   }
 
   gfx::GpuMemoryBufferHandle TakeGpuMemoryBufferHandle() {
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_MAC) or BUILDFLAG(IS_WIN)
     // The same GpuMemoryBuffersHandles will be reused repeatedly by the
     // unaccelerated macOS path. Each of these uses will call this function.
     // Ensure that this function doesn't invalidate the GpuMemoryBufferHandle
     // on macOS for this reason.
     // https://crbug.com/1159722
+    // It will also be reused repeatedly if GPU process is unavailable in
+    // Windows zero-copy path (e.g. due to repeated GPU process crashes).
     return gmb_resources_->gpu_memory_buffer_handle.Clone();
 #else
     return std::move(gmb_resources_->gpu_memory_buffer_handle);
 #endif
   }
+
   void SetGpuMemoryBuffer(
       std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer) {
     gmb_resources_->gpu_memory_buffer = std::move(gpu_memory_buffer);
@@ -171,6 +173,16 @@ struct VideoCaptureImpl::BufferContext
         return;
       sii->DestroySharedImage(release_sync_token, mailbox);
     }
+  }
+
+  // Public because it may be called after initialization when GPU process
+  // dies on Windows to wrap premapped GMBs.
+  void InitializeFromUnsafeShmemRegion(base::UnsafeSharedMemoryRegion region) {
+    DCHECK(region.IsValid());
+    backup_mapping_ = region.Map();
+    DCHECK(backup_mapping_.IsValid());
+    data_ = backup_mapping_.GetMemoryAsSpan<uint8_t>().data();
+    data_size_ = backup_mapping_.size();
   }
 
  private:
@@ -235,6 +247,11 @@ struct VideoCaptureImpl::BufferContext
 
   // Only valid for |buffer_type_ == READ_ONLY_SHMEM_REGION|.
   base::ReadOnlySharedMemoryMapping read_only_mapping_;
+
+  // Only valid for |buffer_type == GPU_MEMORY_BUFFER_HANDLE|
+  // if on windows, gpu_factories are unavailable, and
+  // GMB comes premapped from the capturer.
+  base::WritableSharedMemoryMapping backup_mapping_;
 
   // These point into one of the above mappings, which hold the mapping open for
   // the lifetime of this object.
@@ -364,6 +381,38 @@ bool VideoCaptureImpl::VideoFrameBufferPreparer::Initialize() {
         break;
       }
 #endif
+#if BUILDFLAG(IS_WIN)
+      // The associated shared memory region is mapped only once
+      if (frame_info_->is_premapped && !buffer_context_->data()) {
+        auto gmb_handle = buffer_context_->TakeGpuMemoryBufferHandle();
+        buffer_context_->InitializeFromUnsafeShmemRegion(
+            std::move(gmb_handle.region));
+        DCHECK(buffer_context_->data());
+      }
+      // On Windows it might happen that the Renderer process loses GPU
+      // connection, while the capturer process will continue to produce
+      // GPU backed frames.
+      if (!video_capture_impl_.gpu_factories_ ||
+          !video_capture_impl_.media_task_runner_) {
+        video_capture_impl_.RequirePremappedFrames();
+        if (!frame_info_->is_premapped || !buffer_context_->data()) {
+          // If the frame isn't premapped, can't do anything here.
+          return false;
+        }
+
+        frame_ = media::VideoFrame::WrapExternalData(
+            frame_info_->pixel_format, gfx::Size(frame_info_->coded_size),
+            gfx::Rect(frame_info_->visible_rect),
+            frame_info_->visible_rect.size(),
+            const_cast<uint8_t*>(buffer_context_->data()),
+            buffer_context_->data_size(), frame_info_->timestamp);
+
+        if (!frame_) {
+          return false;
+        }
+        break;
+      }
+#endif
       CHECK(video_capture_impl_.gpu_factories_);
       CHECK(video_capture_impl_.media_task_runner_);
       // Create GpuMemoryBuffer from handle.
@@ -389,6 +438,7 @@ bool VideoCaptureImpl::VideoFrameBufferPreparer::Initialize() {
                     video_capture_impl_.gpu_factories_
                         ->GpuMemoryBufferManager(),
                     video_capture_impl_.pool_);
+
         // Keep one GpuMemoryBuffer for current GpuMemoryHandle alive,
         // so that any associated structures are kept alive while this buffer id
         // is still used (e.g. DMA buf handles for linux/CrOS).
@@ -397,13 +447,17 @@ bool VideoCaptureImpl::VideoFrameBufferPreparer::Initialize() {
       CHECK(buffer_context_->GetGpuMemoryBuffer());
 
       auto buffer_handle = buffer_context_->GetGpuMemoryBuffer()->CloneHandle();
-      if (!frame_info_->is_premapped) {
-        // The buffer may have a region associated with it, which is passed
-        // together with the buffer handle when a new buffer is allocated by the
-        // capturer. However, it will contain actual frame data only if the
-        // |is_premapped| flag is signalled for this frame.
-        buffer_handle.region = base::UnsafeSharedMemoryRegion();
-      }
+
+      // No need to propagate shared memory region further as it's already
+      // exposed by |buffer_context_->data()|.
+      buffer_handle.region = base::UnsafeSharedMemoryRegion();
+      // The buffer_context_ might still have a mapped shared memory region.
+      // However, it contains valid data only if |is_premapped| is set.
+      uint8_t* premapped_data =
+          frame_info_->is_premapped
+              ? const_cast<uint8_t*>(buffer_context_->data())
+              : nullptr;
+
       // Clone the GpuMemoryBuffer and wrap it in a VideoFrame.
       gpu_memory_buffer_ =
           video_capture_impl_.gpu_memory_buffer_support_
@@ -413,7 +467,9 @@ bool VideoCaptureImpl::VideoFrameBufferPreparer::Initialize() {
                   buffer_context_->GetGpuMemoryBuffer()->GetFormat(),
                   gfx::BufferUsage::SCANOUT_VEA_CPU_READ, base::DoNothing(),
                   video_capture_impl_.gpu_factories_->GpuMemoryBufferManager(),
-                  video_capture_impl_.pool_);
+                  video_capture_impl_.pool_,
+                  base::span<uint8_t>(premapped_data,
+                                      buffer_context_->data_size()));
       if (!gpu_memory_buffer_) {
         LOG(ERROR) << "Failed to open GpuMemoryBuffer handle";
         return false;
@@ -851,10 +907,10 @@ void VideoCaptureImpl::OnBufferReady(
     OnFrameDropped(
         media::VideoCaptureFrameDropReason::kVideoCaptureImplNotInStartedState);
     GetVideoCaptureHost()->ReleaseBuffer(device_id_, buffer->buffer_id,
-                                         media::VideoCaptureFeedback());
+                                         DefaultFeedback());
     for (auto& scaled_buffer : scaled_buffers) {
       GetVideoCaptureHost()->ReleaseBuffer(device_id_, scaled_buffer->buffer_id,
-                                           media::VideoCaptureFeedback());
+                                           DefaultFeedback());
     }
     return;
   }
@@ -876,8 +932,6 @@ void VideoCaptureImpl::OnBufferReady(
 
   // If the timestamp is not prepared, we use reference time to make a rough
   // estimate. e.g. ThreadSafeCaptureOracle::DidCaptureFrame().
-  // TODO(miu): Fix upstream capturers to always set timestamp and reference
-  // time. See http://crbug/618407/ for tracking.
   if (buffer->info->timestamp.is_zero())
     buffer->info->timestamp = reference_time - first_frame_ref_time_;
 
@@ -911,6 +965,14 @@ void VideoCaptureImpl::OnBufferReady(
     scaled_frame_preparers.push_back(std::move(scaled_frame_preparer));
   }
   if (!init_successful) {
+    OnFrameDropped(media::VideoCaptureFrameDropReason::
+                       kVideoCaptureImplFailedToWrapDataAsMediaVideoFrame);
+    GetVideoCaptureHost()->ReleaseBuffer(
+        device_id_, frame_preparer->buffer_id(), DefaultFeedback());
+    for (auto& scaled_frame_preparer : scaled_frame_preparers) {
+      GetVideoCaptureHost()->ReleaseBuffer(
+          device_id_, scaled_frame_preparer->buffer_id(), DefaultFeedback());
+    }
     return;
   }
 
@@ -985,11 +1047,10 @@ void VideoCaptureImpl::OnVideoFrameReady(
                        kVideoCaptureImplFailedToWrapDataAsMediaVideoFrame);
     // Release all buffers.
     GetVideoCaptureHost()->ReleaseBuffer(
-        device_id_, frame_preparer->buffer_id(), media::VideoCaptureFeedback());
+        device_id_, frame_preparer->buffer_id(), DefaultFeedback());
     for (const auto& scaled_frame_preparer : scaled_frame_preparers) {
-      GetVideoCaptureHost()->ReleaseBuffer(device_id_,
-                                           scaled_frame_preparer->buffer_id(),
-                                           media::VideoCaptureFeedback());
+      GetVideoCaptureHost()->ReleaseBuffer(
+          device_id_, scaled_frame_preparer->buffer_id(), DefaultFeedback());
     }
     return;
   }
@@ -1061,6 +1122,9 @@ void VideoCaptureImpl::OnAllClientsFinishedConsumingFrame(
   buffer_context = nullptr;
 #endif
 
+  if (require_premapped_frames_) {
+    feedback_.require_mapped_frame = true;
+  }
   GetVideoCaptureHost()->ReleaseBuffer(device_id_, buffer_id, feedback_);
   feedback_ = media::VideoCaptureFeedback();
 }
@@ -1181,6 +1245,16 @@ void VideoCaptureImpl::ProcessFeedback(
     const media::VideoCaptureFeedback& feedback) {
   DCHECK_CALLED_ON_VALID_THREAD(io_thread_checker_);
   feedback_ = feedback;
+}
+
+void VideoCaptureImpl::RequirePremappedFrames() {
+  require_premapped_frames_ = true;
+}
+
+media::VideoCaptureFeedback VideoCaptureImpl::DefaultFeedback() {
+  media::VideoCaptureFeedback feedback;
+  feedback.require_mapped_frame = require_premapped_frames_;
+  return feedback;
 }
 
 base::WeakPtr<VideoCaptureImpl> VideoCaptureImpl::GetWeakPtr() {

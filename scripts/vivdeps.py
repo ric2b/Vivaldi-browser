@@ -58,6 +58,13 @@ def IsAndroidEnabled():
     return True
   return os.access(os.path.join(SRC,".enable_android"), os.F_OK)
 
+def IsReclientEnabled(host_os):
+  if host_os not in ["win", "linux"]:
+    return False
+  if "FETCH_RECLIENT" in os.environ:
+    return True
+  return os.access(os.path.join(SRC,".enable_gn_reclient"), os.F_OK)
+
 def get_variables(a_checkout_os=None):
   host_os = VivaldiBaseDeps.DEPS_OS_CHOICES.get(sys.platform, 'linux')
   if host_os == "unix":
@@ -89,7 +96,7 @@ def get_variables(a_checkout_os=None):
     checkout_os: True,
     "checkout_pgo_profiles": False,
     "build_with_chromium": True,
-    "checkout_reclient": False,
+    "checkout_reclient": IsReclientEnabled(host_os),
   }
   for x in checkout_cpu:
     global_vars["checkout_"+x] = True

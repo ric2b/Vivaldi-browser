@@ -7,7 +7,7 @@ import {EmojiButton} from 'chrome://emoji-picker/emoji_button.js';
 import {EmojiPicker} from 'chrome://emoji-picker/emoji_picker.js';
 import {EmojiPickerApiProxyImpl} from 'chrome://emoji-picker/emoji_picker_api_proxy.js';
 import {EmojiVariants} from 'chrome://emoji-picker/emoji_variants.js';
-import {EMOJI_DATA_LOADED, EMOJI_VARIANTS_SHOWN} from 'chrome://emoji-picker/events.js';
+import {EMOJI_REMAINING_DATA_LOADED, EMOJI_VARIANTS_SHOWN} from 'chrome://emoji-picker/events.js';
 import {assert} from 'chrome://resources/js/assert.m.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
@@ -35,7 +35,7 @@ suite('<emoji-picker>', () => {
 
     // Wait until emoji data is loaded before executing tests.
     return new Promise((resolve) => {
-      emojiPicker.addEventListener(EMOJI_DATA_LOADED, resolve);
+      emojiPicker.addEventListener(EMOJI_REMAINING_DATA_LOADED, resolve);
       document.body.appendChild(emojiPicker);
       flush();
     });
@@ -214,6 +214,39 @@ suite('<emoji-picker>', () => {
         assert(!recentlyUsed);
       });
 
+  test('recently used should be empty after clearing', async () => {
+    EmojiPickerApiProxyImpl.getInstance().isIncognitoTextField = () =>
+        // first - insert an emoji to populate recently used
+        new Promise((resolve) => resolve({incognito: false}));
+    // yield to allow emoji-group and emoji buttons to render.
+    const emojiButton = (await waitForCondition(
+                             () => findInEmojiPicker(
+                                 '[data-group="0"] > emoji-group',
+                                 'emoji-button:nth-child(2)')))
+                            .shadowRoot.querySelector('button');
+    emojiButton.click();
+
+    // wait until emoji exists in recently used section.
+    const recentlyUsed =
+        (await waitForCondition(
+             () => findInEmojiPicker(
+                 '[data-group=history] > emoji-group', 'emoji-button')))
+            .shadowRoot.querySelector('button');
+
+    // click show clear button
+    findInEmojiPicker('.group', '#show-clear').click();
+    await waitForCondition(() => findInEmojiPicker('.group', '#clear-recents'));
+
+    // click clear button
+    findInEmojiPicker('.group', '#clear-recents').click();
+
+    // Expect no more history.
+    await waitForCondition(
+        () => findInEmojiPicker('[data-group=history] > emoji-group')
+                  .style.display === 'none',
+        'history failed to disappear');
+  });
+
 
   suite('<emoji-variants>', () => {
     /** @type {!EmojiButton} */
@@ -343,6 +376,22 @@ suite('<emoji-picker>', () => {
           'keydown', {cancelable: true, key: 'Enter', keyCode: 13});
       const search = findInEmojiPicker('emoji-search');
       search.onKeyDown(enterEvent);
+    });
+    test('finds results in the second group', async () => {
+      const search = findInEmojiPicker('emoji-search');
+      // This particular emoji only appears in the third tab of the test
+      // ordering
+      search.search = 'face with tears of joy';
+
+      await waitForCondition(
+          () => search.emojiResults.length > 0, 'no search get any results',
+          1000);
+      assertGT(search.emojiResults.length, 0);
+    });
+    test('finds no results for garbage search', async () => {
+      const search = findInEmojiPicker('emoji-search');
+      search.search = 'THIS string should not match anything';
+      assertEquals(search.emojiResults.length, 0);
     });
   });
 });

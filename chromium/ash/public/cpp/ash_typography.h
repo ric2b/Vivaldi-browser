@@ -50,6 +50,9 @@ enum AshTextContext {
   // Big title text label used in search result view. Usually 36 pt.
   CONTEXT_SEARCH_RESULT_BIG_TITLE,
 
+  // Big title superscript text label used in search result view. Usually 18 pt.
+  CONTEXT_SEARCH_RESULT_BIG_TITLE_SUPERSCRIPT,
+
   // Details text label used for inline answer search result view. Usually 12pt.
   // Used when productivity launcher is enabled.
   CONTEXT_SEARCH_RESULT_VIEW_INLINE_ANSWER_DETAILS,
@@ -64,9 +67,12 @@ enum AshTextContext {
 enum AshTextStyle {
   ASH_TEXT_STYLE_START = views::style::VIEWS_TEXT_STYLE_END,
 
-  // Used to draw attention to a section of body text such as a matched search
-  // string.
+  // Used to draw attention to a section of body text such as the date.
   STYLE_EMPHASIZED = ASH_TEXT_STYLE_START,
+
+  // Used to strongly draw attention to a section or body of text such as a
+  // matched search string.
+  STYLE_HIGHLIGHT,
 
   // Text styling specifically for the Chrome OS sharesheet.
   STYLE_SHARESHEET,

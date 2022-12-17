@@ -54,4 +54,7 @@ bool IsValidLinkerSubstitution(const Substitution* type);
 bool IsValidLinkerOutputsSubstitution(const Substitution* type);
 bool IsValidALinkSubstitution(const Substitution* type);
 
+// action targets may rely on some compiler substitutions.
+bool IsValidCompilerScriptArgsSubstitution(const Substitution* type);
+
 #endif  // TOOLS_GN_C_SUBSTITUTION_TYPE_H_

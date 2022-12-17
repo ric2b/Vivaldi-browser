@@ -20,6 +20,7 @@
 #include "chrome/browser/ash/login/screens/encryption_migration_screen.h"
 #include "chrome/browser/ash/login/screens/gaia_screen.h"
 #include "chrome/browser/ash/login/screens/pin_setup_screen.h"
+#include "chrome/browser/ash/login/screens/saml_confirm_password_screen.h"
 #include "chrome/browser/ash/login/screens/signin_fatal_error_screen.h"
 #include "chrome/browser/ash/login/startup_utils.h"
 #include "chrome/browser/ash/login/ui/login_feedback.h"
@@ -39,6 +40,7 @@
 #include "chrome/browser/ui/webui/chromeos/login/locale_switch_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/management_transition_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/os_install_screen_handler.h"
+#include "chrome/browser/ui/webui/chromeos/login/saml_confirm_password_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/signin_fatal_error_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/terms_of_service_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/user_creation_screen_handler.h"
@@ -192,6 +194,10 @@ void LoginDisplayHostCommon::BeforeSessionStart() {
   session_starting_ = true;
 }
 
+bool LoginDisplayHostCommon::LoginDisplayHostCommon::IsFinalizing() {
+  return is_finalizing_;
+}
+
 void LoginDisplayHostCommon::Finalize(base::OnceClosure completion_callback) {
   LOG(WARNING) << "Finalize";
   // If finalize is called twice the LoginDisplayHost instance will be deleted
@@ -342,6 +348,13 @@ void LoginDisplayHostCommon::SetDisplayAndGivenName(
                                                         given_name);
 }
 
+void LoginDisplayHostCommon::ShowAllowlistCheckFailedError() {
+  StartWizard(GaiaView::kScreenId);
+
+  GaiaScreen* gaia_screen = GetWizardController()->GetScreen<GaiaScreen>();
+  gaia_screen->ShowAllowlistCheckFailedError();
+}
+
 void LoginDisplayHostCommon::LoadWallpaper(const AccountId& account_id) {
   WallpaperControllerClientImpl::Get()->ShowUserWallpaper(account_id);
 }
@@ -379,15 +392,11 @@ bool LoginDisplayHostCommon::HandleAccelerator(LoginAcceleratorAction action) {
   if (action == LoginAcceleratorAction::kShowFeedback) {
     login_feedback_ = std::make_unique<LoginFeedback>(
         ProfileHelper::Get()->GetSigninProfile());
-    login_feedback_->Request(
-        std::string(),
-        base::BindOnce(&LoginDisplayHostCommon::OnFeedbackFinished,
-                       weak_factory_.GetWeakPtr()));
+    login_feedback_->Request(std::string());
     return true;
   }
 
-  if (action == LoginAcceleratorAction::kLaunchDiagnostics &&
-      base::FeatureList::IsEnabled(features::kDiagnosticsApp)) {
+  if (action == LoginAcceleratorAction::kLaunchDiagnostics) {
     // Don't handle this action if device is disabled.
     if (system::DeviceDisablingManager::
             IsDeviceDisabledDuringNormalOperation()) {
@@ -440,8 +449,18 @@ void LoginDisplayHostCommon::StartManagementTransition() {
 }
 
 void LoginDisplayHostCommon::ShowTosForExistingUser() {
-  SetScreenAfterManagedTos(OobeScreen::SCREEN_UNKNOWN);
+  SetScreenAfterManagedTos(ash::OOBE_SCREEN_UNKNOWN);
   StartUserOnboarding();
+}
+
+void LoginDisplayHostCommon::ShowNewTermsForFlexUsers() {
+  if (features::IsOobeConsolidatedConsentEnabled()) {
+    SetScreenAfterManagedTos(ConsolidatedConsentScreenView::kScreenId);
+  } else {
+    SetScreenAfterManagedTos(EulaView::kScreenId);
+  }
+  wizard_context_->is_cloud_ready_update_flow = true;
+  StartWizard(TermsOfServiceScreenView::kScreenId);
 }
 
 void LoginDisplayHostCommon::SetAuthSessionForOnboarding(
@@ -516,6 +535,16 @@ void LoginDisplayHostCommon::ShowSigninError(SigninError error,
   GetWizardController()->GetScreen<SignInFatalErrorScreen>()->SetCustomError(
       error_text, keyboard_hint, details, help_link_text);
   StartWizard(SignInFatalErrorView::kScreenId);
+}
+
+void LoginDisplayHostCommon::SAMLConfirmPassword(
+    ::login::StringList scraped_passwords,
+    std::unique_ptr<UserContext> user_context) {
+  GetWizardController()
+      ->GetScreen<SamlConfirmPasswordScreen>()
+      ->SetContextAndPasswords(std::move(user_context),
+                               std::move(scraped_passwords));
+  StartWizard(SamlConfirmPasswordView::kScreenId);
 }
 
 WizardContext* LoginDisplayHostCommon::GetWizardContextForTesting() {
@@ -603,10 +632,6 @@ void LoginDisplayHostCommon::Cleanup() {
   ProfileHelper::Get()->ClearSigninProfile(base::DoNothing());
   registrar_.RemoveAll();
   BrowserList::RemoveObserver(this);
-}
-
-void LoginDisplayHostCommon::OnFeedbackFinished() {
-  login_feedback_.reset();
 }
 
 }  // namespace ash

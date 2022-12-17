@@ -40,7 +40,6 @@ import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.read_later.ReadingListUtils;
 import org.chromium.ui.base.DeviceFormFactor;
-import org.chromium.ui.widget.Toast;
 
 import org.vivaldi.browser.bookmarks.BookmarkDialogDelegate;
 import org.vivaldi.browser.panels.PanelUtils;
@@ -247,8 +246,6 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
                 if (mTabbedActivity != null && mTabbedActivity.getActivityTab() != null
                   && ReadingListUtils.isReadingListSupported(mTabbedActivity.getActivityTab().getUrl())) {
                     mTabbedActivity.addToReadingList(mTabbedActivity.getActivityTab());
-                    Toast.makeText(getContext(), R.string.add_page_to_reading_list_confirm,
-                            Toast.LENGTH_SHORT).show();
                 }
                 return true;
             }

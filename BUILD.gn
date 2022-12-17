@@ -72,12 +72,10 @@ group("All") {
       "//vivaldi/tools/vivaldi_proxy",
       "//chrome/installer/mini_installer",
       "//components/zucchini:zucchini",
-      "//courgette:courgette",
       "//vivaldi/update_notifier",
     ]
     if (vivaldi_build_tests) {
       deps += [
-        "//courgette:courgette_unittests",
         "//components/zucchini:zucchini_unittests",
         "//sandbox/win:sbox_integration_tests",
         "//sandbox/win:sbox_unittests",
@@ -104,7 +102,6 @@ group("All") {
     ]
     if (vivaldi_build_tests) {
       deps += [
-        "//courgette:courgette_unittests",
         "//sandbox/linux:sandbox_linux_unittests",
       ]
       if (use_dbus) {

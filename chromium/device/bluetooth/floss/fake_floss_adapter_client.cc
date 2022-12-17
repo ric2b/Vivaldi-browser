@@ -5,6 +5,7 @@
 #include "device/bluetooth/floss/fake_floss_adapter_client.h"
 
 #include "base/logging.h"
+#include "base/observer_list.h"
 #include "base/threading/thread_task_runner_handle.h"
 
 namespace floss {
@@ -133,7 +134,8 @@ void FakeFlossAdapterClient::GetBondState(ResponseCallback<uint32_t> callback,
 void FakeFlossAdapterClient::ConnectAllEnabledProfiles(
     ResponseCallback<Void> callback,
     const FlossDeviceId& device) {
-  // No-op, there is no need for testing yet.
+  PostDelayedTask(base::BindOnce(std::move(callback), /*ret=*/absl::nullopt,
+                                 /*err=*/absl::nullopt));
 }
 
 void FakeFlossAdapterClient::PostDelayedTask(base::OnceClosure callback) {

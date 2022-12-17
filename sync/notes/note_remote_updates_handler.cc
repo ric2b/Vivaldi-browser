@@ -4,7 +4,6 @@
 
 #include "sync/notes/note_remote_updates_handler.h"
 
-#include <algorithm>
 #include <memory>
 #include <set>
 #include <string>
@@ -16,13 +15,16 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/ranges/algorithm.h"
 #include "base/trace_event/trace_event.h"
 #include "components/sync/base/unique_position.h"
 #include "components/sync/model/conflict_resolution.h"
+#include "components/sync/protocol/entity_metadata.pb.h"
 #include "components/sync/protocol/unique_position.pb.h"
 #include "notes/note_node.h"
 #include "notes/notes_model.h"
 #include "sync/notes/note_specifics_conversions.h"
+#include "sync/notes/synced_note_tracker_entity.h"
 
 namespace sync_notes {
 
@@ -61,7 +63,7 @@ syncer::UniquePosition ComputeUniquePositionForTrackedNoteNode(
     const vivaldi::NoteNode* note_node) {
   DCHECK(note_tracker);
 
-  const SyncedNoteTracker::Entity* child_entity =
+  const SyncedNoteTrackerEntity* child_entity =
       note_tracker->GetEntityForNoteNode(note_node);
   DCHECK(child_entity);
   // TODO(crbug.com/1113139): precompute UniquePosition to prevent its
@@ -79,10 +81,9 @@ size_t ComputeChildNodeIndex(const vivaldi::NoteNode* parent,
   const syncer::UniquePosition position =
       syncer::UniquePosition::FromProto(unique_position);
 
-  auto iter = std::partition_point(
-      parent->children().begin(), parent->children().end(),
-      [note_tracker,
-       &position](const std::unique_ptr<vivaldi::NoteNode>& child) {
+  auto iter = base::ranges::partition_point(
+      parent->children(), [note_tracker, &position](
+                              const std::unique_ptr<vivaldi::NoteNode>& child) {
         // Return true for all |parent|'s children whose position is less than
         // |position|.
         return !position.LessThan(
@@ -132,12 +133,11 @@ base::GUID GetParentGUIDInUpdate(const syncer::EntityData& update_entity) {
   return parent_guid;
 }
 
-void ApplyRemoteUpdate(
-    const syncer::UpdateResponseData& update,
-    const SyncedNoteTracker::Entity* tracked_entity,
-    const SyncedNoteTracker::Entity* new_parent_tracked_entity,
-    vivaldi::NotesModel* model,
-    SyncedNoteTracker* tracker) {
+void ApplyRemoteUpdate(const syncer::UpdateResponseData& update,
+                       const SyncedNoteTrackerEntity* tracked_entity,
+                       const SyncedNoteTrackerEntity* new_parent_tracked_entity,
+                       vivaldi::NotesModel* model,
+                       SyncedNoteTracker* tracker) {
   const syncer::EntityData& update_entity = update.entity;
   DCHECK(!update_entity.is_deleted());
   DCHECK(tracked_entity);
@@ -223,7 +223,7 @@ void NoteRemoteUpdatesHandler::Process(
     DCHECK(update_entity.is_deleted() || IsValidUpdate(update_entity));
 
     bool should_ignore_update = false;
-    const SyncedNoteTracker::Entity* tracked_entity =
+    const SyncedNoteTrackerEntity* tracked_entity =
         DetermineLocalTrackedEntityToUpdate(update_entity,
                                             &should_ignore_update);
 
@@ -288,16 +288,12 @@ void NoteRemoteUpdatesHandler::Process(
         // the encryption.
         continue;
       }
-      // TODO(crbug.com/516866): The below CHECK is added to debug some crashes.
-      // Should be removed after figuring out the reason for the crash.
-      CHECK_EQ(tracked_entity,
-               note_tracker_->GetEntityForSyncId(update_entity.id));
+      DCHECK_EQ(tracked_entity,
+                note_tracker_->GetEntityForSyncId(update_entity.id));
     } else {
       ProcessUpdate(*update, tracked_entity);
-      // TODO(crbug.com/516866): The below CHECK is added to debug some crashes.
-      // Should be removed after figuring out the reason for the crash.
-      CHECK_EQ(tracked_entity,
-               note_tracker_->GetEntityForSyncId(update_entity.id));
+      DCHECK_EQ(tracked_entity,
+                note_tracker_->GetEntityForSyncId(update_entity.id));
     }
 
     // If the received entity has out of date encryption, we schedule another
@@ -317,9 +313,9 @@ void NoteRemoteUpdatesHandler::Process(
 
   // Recommit entities with out of date encryption.
   if (got_new_encryption_requirements) {
-    std::vector<const SyncedNoteTracker::Entity*> all_entities =
+    std::vector<const SyncedNoteTrackerEntity*> all_entities =
         note_tracker_->GetAllEntities();
-    for (const SyncedNoteTracker::Entity* entity : all_entities) {
+    for (const SyncedNoteTrackerEntity* entity : all_entities) {
       // No need to recommit tombstones and permanent nodes.
       if (entity->metadata()->is_deleted()) {
         continue;
@@ -443,7 +439,7 @@ NoteRemoteUpdatesHandler::ReorderValidUpdates(
   return ordered_updates;
 }
 
-const SyncedNoteTracker::Entity*
+const SyncedNoteTrackerEntity*
 NoteRemoteUpdatesHandler::DetermineLocalTrackedEntityToUpdate(
     const syncer::EntityData& update_entity,
     bool* should_ignore_update) {
@@ -467,9 +463,9 @@ NoteRemoteUpdatesHandler::DetermineLocalTrackedEntityToUpdate(
                     update_entity.originator_cache_guid,
                     update_entity.originator_client_item_id));
 
-  const SyncedNoteTracker::Entity* const tracked_entity_by_client_tag =
+  const SyncedNoteTrackerEntity* const tracked_entity_by_client_tag =
       note_tracker_->GetEntityForClientTagHash(client_tag_hash_in_update);
-  const SyncedNoteTracker::Entity* const tracked_entity_by_sync_id =
+  const SyncedNoteTrackerEntity* const tracked_entity_by_sync_id =
       note_tracker_->GetEntityForSyncId(update_entity.id);
 
   // The most common scenario is that both lookups, client-tag-based and
@@ -503,7 +499,7 @@ NoteRemoteUpdatesHandler::DetermineLocalTrackedEntityToUpdate(
   return tracked_entity_by_client_tag;
 }
 
-const SyncedNoteTracker::Entity* NoteRemoteUpdatesHandler::ProcessCreate(
+const SyncedNoteTrackerEntity* NoteRemoteUpdatesHandler::ProcessCreate(
     const syncer::UpdateResponseData& update) {
   const syncer::EntityData& update_entity = update.entity;
   DCHECK(!update_entity.is_deleted());
@@ -527,7 +523,7 @@ const SyncedNoteTracker::Entity* NoteRemoteUpdatesHandler::ProcessCreate(
                             note_tracker_),
       notes_model_);
   DCHECK(note_node);
-  const SyncedNoteTracker::Entity* entity =
+  const SyncedNoteTrackerEntity* entity =
       note_tracker_->Add(note_node, update_entity.id, update.response_version,
                          update_entity.creation_time, update_entity.specifics);
   ReuploadEntityIfNeeded(update_entity, entity);
@@ -536,7 +532,7 @@ const SyncedNoteTracker::Entity* NoteRemoteUpdatesHandler::ProcessCreate(
 
 void NoteRemoteUpdatesHandler::ProcessUpdate(
     const syncer::UpdateResponseData& update,
-    const SyncedNoteTracker::Entity* tracked_entity) {
+    const SyncedNoteTrackerEntity* tracked_entity) {
   const syncer::EntityData& update_entity = update.entity;
   // Can only update existing nodes.
   DCHECK(tracked_entity);
@@ -555,7 +551,7 @@ void NoteRemoteUpdatesHandler::ProcessUpdate(
   DCHECK(old_parent);
   DCHECK(old_parent->is_folder());
 
-  const SyncedNoteTracker::Entity* new_parent_entity =
+  const SyncedNoteTrackerEntity* new_parent_entity =
       note_tracker_->GetEntityForGUID(GetParentGUIDInUpdate(update_entity));
   if (!new_parent_entity) {
     return;
@@ -569,10 +565,9 @@ void NoteRemoteUpdatesHandler::ProcessUpdate(
   }
   // Node update could be either in the node data (e.g. title or
   // unique_position), or it could be that the node has moved under another
-  // parent without any data change. Should check both the data and the parent
-  // to confirm that no updates to the model are needed.
-  if (tracked_entity->MatchesDataPossiblyIncludingParent(update_entity) &&
-      new_parent == old_parent) {
+  // parent without any data change.
+  if (tracked_entity->MatchesData(update_entity)) {
+    DCHECK_EQ(new_parent, old_parent);
     note_tracker_->Update(tracked_entity, update.response_version,
                           update_entity.modification_time,
                           update_entity.specifics);
@@ -586,7 +581,7 @@ void NoteRemoteUpdatesHandler::ProcessUpdate(
 
 void NoteRemoteUpdatesHandler::ProcessDelete(
     const syncer::EntityData& update_entity,
-    const SyncedNoteTracker::Entity* tracked_entity) {
+    const SyncedNoteTrackerEntity* tracked_entity) {
   DCHECK(update_entity.is_deleted());
 
   DCHECK_EQ(tracked_entity,
@@ -611,9 +606,9 @@ void NoteRemoteUpdatesHandler::ProcessDelete(
   notes_model_->Remove(node);
 }
 
-const SyncedNoteTracker::Entity* NoteRemoteUpdatesHandler::ProcessConflict(
+const SyncedNoteTrackerEntity* NoteRemoteUpdatesHandler::ProcessConflict(
     const syncer::UpdateResponseData& update,
-    const SyncedNoteTracker::Entity* tracked_entity) {
+    const SyncedNoteTrackerEntity* tracked_entity) {
   const syncer::EntityData& update_entity = update.entity;
   // TODO(crbug.com/516866): Handle the case of conflict as a result of
   // re-encryption request.
@@ -657,7 +652,7 @@ const SyncedNoteTracker::Entity* NoteRemoteUpdatesHandler::ProcessConflict(
   DCHECK(old_parent);
   DCHECK(old_parent->is_folder());
 
-  const SyncedNoteTracker::Entity* new_parent_entity =
+  const SyncedNoteTrackerEntity* new_parent_entity =
       note_tracker_->GetEntityForGUID(GetParentGUIDInUpdate(update_entity));
   // The |new_parent_entity| could be null in some racy conditions.  For
   // example, when a client A moves a node and deletes the old parent and
@@ -681,10 +676,9 @@ const SyncedNoteTracker::Entity* NoteRemoteUpdatesHandler::ProcessConflict(
 
   // Node update could be either in the node data (e.g. title or
   // unique_position), or it could be that the node has moved under another
-  // parent without any data change. Should check both the data and the parent
-  // to confirm that no updates to the model are needed.
-  if (tracked_entity->MatchesDataPossiblyIncludingParent(update_entity) &&
-      new_parent == old_parent) {
+  // parent without any data change.
+  if (tracked_entity->MatchesData(update_entity)) {
+    DCHECK_EQ(new_parent, old_parent);
     note_tracker_->Update(tracked_entity, update.response_version,
                           update_entity.modification_time,
                           update_entity.specifics);
@@ -707,7 +701,7 @@ void NoteRemoteUpdatesHandler::RemoveEntityAndChildrenFromTracker(
   DCHECK(node);
   DCHECK(!node->is_permanent_node());
 
-  const SyncedNoteTracker::Entity* entity =
+  const SyncedNoteTrackerEntity* entity =
       note_tracker_->GetEntityForNoteNode(node);
   DCHECK(entity);
   note_tracker_->Remove(entity);
@@ -720,7 +714,7 @@ const vivaldi::NoteNode* NoteRemoteUpdatesHandler::GetParentNode(
     const syncer::EntityData& update_entity) const {
   DCHECK(IsValidNotesSpecifics(update_entity.specifics.notes()));
 
-  const SyncedNoteTracker::Entity* parent_entity =
+  const SyncedNoteTrackerEntity* parent_entity =
       note_tracker_->GetEntityForGUID(GetParentGUIDInUpdate(update_entity));
   if (!parent_entity) {
     return nullptr;
@@ -730,7 +724,7 @@ const vivaldi::NoteNode* NoteRemoteUpdatesHandler::GetParentNode(
 
 void NoteRemoteUpdatesHandler::ReuploadEntityIfNeeded(
     const syncer::EntityData& entity_data,
-    const SyncedNoteTracker::Entity* tracked_entity) {
+    const SyncedNoteTrackerEntity* tracked_entity) {
   DCHECK(tracked_entity);
   DCHECK_EQ(tracked_entity->metadata()->server_id(), entity_data.id);
   DCHECK(!tracked_entity->note_node() ||

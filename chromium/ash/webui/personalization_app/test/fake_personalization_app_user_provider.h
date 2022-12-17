@@ -21,6 +21,7 @@ class WebUI;
 }  // namespace content
 
 namespace ash {
+namespace personalization_app {
 
 class FakePersonalizationAppUserProvider
     : public PersonalizationAppUserProvider {
@@ -49,12 +50,14 @@ class FakePersonalizationAppUserProvider
   void SelectProfileImage() override;
   void SelectCameraImage(::mojo_base::BigBuffer data) override;
   void SelectImageFromDisk() override;
+  void SelectLastExternalUserImage() override {}
 
  private:
   mojo::Receiver<ash::personalization_app::mojom::UserProvider> user_receiver_{
       this};
 };
 
+}  // namespace personalization_app
 }  // namespace ash
 
 #endif  // ASH_WEBUI_PERSONALIZATION_APP_TEST_FAKE_PERSONALIZATION_APP_USER_PROVIDER_H_

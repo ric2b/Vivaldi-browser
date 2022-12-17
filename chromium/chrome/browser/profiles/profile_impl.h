@@ -34,7 +34,7 @@ class PrefService;
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 namespace ash {
-class KioskTest;
+class KioskBaseTest;
 class LocaleChangeGuard;
 class Preferences;
 }  // namespace ash
@@ -92,6 +92,8 @@ class ProfileImpl : public Profile {
   content::FileSystemAccessPermissionContext*
   GetFileSystemAccessPermissionContext() override;
   content::ContentIndexProvider* GetContentIndexProvider() override;
+  content::FederatedIdentityApiPermissionContextDelegate*
+  GetFederatedIdentityApiPermissionContext() override;
   content::FederatedIdentityActiveSessionPermissionContextDelegate*
   GetFederatedIdentityActiveSessionPermissionContext() override;
   content::FederatedIdentityRequestPermissionContextDelegate*
@@ -167,7 +169,7 @@ class ProfileImpl : public Profile {
 
  private:
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  friend class ash::KioskTest;
+  friend class ash::KioskBaseTest;
 #endif
   friend class Profile;
   FRIEND_TEST_ALL_PREFIXES(StartupBrowserCreatorTest,

@@ -13,6 +13,7 @@
 #include "base/callback.h"
 #include "base/containers/circular_deque.h"
 #include "base/containers/flat_set.h"
+#include "base/containers/linked_list.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
@@ -78,6 +79,10 @@ class WaylandWindow : public PlatformWindow,
     return wayland_subsurfaces_;
   }
 
+  base::LinkedList<WaylandSubsurface>* subsurface_stack_committed() {
+    return &subsurface_stack_committed_;
+  }
+
   void set_parent_window(WaylandWindow* parent_window) {
     parent_window_ = parent_window;
   }
@@ -93,6 +98,7 @@ class WaylandWindow : public PlatformWindow,
   // subsurface_stack_below_.size() >= below.
   bool ArrangeSubsurfaceStack(size_t above, size_t below);
   bool CommitOverlays(
+      uint32_t frame_id,
       std::vector<ui::ozone::mojom::WaylandOverlayConfigPtr>& overlays);
 
   // Set whether this window has pointer focus and should dispatch mouse events.
@@ -202,11 +208,18 @@ class WaylandWindow : public PlatformWindow,
   // The width and height come in DIP of the output that the surface is
   // currently bound to.
   virtual void HandleSurfaceConfigure(uint32_t serial);
-  virtual void HandleToplevelConfigure(int32_t widht,
+  virtual void HandleToplevelConfigure(int32_t width,
                                        int32_t height,
                                        bool is_maximized,
                                        bool is_fullscreen,
                                        bool is_activated);
+  virtual void HandleAuraToplevelConfigure(int32_t x,
+                                           int32_t y,
+                                           int32_t width,
+                                           int32_t height,
+                                           bool is_maximized,
+                                           bool is_fullscreen,
+                                           bool is_activated);
   virtual void HandlePopupConfigure(const gfx::Rect& bounds);
   // The final size of the Wayland surface is determined by the buffer size in
   // px * scale that the Chromium compositor renders at. If the window changes a
@@ -318,12 +331,16 @@ class WaylandWindow : public PlatformWindow,
   // Processes the pending bounds in dip.
   void ProcessPendingBoundsDip(uint32_t serial);
 
+  // If the given |bounds_px| violate size constraints set for this window,
+  // fixes them so they wouldn't.
+  gfx::Rect AdjustBoundsToConstraintsPx(const gfx::Rect& bounds_px);
+
   // Processes the size information form visual size update and returns true if
   // any pending configure is fulfilled.
   bool ProcessVisualSizeUpdate(const gfx::Size& size_px, float scale_factor);
 
   // Applies pending bounds.
-  virtual void ApplyPendingBounds() = 0;
+  virtual void ApplyPendingBounds();
 
   // These bounds attributes below have suffixes that indicate units used.
   // Wayland operates in DIP but the platform operates in physical pixels so
@@ -342,11 +359,14 @@ class WaylandWindow : public PlatformWindow,
   struct PendingConfigure {
     gfx::Rect bounds_dip;
     uint32_t serial;
+    // True if this configure has been passed to the compositor for rendering.
+    bool set = false;
   };
   base::circular_deque<PendingConfigure> pending_configures_;
 
  private:
   friend class WaylandBufferManagerViewportTest;
+  friend class BlockableWaylandToplevelWindow;
 
   FRIEND_TEST_ALL_PREFIXES(WaylandScreenTest, SetWindowScale);
   FRIEND_TEST_ALL_PREFIXES(WaylandBufferManagerTest, CanSubmitOverlayPriority);
@@ -404,10 +424,14 @@ class WaylandWindow : public PlatformWindow,
 
   // The stack of sub-surfaces to take effect when Commit() is called.
   // |subsurface_stack_above_| refers to subsurfaces that are stacked above the
-  // primary.
+  // primary. These include the subsurfaces to be hidden as well.
   // Subsurface at the front of the list is the closest to the primary.
   std::list<WaylandSubsurface*> subsurface_stack_above_;
   std::list<WaylandSubsurface*> subsurface_stack_below_;
+
+  // The stack of sub-surfaces currently committed. This list is altered when
+  // the subsurface arrangement are played back by WaylandFrameManager.
+  base::LinkedList<WaylandSubsurface> subsurface_stack_committed_;
 
   // The current cursor bitmap (immutable).
   scoped_refptr<BitmapCursor> cursor_;

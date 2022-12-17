@@ -41,11 +41,9 @@ LayoutRect BoxShape::ShapeMarginLogicalBoundingBox() const {
 }
 
 FloatRoundedRect BoxShape::ShapeMarginBounds() const {
-  FloatRoundedRect margin_bounds(bounds_);
-  if (ShapeMargin() > 0) {
-    margin_bounds.Inflate(ShapeMargin());
-    margin_bounds.ExpandRadii(ShapeMargin());
-  }
+  FloatRoundedRect margin_bounds = bounds_;
+  if (ShapeMargin() > 0)
+    margin_bounds.OutsetForShapeMargin(ShapeMargin());
   return margin_bounds;
 }
 

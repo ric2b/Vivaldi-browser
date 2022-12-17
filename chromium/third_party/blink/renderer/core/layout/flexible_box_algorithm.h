@@ -421,14 +421,15 @@ class FlexLayoutAlgorithm {
   // FlexItem::desired_position. When lines stretch, also modifies
   // FlexLine::cross_axis_extent.
   void AlignFlexLines(LayoutUnit cross_axis_content_extent,
-                      Vector<NGFlexLine>* flex_line_outputs = nullptr);
+                      HeapVector<NGFlexLine>* flex_line_outputs = nullptr);
 
   // Positions flex items by modifying FlexItem::offset.
   // When lines stretch, also modifies FlexItem::cross_axis_size.
   void AlignChildren();
 
   void FlipForWrapReverse(LayoutUnit cross_axis_start_edge,
-                          LayoutUnit cross_axis_content_size);
+                          LayoutUnit cross_axis_content_size,
+                          HeapVector<NGFlexLine>* flex_line_outputs = nullptr);
 
   static TransformedWritingMode GetTransformedWritingMode(const ComputedStyle&);
 

@@ -85,6 +85,7 @@
     <output filename="vivaldi_native_strings_vi.pak" type="data_package" lang="vi" />
     <output filename="vivaldi_native_strings_zh-CN.pak" type="data_package" lang="zh-CN" />
     <output filename="vivaldi_native_strings_zh-TW.pak" type="data_package" lang="zh-TW" />
+    <output filename="vivaldi_native_strings_ur.pak" type="data_package" lang="ur" />
     <if expr="is_android">
       <output filename="vivaldi_native_strings_as.pak" type="data_package" lang="as" />
       <output filename="vivaldi_native_strings_bs.pak" type="data_package" lang="bs" />
@@ -98,7 +99,6 @@
       <output filename="vivaldi_native_strings_ne.pak" type="data_package" lang="ne" />
       <output filename="vivaldi_native_strings_or.pak" type="data_package" lang="or" />
       <output filename="vivaldi_native_strings_si.pak" type="data_package" lang="si" />
-      <output filename="vivaldi_native_strings_ur.pak" type="data_package" lang="ur" />
       <output filename="vivaldi_native_strings_uz.pak" type="data_package" lang="uz" />
       <output filename="vivaldi_native_strings_zh-HK.pak" type="data_package" lang="zh-HK" />
       <output filename="vivaldi_native_strings_zu.pak" type="data_package" lang="zu" />

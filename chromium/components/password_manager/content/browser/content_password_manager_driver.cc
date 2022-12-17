@@ -369,6 +369,9 @@ void ContentPasswordManagerDriver::UserModifiedPasswordField() {
     return;
   if (client_->GetMetricsRecorder())
     client_->GetMetricsRecorder()->RecordUserModifiedPasswordField();
+  // A user has modified an input field, it wouldn't be a submission "after
+  // Touch To Fill".
+  client_->ResetSubmissionTrackingAfterTouchToFill();
 }
 
 void ContentPasswordManagerDriver::UserModifiedNonPasswordField(
@@ -380,6 +383,9 @@ void ContentPasswordManagerDriver::UserModifiedNonPasswordField(
     return;
   GetPasswordManager()->OnUserModifiedNonPasswordField(this, renderer_id,
                                                        field_name, value);
+  // A user has modified an input field, it wouldn't be a submission "after
+  // Touch To Fill".
+  client_->ResetSubmissionTrackingAfterTouchToFill();
 }
 
 void ContentPasswordManagerDriver::ShowPasswordSuggestions(
@@ -395,11 +401,12 @@ void ContentPasswordManagerDriver::ShowPasswordSuggestions(
       TransformToRootCoordinates(render_frame_host_, bounds));
 }
 
-void ContentPasswordManagerDriver::ShowTouchToFill() {
+void ContentPasswordManagerDriver::ShowTouchToFill(
+    autofill::mojom::SubmissionReadinessState submission_readiness) {
   if (!password_manager::bad_message::CheckFrameNotPrerendering(
           render_frame_host_))
     return;
-  client_->ShowTouchToFill(this);
+  client_->ShowTouchToFill(this, submission_readiness);
 }
 
 void ContentPasswordManagerDriver::CheckSafeBrowsingReputation(

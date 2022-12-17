@@ -7,7 +7,6 @@
 #include <memory>
 #include <utility>
 
-#include "base/cxx17_backports.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
@@ -83,8 +82,10 @@ syncer::SyncData CreateCustomSyncData(const TemplateURL& turl,
   se_specifics->set_autogenerate_keyword(autogenerate_keyword);
   se_specifics->set_last_modified(turl.last_modified().ToInternalValue());
   se_specifics->set_sync_guid(sync_guid);
+  *se_specifics->mutable_unique_position() =
+      turl.data().vivaldi_position.ToProto();
   return syncer::SyncData::CreateLocalData(turl.sync_guid(),  // Must be valid!
-                                   se_specifics->keyword(), specifics);
+                                           se_specifics->keyword(), specifics);
 }
 
 
@@ -1899,7 +1900,7 @@ TEST_F(TemplateURLServiceSyncTest, MergeInSyncTemplateURL) {
       {NEITHER, SYNC, NEITHER, BOTH, false, 2},
   };
 
-  for (size_t i = 0; i < base::size(test_cases); ++i) {
+  for (size_t i = 0; i < std::size(test_cases); ++i) {
     SCOPED_TRACE(testing::Message() << "Case #" << i << std::endl);
 
     // Assert all the valid states of ExpectedTemplateURLs.

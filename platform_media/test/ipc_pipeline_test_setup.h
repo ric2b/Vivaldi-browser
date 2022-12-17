@@ -4,6 +4,7 @@
 #define PLATFORM_MEDIA_TEST_IPC_PIPELINE_TEST_SETUP_H_
 
 #include "base/task/sequenced_task_runner.h"
+#include "build/build_config.h"
 
 namespace media {
 
@@ -15,7 +16,7 @@ class IPCPipelineTestSetup {
 
   ~IPCPipelineTestSetup();
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   static scoped_refptr<base::SequencedTaskRunner> CreatePipelineRunner();
 #endif
 

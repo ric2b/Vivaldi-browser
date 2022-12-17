@@ -196,36 +196,12 @@ bool BrowserAccessibilityAndroid::IsCollapsed() const {
   return HasState(ax::mojom::State::kCollapsed);
 }
 
-// TODO(dougt) Move to ax_role_properties?
 bool BrowserAccessibilityAndroid::IsCollection() const {
-  return (ui::IsTableLike(GetRole()) || GetRole() == ax::mojom::Role::kList ||
-          GetRole() == ax::mojom::Role::kListBox ||
-          GetRole() == ax::mojom::Role::kDescriptionList ||
-          GetRole() == ax::mojom::Role::kDirectory ||
-          GetRole() == ax::mojom::Role::kTree);
+  return ui::IsTableLike(GetRole());
 }
 
 bool BrowserAccessibilityAndroid::IsCollectionItem() const {
-  return (GetRole() == ax::mojom::Role::kCell ||
-          GetRole() == ax::mojom::Role::kColumnHeader ||
-          GetRole() == ax::mojom::Role::kDescriptionListTerm ||
-          GetRole() == ax::mojom::Role::kListBoxOption ||
-          GetRole() == ax::mojom::Role::kListItem ||
-          GetRole() == ax::mojom::Role::kRowHeader ||
-          GetRole() == ax::mojom::Role::kTreeItem);
-}
-
-bool BrowserAccessibilityAndroid::IsCombobox() const {
-  return (GetRole() == ax::mojom::Role::kComboBoxGrouping ||
-          GetRole() == ax::mojom::Role::kTextFieldWithComboBox ||
-          GetRole() == ax::mojom::Role::kComboBoxMenuButton);
-}
-
-bool BrowserAccessibilityAndroid::IsComboboxControl() const {
-  return (GetRole() == ax::mojom::Role::kTree ||
-          GetRole() == ax::mojom::Role::kGrid ||
-          GetRole() == ax::mojom::Role::kDialog ||
-          GetRole() == ax::mojom::Role::kListBox);
+  return ui::IsTableItem(GetRole());
 }
 
 bool BrowserAccessibilityAndroid::IsContentInvalid() const {
@@ -252,10 +228,6 @@ bool BrowserAccessibilityAndroid::IsDisabledDescendant() const {
   }
 
   return false;
-}
-
-bool BrowserAccessibilityAndroid::IsDismissable() const {
-  return false;  // No concept of "dismissable" on the web currently.
 }
 
 bool BrowserAccessibilityAndroid::IsEnabled() const {
@@ -316,10 +288,6 @@ bool BrowserAccessibilityAndroid::IsHeading() const {
 
 bool BrowserAccessibilityAndroid::IsHierarchical() const {
   return (GetRole() == ax::mojom::Role::kTree || IsHierarchicalList());
-}
-
-bool BrowserAccessibilityAndroid::IsLink() const {
-  return ui::IsLink(GetRole());
 }
 
 bool BrowserAccessibilityAndroid::IsMultiLine() const {
@@ -430,7 +398,7 @@ bool BrowserAccessibilityAndroid::IsHeadingLink() const {
 
   BrowserAccessibilityAndroid* child =
       static_cast<BrowserAccessibilityAndroid*>(InternalChildrenBegin().get());
-  return child->IsLink();
+  return ui::IsLink(child->GetRole());
 }
 
 const BrowserAccessibilityAndroid*
@@ -556,7 +524,7 @@ bool BrowserAccessibilityAndroid::IsLeaf() const {
   }
 
   // Links are never leaves.
-  if (IsLink())
+  if (ui::IsLink(GetRole()))
     return false;
 
   BrowserAccessibilityManagerAndroid* manager_android =
@@ -627,10 +595,6 @@ bool BrowserAccessibilityAndroid::IsLeafConsideringChildren() const {
   return true;
 }
 
-// Note: this is used to compute an object's name on Android, and is exposed as
-// the name field in Android dump tree tests.
-// TODO(accessibility) Should it be called GetName() so that engineers not
-// familiar with Android can find it more easily?
 std::u16string BrowserAccessibilityAndroid::GetTextContentUTF16() const {
   if (ui::IsIframe(GetRole()))
     return std::u16string();
@@ -685,7 +649,7 @@ std::u16string BrowserAccessibilityAndroid::GetTextContentUTF16() const {
   // Append image description strings to the text.
   auto* manager =
       static_cast<BrowserAccessibilityManagerAndroid*>(this->manager());
-  if (manager->AllowImageDescriptions()) {
+  if (manager->should_allow_image_descriptions()) {
     auto status = GetData().GetImageAnnotationStatus();
     switch (status) {
       case ax::mojom::ImageAnnotationStatus::kEligibleForAnnotation:
@@ -1027,10 +991,10 @@ std::u16string BrowserAccessibilityAndroid::GetComboboxExpandedText() const {
   if (controls.size() != 1)
     return GetComboboxExpandedTextFallback();
 
-  // |controlled_node| needs to be a combobox control, if not, try fallbacks.
+  // |controlled_node| needs to be a combobox container, if not, try fallbacks.
   BrowserAccessibilityAndroid* controlled_node =
       static_cast<BrowserAccessibilityAndroid*>(controls[0]);
-  if (!controlled_node->IsComboboxControl())
+  if (!ui::IsComboBoxContainer(controlled_node->GetRole()))
     return GetComboboxExpandedTextFallback();
 
   // For dialogs, return special case string.
@@ -1133,7 +1097,7 @@ std::u16string BrowserAccessibilityAndroid::GetRoleDescription() const {
   // If this node is an image, check status and potentially add unlabeled role.
   auto* manager =
       static_cast<BrowserAccessibilityManagerAndroid*>(this->manager());
-  if (manager->AllowImageDescriptions()) {
+  if (manager->should_allow_image_descriptions()) {
     auto status = GetData().GetImageAnnotationStatus();
     switch (status) {
       case ax::mojom::ImageAnnotationStatus::kEligibleForAnnotation:
@@ -1933,6 +1897,9 @@ bool BrowserAccessibilityAndroid::ShouldExposeValueAsName() const {
     return false;
 
   if (IsTextField())
+    return true;
+
+  if (ui::IsComboBox(GetRole()))
     return true;
 
   if (GetRole() == ax::mojom::Role::kPopUpButton &&

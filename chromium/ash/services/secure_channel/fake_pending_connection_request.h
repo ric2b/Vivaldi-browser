@@ -8,14 +8,12 @@
 #include <utility>
 #include <vector>
 
-#include "ash/services/secure_channel/client_connection_parameters.h"
 #include "ash/services/secure_channel/pending_connection_request.h"
 #include "base/unguessable_token.h"
 
-namespace chromeos {
+namespace ash::secure_channel {
 
-namespace secure_channel {
-
+class ClientConnectionParameters;
 class PendingConnectionRequestDelegate;
 
 // Fake PendingConnectionRequest implementation.
@@ -24,10 +22,12 @@ class FakePendingConnectionRequest
     : public PendingConnectionRequest<FailureDetailType> {
  public:
   FakePendingConnectionRequest(PendingConnectionRequestDelegate* delegate,
-                               ConnectionPriority connection_priority)
+                               ConnectionPriority connection_priority,
+                               bool notify_on_failure = false)
       : PendingConnectionRequest<FailureDetailType>(delegate,
                                                     connection_priority),
-        id_(base::UnguessableToken::Create()) {}
+        id_(base::UnguessableToken::Create()),
+        notify_on_failure_(notify_on_failure) {}
 
   FakePendingConnectionRequest(const FakePendingConnectionRequest&) = delete;
   FakePendingConnectionRequest& operator=(const FakePendingConnectionRequest&) =
@@ -55,6 +55,11 @@ class FakePendingConnectionRequest
   // PendingConnectionRequest<FailureDetailType>:
   void HandleConnectionFailure(FailureDetailType failure_detail) override {
     handled_failure_details_.push_back(failure_detail);
+    if (notify_on_failure_) {
+      NotifyRequestFinishedWithoutConnection(
+          PendingConnectionRequestDelegate::FailedConnectionReason::
+              kRequestFailed);
+    }
   }
 
   std::unique_ptr<ClientConnectionParameters>
@@ -68,10 +73,10 @@ class FakePendingConnectionRequest
   std::vector<FailureDetailType> handled_failure_details_;
 
   std::unique_ptr<ClientConnectionParameters> client_data_for_extraction_;
+
+  bool notify_on_failure_ = false;
 };
 
-}  // namespace secure_channel
-
-}  // namespace chromeos
+}  // namespace ash::secure_channel
 
 #endif  // ASH_SERVICES_SECURE_CHANNEL_FAKE_PENDING_CONNECTION_REQUEST_H_

@@ -92,8 +92,8 @@ const base::Feature kSplitAuthCacheByNetworkIsolationKey{
 // Enable usage of hardcoded DoH upgrade mapping for use in automatic mode.
 const base::Feature kDnsOverHttpsUpgrade {
   "DnsOverHttpsUpgrade",
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_MAC) || \
-    BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC) || \
+    BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_LINUX)
       base::FEATURE_ENABLED_BY_DEFAULT
 #else
       base::FEATURE_DISABLED_BY_DEFAULT
@@ -106,13 +106,6 @@ const base::Feature kDnsOverHttpsUpgrade {
 // mDNS names (random UUIDs) in the TXT record data.
 const base::Feature kMdnsResponderGeneratedNameListing{
     "MdnsResponderGeneratedNameListing", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Provides a mechanism to disable DoH upgrades for some subset of the hardcoded
-// upgrade mapping. Separate multiple provider ids with commas. See the
-// mapping in net/dns/dns_util.cc for provider ids.
-const base::FeatureParam<std::string>
-    kDnsOverHttpsUpgradeDisabledProvidersParam{&kDnsOverHttpsUpgrade,
-                                               "DisabledProviders", ""};
 
 // Disable special treatment on requests with keepalive set (see
 // https://fetch.spec.whatwg.org/#request-keepalive-flag). This is introduced
@@ -184,12 +177,6 @@ const base::FeatureParam<bool> kPlatformProvidedTrustTokenIssuance{
 const base::Feature kWebSocketReassembleShortMessages{
     "WebSocketReassembleShortMessages", base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Enable support for ACCEPT_CH H2/3 frame as part of Client Hint Reliability.
-// See:
-// https://tools.ietf.org/html/draft-davidben-http-client-hint-reliability-02#section-4.3
-const base::Feature kAcceptCHFrame{"AcceptCHFrame",
-                                   base::FEATURE_ENABLED_BY_DEFAULT};
-
 const base::Feature kSCTAuditingRetryReports{"SCTAuditingRetryReports",
                                              base::FEATURE_ENABLED_BY_DEFAULT};
 
@@ -221,9 +208,8 @@ static_assert(kDefaultDataPipeAllocationSize >= net::kMaxBytesToSniff,
 // static
 uint32_t GetDataPipeDefaultAllocationSize(DataPipeAllocationSize option) {
 #if BUILDFLAG(IS_CHROMEOS)
-  // TODO(crbug.com/1260751): It is unclear if the increased data pipe size
-  // is responsible for an increased CrOS crash rate, so the size is being
-  // reverted to the default while we investigate.
+  // TODO(crbug.com/1306998): ChromeOS experiences a much higher OOM crash
+  // rate if the larger data pipe size is used.
   return kDefaultDataPipeAllocationSize;
 #else
   // For low-memory devices, always use the (smaller) default buffer size.
@@ -267,11 +253,7 @@ const base::Feature kCorsNonWildcardRequestHeadersSupport{
 // Whether the sync client optimization is used for communication between the
 // CorsURLLoader and URLLoader.
 const base::Feature kURLLoaderSyncClient{"URLLoaderSyncClient",
-                                         base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Optimize the implementation of calling URLLoaderFactory::UpdateLoadInfo().
-const base::Feature kOptimizeUpdateLoadInfo{"OptimizeUpdateLoadInfo",
-                                            base::FEATURE_DISABLED_BY_DEFAULT};
+                                         base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Combine URLLoaderClient::OnReceiveResponse and OnStartLoadingResponseBody.
 const base::Feature kCombineResponseBody{"CombineResponseBody",
@@ -280,12 +262,20 @@ const base::Feature kCombineResponseBody{"CombineResponseBody",
 // Don't wait for database write before responding to
 // RestrictedCookieManager::SetCookieFromString.
 const base::Feature kFasterSetCookie{"FasterSetCookie",
-                                     base::FEATURE_DISABLED_BY_DEFAULT};
+                                     base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Allow batching SimpleURLLoaders when the underlying network state is
 // inactive.
 const base::Feature kBatchSimpleURLLoader{"BatchSimpleURLLoader",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Do not send TLS client certificates in CORS preflight. Omit all client certs
+// and continue the handshake without sending one if requested.
+const base::Feature kOmitCorsClientCert{"OmitCorsClientCert",
+                                        base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Read as much of the net::URLRequest as there is space in the Mojo data pipe.
+const base::Feature kOptimizeNetworkBuffers{"OptimizeNetworkBuffers",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
 }  // namespace features
 }  // namespace network

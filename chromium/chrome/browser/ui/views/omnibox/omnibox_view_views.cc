@@ -17,7 +17,6 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
-#include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
@@ -28,13 +27,13 @@
 #include "chrome/browser/external_protocol/external_protocol_handler.h"
 #include "chrome/browser/history_clusters/history_clusters_tab_helper.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/send_tab_to_self/send_tab_to_self_desktop_util.h"
 #include "chrome/browser/send_tab_to_self/send_tab_to_self_util.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/omnibox/clipboard_utils.h"
 #include "chrome/browser/ui/omnibox/omnibox_theme.h"
+#include "chrome/browser/ui/send_tab_to_self/send_tab_to_self_bubble_controller.h"
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -257,16 +256,6 @@ void OmniboxViewViews::SaveStateToTab(content::WebContents* tab) {
 }
 
 void OmniboxViewViews::OnTabChanged(content::WebContents* web_contents) {
-  // The context menu holds references to share_submenu_model_ and
-  // send_tab_to_self_sub_menu_model_; invalidate it here so we can destroy
-  // those below.
-  InvalidateContextMenu();
-
-  // These have a reference to the WebContents, which might be being destroyed
-  // here:
-  share_submenu_model_.reset();
-  send_tab_to_self_sub_menu_model_.reset();
-
   const OmniboxState* state = static_cast<OmniboxState*>(
       web_contents->GetUserData(&OmniboxState::kKey));
   model()->RestoreState(state ? &state->model_state : nullptr);
@@ -517,11 +506,10 @@ void OmniboxViewViews::ExecuteCommand(int command_id, int event_flags) {
       location_bar_view_->command_updater()->ExecuteCommand(command_id);
       return;
 
-    case IDC_SEND_TAB_TO_SELF_SINGLE_TARGET:
-      send_tab_to_self::ShareToSingleTarget(
-          location_bar_view_->GetWebContents());
-      send_tab_to_self::RecordDeviceClicked(
-          send_tab_to_self::ShareEntryPoint::kOmniboxMenu);
+    case IDC_SEND_TAB_TO_SELF:
+      send_tab_to_self::SendTabToSelfBubbleController::
+          CreateOrGetFromWebContents(location_bar_view_->GetWebContents())
+              ->ShowBubble();
       return;
 
     // These commands do invoke the popup.
@@ -1808,10 +1796,7 @@ views::View::DropCallback OmniboxViewViews::CreateDropCallback(
 }
 
 void OmniboxViewViews::UpdateContextMenu(ui::SimpleMenuModel* menu_contents) {
-  if (share::ShareSubmenuModel::IsEnabled())
-    MaybeAddShareSubmenu(menu_contents);
-  else
-    MaybeAddSendTabToSelfItem(menu_contents);
+  MaybeAddSendTabToSelfItem(menu_contents);
 
   int paste_position = menu_contents->GetIndexOfCommandId(Textfield::kPaste);
   DCHECK_GE(paste_position, 0);
@@ -1916,33 +1901,6 @@ void OmniboxViewViews::PerformDrop(const ui::DropTargetEvent& event,
   output_drag_op = DragOperation::kCopy;
 }
 
-void OmniboxViewViews::MaybeAddShareSubmenu(
-    ui::SimpleMenuModel* menu_contents) {
-  content::WebContents* web_contents = location_bar_view_->GetWebContents();
-
-  const GURL& page_url = web_contents->GetVisibleURL();
-
-  if (!page_url.is_valid())
-    return;
-
-  int index = menu_contents->GetIndexOfCommandId(Textfield::kUndo);
-  // Add a separator if this is not the first item.
-  if (index) {
-    menu_contents->InsertSeparatorAt(index++, ui::NORMAL_SEPARATOR);
-  }
-
-  share_submenu_model_ = std::make_unique<share::ShareSubmenuModel>(
-      web_contents,
-      std::make_unique<ui::DataTransferEndpoint>(ui::EndpointType::kDefault,
-                                                 false),
-      share::ShareSubmenuModel::Context::PAGE, page_url,
-      web_contents->GetTitle());
-  menu_contents->InsertSubMenuWithStringIdAt(
-      index, IDC_CONTENT_CONTEXT_SHARING_SUBMENU, IDS_SHARE_MENU_TITLE,
-      share_submenu_model_.get());
-  menu_contents->InsertSeparatorAt(++index, ui::NORMAL_SEPARATOR);
-}
-
 void OmniboxViewViews::MaybeAddSendTabToSelfItem(
     ui::SimpleMenuModel* menu_contents) {
   // Only add this menu entry if SendTabToSelf feature is enabled.
@@ -1957,23 +1915,9 @@ void OmniboxViewViews::MaybeAddSendTabToSelfItem(
     menu_contents->InsertSeparatorAt(index++, ui::NORMAL_SEPARATOR);
   }
 
-  if (send_tab_to_self::GetValidDeviceCount(location_bar_view_->profile()) ==
-      1) {
-    menu_contents->InsertItemAt(
-        index, IDC_SEND_TAB_TO_SELF_SINGLE_TARGET,
-        l10n_util::GetStringFUTF16(
-            IDS_CONTEXT_MENU_SEND_TAB_TO_SELF_SINGLE_TARGET,
-            send_tab_to_self::GetSingleTargetDeviceName(
-                location_bar_view_->profile())));
-  } else {
-    send_tab_to_self_sub_menu_model_ =
-        std::make_unique<send_tab_to_self::SendTabToSelfSubMenuModel>(
-            location_bar_view_->GetWebContents(),
-            send_tab_to_self::SendTabToSelfMenuType::kOmnibox);
-    menu_contents->InsertSubMenuWithStringIdAt(
-        index, IDC_SEND_TAB_TO_SELF, IDS_CONTEXT_MENU_SEND_TAB_TO_SELF,
-        send_tab_to_self_sub_menu_model_.get());
-  }
+  menu_contents->InsertItemAt(
+      index, IDC_SEND_TAB_TO_SELF,
+      l10n_util::GetStringUTF16(IDS_CONTEXT_MENU_SEND_TAB_TO_SELF));
 #if !BUILDFLAG(IS_MAC)
   menu_contents->SetIcon(index,
                          ui::ImageModel::FromVectorIcon(kSendTabToSelfIcon));

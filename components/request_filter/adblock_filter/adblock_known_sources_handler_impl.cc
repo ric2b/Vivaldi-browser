@@ -157,7 +157,7 @@ struct PresetSourceInfoWithSize {
 
 const PresetSourceInfoWithSize kPresetRuleSources[] = {
     {nullptr, 0},
-    {kPresetAdBlockSources, base::size(kPresetAdBlockSources)}};
+    {kPresetAdBlockSources, std::size(kPresetAdBlockSources)}};
 
 }  // namespace
 

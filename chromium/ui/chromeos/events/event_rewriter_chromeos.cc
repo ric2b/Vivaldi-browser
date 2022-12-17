@@ -8,7 +8,6 @@
 #include <stddef.h>
 
 #include "ash/constants/ash_features.h"
-#include "base/cxx17_backports.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_file.h"
@@ -123,7 +122,7 @@ const EventRewriterChromeOS::MutableKeyState kCustomTopRowLayoutFKeys[] = {
     {EF_NONE, DomCode::F14, DomKey::F14, VKEY_F14},
     {EF_NONE, DomCode::F15, DomKey::F15, VKEY_F15},
 };
-const size_t kAllFKeysSize = base::size(kCustomTopRowLayoutFKeys);
+const size_t kAllFKeysSize = std::size(kCustomTopRowLayoutFKeys);
 constexpr KeyboardCode kMaxCustomTopRowLayoutFKeyCode = VKEY_F15;
 
 bool IsCustomLayoutFunctionKey(KeyboardCode key_code) {
@@ -1062,8 +1061,10 @@ bool EventRewriterChromeOS::IsLastKeyboardOfType(DeviceType device_type) const {
 
 EventRewriterChromeOS::DeviceType EventRewriterChromeOS::GetLastKeyboardType()
     const {
-  if (last_keyboard_device_id_ == ED_UNKNOWN_DEVICE)
+  if ((last_keyboard_device_id_ == ED_UNKNOWN_DEVICE) ||
+      (last_keyboard_device_id_ == ED_REMOTE_INPUT_DEVICE)) {
     return kDeviceUnknown;
+  }
 
   const auto iter = device_id_to_info_.find(last_keyboard_device_id_);
   if (iter == device_id_to_info_.end()) {
@@ -1078,7 +1079,7 @@ int EventRewriterChromeOS::GetRemappedModifierMasks(const Event& event,
                                                     int original_flags) const {
   int unmodified_flags = original_flags;
   int rewritten_flags = pressed_modifier_latches_ | latched_modifier_latches_;
-  for (size_t i = 0; unmodified_flags && (i < base::size(kModifierRemappings));
+  for (size_t i = 0; unmodified_flags && (i < std::size(kModifierRemappings));
        ++i) {
     const ModifierRemapping* remapped_key = nullptr;
     if (!(unmodified_flags & kModifierRemappings[i].flag))
@@ -1427,7 +1428,7 @@ void EventRewriterChromeOS::RewriteExtendedKeys(const KeyEvent& key_event,
         };
         if (!skip_search_key_remapping &&
             RewriteWithKeyboardRemappings(kNewSearchRemappings,
-                                          base::size(kNewSearchRemappings),
+                                          std::size(kNewSearchRemappings),
                                           incoming, state, /*strict=*/true)) {
           return;
         }
@@ -1453,7 +1454,7 @@ void EventRewriterChromeOS::RewriteExtendedKeys(const KeyEvent& key_event,
 
       if (!skip_search_key_remapping &&
           RewriteWithKeyboardRemappings(kNewInsertRemapping,
-                                        base::size(kNewInsertRemapping),
+                                        std::size(kNewInsertRemapping),
                                         incoming, state, strict)) {
         RecordSixPackEventRewrites(key_event.type(), state->key_code,
                                    /*legacy_variant=*/false);
@@ -1462,7 +1463,7 @@ void EventRewriterChromeOS::RewriteExtendedKeys(const KeyEvent& key_event,
 
       // Test for the deprecated insert rewrite in order to show a notification.
       const ui::KeyboardCode deprecated_key = MatchedDeprecatedRemapping(
-          kOldInsertRemapping, base::size(kOldInsertRemapping), incoming);
+          kOldInsertRemapping, std::size(kOldInsertRemapping), incoming);
       if (deprecated_key != VKEY_UNKNOWN) {
         // If the key would have matched prior to being deprecated then notify
         // the delegate to show a notification.
@@ -1471,7 +1472,7 @@ void EventRewriterChromeOS::RewriteExtendedKeys(const KeyEvent& key_event,
     } else {
       if (!skip_search_key_remapping &&
           RewriteWithKeyboardRemappings(kOldInsertRemapping,
-                                        base::size(kOldInsertRemapping),
+                                        std::size(kOldInsertRemapping),
                                         incoming, state, strict)) {
         RecordSixPackEventRewrites(key_event.type(), state->key_code,
                                    /*legacy_variant=*/true);
@@ -1498,7 +1499,7 @@ void EventRewriterChromeOS::RewriteExtendedKeys(const KeyEvent& key_event,
 
     if (!skip_search_key_remapping &&
         RewriteWithKeyboardRemappings(kSixPackRemappings,
-                                      base::size(kSixPackRemappings), incoming,
+                                      std::size(kSixPackRemappings), incoming,
                                       state, strict)) {
       RecordSixPackEventRewrites(key_event.type(), state->key_code,
                                  /*legacy_variant=*/false);
@@ -1527,7 +1528,7 @@ void EventRewriterChromeOS::RewriteExtendedKeys(const KeyEvent& key_event,
     if (!::features::IsImprovedKeyboardShortcutsEnabled() ||
         !::features::IsDeprecateAltBasedSixPackEnabled()) {
       if (RewriteWithKeyboardRemappings(kLegacySixPackRemappings,
-                                        base::size(kLegacySixPackRemappings),
+                                        std::size(kLegacySixPackRemappings),
                                         incoming, state)) {
         RecordSixPackEventRewrites(key_event.type(), state->key_code,
                                    /*legacy_variant=*/true);
@@ -1535,7 +1536,7 @@ void EventRewriterChromeOS::RewriteExtendedKeys(const KeyEvent& key_event,
       }
     } else {
       const ui::KeyboardCode deprecated_key = MatchedDeprecatedRemapping(
-          kLegacySixPackRemappings, base::size(kLegacySixPackRemappings),
+          kLegacySixPackRemappings, std::size(kLegacySixPackRemappings),
           incoming);
       if (deprecated_key != VKEY_UNKNOWN) {
         // If the key would have matched prior to being deprecated then notify
@@ -1663,12 +1664,12 @@ void EventRewriterChromeOS::RewriteFunctionKeys(const KeyEvent& key_event,
       switch (layout) {
         case kKbdTopRowLayout2:
           mapping = kFkeysToSystemKeys2;
-          mappingSize = base::size(kFkeysToSystemKeys2);
+          mappingSize = std::size(kFkeysToSystemKeys2);
           break;
         case kKbdTopRowLayout1:
         default:
           mapping = kFkeysToSystemKeys1;
-          mappingSize = base::size(kFkeysToSystemKeys1);
+          mappingSize = std::size(kFkeysToSystemKeys1);
           break;
       }
 
@@ -2106,12 +2107,12 @@ bool EventRewriterChromeOS::RewriteTopRowKeysForLayoutWilco(
         return true;
       }
       return RewriteWithKeyboardRemappings(kFnkeysToActionKeys,
-                                           base::size(kFnkeysToActionKeys),
+                                           std::size(kFnkeysToActionKeys),
                                            incoming_without_command, state);
     }
     return true;
   } else if (IsKeyCodeInMappings(state->key_code, kActionToFnKeys,
-                                 base::size(kActionToFnKeys))) {
+                                 std::size(kActionToFnKeys))) {
     // Incoming key code is an action key. Check if it needs to be mapped back
     // to its corresponding function key.
     if (search_is_pressed != ForceTopRowAsFunctionKeys()) {
@@ -2123,7 +2124,7 @@ bool EventRewriterChromeOS::RewriteTopRowKeysForLayoutWilco(
         return true;
       }
       return RewriteWithKeyboardRemappings(kActionToFnKeys,
-                                           base::size(kActionToFnKeys),
+                                           std::size(kActionToFnKeys),
                                            incoming_without_command, state);
     }
     // Remap Privacy Screen Toggle to F12 on Drallion devices that do not have

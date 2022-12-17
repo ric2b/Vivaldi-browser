@@ -10,13 +10,20 @@
 #if !BUILDFLAG(IS_NACL)
 #if ICU_UTIL_DATA_IMPL == ICU_UTIL_DATA_FILE
 
-namespace base {
-namespace i18n {
+namespace base::i18n {
 
 class IcuUtilTest : public testing::Test {
  protected:
   void SetUp() override { ResetGlobalsForTesting(); }
 };
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+TEST_F(IcuUtilTest, InitializeIcuSucceeds) {
+  bool success = InitializeICU();
+
+  ASSERT_TRUE(success);
+}
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
 #if BUILDFLAG(IS_ANDROID)
 
@@ -26,57 +33,9 @@ TEST_F(IcuUtilTest, InitializeIcuSucceeds) {
   ASSERT_TRUE(success);
 }
 
-TEST_F(IcuUtilTest, ExtraFileNotInitializedAtStart) {
-  MemoryMappedFile::Region region;
-  PlatformFile file = GetIcuExtraDataFileHandle(&region);
-
-  ASSERT_EQ(file, kInvalidPlatformFile);
-}
-
-TEST_F(IcuUtilTest, InitializeExtraIcuSucceeds) {
-  bool success = InitializeExtraICU(std::string());
-
-  ASSERT_TRUE(success);
-}
-
-TEST_F(IcuUtilTest, CannotInitializeExtraIcuAfterIcu) {
-  InitializeICU();
-  bool success = InitializeExtraICU(std::string());
-
-  ASSERT_FALSE(success);
-}
-
-TEST_F(IcuUtilTest, ExtraFileInitializedAfterInit) {
-  InitializeExtraICU(std::string());
-  MemoryMappedFile::Region region;
-  PlatformFile file = GetIcuExtraDataFileHandle(&region);
-
-  ASSERT_NE(file, kInvalidPlatformFile);
-}
-
-TEST_F(IcuUtilTest, DISABLED_InitializeExtraIcuFromFdSucceeds) {
-  InitializeExtraICU(std::string());
-  MemoryMappedFile::Region region;
-  PlatformFile pf = GetIcuExtraDataFileHandle(&region);
-  bool success = InitializeExtraICUWithFileDescriptor(pf, region);
-
-  ASSERT_TRUE(success);
-}
-
-TEST_F(IcuUtilTest, CannotInitializeExtraIcuFromFdAfterIcu) {
-  InitializeExtraICU(std::string());
-  InitializeICU();
-  MemoryMappedFile::Region region;
-  PlatformFile pf = GetIcuExtraDataFileHandle(&region);
-  bool success = InitializeExtraICUWithFileDescriptor(pf, region);
-
-  ASSERT_FALSE(success);
-}
-
 #endif  // BUILDFLAG(IS_ANDROID)
 
-}  // namespace i18n
-}  // namespace base
+}  // namespace base::i18n
 
 #endif  // ICU_UTIL_DATA_IMPL == ICU_UTIL_DATA_FILE
 #endif  // !BUILDFLAG(IS_NACL)

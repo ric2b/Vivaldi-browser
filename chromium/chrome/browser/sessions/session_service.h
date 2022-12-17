@@ -151,14 +151,14 @@ class SessionService : public SessionServiceBase {
 
   // Vivaldi
   // Sets the ext data of the specified window.
-  void SetWindowExtData(const SessionID& window_id,
-                        const std::string& ext_data);
+  void SetWindowVivExtData(const SessionID& window_id,
+                           const std::string& viv_ext_data);
 
-  void SetTabExtData(const SessionID& window_id,
-                     const SessionID& tab_id,
-                      const std::string& ext_data);
+  void SetTabVivExtData(const SessionID& window_id,
+                        const SessionID& tab_id,
+                        const std::string& viv_ext_data);
 
-  void PageActionOverridesChanged(
+  void VivPageActionOverridesChanged(
       const SessionID& window_id,
       const SessionID& tab_id,
       const base::FilePath& script_path,

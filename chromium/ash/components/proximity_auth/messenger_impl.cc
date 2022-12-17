@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "ash/components/multidevice/logging/logging.h"
 #include "ash/components/proximity_auth/messenger_observer.h"
 #include "ash/components/proximity_auth/remote_status_update.h"
 #include "base/base64url.h"
@@ -16,7 +17,6 @@
 #include "base/location.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
-#include "chromeos/components/multidevice/logging/logging.h"
 
 namespace proximity_auth {
 
@@ -57,7 +57,7 @@ std::string GetMessageType(const base::DictionaryValue& message) {
 }  // namespace
 
 MessengerImpl::MessengerImpl(
-    std::unique_ptr<chromeos::secure_channel::ClientChannel> channel)
+    std::unique_ptr<ash::secure_channel::ClientChannel> channel)
     : channel_(std::move(channel)) {
   DCHECK(!channel_->is_disconnected());
   channel_->AddObserver(this);
@@ -104,7 +104,7 @@ void MessengerImpl::RequestUnlock() {
   ProcessMessageQueue();
 }
 
-chromeos::secure_channel::ClientChannel* MessengerImpl::GetChannel() const {
+ash::secure_channel::ClientChannel* MessengerImpl::GetChannel() const {
   if (channel_->is_disconnected())
     return nullptr;
 

@@ -317,6 +317,11 @@
         "type": "function",
         "description": "Translate: Resets the translation preferences to defaults.",
         "parameters": []
+      },
+      {
+        "name": "resetAllToDefault",
+        "description": "Reset all preferences to their default values.",
+        "parameters": []
       }
     ],
     "events": [

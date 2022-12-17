@@ -6,8 +6,12 @@
 
 #include "gn/item.h"
 
-BuilderRecord::BuilderRecord(ItemType type, const Label& label)
-    : type_(type), label_(label) {}
+BuilderRecord::BuilderRecord(ItemType type,
+                             const Label& label,
+                             const ParseNode* originally_referenced_from)
+    : type_(type),
+      label_(label),
+      originally_referenced_from_(originally_referenced_from) {}
 
 // static
 const char* BuilderRecord::GetNameForType(ItemType type) {
@@ -64,10 +68,27 @@ void BuilderRecord::AddGenDep(BuilderRecord* record) {
   all_deps_.insert(record);
 }
 
+bool BuilderRecord::OnResolvedDep(const BuilderRecord* dep) {
+  DCHECK(all_deps_.contains(const_cast<BuilderRecord*>(dep)));
+  DCHECK(unresolved_count_ > 0);
+  return --unresolved_count_ == 0;
+}
+
+std::vector<const BuilderRecord*> BuilderRecord::GetSortedUnresolvedDeps()
+    const {
+  std::vector<const BuilderRecord*> result;
+  for (auto it = all_deps_.begin(); it.valid(); ++it) {
+    BuilderRecord* dep = *it;
+    if (dep->waiting_on_resolution_.contains(const_cast<BuilderRecord*>(this)))
+      result.push_back(dep);
+  }
+  std::sort(result.begin(), result.end(), LabelCompare);
+  return result;
+}
+
 void BuilderRecord::AddDep(BuilderRecord* record) {
-  all_deps_.insert(record);
-  if (!record->resolved()) {
-    unresolved_deps_.insert(record);
-    record->waiting_on_resolution_.insert(this);
+  if (all_deps_.add(record) && !record->resolved()) {
+    unresolved_count_ += 1;
+    record->waiting_on_resolution_.add(this);
   }
 }

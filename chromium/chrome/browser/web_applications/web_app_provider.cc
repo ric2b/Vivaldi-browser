@@ -31,6 +31,7 @@
 #include "chrome/browser/web_applications/preinstalled_web_app_manager.h"
 #include "chrome/browser/web_applications/system_web_apps/system_web_app_manager.h"
 #include "chrome/browser/web_applications/web_app_audio_focus_id_map.h"
+#include "chrome/browser/web_applications/web_app_command_manager.h"
 #include "chrome/browser/web_applications/web_app_database_factory.h"
 #include "chrome/browser/web_applications/web_app_icon_manager.h"
 #include "chrome/browser/web_applications/web_app_install_finalizer.h"
@@ -211,7 +212,13 @@ const OsIntegrationManager& WebAppProvider::os_integration_manager() const {
   return *os_integration_manager_;
 }
 
+WebAppCommandManager& WebAppProvider::command_manager() {
+  CheckIsConnected();
+  return *command_manager_;
+}
+
 void WebAppProvider::Shutdown() {
+  command_manager_->Shutdown();
   ui_manager_->Shutdown();
   externally_managed_app_manager_->Shutdown();
   manifest_update_manager_->Shutdown();
@@ -260,20 +267,16 @@ void WebAppProvider::CreateSubsystems(Profile* profile) {
   {
     auto mutable_registrar = std::make_unique<WebAppRegistrarMutable>(profile);
 
-    sync_bridge = std::make_unique<WebAppSyncBridge>(database_factory_.get(),
-                                                     mutable_registrar.get(),
-                                                     install_manager_.get());
+    sync_bridge = std::make_unique<WebAppSyncBridge>(mutable_registrar.get());
 
     // Upcast to read-only WebAppRegistrar.
     registrar = std::move(mutable_registrar);
   }
 
-  auto icon_manager = std::make_unique<WebAppIconManager>(
-      profile, *registrar, *install_manager_,
-      base::MakeRefCounted<FileUtilsWrapper>());
-  auto translation_manager = std::make_unique<WebAppTranslationManager>(
-      profile, install_manager_.get(),
-      base::MakeRefCounted<FileUtilsWrapper>());
+  icon_manager_ = std::make_unique<WebAppIconManager>(
+      profile, base::MakeRefCounted<FileUtilsWrapper>());
+  translation_manager_ = std::make_unique<WebAppTranslationManager>(
+      profile, base::MakeRefCounted<FileUtilsWrapper>());
   install_finalizer_ = std::make_unique<WebAppInstallFinalizer>(profile);
 
   if (g_os_integration_manager_factory_for_testing) {
@@ -285,7 +288,7 @@ void WebAppProvider::CreateSubsystems(Profile* profile) {
     auto protocol_handler_manager =
         std::make_unique<WebAppProtocolHandlerManager>(profile);
     auto shortcut_manager = std::make_unique<WebAppShortcutManager>(
-        profile, icon_manager.get(), file_handler_manager.get(),
+        profile, icon_manager_.get(), file_handler_manager.get(),
         protocol_handler_manager.get());
 
     std::unique_ptr<UrlHandlerManager> url_handler_manager;
@@ -299,15 +302,18 @@ void WebAppProvider::CreateSubsystems(Profile* profile) {
         std::move(protocol_handler_manager), std::move(url_handler_manager));
   }
 
+  command_manager_ = std::make_unique<WebAppCommandManager>();
+
   registrar_ = std::move(registrar);
   sync_bridge_ = std::move(sync_bridge);
-  icon_manager_ = std::move(icon_manager);
-  translation_manager_ = std::move(translation_manager);
 }
 
 void WebAppProvider::ConnectSubsystems() {
   DCHECK(!started_);
 
+  sync_bridge_->SetSubsystems(database_factory_.get(), install_manager_.get(),
+                              command_manager_.get());
+  icon_manager_->SetSubsystems(registrar_.get(), install_manager_.get());
   install_finalizer_->SetSubsystems(
       install_manager_.get(), registrar_.get(), ui_manager_.get(),
       sync_bridge_.get(), os_integration_manager_.get(), icon_manager_.get(),
@@ -322,7 +328,7 @@ void WebAppProvider::ConnectSubsystems() {
       sync_bridge_.get());
   externally_managed_app_manager_->SetSubsystems(
       registrar_.get(), ui_manager_.get(), install_finalizer_.get(),
-      install_manager_.get());
+      install_manager_.get(), sync_bridge_.get());
   preinstalled_web_app_manager_->SetSubsystems(
       registrar_.get(), ui_manager_.get(),
       externally_managed_app_manager_.get());
@@ -333,7 +339,8 @@ void WebAppProvider::ConnectSubsystems() {
                                          registrar_.get(), sync_bridge_.get(),
                                          system_web_app_manager_.get(),
                                          os_integration_manager_.get());
-  registrar_->SetSubsystems(web_app_policy_manager_.get());
+  registrar_->SetSubsystems(web_app_policy_manager_.get(),
+                            translation_manager_.get());
   ui_manager_->SetSubsystems(sync_bridge_.get(), os_integration_manager_.get());
   os_integration_manager_->SetSubsystems(sync_bridge_.get(), registrar_.get(),
                                          ui_manager_.get(),

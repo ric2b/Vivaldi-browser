@@ -4,6 +4,7 @@ include_rules = [
     "+base/cancelable_callback.h",
     "+base/memory/values_equivalent.h",
     "+base/files/file.h",
+    "+base/files/file_path.h",
     "+base/guid.h",
     "+base/mac/foundation_util.h",
     "+base/memory/scoped_policy.h",
@@ -18,7 +19,11 @@ include_rules = [
     "+base/unguessable_token.h",
     "+base/values.h",
     "+cc/animation/animation_host.h",
+    "+cc/animation/animation_id_provider.h",
+    "+cc/animation/filter_animation_curve.h",
+    "+cc/animation/keyframe_model.h",
     "+cc/animation/scroll_offset_animation_curve.h",
+    "+cc/animation/scroll_offset_animation_curve_factory.h",
     "+cc/animation/scroll_offset_animations.h",
     "+cc/animation/scroll_timeline.h",
     "+cc/base/features.h",
@@ -45,6 +50,7 @@ include_rules = [
     "+cc/trees/layer_tree_host.h",
     "+cc/trees/paint_holding_commit_trigger.h",
     "+cc/trees/paint_holding_reason.h",
+    "+cc/trees/target_property.h",
     "+cc/trees/ukm_manager.h",
     "+components/performance_manager/public/mojom/coordination_unit.mojom-blink.h",
     "+components/performance_manager/public/mojom/web_memory.mojom-blink.h",
@@ -94,6 +100,7 @@ include_rules = [
     "+ui/display/screen_info.h",
     "+ui/display/screen_infos.h",
     "+ui/gfx/animation/keyframe/animation_curve.h",
+    "+ui/gfx/animation/keyframe/keyframed_animation_curve.h",
     "+ui/gfx/geometry",
     "+ui/gfx/range/range.h",
     "-web",
@@ -131,6 +138,9 @@ specific_include_rules = {
         "+gin",
         "+url/url_util.h"
     ],
+    ".*_fuzzer.cc" : [
+        "+testing/libfuzzer",
+    ],
     "data_object_item.cc" : [ "+ui/gfx/codec" ],
     "chrome_client.h" : [
         "+ui/gfx/delegated_ink_metadata.h",
@@ -160,6 +170,9 @@ specific_include_rules = {
     ],
     "media_query_evaluator.cc": [
         "+ui/base/pointer/pointer_device.h",
+    ],
+    "media_query_evaluator_test.cc": [
+        "+ui/gfx/display_color_spaces.h",
     ],
     "media_values.h": [
         "+ui/base/pointer/pointer_device.h",

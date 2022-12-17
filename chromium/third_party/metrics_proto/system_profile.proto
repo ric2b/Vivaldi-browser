@@ -229,7 +229,7 @@ message SystemProfileProto {
   optional OS os = 5;
 
   // Information on the user's hardware.
-  // Next tag: 22
+  // Next tag: 23
   message Hardware {
     // OS CPU architecture. Taken from uname -m and modified in Chromium logic.
     // Common options are: x86, x86_64, armv7l, armv8l, aarch64.
@@ -288,6 +288,19 @@ message SystemProfileProto {
     // Max DPI for any attached screen. (Windows only)
     optional float max_dpi_x = 9;
     optional float max_dpi_y = 10;
+
+    // The form factor of the device. Added in M101.
+    // Android devices can be phone, tablet, or TV. iOS devices can be phone or
+    // tablet. For Windows, Mac, ChromeOS, Lacros, and Linux, the desktop form
+    // factor is always used.
+    enum FormFactor {
+      FORM_FACTOR_UNKNOWN = 0;
+      FORM_FACTOR_DESKTOP = 1;
+      FORM_FACTOR_PHONE = 2;
+      FORM_FACTOR_TABLET = 3;
+      FORM_FACTOR_TV = 4;
+    }
+    optional FormFactor form_factor = 22;
 
     // Information on the CPU obtained by CPUID.
     message CPU {
@@ -519,25 +532,6 @@ message SystemProfileProto {
   }
   optional GoogleUpdate google_update = 11;
 
-  // Information on all installed plugins.
-  message Plugin {
-    // The plugin's self-reported name and filename (without path).
-    optional string name = 1;
-    optional string filename = 2;
-
-    // The plugin's version.
-    optional string version = 3;
-
-    // True if the plugin is disabled.
-    // If a client has multiple local Chrome user accounts, this is logged based
-    // on the first user account launched during the current session.
-    optional bool is_disabled = 4;
-
-    // True if the plugin is PPAPI.
-    optional bool is_pepper = 5;
-  }
-  repeated Plugin plugin = 7;
-
   // Figures that can be used to generate application stability metrics.
   // All values are counts of events since the last time that these
   // values were reported.
@@ -563,14 +557,11 @@ message SystemProfileProto {
     // launches, since page load count roughly corresponds to usage.
     optional int32 page_load_count = 2;
     optional int32 renderer_crash_count = 3;
-    optional int32 renderer_failed_launch_count = 24;
     optional int32 renderer_launch_count = 26;
 
     // Number of renderer launches, crashes and failed launches that were for
     // extensions. These are not counted in the renderer counts above.
     optional int32 extension_renderer_crash_count = 5;
-    optional int32 extension_renderer_failed_launch_count = 25;
-    optional int32 extension_renderer_launch_count = 27;
 
     // Number of gpu crashes that generate a crash dump. Currently only used by
     // Android Chrome starting with M71.
@@ -594,10 +585,12 @@ message SystemProfileProto {
 
     // The number of times the program was launched since the last time metrics
     // was uploaded. For the initial metrics upload (right after startup), this
-    // will often be equal to 1.  However, it is possible that Chrome was unable
+    // will often be equal to 1. However, it is possible that Chrome was unable
     // to upload stability metrics for previous launches (e.g. due to crashing
-    // early during startup), making this value greater than 1.  For subsequent
+    // early during startup), making this value greater than 1. For subsequent
     // metrics uploads, this value will be 0.
+    //
+    // Logged on Android only. Used by only Android WebView.
     optional int32 launch_count = 15;
     // The number of times that it didn't exit cleanly (which we assume to be
     // mostly crashes). On Android M71+ this does not include times when the Gms
@@ -612,16 +605,6 @@ message SystemProfileProto {
     // Whether the metrics being reported are from a previous run picked up via
     // the left-over memory mapped files.
     optional bool from_previous_run = 29;
-
-    // Stability information for all installed plugins.
-    message PluginStability {
-      // The relevant plugin's information (name, etc.)
-      optional Plugin plugin = 1;
-
-      // The number of times this plugin process crashed.
-      optional int32 crash_count = 4;
-    }
-    repeated PluginStability plugin_stability = 22;
   }
   optional Stability stability = 8;
 

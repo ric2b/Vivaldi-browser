@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/cxx17_backports.h"
 #include "base/feature_list.h"
 #include "base/json/json_reader.h"
 #include "base/logging.h"
@@ -129,7 +128,7 @@ const struct {
 void GetPhaseAndTypeFromNetError(Error error,
                                  std::string* phase_out,
                                  std::string* type_out) {
-  for (size_t i = 0; i < base::size(kErrorTypes); ++i) {
+  for (size_t i = 0; i < std::size(kErrorTypes); ++i) {
     DCHECK(kErrorTypes[i].phase != nullptr);
     DCHECK(kErrorTypes[i].type != nullptr);
     if (kErrorTypes[i].error == error) {
@@ -228,8 +227,9 @@ class NetworkErrorLoggingServiceImpl : public NetworkErrorLoggingService {
         base::Unretained(this), std::move(details), request_received_time));
   }
 
-  void RemoveBrowsingData(const base::RepeatingCallback<bool(const GURL&)>&
-                              origin_filter) override {
+  void RemoveBrowsingData(
+      const base::RepeatingCallback<bool(const url::Origin&)>& origin_filter)
+      override {
     // base::Unretained is safe because the callback gets stored in
     // task_backlog_, so the callback will not outlive |*this|.
     DoOrBacklogTask(
@@ -551,12 +551,12 @@ class NetworkErrorLoggingServiceImpl : public NetworkErrorLoggingService {
   }
 
   void DoRemoveBrowsingData(
-      const base::RepeatingCallback<bool(const GURL&)>& origin_filter) {
+      const base::RepeatingCallback<bool(const url::Origin&)>& origin_filter) {
     DCHECK(initialized_);
     for (auto it = policies_.begin(); it != policies_.end();) {
       const NelPolicyKey& key = it->first;
       // Remove policies matching the filter.
-      if (origin_filter.Run(key.origin.GetURL())) {
+      if (origin_filter.Run(key.origin)) {
         it = RemovePolicy(it);
       } else {
         ++it;

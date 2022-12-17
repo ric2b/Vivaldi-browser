@@ -11,7 +11,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
 #include "base/synchronization/lock.h"
-#include "base/task/post_task.h"
 #include "base/thread_annotations.h"
 #include "base/timer/timer.h"
 #include "base/unguessable_token.h"
@@ -78,7 +77,10 @@ class ScheduledExecutor : public api::ScheduledExecutor {
   std::map<base::UnguessableToken, std::unique_ptr<PendingTaskWithTimer>>
       id_to_task_map_ GUARDED_BY(lock_);
   SEQUENCE_CHECKER(timer_sequence_checker_);
-  base::WeakPtrFactory<ScheduledExecutor> weak_factory_{this};
+  // WeakPtrFactory bound to |timer_task_runer_| to prevent use-after-free.
+  base::WeakPtrFactory<ScheduledExecutor> timer_task_runner_weak_factory_{this};
+  // WeakPtrFactory bound to Cancelable task
+  base::WeakPtrFactory<ScheduledExecutor> cancelable_task_weak_factory_{this};
 };
 
 }  // namespace chrome

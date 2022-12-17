@@ -1,5 +1,5 @@
 This is a testharness.js-based test.
-Found 520 tests; 442 PASS, 78 FAIL, 0 TIMEOUT, 0 NOTRUN.
+Found 544 tests; 476 PASS, 68 FAIL, 0 TIMEOUT, 0 NOTRUN.
 PASS idl_test setup
 PASS idl_test validation
 PASS Partial interface Element: original interface defined
@@ -421,16 +421,16 @@ PASS CSSHSL interface: attribute h
 PASS CSSHSL interface: attribute s
 PASS CSSHSL interface: attribute l
 PASS CSSHSL interface: attribute alpha
-FAIL CSSHWB interface: existence and properties of interface object assert_own_property: self does not have own property "CSSHWB" expected property "CSSHWB" missing
-FAIL CSSHWB interface object length assert_own_property: self does not have own property "CSSHWB" expected property "CSSHWB" missing
-FAIL CSSHWB interface object name assert_own_property: self does not have own property "CSSHWB" expected property "CSSHWB" missing
-FAIL CSSHWB interface: existence and properties of interface prototype object assert_own_property: self does not have own property "CSSHWB" expected property "CSSHWB" missing
-FAIL CSSHWB interface: existence and properties of interface prototype object's "constructor" property assert_own_property: self does not have own property "CSSHWB" expected property "CSSHWB" missing
-FAIL CSSHWB interface: existence and properties of interface prototype object's @@unscopables property assert_own_property: self does not have own property "CSSHWB" expected property "CSSHWB" missing
-FAIL CSSHWB interface: attribute h assert_own_property: self does not have own property "CSSHWB" expected property "CSSHWB" missing
-FAIL CSSHWB interface: attribute w assert_own_property: self does not have own property "CSSHWB" expected property "CSSHWB" missing
-FAIL CSSHWB interface: attribute b assert_own_property: self does not have own property "CSSHWB" expected property "CSSHWB" missing
-FAIL CSSHWB interface: attribute alpha assert_own_property: self does not have own property "CSSHWB" expected property "CSSHWB" missing
+PASS CSSHWB interface: existence and properties of interface object
+PASS CSSHWB interface object length
+PASS CSSHWB interface object name
+PASS CSSHWB interface: existence and properties of interface prototype object
+PASS CSSHWB interface: existence and properties of interface prototype object's "constructor" property
+PASS CSSHWB interface: existence and properties of interface prototype object's @@unscopables property
+PASS CSSHWB interface: attribute h
+PASS CSSHWB interface: attribute w
+PASS CSSHWB interface: attribute b
+PASS CSSHWB interface: attribute alpha
 FAIL CSSLab interface: existence and properties of interface object assert_own_property: self does not have own property "CSSLab" expected property "CSSLab" missing
 FAIL CSSLab interface object length assert_own_property: self does not have own property "CSSLab" expected property "CSSLab" missing
 FAIL CSSLab interface object name assert_own_property: self does not have own property "CSSLab" expected property "CSSLab" missing
@@ -497,6 +497,30 @@ PASS CSS namespace: operation vi(double)
 PASS CSS namespace: operation vb(double)
 PASS CSS namespace: operation vmin(double)
 PASS CSS namespace: operation vmax(double)
+PASS CSS namespace: operation svw(double)
+PASS CSS namespace: operation svh(double)
+PASS CSS namespace: operation svi(double)
+PASS CSS namespace: operation svb(double)
+PASS CSS namespace: operation svmin(double)
+PASS CSS namespace: operation svmax(double)
+PASS CSS namespace: operation lvw(double)
+PASS CSS namespace: operation lvh(double)
+PASS CSS namespace: operation lvi(double)
+PASS CSS namespace: operation lvb(double)
+PASS CSS namespace: operation lvmin(double)
+PASS CSS namespace: operation lvmax(double)
+PASS CSS namespace: operation dvw(double)
+PASS CSS namespace: operation dvh(double)
+PASS CSS namespace: operation dvi(double)
+PASS CSS namespace: operation dvb(double)
+PASS CSS namespace: operation dvmin(double)
+PASS CSS namespace: operation dvmax(double)
+PASS CSS namespace: operation cqw(double)
+PASS CSS namespace: operation cqh(double)
+PASS CSS namespace: operation cqi(double)
+PASS CSS namespace: operation cqb(double)
+PASS CSS namespace: operation cqmin(double)
+PASS CSS namespace: operation cqmax(double)
 PASS CSS namespace: operation cm(double)
 PASS CSS namespace: operation mm(double)
 PASS CSS namespace: operation Q(double)

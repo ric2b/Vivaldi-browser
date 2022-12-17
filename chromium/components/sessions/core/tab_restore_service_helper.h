@@ -107,7 +107,7 @@ class SESSIONS_EXPORT TabRestoreServiceHelper
 
   const Entries& entries() const;
   std::vector<LiveTab*> RestoreMostRecentEntry(LiveTabContext* context);
-  std::unique_ptr<Tab> RemoveTabEntryById(SessionID id);
+  void RemoveTabEntryById(SessionID id);
   std::vector<LiveTab*> RestoreEntryById(LiveTabContext* context,
                                          SessionID id,
                                          WindowOpenDisposition disposition);

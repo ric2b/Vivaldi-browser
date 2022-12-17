@@ -41,7 +41,7 @@ blink_python_runner("make_generated_permissions_policy_helper") {
   inputs = scripts_for_json5_files + [
              "../../renderer/build/scripts/make_policy_helper_public.py",
              "../../renderer/core/permissions_policy/permissions_policy_features.json5",
-             "../../renderer/build/scripts/templates/policy_helper.cc.tmpl",
+             "../../renderer/build/scripts/templates/policy_helper_public.cc.tmpl",
            ]
   outputs = [ "$root_gen_dir/third_party/blink/public/common/permissions_policy/policy_helper_public.cc" ]
 
@@ -109,6 +109,7 @@ source_set("headers") {
     "action_after_pagehide.h",
     "associated_interfaces/associated_interface_provider.h",
     "associated_interfaces/associated_interface_registry.h",
+    "attribution_reporting/constants.h",
     "blob/blob_utils.h",
     "bluetooth/web_bluetooth_device_id.h",
     "bluetooth/web_bluetooth_device_id_mojom_traits.h",
@@ -130,10 +131,12 @@ source_set("headers") {
     "device_memory/approximated_device_memory.h",
     "dom_storage/session_storage_namespace_id.h",
     "features.h",
+    "fenced_frame/fenced_frame_utils.h",
     "fetch/fetch_api_request_headers_map.h",
     "fetch/fetch_api_request_headers_mojom_traits.h",
     "forcedark/forcedark_switches.h",
     "frame/event_page_show_persisted.h",
+    "frame/fenced_frame_sandbox_flags.h",
     "frame/frame_ad_evidence.h",
     "frame/frame_owner_element_type.h",
     "frame/frame_policy.h",
@@ -206,6 +209,7 @@ source_set("headers") {
     "messaging/transferable_message.h",
     "messaging/transferable_message_mojom_traits.h",
     "messaging/web_message_port.h",
+    "metrics/accept_language_and_content_language_usage.h",
     "metrics/document_update_reason.h",
     "metrics/form_element_pii_type.h",
     "metrics/post_message_counter.h",
@@ -259,6 +263,8 @@ source_set("headers") {
     "service_worker/service_worker_status_code.h",
     "service_worker/service_worker_type_converters.h",
     "service_worker/service_worker_types.h",
+    "shared_storage/shared_storage_mojom_traits.h",
+    "shared_storage/shared_storage_utils.h",
     "sms/webotp_constants.h",
     "sms/webotp_service_outcome.h",
     "storage_key/storage_key.h",
@@ -273,6 +279,7 @@ source_set("headers") {
     "web_package/signed_exchange_consts.h",
     "web_package/web_package_request_matcher.h",
     "web_preferences/web_preferences.h",
+    "widget/constants.h",
     "widget/device_emulation_params.h",
     "widget/visual_properties.h",
   ]

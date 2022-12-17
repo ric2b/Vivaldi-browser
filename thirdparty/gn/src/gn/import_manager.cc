@@ -144,14 +144,14 @@ bool ImportManager::DoImport(const SourceFile& file,
       if (TracingEnabled() &&
           TicksDelta(import_block_end, import_block_begin).InMilliseconds() >
               kImportBlockTraceThresholdMS) {
-        auto* import_block_trace =
-            new TraceItem(TraceItem::TRACE_IMPORT_BLOCK, file.value(),
-                          std::this_thread::get_id());
+        auto import_block_trace = std::make_unique<TraceItem>(
+            TraceItem::TRACE_IMPORT_BLOCK, file.value(),
+            std::this_thread::get_id());
         import_block_trace->set_begin(import_block_begin);
         import_block_trace->set_end(import_block_end);
         import_block_trace->set_toolchain(
             scope->settings()->toolchain_label().GetUserVisibleName(false));
-        AddTrace(import_block_trace);
+        AddTrace(std::move(import_block_trace));
       }
     }
 

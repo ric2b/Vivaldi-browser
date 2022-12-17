@@ -32,7 +32,6 @@ import androidx.appcompat.content.res.AppCompatResources;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.ItemTouchHelper;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Callback;
 import org.chromium.base.Log;
 import org.chromium.base.metrics.RecordHistogram;
@@ -63,6 +62,7 @@ import org.chromium.chrome.browser.tasks.pseudotab.PseudoTab;
 import org.chromium.chrome.browser.tasks.pseudotab.TabAttributeCache;
 import org.chromium.chrome.browser.tasks.tab_groups.EmptyTabGroupModelFilterObserver;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
+import org.chromium.chrome.browser.tasks.tab_groups.TabGroupTitleUtils;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupUtils;
 import org.chromium.chrome.browser.tasks.tab_management.PriceMessageService.PriceTabData;
 import org.chromium.chrome.browser.tasks.tab_management.TabListCoordinator.TabListMode;
@@ -999,17 +999,17 @@ class TabListMediator {
 
                 @Override
                 protected void deleteTabGroupTitle(int tabRootId) {
-                    TabGroupUtils.deleteTabGroupTitle(tabRootId);
+                    TabGroupTitleUtils.deleteTabGroupTitle(tabRootId);
                 }
 
                 @Override
                 protected String getTabGroupTitle(int tabRootId) {
-                    return TabGroupUtils.getTabGroupTitle(tabRootId);
+                    return TabGroupTitleUtils.getTabGroupTitle(tabRootId);
                 }
 
                 @Override
                 protected void storeTabGroupTitle(int tabRootId, String title) {
-                    TabGroupUtils.storeTabGroupTitle(tabRootId, title);
+                    TabGroupTitleUtils.storeTabGroupTitle(tabRootId, title);
                 }
             };
         }
@@ -1536,8 +1536,7 @@ class TabListMediator {
             // bug is landed.
             ColorStateList actionbuttonSelectedBackgroundColorList =
                     ColorStateList.valueOf(pseudoTab.isIncognito()
-                                    ? ApiCompatibilityUtils.getColor(
-                                            mContext.getResources(), R.color.modern_blue_300)
+                                    ? mContext.getColor(R.color.modern_blue_300)
                                     : SemanticColorUtils.getDefaultControlColorActive(mContext));
 
             tabInfo.set(TabProperties.CHECKED_DRAWABLE_STATE_LIST, checkedDrawableColorList);

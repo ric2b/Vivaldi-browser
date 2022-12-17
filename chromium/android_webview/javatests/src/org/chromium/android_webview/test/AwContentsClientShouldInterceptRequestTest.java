@@ -22,14 +22,16 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.android_webview.AwContents;
+import org.chromium.android_webview.InterceptionType;
+import org.chromium.android_webview.test.TestAwContentsClient.OnReceivedErrorHelper;
 import org.chromium.android_webview.test.util.AwTestTouchUtils;
 import org.chromium.android_webview.test.util.CommonResources;
 import org.chromium.android_webview.test.util.JSUtils;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.TestFileUtil;
 import org.chromium.components.embedder_support.util.WebResourceResponseInfo;
-import org.chromium.content_public.browser.test.util.TestCallbackHelperContainer.OnReceivedErrorHelper;
 import org.chromium.net.test.util.TestWebServer;
 import org.chromium.net.test.util.WebServer;
 
@@ -120,6 +122,10 @@ public class AwContentsClientShouldInterceptRequestTest {
         mContentsClient.getOnPageFinishedHelper().waitForCallback(onPageFinishedCallCount);
         Assert.assertEquals(
                 CommonResources.ABOUT_TITLE, mActivityTestRule.getTitleOnUiThread(mAwContents));
+        Assert.assertEquals(1,
+                RecordHistogram.getHistogramValueCountForTesting(
+                        "Android.WebView.ShouldInterceptRequest.InterceptionType2",
+                        InterceptionType.NO_INTERCEPT));
     }
 
     @Test
@@ -605,6 +611,10 @@ public class AwContentsClientShouldInterceptRequestTest {
 
         Assert.assertEquals(expectedTitle, mActivityTestRule.getTitleOnUiThread(mAwContents));
         Assert.assertEquals(0, mWebServer.getRequestCount("/" + CommonResources.ABOUT_FILENAME));
+        Assert.assertEquals(1,
+                RecordHistogram.getHistogramValueCountForTesting(
+                        "Android.WebView.ShouldInterceptRequest.InterceptionType2",
+                        InterceptionType.HTTP));
     }
 
     @Test
@@ -676,7 +686,7 @@ public class AwContentsClientShouldInterceptRequestTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
-    public void testNoOnReceivedErrorCallback() throws Throwable {
+    public void testSubresourceError_NullMimeEncodingAndInputStream() throws Throwable {
         final String imagePath = "/" + CommonResources.FAVICON_FILENAME;
         final String imageUrl = mWebServer.setResponseBase64(imagePath,
                 CommonResources.FAVICON_DATA_BASE64, CommonResources.getImagePngHeaders(true));
@@ -685,6 +695,26 @@ public class AwContentsClientShouldInterceptRequestTest {
                         CommonResources.getOnImageLoadedHtml(CommonResources.FAVICON_FILENAME));
         mShouldInterceptRequestHelper.setReturnValueForUrl(
                 imageUrl, new WebResourceResponseInfo(null, null, null));
+        OnReceivedErrorHelper onReceivedErrorHelper = mContentsClient.getOnReceivedErrorHelper();
+        int onReceivedErrorHelperCallCount = onReceivedErrorHelper.getCallCount();
+        mActivityTestRule.loadUrlSync(
+                mAwContents, mContentsClient.getOnPageFinishedHelper(), pageWithImage);
+        onReceivedErrorHelper.waitForCallback(onReceivedErrorHelperCallCount);
+        Assert.assertEquals(imageUrl, onReceivedErrorHelper.getRequest().url);
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testNoOnReceivedErrorCallback() throws Throwable {
+        final String imagePath = "/" + CommonResources.FAVICON_FILENAME;
+        final String imageUrl = mWebServer.setResponseBase64(imagePath,
+                CommonResources.FAVICON_DATA_BASE64, CommonResources.getImagePngHeaders(true));
+        final String pageWithImage = addPageToTestServer(mWebServer, "/page_with_image.html",
+                CommonResources.getOnImageLoadedHtml(CommonResources.FAVICON_FILENAME));
+        mShouldInterceptRequestHelper.setReturnValueForUrl(imageUrl,
+                new WebResourceResponseInfo(/* mimeType= */ null, /* encoding= */ null,
+                        /* data= */ new EmptyInputStream()));
         OnReceivedErrorHelper onReceivedErrorHelper = mContentsClient.getOnReceivedErrorHelper();
         int onReceivedErrorHelperCallCount = onReceivedErrorHelper.getCallCount();
         mActivityTestRule.loadUrlSync(
@@ -728,6 +758,9 @@ public class AwContentsClientShouldInterceptRequestTest {
         // renderer should be delivered in order waiting for onPageFinished is sufficient to
         // 'flush' any pending interception messages.
         Assert.assertEquals(callCount, mShouldInterceptRequestHelper.getCallCount());
+        Assert.assertEquals(0,
+                RecordHistogram.getHistogramTotalCountForTesting(
+                        "Android.WebView.ShouldInterceptRequest.InterceptionType2"));
     }
 
     @Test
@@ -740,8 +773,25 @@ public class AwContentsClientShouldInterceptRequestTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
-    public void testCalledForNonexistentFiles() throws Throwable {
+    public void testFileUrls_notIntercepted() throws Throwable {
         calledForUrlTemplate("file:///somewhere/something");
+        Assert.assertEquals(1,
+                RecordHistogram.getHistogramValueCountForTesting(
+                        "Android.WebView.ShouldInterceptRequest.InterceptionType2",
+                        InterceptionType.NO_INTERCEPT));
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testFileUrls_intercepted() throws Throwable {
+        mShouldInterceptRequestHelper.setReturnValue(
+                stringToWebResourceResponseInfo("<html>Hello world</html>"));
+        calledForUrlTemplate("file:///somewhere/something");
+        Assert.assertEquals(1,
+                RecordHistogram.getHistogramValueCountForTesting(
+                        "Android.WebView.ShouldInterceptRequest.InterceptionType2",
+                        InterceptionType.FILE));
     }
 
     @Test
@@ -966,13 +1016,35 @@ public class AwContentsClientShouldInterceptRequestTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
-    public void testLoadDataUrlShouldTriggerShouldInterceptRequest() throws Throwable {
+    public void testLoadDataUrl_notIntercepted() throws Throwable {
         String url = "data:text/plain,foo";
 
         int callCount = mShouldInterceptRequestHelper.getCallCount();
         mActivityTestRule.loadUrlSync(mAwContents, mContentsClient.getOnPageFinishedHelper(), url);
         Assert.assertEquals(callCount + 1, mShouldInterceptRequestHelper.getCallCount());
         Assert.assertEquals(url, mShouldInterceptRequestHelper.getUrls().get(0));
+        Assert.assertEquals(1,
+                RecordHistogram.getHistogramValueCountForTesting(
+                        "Android.WebView.ShouldInterceptRequest.InterceptionType2",
+                        InterceptionType.NO_INTERCEPT));
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testLoadDataUrl_intercepted() throws Throwable {
+        String url = "data:text/plain,foo";
+
+        mShouldInterceptRequestHelper.setReturnValue(
+                stringToWebResourceResponseInfo("<html>Hello world</html>"));
+        int callCount = mShouldInterceptRequestHelper.getCallCount();
+        mActivityTestRule.loadUrlSync(mAwContents, mContentsClient.getOnPageFinishedHelper(), url);
+        Assert.assertEquals(callCount + 1, mShouldInterceptRequestHelper.getCallCount());
+        Assert.assertEquals(url, mShouldInterceptRequestHelper.getUrls().get(0));
+        Assert.assertEquals(1,
+                RecordHistogram.getHistogramValueCountForTesting(
+                        "Android.WebView.ShouldInterceptRequest.InterceptionType2",
+                        InterceptionType.DATA));
     }
 
     @Test

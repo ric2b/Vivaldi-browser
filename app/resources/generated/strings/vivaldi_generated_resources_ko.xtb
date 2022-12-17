@@ -9,7 +9,6 @@
 <translation id="1054153489933238809">새 탭에서 원본 이미지 열기</translation>
 <translation id="1056898198331236512">경고</translation>
 <translation id="1084824384139382525">링크 주소 복사(&amp;E)</translation>
-<translation id="1128109161498068552">사이트에서 시스템 전용 메시지를 사용하여 MIDI 기기에 액세스하도록 허용하지 않음</translation>
 <translation id="1163931534039071049">프레임 소스 보기(&amp;V)</translation>
 <translation id="1165039591588034296">오류</translation>
 <translation id="1175364870820465910">인쇄... (&amp;P)</translation>
@@ -22,7 +21,6 @@
 <translation id="1297175357211070620">대상</translation>
 <translation id="1303101771013849280">HTML 파일 북마크하기</translation>
 <translation id="1430915738399379752">인쇄</translation>
-<translation id="1433811987160647649">액세스하기 전에 확인</translation>
 <translation id="1451375123200651445">웹페이지, 단일 파일</translation>
 <translation id="1465176863081977902">오디오 주소 복사(&amp;O)</translation>
 <translation id="1476607407192946488">언어 설정(&amp;L)</translation>
@@ -99,13 +97,11 @@
 <translation id="2783321960289401138">바로가기 만들기...</translation>
 <translation id="2785873697295365461">파일 설명자</translation>
 <translation id="2809586584051668049">외 <ph name="NUMBER_ADDITIONAL_DISABLED" />개</translation>
-<translation id="2812989263793994277">이미지 표시하지 않기</translation>
 <translation id="2850541429955027218">테마 추가</translation>
 <translation id="2861941300086904918">네이티브 클라이언트 보안 관리자</translation>
 <translation id="2881076733170862447">확장 프로그램을 클릭할 경우</translation>
 <translation id="2889064240420137087">다음으로 링크 열기...</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" />이(가) 이 프린터와 통신할 수 없습니다. 프린터가 연결되어 있는지 확인한 후 다시 시도해 주세요.</translation>
-<translation id="2904456025988372123">사이트에서 첫 파일 다운로드 후 자동으로 파일을 다운로드하려고 할 때 확인</translation>
 <translation id="2913331724188855103">사이트에서 쿠키 데이터를 저장하고 읽도록 허용(권장)</translation>
 <translation id="2931157624143513983">인쇄 가능 영역에 맞춤</translation>
 <translation id="2932085390869194046">비밀번호 추천...</translation>
@@ -126,7 +122,6 @@
 <translation id="3127156390846601284">기기에 저장된 데이터 중 표시된 모든 사이트의 데이터가 삭제됩니다. 계속하시겠습니까?</translation>
 <translation id="3129173833825111527">왼쪽 여백</translation>
 <translation id="3144647712221361880">다음으로 링크 열기</translation>
-<translation id="3154429428035006212">1달 이상 오프라인 상태</translation>
 <translation id="3222066309010235055">사전 렌더링: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">압축할 확장 프로그램의 루트 디렉토리를 선택합니다. 확장 프로그램을 업데이트하려면 다시 사용할 비공개 키 파일도 선택합니다.</translation>
 <translation id="3280237271814976245">다른 이름으로 저장(&amp;A)...</translation>
@@ -143,6 +138,7 @@
 <translation id="3360297538363969800">인쇄에 실패했습니다. 프린터를 확인한 후 다시 시도해 주세요.</translation>
 <translation id="3378572629723696641">확장 프로그램이 손상되었을 수도 있습니다.</translation>
 <translation id="3387614642886316601">향상된 맞춤법 검사 기능 사용</translation>
+<translation id="3393582007140394275">화면을 전송할 수 없습니다.</translation>
 <translation id="3432227430032737297">표시된 항목 모두 제거</translation>
 <translation id="345693547134384690">새 탭에서 이미지 열기(&amp;I)</translation>
 <translation id="3494769164076977169">사이트에서 첫 파일 다운로드 후 자동으로 파일을 다운로드하려고 할 때 확인(권장)</translation>
@@ -165,7 +161,6 @@
 <translation id="3838085852053358637">확장 프로그램을 로드하지 못함</translation>
 <translation id="383891835335927981">확대 또는 축소된 사이트가 없음</translation>
 <translation id="385051799172605136">뒤로</translation>
-<translation id="3899879303189199559">1년 이상 오프라인 상태</translation>
 <translation id="3905761538810670789">앱 복구</translation>
 <translation id="3908501907586732282">확장 프로그램 사용</translation>
 <translation id="3909701002594999354">모든 제어 기능 표시 &amp;Controls</translation>
@@ -192,7 +187,6 @@
 <translation id="4200983522494130825">새 탭(&amp;T)</translation>
 <translation id="4225397296022057997">모든 사이트에서</translation>
 <translation id="4256316378292851214">동영상을 다른 이름으로 저장(&amp;V)...</translation>
-<translation id="4278390842282768270">허용됨</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K(<ph name="NUM_KILOBYTES_LIVE" />K 활성)</translation>
 <translation id="4345587454538109430">설정...</translation>
 <translation id="4348766275249686434">오류 수집</translation>
@@ -217,15 +211,15 @@
 <translation id="488785315393301722">세부정보 표시</translation>
 <translation id="4907306957610201395">권한 카테고리</translation>
 <translation id="4912643508233590958">유휴 상태 해제</translation>
+<translation id="49265687513387605">화면을 전송할 수 없습니다. 화면 공유를 시작하라는 메시지를 확인했는지 확인해주세요.</translation>
 <translation id="4927753642311223124">별로 볼만한 건 없습니다. 다음으로.</translation>
 <translation id="4930714375720679147">사용 설정</translation>
+<translation id="4961318399572185831">화면 전송</translation>
 <translation id="4988526792673242964">페이지</translation>
 <translation id="49896407730300355">반시계 방향으로 회전(&amp;O)</translation>
 <translation id="4989966318180235467">백그라운드 페이지 검사(&amp;B)</translation>
-<translation id="4994474651455208930">사이트에서 프로토콜에 대한 기본 핸들러가 될지 여부를 묻도록 허용</translation>
 <translation id="5000922062037820727">차단(권장)</translation>
 <translation id="5027562294707732951">확장 프로그램 추가</translation>
-<translation id="5036662165765606524">사이트에서 여러 파일을 자동으로 다운로드하도록 허용하지 않음</translation>
 <translation id="5039804452771397117">허용</translation>
 <translation id="5057110919553308744">확장 프로그램을 클릭할 경우</translation>
 <translation id="5059526285558225588">공유할 정보 선택</translation>
@@ -238,7 +232,6 @@
 <translation id="5233231016133573565">프로세스 ID</translation>
 <translation id="5233736638227740678">붙여넣기 (&amp;P)</translation>
 <translation id="5256861893479663409">모든 사이트에서</translation>
-<translation id="5265562206369321422">1주 이상 오프라인 상태</translation>
 <translation id="5269977353971873915">인쇄 실패</translation>
 <translation id="5284445933715251131">다운로드 계속</translation>
 <translation id="52912272896845572">비공개 키 파일이 잘못되었습니다.</translation>
@@ -294,7 +287,6 @@
 <translation id="6122081475643980456">인터넷 연결이 제어되고 있습니다</translation>
 <translation id="6147020289383635445">인쇄 미리보기에 실패했습니다.</translation>
 <translation id="6156863943908443225">스크립트 캐시</translation>
-<translation id="6169666352732958425">데스크톱을 전송할 수 없습니다.</translation>
 <translation id="6196854373336333322">'<ph name="EXTENSION_NAME" />' 확장 프로그램이 프록시 설정을 제어할 수 있게 되었으며, 따라서 사용자가 온라인에서 수행하는 모든 작업을 변경, 중단하거나 엿볼 수 있게 되었습니다. 이와 같이 변경된 이유를 잘 모른다면 이 설정을 사용하지 않는 것이 좋습니다.</translation>
 <translation id="6200151268994853226">확장 프로그램 관리</translation>
 <translation id="6206311232642889873">이미지 복사(&amp;Y)</translation>
@@ -328,7 +320,6 @@
 <translation id="6798954102094737107">플러그인: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">변경사항 유지</translation>
 <translation id="6817174620439930047">사이트에서 시스템 전용 메시지를 사용하여 MIDI 기기에 액세스하려는 경우 확인(권장)</translation>
-<translation id="682123305478866682">데스크톱 전송</translation>
 <translation id="6824564591481349393">이메일 주소 복사(&amp;E)</translation>
 <translation id="6840155290835956714">보내기 전에 확인</translation>
 <translation id="6886871292305414135">새 탭에서 링크 열기(&amp;T)</translation>
@@ -346,7 +337,6 @@
 <translation id="708060913198414444">오디오 주소 복사(&amp;O)</translation>
 <translation id="7175353351958621980">불러온 경로:</translation>
 <translation id="7186088072322679094">툴바에 고정</translation>
-<translation id="7270858098575133036">사이트에서 시스템 전용 메시지를 사용하여 MIDI 기기에 액세스하려는 경우 확인</translation>
 <translation id="7287143125007575591">액세스가 거부되었습니다.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7385854874724088939">인쇄를 시도하는 동안 문제가 발생했습니다. 프린터를 점검한 다음 다시 시도해 보세요.</translation>
@@ -369,7 +359,6 @@
 <translation id="7704305437604973648">작업</translation>
 <translation id="7710568461918838723">캐스트... (&amp;C)</translation>
 <translation id="7750228210027921155">PIP 모드</translation>
-<translation id="7751260505918304024">모두 보기</translation>
 <translation id="7760004034676677601">설정한 시작 페이지가 맞습니까?</translation>
 <translation id="7771452384635174008">레이아웃</translation>
 <translation id="7782102568078991263">Google 추천 단어 없음</translation>
@@ -382,9 +371,7 @@
 <translation id="7849264908733290972">새 탭에서 이미지 열기(&amp;I)</translation>
 <translation id="7857949311770343000">설정한 새 탭 페이지가 맞습니까?</translation>
 <translation id="786073089922909430">서비스: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7885253890047913815">최근 대상</translation>
 <translation id="7903925330883316394">유틸리티: <ph name="UTILITY_TYPE" /></translation>
-<translation id="7938594894617528435">현재 오프라인 상태</translation>
 <translation id="7947962633355574091">동영상 주소 복사(&amp;O)</translation>
 <translation id="7966241909927244760">이미지 주소 복사(&amp;O)</translation>
 <translation id="7973394300052703468">새 사생활 보호 창 (&amp;P)</translation>
@@ -427,10 +414,8 @@
 <translation id="8708000541097332489">종료 시 삭제</translation>
 <translation id="8714838604780058252">배경 그래픽</translation>
 <translation id="8725066075913043281">재시도</translation>
-<translation id="8757090071857742562">데스크톱을 전송할 수 없습니다. 화면 공유 시작을 묻는 메시지에 동의했는지 확인해보세요.</translation>
 <translation id="8774934320277480003">상단 여백</translation>
 <translation id="8798099450830957504">기본값</translation>
-<translation id="8800004011501252845">다음 계정의 대상 표시 중</translation>
 <translation id="8808478386290700967">웹 스토어</translation>
 <translation id="8823514049557262177">링크 텍스트 복사(&amp;X)</translation>
 <translation id="8823704566850948458">비밀번호 추천...</translation>
@@ -443,7 +428,6 @@
 <translation id="8962083179518285172">세부정보 숨기기</translation>
 <translation id="8973557916016709913">확대/축소 단계 제거</translation>
 <translation id="897939795688207351"><ph name="ORIGIN" />에서</translation>
-<translation id="8996526648899750015">계정 추가...</translation>
 <translation id="9003647077635673607">모든 웹사이트에서 허용</translation>
 <translation id="9027459031423301635">새 탭에서 링크 열기(&amp;T)</translation>
 <translation id="9056810968620647706">일치하는 항목이 없습니다.</translation>

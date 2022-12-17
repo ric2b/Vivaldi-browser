@@ -75,26 +75,10 @@ bool Manifest::RelatedApplication::operator==(
 }
 
 bool Manifest::LaunchHandler::operator==(const LaunchHandler& other) const {
-  auto AsTuple = [](const auto& item) {
-    return std::tie(item.route_to, item.navigate_existing_client);
-  };
-  return AsTuple(*this) == AsTuple(other);
+  return route_to == other.route_to;
 }
 
 bool Manifest::LaunchHandler::operator!=(const LaunchHandler& other) const {
-  return !(*this == other);
-}
-
-bool Manifest::PermissionsPolicyDeclaration::operator==(
-    const PermissionsPolicyDeclaration& other) const {
-  auto AsTuple = [](const auto& item) {
-    return std::tie(item.feature, item.allowlist);
-  };
-  return AsTuple(*this) == AsTuple(other);
-}
-
-bool Manifest::PermissionsPolicyDeclaration::operator!=(
-    const PermissionsPolicyDeclaration& other) const {
   return !(*this == other);
 }
 

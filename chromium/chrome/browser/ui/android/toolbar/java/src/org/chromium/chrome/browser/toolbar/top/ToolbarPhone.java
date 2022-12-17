@@ -1900,7 +1900,7 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
     }
 
     private void updateViewsForTabSwitcherMode() {
-        setVisibility(mTabSwitcherState == STATIC_TAB ? View.VISIBLE : View.GONE);
+        setVisibility(mTabSwitcherState == STATIC_TAB ? View.VISIBLE : View.INVISIBLE);
 
         updateProgressBarVisibility();
         updateShadowVisibility();
@@ -2003,7 +2003,7 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
         if (mToggleTabStackButton == null) return;
         if (mTabSwitcherState == ENTERING_TAB_SWITCHER) {
             mToggleTabStackButton.setBackgroundColor(
-                    ApiCompatibilityUtils.getColor(getResources(), android.R.color.transparent));
+                    getContext().getColor(android.R.color.transparent));
         } else {
             // TODO(https://crbug.com/912358): This appears to no longer work.
             TypedValue outValue = new TypedValue();

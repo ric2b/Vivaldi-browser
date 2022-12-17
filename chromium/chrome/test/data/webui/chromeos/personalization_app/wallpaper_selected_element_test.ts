@@ -4,18 +4,18 @@
 
 /** @fileoverview Test suite for wallpaper-selected component.  */
 
-import {Paths} from 'chrome://personalization/trusted/personalization_router_element.js';
-import {WallpaperSelected} from 'chrome://personalization/trusted/wallpaper/wallpaper_selected_element.js';
+import 'chrome://personalization/strings.m.js';
+import 'chrome://webui-test/mojo_webui_test_support.js';
 
-import {assertEquals, assertFalse, assertNotEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
-
+import {Paths, WallpaperLayout, WallpaperSelected, WallpaperType} from 'chrome://personalization/trusted/personalization_app.js';
+import {assertDeepEquals, assertEquals, assertFalse, assertNotEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {flushTasks, waitAfterNextRender} from 'chrome://webui-test/test_util.js';
 
 import {baseSetup, initElement} from './personalization_app_test_utils.js';
 import {TestPersonalizationStore} from './test_personalization_store.js';
 import {TestWallpaperProvider} from './test_wallpaper_interface_provider.js';
 
-export function WallpaperSelectedTest() {
+suite('WallpaperSelectedTest', function() {
   let wallpaperSelectedElement: WallpaperSelected|null;
   let wallpaperProvider: TestWallpaperProvider;
   let personalizationStore: TestPersonalizationStore;
@@ -261,4 +261,37 @@ export function WallpaperSelectedTest() {
                 'refreshWallpaper');
         assertFalse(newRefreshWallpaper!.hidden);
       });
-}
+
+  test('shows layout options for Google Photos', async () => {
+    // Set a Google Photos photo as current wallpaper.
+    personalizationStore.data.wallpaper.currentSelected = {
+      url: {url: 'url'},
+      attribution: [],
+      layout: WallpaperLayout.kStretch,
+      type: WallpaperType.kGooglePhotos,
+      key: 'key',
+    };
+
+    // Initialize |wallpaperSelectedElement|.
+    wallpaperSelectedElement =
+        initElement(WallpaperSelected, {'path': Paths.CollectionImages});
+    await waitAfterNextRender(wallpaperSelectedElement);
+
+    // Verify layout options are *not* shown when not on Google Photos path.
+    const selector = '#wallpaperOptions';
+    const shadowRoot = wallpaperSelectedElement.shadowRoot;
+    assertEquals(shadowRoot?.querySelector(selector), null);
+
+    // Set Google Photos path and verify layout options *are* shown.
+    wallpaperSelectedElement.path = Paths.GooglePhotosCollection;
+    await waitAfterNextRender(wallpaperSelectedElement);
+    assertNotEquals(shadowRoot?.querySelector(selector), null);
+
+    // Verify that clicking layout |button| results in mojo API call.
+    const button = shadowRoot?.querySelector('#center') as HTMLElement | null;
+    button?.click();
+    assertDeepEquals(
+        await wallpaperProvider.whenCalled('setCurrentWallpaperLayout'),
+        WallpaperLayout.kCenter);
+  });
+});

@@ -26,6 +26,12 @@ struct PrepopulatedEngine;
 
 extern const int kMaxPrepopulatedEngineID;
 
+enum class SearchType {
+    kMain = 0,
+    kPrivate,
+    kImage
+};
+
 void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
 // Returns the current version of the prepopulate data, so callers can know when
@@ -38,7 +44,8 @@ int GetDataVersion(PrefService* prefs);
 // default search provider within the returned vector.
 std::vector<std::unique_ptr<TemplateURLData>> GetPrepopulatedEngines(
     PrefService* prefs,
-    size_t* default_search_provider_index);
+    size_t* default_search_provider_index,
+    SearchType search_type = SearchType::kMain);
 
 // Returns the prepopulated search engine with the given |prepopulated_id|.
 std::unique_ptr<TemplateURLData> GetPrepopulatedEngine(PrefService* prefs,
@@ -48,7 +55,7 @@ std::unique_ptr<TemplateURLData> GetPrepopulatedEngine(PrefService* prefs,
 // Returns the prepopulated URLs associated with |locale|.  |locale| should be a
 // two-character uppercase ISO 3166-1 country code.
 std::vector<std::unique_ptr<TemplateURLData>> GetLocalPrepopulatedEngines(
-    const std::string& locale);
+    const std::string& locale, std::string application_locale = "");
 #endif
 
 // Returns all prepopulated engines for all locales. Used only by tests.
@@ -62,7 +69,7 @@ void ClearPrepopulatedEnginesInPrefs(PrefService* prefs);
 // If |prefs| is NULL, any search provider overrides from the preferences are
 // not used.
 std::unique_ptr<TemplateURLData> GetPrepopulatedDefaultSearch(
-    PrefService* prefs);
+    PrefService* prefs, SearchType search_type = SearchType::kMain);
 
 }  // namespace TemplateURLPrepopulateData
 

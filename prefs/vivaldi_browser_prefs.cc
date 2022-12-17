@@ -34,7 +34,7 @@
 
 // Preference override is available on Linux or in internal desktop builds on
 // any platform for testing convenience.
-#if defined(OS_LINUX) || !(defined(OFFICIAL_BUILD) || defined(OS_ANDROID))
+#if BUILDFLAG(IS_LINUX) || !(defined(OFFICIAL_BUILD) || BUILDFLAG(IS_ANDROID))
 #define VIVALDI_PREFERENCE_OVERRIDE_FILE
 #endif
 
@@ -79,10 +79,10 @@ const char kThemeExtra[] = "themeExtra";
 #endif  // VIVALDI_PREFERENCE_OVERRIDE_FILE
 
 const char kVivaldiKeyName[] = "vivaldi";
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
 const char kChromiumKeyName[] = "chromium";
 const char kChromiumLocalKeyName[] = "chromium_local";
-#endif  // !defined(OS_ANDROID)
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 const char kTypeKeyName[] = "type";
 const char kDefaultKeyName[] = "default";
@@ -100,7 +100,7 @@ const char kTypeDictionaryName[] = "dictionary";
 
 }  // namespace
 
-#ifndef OS_ANDROID
+#if !BUILDFLAG(IS_ANDROID)
 
 namespace {
 
@@ -131,7 +131,7 @@ PrefPropertiesMap ExtractLastRegisteredPrefsProperties() {
   return std::move(GetRegisteredPrefPropertiesStorage());
 }
 
-#endif  // ifndef OS_ANDROID
+#endif  // !IS_ANDROID
 
 EnumPrefProperties::EnumPrefProperties() = default;
 EnumPrefProperties::EnumPrefProperties(EnumPrefProperties&&) = default;
@@ -330,7 +330,7 @@ void RegisterPrefsFromDefinition(base::Value::Dict& definition,
     }
   }
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   PrefProperties properties;
 #endif
   switch (pref_kind) {
@@ -377,7 +377,7 @@ void RegisterPrefsFromDefinition(base::Value::Dict& definition,
             << current_path << "'";
       }
       registry->RegisterIntegerPref(current_path, *enum_default, flags);
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
       properties.SetEnumProperties(std::move(enum_properties));
 #endif
       break;
@@ -415,12 +415,12 @@ void RegisterPrefsFromDefinition(base::Value::Dict& definition,
       NOTREACHED();
   }
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   pref_properties_map->emplace(std::move(current_path), std::move(properties));
 #endif
 }
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
 
 void AddChromiumProperties(base::Value::Dict& prefs,
                            base::StringPiece current_path,
@@ -499,7 +499,7 @@ void RegisterOldPrefs(user_prefs::PrefRegistrySyncable* registry) {
   RegisterOldPlatformPrefs(registry);
 }
 
-#endif  // !defined(OS_ANDROID)
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 #ifdef VIVALDI_PREFERENCE_OVERRIDE_FILE
 
@@ -691,6 +691,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
       vivaldiprefs::kVivaldiAccountPendingRegistration);
   registry->RegisterListPref(vivaldiprefs::kVivaldiExperiments);
   registry->RegisterInt64Pref(vivaldiprefs::kVivaldiLastTopSitesVacuumDate, 0);
+  registry->RegisterDictionaryPref(vivaldiprefs::kVivaldiPIPPlacement);
 
   base::Value::Dict prefs_definitions = ReadPrefsJson();
 
@@ -705,7 +706,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   RegisterPrefsFromDefinition(*vivaldi_pref_definition, kVivaldiKeyName,
                               registry, &pref_properties_map);
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   AddChromiumProperties(prefs_definitions, kChromiumKeyName, false,
                         &pref_properties_map);
   AddChromiumProperties(prefs_definitions, kChromiumLocalKeyName, true,
@@ -715,7 +716,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   GetRegisteredPrefPropertiesStorage() = std::move(pref_properties_map);
 
   RegisterOldPrefs(registry);
-#endif  // !defined(OS_ANDROID)
+#endif  // !BUILDFLAG(IS_ANDROID)
 }
 
 void MigrateOldPrefs(PrefService* prefs) {
@@ -762,7 +763,7 @@ void MigrateOldPrefs(PrefService* prefs) {
     prefs->ClearPref(vivaldiprefs::kOldVivaldiTabZoom);
   }
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   {
     const base::Value* old_number_of_days_to_keep_visits_pref =
         prefs->GetUserPrefValue(

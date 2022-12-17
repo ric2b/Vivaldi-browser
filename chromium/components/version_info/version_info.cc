@@ -8,6 +8,7 @@
 #include "base/no_destructor.h"
 #include "base/notreached.h"
 #include "base/sanitizer_buildflags.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/version.h"
 #include "build/branding_buildflags.h"
@@ -21,6 +22,14 @@ const std::string& GetProductNameAndVersionForUserAgent() {
   static const base::NoDestructor<std::string> product_and_version(
       "Chrome/" + GetVersionNumber());
   return *product_and_version;
+}
+
+const std::string GetProductNameAndVersionForReducedUserAgent(
+    const std::string& build_version) {
+  std::string product_and_version;
+  base::StrAppend(&product_and_version, {"Chrome/", GetMajorVersionNumber(),
+                                         ".0.", build_version, ".0"});
+  return product_and_version;
 }
 
 std::string GetProductName() {
@@ -62,9 +71,9 @@ std::string GetOSType() {
   return "Mac OS X";
 #elif BUILDFLAG(IS_CHROMEOS_ASH)
 # if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  return "Chrome OS";
+  return "ChromeOS";
 # else
-  return "Chromium OS";
+  return "ChromiumOS";
 # endif
 #elif BUILDFLAG(IS_ANDROID)
   return "Android";

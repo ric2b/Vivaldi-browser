@@ -13,13 +13,14 @@
 #include "base/scoped_observation.h"
 #include "components/desks_storage/core/desk_model.h"
 #include "components/desks_storage/core/desk_model_observer.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/aura/window.h"
 
 namespace ash {
 
+class Desk;
 class DeskTemplate;
 class OverviewSession;
+enum class DeskTemplateType;
 
 // DesksTemplatesPresenter is the presenter for the desks templates UI. It
 // handles all calls to the model, and lets the UI know what to show or update.
@@ -50,7 +51,8 @@ class ASH_EXPORT DesksTemplatesPresenter : desks_storage::DeskModelObserver {
 
   // Calls the DeskModel to get all the template entries, with a callback to
   // `OnGetAllEntries`.
-  void GetAllEntries();
+  void GetAllEntries(const base::GUID& item_to_focus,
+                     aura::Window* const root_window);
 
   // Calls the DeskModel to delete the template with the provided uuid.
   void DeleteEntry(const std::string& template_uuid);
@@ -61,14 +63,16 @@ class ASH_EXPORT DesksTemplatesPresenter : desks_storage::DeskModelObserver {
                           base::TimeDelta delay,
                           aura::Window* root_window);
 
-  // Calls the DeskModel to capture the active desk as a template entry, with a
+  // Calls the DeskModel to capture the active desk as a `template_type`, with a
   // callback to `OnAddOrUpdateEntry`. If there are unsupported apps on the
   // active desk, a dialog will open up and we may or may not save the desk
   // asynchronously based on the user's decision.
-  void MaybeSaveActiveDeskAsTemplate(aura::Window* root_window_to_show);
+  void MaybeSaveActiveDeskAsTemplate(DeskTemplateType template_type,
+                                     aura::Window* root_window_to_show);
 
   // Saves or updates the `desk_template` to the model.
   void SaveOrUpdateDeskTemplate(bool is_update,
+                                aura::Window* const root_window,
                                 std::unique_ptr<DeskTemplate> desk_template);
 
   // desks_storage::DeskModelObserver:
@@ -86,17 +90,10 @@ class ASH_EXPORT DesksTemplatesPresenter : desks_storage::DeskModelObserver {
 
   // Callback ran after querying the model for a list of entries. This function
   // also contains logic for updating the UI.
-  void OnGetAllEntries(desks_storage::DeskModel::GetAllEntriesStatus status,
+  void OnGetAllEntries(const base::GUID& item_to_focus,
+                       aura::Window* const root_window,
+                       desks_storage::DeskModel::GetAllEntriesStatus status,
                        const std::vector<DeskTemplate*>& entries);
-
-  // Calls the DeskModel to get a specific template entry, with a callback to
-  // `OnGetEntryByUUID`.
-  void GetEntryByUUID(const std::string& template_uuid);
-
-  // Callback ran after querying the model for a specific entry. Will then call
-  // `AddOrUpdateUIEntries` to update specified template in the UI.
-  void OnGetEntryByUUID(desks_storage::DeskModel::GetEntryByUuidStatus status,
-                        std::unique_ptr<ash::DeskTemplate> entry);
 
   // Callback after deleting an entry. Will then call `RemoveUIEntries` to
   // update the UI by removing the deleted template.
@@ -105,16 +102,25 @@ class ASH_EXPORT DesksTemplatesPresenter : desks_storage::DeskModelObserver {
 
   // Launches DeskTemplate after retrieval from storage.
   void OnGetTemplateForDeskLaunch(
+      base::Time time_launch_started,
       base::TimeDelta delay,
-      aura::Window* root_window,
+      aura::Window* const root_window,
       desks_storage::DeskModel::GetEntryByUuidStatus status,
       std::unique_ptr<DeskTemplate> entry);
+
+  // Callback after creating a new desk for launching a template.
+  void OnNewDeskCreatedForTemplate(std::unique_ptr<DeskTemplate> desk_template,
+                                   base::Time time_launch_started,
+                                   base::TimeDelta delay,
+                                   aura::Window* root_window,
+                                   const Desk* new_desk);
 
   // Callback after adding or updating an entry. Will then call
   // `AddOrUpdateUIEntries` to update the UI by adding or updating the template.
   void OnAddOrUpdateEntry(
       bool was_update,
-      const std::string& template_uuid,
+      aura::Window* const root_window,
+      std::unique_ptr<DeskTemplate> desk_template,
       desks_storage::DeskModel::AddOrUpdateEntryStatus status);
 
   // Helper functions for updating the UI.
@@ -136,12 +142,6 @@ class ASH_EXPORT DesksTemplatesPresenter : desks_storage::DeskModelObserver {
   // Test closure that runs after the UI has been updated async after a call to
   // the model.
   base::OnceClosure on_update_ui_closure_for_testing_;
-
-  // A cache of the last saved `DeskTemplate` UUID, used to name nudge the last
-  // saved template on `GetAllEntries`.
-  // TODO(crbug.com/1266552): Investigate if this is needed once we aren't
-  // recreating the grid every time.
-  absl::optional<base::GUID> cached_saved_template_uuid_;
 
   base::WeakPtrFactory<DesksTemplatesPresenter> weak_ptr_factory_{this};
 };

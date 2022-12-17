@@ -18,6 +18,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
+#include "base/observer_list.h"
 #include "base/strings/string_util.h"
 #include "components/bookmarks/browser/bookmark_expanded_state_tracker.h"
 #include "components/bookmarks/browser/bookmark_load_details.h"
@@ -463,14 +464,14 @@ void BookmarkModel::SetNodeMetaInfoMap(
 
   // NOTE(jarle@vivaldi.com): The index doesn't support changing metadata
   // (description, nickname), instead we remove the node and then add it back.
-  #if defined(OS_ANDROID) && defined(VIVALDI_BUILD)
+  #if BUILDFLAG(IS_ANDROID) && defined(VIVALDI_BUILD)
   if (node->is_url())
     titled_url_index_->Remove(node);
   #endif
 
   AsMutable(node)->SetMetaInfoMap(meta_info_map);
 
-  #if defined(OS_ANDROID) && defined(VIVALDI_BUILD)
+  #if BUILDFLAG(IS_ANDROID) && defined(VIVALDI_BUILD)
   if (node->is_url())
     titled_url_index_->Add(node);
   #endif

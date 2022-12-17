@@ -34,6 +34,7 @@
 #include <memory>
 
 #include "base/format_macros.h"
+#include "base/time/time.h"
 #include "third_party/blink/public/web/web_settings.h"
 #include "third_party/blink/renderer/bindings/core/v8/js_based_event_listener.h"
 #include "third_party/blink/renderer/bindings/core/v8/js_event_listener.h"
@@ -453,6 +454,20 @@ bool EventTarget::AddEventListenerInternal(
 
   if (options->hasSignal() && options->signal()->aborted())
     return false;
+
+  // Unload/Beforeunload handlers are not allowed in fenced frames.
+  if (event_type == event_type_names::kUnload ||
+      event_type == event_type_names::kBeforeunload) {
+    if (const LocalDOMWindow* window = ExecutingWindow()) {
+      if (const LocalFrame* frame = window->GetFrame()) {
+        if (frame->IsInFencedFrameTree()) {
+          window->PrintErrorMessage(
+              "unload/beforeunload handlers are prohibited in fenced frames.");
+          return false;
+        }
+      }
+    }
+  }
 
   if (event_type == event_type_names::kTouchcancel ||
       event_type == event_type_names::kTouchend ||

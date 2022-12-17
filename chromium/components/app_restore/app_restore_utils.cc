@@ -7,9 +7,9 @@
 #include "ash/constants/app_types.h"
 #include "ash/constants/ash_features.h"
 #include "base/bind.h"
+#include "components/app_restore/app_restore_info.h"
 #include "components/app_restore/desk_template_read_handler.h"
 #include "components/app_restore/features.h"
-#include "components/app_restore/full_restore_info.h"
 #include "components/app_restore/full_restore_read_handler.h"
 #include "components/app_restore/full_restore_save_handler.h"
 #include "components/app_restore/window_info.h"
@@ -43,6 +43,14 @@ bool IsArcWindow(aura::Window* window) {
 bool IsLacrosWindow(aura::Window* window) {
   return window->GetProperty(aura::client::kAppType) ==
          static_cast<int>(ash::AppType::LACROS);
+}
+
+bool HasWindowInfo(int32_t restore_window_id) {
+  auto* full_restore_instance =
+      full_restore::FullRestoreReadHandler::GetInstance();
+  if (full_restore_instance->IsFullRestoreRunning())
+    return full_restore_instance->HasWindowInfo(restore_window_id);
+  return !!DeskTemplateReadHandler::Get()->GetWindowInfo(restore_window_id);
 }
 
 void ApplyProperties(app_restore::WindowInfo* window_info,
@@ -88,7 +96,8 @@ void ModifyWidgetParams(int32_t restore_window_id,
     ArcReadHandler* arc_read_handler =
         ShouldUseFullRestoreArcData()
             ? full_restore_read_handler->arc_read_handler()
-            : DeskTemplateReadHandler::Get()->arc_read_handler();
+            : DeskTemplateReadHandler::Get()->GetArcReadHandlerForWindow(
+                  restore_window_id);
     window_info = arc_read_handler
                       ? arc_read_handler->GetWindowInfo(restore_window_id)
                       : nullptr;
@@ -129,7 +138,7 @@ void ModifyWidgetParams(int32_t restore_window_id,
   if (delegate) {
     delegate->RegisterWidgetInitializedCallback(base::BindOnce(
         [](views::WidgetDelegate* delegate) {
-          full_restore::FullRestoreInfo::GetInstance()->OnWidgetInitialized(
+          app_restore::AppRestoreInfo::GetInstance()->OnWidgetInitialized(
               delegate->GetWidget());
         },
         delegate));
@@ -171,6 +180,12 @@ void SetArcSessionIdForWindowId(int32_t arc_session_id, int32_t window_id) {
       arc_session_id, window_id);
 }
 
+void SetDeskTemplateLaunchIdForArcSessionId(int32_t arc_session_id,
+                                            int32_t desk_template_launch_id) {
+  DeskTemplateReadHandler::Get()->SetLaunchIdForArcSessionId(
+      arc_session_id, desk_template_launch_id);
+}
+
 int32_t GetArcRestoreWindowIdForTaskId(int32_t task_id) {
   if (ShouldUseFullRestoreArcData()) {
     return full_restore::FullRestoreReadHandler::GetInstance()
@@ -210,7 +225,8 @@ int32_t GetLacrosRestoreWindowId(const std::string& lacros_window_id) {
 
 void OnLacrosWindowAdded(aura::Window* const window,
                          uint32_t browser_session_id,
-                         uint32_t restored_browser_session_id) {
+                         uint32_t restored_browser_session_id,
+                         bool is_browser_app) {
   if (!IsLacrosWindow(window))
     return;
 
@@ -218,7 +234,8 @@ void OnLacrosWindowAdded(aura::Window* const window,
       ->OnLacrosBrowserWindowAdded(window, restored_browser_session_id);
 
   full_restore::FullRestoreSaveHandler::GetInstance()
-      ->OnLacrosBrowserWindowAdded(window, browser_session_id);
+      ->OnLacrosBrowserWindowAdded(window, browser_session_id,
+                                   restored_browser_session_id, is_browser_app);
 }
 
 }  // namespace app_restore

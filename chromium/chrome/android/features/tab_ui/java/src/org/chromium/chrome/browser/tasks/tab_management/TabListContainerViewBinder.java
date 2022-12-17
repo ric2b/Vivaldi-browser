@@ -22,7 +22,9 @@ import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
 
+// Vivaldi
 import org.chromium.chrome.browser.ChromeApplicationImpl;
+import org.vivaldi.browser.tasks.tab_management.TabSwitcherView;
 
 /**
  * ViewBinder for TabListRecyclerView.
@@ -81,6 +83,23 @@ class TabListContainerViewBinder {
             view.setShadowTopOffset(model.get(SHADOW_TOP_OFFSET));
         } else if (BOTTOM_PADDING == propertyKey) {
             view.setBottomPadding(model.get(BOTTOM_PADDING));
+            // Vivaldi: Set the scroll index for the correct recycler view.
+        } else if (TabListContainerProperties.SCROLL_INDEX_NORMAL == propertyKey) {
+            if (view.getCurrentTabViewInstance() == TabSwitcherView.PAGE.NORMAL) {
+                int index = model.get(TabListContainerProperties.SCROLL_INDEX_NORMAL);
+                scrollView(view, index);
+            }
+            // Vivaldi: Set the scroll index for the correct recycler view.
+        } else if (TabListContainerProperties.SCROLL_INDEX_PRIVATE == propertyKey) {
+            if (view.getCurrentTabViewInstance() == TabSwitcherView.PAGE.PRIVATE) {
+                int index = model.get(TabListContainerProperties.SCROLL_INDEX_PRIVATE);
+                scrollView(view, index);
+            }
         }
+    }
+
+    /** Vivaldi */
+    private static void scrollView(TabListRecyclerView view, int index) {
+        ((LinearLayoutManager) view.getLayoutManager()).scrollToPositionWithOffset(index, 0);
     }
 }

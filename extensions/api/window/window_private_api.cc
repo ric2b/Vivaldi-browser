@@ -8,6 +8,7 @@
 
 #include "base/no_destructor.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/api/tabs/windows_util.h"
 #include "chrome/browser/extensions/browser_extension_window_controller.h"
@@ -280,7 +281,7 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
   bool incognito = false;
   bool focused = true;
   std::string tab_url;
-  std::string ext_data;
+  std::string viv_ext_data;
 
   if (params->options.incognito.get()) {
     incognito = *params->options.incognito.get();
@@ -291,8 +292,8 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
   if (params->options.tab_url.get()) {
     tab_url = *params->options.tab_url.get();
   }
-  if (params->options.ext_data.get()) {
-    ext_data = *params->options.ext_data.get();
+  if (params->options.viv_ext_data.get()) {
+    viv_ext_data = *params->options.viv_ext_data.get();
   }
   Profile* profile = Profile::FromBrowserContext(browser_context());
   if (incognito) {
@@ -343,7 +344,7 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
   create_params.creation_source = Browser::CreationSource::kStartupCreator;
   create_params.is_vivaldi = true;
   create_params.window = window;
-  create_params.ext_data = ext_data;
+  create_params.viv_ext_data = viv_ext_data;
   std::unique_ptr<Browser> browser(Browser::Create(create_params));
   DCHECK(browser->window() == window);
   window->SetWindowURL(window_params.resource_relative_url);
@@ -418,7 +419,7 @@ ExtensionFunction::ResponseAction WindowPrivateSetStateFunction::Run() {
       break;
     case ui::SHOW_STATE_MAXIMIZED:
       was_fullscreen = browser->window()->IsFullscreen();
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
       // NOTE(bjorgvin@vivaldi.com): VB-82933 SetFullscreenMode has to be after
       // Maximize on macOS.
       browser->extension_window_controller()->window()->Maximize();

@@ -30,6 +30,13 @@ bool IsArcWindow(aura::Window* window);
 // Returns true if `window` is a Lacros window. Otherwise, returns false.
 bool IsLacrosWindow(aura::Window* window);
 
+// Returns true if there is a window info for `restore_window_id` from desk
+// templates or full restore, depending on which one is thought to be launching
+// apps currently. Otherwise, returns false. This interface can't be used for
+// ARC app windows.
+COMPONENT_EXPORT(APP_RESTORE)
+bool HasWindowInfo(int32_t restore_window_id);
+
 // Applies properties from `window_info` to the given `property_handler`.
 // This is called from `GetWindowInfo()` when window is
 // created, or from the ArcReadHandler when a task is ready for a full
@@ -58,6 +65,11 @@ COMPONENT_EXPORT(APP_RESTORE) int32_t CreateArcSessionId();
 COMPONENT_EXPORT(APP_RESTORE)
 void SetArcSessionIdForWindowId(int32_t arc_session_id, int32_t window_id);
 
+// Associates `desk_template_launch_id` with `arc_session_id`.
+COMPONENT_EXPORT(APP_RESTORE)
+void SetDeskTemplateLaunchIdForArcSessionId(int32_t arc_session_id,
+                                            int32_t desk_template_launch_id);
+
 // Returns the restore window id for the ARC app's `task_id`.
 COMPONENT_EXPORT(APP_RESTORE)
 int32_t GetArcRestoreWindowIdForTaskId(int32_t task_id);
@@ -79,11 +91,13 @@ int32_t GetLacrosRestoreWindowId(const std::string& lacros_window_id);
 
 // Invoked when Lacros window is created. `browser_session_id` is the
 // current browser session id. `restored_browser_session_id` is the restored
-// browser session id.
+// browser session id. `is_browser_app` is true if it's an app type Lacros
+// browser window.
 COMPONENT_EXPORT(APP_RESTORE)
 void OnLacrosWindowAdded(aura::Window* const window,
                          uint32_t browser_session_id,
-                         uint32_t restored_browser_session_id);
+                         uint32_t restored_browser_session_id,
+                         bool is_browser_app);
 
 }  // namespace app_restore
 

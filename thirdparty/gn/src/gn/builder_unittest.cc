@@ -138,17 +138,17 @@ TEST_F(BuilderTest, BasicDeps) {
 
   // A should have two deps: B and the toolchain. Only B should be unresolved.
   EXPECT_EQ(2u, a_record->all_deps().size());
-  EXPECT_EQ(1u, a_record->unresolved_deps().size());
-  EXPECT_NE(a_record->all_deps().end(),
-            a_record->all_deps().find(toolchain_record));
-  EXPECT_NE(a_record->all_deps().end(), a_record->all_deps().find(b_record));
-  EXPECT_NE(a_record->unresolved_deps().end(),
-            a_record->unresolved_deps().find(b_record));
+  EXPECT_TRUE(a_record->all_deps().contains(toolchain_record));
+  EXPECT_TRUE(a_record->all_deps().contains(b_record));
+
+  std::vector<const BuilderRecord*> a_unresolved =
+      a_record->GetSortedUnresolvedDeps();
+  EXPECT_EQ(1u, a_unresolved.size());
+  EXPECT_EQ(a_unresolved[0], b_record);
 
   // B should be marked as having A waiting on it.
   EXPECT_EQ(1u, b_record->waiting_on_resolution().size());
-  EXPECT_NE(b_record->waiting_on_resolution().end(),
-            b_record->waiting_on_resolution().find(a_record));
+  EXPECT_TRUE(b_record->waiting_on_resolution().contains(a_record));
 
   // Add the C target.
   Target* c = new Target(&settings_, c_label);
@@ -177,13 +177,45 @@ TEST_F(BuilderTest, BasicDeps) {
   EXPECT_TRUE(b_record->resolved());
   EXPECT_TRUE(c_record->resolved());
 
-  EXPECT_TRUE(a_record->unresolved_deps().empty());
-  EXPECT_TRUE(b_record->unresolved_deps().empty());
-  EXPECT_TRUE(c_record->unresolved_deps().empty());
+  EXPECT_TRUE(a_record->GetSortedUnresolvedDeps().empty());
+  EXPECT_TRUE(b_record->GetSortedUnresolvedDeps().empty());
+  EXPECT_TRUE(c_record->GetSortedUnresolvedDeps().empty());
 
   EXPECT_TRUE(a_record->waiting_on_resolution().empty());
   EXPECT_TRUE(b_record->waiting_on_resolution().empty());
   EXPECT_TRUE(c_record->waiting_on_resolution().empty());
+}
+
+TEST_F(BuilderTest, SortedUnresolvedDeps) {
+  SourceDir toolchain_dir = settings_.toolchain_label().dir();
+  std::string toolchain_name = settings_.toolchain_label().name();
+
+  // Construct a dependency graph with:
+  //    A -> B
+  //    A -> D
+  //    A -> C
+  //
+  // Ensure that the unresolved list of A is always [B, C, D]
+  //
+  Label a_label(SourceDir("//a/"), "a", toolchain_dir, toolchain_name);
+  Label b_label(SourceDir("//b/"), "b", toolchain_dir, toolchain_name);
+  Label c_label(SourceDir("//c/"), "c", toolchain_dir, toolchain_name);
+  Label d_label(SourceDir("//d/"), "d", toolchain_dir, toolchain_name);
+
+  BuilderRecord* a_record = builder_.GetOrCreateRecordForTesting(a_label);
+  BuilderRecord* b_record = builder_.GetOrCreateRecordForTesting(b_label);
+  BuilderRecord* c_record = builder_.GetOrCreateRecordForTesting(c_label);
+  BuilderRecord* d_record = builder_.GetOrCreateRecordForTesting(d_label);
+
+  a_record->AddDep(b_record);
+  a_record->AddDep(d_record);
+  a_record->AddDep(c_record);
+
+  std::vector<const BuilderRecord*> a_unresolved = a_record->GetSortedUnresolvedDeps();
+  EXPECT_EQ(3u, a_unresolved.size()) << a_unresolved.size();
+  EXPECT_EQ(b_record, a_unresolved[0]);
+  EXPECT_EQ(c_record, a_unresolved[1]);
+  EXPECT_EQ(d_record, a_unresolved[2]);
 }
 
 // Tests that the "should generate" flag is set and propagated properly.

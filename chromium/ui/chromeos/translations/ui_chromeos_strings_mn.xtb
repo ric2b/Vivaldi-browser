@@ -31,6 +31,7 @@
 <translation id="1201402288615127009">Дараагийнх</translation>
 <translation id="1209796539517632982">Автомат нэрийн серверүүд</translation>
 <translation id="1210831758834677569">Лао</translation>
+<translation id="1223825810409523901">Chrome өргөтгөл</translation>
 <translation id="1243314992276662751">Байршуул</translation>
 <translation id="1249250836236328755">Төрөл</translation>
 <translation id="1254593899333212300">Интернетийн шууд холболт</translation>
@@ -61,6 +62,7 @@
 <translation id="1497522201463361063">"<ph name="FILE_NAME" />". <ph name="ERROR_MESSAGE" />-ын нэрийг өөрчлөх боломжгүй байна.</translation>
 <translation id="1499943022354839699">Dvorak гартай англи (АНУ)</translation>
 <translation id="1515909359182093592"><ph name="INPUT_LABEL" /> - хост</translation>
+<translation id="1521655867290435174">Google Хүснэгт</translation>
 <translation id="1538729222189715449">Linux-н файлуудыг нээж байна...</translation>
 <translation id="1547964879613821194">Канадын Англи хэл</translation>
 <translation id="1556189134700913550">Бүгдэд хамааруулах</translation>
@@ -79,6 +81,7 @@
 <translation id="166439687370499867">Хуваалцсан сүлжээний тохиргоог өөрчлөх боломжгүй</translation>
 <translation id="1665611772925418501">Энэ файлыг өөрчилж чадсангүй.</translation>
 <translation id="1673103856845176271">Файлд аюулгүй байдлын үүднээс нэвтэрч чадсангүй.</translation>
+<translation id="16762847117768727">ISO зураг</translation>
 <translation id="169515659049020177">Солих</translation>
 <translation id="1715848075824334077">Дугуй унах</translation>
 <translation id="1722487484194605434"><ph name="NUMBER_OF_ITEMS" /> зүйлийг zip хийж байна...</translation>
@@ -106,7 +109,6 @@
 <translation id="1853795129690976061">Энэ фолдерыг Linux-тай хуваалцсан байна</translation>
 <translation id="1864756863218646478">Файл олдсонгүй.</translation>
 <translation id="1884013283844450420">Сүлжээ: <ph name="NETWORK_COUNT" />-н <ph name="NETWORK_INDEX" />, <ph name="NETWORK_NAME" />, холбогдох</translation>
-<translation id="1914901738028575085">CloudReady 2.0 төхөөрөмж</translation>
 <translation id="1920670151694390848">Малайлам галиг</translation>
 <translation id="1920798810075583923">Тарвас</translation>
 <translation id="1924372192547904021"><ph name="DRIVE_NAME" />-г форматаллаа</translation>
@@ -185,7 +187,6 @@
 <translation id="2544853746127077729">Таниулах гэрчилгээг сүлжээнээс цуцалсан байна</translation>
 <translation id="2547921442987553570"><ph name="EXTENSION_NAME" />-д нэмэх</translation>
 <translation id="255937426064304553">АНУ олон улсын</translation>
-<translation id="2562685439590298522">Docs</translation>
 <translation id="2563185590376525700">Frog</translation>
 <translation id="2578394532502990878">Тамил авиа зүй</translation>
 <translation id="2579959351793446050">Одиа</translation>
@@ -221,9 +222,7 @@
 <translation id="2902734494705624966">АНУ өргөтгөсөн</translation>
 <translation id="290843123675549676">Марати</translation>
 <translation id="2923240520113693977">Эстон</translation>
-<translation id="2925966894897775835">Sheets</translation>
 <translation id="2938685643439809023">Монгол</translation>
-<translation id="2943400156390503548">Слайдууд</translation>
 <translation id="2943503720238418293">Богино нэр ашиглах</translation>
 <translation id="2949781154072577687"><ph name="DRIVE_NAME" />-г форматалж байна...</translation>
 <translation id="2951236788251446349">Далайн мөгөөрс</translation>
@@ -368,6 +367,7 @@
 <translation id="4215448920900139318"><ph name="FILE_COUNT" />-г нөөцөлж байна</translation>
 <translation id="4218274196133425560"><ph name="HOST_NAME" />-д зориулж дүрмээс гажих онцгой тохиолдлыг хасах</translation>
 <translation id="4261901459838235729">Google танилцуулга</translation>
+<translation id="4277536868133419688"><ph name="FILTER_NAME" /> шүүлтүүр асаалттай байна.</translation>
 <translation id="4290535918735525311">Linux-тай хуваалцсан 1 фолдер</translation>
 <translation id="4299729908419173967">Бразил хэл</translation>
 <translation id="4302605047395093221">Энэ төхөөрөмжийг ашиглаж буй дурын хүн энэ мобайл сүлжээнд холбогдохын тулд ПИН оруулах шаардлагатай болно</translation>
@@ -385,6 +385,8 @@
 <translation id="4380245540200674032">Сүлжээ <ph name="NETWORK_COUNT" />-н <ph name="NETWORK_INDEX" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, <ph name="CONNECTION_STATUS" />, дохионы хүч <ph name="SIGNAL_STRENGTH" />%, таны администратор удирддаг, дэлгэрэнгүй мэдээлэл</translation>
 <translation id="4387004326333427325">Баталгаажуулах сертификатыг алсаас цуцалсан байна.</translation>
 <translation id="4394214039309501350">Гадаад холбоос</translation>
+<translation id="4401287888955153199">Бүгдийг задлах</translation>
+<translation id="4410695710508688828">Задлах үйл ажиллагаа амжилтгүй боллоо. <ph name="ERROR_MESSAGE" /></translation>
 <translation id="4418686080762064601">Файлууддаа товчлол үүсгэх</translation>
 <translation id="4425149324548788773">Миний Драйв</translation>
 <translation id="4439427728133035643">Сүлжээ: <ph name="NETWORK_COUNT" />-н <ph name="NETWORK_INDEX" />, <ph name="NETWORK_NAME" />, дохионы хүч <ph name="SIGNAL_STRENGTH" />%, холбогдох</translation>
@@ -406,6 +408,7 @@
 <translation id="457386861538956877">Илүү ихийг ...</translation>
 <translation id="4579744207439506346"><ph name="ENTRY_NAME" />-г сонголтод нэмсэн.</translation>
 <translation id="4594543368593301662"><ph name="SEARCH_TERM" />-н илэрцийг харуулж байна.</translation>
+<translation id="4599600860674643278">Шүүлтүүрийг шинэчилсэн.</translation>
 <translation id="4603392156942865207"><ph name="FILE_NAME" />-г <ph name="FOLDER_NAME" /> руу хуулж байна</translation>
 <translation id="4631887759990505102">Уран бүтээлч</translation>
 <translation id="4642769377300286600">Мобайл профайлыг суулгаж байна, Сүлжээ <ph name="NETWORK_COUNT" />-н <ph name="NETWORK_INDEX" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" /></translation>
@@ -414,6 +417,7 @@
 <translation id="4656777537938206294">Файлуудыг офлайн үед ашиглах боломжтой болгох</translation>
 <translation id="4658782175094886150">Цасан дунд байгаа хүн</translation>
 <translation id="4669606053856530811">Эдгээр зүйлийг '<ph name="SOURCE_NAME" />'-н гишүүдтэй хуваалцаагүй тохиолдолд тус гишүүд хандах боломжгүй.</translation>
+<translation id="467809019005607715">Google Слайд</translation>
 <translation id="4690246192099372265">Швед</translation>
 <translation id="4693155481716051732">Сүши</translation>
 <translation id="4694604912444486114">Сармагчин</translation>
@@ -525,6 +529,7 @@
 <translation id="5469868506864199649">Итали хэл</translation>
 <translation id="5473333559083690127">Шинэ ПИН-г дахин оруулна уу</translation>
 <translation id="5489067830765222292">Латви</translation>
+<translation id="5489965683297092283"><ph name="FILTER_NAME" /> шүүлтүүр унтраалттай байна.</translation>
 <translation id="5494920125229734069">Бүгдийг сонго</translation>
 <translation id="5500122897333236901">Исланд</translation>
 <translation id="5508696409934741614">Цэг</translation>
@@ -591,6 +596,7 @@
 <translation id="6082256976217156453">LZMA-н шахсан архив</translation>
 <translation id="6096979789310008754">Хайлтын текстийг устгасан, бүх файл болон фолдерыг харуулж байна.</translation>
 <translation id="610101264611565198"><ph name="FILE_NAME" />-г <ph name="FOLDER_NAME" /> руу зөөж байна</translation>
+<translation id="61118516107968648">CSV текст</translation>
 <translation id="6129953537138746214">Space</translation>
 <translation id="6133173853026656527"><ph name="FILE_NAME" />-ийг зөөвөрлөж байна...</translation>
 <translation id="613750717151263950">АНУ-ын гартай япон</translation>
@@ -655,6 +661,7 @@
 <translation id="6732801395666424405">Гэрчилгээнүүдийг ачаалласангүй</translation>
 <translation id="6736329909263487977"><ph name="ISSUED_BY" /> [ <ph name="ISSUED_TO" /> ]</translation>
 <translation id="6751256176799620176">1 фолдер сонгосон</translation>
+<translation id="6755827872271341378">ChromeOS Flex төхөөрөмж</translation>
 <translation id="6790428901817661496">Тоглуулах</translation>
 <translation id="6795884519221689054">Хулсны баавгай</translation>
 <translation id="6806699711453372963">Linux-н хуваалцлыг удирдах</translation>
@@ -732,6 +739,7 @@
 <translation id="7343393116438664539">Вьетнам телекс</translation>
 <translation id="7359359531237882347"><ph name="NUMBER_OF_ITEMS" /> зүйлийг хуулж байна...</translation>
 <translation id="7375951387215729722">Файлын жагсаалтыг <ph name="COLUMN_NAME" />-н дагуу буурах дарааллаар эрэмбэлсэн.</translation>
+<translation id="7402503521691663770">ChromeOS Flex төхөөрөмжүүд</translation>
 <translation id="7408870451288633753">Чех</translation>
 <translation id="7417453074306512035">Этиоп хэлний гар</translation>
 <translation id="7417705661718309329">Google-ийн газрын зураг</translation>
@@ -807,6 +815,7 @@
 <translation id="7925686952655276919">Синхрончилоход үүрэн холбооны датаг бүү ашигла</translation>
 <translation id="7928710562641958568">Төхөөрөмжийг гаргах</translation>
 <translation id="7943385054491506837">АНУ-ын Colemak</translation>
+<translation id="7948417415021769876">7z архив</translation>
 <translation id="7953739707111622108">Энэ төхөөрөмжийн файлын системийг таньж чадаагүй учраас нээж болохгүй  байна.</translation>
 <translation id="7969525169268594403">Словени</translation>
 <translation id="7972920761225148017">Франц (Швейцар)</translation>
@@ -821,6 +830,7 @@
 <translation id="8042602468072383151"><ph name="AUDIO_TYPE" /> аудио</translation>
 <translation id="8045462269890919536">Румын</translation>
 <translation id="8049184478152619004">Хувийн блокоос гаргах түлхүүр (PUK)-ийг оруулна уу</translation>
+<translation id="807187749540895545">Гаргаж байна <ph name="FILE_NAME" />...</translation>
 <translation id="8079530767338315840">Давтах</translation>
 <translation id="8087576439476816834">Татах, <ph name="PROFILE_NAME" /></translation>
 <translation id="8106045200081704138">Надтай хуваалцсан</translation>
@@ -837,6 +847,7 @@
 <translation id="8208580316430297579">Урлагийн бүтээл</translation>
 <translation id="8223479393428528563">Эдгээр файлыг интернетэд холбогдоогүй байхдаа ашиглахаар хадгалахын тулд интернетэд холбогдсоныхоо дараагаар холбогдох файл дээр очин хулганын баруун талд даран <ph name="OFFLINE_CHECKBOX_NAME" /> сонголтыг сонгоно уу.</translation>
 <translation id="8249296373107784235">Цуцлах</translation>
+<translation id="8250920743982581267">Документ</translation>
 <translation id="8261506727792406068">Устгах</translation>
 <translation id="8261561378965667560">Хятад матрицын арга</translation>
 <translation id="8269755669432358899">Файлын cанал хүсэлтийн түр зуурын самбарыг буулгах</translation>
@@ -855,6 +866,7 @@
 <translation id="8372369524088641025">WEP сул түлхүүр байна</translation>
 <translation id="8372852072747894550">Грек</translation>
 <translation id="8386903983509584791">Шалгаж дууслаа</translation>
+<translation id="8387733224523483503"><ph name="FILE_NAME" />-г задалсан.</translation>
 <translation id="8395901698320285466">Хэмжээ</translation>
 <translation id="8408068190360279472"><ph name="NETWORK_TYPE" /> сүлжээ, холбогдож байна</translation>
 <translation id="8425213833346101688">Өөрчлөлт</translation>
@@ -872,6 +884,7 @@
 <translation id="8484284835977497781">Саяхны зургаасаа сонгоно уу.</translation>
 <translation id="8487700953926739672">Сүлжээнд холбогдоогүй байна</translation>
 <translation id="8492972329130824181">Гэрийн сүлжээ боломжгүй байна. Холбогдохын тулд мобайл дата роумингийг идэвхжүүлсэн байх ёстой.</translation>
+<translation id="8499098729323186194"><ph name="NUMBER_OF_ITEMS" />-г гаргаж байна...</translation>
 <translation id="8521441079177373948">Их Британи</translation>
 <translation id="8525306231823319788">Бүтэн дэлгэц</translation>
 <translation id="853494022971700746">Франц (Франц)</translation>
@@ -900,7 +913,6 @@
 <translation id="8714406895390098252">Унадаг дугуй</translation>
 <translation id="8719721339511222681"><ph name="ENTRY_NAME" /> сонгогдсон.</translation>
 <translation id="872537912056138402">Хорват</translation>
-<translation id="873847021056608403">CloudReady 2.0 төхөөрөмжүүд</translation>
 <translation id="8743164338060742337">Сүлжээ <ph name="NETWORK_COUNT" />-н <ph name="NETWORK_INDEX" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, дохионы хүч <ph name="SIGNAL_STRENGTH" />%, таны администратор удирддаг, холбогдох</translation>
 <translation id="8750438273876807512">Тавиур дахь файлууддаа шуурхай хандахын тулд файлыг удаан дарж, <ph name="ICON" />-г товшоод, "Тавиурт бэхлэх"-ийг сонгоно уу.</translation>
 <translation id="8787254343425541995">Нэгдсэн сүлжээнүүдэд проксиг зөвшөөрөх</translation>
@@ -947,7 +959,9 @@
 <translation id="9172592259078059678">Гужарати галиг</translation>
 <translation id="9173120999827300720">Олон улсын гартай англи (АНУ)</translation>
 <translation id="9174050671906956834">Хогийн саван дахь зүйлсийг 30 хоногийн дараа үүрд устгана.</translation>
+<translation id="9183302530794969518">Google Докс</translation>
 <translation id="9189836632794948435">Казак</translation>
+<translation id="9200427192836333033"><ph name="NUMBER_OF_ITEMS" /> зүйлийг задалсан.</translation>
 <translation id="9213073329713032541">Суулгалтыг амжилттай эхлүүллээ.</translation>
 <translation id="9219103736887031265">Зураг</translation>
 <translation id="9219908252191632183">Сарны гадарга</translation>

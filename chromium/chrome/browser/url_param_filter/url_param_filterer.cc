@@ -12,6 +12,7 @@
 #include "base/no_destructor.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
+#include "chrome/browser/url_param_filter/url_param_classifications_loader.h"
 #include "chrome/browser/url_param_filter/url_param_filter_classification.pb.h"
 #include "chrome/common/chrome_features.h"
 #include "net/base/escape.h"
@@ -24,7 +25,12 @@ namespace url_param_filter {
 namespace {
 
 // Get the ETLD+1 of the URL, which means any subdomain is treated equivalently.
-std::string GetEtldPlusOne(const GURL& gurl) {
+// IP addresses are returned verbatim. Note that this is schemeless, so
+// filtering is applied equivalently regardless of http vs https vs others.
+std::string GetClassifiedSite(const GURL& gurl) {
+  if (gurl.HostIsIPAddress()) {
+    return gurl.host();
+  }
   return net::registry_controlled_domains::GetDomainAndRegistry(
       gurl, net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
 }
@@ -48,20 +54,25 @@ FilterResult FilterUrl(const GURL& source_url,
   GURL result = GURL{destination_url};
   int filtered_params_count = 0;
 
-  std::string source_etld_plus1 = GetEtldPlusOne(source_url);
-  std::string destination_etld_plus1 = GetEtldPlusOne(destination_url);
+  // If there's no query string, we can short-circuit immediately.
+  if (!destination_url.has_query()) {
+    return FilterResult{destination_url, filtered_params_count};
+  }
+
+  std::string source_classified_site = GetClassifiedSite(source_url);
+  std::string destination_classified_site = GetClassifiedSite(destination_url);
 
   std::set<std::string> blocked_parameters;
-  // Check whether source eTLD+1 has params classified as requiring filtering.
-  // If so, and the params are present on the destination URL, or any nested
-  // URLs, remove them.
+  // Check whether source site, as seen by the classifier (eTLD+1 or IP), has
+  // params classified as requiring filtering. If so, and the params are present
+  // on the destination URL, or any nested URLs, remove them.
   auto source_classification_result =
-      source_classification_map.find(source_etld_plus1);
+      source_classification_map.find(source_classified_site);
   if (source_classification_result != source_classification_map.end()) {
     AddParams(blocked_parameters, source_classification_result->second);
   }
   auto destination_classification_result =
-      destination_classification_map.find(destination_etld_plus1);
+      destination_classification_map.find(destination_classified_site);
   if (destination_classification_result !=
       destination_classification_map.end()) {
     AddParams(blocked_parameters, destination_classification_result->second);
@@ -93,7 +104,11 @@ FilterResult FilterUrl(const GURL& source_url,
           }
         }
       }
-      query_parts.push_back(base::StrCat({key, "=", value}));
+      if (value != "") {
+        query_parts.push_back(base::StrCat({key, "=", value}));
+      } else {
+        query_parts.push_back(key);
+      }
     } else {
       filtered_params_count++;
     }
@@ -101,55 +116,13 @@ FilterResult FilterUrl(const GURL& source_url,
 
   std::string new_query = base::JoinString(query_parts, "&");
   GURL::Replacements replacements;
-  replacements.SetQueryStr(new_query);
+  if (new_query == "") {
+    replacements.ClearQuery();
+  } else {
+    replacements.SetQueryStr(new_query);
+  }
   result = result.ReplaceComponents(replacements);
   return FilterResult{result, filtered_params_count};
-}
-
-url_param_filter::ClassificationMap GetClassifications(
-    url_param_filter::FilterClassification_SiteRole role) {
-  base::FieldTrialParams params;
-  base::GetFieldTrialParamsByFeature(features::kIncognitoParamFilterEnabled,
-                                     &params);
-  auto classification_arg = params.find("classifications");
-  url_param_filter::FilterClassifications classifications;
-  url_param_filter::ClassificationMap map;
-  if (classification_arg != params.end()) {
-    std::string out;
-    base::Base64Decode(classification_arg->second, &out);
-    std::string uncompressed;
-    if (compression::GzipUncompress(out, &uncompressed)) {
-      if (classifications.ParseFromString(uncompressed)) {
-        for (auto i : classifications.classifications()) {
-          if (i.site_role() == role) {
-            map[i.site()] = i;
-          }
-        }
-      }
-    }
-  }
-  return map;
-}
-const url_param_filter::ClassificationMap& GetSourceClassifications() {
-  static const base::NoDestructor<url_param_filter::ClassificationMap>
-      source_classifications(
-          GetClassifications(url_param_filter::FilterClassification_SiteRole::
-                                 FilterClassification_SiteRole_SOURCE));
-  return *source_classifications;
-}
-const url_param_filter::ClassificationMap& GetDestinationClassifications() {
-  static const base::NoDestructor<url_param_filter::ClassificationMap>
-      destination_classifications(
-          GetClassifications(url_param_filter::FilterClassification_SiteRole::
-                                 FilterClassification_SiteRole_DESTINATION));
-  return *destination_classifications;
-}
-
-// Write metrics about results of param filtering.
-void WriteMetrics(FilterResult result) {
-  base::UmaHistogramCounts100(
-      "Navigation.UrlParamFilter.FilteredParamCountExperimental",
-      result.filtered_param_count);
 }
 }  // anonymous namespace
 
@@ -162,15 +135,15 @@ FilterResult FilterUrl(
                    destination_classification_map, true);
 }
 
-GURL FilterUrl(const GURL& source_url, const GURL& destination_url) {
-  if (base::FeatureList::IsEnabled(features::kIncognitoParamFilterEnabled)) {
-    FilterResult result =
-        FilterUrl(source_url, destination_url, GetSourceClassifications(),
-                  GetDestinationClassifications());
-    WriteMetrics(result);
-    return result.filtered_url;
+FilterResult FilterUrl(const GURL& source_url, const GURL& destination_url) {
+  if (!base::FeatureList::IsEnabled(features::kIncognitoParamFilterEnabled)) {
+    return FilterResult{destination_url, 0};
   }
-  return destination_url;
+
+  return FilterUrl(
+      source_url, destination_url,
+      ClassificationsLoader::GetInstance()->GetSourceClassifications(),
+      ClassificationsLoader::GetInstance()->GetDestinationClassifications());
 }
 
 }  // namespace url_param_filter

@@ -30,6 +30,7 @@
 #include "chrome/browser/dom_distiller/tab_utils.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/favicon/favicon_utils.h"
+#include "chrome/browser/feed/web_feed_ui_util.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
@@ -119,7 +120,6 @@
 #include "components/tab_groups/tab_group_id.h"
 #include "components/tab_groups/tab_group_visual_data.h"
 #include "components/translate/core/browser/language_state.h"
-#include "components/version_info/version_info.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "components/zoom/page_zoom.h"
 #include "components/zoom/zoom_controller.h"
@@ -174,6 +174,11 @@
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "chromeos/crosapi/mojom/task_manager.mojom.h"
 #include "chromeos/lacros/lacros_service.h"
+#endif
+
+#if BUILDFLAG(IS_LINUX)
+#include "ui/accessibility/ax_action_data.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #endif
 
 #include "app/vivaldi_constants.h"
@@ -1190,7 +1195,6 @@ bool MoveTabToReadLater(Browser* browser, content::WebContents* web_contents) {
   }
   model->AddEntry(url, base::UTF16ToUTF8(title),
                   reading_list::EntrySource::ADDED_VIA_CURRENT_APP);
-  MaybeShowBookmarkBarForReadLater(browser);
   browser->window()->MaybeShowFeaturePromo(
       feature_engagement::kIPHReadingListDiscoveryFeature);
   base::UmaHistogramEnumeration(
@@ -1224,26 +1228,6 @@ bool IsCurrentTabUnreadInReadLater(Browser* browser) {
     return false;
   const ReadingListEntry* entry = model->GetEntryByURL(url);
   return entry && !entry->IsRead();
-}
-
-void MaybeShowBookmarkBarForReadLater(Browser* browser) {
-#if !BUILDFLAG(IS_ANDROID)
-  if (base::FeatureList::IsEnabled(features::kSidePanel))
-    return;
-  PrefService* pref_service = browser->profile()->GetPrefs();
-  if (pref_service &&
-      !pref_service->GetBoolean(
-          reading_list::prefs::kReadingListDesktopFirstUseExperienceShown)) {
-    pref_service->SetBoolean(
-        reading_list::prefs::kReadingListDesktopFirstUseExperienceShown, true);
-    base::UmaHistogramEnumeration(
-        "ReadingList.BookmarkBarState.OnFirstAddToReadingList",
-        browser->bookmark_bar_state());
-
-    if (browser->bookmark_bar_state() == BookmarkBar::HIDDEN)
-      ToggleBookmarkBar(browser);
-  }
-#endif  // BUILDFLAG(IS_ANDROID)
 }
 
 void ShowOffersAndRewardsForPage(Browser* browser) {
@@ -1705,8 +1689,7 @@ void SetAndroidOsForTabletSite(content::WebContents* current_tab) {
   NavigationEntry* entry = current_tab->GetController().GetLastCommittedEntry();
   if (entry) {
     entry->SetIsOverridingUserAgent(true);
-    std::string product =
-        version_info::GetProductNameAndVersionForUserAgent() + " Mobile";
+    std::string product = embedder_support::GetProductAndVersion() + " Mobile";
     blink::UserAgentOverride ua_override;
     ua_override.ua_string_override = content::BuildUserAgentFromOSAndProduct(
         kOsOverrideForTabletSite, product);
@@ -1890,9 +1873,7 @@ bool ShouldInterceptChromeURLNavigationInIncognito(Browser* browser,
 
   bool show_clear_browsing_data_dialog =
       url == GURL(chrome::kChromeUISettingsURL)
-                 .Resolve(chrome::kClearBrowserDataSubPage) &&
-      base::FeatureList::IsEnabled(
-          features::kIncognitoClearBrowsingDataDialogForDesktop);
+                 .Resolve(chrome::kClearBrowserDataSubPage);
 
   bool show_history_disclaimer_dialog =
       url == GURL(chrome::kChromeUIHistoryURL) &&
@@ -1906,8 +1887,6 @@ void ProcessInterceptedChromeURLNavigationInIncognito(Browser* browser,
                                                       const GURL& url) {
   if (url == GURL(chrome::kChromeUISettingsURL)
                  .Resolve(chrome::kClearBrowserDataSubPage)) {
-    DCHECK(base::FeatureList::IsEnabled(
-        features::kIncognitoClearBrowsingDataDialogForDesktop));
     ShowIncognitoClearBrowsingDataDialog(browser);
   } else if (url == GURL(chrome::kChromeUIHistoryURL)) {
     DCHECK(base::FeatureList::IsEnabled(
@@ -1917,5 +1896,28 @@ void ProcessInterceptedChromeURLNavigationInIncognito(Browser* browser,
     NOTREACHED();
   }
 }
+
+void FollowSite(content::WebContents* web_contents) {
+  DCHECK(!Profile::FromBrowserContext(web_contents->GetBrowserContext())
+              ->IsIncognitoProfile());
+  feed::FollowSite(web_contents);
+}
+
+void UnfollowSite(content::WebContents* web_contents) {
+  DCHECK(!Profile::FromBrowserContext(web_contents->GetBrowserContext())
+              ->IsIncognitoProfile());
+  feed::UnfollowSite(web_contents);
+}
+
+#if BUILDFLAG(IS_LINUX)
+void RunScreenAi(Browser* browser) {
+  ui::AXActionData ad;
+  ad.action = ax::mojom::Action::kRunScreenAi;
+  browser->tab_strip_model()
+      ->GetActiveWebContents()
+      ->GetMainFrame()
+      ->AccessibilityPerformAction(ad);
+}
+#endif  // BUILDFLAG(IS_LINUX)
 
 }  // namespace chrome

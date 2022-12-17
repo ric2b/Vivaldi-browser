@@ -16,7 +16,7 @@
 namespace enterprise_reporting {
 namespace {
 constexpr int kMinimumReportFrequencyInHour = 3;
-constexpr int kMaximumReportFrequencyInour = 24 * 7;
+constexpr int kMaximumReportFrequencyInour = 24;
 
 }  // namespace
 
@@ -50,7 +50,8 @@ bool CloudReportingFrequencyPolicyHandler::CheckPolicySettings(
 void CloudReportingFrequencyPolicyHandler::ApplyPolicySettings(
     const policy::PolicyMap& policies,
     PrefValueMap* prefs) {
-  const base::Value* value = policies.GetValue(policy_name());
+  const base::Value* value =
+      policies.GetValue(policy_name(), base::Value::Type::INTEGER);
   int value_in_range;
   if (value && EnsureInRange(value, &value_in_range, nullptr))
     prefs->SetValue(kCloudReportingUploadFrequency,

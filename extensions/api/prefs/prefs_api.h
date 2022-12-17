@@ -183,6 +183,22 @@ class PrefsResetTranslationPrefsFunction : public ExtensionFunction {
   ResponseAction Run() override;
 };
 
+class PrefsResetAllToDefaultFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("prefs.resetAllToDefault",
+                             PREFS_RESETALLTODEFAULT)
+  PrefsResetAllToDefaultFunction();
+
+ private:
+  ~PrefsResetAllToDefaultFunction() override;
+
+  void HandlePrefValue(const std::string& key, const base::Value& value);
+
+  ResponseAction Run() override;
+
+  std::vector<std::string> keys_to_reset_;
+};
+
 }  // namespace extensions
 
 #endif  // EXTENSIONS_API_PREFS_PREFS_API_H_

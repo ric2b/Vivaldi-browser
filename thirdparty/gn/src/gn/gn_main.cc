@@ -65,6 +65,9 @@ int main(int argc, char** argv) {
     args.erase(args.begin());
   }
 
+  if (!commands::CommandSwitches::Init(cmdline))
+    return 1;
+
   const commands::CommandInfoMap& command_map = commands::GetCommands();
   commands::CommandInfoMap::const_iterator found_command =
       command_map.find(command);

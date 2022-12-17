@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <vector>
 
+#include "base/values.h"
 #include "chromeos/crosapi/mojom/crosapi.mojom.h"
 #include "chromeos/lacros/lacros_service.h"
 #include "chromeos/lacros/lacros_test_helper.h"
@@ -77,28 +78,39 @@ class PolicyLoaderLacrosTest : public PolicyTestBase {
 
   void CheckProfilePolicies(const PolicyMap& policy_map) const {
     if (per_profile_ == PolicyPerProfileFilter::kFalse) {
-      EXPECT_EQ(nullptr, policy_map.GetValue(key::kHomepageLocation));
-      EXPECT_EQ(nullptr, policy_map.GetValue(key::kAllowDinosaurEasterEgg));
+      EXPECT_EQ(nullptr, policy_map.GetValue(key::kHomepageLocation,
+                                             base::Value::Type::STRING));
+      EXPECT_EQ(nullptr, policy_map.GetValue(key::kAllowDinosaurEasterEgg,
+                                             base::Value::Type::BOOLEAN));
     } else {
       EXPECT_EQ("http://chromium.org",
-                policy_map.GetValue(key::kHomepageLocation)->GetString());
+                policy_map
+                    .GetValue(key::kHomepageLocation, base::Value::Type::STRING)
+                    ->GetString());
       // Enterprise default.
-      EXPECT_EQ(false,
-                policy_map.GetValue(key::kAllowDinosaurEasterEgg)->GetBool());
+      EXPECT_EQ(false, policy_map
+                           .GetValue(key::kAllowDinosaurEasterEgg,
+                                     base::Value::Type::BOOLEAN)
+                           ->GetBool());
     }
   }
 
   void CheckSystemWidePolicies(const PolicyMap& policy_map) const {
     if (per_profile_ == PolicyPerProfileFilter::kTrue) {
-      EXPECT_EQ(nullptr,
-                policy_map.GetValue(key::kTaskManagerEndProcessEnabled));
-      EXPECT_EQ(nullptr, policy_map.GetValue(key::kPinUnlockAutosubmitEnabled));
+      EXPECT_EQ(nullptr, policy_map.GetValue(key::kTaskManagerEndProcessEnabled,
+                                             base::Value::Type::BOOLEAN));
+      EXPECT_EQ(nullptr, policy_map.GetValue(key::kPinUnlockAutosubmitEnabled,
+                                             base::Value::Type::BOOLEAN));
     } else {
-      EXPECT_FALSE(
-          policy_map.GetValue(key::kTaskManagerEndProcessEnabled)->GetBool());
+      EXPECT_FALSE(policy_map
+                       .GetValue(key::kTaskManagerEndProcessEnabled,
+                                 base::Value::Type::BOOLEAN)
+                       ->GetBool());
       // Enterprise default.
-      EXPECT_FALSE(
-          policy_map.GetValue(key::kPinUnlockAutosubmitEnabled)->GetBool());
+      EXPECT_FALSE(policy_map
+                       .GetValue(key::kPinUnlockAutosubmitEnabled,
+                                 base::Value::Type::BOOLEAN)
+                       ->GetBool());
     }
   }
 
@@ -106,6 +118,16 @@ class PolicyLoaderLacrosTest : public PolicyTestBase {
     const PolicyMap& policy_map = GetChromePolicyMap(bundle);
     CheckProfilePolicies(policy_map);
     CheckSystemWidePolicies(policy_map);
+  }
+
+  void SwitchAndCheckLocalDeviceAccountUser(
+      crosapi::mojom::SessionType session_type) {
+    auto init_params = crosapi::mojom::BrowserInitParams::New();
+    init_params->session_type = session_type;
+    chromeos::LacrosService::Get()->SetInitParamsForTests(
+        std::move(init_params));
+    EXPECT_TRUE(PolicyLoaderLacros::IsDeviceLocalAccountUser());
+    EXPECT_TRUE(PolicyLoaderLacros::IsMainUserAffiliated());
   }
 
   SchemaRegistry schema_registry_;
@@ -215,6 +237,50 @@ TEST_F(PolicyLoaderLacrosTest, TwoLoaders) {
             static_cast<unsigned int>(0));
   system_wide_provider.Shutdown();
   per_profile_provider.Shutdown();
+}
+
+TEST_F(PolicyLoaderLacrosTest, ChildUsersNoEnterpriseDefaults) {
+  // Prepare child policy (per_profile:False).
+  per_profile_ = PolicyPerProfileFilter::kFalse;
+
+  em::CloudPolicySettings policy_proto;
+  policy_proto.mutable_lacrossecondaryprofilesallowed()->set_value(false);
+  const std::vector<uint8_t> data = GetValidPolicyFetchResponse(policy_proto);
+
+  // Setup child user session with the policy.
+  auto init_params = crosapi::mojom::BrowserInitParams::New();
+  init_params->session_type = crosapi::mojom::SessionType::kChildSession;
+  init_params->device_account_policy = std::move(data);
+  chromeos::LacrosService::Get()->SetInitParamsForTests(std::move(init_params));
+
+  // Load the policy.
+  PolicyLoaderLacros loader(task_environment_.GetMainThreadTaskRunner(),
+                            per_profile_);
+  base::RunLoop().RunUntilIdle();
+  std::unique_ptr<PolicyBundle> bundle = loader.Load();
+
+  EXPECT_TRUE(PolicyLoaderLacros::IsMainUserManaged());
+  EXPECT_FALSE(PolicyLoaderLacros::IsDeviceLocalAccountUser());
+  EXPECT_FALSE(PolicyLoaderLacros::IsMainUserAffiliated());
+
+  // Check that desired policy is set and enterprise defaults are not applied.
+  const PolicyMap& policy_map = GetChromePolicyMap(bundle.get());
+  EXPECT_EQ(1u, policy_map.size());
+
+  const PolicyMap::Entry* entry =
+      policy_map.Get(key::kLacrosSecondaryProfilesAllowed);
+  ASSERT_TRUE(entry);
+  EXPECT_FALSE(entry->value(base::Value::Type::BOOLEAN)->GetBool());
+  EXPECT_EQ(policy::POLICY_SOURCE_CLOUD_FROM_ASH, entry->source);
+}
+
+TEST_F(PolicyLoaderLacrosTest, DeviceLocalAccountUsers) {
+  SwitchAndCheckLocalDeviceAccountUser(
+      crosapi::mojom::SessionType::kPublicSession);
+  SwitchAndCheckLocalDeviceAccountUser(
+      crosapi::mojom::SessionType::kWebKioskSession);
+  SwitchAndCheckLocalDeviceAccountUser(
+      crosapi::mojom::SessionType::kAppKioskSession);
 }
 
 }  // namespace policy

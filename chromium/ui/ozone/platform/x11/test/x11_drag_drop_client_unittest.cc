@@ -19,6 +19,8 @@
 #include "base/test/task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/skia/include/core/SkBitmap.h"
+#include "third_party/skia/include/core/SkPath.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom-shared.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
@@ -128,7 +130,7 @@ class SimpleTestDragDropClient : public XDragDropClient,
 
  private:
   // XDragDropClient::Delegate:
-  std::unique_ptr<XTopmostWindowFinder> CreateWindowFinder() override;
+  absl::optional<gfx::AcceleratedWidget> GetDragWidget() override;
   int UpdateDrag(const gfx::Point& screen_point) override;
   void UpdateCursor(DragOperation negotiated_operation) override;
   void OnBeginForeignDrag(x11::Window window) override;
@@ -314,14 +316,15 @@ DragOperation SimpleTestDragDropClient::StartDragAndDrop(
   return resulting_operation;
 }
 
+absl::optional<gfx::AcceleratedWidget>
+SimpleTestDragDropClient::GetDragWidget() {
+  return absl::nullopt;
+}
+
 int SimpleTestDragDropClient::UpdateDrag(const gfx::Point& screen_point) {
   return 0;
 }
 
-std::unique_ptr<XTopmostWindowFinder>
-SimpleTestDragDropClient::CreateWindowFinder() {
-  return {};
-}
 void SimpleTestDragDropClient::UpdateCursor(
     DragOperation negotiated_operation) {}
 void SimpleTestDragDropClient::OnBeginForeignDrag(x11::Window window) {}

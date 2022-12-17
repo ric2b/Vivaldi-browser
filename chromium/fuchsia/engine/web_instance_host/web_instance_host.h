@@ -10,6 +10,7 @@
 #include <fuchsia/web/cpp/fidl.h>
 #include <lib/fidl/cpp/interface_request.h>
 
+#include "base/command_line.h"
 #include "base/values.h"
 
 namespace cr_fuchsia {
@@ -44,9 +45,13 @@ class WebInstanceHost {
 
   // Creates a new web_instance Component and connects |services_request| to it.
   // Returns ZX_OK if |params| were valid, and the Component was launched.
-  zx_status_t CreateInstanceForContext(
+  // Appends to the given |extra_args|.
+  // Use base::CommandLine(base::CommandLine::NoProgram::NO_PROGRAM) for
+  // empty args.
+  zx_status_t CreateInstanceForContextWithCopiedArgs(
       fuchsia::web::CreateContextParams params,
-      fidl::InterfaceRequest<fuchsia::io::Directory> services_request);
+      fidl::InterfaceRequest<fuchsia::io::Directory> services_request,
+      base::CommandLine extra_args);
 
   // Enables/disables remote debugging mode in instances created by this host.
   // This may be called at any time, and will not affect pre-existing instances.
@@ -61,6 +66,13 @@ class WebInstanceHost {
     config_for_test_ = std::move(config);
   }
 
+  // The next created WebInstance will have access to the given directory handle
+  // for temporary directory reading and writing.
+  // Ownership of the directory is passed to the next created instance.
+  void set_tmp_dir(fuchsia::io::DirectoryHandle tmp_dir) {
+    tmp_dir_ = std::move(tmp_dir);
+  }
+
  private:
   // Returns the Launcher for the isolated Environment in which web instances
   // should run. If the Environment does not presently exist then it will be
@@ -73,6 +85,10 @@ class WebInstanceHost {
 
   // If true then new instances will have remote debug mode enabled.
   bool enable_remote_debug_mode_ = false;
+
+  // If set, then the next created WebInstance will gain ownership of this
+  // directory.
+  fuchsia::io::DirectoryHandle tmp_dir_;
 
   // Set by configuration tests.
   base::Value config_for_test_;

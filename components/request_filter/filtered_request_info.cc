@@ -8,7 +8,6 @@ FilteredRequestInfo::FilteredRequestInfo(
     uint64_t request_id,
     int render_process_id,
     int render_frame_id,
-    int32_t view_routing_id,
     const network::ResourceRequest& request,
     content::ContentBrowserClient::URLLoaderFactoryType loader_factory_type,
     bool is_async,
@@ -16,7 +15,6 @@ FilteredRequestInfo::FilteredRequestInfo(
     absl::optional<int64_t> navigation_id)
     : id(request_id),
       request(request),
-      view_routing_id(view_routing_id),
       render_process_id(render_process_id),
       render_frame_id(render_frame_id),
       loader_factory_type(loader_factory_type),

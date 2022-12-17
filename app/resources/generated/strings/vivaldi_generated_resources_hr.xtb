@@ -6,7 +6,6 @@
 <translation id="1049795001945932310">&amp;Postavke jezika</translation>
 <translation id="1056898198331236512">Upozorenje</translation>
 <translation id="1084824384139382525">Kopiraj adresu &amp;veze</translation>
-<translation id="1128109161498068552">Ne dozvoli nijednoj web-lokaciji upotrebu posebnih sistemskih poruka za pristup MIDI uređajima</translation>
 <translation id="1163931534039071049">&amp;Pogledaj izvor okvira</translation>
 <translation id="1165039591588034296">Pogreška</translation>
 <translation id="1175364870820465910">&amp;Ispis...</translation>
@@ -16,7 +15,6 @@
 <translation id="125220115284141797">Zadano</translation>
 <translation id="1297175357211070620">Odredište</translation>
 <translation id="1303101771013849280">HTML datoteka oznaka</translation>
-<translation id="1433811987160647649">Pitaj prije omogućivanja pristupa</translation>
 <translation id="1465176863081977902">K&amp;opiraj adresu audiozapisa</translation>
 <translation id="1476607407192946488">&amp;Postavke jezika</translation>
 <translation id="1546280085599573572">Ovo proširenje promijenilo je stranicu koja se prikazuje kada se klikne gumb Početna.</translation>
@@ -62,11 +60,9 @@
 <translation id="2721037002783622288">&amp;Traži sliku uz <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2785873697295365461">Deskriptori datoteke</translation>
 <translation id="2809586584051668049">i još <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
-<translation id="2812989263793994277">Ne prikazuj slike</translation>
 <translation id="2850541429955027218">Dodaj temu</translation>
 <translation id="2861941300086904918">Sigurnosni upravitelj izvornog klijenta</translation>
 <translation id="2902127500170292085">Proširenje <ph name="EXTENSION_NAME" /> nije uspostavilo komunikaciju s tim pisačem. Provjerite je li pisač priključen i pokušajte ponovo.</translation>
-<translation id="2904456025988372123">Pitaj me kad web-lokacija pokuša automatski preuzeti datoteke nakon prve datoteke</translation>
 <translation id="2913331724188855103">Dopuštanje web-lokacijama da spremaju i čitaju podatke kolačića (preporučeno)</translation>
 <translation id="2931157624143513983">Prilagodi području ispisa</translation>
 <translation id="2932883381142163287">Prijavi zloupotrebu</translation>
@@ -118,7 +114,6 @@
 <translation id="4130207949184424187">Ovo proširenje promijenilo je stranicu koja se prikazuje prilikom pretraživanja putem višenamjenskog okvira.</translation>
 <translation id="4131410914670010031">Crno-bijelo</translation>
 <translation id="4176463684765177261">Onemogućeno</translation>
-<translation id="4278390842282768270">Dopušteno</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> K (<ph name="NUM_KILOBYTES_LIVE" /> K izravno)</translation>
 <translation id="4345587454538109430">Konfiguracija...</translation>
 <translation id="4348766275249686434">Prikupite pogreške</translation>
@@ -133,10 +128,8 @@
 <translation id="4677772697204437347">Memorija grafičkog procesora</translation>
 <translation id="488785315393301722">Pokaži pojedinosti</translation>
 <translation id="4912643508233590958">Buđenja iz stanja mirovanja</translation>
-<translation id="4994474651455208930">Dopusti web-lokacijama traženje dopuštenja da postanu zadani rukovatelji za protokole</translation>
 <translation id="5000922062037820727">Blokirano (preporučeno)</translation>
 <translation id="5027562294707732951">Dodaj proširenje</translation>
-<translation id="5036662165765606524">Ne dozvoli nijednoj web-lokaciji automatsko preuzimanje više datoteka</translation>
 <translation id="5039804452771397117">Dopusti</translation>
 <translation id="5143374789336132547">Proširenje "<ph name="EXTENSION_NAME" />" promijenilo je stranicu koja se prikazuje kada se klikne gumb Početna.</translation>
 <translation id="5154108062446123722">Napredne postavke za <ph name="PRINTING_DESTINATION" /></translation>
@@ -173,7 +166,6 @@
 <translation id="6042308850641462728">Više</translation>
 <translation id="6101226222197207147">Dodana je nova aplikacija (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Internetskom vezom upravlja proširenje</translation>
-<translation id="6169666352732958425">Emitiranje radne površine nije moguće.</translation>
 <translation id="6196854373336333322">Proširenje "<ph name="EXTENSION_NAME" />" preuzelo je kontrolu nad vašim postavkama proxyja, a to znači da može promijeniti, prekinuti ili prisluškivati sve što radite na mreži. Ako niste sigurni kako je došlo do te promjene, vjerojatno je ne želite.</translation>
 <translation id="6206311232642889873">Kop&amp;iraj sliku</translation>
 <translation id="6247802389331535091">Sustav: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -192,7 +184,6 @@
 <translation id="6691936601825168937">&amp;Proslijedi</translation>
 <translation id="6798954102094737107">Dodatak: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6817174620439930047">Pitaj kada web-lokacija želi upotrijebiti posebne sistemske poruke za pristup MIDI uređajima (preporučeno)</translation>
-<translation id="682123305478866682">Emitiraj radnu površinu</translation>
 <translation id="6824564591481349393">Kopiraj &amp;adresu e-pošte</translation>
 <translation id="6840155290835956714">Pitaj prije slanja</translation>
 <translation id="6900284862687837908">Aplikacija u pozadini: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -201,7 +192,6 @@
 <translation id="7053983685419859001">Blokiraj</translation>
 <translation id="708060913198414444">K&amp;opiraj adresu audiozapisa</translation>
 <translation id="7175353351958621980">Učitano s lokacije:</translation>
-<translation id="7270858098575133036">Pitaj kada web-lokacija želi upotrijebiti posebne sistemske poruke za pristup MIDI uređajima</translation>
 <translation id="7287143125007575591">Pristup je odbijen.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7412226954991670867">Memorija grafičkog procesora</translation>
@@ -217,7 +207,6 @@
 <translation id="7663719505383602579">Prijemnik: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7704305437604973648">Zadatak</translation>
 <translation id="7710568461918838723">&amp;Prebaci...</translation>
-<translation id="7751260505918304024">Prikaži sve</translation>
 <translation id="7760004034676677601">Je li to početna stranica koju ste očekivali?</translation>
 <translation id="7786889348652477777">&amp;Ponovo učitaj aplikaciju</translation>
 <translation id="7791543448312431591">Dodaj</translation>
@@ -227,7 +216,6 @@
 <translation id="7857949311770343000">Je li to web-stranica nove kartice koju ste očekivali?</translation>
 <translation id="786073089922909430">Usluga: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7903925330883316394">Uslužni proces: <ph name="UTILITY_TYPE" /></translation>
-<translation id="7938594894617528435">Trenutačno izvan mreže</translation>
 <translation id="7947962633355574091">K&amp;opiraj adresu videozapisa</translation>
 <translation id="7966241909927244760">K&amp;opiraj adresu slike</translation>
 <translation id="7978412674231730200">Osobni ključ</translation>
@@ -256,7 +244,6 @@ Ključnu datoteku čuvajte na sigurnom mjestu. Trebat će vam za stvaranje novih
 <translation id="8664389313780386848">&amp;Pogledaj izvor stranice</translation>
 <translation id="8708000541097332489">Izbriši pri izlazu</translation>
 <translation id="8714838604780058252">Pozadinska grafika</translation>
-<translation id="8757090071857742562">Nije moguće emitirati radnu površinu.  Provjerite jeste li potvrdili upit za početak dijeljenja zaslona.</translation>
 <translation id="8798099450830957504">Zadano</translation>
 <translation id="8808478386290700967">Internet trgovina</translation>
 <translation id="8823514049557262177">Kopiraj te&amp;kst veze</translation>
@@ -264,7 +251,6 @@ Ključnu datoteku čuvajte na sigurnom mjestu. Trebat će vam za stvaranje novih
 <translation id="8916476537757519021">Anonimni podokvir: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8962083179518285172">Sakrij pojedinosti</translation>
 <translation id="8973557916016709913">Onemogući kontrolu povećanja</translation>
-<translation id="8996526648899750015">Dodavanje računa...</translation>
 <translation id="9003647077635673607">Dopusti na svim web mjestima</translation>
 <translation id="9170848237812810038">&amp;Poništi</translation>
 <translation id="9215293857209265904">Dodano je proširenje "<ph name="EXTENSION_NAME" />"</translation>

@@ -5,6 +5,7 @@
 #include "gn/builder.h"
 
 #include <stddef.h>
+#include <algorithm>
 #include <utility>
 
 #include "gn/action_values.h"
@@ -34,7 +35,7 @@ using BuilderRecordSet = BuilderRecord::BuilderRecordSet;
 bool RecursiveFindCycle(const BuilderRecord* search_in,
                         std::vector<const BuilderRecord*>* path) {
   path->push_back(search_in);
-  for (auto* cur : search_in->unresolved_deps()) {
+  for (const auto& cur : search_in->GetSortedUnresolvedDeps()) {
     std::vector<const BuilderRecord*>::iterator found =
         std::find(path->begin(), path->end(), cur);
     if (found != path->end()) {
@@ -133,7 +134,9 @@ std::vector<const BuilderRecord*> Builder::GetAllRecords() const {
   std::vector<const BuilderRecord*> result;
   result.reserve(records_.size());
   for (const auto& record : records_)
-    result.push_back(record.second.get());
+    result.push_back(&record);
+  // Ensure deterministic outputs.
+  std::sort(result.begin(), result.end(), BuilderRecord::LabelCompare);
   return result;
 }
 
@@ -141,12 +144,15 @@ std::vector<const Item*> Builder::GetAllResolvedItems() const {
   std::vector<const Item*> result;
   result.reserve(records_.size());
   for (const auto& record : records_) {
-    if (record.second->type() != BuilderRecord::ITEM_UNKNOWN &&
-        record.second->should_generate() && record.second->item()) {
-      result.push_back(record.second->item());
+    if (record.type() != BuilderRecord::ITEM_UNKNOWN &&
+        record.should_generate() && record.item()) {
+      result.push_back(record.item());
     }
   }
-
+  // Ensure deterministic outputs.
+  std::sort(result.begin(), result.end(), [](const Item* a, const Item* b) {
+    return a->label() < b->label();
+  });
   return result;
 }
 
@@ -154,10 +160,14 @@ std::vector<const Target*> Builder::GetAllResolvedTargets() const {
   std::vector<const Target*> result;
   result.reserve(records_.size());
   for (const auto& record : records_) {
-    if (record.second->type() == BuilderRecord::ITEM_TARGET &&
-        record.second->should_generate() && record.second->item())
-      result.push_back(record.second->item()->AsTarget());
+    if (record.type() == BuilderRecord::ITEM_TARGET &&
+        record.should_generate() && record.item())
+      result.push_back(record.item()->AsTarget());
   }
+  // Ensure deterministic outputs.
+  std::sort(result.begin(), result.end(), [](const Target* a, const Target* b) {
+    return a->label() < b->label();
+  });
   return result;
 }
 
@@ -167,8 +177,7 @@ const BuilderRecord* Builder::GetRecord(const Label& label) const {
 }
 
 BuilderRecord* Builder::GetRecord(const Label& label) {
-  auto found = records_.find(label);
-  return (found != records_.end()) ? found->second.get() : nullptr;
+  return records_.find(label);
 }
 
 bool Builder::CheckForBadItems(Err* err) const {
@@ -182,21 +191,27 @@ bool Builder::CheckForBadItems(Err* err) const {
   // but none will be resolved. If this happens, we'll check explicitly for
   // that below.
   std::vector<const BuilderRecord*> bad_records;
-  std::string depstring;
-  for (const auto& record_pair : records_) {
-    const BuilderRecord* src = record_pair.second.get();
-    if (!src->should_generate())
+  for (const auto& src : records_) {
+    if (!src.should_generate())
       continue;  // Skip ungenerated nodes.
 
-    if (!src->resolved()) {
-      bad_records.push_back(src);
+    if (!src.resolved())
+      bad_records.push_back(&src);
+  }
+  if (bad_records.empty())
+    return true;
 
-      // Check dependencies.
-      for (auto* dest : src->unresolved_deps()) {
-        if (!dest->item()) {
-          depstring += src->label().GetUserVisibleName(true) + "\n  needs " +
-                       dest->label().GetUserVisibleName(true) + "\n";
-        }
+  // Sort by label to ensure deterministic outputs.
+  std::sort(bad_records.begin(), bad_records.end(),
+            BuilderRecord::LabelCompare);
+
+  std::string depstring;
+  for (const auto& src : bad_records) {
+    // Check dependencies.
+    for (const auto* dest : src->GetSortedUnresolvedDeps()) {
+      if (!dest->item()) {
+        depstring += src->label().GetUserVisibleName(true) + "\n  needs " +
+                     dest->label().GetUserVisibleName(true) + "\n";
       }
     }
   }
@@ -268,8 +283,9 @@ bool Builder::ConfigDefined(BuilderRecord* record, Err* err) {
   // anything they depend on is actually written, the "generate" flag isn't
   // relevant and means extra book keeping. Just force load any deps of this
   // config.
-  for (auto* cur : record->all_deps())
-    ScheduleItemLoadIfNecessary(cur);
+  for (auto it = record->all_deps().begin(); it.valid(); ++it) {
+    ScheduleItemLoadIfNecessary(*it);
+  }
 
   return true;
 }
@@ -304,22 +320,20 @@ bool Builder::ToolchainDefined(BuilderRecord* record, Err* err) {
   return true;
 }
 
+BuilderRecord* Builder::GetOrCreateRecordForTesting(const Label& label) {
+  Err err;
+  return GetOrCreateRecordOfType(label, nullptr, BuilderRecord::ITEM_UNKNOWN, &err);
+}
+
 BuilderRecord* Builder::GetOrCreateRecordOfType(const Label& label,
                                                 const ParseNode* request_from,
                                                 BuilderRecord::ItemType type,
                                                 Err* err) {
-  BuilderRecord* record = GetRecord(label);
-  if (!record) {
-    // Not seen this record yet, create a new one.
-    auto new_record = std::make_unique<BuilderRecord>(type, label);
-    new_record->set_originally_referenced_from(request_from);
-    record = new_record.get();
-    records_[label] = std::move(new_record);
-    return record;
-  }
+  auto pair = records_.try_emplace(label, request_from, type);
+  BuilderRecord* record = pair.second;
 
-  // Check types.
-  if (record->type() != type) {
+  // Check types, if the record was not just created.
+  if (!pair.first && record->type() != type) {
     std::string msg =
         "The type of " + label.GetUserVisibleName(false) + "\nhere is a " +
         BuilderRecord::GetNameForType(type) + " but was previously seen as a " +
@@ -466,7 +480,8 @@ void Builder::RecursiveSetShouldGenerate(BuilderRecord* record, bool force) {
     return;  // Already set and we're not required to iterate dependencies.
   }
 
-  for (auto* cur : record->all_deps()) {
+  for (auto it = record->all_deps().begin(); it.valid(); ++it) {
+    BuilderRecord* cur = *it;
     if (!cur->should_generate()) {
       ScheduleItemLoadIfNecessary(cur);
       RecursiveSetShouldGenerate(cur, false);
@@ -513,12 +528,10 @@ bool Builder::ResolveItem(BuilderRecord* record, Err* err) {
     resolved_and_generated_callback_(record);
 
   // Recursively update everybody waiting on this item to be resolved.
-  for (BuilderRecord* waiting : record->waiting_on_resolution()) {
-    DCHECK(waiting->unresolved_deps().find(record) !=
-           waiting->unresolved_deps().end());
-    waiting->unresolved_deps().erase(record);
-
-    if (waiting->can_resolve()) {
+  const BuilderRecordSet waiting_deps = record->waiting_on_resolution();
+  for (auto it = waiting_deps.begin(); it.valid(); ++it) {
+    BuilderRecord* waiting = *it;
+    if (waiting->OnResolvedDep(record)) {
       if (!ResolveItem(waiting, err))
         return false;
     }

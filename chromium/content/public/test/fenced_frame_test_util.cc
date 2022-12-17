@@ -8,7 +8,9 @@
 #include "content/browser/fenced_frame/fenced_frame.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
+#include "content/public/common/content_features.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/test_frame_navigation_observer.h"
 #include "content/test/fenced_frame_test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
@@ -23,13 +25,21 @@ constexpr char kAddFencedFrameScript[] = R"({
     document.body.appendChild(fenced_frame);
   })";
 
+constexpr char kAddAndNavigateFencedFrameScript[] = R"({
+    const fenced_frame = document.createElement('fencedframe');
+    fenced_frame.src = $1;
+    document.body.appendChild(fenced_frame);
+  })";
+
 constexpr char kNavigateFrameScript[] = R"({location.href = $1;})";
 
 }  // namespace
 
 FencedFrameTestHelper::FencedFrameTestHelper() {
-  scoped_feature_list_.InitAndEnableFeatureWithParameters(
-      blink::features::kFencedFrames, {{"implementation_type", "mparch"}});
+  scoped_feature_list_.InitWithFeaturesAndParameters(
+      {{blink::features::kFencedFrames, {{"implementation_type", "mparch"}}},
+       {features::kPrivacySandboxAdsAPIsOverride, {}}},
+      {/* disabled_features */});
 }
 
 FencedFrameTestHelper::~FencedFrameTestHelper() = default;
@@ -46,8 +56,7 @@ RenderFrameHost* FencedFrameTestHelper::CreateFencedFrame(
   size_t previous_fenced_frame_count =
       fenced_frame_parent_rfh->GetFencedFrames().size();
 
-  EXPECT_TRUE(ExecJs(fenced_frame_parent_rfh,
-                     JsReplace(kAddFencedFrameScript, url),
+  EXPECT_TRUE(ExecJs(fenced_frame_parent_rfh, JsReplace(kAddFencedFrameScript),
                      EvalJsOptions::EXECUTE_SCRIPT_NO_USER_GESTURE));
 
   std::vector<FencedFrame*> fenced_frames =
@@ -65,6 +74,14 @@ RenderFrameHost* FencedFrameTestHelper::CreateFencedFrame(
                                         expected_error_code);
 }
 
+void FencedFrameTestHelper::CreateFencedFrameAsync(
+    RenderFrameHost* fenced_frame_parent_rfh,
+    const GURL& url) {
+  EXPECT_TRUE(ExecJs(fenced_frame_parent_rfh,
+                     JsReplace(kAddAndNavigateFencedFrameScript, url),
+                     EvalJsOptions::EXECUTE_SCRIPT_NO_USER_GESTURE));
+}
+
 RenderFrameHost* FencedFrameTestHelper::NavigateFrameInFencedFrameTree(
     RenderFrameHost* rfh,
     const GURL& url,
@@ -78,16 +95,36 @@ RenderFrameHost* FencedFrameTestHelper::NavigateFrameInFencedFrameTree(
   FrameTreeNode* target_node =
       static_cast<RenderFrameHostImpl*>(rfh)->frame_tree_node();
 
-  FencedFrameNavigationObserver observer(
-      static_cast<RenderFrameHostImpl*>(rfh));
+  TestFrameNavigationObserver fenced_frame_observer(rfh);
   EXPECT_EQ(url.spec(), EvalJs(rfh, JsReplace(kNavigateFrameScript, url)));
-  observer.Wait(expected_error_code);
+  fenced_frame_observer.Wait();
 
-  EXPECT_EQ(target_node->current_frame_host()->GetLastCommittedURL(), url);
+  EXPECT_EQ(target_node->current_frame_host()->IsErrorDocument(),
+            expected_error_code != net::OK);
 
   return target_node->current_frame_host();
 }
 
+// static
+RenderFrameHost* FencedFrameTestHelper::GetMostRecentlyAddedFencedFrame(
+    RenderFrameHost* rfh) {
+  std::vector<FencedFrame*> fenced_frames =
+      static_cast<RenderFrameHostImpl*>(rfh)->GetFencedFrames();
+  if (fenced_frames.empty())
+    return nullptr;
+
+  return fenced_frames.back()->GetInnerRoot();
+}
+
+GURL CreateFencedFrameURLMapping(RenderFrameHost* rfh, const GURL& url) {
+  FrameTreeNode* target_node =
+      static_cast<RenderFrameHostImpl*>(rfh)->frame_tree_node();
+  FencedFrameURLMapping& url_mapping =
+      target_node->current_frame_host()->GetPage().fenced_frame_urls_map();
+  GURL urn_uuid = url_mapping.AddFencedFrameURL(url);
+  EXPECT_TRUE(urn_uuid.is_valid());
+  return urn_uuid;
+}
 }  // namespace test
 
 }  // namespace content

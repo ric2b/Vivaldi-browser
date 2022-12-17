@@ -14,6 +14,7 @@
 
 namespace syncer {
 class ProxyModelTypeControllerDelegate;
+class SyncService;
 }  // namespace syncer
 
 class PrefService;
@@ -52,7 +53,8 @@ using LoginsOrErrorReply = base::OnceCallback<void(LoginsResultOrError)>;
 class PasswordStoreBackend {
  public:
   // Delegate which provides information about current sync status and an
-  // account used for syncing.
+  // account used for syncing. It can be called only after Sync service was
+  // instantiated.
   class SyncDelegate {
    public:
     SyncDelegate() = default;
@@ -65,7 +67,8 @@ class PasswordStoreBackend {
     // Tells whether sync enabled or not.
     virtual bool IsSyncingPasswordsEnabled() = 0;
 
-    // Active syncing account if one exist.
+    // Active syncing account if one exist. If sync disabled absl::nullopt will
+    // be returned.
     virtual absl::optional<std::string> GetSyncingAccount() = 0;
   };
 
@@ -96,6 +99,15 @@ class PasswordStoreBackend {
   // Returns the complete list of non-blocklist PasswordForms. Callback is
   // called on the main sequence.
   virtual void GetAutofillableLoginsAsync(LoginsOrErrorReply callback) = 0;
+
+  // Returns the complete list of PasswordForms (regardless of their blocklist
+  // status) saved in the given sync |account|. The passed account should be a
+  // current or former syncing account, otherwise |callback| will be
+  // called with an error result. Callback is called on the main sequence.
+  // TODO(crbug.com/1315594): Clean up/refactor to avoid having methods
+  // introduced for a specific backend in this interface.
+  virtual void GetAllLoginsForAccountAsync(absl::optional<std::string> account,
+                                           LoginsOrErrorReply callback) = 0;
 
   // Returns all PasswordForms with the same signon_realm as a form in |forms|.
   // If |include_psl|==true, the PSL-matched forms are also included.
@@ -151,6 +163,9 @@ class PasswordStoreBackend {
 
   // Clears all the passwords from the local storage.
   virtual void ClearAllLocalPasswords() = 0;
+
+  // Propagates sync initialization event.
+  virtual void OnSyncServiceInitialized(syncer::SyncService* sync_service) = 0;
 
   // Factory function for creating the backend. The Local backend requires the
   // provided `login_db_path` for storage and Android backend for migration

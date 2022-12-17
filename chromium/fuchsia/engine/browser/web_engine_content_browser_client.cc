@@ -7,7 +7,7 @@
 #include <string>
 #include <utility>
 
-#include "base/cxx17_backports.h"
+#include "base/callback.h"
 #include "base/i18n/rtl.h"
 #include "base/strings/string_split.h"
 #include "components/embedder_support/user_agent_utils.h"
@@ -17,6 +17,7 @@
 #include "components/strings/grit/components_locale_settings.h"
 #include "components/url_rewrite/common/url_loader_throttle.h"
 #include "components/url_rewrite/common/url_request_rewrite_rules.h"
+#include "components/version_info/version_info.h"
 #include "content/public/browser/client_certificate_delegate.h"
 #include "content/public/browser/devtools_manager_delegate.h"
 #include "content/public/browser/navigation_handle.h"
@@ -110,7 +111,7 @@ WebEngineContentBrowserClient::CreateDevToolsManagerDelegate() {
 }
 
 std::string WebEngineContentBrowserClient::GetProduct() {
-  return embedder_support::GetProduct();
+  return version_info::GetProductNameAndVersionForUserAgent();
 }
 
 std::string WebEngineContentBrowserClient::GetUserAgent() {
@@ -147,9 +148,7 @@ void WebEngineContentBrowserClient::OverrideWebkitPrefs(
 void WebEngineContentBrowserClient::RegisterBrowserInterfaceBindersForFrame(
     content::RenderFrameHost* render_frame_host,
     mojo::BinderMapWithContext<content::RenderFrameHost*>* map) {
-  CdmProviderService* const provider = main_parts_->cdm_provider_service();
-  DCHECK(provider);
-  PopulateFuchsiaFrameBinders(map, provider);
+  PopulateFuchsiaFrameBinders(map);
 }
 
 void WebEngineContentBrowserClient::
@@ -204,7 +203,7 @@ void WebEngineContentBrowserClient::AppendExtraCommandLineSwitches(
   };
 
   command_line->CopySwitchesFrom(*base::CommandLine::ForCurrentProcess(),
-                                 kSwitchesToCopy, base::size(kSwitchesToCopy));
+                                 kSwitchesToCopy, std::size(kSwitchesToCopy));
 }
 
 std::string WebEngineContentBrowserClient::GetApplicationLocale() {

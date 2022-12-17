@@ -6,14 +6,18 @@
 
 #include "base/bind.h"
 #include "chrome/app/vector_icons/vector_icons.h"
+#include "chrome/browser/download/bubble/download_bubble_controller.h"
 #include "chrome/browser/download/bubble/download_display_controller.h"
+#include "chrome/browser/download/download_ui_model.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/accessibility/non_accessible_image_view.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
-#include "chrome/browser/ui/views/download/bubble/download_bubble_controller.h"
+#include "chrome/browser/ui/views/download/bubble/download_bubble_row_list_view.h"
+#include "chrome/browser/ui/views/download/bubble/download_bubble_row_view.h"
+#include "chrome/browser/ui/views/download/bubble/download_bubble_security_view.h"
 #include "chrome/browser/ui/views/download/bubble/download_dialog_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/grit/generated_resources.h"
@@ -24,31 +28,18 @@
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/button/button_controller.h"
+#include "ui/views/controls/progress_ring_utils.h"
+#include "ui/views/controls/scroll_view.h"
+#include "ui/views/layout/fill_layout.h"
+#include "ui/views/layout/flex_layout.h"
 #include "ui/views/layout/layout_provider.h"
 
 namespace {
 
-constexpr int kProgressRingRadius = 7;
-
-// TODO(crbug.com/1282240): Move this helper function into ui/views/controls/
-// so it can be used by ring_progress_bar too.
-void DrawRing(gfx::Canvas* canvas,
-              const gfx::RectF& bounds,
-              SkColor color,
-              SkScalar sweep_angle) {
-  SkPath path;
-  path.addArc(gfx::RectFToSkRect(bounds), /*startAngle=*/-90,
-              /*sweepAngle=*/sweep_angle);
-
-  cc::PaintFlags flags;
-  flags.setStyle(cc::PaintFlags::Style::kStroke_Style);
-  flags.setAntiAlias(true);
-  flags.setColor(color);
-  flags.setStrokeWidth(1.7f);
-
-  canvas->DrawPath(std::move(path), std::move(flags));
-}
-
+constexpr int kProgressRingRadius = 9;
+constexpr float kProgressRingStrokeWidth = 1.7f;
+// 7.5 rows * 60 px per row = 450;
+constexpr int kMaxHeightForRowList = 450;
 }  // namespace
 
 DownloadToolbarButtonView::DownloadToolbarButtonView(BrowserView* browser_view)
@@ -61,14 +52,16 @@ DownloadToolbarButtonView::DownloadToolbarButtonView(BrowserView* browser_view)
   SetVectorIcons(kDownloadToolbarButtonIcon, kDownloadToolbarButtonIcon);
   GetViewAccessibility().OverrideHasPopup(ax::mojom::HasPopup::kDialog);
   SetTooltipText(l10n_util::GetStringUTF16(IDS_TOOLTIP_DOWNLOAD_ICON));
-  Profile* profile = browser_->profile();
-  content::DownloadManager* manager = profile->GetDownloadManager();
-  // The display starts hidden and isn't shown until a download is initiated.
-  // TODO(crbug.com/1282240): Use pref service to determine what the initial
-  // state should be.
   SetVisible(false);
-  controller_ = std::make_unique<DownloadDisplayController>(this, manager);
-  bubble_controller_ = std::make_unique<DownloadBubbleUIController>(manager);
+
+  scanning_animation_.SetSlideDuration(base::Milliseconds(2500));
+  scanning_animation_.SetTweenType(gfx::Tween::LINEAR);
+
+  bubble_controller_ = std::make_unique<DownloadBubbleUIController>(browser_);
+  // Wait until we're done with everything else before creating `controller_`
+  // since it can call `Show()` synchronously.
+  controller_ = std::make_unique<DownloadDisplayController>(
+      this, browser_->profile(), bubble_controller_.get());
 }
 
 DownloadToolbarButtonView::~DownloadToolbarButtonView() {
@@ -79,8 +72,12 @@ DownloadToolbarButtonView::~DownloadToolbarButtonView() {
 void DownloadToolbarButtonView::PaintButtonContents(gfx::Canvas* canvas) {
   DownloadDisplayController::ProgressInfo progress_info =
       controller_->GetProgress();
+  DownloadDisplayController::IconInfo icon_info = controller_->GetIconInfo();
   // Do not show the progress ring when there is no in progress download.
   if (progress_info.download_count == 0) {
+    if (scanning_animation_.is_animating()) {
+      scanning_animation_.End();
+    }
     return;
   }
 
@@ -89,20 +86,31 @@ void DownloadToolbarButtonView::PaintButtonContents(gfx::Canvas* canvas) {
   int diameter = 2 * kProgressRingRadius;
   gfx::RectF ring_bounds(x, y, /*width=*/diameter, /*height=*/diameter);
 
-  // Draw the background ring that gets progressively filled.
-  DrawRing(
-      canvas, ring_bounds,
+  if (icon_info.icon_state == download::DownloadIconState::kDeepScanning) {
+    if (!scanning_animation_.is_animating()) {
+      scanning_animation_.Reset();
+      scanning_animation_.Show();
+    }
+    views::DrawSpinningRing(
+        canvas, gfx::RectFToSkRect(ring_bounds),
+        GetColorProvider()->GetColor(kColorDownloadToolbarButtonRingBackground),
+        GetColorProvider()->GetColor(kColorDownloadToolbarButtonActive),
+        kProgressRingStrokeWidth, /*start_angle=*/
+        gfx::Tween::IntValueBetween(scanning_animation_.GetCurrentValue(), 0,
+                                    360));
+    return;
+  }
+
+  views::DrawProgressRing(
+      canvas, gfx::RectFToSkRect(ring_bounds),
       GetColorProvider()->GetColor(kColorDownloadToolbarButtonRingBackground),
-      /*sweep_angle=*/360);
-  // Draw the filled portion of the progress ring.
-  DrawRing(canvas, ring_bounds,
-           GetColorProvider()->GetColor(kColorDownloadToolbarButtonActive),
-           /*sweep_angle=*/360 * progress_info.progress_percentage / 100.0);
+      GetColorProvider()->GetColor(kColorDownloadToolbarButtonActive),
+      kProgressRingStrokeWidth, /*start_angle=*/-90,
+      /*sweep_angle=*/360 * progress_info.progress_percentage / 100.0);
 }
 
 void DownloadToolbarButtonView::Show() {
   SetVisible(true);
-  ButtonPressed();
   PreferredSizeChanged();
 }
 
@@ -123,10 +131,18 @@ void DownloadToolbarButtonView::Disable() {
   SetEnabled(false);
 }
 
-void DownloadToolbarButtonView::UpdateDownloadIcon(
-    download::DownloadIconState state) {
-  icon_state_ = state;
+void DownloadToolbarButtonView::UpdateDownloadIcon() {
   UpdateIcon();
+}
+
+// This function shows the partial view. If the main view is already showing,
+// we do not show the partial view. If the partial view is already showing,
+// there is nothing to do here, the controller should update the partial view.
+void DownloadToolbarButtonView::ShowDetails() {
+  if (!bubble_delegate_) {
+    is_primary_partial_view_ = true;
+    CreateBubbleDialogDelegate(GetPrimaryView());
+  }
 }
 
 void DownloadToolbarButtonView::UpdateIcon() {
@@ -136,14 +152,16 @@ void DownloadToolbarButtonView::UpdateIcon() {
   // Schedule paint to update the progress ring.
   SchedulePaint();
 
+  DownloadDisplayController::IconInfo icon_info = controller_->GetIconInfo();
   const gfx::VectorIcon* new_icon;
   SkColor icon_color =
-      GetColorProvider()->GetColor(kColorDownloadToolbarButtonActive);
-  if (icon_state_ == download::DownloadIconState::kProgress) {
+      icon_info.is_active
+          ? GetColorProvider()->GetColor(kColorDownloadToolbarButtonActive)
+          : GetColorProvider()->GetColor(kColorDownloadToolbarButtonInactive);
+  if (icon_info.icon_state == download::DownloadIconState::kProgress ||
+      icon_info.icon_state == download::DownloadIconState::kDeepScanning) {
     new_icon = &kDownloadInProgressIcon;
   } else {
-    // TODO(crbug.com/1282240): Change the color to inactive if the download was
-    // completed for more than 1 minute or the button was pressed.
     new_icon = &kDownloadToolbarButtonIcon;
   }
 
@@ -155,45 +173,122 @@ void DownloadToolbarButtonView::UpdateIcon() {
   }
 }
 
-void DownloadToolbarButtonView::OnBubbleDelegateDeleted() {
-  bubble_delegate_ = nullptr;
+std::unique_ptr<views::View> DownloadToolbarButtonView::GetPrimaryView() {
+  if (is_primary_partial_view_) {
+    return CreateRowListView(bubble_controller_->GetPartialView());
+  } else {
+    // raw ptr is safe as the toolbar view owns the bubble.
+    return std::make_unique<DownloadDialogView>(
+        browser_, CreateRowListView(bubble_controller_->GetMainView()), this);
+  }
 }
 
-std::unique_ptr<views::BubbleDialogDelegate>
-DownloadToolbarButtonView::CreateBubbleDialogDelegate() {
+void DownloadToolbarButtonView::OpenPrimaryDialog() {
+  primary_view_->SetVisible(true);
+  security_view_->SetVisible(false);
+  ResizeDialog();
+}
+
+void DownloadToolbarButtonView::OpenSecurityDialog(
+    DownloadBubbleRowView* download_row_view) {
+  security_view_->UpdateSecurityView(download_row_view);
+  primary_view_->SetVisible(false);
+  security_view_->SetVisible(true);
+  security_view_->UpdateAccessibilityTextAndFocus();
+  ResizeDialog();
+}
+
+void DownloadToolbarButtonView::CloseDialog(
+    views::Widget::ClosedReason reason) {
+  bubble_delegate_->GetWidget()->CloseWithReason(reason);
+}
+
+void DownloadToolbarButtonView::ResizeDialog() {
+  // Resize may be called when there is no delegate, e.g. during bubble
+  // construction.
+  if (bubble_delegate_)
+    bubble_delegate_->SizeToContents();
+}
+
+void DownloadToolbarButtonView::OnBubbleDelegateDeleted() {
+  bubble_delegate_ = nullptr;
+  primary_view_ = nullptr;
+  security_view_ = nullptr;
+}
+
+// TODO(bhatiarohit): Remove the margin around the bubble.
+// Hover button should be visible from end to end of the bubble.
+void DownloadToolbarButtonView::CreateBubbleDialogDelegate(
+    std::unique_ptr<View> bubble_contents_view) {
+  if (!bubble_contents_view)
+    return;
   std::unique_ptr<views::BubbleDialogDelegate> bubble_delegate =
       std::make_unique<views::BubbleDialogDelegate>(
           this, views::BubbleBorder::TOP_RIGHT);
+  bubble_delegate->SetTitle(
+      l10n_util::GetStringUTF16(IDS_DOWNLOAD_BUBBLE_HEADER_TEXT));
   bubble_delegate->SetShowTitle(false);
   bubble_delegate->SetShowCloseButton(false);
   bubble_delegate->SetButtons(ui::DIALOG_BUTTON_NONE);
-  // base::Unretained(this) is fine as DownloadToolbarButtonView is the anchor
-  // view, and owns the child view/widgets.
   bubble_delegate->RegisterDeleteDelegateCallback(
       base::BindOnce(&DownloadToolbarButtonView::OnBubbleDelegateDeleted,
-                     base::Unretained(this)));
-  bubble_delegate->SetContentsView(std::make_unique<DownloadDialogView>(
-      browser_, bubble_controller_->GetMainView()));
-
+                     weak_factory_.GetWeakPtr()));
+  auto* switcher_view =
+      bubble_delegate->SetContentsView(std::make_unique<views::View>());
+  switcher_view->SetLayoutManager(std::make_unique<views::FlexLayout>())
+      ->SetOrientation(views::LayoutOrientation::kVertical);
+  primary_view_ = switcher_view->AddChildView(std::move(bubble_contents_view));
+  // raw ptr for this is safe as Toolbar Button view owns the Bubble.
+  security_view_ =
+      switcher_view->AddChildView(std::make_unique<DownloadBubbleSecurityView>(
+          bubble_controller_.get(), this));
+  security_view_->SetVisible(false);
   bubble_delegate->set_fixed_width(
       ChromeLayoutProvider::Get()->GetDistanceMetric(
           views::DISTANCE_BUBBLE_PREFERRED_WIDTH));
   bubble_delegate->set_margins(
       gfx::Insets(ChromeLayoutProvider::Get()->GetDistanceMetric(
           views::DISTANCE_RELATED_CONTROL_VERTICAL)));
-  return bubble_delegate;
+  bubble_delegate_ = bubble_delegate.get();
+  views::BubbleDialogDelegate::CreateBubble(std::move(bubble_delegate));
+  bubble_delegate_->GetWidget()->Show();
 }
 
-// We do not need to hide the bubble if it is already showing, as it will be
-// destroyed because of loss of focus.
+// If the bubble delegate is set (either the main or the partial view), the
+// button press is going to make the bubble lose focus, and will destroy
+// the bubble.
+// If the bubble delegate is not set, show the main view.
 void DownloadToolbarButtonView::ButtonPressed() {
   if (!bubble_delegate_) {
-    std::unique_ptr<views::BubbleDialogDelegate> bubble_delegate =
-        CreateBubbleDialogDelegate();
-    bubble_delegate_ = bubble_delegate.get();
-    views::BubbleDialogDelegate::CreateBubble(std::move(bubble_delegate));
-    bubble_delegate_->GetWidget()->Show();
+    is_primary_partial_view_ = false;
+    CreateBubbleDialogDelegate(GetPrimaryView());
   }
+  controller_->OnButtonPressed();
+}
+
+std::unique_ptr<views::View> DownloadToolbarButtonView::CreateRowListView(
+    std::vector<DownloadUIModel::DownloadUIModelPtr> model_list) {
+  // Do not create empty partial view.
+  if (is_primary_partial_view_ && model_list.empty())
+    return nullptr;
+
+  auto row_list_view =
+      std::make_unique<DownloadBubbleRowListView>(is_primary_partial_view_);
+  for (DownloadUIModel::DownloadUIModelPtr& model : model_list) {
+    // raw pointer is safe as the toolbar owns the bubble, which owns an
+    // individual row view.
+    row_list_view->AddChildView(std::make_unique<DownloadBubbleRowView>(
+        std::move(model), row_list_view.get(), bubble_controller_.get(), this));
+  }
+
+  auto scroll_view = std::make_unique<views::ScrollView>();
+  scroll_view->SetContents(std::move(row_list_view));
+  scroll_view->ClipHeightTo(0, kMaxHeightForRowList);
+  scroll_view->SetHorizontalScrollBarMode(
+      views::ScrollView::ScrollBarMode::kDisabled);
+  scroll_view->SetVerticalScrollBarMode(
+      views::ScrollView::ScrollBarMode::kEnabled);
+  return std::move(scroll_view);
 }
 
 BEGIN_METADATA(DownloadToolbarButtonView, ToolbarButton)

@@ -4,7 +4,7 @@
 
 import './strings.m.js';
 
-import {assertNotReached} from 'chrome://resources/js/assert.m.js';
+import {assertNotReached} from 'chrome://resources/js/assert_ts.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 
 export enum SourceType {
@@ -22,7 +22,6 @@ export enum EnableControl {
 }
 
 // TODO(tjudkins): This should be extracted to a shared metrics module.
-/** @enum {string} */
 export enum UserAction {
   ALL_TOGGLED_ON = 'Extensions.Settings.HostList.AllHostsToggledOn',
   ALL_TOGGLED_OFF = 'Extensions.Settings.HostList.AllHostsToggledOff',
@@ -44,13 +43,13 @@ export function isEnabled(state: chrome.developerPrivate.ExtensionState):
     case chrome.developerPrivate.ExtensionState.BLACKLISTED:
     case chrome.developerPrivate.ExtensionState.DISABLED:
       return false;
+    default:
+      assertNotReached();
   }
-  assertNotReached();
-  return false;
 }
 
 /**
- * @return {boolean} Whether the user can change whether or not the extension is
+ * @return Whether the user can change whether or not the extension is
  *     enabled.
  */
 export function userCanChangeEnablement(
@@ -94,9 +93,9 @@ export function getItemSource(item: chrome.developerPrivate.ExtensionInfo):
       return SourceType.UNKNOWN;
     case chrome.developerPrivate.Location.FROM_STORE:
       return SourceType.WEBSTORE;
+    default:
+      assertNotReached(item.location);
   }
-
-  assertNotReached(item.location);
 }
 
 export function getItemSourceString(source: SourceType): string {
@@ -113,9 +112,9 @@ export function getItemSourceString(source: SourceType): string {
       // Nothing to return. Calling code should use
       // chrome.developerPrivate.ExtensionInfo's |locationText| instead.
       return '';
+    default:
+      assertNotReached();
   }
-  assertNotReached();
-  return '';
 }
 
 /**

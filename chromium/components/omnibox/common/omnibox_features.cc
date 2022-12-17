@@ -61,6 +61,10 @@ const base::Feature kDisplayTitleForCurrentUrl{
 const base::Feature kOmniboxRemoveSuggestionsFromClipboard{
     "OmniboxRemoveSuggestionsFromClipboard", enabled_by_default_android_only};
 
+// Auxiliary search for Android. See http://crbug/1310100 for more details.
+const base::Feature kAndroidAuxiliarySearch{
+    "AndroidAuxiliarySearch", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Demotes the relevance scores when comparing suggestions based on the
 // suggestion's |AutocompleteMatchType| and the user's |PageClassification|.
 // This feature's main job is to contain the DemoteByType parameter.
@@ -199,12 +203,6 @@ const base::Feature kShortBookmarkSuggestionsByTotalInputLength{
     "OmniboxShortBookmarkSuggestionsByTotalInputLength",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
-// If disabled, updating shortcuts truncates their text to the user input. If
-// enabled, they preserve up to 3 additional chars. See `GetShortcutText()` in
-// shortcuts_backend.cc for details.
-const base::Feature kPreserveLongerShortcutsText{
-    "OmniboxPreserveLongerShortcutsText", base::FEATURE_ENABLED_BY_DEFAULT};
-
 // If disabled, shortcuts to the same stripped destination URL are scored
 // independently, and only the highest scored shortcut is kept. If enabled,
 // duplicate shortcuts are given an aggregate score, as if they had been a
@@ -274,30 +272,10 @@ const base::Feature kOmniboxFuzzyUrlSuggestions{
 const base::Feature kOmniboxPedalsAndroidBatch1{
     "OmniboxPedalsAndroidBatch1", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Feature used to enable the second batch of Pedals (Safety Check, etc.)
-// for non-English locales (English locales are 'en' and 'en-GB').
-// This feature is only meaningful if `OmniboxPedalsBatch2` is enabled.
-const base::Feature kOmniboxPedalsBatch2NonEnglish{
-    "OmniboxPedalsBatch2NonEnglish", base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Feature used to enable the third batch of Pedals.
-const base::Feature kOmniboxPedalsBatch3{"OmniboxPedalsBatch3",
-                                         base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Feature used to enable the third batch of Pedals (Find your phone, etc.)
 // for non-English locales (English locales are 'en' and 'en-GB').
-// This feature is only meaningful if `OmniboxPedalsBatch3` is enabled.
 const base::Feature kOmniboxPedalsBatch3NonEnglish{
-    "OmniboxPedalsBatch3NonEnglish", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Feature that enables loading synonyms from the translation console.
-const base::Feature kOmniboxPedalsTranslationConsole{
-    "OmniboxPedalsTranslationConsole", base::FEATURE_ENABLED_BY_DEFAULT};
-
-// If enabled, uses WebUI to render the omnibox suggestions popup, similar to
-// how the NTP "realbox" is implemented.
-const base::Feature kWebUIOmniboxPopup{"WebUIOmniboxPopup",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
+    "OmniboxPedalsBatch3NonEnglish", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // When enabled, use Assistant for omnibox voice query recognition instead of
 // Android's built-in voice recognition service. Only works on Android.
@@ -314,7 +292,7 @@ const base::Feature kBlurWithEscape{"OmniboxBlurWithEscape",
 // chrome://settings/searchEngines. This section contains any search engines
 // that have been used or manually added/modified by the user.
 const base::Feature kActiveSearchEngines{"OmniboxActiveSearchEngines",
-                                         base::FEATURE_DISABLED_BY_DEFAULT};
+                                         base::FEATURE_ENABLED_BY_DEFAULT};
 
 // When enabled, adds a "starter pack" of @history, @bookmarks, and @settings
 // scopes to Site Search/Keyword Mode.
@@ -345,4 +323,20 @@ const char kDefaultTypedNavigationsToHttpsTimeoutParam[] = "timeout";
 // Spare renderer warmup for faster website loading.
 const base::Feature kOmniboxSpareRenderer{"OmniboxSpareRenderer",
                                           base::FEATURE_ENABLED_BY_DEFAULT};
+
+// If enabled, Omnibox reports the Assisted Query Stats in the aqs= param in the
+// Search Results Page URL.
+const base::Feature kReportAssistedQueryStats{"OmniboxReportAssistedQueryStats",
+                                              base::FEATURE_ENABLED_BY_DEFAULT};
+
+// If enabled, Omnibox reports the Searchbox Stats in the gs_lcrp= param in the
+// Search Results Page URL.
+extern const base::Feature kReportSearchboxStats{
+    "OmniboxReportSearchboxStats", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// If enabled, retains all suggestions with headers to be presented entirely.
+// Disabling the feature trims the suggestions list to the predefined limit.
+extern const base::Feature kRetainSuggestionsWithHeaders{
+    "OmniboxRetainSuggestionsWithHeaders", base::FEATURE_DISABLED_BY_DEFAULT};
+
 }  // namespace omnibox

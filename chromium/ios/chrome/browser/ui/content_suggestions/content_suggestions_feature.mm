@@ -17,11 +17,16 @@ const base::Feature kSingleNtp{"SingleNTP", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Feature disabled by default.
 const base::Feature kSingleCellContentSuggestions{
-    "SingleCellContentSuggestions", base::FEATURE_DISABLED_BY_DEFAULT};
+    "SingleCellContentSuggestions", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Feature disabled by default.
 const base::Feature kContentSuggestionsHeaderMigration{
     "ContentSuggestionsHeaderMigration", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Feature disabled by default.
+const base::Feature kContentSuggestionsUIViewControllerMigration{
+    "ContentSuggestionsUIViewControllerMigration",
+    base::FEATURE_DISABLED_BY_DEFAULT};
 
 // A parameter to indicate whether the native UI is enabled for the discover
 // feed.
@@ -41,4 +46,9 @@ bool IsSingleCellContentSuggestionsEnabled() {
 
 bool IsContentSuggestionsHeaderMigrationEnabled() {
   return base::FeatureList::IsEnabled(kContentSuggestionsHeaderMigration);
+}
+
+bool IsContentSuggestionsUIViewControllerMigrationEnabled() {
+  return base::FeatureList::IsEnabled(
+      kContentSuggestionsUIViewControllerMigration);
 }

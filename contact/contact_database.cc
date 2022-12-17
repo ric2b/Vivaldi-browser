@@ -30,7 +30,7 @@
 #include "sql/statement.h"
 #include "sql/transaction.h"
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 #include "base/mac/backup_util.h"
 #endif
 
@@ -92,7 +92,7 @@ sql::InitStatus ContactDatabase::Init(const base::FilePath& contact_db_name) {
   if (!committer.Begin())
     return sql::INIT_FAILURE;
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   // Exclude the contact file from backups.
   base::mac::SetBackupExclusion(contact_db_name);
 #endif

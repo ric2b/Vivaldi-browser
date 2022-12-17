@@ -29,8 +29,10 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.query_tiles.QueryTileSection;
 import org.chromium.chrome.browser.query_tiles.QueryTileSection.QueryInfo;
 import org.chromium.chrome.browser.share.ShareDelegate;
+import org.chromium.chrome.browser.suggestions.SuggestionsNavigationDelegate;
+import org.chromium.chrome.browser.suggestions.SuggestionsUiDelegateImpl;
 import org.chromium.chrome.browser.suggestions.tile.MostVisitedListCoordinator;
-import org.chromium.chrome.browser.suggestions.tile.MvTilesLayout;
+import org.chromium.chrome.browser.suggestions.tile.TileGroupDelegateImpl;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
@@ -38,10 +40,12 @@ import org.chromium.chrome.browser.tasks.mv_tiles.MostVisitedTileNavigationDeleg
 import org.chromium.chrome.browser.tasks.tab_management.TabManagementDelegate.TabSwitcherType;
 import org.chromium.chrome.browser.tasks.tab_management.TabManagementModuleProvider;
 import org.chromium.chrome.browser.tasks.tab_management.TabSwitcher;
+import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.components.browser_ui.widget.MenuOrKeyboardActionController;
 import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
+import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -57,7 +61,6 @@ public class TasksSurfaceCoordinator implements TasksSurface {
     private final TasksView mView;
     private final PropertyModelChangeProcessor mPropertyModelChangeProcessor;
     private final TasksSurfaceMediator mMediator;
-    private MostVisitedListCoordinator mMostVisitedList;
     private QueryTileSection mQueryTileSection;
     private final PropertyModel mPropertyModel;
     private final @TabSwitcherType int mTabSwitcherType;
@@ -67,6 +70,10 @@ public class TasksSurfaceCoordinator implements TasksSurface {
     private final ModalDialogManager mModalDialogManager;
     private final Activity mActivity;
     private final Supplier<Tab> mParentTabSupplier;
+
+    private MostVisitedListCoordinator mMostVisitedCoordinator;
+    private MostVisitedSuggestionsUiDelegate mSuggestionsUiDelegate;
+    private TileGroupDelegateImpl mTileGroupDelegate;
 
     /**
      * This flag should be reset once {@link MostVisitedListCoordinator#destroyMVTiles} is called.
@@ -138,11 +145,14 @@ public class TasksSurfaceCoordinator implements TasksSurface {
                 incognitoCookieControlsManager, tabSwitcherType == TabSwitcherType.CAROUSEL);
 
         if (hasMVTiles) {
-            MvTilesLayout mvTilesLayout = mView.findViewById(R.id.mv_tiles_layout);
-            mMostVisitedList = new MostVisitedListCoordinator(
-                    activity, mvTilesLayout, mPropertyModel, snackbarManager, windowAndroid);
-            mMostVisitedList.initialize();
+            mMostVisitedCoordinator =
+                    new MostVisitedListCoordinator(activity, activityLifecycleDispatcher,
+                            mView.findViewById(R.id.mv_tiles_container), windowAndroid,
+                            TabUiFeatureUtilities.supportInstantStart(
+                                    DeviceFormFactor.isNonMultiDisplayContextOnTablet(mActivity),
+                                    mActivity));
         }
+
         if (hasQueryTiles) {
             QueryTileSection queryTileSection =
                     new QueryTileSection(mView.findViewById(R.id.query_tiles_layout),
@@ -160,12 +170,27 @@ public class TasksSurfaceCoordinator implements TasksSurface {
     @Override
     public void initialize() {
         assert LibraryLoader.getInstance().isInitialized();
-        if (!mIsMVTilesInitialized && mMostVisitedList != null) {
-            mMostVisitedList.initWithNative(new MostVisitedTileNavigationDelegate(
-                    mActivity, Profile.getLastUsedRegularProfile(), mParentTabSupplier));
-            mIsMVTilesInitialized = true;
-        }
         mMediator.initialize();
+    }
+
+    @Override
+    public void initializeMVTiles() {
+        if (!LibraryLoader.getInstance().isInitialized() || mIsMVTilesInitialized
+                || mMostVisitedCoordinator == null) {
+            return;
+        }
+
+        Profile profile = Profile.getLastUsedRegularProfile();
+        MostVisitedTileNavigationDelegate navigationDelegate =
+                new MostVisitedTileNavigationDelegate(mActivity, profile, mParentTabSupplier);
+        mSuggestionsUiDelegate =
+                new MostVisitedSuggestionsUiDelegate(navigationDelegate, profile, mSnackbarManager);
+        mTileGroupDelegate =
+                new TileGroupDelegateImpl(mActivity, profile, navigationDelegate, mSnackbarManager);
+
+        mMostVisitedCoordinator.initWithNative(
+                mSuggestionsUiDelegate, mTileGroupDelegate, enabled -> {});
+        mIsMVTilesInitialized = true;
     }
 
     @Override
@@ -236,23 +261,47 @@ public class TasksSurfaceCoordinator implements TasksSurface {
 
     @Override
     public void onHide() {
-        if (mMostVisitedList != null) {
-            mMostVisitedList.destroyMVTiles();
+        if (mSuggestionsUiDelegate != null) {
+            mSuggestionsUiDelegate.onDestroy();
+            mSuggestionsUiDelegate = null;
+        }
+        if (mTileGroupDelegate != null) {
+            mTileGroupDelegate.destroy();
+            mTileGroupDelegate = null;
+        }
+
+        if (mMostVisitedCoordinator != null) {
+            mMostVisitedCoordinator.destroyMVTiles();
             mIsMVTilesInitialized = false;
         }
+
         mTabSwitcher.getTabListDelegate().postHiding();
     }
 
     @VisibleForTesting
     @Override
     public boolean isMVTilesCleanedUp() {
-        assert mMostVisitedList != null;
-        return mMostVisitedList.isMVTilesCleanedUp();
+        assert mMostVisitedCoordinator != null;
+        return mMostVisitedCoordinator.isMVTilesCleanedUp();
     }
 
     @VisibleForTesting
     @Override
     public boolean isMVTilesInitialized() {
         return mIsMVTilesInitialized;
+    }
+
+    /** Suggestions UI Delegate for constructing the TileGroup. */
+    private class MostVisitedSuggestionsUiDelegate extends SuggestionsUiDelegateImpl {
+        public MostVisitedSuggestionsUiDelegate(SuggestionsNavigationDelegate navigationDelegate,
+                Profile profile, SnackbarManager snackbarManager) {
+            super(navigationDelegate, profile, /*host=*/null, snackbarManager);
+        }
+
+        @Override
+        public boolean isVisible() {
+            return mView.getVisibility() == View.VISIBLE
+                    && mView.findViewById(R.id.mv_tiles_layout).getVisibility() == View.VISIBLE;
+        }
     }
 }

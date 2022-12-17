@@ -5,7 +5,6 @@
 import './iframe.js';
 import './realbox/realbox.js';
 import './logo.js';
-import './modules/modules.js';
 import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
 import 'chrome://resources/cr_elements/shared_style_css.m.js';
 
@@ -24,7 +23,6 @@ import {loadTimeData} from './i18n_setup.js';
 import {IframeElement} from './iframe.js';
 import {LogoElement} from './logo.js';
 import {recordLoadDuration} from './metrics_utils.js';
-import {ModuleRegistry} from './modules/module_registry.js';
 import {PageCallbackRouter, PageHandlerRemote, Theme} from './new_tab_page.mojom-webui.js';
 import {NewTabPageProxy} from './new_tab_page_proxy.js';
 import {$$} from './utils.js';
@@ -193,6 +191,11 @@ export class AppElement extends PolymerElement {
         value: () => loadTimeData.getBoolean('shortcutsEnabled'),
       },
 
+      modulesFreShown: {
+        type: Boolean,
+        reflectToAttribute: true,
+      },
+
       modulesRedesignedLayoutEnabled_: {
         type: Boolean,
         value: () => loadTimeData.getBoolean('modulesRedesignedLayoutEnabled'),
@@ -223,6 +226,11 @@ export class AppElement extends PolymerElement {
       modulesLoaded_: {
         type: Boolean,
         value: false,
+      },
+
+      modulesShownToUser: {
+        type: Boolean,
+        reflectToAttribute: true,
       },
 
       /**
@@ -263,12 +271,14 @@ export class AppElement extends PolymerElement {
   private logoEnabled_: boolean;
   private oneGoogleBarEnabled_: boolean;
   private shortcutsEnabled_: boolean;
+  private modulesFreShown: boolean;
   private modulesRedesignedLayoutEnabled_: boolean;
   private middleSlotPromoEnabled_: boolean;
   private modulesEnabled_: boolean;
   private modulesRedesignedEnabled_: boolean;
   private middleSlotPromoLoaded_: boolean;
   private modulesLoaded_: boolean;
+  private modulesShownToUser: boolean;
   private promoAndModulesLoaded_: boolean;
   private lazyRender_: boolean;
 
@@ -310,7 +320,7 @@ export class AppElement extends PolymerElement {
         Math.floor(document.documentElement.clientHeight));
   }
 
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
     this.setThemeListenerId_ =
         this.callbackRouter_.setTheme.addListener((theme: Theme) => {
@@ -352,13 +362,13 @@ export class AppElement extends PolymerElement {
     FocusOutlineManager.forDocument(document);
   }
 
-  disconnectedCallback() {
+  override disconnectedCallback() {
     super.disconnectedCallback();
     this.callbackRouter_.removeListener(this.setThemeListenerId_!);
     this.eventTracker_.removeAll();
   }
 
-  ready() {
+  override ready() {
     super.ready();
     this.pageHandler_.onAppRendered(WindowProxy.getInstance().now());
     // Let the browser breath and then render remaining elements.
@@ -414,17 +424,6 @@ export class AppElement extends PolymerElement {
     // Integration tests use this attribute to determine when lazy load has
     // completed.
     document.documentElement.setAttribute('lazy-loaded', String(true));
-    // Instantiate modules even if |modulesEnabled| is false to counterfactually
-    // trigger a HaTS survey in a potential control group.
-    if (!loadTimeData.getBoolean('modulesLoadEnabled') ||
-        loadTimeData.getBoolean('modulesEnabled')) {
-      return;
-    }
-    const modules = await ModuleRegistry.getInstance().initializeModules(
-        loadTimeData.getInteger('modulesLoadTimeout'));
-    if (modules) {
-      this.pageHandler_.onModulesLoadedWithData();
-    }
   }
 
   private onOpenVoiceSearch_() {
@@ -634,11 +633,9 @@ export class AppElement extends PolymerElement {
     if (!this.shouldPrintPerformance_) {
       return;
     }
-    if (!auxTime) {
-      console.log(`${name}: ${time}`);
-    } else {
-      console.log(`${name}: ${time} (${auxTime})`);
-    }
+
+    console.info(
+        !auxTime ? `${name}: ${time}` : `${name}: ${time} (${auxTime})`);
   }
 
   /**

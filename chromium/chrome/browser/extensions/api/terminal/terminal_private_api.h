@@ -199,6 +199,17 @@ class TerminalPrivateOpenOptionsPageFunction : public ExtensionFunction {
   ExtensionFunction::ResponseAction Run() override;
 };
 
+class TerminalPrivateOpenSettingsSubpageFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("terminalPrivate.openSettingsSubpage",
+                             TERMINALPRIVATE_OPENSETTINGSSUBPAGE)
+
+ protected:
+  ~TerminalPrivateOpenSettingsSubpageFunction() override;
+
+  ExtensionFunction::ResponseAction Run() override;
+};
+
 class TerminalPrivateGetOSInfoFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("terminalPrivate.getOSInfo",
@@ -210,35 +221,24 @@ class TerminalPrivateGetOSInfoFunction : public ExtensionFunction {
   ExtensionFunction::ResponseAction Run() override;
 };
 
-class TerminalPrivateGetSettingsFunction : public ExtensionFunction {
+class TerminalPrivateGetPrefsFunction : public ExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("terminalPrivate.getSettings",
-                             TERMINALPRIVATE_GETSETTINGS)
+  DECLARE_EXTENSION_FUNCTION("terminalPrivate.getPrefs",
+                             TERMINALPRIVATE_GETPREFS)
 
  protected:
-  ~TerminalPrivateGetSettingsFunction() override;
+  ~TerminalPrivateGetPrefsFunction() override;
 
   ExtensionFunction::ResponseAction Run() override;
 };
 
-class TerminalPrivateSetSettingsFunction : public ExtensionFunction {
+class TerminalPrivateSetPrefsFunction : public ExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("terminalPrivate.setSettings",
-                             TERMINALPRIVATE_SETSETTINGS)
+  DECLARE_EXTENSION_FUNCTION("terminalPrivate.setPrefs",
+                             TERMINALPRIVATE_SETPREFS)
 
  protected:
-  ~TerminalPrivateSetSettingsFunction() override;
-
-  ExtensionFunction::ResponseAction Run() override;
-};
-
-class TerminalPrivateGetA11yStatusFunction : public ExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("terminalPrivate.getA11yStatus",
-                             TERMINALPRIVATE_GETA11YSTATUS)
-
- protected:
-  ~TerminalPrivateGetA11yStatusFunction() override;
+  ~TerminalPrivateSetPrefsFunction() override;
 
   ExtensionFunction::ResponseAction Run() override;
 };

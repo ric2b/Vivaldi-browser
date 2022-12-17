@@ -11,6 +11,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/system/sys_info.h"
 #include "base/threading/thread_checker.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "gpu/command_buffer/common/constants.h"
 #include "gpu/config/gpu_preferences.h"
@@ -562,9 +563,9 @@ void ShaderDiskCache::Init() {
 
   int rv = disk_cache::CreateCacheBackend(
       net::SHADER_CACHE, net::CACHE_BACKEND_DEFAULT,
-      cache_path_.Append(kGpuCachePath), CacheSizeBytes(),
-      disk_cache::ResetHandling::kResetOnError, nullptr, &backend_,
-      base::BindOnce(&ShaderDiskCache::CacheCreatedCallback, this));
+      /*file_operations=*/nullptr, cache_path_.Append(kGpuCachePath),
+      CacheSizeBytes(), disk_cache::ResetHandling::kResetOnError, nullptr,
+      &backend_, base::BindOnce(&ShaderDiskCache::CacheCreatedCallback, this));
 
   if (rv == net::OK)
     cache_available_ = true;

@@ -41,10 +41,11 @@ const categoryLabels: {[key: string]: string} = {
 const SiteDataDetailsSubpageElementBase =
     RouteObserverMixin(WebUIListenerMixin(PolymerElement)) as {
       new (): PolymerElement & WebUIListenerMixinInterface &
-      RouteObserverMixinInterface
+          RouteObserverMixinInterface,
     };
 
-class SiteDataDetailsSubpageElement extends SiteDataDetailsSubpageElementBase {
+export class SiteDataDetailsSubpageElement extends
+    SiteDataDetailsSubpageElementBase {
   static get is() {
     return 'site-data-details-subpage';
   }
@@ -76,7 +77,7 @@ class SiteDataDetailsSubpageElement extends SiteDataDetailsSubpageElementBase {
   private browserProxy_: LocalDataBrowserProxy =
       LocalDataBrowserProxyImpl.getInstance();
 
-  ready() {
+  override ready() {
     super.ready();
 
     this.addWebUIListener(
@@ -86,7 +87,7 @@ class SiteDataDetailsSubpageElement extends SiteDataDetailsSubpageElementBase {
   /**
    * RouteObserverMixin
    */
-  currentRouteChanged(route: Route) {
+  override currentRouteChanged(route: Route) {
     if (route !== routes.SITE_SETTINGS_DATA_DETAILS) {
       return;
     }

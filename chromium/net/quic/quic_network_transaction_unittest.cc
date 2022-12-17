@@ -69,18 +69,18 @@
 #include "net/test/gtest_util.h"
 #include "net/test/test_data_directory.h"
 #include "net/test/test_with_task_environment.h"
-#include "net/third_party/quiche/src/quic/core/crypto/quic_decrypter.h"
-#include "net/third_party/quiche/src/quic/core/crypto/quic_encrypter.h"
-#include "net/third_party/quiche/src/quic/core/quic_framer.h"
-#include "net/third_party/quiche/src/quic/core/quic_utils.h"
-#include "net/third_party/quiche/src/quic/platform/api/quic_test.h"
-#include "net/third_party/quiche/src/quic/test_tools/crypto_test_utils.h"
-#include "net/third_party/quiche/src/quic/test_tools/mock_clock.h"
-#include "net/third_party/quiche/src/quic/test_tools/mock_random.h"
-#include "net/third_party/quiche/src/quic/test_tools/quic_spdy_session_peer.h"
-#include "net/third_party/quiche/src/quic/test_tools/quic_test_utils.h"
-#include "net/third_party/quiche/src/spdy/core/spdy_frame_builder.h"
-#include "net/third_party/quiche/src/spdy/core/spdy_framer.h"
+#include "net/third_party/quiche/src/quiche/quic/core/crypto/quic_decrypter.h"
+#include "net/third_party/quiche/src/quiche/quic/core/crypto/quic_encrypter.h"
+#include "net/third_party/quiche/src/quiche/quic/core/quic_framer.h"
+#include "net/third_party/quiche/src/quiche/quic/core/quic_utils.h"
+#include "net/third_party/quiche/src/quiche/quic/platform/api/quic_test.h"
+#include "net/third_party/quiche/src/quiche/quic/test_tools/crypto_test_utils.h"
+#include "net/third_party/quiche/src/quiche/quic/test_tools/mock_clock.h"
+#include "net/third_party/quiche/src/quiche/quic/test_tools/mock_random.h"
+#include "net/third_party/quiche/src/quiche/quic/test_tools/quic_spdy_session_peer.h"
+#include "net/third_party/quiche/src/quiche/quic/test_tools/quic_test_utils.h"
+#include "net/third_party/quiche/src/quiche/spdy/core/spdy_frame_builder.h"
+#include "net/third_party/quiche/src/quiche/spdy/core/spdy_framer.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/static_http_user_agent_settings.h"
 #include "net/url_request/url_request.h"
@@ -215,8 +215,8 @@ std::string ConstructDataFrameForVersion(base::StringPiece body,
   if (!version.HasIetfQuicFrames()) {
     return std::string(body);
   }
-  quic::QuicBuffer buffer = quic::HttpEncoder::SerializeDataFrameHeader(
-      body.size(), quic::SimpleBufferAllocator::Get());
+  quiche::QuicheBuffer buffer = quic::HttpEncoder::SerializeDataFrameHeader(
+      body.size(), quiche::SimpleBufferAllocator::Get());
   return base::StrCat({base::StringPiece(buffer.data(), buffer.size()), body});
 }
 
@@ -1527,6 +1527,73 @@ TEST_P(QuicNetworkTransactionTest, TooLargeResponseHeaders) {
   int rv = trans.Start(&request_, callback.callback(), net_log_with_source_);
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   EXPECT_THAT(callback.WaitForResult(), IsError(ERR_QUIC_PROTOCOL_ERROR));
+}
+
+TEST_P(QuicNetworkTransactionTest, RedirectMultipleLocations) {
+  context_.params()->retry_without_alt_svc_on_quic_errors = false;
+  context_.params()->origins_to_force_quic_on.insert(
+      HostPortPair::FromString("mail.example.org:443"));
+
+  MockQuicData mock_quic_data(version_);
+  int packet_num = 1;
+  if (VersionUsesHttp3(version_.transport_version)) {
+    mock_quic_data.AddWrite(SYNCHRONOUS,
+                            ConstructInitialSettingsPacket(packet_num++));
+  }
+  mock_quic_data.AddWrite(
+      SYNCHRONOUS,
+      ConstructClientRequestHeadersPacket(
+          packet_num++, GetNthClientInitiatedBidirectionalStreamId(0), true,
+          true, GetRequestHeaders("GET", "https", "/")));
+
+  spdy::Http2HeaderBlock response_headers = GetResponseHeaders("301");
+  response_headers.AppendValueOrAddHeader("location", "https://example1.test");
+  response_headers.AppendValueOrAddHeader("location", "https://example2.test");
+
+  if (quic::VersionUsesHttp3(version_.transport_version)) {
+    const quic::QuicStreamId stream_id =
+        GetNthClientInitiatedBidirectionalStreamId(0);
+    const std::string response_data = server_maker_.QpackEncodeHeaders(
+        stream_id, std::move(response_headers), nullptr);
+    ASSERT_LT(response_data.size(), 1200u);
+    mock_quic_data.AddRead(
+        ASYNC, ConstructServerDataPacket(/*packet_number=*/1, stream_id,
+                                         /*should_include_version=*/false,
+                                         /*fin=*/true, response_data));
+  } else {
+    const quic::QuicStreamId stream_id =
+        quic::QuicUtils::GetHeadersStreamId(version_.transport_version);
+    spdy::SpdyHeadersIR headers_frame(
+        GetNthClientInitiatedBidirectionalStreamId(0),
+        std::move(response_headers));
+    spdy::SpdyFramer response_framer(spdy::SpdyFramer::ENABLE_COMPRESSION);
+    spdy::SpdySerializedFrame spdy_frame =
+        response_framer.SerializeFrame(headers_frame);
+    const std::string response_data =
+        std::string(spdy_frame.data(), spdy_frame.size());
+    ASSERT_LT(response_data.size(), 1200u);
+    mock_quic_data.AddRead(
+        ASYNC, ConstructServerDataPacket(/*packet_number=*/1, stream_id,
+                                         /*should_include_version=*/false,
+                                         /*fin=*/false, response_data));
+  }
+  mock_quic_data.AddRead(SYNCHRONOUS, ERR_IO_PENDING);  // No more data to read
+
+  mock_quic_data.AddWrite(
+      ASYNC, ConstructClientAckAndRstPacket(
+                 packet_num++, GetNthClientInitiatedBidirectionalStreamId(0),
+                 quic::QUIC_STREAM_CANCELLED,
+                 /*largest_received=*/1, /*smallest_received=*/1));
+
+  mock_quic_data.AddSocketDataToFactory(&socket_factory_);
+
+  CreateSession();
+
+  HttpNetworkTransaction trans(DEFAULT_PRIORITY, session_.get());
+  TestCompletionCallback callback;
+  int rv = trans.Start(&request_, callback.callback(), net_log_with_source_);
+  ASSERT_THAT(rv, IsError(ERR_IO_PENDING));
+  ASSERT_THAT(callback.WaitForResult(), IsError(ERR_QUIC_PROTOCOL_ERROR));
 }
 
 TEST_P(QuicNetworkTransactionTest, ForceQuicForAll) {
@@ -3219,7 +3286,7 @@ TEST_P(QuicNetworkTransactionTest, TimeoutAfterHandshakeConfirmed) {
                        client_maker_->MakeConnectionClosePacket(
                            packet_num++, true, quic::QUIC_NETWORK_IDLE_TIMEOUT,
                            "No recent network activity after 4s. Timeout:4s"));
-  } else if (version_.UsesTls()) {
+  } else if (version_.UsesTls() || GetQuicRestartFlag(quic_default_on_pto2)) {
     // Settings were sent in the request packet so there is only 1 packet to
     // retransmit.
     // QuicConnection::OnRetransmissionTimeout skips a packet number when
@@ -3442,7 +3509,7 @@ TEST_P(QuicNetworkTransactionTest, TimeoutAfterHandshakeConfirmedThenBroken2) {
                        client_maker_->MakeConnectionClosePacket(
                            packet_num++, true, quic::QUIC_NETWORK_IDLE_TIMEOUT,
                            "No recent network activity after 4s. Timeout:4s"));
-  } else if (version_.UsesTls()) {
+  } else if (version_.UsesTls() || GetQuicRestartFlag(quic_default_on_pto2)) {
     // Settings were sent in the request packet so there is only 1 packet to
     // retransmit.
     // QuicConnection::OnRetransmissionTimeout skips a packet number when
@@ -6911,42 +6978,6 @@ TEST_P(QuicNetworkTransactionTest, QuicForceHolBlocking) {
 
   SendRequestAndExpectQuicResponse("hello!");
 }
-
-class QuicURLRequestContext : public URLRequestContext {
- public:
-  QuicURLRequestContext(std::unique_ptr<HttpNetworkSession> session,
-                        MockClientSocketFactory* socket_factory)
-      : storage_(this) {
-    socket_factory_ = socket_factory;
-    storage_.set_host_resolver(std::make_unique<MockHostResolver>(
-        /*default_result=*/MockHostResolverBase::RuleResolver::
-            GetLocalhostResult()));
-    storage_.set_cert_verifier(std::make_unique<MockCertVerifier>());
-    storage_.set_transport_security_state(
-        std::make_unique<TransportSecurityState>());
-    storage_.set_proxy_resolution_service(
-        ConfiguredProxyResolutionService::CreateDirect());
-    storage_.set_ssl_config_service(
-        std::make_unique<SSLConfigServiceDefaults>());
-    storage_.set_http_auth_handler_factory(
-        HttpAuthHandlerFactory::CreateDefault());
-    storage_.set_http_server_properties(
-        std::make_unique<HttpServerProperties>());
-    storage_.set_job_factory(std::make_unique<URLRequestJobFactory>());
-    storage_.set_http_network_session(std::move(session));
-    storage_.set_http_transaction_factory(std::make_unique<HttpCache>(
-        storage_.http_network_session(), HttpCache::DefaultBackend::InMemory(0),
-        false));
-  }
-
-  ~QuicURLRequestContext() override { AssertNoURLRequests(); }
-
-  MockClientSocketFactory& socket_factory() { return *socket_factory_; }
-
- private:
-  raw_ptr<MockClientSocketFactory> socket_factory_;
-  URLRequestContextStorage storage_;
-};
 
 TEST_P(QuicNetworkTransactionTest, HostInAllowlist) {
   if (version_.AlpnDeferToRFCv1()) {

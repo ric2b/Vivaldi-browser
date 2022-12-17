@@ -81,7 +81,7 @@ PageInfoMainView::PageInfoMainView(
 
   AddChildView(CreateBubbleHeaderView())
       ->SetProperty(views::kMarginsKey,
-                    gfx::Insets(0, 0, hover_list_spacing, 0));
+                    gfx::Insets::TLBR(0, 0, hover_list_spacing, 0));
 
 #if BUILDFLAG(IS_WIN) && BUILDFLAG(ENABLE_VR)
   page_feature_info_view_ = AddChildView(std::make_unique<views::View>());
@@ -119,10 +119,6 @@ PageInfoMainView::PageInfoMainView(
     about_this_site_section_ = AddChildView(CreateContainerView());
   }
 
-  if (base::FeatureList::IsEnabled(privacy_sandbox::kPrivacySandboxSettings3)) {
-    ads_personalization_section_ = AddChildView(CreateContainerView());
-  }
-
   presenter_->InitializeUiState(this, std::move(initialized_callback));
 }
 
@@ -153,6 +149,12 @@ void PageInfoMainView::EnsureCookieInfo() {
             tooltip, std::u16string(), PageInfoViewFactory::GetLaunchIcon())
             .release();
     site_settings_view_->AddChildView(cookie_button_.get());
+
+    if (base::FeatureList::IsEnabled(
+            privacy_sandbox::kPrivacySandboxSettings3)) {
+      ads_personalization_section_ =
+          site_settings_view_->AddChildView(CreateContainerView());
+    }
   }
 }
 
@@ -278,7 +280,7 @@ void PageInfoMainView::SetPermissionInfo(
           views::DISTANCE_RELATED_LABEL_HORIZONTAL);
   reset_button_->SetProperty(
       views::kMarginsKey,
-      gfx::Insets(controls_spacing, side_offset, controls_spacing, 0));
+      gfx::Insets::TLBR(controls_spacing, side_offset, controls_spacing, 0));
   reset_button_->SetID(
       PageInfoViewFactory::VIEW_ID_PAGE_INFO_RESET_PERMISSIONS_BUTTON);
 
@@ -388,7 +390,8 @@ void PageInfoMainView::SetPageFeatureInfo(const PageFeatureInfo& info) {
   label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   const int icon_label_spacing = layout_provider->GetDistanceMetric(
       views::DISTANCE_RELATED_LABEL_HORIZONTAL);
-  label->SetProperty(views::kMarginsKey, gfx::Insets(0, icon_label_spacing));
+  label->SetProperty(views::kMarginsKey,
+                     gfx::Insets::VH(0, icon_label_spacing));
   label->SetProperty(
       views::kFlexBehaviorKey,
       views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
@@ -411,7 +414,7 @@ void PageInfoMainView::SetPageFeatureInfo(const PageFeatureInfo& info) {
   // Set views::kInternalPaddingKey for flex layout to account for internal
   // button padding when calculating margins.
   exit_button->SetProperty(views::kInternalPaddingKey,
-                           gfx::Insets(exit_button->GetInsets().top(), 0));
+                           gfx::Insets::VH(exit_button->GetInsets().top(), 0));
   content_view->AddChildView(std::move(exit_button));
 
   flex_layout->SetInteriorMargin(layout_provider->GetInsetsMetric(
@@ -424,7 +427,8 @@ void PageInfoMainView::SetPageFeatureInfo(const PageFeatureInfo& info) {
       2;
   auto* separator = page_feature_info_view_->AddChildView(
       std::make_unique<views::Separator>());
-  separator->SetProperty(views::kMarginsKey, gfx::Insets(separator_spacing, 0));
+  separator->SetProperty(views::kMarginsKey,
+                         gfx::Insets::VH(separator_spacing, 0));
 
   PreferredSizeChanged();
 #endif
@@ -432,11 +436,13 @@ void PageInfoMainView::SetPageFeatureInfo(const PageFeatureInfo& info) {
 
 void PageInfoMainView::SetAdPersonalizationInfo(
     const AdPersonalizationInfo& info) {
+  EnsureCookieInfo();
   if (!ads_personalization_section_)
     return;
+
   ads_personalization_section_->RemoveAllChildViews();
 
-  if (!info.has_joined_user_to_interest_group)
+  if (info.is_empty())
     return;
 
   ads_personalization_section_->AddChildView(CreateAdPersonalizationSection());
@@ -506,7 +512,7 @@ void PageInfoMainView::ChildPreferredSizeChanged(views::View* child) {
 std::unique_ptr<views::View> PageInfoMainView::CreateBubbleHeaderView() {
   auto header = std::make_unique<views::View>();
   header->SetLayoutManager(std::make_unique<views::FlexLayout>())
-      ->SetInteriorMargin(gfx::Insets(0, kIconColumnWidth));
+      ->SetInteriorMargin(gfx::Insets::VH(0, kIconColumnWidth));
   title_ = header->AddChildView(std::make_unique<views::Label>(
       std::u16string(), views::style::CONTEXT_DIALOG_TITLE,
       views::style::STYLE_PRIMARY,
@@ -566,23 +572,17 @@ PageInfoMainView::CreateAdPersonalizationSection() {
       ->SetLayoutManager(std::make_unique<views::FlexLayout>())
       ->SetOrientation(views::LayoutOrientation::kVertical);
   ads_personalization_section->AddChildView(
-      PageInfoViewFactory::CreateSeparator());
-  // TODO(olesiamarukhno): Use correct icon.
-  // TODO(olesiamarukhno): Use correct strings (title and tooltip).
-  auto* ads_personalization_button = ads_personalization_section->AddChildView(
       std::make_unique<PageInfoHoverButton>(
           base::BindRepeating(
               [](PageInfoMainView* view) {
-                // TODO(olesiamarukhno): Open a subpage.
                 view->navigation_handler_->OpenAdPersonalizationPage();
               },
               this),
-          PageInfoViewFactory::GetSiteSettingsIcon(),
-          /*title_resource_id=*/0, std::u16string(),
+          PageInfoViewFactory::GetAdPersonalizationIcon(),
+          IDS_PAGE_INFO_AD_PERSONALIZATION_HEADER, std::u16string(),
           PageInfoViewFactory::VIEW_ID_PAGE_INFO_AD_PERSONALIZATION_BUTTON,
-          /*tooltip_text=*/std::u16string(), std::u16string(),
-          PageInfoViewFactory::GetOpenSubpageIcon()));
-  ads_personalization_button->SetTitleText(u"Lorem ipsum dolor");
+          l10n_util::GetStringUTF16(IDS_PAGE_INFO_AD_PERSONALIZATION_TOOLTIP),
+          std::u16string(), PageInfoViewFactory::GetOpenSubpageIcon()));
 
   return ads_personalization_section;
 }

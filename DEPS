@@ -1,7 +1,7 @@
 # DO NOT EDIT EXCEPT FOR LOCAL TESTING.
 
 vars = {
-  "upstream_commit_id": "Ia14d1f1b42beb6031ce2f78f3497cbcb5f360b4a",
+  "upstream_commit_id": "I20bb8db59029543da89fdc3c91cbce4431fa243b",
 }
 
 hooks = [
@@ -187,6 +187,33 @@ hooks = [
                '-s', 'chromium/third_party/skia',
                '--header', 'chromium/skia/ext/skia_commit_hash.h'],
   },
+  # Pull dsymutil binaries using checked-in hashes.
+  {
+    'name': 'dsymutil_mac_arm64',
+    'pattern': '.',
+    'condition': 'host_os == "mac" and host_cpu == "arm64"',
+    'action': [ 'python3',
+                'chromium/third_party/depot_tools/download_from_google_storage.py',
+                '--no_resume',
+                '--no_auth',
+                '--bucket', 'chromium-browser-clang',
+                '-s', 'chromium/tools/clang/dsymutil/bin/dsymutil.arm64.sha1',
+                '-o', 'chromium/tools/clang/dsymutil/bin/dsymutil',
+    ],
+  },
+  {
+    'name': 'dsymutil_mac_x64',
+    'pattern': '.',
+    'condition': 'host_os == "mac" and host_cpu == "x64"',
+    'action': [ 'python3',
+                'chromium/third_party/depot_tools/download_from_google_storage.py',
+                '--no_resume',
+                '--no_auth',
+                '--bucket', 'chromium-browser-clang',
+                '-s', 'chromium/tools/clang/dsymutil/bin/dsymutil.x64.sha1',
+                '-o', 'chromium/tools/clang/dsymutil/bin/dsymutil',
+    ],
+  },
   # Pull clang-format binaries using checked-in hashes.
   {
     'name': 'clang_format_win',
@@ -201,15 +228,29 @@ hooks = [
     ],
   },
   {
-    'name': 'clang_format_mac',
+    'name': 'clang_format_mac_x64',
     'pattern': '.',
-    'condition': 'host_os == "mac"',
-    'action': [ 'python3', "-u",
+    'condition': 'host_os == "mac" and host_cpu == "x64"',
+    'action': [ 'python3',
                 'chromium/third_party/depot_tools/download_from_google_storage.py',
                 '--no_resume',
                 '--no_auth',
                 '--bucket', 'chromium-clang-format',
-                '-s', 'chromium/buildtools/mac/clang-format.sha1'
+                '-s', 'chromium/buildtools/mac/clang-format.x64.sha1',
+                '-o', 'chromium/buildtools/mac/clang-format',
+    ],
+  },
+ {
+    'name': 'clang_format_mac_arm64',
+    'pattern': '.',
+    'condition': 'host_os == "mac" and host_cpu == "arm64"',
+    'action': [ 'python3',
+                'chromium/third_party/depot_tools/download_from_google_storage.py',
+                '--no_resume',
+                '--no_auth',
+                '--bucket', 'chromium-clang-format',
+                '-s', 'chromium/buildtools/mac/clang-format.arm64.sha1',
+                '-o', 'chromium/buildtools/mac/clang-format',
     ],
   },
   {

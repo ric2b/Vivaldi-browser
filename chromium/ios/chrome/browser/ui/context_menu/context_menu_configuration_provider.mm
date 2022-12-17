@@ -42,6 +42,7 @@
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
 #import "ios/chrome/browser/web/image_fetch/image_fetch_tab_helper.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
+#import "ios/chrome/common/ui/favicon/favicon_constants.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/public/provider/chrome/browser/lens/lens_api.h"
 #include "ios/web/common/features.h"
@@ -61,9 +62,6 @@ namespace {
 const NSUInteger kContextMenuMaxURLTitleLength = 100;
 // Character to append to context menut titles that are truncated.
 NSString* const kContextMenuEllipsis = @"…";
-
-// Desired width and height of favicon.
-const CGFloat kFaviconWidthHeight = 24;
 
 }  // namespace
 
@@ -330,7 +328,7 @@ const CGFloat kFaviconWidthHeight = 24;
           IOSChromeFaviconLoaderFactory::GetForBrowserState(
               self.browser->GetBrowserState());
       faviconLoader->FaviconForPageUrl(
-          linkURL, kFaviconWidthHeight, kFaviconWidthHeight,
+          linkURL, kDesiredSmallFaviconSizePt, kDesiredSmallFaviconSizePt,
           /*fallback_to_google_server=*/false,
           ^(FaviconAttributes* attributes) {
             [weakPreview configureFaviconWithAttributes:attributes];

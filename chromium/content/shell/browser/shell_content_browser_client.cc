@@ -5,11 +5,11 @@
 #include "content/shell/browser/shell_content_browser_client.h"
 
 #include <stddef.h>
+
 #include <utility>
 
 #include "base/base_switches.h"
 #include "base/command_line.h"
-#include "base/cxx17_backports.h"
 #include "base/feature_list.h"
 #include "base/files/file.h"
 #include "base/files/file_util.h"
@@ -20,6 +20,9 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "cc/base/switches.h"
+#include "components/custom_handlers/protocol_handler_registry.h"
+#include "components/custom_handlers/protocol_handler_throttle.h"
+#include "components/custom_handlers/simple_protocol_handler_registry_factory.h"
 #include "components/metrics/client_info.h"
 #include "components/metrics/metrics_service.h"
 #include "components/metrics/metrics_state_manager.h"
@@ -51,7 +54,6 @@
 #include "content/shell/browser/shell_browser_context.h"
 #include "content/shell/browser/shell_browser_main_parts.h"
 #include "content/shell/browser/shell_devtools_manager_delegate.h"
-#include "content/shell/browser/shell_identity_dialog_controller.h"
 #include "content/shell/browser/shell_paths.h"
 #include "content/shell/browser/shell_quota_permission_context.h"
 #include "content/shell/browser/shell_web_contents_view_delegate_creator.h"
@@ -269,6 +271,37 @@ ShellContentBrowserClient::CreateBrowserMainParts(
   return browser_main_parts;
 }
 
+bool ShellContentBrowserClient::HasCustomSchemeHandler(
+    content::BrowserContext* browser_context,
+    const std::string& scheme) {
+  if (custom_handlers::ProtocolHandlerRegistry* protocol_handler_registry =
+          custom_handlers::SimpleProtocolHandlerRegistryFactory::
+              GetForBrowserContext(browser_context)) {
+    return protocol_handler_registry->IsHandledProtocol(scheme);
+  }
+  return false;
+}
+
+std::vector<std::unique_ptr<blink::URLLoaderThrottle>>
+ShellContentBrowserClient::CreateURLLoaderThrottles(
+    const network::ResourceRequest& request,
+    BrowserContext* browser_context,
+    const base::RepeatingCallback<WebContents*()>& wc_getter,
+    NavigationUIData* navigation_ui_data,
+    int frame_tree_node_id) {
+  std::vector<std::unique_ptr<blink::URLLoaderThrottle>> result;
+
+  auto* factory = custom_handlers::SimpleProtocolHandlerRegistryFactory::
+      GetForBrowserContext(browser_context);
+  // null in unit tests.
+  if (factory) {
+    result.push_back(
+        std::make_unique<custom_handlers::ProtocolHandlerThrottle>(*factory));
+  }
+
+  return result;
+}
+
 bool ShellContentBrowserClient::IsHandledURL(const GURL& url) {
   if (!url.is_valid())
     return false;
@@ -302,8 +335,7 @@ void ShellContentBrowserClient::AppendExtraCommandLineSwitches(
   };
 
   command_line->CopySwitchesFrom(*base::CommandLine::ForCurrentProcess(),
-                                 kForwardSwitches,
-                                 base::size(kForwardSwitches));
+                                 kForwardSwitches, std::size(kForwardSwitches));
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -495,6 +527,10 @@ ShellContentBrowserClient::GetSandboxedStorageServiceDataDirectory() {
   return browser_context()->GetPath();
 }
 
+base::FilePath ShellContentBrowserClient::GetFirstPartySetsDirectory() {
+  return browser_context()->GetPath();
+}
+
 std::string ShellContentBrowserClient::GetUserAgent() {
   return GetShellUserAgent();
 }
@@ -618,11 +654,6 @@ bool ShellContentBrowserClient::HasErrorPage(int http_status_code) {
   return http_status_code >= 400 && http_status_code < 600;
 }
 
-std::unique_ptr<IdentityRequestDialogController>
-ShellContentBrowserClient::CreateIdentityRequestDialogController() {
-  return std::make_unique<ShellIdentityDialogController>();
-}
-
 void ShellContentBrowserClient::CreateFeatureListAndFieldTrials() {
   local_state_ = CreateLocalState();
   SetUpFieldTrials();
@@ -705,13 +736,12 @@ void ShellContentBrowserClient::OnNetworkServiceCreated(
   // using `MockCertVerifier` (otherwise CT validation would fail due to the
   // empty log list).
   if (g_enable_expect_ct_for_testing) {
+    base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
     network_service->UpdateCtLogList(
-        std::vector<network::mojom::CTLogInfoPtr>(), base::Time::Now());
+        std::vector<network::mojom::CTLogInfoPtr>(), base::Time::Now(),
+        run_loop.QuitClosure());
+    run_loop.Run();
   }
-
-  // Network service receives an empty First-Party Sets file when component
-  // updater is disabled.
-  network_service->SetFirstPartySets(base::File());
 }
 
 }  // namespace content

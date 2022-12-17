@@ -17,7 +17,6 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/rand_util.h"
 #include "base/task/bind_post_task.h"
-#include "base/task/post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/task_runner_util.h"
 #include "base/task/thread_pool.h"
@@ -213,7 +212,6 @@ void SCTAuditingHandler::DeserializeData(const std::string& serialized) {
     return;
   }
 
-  size_t num_reporters_deserialized = 0u;
   for (base::Value& sct_entry : value->GetListDeprecated()) {
     if (!sct_entry.is_dict()) {
       continue;
@@ -275,7 +273,6 @@ void SCTAuditingHandler::DeserializeData(const std::string& serialized) {
 
     AddReporter(cache_key, std::move(audit_report), std::move(sct_metadata),
                 std::move(backoff_entry));
-    ++num_reporters_deserialized;
   }
   // TODO(crbug.com/1144205): Add metrics for number of reporters deserialized.
 }
@@ -301,26 +298,13 @@ void SCTAuditingHandler::AddReporter(
     return;
   }
 
-  // Get the URLs, traffic annotations, and timing parameters as configured on
-  // the SCTAuditingCache.
-  auto* sct_auditing_cache =
-      owner_network_context_->network_service()->sct_auditing_cache();
-  auto log_expected_ingestion_delay =
-      sct_auditing_cache->log_expected_ingestion_delay();
-  auto log_max_ingestion_random_delay =
-      sct_auditing_cache->log_max_ingestion_random_delay();
-  auto report_uri = sct_auditing_cache->report_uri();
-  auto hashdance_lookup_uri = sct_auditing_cache->hashdance_lookup_uri();
-  auto traffic_annotation = sct_auditing_cache->traffic_annotation();
-  auto hashdance_traffic_annotation =
-      sct_auditing_cache->hashdance_traffic_annotation();
-
   auto reporter = std::make_unique<SCTAuditingReporter>(
       owner_network_context_, reporter_key, std::move(report),
       mode_ == mojom::SCTAuditingMode::kHashdance, std::move(sct_metadata),
-      GetURLLoaderFactory(), log_expected_ingestion_delay,
-      log_max_ingestion_random_delay, report_uri, hashdance_lookup_uri,
-      traffic_annotation, hashdance_traffic_annotation,
+      owner_network_context_->network_service()
+          ->sct_auditing_cache()
+          ->GetConfiguration(),
+      GetURLLoaderFactory(),
       base::BindRepeating(&SCTAuditingHandler::OnReporterStateUpdated,
                           GetWeakPtr()),
       base::BindOnce(&SCTAuditingHandler::OnReporterFinished, GetWeakPtr()),
@@ -372,7 +356,7 @@ void SCTAuditingHandler::SetMode(mojom::SCTAuditingMode mode) {
   // processes can fail to report metrics during shutdown). The timer should
   // only be running if SCT auditing is enabled.
   if (mode != mojom::SCTAuditingMode::kDisabled) {
-    histogram_timer_.Start(FROM_HERE, base::Hours(1), this,
+    histogram_timer_.Start(FROM_HERE, hwm_metrics_period_, this,
                            &SCTAuditingHandler::ReportHWMMetrics);
   } else {
     histogram_timer_.Stop();

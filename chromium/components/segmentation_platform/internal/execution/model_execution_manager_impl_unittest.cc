@@ -18,31 +18,34 @@
 #include "base/test/simple_test_clock.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
-#include "components/optimization_guide/core/test_optimization_guide_model_provider.h"
 #include "components/optimization_guide/proto/models.pb.h"
 #include "components/segmentation_platform/internal/database/metadata_utils.h"
 #include "components/segmentation_platform/internal/database/mock_signal_database.h"
 #include "components/segmentation_platform/internal/database/signal_database.h"
 #include "components/segmentation_platform/internal/database/test_segment_info_database.h"
-#include "components/segmentation_platform/internal/execution/feature_aggregator.h"
 #include "components/segmentation_platform/internal/execution/feature_list_query_processor.h"
-#include "components/segmentation_platform/internal/execution/mock_feature_aggregator.h"
+#include "components/segmentation_platform/internal/execution/mock_model_provider.h"
 #include "components/segmentation_platform/internal/execution/model_execution_manager.h"
 #include "components/segmentation_platform/internal/execution/model_execution_status.h"
-#include "components/segmentation_platform/internal/execution/segmentation_model_handler.h"
 #include "components/segmentation_platform/internal/proto/aggregation.pb.h"
 #include "components/segmentation_platform/internal/proto/model_metadata.pb.h"
 #include "components/segmentation_platform/internal/proto/types.pb.h"
+#include "components/segmentation_platform/public/model_provider.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using ::base::test::RunOnceCallback;
 using testing::_;
+using testing::Invoke;
 using testing::Return;
 using testing::SaveArg;
 using testing::SetArgReferee;
 
 namespace segmentation_platform {
+namespace {
+
+const int64_t kModelVersion = 123;
+
 using Sample = SignalDatabase::Sample;
 
 class MockSegmentInfoDatabase : public test::TestSegmentInfoDatabase {
@@ -75,37 +78,15 @@ class MockSegmentInfoDatabase : public test::TestSegmentInfoDatabase {
               (override));
 };
 
-class MockSegmentationModelHandler : public SegmentationModelHandler {
- public:
-  MockSegmentationModelHandler(
-      optimization_guide::OptimizationGuideModelProvider* model_provider,
-      scoped_refptr<base::SequencedTaskRunner> background_task_runner,
-      optimization_guide::proto::OptimizationTarget optimization_target,
-      const SegmentationModelHandler::ModelUpdatedCallback&
-          model_updated_callback)
-      : SegmentationModelHandler(model_provider,
-                                 background_task_runner,
-                                 optimization_target,
-                                 model_updated_callback,
-                                 absl::nullopt) {}
-
-  MOCK_METHOD(void,
-              ExecuteModelWithInput,
-              (base::OnceCallback<void(const absl::optional<float>&)> callback,
-               const std::vector<float>& input),
-              (override));
-
-  MOCK_METHOD(bool, ModelAvailable, (), (const override));
-};
+}  // namespace
 
 class ModelExecutionManagerTest : public testing::Test {
  public:
-  ModelExecutionManagerTest() = default;
+  ModelExecutionManagerTest()
+      : model_provider_factory_(&model_provider_data_) {}
   ~ModelExecutionManagerTest() override = default;
 
   void SetUp() override {
-    optimization_guide_model_provider_ = std::make_unique<
-        optimization_guide::TestOptimizationGuideModelProvider>();
     segment_database_ = std::make_unique<test::TestSegmentInfoDatabase>();
     signal_database_ = std::make_unique<MockSignalDatabase>();
     clock_.SetNow(base::Time::Now());
@@ -113,7 +94,7 @@ class ModelExecutionManagerTest : public testing::Test {
 
   void TearDown() override {
     model_execution_manager_.reset();
-    // Allow for the SegmentationModelExecutor owned by SegmentationModelHandler
+    // Allow for the SegmentationModelExecutor owned by ModelProvider
     // to be destroyed.
     RunUntilIdle();
   }
@@ -121,107 +102,30 @@ class ModelExecutionManagerTest : public testing::Test {
   void CreateModelExecutionManager(
       std::vector<OptimizationTarget> segment_ids,
       const ModelExecutionManager::SegmentationModelUpdatedCallback& callback) {
-    auto feature_aggregator = std::make_unique<MockFeatureAggregator>();
-    feature_aggregator_ = feature_aggregator.get();
-    feature_list_query_processor_ = std::make_unique<FeatureListQueryProcessor>(
-        signal_database_.get(), std::move(feature_aggregator));
     model_execution_manager_ = std::make_unique<ModelExecutionManagerImpl>(
-        segment_ids,
-        base::BindRepeating(&ModelExecutionManagerTest::CreateModelHandler,
-                            base::Unretained(this)),
-        &clock_, segment_database_.get(), signal_database_.get(),
-        feature_list_query_processor_.get(), callback);
-  }
-
-  std::unique_ptr<SegmentationModelHandler> CreateModelHandler(
-      optimization_guide::proto::OptimizationTarget segment_id,
-      const SegmentationModelHandler::ModelUpdatedCallback&
-          model_updated_callback) {
-    auto handler = std::make_unique<MockSegmentationModelHandler>(
-        optimization_guide_model_provider_.get(),
-        task_environment_.GetMainThreadTaskRunner(), segment_id,
-        model_updated_callback);
-    model_handlers_.emplace(std::make_pair(segment_id, handler.get()));
-    model_handlers_callbacks_.emplace(
-        std::make_pair(segment_id, model_updated_callback));
-    return handler;
+        segment_ids, &model_provider_factory_, &clock_, segment_database_.get(),
+        callback);
   }
 
   void RunUntilIdle() { task_environment_.RunUntilIdle(); }
 
-  void ExecuteModel(const std::pair<float, ModelExecutionStatus>& expected) {
-    base::RunLoop loop;
-    model_execution_manager_->ExecuteModel(
-        OptimizationTarget::OPTIMIZATION_TARGET_SEGMENTATION_NEW_TAB,
-        base::BindOnce(&ModelExecutionManagerTest::OnExecutionCallback,
-                       base::Unretained(this), loop.QuitClosure(), expected));
-    loop.Run();
-  }
-
-  void OnExecutionCallback(
-      base::RepeatingClosure closure,
-      const std::pair<float, ModelExecutionStatus>& expected,
-      const std::pair<float, ModelExecutionStatus>& actual) {
-    EXPECT_EQ(expected.second, actual.second);
-    EXPECT_NEAR(expected.first, actual.first, 1e-5);
-    std::move(closure).Run();
-  }
-
-  MockSegmentationModelHandler& FindHandler(
+  MockModelProvider& FindHandler(
       optimization_guide::proto::OptimizationTarget segment_id) {
-    return *(*model_handlers_.find(segment_id)).second;
+    return *(*model_provider_data_.model_providers.find(segment_id)).second;
   }
 
-  base::Time StartTime(base::TimeDelta bucket_duration, int64_t bucket_count) {
-    return clock_.Now() - bucket_duration * bucket_count;
-  }
-
+ protected:
   base::test::TaskEnvironment task_environment_;
 
-  std::unique_ptr<optimization_guide::TestOptimizationGuideModelProvider>
-      optimization_guide_model_provider_;
-  std::map<OptimizationTarget, MockSegmentationModelHandler*> model_handlers_;
-  std::map<OptimizationTarget, SegmentationModelHandler::ModelUpdatedCallback>
-      model_handlers_callbacks_;
+  TestModelProviderFactory::Data model_provider_data_;
+  TestModelProviderFactory model_provider_factory_;
+
   base::SimpleTestClock clock_;
   std::unique_ptr<test::TestSegmentInfoDatabase> segment_database_;
   std::unique_ptr<MockSignalDatabase> signal_database_;
-  raw_ptr<MockFeatureAggregator> feature_aggregator_;
 
-  std::unique_ptr<FeatureListQueryProcessor> feature_list_query_processor_;
   std::unique_ptr<ModelExecutionManagerImpl> model_execution_manager_;
 };
-
-TEST_F(ModelExecutionManagerTest, HandlerNotRegistered) {
-  CreateModelExecutionManager({}, base::DoNothing());
-  EXPECT_DCHECK_DEATH(
-      ExecuteModel(std::make_pair(0, ModelExecutionStatus::kExecutionError)));
-}
-
-TEST_F(ModelExecutionManagerTest, MetadataTests) {
-  auto segment_id =
-      OptimizationTarget::OPTIMIZATION_TARGET_SEGMENTATION_NEW_TAB;
-  CreateModelExecutionManager({segment_id}, base::DoNothing());
-  ExecuteModel(std::make_pair(0, ModelExecutionStatus::kInvalidMetadata));
-
-  segment_database_->SetBucketDuration(segment_id, 14,
-                                       proto::TimeUnit::UNKNOWN_TIME_UNIT);
-  ExecuteModel(std::make_pair(0, ModelExecutionStatus::kInvalidMetadata));
-}
-
-TEST_F(ModelExecutionManagerTest, ModelNotReady) {
-  auto segment_id =
-      OptimizationTarget::OPTIMIZATION_TARGET_SEGMENTATION_NEW_TAB;
-  CreateModelExecutionManager({segment_id}, base::DoNothing());
-
-  segment_database_->SetBucketDuration(segment_id, 3, proto::TimeUnit::HOUR);
-
-  // When the model is unavailable, the execution should fail.
-  EXPECT_CALL(FindHandler(segment_id), ModelAvailable())
-      .WillRepeatedly(Return(false));
-
-  ExecuteModel(std::make_pair(0, ModelExecutionStatus::kExecutionError));
-}
 
 TEST_F(ModelExecutionManagerTest, OnSegmentationModelUpdatedInvalidMetadata) {
   // Use a MockSegmentInfoDatabase for this test in particular, to verify that
@@ -246,7 +150,8 @@ TEST_F(ModelExecutionManagerTest, OnSegmentationModelUpdatedInvalidMetadata) {
   // SegmentInfoDatabase, nor invokes the callback.
   EXPECT_CALL(*mock_segment_database_ptr, GetSegmentInfo(_, _)).Times(0);
   EXPECT_CALL(callback, Run(_)).Times(0);
-  model_handlers_callbacks_[segment_id].Run(segment_id, metadata);
+  model_provider_data_.model_providers_callbacks[segment_id].Run(
+      segment_id, metadata, kModelVersion);
 }
 
 TEST_F(ModelExecutionManagerTest, OnSegmentationModelUpdatedNoOldMetadata) {
@@ -261,7 +166,8 @@ TEST_F(ModelExecutionManagerTest, OnSegmentationModelUpdatedNoOldMetadata) {
   metadata.set_bucket_duration(42u);
   metadata.set_time_unit(proto::TimeUnit::DAY);
   EXPECT_CALL(callback, Run(_)).WillOnce(SaveArg<0>(&segment_info));
-  model_handlers_callbacks_[segment_id].Run(segment_id, metadata);
+  model_provider_data_.model_providers_callbacks[segment_id].Run(
+      segment_id, metadata, kModelVersion);
 
   // Verify that the resulting callback was invoked correctly.
   EXPECT_EQ(segment_id, segment_info.segment_id());
@@ -279,6 +185,10 @@ TEST_F(ModelExecutionManagerTest, OnSegmentationModelUpdatedNoOldMetadata) {
 
   // The metadata should have been stored.
   EXPECT_EQ(42u, segment_info_from_db->model_metadata().bucket_duration());
+
+  // Model update time should be updated.
+  EXPECT_EQ(clock_.Now().ToDeltaSinceWindowsEpoch().InSeconds(),
+            segment_info_from_db->model_update_time_s());
 }
 
 TEST_F(ModelExecutionManagerTest,
@@ -307,11 +217,19 @@ TEST_F(ModelExecutionManagerTest,
   EXPECT_EQ(2, segment_info_from_db_1->prediction_result().result());
   // Verify the metadata features have been stored correctly.
   EXPECT_EQ(proto::SignalType::USER_ACTION,
-            segment_info_from_db_1->model_metadata().features(0).type());
-  EXPECT_EQ("hello",
-            segment_info_from_db_1->model_metadata().features(0).name());
+            segment_info_from_db_1->model_metadata()
+                .input_features(0)
+                .uma_feature()
+                .type());
+  EXPECT_EQ("hello", segment_info_from_db_1->model_metadata()
+                         .input_features(0)
+                         .uma_feature()
+                         .name());
   EXPECT_EQ(proto::Aggregation::BUCKETED_COUNT,
-            segment_info_from_db_1->model_metadata().features(0).aggregation());
+            segment_info_from_db_1->model_metadata()
+                .input_features(0)
+                .uma_feature()
+                .aggregation());
 
   // Create segment info that does not match.
   proto::SegmentInfo segment_info;
@@ -331,7 +249,8 @@ TEST_F(ModelExecutionManagerTest,
   // Invoke the callback and store the resulting invocation of the outer
   // callback for verification.
   EXPECT_CALL(callback, Run(_)).WillOnce(SaveArg<0>(&segment_info));
-  model_handlers_callbacks_[segment_id].Run(segment_id, metadata);
+  model_provider_data_.model_providers_callbacks[segment_id].Run(
+      segment_id, metadata, kModelVersion);
 
   // Should now have the metadata from the new proto.
   EXPECT_EQ(segment_id, segment_info.segment_id());
@@ -356,6 +275,8 @@ TEST_F(ModelExecutionManagerTest,
   segment_database_->GetSegmentInfo(segment_id, db_callback_2.Get());
   EXPECT_TRUE(segment_info_from_db_2.has_value());
   EXPECT_EQ(segment_id, segment_info_from_db_2->segment_id());
+  EXPECT_EQ(clock_.Now().ToDeltaSinceWindowsEpoch().InSeconds(),
+            segment_info_from_db_2->model_update_time_s());
 
   // The metadata should have been updated.
   EXPECT_EQ(42u, segment_info_from_db_2->model_metadata().bucket_duration());

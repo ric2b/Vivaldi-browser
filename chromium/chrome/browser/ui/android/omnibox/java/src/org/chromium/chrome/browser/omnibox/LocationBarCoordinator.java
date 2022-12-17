@@ -145,6 +145,7 @@ public final class LocationBarCoordinator implements LocationBar, NativeInitObse
      * @param merchantTrustSignalsCoordinatorSupplier Supplier of {@link
      *         MerchantTrustSignalsCoordinator}. Can be null if a store icon shouldn't be shown,
      *         such as when called from a search activity.
+     * @param reportExceptionCallback A {@link Callback} to report exceptions.
      */
     public LocationBarCoordinator(View locationBarLayout, View autocompleteAnchorView,
             ObservableSupplier<Profile> profileObservableSupplier,
@@ -169,7 +170,8 @@ public final class LocationBarCoordinator implements LocationBar, NativeInitObse
             @Nullable Supplier<MerchantTrustSignalsCoordinator>
                     merchantTrustSignalsCoordinatorSupplier,
             @NonNull OmniboxPedalDelegate omniboxPedalDelegate,
-            BrowserStateBrowserControlsVisibilityDelegate browserControlsVisibilityDelegate) {
+            BrowserStateBrowserControlsVisibilityDelegate browserControlsVisibilityDelegate,
+            Callback<Throwable> reportExceptionCallback) {
         mLocationBarLayout = (LocationBarLayout) locationBarLayout;
         mWindowDelegate = windowDelegate;
         mWindowAndroid = windowAndroid;
@@ -192,7 +194,8 @@ public final class LocationBarCoordinator implements LocationBar, NativeInitObse
         mUrlCoordinator =
                 new UrlBarCoordinator((UrlBar) mUrlBar, windowDelegate, actionModeCallback,
                         mCallbackController.makeCancelable(mLocationBarMediator::onUrlFocusChange),
-                        mLocationBarMediator, windowAndroid.getKeyboardDelegate(), isIncognito);
+                        mLocationBarMediator, windowAndroid.getKeyboardDelegate(), isIncognito,
+                        reportExceptionCallback);
         mAutocompleteCoordinator = new AutocompleteCoordinator(mLocationBarLayout, this, this,
                 mUrlCoordinator, modalDialogManagerSupplier, activityTabSupplier,
                 shareDelegateSupplier, locationBarDataProvider, profileObservableSupplier,
@@ -297,6 +300,7 @@ public final class LocationBarCoordinator implements LocationBar, NativeInitObse
 
         mTemplateUrlServiceSupplier.set(TemplateUrlServiceFactory.get());
         mLocationBarMediator.onFinishNativeInitialization();
+        mUrlCoordinator.onFinishNativeInitialization();
         mAutocompleteCoordinator.onNativeInitialized();
         mStatusCoordinator.onNativeInitialized();
         mNativeInitialized = true;
@@ -323,6 +327,11 @@ public final class LocationBarCoordinator implements LocationBar, NativeInitObse
     @Override
     public void setShowTitle(boolean showTitle) {
         mLocationBarMediator.setShowTitle(showTitle);
+    }
+
+    @Override
+    public void requestUrlBarAccessibilityFocus() {
+        mUrlCoordinator.requestAccessibilityFocus();
     }
 
     @Override

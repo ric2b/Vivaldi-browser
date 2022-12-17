@@ -120,7 +120,7 @@ public class TabSwitcherActionMenuCoordinator {
             }
         };
 
-        anchorView.setDelegate(delegate);
+        anchorView.setDelegate(delegate, false);
         anchorView.showMenu();
     }
 
@@ -135,9 +135,10 @@ public class TabSwitcherActionMenuCoordinator {
         itemList.add(buildListItemByMenuItemType(MenuItemType.CLOSE_TAB));
         itemList.add(buildListItemByMenuItemType(MenuItemType.DIVIDER));
         itemList.add(buildListItemByMenuItemType(MenuItemType.NEW_TAB));
-        itemList.add(buildListItemByMenuItemType(MenuItemType.NEW_INCOGNITO_TAB));
+        // Vivaldi
         if (SharedPreferencesManager.getInstance().readBoolean("enable_tab_stack", true))
             itemList.add(buildListItemByMenuItemType(MenuItemType.VIVALDI_CREATE_TAB_STACK));
+        itemList.add(buildListItemByMenuItemType(MenuItemType.NEW_INCOGNITO_TAB));
         return itemList;
     }
 

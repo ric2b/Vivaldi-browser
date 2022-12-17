@@ -372,7 +372,7 @@ void CoreTabHelper::DoSearchByImageInNewTab(
       TemplateURLServiceFactory::GetForProfile(profile);
   DCHECK(template_url_service);
   const TemplateURL* const default_provider =
-      template_url_service->GetDefaultSearchProvider();
+      template_url_service->GetDefaultSearchProvider(TemplateURLService::kDefaultSearchImage);
   DCHECK(default_provider);
 
   TemplateURLRef::SearchTermsArgs search_args =

@@ -17,6 +17,7 @@
 #include "base/scoped_observation.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread.h"
+#include "base/time/time.h"
 #include "chromeos/services/assistant/assistant_host.h"
 #include "chromeos/services/assistant/assistant_manager_service.h"
 #include "chromeos/services/assistant/assistant_settings_impl.h"
@@ -137,7 +138,6 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE) AssistantManagerServiceImpl
   // Assistant overrides:
   void StartEditReminderInteraction(const std::string& client_id) override;
   void StartScreenContextInteraction(
-      ax::mojom::AssistantStructurePtr assistant_structure,
       const std::vector<uint8_t>& assistant_screenshot) override;
   void StartTextInteraction(const std::string& query,
                             AssistantQuerySource source,

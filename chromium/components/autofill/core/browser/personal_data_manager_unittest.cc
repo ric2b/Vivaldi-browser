@@ -1071,55 +1071,6 @@ TEST_F(PersonalDataManagerTest, AddUpdateRemoveCreditCards) {
   ExpectSameElements(cards, personal_data_->GetCreditCards());
 }
 
-TEST_F(PersonalDataManagerTest, DoNotAddGoogleIssuedCreditCardExpOff) {
-  base::test::ScopedFeatureList scoped_features;
-  scoped_features.InitAndDisableFeature(
-      features::kAutofillEnableGoogleIssuedCard);
-  // Set up the credit cards.
-  CreditCard credit_card0 = test::GetMaskedServerCard();
-  credit_card0.set_card_issuer(CreditCard::Issuer::ISSUER_UNKNOWN);
-  CreditCard credit_card1 = test::GetMaskedServerCardAmex();
-  credit_card1.set_card_issuer(CreditCard::Issuer::GOOGLE);
-  // Add the above cards to server_cards.
-  std::vector<CreditCard> server_cards;
-  server_cards.push_back(credit_card0);
-  server_cards.push_back(credit_card1);
-  SetServerCards(server_cards);
-
-  personal_data_->Refresh();
-  WaitForOnPersonalDataChanged();
-
-  std::vector<CreditCard*> cards;
-  // Since the flag is off, only the card with ISSUER_UNKNOWN should be
-  // returned.
-  cards.push_back(&credit_card0);
-  ExpectSameElements(cards, personal_data_->GetCreditCards());
-}
-
-TEST_F(PersonalDataManagerTest, AddGoogleIssuedCreditCard) {
-  base::test::ScopedFeatureList scoped_features;
-  scoped_features.InitAndEnableFeature(
-      features::kAutofillEnableGoogleIssuedCard);
-  // Set up the credit cards.
-  CreditCard credit_card0 = test::GetMaskedServerCard();
-  credit_card0.set_card_issuer(CreditCard::Issuer::ISSUER_UNKNOWN);
-  CreditCard credit_card1 = test::GetMaskedServerCardAmex();
-  credit_card1.set_card_issuer(CreditCard::Issuer::GOOGLE);
-  // Add the above cards to server_cards.
-  std::vector<CreditCard> server_cards;
-  server_cards.push_back(credit_card0);
-  server_cards.push_back(credit_card1);
-  SetServerCards(server_cards);
-
-  personal_data_->Refresh();
-  WaitForOnPersonalDataChanged();
-
-  std::vector<CreditCard*> cards;
-  cards.push_back(&credit_card0);
-  cards.push_back(&credit_card1);
-  ExpectSameElements(cards, personal_data_->GetCreditCards());
-}
-
 // Test that a new credit card has its basic information set.
 TEST_F(PersonalDataManagerTest, AddCreditCard_BasicInformation) {
   // Create the test clock and set the time to a specific value.
@@ -4979,6 +4930,35 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_OncePerVersion) {
 
   // The two duplicate profiles should still be present.
   EXPECT_EQ(2U, personal_data_->GetProfiles().size());
+}
+
+// Tests that settings-inaccessible profile values are removed from every stored
+// profile.
+TEST_F(PersonalDataManagerTest, RemoveInaccessibleProfileValues) {
+  base::test::ScopedFeatureList feature;
+  feature.InitAndEnableFeature(
+      features::kAutofillRemoveInaccessibleProfileValues);
+
+  // Add a German and a US profile.
+  AutofillProfile profile0(base::GenerateGUID(), test::kEmptyOrigin);
+  test::SetProfileInfo(&profile0, "Marion", "Mitchell", "Morrison",
+                       "johnwayne@me.xyz", "Fox", "123 Zoo St.", "unit 5",
+                       "Hollywood", "CA", "91601", "DE", "12345678910");
+  AutofillProfile profile1(base::GenerateGUID(), test::kEmptyOrigin);
+  test::SetProfileInfo(&profile1, "Josephine", "Alicia", "Saenz",
+                       "joewayne@me.xyz", "Fox", "903 Apple Ct.", nullptr,
+                       "Orlando", "FL", "32801", "US", "19482937549");
+  AddProfileToPersonalDataManager(profile0);
+  AddProfileToPersonalDataManager(profile1);
+
+  personal_data_->personal_data_manager_cleaner_for_testing()
+      ->RemoveInaccessibleProfileValuesForTesting();
+  WaitForOnPersonalDataChanged();
+
+  // profile0 should have it's state removed, while the US profile should remain
+  // unchanged.
+  profile0.SetRawInfo(ADDRESS_HOME_STATE, u"");
+  ExpectSameElements({&profile0, &profile1}, personal_data_->GetProfiles());
 }
 
 // Tests that DeleteDisusedAddresses only deletes the addresses that are

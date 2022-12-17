@@ -7,7 +7,6 @@
 #include <utility>
 #include <vector>
 
-#include "base/cxx17_backports.h"
 #include "base/feature_list.h"
 #include "base/no_destructor.h"
 #include "base/strings/strcat.h"
@@ -79,6 +78,8 @@ ClientHintToPolicyFeatureMap MakeClientHintToPolicyFeatureMap() {
        mojom::PermissionsPolicyFeature::kClientHintUAWoW64},
       {network::mojom::WebClientHintsType::kPartitionedCookies,
        mojom::PermissionsPolicyFeature::kClientHintPartitionedCookies},
+      {network::mojom::WebClientHintsType::kSaveData,
+       mojom::PermissionsPolicyFeature::kClientHintSaveData},
   };
 }
 
@@ -114,10 +115,11 @@ const char* const kWebEffectiveConnectionTypeMapping[] = {
 };
 
 const size_t kWebEffectiveConnectionTypeMappingCount =
-    base::size(kWebEffectiveConnectionTypeMapping);
+    std::size(kWebEffectiveConnectionTypeMapping);
 
 bool IsClientHintSentByDefault(network::mojom::WebClientHintsType type) {
   switch (type) {
+    case network::mojom::WebClientHintsType::kSaveData:
     case network::mojom::WebClientHintsType::kUA:
     case network::mojom::WebClientHintsType::kUAMobile:
       return true;

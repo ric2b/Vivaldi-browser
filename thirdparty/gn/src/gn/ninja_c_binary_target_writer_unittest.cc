@@ -53,7 +53,11 @@ TEST_F(NinjaCBinaryTargetWriterTest, SourceSet) {
         "target_output_name = bar\n"
         "\n"
         "build obj/foo/bar.input1.o: cxx ../../foo/input1.cc\n"
+        "  source_file_part = input1.cc\n"
+        "  source_name_part = input1\n"
         "build obj/foo/bar.input2.o: cxx ../../foo/input2.cc\n"
+        "  source_file_part = input2.cc\n"
+        "  source_name_part = input2\n"
         "\n"
         "build obj/foo/bar.stamp: stamp obj/foo/bar.input1.o "
         "obj/foo/bar.input2.o ../../foo/input3.o ../../foo/input4.obj\n";
@@ -204,6 +208,8 @@ TEST_F(NinjaCBinaryTargetWriterTest, StaticLibrary) {
       "target_output_name = libbar\n"
       "\n"
       "build obj/foo/libbar.input1.o: cxx ../../foo/input1.cc\n"
+      "  source_file_part = input1.cc\n"
+      "  source_name_part = input1\n"
       "\n"
       "build obj/foo/libbar.a: alink obj/foo/libbar.input1.o\n"
       "  arflags = --asdf\n"
@@ -250,6 +256,8 @@ TEST_F(NinjaCBinaryTargetWriterTest, CompleteStaticLibrary) {
         "target_output_name = libbar\n"
         "\n"
         "build obj/foo/libbar.input1.o: cxx ../../foo/input1.cc\n"
+        "  source_file_part = input1.cc\n"
+        "  source_name_part = input1\n"
         "\n"
         "build obj/foo/libbar.a: alink obj/foo/libbar.input1.o "
         "obj/foo/libbaz.input2.o || obj/foo/libbaz.a\n"
@@ -279,6 +287,8 @@ TEST_F(NinjaCBinaryTargetWriterTest, CompleteStaticLibrary) {
         "target_output_name = libbar\n"
         "\n"
         "build obj/foo/libbar.input1.o: cxx ../../foo/input1.cc\n"
+        "  source_file_part = input1.cc\n"
+        "  source_name_part = input1\n"
         "\n"
         "build obj/foo/libbar.a: alink obj/foo/libbar.input1.o "
         "|| obj/foo/libbaz.a\n"
@@ -330,8 +340,12 @@ TEST_F(NinjaCBinaryTargetWriterTest, OutputExtensionAndInputDeps) {
       "\n"
       "build obj/foo/libshlib.input1.o: cxx ../../foo/input1.cc"
       " || obj/foo/action.stamp\n"
+      "  source_file_part = input1.cc\n"
+      "  source_name_part = input1\n"
       "build obj/foo/libshlib.input2.o: cxx ../../foo/input2.cc"
       " || obj/foo/action.stamp\n"
+      "  source_file_part = input2.cc\n"
+      "  source_name_part = input2\n"
       "\n"
       "build ./libshlib.so.6: solink obj/foo/libshlib.input1.o "
       // The order-only dependency here is stricly unnecessary since the
@@ -391,16 +405,18 @@ TEST_F(NinjaCBinaryTargetWriterTest, NoHardDepsToNoPublicHeaderTarget) {
       "target_out_dir = obj/foo\n"
       "target_output_name = gen_obj\n"
       "\n"
-      "build obj/out/Debug/gen_obj.generated.o: cxx generated.cc"
+      "build obj/BUILD_DIR/gen_obj.generated.o: cxx generated.cc"
       " || obj/foo/generate.stamp\n"
+      "  source_file_part = generated.cc\n"
+      "  source_name_part = generated\n"
       "\n"
-      "build obj/foo/gen_obj.stamp: stamp obj/out/Debug/gen_obj.generated.o"
+      "build obj/foo/gen_obj.stamp: stamp obj/BUILD_DIR/gen_obj.generated.o"
       // The order-only dependency here is strictly unnecessary since the
       // sources list this as an order-only dep.
       " || obj/foo/generate.stamp\n";
 
   std::string obj_str = obj_out.str();
-  EXPECT_EQ(obj_expected, obj_str);
+  EXPECT_EQ(std::string(obj_expected), obj_str);
 
   // A shared library depends on gen_obj, having corresponding header for
   // generated obj.
@@ -426,7 +442,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, NoHardDepsToNoPublicHeaderTarget) {
       "target_output_name = libgen_lib\n"
       "\n"
       "\n"
-      "build ./libgen_lib.so: solink obj/out/Debug/gen_obj.generated.o"
+      "build ./libgen_lib.so: solink obj/BUILD_DIR/gen_obj.generated.o"
       // The order-only dependency here is strictly unnecessary since
       // obj/out/Debug/gen_obj.generated.o has dependency to
       // obj/foo/gen_obj.stamp
@@ -467,6 +483,8 @@ TEST_F(NinjaCBinaryTargetWriterTest, NoHardDepsToNoPublicHeaderTarget) {
       "target_output_name = final_target\n"
       "\n"
       "build obj/foo/final_target.main.o: cxx ../../foo/main.cc\n"
+      "  source_file_part = main.cc\n"
+      "  source_name_part = main\n"
       "\n"
       "build ./final_target: link obj/foo/final_target.main.o"
       " ./libgen_lib.so\n"
@@ -613,7 +631,11 @@ TEST_F(NinjaCBinaryTargetWriterTest, EmptyOutputExtension) {
       "target_output_name = shlib\n"
       "\n"
       "build obj/foo/shlib.input1.o: cxx ../../foo/input1.cc\n"
+      "  source_file_part = input1.cc\n"
+      "  source_name_part = input1\n"
       "build obj/foo/shlib.input2.o: cxx ../../foo/input2.cc\n"
+      "  source_file_part = input2.cc\n"
+      "  source_name_part = input2\n"
       "\n"
       "build ./shlib: solink obj/foo/shlib.input1.o "
       "obj/foo/shlib.input2.o\n"
@@ -667,6 +689,8 @@ TEST_F(NinjaCBinaryTargetWriterTest, SourceSetDataDeps) {
       "target_output_name = inter\n"
       "\n"
       "build obj/foo/inter.inter.o: cxx ../../foo/inter.cc\n"
+      "  source_file_part = inter.cc\n"
+      "  source_name_part = inter\n"
       "\n"
       "build obj/foo/inter.stamp: stamp obj/foo/inter.inter.o || "
       "./data_target\n";
@@ -700,6 +724,8 @@ TEST_F(NinjaCBinaryTargetWriterTest, SourceSetDataDeps) {
       "target_output_name = exe\n"
       "\n"
       "build obj/foo/exe.final.o: cxx ../../foo/final.cc\n"
+      "  source_file_part = final.cc\n"
+      "  source_name_part = final\n"
       "\n"
       "build ./exe: link obj/foo/exe.final.o obj/foo/inter.inter.o || "
       "obj/foo/inter.stamp\n"
@@ -739,6 +765,8 @@ TEST_F(NinjaCBinaryTargetWriterTest, SharedLibraryModuleDefinitionFile) {
       "target_output_name = libbar\n"
       "\n"
       "build obj/foo/libbar.sources.o: cxx ../../foo/sources.cc\n"
+      "  source_file_part = sources.cc\n"
+      "  source_name_part = sources\n"
       "\n"
       "build ./libbar.so: solink obj/foo/libbar.sources.o | ../../foo/bar.def\n"
       "  ldflags = /DEF:../../foo/bar.def\n"
@@ -776,6 +804,8 @@ TEST_F(NinjaCBinaryTargetWriterTest, LoadableModule) {
       "target_output_name = libbar\n"
       "\n"
       "build obj/foo/libbar.sources.o: cxx ../../foo/sources.cc\n"
+      "  source_file_part = sources.cc\n"
+      "  source_name_part = sources\n"
       "\n"
       "build ./libbar.so: solink_module obj/foo/libbar.sources.o\n"
       "  ldflags =\n"
@@ -811,6 +841,8 @@ TEST_F(NinjaCBinaryTargetWriterTest, LoadableModule) {
       "target_output_name = exe\n"
       "\n"
       "build obj/foo/exe.final.o: cxx ../../foo/final.cc\n"
+      "  source_file_part = final.cc\n"
+      "  source_name_part = final\n"
       "\n"
       "build ./exe: link obj/foo/exe.final.o || ./libbar.so\n"
       "  ldflags =\n"
@@ -888,8 +920,12 @@ TEST_F(NinjaCBinaryTargetWriterTest, WinPrecompiledHeaders) {
         "\n"
         "build withpch/obj/foo/no_pch_target.input1.o: "
         "withpch_cxx ../../foo/input1.cc\n"
+        "  source_file_part = input1.cc\n"
+        "  source_name_part = input1\n"
         "build withpch/obj/foo/no_pch_target.input2.o: "
         "withpch_cc ../../foo/input2.c\n"
+        "  source_file_part = input2.c\n"
+        "  source_name_part = input2\n"
         "\n"
         "build withpch/obj/foo/no_pch_target.stamp: "
         "withpch_stamp withpch/obj/foo/no_pch_target.input1.o "
@@ -930,20 +966,28 @@ TEST_F(NinjaCBinaryTargetWriterTest, WinPrecompiledHeaders) {
         // Compile the precompiled source files with /Yc.
         "build withpch/obj/build/pch_target.precompile.c.o: "
         "withpch_cc ../../build/precompile.cc\n"
+        "  source_file_part = precompile.cc\n"
+        "  source_name_part = precompile\n"
         "  cflags_c = ${cflags_c} /Ycbuild/precompile.h\n"
         "\n"
         "build withpch/obj/build/pch_target.precompile.cc.o: "
         "withpch_cxx ../../build/precompile.cc\n"
+        "  source_file_part = precompile.cc\n"
+        "  source_name_part = precompile\n"
         "  cflags_cc = ${cflags_cc} /Ycbuild/precompile.h\n"
         "\n"
         "build withpch/obj/foo/pch_target.input1.o: "
         "withpch_cxx ../../foo/input1.cc | "
         // Explicit dependency on the PCH build step.
         "withpch/obj/build/pch_target.precompile.cc.o\n"
+        "  source_file_part = input1.cc\n"
+        "  source_name_part = input1\n"
         "build withpch/obj/foo/pch_target.input2.o: "
         "withpch_cc ../../foo/input2.c | "
         // Explicit dependency on the PCH build step.
         "withpch/obj/build/pch_target.precompile.c.o\n"
+        "  source_file_part = input2.c\n"
+        "  source_name_part = input2\n"
         "\n"
         "build withpch/obj/foo/pch_target.stamp: withpch_stamp "
         "withpch/obj/foo/pch_target.input1.o "
@@ -1022,8 +1066,12 @@ TEST_F(NinjaCBinaryTargetWriterTest, GCCPrecompiledHeaders) {
         "\n"
         "build withpch/obj/foo/no_pch_target.input1.o: "
         "withpch_cxx ../../foo/input1.cc\n"
+        "  source_file_part = input1.cc\n"
+        "  source_name_part = input1\n"
         "build withpch/obj/foo/no_pch_target.input2.o: "
         "withpch_cc ../../foo/input2.c\n"
+        "  source_file_part = input2.c\n"
+        "  source_name_part = input2\n"
         "\n"
         "build withpch/obj/foo/no_pch_target.stamp: "
         "withpch_stamp withpch/obj/foo/no_pch_target.input1.o "
@@ -1062,20 +1110,28 @@ TEST_F(NinjaCBinaryTargetWriterTest, GCCPrecompiledHeaders) {
         // Compile the precompiled sources with -x <lang>.
         "build withpch/obj/build/pch_target.precompile.h-c.gch: "
         "withpch_cc ../../build/precompile.h\n"
+        "  source_file_part = precompile.h\n"
+        "  source_name_part = precompile\n"
         "  cflags_c = -std=c99 -x c-header\n"
         "\n"
         "build withpch/obj/build/pch_target.precompile.h-cc.gch: "
         "withpch_cxx ../../build/precompile.h\n"
+        "  source_file_part = precompile.h\n"
+        "  source_name_part = precompile\n"
         "  cflags_cc = -x c++-header\n"
         "\n"
         "build withpch/obj/foo/pch_target.input1.o: "
         "withpch_cxx ../../foo/input1.cc | "
         // Explicit dependency on the PCH build step.
         "withpch/obj/build/pch_target.precompile.h-cc.gch\n"
+        "  source_file_part = input1.cc\n"
+        "  source_name_part = input1\n"
         "build withpch/obj/foo/pch_target.input2.o: "
         "withpch_cc ../../foo/input2.c | "
         // Explicit dependency on the PCH build step.
         "withpch/obj/build/pch_target.precompile.h-c.gch\n"
+        "  source_file_part = input2.c\n"
+        "  source_name_part = input2\n"
         "\n"
         "build withpch/obj/foo/pch_target.stamp: "
         "withpch_stamp withpch/obj/foo/pch_target.input1.o "
@@ -1140,8 +1196,12 @@ TEST_F(NinjaCBinaryTargetWriterTest, InputFiles) {
         "\n"
         "build obj/foo/bar.input1.o: cxx ../../foo/input1.cc"
         " | ../../foo/input.data\n"
+        "  source_file_part = input1.cc\n"
+        "  source_name_part = input1\n"
         "build obj/foo/bar.input2.o: cxx ../../foo/input2.cc"
         " | ../../foo/input.data\n"
+        "  source_file_part = input2.cc\n"
+        "  source_name_part = input2\n"
         "\n"
         "build obj/foo/bar.stamp: stamp obj/foo/bar.input1.o "
         "obj/foo/bar.input2.o\n";
@@ -1211,8 +1271,12 @@ TEST_F(NinjaCBinaryTargetWriterTest, InputFiles) {
         " ../../foo/input1.data ../../foo/input2.data\n"
         "build obj/foo/bar.input1.o: cxx ../../foo/input1.cc"
         " | obj/foo/bar.inputs.stamp\n"
+        "  source_file_part = input1.cc\n"
+        "  source_name_part = input1\n"
         "build obj/foo/bar.input2.o: cxx ../../foo/input2.cc"
         " | obj/foo/bar.inputs.stamp\n"
+        "  source_file_part = input2.cc\n"
+        "  source_name_part = input2\n"
         "\n"
         "build obj/foo/bar.stamp: stamp obj/foo/bar.input1.o "
         "obj/foo/bar.input2.o\n";
@@ -1261,8 +1325,12 @@ TEST_F(NinjaCBinaryTargetWriterTest, InputFiles) {
         " ../../foo/input1.data ../../foo/input2.data ../../foo/input3.data\n"
         "build obj/foo/bar.input1.o: cxx ../../foo/input1.cc"
         " | obj/foo/bar.inputs.stamp\n"
+        "  source_file_part = input1.cc\n"
+        "  source_name_part = input1\n"
         "build obj/foo/bar.input2.o: cxx ../../foo/input2.cc"
         " | obj/foo/bar.inputs.stamp\n"
+        "  source_file_part = input2.cc\n"
+        "  source_name_part = input2\n"
         "\n"
         "build obj/foo/bar.stamp: stamp obj/foo/bar.input1.o "
         "obj/foo/bar.input2.o\n";
@@ -1272,232 +1340,883 @@ TEST_F(NinjaCBinaryTargetWriterTest, InputFiles) {
 }
 
 // Test linking of Rust dependencies into C targets.
-TEST_F(NinjaCBinaryTargetWriterTest, RustDeps) {
+TEST_F(NinjaCBinaryTargetWriterTest, RustStaticLib) {
   Err err;
   TestWithScope setup;
 
-  {
-    Target library_target(setup.settings(), Label(SourceDir("//foo/"), "foo"));
-    library_target.set_output_type(Target::STATIC_LIBRARY);
-    library_target.visibility().SetPublic();
-    SourceFile lib("//foo/lib.rs");
-    library_target.sources().push_back(lib);
-    library_target.source_types_used().Set(SourceFile::SOURCE_RS);
-    library_target.rust_values().set_crate_root(lib);
-    library_target.rust_values().crate_name() = "foo";
-    library_target.SetToolchain(setup.toolchain());
-    ASSERT_TRUE(library_target.OnResolved(&err));
+  Target library_target(setup.settings(), Label(SourceDir("//foo/"), "foo"));
+  library_target.set_output_type(Target::STATIC_LIBRARY);
+  library_target.visibility().SetPublic();
+  SourceFile lib("//foo/lib.rs");
+  library_target.sources().push_back(lib);
+  library_target.source_types_used().Set(SourceFile::SOURCE_RS);
+  library_target.rust_values().set_crate_root(lib);
+  library_target.rust_values().crate_name() = "foo";
+  library_target.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(library_target.OnResolved(&err));
 
-    Target target(setup.settings(), Label(SourceDir("//bar/"), "bar"));
-    target.set_output_type(Target::EXECUTABLE);
-    target.visibility().SetPublic();
-    target.sources().push_back(SourceFile("//bar/bar.cc"));
-    target.source_types_used().Set(SourceFile::SOURCE_CPP);
-    target.private_deps().push_back(LabelTargetPair(&library_target));
-    target.SetToolchain(setup.toolchain());
-    ASSERT_TRUE(target.OnResolved(&err));
+  Target target(setup.settings(), Label(SourceDir("//bar/"), "bar"));
+  target.set_output_type(Target::EXECUTABLE);
+  target.visibility().SetPublic();
+  target.sources().push_back(SourceFile("//bar/bar.cc"));
+  target.source_types_used().Set(SourceFile::SOURCE_CPP);
+  target.private_deps().push_back(LabelTargetPair(&library_target));
+  target.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(target.OnResolved(&err));
 
-    std::ostringstream out;
-    NinjaCBinaryTargetWriter writer(&target, out);
-    writer.Run();
+  std::ostringstream out;
+  NinjaCBinaryTargetWriter writer(&target, out);
+  writer.Run();
 
-    const char expected[] =
-        "defines =\n"
-        "include_dirs =\n"
-        "cflags =\n"
-        "cflags_cc =\n"
-        "root_out_dir = .\n"
-        "target_out_dir = obj/bar\n"
-        "target_output_name = bar\n"
-        "\n"
-        "build obj/bar/bar.bar.o: cxx ../../bar/bar.cc\n"
-        "\n"
-        "build ./bar: link obj/bar/bar.bar.o obj/foo/libfoo.a\n"
-        "  ldflags =\n"
-        "  libs =\n"
-        "  frameworks =\n"
-        "  swiftmodules =\n"
-        "  output_extension = \n"
-        "  output_dir = \n";
+  const char expected[] =
+      "defines =\n"
+      "include_dirs =\n"
+      "cflags =\n"
+      "cflags_cc =\n"
+      "root_out_dir = .\n"
+      "target_out_dir = obj/bar\n"
+      "target_output_name = bar\n"
+      "\n"
+      "build obj/bar/bar.bar.o: cxx ../../bar/bar.cc\n"
+      "  source_file_part = bar.cc\n"
+      "  source_name_part = bar\n"
+      "\n"
+      "build ./bar: link obj/bar/bar.bar.o obj/foo/libfoo.a\n"
+      "  ldflags =\n"
+      "  libs =\n"
+      "  frameworks =\n"
+      "  swiftmodules =\n"
+      "  output_extension = \n"
+      "  output_dir = \n";
 
-    std::string out_str = out.str();
-    EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
-  }
+  std::string out_str = out.str();
+  EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
+}
 
-  {
-    Target rlib_target(setup.settings(), Label(SourceDir("//baz/"), "lib"));
-    rlib_target.set_output_type(Target::RUST_LIBRARY);
-    rlib_target.visibility().SetPublic();
-    SourceFile bazlib("//baz/lib.rs");
-    rlib_target.sources().push_back(bazlib);
-    rlib_target.source_types_used().Set(SourceFile::SOURCE_RS);
-    rlib_target.rust_values().set_crate_root(bazlib);
-    rlib_target.rust_values().crate_name() = "lib";
-    rlib_target.SetToolchain(setup.toolchain());
-    ASSERT_TRUE(rlib_target.OnResolved(&err));
+// Test linking of Rust dependencies into C targets.
+TEST_F(NinjaCBinaryTargetWriterTest, RlibInLibrary) {
+  Err err;
+  TestWithScope setup;
 
-    Target library_target(setup.settings(), Label(SourceDir("//foo/"), "foo"));
-    library_target.set_output_type(Target::STATIC_LIBRARY);
-    library_target.visibility().SetPublic();
-    SourceFile lib("//foo/lib.rs");
-    library_target.sources().push_back(lib);
-    library_target.source_types_used().Set(SourceFile::SOURCE_RS);
-    library_target.rust_values().set_crate_root(lib);
-    library_target.rust_values().crate_name() = "foo";
-    library_target.public_deps().push_back(LabelTargetPair(&rlib_target));
-    library_target.SetToolchain(setup.toolchain());
-    ASSERT_TRUE(library_target.OnResolved(&err));
+  // This source_set() is depended on by an rlib, which is a private dep of a
+  // static lib.
+  Target priv_sset_in_staticlib(
+      setup.settings(),
+      Label(SourceDir("//priv_sset_in_staticlib/"), "priv_sset_in_staticlib"));
+  priv_sset_in_staticlib.set_output_type(Target::SOURCE_SET);
+  priv_sset_in_staticlib.visibility().SetPublic();
+  priv_sset_in_staticlib.sources().push_back(
+      SourceFile("//priv_sset_in_staticlib/lib.cc"));
+  priv_sset_in_staticlib.source_types_used().Set(SourceFile::SOURCE_CPP);
+  priv_sset_in_staticlib.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(priv_sset_in_staticlib.OnResolved(&err));
 
-    Target rlib_target2(setup.settings(), Label(SourceDir("//qux/"), "lib2"));
-    rlib_target2.set_output_type(Target::RUST_LIBRARY);
-    rlib_target2.visibility().SetPublic();
-    SourceFile quxlib("//qux/lib.rs");
-    rlib_target2.sources().push_back(quxlib);
-    rlib_target2.source_types_used().Set(SourceFile::SOURCE_RS);
-    rlib_target2.rust_values().set_crate_root(quxlib);
-    rlib_target2.rust_values().crate_name() = "lib2";
-    rlib_target2.SetToolchain(setup.toolchain());
-    ASSERT_TRUE(rlib_target2.OnResolved(&err));
+  // This source_set() is depended on by an rlib, which is a public dep of a
+  // static lib.
+  Target pub_sset_in_staticlib(
+      setup.settings(),
+      Label(SourceDir("//pub_sset_in_staticlib/"), "pub_sset_in_staticlib"));
+  pub_sset_in_staticlib.set_output_type(Target::SOURCE_SET);
+  pub_sset_in_staticlib.visibility().SetPublic();
+  pub_sset_in_staticlib.sources().push_back(
+      SourceFile("//pub_sset_in_staticlib/lib.cc"));
+  pub_sset_in_staticlib.source_types_used().Set(SourceFile::SOURCE_CPP);
+  pub_sset_in_staticlib.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(pub_sset_in_staticlib.OnResolved(&err));
 
-    Target rlib_target3(setup.settings(), Label(SourceDir("//quxqux/"), "lib3"));
-    rlib_target3.set_output_type(Target::RUST_LIBRARY);
-    rlib_target3.visibility().SetPublic();
-    SourceFile quxquxlib("//quxqux/lib.rs");
-    rlib_target3.sources().push_back(quxquxlib);
-    rlib_target3.source_types_used().Set(SourceFile::SOURCE_RS);
-    rlib_target3.rust_values().set_crate_root(quxlib);
-    rlib_target3.rust_values().crate_name() = "lib3";
-    rlib_target3.SetToolchain(setup.toolchain());
-    ASSERT_TRUE(rlib_target3.OnResolved(&err));
+  // This source_set() is depended on by an rlib, which is a private dep of a
+  // shared lib.
+  Target priv_sset_in_dylib(
+      setup.settings(),
+      Label(SourceDir("//priv_sset_in_dylib/"), "priv_sset_in_dylib"));
+  priv_sset_in_dylib.set_output_type(Target::SOURCE_SET);
+  priv_sset_in_dylib.visibility().SetPublic();
+  priv_sset_in_dylib.sources().push_back(
+      SourceFile("//priv_sset_in_dylib/lib.cc"));
+  priv_sset_in_dylib.source_types_used().Set(SourceFile::SOURCE_CPP);
+  priv_sset_in_dylib.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(priv_sset_in_dylib.OnResolved(&err));
 
-    Target procmacro(setup.settings(),
-                     Label(SourceDir("//quuxmacro/"), "procmacro"));
-    procmacro.set_output_type(Target::RUST_PROC_MACRO);
-    procmacro.visibility().SetPublic();
-    SourceFile procmacrolib("//procmacro/lib.rs");
-    procmacro.sources().push_back(procmacrolib);
-    procmacro.source_types_used().Set(SourceFile::SOURCE_RS);
-    procmacro.public_deps().push_back(LabelTargetPair(&rlib_target2));
-    procmacro.public_deps().push_back(LabelTargetPair(&rlib_target3));
-    procmacro.rust_values().set_crate_root(procmacrolib);
-    procmacro.rust_values().crate_name() = "procmacro";
-    procmacro.SetToolchain(setup.toolchain());
-    ASSERT_TRUE(procmacro.OnResolved(&err));
+  // This source_set() is depended on by an rlib, which is a public dep of a
+  // shared lib.
+  Target pub_sset_in_dylib(
+      setup.settings(),
+      Label(SourceDir("//pub_sset_in_dylib"), "pub_sset_in_dylib"));
+  pub_sset_in_dylib.set_output_type(Target::SOURCE_SET);
+  pub_sset_in_dylib.visibility().SetPublic();
+  pub_sset_in_dylib.sources().push_back(
+      SourceFile("//pub_sset_in_dylib/lib.cc"));
+  pub_sset_in_dylib.source_types_used().Set(SourceFile::SOURCE_CPP);
+  pub_sset_in_dylib.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(pub_sset_in_dylib.OnResolved(&err));
 
-    Target rlib_target4(setup.settings(), Label(SourceDir("//quux/"), "lib4"));
-    rlib_target4.set_output_type(Target::RUST_LIBRARY);
-    rlib_target4.visibility().SetPublic();
-    SourceFile quuxlib("//quux/lib.rs");
-    rlib_target4.sources().push_back(quuxlib);
-    rlib_target4.source_types_used().Set(SourceFile::SOURCE_RS);
-    rlib_target4.public_deps().push_back(LabelTargetPair(&rlib_target2));
-    // Transitive proc macros should not impact C++ targets; we're
-    // adding one to ensure the ninja instructions below are unaffected.
-    rlib_target4.public_deps().push_back(LabelTargetPair(&procmacro));
-    rlib_target4.rust_values().set_crate_root(quuxlib);
-    rlib_target4.rust_values().crate_name() = "lib4";
-    rlib_target4.SetToolchain(setup.toolchain());
-    ASSERT_TRUE(rlib_target4.OnResolved(&err));
+  Target priv_in_staticlib(
+      setup.settings(),
+      Label(SourceDir("//priv_in_staticlib/"), "priv_in_staticlib"));
+  priv_in_staticlib.set_output_type(Target::RUST_LIBRARY);
+  priv_in_staticlib.visibility().SetPublic();
+  SourceFile priv_in_staticlib_root("//priv_in_staticlib/lib.rs");
+  priv_in_staticlib.sources().push_back(priv_in_staticlib_root);
+  priv_in_staticlib.source_types_used().Set(SourceFile::SOURCE_RS);
+  priv_in_staticlib.rust_values().set_crate_root(priv_in_staticlib_root);
+  priv_in_staticlib.rust_values().crate_name() = "priv_in_staticlib";
+  priv_in_staticlib.SetToolchain(setup.toolchain());
+  priv_in_staticlib.private_deps().push_back(
+      LabelTargetPair(&priv_sset_in_staticlib));
+  ASSERT_TRUE(priv_in_staticlib.OnResolved(&err));
 
-    Target target(setup.settings(), Label(SourceDir("//bar/"), "bar"));
-    target.set_output_type(Target::EXECUTABLE);
-    target.visibility().SetPublic();
-    target.sources().push_back(SourceFile("//bar/bar.cc"));
-    target.source_types_used().Set(SourceFile::SOURCE_CPP);
-    target.private_deps().push_back(LabelTargetPair(&library_target));
-    target.private_deps().push_back(LabelTargetPair(&rlib_target4));
-    target.SetToolchain(setup.toolchain());
-    ASSERT_TRUE(target.OnResolved(&err));
+  Target pub_in_staticlib(
+      setup.settings(),
+      Label(SourceDir("//pub_in_staticlib/"), "pub_in_staticlib"));
+  pub_in_staticlib.set_output_type(Target::RUST_LIBRARY);
+  pub_in_staticlib.visibility().SetPublic();
+  SourceFile pub_in_staticlib_root("//pub_in_staticlib/lib.rs");
+  pub_in_staticlib.sources().push_back(pub_in_staticlib_root);
+  pub_in_staticlib.source_types_used().Set(SourceFile::SOURCE_RS);
+  pub_in_staticlib.rust_values().set_crate_root(pub_in_staticlib_root);
+  pub_in_staticlib.rust_values().crate_name() = "pub_in_staticlib";
+  pub_in_staticlib.SetToolchain(setup.toolchain());
+  pub_in_staticlib.private_deps().push_back(
+      LabelTargetPair(&pub_sset_in_staticlib));
+  ASSERT_TRUE(pub_in_staticlib.OnResolved(&err));
 
-    std::ostringstream out;
-    NinjaCBinaryTargetWriter writer(&target, out);
-    writer.Run();
+  Target priv_in_dylib(setup.settings(),
+                       Label(SourceDir("//priv_in_dylib/"), "priv_in_dylib"));
+  priv_in_dylib.set_output_type(Target::RUST_LIBRARY);
+  priv_in_dylib.visibility().SetPublic();
+  SourceFile priv_in_dylib_root("//priv_in_dylib/lib.rs");
+  priv_in_dylib.sources().push_back(priv_in_dylib_root);
+  priv_in_dylib.source_types_used().Set(SourceFile::SOURCE_RS);
+  priv_in_dylib.rust_values().set_crate_root(priv_in_dylib_root);
+  priv_in_dylib.rust_values().crate_name() = "priv_in_dylib";
+  priv_in_dylib.SetToolchain(setup.toolchain());
+  priv_in_dylib.private_deps().push_back(LabelTargetPair(&priv_sset_in_dylib));
+  ASSERT_TRUE(priv_in_dylib.OnResolved(&err));
 
-    const char expected[] =
-        "defines =\n"
-        "include_dirs =\n"
-        "cflags =\n"
-        "cflags_cc =\n"
-        "root_out_dir = .\n"
-        "target_out_dir = obj/bar\n"
-        "target_output_name = bar\n"
-        "\n"
-        "build obj/bar/bar.bar.o: cxx ../../bar/bar.cc\n"
-        "\n"
-        "build ./bar: link obj/bar/bar.bar.o obj/foo/libfoo.a | "
-        "obj/baz/lib.rlib obj/quux/lib4.rlib obj/qux/lib2.rlib\n"
-        "  ldflags =\n"
-        "  libs =\n"
-        "  frameworks =\n"
-        "  swiftmodules =\n"
-        "  output_extension = \n"
-        "  output_dir = \n"
-        "  rlibs = obj/baz/lib.rlib obj/quux/lib4.rlib obj/qux/lib2.rlib\n";
+  Target pub_in_dylib(setup.settings(),
+                      Label(SourceDir("//pub_in_dylib/"), "pub_in_dylib"));
+  pub_in_dylib.set_output_type(Target::RUST_LIBRARY);
+  pub_in_dylib.visibility().SetPublic();
+  SourceFile pub_in_dylib_root("//pub_in_dylib/lib.rs");
+  pub_in_dylib.sources().push_back(pub_in_dylib_root);
+  pub_in_dylib.source_types_used().Set(SourceFile::SOURCE_RS);
+  pub_in_dylib.rust_values().set_crate_root(pub_in_dylib_root);
+  pub_in_dylib.rust_values().crate_name() = "pub_in_dylib";
+  pub_in_dylib.SetToolchain(setup.toolchain());
+  pub_in_dylib.private_deps().push_back(LabelTargetPair(&pub_sset_in_dylib));
+  ASSERT_TRUE(pub_in_dylib.OnResolved(&err));
 
-    std::string out_str = out.str();
-    EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
-  }
+  Target staticlib(setup.settings(),
+                   Label(SourceDir("//staticlib/"), "staticlib"));
+  staticlib.set_output_type(Target::STATIC_LIBRARY);
+  staticlib.visibility().SetPublic();
+  staticlib.sources().push_back(SourceFile("//staticlib/lib.cc"));
+  staticlib.source_types_used().Set(SourceFile::SOURCE_CPP);
+  staticlib.public_deps().push_back(LabelTargetPair(&pub_in_staticlib));
+  staticlib.private_deps().push_back(LabelTargetPair(&priv_in_staticlib));
+  staticlib.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(staticlib.OnResolved(&err));
 
-  {
-    Target procmacro(setup.settings(), Label(SourceDir("//baz/"), "macro"));
-    procmacro.set_output_type(Target::LOADABLE_MODULE);
-    procmacro.visibility().SetPublic();
-    SourceFile bazlib("//baz/lib.rs");
-    procmacro.sources().push_back(bazlib);
-    procmacro.source_types_used().Set(SourceFile::SOURCE_RS);
-    procmacro.rust_values().set_crate_root(bazlib);
-    procmacro.rust_values().crate_name() = "macro";
-    procmacro.rust_values().set_crate_type(RustValues::CRATE_PROC_MACRO);
-    procmacro.SetToolchain(setup.toolchain());
-    ASSERT_TRUE(procmacro.OnResolved(&err));
+  Target dylib(setup.settings(), Label(SourceDir("//dylib/"), "dylib"));
+  dylib.set_output_type(Target::SHARED_LIBRARY);
+  dylib.visibility().SetPublic();
+  SourceFile dylib_root("//dylib/lib.rs");
+  dylib.sources().push_back(dylib_root);
+  dylib.source_types_used().Set(SourceFile::SOURCE_RS);
+  dylib.rust_values().set_crate_root(dylib_root);
+  dylib.rust_values().crate_name() = "dylib";
+  dylib.public_deps().push_back(LabelTargetPair(&pub_in_dylib));
+  dylib.private_deps().push_back(LabelTargetPair(&priv_in_dylib));
+  dylib.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(dylib.OnResolved(&err));
 
-    Target library_target(setup.settings(), Label(SourceDir("//foo/"), "foo"));
-    library_target.set_output_type(Target::STATIC_LIBRARY);
-    library_target.visibility().SetPublic();
-    SourceFile lib("//foo/lib.rs");
-    library_target.sources().push_back(lib);
-    library_target.source_types_used().Set(SourceFile::SOURCE_RS);
-    library_target.rust_values().set_crate_root(lib);
-    library_target.rust_values().crate_name() = "foo";
-    library_target.public_deps().push_back(LabelTargetPair(&procmacro));
-    library_target.SetToolchain(setup.toolchain());
-    ASSERT_TRUE(library_target.OnResolved(&err));
+  Target target(setup.settings(), Label(SourceDir("//exe/"), "exe"));
+  target.set_output_type(Target::EXECUTABLE);
+  target.visibility().SetPublic();
+  target.sources().push_back(SourceFile("//exe/main.cc"));
+  target.source_types_used().Set(SourceFile::SOURCE_CPP);
+  target.private_deps().push_back(LabelTargetPair(&staticlib));
+  target.private_deps().push_back(LabelTargetPair(&dylib));
+  target.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(target.OnResolved(&err));
 
-    Target target(setup.settings(), Label(SourceDir("//bar/"), "bar"));
-    target.set_output_type(Target::EXECUTABLE);
-    target.visibility().SetPublic();
-    target.sources().push_back(SourceFile("//bar/bar.cc"));
-    target.source_types_used().Set(SourceFile::SOURCE_CPP);
-    target.private_deps().push_back(LabelTargetPair(&library_target));
-    target.SetToolchain(setup.toolchain());
-    ASSERT_TRUE(target.OnResolved(&err));
 
-    std::ostringstream out;
-    NinjaCBinaryTargetWriter writer(&target, out);
-    writer.Run();
+  std::ostringstream out;
+  NinjaCBinaryTargetWriter writer(&target, out);
+  writer.Run();
 
-    const char expected[] =
-        "defines =\n"
-        "include_dirs =\n"
-        "cflags =\n"
-        "cflags_cc =\n"
-        "root_out_dir = .\n"
-        "target_out_dir = obj/bar\n"
-        "target_output_name = bar\n"
-        "\n"
-        "build obj/bar/bar.bar.o: cxx ../../bar/bar.cc\n"
-        "\n"
-        "build ./bar: link obj/bar/bar.bar.o obj/foo/libfoo.a\n"
-        "  ldflags =\n"
-        "  libs =\n"
-        "  frameworks =\n"
-        "  swiftmodules =\n"
-        "  output_extension = \n"
-        "  output_dir = \n";
+  const char expected[] =
+      "defines =\n"
+      "include_dirs =\n"
+      "cflags =\n"
+      "cflags_cc =\n"
+      "root_out_dir = .\n"
+      "target_out_dir = obj/exe\n"
+      "target_output_name = exe\n"
+      "\n"
+      "build obj/exe/exe.main.o: cxx ../../exe/main.cc\n"
+      "  source_file_part = main.cc\n"
+      "  source_name_part = main\n"
+      "\n"
+      "build ./exe: link obj/exe/exe.main.o "
+      "obj/pub_sset_in_staticlib/pub_sset_in_staticlib.lib.o "
+      "obj/priv_sset_in_staticlib/priv_sset_in_staticlib.lib.o "
+      "obj/staticlib/libstaticlib.a "
+      "obj/dylib/libdylib.so | "
+      "obj/pub_in_staticlib/libpub_in_staticlib.rlib "
+      "obj/priv_in_staticlib/libpriv_in_staticlib.rlib || "
+      "obj/pub_sset_in_staticlib/pub_sset_in_staticlib.stamp "
+      "obj/priv_sset_in_staticlib/priv_sset_in_staticlib.stamp\n"
+      "  ldflags =\n"
+      "  libs =\n"
+      "  frameworks =\n"
+      "  swiftmodules =\n"
+      "  output_extension = \n"
+      "  output_dir = \n"
+      "  rlibs = obj/pub_in_staticlib/libpub_in_staticlib.rlib "
+      "obj/priv_in_staticlib/libpriv_in_staticlib.rlib\n";
 
-    std::string out_str = out.str();
-    EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
-  }
+  std::string out_str = out.str();
+  EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
+}
+
+// Test linking of Rust dependencies into C targets. Proc-macro dependencies are
+// not inherited by the targets that depend on them, even from public_deps,
+// since they are not built into those targets, but instead used to build them.
+TEST_F(NinjaCBinaryTargetWriterTest, RlibsWithProcMacros) {
+  Err err;
+  TestWithScope setup;
+
+  Target pub_in_staticlib(
+      setup.settings(),
+      Label(SourceDir("//pub_in_staticlib/"), "pub_in_staticlib"));
+  pub_in_staticlib.set_output_type(Target::RUST_LIBRARY);
+  pub_in_staticlib.visibility().SetPublic();
+  SourceFile pub_in_staticlib_root("//pub_in_staticlib/lib.rs");
+  pub_in_staticlib.sources().push_back(pub_in_staticlib_root);
+  pub_in_staticlib.source_types_used().Set(SourceFile::SOURCE_RS);
+  pub_in_staticlib.rust_values().set_crate_root(pub_in_staticlib_root);
+  pub_in_staticlib.rust_values().crate_name() = "pub_in_staticlib";
+  pub_in_staticlib.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(pub_in_staticlib.OnResolved(&err));
+
+  Target priv_in_staticlib(
+      setup.settings(),
+      Label(SourceDir("//priv_in_staticlib/"), "priv_in_staticlib"));
+  priv_in_staticlib.set_output_type(Target::RUST_LIBRARY);
+  priv_in_staticlib.visibility().SetPublic();
+  SourceFile priv_in_staticlib_root("//priv_in_staticlib/lib.rs");
+  priv_in_staticlib.sources().push_back(priv_in_staticlib_root);
+  priv_in_staticlib.source_types_used().Set(SourceFile::SOURCE_RS);
+  priv_in_staticlib.rust_values().set_crate_root(priv_in_staticlib_root);
+  priv_in_staticlib.rust_values().crate_name() = "priv_in_staticlib";
+  priv_in_staticlib.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(priv_in_staticlib.OnResolved(&err));
+
+  Target staticlib(setup.settings(),
+                   Label(SourceDir("//staticlib/"), "staticlib"));
+  staticlib.set_output_type(Target::STATIC_LIBRARY);
+  staticlib.visibility().SetPublic();
+  staticlib.sources().push_back(SourceFile("//staticlib/lib.cc"));
+  staticlib.source_types_used().Set(SourceFile::SOURCE_CPP);
+  staticlib.public_deps().push_back(LabelTargetPair(&pub_in_staticlib));
+  staticlib.private_deps().push_back(LabelTargetPair(&priv_in_staticlib));
+  staticlib.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(staticlib.OnResolved(&err));
+
+  Target priv_in_procmacro(
+      setup.settings(),
+      Label(SourceDir("//priv_in_procmacro/"), "priv_in_procmacro"));
+  priv_in_procmacro.set_output_type(Target::RUST_LIBRARY);
+  priv_in_procmacro.visibility().SetPublic();
+  SourceFile priv_in_procmacro_root("//priv_in_procmacro/lib.rs");
+  priv_in_procmacro.sources().push_back(priv_in_procmacro_root);
+  priv_in_procmacro.source_types_used().Set(SourceFile::SOURCE_RS);
+  priv_in_procmacro.rust_values().set_crate_root(priv_in_procmacro_root);
+  priv_in_procmacro.rust_values().crate_name() = "priv_in_procmacro";
+  priv_in_procmacro.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(priv_in_procmacro.OnResolved(&err));
+
+  // Public deps in a proc-macro are not inherited, since the proc-macro is not
+  // compiled into targets that depend on it.
+  Target pub_in_procmacro(
+      setup.settings(),
+      Label(SourceDir("//pub_in_procmacro/"), "pub_in_procmacro"));
+  pub_in_procmacro.set_output_type(Target::RUST_LIBRARY);
+  pub_in_procmacro.visibility().SetPublic();
+  SourceFile pub_in_procmacro_root("//pub_in_procmacro/lib.rs");
+  pub_in_procmacro.sources().push_back(pub_in_procmacro_root);
+  pub_in_procmacro.source_types_used().Set(SourceFile::SOURCE_RS);
+  pub_in_procmacro.rust_values().set_crate_root(pub_in_procmacro_root);
+  pub_in_procmacro.rust_values().crate_name() = "pub_in_procmacro";
+  pub_in_procmacro.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(pub_in_procmacro.OnResolved(&err));
+
+  Target pub_in_procmacro_and_rlib(
+      setup.settings(), Label(SourceDir("//pub_in_procmacro_and_rlib/"),
+                              "pub_in_procmacro_and_rlib"));
+  pub_in_procmacro_and_rlib.set_output_type(Target::RUST_LIBRARY);
+  pub_in_procmacro_and_rlib.visibility().SetPublic();
+  SourceFile pub_in_procmacro_and_rlib_root(
+      "//pub_in_procmacro_and_rlib/lib.rs");
+  pub_in_procmacro_and_rlib.sources().push_back(pub_in_procmacro_and_rlib_root);
+  pub_in_procmacro_and_rlib.source_types_used().Set(SourceFile::SOURCE_RS);
+  pub_in_procmacro_and_rlib.rust_values().set_crate_root(
+      pub_in_procmacro_and_rlib_root);
+  pub_in_procmacro_and_rlib.rust_values().crate_name() = "lib2";
+  pub_in_procmacro_and_rlib.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(pub_in_procmacro_and_rlib.OnResolved(&err));
+
+  Target procmacro(setup.settings(),
+                   Label(SourceDir("//procmacro/"), "procmacro"));
+  procmacro.set_output_type(Target::RUST_PROC_MACRO);
+  procmacro.visibility().SetPublic();
+  SourceFile procmacrolib("//procmacro/lib.rs");
+  procmacro.sources().push_back(procmacrolib);
+  procmacro.source_types_used().Set(SourceFile::SOURCE_RS);
+  procmacro.public_deps().push_back(LabelTargetPair(&pub_in_procmacro));
+  procmacro.public_deps().push_back(LabelTargetPair(&priv_in_procmacro));
+  procmacro.public_deps().push_back(
+      LabelTargetPair(&pub_in_procmacro_and_rlib));
+  procmacro.rust_values().set_crate_root(procmacrolib);
+  procmacro.rust_values().crate_name() = "procmacro";
+  procmacro.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(procmacro.OnResolved(&err));
+
+  Target rlib(setup.settings(), Label(SourceDir("//rlib/"), "rlib"));
+  rlib.set_output_type(Target::RUST_LIBRARY);
+  rlib.visibility().SetPublic();
+  SourceFile rlib_root("//rlib/lib.rs");
+  rlib.sources().push_back(rlib_root);
+  rlib.source_types_used().Set(SourceFile::SOURCE_RS);
+  rlib.public_deps().push_back(LabelTargetPair(&pub_in_procmacro_and_rlib));
+  // Transitive proc macros should not impact C++ targets; we're
+  // adding one to ensure the ninja instructions below are unaffected.
+  rlib.public_deps().push_back(LabelTargetPair(&procmacro));
+  rlib.rust_values().set_crate_root(rlib_root);
+  rlib.rust_values().crate_name() = "rlib";
+  rlib.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(rlib.OnResolved(&err));
+
+  Target target(setup.settings(), Label(SourceDir("//exe/"), "exe"));
+  target.set_output_type(Target::EXECUTABLE);
+  target.visibility().SetPublic();
+  target.sources().push_back(SourceFile("//exe/main.cc"));
+  target.source_types_used().Set(SourceFile::SOURCE_CPP);
+  target.private_deps().push_back(LabelTargetPair(&staticlib));
+  target.private_deps().push_back(LabelTargetPair(&rlib));
+  target.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(target.OnResolved(&err));
+
+  std::ostringstream out;
+  NinjaCBinaryTargetWriter writer(&target, out);
+  writer.Run();
+
+  const char expected[] =
+      "defines =\n"
+      "include_dirs =\n"
+      "cflags =\n"
+      "cflags_cc =\n"
+      "root_out_dir = .\n"
+      "target_out_dir = obj/exe\n"
+      "target_output_name = exe\n"
+      "\n"
+      "build obj/exe/exe.main.o: cxx ../../exe/main.cc\n"
+      "  source_file_part = main.cc\n"
+      "  source_name_part = main\n"
+      "\n"
+      "build ./exe: link obj/exe/exe.main.o "
+      "obj/staticlib/libstaticlib.a | "
+      "obj/pub_in_staticlib/libpub_in_staticlib.rlib "
+      "obj/priv_in_staticlib/libpriv_in_staticlib.rlib "
+      "obj/rlib/librlib.rlib "
+      "obj/pub_in_procmacro_and_rlib/libpub_in_procmacro_and_rlib.rlib\n"
+      "  ldflags =\n"
+      "  libs =\n"
+      "  frameworks =\n"
+      "  swiftmodules =\n"
+      "  output_extension = \n"
+      "  output_dir = \n"
+      "  rlibs = obj/pub_in_staticlib/libpub_in_staticlib.rlib "
+      "obj/priv_in_staticlib/libpriv_in_staticlib.rlib "
+      "obj/rlib/librlib.rlib "
+      "obj/pub_in_procmacro_and_rlib/libpub_in_procmacro_and_rlib.rlib\n";
+
+  std::string out_str = out.str();
+  EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
+}
+
+// Test linking of Rust dependencies into C targets.
+TEST_F(NinjaCBinaryTargetWriterTest, ProcMacroInRustStaticLib) {
+  Err err;
+  TestWithScope setup;
+
+  Target procmacro(setup.settings(), Label(SourceDir("//baz/"), "macro"));
+  procmacro.set_output_type(Target::LOADABLE_MODULE);
+  procmacro.visibility().SetPublic();
+  SourceFile bazlib("//baz/lib.rs");
+  procmacro.sources().push_back(bazlib);
+  procmacro.source_types_used().Set(SourceFile::SOURCE_RS);
+  procmacro.rust_values().set_crate_root(bazlib);
+  procmacro.rust_values().crate_name() = "macro";
+  procmacro.rust_values().set_crate_type(RustValues::CRATE_PROC_MACRO);
+  procmacro.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(procmacro.OnResolved(&err));
+
+  Target library_target(setup.settings(), Label(SourceDir("//foo/"), "foo"));
+  library_target.set_output_type(Target::STATIC_LIBRARY);
+  library_target.visibility().SetPublic();
+  SourceFile lib("//foo/lib.rs");
+  library_target.sources().push_back(lib);
+  library_target.source_types_used().Set(SourceFile::SOURCE_RS);
+  library_target.rust_values().set_crate_root(lib);
+  library_target.rust_values().crate_name() = "foo";
+  library_target.public_deps().push_back(LabelTargetPair(&procmacro));
+  library_target.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(library_target.OnResolved(&err));
+
+  Target target(setup.settings(), Label(SourceDir("//bar/"), "bar"));
+  target.set_output_type(Target::EXECUTABLE);
+  target.visibility().SetPublic();
+  target.sources().push_back(SourceFile("//bar/bar.cc"));
+  target.source_types_used().Set(SourceFile::SOURCE_CPP);
+  target.private_deps().push_back(LabelTargetPair(&library_target));
+  target.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(target.OnResolved(&err));
+
+  std::ostringstream out;
+  NinjaCBinaryTargetWriter writer(&target, out);
+  writer.Run();
+
+  const char expected[] =
+      "defines =\n"
+      "include_dirs =\n"
+      "cflags =\n"
+      "cflags_cc =\n"
+      "root_out_dir = .\n"
+      "target_out_dir = obj/bar\n"
+      "target_output_name = bar\n"
+      "\n"
+      "build obj/bar/bar.bar.o: cxx ../../bar/bar.cc\n"
+      "  source_file_part = bar.cc\n"
+      "  source_name_part = bar\n"
+      "\n"
+      "build ./bar: link obj/bar/bar.bar.o obj/foo/libfoo.a\n"
+      "  ldflags =\n"
+      "  libs =\n"
+      "  frameworks =\n"
+      "  swiftmodules =\n"
+      "  output_extension = \n"
+      "  output_dir = \n";
+
+  std::string out_str = out.str();
+  EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
+}
+
+TEST_F(NinjaCBinaryTargetWriterTest, RustDepsOverDynamicLinking) {
+  Err err;
+  TestWithScope setup;
+
+  Target rlib3(setup.settings(), Label(SourceDir("//baz/"), "baz"));
+  rlib3.set_output_type(Target::RUST_LIBRARY);
+  rlib3.visibility().SetPublic();
+  SourceFile lib3("//baz/lib.rs");
+  rlib3.sources().push_back(lib3);
+  rlib3.source_types_used().Set(SourceFile::SOURCE_RS);
+  rlib3.rust_values().set_crate_root(lib3);
+  rlib3.rust_values().crate_name() = "baz";
+  rlib3.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(rlib3.OnResolved(&err));
+
+  Target rlib2(setup.settings(), Label(SourceDir("//bar/"), "bar"));
+  rlib2.set_output_type(Target::RUST_LIBRARY);
+  rlib2.visibility().SetPublic();
+  SourceFile lib2("//bar/lib.rs");
+  rlib2.sources().push_back(lib2);
+  rlib2.source_types_used().Set(SourceFile::SOURCE_RS);
+  rlib2.rust_values().set_crate_root(lib2);
+  rlib2.rust_values().crate_name() = "bar";
+  rlib2.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(rlib2.OnResolved(&err));
+
+  Target rlib(setup.settings(), Label(SourceDir("//foo/"), "foo"));
+  rlib.set_output_type(Target::RUST_LIBRARY);
+  rlib.visibility().SetPublic();
+  SourceFile lib("//foo/lib.rs");
+  rlib.sources().push_back(lib);
+  rlib.source_types_used().Set(SourceFile::SOURCE_RS);
+  rlib.rust_values().set_crate_root(lib);
+  rlib.rust_values().crate_name() = "foo";
+  rlib.public_deps().push_back(LabelTargetPair(&rlib2));
+  rlib.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(rlib.OnResolved(&err));
+
+  Target cdylib(setup.settings(), Label(SourceDir("//sh/"), "mylib"));
+  cdylib.set_output_type(Target::SHARED_LIBRARY);
+  cdylib.visibility().SetPublic();
+  SourceFile barlib("//sh/lib.rs");
+  cdylib.sources().push_back(barlib);
+  cdylib.source_types_used().Set(SourceFile::SOURCE_RS);
+  cdylib.rust_values().set_crate_type(RustValues::CRATE_CDYLIB);
+  cdylib.rust_values().set_crate_root(barlib);
+  cdylib.rust_values().crate_name() = "mylib";
+  cdylib.private_deps().push_back(LabelTargetPair(&rlib));
+  cdylib.public_deps().push_back(LabelTargetPair(&rlib3));
+  cdylib.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(cdylib.OnResolved(&err));
+
+  Target nearrlib(setup.settings(), Label(SourceDir("//near/"), "near"));
+  nearrlib.set_output_type(Target::RUST_LIBRARY);
+  nearrlib.visibility().SetPublic();
+  SourceFile nearlib("//near/lib.rs");
+  nearrlib.sources().push_back(nearlib);
+  nearrlib.source_types_used().Set(SourceFile::SOURCE_RS);
+  nearrlib.rust_values().set_crate_root(nearlib);
+  nearrlib.rust_values().crate_name() = "near";
+  nearrlib.public_deps().push_back(LabelTargetPair(&cdylib));
+  nearrlib.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(nearrlib.OnResolved(&err));
+
+  Target target(setup.settings(), Label(SourceDir("//exe/"), "binary"));
+  target.set_output_type(Target::EXECUTABLE);
+  target.visibility().SetPublic();
+  target.sources().push_back(SourceFile("//exe/main.cc"));
+  target.source_types_used().Set(SourceFile::SOURCE_CPP);
+  target.private_deps().push_back(LabelTargetPair(&nearrlib));
+  target.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(target.OnResolved(&err));
+
+  std::ostringstream out;
+  NinjaCBinaryTargetWriter writer(&target, out);
+  writer.Run();
+
+  const char expected[] =
+      "defines =\n"
+      "include_dirs =\n"
+      "cflags =\n"
+      "cflags_cc =\n"
+      "root_out_dir = .\n"
+      "target_out_dir = obj/exe\n"
+      "target_output_name = binary\n"
+      "\n"
+      "build obj/exe/binary.main.o: cxx ../../exe/main.cc\n"
+      "  source_file_part = main.cc\n"
+      "  source_name_part = main\n"
+      "\n"
+      "build ./binary: link obj/exe/binary.main.o obj/sh/libmylib.so | "
+      "obj/near/libnear.rlib\n"
+      "  ldflags =\n"
+      "  libs =\n"
+      "  frameworks =\n"
+      "  swiftmodules =\n"
+      "  output_extension = \n"
+      "  output_dir = \n"
+      "  rlibs = obj/near/libnear.rlib\n";
+
+  std::string out_str = out.str();
+  EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
+}
+
+TEST_F(NinjaCBinaryTargetWriterTest, LinkingWithRustLibraryDepsOnCdylib) {
+  Err err;
+  TestWithScope setup;
+
+  // A non-rust shared library.
+  Target cc_shlib(setup.settings(), Label(SourceDir("//cc_shlib"), "cc_shlib"));
+  cc_shlib.set_output_type(Target::SHARED_LIBRARY);
+  cc_shlib.set_output_name("cc_shlib");
+  cc_shlib.SetToolchain(setup.toolchain());
+  cc_shlib.visibility().SetPublic();
+  ASSERT_TRUE(cc_shlib.OnResolved(&err));
+
+  // A Rust CDYLIB shared library that will be in deps.
+  Target rust_shlib(setup.settings(),
+                    Label(SourceDir("//rust_shlib/"), "rust_shlib"));
+  rust_shlib.set_output_type(Target::SHARED_LIBRARY);
+  rust_shlib.visibility().SetPublic();
+  SourceFile rust_shlib_rs("//rust_shlib/lib.rs");
+  rust_shlib.sources().push_back(rust_shlib_rs);
+  rust_shlib.source_types_used().Set(SourceFile::SOURCE_RS);
+  rust_shlib.rust_values().set_crate_type(RustValues::CRATE_CDYLIB);
+  rust_shlib.rust_values().set_crate_root(rust_shlib_rs);
+  rust_shlib.rust_values().crate_name() = "rust_shlib";
+  rust_shlib.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(rust_shlib.OnResolved(&err));
+
+  // A Rust DYLIB shared library that will be in public_deps.
+  Target pub_rust_shlib(setup.settings(), Label(SourceDir("//pub_rust_shlib/"),
+                                                "pub_rust_shlib"));
+  pub_rust_shlib.set_output_type(Target::SHARED_LIBRARY);
+  pub_rust_shlib.visibility().SetPublic();
+  SourceFile pub_rust_shlib_rs("//pub_rust_shlib/lib.rs");
+  pub_rust_shlib.sources().push_back(pub_rust_shlib_rs);
+  pub_rust_shlib.source_types_used().Set(SourceFile::SOURCE_RS);
+  pub_rust_shlib.rust_values().set_crate_type(RustValues::CRATE_CDYLIB);
+  pub_rust_shlib.rust_values().set_crate_root(pub_rust_shlib_rs);
+  pub_rust_shlib.rust_values().crate_name() = "pub_rust_shlib";
+  pub_rust_shlib.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(pub_rust_shlib.OnResolved(&err));
+
+  // An rlib that depends on both shared libraries.
+  Target rlib(setup.settings(), Label(SourceDir("//rlib/"), "rlib"));
+  rlib.set_output_type(Target::RUST_LIBRARY);
+  rlib.visibility().SetPublic();
+  SourceFile rlib_rs("//rlib/lib.rs");
+  rlib.sources().push_back(rlib_rs);
+  rlib.source_types_used().Set(SourceFile::SOURCE_RS);
+  rlib.rust_values().set_crate_root(rlib_rs);
+  rlib.rust_values().crate_name() = "rlib";
+  rlib.private_deps().push_back(LabelTargetPair(&rust_shlib));
+  rlib.private_deps().push_back(LabelTargetPair(&cc_shlib));
+  rlib.public_deps().push_back(LabelTargetPair(&pub_rust_shlib));
+  rlib.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(rlib.OnResolved(&err));
+
+  Target target(setup.settings(), Label(SourceDir("//exe/"), "binary"));
+  target.set_output_type(Target::EXECUTABLE);
+  target.visibility().SetPublic();
+  target.sources().push_back(SourceFile("//exe/main.cc"));
+  target.source_types_used().Set(SourceFile::SOURCE_CPP);
+  target.private_deps().push_back(LabelTargetPair(&rlib));
+  target.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(target.OnResolved(&err));
+
+  std::ostringstream out;
+  NinjaCBinaryTargetWriter writer(&target, out);
+  writer.Run();
+
+  const char expected[] =
+      "defines =\n"
+      "include_dirs =\n"
+      "cflags =\n"
+      "cflags_cc =\n"
+      "root_out_dir = .\n"
+      "target_out_dir = obj/exe\n"
+      "target_output_name = binary\n"
+      "\n"
+      "build obj/exe/binary.main.o: cxx ../../exe/main.cc\n"
+      "  source_file_part = main.cc\n"
+      "  source_name_part = main\n"
+      "\n"
+      "build ./binary: link obj/exe/binary.main.o "
+      "obj/pub_rust_shlib/libpub_rust_shlib.so obj/rust_shlib/librust_shlib.so "
+      "./libcc_shlib.so | "
+      "obj/rlib/librlib.rlib\n"
+      "  ldflags =\n"
+      "  libs =\n"
+      "  frameworks =\n"
+      "  swiftmodules =\n"
+      "  output_extension = \n"
+      "  output_dir = \n"
+      "  rlibs = obj/rlib/librlib.rlib\n";
+
+  std::string out_str = out.str();
+  EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
+}
+
+TEST_F(NinjaCBinaryTargetWriterTest, LinkingWithRustLibraryDepsOnDylib) {
+  Err err;
+  TestWithScope setup;
+
+  // A non-rust shared library.
+  Target cc_shlib(setup.settings(), Label(SourceDir("//cc_shlib"), "cc_shlib"));
+  cc_shlib.set_output_type(Target::SHARED_LIBRARY);
+  cc_shlib.set_output_name("cc_shlib");
+  cc_shlib.SetToolchain(setup.toolchain());
+  cc_shlib.visibility().SetPublic();
+  ASSERT_TRUE(cc_shlib.OnResolved(&err));
+
+  // A Rust DYLIB shared library that will be in deps.
+  Target rust_shlib(setup.settings(),
+                    Label(SourceDir("//rust_shlib/"), "rust_shlib"));
+  rust_shlib.set_output_type(Target::SHARED_LIBRARY);
+  rust_shlib.visibility().SetPublic();
+  SourceFile rust_shlib_rs("//rust_shlib/lib.rs");
+  rust_shlib.sources().push_back(rust_shlib_rs);
+  rust_shlib.source_types_used().Set(SourceFile::SOURCE_RS);
+  rust_shlib.rust_values().set_crate_type(RustValues::CRATE_DYLIB);
+  rust_shlib.rust_values().set_crate_root(rust_shlib_rs);
+  rust_shlib.rust_values().crate_name() = "rust_shlib";
+  rust_shlib.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(rust_shlib.OnResolved(&err));
+
+  // A Rust DYLIB shared library that will be in public_deps.
+  Target pub_rust_shlib(setup.settings(), Label(SourceDir("//pub_rust_shlib/"),
+                                                "pub_rust_shlib"));
+  pub_rust_shlib.set_output_type(Target::SHARED_LIBRARY);
+  pub_rust_shlib.visibility().SetPublic();
+  SourceFile pub_rust_shlib_rs("//pub_rust_shlib/lib.rs");
+  pub_rust_shlib.sources().push_back(pub_rust_shlib_rs);
+  pub_rust_shlib.source_types_used().Set(SourceFile::SOURCE_RS);
+  pub_rust_shlib.rust_values().set_crate_type(RustValues::CRATE_DYLIB);
+  pub_rust_shlib.rust_values().set_crate_root(pub_rust_shlib_rs);
+  pub_rust_shlib.rust_values().crate_name() = "pub_rust_shlib";
+  pub_rust_shlib.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(pub_rust_shlib.OnResolved(&err));
+
+  // An rlib that depends on both shared libraries.
+  Target rlib(setup.settings(), Label(SourceDir("//rlib/"), "rlib"));
+  rlib.set_output_type(Target::RUST_LIBRARY);
+  rlib.visibility().SetPublic();
+  SourceFile rlib_rs("//rlib/lib.rs");
+  rlib.sources().push_back(rlib_rs);
+  rlib.source_types_used().Set(SourceFile::SOURCE_RS);
+  rlib.rust_values().set_crate_root(rlib_rs);
+  rlib.rust_values().crate_name() = "rlib";
+  rlib.private_deps().push_back(LabelTargetPair(&rust_shlib));
+  rlib.private_deps().push_back(LabelTargetPair(&cc_shlib));
+  rlib.public_deps().push_back(LabelTargetPair(&pub_rust_shlib));
+  rlib.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(rlib.OnResolved(&err));
+
+  Target target(setup.settings(), Label(SourceDir("//exe/"), "binary"));
+  target.set_output_type(Target::EXECUTABLE);
+  target.visibility().SetPublic();
+  target.sources().push_back(SourceFile("//exe/main.cc"));
+  target.source_types_used().Set(SourceFile::SOURCE_CPP);
+  target.private_deps().push_back(LabelTargetPair(&rlib));
+  target.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(target.OnResolved(&err));
+
+  std::ostringstream out;
+  NinjaCBinaryTargetWriter writer(&target, out);
+  writer.Run();
+
+  const char expected[] =
+      "defines =\n"
+      "include_dirs =\n"
+      "cflags =\n"
+      "cflags_cc =\n"
+      "root_out_dir = .\n"
+      "target_out_dir = obj/exe\n"
+      "target_output_name = binary\n"
+      "\n"
+      "build obj/exe/binary.main.o: cxx ../../exe/main.cc\n"
+      "  source_file_part = main.cc\n"
+      "  source_name_part = main\n"
+      "\n"
+      "build ./binary: link obj/exe/binary.main.o "
+      "obj/pub_rust_shlib/libpub_rust_shlib.so obj/rust_shlib/librust_shlib.so "
+      "./libcc_shlib.so | "
+      "obj/rlib/librlib.rlib\n"
+      "  ldflags =\n"
+      "  libs =\n"
+      "  frameworks =\n"
+      "  swiftmodules =\n"
+      "  output_extension = \n"
+      "  output_dir = \n"
+      "  rlibs = obj/rlib/librlib.rlib\n";
+
+  std::string out_str = out.str();
+  EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
+}
+
+// Verify dependencies of a shared library and a rust library are inherited
+// independently.
+TEST_F(NinjaCBinaryTargetWriterTest, RustLibAfterSharedLib) {
+  Err err;
+  TestWithScope setup;
+
+  Target static1(setup.settings(),
+                Label(SourceDir("//static1/"), "staticlib1"));
+  static1.set_output_type(Target::STATIC_LIBRARY);
+  static1.visibility().SetPublic();
+  static1.sources().push_back(SourceFile("//static1/c.cc"));
+  static1.source_types_used().Set(SourceFile::SOURCE_CPP);
+  static1.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(static1.OnResolved(&err));
+
+  Target static2(setup.settings(),
+                Label(SourceDir("//static2/"), "staticlib2"));
+  static2.set_output_type(Target::STATIC_LIBRARY);
+  static2.visibility().SetPublic();
+  static2.sources().push_back(SourceFile("//static2/c.cc"));
+  static2.source_types_used().Set(SourceFile::SOURCE_CPP);
+  static2.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(static2.OnResolved(&err));
+
+  Target static3(setup.settings(),
+                Label(SourceDir("//static3/"), "staticlib3"));
+  static3.set_output_type(Target::STATIC_LIBRARY);
+  static3.visibility().SetPublic();
+  static3.sources().push_back(SourceFile("//static3/c.cc"));
+  static3.source_types_used().Set(SourceFile::SOURCE_CPP);
+  static3.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(static3.OnResolved(&err));
+
+  Target shared1(setup.settings(),
+                    Label(SourceDir("//shared1"), "mysharedlib1"));
+  shared1.set_output_type(Target::SHARED_LIBRARY);
+  shared1.set_output_name("mysharedlib1");
+  shared1.set_output_prefix_override("");
+  shared1.SetToolchain(setup.toolchain());
+  shared1.visibility().SetPublic();
+  shared1.private_deps().push_back(LabelTargetPair(&static1));
+  ASSERT_TRUE(shared1.OnResolved(&err));
+
+  Target rlib2(setup.settings(), Label(SourceDir("//rlib2/"), "myrlib2"));
+  rlib2.set_output_type(Target::RUST_LIBRARY);
+  rlib2.visibility().SetPublic();
+  SourceFile lib2("//rlib2/lib.rs");
+  rlib2.sources().push_back(lib2);
+  rlib2.source_types_used().Set(SourceFile::SOURCE_RS);
+  rlib2.rust_values().set_crate_root(lib2);
+  rlib2.rust_values().crate_name() = "foo";
+  rlib2.private_deps().push_back(LabelTargetPair(&static2));
+  rlib2.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(rlib2.OnResolved(&err));
+
+  Target shared3(setup.settings(),
+                    Label(SourceDir("//shared3"), "mysharedlib3"));
+  shared3.set_output_type(Target::SHARED_LIBRARY);
+  shared3.set_output_name("mysharedlib3");
+  shared3.set_output_prefix_override("");
+  shared3.SetToolchain(setup.toolchain());
+  shared3.visibility().SetPublic();
+  shared3.private_deps().push_back(LabelTargetPair(&static3));
+  ASSERT_TRUE(shared3.OnResolved(&err));
+
+  Target target(setup.settings(), Label(SourceDir("//exe/"), "binary"));
+  target.set_output_type(Target::EXECUTABLE);
+  target.visibility().SetPublic();
+  target.sources().push_back(SourceFile("//exe/main.cc"));
+  target.source_types_used().Set(SourceFile::SOURCE_CPP);
+  target.private_deps().push_back(LabelTargetPair(&shared1));
+  target.private_deps().push_back(LabelTargetPair(&rlib2));
+  target.private_deps().push_back(LabelTargetPair(&shared3));
+  target.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(target.OnResolved(&err));
+
+  std::ostringstream out;
+  NinjaCBinaryTargetWriter writer(&target, out);
+  writer.Run();
+
+  const char expected[] =
+      "defines =\n"
+      "include_dirs =\n"
+      "cflags =\n"
+      "cflags_cc =\n"
+      "root_out_dir = .\n"
+      "target_out_dir = obj/exe\n"
+      "target_output_name = binary\n"
+      "\n"
+      "build obj/exe/binary.main.o: cxx ../../exe/main.cc\n"
+      "  source_file_part = main.cc\n"
+      "  source_name_part = main\n"
+      "\n"
+      "build ./binary: link obj/exe/binary.main.o "
+      "./mysharedlib1.so ./mysharedlib3.so "
+      "obj/static2/libstaticlib2.a | obj/rlib2/libmyrlib2.rlib\n"
+      "  ldflags =\n"
+      "  libs =\n"
+      "  frameworks =\n"
+      "  swiftmodules =\n"
+      "  output_extension = \n"
+      "  output_dir = \n"
+      "  rlibs = obj/rlib2/libmyrlib2.rlib\n";
+
+  std::string out_str = out.str();
+  EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
 }
 
 TEST_F(NinjaCBinaryTargetWriterTest, ModuleMapInStaticLibrary) {
@@ -1531,7 +2250,11 @@ TEST_F(NinjaCBinaryTargetWriterTest, ModuleMapInStaticLibrary) {
       "target_output_name = libbar\n"
       "\n"
       "build obj/foo/libbar.bar.o: cxx ../../foo/bar.cc | obj/foo/libbar.bar.pcm\n"
+      "  source_file_part = bar.cc\n"
+      "  source_name_part = bar\n"
       "build obj/foo/libbar.bar.pcm: cxx_module ../../foo/bar.modulemap\n"
+      "  source_file_part = bar.modulemap\n"
+      "  source_name_part = bar\n"
       "\n"
       "build obj/foo/libbar.a: alink obj/foo/libbar.bar.o\n"
       "  arflags =\n"
@@ -1655,10 +2378,10 @@ TEST_F(NinjaCBinaryTargetWriterTest, SwiftModule) {
         "target_output_name = bar\n"
         "\n"
         "build obj/bar/Bar.swiftmodule: swift ../../bar/bar.swift"
-        " || obj/foo/foo.stamp\n"
+        " || obj/bar/group.stamp obj/foo/foo.stamp\n"
         "\n"
         "build obj/bar/bar.o: stamp obj/bar/Bar.swiftmodule"
-        " || obj/foo/foo.stamp\n"
+        " || obj/bar/group.stamp obj/foo/foo.stamp\n"
         "\n"
         "build obj/bar/bar.stamp: stamp obj/bar/bar.o "
         "|| obj/bar/group.stamp obj/foo/foo.stamp\n";
@@ -1780,17 +2503,21 @@ TEST_F(NinjaCBinaryTargetWriterTest, DependOnModule) {
 
     const char expected[] = R"(defines =
 include_dirs =
-module_deps = -Xclang -fmodules-embed-all-files -fmodule-file=obj/blah/liba.a.pcm
-module_deps_no_self = -Xclang -fmodules-embed-all-files
 cflags =
 cflags_cc =
+module_deps = -Xclang -fmodules-embed-all-files -fmodule-file=obj/blah/liba.a.pcm
+module_deps_no_self = -Xclang -fmodules-embed-all-files
 label = //blah$:a
 root_out_dir = withmodules
 target_out_dir = obj/blah
 target_output_name = liba
 
 build obj/blah/liba.a.pcm: cxx_module ../../blah/a.modulemap
+  source_file_part = a.modulemap
+  source_name_part = a
 build obj/blah/liba.a.o: cxx ../../blah/a.cc | obj/blah/liba.a.pcm
+  source_file_part = a.cc
+  source_name_part = a
 
 build obj/blah/liba.a: alink obj/blah/liba.a.o
   arflags =
@@ -1821,17 +2548,21 @@ build obj/blah/liba.a: alink obj/blah/liba.a.o
 
     const char expected[] = R"(defines =
 include_dirs =
-module_deps = -Xclang -fmodules-embed-all-files -fmodule-file=obj/stuff/libb.b.pcm
-module_deps_no_self = -Xclang -fmodules-embed-all-files
 cflags =
 cflags_cc =
+module_deps = -Xclang -fmodules-embed-all-files -fmodule-file=obj/stuff/libb.b.pcm
+module_deps_no_self = -Xclang -fmodules-embed-all-files
 label = //stuff$:b
 root_out_dir = withmodules
 target_out_dir = obj/stuff
 target_output_name = libb
 
 build obj/stuff/libb.b.pcm: cxx_module ../../stuff/b.modulemap
+  source_file_part = b.modulemap
+  source_name_part = b
 build obj/stuff/libb.b.o: cxx ../../stuff/b.cc | obj/stuff/libb.b.pcm
+  source_file_part = b.cc
+  source_name_part = b
 
 build obj/stuff/libb.a: alink obj/stuff/libb.b.o
   arflags =
@@ -1861,16 +2592,18 @@ build obj/stuff/libb.a: alink obj/stuff/libb.b.o
 
     const char expected[] = R"(defines =
 include_dirs =
-module_deps = -Xclang -fmodules-embed-all-files -fmodule-file=obj/stuff/libc.c.pcm -fmodule-file=obj/blah/liba.a.pcm
-module_deps_no_self = -Xclang -fmodules-embed-all-files -fmodule-file=obj/blah/liba.a.pcm
 cflags =
 cflags_cc =
+module_deps = -Xclang -fmodules-embed-all-files -fmodule-file=obj/stuff/libc.c.pcm -fmodule-file=obj/blah/liba.a.pcm
+module_deps_no_self = -Xclang -fmodules-embed-all-files -fmodule-file=obj/blah/liba.a.pcm
 label = //things$:c
 root_out_dir = withmodules
 target_out_dir = obj/things
 target_output_name = libc
 
 build obj/stuff/libc.c.pcm: cxx_module ../../stuff/c.modulemap | obj/blah/liba.a.pcm
+  source_file_part = c.modulemap
+  source_name_part = c
 
 build obj/things/libc.a: alink || obj/blah/liba.a
   arflags =
@@ -1900,17 +2633,21 @@ build obj/things/libc.a: alink || obj/blah/liba.a
 
     const char expected[] = R"(defines =
 include_dirs =
-module_deps = -Xclang -fmodules-embed-all-files -fmodule-file=obj/blah/liba.a.pcm -fmodule-file=obj/stuff/libb.b.pcm
-module_deps_no_self = -Xclang -fmodules-embed-all-files -fmodule-file=obj/blah/liba.a.pcm -fmodule-file=obj/stuff/libb.b.pcm
 cflags =
 cflags_cc =
+module_deps = -Xclang -fmodules-embed-all-files -fmodule-file=obj/blah/liba.a.pcm -fmodule-file=obj/stuff/libb.b.pcm
+module_deps_no_self = -Xclang -fmodules-embed-all-files -fmodule-file=obj/blah/liba.a.pcm -fmodule-file=obj/stuff/libb.b.pcm
 label = //zap$:c
 root_out_dir = withmodules
 target_out_dir = obj/zap
 target_output_name = c
 
 build obj/zap/c.x.o: cxx ../../zap/x.cc | obj/blah/liba.a.pcm obj/stuff/libb.b.pcm
+  source_file_part = x.cc
+  source_name_part = x
 build obj/zap/c.y.o: cxx ../../zap/y.cc | obj/blah/liba.a.pcm obj/stuff/libb.b.pcm
+  source_file_part = y.cc
+  source_name_part = y
 
 build withmodules/c: link obj/zap/c.x.o obj/zap/c.y.o obj/blah/liba.a obj/stuff/libb.a
   ldflags =
@@ -1963,6 +2700,8 @@ target_out_dir = obj/launchpad
 target_output_name = main
 
 build obj/launchpad/main.main.o: cxx ../../launchpad/main.cc
+  source_file_part = main.cc
+  source_name_part = main
 
 build ./main: link obj/launchpad/main.main.o | ./Space$ Cadet.so.TOC
   ldflags =

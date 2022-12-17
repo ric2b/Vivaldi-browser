@@ -209,6 +209,23 @@ class BuildRule:
         self._write(indent, "]")
 
         self._write(indent, "edition = \"{}\"".format(build_rule.edition))
+        if build_rule.cargo_pkg_version:
+            self._write(
+                indent, "cargo_pkg_version = \"{}\"".format(
+                    build_rule.cargo_pkg_version))
+        if build_rule.cargo_pkg_authors:
+            self._write(
+                indent, "cargo_pkg_authors = \"{}\"".format(", ".join(
+                    build_rule.cargo_pkg_authors)))
+        if build_rule.cargo_pkg_name:
+            self._write(
+                indent, "cargo_pkg_name = \"{}\"".format(
+                    build_rule.cargo_pkg_name.replace('\n', '')))
+        if build_rule.cargo_pkg_description:
+            self._write(
+                indent, "cargo_pkg_description = \"{}\"".format(
+                    build_rule.cargo_pkg_description.replace('\n', '').replace(
+                        '"', '\'')))
 
         # Add these if, in the future, we want to explicitly mark each
         # third-party crate instead of doing so from the GN template.
@@ -342,12 +359,18 @@ class BuildRule:
                     self._write(indent + 2, "testonly = \"true\"")
                 self._write(indent + 2,
                             "crate_root = \"{}\"".format(self.lib_root))
-                if not usage == cargo.CrateUsage.FOR_NORMAL:
-                    self._write(indent + 2, "skip_unit_tests = true")
-                elif not args.with_tests:
-                    for c in consts.GN_TESTS_COMMENT.split("\n"):
-                        self._write(indent + 2, c)
-                    self._write(indent + 2, "skip_unit_tests = true")
+                if usage == cargo.CrateUsage.FOR_NORMAL:
+                    if args.with_tests:
+                        self._write(indent + 2,
+                                    "build_native_rust_unit_tests = true")
+                    else:
+                        for c in consts.GN_TESTS_COMMENT.split("\n"):
+                            self._write(indent + 2, c)
+                        self._write(indent + 2,
+                                    "build_native_rust_unit_tests = false")
+                else:
+                    self._write(indent + 2,
+                                "build_native_rust_unit_tests = false")
                 self._write_common(indent + 2, self, self.lib_sources, usage)
                 self._write(indent, "}")
 

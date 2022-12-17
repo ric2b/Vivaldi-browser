@@ -13,6 +13,7 @@
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/memory/weak_ptr.h"
+#include "base/ranges/algorithm.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -263,8 +264,7 @@ bool GetLocalWindows(int browser_index, ScopedWindowMap* local_windows) {
       std::unique_ptr<sessions::SessionTab> new_tab =
           std::make_unique<sessions::SessionTab>();
       new_tab->navigations.resize(tab.navigations.size());
-      std::copy(tab.navigations.begin(), tab.navigations.end(),
-                new_tab->navigations.begin());
+      base::ranges::copy(tab.navigations, new_tab->navigations.begin());
       new_window->wrapped_window.tabs.push_back(std::move(new_tab));
     }
     SessionID id = new_window->wrapped_window.window_id;
@@ -323,7 +323,7 @@ bool CompareSyncedSessions(const sync_sessions::SyncedSession* lhs,
 }
 
 void SortSyncedSessions(SyncedSessionVector* sessions) {
-  std::sort(sessions->begin(), sessions->end(), CompareSyncedSessions);
+  base::ranges::sort(*sessions, CompareSyncedSessions);
 }
 
 bool NavigationEquals(const sessions::SerializedNavigationEntry& expected,

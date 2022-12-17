@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <memory>
 
+#include "base/time/time.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/platform/web_fullscreen_video_status.h"
@@ -613,7 +614,7 @@ class CueEventListener final : public NativeEventListener {
     cue_event_deltas_[cue_index].exit_time_delta = base::Seconds(diff_seconds);
   }
 
-  std::array<CueChangeEventTimeDelta, base::size(kTestCueData)>
+  std::array<CueChangeEventTimeDelta, std::size(kTestCueData)>
       cue_event_deltas_;
 };
 

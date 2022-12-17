@@ -397,6 +397,7 @@ LayoutUnit ComputeInitialBlockSizeForFragment(
 CORE_EXPORT LayoutUnit
 CalculateDefaultBlockSize(const NGConstraintSpace& space,
                           const NGBlockNode& node,
+                          const NGBlockBreakToken* break_token,
                           const NGBoxStrut& border_scrollbar_padding);
 
 // Flex layout is interested in ignoring lengths in a particular axis. This
@@ -513,11 +514,6 @@ inline NGLineBoxStrut ComputeLineMarginsForVisualContainer(
           {constraint_space.GetWritingMode(), TextDirection::kLtr});
 }
 
-// Compute margins for a child during the min-max size calculation.
-// TODO(ikilpatrick): Replace this function with ComputeMarginsFor.
-CORE_EXPORT NGBoxStrut ComputeMinMaxMargins(const ComputedStyle& parent_style,
-                                            NGLayoutInputNode child);
-
 CORE_EXPORT NGBoxStrut ComputeBorders(const NGConstraintSpace&,
                                       const NGBlockNode&);
 
@@ -596,6 +592,7 @@ inline LayoutUnit ConstrainByMinMax(LayoutUnit length,
 CORE_EXPORT NGFragmentGeometry
 CalculateInitialFragmentGeometry(const NGConstraintSpace&,
                                  const NGBlockNode&,
+                                 const NGBlockBreakToken*,
                                  bool is_intrinsic = false);
 
 // Shrinks the logical |size| by |insets|.
@@ -630,6 +627,7 @@ LogicalSize CalculateReplacedChildPercentageSize(
 LayoutUnit ClampIntrinsicBlockSize(
     const NGConstraintSpace&,
     const NGBlockNode&,
+    const NGBlockBreakToken* break_token,
     const NGBoxStrut& border_scrollbar_padding,
     LayoutUnit current_intrinsic_block_size,
     absl::optional<LayoutUnit> body_margin_block_sum = absl::nullopt);

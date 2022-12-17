@@ -13,6 +13,7 @@
 #include "base/location.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
+#include "base/observer_list.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/supports_user_data.h"
 #include "base/task/single_thread_task_runner.h"
@@ -38,6 +39,7 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/referrer.h"
+#include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
@@ -150,7 +152,7 @@ void PerFrameContentTranslateDriver::TranslatePage(
   stats_.Clear();
   translate_seq_no_ = IncrementSeqNo(translate_seq_no_);
 
-  web_contents()->ForEachFrame(base::BindRepeating(
+  web_contents()->GetMainFrame()->ForEachRenderFrameHost(base::BindRepeating(
       &PerFrameContentTranslateDriver::TranslateFrame, base::Unretained(this),
       translate_script, source_lang, target_lang, translate_seq_no_));
 }
@@ -187,7 +189,7 @@ void PerFrameContentTranslateDriver::RevertTranslation(int page_seq_no) {
   stats_.Clear();
   translate_seq_no_ = IncrementSeqNo(translate_seq_no_);
 
-  web_contents()->ForEachFrame(base::BindRepeating(
+  web_contents()->GetMainFrame()->ForEachRenderFrameHost(base::BindRepeating(
       &PerFrameContentTranslateDriver::RevertFrame, base::Unretained(this)));
 }
 

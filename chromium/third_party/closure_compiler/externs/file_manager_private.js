@@ -22,6 +22,7 @@ chrome.fileManagerPrivate.VolumeType = {
   TESTING: 'testing',
   SMB: 'smb',
   SYSTEM_INTERNAL: 'system_internal',
+  GUEST_OS: 'guest_os',
 };
 
 /** @enum {string} */
@@ -277,6 +278,7 @@ chrome.fileManagerPrivate.RecentFileType = {
   AUDIO: 'audio',
   IMAGE: 'image',
   VIDEO: 'video',
+  DOCUMENT: 'document',
 };
 
 /** @enum {string} */
@@ -1202,6 +1204,15 @@ chrome.fileManagerPrivate.mountCrostini = function(callback) {};
 chrome.fileManagerPrivate.listMountableGuests = function(callback) {};
 
 /**
+ * Starts and mounts target guest
+ * @param {!number} id Id of the mount provider to use
+ * @param {function()} callback Callback called after the requests completes
+ * (either successfully or with an error).
+ *     chrome.runtime.lastError will be set if there was an error.
+ */
+chrome.fileManagerPrivate.mountGuest = function(id, callback) {};
+
+/**
  * Shares paths with crostini container.
  * @param {string} vmName VM to share path with.
  * @param {!Array<!Entry>} entries Entries of the files and directories to
@@ -1389,6 +1400,11 @@ chrome.fileManagerPrivate.startIOTask = function(type, entries, params) {};
  * @param {number} taskId
  */
 chrome.fileManagerPrivate.cancelIOTask = function (taskId) { };
+
+/**
+ * Tells DriveFS to update its cached pin states of hosted files (once).
+ */
+chrome.fileManagerPrivate.pollDriveHostedFilePinStates = function() {};
 
 /**
  * Returns color via `callback` for Files app foreground window frame.

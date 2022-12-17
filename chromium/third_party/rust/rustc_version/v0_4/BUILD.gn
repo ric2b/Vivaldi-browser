@@ -13,8 +13,13 @@ cargo_crate("buildrs_support") {
   # third_party.toml to use it from first-party code.
   visibility = [ "//third_party/rust/*" ]
   crate_root = "crate/src/lib.rs"
-  skip_unit_tests = true
+  build_native_rust_unit_tests = false
   sources = [ "crate/src/lib.rs" ]
   edition = "2018"
+  cargo_pkg_version = "0.4.0"
+  cargo_pkg_authors = "Dirkjan Ochtman <dirkjan@ochtman.nl>, Marvin Löbel <loebel.marvin@gmail.com>"
+  cargo_pkg_name = "rustc_version"
+  cargo_pkg_description =
+      "A library for querying the version of a installed rustc compiler"
   deps = [ "//third_party/rust/semver/v1:lib" ]
 }

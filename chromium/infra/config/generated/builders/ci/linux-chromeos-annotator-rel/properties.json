@@ -12,7 +12,7 @@
       "v.test_suite"
     ]
   },
-  "builder_group": "chromium.chromiumos",
+  "builder_group": "chromium.fyi",
   "recipe": "chromium",
   "sheriff_rotations": [
     "chrome_browser_release"

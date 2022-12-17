@@ -98,7 +98,7 @@ void PingSender::SendPing(const Component& component,
   apps.push_back(MakeProtocolApp(
       component.id(), component.crx_component()->version,
       component.crx_component()->ap, component.crx_component()->brand,
-      component.crx_component()->install_source,
+      config_->GetLang(), component.crx_component()->install_source,
       component.crx_component()->install_location,
       component.crx_component()->fingerprint,
       component.crx_component()->installer_attributes,
@@ -107,7 +107,7 @@ void PingSender::SendPing(const Component& component,
       metadata.GetCohortName(component.id()),
       component.crx_component()->channel,
       component.crx_component()->disabled_reasons,
-      absl::nullopt /* update check */, absl::nullopt /* ping */,
+      absl::nullopt /* update check */, {} /* data */, absl::nullopt /* ping */,
       component.GetEvents()));
   request_sender_ = std::make_unique<RequestSender>(config_);
   request_sender_->Send(
@@ -116,8 +116,8 @@ void PingSender::SendPing(const Component& component,
           MakeProtocolRequest(
               !config_->IsPerUserInstall(), component.session_id(),
               config_->GetProdId(), config_->GetBrowserVersion().GetString(),
-              config_->GetLang(), config_->GetChannel(),
-              config_->GetOSLongName(), config_->GetDownloadPreference(),
+              config_->GetChannel(), config_->GetOSLongName(),
+              config_->GetDownloadPreference(),
               config_->IsMachineExternallyManaged(),
               config_->ExtraRequestParams(), {}, std::move(apps))),
       false, base::BindOnce(&PingSender::SendPingComplete, this));

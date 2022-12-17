@@ -51,15 +51,17 @@ class ServiceImpl : public Service {
               std::unique_ptr<ServiceRequestSender> request_sender,
               const GURL& script_server_url,
               const GURL& action_server_url,
+              const GURL& user_data_url,
               std::unique_ptr<ClientContext> client_context);
   ServiceImpl(const ServiceImpl&) = delete;
   ServiceImpl& operator=(const ServiceImpl&) = delete;
   ~ServiceImpl() override;
 
   // Get scripts for a given |url|, which should be a valid URL.
-  void GetScriptsForUrl(const GURL& url,
-                        const TriggerContext& trigger_context,
-                        ResponseCallback callback) override;
+  void GetScriptsForUrl(
+      const GURL& url,
+      const TriggerContext& trigger_context,
+      ServiceRequestSender::ResponseCallback callback) override;
 
   // Get actions.
   void GetActions(const std::string& script_path,
@@ -67,7 +69,7 @@ class ServiceImpl : public Service {
                   const TriggerContext& trigger_context,
                   const std::string& global_payload,
                   const std::string& script_payload,
-                  ResponseCallback callback) override;
+                  ServiceRequestSender::ResponseCallback callback) override;
 
   // Get next sequence of actions according to server payloads in previous
   // response.
@@ -77,26 +79,27 @@ class ServiceImpl : public Service {
       const std::string& previous_script_payload,
       const std::vector<ProcessedActionProto>& processed_actions,
       const RoundtripTimingStats& timing_stats,
-      ResponseCallback callback) override;
+      const RoundtripNetworkStats& network_stats,
+      ServiceRequestSender::ResponseCallback callback) override;
 
   void SetScriptStoreConfig(
       const ScriptStoreConfig& script_store_config) override;
 
+  void GetUserData(const CollectUserDataOptions& options,
+                   uint64_t run_id,
+                   ServiceRequestSender::ResponseCallback callback) override;
+
  private:
-  void OnFetchPaymentsClientToken(
-      const std::string& script_path,
-      const GURL& url,
-      std::unique_ptr<TriggerContext> trigger_context,
-      const std::string& global_payload,
-      const std::string& script_payload,
-      ResponseCallback callback,
+  void SendUserDataRequest(
+      uint64_t run_id,
+      bool request_name,
+      bool request_email,
+      bool request_phone,
+      bool request_shipping,
+      bool request_payment_methods,
+      const std::vector<std::string>& supported_card_networks,
+      ServiceRequestSender::ResponseCallback callback,
       const std::string& client_token);
-  void SendGetActions(const std::string& script_path,
-                      const GURL& url,
-                      const TriggerContext& trigger_context,
-                      const std::string& global_payload,
-                      const std::string& script_payload,
-                      ResponseCallback callback);
 
   Client* const client_;
 
@@ -106,6 +109,7 @@ class ServiceImpl : public Service {
   // The RPC endpoints to send requests to.
   GURL script_server_url_;
   GURL script_action_server_url_;
+  GURL user_data_url_;
 
   // The client context to send to the backend.
   std::unique_ptr<ClientContext> client_context_;

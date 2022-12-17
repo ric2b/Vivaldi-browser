@@ -12,19 +12,14 @@ bool ForceStartupSigninPromo() {
   return base::FeatureList::IsEnabled(switches::kForceStartupSigninPromo);
 }
 
-bool ForceDisableExtendedSyncPromos() {
-  return base::FeatureList::IsEnabled(
-      switches::kForceDisableExtendedSyncPromos);
-}
-
 const char kDelayThresholdMinutesToUpdateGaiaCookie[] =
     "minutes-delay-to-restore-gaia-cookies-if-deleted";
 
 const char kWaitThresholdMillisecondsForCapabilitiesApi[] =
     "wait-threshold-milliseconds-for-capabilities-api";
 
-const base::Feature kFREMobileIdentityConsistency{
-    "FREMobileIdentityConsistency", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kNewMobileIdentityConsistencyFRE{
+    "NewMobileIdentityConsistencyFRE", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kEnableUnicornAccountSupport{
     "EnableUnicornAccountSupport", base::FEATURE_DISABLED_BY_DEFAULT};

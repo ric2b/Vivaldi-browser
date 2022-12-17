@@ -60,7 +60,6 @@ using chromeos::network_config::mojom::OncSource;
 using chromeos::network_config::mojom::ProxyMode;
 
 namespace ash {
-namespace tray {
 namespace {
 
 const int kMobileNetworkBatteryIconSize = 20;
@@ -86,7 +85,14 @@ bool IsManagedByPolicy(const NetworkInfo& info) {
 
 bool ShouldShowActivateCellularNetwork(const NetworkInfo& info) {
   return NetworkTypeMatchesType(info.type, NetworkType::kCellular) &&
-         info.activation_state == ActivationStateType::kNotActivated;
+         info.activation_state == ActivationStateType::kNotActivated &&
+         info.sim_eid.empty();
+}
+
+bool ShouldShowContactCarrier(const NetworkInfo& info) {
+  return NetworkTypeMatchesType(info.type, NetworkType::kCellular) &&
+         info.activation_state == ActivationStateType::kNotActivated &&
+         !info.sim_eid.empty();
 }
 
 gfx::ImageSkia GetNetworkImageForNetwork(const NetworkInfo& info) {
@@ -122,6 +128,8 @@ bool ShouldShowUnlockCellularNetwork(const NetworkInfo& info) {
 int GetCellularNetworkSubText(const NetworkInfo& info) {
   if (ShouldShowActivateCellularNetwork(info))
     return IDS_ASH_STATUS_TRAY_NETWORK_STATUS_CLICK_TO_ACTIVATE;
+  if (ShouldShowContactCarrier(info))
+    return IDS_ASH_STATUS_TRAY_NETWORK_UNAVAILABLE_SIM_NETWORK;
   if (!ShouldShowUnlockCellularNetwork(info))
     return 0;
   if (Shell::Get()->session_controller()->IsActiveUserSessionStarted())
@@ -258,6 +266,8 @@ void NetworkListView::OnGetNetworkStateList(
             network->type_state->get_cellular()->activation_state;
         info->activation_state = activation_state;
         info->sim_locked = network->type_state->get_cellular()->sim_locked;
+        info->sim_eid = network->type_state->get_cellular()->eid;
+
         if (cellular_device && IsInhibited(cellular_device))
           inhibited = true;
         // If cellular is not enabled, skip cellular networks with no service.
@@ -499,9 +509,8 @@ void NetworkListView::UpdateViewForNetwork(HoverHighlightView* view,
   // that require it (e.g. Tether, controlled by extension).
   views::View* icon = CreatePowerStatusView(info);
   if (icon) {
-    view->AddRightView(icon, views::CreateEmptyBorder(gfx::Insets(
-                                 0 /* top */, 0 /* left */, 0 /* bottom */,
-                                 kPowerStatusPaddingRight)));
+    view->AddRightView(icon, views::CreateEmptyBorder(gfx::Insets::TLBR(
+                                 0, 0, 0, kPowerStatusPaddingRight)));
   } else {
     icon = CreatePolicyView(info);
     if (icon)
@@ -518,7 +527,7 @@ void NetworkListView::UpdateViewForNetwork(HoverHighlightView* view,
 std::u16string NetworkListView::GenerateAccessibilityLabel(
     const NetworkInfo& info) {
   if (CanNetworkConnect(info.connection_state, info.type, info.activation_state,
-                        info.connectable)) {
+                        info.connectable, info.sim_eid)) {
     return l10n_util::GetStringFUTF16(
         IDS_ASH_STATUS_TRAY_NETWORK_A11Y_LABEL_CONNECT, info.label);
   }
@@ -526,6 +535,11 @@ std::u16string NetworkListView::GenerateAccessibilityLabel(
   if (ShouldShowActivateCellularNetwork(info)) {
     return l10n_util::GetStringFUTF16(
         IDS_ASH_STATUS_TRAY_NETWORK_A11Y_LABEL_ACTIVATE, info.label);
+  }
+
+  if (ShouldShowContactCarrier(info)) {
+    return l10n_util::GetStringFUTF16(
+        IDS_ASH_STATUS_TRAY_NETWORK_A11Y_UNAVAILABLE_SIM_NETWORK, info.label);
   }
 
   return l10n_util::GetStringFUTF16(IDS_ASH_STATUS_TRAY_NETWORK_A11Y_LABEL_OPEN,
@@ -584,9 +598,13 @@ std::u16string NetworkListView::GenerateAccessibilityDescription(
           base::FormatPercent(info.signal_strength));
     }
     case NetworkType::kCellular:
-      if (info.activation_state == ActivationStateType::kNotActivated) {
+      if (ShouldShowActivateCellularNetwork(info)) {
         return l10n_util::GetStringUTF16(
             IDS_ASH_STATUS_TRAY_NETWORK_STATUS_CLICK_TO_ACTIVATE);
+      }
+      if (ShouldShowContactCarrier(info)) {
+        return l10n_util::GetStringUTF16(
+            IDS_ASH_STATUS_TRAY_NETWORK_UNAVAILABLE_SIM_NETWORK);
       }
       if (info.sim_locked) {
         if (Shell::Get()->session_controller()->IsActiveUserSessionStarted()) {
@@ -628,7 +646,7 @@ std::u16string NetworkListView::GenerateAccessibilityDescription(
     default:
       return u"";
   }
-}  // namespace tray
+}
 
 views::View* NetworkListView::CreatePowerStatusView(const NetworkInfo& info) {
   // Mobile can be Cellular or Tether.
@@ -797,7 +815,7 @@ TriView* NetworkListView::CreateConnectionWarning() {
 
   connection_warning->AddView(TriView::Container::CENTER, label);
   connection_warning->SetContainerBorder(
-      TriView::Container::CENTER, views::CreateEmptyBorder(gfx::Insets(
+      TriView::Container::CENTER, views::CreateEmptyBorder(gfx::Insets::TLBR(
                                       0, 0, 0, kTrayPopupLabelRightPadding)));
 
   // Nothing to the right of the text.
@@ -805,5 +823,4 @@ TriView* NetworkListView::CreateConnectionWarning() {
   return connection_warning;
 }
 
-}  // namespace tray
 }  // namespace ash

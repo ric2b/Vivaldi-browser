@@ -144,10 +144,6 @@ void WebRuntimeFeatures::EnableAdTagging(bool enable) {
   RuntimeEnabledFeatures::SetAdTaggingEnabled(enable);
 }
 
-void WebRuntimeFeatures::EnableAllowActivationDelegationAttr(bool enable) {
-  RuntimeEnabledFeatures::SetAllowActivationDelegationAttrEnabled(enable);
-}
-
 void WebRuntimeFeatures::EnableCacheInlineScriptCode(bool enable) {
   RuntimeEnabledFeatures::SetCacheInlineScriptCodeEnabled(enable);
 }
@@ -194,6 +190,10 @@ void WebRuntimeFeatures::EnableDevicePosture(bool enable) {
 
 void WebRuntimeFeatures::EnableRemoveMobileViewportDoubleTap(bool enable) {
   RuntimeEnabledFeatures::SetRemoveMobileViewportDoubleTapEnabled(enable);
+}
+
+void WebRuntimeFeatures::EnableZeroCopyTabCapture(bool enable) {
+  RuntimeEnabledFeatures::SetZeroCopyTabCaptureEnabled(enable);
 }
 
 void WebRuntimeFeatures::EnableFencedFrames(bool enable) {
@@ -301,6 +301,10 @@ void WebRuntimeFeatures::EnablePictureInPicture(bool enable) {
 
 void WebRuntimeFeatures::EnablePictureInPictureAPI(bool enable) {
   RuntimeEnabledFeatures::SetPictureInPictureAPIEnabled(enable);
+}
+
+void WebRuntimeFeatures::EnablePictureInPictureV2(bool enable) {
+  RuntimeEnabledFeatures::SetPictureInPictureV2Enabled(enable);
 }
 
 void WebRuntimeFeatures::EnablePointerLockOptions(bool enable) {
@@ -475,6 +479,10 @@ void WebRuntimeFeatures::EnableSecurePaymentConfirmation(bool enable) {
   RuntimeEnabledFeatures::SetSecurePaymentConfirmationEnabled(enable);
 }
 
+void WebRuntimeFeatures::EnableSecurePaymentConfirmationAPIV3(bool enable) {
+  RuntimeEnabledFeatures::SetSecurePaymentConfirmationAPIV3Enabled(enable);
+}
+
 void WebRuntimeFeatures::EnableSecurePaymentConfirmationDebug(bool enable) {
   RuntimeEnabledFeatures::SetSecurePaymentConfirmationDebugEnabled(enable);
 }
@@ -539,6 +547,10 @@ void WebRuntimeFeatures::EnableMediaEngagementBypassAutoplayPolicies(
 
 void WebRuntimeFeatures::EnableAutomationControlled(bool enable) {
   RuntimeEnabledFeatures::SetAutomationControlledEnabled(enable);
+}
+
+void WebRuntimeFeatures::EnableDigitalGoodsAPI(bool enable) {
+  RuntimeEnabledFeatures::SetDigitalGoodsEnabled(enable);
 }
 
 void WebRuntimeFeatures::EnableDisplayCutoutAPI(bool enable) {
@@ -635,20 +647,16 @@ void WebRuntimeFeatures::EnableRestrictGamepadAccess(bool enable) {
   RuntimeEnabledFeatures::SetRestrictGamepadAccessEnabled(enable);
 }
 
-void WebRuntimeFeatures::EnableParseUrlProtocolHandler(bool enable) {
-  RuntimeEnabledFeatures::SetParseUrlProtocolHandlerEnabled(enable);
-}
-
 void WebRuntimeFeatures::EnableWebAppManifestId(bool enable) {
   RuntimeEnabledFeatures::SetWebAppManifestIdEnabled(enable);
 }
 
-void WebRuntimeFeatures::EnableWebID(bool enable) {
-  RuntimeEnabledFeatures::SetWebIDEnabled(enable);
+void WebRuntimeFeatures::EnableFedCm(bool enable) {
+  RuntimeEnabledFeatures::SetFedCmEnabled(enable);
 }
 
-void WebRuntimeFeatures::EnableTargetBlankImpliesNoOpener(bool enable) {
-  RuntimeEnabledFeatures::SetTargetBlankImpliesNoOpenerEnabled(enable);
+void WebRuntimeFeatures::EnableFedCmIdpSignout(bool enable) {
+  RuntimeEnabledFeatures::SetFedCmIdpSignoutEnabled(enable);
 }
 
 void WebRuntimeFeatures::EnableDocumentTransition(bool enable) {
@@ -657,6 +665,16 @@ void WebRuntimeFeatures::EnableDocumentTransition(bool enable) {
 
 void WebRuntimeFeatures::EnableCLSScrollAnchoring(bool enable) {
   RuntimeEnabledFeatures::SetCLSScrollAnchoringEnabled(enable);
+}
+
+void WebRuntimeFeatures::EnableAndroidDownloadableFontsMatching(bool enable) {
+  RuntimeEnabledFeatures::SetAndroidDownloadableFontsMatchingEnabled(enable);
+}
+
+void WebRuntimeFeatures::EnableWebAuthenticationRemoteDesktopSupport(
+    bool enable) {
+  RuntimeEnabledFeatures::SetWebAuthenticationRemoteDesktopSupportEnabled(
+      enable);
 }
 
 }  // namespace blink

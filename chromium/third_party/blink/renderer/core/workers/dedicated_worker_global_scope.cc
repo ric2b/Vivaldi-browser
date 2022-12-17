@@ -40,6 +40,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/serialization/serialized_script_value.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_post_message_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/worker_or_worklet_script_controller.h"
+#include "third_party/blink/renderer/core/event_target_names.h"
 #include "third_party/blink/renderer/core/execution_context/agent.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
@@ -47,7 +48,6 @@
 #include "third_party/blink/renderer/core/messaging/blink_transferable_message.h"
 #include "third_party/blink/renderer/core/origin_trials/origin_trial_context.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
-#include "third_party/blink/renderer/core/workers/dedicated_worker.h"
 #include "third_party/blink/renderer/core/workers/dedicated_worker_object_proxy.h"
 #include "third_party/blink/renderer/core/workers/dedicated_worker_thread.h"
 #include "third_party/blink/renderer/core/workers/global_scope_creation_params.h"
@@ -110,18 +110,24 @@ DedicatedWorkerGlobalScope* DedicatedWorkerGlobalScope::Create(
   }
 }
 
-struct ProcessedCreationParams {
-  std::unique_ptr<GlobalScopeCreationParams> creation_params;
-  ExecutionContextToken parent_context_token;
-};
-
 // static
 DedicatedWorkerGlobalScope::ParsedCreationParams
 DedicatedWorkerGlobalScope::ParseCreationParams(
     std::unique_ptr<GlobalScopeCreationParams> creation_params) {
   ParsedCreationParams parsed_creation_params;
+
+  // Copy some stuff we need after passing the creation params to
+  // WorkerGlobalScope.
   parsed_creation_params.parent_context_token =
       creation_params->parent_context_token.value();
+  parsed_creation_params.starter_secure_context =
+      creation_params->starter_secure_context;
+
+  if (!RuntimeEnabledFeatures::SecureContextFixForWorkersEnabled()) {
+    // Preserve incorrect behavior when the fix is not enabled.
+    creation_params->starter_secure_context = true;
+  }
+
   parsed_creation_params.creation_params = std::move(creation_params);
   return parsed_creation_params;
 }
@@ -173,6 +179,13 @@ DedicatedWorkerGlobalScope::DedicatedWorkerGlobalScope(
           MakeGarbageCollected<WorkerAnimationFrameProvider>(
               this,
               begin_frame_provider_params)) {
+  // TODO(https://crbug.com/780031): When the right blink feature is disabled,
+  // we can incorrectly compute the secure context bit for this worker. It
+  // should never be true when the creator context was non-secure.
+  if (IsSecureContext() && !parsed_creation_params.starter_secure_context) {
+    CountUse(mojom::blink::WebFeature::kSecureContextIncorrectForWorker);
+  }
+
   // https://html.spec.whatwg.org/C/#run-a-worker
   // Step 14.10 "If shared is false and owner's cross-origin isolated
   // capability is false, then set worker global scope's cross-origin isolated
@@ -497,7 +510,6 @@ void DedicatedWorkerGlobalScope::Trace(Visitor* visitor) const {
   visitor->Trace(dedicated_worker_host_);
   visitor->Trace(back_forward_cache_controller_host_);
   visitor->Trace(animation_frame_provider_);
-  visitor->Trace(dedicated_workers_);
   WorkerGlobalScope::Trace(visitor);
 }
 
@@ -508,6 +520,13 @@ void DedicatedWorkerGlobalScope::EvictFromBackForwardCache(
     return;
   }
   if (!back_forward_cache_controller_host_.is_bound()) {
+    return;
+  }
+  if (!GetExecutionContext()->is_in_back_forward_cache()) {
+    // Don't send an eviction message unless the document associated with this
+    // DedicatedWorker is in back/forward cache.
+    // TODO(crbug.com/1163843): Maybe also check if eviction is already disabled
+    // for the document?
     return;
   }
   UMA_HISTOGRAM_ENUMERATION("BackForwardCache.Eviction.Renderer", reason);
@@ -529,16 +548,6 @@ void DedicatedWorkerGlobalScope::SetIsInBackForwardCache(
             total_bytes_buffered_while_in_back_forward_cache_);
     total_bytes_buffered_while_in_back_forward_cache_ = 0;
   }
-}
-
-void DedicatedWorkerGlobalScope::AddDedicatedWorker(
-    DedicatedWorker* dedicated_worker) {
-  dedicated_workers_.insert(dedicated_worker);
-}
-
-void DedicatedWorkerGlobalScope::RemoveDedicatedWorker(
-    DedicatedWorker* dedicated_worker) {
-  dedicated_workers_.erase(dedicated_worker);
 }
 
 }  // namespace blink

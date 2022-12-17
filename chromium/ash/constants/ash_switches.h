@@ -27,6 +27,7 @@ COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kAllowFailedPolicyFetchForTest[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kAllowOsInstall[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kAllowRAInDevMode[];
+COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kAlwaysEnableHdcp[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kAppAutoLaunched[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kAppOemManifestFile[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kArcAvailability[];
@@ -177,6 +178,8 @@ COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kFakeDriveFsLauncherSocketPath[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kFingerprintSensorLocation[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kFirstExecAfterBoot[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kForceCryptohomeRecoveryForTesting[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kForceDevToolsAvailable[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kForceFirstRunUI[];
 COMPONENT_EXPORT(ASH_CONSTANTS)

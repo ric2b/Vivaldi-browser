@@ -35,6 +35,11 @@
           android:layout_height="wrap_content"
           android:layout_weight="1"
           android:layout_gravity="center_vertical"
+          android:paddingTop="12dp"
+          android:paddingBottom="12dp"
+          android:focusable="true"
+          android:focusableInTouchMode="true"
+          android:screenReaderFocusable="true"
           android:textAppearance="@style/TextAppearance.TextAccentMediumThick" />
     <org.chromium.ui.widget.ChromeImageButton
           android:id="@+id/close_button"

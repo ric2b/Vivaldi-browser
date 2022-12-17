@@ -23,6 +23,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread_restrictions.h"
@@ -72,6 +73,7 @@
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/fenced_frame_test_util.h"
+#include "content/public/test/mock_client_hints_controller_delegate.h"
 #include "content/public/test/mock_web_contents_observer.h"
 #include "content/public/test/no_renderer_crashes_assertion.h"
 #include "content/public/test/prerender_test_util.h"
@@ -82,7 +84,6 @@
 #include "content/shell/browser/shell_browser_context.h"
 #include "content/shell/browser/shell_content_browser_client.h"
 #include "content/test/content_browser_test_utils_internal.h"
-#include "content/test/mock_client_hints_controller_delegate.h"
 #include "content/test/resource_load_observer.h"
 #include "content/test/test_content_browser_client.h"
 #include "mojo/public/cpp/test_support/test_utils.h"
@@ -99,6 +100,7 @@
 #include "third_party/blink/public/common/client_hints/client_hints.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
+#include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "third_party/blink/public/mojom/frame/fullscreen.mojom.h"
 #include "ui/base/clipboard/clipboard_format_type.h"
 #include "url/gurl.h"
@@ -676,7 +678,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, ResourceLoadComplete) {
   base::TimeTicks before = base::TimeTicks::Now();
   EXPECT_TRUE(NavigateToURL(shell(), page_url));
   base::TimeTicks after = base::TimeTicks::Now();
-  ASSERT_EQ(3U, observer.resource_load_infos().size());
+  ASSERT_EQ(3U, observer.resource_load_entries().size());
   SCOPE_TRACED(observer.CheckResourceLoaded(
       page_url, /*referrer=*/GURL(), "GET",
       network::mojom::RequestDestination::kDocument,
@@ -696,9 +698,8 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, ResourceLoadComplete) {
 
 // Same as WebContentsImplBrowserTest.ResourceLoadComplete but with resources
 // retrieved from the network cache.
-// TODO(crbug.com/1271252): Flaky everywhere.
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
-                       DISABLED_ResourceLoadCompleteFromNetworkCache) {
+                       ResourceLoadCompleteFromNetworkCache) {
   ResourceLoadObserver observer(shell());
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL page_url(
@@ -708,7 +709,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   base::TimeTicks after = base::TimeTicks::Now();
 
   GURL resource_url = embedded_test_server()->GetURL("/cachetime");
-  ASSERT_EQ(2U, observer.resource_load_infos().size());
+  ASSERT_EQ(2U, observer.resource_load_entries().size());
   SCOPE_TRACED(observer.CheckResourceLoaded(
       page_url, /*referrer=*/GURL(), "GET",
       network::mojom::RequestDestination::kDocument,
@@ -721,8 +722,8 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
       network::mojom::RequestDestination::kScript,
       /*served_file_name=*/FILE_PATH_LITERAL(""), "text/html", "127.0.0.1",
       /*was_cached=*/false, /*first_network_request=*/false, before, after));
-  EXPECT_TRUE(
-      observer.resource_load_infos()[1]->network_info->network_accessed);
+  EXPECT_TRUE(observer.resource_load_entries()[1]
+                  .resource_load_info->network_info->network_accessed);
   EXPECT_TRUE(observer.memory_cached_loaded_urls().empty());
   observer.Reset();
 
@@ -730,7 +731,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   before = base::TimeTicks::Now();
   EXPECT_TRUE(NavigateToURL(shell(), page_url));
   after = base::TimeTicks::Now();
-  ASSERT_EQ(1U, observer.resource_load_infos().size());
+  ASSERT_EQ(1U, observer.resource_load_entries().size());
   SCOPE_TRACED(observer.CheckResourceLoaded(
       page_url, /*referrer=*/GURL(), "GET",
       network::mojom::RequestDestination::kDocument,
@@ -749,7 +750,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   before = base::TimeTicks::Now();
   EXPECT_TRUE(NavigateToURL(shell(), page_url));
   after = base::TimeTicks::Now();
-  ASSERT_EQ(2U, observer.resource_load_infos().size());
+  ASSERT_EQ(2U, observer.resource_load_entries().size());
   SCOPE_TRACED(observer.CheckResourceLoaded(
       page_url, /*referrer=*/GURL(), "GET",
       network::mojom::RequestDestination::kDocument,
@@ -761,8 +762,8 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
       /*served_file_name=*/FILE_PATH_LITERAL(""), "text/html", "127.0.0.1",
       /*was_cached=*/true, /*first_network_request=*/false, before, after));
   EXPECT_TRUE(observer.memory_cached_loaded_urls().empty());
-  EXPECT_FALSE(
-      observer.resource_load_infos()[1]->network_info->network_accessed);
+  EXPECT_FALSE(observer.resource_load_entries()[1]
+                   .resource_load_info->network_info->network_accessed);
 }
 
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
@@ -771,18 +772,18 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   ASSERT_TRUE(embedded_test_server()->Start());
   EXPECT_TRUE(NavigateToURL(
       shell(), GURL(embedded_test_server()->GetURL("/page_with_image.html"))));
-  ASSERT_EQ(2U, observer.resource_load_infos().size());
-  EXPECT_TRUE(
-      observer.resource_load_infos()[0]->network_info->network_accessed);
-  EXPECT_TRUE(
-      observer.resource_load_infos()[1]->network_info->network_accessed);
+  ASSERT_EQ(2U, observer.resource_load_entries().size());
+  EXPECT_TRUE(observer.resource_load_entries()[0]
+                  .resource_load_info->network_info->network_accessed);
+  EXPECT_TRUE(observer.resource_load_entries()[1]
+                  .resource_load_info->network_info->network_accessed);
   observer.Reset();
 
   EXPECT_TRUE(NavigateToURL(shell(), GetWebUIURL("gpu")));
-  ASSERT_LE(1U, observer.resource_load_infos().size());
-  for (const blink::mojom::ResourceLoadInfoPtr& resource_load_info :
-       observer.resource_load_infos()) {
-    EXPECT_FALSE(resource_load_info->network_info->network_accessed);
+  ASSERT_LE(1U, observer.resource_load_entries().size());
+  for (auto& resource_load_entry : observer.resource_load_entries()) {
+    EXPECT_FALSE(
+        resource_load_entry.resource_load_info->network_info->network_accessed);
   }
 }
 
@@ -798,9 +799,9 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   EXPECT_TRUE(NavigateToURL(shell(), page_original_url,
                             page_destination_url /* expected_commit_url */));
 
-  ASSERT_EQ(2U, observer.resource_load_infos().size());
+  ASSERT_EQ(2U, observer.resource_load_entries().size());
   const blink::mojom::ResourceLoadInfoPtr& page_load_info =
-      observer.resource_load_infos()[0];
+      observer.resource_load_entries()[0].resource_load_info;
   EXPECT_EQ(page_destination_url, page_load_info->final_url);
   EXPECT_EQ(page_original_url, page_load_info->original_url);
 
@@ -808,7 +809,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   GURL image_original_url(
       embedded_test_server()->GetURL("/server-redirect?blank.jpg"));
   const blink::mojom::ResourceLoadInfoPtr& image_load_info =
-      observer.resource_load_infos()[1];
+      observer.resource_load_entries()[1].resource_load_info;
   EXPECT_EQ(image_destination_url, image_load_info->final_url);
   EXPECT_EQ(image_original_url, image_load_info->original_url);
 }
@@ -823,9 +824,11 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
 
   // Load the page without errors.
   EXPECT_TRUE(NavigateToURL(shell(), page_url));
-  ASSERT_EQ(2U, observer.resource_load_infos().size());
-  EXPECT_EQ(net::OK, observer.resource_load_infos()[0]->net_error);
-  EXPECT_EQ(net::OK, observer.resource_load_infos()[1]->net_error);
+  const std::vector<ResourceLoadObserver::ResourceLoadEntry>& entries =
+      observer.resource_load_entries();
+  ASSERT_EQ(2U, entries.size());
+  EXPECT_EQ(net::OK, entries[0].resource_load_info->net_error);
+  EXPECT_EQ(net::OK, entries[1].resource_load_info->net_error);
   observer.Reset();
 
   // Load the page and simulate a network error.
@@ -839,20 +842,20 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
         return true;
       }));
   EXPECT_TRUE(NavigateToURL(shell(), page_url));
-  ASSERT_EQ(2U, observer.resource_load_infos().size());
+  ASSERT_EQ(2U, entries.size());
   // A ResourceLoadInfo is added when the load for the resource is complete,
   // and hence the order is undeterministic.
-  if (observer.resource_load_infos()[0]->final_url == page_url) {
-    EXPECT_EQ(net::OK, observer.resource_load_infos()[0]->net_error);
-    EXPECT_EQ(image_url, observer.resource_load_infos()[1]->final_url);
+  if (entries[0].resource_load_info->final_url == page_url) {
+    EXPECT_EQ(net::OK, entries[0].resource_load_info->net_error);
+    EXPECT_EQ(image_url, entries[1].resource_load_info->final_url);
     EXPECT_EQ(net::ERR_ADDRESS_UNREACHABLE,
-              observer.resource_load_infos()[1]->net_error);
+              entries[1].resource_load_info->net_error);
   } else {
-    EXPECT_EQ(image_url, observer.resource_load_infos()[0]->final_url);
+    EXPECT_EQ(image_url, entries[0].resource_load_info->final_url);
     EXPECT_EQ(net::ERR_ADDRESS_UNREACHABLE,
-              observer.resource_load_infos()[0]->net_error);
-    EXPECT_EQ(page_url, observer.resource_load_infos()[1]->final_url);
-    EXPECT_EQ(net::OK, observer.resource_load_infos()[1]->net_error);
+              entries[0].resource_load_info->net_error);
+    EXPECT_EQ(page_url, entries[1].resource_load_info->final_url);
+    EXPECT_EQ(net::OK, entries[1].resource_load_info->net_error);
   }
 }
 
@@ -863,9 +866,9 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
 
   GURL cacheable_url(embedded_test_server()->GetURL("/set-header"));
   EXPECT_TRUE(NavigateToURL(shell(), cacheable_url));
-  ASSERT_EQ(1U, observer.resource_load_infos().size());
-  EXPECT_FALSE(
-      observer.resource_load_infos()[0]->network_info->always_access_network);
+  ASSERT_EQ(1U, observer.resource_load_entries().size());
+  EXPECT_FALSE(observer.resource_load_entries()[0]
+                   .resource_load_info->network_info->always_access_network);
   observer.Reset();
 
   std::array<std::string, 3> headers = {
@@ -873,9 +876,9 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   for (const std::string& header : headers) {
     GURL no_cache_url(embedded_test_server()->GetURL("/set-header?" + header));
     EXPECT_TRUE(NavigateToURL(shell(), no_cache_url));
-    ASSERT_EQ(1U, observer.resource_load_infos().size());
-    EXPECT_TRUE(
-        observer.resource_load_infos()[0]->network_info->always_access_network);
+    ASSERT_EQ(1U, observer.resource_load_entries().size());
+    EXPECT_TRUE(observer.resource_load_entries()[0]
+                    .resource_load_info->network_info->always_access_network);
     observer.Reset();
   }
 }
@@ -894,57 +897,61 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   EXPECT_TRUE(
       NavigateToURL(shell(), start_url, target_url /* expected_commit_url */));
 
-  ASSERT_EQ(1U, observer.resource_load_infos().size());
-  EXPECT_EQ(target_url, observer.resource_load_infos()[0]->final_url);
+  ASSERT_EQ(1U, observer.resource_load_entries().size());
+  EXPECT_EQ(target_url,
+            observer.resource_load_entries()[0].resource_load_info->final_url);
 
-  ASSERT_EQ(2U, observer.resource_load_infos()[0]->redirect_info_chain.size());
+  ASSERT_EQ(2U, observer.resource_load_entries()[0]
+                    .resource_load_info->redirect_info_chain.size());
   EXPECT_EQ(url::Origin::Create(intermediate_url),
-            observer.resource_load_infos()[0]
-                ->redirect_info_chain[0]
+            observer.resource_load_entries()[0]
+                .resource_load_info->redirect_info_chain[0]
                 ->origin_of_new_url);
-  EXPECT_TRUE(observer.resource_load_infos()[0]
-                  ->redirect_info_chain[0]
+  EXPECT_TRUE(observer.resource_load_entries()[0]
+                  .resource_load_info->redirect_info_chain[0]
                   ->network_info->network_accessed);
-  EXPECT_FALSE(observer.resource_load_infos()[0]
-                   ->redirect_info_chain[0]
+  EXPECT_FALSE(observer.resource_load_entries()[0]
+                   .resource_load_info->redirect_info_chain[0]
                    ->network_info->always_access_network);
-  EXPECT_EQ(url::Origin::Create(target_url), observer.resource_load_infos()[0]
-                                                 ->redirect_info_chain[1]
-                                                 ->origin_of_new_url);
-  EXPECT_TRUE(observer.resource_load_infos()[0]
-                  ->redirect_info_chain[1]
+  EXPECT_EQ(url::Origin::Create(target_url),
+            observer.resource_load_entries()[0]
+                .resource_load_info->redirect_info_chain[1]
+                ->origin_of_new_url);
+  EXPECT_TRUE(observer.resource_load_entries()[0]
+                  .resource_load_info->redirect_info_chain[1]
                   ->network_info->network_accessed);
-  EXPECT_FALSE(observer.resource_load_infos()[0]
-                   ->redirect_info_chain[1]
+  EXPECT_FALSE(observer.resource_load_entries()[0]
+                   .resource_load_info->redirect_info_chain[1]
                    ->network_info->always_access_network);
 }
 
-// Flaky on all platforms: https://crbug.com/1259766
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
-                       DISABLED_ResourceLoadCompleteIsMainFrame) {
+                       ResourceLoadCompleteIsMainFrame) {
   ResourceLoadObserver observer(shell());
   ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL url(embedded_test_server()->GetURL("/page_with_image.html"));
   EXPECT_TRUE(NavigateToURL(shell(), url));
-  ASSERT_EQ(2U, observer.resource_load_infos().size());
-  EXPECT_EQ(url, observer.resource_load_infos()[0]->original_url);
-  EXPECT_EQ(url, observer.resource_load_infos()[0]->final_url);
-  EXPECT_TRUE(observer.resource_is_associated_with_main_frame()[0]);
-  EXPECT_TRUE(observer.resource_is_associated_with_main_frame()[1]);
+  const std::vector<ResourceLoadObserver::ResourceLoadEntry>& entries =
+      observer.resource_load_entries();
+  ASSERT_EQ(2U, entries.size());
+  EXPECT_EQ(url, entries[0].resource_load_info->original_url);
+  EXPECT_EQ(url, entries[0].resource_load_info->final_url);
+  EXPECT_TRUE(entries[0].resource_is_associated_with_main_frame);
+  EXPECT_TRUE(entries[1].resource_is_associated_with_main_frame);
   observer.Reset();
 
   // Load that same page inside an iframe.
   GURL data_url("data:text/html,<iframe src='" + url.spec() + "'></iframe>");
   EXPECT_TRUE(NavigateToURL(shell(), data_url));
-  ASSERT_EQ(3U, observer.resource_load_infos().size());
-  EXPECT_EQ(data_url, observer.resource_load_infos()[0]->original_url);
-  EXPECT_EQ(data_url, observer.resource_load_infos()[0]->final_url);
-  EXPECT_EQ(url, observer.resource_load_infos()[1]->original_url);
-  EXPECT_EQ(url, observer.resource_load_infos()[1]->final_url);
-  EXPECT_TRUE(observer.resource_is_associated_with_main_frame()[0]);
-  EXPECT_FALSE(observer.resource_is_associated_with_main_frame()[1]);
-  EXPECT_FALSE(observer.resource_is_associated_with_main_frame()[2]);
+  ASSERT_EQ(3U, entries.size());
+  EXPECT_EQ(data_url, entries[0].resource_load_info->original_url);
+  EXPECT_EQ(data_url, entries[0].resource_load_info->final_url);
+  EXPECT_EQ(url, entries[1].resource_load_info->original_url);
+  EXPECT_EQ(url, entries[1].resource_load_info->final_url);
+  EXPECT_TRUE(entries[0].resource_is_associated_with_main_frame);
+  EXPECT_FALSE(entries[1].resource_is_associated_with_main_frame);
+  EXPECT_FALSE(entries[2].resource_is_associated_with_main_frame);
 }
 
 struct LoadProgressObserver : public WebContentsObserver {
@@ -1210,6 +1217,55 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, ChangePageScale) {
     observer.WaitForPageScaleUpdate();
   }
 }
+
+#if BUILDFLAG(IS_ANDROID)
+// Test that when navigating between pages with the same non-one initial scale,
+// the browser tracks the correct scale value.
+// This test is only relevant for Android, since desktop would always have one
+// as the initial scale.
+IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
+                       SameInitialScaleAcrossNavigations) {
+  // Scale value comparisons don't need to be precise.
+  constexpr double kEpsilon = 0.01;
+
+  ASSERT_TRUE(embedded_test_server()->Start());
+  const GURL url(embedded_test_server()->GetURL("/title1.html"));
+  auto* contents = static_cast<WebContentsImpl*>(shell()->web_contents());
+
+  // Navigate to a page with a non-one initial scale, then determine what the
+  // renderer and browser each think the scale is.
+  EXPECT_TRUE(NavigateToURL(shell(), url));
+  double initial_renderer_scale_1 =
+      EvalJs(contents, "window.visualViewport.scale").ExtractDouble();
+  double initial_browser_scale_1 =
+      contents->GetPrimaryPage().GetPageScaleFactor();
+
+  // Now navigate to another page and record the scales again. Note that this
+  // navigation could reuse the RenderFrameHost and in that case the renderer
+  // will not inform the browser of the scale again. This was the case in
+  // https://crbug.com/1301879
+  const auto rfh_id_1 = contents->GetMainFrame()->GetGlobalId();
+  EXPECT_TRUE(NavigateToURL(shell(), url));
+  const auto rfh_id_2 = contents->GetMainFrame()->GetGlobalId();
+  SCOPED_TRACE(testing::Message()
+               << "CanSameSiteMainFrameNavigationsChangeRenderFrameHosts = "
+               << CanSameSiteMainFrameNavigationsChangeRenderFrameHosts());
+  SCOPED_TRACE(testing::Message()
+               << "Did change RenderFrameHost? " << (rfh_id_1 != rfh_id_2));
+  double initial_renderer_scale_2 =
+      EvalJs(contents, "window.visualViewport.scale").ExtractDouble();
+  double initial_browser_scale_2 =
+      contents->GetPrimaryPage().GetPageScaleFactor();
+
+  // Ensure both pages are scaled to the same non-one value.
+  ASSERT_LT(initial_renderer_scale_1, 1.0 - kEpsilon);
+  ASSERT_NEAR(initial_renderer_scale_1, initial_renderer_scale_2, kEpsilon);
+
+  // Test that the browser and renderer agree on the scale.
+  EXPECT_NEAR(initial_browser_scale_1, initial_renderer_scale_1, kEpsilon);
+  EXPECT_NEAR(initial_browser_scale_2, initial_renderer_scale_2, kEpsilon);
+}
+#endif  // BUILDFLAG(IS_ANDROID)
 
 // Test that a direct navigation to a view-source URL works.
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, ViewSourceDirectNavigation) {
@@ -1815,7 +1871,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   FrameTreeNode* frame = root->child_at(0);
   ASSERT_NE(nullptr, frame);
 
-  url::Replacements<char> clear_port;
+  GURL::Replacements clear_port;
   clear_port.ClearPort();
 
   // A dialog from the main frame.
@@ -2454,6 +2510,96 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, UserAgentOverride) {
             EvalJs(shell()->web_contents(), "document.body.textContent;"));
 }
 
+class WebContentsImplBrowserTestUserAgentOverrideSubstring
+    : public WebContentsImplBrowserTest {
+ public:
+  void SetUp() override {
+    scoped_feature_list_.InitAndEnableFeature(
+        blink::features::kUserAgentOverrideExperiment);
+    WebContentsImplBrowserTest::SetUp();
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+// Verify UserAgentOverride histograms
+IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTestUserAgentOverrideSubstring,
+                       UserAgentOverrideHistogram) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  const std::string kHeaderPath =
+      std::string("/echoheader?") + net::HttpRequestHeaders::kUserAgent;
+  const GURL kUrl(embedded_test_server()->GetURL(kHeaderPath));
+  EXPECT_TRUE(NavigateToURL(shell(), kUrl));
+
+  std::string original_ua = ShellContentBrowserClient::Get()->GetUserAgent();
+  std::string ua_no_substring = "foo";
+  std::string ua_prefix = "foo" + original_ua;
+  std::string ua_suffix = original_ua + "foo";
+  {
+    base::HistogramTester histogram;
+    shell()->web_contents()->SetUserAgentOverride(
+        blink::UserAgentOverride::UserAgentOnly(ua_no_substring), false);
+    shell()
+        ->web_contents()
+        ->GetController()
+        .GetLastCommittedEntry()
+        ->SetIsOverridingUserAgent(true);
+    EXPECT_TRUE(NavigateToURL(shell(), kUrl));
+    histogram.ExpectBucketCount(
+        blink::UserAgentOverride::kUserAgentOverrideHistogram,
+        blink::UserAgentOverride::UserAgentOverriden, 1);
+    histogram.ExpectBucketCount(
+        blink::UserAgentOverride::kUserAgentOverrideHistogram,
+        blink::UserAgentOverride::UserAgentOverrideSubstring, 0);
+    histogram.ExpectBucketCount(
+        blink::UserAgentOverride::kUserAgentOverrideHistogram,
+        blink::UserAgentOverride::UserAgentOverrideSuffix, 0);
+  }
+
+  {
+    base::HistogramTester histogram;
+    shell()->web_contents()->SetUserAgentOverride(
+        blink::UserAgentOverride::UserAgentOnly(ua_prefix), false);
+    shell()
+        ->web_contents()
+        ->GetController()
+        .GetLastCommittedEntry()
+        ->SetIsOverridingUserAgent(true);
+    EXPECT_TRUE(NavigateToURL(shell(), kUrl));
+    histogram.ExpectBucketCount(
+        blink::UserAgentOverride::kUserAgentOverrideHistogram,
+        blink::UserAgentOverride::UserAgentOverriden, 0);
+    histogram.ExpectBucketCount(
+        blink::UserAgentOverride::kUserAgentOverrideHistogram,
+        blink::UserAgentOverride::UserAgentOverrideSubstring, 1);
+    histogram.ExpectBucketCount(
+        blink::UserAgentOverride::kUserAgentOverrideHistogram,
+        blink::UserAgentOverride::UserAgentOverrideSuffix, 0);
+  }
+
+  {
+    base::HistogramTester histogram;
+    shell()->web_contents()->SetUserAgentOverride(
+        blink::UserAgentOverride::UserAgentOnly(ua_suffix), false);
+    shell()
+        ->web_contents()
+        ->GetController()
+        .GetLastCommittedEntry()
+        ->SetIsOverridingUserAgent(true);
+    EXPECT_TRUE(NavigateToURL(shell(), kUrl));
+    histogram.ExpectBucketCount(
+        blink::UserAgentOverride::kUserAgentOverrideHistogram,
+        blink::UserAgentOverride::UserAgentOverriden, 0);
+    histogram.ExpectBucketCount(
+        blink::UserAgentOverride::kUserAgentOverrideHistogram,
+        blink::UserAgentOverride::UserAgentOverrideSubstring, 0);
+    histogram.ExpectBucketCount(
+        blink::UserAgentOverride::kUserAgentOverrideHistogram,
+        blink::UserAgentOverride::UserAgentOverrideSuffix, 1);
+  }
+}
+
 // Verifies the user-agent string may be changed in DidStartNavigation().
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
                        SetUserAgentOverrideFromDidStartNavigation) {
@@ -2714,7 +2860,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   // gesture to allow dialogs.
   wc->GetMainFrame()->DisableBeforeUnloadHangMonitorForTesting();
   wc->GetMainFrame()->ExecuteJavaScriptWithUserGestureForTests(
-      std::u16string());
+      std::u16string(), base::NullCallback());
   script = "window.onbeforeunload=function(e){ return 'x' };";
   EXPECT_TRUE(ExecJs(wc, script));
   test_delegate.WillWaitForDialog();
@@ -5393,6 +5539,72 @@ IN_PROC_BROWSER_TEST_F(WebContentsFencedFrameBrowserTest, DoNotUpdateAXTree) {
       fenced_frame_test_helper().CreateFencedFrame(
           web_contents()->GetMainFrame(), fenced_frame_url);
   EXPECT_NE(nullptr, fenced_frame_rfh);
+}
+
+class MediaWatchTimeChangedDelegate : public WebContentsDelegate {
+ public:
+  explicit MediaWatchTimeChangedDelegate(WebContents* contents)
+      : watch_time_(GURL(),
+                    GURL(),
+                    base::TimeDelta(),
+                    base::TimeDelta(),
+                    false,
+                    false) {
+    contents->SetDelegate(this);
+  }
+  ~MediaWatchTimeChangedDelegate() override = default;
+  MediaWatchTimeChangedDelegate(const LoadStateWaiter&) = delete;
+  MediaWatchTimeChangedDelegate& operator=(
+      const MediaWatchTimeChangedDelegate&) = delete;
+
+  // WebContentsDelegate:
+  void MediaWatchTimeChanged(const MediaPlayerWatchTime& watch_time) override {
+    watch_time_ = watch_time;
+  }
+  base::WeakPtr<WebContentsDelegate> GetDelegateWeakPtr() override {
+    return weak_factory_.GetWeakPtr();
+  }
+
+  const MediaPlayerWatchTime& watch_time() { return watch_time_; }
+
+ private:
+  MediaPlayerWatchTime watch_time_;
+  base::WeakPtrFactory<MediaWatchTimeChangedDelegate> weak_factory_{this};
+};
+
+// Tests that a media in a fenced frame reports the watch time with the url from
+// the top level frame.
+IN_PROC_BROWSER_TEST_F(WebContentsFencedFrameBrowserTest,
+                       MediaWatchTimeCallback) {
+  MediaWatchTimeChangedDelegate delegate(web_contents());
+  net::test_server::EmbeddedTestServerHandle test_server_handle;
+  ASSERT_TRUE(test_server_handle =
+                  embedded_test_server()->StartAndReturnHandle());
+  const GURL top_url = embedded_test_server()->GetURL("/empty.html");
+  ASSERT_TRUE(NavigateToURL(shell(), top_url));
+
+  // Create a fenced frame.
+  GURL fenced_frame_url(
+      embedded_test_server()->GetURL("/fenced_frames/title1.html"));
+  content::RenderFrameHost* fenced_frame =
+      fenced_frame_test_helper().CreateFencedFrame(
+          web_contents()->GetMainFrame(), fenced_frame_url);
+  // Insert a video element.
+  EXPECT_TRUE(ExecJs(fenced_frame, R"(
+    var video = document.createElement('video');
+    document.body.appendChild(video);
+    video.src = '../media/bear.webm';
+    video.play();
+  )"));
+
+  // Get a watch time callback from `fenced_frame`.
+  media::MediaMetricsProvider::RecordAggregateWatchTimeCallback
+      record_playback_cb = static_cast<RenderFrameHostImpl*>(fenced_frame)
+                               ->GetRecordAggregateWatchTimeCallback();
+  std::move(record_playback_cb)
+      .Run(base::TimeDelta(), base::TimeDelta(), true, true);
+  // Check if the URL is from the top level frame.
+  DCHECK_EQ(top_url, delegate.watch_time().url);
 }
 
 #if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && defined(PA_ALLOW_PCSCAN)

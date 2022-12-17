@@ -79,6 +79,7 @@
 #include "mojo/public/cpp/platform/platform_channel.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/dns/public/dns_over_https_server_config.h"
+#include "net/dns/public/secure_dns_mode.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/mojom/network_service_test.mojom.h"
@@ -431,7 +432,12 @@ void BrowserTestBase::SetUp() {
 
       // Mark the channel as blocking.
       int flags = fcntl(socket_fd.get(), F_GETFL);
-      PCHECK(flags != -1) << "Ash is probably not running. Perhaps it crashed?";
+      std::string helper_msg =
+          "On bot, open CAS outputs on test result page(Milo),"
+          "there is a ash_chrome.log file which contains ash log."
+          "For local debugging, pass in --ash-logging-path to test runner.";
+      PCHECK(flags != -1) << "Ash is probably not running. Perhaps it crashed?"
+                          << helper_msg;
       fcntl(socket_fd.get(), F_SETFL, flags & ~O_NONBLOCK);
 
       uint8_t buf[32];
@@ -439,7 +445,7 @@ void BrowserTestBase::SetUp() {
       auto size = mojo::SocketRecvmsg(socket_fd.get(), buf, sizeof(buf),
                                       &descriptors, true /*block*/);
       if (size < 0)
-        PLOG(ERROR) << "Error receiving message from the socket";
+        PLOG(ERROR) << "Error receiving message from the socket" << helper_msg;
       ASSERT_EQ(1, size);
 
       // TODO(crbug.com/1156033): Clean up when both ash-chrome and
@@ -739,6 +745,14 @@ bool BrowserTestBase::UseProductionQuotaSettings() {
 void BrowserTestBase::SimulateNetworkServiceCrash() {
   CHECK(!IsInProcessNetworkService())
       << "Can't crash the network service if it's running in-process!";
+
+  // Check if any unexpected crashes have occurred *before* the expected crash
+  // that we will trigger/simulate below.
+  AssertThatNetworkServiceDidNotCrash();
+
+  // `network_service_test_` field might not be ready yet - some tests call
+  // SimulateNetworkServiceCrash from SetUpOnMainThread, before
+  // InitializeNetworkProcess has been called.
   mojo::Remote<network::mojom::NetworkServiceTest> network_service_test;
   content::GetNetworkService()->BindTestInterface(
       network_service_test.BindNewPipeAndPassReceiver());
@@ -756,6 +770,10 @@ void BrowserTestBase::SimulateNetworkServiceCrash() {
   // Need to re-initialize the network process.
   initialized_network_process_ = false;
   InitializeNetworkProcess();
+}
+
+void BrowserTestBase::IgnoreNetworkServiceCrashes() {
+  network_service_test_.reset();
 }
 
 #if BUILDFLAG(IS_ANDROID)
@@ -880,6 +898,7 @@ void BrowserTestBase::ProxyRunTestOnMainThreadLoop() {
       RunTestOnMainThread();
     }
     TearDownOnMainThread();
+    AssertThatNetworkServiceDidNotCrash();
   }
 
   PostRunTestOnMainThread();
@@ -917,9 +936,10 @@ void BrowserTestBase::SetReplaceSystemDnsConfig() {
   replace_system_dns_config_ = true;
 }
 
-void BrowserTestBase::SetTestDohConfig(net::DnsOverHttpsConfig config) {
+void BrowserTestBase::SetTestDohConfig(net::SecureDnsMode secure_dns_mode,
+                                       net::DnsOverHttpsConfig config) {
   DCHECK(!test_doh_config_.has_value());
-  test_doh_config_ = std::move(config);
+  test_doh_config_ = std::make_pair(secure_dns_mode, std::move(config));
 }
 
 void BrowserTestBase::CreateTestServer(const base::FilePath& test_server_base) {
@@ -956,6 +976,26 @@ void BrowserTestBase::SetInitialWebContents(WebContents* web_contents) {
   initial_web_contents_ = web_contents;
 }
 
+void BrowserTestBase::AssertThatNetworkServiceDidNotCrash() {
+  if (!IsOutOfProcessNetworkService()) {
+    return;
+  }
+
+  // TODO(https://crbug.com/1169431#c2): Enable NetworkService crash detection
+  // on Fuchsia.
+#if !BUILDFLAG(IS_FUCHSIA)
+  if (network_service_test_.is_bound()) {
+    // If there was a crash, then |network_service_test_| will receive an error
+    // notification, but it's not guaranteed to have arrived at this point.
+    // Flush the remote to make sure the notification has been received.
+    network_service_test_.FlushForTesting();
+
+    EXPECT_TRUE(network_service_test_.is_connected())
+        << "Expecting no NetworkService crashes";
+  }
+#endif
+}
+
 void BrowserTestBase::InitializeNetworkProcess() {
   if (initialized_network_process_)
     return;
@@ -980,26 +1020,27 @@ void BrowserTestBase::InitializeNetworkProcess() {
     return;
   }
 
-  mojo::Remote<network::mojom::NetworkServiceTest> network_service_test;
+  network_service_test_.reset();
   content::GetNetworkService()->BindTestInterface(
-      network_service_test.BindNewPipeAndPassReceiver());
+      network_service_test_.BindNewPipeAndPassReceiver());
 
   // Do not set up host resolver rules if we allow the test to access
   // the network.
   if (allow_network_access_to_host_resolutions_) {
     mojo::ScopedAllowSyncCallForTesting allow_sync_call;
-    network_service_test->SetAllowNetworkAccessToHostResolutions();
+    network_service_test_->SetAllowNetworkAccessToHostResolutions();
     return;
   }
 
   if (replace_system_dns_config_) {
     mojo::ScopedAllowSyncCallForTesting allow_sync_call;
-    network_service_test->ReplaceSystemDnsConfig();
+    network_service_test_->ReplaceSystemDnsConfig();
   }
 
   if (test_doh_config_.has_value()) {
     mojo::ScopedAllowSyncCallForTesting allow_sync_call;
-    network_service_test->SetTestDohConfig(*test_doh_config_);
+    network_service_test_->SetTestDohConfig(test_doh_config_->first,
+                                            test_doh_config_->second);
   }
 
   std::vector<network::mojom::RulePtr> mojo_rules;
@@ -1066,7 +1107,7 @@ void BrowserTestBase::InitializeNetworkProcess() {
   // to dispatch a Java callback that makes network process to enter native
   // code.
   base::RunLoop loop{base::RunLoop::Type::kNestableTasksAllowed};
-  network_service_test->AddRules(std::move(mojo_rules), loop.QuitClosure());
+  network_service_test_->AddRules(std::move(mojo_rules), loop.QuitClosure());
   loop.Run();
 }
 

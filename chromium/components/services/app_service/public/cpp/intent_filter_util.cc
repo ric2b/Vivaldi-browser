@@ -6,7 +6,6 @@
 
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
-#include "components/services/app_service/public/cpp/intent_constants.h"
 #include "components/services/app_service/public/cpp/intent_util.h"
 #include "components/services/app_service/public/mojom/types.mojom-shared.h"
 #include "url/url_constants.h"
@@ -21,7 +20,15 @@ bool ConditionValuesHaveOverlap(const apps::mojom::ConditionValuePtr& value1,
     return true;
   }
 
-  if (value1->match_type == apps::mojom::PatternMatchType::kLiteral) {
+  if (value1->match_type == apps::mojom::PatternMatchType::kSuffix &&
+      (value2->match_type == apps::mojom::PatternMatchType::kNone ||
+       value2->match_type == apps::mojom::PatternMatchType::kLiteral ||
+       value2->match_type == apps::mojom::PatternMatchType::kSuffix)) {
+    return base::EndsWith(/*str=*/value2->value,
+                          /*search_for=*/value1->value);
+  }
+
+  else if (value1->match_type == apps::mojom::PatternMatchType::kLiteral) {
     if (value2->match_type == apps::mojom::PatternMatchType::kPrefix) {
       return base::StartsWith(/*str=*/value1->value,
                               /*search_for=*/value2->value);
@@ -84,17 +91,6 @@ apps::mojom::ConditionPtr MakeCondition(
   return condition;
 }
 
-void AddSingleValueCondition(apps::ConditionType condition_type,
-                             const std::string& value,
-                             apps::PatternMatchType pattern_match_type,
-                             apps::IntentFilterPtr& intent_filter) {
-  apps::ConditionValues condition_values;
-  condition_values.push_back(
-      std::make_unique<apps::ConditionValue>(value, pattern_match_type));
-  intent_filter->conditions.push_back(std::make_unique<apps::Condition>(
-      condition_type, std::move(condition_values)));
-}
-
 void AddSingleValueCondition(apps::mojom::ConditionType condition_type,
                              const std::string& value,
                              apps::mojom::PatternMatchType pattern_match_type,
@@ -105,6 +101,27 @@ void AddSingleValueCondition(apps::mojom::ConditionType condition_type,
   auto condition =
       apps_util::MakeCondition(condition_type, std::move(condition_values));
   intent_filter->conditions.push_back(std::move(condition));
+}
+
+apps::IntentFilterPtr MakeIntentFilterForUrlScope(const GURL& url) {
+  auto intent_filter = std::make_unique<apps::IntentFilter>();
+
+  intent_filter->AddSingleValueCondition(apps::ConditionType::kAction,
+                                         apps_util::kIntentActionView,
+                                         apps::PatternMatchType::kNone);
+
+  intent_filter->AddSingleValueCondition(apps::ConditionType::kScheme,
+                                         url.scheme(),
+                                         apps::PatternMatchType::kNone);
+
+  intent_filter->AddSingleValueCondition(apps::ConditionType::kHost, url.host(),
+                                         apps::PatternMatchType::kNone);
+
+  intent_filter->AddSingleValueCondition(apps::ConditionType::kPattern,
+                                         url.path(),
+                                         apps::PatternMatchType::kPrefix);
+
+  return intent_filter;
 }
 
 apps::mojom::IntentFilterPtr CreateIntentFilterForUrlScope(const GURL& url) {
@@ -128,7 +145,7 @@ apps::mojom::IntentFilterPtr CreateIntentFilterForUrlScope(const GURL& url) {
 }
 
 int GetFilterMatchLevel(const apps::mojom::IntentFilterPtr& intent_filter) {
-  int match_level = IntentFilterMatchLevel::kNone;
+  int match_level = static_cast<int>(apps::IntentFilterMatchLevel::kNone);
   for (const auto& condition : intent_filter->conditions) {
     switch (condition->condition_type) {
       case apps::mojom::ConditionType::kAction:
@@ -136,17 +153,18 @@ int GetFilterMatchLevel(const apps::mojom::IntentFilterPtr& intent_filter) {
         // match level.
         break;
       case apps::mojom::ConditionType::kScheme:
-        match_level += IntentFilterMatchLevel::kScheme;
+        match_level += static_cast<int>(apps::IntentFilterMatchLevel::kScheme);
         break;
       case apps::mojom::ConditionType::kHost:
-        match_level += IntentFilterMatchLevel::kHost;
+        match_level += static_cast<int>(apps::IntentFilterMatchLevel::kHost);
         break;
       case apps::mojom::ConditionType::kPattern:
-        match_level += IntentFilterMatchLevel::kPattern;
+        match_level += static_cast<int>(apps::IntentFilterMatchLevel::kPattern);
         break;
       case apps::mojom::ConditionType::kMimeType:
       case apps::mojom::ConditionType::kFile:
-        match_level += IntentFilterMatchLevel::kMimeType;
+        match_level +=
+            static_cast<int>(apps::IntentFilterMatchLevel::kMimeType);
         break;
     }
   }
@@ -190,7 +208,8 @@ void UpgradeFilter(apps::mojom::IntentFilterPtr& filter) {
 }
 
 bool IsBrowserFilter(const apps::mojom::IntentFilterPtr& filter) {
-  if (GetFilterMatchLevel(filter) != IntentFilterMatchLevel::kScheme) {
+  if (GetFilterMatchLevel(filter) !=
+      static_cast<int>(apps::IntentFilterMatchLevel::kScheme)) {
     return false;
   }
   for (const auto& condition : filter->conditions) {
@@ -238,14 +257,20 @@ std::set<std::string> AppManagementGetSupportedLinks(
       }
     }
 
-    // For host conditions we add each value to the the |hosts| set.
+    // For host conditions we add each value to the |hosts| set.
     if (condition->condition_type == apps::mojom::ConditionType::kHost) {
       for (auto& condition_value : condition->condition_values) {
-        hosts.insert(condition_value->value);
+        // Prepend the wildcard to indicate any subdomain in the hosts
+        std::string host = condition_value->value;
+        if (condition_value->match_type ==
+            apps::mojom::PatternMatchType::kSuffix) {
+          host = "*" + host;
+        }
+        hosts.insert(host);
       }
     }
 
-    // For path conditions we add each value to the the |paths| set.
+    // For path conditions we add each value to the |paths| set.
     if (condition->condition_type == apps::mojom::ConditionType::kPattern) {
       for (auto& condition_value : condition->condition_values) {
         std::string value = condition_value->value;
@@ -281,11 +306,61 @@ std::set<std::string> AppManagementGetSupportedLinks(
 }
 
 bool IsSupportedLinkForApp(const std::string& app_id,
+                           const apps::IntentFilterPtr& intent_filter) {
+  // Filters associated with kUseBrowserForLink are a special case. These
+  // filters do not "belong" to the app and should not be treated as supported
+  // links.
+  if (app_id == apps_util::kUseBrowserForLink) {
+    return false;
+  }
+
+  bool action = false;
+  bool scheme = false;
+  bool host = false;
+  bool pattern = false;
+  for (auto& condition : intent_filter->conditions) {
+    switch (condition->condition_type) {
+      case apps::ConditionType::kAction:
+        for (auto& condition_value : condition->condition_values) {
+          if (condition_value->value == apps_util::kIntentActionView) {
+            action = true;
+            break;
+          }
+        }
+        break;
+      case apps::ConditionType::kScheme:
+        for (auto& condition_value : condition->condition_values) {
+          if (condition_value->value == "http" ||
+              condition_value->value == "https") {
+            scheme = true;
+            break;
+          }
+        }
+        break;
+      case apps::ConditionType::kHost:
+        host = true;
+        break;
+      case apps::ConditionType::kPattern:
+        pattern = true;
+        break;
+      default:
+        break;
+    }
+
+    if (action && scheme && host && pattern) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool IsSupportedLinkForApp(const std::string& app_id,
                            const apps::mojom::IntentFilterPtr& intent_filter) {
   // Filters associated with kUseBrowserForLink are a special case. These
   // filters do not "belong" to the app and should not be treated as supported
   // links.
-  if (app_id == apps::kUseBrowserForLink) {
+  if (app_id == apps_util::kUseBrowserForLink) {
     return false;
   }
 
@@ -330,6 +405,38 @@ bool IsSupportedLinkForApp(const std::string& app_id,
   return false;
 }
 
+size_t IntentFilterUrlMatchLength(const apps::IntentFilterPtr& intent_filter,
+                                  const GURL& url) {
+  apps::Intent intent(url);
+  if (!intent.MatchFilter(intent_filter)) {
+    return 0;
+  }
+  // If the filter matches, all URL components match, so a kPattern condition
+  // matches and we add up the length of the filter's URL components (scheme,
+  // host, path).
+  size_t path_length = 0;
+  for (const apps::ConditionPtr& condition : intent_filter->conditions) {
+    if (condition->condition_type == apps::ConditionType::kPattern) {
+      for (const apps::ConditionValuePtr& value : condition->condition_values) {
+        switch (value->match_type) {
+          case apps::PatternMatchType::kLiteral:
+          case apps::PatternMatchType::kPrefix:
+            path_length = std::max(path_length, value->value.size());
+            break;
+          default:
+            // the rest are ignored.
+            break;
+        }
+      }
+    }
+  }
+  if (path_length == 0) {
+    return 0;
+  }
+  return url.scheme_piece().size() + /*length("://")*/ 3 +
+         url.host_piece().size() + path_length;
+}
+
 }  // namespace apps_util
 
 namespace apps {
@@ -339,6 +446,7 @@ namespace apps {
 // activity_name: FooActivity
 // activity_label: Foo
 // conditions:
+// - kHost: *.wikipedia.org
 // - kAction: view
 // - kPattern: /a /b*
 std::ostream& operator<<(std::ostream& out,
@@ -355,6 +463,9 @@ std::ostream& operator<<(std::ostream& out,
   for (const auto& condition : intent_filter->conditions) {
     out << "- " << condition->condition_type << ": ";
     for (const auto& value : condition->condition_values) {
+      if (value->match_type == apps::mojom::PatternMatchType::kSuffix) {
+        out << "*";
+      }
       out << value->value;
       if (value->match_type == apps::mojom::PatternMatchType::kPrefix) {
         out << "*";

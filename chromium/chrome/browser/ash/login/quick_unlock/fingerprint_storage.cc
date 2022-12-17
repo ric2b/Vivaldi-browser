@@ -10,8 +10,8 @@
 #include "chrome/browser/ash/login/quick_unlock/quick_unlock_utils.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chromeos/ash/components/dbus/biod/biod_client.h"
 #include "chromeos/components/feature_usage/feature_usage_metrics.h"
-#include "chromeos/dbus/biod/biod_client.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -33,7 +33,7 @@ void FingerprintStorage::RegisterProfilePrefs(PrefRegistrySimple* registry) {
 }
 
 FingerprintStorage::FingerprintStorage(Profile* profile) : profile_(profile) {
-  if (!chromeos::BiodClient::Get()) {
+  if (!BiodClient::Get()) {
     // Could be nullptr in tests.
     return;
   }
@@ -72,11 +72,11 @@ bool FingerprintStorage::IsEligible() const {
 }
 
 absl::optional<bool> FingerprintStorage::IsAccessible() const {
-  return IsFingerprintEnabled(profile_);
+  return IsFingerprintEnabled(profile_, Purpose::kAny);
 }
 
 bool FingerprintStorage::IsEnabled() const {
-  return IsFingerprintEnabled(profile_) && HasRecord();
+  return IsAccessible() && HasRecord();
 }
 
 void FingerprintStorage::RecordFingerprintUnlockResult(
@@ -92,8 +92,8 @@ void FingerprintStorage::RecordFingerprintUnlockResult(
   feature_usage_metrics_service_->RecordUsage(success);
 }
 
-bool FingerprintStorage::IsFingerprintAvailable() const {
-  return !ExceededUnlockAttempts() && IsFingerprintEnabled(profile_) &&
+bool FingerprintStorage::IsFingerprintAvailable(Purpose purpose) const {
+  return !ExceededUnlockAttempts() && IsFingerprintEnabled(profile_, purpose) &&
          HasRecord();
 }
 
@@ -149,7 +149,7 @@ void FingerprintStorage::OnSessionFailed() {}
 
 void FingerprintStorage::OnGetRecords(
     const base::flat_map<std::string, std::string>& fingerprints_list_mapping) {
-  if (!IsFingerprintDisabledByPolicy(profile_->GetPrefs())) {
+  if (!IsFingerprintDisabledByPolicy(profile_->GetPrefs(), Purpose::kAny)) {
     profile_->GetPrefs()->SetInteger(prefs::kQuickUnlockFingerprintRecord,
                                      fingerprints_list_mapping.size());
     return;

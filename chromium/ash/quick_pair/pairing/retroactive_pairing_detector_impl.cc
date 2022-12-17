@@ -11,6 +11,7 @@
 #include "ash/quick_pair/common/protocol.h"
 #include "ash/quick_pair/fast_pair_handshake/fast_pair_handshake_lookup.h"
 #include "ash/quick_pair/message_stream/message_stream.h"
+#include "ash/quick_pair/repository/fast_pair_repository.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "base/bind.h"
@@ -65,6 +66,10 @@ RetroactivePairingDetectorImpl::RetroactivePairingDetectorImpl(
     return;
   }
 
+  // If we get to this point in the constructor, it means that the user is
+  // logged in to enable this scenario, so we can being our observations. If we
+  // get any log in events, we know to ignore them, since we already
+  // instantiated our retroactive pairing detector.
   retroactive_pairing_detector_instatiated_ = true;
 
   device::BluetoothAdapterFactory::Get()->GetAdapter(
@@ -147,8 +152,7 @@ void RetroactivePairingDetectorImpl::OnDevicePaired(
     return;
   }
 
-  QP_LOG(VERBOSE) << __func__ << ":  Storing Fast Pair device address: "
-                  << device->classic_address().value();
+  QP_LOG(INFO) << __func__ << ": Storing Fast Pair device address";
   fast_pair_addresses_.insert(device->classic_address().value());
 }
 
@@ -293,6 +297,37 @@ void RetroactivePairingDetectorImpl::NotifyDeviceFound(
     const std::string& model_id,
     const std::string& ble_address,
     const std::string& classic_address) {
+  QP_LOG(INFO) << __func__;
+
+  // Before we notify that the device is found for retroactive pairing, we
+  // should check if the user is opted in to saving devices to their account.
+  // The reason why we check this every time we want to notify a device is found
+  // rather than having the user's opt-in status determine whether or not the
+  // retroactive pairing scenario is instantiated is because the user might be
+  // opted out when the user initially logs in to the Chromebook (when this
+  // class is created), but then opted-in later one, and then unable to save
+  // devices to their account, or vice versa. By checking every time we want
+  // to notify a device is found, we can accurately reflect a user's status
+  // in the moment.
+  FastPairRepository::Get()->CheckOptInStatus(base::BindOnce(
+      &RetroactivePairingDetectorImpl::OnCheckOptInStatus,
+      weak_ptr_factory_.GetWeakPtr(), model_id, ble_address, classic_address));
+}
+
+void RetroactivePairingDetectorImpl::OnCheckOptInStatus(
+    const std::string& model_id,
+    const std::string& ble_address,
+    const std::string& classic_address,
+    nearby::fastpair::OptInStatus status) {
+  QP_LOG(INFO) << __func__;
+
+  if (status != nearby::fastpair::OptInStatus::STATUS_OPTED_IN) {
+    QP_LOG(INFO) << __func__
+                 << ": User is not opted in to save devices to their account";
+    RemoveDeviceInformation(classic_address);
+    return;
+  }
+
   device::BluetoothDevice* bluetooth_device =
       adapter_->GetDevice(classic_address);
   if (!bluetooth_device) {
@@ -305,8 +340,8 @@ void RetroactivePairingDetectorImpl::NotifyDeviceFound(
   auto device = base::MakeRefCounted<Device>(model_id, ble_address,
                                              Protocol::kFastPairRetroactive);
   device->set_classic_address(classic_address);
-  QP_LOG(VERBOSE) << __func__ << ": Found device for Retroactive Pairing "
-                  << device;
+  QP_LOG(INFO) << __func__ << ": Found device for Retroactive Pairing "
+               << device;
 
   FastPairHandshakeLookup::GetInstance()->Create(
       adapter_, std::move(device),

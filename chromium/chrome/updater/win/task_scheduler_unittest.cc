@@ -4,6 +4,7 @@
 
 #include "chrome/updater/win/task_scheduler.h"
 
+#include <lmsname.h>
 #include <mstask.h>
 #include <security.h>
 #include <shlobj.h>
@@ -22,6 +23,7 @@
 #include "base/path_service.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/test_timeouts.h"
 #include "base/time/time.h"
@@ -63,12 +65,12 @@ class TaskSchedulerTests : public ::testing::Test {
  public:
   void SetUp() override {
     DeleteLogFile();
-    InitLogging(GetTestScope(), FILE_PATH_LITERAL("updater.log"));
 
     task_scheduler_ = TaskScheduler::CreateInstance();
     EXPECT_TRUE(task_scheduler_->DeleteTask(kTaskName1));
     EXPECT_TRUE(task_scheduler_->DeleteTask(kTaskName2));
     ASSERT_FALSE(IsProcessRunning(kTestProcessExecutableName));
+    EXPECT_TRUE(IsServiceRunning(SERVICE_SCHEDULE));
   }
 
   void TearDown() override {
@@ -109,22 +111,7 @@ class TaskSchedulerTests : public ::testing::Test {
     }
   }
 
-  base::CommandLine GetTestProcessCommandLine(bool enable_logging) {
-    base::FilePath executable_path;
-    CHECK(base::PathService::Get(base::DIR_EXE, &executable_path));
-
-    base::CommandLine command_line(
-        executable_path.Append(kTestProcessExecutableName));
-    if (GetTestScope() == UpdaterScope::kSystem)
-      command_line.AppendSwitch(kSystemSwitch);
-
-    if (enable_logging) {
-      command_line.AppendSwitch(kEnableLoggingSwitch);
-      command_line.AppendSwitchASCII(kLoggingModuleSwitch,
-                                     kLoggingModuleSwitchValue);
-    }
-    return command_line;
-  }
+  static void SetUpTestCase() { InitLogging(GetTestScope()); }
 
  protected:
   std::unique_ptr<TaskScheduler> task_scheduler_;
@@ -136,7 +123,7 @@ TEST_F(TaskSchedulerTests, DeleteAndIsRegistered) {
   EXPECT_FALSE(task_scheduler_->IsTaskRegistered(kTaskName1));
 
   // Construct the full-path of the test executable.
-  base::CommandLine command_line = GetTestProcessCommandLine(false);
+  base::CommandLine command_line = GetTestProcessCommandLine(GetTestScope());
 
   // Validate that the task is properly seen as registered when it is.
   EXPECT_TRUE(task_scheduler_->RegisterTask(
@@ -158,7 +145,7 @@ TEST_F(TaskSchedulerTests, DeleteAndIsRegistered) {
 // TODO(crbug.com/1295399) : this test fails on Builder
 // win10-updater-tester-dbg-uac, and we do not know why.
 TEST_F(TaskSchedulerTests, DISABLED_RunAProgramNow) {
-  base::CommandLine command_line = GetTestProcessCommandLine(true);
+  base::CommandLine command_line = GetTestProcessCommandLine(GetTestScope());
 
   // Create a unique name for a shared event to be waited for in this process
   // and signaled in the test process to confirm it was scheduled and ran.
@@ -175,22 +162,23 @@ TEST_F(TaskSchedulerTests, DISABLED_RunAProgramNow) {
   command_line.AppendSwitchNative(kTestEventToSignal, attr.name);
   EXPECT_TRUE(task_scheduler_->RegisterTask(
       GetTestScope(), kTaskName1, kTaskDescription1, command_line,
-      TaskScheduler::TRIGGER_TYPE_NOW, false));
+      TaskScheduler::TRIGGER_TYPE_HOURLY, false));
+  EXPECT_TRUE(task_scheduler_->StartTask(kTaskName1));
 
-  TaskScheduler::TaskInfo info;
-  EXPECT_TRUE(task_scheduler_->GetTaskInfo(kTaskName1, &info));
-  VLOG(0) << info;
+  VLOG(0) << [this]() {
+    TaskScheduler::TaskInfo info;
+    EXPECT_TRUE(task_scheduler_->GetTaskInfo(kTaskName1, &info));
+    return info;
+  }();
 
   EXPECT_TRUE(event.TimedWait(TestTimeouts::action_max_timeout()));
-  base::Time next_run_time;
-  EXPECT_FALSE(task_scheduler_->GetNextTaskRunTime(kTaskName1, &next_run_time));
   EXPECT_TRUE(task_scheduler_->DeleteTask(kTaskName1));
 
   test::PrintLog(GetTestScope());
 }
 
 TEST_F(TaskSchedulerTests, Hourly) {
-  base::CommandLine command_line = GetTestProcessCommandLine(false);
+  base::CommandLine command_line = GetTestProcessCommandLine(GetTestScope());
 
   base::Time now(base::Time::NowFromSystemTime());
   EXPECT_TRUE(task_scheduler_->RegisterTask(
@@ -212,7 +200,7 @@ TEST_F(TaskSchedulerTests, Hourly) {
 }
 
 TEST_F(TaskSchedulerTests, EveryFiveHours) {
-  base::CommandLine command_line = GetTestProcessCommandLine(false);
+  base::CommandLine command_line = GetTestProcessCommandLine(GetTestScope());
 
   base::Time now(base::Time::NowFromSystemTime());
   EXPECT_TRUE(task_scheduler_->RegisterTask(
@@ -234,7 +222,7 @@ TEST_F(TaskSchedulerTests, EveryFiveHours) {
 }
 
 TEST_F(TaskSchedulerTests, SetTaskEnabled) {
-  base::CommandLine command_line = GetTestProcessCommandLine(false);
+  base::CommandLine command_line = GetTestProcessCommandLine(GetTestScope());
 
   EXPECT_TRUE(task_scheduler_->RegisterTask(
       GetTestScope(), kTaskName1, kTaskDescription1, command_line,
@@ -253,7 +241,7 @@ TEST_F(TaskSchedulerTests, SetTaskEnabled) {
 }
 
 TEST_F(TaskSchedulerTests, GetTaskNameList) {
-  base::CommandLine command_line = GetTestProcessCommandLine(false);
+  base::CommandLine command_line = GetTestProcessCommandLine(GetTestScope());
 
   EXPECT_TRUE(task_scheduler_->RegisterTask(
       GetTestScope(), kTaskName1, kTaskDescription1, command_line,
@@ -274,7 +262,7 @@ TEST_F(TaskSchedulerTests, GetTaskNameList) {
 }
 
 TEST_F(TaskSchedulerTests, FindFirstTaskName) {
-  base::CommandLine command_line = GetTestProcessCommandLine(false);
+  base::CommandLine command_line = GetTestProcessCommandLine(GetTestScope());
 
   EXPECT_TRUE(task_scheduler_->RegisterTask(
       GetTestScope(), kTaskName1, kTaskDescription1, command_line,
@@ -295,7 +283,7 @@ TEST_F(TaskSchedulerTests, FindFirstTaskName) {
 }
 
 TEST_F(TaskSchedulerTests, GetTasksIncludesHidden) {
-  base::CommandLine command_line = GetTestProcessCommandLine(false);
+  base::CommandLine command_line = GetTestProcessCommandLine(GetTestScope());
 
   EXPECT_TRUE(task_scheduler_->RegisterTask(
       GetTestScope(), kTaskName1, kTaskDescription1, command_line,
@@ -311,7 +299,7 @@ TEST_F(TaskSchedulerTests, GetTasksIncludesHidden) {
 }
 
 TEST_F(TaskSchedulerTests, GetTaskInfoExecActions) {
-  base::CommandLine command_line1 = GetTestProcessCommandLine(false);
+  base::CommandLine command_line1 = GetTestProcessCommandLine(GetTestScope());
 
   EXPECT_TRUE(task_scheduler_->RegisterTask(
       GetTestScope(), kTaskName1, kTaskDescription1, command_line1,
@@ -326,7 +314,7 @@ TEST_F(TaskSchedulerTests, GetTaskInfoExecActions) {
   EXPECT_EQ(command_line1.GetProgram(), info.exec_actions[0].application_path);
   EXPECT_EQ(command_line1.GetArgumentsString(), info.exec_actions[0].arguments);
 
-  base::CommandLine command_line2 = GetTestProcessCommandLine(false);
+  base::CommandLine command_line2 = GetTestProcessCommandLine(GetTestScope());
   command_line2.AppendSwitch(kUnitTestSwitch);
   EXPECT_TRUE(task_scheduler_->RegisterTask(
       GetTestScope(), kTaskName2, kTaskDescription2, command_line2,
@@ -345,7 +333,7 @@ TEST_F(TaskSchedulerTests, GetTaskInfoExecActions) {
 }
 
 TEST_F(TaskSchedulerTests, GetTaskInfoNameAndDescription) {
-  base::CommandLine command_line1 = GetTestProcessCommandLine(false);
+  base::CommandLine command_line1 = GetTestProcessCommandLine(GetTestScope());
 
   EXPECT_TRUE(task_scheduler_->RegisterTask(
       GetTestScope(), kTaskName1, kTaskDescription1, command_line1,
@@ -362,7 +350,11 @@ TEST_F(TaskSchedulerTests, GetTaskInfoNameAndDescription) {
   EXPECT_EQ(kTaskName1, info.name);
 
   EXPECT_TRUE(task_scheduler_->HasTaskFolder(
-      L"\\" COMPANY_SHORTNAME_STRING L"\\" PRODUCT_FULLNAME_STRING));
+      base::StrCat(
+          {L"\\" COMPANY_SHORTNAME_STRING,
+           GetTestScope() == UpdaterScope::kSystem ? L"System " : L"User ",
+           L"\\" PRODUCT_FULLNAME_STRING})
+          .c_str()));
 
   EXPECT_TRUE(task_scheduler_->DeleteTask(kTaskName1));
 }
@@ -370,7 +362,7 @@ TEST_F(TaskSchedulerTests, GetTaskInfoNameAndDescription) {
 TEST_F(TaskSchedulerTests, GetTaskInfoLogonType) {
   const bool is_system = GetTestScope() == UpdaterScope::kSystem;
 
-  base::CommandLine command_line1 = GetTestProcessCommandLine(false);
+  base::CommandLine command_line1 = GetTestProcessCommandLine(GetTestScope());
 
   EXPECT_TRUE(task_scheduler_->RegisterTask(
       GetTestScope(), kTaskName1, kTaskDescription1, command_line1,
@@ -384,6 +376,43 @@ TEST_F(TaskSchedulerTests, GetTaskInfoLogonType) {
   EXPECT_EQ(!is_system, !!(info.logon_type & TaskScheduler::LOGON_INTERACTIVE));
   EXPECT_EQ(is_system, !!(info.logon_type & TaskScheduler::LOGON_SERVICE));
   EXPECT_FALSE(info.logon_type & TaskScheduler::LOGON_S4U);
+
+  EXPECT_TRUE(task_scheduler_->DeleteTask(kTaskName1));
+}
+
+TEST_F(TaskSchedulerTests, GetTaskInfoUserId) {
+  const bool is_system = GetTestScope() == UpdaterScope::kSystem;
+
+  base::CommandLine command_line1 = GetTestProcessCommandLine(GetTestScope());
+
+  EXPECT_TRUE(task_scheduler_->RegisterTask(
+      GetTestScope(), kTaskName1, kTaskDescription1, command_line1,
+      TaskScheduler::TRIGGER_TYPE_HOURLY, false));
+  EXPECT_TRUE(task_scheduler_->IsTaskRegistered(kTaskName1));
+
+  TaskScheduler::TaskInfo info;
+  EXPECT_FALSE(task_scheduler_->GetTaskInfo(kTaskName2, &info));
+  EXPECT_STREQ(L"", info.user_id.c_str());
+
+  EXPECT_TRUE(task_scheduler_->GetTaskInfo(kTaskName1, &info));
+
+  const std::wstring expected_user_id = [&is_system]() -> std::wstring {
+    if (is_system)
+      return L"SYSTEM";
+
+    base::win::ScopedBstr user_name_bstr;
+    ULONG user_name_size = 256;
+    EXPECT_TRUE(::GetUserNameExW(
+        NameSamCompatible,
+        user_name_bstr.AllocateBytes(user_name_size * sizeof(OLECHAR)),
+        &user_name_size));
+    return user_name_bstr.Get();
+  }();
+
+  EXPECT_TRUE(base::EndsWith(info.user_id, expected_user_id,
+                             base::CompareCase::INSENSITIVE_ASCII) ||
+              base::EndsWith(expected_user_id, info.user_id,
+                             base::CompareCase::INSENSITIVE_ASCII));
 
   EXPECT_TRUE(task_scheduler_->DeleteTask(kTaskName1));
 }

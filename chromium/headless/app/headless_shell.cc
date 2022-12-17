@@ -11,6 +11,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
+#include "base/containers/adapters.h"
 #include "base/environment.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -22,7 +23,6 @@
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "base/task/task_runner_util.h"
 #include "base/task/thread_pool.h"
 #include "build/branding_buildflags.h"
@@ -126,8 +126,8 @@ std::vector<GURL> ConvertArgumentsToURLs(
     const base::CommandLine::StringVector& args) {
   std::vector<GURL> urls;
   urls.reserve(args.size());
-  for (auto it = args.rbegin(); it != args.rend(); ++it)
-    urls.push_back(ConvertArgumentToURL(*it));
+  for (const auto& arg : base::Reversed(args))
+    urls.push_back(ConvertArgumentToURL(arg));
   return urls;
 }
 
@@ -634,6 +634,7 @@ void HeadlessShell::OnFileOpened(const protocol::Binary& data,
     LOG(ERROR) << "Writing to file " << file_name.value()
                << " was unsuccessful, could not open file: "
                << base::File::ErrorToString(error_code);
+    ShutdownSoon();
     return;
   }
   if (!file_proxy_->Write(

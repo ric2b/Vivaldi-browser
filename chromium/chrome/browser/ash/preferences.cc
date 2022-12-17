@@ -64,6 +64,7 @@
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_thread.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/mojom/speech/speech_synthesis.mojom.h"
 #include "third_party/cros_system_api/dbus/update_engine/dbus-constants.h"
 #include "third_party/icu/source/i18n/unicode/timezone.h"
@@ -80,10 +81,10 @@ namespace ash {
 
 namespace {
 
-// The keyboard preferences that determine how we remap modifier keys. These
-// preferences will be saved in global user preferences dictionary so that they
-// can be used on signin screen.
-const char* const kLanguageRemapPrefs[] = {
+// These preferences will be saved in global user preferences dictionary so that
+// they can be used on the signin screen.
+const char* const kCopyToKnownUserPrefs[] = {
+    // The keyboard preferences that determine how we remap modifier keys.
     ::prefs::kLanguageRemapSearchKeyTo,
     ::prefs::kLanguageRemapControlKeyTo,
     ::prefs::kLanguageRemapAltKeyTo,
@@ -91,7 +92,11 @@ const char* const kLanguageRemapPrefs[] = {
     ::prefs::kLanguageRemapEscapeKeyTo,
     ::prefs::kLanguageRemapBackspaceKeyTo,
     ::prefs::kLanguageRemapExternalCommandKeyTo,
-    ::prefs::kLanguageRemapExternalMetaKeyTo};
+    ::prefs::kLanguageRemapExternalMetaKeyTo,
+
+    prefs::kLoginDisplayPasswordButtonEnabled,
+    ::prefs::kUse24HourClock,
+    prefs::kDarkModeEnabled};
 
 bool AreScrollSettingsAllowed() {
   return base::FeatureList::IsEnabled(features::kAllowScrollSettings);
@@ -103,9 +108,9 @@ Preferences::Preferences()
     : Preferences(input_method::InputMethodManager::Get()) {}
 
 Preferences::Preferences(input_method::InputMethodManager* input_method_manager)
-    : prefs_(NULL),
+    : prefs_(nullptr),
       input_method_manager_(input_method_manager),
-      user_(NULL),
+      user_(nullptr),
       user_is_primary_(false) {
   BindCrosDisplayConfigController(
       cros_display_config_.BindNewPipeAndPassReceiver());
@@ -135,7 +140,7 @@ void Preferences::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterStringPref(::prefs::kMinimumAllowedChromeVersion, "");
   registry->RegisterIntegerPref(
       ::prefs::kLacrosLaunchSwitch,
-      static_cast<int>(crosapi::browser_util::LacrosLaunchSwitch::kUserChoice));
+      static_cast<int>(crosapi::browser_util::LacrosAvailability::kUserChoice));
   registry->RegisterBooleanPref(prefs::kDeviceSystemWideTracingEnabled, true);
   registry->RegisterBooleanPref(
       prefs::kLocalStateDevicePeripheralDataAccessEnabled, false);
@@ -253,6 +258,9 @@ void Preferences::RegisterProfilePrefs(
   registry->RegisterBooleanPref(drive::prefs::kDriveFsPinnedMigrated, false);
   registry->RegisterBooleanPref(drive::prefs::kDriveFsEnableVerboseLogging,
                                 false);
+  // Do not sync drive::prefs::kDriveFsEnableMirrorSync because we're syncing
+  // local files and users may wish to turn this off on a per device basis.
+  registry->RegisterBooleanPref(drive::prefs::kDriveFsEnableMirrorSync, false);
   // We don't sync ::prefs::kLanguageCurrentInputMethod and PreviousInputMethod
   // because they're just used to track the logout state of the device.
   registry->RegisterStringPref(::prefs::kLanguageCurrentInputMethod, "");
@@ -425,6 +433,26 @@ void Preferences::RegisterProfilePrefs(
 
   registry->RegisterBooleanPref(::prefs::kHatsStabilityDeviceIsSelected, false);
 
+  registry->RegisterInt64Pref(::prefs::kHatsPerformanceSurveyCycleEndTs, 0);
+
+  registry->RegisterBooleanPref(::prefs::kHatsPerformanceDeviceIsSelected,
+                                false);
+
+  // Personalization HaTS survey prefs for avatar, screensaver, and wallpaper
+  // features.
+  registry->RegisterInt64Pref(
+      ::prefs::kHatsPersonalizationAvatarSurveyCycleEndTs, 0);
+  registry->RegisterBooleanPref(
+      ::prefs::kHatsPersonalizationAvatarSurveyIsSelected, false);
+  registry->RegisterInt64Pref(
+      ::prefs::kHatsPersonalizationScreensaverSurveyCycleEndTs, 0);
+  registry->RegisterBooleanPref(
+      ::prefs::kHatsPersonalizationScreensaverSurveyIsSelected, false);
+  registry->RegisterInt64Pref(
+      ::prefs::kHatsPersonalizationWallpaperSurveyCycleEndTs, 0);
+  registry->RegisterBooleanPref(
+      ::prefs::kHatsPersonalizationWallpaperSurveyIsSelected, false);
+
   registry->RegisterBooleanPref(::prefs::kPinUnlockFeatureNotificationShown,
                                 false);
   registry->RegisterBooleanPref(
@@ -568,11 +596,9 @@ void Preferences::InitUserPrefs(sync_preferences::PrefServiceSyncable* prefs) {
   pref_change_registrar_.Add(::prefs::kUserTimezone, callback);
   pref_change_registrar_.Add(::prefs::kResolveTimezoneByGeolocationMethod,
                              callback);
-  pref_change_registrar_.Add(::prefs::kUse24HourClock, callback);
   pref_change_registrar_.Add(::prefs::kParentAccessCodeConfig, callback);
-  for (auto* remap_pref : kLanguageRemapPrefs)
-    pref_change_registrar_.Add(remap_pref, callback);
-
+  for (auto* copy_pref : kCopyToKnownUserPrefs)
+    pref_change_registrar_.Add(copy_pref, callback);
 }
 
 void Preferences::Init(Profile* profile, const user_manager::User* user) {
@@ -696,6 +722,7 @@ void Preferences::ApplyPreferences(ApplyReason reason,
   system::TouchpadSettings touchpad_settings;
   system::MouseSettings mouse_settings;
   system::PointingStickSettings pointing_stick_settings;
+  user_manager::KnownUser known_user(g_browser_process->local_state());
 
   if (user_is_primary_ && (reason == REASON_INITIALIZATION ||
                            pref_name == ::prefs::kPerformanceTracingEnabled)) {
@@ -924,8 +951,8 @@ void Preferences::ApplyPreferences(ApplyReason reason,
           ->GetImeKeyboard()
           ->SetAutoRepeatEnabled(enabled);
 
-      user_manager::known_user::SetBooleanPref(
-          user_->GetAccountId(), prefs::kXkbAutoRepeatEnabled, enabled);
+      known_user.SetBooleanPref(user_->GetAccountId(),
+                                prefs::kXkbAutoRepeatEnabled, enabled);
     }
   }
   if (reason != REASON_PREF_CHANGED ||
@@ -1033,13 +1060,6 @@ void Preferences::ApplyPreferences(ApplyReason reason,
     }
   }
 
-  if (pref_name == ::prefs::kUse24HourClock ||
-      reason != REASON_ACTIVE_USER_CHANGED) {
-    const bool value = prefs_->GetBoolean(::prefs::kUse24HourClock);
-    user_manager::known_user::SetBooleanPref(user_->GetAccountId(),
-                                             ::prefs::kUse24HourClock, value);
-  }
-
   if (pref_name == ::prefs::kParentAccessCodeConfig ||
       reason != REASON_PREF_CHANGED) {
     const base::Value* value =
@@ -1047,32 +1067,25 @@ void Preferences::ApplyPreferences(ApplyReason reason,
     if (value &&
         prefs_->IsManagedPreference(::prefs::kParentAccessCodeConfig) &&
         user_->IsChild()) {
-      user_manager::KnownUser known_user(g_browser_process->local_state());
       known_user.SetPath(user_->GetAccountId(),
                          ::prefs::kKnownUserParentAccessCodeConfig,
                          value->Clone());
       parent_access::ParentAccessService::Get().LoadConfigForUser(user_);
     } else {
-      user_manager::known_user::RemovePref(
-          user_->GetAccountId(), ::prefs::kKnownUserParentAccessCodeConfig);
+      known_user.RemovePref(user_->GetAccountId(),
+                            ::prefs::kKnownUserParentAccessCodeConfig);
     }
   }
 
-  for (auto* remap_pref : kLanguageRemapPrefs) {
-    if (pref_name == remap_pref || reason != REASON_ACTIVE_USER_CHANGED) {
-      const int value = prefs_->GetInteger(remap_pref);
-      user_manager::KnownUser known_user(g_browser_process->local_state());
-      known_user.SetIntegerPref(user_->GetAccountId(), remap_pref, value);
+  for (auto* copy_pref : kCopyToKnownUserPrefs) {
+    if (pref_name == copy_pref || reason != REASON_ACTIVE_USER_CHANGED) {
+      absl::optional<base::Value> opt_value = absl::nullopt;
+      if (const base::Value* value = prefs_->Get(copy_pref)) {
+        opt_value = value->Clone();
+      }
+      known_user.SetPath(user_->GetAccountId(), copy_pref,
+                         std::move(opt_value));
     }
-  }
-
-  if (pref_name == prefs::kLoginDisplayPasswordButtonEnabled ||
-      reason != REASON_ACTIVE_USER_CHANGED) {
-    const bool value =
-        prefs_->GetBoolean(prefs::kLoginDisplayPasswordButtonEnabled);
-    user_manager::known_user::SetBooleanPref(
-        user_->GetAccountId(), prefs::kLoginDisplayPasswordButtonEnabled,
-        value);
   }
 
   if (pref_name == prefs::kLocalStateDevicePeripheralDataAccessEnabled &&

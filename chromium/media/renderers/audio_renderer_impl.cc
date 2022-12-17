@@ -40,6 +40,26 @@
 
 namespace media {
 
+namespace {
+
+AudioParameters::Format ConvertCodecToBitstreamFormat(AudioCodec codec) {
+  switch (codec) {
+    case AudioCodec::kAC3:
+      return AudioParameters::Format::AUDIO_BITSTREAM_AC3;
+    case AudioCodec::kEAC3:
+      return AudioParameters::Format::AUDIO_BITSTREAM_EAC3;
+    case AudioCodec::kDTS:
+      return AudioParameters::Format::AUDIO_BITSTREAM_DTS;
+      // No support for DTS_HD yet as this section is related to the incoming
+      // stream type. DTS_HD support is only added for audio track output to
+      // support audiosink reporting DTS_HD support.
+    default:
+      return AudioParameters::Format::AUDIO_FAKE;
+  }
+}
+
+}  // namespace
+
 AudioRendererImpl::AudioRendererImpl(
     const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
     AudioRendererSink* sink,
@@ -433,19 +453,16 @@ void AudioRendererImpl::OnDeviceInfoReceived(
   ChannelLayout hw_channel_layout =
       hw_params.IsValid() ? hw_params.channel_layout() : CHANNEL_LAYOUT_NONE;
 
-  audio_decoder_stream_ = std::make_unique<AudioDecoderStream>(
-      std::make_unique<AudioDecoderStream::StreamTraits>(media_log_,
-                                                         hw_channel_layout),
-      task_runner_, create_audio_decoders_cb_, media_log_);
-
-  audio_decoder_stream_->set_config_change_observer(base::BindRepeating(
-      &AudioRendererImpl::OnConfigChange, weak_factory_.GetWeakPtr()));
+  DVLOG(1) << __func__ << ": " << hw_params.AsHumanReadableString();
 
   AudioCodec codec = stream->audio_decoder_config().codec();
-  if (auto* mc = GetMediaClient())
-    is_passthrough_ = mc->IsSupportedBitstreamAudioCodec(codec);
-  else
+  if (auto* mc = GetMediaClient()) {
+    const auto format = ConvertCodecToBitstreamFormat(codec);
+    is_passthrough_ = mc->IsSupportedBitstreamAudioCodec(codec) &&
+                      hw_params.IsFormatSupportedByHardware(format);
+  } else {
     is_passthrough_ = false;
+  }
   expecting_config_changes_ = stream->SupportsConfigChanges();
 
   bool use_stream_params = !expecting_config_changes_ || !hw_params.IsValid() ||
@@ -470,14 +487,21 @@ void AudioRendererImpl::OnDeviceInfoReceived(
       std::max(2 * stream->audio_decoder_config().samples_per_second() / 100,
                hw_params.IsValid() ? hw_params.frames_per_buffer() : 0);
 
+  SampleFormat target_output_sample_format = kUnknownSampleFormat;
   if (is_passthrough_) {
     AudioParameters::Format format = AudioParameters::AUDIO_FAKE;
+    // For DTS and Dolby formats, set target_output_sample_format to the
+    // respective bit-stream format so that passthrough decoder will be selected
+    // by MediaCodecAudioRenderer if this is running on Android.
     if (codec == AudioCodec::kAC3) {
       format = AudioParameters::AUDIO_BITSTREAM_AC3;
+      target_output_sample_format = kSampleFormatAc3;
     } else if (codec == AudioCodec::kEAC3) {
       format = AudioParameters::AUDIO_BITSTREAM_EAC3;
+      target_output_sample_format = kSampleFormatEac3;
     } else if (codec == AudioCodec::kDTS) {
       format = AudioParameters::AUDIO_BITSTREAM_DTS;
+      target_output_sample_format = kSampleFormatDts;
     } else {
       NOTREACHED();
     }
@@ -571,6 +595,19 @@ void AudioRendererImpl::OnDeviceInfoReceived(
                                 AudioParameters::MULTIZONE);
 
   audio_parameters_.set_latency_tag(AudioLatency::LATENCY_PLAYBACK);
+
+  audio_decoder_stream_ = std::make_unique<AudioDecoderStream>(
+      std::make_unique<AudioDecoderStream::StreamTraits>(
+          media_log_, hw_channel_layout, target_output_sample_format),
+      task_runner_, create_audio_decoders_cb_, media_log_);
+
+  audio_decoder_stream_->set_config_change_observer(base::BindRepeating(
+      &AudioRendererImpl::OnConfigChange, weak_factory_.GetWeakPtr()));
+
+  DVLOG(1) << __func__ << ": is_passthrough_=" << is_passthrough_
+           << " codec=" << codec
+           << " stream->audio_decoder_config().sample_format="
+           << stream->audio_decoder_config().sample_format();
 
   if (!client_->IsVideoStreamAvailable()) {
     // When video is not available, audio prefetch can be enabled.  See
@@ -865,7 +902,29 @@ void AudioRendererImpl::DecodedAudioReady(
 
   bool need_another_buffer = true;
 
-  if (expecting_config_changes_) {
+  // FFmpeg allows "channel pair element" and "single channel element" type
+  // AAC streams to masquerade as mono and stereo respectively. Allow these
+  // specific exceptions to avoid playback errors.
+  bool allow_config_changes = expecting_config_changes_;
+  if (!expecting_config_changes_ && !buffer->end_of_stream() &&
+      current_decoder_config_.codec() == AudioCodec::kAAC &&
+      buffer->sample_rate() == audio_parameters_.sample_rate()) {
+    const bool is_mono_to_stereo =
+        buffer->channel_layout() == CHANNEL_LAYOUT_MONO &&
+        audio_parameters_.channel_layout() == CHANNEL_LAYOUT_STEREO;
+    const bool is_stereo_to_mono =
+        buffer->channel_layout() == CHANNEL_LAYOUT_STEREO &&
+        audio_parameters_.channel_layout() == CHANNEL_LAYOUT_MONO;
+    if (is_mono_to_stereo || is_stereo_to_mono) {
+      if (!buffer_converter_) {
+        buffer_converter_ =
+            std::make_unique<AudioBufferConverter>(audio_parameters_);
+      }
+      allow_config_changes = true;
+    }
+  }
+
+  if (allow_config_changes) {
     if (!buffer->end_of_stream()) {
       if (last_decoded_sample_rate_ &&
           buffer->sample_rate() != last_decoded_sample_rate_) {
@@ -1412,4 +1471,5 @@ void AudioRendererImpl::TranscribeAudio(
     speech_recognition_client_->AddAudio(std::move(buffer));
 #endif
 }
+
 }  // namespace media

@@ -58,6 +58,10 @@ extern const base::Feature kMessagesForAndroidSafetyTip;
 // Infobars infrastructure.
 extern const base::Feature kMessagesForAndroidSaveCard;
 
+// Feature that controls whether Messages for Android should use
+// new Stacking Animation.
+extern const base::Feature kMessagesForAndroidStackingAnimation;
+
 // Feature that controls whether "sync error" prompts use Messages or
 // Infobars infrastructure.
 extern const base::Feature kMessagesForAndroidSyncError;
@@ -97,6 +101,8 @@ bool UseFollowupButtonTextForUpdatePasswordButton();
 bool UseFollowupButtonTextForSaveCardMessage();
 
 bool UseGPayIconForSaveCardMessage();
+
+bool UseDialogV2ForSaveCardMessage();
 
 }  // namespace messages
 

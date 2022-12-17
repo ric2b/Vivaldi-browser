@@ -14,6 +14,8 @@
 #include "third_party/blink/renderer/modules/hid/hid_device.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
+#include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_map.h"
+#include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_set.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_wrapper_mode.h"
@@ -81,10 +83,9 @@ class MODULES_EXPORT HID : public EventTargetWithInlineData,
   static mojom::blink::HidDeviceFilterPtr ConvertDeviceFilter(
       const HIDDeviceFilter& filter);
 
-  // Checks the validity of the given HIDDeviceFilter. Returns nullopt when
+  // Checks the validity of the given HIDDeviceFilter. Returns null string when
   // filter is valid or an error message when the filter is invalid.
-  static absl::optional<String> CheckDeviceFilterValidity(
-      const HIDDeviceFilter& filter);
+  static String CheckDeviceFilterValidity(const HIDDeviceFilter& filter);
 
   void Trace(Visitor*) const override;
 

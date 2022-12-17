@@ -1,4 +1,4 @@
-@@include@@variables.include
+@@include@@repo_variables.include
 
 # import Vivaldi public key updates from Vivaldi repo
 @@include@@../common/vivaldi.rpm.include

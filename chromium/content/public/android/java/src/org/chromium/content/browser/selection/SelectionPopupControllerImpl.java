@@ -799,11 +799,13 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
 
     private void createActionMenu(ActionMode mode, Menu menu) {
         initializeMenu(mContext, mode, menu);
+        if (!BuildConfig.IS_VIVALDI) // Vivaldi - Remove G Translate option
         updateAssistMenuItem(menu);
         removeActionMenuItemsIfNecessary(menu);
         setPasteAsPlainTextMenuItemTitle(menu);
 
         Context windowContext = mWindowAndroid.getContext().get();
+        if (!BuildConfig.IS_VIVALDI) // Vivaldi - Remove G Translate option
         if (mClassificationResult != null && mAdditionalMenuItemProvider != null
                 && windowContext != null) {
             mAdditionalMenuItemProvider.addMenuItems(windowContext, menu,
@@ -848,7 +850,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
             menu.removeItem(R.id.select_action_menu_web_search);
         }
 
-        if (isSelectionPassword()) {
+        if (isSelectionPassword() || !Clipboard.getInstance().canCopy()) {
             menu.removeItem(R.id.select_action_menu_copy);
             menu.removeItem(R.id.select_action_menu_cut);
         }

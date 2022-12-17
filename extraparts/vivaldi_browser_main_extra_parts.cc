@@ -4,17 +4,19 @@
 
 #include <string>
 
-#include "app/vivaldi_apptools.h"
+#include "base/base64.h"
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/path_service.h"
 #include "base/vivaldi_switches.h"
 #include "browser/stats_reporter.h"
 #include "browser/translate/vivaldi_translate_client.h"
-#include "browser/vivaldi_runtime_feature.h"
+#include "build/build_config.h"
 #include "calendar/calendar_service_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/chrome_paths.h"
@@ -24,15 +26,19 @@
 #include "components/content_settings/core/browser/content_settings_registry.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
-#include "components/datasource/vivaldi_image_store.h"
+#include "components/favicon/core/favicon_service.h"
 #include "components/translate/core/browser/translate_language_list.h"
-#include "contact/contact_service_factory.h"
 #include "content/public/browser/web_ui_controller_factory.h"
 #include "content/public/common/content_switches.h"
 #include "extensions/browser/api/content_settings/content_settings_helpers.h"
 #include "extensions/buildflags/buildflags.h"
-#include "notes/notes_factory.h"
 #include "ui/lazy_load_service_factory.h"
+
+#include "app/vivaldi_apptools.h"
+#include "browser/vivaldi_runtime_feature.h"
+#include "components/datasource/vivaldi_image_store.h"
+#include "contact/contact_service_factory.h"
+#include "notes/notes_factory.h"
 #include "ui/webui/vivaldi_web_ui_controller_factory.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -52,6 +58,7 @@
 #include "extensions/api/prefs/prefs_api.h"
 #include "extensions/api/reading_list/reading_list_api.h"
 #include "extensions/api/runtime/runtime_api.h"
+#include "extensions/api/search_engines/search_engines_api.h"
 #include "extensions/api/settings/settings_api.h"
 #include "extensions/api/sync/sync_api.h"
 #include "extensions/api/tabs/tabs_private_api.h"
@@ -66,7 +73,7 @@
 #include "ui/vivaldi_rootdocument_handler.h"
 #endif
 
-#if defined(OS_LINUX)
+#if BUILDFLAG(IS_LINUX)
 #include "base/environment.h"
 #include "base/nix/xdg_util.h"
 #endif
@@ -75,23 +82,30 @@ namespace vivaldi {
 void StartGitIgnoreCheck();
 }
 
+namespace {
+struct PreloadedFavicon {
+  base::StringPiece page_url;
+  base::StringPiece favicon_url;
+  base::StringPiece favicon_png_base64;
+};
+
+#include "extraparts/preloaded_favicons.inc"
+}  // namespace
+
 VivaldiBrowserMainExtraParts::VivaldiBrowserMainExtraParts() {}
 
 VivaldiBrowserMainExtraParts::~VivaldiBrowserMainExtraParts() {}
 
 // Overridden from ChromeBrowserMainExtraParts:
 void VivaldiBrowserMainExtraParts::PostEarlyInitialization() {
-  base::CommandLine& cmd_line = *base::CommandLine::ForCurrentProcess();
-  if (!cmd_line.HasSwitch(switches::kAutoTestMode))
-    stats_reporter_ = vivaldi::StatsReporter::CreateInstance();
-#if defined(OS_LINUX) || defined(OS_MAC)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC)
   base::FilePath messaging(
   // Hardcoded from chromium/chrome/common/chrome_paths.cc
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
       FILE_PATH_LITERAL("/Library/Google/Chrome/NativeMessagingHosts")
-#else   // OS_MAC
+#else   // IS_MAC
       FILE_PATH_LITERAL("/etc/opt/chrome/native-messaging-hosts")
-#endif  // OS_MAC
+#endif  // IS_MAC
   );
   base::PathService::Override(chrome::DIR_NATIVE_MESSAGING, messaging);
 #endif
@@ -100,7 +114,7 @@ void VivaldiBrowserMainExtraParts::PostEarlyInitialization() {
 void VivaldiBrowserMainExtraParts::
     EnsureBrowserContextKeyedServiceFactoriesBuilt() {
   translate::TranslateLanguageList::DisableUpdate();
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   vivaldi::NotesModelFactory::GetInstance();
   calendar::CalendarServiceFactory::GetInstance();
   contact::ContactServiceFactory::GetInstance();
@@ -122,6 +136,7 @@ void VivaldiBrowserMainExtraParts::
   extensions::MenuContentAPI::GetFactoryInstance();
   extensions::TabsPrivateAPI::Init();
   extensions::ThemePrivateAPI::GetFactoryInstance();
+  extensions::SearchEnginesAPI::GetFactoryInstance();
   extensions::SyncAPI::GetFactoryInstance();
   extensions::VivaldiAccountAPI::GetFactoryInstance();
   extensions::VivaldiExtensionInit::GetFactoryInstance();
@@ -140,7 +155,7 @@ void VivaldiBrowserMainExtraParts::
 #endif
   VivaldiAdverseAdFilterListFactory::GetFactoryInstance();
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   vivaldi::LazyLoadServiceFactory::GetInstance();
 #endif
 
@@ -158,10 +173,26 @@ void VivaldiBrowserMainExtraParts::PostProfileInit(Profile* profile,
 
   if (vivaldi::IsVivaldiRunning()) {
     translate_language_list_ =
-        std::make_unique<translate::VivaldiTranslateLanguageList>(profile);
+        std::make_unique<translate::VivaldiTranslateLanguageList>();
   }
 
-#if !defined(OS_ANDROID)
+  auto* favicon_service = FaviconServiceFactory::GetForProfile(
+      profile, ServiceAccessType::EXPLICIT_ACCESS);
+  for (size_t i = 0; i < std::size(kPreloadedFavicons); i++) {
+    std::string png;
+    if (!base::Base64Decode(kPreloadedFavicons[i].favicon_png_base64, &png)) {
+      NOTREACHED();
+    }
+    favicon_service->SetOnDemandFavicons(
+        GURL(kPreloadedFavicons[i].page_url),
+        GURL(kPreloadedFavicons[i].favicon_url),
+        favicon_base::IconType::kFavicon,
+        gfx::Image::CreateFrom1xPNGBytes(
+            reinterpret_cast<const unsigned char*>(png.c_str()), png.length()),
+        base::DoNothing());
+  }
+
+#if !BUILDFLAG(IS_ANDROID)
   base::CommandLine& cmd_line = *base::CommandLine::ForCurrentProcess();
   vivaldi::CommandLineAppendSwitchNoDup(cmd_line, switches::kSavePageAsMHTML);
 
@@ -212,13 +243,22 @@ void VivaldiBrowserMainExtraParts::PostProfileInit(Profile* profile,
                                                      default_setting);
     }
   }
-#endif  // OS_ANDROID
+#endif  // IS_ANDROID
 
   vivaldi::StartGitIgnoreCheck();
 }
 
+void VivaldiBrowserMainExtraParts::PreMainMessageLoopRun() {
+  // The stats reporter must not be initialized earlier than this, because
+  // some platforms may not have their screen information available before this
+  // point.
+  base::CommandLine& cmd_line = *base::CommandLine::ForCurrentProcess();
+  if (!cmd_line.HasSwitch(switches::kAutoTestMode))
+    stats_reporter_ = vivaldi::StatsReporter::CreateInstance();
+}
+
 void VivaldiBrowserMainExtraParts::PostMainMessageLoopRun() {
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   extensions::AutoUpdateAPI::Shutdown();
-#endif  // OS_ANDROID
+#endif  // IS_ANDROID
 }

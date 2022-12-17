@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Vivaldi Technologies
+// Copyright (c) 2015-2022 Vivaldi Technologies
 
 #include "prefs/vivaldi_pref_names.h"
 
@@ -12,6 +12,8 @@ const char kVivaldiAccountPendingRegistration[] =
 const char kVivaldiExperiments[] = "vivaldi.experiments";
 const char kVivaldiLastTopSitesVacuumDate[] =
     "vivaldi.last_topsites_vacuum_date";
+const char kVivaldiPIPPlacement[] = "vivaldi.pip_placement";
+
 
 // Local state prefs go here
 const char kVivaldiAutoUpdateStandalone[] = "vivaldi.autoupdate.standalone";

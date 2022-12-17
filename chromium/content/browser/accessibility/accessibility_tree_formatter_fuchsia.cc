@@ -30,8 +30,7 @@ constexpr const char* const kStringAttributes[] = {
 constexpr const char* const kIntAttributes[] = {
     "number_of_rows",   "number_of_columns", "row_index",
     "cell_row_index",   "cell_column_index", "cell_row_span",
-    "cell_column_span",
-};
+    "cell_column_span", "list_size",         "list_element_index"};
 
 constexpr const char* const kDoubleAttributes[] = {
     "min_value",
@@ -59,6 +58,8 @@ std::string FuchsiaRoleToString(const FuchsiaRole role) {
       return "LINK";
     case FuchsiaRole::LIST:
       return "LIST";
+    case FuchsiaRole::LIST_ELEMENT:
+      return "LIST_ELEMENT";
     case FuchsiaRole::LIST_ELEMENT_MARKER:
       return "LIST_ELEMENT_MARKER";
     case FuchsiaRole::PARAGRAPH:
@@ -333,6 +334,15 @@ void AccessibilityTreeFormatterFuchsia::AddProperties(
       }
     }
 
+    if (attributes.has_list_attributes()) {
+      dict->SetIntKey("list_size", attributes.list_attributes().size());
+    }
+
+    if (attributes.has_list_element_attributes()) {
+      dict->SetIntKey("list_element_index",
+                      attributes.list_element_attributes().index());
+    }
+
     if (attributes.has_is_keyboard_key())
       dict->SetBoolKey("is_keyboard_key", attributes.is_keyboard_key());
   }
@@ -398,14 +408,14 @@ std::string AccessibilityTreeFormatterFuchsia::ProcessTreeForOutput(
   node.GetString("role", &role_value);
   WriteAttribute(true, role_value, &line);
 
-  for (unsigned i = 0; i < base::size(kBoolAttributes); i++) {
+  for (unsigned i = 0; i < std::size(kBoolAttributes); i++) {
     const char* bool_attribute = kBoolAttributes[i];
     absl::optional<bool> value = node.FindBoolPath(bool_attribute);
     if (value && *value)
       WriteAttribute(/*include_by_default=*/true, bool_attribute, &line);
   }
 
-  for (unsigned i = 0; i < base::size(kStringAttributes); i++) {
+  for (unsigned i = 0; i < std::size(kStringAttributes); i++) {
     const char* string_attribute = kStringAttributes[i];
     std::string value;
     if (!node.GetString(string_attribute, &value) || value.empty())
@@ -416,7 +426,7 @@ std::string AccessibilityTreeFormatterFuchsia::ProcessTreeForOutput(
         base::StringPrintf("%s='%s'", string_attribute, value.c_str()), &line);
   }
 
-  for (unsigned i = 0; i < base::size(kIntAttributes); i++) {
+  for (unsigned i = 0; i < std::size(kIntAttributes); i++) {
     const char* attribute_name = kIntAttributes[i];
     int value = node.FindIntKey(attribute_name).value_or(0);
     if (value == 0)
@@ -425,7 +435,7 @@ std::string AccessibilityTreeFormatterFuchsia::ProcessTreeForOutput(
                    &line);
   }
 
-  for (unsigned i = 0; i < base::size(kDoubleAttributes); i++) {
+  for (unsigned i = 0; i < std::size(kDoubleAttributes); i++) {
     const char* attribute_name = kDoubleAttributes[i];
     int value = node.FindIntKey(attribute_name).value_or(0);
     if (value == 0)

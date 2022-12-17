@@ -12,7 +12,6 @@
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/system/sys_info.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "chrome/browser/ash/borealis/borealis_context.h"
 #include "chrome/browser/ash/borealis/borealis_context_manager.h"
@@ -471,6 +470,19 @@ class BorealisDiskManagerImpl::SyncDisk
       Expected<std::unique_ptr<std::pair<BorealisDiskInfo, BorealisDiskInfo>>,
                Described<BorealisResizeDiskResult>> disk_info_or_error) {
     if (!disk_info_or_error) {
+      // Sometimes the disk size can get out of sync, so that btrfs reports that
+      // the minimum size of the disk is larger than the actual disk size. In
+      // this case we will get a kViolatesMinimumSize from trying to resize the
+      // disk. We don't want to block the startup process because of this error
+      // so we special case it as a success.
+      if (disk_info_or_error.Error().error() ==
+          BorealisResizeDiskResult::kViolatesMinimumSize) {
+        LOG(WARNING) << "disk was unable to be shrunk due to the disk "
+                        "already being smaller than the minimum size";
+        Succeed(std::make_unique<BorealisSyncDiskSizeResult>(
+            BorealisSyncDiskSizeResult::kDiskSizeSmallerThanMin));
+        return;
+      }
       Fail(Described<BorealisSyncDiskSizeResult>(
           BorealisSyncDiskSizeResult::kResizeFailed,
           "resize failed: " + disk_info_or_error.Error().description()));
@@ -618,10 +630,12 @@ void BorealisDiskManagerImpl::OnRequestSpaceDelta(
             std::move(disk_info_or_error.Error())));
     return;
   }
-  int64_t delta =
-      ExcludeBufferBytes(disk_info_or_error.Value()->second.available_space) -
-      ExcludeBufferBytes(disk_info_or_error.Value()->first.available_space);
+  int64_t delta = disk_info_or_error.Value()->second.disk_size -
+                  disk_info_or_error.Value()->first.disk_size;
   if (expanding) {
+    // Exclude the space that was required to regenerate the buffer.
+    delta -=
+        MissingBufferBytes(disk_info_or_error.Value()->first.available_space);
     if (delta < target_delta) {
       EmitResizeDiskMetric(expanding,
                            BorealisResizeDiskResult::kFailedToFulfillRequest);

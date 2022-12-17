@@ -2,18 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-/**
- * @fileoverview TODO(cowmoo)
- */
-
-
 import {FilePath} from 'chrome://resources/mojo/mojo/public/mojom/base/file_path.mojom-webui.js';
-
 import {Url} from 'chrome://resources/mojo/url/mojom/url.mojom-webui.js';
 
-import {WallpaperCollection} from '../trusted/personalization_app.mojom-webui.js';
-
-export const untrustedOrigin = 'chrome-untrusted://personalization';
+import {GooglePhotosEnablementState, WallpaperCollection} from '../trusted/personalization_app.mojom-webui.js';
 
 export const trustedOrigin = 'chrome://personalization';
 
@@ -23,6 +15,7 @@ export const kMaximumLocalImagePreviews = 3;
 export enum EventType {
   SEND_COLLECTIONS = 'send_collections',
   SEND_GOOGLE_PHOTOS_COUNT = 'send_google_photos_count',
+  SEND_GOOGLE_PHOTOS_ENABLED = 'send_google_photos_enabled',
   SEND_GOOGLE_PHOTOS_PHOTOS = 'send_google_photos_photos',
   SELECT_COLLECTION = 'select_collection',
   SELECT_GOOGLE_PHOTOS_COLLECTION = 'select_google_photos_collection',
@@ -46,6 +39,11 @@ export type SendCollectionsEvent = {
 export type SendGooglePhotosCountEvent = {
   type: EventType.SEND_GOOGLE_PHOTOS_COUNT,
   count: number|null,
+};
+
+export type SendGooglePhotosEnabledEvent = {
+  type: EventType.SEND_GOOGLE_PHOTOS_ENABLED,
+  enabled: GooglePhotosEnablementState,
 };
 
 export type SendGooglePhotosPhotosEvent = {
@@ -123,8 +121,9 @@ export type SendVisibleEvent = {
 };
 
 export type Events = SendCollectionsEvent|SendGooglePhotosCountEvent|
-    SendGooglePhotosPhotosEvent|SelectCollectionEvent|
-    SelectGooglePhotosCollectionEvent|SelectLocalCollectionEvent|
-    SendImageCountsEvent|SendImageTilesEvent|SendLocalImagesEvent|
-    SendLocalImageDataEvent|SendCurrentWallpaperAssetIdEvent|
-    SendPendingWallpaperAssetIdEvent|SelectImageEvent|SendVisibleEvent;
+    SendGooglePhotosEnabledEvent|SendGooglePhotosPhotosEvent|
+    SelectCollectionEvent|SelectGooglePhotosCollectionEvent|
+    SelectLocalCollectionEvent|SendImageCountsEvent|SendImageTilesEvent|
+    SendLocalImagesEvent|SendLocalImageDataEvent|
+    SendCurrentWallpaperAssetIdEvent|SendPendingWallpaperAssetIdEvent|
+    SelectImageEvent|SendVisibleEvent;

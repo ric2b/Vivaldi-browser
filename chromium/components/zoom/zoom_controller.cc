@@ -5,6 +5,7 @@
 #include "components/zoom/zoom_controller.h"
 
 #include "base/bind.h"
+#include "base/observer_list.h"
 #include "components/zoom/zoom_event_manager.h"
 #include "components/zoom/zoom_observer.h"
 #include "content/public/browser/browser_thread.h"
@@ -117,7 +118,7 @@ bool ZoomController::SetZoomLevelByClient(
   // Cannot zoom in disabled mode. Also, don't allow changing zoom level on
   // a crashed tab, an error page or an interstitial page.
   if (zoom_mode_ == ZOOM_MODE_DISABLED ||
-      !web_contents()->GetMainFrame()->GetRenderViewHost()->IsRenderViewLive())
+      !web_contents()->GetMainFrame()->IsRenderFrameLive())
     return false;
 
   // Store client data so the |client| can be attributed when the zoom

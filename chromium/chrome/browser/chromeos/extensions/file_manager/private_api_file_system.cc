@@ -15,7 +15,9 @@
 
 #include "ash/components/disks/disk.h"
 #include "ash/components/disks/disk_mount_manager.h"
+#include "ash/constants/ash_features.h"
 #include "base/bind.h"
+#include "base/files/file.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/numerics/safe_conversions.h"
@@ -33,6 +35,8 @@
 #include "chrome/browser/ash/drive/file_system_util.h"
 #include "chrome/browser/ash/file_manager/copy_or_move_io_task.h"
 #include "chrome/browser/ash/file_manager/delete_io_task.h"
+#include "chrome/browser/ash/file_manager/extract_io_task.h"
+#include "chrome/browser/ash/file_manager/file_manager_copy_or_move_hook_delegate.h"
 #include "chrome/browser/ash/file_manager/fileapi_util.h"
 #include "chrome/browser/ash/file_manager/io_task.h"
 #include "chrome/browser/ash/file_manager/path_util.h"
@@ -72,6 +76,7 @@
 #include "storage/browser/file_system/file_stream_reader.h"
 #include "storage/browser/file_system/file_system_context.h"
 #include "storage/browser/file_system/file_system_file_util.h"
+#include "storage/browser/file_system/file_system_operation.h"
 #include "storage/browser/file_system/file_system_operation_context.h"
 #include "storage/browser/file_system/file_system_operation_runner.h"
 #include "storage/browser/file_system/file_system_url.h"
@@ -152,7 +157,7 @@ file_manager::EventRouter* GetEventRouterByProfileId(void* profile_id) {
 void NotifyCopyProgress(
     void* profile_id,
     storage::FileSystemOperationRunner::OperationID operation_id,
-    storage::FileSystemOperation::CopyOrMoveProgressType type,
+    file_manager::FileManagerCopyOrMoveHookDelegate::ProgressType type,
     const FileSystemURL& source_url,
     const FileSystemURL& destination_url,
     int64_t size) {
@@ -170,7 +175,7 @@ void NotifyCopyProgress(
 void OnCopyProgress(
     void* profile_id,
     storage::FileSystemOperationRunner::OperationID* operation_id,
-    storage::FileSystemOperation::CopyOrMoveProgressType type,
+    file_manager::FileManagerCopyOrMoveHookDelegate::ProgressType type,
     const FileSystemURL& source_url,
     const FileSystemURL& destination_url,
     int64_t size) {
@@ -243,7 +248,7 @@ storage::FileSystemOperationRunner::OperationID StartCopyOnIOThread(
   // loop or later, so at least during this invocation it should alive.
   //
   // TODO(yawano): change ERROR_BEHAVIOR_ABORT to ERROR_BEHAVIOR_SKIP after
-  //     error messages of individual operations become appear in the Files app
+  //     error messages of individual operations become visible in the Files app
   //     UI.
   storage::FileSystemOperationRunner::OperationID* operation_id =
       new storage::FileSystemOperationRunner::OperationID;
@@ -253,8 +258,9 @@ storage::FileSystemOperationRunner::OperationID StartCopyOnIOThread(
           storage::FileSystemOperation::CopyOrMoveOption::
               kPreserveLastModified),
       storage::FileSystemOperation::ERROR_BEHAVIOR_ABORT,
-      base::BindRepeating(&OnCopyProgress, profile_id,
-                          base::Unretained(operation_id)),
+      std::make_unique<file_manager::FileManagerCopyOrMoveHookDelegate>(
+          base::BindRepeating(&OnCopyProgress, profile_id,
+                              base::Unretained(operation_id))),
       base::BindOnce(&OnCopyCompleted, profile_id, base::Owned(operation_id),
                      source_url, destination_url));
   // Notify the start of copy to send total size.
@@ -630,7 +636,18 @@ FileManagerPrivateGetSizeStatsFunction::Run() {
   base::WeakPtr<Volume> volume =
       volume_manager->FindVolumeById(params->volume_id);
   if (!volume.get())
-    return RespondNow(Error("Volume not found"));
+    return RespondNow(
+        Error("GetSizeStats: volume with ID * not found", params->volume_id));
+
+  // For fusebox volumes, get the underlying (aka original) volume.
+  const auto fusebox = base::StringPiece(file_manager::util::kFuseBox);
+  if (base::StartsWith(volume->file_system_type(), fusebox)) {
+    auto volume_id = params->volume_id.substr(fusebox.length());
+    volume = volume_manager->FindVolumeById(volume_id);
+    if (!volume.get())
+      return RespondNow(
+          Error("GetSizeStats: volume with ID * not found", volume_id));
+  }
 
   if (volume->type() == file_manager::VOLUME_TYPE_MTP) {
     // Resolve storage_name.
@@ -790,7 +807,8 @@ FileManagerPrivateFormatVolumeFunction::Run() {
   base::WeakPtr<Volume> volume =
       volume_manager->FindVolumeById(params->volume_id);
   if (!volume)
-    return RespondNow(Error("Volume not found"));
+    return RespondNow(
+        Error("FormatVolume: volume with ID * not found", params->volume_id));
 
   DiskMountManager::GetInstance()->FormatMountedDevice(
       volume->mount_path().AsUTF8Unsafe(),
@@ -850,7 +868,8 @@ FileManagerPrivateRenameVolumeFunction::Run() {
   base::WeakPtr<Volume> volume =
       volume_manager->FindVolumeById(params->volume_id);
   if (!volume)
-    return RespondNow(Error("Volume not found"));
+    return RespondNow(
+        Error("RenameVolume: volume with ID * not found", params->volume_id));
 
   DiskMountManager::GetInstance()->RenameMountedDevice(
       volume->mount_path().AsUTF8Unsafe(), params->new_name);
@@ -1553,6 +1572,16 @@ FileManagerPrivateInternalStartIOTaskFunction::Run() {
       task = std::make_unique<file_manager::io_task::DeleteIOTask>(
           std::move(source_urls), file_system_context);
       break;
+    case file_manager::io_task::OperationType::kExtract:
+      if (base::FeatureList::IsEnabled(
+              chromeos::features::kFilesExtractArchive)) {
+        task = std::make_unique<file_manager::io_task::ExtractIOTask>(
+            std::move(source_urls), std::move(destination_folder_url),
+            file_system_context);
+        break;
+      }
+      // Fall through
+      ABSL_FALLTHROUGH_INTENDED;
     default:
       // TODO(b/199804935): Replace with MoveIOTask when implemented.
       task = std::make_unique<file_manager::io_task::DummyIOTask>(

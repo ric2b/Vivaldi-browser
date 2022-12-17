@@ -23,7 +23,7 @@ export class ZeroTrustConnectorElement extends CustomElement {
     return 'zero-trust-connector';
   }
 
-  static get template() {
+  static override get template() {
     return `{__html_template__}`;
   }
 
@@ -120,7 +120,7 @@ export class ZeroTrustConnectorElement extends CustomElement {
     return this.pageHandler.getZeroTrustState().then(
         (response: {state: ZeroTrustState}) => response && response.state,
         (e: object) => {
-          console.log(`fetchZeroTrustValues failed: ${JSON.stringify(e)}`);
+          console.warn(`fetchZeroTrustValues failed: ${JSON.stringify(e)}`);
           return undefined;
         });
   }

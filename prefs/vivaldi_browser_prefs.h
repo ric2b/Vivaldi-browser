@@ -36,7 +36,7 @@ struct EnumPrefProperties {
 
 bool IsMergeableListPreference(base::StringPiece name);
 
-#ifdef OS_ANDROID
+#if BUILDFLAG(IS_ANDROID)
 
 // Declare an empty struct to minimize the amount of Android-specific ifdefs.
 struct PrefPropertiesMap {};
@@ -72,7 +72,7 @@ using PrefPropertiesMap = std::unordered_map<std::string, PrefProperties>;
 // profile from RegisterProfilePrefs.
 PrefPropertiesMap ExtractLastRegisteredPrefsProperties();
 
-#endif  // ifdef OS_ANDROID
+#endif  // !IS_ANDROID
 
 void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 

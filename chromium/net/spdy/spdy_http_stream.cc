@@ -27,8 +27,8 @@
 #include "net/spdy/spdy_http_utils.h"
 #include "net/spdy/spdy_log_util.h"
 #include "net/spdy/spdy_session.h"
-#include "net/third_party/quiche/src/spdy/core/spdy_header_block.h"
-#include "net/third_party/quiche/src/spdy/core/spdy_protocol.h"
+#include "net/third_party/quiche/src/quiche/spdy/core/spdy_header_block.h"
+#include "net/third_party/quiche/src/quiche/spdy/core/spdy_protocol.h"
 #include "url/scheme_host_port.h"
 
 namespace net {
@@ -134,16 +134,20 @@ SpdyHttpStream::~SpdyHttpStream() {
   }
 }
 
-int SpdyHttpStream::InitializeStream(const HttpRequestInfo* request_info,
-                                     bool can_send_early,
+void SpdyHttpStream::RegisterRequest(const HttpRequestInfo* request_info) {
+  DCHECK(request_info);
+  request_info_ = request_info;
+}
+
+int SpdyHttpStream::InitializeStream(bool can_send_early,
                                      RequestPriority priority,
                                      const NetLogWithSource& stream_net_log,
                                      CompletionOnceCallback callback) {
   DCHECK(!stream_);
+  DCHECK(request_info_);
   if (!spdy_session_)
     return ERR_CONNECTION_CLOSED;
 
-  request_info_ = request_info;
   if (pushed_stream_id_ != kNoPushedStreamFound) {
     int error = spdy_session_->GetPushedStream(
         request_info_->url, pushed_stream_id_, priority, &stream_);
@@ -163,7 +167,7 @@ int SpdyHttpStream::InitializeStream(const HttpRequestInfo* request_info,
       can_send_early, priority, request_info_->socket_tag, stream_net_log,
       base::BindOnce(&SpdyHttpStream::OnStreamCreated,
                      weak_factory_.GetWeakPtr(), std::move(callback)),
-      NetworkTrafficAnnotationTag(request_info->traffic_annotation));
+      NetworkTrafficAnnotationTag{request_info_->traffic_annotation});
 
   if (rv == OK) {
     stream_ = stream_request_.ReleaseStream().get();
@@ -396,8 +400,8 @@ void SpdyHttpStream::OnEarlyHintsReceived(
   DCHECK(response_info_);
   DCHECK_EQ(stream_->type(), SPDY_REQUEST_RESPONSE_STREAM);
 
-  const bool headers_valid = SpdyHeadersToHttpResponse(headers, response_info_);
-  CHECK(headers_valid);
+  const int rv = SpdyHeadersToHttpResponse(headers, response_info_);
+  CHECK_NE(rv, ERR_INCOMPLETE_HTTP2_HEADERS);
 
   if (!response_callback_.is_null()) {
     DoResponseCallback(OK);
@@ -416,15 +420,21 @@ void SpdyHttpStream::OnHeadersReceived(
     response_info_ = push_response_info_.get();
   }
 
-  const bool headers_valid =
-      SpdyHeadersToHttpResponse(response_headers, response_info_);
-  DCHECK(headers_valid);
+  const int rv = SpdyHeadersToHttpResponse(response_headers, response_info_);
+  DCHECK_NE(rv, ERR_INCOMPLETE_HTTP2_HEADERS);
+
+  if (rv == ERR_RESPONSE_HEADERS_MULTIPLE_LOCATION) {
+    // Cancel will call OnClose, which might call callbacks and might destroy
+    // `this`.
+    stream_->Cancel(rv);
+    return;
+  }
 
   if (pushed_request_headers &&
       !ValidatePushedHeaders(*request_info_, *pushed_request_headers,
                              response_headers, *response_info_)) {
     // Cancel will call OnClose, which might call callbacks and might destroy
-    // |this|.
+    // `this`.
     stream_->Cancel(ERR_HTTP2_PUSHED_RESPONSE_DOES_NOT_MATCH);
 
     return;

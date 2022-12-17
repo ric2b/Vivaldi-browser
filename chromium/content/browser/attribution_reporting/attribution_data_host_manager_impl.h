@@ -5,18 +5,26 @@
 #ifndef CONTENT_BROWSER_ATTRIBUTION_REPORTING_ATTRIBUTION_DATA_HOST_MANAGER_IMPL_H_
 #define CONTENT_BROWSER_ATTRIBUTION_REPORTING_ATTRIBUTION_DATA_HOST_MANAGER_IMPL_H_
 
+#include <stddef.h>
+
+#include "base/containers/circular_deque.h"
+#include "base/containers/flat_map.h"
 #include "base/memory/raw_ptr.h"
+#include "base/timer/timer.h"
 #include "content/browser/attribution_reporting/attribution_data_host_manager.h"
-#include "content/browser/attribution_reporting/common_source_info.h"
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/conversions/attribution_data_host.mojom.h"
-#include "url/origin.h"
+
+namespace base {
+class TimeDelta;
+class TimeTicks;
+}  // namespace base
 
 namespace content {
 
 class AttributionManager;
-class BrowserContext;
 
 // Manages a receiver set of all ongoing `AttributionDataHost`s and forwards
 // events to the AttributionManager which owns `this`. Because attributionsrc
@@ -27,8 +35,8 @@ class CONTENT_EXPORT AttributionDataHostManagerImpl
     : public AttributionDataHostManager,
       public blink::mojom::AttributionDataHost {
  public:
-  AttributionDataHostManagerImpl(BrowserContext* storage_partition,
-                                 AttributionManager* attribution_manager);
+  explicit AttributionDataHostManagerImpl(
+      AttributionManager* attribution_manager);
   AttributionDataHostManagerImpl(const AttributionDataHostManager& other) =
       delete;
   AttributionDataHostManagerImpl& operator=(
@@ -43,35 +51,56 @@ class CONTENT_EXPORT AttributionDataHostManagerImpl
   void RegisterDataHost(
       mojo::PendingReceiver<blink::mojom::AttributionDataHost> data_host,
       url::Origin context_origin) override;
-
-  // TODO(johnidel): Add support for navigation bound data hosts.
+  void RegisterNavigationDataHost(
+      mojo::PendingReceiver<blink::mojom::AttributionDataHost> data_host,
+      const blink::AttributionSrcToken& attribution_src_token) override;
+  void NotifyNavigationForDataHost(
+      const blink::AttributionSrcToken& attribution_src_token,
+      const url::Origin& source_origin,
+      const url::Origin& destination_origin) override;
+  void NotifyNavigationFailure(
+      const blink::AttributionSrcToken& attribution_src_token) override;
 
  private:
   // Represents frozen data from the browser process associated with each
   // receiver.
-  struct FrozenContext {
-    // Top-level origin the data host was created in.
-    url::Origin context_origin;
+  struct FrozenContext;
 
-    // Source type of this context. Note that data hosts which result in
-    // triggers still have a source type of` kEvent` as they share the same web
-    // API surface.
-    CommonSourceInfo::SourceType source_type;
-  };
+  struct DelayedTrigger;
+
+  struct NavigationDataHost;
 
   // blink::mojom::AttributionDataHost:
   void SourceDataAvailable(
       blink::mojom::AttributionSourceDataPtr data) override;
+  void TriggerDataAvailable(
+      blink::mojom::AttributionTriggerDataPtr data) override;
 
-  // Safe because the owning `AttributionManager` is guaranteed to outlive the
-  // browser context.
-  raw_ptr<BrowserContext> browser_context_;
+  void OnReceiverDisconnected();
+  void OnSourceEligibleDataHostFinished(base::TimeTicks register_time);
+
+  void SetTriggerTimer(base::TimeDelta delay);
+  void ProcessDelayedTrigger();
 
   // Owns `this`.
   raw_ptr<AttributionManager> attribution_manager_;
 
   mojo::ReceiverSet<blink::mojom::AttributionDataHost, FrozenContext>
       receivers_;
+
+  // Map which stores pending receivers for data hosts which are going to
+  // register sources associated with a navigation. These are not added to
+  // `receivers_` until the necessary browser process information is available
+  // to validate the attribution sources which is after the navigation finishes.
+  base::flat_map<blink::AttributionSrcToken, NavigationDataHost>
+      navigation_data_host_map_;
+
+  // The number of connected receivers that may register a source. Used to
+  // determine whether to buffer triggers. Event receivers are counted here
+  // until they register a trigger.
+  size_t data_hosts_in_source_mode_ = 0;
+  base::OneShotTimer trigger_timer_;
+  base::circular_deque<DelayedTrigger> delayed_triggers_;
 };
 
 }  // namespace content

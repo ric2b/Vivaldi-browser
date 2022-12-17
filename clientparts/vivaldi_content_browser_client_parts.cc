@@ -6,6 +6,7 @@
 #include "app/vivaldi_constants.h"
 #include "base/strings/string_number_conversions.h"
 #include "browser/vivaldi_runtime_feature.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/platform_locale_settings.h"
@@ -64,7 +65,7 @@ void VivaldiContentBrowserClientParts::BrowserURLHandlerCreated(
 void VivaldiContentBrowserClientParts::OverrideWebkitPrefs(
     content::WebContents* web_contents,
     blink::web_pref::WebPreferences* web_prefs) {
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   if (!vivaldi::IsVivaldiRunning())
     return;
 
@@ -127,5 +128,5 @@ void VivaldiContentBrowserClientParts::OverrideWebkitPrefs(
     }
 #endif //ENABLE_EXTENSIONS
   }
-#endif  // !OS_ANDROID
+#endif  // !IS_ANDROID
 }

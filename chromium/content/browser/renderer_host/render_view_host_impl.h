@@ -20,6 +20,7 @@
 #include "base/process/kill.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "content/browser/renderer_host/browsing_context_state.h"
 #include "content/browser/renderer_host/frame_tree.h"
 #include "content/browser/renderer_host/input/input_device_change_observer.h"
 #include "content/browser/renderer_host/page_lifecycle_state_manager.h"
@@ -39,7 +40,6 @@
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/page/page.mojom.h"
 #include "third_party/blink/public/web/web_ax_enums.h"
-#include "third_party/blink/public/web/web_console_message.h"
 #include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/window_open_disposition.h"
@@ -115,25 +115,27 @@ class CONTENT_EXPORT RenderViewHostImpl
   static bool HasNonBackForwardCachedInstancesForProcess(
       RenderProcessHost* process);
 
-  RenderViewHostImpl(FrameTree* frame_tree,
-                     SiteInstance* instance,
-                     std::unique_ptr<RenderWidgetHostImpl> widget,
-                     RenderViewHostDelegate* delegate,
-                     int32_t routing_id,
-                     int32_t main_frame_routing_id,
-                     bool swapped_out,
-                     bool has_initialized_audio_host);
+  RenderViewHostImpl(
+      FrameTree* frame_tree,
+      SiteInstance* instance,
+      std::unique_ptr<RenderWidgetHostImpl> widget,
+      RenderViewHostDelegate* delegate,
+      int32_t routing_id,
+      int32_t main_frame_routing_id,
+      bool swapped_out,
+      bool has_initialized_audio_host,
+      scoped_refptr<BrowsingContextState> main_browsing_context_state);
 
   RenderViewHostImpl(const RenderViewHostImpl&) = delete;
   RenderViewHostImpl& operator=(const RenderViewHostImpl&) = delete;
 
   // RenderViewHost implementation.
-  RenderWidgetHostImpl* GetWidget() override;
-  RenderProcessHost* GetProcess() override;
-  int GetRoutingID() override;
+  RenderWidgetHostImpl* GetWidget() const override;
+  RenderProcessHost* GetProcess() const override;
+  int GetRoutingID() const override;
   void EnablePreferredSizeMode() override;
-  bool IsRenderViewLive() override;
-  void WriteIntoTrace(perfetto::TracedValue context) override;
+  bool IsRenderViewLiveForTesting() const override;
+  void WriteIntoTrace(perfetto::TracedProto<TraceProto> context) const override;
 
   void SendWebPreferencesToRenderer();
   void SendRendererPreferencesToRenderer(
@@ -173,6 +175,9 @@ class CONTENT_EXPORT RenderViewHostImpl
     return is_waiting_for_page_close_completion_;
   }
 
+  // Returns true if the RenderView is active and has not crashed.
+  bool IsRenderViewLive() const;
+
   // Called when the RenderView in the renderer process has been created, at
   // which point IsRenderViewLive() becomes true, and the mojo connections to
   // the renderer process for this view now exist.
@@ -184,9 +189,22 @@ class CONTENT_EXPORT RenderViewHostImpl
   // blink::Page's main blink::Frame is remote).
   RenderFrameHostImpl* GetMainRenderFrameHost();
 
+  // // RenderViewHost is associated with a given SiteInstance(Group) and as
+  // BrowsingContextState in non-legacy BrowsingContextState mode is tied to a
+  // given BrowsingInstance, so the main BrowsingContextState stays the same
+  // during the entire lifetime of a RenderViewHost: cross-SiteInstance
+  // same-BrowsingInstance navigations might change the representation of the
+  // main frame in a given RenderView from RenderFrame to RenderFrameProxy and
+  // back, while cross-BrowsingInstances result in creating a new unrelated
+  // RenderViewHost. This is not true in the legacy BCS mode, so there the
+  // |main_browsing_context_state_| is null.
+  const scoped_refptr<BrowsingContextState>& main_browsing_context_state() {
+    return main_browsing_context_state_;
+  }
+
   // Returns the `AgentSchedulingGroupHost` this view is associated with (via
   // the widget).
-  AgentSchedulingGroupHost& GetAgentSchedulingGroup();
+  AgentSchedulingGroupHost& GetAgentSchedulingGroup() const;
 
   // Tells the renderer process to request a page-scale animation based on the
   // specified point/rect.
@@ -251,7 +269,8 @@ class CONTENT_EXPORT RenderViewHostImpl
 
   bool is_in_back_forward_cache() const { return is_in_back_forward_cache_; }
 
-  void ActivatePrerenderedPage(base::TimeTicks activation_start,
+  void ActivatePrerenderedPage(blink::mojom::PrerenderPageActivationParamsPtr
+                                   prerender_page_activation_params,
                                base::OnceClosure callback);
 
   void SetFrameTreeVisibility(blink::mojom::PageVisibilityState visibility);
@@ -303,10 +322,6 @@ class CONTENT_EXPORT RenderViewHostImpl
   // class to FrameTree/FrameTreeNode.
   FrameTree* frame_tree() const { return frame_tree_; }
   void SetFrameTree(FrameTree& frame_tree);
-
-  // Write a representation of this object into a trace.
-  void WriteIntoTrace(
-      perfetto::TracedProto<perfetto::protos::pbzero::RenderViewHost> proto);
 
   // NOTE: Do not add functions that just send an IPC message that are called in
   // one or two places. Have the caller send the IPC message directly (unless
@@ -435,6 +450,9 @@ class CONTENT_EXPORT RenderViewHostImpl
   mojo::AssociatedRemote<blink::mojom::PageBroadcast> page_broadcast_;
 
   raw_ptr<FrameTree> frame_tree_;
+
+  // See main_browsing_context_state() for more details.
+  const scoped_refptr<BrowsingContextState> main_browsing_context_state_;
 
   base::WeakPtrFactory<RenderViewHostImpl> weak_factory_{this};
 };

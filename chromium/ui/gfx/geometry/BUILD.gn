@@ -19,6 +19,7 @@ component("geometry") {
     "insets.h",
     "insets_conversions.cc",
     "insets_conversions.h",
+    "insets_f.cc",
     "insets_f.h",
     "insets_outsets_base.h",
     "insets_outsets_f_base.h",
@@ -79,8 +80,12 @@ component("geometry") {
 component("geometry_skia") {
   sources = [
     "geometry_skia_export.h",
+    "linear_gradient.cc",
+    "linear_gradient.h",
     "mask_filter_info.cc",
     "mask_filter_info.h",
+    "matrix44.cc",
+    "matrix44.h",
     "rrect_f.cc",
     "rrect_f.h",
     "rrect_f_builder.cc",

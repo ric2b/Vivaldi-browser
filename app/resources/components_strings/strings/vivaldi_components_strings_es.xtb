@@ -54,7 +54,7 @@
 <translation id="3041612393474885105">Información del certificado</translation>
 <translation id="3109728660330352905">No tienes autorización para ver esta página.</translation>
 <translation id="31207688938192855"><ph name="BEGIN_LINK" />Prueba a ejecutar el diagnóstico de conectividad<ph name="END_LINK" />.</translation>
-<translation id="3154506275960390542">Esta página contiene un formulario que no se puede enviar de forma segura. Mientas transitan los datos que envías, estos pueden ser vistos por otros y un atacante puede modificarlos para cambiar lo que recibe el servidor.</translation>
+<translation id="3154506275960390542">Esta página contiene un formulario que no se puede enviar seguramente. Mientas transitan los datos que envías, estos pueden ser vistos por otros y un atacante puede modificarlos para cambiar lo que recibe el servidor.</translation>
 <translation id="3176929007561373547">Revisa tu configuración del proxy o contacta con tu administrador de red para
       asegurarte de que el servidor proxy esté funcionando. Si consideras que no
       necesitas usar un servidor proxy, sigue estas instrucciones:

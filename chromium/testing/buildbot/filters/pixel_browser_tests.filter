@@ -24,17 +24,19 @@ HatsBubbleTest.*
 HungRendererDialogViewBrowserTest.*
 ImportLockDialogViewBrowserTest.*
 InlineLoginHelperBrowserTest.InvokeUi_*
+LocalCardMigrationBrowserUiTest.*
 NewTabPageTest.*
 OneTimePermissionPromptBubbleViewBrowserTest.*
 OutdatedUpgradeBubbleTest.*
 PageInfoBubbleViewAboutThisSiteDialogBrowserTest.*
 PageInfoBubbleViewDialogBrowserTest.*
+PageInfoBubbleViewPrivacySandboxDialogBrowserTest.*
 PageInfoBubbleViewHistoryDialogBrowserTest.*
 *PasswordBubbleBrowserTest.*
 PasswordReuseModalWarningTest.*
 PermissionRequestChipDialogBrowserTest.*
 *PermissionPromptBubbleViewBrowserTest.*
-ProfileSigninConfirmationDialogTest.*
+PrivacySandboxDialogViewBrowserTest.*
 PromptForScanningModalDialogTest.*
 QRCodeGeneratorBubbleBrowserTest.*
 RelaunchRecommendedBubbleViewDialogTest.*
@@ -49,7 +51,6 @@ TabGroupEditorBubbleViewDialogBrowserTest.*
 TabHoverCardBubbleViewBrowserTest.*
 UpdateRecommendedDialogTest.*
 WebAppConfirmViewBrowserTest.*
-WorkProfileSigninConfirmationDialogTest.*
 ZoomBubbleDialogTest.*
 
 # This test uses random network port and shows it on ui.

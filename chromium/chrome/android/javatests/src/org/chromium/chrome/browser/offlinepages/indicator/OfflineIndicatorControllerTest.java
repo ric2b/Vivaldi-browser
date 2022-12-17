@@ -60,7 +60,6 @@ import java.util.concurrent.TimeUnit;
 /** Unit tests for offline indicator interacting with chrome activity. */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
-@Features.DisableFeatures({ChromeFeatureList.OFFLINE_INDICATOR_V2})
 @Batch(Batch.PER_CLASS)
 // TODO(jianli): Add test for disabled feature.
 public class OfflineIndicatorControllerTest {
@@ -270,7 +269,7 @@ public class OfflineIndicatorControllerTest {
     @Test
     @MediumTest
     public void testDoNotShowOfflineIndicatorOnPageLoadingWhenOffline() {
-        String testUrl = mTestServer.getURL("/slow?1");
+        String testUrl = mTestServer.getURL("/slow?3");
 
         // Load a page without waiting it to finish.
         loadPageWithoutWaiting(testUrl, null);

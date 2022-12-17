@@ -18,6 +18,7 @@
 #include "device/fido/attested_credential_data.h"
 #include "device/fido/authenticator_data.h"
 #include "device/fido/fido_constants.h"
+#include "device/fido/mac/credential_metadata.h"
 #include "device/fido/p256_public_key.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -38,6 +39,7 @@ absl::optional<AttestedCredentialData> MakeAttestedCredentialData(
 // which may be |absl::nullopt| in GetAssertion operations.
 COMPONENT_EXPORT(DEVICE_FIDO)
 AuthenticatorData MakeAuthenticatorData(
+    CredentialMetadata::Version version,
     const std::string& rp_id,
     absl::optional<AttestedCredentialData> attested_credential_data);
 
@@ -55,6 +57,17 @@ absl::optional<std::vector<uint8_t>> GenerateSignature(
 // be converted.
 std::unique_ptr<PublicKey> SecKeyRefToECPublicKey(SecKeyRef public_key_ref)
     API_AVAILABLE(macosx(10.12.2));
+
+enum class CodeSigningState {
+  kSigned,
+  kNotSigned,
+  kUnknown,
+};
+
+// ProcessIsSigned returns `kSigned` if the current process has been code
+// signed, `kNotSigned` if not, or `kUnknown` if the signing status cannot be
+// determined. (The latter will always happen on macOS < 10.12.)
+CodeSigningState ProcessIsSigned();
 
 }  // namespace mac
 }  // namespace fido

@@ -17,19 +17,21 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 
-namespace chromeos {
+namespace ash {
 namespace ime {
 
 // Chromium implementation of ConnectionFactory (as opposed to the sharedlib
 // implementation). This impl is used to connect the RuleBasedEngine in the ime
 // service to the NativeIME when requested.
+// TODO(b/214153032): Rename to RuleBasedEngineMojoConnectionFactory to better
+// and more specifically reflect what this represents.
 class ConnectionFactory : public mojom::ConnectionFactory {
  public:
   explicit ConnectionFactory(
       mojo::PendingReceiver<mojom::ConnectionFactory> pending_receiver);
   ~ConnectionFactory() override;
 
-  // chromeos::ime::mojom::ConnectionFactory overrides.
+  // mojom::ConnectionFactory overrides.
   void ConnectToInputMethod(
       const std::string& ime_spec,
       mojo::PendingAssociatedReceiver<mojom::InputMethod> pending_input_method,
@@ -49,6 +51,6 @@ class ConnectionFactory : public mojom::ConnectionFactory {
 };
 
 }  // namespace ime
-}  // namespace chromeos
+}  // namespace ash
 
 #endif  // ASH_SERVICES_IME_CONNECTION_FACTORY_H_

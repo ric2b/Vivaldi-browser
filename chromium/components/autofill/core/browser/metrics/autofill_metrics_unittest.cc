@@ -30,6 +30,7 @@
 #include "components/autofill/core/browser/autofill_external_delegate.h"
 #include "components/autofill/core/browser/autofill_form_test_utils.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
+#include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/metrics/form_events/address_form_event_logger.h"
 #include "components/autofill/core/browser/metrics/form_events/credit_card_form_event_logger.h"
@@ -181,8 +182,8 @@ void VerifyUkm(const ukm::TestUkmRecorder* ukm_recorder,
 
   EXPECT_LE(entries.size(), expected_metrics.size());
   for (size_t i = 0; i < expected_metrics.size() && i < entries.size(); i++) {
-    ukm_recorder->ExpectEntrySourceHasUrl(
-        entries[i], GURL(form.main_frame_origin.GetURL()));
+    ukm_recorder->ExpectEntrySourceHasUrl(entries[i],
+                                          form.main_frame_origin.GetURL());
     EXPECT_THAT(
         entries[i]->metrics,
         UnorderedPointwise(CompareMetricsIgnoringMillisecondsSinceFormParsed(),
@@ -328,6 +329,30 @@ class MockAutofillClient : public TestAutofillClient {
   MOCK_METHOD(void, ExecuteCommand, (int), (override));
 };
 
+template <typename T>
+struct HistogramBucketExpectation {
+  T bucket;
+  size_t count;
+};
+
+// Checks that the given buckets have the given counts.
+// Additionally checks that the overall count is `total_count`, which defaults
+// to the sum of `expectations` counts.
+template <typename T>
+void ExpectBuckets(const base::HistogramTester& histogram_tester,
+                   base::StringPiece metric,
+                   std::vector<HistogramBucketExpectation<T>> expectations,
+                   absl::optional<size_t> total_size = absl::nullopt) {
+  if (!total_size) {
+    total_size = 0;
+    for (const auto& e : expectations)
+      *total_size += e.count;
+  }
+  histogram_tester.ExpectTotalCount(metric, *total_size);
+  for (const auto& e : expectations)
+    histogram_tester.ExpectBucketCount(metric, e.bucket, e.count);
+}
+
 }  // namespace
 
 // This is defined in the autofill_metrics.cc implementation file.
@@ -380,6 +405,14 @@ class AutofillMetricsTest : public testing::Test {
   // Purge recorded UKM metrics for running more tests.
   void PurgeUKM();
 
+  // Mocks a credit card fetching was completed. This mock starts from the
+  // BrowserAutofillManager. Use these if your test does not depends on
+  // OnDidGetRealPan but just need to mock the card fetching result (so that
+  // you don't need to branch on what auth method was used).
+  void OnCreditCardFetchingSuccessful(const std::u16string& real_pan,
+                                      bool is_virtual_card = false);
+  void OnCreditCardFetchingFailed();
+
   base::test::TaskEnvironment task_environment_;
   MockAutofillClient autofill_client_;
   raw_ptr<ukm::TestUkmRecorder> test_ukm_recorder_;
@@ -392,6 +425,8 @@ class AutofillMetricsTest : public testing::Test {
 
  private:
   void CreateTestAutofillProfiles();
+
+  CreditCard credit_card_ = test::GetMaskedServerCard();
 };
 
 AutofillMetricsTest::AutofillMetricsTest() {
@@ -554,6 +589,23 @@ void AutofillMetricsTest::OnDidGetRealPanWithNonHttpOkResponse() {
       AutofillClient::PaymentsRpcResult::kPermanentFailure, response);
 }
 
+void AutofillMetricsTest::OnCreditCardFetchingSuccessful(
+    const std::u16string& real_pan,
+    bool is_virtual_card) {
+  credit_card_.set_record_type(
+      is_virtual_card ? CreditCard::RecordType::VIRTUAL_CARD
+                      : CreditCard::RecordType::MASKED_SERVER_CARD);
+  credit_card_.SetNumber(real_pan);
+
+  browser_autofill_manager_->OnCreditCardFetched(
+      CreditCardFetchResult::kSuccess, &credit_card_, u"123");
+}
+
+void AutofillMetricsTest::OnCreditCardFetchingFailed() {
+  browser_autofill_manager_->OnCreditCardFetched(
+      CreditCardFetchResult::kPermanentError, nullptr, u"");
+}
+
 void AutofillMetricsTest::RecreateCreditCards(
     bool include_local_credit_card,
     bool include_masked_server_credit_card,
@@ -642,15 +694,15 @@ class AutofillMetricsIFrameTest : public AutofillMetricsTest,
                                   public testing::WithParamInterface<bool> {
  public:
   AutofillMetricsIFrameTest()
-      : is_in_main_frame_(GetParam()),
+      : is_in_any_main_frame_(GetParam()),
         credit_card_form_events_frame_histogram_(
             std::string("Autofill.FormEvents.CreditCard.") +
-            (is_in_main_frame_ ? "IsInMainFrame" : "IsInIFrame")) {
-    autofill_driver_->SetIsInMainFrame(is_in_main_frame_);
+            (is_in_any_main_frame_ ? "IsInMainFrame" : "IsInIFrame")) {
+    autofill_driver_->SetIsInAnyMainFrame(is_in_any_main_frame_);
   }
 
  protected:
-  const bool is_in_main_frame_;
+  const bool is_in_any_main_frame_;
   const std::string credit_card_form_events_frame_histogram_;
 };
 
@@ -729,6 +781,93 @@ TEST_F(AutofillMetricsTest, NumberOfAutofilledFieldsAtSubmission) {
     histogram_tester.ExpectBucketCount(
         "Autofill.NumberOfAutofilledFieldsAtSubmission.Corrected", i,
         i == expected_number_of_corrected_fillings ? 1 : 0);
+  }
+}
+
+// Test that we log the right number of autofilled fields with an unrecognized
+// autocomplete attribute at submission time.
+TEST_F(AutofillMetricsTest,
+       NumberOfAutofilledFieldsWithAutocompleteUnrecognizedAtSubmission) {
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillFillAndImportFromMoreFields);
+  // Set up our form data with two autofilled fields.
+  FormData form =
+      test::GetFormData({.description_for_logging = "NumberOfAutofilledFields",
+                         .fields = {{.label = u"Autofilled",
+                                     .name = u"autofilled",
+                                     .value = u"Elvis Aaron Presley",
+                                     .autocomplete_attribute = "garbage",
+                                     .is_autofilled = true},
+                                    {.label = u"Autofilled but corrected",
+                                     .name = u"autofillfailed",
+                                     .value = u"buddy@gmail.com",
+                                     .autocomplete_attribute = "garbage",
+                                     .is_autofilled = true},
+                                    {.label = u"Empty",
+                                     .name = u"empty",
+                                     .value = u"",
+                                     .is_autofilled = false},
+                                    {.label = u"Unknown",
+                                     .name = u"unknown",
+                                     .value = u"garbage",
+                                     .is_autofilled = false},
+                                    {.label = u"Select",
+                                     .name = u"select",
+                                     .value = u"USA",
+                                     .form_control_type = "select-one",
+                                     .is_autofilled = false},
+                                    {.role = ServerFieldType::PHONE_HOME_NUMBER,
+                                     .value = u"2345678901",
+                                     .form_control_type = "tel",
+                                     .is_autofilled = true}},
+                         .unique_renderer_id = test::MakeFormRendererId(),
+                         .main_frame_origin = url::Origin::Create(
+                             autofill_client_.form_origin())});
+
+  std::vector<ServerFieldType> heuristic_types = {
+      NAME_FULL,         PHONE_HOME_NUMBER, NAME_FULL,
+      PHONE_HOME_NUMBER, UNKNOWN_TYPE,      PHONE_HOME_CITY_AND_NUMBER};
+  std::vector<ServerFieldType> server_types = {
+      NAME_FIRST,    EMAIL_ADDRESS,  NAME_FIRST,
+      EMAIL_ADDRESS, NO_SERVER_DATA, PHONE_HOME_CITY_AND_NUMBER};
+
+  // Simulate having seen this form on page load.
+  browser_autofill_manager_->AddSeenForm(form, heuristic_types, server_types);
+
+  // Simulate user changing the second and forth field of the form.
+  browser_autofill_manager_->OnTextFieldDidChange(form, form.fields[1],
+                                                  gfx::RectF(), TimeTicks());
+  form.fields.at(1).is_autofilled = false;
+
+  // Simulate form submission.
+  base::HistogramTester histogram_tester;
+  browser_autofill_manager_->OnFormSubmitted(form, /*known_success=*/false,
+                                             SubmissionSource::FORM_SUBMISSION);
+
+  // Test that the correct bucket for the number of filled fields with an
+  // unrecognized autocomplete attriute received a count while the others remain
+  // at zero counts.
+  const size_t expected_number_of_accepted_fillings = 1;
+  const size_t expected_number_of_corrected_fillings = 1;
+  const size_t expected_number_of_total_fillings =
+      expected_number_of_accepted_fillings +
+      expected_number_of_corrected_fillings;
+  for (int i = 0; i < 50; i++) {
+    histogram_tester.ExpectBucketCount(
+        "Autofill."
+        "NumberOfAutofilledFieldsWithAutocompleteUnrecognizedAtSubmission."
+        "Total",
+        i, i == expected_number_of_total_fillings ? 1 : 0);
+    histogram_tester.ExpectBucketCount(
+        "Autofill."
+        "NumberOfAutofilledFieldsWithAutocompleteUnrecognizedAtSubmission."
+        "Accepted",
+        i, i == expected_number_of_accepted_fillings ? 1 : 0);
+    histogram_tester.ExpectBucketCount(
+        "Autofill."
+        "NumberOfAutofilledFieldsWithAutocompleteUnrecognizedAtSubmission."
+        "Corrected",
+        i, i == expected_number_of_corrected_fillings ? 1 : 0);
   }
 }
 
@@ -5564,8 +5703,8 @@ TEST_P(AutofillMetricsIFrameTest, CreditCardSelectedFormEvents) {
     browser_autofill_manager_->FillOrPreviewVirtualCardInformation(
         mojom::RendererFormDataAction::kFill, guid, kDefaultPageID, form,
         form.fields[2]);
-    OnDidGetRealPan(AutofillClient::PaymentsRpcResult::kSuccess,
-                    "6011000990139424");
+    OnCreditCardFetchingSuccessful(u"6011000990139424",
+                                   /*is_virtual_card=*/true);
     histogram_tester.ExpectBucketCount(
         "Autofill.FormEvents.CreditCard",
         FORM_EVENT_VIRTUAL_CARD_SUGGESTION_SELECTED, 1);
@@ -5591,13 +5730,13 @@ TEST_P(AutofillMetricsIFrameTest, CreditCardSelectedFormEvents) {
     browser_autofill_manager_->FillOrPreviewVirtualCardInformation(
         mojom::RendererFormDataAction::kFill, guid, kDefaultPageID, form,
         form.fields[2]);
-    OnDidGetRealPan(AutofillClient::PaymentsRpcResult::kSuccess,
-                    "6011000990139424");
+    OnCreditCardFetchingSuccessful(u"6011000990139424",
+                                   /*is_virtual_card=*/true);
     browser_autofill_manager_->FillOrPreviewVirtualCardInformation(
         mojom::RendererFormDataAction::kFill, guid, kDefaultPageID, form,
         form.fields[2]);
-    OnDidGetRealPan(AutofillClient::PaymentsRpcResult::kSuccess,
-                    "6011000990139424");
+    OnCreditCardFetchingSuccessful(u"6011000990139424",
+                                   /*is_virtual_card=*/true);
     histogram_tester.ExpectBucketCount(
         "Autofill.FormEvents.CreditCard",
         FORM_EVENT_VIRTUAL_CARD_SUGGESTION_SELECTED, 2);
@@ -5676,8 +5815,8 @@ TEST_P(AutofillMetricsIFrameTest, CreditCardFilledFormEvents) {
     browser_autofill_manager_->FillOrPreviewVirtualCardInformation(
         mojom::RendererFormDataAction::kFill, guid, kDefaultPageID, form,
         form.fields.front());
-    OnDidGetRealPan(AutofillClient::PaymentsRpcResult::kSuccess,
-                    "6011000990139424");
+    OnCreditCardFetchingSuccessful(u"6011000990139424",
+                                   /*is_virtual_card=*/true);
     histogram_tester.ExpectBucketCount(
         "Autofill.FormEvents.CreditCard",
         FORM_EVENT_VIRTUAL_CARD_SUGGESTION_FILLED, 1);
@@ -5704,8 +5843,7 @@ TEST_P(AutofillMetricsIFrameTest, CreditCardFilledFormEvents) {
     browser_autofill_manager_->FillOrPreviewForm(
         mojom::RendererFormDataAction::kFill, 0, form, form.fields.back(),
         browser_autofill_manager_->MakeFrontendIDForTest(guid, std::string()));
-    OnDidGetRealPan(AutofillClient::PaymentsRpcResult::kSuccess,
-                    "6011000990139424");
+    OnCreditCardFetchingSuccessful(u"6011000990139424");
     browser_autofill_manager_->OnFormSubmitted(
         form, /*known_success=*/false, SubmissionSource::FORM_SUBMISSION);
     histogram_tester.ExpectBucketCount(
@@ -5990,7 +6128,7 @@ TEST_F(AutofillMetricsTest, CreditCardGetRealPanDuration_BadServerResponse) {
   test::CreateTestCreditCardFormData(&form,
                                      /*is_https=*/true,
                                      /*use_month_type=*/true,
-                                     /*split_name=*/false);
+                                     /*split_names=*/false);
   std::vector<ServerFieldType> field_types{
       CREDIT_CARD_NAME_FULL, CREDIT_CARD_NUMBER,
       CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR, CREDIT_CARD_VERIFICATION_CODE};
@@ -6668,8 +6806,8 @@ TEST_P(AutofillMetricsIFrameTest, CreditCardSubmittedFormEvents) {
     browser_autofill_manager_->FillOrPreviewVirtualCardInformation(
         mojom::RendererFormDataAction::kFill, guid, kDefaultPageID, form,
         form.fields.front());
-    OnDidGetRealPan(AutofillClient::PaymentsRpcResult::kSuccess,
-                    "6011000990139424");
+    OnCreditCardFetchingSuccessful(u"6011000990139424",
+                                   /*is_virtual_card=*/true);
     browser_autofill_manager_->OnFormSubmitted(
         form, /*known_success=*/false, SubmissionSource::FORM_SUBMISSION);
     histogram_tester.ExpectBucketCount(
@@ -6762,8 +6900,7 @@ TEST_P(AutofillMetricsIFrameTest, CreditCardSubmittedFormEvents) {
     browser_autofill_manager_->FillOrPreviewForm(
         mojom::RendererFormDataAction::kFill, 0, form, form.fields.back(),
         browser_autofill_manager_->MakeFrontendIDForTest(guid, std::string()));
-    OnDidGetRealPan(AutofillClient::PaymentsRpcResult::kSuccess,
-                    "6011000990139424");
+    OnCreditCardFetchingSuccessful(u"6011000990139424");
     browser_autofill_manager_->OnFormSubmitted(
         form, /*known_success=*/false, SubmissionSource::FORM_SUBMISSION);
     histogram_tester.ExpectBucketCount(
@@ -7127,8 +7264,8 @@ TEST_P(AutofillMetricsIFrameTest, CreditCardWillSubmitFormEvents) {
     browser_autofill_manager_->FillOrPreviewVirtualCardInformation(
         mojom::RendererFormDataAction::kFill, guid, kDefaultPageID, form,
         form.fields.front());
-    OnDidGetRealPan(AutofillClient::PaymentsRpcResult::kSuccess,
-                    "6011000990139424");
+    OnCreditCardFetchingSuccessful(u"6011000990139424",
+                                   /*is_virtual_card=*/true);
     browser_autofill_manager_->OnFormSubmitted(
         form, /*known_success=*/false, SubmissionSource::FORM_SUBMISSION);
     histogram_tester.ExpectBucketCount(
@@ -7187,8 +7324,7 @@ TEST_P(AutofillMetricsIFrameTest, CreditCardWillSubmitFormEvents) {
     browser_autofill_manager_->FillOrPreviewForm(
         mojom::RendererFormDataAction::kFill, 0, form, form.fields.back(),
         browser_autofill_manager_->MakeFrontendIDForTest(guid, std::string()));
-    OnDidGetRealPan(AutofillClient::PaymentsRpcResult::kSuccess,
-                    "6011000990139424");
+    OnCreditCardFetchingSuccessful(u"6011000990139424");
     histogram_tester.ExpectBucketCount(
         "Autofill.FormEvents.CreditCard",
         FORM_EVENT_MASKED_SERVER_CARD_SUGGESTION_FILLED, 1);
@@ -12613,11 +12749,22 @@ TEST_F(AutofillMetricsTest,
 }
 
 // Base class for cross-frame filling metrics, in particular for
-// Autofill.CreditCard.SeamlessFills.* and Autofill.CreditCard.NumberFills.*.
+// Autofill.CreditCard.SeamlessFills.*.
 class AutofillMetricsCrossFrameFormTest : public AutofillMetricsTest {
  public:
+  struct CreditCardAndCvc {
+    CreditCard credit_card;
+    std::u16string cvc;
+  };
+
   AutofillMetricsCrossFrameFormTest() {
-    scoped_feature_list_.InitAndEnableFeature(features::kAutofillAcrossIframes);
+    scoped_feature_list_.InitWithFeaturesAndParameters(
+        {base::test::ScopedFeatureList::FeatureAndParams(
+             features::kAutofillAcrossIframes, {}),
+         base::test::ScopedFeatureList::FeatureAndParams(
+             features::kAutofillSharedAutofill,
+             {{"relax_shared_autofill", "true"}})},
+        {});
   }
   ~AutofillMetricsCrossFrameFormTest() override = default;
 
@@ -12629,8 +12776,15 @@ class AutofillMetricsCrossFrameFormTest : public AutofillMetricsTest {
                         false /* include_full_server_credit_card */,
                         false /* masked_card_is_enrolled_for_virtual_card */);
 
-    url::Origin main_origin = url::Origin::Create(GURL("https://main.com/"));
-    url::Origin other_origin = url::Origin::Create(GURL("https://other.com/"));
+    credit_card_with_cvc_ = {
+        .credit_card = *browser_autofill_manager_->credit_card_access_manager()
+                            ->GetCreditCardsToSuggest()
+                            .front(),
+        .cvc = u"123"};
+
+    url::Origin main_origin =
+        url::Origin::Create(GURL("https://example.test/"));
+    url::Origin other_origin = url::Origin::Create(GURL("https://other.test/"));
     form_ = test::GetFormData(
         {.description_for_logging = "CrossFrameFillingMetrics",
          .fields =
@@ -12679,17 +12833,13 @@ class AutofillMetricsCrossFrameFormTest : public AutofillMetricsTest {
                                            /*removed_forms=*/{});
   }
 
-  const CreditCard& credit_card() {
-    return *browser_autofill_manager_->credit_card_access_manager()
-                ->GetCreditCardsToSuggest()
-                .front();
-  }
+  CreditCardAndCvc& fill_data() { return credit_card_with_cvc_; }
 
   // Any call to FillForm() should be followed by a SetFormValues() call to
   // mimic its effect on |form_|.
   void FillForm(const FormFieldData& triggering_field) {
-    browser_autofill_manager_->FillCreditCardForm(0, form_, triggering_field,
-                                                  credit_card(), u"123");
+    browser_autofill_manager_->FillCreditCardForm(
+        0, form_, triggering_field, fill_data().credit_card, fill_data().cvc);
   }
 
   // Sets the field values of |form_| according to the parameters.
@@ -12711,8 +12861,8 @@ class AutofillMetricsCrossFrameFormTest : public AutofillMetricsTest {
       ASSERT_NE(index_it, type_to_index.end());
       FormFieldData& field = form_.fields[index_it->second];
       field.value = fill_type != CREDIT_CARD_VERIFICATION_CODE
-                        ? credit_card().GetRawInfo(fill_type)
-                        : u"123";
+                        ? fill_data().credit_card.GetRawInfo(fill_type)
+                        : fill_data().cvc;
       field.is_autofilled = is_autofilled;
       field.properties_mask = (field.properties_mask & ~kUserTyped) |
                               (is_user_typed ? kUserTyped : 0);
@@ -12733,15 +12883,16 @@ class AutofillMetricsCrossFrameFormTest : public AutofillMetricsTest {
 
   void CommitMetrics() { browser_autofill_manager_.reset(); }
 
-  // Fillable form.
   base::test::ScopedFeatureList scoped_feature_list_;
   FormData form_;
+  CreditCardAndCvc credit_card_with_cvc_;
 };
 
 // Tests that Autofill.CreditCard.SeamlessFills.* is not emitted for manual
-// fills and that Autofill.CreditCard.NumberFills.AtSubmissionTime emits false.
+// fills.
 TEST_F(AutofillMetricsCrossFrameFormTest,
        DoNotLogCreditCardSeamlessFillsMetricIfNotAutofilled) {
+  using UkmBuilder = ukm::builders::Autofill_CreditCardFill;
   base::HistogramTester histogram_tester;
   SeeForm();
 
@@ -12751,97 +12902,179 @@ TEST_F(AutofillMetricsCrossFrameFormTest,
        CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR, CREDIT_CARD_VERIFICATION_CODE},
       /*is_autofilled=*/false, /*is_user_typed=*/true);
 
-  // Fake autofill: this fills nothing because all fields have been manually
-  // filled.
+  // Fakes an Autofill.
+  // This fills nothing because all fields have been manually filled.
   FillForm(FormFieldData());
   SubmitForm();
   CommitMetrics();
 
   histogram_tester.ExpectTotalCount(
-      "Autofill.CreditCard.NumberFills.AtFillTimeBeforeSecurityPolicy", 0);
-  histogram_tester.ExpectTotalCount(
       "Autofill.CreditCard.SeamlessFills.AtFillTimeBeforeSecurityPolicy", 0);
-
   histogram_tester.ExpectTotalCount(
-      "Autofill.CreditCard.NumberFills.AtFillTimeAfterSecurityPolicy", 0);
+      "Autofill.CreditCard.SeamlessFills.AtFillTimeBeforeSecurityPolicy."
+      "Bitmask",
+      0);
+
   histogram_tester.ExpectTotalCount(
       "Autofill.CreditCard.SeamlessFills.AtFillTimeAfterSecurityPolicy", 0);
-
-  histogram_tester.ExpectBucketCount(
-      "Autofill.CreditCard.NumberFills.AtSubmissionTime", false, 1);
-  histogram_tester.ExpectBucketCount(
-      "Autofill.CreditCard.NumberFills.AtSubmissionTime", true, 0);
   histogram_tester.ExpectTotalCount(
-      "Autofill.CreditCard.SeamlessFills.AtSubmissionTime", 0);
+      "Autofill.CreditCard.SeamlessFills.AtFillTimeAfterSecurityPolicy.Bitmask",
+      0);
+
+  histogram_tester.ExpectTotalCount(
+      "Autofill.CreditCard.SeamlessFillable.AtFillTimeBeforeSecurityPolicy", 0);
+  histogram_tester.ExpectTotalCount(
+      "Autofill.CreditCard.SeamlessFillable.AtFillTimeBeforeSecurityPolicy."
+      "Bitmask",
+      0);
+
+  histogram_tester.ExpectTotalCount(
+      "Autofill.CreditCard.SeamlessFillable.AtFillTimeAfterSecurityPolicy", 0);
+  histogram_tester.ExpectTotalCount(
+      "Autofill.CreditCard.SeamlessFillable.AtFillTimeAfterSecurityPolicy."
+      "Bitmask",
+      0);
+
+  VerifyUkm(test_ukm_recorder_, form_, UkmBuilder::kEntryName, {});
 }
 
-// Tests that Autofill.CreditCard.SeamlessFills.* and
-// Autofill.CreditCard.NumberFills.* are emitted.
+// Tests that Autofill.CreditCard.SeamlessFills.* are emitted.
 TEST_F(AutofillMetricsCrossFrameFormTest,
-       LogCreditCardSeamlessFillsMetricIfAutofilled) {
+       LogCreditCardSeamlessFillsMetricIfAutofilledWithoutCvc) {
+  using Metric = AutofillMetrics::CreditCardSeamlessness::Metric;
+  using UkmBuilder = ukm::builders::Autofill_CreditCardFill;
+
+  // `Metric` as raw integer for UKM.
+  constexpr auto kFullFill = static_cast<uint64_t>(Metric::kFullFill);
+  constexpr auto kOptionalCvcMissing =
+      static_cast<uint64_t>(Metric::kOptionalCvcMissing);
+  constexpr auto kPartialFill = static_cast<uint64_t>(Metric::kPartialFill);
+  // Bits of the bitmask.
+  constexpr uint8_t kName = true << 3;
+  constexpr uint8_t kNumber = true << 2;
+  constexpr uint8_t kExp = true << 1;
+  constexpr uint8_t kCvc = true << 0;
+  // The shared-autofill metric.
+  enum SharedAutofillMetric : uint64_t {
+    kSharedAutofillIsIrrelevant = 0,
+    kSharedAutofillWouldHelp = 1,
+    kSharedAutofillDidHelp = 2,
+  };
+
   base::HistogramTester histogram_tester;
   SeeForm();
 
-  // Fake autofill: this is a kFullFill before the security policy, but only a
-  // kPartialFill after the security policy because only the NAME and the
-  // EXP_DATE fields are allowed to be filled.
+  fill_data().cvc = u"";
+
+  // Fakes an Autofill with the following behavior:
+  // - before security and assuming a complete profile: kFullFill;
+  // - before security and without a CVC:               kOptionalCvcMissing;
+  // - after security  and assuming a complete profile: kPartialFill;
+  // - after security  and without a CVC:               kPartialFill;
+  // because due to the security policy, only NAME and EXP_DATE are filled.
   FillForm(form_.fields[0]);
   SetFormValues({CREDIT_CARD_NAME_FULL, CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR},
                 /*is_autofilled=*/true, /*is_user_typed=*/false);
 
-  // Fake autofill: this is a kPartialFill before the security policy and after
-  // the security policy because only the NUMBER and CVC fields are
-  // un-autofilled.
+  // Fakes an Autofill with the following behavior:
+  // - before security and assuming a complete profile: kFullFill;
+  // - before security and without a CVC:               kPartialFill;
+  // - after security  and assuming a complete profile: kPartialFill;
+  // - after security  and without a CVC:               kPartialFill;
+  // because the due to the security policy, only NUMBER and CVC could be
+  // filled.
   FillForm(form_.fields[1]);
-  SetFormValues({CREDIT_CARD_NUMBER, CREDIT_CARD_VERIFICATION_CODE},
+  SetFormValues({CREDIT_CARD_NUMBER},
                 /*is_autofilled=*/true, /*is_user_typed=*/false);
 
   SubmitForm();
   CommitMetrics();
 
-  histogram_tester.ExpectBucketCount(
-      "Autofill.CreditCard.NumberFills.AtFillTimeBeforeSecurityPolicy", false,
-      0);
-  histogram_tester.ExpectBucketCount(
-      "Autofill.CreditCard.NumberFills.AtFillTimeBeforeSecurityPolicy", true,
-      2);
-  histogram_tester.ExpectTotalCount(
-      "Autofill.CreditCard.SeamlessFills.AtFillTimeBeforeSecurityPolicy", 2);
-  histogram_tester.ExpectBucketCount(
-      "Autofill.CreditCard.SeamlessFills.AtFillTimeBeforeSecurityPolicy",
-      static_cast<size_t>(
-          AutofillMetrics::CreditCardSeamlessFillMetric::kFullFill),
-      1);
-  histogram_tester.ExpectBucketCount(
-      "Autofill.CreditCard.SeamlessFills.AtFillTimeBeforeSecurityPolicy",
-      static_cast<size_t>(
-          AutofillMetrics::CreditCardSeamlessFillMetric::kPartialFill),
-      1);
+  ExpectBuckets<Metric>(
+      histogram_tester,
+      "Autofill.CreditCard.SeamlessFillable.AtFillTimeBeforeSecurityPolicy",
+      {{Metric::kFullFill, 2}});
+  ExpectBuckets<int>(
+      histogram_tester,
+      "Autofill.CreditCard.SeamlessFillable.AtFillTimeBeforeSecurityPolicy."
+      "Bitmask",
+      {{kName | kNumber | kExp | kCvc, 2}});
 
-  histogram_tester.ExpectBucketCount(
-      "Autofill.CreditCard.NumberFills.AtFillTimeAfterSecurityPolicy", false,
-      1);
-  histogram_tester.ExpectBucketCount(
-      "Autofill.CreditCard.NumberFills.AtFillTimeAfterSecurityPolicy", true, 1);
-  histogram_tester.ExpectTotalCount(
-      "Autofill.CreditCard.SeamlessFills.AtFillTimeAfterSecurityPolicy", 2);
-  histogram_tester.ExpectBucketCount(
+  ExpectBuckets<Metric>(
+      histogram_tester,
+      "Autofill.CreditCard.SeamlessFillable.AtFillTimeAfterSecurityPolicy",
+      {{Metric::kPartialFill, 2}});
+  ExpectBuckets<int>(
+      histogram_tester,
+      "Autofill.CreditCard.SeamlessFillable.AtFillTimeAfterSecurityPolicy."
+      "Bitmask",
+      {{kName | kExp, 1}, {kNumber | kCvc, 1}});
+
+  ExpectBuckets<Metric>(
+      histogram_tester,
+      "Autofill.CreditCard.SeamlessFills.AtFillTimeBeforeSecurityPolicy",
+      {{Metric::kOptionalCvcMissing, 1}, {Metric::kPartialFill, 1}});
+  ExpectBuckets<int>(
+      histogram_tester,
+      "Autofill.CreditCard.SeamlessFills.AtFillTimeBeforeSecurityPolicy."
+      "Bitmask",
+      {{kName | kNumber | kExp, 1}, {kNumber, 1}});
+
+  ExpectBuckets<Metric>(
+      histogram_tester,
       "Autofill.CreditCard.SeamlessFills.AtFillTimeAfterSecurityPolicy",
-      static_cast<size_t>(
-          AutofillMetrics::CreditCardSeamlessFillMetric::kPartialFill),
-      2);
+      {{Metric::kPartialFill, 2}});
+  ExpectBuckets<int>(
+      histogram_tester,
+      "Autofill.CreditCard.SeamlessFills.AtFillTimeAfterSecurityPolicy.Bitmask",
+      {{kName | kExp, 1}, {kNumber, 1}});
 
-  histogram_tester.ExpectBucketCount(
-      "Autofill.CreditCard.NumberFills.AtSubmissionTime", false, 0);
-  histogram_tester.ExpectBucketCount(
-      "Autofill.CreditCard.NumberFills.AtSubmissionTime", true, 1);
-  histogram_tester.ExpectTotalCount(
-      "Autofill.CreditCard.SeamlessFills.AtSubmissionTime", 1);
-  histogram_tester.ExpectBucketCount(
-      "Autofill.CreditCard.SeamlessFills.AtSubmissionTime",
-      static_cast<size_t>(
-          AutofillMetrics::CreditCardSeamlessFillMetric::kFullFill),
-      1);
+  ExpectBuckets<Metric>(histogram_tester,
+                        "Autofill.CreditCard.SeamlessFills.AtSubmissionTime",
+                        {{Metric::kOptionalCvcMissing, 1}});
+  ExpectBuckets<int>(
+      histogram_tester,
+      "Autofill.CreditCard.SeamlessFills.AtSubmissionTime.Bitmask",
+      {{kName | kNumber | kExp, 1}});
+
+  VerifyUkm(
+      test_ukm_recorder_, form_, UkmBuilder::kEntryName,
+      {{
+           {UkmBuilder::kFillable_BeforeSecurity_QualitativeName, kFullFill},
+           {UkmBuilder::kFillable_AfterSecurity_QualitativeName, kPartialFill},
+           {UkmBuilder::kFilled_BeforeSecurity_QualitativeName,
+            kOptionalCvcMissing},
+           {UkmBuilder::kFilled_AfterSecurity_QualitativeName, kPartialFill},
+
+           {UkmBuilder::kFillable_BeforeSecurity_BitmaskName,
+            kName | kNumber | kExp | kCvc},
+           {UkmBuilder::kFillable_AfterSecurity_BitmaskName, kName | kExp},
+           {UkmBuilder::kFilled_BeforeSecurity_BitmaskName,
+            kName | kNumber | kExp},
+           {UkmBuilder::kFilled_AfterSecurity_BitmaskName, kName | kExp},
+
+           {UkmBuilder::kSharedAutofillName, kSharedAutofillWouldHelp},
+
+           {UkmBuilder::kFormSignatureName,
+            *Collapse(CalculateFormSignature(form_))},
+       },
+       {
+           {UkmBuilder::kFillable_BeforeSecurity_QualitativeName, kFullFill},
+           {UkmBuilder::kFillable_AfterSecurity_QualitativeName, kPartialFill},
+           {UkmBuilder::kFilled_BeforeSecurity_QualitativeName, kPartialFill},
+           {UkmBuilder::kFilled_AfterSecurity_QualitativeName, kPartialFill},
+
+           {UkmBuilder::kFillable_BeforeSecurity_BitmaskName,
+            kName | kNumber | kExp | kCvc},
+           {UkmBuilder::kFillable_AfterSecurity_BitmaskName, kNumber | kCvc},
+           {UkmBuilder::kFilled_BeforeSecurity_BitmaskName, kNumber},
+           {UkmBuilder::kFilled_AfterSecurity_BitmaskName, kNumber},
+
+           {UkmBuilder::kSharedAutofillName, kSharedAutofillIsIrrelevant},
+
+           {UkmBuilder::kFormSignatureName,
+            *Collapse(CalculateFormSignature(form_))},
+       }});
 }
 
 }  // namespace autofill

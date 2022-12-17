@@ -19,6 +19,7 @@
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
+#include "base/observer_list.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -78,6 +79,13 @@ void AddSerializedNavigationEntries(
     if (entry.virtual_url().SchemeIs(dom_distiller::kDomDistillerScheme))
       continue;
 
+    // An entry might have an empty URL (e.g. if it's the initial
+    // NavigationEntry). Don't try to persist it, as it is not actually
+    // associated with any navigation and will just result in about:blank on
+    // session restore.
+    if (entry.virtual_url().is_empty())
+      continue;
+
     // As this code was identified as doing a lot of allocations, push_back is
     // always used and the vector is reversed for `kCurrentAndPreceedingEntries`
     // when done. Doing this instead of inserting at the beginning results in
@@ -121,9 +129,7 @@ TabRestoreServiceHelper::TabRestoreServiceHelper(
       time_factory_(time_factory) {
   DCHECK(tab_restore_service_);
   base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
-      this,
-      "TabRestoreServiceHelper",
-      base::ThreadTaskRunnerHandle::Get());
+      this, "TabRestoreServiceHelper", base::ThreadTaskRunnerHandle::Get());
 }
 
 void TabRestoreServiceHelper::SetHelperObserver(Observer* observer) {
@@ -137,8 +143,7 @@ TabRestoreServiceHelper::~TabRestoreServiceHelper() {
       this);
 }
 
-void TabRestoreServiceHelper::AddObserver(
-    TabRestoreServiceObserver* observer) {
+void TabRestoreServiceHelper::AddObserver(TabRestoreServiceObserver* observer) {
   observer_list_.AddObserver(observer);
 }
 
@@ -197,7 +202,7 @@ void TabRestoreServiceHelper::BrowserClosing(LiveTabContext* context) {
   window->user_title = context->GetUserTitle();
   window->extra_data = context->GetExtraDataForWindow();
 
-  window->ext_data = context->GetExtData();
+  window->viv_ext_data = context->GetVivExtData();
 
   base::flat_set<tab_groups::TabGroupId> seen_groups;
   for (int tab_index = 0; tab_index < context->GetTabCount(); ++tab_index) {
@@ -434,19 +439,13 @@ std::vector<LiveTab*> TabRestoreServiceHelper::RestoreMostRecentEntry(
                           WindowOpenDisposition::UNKNOWN);
 }
 
-std::unique_ptr<TabRestoreService::Tab>
-TabRestoreServiceHelper::RemoveTabEntryById(SessionID id) {
+void TabRestoreServiceHelper::RemoveTabEntryById(SessionID id) {
   auto it = GetEntryIteratorById(id);
-  if (it == entries_.end())
-    return nullptr;
+  if (it == entries_.end() || (*it)->type != TabRestoreService::TAB)
+    return;
 
-  if ((*it)->type != TabRestoreService::TAB)
-    return nullptr;
-
-  auto tab = std::unique_ptr<Tab>(static_cast<Tab*>(it->release()));
   entries_.erase(it);
   NotifyTabsChanged();
-  return tab;
 }
 
 std::vector<LiveTab*> TabRestoreServiceHelper::RestoreEntryById(
@@ -492,8 +491,9 @@ std::vector<LiveTab*> TabRestoreServiceHelper::RestoreEntryById(
       // restored.
       if (entry_id_matches_restore_id || !window.app_name.empty()) {
         context = client_->CreateLiveTabContext(
-            window.app_name, window.bounds, window.show_state, window.workspace,
-            window.user_title, window.extra_data, window.ext_data);
+            context, window.app_name, window.bounds, window.show_state,
+            window.workspace, window.user_title, window.extra_data,
+            window.viv_ext_data);
 
         base::flat_map<tab_groups::TabGroupId, tab_groups::TabGroupId>
             new_group_ids;
@@ -527,8 +527,7 @@ std::vector<LiveTab*> TabRestoreServiceHelper::RestoreEntryById(
               tab.group_visual_data.value_or(tab_groups::TabGroupVisualData()),
               static_cast<int>(tab_i) == window.selected_tab_index, tab.pinned,
               tab.platform_data.get(), tab.user_agent_override, tab.extra_data,
-              nullptr,
-              tab.page_action_overrides, tab.ext_data);
+              nullptr, tab.viv_page_action_overrides, tab.viv_ext_data);
           if (restored_tab) {
             client_->OnTabRestored(
                 tab.navigations.at(tab.current_navigation_index).virtual_url());
@@ -750,13 +749,12 @@ bool TabRestoreServiceHelper::OnMemoryDump(
     return true;
   }
 
-  std::string entries_dump_name = base::StringPrintf(
-      "tab_restore/service_helper_0x%" PRIXPTR "/entries",
-      reinterpret_cast<uintptr_t>(this));
+  std::string entries_dump_name =
+      base::StringPrintf("tab_restore/service_helper_0x%" PRIXPTR "/entries",
+                         reinterpret_cast<uintptr_t>(this));
   pmd->CreateAllocatorDump(entries_dump_name)
       ->AddScalar(MemoryAllocatorDump::kNameObjectCount,
-                  MemoryAllocatorDump::kUnitsObjects,
-                  entries_.size());
+                  MemoryAllocatorDump::kUnitsObjects, entries_.size());
 
   for (const auto& entry : entries_) {
     const char* type_string = "";
@@ -773,9 +771,7 @@ bool TabRestoreServiceHelper::OnMemoryDump(
     }
 
     std::string entry_dump_name = base::StringPrintf(
-        "%s/%s_0x%" PRIXPTR,
-        entries_dump_name.c_str(),
-        type_string,
+        "%s/%s_0x%" PRIXPTR, entries_dump_name.c_str(), type_string,
         reinterpret_cast<uintptr_t>(entry.get()));
     auto* entry_dump = pmd->CreateAllocatorDump(entry_dump_name);
 
@@ -784,8 +780,7 @@ bool TabRestoreServiceHelper::OnMemoryDump(
                           entry->EstimateMemoryUsage());
 
     auto age = base::Time::Now() - entry->timestamp;
-    entry_dump->AddScalar("age",
-                          MemoryAllocatorDump::kUnitsObjects,
+    entry_dump->AddScalar("age", MemoryAllocatorDump::kUnitsObjects,
                           age.InSeconds());
 
     if (system_allocator_name)
@@ -830,14 +825,14 @@ void TabRestoreServiceHelper::PopulateTab(Tab* tab,
   tab->extension_app_id = client_->GetExtensionAppIDForTab(live_tab);
   tab->user_agent_override = live_tab->GetUserAgentOverride();
 
-  tab->ext_data = live_tab->GetExtData();
+  tab->viv_ext_data = live_tab->GetVivExtData();
   const std::map<base::FilePath, bool>* page_action_overrides =
       client_->GetPageActionOverridesForTab(live_tab);
   if (page_action_overrides) {
     std::transform(page_action_overrides->cbegin(),
                    page_action_overrides->cend(),
-                   std::inserter(tab->page_action_overrides,
-                                 tab->page_action_overrides.end()),
+                   std::inserter(tab->viv_page_action_overrides,
+                                 tab->viv_page_action_overrides.end()),
                    [](const std::pair<const base::FilePath, bool>& p) {
                      return std::make_pair(p.first.AsUTF8Unsafe(), p.second);
                    });
@@ -871,8 +866,7 @@ LiveTabContext* TabRestoreServiceHelper::RestoreTab(
     restored_tab = context->ReplaceRestoredTab(
         tab.navigations, absl::nullopt, tab.current_navigation_index,
         tab.extension_app_id, tab.platform_data.get(), tab.user_agent_override,
-        tab.extra_data,
-        tab.page_action_overrides, tab.ext_data);
+        tab.extra_data, tab.viv_page_action_overrides, tab.viv_ext_data);
   } else {
     // We only respect the tab's original browser if there's no disposition.
     if (disposition == WindowOpenDisposition::UNKNOWN) {
@@ -901,8 +895,8 @@ LiveTabContext* TabRestoreServiceHelper::RestoreTab(
       tab_index = tab.tabstrip_index;
     } else {
       context = client_->CreateLiveTabContext(
-          std::string(), gfx::Rect(), ui::SHOW_STATE_NORMAL, std::string(),
-          std::string(), std::map<std::string, std::string>());
+          context, std::string(), gfx::Rect(), ui::SHOW_STATE_NORMAL,
+          std::string(), std::string(), std::map<std::string, std::string>());
       if (tab.browser_id)
         UpdateTabBrowserIDs(tab.browser_id, context->GetSessionID());
     }
@@ -920,8 +914,7 @@ LiveTabContext* TabRestoreServiceHelper::RestoreTab(
         tab.group_visual_data.value_or(tab_groups::TabGroupVisualData()),
         disposition != WindowOpenDisposition::NEW_BACKGROUND_TAB, tab.pinned,
         tab.platform_data.get(), tab.user_agent_override, tab.extra_data,
-        &tab.id,
-        tab.page_action_overrides, tab.ext_data);
+        &tab.id, tab.viv_page_action_overrides, tab.viv_ext_data);
   }
 
   client_->OnTabRestored(

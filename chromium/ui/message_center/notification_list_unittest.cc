@@ -81,7 +81,7 @@ class NotificationListTest : public testing::Test {
         new Notification(NOTIFICATION_TYPE_SIMPLE, *id_out,
                          u"id" + base::NumberToString16(counter_),
                          u"message" + base::NumberToString16(counter_),
-                         gfx::Image(), kDisplaySource, GURL(),
+                         ui::ImageModel(), kDisplaySource, GURL(),
                          NotifierId(NotifierType::APPLICATION, kExtensionId),
                          optional_fields, nullptr));
     return notification;
@@ -192,7 +192,7 @@ TEST_F(NotificationListTest, UpdateNotification) {
   EXPECT_EQ(1u, notification_list_->NotificationCount(blockers_));
   std::unique_ptr<Notification> notification(
       new Notification(NOTIFICATION_TYPE_SIMPLE, replaced, u"newtitle",
-                       u"newbody", gfx::Image(), kDisplaySource, GURL(),
+                       u"newbody", ui::ImageModel(), kDisplaySource, GURL(),
                        NotifierId(NotifierType::APPLICATION, kExtensionId),
                        RichNotificationData(), nullptr));
   notification_list_->UpdateNotificationMessage(id0, std::move(notification));
@@ -242,33 +242,62 @@ TEST_F(NotificationListTest, UpdateNotificationWithRenotifyAndQuietMode) {
   }
 }
 
+TEST_F(NotificationListTest, ResetPopupInQuietMode) {
+  for (size_t quiet_mode = 0u; quiet_mode < 2u; ++quiet_mode) {
+    // Set Do Not Disturb mode.
+    notification_list_->SetQuietMode(static_cast<bool>(quiet_mode));
+
+    // Create notification.
+    std::string id;
+    auto old_notification = MakeNotification(&id);
+    notification_list_->AddNotification(std::move(old_notification));
+    EXPECT_EQ(1u, notification_list_->NotificationCount(blockers_));
+
+    // Reset single popup and make sure that the behavior is correct
+    // within/outside of quiet mode.
+    notification_list_->ResetSinglePopup(id);
+
+    // Normally, `shown_as_popup` should be reset in order to show the popup
+    // again. However, in quiet mode, `shown_as_popup` should not be reset since
+    // we don't want the popup to be shown.
+    const NotificationList::PopupNotifications popup_notifications =
+        notification_list_->GetPopupNotifications(blockers_, nullptr);
+    if (quiet_mode) {
+      ASSERT_EQ(0U, popup_notifications.size());
+    } else {
+      ASSERT_EQ(1U, popup_notifications.size());
+      EXPECT_EQ(id, (*popup_notifications.begin())->id());
+    }
+  }
+}
+
 TEST_F(NotificationListTest, GetNotificationsByNotifierId) {
   NotifierId id0(NotifierType::APPLICATION, "ext0");
   NotifierId id1(NotifierType::APPLICATION, "ext1");
   NotifierId id2(GURL("http://example.com"));
   NotifierId id3(NotifierType::SYSTEM_COMPONENT, "system-notifier");
   std::unique_ptr<Notification> notification(new Notification(
-      NOTIFICATION_TYPE_SIMPLE, "id0", u"title0", u"message0", gfx::Image(),
+      NOTIFICATION_TYPE_SIMPLE, "id0", u"title0", u"message0", ui::ImageModel(),
       u"source0", GURL(), id0, RichNotificationData(), nullptr));
   notification_list_->AddNotification(std::move(notification));
   notification = std::make_unique<Notification>(
-      NOTIFICATION_TYPE_SIMPLE, "id1", u"title1", u"message1", gfx::Image(),
+      NOTIFICATION_TYPE_SIMPLE, "id1", u"title1", u"message1", ui::ImageModel(),
       u"source0", GURL(), id0, RichNotificationData(), nullptr);
   notification_list_->AddNotification(std::move(notification));
   notification = std::make_unique<Notification>(
-      NOTIFICATION_TYPE_SIMPLE, "id2", u"title1", u"message1", gfx::Image(),
+      NOTIFICATION_TYPE_SIMPLE, "id2", u"title1", u"message1", ui::ImageModel(),
       u"source1", GURL(), id0, RichNotificationData(), nullptr);
   notification_list_->AddNotification(std::move(notification));
   notification = std::make_unique<Notification>(
-      NOTIFICATION_TYPE_SIMPLE, "id3", u"title1", u"message1", gfx::Image(),
+      NOTIFICATION_TYPE_SIMPLE, "id3", u"title1", u"message1", ui::ImageModel(),
       u"source2", GURL(), id1, RichNotificationData(), nullptr);
   notification_list_->AddNotification(std::move(notification));
   notification = std::make_unique<Notification>(
-      NOTIFICATION_TYPE_SIMPLE, "id4", u"title1", u"message1", gfx::Image(),
+      NOTIFICATION_TYPE_SIMPLE, "id4", u"title1", u"message1", ui::ImageModel(),
       u"source2", GURL(), id2, RichNotificationData(), nullptr);
   notification_list_->AddNotification(std::move(notification));
   notification = std::make_unique<Notification>(
-      NOTIFICATION_TYPE_SIMPLE, "id5", u"title1", u"message1", gfx::Image(),
+      NOTIFICATION_TYPE_SIMPLE, "id5", u"title1", u"message1", ui::ImageModel(),
       u"source2", GURL(), id3, RichNotificationData(), nullptr);
   notification_list_->AddNotification(std::move(notification));
 
@@ -394,7 +423,7 @@ TEST_F(NotificationListTest, GetNotificationsByAppId) {
     const std::string id1("id1");
     std::unique_ptr<Notification> notification(
         new Notification(NOTIFICATION_TYPE_PROGRESS, id1, u"updated",
-                         u"updated", gfx::Image(), std::u16string(), GURL(),
+                         u"updated", ui::ImageModel(), std::u16string(), GURL(),
                          NotifierId(NotifierType::APPLICATION, app_id1),
                          RichNotificationData(), nullptr));
     notification_list_->AddNotification(std::move(notification));
@@ -414,16 +443,16 @@ TEST_F(NotificationListTest, GetNotificationsByAppId) {
 
     // Add two notifications for |app_id1| and one for |app_id2|.
     notification = std::make_unique<Notification>(
-        NOTIFICATION_TYPE_PROGRESS, id1, u"updated", u"updated", gfx::Image(),
-        std::u16string(), GURL(),
+        NOTIFICATION_TYPE_PROGRESS, id1, u"updated", u"updated",
+        ui::ImageModel(), std::u16string(), GURL(),
         NotifierId(NotifierType::APPLICATION, app_id1), RichNotificationData(),
         nullptr);
     notification_list_->AddNotification(std::move(notification));
 
     const std::string id2("id2");
     notification = std::make_unique<Notification>(
-        NOTIFICATION_TYPE_PROGRESS, id2, u"updated", u"updated", gfx::Image(),
-        std::u16string(), GURL(),
+        NOTIFICATION_TYPE_PROGRESS, id2, u"updated", u"updated",
+        ui::ImageModel(), std::u16string(), GURL(),
         NotifierId(NotifierType::APPLICATION, app_id1), RichNotificationData(),
         nullptr);
     notification_list_->AddNotification(std::move(notification));
@@ -431,8 +460,8 @@ TEST_F(NotificationListTest, GetNotificationsByAppId) {
 
     const std::string id3("id3");
     notification = std::make_unique<Notification>(
-        NOTIFICATION_TYPE_PROGRESS, id3, u"updated", u"updated", gfx::Image(),
-        std::u16string(), GURL(),
+        NOTIFICATION_TYPE_PROGRESS, id3, u"updated", u"updated",
+        ui::ImageModel(), std::u16string(), GURL(),
         NotifierId(NotifierType::APPLICATION, app_id2), RichNotificationData(),
         nullptr);
     notification_list_->AddNotification(std::move(notification));
@@ -459,7 +488,7 @@ TEST_F(NotificationListTest, GetNotificationsByOriginUrl) {
     const std::string id1("id1");
     std::unique_ptr<Notification> notification(
         new Notification(NOTIFICATION_TYPE_PROGRESS, id1, u"updated",
-                         u"updated", gfx::Image(), std::u16string(), kUrl1,
+                         u"updated", ui::ImageModel(), std::u16string(), kUrl1,
                          NotifierId(), RichNotificationData(), nullptr));
     notification_list_->AddNotification(std::move(notification));
     EXPECT_EQ(1u,
@@ -482,22 +511,25 @@ TEST_F(NotificationListTest, GetNotificationsByOriginUrl) {
 
     // Add two notifications for `kurl1` and one for `kUrl2`.
     notification = std::make_unique<Notification>(
-        NOTIFICATION_TYPE_PROGRESS, id1, u"updated", u"updated", gfx::Image(),
-        std::u16string(), kUrl1, NotifierId(), RichNotificationData(), nullptr);
+        NOTIFICATION_TYPE_PROGRESS, id1, u"updated", u"updated",
+        ui::ImageModel(), std::u16string(), kUrl1, NotifierId(),
+        RichNotificationData(), nullptr);
     notification_list_->AddNotification(std::move(notification));
 
     const std::string id2("id2");
     notification = std::make_unique<Notification>(
-        NOTIFICATION_TYPE_PROGRESS, id2, u"updated", u"updated", gfx::Image(),
-        std::u16string(), kUrl1, NotifierId(), RichNotificationData(), nullptr);
+        NOTIFICATION_TYPE_PROGRESS, id2, u"updated", u"updated",
+        ui::ImageModel(), std::u16string(), kUrl1, NotifierId(),
+        RichNotificationData(), nullptr);
     notification_list_->AddNotification(std::move(notification));
     EXPECT_EQ(2u,
               notification_list_->GetNotificationsByOriginUrl(kUrl1).size());
 
     const std::string id3("id3");
     notification = std::make_unique<Notification>(
-        NOTIFICATION_TYPE_PROGRESS, id3, u"updated", u"updated", gfx::Image(),
-        std::u16string(), kUrl2, NotifierId(), RichNotificationData(), nullptr);
+        NOTIFICATION_TYPE_PROGRESS, id3, u"updated", u"updated",
+        ui::ImageModel(), std::u16string(), kUrl2, NotifierId(),
+        RichNotificationData(), nullptr);
     notification_list_->AddNotification(std::move(notification));
     EXPECT_EQ(2u,
               notification_list_->GetNotificationsByOriginUrl(kUrl1).size());
@@ -569,7 +601,7 @@ TEST_F(NotificationListTest, UpdateWithoutMessageCenterView) {
     RichNotificationData optional;
     std::unique_ptr<Notification> notification(
         new Notification(NOTIFICATION_TYPE_SIMPLE, replaced, u"newtitle",
-                         u"newbody", gfx::Image(), kDisplaySource, GURL(),
+                         u"newbody", ui::ImageModel(), kDisplaySource, GURL(),
                          NotifierId(NotifierType::APPLICATION, kExtensionId),
                          optional, nullptr));
     notification_list_->UpdateNotificationMessage(id0, std::move(notification));
@@ -599,8 +631,8 @@ TEST_F(NotificationListTest, Renotify) {
   RichNotificationData optional;
   optional.renotify = true;
   std::unique_ptr<Notification> notification(new Notification(
-      NOTIFICATION_TYPE_SIMPLE, replaced, u"newtitle", u"newbody", gfx::Image(),
-      kDisplaySource, GURL(),
+      NOTIFICATION_TYPE_SIMPLE, replaced, u"newtitle", u"newbody",
+      ui::ImageModel(), kDisplaySource, GURL(),
       NotifierId(NotifierType::APPLICATION, kExtensionId), optional, nullptr));
   notification_list_->UpdateNotificationMessage(id0, std::move(notification));
   EXPECT_EQ(1u, notification_list_->NotificationCount(blockers_));
@@ -623,7 +655,7 @@ TEST_F(NotificationListTest, PriorityAndRenotify) {
   RichNotificationData priority;
   priority.priority = DEFAULT_PRIORITY;
   std::unique_ptr<Notification> notification(new Notification(
-      NOTIFICATION_TYPE_SIMPLE, id0, u"newtitle", u"newbody", gfx::Image(),
+      NOTIFICATION_TYPE_SIMPLE, id0, u"newtitle", u"newbody", ui::ImageModel(),
       kDisplaySource, GURL(),
       NotifierId(NotifierType::APPLICATION, kExtensionId), priority, nullptr));
   notification_list_->UpdateNotificationMessage(id0, std::move(notification));
@@ -633,8 +665,8 @@ TEST_F(NotificationListTest, PriorityAndRenotify) {
 
   // update with no promotion change for id0, it won't appear as a toast.
   notification = std::make_unique<Notification>(
-      NOTIFICATION_TYPE_SIMPLE, id0, u"newtitle2", u"newbody2", gfx::Image(),
-      kDisplaySource, GURL(),
+      NOTIFICATION_TYPE_SIMPLE, id0, u"newtitle2", u"newbody2",
+      ui::ImageModel(), kDisplaySource, GURL(),
       NotifierId(NotifierType::APPLICATION, kExtensionId), priority, nullptr);
   notification_list_->UpdateNotificationMessage(id0, std::move(notification));
   EXPECT_EQ(0u, GetPopupCounts());
@@ -642,7 +674,7 @@ TEST_F(NotificationListTest, PriorityAndRenotify) {
   // id1 promoted to DEFAULT->HIGH, it won't reappear as a toast (popup).
   priority.priority = HIGH_PRIORITY;
   notification = std::make_unique<Notification>(
-      NOTIFICATION_TYPE_SIMPLE, id1, u"newtitle", u"newbody", gfx::Image(),
+      NOTIFICATION_TYPE_SIMPLE, id1, u"newtitle", u"newbody", ui::ImageModel(),
       kDisplaySource, GURL(),
       NotifierId(NotifierType::APPLICATION, kExtensionId), priority, nullptr);
   notification_list_->UpdateNotificationMessage(id1, std::move(notification));
@@ -651,7 +683,7 @@ TEST_F(NotificationListTest, PriorityAndRenotify) {
   // |renotify| will make it reappear as a toast (popup).
   priority.renotify = true;
   notification = std::make_unique<Notification>(
-      NOTIFICATION_TYPE_SIMPLE, id1, u"newtitle", u"newbody", gfx::Image(),
+      NOTIFICATION_TYPE_SIMPLE, id1, u"newtitle", u"newbody", ui::ImageModel(),
       kDisplaySource, GURL(),
       NotifierId(NotifierType::APPLICATION, kExtensionId), priority, nullptr);
   notification_list_->UpdateNotificationMessage(id1, std::move(notification));
@@ -752,7 +784,7 @@ TEST_F(NotificationListTest, UpdateAfterMarkedAsShown) {
   const std::string replaced("test-replaced-id");
   std::unique_ptr<Notification> notification(
       new Notification(NOTIFICATION_TYPE_SIMPLE, replaced, u"newtitle",
-                       u"newbody", gfx::Image(), kDisplaySource, GURL(),
+                       u"newbody", ui::ImageModel(), kDisplaySource, GURL(),
                        NotifierId(NotifierType::APPLICATION, kExtensionId),
                        RichNotificationData(), nullptr));
   notification_list_->UpdateNotificationMessage(id1, std::move(notification));
@@ -788,7 +820,7 @@ TEST_F(NotificationListTest, TestHasNotificationOfType) {
       id, NOTIFICATION_TYPE_PROGRESS));
 
   std::unique_ptr<Notification> updated_notification(new Notification(
-      NOTIFICATION_TYPE_PROGRESS, id, u"updated", u"updated", gfx::Image(),
+      NOTIFICATION_TYPE_PROGRESS, id, u"updated", u"updated", ui::ImageModel(),
       std::u16string(), GURL(), NotifierId(), RichNotificationData(), nullptr));
   notification_list_->AddNotification(std::move(updated_notification));
 

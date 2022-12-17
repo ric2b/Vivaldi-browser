@@ -12,10 +12,12 @@
 #include "base/check.h"
 #include "base/memory/scoped_refptr.h"
 #include "build/chromeos_buildflags.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/printing/print_job.h"
 #include "chrome/browser/printing/printer_query.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/global_routing_id.h"
 #include "content/public/common/child_process_host.h"
 #include "printing/metafile_skia.h"
 #include "printing/print_settings.h"
@@ -40,8 +42,7 @@ void CreateQueryOnIOThread(std::unique_ptr<printing::PrintSettings> settings,
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
   auto query = std::make_unique<printing::PrinterQuery>(
-      content::ChildProcessHost::kInvalidUniqueID,
-      content::ChildProcessHost::kInvalidUniqueID);
+      content::GlobalRenderFrameHostId());
   auto* query_ptr = query.get();
   query_ptr->SetSettingsFromPOD(
       std::move(settings),
@@ -84,7 +85,8 @@ scoped_refptr<printing::PrintJob> PrintJobControllerImpl::StartPrintJob(
     std::unique_ptr<printing::PrintSettings> settings) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  auto job = base::MakeRefCounted<printing::PrintJob>();
+  auto job = base::MakeRefCounted<printing::PrintJob>(
+      g_browser_process->print_job_manager());
   content::GetIOThreadTaskRunner({})->PostTask(
       FROM_HERE, base::BindOnce(&CreateQueryOnIOThread, std::move(settings),
                                 base::BindOnce(StartPrinting, job, extension_id,

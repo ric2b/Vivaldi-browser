@@ -18,13 +18,13 @@ Browser::CreateParams Browser::CreateParams::CreateForDevToolsForVivaldi(
   return params;
 }
 
-void Browser::set_ext_data(const std::string& ext_data) {
-  ext_data_ = ext_data;
+void Browser::set_viv_ext_data(const std::string& viv_ext_data) {
+  viv_ext_data_ = viv_ext_data;
 
   SessionService* session_service =
       SessionServiceFactory::GetForProfile(profile());
   if (session_service)
-    session_service->SetWindowExtData(session_id(), ext_data_);
+    session_service->SetWindowVivExtData(session_id(), viv_ext_data_);
 }
 
 void Browser::DoBeforeUnloadFired(content::WebContents* web_contents,

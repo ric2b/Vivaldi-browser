@@ -6,6 +6,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/enterprise/connectors/analysis/content_analysis_dialog.h"
@@ -142,6 +143,17 @@ class ContentAnalysisDialogBehaviorBrowserTest
     // The dialog should only be shown once some time after being constructed.
     EXPECT_TRUE(ctor_called_);
     EXPECT_FALSE(dialog_first_shown_);
+
+    // The initial dialog should only have the top views that are present on
+    // every state initialized, and everything else should be null.
+    EXPECT_TRUE(dialog->GetTopImageForTesting());
+    EXPECT_TRUE(dialog->GetSideIconSpinnerForTesting());
+    EXPECT_TRUE(dialog->GetMessageForTesting());
+    EXPECT_FALSE(dialog->GetLearnMoreLinkForTesting());
+    EXPECT_FALSE(dialog->GetBypassJustificationLabelForTesting());
+    EXPECT_FALSE(dialog->GetBypassJustificationTextareaForTesting());
+    EXPECT_FALSE(dialog->GetJustificationTextLengthForTesting());
+
     dialog_first_shown_ = true;
   }
 
@@ -181,6 +193,19 @@ class ContentAnalysisDialogBehaviorBrowserTest
     EXPECT_EQ(ax_events_count_when_first_shown_ + 1,
               ax_event_counter_.GetCount(ax::mojom::Event::kAlert));
 #endif
+
+    // The updated dialog should have every relevant view initialized.
+    EXPECT_TRUE(dialog->GetTopImageForTesting());
+    EXPECT_FALSE(dialog->GetSideIconSpinnerForTesting());
+    EXPECT_TRUE(dialog->GetMessageForTesting());
+    EXPECT_EQ(!!dialog->GetLearnMoreLinkForTesting(),
+              dialog->has_learn_more_url());
+    EXPECT_EQ(!!dialog->GetBypassJustificationLabelForTesting(),
+              dialog->bypass_requires_justification());
+    EXPECT_EQ(!!dialog->GetBypassJustificationTextareaForTesting(),
+              dialog->bypass_requires_justification());
+    EXPECT_EQ(!!dialog->GetJustificationTextLengthForTesting(),
+              dialog->bypass_requires_justification());
 
     dialog_updated_ = true;
   }

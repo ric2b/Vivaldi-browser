@@ -21,17 +21,21 @@
 <translation id="3377025655491224618">Приватная вкладка</translation>
 <translation id="3504699618187058974">Группировать вкладки</translation>
 <translation id="3518985090088779359">Принять и продолжить</translation>
+<translation id="3571177741182643350">Непрочтённые статьи - Доступны автономно:</translation>
 <translation id="3700829948786686853">Добро пожаловать в Vivaldi</translation>
 <translation id="3719826155360621982">Домой</translation>
 <translation id="385051799172605136">Назад</translation>
+<translation id="399014816462153200">Читать статьи:</translation>
 <translation id="4121750346708795461">Используя это приложение, вы принимаете <ph name="BEGIN_LINK1" />Условия использования<ph name="END_LINK1" /> и <ph name="BEGIN_LINK2" />Политику безопасности<ph name="END_LINK2" /> Vivaldi.</translation>
 <translation id="4137746084635924146">Текущий язык устройства</translation>
+<translation id="4167670741834902166">Новая приватная вкладка</translation>
 <translation id="4243710787042215766">Открыть в приватной вкладке</translation>
 <translation id="4526803704855831732">Приватные вкладки</translation>
 <translation id="4759238208242260848">Загрузки</translation>
 <translation id="4883379392681899581">Выйти из приватного режима</translation>
 <translation id="4943872375798546930">Нет результатов</translation>
 <translation id="49576331685473090">Блокировка</translation>
+<translation id="5079259810715830221">Когда сайт Google запрашивает предзагрузку ссылок на свою страницу, Vivaldi шифрует и предзагружает страницы через серверы Google без файлов cookie. Это скрывает вашу личность от предзагруженного сайта.</translation>
 <translation id="5118676864324397542">Хранилище <ph name="APP_NAME" /></translation>
 <translation id="5186185447130319458">Приватный</translation>
 <translation id="5233638681132016545">Новая вкладка</translation>
@@ -44,6 +48,7 @@
 <translation id="6585139692466700358">Предлагать перевод страниц с использованием сервиса Vivaldi</translation>
 <translation id="6593061639179217415">Версия для ПК</translation>
 <translation id="6610147964972079463">Закрыть приватные вкладки</translation>
+<translation id="7029995644714925509">Когда сайт запрашивает предзагрузку ссылок на свою страницу, Vivaldi шифрует и предзагружает страницы через серверы Google без файлов cookie. Это скрывает вашу личность от предзагруженного сайта.</translation>
 <translation id="706339621163631076">Политика безопасности</translation>
 <translation id="732145680195464316">Закладка сохранена в <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">О браузере Vivaldi</translation>

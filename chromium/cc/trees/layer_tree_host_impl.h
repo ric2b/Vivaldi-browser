@@ -155,9 +155,6 @@ class LayerTreeHostImplClient {
       PresentationTimeCallbackBuffer::PendingCallbacks callbacks,
       const viz::FrameTimingDetails& details) = 0;
 
-  // Returns whether the main-thread is expected to receive a BeginMainFrame.
-  virtual bool IsBeginMainFrameExpected() = 0;
-
   virtual void NotifyAnimationWorkletStateChange(
       AnimationWorkletMutationState state,
       ElementListType tree_type) = 0;
@@ -330,7 +327,8 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
       bool scroll_and_viewport_changes_synced);
   virtual void ReadyToCommit(
       const viz::BeginFrameArgs& commit_args,
-      const BeginMainFrameMetrics* begin_main_frame_metrics);
+      const BeginMainFrameMetrics* begin_main_frame_metrics,
+      bool commit_timeout = false);
   virtual void BeginCommit(int source_frame_number);
   virtual void FinishCommit(CommitState& commit_state,
                             const ThreadUnsafeCommitState& unsafe_state);
@@ -398,10 +396,6 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
 
   void SetMayThrottleIfUndrawnFrames(bool may_throttle_if_undrawn_frames);
 
-  // Updates registered ElementIds present in |changed_list|. Call this after
-  // changing the property trees for the |changed_list| trees.
-  void UpdateElements(ElementListType changed_list);
-
   // Analogous to a commit, this function is used to create a sync tree and
   // add impl-side invalidations to it.
   // virtual for testing.
@@ -468,9 +462,14 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
   // `DrawLayers()` is called between the two.
   virtual DrawResult PrepareToDraw(FrameData* frame);
 
-  // If there is no damage, returns `absl::nullopt`; otherwise, returns set of
+  // If there is no damage, returns `absl::nullopt`; otherwise, returns
+  // information about the submitted frame including submit time and a set of
   // `EventMetrics` for the frame.
-  virtual absl::optional<EventMetricsSet> DrawLayers(FrameData* frame);
+  struct SubmitInfo {
+    base::TimeTicks time;
+    EventMetricsSet events_metrics;
+  };
+  virtual absl::optional<SubmitInfo> DrawLayers(FrameData* frame);
 
   // Must be called if and only if PrepareToDraw was called.
   void DidDrawAllLayers(const FrameData& frame);
@@ -1290,8 +1289,6 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
   ThrottleDecider throttle_decider_;
 
   std::vector<uint32_t> finished_transition_request_sequence_ids_;
-
-  bool was_set_memory_policy_called_ = false;
 
   // Must be the last member to ensure this is destroyed first in the
   // destruction order and invalidates all weak pointers.

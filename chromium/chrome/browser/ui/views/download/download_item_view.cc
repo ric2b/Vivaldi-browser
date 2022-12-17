@@ -41,8 +41,8 @@
 #include "chrome/browser/safe_browsing/advanced_protection_status_manager_factory.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
-#include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/tab_modal_confirm_dialog.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/chrome_typography.h"
@@ -66,7 +66,7 @@
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/text/bytes_formatting.h"
-#include "ui/base/theme_provider.h"
+#include "ui/base/themed_vector_icon.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/color/color_id.h"
 #include "ui/compositor/layer.h"
@@ -85,7 +85,6 @@
 #include "ui/gfx/range/range.h"
 #include "ui/gfx/text_constants.h"
 #include "ui/gfx/text_elider.h"
-#include "ui/native_theme/themed_vector_icon.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/ink_drop.h"
 #include "ui/views/animation/ink_drop_host_view.h"
@@ -96,6 +95,7 @@
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/controls/progress_ring_utils.h"
 #include "ui/views/controls/styled_label.h"
 #include "ui/views/style/typography.h"
 #include "ui/views/vector_icons.h"
@@ -263,7 +263,7 @@ class DownloadItemView::ContextMenuButton : public views::ImageButton {
     views::ConfigureVectorImageButton(this);
     SetAccessibleName(l10n_util::GetStringUTF16(
         IDS_DOWNLOAD_ITEM_DROPDOWN_BUTTON_ACCESSIBLE_TEXT));
-    SetBorder(views::CreateEmptyBorder(gfx::Insets(10)));
+    SetBorder(views::CreateEmptyBorder(10));
     SetHasInkDropActionOnClick(false);
   }
 
@@ -609,10 +609,9 @@ void DownloadItemView::OnPaintBackground(gfx::Canvas* canvas) {
   // Draw the separator as part of the background. It will be covered by the
   // focus ring when the view has focus.
   gfx::Rect rect(width() - 1, 0, 1, height());
-  rect.Inset(0, kTopBottomPadding);
+  rect.Inset(gfx::Insets::VH(kTopBottomPadding, 0));
   canvas->FillRect(GetMirroredRect(rect),
-                   GetThemeProvider()->GetColor(
-                       ThemeProperties::COLOR_TOOLBAR_VERTICAL_SEPARATOR));
+                   GetColorProvider()->GetColor(kColorToolbarSeparator));
 }
 
 void DownloadItemView::OnPaint(gfx::Canvas* canvas) {
@@ -699,7 +698,7 @@ void DownloadItemView::OnThemeChanged() {
   views::View::OnThemeChanged();
 
   const SkColor background_color =
-      GetThemeProvider()->GetColor(ThemeProperties::COLOR_DOWNLOAD_SHELF);
+      GetColorProvider()->GetColor(kColorDownloadShelfBackground);
   SetBackground(views::CreateSolidBackground(background_color));
 
   shelf_->ConfigureButtonForTheme(open_now_button_);
@@ -1062,15 +1061,6 @@ void DownloadItemView::PaintDownloadProgress(
     const gfx::RectF& bounds,
     const base::TimeDelta& indeterminate_progress_time,
     int percent_done) const {
-  const SkColor color = GetColorProvider()->GetColor(ui::kColorThrobber);
-
-  // Draw background.
-  cc::PaintFlags bg_flags;
-  bg_flags.setColor(SkColorSetA(color, 0x33));
-  bg_flags.setStyle(cc::PaintFlags::kFill_Style);
-  bg_flags.setAntiAlias(true);
-  canvas->DrawCircle(bounds.CenterPoint(), bounds.width() / 2, bg_flags);
-
   // Calculate progress.
   SkScalar start_pos = SkIntToScalar(270);  // 12 o'clock
   SkScalar sweep_angle = SkDoubleToScalar(360 * percent_done / 100.0);
@@ -1082,15 +1072,12 @@ void DownloadItemView::PaintDownloadProgress(
     sweep_angle = SkIntToScalar(50);
   }
 
-  // Draw progress.
-  SkPath progress;
-  progress.addArc(gfx::RectFToSkRect(bounds), start_pos, sweep_angle);
-  cc::PaintFlags progress_flags;
-  progress_flags.setColor(color);
-  progress_flags.setStyle(cc::PaintFlags::kStroke_Style);
-  progress_flags.setStrokeWidth(1.7f);
-  progress_flags.setAntiAlias(true);
-  canvas->DrawPath(progress, progress_flags);
+  const auto* color_provider = GetColorProvider();
+  views::DrawProgressRing(
+      canvas, gfx::RectFToSkRect(bounds),
+      color_provider->GetColor(kColorDownloadItemProgressRingBackground),
+      color_provider->GetColor(kColorDownloadItemProgressRingForeground),
+      /*stroke_width=*/1.7f, start_pos, sweep_angle);
 }
 
 ui::ImageModel DownloadItemView::GetIcon() const {
@@ -1277,11 +1264,13 @@ bool DownloadItemView::GetDropdownPressed() const {
 }
 
 void DownloadItemView::UpdateDropdownButtonImage() {
-  views::SetImageFromVectorIcon(
+  const ui::ColorProvider* cp = GetColorProvider();
+  views::SetImageFromVectorIconWithColor(
       dropdown_button_,
       dropdown_pressed_ ? vector_icons::kCaretDownIcon
                         : vector_icons::kCaretUpIcon,
-      GetThemeProvider()->GetColor(ThemeProperties::COLOR_TOOLBAR_TEXT));
+      cp->GetColor(kColorToolbarButtonIcon),
+      cp->GetColor(kColorToolbarButtonIconInactive));
   dropdown_button_->SizeToPreferredSize();
 }
 

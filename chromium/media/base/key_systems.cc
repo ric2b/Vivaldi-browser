@@ -18,7 +18,6 @@
 #include "base/notreached.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_checker.h"
-#include "base/time/time.h"
 #include "build/build_config.h"
 #include "media/base/key_system_names.h"
 #include "media/base/key_system_properties.h"
@@ -276,7 +275,6 @@ class KeySystemsImpl : public KeySystems {
 
   // Implementation of KeySystems interface.
   void UpdateIfNeeded(base::OnceClosure done_cb) override;
-  bool IsUpToDate() override;
   std::string GetBaseKeySystemName(
       const std::string& key_system) const override;
   bool IsSupportedKeySystem(const std::string& key_system) const override;
@@ -323,7 +321,6 @@ class KeySystemsImpl : public KeySystems {
   KeySystemsImpl();
   ~KeySystemsImpl() override;
 
-  bool IsUpdateNeeded();
   void UpdateSupportedKeySystems();
   void OnSupportedKeySystemsUpdated(KeySystemPropertiesVector key_systems);
   void ProcessSupportedKeySystems(KeySystemPropertiesVector key_systems);
@@ -387,10 +384,6 @@ KeySystemsImpl::~KeySystemsImpl() {
     update_callbacks_.Notify();
 }
 
-bool KeySystemsImpl::IsUpdateNeeded() {
-  return GetMediaClient() && GetMediaClient()->IsKeySystemsUpdateNeeded();
-}
-
 void KeySystemsImpl::UpdateSupportedKeySystems() {
   DCHECK(!is_updating_);
   is_updating_ = true;
@@ -401,28 +394,18 @@ void KeySystemsImpl::UpdateSupportedKeySystems() {
   }
 
   GetMediaClient()->GetSupportedKeySystems(
-      base::BindOnce(&KeySystemsImpl::OnSupportedKeySystemsUpdated,
-                     weak_factory_.GetWeakPtr()));
+      base::BindRepeating(&KeySystemsImpl::OnSupportedKeySystemsUpdated,
+                          weak_factory_.GetWeakPtr()));
 }
 
 void KeySystemsImpl::UpdateIfNeeded(base::OnceClosure done_cb) {
   if (is_updating_) {
+    // The callback will be resolved in OnSupportedKeySystemsUpdated().
     update_callbacks_.AddUnsafe(std::move(done_cb));
     return;
   }
 
-  DCHECK(update_callbacks_.empty());
-  if (!IsUpdateNeeded()) {
-    std::move(done_cb).Run();
-    return;
-  }
-
-  update_callbacks_.AddUnsafe(std::move(done_cb));
-  UpdateSupportedKeySystems();
-}
-
-bool KeySystemsImpl::IsUpToDate() {
-  return !is_updating_ && !IsUpdateNeeded();
+  std::move(done_cb).Run();
 }
 
 SupportedCodecs KeySystemsImpl::GetCodecMaskForMimeType(
@@ -483,7 +466,6 @@ void KeySystemsImpl::OnSupportedKeySystemsUpdated(
     KeySystemPropertiesVector key_systems) {
   DVLOG(1) << __func__;
 
-  DCHECK(is_updating_);
   is_updating_ = false;
 
   // Clear Key is always supported.
@@ -550,6 +532,7 @@ void KeySystemsImpl::ProcessSupportedKeySystems(
 
 const KeySystemProperties* KeySystemsImpl::GetKeySystemProperties(
     const std::string& key_system) const {
+  DCHECK(!is_updating_);
   for (const auto& entry : key_system_properties_map_) {
     const auto& base_key_system = entry.first;
     const auto* properties = entry.second.get();

@@ -1451,7 +1451,7 @@ RenderWidgetTargetResult
 RenderWidgetHostInputEventRouter::FindTouchscreenGestureEventTarget(
     RenderWidgetHostViewBase* root_view,
     const blink::WebGestureEvent& gesture_event) {
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   if (vivaldi::IsVivaldiRunning() &&
       blink::WebInputEvent::IsPinchGestureEventType(gesture_event.GetType())) {
     // We have to find the view under the event position as we can not use the
@@ -1460,7 +1460,7 @@ RenderWidgetHostInputEventRouter::FindTouchscreenGestureEventTarget(
     return FindViewAtLocation(root_view, gesture_event.PositionInWidget(),
                               viz::EventSource::TOUCH, &transformed_point);
   }
-#endif  // !OS_ANDROID
+#endif  // !IS_ANDROID
   // Since DispatchTouchscreenGestureEvent() doesn't pay any attention to the
   // target we could just return nullptr for pinch events, but since we know
   // where they are going we return the correct target.
@@ -1548,11 +1548,11 @@ void RenderWidgetHostInputEventRouter::DispatchTouchscreenGestureEvent(
         // not already started in the root from scroll bubbling, then we need
         // to warp the diverted pinch events in a GestureScrollBegin/End.
         DCHECK(!root_rwhi->is_in_touchscreen_gesture_scroll());
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
         if (vivaldi::IsVivaldiRunning() && target) // Prevent pinching UI
           SendGestureScrollBegin(target, gesture_event);
         else
-#endif  // !OS_ANDROID
+#endif  // !IS_ANDROID
         SendGestureScrollBegin(root_view, gesture_event);
       }
 
@@ -1561,11 +1561,11 @@ void RenderWidgetHostInputEventRouter::DispatchTouchscreenGestureEvent(
   }
 
   if (touchscreen_pinch_state_.IsInPinch()) {
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
     if (vivaldi::IsVivaldiRunning() && target) // Prevent pinching UI
       target->ProcessGestureEvent(gesture_event, latency);
     else
-#endif  // !OS_ANDROID
+#endif  // !IS_ANDROID
     root_view->ProcessGestureEvent(gesture_event, latency);
 
     if (gesture_event.GetType() ==
@@ -1578,11 +1578,11 @@ void RenderWidgetHostInputEventRouter::DispatchTouchscreenGestureEvent(
         auto* root_rwhi = static_cast<RenderWidgetHostImpl*>(
             root_view->GetRenderWidgetHost());
         DCHECK(root_rwhi->is_in_touchscreen_gesture_scroll());
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
         if (vivaldi::IsVivaldiRunning() && target) // Prevent pinching UI
           SendGestureScrollEnd(target, gesture_event);
         else
-#endif  // !OS_ANDROID
+#endif  // !IS_ANDROID
         SendGestureScrollEnd(root_view, gesture_event);
       }
     }
@@ -1725,7 +1725,7 @@ RenderWidgetTargetResult
 RenderWidgetHostInputEventRouter::FindTouchpadGestureEventTarget(
     RenderWidgetHostViewBase* root_view,
     const blink::WebGestureEvent& event) const {
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   if (vivaldi::IsVivaldiRunning() &&
     (event.GetType() == blink::WebInputEvent::Type::kGestureDoubleTap)) {
     // NOTE(espen@vivaldi.com): We have to find the view under the event
@@ -1734,7 +1734,7 @@ RenderWidgetHostInputEventRouter::FindTouchpadGestureEventTarget(
     return FindViewAtLocation(root_view, event.PositionInWidget(),
                               viz::EventSource::TOUCH, &transformed_point);
   }
-#endif  // !OS_ANDROID
+#endif  // !IS_ANDROID
   if (event.GetType() != blink::WebInputEvent::Type::kGesturePinchBegin &&
       event.GetType() != blink::WebInputEvent::Type::kGestureFlingCancel &&
       event.GetType() != blink::WebInputEvent::Type::kGestureDoubleTap) {
@@ -2127,10 +2127,11 @@ void RenderWidgetHostInputEventRouter::ForwardDelegatedInkPoint(
 
     gfx::DelegatedInkPoint delegated_ink_point(
         position, input_event.TimeStamp(), pointer_properties.id);
-    TRACE_EVENT_INSTANT1("delegated_ink_trails",
-                         "Forwarding delegated ink point from browser.",
-                         TRACE_EVENT_SCOPE_THREAD, "delegated point",
-                         delegated_ink_point.ToString());
+    TRACE_EVENT_WITH_FLOW1("delegated_ink_trails",
+                           "Forwarding delegated ink point from browser.",
+                           TRACE_ID_GLOBAL(delegated_ink_point.trace_id()),
+                           TRACE_EVENT_FLAG_FLOW_OUT, "delegated point",
+                           delegated_ink_point.ToString());
 
     // Calling this will result in IPC calls to get |delegated_ink_point| to
     // viz. The decision to do this here was made with the understanding that

@@ -47,7 +47,6 @@
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/page_visibility_state.h"
-#include "content/public/common/use_zoom_for_dsf_policy.h"
 #include "skia/ext/platform_canvas.h"
 #include "skia/ext/skia_utils_mac.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -318,14 +317,16 @@ void RenderWidgetHostViewMac::MigrateNSViewBridge(
 }
 
 void RenderWidgetHostViewMac::SetParentUiLayer(ui::Layer* parent_ui_layer) {
-  if (parent_ui_layer && !display_only_using_parent_ui_layer_) {
+  if (parent_ui_layer) {
     // The first time that we display using a parent ui::Layer, permanently
     // switch from drawing using Cocoa to only drawing using ui::Views. Erase
     // the existing content being drawn by Cocoa (which may have been set due
     // to races, e.g, in https://crbug.com/845807). Note that this transition
     // must be done lazily because not all code has been updated to use
-    // ui::Views (e.g, content_shell).
-    display_only_using_parent_ui_layer_ = true;
+    // ui::Views (e.g, content_shell). Also note that this call must be done
+    // every time the RenderWidgetHostNSViewBridge that `ns_view` points to
+    // changes (e.g, due to MigrateNSViewBridge), see
+    // https://crbug.com/1222976#c49.
     ns_view_->DisableDisplay();
   }
   if (browser_compositor_)
@@ -1025,6 +1026,10 @@ bool RenderWidgetHostViewMac::GetLineBreakIndex(
 gfx::Rect RenderWidgetHostViewMac::GetFirstRectForCompositionRange(
     const gfx::Range& range,
     gfx::Range* actual_range) {
+  TRACE_EVENT1("ime",
+               "RenderWidgetHostViewMac::GetFirstRectForCompositionRange",
+               "range", range.ToString());
+
   const TextInputManager::CompositionRangeInfo* composition_info =
       GetCompositionRangeInfo();
   if (!composition_info)
@@ -1101,8 +1106,9 @@ bool RenderWidgetHostViewMac::GetCachedFirstRectForCharacterRange(
 
   DCHECK(rect);
   // This exists to make IMEs more responsive, see http://crbug.com/115920
-  TRACE_EVENT0("browser",
-               "RenderWidgetHostViewMac::GetFirstRectForCharacterRange");
+  TRACE_EVENT1("ime",
+               "RenderWidgetHostViewMac::GetCachedFirstRectForCharacterRange",
+               "requested range", requested_range.ToString());
 
   const TextInputManager::TextSelection* selection = GetTextSelection();
   if (!selection)
@@ -1120,6 +1126,10 @@ bool RenderWidgetHostViewMac::GetCachedFirstRectForCharacterRange(
         GetTextInputManager()->GetTextSelectionBounds();
     if (text_selection_bound) {
       *rect = text_selection_bound.value();
+      TRACE_EVENT1(
+          "ime",
+          "RenderWidgetHostViewMac::GetCachedFirstRectForCharacterRange",
+          "GetTextSelectionBounds", rect->ToString());
       return true;
     }
 
@@ -1127,6 +1137,9 @@ bool RenderWidgetHostViewMac::GetCachedFirstRectForCharacterRange(
     *rect = GetTextInputManager()
                 ->GetSelectionRegion(GetFocusedWidget()->GetView())
                 ->caret_rect;
+    TRACE_EVENT1(
+        "ime", "RenderWidgetHostViewMac::GetCachedFirstRectForCharacterRange",
+        "caret_rect", rect->ToString());
     return true;
   }
 
@@ -1141,6 +1154,9 @@ bool RenderWidgetHostViewMac::GetCachedFirstRectForCharacterRange(
     *rect = GetTextInputManager()
                 ->GetSelectionRegion(GetFocusedWidget()->GetView())
                 ->first_selection_rect;
+    TRACE_EVENT1(
+        "ime", "RenderWidgetHostViewMac::GetCachedFirstRectForCharacterRange",
+        "first_selection_rect", rect->ToString());
     return true;
   }
 
@@ -1160,6 +1176,11 @@ bool RenderWidgetHostViewMac::GetCachedFirstRectForCharacterRange(
   gfx::Range ui_actual_range;
   *rect = GetFirstRectForCompositionRange(request_range_in_composition,
                                           &ui_actual_range);
+
+  TRACE_EVENT1("ime",
+               "RenderWidgetHostViewMac::GetCachedFirstRectForCharacterRange",
+               "GetFirstRectForCompositionRange", rect->ToString());
+
   if (actual_range) {
     *actual_range =
         gfx::Range(composition_info->range.start() + ui_actual_range.start(),
@@ -1435,7 +1456,7 @@ void RenderWidgetHostViewMac::ShutdownHost() {
 
 void RenderWidgetHostViewMac::SetActive(bool active) {
   if (host()) {
-    host()->SetActive(active);
+    UpdateActiveState(active);
     if (active) {
       if (HasFocus())
         host()->Focus();
@@ -1880,8 +1901,7 @@ void RenderWidgetHostViewMac::LookUpDictionaryOverlayAtPoint(
   // With zoom-for-dsf, RenderWidgetHost coordinate system is physical points,
   // which means we have to scale the point by device scale factor.
   gfx::PointF root_point = root_point_in_dips;
-  if (IsUseZoomForDSFEnabled())
-    root_point.Scale(GetDeviceScaleFactor());
+  root_point.Scale(GetDeviceScaleFactor());
 
   gfx::PointF transformed_point;
   RenderWidgetHostImpl* widget_host =
@@ -1937,6 +1957,9 @@ bool RenderWidgetHostViewMac::SyncGetFirstRectForRange(
     gfx::Rect* rect,
     gfx::Range* actual_range,
     bool* success) {
+  TRACE_EVENT1("ime", "RenderWidgetHostViewMac::SyncGetFirstRectForRange",
+               "requested range", requested_range.ToString());
+
   *actual_range = requested_range;
   if (!GetFocusedWidget()) {
     *success = false;
@@ -2238,12 +2261,10 @@ void RenderWidgetHostViewMac::OnGotStringForDictionaryOverlay(
             baseline_point_in_layout_space);
       }
     }
-    // If zoom-for-dsf is enabled, then layout space is physical pixels. Scale
+    // Layout space is physical pixels. Scale
     // it to get DIPs, which is what ns_view_ expects.
-    if (IsUseZoomForDSFEnabled()) {
-      updated_baseline_point = gfx::ScaleToRoundedPoint(
-          updated_baseline_point, 1.f / GetDeviceScaleFactor());
-    }
+    updated_baseline_point = gfx::ScaleToRoundedPoint(
+        updated_baseline_point, 1.f / GetDeviceScaleFactor());
     ns_view_->ShowDictionaryOverlay(std::move(attributed_string),
                                     updated_baseline_point);
   }

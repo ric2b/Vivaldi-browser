@@ -18,40 +18,22 @@ class FederatedIdentitySharingPermissionContextDelegate {
   virtual ~FederatedIdentitySharingPermissionContextDelegate() = default;
 
   // Determine whether the requester has an existing permission grant to share
-  // identity information to the relying party.
-  virtual bool HasSharingPermission(const url::Origin& identity_provider,
-                                    const url::Origin& relying_party) = 0;
-
-  // Determine whether the requester has an existing permission grant to share
   // identity information for the given account to the relying party.
-  virtual bool HasSharingPermissionForAccount(
-      const url::Origin& identity_provider,
-      const url::Origin& relying_party,
-      const std::string& account_id) = 0;
-
-  // Grant permission for the requester to share identity information to the
-  // relying party.
-  virtual void GrantSharingPermission(const url::Origin& identity_provider,
-                                      const url::Origin& relying_party) = 0;
+  virtual bool HasSharingPermission(const url::Origin& relying_party,
+                                    const url::Origin& identity_provider,
+                                    const std::string& account_id) = 0;
 
   // Grant permission for the requester to share identity information for the
   // given account to the  relying party.
-  virtual void GrantSharingPermissionForAccount(
-      const url::Origin& identity_provider,
-      const url::Origin& relying_party,
-      const std::string& account_id) = 0;
-
-  // Revoke a previously-provided grant from the identity provider to the
-  // relying party.
-  virtual void RevokeSharingPermission(const url::Origin& identity_provider,
-                                       const url::Origin& relying_party) = 0;
+  virtual void GrantSharingPermission(const url::Origin& relying_party,
+                                      const url::Origin& identity_provider,
+                                      const std::string& account_id) = 0;
 
   // Revoke a previously-provided grant from the identity provider for the
   // relying party and the given account.
-  virtual void RevokeSharingPermissionForAccount(
-      const url::Origin& identity_provider,
-      const url::Origin& relying_party,
-      const std::string& account_id) = 0;
+  virtual void RevokeSharingPermission(const url::Origin& relying_party,
+                                       const url::Origin& identity_provider,
+                                       const std::string& account_id) = 0;
 };
 
 }  // namespace content

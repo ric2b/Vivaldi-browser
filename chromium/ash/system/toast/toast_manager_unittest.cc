@@ -23,6 +23,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "components/session_manager/session_manager_types.h"
 #include "ui/compositor/layer.h"
+#include "ui/compositor/layer_animator.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/views/controls/button/label_button.h"
@@ -547,7 +548,7 @@ TEST_F(ToastManagerImplTest,
 
   // Cancel the shown toast and wait for the animation to finish.
   CancelToast(id1);
-  task_environment()->FastForwardBy(base::Seconds(1));
+  task_environment()->FastForwardBy(base::Seconds(2));
 
   // Confirm that the toast now showing corresponds with id2.
   EXPECT_EQ(u"TEXT2", GetCurrentText());

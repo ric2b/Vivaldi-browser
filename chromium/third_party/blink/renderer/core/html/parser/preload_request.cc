@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/core/html/parser/preload_request.h"
 
+#include "base/memory/ptr_util.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
@@ -103,7 +104,7 @@ Resource* PreloadRequest::Start(Document* document) {
   resource_request.SetRequestDestination(
       ResourceFetcher::DetermineRequestDestination(resource_type_));
 
-  resource_request.SetFetchImportanceMode(importance_);
+  resource_request.SetFetchPriorityHint(fetch_priority_hint_);
 
   ResourceLoaderOptions options(document->domWindow()->GetCurrentWorld());
   options.initiator_info = initiator_info;

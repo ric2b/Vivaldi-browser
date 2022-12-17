@@ -11,12 +11,17 @@ struct OverflowMenuActionRow: View {
   /// The action for this row.
   @ObservedObject var action: OverflowMenuAction
 
+  weak var metricsHandler: PopupMenuMetricsHandler?
+
   var body: some View {
     Button(
-      action: action.handler,
+      action: {
+        metricsHandler?.popupMenuTookAction()
+        action.handler()
+      },
       label: {
         HStack {
-          Text(action.name)
+          Text(action.name).lineLimit(1)
           Spacer()
           action.image
             // Without explicitly removing the image from accessibility,

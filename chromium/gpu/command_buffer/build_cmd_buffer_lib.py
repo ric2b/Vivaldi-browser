@@ -682,7 +682,7 @@ def _Namespace():
 def Grouper(n, iterable, fillvalue=None):
   """Collect data into fixed-length chunks or blocks"""
   args = [iter(iterable)] * n
-  return itertools.izip_longest(fillvalue=fillvalue, *args)
+  return itertools.zip_longest(fillvalue=fillvalue, *args)
 
 
 def SplitWords(input_string):
@@ -831,7 +831,7 @@ class CWriter(object):
     except OSError as e:
       if e.errno == errno.EEXIST:
         pass
-    self._file = open(filename, 'wb')
+    self._file = open(filename, 'w')
 
   def __enter__(self):
     self._file.write(self._ENTER_MSG)
@@ -1477,7 +1477,7 @@ TEST_F(%(prefix)sImplementationTest,
 """
         for invalid_arg in constants:
           gl_arg_strings = []
-          invalid = invalid_arg.GetInvalidArg(func)
+          invalid = invalid_arg.GetInvalidArg(0)
           for arg in func.GetOriginalArgs():
             if arg is invalid_arg:
               gl_arg_strings.append(invalid[0])
@@ -2245,10 +2245,10 @@ TEST_F(%(prefix)sImplementationTest, %(name)s) {
     GLuint data[2];
   };
   Cmds expected;
-  expected.gen.Init(base::size(ids), &ids[0]);
+  expected.gen.Init(std::size(ids), &ids[0]);
   expected.data[0] = k%(types)sStartId;
   expected.data[1] = k%(types)sStartId + 1;
-  gl_->%(name)s(base::size(ids), &ids[0]);
+  gl_->%(name)s(std::size(ids), &ids[0]);
   EXPECT_EQ(0, memcmp(&expected, commands_, sizeof(expected)));
   EXPECT_EQ(k%(types)sStartId, ids[0]);
   EXPECT_EQ(k%(types)sStartId + 1, ids[1]);
@@ -2394,17 +2394,17 @@ TEST_P(%(test_name)s, %(name)sInvalidArgs) {
     f.write("  cmds::%s& cmd = *GetBufferAs<cmds::%s>();\n" %
                (func.name, func.name))
     f.write("  void* next_cmd = cmd.Set(\n")
-    f.write("      &cmd, static_cast<GLsizei>(base::size(ids)), ids);\n")
+    f.write("      &cmd, static_cast<GLsizei>(std::size(ids)), ids);\n")
     f.write("  EXPECT_EQ(static_cast<uint32_t>(cmds::%s::kCmdId),\n" %
                func.name)
     f.write("            cmd.header.command);\n")
     f.write("  EXPECT_EQ(sizeof(cmd) +\n")
     f.write("            RoundSizeToMultipleOfEntries(cmd.n * 4u),\n")
     f.write("            cmd.header.size * 4u);\n")
-    f.write("  EXPECT_EQ(static_cast<GLsizei>(base::size(ids)), cmd.n);\n");
+    f.write("  EXPECT_EQ(static_cast<GLsizei>(std::size(ids)), cmd.n);\n");
     f.write("  CheckBytesWrittenMatchesExpectedSize(\n")
     f.write("      next_cmd, sizeof(cmd) +\n")
-    f.write("      RoundSizeToMultipleOfEntries(base::size(ids) * 4u));\n")
+    f.write("      RoundSizeToMultipleOfEntries(std::size(ids) * 4u));\n")
     f.write("  EXPECT_EQ(0, memcmp(ids, ImmediateDataAddress(&cmd),\n")
     f.write("                      sizeof(ids)));\n")
     f.write("}\n")
@@ -2623,10 +2623,10 @@ TEST_F(%(prefix)sImplementationTest, %(name)s) {
     GLuint data[2];
   };
   Cmds expected;
-  expected.del.Init(base::size(ids), &ids[0]);
+  expected.del.Init(std::size(ids), &ids[0]);
   expected.data[0] = k%(types)sStartId;
   expected.data[1] = k%(types)sStartId + 1;
-  gl_->%(name)s(base::size(ids), &ids[0]);
+  gl_->%(name)s(std::size(ids), &ids[0]);
   EXPECT_EQ(0, memcmp(&expected, commands_, sizeof(expected)));
 }
 """
@@ -2830,17 +2830,17 @@ TEST_P(%(test_name)s, %(name)sInvalidArgs) {
     f.write("  cmds::%s& cmd = *GetBufferAs<cmds::%s>();\n" %
                (func.name, func.name))
     f.write("  void* next_cmd = cmd.Set(\n")
-    f.write("      &cmd, static_cast<GLsizei>(base::size(ids)), ids);\n")
+    f.write("      &cmd, static_cast<GLsizei>(std::size(ids)), ids);\n")
     f.write("  EXPECT_EQ(static_cast<uint32_t>(cmds::%s::kCmdId),\n" %
                func.name)
     f.write("            cmd.header.command);\n")
     f.write("  EXPECT_EQ(sizeof(cmd) +\n")
     f.write("            RoundSizeToMultipleOfEntries(cmd.n * 4u),\n")
     f.write("            cmd.header.size * 4u);\n")
-    f.write("  EXPECT_EQ(static_cast<GLsizei>(base::size(ids)), cmd.n);\n");
+    f.write("  EXPECT_EQ(static_cast<GLsizei>(std::size(ids)), cmd.n);\n");
     f.write("  CheckBytesWrittenMatchesExpectedSize(\n")
     f.write("      next_cmd, sizeof(cmd) +\n")
-    f.write("      RoundSizeToMultipleOfEntries(base::size(ids) * 4u));\n")
+    f.write("      RoundSizeToMultipleOfEntries(std::size(ids) * 4u));\n")
     f.write("  EXPECT_EQ(0, memcmp(ids, ImmediateDataAddress(&cmd),\n")
     f.write("                      sizeof(ids)));\n")
     f.write("}\n")
@@ -4139,14 +4139,14 @@ TEST_P(%(test_name)s, %(name)sInvalidHeader) {
   const char kSource0[] = "hello";
   const char* kSource[] = { kSource0 };
   const char kValidStrEnd = 0;
-  const GLsizei kCount = static_cast<GLsizei>(base::size(kSource));
+  const GLsizei kCount = static_cast<GLsizei>(std::size(kSource));
   const GLsizei kTests[] = {
       kCount + 1,
       0,
       std::numeric_limits<GLsizei>::max(),
       -1,
   };
-  for (size_t ii = 0; ii < base::size(kTests); ++ii) {
+  for (size_t ii = 0; ii < std::size(kTests); ++ii) {
     SetBucketAsCStrings(kBucketId, 1, kSource, kTests[ii], kValidStrEnd);
     cmds::%(name)s cmd;
     cmd.Init(%(cmd_args)s);
@@ -5923,7 +5923,7 @@ class Function(object):
     """Writes the cmd cmd_flags constant."""
     # By default trace only at the highest level 3.
     trace_level = int(self.GetInfo('trace_level', default = 3))
-    if trace_level not in xrange(0, 4):
+    if trace_level not in range(0, 4):
       raise KeyError("Unhandled trace_level: %d" % trace_level)
 
     cmd_flags = ('CMD_FLAG_SET_TRACE_LEVEL(%d)' % trace_level)
@@ -6351,11 +6351,11 @@ class GLGenerator(object):
   def Log(self, msg):
     """Prints something if verbose is true."""
     if self.verbose:
-      print msg
+      print(msg)
 
   def Error(self, msg):
     """Prints an error."""
-    print "Error: %s" % msg
+    print("Error: %s" % msg)
     self.errors += 1
 
   def ParseGLH(self, filename):
@@ -6703,7 +6703,7 @@ void ContextState::InitState(const ContextState *prev_state) const {
             continue
           if state['type'] == 'FrontBack':
             num_states = len(state['states'])
-            for ndx, group in enumerate(Grouper(num_states / 2,
+            for ndx, group in enumerate(Grouper(num_states // 2,
                                         state['states'])):
               if test_prev:
                 f.write("  if (")
@@ -6992,7 +6992,7 @@ void ContextStateTestHelpers::SetupInitStateExpectations(
         state = _STATE_INFO[state_name]
         if state['type'] == 'FrontBack':
           num_states = len(state['states'])
-          for ndx, group in enumerate(Grouper(num_states / 2,
+          for ndx, group in enumerate(Grouper(num_states // 2,
                                               state['states'])):
             args = []
             for item in group:
@@ -7270,7 +7270,7 @@ extern const NameToFunc g_gles2_function_table[] = {
           continue
         if named_type.GetValidValues():
           code = """%(pre)s%(name)s(
-            valid_%(name)s_table, base::size(valid_%(name)s_table))"""
+            valid_%(name)s_table, std::size(valid_%(name)s_table))"""
         else:
           code = "%(pre)s%(name)s()"
         f.write(code % {
@@ -7293,14 +7293,14 @@ extern const NameToFunc g_gles2_function_table[] = {
             continue
           if named_type.GetDeprecatedValuesES3():
             code = """  %(name)s.RemoveValues(
-      deprecated_%(name)s_table_es3, base::size(deprecated_%(name)s_table_es3));
+      deprecated_%(name)s_table_es3, std::size(deprecated_%(name)s_table_es3));
 """
             f.write(code % {
               'name': ToUnderscore(name),
             })
           if named_type.GetValidValuesES3():
             code = """  %(name)s.AddValues(
-      valid_%(name)s_table_es3, base::size(valid_%(name)s_table_es3));
+      valid_%(name)s_table_es3, std::size(valid_%(name)s_table_es3));
 """
             f.write(code % {
               'name': ToUnderscore(name),
@@ -7386,7 +7386,7 @@ const size_t %(p)sUtil::enum_to_string_table_len_ =
               f.write('    { %s, "%s" },\n' % (value, value))
             f.write("""  };
   return %sUtil::GetQualifiedEnumString(
-      string_table, base::size(string_table), value);
+      string_table, std::size(string_table), value);
 }
 
 """ % _prefix)
@@ -7424,13 +7424,13 @@ const size_t %(p)sUtil::enum_to_string_table_len_ =
         f.write("#include \"ppapi/c/ppb_opengles2.h\"\n\n")
       else:
         f.write("\n#ifndef __gl2_h_\n")
-        for (k, v) in _GL_TYPES.iteritems():
+        for (k, v) in _GL_TYPES.items():
           f.write("typedef %s %s;\n" % (v, k))
         f.write("#ifdef _WIN64\n")
-        for (k, v) in _GL_TYPES_64.iteritems():
+        for (k, v) in _GL_TYPES_64.items():
           f.write("typedef %s %s;\n" % (v, k))
         f.write("#else\n")
-        for (k, v) in _GL_TYPES_32.iteritems():
+        for (k, v) in _GL_TYPES_32.items():
           f.write("typedef %s %s;\n" % (v, k))
         f.write("#endif  // _WIN64\n")
         f.write("#endif  // __gl2_h_\n\n")

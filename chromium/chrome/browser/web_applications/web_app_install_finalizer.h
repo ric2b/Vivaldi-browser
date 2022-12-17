@@ -14,6 +14,7 @@
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/web_applications/os_integration/os_integration_manager.h"
 #include "chrome/browser/web_applications/web_app_chromeos_data.h"
+#include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_id.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/browser/web_applications/web_app_system_web_app_data.h"
@@ -25,6 +26,7 @@
 class Profile;
 
 namespace webapps {
+enum class UninstallResultCode;
 enum class WebappUninstallSource;
 }
 
@@ -39,7 +41,6 @@ class WebAppPolicyManager;
 class WebAppRegistrar;
 class WebAppTranslationManager;
 class WebAppUninstallJob;
-enum class WebAppUninstallJobResult;
 
 // An finalizer for the installation process, represents the last step.
 // Takes WebAppInstallInfo as input, writes data to disk (e.g icons, shortcuts)
@@ -50,17 +51,19 @@ class WebAppInstallFinalizer {
       base::OnceCallback<void(const AppId& app_id,
                               webapps::InstallResultCode code,
                               OsHooksErrors os_hooks_errors)>;
-  using UninstallWebAppCallback = base::OnceCallback<void(bool uninstalled)>;
+  using UninstallWebAppCallback =
+      base::OnceCallback<void(webapps::UninstallResultCode code)>;
   using RepeatingUninstallCallback =
-      base::RepeatingCallback<void(const AppId& app_id, bool uninstalled)>;
+      base::RepeatingCallback<void(const AppId& app_id,
+                                   webapps::UninstallResultCode code)>;
 
   struct FinalizeOptions {
-    FinalizeOptions();
+    explicit FinalizeOptions(webapps::WebappInstallSource install_surface);
     ~FinalizeOptions();
     FinalizeOptions(const FinalizeOptions&);
 
-    webapps::WebappInstallSource install_source =
-        webapps::WebappInstallSource::COUNT;
+    const WebAppManagement::Type source;
+    const webapps::WebappInstallSource install_surface;
     bool locally_installed = true;
     bool overwrite_existing_manifest_fields = true;
 
@@ -98,26 +101,27 @@ class WebAppInstallFinalizer {
   virtual void FinalizeUpdate(const WebAppInstallInfo& web_app_info,
                               InstallFinalizedCallback callback);
 
-  // Removes |webapp_uninstall_source| from |app_id|. If no more interested
+  // Removes |webapp_uninstall_surface| from |app_id|. If no more interested
   // sources left, deletes the app from disk and registrar.
   virtual void UninstallExternalWebApp(
       const AppId& app_id,
-      webapps::WebappUninstallSource external_install_source,
+      WebAppManagement::Type external_install_source,
+      webapps::WebappUninstallSource uninstall_surface,
       UninstallWebAppCallback callback);
 
   // Removes the external app for |app_url| from disk and registrar. Fails if
   // there is no installed external app for |app_url|.
   virtual void UninstallExternalWebAppByUrl(
       const GURL& app_url,
-      webapps::WebappUninstallSource webapp_uninstall_source,
+      WebAppManagement::Type external_install_source,
+      webapps::WebappUninstallSource uninstall_surface,
       UninstallWebAppCallback callback);
 
-  // Removes |webapp_uninstall_source| from |app_id|. If no more interested
-  // sources left, deletes the app from disk and registrar.
-  virtual void UninstallWebApp(
-      const AppId& app_id,
-      webapps::WebappUninstallSource external_install_source,
-      UninstallWebAppCallback callback);
+  // Removes |webapp_uninstall_surface| from |app_id|, no matter how many
+  // sources are left.
+  virtual void UninstallWebApp(const AppId& app_id,
+                               webapps::WebappUninstallSource uninstall_surface,
+                               UninstallWebAppCallback callback);
 
   virtual void RetryIncompleteUninstalls(
       const std::vector<AppId>& apps_to_uninstall);
@@ -171,18 +175,20 @@ class WebAppInstallFinalizer {
   using CommitCallback = base::OnceCallback<void(bool success)>;
 
   void UninstallWebAppInternal(const AppId& app_id,
-                               webapps::WebappUninstallSource uninstall_source,
+                               webapps::WebappUninstallSource uninstall_surface,
                                UninstallWebAppCallback callback);
   void OnUninstallComplete(AppId app_id,
-                           webapps::WebappUninstallSource uninstall_source,
+                           webapps::WebappUninstallSource uninstall_surface,
                            UninstallWebAppCallback callback,
-                           WebAppUninstallJobResult result);
-  void UninstallExternalWebAppOrRemoveSource(const AppId& app_id,
-                                             Source::Type source,
-                                             UninstallWebAppCallback callback);
+                           webapps::UninstallResultCode code);
+  void UninstallExternalWebAppOrRemoveSource(
+      const AppId& app_id,
+      WebAppManagement::Type install_source,
+      webapps::WebappUninstallSource uninstall_surface,
+      UninstallWebAppCallback callback);
 
   void OnMaybeRegisterOsUninstall(const AppId& app_id,
-                                  Source::Type source,
+                                  WebAppManagement::Type source,
                                   UninstallWebAppCallback callback,
                                   OsHooksErrors os_hooks_errors);
 

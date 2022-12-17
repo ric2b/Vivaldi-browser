@@ -5,9 +5,9 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_NG_GRID_NG_GRID_ITEM_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_NG_GRID_NG_GRID_ITEM_H_
 
+#include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/layout/ng/grid/ng_grid_track_collection.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_block_node.h"
-#include "third_party/blink/renderer/core/style/grid_positions_resolver.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace blink {
@@ -62,14 +62,13 @@ struct CORE_EXPORT GridItemData {
   // For this item and track direction, computes the pair of indices |begin| and
   // |end| such that the item spans every set from the respective collection's
   // |sets_| with an index in the range [begin, end).
-  void ComputeSetIndices(
-      const NGGridLayoutAlgorithmTrackCollection& track_collection);
+  void ComputeSetIndices(const NGGridLayoutTrackCollection& track_collection);
 
   // For this out of flow item and track collection, computes and stores its
   // first and last spanned ranges, as well as the start and end track offset.
   // |grid_placement| is used to resolve the grid lines.
   void ComputeOutOfFlowItemPlacement(
-      const NGGridLayoutAlgorithmTrackCollection& track_collection,
+      const NGGridLayoutTrackCollection& track_collection,
       const NGGridPlacement& grid_placement);
 
   const GridItemIndices& SetIndices(
@@ -94,6 +93,15 @@ struct CORE_EXPORT GridItemData {
   }
   wtf_size_t SpanSize(const GridTrackSizingDirection track_direction) const {
     return resolved_position.SpanSize(track_direction);
+  }
+
+  bool HasSubgriddedAxis(const GridTrackSizingDirection track_direction) const {
+    if (node.IsGrid()) {
+      return (track_direction == kForColumns)
+                 ? node.Style().GridTemplateColumns().IsSubgriddedAxis()
+                 : node.Style().GridTemplateRows().IsSubgriddedAxis();
+    }
+    return false;
   }
 
   bool IsGridContainingBlock() const { return node.IsContainingBlockNGGrid(); }
@@ -138,12 +146,15 @@ struct CORE_EXPORT GridItemData {
         .HasProperty(TrackSpanProperties::kHasFixedMaximumTrack);
   }
 
+  void Trace(Visitor* visitor) const { visitor->Trace(node); }
+
   NGBlockNode node;
   GridArea resolved_position;
 
   bool is_block_axis_overflow_safe : 1;
   bool is_inline_axis_overflow_safe : 1;
   bool is_sizing_dependent_on_block_size : 1;
+  bool is_subgridded_to_parent_grid : 1;
 
   AxisEdge inline_axis_alignment;
   AxisEdge block_axis_alignment;
@@ -154,8 +165,8 @@ struct CORE_EXPORT GridItemData {
   NGAutoBehavior inline_auto_behavior;
   NGAutoBehavior block_auto_behavior;
 
-  BaselineType row_baseline_type;
   BaselineType column_baseline_type;
+  BaselineType row_baseline_type;
 
   TrackSpanProperties column_span_properties;
   TrackSpanProperties row_span_properties;
@@ -173,7 +184,7 @@ struct CORE_EXPORT GridItemData {
   OutOfFlowItemPlacement row_placement;
 };
 
-using GridItemStorageVector = Vector<GridItemData, 4>;
+using GridItemStorageVector = HeapVector<GridItemData, 4>;
 
 struct CORE_EXPORT GridItems {
   DISALLOW_NEW();
@@ -208,7 +219,7 @@ struct CORE_EXPORT GridItems {
 
    private:
     GridItemStorageVector* item_data_;
-    Vector<wtf_size_t>::const_iterator current_index_;
+    HeapVector<wtf_size_t>::const_iterator current_index_;
   };
 
   Iterator begin() {
@@ -216,7 +227,7 @@ struct CORE_EXPORT GridItems {
   }
   Iterator end() { return Iterator(&item_data, reordered_item_indices.end()); }
 
-  void Append(const GridItemData& new_item_data) {
+  void Append(GridItemData&& new_item_data) {
     reordered_item_indices.push_back(item_data.size());
     item_data.emplace_back(new_item_data);
   }
@@ -225,8 +236,12 @@ struct CORE_EXPORT GridItems {
     item_data.ReserveCapacity(capacity);
   }
 
+  void RemoveSubgriddedItems();
+
   wtf_size_t Size() const { return item_data.size(); }
   bool IsEmpty() const { return item_data.IsEmpty(); }
+
+  void Trace(Visitor* visitor) const { visitor->Trace(item_data); }
 
   // Grid items are appended in document order, but we want to rearrange them in
   // order-modified document order since auto-placement and painting rely on it
@@ -236,5 +251,7 @@ struct CORE_EXPORT GridItems {
 };
 
 }  // namespace blink
+
+WTF_ALLOW_CLEAR_UNUSED_SLOTS_WITH_MEM_FUNCTIONS(blink::GridItemData)
 
 #endif  // THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_NG_GRID_NG_GRID_ITEM_H_

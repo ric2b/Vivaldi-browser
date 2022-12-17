@@ -52,6 +52,22 @@ Local Modifications:
 (none)
 
 
+Name: Type Definition for D3 library
+Short Name: @types/d3
+URL: https://www.npmjs.com/package/@types/d3
+Version: 5.16.0
+License: MIT
+Security Critical: No. The types are only used when type checking the discards
+page.
+
+Description:
+This package contains type definitions for d3.
+
+Local Modifications:
+See chromium_d3_types_index.patch, which is used to reduce the types to only
+the necessary parts of the library:
+d3-drag, d3-force, d3-scale-chromatic, d3-selection, d3-transition.
+
 Name: Type Definition for W3C MediaStream Recording
 Short Name: @types/dom-mediacapture-record
 URL: https://www.npmjs.com/package/@types/dom-mediacapture-record
@@ -180,6 +196,22 @@ Security Critical: No. The ESLint checks are not shipped with Chrome and code ar
 Description:
 An ESLint parser which leverages TypeScript ESTree to allow for ESLint to lint
 TypeScript source code.
+
+Local Modifications:
+(none)
+
+
+Name: Type Definition for Trusted Types
+Short Name: @types/trusted-types
+URL: https://www.npmjs.com/package/@types/trusted-types
+Version: 1.0.6
+License: MIT
+Security Critical: No. The types are only used when type checking the Web
+Trusted Types:
+
+Description:
+This package contains type definitions for Web Trusted Types.
+https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy/trusted-types
 
 Local Modifications:
 (none)

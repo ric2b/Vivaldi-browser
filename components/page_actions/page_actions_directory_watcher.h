@@ -12,7 +12,9 @@
 #include "base/files/file_path_watcher.h"
 #include "base/files/file_util.h"
 #include "base/sequence_checker.h"
+#include "base/timer/timer.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/memory/weak_ptr.h"
 
 namespace page_actions {
 class DirectoryWatcher {
@@ -43,7 +45,6 @@ class DirectoryWatcher {
   void OnPathChanged(const base::FilePath& path, bool error);
 
   void ReportChanges();
-  void end_update_cooldown() { in_update_cooldown_ = false; }
 
   FilePathTimesMap GetModificationTimes(const base::FilePath& path);
 
@@ -59,10 +60,12 @@ class DirectoryWatcher {
 
   base::FilePath apk_assets_;
   std::set<base::FilePath> pending_paths_;
-  bool in_update_cooldown_ = false;
 
+  base::OneShotTimer timer_;
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
+
   SEQUENCE_CHECKER(sequence_checker_);
+  base::WeakPtrFactory<DirectoryWatcher> weak_factory_{this};
 };
 }  // namespace page_actions
 

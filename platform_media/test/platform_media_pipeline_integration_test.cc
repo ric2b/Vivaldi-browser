@@ -10,6 +10,7 @@
 #include "base/command_line.h"
 #include "base/path_service.h"
 #include "base/vivaldi_paths.h"
+#include "build/build_config.h"
 #include "media/base/audio_decoder_config.h"
 #include "media/base/media_log.h"
 #include "media/base/media_switches.h"
@@ -20,11 +21,11 @@
 
 #include "platform_media/renderer/decoders/ipc_demuxer.h"
 #include "platform_media/test/ipc_pipeline_test_setup.h"
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 #include "base/mac/mac_util.h"
 #endif
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 #include "base/win/windows_version.h"
 #endif
 
@@ -32,7 +33,7 @@ namespace media {
 
 namespace {
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 DemuxerStream* GetStream(std::unique_ptr<Demuxer>& demuxer,
                          DemuxerStream::Type type) {
   std::vector<DemuxerStream*> streams = demuxer->GetAllStreams();
@@ -42,7 +43,7 @@ DemuxerStream* GetStream(std::unique_ptr<Demuxer>& demuxer,
   }
   return nullptr;
 }
-#endif  // defined(OS_WIN)
+#endif  // BUILDFLAG(IS_WIN)
 
 const base::FilePath::CharType kPlatformMediaTestDataPath[] =
     FILE_PATH_LITERAL("platform_media");
@@ -131,7 +132,7 @@ class PlatformMediaPipelineIntegrationTest
   IPCPipelineTestSetup ipc_pipeline_test_setup_;
 };
 
-#if defined(OS_MAC) || defined(OS_WIN)
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
 TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback) {
   ASSERT_EQ(PIPELINE_OK, Start("bear.mp4", kHashed));
 
@@ -139,10 +140,10 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback) {
 
   ASSERT_TRUE(WaitUntilOnEnded());
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   EXPECT_EQ("bd1d880e4934bf76c0bb34450cd0f173", GetVideoHash());
   EXPECT_EQ("-0.51,0.54,1.03,0.85,-0.08,-0.22,", GetAudioHash());
-#elif defined(OS_WIN)
+#elif BUILDFLAG(IS_WIN)
   EXPECT_EQ("eb228dfe6882747111161156164dcab0", GetVideoHash());
   EXPECT_EQ("-0.52,0.26,0.16,0.24,-0.00,0.26,", GetAudioHash());
 #endif
@@ -157,10 +158,10 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback_16x9_Aspect) {
 
   ASSERT_TRUE(WaitUntilOnEnded());
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   EXPECT_EQ("e9a2e53ef2c16757962cc58d37de69e7", GetVideoHash());
   EXPECT_EQ("-3.66,-2.08,0.22,2.09,0.64,-0.90,", GetAudioHash());
-#elif defined(OS_WIN)
+#elif BUILDFLAG(IS_WIN)
   EXPECT_EQ("e9a2e53ef2c16757962cc58d37de69e7", GetVideoHash());
   EXPECT_EQ("-3.60,-1.82,0.28,1.90,0.34,-1.09,", GetAudioHash());
 #endif
@@ -173,11 +174,11 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback_VideoOnly) {
 
   ASSERT_TRUE(WaitUntilOnEnded());
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   // On OS X, the expected hashes can be different, because our solution
   // doesn't necessarily process frames one by one, see AVFMediaDecoder.
   EXPECT_EQ("e7832270a91e8de7945b5724eec2cbcb", GetVideoHash());
-#elif defined(OS_WIN)
+#elif BUILDFLAG(IS_WIN)
   EXPECT_EQ("eb228dfe6882747111161156164dcab0", GetVideoHash());
 #endif
 }
@@ -189,9 +190,9 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback_M4A) {
 
   ASSERT_TRUE(WaitUntilOnEnded());
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   EXPECT_EQ("-5.29,-5.47,-5.05,-4.33,-2.99,-3.79,", GetAudioHash());
-#elif defined(OS_WIN)
+#elif BUILDFLAG(IS_WIN)
   EXPECT_EQ("0.46,1.72,4.26,4.57,3.39,1.54,", GetAudioHash());
 #endif
 }
@@ -275,7 +276,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, TruncatedMedia) {
 TEST_F(PlatformMediaPipelineIntegrationTest, DecodingError) {
   // TODO(wdzierzanowski): WMFMediaPipeline (Windows) doesn't detect the error?
   // (DNA-30324).
-#if !defined(OS_WIN)
+#if !BUILDFLAG(IS_WIN)
   ASSERT_EQ(PIPELINE_OK, StartVivaldi("bear_corrupt.mp4"));
   Play();
   EXPECT_EQ(PIPELINE_ERROR_DECODE, WaitUntilEndedOrError());
@@ -284,7 +285,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, DecodingError) {
 
 TEST_F(PlatformMediaPipelineIntegrationTest, Rotated_Metadata_0) {
   // This is known not to work on Windows systems older than 8.
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   if (base::win::GetVersion() < base::win::Version::WIN8)
     return;
 #endif
@@ -296,7 +297,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, Rotated_Metadata_0) {
 
 TEST_F(PlatformMediaPipelineIntegrationTest, Rotated_Metadata_90) {
   // This is known not to work on Windows systems older than 8.
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   if (base::win::GetVersion() < base::win::Version::WIN8)
     return;
 #endif
@@ -308,7 +309,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, Rotated_Metadata_90) {
 
 TEST_F(PlatformMediaPipelineIntegrationTest, Rotated_Metadata_180) {
   // This is known not to work on Windows systems older than 8.
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   if (base::win::GetVersion() < base::win::Version::WIN8)
     return;
 #endif
@@ -320,7 +321,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, Rotated_Metadata_180) {
 
 TEST_F(PlatformMediaPipelineIntegrationTest, Rotated_Metadata_270) {
   // This is known not to work on Windows systems older than 8.
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   if (base::win::GetVersion() < base::win::Version::WIN8)
     return;
 #endif
@@ -331,7 +332,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, Rotated_Metadata_270) {
 }
 
 // Configuration change happens only on Windows.
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 TEST_F(PlatformMediaPipelineIntegrationTest, AudioConfigChange) {
   ASSERT_EQ(PIPELINE_OK,
             StartVivaldi("vivaldi-config_change_audio.mp4"));
@@ -366,7 +367,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, VideoConfigChange) {
       GetStream(demuxer_, DemuxerStream::VIDEO)->video_decoder_config();
   EXPECT_EQ(video_config.coded_size().height(), 272);
 }
-#endif  // defined(OS_WIN)
+#endif  // BUILDFLAG(IS_WIN)
 
 TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlaybackPositiveStartTime) {
   ASSERT_EQ(PIPELINE_OK,
@@ -377,7 +378,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlaybackPositiveStartTime) {
             demuxer_->GetStartTime());
 }
 
-#endif  // defined(OS_MAC) || defined(OS_WIN)
+#endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
 
 TEST_F(PlatformMediaPipelineIntegrationTest,
        BasicPlayback_MediaSource_MP4_AudioOnly) {

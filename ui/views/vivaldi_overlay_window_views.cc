@@ -1,12 +1,20 @@
-// Copyright (c) 2020 Vivaldi Technologies AS. All rights reserved
+// Copyright (c) 2020-2022 Vivaldi Technologies AS. All rights reserved
 
+#include "base/values.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/views/overlay/video_overlay_window_views.h"
+#include "components/prefs/scoped_user_pref_update.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/picture_in_picture_window_controller.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/compositor/layer.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/views/controls/mute_button.h"
 #include "ui/views/controls/video_progress.h"
+
+#include "prefs/vivaldi_pref_names.h"
 
 // The file contains the vivaldi specific code for the VideoOverlayWindowViews class
 // used for the Picture-in-Picture window.
@@ -106,7 +114,7 @@ void VideoOverlayWindowViews::UpdateVivaldiControlsVisibility(bool is_visible) {
 }
 
 void VideoOverlayWindowViews::UpdateVivaldiControlsBounds(int primary_control_y,
-                                                     int margin) {
+                                                          int margin) {
   int window_width = GetBounds().size().width();
   int offset_left = kVivaldiButtonControlSize.width();
 
@@ -169,4 +177,60 @@ bool VideoOverlayWindowViews::IsPointInVivaldiControl(const gfx::Point& point) {
     return true;
   }
   return false;
+}
+
+constexpr char kPipLeft[] = "left";
+constexpr char kPipTop[] = "top";
+constexpr char kPipWidth[] = "width";
+constexpr char kPipHeight[] = "height";
+
+// OverlayWindowViews implementation
+gfx::Rect OverlayWindowViews::GetStoredBoundsFromPrefs() {
+  Browser* browser =
+      chrome::FindBrowserWithWebContents(GetController()->GetWebContents());
+  if (browser) {
+    PrefService* prefs = browser->profile()->GetPrefs();
+    if (prefs->FindPreference(vivaldiprefs::kVivaldiPIPPlacement)) {
+      const base::Value* dict =
+          prefs->GetDictionary(vivaldiprefs::kVivaldiPIPPlacement);
+      if (dict) {
+        int left = dict->FindIntPath(kPipLeft).value_or(0);
+        int top = dict->FindIntPath(kPipTop).value_or(0);
+        int width = dict->FindIntPath(kPipWidth).value_or(0);
+        int height = dict->FindIntPath(kPipHeight).value_or(0);
+
+        gfx::Rect placement(left, top, width, height);
+
+        if (!placement.IsEmpty()) {
+          // Set has_been_shown_ so it will not use a default size.
+          has_been_shown_ = true;
+          return placement;
+        }
+      }
+    }
+  }
+  return native_widget() ? GetRestoredBounds() : gfx::Rect();
+}
+
+void OverlayWindowViews::UpdateStoredBounds() {
+  gfx::Rect bounds = GetRestoredBounds();
+  gfx::Size size = bounds.size();
+  if (size.width() == min_size_.width() ||
+      size.height() == min_size_.height()) {
+    // Don't store the ratio modified default size, it's used before the stored
+    // size is applied.
+    return;
+  }
+  Browser* browser =
+      chrome::FindBrowserWithWebContents(GetController()->GetWebContents());
+  if (browser) {
+    PrefService* prefs = browser->profile()->GetPrefs();
+    DictionaryPrefUpdate update(prefs, vivaldiprefs::kVivaldiPIPPlacement);
+    base::Value::Dict& dict = update.Get()->GetDict();
+
+    dict.Set(kPipLeft, bounds.x());
+    dict.Set(kPipTop, bounds.y());
+    dict.Set(kPipWidth, bounds.width());
+    dict.Set(kPipHeight, bounds.height());
+  }
 }

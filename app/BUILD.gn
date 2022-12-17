@@ -150,6 +150,7 @@ grit("vivaldi_unscaled_native_resources") {
   if (is_android) {
     defines += [ "is_oem_automotive_build=$is_vivaldi_automotive"]
     defines += [ "is_oem_polestar_build=$is_vivaldi_polestar" ]
+    defines += [ "is_oem_renault_build=$is_vivaldi_renault" ]
   }
   output_dir = "$root_gen_dir/vivaldi"
   resource_ids = "//vivaldi/app/gritsettings/resource_ids"

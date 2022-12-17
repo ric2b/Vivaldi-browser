@@ -5,8 +5,10 @@
 package org.chromium.chrome.browser.ui.signin.fre;
 
 import android.text.method.LinkMovementMethod;
+import android.transition.AutoTransition;
 import android.transition.TransitionManager;
 import android.view.View;
+import android.widget.ProgressBar;
 
 import androidx.annotation.Nullable;
 
@@ -27,6 +29,15 @@ class SigninFirstRunViewBinder {
         } else if (propertyKey == SigninFirstRunProperties.ON_DISMISS_CLICKED) {
             view.getDismissButtonView().setOnClickListener(
                     model.get(SigninFirstRunProperties.ON_DISMISS_CLICKED));
+        } else if (propertyKey == SigninFirstRunProperties.SHOW_SIGNIN_PROGRESS_SPINNER) {
+            final boolean showSigninProgressSpinner =
+                    model.get(SigninFirstRunProperties.SHOW_SIGNIN_PROGRESS_SPINNER);
+            if (showSigninProgressSpinner) {
+                // Transition is only used when the progress spinner is shown.
+                TransitionManager.beginDelayedTransition(
+                        view, new AutoTransition().setStartDelay(300).setDuration(300));
+            }
+            updateVisibilityOnButtonClick(view, showSigninProgressSpinner);
         } else if (propertyKey == SigninFirstRunProperties.ON_SELECTED_ACCOUNT_CLICKED) {
             view.getSelectedAccountView().setOnClickListener(
                     model.get(SigninFirstRunProperties.ON_SELECTED_ACCOUNT_CLICKED));
@@ -38,8 +49,18 @@ class SigninFirstRunViewBinder {
             view.getSelectedAccountView().setEnabled(!isSelectedAccountSupervised);
             updateVisibility(view, model);
         } else if (propertyKey == SigninFirstRunProperties.ARE_NATIVE_AND_POLICY_LOADED) {
-            // Add a transition animation between the view changes.
-            TransitionManager.beginDelayedTransition(view.getContentView());
+            final boolean areNativeAndPolicyLoaded =
+                    model.get(SigninFirstRunProperties.ARE_NATIVE_AND_POLICY_LOADED);
+            final ProgressBar initialLoadProgressSpinner = view.getInitialLoadProgressSpinnerView();
+            if (areNativeAndPolicyLoaded) {
+                TransitionManager.beginDelayedTransition(view);
+                initialLoadProgressSpinner.setVisibility(View.GONE);
+            } else {
+                // The progress spinner is shown at the beginning when layout inflation may not be
+                // complete. So it is not possible to use TransitionManager with a startDelay in
+                // this case.
+                initialLoadProgressSpinner.animate().alpha(1.0f).setStartDelay(500);
+            }
             updateVisibility(view, model);
         } else if (propertyKey == SigninFirstRunProperties.FRE_POLICY) {
             view.getBrowserManagedHeaderView().setVisibility(
@@ -79,8 +100,6 @@ class SigninFirstRunViewBinder {
     private static void updateVisibility(SigninFirstRunView view, PropertyModel model) {
         final boolean areNativeAndPolicyLoaded =
                 model.get(SigninFirstRunProperties.ARE_NATIVE_AND_POLICY_LOADED);
-        view.getProgressSpinnerView().setVisibility(
-                areNativeAndPolicyLoaded ? View.GONE : View.VISIBLE);
         if (areNativeAndPolicyLoaded) view.onNativeAndPoliciesLoaded();
 
         final int selectedAccountVisibility = areNativeAndPolicyLoaded
@@ -105,6 +124,18 @@ class SigninFirstRunViewBinder {
         final int otherElementsVisibility = areNativeAndPolicyLoaded ? View.VISIBLE : View.GONE;
         view.getContinueButtonView().setVisibility(otherElementsVisibility);
         view.getFooterView().setVisibility(otherElementsVisibility);
+    }
+
+    private static void updateVisibilityOnButtonClick(
+            SigninFirstRunView view, boolean showSigninProgressSpinner) {
+        final int bottomGroupVisibility = showSigninProgressSpinner ? View.INVISIBLE : View.VISIBLE;
+        view.getSelectedAccountView().setVisibility(bottomGroupVisibility);
+        view.getDismissButtonView().setVisibility(bottomGroupVisibility);
+        view.getContinueButtonView().setVisibility(bottomGroupVisibility);
+        view.getFooterView().setVisibility(bottomGroupVisibility);
+
+        view.getSigninProgressSpinner().setVisibility(
+                showSigninProgressSpinner ? View.VISIBLE : View.GONE);
     }
 
     private SigninFirstRunViewBinder() {}

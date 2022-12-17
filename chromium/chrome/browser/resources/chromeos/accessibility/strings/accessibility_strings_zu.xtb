@@ -618,7 +618,6 @@
 <translation id="5170206230005240598">Amagama-ncazo we-Braille anikwe amandla</translation>
 <translation id="5183440668879371625">Umugqa odlule we-braille</translation>
 <translation id="5189244881767082992">Umugqa</translation>
-<translation id="5234747236692380506">thayipha <ph name="TEXT" /></translation>
 <translation id="5263034204789987535">I-Cornsilk</translation>
 <translation id="5263344797180442561">h2</translation>
 <translation id="528468243742722775">Qeda</translation>
@@ -685,6 +684,8 @@
 <translation id="5623842676595125836">Ilogi</translation>
 <translation id="5628125749885014029">h4</translation>
 <translation id="5632083598315326067">Isimbuli yamagrafikhi</translation>
+<translation id="5648939288050772726">Halala! Usufunde ukubaluleka kokusebenzisa i-ChromeVox ngempumelelo. Khumbula ukuthi ungavula imenyu yomyalo ye-ChromeVox nganoma yisiphi isikhahti ngokucindezela Sesha+Isikhathi. Ukuze ufunde nakabanzi nge-ChromeVox ne-ChromeOS, vakashela lezi zindaba ezilandelayo.
+    Uma usuqedile ngalesi sifundo, sebenzisa i-ChromeVox ukuzulela kwinkinobho Yokuvala bese uyayichofoza.</translation>
 <translation id="5653397561111110475">Sebenzisa izici zokufinyelela isikrini esithintwayo se-Chromebook</translation>
 <translation id="5655682562155942719">Yeqa imiyalo</translation>
 <translation id="56637627897541303">Indawo yombhalo</translation>
@@ -794,6 +795,7 @@
 <translation id="641759969622533235">{COUNT,plural, =1{ikholoni}one{# amakholoni}other{# amakholoni}}</translation>
 <translation id="6444046323172968959">Ingxoxo yesexwayiso</translation>
 <translation id="6452403590345320472">Ithebula yokuqukethwe</translation>
+<translation id="6457542714329819968">uhlobo</translation>
 <translation id="6468049171101508116">Inkinobho yokulandelayo</translation>
 <translation id="646954774886932461">Inkomba</translation>
 <translation id="6475604559827479857">Umbala wokugqamisa igama:</translation>
@@ -966,8 +968,6 @@
 <translation id="7701196182766842984">autolst</translation>
 <translation id="7713139339518499741">Izwi elivamile</translation>
 <translation id="7714340021005120797">Alikho ibhokisi lokuhlangene elilandelayo</translation>
-<translation id="772146615414628379">Halala! Usufunde ukubaluleka kokusebenzisa i-ChromeVox ngempumelelo. Khumbula ukuthi ungavula imenyu yomyalo ye-ChromeVox nganoma yisiphi isikhahti ngokucindezela Sesha+Isikhathi. Ukuze ufunde nakabanzi nge-ChromeVox ne-Chrome OS, vakashela lama athikili alandelayo.
-    Uma usuqedile ngalesi sifundo, sebenzisa i-ChromeVox ukuzulela kwinkinobho Yokuvala bese uyayichofoza.</translation>
 <translation id="7724603315864178912">Sika</translation>
 <translation id="7731785449856576010">Ayikho iwijethi yemidiya elandelayo</translation>
 <translation id="7735498529470878067">Ukuhlola ngokuthinta kungakusiza uthole inzwa esheshayo yalokho okusesikrinini.</translation>

@@ -25,6 +25,8 @@
 #include "chrome/common/pref_names.h"
 #include "components/accuracy_tips/features.h"
 #include "components/metrics_services_manager/metrics_services_manager.h"
+#include "components/permissions/constants.h"
+#include "components/permissions/features.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/version_info/version_info.h"
@@ -40,6 +42,10 @@ constexpr char kHatsSurveyTriggerAutofillAddress[] = "autofill-address";
 constexpr char kHatsSurveyTriggerAutofillCard[] = "autofill-card";
 constexpr char kHatsSurveyTriggerAutofillPassword[] = "autofill-password";
 constexpr char kHatsSurveyTriggerNtpModules[] = "ntp-modules";
+constexpr char kHatsSurveyTriggerNtpPhotosModuleOptOut[] =
+    "ntp-photos-module-opt-out";
+constexpr char kHatsSurveyTriggerPermissionsPostPrompt[] =
+    "permissions-post-prompt";
 constexpr char kHatsSurveyTriggerPrivacyGuide[] = "privacy-guide";
 constexpr char kHatsSurveyTriggerPrivacySandbox[] = "privacy-sandbox";
 constexpr char kHatsSurveyTriggerSettings[] = "settings";
@@ -159,6 +165,10 @@ std::vector<HatsService::SurveyConfig> GetSurveyConfigs() {
   survey_configs.emplace_back(
       &features::kHappinessTrackingSurveysForDesktopNtpModules,
       kHatsSurveyTriggerNtpModules);
+  // NTP Photos module opt-out survey.
+  survey_configs.emplace_back(
+      &features::kHappinessTrackingSurveysForNtpPhotosOptOut,
+      kHatsSurveyTriggerNtpPhotosModuleOptOut);
 
   // Trust & Safety Sentiment surveys.
   survey_configs.emplace_back(
@@ -233,6 +243,21 @@ std::vector<HatsService::SurveyConfig> GetSurveyConfigs() {
   survey_configs.emplace_back(
       &features::kHappinessTrackingSurveysForDesktopWhatsNew,
       kHatsSurveyTriggerWhatsNew);
+
+  // Permissions surveys.
+  survey_configs.emplace_back(
+      &permissions::features::kPermissionsPostPromptSurvey,
+      kHatsSurveyTriggerPermissionsPostPrompt,
+      permissions::feature_params::kPermissionsPostPromptSurveyTriggerId.Get(),
+      std::vector<std::string>{
+          permissions::kPermissionsPostPromptSurveyHadGestureKey},
+      std::vector<std::string>{
+          /* String values correspond to known enumerators in
+           * permissions::PermissionPromptDisposition. */
+          permissions::kPermissionsPostPromptSurveyPromptDispositionKey,
+          /* String values correspond to known enumerators in
+           * permissions::PermissionPromptDispositionReason. */
+          permissions::kPermissionsPostPromptSurveyPromptDispositionReasonKey});
 
   return survey_configs;
 }

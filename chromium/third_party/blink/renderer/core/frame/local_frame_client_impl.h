@@ -36,12 +36,14 @@
 
 #include "base/memory/scoped_refptr.h"
 
+#include "base/time/time.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/public/common/responsiveness_metrics/user_interaction_latency.h"
 #include "third_party/blink/public/mojom/devtools/devtools_agent.mojom-blink-forward.h"
+#include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
@@ -120,6 +122,8 @@ class CORE_EXPORT LocalFrameClientImpl final : public LocalFrameClient {
       NavigationPolicy,
       WebFrameLoadType,
       bool is_client_redirect,
+      // TODO(crbug.com/1315802): Refactor _unfencedTop handling.
+      bool is_unfenced_top_navigation,
       mojom::blink::TriggeringEventInfo,
       HTMLFormElement*,
       network::mojom::CSPDisposition should_bypass_main_world_csp,
@@ -139,7 +143,6 @@ class CORE_EXPORT LocalFrameClientImpl final : public LocalFrameClient {
   void DidChangePerformanceTiming() override;
   void DidObserveInputDelay(base::TimeDelta) override;
   void DidObserveUserInteraction(base::TimeDelta max_event_duration,
-                                 base::TimeDelta total_event_duration,
                                  UserInteractionType interaction_type) override;
   void DidChangeCpuTiming(base::TimeDelta) override;
   void DidObserveLoadingBehavior(LoadingBehaviorFlag) override;
@@ -149,8 +152,6 @@ class CORE_EXPORT LocalFrameClientImpl final : public LocalFrameClient {
                           uint32_t ng_block_count,
                           uint32_t all_call_count,
                           uint32_t ng_call_count) override;
-  void DidObserveLazyLoadBehavior(
-      WebLocalFrameClient::LazyLoadBehavior lazy_load_behavior) override;
   void PreloadSubresourceOptimizationsForOrigins(
       const WTF::HashSet<scoped_refptr<const SecurityOrigin>,
                          SecurityOriginHash>& origins) override;
@@ -168,11 +169,7 @@ class CORE_EXPORT LocalFrameClientImpl final : public LocalFrameClient {
       std::unique_ptr<PolicyContainer> policy_container,
       std::unique_ptr<WebDocumentLoader::ExtraData> extra_data) override;
 
-  // Updates the underlying |WebDocumentLoaderImpl| of |DocumentLoader| with
-  // extra_data.
-  void UpdateDocumentLoader(
-      DocumentLoader* document_loader,
-      std::unique_ptr<WebDocumentLoader::ExtraData> extra_data) override;
+  String UserAgentOverride() override;
   WTF::String UserAgent() override;
   WTF::String FullUserAgent() override;
   WTF::String ReducedUserAgent() override;
@@ -189,8 +186,8 @@ class CORE_EXPORT LocalFrameClientImpl final : public LocalFrameClient {
 
   RemoteFrame* CreateFencedFrame(
       HTMLFencedFrameElement*,
-      mojo::PendingAssociatedReceiver<mojom::blink::FencedFrameOwnerHost>)
-      override;
+      mojo::PendingAssociatedReceiver<mojom::blink::FencedFrameOwnerHost>,
+      mojom::blink::FencedFrameMode) override;
 
   WebPluginContainerImpl* CreatePlugin(HTMLPlugInElement&,
                                        const KURL&,

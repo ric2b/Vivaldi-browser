@@ -27,6 +27,7 @@
 #include "ash/system/message_center/message_view_factory.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
+#include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/check.h"
@@ -533,8 +534,10 @@ void CaptureModeController::SetUserCaptureRegion(const gfx::Rect& region,
   if (!user_capture_region_.IsEmpty() && by_user)
     last_capture_region_update_time_ = base::TimeTicks::Now();
 
-  if (camera_controller_ && !is_recording_in_progress())
+  if (camera_controller_ && !is_recording_in_progress() &&
+      source_ == CaptureModeSource::kRegion) {
     camera_controller_->MaybeReparentPreviewWidget();
+  }
 }
 
 bool CaptureModeController::CanShowUserNudge() const {
@@ -676,7 +679,7 @@ void CaptureModeController::CheckFolderAvailability(
     base::OnceCallback<void(bool available)> callback) {
   blocking_task_runner_->PostTaskAndReplyWithResult(
       FROM_HERE, base::BindOnce(&base::PathExists, folder),
-      base::BindOnce(std::move(callback)));
+      std::move(callback));
 }
 
 void CaptureModeController::SetWindowProtectionMask(aura::Window* window,
@@ -879,17 +882,18 @@ void CaptureModeController::EndSessionOrRecording(EndRecordingReason reason) {
     // is active or after the three-second countdown had started but not
     // finished yet.
     Stop();
-    return;
   }
 
   if (!is_recording_in_progress())
     return;
 
-  if (reason == EndRecordingReason::kImminentSuspend) {
-    // If suspend happens while recording is in progress, we consider this a
-    // failure, and cut the recording immediately. The recording service will
-    // flush any remaining buffered chunks in the muxer before it terminates.
-    RecordEndRecordingReason(EndRecordingReason::kImminentSuspend);
+  if (reason == EndRecordingReason::kImminentSuspend ||
+      reason == EndRecordingReason::kShuttingDown) {
+    // If suspend or shutdown happen while recording is in progress, we consider
+    // this a failure, and cut the recording immediately. The recording service
+    // will flush any remaining buffered chunks in the muxer before it
+    // terminates.
+    RecordEndRecordingReason(reason);
     FinalizeRecording(/*success=*/false, gfx::ImageSkia());
     return;
   }
@@ -1230,7 +1234,7 @@ void CaptureModeController::ShowPreviewNotification(
   const int title_id = for_video ? IDS_ASH_SCREEN_CAPTURE_RECORDING_TITLE
                                  : IDS_ASH_SCREEN_CAPTURE_SCREENSHOT_TITLE;
   const int message_id = for_video && low_disk_space_threshold_reached_
-                             ? IDS_ASH_SCREEN_CAPTURE_LOW_DISK_SPACE_MESSAGE
+                             ? IDS_ASH_SCREEN_CAPTURE_LOW_STORAGE_SPACE_MESSAGE
                              : IDS_ASH_SCREEN_CAPTURE_MESSAGE;
 
   message_center::RichNotificationData optional_fields;
@@ -1401,6 +1405,9 @@ void CaptureModeController::BeginVideoRecording(
   DCHECK(GetCaptureParams());
   DCHECK(!video_file_path.empty());
   DCHECK(video_file_path.MatchesExtension(".webm"));
+
+  base::AutoReset<bool> initializing_resetter(&is_initializing_recording_,
+                                              true);
 
   // Do not trigger an alert when exiting the session, since we end the session
   // to start recording.
@@ -1630,6 +1637,11 @@ void CaptureModeController::OnDlpRestrictionCheckedAtVideoEnd(
   } else {
     OnVideoFileSaved(video_file_path, video_thumbnail, success,
                      in_projector_mode);
+  }
+
+  if (features::IsProjectorEnabled()) {
+    ProjectorControllerImpl::Get()->OnDlpRestrictionCheckedAtVideoEnd(
+        in_projector_mode, should_delete_file, video_thumbnail);
   }
 
   low_disk_space_threshold_reached_ = false;

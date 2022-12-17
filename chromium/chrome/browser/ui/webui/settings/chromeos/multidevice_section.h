@@ -7,13 +7,13 @@
 
 // TODO(https://crbug.com/1164001): move to forward declaration.
 #include "ash/components/phonehub/phone_hub_manager.h"
+#include "ash/services/multidevice_setup/public/cpp/multidevice_setup_client.h"
 #include "ash/webui/eche_app_ui/eche_app_manager.h"
 #include "base/values.h"
 #include "chrome/browser/ui/webui/settings/chromeos/os_settings_section.h"
 // TODO(https://crbug.com/1164001): move to forward declaration.
 #include "chrome/browser/ash/android_sms/android_sms_service.h"
 #include "chrome/browser/ui/webui/nearby_share/public/mojom/nearby_share_settings.mojom.h"
-#include "chromeos/services/multidevice_setup/public/cpp/multidevice_setup_client.h"
 #include "components/prefs/pref_change_registrar.h"
 
 class PrefService;
@@ -46,6 +46,7 @@ class MultiDeviceSection
   ~MultiDeviceSection() override;
 
  private:
+  friend class MultiDeviceSectionTest;
   // OsSettingsSection:
   void AddLoadTimeData(content::WebUIDataSource* html_source) override;
   void AddHandlers(content::WebUI* web_ui) override;
@@ -64,10 +65,10 @@ class MultiDeviceSection
       const multidevice_setup::MultiDeviceSetupClient::FeatureStatesMap&
           feature_states_map) override;
 
-  // Nearby Share enabled pref change observer.
-  void OnNearbySharingEnabledChanged();
+  // Screen lock enabled pref change observer.
+  void OnEnableScreenLockChanged();
 
-  bool IsFeatureSupported(multidevice_setup::mojom::Feature feature);
+  bool IsFeatureSupported(ash::multidevice_setup::mojom::Feature feature);
   void RefreshNearbyBackgroundScanningShareSearchConcepts();
 
   // nearby_share::mojom::NearbyShareSettingsObserver:
@@ -92,6 +93,7 @@ class MultiDeviceSection
   PrefService* pref_service_;
   PrefChangeRegistrar pref_change_registrar_;
   ash::eche_app::EcheAppManager* eche_app_manager_;
+  content::WebUIDataSource* html_source_;
 };
 
 }  // namespace settings

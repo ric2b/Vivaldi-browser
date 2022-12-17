@@ -57,19 +57,19 @@ bool WillDispatchTabUpdatedEvent(
       ExtensionTabUtil::CreateTabObject(contents, scrub_tab_behavior,
                                         extension);
 
-  std::unique_ptr<base::DictionaryValue> tab_value = tab_object->ToValue();
+  base::Value tab_value =
+      base::Value::FromUniquePtrValue(tab_object->ToValue());
 
-  auto changed_properties = std::make_unique<base::DictionaryValue>();
-  const base::Value* value = nullptr;
+  base::Value::Dict changed_properties;
   for (const auto& property : changed_property_names) {
-    if (tab_value->Get(property, &value))
-      changed_properties->SetKey(property, value->Clone());
+    if (const base::Value* value = tab_value.FindKey(property))
+      changed_properties.Set(property, value->Clone());
   }
 
   *event_args_out = std::make_unique<base::Value::List>();
   (*event_args_out)->Append(ExtensionTabUtil::GetTabId(contents));
-  (*event_args_out)->Append(std::move(*changed_properties));
-  (*event_args_out)->Append(std::move(*tab_value));
+  (*event_args_out)->Append(base::Value(std::move(changed_properties)));
+  (*event_args_out)->Append(std::move(tab_value));
   return true;
 }
 
@@ -85,14 +85,14 @@ bool WillDispatchTabCreatedEvent(
   ExtensionTabUtil::ScrubTabBehavior scrub_tab_behavior =
       ExtensionTabUtil::GetScrubTabBehavior(extension, target_context,
                                             contents);
-  std::unique_ptr<base::DictionaryValue> tab_value =
+  base::Value tab_value = base::Value::FromUniquePtrValue(
       ExtensionTabUtil::CreateTabObject(contents, scrub_tab_behavior, extension)
-          ->ToValue();
-  tab_value->SetBoolKey(tabs_constants::kSelectedKey, active);
-  tab_value->SetBoolKey(tabs_constants::kActiveKey, active);
+          ->ToValue());
+  tab_value.SetBoolKey(tabs_constants::kSelectedKey, active);
+  tab_value.SetBoolKey(tabs_constants::kActiveKey, active);
 
   *event_args_out = std::make_unique<base::Value::List>();
-  (*event_args_out)->Append(std::move(*tab_value));
+  (*event_args_out)->Append(std::move(tab_value));
   return true;
 }
 
@@ -355,20 +355,19 @@ void TabsEventRouter::DispatchTabInsertedAt(TabStripModel* tab_strip_model,
   std::unique_ptr<base::ListValue> args(new base::ListValue);
   args->Append(tab_id);
 
-  std::unique_ptr<base::DictionaryValue> object_args(
-      new base::DictionaryValue());
-  object_args->SetKey(tabs_constants::kNewWindowIdKey,
-                      Value(ExtensionTabUtil::GetWindowIdOfTab(contents)));
-  object_args->SetKey(tabs_constants::kNewPositionKey, Value(index));
+  base::Value::Dict object_args;
+  object_args.Set(tabs_constants::kNewWindowIdKey,
+                  Value(ExtensionTabUtil::GetWindowIdOfTab(contents)));
+  object_args.Set(tabs_constants::kNewPositionKey, Value(index));
 
   // NOTE(andre@vivaldi.com): If NavigationController::NeedsReload is set this
   // is a lazy-loaded tab. Report this to the client so we can act the right
   // way.
   bool is_lazy_loaded_tab = contents->GetController().NeedsReload();
   bool is_discarded = ExtensionTabUtil::IsDiscarded(contents);
-  object_args->SetBoolean(tabs_constants::kDiscardedKey,
+  object_args.Set(tabs_constants::kDiscardedKey,
                           is_discarded || is_lazy_loaded_tab);
-  args->Append(std::move(object_args));
+  args->Append(base::Value(std::move(object_args)));
 
   Profile* profile = Profile::FromBrowserContext(contents->GetBrowserContext());
   DispatchEvent(profile, events::TABS_ON_ATTACHED,
@@ -384,13 +383,12 @@ void TabsEventRouter::DispatchTabClosingAt(TabStripModel* tab_strip_model,
   std::unique_ptr<base::ListValue> args(new base::ListValue);
   args->Append(tab_id);
 
-  std::unique_ptr<base::DictionaryValue> object_args(
-      new base::DictionaryValue());
-  object_args->SetIntKey(tabs_constants::kWindowIdKey,
-                         ExtensionTabUtil::GetWindowIdOfTab(contents));
-  object_args->SetBoolKey(tabs_constants::kWindowClosing,
-                          tab_strip_model->closing_all());
-  args->Append(std::move(object_args));
+  base::Value::Dict object_args;
+  object_args.Set(tabs_constants::kWindowIdKey,
+                  ExtensionTabUtil::GetWindowIdOfTab(contents));
+  object_args.Set(tabs_constants::kWindowClosing,
+                  tab_strip_model->closing_all());
+  args->Append(base::Value(std::move(object_args)));
 
   Profile* profile = Profile::FromBrowserContext(contents->GetBrowserContext());
   DispatchEvent(profile, events::TABS_ON_REMOVED,
@@ -411,12 +409,11 @@ void TabsEventRouter::DispatchTabDetachedAt(WebContents* contents,
   std::unique_ptr<base::ListValue> args(new base::ListValue);
   args->Append(ExtensionTabUtil::GetTabId(contents));
 
-  std::unique_ptr<base::DictionaryValue> object_args(
-      new base::DictionaryValue());
-  object_args->SetKey(tabs_constants::kOldWindowIdKey,
-                      Value(ExtensionTabUtil::GetWindowIdOfTab(contents)));
-  object_args->SetKey(tabs_constants::kOldPositionKey, Value(index));
-  args->Append(std::move(object_args));
+  base::Value::Dict object_args;
+  object_args.Set(tabs_constants::kOldWindowIdKey,
+                  ExtensionTabUtil::GetWindowIdOfTab(contents));
+  object_args.Set(tabs_constants::kOldPositionKey, index);
+  args->Append(base::Value(std::move(object_args)));
 
   Profile* profile = Profile::FromBrowserContext(contents->GetBrowserContext());
   DispatchEvent(profile, events::TABS_ON_DETACHED,
@@ -431,10 +428,10 @@ void TabsEventRouter::DispatchActiveTabChanged(WebContents* old_contents,
   int tab_id = ExtensionTabUtil::GetTabId(new_contents);
   args->Append(tab_id);
 
-  auto object_args = std::make_unique<base::DictionaryValue>();
-  object_args->SetKey(tabs_constants::kWindowIdKey,
-                      Value(ExtensionTabUtil::GetWindowIdOfTab(new_contents)));
-  args->Append(object_args->CreateDeepCopy());
+  base::Value::Dict object_args;
+  object_args.Set(tabs_constants::kWindowIdKey,
+                  ExtensionTabUtil::GetWindowIdOfTab(new_contents));
+  args->Append(base::Value(object_args.Clone()));
 
   // The onActivated event replaced onActiveChanged and onSelectionChanged. The
   // deprecated events take two arguments: tabId, {windowId}.
@@ -452,8 +449,8 @@ void TabsEventRouter::DispatchActiveTabChanged(WebContents* old_contents,
 
   // The onActivated event takes one argument: {windowId, tabId}.
   auto on_activated_args = std::make_unique<base::ListValue>();
-  object_args->SetKey(tabs_constants::kTabIdKey, Value(tab_id));
-  on_activated_args->Append(std::move(object_args));
+  object_args.Set(tabs_constants::kTabIdKey, tab_id);
+  on_activated_args->Append(base::Value(std::move(object_args)));
   DispatchEvent(
       profile, events::TABS_ON_ACTIVATED, api::tabs::OnActivated::kEventName,
       std::move(on_activated_args), EventRouter::USER_GESTURE_UNKNOWN);
@@ -475,14 +472,14 @@ void TabsEventRouter::DispatchTabSelectionChanged(
   }
 
   std::unique_ptr<base::ListValue> args(new base::ListValue);
-  std::unique_ptr<base::DictionaryValue> select_info(new base::DictionaryValue);
+  base::Value::Dict select_info;
 
-  select_info->SetKey(
+  select_info.Set(
       tabs_constants::kWindowIdKey,
-      Value(ExtensionTabUtil::GetWindowIdOfTabStripModel(tab_strip_model)));
+      ExtensionTabUtil::GetWindowIdOfTabStripModel(tab_strip_model));
 
-  select_info->SetKey(tabs_constants::kTabIdsKey, std::move(all_tabs));
-  args->Append(std::move(select_info));
+  select_info.Set(tabs_constants::kTabIdsKey, std::move(all_tabs));
+  args->Append(base::Value(std::move(select_info)));
 
   // The onHighlighted event replaced onHighlightChanged.
   Profile* profile = tab_strip_model->profile();
@@ -502,13 +499,12 @@ void TabsEventRouter::DispatchTabMoved(WebContents* contents,
   std::unique_ptr<base::ListValue> args(new base::ListValue);
   args->Append(ExtensionTabUtil::GetTabId(contents));
 
-  std::unique_ptr<base::DictionaryValue> object_args(
-      new base::DictionaryValue());
-  object_args->SetKey(tabs_constants::kWindowIdKey,
-                      Value(ExtensionTabUtil::GetWindowIdOfTab(contents)));
-  object_args->SetKey(tabs_constants::kFromIndexKey, Value(from_index));
-  object_args->SetKey(tabs_constants::kToIndexKey, Value(to_index));
-  args->Append(std::move(object_args));
+  base::Value::Dict object_args;
+  object_args.Set(tabs_constants::kWindowIdKey,
+                  ExtensionTabUtil::GetWindowIdOfTab(contents));
+  object_args.Set(tabs_constants::kFromIndexKey, from_index);
+  object_args.Set(tabs_constants::kToIndexKey, to_index);
+  args->Append(base::Value(std::move(object_args)));
 
   Profile* profile = Profile::FromBrowserContext(contents->GetBrowserContext());
   DispatchEvent(profile, events::TABS_ON_MOVED, api::tabs::OnMoved::kEventName,

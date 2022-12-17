@@ -23,22 +23,23 @@ import './sidebar.js';
 import './site_permissions.js';
 import './site_permissions_by_site.js';
 import './toolbar.js';
-// <if expr="chromeos">
+// <if expr="chromeos_ash">
 import './kiosk_dialog.js';
 
 // </if>
 
 import {CrViewManagerElement} from 'chrome://resources/cr_elements/cr_view_manager/cr_view_manager.js';
-import {assert, assertNotReached} from 'chrome://resources/js/assert.m.js';
+import {assert, assertNotReached} from 'chrome://resources/js/assert_ts.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
-import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {ActivityLogExtensionPlaceholder} from './activity_log/activity_log.js';
 import {ExtensionsDetailViewElement} from './detail_view.js';
 import {ExtensionsItemListElement} from './item_list.js';
-// <if expr="chromeos">
+// <if expr="chromeos_ash">
 import {KioskBrowserProxyImpl} from './kiosk_browser_proxy.js';
 // </if>
+import {getTemplate} from './manager.html.js';
 import {Dialog, navigation, Page, PageState} from './navigation_helper.js';
 import {Service} from './service.js';
 
@@ -86,6 +87,10 @@ export interface ExtensionsManagerElement {
 export class ExtensionsManagerElement extends PolymerElement {
   static get is() {
     return 'extensions-manager';
+  }
+
+  static get template() {
+    return getTemplate();
   }
 
   static get properties() {
@@ -186,7 +191,7 @@ export class ExtensionsManagerElement extends PolymerElement {
        */
       fromActivityLog_: Boolean,
 
-      // <if expr="chromeos">
+      // <if expr="chromeos_ash">
       kioskEnabled_: {
         type: Boolean,
         value: false,
@@ -223,7 +228,7 @@ export class ExtensionsManagerElement extends PolymerElement {
   private showOptionsDialog_: boolean;
   private fromActivityLog_: boolean;
 
-  // <if expr="chromeos">
+  // <if expr="chromeos_ash">
   private kioskEnabled_: boolean;
   private showKioskDialog_: boolean;
   // </if>
@@ -247,7 +252,7 @@ export class ExtensionsManagerElement extends PolymerElement {
     this.navigationListener_ = null;
   }
 
-  ready() {
+  override ready() {
     super.ready();
 
     this.addEventListener('load-error', this.onLoadError_);
@@ -277,7 +282,7 @@ export class ExtensionsManagerElement extends PolymerElement {
           this.onItemStateChanged_.bind(this));
     });
 
-    // <if expr="chromeos">
+    // <if expr="chromeos_ash">
     KioskBrowserProxyImpl.getInstance().initializeKioskAppSettings().then(
         params => {
           this.kioskEnabled_ = params.kioskEnabled;
@@ -285,7 +290,7 @@ export class ExtensionsManagerElement extends PolymerElement {
     // </if>
   }
 
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
 
     document.documentElement.classList.remove('loading');
@@ -297,9 +302,10 @@ export class ExtensionsManagerElement extends PolymerElement {
     });
   }
 
-  disconnectedCallback() {
+  override disconnectedCallback() {
     super.disconnectedCallback();
-    assert(navigation.removeListener(this.navigationListener_!));
+    assert(this.navigationListener_);
+    assert(navigation.removeListener(this.navigationListener_));
     this.navigationListener_ = null;
   }
 
@@ -389,10 +395,9 @@ export class ExtensionsManagerElement extends PolymerElement {
         return 'extensions_';
       case ExtensionType.THEME:
         assertNotReached('Don\'t send themes to the chrome://extensions page');
-        break;
+      default:
+        assertNotReached();
     }
-    assertNotReached();
-    return '';
   }
 
   /**
@@ -550,9 +555,9 @@ export class ExtensionsManagerElement extends PolymerElement {
     }
 
     if (toPage === Page.DETAILS) {
-      this.detailViewItem_ = assert(data);
+      this.detailViewItem_ = data;
     } else if (toPage === Page.ERRORS) {
-      this.errorPageItem_ = assert(data);
+      this.errorPageItem_ = data;
     } else if (toPage === Page.ACTIVITY_LOG) {
       if (!this.showActivityLog) {
         // Redirect back to the details page if we try to view the
@@ -562,7 +567,7 @@ export class ExtensionsManagerElement extends PolymerElement {
         return;
       }
 
-      this.activityLogItem_ = data ? assert(data) : activityLogPlaceholder;
+      this.activityLogItem_ = data || activityLogPlaceholder;
     } else if (
         (toPage === Page.SITE_PERMISSIONS ||
          toPage === Page.SITE_PERMISSIONS_ALL_SITES) &&
@@ -667,7 +672,7 @@ export class ExtensionsManagerElement extends PolymerElement {
     this.showInstallWarningsDialog_ = false;
   }
 
-  // <if expr="chromeos">
+  // <if expr="chromeos_ash">
   private onKioskTap_() {
     this.showKioskDialog_ = true;
   }
@@ -676,10 +681,6 @@ export class ExtensionsManagerElement extends PolymerElement {
     this.showKioskDialog_ = false;
   }
   // </if>
-
-  static get template() {
-    return html`{__html_template__}`;
-  }
 }
 
 declare global {

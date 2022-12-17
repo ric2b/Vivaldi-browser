@@ -53,6 +53,11 @@ component("wtf") {
     "container_annotations.h",
     "cross_thread_copier.cc",
     "cross_thread_copier.h",
+    "cross_thread_copier_base.h",
+    "cross_thread_copier_gfx.h",
+    "cross_thread_copier_media.h",
+    "cross_thread_copier_mojo.h",
+    "cross_thread_copier_std.h",
     "cross_thread_functional.h",
     "date_math.cc",
     "date_math.h",
@@ -177,6 +182,7 @@ component("wtf") {
     "thread_specific.h",
     "threading.cc",
     "threading.h",
+    "threading_primitives.cc",
     "threading_primitives.h",
     "type_traits.h",
     "uuid.cc",
@@ -231,8 +237,6 @@ component("wtf") {
   }
 
   if (is_win) {
-    sources += [ "threading_win.cc" ]
-
     cflags = [ "/wd4068" ]  # Unknown pragma.
 
     # Inject Visual Studio debug visualizers for our types into all targets
@@ -244,8 +248,6 @@ component("wtf") {
       # in generated build files.
       "//tools/win/DebugVisualizers/blink.natvis",
     ]
-  } else {
-    sources += [ "threading_pthreads.cc" ]
   }
 
   if (is_android) {

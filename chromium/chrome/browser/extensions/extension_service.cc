@@ -13,6 +13,7 @@
 
 #include "base/barrier_closure.h"
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
@@ -22,6 +23,7 @@
 #include "base/location.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/observer_list.h"
 #include "base/one_shot_event.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_tokenizer.h"

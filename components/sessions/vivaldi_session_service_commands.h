@@ -25,20 +25,20 @@ using sessions::SessionCommand;
 namespace vivaldi {
 
 // Creates a SessionCommand that represents ext data.
-SESSIONS_EXPORT std::unique_ptr<SessionCommand> CreateSetTabExtDataCommand(
+SESSIONS_EXPORT std::unique_ptr<SessionCommand> CreateSetTabVivExtDataCommand(
     SessionID::id_type command_id,
     SessionID tab_id,
-    const std::string& ext_data);
+    const std::string& viv_ext_data);
 
 // Creates a SessionCommand stores a browser window's ext data.
-SESSIONS_EXPORT std::unique_ptr<SessionCommand> CreateSetWindowExtDataCommand(
+SESSIONS_EXPORT std::unique_ptr<SessionCommand> CreateSetWindowVivExtDataCommand(
     SessionID::id_type command_id,
     SessionID window_id,
-    const std::string& ext_data);
+    const std::string& viv_ext_data);
 
 // Creates a SessionCommand that records the override of a page action script
 // for a specific tab
-SESSIONS_EXPORT std::unique_ptr<SessionCommand> CreatePageActionOverrideCommand(
+SESSIONS_EXPORT std::unique_ptr<SessionCommand> CreateVivPageActionOverrideCommand(
     SessionID::id_type command_id,
     SessionID tab_id,
     const std::string& script_path,
@@ -47,33 +47,33 @@ SESSIONS_EXPORT std::unique_ptr<SessionCommand> CreatePageActionOverrideCommand(
 // Creates a SessionCommand that records the removal of an override of a page
 // action script for a specific tab
 SESSIONS_EXPORT std::unique_ptr<SessionCommand>
-CreateRemovePageActionOverrideCommand(SessionID::id_type command_id,
+CreateRemoveVivPageActionOverrideCommand(SessionID::id_type command_id,
                                       SessionID tab_id,
                                       const std::string& script_path);
 
 // Extracts a SessionCommand as previously created by
-// CreateSetExtDataCommand into the tab id and ext data.
-SESSIONS_EXPORT bool RestoreSetExtDataCommand(const SessionCommand& command,
+// CreateSetVivExtDataCommand into the tab id and ext data.
+SESSIONS_EXPORT bool RestoreSetVivExtDataCommand(const SessionCommand& command,
                                               SessionID* tab_id,
-                                              std::string* ext_data);
+                                              std::string* viv_ext_data);
 
 // Extracts a SessionCommand as previously created by
 // CreateSetWindowExtDataCommand into the window id and ext data.
-SESSIONS_EXPORT bool RestoreSetWindowExtDataCommand(
+SESSIONS_EXPORT bool RestoreSetWindowVivExtDataCommand(
     const SessionCommand& command,
     SessionID* window_id,
-    std::string* ext_data);
+    std::string* viv_ext_data);
 
 // Extracts a SessionCommand as previously created by
 // CreatePageActionOverrideCommand into the tab id and page action script
 // override data
-SESSIONS_EXPORT bool RestorePageActionOverrideCommand(
+SESSIONS_EXPORT bool RestoreVivPageActionOverrideCommand(
     const SessionCommand& command,
     SessionID* tab_id,
     std::string* script_path,
     bool* is_enabled_override);
 
-SESSIONS_EXPORT bool RestoreRemovePageActionOverrideCommand(
+SESSIONS_EXPORT bool RestoreRemoveVivPageActionOverrideCommand(
     const SessionCommand& command,
     SessionID* tab_id,
     std::string* script_path);
@@ -102,21 +102,21 @@ SESSIONS_EXPORT bool VivaldiCreateTabsAndWindows(
 SESSIONS_EXPORT std::unique_ptr<SessionCommand>
 CreateSetSelectedTabInWindowCommand(const SessionID& window_id, int index);
 
-SESSIONS_EXPORT std::unique_ptr<SessionCommand> CreateSetWindowExtDataCommand(
+SESSIONS_EXPORT std::unique_ptr<SessionCommand> CreateSetWindowVivExtDataCommand(
     const SessionID& window_id,
-    const std::string& ext_data);
+    const std::string& viv_ext_data);
 
-SESSIONS_EXPORT std::unique_ptr<SessionCommand> CreateSetExtDataCommand(
+SESSIONS_EXPORT std::unique_ptr<SessionCommand> CreateSetVivExtDataCommand(
     const SessionID& tab_id,
-    const std::string& ext_data);
+    const std::string& viv_ext_data);
 
-SESSIONS_EXPORT std::unique_ptr<SessionCommand> CreatePageActionOverrideCommand(
+SESSIONS_EXPORT std::unique_ptr<SessionCommand> CreateVivPageActionOverrideCommand(
     const SessionID& tab_id,
     const std::string& script_path,
     bool is_enabled_override);
 
 SESSIONS_EXPORT std::unique_ptr<SessionCommand>
-CreateRemovePageActionOverrideCommand(const SessionID& tab_id,
+CreateRemoveVivPageActionOverrideCommand(const SessionID& tab_id,
                                       const std::string& script_path);
 }  // namespace sessions
 

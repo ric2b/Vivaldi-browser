@@ -165,8 +165,6 @@ ProtoEnum::BackForwardCacheNotRestoredReason NotRestoredReasonToTraceEnum(
       return ProtoEnum::BROWSING_INSTANCE_NOT_SWAPPED;
     case Reason::kBackForwardCacheDisabledForDelegate:
       return ProtoEnum::BACK_FORWARD_CACHE_DISABLED_FOR_DELEGATE;
-    case Reason::kOptInUnloadHeaderNotPresent:
-      return ProtoEnum::OPT_IN_UNLOAD_HEADER_NOT_PRESENT;
     case Reason::kUnloadHandlerExistsInMainFrame:
       return ProtoEnum::UNLOAD_HANDLER_EXISTS_IN_MAIN_FRAME;
     case Reason::kUnloadHandlerExistsInSubFrame:
@@ -181,8 +179,10 @@ ProtoEnum::BackForwardCacheNotRestoredReason NotRestoredReasonToTraceEnum(
       return ProtoEnum::CACHE_CONTROL_NO_STORE_HTTP_ONLY_COOKIE_MODIFIED;
     case Reason::kNoResponseHead:
       return ProtoEnum::NO_RESPONSE_HEAD;
-    case Reason::kActivationNavigationsDisallowedForBug1234857:
-      return ProtoEnum::ACTIVATION_NAVIGATION_DISALLOWED_FOR_BUG_1234857;
+    case Reason::kErrorDocument:
+      return ProtoEnum::ERROR_DOCUMENT;
+    case Reason::kFencedFramesEmbedder:
+      return ProtoEnum::FENCED_FRAMES_EMBEDDER;
     case Reason::kBlocklistedFeatures:
       return ProtoEnum::BLOCKLISTED_FEATURES;
     case Reason::kUnknown:
@@ -238,8 +238,9 @@ std::string DisabledReasonsToString(
     const std::set<BackForwardCache::DisabledReason>& reasons) {
   std::vector<std::string> descriptions;
   for (const auto& reason : reasons) {
-    descriptions.push_back(base::StringPrintf(
-        "%d:%d:%s", reason.source, reason.id, reason.description.c_str()));
+    descriptions.push_back(
+        base::StringPrintf("%d:%d:%s:%s", reason.source, reason.id,
+                           reason.description.c_str(), reason.context.c_str()));
   }
   return base::JoinString(descriptions, ", ");
 }
@@ -364,9 +365,6 @@ std::string BackForwardCacheCanStoreDocumentResult::NotRestoredReasonToString(
       return "Browsing instance is not swapped";
     case Reason::kBackForwardCacheDisabledForDelegate:
       return "BackForwardCache is not supported by delegate";
-    case Reason::kOptInUnloadHeaderNotPresent:
-      return "BFCache-Opt-In header not present, or does not include `unload` "
-             "token, and an experimental config which requires it is active.";
     case Reason::kUnloadHandlerExistsInMainFrame:
       return "Unload handler exists in the main frame, and the current "
              "experimental config doesn't permit it to be BFCached.";
@@ -390,10 +388,10 @@ std::string BackForwardCacheCanStoreDocumentResult::NotRestoredReasonToString(
     case Reason::kNoResponseHead:
       return "main RenderFrameHost doesn't have response headers set, probably "
              "due not having successfully committed a navigation.";
-    case Reason::kActivationNavigationsDisallowedForBug1234857:
-      return "Activation navigations are disallowed to avoid bypassing "
-             "PasswordProtectionService as a workaround for "
-             "https://crbug.com/1234857.";
+    case Reason::kErrorDocument:
+      return "Error documents cannot be stored in bfcache";
+    case Reason::kFencedFramesEmbedder:
+      return "Pages using FencedFrames cannot be stored in bfcache.";
   }
 }
 
@@ -419,10 +417,15 @@ void BackForwardCacheCanStoreDocumentResult::NoDueToFeatures(
 void BackForwardCacheCanStoreDocumentResult::
     NoDueToDisableForRenderFrameHostCalled(
         const std::set<BackForwardCache::DisabledReason>& reasons) {
-  AddNotStoredReason(BackForwardCacheMetrics::NotRestoredReason::
-                         kDisableForRenderFrameHostCalled);
-  for (const BackForwardCache::DisabledReason& reason : reasons)
+  // This should only be called with non-empty reasons.
+  DCHECK(reasons.size());
+  for (const BackForwardCache::DisabledReason& reason : reasons) {
     disabled_reasons_.insert(reason);
+    // This will be a no-op after the first time but it's written like this to
+    // guarantee that we do not set it without a reason.
+    AddNotStoredReason(BackForwardCacheMetrics::NotRestoredReason::
+                           kDisableForRenderFrameHostCalled);
+  }
 }
 
 void BackForwardCacheCanStoreDocumentResult::NoDueToRelatedActiveContents(
@@ -470,9 +473,8 @@ void BackForwardCacheCanStoreDocumentResult::AddReasonsFrom(
 BackForwardCacheCanStoreDocumentResult::
     BackForwardCacheCanStoreDocumentResult() = default;
 BackForwardCacheCanStoreDocumentResult::BackForwardCacheCanStoreDocumentResult(
-    BackForwardCacheCanStoreDocumentResult&&) = default;
-BackForwardCacheCanStoreDocumentResult&
-BackForwardCacheCanStoreDocumentResult::operator=(
+    BackForwardCacheCanStoreDocumentResult&) = default;
+BackForwardCacheCanStoreDocumentResult::BackForwardCacheCanStoreDocumentResult(
     BackForwardCacheCanStoreDocumentResult&&) = default;
 BackForwardCacheCanStoreDocumentResult::
     ~BackForwardCacheCanStoreDocumentResult() = default;

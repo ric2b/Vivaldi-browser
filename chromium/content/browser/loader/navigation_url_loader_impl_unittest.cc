@@ -14,7 +14,6 @@
 #include "base/bind.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
-#include "base/task/post_task.h"
 #include "base/unguessable_token.h"
 #include "content/browser/loader/navigation_loader_interceptor.h"
 #include "content/browser/loader/navigation_url_loader.h"
@@ -30,8 +29,11 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_task_environment.h"
+#include "content/public/test/navigation_simulator.h"
 #include "content/public/test/test_browser_context.h"
+#include "content/public/test/test_renderer_host.h"
 #include "content/test/test_navigation_url_loader_delegate.h"
+#include "content/test/test_web_contents.h"
 #include "ipc/ipc_message.h"
 #include "net/base/load_flags.h"
 #include "net/base/mock_network_change_notifier.h"
@@ -52,7 +54,6 @@
 #include "third_party/blink/public/common/navigation/navigation_params.h"
 #include "third_party/blink/public/mojom/loader/mixed_content.mojom.h"
 #include "third_party/blink/public/mojom/navigation/navigation_params.mojom.h"
-
 #if BUILDFLAG(ENABLE_PLUGINS)
 #include "content/public/browser/plugin_service.h"
 #endif
@@ -72,11 +73,10 @@ class TestNavigationLoaderInterceptor : public NavigationLoaderInterceptor {
     url_request_context_ = url_request_context_builder.Build();
     url_loader_context_.set_url_request_context(url_request_context_.get());
 
-    constexpr int child_id = 4;
-    constexpr int route_id = 8;
+    constexpr network::ResourceScheduler::ClientId kClientId(3);
     resource_scheduler_client_ =
         base::MakeRefCounted<network::ResourceSchedulerClient>(
-            child_id, route_id, &resource_scheduler_,
+            kClientId, network::IsBrowserInitiated(false), &resource_scheduler_,
             url_request_context_->network_quality_estimator());
     url_loader_context_.set_resource_scheduler_client(
         resource_scheduler_client_);
@@ -178,6 +178,23 @@ class NavigationURLLoaderImplTest : public testing::Test {
     task_environment_.reset();
   }
 
+  void SetUp() override {
+    // Do not create TestNavigationURLLoaderFactory as this tests creates
+    // NavigationURLLoaders explicitly and TestNavigationURLLoaderFactory
+    // interferes with that.
+    rvh_test_enabler_ = std::make_unique<RenderViewHostTestEnabler>(
+        RenderViewHostTestEnabler::NavigationURLLoaderFactoryType::kNone);
+    web_contents_ = TestWebContents::Create(
+        browser_context_.get(),
+        SiteInstanceImpl::Create(browser_context_.get()));
+  }
+
+  void TearDown() override {
+    pending_navigation_.reset();
+    web_contents_.reset();
+    rvh_test_enabler_.reset();
+  }
+
   std::unique_ptr<NavigationURLLoader> CreateTestLoader(
       const GURL& url,
       const std::string& headers,
@@ -187,6 +204,12 @@ class NavigationURLLoaderImplTest : public testing::Test {
           blink::NavigationDownloadPolicy(),
       bool is_main_frame = true,
       bool upgrade_if_insecure = false) {
+    // NavigationURLLoader assumes that the corresponding FrameTreeNode has an
+    // associated NavigationRequest.
+    pending_navigation_ = NavigationSimulator::CreateBrowserInitiated(
+        GURL("https://example.com"), web_contents_.get());
+    pending_navigation_->Start();
+
     blink::mojom::BeginNavigationParamsPtr begin_params =
         blink::mojom::BeginNavigationParams::New(
             absl::nullopt /* initiator_frame_token */, headers,
@@ -213,6 +236,12 @@ class NavigationURLLoaderImplTest : public testing::Test {
         network::mojom::RequestDestination::kDocument;
     url::Origin origin = url::Origin::Create(url);
 
+    uint32_t frame_tree_node_id =
+        web_contents_->GetMainFrame()->GetFrameTreeNodeId();
+
+    bool is_primary_main_frame = is_main_frame;
+    bool is_outermost_main_frame = is_main_frame;
+
     std::unique_ptr<NavigationRequestInfo> request_info(
         std::make_unique<NavigationRequestInfo>(
             std::move(common_params), std::move(begin_params),
@@ -220,8 +249,8 @@ class NavigationURLLoaderImplTest : public testing::Test {
             net::IsolationInfo::Create(
                 net::IsolationInfo::RequestType::kMainFrame, origin, origin,
                 net::SiteForCookies::FromUrl(url)),
-            is_main_frame, false /* are_ancestors_secure */,
-            FrameTreeNode::kFrameTreeNodeInvalidId /* frame_tree_node_id */,
+            is_primary_main_frame, is_outermost_main_frame, is_main_frame,
+            false /* are_ancestors_secure */, frame_tree_node_id,
             false /* report_raw_headers */,
             upgrade_if_insecure /* upgrade_if_insecure */,
             nullptr /* blob_url_loader_factory */,
@@ -326,6 +355,11 @@ class NavigationURLLoaderImplTest : public testing::Test {
   std::unique_ptr<TestBrowserContext> browser_context_;
   net::EmbeddedTestServer http_test_server_;
   absl::optional<network::ResourceRequest> most_recent_resource_request_;
+  std::unique_ptr<RenderViewHostTestEnabler> rvh_test_enabler_;
+  std::unique_ptr<TestWebContents> web_contents_;
+  // NavigationURLLoaderImpl relies on the existence of the
+  // |frame_tree_node->navigation_request()|.
+  std::unique_ptr<NavigationSimulator> pending_navigation_;
 };
 
 TEST_F(NavigationURLLoaderImplTest, IsolationInfoOfMainFrameNavigation) {

@@ -31,6 +31,7 @@
 <translation id="1201402288615127009">Növbəti</translation>
 <translation id="1209796539517632982">Avtomatik ad serverləri</translation>
 <translation id="1210831758834677569">Laos</translation>
+<translation id="1223825810409523901">Chrome artırması</translation>
 <translation id="1243314992276662751">Yükləyin</translation>
 <translation id="1249250836236328755">Janr</translation>
 <translation id="1254593899333212300">Birbaşa İnternet bağlantısı</translation>
@@ -61,6 +62,7 @@
 <translation id="1497522201463361063">"<ph name="FILE_NAME" />" faylını adlandırmaq mümkün deyil. <ph name="ERROR_MESSAGE" /></translation>
 <translation id="1499943022354839699">Dvorak klaviaturası ilə İngilis dili (ABŞ)</translation>
 <translation id="1515909359182093592"><ph name="INPUT_LABEL" /> - Host</translation>
+<translation id="1521655867290435174">Google Cədvəl</translation>
 <translation id="1538729222189715449">Linux faylları açılır...</translation>
 <translation id="1547964879613821194">Kanada İngiliscəsi</translation>
 <translation id="1556189134700913550">Hamısına tətbiq edin</translation>
@@ -79,6 +81,7 @@
 <translation id="166439687370499867">Paylaşılmış şəbəkə konfiqurasiyalarının dəyişdirilməsinə icazə verilmir</translation>
 <translation id="1665611772925418501">Fayl dəyişdirilə bilməz.</translation>
 <translation id="1673103856845176271">Fayl təhlükəsizlik məqsədilə əldə edilə bilməz.</translation>
+<translation id="16762847117768727">ISO şəkli</translation>
 <translation id="169515659049020177">Shift</translation>
 <translation id="1715848075824334077">Velosiped sürmə</translation>
 <translation id="1722487484194605434"><ph name="NUMBER_OF_ITEMS" /> element sıxılır...</translation>
@@ -106,7 +109,6 @@
 <translation id="1853795129690976061">Bu qovluq Linux ilə paylaşılır</translation>
 <translation id="1864756863218646478">Fayl tapılmadı.</translation>
 <translation id="1884013283844450420"><ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" /> şəbəkə, <ph name="NETWORK_NAME" />, Qoşulun</translation>
-<translation id="1914901738028575085">CloudReady 2.0 cihazı</translation>
 <translation id="1920670151694390848">Malayalam dilində Transliterasiya</translation>
 <translation id="1920798810075583923">Qarpız</translation>
 <translation id="1924372192547904021"><ph name="DRIVE_NAME" /> formatlandı</translation>
@@ -185,7 +187,6 @@
 <translation id="2544853746127077729">Doğrulama təsdiqi şəbəkə tərəfindən ləğv edildi</translation>
 <translation id="2547921442987553570"><ph name="EXTENSION_NAME" /> atırmasına əlavə edin</translation>
 <translation id="255937426064304553">ABŞ Beynəlxalq</translation>
-<translation id="2562685439590298522">Sənəd</translation>
 <translation id="2563185590376525700">Qurbağa</translation>
 <translation id="2578394532502990878">Tamil dili (Fonetik)</translation>
 <translation id="2579959351793446050">Oriya dili</translation>
@@ -221,9 +222,7 @@
 <translation id="2902734494705624966">Genişlənmiş ABŞ klaviaturası</translation>
 <translation id="290843123675549676">Marathi</translation>
 <translation id="2923240520113693977">Eston</translation>
-<translation id="2925966894897775835">Vərəqlər</translation>
 <translation id="2938685643439809023">Monqolca</translation>
-<translation id="2943400156390503548">Slaydlar</translation>
 <translation id="2943503720238418293">Qısa ad istifadə edin</translation>
 <translation id="2949781154072577687"><ph name="DRIVE_NAME" /> formatlanır...</translation>
 <translation id="2951236788251446349">Meduza</translation>
@@ -368,6 +367,7 @@
 <translation id="4215448920900139318"><ph name="FILE_COUNT" /> element yedəklənir</translation>
 <translation id="4218274196133425560"><ph name="HOST_NAME" /> üçün istisnanı silin</translation>
 <translation id="4261901459838235729">Google təqdimatı</translation>
+<translation id="4277536868133419688"><ph name="FILTER_NAME" /> filtri aktivdir.</translation>
 <translation id="4290535918735525311">Linux'da 1 qovluq paylaşıldı</translation>
 <translation id="4299729908419173967">Braziliya</translation>
 <translation id="4302605047395093221">Bu cihazdan istifadə edən hər kəs bu mobil şəbəkəyə qoşulmaq üçün PİN kodu daxil etməlidir</translation>
@@ -385,6 +385,8 @@
 <translation id="4380245540200674032"><ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" /> şəbəkə, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, <ph name="CONNECTION_STATUS" />, Siqnal Gücü <ph name="SIGNAL_STRENGTH" />%, Administratorunuz tərəfindən idarə olunur, Detallar</translation>
 <translation id="4387004326333427325">Doğrulama təsdiqi uzaqdan ləğv edildi</translation>
 <translation id="4394214039309501350">Xarici keçid</translation>
+<translation id="4401287888955153199">Hamısını çıxarın</translation>
+<translation id="4410695710508688828">Çıxarılma əməliyyatı alınmadı. <ph name="ERROR_MESSAGE" /></translation>
 <translation id="4418686080762064601">Fayllarınız üçün qısayol yaradın</translation>
 <translation id="4425149324548788773">Diskim</translation>
 <translation id="4439427728133035643"><ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" /> şəbəkə, <ph name="NETWORK_NAME" />, Siqnal Gücü <ph name="SIGNAL_STRENGTH" />%, Qoşulun</translation>
@@ -406,6 +408,7 @@
 <translation id="457386861538956877">Digər...</translation>
 <translation id="4579744207439506346"><ph name="ENTRY_NAME" /> seçimə əlavə edildi.</translation>
 <translation id="4594543368593301662"><ph name="SEARCH_TERM" /> üçün nəticələr göstərilir.</translation>
+<translation id="4599600860674643278">Filtr sıfırlanıb.</translation>
 <translation id="4603392156942865207"><ph name="FILE_NAME" /> faylı <ph name="FOLDER_NAME" /> qovluğuna kopyalanır</translation>
 <translation id="4631887759990505102">Artist</translation>
 <translation id="4642769377300286600">Mobil profil quraşdırılır, Şəbəkə <ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" /></translation>
@@ -414,6 +417,7 @@
 <translation id="4656777537938206294">Faylları oflayn əlçatan edin</translation>
 <translation id="4658782175094886150">Qarda adam</translation>
 <translation id="4669606053856530811">"<ph name="SOURCE_NAME" />" bu element onlarla paylaşılmadığı halda, daxil ola bilməyəcəklər.</translation>
+<translation id="467809019005607715">Google Slayd</translation>
 <translation id="4690246192099372265">İsveç</translation>
 <translation id="4693155481716051732">Suşi</translation>
 <translation id="4694604912444486114">Meymun</translation>
@@ -527,6 +531,7 @@
 <translation id="5469868506864199649">İtalyan</translation>
 <translation id="5473333559083690127">Yeni PIN kodu yenidən daxil edin</translation>
 <translation id="5489067830765222292">Latış</translation>
+<translation id="5489965683297092283"><ph name="FILTER_NAME" /> filtri deaktivdir.</translation>
 <translation id="5494920125229734069">Hamısını seçin</translation>
 <translation id="5500122897333236901">İsland</translation>
 <translation id="5508696409934741614">Nöqtə</translation>
@@ -593,6 +598,7 @@
 <translation id="6082256976217156453">LZMA sıxılmış arxivi</translation>
 <translation id="6096979789310008754">Bütün fayl və qovluqları göstərən axtarış mətni silindi.</translation>
 <translation id="610101264611565198"><ph name="FILE_NAME" /> faylı <ph name="FOLDER_NAME" /> qovluğuna köçürülür</translation>
+<translation id="61118516107968648">CSV mətni</translation>
 <translation id="6129953537138746214">Boşluq</translation>
 <translation id="6133173853026656527"><ph name="FILE_NAME" /> daşınır...</translation>
 <translation id="613750717151263950">ABŞ klaviaturası ilə Yapon dili</translation>
@@ -657,6 +663,7 @@
 <translation id="6732801395666424405">Sertifikatlar yüklənilmədi</translation>
 <translation id="6736329909263487977"><ph name="ISSUED_BY" /> [<ph name="ISSUED_TO" />]</translation>
 <translation id="6751256176799620176">1 qovluq seçildi</translation>
+<translation id="6755827872271341378">ChromeOS Flex cihazı</translation>
 <translation id="6790428901817661496">Oxudun</translation>
 <translation id="6795884519221689054">Panda</translation>
 <translation id="6806699711453372963">Linux paylaşımını idarə edin</translation>
@@ -734,6 +741,7 @@
 <translation id="7343393116438664539">Vyetnam dili (Teleks)</translation>
 <translation id="7359359531237882347"><ph name="NUMBER_OF_ITEMS" /> element kopyalanır...</translation>
 <translation id="7375951387215729722">Fayllar <ph name="COLUMN_NAME" /> üzrə artan sıra ilə çeşidlənib.</translation>
+<translation id="7402503521691663770">ChromeOS Flex cihazları</translation>
 <translation id="7408870451288633753">Çex</translation>
 <translation id="7417453074306512035">Efiop klaviaturası</translation>
 <translation id="7417705661718309329">Google xəritə</translation>
@@ -807,6 +815,7 @@
 <translation id="7925686952655276919">Sinxronizasiya üçün mobil data istifadə etməyin</translation>
 <translation id="7928710562641958568">Cihazı çıxarın</translation>
 <translation id="7943385054491506837">US Colemak</translation>
+<translation id="7948417415021769876">7z arxivi</translation>
 <translation id="7953739707111622108">Bu fayl açıla bilməz, çünki onun fayl sistemi tanınmadı.</translation>
 <translation id="7969525169268594403">Sloven</translation>
 <translation id="7972920761225148017">Fransız (İsveçrə)</translation>
@@ -821,6 +830,7 @@
 <translation id="8042602468072383151"><ph name="AUDIO_TYPE" /> audiosu</translation>
 <translation id="8045462269890919536">Rumın</translation>
 <translation id="8049184478152619004">Şəxsi Blokdan Çıxarma Açarını (PUK) daxil edin</translation>
+<translation id="807187749540895545"><ph name="FILE_NAME" /> çıxarılır...</translation>
 <translation id="8079530767338315840">Təkrarlayın</translation>
 <translation id="8087576439476816834">Endirin: <ph name="PROFILE_NAME" /></translation>
 <translation id="8106045200081704138">Mənimlə Paylaşılan</translation>
@@ -837,6 +847,7 @@
 <translation id="8208580316430297579">Sənət əsəri</translation>
 <translation id="8223479393428528563">Bu faylları oflayn istifadəyə saxlamaq üçün onlayn olun, faylları sağ klikləyin və <ph name="OFFLINE_CHECKBOX_NAME" /> seçimini edin.</translation>
 <translation id="8249296373107784235">Dayandırın</translation>
+<translation id="8250920743982581267">Sənədlər</translation>
 <translation id="8261506727792406068">Silin</translation>
 <translation id="8261561378965667560">Çin dili (Array)</translation>
 <translation id="8269755669432358899">Faylların rəy panelini yığcamlaşdırın</translation>
@@ -855,6 +866,7 @@
 <translation id="8372369524088641025">Səhv WEP açarı</translation>
 <translation id="8372852072747894550">Yunan</translation>
 <translation id="8386903983509584791">Skan tamamlandı</translation>
+<translation id="8387733224523483503"><ph name="FILE_NAME" /> çıxarılıb.</translation>
 <translation id="8395901698320285466">Ölçülər</translation>
 <translation id="8408068190360279472"><ph name="NETWORK_TYPE" /> şəbəkəsi, qoşulur</translation>
 <translation id="8425213833346101688">Dəyişin</translation>
@@ -872,6 +884,7 @@
 <translation id="8484284835977497781">Son fotolarınızdan seçin.</translation>
 <translation id="8487700953926739672">Oflayn olaraq əlçatan</translation>
 <translation id="8492972329130824181">Ev şəbəkəsi əlçatan deyil. Qoşulmaq üçün mobil data rouminqi aktiv edilməlidir.</translation>
+<translation id="8499098729323186194"><ph name="NUMBER_OF_ITEMS" /> element çıxarılır...</translation>
 <translation id="8521441079177373948">Böyük Britaniya</translation>
 <translation id="8525306231823319788">Tam ekran</translation>
 <translation id="853494022971700746">Fransız (Fransa)</translation>
@@ -900,7 +913,6 @@
 <translation id="8714406895390098252">Velosiped</translation>
 <translation id="8719721339511222681"><ph name="ENTRY_NAME" /> seçildi.</translation>
 <translation id="872537912056138402">Xorvat</translation>
-<translation id="873847021056608403">CloudReady 2.0 cihazları</translation>
 <translation id="8743164338060742337"><ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" /> şəbəkə, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" /> Siqnal Gücü <ph name="SIGNAL_STRENGTH" />%, Administratorunuz tərəfindən idarə olunur, Qoşulun</translation>
 <translation id="8750438273876807512">Rəfdəki fayllarınıza sürətli giriş etmək üçün fayla toxunub saxlayın, <ph name="ICON" /> ikonasına toxunun və "Rəfə bərkidin" seçimini edin.</translation>
 <translation id="8787254343425541995">Paylaşılan şəbəkələr üçün proksilərə icazə verin</translation>
@@ -947,7 +959,9 @@
 <translation id="9172592259078059678">Qucarat dilində Transliterasiya</translation>
 <translation id="9173120999827300720">Beynəlxalq klaviatura ilə İngilis dili (ABŞ)</translation>
 <translation id="9174050671906956834">Zibil qutusundakı elementlər 30 gün sonra həmişəlik silinir.</translation>
+<translation id="9183302530794969518">Google Sənəd</translation>
 <translation id="9189836632794948435">Qazax</translation>
+<translation id="9200427192836333033"><ph name="NUMBER_OF_ITEMS" /> element çıxarılıb.</translation>
 <translation id="9213073329713032541">Quraşdırma uğurla başladı.</translation>
 <translation id="9219103736887031265">Şəkillər</translation>
 <translation id="9219908252191632183">Qəməri</translation>

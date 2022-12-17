@@ -15,7 +15,9 @@
 #include "base/run_loop.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
+#include "base/test/bind.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "media/base/cdm_callback_promise.h"
 #include "media/base/cdm_key_information.h"
@@ -35,6 +37,14 @@
 #include "media/test/test_media_source.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "url/gurl.h"
+
+#if BUILDFLAG(IS_MAC)
+#include "media/filters/mac/audio_toolbox_audio_decoder.h"
+#endif
+
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && BUILDFLAG(IS_WIN)
+#include "platform_media/renderer/decoders/win/wmf_audio_decoder.h"
+#endif
 
 #define EXPECT_HASH_EQ(a, b) EXPECT_EQ(a, b)
 #define EXPECT_VIDEO_FORMAT_EQ(a, b) EXPECT_EQ(a, b)
@@ -2044,8 +2054,14 @@ TEST_F(PipelineIntegrationTest, MSE_ADTS_TimestampOffset) {
 
   // TODO(wdzierzanowski): Clarify decoder delay differences (DNA-44158).
   // Verify preroll is stripped.
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && defined(OS_WIN)
-  EXPECT_HASH_EQ("-1.73,-1.32,-0.69,0.73,1.26,0.54,", GetAudioHash());
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && BUILDFLAG(IS_WIN)
+  // NOTE(igor@vivaldi.com): Account for differences between AAC decoder
+  // implementations.
+  if (WMFAudioDecoder::IsEnabled()) {
+    EXPECT_HASH_EQ("-1.73,-1.32,-0.69,0.73,1.26,0.54,", GetAudioHash());
+  } else {
+    EXPECT_HASH_EQ("-1.78,-0.93,-1.72,-1.74,-1.75,-1.81,", GetAudioHash());
+  }
 #else
   EXPECT_HASH_EQ("-1.76,-1.35,-0.72,0.70,1.24,0.52,", GetAudioHash());
 #endif
@@ -2083,6 +2099,72 @@ TEST_F(PipelineIntegrationTest, BasicPlaybackHashed_M4A) {
   //
   // EXPECT_HASH_EQ("3.77,4.53,4.75,3.48,3.67,3.76,", GetAudioHash());
 }
+
+// TODO(crbug.com/1289825): Make this work on Android.
+#if BUILDFLAG(IS_MAC)
+constexpr char kXHE_AACAudioHash[] = "34.02,8.92,-11.02,12.15,16.11,10.75,";
+
+TEST_F(PipelineIntegrationTest, BasicPlaybackXHE_AAC) {
+  if (__builtin_available(macOS 10.15, *)) {
+    // Annoyingly !__builtin_available() doesn't work.
+  } else {
+    GTEST_SKIP() << "Unsupported platform.";
+  }
+
+  auto prepend_audio_decoders_cb = base::BindLambdaForTesting([]() {
+    std::vector<std::unique_ptr<AudioDecoder>> audio_decoders;
+    audio_decoders.push_back(std::make_unique<AudioToolboxAudioDecoder>());
+    return audio_decoders;
+  });
+
+  ASSERT_EQ(PIPELINE_OK,
+            Start("noise-xhe-aac.mp4", kHashed, CreateVideoDecodersCB(),
+                  prepend_audio_decoders_cb));
+  Play();
+  ASSERT_TRUE(WaitUntilOnEnded());
+
+  // Hash testing may be a poor choice here since we're using the OS decoders,
+  // but lets wait to see what the test says on Android before removing.
+  EXPECT_HASH_EQ(kXHE_AACAudioHash, GetAudioHash());
+
+  // TODO(crbug.com/1289825): Seeking doesn't always work properly when using
+  // ffmpeg since it doesn't handle non-keyframe xHE-AAC samples properly.
+}
+
+TEST_F(PipelineIntegrationTest, MSE_BasicPlaybackXHE_AAC) {
+  if (__builtin_available(macOS 10.15, *)) {
+    // Annoyingly !__builtin_available() doesn't work.
+  } else {
+    GTEST_SKIP() << "Unsupported platform.";
+  }
+
+  auto prepend_audio_decoders_cb = base::BindLambdaForTesting([]() {
+    std::vector<std::unique_ptr<AudioDecoder>> audio_decoders;
+    audio_decoders.push_back(std::make_unique<AudioToolboxAudioDecoder>());
+    return audio_decoders;
+  });
+
+  TestMediaSource source("noise-xhe-aac.mp4", kAppendWholeFile);
+  EXPECT_EQ(PIPELINE_OK, StartPipelineWithMediaSource(
+                             &source, kHashed, prepend_audio_decoders_cb));
+  source.EndOfStream();
+  Play();
+  ASSERT_TRUE(WaitUntilOnEnded());
+  Pause();
+
+  // Hash testing may be a poor choice here since we're using the OS decoders,
+  // but lets wait to see what the test says on Android before removing.
+  EXPECT_HASH_EQ(kXHE_AACAudioHash, GetAudioHash());
+
+  // Seek to ensure a flushing and playback resumption works properly.
+  auto seek_time = pipeline_->GetMediaDuration() / 2;
+  ASSERT_TRUE(Seek(seek_time));
+  EXPECT_EQ(seek_time, pipeline_->GetMediaTime());
+
+  Play();
+  ASSERT_TRUE(WaitUntilOnEnded());
+}
+#endif  // BUILDFLAG(IS_MAC)
 
 TEST_F(PipelineIntegrationTest, BasicPlaybackHi10P) {
   ASSERT_EQ(PIPELINE_OK, Start("bear-320x180-hi10p.mp4"));
@@ -2745,6 +2827,12 @@ TEST_F(PipelineIntegrationTest, Spherical) {
   Play();
   ASSERT_TRUE(WaitUntilOnEnded());
   EXPECT_HASH_EQ("1cb7f980020d99ea852e22dd6bd8d9de", GetVideoHash());
+}
+
+TEST_F(PipelineIntegrationTest, StereoAACMarkedAsMono) {
+  ASSERT_EQ(PIPELINE_OK, Start("mono_cpe.adts"));
+  Play();
+  ASSERT_TRUE(WaitUntilOnEnded());
 }
 #endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
 

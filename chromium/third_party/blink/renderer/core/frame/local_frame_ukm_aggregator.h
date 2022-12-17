@@ -5,6 +5,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_FRAME_LOCAL_FRAME_UKM_AGGREGATOR_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_FRAME_LOCAL_FRAME_UKM_AGGREGATOR_H_
 
+#include "base/time/time.h"
 #include "cc/metrics/frame_sequence_tracker_collection.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/platform/instrumentation/histogram.h"
@@ -201,7 +202,7 @@ class CORE_EXPORT LocalFrameUkmAggregator
         {"ServiceDocumentUpdate", true},
         {"UserDrivenDocumentUpdate", true},
         {"ParseStyleSheet", true}};
-    static_assert(base::size(data) == kCount, "Metrics data mismatch");
+    static_assert(std::size(data) == kCount, "Metrics data mismatch");
     return data;
   }
 

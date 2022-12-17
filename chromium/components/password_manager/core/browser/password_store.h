@@ -25,7 +25,6 @@
 #include "build/build_config.h"
 #include "components/password_manager/core/browser/android_affiliation/affiliated_match_helper.h"
 #include "components/password_manager/core/browser/field_info_store.h"
-#include "components/password_manager/core/browser/insecure_credentials_table.h"
 #include "components/password_manager/core/browser/password_form_digest.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_store_backend.h"
@@ -94,18 +93,19 @@ class PasswordStore : public PasswordStoreInterface {
       const base::RepeatingCallback<bool(const GURL&)>& url_filter,
       base::Time delete_begin,
       base::Time delete_end,
-      base::OnceClosure completion,
+      base::OnceClosure completion = base::NullCallback(),
       base::OnceCallback<void(bool)> sync_completion =
           base::NullCallback()) override;
-  void RemoveLoginsCreatedBetween(
-      base::Time delete_begin,
-      base::Time delete_end,
-      base::OnceCallback<void(bool)> completion) override;
+  void RemoveLoginsCreatedBetween(base::Time delete_begin,
+                                  base::Time delete_end,
+                                  base::OnceCallback<void(bool)> completion =
+                                      base::NullCallback()) override;
   void DisableAutoSignInForOrigins(
       const base::RepeatingCallback<bool(const GURL&)>& origin_filter,
-      base::OnceClosure completion) override;
-  void Unblocklist(const PasswordFormDigest& form_digest,
-                   base::OnceClosure completion) override;
+      base::OnceClosure completion = base::NullCallback()) override;
+  void Unblocklist(
+      const PasswordFormDigest& form_digest,
+      base::OnceClosure completion = base::NullCallback()) override;
   void GetLogins(const PasswordFormDigest& form,
                  base::WeakPtr<PasswordStoreConsumer> consumer) override;
   void GetAutofillableLogins(
@@ -119,11 +119,15 @@ class PasswordStore : public PasswordStoreInterface {
   FieldInfoStore* GetFieldInfoStore() override;
   std::unique_ptr<syncer::ProxyModelTypeControllerDelegate>
   CreateSyncControllerDelegate() override;
+  void OnSyncServiceInitialized(syncer::SyncService* sync_service) override;
   PasswordStoreBackend* GetBackendForTesting() override;
 
  protected:
   friend class base::RefCountedThreadSafe<PasswordStore>;
 
+  ~PasswordStore() override;
+
+ private:
   // Status of PasswordStore::Init().
   enum class InitStatus {
     // Initialization status is still not determined (init hasn't started or
@@ -136,17 +140,6 @@ class PasswordStore : public PasswordStoreInterface {
     // Removing passwords may still work.
     kFailure,
   };
-
-  ~PasswordStore() override;
-
-  // This member is called to perform the actual interaction with the storage.
-  // TODO(crbug.com/1217071): Make private std::unique_ptr as soon as the
-  // backend is passed into the store instead of it being the store(_impl).
-  raw_ptr<PasswordStoreBackend> backend_ = nullptr;
-
- private:
-  using InsecureCredentialsTask =
-      base::OnceCallback<std::vector<InsecureCredential>()>;
 
   // Represents different triggers that may require requesting all logins from
   // the password store. Entries should not be renumbered and numeric values
@@ -194,13 +187,10 @@ class PasswordStore : public PasswordStoreInterface {
   void InjectAffiliationAndBrandingInformation(LoginsReply callback,
                                                LoginsResult forms);
 
-  // The local backend is a ref-counted type in tests because it still inherits
-  // from PasswordStore and this would be a self reference. So, if `this` is an
-  // instance of PasswordStoreImpl, this member is not used.
-  //
+  // This member is called to perform the actual interaction with the storage.
   // The backend is injected via the public constructor, this member owns the
   // instance and deletes it by calling PasswordStoreBackend::Shutdown on it.
-  std::unique_ptr<PasswordStoreBackend> backend_deleter_ = nullptr;
+  std::unique_ptr<PasswordStoreBackend> backend_;
 
   // TaskRunner for tasks that run on the main sequence (usually the UI thread).
   // TODO(crbug.com/1217071): Move into backend_.

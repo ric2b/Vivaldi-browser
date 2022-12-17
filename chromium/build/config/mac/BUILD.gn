@@ -62,13 +62,9 @@ config("compiler") {
 # that is Mac-only. Please see that target for advice on what should go in
 # :runtime_library vs. :compiler.
 config("runtime_library") {
-  temp_sysroot = sysroot
-  if (use_system_xcode && use_goma && target_os == "mac") {
-    temp_sysroot = rebase_path(sysroot, root_build_dir)
-  }
   common_flags = [
     "-isysroot",
-    temp_sysroot,
+    rebase_path(sysroot, root_build_dir),
     "-mmacosx-version-min=$mac_deployment_target",
   ]
 
@@ -96,6 +92,17 @@ config("mac_dynamic_flags") {
       # Binary.app/Contents/MacOS.
       "-Wl,-rpath,@loader_path/../../..",
     ]
+
+    # Path for loading shared libraries for unbundled binaries for
+    # the host toolchain (see https://crbug.com/1315433). Only used
+    # for when building for iOS.
+    if (target_os == "ios" && current_toolchain == host_toolchain) {
+      ldflags += [
+        "-Wl,-rpath,@loader_path/" +
+            rebase_path(get_label_info(":mac_dynamic_flags", "root_out_dir"),
+                        root_build_dir),
+      ]
+    }
   }
 }
 

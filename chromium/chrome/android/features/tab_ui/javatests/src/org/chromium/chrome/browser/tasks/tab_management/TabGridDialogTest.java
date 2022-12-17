@@ -82,7 +82,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.test.params.ParameterAnnotations;
 import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.CommandLineFlags;
@@ -107,6 +106,7 @@ import org.chromium.chrome.test.util.ActivityTestUtils;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
+import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.test.util.NightModeTestUtils;
@@ -141,7 +141,10 @@ public class TabGridDialogTest {
 
     @Rule
     public ChromeRenderTestRule mRenderTestRule =
-            ChromeRenderTestRule.Builder.withPublicCorpus().build();
+            ChromeRenderTestRule.Builder.withPublicCorpus()
+                    .setBugComponent(
+                            ChromeRenderTestRule.Component.UI_BROWSER_MOBILE_TAB_SWITCHER_GRID)
+                    .build();
 
     @BeforeClass
     public static void setUpBeforeActivityLaunched() {
@@ -736,7 +739,7 @@ public class TabGridDialogTest {
     }
 
     @Test
-    @DisabledTest
+    @DisabledTest(message = "crbug.com/1065153")
     @MediumTest
     @Feature({"RenderTest"})
     @ParameterAnnotations.UseMethodParameter(NightModeTestUtils.NightModeParams.class)
@@ -1073,12 +1076,8 @@ public class TabGridDialogTest {
                 || !resources.getBoolean(R.bool.window_light_navigation_bar)) {
             return;
         }
-        @ColorInt
-        int scrimDefaultColor =
-                ApiCompatibilityUtils.getColor(resources, R.color.default_scrim_color);
-        @ColorInt
-        int navigationBarColor =
-                ApiCompatibilityUtils.getColor(resources, R.color.bottom_system_nav_color);
+        final @ColorInt int scrimDefaultColor = cta.getColor(R.color.default_scrim_color);
+        final @ColorInt int navigationBarColor = SemanticColorUtils.getBottomSystemNavColor(cta);
         float scrimColorAlpha = (scrimDefaultColor >>> 24) / 255f;
         int scrimColorOpaque = scrimDefaultColor & 0xFF000000;
         int navigationBarColorWithScrimOverlay = ColorUtils.getColorWithOverlay(

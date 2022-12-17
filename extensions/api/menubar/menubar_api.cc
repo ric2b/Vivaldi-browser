@@ -4,9 +4,7 @@
 
 #include "extensions/api/menubar/menubar_api.h"
 
-#include "app/vivaldi_command_controller.h"
-#include "app/vivaldi_commands.h"
-#include "browser/vivaldi_browser_finder.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/command_updater.h"
 #include "chrome/browser/profiles/profile.h"
@@ -14,6 +12,10 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "extensions/browser/app_window/app_window.h"
+
+#include "app/vivaldi_command_controller.h"
+#include "app/vivaldi_commands.h"
+#include "browser/vivaldi_browser_finder.h"
 #include "extensions/schema/menubar.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "ui/vivaldi_main_menu.h"
@@ -202,7 +204,7 @@ ExtensionFunction::ResponseAction MenubarSetupFunction::Run() {
     }
   }
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   // There may be no windows. Allow a nullptr profile.
   Profile* profile = Profile::FromBrowserContext(browser_context());
   ::vivaldi::CreateVivaldiMainMenu(profile, &params->items, params->mode,
@@ -210,7 +212,7 @@ ExtensionFunction::ResponseAction MenubarSetupFunction::Run() {
   return RespondNow(NoArguments());
 #else
   return RespondNow(Error("NOT IMPLEMENTED"));
-#endif  // defined(OS_MAC)
+#endif  // BUILDFLAG(IS_MAC)
 }
 
 }  // namespace extensions

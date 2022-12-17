@@ -7,7 +7,7 @@
       '. leftspacer imagegrid  rightspacer .'
       '. leftspacer .          rightspacer .';
     grid-template-columns: 1fr 16px minmax(568px, 920px) 16px 1fr;
-    grid-template-rows: 172px 12px 1fr 12px;
+    grid-template-rows: 172px 12px minmax(0, 1fr) 12px;
     height: 100%;
     position: relative;
     width: 100%;
@@ -44,7 +44,8 @@
   <wallpaper-images collection-id="[[queryParams.id]]"
       hidden="[[!shouldShowCollectionImages_(path)]]"></wallpaper-images>
   <template is="dom-if" if="[[isGooglePhotosIntegrationEnabled_()]]">
-    <google-photos-collection album-id="[[queryParams.googlePhotosAlbumId]]"
+    <google-photos-collection path="[[path]]"
+        album-id="[[queryParams.googlePhotosAlbumId]]"
         hidden="[[!shouldShowGooglePhotosCollection_(path)]]">
     </google-photos-collection>
   </template>

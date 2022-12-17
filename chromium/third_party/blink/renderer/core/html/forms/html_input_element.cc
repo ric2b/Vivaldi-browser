@@ -54,7 +54,6 @@
 #include "third_party/blink/renderer/core/events/keyboard_event.h"
 #include "third_party/blink/renderer/core/events/mouse_event.h"
 #include "third_party/blink/renderer/core/fileapi/file_list.h"
-#include "third_party/blink/renderer/core/frame/deprecation.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/html/forms/color_chooser.h"
@@ -943,11 +942,6 @@ void HTMLInputElement::FinishParsingChildren() {
 bool HTMLInputElement::LayoutObjectIsNeeded(const ComputedStyle& style) const {
   return input_type_->LayoutObjectIsNeeded() &&
          TextControlElement::LayoutObjectIsNeeded(style);
-}
-
-// TODO(crbug.com/1040826): Remove this override.
-bool HTMLInputElement::TypeShouldForceLegacyLayout() const {
-  return input_type_view_->TypeShouldForceLegacyLayout();
 }
 
 LayoutObject* HTMLInputElement::CreateLayoutObject(const ComputedStyle& style,
@@ -2109,15 +2103,21 @@ void HTMLInputElement::SetShouldRevealPassword(bool value) {
 }
 
 #if BUILDFLAG(IS_ANDROID)
-void HTMLInputElement::DispatchSimulatedEnterIfLastInputInForm() {
-  Page* page = GetDocument().GetPage();
-  if (page && !page->GetFocusController().NextFocusableElementInForm(
-                  this, mojom::blink::FocusType::kForward)) {
-    page->GetFocusController().SetFocusedElement(this,
-                                                 GetDocument().GetFrame());
+bool HTMLInputElement::IsLastInputElementInForm() {
+  DCHECK(GetDocument().GetPage());
+  return !GetDocument()
+              .GetPage()
+              ->GetFocusController()
+              .NextFocusableElementForIME(this,
+                                          mojom::blink::FocusType::kForward);
+}
 
-    EventDispatcher::DispatchSimulatedEnterEvent(*this);
-  }
+void HTMLInputElement::DispatchSimulatedEnter() {
+  DCHECK(GetDocument().GetPage());
+  GetDocument().GetPage()->GetFocusController().SetFocusedElement(
+      this, GetDocument().GetFrame());
+
+  EventDispatcher::DispatchSimulatedEnterEvent(*this);
 }
 #endif
 
@@ -2226,6 +2226,13 @@ void HTMLInputElement::showPicker(ExceptionState& exception_state) {
           "HTMLInputElement::showPicker() called from cross-origin iframe.");
       return;
     }
+  }
+
+  if (IsDisabledOrReadOnly()) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "HTMLInputElement::showPicker() cannot be used on immutable controls.");
+    return;
   }
 
   if (!LocalFrame::HasTransientUserActivation(frame)) {

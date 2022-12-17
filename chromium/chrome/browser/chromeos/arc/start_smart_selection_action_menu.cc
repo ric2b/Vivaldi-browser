@@ -12,6 +12,7 @@
 #include "base/metrics/user_metrics.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/apps/app_service/app_icon/app_icon_factory.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
@@ -20,6 +21,7 @@
 #include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/arc/common/intent_helper/arc_intent_helper_package.h"
 #include "components/renderer_context_menu/render_view_context_menu_proxy.h"
 #include "content/public/browser/context_menu_params.h"
 #include "ui/base/layout.h"
@@ -144,6 +146,21 @@ void StartSmartSelectionActionMenu::ExecuteCommand(int command_id) {
       display::Screen::GetScreen()->GetDisplayNearestPoint(point);
 
   Profile* profile = Profile::FromBrowserContext(context_);
+  if (actions_[index].activity.package_name ==
+      arc::kArcIntentHelperPackageName) {
+    // The intent_helper app can't be launched as a regular app that then
+    // handles this smart action intent because it is not a launcher app.
+    // Instead, directly request that the intent be handled by it without
+    // really launching the app.
+    // This is necessary for "generic" smart selection actions that aren't
+    // created for specific apps such as opening a URL or a street address.
+    delegate_->HandleIntent(std::move(actions_[index].action_intent),
+                            internal::ActivityIconLoader::ActivityName(
+                                actions_[index].activity.package_name,
+                                actions_[index].activity.activity_name));
+    return;
+  }
+  // The app that this intent points to is able to handle it, launch it.
   apps::AppServiceProxyFactory::GetForProfile(profile)->LaunchAppWithIntent(
       actions_[index].app_id, ui::EF_NONE,
       CreateIntent(std::move(actions_[index].action_intent),

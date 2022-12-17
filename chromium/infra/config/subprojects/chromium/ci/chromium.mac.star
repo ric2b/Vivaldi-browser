@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 """Definitions of builders in the chromium.mac builder group."""
 
+load("//lib/args.star", "args")
 load("//lib/branches.star", "branches")
 load("//lib/builder_config.star", "builder_config")
 load("//lib/builders.star", "cpu", "goma", "os", "sheriff_rotations", "xcode")
@@ -68,6 +69,7 @@ ci.builder(
             ],
             build_config = builder_config.build_config.RELEASE,
             target_bits = 64,
+            target_platform = builder_config.target_platform.MAC,
         ),
         build_gs_bucket = "chromium-mac-archive",
     ),
@@ -81,6 +83,21 @@ ci.builder(
 ci.builder(
     name = "Mac Builder (dbg)",
     branch_selector = branches.DESKTOP_EXTENDED_STABLE_MILESTONE,
+    builder_spec = builder_config.builder_spec(
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = [
+                "mb",
+            ],
+            build_config = builder_config.build_config.DEBUG,
+            target_bits = 64,
+            target_platform = builder_config.target_platform.MAC,
+        ),
+        build_gs_bucket = "chromium-mac-archive",
+    ),
     console_view_entry = consoles.console_view_entry(
         category = "debug",
         short_name = "bld",
@@ -100,22 +117,53 @@ ci.builder(
         short_name = "a64",
     ),
     cpu = cpu.ARM64,
-    os = os.MAC_11,
+    os = os.MAC_DEFAULT,
 )
 
 ci.builder(
     name = "mac-arm64-rel",
     branch_selector = branches.DESKTOP_EXTENDED_STABLE_MILESTONE,
+    builder_spec = builder_config.builder_spec(
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = [
+                "mb",
+            ],
+            build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.ARM,
+            target_bits = 64,
+            target_platform = builder_config.target_platform.MAC,
+        ),
+    ),
     console_view_entry = consoles.console_view_entry(
         category = "release|arm64",
         short_name = "bld",
     ),
-    os = os.MAC_ANY,
+    os = os.MAC_DEFAULT,
 )
 
 ci.thin_tester(
     name = "mac11-arm64-rel-tests",
     branch_selector = branches.DESKTOP_EXTENDED_STABLE_MILESTONE,
+    builder_spec = builder_config.builder_spec(
+        execution_mode = builder_config.execution_mode.TEST,
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = [
+                "mb",
+            ],
+            build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.ARM,
+            target_bits = 64,
+            target_platform = builder_config.target_platform.MAC,
+        ),
+    ),
     console_view_entry = consoles.console_view_entry(
         category = "release|arm64",
         short_name = "11",
@@ -140,6 +188,7 @@ ci.thin_tester(
             ],
             build_config = builder_config.build_config.RELEASE,
             target_bits = 64,
+            target_platform = builder_config.target_platform.MAC,
         ),
         build_gs_bucket = "chromium-mac-archive",
     ),
@@ -167,6 +216,7 @@ ci.thin_tester(
             ],
             build_config = builder_config.build_config.RELEASE,
             target_bits = 64,
+            target_platform = builder_config.target_platform.MAC,
         ),
         build_gs_bucket = "chromium-mac-archive",
     ),
@@ -197,6 +247,7 @@ ci.thin_tester(
             ],
             build_config = builder_config.build_config.RELEASE,
             target_bits = 64,
+            target_platform = builder_config.target_platform.MAC,
         ),
         build_gs_bucket = "chromium-mac-archive",
     ),
@@ -224,6 +275,7 @@ ci.thin_tester(
             ],
             build_config = builder_config.build_config.RELEASE,
             target_bits = 64,
+            target_platform = builder_config.target_platform.MAC,
         ),
         build_gs_bucket = "chromium-mac-archive",
     ),
@@ -251,6 +303,7 @@ ci.thin_tester(
             ],
             build_config = builder_config.build_config.RELEASE,
             target_bits = 64,
+            target_platform = builder_config.target_platform.MAC,
         ),
         build_gs_bucket = "chromium-mac-archive",
     ),
@@ -278,6 +331,7 @@ ci.thin_tester(
             ],
             build_config = builder_config.build_config.RELEASE,
             target_bits = 64,
+            target_platform = builder_config.target_platform.MAC,
         ),
     ),
     console_view_entry = consoles.console_view_entry(
@@ -290,11 +344,28 @@ ci.thin_tester(
 ci.thin_tester(
     name = "Mac11 Tests (dbg)",
     branch_selector = branches.DESKTOP_EXTENDED_STABLE_MILESTONE,
+    builder_spec = builder_config.builder_spec(
+        execution_mode = builder_config.execution_mode.TEST,
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = [
+                "mb",
+            ],
+            build_config = builder_config.build_config.DEBUG,
+            target_bits = 64,
+            target_platform = builder_config.target_platform.MAC,
+        ),
+        build_gs_bucket = "chromium-mac-archive",
+    ),
     console_view_entry = consoles.console_view_entry(
         category = "debug",
         short_name = "11",
     ),
     cq_mirrors_console_view = "mirrors",
+    sheriff_rotations = args.ignore_default(None),
     triggered_by = ["ci/Mac Builder (dbg)"],
 )
 
@@ -314,8 +385,6 @@ ios_builder(
             short_name = "ctl",
         ),
     ],
-    # TODO(crbug.com/1266211): Use main Xcode when main version >= 13c100.
-    xcode = xcode.x13betabots,
 )
 
 ios_builder(
@@ -339,6 +408,25 @@ ios_builder(
 ios_builder(
     name = "ios-simulator",
     branch_selector = branches.STANDARD_MILESTONE,
+    builder_spec = builder_config.builder_spec(
+        gclient_config = builder_config.gclient_config(
+            config = "ios",
+            apply_configs = [
+                "use_clang_coverage",
+            ],
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = [
+                "mb",
+                "mac_toolchain",
+            ],
+            build_config = builder_config.build_config.DEBUG,
+            target_bits = 64,
+            target_platform = builder_config.target_platform.IOS,
+        ),
+        build_gs_bucket = "chromium-mac-archive",
+    ),
     console_view_entry = [
         consoles.console_view_entry(
             category = "ios|default",
@@ -357,6 +445,25 @@ ios_builder(
 ios_builder(
     name = "ios-simulator-full-configs",
     branch_selector = branches.STANDARD_MILESTONE,
+    builder_spec = builder_config.builder_spec(
+        gclient_config = builder_config.gclient_config(
+            config = "ios",
+            apply_configs = [
+                "use_clang_coverage",
+            ],
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = [
+                "mb",
+                "mac_toolchain",
+            ],
+            build_config = builder_config.build_config.DEBUG,
+            target_bits = 64,
+            target_platform = builder_config.target_platform.IOS,
+        ),
+        build_gs_bucket = "chromium-mac-archive",
+    ),
     console_view_entry = [
         consoles.console_view_entry(
             category = "ios|default",

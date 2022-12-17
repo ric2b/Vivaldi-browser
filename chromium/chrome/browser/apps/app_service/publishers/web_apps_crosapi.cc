@@ -75,8 +75,7 @@ void WebAppsCrosapi::LoadIcon(const std::string& app_id,
   const uint32_t icon_effects = icon_key.icon_effects;
 
   IconType crosapi_icon_type = icon_type;
-  IconKeyPtr crosapi_icon_key = std::make_unique<IconKey>(
-      icon_key.timeline, icon_key.resource_id, icon_key.icon_effects);
+  IconKeyPtr crosapi_icon_key = icon_key.Clone();
   if (crosapi_icon_type == apps::IconType::kCompressed) {
     // The effects are applied here in Ash.
     crosapi_icon_type = apps::IconType::kUncompressed;
@@ -100,6 +99,17 @@ void WebAppsCrosapi::LaunchAppWithParams(AppLaunchParams&& params,
   controller_->Launch(
       apps::ConvertLaunchParamsToCrosapi(params, proxy_->profile()),
       apps::LaunchResultToMojomLaunchResultCallback(std::move(callback)));
+}
+
+void WebAppsCrosapi::LaunchShortcut(const std::string& app_id,
+                                    const std::string& shortcut_id,
+                                    int64_t display_id) {
+  if (!LogIfNotConnected(FROM_HERE)) {
+    return;
+  }
+
+  controller_->ExecuteContextMenuCommand(app_id, shortcut_id,
+                                         base::DoNothing());
 }
 
 void WebAppsCrosapi::Connect(
@@ -207,23 +217,22 @@ void WebAppsCrosapi::GetMenuModel(const std::string& app_id,
                                   GetMenuModelCallback callback) {
   bool is_system_web_app = false;
   bool can_use_uninstall = false;
-  apps::mojom::WindowMode display_mode = apps::mojom::WindowMode::kUnknown;
+  WindowMode display_mode = WindowMode::kUnknown;
 
   proxy_->AppRegistryCache().ForOneApp(
       app_id, [&is_system_web_app, &can_use_uninstall,
                &display_mode](const apps::AppUpdate& update) {
         is_system_web_app =
-            update.InstallReason() == apps::mojom::InstallReason::kSystem;
-        can_use_uninstall =
-            update.AllowUninstall() == apps::mojom::OptionalBool::kTrue;
+            update.InstallReason() == apps::InstallReason::kSystem;
+        can_use_uninstall = update.AllowUninstall().value_or(false);
         display_mode = update.WindowMode();
       });
 
   apps::mojom::MenuItemsPtr menu_items = apps::mojom::MenuItems::New();
 
-  if (display_mode != apps::mojom::WindowMode::kUnknown && !is_system_web_app) {
+  if (display_mode != WindowMode::kUnknown && !is_system_web_app) {
     apps::CreateOpenNewSubmenu(menu_type,
-                               display_mode == apps::mojom::WindowMode::kBrowser
+                               display_mode == WindowMode::kBrowser
                                    ? IDS_APP_LIST_CONTEXT_MENU_NEW_TAB
                                    : IDS_APP_LIST_CONTEXT_MENU_NEW_WINDOW,
                                &menu_items);
@@ -367,6 +376,16 @@ void WebAppsCrosapi::OnApps(std::vector<AppPtr> deltas) {
   if (!web_app::IsWebAppsCrosapiEnabled())
     return;
 
+  if (!controller_.is_bound()) {
+    // If `controller_` is not bound, add `deltas` to `delta_cache_` to wait for
+    // registering the crosapi controller to publish all deltas saved in
+    // `delta_cache_`.
+    for (auto& delta : deltas) {
+      delta_cache_.push_back(std::move(delta));
+    }
+    return;
+  }
+
   std::vector<apps::mojom::AppPtr> mojom_apps;
   for (const AppPtr& delta : deltas) {
     mojom_apps.push_back(ConvertAppToMojomApp(delta));
@@ -389,6 +408,28 @@ void WebAppsCrosapi::RegisterAppController(
   controller_.Bind(std::move(controller));
   controller_.set_disconnect_handler(base::BindOnce(
       &WebAppsCrosapi::OnControllerDisconnected, base::Unretained(this)));
+
+  if (delta_cache_.empty()) {
+    // If there is no apps saved in `app_cache_`, still publish an empty app
+    // list to initialize the web app AppType for AppRegistryCache.
+    apps::AppPublisher::Publish(std::vector<AppPtr>{}, AppType::kWeb,
+                                should_notify_initialized_);
+  } else {
+    std::vector<apps::mojom::AppPtr> mojom_apps;
+    for (const auto& delta : delta_cache_) {
+      mojom_apps.push_back(ConvertAppToMojomApp(delta));
+    }
+    apps::AppPublisher::Publish(std::move(delta_cache_), AppType::kWeb,
+                                should_notify_initialized_);
+    delta_cache_.clear();
+
+    for (auto& subscriber : subscribers_) {
+      subscriber->OnApps(apps_util::CloneStructPtrVector(mojom_apps),
+                         apps::mojom::AppType::kWeb,
+                         should_notify_initialized_);
+    }
+  }
+  should_notify_initialized_ = false;
 }
 
 void WebAppsCrosapi::OnCapabilityAccesses(

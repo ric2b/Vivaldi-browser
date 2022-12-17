@@ -19,12 +19,30 @@ class HostContentSettingsMap;
 
 namespace privacy_sandbox_test_util {
 
-class MockPrivacySandboxObserver : public PrivacySandboxSettings::Observer {
+class MockPrivacySandboxObserver
+    : public privacy_sandbox::PrivacySandboxSettings::Observer {
  public:
   MockPrivacySandboxObserver();
   ~MockPrivacySandboxObserver();
-  MOCK_METHOD1(OnFlocDataAccessibleSinceUpdated, void(bool));
+  MOCK_METHOD(void, OnTopicsDataAccessibleSinceUpdated, (), (override));
   MOCK_METHOD1(OnTrustTokenBlockingChanged, void(bool));
+};
+
+class MockPrivacySandboxSettingsDelegate
+    : public privacy_sandbox::PrivacySandboxSettings::Delegate {
+ public:
+  MockPrivacySandboxSettingsDelegate();
+  ~MockPrivacySandboxSettingsDelegate() override;
+  void SetupDefaultResponse(bool restricted, bool confirmed) {
+    ON_CALL(*this, IsPrivacySandboxRestricted).WillByDefault([=]() {
+      return restricted;
+    });
+    ON_CALL(*this, IsPrivacySandboxConfirmed).WillByDefault([=]() {
+      return confirmed;
+    });
+  }
+  MOCK_METHOD(bool, IsPrivacySandboxRestricted, (), (override));
+  MOCK_METHOD(bool, IsPrivacySandboxConfirmed, (), (override));
 };
 
 // Define an additional content setting value to simulate an unmanaged default

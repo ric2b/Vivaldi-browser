@@ -15,12 +15,14 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/base_export.h"
 #include "base/containers/stack.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/no_destructor.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/platform_thread.h"
+#include "base/threading/thread_local.h"
 #include "base/time/time_override.h"
 #include "base/trace_event/category_registry.h"
 #include "base/trace_event/memory_dump_provider.h"

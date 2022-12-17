@@ -33,6 +33,7 @@
 #include "ash/login/ui/system_label_button.h"
 #include "ash/login/ui/views_utils.h"
 #include "ash/media/media_controller_impl.h"
+#include "ash/metrics/user_metrics_recorder.h"
 #include "ash/public/cpp/child_accounts/parent_access_controller.h"
 #include "ash/public/cpp/login_accelerators.h"
 #include "ash/public/cpp/smartlock_state.h"
@@ -569,6 +570,7 @@ FingerprintState LockContentsView::TestApi::GetFingerPrintState(
 LockContentsView::UserState::UserState(const LoginUserInfo& user_info)
     : account_id(user_info.basic_user_info.account_id) {
   fingerprint_state = user_info.fingerprint_state;
+  smart_lock_state = user_info.smart_lock_state;
   if (user_info.auth_type == proximity_auth::mojom::AuthType::ONLINE_SIGN_IN)
     force_online_sign_in = true;
   show_pin_pad_for_password = user_info.show_pin_pad_for_password;
@@ -622,7 +624,7 @@ LockContentsView::LockContentsView(
   system_info_ = top_header_->AddChildView(std::make_unique<views::View>());
   auto* system_info_layout =
       system_info_->SetLayoutManager(std::make_unique<views::BoxLayout>(
-          views::BoxLayout::Orientation::kVertical, gfx::Insets(6, 8)));
+          views::BoxLayout::Orientation::kVertical, gfx::Insets::VH(6, 8)));
   system_info_layout->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::kEnd);
   system_info_->SetVisible(false);
@@ -1114,6 +1116,9 @@ void LockContentsView::OnAuthFactorIsHidingPasswordChanged(
 
   user_state->auth_factor_is_hiding_password = auth_factor_is_hiding_password;
 
+  if (auth_factor_is_hiding_password)
+    HideAuthErrorMessage();
+
   // Do not call LayoutAuth() here. This event is triggered by
   // OnSmartLockStateChanged, which calls LayoutAuth(). Calling LayoutAuth() a
   // second time will prevent animations from running properly.
@@ -1413,8 +1418,7 @@ void LockContentsView::OnDetachableBasePairingStatusChanged(
     return;
   }
 
-  if (auth_error_bubble_->GetVisible())
-    auth_error_bubble_->Hide();
+  HideAuthErrorMessage();
 
   std::u16string error_text =
       l10n_util::GetStringUTF16(IDS_ASH_LOGIN_ERROR_DETACHABLE_BASE_CHANGED);
@@ -1929,7 +1933,12 @@ void LockContentsView::LayoutUserAddingScreenIndicator() {
 
 void LockContentsView::LayoutPublicSessionView() {
   gfx::Rect bounds = GetContentsBounds();
-  bounds.ClampToCenteredSize(expanded_view_->GetPreferredSize());
+  gfx::Size pref_size = expanded_view_->GetPreferredSize();
+  if (bounds.width() < pref_size.width()) {
+    int height = expanded_view_->GetHeightForWidth(bounds.width());
+    pref_size = {bounds.width(), height};
+  }
+  bounds.ClampToCenteredSize(pref_size);
   expanded_view_->SetBoundsRect(bounds);
 }
 
@@ -1965,8 +1974,7 @@ void LockContentsView::SwapActiveAuthBetweenPrimaryAndSecondary(
 void LockContentsView::OnAuthenticate(bool auth_success,
                                       bool display_error_messages) {
   if (auth_success) {
-    if (auth_error_bubble_->GetVisible())
-      auth_error_bubble_->Hide();
+    HideAuthErrorMessage();
 
     if (detachable_base_error_bubble_->GetVisible())
       detachable_base_error_bubble_->Hide();
@@ -2259,6 +2267,11 @@ void LockContentsView::ShowAuthErrorMessage() {
   auth_error_bubble_->Show();
 }
 
+void LockContentsView::HideAuthErrorMessage() {
+  if (auth_error_bubble_->GetVisible())
+    auth_error_bubble_->Hide();
+}
+
 void LockContentsView::OnEasyUnlockIconHovered() {
   LoginBigUserView* big_view = CurrentBigUserView();
   if (!big_view->auth_user())
@@ -2340,7 +2353,7 @@ void LockContentsView::OnPublicAccountTapped(bool is_primary) {
 void LockContentsView::LearnMoreButtonPressed() {
   Shell::Get()->login_screen_controller()->ShowAccountAccessHelpApp(
       GetWidget()->GetNativeWindow());
-  auth_error_bubble_->Hide();
+  HideAuthErrorMessage();
 }
 
 std::unique_ptr<LoginBigUserView> LockContentsView::AllocateLoginBigUserView(

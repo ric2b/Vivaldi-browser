@@ -186,8 +186,8 @@ sessions::LiveTab* BrowserLiveTabContext::AddRestoredTab(
     const sessions::SerializedUserAgentOverride& user_agent_override,
     const std::map<std::string, std::string>& extra_data,
     const SessionID* tab_id,
-    const std::map<std::string, bool> page_action_overrides,
-    const std::string& ext_data) {
+    const std::map<std::string, bool> viv_page_action_overrides,
+    const std::string& viv_ext_data) {
   SessionStorageNamespace* storage_namespace =
       tab_platform_data
           ? static_cast<const sessions::ContentPlatformSpecificTabData*>(
@@ -224,7 +224,7 @@ sessions::LiveTab* BrowserLiveTabContext::AddRestoredTab(
         browser_, navigations, tab_index, selected_navigation, extension_app_id,
         group, select, pin, base::TimeTicks(), storage_namespace,
         user_agent_override, extra_data, false /* from_session_restore */,
-        page_action_overrides, ext_data);
+        viv_page_action_overrides, viv_ext_data);
   }
 
   // Only update the metadata if the group doesn't already exist since the
@@ -275,8 +275,8 @@ sessions::LiveTab* BrowserLiveTabContext::ReplaceRestoredTab(
     const sessions::PlatformSpecificTabData* tab_platform_data,
     const sessions::SerializedUserAgentOverride& user_agent_override,
     const std::map<std::string, std::string>& extra_data,
-    const std::map<std::string, bool> page_action_overrides,
-    const std::string& ext_data) {
+    const std::map<std::string, bool> viv_page_action_overrides,
+    const std::string& viv_ext_data) {
   SessionStorageNamespace* storage_namespace =
       tab_platform_data
           ? static_cast<const sessions::ContentPlatformSpecificTabData*>(
@@ -288,7 +288,7 @@ sessions::LiveTab* BrowserLiveTabContext::ReplaceRestoredTab(
       browser_, navigations, selected_navigation, extension_app_id,
       storage_namespace, user_agent_override, extra_data,
       false /* from_session_restore */,
-      page_action_overrides, ext_data);
+      viv_page_action_overrides, viv_ext_data);
 
   return sessions::ContentLiveTab::GetForWebContents(web_contents);
 }
@@ -306,7 +306,7 @@ sessions::LiveTabContext* BrowserLiveTabContext::Create(
     const std::string& workspace,
     const std::string& user_title,
     const std::map<std::string, std::string>& extra_data,
-    const std::string& ext_data) {
+    const std::string& viv_ext_data) {
   std::unique_ptr<Browser::CreateParams> create_params;
   if (ShouldCreateAppWindowForAppName(profile, app_name)) {
     // Only trusted app popup windows should ever be restored.
@@ -319,7 +319,7 @@ sessions::LiveTabContext* BrowserLiveTabContext::Create(
         Browser::CreateParams(profile, true));
     create_params->initial_bounds = bounds;
     create_params->is_vivaldi = vivaldi::IsVivaldiRunning();
-    create_params->ext_data = ext_data;
+    create_params->viv_ext_data = viv_ext_data;
   }
 
   create_params->initial_show_state = show_state;
@@ -356,6 +356,6 @@ sessions::LiveTabContext* BrowserLiveTabContext::FindContextWithGroup(
   return browser ? browser->live_tab_context() : nullptr;
 }
 
-std::string BrowserLiveTabContext::GetExtData() const {
-  return browser_->ext_data();
+std::string BrowserLiveTabContext::GetVivExtData() const {
+  return browser_->viv_ext_data();
 }

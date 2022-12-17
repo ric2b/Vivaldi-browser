@@ -6,6 +6,7 @@
 
 #include "base/stl_util.h"
 #include "gn/build_settings.h"
+#include "gn/config_values_generator.h"
 #include "gn/err.h"
 #include "gn/filesystem_utils.h"
 #include "gn/functions.h"
@@ -63,7 +64,17 @@ void ActionTargetGenerator::DoRun() {
   if (!FillCheckIncludes())
     return;
 
+  if (!FillConfigs())
+    return;
+
   if (!CheckOutputs())
+    return;
+
+  // Config values (compiler flags, etc.) set directly on this target.
+  ConfigValuesGenerator gen(&target_->config_values(), scope_,
+                            scope_->GetSourceDir(), err_);
+  gen.Run();
+  if (err_->has_error())
     return;
 
   // Action outputs don't depend on the current toolchain so we can skip adding

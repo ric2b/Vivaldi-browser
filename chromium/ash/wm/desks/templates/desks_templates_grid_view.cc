@@ -25,10 +25,12 @@
 #include "base/i18n/string_compare.h"
 #include "third_party/icu/source/common/unicode/uloc.h"
 #include "third_party/icu/source/i18n/unicode/coll.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/aura/window.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/compositor/layer.h"
+#include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/events/event_handler.h"
 #include "ui/gfx/geometry/transform.h"
 #include "ui/gfx/geometry/transform_util.h"
@@ -117,7 +119,11 @@ class DesksTemplatesEventHandler : public ui::EventHandler {
 
 DesksTemplatesGridView::DesksTemplatesGridView()
     : bounds_animator_(this, /*use_transforms=*/true) {
-  bounds_animator_.SetAnimationDuration(kBoundsChangeAnimationDuration);
+  // Bounds animator is unaffected by debug tools such as "--ui-slow-animations"
+  // flag, so manually multiply the duration here.
+  bounds_animator_.SetAnimationDuration(
+      ui::ScopedAnimationDurationScaleMode::duration_multiplier() *
+      kBoundsChangeAnimationDuration);
   bounds_animator_.set_tween_type(gfx::Tween::LINEAR);
 }
 
@@ -160,7 +166,12 @@ DesksTemplatesGridView::CreateDesksTemplatesGridWidget(aura::Window* root) {
 
 void DesksTemplatesGridView::PopulateGridUI(
     const std::vector<DeskTemplate*>& desk_templates,
-    const gfx::Rect& grid_bounds) {
+    const gfx::Rect& grid_bounds,
+    const base::GUID& last_saved_template_uuid) {
+  DCHECK(grid_items_.empty());
+
+  // TODO(richui|sammiequon): See if this can be removed as this function should
+  // only be called once per overview session.
   if (desk_templates.empty()) {
     RemoveAllChildViews();
     grid_items_.clear();
@@ -169,24 +180,67 @@ void DesksTemplatesGridView::PopulateGridUI(
 
   AddOrUpdateTemplates(std::vector<const DeskTemplate*>(desk_templates.begin(),
                                                         desk_templates.end()),
-                       /*initializing_grid_view=*/true);
+                       /*initializing_grid_view=*/true,
+                       last_saved_template_uuid);
 
-  feedback_button_ = AddChildView(std::make_unique<PillButton>(
-      base::BindRepeating(&DesksTemplatesGridView::OnFeedbackButtonPressed,
-                          base::Unretained(this)),
-      l10n_util::GetStringUTF16(
-          IDS_ASH_PERSISTENT_DESKS_BAR_CONTEXT_MENU_FEEDBACK),
-      PillButton::Type::kIcon, &kPersistentDesksBarFeedbackIcon));
-  feedback_button_->SetBackgroundColor(
-      AshColorProvider::Get()->GetBaseLayerColor(
-          AshColorProvider::BaseLayerType::kTransparent80));
+  if (!feedback_button_) {
+    feedback_button_ = AddChildView(std::make_unique<PillButton>(
+        base::BindRepeating(&DesksTemplatesGridView::OnFeedbackButtonPressed,
+                            base::Unretained(this)),
+        l10n_util::GetStringUTF16(
+            IDS_ASH_PERSISTENT_DESKS_BAR_CONTEXT_MENU_FEEDBACK),
+        PillButton::Type::kIcon, &kPersistentDesksBarFeedbackIcon));
+  }
 
   GetWidget()->SetBounds(grid_bounds);
 }
 
+void DesksTemplatesGridView::SortTemplateGridItems(
+    const base::GUID& last_saved_template_uuid) {
+  // Sort the `grid_items_` into alphabetical order based on template name.
+  // Note that this doesn't update the order of the child views, but just sorts
+  // the vector. `Layout` is responsible for placing the views in the correct
+  // locations in the grid.
+  UErrorCode error_code = U_ZERO_ERROR;
+  std::unique_ptr<icu::Collator> collator(
+      icu::Collator::createInstance(error_code));  // Use current ICU locale.
+  DCHECK(U_SUCCESS(error_code));
+  // If there is a newly saved template, move that template to the front of the
+  // grid, and sort the rest of the templates after it.
+  std::sort(
+      grid_items_.begin(), grid_items_.end(),
+      [&collator, last_saved_template_uuid](const DesksTemplatesItemView* a,
+                                            const DesksTemplatesItemView* b) {
+        if (last_saved_template_uuid.is_valid() &&
+            a->uuid() == last_saved_template_uuid) {
+          return true;
+        }
+        if (last_saved_template_uuid.is_valid() &&
+            b->uuid() == last_saved_template_uuid) {
+          return false;
+        }
+        return base::i18n::CompareString16WithCollator(
+                   *collator, a->name_view()->GetAccessibleName(),
+                   b->name_view()->GetAccessibleName()) < 0;
+      });
+
+  // A11y traverses views based on the order of the children, so we need to
+  // manually reorder the child views to match the order that they are
+  // displayed, which is the alphabetically sorted `grid_items_` order. If
+  // there was a newly saved template, the first template in the grid will
+  // be the new template, while the rest will be sorted alphabetically.
+  for (size_t i = 0; i < grid_items_.size(); i++)
+    ReorderChildView(grid_items_[i], i);
+
+  if (bounds_animator_.IsAnimating())
+    bounds_animator_.Cancel();
+  Layout();
+}
+
 void DesksTemplatesGridView::AddOrUpdateTemplates(
     const std::vector<const DeskTemplate*>& entries,
-    bool initializing_grid_view) {
+    bool initializing_grid_view,
+    const base::GUID& last_saved_template_uuid) {
   std::vector<DesksTemplatesItemView*> new_grid_items;
 
   for (const DeskTemplate* entry : entries) {
@@ -206,27 +260,15 @@ void DesksTemplatesGridView::AddOrUpdateTemplates(
     }
   }
 
-  // Sort the `grid_items_` into alphabetical order based on template name.
-  // Note that this doesn't update the order of the child views, but just sorts
-  // the vector. `Layout` is responsible for placing the views in the correct
-  // locations in the grid.
-  UErrorCode error_code = U_ZERO_ERROR;
-  std::unique_ptr<icu::Collator> collator(
-      icu::Collator::createInstance(error_code));  // Use current ICU locale.
-  DCHECK(U_SUCCESS(error_code));
+  // Sort the `grid_items_` into alphabetical order based on template name. If a
+  // given uuid is valid, it'll push that template item to the front of the grid
+  // and sort the remaining templates after it.
+  SortTemplateGridItems(last_saved_template_uuid);
 
-  std::sort(grid_items_.begin(), grid_items_.end(),
-            [&collator](const DesksTemplatesItemView* a,
-                        const DesksTemplatesItemView* b) {
-              return base::i18n::CompareString16WithCollator(
-                         *collator, a->name_view()->GetAccessibleName(),
-                         b->name_view()->GetAccessibleName()) < 0;
-            });
-
-  if (initializing_grid_view)
-    Layout();
-  else
+  if (!initializing_grid_view) {
     AnimateGridItems(new_grid_items);
+    NotifyAccessibilityEvent(ax::mojom::Event::kTreeChanged, true);
+  }
 }
 
 void DesksTemplatesGridView::DeleteTemplates(
@@ -274,6 +316,7 @@ void DesksTemplatesGridView::DeleteTemplates(
   }
 
   AnimateGridItems(/*new_grid_items=*/{});
+  NotifyAccessibilityEvent(ax::mojom::Event::kTreeChanged, true);
 }
 
 DesksTemplatesItemView* DesksTemplatesGridView::GridItemBeingModified() {
@@ -323,6 +366,15 @@ void DesksTemplatesGridView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
     bounds_animator_.Cancel();
 }
 
+void DesksTemplatesGridView::OnThemeChanged() {
+  views::View::OnThemeChanged();
+  if (feedback_button_) {
+    feedback_button_->SetBackgroundColor(
+        AshColorProvider::Get()->GetBaseLayerColor(
+            AshColorProvider::BaseLayerType::kTransparent80));
+  }
+}
+
 void DesksTemplatesGridView::OnWindowDestroying(aura::Window* window) {
   DCHECK_EQ(window, widget_window_);
   DCHECK(event_handler_);
@@ -345,6 +397,18 @@ bool DesksTemplatesGridView::IntersectsWithGridItem(
       return true;
   }
   return false;
+}
+
+DesksTemplatesItemView* DesksTemplatesGridView::GetItemForUUID(
+    const base::GUID& uuid) {
+  if (!uuid.is_valid())
+    return nullptr;
+
+  auto it = std::find_if(grid_items_.begin(), grid_items_.end(),
+                         [&uuid](DesksTemplatesItemView* item_view) {
+                           return uuid == item_view->desk_template()->uuid();
+                         });
+  return it == grid_items_.end() ? nullptr : *it;
 }
 
 void DesksTemplatesGridView::OnLocatedEvent(ui::LocatedEvent* event,
@@ -456,8 +520,10 @@ std::vector<gfx::Rect> DesksTemplatesGridView::CalculateGridItemPositions()
 }
 
 gfx::Rect DesksTemplatesGridView::CalculateFeedbackButtonPosition() const {
+  // Use the current bounds if the grid is empty. When this happens, the grid
+  // will fade out and the feedback button will not be moved.
   if (grid_items_.empty())
-    return gfx::Rect();
+    return feedback_button_->bounds();
 
   // The feedback button is centered and `kFeedbackButtonSpacingDp` from the
   // bottom most grid item.

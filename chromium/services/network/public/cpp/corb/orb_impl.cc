@@ -6,6 +6,8 @@
 
 #include "base/containers/contains.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/rand_util.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "net/base/mime_sniffer.h"
@@ -43,7 +45,8 @@ bool IsAudioOrVideoMimeType(base::StringPiece mime_type) {
   //   (with only HTML/XML/JSON sniffing current implementation wouldn't block
   //   such non-webby images anyway).
   // - The current implementation reduces risk of blocking range requests for
-  //   non-sniffable types.
+  //   A) non-sniffable types and B) range responses for middle-of-resource
+  //   when first-bytes-response wasn't seen earlier.
   constexpr auto kCaseInsensitive = base::CompareCase::INSENSITIVE_ASCII;
   if (base::StartsWith(mime_type, "audio/", kCaseInsensitive) ||
       base::StartsWith(mime_type, "video/", kCaseInsensitive)) {
@@ -178,35 +181,6 @@ bool IsOpaqueResponse(const absl::optional<url::Origin>& request_initiator,
   return true;
 }
 
-bool IsSensitiveHtmlXmlOrJson(base::StringPiece data,
-                              base::StringPiece mime_type) {
-  if (CrossOriginReadBlocking::SniffForHTML(data) ==
-      CrossOriginReadBlocking::SniffingResult::kYes) {
-    return true;
-  }
-
-  // Some multimedia formats (e.g. image/svg+xml or application/dash+xml) may
-  // be XML-based - these need to be excluded from XML sniffing.
-  bool is_multimedia_mime_type = IsNonSniffableImageMimeType(mime_type) ||
-                                 IsAudioOrVideoMimeType(mime_type);
-  bool is_xml_based_multimedia_mime_type =
-      is_multimedia_mime_type &&
-      base::EndsWith(mime_type, "+xml", base::CompareCase::INSENSITIVE_ASCII);
-  if (!is_xml_based_multimedia_mime_type &&
-      CrossOriginReadBlocking::SniffForXML(data) ==
-          CrossOriginReadBlocking::SniffingResult::kYes) {
-    return true;
-  }
-
-  // Check for JSON and JS parser breakers.
-  if (CrossOriginReadBlocking::SniffForFetchOnlyResource(data) ==
-      CrossOriginReadBlocking::SniffingResult::kYes) {
-    return true;
-  }
-
-  return false;
-}
-
 }  // namespace
 
 OpaqueResponseBlockingAnalyzer::OpaqueResponseBlockingAnalyzer(
@@ -214,6 +188,9 @@ OpaqueResponseBlockingAnalyzer::OpaqueResponseBlockingAnalyzer(
     : per_factory_state_(&state) {}
 
 OpaqueResponseBlockingAnalyzer::~OpaqueResponseBlockingAnalyzer() {
+  base::UmaHistogramEnumeration("SiteIsolation.ORB.BlockingReason",
+                                blocking_decision_reason_);
+
   // TODO(https://crbug.com/1178928): Add UMA tracking the size of ORB state
   // from `per_factory_state_`.
 }
@@ -278,17 +255,30 @@ Decision OpaqueResponseBlockingAnalyzer::Init(
     // tighten our implementation of step 4 below (handling of range requests).
     switch (CrossOriginReadBlocking::GetCanonicalMimeType(mime_type_)) {
       case CrossOriginReadBlocking::MimeType::kNeverSniffed:
+        blocking_decision_reason_ =
+            BlockingDecisionReason::kNeverSniffedMimeType;
         return Decision::kBlock;  // Step ii.
 
       case CrossOriginReadBlocking::MimeType::kHtml:
       case CrossOriginReadBlocking::MimeType::kJson:
       case CrossOriginReadBlocking::MimeType::kPlain:
       case CrossOriginReadBlocking::MimeType::kXml:
-        if (is_no_sniff_header_present_)
+        if (is_no_sniff_header_present_) {
+          blocking_decision_reason_ = BlockingDecisionReason::kNoSniffHeader;
           return Decision::kBlock;  // Step iv.
+        }
         break;
 
       case CrossOriginReadBlocking::MimeType::kOthers:
+        // TODO(lukasza): Departure from the spec: The implementation below
+        // allows any response with an audio/video MIME type.  For more details
+        // please see *all* TODO comments in the IsAudioOrVideoMimeType function
+        // and also the "ORB v0.1 vs full ORB differences" section in the
+        // "Gradual CORB -> ORB transition" doc.
+        if (IsAudioOrVideoMimeType(mime_type_))
+          return Decision::kAllow;
+        break;
+
       case CrossOriginReadBlocking::MimeType::kInvalidMimeType:
         break;
     }
@@ -308,6 +298,8 @@ Decision OpaqueResponseBlockingAnalyzer::Init(
     if (IsAllowedAudioVideoRequest(request_url)) {
       return Decision::kAllow;
     } else {
+      blocking_decision_reason_ =
+          BlockingDecisionReason::kUnexpectedRangeResponse;
       return Decision::kBlock;
     }
   }
@@ -323,12 +315,7 @@ Decision OpaqueResponseBlockingAnalyzer::Sniff(base::StringPiece data) {
 
   // 7. If the audio or video type pattern matching algorithm given bytes does
   //    not return undefined, then:
-  //
-  // TODO(lukasza): Inspecting `mime_type_` (in addition to `sniffed_mime_type`)
-  // is a departure from the spec.  For more details please see *all* 3 of the
-  // TODO comments in the IsAudioOrVideoMimeType function.
-  if (IsAudioOrVideoMimeType(sniffed_mime_type) ||
-      IsAudioOrVideoMimeType(mime_type_)) {
+  if (IsAudioOrVideoMimeType(sniffed_mime_type)) {
     // i. Append (request's opaque media identifier, request's current URL) to
     //    the user agent's opaque-safelisted requesters set.
     StoreAllowedAudioVideoRequest(final_request_url_);
@@ -349,15 +336,45 @@ Decision OpaqueResponseBlockingAnalyzer::Sniff(base::StringPiece data) {
   if (base::StartsWith(sniffed_mime_type, "image/", kCaseInsensitive))
     return Decision::kAllow;
 
+  // Check if the response is HTML, XML, or JSON, in which case it is surely not
+  // JavaScript.  (The sniffers account for HTML/JS polyglot cases - see
+  // https://crbug.com/839945 and https://crbug.com/839425.)
+  //
   // TODO(lukasza): Departure from the spec.  This avoids having to sniff
   // Javascript in the full response as described in the "Gradual CORB -> ORB
   // transition" doc at
   // https://docs.google.com/document/d/1qUbE2ySi6av3arUEw5DNdFJIKKBbWGRGsXz_ew3S7HQ/edit?usp=sharing
   // Diff: This is a new sniffing step for the 1st 1024 bytes.
   // Diff: This doesn't sniff for JavaScript, but for non-Html/Xml/Json.
-  bool is_surely_not_javascript = IsSensitiveHtmlXmlOrJson(data, mime_type_);
-  if (is_surely_not_javascript)
-    return Decision::kBlock;
+  {
+    if (CrossOriginReadBlocking::SniffForHTML(data) ==
+        CrossOriginReadBlocking::SniffingResult::kYes) {
+      blocking_decision_reason_ = BlockingDecisionReason::kSniffedAsHtml;
+      return Decision::kBlock;
+    }
+
+    // Some multimedia formats (e.g. image/svg+xml or application/dash+xml) may
+    // be XML-based - these need to be excluded from XML sniffing.
+    bool is_multimedia_mime_type = IsNonSniffableImageMimeType(mime_type_) ||
+                                   IsAudioOrVideoMimeType(mime_type_);
+    bool is_xml_based_multimedia_mime_type =
+        is_multimedia_mime_type &&
+        base::EndsWith(mime_type_, "+xml",
+                       base::CompareCase::INSENSITIVE_ASCII);
+    if (!is_xml_based_multimedia_mime_type &&
+        CrossOriginReadBlocking::SniffForXML(data) ==
+            CrossOriginReadBlocking::SniffingResult::kYes) {
+      blocking_decision_reason_ = BlockingDecisionReason::kSniffedAsXml;
+      return Decision::kBlock;
+    }
+
+    // Check for JSON and JS parser breakers.
+    if (CrossOriginReadBlocking::SniffForFetchOnlyResource(data) ==
+        CrossOriginReadBlocking::SniffingResult::kYes) {
+      blocking_decision_reason_ = BlockingDecisionReason::kSniffedAsJson;
+      return Decision::kBlock;
+    }
+  }
 
   return Decision::kSniffMore;
 }
@@ -411,6 +428,15 @@ Decision OpaqueResponseBlockingAnalyzer::HandleEndOfSniffableResponseBody() {
 
 bool OpaqueResponseBlockingAnalyzer::ShouldReportBlockedResponse() const {
   return !is_empty_response_ && is_http_status_okay_;
+}
+
+void OpaqueResponseBlockingAnalyzer::ReportOrbBlockedAndCorbDidnt() const {
+  // We encountered a scenario where ORB may block more than CORB and therefore
+  // let's log some extra data that may help us understand the kind of
+  // backcompatiblity risk that this scenario represents.
+  base::UmaHistogramEnumeration(
+      "SiteIsolation.ORB.CorbVsOrb.OrbBlockedAndCorbDidnt.Reason",
+      blocking_decision_reason_);
 }
 
 void OpaqueResponseBlockingAnalyzer::StoreAllowedAudioVideoRequest(

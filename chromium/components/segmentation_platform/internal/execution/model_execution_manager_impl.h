@@ -11,17 +11,11 @@
 
 #include "base/callback.h"
 #include "base/containers/flat_set.h"
-#include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/task/sequenced_task_runner.h"
-#include "components/optimization_guide/core/model_executor.h"
 #include "components/optimization_guide/proto/models.pb.h"
 #include "components/segmentation_platform/internal/database/segment_info_database.h"
-#include "components/segmentation_platform/internal/database/signal_database.h"
 #include "components/segmentation_platform/internal/execution/model_execution_manager.h"
-#include "components/segmentation_platform/internal/execution/segmentation_model_handler.h"
-#include "components/segmentation_platform/internal/proto/aggregation.pb.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace base {
@@ -29,40 +23,25 @@ class Clock;
 }  // namespace base
 
 namespace segmentation_platform {
-class FeatureListQueryProcessor;
-class SignalDatabase;
+class ModelProvider;
+class ModelProviderFactory;
 
 namespace proto {
 class SegmentInfo;
 }  // namespace proto
 
-// The ModelExecutionManagerImpl is the core implementation of the
-// ModelExecutionManager that hooks up the SegmentInfoDatabase (metadata) and
-// SignalDatabase (raw signals) databases, and uses a FeatureCalculator for each
-// feature to go from metadata and raw signals to create an input tensor to use
-// when executing the ML model. It then uses this input tensor to execute the
-// model and returns the result through a callback.
-// This class is implemented by having a long chain of callbacks and storing all
-// necessary state as part of an ExecutionState struct. This simplifies state
-// management, particularly in the case of executing multiple models
-// simultaneously, or the same model multiple times without waiting for the
-// requests to finish.
-// The vector of OptimizationTargets need to be passed in at construction time
-// so the SegmentationModelHandler instances can be created early.
+// ModelExecutionManager that owns and manages non-default (OptimizationGuide
+// based) ModelProvider(s) and uses SegmentInfoDatabase (metadata) for storing
+// the latest model from ModelProvider. The vector of OptimizationTargets need
+// to be passed in at construction time so the SegmentationModelHandler
+// instances can be created early.
 class ModelExecutionManagerImpl : public ModelExecutionManager {
  public:
-  using ModelHandlerCreator =
-      base::RepeatingCallback<std::unique_ptr<SegmentationModelHandler>(
-          optimization_guide::proto::OptimizationTarget,
-          const SegmentationModelHandler::ModelUpdatedCallback&)>;
-
-  explicit ModelExecutionManagerImpl(
+  ModelExecutionManagerImpl(
       const base::flat_set<OptimizationTarget>& segment_ids,
-      ModelHandlerCreator model_handler_creator,
+      ModelProviderFactory* model_provider_factory,
       base::Clock* clock,
       SegmentInfoDatabase* segment_database,
-      SignalDatabase* signal_database,
-      FeatureListQueryProcessor* feature_list_query_processor,
       const SegmentationModelUpdatedCallback& model_updated_callback);
   ~ModelExecutionManagerImpl() override;
 
@@ -71,51 +50,21 @@ class ModelExecutionManagerImpl : public ModelExecutionManager {
   ModelExecutionManagerImpl& operator=(const ModelExecutionManagerImpl&) =
       delete;
 
-  // ModelExecutionManager overrides.
-  void ExecuteModel(optimization_guide::proto::OptimizationTarget segment_id,
-                    ModelExecutionCallback callback) override;
+  // ModelExecutionManager override:
+  ModelProvider* GetProvider(
+      optimization_guide::proto::OptimizationTarget segment_id) override;
 
  private:
-  FRIEND_TEST_ALL_PREFIXES(SegmentationPlatformServiceImplTest,
-                           InitializationFlow);
-  struct ExecutionState;
-  struct ModelExecutionTraceEvent;
-
-  // Callback method for when the SegmentInfo (segment metadata) has been
-  // loaded.
-  void OnSegmentInfoFetchedForExecution(
-      std::unique_ptr<ExecutionState> state,
-      absl::optional<proto::SegmentInfo> segment_info);
-
-  // Callback method for when the processing of the model metadata's feature
-  // list has completed, which either result in an error or a valid input tensor
-  // for executing the model.
-  void OnProcessingFeatureListComplete(std::unique_ptr<ExecutionState> state,
-                                       bool error,
-                                       const std::vector<float>& input_tensor);
-
-  // ExecuteModel takes the current input tensor and passes it to the ML
-  // model for execution.
-  void ExecuteModel(std::unique_ptr<ExecutionState> state);
-
-  // Callback method for when the model execution has completed which gives
-  // the end result to the initial ModelExecutionCallback passed to
-  // ExecuteModel(...).
-  void OnModelExecutionComplete(std::unique_ptr<ExecutionState> state,
-                                const absl::optional<float>& result);
-
-  // Helper function for synchronously invoking the callback with the given
-  // result and status.
-  void RunModelExecutionCallback(std::unique_ptr<ExecutionState> state,
-                                 float result,
-                                 ModelExecutionStatus status);
+  friend class SegmentationPlatformServiceImplTest;
+  friend class TestServicesForPlatform;
 
   // Callback for whenever a SegmentationModelHandler is informed that the
   // underlying ML model file has been updated. If there is an available
   // model, this will be called at least once per session.
   void OnSegmentationModelUpdated(
       optimization_guide::proto::OptimizationTarget segment_id,
-      proto::SegmentationModelMetadata metadata);
+      proto::SegmentationModelMetadata metadata,
+      int64_t model_version);
 
   // Callback after fetching the current SegmentInfo from the
   // SegmentInfoDatabase. This is part of the flow for informing the
@@ -125,6 +74,7 @@ class ModelExecutionManagerImpl : public ModelExecutionManager {
   void OnSegmentInfoFetchedForModelUpdate(
       optimization_guide::proto::OptimizationTarget segment_id,
       proto::SegmentationModelMetadata metadata,
+      int64_t model_version,
       absl::optional<proto::SegmentInfo> segment_info);
 
   // Callback after storing the updated version of the SegmentInfo.
@@ -133,20 +83,13 @@ class ModelExecutionManagerImpl : public ModelExecutionManager {
                                   bool success);
 
   // All the relevant handlers for each of the segments.
-  std::map<OptimizationTarget, std::unique_ptr<SegmentationModelHandler>>
-      model_handlers_;
+  std::map<OptimizationTarget, std::unique_ptr<ModelProvider>> model_providers_;
 
   // Used to access the current time.
   raw_ptr<base::Clock> clock_;
 
   // Database for segment information and metadata.
   raw_ptr<SegmentInfoDatabase> segment_database_;
-
-  // Main signal database for user actions and histograms.
-  raw_ptr<SignalDatabase> signal_database_;
-
-  // Feature list processor for processing a model metadata's feature list.
-  raw_ptr<FeatureListQueryProcessor> feature_list_query_processor_;
 
   // Invoked whenever there is an update to any of the relevant ML models.
   SegmentationModelUpdatedCallback model_updated_callback_;

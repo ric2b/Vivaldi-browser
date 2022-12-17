@@ -32,7 +32,7 @@ FakeOsIntegrationManager::FakeOsIntegrationManager(
   if (!this->shortcut_manager()) {
     set_shortcut_manager(std::make_unique<TestShortcutManager>(profile));
   }
-  if (!this->file_handler_manager()) {
+  if (!has_file_handler_manager()) {
     set_file_handler_manager(
         std::make_unique<FakeWebAppFileHandlerManager>(profile));
   }
@@ -92,8 +92,7 @@ void FakeOsIntegrationManager::InstallOsHooks(
   }
 
   base::SequencedTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::BindOnce(std::move(callback), std::move(os_hooks_errors)));
+      FROM_HERE, base::BindOnce(std::move(callback), os_hooks_errors));
 }
 
 void FakeOsIntegrationManager::UninstallOsHooks(

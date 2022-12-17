@@ -5,7 +5,11 @@
 #ifndef MEDIA_MOJO_MOJOM_STABLE_STABLE_VIDEO_DECODER_TYPES_MOJOM_TRAITS_H_
 #define MEDIA_MOJO_MOJOM_STABLE_STABLE_VIDEO_DECODER_TYPES_MOJOM_TRAITS_H_
 
+#include "base/notreached.h"
+#include "media/base/video_frame.h"
+#include "media/base/video_frame_metadata.h"
 #include "media/mojo/mojom/stable/stable_video_decoder_types.mojom.h"
+#include "mojo/public/cpp/bindings/optional_as_pointer.h"
 
 namespace mojo {
 
@@ -429,6 +433,46 @@ struct StructTraits<media::stable::mojom::ColorVolumeMetadataDataView,
 };
 
 template <>
+struct StructTraits<media::stable::mojom::DecoderBufferDataView,
+                    scoped_refptr<media::DecoderBuffer>> {
+  static bool IsNull(const scoped_refptr<media::DecoderBuffer>& input) {
+    return !input;
+  }
+
+  static void SetToNull(scoped_refptr<media::DecoderBuffer>* input) {
+    *input = nullptr;
+  }
+
+  static base::TimeDelta timestamp(
+      const scoped_refptr<media::DecoderBuffer>& input);
+
+  static base::TimeDelta duration(
+      const scoped_refptr<media::DecoderBuffer>& input);
+
+  static bool is_end_of_stream(
+      const scoped_refptr<media::DecoderBuffer>& input);
+
+  static uint32_t data_size(const scoped_refptr<media::DecoderBuffer>& input);
+
+  static bool is_key_frame(const scoped_refptr<media::DecoderBuffer>& input);
+
+  static std::vector<uint8_t> side_data(
+      const scoped_refptr<media::DecoderBuffer>& input);
+
+  static std::unique_ptr<media::DecryptConfig> decrypt_config(
+      const scoped_refptr<media::DecoderBuffer>& input);
+
+  static base::TimeDelta front_discard(
+      const scoped_refptr<media::DecoderBuffer>& input);
+
+  static base::TimeDelta back_discard(
+      const scoped_refptr<media::DecoderBuffer>& input);
+
+  static bool Read(media::stable::mojom::DecoderBufferDataView input,
+                   scoped_refptr<media::DecoderBuffer>* output);
+};
+
+template <>
 struct StructTraits<media::stable::mojom::DecryptConfigDataView,
                     std::unique_ptr<media::DecryptConfig>> {
   static bool IsNull(const std::unique_ptr<media::DecryptConfig>& input) {
@@ -576,8 +620,18 @@ struct StructTraits<media::stable::mojom::NativeGpuMemoryBufferHandleDataView,
   static const gfx::GpuMemoryBufferId& id(
       const gfx::GpuMemoryBufferHandle& input);
 
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
   static gfx::NativePixmapHandle platform_handle(
       gfx::GpuMemoryBufferHandle& input);
+#else
+  static media::stable::mojom::NativePixmapHandlePtr platform_handle(
+      gfx::GpuMemoryBufferHandle& input) {
+    // We should not be trying to serialize a gfx::GpuMemoryBufferHandle for the
+    // purposes of this interface outside of Linux and Chrome OS.
+    CHECK(false);
+    return media::stable::mojom::NativePixmapHandle::New();
+  }
+#endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 
   static bool Read(
       media::stable::mojom::NativeGpuMemoryBufferHandleDataView data,
@@ -600,7 +654,7 @@ struct StructTraits<media::stable::mojom::StatusDataDataView,
   static absl::optional<media::internal::StatusData> cause(
       const media::internal::StatusData& input);
 
-  static base::Value data(const media::internal::StatusData& input);
+  static const base::Value& data(const media::internal::StatusData& input);
 
   static bool Read(media::stable::mojom::StatusDataDataView data,
                    media::internal::StatusData* output);
@@ -609,7 +663,7 @@ struct StructTraits<media::stable::mojom::StatusDataDataView,
 template <>
 struct StructTraits<media::stable::mojom::StatusDataView,
                     media::DecoderStatus> {
-  static absl::optional<media::internal::StatusData> internal(
+  static mojo::OptionalAsPointer<const media::internal::StatusData> internal(
       const media::DecoderStatus& input);
 
   static bool Read(media::stable::mojom::StatusDataView data,
@@ -1128,6 +1182,16 @@ struct EnumTraits<media::stable::mojom::VideoPixelFormat,
         return media::stable::mojom::VideoPixelFormat::kPixelFormatBGRA;
       case ::media::VideoPixelFormat::PIXEL_FORMAT_RGBAF16:
         return media::stable::mojom::VideoPixelFormat::kPixelFormatRGBAF16;
+      case ::media::VideoPixelFormat::PIXEL_FORMAT_I422A:
+        return media::stable::mojom::VideoPixelFormat::kPixelFormatI422A;
+      case ::media::VideoPixelFormat::PIXEL_FORMAT_I444A:
+        return media::stable::mojom::VideoPixelFormat::kPixelFormatI444A;
+      case ::media::VideoPixelFormat::PIXEL_FORMAT_YUV420AP10:
+        return media::stable::mojom::VideoPixelFormat::kPixelFormatYUV420AP10;
+      case ::media::VideoPixelFormat::PIXEL_FORMAT_YUV422AP10:
+        return media::stable::mojom::VideoPixelFormat::kPixelFormatYUV422AP10;
+      case ::media::VideoPixelFormat::PIXEL_FORMAT_YUV444AP10:
+        return media::stable::mojom::VideoPixelFormat::kPixelFormatYUV444AP10;
     }
 
     NOTREACHED();
@@ -1231,6 +1295,21 @@ struct EnumTraits<media::stable::mojom::VideoPixelFormat,
         return true;
       case media::stable::mojom::VideoPixelFormat::kPixelFormatRGBAF16:
         *output = ::media::VideoPixelFormat::PIXEL_FORMAT_RGBAF16;
+        return true;
+      case media::stable::mojom::VideoPixelFormat::kPixelFormatI422A:
+        *output = ::media::VideoPixelFormat::PIXEL_FORMAT_I422A;
+        return true;
+      case media::stable::mojom::VideoPixelFormat::kPixelFormatI444A:
+        *output = ::media::VideoPixelFormat::PIXEL_FORMAT_I444A;
+        return true;
+      case media::stable::mojom::VideoPixelFormat::kPixelFormatYUV420AP10:
+        *output = ::media::VideoPixelFormat::PIXEL_FORMAT_YUV420AP10;
+        return true;
+      case media::stable::mojom::VideoPixelFormat::kPixelFormatYUV422AP10:
+        *output = ::media::VideoPixelFormat::PIXEL_FORMAT_YUV422AP10;
+        return true;
+      case media::stable::mojom::VideoPixelFormat::kPixelFormatYUV444AP10:
+        *output = ::media::VideoPixelFormat::PIXEL_FORMAT_YUV444AP10;
         return true;
     }
 

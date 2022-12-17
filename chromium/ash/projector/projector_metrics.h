@@ -49,10 +49,13 @@ enum class ProjectorMarkerColor {
   kBlack = 0,
   kWhite = 1,
   kBlue = 2,
+  kRed = 3,
+  kYellow = 4,
+  kMagenta = 5,
   // Add future entries above this comment, in sync with
   // "ProjectorMarkerColor" in src/tools/metrics/histograms/enums.xml.
   // Update kMaxValue to the last value.
-  kMaxValue = kBlue
+  kMaxValue = kMagenta
 };
 
 // These enum values represent steps in the Projector creation flow and log to
@@ -71,6 +74,19 @@ enum class ProjectorCreationFlow {
   kMaxValue = kSessionStopped
 };
 
+// These enum values represent user-facing errors in the Projector creation flow
+// and log to UMA. Entries should not be renumbered and numeric values should
+// never be reused. Please keep in sync with "ProjectorCreationFlowError" in
+// src/tools/metrics/histograms/enums.xml.
+enum class ProjectorCreationFlowError {
+  kSaveError = 0,
+  kTranscriptionError = 1,
+  // Add future entries above this comment, in sync with
+  // "ProjectorCreationFlowError" in src/tools/metrics/histograms/enums.xml.
+  // Update kMaxValue to the last value.
+  kMaxValue = kTranscriptionError
+};
+
 // Records the buttons the user presses on the Projector toolbar.
 void RecordToolbarMetrics(ProjectorToolbar button);
 
@@ -83,6 +99,9 @@ void RecordCreationFlowMetrics(ProjectorCreationFlow step);
 
 // Records the number of transcripts generated during a screencast recording.
 void RecordTranscriptsCount(size_t count);
+
+// Records errors encountered during the creation flow.
+void RecordCreationFlowError(int message_id);
 
 }  // namespace ash
 

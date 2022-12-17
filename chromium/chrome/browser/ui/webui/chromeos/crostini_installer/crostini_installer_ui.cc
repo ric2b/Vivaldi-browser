@@ -30,7 +30,6 @@
 #include "ui/base/webui/web_ui_util.h"
 #include "ui/chromeos/devicetype_utils.h"
 #include "ui/resources/grit/webui_generated_resources.h"
-#include "ui/resources/grit/webui_resources.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/web_dialogs/web_dialog_ui.h"
 #include "ui/webui/mojo_web_ui_controller.h"
@@ -74,8 +73,6 @@ void AddStringResources(content::WebUIDataSource* source) {
       {"configureContainerMessage",
        IDS_CROSTINI_INSTALLER_CONFIGURE_CONTAINER_MESSAGE},
       {"setupContainerMessage", IDS_CROSTINI_INSTALLER_SETUP_CONTAINER_MESSAGE},
-      {"fetchSshKeysMessage", IDS_CROSTINI_INSTALLER_FETCH_SSH_KEYS_MESSAGE},
-      {"mountContainerMessage", IDS_CROSTINI_INSTALLER_MOUNT_CONTAINER_MESSAGE},
       {"cancelingMessage", IDS_CROSTINI_INSTALLER_CANCELING},
 
       {"configureMessage", IDS_CROSTINI_INSTALLER_CONFIGURE_MESSAGE},

@@ -18,10 +18,10 @@
 #include "chrome/browser/background/background_contents_service_factory.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/breadcrumbs/breadcrumb_manager_keyed_service_factory.h"
-#include "chrome/browser/breadcrumbs/breadcrumbs_status.h"
 #include "chrome/browser/browsing_data/access_context_audit_service_factory.h"
 #include "chrome/browser/browsing_data/browsing_data_history_observer_service.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate_factory.h"
+#include "chrome/browser/browsing_topics/browsing_topics_service_factory.h"
 #include "chrome/browser/chrome_browser_main.h"
 #include "chrome/browser/client_hints/client_hints_factory.h"
 #include "chrome/browser/consent_auditor/consent_auditor_factory.h"
@@ -34,6 +34,7 @@
 #include "chrome/browser/download/background_download_service_factory.h"
 #include "chrome/browser/download/download_core_service_factory.h"
 #include "chrome/browser/engagement/site_engagement_service_factory.h"
+#include "chrome/browser/enterprise/reporting/cloud_profile_reporting_service_factory.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/favicon/history_ui_favicon_request_handler_factory.h"
 #include "chrome/browser/feature_engagement/tracker_factory.h"
@@ -113,6 +114,7 @@
 #include "chrome/browser/web_data_service_factory.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_features.h"
+#include "components/breadcrumbs/core/breadcrumbs_status.h"
 #include "components/captive_portal/core/buildflags.h"
 #include "components/optimization_guide/core/optimization_guide_switches.h"
 #include "components/optimization_guide/machine_learning_tflite_buildflags.h"
@@ -223,8 +225,9 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "chrome/browser/chromeos/extensions/login_screen/login/cleanup/cleanup_manager_lacros_factory.h"
 #include "chrome/browser/lacros/account_manager/profile_account_manager_factory.h"
-#include "chrome/browser/lacros/cert_db_initializer_factory.h"
+#include "chrome/browser/lacros/cert/cert_db_initializer_factory.h"
 #endif
 
 #if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
@@ -300,10 +303,14 @@ void ChromeBrowserMainExtraPartsProfiles::
 #endif
   BookmarkModelFactory::GetInstance();
   BookmarkUndoServiceFactory::GetInstance();
-  if (BreadcrumbsStatus::IsEnabled())
+  if (breadcrumbs::IsEnabled())
     BreadcrumbManagerKeyedServiceFactory::GetInstance();
   browser_sync::UserEventServiceFactory::GetInstance();
   BrowsingDataHistoryObserverService::Factory::GetInstance();
+  browsing_topics::BrowsingTopicsServiceFactory::GetInstance();
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  chromeos::CleanupManagerLacrosFactory::GetInstance();
+#endif
 #if BUILDFLAG(ENABLE_CAPTIVE_PORTAL_DETECTION)
   CaptivePortalServiceFactory::GetInstance();
 #endif
@@ -441,6 +448,10 @@ void ChromeBrowserMainExtraPartsProfiles::
   policy::UserCloudPolicyInvalidatorFactory::GetInstance();
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
   policy::UserPolicySigninServiceFactory::GetInstance();
+#endif
+
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
+  enterprise_reporting::CloudProfileReportingServiceFactory::GetInstance();
 #endif
 #if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
   if (base::FeatureList::IsEnabled(

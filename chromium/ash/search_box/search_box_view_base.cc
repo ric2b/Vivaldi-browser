@@ -107,6 +107,13 @@ class SearchBoxImageButton : public views::ImageButton {
     // OnPaintBackground();
     SetInstallFocusRingOnFocus(false);
 
+    // Inkdrop only on click.
+    views::InkDrop::Get(this)->SetMode(views::InkDropHost::InkDropMode::ON);
+    SetHasInkDropActionOnClick(true);
+    views::InkDrop::UseInkDropForFloodFillRipple(views::InkDrop::Get(this),
+                                                 /*highlight_on_hover=*/false);
+    UpdateInkDropColors();
+
     SetPaintToLayer();
     layer()->SetFillsBoundsOpaquely(false);
 
@@ -144,6 +151,11 @@ class SearchBoxImageButton : public views::ImageButton {
     SchedulePaint();
   }
 
+  void OnThemeChanged() override {
+    views::View::OnThemeChanged();
+    UpdateInkDropColors();
+  }
+
   void set_is_showing(bool is_showing) { is_showing_ = is_showing; }
   bool is_showing() { return is_showing_; }
 
@@ -152,6 +164,18 @@ class SearchBoxImageButton : public views::ImageButton {
 
   // Whether the button is showing/shown or hiding/hidden.
   bool is_showing_ = false;
+
+  void UpdateInkDropColors() {
+    SkColor search_box_card_background_color =
+        AppListColorProvider::Get()->GetSearchBoxCardBackgroundColor();
+
+    views::InkDrop::Get(this)->SetBaseColor(
+        AppListColorProvider::Get()->GetInkDropBaseColor(
+            search_box_card_background_color));
+    views::InkDrop::Get(this)->SetVisibleOpacity(
+        AppListColorProvider::Get()->GetInkDropOpacity(
+            search_box_card_background_color));
+  }
 
   // views::View overrides:
   void OnPaintBackground(gfx::Canvas* canvas) override {
@@ -312,7 +336,7 @@ SearchBoxViewBase::SearchBoxViewBase(SearchBoxViewDelegate* delegate)
   box_layout_ =
       content_container_->SetLayoutManager(std::make_unique<views::BoxLayout>(
           views::BoxLayout::Orientation::kHorizontal,
-          gfx::Insets(0, kSearchBoxPadding), between_child_spacing));
+          gfx::Insets::VH(0, kSearchBoxPadding), between_child_spacing));
   box_layout_->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::kCenter);
   box_layout_->set_minimum_cross_axis_size(kSearchBoxPreferredHeight);
@@ -335,7 +359,6 @@ SearchBoxViewBase::SearchBoxViewBase(SearchBoxViewDelegate* delegate)
       content_container_->AddChildView(std::make_unique<SearchIconImageView>());
   search_icon_->SetPaintToLayer();
   search_icon_->layer()->SetFillsBoundsOpaquely(false);
-
   content_container_->AddChildView(search_box_);
   box_layout_->SetFlexForView(search_box_, 1);
 
@@ -369,10 +392,14 @@ void SearchBoxViewBase::Init(const InitParams& params) {
   layer()->SetFillsBoundsOpaquely(false);
   layer()->SetMasksToBounds(true);
   if (params.create_background) {
-    content_container_->SetBackground(std::make_unique<SearchBoxBackground>(
+    SetBackground(std::make_unique<SearchBoxBackground>(
         kSearchBoxBorderCornerRadius,
         AppListColorProvider::Get()->GetSearchBoxBackgroundColor()));
   }
+  if (params.increase_child_view_padding) {
+    box_layout_->set_between_child_spacing(kInnerPadding);
+  }
+
   UpdateSearchBoxBorder();
   UpdatePlaceholderTextStyle();
   SetupAssistantButton();
@@ -440,6 +467,7 @@ void SearchBoxViewBase::SetSearchBoxActive(bool active,
   NotifyActiveChanged();
 
   content_container_->Layout();
+  UpdateSearchBoxFocusPaint();
   SchedulePaint();
 }
 
@@ -487,6 +515,7 @@ void SearchBoxViewBase::NotifyGestureEvent() {
 void SearchBoxViewBase::OnSearchBoxFocusedChanged() {
   UpdateSearchBoxBorder();
   Layout();
+  UpdateSearchBoxFocusPaint();
   SchedulePaint();
 }
 
@@ -514,6 +543,8 @@ void SearchBoxViewBase::ClearSearch() {
 }
 
 void SearchBoxViewBase::OnSearchBoxActiveChanged(bool active) {}
+
+void SearchBoxViewBase::UpdateSearchBoxFocusPaint() {}
 
 void SearchBoxViewBase::NotifyQueryChanged() {
   DCHECK(delegate_);
@@ -607,10 +638,9 @@ bool SearchBoxViewBase::HandleGestureEvent(
 }
 
 void SearchBoxViewBase::SetSearchBoxBackgroundCornerRadius(int corner_radius) {
-  auto* background =
-      static_cast<SearchBoxBackground*>(GetSearchBoxBackground());
-  if (background)
-    background->SetCornerRadius(corner_radius);
+  auto* search_box_background = static_cast<SearchBoxBackground*>(background());
+  if (search_box_background)
+    search_box_background->SetCornerRadius(corner_radius);
 }
 
 void SearchBoxViewBase::SetSearchIconImage(gfx::ImageSkia image) {
@@ -646,13 +676,9 @@ void SearchBoxViewBase::HandleSearchBoxEvent(ui::LocatedEvent* located_event) {
 
 // TODO(crbug.com/755219): Unify this with SetBackgroundColor.
 void SearchBoxViewBase::UpdateBackgroundColor(SkColor color) {
-  auto* background = GetSearchBoxBackground();
-  if (background)
-    background->SetNativeControlColor(color);
-}
-
-views::Background* SearchBoxViewBase::GetSearchBoxBackground() {
-  return content_container_->background();
+  auto* search_box_background = background();
+  if (search_box_background)
+    search_box_background->SetNativeControlColor(color);
 }
 
 }  // namespace ash

@@ -11,6 +11,7 @@
 #include "ui/compositor/layer.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/font_list.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/progress_bar.h"
 #include "ui/views/layout/box_layout.h"
@@ -64,7 +65,7 @@ VideoProgress::VideoProgress() {
       views::kFlexBehaviorKey,
       views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToMinimum,
                                views::MaximumFlexSizeRule::kUnbounded));
-  progress_bar->SetProperty(views::kMarginsKey, gfx::Insets(0, 4, 0, 4));
+  progress_bar->SetProperty(views::kMarginsKey, gfx::Insets::TLBR(0, 4, 0, 4));
   progress_bar_ = AddChildView(std::move(progress_bar));
 
   auto duration = std::make_unique<views::Label>(u"0:00:00");

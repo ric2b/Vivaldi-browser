@@ -4,11 +4,11 @@
 
 import './supported_links_overlapping_apps_dialog.js';
 import './supported_links_dialog.js';
-import '//resources/cr_components/chromeos/localized_link/localized_link.js';
+import '//resources/cr_components/localized_link/localized_link.js';
 import '//resources/cr_elements/cr_radio_button/cr_radio_button.m.js';
 import '//resources/cr_elements/cr_radio_group/cr_radio_group.m.js';
 
-import {AppManagementUserAction, AppType} from '//resources/cr_components/app_management/constants.js';
+import {AppManagementUserAction, AppType, WindowMode} from '//resources/cr_components/app_management/constants.js';
 import {assert} from '//resources/js/assert.m.js';
 import {focusWithoutInk} from '//resources/js/cr/ui/focus_without_ink.m.js';
 import {html, Polymer} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -16,7 +16,7 @@ import {recordAppManagementUserAction} from 'chrome://resources/cr_components/ap
 import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 
-import {recordSettingChange} from '../../metrics_recorder.m.js';
+import {recordSettingChange} from '../../metrics_recorder.js';
 
 import {BrowserProxy} from './browser_proxy.js';
 import {AppManagementStoreClient} from './store_client.js';
@@ -132,8 +132,7 @@ Polymer({
    * @private
    */
   isDisabled_(app) {
-    return app.type === AppType.kWeb &&
-        app.windowMode === apps.mojom.WindowMode.kBrowser;
+    return app.type === AppType.kWeb && app.windowMode === WindowMode.kBrowser;
   },
 
   /**
@@ -186,7 +185,7 @@ Polymer({
     } catch (err) {
       // If we fail to get the overlapping preferred apps, do not
       // show the overlap warning.
-      console.log(err);
+      console.warn(err);
       this.showOverlappingAppsWarning_ = false;
       return;
     }
@@ -245,7 +244,7 @@ Polymer({
 
     recordSettingChange();
     recordAppManagementUserAction(
-        this.app.type, AppManagementUserAction.SupportedLinksListShown);
+        this.app.type, AppManagementUserAction.SUPPORTED_LINKS_LIST_SHOWN);
   },
 
   /**
@@ -275,7 +274,7 @@ Polymer({
     } catch (err) {
       // If we fail to get the overlapping preferred apps, don't prevent the
       // user from setting their preference.
-      console.log(err);
+      console.warn(err);
     }
 
     // If there are overlapping apps, show the overlap dialog to the user.
@@ -283,7 +282,7 @@ Polymer({
       this.overlappingAppIds_ = overlappingAppIds;
       this.showOverlappingAppsDialog_ = true;
       recordAppManagementUserAction(
-          this.app.type, AppManagementUserAction.OverlappingAppsDialogShown);
+          this.app.type, AppManagementUserAction.OVERLAPPING_APPS_DIALOG_SHOWN);
       return;
     }
 
@@ -318,8 +317,9 @@ Polymer({
     BrowserProxy.getInstance().handler.setPreferredApp(this.app.id, newState);
 
     recordSettingChange();
-    const userAction = newState ? AppManagementUserAction.PreferredAppTurnedOn :
-                                  AppManagementUserAction.PreferredAppTurnedOff;
+    const userAction = newState ?
+        AppManagementUserAction.PREFERRED_APP_TURNED_ON :
+        AppManagementUserAction.PREFERRED_APP_TURNED_OFF;
     recordAppManagementUserAction(this.app.type, userAction);
   },
 });

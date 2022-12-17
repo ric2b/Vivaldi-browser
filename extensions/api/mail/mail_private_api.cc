@@ -9,6 +9,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/db/mail_client/mail_client_service_factory.h"
 #include "extensions/browser/api/file_handlers/app_file_handler_util.h"
@@ -39,7 +40,7 @@ bool deleteFile(base::FilePath file_path,
 }
 
 base::FilePath::StringType FilePathAsString(const base::FilePath& path) {
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   return path.value();
 #else
   return path.value().c_str();
@@ -47,7 +48,7 @@ base::FilePath::StringType FilePathAsString(const base::FilePath& path) {
 }
 
 base::FilePath::StringType StringToStringType(const std::string& str) {
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   return base::UTF8ToWide(str);
 #else
   return str;
@@ -55,7 +56,7 @@ base::FilePath::StringType StringToStringType(const std::string& str) {
 }
 
 std::string StringTypeToString(const base::FilePath::StringType& str) {
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   return base::WideToUTF8(str);
 #else
   return str;
@@ -760,23 +761,25 @@ void MailPrivateMatchMessageFunction::MatchMessageComplete(
   Respond(ArgumentList(mail_private::MatchMessage::Results::Create(*match)));
 }
 
-ExtensionFunction::ResponseAction MailPrivateRebuildDatabaseFunction::Run() {
+ExtensionFunction::ResponseAction
+MailPrivateRebuildAndVacuumDatabaseFunction::Run() {
   MailClientService* service =
       MailClientServiceFactory::GetForProfile(GetProfile());
 
-  service->RebuildDatabase(
+  service->RebuildAndVacuumDatabase(
       base::BindOnce(
-          &MailPrivateRebuildDatabaseFunction::RebuildStartedCallback, this),
+          &MailPrivateRebuildAndVacuumDatabaseFunction::RebuildStartedCallback,
+          this),
       &task_tracker_);
 
   return RespondLater();  // RebuildStartedCallback() will be called
                           // asynchronously.
 }
 
-void MailPrivateRebuildDatabaseFunction::RebuildStartedCallback(
+void MailPrivateRebuildAndVacuumDatabaseFunction::RebuildStartedCallback(
     std::shared_ptr<bool> started) {
-  Respond(
-      ArgumentList(mail_private::RebuildDatabase::Results::Create(*started)));
+  Respond(ArgumentList(
+      mail_private::RebuildAndVacuumDatabase::Results::Create(*started)));
 }
 
 }  //  namespace extensions

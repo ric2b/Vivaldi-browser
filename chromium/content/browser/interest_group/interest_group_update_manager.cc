@@ -8,8 +8,11 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/containers/span.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/metrics/histogram_functions.h"
+#include "base/rand_util.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "content/browser/interest_group/interest_group_manager_impl.h"
@@ -33,19 +36,33 @@ namespace {
 // updates, so don't let this get too large.
 constexpr size_t kMaxUpdateSize = 10 * 1024;
 
+// The maximum amount of time that the update process can run before it gets
+// cancelled for taking too long.
+constexpr base::TimeDelta kMaxUpdateRoundDuration = base::Minutes(10);
+
+// The maximum number of groups that can be updated at the same time.
+constexpr int kMaxParallelUpdates = 5;
+
 constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
     net::DefineNetworkTrafficAnnotation("interest_group_update_fetcher", R"(
         semantics {
           sender: "Interest group periodic update fetcher"
           description:
-            "Fetches periodic updates of interest groups previously joined by "
-            "navigator.joinAdInterestGroup(). JavaScript running in the "
-            "context of a frame cannot read interest groups, but it can "
-            "request that all interest groups owned by the current frame's "
-            "origin be updated by fetching JSON from the registered update URL."
-            "See https://github.com/WICG/turtledove/blob/main/FLEDGE.md"
+            "Fetches periodic updates of FLEDGE interest groups previously "
+            "joined by navigator.joinAdInterestGroup(). FLEDGE allow sites to "
+            "store persistent interest groups that are only accessible to "
+            "special on-device ad auction worklets run via "
+            "navigator.runAdAuction(). JavaScript running in the context of a "
+            "frame cannot read interest groups, but it can request that all "
+            "interest groups owned by the current frame's origin be updated by "
+            "fetching JSON from the registered update URL for each interest "
+            "group."
+            "See https://github.com/WICG/turtledove/blob/main/FLEDGE.md and "
+            "https://developer.chrome.com/docs/privacy-sandbox/fledge/"
           trigger:
-            "Fetched upon a navigator.updateAdInterestGroups() call."
+            "Fetched upon a navigator.updateAdInterestGroups() call. Also "
+            "triggered upon navigator.runAdAuction() completion for interest "
+            "groups that participated in the auction."
           data: "URL registered for updating this interest group."
           destination: WEBSITE
         }
@@ -100,20 +117,16 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
   return true;
 }
 
-// Copies the `ads` list  JSON field into `interest_group_update`, returns true
-// iff the JSON is valid and the copy completed.
-[[nodiscard]] bool TryToCopyAds(blink::InterestGroup& interest_group_update,
-                                const base::Value& value) {
-  const base::Value* maybe_ads = value.FindListKey("ads");
-  if (!maybe_ads)
-    return true;
+// Helper for TryToCopyAds() and TryToCopyAdComponents().
+[[nodiscard]] absl::optional<std::vector<blink::InterestGroup::Ad>> ExtractAds(
+    const base::Value& ads_list) {
   std::vector<blink::InterestGroup::Ad> ads;
-  for (const base::Value& ads_value : maybe_ads->GetListDeprecated()) {
+  for (const base::Value& ads_value : ads_list.GetListDeprecated()) {
     if (!ads_value.is_dict())
-      return false;
+      return absl::nullopt;
     const std::string* maybe_render_url = ads_value.FindStringKey("renderUrl");
     if (!maybe_render_url)
-      return false;
+      return absl::nullopt;
     blink::InterestGroup::Ad ad;
     ad.render_url = GURL(*maybe_render_url);
     const base::Value* maybe_metadata = ads_value.FindKey("metadata");
@@ -123,13 +136,43 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
       if (!serializer.Serialize(*maybe_metadata)) {
         // Binary blobs shouldn't be present, but it's possible we exceeded the
         // max JSON depth.
-        return false;
+        return absl::nullopt;
       }
       ad.metadata = std::move(metadata);
     }
     ads.push_back(std::move(ad));
   }
-  interest_group_update.ads = std::move(ads);
+  return ads;
+}
+
+// Copies the `ads` list JSON field into `interest_group_update`, returns true
+// iff the JSON is valid and the copy completed.
+[[nodiscard]] bool TryToCopyAds(blink::InterestGroup& interest_group_update,
+                                const base::Value& value) {
+  const base::Value* maybe_ads = value.FindListKey("ads");
+  if (!maybe_ads)
+    return true;
+  absl::optional<std::vector<blink::InterestGroup::Ad>> maybe_extracted_ads =
+      ExtractAds(*maybe_ads);
+  if (!maybe_extracted_ads)
+    return false;
+  interest_group_update.ads = std::move(*maybe_extracted_ads);
+  return true;
+}
+
+// Copies the `adComponents` list JSON field into `interest_group_update`,
+// returns true iff the JSON is valid and the copy completed.
+[[nodiscard]] bool TryToCopyAdComponents(
+    blink::InterestGroup& interest_group_update,
+    const base::Value& value) {
+  const base::Value* maybe_ads = value.FindListKey("adComponents");
+  if (!maybe_ads)
+    return true;
+  absl::optional<std::vector<blink::InterestGroup::Ad>> maybe_extracted_ads =
+      ExtractAds(*maybe_ads);
+  if (!maybe_extracted_ads)
+    return false;
+  interest_group_update.ad_components = std::move(*maybe_extracted_ads);
   return true;
 }
 
@@ -151,9 +194,22 @@ absl::optional<blink::InterestGroup> ParseUpdateJson(
   blink::InterestGroup interest_group_update;
   interest_group_update.owner = owner;
   interest_group_update.name = name;
+  const base::Value* maybe_priority_value = value.FindKey("priority");
+  if (maybe_priority_value) {
+    // If the field is specified, it must be an integer or a double.
+    if (!maybe_priority_value->is_int() && !maybe_priority_value->is_double())
+      return absl::nullopt;
+    interest_group_update.priority = maybe_priority_value->GetDouble();
+  }
   const std::string* maybe_bidding_url = value.FindStringKey("biddingLogicUrl");
   if (maybe_bidding_url)
     interest_group_update.bidding_url = GURL(*maybe_bidding_url);
+  const std::string* maybe_bidding_wasm_helper_url =
+      value.FindStringKey("biddingWasmHelperUrl");
+  if (maybe_bidding_wasm_helper_url) {
+    interest_group_update.bidding_wasm_helper_url =
+        GURL(*maybe_bidding_wasm_helper_url);
+  }
   const std::string* maybe_update_trusted_bidding_signals_url =
       value.FindStringKey("trustedBiddingSignalsUrl");
   if (maybe_update_trusted_bidding_signals_url) {
@@ -166,9 +222,17 @@ absl::optional<blink::InterestGroup> ParseUpdateJson(
   if (!TryToCopyAds(interest_group_update, value)) {
     return absl::nullopt;
   }
+  if (!TryToCopyAdComponents(interest_group_update, value)) {
+    return absl::nullopt;
+  }
   if (!interest_group_update.IsValid()) {
     return absl::nullopt;
   }
+  // If not specified by the update make sure the field is not specified.
+  // This must occur after the IsValid check since priority is required for a
+  // valid interest group, while an update should just keep the existing value.
+  if (!maybe_priority_value)
+    interest_group_update.priority.reset();
   return interest_group_update;
 }
 
@@ -179,7 +243,10 @@ namespace content {
 InterestGroupUpdateManager::InterestGroupUpdateManager(
     InterestGroupManagerImpl* manager,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory)
-    : manager_(manager), url_loader_factory_(std::move(url_loader_factory)) {}
+    : manager_(manager),
+      max_update_round_duration_(kMaxUpdateRoundDuration),
+      max_parallel_updates_(kMaxParallelUpdates),
+      url_loader_factory_(std::move(url_loader_factory)) {}
 
 InterestGroupUpdateManager::~InterestGroupUpdateManager() = default;
 
@@ -188,6 +255,26 @@ void InterestGroupUpdateManager::UpdateInterestGroupsOfOwner(
     network::mojom::ClientSecurityStatePtr client_security_state) {
   owners_to_update_.Enqueue(owner, std::move(client_security_state));
   MaybeContinueUpdatingCurrentOwner();
+}
+
+void InterestGroupUpdateManager::UpdateInterestGroupsOfOwners(
+    base::span<url::Origin> owners,
+    network::mojom::ClientSecurityStatePtr client_security_state) {
+  // Shuffle the list of interest group owners for fairness.
+  base::RandomShuffle(owners.begin(), owners.end());
+  for (const url::Origin& owner : owners) {
+    UpdateInterestGroupsOfOwner(owner, client_security_state.Clone());
+  }
+}
+
+void InterestGroupUpdateManager::set_max_update_round_duration_for_testing(
+    base::TimeDelta delta) {
+  max_update_round_duration_ = delta;
+}
+
+void InterestGroupUpdateManager::set_max_parallel_updates_for_testing(
+    int max_parallel_updates) {
+  max_parallel_updates_ = max_parallel_updates;
 }
 
 InterestGroupUpdateManager::OwnersToUpdate::OwnersToUpdate() = default;
@@ -230,10 +317,27 @@ void InterestGroupUpdateManager::OwnersToUpdate::Clear() {
 }
 
 void InterestGroupUpdateManager::MaybeContinueUpdatingCurrentOwner() {
-  if (owners_to_update_.Empty() || num_in_flight_updates_ > 0 ||
-      waiting_on_db_read_) {
+  if (num_in_flight_updates_ > 0 || waiting_on_db_read_)
+    return;
+
+  if (owners_to_update_.Empty()) {
+    // This update round is finished, there's no more work to do.
+    last_update_started_ = base::TimeTicks::Min();
     return;
   }
+
+  if (last_update_started_ == base::TimeTicks::Min()) {
+    // It appears we're staring a new update round; mark the time we started the
+    // round.
+    last_update_started_ = base::TimeTicks::Now();
+  } else if (base::TimeTicks::Now() - last_update_started_ >
+             max_update_round_duration_) {
+    // We've been updating for too long; cancel all outstanding updates.
+    owners_to_update_.Clear();
+    last_update_started_ = base::TimeTicks::Min();
+    return;
+  }
+
   GetInterestGroupsForUpdate(
       owners_to_update_.FrontOwner(),
       base::BindOnce(
@@ -247,7 +351,8 @@ void InterestGroupUpdateManager::GetInterestGroupsForUpdate(
   DCHECK_EQ(num_in_flight_updates_, 0);
   DCHECK(!waiting_on_db_read_);
   waiting_on_db_read_ = true;
-  manager_->GetInterestGroupsForUpdate(owner, std::move(callback));
+  manager_->GetInterestGroupsForUpdate(
+      owner, /*groups_limit=*/max_parallel_updates_, std::move(callback));
 }
 
 void InterestGroupUpdateManager::DidUpdateInterestGroupsOfOwnerDbLoad(
@@ -256,6 +361,8 @@ void InterestGroupUpdateManager::DidUpdateInterestGroupsOfOwnerDbLoad(
   DCHECK_EQ(owner, owners_to_update_.FrontOwner());
   DCHECK_EQ(num_in_flight_updates_, 0);
   DCHECK(waiting_on_db_read_);
+  DCHECK_LE(storage_groups.size(),
+            static_cast<unsigned int>(max_parallel_updates_));
   waiting_on_db_read_ = false;
   if (storage_groups.empty()) {
     // All interest groups for `owner` are up to date, so we can pop it off the
@@ -268,12 +375,15 @@ void InterestGroupUpdateManager::DidUpdateInterestGroupsOfOwnerDbLoad(
       net::IsolationInfo::CreateTransient();
 
   for (auto& storage_group : storage_groups) {
-    if (!storage_group.interest_group.update_url)
+    if (!storage_group.interest_group.daily_update_url)
       continue;
     ++num_in_flight_updates_;
+    base::UmaHistogramCounts100000(
+        "Ads.InterestGroup.Net.RequestUrlSizeBytes.Update",
+        storage_group.interest_group.daily_update_url->spec().size());
     auto resource_request = std::make_unique<network::ResourceRequest>();
     resource_request->url =
-        std::move(storage_group.interest_group.update_url).value();
+        std::move(storage_group.interest_group.daily_update_url).value();
     resource_request->redirect_mode = network::mojom::RedirectMode::kError;
     resource_request->credentials_mode = network::mojom::CredentialsMode::kOmit;
     resource_request->request_initiator = owner;
@@ -320,6 +430,8 @@ void InterestGroupUpdateManager::DidUpdateInterestGroupsOfOwnerNetFetch(
                            : UpdateDelayType::kNetFailure);
     return;
   }
+  base::UmaHistogramCounts100000(
+      "Ads.InterestGroup.Net.ResponseSizeBytes.Update", fetch_body->size());
   data_decoder::DataDecoder::ParseJsonIsolated(
       *fetch_body,
       base::BindOnce(

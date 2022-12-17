@@ -24,7 +24,6 @@ import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bu
 import {BrowserProxyImpl} from './browser_proxy.js';
 import {getTemplate} from './clusters.html.js';
 import {Cluster, PageCallbackRouter, PageHandlerRemote, QueryResult, URLVisit} from './history_clusters.mojom-webui.js';
-import {ClusterAction, MetricsProxyImpl} from './metrics_proxy.js';
 
 /**
  * @fileoverview This file provides a custom element that requests and shows
@@ -34,7 +33,7 @@ import {ClusterAction, MetricsProxyImpl} from './metrics_proxy.js';
 
 declare global {
   interface HTMLElementTagNameMap {
-    'history-clusters': HistoryClustersElement,
+    'history-clusters': HistoryClustersElement;
   }
 
   interface Window {
@@ -73,14 +72,6 @@ class HistoryClustersElement extends PolymerElement {
       },
 
       /**
-       * The header text to show when the query and the results are non-empty.
-       */
-      headerText_: {
-        type: String,
-        computed: `computeHeaderText_(result_.*)`,
-      },
-
-      /**
        * The placeholder text to show when the results are empty.
        */
       placeholderText_: {
@@ -93,6 +84,14 @@ class HistoryClustersElement extends PolymerElement {
        * a given query until an optional given end time (or the present time).
        */
       result_: Object,
+
+      /**
+       * Boolean determining if spinner shows instead of load more button.
+       */
+      showSpinner_: {
+        type: Boolean,
+        value: false,
+      },
 
       /**
        * The list of visits to be removed. A non-empty array indicates a pending
@@ -111,10 +110,13 @@ class HistoryClustersElement extends PolymerElement {
 
   query: string;
   private callbackRouter_: PageCallbackRouter;
+  private headerText_: string;
   private onClustersQueryResultListenerId_: number|null = null;
   private onVisitsRemovedListenerId_: number|null = null;
   private pageHandler_: PageHandlerRemote;
+  private placeholderText_: string;
   private result_: QueryResult;
+  private showSpinner_: boolean;
   private visitsToBeRemoved_: Array<URLVisit>;
 
   //============================================================================
@@ -127,7 +129,7 @@ class HistoryClustersElement extends PolymerElement {
     this.callbackRouter_ = BrowserProxyImpl.getInstance().callbackRouter;
   }
 
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
 
     // Register a per-document singleton focus outline manager. Some of our
@@ -146,7 +148,7 @@ class HistoryClustersElement extends PolymerElement {
             this.onVisitsRemoved_.bind(this));
   }
 
-  disconnectedCallback() {
+  override disconnectedCallback() {
     super.disconnectedCallback();
     assert(this.onClustersQueryResultListenerId_);
     this.callbackRouter_.removeListener(this.onClustersQueryResultListenerId_);
@@ -171,6 +173,7 @@ class HistoryClustersElement extends PolymerElement {
 
   private onLoadMoreButtonClick_() {
     if (this.result_ && this.result_.canLoadMore) {
+      this.showSpinner_ = true;
       // Prevent sending further load-more requests until this one finishes.
       this.set('result_.canLoadMore', false);
       this.pageHandler_.loadMoreClusters(this.result_.query);
@@ -194,8 +197,6 @@ class HistoryClustersElement extends PolymerElement {
   private onRemoveCluster_(event: CustomEvent<number>) {
     const index = event.detail;
     this.splice('result_.clusters', index, 1);
-    MetricsProxyImpl.getInstance().recordClusterAction(
-        ClusterAction.DELETED, index);
   }
 
   /**
@@ -250,12 +251,6 @@ class HistoryClustersElement extends PolymerElement {
   // Helper methods
   //============================================================================
 
-  private computeHeaderText_(): string {
-    return this.result_ && this.result_.query && this.result_.clusters.length ?
-        loadTimeData.getStringF('headerText', this.result_.query) :
-        '';
-  }
-
   private computePlaceholderText_(): string {
     if (!this.result_) {
       return '';
@@ -273,8 +268,8 @@ class HistoryClustersElement extends PolymerElement {
    * loaded before the user ever gets a chance to see this button.
    */
   private getLoadMoreButtonHidden_(
-      _result: QueryResult, _result_clusters: Array<Cluster>,
-      _result_can_load_more: Time): boolean {
+      _result: QueryResult, _resultClusters: Array<Cluster>,
+      _resultCanLoadMore: Time): boolean {
     return !this.result_ || this.result_.clusters.length === 0 ||
         !this.result_.canLoadMore;
   }
@@ -321,6 +316,7 @@ class HistoryClustersElement extends PolymerElement {
         this.onLoadMoreButtonClick_();
       }
     });
+    this.showSpinner_ = false;
   }
 
   /**

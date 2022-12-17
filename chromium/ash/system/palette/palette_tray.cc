@@ -9,6 +9,7 @@
 #include "ash/accessibility/accessibility_controller_impl.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
+#include "ash/projector/projector_controller_impl.h"
 #include "ash/public/cpp/shelf_config.h"
 #include "ash/public/cpp/stylus_utils.h"
 #include "ash/public/cpp/system_tray_client.h"
@@ -19,6 +20,7 @@
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_provider.h"
 #include "ash/style/icon_button.h"
+#include "ash/style/system_shadow.h"
 #include "ash/system/model/system_tray_model.h"
 #include "ash/system/palette/palette_tool_manager.h"
 #include "ash/system/palette/palette_utils.h"
@@ -70,7 +72,7 @@ constexpr int kPaddingBetweenTitleAndSeparator = 3;
 constexpr int kPaddingBetweenBottomAndLastTrayItem = 8;
 
 // Insets for the title view (dp).
-constexpr gfx::Insets kTitleViewPadding(8, 16, 8, 16);
+constexpr auto kTitleViewPadding = gfx::Insets::TLBR(8, 16, 8, 16);
 
 // Spacing between buttons in the title view (dp).
 constexpr int kTitleViewChildSpacing = 16;
@@ -410,6 +412,15 @@ void PaletteTray::OnLockStateChanged(bool locked) {
   }
 }
 
+void PaletteTray::OnShellInitialized() {
+  if (features::IsProjectorEnabled()) {
+    ProjectorControllerImpl* projector_controller =
+        Shell::Get()->projector_controller();
+    projector_session_observation_.Observe(
+        projector_controller->projector_session());
+  }
+}
+
 void PaletteTray::OnDisplayConfigurationChanged() {
   UpdateIconVisibility();
 }
@@ -512,6 +523,7 @@ void PaletteTray::HidePalette() {
   is_bubble_auto_opened_ = false;
   num_actions_in_bubble_ = 0;
   bubble_.reset();
+  shadow_.reset();
 
   shelf()->UpdateAutoHideState();
 }
@@ -545,6 +557,16 @@ void PaletteTray::RecordPaletteModeCancellation(PaletteModeCancelType type) {
   UMA_HISTOGRAM_ENUMERATION(
       "Ash.Shelf.Palette.ModeCancellation", type,
       PaletteModeCancelType::PALETTE_MODE_CANCEL_TYPE_COUNT);
+}
+
+void PaletteTray::OnProjectorSessionActiveStateChanged(bool active) {
+  is_palette_visibility_paused_ = active;
+  if (active) {
+    DeactivateActiveTool();
+    SetVisiblePreferred(false);
+  } else {
+    UpdateIconVisibility();
+  }
 }
 
 void PaletteTray::OnActiveToolChanged() {
@@ -636,7 +658,7 @@ void PaletteTray::ShowBubble() {
   TrayBubbleView* bubble_view = new TrayBubbleView(init_params);
   bubble_view->set_margins(GetSecondaryBubbleInsets());
   bubble_view->SetBorder(views::CreateEmptyBorder(
-      gfx::Insets(0, 0, kPaddingBetweenBottomAndLastTrayItem, 0)));
+      gfx::Insets::TLBR(0, 0, kPaddingBetweenBottomAndLastTrayItem, 0)));
 
   auto setup_layered_view = [](views::View* view) {
     view->SetPaintToLayer();
@@ -654,7 +676,7 @@ void PaletteTray::ShowBubble() {
   setup_layered_view(separator);
   separator->SetColor(AshColorProvider::Get()->GetContentLayerColor(
       AshColorProvider::ContentLayerType::kSeparatorColor));
-  separator->SetBorder(views::CreateEmptyBorder(gfx::Insets(
+  separator->SetBorder(views::CreateEmptyBorder(gfx::Insets::TLBR(
       kPaddingBetweenTitleAndSeparator, 0, kMenuSeparatorVerticalPadding, 0)));
 
   // Add palette tools.
@@ -669,6 +691,12 @@ void PaletteTray::ShowBubble() {
   // Show the bubble.
   bubble_ = std::make_unique<TrayBubbleWrapper>(this, bubble_view);
   SetIsActive(true);
+
+  // Create a system shadow for the tray bubble.
+  shadow_ = SystemShadow::CreateShadowForWidget(
+      bubble_->GetBubbleWidget(), SystemShadow::Type::kElevation12);
+  shadow_->SetRoundedCornerRadius(kTrayItemCornerRadius);
+  shadow_->SetContentBounds(gfx::Rect(bubble_view->GetBoundsInScreen().size()));
 }
 
 TrayBubbleView* PaletteTray::GetBubbleView() {
@@ -758,8 +786,9 @@ void PaletteTray::SetDisplayHasStylusForTesting() {
 
 void PaletteTray::UpdateIconVisibility() {
   bool visible_preferred =
-      is_palette_enabled_ && stylus_utils::HasStylusInput() &&
-      ShouldShowOnDisplay() && palette_utils::IsInUserSession();
+      is_palette_enabled_ && !is_palette_visibility_paused_ &&
+      stylus_utils::HasStylusInput() && ShouldShowOnDisplay() &&
+      palette_utils::IsInUserSession();
   SetVisiblePreferred(visible_preferred);
   if (visible_preferred)
     UpdateLayout();

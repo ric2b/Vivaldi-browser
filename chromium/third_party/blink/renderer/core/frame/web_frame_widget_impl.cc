@@ -33,6 +33,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/auto_reset.h"
 #include "base/callback_helpers.h"
 #include "base/debug/crash_logging.h"
 #include "base/debug/dump_without_crashing.h"
@@ -65,6 +66,7 @@
 #include "third_party/blink/renderer/core/editing/ephemeral_range.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
 #include "third_party/blink/renderer/core/editing/ime/edit_context.h"
+#include "third_party/blink/renderer/core/editing/ime/input_method_controller.h"
 #include "third_party/blink/renderer/core/editing/selection_template.h"
 #include "third_party/blink/renderer/core/events/current_input_event.h"
 #include "third_party/blink/renderer/core/events/pointer_event_factory.h"
@@ -108,6 +110,7 @@
 #include "third_party/blink/renderer/core/page/focus_controller.h"
 #include "third_party/blink/renderer/core/page/link_highlight.h"
 #include "third_party/blink/renderer/core/page/page.h"
+#include "third_party/blink/renderer/core/page/page_animator.h"
 #include "third_party/blink/renderer/core/page/pointer_lock_controller.h"
 #include "third_party/blink/renderer/core/page/scrolling/fragment_anchor.h"
 #include "third_party/blink/renderer/core/page/validation_message_client.h"
@@ -127,6 +130,7 @@
 #include "third_party/blink/renderer/platform/widget/input/main_thread_event_queue.h"
 #include "third_party/blink/renderer/platform/widget/input/widget_input_handler_manager.h"
 #include "third_party/blink/renderer/platform/widget/widget_base.h"
+#include "third_party/blink/renderer/platform/wtf/cross_thread_copier_base.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom-blink.h"
 #include "ui/gfx/geometry/point_conversions.h"
@@ -789,7 +793,7 @@ void WebFrameWidgetImpl::HandleMouseDown(LocalFrame& local_root,
       MouseContextMenu(event);
 #endif
   }
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   else if (vivaldi::IsVivaldiRunning()) {
     // On Mac show Ctrl-click menu on mouse down irrespective of
     // ShowContextMenuOnMouseUp, see VB-45970.
@@ -984,7 +988,7 @@ WebInputEventResult WebFrameWidgetImpl::HandleGestureEvent(
       case WebInputEvent::Type::kGestureLongPress:
       case WebInputEvent::Type::kGestureTapCancel:
       case WebInputEvent::Type::kGestureTap:
-        GetPage()->GetLinkHighlight().StartHighlightAnimationIfNeeded();
+        GetPage()->GetLinkHighlight().UpdateOpacityAndRequestAnimation();
         break;
       default:
         break;
@@ -1430,12 +1434,15 @@ void WebFrameWidgetImpl::ScheduleAnimation() {
   widget_base_->LayerTreeHost()->SetNeedsAnimate();
 }
 
-void WebFrameWidgetImpl::FocusChanged(bool enable) {
+void WebFrameWidgetImpl::FocusChanged(mojom::blink::FocusState focus_state) {
   // TODO(crbug.com/689777): FocusChange events are only sent to the MainFrame
   // these maybe should goto the local root so that the rest of input messages
   // sent to those are preserved in order.
   DCHECK(ForMainFrame());
-  View()->SetPageFocus(enable);
+  View()->SetIsActive(focus_state == mojom::blink::FocusState::kFocused ||
+                      focus_state ==
+                          mojom::blink::FocusState::kNotFocusedAndActive);
+  View()->SetPageFocus(focus_state == mojom::blink::FocusState::kFocused);
 }
 
 bool WebFrameWidgetImpl::ShouldAckSyntheticInputImmediately() {
@@ -1835,7 +1842,7 @@ void WebFrameWidgetImpl::SetViewportIntersection(
     const absl::optional<VisualProperties>& visual_properties) {
   // Remote viewports are only applicable to local frames with remote ancestors.
   // TODO(https://crbug.com/1148960): Should this deal with portals?
-  DCHECK(ForSubframe());
+  DCHECK(ForSubframe() || !LocalRootImpl()->GetFrame()->IsOutermostMainFrame());
 
   if (visual_properties.has_value())
     UpdateVisualProperties(visual_properties.value());
@@ -1849,10 +1856,16 @@ void WebFrameWidgetImpl::ApplyViewportIntersectionForTesting(
 
 void WebFrameWidgetImpl::ApplyViewportIntersection(
     mojom::blink::ViewportIntersectionStatePtr intersection_state) {
-  child_data().compositor_visible_rect =
-      intersection_state->compositor_visible_rect;
-  widget_base_->LayerTreeHost()->SetVisualDeviceViewportIntersectionRect(
-      intersection_state->compositor_visible_rect);
+  if (ForSubframe()) {
+    // This information is propagated to LTH to define the region for filling
+    // the on-screen text content.
+    // TODO(khushalsagar) : This needs to also be done for main frames which are
+    // embedded pages (see Frame::IsOutermostMainFrame()).
+    child_data().compositor_visible_rect =
+        intersection_state->compositor_visible_rect;
+    widget_base_->LayerTreeHost()->SetVisualDeviceViewportIntersectionRect(
+        intersection_state->compositor_visible_rect);
+  }
   LocalRootImpl()->GetFrame()->SetViewportIntersectionFromParent(
       *intersection_state);
 }
@@ -1917,8 +1930,6 @@ void WebFrameWidgetImpl::SetAutoResizeMode(bool auto_resize,
   DCHECK(ForMainFrame());
 
   if (auto_resize) {
-    if (!Platform::Current()->IsUseZoomForDSFEnabled())
-      device_scale_factor = 1.f;
     View()->EnableAutoResizeMode(
         gfx::ScaleToCeiledSize(min_window_size, device_scale_factor),
         gfx::ScaleToCeiledSize(max_window_size, device_scale_factor));
@@ -2509,8 +2520,8 @@ WebInputEventResult WebFrameWidgetImpl::HandleInputEvent(
   DCHECK(!WebInputEvent::IsTouchEventType(input_event.GetType()));
   CHECK(LocalRootImpl());
 
-  // Only record metrics for the main frame.
-  if (ForMainFrame()) {
+  // Only record metrics for the root frame.
+  if (ForTopMostMainFrame()) {
     GetPage()->GetVisualViewport().StartTrackingPinchStats();
   }
 
@@ -2574,7 +2585,7 @@ WebInputEventResult WebFrameWidgetImpl::HandleInputEvent(
   Frame* frame = FocusedCoreFrame();
   if (auto* local_frame = DynamicTo<LocalFrame>(frame)) {
     if (auto* content_capture_manager =
-            local_frame->LocalFrameRoot().GetContentCaptureManager()) {
+            local_frame->LocalFrameRoot().GetOrResetContentCaptureManager()) {
       content_capture_manager->NotifyInputEvent(input_event.GetType(),
                                                 *local_frame);
     }
@@ -2955,9 +2966,36 @@ class ReportTimeSwapPromise : public cc::SwapPromise {
   }
 
   DidNotSwapAction DidNotSwap(DidNotSwapReason reason) override {
-    ReportSwapAndPresentationFailureOnTaskRunner(
-        task_runner_, std::move(promise_callbacks_), base::TimeTicks::Now());
-    return DidNotSwapAction::BREAK_PROMISE;
+    if (base::FeatureList::IsEnabled(
+            features::kReportFCPOnlyOnSuccessfulCommit)) {
+      if (reason != DidNotSwapReason::SWAP_FAILS &&
+          reason != DidNotSwapReason::COMMIT_NO_UPDATE) {
+        return DidNotSwapAction::KEEP_ACTIVE;
+      }
+    }
+
+    DidNotSwapAction action = DidNotSwapAction::BREAK_PROMISE;
+    WebFrameWidgetImpl::PromiseCallbacks promise_callbacks_on_failure = {
+        .swap_time_callback = std::move(promise_callbacks_.swap_time_callback),
+        .presentation_time_callback =
+            std::move(promise_callbacks_.presentation_time_callback)};
+
+#if BUILDFLAG(IS_MAC)
+    if (reason == DidNotSwapReason::COMMIT_FAILS &&
+        promise_callbacks_.core_animation_error_code_callback) {
+      action = DidNotSwapAction::KEEP_ACTIVE;
+    } else {
+      promise_callbacks_on_failure.core_animation_error_code_callback =
+          std::move(promise_callbacks_.core_animation_error_code_callback);
+    }
+#endif
+
+    if (!promise_callbacks_on_failure.IsEmpty()) {
+      ReportSwapAndPresentationFailureOnTaskRunner(
+          task_runner_, std::move(promise_callbacks_on_failure),
+          base::TimeTicks::Now());
+    }
+    return action;
   }
 
   int64_t GetTraceId() const override { return 0; }
@@ -3259,7 +3297,11 @@ bool WebFrameWidgetImpl::HandlingSelectRange() {
 }
 
 void WebFrameWidgetImpl::SetFocus(bool focus) {
-  widget_base_->SetFocus(focus);
+  widget_base_->SetFocus(
+      focus ? mojom::blink::FocusState::kFocused
+            : View()->IsActive()
+                  ? mojom::blink::FocusState::kNotFocusedAndActive
+                  : mojom::blink::FocusState::kNotFocusedAndNotActive);
 }
 
 bool WebFrameWidgetImpl::HasFocus() {
@@ -3391,8 +3433,7 @@ bool WebFrameWidgetImpl::IsProvisional() {
 }
 
 uint64_t WebFrameWidgetImpl::GetScrollableContainerIdAt(
-    const gfx::PointF& point_in_dips) {
-  gfx::PointF point = widget_base_->DIPsToBlinkSpace(point_in_dips);
+    const gfx::PointF& point) {
   return HitTestResultAt(point).GetScrollableContainerId();
 }
 
@@ -4032,11 +4073,7 @@ void WebFrameWidgetImpl::OrientationChanged() {
 void WebFrameWidgetImpl::DidUpdateSurfaceAndScreen(
     const display::ScreenInfos& previous_original_screen_infos) {
   display::ScreenInfo screen_info = widget_base_->GetScreenInfo();
-  if (Platform::Current()->IsUseZoomForDSFEnabled()) {
-    View()->SetZoomFactorForDeviceScaleFactor(screen_info.device_scale_factor);
-  } else {
-    View()->SetDeviceScaleFactor(screen_info.device_scale_factor);
-  }
+  View()->SetZoomFactorForDeviceScaleFactor(screen_info.device_scale_factor);
 
   if (ShouldAutoDetermineCompositingToLCDTextSetting()) {
     // This causes compositing state to be modified which dirties the

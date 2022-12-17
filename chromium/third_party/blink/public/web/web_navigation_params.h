@@ -28,6 +28,7 @@
 #include "third_party/blink/public/platform/web_common.h"
 #include "third_party/blink/public/platform/web_content_security_policy_struct.h"
 #include "third_party/blink/public/platform/web_data.h"
+#include "third_party/blink/public/platform/web_fenced_frame_reporting.h"
 #include "third_party/blink/public/platform/web_http_body.h"
 #include "third_party/blink/public/platform/web_impression.h"
 #include "third_party/blink/public/platform/web_navigation_body_loader.h"
@@ -106,6 +107,13 @@ struct BLINK_EXPORT WebNavigationInfo {
   // Whether this is a navigation in the opener frame initiated
   // by the window.open'd frame.
   bool is_opener_navigation = false;
+
+  // Whether this is a navigation to _unfencedTop, i.e. to the top-level frame
+  // from a renderer process that does not get a handle to the frame.
+  // The browser should ignore the specified target frame and pick (and
+  // validate) the top-level frame instead.
+  // TODO(crbug.com/1315802): Refactor _unfencedTop handling.
+  bool is_unfenced_top_navigation = false;
 
   // Event information. See TriggeringEventInfo.
   blink::mojom::TriggeringEventInfo triggering_event_info =
@@ -413,6 +421,11 @@ struct BLINK_EXPORT WebNavigationParams {
   // https://html.spec.whatwg.org/C/#is-origin-keyed
   bool origin_agent_cluster = false;
 
+  // Whether the decision to use origin-keyed or site-keyed agent clustering
+  // (which itself is recorded in origin_agent_cluster, above) has been
+  // made based on absent Origin-Agent-Cluster http header.
+  bool origin_agent_cluster_left_as_default = true;
+
   // List of client hints enabled for top-level frame. These still need to be
   // checked against permissions policy before use.
   WebVector<network::mojom::WebClientHintsType> enabled_client_hints;
@@ -426,10 +439,10 @@ struct BLINK_EXPORT WebNavigationParams {
   std::unique_ptr<WebPolicyContainer> policy_container;
 
   // These are used to construct a subset of the back/forward list for the
-  // appHistory API. They only have the attributes that are needed for
-  // appHistory.
-  WebVector<WebHistoryItem> app_history_back_entries;
-  WebVector<WebHistoryItem> app_history_forward_entries;
+  // window.navigation API. They only have the attributes that are needed for
+  // that API.
+  WebVector<WebHistoryItem> navigation_api_back_entries;
+  WebVector<WebHistoryItem> navigation_api_forward_entries;
 
   // List of URLs which are preloaded by HTTP Early Hints.
   WebVector<WebURL> early_hints_preloaded_resources;
@@ -438,6 +451,13 @@ struct BLINK_EXPORT WebNavigationParams {
   // contains URNs mapped to the ad components returned by the winning bid.
   // Null, otherwise.
   absl::optional<WebVector<WebURL>> ad_auction_components;
+
+  // If this is a navigation to a "opaque-ads" mode fenced frame, there might
+  // be associated reporting metadata. This is a map from destination type to
+  // reporting metadata which in turn is a map from the event type to the
+  // reporting url. Null, otherwise.
+  // https://github.com/WICG/turtledove/blob/main/Fenced_Frames_Ads_Reporting.md
+  absl::optional<WebFencedFrameReporting> fenced_frame_reporting;
 
   // Whether or not this navigation will commit in an anonymous frame.
   bool anonymous = false;

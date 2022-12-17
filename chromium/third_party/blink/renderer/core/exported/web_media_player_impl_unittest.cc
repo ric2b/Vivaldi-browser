@@ -27,6 +27,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/threading/thread.h"
+#include "base/time/time.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "build/build_config.h"
 #include "cc/layers/layer.h"
@@ -71,6 +72,7 @@
 #include "third_party/blink/public/web/web_view.h"
 #include "third_party/blink/public/web/web_widget.h"
 #include "third_party/blink/renderer/core/frame/frame_test_helpers.h"
+#include "third_party/blink/renderer/platform/media/buffered_data_source_host_impl.h"
 #include "third_party/blink/renderer/platform/media/power_status_helper.h"
 #include "third_party/blink/renderer/platform/media/resource_multi_buffer_data_provider.h"
 #include "third_party/blink/renderer/platform/media/testing/mock_resource_fetch_context.h"
@@ -182,7 +184,6 @@ class MockWebMediaPlayerClient : public WebMediaPlayerClient {
   MOCK_METHOD1(DidPlayerSizeChange, void(const gfx::Size&));
   MOCK_METHOD0(DidBufferUnderflow, void());
   MOCK_METHOD0(DidSeek, void());
-  MOCK_METHOD0(GetFeatures, Features(void));
   MOCK_METHOD0(OnRequestVideoFrameCallback, void());
   MOCK_METHOD0(GetTextTrackMetadata, Vector<TextTrackMetadata>());
 

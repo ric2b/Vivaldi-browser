@@ -111,6 +111,12 @@ bool VivaldiInvalidationService::UpdateInterestedTopics(
   return result;
 }
 
+void VivaldiInvalidationService::UnsubscribeFromUnregisteredTopics(
+    invalidation::InvalidationHandler* handler) {
+  invalidator_registrar_.RemoveUnregisteredTopics(handler);
+  ToggleConnectionIfNeeded();
+}
+
 void VivaldiInvalidationService::UnregisterInvalidationHandler(
     invalidation::InvalidationHandler* handler) {
   invalidator_registrar_.UnregisterHandler(handler);

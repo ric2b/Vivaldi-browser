@@ -23,6 +23,10 @@ class SourceFile;
 class Target;
 class Toolchain;
 
+namespace base {
+class CommandLine;
+}  // namespace base
+
 // Each "Run" command returns the value we should return from main().
 
 namespace commands {
@@ -115,6 +119,123 @@ struct CommandInfo {
 using CommandInfoMap = std::map<std::string_view, CommandInfo>;
 
 const CommandInfoMap& GetCommands();
+
+// Command switches as flags and enums -----------------------------------------
+
+// A class that models a set of command-line flags and values that
+// can affect the output of various GN commands. For example --tree
+// can be used with `gn desc <out_dir> <label> deps --tree`.
+//
+// Each flag or value is checked by an accessor method which returns
+// a boolean or an enum.
+//
+// Use CommandSwitches::Get() to get a reference to the current
+// global set of switches for the process.
+//
+// Use CommandSwitches::Set() to update its value. This may be
+// useful when implementing a REPL in GN, where each evaluation
+// might need a different set of command switches.
+class CommandSwitches {
+ public:
+  // Default constructor.
+  CommandSwitches() = default;
+
+  // For --quiet, used by `refs`.
+  bool has_quiet() const { return has_quiet_; }
+
+  // For --force, used by `check`.
+  bool has_force() const { return has_force_; }
+
+  // For --all, used by `desc` and `refs`.
+  bool has_all() const { return has_all_; }
+
+  // For --blame used by `desc`.
+  bool has_blame() const { return has_blame_; }
+
+  // For --tree used by `desc` and `refs`.
+  bool has_tree() const { return has_tree_; }
+
+  // For --format=json used by `desc`.
+  bool has_format_json() const { return has_format_json_; }
+
+  // For --default-toolchain used by `desc`, `refs`.
+  bool has_default_toolchain() const { return has_default_toolchain_; }
+
+  // For --check-generated
+  bool has_check_generated() const { return has_check_generated_; }
+
+  // For --check-system
+  bool has_check_system() const { return has_check_system_; }
+
+  // For --public
+  bool has_public() const { return has_public_; }
+
+  // For --with-data
+  bool has_with_data() const { return has_with_data_; }
+
+  // For --as=(buildtype|label|output).
+  enum TargetPrintMode {
+    TARGET_PRINT_BUILDFILE,
+    TARGET_PRINT_LABEL,
+    TARGET_PRINT_OUTPUT,
+  };
+  TargetPrintMode target_print_mode() const { return target_print_mode_; }
+
+  // For --type=TARGET_TYPE
+  Target::OutputType target_type() const { return target_type_; }
+
+  enum TestonlyMode {
+    TESTONLY_NONE,   // no --testonly used.
+    TESTONLY_FALSE,  // --testonly=false
+    TESTONLY_TRUE,   // --testonly=true
+  };
+  TestonlyMode testonly_mode() const { return testonly_mode_; }
+
+  // For --rebase, --walk and --data in `gn meta`
+  std::string meta_rebase_dir() const { return meta_rebase_dir_; }
+  std::string meta_data_keys() const { return meta_data_keys_; }
+  std::string meta_walk_keys() const { return meta_walk_keys_; }
+
+  // Initialize the global set from a given command line.
+  // Must be called early from main(). On success return true,
+  // on failure return false after printing an error message.
+  static bool Init(const base::CommandLine& cmdline);
+
+  // Retrieve a reference to the current global set of command switches.
+  static const CommandSwitches& Get();
+
+  // Change the current global set of command switches, and return
+  // the previous value.
+  static CommandSwitches Set(CommandSwitches new_switches);
+
+ private:
+  bool is_initialized() const { return initialized_; }
+
+  bool InitFrom(const base::CommandLine&);
+
+  static CommandSwitches s_global_switches_;
+
+  bool initialized_ = false;
+  bool has_quiet_ = false;
+  bool has_force_ = false;
+  bool has_all_ = false;
+  bool has_blame_ = false;
+  bool has_tree_ = false;
+  bool has_format_json_ = false;
+  bool has_default_toolchain_ = false;
+  bool has_check_generated_ = false;
+  bool has_check_system_ = false;
+  bool has_public_ = false;
+  bool has_with_data_ = false;
+
+  TargetPrintMode target_print_mode_ = TARGET_PRINT_LABEL;
+  Target::OutputType target_type_ = Target::UNKNOWN;
+  TestonlyMode testonly_mode_ = TESTONLY_NONE;
+
+  std::string meta_rebase_dir_;
+  std::string meta_data_keys_;
+  std::string meta_walk_keys_;
+};
 
 // Helper functions for some commands ------------------------------------------
 

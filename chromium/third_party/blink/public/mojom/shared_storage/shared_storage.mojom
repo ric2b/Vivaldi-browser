@@ -4,7 +4,22 @@
 
 module blink.mojom;
 
+import "mojo/public/mojom/base/string16.mojom";
 import "url/mojom/url.mojom";
+
+// The input argument of the shared storage key. The data will be checked at
+// mojom boundary to ensure it meets the length requirement. Avoid using this
+// type if you don't intend to check the key's length.
+struct SharedStorageKeyArgument {
+  mojo_base.mojom.String16 data;
+};
+
+// The input argument of the shared storage value. The data will be checked at
+// mojom boundary to ensure it meets the length requirement. Avoid using this
+// type if you don't intend to check the value's length.
+struct SharedStorageValueArgument {
+  mojo_base.mojom.String16 data;
+};
 
 // SharedStorage is an origin-keyed storage mechanism where the output is
 // carefully guarded to mitigate the risk of cross-site correlation.
@@ -45,4 +60,23 @@ interface SharedStorageDocumentService {
                                     array<url.mojom.Url> urls,
                                     array<uint8> serialized_data)
     => (bool success, string error_message, url.mojom.Url opaque_url);
+
+  // Handle sharedStorage.set(): set `key`’s entry to `value`. If
+  // `ignore_if_present` is true, the entry is not updated if `key` already
+  // exists.
+  SharedStorageSet(blink.mojom.SharedStorageKeyArgument key,
+                   blink.mojom.SharedStorageValueArgument value,
+                   bool ignore_if_present);
+
+  // Handle sharedStorage.append(): append `value` to the entry for `key`.
+  // Equivalent to "set" if the `key` is not present.
+  SharedStorageAppend(blink.mojom.SharedStorageKeyArgument key,
+                      blink.mojom.SharedStorageValueArgument value);
+
+  // Handle sharedStorage.delete(): delete the entry at the given `key`.
+  SharedStorageDelete(blink.mojom.SharedStorageKeyArgument key);
+
+  // Handle sharedStorage.clear(): delete all entries.
+  SharedStorageClear();
 };
+

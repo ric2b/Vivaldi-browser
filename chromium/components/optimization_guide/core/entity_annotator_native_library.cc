@@ -8,6 +8,7 @@
 #include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/path_service.h"
 #include "build/build_config.h"
 #include "components/optimization_guide/core/model_util.h"
@@ -52,37 +53,60 @@ std::string GetSliceBaseName(const std::string& slice,
   return slice + "-" + base_name;
 }
 
+class ScopedEntityAnnotatorCreationStatusRecorder {
+ public:
+  ScopedEntityAnnotatorCreationStatusRecorder() = default;
+  ~ScopedEntityAnnotatorCreationStatusRecorder() {
+    DCHECK_NE(status_, EntityAnnotatorCreationStatus::kUnknown);
+    base::UmaHistogramEnumeration(
+        "OptimizationGuide.PageEntitiesModelExecutor.CreationStatus", status_);
+  }
+
+  void set_status(EntityAnnotatorCreationStatus status) { status_ = status; }
+
+ private:
+  EntityAnnotatorCreationStatus status_ =
+      EntityAnnotatorCreationStatus::kUnknown;
+};
+
 }  // namespace
 
 EntityAnnotatorNativeLibrary::EntityAnnotatorNativeLibrary(
-    base::NativeLibrary native_library)
-    : native_library_(std::move(native_library)) {
+    base::NativeLibrary native_library,
+    bool should_provide_filter_path)
+    : native_library_(std::move(native_library)),
+      should_provide_filter_path_(should_provide_filter_path) {
   LoadFunctions();
 }
 EntityAnnotatorNativeLibrary::~EntityAnnotatorNativeLibrary() = default;
 
 // static
 std::unique_ptr<EntityAnnotatorNativeLibrary>
-EntityAnnotatorNativeLibrary::Create() {
+EntityAnnotatorNativeLibrary::Create(bool should_provide_filter_path) {
   base::FilePath base_dir;
+#if !BUILDFLAG(IS_ANDROID)
 #if BUILDFLAG(IS_MAC)
   if (base::mac::AmIBundled()) {
     base_dir = base::mac::FrameworkBundlePath().Append("Libraries");
   } else {
-#endif
+#endif  // BUILDFLAG(IS_MAC)
     if (!base::PathService::Get(base::DIR_MODULE, &base_dir)) {
       LOG(ERROR) << "Error getting app dir";
       return nullptr;
     }
 #if BUILDFLAG(IS_MAC)
   }
-#endif
+#endif  // BUILDFLAG(IS_MAC)
+#endif  // !BUILDFLAG(IS_ANDROID)
 
   base::NativeLibraryLoadError error;
   base::NativeLibrary native_library = base::LoadNativeLibrary(
       base_dir.AppendASCII(
           base::GetNativeLibraryName("optimization_guide_internal")),
       &error);
+  base::UmaHistogramBoolean(
+      "OptimizationGuide.EntityAnnotatorNativeLibrary.InitiatedSuccessfully",
+      (native_library != nullptr));
   if (!native_library) {
     LOG(ERROR) << "Failed to initialize optimization guide internal: "
                << error.ToString();
@@ -92,7 +116,8 @@ EntityAnnotatorNativeLibrary::Create() {
   std::unique_ptr<EntityAnnotatorNativeLibrary>
       entity_annotator_native_library =
           base::WrapUnique<EntityAnnotatorNativeLibrary>(
-              new EntityAnnotatorNativeLibrary(std::move(native_library)));
+              new EntityAnnotatorNativeLibrary(std::move(native_library),
+                                               should_provide_filter_path));
   if (entity_annotator_native_library->IsValid()) {
     return entity_annotator_native_library;
   }
@@ -246,14 +271,19 @@ int32_t EntityAnnotatorNativeLibrary::GetMaxSupportedFeatureFlag() {
 DISABLE_CFI_ICALL
 void* EntityAnnotatorNativeLibrary::CreateEntityAnnotator(
     const ModelInfo& model_info) {
+  ScopedEntityAnnotatorCreationStatusRecorder recorder;
   DCHECK(IsValid());
   if (!IsValid()) {
+    recorder.set_status(EntityAnnotatorCreationStatus::kLibraryInvalid);
     return nullptr;
   }
 
   void* options = options_create_func_();
-  if (!PopulateEntityAnnotatorOptionsFromModelInfo(options, model_info)) {
+  EntityAnnotatorCreationStatus status;
+  if (!PopulateEntityAnnotatorOptionsFromModelInfo(options, model_info,
+                                                   &status)) {
     options_delete_func_(options);
+    recorder.set_status(status);
     return nullptr;
   }
 
@@ -261,20 +291,25 @@ void* EntityAnnotatorNativeLibrary::CreateEntityAnnotator(
   const char* creation_error = get_creation_error_func_(entity_annotator);
   if (creation_error) {
     LOG(ERROR) << "Failed to create entity annotator: " << creation_error;
+    recorder.set_status(EntityAnnotatorCreationStatus::kInitializationFailure);
     DeleteEntityAnnotator(entity_annotator);
     entity_annotator = nullptr;
   }
+
   options_delete_func_(options);
+  recorder.set_status(EntityAnnotatorCreationStatus::kSuccess);
   return entity_annotator;
 }
 
 DISABLE_CFI_ICALL
 bool EntityAnnotatorNativeLibrary::PopulateEntityAnnotatorOptionsFromModelInfo(
     void* options,
-    const ModelInfo& model_info) {
+    const ModelInfo& model_info,
+    EntityAnnotatorCreationStatus* status) {
   // We don't know which files are intended for use if we don't have model
   // metadata, so return early.
   if (!model_info.GetModelMetadata()) {
+    *status = EntityAnnotatorCreationStatus::kMissingModelMetadata;
     return false;
   }
 
@@ -283,9 +318,12 @@ bool EntityAnnotatorNativeLibrary::PopulateEntityAnnotatorOptionsFromModelInfo(
       ParsedAnyMetadata<proto::PageEntitiesModelMetadata>(
           model_info.GetModelMetadata().value());
   if (!entities_model_metadata) {
+    *status = EntityAnnotatorCreationStatus::kMissingEntitiesModelMetadata;
     return false;
   }
   if (entities_model_metadata->slice_size() == 0) {
+    *status = EntityAnnotatorCreationStatus::
+        kMissingEntitiesModelMetadataSliceSpecification;
     return false;
   }
 
@@ -302,6 +340,8 @@ bool EntityAnnotatorNativeLibrary::PopulateEntityAnnotatorOptionsFromModelInfo(
   absl::optional<std::string> model_metadata_file_path =
       GetFilePathFromMap(kModelMetadataBaseName, base_to_full_file_path);
   if (!model_metadata_file_path) {
+    *status = EntityAnnotatorCreationStatus::
+        kMissingAdditionalEntitiesModelMetadataPath;
     return false;
   }
   options_set_model_metadata_file_path_func_(options,
@@ -309,6 +349,8 @@ bool EntityAnnotatorNativeLibrary::PopulateEntityAnnotatorOptionsFromModelInfo(
   absl::optional<std::string> word_embeddings_file_path =
       GetFilePathFromMap(kWordEmbeddingsBaseName, base_to_full_file_path);
   if (!word_embeddings_file_path) {
+    *status =
+        EntityAnnotatorCreationStatus::kMissingAdditionalWordEmbeddingsPath;
     return false;
   }
   options_set_word_embeddings_file_path_func_(
@@ -317,32 +359,45 @@ bool EntityAnnotatorNativeLibrary::PopulateEntityAnnotatorOptionsFromModelInfo(
   base::flat_set<std::string> slices(entities_model_metadata->slice().begin(),
                                      entities_model_metadata->slice().end());
   for (const auto& slice_id : slices) {
-    absl::optional<std::string> name_filter_path =
-        GetFilePathFromMap(GetSliceBaseName(slice_id, kNameFilterBaseName),
-                           base_to_full_file_path);
-    if (!name_filter_path) {
-      return false;
+    absl::optional<std::string> name_filter_path;
+    if (should_provide_filter_path_) {
+      name_filter_path =
+          GetFilePathFromMap(GetSliceBaseName(slice_id, kNameFilterBaseName),
+                             base_to_full_file_path);
+      if (!name_filter_path) {
+        *status =
+            EntityAnnotatorCreationStatus::kMissingAdditionalNameFilterPath;
+        return false;
+      }
     }
     absl::optional<std::string> name_table_path = GetFilePathFromMap(
         GetSliceBaseName(slice_id, kNameTableBaseName), base_to_full_file_path);
     if (!name_table_path) {
+      *status = EntityAnnotatorCreationStatus::kMissingAdditionalNameTablePath;
       return false;
     }
-    absl::optional<std::string> prefix_filter_path =
-        GetFilePathFromMap(GetSliceBaseName(slice_id, kPrefixFilterBaseName),
-                           base_to_full_file_path);
-    if (!prefix_filter_path) {
-      return false;
+    absl::optional<std::string> prefix_filter_path;
+    if (should_provide_filter_path_) {
+      prefix_filter_path =
+          GetFilePathFromMap(GetSliceBaseName(slice_id, kPrefixFilterBaseName),
+                             base_to_full_file_path);
+      if (!prefix_filter_path) {
+        *status =
+            EntityAnnotatorCreationStatus::kMissingAdditionalPrefixFilterPath;
+        return false;
+      }
     }
     absl::optional<std::string> metadata_table_path =
         GetFilePathFromMap(GetSliceBaseName(slice_id, kMetadataTableBaseName),
                            base_to_full_file_path);
     if (!metadata_table_path) {
+      *status =
+          EntityAnnotatorCreationStatus::kMissingAdditionalMetadataTablePath;
       return false;
     }
     options_add_model_slice_func_(
-        options, slice_id.c_str(), name_filter_path->c_str(),
-        name_table_path->c_str(), prefix_filter_path->c_str(),
+        options, slice_id.c_str(), name_filter_path.value_or("").c_str(),
+        name_table_path->c_str(), prefix_filter_path.value_or("").c_str(),
         metadata_table_path->c_str());
   }
 

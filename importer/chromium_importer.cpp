@@ -18,6 +18,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/importer/importer_list.h"
 #include "chrome/browser/shell_integration.h"
 #include "chrome/common/chrome_paths_internal.h"
@@ -80,16 +81,16 @@ void ChromiumImporter::StartImport(
   bridge_->NotifyEnded();
 }
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 std::string import_encryption_key;
-#endif  // OS_WIN
+#endif  // IS_WIN
 void ChromiumImporter::ImportPasswords(importer::ImporterType importer_type) {
   // Initializes Chrome decryptor
 
   std::vector<importer::ImportedPasswordForm> forms;
   base::FilePath source_path = profile_dir_;
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   // Read encryption key from other browser local state
   base::FilePath local_state_file =
       profile_dir_.DirName().AppendASCII("Local State");
@@ -146,7 +147,7 @@ void ChromiumImporter::ImportPasswords(importer::ImporterType importer_type) {
       return;
     }
   }
-#endif  // OS_WIN
+#endif  // IS_WIN
 
   base::FilePath file = source_path.AppendASCII("Login Data");
   if (base::PathExists(file)) {
@@ -189,7 +190,7 @@ bool ChromiumImporter::ReadAndParseSignons(
     const std::string& cipher_text = s2.ColumnString(5);
     std::u16string plain_text;
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
     std::string service_name = "Chrome Safe Storage";
     std::string account_name = "Chrome";
     if (importer_type == importer::TYPE_BRAVE) {
@@ -216,10 +217,10 @@ bool ChromiumImporter::ReadAndParseSignons(
       service_name = "Chromium Safe Storage";
       account_name = "Chromium";
     }
-    OSCrypt::DecryptImportedString16(cipher_text, &plain_text, service_name,
+    OSCryptImpl::DecryptImportedString16(cipher_text, &plain_text, service_name,
                                      account_name);
 #else
-#if defined(OS_LINUX)
+#if BUILDFLAG(IS_LINUX)
     // Set up crypt config.
     const base::CommandLine& command_line =
         *base::CommandLine::ForCurrentProcess();
@@ -231,11 +232,11 @@ bool ChromiumImporter::ReadAndParseSignons(
     chrome::GetDefaultUserDataDirectory(&config->user_data_path);
     OSCrypt::SetConfig(std::move(config));
     OSCrypt::DecryptString16(cipher_text, &plain_text);
-#endif  // OS_LINUX
-#if defined(OS_WIN)
-    OSCrypt::DecryptImportedString16(cipher_text, &plain_text,
+#endif  // IS_LINUX
+#if BUILDFLAG(IS_WIN)
+    OSCryptImpl::DecryptImportedString16(cipher_text, &plain_text,
                                      import_encryption_key);
-#endif  // OS_WIN
+#endif  // IS_WIN
 #endif
 
     form.password_value = plain_text;
@@ -243,8 +244,8 @@ bool ChromiumImporter::ReadAndParseSignons(
 
     forms->push_back(form);
   }
-#if defined(OS_MAC)
-  OSCrypt::ResetImportCache();
+#if BUILDFLAG(IS_MAC)
+  OSCryptImpl::ResetImportCache();
 #endif
 
   return true;

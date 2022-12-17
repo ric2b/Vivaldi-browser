@@ -35,6 +35,7 @@
 #include "ui/compositor/compositor_observer.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_observer.h"
+#include "ui/compositor/layer_animator.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/events/devices/device_data_manager_test_api.h"
 #include "ui/events/gesture_detection/gesture_configuration.h"
@@ -101,9 +102,7 @@ class WindowAnimationWaiter : public ui::LayerAnimationObserver {
   void OnLayerAnimationScheduled(
       ui::LayerAnimationSequence* sequence) override {}
 
-  void Wait() {
-    run_loop_.Run();
-  }
+  void Wait() { run_loop_.Run(); }
 
  private:
   ui::LayerAnimator* animator_;
@@ -165,6 +164,7 @@ display::DisplayManager* ShellTestApi::display_manager() {
 
 void ShellTestApi::ResetPowerButtonControllerForTest() {
   shell_->backlights_forced_off_setter_->ResetForTest();
+  shell_->power_button_controller_.reset();
   shell_->power_button_controller_ = std::make_unique<PowerButtonController>(
       shell_->backlights_forced_off_setter_.get());
 }

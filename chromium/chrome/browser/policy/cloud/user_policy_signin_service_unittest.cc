@@ -195,10 +195,13 @@ class UserPolicySigninServiceTest : public testing::Test {
     EXPECT_CALL(*mock_store_, Clear());
 
     // Let the SigninService know that the profile has been created.
-    content::NotificationService::current()->Notify(
-        chrome::NOTIFICATION_PROFILE_ADDED,
-        content::Source<Profile>(profile_.get()),
-        content::NotificationService::NoDetails());
+#if BUILDFLAG(IS_ANDROID)
+    UserPolicySigninServiceFactory::GetForProfile(profile_.get())
+        ->OnProfileAdded(profile_.get());
+#else
+    UserPolicySigninServiceFactory::GetForProfile(profile_.get())
+        ->OnProfileReady(profile_.get());
+#endif  // BUILDFLAG(IS_ANDROID)
   }
 
   bool IsRequestActive() {
@@ -322,10 +325,13 @@ class UserPolicySigninServiceSignedInTest : public UserPolicySigninServiceTest {
                                            signin::ConsentLevel::kSync);
 
     // Let the SigninService know that the profile has been created.
-    content::NotificationService::current()->Notify(
-        chrome::NOTIFICATION_PROFILE_ADDED,
-        content::Source<Profile>(profile_.get()),
-        content::NotificationService::NoDetails());
+#if BUILDFLAG(IS_ANDROID)
+    UserPolicySigninServiceFactory::GetForProfile(profile_.get())
+        ->OnProfileAdded(profile_.get());
+#else
+    UserPolicySigninServiceFactory::GetForProfile(profile_.get())
+        ->OnProfileReady(profile_.get());
+#endif  // BUILDFLAG(IS_ANDROID)
   }
 };
 
@@ -337,6 +343,9 @@ TEST_F(UserPolicySigninServiceTest, InitWhileSignedOut) {
   // UserCloudPolicyManager should not be initialized.
   ASSERT_FALSE(manager_->core()->service());
 }
+
+// TODO(crbug.com/1312544): Extend the test coverage by merging tests from
+// ios/chrome/browser/policy/cloud/user_policy_signin_service_unittest.mm here.
 
 #if !BUILDFLAG(IS_ANDROID)
 TEST_F(UserPolicySigninServiceTest, InitRefreshTokenAvailableBeforeSignin) {

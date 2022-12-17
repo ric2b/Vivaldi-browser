@@ -204,7 +204,7 @@ absl::optional<TitledUrlMatch> TitledUrlIndex::MatchTitledUrlNodeWithQuery(
   // ["thi"] will match the title [Thinking], but since
   // ["thi"] is quoted we don't want to do a prefix match.
   query_parser::QueryWordVector title_words, url_words, ancestor_words;
-#if defined(OS_ANDROID) && defined(VIVALDI_BUILD)
+#if BUILDFLAG(IS_ANDROID) && defined(VIVALDI_BUILD)
   query_parser::QueryWordVector description_words, nickname_words;
 #endif
   const std::u16string lower_title =
@@ -222,7 +222,7 @@ absl::optional<TitledUrlMatch> TitledUrlIndex::MatchTitledUrlNodeWithQuery(
     }
   }
 
-#if defined(OS_ANDROID) && defined(VIVALDI_BUILD)
+#if BUILDFLAG(IS_ANDROID) && defined(VIVALDI_BUILD)
   const std::u16string lower_description =
       base::i18n::ToLower(Normalize(node->GetTitledUrlNodeDescription()));
   query_parser::QueryParser::ExtractQueryWords(lower_description,
@@ -244,7 +244,7 @@ absl::optional<TitledUrlMatch> TitledUrlIndex::MatchTitledUrlNodeWithQuery(
         match_ancestor_titles && query_node->HasMatchIn(ancestor_words, false);
     query_has_ancestor_matches =
         query_has_ancestor_matches || has_ancestor_matches;
-#if !(defined(OS_ANDROID) && defined(VIVALDI_BUILD))
+#if !(BUILDFLAG(IS_ANDROID) && defined(VIVALDI_BUILD))
     if (!has_title_matches && !has_url_matches && !has_ancestor_matches)
       return absl::nullopt;
 #else
@@ -259,7 +259,7 @@ absl::optional<TitledUrlMatch> TitledUrlIndex::MatchTitledUrlNodeWithQuery(
 
     query_parser::QueryParser::SortAndCoalesceMatchPositions(&title_matches);
     query_parser::QueryParser::SortAndCoalesceMatchPositions(&url_matches);
-#if defined(OS_ANDROID) && defined(VIVALDI_BUILD)
+#if BUILDFLAG(IS_ANDROID) && defined(VIVALDI_BUILD)
     query_parser::QueryParser::SortAndCoalesceMatchPositions(&description_matches);
     query_parser::QueryParser::SortAndCoalesceMatchPositions(&nickname_matches);
 #endif
@@ -436,7 +436,7 @@ std::vector<std::u16string> TitledUrlIndex::ExtractIndexTerms(
     terms.push_back(term);
   }
 
-#if defined(VIVALDI_BUILD) && defined(OS_ANDROID)
+#if defined(VIVALDI_BUILD) && BUILDFLAG(IS_ANDROID)
   for (const std::u16string& term :
        ExtractQueryWords(
            Normalize(node->GetTitledUrlNodeDescription()))) {

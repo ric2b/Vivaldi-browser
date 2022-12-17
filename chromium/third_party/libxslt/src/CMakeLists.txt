@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 
-project(libxslt1 VERSION 1.1.34 LANGUAGES C)
+project(libxslt1 VERSION 1.1.35 LANGUAGES C)
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -26,7 +26,7 @@ option(LIBXSLT_WITH_THREADS "Add multithread support" ON)
 set(LIBXSLT_WITH_TRIO OFF)
 option(LIBXSLT_WITH_XSLT_DEBUG "Add the debugging code" ON)
 
-if(LIBXSLT_WITH_CRYPTO)
+if(LIBXSLT_WITH_CRYPTO AND NOT WIN32)
 	find_package(Gcrypt REQUIRED)
 endif()
 
@@ -77,7 +77,7 @@ set(LIBEXSLT_VERSION ${LIBEXSLT_DOTTED_VERSION})
 
 set(MODULE_EXTENSION "${CMAKE_SHARED_LIBRARY_SUFFIX}")
 
-if(LIBXSLT_WITH_CRYPTO)
+if(LIBXSLT_WITH_CRYPTO AND NOT WIN32)
 	list(APPEND CMAKE_REQUIRED_LIBRARIES Gcrypt::Gcrypt)
 endif()
 
@@ -145,7 +145,7 @@ else()
 	set(PACKAGE_NAME "libxslt")
 	set(PACKAGE_STRING "libxslt ${LIBXSLT_DOTTED_VERSION}")
 	set(PACKAGE_TARNAME "libxslt")
-	set(PACKAGE_URL "http://www.xmlsoft.org/libxslt")
+	set(PACKAGE_URL "https://gitlab.gnome.org/GNOME/libxslt")
 	set(PACKAGE_VERSION ${LIBXSLT_DOTTED_VERSION})
 	check_include_files("float.h;stdarg.h;stdlib.h;string.h" STDC_HEADERS)
 	set(_ALL_SOURCE ON)
@@ -310,7 +310,7 @@ target_include_directories(
 	$<INSTALL_INTERFACE:$<INSTALL_PREFIX>/${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
-if(LIBXSLT_WITH_CRYPTO)
+if(LIBXSLT_WITH_CRYPTO AND NOT WIN32)
 	target_link_libraries(LibExslt PRIVATE Gcrypt::Gcrypt)
 	set(LIBGCRYPT_LIBS "-lgcrypt")
 endif()
@@ -432,7 +432,7 @@ install(FILES libxslt/libxslt.3 DESTINATION ${CMAKE_INSTALL_MANDIR}/man3 COMPONE
 install(FILES doc/xsltproc.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1 COMPONENT documentation)
 install(DIRECTORY doc/ DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/libxslt COMPONENT documentation PATTERN Makefile.* EXCLUDE)
 
-if(LIBXSLT_WITH_CRYPTO)
+if(LIBXSLT_WITH_CRYPTO AND NOT WIN32)
 	install(FILES FindGcrypt.cmake DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/libxslt-${PROJECT_VERSION} COMPONENT development)
 endif()
 

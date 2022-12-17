@@ -16,6 +16,7 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/printing/print_job_worker.h"
 #include "chrome/browser/printing/printer_query.h"
+#include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/notification_service.h"
@@ -30,19 +31,16 @@ namespace {
 
 class TestPrintJobWorker : public PrintJobWorker {
  public:
-  TestPrintJobWorker()
-      : PrintJobWorker(content::ChildProcessHost::kInvalidUniqueID,
-                       content::ChildProcessHost::kInvalidUniqueID) {}
+  TestPrintJobWorker() : PrintJobWorker(content::GlobalRenderFrameHostId()) {}
   friend class TestQuery;
 };
 
 class TestQuery : public PrinterQuery {
  public:
-  TestQuery()
-      : PrinterQuery(content::ChildProcessHost::kInvalidUniqueID,
-                     content::ChildProcessHost::kInvalidUniqueID) {}
+  TestQuery() : PrinterQuery(content::GlobalRenderFrameHostId()) {}
 
   void GetSettingsDone(base::OnceClosure callback,
+                       absl::optional<bool> maybe_is_modifiable,
                        std::unique_ptr<PrintSettings> new_settings,
                        mojom::ResultCode result) override {
     FAIL();

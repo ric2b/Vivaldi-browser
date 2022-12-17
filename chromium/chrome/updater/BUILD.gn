@@ -101,8 +101,6 @@ if (is_win || is_mac || is_linux) {
       "external_constants_default.h",
       "installer.cc",
       "installer.h",
-      "lib_util.cc",
-      "lib_util.h",
       "persisted_data.cc",
       "persisted_data.h",
       "policy/dm_policy_manager.cc",
@@ -172,6 +170,10 @@ if (is_win || is_mac || is_linux) {
       "//url",
     ]
 
+    if (is_posix) {
+      sources += [ "remove_uninstalled_apps_task_posix.cc" ]
+    }
+
     if (is_mac) {
       sources += [
         "activity_impl_mac.cc",
@@ -189,7 +191,6 @@ if (is_win || is_mac || is_linux) {
         "installer_mac.cc",
         "launchd_util.cc",
         "launchd_util.h",
-        "lib_util_mac.mm",
         "mac/install_from_archive.h",
         "mac/install_from_archive.mm",
         "mac/mac_util.h",
@@ -248,10 +249,10 @@ if (is_win || is_mac || is_linux) {
         "app/server/win/service_main.h",
         "app/server/win/wrl_classes.cc",
         "device_management/dm_storage_win.cc",
-        "lib_util_win.cc",
         "policy/win/group_policy_manager.cc",
         "policy/win/group_policy_manager.h",
         "prefs_win.cc",
+        "remove_uninstalled_apps_task_win.cc",
         "setup_win.cc",
         "update_block_check_win.cc",
         "update_usage_stats_task_win.cc",
@@ -265,6 +266,8 @@ if (is_win || is_mac || is_linux) {
         "win/net/network.h",
         "win/net/network_fetcher.cc",
         "win/net/network_fetcher.h",
+        "win/protocol_parser_xml.cc",
+        "win/protocol_parser_xml.h",
         "win/scoped_handle.h",
         "win/scoped_impersonation.cc",
         "win/scoped_impersonation.h",
@@ -309,7 +312,9 @@ if (is_win || is_mac || is_linux) {
       ]
       deps += [
         "//build:branding_buildflags",
-        "//chrome/installer/util:with_no_strings",
+        "//chrome/installer/util:constants",
+        "//chrome/installer/util:metainstaller_utils",
+        "//chrome/installer/util:work_item",
         "//chrome/updater/app/server/win:updater_idl_idl",
         "//chrome/updater/app/server/win:updater_internal_idl_idl",
         "//chrome/updater/app/server/win:updater_legacy_idl_idl",
@@ -327,8 +332,10 @@ if (is_win || is_mac || is_linux) {
       defines = [ "SECURITY_WIN32" ]
 
       libs = [
+        "msxml2.lib",
         "secur32.lib",
         "taskschd.lib",
+        "wtsapi32.lib",
       ]
     }
 
@@ -445,7 +452,6 @@ if (is_win || is_mac || is_linux) {
       "//chrome/updater/constants.cc",
       "//chrome/updater/constants.h",
       "//chrome/updater/enum_traits.h",
-      "//chrome/updater/lib_util.h",
       "//chrome/updater/registration_data.cc",
       "//chrome/updater/registration_data.h",
       "//chrome/updater/tag.cc",
@@ -468,7 +474,6 @@ if (is_win || is_mac || is_linux) {
 
     if (is_win) {
       sources += [
-        "//chrome/updater/lib_util_win.cc",
         "//chrome/updater/util_win.cc",
         "//chrome/updater/win/user_info.cc",
         "//chrome/updater/win/user_info.h",
@@ -486,7 +491,6 @@ if (is_win || is_mac || is_linux) {
         "//chrome/updater/app/server/mac/update_service_wrappers.h",
         "//chrome/updater/app/server/mac/update_service_wrappers.mm",
         "//chrome/updater/constants_prod.cc",
-        "//chrome/updater/lib_util_mac.mm",
         "//chrome/updater/mac/mac_util.h",
         "//chrome/updater/mac/mac_util.mm",
         "//chrome/updater/mac/privileged_helper/service_protocol.h",
@@ -547,7 +551,10 @@ if (is_win || is_mac || is_linux) {
             "$root_build_dir/base.dll",
             "$root_build_dir/ui_base.dll",
           ]
-          data = [ "$root_build_dir/ucrtbased.dll" ]
+
+          if (is_debug) {
+            data = [ "$root_build_dir/ucrtbased.dll" ]
+          }
 
           deps += [ "//ui/base" ]
         }
@@ -570,7 +577,6 @@ if (is_win || is_mac || is_linux) {
       "external_constants_builder.h",
       "external_constants_builder_unittest.cc",
       "external_constants_override_unittest.cc",
-      "lib_util_unittest.cc",
       "persisted_data_unittest.cc",
       "policy/dm_policy_manager_unittest.cc",
       "policy/manager_unittest.cc",
@@ -625,6 +631,7 @@ if (is_win || is_mac || is_linux) {
         "util_win_unittest.cc",
         "win/installer_api_unittest.cc",
         "win/net/network_unittest.cc",
+        "win/protocol_parser_xml_unittest.cc",
         "win/setup/setup_util_unittest.cc",
         "win/tag_extractor_unittest.cc",
         "win/task_scheduler_unittest.cc",

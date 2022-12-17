@@ -70,7 +70,6 @@ class ASH_EXPORT LoginShelfView : public views::View,
     virtual void OnUiUpdate() = 0;
   };
 
- public:
   explicit LoginShelfView(
       LockScreenActionBackgroundController* lock_screen_action_background);
 
@@ -189,6 +188,8 @@ class ASH_EXPORT LoginShelfView : public views::View,
   // kShutdownConfirmationDialog is enabled, a shutdown confirmation bubble
   // would appear. If not, the device would shutdown immediately.
   void RequestShutdown();
+
+  bool ShouldShowShutdownButton() const;
 
   bool ShouldShowGuestButton() const;
 

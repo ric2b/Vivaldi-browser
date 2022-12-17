@@ -36,7 +36,6 @@ import org.chromium.base.test.params.ParameterSet;
 import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.CriteriaHelper;
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.FlakyTest;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.UrlUtils;
@@ -161,7 +160,6 @@ public class WebXrVrTransitionTest {
     @Restriction({RESTRICTION_TYPE_DEVICE_DAYDREAM, RESTRICTION_TYPE_VR_DON_ENABLED})
     @CommandLineFlags.Add({"enable-features=WebXR"})
     @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
-    @DisabledTest(message = "https://crbug.com/1236093")
     public void testPresentationPromiseUnresolvedDuringDon_WebXr() {
         presentationPromiseUnresolvedDuringDonImpl(
 
@@ -183,7 +181,6 @@ public class WebXrVrTransitionTest {
     @Restriction({RESTRICTION_TYPE_DEVICE_DAYDREAM, RESTRICTION_TYPE_VR_DON_ENABLED})
     @CommandLineFlags.Add({"enable-features=WebXR"})
     @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
-    @DisabledTest(message = "https://crbug.com/1246405")
     public void testPresentationPromiseRejectedIfDonCanceled_WebXr() {
         presentationPromiseRejectedIfDonCanceledImpl(
 
@@ -246,10 +243,9 @@ public class WebXrVrTransitionTest {
      */
     @Test
     @MediumTest
-            @CommandLineFlags.Add({"enable-features=WebXR"})
-            @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
-            public void testWindowRafStopsFiringWhilePresenting_WebXr()
-            throws InterruptedException {
+    @CommandLineFlags.Add({"enable-features=WebXR"})
+    @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
+    public void testWindowRafStopsFiringWhilePresenting_WebXr() throws InterruptedException {
         windowRafStopsFiringWhilePresentingImpl(
 
                 "webxr_test_window_raf_stops_firing_during_immersive_session",
@@ -311,9 +307,9 @@ public class WebXrVrTransitionTest {
      */
     @Test
     @MediumTest
-            @CommandLineFlags.Add({"enable-features=WebXR"})
-            @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
-            public void testNonImmersiveStopsDuringImmersive() {
+    @CommandLineFlags.Add({"enable-features=WebXR"})
+    @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
+    public void testNonImmersiveStopsDuringImmersive() {
         mWebXrVrTestFramework.loadFileAndAwaitInitialization(
                 "test_non_immersive_stops_during_immersive", PAGE_LOAD_TIMEOUT_S);
         mWebXrVrTestFramework.executeStepAndWait("stepBeforeImmersive()");

@@ -10,14 +10,11 @@
 #include "ash/public/cpp/app_list/internal_app_id_constants.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
-#include "base/cxx17_backports.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/json/json_file_value_serializer.h"
 #include "base/path_service.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
-#include "base/time/time.h"
 #include "chrome/browser/ash/file_manager/app_id.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
@@ -75,6 +72,8 @@ const char* const kDefaultAppOrder[] = {
     arc::kGoogleCalendarAppId,
     extension_misc::kCalendarAppId,
     web_app::kGoogleCalendarAppId,
+
+    web_app::kMessagesAppId,
 
     arc::kYoutubeAppId,
     extension_misc::kYoutubeAppId,
@@ -184,13 +183,13 @@ std::string GetLocaleSpecificStringImpl(
 
 // Gets built-in default app order.
 void GetDefault(std::vector<std::string>* app_ids) {
-  for (size_t i = 0; i < base::size(kDefaultAppOrder); ++i)
+  for (size_t i = 0; i < std::size(kDefaultAppOrder); ++i)
     app_ids->push_back(std::string(kDefaultAppOrder[i]));
 }
 
 }  // namespace
 
-const size_t kDefaultAppOrderCount = base::size(kDefaultAppOrder);
+const size_t kDefaultAppOrderCount = std::size(kDefaultAppOrder);
 
 ExternalLoader::ExternalLoader(bool async)
     : loaded_(base::WaitableEvent::ResetPolicy::MANUAL,

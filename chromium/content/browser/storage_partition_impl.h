@@ -15,7 +15,10 @@
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/observer_list.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "components/services/storage/public/mojom/partition.mojom.h"
@@ -23,30 +26,28 @@
 #include "content/browser/background_sync/background_sync_context_impl.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/content_index/content_index_context_impl.h"
-#include "content/browser/devtools/devtools_background_services_context_impl.h"
 #include "content/browser/dom_storage/dom_storage_context_wrapper.h"
 #include "content/browser/notifications/platform_notification_context_impl.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/url_loader_factory_getter.h"
 #include "content/browser/worker_host/dedicated_worker_service_impl.h"
-#include "content/browser/worker_host/shared_worker_service_impl.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/storage_partition_config.h"
 #include "content/public/common/trust_tokens.mojom.h"
+#include "media/media_buildflags.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "mojo/public/cpp/bindings/unique_receiver_set.h"
 #include "services/network/public/mojom/cookie_manager.mojom.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "storage/browser/quota/quota_client_type.h"
 #include "storage/browser/quota/quota_settings.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/dom_storage/dom_storage.mojom.h"
-
-#include "content/browser/blob_storage/blob_registry_wrapper.h"
 
 namespace leveldb_proto {
 class ProtoDatabaseProvider;
@@ -56,21 +57,26 @@ namespace net {
 class IsolationInfo;
 }  // namespace net
 
+namespace storage {
+class SharedStorageManager;
+}
+
 namespace content {
 
 class AggregationServiceImpl;
+class AttributionManagerImpl;
 class BackgroundFetchContext;
 class BlobRegistryWrapper;
 class BluetoothAllowedDevicesMap;
 class BroadcastChannelService;
-class BucketContext;
+class BucketManager;
 class CacheStorageControlWrapper;
 class ComputePressureManager;
-class AttributionManagerImpl;
 class CookieStoreManager;
+class DevToolsBackgroundServicesContextImpl;
 class FileSystemAccessEntryFactory;
 class FileSystemAccessManagerImpl;
-class FontAccessManagerImpl;
+class FontAccessManager;
 class GeneratedCodeCacheContext;
 class HostZoomLevelContext;
 class IndexedDBControlWrapper;
@@ -85,6 +91,8 @@ class PrefetchURLLoaderService;
 class PushMessagingContext;
 class QuotaContext;
 class SharedStorageWorkletHostManager;
+class SharedWorkerServiceImpl;
+class NavigationOrDocumentHandle;
 
 class CONTENT_EXPORT StoragePartitionImpl
     : public StoragePartition,
@@ -117,8 +125,7 @@ class CONTENT_EXPORT StoragePartitionImpl
   static void SetGetURLLoaderFactoryForBrowserProcessCallbackForTesting(
       CreateNetworkFactoryCallback url_loader_factory_callback);
 
-  // Forces Storage Service instances to be run in-process, ignoring the
-  // StorageServiceOutOfProcess feature setting.
+  // Forces Storage Service instances to be run in-process.
   static void ForceInProcessStorageServiceForTesting();
 
   void OverrideQuotaManagerForTesting(storage::QuotaManager* quota_manager);
@@ -157,7 +164,7 @@ class CONTENT_EXPORT StoragePartitionImpl
                                          int routing_id) override;
   mojo::PendingRemote<network::mojom::URLLoaderNetworkServiceObserver>
   CreateURLLoaderNetworkObserverForNavigationRequest(
-      int frame_tree_id) override;
+      NavigationRequest& navigation_request) override;
   storage::QuotaManager* GetQuotaManager() override;
   BackgroundSyncContextImpl* GetBackgroundSyncContext() override;
   storage::FileSystemContext* GetFileSystemContext() override;
@@ -175,9 +182,9 @@ class CONTENT_EXPORT StoragePartitionImpl
   storage::mojom::CacheStorageControl* GetCacheStorageControl() override;
   ServiceWorkerContextWrapper* GetServiceWorkerContext() override;
   DedicatedWorkerServiceImpl* GetDedicatedWorkerService() override;
-  SharedWorkerServiceImpl* GetSharedWorkerService() override;
+  SharedWorkerService* GetSharedWorkerService() override;
   GeneratedCodeCacheContext* GetGeneratedCodeCacheContext() override;
-  DevToolsBackgroundServicesContextImpl* GetDevToolsBackgroundServicesContext()
+  DevToolsBackgroundServicesContext* GetDevToolsBackgroundServicesContext()
       override;
   ContentIndexContextImpl* GetContentIndexContext() override;
   NativeIOContext* GetNativeIOContext() override;
@@ -186,6 +193,7 @@ class CONTENT_EXPORT StoragePartitionImpl
   ZoomLevelDelegate* GetZoomLevelDelegate() override;
   PlatformNotificationContextImpl* GetPlatformNotificationContext() override;
   InterestGroupManager* GetInterestGroupManager() override;
+  BrowsingTopicsSiteDataManager* GetBrowsingTopicsSiteDataManager() override;
   leveldb_proto::ProtoDatabaseProvider* GetProtoDatabaseProvider() override;
   void SetProtoDatabaseProvider(
       std::unique_ptr<leveldb_proto::ProtoDatabaseProvider> proto_db_provider)
@@ -236,18 +244,22 @@ class CONTENT_EXPORT StoragePartitionImpl
   PrefetchURLLoaderService* GetPrefetchURLLoaderService();
   CookieStoreManager* GetCookieStoreManager();
   FileSystemAccessManagerImpl* GetFileSystemAccessManager();
-  BucketContext* GetBucketContext();
+  BucketManager* GetBucketManager();
   QuotaContext* GetQuotaContext();
   AttributionManagerImpl* GetAttributionManager();
   void SetFontAccessManagerForTesting(
-      std::unique_ptr<FontAccessManagerImpl> font_access_manager);
+      std::unique_ptr<FontAccessManager> font_access_manager);
   ComputePressureManager* GetComputePressureManager();
   std::string GetPartitionDomain();
   AggregationServiceImpl* GetAggregationService();
-  FontAccessManagerImpl* GetFontAccessManager();
+  FontAccessManager* GetFontAccessManager();
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
   MediaLicenseManager* GetMediaLicenseManager();
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
+
+  // Gets the SharedStorageManager for the StoragePartition, or nullptr if it
+  // doesn't exist because the feature is disabled.
+  storage::SharedStorageManager* GetSharedStorageManager();
 
   // blink::mojom::DomStorage interface.
   void OpenLocalStorage(
@@ -419,54 +431,52 @@ class CONTENT_EXPORT StoragePartitionImpl
   class URLLoaderNetworkContext {
    public:
     enum class Type {
-      // A network context for a RenderFrameHost.
       kRenderFrameHostContext,
-      // A network context for a navigation request or a service worker.
       kNavigationRequestContext,
+      kServiceWorkerContext,
     };
 
     ~URLLoaderNetworkContext();
 
+    // Allow copy and assign.
+    URLLoaderNetworkContext(const URLLoaderNetworkContext& other);
+    URLLoaderNetworkContext& operator=(const URLLoaderNetworkContext& other);
+
     // Creates a URLLoaderNetworkContext for the render frame host.
-    static URLLoaderNetworkContext CreateForRenderFrameHost(
+    static StoragePartitionImpl::URLLoaderNetworkContext
+    CreateForRenderFrameHost(
         GlobalRenderFrameHostId global_render_frame_host_id);
 
     // Creates a URLLoaderNetworkContext for the navigation request.
-    static URLLoaderNetworkContext CreateForNavigation(int frame_tree_node_id);
+    static StoragePartitionImpl::URLLoaderNetworkContext CreateForNavigation(
+        NavigationRequest& navigation_request);
+
+    // Creates a URLLoaderNetworkContext for the service worker.
+    static StoragePartitionImpl::URLLoaderNetworkContext
+    CreateForServiceWorker();
+
+    // Used when `type` is `kRenderFrameHostContext` or
+    // `kNavigationRequestContext`.
+    URLLoaderNetworkContext(
+        URLLoaderNetworkContext::Type type,
+        GlobalRenderFrameHostId global_render_frame_host_id);
+
+    // Used when `type` is `kNavigationRequestContext`.
+    explicit URLLoaderNetworkContext(NavigationRequest& navigation_request);
 
     // Returns true if `type` is `kNavigationRequestContext`.
-    bool IsNavigationRequestContext();
+    bool IsNavigationRequestContext() const;
 
     Type type() const { return type_; }
 
-    GlobalRenderFrameHostId render_frame_host_id() const {
-      return render_frame_host_id_;
+    NavigationOrDocumentHandle* navigation_or_document() const {
+      return navigation_or_document_.get();
     }
 
-    int frame_tree_node_id() const { return frame_tree_node_id_; }
-
    private:
-    URLLoaderNetworkContext(URLLoaderNetworkContext::Type type,
-                            GlobalRenderFrameHostId global_render_frame_host_id,
-                            int frame_tree_node_id);
-
     Type type_;
-    // Used for kRenderFrameHostContext.
-    GlobalRenderFrameHostId render_frame_host_id_;
-    // Used for kNavigationRequestContext.
-    int frame_tree_node_id_;
+    scoped_refptr<NavigationOrDocumentHandle> navigation_or_document_;
   };
-
-  // NOTE(andre@vivaldi.com) : When we have a WebView that "adopt" a WebContents
-  // in WebViewGuest we need to set the parent of the WebView as fallback
-  // storage. See VB-72847 and
-  // https://source.chromium.org/chromium/chromium/src/+/98f465d27454f40690199ed1c32ab0ce2f8f3230
-  void UpdateBlobRegistryWithParentAsFallback(
-      StoragePartitionImpl* fallback_for_blob_urls);
-
-  scoped_refptr<BlobRegistryWrapper> blob_registry() {
-    return blob_registry_;
-  }
 
  private:
   class DataDeletionHelper;
@@ -632,7 +642,7 @@ class CONTENT_EXPORT StoragePartitionImpl
   scoped_refptr<BlobRegistryWrapper> blob_registry_;
   std::unique_ptr<PrefetchURLLoaderService> prefetch_url_loader_service_;
   std::unique_ptr<CookieStoreManager> cookie_store_manager_;
-  scoped_refptr<BucketContext> bucket_context_;
+  std::unique_ptr<BucketManager> bucket_manager_;
   scoped_refptr<GeneratedCodeCacheContext> generated_code_cache_context_;
   scoped_refptr<DevToolsBackgroundServicesContextImpl>
       devtools_background_services_context_;
@@ -642,12 +652,17 @@ class CONTENT_EXPORT StoragePartitionImpl
   scoped_refptr<ContentIndexContextImpl> content_index_context_;
   scoped_refptr<NativeIOContextImpl> native_io_context_;
   std::unique_ptr<AttributionManagerImpl> attribution_manager_;
-  std::unique_ptr<FontAccessManagerImpl> font_access_manager_;
+  std::unique_ptr<FontAccessManager> font_access_manager_;
   std::unique_ptr<InterestGroupManagerImpl> interest_group_manager_;
+  std::unique_ptr<BrowsingTopicsSiteDataManager>
+      browsing_topics_site_data_manager_;
   std::unique_ptr<AggregationServiceImpl> aggregation_service_;
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
   std::unique_ptr<MediaLicenseManager> media_license_manager_;
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
+
+  // Owning pointer to the SharedStorageManager for this partition.
+  std::unique_ptr<storage::SharedStorageManager> shared_storage_manager_;
 
   // TODO(crbug.com/1205695): ComputePressureManager should live elsewher. The
   //                          Compute Pressure API does not store data.
@@ -710,9 +725,6 @@ class CONTENT_EXPORT StoragePartitionImpl
   base::ObserverList<DataRemovalObserver> data_removal_observers_;
 
   bool is_vivaldi_ = false;
-  // NOTE(andre@vivaldi.com) : Used to give webviews access to the embedders
-  // blobs.
-  scoped_refptr<BlobRegistryWrapper> fallback_blob_registry_;
 
   // Called when all deletions are done. For test use only.
   base::OnceClosure on_deletion_helpers_done_callback_;

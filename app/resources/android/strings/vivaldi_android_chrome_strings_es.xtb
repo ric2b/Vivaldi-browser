@@ -21,17 +21,21 @@
 <translation id="3377025655491224618">Pestañas privada</translation>
 <translation id="3504699618187058974">Apilar pestañas</translation>
 <translation id="3518985090088779359">Aceptar y continuar</translation>
+<translation id="3571177741182643350">Páginas no leídas - disponibles sin conexión:</translation>
 <translation id="3700829948786686853">Bienvenido a Vivaldi</translation>
 <translation id="3719826155360621982">Página principal</translation>
 <translation id="385051799172605136">Regresar</translation>
+<translation id="399014816462153200">Páginas leídas:</translation>
 <translation id="4121750346708795461">Al usar esta aplicación, aceptas las <ph name="BEGIN_LINK1" />condiciones de servicio<ph name="END_LINK1" /> y la <ph name="BEGIN_LINK2" />política de privacidad<ph name="END_LINK2" /> de Vivaldi.</translation>
 <translation id="4137746084635924146">Idioma actual del dispositivo</translation>
+<translation id="4167670741834902166">Pestaña privada nueva</translation>
 <translation id="4243710787042215766">Abrir en pestaña privada</translation>
 <translation id="4526803704855831732">Pestañas privadas</translation>
 <translation id="4759238208242260848">Descargas</translation>
 <translation id="4883379392681899581">Salir del modo privado</translation>
 <translation id="4943872375798546930">Sin resultados</translation>
 <translation id="49576331685473090">Bloqueador de contenidos</translation>
+<translation id="5079259810715830221">Cuando un sitio de Google solicita precargar privadamente enlaces en su página, Vivaldi encripta y precarga las páginas a través de los servidores de Google sin usar cookies. Esto permite ocultar tu identidad del sitio precargado.</translation>
 <translation id="5118676864324397542">Almacenamiento de <ph name="APP_NAME" /></translation>
 <translation id="5186185447130319458">Privado</translation>
 <translation id="5233638681132016545">Pestaña nueva</translation>
@@ -41,9 +45,10 @@
 Para modificar el término de búsqueda, mantén presionado cualquier texto para seleccionarlo. Para afinar la búsqueda, desliza el panel hacia arriba y luego toca el cuadro de búsqueda.</translation>
 <translation id="6150320133806434356">Marcador guardado</translation>
 <translation id="6336451774241870485">Pestaña privada nueva</translation>
-<translation id="6585139692466700358">Ofrecer traducir páginas usando el servicio de traducción de Vivaldi</translation>
+<translation id="6585139692466700358">Ofrecer traducir páginas con el servicio de traducción de Vivaldi</translation>
 <translation id="6593061639179217415">Modo escritorio</translation>
 <translation id="6610147964972079463">Cerrar todas</translation>
+<translation id="7029995644714925509">Cuando un sitio solicita precargar privadamente enlaces en su página, Vivaldi encripta y precarga las páginas a través de los servidores de Google sin usar cookies. Esto permite ocultar tu identidad del sitio precargado.</translation>
 <translation id="706339621163631076">Política de privacidad del navegador</translation>
 <translation id="732145680195464316">Marcador guardado en <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Acerca de Vivaldi</translation>

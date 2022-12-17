@@ -21,17 +21,21 @@
 <translation id="3377025655491224618">시크릿 탭</translation>
 <translation id="3504699618187058974">탭</translation>
 <translation id="3518985090088779359">동의 &amp; 계속하기</translation>
+<translation id="3571177741182643350">읽지 않은 글 - 오프라인에서 읽기 가능:</translation>
 <translation id="3700829948786686853">Vivaldi에 오신 것을 환영합니다</translation>
 <translation id="3719826155360621982">홈페이지</translation>
 <translation id="385051799172605136">이전</translation>
+<translation id="399014816462153200">글 읽기:</translation>
 <translation id="4121750346708795461">이 애플리케이션을 사용하면 Vivaldi의 <ph name="BEGIN_LINK1" />최종 사용자 라이선스 계약<ph name="END_LINK1" />과 <ph name="BEGIN_LINK2" />개인정보 보호 정책<ph name="END_LINK2" />에 동의하는 것으로 간주됩니다.</translation>
 <translation id="4137746084635924146">기기의 현재 언어</translation>
+<translation id="4167670741834902166">새 시크릿 탭</translation>
 <translation id="4243710787042215766">사생활 보호 탭으로 열기</translation>
 <translation id="4526803704855831732">사생활 보호 탭</translation>
 <translation id="4759238208242260848">다운로드</translation>
 <translation id="4883379392681899581">사생활 보호 모드 나가기</translation>
 <translation id="4943872375798546930">검색결과 없음</translation>
 <translation id="49576331685473090">콘텐츠 차단기</translation>
+<translation id="5079259810715830221">Google 사이트가 페이지의 링크를 비공개로 미리 불러오도록 요청할 때 Vivaldi는 쿠키 없이 Google 서버를 통해 페이지를 암호화하고 미리 불러옵니다. 이렇게 하면 사전에 불러온 사이트에서 ㅎ사용자의 정보가 숨겨집니다.</translation>
 <translation id="5118676864324397542">Vivaldi <ph name="APP_NAME" /> 저장공간</translation>
 <translation id="5186185447130319458">비공개</translation>
 <translation id="5233638681132016545">새 탭</translation>
@@ -44,6 +48,7 @@
 <translation id="6585139692466700358">페이지를 Vivaldi의 번역 서비스를 사용해서 다른 언어로 번역하도록 제안</translation>
 <translation id="6593061639179217415">데스크톱 사이트</translation>
 <translation id="6610147964972079463">사생활 보호 탭 닫기</translation>
+<translation id="7029995644714925509">사이트가 페이지에 링크를 비공개로 미리 불러오도록 요청하면 Vivaldi는 쿠키 없이 Google 서버를 통해 페이지를 암호화하고 미리 불러옵니다. 이렇게 하면 미리 불러온 사이트에서 사용자의 정보가 숨겨집니다.</translation>
 <translation id="706339621163631076">브라우저 개인정보처리방침</translation>
 <translation id="732145680195464316"><ph name="PRODUCT_NAME" />에 북마크가 저장됨</translation>
 <translation id="7427132068601343474">Vivaldi 정보</translation>

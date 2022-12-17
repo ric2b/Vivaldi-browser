@@ -18,7 +18,6 @@
 #include "base/process/process_handle.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -53,7 +52,6 @@
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/common/referrer.h"
 #include "content/public/common/result_codes.h"
-#include "content/public/common/use_zoom_for_dsf_policy.h"
 #include "net/base/filename_util.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/manifest/manifest_util.h"
@@ -133,10 +131,8 @@ std::unique_ptr<Page::ScreencastFrameMetadata> BuildScreencastFrameMetadata(
       gfx::ScaleSize(gfx::SizeF(surface_size), 1 / device_scale_factor);
   float top_offset_dip = top_controls_visible_height;
   gfx::PointF root_scroll_offset_dip = root_scroll_offset;
-  if (IsUseZoomForDSFEnabled()) {
-    top_offset_dip /= device_scale_factor;
-    root_scroll_offset_dip.Scale(1 / device_scale_factor);
-  }
+  top_offset_dip /= device_scale_factor;
+  root_scroll_offset_dip.Scale(1 / device_scale_factor);
   std::unique_ptr<Page::ScreencastFrameMetadata> page_metadata =
       Page::ScreencastFrameMetadata::Create()
           .SetPageScaleFactor(page_scale_factor)
@@ -825,9 +821,7 @@ void PageHandler::CaptureScreenshot(
     modified_params.viewport_offset.SetPoint(clip.fromJust()->GetX(),
                                              clip.fromJust()->GetY());
     modified_params.viewport_scale = clip.fromJust()->GetScale() * dpfactor;
-    if (IsUseZoomForDSFEnabled()) {
-      modified_params.viewport_offset.Scale(widget_host_device_scale_factor);
-    }
+    modified_params.viewport_offset.Scale(widget_host_device_scale_factor);
   }
 
   absl::optional<blink::web_pref::WebPreferences> maybe_original_web_prefs;
@@ -1018,7 +1012,7 @@ void PageHandler::GetAppManifest(
   }
   if (!CanExecuteGlobalCommands(host_, callback))
     return;
-  ManifestManagerHost::GetOrCreateForCurrentDocument(host_->GetMainFrame())
+  ManifestManagerHost::GetOrCreateForPage(host_->GetPage())
       ->RequestManifestDebugInfo(base::BindOnce(&PageHandler::GotManifest,
                                                 weak_factory_.GetWeakPtr(),
                                                 std::move(callback)));
@@ -1394,9 +1388,6 @@ Page::BackForwardCacheNotRestoredReason NotRestoredReasonToProtocol(
     case Reason::kBackForwardCacheDisabledForDelegate:
       return Page::BackForwardCacheNotRestoredReasonEnum::
           BackForwardCacheDisabledForDelegate;
-    case Reason::kOptInUnloadHeaderNotPresent:
-      return Page::BackForwardCacheNotRestoredReasonEnum::
-          OptInUnloadHeaderNotPresent;
     case Reason::kUnloadHandlerExistsInMainFrame:
       return Page::BackForwardCacheNotRestoredReasonEnum::
           UnloadHandlerExistsInMainFrame;
@@ -1416,9 +1407,10 @@ Page::BackForwardCacheNotRestoredReason NotRestoredReasonToProtocol(
           CacheControlNoStoreHTTPOnlyCookieModified;
     case Reason::kNoResponseHead:
       return Page::BackForwardCacheNotRestoredReasonEnum::NoResponseHead;
-    case Reason::kActivationNavigationsDisallowedForBug1234857:
-      return Page::BackForwardCacheNotRestoredReasonEnum::
-          ActivationNavigationsDisallowedForBug1234857;
+    case Reason::kErrorDocument:
+      return Page::BackForwardCacheNotRestoredReasonEnum::ErrorDocument;
+    case Reason::kFencedFramesEmbedder:
+      return Page::BackForwardCacheNotRestoredReasonEnum::FencedFramesEmbedder;
     case Reason::kBlocklistedFeatures:
       // Blocklisted features should be handled separately and be broken down
       // into sub reasons.
@@ -1697,14 +1689,14 @@ Page::BackForwardCacheNotRestoredReasonType MapNotRestoredReasonToType(
     case Reason::kCacheControlNoStoreCookieModified:
     case Reason::kCacheControlNoStoreHTTPOnlyCookieModified:
     case Reason::kNoResponseHead:
+    case Reason::kErrorDocument:
+    case Reason::kFencedFramesEmbedder:
       return Page::BackForwardCacheNotRestoredReasonTypeEnum::Circumstantial;
-    case Reason::kOptInUnloadHeaderNotPresent:
     case Reason::kUnloadHandlerExistsInMainFrame:
     case Reason::kUnloadHandlerExistsInSubFrame:
       return Page::BackForwardCacheNotRestoredReasonTypeEnum::PageSupportNeeded;
     case Reason::kNetworkRequestDatapipeDrainedAsBytesConsumer:
     case Reason::kUnknown:
-    case Reason::kActivationNavigationsDisallowedForBug1234857:
       return Page::BackForwardCacheNotRestoredReasonTypeEnum::SupportPending;
     case Reason::kBlocklistedFeatures:
       NOTREACHED();
@@ -1795,13 +1787,16 @@ CreateNotRestoredExplanation(
     } else if (reason == BackForwardCacheMetrics::NotRestoredReason::
                              kDisableForRenderFrameHostCalled) {
       for (auto disabled_reason : disabled_reasons) {
-        reasons->emplace_back(
+        auto reason =
             Page::BackForwardCacheNotRestoredExplanation::Create()
                 .SetType(
                     MapDisableForRenderFrameHostReasonToType(disabled_reason))
                 .SetReason(
                     DisableForRenderFrameHostReasonToProtocol(disabled_reason))
-                .Build());
+                .Build();
+        if (!disabled_reason.context.empty())
+          reason->SetContext(disabled_reason.context);
+        reasons->emplace_back(std::move(reason));
       }
     } else {
       reasons->emplace_back(
@@ -1869,6 +1864,17 @@ void PageHandler::BackForwardCacheNotUsed(
   frontend_->BackForwardCacheNotUsed(devtools_navigation_token, frame_id,
                                      std::move(explanation),
                                      std::move(explanation_tree));
+}
+
+void PageHandler::DidActivatePrerender(const NavigationRequest& nav_request) {
+  if (!enabled_)
+    return;
+  FrameTreeNode* ftn = nav_request.frame_tree_node();
+  std::string initiating_frame_id = ftn->devtools_frame_token().ToString();
+  const GURL& prerendering_url = nav_request.common_params().url;
+  frontend_->PrerenderAttemptCompleted(
+      initiating_frame_id, prerendering_url.spec(),
+      Page::PrerenderFinalStatusEnum::Activated);
 }
 
 bool PageHandler::ShouldBypassCSP() {

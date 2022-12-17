@@ -10,21 +10,22 @@
 #include <vector>
 
 #include "ash/services/secure_channel/secure_context.h"
-#include "ash/services/secure_channel/session_keys.h"
 #include "base/memory/weak_ptr.h"
 #include "third_party/ukey2/proto/device_to_device_messages.pb.h"
 
 namespace securemessage {
 class Header;
-}  // namespace securemessage
+}
 
-namespace chromeos {
+namespace ash {
 
 namespace multidevice {
 class SecureMessageDelegate;
-}  // namespace multidevice
+}
 
 namespace secure_channel {
+
+class SessionKeys;
 
 struct MessageComparator {
   // Prioritize messages with the lowest sequence number
@@ -104,7 +105,6 @@ class DeviceToDeviceSecureContext : public SecureContext {
 };
 
 }  // namespace secure_channel
-
-}  // namespace chromeos
+}  // namespace ash
 
 #endif  // ASH_SERVICES_SECURE_CHANNEL_DEVICE_TO_DEVICE_SECURE_CONTEXT_H_

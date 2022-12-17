@@ -35,6 +35,7 @@
 #include "sync/notes/note_specifics_conversions.h"
 #include "sync/notes/notes_model_observer_impl.h"
 #include "sync/notes/parent_guid_preprocessing.h"
+#include "sync/notes/synced_note_tracker_entity.h"
 #include "ui/base/models/tree_node_iterator.h"
 
 namespace sync_notes {
@@ -140,7 +141,7 @@ void NoteModelTypeProcessor::OnCommitCompleted(
   // transient and the processor with eventually retry.
 
   for (const syncer::CommitResponseData& response : committed_response_list) {
-    const SyncedNoteTracker::Entity* entity =
+    const SyncedNoteTrackerEntity* entity =
         note_tracker_->GetEntityForClientTagHash(response.client_tag_hash);
     if (!entity) {
       DLOG(WARNING) << "Received a commit response for an unknown entity.";
@@ -169,12 +170,6 @@ void NoteModelTypeProcessor::OnUpdateReceived(
   if (!note_tracker_) {
     OnInitialUpdateReceived(model_type_state, std::move(updates));
     return;
-  }
-
-  // Before applying incremental updates, run a quirk to mitigate some data
-  // corruption issue introduced by crbug.com/1231450.
-  for (syncer::UpdateResponseData& update : updates) {
-    MaybeFixGuidInSpecificsDueToPastBug(*note_tracker_, &update.entity);
   }
 
   // Incremental updates.
@@ -443,18 +438,18 @@ void NoteModelTypeProcessor::GetAllNodesForDebugging(
   auto all_nodes = std::make_unique<base::ListValue>();
   // Create a permanent folder since sync server no longer create root folders,
   // and USS won't migrate root folders from directory, we create root folders.
-  auto root_node = std::make_unique<base::DictionaryValue>();
+  base::Value::Dict root_node;
   // Function isTypeRootNode in sync_node_browser.js use PARENT_ID and
   // UNIQUE_SERVER_TAG to check if the node is root node. isChildOf in
   // sync_node_browser.js uses modelType to check if root node is parent of real
   // data node. NON_UNIQUE_NAME will be the name of node to display.
-  root_node->SetString("ID", "NOTES_ROOT");
-  root_node->SetString("PARENT_ID", "r");
-  root_node->SetString("UNIQUE_SERVER_TAG", "vivaldi_notes");
-  root_node->SetBoolean("IS_DIR", true);
-  root_node->SetString("modelType", "Notes");
-  root_node->SetString("NON_UNIQUE_NAME", "Notes");
-  all_nodes->Append(std::move(root_node));
+  root_node.Set("ID", "NOTES_ROOT");
+  root_node.Set("PARENT_ID", "r");
+  root_node.Set("UNIQUE_SERVER_TAG", "vivaldi_notes");
+  root_node.Set("IS_DIR", true);
+  root_node.Set("modelType", "Notes");
+  root_node.Set("NON_UNIQUE_NAME", "Notes");
+  all_nodes->Append(base::Value(std::move(root_node)));
 
   const vivaldi::NoteNode* model_root_node = notes_model_->root_node();
   int i = 0;
@@ -468,7 +463,7 @@ void NoteModelTypeProcessor::AppendNodeAndChildrenForDebugging(
     const vivaldi::NoteNode* node,
     int index,
     base::ListValue* all_nodes) const {
-  const SyncedNoteTracker::Entity* entity =
+  const SyncedNoteTrackerEntity* entity =
       note_tracker_->GetEntityForNoteNode(node);
   // Include only tracked nodes. Newly added nodes are tracked even before being
   // sent to the server.
@@ -496,7 +491,7 @@ void NoteModelTypeProcessor::AppendNodeAndChildrenForDebugging(
     data.legacy_parent_id = "";
   } else {
     const vivaldi::NoteNode* parent = node->parent();
-    const SyncedNoteTracker::Entity* parent_entity =
+    const SyncedNoteTrackerEntity* parent_entity =
         note_tracker_->GetEntityForNoteNode(parent);
     DCHECK(parent_entity);
     data.legacy_parent_id = parent_entity->metadata()->server_id();
@@ -524,7 +519,8 @@ void NoteModelTypeProcessor::AppendNodeAndChildrenForDebugging(
                               syncer::EntityMetadataToValue(*metadata)));
   data_dictionary->SetString("modelType", "Notes");
   data_dictionary->SetBoolean("IS_DIR", node->is_folder());
-  all_nodes->Append(std::move(data_dictionary));
+  all_nodes->Append(
+      base::Value::FromUniquePtrValue(std::move(data_dictionary)));
 
   int i = 0;
   for (const auto& child : node->children())

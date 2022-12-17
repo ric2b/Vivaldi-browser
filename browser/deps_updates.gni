@@ -35,7 +35,7 @@ if (is_win) {
   }
 }
 
-update_target("//chrome:browser_dependencies") {
+update_target("//chrome:dependencies") {
   public_deps += [
     "//vivaldi/browser",
   ]

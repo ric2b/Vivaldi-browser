@@ -16,6 +16,7 @@
 #include "base/observer_list.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/task_runner_util.h"
+#include "base/time/time.h"
 #include "base/version.h"
 #include "components/feed/core/proto/v2/ui.pb.h"
 #include "components/feed/core/proto/v2/wire/reliability_logging_enums.pb.h"
@@ -36,8 +37,10 @@
 #include "components/feed/core/v2/tasks/load_more_task.h"
 #include "components/feed/core/v2/tasks/load_stream_task.h"
 #include "components/feed/core/v2/tasks/wait_for_store_initialize_task.h"
+#include "components/feed/core/v2/user_actions_collector.h"
 #include "components/feed/core/v2/web_feed_subscription_coordinator.h"
 #include "components/feed/core/v2/wire_response_translator.h"
+#include "components/feed/core/v2/xsurface_datastore.h"
 #include "components/offline_pages/task/task_queue.h"
 #include "components/prefs/pref_member.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -104,6 +107,9 @@ class FeedStream : public FeedApi,
   std::string GetSessionId() const override;
   void AttachSurface(FeedStreamSurface*) override;
   void DetachSurface(FeedStreamSurface*) override;
+  void UpdateUserProfileOnLinkClick(
+      const GURL& url,
+      const std::vector<int64_t>& entity_mids) override;
   void AddUnreadContentObserver(const StreamType& stream_type,
                                 UnreadContentObserver* observer) override;
   void RemoveUnreadContentObserver(const StreamType& stream_type,
@@ -175,6 +181,7 @@ class FeedStream : public FeedApi,
                        ContentOrder content_order) override;
   ContentOrder GetContentOrder(const StreamType& stream_type) override;
   ContentOrder GetContentOrderFromPrefs(const StreamType& stream_type) override;
+  void IncrementFollowedFromWebPageMenuCount() override;
 
   // offline_pages::TaskQueue::Delegate.
   void OnTaskQueueIsIdle() override;
@@ -298,6 +305,10 @@ class FeedStream : public FeedApi,
   LaunchReliabilityLogger& GetLaunchReliabilityLogger(
       const StreamType& stream_type);
 
+  XsurfaceDatastoreSlice& GetGlobalXsurfaceDatastore() {
+    return global_datastore_slice_;
+  }
+
   // Testing functionality.
   offline_pages::TaskQueue& GetTaskQueueForTesting();
   // Loads |model|. Should be used for testing in place of typical model
@@ -400,6 +411,8 @@ class FeedStream : public FeedApi,
   raw_ptr<const WireResponseTranslator> wire_response_translator_;
 
   StreamModel::Context stream_model_context_;
+  // For Xsurface datastore data which applies to all `StreamType`s.
+  XsurfaceDatastoreSlice global_datastore_slice_;
 
   ChromeInfo chrome_info_;
 
@@ -438,6 +451,7 @@ class FeedStream : public FeedApi,
   bool clear_all_in_progress_ = false;
 
   std::vector<GURL> recent_feed_navigations_;
+  UserActionsCollector user_actions_collector_;
 
   base::WeakPtrFactory<FeedStream> weak_ptr_factory_{this};
 };

@@ -106,7 +106,6 @@ RequestFilterProxyingWebSocket::RequestFilterProxyingWebSocket(
       info_(request_id_generator->Generate(MSG_ROUTING_NONE, 0),
             process_id,
             render_frame_id,
-            MSG_ROUTING_NONE,
             request,
             content::ContentBrowserClient::URLLoaderFactoryType::
                 kDocumentSubResource,

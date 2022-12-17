@@ -106,7 +106,6 @@ namespace {
 class JavaScriptDialogDismissNotifier;
 }
 enum class PictureInPictureResult;
-class AgentSchedulingGroupHost;
 class BeforeUnloadBlockingDelegate;  // content_browser_test_utils_internal.h
 class BrowserPluginEmbedder;
 class BrowserPluginGuest;
@@ -125,7 +124,7 @@ class RenderWidgetHostInputEventRouter;
 class SavePackage;
 class ScreenChangeMonitor;
 class ScreenOrientationProvider;
-class SiteInstance;
+class SiteInstanceGroup;
 // For web_contents_impl_browsertest.cc
 class TestWCDelegateForDialogsAndFullscreen;
 class TestWebContents;
@@ -565,13 +564,12 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   void SetIgnoreInputEvents(bool ignore_input_events) override;
   bool HasActiveEffectivelyFullscreenVideo() override;
   void WriteIntoTrace(perfetto::TracedValue context) override;
-  void DisallowActivationNavigationsForBug1234857() override;
   const base::Location& GetCreatorLocation() override;
   void UpdateBrowserControlsState(cc::BrowserControlsState constraints,
                                   cc::BrowserControlsState current,
                                   bool animate) override;
   void SetTabSwitchStartTime(base::TimeTicks start_time,
-                             bool destination_is_loaded) final;
+                             bool destination_is_loaded) override;
 
   // Implementation of PageNavigator.
   WebContents* OpenURL(const OpenURLParams& params) override;
@@ -590,7 +588,7 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
       blink::mojom::NavigationBlockedReason reason) override;
   void OnDidFinishLoad(RenderFrameHostImpl* render_frame_host,
                        const GURL& url) override;
-  void OnManifestUrlChanged(const PageImpl& page) override;
+  void OnManifestUrlChanged(PageImpl& page) override;
   void RenderFrameCreated(RenderFrameHostImpl* render_frame_host) override;
   void RenderFrameDeleted(RenderFrameHostImpl* render_frame_host) override;
   void ShowContextMenu(
@@ -661,14 +659,12 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
       RenderFrameHostImpl* rfh,
       bool is_fullscreen,
       blink::mojom::FullscreenOptionsPtr options) override;
-  bool ShouldRouteMessageEvent(
-      RenderFrameHostImpl* target_rfh,
-      SiteInstance* source_site_instance) const override;
+  bool ShouldRouteMessageEvent(RenderFrameHostImpl* target_rfh) const override;
   void EnsureOpenerProxiesExist(RenderFrameHostImpl* source_rfh) override;
   std::unique_ptr<WebUIImpl> CreateWebUIForRenderFrameHost(
       RenderFrameHostImpl* frame_host,
       const GURL& url) override;
-  void SetFocusedFrame(FrameTreeNode* node, SiteInstance* source) override;
+  void SetFocusedFrame(FrameTreeNode* node, SiteInstanceGroup* source) override;
   void DidCallFocus() override;
   RenderFrameHostImpl* GetFocusedFrameIncludingInnerWebContents() override;
   void OnFocusedElementChangedInFrame(
@@ -751,7 +747,7 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   bool IsTransientAllowFullscreenActive() const override;
   bool IsBackForwardCacheSupported() override;
   RenderWidgetHostImpl* CreateNewPopupWidget(
-      AgentSchedulingGroupHost& agent_scheduling_group,
+      base::SafeRef<SiteInstanceGroup> site_instance_group,
       int32_t route_id,
       mojo::PendingAssociatedReceiver<blink::mojom::PopupWidgetHost>
           blink_popup_widget_host,
@@ -880,7 +876,7 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
       const LoadCommittedDetails& details) override;
   void NotifyChangedNavigationState(InvalidateTypes changed_flags) override;
   bool ShouldAllowRendererInitiatedCrossProcessNavigation(
-      bool is_main_frame_navigation) override;
+      bool is_outermost_main_frame_navigation) override;
   std::vector<std::unique_ptr<NavigationThrottle>> CreateThrottlesForNavigation(
       NavigationHandle* navigation_handle) override;
   std::vector<std::unique_ptr<CommitDeferringCondition>>
@@ -897,7 +893,6 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   void RegisterExistingOriginToPreventOptInIsolation(
       const url::Origin& origin,
       NavigationRequest* navigation_request_to_exclude) override;
-  bool IsActivationNavigationDisallowedForBug1234857() override;
 
   // RenderWidgetHostDelegate --------------------------------------------------
 
@@ -965,6 +960,7 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
       RenderFrameProxyHost* render_frame_proxy_host,
       blink::mojom::FrameVisibility visibility) override;
   void SendScreenRects() override;
+  void SendActiveState(bool active) override;
   TextInputManager* GetTextInputManager() override;
   bool IsWidgetForPrimaryMainFrame(
       RenderWidgetHostImpl* render_widget_host) override;
@@ -1317,8 +1313,8 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   bool CancelPrerendering(FrameTreeNode* frame_tree_node,
                           PrerenderHost::FinalStatus final_status);
 
-  void SetExtData(const std::string& ext_data) override;
-  const std::string& GetExtData() const override;
+  void SetVivExtData(const std::string& viv_ext_data) override;
+  const std::string& GetVivExtData() const override;
 
  private:
   using FrameTreeIterationCallback = base::RepeatingCallback<void(FrameTree*)>;
@@ -1375,6 +1371,7 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   FRIEND_TEST_ALL_PREFIXES(WebContentsImplBrowserTest,
                            ForEachFrameTreeInnerContents);
   FRIEND_TEST_ALL_PREFIXES(FencedFrameBrowserTest, FrameIteration);
+  FRIEND_TEST_ALL_PREFIXES(FencedFrameTreeBrowserTest, ShouldIgnoreJsDialog);
   FRIEND_TEST_ALL_PREFIXES(FormStructureBrowserTest, HTMLFiles);
   FRIEND_TEST_ALL_PREFIXES(NavigationControllerTest, HistoryNavigate);
   FRIEND_TEST_ALL_PREFIXES(RenderFrameHostManagerTest, PageDoesBackAndReload);
@@ -2310,8 +2307,6 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   // color or if the page does not set a background color.
   absl::optional<SkColor> page_base_background_color_;
 
-  bool disallow_activation_navigations_ = false;
-
   // TODO(1231679): Remove/reevaluate after the PCScan experiment is finished.
   std::unique_ptr<StarScanLoadObserver> star_scan_load_observer_;
 
@@ -2325,7 +2320,7 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   std::unique_ptr<bool> only_load_from_cache_; // Note this is only for images for now.
 
   // Ext data.
-  std::string ext_data_;
+  std::string viv_ext_data_;
 
   base::WeakPtrFactory<WebContentsImpl> loading_weak_factory_{this};
   base::WeakPtrFactory<WebContentsImpl> weak_factory_{this};
@@ -2344,6 +2339,7 @@ class CONTENT_EXPORT WebContentsImpl::FriendWrapper {
   friend class TestNavigationObserver;
   friend class WebContentsAddedObserver;
   friend class ContentBrowserConsistencyChecker;
+  friend class CreateAndLoadWebContentsObserver;
 
   FriendWrapper();  // Not instantiable.
 

@@ -528,9 +528,13 @@ void RenderWidgetHostViewChildFrame::UpdateViewportIntersection(
     host()->SetIntersectsViewport(
         !intersection_state.viewport_intersection.IsEmpty());
 
-    // Do not send viewport intersection to main frames.
+    // Do not send |visual_properties| to main frames.
     DCHECK(!visual_properties.has_value() || !host()->owner_delegate());
-    if (!host()->owner_delegate()) {
+
+    // TODO(crbug.com/1148960): Also propagate this for portals.
+    bool is_fenced_frame =
+        host()->frame_tree()->type() == FrameTree::Type::kFencedFrame;
+    if (!host()->owner_delegate() || is_fenced_frame) {
       host()->GetAssociatedFrameWidget()->SetViewportIntersection(
           intersection_state.Clone(), visual_properties);
     }
@@ -587,7 +591,7 @@ void RenderWidgetHostViewChildFrame::GestureEventAck(
   if (event.IsTouchpadZoomEvent())
     ProcessTouchpadZoomEventAckInRoot(event, ack_result);
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   // NOTE(espen@vivladi.com): We must forward the ack to the root view right
   // away in order to properly activate mac history navigation. Normally
   // we bubble the event and deal with the ack after the next roundtrip to
@@ -766,7 +770,7 @@ const viz::LocalSurfaceId& RenderWidgetHostViewChildFrame::GetLocalSurfaceId()
 void RenderWidgetHostViewChildFrame::NotifyHitTestRegionUpdated(
     const viz::AggregatedHitTestRegion& region) {
   gfx::RectF screen_rect(region.rect);
-  if (!region.transform().TransformRectReverse(&screen_rect)) {
+  if (!region.transform.TransformRectReverse(&screen_rect)) {
     last_stable_screen_rect_ = gfx::RectF();
     screen_rect_stable_since_ = base::TimeTicks::Now();
     return;

@@ -566,8 +566,8 @@ class WebContents : public PageNavigator,
       absl::optional<AccessibilityEventCallback> callback) = 0;
 
   // External data.
-  virtual void SetExtData(const std::string& ext_data) = 0;
-  virtual const std::string& GetExtData() const = 0;
+  virtual void SetVivExtData(const std::string& viv_ext_data) = 0;
+  virtual const std::string& GetVivExtData() const = 0;
 
   // Tab navigation state ------------------------------------------------------
 
@@ -593,7 +593,7 @@ class WebContents : public PageNavigator,
 
   // Returns whether a navigation is currently in progress that should show
   // loading UI if such UI exists (progress bar, loading spinner, stop button,
-  // etc.) True for different-document navigations and appHistory's
+  // etc.) True for different-document navigations and the navigation API's
   // transitionWhile(). This being true implies that IsLoading() is also true.
   virtual bool ShouldShowLoadingUI() = 0;
 
@@ -1075,8 +1075,13 @@ class WebContents : public PageNavigator,
   // original owner, etc.
   virtual bool HasOriginalOpener() = 0;
 
-  // Returns the original opener if HasOriginalOpener() is true, or nullptr
-  // otherwise.
+  // Returns the original opener's main frame if HasOriginalOpener() is true, or
+  // nullptr otherwise. NOTE: This will always be the main frame of the actual
+  // original opener's frame tree, so it might be different from the actual
+  // original opener if it is a subframe. See https://crbug.com/705316 for more
+  // context.
+  // TODO(https://crbug.com/1311820): Consider renaming this function and other
+  // things related to "original openers", to make the quirk more obvious.
   virtual RenderFrameHost* GetOriginalOpener() = 0;
 
   // Returns the WakeLockContext accociated with this WebContents.
@@ -1320,14 +1325,6 @@ class WebContents : public PageNavigator,
 
   // Serialise this object into a trace.
   virtual void WriteIntoTrace(perfetto::TracedValue context) = 0;
-
-  // Disallows navigations that activate a prerendered page or a back/forward
-  // cached page in this WebContents. Such pages will be ignored and normal
-  // navigation will occur instead.
-  // TODO(https://crbug.com/1234857): Remove this. This is a temporary
-  // workaround to avoid breaking features that must be taught to deal with
-  // activation navigations.
-  virtual void DisallowActivationNavigationsForBug1234857() = 0;
 
   // Returns the value from CreateParams::creator_location.
   virtual const base::Location& GetCreatorLocation() = 0;

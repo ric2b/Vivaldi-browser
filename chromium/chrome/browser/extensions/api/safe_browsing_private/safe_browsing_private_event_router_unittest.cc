@@ -44,11 +44,11 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/components/tpm/stub_install_attributes.h"
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/ash/login/users/scoped_test_user_manager.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ash/settings/scoped_cros_settings_test_helper.h"
-#include "chromeos/tpm/stub_install_attributes.h"
 #include "components/account_id/account_id.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "components/user_manager/user.h"
@@ -133,11 +133,11 @@ class SafeBrowsingPrivateEventRouterTestBase : public testing::Test {
         policy::DMToken::CreateValidTokenForTesting("fake-token"));
   }
 
-  void TriggerOnPolicySpecifiedPasswordReuseDetectedEvent() {
+  void TriggerOnPolicySpecifiedPasswordReuseDetectedEvent(bool warning_shown) {
     SafeBrowsingPrivateEventRouterFactory::GetForProfile(profile_)
-        ->OnPolicySpecifiedPasswordReuseDetected(GURL("https://phishing.com/"),
-                                                 "user_name_1",
-                                                 /*is_phishing_url*/ true);
+        ->OnPolicySpecifiedPasswordReuseDetected(
+            GURL("https://phishing.com/"), "user_name_1",
+            /*is_phishing_url*/ true, warning_shown);
   }
 
   void TriggerOnPolicySpecifiedPasswordChangedEvent() {
@@ -302,7 +302,7 @@ class SafeBrowsingPrivateEventRouterTest
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 };
 
-TEST_F(SafeBrowsingPrivateEventRouterTest, TestOnReuseDetected) {
+TEST_F(SafeBrowsingPrivateEventRouterTest, TestOnReuseDetected_Warned) {
   SetUpRouters();
   SafeBrowsingEventObserver event_observer(
       api::safe_browsing_private::OnPolicySpecifiedPasswordReuseDetected::
@@ -313,7 +313,7 @@ TEST_F(SafeBrowsingPrivateEventRouterTest, TestOnReuseDetected) {
   EXPECT_CALL(*client_, UploadSecurityEventReport_(_, _, _, _))
       .WillOnce(CaptureArg(&report));
 
-  TriggerOnPolicySpecifiedPasswordReuseDetectedEvent();
+  TriggerOnPolicySpecifiedPasswordReuseDetectedEvent(/*warning_shown*/ true);
   base::RunLoop().RunUntilIdle();
 
   auto captured_args =
@@ -334,6 +334,46 @@ TEST_F(SafeBrowsingPrivateEventRouterTest, TestOnReuseDetected) {
             *event->FindString(SafeBrowsingPrivateEventRouter::kKeyUrl));
   EXPECT_EQ("user_name_1",
             *event->FindString(SafeBrowsingPrivateEventRouter::kKeyUserName));
+  EXPECT_EQ(
+      safe_browsing::EventResultToString(safe_browsing::EventResult::WARNED),
+      *event->FindString(SafeBrowsingPrivateEventRouter::kKeyEventResult));
+}
+
+TEST_F(SafeBrowsingPrivateEventRouterTest, TestOnReuseDetected_Allowed) {
+  SetUpRouters();
+  SafeBrowsingEventObserver event_observer(
+      api::safe_browsing_private::OnPolicySpecifiedPasswordReuseDetected::
+          kEventName);
+  event_router_->AddEventObserver(&event_observer);
+
+  base::Value::Dict report;
+  EXPECT_CALL(*client_, UploadSecurityEventReport_(_, _, _, _))
+      .WillOnce(CaptureArg(&report));
+
+  TriggerOnPolicySpecifiedPasswordReuseDetectedEvent(/*warning_shown*/ false);
+  base::RunLoop().RunUntilIdle();
+
+  auto captured_args =
+      event_observer.PassEventArgs().GetListDeprecated()[0].Clone();
+  EXPECT_EQ("https://phishing.com/", captured_args.FindKey("url")->GetString());
+  EXPECT_EQ("user_name_1", captured_args.FindKey("userName")->GetString());
+
+  Mock::VerifyAndClearExpectations(client_.get());
+  const base::Value::List* event_list =
+      report.FindList(policy::RealtimeReportingJobConfiguration::kEventListKey);
+  ASSERT_NE(nullptr, event_list);
+  ASSERT_EQ(1u, event_list->size());
+  const base::Value::Dict& wrapper = (*event_list)[0].GetDict();
+  const base::Value::Dict* event =
+      wrapper.FindDict(SafeBrowsingPrivateEventRouter::kKeyPasswordReuseEvent);
+  EXPECT_NE(nullptr, event);
+  EXPECT_EQ("https://phishing.com/",
+            *event->FindString(SafeBrowsingPrivateEventRouter::kKeyUrl));
+  EXPECT_EQ("user_name_1",
+            *event->FindString(SafeBrowsingPrivateEventRouter::kKeyUserName));
+  EXPECT_EQ(
+      safe_browsing::EventResultToString(safe_browsing::EventResult::ALLOWED),
+      *event->FindString(SafeBrowsingPrivateEventRouter::kKeyEventResult));
 }
 
 TEST_F(SafeBrowsingPrivateEventRouterTest, TestOnPasswordChanged) {
@@ -398,7 +438,7 @@ TEST_F(SafeBrowsingPrivateEventRouterTest, TestOnDangerousDownloadOpened) {
   const base::Value::Dict* event = wrapper.FindDict(
       SafeBrowsingPrivateEventRouter::kKeyDangerousDownloadEvent);
   EXPECT_NE(nullptr, event);
-  EXPECT_EQ("/path/to/malware.exe",
+  EXPECT_EQ("malware.exe",
             *event->FindString(SafeBrowsingPrivateEventRouter::kKeyFileName));
   EXPECT_EQ("exe", *event->FindString(
                        SafeBrowsingPrivateEventRouter::kKeyContentType));
@@ -510,7 +550,7 @@ TEST_F(SafeBrowsingPrivateEventRouterTest, TestOnDangerousDownloadWarning) {
   const base::Value::Dict* event = wrapper.FindDict(
       SafeBrowsingPrivateEventRouter::kKeyDangerousDownloadEvent);
   EXPECT_NE(nullptr, event);
-  EXPECT_EQ("/path/to/warning.exe",
+  EXPECT_EQ("warning.exe",
             *event->FindString(SafeBrowsingPrivateEventRouter::kKeyFileName));
   EXPECT_EQ("exe", *event->FindString(
                        SafeBrowsingPrivateEventRouter::kKeyContentType));
@@ -548,7 +588,7 @@ TEST_F(SafeBrowsingPrivateEventRouterTest,
   const base::Value::Dict* event = wrapper.FindDict(
       SafeBrowsingPrivateEventRouter::kKeyDangerousDownloadEvent);
   EXPECT_NE(nullptr, event);
-  EXPECT_EQ("/path/to/bypass.exe",
+  EXPECT_EQ("bypass.exe",
             *event->FindString(SafeBrowsingPrivateEventRouter::kKeyFileName));
   EXPECT_EQ("exe", *event->FindString(
                        SafeBrowsingPrivateEventRouter::kKeyContentType));
@@ -613,7 +653,7 @@ TEST_F(SafeBrowsingPrivateEventRouterTest, TestUnauthorizedOnReuseDetected) {
   base::Value report;
   EXPECT_CALL(*client_, UploadSecurityEventReport_(_, _, _, _)).Times(0);
 
-  TriggerOnPolicySpecifiedPasswordReuseDetectedEvent();
+  TriggerOnPolicySpecifiedPasswordReuseDetectedEvent(/*warning_shown*/ true);
   base::RunLoop().RunUntilIdle();
 
   Mock::VerifyAndClearExpectations(client_.get());
@@ -1153,7 +1193,7 @@ TEST_F(SafeBrowsingPrivateEventRouterTest, TestPasswordReuseEnabled) {
   event_router_->AddEventObserver(&event_observer);
 
   EXPECT_CALL(*client_, UploadSecurityEventReport_(_, _, _, _)).Times(1);
-  TriggerOnPolicySpecifiedPasswordReuseDetectedEvent();
+  TriggerOnPolicySpecifiedPasswordReuseDetectedEvent(/*warning_shown*/ true);
   base::RunLoop().RunUntilIdle();
 
   // Assert the event actually did fire.
@@ -1426,7 +1466,7 @@ TEST_P(SafeBrowsingIsRealtimeReportingEventDisabledTest,
   EXPECT_CALL(*client_, UploadSecurityEventReport_(_, _, _, _))
       .Times(num_triggers_);
   TriggerOnPolicySpecifiedPasswordChangedEvent();
-  TriggerOnPolicySpecifiedPasswordReuseDetectedEvent();
+  TriggerOnPolicySpecifiedPasswordReuseDetectedEvent(/*warning_shown*/ true);
   TriggerOnDangerousDownloadOpenedEvent();
   TriggerOnSecurityInterstitialShownEvent();
   TriggerOnSecurityInterstitialProceededEvent();

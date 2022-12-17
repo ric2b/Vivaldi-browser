@@ -3,6 +3,8 @@
 # found in the LICENSE file.
 """Definitions of builders in the chromium.gpu.fyi builder group."""
 
+load("//lib/args.star", "args")
+load("//lib/builder_config.star", "builder_config")
 load("//lib/builders.star", "goma", "sheriff_rotations")
 load("//lib/ci.star", "ci", "rbe_instance", "rbe_jobs")
 load("//lib/consoles.star", "consoles")
@@ -83,15 +85,6 @@ ci.thin_tester(
 )
 
 ci.thin_tester(
-    name = "Android FYI Release (Nexus 9)",
-    console_view_entry = consoles.console_view_entry(
-        category = "Android|M64|NVDA",
-        short_name = "N9",
-    ),
-    triggered_by = ["GPU FYI Android arm64 Builder"],
-)
-
-ci.thin_tester(
     name = "Android FYI Release (Pixel 2)",
     console_view_entry = consoles.console_view_entry(
         category = "Android|P32|QCOM",
@@ -133,6 +126,42 @@ ci.gpu.linux_builder(
 )
 
 ci.gpu.linux_builder(
+    name = "ChromeOS FYI Release (amd64-generic) (reclient shadow)",
+    # Runs a lot of tests + VMs are slower than real hardware, so increase the
+    # timeout.
+    execution_timeout = 8 * time.hour,
+    console_view_entry = consoles.console_view_entry(
+        category = "ChromeOS|LLVM",
+        short_name = "gen",
+    ),
+    builder_spec = builder_config.builder_spec(
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+            apply_configs = [
+                "chromeos",
+            ],
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = [
+                "mb",
+            ],
+            build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.INTEL,
+            target_bits = 64,
+            cros_boards_with_qemu_images = [
+                "amd64-generic-vm",
+            ],
+            target_platform = builder_config.target_platform.CHROMEOS,
+        ),
+    ),
+    goma_backend = None,
+    reclient_jobs = rbe_jobs.HIGH_JOBS_FOR_CI,
+    reclient_instance = rbe_instance.DEFAULT,
+    sheriff_rotations = args.ignore_default(None),
+)
+
+ci.gpu.linux_builder(
     name = "gpu-fyi-chromeos-jacuzzi-exp",
     console_view_entry = consoles.console_view_entry(
         category = "ChromeOS|ARM",
@@ -154,6 +183,65 @@ ci.gpu.linux_builder(
     console_view_entry = consoles.console_view_entry(
         category = "ChromeOS|Intel",
         short_name = "oct",
+    ),
+    list_view = "chromium.gpu.experimental",
+)
+
+ci.gpu.linux_builder(
+    name = "gpu-fyi-chromeos-octopus-exp (reclient shadow)",
+    console_view_entry = consoles.console_view_entry(
+        category = "ChromeOS|Intel",
+        short_name = "oct",
+    ),
+    list_view = "chromium.gpu.experimental",
+    builder_spec = builder_config.builder_spec(
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+            apply_configs = [
+                "chromeos",
+            ],
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = [
+                "mb",
+            ],
+            build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.INTEL,
+            target_bits = 64,
+            target_cros_boards = [
+                "octopus",
+            ],
+            target_platform = builder_config.target_platform.CHROMEOS,
+        ),
+    ),
+    goma_backend = None,
+    reclient_jobs = rbe_jobs.HIGH_JOBS_FOR_CI,
+    reclient_instance = rbe_instance.DEFAULT,
+    sheriff_rotations = args.ignore_default(None),
+)
+
+ci.gpu.linux_builder(
+    name = "gpu-fyi-chromeos-zork-exp",
+    builder_spec = builder_config.builder_spec(
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = ["mb"],
+            build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.INTEL,
+            target_bits = 64,
+            target_platform = builder_config.target_platform.CHROMEOS,
+            target_cros_boards = ["zork"],
+        ),
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+            apply_configs = ["chromeos"],
+        ),
+        run_tests_serially = True,
+    ),
+    console_view_entry = consoles.console_view_entry(
+        category = "ChromeOS|AMD",
+        short_name = "zrk",
     ),
     list_view = "chromium.gpu.experimental",
 )
@@ -594,6 +682,9 @@ gpu_fyi_windows_builder(
         category = "Windows|Builder|Release",
         short_name = "x86",
     ),
+    goma_backend = None,
+    reclient_jobs = rbe_jobs.LOW_JOBS_FOR_CI,
+    reclient_instance = rbe_instance.DEFAULT,
 )
 
 gpu_fyi_windows_builder(
@@ -602,6 +693,9 @@ gpu_fyi_windows_builder(
         category = "Windows|Builder|Release",
         short_name = "x64",
     ),
+    goma_backend = None,
+    reclient_jobs = rbe_jobs.LOW_JOBS_FOR_CI,
+    reclient_instance = rbe_instance.DEFAULT,
 )
 
 gpu_fyi_windows_builder(
@@ -610,6 +704,9 @@ gpu_fyi_windows_builder(
         category = "Windows|Builder|Debug",
         short_name = "x64",
     ),
+    goma_backend = None,
+    reclient_jobs = rbe_jobs.LOW_JOBS_FOR_CI,
+    reclient_instance = rbe_instance.DEFAULT,
 )
 
 gpu_fyi_windows_builder(
@@ -618,6 +715,9 @@ gpu_fyi_windows_builder(
         category = "Windows|Builder|dx12vk",
         short_name = "rel",
     ),
+    goma_backend = None,
+    reclient_jobs = rbe_jobs.LOW_JOBS_FOR_CI,
+    reclient_instance = rbe_instance.DEFAULT,
 )
 
 gpu_fyi_windows_builder(
@@ -626,6 +726,9 @@ gpu_fyi_windows_builder(
         category = "Windows|Builder|dx12vk",
         short_name = "dbg",
     ),
+    goma_backend = None,
+    reclient_jobs = rbe_jobs.LOW_JOBS_FOR_CI,
+    reclient_instance = rbe_instance.DEFAULT,
 )
 
 gpu_fyi_windows_builder(
@@ -634,4 +737,7 @@ gpu_fyi_windows_builder(
         category = "Windows|Builder|XR",
         short_name = "x64",
     ),
+    goma_backend = None,
+    reclient_jobs = rbe_jobs.LOW_JOBS_FOR_CI,
+    reclient_instance = rbe_instance.DEFAULT,
 )

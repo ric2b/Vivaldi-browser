@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/global_request_id.h"
@@ -294,6 +295,11 @@ class NavigationController {
 
     // Indicates that this navigation is for PDF content in a renderer.
     bool is_pdf = false;
+
+    // Indicates this navigation should use a new BrowsingInstance. For example,
+    // this is used in web platform tests to guarantee that each test starts in
+    // a fresh BrowsingInstance.
+    bool force_new_browsing_instance = false;
   };
 
   // Disables checking for a repost and prompting the user. This is used during

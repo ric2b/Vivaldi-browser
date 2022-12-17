@@ -9,6 +9,9 @@
 #include <sstream>
 #include <utility>
 
+#include "ash/components/multidevice/logging/logging.h"
+#include "ash/components/multidevice/software_feature_state.h"
+#include "ash/services/device_sync/proto/enum_util.h"
 #include "base/base64url.h"
 #include "base/bind.h"
 #include "base/i18n/time_formatting.h"
@@ -16,9 +19,6 @@
 #include "base/time/default_clock.h"
 #include "base/time/default_tick_clock.h"
 #include "base/values.h"
-#include "chromeos/components/multidevice/logging/logging.h"
-#include "chromeos/components/multidevice/software_feature_state.h"
-#include "chromeos/services/device_sync/proto/enum_util.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_ui.h"
@@ -29,9 +29,6 @@ namespace ash {
 namespace multidevice {
 
 namespace {
-
-// TODO(https://crbug.com/1164001): remove when device_sync moved to ash
-namespace device_sync = ::chromeos::device_sync;
 
 constexpr const multidevice::SoftwareFeature kAllSoftareFeatures[] = {
     multidevice::SoftwareFeature::kBetterTogetherHost,
@@ -235,7 +232,8 @@ void ProximityAuthWebUIHandler::OnWebContentsInitialized(
 void ProximityAuthWebUIHandler::GetLogMessages(const base::ListValue* args) {
   base::ListValue json_logs;
   for (const auto& log : *multidevice::LogBuffer::GetInstance()->logs()) {
-    json_logs.Append(LogMessageToDictionary(log));
+    json_logs.Append(
+        base::Value::FromUniquePtrValue(LogMessageToDictionary(log)));
   }
   web_ui()->CallJavascriptFunctionUnsafe("LogBufferInterface.onGotLogMessages",
                                          json_logs);
@@ -285,36 +283,33 @@ std::unique_ptr<base::ListValue>
 ProximityAuthWebUIHandler::GetRemoteDevicesList() {
   std::unique_ptr<base::ListValue> devices_list_value(new base::ListValue());
 
-  for (const auto& remote_device : device_sync_client_->GetSyncedDevices())
-    devices_list_value->Append(RemoteDeviceToDictionary(remote_device));
+  for (const auto& remote_device : device_sync_client_->GetSyncedDevices()) {
+    devices_list_value->Append(
+        base::Value(RemoteDeviceToDictionary(remote_device)));
+  }
 
   return devices_list_value;
 }
 
-std::unique_ptr<base::DictionaryValue>
-ProximityAuthWebUIHandler::RemoteDeviceToDictionary(
+base::Value::Dict ProximityAuthWebUIHandler::RemoteDeviceToDictionary(
     const multidevice::RemoteDeviceRef& remote_device) {
   // Set the fields in the ExternalDeviceInfo proto.
-  std::unique_ptr<base::DictionaryValue> dictionary(
-      new base::DictionaryValue());
-  dictionary->SetStringKey(kExternalDevicePublicKey,
-                           remote_device.GetDeviceId());
-  dictionary->SetStringKey(kExternalDevicePublicKeyTruncated,
-                           remote_device.GetTruncatedDeviceIdForLogs());
-  dictionary->SetStringKey(kExternalDeviceFriendlyName, remote_device.name());
-  dictionary->SetStringKey(kExternalDeviceNoPiiName,
-                           remote_device.pii_free_name());
-  dictionary->SetBoolKey(kExternalDeviceUnlockKey,
-                         remote_device.GetSoftwareFeatureState(
-                             multidevice::SoftwareFeature::kSmartLockHost) ==
-                             multidevice::SoftwareFeatureState::kEnabled);
-  dictionary->SetBoolKey(
-      kExternalDeviceMobileHotspot,
-      remote_device.GetSoftwareFeatureState(
-          multidevice::SoftwareFeature::kInstantTetheringHost) ==
-          multidevice::SoftwareFeatureState::kSupported);
-  dictionary->SetStringKey(kExternalDeviceFeatureStates,
-                           GenerateFeaturesString(remote_device));
+  base::Value::Dict dictionary;
+  dictionary.Set(kExternalDevicePublicKey, remote_device.GetDeviceId());
+  dictionary.Set(kExternalDevicePublicKeyTruncated,
+                 remote_device.GetTruncatedDeviceIdForLogs());
+  dictionary.Set(kExternalDeviceFriendlyName, remote_device.name());
+  dictionary.Set(kExternalDeviceNoPiiName, remote_device.pii_free_name());
+  dictionary.Set(kExternalDeviceUnlockKey,
+                 remote_device.GetSoftwareFeatureState(
+                     multidevice::SoftwareFeature::kSmartLockHost) ==
+                     multidevice::SoftwareFeatureState::kEnabled);
+  dictionary.Set(kExternalDeviceMobileHotspot,
+                 remote_device.GetSoftwareFeatureState(
+                     multidevice::SoftwareFeature::kInstantTetheringHost) ==
+                     multidevice::SoftwareFeatureState::kSupported);
+  dictionary.Set(kExternalDeviceFeatureStates,
+                 GenerateFeaturesString(remote_device));
 
   return dictionary;
 }

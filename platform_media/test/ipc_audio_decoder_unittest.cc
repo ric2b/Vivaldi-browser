@@ -12,6 +12,7 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/test/task_environment.h"
+#include "build/build_config.h"
 #include "media/base/audio_bus.h"
 #include "media/base/audio_hash.h"
 #include "media/base/decoder_buffer.h"
@@ -68,7 +69,7 @@ class IPCAudioDecoderTest : public testing::Test {
 
     // TODO(igor@vivaldi.com): Figure out how to verify this on Mac where the
     // number of actual frames depends on OS version etc.
-#if !defined(OS_MAC)
+#if !BUILDFLAG(IS_MAC)
     EXPECT_EQ(expected_audio_hash, audio_hash.ToString());
 #endif
   }
@@ -112,11 +113,11 @@ class IPCAudioDecoderTest : public testing::Test {
 
 TEST_F(IPCAudioDecoderTest, AAC) {
   RunTest("sfx.m4a",
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
           // On Mac hash is not compared.
           "-4.72,-4.77,-4.73,-4.63,-4.53,-3.78,", 1, 44100,
           base::Microseconds(312000), 13760, 10607
-#elif defined(OS_WIN) || defined(OS_LINUX)
+#elif BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
           "2.62,3.23,2.38,2.56,2.75,2.73,", 1, 44100,
           base::Microseconds(312000), 13760, 13760
 #endif

@@ -77,6 +77,7 @@
 <translation id="2687403674020088961">Blokkeer alle webkoekies (nie aanbeveel nie)</translation>
 <translation id="2704606927547763573">Gekopieer</translation>
 <translation id="2717722538473713889">E-posadresse</translation>
+<translation id="2750481671343847896">Werwe kan vir jou aanmeldporboodskappe van identiteitsdienste af wys.</translation>
 <translation id="2785051990912111074">Hierdie keuse sal webkoekies uitvee vir <ph name="WEBSITE" /></translation>
 <translation id="2822354292072154809">Is jy seker jy wil alle werftoestemmings vir <ph name="CHOSEN_OBJECT_NAME" /> terugstel?</translation>
 <translation id="2870560284913253234">Werf</translation>
@@ -112,6 +113,7 @@
 <translation id="3763247130972274048">Dubbeltik links of regs op video om 10 s. oor te slaan</translation>
 <translation id="3797520601150691162">Moenie donkertema vir 'n spesifieke werf toepas nie</translation>
 <translation id="381841723434055211">Foonnommers</translation>
+<translation id="3826050100957962900">Derdeparty-aanmelding</translation>
 <translation id="3835233591525155343">Jou toestelgebruik</translation>
 <translation id="385051799172605136">Terug</translation>
 <translation id="3859306556332390985">Soek vorentoe</translation>
@@ -122,7 +124,6 @@
 <translation id="3991845972263764475"><ph name="BYTES_DOWNLOADED_WITH_UNITS" /> van ?</translation>
 <translation id="4002066346123236978">Titel</translation>
 <translation id="4008040567710660924">Laat webkoekies vir 'n spesifieke werf toe.</translation>
-<translation id="4040330681741629921">Word in kennis gestel wanneer ’n werf in vereenvoudigde aansig gewys kan word</translation>
 <translation id="4046123991198612571">Volgende snit</translation>
 <translation id="4149994727733219643">Vereenvoudigde aansig vir webbladsye</translation>
 <translation id="4165986682804962316">Werfinstellings</translation>
@@ -236,6 +237,7 @@
 <translation id="6643016212128521049">Vee uit</translation>
 <translation id="6689172468748959065">Profielfoto's</translation>
 <translation id="6697925417670533197">Aktiewe aflaaie</translation>
+<translation id="6722828510648505498">Blokkeer aanmeldporboodskappe van identiteitsdienste af.</translation>
 <translation id="6746124502594467657">Skuif af</translation>
 <translation id="6749077623962119521">Stel toestemmings terug?</translation>
 <translation id="6766622839693428701">Swiep ondertoe om toe te maak</translation>
@@ -255,6 +257,7 @@
 <translation id="7087918508125750058"><ph name="ITEM_COUNT" /> gekies. Opsies is naby aan die bokant van die skerm beskikbaar</translation>
 <translation id="7141896414559753902">Verhinder werwe om opspringers en herleidings te wys (aanbeveel)</translation>
 <translation id="7176368934862295254"><ph name="KILOBYTES" /> KB</translation>
+<translation id="7180611975245234373">Herlaai</translation>
 <translation id="723171743924126238">Kies prente</translation>
 <translation id="7243308994586599757">Opsies is naby die onderkant van die skerm beskikbaar</translation>
 <translation id="7250468141469952378"><ph name="ITEM_COUNT" /> gekies</translation>
@@ -308,7 +311,9 @@
 <translation id="83792324527827022">'n Werf gebruik tans jou kamera en mikrofoon</translation>
 <translation id="8380167699614421159">Hierdie werf wys indringerige of misleidende advertensies</translation>
 <translation id="8394832520002899662">Tik om na werf terug te keer</translation>
+<translation id="8409345997656833551">Word in kennis gestel wanneer ’n artikel in vereenvoudigde aansig gewys kan word</translation>
 <translation id="8425213833346101688">Verander</translation>
+<translation id="8428213095426709021">Instellings</translation>
 <translation id="8441146129660941386">Soek agtertoe</translation>
 <translation id="8444433999583714703">Om <ph name="APP_NAME" /> toegang tot jou ligging te gee, moet jy ligging ook in <ph name="BEGIN_LINK" />Android-instellings<ph name="END_LINK" /> aanskakel.</translation>
 <translation id="8447861592752582886">Herroep toesteltoestemming</translation>

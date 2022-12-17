@@ -154,10 +154,15 @@ bool IsFillableFieldType(ServerFieldType field_type) {
     case PHONE_FAX_COUNTRY_CODE:
     case PHONE_FAX_CITY_AND_NUMBER:
     case PHONE_FAX_WHOLE_NUMBER:
+    case PHONE_HOME_CITY_CODE_WITH_TRUNK_PREFIX:
+    case PHONE_HOME_CITY_AND_NUMBER_WITHOUT_TRUNK_PREFIX:
     case FIELD_WITH_DEFAULT_VALUE:
     case MERCHANT_EMAIL_SIGNUP:
     case PRICE:
     case SEARCH_TERM:
+    case BIRTHDATE_DAY:
+    case BIRTHDATE_MONTH:
+    case BIRTHDATE_YEAR_4_DIGITS:
     case UNKNOWN_TYPE:
     case MAX_VALID_FIELD_TYPE:
       return false;
@@ -216,10 +221,14 @@ base::StringPiece FieldTypeToStringPiece(ServerFieldType type) {
       return "PHONE_HOME_NUMBER";
     case PHONE_HOME_CITY_CODE:
       return "PHONE_HOME_CITY_CODE";
+    case PHONE_HOME_CITY_CODE_WITH_TRUNK_PREFIX:
+      return "PHONE_HOME_CITY_CODE_WITH_TRUNK_PREFIX";
     case PHONE_HOME_COUNTRY_CODE:
       return "PHONE_HOME_COUNTRY_CODE";
     case PHONE_HOME_CITY_AND_NUMBER:
       return "PHONE_HOME_CITY_AND_NUMBER";
+    case PHONE_HOME_CITY_AND_NUMBER_WITHOUT_TRUNK_PREFIX:
+      return "PHONE_HOME_CITY_AND_NUMBER_WITHOUT_TRUNK_PREFIX";
     case PHONE_HOME_WHOLE_NUMBER:
       return "PHONE_HOME_WHOLE_NUMBER";
     case PHONE_HOME_EXTENSION:
@@ -272,6 +281,12 @@ base::StringPiece FieldTypeToStringPiece(ServerFieldType type) {
       return "ADDRESS_BILLING_ZIP";
     case ADDRESS_BILLING_COUNTRY:
       return "ADDRESS_BILLING_COUNTRY";
+    case BIRTHDATE_DAY:
+      return "BIRTHDATE_DAY";
+    case BIRTHDATE_MONTH:
+      return "BIRTHDATE_MONTH";
+    case BIRTHDATE_YEAR_4_DIGITS:
+      return "BIRTHDATE_YEAR_4_DIGITS";
     case CREDIT_CARD_NAME_FULL:
       return "CREDIT_CARD_NAME_FULL";
     case CREDIT_CARD_NAME_FIRST:

@@ -23,6 +23,9 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.Random;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /**
  * Creates a Field Trial to control the MobileIdentityConsistencyFRE feature. This feature is used
  * to show a new First Run page that will let users sign into chrome without syncing. The trial is
@@ -107,6 +110,8 @@ public class FREMobileIdentityConsistencyFieldTrial {
     @CalledByNative
     @AnyThread
     public static boolean isEnabled() {
+        // Vivaldi should never enable Chrome field trials.
+        if (BuildConfig.IS_VIVALDI) return false;
         // Switch used for tests. Disabled by default otherwise.
         if (CommandLine.getInstance().hasSwitch(ChromeSwitches.FORCE_DISABLE_SIGNIN_FRE)) {
             return false;

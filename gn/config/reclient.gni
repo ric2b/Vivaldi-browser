@@ -1,0 +1,33 @@
+# Reclient activation and configuration
+
+declare_args() {
+  vivaldi_enable_reclient = false
+}
+
+# reclient variables must be set here, before importing rb.gni
+if (vivaldi_enable_reclient) {
+  assert(!is_official_build)
+  declare_overrides() {
+    rbe_cfg_dir=rebase_path("//vivaldi/build/reclient_cfgs", root_build_dir)
+    rbe_exec_root = rebase_path("//vivaldi")
+
+    use_remoteexec = true
+  }
+  declare_overrides() {
+    if (is_win) {
+      rbe_cc_cfg_file = "${rbe_cfg_dir}/rewrapper_windows.cfg"
+    } else {
+      rbe_cc_cfg_file = "${rbe_cfg_dir}/rewrapper_linux.cfg"
+    }
+  }
+}
+
+# Cannot be imported before the overrides are set
+import("//build/toolchain/cc_wrapper.gni")
+import("//build/toolchain/goma.gni")
+import("//build/toolchain/rbe.gni")
+
+if (use_remoteexec) {
+  assert(cc_wrapper == "")
+  assert(!use_goma)
+}

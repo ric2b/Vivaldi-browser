@@ -25,6 +25,8 @@ import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
+import org.chromium.base.FeatureList;
+import org.chromium.base.FeatureList.TestValues;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
@@ -45,19 +47,19 @@ import java.io.IOException;
 
 /** Tests for AssistantVoiceSearchService */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-        "enable-features=" + ChromeFeatureList.OMNIBOX_ASSISTANT_VOICE_SEARCH + "<Study",
-        "force-fieldtrials=Study/Group"})
+@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 @Restriction({RESTRICTION_TYPE_NON_LOW_END_DEVICE})
 public class AssistantVoiceSearchServiceRenderTest {
     @Rule
-    public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
+    public final ChromeTabbedActivityTestRule mActivityTestRule =
+            new ChromeTabbedActivityTestRule();
     @Rule
-    public ChromeRenderTestRule mRenderTestRule =
-            ChromeRenderTestRule.Builder.withPublicCorpus().build();
+    public final ChromeRenderTestRule mRenderTestRule =
+            ChromeRenderTestRule.Builder.withPublicCorpus()
+                    .setBugComponent(ChromeRenderTestRule.Component.UI_BROWSER_SEARCH_VOICE)
+                    .build();
     @Rule
-    public MockitoRule mMockitoRule = MockitoJUnit.rule();
-
+    public final MockitoRule mMockitoRule = MockitoJUnit.rule();
     @Rule
     public final AccountManagerTestRule mAccountManagerTestRule = new AccountManagerTestRule();
 
@@ -65,6 +67,8 @@ public class AssistantVoiceSearchServiceRenderTest {
     private GSAState mGsaState;
     @Mock
     private ExternalAuthUtils mExternalAuthUtils;
+
+    private final TestValues mTestValues = new TestValues();
 
     @Before
     public void setUp() throws Exception {
@@ -78,17 +82,30 @@ public class AssistantVoiceSearchServiceRenderTest {
         doReturn(true).when(mExternalAuthUtils).isGoogleSigned(anyString());
         doReturn(true).when(mExternalAuthUtils).isChromeGoogleSigned();
         ExternalAuthUtils.setInstanceForTesting(mExternalAuthUtils);
+        AssistantVoiceSearchService.setAlwaysUseAssistantVoiceSearchForTestingEnabled(true);
+    }
 
-        mActivityTestRule.startMainActivityOnBlankPage();
-        mAccountManagerTestRule.addTestAccountThenSigninAndEnableSync();
+    private void setAssistantVoiceSearchEnabled(boolean enabled) {
+        mTestValues.addFeatureFlagOverride(
+                ChromeFeatureList.OMNIBOX_ASSISTANT_VOICE_SEARCH, enabled);
+        FeatureList.setTestValues(mTestValues);
+    }
+
+    private void setColorfulMicEnabled(boolean enabled) {
+        mTestValues.addFieldTrialParamOverride(ChromeFeatureList.OMNIBOX_ASSISTANT_VOICE_SEARCH,
+                "colorful_mic", enabled ? "true" : "false");
+        FeatureList.setTestValues(mTestValues);
     }
 
     @Test
     @MediumTest
-    @CommandLineFlags.Add({"force-fieldtrial-params=Study.Group:colorful_mic/true"})
     @Feature({"RenderTest"})
-    @DisabledTest(message = "crbug.com/1196384")
+    @DisabledTest(message = "crbug.com/1300480")
     public void testAssistantColorfulMic() throws IOException {
+        setAssistantVoiceSearchEnabled(true);
+        setColorfulMicEnabled(true);
+        mActivityTestRule.startMainActivityOnBlankPage();
+        mAccountManagerTestRule.addTestAccountThenSigninAndEnableSync();
         mActivityTestRule.loadUrl(UrlConstants.NTP_URL);
 
         mRenderTestRule.render(mActivityTestRule.getActivity().findViewById(R.id.ntp_content),
@@ -101,12 +118,17 @@ public class AssistantVoiceSearchServiceRenderTest {
 
     @Test
     @MediumTest
-    @CommandLineFlags.Add({"force-fieldtrial-params=Study.Group:colorful_mic/false"})
     @Feature({"RenderTest"})
     @DisabledTest(message = "crbug.com/1221496")
     public void testAssistantMic() throws IOException {
+        setAssistantVoiceSearchEnabled(true);
+        setColorfulMicEnabled(false);
+        mActivityTestRule.startMainActivityOnBlankPage();
+        mAccountManagerTestRule.addTestAccountThenSigninAndEnableSync();
         mActivityTestRule.loadUrl(UrlConstants.NTP_URL);
 
+        // TODO(crbug.com/1291209): Add a #testAssistantMic_WithScrollableMVT test with
+        // ChromeFeatureList.SHOW_SCROLLABLE_MVT_ON_NTP_ANDROID enabled when re-enabling this test.
         mRenderTestRule.render(mActivityTestRule.getActivity().findViewById(R.id.ntp_content),
                 "avs__mic_unfocused_ntp");
 

@@ -34,7 +34,6 @@
 #include "third_party/blink/public/mojom/idle/idle_manager.mojom.h"
 
 using blink::mojom::IdleManagerError;
-using blink::mojom::IdleMonitorPtr;
 using blink::mojom::IdleStatePtr;
 using ::testing::_;
 using ::testing::Invoke;
@@ -110,8 +109,8 @@ class IdleManagerTest : public RenderViewHostTestHarness {
 
   void SetPermissionStatus(blink::mojom::PermissionStatus permission_status) {
     ON_CALL(*permission_manager_,
-            GetPermissionStatusForFrame(PermissionType::IDLE_DETECTION,
-                                        main_rfh(), url_))
+            GetPermissionStatusForCurrentDocument(
+                PermissionType::IDLE_DETECTION, main_rfh()))
         .WillByDefault(Return(permission_status));
   }
 

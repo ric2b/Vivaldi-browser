@@ -34,10 +34,12 @@
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_id.h"
+#include "chrome/browser/web_applications/web_app_utils.h"
 #include "chrome/common/webui_url_constants.h"
 #include "components/arc/intent_helper/arc_intent_helper_bridge.h"
 #include "components/arc/intent_helper/custom_tab.h"
 #include "components/services/app_service/public/cpp/app_update.h"
+#include "components/services/app_service/public/cpp/intent_filter_util.h"
 #include "components/services/app_service/public/cpp/intent_util.h"
 #include "components/services/app_service/public/cpp/types_util.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
@@ -102,7 +104,6 @@ constexpr auto kBrowserSettingsMap =
         {ChromePage::APPEARANCE, chrome::kAppearanceSubPage},
         {ChromePage::AUTOFILL, chrome::kAutofillSubPage},
         {ChromePage::CLEARBROWSERDATA, chrome::kClearBrowserDataSubPage},
-        {ChromePage::CLOUDPRINTERS, chrome::kCloudPrintersSubPage},
         {ChromePage::DOWNLOADS, chrome::kDownloadsSubPage},
         {ChromePage::LANGUAGES, chrome::kLanguagesSubPage},
         {ChromePage::ONSTARTUP, chrome::kOnStartupSubPage},
@@ -166,6 +167,46 @@ apps::mojom::IntentPtr ConvertLaunchIntent(
   return intent;
 }
 
+// Finds the best matching web app that can handle the |url|.
+absl::optional<std::string> FindWebAppForURL(Profile* profile,
+                                             const GURL& url) {
+  apps::AppServiceProxy* proxy =
+      apps::AppServiceProxyFactory::GetForProfile(profile);
+  if (!proxy) {
+    return absl::nullopt;
+  }
+
+  std::vector<std::string> app_ids = proxy->GetAppIdsForUrl(
+      url, /*exclude_browsers=*/true, /*exclude_browser_tab_apps=*/true);
+
+  std::string best_match;
+  size_t best_match_length = 0;
+  for (const std::string& app_id : app_ids) {
+    // Among all the matched apps, select a web app with the longest matching
+    // scope.
+    size_t match_length = 0;
+    proxy->AppRegistryCache().ForOneApp(
+        app_id, [&url, &match_length](const apps::AppUpdate& update) {
+          if (update.AppType() != apps::AppType::kWeb) {
+            return;
+          }
+          for (const auto& filter : update.IntentFilters()) {
+            match_length =
+                std::max(match_length,
+                         apps_util::IntentFilterUrlMatchLength(filter, url));
+          }
+        });
+    if (match_length > best_match_length) {
+      best_match_length = match_length;
+      best_match = app_id;
+    }
+  }
+  if (best_match.empty()) {
+    return absl::nullopt;
+  }
+  return best_match;
+}
+
 }  // namespace
 
 ArcOpenUrlDelegateImpl::ArcOpenUrlDelegateImpl() {
@@ -211,8 +252,10 @@ void ArcOpenUrlDelegateImpl::OpenWebAppFromArc(const GURL& url) {
     return;
 
   absl::optional<web_app::AppId> app_id =
-      web_app::FindInstalledAppWithUrlInScope(profile, url,
-                                              /*window_only=*/true);
+      web_app::IsWebAppsCrosapiEnabled()
+          ? FindWebAppForURL(profile, url)
+          : web_app::FindInstalledAppWithUrlInScope(profile, url,
+                                                    /*window_only=*/true);
 
   if (!app_id) {
     OpenUrlFromArc(url);
@@ -227,7 +270,7 @@ void ArcOpenUrlDelegateImpl::OpenWebAppFromArc(const GURL& url) {
 
   proxy->AppRegistryCache().ForOneApp(
       *app_id, [&event_flags](const apps::AppUpdate& update) {
-        if (update.WindowMode() == apps::mojom::WindowMode::kBrowser) {
+        if (update.WindowMode() == apps::WindowMode::kBrowser) {
           event_flags = apps::GetEventFlags(
               apps::mojom::LaunchContainer::kLaunchContainerTab,
               WindowOpenDisposition::NEW_FOREGROUND_TAB,
@@ -366,7 +409,7 @@ void ArcOpenUrlDelegateImpl::OpenAppWithIntent(
   auto disposition = WindowOpenDisposition::NEW_WINDOW;
   proxy->AppRegistryCache().ForOneApp(
       app_id, [&launch_container, &disposition](const apps::AppUpdate& update) {
-        if (update.WindowMode() == apps::mojom::WindowMode::kBrowser) {
+        if (update.WindowMode() == apps::WindowMode::kBrowser) {
           launch_container = apps::mojom::LaunchContainer::kLaunchContainerTab;
           disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
         }

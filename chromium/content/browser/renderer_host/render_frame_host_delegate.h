@@ -12,6 +12,7 @@
 
 #include "base/callback_forward.h"
 #include "base/i18n/rtl.h"
+#include "base/memory/safe_ref.h"
 #include "build/build_config.h"
 #include "components/viz/common/surfaces/surface_id.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
@@ -94,12 +95,12 @@ class ClipboardFormatType;
 }
 
 namespace content {
-class AgentSchedulingGroupHost;
 class FrameTreeNode;
 class PrerenderHostRegistry;
 class RenderFrameHostImpl;
 class RenderWidgetHostImpl;
 class SessionStorageNamespace;
+class SiteInstanceGroup;
 struct AXEventNotificationDetails;
 struct AXLocationChangeNotificationDetails;
 struct ContextMenuParams;
@@ -151,7 +152,7 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
                                const GURL& url) {}
 
   // Notifies that the manifest URL is updated.
-  virtual void OnManifestUrlChanged(const PageImpl& page) {}
+  virtual void OnManifestUrlChanged(PageImpl& page) {}
 
   // A message was added to to the console. |source_id| is a URL.
   // |untrusted_stack_trace| is not present for most messages; only when
@@ -325,9 +326,7 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // Let the delegate decide whether postMessage should be delivered to
   // |target_rfh| from a source frame in the given SiteInstance.  This defaults
   // to false and overrides the RenderFrameHost's decision if true.
-  virtual bool ShouldRouteMessageEvent(
-      RenderFrameHostImpl* target_rfh,
-      SiteInstance* source_site_instance) const;
+  virtual bool ShouldRouteMessageEvent(RenderFrameHostImpl* target_rfh) const;
 
   // Ensure that |source_rfh| has swapped-out RenderViews and
   // RenderFrameProxies for itself and for all frames on its opener chain in
@@ -344,7 +343,8 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
 
   // Set the |node| frame as focused in the current FrameTree as well as
   // possibly changing focus in distinct but related inner/outer WebContents.
-  virtual void SetFocusedFrame(FrameTreeNode* node, SiteInstance* source) {}
+  virtual void SetFocusedFrame(FrameTreeNode* node, SiteInstanceGroup* source) {
+  }
 
   // The frame called |window.focus()|.
   virtual void DidCallFocus() {}
@@ -562,10 +562,10 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
 
   // The page is trying to open a new widget (e.g. a select popup). The
   // widget should be created associated with the given
-  // |agent_scheduling_group|, but it should not be shown yet. That should
+  // |site_instance_group|, but it should not be shown yet. That should
   // happen in response to ShowCreatedWidget.
   virtual RenderWidgetHostImpl* CreateNewPopupWidget(
-      AgentSchedulingGroupHost& agent_scheduling_group,
+      base::SafeRef<SiteInstanceGroup> site_instance_group,
       int32_t route_id,
       mojo::PendingAssociatedReceiver<blink::mojom::PopupWidgetHost>
           blink_popup_widget_host,

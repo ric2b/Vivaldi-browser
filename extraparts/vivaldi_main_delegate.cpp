@@ -2,17 +2,19 @@
 
 #include "extraparts/vivaldi_main_delegate.h"
 
+#include "build/build_config.h"
+
 #include "app/vivaldi_apptools.h"
 #include "extraparts/vivaldi_content_browser_client.h"
 
 VivaldiMainDelegate::VivaldiMainDelegate()
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
     : VivaldiMainDelegate(base::TimeTicks())
 #endif
 {
 }
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
 VivaldiMainDelegate::VivaldiMainDelegate(base::TimeTicks exe_entry_point_ticks)
     : ChromeMainDelegate(exe_entry_point_ticks) {}
 #endif
@@ -32,7 +34,7 @@ VivaldiMainDelegate::CreateContentBrowserClient() {
   return chrome_content_browser_client_.get();
 }
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 bool VivaldiTestMainDelegate::ShouldHandleConsoleControlEvents() {
   return false;
 }

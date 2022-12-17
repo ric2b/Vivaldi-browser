@@ -5,6 +5,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_NG_MATHML_NG_MATH_ROW_LAYOUT_ALGORITHM_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_NG_MATHML_NG_MATH_ROW_LAYOUT_ALGORITHM_H_
 
+#include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_block_break_token.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_block_node.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_box_fragment_builder.h"
@@ -32,7 +33,10 @@ class CORE_EXPORT NGMathRowLayoutAlgorithm
           offset(offset),
           result(std::move(result)) {}
 
-    void Trace(Visitor* visitor) const { visitor->Trace(result); }
+    void Trace(Visitor* visitor) const {
+      visitor->Trace(child);
+      visitor->Trace(result);
+    }
 
     NGBlockNode child;
     NGBoxStrut margins;

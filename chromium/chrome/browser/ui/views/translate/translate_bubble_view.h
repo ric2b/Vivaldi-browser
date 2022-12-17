@@ -57,7 +57,7 @@ class TranslateBubbleView : public LocationBarBubbleDelegateView,
     CHANGE_SOURCE_LANGUAGE
   };
 
-  // Element IDs for ui::ElementTracker
+  // Element IDs for ui::ElementTracker.
   DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kIdentifier);
   DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kSourceLanguageTab);
   DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kTargetLanguageTab);
@@ -79,9 +79,6 @@ class TranslateBubbleView : public LocationBarBubbleDelegateView,
   // Shows the Translate bubble. Returns the newly created bubble's Widget or
   // nullptr in cases when the bubble already exists or when the bubble is not
   // created.
-  //
-  // |is_user_gesture| is true when the bubble is shown on the user's deliberate
-  // action.
   static views::Widget* ShowBubble(views::View* anchor_view,
                                    views::Button* highlighted_button,
                                    content::WebContents* web_contents,
@@ -94,7 +91,7 @@ class TranslateBubbleView : public LocationBarBubbleDelegateView,
   // Closes the current bubble if it exists.
   static void CloseCurrentBubble();
 
-  // Returns the bubble view currently shown. This may return NULL.
+  // Returns the bubble view currently shown. This may return nullptr.
   static TranslateBubbleView* GetCurrentBubble();
 
   TranslateBubbleModel* model() { return model_.get(); }
@@ -213,7 +210,7 @@ class TranslateBubbleView : public LocationBarBubbleDelegateView,
   // takes ownership of the returned view.
   std::unique_ptr<views::View> CreateViewAdvancedSource();
 
-  // Creates source language label and combobox for Tab UI advanced view. Caller
+  // Creates target language label and combobox for Tab UI advanced view. Caller
   // takes ownership of the returned view.
   std::unique_ptr<views::View> CreateViewAdvancedTarget();
 
@@ -236,11 +233,11 @@ class TranslateBubbleView : public LocationBarBubbleDelegateView,
   // Creates a close button.
   std::unique_ptr<views::Button> CreateCloseButton();
 
-  // Get the current always translate checkbox
+  // Get the current always translate checkbox.
   views::Checkbox* GetAlwaysTranslateCheckbox();
 
   // Sets the window title. The window title still needs to be set, even when it
-  // is not shown, for accessiblity purposes.
+  // is not shown, for accessibility purposes.
   void SetWindowTitle(TranslateBubbleModel::ViewState view_state);
 
   // Updates the view state. Whenever the view state is updated, the title needs

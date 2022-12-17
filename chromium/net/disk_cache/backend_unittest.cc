@@ -7,8 +7,8 @@
 #include <memory>
 
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/callback_helpers.h"
-#include "base/cxx17_backports.h"
 #include "base/files/file.h"
 #include "base/files/file_util.h"
 #include "base/memory/memory_pressure_listener.h"
@@ -19,7 +19,6 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/task/post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -29,6 +28,7 @@
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "base/trace_event/memory_allocator_dump.h"
 #include "base/trace_event/process_memory_dump.h"
 #include "base/trace_event/traced_value.h"
@@ -515,17 +515,17 @@ void DiskCacheBackendTest::BackendKeying() {
   entry2->Close();
 
   char buffer[30];
-  base::strlcpy(buffer, kName1, base::size(buffer));
+  base::strlcpy(buffer, kName1, std::size(buffer));
   ASSERT_THAT(OpenEntry(buffer, &entry2), IsOk());
   EXPECT_TRUE(entry1 == entry2);
   entry2->Close();
 
-  base::strlcpy(buffer + 1, kName1, base::size(buffer) - 1);
+  base::strlcpy(buffer + 1, kName1, std::size(buffer) - 1);
   ASSERT_THAT(OpenEntry(buffer + 1, &entry2), IsOk());
   EXPECT_TRUE(entry1 == entry2);
   entry2->Close();
 
-  base::strlcpy(buffer + 3, kName1, base::size(buffer) - 3);
+  base::strlcpy(buffer + 3, kName1, std::size(buffer) - 3);
   ASSERT_THAT(OpenEntry(buffer + 3, &entry2), IsOk());
   EXPECT_TRUE(entry1 == entry2);
   entry2->Close();
@@ -542,6 +542,21 @@ void DiskCacheBackendTest::BackendKeying() {
   ASSERT_EQ(net::OK, CreateEntry(buffer2, &entry2)) << "key on external file";
   entry2->Close();
   entry1->Close();
+
+  // Create entries with null terminator(s), and check equality. Note we create
+  // the strings via the ctor instead of using literals because literals are
+  // implicitly C strings which will stop at the first null terminator.
+  std::string key1(4, '\0');
+  key1[1] = 's';
+  std::string key2(3, '\0');
+  key2[1] = 's';
+  ASSERT_THAT(CreateEntry(key1, &entry1), IsOk());
+  ASSERT_THAT(CreateEntry(key2, &entry2), IsOk());
+  EXPECT_TRUE(entry1 != entry2) << "Different lengths";
+  EXPECT_EQ(entry1->GetKey(), key1);
+  EXPECT_EQ(entry2->GetKey(), key2);
+  entry1->Close();
+  entry2->Close();
 }
 
 TEST_F(DiskCacheBackendTest, Keying) {
@@ -582,14 +597,16 @@ TEST_F(DiskCacheTest, CreateBackend) {
 
     // Now test the public API.
     int rv = disk_cache::CreateCacheBackend(
-        net::DISK_CACHE, net::CACHE_BACKEND_DEFAULT, cache_path_, 0,
+        net::DISK_CACHE, net::CACHE_BACKEND_DEFAULT,
+        /*file_operations=*/nullptr, cache_path_, 0,
         disk_cache::ResetHandling::kNeverReset, nullptr, &cache, cb.callback());
     ASSERT_THAT(cb.GetResult(rv), IsOk());
     ASSERT_TRUE(cache.get());
     cache.reset();
 
     rv = disk_cache::CreateCacheBackend(
-        net::MEMORY_CACHE, net::CACHE_BACKEND_DEFAULT, base::FilePath(), 0,
+        net::MEMORY_CACHE, net::CACHE_BACKEND_DEFAULT,
+        /*file_operations=*/nullptr, base::FilePath(), 0,
         disk_cache::ResetHandling::kNeverReset, nullptr, &cache, cb.callback());
     ASSERT_THAT(cb.GetResult(rv), IsOk());
     ASSERT_TRUE(cache.get());
@@ -606,7 +623,8 @@ TEST_F(DiskCacheTest, MemBackendPostCleanupCallback) {
 
   std::unique_ptr<disk_cache::Backend> cache;
   int rv = disk_cache::CreateCacheBackend(
-      net::MEMORY_CACHE, net::CACHE_BACKEND_DEFAULT, base::FilePath(), 0,
+      net::MEMORY_CACHE, net::CACHE_BACKEND_DEFAULT,
+      /*file_operations=*/nullptr, base::FilePath(), 0,
       disk_cache::ResetHandling::kNeverReset, nullptr, &cache,
       on_cleanup.closure(), cb.callback());
   ASSERT_THAT(cb.GetResult(rv), IsOk());
@@ -630,12 +648,14 @@ TEST_F(DiskCacheTest, CreateBackendDouble) {
   std::unique_ptr<disk_cache::Backend> cache, cache2;
 
   int rv = disk_cache::CreateCacheBackend(
-      net::APP_CACHE, net::CACHE_BACKEND_DEFAULT, cache_path_, 0,
-      disk_cache::ResetHandling::kNeverReset, nullptr, &cache, cb.callback());
+      net::APP_CACHE, net::CACHE_BACKEND_DEFAULT, /*file_operations=*/nullptr,
+      cache_path_, 0, disk_cache::ResetHandling::kNeverReset, nullptr, &cache,
+      cb.callback());
 
   int rv2 = disk_cache::CreateCacheBackend(
-      net::APP_CACHE, net::CACHE_BACKEND_DEFAULT, cache_path_, 0,
-      disk_cache::ResetHandling::kNeverReset, nullptr, &cache2, cb2.callback());
+      net::APP_CACHE, net::CACHE_BACKEND_DEFAULT, /*file_operations=*/nullptr,
+      cache_path_, 0, disk_cache::ResetHandling::kNeverReset, nullptr, &cache2,
+      cb2.callback());
 
   EXPECT_THAT(cb.GetResult(rv), IsOk());
   EXPECT_TRUE(cache.get());
@@ -667,12 +687,14 @@ TEST_F(DiskCacheBackendTest, CreateBackendDoubleOpenEntry) {
   std::unique_ptr<disk_cache::Backend> cache, cache2;
 
   int rv = disk_cache::CreateCacheBackend(
-      net::APP_CACHE, net::CACHE_BACKEND_SIMPLE, cache_path_, 0,
-      disk_cache::ResetHandling::kNeverReset, nullptr, &cache, cb.callback());
+      net::APP_CACHE, net::CACHE_BACKEND_SIMPLE, /*file_operations=*/nullptr,
+      cache_path_, 0, disk_cache::ResetHandling::kNeverReset, nullptr, &cache,
+      cb.callback());
 
   int rv2 = disk_cache::CreateCacheBackend(
-      net::APP_CACHE, net::CACHE_BACKEND_SIMPLE, cache_path_, 0,
-      disk_cache::ResetHandling::kNeverReset, nullptr, &cache2, cb2.callback());
+      net::APP_CACHE, net::CACHE_BACKEND_SIMPLE, /*file_operations=*/nullptr,
+      cache_path_, 0, disk_cache::ResetHandling::kNeverReset, nullptr, &cache2,
+      cb2.callback());
 
   EXPECT_THAT(cb.GetResult(rv), IsOk());
   ASSERT_TRUE(cache.get());
@@ -717,8 +739,8 @@ TEST_F(DiskCacheBackendTest, CreateBackendPostCleanup) {
   std::unique_ptr<disk_cache::Backend> cache;
 
   int rv = disk_cache::CreateCacheBackend(
-      net::APP_CACHE, net::CACHE_BACKEND_SIMPLE, cache_path_, 0,
-      disk_cache::ResetHandling::kNeverReset, nullptr, &cache,
+      net::APP_CACHE, net::CACHE_BACKEND_SIMPLE, /*file_operations=*/nullptr,
+      cache_path_, 0, disk_cache::ResetHandling::kNeverReset, nullptr, &cache,
       run_loop.QuitClosure(), cb.callback());
   EXPECT_THAT(cb.GetResult(rv), IsOk());
   ASSERT_TRUE(cache.get());
@@ -765,8 +787,8 @@ TEST_F(DiskCacheBackendTest, SimpleCreateBackendRecoveryAppCache) {
   // Create a backend with post-cleanup callback specified, in order to know
   // when the index has been written back (so it can be deleted race-free).
   int rv = disk_cache::CreateCacheBackend(
-      net::APP_CACHE, net::CACHE_BACKEND_SIMPLE, cache_path_, 0,
-      disk_cache::ResetHandling::kNeverReset, nullptr, &cache,
+      net::APP_CACHE, net::CACHE_BACKEND_SIMPLE, /*file_operations=*/nullptr,
+      cache_path_, 0, disk_cache::ResetHandling::kNeverReset, nullptr, &cache,
       run_loop.QuitClosure(), cb.callback());
   EXPECT_THAT(cb.GetResult(rv), IsOk());
   ASSERT_TRUE(cache.get());
@@ -940,8 +962,8 @@ TEST_F(DiskCacheBackendTest, MultipleInstancesWithPendingFileIO) {
   net::TestCompletionCallback cb;
   std::unique_ptr<disk_cache::Backend> extra_cache;
   int rv = disk_cache::CreateCacheBackend(
-      net::DISK_CACHE, net::CACHE_BACKEND_DEFAULT, store.GetPath(), 0,
-      disk_cache::ResetHandling::kNeverReset,
+      net::DISK_CACHE, net::CACHE_BACKEND_DEFAULT, /*file_operations=*/nullptr,
+      store.GetPath(), 0, disk_cache::ResetHandling::kNeverReset,
       /* net_log = */ nullptr, &extra_cache, cb.callback());
   ASSERT_THAT(cb.GetResult(rv), IsOk());
   ASSERT_TRUE(extra_cache.get() != nullptr);
@@ -1089,7 +1111,8 @@ TEST_F(DiskCacheTest, TruncatedIndex) {
 
   std::unique_ptr<disk_cache::Backend> backend;
   int rv = disk_cache::CreateCacheBackend(
-      net::DISK_CACHE, net::CACHE_BACKEND_BLOCKFILE, cache_path_, 0,
+      net::DISK_CACHE, net::CACHE_BACKEND_BLOCKFILE,
+      /*file_operations=*/nullptr, cache_path_, 0,
       disk_cache::ResetHandling::kNeverReset, nullptr, &backend, cb.callback());
   ASSERT_NE(net::OK, cb.GetResult(rv));
 
@@ -2518,7 +2541,8 @@ TEST_F(DiskCacheTest, SimpleCacheControlJoin) {
   net::TestCompletionCallback cb;
   std::unique_ptr<disk_cache::Backend> base_cache;
   int rv = disk_cache::CreateCacheBackend(
-      net::DISK_CACHE, net::CACHE_BACKEND_BLOCKFILE, cache_path_, 0,
+      net::DISK_CACHE, net::CACHE_BACKEND_BLOCKFILE,
+      /*file_operations=*/nullptr, cache_path_, 0,
       disk_cache::ResetHandling::kResetOnError, nullptr, &base_cache,
       cb.callback());
   ASSERT_THAT(cb.GetResult(rv), IsOk());
@@ -2606,7 +2630,8 @@ TEST_F(DiskCacheBackendTest, DeleteOld) {
     base::ScopedDisallowBlocking disallow_blocking;
     base::FilePath path(cache_path_);
     int rv = disk_cache::CreateCacheBackend(
-        net::DISK_CACHE, net::CACHE_BACKEND_BLOCKFILE, path, 0,
+        net::DISK_CACHE, net::CACHE_BACKEND_BLOCKFILE,
+        /*file_operations=*/nullptr, path, 0,
         disk_cache::ResetHandling::kResetOnError, nullptr, &cache_,
         cb.callback());
     path.clear();  // Make sure path was captured by the previous call.
@@ -3708,14 +3733,15 @@ TEST_F(DiskCacheTest, MultipleInstances) {
   std::unique_ptr<disk_cache::Backend> cache[kNumberOfCaches];
 
   int rv = disk_cache::CreateCacheBackend(
-      net::DISK_CACHE, net::CACHE_BACKEND_DEFAULT, store1.GetPath(), 0,
-      disk_cache::ResetHandling::kNeverReset, nullptr, &cache[0],
-      cb.callback());
+      net::DISK_CACHE, net::CACHE_BACKEND_DEFAULT, /*file_operations=*/nullptr,
+      store1.GetPath(), 0, disk_cache::ResetHandling::kNeverReset, nullptr,
+      &cache[0], cb.callback());
   ASSERT_THAT(cb.GetResult(rv), IsOk());
   rv = disk_cache::CreateCacheBackend(
       net::GENERATED_BYTE_CODE_CACHE, net::CACHE_BACKEND_DEFAULT,
-      store2.GetPath(), 0, disk_cache::ResetHandling::kNeverReset, nullptr,
-      &cache[1], cb.callback());
+      /*file_operations=*/nullptr, store2.GetPath(), 0,
+      disk_cache::ResetHandling::kNeverReset, nullptr, &cache[1],
+      cb.callback());
   ASSERT_THAT(cb.GetResult(rv), IsOk());
 
   ASSERT_TRUE(cache[0].get() != nullptr && cache[1].get() != nullptr);
@@ -4101,13 +4127,13 @@ TEST_F(DiskCacheBackendTest, SimpleCacheOverBlockfileCache) {
   cache_.reset();
 
   // Check that the |SimpleBackendImpl| does not favor this structure.
-  disk_cache::SimpleBackendImpl* simple_cache =
-      new disk_cache::SimpleBackendImpl(cache_path_, nullptr, nullptr, 0,
-                                        net::DISK_CACHE, nullptr);
+  auto simple_cache = std::make_unique<disk_cache::SimpleBackendImpl>(
+      /*file_operations_factory=*/nullptr, cache_path_, nullptr, nullptr, 0,
+      net::DISK_CACHE, nullptr);
   net::TestCompletionCallback cb;
   int rv = simple_cache->Init(cb.callback());
   EXPECT_NE(net::OK, cb.GetResult(rv));
-  delete simple_cache;
+  simple_cache.reset();
   DisableIntegrityCheck();
 }
 
@@ -4890,8 +4916,9 @@ TEST_F(DiskCacheBackendTest, EmptyCorruptSimpleCacheRecovery) {
 
   // Simple cache should be able to recover.
   int rv = disk_cache::CreateCacheBackend(
-      net::APP_CACHE, net::CACHE_BACKEND_SIMPLE, cache_path_, 0,
-      disk_cache::ResetHandling::kNeverReset, nullptr, &cache, cb.callback());
+      net::APP_CACHE, net::CACHE_BACKEND_SIMPLE, /*file_operations=*/nullptr,
+      cache_path_, 0, disk_cache::ResetHandling::kNeverReset, nullptr, &cache,
+      cb.callback());
   EXPECT_THAT(cb.GetResult(rv), IsOk());
 }
 
@@ -4913,8 +4940,9 @@ TEST_F(DiskCacheBackendTest, MAYBE_NonEmptyCorruptSimpleCacheDoesNotRecover) {
 
   // Simple cache should not be able to recover when there are entry files.
   int rv = disk_cache::CreateCacheBackend(
-      net::APP_CACHE, net::CACHE_BACKEND_SIMPLE, cache_path_, 0,
-      disk_cache::ResetHandling::kNeverReset, nullptr, &cache, cb.callback());
+      net::APP_CACHE, net::CACHE_BACKEND_SIMPLE, /*file_operations=*/nullptr,
+      cache_path_, 0, disk_cache::ResetHandling::kNeverReset, nullptr, &cache,
+      cb.callback());
   EXPECT_THAT(cb.GetResult(rv), IsError(net::ERR_FAILED));
 }
 
@@ -4987,8 +5015,9 @@ TEST_F(DiskCacheBackendTest, SimpleCacheSoftResetKeepsValues) {
 
     // Create an initial back-end and wait for indexing
     int rv = disk_cache::CreateCacheBackend(
-        net::APP_CACHE, net::CACHE_BACKEND_SIMPLE, cache_path_, 0,
-        disk_cache::ResetHandling::kNeverReset, nullptr, &cache, cb.callback());
+        net::APP_CACHE, net::CACHE_BACKEND_SIMPLE, /*file_operations=*/nullptr,
+        cache_path_, 0, disk_cache::ResetHandling::kNeverReset, nullptr, &cache,
+        cb.callback());
     EXPECT_THAT(cb.GetResult(rv), IsOk());
     ASSERT_TRUE(cache.get());
     WaitForSimpleCacheIndexAndCheck(cache.get());
@@ -5004,8 +5033,9 @@ TEST_F(DiskCacheBackendTest, SimpleCacheSoftResetKeepsValues) {
     net::TestCompletionCallback cb;
 
     int rv = disk_cache::CreateCacheBackend(
-        net::APP_CACHE, net::CACHE_BACKEND_SIMPLE, cache_path_, 0,
-        disk_cache::ResetHandling::kNeverReset, nullptr, &cache, cb.callback());
+        net::APP_CACHE, net::CACHE_BACKEND_SIMPLE, /*file_operations=*/nullptr,
+        cache_path_, 0, disk_cache::ResetHandling::kNeverReset, nullptr, &cache,
+        cb.callback());
     EXPECT_THAT(cb.GetResult(rv), IsOk());
     ASSERT_TRUE(cache.get());
     WaitForSimpleCacheIndexAndCheck(cache.get());
@@ -5029,8 +5059,9 @@ TEST_F(DiskCacheBackendTest, SimpleCacheHardResetDropsValues) {
     std::unique_ptr<disk_cache::Backend> cache;
 
     int rv = disk_cache::CreateCacheBackend(
-        net::APP_CACHE, net::CACHE_BACKEND_SIMPLE, cache_path_, 0,
-        disk_cache::ResetHandling::kNeverReset, nullptr, &cache, cb.callback());
+        net::APP_CACHE, net::CACHE_BACKEND_SIMPLE, /*file_operations=*/nullptr,
+        cache_path_, 0, disk_cache::ResetHandling::kNeverReset, nullptr, &cache,
+        cb.callback());
     EXPECT_THAT(cb.GetResult(rv), IsOk());
     ASSERT_TRUE(cache.get());
     WaitForSimpleCacheIndexAndCheck(cache.get());
@@ -5046,8 +5077,9 @@ TEST_F(DiskCacheBackendTest, SimpleCacheHardResetDropsValues) {
     std::unique_ptr<disk_cache::Backend> cache;
 
     int rv = disk_cache::CreateCacheBackend(
-        net::APP_CACHE, net::CACHE_BACKEND_SIMPLE, cache_path_, 0,
-        disk_cache::ResetHandling::kReset, nullptr, &cache, cb.callback());
+        net::APP_CACHE, net::CACHE_BACKEND_SIMPLE, /*file_operations=*/nullptr,
+        cache_path_, 0, disk_cache::ResetHandling::kReset, nullptr, &cache,
+        cb.callback());
     EXPECT_THAT(cb.GetResult(rv), IsOk());
     ASSERT_TRUE(cache.get());
     WaitForSimpleCacheIndexAndCheck(cache.get());

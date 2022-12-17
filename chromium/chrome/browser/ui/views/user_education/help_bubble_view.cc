@@ -14,6 +14,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
 #include "chrome/browser/themes/theme_properties.h"
+#include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/user_education/help_bubble_params.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/chrome_typography.h"
@@ -21,6 +22,7 @@
 #include "components/strings/grit/components_strings.h"
 #include "components/variations/variations_associated_data.h"
 #include "components/vector_icons/vector_icons.h"
+#include "ui/base/interaction/element_identifier.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -73,19 +75,10 @@ constexpr base::TimeDelta kDefaultTimeoutWithButtons = base::Seconds(0);
 constexpr int kBubbleMaxWidthDip = 340;
 
 // The insets from the bubble border to the text inside.
-constexpr gfx::Insets kBubbleContentsInsets(16, 20);
+constexpr auto kBubbleContentsInsets = gfx::Insets::VH(16, 20);
 
 // The insets from the button border to the text inside.
-constexpr gfx::Insets kBubbleButtonPadding(6, 16);
-
-// The text color of the button.
-constexpr SkColor kBubbleButtonTextColor = SK_ColorWHITE;
-
-// The outline color of the button.
-constexpr SkColor kBubbleButtonBorderColor = gfx::kGoogleGrey300;
-
-// The background color of the button when highlighted.
-constexpr SkColor kBubbleButtonHighlightColor = gfx::kGoogleBlue300;
+constexpr auto kBubbleButtonPadding = gfx::Insets::VH(6, 16);
 
 // Translates from HelpBubbleArrow to the Views equivalent.
 views::BubbleBorder::Arrow TranslateArrow(HelpBubbleArrow arrow) {
@@ -129,18 +122,9 @@ class MdIPHBubbleButton : public views::MdTextButton {
       : MdTextButton(callback,
                      text,
                      ChromeTextContext::CONTEXT_IPH_BUBBLE_BUTTON),
-        button_colors_(ComputeButtonColors(is_default_button)) {
+        is_default_button_(is_default_button) {
     // Prominent style gives a button hover highlight.
     SetProminent(true);
-    // TODO(kerenzhu): IPH bubble uses blue600 as the background color
-    // for both regular and dark mode. We might want to use a
-    // dark-mode-appropriate background color so that overriding text color
-    // is not needed.
-    SetEnabledTextColors(button_colors_.text_color);
-    // TODO(crbug/1112244): Temporary fix for Mac. Bubble shouldn't be in
-    // inactive style when the bubble loses focus.
-    SetTextColor(ButtonState::STATE_DISABLED, button_colors_.text_color);
-    views::FocusRing::Get(this)->SetColor(button_colors_.focus_ring_color);
     GetViewAccessibility().OverrideIsLeaf(true);
   }
   MdIPHBubbleButton(const MdIPHBubbleButton&) = delete;
@@ -151,39 +135,52 @@ class MdIPHBubbleButton : public views::MdTextButton {
     // Prominent MD button does not have a border.
     // Override this method to draw a border.
     // Adapted from MdTextButton::UpdateBackgroundColor()
-    SkColor bg_color = button_colors_.background_color;
-    if (GetState() == STATE_PRESSED)
-      bg_color = GetNativeTheme()->GetSystemButtonPressedColor(bg_color);
-
+    const auto* theme_provider = GetThemeProvider();
+    if (!theme_provider)
+      return;
+    SkColor background_color = theme_provider->GetColor(
+        ThemeProperties::COLOR_FEATURE_PROMO_BUBBLE_BACKGROUND);
+    if (is_default_button_) {
+      background_color = theme_provider->GetColor(
+          ThemeProperties::
+              COLOR_FEATURE_PROMO_BUBBLE_DEFAULT_BUTTON_BACKGROUND);
+    }
+    if (GetState() == STATE_PRESSED) {
+      background_color =
+          GetNativeTheme()->GetSystemButtonPressedColor(background_color);
+    }
+    const SkColor stroke_color = theme_provider->GetColor(
+        is_default_button_
+            ? ThemeProperties::
+                  COLOR_FEATURE_PROMO_BUBBLE_DEFAULT_BUTTON_BACKGROUND
+            : ThemeProperties::COLOR_FEATURE_PROMO_BUBBLE_BUTTON_BORDER);
     SetBackground(CreateBackgroundFromPainter(
         views::Painter::CreateRoundRectWith1PxBorderPainter(
-            bg_color, button_colors_.background_stroke_color,
-            GetCornerRadius())));
+            background_color, stroke_color, GetCornerRadius())));
+  }
+
+  void OnThemeChanged() override {
+    views::MdTextButton::OnThemeChanged();
+
+    const auto* theme_provider = GetThemeProvider();
+    const SkColor background_color = theme_provider->GetColor(
+        ThemeProperties::COLOR_FEATURE_PROMO_BUBBLE_BACKGROUND);
+    views::FocusRing::Get(this)->SetColor(background_color);
+
+    const SkColor foreground_color = theme_provider->GetColor(
+        is_default_button_
+            ? ThemeProperties::
+                  COLOR_FEATURE_PROMO_BUBBLE_DEFAULT_BUTTON_FOREGROUND
+            : ThemeProperties::COLOR_FEATURE_PROMO_BUBBLE_FOREGROUND);
+    SetEnabledTextColors(foreground_color);
+
+    // TODO(crbug/1112244): Temporary fix for Mac. Bubble shouldn't be in
+    // inactive style when the bubble loses focus.
+    SetTextColor(ButtonState::STATE_DISABLED, foreground_color);
   }
 
  private:
-  struct ButtonColors {
-    SkColor text_color;
-    SkColor background_color;
-    SkColor background_stroke_color;
-    SkColor focus_ring_color;
-  };
-
-  static ButtonColors ComputeButtonColors(bool is_default_button) {
-    const SkColor kBubbleBackgroundColor = ThemeProperties::GetDefaultColor(
-        ThemeProperties::COLOR_FEATURE_PROMO_BUBBLE_BACKGROUND, false);
-    ButtonColors button_colors;
-    button_colors.text_color =
-        is_default_button ? kBubbleBackgroundColor : kBubbleButtonTextColor;
-    button_colors.background_color =
-        is_default_button ? kBubbleButtonTextColor : kBubbleBackgroundColor;
-    button_colors.background_stroke_color =
-        is_default_button ? kBubbleButtonTextColor : kBubbleButtonBorderColor;
-    button_colors.focus_ring_color = kBubbleBackgroundColor;
-    return button_colors;
-  }
-
-  ButtonColors button_colors_;
+  bool is_default_button_;
 };
 
 BEGIN_METADATA(MdIPHBubbleButton, views::MdTextButton)
@@ -197,15 +194,30 @@ class ClosePromoButton : public views::ImageButton {
   METADATA_HEADER(ClosePromoButton);
   ClosePromoButton(int accessible_name_id, PressedCallback callback) {
     SetCallback(callback);
-    SetImage(
-        views::ImageButton::STATE_NORMAL,
-        gfx::CreateVectorIcon(views::kIcCloseIcon, 16, kBubbleButtonTextColor));
     views::ConfigureVectorImageButton(this);
     views::HighlightPathGenerator::Install(
         this,
         std::make_unique<views::CircleHighlightPathGenerator>(gfx::Insets()));
-    views::InkDrop::Get(this)->SetBaseColor(kBubbleButtonHighlightColor);
     SetAccessibleName(l10n_util::GetStringUTF16(accessible_name_id));
+  }
+
+  void OnThemeChanged() override {
+    views::ImageButton::OnThemeChanged();
+
+    constexpr float kCloseButtonFocusRingHaloThickness = 1.25f;
+
+    const auto* theme_provider = GetThemeProvider();
+    SetImage(views::ImageButton::STATE_NORMAL,
+             gfx::CreateVectorIcon(
+                 views::kIcCloseIcon, 16,
+                 theme_provider->GetColor(
+                     ThemeProperties::COLOR_FEATURE_PROMO_BUBBLE_FOREGROUND)));
+    views::InkDrop::Get(this)->SetBaseColor(theme_provider->GetColor(
+        ThemeProperties::COLOR_FEATURE_PROMO_BUBBLE_CLOSE_BUTTON_INK_DROP));
+    views::FocusRing::Get(this)->SetColor(theme_provider->GetColor(
+        ThemeProperties::COLOR_FEATURE_PROMO_BUBBLE_FOREGROUND));
+    views::FocusRing::Get(this)->SetHaloThickness(
+        kCloseButtonFocusRingHaloThickness);
   }
 };
 
@@ -215,8 +227,8 @@ END_METADATA
 class DotView : public views::View {
  public:
   METADATA_HEADER(DotView);
-  DotView(gfx::Size size, SkColor fill_color, SkColor stroke_color)
-      : size_(size), fill_color_(fill_color), stroke_color_(stroke_color) {
+  DotView(gfx::Size size, bool should_fill)
+      : size_(size), should_fill_(should_fill) {
     // In order to anti-alias properly, we'll grow by the stroke width and then
     // have the excess space be subtracted from the margins by the layout.
     SetProperty(views::kInternalPaddingKey, gfx::Insets(kStrokeWidth));
@@ -238,17 +250,21 @@ class DotView : public views::View {
     const gfx::PointF center_point = local_bounds.CenterPoint();
     const float radius = (size_.width() - kStrokeWidth) / 2.0f;
 
-    cc::PaintFlags fill_flags;
-    fill_flags.setStyle(cc::PaintFlags::kFill_Style);
-    fill_flags.setAntiAlias(true);
-    fill_flags.setColor(fill_color_);
-    canvas->DrawCircle(center_point, radius, fill_flags);
+    const SkColor color = GetThemeProvider()->GetColor(
+        ThemeProperties::COLOR_FEATURE_PROMO_BUBBLE_FOREGROUND);
+    if (should_fill_) {
+      cc::PaintFlags fill_flags;
+      fill_flags.setStyle(cc::PaintFlags::kFill_Style);
+      fill_flags.setAntiAlias(true);
+      fill_flags.setColor(color);
+      canvas->DrawCircle(center_point, radius, fill_flags);
+    }
 
     cc::PaintFlags stroke_flags;
     stroke_flags.setStyle(cc::PaintFlags::kStroke_Style);
     stroke_flags.setStrokeWidth(kStrokeWidth);
     stroke_flags.setAntiAlias(true);
-    stroke_flags.setColor(stroke_color_);
+    stroke_flags.setColor(color);
     canvas->DrawCircle(center_point, radius, stroke_flags);
   }
 
@@ -256,8 +272,7 @@ class DotView : public views::View {
   static constexpr int kStrokeWidth = 1;
 
   const gfx::Size size_;
-  const SkColor fill_color_;
-  const SkColor stroke_color_;
+  const bool should_fill_;
 };
 
 constexpr int DotView::kStrokeWidth;
@@ -266,6 +281,9 @@ BEGIN_METADATA(DotView, views::View)
 END_METADATA
 
 }  // namespace
+
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(HelpBubbleView,
+                                      kHelpBubbleElementIdForTesting);
 
 // Explicitly don't use the default DIALOG_SHADOW as it will show a black
 // outline in dark mode on Mac. Use our own shadow instead. The shadow type is
@@ -289,28 +307,17 @@ HelpBubbleView::HelpBubbleView(views::View* anchor_view,
     timeout_callback_ = std::move(params.timeout_callback);
   SetCancelCallback(std::move(params.dismiss_callback));
 
-  accessible_name_ = params.screenreader_text.empty()
-                         ? params.body_text
-                         : params.screenreader_text;
+  accessible_name_ = params.title_text;
+  if (!accessible_name_.empty())
+    accessible_name_ += u". ";
+  accessible_name_ += params.screenreader_text.empty()
+                          ? params.body_text
+                          : params.screenreader_text;
   screenreader_hint_text_ = params.keyboard_navigation_hint;
 
   // Since we don't have any controls for the user to interact with (we're just
   // an information bubble), override our role to kAlert.
   SetAccessibleRole(ax::mojom::Role::kAlert);
-
-  // We get the theme provider from the anchor view since our widget hasn't
-  // been created yet. This didn't work correctly for bubbles anchored to menu
-  // items before crbug.com/1295896 was fixed; if this breaks again that change
-  // might have gotten undone.
-  const ui::ThemeProvider* theme_provider = anchor_view->GetThemeProvider();
-  const views::LayoutProvider* layout_provider = views::LayoutProvider::Get();
-  DCHECK(theme_provider);
-  DCHECK(layout_provider);
-
-  const SkColor background_color = theme_provider->GetColor(
-      ThemeProperties::COLOR_FEATURE_PROMO_BUBBLE_BACKGROUND);
-  const SkColor text_color = theme_provider->GetColor(
-      ThemeProperties::COLOR_FEATURE_PROMO_BUBBLE_TEXT);
 
   // Layout structure:
   //
@@ -339,65 +346,56 @@ HelpBubbleView::HelpBubbleView(views::View* anchor_view,
     DCHECK(params.tutorial_progress->second);
     // TODO(crbug.com/1197208): surface progress information in a11y tree
     for (int i = 0; i < params.tutorial_progress->second; ++i) {
-      SkColor fill_color = i < params.tutorial_progress->first
-                               ? SK_ColorWHITE
-                               : SK_ColorTRANSPARENT;
       // TODO(crbug.com/1197208): formalize dot size
       progress_container->AddChildView(std::make_unique<DotView>(
-          gfx::Size(8, 8), fill_color, SK_ColorWHITE));
+          gfx::Size(8, 8), i < params.tutorial_progress->first));
     }
   } else {
     progress_container->SetVisible(false);
   }
 
   // Add the body icon (optional).
-  views::ImageView* icon_view = nullptr;
   constexpr int kBodyIconSize = 20;
   constexpr int kBodyIconBackgroundSize = 24;
   if (params.body_icon) {
-    icon_view = top_text_container->AddChildViewAt(
+    icon_view_ = top_text_container->AddChildViewAt(
         std::make_unique<views::ImageView>(ui::ImageModel::FromVectorIcon(
-            *params.body_icon, background_color, kBodyIconSize)),
+            *params.body_icon, kColorFeaturePromoBubbleBackground,
+            kBodyIconSize)),
         0);
-    icon_view->SetPreferredSize(
+    icon_view_->SetPreferredSize(
         gfx::Size(kBodyIconBackgroundSize, kBodyIconBackgroundSize));
-    icon_view->SetBackground(views::CreateRoundedRectBackground(
-        text_color, kBodyIconBackgroundSize / 2));
-    icon_view->SetAccessibleName(l10n_util::GetStringUTF16(IDS_CHROME_TIP));
+    icon_view_->SetAccessibleName(l10n_util::GetStringUTF16(IDS_CHROME_TIP));
   }
 
-  std::vector<views::Label*> labels;
   // Add title (optional) and body label.
   if (!params.title_text.empty()) {
-    labels.push_back(
+    labels_.push_back(
         top_text_container->AddChildView(std::make_unique<views::Label>(
             params.title_text, ChromeTextContext::CONTEXT_IPH_BUBBLE_TITLE)));
-    labels.push_back(
+    labels_.push_back(
         AddChildViewAt(std::make_unique<views::Label>(params.body_text,
                                                       CONTEXT_IPH_BUBBLE_BODY),
                        GetIndexOf(button_container)));
   } else {
-    labels.push_back(
+    labels_.push_back(
         top_text_container->AddChildView(std::make_unique<views::Label>(
             params.body_text, CONTEXT_IPH_BUBBLE_BODY)));
   }
 
   // Set common label properties.
-  for (views::Label* label : labels) {
-    label->SetBackgroundColor(background_color);
-    label->SetEnabledColor(text_color);
+  for (views::Label* label : labels_) {
     label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     label->SetMultiLine(true);
     label->SetElideBehavior(gfx::NO_ELIDE);
   }
 
   // Add close button (optional).
-  ClosePromoButton* close_button = nullptr;
   if (params.buttons.empty() || params.force_close_button) {
     int close_string_id =
         params.tutorial_progress ? IDS_CLOSE_TUTORIAL : IDS_CLOSE_PROMO;
     // Since we set the cancel callback, we will use CancelDialog() to dismiss.
-    close_button =
+    close_button_ =
         (params.tutorial_progress ? progress_container : top_text_container)
             ->AddChildView(std::make_unique<ClosePromoButton>(
                 close_string_id,
@@ -419,16 +417,35 @@ HelpBubbleView::HelpBubbleView(views::View* anchor_view,
       if (view && view->GetWidget() && !view->GetWidget()->IsClosed())
         view->GetWidget()->Close();
     };
+
+    // We will hold the default button to add later, since where we add it in
+    // the sequence depends on platform style.
+    std::unique_ptr<MdIPHBubbleButton> default_button;
     for (HelpBubbleButtonParams& button_params : params.buttons) {
-      MdIPHBubbleButton* const button =
-          button_container->AddChildView(std::make_unique<MdIPHBubbleButton>(
-              base::BindRepeating(
-                  run_callback_and_close, base::Unretained(this),
-                  base::Passed(std::move(button_params.callback))),
-              button_params.text, button_params.is_default));
-      buttons_.push_back(button);
+      auto button = std::make_unique<MdIPHBubbleButton>(
+          base::BindRepeating(run_callback_and_close, base::Unretained(this),
+                              base::Passed(std::move(button_params.callback))),
+          button_params.text, button_params.is_default);
       button->SetMinSize(gfx::Size(0, 0));
       button->SetCustomPadding(kBubbleButtonPadding);
+      if (button_params.is_default) {
+        DCHECK(!default_button);
+        default_button = std::move(button);
+      } else {
+        non_default_buttons_.push_back(
+            button_container->AddChildView(std::move(button)));
+      }
+    }
+
+    // Add the default button if there is one based on platform style.
+    if (default_button) {
+      if (views::PlatformStyle::kIsOkButtonLeading) {
+        default_button_ =
+            button_container->AddChildViewAt(std::move(default_button), 0);
+      } else {
+        default_button_ =
+            button_container->AddChildView(std::move(default_button));
+      }
     }
   } else {
     button_container->SetVisible(false);
@@ -438,6 +455,7 @@ HelpBubbleView::HelpBubbleView(views::View* anchor_view,
   // separate progress indicators for symmetry.
   // TODO(dfried): consider whether we could take font ascender and descender
   // height and factor them into margin calculations.
+  const views::LayoutProvider* layout_provider = views::LayoutProvider::Get();
   const int default_spacing = layout_provider->GetDistanceMetric(
       views::DISTANCE_RELATED_CONTROL_VERTICAL);
 
@@ -447,7 +465,8 @@ HelpBubbleView::HelpBubbleView(views::View* anchor_view,
       .SetMainAxisAlignment(views::LayoutAlignment::kCenter)
       .SetInteriorMargin(kBubbleContentsInsets)
       .SetCollapseMargins(true)
-      .SetDefault(views::kMarginsKey, gfx::Insets(0, 0, default_spacing, 0))
+      .SetDefault(views::kMarginsKey,
+                  gfx::Insets::TLBR(0, 0, default_spacing, 0))
       .SetIgnoreDefaultMainAxisMargins(true);
 
   // Set up top row container layout.
@@ -458,28 +477,29 @@ HelpBubbleView::HelpBubbleView(views::View* anchor_view,
           ->SetOrientation(views::LayoutOrientation::kHorizontal)
           .SetCrossAxisAlignment(views::LayoutAlignment::kCenter)
           .SetMinimumCrossAxisSize(kCloseButtonHeight)
-          .SetDefault(views::kMarginsKey, gfx::Insets(0, default_spacing, 0, 0))
+          .SetDefault(views::kMarginsKey,
+                      gfx::Insets::TLBR(0, default_spacing, 0, 0))
           .SetIgnoreDefaultMainAxisMargins(true);
   progress_container->SetProperty(
       views::kFlexBehaviorKey,
       views::FlexSpecification(progress_layout.GetDefaultFlexRule()));
 
   // Close button should float right in whatever container it's in.
-  if (close_button) {
-    close_button->SetProperty(
+  if (close_button_) {
+    close_button_->SetProperty(
         views::kFlexBehaviorKey,
         views::FlexSpecification(views::LayoutOrientation::kHorizontal,
                                  views::MinimumFlexSizeRule::kPreferred,
                                  views::MaximumFlexSizeRule::kUnbounded)
             .WithAlignment(views::LayoutAlignment::kEnd));
-    close_button->SetProperty(views::kMarginsKey,
-                              gfx::Insets(0, default_spacing, 0, 0));
+    close_button_->SetProperty(views::kMarginsKey,
+                               gfx::Insets::TLBR(0, default_spacing, 0, 0));
   }
 
   // Icon view should have padding between it and the title or body label.
-  if (icon_view) {
-    icon_view->SetProperty(views::kMarginsKey,
-                           gfx::Insets(0, 0, 0, default_spacing));
+  if (icon_view_) {
+    icon_view_->SetProperty(views::kMarginsKey,
+                            gfx::Insets::TLBR(0, 0, 0, default_spacing));
   }
 
   // Set label flex properties. This ensures that if the width of the bubble
@@ -492,7 +512,7 @@ HelpBubbleView::HelpBubbleView(views::View* anchor_view,
       /* adjust_height_for_width = */ true,
       views::MinimumFlexSizeRule::kScaleToMinimum);
 
-  for (views::Label* label : labels)
+  for (views::Label* label : labels_)
     label->SetProperty(views::kFlexBehaviorKey, text_flex);
 
   auto& top_text_layout =
@@ -508,20 +528,23 @@ HelpBubbleView::HelpBubbleView(views::View* anchor_view,
   // If the body icon is present, labels after the first are not parented to
   // the top text container, but still need to be inset to align with the
   // title.
-  if (icon_view) {
+  if (icon_view_) {
     const int indent = kBubbleContentsInsets.left() + kBodyIconBackgroundSize +
                        default_spacing;
-    for (size_t i = 1; i < labels.size(); ++i)
-      labels[i]->SetProperty(views::kMarginsKey, gfx::Insets(0, indent, 0, 0));
+    for (size_t i = 1; i < labels_.size(); ++i) {
+      labels_[i]->SetProperty(views::kMarginsKey,
+                              gfx::Insets::TLBR(0, indent, 0, 0));
+    }
   }
 
   // Set up button container layout.
   // Add in the default spacing between bubble content and bottom/buttons.
   button_container->SetProperty(
       views::kMarginsKey,
-      gfx::Insets(layout_provider->GetDistanceMetric(
-                      views::DISTANCE_DIALOG_CONTENT_MARGIN_BOTTOM_CONTROL),
-                  0, 0, 0));
+      gfx::Insets::TLBR(
+          layout_provider->GetDistanceMetric(
+              views::DISTANCE_DIALOG_CONTENT_MARGIN_BOTTOM_CONTROL),
+          0, 0, 0));
 
   // Create button container internal layout.
   auto& button_layout =
@@ -530,29 +553,34 @@ HelpBubbleView::HelpBubbleView(views::View* anchor_view,
           .SetMainAxisAlignment(views::LayoutAlignment::kEnd)
           .SetDefault(
               views::kMarginsKey,
-              gfx::Insets(0,
-                          layout_provider->GetDistanceMetric(
-                              views::DISTANCE_RELATED_BUTTON_HORIZONTAL),
-                          0, 0))
+              gfx::Insets::TLBR(0,
+                                layout_provider->GetDistanceMetric(
+                                    views::DISTANCE_RELATED_BUTTON_HORIZONTAL),
+                                0, 0))
           .SetIgnoreDefaultMainAxisMargins(true);
   button_container->SetProperty(
       views::kFlexBehaviorKey,
       views::FlexSpecification(button_layout.GetDefaultFlexRule()));
 
   // Want a consistent initial focused view if one is available.
-  if (close_button)
-    SetInitiallyFocusedView(close_button);
-  else if (!button_container->children().empty())
+  if (!button_container->children().empty()) {
     SetInitiallyFocusedView(button_container->children()[0]);
+  } else if (close_button_) {
+    SetInitiallyFocusedView(close_button_);
+  }
 
+  SetProperty(views::kElementIdentifierKey, kHelpBubbleElementIdForTesting);
   set_margins(gfx::Insets());
   set_title_margins(gfx::Insets());
   SetButtons(ui::DIALOG_BUTTON_NONE);
-
-  set_color(background_color);
+  set_close_on_deactivate(false);
+  set_focus_traversable_from_anchor_view(false);
 
   views::Widget* widget = views::BubbleDialogDelegateView::CreateBubble(this);
 
+  // This gets reset to the platform default when we call CreateBubble(), so we
+  // have to change it afterwards:
+  set_adjust_if_offscreen(true);
   auto* const frame_view = GetBubbleFrameView();
   frame_view->SetCornerRadius(
       ChromeLayoutProvider::Get()->GetCornerRadiusMetric(
@@ -562,6 +590,10 @@ HelpBubbleView::HelpBubbleView(views::View* anchor_view,
   SizeToContents();
 
   widget->ShowInactive();
+  auto* const anchor_bubble =
+      anchor_view->GetWidget()->widget_delegate()->AsBubbleDialogDelegate();
+  if (anchor_bubble)
+    anchor_pin_ = anchor_bubble->PreventCloseOnDeactivate();
   MaybeStartAutoCloseTimer();
 }
 
@@ -608,6 +640,27 @@ void HelpBubbleView::OnWidgetActivationChanged(views::Widget* widget,
   }
 }
 
+void HelpBubbleView::OnThemeChanged() {
+  views::BubbleDialogDelegateView::OnThemeChanged();
+
+  const auto* theme_provider = GetThemeProvider();
+  const SkColor background_color = theme_provider->GetColor(
+      ThemeProperties::COLOR_FEATURE_PROMO_BUBBLE_BACKGROUND);
+  set_color(background_color);
+
+  const SkColor foreground_color = theme_provider->GetColor(
+      ThemeProperties::COLOR_FEATURE_PROMO_BUBBLE_FOREGROUND);
+  if (icon_view_) {
+    icon_view_->SetBackground(views::CreateRoundedRectBackground(
+        foreground_color, icon_view_->GetPreferredSize().height() / 2));
+  }
+
+  for (auto* label : labels_) {
+    label->SetBackgroundColor(background_color);
+    label->SetEnabledColor(foreground_color);
+  }
+}
+
 gfx::Size HelpBubbleView::CalculatePreferredSize() const {
   const gfx::Size layout_manager_preferred_size =
       View::CalculatePreferredSize();
@@ -630,8 +683,29 @@ bool HelpBubbleView::IsHelpBubble(views::DialogDelegate* dialog) {
   return contents && views::IsViewClass<HelpBubbleView>(contents);
 }
 
-views::Button* HelpBubbleView::GetButtonForTesting(int index) const {
-  return buttons_[index];
+bool HelpBubbleView::IsFocusInHelpBubble() const {
+#if BUILDFLAG(IS_MAC)
+  if (close_button_ && close_button_->HasFocus())
+    return true;
+  if (default_button_ && default_button_->HasFocus())
+    return true;
+  for (auto* button : non_default_buttons_) {
+    if (button->HasFocus())
+      return true;
+  }
+  return false;
+#else
+  return GetWidget()->IsActive();
+#endif
+}
+
+views::LabelButton* HelpBubbleView::GetDefaultButtonForTesting() const {
+  return default_button_;
+}
+
+views::LabelButton* HelpBubbleView::GetNonDefaultButtonForTesting(
+    int index) const {
+  return non_default_buttons_[index];
 }
 
 BEGIN_METADATA(HelpBubbleView, views::BubbleDialogDelegateView)

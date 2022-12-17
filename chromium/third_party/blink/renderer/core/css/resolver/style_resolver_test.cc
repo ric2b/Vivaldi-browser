@@ -16,6 +16,7 @@
 #include "third_party/blink/renderer/core/css/css_value_list.h"
 #include "third_party/blink/renderer/core/css/properties/computed_style_utils.h"
 #include "third_party/blink/renderer/core/css/properties/css_property_ref.h"
+#include "third_party/blink/renderer/core/css/resolver/scoped_style_resolver.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver_state.h"
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
@@ -813,7 +814,7 @@ TEST_F(StyleResolverTestCQ, CascadedValuesForElementInContainer) {
   GetDocument().body()->setInnerHTML(R"HTML(
     <style>
       #container { container-type: inline-size; }
-      @container size(min-width: 1px) {
+      @container (min-width: 1px) {
         #inner {
           top: 1em;
         }
@@ -843,7 +844,7 @@ TEST_F(StyleResolverTestCQ, CascadedValuesForPseudoElementInContainer) {
   GetDocument().body()->setInnerHTML(R"HTML(
     <style>
       #container { container-type: inline-size; }
-      @container size(min-width: 1px) {
+      @container (min-width: 1px) {
         #inner::before {
           top: 1em;
         }
@@ -918,8 +919,8 @@ TEST_F(StyleResolverTest, ComputeValueStandardProperty) {
       MakeGarbageCollected<MutableCSSPropertyValueSet>(kHTMLStandardMode);
   MutableCSSPropertyValueSet::SetResult result = set->SetProperty(
       property_id, "var(--color)", false, SecureContextMode::kInsecureContext,
-      /*style_sheet_contents=*/nullptr);
-  ASSERT_TRUE(result.did_parse);
+      /*context_style_sheet=*/nullptr);
+  ASSERT_NE(MutableCSSPropertyValueSet::kParseError, result);
   const CSSValue* parsed_value = set->GetPropertyCSSValue(property_id);
   ASSERT_TRUE(parsed_value);
   const CSSValue* computed_value = StyleResolver::ComputeValue(
@@ -1306,7 +1307,7 @@ TEST_F(StyleResolverTestCQ, DependsOnContainerQueries) {
   GetDocument().documentElement()->setInnerHTML(R"HTML(
     <style>
       #a { color: red; }
-      @container size(min-width: 0px) {
+      @container (min-width: 0px) {
         #b { color: blue; }
         span { color: green; }
         #d { color: coral; }
@@ -1345,7 +1346,7 @@ TEST_F(StyleResolverTestCQ, DependsOnContainerQueriesPseudo) {
     <style>
       main { container-type: size; width: 100px; }
       #a::before { content: "before"; }
-      @container size(min-width: 0px) {
+      @container (min-width: 0px) {
         #a::after { content: "after"; }
       }
     </style>
@@ -1364,7 +1365,7 @@ TEST_F(StyleResolverTestCQ, DependsOnContainerQueriesPseudo) {
   ASSERT_TRUE(before);
   ASSERT_TRUE(after);
 
-  EXPECT_FALSE(a->ComputedStyleRef().DependsOnContainerQueries());
+  EXPECT_TRUE(a->ComputedStyleRef().DependsOnContainerQueries());
   EXPECT_FALSE(before->ComputedStyleRef().DependsOnContainerQueries());
   EXPECT_TRUE(after->ComputedStyleRef().DependsOnContainerQueries());
 }
@@ -1374,7 +1375,7 @@ TEST_F(StyleResolverTestCQ, DependsOnContainerQueriesPseudo) {
 TEST_F(StyleResolverTestCQ, DependsOnContainerQueriesMPC) {
   GetDocument().documentElement()->setInnerHTML(R"HTML(
     <style>
-      @container size(min-width: 9999999px) {
+      @container (min-width: 9999999px) {
         #a { color: green; }
       }
     </style>
@@ -1405,8 +1406,6 @@ TEST_F(StyleResolverTestCQ, DependsOnContainerQueriesMPC) {
 }
 
 TEST_F(StyleResolverTest, NoCascadeLayers) {
-  ScopedCSSCascadeLayersForTest enabled_scope(true);
-
   GetDocument().documentElement()->setInnerHTML(R"HTML(
     <style>
       #a { color: green; }
@@ -1447,8 +1446,6 @@ TEST_F(StyleResolverTest, NoCascadeLayers) {
 }
 
 TEST_F(StyleResolverTest, CascadeLayersInDifferentSheets) {
-  ScopedCSSCascadeLayersForTest enabled_scope(true);
-
   GetDocument().documentElement()->setInnerHTML(R"HTML(
     <style>
       @layer foo, bar;
@@ -1503,8 +1500,6 @@ TEST_F(StyleResolverTest, CascadeLayersInDifferentSheets) {
 }
 
 TEST_F(StyleResolverTest, CascadeLayersInDifferentTreeScopes) {
-  ScopedCSSCascadeLayersForTest enabled_scope(true);
-
   GetDocument()
       .documentElement()
       ->setInnerHTMLWithDeclarativeShadowDOMForTesting(R"HTML(
@@ -1559,11 +1554,55 @@ TEST_F(StyleResolverTest, CascadeLayersInDifferentTreeScopes) {
             &GetDocument());
 }
 
+// https://crbug.com/1313357
+TEST_F(StyleResolverTest, CascadeLayersAfterModifyingAnotherSheet) {
+  GetDocument().documentElement()->setInnerHTML(R"HTML(
+    <style>
+      @layer {
+        target { color: red; }
+      }
+    </style>
+    <style id="addrule"></style>
+    <target></target>
+  )HTML");
+
+  UpdateAllLifecyclePhasesForTest();
+
+  GetDocument().getElementById("addrule")->appendChild(
+      GetDocument().createTextNode("target { font-size: 10px; }"));
+
+  UpdateAllLifecyclePhasesForTest();
+
+  ASSERT_TRUE(GetDocument().GetScopedStyleResolver()->GetCascadeLayerMap());
+
+  StyleResolverState state(GetDocument(),
+                           *GetDocument().QuerySelector("target"));
+  SelectorFilter filter;
+  MatchResult match_result;
+  ElementRuleCollector collector(state.ElementContext(), StyleRecalcContext(),
+                                 filter, match_result, state.Style(),
+                                 EInsideLink::kNotInsideLink);
+  MatchAllRules(state, collector);
+  const auto& properties = match_result.GetMatchedProperties();
+  ASSERT_EQ(properties.size(), 2u);
+
+  const uint16_t kImplicitOuterLayerOrder =
+      CascadeLayerMap::kImplicitOuterLayerOrder;
+
+  // @layer { target { color: red } }"
+  EXPECT_TRUE(properties[0].properties->HasProperty(CSSPropertyID::kColor));
+  EXPECT_EQ(0u, properties[0].types_.layer_order);
+  EXPECT_EQ(properties[0].types_.origin, CascadeOrigin::kAuthor);
+
+  // target { font-size: 10px }
+  EXPECT_TRUE(properties[1].properties->HasProperty(CSSPropertyID::kFontSize));
+  EXPECT_EQ(kImplicitOuterLayerOrder, properties[1].types_.layer_order);
+  EXPECT_EQ(properties[1].types_.origin, CascadeOrigin::kAuthor);
+}
+
 // TODO(crbug.com/1095765): We should have a WPT for this test case, but
 // currently Blink web test runner can't test @page rules in WPT.
 TEST_F(StyleResolverTest, CascadeLayersAndPageRules) {
-  ScopedCSSCascadeLayersForTest enabled_scope(true);
-
   GetDocument().documentElement()->setInnerHTML(R"HTML(
     <style>
     @page { margin-top: 100px; }
@@ -1872,8 +1911,6 @@ TEST_F(StyleResolverTest, IsInertWithFullscreen) {
 
 TEST_F(StyleResolverTest, IsInertWithFrameAndFullscreen) {
   Document& document = GetDocument();
-  LocalFrame& frame = GetFrame();
-
   document.body()->setInnerHTML(R"HTML(
     <div>div_text</div>
   )HTML");
@@ -1898,25 +1935,7 @@ TEST_F(StyleResolverTest, IsInertWithFrameAndFullscreen) {
   EXPECT_FALSE(div->GetComputedStyle()->IsInert());
   EXPECT_FALSE(div_text->GetComputedStyle()->IsInert());
 
-  frame.SetIsInert(true);
-  UpdateAllLifecyclePhasesForTest();
-
-  EXPECT_FALSE(document.GetComputedStyle()->IsInert());
-  EXPECT_TRUE(html->GetComputedStyle()->IsInert());
-  EXPECT_TRUE(body->GetComputedStyle()->IsInert());
-  EXPECT_TRUE(div->GetComputedStyle()->IsInert());
-  EXPECT_TRUE(div_text->GetComputedStyle()->IsInert());
-
   EnterFullscreen(document, *body);
-  UpdateAllLifecyclePhasesForTest();
-
-  EXPECT_FALSE(document.GetComputedStyle()->IsInert());
-  EXPECT_TRUE(html->GetComputedStyle()->IsInert());
-  EXPECT_TRUE(body->GetComputedStyle()->IsInert());
-  EXPECT_TRUE(div->GetComputedStyle()->IsInert());
-  EXPECT_TRUE(div_text->GetComputedStyle()->IsInert());
-
-  frame.SetIsInert(false);
   UpdateAllLifecyclePhasesForTest();
 
   EXPECT_FALSE(document.GetComputedStyle()->IsInert());
@@ -1933,20 +1952,10 @@ TEST_F(StyleResolverTest, IsInertWithFrameAndFullscreen) {
   EXPECT_FALSE(body->GetComputedStyle()->IsInert());
   EXPECT_FALSE(div->GetComputedStyle()->IsInert());
   EXPECT_FALSE(div_text->GetComputedStyle()->IsInert());
-
-  frame.SetIsInert(true);
-  UpdateAllLifecyclePhasesForTest();
-
-  EXPECT_FALSE(document.GetComputedStyle()->IsInert());
-  EXPECT_TRUE(html->GetComputedStyle()->IsInert());
-  EXPECT_TRUE(body->GetComputedStyle()->IsInert());
-  EXPECT_TRUE(div->GetComputedStyle()->IsInert());
-  EXPECT_TRUE(div_text->GetComputedStyle()->IsInert());
 }
 
 TEST_F(StyleResolverTest, IsInertWithBackdrop) {
   Document& document = GetDocument();
-  LocalFrame& frame = GetFrame();
   NonThrowableExceptionState exception_state;
 
   document.documentElement()->setInnerHTML(R"HTML(
@@ -1977,35 +1986,21 @@ TEST_F(StyleResolverTest, IsInertWithBackdrop) {
   EXPECT_FALSE(IsBackdropInert(body));
   EXPECT_FALSE(IsBackdropInert(dialog));
 
-  frame.SetIsInert(true);
-  UpdateAllLifecyclePhasesForTest();
-
-  EXPECT_EQ(html->GetPseudoElement(kPseudoIdBackdrop), nullptr);
-  EXPECT_TRUE(IsBackdropInert(body));
-  EXPECT_TRUE(IsBackdropInert(dialog));
-
   dialog->close();
   UpdateAllLifecyclePhasesForTest();
 
   EXPECT_EQ(html->GetPseudoElement(kPseudoIdBackdrop), nullptr);
-  EXPECT_TRUE(IsBackdropInert(body));
+  EXPECT_FALSE(IsBackdropInert(body));
   EXPECT_EQ(dialog->GetPseudoElement(kPseudoIdBackdrop), nullptr);
 
   EnterFullscreen(document, *html);
   UpdateAllLifecyclePhasesForTest();
 
-  EXPECT_TRUE(IsBackdropInert(html));
+  EXPECT_FALSE(IsBackdropInert(html));
   EXPECT_EQ(body->GetPseudoElement(kPseudoIdBackdrop), nullptr);
   EXPECT_EQ(dialog->GetPseudoElement(kPseudoIdBackdrop), nullptr);
 
   dialog->showModal(exception_state);
-  UpdateAllLifecyclePhasesForTest();
-
-  EXPECT_TRUE(IsBackdropInert(html));
-  EXPECT_EQ(body->GetPseudoElement(kPseudoIdBackdrop), nullptr);
-  EXPECT_TRUE(IsBackdropInert(dialog));
-
-  frame.SetIsInert(false);
   UpdateAllLifecyclePhasesForTest();
 
   EXPECT_FALSE(IsBackdropInert(html));
@@ -2101,10 +2096,10 @@ TEST_F(StyleResolverTestCQ, StyleRulesForElementContainerQuery) {
   GetDocument().documentElement()->setInnerHTML(R"HTML(
     <style>
       #container { container-type: inline-size }
-      @container size(min-width: 1px) {
+      @container (min-width: 1px) {
         #target { }
       }
-      @container size(min-width: 99999px) {
+      @container (min-width: 99999px) {
         #target { color: red }
       }
     </style>

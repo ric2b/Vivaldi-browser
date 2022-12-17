@@ -53,12 +53,14 @@
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_root.h"
 #include "third_party/blink/renderer/core/loader/frame_load_request.h"
+#include "third_party/blink/renderer/core/page/page_animator.h"
 #include "third_party/blink/renderer/core/paint/paint_auto_dark_mode.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/svg/animation/smil_time_container.h"
 #include "third_party/blink/renderer/core/svg/graphics/svg_image_chrome_client.h"
 #include "third_party/blink/renderer/core/svg/svg_animated_preserve_aspect_ratio.h"
+#include "third_party/blink/renderer/core/svg/svg_document_extensions.h"
 #include "third_party/blink/renderer/core/svg/svg_fe_image_element.h"
 #include "third_party/blink/renderer/core/svg/svg_image_element.h"
 #include "third_party/blink/renderer/core/svg/svg_svg_element.h"
@@ -150,6 +152,11 @@ class FailingLoaderFactory final : public WebURLLoaderFactory {
         std::move(unfreezable_task_runner_handle));
   }
 };
+
+bool HasSmilAnimations(const Document& document) {
+  const SVGDocumentExtensions* extensions = document.SvgExtensions();
+  return extensions && extensions->HasSmilAnimations();
+}
 
 }  // namespace
 
@@ -508,7 +515,6 @@ bool SVGImage::ApplyShaderInternal(const DrawInfo& draw_info,
 
 bool SVGImage::ApplyShader(cc::PaintFlags& flags,
                            const SkMatrix& local_matrix,
-                           const gfx::RectF& dst_rect,
                            const gfx::RectF& src_rect,
                            const ImageDrawOptions& draw_options) {
   const DrawInfo draw_info(gfx::SizeF(intrinsic_size_), 1, NullURL(),
@@ -667,8 +673,8 @@ bool SVGImage::MaybeAnimated() {
   SVGSVGElement* root_element = RootElement();
   if (!root_element)
     return false;
-  return root_element->TimeContainer()->HasAnimations() ||
-         root_element->GetDocument().Timeline().HasPendingUpdates();
+  const Document& document = root_element->GetDocument();
+  return HasSmilAnimations(document) || document.Timeline().HasPendingUpdates();
 }
 
 void SVGImage::ServiceAnimations(
@@ -741,7 +747,7 @@ SVGImageChromeClient& SVGImage::ChromeClientForTesting() {
 
 void SVGImage::UpdateUseCounters(const Document& document) const {
   if (SVGSVGElement* root_element = RootElement()) {
-    if (root_element->TimeContainer()->HasAnimations()) {
+    if (HasSmilAnimations(root_element->GetDocument())) {
       document.CountUse(WebFeature::kSVGSMILAnimationInImageRegardlessOfCache);
     }
   }

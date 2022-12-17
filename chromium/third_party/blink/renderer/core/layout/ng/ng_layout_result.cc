@@ -10,6 +10,7 @@
 #include "third_party/blink/renderer/core/layout/ng/exclusions/ng_exclusion_space.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_line_box_fragment_builder.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_box_fragment_builder.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_column_spanner_path.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_positioned_float.h"
 #include "third_party/blink/renderer/platform/geometry/layout_unit.h"
@@ -22,7 +23,7 @@ namespace {
 struct SameSizeAsNGLayoutResult
     : public GarbageCollected<SameSizeAsNGLayoutResult> {
   const NGConstraintSpace space;
-  scoped_refptr<void*> physical_fragment;
+  Member<void*> physical_fragment;
   Member<void*> rare_data_;
   union {
     NGBfcOffset bfc_offset;
@@ -50,10 +51,9 @@ const NGLayoutResult* NGLayoutResult::CloneWithPostLayoutFragments(
                  updated_layout_overflow));
 }
 
-NGLayoutResult::NGLayoutResult(
-    NGBoxFragmentBuilderPassKey passkey,
-    scoped_refptr<const NGPhysicalFragment> physical_fragment,
-    NGBoxFragmentBuilder* builder)
+NGLayoutResult::NGLayoutResult(NGBoxFragmentBuilderPassKey passkey,
+                               const NGPhysicalFragment* physical_fragment,
+                               NGBoxFragmentBuilder* builder)
     : NGLayoutResult(std::move(physical_fragment),
                      static_cast<NGContainerFragmentBuilder*>(builder)) {
   bitfields_.is_initial_block_size_indefinite =
@@ -102,32 +102,43 @@ NGLayoutResult::NGLayoutResult(
         static_cast<unsigned>(builder->previous_break_after_);
   }
 
-  if (builder->table_column_count_)
-    EnsureRareData()->table_column_count_ = *builder->table_column_count_;
-  if (builder->math_data_.has_value())
-    EnsureRareData()->math_layout_data_ = builder->math_data_;
-  if (builder->grid_layout_data_)
-    EnsureRareData()->grid_layout_data_ = std::move(builder->grid_layout_data_);
+  if (builder->table_column_count_) {
+    EnsureRareData()->EnsureTableData()->table_column_count =
+        *builder->table_column_count_;
+  }
+  if (builder->math_italic_correction_) {
+    EnsureRareData()->EnsureMathData()->italic_correction =
+        builder->math_italic_correction_;
+  }
+  if (builder->grid_layout_data_) {
+    EnsureRareData()->EnsureGridData()->grid_layout_data =
+        std::move(builder->grid_layout_data_);
+  }
+  if (builder->flex_layout_data_) {
+    EnsureRareData()->EnsureFlexData()->flex_layout_data =
+        std::move(builder->flex_layout_data_);
+  }
 }
 
-NGLayoutResult::NGLayoutResult(
-    NGLineBoxFragmentBuilderPassKey passkey,
-    scoped_refptr<const NGPhysicalFragment> physical_fragment,
-    NGLineBoxFragmentBuilder* builder)
+NGLayoutResult::NGLayoutResult(NGLineBoxFragmentBuilderPassKey passkey,
+                               const NGPhysicalFragment* physical_fragment,
+                               NGLineBoxFragmentBuilder* builder)
     : NGLayoutResult(std::move(physical_fragment),
                      static_cast<NGContainerFragmentBuilder*>(builder)) {
   DCHECK_EQ(builder->bfc_block_offset_.has_value(),
             builder->line_box_bfc_block_offset_.has_value());
   if (builder->bfc_block_offset_ != builder->line_box_bfc_block_offset_) {
-    EnsureRareData()->line_box_bfc_block_offset =
-        builder->line_box_bfc_block_offset_;
+    EnsureRareData()->SetLineBoxBfcBlockOffset(
+        *builder->line_box_bfc_block_offset_);
   }
   if (builder->annotation_block_offset_adjustment_) {
-    EnsureRareData()->annotation_block_offset_adjustment =
+    EnsureRareData()->EnsureLineData()->annotation_block_offset_adjustment =
         builder->annotation_block_offset_adjustment_;
   }
-  if (builder->clearance_after_line_)
-    EnsureRareData()->clearance_after_line = builder->clearance_after_line_;
+  if (builder->clearance_after_line_) {
+    EnsureRareData()->EnsureLineData()->clearance_after_line =
+        builder->clearance_after_line_;
+  }
 }
 
 NGLayoutResult::NGLayoutResult(NGContainerFragmentBuilderPassKey key,
@@ -152,7 +163,7 @@ NGLayoutResult::NGLayoutResult(const NGLayoutResult& other,
   if (other.HasRareData()) {
     rare_data_ = MakeGarbageCollected<RareData>(*other.rare_data_);
     rare_data_->bfc_line_offset = bfc_line_offset;
-    rare_data_->bfc_block_offset = bfc_block_offset;
+    rare_data_->SetBfcBlockOffset(bfc_block_offset);
   } else if (!bitfields_.has_oof_positioned_offset) {
     bfc_offset_.line_offset = bfc_line_offset;
     bfc_offset_.block_offset = bfc_block_offset.value_or(LayoutUnit());
@@ -182,9 +193,8 @@ NGLayoutResult::NGLayoutResult(const NGLayoutResult& other,
 #endif
 }
 
-NGLayoutResult::NGLayoutResult(
-    const NGLayoutResult& other,
-    scoped_refptr<const NGPhysicalFragment> physical_fragment)
+NGLayoutResult::NGLayoutResult(const NGLayoutResult& other,
+                               const NGPhysicalFragment* physical_fragment)
     : space_(other.space_),
       physical_fragment_(std::move(physical_fragment)),
       intrinsic_block_size_(other.intrinsic_block_size_),
@@ -205,9 +215,8 @@ NGLayoutResult::NGLayoutResult(
 #endif
 }
 
-NGLayoutResult::NGLayoutResult(
-    scoped_refptr<const NGPhysicalFragment> physical_fragment,
-    NGContainerFragmentBuilder* builder)
+NGLayoutResult::NGLayoutResult(const NGPhysicalFragment* physical_fragment,
+                               NGContainerFragmentBuilder* builder)
     : space_(builder->space_ ? NGConstraintSpace(*builder->space_)
                              : NGConstraintSpace()),
       physical_fragment_(std::move(physical_fragment)),
@@ -255,14 +264,18 @@ NGLayoutResult::NGLayoutResult(
       (!physical_fragment_ || !physical_fragment_->BreakToken()))
     EnsureRareData()->early_break = builder->early_break_;
 
-  if (builder->column_spanner_) {
-    EnsureRareData()->column_spanner = builder->column_spanner_;
+  if (builder->column_spanner_path_) {
+    EnsureRareData()->EnsureBlockData()->column_spanner_path =
+        builder->column_spanner_path_;
     bitfields_.is_empty_spanner_parent = builder->is_empty_spanner_parent_;
   }
 
+  bitfields_.should_force_same_fragmentation_flow =
+      builder->should_force_same_fragmentation_flow_;
+
   if (HasRareData()) {
     rare_data_->bfc_line_offset = builder->bfc_line_offset_;
-    rare_data_->bfc_block_offset = builder->bfc_block_offset_;
+    rare_data_->SetBfcBlockOffset(builder->bfc_block_offset_);
   } else {
     bfc_offset_.line_offset = builder->bfc_line_offset_;
     bfc_offset_.block_offset =
@@ -355,11 +368,16 @@ void NGLayoutResult::AssertSoleBoxFragment() const {
 #endif
 
 void NGLayoutResult::Trace(Visitor* visitor) const {
+  visitor->Trace(physical_fragment_);
   visitor->Trace(rare_data_);
 }
 
 void NGLayoutResult::RareData::Trace(Visitor* visitor) const {
   visitor->Trace(early_break);
+  // This will not cause TOCTOU issue because data_union_type is set in the
+  // constructor and never changed.
+  if (const BlockData* data = GetBlockData())
+    visitor->Trace(data->column_spanner_path);
 }
 
 }  // namespace blink

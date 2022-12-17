@@ -618,7 +618,6 @@
 <translation id="5170206230005240598">Brayl başlıqları aktivdir</translation>
 <translation id="5183440668879371625">Brayl öncəki xətt</translation>
 <translation id="5189244881767082992">Xətt</translation>
-<translation id="5234747236692380506"><ph name="TEXT" /> yazın</translation>
 <translation id="5263034204789987535">Qarğıdalı sarısı</translation>
 <translation id="5263344797180442561">h2</translation>
 <translation id="528468243742722775">Son</translation>
@@ -685,6 +684,8 @@
 <translation id="5623842676595125836">log</translation>
 <translation id="5628125749885014029">h4</translation>
 <translation id="5632083598315326067">Qrafik simvol</translation>
+<translation id="5648939288050772726">Təbriklər! ChromeVox'dan uğurla istifadə etmək üçün əsasları öyrəndiniz. Unutmayın ki, Axtarış+Nöqtə üzərinə basmaqla istənilən vaxt ChromeVox əmr menyusunu aça bilərsiniz. ChromeVox və ChromeOS haqqında daha ətraflı məlumat əldə etmək üçün aşağıdakı məqalələrə daxil olun.
+    Təlim materialını tamamladınızsa, ChromeVox'dan istifadə edərək "Bağlayın" düyməsinə yönəlin və üzərinə klikləyin.</translation>
 <translation id="5653397561111110475">Chromebook sensor əlçatımlılıq xüsusiyyətlərini istifadə edin</translation>
 <translation id="5655682562155942719">Keçid Əmrləri</translation>
 <translation id="56637627897541303">Mətn sahəsi</translation>
@@ -794,6 +795,7 @@
 <translation id="641759969622533235">{COUNT,plural, =1{iki nöqtə}other{# iki nöqtə}}</translation>
 <translation id="6444046323172968959">Siqnal dialoqu</translation>
 <translation id="6452403590345320472">Mündəricat</translation>
+<translation id="6457542714329819968">yazın</translation>
 <translation id="6468049171101508116">Növbəti düymə</translation>
 <translation id="646954774886932461">İndeks</translation>
 <translation id="6475604559827479857">Sözləri vurğulamaq üçün rənglər:</translation>
@@ -966,8 +968,6 @@
 <translation id="7701196182766842984">autolst</translation>
 <translation id="7713139339518499741">Təbii səs</translation>
 <translation id="7714340021005120797">Sonrakı kombo xanası yoxdur</translation>
-<translation id="772146615414628379">Təbriklər! ChromeVox'dan uğurla istifadə etmək üçün əsasları öyrəndiniz. Unutmayın ki, Axtarış+Nöqtə üzərinə basmaqla istənilən vaxt ChromeVox əmr menyusunu aça bilərsiniz. ChromeVox və Chrome ƏS haqqında daha ətraflı məlumat əldə etmək üçün aşağıdakı məqalələrə daxil olun.
-    Təlim materialını tamamladınızsa, ChromeVox'dan istifadə edərək "Bağlayın" düyməsinə yönəlin və üzərinə klikləyin.</translation>
 <translation id="7724603315864178912">Kəsin</translation>
 <translation id="7731785449856576010">Sonrakı media vidceti yoxdur</translation>
 <translation id="7735498529470878067">"Toxunma ilə kəşf edin" düyməsi ekranda olanları tez bir zamanda anlamanıza kömək edə bilər.</translation>

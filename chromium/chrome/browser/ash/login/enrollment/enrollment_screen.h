@@ -12,6 +12,7 @@
 #include "base/cancelable_callback.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/weak_ptr.h"
+#include "base/timer/timer.h"
 #include "chrome/browser/ash/authpolicy/authpolicy_helper.h"
 #include "chrome/browser/ash/login/enrollment/enrollment_screen_view.h"
 #include "chrome/browser/ash/login/enrollment/enterprise_enrollment_helper.h"
@@ -78,6 +79,7 @@ class EnrollmentScreen
 
   // EnrollmentScreenView::Controller implementation:
   void OnLoginDone(const std::string& user,
+                   int license_type,
                    const std::string& auth_code) override;
   void OnRetry() override;
   void OnCancel() override;
@@ -129,7 +131,7 @@ class EnrollmentScreen
   void ShowImpl() override;
   void HideImpl() override;
   bool HandleAccelerator(LoginAcceleratorAction action) override;
-  void OnUserAction(const std::string& action_id) override;
+  void OnUserActionDeprecated(const std::string& action_id) override;
 
   // Expose the exit_callback to test screen overrides.
   ScreenExitCallback* exit_callback() { return &exit_callback_; }
@@ -244,6 +246,7 @@ class EnrollmentScreen
   absl::optional<TpmStatusCallback> tpm_ownership_callback_for_testing_;
   policy::EnrollmentConfig config_;
   policy::EnrollmentConfig enrollment_config_;
+  policy::LicenseType license_type_to_use_ = policy::LicenseType::kEnterprise;
 
   // 'Current' and 'Next' authentication mechanisms to be used.
   Auth current_auth_ = AUTH_OAUTH;

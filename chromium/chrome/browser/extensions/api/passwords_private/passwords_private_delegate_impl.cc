@@ -23,7 +23,7 @@
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/sync_service_factory.h"
-#include "chrome/browser/ui/passwords/manage_passwords_view_utils.h"
+#include "chrome/browser/ui/passwords/ui_utils.h"
 #include "chrome/common/extensions/api/passwords_private.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
@@ -260,8 +260,7 @@ bool PasswordsPrivateDelegateImpl::AddPassword(
 
 bool PasswordsPrivateDelegateImpl::ChangeSavedPassword(
     const std::vector<int>& ids,
-    const std::u16string& new_username,
-    const std::u16string& new_password) {
+    const api::passwords_private::ChangeSavedPasswordParams& params) {
   const std::vector<std::string> sort_keys =
       GetSortKeys(password_id_generator_, ids);
 
@@ -279,8 +278,14 @@ bool PasswordsPrivateDelegateImpl::ChangeSavedPassword(
       forms_to_change.push_back(*form);
   }
 
-  return saved_passwords_presenter_.EditSavedPasswords(
-      forms_to_change, new_username, new_password);
+  std::u16string username = base::UTF8ToUTF16(params.username);
+  std::u16string password = base::UTF8ToUTF16(params.password);
+  if (params.note) {
+    return saved_passwords_presenter_.EditSavedPasswords(
+        forms_to_change, username, password, base::UTF8ToUTF16(*params.note));
+  }
+  return saved_passwords_presenter_.EditSavedPasswords(forms_to_change,
+                                                       username, password);
 }
 
 void PasswordsPrivateDelegateImpl::RemoveSavedPasswords(
@@ -375,6 +380,7 @@ void PasswordsPrivateDelegateImpl::SetPasswordList(
     api::passwords_private::PasswordUiEntry entry;
     entry.urls = CreateUrlCollectionFromForm(*form);
     entry.username = base::UTF16ToUTF8(form->username_value);
+    entry.password_note = base::UTF16ToUTF8(form->note.value);
     entry.id = password_id_generator_.GenerateId(
         password_manager::CreateSortKey(*form));
     entry.frontend_id = password_frontend_id_generator_.GenerateId(

@@ -32,7 +32,6 @@
 #include <memory>
 #include <utility>
 
-#include "base/auto_reset.h"
 #include "build/build_config.h"
 #include "cc/layers/content_layer_client.h"
 #include "cc/layers/picture_layer.h"
@@ -42,6 +41,7 @@
 #include "third_party/blink/public/platform/web_data.h"
 #include "third_party/blink/public/resources/grit/inspector_overlay_resources_map.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
+#include "third_party/blink/renderer/bindings/core/v8/script_evaluation_result.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_inspector_overlay_host.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_utilities.h"
@@ -707,7 +707,7 @@ Response InspectorOverlayAgent::setShowGridOverlays(
         MakeGarbageCollected<PersistentTool>(this, GetFrontend());
   }
 
-  Vector<std::pair<Member<Node>, std::unique_ptr<InspectorGridHighlightConfig>>>
+  HeapHashMap<WeakMember<Node>, std::unique_ptr<InspectorGridHighlightConfig>>
       configs;
   for (std::unique_ptr<protocol::Overlay::GridNodeHighlightConfig>& config :
        *grid_node_highlight_configs) {
@@ -715,9 +715,8 @@ Response InspectorOverlayAgent::setShowGridOverlays(
     Response response = dom_agent_->AssertNode(config->getNodeId(), node);
     if (!response.IsSuccess())
       return response;
-    configs.push_back(
-        std::make_pair(node, InspectorOverlayAgent::ToGridHighlightConfig(
-                                 config->getGridHighlightConfig())));
+    configs.insert(node, InspectorOverlayAgent::ToGridHighlightConfig(
+                             config->getGridHighlightConfig()));
   }
 
   persistent_tool_->SetGridConfigs(std::move(configs));
@@ -735,8 +734,8 @@ Response InspectorOverlayAgent::setShowFlexOverlays(
         MakeGarbageCollected<PersistentTool>(this, GetFrontend());
   }
 
-  Vector<std::pair<Member<Node>,
-                   std::unique_ptr<InspectorFlexContainerHighlightConfig>>>
+  HeapHashMap<WeakMember<Node>,
+              std::unique_ptr<InspectorFlexContainerHighlightConfig>>
       configs;
 
   for (std::unique_ptr<protocol::Overlay::FlexNodeHighlightConfig>& config :
@@ -745,9 +744,8 @@ Response InspectorOverlayAgent::setShowFlexOverlays(
     Response response = dom_agent_->AssertNode(config->getNodeId(), node);
     if (!response.IsSuccess())
       return response;
-    configs.push_back(std::make_pair(
-        node, InspectorOverlayAgent::ToFlexContainerHighlightConfig(
-                  config->getFlexContainerHighlightConfig())));
+    configs.insert(node, InspectorOverlayAgent::ToFlexContainerHighlightConfig(
+                             config->getFlexContainerHighlightConfig()));
   }
 
   persistent_tool_->SetFlexContainerConfigs(std::move(configs));
@@ -766,9 +764,8 @@ Response InspectorOverlayAgent::setShowScrollSnapOverlays(
         MakeGarbageCollected<PersistentTool>(this, GetFrontend());
   }
 
-  Vector<
-      std::pair<Member<Node>,
-                std::unique_ptr<InspectorScrollSnapContainerHighlightConfig>>>
+  HeapHashMap<WeakMember<Node>,
+              std::unique_ptr<InspectorScrollSnapContainerHighlightConfig>>
       configs;
 
   for (std::unique_ptr<protocol::Overlay::ScrollSnapHighlightConfig>& config :
@@ -777,9 +774,9 @@ Response InspectorOverlayAgent::setShowScrollSnapOverlays(
     Response response = dom_agent_->AssertNode(config->getNodeId(), node);
     if (!response.IsSuccess())
       return response;
-    configs.push_back(std::make_pair(
-        node, InspectorOverlayAgent::ToScrollSnapContainerHighlightConfig(
-                  config->getScrollSnapContainerHighlightConfig())));
+    configs.insert(node,
+                   InspectorOverlayAgent::ToScrollSnapContainerHighlightConfig(
+                       config->getScrollSnapContainerHighlightConfig()));
   }
 
   persistent_tool_->SetScrollSnapConfigs(std::move(configs));
@@ -798,9 +795,8 @@ Response InspectorOverlayAgent::setShowContainerQueryOverlays(
         MakeGarbageCollected<PersistentTool>(this, GetFrontend());
   }
 
-  Vector<std::pair<
-      Member<Node>,
-      std::unique_ptr<InspectorContainerQueryContainerHighlightConfig>>>
+  HeapHashMap<WeakMember<Node>,
+              std::unique_ptr<InspectorContainerQueryContainerHighlightConfig>>
       configs;
 
   for (std::unique_ptr<protocol::Overlay::ContainerQueryHighlightConfig>&
@@ -809,9 +805,9 @@ Response InspectorOverlayAgent::setShowContainerQueryOverlays(
     Response response = dom_agent_->AssertNode(config->getNodeId(), node);
     if (!response.IsSuccess())
       return response;
-    configs.push_back(std::make_pair(
+    configs.insert(
         node, InspectorOverlayAgent::ToContainerQueryContainerHighlightConfig(
-                  config->getContainerQueryContainerHighlightConfig())));
+                  config->getContainerQueryContainerHighlightConfig()));
   }
 
   persistent_tool_->SetContainerQueryConfigs(std::move(configs));
@@ -830,10 +826,11 @@ Response InspectorOverlayAgent::setShowIsolatedElements(
         MakeGarbageCollected<PersistentTool>(this, GetFrontend());
   }
 
-  Vector<std::pair<Member<Element>,
-                   std::unique_ptr<InspectorIsolationModeHighlightConfig>>>
+  HeapHashMap<WeakMember<Element>,
+              std::unique_ptr<InspectorIsolationModeHighlightConfig>>
       configs;
 
+  int idx = 0;
   for (std::unique_ptr<protocol::Overlay::IsolatedElementHighlightConfig>&
            config : *isolated_element_highlight_configs) {
     Element* element = nullptr;
@@ -841,9 +838,10 @@ Response InspectorOverlayAgent::setShowIsolatedElements(
     Response response = dom_agent_->AssertElement(config->getNodeId(), element);
     if (!response.IsSuccess())
       return response;
-    configs.push_back(std::make_pair(
-        element, InspectorOverlayAgent::ToIsolationModeHighlightConfig(
-                     config->getIsolationModeHighlightConfig())));
+    configs.insert(element,
+                   InspectorOverlayAgent::ToIsolationModeHighlightConfig(
+                       config->getIsolationModeHighlightConfig(), idx));
+    idx++;
   }
 
   persistent_tool_->SetIsolatedElementConfigs(std::move(configs));
@@ -928,16 +926,17 @@ Response InspectorOverlayAgent::getHighlightObjectForTest(
   namespace ColorFormatEnum = protocol::Overlay::ColorFormatEnum;
   if (format == ColorFormatEnum::Hsl) {
     config->color_format = ColorFormat::kHsl;
+  } else if (format == ColorFormatEnum::Hwb) {
+    config->color_format = ColorFormat::kHwb;
   } else if (format == ColorFormatEnum::Rgb) {
     config->color_format = ColorFormat::kRgb;
   } else {
     config->color_format = ColorFormat::kHex;
   }
-
-  node->GetDocument().EnsurePaintLocationDataValidForNode(
-      node, DocumentUpdateReason::kInspector);
   NodeHighlightTool tool(this, GetFrontend(), node, "" /* selector_list */,
                          std::move(config));
+  node->GetDocument().EnsurePaintLocationDataValidForNode(
+      node, DocumentUpdateReason::kInspector);
   *result = tool.GetNodeInspectorHighlightAsJson(
       true /* append_element_info */, include_distance.fromMaybe(false));
   return Response::Success();
@@ -947,16 +946,16 @@ Response InspectorOverlayAgent::getGridHighlightObjectsForTest(
     std::unique_ptr<protocol::Array<int>> node_ids,
     std::unique_ptr<protocol::DictionaryValue>* highlights) {
   PersistentTool persistent_tool(this, GetFrontend());
-  Vector<std::pair<Member<Node>, std::unique_ptr<InspectorGridHighlightConfig>>>
+
+  HeapHashMap<WeakMember<Node>, std::unique_ptr<InspectorGridHighlightConfig>>
       configs;
   for (const int node_id : *node_ids) {
     Node* node = nullptr;
     Response response = dom_agent_->AssertNode(node_id, node);
     if (!response.IsSuccess())
       return response;
-    configs.push_back(
-        std::make_pair(node, std::make_unique<InspectorGridHighlightConfig>(
-                                 InspectorHighlight::DefaultGridConfig())));
+    configs.insert(node, std::make_unique<InspectorGridHighlightConfig>(
+                             InspectorHighlight::DefaultGridConfig()));
   }
   persistent_tool.SetGridConfigs(std::move(configs));
   *highlights = persistent_tool.GetGridInspectorHighlightsAsJson();
@@ -1372,7 +1371,8 @@ String InspectorOverlayAgent::EvaluateInOverlayForTest(const String& script) {
           script, ScriptSourceLocationType::kInspector)
           ->RunScriptAndReturnValue(
               To<LocalFrame>(OverlayMainFrame())->DomWindow(),
-              ExecuteScriptPolicy::kExecuteScriptWhenScriptsDisabled);
+              ExecuteScriptPolicy::kExecuteScriptWhenScriptsDisabled)
+          .GetSuccessValueOrEmpty();
   return ToCoreStringWithUndefinedOrNullCheck(string);
 }
 
@@ -1582,7 +1582,7 @@ Response InspectorOverlayAgent::HighlightConfigFromInspectorObject(
   String format = config->getColorFormat("hex");
 
   if (format != ColorFormatEnum::Rgb && format != ColorFormatEnum::Hex &&
-      format != ColorFormatEnum::Hsl) {
+      format != ColorFormatEnum::Hsl && format != ColorFormatEnum::Hwb) {
     return Response::InvalidParams("Unknown color format");
   }
 
@@ -1748,7 +1748,8 @@ InspectorOverlayAgent::ToFlexItemHighlightConfig(
 // static
 std::unique_ptr<InspectorIsolationModeHighlightConfig>
 InspectorOverlayAgent::ToIsolationModeHighlightConfig(
-    protocol::Overlay::IsolationModeHighlightConfig* config) {
+    protocol::Overlay::IsolationModeHighlightConfig* config,
+    int idx) {
   if (!config) {
     return nullptr;
   }
@@ -1760,6 +1761,7 @@ InspectorOverlayAgent::ToIsolationModeHighlightConfig(
       InspectorDOMAgent::ParseColor(config->getResizerHandleColor(nullptr));
   highlight_config->mask_color =
       InspectorDOMAgent::ParseColor(config->getMaskColor(nullptr));
+  highlight_config->highlight_index = idx;
 
   return highlight_config;
 }
@@ -1838,6 +1840,8 @@ InspectorOverlayAgent::ToHighlightConfig(
 
   if (format == ColorFormatEnum::Hsl) {
     highlight_config->color_format = ColorFormat::kHsl;
+  } else if (format == ColorFormatEnum::Hwb) {
+    highlight_config->color_format = ColorFormat::kHwb;
   } else if (format == ColorFormatEnum::Rgb) {
     highlight_config->color_format = ColorFormat::kRgb;
   } else {

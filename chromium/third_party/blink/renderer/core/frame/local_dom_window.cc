@@ -76,6 +76,7 @@
 #include "third_party/blink/renderer/core/editing/suggestion/text_suggestion_controller.h"
 #include "third_party/blink/renderer/core/events/hash_change_event.h"
 #include "third_party/blink/renderer/core/events/message_event.h"
+#include "third_party/blink/renderer/core/events/page_transition_event.h"
 #include "third_party/blink/renderer/core/events/pop_state_event.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/execution_context/window_agent.h"
@@ -127,7 +128,6 @@
 #include "third_party/blink/renderer/core/timing/window_performance.h"
 #include "third_party/blink/renderer/core/trustedtypes/trusted_type_policy_factory.h"
 #include "third_party/blink/renderer/core/trustedtypes/trusted_types_util.h"
-#include "third_party/blink/renderer/core/workers/dedicated_worker.h"
 #include "third_party/blink/renderer/platform/back_forward_cache_buffer_limit_tracker.h"
 #include "third_party/blink/renderer/platform/bindings/exception_messages.h"
 #include "third_party/blink/renderer/platform/bindings/microtask.h"
@@ -141,6 +141,7 @@
 #include "third_party/blink/renderer/platform/timer.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/widget/frame_widget.h"
+#include "third_party/blink/renderer/platform/wtf/cross_thread_copier_std.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 #include "ui/display/screen_info.h"
 #include "v8/include/v8.h"
@@ -200,7 +201,9 @@ LocalDOMWindow::LocalDOMWindow(LocalFrame& frame,
       token_(frame.GetLocalFrameToken()),
       post_message_counter_(PostMessagePartition::kSameProcess),
       network_state_observer_(MakeGarbageCollected<NetworkStateObserver>(this)),
-      anonymous_(anonymous) {}
+      anonymous_(anonymous),
+      closewatcher_stack_(
+          MakeGarbageCollected<CloseWatcher::WatcherStack>(this)) {}
 
 void LocalDOMWindow::BindContentSecurityPolicy() {
   DCHECK(!GetContentSecurityPolicy()->IsBound());
@@ -621,8 +624,8 @@ void LocalDOMWindow::AddConsoleMessageImpl(ConsoleMessage* console_message,
     console_message = MakeGarbageCollected<ConsoleMessage>(
         console_message->Source(), console_message->Level(),
         console_message->Message(),
-        std::make_unique<SourceLocation>(Url().GetString(), line_number, 0,
-                                         nullptr));
+        std::make_unique<SourceLocation>(Url().GetString(), String(),
+                                         line_number, 0, nullptr));
     console_message->SetNodes(GetFrame(), std::move(nodes));
     if (category)
       console_message->SetCategory(*category);
@@ -910,11 +913,6 @@ void LocalDOMWindow::RegisterEventListenerObserver(
   event_listener_observers_.insert(event_listener_observer);
 }
 
-void LocalDOMWindow::RegisterUserActivationObserver(
-    UserActivationObserver* user_activation_observer) {
-  user_activation_observers_.insert(user_activation_observer);
-}
-
 void LocalDOMWindow::Reset() {
   DCHECK(document());
   FrameDestroyed();
@@ -1045,8 +1043,9 @@ void LocalDOMWindow::SchedulePostMessage(PostedMessage* posted_message) {
   LocalDOMWindow* source = posted_message->source;
 
   // Record UKM metrics for postMessage event.
-  post_message_counter_.RecordMessage(source->UkmSourceID(), UkmSourceID(),
-                                      UkmRecorder());
+  post_message_counter_.RecordMessage(source->UkmSourceID(),
+                                      source->GetStorageKey(), UkmSourceID(),
+                                      GetStorageKey(), UkmRecorder());
 
   // Convert the posted message to a MessageEvent so it can be unpacked for
   // local dispatch.
@@ -1162,6 +1161,13 @@ void LocalDOMWindow::DispatchMessageEventWithOriginCheck(
     UMA_HISTOGRAM_ENUMERATION("BackForwardCache.SameSite.ActionAfterPagehide2",
                               ActionAfterPagehide::kReceivedPostMessage);
   }
+
+  if (RuntimeEnabledFeatures::CapabilityDelegationPaymentRequestEnabled(this) &&
+      event->delegatePaymentRequest()) {
+    UseCounter::Count(this, WebFeature::kCapabilityDelegationOfPaymentRequest);
+    payment_request_token_.Activate();
+  }
+
   DispatchEvent(*event);
 }
 
@@ -1220,10 +1226,13 @@ void LocalDOMWindow::alert(ScriptState* script_state, const String& message) {
   if (IsSandboxed(network::mojom::blink::WebSandboxFlags::kModals)) {
     UseCounter::Count(this, WebFeature::kDialogInSandboxedContext);
     GetFrameConsole()->AddMessage(MakeGarbageCollected<ConsoleMessage>(
-        mojom::ConsoleMessageSource::kSecurity,
-        mojom::ConsoleMessageLevel::kError,
-        "Ignored call to 'alert()'. The document is sandboxed, and the "
-        "'allow-modals' keyword is not set."));
+        mojom::blink::ConsoleMessageSource::kSecurity,
+        mojom::blink::ConsoleMessageLevel::kError,
+        GetFrame()->IsInFencedFrameTree()
+            ? "Ignored call to 'alert()'. The document is in a fenced frame "
+              "tree."
+            : "Ignored call to 'alert()'. The document is sandboxed, and the "
+              "'allow-modals' keyword is not set."));
     return;
   }
 
@@ -1253,10 +1262,13 @@ bool LocalDOMWindow::confirm(ScriptState* script_state, const String& message) {
   if (IsSandboxed(network::mojom::blink::WebSandboxFlags::kModals)) {
     UseCounter::Count(this, WebFeature::kDialogInSandboxedContext);
     GetFrameConsole()->AddMessage(MakeGarbageCollected<ConsoleMessage>(
-        mojom::ConsoleMessageSource::kSecurity,
-        mojom::ConsoleMessageLevel::kError,
-        "Ignored call to 'confirm()'. The document is sandboxed, and the "
-        "'allow-modals' keyword is not set."));
+        mojom::blink::ConsoleMessageSource::kSecurity,
+        mojom::blink::ConsoleMessageLevel::kError,
+        GetFrame()->IsInFencedFrameTree()
+            ? "Ignored call to 'confirm()'. The document is in a fenced frame "
+              "tree."
+            : "Ignored call to 'confirm()'. The document is sandboxed, and the "
+              "'allow-modals' keyword is not set."));
     return false;
   }
 
@@ -1288,10 +1300,13 @@ String LocalDOMWindow::prompt(ScriptState* script_state,
   if (IsSandboxed(network::mojom::blink::WebSandboxFlags::kModals)) {
     UseCounter::Count(this, WebFeature::kDialogInSandboxedContext);
     GetFrameConsole()->AddMessage(MakeGarbageCollected<ConsoleMessage>(
-        mojom::ConsoleMessageSource::kSecurity,
-        mojom::ConsoleMessageLevel::kError,
-        "Ignored call to 'prompt()'. The document is sandboxed, and the "
-        "'allow-modals' keyword is not set."));
+        mojom::blink::ConsoleMessageSource::kSecurity,
+        mojom::blink::ConsoleMessageLevel::kError,
+        GetFrame()->IsInFencedFrameTree()
+            ? "Ignored call to 'prompt()'. The document is in a fenced frame "
+              "tree."
+            : "Ignored call to 'prompt()'. The document is sandboxed, and the "
+              "'allow-modals' keyword is not set."));
     return String();
   }
 
@@ -1700,8 +1715,10 @@ void LocalDOMWindow::scrollTo(const ScrollToOptions* scroll_to_options) const {
 }
 
 void LocalDOMWindow::moveBy(int x, int y) const {
-  if (!GetFrame() || !GetFrame()->IsMainFrame() || document()->IsPrerendering())
+  if (!GetFrame() || !GetFrame()->IsOutermostMainFrame() ||
+      document()->IsPrerendering()) {
     return;
+  }
 
   LocalFrame* frame = GetFrame();
   Page* page = frame->GetPage();
@@ -1716,8 +1733,10 @@ void LocalDOMWindow::moveBy(int x, int y) const {
 }
 
 void LocalDOMWindow::moveTo(int x, int y) const {
-  if (!GetFrame() || !GetFrame()->IsMainFrame() || document()->IsPrerendering())
+  if (!GetFrame() || !GetFrame()->IsOutermostMainFrame() ||
+      document()->IsPrerendering()) {
     return;
+  }
 
   LocalFrame* frame = GetFrame();
   Page* page = frame->GetPage();
@@ -1732,8 +1751,10 @@ void LocalDOMWindow::moveTo(int x, int y) const {
 }
 
 void LocalDOMWindow::resizeBy(int x, int y) const {
-  if (!GetFrame() || !GetFrame()->IsMainFrame() || document()->IsPrerendering())
+  if (!GetFrame() || !GetFrame()->IsOutermostMainFrame() ||
+      document()->IsPrerendering()) {
     return;
+  }
 
   LocalFrame* frame = GetFrame();
   Page* page = frame->GetPage();
@@ -1747,8 +1768,10 @@ void LocalDOMWindow::resizeBy(int x, int y) const {
 }
 
 void LocalDOMWindow::resizeTo(int width, int height) const {
-  if (!GetFrame() || !GetFrame()->IsMainFrame() || document()->IsPrerendering())
+  if (!GetFrame() || !GetFrame()->IsOutermostMainFrame() ||
+      document()->IsPrerendering()) {
     return;
+  }
 
   LocalFrame* frame = GetFrame();
   Page* page = frame->GetPage();
@@ -1836,7 +1859,7 @@ External* LocalDOMWindow::external() {
 }
 
 bool LocalDOMWindow::isSecureContext() const {
-  return GetFrame() && IsSecureContext();
+  return IsSecureContext();
 }
 
 void LocalDOMWindow::ClearIsolatedWorldCSPForTesting(int32_t world_id) {
@@ -2052,6 +2075,11 @@ DOMWindow* LocalDOMWindow::open(v8::Isolate* isolate,
   WebWindowFeatures window_features =
       GetWindowFeaturesFromString(features, incumbent_window);
 
+  // In fenced frames, we should always use `noopener`.
+  if (GetFrame()->IsInFencedFrameTree()) {
+    window_features.noopener = true;
+  }
+
   FrameLoadRequest frame_request(incumbent_window,
                                  ResourceRequest(completed_url));
   frame_request.SetFeaturesForWindowOpen(window_features);
@@ -2129,6 +2157,7 @@ DOMWindow* LocalDOMWindow::openPictureInPictureWindow(
     ExceptionState& exception_state) {
   LocalDOMWindow* incumbent_window = IncumbentDOMWindow(isolate);
   LocalDOMWindow* entered_window = EnteredDOMWindow(isolate);
+  DCHECK(isSecureContext());
 
   // If the bindings implementation is 100% correct, the current realm and the
   // entered realm should be same origin-domain. However, to be on the safe
@@ -2183,7 +2212,6 @@ void LocalDOMWindow::Trace(Visitor* visitor) const {
   visitor->Trace(external_);
   visitor->Trace(visualViewport_);
   visitor->Trace(event_listener_observers_);
-  visitor->Trace(user_activation_observers_);
   visitor->Trace(current_event_);
   visitor->Trace(trusted_types_map_);
   visitor->Trace(input_method_controller_);
@@ -2191,8 +2219,8 @@ void LocalDOMWindow::Trace(Visitor* visitor) const {
   visitor->Trace(text_suggestion_controller_);
   visitor->Trace(isolated_world_csp_map_);
   visitor->Trace(network_state_observer_);
-  visitor->Trace(dedicated_workers_);
   visitor->Trace(fence_);
+  visitor->Trace(closewatcher_stack_);
   DOMWindow::Trace(visitor);
   ExecutionContext::Trace(visitor);
   Supplementable<LocalDOMWindow>::Trace(visitor);
@@ -2222,10 +2250,12 @@ void LocalDOMWindow::SetStorageKey(const BlinkStorageKey& storage_key) {
   storage_key_ = storage_key;
 }
 
-void LocalDOMWindow::DidReceiveUserActivation() {
-  for (auto& it : user_activation_observers_) {
-    it->DidReceiveUserActivation();
-  }
+bool LocalDOMWindow::IsPaymentRequestTokenActive() const {
+  return payment_request_token_.IsActive();
+}
+
+bool LocalDOMWindow::ConsumePaymentRequestToken() {
+  return payment_request_token_.ConsumeIfActive();
 }
 
 void LocalDOMWindow::SetIsInBackForwardCache(bool is_in_back_forward_cache) {
@@ -2243,14 +2273,6 @@ void LocalDOMWindow::DidBufferLoadWhileInBackForwardCache(size_t num_bytes) {
   BackForwardCacheBufferLimitTracker::Get().DidBufferBytes(num_bytes);
 }
 
-void LocalDOMWindow::AddDedicatedWorker(DedicatedWorker* dedicated_worker) {
-  dedicated_workers_.insert(dedicated_worker);
-}
-
-void LocalDOMWindow::RemoveDedicatedWorker(DedicatedWorker* dedicated_worker) {
-  dedicated_workers_.erase(dedicated_worker);
-}
-
 Fence* LocalDOMWindow::fence() {
   // Return nullptr if we aren't in a fenced subtree.
   if (!GetFrame() || !GetFrame()->IsInFencedFrameTree()) {
@@ -2258,7 +2280,7 @@ Fence* LocalDOMWindow::fence() {
   }
 
   if (!fence_) {
-    fence_ = MakeGarbageCollected<Fence>();
+    fence_ = MakeGarbageCollected<Fence>(*this);
   }
 
   return fence_.Get();

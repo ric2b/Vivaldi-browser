@@ -25,7 +25,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/trace_event/trace_event.h"
 #include "base/values.h"
@@ -48,6 +47,7 @@
 #include "ui/base/ui_base_features.h"
 #include "ui/events/event.h"
 #include "ui/gfx/codec/png_codec.h"
+#include "ui/gfx/image/image_skia_rep.h"
 
 namespace chromeos {
 

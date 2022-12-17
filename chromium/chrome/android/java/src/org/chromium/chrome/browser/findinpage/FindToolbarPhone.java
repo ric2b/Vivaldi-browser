@@ -16,7 +16,9 @@ import org.chromium.chrome.R;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 
-import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+// Vivaldi
+import android.view.ViewGroup;
+
 import org.vivaldi.browser.common.VivaldiUtils;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 
@@ -38,13 +40,26 @@ public class FindToolbarPhone extends FindToolbar {
         assert isWebContentAvailable();
         setVisibility(View.VISIBLE);
 
-        // Note(david@vivaldi.com): We need to adjust the margin when using tab strip.
-        VivaldiUtils.updateViewsTopMargin(this,
-                SharedPreferencesManager.getInstance().readBoolean(
-                        VivaldiPreferences.SHOW_TAB_STRIP, true)
-                        ? (int) getResources().getDimension(
-                                  R.dimen.tab_strip_height)
-                        : 0);
+        // Note(david@vivaldi.com): Place the find in page toolbar always on top of the address bar.
+        boolean stackVisible = VivaldiUtils.isTabStackVisible();
+        int height = (int) getResources().getDimension(R.dimen.tab_strip_height);
+        if (!VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                    VivaldiPreferences.SHOW_TAB_STRIP, true))
+            height = 0;
+        if (stackVisible) height *= 2;
+        ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) getLayoutParams();
+        if (params != null) {
+            if (VivaldiUtils.isTopToolbarOn())
+                params.topMargin = height;
+            else {
+                if (VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                            VivaldiPreferences.TAB_STACK_TOOLBAR_VISIBLE, false))
+                    params.topMargin = 0;
+                else
+                    params.bottomMargin = height;
+            }
+            setLayoutParams(params);
+        }
 
         super.handleActivate();
     }
@@ -83,7 +98,7 @@ public class FindToolbarPhone extends FindToolbar {
     protected int getStatusColor(boolean failed, boolean incognito) {
         if (incognito) {
             final int colorResourceId = failed ? R.color.default_red_light : R.color.white_alpha_50;
-            return ApiCompatibilityUtils.getColor(getContext().getResources(), colorResourceId);
+            return getContext().getColor(colorResourceId);
         }
         return super.getStatusColor(failed, incognito);
     }

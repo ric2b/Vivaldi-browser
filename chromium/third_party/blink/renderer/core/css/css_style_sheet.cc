@@ -31,12 +31,12 @@
 #include "third_party/blink/renderer/core/css/parser/css_parser.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_context.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_impl.h"
+#include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/css/style_rule.h"
 #include "third_party/blink/renderer/core/css/style_sheet_contents.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/node.h"
-#include "third_party/blink/renderer/core/frame/deprecation.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/html/html_link_element.h"
 #include "third_party/blink/renderer/core/html/html_style_element.h"
@@ -470,13 +470,13 @@ int CSSStyleSheet::addRule(const String& selector,
 }
 
 ScriptPromise CSSStyleSheet::replace(ScriptState* script_state,
-                                     const String& text) {
+                                     const String& text,
+                                     ExceptionState& exception_state) {
   if (!IsConstructed()) {
-    return ScriptPromise::RejectWithDOMException(
-        script_state,
-        MakeGarbageCollected<DOMException>(
-            DOMExceptionCode::kNotAllowedError,
-            "Can't call replace on non-constructed CSSStyleSheets."));
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kNotAllowedError,
+        "Can't call replace on non-constructed CSSStyleSheets.");
+    return ScriptPromise();
   }
   SetText(text, CSSImportRules::kIgnoreWithWarning);
   // We currently parse synchronously, and since @import support was removed,
@@ -554,9 +554,9 @@ bool CSSStyleSheet::SheetLoaded() {
   return load_completed_;
 }
 
-void CSSStyleSheet::StartLoadingDynamicSheet() {
+void CSSStyleSheet::SetToPendingState() {
   SetLoadCompleted(false);
-  owner_node_->StartLoadingDynamicSheet();
+  owner_node_->SetToPendingState();
 }
 
 void CSSStyleSheet::SetLoadCompleted(bool completed) {

@@ -8,8 +8,6 @@
 
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/publishers/extension_apps.h"
-#include "chrome/browser/ash/guest_os/guest_os_registry_service_factory.h"
-#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/web_applications/app_service/web_apps.h"
 #include "chrome/common/chrome_features.h"
 
@@ -22,6 +20,8 @@
 #include "chrome/browser/apps/app_service/publishers/plugin_vm_apps.h"
 #include "chrome/browser/apps/app_service/publishers/standalone_browser_apps.h"
 #include "chrome/browser/ash/crosapi/browser_util.h"
+#include "chrome/browser/ash/guest_os/guest_os_registry_service_factory.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "components/services/app_service/public/cpp/instance_registry.h"
 #endif
 
@@ -30,6 +30,7 @@ namespace apps {
 namespace {
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+bool g_omit_borealis_apps_for_testing_ = false;
 bool g_omit_built_in_apps_for_testing_ = false;
 bool g_omit_plugin_vm_apps_for_testing_ = false;
 #endif
@@ -99,7 +100,8 @@ void PublisherHost::Initialize() {
   }
   // TODO(b/170591339): Allow borealis to provide apps for the non-primary
   // profile.
-  if (guest_os::GuestOsRegistryServiceFactory::GetForProfile(profile)) {
+  if (guest_os::GuestOsRegistryServiceFactory::GetForProfile(profile) &&
+      !g_omit_borealis_apps_for_testing_) {
     borealis_apps_ = std::make_unique<BorealisApps>(proxy_);
     borealis_apps_->Initialize();
   }
@@ -141,6 +143,16 @@ void PublisherHost::Initialize() {
 }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+ScopedOmitBorealisAppsForTesting::ScopedOmitBorealisAppsForTesting()
+    : previous_omit_borealis_apps_for_testing_(
+          g_omit_borealis_apps_for_testing_) {
+  g_omit_borealis_apps_for_testing_ = true;
+}
+
+ScopedOmitBorealisAppsForTesting::~ScopedOmitBorealisAppsForTesting() {
+  g_omit_borealis_apps_for_testing_ = previous_omit_borealis_apps_for_testing_;
+}
+
 ScopedOmitBuiltInAppsForTesting::ScopedOmitBuiltInAppsForTesting()
     : previous_omit_built_in_apps_for_testing_(
           g_omit_built_in_apps_for_testing_) {

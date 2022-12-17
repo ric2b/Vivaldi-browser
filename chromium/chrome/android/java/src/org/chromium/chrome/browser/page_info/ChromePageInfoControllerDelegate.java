@@ -233,6 +233,7 @@ public class ChromePageInfoControllerDelegate extends PageInfoControllerDelegate
         settingsLauncher.launchSettingsActivity(mContext, AdPersonalizationFragment.class);
     }
 
+    @NonNull
     @Override
     public Collection<PageInfoSubpageController> createAdditionalRowViews(
             PageInfoMainController mainController, ViewGroup rowWrapper) {

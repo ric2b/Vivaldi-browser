@@ -6,8 +6,11 @@ package org.chromium.chrome.browser.privacy.settings;
 
 import static androidx.test.espresso.Espresso.onView;
 import static androidx.test.espresso.action.ViewActions.click;
+import static androidx.test.espresso.assertion.ViewAssertions.doesNotExist;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
+import static androidx.test.espresso.matcher.ViewMatchers.hasDescendant;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
+import static androidx.test.espresso.matcher.ViewMatchers.withId;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
 import static org.chromium.base.test.util.Batch.PER_CLASS;
@@ -21,6 +24,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import androidx.test.espresso.contrib.RecyclerViewActions;
 import androidx.test.filters.LargeTest;
 
+import org.junit.Before;
 import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
@@ -31,11 +35,14 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthManager;
 import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthSettingUtils;
+import org.chromium.chrome.browser.privacy_sandbox.FakePrivacySandboxBridge;
+import org.chromium.chrome.browser.privacy_sandbox.PrivacySandboxBridgeJni;
 import org.chromium.chrome.browser.settings.SettingsActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
@@ -62,7 +69,14 @@ public class PrivacySettingsFragmentTest {
 
     @Rule
     public ChromeRenderTestRule mRenderTestRule =
-            ChromeRenderTestRule.Builder.withPublicCorpus().build();
+            ChromeRenderTestRule.Builder.withPublicCorpus()
+                    .setBugComponent(ChromeRenderTestRule.Component.UI_SETTINGS_PRIVACY)
+                    .build();
+
+    @Rule
+    public JniMocker mocker = new JniMocker();
+
+    private FakePrivacySandboxBridge mFakePrivacySandboxBridge;
 
     private void waitForOptionsMenu() {
         CriteriaHelper.pollUiThread(() -> {
@@ -74,9 +88,10 @@ public class PrivacySettingsFragmentTest {
     private View getIncognitoReauthSettingView(PrivacySettings privacySettings) {
         String incognito_lock_title = mSettingsActivityTestRule.getActivity().getString(
                 R.string.settings_incognito_tab_lock_title);
-        RecyclerViewActions.scrollTo(withText(incognito_lock_title));
+        onView(withId(R.id.recycler_view))
+                .perform(RecyclerViewActions.scrollTo(
+                        hasDescendant(withText(incognito_lock_title))));
         onView(withText(incognito_lock_title)).check(matches(isDisplayed()));
-
         for (int i = 0; i < privacySettings.getListView().getChildCount(); ++i) {
             View view = privacySettings.getListView().getChildAt(i);
             String title = ((TextView) view.findViewById(android.R.id.title)).getText().toString();
@@ -85,6 +100,12 @@ public class PrivacySettingsFragmentTest {
             }
         }
         return null;
+    }
+
+    @Before
+    public void setUp() {
+        mFakePrivacySandboxBridge = new FakePrivacySandboxBridge();
+        mocker.mock(PrivacySandboxBridgeJni.TEST_HOOKS, mFakePrivacySandboxBridge);
     }
 
     @Test
@@ -118,6 +139,7 @@ public class PrivacySettingsFragmentTest {
 
     @Test
     @LargeTest
+    @Features.DisableFeatures(ChromeFeatureList.PRIVACY_SANDBOX_SETTINGS_3)
     public void testPrivacySandboxView() throws IOException {
         mSettingsActivityTestRule.startSettingsActivity();
         PrivacySettings fragment = mSettingsActivityTestRule.getFragment();
@@ -146,6 +168,21 @@ public class PrivacySettingsFragmentTest {
         // Verify that the right view is shown depending on feature state.
         onView(withText(R.string.privacy_sandbox_ad_personalization_title))
                 .check(matches(isDisplayed()));
+    }
+
+    @Test
+    @LargeTest
+    @Features.EnableFeatures(ChromeFeatureList.PRIVACY_SANDBOX_SETTINGS_3)
+    public void testPrivacySandboxViewV3Restricted() throws IOException {
+        mFakePrivacySandboxBridge.setPrivacySandboxRestricted(true);
+        mSettingsActivityTestRule.startSettingsActivity();
+        PrivacySettings fragment = mSettingsActivityTestRule.getFragment();
+        // Scroll down and verify that the Privacy Sandbox is not there.
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            RecyclerView recyclerView = fragment.getView().findViewById(R.id.recycler_view);
+            recyclerView.scrollToPosition(recyclerView.getAdapter().getItemCount() - 1);
+        });
+        onView(withText(R.string.prefs_privacy_sandbox)).check(doesNotExist());
     }
 
     @Test

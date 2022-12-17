@@ -7,6 +7,8 @@
 
 #include <string>
 
+#include "base/component_export.h"
+
 namespace base {
 class Value;
 }
@@ -19,8 +21,8 @@ namespace policy_util {
 
 // This fake credential contains a random postfix which is extremely unlikely to
 // be used by any user. Used to determine saved but unknown credential
-// (PSK/Passphrase/Password) in UI (see network_password_input.js).
-extern const char kFakeCredential[];
+// (PSK/Passphrase/Password) in UI (see onc_mojo.js).
+extern COMPONENT_EXPORT(CHROMEOS_NETWORK) const char kFakeCredential[];
 
 // Creates a managed ONC dictionary from the given arguments. Depending on the
 // profile type, the policies are assumed to come from the user or device policy
@@ -59,6 +61,13 @@ base::Value CreateShillConfiguration(const NetworkProfile& profile,
 // matching behavior.
 bool IsPolicyMatching(const base::Value& policy,
                       const base::Value& actual_network);
+
+// Returns if the given |onc_config| is Cellular type configuration.
+bool IsCellularPolicy(const base::Value& onc_config);
+
+// Returns the ICCID value from the given |onc_config|, returns nullptr if it
+// is not a Cellular type ONC or no ICCID field is found.
+const std::string* GetIccidFromONC(const base::Value& onc_config);
 
 }  // namespace policy_util
 

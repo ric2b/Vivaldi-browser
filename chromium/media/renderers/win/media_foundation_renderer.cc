@@ -81,11 +81,20 @@ const std::string GetErrorReasonString(
     STRINGIFY(kFailedToSetCurrentTime);
     STRINGIFY(kFailedToPlay);
     STRINGIFY(kOnPlaybackError);
-    STRINGIFY(kOnDCompSurfaceReceivedError);
     STRINGIFY(kOnDCompSurfaceHandleSetError);
     STRINGIFY(kOnConnectionError);
+    STRINGIFY(kFailedToSetDCompMode);
+    STRINGIFY(kFailedToGetDCompSurface);
+    STRINGIFY(kFailedToDuplicateHandle);
+    STRINGIFY(kFailedToCreateMediaEngine);
   }
 #undef STRINGIFY
+}
+
+// INVALID_HANDLE_VALUE is the official invalid handle value. Historically, 0 is
+// not used as a handle value too.
+bool IsInvalidHandle(const HANDLE& handle) {
+  return handle == INVALID_HANDLE_VALUE || handle == nullptr;
 }
 
 }  // namespace
@@ -145,14 +154,34 @@ void MediaFoundationRenderer::Initialize(MediaResource* media_resource,
 
   renderer_client_ = client;
 
+  // If the content is not protected then we need to start off in
+  // frame server mode so that the first frame's image data is
+  // available to Chromium, quite a few web tests need that image.
+  bool start_in_dcomp_mode = false;
+  for (DemuxerStream* stream : media_resource->GetAllStreams()) {
+    if (stream->type() == DemuxerStream::Type::VIDEO &&
+        stream->video_decoder_config().is_encrypted()) {
+      // This conditional must match the conditional in
+      // MediaFoundationRendererClient::Initialize
+      start_in_dcomp_mode = true;
+    }
+  }
+
+  rendering_mode_ = start_in_dcomp_mode ? RenderingMode::DirectComposition
+                                        : RenderingMode::FrameServer;
+
   HRESULT hr = CreateMediaEngine(media_resource);
   if (FAILED(hr)) {
     DLOG(ERROR) << "Failed to create media engine: " << PrintHr(hr);
-    std::move(init_cb).Run(PIPELINE_ERROR_INITIALIZATION_FAILED);
-  } else {
-    SetVolume(volume_);
-    std::move(init_cb).Run(PIPELINE_OK);
+    base::UmaHistogramSparse(
+        "Media.MediaFoundationRenderer.CreateMediaEngineError", hr);
+    OnError(PIPELINE_ERROR_INITIALIZATION_FAILED,
+            ErrorReason::kFailedToCreateMediaEngine, hr, std::move(init_cb));
+    return;
   }
+
+  SetVolume(volume_);
+  std::move(init_cb).Run(PIPELINE_OK);
 }
 
 HRESULT MediaFoundationRenderer::CreateMediaEngine(
@@ -161,6 +190,16 @@ HRESULT MediaFoundationRenderer::CreateMediaEngine(
 
   if (!InitializeMediaFoundation())
     return E_FAIL;
+
+  // Set `cdm_proxy_` early on so errors can be reported via the CDM for better
+  // error aggregation. See `CdmDocumentServiceImpl::OnCdmEvent()`.
+  if (cdm_context_) {
+    cdm_proxy_ = cdm_context_->GetMediaFoundationCdmProxy();
+    if (!cdm_proxy_) {
+      DLOG(ERROR) << __func__ << ": CDM does not support MF CDM interface";
+      return MF_E_UNEXPECTED;
+    }
+  }
 
   // TODO(frankli): Only call the followings when there is a video stream.
   RETURN_IF_FAILED(InitializeDXGIDeviceManager());
@@ -208,7 +247,7 @@ HRESULT MediaFoundationRenderer::CreateMediaEngine(
 
     // TODO(crbug.com/1276067): We'll investigate scenarios to see if we can use
     // the on-screen video window size and not the native video size.
-    if (in_frame_server_mode_) {
+    if (rendering_mode_ == RenderingMode::FrameServer) {
       gfx::Size max_video_size;
       bool has_video = false;
       for (auto* stream : media_resource->GetAllStreams()) {
@@ -273,18 +312,13 @@ HRESULT MediaFoundationRenderer::CreateMediaEngine(
       content_protection_manager_.Get()));
 
   waiting_for_mf_cdm_ = true;
-  if (!cdm_context_)
+  if (!cdm_context_) {
+    DCHECK(!cdm_proxy_);
     return S_OK;
-
-  // Has |cdm_context_|.
-  if (!cdm_context_->GetMediaFoundationCdmProxy(
-          base::BindOnce(&MediaFoundationRenderer::OnCdmProxyReceived,
-                         weak_factory_.GetWeakPtr()))) {
-    DLOG(ERROR) << __func__
-                << ": CdmContext does not support MF CDM interface.";
-    return MF_E_UNEXPECTED;
   }
 
+  DCHECK(cdm_proxy_);
+  OnCdmProxyReceived();
   return S_OK;
 }
 
@@ -327,7 +361,7 @@ HRESULT MediaFoundationRenderer::InitializeDXGIDeviceManager() {
       D3D_FEATURE_LEVEL_9_1};
   RETURN_IF_FAILED(
       D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, 0, creation_flags,
-                        feature_levels, base::size(feature_levels),
+                        feature_levels, std::size(feature_levels),
                         D3D11_SDK_VERSION, &d3d11_device, nullptr, nullptr));
   RETURN_IF_FAILED(media::SetDebugName(d3d11_device.Get(), "Media_MFRenderer"));
 
@@ -371,13 +405,14 @@ void MediaFoundationRenderer::SetCdm(CdmContext* cdm_context,
   cdm_context_ = cdm_context;
 
   if (waiting_for_mf_cdm_) {
-    if (!cdm_context_->GetMediaFoundationCdmProxy(
-            base::BindOnce(&MediaFoundationRenderer::OnCdmProxyReceived,
-                           weak_factory_.GetWeakPtr()))) {
-      DLOG(ERROR) << "Decryptor does not support MF CDM interface.";
+    cdm_proxy_ = cdm_context_->GetMediaFoundationCdmProxy();
+    if (!cdm_proxy_) {
+      DLOG(ERROR) << "CDM does not support MediaFoundationCdmProxy";
       std::move(cdm_attached_cb).Run(false);
       return;
     }
+
+    OnCdmProxyReceived();
   }
 
   std::move(cdm_attached_cb).Run(true);
@@ -389,9 +424,9 @@ void MediaFoundationRenderer::SetLatencyHint(
   NOTIMPLEMENTED() << "We do not use the latency hint today";
 }
 
-void MediaFoundationRenderer::OnCdmProxyReceived(
-    scoped_refptr<MediaFoundationCdmProxy> cdm_proxy) {
+void MediaFoundationRenderer::OnCdmProxyReceived() {
   DVLOG_FUNC(1);
+  DCHECK(cdm_proxy_);
 
   if (!waiting_for_mf_cdm_ || !content_protection_manager_) {
     OnError(PIPELINE_ERROR_INVALID_STATE,
@@ -400,7 +435,6 @@ void MediaFoundationRenderer::OnCdmProxyReceived(
   }
 
   waiting_for_mf_cdm_ = false;
-  cdm_proxy_ = std::move(cdm_proxy);
   content_protection_manager_->SetCdmProxy(cdm_proxy_);
   mf_source_->SetCdmProxy(cdm_proxy_);
 
@@ -423,6 +457,40 @@ void MediaFoundationRenderer::Flush(base::OnceClosure flush_cb) {
 
   mf_source_->FlushStreams();
   std::move(flush_cb).Run();
+}
+
+void MediaFoundationRenderer::SetRenderingMode(RenderingMode render_mode) {
+  ComPtr<IMFMediaEngineEx> mf_media_engine_ex;
+  HRESULT hr = mf_media_engine_.As(&mf_media_engine_ex);
+
+  if (mf_media_engine_->HasVideo()) {
+    if (render_mode == RenderingMode::FrameServer) {
+      // Make sure we reinitialize the texture pool
+      hr = InitializeTexturePool(native_video_size_);
+    } else if (render_mode == RenderingMode::DirectComposition) {
+      // If needed renegotiate the DComp visual and send it to the client for
+      // presentation
+    } else {
+      DVLOG(1) << "Rendering mode: " << static_cast<int>(render_mode)
+               << " is unsupported";
+      MEDIA_LOG(ERROR, media_log_)
+          << "MediaFoundationRenderer SetRenderingMode: " << (int)render_mode
+          << " is not defined. No change to the rendering mode.";
+      hr = E_NOT_SET;
+    }
+
+    if (SUCCEEDED(hr)) {
+      hr = mf_media_engine_ex->EnableWindowlessSwapchainMode(
+          render_mode == RenderingMode::DirectComposition);
+      if (SUCCEEDED(hr)) {
+        rendering_mode_ = render_mode;
+      }
+    }
+  }
+}
+
+bool MediaFoundationRenderer::InFrameServerMode() {
+  return rendering_mode_ == RenderingMode::FrameServer;
 }
 
 void MediaFoundationRenderer::StartPlayingFrom(base::TimeDelta time) {
@@ -465,18 +533,20 @@ void MediaFoundationRenderer::GetDCompSurface(GetDCompSurfaceCB callback) {
 
   HRESULT hr = SetDCompModeInternal();
   if (FAILED(hr)) {
-    std::string error = "Failed to set DComp mode: " + PrintHr(hr);
-    DLOG(ERROR) << error;
-    std::move(callback).Run(base::win::ScopedHandle(), error);
+    OnError(PIPELINE_ERROR_COULD_NOT_RENDER, ErrorReason::kFailedToSetDCompMode,
+            hr);
+    std::move(callback).Run(base::win::ScopedHandle(), PrintHr(hr));
     return;
   }
 
   HANDLE surface_handle = INVALID_HANDLE_VALUE;
   hr = GetDCompSurfaceInternal(&surface_handle);
-  if (FAILED(hr)) {
-    std::string error = "Failed to get DComp surface: " + PrintHr(hr);
-    DLOG(ERROR) << error;
-    std::move(callback).Run(base::win::ScopedHandle(), error);
+  // The handle could still be invalid after a non failure (e.g. S_FALSE) is
+  // returned. See https://crbug.com/1307065.
+  if (FAILED(hr) || IsInvalidHandle(surface_handle)) {
+    OnError(PIPELINE_ERROR_COULD_NOT_RENDER,
+            ErrorReason::kFailedToGetDCompSurface, hr);
+    std::move(callback).Run(base::win::ScopedHandle(), PrintHr(hr));
     return;
   }
 
@@ -487,11 +557,11 @@ void MediaFoundationRenderer::GetDCompSurface(GetDCompSurfaceCB callback) {
   const BOOL result = ::DuplicateHandle(
       process, surface_handle, process, &duplicated_handle,
       GENERIC_READ | GENERIC_EXECUTE, false, DUPLICATE_CLOSE_SOURCE);
-  if (!result) {
-    std::string error =
-        "Duplicate surface_handle failed: " + PrintHr(::GetLastError());
-    DLOG(ERROR) << error;
-    std::move(callback).Run(base::win::ScopedHandle(), error);
+  if (!result || IsInvalidHandle(surface_handle)) {
+    hr = ::GetLastError();
+    OnError(PIPELINE_ERROR_COULD_NOT_RENDER,
+            ErrorReason::kFailedToDuplicateHandle, hr);
+    std::move(callback).Run(base::win::ScopedHandle(), PrintHr(hr));
     return;
   }
 
@@ -550,11 +620,8 @@ HRESULT MediaFoundationRenderer::InitializeTexturePool(const gfx::Size& size) {
   // However we also need to investigate the scenario of WebGL and 360 video
   // where they need the original frame size instead of the window size due
   // to later image processing.
-  auto callback = [](std::vector<MediaFoundationFrameInfo> frame_textures,
-                     const gfx::Size& texture_size) {};
-
-  RETURN_IF_FAILED(texture_pool_.Initialize(
-      d3d11_device.Get(), base::BindRepeating(callback), size));
+  RETURN_IF_FAILED(texture_pool_.Initialize(d3d11_device.Get(),
+                                            initialized_frame_pool_cb_, size));
 
   return S_OK;
 }
@@ -565,6 +632,9 @@ HRESULT MediaFoundationRenderer::UpdateVideoStream(const gfx::Rect& rect) {
   RECT dest_rect = {0, 0, rect.width(), rect.height()};
   RETURN_IF_FAILED(mf_media_engine_ex->UpdateVideoStream(
       /*pSrc=*/nullptr, &dest_rect, /*pBorderClr=*/nullptr));
+  if (rendering_mode_ == RenderingMode::FrameServer) {
+    RETURN_IF_FAILED(InitializeTexturePool(native_video_size_));
+  }
   return S_OK;
 }
 
@@ -616,6 +686,13 @@ void MediaFoundationRenderer::SendStatistics() {
     return;
   }
 
+  const int kSignificantPlaybackFrames = 5400;  // About 30 fps for 3 minutes.
+  if (!has_reported_significant_playback_ && cdm_proxy_ &&
+      new_stats.video_frames_decoded >= kSignificantPlaybackFrames) {
+    has_reported_significant_playback_ = true;
+    cdm_proxy_->OnSignificantPlayback();
+  }
+
   if (statistics_ != new_stats) {
     // OnStatisticsUpdate() expects delta values.
     PipelineStatistics delta;
@@ -655,6 +732,13 @@ void MediaFoundationRenderer::SetVolume(float volume) {
   DVLOG_IF(1, FAILED(hr)) << "Failed to set volume: " << PrintHr(hr);
 }
 
+void MediaFoundationRenderer::SetFrameReturnCallbacks(
+    FrameReturnCallback frame_available_cb,
+    FramePoolInitializedCallback initialized_frame_pool_cb) {
+  frame_available_cb_ = std::move(frame_available_cb);
+  initialized_frame_pool_cb_ = std::move(initialized_frame_pool_cb);
+}
+
 base::TimeDelta MediaFoundationRenderer::GetMediaTime() {
 // GetCurrentTime is expanded as GetTickCount in base/win/windows_types.h
 #undef GetCurrentTime
@@ -672,9 +756,6 @@ void MediaFoundationRenderer::OnPlaybackError(PipelineStatus status,
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   base::UmaHistogramSparse("Media.MediaFoundationRenderer.PlaybackError", hr);
-
-  if (status == PIPELINE_ERROR_HARDWARE_CONTEXT_RESET && cdm_proxy_)
-    cdm_proxy_->OnHardwareContextReset();
 
   StopSendingStatistics();
   OnError(status, ErrorReason::kOnPlaybackError, hr);
@@ -796,7 +877,7 @@ void MediaFoundationRenderer::OnVideoNaturalSizeChange() {
     std::ignore = UpdateVideoStream(test_rect);
   }
 
-  if (in_frame_server_mode_) {
+  if (rendering_mode_ == RenderingMode::FrameServer) {
     InitializeTexturePool(native_video_size_);
   }
 
@@ -805,14 +886,98 @@ void MediaFoundationRenderer::OnVideoNaturalSizeChange() {
 
 void MediaFoundationRenderer::OnError(PipelineStatus status,
                                       ErrorReason reason,
-                                      absl::optional<HRESULT> hresult) {
+                                      absl::optional<HRESULT> hresult,
+                                      PipelineStatusCallback status_cb) {
   const std::string error =
       "MediaFoundationRenderer error: " + GetErrorReasonString(reason) +
       (hresult.has_value() ? (" (" + PrintHr(hresult.value()) + ")") : "");
+
   DLOG(ERROR) << error;
+
+  // Report to MediaLog so the error will show up in media internals and
+  // MediaError.message.
   MEDIA_LOG(ERROR, media_log_) << error;
+
+  // Report the error to UMA.
   ReportErrorReason(reason);
-  renderer_client_->OnError(status);
+
+  // HRESULT 0x8004CD12 is DRM_E_TEE_INVALID_HWDRM_STATE, which can happen
+  // during OS sleep/resume, or moving video to different graphics adapters.
+  // This is not an error, so special case it here.
+  PipelineStatus new_status = status;
+  if (hresult.has_value() && hresult == static_cast<HRESULT>(0x8004CD12)) {
+    new_status = PIPELINE_ERROR_HARDWARE_CONTEXT_RESET;
+    if (cdm_proxy_)
+      cdm_proxy_->OnHardwareContextReset();
+  } else if (cdm_proxy_) {
+    cdm_proxy_->OnPlaybackError();
+  }
+
+  // Attach hresult to `new_status` for logging and metrics reporting.
+  if (hresult.has_value())
+    new_status.WithData("hresult", static_cast<uint32_t>(hresult.value()));
+
+  if (status_cb)
+    std::move(status_cb).Run(new_status);
+  else
+    renderer_client_->OnError(new_status);
+}
+
+void MediaFoundationRenderer::RequestNextFrameBetweenTimestamps(
+    base::TimeTicks deadline_min,
+    base::TimeTicks deadline_max) {
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
+  if (rendering_mode_ != RenderingMode::FrameServer) {
+    return;
+  }
+
+  LONGLONG presentation_timestamp_in_hns = 0;
+  // OnVideoStreamTick can return S_FALSE if there is no frame available.
+  if (dxgi_device_manager_ == nullptr ||
+      mf_media_engine_->OnVideoStreamTick(&presentation_timestamp_in_hns) !=
+          S_OK) {
+    return;
+  }
+
+  // TODO(crbug.com/1276067): Change the |native_video_size_| to get the correct
+  // output video size as determined by the output texture requirements.
+  gfx::Size video_size = native_video_size_;
+
+  base::UnguessableToken frame_token;
+  auto d3d11_video_frame = texture_pool_.AcquireTexture(&frame_token);
+  if (d3d11_video_frame.Get() == nullptr)
+    return;
+
+  RECT destination_frame_size = {0, 0, video_size.width(), video_size.height()};
+
+  ComPtr<IDXGIKeyedMutex> texture_mutex;
+  d3d11_video_frame.As(&texture_mutex);
+
+  if (texture_mutex->AcquireSync(0, INFINITE) != S_OK) {
+    texture_pool_.ReleaseTexture(frame_token);
+    return;
+  }
+
+  if (FAILED(mf_media_engine_->TransferVideoFrame(
+          d3d11_video_frame.Get(), nullptr, &destination_frame_size,
+          nullptr))) {
+    texture_mutex->ReleaseSync(0);
+    texture_pool_.ReleaseTexture(frame_token);
+    return;
+  }
+  texture_mutex->ReleaseSync(0);
+
+// Need access to GetCurrentTime on the Media Engine.
+#undef GetCurrentTime
+  auto frame_timestamp = base::Seconds(mf_media_engine_->GetCurrentTime());
+// Restore previous definition
+#define GetCurrentTime() GetTickCount()
+  frame_available_cb_.Run(frame_token, video_size, frame_timestamp);
+}
+
+void MediaFoundationRenderer::NotifyFrameReleased(
+    const base::UnguessableToken& frame_token) {
+  texture_pool_.ReleaseTexture(frame_token);
 }
 
 }  // namespace media

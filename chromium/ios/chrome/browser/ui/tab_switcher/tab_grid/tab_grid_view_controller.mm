@@ -9,7 +9,6 @@
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/sys_string_conversions.h"
-#include "base/task/post_task.h"
 #include "ios/chrome/browser/crash_report/crash_keys_helper.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/popup_menu_commands.h"
@@ -128,7 +127,8 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
                                      LayoutSwitcher,
                                      UIScrollViewAccessibilityDelegate,
                                      UISearchBarDelegate,
-                                     ViewRevealingAnimatee>
+                                     ViewRevealingAnimatee,
+                                     UIGestureRecognizerDelegate>
 // Whether the view is visible. Bookkeeping is based on |-viewWillAppear:| and
 // |-viewWillDisappear methods. Note that the |Did| methods are not reliably
 // called (e.g., edge case in multitasking).
@@ -166,9 +166,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 // Whether the scroll view is animating its content offset to the current page.
 @property(nonatomic, assign, getter=isScrollViewAnimatingContentOffset)
     BOOL scrollViewAnimatingContentOffset;
-// The height of the bottom of the tab grid which is currently covered by the
-// software keyboard.
-@property(nonatomic, assign) CGFloat keyboardOverlap;
 
 @property(nonatomic, assign) PageChangeInteraction pageChangeInteraction;
 // UIView whose background color changes to create a fade-in / fade-out effect
@@ -184,6 +181,11 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 @property(nonatomic, assign) TabGridPageConfiguration pageConfiguration;
 // If the scrim view is being presented.
 @property(nonatomic, assign) BOOL isScrimDisplayed;
+// Wether there is a search being performed in the tab grid or not.
+@property(nonatomic, assign) BOOL isPerformingSearch;
+// Pan gesture for when the search results view is scrolled during the search
+// mode.
+@property(nonatomic, strong) UIPanGestureRecognizer* searchResultPanRecognizer;
 
 @end
 
@@ -278,18 +280,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
       pageViewController.view.accessibilityElementsHidden = YES;
     }
   }
-
-  [[NSNotificationCenter defaultCenter]
-      addObserver:self
-         selector:@selector(handleKeyboardWillShow:)
-             name:UIKeyboardWillShowNotification
-           object:nil];
-
-  [[NSNotificationCenter defaultCenter]
-      addObserver:self
-         selector:@selector(handleKeyboardWillHide:)
-             name:UIKeyboardWillHideNotification
-           object:nil];
 }
 
 - (void)viewDidLayoutSubviews {
@@ -387,13 +377,11 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     [self broadcastIncognitoContentVisibility];
     [self configureButtonsForActiveAndCurrentPage];
   }
-  [self arriveAtCurrentPage];
 }
 
 - (void)scrollViewDidEndScrollingAnimation:(UIScrollView*)scrollView {
   self.currentPage = GetPageFromScrollView(scrollView);
   self.scrollViewAnimatingContentOffset = NO;
-  [self arriveAtCurrentPage];
   [self broadcastIncognitoContentVisibility];
   [self configureButtonsForActiveAndCurrentPage];
 }
@@ -503,7 +491,12 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 
 - (void)contentWillDisappearAnimated:(BOOL)animated {
   self.undoCloseAllAvailable = NO;
-  self.tabGridMode = TabGridModeNormal;
+  if (self.tabGridMode != TabGridModeSearch || !animated) {
+    // Updating the mode reset the items on the grid, in that case of search
+    // mode the animation to show the tab will start from the tab cell after the
+    // reset instead of starting from the cell that triggered the navigation.
+    self.tabGridMode = TabGridModeNormal;
+  }
   [self.regularTabsDelegate discardSavedClosedItems];
   // When the view disappears, the toolbar alpha should be set to 0; either as
   // part of the animation, or directly with -hideToolbars.
@@ -526,10 +519,41 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 }
 
 - (void)setCurrentPageAndPageControl:(TabGridPage)page animated:(BOOL)animated {
+  [self updatePageWithCurrentSearchTerms:page];
+
   if (self.topToolbar.pageControl.selectedPage != page)
     [self.topToolbar.pageControl setSelectedPage:page animated:animated];
   if (self.currentPage != page) {
     [self scrollToPage:page animated:animated];
+  }
+}
+
+// Sets the current search terms on |page|. This allows the content to update
+// while the page is still hidden before the page change animation begins.
+- (void)updatePageWithCurrentSearchTerms:(TabGridPage)page {
+  if (self.tabGridMode != TabGridModeSearch ||
+      self.currentPage == TabGridPageIncognitoTabs) {
+    // No need to update search term if not in search mode or currently on the
+    // incognito page.
+    return;
+  }
+
+  NSString* searchTerms = nil;
+  if (self.currentPage == TabGridPageRegularTabs) {
+    searchTerms = self.regularTabsViewController.searchText;
+  } else {
+    searchTerms = self.remoteTabsViewController.searchTerms;
+  }
+
+  if (page == TabGridPageRegularTabs) {
+    // Search terms will be non-empty when switching pages. This is important
+    // because |searchItemsWithText:| will show items from all windows. When no
+    // search terms exist, |resetToAllItems| is used instead.
+    DCHECK(searchTerms.length);
+    self.regularTabsViewController.searchText = searchTerms;
+    [self.regularTabsDelegate searchItemsWithText:searchTerms];
+  } else {
+    self.remoteTabsViewController.searchTerms = searchTerms;
   }
 }
 
@@ -739,10 +763,8 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   self.currentState = currentViewRevealState;
   self.scrollView.scrollEnabled = NO;
   [self updateNotSelectedTabCellOpacityForState:currentViewRevealState];
-  if (nextViewRevealState != ViewRevealState::Fullscreen) {
-    // Reset tag grid mode, unless the grid is fullscreen.
-    self.tabGridMode = TabGridModeNormal;
-  }
+  // Reset tab grid mode.
+  self.tabGridMode = TabGridModeNormal;
   switch (currentViewRevealState) {
     case ViewRevealState::Hidden: {
       // If the tab grid is just showing up, make sure that the active page is
@@ -774,7 +796,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     case ViewRevealState::Peeked:
       break;
     case ViewRevealState::Revealed:
-    case ViewRevealState::Fullscreen:
       self.plusSignButton.alpha = 0;
       break;
   }
@@ -818,8 +839,7 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
                                                 .fractionVisibleOfLastItem];
       break;
     }
-    case ViewRevealState::Revealed:
-    case ViewRevealState::Fullscreen: {
+    case ViewRevealState::Revealed: {
       self.foregroundView.alpha = 0;
       self.topToolbar.transform = CGAffineTransformIdentity;
       regularViewController.gridView.transform =
@@ -840,18 +860,33 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
                               trigger:(ViewRevealTrigger)trigger {
   [self updateNotSelectedTabCellOpacityForState:currentViewRevealState];
   self.currentState = currentViewRevealState;
+  // Update a11y visibility for browser and grid. Both should be visible
+  // when in Peeked mode, and only one visible in the other two modes.
+  BOOL updateAccessibility = NO;
   switch (currentViewRevealState) {
     case ViewRevealState::Hidden:
       [self.delegate tabGridViewControllerDidDismiss:self];
+      self.view.accessibilityViewIsModal = NO;
+      [self.delegate setBVCAccessibilityViewModal:YES];
+      updateAccessibility = YES;
       break;
     case ViewRevealState::Peeked:
-      // No-op.
+      self.view.accessibilityViewIsModal = NO;
+      [self.delegate setBVCAccessibilityViewModal:NO];
+      updateAccessibility = startViewRevealState == ViewRevealState::Hidden;
       break;
     case ViewRevealState::Revealed:
-    case ViewRevealState::Fullscreen:
       self.scrollView.scrollEnabled = YES;
       [self setInsetForRemoteTabs];
+      [self.delegate dismissBVC];
+      self.view.accessibilityViewIsModal = YES;
+      [self.delegate setBVCAccessibilityViewModal:NO];
+      updateAccessibility = startViewRevealState == ViewRevealState::Hidden;
       break;
+  }
+  if (updateAccessibility) {
+    UIAccessibilityPostNotification(UIAccessibilityScreenChangedNotification,
+                                    nil);
   }
 }
 
@@ -869,7 +904,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
           kNotSelectedTabsOpacity;
       break;
     case ViewRevealState::Revealed:
-    case ViewRevealState::Fullscreen:
       regularViewController.notSelectedTabCellOpacity = 1.0f;
       incognitoViewController.notSelectedTabCellOpacity = 1.0f;
       break;
@@ -960,27 +994,9 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   inset.left = self.scrollView.safeAreaInsets.left;
   inset.right = self.scrollView.safeAreaInsets.right;
   inset.top += self.scrollView.safeAreaInsets.top;
-  if (self.keyboardOverlap > 0) {
-    // Override normal bottom insets which will be behind keyboard.
-    inset.bottom = self.keyboardOverlap;
-  } else {
-    inset.bottom += self.scrollView.safeAreaInsets.bottom;
-  }
+  inset.bottom += self.scrollView.safeAreaInsets.bottom;
   self.incognitoTabsViewController.gridView.contentInset = inset;
   self.regularTabsViewController.gridView.contentInset = inset;
-}
-
-- (void)handleKeyboardWillShow:(NSNotification*)notification {
-  CGRect keyboardFrame =
-      [notification.userInfo[UIKeyboardFrameEndUserInfoKey] CGRectValue];
-  CGRect viewFrameInWindow = [self.scrollView convertRect:self.scrollView.bounds
-                                                   toView:nil];
-  self.keyboardOverlap =
-      CGRectIntersection(keyboardFrame, viewFrameInWindow).size.height;
-}
-
-- (void)handleKeyboardWillHide:(NSNotification*)notification {
-  self.keyboardOverlap = 0.0;
 }
 
 // Returns the corresponding GridViewController for |page|. Returns |nil| if
@@ -1000,9 +1016,9 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   // Original current page is about to not be visible. Disable it from being
   // focused by VoiceOver.
   self.currentPageViewController.view.accessibilityElementsHidden = YES;
+  UIViewController* previousPageVC = self.currentPageViewController;
   _currentPage = currentPage;
   self.currentPageViewController.view.accessibilityElementsHidden = NO;
-  // Force VoiceOver to update its accessibility element tree immediately.
   if (self.tabGridMode == TabGridModeSearch) {
     // |UIAccessibilityLayoutChangedNotification| doesn't change the current
     // item focused by the voiceOver if the notification argument provided with
@@ -1011,6 +1027,13 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     // be posted instead.
     UIAccessibilityPostNotification(UIAccessibilityScreenChangedNotification,
                                     nil);
+    // If the search mode is active. the previous page should have the result
+    // gesture recognizer installed, make sure to move the gesture recognizer to
+    // the new page's view.
+    [previousPageVC.view
+        removeGestureRecognizer:self.searchResultPanRecognizer];
+    [self.currentPageViewController.view
+        addGestureRecognizer:self.searchResultPanRecognizer];
   } else {
     UIAccessibilityPostNotification(UIAccessibilityLayoutChangedNotification,
                                     nil);
@@ -1042,6 +1065,9 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   CGFloat pageWidth = self.scrollView.frame.size.width;
   NSUInteger pageIndex = GetPageIndexFromPage(targetPage);
   CGPoint targetOffset = CGPointMake(pageIndex * pageWidth, 0);
+  BOOL changed = self.currentPage != targetPage;
+  BOOL scrolled =
+      !CGPointEqualToPoint(self.scrollView.contentOffset, targetOffset);
 
   // If the view is visible and |animated| is YES, animate the change.
   // Otherwise don't.
@@ -1051,26 +1077,23 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     // Important updates (e.g., button configurations, incognito visibility) are
     // made at the end of scrolling animations after |self.currentPage| is set.
     // Since this codepath has no animations, updates must be called manually.
-    [self arriveAtCurrentPage];
     [self broadcastIncognitoContentVisibility];
     [self configureButtonsForActiveAndCurrentPage];
   } else {
     // Only set |scrollViewAnimatingContentOffset| to YES if there's an actual
     // change in the contentOffset, as |-scrollViewDidEndScrollingAnimation:| is
     // never called if the animation does not occur.
-    if (!CGPointEqualToPoint(self.scrollView.contentOffset, targetOffset)) {
+    if (scrolled) {
       self.scrollViewAnimatingContentOffset = YES;
       [self.scrollView setContentOffset:targetOffset animated:YES];
       // |self.currentPage| is set in scrollViewDidEndScrollingAnimation:
     } else {
-      BOOL changed = self.currentPage != targetPage;
       self.currentPage = targetPage;
       if (changed) {
         // When there is no scrolling and the page changed, it can be due to
         // the user dragging the slider and dropping it right on the spot.
         // Something easy to reproduce with the two edges (incognito / recent
         // tabs), but also possible with middle position (normal).
-        [self arriveAtCurrentPage];
         [self broadcastIncognitoContentVisibility];
         [self configureButtonsForActiveAndCurrentPage];
       }
@@ -1081,22 +1104,9 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   // does not notify observers when entries are removed. When close all tabs
   // removes entries, the remote tabs page in the tab grid are not updated. This
   // ensures that the table is updated whenever scrolling to it.
-  if (targetPage == TabGridPageRemoteTabs) {
+  if (targetPage == TabGridPageRemoteTabs && (changed || scrolled)) {
     [self.remoteTabsViewController loadModel];
     [self.remoteTabsViewController.tableView reloadData];
-  }
-}
-
-// Updates the state when the scroll view stops scrolling at a given page,
-// whether the scroll is from dragging or programmatic.
-- (void)arriveAtCurrentPage {
-  if (!self.viewVisible) {
-    return;
-  }
-  if (self.thumbStripEnabled) {
-    [self.tabPresentationDelegate showActiveTabInPage:self.currentPage
-                                         focusOmnibox:NO
-                                         closeTabGrid:NO];
   }
 }
 
@@ -1330,7 +1340,10 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 
 // Adds the top toolbar and sets constraints.
 - (void)setupTopToolbar {
-  TabGridTopToolbar* topToolbar = [[TabGridTopToolbar alloc] init];
+  // In iOS 13+, constraints break if the UIToolbar is initialized with a null
+  // or zero rect frame. An arbitrary non-zero frame fixes this issue.
+  TabGridTopToolbar* topToolbar =
+      [[TabGridTopToolbar alloc] initWithFrame:CGRectMake(0, 0, 100, 100)];
   self.topToolbar = topToolbar;
   topToolbar.translatesAutoresizingMaskIntoConstraints = NO;
   [self.view addSubview:topToolbar];
@@ -1507,7 +1520,10 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     return;
   }
 
-  [self updateSelectionModeToolbars];
+  if (self.tabGridMode == TabGridModeSelection) {
+    [self updateSelectionModeToolbars];
+  }
+
   [self configureDoneButtonBasedOnPage:self.currentPage];
   [self configureNewTabButtonBasedOnContentPermissions];
   [self configureCloseAllButtonForCurrentPageAndUndoAvailability];
@@ -1587,14 +1603,12 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   if (self.thumbStripEnabled) {
     GridViewController* gridViewController =
         [self gridViewControllerForPage:self.currentPage];
-    DCHECK(gridViewController);
-    if (gridViewController.fractionVisibleOfLastItem >= 0.999) {
-      // Don't show the bottom new tab button because the plus sign cell is
-      // visible.
-      return;
+    // gridViewController can be null if page configuration disables the
+    // currentPage mode.
+    if (gridViewController) {
+      self.plusSignButton.alpha =
+          1 - gridViewController.fractionVisibleOfLastItem;
     }
-    self.plusSignButton.alpha =
-        1 - gridViewController.fractionVisibleOfLastItem;
   }
   [self.bottomToolbar show];
 }
@@ -1755,7 +1769,8 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
           TabSwitcherPageChangeInteraction::kControlDrag);
       break;
   }
-  self.pageChangeInteraction = PageChangeInteractionNone;
+  // Don't reset |self.pageChangeInteraction| here, because a drag may still be
+  // in process.
 }
 
 // Tells the appropriate delegate to create a new item, and then tells the
@@ -1840,23 +1855,29 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 
 - (void)setupSearchUI {
   self.scrimView = [[UIControl alloc] init];
-  self.scrimView.backgroundColor = [UIColor colorNamed:kScrimBackgroundColor];
+  self.scrimView.backgroundColor =
+      [UIColor colorNamed:kDarkerScrimBackgroundColor];
   self.scrimView.translatesAutoresizingMaskIntoConstraints = NO;
   self.scrimView.accessibilityIdentifier = kTabGridScrimIdentifier;
   [self.scrimView addTarget:self
                      action:@selector(cancelSearchButtonTapped:)
            forControlEvents:UIControlEventTouchUpInside];
+  // Add a gesture recognizer to identify when the user interactions with the
+  // search results.
+  self.searchResultPanRecognizer =
+      [[UIPanGestureRecognizer alloc] initWithTarget:self.view
+                                              action:@selector(endEditing:)];
+  self.searchResultPanRecognizer.cancelsTouchesInView = NO;
+  self.searchResultPanRecognizer.delegate = self;
 }
 
 // Shows scrim overlay.
 - (void)showScrim {
-  if (self.isScrimDisplayed) {
-    return;
-  }
-
   self.scrimView.alpha = 0.0f;
-  [self.scrollContentView addSubview:self.scrimView];
-  AddSameConstraints(self.scrimView, self.view.superview);
+  if (!self.scrimView.superview) {
+    [self.scrollContentView addSubview:self.scrimView];
+    AddSameConstraints(self.scrimView, self.view.superview);
+  }
   self.currentPageViewController.accessibilityElementsHidden = YES;
   __weak __typeof(self) weakSelf = self;
   [UIView animateWithDuration:0.2
@@ -1864,39 +1885,61 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
         TabGridViewController* strongSelf = weakSelf;
         if (!strongSelf)
           return;
+        strongSelf.scrimView.hidden = NO;
         strongSelf.scrimView.alpha = 1.0f;
         [strongSelf.view layoutIfNeeded];
-      }
-      completion:^(BOOL finished) {
-        weakSelf.isScrimDisplayed = YES;
-      }];
-}
-
-// Hides scrim overlay.
-- (void)hideScrim {
-  if (!self.isScrimDisplayed) {
-    return;
-  }
-
-  __weak TabGridViewController* weakSelf = self;
-  [UIView animateWithDuration:0.2
-      animations:^{
-        weakSelf.scrimView.alpha = 0.0f;
       }
       completion:^(BOOL finished) {
         TabGridViewController* strongSelf = weakSelf;
         if (!strongSelf)
           return;
-        [strongSelf.scrimView removeFromSuperview];
-        strongSelf.currentPageViewController.accessibilityElementsHidden = NO;
-        strongSelf.isScrimDisplayed = NO;
+        strongSelf.isScrimDisplayed = (strongSelf.scrimView.alpha > 0);
+        strongSelf.currentPageViewController.accessibilityElementsHidden = YES;
       }];
+}
+
+// Hides scrim overlay.
+- (void)hideScrim {
+  __weak TabGridViewController* weakSelf = self;
+  [UIView animateWithDuration:0.2
+      animations:^{
+        TabGridViewController* strongSelf = weakSelf;
+        if (!strongSelf)
+          return;
+
+        strongSelf.scrimView.alpha = 0.0f;
+        strongSelf.scrimView.hidden = YES;
+      }
+      completion:^(BOOL finished) {
+        TabGridViewController* strongSelf = weakSelf;
+        if (!strongSelf)
+          return;
+        strongSelf.currentPageViewController.accessibilityElementsHidden = NO;
+        strongSelf.isScrimDisplayed = (strongSelf.scrimView.alpha > 0);
+      }];
+}
+
+#pragma mark UIGestureRecognizerDelegate
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer*)gestureRecognizer
+    shouldRecognizeSimultaneouslyWithGestureRecognizer:
+        (UIGestureRecognizer*)otherGestureRecognizer {
+  if (gestureRecognizer == self.searchResultPanRecognizer)
+    return YES;
+  return NO;
 }
 
 #pragma mark UISearchBarDelegate
 
 - (void)searchBarTextDidBeginEditing:(UISearchBar*)searchBar {
   [self updateScrimVisibilityForText:searchBar.text];
+  [self.currentPageViewController.view
+      addGestureRecognizer:self.searchResultPanRecognizer];
+}
+
+- (void)searchBarTextDidEndEditing:(UISearchBar*)searchBar {
+  [self.currentPageViewController.view
+      removeGestureRecognizer:self.searchResultPanRecognizer];
 }
 
 - (void)searchBarSearchButtonClicked:(UISearchBar*)searchBar {
@@ -1904,43 +1947,50 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 }
 
 - (void)searchBar:(UISearchBar*)searchBar textDidChange:(NSString*)searchText {
+  searchBar.searchTextField.accessibilityIdentifier =
+      [kTabGridSearchTextFieldIdentifierPrefix
+          stringByAppendingString:searchText];
   [self updateScrimVisibilityForText:searchText];
   switch (self.currentPage) {
     case TabGridPageIncognitoTabs:
       self.incognitoTabsViewController.searchText = searchText;
-      if (searchText.length) {
-        [self.incognitoTabsDelegate searchItemsWithText:searchText];
-      } else {
-        // The expectation from searchItemsWithText is to search tabs from all
-        // the available windows to the app. However in the case of empy string
-        // the grid should revert back to its original state so it doesn't
-        // display all the tabs from all the available windows.
-        [self.incognitoTabsDelegate resetToAllItems];
-      }
+      [self updateSearchGrid:self.incognitoTabsDelegate
+              withSearchText:searchText];
       break;
     case TabGridPageRegularTabs:
-    case TabGridPageRemoteTabs:
       self.regularTabsViewController.searchText = searchText;
+      [self updateSearchGrid:self.regularTabsDelegate
+              withSearchText:searchText];
+      break;
+    case TabGridPageRemoteTabs:
       self.remoteTabsViewController.searchTerms = searchText;
-      if (searchText.length) {
-        [self.regularTabsDelegate searchItemsWithText:searchText];
-      } else {
-        // The expectation from searchItemsWithText is to search tabs from all
-        // the available windows to the app. However in the case of empy string
-        // the grid should revert back to its original state so it doesn't
-        // display all the tabs from all the available windows.
-        [self.regularTabsDelegate resetToAllItems];
-      }
       break;
   }
 }
 
-- (void)updateScrimVisibilityForText:(NSString*)searchText {
-  if (_tabGridMode == TabGridModeSearch && searchText.length == 0) {
-    [self showScrim];
+- (void)updateSearchGrid:(id<GridCommands>)tabsDelegate
+          withSearchText:(NSString*)searchText {
+  if (searchText.length) {
+    [tabsDelegate searchItemsWithText:searchText];
   } else {
-    // If no results have been presented yet, then hide the scrim to present the
-    // results.
+    // The expectation from searchItemsWithText is to search tabs from all
+    // the available windows to the app. However in the case of empy string
+    // the grid should revert back to its original state so it doesn't
+    // display all the tabs from all the available windows.
+    [tabsDelegate resetToAllItems];
+  }
+}
+
+- (void)updateScrimVisibilityForText:(NSString*)searchText {
+  if (_tabGridMode != TabGridModeSearch)
+    return;
+  if (searchText.length == 0) {
+    self.isPerformingSearch = NO;
+    [self showScrim];
+  } else if (!self.isPerformingSearch) {
+    self.isPerformingSearch = YES;
+    // If no results have been presented yet, then hide the scrim to present
+    // the results.
     [self hideScrim];
   }
 }
@@ -2046,14 +2096,19 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   alreadySelected = [tabsDelegate isItemWithIDSelected:itemID];
   [tabsDelegate selectItemWithID:itemID];
 
-  if (IsTabsSearchEnabled() && self.tabGridMode == TabGridModeSearch &&
-      ![tabsDelegate isItemWithIDSelected:itemID]) {
-    // That can happen when the search result that was selected is from
-    // another window. In that case don't change the active page for this
-    // window and don't close the tab grid.
-    base::RecordAction(base::UserMetricsAction(
-        "MobileTabGridOpenSearchResultInAnotherWindow"));
-    return;
+  if (IsTabsSearchEnabled() && self.tabGridMode == TabGridModeSearch) {
+    if (![tabsDelegate isItemWithIDSelected:itemID]) {
+      // That can happen when the search result that was selected is from
+      // another window. In that case don't change the active page for this
+      // window and don't close the tab grid.
+      base::RecordAction(base::UserMetricsAction(
+          "MobileTabGridOpenSearchResultInAnotherWindow"));
+      return;
+    } else {
+      // Make sure that the keyboard is dismissed before starting the transition
+      // to the selected tab.
+      [self.view endEditing:YES];
+    }
   }
   self.activePage = self.currentPage;
   // When the tab grid is peeked, selecting an item should not close the grid
@@ -2104,7 +2159,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     // Exit selection mode if there are no more tabs.
     if (count == 0) {
       self.tabGridMode = TabGridModeNormal;
-      [self.delegate showFullscreen:NO];
     }
     [self updateSelectionModeToolbars];
   }
@@ -2131,10 +2185,11 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 
   CGFloat lastItemVisiblity = gridViewController.fractionVisibleOfLastItem;
   self.plusSignButton.alpha = 1 - lastItemVisiblity;
+  CGFloat xDistance = UseRTLLayout() ? -kScrollThresholdForPlusSignButtonHide
+                                     : kScrollThresholdForPlusSignButtonHide;
   self.plusSignButton.plusSignImage.transform =
       lastItemVisiblity < 1
-          ? CGAffineTransformMakeTranslation(
-                lastItemVisiblity * kScrollThresholdForPlusSignButtonHide, 0)
+          ? CGAffineTransformMakeTranslation(lastItemVisiblity * xDistance, 0)
           : CGAffineTransformIdentity;
 }
 
@@ -2156,6 +2211,7 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     (GridViewController*)gridViewController {
   // Actions on both bars should be disabled during dragging.
   [self.topToolbar setDoneButtonEnabled:NO];
+  self.topToolbar.pageControl.userInteractionEnabled = NO;
   [self.bottomToolbar setDoneButtonEnabled:NO];
   [self.topToolbar setNewTabButtonEnabled:NO];
   [self.topToolbar setSelectAllButtonEnabled:NO];
@@ -2168,10 +2224,13 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 
 - (void)gridViewControllerDragSessionDidEnd:
     (GridViewController*)gridViewController {
+  // -configureDoneButtonBasedOnPage will enable the page control.
   [self configureDoneButtonBasedOnPage:self.currentPage];
   [self configureCloseAllButtonForCurrentPageAndUndoAvailability];
   [self configureNewTabButtonBasedOnContentPermissions];
-  [self updateSelectionModeToolbars];
+  if (self.tabGridMode == TabGridModeSelection) {
+    [self updateSelectionModeToolbars];
+  }
 }
 
 #pragma mark - Control actions
@@ -2181,7 +2240,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   // mode.
   if (self.tabGridMode == TabGridModeSelection) {
     self.tabGridMode = TabGridModeNormal;
-    [self.delegate showFullscreen:NO];
     // Records action when user exit the selection mode.
     base::RecordAction(base::UserMetricsAction("MobileTabGridSelectionDone"));
     return;
@@ -2207,7 +2265,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 
 - (void)selectTabsButtonTapped:(id)sender {
   self.tabGridMode = TabGridModeSelection;
-  [self.delegate showFullscreen:YES];
   base::RecordAction(base::UserMetricsAction("MobileTabGridSelectTabs"));
 }
 
@@ -2403,7 +2460,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     didUpdateAuthenticationRequirement:(BOOL)isRequired {
   if (isRequired) {
     self.tabGridMode = TabGridModeNormal;
-    [self.delegate showFullscreen:NO];
   }
 }
 

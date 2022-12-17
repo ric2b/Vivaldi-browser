@@ -391,12 +391,12 @@ void ConversionContext::SwitchToClip(const ClipPaintPropertyNode& target_clip) {
 
 // NOTE(david@vivaldi.com): When capturing the whole page in Android, we need
 // to apply the correct clipping rect without taking the top frame into account.
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   if (PaintChunksToCcLayer::TopClipToIgnore() != nullptr) {
     pending_combined_clip_rect =
         FloatRoundedRect(LayoutRect::InfiniteIntRect());
   }
-#endif  // OS_ANDROID
+#endif  // IS_ANDROID
 
   const auto* lowest_combined_clip_node = pending_clips.back();
   for (auto i = pending_clips.size() - 1; i--;) {

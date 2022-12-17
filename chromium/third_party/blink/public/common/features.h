@@ -7,6 +7,7 @@
 
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "media/media_buildflags.h"
 #include "third_party/blink/public/common/buildflags.h"
@@ -19,18 +20,17 @@ namespace features {
 BLINK_COMMON_EXPORT extern const base::Feature kAutomaticLazyFrameLoadingToAds;
 BLINK_COMMON_EXPORT extern const base::Feature
     kAutomaticLazyFrameLoadingToEmbeds;
+BLINK_COMMON_EXPORT extern const base::Feature
+    kAutomaticLazyFrameLoadingToEmbedUrls;
 BLINK_COMMON_EXPORT extern const base::Feature kBackForwardCacheDedicatedWorker;
 BLINK_COMMON_EXPORT extern const base::Feature
     kBlockingDownloadsInAdFrameWithoutUserActivation;
-BLINK_COMMON_EXPORT extern const base::Feature kCOLRV1Fonts;
 BLINK_COMMON_EXPORT extern const base::Feature kCSSContainerQueries;
 BLINK_COMMON_EXPORT extern const base::Feature kConversionMeasurement;
 BLINK_COMMON_EXPORT extern const base::Feature kExcludeLowEntropyImagesFromLCP;
 BLINK_COMMON_EXPORT extern const base::FeatureParam<double>
     kMinimumEntropyForLCP;
 BLINK_COMMON_EXPORT extern const base::Feature kGMSCoreEmoji;
-BLINK_COMMON_EXPORT extern const base::Feature
-    kHandwritingRecognitionWebPlatformApiFinch;
 BLINK_COMMON_EXPORT extern const base::Feature kPaintHolding;
 BLINK_COMMON_EXPORT extern const base::Feature kPaintHoldingCrossOrigin;
 BLINK_COMMON_EXPORT extern const base::Feature
@@ -47,11 +47,13 @@ BLINK_COMMON_EXPORT extern const base::Feature
     kFrequencyCappingForLargeStickyAdDetection;
 BLINK_COMMON_EXPORT extern const base::Feature kDisplayLocking;
 BLINK_COMMON_EXPORT extern const base::Feature kJSONModules;
-BLINK_COMMON_EXPORT extern const base::Feature kForceSynchronousHTMLParsing;
+BLINK_COMMON_EXPORT extern const base::Feature kDeferredFontShaping;
 BLINK_COMMON_EXPORT extern const base::Feature kEditingNG;
 BLINK_COMMON_EXPORT extern const base::Feature kLayoutNG;
+BLINK_COMMON_EXPORT extern const base::Feature kLayoutNGBlockInInline;
 BLINK_COMMON_EXPORT extern const base::Feature kMixedContentAutoupgrade;
 BLINK_COMMON_EXPORT extern const base::Feature kNavigationPredictor;
+BLINK_COMMON_EXPORT extern const base::Feature kAnchorElementInteraction;
 BLINK_COMMON_EXPORT extern const base::Feature kPlzDedicatedWorker;
 BLINK_COMMON_EXPORT extern const base::Feature kPortals;
 BLINK_COMMON_EXPORT extern const base::Feature kPortalsCrossOrigin;
@@ -63,6 +65,8 @@ BLINK_COMMON_EXPORT extern const base::Feature
     kPrefersColorSchemeClientHintHeader;
 BLINK_COMMON_EXPORT extern const base::Feature kViewportHeightClientHintHeader;
 BLINK_COMMON_EXPORT extern const base::Feature kFullUserAgent;
+BLINK_COMMON_EXPORT extern const base::Feature kPath2DPaintCache;
+BLINK_COMMON_EXPORT extern const base::Feature kPrivacySandboxAdsAPIs;
 
 enum class FencedFramesImplementationType {
   kShadowDOM,
@@ -94,13 +98,10 @@ BLINK_COMMON_EXPORT extern const base::FeatureParam<int>
 // Maximum number of tries to initialize the database.
 BLINK_COMMON_EXPORT extern const base::FeatureParam<int>
     kMaxSharedStorageInitTries;
-// Maximum number of consecutive database errors allowed before the database is
-// razed. Consecutive errors are tallied, and if the next database operation
-// returns successfully, the consecutive error count is reset back to zero. If
-// the consecutive error count exceeds the threshold, then the database is
-// destroyed and recreated.
+// The maximum number of keys or key-value pairs returned in each batch by
+// the async `keys()` and `entries()` iterators, respectively.
 BLINK_COMMON_EXPORT extern const base::FeatureParam<int>
-    kMaxSharedStorageConsecutiveOperationErrorsAllowed;
+    kMaxSharedStorageIteratorBatchSize;
 // The length of the initial interval from service startup after which
 // SharedStorageManager first checks for any stale origins, purging any that it
 // finds.
@@ -136,6 +137,7 @@ BLINK_COMMON_EXPORT bool IsPrerender2Enabled();
 // Fenced Frames:
 BLINK_COMMON_EXPORT bool IsFencedFramesEnabled();
 BLINK_COMMON_EXPORT bool IsFencedFramesMPArchBased();
+BLINK_COMMON_EXPORT bool IsFencedFramesShadowDOMBased();
 
 // Whether we will create initial NavigationEntry or not on FrameTree creation,
 // which also impacts the session history replacement decisions made in the
@@ -149,8 +151,6 @@ BLINK_COMMON_EXPORT extern const base::Feature
     kPurgeRendererMemoryWhenBackgrounded;
 BLINK_COMMON_EXPORT extern const base::Feature kWindowOpenNewPopupBehavior;
 BLINK_COMMON_EXPORT extern const base::Feature kRTCUnifiedPlanByDefault;
-BLINK_COMMON_EXPORT extern const base::Feature
-    kRTCDisallowPlanBOutsideDeprecationTrial;
 BLINK_COMMON_EXPORT extern const base::Feature kRTCOfferExtmapAllowMixed;
 BLINK_COMMON_EXPORT extern const base::Feature kRTCGpuCodecSupportWaiter;
 BLINK_COMMON_EXPORT extern const base::FeatureParam<int>
@@ -375,7 +375,7 @@ BLINK_COMMON_EXPORT extern const base::Feature kWebAppEnableHandleLinks;
 
 BLINK_COMMON_EXPORT extern const base::Feature kWebAppEnableLaunchHandler;
 
-BLINK_COMMON_EXPORT extern const base::Feature kWebAppEnableLinkCapturing;
+BLINK_COMMON_EXPORT extern const base::Feature kWebAppEnableLaunchHandlerV1API;
 
 BLINK_COMMON_EXPORT extern const base::Feature kWebAppEnableManifestId;
 
@@ -383,12 +383,7 @@ BLINK_COMMON_EXPORT extern const base::Feature kWebAppEnableTranslations;
 
 BLINK_COMMON_EXPORT extern const base::Feature kWebAppEnableUrlHandlers;
 
-BLINK_COMMON_EXPORT extern const base::Feature kWebAppEnableProtocolHandlers;
-
 BLINK_COMMON_EXPORT extern const base::Feature kLoadingTasksUnfreezable;
-
-BLINK_COMMON_EXPORT extern const base::Feature
-    kNetworkRequestUsesOnlyPerProcessBufferLimit;
 
 BLINK_COMMON_EXPORT extern const base::Feature kTargetBlankImpliesNoOpener;
 
@@ -416,6 +411,7 @@ BLINK_COMMON_EXPORT extern const base::FeatureParam<std::string>
     kBackgroundTracingPerformanceMark_AllowList;
 
 BLINK_COMMON_EXPORT extern const base::Feature kSanitizerAPI;
+BLINK_COMMON_EXPORT extern const base::Feature kSanitizerAPINamespaces;
 BLINK_COMMON_EXPORT extern const base::Feature kManagedConfiguration;
 
 // Kill switch for the blocking of the navigation of top from a cross origin
@@ -463,10 +459,29 @@ BLINK_COMMON_EXPORT extern const base::Feature kAllowURNsInIframes;
 // Returns true when Prerender2 feature is enabled.
 BLINK_COMMON_EXPORT bool IsAllowURNsInIframeEnabled();
 
-// Control switch for minimizing processing in the WebRTC APM when all audio
-// tracks are disabled.
+BLINK_COMMON_EXPORT extern const base::Feature kBrowsingTopics;
+BLINK_COMMON_EXPORT extern const base::FeatureParam<base::TimeDelta>
+    kBrowsingTopicsTimePeriodPerEpoch;
+BLINK_COMMON_EXPORT extern const base::FeatureParam<int>
+    kBrowsingTopicsNumberOfEpochsToExpose;
+BLINK_COMMON_EXPORT extern const base::FeatureParam<int>
+    kBrowsingTopicsNumberOfTopTopicsPerEpoch;
+BLINK_COMMON_EXPORT extern const base::FeatureParam<int>
+    kBrowsingTopicsUseRandomTopicProbabilityPercent;
+BLINK_COMMON_EXPORT extern const base::FeatureParam<int>
+    kBrowsingTopicsNumberOfEpochsOfObservationDataToUseForFiltering;
+BLINK_COMMON_EXPORT extern const base::FeatureParam<int>
+    kBrowsingTopicsMaxNumberOfApiUsageContextDomainsToKeepPerTopic;
+BLINK_COMMON_EXPORT extern const base::FeatureParam<int>
+    kBrowsingTopicsMaxNumberOfApiUsageContextEntriesToLoadPerEpoch;
+BLINK_COMMON_EXPORT extern const base::FeatureParam<int>
+    kBrowsingTopicsMaxNumberOfApiUsageContextDomainsToStorePerPageLoad;
+BLINK_COMMON_EXPORT extern const base::FeatureParam<int>
+    kBrowsingTopicsConfigVersion;
+BLINK_COMMON_EXPORT extern const base::FeatureParam<int>
+    kBrowsingTopicsTaxonomyVersion;
 BLINK_COMMON_EXPORT extern const base::Feature
-    kMinimizeAudioProcessingForUnusedOutput;
+    kBrowsingTopicsBypassIPIsPubliclyRoutableCheck;
 
 // When <dialog>s are closed, this focuses the "previously focused" element
 // which had focus when the <dialog> was first opened.
@@ -485,9 +500,6 @@ BLINK_COMMON_EXPORT extern const base::Feature kClipboardCustomFormats;
 // Uses page viewport instead of frame viewport in the Largest Contentful Paint
 // heuristic where images occupying the full viewport are ignored.
 BLINK_COMMON_EXPORT extern const base::Feature kUsePageViewportInLCP;
-
-// Send all user interaction latency data from renderer to the browser process.
-BLINK_COMMON_EXPORT extern const base::Feature kSendAllUserInteractionLatencies;
 
 // Enable "Sec-CH-UA-Platform" client hint and request header for all requests
 BLINK_COMMON_EXPORT extern const base::Feature kUACHPlatformEnabledByDefault;
@@ -530,6 +542,11 @@ BLINK_COMMON_EXPORT extern const base::Feature kIncludeBackgroundSVGInLCP;
 BLINK_COMMON_EXPORT
 extern const base::FeatureParam<int> kMaxNumOfThrottleableRequestsInTightMode;
 
+// TODO(crbug.com/1315717): This flag is being used to deprecate support for
+// <param> urls within <object> elements. This feature is controlled by
+// blink::features::kHTMLParamElementUrlSupport.
+BLINK_COMMON_EXPORT extern const base::Feature kHTMLParamElementUrlSupport;
+
 // The HTTP RTT threshold: decide whether the
 // `kDelayLowPriorityRequestsAccordingToNetworkState` feature can take effect
 // practically according to the network connection state.
@@ -554,8 +571,6 @@ BLINK_COMMON_EXPORT extern const base::Feature kClientHintsDPR;
 BLINK_COMMON_EXPORT extern const base::Feature kClientHintsResourceWidth;
 BLINK_COMMON_EXPORT extern const base::Feature kClientHintsViewportWidth;
 BLINK_COMMON_EXPORT extern const base::Feature
-    kWebSQLInThirdPartyContextEnabled;
-BLINK_COMMON_EXPORT extern const base::Feature
     kClientHintsDeviceMemory_DEPRECATED;
 BLINK_COMMON_EXPORT extern const base::Feature kClientHintsDPR_DEPRECATED;
 BLINK_COMMON_EXPORT extern const base::Feature
@@ -563,11 +578,21 @@ BLINK_COMMON_EXPORT extern const base::Feature
 BLINK_COMMON_EXPORT extern const base::Feature
     kClientHintsViewportWidth_DEPRECATED;
 
-// https://drafts.csswg.org/css-cascade-5/#layering
-BLINK_COMMON_EXPORT extern const base::Feature kCSSCascadeLayers;
-
 BLINK_COMMON_EXPORT extern const base::Feature kSetTimeoutWithoutClamp;
+// window.setTimeout() has a feature to remove 1ms clamp to improve performance
+// and battery life. Enterprise policy can override this to control the feature.
+// Normally, the result of this feature calculation is cached; allow tests
+// to clear the cache to recompute the feature value.
+BLINK_COMMON_EXPORT void
+ClearSetTimeoutWithout1MsClampPolicyOverrideCacheForTesting();
 BLINK_COMMON_EXPORT bool IsSetTimeoutWithoutClampEnabled();
+
+BLINK_COMMON_EXPORT extern const base::Feature
+    kMaxUnthrottledTimeoutNestingLevel;
+BLINK_COMMON_EXPORT extern const base::FeatureParam<int>
+    kMaxUnthrottledTimeoutNestingLevelParam;
+BLINK_COMMON_EXPORT bool IsMaxUnthrottledTimeoutNestingLevelEnabled();
+BLINK_COMMON_EXPORT int GetMaxUnthrottledTimeoutNestingLevel();
 
 // If enabled, ContentToVisibleTimeReporter logs
 // Browser.Tabs.TotalSwitchDuration2.* instead of
@@ -575,12 +600,6 @@ BLINK_COMMON_EXPORT bool IsSetTimeoutWithoutClampEnabled();
 BLINK_COMMON_EXPORT extern const base::Feature kTabSwitchMetrics2;
 
 BLINK_COMMON_EXPORT extern const base::Feature kLCPAnimatedImagesReporting;
-
-BLINK_COMMON_EXPORT extern const base::Feature
-    kWebSQLInThirdPartyContextThrowsWhenDisabled;
-
-// https://blog.whatwg.org/newline-normalizations-in-form-submission
-BLINK_COMMON_EXPORT extern const base::Feature kLateFormNewlineNormalization;
 
 // TODO(crbug.com/1185950): Remove this flag when the feature is fully launched
 // and released to stable with no issues.
@@ -613,9 +632,6 @@ BLINK_COMMON_EXPORT extern const base::Feature kClientHintThirdPartyDelegation;
 BLINK_COMMON_EXPORT extern const base::Feature kPrefetchAndroidFonts;
 #endif
 
-BLINK_COMMON_EXPORT extern const base::Feature
-    kLazyInitializeTimeZoneController;
-
 BLINK_COMMON_EXPORT extern const base::Feature kCompositedCaret;
 
 // Allows pages that support App Install Banners to stay eligible for the
@@ -644,12 +660,68 @@ BLINK_COMMON_EXPORT extern const base::Feature kDurableClientHintsCache;
 // better control text input. See crbug.com/999184.
 BLINK_COMMON_EXPORT extern const base::Feature kEditContext;
 
-// If enabled, non-required tiles in inactive windows are freed.
-BLINK_COMMON_EXPORT extern const base::Feature
-    kFreeNonRequiredTileResourcesForInactiveWindows;
-
-// Enables the WindowPlacement RuntimeEnabledFeature.
+// Gates Multi-Screen Window Placement features and additional enhancements.
 BLINK_COMMON_EXPORT extern const base::Feature kWindowPlacement;
+BLINK_COMMON_EXPORT extern const base::Feature
+    kWindowPlacementFullscreenCompanionWindow;
+BLINK_COMMON_EXPORT extern const base::Feature
+    kWindowPlacementFullscreenOnScreensChange;
+
+// Gates the non-standard API Event.path to help its deprecation and removal.
+BLINK_COMMON_EXPORT extern const base::Feature kEventPath;
+
+// Removes a paint invalidation of viewport constrained objects (sticky or
+// fixed) after scrolling.
+BLINK_COMMON_EXPORT extern const base::Feature
+    kOptimizeViewportConstrainedPaintInvalidation;
+
+// If enabled, the minor version of the User-Agent string will be reduced.
+BLINK_COMMON_EXPORT extern const base::Feature kReduceUserAgentMinorVersion;
+BLINK_COMMON_EXPORT extern const base::FeatureParam<std::string>
+    kUserAgentFrozenBuildVersion;
+
+// If enabled, we only report FCP if there’s a successful commit to the
+// compositor. Otherwise, FCP may be reported if first BeginMainFrame results in
+// a commit failure (see crbug.com/1257607).
+BLINK_COMMON_EXPORT extern const base::Feature kReportFCPOnlyOnSuccessfulCommit;
+
+BLINK_COMMON_EXPORT extern const base::Feature kSecureContextFixForWorkers;
+
+// If enabled, the `getDisplayMedia()` family of APIs will ask for NV12 frames,
+// which should trigger a zero-copy path in the tab capture code.
+BLINK_COMMON_EXPORT extern const base::Feature kZeroCopyTabCapture;
+
+// Experiment for measuring how often an overridden User-Agent string is made by
+// appending or prepending to the original User-Agent string.
+BLINK_COMMON_EXPORT extern const base::Feature kUserAgentOverrideExperiment;
+
+BLINK_COMMON_EXPORT extern const base::Feature kWebSQLAccess;
+
+BLINK_COMMON_EXPORT extern const base::Feature kUACHOverrideBlank;
+
+#if BUILDFLAG(IS_WIN)
+// Enables prewarming the default font families.
+BLINK_COMMON_EXPORT extern const base::Feature kPrewarmDefaultFontFamilies;
+BLINK_COMMON_EXPORT extern const base::FeatureParam<bool> kPrewarmStandard;
+BLINK_COMMON_EXPORT extern const base::FeatureParam<bool> kPrewarmFixed;
+BLINK_COMMON_EXPORT extern const base::FeatureParam<bool> kPrewarmSerif;
+BLINK_COMMON_EXPORT extern const base::FeatureParam<bool> kPrewarmSansSerif;
+BLINK_COMMON_EXPORT extern const base::FeatureParam<bool> kPrewarmCursive;
+BLINK_COMMON_EXPORT extern const base::FeatureParam<bool> kPrewarmFantasy;
+#endif
+
+BLINK_COMMON_EXPORT extern const base::Feature kClientHintsSaveData;
+
+// Enables establishing the GPU channel asnchronously when requesting a new
+// layer tree frame sink.
+BLINK_COMMON_EXPORT extern const base::Feature kEstablishGpuChannelAsync;
+
+// If enabled, the parser may continue parsing if BeginMainFrame was
+// recently called.
+BLINK_COMMON_EXPORT extern const base::Feature
+    kDeferBeginMainFrameDuringLoading;
+BLINK_COMMON_EXPORT extern const base::FeatureParam<base::TimeDelta>
+    kRecentBeginMainFrameCutoff;
 
 }  // namespace features
 }  // namespace blink

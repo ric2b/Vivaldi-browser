@@ -13,6 +13,7 @@
 #include "third_party/blink/renderer/core/layout/ng/ng_block_node.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_constraint_space.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_constraint_space_builder.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_fragmentation_utils.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_space_utils.h"
 #include "third_party/blink/renderer/core/layout/ng/table/ng_table_node.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
@@ -120,7 +121,8 @@ LayoutUnit ResolveInlineLengthInternal(
     case Length::kCalculated: {
       const LayoutUnit percentage_resolution_size =
           constraint_space.PercentageResolutionInlineSize();
-      DCHECK(length.IsFixed() || percentage_resolution_size != kIndefiniteSize);
+      DCHECK(length.IsFixed() || percentage_resolution_size != kIndefiniteSize)
+          << length.ToString();
       LayoutUnit value =
           MinimumValueForLength(length, percentage_resolution_size);
 
@@ -996,7 +998,10 @@ LogicalSize ComputeReplacedSize(const NGBlockNode& node,
       size = InlineSizeFromAspectRatio(border_padding, aspect_ratio, box_sizing,
                                        *replaced_block);
     } else if (natural_size) {
-      size = natural_size->inline_size;
+      DCHECK_NE(mode, ReplacedSizeMode::kIgnoreInlineLengths);
+      size = ComputeReplacedSize(node, space, border_padding,
+                                 ReplacedSizeMode::kIgnoreInlineLengths)
+                 .inline_size;
     } else {
       // We don't have a natural size - default to stretching.
       size = StretchFit();
@@ -1236,29 +1241,6 @@ NGBoxStrut ComputeMarginsFor(const NGConstraintSpace& constraint_space,
       .ConvertToLogical(compute_for.GetWritingDirection());
 }
 
-NGBoxStrut ComputeMinMaxMargins(const ComputedStyle& parent_style,
-                                NGLayoutInputNode child) {
-  // An inline child just produces line-boxes which don't have any margins.
-  if (child.IsInline() || !child.Style().MayHaveMargin())
-    return NGBoxStrut();
-
-  const Length& inline_start_margin_length =
-      child.Style().MarginStartUsing(parent_style);
-  const Length& inline_end_margin_length =
-      child.Style().MarginEndUsing(parent_style);
-
-  // TODO(ikilpatrick): We may want to re-visit calculated margins at some
-  // point. Currently "margin-left: calc(10px + 50%)" will resolve to 0px, but
-  // 10px would be more correct, (as percentages resolve to zero).
-  NGBoxStrut margins;
-  if (inline_start_margin_length.IsFixed())
-    margins.inline_start = LayoutUnit(inline_start_margin_length.Value());
-  if (inline_end_margin_length.IsFixed())
-    margins.inline_end = LayoutUnit(inline_end_margin_length.Value());
-
-  return margins;
-}
-
 namespace {
 
 NGBoxStrut ComputeBordersInternal(const ComputedStyle& style) {
@@ -1414,10 +1396,11 @@ LayoutUnit LineOffsetForTextAlign(ETextAlign text_align,
 LayoutUnit CalculateDefaultBlockSize(
     const NGConstraintSpace& space,
     const NGBlockNode& node,
+    const NGBlockBreakToken* break_token,
     const NGBoxStrut& border_scrollbar_padding) {
   // In quirks mode, html and body elements will completely fill the ICB, block
   // percentages should resolve against this size.
-  if (node.IsQuirkyAndFillsViewport()) {
+  if (node.IsQuirkyAndFillsViewport() && !IsResumingLayout(break_token)) {
     LayoutUnit block_size = space.AvailableSize().block_size;
     block_size -= ComputeMarginsForSelf(space, node.Style()).BlockSum();
     return std::max(block_size.ClampNegativeToZero(),
@@ -1453,6 +1436,7 @@ bool ClampScrollbarToContentBox(NGBoxStrut* scrollbars,
 NGFragmentGeometry CalculateInitialFragmentGeometry(
     const NGConstraintSpace& constraint_space,
     const NGBlockNode& node,
+    const NGBlockBreakToken* break_token,
     bool is_intrinsic) {
   DCHECK(is_intrinsic || node.CanUseNewLayout());
   const ComputedStyle& style = node.Style();
@@ -1483,7 +1467,7 @@ NGFragmentGeometry CalculateInitialFragmentGeometry(
   }
 
   LayoutUnit default_block_size = CalculateDefaultBlockSize(
-      constraint_space, node, border_scrollbar_padding);
+      constraint_space, node, break_token, border_scrollbar_padding);
   absl::optional<LayoutUnit> inline_size;
   if (!is_intrinsic) {
     inline_size =
@@ -1603,6 +1587,7 @@ LogicalSize CalculateReplacedChildPercentageSize(
 LayoutUnit ClampIntrinsicBlockSize(
     const NGConstraintSpace& space,
     const NGBlockNode& node,
+    const NGBlockBreakToken* break_token,
     const NGBoxStrut& border_scrollbar_padding,
     LayoutUnit current_intrinsic_block_size,
     absl::optional<LayoutUnit> body_margin_block_sum) {
@@ -1620,8 +1605,9 @@ LayoutUnit ClampIntrinsicBlockSize(
   if (default_intrinsic_size != kIndefiniteSize) {
     // <textarea>'s intrinsic size should ignore scrollbar existence.
     if (node.IsTextArea()) {
-      return default_intrinsic_size + border_scrollbar_padding.BlockSum() -
-             ComputeScrollbars(space, node).BlockSum();
+      return default_intrinsic_size -
+             ComputeScrollbars(space, node).BlockSum() +
+             border_scrollbar_padding.BlockSum();
     }
     return default_intrinsic_size + border_scrollbar_padding.BlockSum();
   }
@@ -1632,7 +1618,8 @@ LayoutUnit ClampIntrinsicBlockSize(
     return border_scrollbar_padding.BlockSum();
 
   // Apply the "fills viewport" quirk if needed.
-  if (node.IsQuirkyAndFillsViewport() && style.LogicalHeight().IsAuto() &&
+  if (!IsResumingLayout(break_token) && node.IsQuirkyAndFillsViewport() &&
+      style.LogicalHeight().IsAuto() &&
       space.AvailableSize().block_size != kIndefiniteSize) {
     DCHECK_EQ(node.IsBody() && !node.CreatesNewFormattingContext(),
               body_margin_block_sum.has_value());

@@ -5,7 +5,6 @@
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_bottom_toolbar.h"
 
 #include "base/strings/sys_string_conversions.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_grid/features.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_constants.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_constants.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_new_tab_button.h"
@@ -60,35 +59,31 @@
 // toolbar is transparent and has the |_largeNewTabButton|, only respond to
 // tapping on that button.
 - (BOOL)pointInside:(CGPoint)point withEvent:(UIEvent*)event {
-  if ([self shouldShowFullBar]) {
-    return [super pointInside:point withEvent:event];
+  if ([self isShowingFloatingButton]) {
+    // Only floating new tab button is tappable.
+    return [_largeNewTabButton
+        pointInside:[self convertPoint:point toView:_largeNewTabButton]
+          withEvent:event];
   }
-  // Only floating new tab button is tappable.
-  return [_largeNewTabButton pointInside:[self convertPoint:point
-                                                     toView:_largeNewTabButton]
-                               withEvent:event];
+  return [super pointInside:point withEvent:event];
 }
 
-// Returns UIToolbar's intrinsicContentSize based on the orientation and the
-// mode.
+// Returns intrinsicContentSize based on the content of the toolbar.
+// When showing the floating Button the contentsize for the toolbar should be
+// zero so that the toolbar isn't accounted for when calculating the bottom
+// insets of the container view.
 - (CGSize)intrinsicContentSize {
-  if ([self shouldShowFullBar]) {
-    return _toolbar.intrinsicContentSize;
+  if ([self isShowingFloatingButton] || self.subviews.count == 0) {
+    return CGSizeZero;
   }
-  // Return CGSizeZero for floating button layout.
-  return CGSizeZero;
+  return _toolbar.intrinsicContentSize;
 }
 
 #pragma mark - Public
 
-// TODO(crbug.com/929981): "traitCollectionDidChange:" method won't get called
-// when the view is not displayed, and in that case the only chance
-// TabGridBottomToolbar can update its layout is when the TabGrid sets its
-// "page" property in the
-// "viewWillTransitionToSize:withTransitionCoordinator:" method. An early
-// return for "self.page == page" can be added here since iOS 13 where the bug
-// is fixed in UIKit.
 - (void)setPage:(TabGridPage)page {
+  if (_page == page)
+    return;
   _page = page;
   _smallNewTabButton.page = page;
   _largeNewTabButton.page = page;
@@ -302,9 +297,6 @@
   _largeNewTabButton.page = self.page;
 
   CGFloat floatingButtonVerticalInset = kTabGridFloatingButtonVerticalInset;
-  if (ShowThumbStripInTraitCollection(self.traitCollection)) {
-    floatingButtonVerticalInset += kBVCHeightTabGrid;
-  }
 
   _largeNewTabButtonBottomAnchor = [_largeNewTabButton.bottomAnchor
       constraintEqualToAnchor:self.safeAreaLayoutGuide.bottomAnchor
@@ -337,22 +329,24 @@
   // return early in that case.
   if (self.mode == TabGridModeSearch) {
     [NSLayoutConstraint deactivateConstraints:_compactConstraints];
-    [_toolbar removeFromSuperview];
     [NSLayoutConstraint deactivateConstraints:_floatingConstraints];
+    [_toolbar removeFromSuperview];
     [_largeNewTabButton removeFromSuperview];
+    self.hidden = !self.subviews.count;
     return;
   }
   _largeNewTabButtonBottomAnchor.constant =
       -kTabGridFloatingButtonVerticalInset;
 
   if (self.mode == TabGridModeSelection) {
+    [NSLayoutConstraint deactivateConstraints:_floatingConstraints];
+    [_largeNewTabButton removeFromSuperview];
     [_toolbar setItems:@[
       _closeTabsButton, _spaceItem, _shareButton, _spaceItem, _addToButton
     ]];
-    [NSLayoutConstraint deactivateConstraints:_floatingConstraints];
-    [_largeNewTabButton removeFromSuperview];
     [self addSubview:_toolbar];
     [NSLayoutConstraint activateConstraints:_compactConstraints];
+    self.hidden = !self.subviews.count;
     return;
   }
   UIBarButtonItem* leadingButton = _closeAllOrUndoButton;
@@ -361,6 +355,9 @@
   UIBarButtonItem* trailingButton = _doneButton;
 
   if ([self shouldUseCompactLayout]) {
+    [NSLayoutConstraint deactivateConstraints:_floatingConstraints];
+    [_largeNewTabButton removeFromSuperview];
+
     // For incognito/regular pages, display all 3 buttons;
     // For remote tabs page, only display new tab button.
     if (self.page == TabGridPageRemoteTabs) {
@@ -371,8 +368,6 @@
       ]];
     }
 
-    [NSLayoutConstraint deactivateConstraints:_floatingConstraints];
-    [_largeNewTabButton removeFromSuperview];
     [self addSubview:_toolbar];
     [NSLayoutConstraint activateConstraints:_compactConstraints];
   } else {
@@ -390,25 +385,20 @@
       [NSLayoutConstraint activateConstraints:_floatingConstraints];
     }
   }
+  self.hidden = !self.subviews.count;
 }
 
-// Returns YES if the full toolbar should be shown instead of the floating
-// button.
-- (BOOL)shouldShowFullBar {
-  return [self shouldUseCompactLayout] || self.page == TabGridPageRemoteTabs ||
-         self.mode == TabGridModeSelection || self.mode == TabGridModeSearch;
+// Returns YES if the |_largeNewTabButton| is showing on the toolbar.
+- (BOOL)isShowingFloatingButton {
+  return _largeNewTabButton.superview &&
+         _largeNewTabButtonBottomAnchor.isActive;
 }
 
 // Returns YES if should use compact bottom toolbar layout.
 - (BOOL)shouldUseCompactLayout {
-  // TODO(crbug.com/929981): UIView's |traitCollection| can be wrong and
-  // contradict the keyWindow's |traitCollection| because UIView's
-  // |-traitCollectionDidChange:| is not properly called when the view rotates
-  // while it is in a ViewController deeper in the ViewController hierarchy. Use
-  // self.traitCollection since iOS 13 where the bug is fixed in UIKit.
-  return self.window.traitCollection.verticalSizeClass ==
+  return self.traitCollection.verticalSizeClass ==
              UIUserInterfaceSizeClassRegular &&
-         self.window.traitCollection.horizontalSizeClass ==
+         self.traitCollection.horizontalSizeClass ==
              UIUserInterfaceSizeClassCompact;
 }
 

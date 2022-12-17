@@ -304,7 +304,7 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
                 int numTabs = listOfTabs.size();
                 // This is set to zero because the UI is hidden.
                 if (!mIsTabGroupUiVisible || numTabs == 1) numTabs = 0;
-                RecordHistogram.recordCountHistogram("TabStrip.TabCountOnPageLoad", numTabs);
+                RecordHistogram.recordCount1MHistogram("TabStrip.TabCountOnPageLoad", numTabs);
             }
 
             @Override
@@ -646,5 +646,12 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
     @VisibleForTesting
     int getConditionalTabStripFeatureStatusForTesting() {
         return ConditionalTabStripUtils.getFeatureStatus();
+    }
+
+    /** Vivaldi **/
+    public void resetTabListForCurrentTab() {
+        Tab currentTab = mTabModelSelector.getCurrentTab();
+        if (currentTab == null) return;
+        mResetHandler.resetGridWithListOfTabs(getTabsToShowForId(currentTab.getId()));
     }
 }

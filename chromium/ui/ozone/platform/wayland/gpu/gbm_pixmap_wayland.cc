@@ -34,7 +34,7 @@ GbmPixmapWayland::GbmPixmapWayland(WaylandBufferManagerGpu* buffer_manager)
 
 GbmPixmapWayland::~GbmPixmapWayland() {
   if (gbm_bo_ && widget_ != gfx::kNullAcceleratedWidget)
-    buffer_manager_->DestroyBuffer(widget_, buffer_id_);
+    buffer_manager_->DestroyBuffer(buffer_id_);
 }
 
 bool GbmPixmapWayland::InitializeBuffer(
@@ -139,6 +139,12 @@ size_t GbmPixmapWayland::GetDmaBufPlaneSize(size_t plane) const {
 
 size_t GbmPixmapWayland::GetNumberOfPlanes() const {
   return gbm_bo_->GetNumPlanes();
+}
+
+bool GbmPixmapWayland::SupportsZeroCopyWebGPUImport() const {
+  // TODO(crbug.com/1258986): Figure out how to import multi-planar pixmap into
+  // WebGPU without copy.
+  return false;
 }
 
 uint64_t GbmPixmapWayland::GetBufferFormatModifier() const {

@@ -4,6 +4,7 @@
 
 #include "content/browser/renderer_host/commit_deferring_condition_runner.h"
 
+#include "base/memory/ptr_util.h"
 #include "base/no_destructor.h"
 #include "content/browser/renderer_host/back_forward_cache_commit_deferring_condition.h"
 #include "content/browser/renderer_host/navigation_request.h"
@@ -57,8 +58,13 @@ void CommitDeferringConditionRunner::AddConditionForTesting(
   AddCondition(std::move(condition));
 }
 
-bool CommitDeferringConditionRunner::is_deferred_for_testing() const {
-  return is_deferred_;
+CommitDeferringCondition*
+CommitDeferringConditionRunner::GetDeferringConditionForTesting() const {
+  if (!is_deferred_)
+    return nullptr;
+
+  DCHECK(!conditions_.empty());
+  return (*conditions_.begin()).get();
 }
 
 void CommitDeferringConditionRunner::ResumeProcessing() {

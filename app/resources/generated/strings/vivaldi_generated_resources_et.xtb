@@ -9,7 +9,6 @@
 <translation id="1054153489933238809">Ava algne &amp;pilt uuel kaardil</translation>
 <translation id="1056898198331236512">Hoiatus</translation>
 <translation id="1084824384139382525">Kopeeri lingi aadress</translation>
-<translation id="1128109161498068552">Ühelgi saidil ei lubata kasutada MIDI-seadmetele juurdepääsemiseks süsteemi ainusõnumeid</translation>
 <translation id="1163931534039071049">&amp;Vaata paneeli lähtekoodi</translation>
 <translation id="1165039591588034296">Viga</translation>
 <translation id="1175364870820465910">&amp;Prindi...</translation>
@@ -22,7 +21,6 @@
 <translation id="1297175357211070620">Printer</translation>
 <translation id="1303101771013849280">Järjehoidjate HTML-fail</translation>
 <translation id="1430915738399379752">Prindi</translation>
-<translation id="1433811987160647649">Enne kasutamist küsitakse</translation>
 <translation id="1451375123200651445">Veebileht, ühe failina</translation>
 <translation id="1465176863081977902">K&amp;opeeri heli aadress</translation>
 <translation id="1476607407192946488">&amp;Keeleseaded...</translation>
@@ -99,13 +97,11 @@
 <translation id="2783321960289401138">Lisa otsetee...</translation>
 <translation id="2785873697295365461">Failideskriptorid</translation>
 <translation id="2809586584051668049">ja veel <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
-<translation id="2812989263793994277">Ühtki pilti ei näidata</translation>
 <translation id="2850541429955027218">Lisa teema</translation>
 <translation id="2861941300086904918">Native Clienti turvahaldur</translation>
 <translation id="2881076733170862447">Laiendusel klõpsamisel</translation>
 <translation id="2889064240420137087">Ava link rakendusega...</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> ei saanud printeriga ühendust. Vaata, et printer oleks sisse lülitatud, ning proovi siis uuesti.</translation>
-<translation id="2904456025988372123">Küsitakse, kui sait proovib pärast esimese faili allalaadimist veel faile alla laadida</translation>
 <translation id="2913331724188855103">Saitidel lubatakse küpsiseandmeid salvestada ja lugeda (soovitatav)</translation>
 <translation id="2931157624143513983">Sobitatakse prinditavale alale</translation>
 <translation id="2932085390869194046">Soovita parooli...</translation>
@@ -126,7 +122,6 @@
 <translation id="3127156390846601284">See kustutab kõigi näidatud saitide sellesse seadmesse salvestatud andmed. Kas soovid jätkata?</translation>
 <translation id="3129173833825111527">Vasakveeris</translation>
 <translation id="3144647712221361880">Ava link kasutajana</translation>
-<translation id="3154429428035006212">Üle kuu aja võrguühenduseta</translation>
 <translation id="3222066309010235055">Eelrenderdus: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Vali pakitava laienduse juurkaust. Laienduse värskendamiseks vali taaskasutamiseks ka privaatvõtme fail.</translation>
 <translation id="3280237271814976245">Salvesta nimega...</translation>
@@ -143,6 +138,7 @@
 <translation id="3360297538363969800">Printimine ebaõnnestus. Kontrolli printerit ja proovi uuesti.</translation>
 <translation id="3378572629723696641">See laiendus võib olla rikutud.</translation>
 <translation id="3387614642886316601">&amp;Täiustatud õigekirjakontroll</translation>
+<translation id="3393582007140394275">Ekraani ei õnnestu üle kanda.</translation>
 <translation id="3432227430032737297">Eemalda kõik nähtavad</translation>
 <translation id="345693547134384690">Ava &amp;pilt uuel kaardil</translation>
 <translation id="3494769164076977169">Küsitakse, kui sait proovib pärast esimese faili allalaadimist veel faile alla laadida (soovitatav)</translation>
@@ -165,7 +161,6 @@
 <translation id="3838085852053358637">Laienduse laadimine ebaõnnestus</translation>
 <translation id="383891835335927981">Ühelegi saidile pole suurendusastet määratud</translation>
 <translation id="385051799172605136">Tagasi</translation>
-<translation id="3899879303189199559">Üle aasta aja võrguühenduseta</translation>
 <translation id="3905761538810670789">Paranda rakendus</translation>
 <translation id="3908501907586732282">Luba laiendus</translation>
 <translation id="3909701002594999354">Kõik &amp;juhtelemendid nähtaval</translation>
@@ -192,7 +187,6 @@
 <translation id="4200983522494130825">Uus kaart</translation>
 <translation id="4225397296022057997">Kõigil saitidel</translation>
 <translation id="4256316378292851214">Sa&amp;lvesta video nimega...</translation>
-<translation id="4278390842282768270">Lubatud</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> K (<ph name="NUM_KILOBYTES_LIVE" /> K reaalajas)</translation>
 <translation id="4345587454538109430">Seadista...</translation>
 <translation id="4348766275249686434">Vigade kogumine</translation>
@@ -217,15 +211,15 @@
 <translation id="488785315393301722">Näita üksikasju</translation>
 <translation id="4907306957610201395">Loakategooria</translation>
 <translation id="4912643508233590958">Jõudeolekust ärkamised</translation>
+<translation id="49265687513387605">Ekraani ei õnnestu üle kanda. Vaata, kas vastasid ekraani jagamise alustamise kinnitusdialoogile.</translation>
 <translation id="4927753642311223124">Siin pole midagi vaadata, liigu aga edasi.</translation>
 <translation id="4930714375720679147">Lülita sisse</translation>
+<translation id="4961318399572185831">Ekraani ülekanne</translation>
 <translation id="4988526792673242964">Lk-d</translation>
 <translation id="49896407730300355">Pööra &amp;vastupäeva</translation>
 <translation id="4989966318180235467">Inspekteeri &amp;taustalehte</translation>
-<translation id="4994474651455208930">Saitidel lubatakse taodelda protokollide vaikekäitlejaks saamist</translation>
 <translation id="5000922062037820727">Blokeeritud (soovitatav)</translation>
 <translation id="5027562294707732951">Lisa laiendus</translation>
-<translation id="5036662165765606524">Ühelgi saidil ei lubata mitut faili automaatselt alla laadida</translation>
 <translation id="5039804452771397117">Luba</translation>
 <translation id="5057110919553308744">Laiendusel klõpsamisel</translation>
 <translation id="5059526285558225588">Jagatava sisu valimine</translation>
@@ -238,7 +232,6 @@
 <translation id="5233231016133573565">Protsessi-ID</translation>
 <translation id="5233736638227740678">&amp;Aseta</translation>
 <translation id="5256861893479663409">Kõigil saitidel</translation>
-<translation id="5265562206369321422">Üle nädala aja võrguühenduseta</translation>
 <translation id="5269977353971873915">Printimine ebaõnnestus</translation>
 <translation id="5284445933715251131">Jätka allalaadimist</translation>
 <translation id="52912272896845572">Privaatvõtme fail on kehtetu.</translation>
@@ -294,7 +287,6 @@
 <translation id="6122081475643980456">Sinu Interneti-ühendust juhitakse</translation>
 <translation id="6147020289383635445">Printimise eelvaadet ei õnnestunud luua.</translation>
 <translation id="6156863943908443225">Skripti vahemälu</translation>
-<translation id="6169666352732958425">Töölauda ei õnnestu üle kanda.</translation>
 <translation id="6196854373336333322">Laiendus „<ph name="EXTENSION_NAME" />” on hõivanud puhverserveri seaded, mis tähendab, et see saab muuta, rikkuda või kuulata pealt kogu sinu veebitegevust. Kui sa pole kindel, miks see muudatus toimus, siis tõenäoliselt sa ei taha seda.</translation>
 <translation id="6200151268994853226">Halda laiendust</translation>
 <translation id="6206311232642889873">Kop&amp;eeri pilt</translation>
@@ -328,7 +320,6 @@
 <translation id="6798954102094737107">Plugin: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Säilita muudatused</translation>
 <translation id="6817174620439930047">Küsitakse, kui sait tahab kasutada MIDI-seadmetele juurdepääsemiseks süsteemi ainusõnumeid (soovitatav)</translation>
-<translation id="682123305478866682">Töölaua ülekanne</translation>
 <translation id="6824564591481349393">Kopeeri meiliaadress</translation>
 <translation id="6840155290835956714">Enne saatmist küsitakse</translation>
 <translation id="6886871292305414135">Ava link uuel kaardil</translation>
@@ -346,7 +337,6 @@
 <translation id="708060913198414444">K&amp;opeeri heli aadress</translation>
 <translation id="7175353351958621980">Laaditud asukohast:</translation>
 <translation id="7186088072322679094">Hoia tööriistaribal</translation>
-<translation id="7270858098575133036">Küsitakse, kui sait tahab kasutada MIDI-seadmetele juurdepääsemiseks süsteemi ainusõnumeid</translation>
 <translation id="7287143125007575591">Juurdepääs on keelatud.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />×<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7385854874724088939">Printida üritamisel läks midagi valesti. Kontrolli printerit ja proovi uuesti.</translation>
@@ -369,7 +359,6 @@
 <translation id="7704305437604973648">Tegum</translation>
 <translation id="7710568461918838723">Kanna üle...</translation>
 <translation id="7750228210027921155">Pilt-pildis</translation>
-<translation id="7751260505918304024">Kuvatakse kõik</translation>
 <translation id="7760004034676677601">Kas see on avaleht, mida ootasid?</translation>
 <translation id="7771452384635174008">Suund</translation>
 <translation id="7782102568078991263">Google’il rohkem soovitusi pole</translation>
@@ -382,9 +371,7 @@
 <translation id="7849264908733290972">Ava &amp;pilt uuel kaardil</translation>
 <translation id="7857949311770343000">Kas see on uue kaardi leht, mida ootasid?</translation>
 <translation id="786073089922909430">Teenus: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7885253890047913815">Hiljutised</translation>
 <translation id="7903925330883316394">Utiliit: <ph name="UTILITY_TYPE" /></translation>
-<translation id="7938594894617528435">Pole hetkel võrgus</translation>
 <translation id="7947962633355574091">K&amp;opeeri video aadress</translation>
 <translation id="7966241909927244760">K&amp;opeeri pildi aadress</translation>
 <translation id="7973394300052703468">Uus privaatne aken</translation>
@@ -427,10 +414,8 @@ Hoia oma võtmefaili kindlas kohas. Seda läheb vaja laienduse uute versioonide 
 <translation id="8708000541097332489">Sulgemisel kustutatakse</translation>
 <translation id="8714838604780058252">Taustapildid</translation>
 <translation id="8725066075913043281">Proovi uuesti</translation>
-<translation id="8757090071857742562">Töölauda ei õnnestu üle kanda. Vaata, kas vastasid ekraani jagamise alustamise kinnitusdialoogile.</translation>
 <translation id="8774934320277480003">Ülaveeris</translation>
 <translation id="8798099450830957504">Vaikimisi</translation>
-<translation id="8800004011501252845">Sihtkohad kontole</translation>
 <translation id="8808478386290700967">Veebipood</translation>
 <translation id="8823514049557262177">Kopeeri lingi tekst</translation>
 <translation id="8823704566850948458">Soovita parooli...</translation>
@@ -443,7 +428,6 @@ Hoia oma võtmefaili kindlas kohas. Seda läheb vaja laienduse uute versioonide 
 <translation id="8962083179518285172">Peida üksikasjad</translation>
 <translation id="8973557916016709913">Eemalda suurendusaste</translation>
 <translation id="897939795688207351">Saidil <ph name="ORIGIN" /></translation>
-<translation id="8996526648899750015">Lisa konto...</translation>
 <translation id="9003647077635673607">Kõikidel saitidel lubatud</translation>
 <translation id="9027459031423301635">Ava link uuel kaardil</translation>
 <translation id="9056810968620647706">Ühtegi vastet ei leitud.</translation>

@@ -43,7 +43,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="VideoTutorials.LanguagePicker.LanguageSelected"
-    units="position" expires_after="2022-06-26">
+    units="position" expires_after="2022-08-28">
   <owner>shaktisahu@chromium.org</owner>
   <owner>chrome-upboarding-eng@google.com</owner>
   <summary>
@@ -54,7 +54,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="VideoTutorials.Player.LoadTimeLatency" units="ms"
-    expires_after="2022-07-03">
+    expires_after="2022-09-18">
   <owner>shaktisahu@chromium.org</owner>
   <owner>chrome-upboarding-eng@google.com</owner>
   <summary>

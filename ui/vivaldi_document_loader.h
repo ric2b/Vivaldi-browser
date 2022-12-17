@@ -21,6 +21,9 @@ class VivaldiDocumentLoader : protected content::WebContentsDelegate,
 
   content::WebContents* GetWebContents() {return vivaldi_web_contents_.get();}
 
+  // Load the document into |vivaldi_web_contents_|
+  void Load();
+
  private:
 
   // content::WebContentsDelegate overrides.
@@ -34,6 +37,7 @@ class VivaldiDocumentLoader : protected content::WebContentsDelegate,
       content::NavigationHandle* navigation_handle) override;
 
   std::unique_ptr<content::WebContents> vivaldi_web_contents_;
+  const extensions::Extension* vivaldi_extension_;
 
   // Timers.
   base::TimeTicks start_time_;

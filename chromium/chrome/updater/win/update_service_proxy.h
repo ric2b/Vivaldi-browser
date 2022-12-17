@@ -54,10 +54,18 @@ class UpdateServiceProxy : public UpdateService {
   void RunPeriodicTasks(base::OnceClosure callback) override;
   void UpdateAll(StateChangeCallback state_update, Callback callback) override;
   void Update(const std::string& app_id,
+              const std::string& install_data_index,
               Priority priority,
               PolicySameVersionUpdate policy_same_version_update,
               StateChangeCallback state_update,
               Callback callback) override;
+  void RunInstaller(const std::string& app_id,
+                    const base::FilePath& installer_path,
+                    const std::string& install_args,
+                    const std::string& install_data,
+                    const std::string& install_settings,
+                    StateChangeCallback state_update,
+                    Callback callback) override;
   void Uninitialize() override;
 
  private:
@@ -79,10 +87,20 @@ class UpdateServiceProxy : public UpdateService {
                       Callback callback,
                       HRESULT prev_hr);
   void UpdateOnSTA(const std::string& app_id,
+                   const std::string& install_data_index,
                    PolicySameVersionUpdate policy_same_version_update,
                    StateChangeCallback state_update,
                    Callback callback,
                    HRESULT prev_hr);
+
+  void RunInstallerOnSTA(const std::string& app_id,
+                         const base::FilePath& installer_path,
+                         const std::string& install_args,
+                         const std::string& install_data,
+                         const std::string& install_settings,
+                         StateChangeCallback state_update,
+                         Callback callback,
+                         HRESULT prev_hr);
 
   // Bound to the main sequence.
   SEQUENCE_CHECKER(sequence_checker_main_);

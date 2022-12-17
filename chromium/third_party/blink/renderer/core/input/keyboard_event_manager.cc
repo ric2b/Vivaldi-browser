@@ -21,6 +21,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
+#include "third_party/blink/renderer/core/html/closewatcher/close_watcher.h"
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html/html_dialog_element.h"
 #include "third_party/blink/renderer/core/input/event_handler.h"
@@ -29,6 +30,7 @@
 #include "third_party/blink/renderer/core/input/scroll_manager.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/focus_controller.h"
+#include "third_party/blink/renderer/core/page/focusgroup_controller.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/page/spatial_navigation.h"
 #include "third_party/blink/renderer/core/page/spatial_navigation_controller.h"
@@ -169,7 +171,7 @@ bool KeyboardEventManager::HandleAccessKey(const WebKeyboardEvent& evt) {
   // using alt-key combos for menu access, unlike chrome. Access keys on mac
   // are triggered by ctrl+alt and don't conflict with any existing key
   // shortcuts.
-#if !defined(OS_MAC)
+#if !BUILDFLAG(IS_MAC)
   if (vivaldi::IsVivaldiRunning()) {
     if ((evt.GetModifiers() & WebKeyboardEvent::kKeyModifiers) !=
         (kAccessKeyModifiers | WebInputEvent::kShiftKey)) {
@@ -181,7 +183,7 @@ bool KeyboardEventManager::HandleAccessKey(const WebKeyboardEvent& evt) {
   if ((evt.GetModifiers() & (WebKeyboardEvent::kKeyModifiers &
                              ~WebInputEvent::kShiftKey)) != kAccessKeyModifiers)
     return false;
-#if !defined(OS_MAC)
+#if !BUILDFLAG(IS_MAC)
   }
 #endif
   String key = String(evt.unmodified_text);
@@ -463,6 +465,12 @@ void KeyboardEventManager::DefaultArrowEventHandler(
   if (!page)
     return;
 
+  if (RuntimeEnabledFeatures::FocusgroupEnabled() &&
+      FocusgroupController::HandleArrowKeyboardEvent(event, frame_)) {
+    event->SetDefaultHandled();
+    return;
+  }
+
   if (IsSpatialNavigationEnabled(frame_) &&
       !frame_->GetDocument()->InDesignMode()) {
     if (page->GetSpatialNavigationController().HandleArrowKeyboardEvent(
@@ -578,8 +586,12 @@ void KeyboardEventManager::DefaultEscapeEventHandler(KeyboardEvent* event) {
     page->GetSpatialNavigationController().HandleEscapeKeyboardEvent(event);
   }
 
-  if (HTMLDialogElement* dialog = frame_->GetDocument()->ActiveModalDialog())
+  HTMLDialogElement* dialog = frame_->GetDocument()->ActiveModalDialog();
+  if (dialog && !RuntimeEnabledFeatures::CloseWatcherEnabled()) {
     dialog->DispatchEvent(*Event::CreateCancelable(event_type_names::kCancel));
+  }
+
+  frame_->DomWindow()->closewatcher_stack()->EscapeKeyHandler(event);
 }
 
 void KeyboardEventManager::DefaultEnterEventHandler(KeyboardEvent* event) {

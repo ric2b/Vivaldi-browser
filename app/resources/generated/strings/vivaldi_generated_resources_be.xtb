@@ -9,7 +9,6 @@
 <translation id="1054153489933238809">Адкрыць зыходную &amp;выяву ў новай укладцы</translation>
 <translation id="1056898198331236512">Увага</translation>
 <translation id="1084824384139382525">Скапіяваць адрас с&amp;пасылкі</translation>
-<translation id="1128109161498068552">Забараніць сайтам выкарыстоўваць сістэмныя паведамленні для доступу да MIDI-прылад</translation>
 <translation id="1163931534039071049">&amp;Праглядзець код рамкі</translation>
 <translation id="1165039591588034296">Памылка</translation>
 <translation id="1175364870820465910">&amp;Друк...</translation>
@@ -22,12 +21,12 @@
 <translation id="1297175357211070620">Прынтар</translation>
 <translation id="1303101771013849280">Файл HTML з закладкамі</translation>
 <translation id="1430915738399379752">Друк</translation>
-<translation id="1433811987160647649">Пытацца дазволу на доступ</translation>
 <translation id="1451375123200651445">Вэб-старонка, адзін файл</translation>
 <translation id="1465176863081977902">С&amp;капіяваць адрас аўдыё</translation>
 <translation id="1476607407192946488">&amp;Налады мовы</translation>
 <translation id="150411034776756821">Выдаліць <ph name="SITE" /> сайта</translation>
 <translation id="1546280085599573572">Пашырэнне змяніла хатнюю старонку.</translation>
+<translation id="1552752544932680961">Кіраванне пашырэннем</translation>
 <translation id="15662109988763471">Прынтар недаступны альбо няправільна ўсталяваны. Праверце прынтар альбо абярыце іншы.</translation>
 <translation id="1588438908519853928">Звычайны</translation>
 <translation id="1588870296199743671">Адкрыць спасылку ў...</translation>
@@ -98,13 +97,11 @@
 <translation id="2783321960289401138">Стварыць цэтлік...</translation>
 <translation id="2785873697295365461">Дэскрыптары файлаў</translation>
 <translation id="2809586584051668049">і яшчэ <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
-<translation id="2812989263793994277">Не паказваць выявы</translation>
 <translation id="2850541429955027218">Дадаць тэму</translation>
 <translation id="2861941300086904918">Кіраўнік бяспекі натыўнага кліента</translation>
 <translation id="2881076733170862447">Пры націсканні на пашырэнне</translation>
 <translation id="2889064240420137087">Адкрыць спасылку з дапамогай...</translation>
 <translation id="2902127500170292085">Пашырэнне <ph name="EXTENSION_NAME" /> не можа злучыцца з прынтарам. Пераканайцеся, што прынтар уключаны, і паўтарыце спробу.</translation>
-<translation id="2904456025988372123">Папярэджваць пра спробы аўтаматычнага спампоўвання файлаў</translation>
 <translation id="2913331724188855103">Дазволіць сайтам захоўваць і чытаць даныя cookie (рэкамендуецца)</translation>
 <translation id="2931157624143513983">Па памерах вобласці друку</translation>
 <translation id="2932085390869194046">Прапаноўваць пароль...</translation>
@@ -125,7 +122,6 @@
 <translation id="3127156390846601284">Усе даныя пазначаных сайтаў выдаляцца з прылады. Хочаце працягнуць?</translation>
 <translation id="3129173833825111527">Левае поле</translation>
 <translation id="3144647712221361880">Адкрыць спасылку як</translation>
-<translation id="3154429428035006212">Па-за сецівам больш за месяц</translation>
 <translation id="3222066309010235055">Папярэдняя адмалёўка: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Абярыце каранёвы каталог пашырэння, якое запакоўваецца. Каб абнавіць пашырэнне, абярыце яшчэ і прыватны ключ.</translation>
 <translation id="3280237271814976245">Захаваць &amp;як...</translation>
@@ -142,6 +138,7 @@
 <translation id="3360297538363969800">Не атрымалася надрукаваць. Калі ласка, праверце прынтар і паспрабуйце зноў.</translation>
 <translation id="3378572629723696641">Гэтае пашырэнне можа быць пашкоджана.</translation>
 <translation id="3387614642886316601">Палепшаная праверка правапісу</translation>
+<translation id="3393582007140394275">Немагчыма трансляваць экран.</translation>
 <translation id="3432227430032737297">Выдаліць ўсе бачныя</translation>
 <translation id="345693547134384690">Адкрыць &amp;выяву ў новай укладцы</translation>
 <translation id="3494769164076977169">Папярэджваць пра спробы аўтаматычнага спампоўвання файлаў (рэкамендуецца)</translation>
@@ -164,7 +161,6 @@
 <translation id="3838085852053358637">Не атрымалася загрузіць пашырэнне</translation>
 <translation id="383891835335927981">Сайты са змененым маштабам адсутнічаюць</translation>
 <translation id="385051799172605136">Назад</translation>
-<translation id="3899879303189199559">Па-за сецівам больш за год</translation>
 <translation id="3905761538810670789">Аднавіць праграму</translation>
 <translation id="3908501907586732282">Уключыць пашырэнне</translation>
 <translation id="3909701002594999354">Паказаць усе элементы &amp;кіравання</translation>
@@ -191,7 +187,6 @@
 <translation id="4200983522494130825">Новая &amp;ўкладка</translation>
 <translation id="4225397296022057997">На ўсіх сайтах</translation>
 <translation id="4256316378292851214">Захаваць відэа як...</translation>
-<translation id="4278390842282768270">Дазволена</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />КБ (<ph name="NUM_KILOBYTES_LIVE" />КБ актыўна)</translation>
 <translation id="4345587454538109430">Наладка...</translation>
 <translation id="4348766275249686434">Адсочваць памылкі</translation>
@@ -216,15 +211,15 @@
 <translation id="488785315393301722">Паказаць падрабязнасці</translation>
 <translation id="4907306957610201395">Катэгорыя права доступу</translation>
 <translation id="4912643508233590958">Пераход у актыўны рэжым</translation>
+<translation id="49265687513387605">Немагчыма трансляваць экран. Пераканайцеся, што вы далі дазвол на трансляцыю.</translation>
 <translation id="4927753642311223124">Тут нічога няма, пераходзьце далей.</translation>
 <translation id="4930714375720679147">Уключыць</translation>
+<translation id="4961318399572185831">Трансляцыя экрана</translation>
 <translation id="4988526792673242964">Старонкі</translation>
 <translation id="49896407730300355">Павярнуць &amp;супраць стрэлкі гадзінніка</translation>
 <translation id="4989966318180235467">Інспектаваць &amp;фонавую старонку</translation>
-<translation id="4994474651455208930">Дазволіць сайтам запыты на прызначэнне іх прадвызначанымі апрацоўнікамі пратаколаў</translation>
 <translation id="5000922062037820727">Заблакавана (рэкамендуецца)</translation>
 <translation id="5027562294707732951">Дадаць пашырэнне</translation>
-<translation id="5036662165765606524">Забараніць сайтам аўтаматычнае спампоўванне файлаў</translation>
 <translation id="5039804452771397117">Дазволіць</translation>
 <translation id="5057110919553308744">Пры націсканні на пашырэнне</translation>
 <translation id="5059526285558225588">Абярыце тое, чым хочаце падзяліцца</translation>
@@ -237,7 +232,6 @@
 <translation id="5233231016133573565">Ідэнтыфікатар працэсу</translation>
 <translation id="5233736638227740678">&amp;Уставіць</translation>
 <translation id="5256861893479663409">На ўсіх сайтах</translation>
-<translation id="5265562206369321422">Па-за сецівам больш за тыдзень</translation>
 <translation id="5269977353971873915">Не атрымалася надрукаваць</translation>
 <translation id="5284445933715251131">Працягнуць спампоўванне</translation>
 <translation id="52912272896845572">Хібны файл прыватнага ключа.</translation>
@@ -293,8 +287,8 @@
 <translation id="6122081475643980456">Пашырэнне змяніла налады проксі</translation>
 <translation id="6147020289383635445">Не атрымалася выканаць папярэдні прагляд.</translation>
 <translation id="6156863943908443225">Кэш скрыпта</translation>
-<translation id="6169666352732958425">Немагчыма выканаць трансляцыю працоўнага стала.</translation>
 <translation id="6196854373336333322">Пашырэнне "<ph name="EXTENSION_NAME" />" змяніла налады проксі. Зараз яно можа сачыць ці змяняць даныя, якія вы адпраўляеце, і перапыніць злучэнне. Калі вы не ведалі пра гэта, то адключыце гэтае пашырэнне.</translation>
+<translation id="6200151268994853226">Кіраванне пашырэннем</translation>
 <translation id="6206311232642889873">Скапіява&amp;ць выяву</translation>
 <translation id="6239558157302047471">Перазагрузіць &amp;рамку</translation>
 <translation id="6247802389331535091">Сістэма: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -326,7 +320,6 @@
 <translation id="6798954102094737107">Убудова: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Захаваць змены</translation>
 <translation id="6817174620439930047">Папярэджваць, калі сайты спрабуюць выкарыстаць сістэмныя паведамленні для доступу да MIDI-прылад (рэкамендуецца)</translation>
-<translation id="682123305478866682">Трансляцыя змесціва працоўнага стала</translation>
 <translation id="6824564591481349393">Скапіяваць &amp;адрас электроннай пошты</translation>
 <translation id="6840155290835956714">Пытацца перад адпраўленнем</translation>
 <translation id="6886871292305414135">Адкрыць спасылку ў новай &amp;укладцы</translation>
@@ -344,7 +337,6 @@
 <translation id="708060913198414444">С&amp;капіяваць адрас аўдыё</translation>
 <translation id="7175353351958621980">Загружана з:</translation>
 <translation id="7186088072322679094">Трымаць на панэлі</translation>
-<translation id="7270858098575133036">Папярэджваць, калі сайты спрабуюць выкарыстаць сістэмныя паведамленні для доступу да MIDI-прылад</translation>
 <translation id="7287143125007575591">Достут забаронены.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />х<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7385854874724088939">Падчас друку адбылася памылка.   Калі ласка, праверце прынтар і паўтарыце спробу.</translation>
@@ -367,7 +359,6 @@
 <translation id="7704305437604973648">Задача</translation>
 <translation id="7710568461918838723">&amp;Трансляцыя...</translation>
 <translation id="7750228210027921155">Рэжым плавальных акон</translation>
-<translation id="7751260505918304024">Паказаць усе</translation>
 <translation id="7760004034676677601">Вы хочаце прызначыць гэтую пачатковую старонку?</translation>
 <translation id="7771452384635174008">Раскладка</translation>
 <translation id="7782102568078991263">Прапаноў ад google болей няма</translation>
@@ -380,9 +371,7 @@
 <translation id="7849264908733290972">Адкрыць &amp;выяву ў новай укладцы</translation>
 <translation id="7857949311770343000">Вы хочаце прызначыць гэтую ўкладку?</translation>
 <translation id="786073089922909430">Служба: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7885253890047913815">Нядаўна выкарыстаныя прынтары</translation>
 <translation id="7903925330883316394">Утыліта: <ph name="UTILITY_TYPE" /></translation>
-<translation id="7938594894617528435">Зараз па-за сецівам</translation>
 <translation id="7947962633355574091">С&amp;капіяваць адрас відэа</translation>
 <translation id="7966241909927244760">С&amp;капіяваць адрас выявы</translation>
 <translation id="7973394300052703468">Новае &amp;прыватнае акно</translation>
@@ -424,10 +413,8 @@
 <translation id="8708000541097332489">Ачышчаць падчас выхаду</translation>
 <translation id="8714838604780058252">Фонавая графіка</translation>
 <translation id="8725066075913043281">Паўтарыць спробу</translation>
-<translation id="8757090071857742562">Немагчыма выканаць трансляцыю працоўнага стала. Пераканайцеся, што вы адкрылі доступ да экрана.</translation>
 <translation id="8774934320277480003">Верхняе поле</translation>
 <translation id="8798099450830957504">Прадвызначана</translation>
-<translation id="8800004011501252845">Паказаць месца прызначэння для</translation>
 <translation id="8808478386290700967">Сеціўная крама</translation>
 <translation id="8823514049557262177">Скапіяваць т&amp;экст спасылкі</translation>
 <translation id="8823704566850948458">Прапаноўваць пароль...</translation>
@@ -440,7 +427,6 @@
 <translation id="8962083179518285172">Схаваць падрабязнасці</translation>
 <translation id="8973557916016709913">Скінуць маштабаванне</translation>
 <translation id="897939795688207351">Укл <ph name="ORIGIN" /></translation>
-<translation id="8996526648899750015">Дадаць акаўнт...</translation>
 <translation id="9003647077635673607">Дазволіць для ўсіх сайтаў</translation>
 <translation id="9027459031423301635">Адкрыць спасылку ў новай &amp;ўкладцы</translation>
 <translation id="9056810968620647706">Нічога не знойдзена.</translation>

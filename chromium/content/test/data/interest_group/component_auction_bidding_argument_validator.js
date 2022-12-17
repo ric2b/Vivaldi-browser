@@ -17,7 +17,8 @@ function generateBid(
       'ad': ad,
       'bid': 2,
       'render': ad.renderUrl,
-      'adComponents': [interestGroup.adComponents[0].renderUrl]
+      'adComponents': [interestGroup.adComponents[0].renderUrl],
+      'allowComponentAuction': true,
   };
 }
 
@@ -34,10 +35,42 @@ function reportWin(auctionSignals, perBuyerSignals, sellerSignals,
 function validateInterestGroup(interestGroup) {
   if (!interestGroup)
     throw 'No interest group';
+
+  if (Object.keys(interestGroup).length !== 9) {
+    throw 'Wrong number of interestGroupFields ' +
+        JSON.stringify(interestGroup);
+  }
+
   if (interestGroup.name !== 'cars')
     throw 'Wrong interestGroup.name ' + interestGroup.name;
   if (!interestGroup.owner.startsWith('https://a.test'))
     throw 'Missing a.test in owner ' + interestGroup.owner;
+
+  if (!interestGroup.biddingLogicUrl.startsWith('https://a.test') ||
+      !interestGroup.biddingLogicUrl.endsWith(
+          '/component_auction_bidding_argument_validator.js')) {
+    throw 'Incorrect biddingLogicUrl ' + interestGroup.biddingLogicUrl;
+  }
+
+  if (!interestGroup.dailyUpdateUrl.startsWith('https://a.test') ||
+      !interestGroup.dailyUpdateUrl.endsWith(
+          '/not_found_daily_update_url.json')) {
+    throw 'Incorrect dailyUpdateUrl ' + interestGroup.dailyUpdateUrl;
+  }
+
+  if (!interestGroup.trustedBiddingSignalsUrl.startsWith('https://a.test') ||
+      !interestGroup.trustedBiddingSignalsUrl.includes(
+          'trusted_bidding_signals.json')) {
+    throw 'Incorrect biddingLogicUrl ' + interestGroup.biddingLogicUrl;
+  }
+
+  trustedBiddingSignalsKeysJson =
+      JSON.stringify(interestGroup.trustedBiddingSignalsKeys);
+  if (trustedBiddingSignalsKeysJson !== "[\"key1\"]") {
+    throw 'Incorrect trustedBiddingSignalsKeys ' +
+        trustedBiddingSignalsKeysJson;
+  }
+
   // TODO(crbug.com/1186444): Consider validating URL fields like
   // interestGroup.biddingLogicUrl once we decide what to do about URL
   // normalization.
@@ -97,9 +130,11 @@ function validateBrowserSignals(browserSignals, isGenerateBid) {
     throw 'Wrong topWindowHostname ' + browserSignals.topWindowHostname;
   if (!browserSignals.seller.startsWith('https://d.test'))
     throw 'Wrong seller ' + browserSignals.seller;
+  if (!browserSignals.topLevelSeller.startsWith('https://b.test'))
+    throw 'Wrong topLevelSeller ' + browserSignals.topLevelSeller;
 
   if (isGenerateBid) {
-    if (Object.keys(browserSignals).length !== 5) {
+    if (Object.keys(browserSignals).length !== 6) {
       throw 'Wrong number of browser signals fields ' +
           JSON.stringify(browserSignals);
     }
@@ -110,7 +145,7 @@ function validateBrowserSignals(browserSignals, isGenerateBid) {
     if (browserSignals.prevWins.length !== 0)
       throw 'Wrong prevWins ' + JSON.stringify(browserSignals.prevWins);
   } else {
-    if (Object.keys(browserSignals).length !== 6) {
+    if (Object.keys(browserSignals).length !== 9) {
       throw 'Wrong number of browser signals fields ' +
           JSON.stringify(browserSignals);
     }
@@ -122,6 +157,10 @@ function validateBrowserSignals(browserSignals, isGenerateBid) {
       throw 'Wrong renderUrl ' + browserSignals.renderUrl;
     if (browserSignals.bid !== 2)
       throw 'Wrong bid ' + browserSignals.bid;
+    if (browserSignals.highestScoringOtherBid !== 0) {
+      throw 'Wrong highestScoringOtherBid ' +
+          browserSignals.highestScoringOtherBid;
+    }
   }
 }
 

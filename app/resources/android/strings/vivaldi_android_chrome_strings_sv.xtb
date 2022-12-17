@@ -21,17 +21,21 @@
 <translation id="3377025655491224618">Privat flik</translation>
 <translation id="3504699618187058974">Stapla flikar</translation>
 <translation id="3518985090088779359">Godkänn och fortsätt</translation>
+<translation id="3571177741182643350">Olästa artiklar - Tillgängliga offline:</translation>
 <translation id="3700829948786686853">Välkommen till Vivaldi</translation>
 <translation id="3719826155360621982">Hemsida</translation>
 <translation id="385051799172605136">Tillbaka</translation>
+<translation id="399014816462153200">Läs artiklar:</translation>
 <translation id="4121750346708795461">Genom att använda det här programmet godkänner du Vivaldis <ph name="BEGIN_LINK1" />användarvillkor<ph name="END_LINK1" /> och <ph name="BEGIN_LINK2" />sekretesspolicy<ph name="END_LINK2" />.</translation>
 <translation id="4137746084635924146">Aktuellt enhetsspråk</translation>
+<translation id="4167670741834902166">Ny privat flik</translation>
 <translation id="4243710787042215766">Öppna i privat flik</translation>
 <translation id="4526803704855831732">Privata flikar</translation>
 <translation id="4759238208242260848">Nedladdningar</translation>
 <translation id="4883379392681899581">Lämna privat läge</translation>
 <translation id="4943872375798546930">Inga resultat</translation>
 <translation id="49576331685473090">Innehållsblockerare</translation>
+<translation id="5079259810715830221">När en Google-webbplats ber om att privat förinläsa länkar på sin sida, krypterar Vivaldi och förladdar sidor via Googles servrar utan cookies. Detta döljer din identitet från den förladdade webbplatsen.</translation>
 <translation id="5118676864324397542"><ph name="APP_NAME" /> lagerplats</translation>
 <translation id="5186185447130319458">Privat</translation>
 <translation id="5233638681132016545">Ny flik</translation>
@@ -44,6 +48,7 @@ För att justera söktermen, tryck länge för att välja. Om du vill finjustera
 <translation id="6585139692466700358">Erbjud översättning av sidor på andra språk med Vivaldis översättningstjänst</translation>
 <translation id="6593061639179217415">Datoranpassad webbsida</translation>
 <translation id="6610147964972079463">Stäng privata flikar</translation>
+<translation id="7029995644714925509">När en webbplats ber om att privat förinläsa länkar på sin sida, krypterar Vivaldi och förladdar sidor via Googles servrar utan cookies. Detta döljer din identitet från den förnedladdade webbplatsen.</translation>
 <translation id="706339621163631076">Webbläsarens sekretesspolicy</translation>
 <translation id="732145680195464316">Bokmärke sparat i <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Om Vivaldi</translation>

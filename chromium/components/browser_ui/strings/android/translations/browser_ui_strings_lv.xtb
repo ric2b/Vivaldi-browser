@@ -77,6 +77,7 @@
 <translation id="2687403674020088961">Bloķēt visus sīkfailus (nav ieteicams)</translation>
 <translation id="2704606927547763573">Nokopēts</translation>
 <translation id="2717722538473713889">E-pasta adreses</translation>
+<translation id="2750481671343847896">Vietnēs drīkst rādīt pierakstīšanās uzvednes, ko nodrošina identitātes pakalpojumi.</translation>
 <translation id="2785051990912111074">Veicot šo darbību, tiks notīrīti vietnes <ph name="WEBSITE" /> sīkfaili.</translation>
 <translation id="2822354292072154809">Vai tiešām vēlaties atiestatīt visas vietņu atļaujas, kas piešķirtas šim objektam: <ph name="CHOSEN_OBJECT_NAME" />?</translation>
 <translation id="2870560284913253234">Vietne</translation>
@@ -112,6 +113,7 @@
 <translation id="3763247130972274048">Divreiz pieskarieties videoklipam pa labi vai pa kreisi, lai izlaistu 10 s.</translation>
 <translation id="3797520601150691162">Varat tumšo motīvu nelietot konkrētās vietnēs</translation>
 <translation id="381841723434055211">Tālruņa numuri</translation>
+<translation id="3826050100957962900">Trešās puses pierakstīšanās</translation>
 <translation id="3835233591525155343">Jūsu ierīces lietojums</translation>
 <translation id="385051799172605136">Atpakaļ</translation>
 <translation id="3859306556332390985">Pārtīt uz priekšu</translation>
@@ -122,7 +124,6 @@
 <translation id="3991845972263764475"><ph name="BYTES_DOWNLOADED_WITH_UNITS" /> no ?</translation>
 <translation id="4002066346123236978">Nosaukums</translation>
 <translation id="4008040567710660924">Atļaut sīkfailus konkrētai vietnei.</translation>
-<translation id="4040330681741629921">Saņemiet paziņojumu, kad vietnei var tikt parādīts vienkāršotais skats.</translation>
 <translation id="4046123991198612571">Nākamais ieraksts</translation>
 <translation id="4149994727733219643">Vienkāršots tīmekļa lapu skatījums</translation>
 <translation id="4165986682804962316">Vietnes iestatījumi</translation>
@@ -236,6 +237,7 @@
 <translation id="6643016212128521049">Notīrīt</translation>
 <translation id="6689172468748959065">Profila fotoattēli</translation>
 <translation id="6697925417670533197">Aktīvas lejupielādes</translation>
+<translation id="6722828510648505498">Bloķēt identitātes pakalpojumu pierakstīšanās uzvednes.</translation>
 <translation id="6746124502594467657">Pārvietot uz leju</translation>
 <translation id="6749077623962119521">Vai atiestatīt atļaujas?</translation>
 <translation id="6766622839693428701">Velciet uz leju, lai aizvērtu.</translation>
@@ -255,6 +257,7 @@
 <translation id="7087918508125750058">Atlasīti vienumi: <ph name="ITEM_COUNT" />. Opcijas ir pieejamas ekrāna augšdaļā.</translation>
 <translation id="7141896414559753902">Neļaut vietnēm novirzīt un rādīt uznirstošos elementus (ieteicams)</translation>
 <translation id="7176368934862295254"><ph name="KILOBYTES" /> KB</translation>
+<translation id="7180611975245234373">Atsvaidzināt</translation>
 <translation id="723171743924126238">Atlasīt attēlus</translation>
 <translation id="7243308994586599757">Opcijas, kas pieejamas ekrāna apakšējā daļā</translation>
 <translation id="7250468141469952378">Atlasīti vienumi: <ph name="ITEM_COUNT" /></translation>
@@ -308,7 +311,9 @@
 <translation id="83792324527827022">Kāda vietne izmanto jūsu kameru un mikrofonu</translation>
 <translation id="8380167699614421159">Šajā vietnē tiek rādītas traucējošas vai maldinošas reklāmas</translation>
 <translation id="8394832520002899662">Lai atgrieztos vietnē, pieskarieties šeit</translation>
+<translation id="8409345997656833551">Saņemiet paziņojumu, kad rakstu var parādīt vienkāršotajā skatā</translation>
 <translation id="8425213833346101688">Mainīt</translation>
+<translation id="8428213095426709021">Iestatījumi</translation>
 <translation id="8441146129660941386">Pārtīt atpakaļ</translation>
 <translation id="8444433999583714703">Lai atļautu lietotnei <ph name="APP_NAME" /> piekļūt jūsu atrašanās vietas datiem, ieslēdziet atrašanās vietas noteikšanu arī <ph name="BEGIN_LINK" />Android iestatījumos<ph name="END_LINK" />.</translation>
 <translation id="8447861592752582886">Atsaukt ierīces atļauju</translation>

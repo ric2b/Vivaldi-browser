@@ -21,6 +21,7 @@
 #include "components/services/app_service/public/cpp/url_handler_info.h"
 #include "components/webapps/common/web_page_metadata.mojom-forward.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 #include "third_party/blink/public/mojom/manifest/manifest.mojom.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -116,7 +117,7 @@ struct WebAppShortcutsMenuItemInfo {
   struct Icon {
     Icon();
     Icon(const Icon&);
-    Icon(Icon&&);
+    Icon(Icon&&) noexcept;
     ~Icon();
     Icon& operator=(const Icon&);
     Icon& operator=(Icon&&);
@@ -173,9 +174,21 @@ struct WebAppInstallInfo {
   };
 
   WebAppInstallInfo();
+
+  // TODO(b/227755254): Delete copy constructors and migrate to move assignment.
   WebAppInstallInfo(const WebAppInstallInfo& other);
+
+  // Deleted to prevent accidental copying. Use Clone() to deep copy explicitly.
+  WebAppInstallInfo& operator=(const WebAppInstallInfo&) = delete;
+
+  WebAppInstallInfo(WebAppInstallInfo&&);
+  WebAppInstallInfo& operator=(WebAppInstallInfo&&);
+
   explicit WebAppInstallInfo(const webapps::mojom::WebPageMetadata& metadata);
   ~WebAppInstallInfo();
+
+  // Creates a deep copy of this struct.
+  WebAppInstallInfo Clone() const;
 
   // Id specified in the manifest.
   absl::optional<std::string> manifest_id;
@@ -301,11 +314,11 @@ struct WebAppInstallInfo {
   absl::optional<blink::Manifest::LaunchHandler> launch_handler;
 
   // A mapping from locales to translated fields.
-  base::flat_map<std::u16string, blink::Manifest::TranslationItem> translations;
+  base::flat_map<std::string, blink::Manifest::TranslationItem> translations;
 
   // The declared permissions policy to apply as the baseline policy for all
   // documents belonging to the application.
-  std::vector<blink::Manifest::PermissionsPolicyDeclaration> permissions_policy;
+  blink::ParsedPermissionsPolicy permissions_policy;
 };
 
 bool operator==(const IconSizes& icon_sizes1, const IconSizes& icon_sizes2);

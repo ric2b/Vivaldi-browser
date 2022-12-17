@@ -79,11 +79,12 @@ enum ShellWindowId {
   // The container for top-level windows with the 'always-on-top' flag set.
   kShellWindowId_AlwaysOnTopContainer,
 
+  // The container for the floating window.
+  // Experimental feature, please don't use this container.
+  kShellWindowId_FloatContainer,
+
   // The container for the app list.
   kShellWindowId_AppListContainer,
-
-  // The container for the floating window.
-  kShellWindowId_FloatContainer,
 
   // The container for the home screen, e.g. the app list in tablet mode.
   kShellWindowId_HomeScreenContainer,
@@ -209,32 +210,23 @@ enum NonContainerWindowId {
   // window (if one exists).
   kShellWindowId_CaptureModeFolderSelectionDialogOwner,
 
-  // The window that shows the "Save Desk as Template" button below the Virtual
-  // Desks bar. There's only one such window on each display when overview mode
-  // is active.
-  kShellWindowId_SaveDeskAsTemplateWindow,
+  // The window that shows the "Save desk as template" button and `Save desk for
+  // later` button below the Virtual Desks bar. There's only one such window on
+  // each display when overview mode is active.
+  kShellWindowId_SaveDeskButtonContainer,
 
   // The window that shows the Desks Templates grid in overview.
   kShellWindowId_DesksTemplatesGridWindow,
+
+  // The window that shows the "No recent items" label in overview.
+  kShellWindowId_OverviewNoWindowsLabelWindow,
 };
 
 // A list of system modal container IDs. The order of the list is important that
 // the more restrictive container appears before the less restrictive ones.
-inline constexpr int kSystemModalContainerIds[] = {
+constexpr int kSystemModalContainerIds[] = {
     kShellWindowId_LockSystemModalContainer,
     kShellWindowId_SystemModalContainer};
-
-// Normally if a window gains focus the app list will be closed. Windows in
-// these containers are exceptions to that rule.
-inline constexpr int kContainersThatWontHideAppListOnFocus[] = {
-    kShellWindowId_AppListContainer,       kShellWindowId_HomeScreenContainer,
-    kShellWindowId_MenuContainer,          kShellWindowId_PowerMenuContainer,
-    kShellWindowId_SettingBubbleContainer, kShellWindowId_ShelfBubbleContainer,
-    kShellWindowId_ShelfContainer};
-
-// Returns true if `id` is a shell window container id such that a window in
-// that container gaining focus should close the app list.
-ASH_PUBLIC_EXPORT bool ShouldCloseAppListForFocusInContainer(int id);
 
 // Returns the list of container ids of containers which may contain windows
 // that need to be activated. this list is ordered by the activation order; that

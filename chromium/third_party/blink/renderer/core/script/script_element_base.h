@@ -24,7 +24,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_typedefs.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/dom/create_element_flags.h"
-#include "third_party/blink/renderer/core/dom/dom_node_ids.h"
+#include "third_party/blink/renderer/platform/graphics/dom_node_id.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
 #include "third_party/blink/renderer/platform/wtf/text/text_position.h"
@@ -55,7 +55,7 @@ class CORE_EXPORT ScriptElementBase : public GarbageCollectedMixin {
   virtual String SourceAttributeValue() const = 0;
   virtual String TypeAttributeValue() const = 0;
   virtual String ReferrerPolicyAttributeValue() const = 0;
-  virtual String ImportanceAttributeValue() const = 0;
+  virtual String FetchPriorityAttributeValue() const = 0;
 
   // This implements https://dom.spec.whatwg.org/#concept-child-text-content
   virtual String ChildTextContent() = 0;
@@ -67,6 +67,7 @@ class CORE_EXPORT ScriptElementBase : public GarbageCollectedMixin {
   virtual bool HasChildren() const = 0;
   virtual const AtomicString& GetNonceForElement() const = 0;
   virtual bool ElementHasDuplicateAttributes() const = 0;
+  virtual bool IsRenderBlocking() const = 0;
 
   // Whether the inline script is allowed by the CSP. Must be called
   // synchronously to ensure the correct Javascript world is used for CSP

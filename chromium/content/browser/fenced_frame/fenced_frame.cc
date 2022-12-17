@@ -9,6 +9,7 @@
 #include "content/browser/renderer_host/render_frame_proxy_host.h"
 #include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
 #include "content/browser/web_contents/web_contents_impl.h"
+#include "third_party/blink/public/common/fenced_frame/fenced_frame_utils.h"
 #include "third_party/blink/public/common/frame/frame_owner_element_type.h"
 #include "url/gurl.h"
 
@@ -34,7 +35,8 @@ FrameTreeNode* CreateDelegateFrameTreeNode(
 }  // namespace
 
 FencedFrame::FencedFrame(
-    base::SafeRef<RenderFrameHostImpl> owner_render_frame_host)
+    base::SafeRef<RenderFrameHostImpl> owner_render_frame_host,
+    blink::mojom::FencedFrameMode mode)
     : web_contents_(static_cast<WebContentsImpl*>(
           WebContents::FromRenderFrameHost(&*owner_render_frame_host))),
       owner_render_frame_host_(owner_render_frame_host),
@@ -50,9 +52,18 @@ FencedFrame::FencedFrame(
                                       /*render_widget_delegate=*/web_contents_,
                                       /*manager_delegate=*/web_contents_,
                                       /*page_delegate=*/web_contents_,
-                                      FrameTree::Type::kFencedFrame)) {
-  scoped_refptr<SiteInstance> site_instance =
-      SiteInstance::Create(web_contents_->GetBrowserContext());
+                                      FrameTree::Type::kFencedFrame)),
+      mode_(mode) {
+  scoped_refptr<SiteInstance> site_instance;
+  if (owner_render_frame_host->GetSiteInstance()->IsGuest()) {
+    site_instance = SiteInstance::CreateForGuest(
+        owner_render_frame_host->GetBrowserContext(),
+        owner_render_frame_host->GetSiteInstance()
+            ->GetStoragePartitionConfig());
+  } else {
+    site_instance =
+        SiteInstance::Create(owner_render_frame_host->GetBrowserContext());
+  }
   // Note that even though this is happening in response to an event in the
   // renderer (i.e., the creation of a <fencedframe> element), we are still
   // putting `renderer_initiated_creation` as false. This is because that
@@ -70,10 +81,6 @@ FencedFrame::FencedFrame(
   web_contents_->NotifySwappedFromRenderManager(
       /*old_frame=*/nullptr,
       frame_tree_->root()->render_manager()->current_frame_host());
-
-  CreateProxyAndAttachToOuterFrameTree();
-
-  devtools_instrumentation::FencedFrameCreated(owner_render_frame_host_, this);
 }
 
 FencedFrame::~FencedFrame() {
@@ -82,8 +89,36 @@ FencedFrame::~FencedFrame() {
   frame_tree_.reset();
 }
 
-void FencedFrame::Navigate(const GURL& url) {
+void FencedFrame::Navigate(const GURL& url,
+                           base::TimeTicks navigation_start_time) {
+  // We don't need guard against a bad message in the case of prerendering since
+  // we wouldn't even establish the mojo connection in that case.
+  DCHECK_NE(RenderFrameHost::LifecycleState::kPrerendering,
+            owner_render_frame_host_->GetLifecycleState());
+
+  if (mode_ == blink::mojom::FencedFrameMode::kDefault &&
+      !blink::IsValidFencedFrameURL(url)) {
+    bad_message::ReceivedBadMessage(owner_render_frame_host_->GetProcess(),
+                                    bad_message::FF_NAVIGATION_INVALID_URL);
+    return;
+  }
+
+  if (mode_ == blink::mojom::FencedFrameMode::kOpaqueAds &&
+      !blink::IsValidUrnUuidURL(url) && !blink::IsValidFencedFrameURL(url)) {
+    bad_message::ReceivedBadMessage(owner_render_frame_host_->GetProcess(),
+                                    bad_message::FF_NAVIGATION_INVALID_URL);
+    return;
+  }
+
   FrameTreeNode* inner_root = frame_tree_->root();
+
+  // Rerandomize the fenced frame's storage partitioning nonce, so that state
+  // isn't carried over from the previous document. This is necessary in order
+  // to prevent local joining of extra information from the embedder or
+  // special information hidden behind the opaque URL.
+  // TODO(crbug.com/1123606): Reinitialize more of the fenced frame metadata
+  // as needed to isolate state across navigations.
+  inner_root->SetFencedFrameNonceIfNeeded();
 
   // TODO(crbug.com/1237552): Resolve the discussion around navigations being
   // treated as downloads, and implement the correct thing.
@@ -107,12 +142,8 @@ void FencedFrame::Navigate(const GURL& url) {
       /*post_body=*/nullptr, /*extra_headers=*/"",
       /*blob_url_loader_factory=*/nullptr,
       network::mojom::SourceLocation::New(), /*has_user_gesture=*/false,
-      absl::nullopt);
-}
-
-void FencedFrame::DidStopLoading() {
-  if (on_did_finish_loading_callback_for_testing_)
-    std::move(on_did_finish_loading_callback_for_testing_).Run();
+      /*impression=*/absl::nullopt, navigation_start_time,
+      blink::IsValidUrnUuidURL(url));
 }
 
 bool FencedFrame::IsHidden() {
@@ -150,8 +181,10 @@ void FencedFrame::CreateProxyAndAttachToOuterFrameTree() {
 
   FrameTreeNode* inner_root = frame_tree_->root();
   proxy_to_inner_main_frame_ =
-      inner_root->render_manager()->CreateOuterDelegateProxy(
-          owner_render_frame_host_->GetSiteInstance());
+      inner_root->current_frame_host()
+          ->browsing_context_state()
+          ->CreateOuterDelegateProxy(
+              owner_render_frame_host_->GetSiteInstance(), inner_root);
 
   inner_root->current_frame_host()->PropagateEmbeddingTokenToParentFrame();
 
@@ -171,7 +204,9 @@ void FencedFrame::CreateProxyAndAttachToOuterFrameTree() {
   RenderViewHost* rvh =
       inner_render_manager->current_frame_host()->GetRenderViewHost();
   if (!inner_render_manager->InitRenderView(
-          inner_render_manager->current_frame_host()->GetSiteInstance(),
+          inner_render_manager->current_frame_host()
+              ->GetSiteInstance()
+              ->group(),
           static_cast<RenderViewHostImpl*>(rvh), nullptr)) {
     return;
   }
@@ -182,6 +217,8 @@ void FencedFrame::CreateProxyAndAttachToOuterFrameTree() {
   CHECK(child_rwhv->IsRenderWidgetHostViewChildFrame());
   inner_render_manager->SetRWHViewForInnerFrameTree(
       static_cast<RenderWidgetHostViewChildFrame*>(child_rwhv));
+
+  devtools_instrumentation::FencedFrameCreated(owner_render_frame_host_, this);
 }
 
 const base::UnguessableToken& FencedFrame::GetDevToolsFrameToken() const {
@@ -189,21 +226,9 @@ const base::UnguessableToken& FencedFrame::GetDevToolsFrameToken() const {
   return frame_tree_->GetMainFrame()->GetDevToolsFrameToken();
 }
 
-void FencedFrame::WaitForDidStopLoadingForTesting() {
-  if (!frame_tree_->IsLoading())
-    return;
-
-  base::RunLoop run_loop;
-  on_did_finish_loading_callback_for_testing_ = run_loop.QuitClosure();
-  run_loop.Run();
-}
-
 void FencedFrame::NotifyNavigationStateChanged(InvalidateTypes changed_flags) {}
 
-void FencedFrame::NotifyBeforeFormRepostWarningShow() {
-  // TODO(https://crbug.com/1263557): Should we call
-  // web_contents_->NotifyBeforeFormRepostWarningShow()?
-}
+void FencedFrame::NotifyBeforeFormRepostWarningShow() {}
 
 void FencedFrame::NotifyNavigationEntryCommitted(
     const LoadCommittedDetails& load_details) {}
@@ -217,8 +242,8 @@ void FencedFrame::NotifyNavigationListPruned(
 void FencedFrame::NotifyNavigationEntriesDeleted() {}
 
 void FencedFrame::ActivateAndShowRepostFormWarningDialog() {
-  // TODO(https://crbug.com/1263557): The continuation callback would goto the
-  // wrong NavigationController so perhaps we need to pass a callback in?
+  // Not supported, cancel pending reload.
+  frame_tree_->controller().CancelPendingReload();
 }
 
 bool FencedFrame::ShouldPreserveAbortedURLs() {

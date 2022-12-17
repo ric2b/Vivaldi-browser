@@ -54,10 +54,13 @@ void AddChromeColorMixers(ui::ColorProvider* provider,
   AddChromeColorMixer(provider, key);
   AddOmniboxColorMixer(provider, key);
   AddTabStripColorMixer(provider, key);
+  AddNativeChromeColorMixer(provider, key);
 
   if (key.custom_theme) {
     key.custom_theme->AddColorMixers(provider, key);
   }
 
-  AddNativeChromeColorMixer(provider, key);
+  if (key.app_controller) {
+    key.app_controller->AddColorMixers(provider, key);
+  }
 }

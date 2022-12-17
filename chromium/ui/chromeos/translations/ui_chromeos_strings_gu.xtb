@@ -31,6 +31,7 @@
 <translation id="1201402288615127009">આગલું</translation>
 <translation id="1209796539517632982">સ્વયંચાલિત નામ સર્વર્સ</translation>
 <translation id="1210831758834677569">લાઓ</translation>
+<translation id="1223825810409523901">Chrome એક્સ્ટેન્શન</translation>
 <translation id="1243314992276662751">અપલોડ કરો</translation>
 <translation id="1249250836236328755">શૈલી</translation>
 <translation id="1254593899333212300">ડાયરેક્ટ ઇન્ટરનેટ કનેક્શન</translation>
@@ -61,6 +62,7 @@
 <translation id="1497522201463361063">"<ph name="FILE_NAME" />" નું નામ બદલવામાં અક્ષમ. <ph name="ERROR_MESSAGE" /></translation>
 <translation id="1499943022354839699">અંગ્રેજી (યુએસ), Dvorak કીબોર્ડ સાથે</translation>
 <translation id="1515909359182093592"><ph name="INPUT_LABEL" /> - હોસ્ટ</translation>
+<translation id="1521655867290435174">Google Sheets</translation>
 <translation id="1538729222189715449">Linux ફાઇલો ખોલી રહ્યાં છીએ...</translation>
 <translation id="1547964879613821194">કેનેડિયન અંગ્રેજી</translation>
 <translation id="1556189134700913550">બધા પર લાગુ કરો</translation>
@@ -79,6 +81,7 @@
 <translation id="166439687370499867">શેર કરેલ નેટવર્કની ગોઠવણીમાં ફેરફાર કરવાની મંજૂરી નથી</translation>
 <translation id="1665611772925418501">ફાઇલ સંશોધિત કરી શકાઈ નથી.</translation>
 <translation id="1673103856845176271">સુરક્ષા કારણોસર ફાઇલ ઍક્સેસ કરી શકાઈ નથી.</translation>
+<translation id="16762847117768727">ISO છબી</translation>
 <translation id="169515659049020177">Shift</translation>
 <translation id="1715848075824334077">બાઇકિંગ</translation>
 <translation id="1722487484194605434"><ph name="NUMBER_OF_ITEMS" /> આઇટમને ઝિપ કરી રહ્યું છે...</translation>
@@ -106,7 +109,6 @@
 <translation id="1853795129690976061">આ ફોલ્ડર Linux સાથે શેર થાય છે</translation>
 <translation id="1864756863218646478">ફાઇલ શોધી શકાઈ નથી.</translation>
 <translation id="1884013283844450420"><ph name="NETWORK_COUNT" />માંથી નેટવર્ક <ph name="NETWORK_INDEX" />, <ph name="NETWORK_NAME" />, કનેક્ટ કરો</translation>
-<translation id="1914901738028575085">CloudReady 2.0 ડિવાઇસ</translation>
 <translation id="1920670151694390848">મલયાલમ લિપ્યંતર</translation>
 <translation id="1920798810075583923">તરબૂચ</translation>
 <translation id="1924372192547904021"><ph name="DRIVE_NAME" />ને ફોર્મેટ કરી</translation>
@@ -185,7 +187,6 @@
 <translation id="2544853746127077729">નેટવર્ક દ્વારા પ્રમાણીકરણ પ્રમાણપત્ર નકારવામાં આવ્યું</translation>
 <translation id="2547921442987553570"><ph name="EXTENSION_NAME" /> માં ઉમેરો</translation>
 <translation id="255937426064304553">યુએસ આંતરરાષ્ટ્રીય</translation>
-<translation id="2562685439590298522">Docs</translation>
 <translation id="2563185590376525700">દેડકો</translation>
 <translation id="2578394532502990878">તમિળ ફોનેટિક</translation>
 <translation id="2579959351793446050">ઉડિયા</translation>
@@ -221,9 +222,7 @@
 <translation id="2902734494705624966">યુએસ વિસ્તૃત</translation>
 <translation id="290843123675549676">મરાઠી</translation>
 <translation id="2923240520113693977">એસ્ટોનિયન</translation>
-<translation id="2925966894897775835">Sheets</translation>
 <translation id="2938685643439809023">મોંગોલિયન</translation>
-<translation id="2943400156390503548">Slides</translation>
 <translation id="2943503720238418293">વધુ ટૂંકા નામનો ઉપયોગ કરો</translation>
 <translation id="2949781154072577687"><ph name="DRIVE_NAME" />ને ફોર્મેટ કરી રહ્યાં છીએ…</translation>
 <translation id="2951236788251446349">જેલીફીશ</translation>
@@ -368,6 +367,7 @@
 <translation id="4215448920900139318"><ph name="FILE_COUNT" />નો બૅકઅપ લઈ રહ્યાં છીએ</translation>
 <translation id="4218274196133425560"><ph name="HOST_NAME" /> માટે અપવાદ કાઢી નાખો</translation>
 <translation id="4261901459838235729">Google પ્રસ્તુતિ</translation>
+<translation id="4277536868133419688"><ph name="FILTER_NAME" /> ફિલ્ટર ચાલુ છે.</translation>
 <translation id="4290535918735525311">Linux વડે શેર કરેલું 1 ફોલ્ડર</translation>
 <translation id="4299729908419173967">બ્રાઝિલિયન</translation>
 <translation id="4302605047395093221">આ ડિવાઇસનો ઉપયોગ કરનાર કોઈપણ વ્યક્તિએ આ મોબાઇલ નેટવર્કથી કનેક્ટ થવા માટે પિન દાખલ કરવો જરૂરી રહેશે</translation>
@@ -385,6 +385,8 @@
 <translation id="4380245540200674032"><ph name="NETWORK_COUNT" />માંથી નેટવર્ક <ph name="NETWORK_INDEX" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, <ph name="CONNECTION_STATUS" />, સિગ્નલની સશક્તતા <ph name="SIGNAL_STRENGTH" />%, તમારા વ્યવસ્થાપક દ્વારા મેનેજ કરવામાં આવે છે, વિગતો</translation>
 <translation id="4387004326333427325">પ્રમાણીકરણ પ્રમાણપત્ર રિમોટલી નકારવામાં આવ્યું છે</translation>
 <translation id="4394214039309501350">બાહ્ય લિંક</translation>
+<translation id="4401287888955153199">બધું એક્સટ્રેક્ટ કરો</translation>
+<translation id="4410695710508688828">એક્સટ્રેક્ટ કરવામાં નિષ્ફ્ળ રહ્યાં. <ph name="ERROR_MESSAGE" /></translation>
 <translation id="4418686080762064601">તમારી ફાઇલો માટે શૉર્ટકટ બનાવો</translation>
 <translation id="4425149324548788773">મારી ડ્રાઇવ</translation>
 <translation id="4439427728133035643"><ph name="NETWORK_COUNT" />માંથી નેટવર્ક <ph name="NETWORK_INDEX" />, <ph name="NETWORK_NAME" />, સિગ્નલની સશક્તતા <ph name="SIGNAL_STRENGTH" />%, કનેક્ટ કરો</translation>
@@ -406,6 +408,7 @@
 <translation id="457386861538956877">વધુ...</translation>
 <translation id="4579744207439506346"><ph name="ENTRY_NAME" /> પસંદગીમાં ઉમેર્યું.</translation>
 <translation id="4594543368593301662"><ph name="SEARCH_TERM" /> માટે પરિણામો બતાવી રહ્યાં છીએ.</translation>
+<translation id="4599600860674643278">ફિલ્ટર રીસેટ કરવામાં આવ્યું છે.</translation>
 <translation id="4603392156942865207"><ph name="FILE_NAME" />ની <ph name="FOLDER_NAME" />માં કૉપિ કરી રહ્યાં છીએ</translation>
 <translation id="4631887759990505102">કલાકાર</translation>
 <translation id="4642769377300286600">મોબાઇલ પ્રોફાઇલ ઇન્સ્ટૉલ કરી રહ્યાં છીએ, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />ના <ph name="NETWORK_COUNT" />માંથી <ph name="NETWORK_INDEX" /> નેટવર્ક</translation>
@@ -414,6 +417,7 @@
 <translation id="4656777537938206294">ફાઇલોને ઑફલાઇન ઉપલબ્ધ કરાવો</translation>
 <translation id="4658782175094886150">હિમવર્ષામાં ઉભેલી વ્યક્તિ</translation>
 <translation id="4669606053856530811">'<ph name="SOURCE_NAME" />'ના સભ્યો ઍક્સેસ ગુમાવશે સિવાય કે આ આઇટમને તેમની સાથે શેર કરવામાં ન આવી હોય.</translation>
+<translation id="467809019005607715">Google Slides</translation>
 <translation id="4690246192099372265">સ્વીડિશ</translation>
 <translation id="4693155481716051732">સુશી - માછલીની એક જાપાની વાનગી</translation>
 <translation id="4694604912444486114">વાનર</translation>
@@ -528,6 +532,7 @@
 <translation id="5469868506864199649">ઇટાલિયન</translation>
 <translation id="5473333559083690127">નવો PIN ફરીથી દાખલ કરો</translation>
 <translation id="5489067830765222292">લૅતવિયન</translation>
+<translation id="5489965683297092283"><ph name="FILTER_NAME" /> ફિલ્ટર બંધ છે.</translation>
 <translation id="5494920125229734069">બધા પસંદ કરો</translation>
 <translation id="5500122897333236901">આઇસલેન્ડિક</translation>
 <translation id="5508696409934741614">બિંદુઓ</translation>
@@ -594,6 +599,7 @@
 <translation id="6082256976217156453">LZMA દ્વારા નાનું કરવામાં આવેલું આર્કાઇવ</translation>
 <translation id="6096979789310008754">શોધ ટેક્સ્ટ સાફ કરી, બધી ફાઇલો અને ફોલ્ડરો બતાવવામાં આવી રહ્યાં છે.</translation>
 <translation id="610101264611565198"><ph name="FILE_NAME" />ને <ph name="FOLDER_NAME" />માં ખસેડાય છે</translation>
+<translation id="61118516107968648">CSV ટેક્સ્ટ</translation>
 <translation id="6129953537138746214">જગ્યા</translation>
 <translation id="6133173853026656527"><ph name="FILE_NAME" /> ખસેડાઈ રહી છે...</translation>
 <translation id="613750717151263950">જાપાનીઝ, યુએસ કીબોર્ડ સાથે</translation>
@@ -658,6 +664,7 @@
 <translation id="6732801395666424405">પ્રમાણપત્રો લોડ કર્યાં નથી</translation>
 <translation id="6736329909263487977"><ph name="ISSUED_BY" /> [<ph name="ISSUED_TO" />]</translation>
 <translation id="6751256176799620176">1 ફોલ્ડર પસંદ કર્યું</translation>
+<translation id="6755827872271341378">ChromeOS Flex ડિવાઇસ</translation>
 <translation id="6790428901817661496">ચલાવો</translation>
 <translation id="6795884519221689054">પાંડા</translation>
 <translation id="6806699711453372963">Linux શેરિંગ મેનેજ કરો</translation>
@@ -735,6 +742,7 @@
 <translation id="7343393116438664539">વિયેતનામીઝ ટેલેક્સ</translation>
 <translation id="7359359531237882347"><ph name="NUMBER_OF_ITEMS" /> આઇટમ કૉપિ કરી રહ્યું છે...</translation>
 <translation id="7375951387215729722">ફાઇલ સૂચિને <ph name="COLUMN_NAME" /> દ્વારા ઉતરતા ક્રમમાં સૉર્ટ કરેલી છે.</translation>
+<translation id="7402503521691663770">ChromeOS Flex ડિવાઇસ</translation>
 <translation id="7408870451288633753">ચેક</translation>
 <translation id="7417453074306512035">ઇથિઓપિક કીબોર્ડ</translation>
 <translation id="7417705661718309329">Google નકશો</translation>
@@ -808,6 +816,7 @@
 <translation id="7925686952655276919">સમન્વયન માટે ડેટા માહિતીની ઉપયોગ કરશો નહીં</translation>
 <translation id="7928710562641958568">ઉપકરણ હટાવો</translation>
 <translation id="7943385054491506837">યુએસ કોલમેક</translation>
+<translation id="7948417415021769876">7z આર્કાઇવ</translation>
 <translation id="7953739707111622108">આ ઉપકરણ ખોલી શકાતું નથી કારણ કે તેની ફાઇલસિસ્ટમ ઓળખાઈ ન હતી.</translation>
 <translation id="7969525169268594403">સ્લોવેનિયન</translation>
 <translation id="7972920761225148017">ફ્રેન્ચ (સ્વિટ્ઝર્લૅન્ડ)</translation>
@@ -822,6 +831,7 @@
 <translation id="8042602468072383151"><ph name="AUDIO_TYPE" /> ઑડિયો</translation>
 <translation id="8045462269890919536">રોમાનિયન</translation>
 <translation id="8049184478152619004">પર્સનલ અનબ્લૉકિંગ કી (PUK) દાખલ કરો</translation>
+<translation id="807187749540895545"><ph name="FILE_NAME" />ને એક્સટ્રેક્ટ કરી રહ્યાં છીએ...</translation>
 <translation id="8079530767338315840">પુનરાવર્તન કરો</translation>
 <translation id="8087576439476816834"><ph name="PROFILE_NAME" /> ડાઉનલોડ કરો</translation>
 <translation id="8106045200081704138">મારી સાથે શેર કરેલા</translation>
@@ -838,6 +848,7 @@
 <translation id="8208580316430297579">આર્ટવર્ક</translation>
 <translation id="8223479393428528563">ઑફલાઇન ઉપયોગ કરવા માટે આ ફાઇલો સાચવવા, પાછા ઑફલાઇન થાઓ, ફાઇલો પર રાઇટ-ક્લિક કરો અને <ph name="OFFLINE_CHECKBOX_NAME" /> વિકલ્પ પસંદ કરો.</translation>
 <translation id="8249296373107784235">છોડો</translation>
+<translation id="8250920743982581267">દસ્તાવેજો</translation>
 <translation id="8261506727792406068">ડિલીટ કરો</translation>
 <translation id="8261561378965667560">ચાઇનીઝ અરે</translation>
 <translation id="8269755669432358899">ફાઇલોના પ્રતિસાદની પૅનલ નાની કરો</translation>
@@ -856,6 +867,7 @@
 <translation id="8372369524088641025">ખરાબ WEP કી</translation>
 <translation id="8372852072747894550">ગ્રીક</translation>
 <translation id="8386903983509584791">સ્કૅન પૂર્ણ થયું</translation>
+<translation id="8387733224523483503"><ph name="FILE_NAME" /> મેળવી છે.</translation>
 <translation id="8395901698320285466">પરિમાણો</translation>
 <translation id="8408068190360279472"><ph name="NETWORK_TYPE" /> નેટવર્ક, કનેક્ટ કરી રહ્યું છે</translation>
 <translation id="8425213833346101688">બદલો</translation>
@@ -873,6 +885,7 @@
 <translation id="8484284835977497781">તમારા તાજેતરના ફોટામાંથી પસંદ કરો.</translation>
 <translation id="8487700953926739672">ઑફલાઇન ઉપલબ્ધ</translation>
 <translation id="8492972329130824181">હોમ નેટવર્ક ઉપલબ્ધ નથી. કનેક્ટ કરવા માટે મોબાઇલ ડેટા રોમિંગની સુવિધા ચાલુ કરવી આવશ્યક છે.</translation>
+<translation id="8499098729323186194"><ph name="NUMBER_OF_ITEMS" /> આઇટમને એક્સટ્રેક્ટ કરી રહ્યાં છીએ...</translation>
 <translation id="8521441079177373948">યુકે</translation>
 <translation id="8525306231823319788">પૂર્ણ સ્ક્રીન</translation>
 <translation id="853494022971700746">ફ્રેન્ચ (ફ્રાન્સ)</translation>
@@ -901,7 +914,6 @@
 <translation id="8714406895390098252">સાયકલ</translation>
 <translation id="8719721339511222681"><ph name="ENTRY_NAME" /> પસંદ કર્યું</translation>
 <translation id="872537912056138402">ક્રોએશિયન</translation>
-<translation id="873847021056608403">CloudReady 2.0 ડિવાઇસ</translation>
 <translation id="8743164338060742337"><ph name="NETWORK_COUNT" />માંથી નેટવર્ક <ph name="NETWORK_INDEX" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" /> સિગ્નલની સશક્તતા <ph name="SIGNAL_STRENGTH" />%, તમારા વ્યવસ્થાપક દ્વારા મેનેજ કરવામાં આવે છે, કનેક્ટ કરો</translation>
 <translation id="8750438273876807512">કોઈ ફાઇલને ટચ કરીને થોડીવાર દબાવી રાખો અને <ph name="ICON" /> પર ટૅપ કરો અને શેલ્ફમાં તમારી ફાઇલોને ઝડપથી ઍક્સેસ કરવા માટે "શેલ્ફ પર પિન કરો" પસંદ કરો.</translation>
 <translation id="8787254343425541995">શેર કરેલા નેટવર્ક્સ માટે પ્રોક્સીસને મંજૂરી આપો</translation>
@@ -948,7 +960,9 @@
 <translation id="9172592259078059678">ગુજરાતી લિપ્યંતર</translation>
 <translation id="9173120999827300720">અંગ્રેજી (યુએસ), આંતરરાષ્ટ્રીય કીબોર્ડ સાથે</translation>
 <translation id="9174050671906956834">30 દિવસ પછી ટ્રેશમાંની આઇટમ કાયમ માટે ડિલીટ કરવામાં આવે છે.</translation>
+<translation id="9183302530794969518">Google Docs</translation>
 <translation id="9189836632794948435">કઝાક</translation>
+<translation id="9200427192836333033"><ph name="NUMBER_OF_ITEMS" /> આઇટમ મેળવી છે.</translation>
 <translation id="9213073329713032541">ઇન્સ્ટૉલેશન સફળતાપૂર્વક શરૂ થયું.</translation>
 <translation id="9219103736887031265">છબીઓ</translation>
 <translation id="9219908252191632183">ચંદ્ર</translation>

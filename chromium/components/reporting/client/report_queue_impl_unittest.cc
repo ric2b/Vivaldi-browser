@@ -8,11 +8,13 @@
 
 #include <utility>
 
+#include "base/containers/queue.h"
 #include "base/json/json_reader.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/test/task_environment.h"
 #include "base/values.h"
+#include "components/reporting/client/mock_report_queue.h"
 #include "components/reporting/client/report_queue_configuration.h"
 #include "components/reporting/proto/synced/record_constants.pb.h"
 #include "components/reporting/proto/test.pb.h"
@@ -112,8 +114,8 @@ TEST_F(ReportQueueImplTest, SuccessfulStringRecord) {
 TEST_F(ReportQueueImplTest, SuccessfulBaseValueRecord) {
   constexpr char kTestKey[] = "TEST_KEY";
   constexpr char kTestValue[] = "TEST_VALUE";
-  base::Value test_dict(base::Value::Type::DICTIONARY);
-  test_dict.SetStringKey(kTestKey, kTestValue);
+  base::Value::Dict test_dict;
+  test_dict.Set(kTestKey, kTestValue);
   test::TestEvent<Status> a;
   report_queue_->Enqueue(test_dict, priority_, a.cb());
   EXPECT_OK(a.result());
@@ -123,7 +125,7 @@ TEST_F(ReportQueueImplTest, SuccessfulBaseValueRecord) {
   absl::optional<base::Value> value_result =
       base::JSONReader::Read(test_storage_module()->record().data());
   ASSERT_TRUE(value_result);
-  EXPECT_EQ(value_result.value(), test_dict);
+  EXPECT_EQ(value_result.value().GetDict(), test_dict);
 }
 
 // Enqueues a |TestMessage| and ensures that it arrives unaltered in the
@@ -190,8 +192,8 @@ TEST_F(ReportQueueImplTest, EnqueueValueFailsOnPolicy) {
       .WillOnce(Return(Status(error::UNAUTHENTICATED, "Failing for tests")));
   constexpr char kTestKey[] = "TEST_KEY";
   constexpr char kTestValue[] = "TEST_VALUE";
-  base::Value test_dict(base::Value::Type::DICTIONARY);
-  test_dict.SetStringKey(kTestKey, kTestValue);
+  base::Value::Dict test_dict;
+  test_dict.Set(kTestKey, kTestValue);
   test::TestEvent<Status> a;
   report_queue_->Enqueue(test_dict, priority_, a.cb());
   const auto result = a.result();
@@ -245,6 +247,65 @@ TEST_F(ReportQueueImplTest, SuccessfulSpeculativeStringRecord) {
 
   EXPECT_EQ(test_storage_module()->priority(), priority_);
   EXPECT_EQ(test_storage_module()->record().data(), kTestString);
+}
+
+TEST_F(ReportQueueImplTest, OverlappingStringRecords) {
+  constexpr char kTestString1[] = "record1";
+  constexpr char kTestString2[] = "record2";
+  constexpr char kTestString3[] = "record3";
+
+  test::TestEvent<Status> event1;
+  test::TestEvent<Status> event2;
+  test::TestEvent<Status> event3;
+  auto speculative_report_queue = SpeculativeReportQueueImpl::Create();
+
+  // Call `Enqueue` for 2 records before report queue is ready, both will be
+  // added to pending records.
+  speculative_report_queue->Enqueue(kTestString1, priority_, event1.cb());
+  EXPECT_OK(event1.result());
+  speculative_report_queue->Enqueue(kTestString2, priority_, event2.cb());
+  EXPECT_OK(event2.result());
+
+  base::queue<ReportQueue::EnqueueCallback> enqueue_cb_queue;
+  int enqueue_count = 0;
+  auto mock_queue = std::make_unique<testing::NiceMock<MockReportQueue>>();
+  EXPECT_CALL(*mock_queue, AddRecord)
+      .Times(3)
+      .WillRepeatedly(
+          [&enqueue_cb_queue, &enqueue_count](base::StringPiece record_string,
+                                              Priority event_priority,
+                                              ReportQueue::EnqueueCallback cb) {
+            ++enqueue_count;
+            enqueue_cb_queue.emplace(std::move(cb));
+          });
+
+  // First record should be enqueued after calling `AttachActualQueue`.
+  speculative_report_queue->AttachActualQueue(std::move(mock_queue));
+  // Second record should be enqueued after calling `Enqueue` for the third
+  // record, and third record should be added to pending records.
+  speculative_report_queue->Enqueue(kTestString3, priority_, event3.cb());
+  task_environment_.RunUntilIdle();
+  ASSERT_EQ(enqueue_count, 2);
+
+  // Executing the first callback with success status should cause the third
+  // record to be enqueued and pending records to be empty.
+  ASSERT_THAT(enqueue_cb_queue, testing::SizeIs(2));
+  std::move(enqueue_cb_queue.front()).Run(Status());
+  enqueue_cb_queue.pop();
+  task_environment_.RunUntilIdle();
+  ASSERT_EQ(enqueue_count, 3);
+
+  // Executing the second and third callback.
+  ASSERT_THAT(enqueue_cb_queue, testing::SizeIs(2));
+  std::move(enqueue_cb_queue.front()).Run(Status());
+  enqueue_cb_queue.pop();
+  task_environment_.RunUntilIdle();
+
+  ASSERT_THAT(enqueue_cb_queue, testing::SizeIs(1));
+  std::move(enqueue_cb_queue.front()).Run(Status());
+  enqueue_cb_queue.pop();
+  EXPECT_OK(event3.result());
+  task_environment_.RunUntilIdle();
 }
 
 }  // namespace

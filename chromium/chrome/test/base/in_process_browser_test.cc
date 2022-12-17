@@ -25,6 +25,7 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/after_startup_task_utils.h"
+#include "chrome/browser/browser_features.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_browser_main.h"
 #include "chrome/browser/chrome_browser_main_extra_parts.h"
@@ -38,6 +39,7 @@
 #include "chrome/browser/net/net_error_tab_helper.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/predictors/loading_predictor_config.h"
+#include "chrome/browser/privacy_sandbox/privacy_sandbox_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
@@ -106,12 +108,12 @@
 #include "ash/components/cryptohome/cryptohome_parameters.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/test/shell_test_api.h"
+#include "ash/services/device_sync/device_sync_impl.h"
+#include "ash/services/device_sync/fake_device_sync.h"
 #include "ash/shell.h"
 #include "base/system/sys_info.h"
 #include "chrome/browser/ash/app_restore/full_restore_app_launch_handler.h"
 #include "chrome/browser/ash/input_method/input_method_configuration.h"
-#include "chromeos/services/device_sync/device_sync_impl.h"
-#include "chromeos/services/device_sync/fake_device_sync.h"
 #include "components/user_manager/user_names.h"
 #include "ui/display/display_switches.h"
 #include "ui/events/test/event_generator.h"
@@ -127,7 +129,7 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-#include "chrome/browser/lacros/cert_db_initializer_factory.h"
+#include "chrome/browser/lacros/cert/cert_db_initializer_factory.h"
 #include "components/account_manager_core/chromeos/account_manager.h"
 #include "components/account_manager_core/chromeos/account_manager_facade_factory.h"  // nogncheck
 #include "components/account_manager_core/chromeos/fake_account_manager_ui.h"  // nogncheck
@@ -139,23 +141,24 @@ namespace {
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 class FakeDeviceSyncImplFactory
-    : public chromeos::device_sync::DeviceSyncImpl::Factory {
+    : public ash::device_sync::DeviceSyncImpl::Factory {
  public:
   FakeDeviceSyncImplFactory() = default;
   ~FakeDeviceSyncImplFactory() override = default;
 
-  // chromeos::device_sync::DeviceSyncImpl::Factory:
-  std::unique_ptr<chromeos::device_sync::DeviceSyncBase> CreateInstance(
+  // ash::device_sync::DeviceSyncImpl::Factory:
+  std::unique_ptr<ash::device_sync::DeviceSyncBase> CreateInstance(
       signin::IdentityManager* identity_manager,
       gcm::GCMDriver* gcm_driver,
       PrefService* profile_prefs,
-      const chromeos::device_sync::GcmDeviceInfoProvider*
-          gcm_device_info_provider,
-      chromeos::device_sync::ClientAppMetadataProvider*
-          client_app_metadata_provider,
+      const ash::device_sync::GcmDeviceInfoProvider* gcm_device_info_provider,
+      ash::device_sync::ClientAppMetadataProvider* client_app_metadata_provider,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-      std::unique_ptr<base::OneShotTimer> timer) override {
-    return std::make_unique<chromeos::device_sync::FakeDeviceSync>();
+      std::unique_ptr<base::OneShotTimer> timer,
+      ash::device_sync::AttestationCertificatesSyncer::
+          GetAttestationCertificatesFunction
+              get_attestation_certificates_function) override {
+    return std::make_unique<ash::device_sync::FakeDeviceSync>();
   }
 };
 
@@ -313,6 +316,11 @@ void InProcessBrowserTest::Initialize() {
   // various test fixtures that mock servers.
   disabled_features.push_back(features::kPreconnectToSearch);
 
+  // If the network service fails to start sandboxed then this should cause
+  // tests to fail.
+  disabled_features.push_back(
+      features::kRestartNetworkServiceUnsandboxedForFailedLaunch);
+
   // In-product help can conflict with tests' expected window activation and
   // focus. Individual tests can re-enable IPH.
   for (const base::Feature* feature : feature_engagement::GetAllFeatures()) {
@@ -325,6 +333,10 @@ void InProcessBrowserTest::Initialize() {
   launch_browser_for_testing_ =
       std::make_unique<ash::full_restore::ScopedLaunchBrowserForTesting>();
 #endif
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  CertDbInitializerFactory::GetInstance()
+      ->SetCreateWithBrowserContextForTesting(/*should_create=*/false);
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 }
 
 InProcessBrowserTest::~InProcessBrowserTest() = default;
@@ -420,14 +432,9 @@ void InProcessBrowserTest::SetUp() {
   ChromeNetworkDelegate::EnableAccessToAllFilesForTesting(true);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
 
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  CertDbInitializerFactory::GetInstance()
-      ->SetCreateWithBrowserContextForTesting(/*should_create=*/false);
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
-
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // Device sync (for multidevice "Better Together") is ash specific.
-  chromeos::device_sync::DeviceSyncImpl::Factory::SetCustomFactory(
+  ash::device_sync::DeviceSyncImpl::Factory::SetCustomFactory(
       GetFakeDeviceSyncImplFactory());
 
   // Using a screenshot for clamshell to tablet mode transitions makes the flow
@@ -459,6 +466,11 @@ void InProcessBrowserTest::SetUp() {
   // What's New for tests that simulate first run, is unexpected by most tests.
   whats_new::DisableRemoteContentForTests();
 
+  // The Privacy Sandbox service may attempt to show a modal dialog to the
+  // profile on browser start, which is unexpected by mosts tests. Tests which
+  // expect this can allow the dialog as desired.
+  PrivacySandboxService::SetDialogDisabledForTests(true);
+
   BrowserTestBase::SetUp();
 }
 
@@ -484,7 +496,7 @@ void InProcessBrowserTest::TearDown() {
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  chromeos::device_sync::DeviceSyncImpl::Factory::SetCustomFactory(nullptr);
+  ash::device_sync::DeviceSyncImpl::Factory::SetCustomFactory(nullptr);
   launch_browser_for_testing_ = nullptr;
 #endif
 }

@@ -17,6 +17,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_window_post_message_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/window_proxy_manager.h"
 #include "third_party/blink/renderer/core/dom/document.h"
+#include "third_party/blink/renderer/core/event_target_names.h"
 #include "third_party/blink/renderer/core/events/message_event.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/execution_context/security_context.h"
@@ -439,6 +440,18 @@ void DOMWindow::focus(v8::Isolate* isolate) {
   if (!page)
     return;
 
+  if (!frame->ShouldAllowScriptFocus()) {
+    // Disallow script focus that crosses a fenced frame boundary on a
+    // frame that doesn't have transient user activation. Note: all calls to
+    // DOMWindow::focus come from JavaScript calls in the web platform
+    if (!frame->HasTransientUserActivation())
+      return;
+    // Fenced frames should consume user activation when attempting to pull
+    // focus across a fenced boundary into itself.
+    if (frame->IsInFencedFrameTree())
+      LocalFrame::ConsumeTransientUserActivation(DynamicTo<LocalFrame>(frame));
+  }
+
   RecordWindowProxyAccessMetrics(
       WebFeature::kWindowProxyCrossOriginAccessFocus,
       WebFeature::kWindowProxyCrossOriginAccessFromOtherPageFocus);
@@ -567,7 +580,11 @@ void DOMWindow::ReportCoopAccess(const char* property_name) {
 
   // Iframes are allowed to trigger reports, only when they are same-origin with
   // their top-level document.
-  if (accessing_frame->IsCrossOriginToMainFrame())
+  // TODO(crbug.com/1318055): With MPArch there may be multiple main frames
+  // so we should use IsCrossOriginToOutermostMainFrame when we intend to check
+  // if any embedded frame (eg, iframe or fenced frame) is cross-origin with
+  // respect to the outermost main frame. Follow up to confirm correctness.
+  if (accessing_frame->IsCrossOriginToOutermostMainFrame())
     return;
 
   // See https://crbug.com/1183571

@@ -618,7 +618,6 @@
 <translation id="5170206230005240598">Na-enable ang mga caption ng braille</translation>
 <translation id="5183440668879371625">Nakaraang Linya ng Braille</translation>
 <translation id="5189244881767082992">Linya</translation>
-<translation id="5234747236692380506">i-type ang <ph name="TEXT" /></translation>
 <translation id="5263034204789987535">Cornsilk</translation>
 <translation id="5263344797180442561">h2</translation>
 <translation id="528468243742722775">Tapusin</translation>
@@ -685,6 +684,8 @@
 <translation id="5623842676595125836">Log</translation>
 <translation id="5628125749885014029">h4</translation>
 <translation id="5632083598315326067">Simbolo ng graphics</translation>
+<translation id="5648939288050772726">Congratulations! Matagumpay mong natutunan ang mga kinakailangan sa paggamit ng ChromeVox. Tandaang mabubuksan mo ang menu ng command sa ChromeVox anumang oras sa pamamagitan ng pagpindot sa Paghahanap+Tuldok. Para matuto pa tungkol sa ChromeVox at ChromeOS, bisitahin ang mga sumusunod na artikulo.
+    Kung tapos ka na sa tutorial, gamitin ang ChromeVox para mag-navigate papunta sa button na Isara at i-click ito.</translation>
 <translation id="5653397561111110475">Gamitin ang mga feature sa pagiging naa-access ng touch screen ng Chromebook</translation>
 <translation id="5655682562155942719">Mga Command sa Paglaktaw</translation>
 <translation id="56637627897541303">Lugar ng text</translation>
@@ -794,6 +795,7 @@
 <translation id="641759969622533235">{COUNT,plural, =1{tutuldok}one{# tutuldok}other{# na tutuldok}}</translation>
 <translation id="6444046323172968959">Dialog ng alerto</translation>
 <translation id="6452403590345320472">Talaan ng mga nilalaman</translation>
+<translation id="6457542714329819968">uri</translation>
 <translation id="6468049171101508116">Susunod na button</translation>
 <translation id="646954774886932461">Index</translation>
 <translation id="6475604559827479857">Kulay para sa mga pag-highlight ng salita:</translation>
@@ -966,8 +968,6 @@
 <translation id="7701196182766842984">autolst</translation>
 <translation id="7713139339518499741">Natural na boses</translation>
 <translation id="7714340021005120797">Walang susunod na combo box</translation>
-<translation id="772146615414628379">Binabati ka namin! Matagumpay mong natutunan ang mga kinakailangan sa paggamit ng ChromeVox. Tandaang mabubuksan mo ang menu ng command sa ChromeVox anumang oras sa pamamagitan ng pagpindot sa Paghahanap+Tuldok. Para matuto pa tungkol sa ChromeVox at Chrome OS, bisitahin ang mga sumusunod na artikulo.
-    Kung tapos ka na sa tutorial, gamitin ang ChromeVox para mag-navigate sa button na Isara at i-click ito.</translation>
 <translation id="7724603315864178912">I-cut</translation>
 <translation id="7731785449856576010">Walang susunod na widget ng media</translation>
 <translation id="7735498529470878067">Makakatulong sa iyo ang explore by touch na makakuha kaagad ng ideya kung ano ang nasa screen.</translation>

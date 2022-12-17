@@ -5,6 +5,7 @@
 #include "chrome/browser/extensions/activity_log/activity_log.h"
 
 #include <stddef.h>
+
 #include <memory>
 #include <set>
 #include <utility>
@@ -12,7 +13,6 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/cxx17_backports.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
@@ -189,7 +189,7 @@ class ApiInfoDatabase {
 
  private:
   ApiInfoDatabase() {
-    for (size_t i = 0; i < base::size(kApiInfoTable); i++) {
+    for (size_t i = 0; i < std::size(kApiInfoTable); i++) {
       const ApiInfo* info = &kApiInfoTable[i];
       api_database_[info->api_name] = info;
     }
@@ -376,7 +376,7 @@ bool IsExtensionAllowlisted(const std::string& extension_id) {
 void LogApiActivity(content::BrowserContext* browser_context,
                     const std::string& extension_id,
                     const std::string& activity_name,
-                    const base::ListValue& args,
+                    std::unique_ptr<base::ListValue> args,
                     Action::ActionType type) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (IsExtensionAllowlisted(extension_id))
@@ -388,8 +388,7 @@ void LogApiActivity(content::BrowserContext* browser_context,
 
   auto action = base::MakeRefCounted<Action>(extension_id, base::Time::Now(),
                                              type, activity_name);
-  action->set_args(
-      base::ListValue::From(base::Value::ToUniquePtrValue(args.Clone())));
+  action->set_args(std::move(args));
   activity_log->LogAction(action);
 }
 
@@ -397,9 +396,12 @@ void LogApiActivity(content::BrowserContext* browser_context,
 void LogApiEvent(content::BrowserContext* browser_context,
                  const std::string& extension_id,
                  const std::string& event_name,
-                 const base::ListValue& args) {
-  LogApiActivity(browser_context, extension_id, event_name, args,
-                 Action::ACTION_API_EVENT);
+                 const base::Value::List& args) {
+  auto list_value = std::make_unique<base::ListValue>();
+  for (const auto& value : args)
+    list_value->Append(value.Clone());
+  LogApiActivity(browser_context, extension_id, event_name,
+                 std::move(list_value), Action::ACTION_API_EVENT);
 }
 
 // Handler for API function calls.
@@ -407,8 +409,10 @@ void LogApiFunction(content::BrowserContext* browser_context,
                     const std::string& extension_id,
                     const std::string& event_name,
                     const base::ListValue& args) {
-  LogApiActivity(browser_context, extension_id, event_name, args,
-                 Action::ACTION_API_CALL);
+  LogApiActivity(
+      browser_context, extension_id, event_name,
+      base::ListValue::From(base::Value::ToUniquePtrValue(args.Clone())),
+      Action::ACTION_API_CALL);
 }
 
 // Handler for webRequest use.
@@ -440,7 +444,7 @@ void SetActivityHandlers() {
   // Set up event handlers. We don't have to worry about unsetting these,
   // because we check whether or not the activity log is active for the context
   // in the monitor methods.
-  activity_monitor::Monitor current_function_monitor =
+  activity_monitor::MonitorListValue current_function_monitor =
       activity_monitor::GetApiFunctionMonitor();
   DCHECK(!current_function_monitor ||
          current_function_monitor == &LogApiFunction);

@@ -85,8 +85,9 @@ class TabHoverCardBubbleViewBrowserTest : public DialogBrowserTest {
     // We don't use Tab::OnMouseEntered here to invoke the hover card because
     // that path is disabled in browser tests. If we enabled it, the real mouse
     // might interfere with the test.
-    tab_strip()->UpdateHoverCard(tab_strip()->tab_at(index),
-                                 TabController::HoverCardUpdateType::kHover);
+    tab_strip()->UpdateHoverCard(
+        tab_strip()->tab_at(index),
+        TabSlotController::HoverCardUpdateType::kHover);
   }
 
   // DialogBrowserTest:
@@ -212,7 +213,7 @@ IN_PROC_BROWSER_TEST_F(TabHoverCardBubbleViewBrowserTest,
   new_tab_data.title = u"Test Tab 2";
   new_tab_data.last_committed_url =
       GURL("http://example.com/this/should/not/be/seen");
-  tab_strip()->AddTabAt(1, new_tab_data, false);
+  tab_strip()->AddTabAt(1, new_tab_data);
 
   // Cycle focus until it reaches a tab.
   while (!tab_strip()->IsFocusInTabs())
@@ -261,7 +262,7 @@ IN_PROC_BROWSER_TEST_F(TabHoverCardBubbleViewBrowserTest,
   new_tab_data.title = u"Test Tab 2";
   new_tab_data.last_committed_url =
       GURL("http://example.com/this/should/not/be/seen");
-  tab_strip()->AddTabAt(1, new_tab_data, false);
+  tab_strip()->AddTabAt(1, new_tab_data);
 
   ShowUi("default");
 
@@ -314,8 +315,8 @@ IN_PROC_BROWSER_TEST_F(TabHoverCardBubbleViewBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(TabHoverCardBubbleViewBrowserTest,
                        HoverCardsSeenRatioMetric) {
-  tab_strip()->AddTabAt(1, TabRendererData(), false);
-  tab_strip()->AddTabAt(2, TabRendererData(), false);
+  tab_strip()->AddTabAt(1, TabRendererData());
+  tab_strip()->AddTabAt(2, TabRendererData());
 
   HoverMouseOverTabAt(0);
 

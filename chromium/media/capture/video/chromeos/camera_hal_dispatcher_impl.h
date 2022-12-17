@@ -128,8 +128,7 @@ class CAPTURE_EXPORT CameraPrivacySwitchObserver
 // See https://crbug.com/891961.
 class CAPTURE_EXPORT CameraHalDispatcherImpl final
     : public cros::mojom::CameraHalDispatcher,
-      public cros::mojom::CameraHalServerCallbacks,
-      public base::trace_event::TraceLog::EnabledStateObserver {
+      public cros::mojom::CameraHalServerCallbacks {
  public:
   static CameraHalDispatcherImpl* GetInstance();
 
@@ -202,10 +201,6 @@ class CAPTURE_EXPORT CameraHalDispatcherImpl final
   base::UnguessableToken GetTokenForTrustedClient(
       cros::mojom::CameraClientType type);
 
-  // base::trace_event::TraceLog::EnabledStateObserver implementation.
-  void OnTraceLogEnabled() final;
-  void OnTraceLogDisabled() final;
-
  private:
   friend struct base::DefaultSingletonTraits<CameraHalDispatcherImpl>;
   // Allow the test to construct the class directly.
@@ -249,9 +244,6 @@ class CAPTURE_EXPORT CameraHalDispatcherImpl final
       RegisterSensorClientWithTokenCallback callback);
 
   void StopOnProxyThread();
-
-  void OnTraceLogEnabledOnProxyThread();
-  void OnTraceLogDisabledOnProxyThread();
 
   TokenManager* GetTokenManagerForTesting();
 

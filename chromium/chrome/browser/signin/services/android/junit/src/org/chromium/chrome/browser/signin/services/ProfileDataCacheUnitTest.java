@@ -21,12 +21,15 @@ import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.R;
 import org.chromium.chrome.test.util.browser.signin.AccountManagerTestRule;
+import org.chromium.components.signin.base.AccountCapabilities;
 import org.chromium.components.signin.base.AccountInfo;
 import org.chromium.components.signin.base.CoreAccountId;
 import org.chromium.components.signin.identitymanager.AccountInfoServiceProvider;
 import org.chromium.components.signin.identitymanager.AccountTrackerService;
 import org.chromium.components.signin.identitymanager.IdentityManager;
 import org.chromium.components.signin.identitymanager.IdentityManagerJni;
+
+import java.util.HashMap;
 
 /**
  * Unit tests for {@link ProfileDataCache}
@@ -78,8 +81,9 @@ public class ProfileDataCacheUnitTest {
     @Test
     public void accountInfoIsUpdatedWithOnlyFullName() {
         final String fullName = "full name1";
-        final AccountInfo accountInfo = new AccountInfo(new CoreAccountId("gaia-id-test"),
-                ACCOUNT_EMAIL, "gaia-id-test", fullName, null, null);
+        final AccountInfo accountInfo =
+                new AccountInfo(new CoreAccountId("gaia-id-test"), ACCOUNT_EMAIL, "gaia-id-test",
+                        fullName, null, null, new AccountCapabilities(new HashMap<>()));
         mProfileDataCache.addObserver(mObserverMock);
         Assert.assertFalse(mProfileDataCache.hasProfileData(ACCOUNT_EMAIL));
         Assert.assertNull(mProfileDataCache.getProfileDataOrDefault(ACCOUNT_EMAIL).getFullName());
@@ -94,8 +98,9 @@ public class ProfileDataCacheUnitTest {
     @Test
     public void accountInfoIsUpdatedWithOnlyGivenName() {
         final String givenName = "given name1";
-        final AccountInfo accountInfo = new AccountInfo(new CoreAccountId("gaia-id-test"),
-                ACCOUNT_EMAIL, "gaia-id-test", null, givenName, null);
+        final AccountInfo accountInfo =
+                new AccountInfo(new CoreAccountId("gaia-id-test"), ACCOUNT_EMAIL, "gaia-id-test",
+                        null, givenName, null, new AccountCapabilities(new HashMap<>()));
         mProfileDataCache.addObserver(mObserverMock);
         Assert.assertFalse(mProfileDataCache.hasProfileData(ACCOUNT_EMAIL));
         Assert.assertNull(mProfileDataCache.getProfileDataOrDefault(ACCOUNT_EMAIL).getGivenName());
@@ -110,8 +115,9 @@ public class ProfileDataCacheUnitTest {
     @Test
     public void accountInfoIsUpdatedWithOnlyBadgeConfig() {
         mProfileDataCache.setBadge(R.drawable.ic_sync_badge_error_20dp);
-        final AccountInfo accountInfo = new AccountInfo(
-                new CoreAccountId("gaia-id-test"), ACCOUNT_EMAIL, "gaia-id-test", null, null, null);
+        final AccountInfo accountInfo =
+                new AccountInfo(new CoreAccountId("gaia-id-test"), ACCOUNT_EMAIL, "gaia-id-test",
+                        null, null, null, new AccountCapabilities(new HashMap<>()));
         mProfileDataCache.addObserver(mObserverMock);
         Assert.assertFalse(mProfileDataCache.hasProfileData(ACCOUNT_EMAIL));
 

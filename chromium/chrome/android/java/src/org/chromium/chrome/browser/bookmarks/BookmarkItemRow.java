@@ -9,7 +9,6 @@ import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkItem;
 import org.chromium.chrome.browser.ui.favicon.FaviconUtils;
@@ -21,7 +20,7 @@ import org.chromium.url.GURL;
 
 // Vivaldi
 import android.graphics.PorterDuff;
-
+import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.components.bookmarks.BookmarkType;
 
@@ -51,12 +50,11 @@ public class BookmarkItemRow extends BookmarkRow implements LargeIconCallback {
         if (isVisualRefreshEnabled()) {
             mIconGenerator = new RoundedIconGenerator(mDisplayedIconSize, mDisplayedIconSize,
                     mDisplayedIconSize / 2,
-                    ApiCompatibilityUtils.getColor(
-                            getResources(), R.color.default_favicon_background_color),
+                    getContext().getColor(R.color.default_favicon_background_color),
                     getResources().getDimensionPixelSize(
                             R.dimen.bookmark_refresh_circular_monogram_text_size));
         } else {
-            mIconGenerator = FaviconUtils.createCircularIconGenerator(context.getResources());
+            mIconGenerator = FaviconUtils.createCircularIconGenerator(context);
         }
     }
 

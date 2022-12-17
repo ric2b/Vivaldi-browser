@@ -52,6 +52,7 @@
 #include "components/subresource_filter/content/browser/ruleset_version.h"
 #include "components/user_prefs/user_prefs.h"
 #include "components/variations/service/variations_service.h"
+#include "components/version_info/version_info.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/client_certificate_delegate.h"
@@ -420,7 +421,7 @@ void ContentBrowserClientImpl::LogWebFeatureForCurrentPage(
 }
 
 std::string ContentBrowserClientImpl::GetProduct() {
-  return embedder_support::GetProduct();
+  return version_info::GetProductNameAndVersionForUserAgent();
 }
 
 std::string ContentBrowserClientImpl::GetUserAgent() {
@@ -464,10 +465,10 @@ void ContentBrowserClientImpl::ConfigureNetworkContextParams(
   context_params->accept_language = GetAcceptLangs(context);
   if (!context->IsOffTheRecord()) {
     context_params->file_paths = network::mojom::NetworkContextFilePaths::New();
-    context_params->file_paths->data_path = context->GetPath();
+    context_params->file_paths->data_directory = context->GetPath();
     context_params->file_paths->cookie_database_name =
         base::FilePath(FILE_PATH_LITERAL("Cookies"));
-    context_params->http_cache_path =
+    context_params->http_cache_directory =
         ProfileImpl::GetCachePath(context).Append(FILE_PATH_LITERAL("Cache"));
   }
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
@@ -1051,7 +1052,7 @@ void ContentBrowserClientImpl::AppendExtraCommandLineSwitches(
         embedder_support::kOriginTrialPublicKey,
     };
     command_line->CopySwitchesFrom(browser_command_line, kSwitchNames,
-                                   base::size(kSwitchNames));
+                                   std::size(kSwitchNames));
   }
 }
 
@@ -1208,7 +1209,6 @@ bool ContentBrowserClientImpl::IsClipboardPasteAllowed(
     content::RenderFrameHost* render_frame_host) {
   DCHECK(render_frame_host);
 
-  const GURL& url = render_frame_host->GetLastCommittedOrigin().GetURL();
   content::BrowserContext* browser_context =
       render_frame_host->GetBrowserContext();
   DCHECK(browser_context);
@@ -1216,9 +1216,8 @@ bool ContentBrowserClientImpl::IsClipboardPasteAllowed(
   content::PermissionController* permission_controller =
       browser_context->GetPermissionController();
   blink::mojom::PermissionStatus status =
-      permission_controller->GetPermissionStatusForFrame(
-          content::PermissionType::CLIPBOARD_READ_WRITE, render_frame_host,
-          url);
+      permission_controller->GetPermissionStatusForCurrentDocument(
+          content::PermissionType::CLIPBOARD_READ_WRITE, render_frame_host);
 
   if (!render_frame_host->HasTransientUserActivation() &&
       status != blink::mojom::PermissionStatus::GRANTED) {

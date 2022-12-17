@@ -67,6 +67,7 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/common/webui_url_constants.h"
 #include "components/arc/intent_helper/arc_intent_helper_bridge.h"
+#include "components/services/app_service/public/cpp/app_types.h"
 #include "components/services/app_service/public/cpp/intent_util.h"
 #include "components/services/app_service/public/cpp/types_util.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
@@ -155,7 +156,8 @@ bool OpenFilesSwa(Profile* const profile,
           /*target_name=*/{}, &file_type_info,
           /*file_type_index=*/0,
           /*search_query=*/{},
-          /*show_android_picker_apps=*/false);
+          /*show_android_picker_apps=*/false,
+          /*volume_filter=*/{});
 
   web_app::SystemAppLaunchParams params;
   params.url = files_swa_url;
@@ -377,10 +379,10 @@ void ChromeNewWindowClient::OpenFileManager() {
   DCHECK(proxy);
 
   auto launch_files_app = [proxy](const apps::AppUpdate& update) {
-    if (update.Readiness() != apps::mojom::Readiness::kReady) {
+    if (update.Readiness() != apps::Readiness::kReady) {
       LOG(WARNING)
           << "Couldn't launch Files app because it isn't ready, readiness: "
-          << update.Readiness();
+          << static_cast<int>(update.Readiness());
       return;
     }
 
@@ -413,10 +415,10 @@ void ChromeNewWindowClient::OpenDownloadsFolder() {
 
   auto launch_files_app = [proxy,
                            downloads_path](const apps::AppUpdate& update) {
-    if (update.Readiness() != apps::mojom::Readiness::kReady) {
+    if (update.Readiness() != apps::Readiness::kReady) {
       LOG(WARNING)
           << "Couldn't launch Files app because it isn't ready, readiness: "
-          << update.Readiness();
+          << static_cast<int>(update.Readiness());
       return;
     }
 
@@ -493,8 +495,7 @@ void ChromeNewWindowClient::ShowTaskManager() {
 }
 
 void ChromeNewWindowClient::OpenDiagnostics() {
-  if (base::FeatureList::IsEnabled(chromeos::features::kDiagnosticsApp))
-    chrome::ShowDiagnosticsApp(ProfileManager::GetActiveUserProfile());
+  chrome::ShowDiagnosticsApp(ProfileManager::GetActiveUserProfile());
 }
 
 void ChromeNewWindowClient::OpenFeedbackPage(

@@ -77,6 +77,7 @@
 <translation id="2687403674020088961">എല്ലാ കുക്കികളും ബ്ലോക്ക് ചെയ്യുക (ശുപാർശ ചെയ്യുന്നില്ല)</translation>
 <translation id="2704606927547763573">പകർത്തി</translation>
 <translation id="2717722538473713889">ഇമെയിൽ വിലാസങ്ങൾ</translation>
+<translation id="2750481671343847896">ഐഡന്റിറ്റി സേവനങ്ങളിൽ നിന്നുള്ള സൈൻ ഇൻ നിർദ്ദേശങ്ങൾ കാണിക്കാൻ സൈറ്റുകൾക്ക് കഴിയും.</translation>
 <translation id="2785051990912111074">ഇത് തിരഞ്ഞെടുക്കുന്നതിലൂടെ <ph name="WEBSITE" /> എന്നതിനുള്ള കുക്കികൾ മായ്ക്കും</translation>
 <translation id="2822354292072154809"><ph name="CHOSEN_OBJECT_NAME" /> എന്നതിനുള്ള എല്ലാ സൈറ്റ് അനുമതികളും പുനഃസജ്ജീകരിക്കണമെന്ന് നിങ്ങൾക്ക് ഉറപ്പാണോ?</translation>
 <translation id="2870560284913253234">സൈറ്റ്</translation>
@@ -112,6 +113,7 @@
 <translation id="3763247130972274048">10 സെക്കൻഡ് ഒഴിവാക്കാൻ വീഡിയോയിൽ ഇടത്തോ വലത്തോ ഡബിൾ ടാപ്പ് ചെയ്യുക</translation>
 <translation id="3797520601150691162">ഒരു പ്രത്യേക സൈറ്റിന് ഡാർക്ക് തീം ബാധകമാക്കരുത്</translation>
 <translation id="381841723434055211">ഫോൺ നമ്പറുകൾ</translation>
+<translation id="3826050100957962900">മൂന്നാം കക്ഷി സൈൻ ഇൻ</translation>
 <translation id="3835233591525155343">നിങ്ങളുടെ ഉപകരണത്തിന്റെ ഉപയോഗം</translation>
 <translation id="385051799172605136">പിന്നോട്ട്</translation>
 <translation id="3859306556332390985">മുന്നോട്ട് നീക്കുക</translation>
@@ -122,7 +124,6 @@
 <translation id="3991845972263764475"><ph name="BYTES_DOWNLOADED_WITH_UNITS" /> / ?</translation>
 <translation id="4002066346123236978">ശീർഷകം</translation>
 <translation id="4008040567710660924">ഒരു പ്രത്യേക സൈറ്റിനായി കുക്കികൾ അനുവദിക്കുക.</translation>
-<translation id="4040330681741629921">ലളിതമാക്കിയ കാഴ്ചയിൽ ഒരു സൈറ്റ് കാണിക്കാൻ കഴിയുമ്പോൾ അറിയിപ്പ് നേടുക</translation>
 <translation id="4046123991198612571">അടുത്ത ട്രാക്ക്</translation>
 <translation id="4149994727733219643">വെബ് പേജുകൾക്കായി ലളിതവൽക്കരിച്ച കാഴ്ച</translation>
 <translation id="4165986682804962316">സൈറ്റ് ക്രമീകരണങ്ങൾ</translation>
@@ -236,6 +237,7 @@
 <translation id="6643016212128521049">മായ്‌ക്കുക</translation>
 <translation id="6689172468748959065">പ്രൊഫൈൽ ഫോട്ടോകൾ</translation>
 <translation id="6697925417670533197">സജീവ ഡൗൺലോഡുകൾ</translation>
+<translation id="6722828510648505498">ഐഡന്റിറ്റി സേവനങ്ങളിൽ നിന്നുള്ള സൈൻ ഇൻ നിർദ്ദേശങ്ങൾ ബ്ലോക്ക് ചെയ്യുക.</translation>
 <translation id="6746124502594467657">താഴേക്ക് നീക്കുക</translation>
 <translation id="6749077623962119521">അനുമതികൾ റീസെറ്റ് ചെയ്യണോ?</translation>
 <translation id="6766622839693428701">അവസാനിപ്പിക്കാൻ താഴേക്ക് സ്വൈപ്പ് ചെയ്യുക.</translation>
@@ -255,6 +257,7 @@
 <translation id="7087918508125750058"><ph name="ITEM_COUNT" /> എണ്ണം തിരഞ്ഞെടുത്തു. സ്‌ക്രീനിന്റെ മുകളിലുള്ള ഭാഗത്തിന് സമീപം ഓപ്‌ഷനുകൾ ലഭ്യമാണ്</translation>
 <translation id="7141896414559753902">പോപ്പ് അപ്പുകളും റീഡയറക്‌റ്റുകളും കാണിക്കുന്നതിൽ നിന്ന് സൈറ്റുകളെ ബ്ലോക്ക് ചെയ്യുക (ശുപാർശ ചെയ്‌തിരിക്കുന്നു)</translation>
 <translation id="7176368934862295254"><ph name="KILOBYTES" /> KB</translation>
+<translation id="7180611975245234373">റീഫ്രഷ് ചെയ്യുക</translation>
 <translation id="723171743924126238">ചിത്രങ്ങൾ തിരഞ്ഞെടുക്കുക</translation>
 <translation id="7243308994586599757">സ്‌ക്രീനിന്റെ ചുവടെ ഓപ്‌ഷനുകൾ ലഭ്യമാണ്</translation>
 <translation id="7250468141469952378"><ph name="ITEM_COUNT" /> എണ്ണം തിരഞ്ഞെടുത്തു</translation>
@@ -308,7 +311,9 @@
 <translation id="83792324527827022">ഒരു സൈറ്റ് നിങ്ങളുടെ ക്യാമറയും മൈക്രോഫോണും ഉപയോഗിക്കുന്നു</translation>
 <translation id="8380167699614421159">ഈ സൈറ്റ്, അനാവശ്യമോ തെറ്റിദ്ധരിപ്പിക്കുന്നതോ ആയ പരസ്യങ്ങള്‍ കാണിക്കുന്നു</translation>
 <translation id="8394832520002899662">സൈറ്റിലേക്ക് മടങ്ങാൻ ടാപ്പ് ചെയ്യുക</translation>
+<translation id="8409345997656833551">ലളിതമാക്കിയ കാഴ്ചയിൽ ഒരു ലേഖനം കാണിക്കാൻ കഴിയുമ്പോൾ അറിയിപ്പ് നേടുക</translation>
 <translation id="8425213833346101688">മാറ്റുക</translation>
+<translation id="8428213095426709021">ക്രമീകരണം</translation>
 <translation id="8441146129660941386">പുറകിലേക്ക് സീക്കുചെയ്യുക</translation>
 <translation id="8444433999583714703">നിങ്ങളുടെ ലൊക്കേഷൻ ആക്‌സസ് ചെയ്യാൻ <ph name="APP_NAME" /> ആപ്പിനെ അനുവദിക്കുന്നതിന്, <ph name="BEGIN_LINK" />Android ക്രമീകരണത്തിലും<ph name="END_LINK" /> ലൊക്കേഷൻ ഓണാക്കുക.</translation>
 <translation id="8447861592752582886">ഉപകരണ അനുമതി റദ്ദാക്കുക</translation>

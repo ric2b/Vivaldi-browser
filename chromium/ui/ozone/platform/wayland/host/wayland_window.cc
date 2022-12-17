@@ -13,6 +13,7 @@
 #include "base/bind.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/chromeos_buildflags.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/cursor/mojom/cursor_type.mojom.h"
@@ -93,6 +94,9 @@ WaylandWindow::~WaylandWindow() {
   // Thus, the parent will have another child window. Do not reset it.
   if (parent_window_ && parent_window_->child_window() == this)
     parent_window_->set_child_window(nullptr);
+
+  if (child_window_)
+    child_window_->set_parent_window(nullptr);
 }
 
 void WaylandWindow::OnWindowLostCapture() {
@@ -252,8 +256,7 @@ void WaylandWindow::OnChannelDestroyed() {
     subsurfaces_to_overlays.emplace_back(subsurface.get(), nullptr);
 
   frame_manager_->RecordFrame(std::make_unique<WaylandFrame>(
-      root_surface(), nullptr, std::move(subsurfaces_to_overlays),
-      /*expects_ack=*/false));
+      root_surface(), nullptr, std::move(subsurfaces_to_overlays)));
 }
 
 void WaylandWindow::Close() {
@@ -271,23 +274,7 @@ void WaylandWindow::PrepareForShutdown() {
 }
 
 void WaylandWindow::SetBounds(const gfx::Rect& bounds_px) {
-  gfx::Rect adjusted_bounds_px = bounds_px;
-
-  if (const auto min_size = delegate_->GetMinimumSizeForWindow()) {
-    if (min_size->width() > 0 && adjusted_bounds_px.width() < min_size->width())
-      adjusted_bounds_px.set_width(min_size->width());
-    if (min_size->height() > 0 &&
-        adjusted_bounds_px.height() < min_size->height())
-      adjusted_bounds_px.set_height(min_size->height());
-  }
-  if (const auto max_size = delegate_->GetMaximumSizeForWindow()) {
-    if (max_size->width() > 0 && adjusted_bounds_px.width() > max_size->width())
-      adjusted_bounds_px.set_width(max_size->width());
-    if (max_size->height() > 0 &&
-        adjusted_bounds_px.height() > max_size->height())
-      adjusted_bounds_px.set_height(max_size->height());
-  }
-
+  gfx::Rect adjusted_bounds_px = AdjustBoundsToConstraintsPx(bounds_px);
   if (bounds_px_ == adjusted_bounds_px)
     return;
   bounds_px_ = adjusted_bounds_px;
@@ -496,6 +483,17 @@ void WaylandWindow::HandleToplevelConfigure(int32_t widht,
       << "Only shell toplevels must receive HandleToplevelConfigure calls.";
 }
 
+void WaylandWindow::HandleAuraToplevelConfigure(int32_t x,
+                                                int32_t y,
+                                                int32_t width,
+                                                int32_t height,
+                                                bool is_maximized,
+                                                bool is_fullscreen,
+                                                bool is_activated) {
+  NOTREACHED()
+      << "Only shell toplevels must receive HandleAuraToplevelConfigure calls.";
+}
+
 void WaylandWindow::HandlePopupConfigure(const gfx::Rect& bounds_dip) {
   NOTREACHED() << "Only shell popups must receive HandlePopupConfigure calls.";
 }
@@ -576,7 +574,10 @@ void WaylandWindow::OnDragSessionClose(DragOperation operation) {
 }
 
 void WaylandWindow::SetBoundsDip(const gfx::Rect& bounds_dip) {
-  SetBounds(gfx::ScaleToRoundedRect(bounds_dip, window_scale()));
+  // This method is used to update the content size, and this method is calling
+  // WindowWindow's SetBounds to avoid calling into
+  // WaylandToplevelWindow::SetBounds which sends a request to a compostior.
+  WaylandWindow::SetBounds(gfx::ScaleToRoundedRect(bounds_dip, window_scale()));
 }
 
 bool WaylandWindow::Initialize(PlatformWindowInitProperties properties) {
@@ -663,11 +664,11 @@ void WaylandWindow::UpdateCursorPositionFromEvent(
   //
   // Basically, this method must translate coordinates of all events
   // in regards to top-level windows' coordinates as it's always located at
-  // origin (0,0) from Chromium point of view (remember that Wayland doesn't
-  // provide global coordinates to its clients). And it's totally fine to use it
-  // as the target. Thus, the location of the |event| is always converted using
-  // the top-level window's bounds as the target excluding cases, when the
-  // mouse/touch is over a top-level window.
+  // origin (0,0) from Chromium point of view (remember that wl_shell/xdg_shell
+  // doesn't provide global coordinates to its clients). And it's totally fine
+  // to use it as the target. Thus, the location of the |event| is always
+  // converted using the top-level window's bounds as the target excluding
+  // cases, when the mouse/touch is over a top-level window.
   auto* toplevel_window = GetRootParentWindow();
   if (toplevel_window != this) {
     ConvertEventLocationToTargetWindowLocation(
@@ -677,7 +678,8 @@ void WaylandWindow::UpdateCursorPositionFromEvent(
   auto* cursor_position = connection_->wayland_cursor_position();
   if (cursor_position) {
     cursor_position->OnCursorPositionChanged(
-        event->AsLocatedEvent()->location());
+        event->AsLocatedEvent()->location() +
+        toplevel_window->GetBoundsInDIP().origin().OffsetFromOrigin());
   }
 }
 
@@ -704,7 +706,8 @@ gfx::PointF WaylandWindow::ToRootWindowPixel(const gfx::PointF& location_dp) {
   if (!connection_->surface_submission_in_pixel_coordinates())
     location_px.Scale(window_scale());
 
-  return location_px;
+  auto* root_window = GetRootParentWindow();
+  return location_px + root_window->GetBounds().origin().OffsetFromOrigin();
 }
 
 WaylandWindow* WaylandWindow::GetTopMostChildWindow() {
@@ -783,6 +786,7 @@ bool WaylandWindow::ArrangeSubsurfaceStack(size_t above, size_t below) {
 }
 
 bool WaylandWindow::CommitOverlays(
+    uint32_t frame_id,
     std::vector<ui::ozone::mojom::WaylandOverlayConfigPtr>& overlays) {
   if (overlays.empty())
     return true;
@@ -795,7 +799,7 @@ bool WaylandWindow::CommitOverlays(
       ozone::mojom::WaylandOverlayConfig::New();
   auto split = std::lower_bound(overlays.begin(), overlays.end(), value,
                                 OverlayStackOrderCompare);
-  CHECK(split == overlays.end() || (*split)->z_order >= 0);
+  DCHECK(split == overlays.end() || (*split)->z_order >= 0);
   size_t num_primary_planes =
       (split != overlays.end() && (*split)->z_order == 0) ? 1 : 0;
   size_t num_background_planes =
@@ -809,18 +813,14 @@ bool WaylandWindow::CommitOverlays(
   if (!ArrangeSubsurfaceStack(above, below))
     return false;
 
-  auto main_overlay = split;
-  if (split == overlays.end() && overlays.front()->z_order == INT32_MIN)
-    main_overlay = overlays.begin();
-
-  gfx::SizeF visual_size = (*main_overlay)->bounds_rect.size();
-  float buffer_scale = (*main_overlay)->surface_scale_factor;
-  auto& rounded_clip_bounds = (*main_overlay)->rounded_clip_bounds;
+  gfx::SizeF visual_size = (*overlays.begin())->bounds_rect.size();
+  float buffer_scale = (*overlays.begin())->surface_scale_factor;
+  auto& rounded_clip_bounds = (*overlays.begin())->rounded_clip_bounds;
 
   if (!wayland_overlay_delegation_enabled_) {
     DCHECK_EQ(overlays.size(), 1u);
     frame_manager_->RecordFrame(std::make_unique<WaylandFrame>(
-        root_surface(), std::move(*main_overlay)));
+        frame_id, root_surface(), std::move(*overlays.begin())));
     return true;
   }
 
@@ -831,10 +831,8 @@ bool WaylandWindow::CommitOverlays(
       std::max(overlays.size() - num_background_planes,
                wayland_subsurfaces_.size() + 1));
 
-  if (num_primary_planes) {
-    subsurfaces_to_overlays.emplace_back(primary_subsurface(),
-                                         std::move(*split));
-  }
+  subsurfaces_to_overlays.emplace_back(
+      primary_subsurface(), num_primary_planes ? std::move(*split) : nullptr);
 
   {
     // Iterate through |subsurface_stack_below_|, setup subsurfaces and place
@@ -873,21 +871,17 @@ bool WaylandWindow::CommitOverlays(
   if (num_background_planes) {
     root_config = std::move(overlays.front());
   } else {
-    root_config = ui::ozone::mojom::WaylandOverlayConfig::New();
-    root_config->z_order = INT32_MIN;
-    root_config->transform = gfx::OverlayTransform::OVERLAY_TRANSFORM_NONE;
-    root_config->buffer_id = root_surface()->buffer_id();
-    root_config->enable_blend = root_surface()->use_blending();
-    root_config->opacity = root_surface()->opacity();
-    root_config->priority_hint = gfx::OverlayPriorityHint::kNone;
+    root_config = ui::ozone::mojom::WaylandOverlayConfig::New(
+        INT32_MIN, gfx::OverlayTransform::OVERLAY_TRANSFORM_NONE,
+        root_surface()->buffer_id(), buffer_scale, gfx::RectF(visual_size),
+        gfx::RectF(), gfx::Rect(), root_surface()->use_blending(),
+        root_surface()->opacity(), gfx::GpuFenceHandle(),
+        gfx::OverlayPriorityHint::kNone, rounded_clip_bounds);
   }
-  root_config->bounds_rect.set_size(visual_size);
-  root_config->surface_scale_factor = buffer_scale;
-  root_config->rounded_clip_bounds = rounded_clip_bounds;
 
-  frame_manager_->RecordFrame(
-      std::make_unique<WaylandFrame>(root_surface(), std::move(root_config),
-                                     std::move(subsurfaces_to_overlays)));
+  frame_manager_->RecordFrame(std::make_unique<WaylandFrame>(
+      frame_id, root_surface(), std::move(root_config),
+      std::move(subsurfaces_to_overlays)));
 
   return true;
 }
@@ -981,23 +975,59 @@ void WaylandWindow::ProcessPendingBoundsDip(uint32_t serial) {
   }
 }
 
+gfx::Rect WaylandWindow::AdjustBoundsToConstraintsPx(
+    const gfx::Rect& bounds_px) {
+  gfx::Rect adjusted_bounds_px = bounds_px;
+  if (const auto min_size = delegate_->GetMinimumSizeForWindow()) {
+    if (min_size->width() > 0 && adjusted_bounds_px.width() < min_size->width())
+      adjusted_bounds_px.set_width(min_size->width());
+    if (min_size->height() > 0 &&
+        adjusted_bounds_px.height() < min_size->height())
+      adjusted_bounds_px.set_height(min_size->height());
+  }
+  if (const auto max_size = delegate_->GetMaximumSizeForWindow()) {
+    if (max_size->width() > 0 && adjusted_bounds_px.width() > max_size->width())
+      adjusted_bounds_px.set_width(max_size->width());
+    if (max_size->height() > 0 &&
+        adjusted_bounds_px.height() > max_size->height())
+      adjusted_bounds_px.set_height(max_size->height());
+  }
+  return adjusted_bounds_px;
+}
+
 bool WaylandWindow::ProcessVisualSizeUpdate(const gfx::Size& size_px,
                                             float scale_factor) {
+  // TODO(crbug.com/1307501): Optimize this to be less expensive. Maybe
+  // precompute in pixels for configure events. pending_configures_ can have 10s
+  // of elements in it for several frames under some conditions.
   auto result = std::find_if(
       pending_configures_.begin(), pending_configures_.end(),
-      [&size_px, &scale_factor](auto& configure) {
-        return gfx::ScaleToRoundedRect(configure.bounds_dip, scale_factor)
-                   .size() == size_px;
+      [this, &size_px, &scale_factor](auto& configure) {
+        // Since size_px comes from SetBounds via UpdateVisualSize in
+        // WaylandTopLevelWindow, we also need to adjust it for bounds to see if
+        // we match.
+        return AdjustBoundsToConstraintsPx(
+                   gfx::ScaleToRoundedRect(configure.bounds_dip, scale_factor))
+                       .size() == size_px &&
+               configure.set;
       });
 
   if (result != pending_configures_.end()) {
+    auto serial = result->serial;
     SetWindowGeometry(result->bounds_dip);
-    AckConfigure(result->serial);
+    AckConfigure(serial);
     connection()->ScheduleFlush();
     pending_configures_.erase(pending_configures_.begin(), ++result);
     return true;
   }
   return false;
+}
+
+void WaylandWindow::ApplyPendingBounds() {
+  DCHECK(!pending_configures_.empty());
+  for (auto& configure : pending_configures_)
+    configure.set = true;
+  SetBoundsDip(pending_configures_.back().bounds_dip);
 }
 
 }  // namespace ui

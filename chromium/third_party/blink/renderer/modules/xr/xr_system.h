@@ -5,6 +5,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_XR_XR_SYSTEM_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_XR_XR_SYSTEM_H_
 
+#include "base/time/time.h"
 #include "device/vr/public/mojom/vr_service.mojom-blink.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom-blink.h"
@@ -20,6 +21,7 @@
 #include "third_party/blink/renderer/modules/xr/xr_exit_fullscreen_observer.h"
 #include "third_party/blink/renderer/modules/xr/xr_session.h"
 #include "third_party/blink/renderer/platform/graphics/color.h"
+#include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_set.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_associated_remote.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_receiver.h"

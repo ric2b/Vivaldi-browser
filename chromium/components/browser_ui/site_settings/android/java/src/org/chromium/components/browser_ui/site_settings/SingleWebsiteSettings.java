@@ -298,7 +298,7 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
     private void init() {
         // Remove this Preference if it gets restored without a valid SiteSettingsDelegate. This
         // can happen e.g. when it is included in PageInfo.
-        if (getSiteSettingsDelegate() == null) {
+        if (!hasSiteSettingsDelegate()) {
             getParentFragmentManager().beginTransaction().remove(this).commit();
             return;
         }
@@ -1102,7 +1102,7 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
         int buttonResId = mHideNonPermissionPreferences ? R.string.reset : titleResId;
         // Handle the Clear & Reset preference click by showing a confirmation.
         mConfirmationDialog =
-                new AlertDialog.Builder(getContext(), R.style.Theme_Chromium_AlertDialog)
+                new AlertDialog.Builder(getContext(), R.style.ThemeOverlay_BrowserUI_AlertDialog)
                         .setTitle(titleResId)
                         .setMessage(confirmationText)
                         .setPositiveButton(buttonResId,

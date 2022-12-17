@@ -8,6 +8,7 @@
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/chrome_paths.h"
@@ -35,7 +36,7 @@ typedef base::OnceCallback<void(base::FilePath)> SetPrefCallback;
 
 // Must be run on the ui thread.
 void SetShowGitDirectoryWarningOnActiveProfile(base::FilePath git_root) {
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   Profile* profile = ProfileManager::GetActiveUserProfile();
   PrefService* pref_service = profile->GetPrefs();
@@ -58,7 +59,7 @@ void CheckForGitIgnoreOnIO(SetPrefCallback callback) {
   LOG(INFO) << "Added .gitignore file to user data dir "
             << user_data_dir.AsUTF8Unsafe();
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   // Check if this user data dir may already be inside a git repo
   base::FilePath dir = user_data_dir;
   while (dir != dir.DirName()) {

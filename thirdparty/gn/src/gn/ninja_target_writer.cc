@@ -8,6 +8,7 @@
 
 #include "base/files/file_util.h"
 #include "base/strings/string_util.h"
+#include "gn/c_substitution_type.h"
 #include "gn/config_values_extractors.h"
 #include "gn/err.h"
 #include "gn/escape.h"
@@ -20,8 +21,10 @@
 #include "gn/ninja_create_bundle_target_writer.h"
 #include "gn/ninja_generated_file_target_writer.h"
 #include "gn/ninja_group_target_writer.h"
+#include "gn/ninja_target_command_util.h"
 #include "gn/ninja_utils.h"
 #include "gn/output_file.h"
+#include "gn/rust_substitution_type.h"
 #include "gn/scheduler.h"
 #include "gn/string_output_buffer.h"
 #include "gn/string_utils.h"
@@ -186,6 +189,178 @@ void NinjaTargetWriter::WriteSharedVars(const SubstitutionBits& bits) {
   // with a blank line.
   if (written_anything)
     out_ << std::endl;
+}
+
+void NinjaTargetWriter::WriteCCompilerVars(const SubstitutionBits& bits,
+                                           bool indent,
+                                           bool respect_source_used) {
+  // Defines.
+  if (bits.used.count(&CSubstitutionDefines)) {
+    if (indent)
+      out_ << "  ";
+    out_ << CSubstitutionDefines.ninja_name << " =";
+    RecursiveTargetConfigToStream<std::string>(kRecursiveWriterSkipDuplicates,
+                                               target_, &ConfigValues::defines,
+                                               DefineWriter(), out_);
+    out_ << std::endl;
+  }
+
+  // Framework search path.
+  if (bits.used.count(&CSubstitutionFrameworkDirs)) {
+    const Tool* tool = target_->toolchain()->GetTool(CTool::kCToolLink);
+
+    if (indent)
+      out_ << "  ";
+    out_ << CSubstitutionFrameworkDirs.ninja_name << " =";
+    PathOutput framework_dirs_output(
+        path_output_.current_dir(),
+        settings_->build_settings()->root_path_utf8(), ESCAPE_NINJA_COMMAND);
+    RecursiveTargetConfigToStream<SourceDir>(
+        kRecursiveWriterSkipDuplicates, target_, &ConfigValues::framework_dirs,
+        FrameworkDirsWriter(framework_dirs_output,
+                            tool->framework_dir_switch()),
+        out_);
+    out_ << std::endl;
+  }
+
+  // Include directories.
+  if (bits.used.count(&CSubstitutionIncludeDirs)) {
+    if (indent)
+      out_ << "  ";
+    out_ << CSubstitutionIncludeDirs.ninja_name << " =";
+    PathOutput include_path_output(
+        path_output_.current_dir(),
+        settings_->build_settings()->root_path_utf8(), ESCAPE_NINJA_COMMAND);
+    RecursiveTargetConfigToStream<SourceDir>(
+        kRecursiveWriterSkipDuplicates, target_, &ConfigValues::include_dirs,
+        IncludeWriter(include_path_output), out_);
+    out_ << std::endl;
+  }
+
+  bool has_precompiled_headers =
+      target_->config_values().has_precompiled_headers();
+
+  EscapeOptions opts;
+  opts.mode = ESCAPE_NINJA_COMMAND;
+  if (respect_source_used
+          ? target_->source_types_used().Get(SourceFile::SOURCE_S)
+          : bits.used.count(&CSubstitutionAsmFlags)) {
+    WriteOneFlag(kRecursiveWriterKeepDuplicates, target_,
+                 &CSubstitutionAsmFlags, false, Tool::kToolNone,
+                 &ConfigValues::asmflags, opts, path_output_, out_, true,
+                 indent);
+  }
+  if (respect_source_used
+          ? (target_->source_types_used().Get(SourceFile::SOURCE_C) ||
+             target_->source_types_used().Get(SourceFile::SOURCE_CPP) ||
+             target_->source_types_used().Get(SourceFile::SOURCE_M) ||
+             target_->source_types_used().Get(SourceFile::SOURCE_MM) ||
+             target_->source_types_used().Get(SourceFile::SOURCE_MODULEMAP))
+          : bits.used.count(&CSubstitutionCFlags)) {
+    WriteOneFlag(kRecursiveWriterKeepDuplicates, target_, &CSubstitutionCFlags,
+                 false, Tool::kToolNone, &ConfigValues::cflags, opts,
+                 path_output_, out_, true, indent);
+  }
+  if (respect_source_used
+          ? target_->source_types_used().Get(SourceFile::SOURCE_C)
+          : bits.used.count(&CSubstitutionCFlagsC)) {
+    WriteOneFlag(kRecursiveWriterKeepDuplicates, target_, &CSubstitutionCFlagsC,
+                 has_precompiled_headers, CTool::kCToolCc,
+                 &ConfigValues::cflags_c, opts, path_output_, out_, true,
+                 indent);
+  }
+  if (respect_source_used
+          ? (target_->source_types_used().Get(SourceFile::SOURCE_CPP) ||
+             target_->source_types_used().Get(SourceFile::SOURCE_MODULEMAP))
+          : bits.used.count(&CSubstitutionCFlagsCc)) {
+    WriteOneFlag(kRecursiveWriterKeepDuplicates, target_,
+                 &CSubstitutionCFlagsCc, has_precompiled_headers,
+                 CTool::kCToolCxx, &ConfigValues::cflags_cc, opts, path_output_,
+                 out_, true, indent);
+  }
+  if (respect_source_used
+          ? target_->source_types_used().Get(SourceFile::SOURCE_M)
+          : bits.used.count(&CSubstitutionCFlagsObjC)) {
+    WriteOneFlag(kRecursiveWriterKeepDuplicates, target_,
+                 &CSubstitutionCFlagsObjC, has_precompiled_headers,
+                 CTool::kCToolObjC, &ConfigValues::cflags_objc, opts,
+                 path_output_, out_, true, indent);
+  }
+  if (respect_source_used
+          ? target_->source_types_used().Get(SourceFile::SOURCE_MM)
+          : bits.used.count(&CSubstitutionCFlagsObjCc)) {
+    WriteOneFlag(kRecursiveWriterKeepDuplicates, target_,
+                 &CSubstitutionCFlagsObjCc, has_precompiled_headers,
+                 CTool::kCToolObjCxx, &ConfigValues::cflags_objcc, opts,
+                 path_output_, out_, true, indent);
+  }
+  if (target_->source_types_used().SwiftSourceUsed() || !respect_source_used) {
+    if (bits.used.count(&CSubstitutionSwiftModuleName)) {
+      if (indent)
+        out_ << "  ";
+      out_ << CSubstitutionSwiftModuleName.ninja_name << " = ";
+      EscapeStringToStream(out_, target_->swift_values().module_name(), opts);
+      out_ << std::endl;
+    }
+
+    if (bits.used.count(&CSubstitutionSwiftBridgeHeader)) {
+      if (indent)
+        out_ << "  ";
+      out_ << CSubstitutionSwiftBridgeHeader.ninja_name << " = ";
+      if (!target_->swift_values().bridge_header().is_null()) {
+        path_output_.WriteFile(out_, target_->swift_values().bridge_header());
+      } else {
+        out_ << R"("")";
+      }
+      out_ << std::endl;
+    }
+
+    if (bits.used.count(&CSubstitutionSwiftModuleDirs)) {
+      // Uniquify the list of swiftmodule dirs (in case multiple swiftmodules
+      // are generated in the same directory).
+      UniqueVector<SourceDir> swiftmodule_dirs;
+      for (const Target* dep : target_->swift_values().modules())
+        swiftmodule_dirs.push_back(dep->swift_values().module_output_dir());
+
+      if (indent)
+        out_ << "  ";
+      out_ << CSubstitutionSwiftModuleDirs.ninja_name << " =";
+      PathOutput swiftmodule_path_output(
+          path_output_.current_dir(),
+          settings_->build_settings()->root_path_utf8(), ESCAPE_NINJA_COMMAND);
+      IncludeWriter swiftmodule_path_writer(swiftmodule_path_output);
+      for (const SourceDir& swiftmodule_dir : swiftmodule_dirs) {
+        swiftmodule_path_writer(swiftmodule_dir, out_);
+      }
+      out_ << std::endl;
+    }
+
+    WriteOneFlag(kRecursiveWriterKeepDuplicates, target_,
+                 &CSubstitutionSwiftFlags, false, CTool::kCToolSwift,
+                 &ConfigValues::swiftflags, opts, path_output_, out_, true,
+                 indent);
+  }
+}
+
+void NinjaTargetWriter::WriteRustCompilerVars(const SubstitutionBits& bits,
+                                              bool indent,
+                                              bool always_write) {
+  EscapeOptions opts;
+  opts.mode = ESCAPE_NINJA_COMMAND;
+
+  if (bits.used.count(&kRustSubstitutionRustFlags) || always_write) {
+    WriteOneFlag(kRecursiveWriterKeepDuplicates, target_,
+                 &kRustSubstitutionRustFlags, false, Tool::kToolNone,
+                 &ConfigValues::rustflags, opts, path_output_, out_, true,
+                 indent);
+  }
+
+  if (bits.used.count(&kRustSubstitutionRustEnv) || always_write) {
+    WriteOneFlag(kRecursiveWriterKeepDuplicates, target_,
+                 &kRustSubstitutionRustEnv, false, Tool::kToolNone,
+                 &ConfigValues::rustenv, opts, path_output_, out_, true,
+                 indent);
+  }
 }
 
 std::vector<OutputFile> NinjaTargetWriter::WriteInputDepsStampAndGetDep(

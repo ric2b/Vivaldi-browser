@@ -7,7 +7,7 @@ import '//resources/cr_elements/cr_button/cr_button.m.js';
 import '//resources/cr_elements/policy/cr_policy_pref_indicator.m.js';
 import '//resources/js/action_link.js';
 import '//resources/cr_elements/action_link_css.m.js';
-import '//resources/cr_components/chromeos/localized_link/localized_link.js';
+import '//resources/cr_components/localized_link/localized_link.js';
 import '../../settings_shared_css.js';
 import '../../settings_vars_css.js';
 
@@ -15,7 +15,7 @@ import {assert, assertNotReached} from '//resources/js/assert.m.js';
 import {afterNextRender, flush, html, Polymer, TemplateInstanceBase, Templatizer} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {Route, Router} from '../../router.js';
-import {routes} from '../os_route.m.js';
+import {routes} from '../os_route.js';
 import {RouteObserverBehavior} from '../route_observer_behavior.js';
 
 Polymer({

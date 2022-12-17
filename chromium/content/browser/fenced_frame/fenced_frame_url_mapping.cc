@@ -4,14 +4,15 @@
 
 #include "content/browser/fenced_frame/fenced_frame_url_mapping.h"
 
+#include <cstring>
 #include <map>
 #include <string>
 
 #include "base/check_op.h"
 #include "base/guid.h"
 #include "base/strings/string_util.h"
-#include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/public/common/fenced_frame/fenced_frame_utils.h"
 #include "third_party/blink/public/common/interest_group/ad_auction_constants.h"
 #include "url/gurl.h"
 #include "url/url_constants.h"
@@ -20,27 +21,14 @@ namespace content {
 
 namespace {
 
+const char kURNUUIDprefix[] = "urn:uuid:";
+
 GURL GenerateURN() {
   return GURL(kURNUUIDprefix +
               base::GUID::GenerateRandomV4().AsLowercaseString());
 }
 
 }  // namespace
-
-const char kURNUUIDprefix[] = "urn:uuid:";
-const int kURNUUIDDashLocations[4] = {17, 22, 27, 32};
-
-bool FencedFrameURLMapping::IsValidUrnUuidURL(const GURL& url) {
-  if (!url.is_valid())
-    return false;
-  std::string spec = url.spec();
-  return base::StartsWith(spec, kURNUUIDprefix,
-                          base::CompareCase::INSENSITIVE_ASCII) &&
-         spec.at(kURNUUIDDashLocations[0]) == '-' &&
-         spec.at(kURNUUIDDashLocations[1]) == '-' &&
-         spec.at(kURNUUIDDashLocations[2]) == '-' &&
-         spec.at(kURNUUIDDashLocations[3]) == '-';
-}
 
 FencedFrameURLMapping::PendingAdComponentsMap::PendingAdComponentsMap(
     PendingAdComponentsMap&&) = default;
@@ -96,6 +84,12 @@ FencedFrameURLMapping::MapInfo::MapInfo() = default;
 FencedFrameURLMapping::MapInfo::MapInfo(const GURL& mapped_url)
     : mapped_url(mapped_url) {}
 
+FencedFrameURLMapping::MapInfo::MapInfo(
+    const GURL& mapped_url,
+    const SharedStorageBudgetMetadata& shared_storage_budget_metadata)
+    : mapped_url(mapped_url),
+      shared_storage_budget_metadata(shared_storage_budget_metadata) {}
+
 FencedFrameURLMapping::MapInfo::MapInfo(const MapInfo&) = default;
 FencedFrameURLMapping::MapInfo::MapInfo(MapInfo&&) = default;
 FencedFrameURLMapping::MapInfo::~MapInfo() = default;
@@ -108,18 +102,26 @@ FencedFrameURLMapping::MapInfo& FencedFrameURLMapping::MapInfo::operator=(
 FencedFrameURLMapping::FencedFrameURLMapping() = default;
 FencedFrameURLMapping::~FencedFrameURLMapping() = default;
 
-GURL FencedFrameURLMapping::AddFencedFrameURL(const GURL& url) {
+GURL FencedFrameURLMapping::AddFencedFrameURL(
+    const GURL& url,
+    const ReportingMetadata& reporting_metadata) {
   DCHECK(url.is_valid());
-  DCHECK(network::IsUrlPotentiallyTrustworthy(url));
+  CHECK(blink::IsValidFencedFrameURL(url));
 
-  return AddMappingForUrl(url)->first;
+  UrnUuidToUrlMap::iterator it = AddMappingForUrl(url);
+  it->second.reporting_metadata = reporting_metadata;
+  return it->first;
 }
 
-GURL FencedFrameURLMapping::AddFencedFrameURLWithInterestGroupAdComponentUrls(
+GURL FencedFrameURLMapping::AddFencedFrameURLWithInterestGroupInfo(
     const GURL& url,
-    std::vector<GURL> ad_component_urls) {
+    AdAuctionData ad_auction_data,
+    std::vector<GURL> ad_component_urls,
+    const ReportingMetadata& reporting_metadata) {
   UrnUuidToUrlMap::iterator it = AddMappingForUrl(url);
+  it->second.ad_auction_data = std::move(ad_auction_data);
   it->second.ad_component_urls = std::move(ad_component_urls);
+  it->second.reporting_metadata = reporting_metadata;
   return it->first;
 }
 
@@ -144,7 +146,7 @@ GURL FencedFrameURLMapping::GeneratePendingMappedURN() {
 void FencedFrameURLMapping::ConvertFencedFrameURNToURL(
     const GURL& urn_uuid,
     MappingResultObserver* observer) {
-  DCHECK(IsValidUrnUuidURL(urn_uuid));
+  DCHECK(blink::IsValidUrnUuidURL(urn_uuid));
 
   if (IsPendingMapped(urn_uuid)) {
     DCHECK(!pending_urn_uuid_to_url_map_.at(urn_uuid).count(observer));
@@ -153,7 +155,9 @@ void FencedFrameURLMapping::ConvertFencedFrameURNToURL(
   }
 
   absl::optional<GURL> result_url;
+  absl::optional<AdAuctionData> result_ad_auction_data;
   absl::optional<PendingAdComponentsMap> result_ad_components;
+  ReportingMetadata reporting_metadata;
 
   auto it = urn_uuid_to_url_map_.find(urn_uuid);
   if (it != urn_uuid_to_url_map_.end()) {
@@ -162,10 +166,13 @@ void FencedFrameURLMapping::ConvertFencedFrameURNToURL(
           PendingAdComponentsMap(*it->second.ad_component_urls));
     }
     result_url = it->second.mapped_url;
+    result_ad_auction_data = it->second.ad_auction_data;
+    reporting_metadata = it->second.reporting_metadata;
   }
 
-  observer->OnFencedFrameURLMappingComplete(std::move(result_url),
-                                            std::move(result_ad_components));
+  observer->OnFencedFrameURLMappingComplete(
+      std::move(result_url), std::move(result_ad_auction_data),
+      std::move(result_ad_components), reporting_metadata);
 }
 
 void FencedFrameURLMapping::RemoveObserverForURN(
@@ -180,26 +187,52 @@ void FencedFrameURLMapping::RemoveObserverForURN(
   it->second.erase(observer_it);
 }
 
-void FencedFrameURLMapping::OnURNMappingResultDetermined(
+void FencedFrameURLMapping::OnSharedStorageURNMappingResultDetermined(
     const GURL& urn_uuid,
-    const absl::optional<GURL>& mapped_url) {
+    const SharedStorageURNMappingResult& mapping_result) {
   auto it = pending_urn_uuid_to_url_map_.find(urn_uuid);
   DCHECK(it != pending_urn_uuid_to_url_map_.end());
 
   DCHECK(!IsMapped(urn_uuid));
 
-  if (mapped_url)
-    urn_uuid_to_url_map_.emplace(urn_uuid, mapped_url.value());
+  absl::optional<GURL> mapped_url = absl::nullopt;
+
+  // Only if the resolved URL is fenced-frame-compatible do we:
+  //   1.) Add it to `urn_uuid_to_url_map_`
+  //   2.) Report it back to any already-queued observers
+  // TODO(crbug.com/1318970): Simplify this by making Shared Storage only
+  // capable of producing URLs that fenced frames can navigate to.
+  if (blink::IsValidFencedFrameURL(mapping_result.mapped_url)) {
+    urn_uuid_to_url_map_.emplace(
+        urn_uuid, MapInfo(mapping_result.mapped_url, mapping_result.metadata));
+    mapped_url = mapping_result.mapped_url;
+  }
 
   std::set<raw_ptr<MappingResultObserver>>& observers = it->second;
 
+  ReportingMetadata metadata;
   for (raw_ptr<MappingResultObserver> observer : observers) {
     observer->OnFencedFrameURLMappingComplete(
-        mapped_url,
-        /*pending_ad_components_map=*/absl::nullopt);
+        mapped_url, /*ad_auction_data=*/absl::nullopt,
+        /*pending_ad_components_map=*/absl::nullopt,
+        /*reporting_metadata=*/metadata);
   }
 
   pending_urn_uuid_to_url_map_.erase(it);
+}
+
+absl::optional<FencedFrameURLMapping::SharedStorageBudgetMetadata>
+FencedFrameURLMapping::ReleaseSharedStorageBudgetMetadata(
+    const GURL& urn_uuid) {
+  auto it = urn_uuid_to_url_map_.find(urn_uuid);
+  DCHECK(it != urn_uuid_to_url_map_.end());
+
+  absl::optional<SharedStorageBudgetMetadata> metadata =
+      it->second.shared_storage_budget_metadata;
+
+  it->second.shared_storage_budget_metadata.reset();
+
+  return metadata;
 }
 
 bool FencedFrameURLMapping::HasObserverForTesting(

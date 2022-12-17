@@ -42,7 +42,10 @@ class MEDIA_GPU_EXPORT VaapiVideoEncodeAccelerator
 
   // VideoEncodeAccelerator implementation.
   SupportedProfiles GetSupportedProfiles() override;
-  bool Initialize(const Config& config, Client* client) override;
+  bool Initialize(const Config& config,
+                  Client* client,
+
+                  std::unique_ptr<MediaLog> media_log) override;
   void Encode(scoped_refptr<VideoFrame> frame, bool force_keyframe) override;
   void UseOutputBitstreamBuffer(BitstreamBuffer buffer) override;
   void RequestEncodingParametersChange(const Bitrate& bitrate,
@@ -211,6 +214,14 @@ class MEDIA_GPU_EXPORT VaapiVideoEncodeAccelerator
   bool IsConfiguredForTesting() const {
     return !supported_profiles_for_testing_.empty();
   }
+
+  // Having too many encoder instances at once may cause us to run out of FDs
+  // and subsequently crash (crbug.com/1289465). To avoid that, we limit the
+  // maximum number of encoder instances that can exist at once.
+  // |num_instances_| tracks that number.
+  static constexpr int kMaxNumOfInstances = 10;
+  static base::AtomicRefCount num_instances_;
+  const bool can_use_encoder_;
 
   // The unchanged values are filled upon the construction. The varied values
   // are filled properly during encoding.

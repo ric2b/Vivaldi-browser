@@ -31,6 +31,7 @@ mojom("mojom_platform") {
     "background_sync/background_sync.mojom",
     "badging/badging.mojom",
     "browser_interface_broker.mojom",
+    "browsing_topics/browsing_topics.mojom",
     "buckets/bucket_manager_host.mojom",
     "cache_storage/cache_storage.mojom",
     "choosers/color_chooser.mojom",
@@ -50,7 +51,7 @@ mojom("mojom_platform") {
     "cookie_manager/cookie_manager_automation.mojom",
     "cookie_store/cookie_store.mojom",
     "crash/crash_memory_metrics_reporter.mojom",
-    "credentialmanager/credential_manager.mojom",
+    "credentialmanagement/credential_manager.mojom",
     "css/preferred_color_scheme.mojom",
     "css/preferred_contrast.mojom",
     "data_transfer/data_transfer.mojom",
@@ -101,6 +102,7 @@ mojom("mojom_platform") {
     "keyboard_lock/keyboard_lock.mojom",
     "leak_detector/leak_detector.mojom",
     "link_to_text/link_to_text.mojom",
+    "loader/anchor_element_interaction_host.mojom",
     "loader/code_cache.mojom",
     "loader/content_security_notifier.mojom",
     "loader/fetch_client_settings_object.mojom",
@@ -131,7 +133,7 @@ mojom("mojom_platform") {
     "mediastream/media_stream.mojom",
     "mime/mime_registry.mojom",
     "native_io/native_io.mojom",
-    "navigation/app_history_entry_arrays.mojom",
+    "navigation/navigation_api_history_entry_arrays.mojom",
     "navigation/navigation_policy.mojom",
     "navigation/prefetched_signed_exchange_info.mojom",
     "navigation/renderer_eviction_reason.mojom",
@@ -204,7 +206,6 @@ mojom("mojom_platform") {
     "webaudio/audio_context_manager.mojom",
     "webdatabase/web_database.mojom",
     "webid/federated_auth_request.mojom",
-    "webid/federated_auth_response.mojom",
     "webpreferences/web_preferences.mojom",
     "websockets/websocket_connector.mojom",
     "webtransport/web_transport_connector.mojom",
@@ -668,6 +669,19 @@ mojom("mojom_platform") {
     {
       types = [
         {
+          mojom = "blink.mojom.SharedStorageKeyArgument"
+          cpp = "::std::u16string"
+        },
+        {
+          mojom = "blink.mojom.SharedStorageValueArgument"
+          cpp = "::std::u16string"
+        },
+      ]
+      traits_headers = [ "//third_party/blink/public/common/shared_storage/shared_storage_mojom_traits.h" ]
+    },
+    {
+      types = [
+        {
           mojom = "blink.mojom.StorageKey"
           cpp = "::blink::StorageKey"
         },
@@ -745,6 +759,19 @@ mojom("mojom_platform") {
       ]
       traits_headers = [ "//third_party/blink/renderer/platform/mojo/fetch_api_request_headers_mojom_traits.h" ]
       traits_public_deps = [ "//third_party/blink/renderer/platform/wtf" ]
+    },
+    {
+      types = [
+        {
+          mojom = "blink.mojom.SharedStorageKeyArgument"
+          cpp = "::WTF::String"
+        },
+        {
+          mojom = "blink.mojom.SharedStorageValueArgument"
+          cpp = "::WTF::String"
+        },
+      ]
+      traits_headers = [ "//third_party/blink/renderer/platform/mojo/shared_storage_mojom_traits.h" ]
     },
     {
       types = [

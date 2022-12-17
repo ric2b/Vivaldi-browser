@@ -47,7 +47,7 @@ template("vivaldi_extract_untranslated") {
   # List of Chromium strings visible in the Vivaldi UI.
   idlist = "//vivaldi/vivapp/bin/gettext/ids.txt"
 
-  foreach(locale, platform_pak_locales + vivaldi_pending_locales - ["ar-XB", "en-US", "en-XA"]) {
+  foreach(locale, platform_pak_locales + vivaldi_pending_locales + vivaldi_pending_mobile_locales - ["ar-XB", "en-US", "en-XA"]) {
     name = "${target_name}_extract_$locale"
     deps_list += [":"+name]
 
@@ -69,7 +69,10 @@ template("vivaldi_extract_untranslated") {
           corrected_locale = "no"
         }
       }
-      xtb_sources += ["${source_translations}${corrected_locale}.xtb"]
+      xtb_name = "${source_translations}${corrected_locale}.xtb"
+      if (exec_script("//vivaldi/scripts/file_exists.py", [rebase_path(xtb_name, root_build_dir)], "value")) {
+        xtb_sources += [xtb_name]
+      }
     }
     if (defined(vivaldi_source)) {
       xtb_sources += ["${vivaldi_translations}$locale.xtb"]

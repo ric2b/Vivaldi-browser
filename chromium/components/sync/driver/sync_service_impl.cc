@@ -17,6 +17,7 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/observer_list.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -844,12 +845,23 @@ void SyncServiceImpl::OnActionableError(const SyncProtocolError& error) {
         // GetPrimaryAccountMutator() returns nullptr on ChromeOS only.
         DCHECK(account_mutator);
 
+        // TODO(crbug.com/1313410): make the behaviour consistent across
+        // platforms. Any platforms which support a single-step flow that signs
+        // in and enables sync should clear the primary account here for
+        // symmetry.
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+        // On mobile, fully sign out the user.
+        account_mutator->ClearPrimaryAccount(
+            signin_metrics::SERVER_FORCED_DISABLE,
+            signin_metrics::SignoutDelete::kIgnoreMetric);
+#else
         // Note: On some platforms, revoking the sync consent will also clear
         // the primary account as transitioning from ConsentLevel::kSync to
         // ConsentLevel::kSignin is not supported.
         account_mutator->RevokeSyncConsent(
             signin_metrics::SERVER_FORCED_DISABLE,
             signin_metrics::SignoutDelete::kIgnoreMetric);
+#endif
       }
 #endif
       break;
@@ -905,6 +917,8 @@ void SyncServiceImpl::OnConfigureDone(
     observer.OnSyncConfigurationCompleted(this);
 
   NotifyObservers();
+
+  UpdateDataTypesForInvalidations();
 
   if (migrator_.get() && migrator_->state() != BackendMigrator::IDLE) {
     // Migration in progress.  Let the migrator know we just finished
@@ -1150,8 +1164,6 @@ void SyncServiceImpl::ConfigureDataTypeManager(ConfigureReason reason) {
   }
   data_type_manager_->Configure(GetDataTypesToConfigure(), configure_context);
 
-  UpdateDataTypesForInvalidations();
-
   // Record in UMA whether we're configuring the full Sync feature or only the
   // transport.
   enum class ConfigureDataTypeManagerOption {
@@ -1224,8 +1236,16 @@ void SyncServiceImpl::UpdateDataTypesForInvalidations() {
     return;
   }
 
+  // Wait for configuring data types. This is needed to consider proxy types
+  // which become known during configuration.
+  if (!data_type_manager_ ||
+      data_type_manager_->state() != DataTypeManager::CONFIGURED) {
+    return;
+  }
+
   // No need to register invalidations for non-protocol or commit-only types.
-  // TODO(crbug.com/1260836): This could break with dynamic proxy types.
+  // TODO(crbug.com/1260836): consider DataTypeManager::GetActiveDataTypes() to
+  // unsubscribe from failed data types.
   ModelTypeSet types = Intersection(GetDataTypesToConfigure(), ProtocolTypes());
   types.RemoveAll(CommitOnlyTypes());
   if (!sessions_invalidations_enabled_) {
@@ -1235,6 +1255,9 @@ void SyncServiceImpl::UpdateDataTypesForInvalidations() {
         base::FeatureList::IsEnabled(kUseSyncInvalidationsForWalletAndOffer))) {
     types.RemoveAll({AUTOFILL_WALLET_DATA, AUTOFILL_WALLET_OFFER});
   }
+
+  types.RemoveAll(data_type_manager_->GetActiveProxyDataTypes());
+
   invalidations_service->SetInterestedDataTypes(types);
 }
 
@@ -1268,43 +1291,42 @@ std::unique_ptr<base::Value> SyncServiceImpl::GetTypeStatusMapForDebugging() {
   const ModelTypeSet& throttled_types(detailed_status.throttled_types);
   const ModelTypeSet& backed_off_types(detailed_status.backed_off_types);
 
-  std::unique_ptr<base::DictionaryValue> type_status_header(
-      new base::DictionaryValue());
-  type_status_header->SetStringKey("status", "header");
-  type_status_header->SetStringKey("name", "Model Type");
-  type_status_header->SetStringKey("num_entries", "Total Entries");
-  type_status_header->SetStringKey("num_live", "Live Entries");
-  type_status_header->SetStringKey("message", "Message");
-  type_status_header->SetStringKey("state", "State");
-  result->Append(std::move(type_status_header));
+  base::Value::Dict type_status_header;
+  type_status_header.Set("status", "header");
+  type_status_header.Set("name", "Model Type");
+  type_status_header.Set("num_entries", "Total Entries");
+  type_status_header.Set("num_live", "Live Entries");
+  type_status_header.Set("message", "Message");
+  type_status_header.Set("state", "State");
+  result->Append(base::Value(std::move(type_status_header)));
 
   for (const auto& [type, controller] : data_type_controllers_) {
-    auto type_status = std::make_unique<base::DictionaryValue>();
-    type_status->SetStringKey("name", ModelTypeToDebugString(type));
+    base::Value::Dict type_status;
+    type_status.Set("name", ModelTypeToDebugString(type));
 
     if (data_type_error_map_.find(type) != data_type_error_map_.end()) {
       const SyncError& error = data_type_error_map_.find(type)->second;
       DCHECK(error.IsSet());
       switch (error.GetSeverity()) {
         case SyncError::SYNC_ERROR_SEVERITY_ERROR:
-          type_status->SetStringKey("status", "severity_error");
-          type_status->SetStringKey(
-              "message", "Error: " + error.location().ToString() + ", " +
-                             error.GetMessagePrefix() + error.message());
+          type_status.Set("status", "severity_error");
+          type_status.Set("message", "Error: " + error.location().ToString() +
+                                         ", " + error.GetMessagePrefix() +
+                                         error.message());
           break;
         case SyncError::SYNC_ERROR_SEVERITY_INFO:
-          type_status->SetStringKey("status", "severity_info");
-          type_status->SetStringKey("message", error.message());
+          type_status.Set("status", "severity_info");
+          type_status.Set("message", error.message());
           break;
       }
     } else if (throttled_types.Has(type)) {
-      type_status->SetStringKey("status", "severity_warning");
-      type_status->SetStringKey("message", " Throttled");
+      type_status.Set("status", "severity_warning");
+      type_status.Set("message", " Throttled");
     } else if (backed_off_types.Has(type)) {
-      type_status->SetStringKey("status", "severity_warning");
-      type_status->SetStringKey("message", "Backed off");
+      type_status.Set("status", "severity_warning");
+      type_status.Set("message", "Backed off");
     } else {
-      type_status->SetStringKey("message", "");
+      type_status.Set("message", "");
 
       // Determine the row color based on the controller's state.
       switch (controller->state()) {
@@ -1313,29 +1335,29 @@ std::unique_ptr<base::Value> SyncServiceImpl::GetTypeStatusMapForDebugging() {
           // which is not very different to certain SYNC_ERROR_SEVERITY_INFO
           // cases like preconditions not having been met due to user
           // configuration.
-          type_status->SetStringKey("status", "severity_info");
+          type_status.Set("status", "severity_info");
           break;
         case DataTypeController::MODEL_STARTING:
         case DataTypeController::MODEL_LOADED:
         case DataTypeController::STOPPING:
           // These are all transitional states that should be rare to observe.
-          type_status->SetStringKey("status", "transitioning");
+          type_status.Set("status", "transitioning");
           break;
         case DataTypeController::RUNNING:
-          type_status->SetStringKey("status", "ok");
+          type_status.Set("status", "ok");
           break;
         case DataTypeController::FAILED:
           // Note that most of the errors (possibly all) should have been
           // handled earlier via |data_type_error_map_|.
-          type_status->SetStringKey("status", "severity_error");
+          type_status.Set("status", "severity_error");
           break;
       }
     }
 
-    type_status->SetStringKey(
-        "state", DataTypeController::StateToString(controller->state()));
+    type_status.Set("state",
+                    DataTypeController::StateToString(controller->state()));
 
-    result->Append(std::move(type_status));
+    result->Append(base::Value(std::move(type_status)));
   }
   return result;
 }

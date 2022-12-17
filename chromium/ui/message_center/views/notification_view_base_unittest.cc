@@ -185,6 +185,8 @@ class NotificationViewBaseTest : public views::ViewsTestBase,
   const SkBitmap CreateBitmap(int width, int height) const;
   std::vector<ButtonInfo> CreateButtons(int number);
   std::unique_ptr<Notification> CreateSimpleNotification() const;
+  std::unique_ptr<Notification> CreateSimpleNotificationWithRichData(
+      const RichNotificationData& optional_fields) const;
 
   void UpdateNotificationViews(const Notification& notification);
   float GetNotificationSlideAmount() const;
@@ -208,10 +210,16 @@ std::unique_ptr<Notification>
 NotificationViewBaseTest::CreateSimpleNotification() const {
   RichNotificationData data;
   data.settings_button_handler = SettingsButtonHandler::INLINE;
+  return CreateSimpleNotificationWithRichData(data);
+}
 
+std::unique_ptr<Notification>
+NotificationViewBaseTest::CreateSimpleNotificationWithRichData(
+    const RichNotificationData& data) const {
   std::unique_ptr<Notification> notification = std::make_unique<Notification>(
       NOTIFICATION_TYPE_BASE_FORMAT, std::string(kDefaultNotificationId),
-      u"title", u"message", CreateTestImage(80, 80), u"display source", GURL(),
+      u"title", u"message", ui::ImageModel::FromImage(CreateTestImage(80, 80)),
+      u"display source", GURL(),
       NotifierId(NotifierType::APPLICATION, "extension_id"), data, delegate_);
   notification->set_small_image(CreateTestImage(16, 16));
   notification->set_image(CreateTestImage(320, 240));
@@ -356,7 +364,7 @@ TEST_F(NotificationViewBaseTest, CreateOrUpdateTest) {
   notification->set_image(gfx::Image());
   notification->set_title(std::u16string());
   notification->set_message(std::u16string());
-  notification->set_icon(gfx::Image());
+  notification->set_icon(ui::ImageModel());
 
   notification_view()->CreateOrUpdateViews(*notification);
 
@@ -818,7 +826,7 @@ TEST_F(NotificationViewBaseTest, SnoozeButton) {
   rich_data.should_show_snooze_button = true;
   std::unique_ptr<Notification> notification = std::make_unique<Notification>(
       message_center::NOTIFICATION_TYPE_CUSTOM, kDefaultNotificationId,
-      u"title", u"message", gfx::Image(), u"display source", GURL(),
+      u"title", u"message", ui::ImageModel(), u"display source", GURL(),
       message_center::NotifierId(message_center::NotifierType::ARC_APPLICATION,
                                  "test_app_id"),
       rich_data, nullptr);
@@ -853,7 +861,8 @@ TEST_F(NotificationViewBaseTest, UseImageAsIcon) {
 
   std::unique_ptr<Notification> notification = CreateSimpleNotification();
   notification->set_type(NotificationType::NOTIFICATION_TYPE_IMAGE);
-  notification->set_icon(CreateTestImage(kIconSize, kIconSize));
+  notification->set_icon(
+      ui::ImageModel::FromImage(CreateTestImage(kIconSize, kIconSize)));
 
   // Test normal notification.
   UpdateNotificationViews(*notification);
@@ -871,7 +880,7 @@ TEST_F(NotificationViewBaseTest, UseImageAsIcon) {
   EXPECT_FALSE(notification_view()->expanded_);
 
   // Test notification with |use_image_for_icon| e.g. screenshot preview.
-  notification->set_icon(gfx::Image());
+  notification->set_icon(ui::ImageModel());
   UpdateNotificationViews(*notification);
   EXPECT_TRUE(notification_view()->icon_view_->GetVisible());
   EXPECT_TRUE(notification_view()->right_content_->GetVisible());
@@ -885,7 +894,7 @@ TEST_F(NotificationViewBaseTest, UseImageAsIcon) {
 
 TEST_F(NotificationViewBaseTest, NotificationWithoutIcon) {
   std::unique_ptr<Notification> notification = CreateSimpleNotification();
-  notification->set_icon(gfx::Image());
+  notification->set_icon(ui::ImageModel());
   notification->set_image(gfx::Image());
   UpdateNotificationViews(*notification);
 
@@ -904,12 +913,13 @@ TEST_F(NotificationViewBaseTest, UpdateAddingIcon) {
 
   // Create a notification without an icon.
   std::unique_ptr<Notification> notification = CreateSimpleNotification();
-  notification->set_icon(gfx::Image());
+  notification->set_icon(ui::ImageModel());
   notification->set_image(gfx::Image());
   UpdateNotificationViews(*notification);
 
   // Update the notification, adding an icon.
-  notification->set_icon(CreateTestImage(kIconSize, kIconSize));
+  notification->set_icon(
+      ui::ImageModel::FromImage(CreateTestImage(kIconSize, kIconSize)));
   UpdateNotificationViews(*notification);
 
   // Notification should now have an icon.
@@ -1083,7 +1093,7 @@ TEST_F(NotificationViewBaseTest, AppNameSystemNotification) {
   data.settings_button_handler = SettingsButtonHandler::INLINE;
   auto notification = std::make_unique<Notification>(
       NOTIFICATION_TYPE_BASE_FORMAT, std::string(kDefaultNotificationId),
-      u"title", u"message", gfx::Image(), std::u16string(), GURL(),
+      u"title", u"message", ui::ImageModel(), std::u16string(), GURL(),
       NotifierId(NotifierType::SYSTEM_COMPONENT, "system"), data, nullptr);
 
   UpdateNotificationViews(*notification);
@@ -1115,8 +1125,8 @@ TEST_F(NotificationViewBaseTest, AppNameWebAppNotification) {
 
   std::unique_ptr<Notification> notification = std::make_unique<Notification>(
       NOTIFICATION_TYPE_BASE_FORMAT, std::string(kDefaultNotificationId),
-      u"title", u"message", CreateTestImage(80, 80), u"display source", GURL(),
-      notifier_id, data, delegate_);
+      u"title", u"message", ui::ImageModel::FromImage(CreateTestImage(80, 80)),
+      u"display source", GURL(), notifier_id, data, delegate_);
   notification->set_small_image(gfx::Image::CreateFrom1xBitmap(small_bitmap));
   notification->set_image(CreateTestImage(320, 240));
 
@@ -1155,6 +1165,37 @@ TEST_F(NotificationViewBaseTest, ShowTimestamp) {
   EXPECT_FALSE(notification_view()
                    ->header_row_->timestamp_view_for_testing()
                    ->GetVisible());
+}
+
+// Tests that action buttons (e.g. the inline reply button) ignores the
+// notification's accent color when the flag is present.
+TEST_F(NotificationViewBaseTest, TestAccentColorTextFlagAffectsActionButtons) {
+  RichNotificationData data;
+  data.settings_button_handler = SettingsButtonHandler::INLINE;
+  data.accent_color = SK_ColorGREEN;
+  std::unique_ptr<Notification> notification;
+
+  data.ignore_accent_color_for_text = true;
+  notification = CreateSimpleNotificationWithRichData(data);
+  notification->set_buttons(CreateButtons(2));
+  notification->set_type(NotificationType::NOTIFICATION_TYPE_SIMPLE);
+  UpdateNotificationViews(*notification);
+  EXPECT_EQ(notification_view()->action_buttons_.size(), 2u);
+  for (views::LabelButton* action_button :
+       notification_view()->action_buttons_) {
+    EXPECT_NE(action_button->GetCurrentTextColor(), data.accent_color);
+  }
+
+  data.ignore_accent_color_for_text = false;
+  notification = CreateSimpleNotificationWithRichData(data);
+  notification->set_buttons(CreateButtons(2));
+  notification->set_type(NotificationType::NOTIFICATION_TYPE_SIMPLE);
+  UpdateNotificationViews(*notification);
+  EXPECT_EQ(notification_view()->action_buttons_.size(), 2u);
+  for (views::LabelButton* action_button :
+       notification_view()->action_buttons_) {
+    EXPECT_EQ(action_button->GetCurrentTextColor(), data.accent_color);
+  }
 }
 
 }  // namespace message_center

@@ -135,28 +135,11 @@ class BLINK_COMMON_EXPORT Manifest {
   // See ManifestLaunchHandler for class comments.
   struct BLINK_COMMON_EXPORT LaunchHandler {
     using RouteTo = mojom::ManifestLaunchHandler_RouteTo;
-    using NavigateExistingClient =
-        mojom::ManifestLaunchHandler_NavigateExistingClient;
 
     bool operator==(const LaunchHandler& other) const;
     bool operator!=(const LaunchHandler& other) const;
 
     RouteTo route_to = RouteTo::kAuto;
-    NavigateExistingClient navigate_existing_client =
-        NavigateExistingClient::kAlways;
-  };
-
-  // This struct replicates ManifestPermissionsPolicy with an added copy
-  // constructor, this enables containing classes to have a default copy
-  // constructor.
-  // TODO(crbug.com/): Use mojom::blink::ManifestPermissionsPolicyDeclaration
-  // directly when it can support copy/move.
-  struct BLINK_COMMON_EXPORT PermissionsPolicyDeclaration {
-    bool operator==(const PermissionsPolicyDeclaration& other) const;
-    bool operator!=(const PermissionsPolicyDeclaration& other) const;
-
-    std::string feature;
-    std::vector<std::string> allowlist;
   };
 
   // Structure containing translations for the translatable manifest fields.

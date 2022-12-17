@@ -42,7 +42,6 @@
     "file_globs": [ "Vivaldi.*.exe" ],
     "archive_type": "ARCHIVE_TYPE_FILES"
   },
-  "courgette64.exe": {},
   "zucchini.exe": {},
   "background-bundle.js.map": {},
   "bundle.js.map": {},

@@ -45,7 +45,7 @@ class AttributionStorageSqlMigrationsTest : public testing::Test {
 
     // We need to run an operation on storage to force the lazy initialization.
     std::ignore =
-        static_cast<AttributionStorage*>(&storage)->GetAttributionsToReport(
+        static_cast<AttributionStorage*>(&storage)->GetAttributionReports(
             base::Time::Min());
   }
 
@@ -130,8 +130,8 @@ TEST_F(AttributionStorageSqlMigrationsTest, MigrateEmptyToCurrent) {
               VersionFromDatabase(&db));
 
     // Check that expected tables are present.
-    EXPECT_TRUE(db.DoesTableExist("conversions"));
-    EXPECT_TRUE(db.DoesTableExist("impressions"));
+    EXPECT_TRUE(db.DoesTableExist("event_level_reports"));
+    EXPECT_TRUE(db.DoesTableExist("sources"));
     EXPECT_TRUE(db.DoesTableExist("meta"));
 
     EXPECT_EQ(GetCurrentSchema(), db.GetSchema());
@@ -175,7 +175,8 @@ TEST_F(AttributionStorageSqlMigrationsTest, MigrateLatestDeprecatedToCurrent) {
     EXPECT_EQ(RemoveQuotes(GetCurrentSchema()), RemoveQuotes(db.GetSchema()));
 
     // Verify that data is not preserved across the migration.
-    sql::Statement s(db.GetUniqueStatement("SELECT COUNT(*) FROM conversions"));
+    sql::Statement s(
+        db.GetUniqueStatement("SELECT COUNT(*) FROM event_level_reports"));
 
     ASSERT_TRUE(s.Step());
     ASSERT_EQ(0, s.ColumnInt(0));
@@ -184,6 +185,55 @@ TEST_F(AttributionStorageSqlMigrationsTest, MigrateLatestDeprecatedToCurrent) {
   // DB creation histograms should be recorded.
   histograms.ExpectTotalCount("Conversions.Storage.CreationTime", 1);
   histograms.ExpectTotalCount("Conversions.Storage.MigrationTime", 0);
+}
+
+TEST_F(AttributionStorageSqlMigrationsTest, MigrateVersion33ToCurrent) {
+  base::HistogramTester histograms;
+  LoadDatabase(GetVersionFilePath(33), DbPath());
+
+  // Verify pre-conditions.
+  {
+    sql::Database db;
+    ASSERT_TRUE(db.Open(DbPath()));
+    ASSERT_FALSE(db.DoesColumnExist("aggregatable_report_metadata",
+                                    "initial_report_time"));
+
+    sql::Statement s(
+        db.GetUniqueStatement("SELECT * FROM aggregatable_report_metadata"));
+
+    ASSERT_TRUE(s.Step());
+    ASSERT_EQ(6, s.ColumnInt(5));  // report_time
+    ASSERT_FALSE(s.Step());
+  }
+
+  MigrateDatabase();
+
+  // Verify schema is current.
+  {
+    sql::Database db;
+    ASSERT_TRUE(db.Open(DbPath()));
+
+    // Check version.
+    EXPECT_EQ(AttributionStorageSql::kCurrentVersionNumber,
+              VersionFromDatabase(&db));
+
+    // Compare without quotes as sometimes migrations cause table names to be
+    // string literals.
+    EXPECT_EQ(RemoveQuotes(GetCurrentSchema()), RemoveQuotes(db.GetSchema()));
+
+    // Verify that data is preserved across the migration.
+    sql::Statement s(
+        db.GetUniqueStatement("SELECT * FROM aggregatable_report_metadata"));
+
+    ASSERT_TRUE(s.Step());
+    ASSERT_EQ(6, s.ColumnInt(5));  // report_time
+    ASSERT_EQ(6, s.ColumnInt(7));  // initial_report_time
+    ASSERT_FALSE(s.Step());
+  }
+
+  // DB creation histograms should be recorded.
+  histograms.ExpectTotalCount("Conversions.Storage.CreationTime", 0);
+  histograms.ExpectTotalCount("Conversions.Storage.MigrationTime", 1);
 }
 
 }  // namespace content

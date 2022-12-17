@@ -19,7 +19,7 @@
         android:id="@+id/download_toolbar"
         android:layout_width="match_parent"
         android:layout_height="@dimen/selectable_list_toolbar_height"
-        android:background="@color/default_bg_color"
+        android:background="@color/default_bg_color_baseline"
         style="@style/ModernToolbar"/>
 
     <org.chromium.components.browser_ui.widget.FadingShadowView

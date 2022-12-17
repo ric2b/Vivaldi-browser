@@ -15,6 +15,8 @@
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
+#include "chrome/common/webui_url_constants.h"
+#include "components/browsing_topics/browsing_topics_service.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/prefs/pref_service.h"
@@ -24,6 +26,8 @@
 #include "components/strings/grit/components_strings.h"
 #include "components/sync/driver/sync_service.h"
 #include "components/sync/driver/sync_user_settings.h"
+#include "content/public/browser/browsing_data_filter_builder.h"
+#include "content/public/browser/browsing_data_remover.h"
 #include "content/public/browser/interest_group_manager.h"
 #include "content/public/common/content_features.h"
 #include "google_apis/gaia/google_service_auth_error.h"
@@ -32,6 +36,10 @@
 #include "ui/base/l10n/l10n_util.h"
 
 namespace {
+
+constexpr char kBlockedTopicsTopicKey[] = "topic";
+
+bool g_dialog_diabled_for_tests = false;
 
 // Returns true iff based on |cookies_settings| & |prefs| third party cookies
 // are disabled by policy. This includes disabling third party cookies via
@@ -106,19 +114,42 @@ int GetNumberOfDaysRoundedAboveOne(base::TimeDelta time) {
   return number_of_days;
 }
 
+// Returns whether 3P cookies are blocked by |cookie_settings|. This can be
+// either through blocking 3P cookies directly, or blocking all cookies.
+bool AreThirdPartyCookiesBlocked(
+    content_settings::CookieSettings* cookie_settings) {
+  const auto default_content_setting =
+      cookie_settings->GetDefaultCookieSetting(/*provider_id=*/nullptr);
+  return cookie_settings->ShouldBlockThirdPartyCookies() ||
+         default_content_setting == ContentSetting::CONTENT_SETTING_BLOCK;
+}
+
+// Sorts |topics| alphabetically by topic display name for display.
+void SortTopicsForDisplay(
+    std::vector<privacy_sandbox::CanonicalTopic>& topics) {
+  std::sort(topics.begin(), topics.end(),
+            [](const privacy_sandbox::CanonicalTopic& a,
+               const privacy_sandbox::CanonicalTopic& b) {
+              return a.GetLocalizedRepresentation() <
+                     b.GetLocalizedRepresentation();
+            });
+}
+
 }  // namespace
 
 PrivacySandboxService::PrivacySandboxService() = default;
 
 PrivacySandboxService::PrivacySandboxService(
-    PrivacySandboxSettings* privacy_sandbox_settings,
+    privacy_sandbox::PrivacySandboxSettings* privacy_sandbox_settings,
     content_settings::CookieSettings* cookie_settings,
     PrefService* pref_service,
     policy::PolicyService* policy_service,
     syncer::SyncService* sync_service,
     signin::IdentityManager* identity_manager,
     content::InterestGroupManager* interest_group_manager,
-    profile_metrics::BrowserProfileType profile_type)
+    profile_metrics::BrowserProfileType profile_type,
+    content::BrowsingDataRemover* browsing_data_remover,
+    browsing_topics::BrowsingTopicsService* browsing_topics_service)
     : privacy_sandbox_settings_(privacy_sandbox_settings),
       cookie_settings_(cookie_settings),
       pref_service_(pref_service),
@@ -126,7 +157,9 @@ PrivacySandboxService::PrivacySandboxService(
       sync_service_(sync_service),
       identity_manager_(identity_manager),
       interest_group_manager_(interest_group_manager),
-      profile_type_(profile_type) {
+      profile_type_(profile_type),
+      browsing_data_remover_(browsing_data_remover),
+      browsing_topics_service_(browsing_topics_service) {
   DCHECK(privacy_sandbox_settings_);
   DCHECK(pref_service_);
   DCHECK(cookie_settings_);
@@ -136,15 +169,15 @@ PrivacySandboxService::PrivacySandboxService(
   user_prefs_registrar_.Init(pref_service_);
   user_prefs_registrar_.Add(
       prefs::kPrivacySandboxApisEnabled,
-      base::BindRepeating(&PrivacySandboxService::OnPrivacySandboxPrefChanged,
+      base::BindRepeating(&PrivacySandboxService::OnPrivacySandboxV1PrefChanged,
                           base::Unretained(this)));
   user_prefs_registrar_.Add(
       prefs::kPrivacySandboxApisEnabledV2,
-      base::BindRepeating(&PrivacySandboxService::OnPrivacySandboxPrefChanged,
+      base::BindRepeating(&PrivacySandboxService::OnPrivacySandboxV2PrefChanged,
                           base::Unretained(this)));
   user_prefs_registrar_.Add(
       prefs::kPrivacySandboxFlocEnabled,
-      base::BindRepeating(&PrivacySandboxService::OnPrivacySandboxPrefChanged,
+      base::BindRepeating(&PrivacySandboxService::OnPrivacySandboxV1PrefChanged,
                           base::Unretained(this)));
 
   // On first entering the privacy sandbox experiment, users may have the
@@ -155,13 +188,27 @@ PrivacySandboxService::PrivacySandboxService(
   // TODO(crbug.com/1166665): Remove reconciliation logic when kAPI controls are
   // further separated from cookie controls.
   MaybeReconcilePrivacySandboxPref();
+
+  // When the user enters the Privacy Sandbox 3 experiment, the default value
+  // of their V2 pref must be set. This is a one time operation that is checked
+  // here to ensure it runs on profile startup.
+  InitializePrivacySandboxV2Pref();
+
+  // If the Sandbox is currently restricted, disable the V2 preference. The user
+  // must manually enable the sandbox if they stop being restricted.
+  if (IsPrivacySandboxRestricted())
+    pref_service_->SetBoolean(prefs::kPrivacySandboxApisEnabledV2, false);
 }
 
 PrivacySandboxService::~PrivacySandboxService() = default;
 
 PrivacySandboxService::DialogType
 PrivacySandboxService::GetRequiredDialogType() {
-  return GetRequiredDialogTypeInternal(pref_service_, profile_type_);
+  const auto third_party_cookies_blocked =
+      AreThirdPartyCookiesBlocked(cookie_settings_);
+  return GetRequiredDialogTypeInternal(pref_service_, profile_type_,
+                                       privacy_sandbox_settings_,
+                                       third_party_cookies_blocked);
 }
 
 void PrivacySandboxService::DialogActionOccurred(
@@ -174,44 +221,127 @@ void PrivacySandboxService::DialogActionOccurred(
       // the old Privacy Sandbox pref.
       pref_service_->SetBoolean(prefs::kPrivacySandboxApisEnabledV2, true);
       pref_service_->SetBoolean(prefs::kPrivacySandboxNoticeDisplayed, true);
+      base::RecordAction(
+          base::UserMetricsAction("Settings.PrivacySandbox.Notice.Shown"));
+      break;
+    }
+    case (DialogAction::kNoticeOpenSettings): {
+      base::RecordAction(base::UserMetricsAction(
+          "Settings.PrivacySandbox.Notice.OpenedSettings"));
+      break;
+    }
+    case (DialogAction::kNoticeAcknowledge): {
+      base::RecordAction(base::UserMetricsAction(
+          "Settings.PrivacySandbox.Notice.Acknowledged"));
+      break;
+    }
+    case (DialogAction::kNoticeDismiss): {
+      base::RecordAction(
+          base::UserMetricsAction("Settings.PrivacySandbox.Notice.Dismissed"));
+      break;
+    }
+    case (DialogAction::kNoticeClosedNoInteraction): {
+      base::RecordAction(base::UserMetricsAction(
+          "Settings.PrivacySandbox.Notice.ClosedNoInteraction"));
+      break;
+    }
+    case (DialogAction::kConsentShown): {
+      base::RecordAction(
+          base::UserMetricsAction("Settings.PrivacySandbox.Consent.Shown"));
       break;
     }
     case (DialogAction::kConsentAccepted): {
       pref_service_->SetBoolean(prefs::kPrivacySandboxApisEnabledV2, true);
       pref_service_->SetBoolean(prefs::kPrivacySandboxConsentDecisionMade,
                                 true);
+      base::RecordAction(
+          base::UserMetricsAction("Settings.PrivacySandbox.Consent.Accepted"));
       break;
     }
     case (DialogAction::kConsentDeclined): {
       pref_service_->SetBoolean(prefs::kPrivacySandboxApisEnabledV2, false);
       pref_service_->SetBoolean(prefs::kPrivacySandboxConsentDecisionMade,
                                 true);
+      base::RecordAction(
+          base::UserMetricsAction("Settings.PrivacySandbox.Consent.Declined"));
       break;
     }
-    default: {
-      // TODO(crbug.com/1286384): Record received actions in metrics.
+    case (DialogAction::kConsentMoreInfoOpened): {
+      base::RecordAction(base::UserMetricsAction(
+          "Settings.PrivacySandbox.Consent.LearnMoreExpanded"));
+      break;
     }
+    case (DialogAction::kConsentClosedNoDecision): {
+      base::RecordAction(base::UserMetricsAction(
+          "Settings.PrivacySandbox.Consent.ClosedNoInteraction"));
+      break;
+    }
+    default:
+      break;
   }
 }
 
+// static
+bool PrivacySandboxService::IsUrlSuitableForDialog(const GURL& url) {
+  // The dialog should be shown on a limited list of pages:
+
+  // about:blank is valid.
+  if (url.IsAboutBlank())
+    return true;
+  // Chrome settings page is valid. The subpages aren't as most of them are not
+  // related to the dialog.
+  if (url == GURL(chrome::kChromeUISettingsURL))
+    return true;
+  // Chrome history is valid as the dialog mentions history.
+  if (url == GURL(chrome::kChromeUIHistoryURL))
+    return true;
+  // Only a Chrome controlled New Tab Page is valid.
+  if (url == GURL(chrome::kChromeUINewTabPageURL))
+    return true;
+
+  return false;
+}
+
+void PrivacySandboxService::DialogOpenedForBrowser(Browser* browser) {
+  DCHECK(!browsers_with_open_dialogs_.count(browser));
+  browsers_with_open_dialogs_.insert(browser);
+}
+
+void PrivacySandboxService::DialogClosedForBrowser(Browser* browser) {
+  DCHECK(browsers_with_open_dialogs_.count(browser));
+  browsers_with_open_dialogs_.erase(browser);
+}
+
+bool PrivacySandboxService::IsDialogOpenForBrowser(Browser* browser) {
+  return browsers_with_open_dialogs_.count(browser);
+}
+
+void PrivacySandboxService::SetDialogDisabledForTests(bool disabled) {
+  g_dialog_diabled_for_tests = disabled;
+}
+
 std::u16string PrivacySandboxService::GetFlocDescriptionForDisplay() const {
+  // TODO(crbug.com/1299720): Remove this and all the UI code which uses it.
   return l10n_util::GetPluralStringFUTF16(
       IDS_PRIVACY_SANDBOX_FLOC_DESCRIPTION,
       GetNumberOfDaysRoundedAboveOne(base::Days(7)));
 }
 
 std::u16string PrivacySandboxService::GetFlocIdForDisplay() const {
+  // TODO(crbug.com/1299720): Remove this and all the UI code which uses it.
   return l10n_util::GetStringUTF16(IDS_PRIVACY_SANDBOX_FLOC_INVALID);
 }
 
 std::u16string PrivacySandboxService::GetFlocIdNextUpdateForDisplay(
     const base::Time& current_time) {
+  // TODO(crbug.com/1299720): Remove this and all the UI code which uses it.
   return l10n_util::GetStringUTF16(
       IDS_PRIVACY_SANDBOX_FLOC_TIME_TO_NEXT_COMPUTE_INVALID);
 }
 
 std::u16string PrivacySandboxService::GetFlocResetExplanationForDisplay()
     const {
+  // TODO(crbug.com/1299720): Remove this and all the UI code which uses it.
   return l10n_util::GetPluralStringFUTF16(
       IDS_PRIVACY_SANDBOX_FLOC_RESET_EXPLANATION,
       GetNumberOfDaysRoundedAboveOne(base::Days(7)));
@@ -219,36 +349,37 @@ std::u16string PrivacySandboxService::GetFlocResetExplanationForDisplay()
 
 std::u16string PrivacySandboxService::GetFlocStatusForDisplay() const {
   // FLoC always disabled while OT not active.
-  // TODO(crbug.com/1287951): Perform cleanup / adjustment as required.
+  // TODO(crbug.com/1299720): Perform cleanup / adjustment as required.
   return l10n_util::GetStringUTF16(IDS_PRIVACY_SANDBOX_FLOC_STATUS_NOT_ACTIVE);
 }
 
 bool PrivacySandboxService::IsFlocIdResettable() const {
+  // TODO(crbug.com/1299720): Remove this and all the UI code which uses it.
   return false;
 }
 
 void PrivacySandboxService::ResetFlocId(bool user_initiated) const {
-  privacy_sandbox_settings_->SetFlocDataAccessibleFromNow(
-      /*reset_calculate_timer=*/true);
-  if (user_initiated) {
-    base::RecordAction(
-        base::UserMetricsAction("Settings.PrivacySandbox.ResetFloc"));
-  }
+  // This function is left as a non-functional stub to support UI code for the
+  // removed FLoC feature. The UI should not allow the user to perform this
+  // action (see IsFlocIdResettable() definition)
+  // TODO(crbug.com/1299720): Remove this and all the UI code which uses it.
+  return;
 }
 
 bool PrivacySandboxService::IsFlocPrefEnabled() const {
-  return pref_service_->GetBoolean(prefs::kPrivacySandboxFlocEnabled);
+  // TODO(crbug.com/1299720): Remove this and all the UI code which uses it.
+  return false;
 }
 
 void PrivacySandboxService::SetFlocPrefEnabled(bool enabled) const {
-  pref_service_->SetBoolean(prefs::kPrivacySandboxFlocEnabled, enabled);
-  base::RecordAction(base::UserMetricsAction(
-      enabled ? "Settings.PrivacySandbox.FlocEnabled"
-              : "Settings.PrivacySandbox.FlocDisabled"));
+  // TODO(crbug.com/1299720): Remove this and all the UI code which uses it.
+  return;
 }
 
 bool PrivacySandboxService::IsPrivacySandboxEnabled() {
-  return privacy_sandbox_settings_->IsPrivacySandboxEnabled();
+  return base::FeatureList::IsEnabled(privacy_sandbox::kPrivacySandboxSettings3)
+             ? pref_service_->GetBoolean(prefs::kPrivacySandboxApisEnabledV2)
+             : pref_service_->GetBoolean(prefs::kPrivacySandboxApisEnabled);
 }
 
 bool PrivacySandboxService::IsPrivacySandboxManaged() {
@@ -261,17 +392,46 @@ bool PrivacySandboxService::IsPrivacySandboxManaged() {
       prefs::kPrivacySandboxApisEnabledV2);
 }
 
+bool PrivacySandboxService::IsPrivacySandboxRestricted() {
+  return privacy_sandbox_settings_->IsPrivacySandboxRestricted();
+}
+
 void PrivacySandboxService::SetPrivacySandboxEnabled(bool enabled) {
+  pref_service_->SetBoolean(
+      base::FeatureList::IsEnabled(privacy_sandbox::kPrivacySandboxSettings3)
+          ? prefs::kPrivacySandboxManuallyControlledV2
+          : prefs::kPrivacySandboxManuallyControlled,
+      true);
   privacy_sandbox_settings_->SetPrivacySandboxEnabled(enabled);
 }
 
-void PrivacySandboxService::OnPrivacySandboxPrefChanged() {
+void PrivacySandboxService::OnPrivacySandboxV1PrefChanged() {
   // Any change of the two observed prefs should be accompanied by a
   // reset of the FLoC cohort. Technically this only needs to occur on the
   // transition from FLoC being effectively disabled to effectively enabled,
   // but performing it on every pref change achieves the same user visible
   // behavior, and is much simpler.
   ResetFlocId(/*user_initiated=*/false);
+}
+
+void PrivacySandboxService::OnPrivacySandboxV2PrefChanged() {
+  // If the user has disabled the Privacy Sandbox, any data stored should be
+  // cleared.
+  if (pref_service_->GetBoolean(prefs::kPrivacySandboxApisEnabledV2))
+    return;
+
+  if (browsing_data_remover_) {
+    browsing_data_remover_->Remove(
+        base::Time::Min(), base::Time::Max(),
+        content::BrowsingDataRemover::DATA_TYPE_INTEREST_GROUPS |
+            content::BrowsingDataRemover::DATA_TYPE_AGGREGATION_SERVICE |
+            content::BrowsingDataRemover::DATA_TYPE_CONVERSIONS |
+            content::BrowsingDataRemover::DATA_TYPE_TRUST_TOKENS,
+        content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB);
+  }
+
+  if (browsing_topics_service_)
+    browsing_topics_service_->ClearAllTopicsData();
 }
 
 void PrivacySandboxService::GetFledgeJoiningEtldPlusOneForDisplay(
@@ -308,6 +468,18 @@ void PrivacySandboxService::SetFledgeJoiningAllowed(
     bool allowed) const {
   privacy_sandbox_settings_->SetFledgeJoiningAllowed(top_frame_etld_plus1,
                                                      allowed);
+
+  if (!allowed && browsing_data_remover_) {
+    std::unique_ptr<content::BrowsingDataFilterBuilder> filter =
+        content::BrowsingDataFilterBuilder::Create(
+            content::BrowsingDataFilterBuilder::Mode::kDelete);
+    filter->AddRegisterableDomain(top_frame_etld_plus1);
+    browsing_data_remover_->RemoveWithFilter(
+        base::Time::Min(), base::Time::Max(),
+        content::BrowsingDataRemover::DATA_TYPE_INTEREST_GROUPS,
+        content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB,
+        std::move(filter));
+  }
 }
 
 void PrivacySandboxService::Shutdown() {
@@ -432,6 +604,39 @@ void PrivacySandboxService::ReconcilePrivacySandboxPref() {
   LogPrivacySandboxState();
 }
 
+void PrivacySandboxService::InitializePrivacySandboxV2Pref() {
+  if (!base::FeatureList::IsEnabled(privacy_sandbox::kPrivacySandboxSettings3))
+    return;
+
+  // The initialization process may turn a preference which is otherwise default
+  // off, on. The default setting for the user is provided by Finch and may
+  // change over time (e.g. location change). This init logic is however only
+  // ever performed once per profile, and so will not attempt to enable if the
+  // user changes location.
+  if (pref_service_->GetBoolean(prefs::kPrivacySandboxApisEnabledV2Init))
+    return;
+
+  pref_service_->SetBoolean(prefs::kPrivacySandboxApisEnabledV2Init, true);
+
+  // This logic should run before the user has had an opporunity to interact
+  // with the Privacy Sandbox controls.
+  DCHECK(
+      !pref_service_->GetBoolean(prefs::kPrivacySandboxManuallyControlledV2));
+
+  // Users must have the V1 sandbox enabled, 3P cookies enabled, and the
+  // appropriate feature parameter for the V2 pref to be default enabled.
+  if (!pref_service_->GetBoolean(prefs::kPrivacySandboxApisEnabled))
+    return;
+
+  if (AreThirdPartyCookiesBlocked(cookie_settings_))
+    return;
+
+  if (!privacy_sandbox::kPrivacySandboxSettings3DefaultOn.Get())
+    return;
+
+  pref_service_->SetBoolean(prefs::kPrivacySandboxApisEnabledV2, true);
+}
+
 void PrivacySandboxService::StopObserving() {
   // Removing a non-observing observer is a no-op.
   sync_service_observer_.Reset();
@@ -447,10 +652,93 @@ void PrivacySandboxService::RecordPrivacySandboxHistogram(
   base::UmaHistogramEnumeration("Settings.PrivacySandbox.Enabled", state);
 }
 
+void PrivacySandboxService::RecordPrivacySandbox3StartupMetrics() {
+  const std::string privacy_sandbox_startup_histogram =
+      "Settings.PrivacySandbox.StartupState";
+  const bool sandbox_v2_enabled =
+      pref_service_->GetBoolean(prefs::kPrivacySandboxApisEnabledV2);
+
+  // Handle PS V1 prefs disabled.
+  if (pref_service_->GetBoolean(
+          prefs::kPrivacySandboxNoConfirmationSandboxDisabled)) {
+    base::UmaHistogramEnumeration(
+        privacy_sandbox_startup_histogram,
+        sandbox_v2_enabled ? PSStartupStates::kDialogOffV1OffEnabled
+                           : PSStartupStates::kDialogOffV1OffDisabled);
+    return;
+  }
+  // Handle 3PC disabled.
+  if (pref_service_->GetBoolean(
+          prefs::kPrivacySandboxNoConfirmationThirdPartyCookiesBlocked)) {
+    base::UmaHistogramEnumeration(
+        privacy_sandbox_startup_histogram,
+        sandbox_v2_enabled ? PSStartupStates::kDialogOff3PCOffEnabled
+                           : PSStartupStates::kDialogOff3PCOffDisabled);
+    return;
+  }
+  // Handle managed.
+  if (pref_service_->GetBoolean(
+          prefs::kPrivacySandboxNoConfirmationSandboxManaged)) {
+    base::UmaHistogramEnumeration(
+        privacy_sandbox_startup_histogram,
+        sandbox_v2_enabled ? PSStartupStates::kDialogOffManagedEnabled
+                           : PSStartupStates::kDialogOffManagedDisabled);
+    return;
+  }
+  // Handle restricted.
+  if (pref_service_->GetBoolean(
+          prefs::kPrivacySandboxNoConfirmationSandboxRestricted)) {
+    base::UmaHistogramEnumeration(privacy_sandbox_startup_histogram,
+                                  PSStartupStates::kDialogOffRestricted);
+    return;
+  }
+  // Handle manually controlled
+  if (pref_service_->GetBoolean(
+          prefs::kPrivacySandboxNoConfirmationManuallyControlled)) {
+    base::UmaHistogramEnumeration(
+        privacy_sandbox_startup_histogram,
+        sandbox_v2_enabled
+            ? PSStartupStates::kDialogOffManuallyControlledEnabled
+            : PSStartupStates::kDialogOffManuallyControlledDisabled);
+    return;
+  }
+  if (privacy_sandbox::kPrivacySandboxSettings3ConsentRequired.Get()) {
+    if (!pref_service_->GetBoolean(prefs::kPrivacySandboxConsentDecisionMade)) {
+      base::UmaHistogramEnumeration(privacy_sandbox_startup_histogram,
+                                    PSStartupStates::kDialogWaiting);
+      return;
+    }
+    base::UmaHistogramEnumeration(privacy_sandbox_startup_histogram,
+                                  sandbox_v2_enabled
+                                      ? PSStartupStates::kConsentShownEnabled
+                                      : PSStartupStates::kConsentShownDisabled);
+  } else if (privacy_sandbox::kPrivacySandboxSettings3NoticeRequired.Get()) {
+    if (!pref_service_->GetBoolean(prefs::kPrivacySandboxNoticeDisplayed)) {
+      base::UmaHistogramEnumeration(privacy_sandbox_startup_histogram,
+                                    PSStartupStates::kDialogWaiting);
+      return;
+    }
+    base::UmaHistogramEnumeration(privacy_sandbox_startup_histogram,
+                                  sandbox_v2_enabled
+                                      ? PSStartupStates::kNoticeShownEnabled
+                                      : PSStartupStates::kNoticeShownDisabled);
+  } else {  // No dialog currently required.
+    base::UmaHistogramEnumeration(
+        privacy_sandbox_startup_histogram,
+        sandbox_v2_enabled ? PSStartupStates::kNoDialogRequiredEnabled
+                           : PSStartupStates::kNoDialogRequiredDisabled);
+  }
+}
+
 void PrivacySandboxService::LogPrivacySandboxState() {
   // Do not record metrics for non-regular profiles.
   if (profile_type_ != profile_metrics::BrowserProfileType::kRegular)
     return;
+
+  // Start by recording any metrics for Privacy Sandbox 3.
+  if (base::FeatureList::IsEnabled(privacy_sandbox::kPrivacySandboxSettings3)) {
+    RecordPrivacySandbox3StartupMetrics();
+  }
 
   // Check policy status first.
   std::string default_cookie_setting_provider;
@@ -557,35 +845,73 @@ void PrivacySandboxService::ConvertFledgeJoiningTopFramesForDisplay(
 
 std::vector<privacy_sandbox::CanonicalTopic>
 PrivacySandboxService::GetCurrentTopTopics() const {
-  // TODO(crbug.com/1286276): Add proper Topics implementation.
-  return std::vector<privacy_sandbox::CanonicalTopic>(
-      fake_current_topics_.begin(), fake_current_topics_.end());
+  if (privacy_sandbox::kPrivacySandboxSettings3ShowSampleDataForTesting.Get())
+    return {fake_current_topics_.begin(), fake_current_topics_.end()};
+
+  if (!browsing_topics_service_)
+    return {};
+
+  auto topics = browsing_topics_service_->GetTopTopicsForDisplay();
+
+  // Topics returned by the backend may include duplicates. Sort into display
+  // order before removing them.
+  SortTopicsForDisplay(topics);
+  topics.erase(std::unique(topics.begin(), topics.end()), topics.end());
+
+  return topics;
 }
 
 std::vector<privacy_sandbox::CanonicalTopic>
 PrivacySandboxService::GetBlockedTopics() const {
-  // TODO(crbug.com/1286276): Add proper Topics implementation.
-  return std::vector<privacy_sandbox::CanonicalTopic>(
-      fake_blocked_topics_.begin(), fake_blocked_topics_.end());
+  if (privacy_sandbox::kPrivacySandboxSettings3ShowSampleDataForTesting.Get())
+    return {fake_blocked_topics_.begin(), fake_blocked_topics_.end()};
+
+  auto* pref_value =
+      pref_service_->GetList(prefs::kPrivacySandboxBlockedTopics);
+  DCHECK(pref_value->is_list());
+
+  std::vector<privacy_sandbox::CanonicalTopic> blocked_topics;
+  for (const auto& entry : pref_value->GetList()) {
+    auto blocked_topic = privacy_sandbox::CanonicalTopic::FromValue(
+        *entry.GetDict().Find(kBlockedTopicsTopicKey));
+    if (blocked_topic)
+      blocked_topics.emplace_back(*blocked_topic);
+  }
+
+  SortTopicsForDisplay(blocked_topics);
+  return blocked_topics;
 }
 
 void PrivacySandboxService::SetTopicAllowed(
     privacy_sandbox::CanonicalTopic topic,
     bool allowed) {
-  // TODO(crbug.com/1286276): Update preferences.
-  if (allowed) {
-    fake_current_topics_.insert(topic);
-    fake_blocked_topics_.erase(topic);
-  } else {
-    fake_current_topics_.erase(topic);
-    fake_blocked_topics_.insert(topic);
+  if (privacy_sandbox::kPrivacySandboxSettings3ShowSampleDataForTesting.Get()) {
+    if (allowed) {
+      fake_current_topics_.insert(topic);
+      fake_blocked_topics_.erase(topic);
+    } else {
+      fake_current_topics_.erase(topic);
+      fake_blocked_topics_.insert(topic);
+    }
+    return;
   }
+
+  if (!allowed && browsing_topics_service_)
+    browsing_topics_service_->ClearTopic(topic);
+
+  privacy_sandbox_settings_->SetTopicAllowed(topic, allowed);
 }
 
 /*static*/ PrivacySandboxService::DialogType
 PrivacySandboxService::GetRequiredDialogTypeInternal(
     PrefService* pref_service,
-    profile_metrics::BrowserProfileType profile_type) {
+    profile_metrics::BrowserProfileType profile_type,
+    privacy_sandbox::PrivacySandboxSettings* privacy_sandbox_settings,
+    bool third_party_cookies_blocked) {
+  // If the dialog is disabled for testing, never show it.
+  if (g_dialog_diabled_for_tests)
+    return DialogType::kNone;
+
   // If the profile isn't a regular profile, no dialog should ever be shown.
   if (profile_type != profile_metrics::BrowserProfileType::kRegular)
     return DialogType::kNone;
@@ -604,6 +930,22 @@ PrivacySandboxService::GetRequiredDialogTypeInternal(
   if (privacy_sandbox::kPrivacySandboxSettings3ForceShowNoticeForTesting.Get())
     return DialogType::kNotice;
 
+  // If neither consent or notice is required, no dialog is required.
+  if (!privacy_sandbox::kPrivacySandboxSettings3ConsentRequired.Get() &&
+      !privacy_sandbox::kPrivacySandboxSettings3NoticeRequired.Get()) {
+    return DialogType::kNone;
+  }
+
+  // Only one of the consent or notice should be required by Finch parameters.
+  DCHECK(!privacy_sandbox::kPrivacySandboxSettings3ConsentRequired.Get() ||
+         !privacy_sandbox::kPrivacySandboxSettings3NoticeRequired.Get());
+
+  // Start by checking for any previous decision about the dialog, such as
+  // it already having been shown, or not having been shown for some reason.
+  // These checks for previous decisions occur in advance of their corresponding
+  // decisions later in this function, so that changes to profile state to not
+  // appear to impact previous decisions.
+
   // If a user wasn't shown a confirmation because they previously turned the
   // Privacy Sandbox off, we do not attempt to re-show one.
   if (pref_service->GetBoolean(
@@ -618,6 +960,65 @@ PrivacySandboxService::GetRequiredDialogTypeInternal(
   // If only a notice is required, and has been shown, no dialog is required.
   if (!privacy_sandbox::kPrivacySandboxSettings3ConsentRequired.Get() &&
       pref_service->GetBoolean(prefs::kPrivacySandboxNoticeDisplayed)) {
+    return DialogType::kNone;
+  }
+
+  // If a user wasn't shown a confirmation because the sandbox was previously
+  // restricted, do not attempt to show them one. The user will be able to
+  // enable the Sandbox on the settings page.
+  if (pref_service->GetBoolean(
+          prefs::kPrivacySandboxNoConfirmationSandboxRestricted)) {
+    return DialogType::kNone;
+  }
+
+  // If a user wasn't shown a dialog previously because the Privacy Sandbox
+  // was managed, do not show them one.
+  if (pref_service->GetBoolean(
+          prefs::kPrivacySandboxNoConfirmationSandboxManaged)) {
+    return DialogType::kNone;
+  }
+
+  // If a user wasn't shown a confirmation because they block third party
+  // cookies, we do not attempt to re-show one.
+  if (pref_service->GetBoolean(
+          prefs::kPrivacySandboxNoConfirmationThirdPartyCookiesBlocked)) {
+    return DialogType::kNone;
+  }
+
+  // If the user wasn't shown a confirmation because they are already manually
+  // controlling the sandbox, do not attempt to show one.
+  if (pref_service->GetBoolean(
+          prefs::kPrivacySandboxNoConfirmationManuallyControlled)) {
+    return DialogType::kNone;
+  }
+
+  // If the Privacy Sandbox is restricted, no dialog is shown.
+  if (privacy_sandbox_settings->IsPrivacySandboxRestricted()) {
+    pref_service->SetBoolean(
+        prefs::kPrivacySandboxNoConfirmationSandboxRestricted, true);
+    return DialogType::kNone;
+  }
+
+  // If the Privacy Sandbox is managed, no dialog is shown.
+  if (pref_service->FindPreference(prefs::kPrivacySandboxApisEnabledV2)
+          ->IsManaged()) {
+    pref_service->SetBoolean(prefs::kPrivacySandboxNoConfirmationSandboxManaged,
+                             true);
+    return DialogType::kNone;
+  }
+
+  // If the user blocks third party cookies, then no dialog is shown.
+  if (third_party_cookies_blocked) {
+    pref_service->SetBoolean(
+        prefs::kPrivacySandboxNoConfirmationThirdPartyCookiesBlocked, true);
+    return DialogType::kNone;
+  }
+
+  // If the Privacy Sandbox has been manually controlled by the user, no dialog
+  // is shown.
+  if (pref_service->GetBoolean(prefs::kPrivacySandboxManuallyControlledV2)) {
+    pref_service->SetBoolean(
+        prefs::kPrivacySandboxNoConfirmationManuallyControlled, true);
     return DialogType::kNone;
   }
 
@@ -659,11 +1060,6 @@ PrivacySandboxService::GetRequiredDialogTypeInternal(
   DCHECK(!pref_service->GetBoolean(prefs::kPrivacySandboxNoticeDisplayed));
   DCHECK(!pref_service->GetBoolean(prefs::kPrivacySandboxConsentDecisionMade));
 
-  // The user should not have been able to enable the Sandbox without a
-  // previous decision having been made. The exception to this is through test
-  // only feature parameters, which will have let the user skip confirmation.
-  DCHECK(!pref_service->GetBoolean(prefs::kPrivacySandboxApisEnabledV2));
-
   // If the user had previously disabled the Privacy Sandbox, no confirmation
   // will be shown.
   if (!pref_service->GetBoolean(prefs::kPrivacySandboxApisEnabled)) {
@@ -674,9 +1070,11 @@ PrivacySandboxService::GetRequiredDialogTypeInternal(
 
   // Check if the users requires a consent. This information is provided by
   // feature parameter to allow Finch based geo-targeting.
-  if (privacy_sandbox::kPrivacySandboxSettings3ConsentRequired.Get())
+  if (privacy_sandbox::kPrivacySandboxSettings3ConsentRequired.Get()) {
     return DialogType::kConsent;
+  }
 
   // Finally a notice is required.
+  DCHECK(privacy_sandbox::kPrivacySandboxSettings3NoticeRequired.Get());
   return DialogType::kNotice;
 }

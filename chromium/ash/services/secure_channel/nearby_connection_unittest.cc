@@ -4,6 +4,7 @@
 
 #include "ash/services/secure_channel/nearby_connection.h"
 
+#include "ash/components/multidevice/remote_device_test_util.h"
 #include "ash/services/secure_channel/connection_observer.h"
 #include "ash/services/secure_channel/file_transfer_update_callback.h"
 #include "ash/services/secure_channel/public/cpp/client/fake_nearby_connector.h"
@@ -15,11 +16,10 @@
 #include "base/files/file_util.h"
 #include "base/test/bind.h"
 #include "base/test/task_environment.h"
-#include "chromeos/components/multidevice/remote_device_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-namespace chromeos {
-namespace secure_channel {
+namespace ash::secure_channel {
+
 namespace {
 
 const char kTestBluetoothAddress[] = "01:23:45:67:89:AB";
@@ -471,5 +471,4 @@ TEST_F(SecureChannelNearbyConnectionTest, DisconnectFromRemoteDevice) {
   EXPECT_EQ(Connection::Status::DISCONNECTED, connection()->status());
 }
 
-}  // namespace secure_channel
-}  // namespace chromeos
+}  // namespace ash::secure_channel

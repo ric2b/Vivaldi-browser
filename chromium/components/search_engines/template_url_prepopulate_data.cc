@@ -4,7 +4,6 @@
 
 #include "components/search_engines/template_url_prepopulate_data.h"
 
-#include "base/cxx17_backports.h"
 #include "base/logging.h"
 #include "build/build_config.h"
 #include "components/country_codes/country_codes.h"
@@ -15,10 +14,8 @@
 #include "components/search_engines/template_url_data.h"
 #include "components/search_engines/template_url_data_util.h"
 
-#if defined(VIVALDI_BUILD) && defined (OS_ANDROID)
 #include "app/vivaldi_apptools.h"
-#endif
-
+#include "components/search_engines/vivaldi_pref_names.h"
 namespace TemplateURLPrepopulateData {
 
 // Helpers --------------------------------------------------------------------
@@ -32,28 +29,18 @@ namespace {
 // first.  The default will be the first engine.
 
 // Default (for countries with no better engine set)
-const PrepopulatedEngine* const engines_default[] = {
-#if defined (VIVALDI_BUILD) && defined(OS_ANDROID)
+/*const PrepopulatedEngine* const engines_default[] = {
 #if defined (OEM_AUTOMOTIVE_BUILD)
     &google_viv,
 #else
-    &bing_viv,
 #endif
-    &yahoo_viv,
-    &duckduckgo_viv,
-    &ecosia_viv,
-    &startpage_com_viv,
-    &wikipedia_viv,
 #if defined (OEM_AUTOMOTIVE_BUILD)
     &bing_viv,
 #else
-    &google_viv,
 #endif
-#else
     &google,
     &bing,
     &yahoo,
-#endif
 };
 
 // Note, the below entries are sorted by country code, not the name in comment.
@@ -817,22 +804,11 @@ const PrepopulatedEngine* const engines_RS[] = {
 
 // Russia
 const PrepopulatedEngine* const engines_RU[] = {
-#if defined (VIVALDI_BUILD) && defined(OS_ANDROID)
-    &yandex_ru_viv,
-    &bing_viv,
-    &yahoo_viv,
-    &google_viv,
-    &duckduckgo_viv,
-    &ecosia_viv,
-    &startpage_com_viv,
-    &wikipedia_viv,
-#else
     &google,
     &yandex_ru,
     &mail_ru,
     &bing,
     &duckduckgo,
-#endif
 };
 
 // Rwanda
@@ -927,21 +903,11 @@ const PrepopulatedEngine* const engines_TN[] = {
 
 // Turkey
 const PrepopulatedEngine* const engines_TR[] = {
-#if defined (VIVALDI_BUILD) && defined(OS_ANDROID)
-    &bing_viv,
-    &yandex_tr_viv,
-    &duckduckgo_viv,
-    &ecosia_viv,
-    &startpage_com_viv,
-    &wikipedia_viv,
-    &google_viv,
-#else
     &google,
     &yandex_tr,
     &yahoo_tr,
     &bing,
     &duckduckgo,
-#endif
 };
 
 // Trinidad and Tobago
@@ -982,30 +948,19 @@ const PrepopulatedEngine* const engines_UA[] = {
 
 // United States
 const PrepopulatedEngine* const engines_US[] = {
-#if defined (VIVALDI_BUILD) && defined(OS_ANDROID)
 #if defined (OEM_AUTOMOTIVE_BUILD)
     &google_viv,
 #else
-    &bing_viv,
 #endif
-    &yahoo_viv,
-    &duckduckgo_viv,
-    &neeva_viv,
-    &ecosia_viv,
-    &startpage_com_viv,
-    &wikipedia_viv,
 #if defined (OEM_AUTOMOTIVE_BUILD)
     &bing_viv,
 #else
-    &google_viv,
 #endif
-#else
     &google,
     &bing,
     &yahoo,
     &duckduckgo,
     &ecosia,
-#endif
 };
 
 // Uruguay
@@ -1064,134 +1019,160 @@ const PrepopulatedEngine* const engines_ZW[] = {
 
 // clang-format on
 // ----------------------------------------------------------------------------
+*/
+
+struct PrepopulatedPerLanguage {
+  char lang[3];
+  const PrepopulatedEngine* const* engines;
+  size_t size;
+};
+
+#include "components/search_engines/vivaldi_defaults.inc"
 
 std::vector<std::unique_ptr<TemplateURLData>> GetPrepopulationSetFromCountryID(
-    int country_id) {
+    int country_id,
+    std::string application_locale,
+    size_t* default_search_provider_index,
+    SearchType search_type) {
+  const PrepopulatedPerLanguage* country_engines;
+  size_t num_country_engines;
   const PrepopulatedEngine* const* engines;
   size_t num_engines;
+  size_t selected = 0;
+  std::string lang(
+      application_locale.begin(),
+      std::find(application_locale.begin(), application_locale.end(), '-'));
   // If you add a new country make sure to update the unit test for coverage.
   switch (country_id) {
 #define UNHANDLED_COUNTRY(code1, code2) \
   case country_codes::CountryCharsToCountryID((#code1)[0], (#code2)[0]):
-#define END_UNHANDLED_COUNTRIES(code1, code2)       \
-  engines = engines_##code1##code2;                 \
-  num_engines = base::size(engines_##code1##code2); \
+#define END_UNHANDLED_COUNTRIES(code1, code2)               \
+  country_engines = engines_##code1##code2;                 \
+  num_country_engines = std::size(engines_##code1##code2) ; \
+  for (size_t i = 0; i < num_country_engines; i++) {        \
+    if (lang == country_engines[i].lang ) {                 \
+      selected = i;                                         \
+      break;                                                \
+    }                                                       \
+  }                                                         \
+  engines = country_engines[selected].engines;              \
+  num_engines = country_engines[selected].size;             \
   break;
 #define DECLARE_COUNTRY(code1, code2)\
     UNHANDLED_COUNTRY(code1, code2)\
     END_UNHANDLED_COUNTRIES(code1, code2)
 
     // Countries with their own, dedicated engine set.
-    DECLARE_COUNTRY(A, E)  // United Arab Emirates
-    DECLARE_COUNTRY(A, L)  // Albania
+    //DECLARE_COUNTRY(A, E)  // United Arab Emirates
+    //DECLARE_COUNTRY(A, L)  // Albania
     DECLARE_COUNTRY(A, R)  // Argentina
     DECLARE_COUNTRY(A, T)  // Austria
-    DECLARE_COUNTRY(A, U)  // Australia
-    DECLARE_COUNTRY(B, A)  // Bosnia and Herzegovina
-    DECLARE_COUNTRY(B, E)  // Belgium
+    //DECLARE_COUNTRY(A, U)  // Australia
+    //DECLARE_COUNTRY(B, A)  // Bosnia and Herzegovina
+    //DECLARE_COUNTRY(B, E)  // Belgium
     DECLARE_COUNTRY(B, G)  // Bulgaria
-    DECLARE_COUNTRY(B, H)  // Bahrain
-    DECLARE_COUNTRY(B, I)  // Burundi
-    DECLARE_COUNTRY(B, N)  // Brunei
-    DECLARE_COUNTRY(B, O)  // Bolivia
+    //DECLARE_COUNTRY(B, H)  // Bahrain
+    //DECLARE_COUNTRY(B, I)  // Burundi
+    //DECLARE_COUNTRY(B, N)  // Brunei
+    //DECLARE_COUNTRY(B, O)  // Bolivia
     DECLARE_COUNTRY(B, R)  // Brazil
     DECLARE_COUNTRY(B, Y)  // Belarus
-    DECLARE_COUNTRY(B, Z)  // Belize
+    //DECLARE_COUNTRY(B, Z)  // Belize
     DECLARE_COUNTRY(C, A)  // Canada
     DECLARE_COUNTRY(C, H)  // Switzerland
     DECLARE_COUNTRY(C, L)  // Chile
     DECLARE_COUNTRY(C, N)  // China
     DECLARE_COUNTRY(C, O)  // Colombia
-    DECLARE_COUNTRY(C, R)  // Costa Rica
+    //DECLARE_COUNTRY(C, R)  // Costa Rica
     DECLARE_COUNTRY(C, Z)  // Czech Republic
     DECLARE_COUNTRY(D, E)  // Germany
     DECLARE_COUNTRY(D, K)  // Denmark
-    DECLARE_COUNTRY(D, O)  // Dominican Republic
-    DECLARE_COUNTRY(D, Z)  // Algeria
-    DECLARE_COUNTRY(E, C)  // Ecuador
-    DECLARE_COUNTRY(E, E)  // Estonia
-    DECLARE_COUNTRY(E, G)  // Egypt
+    //DECLARE_COUNTRY(D, O)  // Dominican Republic
+    //DECLARE_COUNTRY(D, Z)  // Algeria
+    //DECLARE_COUNTRY(E, C)  // Ecuador
+    //DECLARE_COUNTRY(E, E)  // Estonia
+    //DECLARE_COUNTRY(E, G)  // Egypt
     DECLARE_COUNTRY(E, S)  // Spain
     DECLARE_COUNTRY(F, I)  // Finland
-    DECLARE_COUNTRY(F, O)  // Faroe Islands
+    //DECLARE_COUNTRY(F, O)  // Faroe Islands
     DECLARE_COUNTRY(F, R)  // France
     DECLARE_COUNTRY(G, B)  // United Kingdom
     DECLARE_COUNTRY(G, R)  // Greece
-    DECLARE_COUNTRY(G, T)  // Guatemala
+    //DECLARE_COUNTRY(G, T)  // Guatemala
     DECLARE_COUNTRY(H, K)  // Hong Kong
-    DECLARE_COUNTRY(H, N)  // Honduras
+    //DECLARE_COUNTRY(H, N)  // Honduras
     DECLARE_COUNTRY(H, R)  // Croatia
     DECLARE_COUNTRY(H, U)  // Hungary
     DECLARE_COUNTRY(I, D)  // Indonesia
     DECLARE_COUNTRY(I, E)  // Ireland
-    DECLARE_COUNTRY(I, L)  // Israel
+    //DECLARE_COUNTRY(I, L)  // Israel
     DECLARE_COUNTRY(I, N)  // India
-    DECLARE_COUNTRY(I, Q)  // Iraq
-    DECLARE_COUNTRY(I, R)  // Iran
-    DECLARE_COUNTRY(I, S)  // Iceland
+    //DECLARE_COUNTRY(I, Q)  // Iraq
+    //DECLARE_COUNTRY(I, R)  // Iran
+    //DECLARE_COUNTRY(I, S)  // Iceland
     DECLARE_COUNTRY(I, T)  // Italy
-    DECLARE_COUNTRY(J, M)  // Jamaica
-    DECLARE_COUNTRY(J, O)  // Jordan
+    //DECLARE_COUNTRY(J, M)  // Jamaica
+    //DECLARE_COUNTRY(J, O)  // Jordan
     DECLARE_COUNTRY(J, P)  // Japan
-    DECLARE_COUNTRY(K, E)  // Kenya
+    //DECLARE_COUNTRY(K, E)  // Kenya
     DECLARE_COUNTRY(K, R)  // South Korea
-    DECLARE_COUNTRY(K, W)  // Kuwait
-    DECLARE_COUNTRY(K, Z)  // Kazakhstan
-    DECLARE_COUNTRY(L, B)  // Lebanon
-    DECLARE_COUNTRY(L, I)  // Liechtenstein
+    //DECLARE_COUNTRY(K, W)  // Kuwait
+    //DECLARE_COUNTRY(K, Z)  // Kazakhstan
+    //DECLARE_COUNTRY(L, B)  // Lebanon
+    //DECLARE_COUNTRY(L, I)  // Liechtenstein
     DECLARE_COUNTRY(L, T)  // Lithuania
-    DECLARE_COUNTRY(L, U)  // Luxembourg
-    DECLARE_COUNTRY(L, V)  // Latvia
-    DECLARE_COUNTRY(L, Y)  // Libya
-    DECLARE_COUNTRY(M, A)  // Morocco
-    DECLARE_COUNTRY(M, C)  // Monaco
-    DECLARE_COUNTRY(M, D)  // Moldova
-    DECLARE_COUNTRY(M, E)  // Montenegro
-    DECLARE_COUNTRY(M, K)  // Macedonia
+    //DECLARE_COUNTRY(L, U)  // Luxembourg
+    //DECLARE_COUNTRY(L, V)  // Latvia
+    //DECLARE_COUNTRY(L, Y)  // Libya
+    //DECLARE_COUNTRY(M, A)  // Morocco
+    //DECLARE_COUNTRY(M, C)  // Monaco
+    //DECLARE_COUNTRY(M, D)  // Moldova
+    //DECLARE_COUNTRY(M, E)  // Montenegro
+    //DECLARE_COUNTRY(M, K)  // Macedonia
     DECLARE_COUNTRY(M, X)  // Mexico
-    DECLARE_COUNTRY(M, Y)  // Malaysia
-    DECLARE_COUNTRY(N, I)  // Nicaragua
-    DECLARE_COUNTRY(N, L)  // Netherlands
+    //DECLARE_COUNTRY(M, Y)  // Malaysia
+    //DECLARE_COUNTRY(N, I)  // Nicaragua
+    //DECLARE_COUNTRY(N, L)  // Netherlands
     DECLARE_COUNTRY(N, O)  // Norway
-    DECLARE_COUNTRY(N, Z)  // New Zealand
-    DECLARE_COUNTRY(O, M)  // Oman
-    DECLARE_COUNTRY(P, A)  // Panama
+    //DECLARE_COUNTRY(N, Z)  // New Zealand
+    //DECLARE_COUNTRY(O, M)  // Oman
+    //DECLARE_COUNTRY(P, A)  // Panama
     DECLARE_COUNTRY(P, E)  // Peru
     DECLARE_COUNTRY(P, H)  // Philippines
-    DECLARE_COUNTRY(P, K)  // Pakistan
+    //DECLARE_COUNTRY(P, K)  // Pakistan
     DECLARE_COUNTRY(P, L)  // Poland
-    DECLARE_COUNTRY(P, R)  // Puerto Rico
+    //DECLARE_COUNTRY(P, R)  // Puerto Rico
     DECLARE_COUNTRY(P, T)  // Portugal
-    DECLARE_COUNTRY(P, Y)  // Paraguay
-    DECLARE_COUNTRY(Q, A)  // Qatar
+    //DECLARE_COUNTRY(P, Y)  // Paraguay
+    //DECLARE_COUNTRY(Q, A)  // Qatar
     DECLARE_COUNTRY(R, O)  // Romania
     DECLARE_COUNTRY(R, S)  // Serbia
     DECLARE_COUNTRY(R, U)  // Russia
-    DECLARE_COUNTRY(R, W)  // Rwanda
-    DECLARE_COUNTRY(S, A)  // Saudi Arabia
+    //DECLARE_COUNTRY(R, W)  // Rwanda
+    //DECLARE_COUNTRY(S, A)  // Saudi Arabia
     DECLARE_COUNTRY(S, E)  // Sweden
     DECLARE_COUNTRY(S, G)  // Singapore
-    DECLARE_COUNTRY(S, I)  // Slovenia
+    //DECLARE_COUNTRY(S, I)  // Slovenia
     DECLARE_COUNTRY(S, K)  // Slovakia
-    DECLARE_COUNTRY(S, V)  // El Salvador
-    DECLARE_COUNTRY(S, Y)  // Syria
+    //DECLARE_COUNTRY(S, V)  // El Salvador
+    //DECLARE_COUNTRY(S, Y)  // Syria
     DECLARE_COUNTRY(T, H)  // Thailand
-    DECLARE_COUNTRY(T, N)  // Tunisia
+    //DECLARE_COUNTRY(T, N)  // Tunisia
     DECLARE_COUNTRY(T, R)  // Turkey
-    DECLARE_COUNTRY(T, T)  // Trinidad and Tobago
+    //DECLARE_COUNTRY(T, T)  // Trinidad and Tobago
     DECLARE_COUNTRY(T, W)  // Taiwan
-    DECLARE_COUNTRY(T, Z)  // Tanzania
+    //DECLARE_COUNTRY(T, Z)  // Tanzania
     DECLARE_COUNTRY(U, A)  // Ukraine
     DECLARE_COUNTRY(U, S)  // United States
-    DECLARE_COUNTRY(U, Y)  // Uruguay
+    //DECLARE_COUNTRY(U, Y)  // Uruguay
     DECLARE_COUNTRY(V, E)  // Venezuela
     DECLARE_COUNTRY(V, N)  // Vietnam
-    DECLARE_COUNTRY(Y, E)  // Yemen
-    DECLARE_COUNTRY(Z, A)  // South Africa
-    DECLARE_COUNTRY(Z, W)  // Zimbabwe
+    //DECLARE_COUNTRY(Y, E)  // Yemen
+    //DECLARE_COUNTRY(Z, A)  // South Africa
+    //DECLARE_COUNTRY(Z, W)  // Zimbabwe
 
     // Countries using the "Australia" engine set.
-    UNHANDLED_COUNTRY(C, C)  // Cocos Islands
+/*    UNHANDLED_COUNTRY(C, C)  // Cocos Islands
     UNHANDLED_COUNTRY(C, X)  // Christmas Island
     UNHANDLED_COUNTRY(H, M)  // Heard Island and McDonald Islands
     UNHANDLED_COUNTRY(N, F)  // Norfolk Island
@@ -1384,15 +1365,54 @@ std::vector<std::unique_ptr<TemplateURLData>> GetPrepopulationSetFromCountryID(
     UNHANDLED_COUNTRY(V, C)  // Saint Vincent and the Grenadines
     UNHANDLED_COUNTRY(V, U)  // Vanuatu
     UNHANDLED_COUNTRY(W, S)  // Samoa
-    UNHANDLED_COUNTRY(Z, M)  // Zambia
+    UNHANDLED_COUNTRY(Z, M)  // Zambia*/
     case country_codes::kCountryIDUnknown:
+    END_UNHANDLED_COUNTRIES(un, known)
     default:                // Unhandled location
-    END_UNHANDLED_COUNTRIES(def, ault)
+      engines = engines_default;
+      num_engines = std::size(engines_default);
   }
 
+  if (!vivaldi::IsVivaldiRunning()) {
+    engines = engines_unittests;
+    num_engines = std::size(engines_unittests);
+  }
+
+  // Two first entries are pointing to the defaults.
+  DCHECK(num_engines > 2);
+  if (default_search_provider_index)
+      *default_search_provider_index = 0;
+
+#if defined (OEM_POLESTAR_BUILD)
+  const auto* default_search = &google;
+#else
+  const auto* default_search = engines[0];
+#endif
+  bool found_image_search = false;
+
   std::vector<std::unique_ptr<TemplateURLData>> t_urls;
-  for (size_t i = 0; i < num_engines; ++i)
+  for (size_t i = 2; i < num_engines; ++i) {
+    if (default_search_provider_index) {
+      switch (search_type) {
+        case SearchType::kMain:
+          if (engines[i] == default_search)
+            *default_search_provider_index = i - 2;
+          break;
+        case SearchType::kPrivate:
+          if (engines[i] == engines[1])
+            *default_search_provider_index = i - 2;
+          break;
+        case SearchType::kImage:
+          if (engines[i]->image_url &&
+              (engines[i] == default_search || !found_image_search)) {
+            *default_search_provider_index = i - 2;
+            found_image_search = true;
+          }
+          break;
+      }
+    }
     t_urls.push_back(TemplateURLDataFromPrepopulatedEngine(*engines[i]));
+  }
   return t_urls;
 }
 
@@ -1416,6 +1436,16 @@ std::vector<std::unique_ptr<TemplateURLData>> GetPrepopulatedTemplateURLData(
   return t_urls;
 }
 
+std::string GetLangFromPrefs(PrefService* prefs) {
+  if (!prefs || !prefs->FindPreference(prefs::kLanguageAtInstall))
+    return "";
+
+    // Expecting that the first run language value was set before reaching this,
+  // sine there isn't a practical way to pass it to the search code otherwise.
+  DCHECK(prefs->HasPrefPath(prefs::kLanguageAtInstall) ||
+         !vivaldi::IsVivaldiRunning());
+  return prefs->GetString(prefs::kLanguageAtInstall);
+}
 }  // namespace
 
 // Global functions -----------------------------------------------------------
@@ -1435,36 +1465,19 @@ int GetDataVersion(PrefService* prefs) {
 
 std::vector<std::unique_ptr<TemplateURLData>> GetPrepopulatedEngines(
     PrefService* prefs,
-    size_t* default_search_provider_index) {
-#if defined(VIVALDI_BUILD) && defined(OS_ANDROID)
-  std::vector<std::unique_ptr<TemplateURLData>> t_urls;
-  if (vivaldi::IsVivaldiRunning()) {
-    const int country_id_ru = country_codes::CountryCharsToCountryID('R', 'U');
-    const int country_id_tr = country_codes::CountryCharsToCountryID('T', 'R');
-    const int country_id_us = country_codes::CountryCharsToCountryID('U', 'S');
-    if (country_codes::GetCurrentCountryID() == country_id_ru)
-        t_urls = GetPrepopulationSetFromCountryID(country_id_ru);
-    else if (country_codes::GetCurrentCountryID() == country_id_tr)
-        t_urls = GetPrepopulationSetFromCountryID(country_id_tr);
-    else if (country_codes::GetCurrentCountryID() == country_id_us)
-        t_urls = GetPrepopulationSetFromCountryID(country_id_us);
-    else
-        t_urls =
-            GetPrepopulationSetFromCountryID(country_codes::kCountryIDUnknown);
-  } else {
-#endif
+    size_t* default_search_provider_index,
+    SearchType search_type) {
   // If there is a set of search engines in the preferences file, it overrides
   // the built-in set.
+  bool default_from_data = false;
   std::vector<std::unique_ptr<TemplateURLData>> t_urls =
       GetPrepopulatedTemplateURLData(prefs);
   if (t_urls.empty()) {
+    default_from_data = vivaldi::IsVivaldiRunning();
     t_urls = GetPrepopulationSetFromCountryID(
-        country_codes::GetCountryIDFromPrefs(prefs));
+        country_codes::GetCountryIDFromPrefs(prefs), GetLangFromPrefs(prefs), default_search_provider_index, search_type);
   }
-#if defined(VIVALDI_BUILD) && defined(OS_ANDROID)
-  }
-#endif
-  if (default_search_provider_index) {
+  if (default_search_provider_index && !default_from_data) {
     const auto itr = std::find_if(
         t_urls.begin(), t_urls.end(),
         [](const auto& t_url) { return t_url->prepopulate_id == google.id; });
@@ -1488,14 +1501,14 @@ std::unique_ptr<TemplateURLData> GetPrepopulatedEngine(PrefService* prefs,
 #if BUILDFLAG(IS_ANDROID)
 
 std::vector<std::unique_ptr<TemplateURLData>> GetLocalPrepopulatedEngines(
-    const std::string& locale) {
+    const std::string& locale, std::string application_locale) {
   int country_id = country_codes::CountryStringToCountryID(locale);
   if (country_id == country_codes::kCountryIDUnknown) {
     LOG(ERROR) << "Unknown country code specified: " << locale;
     return std::vector<std::unique_ptr<TemplateURLData>>();
   }
 
-  return GetPrepopulationSetFromCountryID(country_id);
+  return GetPrepopulationSetFromCountryID(country_id, application_locale, nullptr, SearchType::kMain);
 }
 
 #endif
@@ -1514,11 +1527,11 @@ void ClearPrepopulatedEnginesInPrefs(PrefService* prefs) {
 }
 
 std::unique_ptr<TemplateURLData> GetPrepopulatedDefaultSearch(
-    PrefService* prefs) {
+    PrefService* prefs, SearchType search_type) {
   size_t default_search_index;
   // This could be more efficient.  We load all URLs but keep only the default.
   std::vector<std::unique_ptr<TemplateURLData>> loaded_urls =
-      GetPrepopulatedEngines(prefs, &default_search_index);
+      GetPrepopulatedEngines(prefs, &default_search_index, search_type);
 
   return (default_search_index < loaded_urls.size())
              ? std::move(loaded_urls[default_search_index])

@@ -524,10 +524,11 @@ std::unique_ptr<WindowResizer> CreateWindowResizer(
     aura::Window* window,
     const gfx::PointF& point_in_parent,
     int window_component,
-    ::wm::WindowMoveSource source) {
+    wm::WindowMoveSource source) {
   DCHECK(window);
 
   WindowState* window_state = WindowState::Get(window);
+  DCHECK(window_state);
 
   // A resizer already exists; don't create a new one.
   if (window_state->drag_details())
@@ -878,10 +879,14 @@ void WorkspaceWindowResizer::CompleteDrag() {
     switch (snap_type_) {
       case SnapType::kPrimary:
         type = WM_EVENT_SNAP_PRIMARY;
+        window_state()->set_snap_action_source(
+            WindowSnapActionSource::kDragWindowToEdgeToSnap);
         base::RecordAction(base::UserMetricsAction("WindowDrag_MaximizeLeft"));
         break;
       case SnapType::kSecondary:
         type = WM_EVENT_SNAP_SECONDARY;
+        window_state()->set_snap_action_source(
+            WindowSnapActionSource::kDragWindowToEdgeToSnap);
         base::RecordAction(base::UserMetricsAction("WindowDrag_MaximizeRight"));
         break;
       case SnapType::kMaximize:
@@ -1111,7 +1116,18 @@ WorkspaceWindowResizer::WorkspaceWindowResizer(
   if (!parent_local_bounds.Intersects(restore_bounds_for_gesture_))
     restore_bounds_for_gesture_.AdjustToFit(parent_local_bounds);
 
-  window_state->OnDragStarted(details().window_component);
+  std::unique_ptr<ash::PresentationTimeRecorder> recorder =
+      window_state->OnDragStarted(details().window_component);
+  if (recorder) {
+    SetPresentationTimeRecorder(std::move(recorder));
+  } else {
+    // Default to use compositor based recorder.
+    SetPresentationTimeRecorder(
+        PresentationTimeRecorder::CreateCompositorRecorder(
+            GetTarget(), "Ash.InteractiveWindowResize.TimeToPresent",
+            "Ash.InteractiveWindowResize.TimeToPresent.MaxLatency"));
+  }
+
   StartDragForAttachedWindows();
 
   if (window_util::IsDraggingTabs(window_state->window())) {
@@ -1667,6 +1683,9 @@ void WorkspaceWindowResizer::SetWindowStateTypeFromGesture(
     case WindowStateType::kPrimarySnapped:
       if (window_state->CanSnap()) {
         window_state->SetRestoreBoundsInParent(restore_bounds_for_gesture_);
+        window_state->set_snap_action_source(
+            WindowSnapActionSource::kDragWindowToEdgeToSnap);
+
         const WMEvent event(WM_EVENT_SNAP_PRIMARY);
         window_state->OnWMEvent(&event);
       }
@@ -1674,6 +1693,9 @@ void WorkspaceWindowResizer::SetWindowStateTypeFromGesture(
     case WindowStateType::kSecondarySnapped:
       if (window_state->CanSnap()) {
         window_state->SetRestoreBoundsInParent(restore_bounds_for_gesture_);
+        window_state->set_snap_action_source(
+            WindowSnapActionSource::kDragWindowToEdgeToSnap);
+
         const WMEvent event(WM_EVENT_SNAP_SECONDARY);
         window_state->OnWMEvent(&event);
       }

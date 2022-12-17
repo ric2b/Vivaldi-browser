@@ -2,9 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {InstanceChecker} from '../../common/instance_checker.js';
+
+import {BrailleCommandHandler} from './braille/braille_command_handler.js';
+import {ChromeVoxBackground} from './classic_background.js';
+import {CommandHandler} from './command_handler.js';
+import {DesktopAutomationHandler} from './desktop_automation_handler.js';
+import {DesktopAutomationInterface} from './desktop_automation_interface.js';
+import {DownloadHandler} from './download_handler.js';
 import {Earcons} from './earcons.js';
 import {FindHandler} from './find_handler.js';
+import {FocusAutomationHandler} from './focus_automation_handler.js';
+import {GestureCommandHandler} from './gesture_command_handler.js';
+import {BackgroundKeyboardHandler} from './keyboard_handler.js';
 import {LiveRegions} from './live_regions.js';
+import {MathHandler} from './math_handler.js';
 import {MediaAutomationHandler} from './media_automation_handler.js';
 import {PageLoadSoundHandler} from './page_load_sound_handler.js';
 import {RangeAutomationHandler} from './range_automation_handler.js';
@@ -99,7 +111,6 @@ export class Background extends ChromeVoxState {
     /** @private {!PageLoadSoundHandler} */
     this.pageLoadSoundHandler_ = new PageLoadSoundHandler();
 
-    CommandHandler.init();
     FindHandler.init();
     DownloadHandler.init();
     JaPhoneticData.init(JaPhoneticMap.MAP);
@@ -139,9 +150,11 @@ export class Background extends ChromeVoxState {
   }
 
   /**
+   * @param {cursors.Range} newRange The new range.
+   * @param {boolean=} opt_fromEditing
    * @override
    */
-  setCurrentRange(newRange) {
+  setCurrentRange(newRange, opt_fromEditing) {
     // Clear anything that was frozen on the braille display whenever
     // the user navigates.
     ChromeVox.braille.thaw();
@@ -155,8 +168,9 @@ export class Background extends ChromeVoxState {
 
     this.previousRange_ = this.currentRange_;
     this.currentRange_ = newRange;
+
     ChromeVoxState.observers.forEach(function(observer) {
-      observer.onCurrentRangeChanged(newRange);
+      observer.onCurrentRangeChanged(newRange, opt_fromEditing);
     });
 
     if (!this.currentRange_) {
@@ -214,8 +228,7 @@ export class Background extends ChromeVoxState {
     let selectedRange;
     let msg;
 
-    if (this.pageSel_ && this.pageSel_.isValid() && range.isValid() &&
-        !opt_skipSettingSelection) {
+    if (this.pageSel_ && this.pageSel_.isValid() && range.isValid()) {
       // Suppress hints.
       o.withoutHints();
 
@@ -229,7 +242,7 @@ export class Background extends ChromeVoxState {
       if (pageRootStart !== pageRootEnd || pageRootStart !== curRootStart ||
           pageRootEnd !== curRootEnd) {
         o.format('@end_selection');
-        DesktopAutomationHandler.instance.ignoreDocumentSelectionFromAction(
+        DesktopAutomationInterface.instance.ignoreDocumentSelectionFromAction(
             false);
         this.pageSel_ = null;
       } else {
@@ -315,7 +328,7 @@ export class Background extends ChromeVoxState {
           const isClassicEnabled = false;
           port.postMessage({target: 'next', isClassicEnabled});
         } else if (action === 'onCommand') {
-          CommandHandler.onCommand(msg['command']);
+          CommandHandlerInterface.instance.onCommand(msg['command']);
         } else if (action === 'flushNextUtterance') {
           Output.forceModeForNextSpeechUtterance(QueueMode.FLUSH);
         }

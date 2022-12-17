@@ -10,7 +10,6 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
-#include "base/cxx17_backports.h"
 #include "base/location.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
@@ -181,7 +180,7 @@ const MockTransaction* FindMockTransaction(const GURL& url) {
     return it->second;
 
   // look for builtins:
-  for (size_t i = 0; i < base::size(kBuiltinMockTransactions); ++i) {
+  for (size_t i = 0; i < std::size(kBuiltinMockTransactions); ++i) {
     if (url == GURL(kBuiltinMockTransactions[i]->url))
       return kBuiltinMockTransactions[i];
   }
@@ -512,6 +511,7 @@ int MockNetworkTransaction::StartInternal(const HttpRequestInfo* request,
 
   response_.was_cached = false;
   response_.network_accessed = true;
+  response_.remote_endpoint = t->transport_info.endpoint;
 
   response_.response_time = transaction_factory_->Now();
   if (!t->response_time.is_null())
@@ -575,9 +575,9 @@ int MockNetworkTransaction::ResumeNetworkStart() {
   return ERR_IO_PENDING;
 }
 
-void MockNetworkTransaction::GetConnectionAttempts(
-    ConnectionAttempts* out) const {
+ConnectionAttempts MockNetworkTransaction::GetConnectionAttempts() const {
   NOTIMPLEMENTED();
+  return {};
 }
 
 void MockNetworkTransaction::CloseConnectionOnDestruction() {

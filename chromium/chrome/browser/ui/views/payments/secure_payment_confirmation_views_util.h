@@ -8,7 +8,7 @@
 #include <memory>
 #include <string>
 
-class SkBitmap;
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace views {
 class Label;
@@ -16,6 +16,10 @@ class ProgressBar;
 class View;
 class ImageView;
 }  // namespace views
+
+namespace gfx {
+class ImageSkia;
+}
 
 namespace payments {
 
@@ -66,7 +70,12 @@ std::unique_ptr<views::Label> CreateSecurePaymentConfirmationTitleLabel(
 
 /// Creates the image view for the SPC instrument icon.
 std::unique_ptr<views::ImageView>
-CreateSecurePaymentConfirmationInstrumentIconView(const SkBitmap& bitmap);
+CreateSecurePaymentConfirmationInstrumentIconView(const gfx::ImageSkia& bitmap);
+
+// Formats the merchant label by combining the name and origin for display.
+std::u16string FormatMerchantLabel(
+    const absl::optional<std::u16string>& merchant_name,
+    const absl::optional<std::u16string>& merchant_origin);
 
 }  // namespace payments
 

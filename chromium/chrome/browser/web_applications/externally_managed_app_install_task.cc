@@ -17,6 +17,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
 #include "chrome/browser/web_applications/web_app.h"
+#include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_install_finalizer.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/browser/web_applications/web_app_install_manager.h"
@@ -27,6 +28,7 @@
 #include "components/webapps/browser/installable/installable_manager.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
 #include "components/webapps/browser/installable/installable_params.h"
+#include "components/webapps/browser/uninstall_result_code.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
 
@@ -182,6 +184,7 @@ void ExternallyManagedAppInstallTask::UninstallPlaceholderApp(
   // Otherwise, uninstall the placeholder app.
   install_finalizer_->UninstallExternalWebAppByUrl(
       install_options_.install_url,
+      ConvertExternalInstallSourceToSource(install_options_.install_source),
       webapps::WebappUninstallSource::kPlaceholderReplacement,
       base::BindOnce(&ExternallyManagedAppInstallTask::OnPlaceholderUninstalled,
                      weak_ptr_factory_.GetWeakPtr(), web_contents,
@@ -191,8 +194,8 @@ void ExternallyManagedAppInstallTask::UninstallPlaceholderApp(
 void ExternallyManagedAppInstallTask::OnPlaceholderUninstalled(
     content::WebContents* web_contents,
     ResultCallback result_callback,
-    bool uninstalled) {
-  if (!uninstalled) {
+    webapps::UninstallResultCode code) {
+  if (code != webapps::UninstallResultCode::kSuccess) {
     LOG(ERROR) << "Failed to uninstall placeholder for: "
                << install_options_.install_url;
     std::move(result_callback)
@@ -297,9 +300,9 @@ void ExternallyManagedAppInstallTask::FinalizePlaceholderInstall(
 
   web_app_info.user_display_mode = install_options_.user_display_mode;
 
-  WebAppInstallFinalizer::FinalizeOptions options;
-  options.install_source = ConvertExternalInstallSourceToInstallSource(
-      install_options_.install_source);
+  WebAppInstallFinalizer::FinalizeOptions options(
+      ConvertExternalInstallSourceToInstallSource(
+          install_options_.install_source));
   // Overwrite fields if we are doing a forced reinstall, because some
   // values (custom name or icon) might have changed.
   options.overwrite_existing_manifest_fields = install_options_.force_reinstall;

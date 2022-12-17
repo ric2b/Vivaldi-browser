@@ -40,7 +40,6 @@
 #include "components/autofill/core/common/signatures.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/safe_browsing/buildflags.h"
-#include "content/public/renderer/document_state.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_view.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
@@ -434,17 +433,87 @@ void FillNonTypedOrFilledPropertiesMasks(std::vector<FormFieldData>* fields,
     if (field.properties_mask & kFilledOrTyped)
       continue;
 
-    for (const auto& pair : manager.field_data_map()) {
-      const auto& field_data = pair.second;
-
-      if ((field_data.second & kFilledOrTyped) &&
-          field_data.first == field.value) {
-        field.properties_mask |= field_data.second & kFilledOrTyped;
+    for (const auto& [field_id, field_data] : manager.field_data_map()) {
+      const absl::optional<std::u16string>& value = field_data.first;
+      FieldPropertiesMask properties = field_data.second;
+      if ((properties & kFilledOrTyped) && value == field.value) {
+        field.properties_mask |= properties & kFilledOrTyped;
         break;
       }
     }
   }
 }
+
+#if BUILDFLAG(IS_ANDROID)
+size_t GetIndexOfElement(const FormData& form_data,
+                         const WebInputElement& element) {
+  for (size_t i = 0; i < form_data.fields.size(); ++i) {
+    if (form_data.fields[i].unique_renderer_id.value() ==
+        element.UniqueRendererFormControlId())
+      return i;
+  }
+  return form_data.fields.size();
+}
+
+// Returns a prediction whether the form that contains |username_element| and
+// |password_element| will be ready for submission after filling these two
+// elements.
+mojom::SubmissionReadinessState CalculateSubmissionReadiness(
+    const FormData& form_data,
+    WebInputElement& username_element,
+    WebInputElement& password_element) {
+  DCHECK(!password_element.IsNull());
+
+  if (username_element.IsNull())
+    return mojom::SubmissionReadinessState::kNoUsernameField;
+
+  size_t username_index = GetIndexOfElement(form_data, username_element);
+  size_t password_index = GetIndexOfElement(form_data, password_element);
+  size_t number_of_elements = form_data.fields.size();
+  if (username_index == number_of_elements ||
+      password_index == number_of_elements) {
+    // This is unexpected. |form_data| is supposed to contain username and
+    // password elements.
+    return mojom::SubmissionReadinessState::kError;
+  }
+
+  auto ShouldIgnoreField = [](const FormFieldData& field) {
+    if (!field.IsVisible())
+      return true;
+    // Don't treat a checkbox (e.g. "remember me") as an input field that may
+    // block a form submission. Note: Don't use |check_status !=
+    // kNotCheckable|, a radio button is considered a "checkable" element too,
+    // but it should block a submission.
+    return field.form_control_type == "checkbox";
+  };
+
+  for (size_t i = username_index + 1; i < password_index; ++i) {
+    if (ShouldIgnoreField(form_data.fields[i]))
+      continue;
+    return mojom::SubmissionReadinessState::kFieldBetweenUsernameAndPassword;
+  }
+
+  if (!password_element.IsLastInputElementInForm())
+    return mojom::SubmissionReadinessState::kFieldAfterPasswordField;
+
+  size_t number_of_visible_elements = 0;
+  for (size_t i = 0; i < number_of_elements; ++i) {
+    if (ShouldIgnoreField(form_data.fields[i]))
+      continue;
+
+    if (username_index != i && password_index != i &&
+        form_data.fields[i].value.empty()) {
+      return mojom::SubmissionReadinessState::kEmptyFields;
+    }
+    number_of_visible_elements++;
+  }
+
+  if (number_of_visible_elements > 2)
+    return mojom::SubmissionReadinessState::kMoreThanTwoFields;
+
+  return mojom::SubmissionReadinessState::kTwoFields;
+}
+#endif  // BUILDFLAG(IS_ANDROID)
 
 }  // namespace
 
@@ -521,8 +590,10 @@ class PasswordAutofillAgent::DeferringPasswordManagerDriver
     DeferMsg(&mojom::PasswordManagerDriver::ShowPasswordSuggestions,
              text_direction, typed_username, options, bounds);
   }
-  void ShowTouchToFill() override {
-    DeferMsg(&mojom::PasswordManagerDriver::ShowTouchToFill);
+  void ShowTouchToFill(
+      autofill::mojom::SubmissionReadinessState submission_readiness) override {
+    DeferMsg(&mojom::PasswordManagerDriver::ShowTouchToFill,
+             submission_readiness);
   }
   void CheckSafeBrowsingReputation(const GURL& form_action,
                                    const GURL& frame_url) override {
@@ -985,7 +1056,23 @@ bool PasswordAutofillAgent::TryToShowTouchToFill(
   password_element.SetAutofillState(WebAutofillState::kPreviewed);
 
   focused_input_element_ = input_element;
-  GetPasswordManagerDriver().ShowTouchToFill();
+
+// TODO(crbug.com/1299430): Consider to disable |TryToShowTouchToFill| and
+// |ShowTouchToFill| on Desktop.
+#if BUILDFLAG(IS_ANDROID)
+  WebFormElement form = password_element.Form();
+  std::unique_ptr<FormData> form_data =
+      form.IsNull() ? GetFormDataFromUnownedInputElements()
+                    : GetFormDataFromWebForm(form);
+  GetPasswordManagerDriver().ShowTouchToFill(
+      form_data ? CalculateSubmissionReadiness(*form_data, username_element,
+                                               password_element)
+                : mojom::SubmissionReadinessState::kNoInformation);
+#else
+  GetPasswordManagerDriver().ShowTouchToFill(
+      mojom::SubmissionReadinessState::kNoInformation);
+#endif
+
   touch_to_fill_state_ = TouchToFillState::kIsShowing;
   return true;
 }
@@ -1477,17 +1564,19 @@ void PasswordAutofillAgent::TriggerFormSubmission() {
     return;
   }
 
-  // TODO(crbug.com/1283004): Support submission for <form>less forms too.
-  if (!form_control.Form().IsNull()) {
-    // |form_control| can only be |WebInputElement|, not |WebSelectElement|.
-    WebInputElement input = form_control.To<WebInputElement>();
+  // |form_control| can only be |WebInputElement|, not |WebSelectElement|.
+  WebInputElement input = form_control.To<WebInputElement>();
 
-    // TODO(crbug.com/1283004): Support filling single username fields too.
-    DCHECK(input.IsPasswordFieldForAutofill())
-        << "Form submission attempt for a non-password element";
+  // TODO(crbug.com/1283004): Support filling single username fields too.
+  DCHECK(input.IsPasswordFieldForAutofill())
+      << "Form submission attempt for a non-password element";
 
-    input.DispatchSimulatedEnterIfLastInputInForm();
-  }
+  // TODO(crbug.com/1283004): Ideally, |CalculateSubmissionReadiness| should be
+  // called to check all criteria. Use the DCHECK just for a sanity check now
+  // and remove it later.
+  DCHECK(input.IsLastInputElementInForm())
+      << "Form is not ready for submission";
+  input.DispatchSimulatedEnter();
 }
 #endif
 

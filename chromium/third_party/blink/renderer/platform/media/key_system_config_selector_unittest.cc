@@ -199,11 +199,9 @@ class FakeKeySystems : public media::KeySystems {
   ~FakeKeySystems() override = default;
 
   void UpdateIfNeeded(base::OnceClosure done_cb) override {
-    NOTREACHED() << "Not needed since IsUpToDate() always returns true";
+    // Call the callback directly since it's always up to date.
     std::move(done_cb).Run();
   }
-
-  bool IsUpToDate() override { return true; }
 
   std::string GetBaseKeySystemName(
       const std::string& key_system) const override {
@@ -396,7 +394,7 @@ class FakeWebLocalFrameDelegate
  public:
   FakeWebLocalFrameDelegate()
       : KeySystemConfigSelector::WebLocalFrameDelegate(nullptr) {}
-  bool IsCrossOriginToMainFrame() override { return is_cross_origin_; }
+  bool IsCrossOriginToOutermostMainFrame() override { return is_cross_origin_; }
   bool AllowStorageAccessSync(
       WebContentSettingsClient::StorageType storage_type) override {
     if (storage_type == WebContentSettingsClient::StorageType::kLocalStorage) {

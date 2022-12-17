@@ -6,11 +6,11 @@
 #define TOOLS_GN_BUILDER_RECORD_H_
 
 #include <memory>
-#include <set>
 #include <utility>
 
 #include "gn/item.h"
 #include "gn/location.h"
+#include "gn/pointer_set.h"
 
 class ParseNode;
 
@@ -28,7 +28,7 @@ class ParseNode;
 // the current build (should_generate is false).
 class BuilderRecord {
  public:
-  using BuilderRecordSet = std::set<BuilderRecord*>;
+  using BuilderRecordSet = PointerSet<BuilderRecord>;
 
   enum ItemType {
     ITEM_UNKNOWN,
@@ -38,7 +38,9 @@ class BuilderRecord {
     ITEM_POOL
   };
 
-  BuilderRecord(ItemType type, const Label& label);
+  BuilderRecord(ItemType type,
+                const Label& label,
+                const ParseNode* originally_referenced_from);
 
   ItemType type() const { return type_; }
   const Label& label() const { return label_; }
@@ -62,9 +64,6 @@ class BuilderRecord {
   const ParseNode* originally_referenced_from() const {
     return originally_referenced_from_;
   }
-  void set_originally_referenced_from(const ParseNode* pn) {
-    originally_referenced_from_ = pn;
-  }
 
   bool should_generate() const { return should_generate_; }
   void set_should_generate(bool sg) { should_generate_ = sg; }
@@ -72,16 +71,21 @@ class BuilderRecord {
   bool resolved() const { return resolved_; }
   void set_resolved(bool r) { resolved_ = r; }
 
-  bool can_resolve() const { return item_ && unresolved_deps_.empty(); }
+  bool can_resolve() const { return item_ && unresolved_count_ == 0; }
 
   // All records this one is depending on. Note that this includes gen_deps for
   // targets, which can have cycles.
   BuilderRecordSet& all_deps() { return all_deps_; }
   const BuilderRecordSet& all_deps() const { return all_deps_; }
 
-  // Unresolved records this one is depending on. A subset of all... above.
-  BuilderRecordSet& unresolved_deps() { return unresolved_deps_; }
-  const BuilderRecordSet& unresolved_deps() const { return unresolved_deps_; }
+  // Get the set of unresolved records this one depends on,
+  // as a list sorted by label.
+  std::vector<const BuilderRecord*> GetSortedUnresolvedDeps() const;
+
+  // Call this method to notify the record that its dependency |dep| was
+  // just resolved. This returns true to indicate that the current record
+  // should now be resolved.
+  bool OnResolvedDep(const BuilderRecord* dep);
 
   // Records that are waiting on this one to be resolved. This is the other
   // end of the "unresolved deps" arrow.
@@ -93,16 +97,21 @@ class BuilderRecord {
   void AddGenDep(BuilderRecord* record);
   void AddDep(BuilderRecord* record);
 
+  // Comparator function used to sort records from their label.
+  static bool LabelCompare(const BuilderRecord* a, const BuilderRecord* b) {
+    return a->label_ < b->label_;
+  }
+
  private:
   ItemType type_;
+  bool should_generate_ = false;
+  bool resolved_ = false;
   Label label_;
   std::unique_ptr<Item> item_;
   const ParseNode* originally_referenced_from_ = nullptr;
-  bool should_generate_ = false;
-  bool resolved_ = false;
 
+  size_t unresolved_count_ = 0;
   BuilderRecordSet all_deps_;
-  BuilderRecordSet unresolved_deps_;
   BuilderRecordSet waiting_on_resolution_;
 
   BuilderRecord(const BuilderRecord&) = delete;

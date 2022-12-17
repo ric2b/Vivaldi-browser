@@ -74,6 +74,33 @@ mojom::CSSOrigin ConvertStyleOriginToCSSOrigin(
   return css_origin;
 }
 
+mojom::ExecutionWorld ConvertExecutionWorld(
+    api::scripting::ExecutionWorld world) {
+  mojom::ExecutionWorld execution_world = mojom::ExecutionWorld::kIsolated;
+  switch (world) {
+    case api::scripting::EXECUTION_WORLD_NONE:
+    case api::scripting::EXECUTION_WORLD_ISOLATED:
+      break;  // Default to mojom::ExecutionWorld::kIsolated.
+    case api::scripting::EXECUTION_WORLD_MAIN:
+      execution_world = mojom::ExecutionWorld::kMain;
+  }
+
+  return execution_world;
+}
+
+api::scripting::ExecutionWorld ConvertExecutionWorldForAPI(
+    mojom::ExecutionWorld world) {
+  switch (world) {
+    case mojom::ExecutionWorld::kIsolated:
+      return api::scripting::EXECUTION_WORLD_ISOLATED;
+    case mojom::ExecutionWorld::kMain:
+      return api::scripting::EXECUTION_WORLD_MAIN;
+  }
+
+  NOTREACHED();
+  return api::scripting::EXECUTION_WORLD_ISOLATED;
+}
+
 std::string InjectionKeyForCode(const mojom::HostID& host_id,
                                 const std::string& code) {
   return ScriptExecutor::GenerateInjectionKey(host_id, /*script_url=*/GURL(),
@@ -305,6 +332,62 @@ bool HasPermissionToInjectIntoFrame(const PermissionsData& permissions,
   return permissions.CanAccessPage(committed_url, tab_id, error);
 }
 
+// Collects the frames for injection. Method will return false if an error is
+// encountered.
+bool CollectFramesForInjection(const api::scripting::InjectionTarget& target,
+                               content::WebContents* tab,
+                               std::set<int>& frame_ids,
+                               std::set<content::RenderFrameHost*>& frames,
+                               std::string* error_out) {
+  if (target.document_ids) {
+    for (const auto& id : *target.document_ids) {
+      ExtensionApiFrameIdMap::DocumentId document_id =
+          ExtensionApiFrameIdMap::DocumentIdFromString(id);
+
+      if (!document_id) {
+        *error_out = base::StringPrintf("Invalid document id %s", id.c_str());
+        return false;
+      }
+
+      content::RenderFrameHost* frame =
+          ExtensionApiFrameIdMap::Get()->GetRenderFrameHostByDocumentId(
+              document_id);
+
+      // If the frame was not found or it matched another tab reject this
+      // request.
+      if (!frame || content::WebContents::FromRenderFrameHost(frame) != tab) {
+        *error_out =
+            base::StringPrintf("No document with id %s in tab with id %d",
+                               id.c_str(), target.tab_id);
+        return false;
+      }
+
+      // Convert the documentId into a frameId since the content will be
+      // injected synchronously.
+      frame_ids.insert(ExtensionApiFrameIdMap::GetFrameId(frame));
+      frames.insert(frame);
+    }
+  } else {
+    if (target.frame_ids) {
+      frame_ids.insert(target.frame_ids->begin(), target.frame_ids->end());
+    } else {
+      frame_ids.insert(ExtensionApiFrameIdMap::kTopFrameId);
+    }
+
+    for (int frame_id : frame_ids) {
+      content::RenderFrameHost* frame =
+          ExtensionApiFrameIdMap::GetRenderFrameHostById(tab, frame_id);
+      if (!frame) {
+        *error_out = base::StringPrintf("No frame with id %d in tab with id %d",
+                                        frame_id, target.tab_id);
+        return false;
+      }
+      frames.insert(frame);
+    }
+  }
+  return true;
+}
+
 // Returns true if the `target` can be accessed with the given `permissions`.
 // If the target can be accessed, populates `script_executor_out`,
 // `frame_scope_out`, and `frame_ids_out` with the appropriate values;
@@ -327,8 +410,16 @@ bool CanAccessTarget(const PermissionsData& permissions,
     return false;
   }
 
-  if ((target.all_frames && *target.all_frames == true) && target.frame_ids) {
-    *error_out = "Cannot specify both 'allFrames' and 'frameIds'.";
+  if ((target.all_frames && *target.all_frames == true) &&
+      (target.frame_ids || target.document_ids)) {
+    *error_out =
+        "Cannot specify 'allFrames' if either 'frameIds' or 'documentIds' is "
+        "specified.";
+    return false;
+  }
+
+  if (target.frame_ids && target.document_ids) {
+    *error_out = "Cannot specify both 'frameIds' and 'documentIds'.";
     return false;
   }
 
@@ -341,25 +432,15 @@ bool CanAccessTarget(const PermissionsData& permissions,
           : ScriptExecutor::SPECIFIED_FRAMES;
 
   std::set<int> frame_ids;
-  if (target.frame_ids) {
-    frame_ids.insert(target.frame_ids->begin(), target.frame_ids->end());
-  } else {
-    frame_ids.insert(ExtensionApiFrameIdMap::kTopFrameId);
-  }
+  std::set<content::RenderFrameHost*> frames;
+  if (!CollectFramesForInjection(target, tab, frame_ids, frames, error_out))
+    return false;
 
   // TODO(devlin): If `allFrames` is true, we error out if the extension
   // doesn't have access to the top frame (even if it may inject in child
   // frames). This is inconsistent with content scripts (which can execute on
   // child frames), but consistent with the old tabs.executeScript() API.
-  for (int frame_id : frame_ids) {
-    content::RenderFrameHost* frame =
-        ExtensionApiFrameIdMap::GetRenderFrameHostById(tab, frame_id);
-    if (!frame) {
-      *error_out = base::StringPrintf("No frame with id %d in tab with id %d",
-                                      frame_id, target.tab_id);
-      return false;
-    }
-
+  for (content::RenderFrameHost* frame : frames) {
     DCHECK_EQ(content::WebContents::FromRenderFrameHost(frame), tab);
     if (!HasPermissionToInjectIntoFrame(permissions, target.tab_id, frame,
                                         error_out)) {
@@ -409,6 +490,7 @@ std::unique_ptr<UserScript> ParseUserScript(
 
   result->set_incognito_enabled(
       util::IsIncognitoEnabled(extension.id(), browser_context));
+  result->set_execution_world(ConvertExecutionWorld(content_script.world));
   return result;
 }
 
@@ -468,6 +550,7 @@ api::scripting::RegisteredContentScript CreateRegisteredContentScriptInfo(
       std::make_unique<bool>(script.match_origin_as_fallback() ==
                              MatchOriginAsFallbackBehavior::kAlways);
   script_info.run_at = ConvertRunLocationForAPI(script.run_location());
+  script_info.world = ConvertExecutionWorldForAPI(script.execution_world());
 
   return script_info;
 }
@@ -584,23 +667,27 @@ bool ScriptingExecuteScriptFunction::Execute(
     return false;
   }
 
-  mojom::ExecutionWorld execution_world = mojom::ExecutionWorld::kIsolated;
-  switch (injection_.world) {
-    case api::scripting::EXECUTION_WORLD_NONE:
-    case api::scripting::EXECUTION_WORLD_ISOLATED:
-      break;  // mojom::ExecutionWorld::kIsolated is correct.
-    case api::scripting::EXECUTION_WORLD_MAIN:
-      execution_world = mojom::ExecutionWorld::kMain;
-  }
+  mojom::ExecutionWorld execution_world =
+      ConvertExecutionWorld(injection_.world);
 
+  // Extensions can specify that the script should be injected "immediately".
+  // In this case, we specify kDocumentStart as the injection time. Due to
+  // inherent raciness between tab creation and load and this function
+  // execution, there is no guarantee that it will actually happen at
+  // document start, but the renderer will appropriately inject it
+  // immediately if document start has already passed.
+  mojom::RunLocation run_location =
+      injection_.inject_immediately && *injection_.inject_immediately
+          ? mojom::RunLocation::kDocumentStart
+          : mojom::RunLocation::kDocumentIdle;
   script_executor->ExecuteScript(
       mojom::HostID(mojom::HostID::HostType::kExtensions, extension()->id()),
       mojom::CodeInjection::NewJs(
           mojom::JSInjection::New(std::move(sources), execution_world,
                                   /*wants_result=*/true, user_gesture(),
                                   /*wait_for_promise=*/true)),
-      frame_scope, frame_ids, ScriptExecutor::MATCH_ABOUT_BLANK,
-      mojom::RunLocation::kDocumentIdle, ScriptExecutor::DEFAULT_PROCESS,
+      frame_scope, frame_ids, ScriptExecutor::MATCH_ABOUT_BLANK, run_location,
+      ScriptExecutor::DEFAULT_PROCESS,
       /* webview_src */ GURL(),
       base::BindOnce(&ScriptingExecuteScriptFunction::OnScriptExecuted, this));
 
@@ -627,6 +714,8 @@ void ScriptingExecuteScriptFunction::OnScriptExecuted(
     injection_result.result =
         base::Value::ToUniquePtrValue(std::move(result.value));
     injection_result.frame_id = result.frame_id;
+    if (result.document_id)
+      injection_result.document_id = result.document_id.ToString();
 
     // Put the top frame first; otherwise, any order.
     if (result.frame_id == ExtensionApiFrameIdMap::kTopFrameId) {

@@ -63,12 +63,12 @@ WebViewImpl.prototype.allowBlockedInsecureContent = function () {
 };
 
 WebViewImpl.prototype.sendRequest =
-  function (url, wasTyped, usePost, postData, extraHeaders) {
+  function (url, transition, fromUrlField, usePost, postData, extraHeaders) {
     if (!this.guest.getId()) {
       return;
     }
     WebViewPrivate.sendRequest(
-      this.guest.getId(), url, wasTyped, usePost, postData, extraHeaders);
+      this.guest.getId(), url, transition, fromUrlField, usePost, postData, extraHeaders);
   };
 
 }

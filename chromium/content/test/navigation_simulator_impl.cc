@@ -7,6 +7,7 @@
 #include <utility>
 #include "base/bind.h"
 #include "base/debug/stack_trace.h"
+#include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "content/browser/renderer_host/back_forward_cache_metrics.h"
@@ -19,6 +20,7 @@
 #include "content/common/content_navigation_policy.h"
 #include "content/common/navigation_params_utils.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/url_utils.h"
 #include "content/test/test_navigation_url_loader.h"
 #include "content/test/test_render_frame_host.h"
@@ -359,7 +361,9 @@ NavigationSimulatorImpl::NavigationSimulatorImpl(
       transition_(browser_initiated ? ui::PAGE_TRANSITION_TYPED
                                     : ui::PAGE_TRANSITION_LINK),
       contents_mime_type_("text/html"),
-      load_url_params_(nullptr) {
+      load_url_params_(nullptr),
+      force_before_unload_for_browser_initiated_(base::FeatureList::IsEnabled(
+          features::kAvoidUnnecessaryBeforeUnloadCheckSync)) {
   net::IPAddress address;
   CHECK(address.AssignFromIPLiteral("2001:db8::1"));
   remote_endpoint_ = net::IPEndPoint(address, 80);
@@ -521,6 +525,8 @@ void NavigationSimulatorImpl::Redirect(const GURL& new_url) {
   response->connection_info = http_connection_info_;
   response->ssl_info = ssl_info_;
 
+  response->headers =
+      base::MakeRefCounted<net::HttpResponseHeaders>(std::string());
   if (redirect_headers_) {
     response->headers = redirect_headers_;
     redirect_headers_ = nullptr;
@@ -564,6 +570,13 @@ void NavigationSimulatorImpl::ReadyToCommit() {
       InitializeFromStartedRequest(request_);
     } else {
       Start();
+
+      // If a request is blocked, we may not have a request. In this case, mark
+      // as failed and exit.
+      if (!request_) {
+        state_ = FAILED;
+        return;
+      }
 
       // For prerendered page activation, CommitDeferringConditions
       // asynchronously run before the navigation starts. Wait here until all
@@ -1104,6 +1117,7 @@ content::GlobalRequestID NavigationSimulatorImpl::GetGlobalRequestID() {
 }
 
 void NavigationSimulatorImpl::BrowserInitiatedStartAndWaitBeforeUnload() {
+  AddBeforeUnloadHandlerIfNecessary();
   if (reload_type_ != ReloadType::NONE) {
     web_contents_->GetController().Reload(reload_type_,
                                           false /*check_for_repost */);
@@ -1424,6 +1438,10 @@ bool NavigationSimulatorImpl::IsDeferred() {
   return !throttle_checks_complete_closure_.is_null();
 }
 
+bool NavigationSimulatorImpl::HasFailed() {
+  return state_ == FAILED;
+}
+
 bool NavigationSimulatorImpl::DidCreateNewEntry(
     bool same_document,
     bool should_replace_current_entry) {
@@ -1633,6 +1651,31 @@ bool NavigationSimulatorImpl::NeedsThrottleChecks() const {
 bool NavigationSimulatorImpl::NeedsPreCommitChecks() const {
   DCHECK(request_);
   return NeedsThrottleChecks() || request_->IsPageActivation();
+}
+
+void NavigationSimulatorImpl::AddBeforeUnloadHandlerIfNecessary() {
+  if (!force_before_unload_for_browser_initiated_)
+    return;
+
+  RenderFrameHostImpl* target_frame_render_frame_host_impl;
+  if (load_url_params_ && load_url_params_->frame_tree_node_id !=
+                              RenderFrameHost::kNoFrameTreeNodeId) {
+    FrameTreeNode* target_frame_tree_node =
+        FrameTreeNode::GloballyFindByID(load_url_params_->frame_tree_node_id);
+    DCHECK(target_frame_tree_node);
+    target_frame_render_frame_host_impl =
+        target_frame_tree_node->current_frame_host();
+  } else {
+    target_frame_render_frame_host_impl =
+        static_cast<RenderFrameHostImpl*>(web_contents_->GetMainFrame());
+  }
+  if (target_frame_render_frame_host_impl &&
+      !target_frame_render_frame_host_impl->GetSuddenTerminationDisablerState(
+          blink::mojom::SuddenTerminationDisablerType::kBeforeUnloadHandler)) {
+    target_frame_render_frame_host_impl->SuddenTerminationDisablerChanged(
+        true,
+        blink::mojom::SuddenTerminationDisablerType::kBeforeUnloadHandler);
+  }
 }
 
 }  // namespace content

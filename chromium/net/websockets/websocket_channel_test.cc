@@ -19,7 +19,6 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
-#include "base/cxx17_backports.h"
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -27,6 +26,7 @@
 #include "base/strings/string_piece.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "net/base/completion_once_callback.h"
 #include "net/base/io_buffer.h"
 #include "net/base/ip_endpoint.h"
@@ -38,6 +38,8 @@
 #include "net/test/test_with_task_environment.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_request_context.h"
+#include "net/url_request/url_request_context_builder.h"
+#include "net/url_request/url_request_test_util.h"
 #include "net/websockets/websocket_errors.h"
 #include "net/websockets/websocket_event_interface.h"
 #include "net/websockets/websocket_handshake_request_info.h"
@@ -134,7 +136,7 @@ const char kBinaryBlob[] = {'\n',   '\r',    // BACKWARDS CRNL
                             '\b',            // backspace
                             '\'',            // single-quote, special in PHP
 };
-const size_t kBinaryBlobSize = base::size(kBinaryBlob);
+const size_t kBinaryBlobSize = std::size(kBinaryBlob);
 
 const int kVeryBigTimeoutMillis = 60 * 60 * 24 * 1000;
 
@@ -796,7 +798,7 @@ class WebSocketChannelTest : public TestWithTaskEnvironment {
   // in |connect_data_|.
   void CreateChannelAndConnect() {
     channel_ = std::make_unique<WebSocketChannel>(
-        CreateEventInterface(), &connect_data_.url_request_context);
+        CreateEventInterface(), connect_data_.url_request_context.get());
     channel_->SendAddChannelRequestForTesting(
         connect_data_.socket_url, connect_data_.requested_subprotocols,
         connect_data_.origin, connect_data_.site_for_cookies,
@@ -835,7 +837,8 @@ class WebSocketChannelTest : public TestWithTaskEnvironment {
   // Grouped for readability.
   struct ConnectData {
     ConnectData()
-        : socket_url("ws://ws/"),
+        : url_request_context(CreateTestURLRequestContextBuilder()->Build()),
+          socket_url("ws://ws/"),
           origin(url::Origin::Create(GURL("http://ws"))),
           site_for_cookies(SiteForCookies::FromUrl(GURL("http://ws/"))) {
       this->isolation_info =
@@ -844,7 +847,7 @@ class WebSocketChannelTest : public TestWithTaskEnvironment {
     }
 
     // URLRequestContext object.
-    URLRequestContext url_request_context;
+    std::unique_ptr<URLRequestContext> url_request_context;
 
     // URL to (pretend to) connect to.
     GURL socket_url;
@@ -988,7 +991,8 @@ TEST_F(WebSocketChannelTest, EverythingIsPassedToTheCreatorFunction) {
   const WebSocketStreamCreationCallbackArgumentSaver& actual =
       connect_data_.argument_saver;
 
-  EXPECT_EQ(&connect_data_.url_request_context, actual.url_request_context);
+  EXPECT_EQ(connect_data_.url_request_context.get(),
+            actual.url_request_context);
 
   EXPECT_EQ(connect_data_.socket_url, actual.socket_url);
   EXPECT_EQ(connect_data_.origin.Serialize(), actual.origin.Serialize());

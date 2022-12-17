@@ -46,6 +46,7 @@
 #include "third_party/blink/renderer/core/imagebitmap/image_bitmap.h"
 #include "third_party/blink/renderer/core/messaging/message_port.h"
 #include "third_party/blink/renderer/core/mojo/mojo_handle.h"
+#include "third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.h"
 #include "third_party/blink/renderer/core/streams/readable_stream.h"
 #include "third_party/blink/renderer/core/streams/transform_stream.h"
 #include "third_party/blink/renderer/core/streams/writable_stream.h"
@@ -369,6 +370,12 @@ void V8ScriptValueSerializer::FinalizeTransfer(
   }
 }
 
+void V8ScriptValueSerializer::WriteUnguessableToken(
+    const base::UnguessableToken& token) {
+  WriteUint64(token.GetHighForSerialization());
+  WriteUint64(token.GetLowForSerialization());
+}
+
 void V8ScriptValueSerializer::WriteUTF8String(const String& string) {
   // TODO(jbroman): Ideally this method would take a WTF::StringView, but the
   // StringUTF8Adaptor trick doesn't yet work with StringView.
@@ -460,8 +467,11 @@ bool V8ScriptValueSerializer::WriteDOMObject(ScriptWrappable* wrappable,
     WriteTag(kImageBitmapTag);
     SkImageInfo info = image_bitmap->GetBitmapSkImageInfo();
     SerializedImageBitmapSettings color_params(info);
-    WriteUint32Enum(ImageSerializationTag::kPredefinedColorSpaceTag);
-    WriteUint32Enum(color_params.GetSerializedColorSpace());
+    WriteUint32Enum(ImageSerializationTag::kParametricColorSpaceTag);
+    DCHECK_EQ(color_params.GetSerializedSkColorSpace().size(),
+              kSerializedParametricColorSpaceLength);
+    for (const auto& value : color_params.GetSerializedSkColorSpace())
+      WriteDouble(value);
     WriteUint32Enum(ImageSerializationTag::kCanvasPixelFormatTag);
     WriteUint32Enum(color_params.GetSerializedPixelFormat());
     WriteUint32Enum(ImageSerializationTag::kCanvasOpacityModeTag);
@@ -493,7 +503,7 @@ bool V8ScriptValueSerializer::WriteDOMObject(ScriptWrappable* wrappable,
         image_data->GetPredefinedColorSpace(),
         image_data->GetImageDataStorageFormat());
     WriteUint32Enum(ImageSerializationTag::kPredefinedColorSpaceTag);
-    WriteUint32Enum(settings.GetSerializedColorSpace());
+    WriteUint32Enum(settings.GetSerializedPredefinedColorSpace());
     WriteUint32Enum(ImageSerializationTag::kImageDataStorageFormatTag);
     WriteUint32Enum(settings.GetSerializedImageDataStorageFormat());
     WriteUint32Enum(ImageSerializationTag::kEndTag);

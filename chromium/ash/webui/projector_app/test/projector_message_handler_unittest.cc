@@ -311,8 +311,6 @@ TEST_F(ProjectorMessageHandlerUnitTest, OnSodaError) {
 TEST_F(ProjectorMessageHandlerUnitTest, ShouldDownloadSoda) {
   ON_CALL(mock_app_client(), ShouldDownloadSoda())
       .WillByDefault(testing::Return(true));
-  ON_CALL(mock_app_client(), IsSpeechRecognitionAvailable())
-      .WillByDefault(testing::Return(false));
 
   base::ListValue list_args;
   list_args.Append(base::Value(kShouldDownloadSodaCallback));
@@ -346,11 +344,10 @@ TEST_F(ProjectorMessageHandlerUnitTest, InstallSoda) {
 TEST_F(ProjectorMessageHandlerUnitTest, GetPendingScreencasts) {
   const std::string name = "test_pending_screecast";
   const std::string path = "/root/projector_data/test_pending_screecast";
-  const base::Time created_time;
   const PendingScreencastSet expectedScreencasts{ash::PendingScreencast{
-      /*container_dir=*/base::FilePath(path),
-      /*name=*/name, /*total_size_in_bytes=*/1,
-      /*bytes_untransferred=*/0, /*created_time=*/created_time}};
+      /*container_dir=*/base::FilePath(path), /*name=*/name,
+      /*total_size_in_bytes=*/1, /*bytes_untransferred=*/0}};
+
   ON_CALL(mock_app_client(), GetPendingScreencasts())
       .WillByDefault(testing::ReturnRef(expectedScreencasts));
 
@@ -378,6 +375,7 @@ TEST_F(ProjectorMessageHandlerUnitTest, GetPendingScreencasts) {
   const auto& screencast = list_view[0];
   EXPECT_EQ(*(screencast.FindStringPath("name")), name);
   EXPECT_EQ(*(screencast.FindDoublePath("createdTime")), 0);
+  EXPECT_EQ(*(screencast.FindBoolPath("uploadFailed")), false);
 }
 
 TEST_F(ProjectorMessageHandlerUnitTest, OnScreencastsStateChange) {

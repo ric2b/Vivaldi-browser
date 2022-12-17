@@ -922,9 +922,26 @@ void CalendarBackend::CreateAccount(
 }
 
 void CalendarBackend::DeleteAccount(
-    AccountID id,
+    AccountID account_id,
     std::shared_ptr<DeleteAccountResult> result) {
-  if (db_->DeleteAccount(id)) {
+  CalendarIDs calendars;
+  db_->GetAllCalendarIdsForAccount(&calendars, account_id);
+
+  for (size_t i = 0; i < calendars.size(); i++) {
+    CalendarID calendarId = calendars[i];
+    auto delete_calendar_result =
+        std::shared_ptr<DeleteCalendarResult>(new DeleteCalendarResult());
+
+    DeleteCalendar(calendarId, delete_calendar_result);
+
+    if (!delete_calendar_result->success) {
+      result->success = false;
+      result->message = "Error deleting calendar";
+      return;
+    }
+  }
+
+  if (db_->DeleteAccount(account_id)) {
     result->success = true;
     NotifyCalendarChanged();
   } else {
@@ -999,7 +1016,7 @@ void CalendarBackend::Commit() {
   if (!db_)
     return;
 
-#if defined(OS_IOS)
+#if BUILDFLAG(IS_IOS)
   // Attempts to get the application running long enough to commit the
   // database transaction if it is currently being backgrounded.
   base::ios::ScopedCriticalAction scoped_critical_action;

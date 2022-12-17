@@ -20,11 +20,11 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/format_macros.h"
+#include "base/memory/ref_counted_memory.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "base/threading/thread.h"
@@ -32,6 +32,7 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/about_flags.h"
+#include "chrome/browser/ash/borealis/borealis_credits.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -131,15 +132,15 @@ typedef std::map<std::string, std::string> CountryRegionMap;
 // Returns country to region map with EU, EMEA and APAC countries.
 CountryRegionMap CreateCountryRegionMap() {
   CountryRegionMap region_map;
-  for (size_t i = 0; i < base::size(kApacCountries); ++i) {
+  for (size_t i = 0; i < std::size(kApacCountries); ++i) {
     region_map.emplace(kApacCountries[i], kApac);
   }
 
-  for (size_t i = 0; i < base::size(kEmeaCountries); ++i) {
+  for (size_t i = 0; i < std::size(kEmeaCountries); ++i) {
     region_map.emplace(kEmeaCountries[i], kEmea);
   }
 
-  for (size_t i = 0; i < base::size(kEuCountries); ++i) {
+  for (size_t i = 0; i < std::size(kEuCountries); ++i) {
     region_map.emplace(kEuCountries[i], kEu);
   }
   return region_map;
@@ -263,7 +264,8 @@ class ChromeOSTermsHandler
           ui::ResourceBundle::GetSharedInstance().LoadLocalizedResourceString(
               IDS_TERMS_HTML);
     }
-    std::move(callback_).Run(base::RefCountedString::TakeString(&contents_));
+    std::move(callback_).Run(
+        base::RefCountedString::TakeString(std::move(contents_)));
   }
 
   // Path in the URL.
@@ -334,7 +336,8 @@ class ChromeOSCreditsHandler
           ui::ResourceBundle::GetSharedInstance().LoadDataResourceString(
               IDR_OS_CREDITS_HTML);
     }
-    std::move(callback_).Run(base::RefCountedString::TakeString(&contents_));
+    std::move(callback_).Run(
+        base::RefCountedString::TakeString(std::move(contents_)));
   }
 
   // Path in the URL.
@@ -346,6 +349,21 @@ class ChromeOSCreditsHandler
   // Chrome OS credits contents that was loaded from file.
   std::string contents_;
 };
+
+void OnBorealisCreditsLoaded(content::URLDataSource::GotDataCallback callback,
+                             std::string credits_html) {
+  if (credits_html.empty()) {
+    credits_html = l10n_util::GetStringUTF8(IDS_BOREALIS_CREDITS_PLACEHOLDER);
+  }
+  std::move(callback).Run(
+      base::RefCountedString::TakeString(std::move(credits_html)));
+}
+
+void HandleBorealisCredits(Profile* profile,
+                           content::URLDataSource::GotDataCallback callback) {
+  borealis::LoadBorealisCredits(
+      profile, base::BindOnce(&OnBorealisCreditsLoaded, std::move(callback)));
+}
 
 class CrostiniCreditsHandler
     : public base::RefCountedThreadSafe<CrostiniCreditsHandler> {
@@ -422,7 +440,8 @@ class CrostiniCreditsHandler
     if (contents_.empty() && path_ != kKeyboardUtilsPath) {
       contents_ = l10n_util::GetStringUTF8(IDS_CROSTINI_CREDITS_PLACEHOLDER);
     }
-    std::move(callback_).Run(base::RefCountedString::TakeString(&contents_));
+    std::move(callback_).Run(
+        base::RefCountedString::TakeString(std::move(contents_)));
   }
 
   // Path in the URL.
@@ -672,6 +691,9 @@ void AboutUIHTMLSource::StartDataRequest(
   } else if (source_name_ == chrome::kChromeUICrostiniCreditsHost) {
     CrostiniCreditsHandler::Start(profile(), path, std::move(callback));
     return;
+  } else if (source_name_ == chrome::kChromeUIBorealisCreditsHost) {
+    HandleBorealisCredits(profile(), std::move(callback));
+    return;
 #endif
 #if !BUILDFLAG(IS_ANDROID)
   } else if (source_name_ == chrome::kChromeUITermsHost) {
@@ -694,7 +716,8 @@ void AboutUIHTMLSource::FinishDataRequest(
     const std::string& html,
     content::URLDataSource::GotDataCallback callback) {
   std::string html_copy(html);
-  std::move(callback).Run(base::RefCountedString::TakeString(&html_copy));
+  std::move(callback).Run(
+      base::RefCountedString::TakeString(std::move(html_copy)));
 }
 
 std::string AboutUIHTMLSource::GetMimeType(const std::string& path) {
@@ -716,7 +739,8 @@ std::string AboutUIHTMLSource::GetMimeType(const std::string& path) {
 bool AboutUIHTMLSource::ShouldAddContentSecurityPolicy() {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   if (source_name_ == chrome::kChromeUIOSCreditsHost ||
-      source_name_ == chrome::kChromeUICrostiniCreditsHost) {
+      source_name_ == chrome::kChromeUICrostiniCreditsHost ||
+      source_name_ == chrome::kChromeUIBorealisCreditsHost) {
     return false;
   }
 #endif

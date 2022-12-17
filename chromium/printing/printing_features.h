@@ -28,6 +28,8 @@ extern const base::Feature kPrintWithPostScriptType42Fonts;
 COMPONENT_EXPORT(PRINTING_BASE)
 extern const base::Feature kPrintWithReducedRasterization;
 COMPONENT_EXPORT(PRINTING_BASE)
+extern const base::Feature kReadPrinterCapabilitiesWithXps;
+COMPONENT_EXPORT(PRINTING_BASE)
 extern const base::Feature kUseXpsForPrinting;
 COMPONENT_EXPORT(PRINTING_BASE)
 extern const base::Feature kUseXpsForPrintingFromPdf;
@@ -48,6 +50,11 @@ extern const base::Feature kEnableOopPrintDrivers;
 COMPONENT_EXPORT(PRINTING_BASE)
 extern const base::FeatureParam<bool> kEnableOopPrintDriversJobPrint;
 #endif  // BUILDFLAG(ENABLE_OOP_PRINTING)
+
+#if BUILDFLAG(ENABLE_PRINT_CONTENT_ANALYSIS)
+COMPONENT_EXPORT(PRINTING_BASE)
+extern const base::Feature kEnablePrintContentAnalysis;
+#endif  // BUILDFLAG(ENABLE_PRINT_CONTENT_ANALYSIS)
 
 }  // namespace features
 }  // namespace printing

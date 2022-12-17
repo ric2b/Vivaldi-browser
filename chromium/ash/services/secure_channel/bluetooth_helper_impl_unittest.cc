@@ -6,6 +6,8 @@
 
 #include <memory>
 
+#include "ash/components/multidevice/remote_device_cache.h"
+#include "ash/components/multidevice/remote_device_test_util.h"
 #include "ash/services/secure_channel/ble_advertisement_generator.h"
 #include "ash/services/secure_channel/device_id_pair.h"
 #include "ash/services/secure_channel/fake_background_eid_generator.h"
@@ -14,13 +16,9 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
-#include "chromeos/components/multidevice/remote_device_cache.h"
-#include "chromeos/components/multidevice/remote_device_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-namespace chromeos {
-
-namespace secure_channel {
+namespace ash::secure_channel {
 
 namespace {
 
@@ -313,6 +311,4 @@ TEST_F(SecureChannelBluetoothHelperImplTest, BluetoothPublicAddress) {
                      test_local_device_1_.GetDeviceId()));
 }
 
-}  // namespace secure_channel
-
-}  // namespace chromeos
+}  // namespace ash::secure_channel

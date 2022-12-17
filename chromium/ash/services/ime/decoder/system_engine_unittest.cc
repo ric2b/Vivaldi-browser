@@ -11,7 +11,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-namespace chromeos {
+namespace ash {
 namespace ime {
 
 namespace {
@@ -32,13 +32,13 @@ mojo::ScopedMessagePipeHandle MessagePipeHandleFromInt(uint32_t handle) {
 struct MockInputMethod : public mojom::InputMethod {
   MOCK_METHOD(void,
               OnFocusDeprecated,
-              (chromeos::ime::mojom::InputFieldInfoPtr input_field_info,
-               chromeos::ime::mojom::InputMethodSettingsPtr settings),
+              (mojom::InputFieldInfoPtr input_field_info,
+               mojom::InputMethodSettingsPtr settings),
               (override));
   MOCK_METHOD(void,
               OnFocus,
-              (chromeos::ime::mojom::InputFieldInfoPtr input_field_info,
-               chromeos::ime::mojom::InputMethodSettingsPtr settings,
+              (mojom::InputFieldInfoPtr input_field_info,
+               mojom::InputMethodSettingsPtr settings,
                OnFocusCallback),
               (override));
   MOCK_METHOD(void, OnBlur, (), (override));
@@ -46,12 +46,12 @@ struct MockInputMethod : public mojom::InputMethod {
               OnSurroundingTextChanged,
               (const std::string& text,
                uint32_t offset,
-               chromeos::ime::mojom::SelectionRangePtr selection_range),
+               mojom::SelectionRangePtr selection_range),
               (override));
   MOCK_METHOD(void, OnCompositionCanceledBySystem, (), (override));
   MOCK_METHOD(void,
               ProcessKeyEvent,
-              (chromeos::ime::mojom::PhysicalKeyEventPtr event,
+              (mojom::PhysicalKeyEventPtr event,
                ProcessKeyEventCallback callback),
               (override));
   MOCK_METHOD(void,
@@ -82,12 +82,14 @@ ImeDecoder::EntryPoints CreateDecoderEntryPoints(TestDecoderState* state) {
   g_test_decoder_state = state;
 
   ImeDecoder::EntryPoints entry_points = {
-      .init_once = [](ImeCrosPlatform* platform) {},
-      .close = []() {},
+      .init_proto_mode = [](ImeCrosPlatform* platform) {},
+      .close_proto_mode = []() {},
       .supports = [](const char* ime_spec) { return true; },
       .activate_ime = [](const char* ime_spec,
                          ImeClientDelegate* delegate) { return true; },
       .process = [](const uint8_t* data, size_t size) {},
+      .init_mojo_mode = [](ImeCrosPlatform* platform) {},
+      .close_mojo_mode = []() {},
       .connect_to_input_method =
           [](const char* ime_spec, uint32_t receiver_pipe_handle,
              uint32_t host_pipe_handle, uint32_t host_pipe_version) {
@@ -219,4 +221,4 @@ TEST_F(SystemEngineTest, CanReceiveMessagesAfterBinding) {
 }
 
 }  // namespace ime
-}  // namespace chromeos
+}  // namespace ash

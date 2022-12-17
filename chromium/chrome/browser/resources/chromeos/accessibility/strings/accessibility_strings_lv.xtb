@@ -618,7 +618,6 @@
 <translation id="5170206230005240598">Braila parakstu funkcija ir iespējota.</translation>
 <translation id="5183440668879371625">Iepriekšējā rindiņa Braila rakstā</translation>
 <translation id="5189244881767082992">Rindiņa</translation>
-<translation id="5234747236692380506">rakstīt vārdu “<ph name="TEXT" />”</translation>
 <translation id="5263034204789987535">Gaiša kukurūzas</translation>
 <translation id="5263344797180442561">2. līmeņa virsraksts</translation>
 <translation id="528468243742722775">Beigas</translation>
@@ -685,6 +684,8 @@
 <translation id="5623842676595125836">Žurnāls</translation>
 <translation id="5628125749885014029">4. līmeņa virsraksts</translation>
 <translation id="5632083598315326067">Grafiskais simbols</translation>
+<translation id="5648939288050772726">Apsveicam! Esat veiksmīgi apguvis ChromeVox lietošanas pamatus. Jebkurā brīdī varat atvērt ChromeVox komandu izvēlni, vienlaikus nospiežot meklēšanas taustiņu un punkta taustiņu. Papildu informāciju par ChromeVox un Chrome OS skatiet tālāk norādītajos rakstos.
+    Ja esat beidzis darbu ar pamācību, izmantojiet ChromeVox, lai pārietu uz aizvēršanas pogu un noklikšķinātu uz tās.</translation>
 <translation id="5653397561111110475">Chromebook skārienekrāna pieejamības funkciju izmantošana</translation>
 <translation id="5655682562155942719">Pārejas komandas</translation>
 <translation id="56637627897541303">Teksta apgabals</translation>
@@ -794,6 +795,7 @@
 <translation id="641759969622533235">{COUNT,plural, =1{kols}zero{# kolu}one{# kols}other{# koli}}</translation>
 <translation id="6444046323172968959">Brīdinājuma dialoglodziņš</translation>
 <translation id="6452403590345320472">Satura rādītājs</translation>
+<translation id="6457542714329819968">rakstīt</translation>
 <translation id="6468049171101508116">Nākamā poga</translation>
 <translation id="646954774886932461">Rādītājs</translation>
 <translation id="6475604559827479857">Krāsa vārdu izcelšanai:</translation>
@@ -966,8 +968,6 @@
 <translation id="7701196182766842984">automātiski pabeigts saraksts</translation>
 <translation id="7713139339518499741">Dabiska balss</translation>
 <translation id="7714340021005120797">Nav nākamā kombinētā lodziņa.</translation>
-<translation id="772146615414628379">Apsveicam! Esat veiksmīgi apguvis ChromeVox lietošanas pamatus. Jebkurā brīdī varat atvērt ChromeVox komandu izvēlni, vienlaikus nospiežot meklēšanas taustiņu un punkta taustiņu. Papildu informāciju par ChromeVox un Chrome OS skatiet tālāk norādītajos rakstos.
-    Ja esat beidzis darbu ar pamācību, izmantojiet ChromeVox, lai pārietu uz aizvēršanas pogu un noklikšķinātu uz tās.</translation>
 <translation id="7724603315864178912">Izgriezt</translation>
 <translation id="7731785449856576010">Nav nākamā multivides logrīka.</translation>
 <translation id="7735498529470878067">Pārlūkošana pieskaroties var palīdzēt ātri uzzināt, kāds saturs tiek rādīts ekrānā.</translation>

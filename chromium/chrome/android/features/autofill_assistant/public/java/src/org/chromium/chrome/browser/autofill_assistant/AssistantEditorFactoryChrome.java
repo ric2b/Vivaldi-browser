@@ -6,11 +6,11 @@ package org.chromium.chrome.browser.autofill_assistant;
 
 import android.app.Activity;
 
-import org.chromium.chrome.browser.autofill_assistant.AssistantEditor.AssistantAddressEditor;
-import org.chromium.chrome.browser.autofill_assistant.AssistantEditor.AssistantContactEditor;
-import org.chromium.chrome.browser.autofill_assistant.AssistantEditor.AssistantPaymentInstrumentEditor;
+import org.chromium.components.autofill_assistant.AssistantEditor.AssistantAddressEditor;
+import org.chromium.components.autofill_assistant.AssistantEditor.AssistantContactEditor;
+import org.chromium.components.autofill_assistant.AssistantEditor.AssistantPaymentInstrumentEditor;
+import org.chromium.components.autofill_assistant.AssistantEditorFactory;
 import org.chromium.content_public.browser.WebContents;
-import org.chromium.ui.base.WindowAndroid;
 
 import java.util.List;
 
@@ -24,13 +24,6 @@ public class AssistantEditorFactoryChrome implements AssistantEditorFactory {
             boolean shouldStoreChanges) {
         return new AssistantContactEditorAutofill(
                 webContents, activity, requestName, requestPhone, requestEmail, shouldStoreChanges);
-    }
-
-    @Override
-    public AssistantContactEditor createAccountEditor(Activity activity,
-            WindowAndroid windowAndroid, String accountEmail, boolean requestEmail) {
-        return new AssistantContactEditorAccount(
-                activity, windowAndroid, accountEmail, requestEmail);
     }
 
     @Override

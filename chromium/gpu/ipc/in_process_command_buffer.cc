@@ -21,6 +21,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/sequence_checker.h"
+#include "base/synchronization/waitable_event.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -497,7 +498,8 @@ gpu::ContextResult InProcessCommandBuffer::InitializeOnGpuThread(
             this, command_buffer_.get(), task_executor_->shared_image_manager(),
             gpu_dependency_->memory_tracker(), task_executor_->outputter(),
             task_executor_->gpu_preferences(), context_state_));
-    gpu::ContextResult result = webgpu_decoder->Initialize();
+    gpu::ContextResult result =
+        webgpu_decoder->Initialize(task_executor_->gpu_feature_info());
     if (result != gpu::ContextResult::kSuccess) {
       DestroyOnGpuThread();
       DLOG(ERROR) << "Failed to initialize WebGPU decoder.";
@@ -566,8 +568,8 @@ gpu::ContextResult InProcessCommandBuffer::InitializeOnGpuThread(
           this, command_buffer_.get(), task_executor_->outputter(),
           task_executor_->gpu_feature_info(), task_executor_->gpu_preferences(),
           gpu_dependency_->memory_tracker(),
-          task_executor_->shared_image_manager(), context_state_,
-          true /*is_privileged*/));
+          task_executor_->shared_image_manager(), params.image_factory,
+          context_state_, true /*is_privileged*/));
     } else {
       decoder_.reset(gles2::GLES2Decoder::Create(this, command_buffer_.get(),
                                                  task_executor_->outputter(),

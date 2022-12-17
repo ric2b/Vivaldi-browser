@@ -43,6 +43,8 @@ by a child template that "extends" this file.
         </intent>
     </queries>
 
+    <!-- Vivaldi/Automotive -->
+    {% if is_oem_automotive_build == 'false' %}
     <!--
       Enable runtime permissions as uses-permission in tip of tree builds
       only for ease of development on Android L and earlier. For consumer
@@ -51,6 +53,7 @@ by a child template that "extends" this file.
     -->
     {% if channel in ['default'] %}
         <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+    {% endif %}
     {% endif %}
 
     <uses-permission-sdk-23 android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30"/>
@@ -79,10 +82,11 @@ by a child template that "extends" this file.
     <uses-permission-sdk-23 android:name="android.permission.READ_CONTACTS"/>
     -->
     <uses-permission-sdk-23 android:name="android.permission.REORDER_TASKS"/>
+    <!-- Vivaldi/Automotive -->
+    {% if is_oem_automotive_build == 'false' %}
     <uses-permission-sdk-23 android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
-
     <uses-permission android:name="android.permission.CAMERA" />
-    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+    {% endif %}
     <uses-permission android:name="android.permission.DOWNLOAD_WITHOUT_NOTIFICATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <!-- Not used by Vivaldi
@@ -93,16 +97,31 @@ by a child template that "extends" this file.
     <uses-permission android:name="android.permission.MANAGE_ACCOUNTS"/>
     -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
+    <!-- Vivaldi/Automotive -->
+    {% if is_oem_automotive_build == 'false' %}
     <uses-permission android:name="android.permission.NFC"/>
+    {% endif %}
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Vivaldi/Automotive -->
+    {% if is_oem_automotive_build == 'false' %}
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    {% endif %}
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+    <uses-permission-sdk-23 android:name="android.permission.READ_MEDIA_IMAGES"/>
+    <uses-permission-sdk-23 android:name="android.permission.READ_MEDIA_VIDEO"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+
+    <!-- Vivaldi/Automotive -->
+    {% if is_oem_automotive_build == 'false' %}
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    {% endif %}
     <uses-permission android:name="android.permission.USE_CREDENTIALS"/>
+    <!-- Vivaldi/Automotive -->
+    {% if is_oem_automotive_build == 'false' %}
     <uses-permission-sdk-23 android:name="android.permission.USE_BIOMETRIC"/>
     <uses-permission-sdk-23 android:name="android.permission.USE_FINGERPRINT"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
+    {% endif %}
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
     {% set enable_vr = enable_vr|default(0) %}
@@ -136,13 +155,19 @@ by a child template that "extends" this file.
     <permission android:name="{{ manifest_package }}.permission.TRANSLATE"
         android:protectionLevel="signature" />
 
+    <!-- Vivaldi/Automotive -->
+    {% if is_oem_automotive_build == 'false' %}
     <uses-permission android:name="{{ manifest_package }}.permission.C2D_MESSAGE" />
     <uses-permission android:name="{{ manifest_package }}.permission.READ_WRITE_BOOKMARK_FOLDERS" />
     <uses-permission android:name="{{ manifest_package }}.TOS_ACKED" />
+    {% endif %}
 
     <uses-permission android:name="com.chrome.permission.DEVICE_EXTRAS" />
     <uses-permission android:name="com.google.android.c2dm.permission.RECEIVE" />
+    <!-- Vivaldi/Automotive -->
+    {% if is_oem_automotive_build == 'false' %}
     <uses-permission android:name="com.android.launcher.permission.INSTALL_SHORTCUT"/>
+    {% endif %}
 
     <!-- Not used by Vivaldi
     <uses-permission android:name="com.google.android.apps.now.CURRENT_ACCOUNT_ACCESS" />
@@ -152,7 +177,10 @@ by a child template that "extends" this file.
 
     <!-- We may use GPS but it's not required -->
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+    <!-- Vivaldi/Automotive -->
+    {% if is_oem_automotive_build == 'false' %}
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+    {% endif %}
 
     <!--
       android.permission.RECORD_AUDIO makes this implied, however we don't
@@ -353,10 +381,6 @@ by a child template that "extends" this file.
             </intent-filter>
             <intent-filter>
                 <action android:name="com.sec.android.airview.HOVER" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.web.action.APP_ATTRIBUTION" />
-                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
             <meta-data android:name="android.app.searchable"
                 android:resource="@xml/searchable" />
@@ -1077,9 +1101,20 @@ by a child template that "extends" this file.
         android:exported="true"
         android:excludeFromRecents="true"
         android:launchMode="singleTop">
-            <!-- This activity can be started by GMSCore, and is thus exported
-            with a permission set, or can be started by the Android system in
-            the case that a USB device is attached. -->
+        </activity>
+
+        <!-- configChanges is set here to prevent the destruction of the
+             activity after configuration changes. Since the bulk of this
+             activity's logic is in a feature module, restoring the activity
+             via a Bundle doesn't work. -->
+        <activity
+        android:name="org.chromium.chrome.browser.webauth.authenticator.CableAuthenticatorUSBActivity"
+        android:configChanges="density|fontScale|keyboard|keyboardHidden|layoutDirection|locale|mcc|mnc|navigation|orientation|screenLayout|screenSize|smallestScreenSize|touchscreen|uiMode"
+        android:theme="@style/Theme.Chromium.Activity.Fullscreen"
+        android:label="@string/cablev2_activity_title"
+        android:exported="false"
+        android:excludeFromRecents="true"
+        android:launchMode="singleTop">
             <intent-filter>
                  <action android:name="android.hardware.usb.action.USB_ACCESSORY_ATTACHED" />
             </intent-filter>
@@ -1214,6 +1249,14 @@ by a child template that "extends" this file.
             </intent-filter>
         </receiver>
 
+        <!-- Android Notification permission metrics -->
+        <receiver android:name="org.chromium.chrome.browser.notifications.permissions.NotificationPermissionChangeReceiver"
+                  android:exported="false">
+          <intent-filter>
+            <action android:name="android.app.action.APP_BLOCK_STATE_CHANGED"/>
+          </intent-filter>
+        </receiver>
+
         <!-- Android Notification job service -->
         <service android:name="org.chromium.chrome.browser.notifications.NotificationJobService"
             android:exported="false"
@@ -1288,6 +1331,16 @@ by a child template that "extends" this file.
               <action android:name="org.chromium.intent.action.UPDATE_PAYMENT_DETAILS" />
             </intent-filter>
         </service>
+
+        <service
+            android:name="org.chromium.chrome.browser.webapps.WebApkInstallCoordinatorService"
+            android:exported="true"
+            tools:ignore="ExportedService">
+            <intent-filter>
+              <action android:name="org.chromium.intent.action.INSTALL_WEB_APK" />
+            </intent-filter>
+        </service>
+
 
         <receiver android:name="org.chromium.chrome.browser.announcement.AnnouncementNotificationManager$Receiver"
             android:exported="false"/>
@@ -1489,7 +1542,7 @@ by a child template that "extends" this file.
       </provider>
 
       <!-- Provider for image data from Drag and Drop. -->
-      <provider android:name="org.chromium.ui.base.DropDataContentProvider"
+      <provider android:name="org.chromium.ui.dragdrop.DropDataContentProvider"
           android:authorities="{{ manifest_package }}.DropDataProvider"
           android:exported="false"
           android:grantUriPermissions="true">
@@ -1502,6 +1555,18 @@ by a child template that "extends" this file.
           android:exported="false"
           tools:node="remove">
       </provider>
+
+      {% if is_oem_renault_build == 'true' %}
+      <service android:name="org.vivaldi.browser.media.MediaPlaybackService"
+          tools:ignore="ExportedService"
+          android:icon="@mipmap/layered_app_icon"
+          android:enabled="false"
+          android:exported="true">
+          <intent-filter>
+              <action android:name="android.media.browse.MediaBrowserService" />
+          </intent-filter>
+      </service>
+      {% endif %}
 
       <!-- The Play Core library added support for Play Asset Delivery (PAD), which is primarily
            used by game apps to allow dynamic delivery of resource bundles. Since chrome does not
@@ -1519,14 +1584,6 @@ by a child template that "extends" this file.
           android:exported="true">
           <path-permission android:path="/bookmarks/search_suggest_query"
                   android:readPermission="android.permission.GLOBAL_SEARCH" />
-      </provider>
-
-      <!-- Provider for App to Web impression attribution.
-           TODO(https://crbug.com/1210171): Gate this provider behind a custom permission? -->
-      <provider android:name="org.chromium.chrome.browser.attribution_reporting.AttributionReportingProvider"
-          android:authorities="{{ manifest_package }}.AttributionReporting"
-          android:exported="true"
-          tools:ignore="ExportedContentProvider">
       </provider>
 
       {% block base_application_definitions %}

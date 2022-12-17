@@ -131,7 +131,7 @@ void UpdateNotifierWindow::ShowNotification(const std::wstring& version) {
   LoadIconMetric(GetModuleHandle(NULL), MAKEINTRESOURCE(IDI_NOTIFIER_MAIN),
                  LIM_SMALL, &notify_icon.hIcon);
   SetNotificationString(
-      notify_icon.szTip, base::size(notify_icon.szTip),
+      notify_icon.szTip, std::size(notify_icon.szTip),
       GetLocalizedString(IDS_UPDATE_NOTIFICATION_TOOLTIP_BASE));
   notify_icon.dwInfoFlags = NIIF_USER;
 
@@ -145,14 +145,14 @@ void UpdateNotifierWindow::ShowNotification(const std::wstring& version) {
   Shell_NotifyIcon(NIM_SETVERSION, &notify_icon);
 
   SetNotificationString(
-      notify_icon.szInfo, base::size(notify_icon.szInfo),
+      notify_icon.szInfo, std::size(notify_icon.szInfo),
       GetLocalizedStringF(IDS_UPDATE_NOTIFICATION_TEXT_BASE, version));
   notify_icon.uTimeout = 30000;
   int message_id = WithDownloadUI(g_mode)
                        ? IDS_UPDATE_NOTIFICATION_TITLE_BASE
                        : IDS_UPDATE_DOWNLOAD_NOTIFICATION_TITLE_BASE;
   SetNotificationString(notify_icon.szInfoTitle,
-                        base::size(notify_icon.szInfoTitle),
+                        std::size(notify_icon.szInfoTitle),
                         GetLocalizedString(message_id));
   Shell_NotifyIcon(NIM_MODIFY, &notify_icon);
 }

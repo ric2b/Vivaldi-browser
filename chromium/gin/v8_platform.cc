@@ -8,7 +8,6 @@
 
 #include "base/bind.h"
 #include "base/bit_cast.h"
-#include "base/bits.h"
 #include "base/check_op.h"
 #include "base/debug/stack_trace.h"
 #include "base/location.h"
@@ -17,7 +16,6 @@
 #include "base/rand_util.h"
 #include "base/system/sys_info.h"
 #include "base/task/post_job.h"
-#include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/task/thread_pool/thread_pool_instance.h"

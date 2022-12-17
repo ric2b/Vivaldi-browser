@@ -351,9 +351,11 @@ ExtensionFunction::ResponseAction AutomationInternalEnableTabFunction::Run() {
   AutomationEventRouter::GetInstance()->RegisterListenerForOneTree(
       extension_id(), source_process_id(), GetSenderWebContents(), ax_tree_id);
 
+  api::automation_internal::EnableTabCallbackInfo info;
+  info.tab_id = tab_id;
+  info.tree_id = ax_tree_id.ToString();
   return RespondNow(
-      ArgumentList(api::automation_internal::EnableTab::Results::Create(
-          ax_tree_id.ToString(), tab_id)));
+      ArgumentList(api::automation_internal::EnableTab::Results::Create(info)));
 }
 
 absl::optional<std::string> AutomationInternalEnableTreeFunction::EnableTree(
@@ -621,6 +623,7 @@ AutomationInternalPerformActionFunction::ConvertToAXActionData(
     case api::automation::ACTION_TYPE_ANNOTATEPAGEIMAGES:
     case api::automation::ACTION_TYPE_SIGNALENDOFTEST:
     case api::automation::ACTION_TYPE_INTERNALINVALIDATETREE:
+    case api::automation::ACTION_TYPE_RUNSCREENAI:
     case api::automation::ACTION_TYPE_NONE:
       break;
   }

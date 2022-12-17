@@ -7,7 +7,7 @@
  * 'settings-safety-passwords-child' is the settings page containing the
  * safety check child showing the password status.
  */
-import {assertNotReached} from 'chrome://resources/js/assert.m.js';
+import {assertNotReached} from 'chrome://resources/js/assert_ts.js';
 import {I18nMixin} from 'chrome://resources/js/i18n_mixin.js';
 import {WebUIListenerMixin} from 'chrome://resources/js/web_ui_listener_mixin.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -76,7 +76,7 @@ export class SettingsSafetyCheckPasswordsChildElement extends
   private metricsBrowserProxy_: MetricsBrowserProxy =
       MetricsBrowserProxyImpl.getInstance();
 
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
 
     // Register for safety check status updates.
@@ -108,7 +108,6 @@ export class SettingsSafetyCheckPasswordsChildElement extends
         return SafetyCheckIconStatus.INFO;
       default:
         assertNotReached();
-        return SafetyCheckIconStatus.INFO;
     }
   }
 

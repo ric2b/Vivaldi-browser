@@ -46,7 +46,8 @@ CrosBluetoothConfig::CrosBluetoothConfig(
       discovery_session_manager_(initializer.CreateDiscoverySessionManager(
           adapter_state_controller_.get(),
           bluetooth_adapter,
-          discovered_devices_provider_.get())),
+          discovered_devices_provider_.get(),
+          fast_pair_delegate)),
       device_operation_handler_(initializer.CreateDeviceOperationHandler(
           adapter_state_controller_.get(),
           bluetooth_adapter,
@@ -55,12 +56,16 @@ CrosBluetoothConfig::CrosBluetoothConfig(
   if (fast_pair_delegate_) {
     BLUETOOTH_LOG(EVENT) << "Setting fast pair delegate's device name manager";
     fast_pair_delegate_->SetDeviceNameManager(device_name_manager_.get());
+    fast_pair_delegate_->SetAdapterStateController(
+        adapter_state_controller_.get());
   }
 }
 
 CrosBluetoothConfig::~CrosBluetoothConfig() {
-  if (fast_pair_delegate_)
+  if (fast_pair_delegate_) {
+    fast_pair_delegate_->SetAdapterStateController(nullptr);
     fast_pair_delegate_->SetDeviceNameManager(nullptr);
+  }
 }
 
 void CrosBluetoothConfig::SetPrefs(PrefService* logged_in_profile_prefs,
@@ -86,8 +91,18 @@ void CrosBluetoothConfig::ObserveDeviceStatusChanges(
       std::move(observer));
 }
 
+void CrosBluetoothConfig::ObserveDiscoverySessionStatusChanges(
+    mojo::PendingRemote<mojom::DiscoverySessionStatusObserver> observer) {
+  discovery_session_manager_->ObserveDiscoverySessionStatusChanges(
+      std::move(observer));
+}
+
 void CrosBluetoothConfig::SetBluetoothEnabledState(bool enabled) {
   bluetooth_power_controller_->SetBluetoothEnabledState(enabled);
+}
+
+void CrosBluetoothConfig::SetBluetoothHidDetectionActive(bool active) {
+  bluetooth_power_controller_->SetBluetoothHidDetectionActive(active);
 }
 
 void CrosBluetoothConfig::StartDiscovery(

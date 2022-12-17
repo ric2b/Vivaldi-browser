@@ -83,6 +83,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+// Vivaldi
+import android.view.GestureDetector;
+import org.chromium.base.ContextUtils;
+import org.chromium.base.ThreadUtils;
+import org.chromium.build.BuildConfig;
 import org.vivaldi.browser.common.VivaldiUtils;
 
 /**
@@ -98,6 +103,9 @@ public class CompositorViewHolder extends FrameLayout
                    ChromeAccessibilityUtil.Observer, TabObscuringHandler.Observer,
                    ViewGroup.OnHierarchyChangeListener {
     private static final long SYSTEM_UI_VIEWPORT_UPDATE_DELAY_MS = 500;
+
+    // Vivaldi
+    private GestureDetector mGestureDetector;
 
     /**
      * Initializer interface used to decouple initialization from the class that owns
@@ -124,6 +132,7 @@ public class CompositorViewHolder extends FrameLayout
 
     private EventOffsetHandler mEventOffsetHandler;
     private boolean mIsKeyboardShowing;
+    private boolean mNativeInitialized;
 
     private final Invalidator mInvalidator = new Invalidator();
     private LayoutManagerImpl mLayoutManager;
@@ -387,6 +396,20 @@ public class CompositorViewHolder extends FrameLayout
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             ApiHelperForO.setDefaultFocusHighlightEnabled(this, false);
         }
+        // Vivaldi
+        if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) {
+            // NOTE(jarle@vivaldi.com): Use long press to exit fullscreen mode for cars.
+            mGestureDetector = new GestureDetector(ContextUtils.getApplicationContext(),
+                        new GestureDetector.SimpleOnGestureListener() {
+                            @Override
+                            public void onLongPress(MotionEvent e) {
+                                if (getFullscreenManager() != null
+                                        && getFullscreenManager().getPersistentFullscreenMode()) {
+                                    getFullscreenManager().exitPersistentFullscreenMode();
+                                }
+                            }
+                        }, ThreadUtils.getUiThreadHandler());
+        }
     }
 
     private Point getViewportSize() {
@@ -629,6 +652,11 @@ public class CompositorViewHolder extends FrameLayout
 
     @Override
     public boolean onInterceptTouchEvent(MotionEvent e) {
+        // Vivaldi
+        if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) {
+            // NOTE(jarle@vivaldi.com): Intercept the touch event and send to the gesture detector.
+            mGestureDetector.onTouchEvent(e);
+        }
         super.onInterceptTouchEvent(e);
         for (TouchEventObserver o : mTouchEventObservers) {
             if (o.shouldInterceptTouchEvent(e)) return true;
@@ -1245,7 +1273,7 @@ public class CompositorViewHolder extends FrameLayout
 
     @Override
     public FullscreenManager getFullscreenManager() {
-        // Vivaldi
+        // Vivaldi: null pointer check.
         if (mBrowserControlsManager == null) return null;
         return mBrowserControlsManager.getFullscreenManager();
     }
@@ -1372,6 +1400,7 @@ public class CompositorViewHolder extends FrameLayout
         });
 
         onContentChanged();
+        mNativeInitialized = true;
     }
 
     private void updateContentOverlayVisibility(boolean show) {
@@ -1571,7 +1600,37 @@ public class CompositorViewHolder extends FrameLayout
         // that may have been added elsewhere.
         assert mLayoutManager != null;
         if (enabled && (mNodeProvider == null)) {
-            mAccessibilityView = new View(getContext());
+            mAccessibilityView = new View(getContext()) {
+                boolean mIsCheckingForVirtualViews;
+                List<VirtualView> mVirtualViews = new ArrayList<>();
+
+                /**
+                 * Checks if there are any a11y focusable VirtualViews. If there are, set the view
+                 * to be View.IMPORTANT_FOR_ACCESSIBILITY_AUTO (and therefore return true). If there
+                 * are not, set the view to be View.IMPORTANT_FOR_ACCESSIBILITY_NO (and therefore
+                 * return false).
+                 *
+                 * @return Whether or not the view should be a11y focusable.
+                 */
+                @Override
+                public boolean isImportantForAccessibility() {
+                    if (mNativeInitialized && !mIsCheckingForVirtualViews) {
+                        mIsCheckingForVirtualViews = true;
+                        mVirtualViews.clear();
+                        mLayoutManager.getVirtualViews(mVirtualViews);
+                        int importantForAccessibility = mVirtualViews.size() == 0
+                                ? View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                                : View.IMPORTANT_FOR_ACCESSIBILITY_AUTO;
+                        if (getImportantForAccessibility() != importantForAccessibility) {
+                            setImportantForAccessibility(importantForAccessibility);
+                            sendAccessibilityEvent(AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
+                        }
+                        mIsCheckingForVirtualViews = false;
+                    }
+
+                    return super.isImportantForAccessibility();
+                }
+            };
             addView(mAccessibilityView);
             mNodeProvider = new CompositorAccessibilityProvider(mAccessibilityView);
             ViewCompat.setAccessibilityDelegate(mAccessibilityView, mNodeProvider);

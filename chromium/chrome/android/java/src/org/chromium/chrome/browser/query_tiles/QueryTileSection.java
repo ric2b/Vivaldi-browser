@@ -50,6 +50,7 @@ public class QueryTileSection {
     private static final String VARIATION_SMALL_SCREEN_HEIGHT_THRESHOLD_DP =
             "small_screen_height_threshold_dp";
     private static final int DEFAULT_SMALL_SCREEN_HEIGHT_THRESHOLD_DP = 700;
+    private static final int DEFAULT_MOST_VISITED_MAX_ROWS = 1;
 
     private final ViewGroup mQueryTileSectionView;
     private final Callback<QueryInfo> mSubmitQueryCallback;
@@ -120,9 +121,7 @@ public class QueryTileSection {
     private void onTileClicked(ImageTile tile) {
         QueryTile queryTile = (QueryTile) tile;
         mTileUmaLogger.recordTileClicked(queryTile);
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.QUERY_TILES_LOCAL_ORDERING)) {
-            mTileProvider.onTileClicked(queryTile.id);
-        }
+        mTileProvider.onTileClicked(queryTile.id);
         QueryTileUtils.onQueryTileClicked();
 
         // TODO(qinmin): make isLastLevelTile a member variable of ImageTile.
@@ -183,6 +182,6 @@ public class QueryTileSection {
         return ChromeFeatureList.getFieldTrialParamByFeatureAsInt(ChromeFeatureList.QUERY_TILES,
                 isSmallScreen ? MOST_VISITED_MAX_ROWS_SMALL_SCREEN
                               : MOST_VISITED_MAX_ROWS_NORMAL_SCREEN,
-                2);
+                DEFAULT_MOST_VISITED_MAX_ROWS);
     }
 }

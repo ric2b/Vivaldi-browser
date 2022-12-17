@@ -161,6 +161,11 @@ BASE_EXPORT bool IsKeyboardPresentOnSlate(HWND hwnd, std::string* reason);
 // Returns true if the machine is enrolled to a domain.
 BASE_EXPORT bool IsEnrolledToDomain();
 
+// Returns true if either the device is joined to Azure Active Directory (AD) or
+// one or more Azure AD work accounts have been added on the device. This call
+// trigger some I/O when loading netapi32.dll to determine the management state.
+BASE_EXPORT bool IsJoinedToAzureAD();
+
 // Returns true if the machine is being managed by an MDM system.
 BASE_EXPORT bool IsDeviceRegisteredWithManagement();
 
@@ -227,6 +232,17 @@ BASE_EXPORT bool IsRunningUnderDesktopName(WStringPiece desktop_name);
 // Returns true if current session is a remote session.
 BASE_EXPORT bool IsCurrentSessionRemote();
 
+#if !defined(OFFICIAL_BUILD)
+// IsAppVerifierEnabled() indicates whether a newly created process will get
+// Application Verifier or pageheap injected into it. Only available in
+// unofficial builds to prevent abuse.
+BASE_EXPORT bool IsAppVerifierEnabled(const std::wstring& process_name);
+#endif  // !defined(OFFICIAL_BUILD)
+
+// IsAppVerifierLoaded() indicates whether Application Verifier is *already*
+// loaded into the current process.
+BASE_EXPORT bool IsAppVerifierLoaded();
+
 // Allows changing the domain enrolled state for the life time of the object.
 // The original state is restored upon destruction.
 class BASE_EXPORT ScopedDomainStateForTesting {
@@ -258,6 +274,21 @@ class BASE_EXPORT ScopedDeviceRegisteredWithManagementForTesting {
 
  private:
   bool initial_state_;
+};
+
+// Allows changing the Azure Active Directory join state for the lifetime of the
+// object. The original state is restored upon destruction.
+class BASE_EXPORT ScopedAzureADJoinStateForTesting {
+ public:
+  explicit ScopedAzureADJoinStateForTesting(bool state);
+  ScopedAzureADJoinStateForTesting(const ScopedAzureADJoinStateForTesting&) =
+      delete;
+  ScopedAzureADJoinStateForTesting& operator=(
+      const ScopedAzureADJoinStateForTesting&) = delete;
+  ~ScopedAzureADJoinStateForTesting();
+
+ private:
+  const bool initial_state_;
 };
 
 }  // namespace win

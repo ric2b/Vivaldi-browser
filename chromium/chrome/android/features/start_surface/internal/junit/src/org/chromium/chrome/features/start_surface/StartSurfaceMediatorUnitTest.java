@@ -142,6 +142,8 @@ public class StartSurfaceMediatorUnitTest {
     private PrefService mPrefService;
     @Mock
     private OneshotSupplier<StartSurface> mStartSurfaceSupplier;
+    @Mock
+    private Runnable mInitializeMVTilesRunnable;
     @Captor
     private ArgumentCaptor<TabModelSelectorObserver> mTabModelSelectorObserverCaptor;
     @Captor
@@ -1082,6 +1084,10 @@ public class StartSurfaceMediatorUnitTest {
                 .addObserver(mBrowserControlsStateProviderCaptor.capture());
         StartSurfaceMediator mediator =
                 createStartSurfaceMediator(/* isStartSurfaceEnabled= */ true, false);
+
+        // The top margin of homepage should be consistent with top controls min height/offset
+        // (indicator height).
+        doReturn(10).when(mBrowserControlsStateProvider).getTopControlsMinHeight();
         // Sets the current StartSurfaceState to SHOWING_START before calling the
         // {@link StartSurfaceMediator#showOverview()}. This is because if the current
         // StartSurfaceState is NOT_SHOWN, the state will be set default to SHOWING_TABSWITCHER in
@@ -1090,33 +1096,28 @@ public class StartSurfaceMediatorUnitTest {
         mediator.showOverview(false);
 
         verify(mBrowserControlsStateProvider).addObserver(ArgumentMatchers.any());
+        assertEquals("Wrong top content offset on homepage.", 10, mPropertyModel.get(TOP_MARGIN));
 
-        doReturn(100).when(mBrowserControlsStateProvider).getTopControlsHeight();
-        doReturn(20).when(mBrowserControlsStateProvider).getTopControlsMinHeight();
-        mBrowserControlsStateProviderCaptor.getValue().onControlsOffsetChanged(
-                100, 20, 0, 0, false);
+        onControlsOffsetChanged(/*topOffset=*/100, /*topControlsMinHeightOffset=*/20);
         assertEquals("Wrong top content offset on homepage.", 20, mPropertyModel.get(TOP_MARGIN));
 
-        doReturn(130).when(mBrowserControlsStateProvider).getTopControlsHeight();
-        doReturn(50).when(mBrowserControlsStateProvider).getTopControlsMinHeight();
-        mBrowserControlsStateProviderCaptor.getValue().onControlsOffsetChanged(
-                130, 50, 0, 0, false);
+        onControlsOffsetChanged(/*topOffset=*/130, /*topControlsMinHeightOffset=*/50);
         assertEquals("Wrong top content offset on homepage.", 50, mPropertyModel.get(TOP_MARGIN));
 
+        // The top margin of tab switcher surface should be consistent with top controls
+        // height/offset.
+        doReturn(15).when(mBrowserControlsStateProvider).getTopControlsHeight();
         mediator.setOverviewState(StartSurfaceState.SHOWING_TABSWITCHER);
         mediator.showOverview(false);
 
-        doReturn(100).when(mBrowserControlsStateProvider).getTopControlsHeight();
-        doReturn(20).when(mBrowserControlsStateProvider).getTopControlsMinHeight();
-        mBrowserControlsStateProviderCaptor.getValue().onControlsOffsetChanged(
-                100, 20, 0, 0, false);
+        assertEquals("Wrong top content offset on tab switcher surface.", 15,
+                mPropertyModel.get(TOP_MARGIN));
+
+        onControlsOffsetChanged(/*topOffset=*/100, /*topControlsMinHeightOffset=*/20);
         assertEquals("Wrong top content offset on tab switcher surface.", 100,
                 mPropertyModel.get(TOP_MARGIN));
 
-        doReturn(130).when(mBrowserControlsStateProvider).getTopControlsHeight();
-        doReturn(50).when(mBrowserControlsStateProvider).getTopControlsMinHeight();
-        mBrowserControlsStateProviderCaptor.getValue().onControlsOffsetChanged(
-                130, 50, 0, 0, false);
+        onControlsOffsetChanged(/*topOffset=*/130, /*topControlsMinHeightOffset=*/50);
         assertEquals("Wrong top content offset on tab switcher surface.", 130,
                 mPropertyModel.get(TOP_MARGIN));
     }
@@ -1145,9 +1146,11 @@ public class StartSurfaceMediatorUnitTest {
         verify(mMainTabGridController).showOverview(eq(false));
 
         when(mMainTabGridController.overviewVisible()).thenReturn(true);
-        mediator.initWithNative(mOmniboxStub, mExploreSurfaceCoordinatorFactory, mPrefService);
+        mediator.initWithNative(
+                mOmniboxStub, mExploreSurfaceCoordinatorFactory, mPrefService, null);
         when(mMainTabGridController.overviewVisible()).thenReturn(true);
-        mediator.initWithNative(mOmniboxStub, mExploreSurfaceCoordinatorFactory, mPrefService);
+        mediator.initWithNative(
+                mOmniboxStub, mExploreSurfaceCoordinatorFactory, mPrefService, null);
         assertThat(mPropertyModel.get(IS_EXPLORE_SURFACE_VISIBLE), equalTo(true));
     }
 
@@ -1263,6 +1266,20 @@ public class StartSurfaceMediatorUnitTest {
         assertThat(mPropertyModel.get(IS_TAB_CAROUSEL_TITLE_VISIBLE), equalTo(false));
     }
 
+    @Test
+    public void testInitializeMVTilesWhenShownHomepage() {
+        doReturn(false).when(mTabModelSelector).isIncognitoSelected();
+        doReturn(mVoiceRecognitionHandler).when(mOmniboxStub).getVoiceRecognitionHandler();
+        doReturn(true).when(mVoiceRecognitionHandler).isVoiceSearchEnabled();
+        doReturn(2).when(mNormalTabModel).getCount();
+        doReturn(true).when(mTabModelSelector).isTabStateInitialized();
+
+        StartSurfaceMediator mediator =
+                createStartSurfaceMediator(/* isStartSurfaceEnabled= */ true, false);
+        mediator.setOverviewState(StartSurfaceState.SHOWN_HOMEPAGE);
+        verify(mInitializeMVTilesRunnable).run();
+    }
+
     private StartSurfaceMediator createStartSurfaceMediator(
             boolean isStartSurfaceEnabled, boolean excludeMVTiles) {
         return createStartSurfaceMediator(
@@ -1274,21 +1291,33 @@ public class StartSurfaceMediatorUnitTest {
         StartSurfaceMediator mediator = createStartSurfaceMediatorWithoutInit(
                 isStartSurfaceEnabled, excludeMVTiles, hadWarmStart);
         mediator.initWithNative(mOmniboxStub,
-                isStartSurfaceEnabled ? mExploreSurfaceCoordinatorFactory : null, mPrefService);
+                isStartSurfaceEnabled ? mExploreSurfaceCoordinatorFactory : null, mPrefService,
+                null);
         mediator.initWithNative(mOmniboxStub,
-                isStartSurfaceEnabled ? mExploreSurfaceCoordinatorFactory : null, mPrefService);
+                isStartSurfaceEnabled ? mExploreSurfaceCoordinatorFactory : null, mPrefService,
+                null);
         return mediator;
     }
 
     private StartSurfaceMediator createStartSurfaceMediatorWithoutInit(
             boolean isStartSurfaceEnabled, boolean excludeMVTiles, boolean hadWarmStart) {
-        StartSurfaceMediator mediator = new StartSurfaceMediator(mMainTabGridController,
-                mTabModelSelector, !isStartSurfaceEnabled ? null : mPropertyModel,
-                isStartSurfaceEnabled ? mSecondaryTasksSurfaceInitializer : null,
-                isStartSurfaceEnabled, ContextUtils.getApplicationContext(),
-                mBrowserControlsStateProvider, mActivityStateChecker, excludeMVTiles,
-                true /* excludeQueryTiles */, mStartSurfaceSupplier, hadWarmStart,
-                new DummyJankTracker());
+        StartSurfaceMediator mediator =
+                new StartSurfaceMediator(mMainTabGridController, null /* tabSwitcherContainer */,
+                        mTabModelSelector, !isStartSurfaceEnabled ? null : mPropertyModel,
+                        isStartSurfaceEnabled ? mSecondaryTasksSurfaceInitializer : null,
+                        isStartSurfaceEnabled, ContextUtils.getApplicationContext(),
+                        mBrowserControlsStateProvider, mActivityStateChecker, excludeMVTiles,
+                        true /* excludeQueryTiles */, mStartSurfaceSupplier, hadWarmStart,
+                        new DummyJankTracker(), mInitializeMVTilesRunnable);
         return mediator;
+    }
+
+    private void onControlsOffsetChanged(int topOffset, int topControlsMinHeightOffset) {
+        doReturn(topOffset).when(mBrowserControlsStateProvider).getContentOffset();
+        doReturn(topControlsMinHeightOffset)
+                .when(mBrowserControlsStateProvider)
+                .getTopControlsMinHeightOffset();
+        mBrowserControlsStateProviderCaptor.getValue().onControlsOffsetChanged(
+                topOffset, topControlsMinHeightOffset, 0, 0, false);
     }
 }

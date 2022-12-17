@@ -119,7 +119,7 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {ContentSettingsType::BLUETOOTH_CHOOSER_DATA,
      kBluetoothChooserDataGroupType},
     {ContentSettingsType::WINDOW_PLACEMENT, "window-placement"},
-    {ContentSettingsType::FONT_ACCESS, "font-access"},
+    {ContentSettingsType::LOCAL_FONTS, "local-fonts"},
     {ContentSettingsType::FILE_SYSTEM_ACCESS_CHOOSER_DATA,
      "file-system-access-handles-data"},
 
@@ -165,11 +165,13 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {ContentSettingsType::HTTP_ALLOWED, nullptr},
     {ContentSettingsType::FORMFILL_METADATA, nullptr},
     {ContentSettingsType::FEDERATED_IDENTITY_ACTIVE_SESSION, nullptr},
+    {ContentSettingsType::FEDERATED_IDENTITY_API, nullptr},
     {ContentSettingsType::AUTO_DARK_WEB_CONTENT, nullptr},
     {ContentSettingsType::REQUEST_DESKTOP_SITE, nullptr},
+    {ContentSettingsType::GET_DISPLAY_MEDIA_SET_SELECT_ALL_SCREENS, nullptr},
 };
 
-static_assert(base::size(kContentSettingsTypeGroupNames) ==
+static_assert(std::size(kContentSettingsTypeGroupNames) ==
                   // ContentSettingsType starts at -1, so add 1 here.
                   static_cast<int32_t>(ContentSettingsType::NUM_TYPES) + 1,
               "kContentSettingsTypeGroupNames should have "
@@ -192,7 +194,7 @@ const SiteSettingSourceStringMapping kSiteSettingSourceStringMapping[] = {
     {SiteSettingSource::kPolicy, "policy"},
     {SiteSettingSource::kPreference, "preference"},
 };
-static_assert(base::size(kSiteSettingSourceStringMapping) ==
+static_assert(std::size(kSiteSettingSourceStringMapping) ==
                   static_cast<int>(SiteSettingSource::kNumSources),
               "kSiteSettingSourceStringMapping should have "
               "SiteSettingSource::kNumSources elements");
@@ -214,7 +216,7 @@ const PolicyIndicatorTypeStringMapping kPolicyIndicatorTypeStringMapping[] = {
     {PolicyIndicatorType::kParent, "parent"},
     {PolicyIndicatorType::kChildRestriction, "childRestriction"},
 };
-static_assert(base::size(kPolicyIndicatorTypeStringMapping) ==
+static_assert(std::size(kPolicyIndicatorTypeStringMapping) ==
                   static_cast<int>(PolicyIndicatorType::kNumIndicators),
               "kPolicyIndicatorStringMapping should have "
               "PolicyIndicatorType::kNumIndicators elements");
@@ -381,7 +383,7 @@ const ChooserTypeNameEntry kChooserTypeGroupNames[] = {
 }  // namespace
 
 bool HasRegisteredGroupName(ContentSettingsType type) {
-  for (size_t i = 0; i < base::size(kContentSettingsTypeGroupNames); ++i) {
+  for (size_t i = 0; i < std::size(kContentSettingsTypeGroupNames); ++i) {
     if (type == kContentSettingsTypeGroupNames[i].type &&
         kContentSettingsTypeGroupNames[i].name) {
       return true;
@@ -391,7 +393,7 @@ bool HasRegisteredGroupName(ContentSettingsType type) {
 }
 
 ContentSettingsType ContentSettingsTypeFromGroupName(base::StringPiece name) {
-  for (size_t i = 0; i < base::size(kContentSettingsTypeGroupNames); ++i) {
+  for (size_t i = 0; i < std::size(kContentSettingsTypeGroupNames); ++i) {
     if (name == kContentSettingsTypeGroupNames[i].name)
       return kContentSettingsTypeGroupNames[i].type;
   }
@@ -401,7 +403,7 @@ ContentSettingsType ContentSettingsTypeFromGroupName(base::StringPiece name) {
 }
 
 base::StringPiece ContentSettingsTypeToGroupName(ContentSettingsType type) {
-  for (size_t i = 0; i < base::size(kContentSettingsTypeGroupNames); ++i) {
+  for (size_t i = 0; i < std::size(kContentSettingsTypeGroupNames); ++i) {
     if (type == kContentSettingsTypeGroupNames[i].type) {
       const char* name = kContentSettingsTypeGroupNames[i].name;
       if (name)
@@ -425,12 +427,12 @@ const std::vector<ContentSettingsType>& GetVisiblePermissionCategories() {
       ContentSettingsType::BACKGROUND_SYNC,
       ContentSettingsType::CLIPBOARD_READ_WRITE,
       ContentSettingsType::FILE_SYSTEM_WRITE_GUARD,
-      ContentSettingsType::FONT_ACCESS,
       ContentSettingsType::GEOLOCATION,
       ContentSettingsType::HID_GUARD,
       ContentSettingsType::IDLE_DETECTION,
       ContentSettingsType::IMAGES,
       ContentSettingsType::JAVASCRIPT,
+      ContentSettingsType::LOCAL_FONTS,
       ContentSettingsType::MEDIASTREAM_CAMERA,
       ContentSettingsType::MEDIASTREAM_MIC,
       ContentSettingsType::MIDI_SYSEX,
@@ -493,22 +495,22 @@ base::Value GetValueForManagedState(const site_settings::ManagedState& state) {
 void AddExceptionForHostedApp(const std::string& url_pattern,
                               const extensions::Extension& app,
                               base::ListValue* exceptions) {
-  std::unique_ptr<base::DictionaryValue> exception(new base::DictionaryValue());
+  base::Value::Dict exception;
 
   std::string setting_string =
       content_settings::ContentSettingToString(CONTENT_SETTING_ALLOW);
   DCHECK(!setting_string.empty());
 
-  exception->SetStringKey(kSetting, setting_string);
-  exception->SetStringKey(kOrigin, url_pattern);
-  exception->SetStringKey(kDisplayName, url_pattern);
-  exception->SetStringKey(kEmbeddingOrigin, url_pattern);
-  exception->SetStringKey(
-      kSource, SiteSettingSourceToString(SiteSettingSource::kHostedApp));
-  exception->SetBoolKey(kIncognito, false);
-  exception->SetStringKey(kAppName, app.name());
-  exception->SetStringKey(kAppId, app.id());
-  exceptions->Append(std::move(exception));
+  exception.Set(kSetting, setting_string);
+  exception.Set(kOrigin, url_pattern);
+  exception.Set(kDisplayName, url_pattern);
+  exception.Set(kEmbeddingOrigin, url_pattern);
+  exception.Set(kSource,
+                SiteSettingSourceToString(SiteSettingSource::kHostedApp));
+  exception.Set(kIncognito, false);
+  exception.Set(kAppName, app.name());
+  exception.Set(kAppId, app.id());
+  exceptions->Append(base::Value(std::move(exception)));
 }
 
 // Create a DictionaryValue* that will act as a data source for a single row
@@ -727,7 +729,7 @@ void GetExceptionsForContentType(
 
   for (auto& one_provider_exceptions : all_provider_exceptions) {
     for (auto& exception : one_provider_exceptions)
-      exceptions->Append(std::move(exception));
+      exceptions->Append(base::Value::FromUniquePtrValue(std::move(exception)));
   }
 }
 
@@ -765,8 +767,8 @@ ContentSetting GetContentSettingForOrigin(
       permissions::PermissionStatusSource::UNSPECIFIED);
   if (permissions::PermissionUtil::IsPermission(content_type)) {
     result =
-        PermissionManagerFactory::GetForProfile(profile)->GetPermissionStatus(
-            content_type, origin, origin);
+        PermissionManagerFactory::GetForProfile(profile)
+            ->GetPermissionStatusForDisplayOnSettingsUI(content_type, origin);
   } else {
     DCHECK_EQ(base::Value::Type::INTEGER, value.type());
     result.content_setting = content_settings::ValueToContentSetting(value);

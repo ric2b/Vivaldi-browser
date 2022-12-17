@@ -7,9 +7,7 @@
  * and manipulate state.
  */
 
-import {reduce} from 'chrome://personalization/trusted/personalization_reducers.js';
-import {emptyState} from 'chrome://personalization/trusted/personalization_state.js';
-import {PersonalizationStore} from 'chrome://personalization/trusted/personalization_store.js';
+import {emptyState, PersonalizationStore, reduce} from 'chrome://personalization/trusted/personalization_app.js';
 import {Action} from 'chrome://resources/js/cr/ui/store.js';
 import {TestStore} from 'chrome://webui-test/test_store.js';
 
@@ -39,7 +37,7 @@ export class TestPersonalizationStore extends TestStore {
     return this.states_;
   }
 
-  replaceSingleton() {
+  override replaceSingleton() {
     PersonalizationStore.setInstance(this);
   }
 

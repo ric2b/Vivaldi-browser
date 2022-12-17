@@ -70,6 +70,7 @@ ContentClient* GetContentClient();
 // returns the old value. In browser tests it seems safest to call these in
 // SetUpOnMainThread() or you may get TSan errors due a race between the
 // browser "process" and the child "process" for the test both accessing it.
+CONTENT_EXPORT ContentClient* GetContentClientForTesting();
 CONTENT_EXPORT ContentBrowserClient* SetBrowserClientForTesting(
     ContentBrowserClient* b);
 CONTENT_EXPORT ContentRendererClient* SetRendererClientForTesting(
@@ -167,6 +168,9 @@ class CONTENT_EXPORT ContentClient {
   // Returns the raw bytes of a scale independent data resource.
   virtual base::RefCountedMemory* GetDataResourceBytes(int resource_id);
 
+  // Returns the string contents of a resource given the resource id.
+  virtual std::string GetDataResourceString(int resource_id);
+
   // Returns a native image given its id.
   virtual gfx::Image& GetNativeImageNamed(int resource_id);
 
@@ -204,8 +208,6 @@ class CONTENT_EXPORT ContentClient {
   virtual void ExposeInterfacesToBrowser(
       scoped_refptr<base::SequencedTaskRunner> io_task_runner,
       mojo::BinderMap* binders);
-
-  virtual std::u16string GetLocalizedProtocolName(const std::string&);
 
  private:
   friend class ContentClientInitializer;  // To set these pointers.

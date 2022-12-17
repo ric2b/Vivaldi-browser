@@ -33,6 +33,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/mixin_based_in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/services/app_service/public/cpp/app_types.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_handle.h"
@@ -188,7 +189,7 @@ content::WebContents* WebTimeLimitEnforcerThrottleTest::InstallAndLaunchWebApp(
                                                        std::move(web_app_info));
 
   if (allowlisted_app)
-    AllowlistApp(app_time::AppId(apps::mojom::AppType::kWeb, app_id));
+    AllowlistApp(app_time::AppId(apps::AppType::kWeb, app_id));
   base::RunLoop().RunUntilIdle();
 
   // Add a tab to |browser()| and return the newly added WebContents.
@@ -236,8 +237,13 @@ IN_PROC_BROWSER_TEST_F(WebTimeLimitEnforcerThrottleTest,
       params.navigated_or_inserted_contents));
 }
 
+#if BUILDFLAG(IS_CHROMEOS)
+#define MAYBE_WebBlockedAfterBrowser DISABLED_WebBlockedAfterBrowser
+#else
+#define MAYBE_WebBlockedAfterBrowser WebBlockedAfterBrowser
+#endif
 IN_PROC_BROWSER_TEST_F(WebTimeLimitEnforcerThrottleTest,
-                       WebBlockedAfterBrowser) {
+                       MAYBE_WebBlockedAfterBrowser) {
   GURL url = embedded_test_server()->GetURL(kExampleHost,
                                             "/supervised_user/simple.html");
   NavigateParams params(browser(), url,
@@ -408,7 +414,14 @@ IN_PROC_BROWSER_TEST_F(WebTimeLimitEnforcerThrottleTest,
   EXPECT_TRUE(IsErrorPageBeingShownInWebContents(web_contents3));
 }
 
-IN_PROC_BROWSER_TEST_F(WebTimeLimitEnforcerThrottleTest, WebContentTitleSet) {
+// TODO(crbug.com/1313933): Flaky on ChromeOS
+#if BUILDFLAG(IS_CHROMEOS)
+#define MAYBE_WebContentTitleSet DISABLED_WebContentTitleSet
+#else
+#define MAYBE_WebContentTitleSet WebContentTitleSet
+#endif
+IN_PROC_BROWSER_TEST_F(WebTimeLimitEnforcerThrottleTest,
+                       MAYBE_WebContentTitleSet) {
   GURL url = embedded_test_server()->GetURL(kExampleHost,
                                             "/supervised_user/simple.html");
   NavigateParams params(browser(), url,
@@ -429,15 +442,9 @@ IN_PROC_BROWSER_TEST_F(WebTimeLimitEnforcerThrottleTest, WebContentTitleSet) {
   EXPECT_EQ(web_contents->GetTitle(), title);
 }
 
-// TODO(crbug.com/1291093): Flaky on Linux.
 // TODO(crbug.com/1291093): Flaky on ChromeOS.
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
-#define MAYBE_EnsureQueryIsCleared DISABLED_EnsureQueryIsCleared
-#else
-#define MAYBE_EnsureQueryIsCleared EnsureQueryIsCleared
-#endif
 IN_PROC_BROWSER_TEST_F(WebTimeLimitEnforcerThrottleTest,
-                       MAYBE_EnsureQueryIsCleared) {
+                       DISABLED_EnsureQueryIsCleared) {
   AllowlistUrlRegx(kExampleHost);
   BlockWeb();
 

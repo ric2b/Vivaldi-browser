@@ -11,7 +11,6 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
-#include "base/cxx17_backports.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
@@ -19,6 +18,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/task_environment.h"
+#include "build/build_config.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/core/common/cloud/dm_auth.h"
 #include "components/policy/core/common/cloud/mock_device_management_service.h"
@@ -50,7 +50,7 @@ const char kServiceUrl[] = "https://example.com/management_service";
 // Encoded empty response messages for testing the error code paths.
 const char kResponseEmpty[] = "\x08\x00";
 
-#define PROTO_STRING(name) (std::string(name, base::size(name) - 1))
+#define PROTO_STRING(name) (std::string(name, std::size(name) - 1))
 
 // Some helper constants.
 const char kOAuthToken[] = "oauth-token";
@@ -58,6 +58,9 @@ const char kDMToken[] = "device-management-token";
 const char kClientID[] = "device-id";
 const char kRobotAuthCode[] = "robot-oauth-auth-code";
 const char kEnrollmentToken[] = "enrollment_token";
+#if BUILDFLAG(IS_IOS)
+const char kOAuthAuthorizationHeaderPrefix[] = "OAuth ";
+#endif
 
 // Unit tests for the device management policy service. The tests are run
 // against a TestURLLoaderFactory that is used to short-circuit the request
@@ -1113,10 +1116,16 @@ TEST_F(DeviceManagementRequestAuthTest, OnlyOAuthToken) {
       GetPendingRequest();
   ASSERT_TRUE(request);
 
+#if BUILDFLAG(IS_IOS)
+  EXPECT_EQ(base::StrCat({kOAuthAuthorizationHeaderPrefix, kOAuthToken}),
+            GetAuthHeader(*request));
+  EXPECT_TRUE(GetOAuthParams(*request).empty());
+#else
   const std::vector<std::string> params = GetOAuthParams(*request);
   ASSERT_EQ(1u, params.size());
   EXPECT_EQ(kOAuthToken, params[0]);
   EXPECT_FALSE(GetAuthHeader(*request));
+#endif
 
   SendResponse(net::OK, 200, std::string());
 }
@@ -1158,6 +1167,10 @@ TEST_F(DeviceManagementRequestAuthTest, OnlyEnrollmentToken) {
   SendResponse(net::OK, 200, std::string());
 }
 
+#if !BUILDFLAG(IS_IOS)
+// Cannot test requests with an oauth token and another authorization token on
+// iOS because they both use the "Authorization" header.
+
 TEST_F(DeviceManagementRequestAuthTest, OAuthAndDMToken) {
   std::unique_ptr<DeviceManagementService::Job> request_job(
       StartJobWithAuthData(DMAuth::FromDMToken(kDMToken), kOAuthToken));
@@ -1195,6 +1208,8 @@ TEST_F(DeviceManagementRequestAuthTest, OAuthAndEnrollmentToken) {
 
   SendResponse(net::OK, 200, std::string());
 }
+
+#endif
 
 #if defined(GTEST_HAS_DEATH_TEST)
 TEST_F(DeviceManagementRequestAuthTest, CannotUseOAuthTokenAsAuthData) {

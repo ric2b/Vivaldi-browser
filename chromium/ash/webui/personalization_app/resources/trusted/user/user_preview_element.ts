@@ -11,14 +11,16 @@ import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import 'chrome://resources/polymer/v3_0/paper-ripple/paper-ripple.js';
 
 import {Url} from 'chrome://resources/mojo/url/mojom/url.mojom-webui.js';
-import {html} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {UserInfo} from '../personalization_app.mojom-webui.js';
 import {Paths, PersonalizationRouter} from '../personalization_router_element.js';
 import {WithPersonalizationStore} from '../personalization_store.js';
-import {initializeUserData} from '../user/user_controller.js';
-import {UserImageObserver} from '../user/user_image_observer.js';
-import {getUserProvider} from '../user/user_interface_provider.js';
+
+import {initializeUserData} from './user_controller.js';
+import {UserImageObserver} from './user_image_observer.js';
+import {getUserProvider} from './user_interface_provider.js';
+import {getTemplate} from './user_preview_element.html.js';
+import {selectUserImageUrl} from './user_selectors.js';
 
 export class UserPreview extends WithPersonalizationStore {
   static get is() {
@@ -26,7 +28,7 @@ export class UserPreview extends WithPersonalizationStore {
   }
 
   static get template() {
-    return html`{__html_template__}`;
+    return getTemplate();
   }
 
   static get properties() {
@@ -34,21 +36,26 @@ export class UserPreview extends WithPersonalizationStore {
       clickable: {
         type: Boolean,
         value: false,
+        reflectToAttribute: true,
       },
-      image_: Object,
       info_: Object,
+      imageUrl_: {
+        type: String,
+        observer: 'onImageUrlChanged_',
+        value: null,
+      },
     };
   }
 
-  clickable: boolean;
-  private image_: Url|null;
+  public clickable: boolean;
   private info_: UserInfo|null;
+  private imageUrl_: Url|null;
 
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
     UserImageObserver.initUserImageObserverIfNeeded();
-    this.watch<UserPreview['image_']>('image_', state => state.user.image);
     this.watch<UserPreview['info_']>('info_', state => state.user.info);
+    this.watch<UserPreview['imageUrl_']>('imageUrl_', selectUserImageUrl);
     this.updateFromStore();
     initializeUserData(getUserProvider(), this.getStore());
   }
@@ -59,6 +66,14 @@ export class UserPreview extends WithPersonalizationStore {
 
   private onClickUserSubpageLink_() {
     PersonalizationRouter.instance().goToRoute(Paths.User);
+  }
+
+  private onImageUrlChanged_(_: Url|null, old: Url|null): void {
+    if (old && old.url.startsWith('blob:')) {
+      // Revoke old object urls to clear memory. This is safe to call multiple
+      // times.
+      URL.revokeObjectURL(old.url);
+    }
   }
 }
 

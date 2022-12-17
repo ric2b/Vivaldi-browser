@@ -12,6 +12,7 @@
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #import "base/strings/sys_string_conversions.h"
+#include "base/time/time.h"
 #include "base/values.h"
 #include "components/enterprise/browser/controller/browser_dm_token_storage.h"
 #include "components/enterprise/browser/controller/chrome_browser_cloud_management_controller.h"
@@ -145,7 +146,7 @@ void PolicyUIHandler::RegisterMessages() {
                           base::Unretained(this)));
 }
 
-void PolicyUIHandler::HandleCopyPoliciesJson(base::Value::ConstListView args) {
+void PolicyUIHandler::HandleCopyPoliciesJson(const base::Value::List& args) {
   NSString* jsonString = base::SysUTF8ToNSString(GetPoliciesAsJson());
   [UIPasteboard generalPasteboard].string = jsonString;
 }
@@ -211,11 +212,11 @@ base::Value PolicyUIHandler::GetPolicyValues() const {
 }
 
 void PolicyUIHandler::HandleListenPoliciesUpdates(
-    base::Value::ConstListView args) {
+    const base::Value::List& args) {
   OnRefreshPoliciesDone();
 }
 
-void PolicyUIHandler::HandleReloadPolicies(base::Value::ConstListView args) {
+void PolicyUIHandler::HandleReloadPolicies(const base::Value::List& args) {
   GetPolicyService()->RefreshPolicies(base::BindOnce(
       &PolicyUIHandler::OnRefreshPoliciesDone, weak_factory_.GetWeakPtr()));
 }

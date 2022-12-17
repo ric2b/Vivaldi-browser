@@ -300,7 +300,7 @@ base::DictionaryValue* ExtensionTabUtil::OpenTab(ExtensionFunction* function,
   navigate_params.tabstrip_index = index;
   navigate_params.user_gesture = false;
   navigate_params.tabstrip_add_types = add_types;
-  navigate_params.ext_data = params.ext_data.get();
+  navigate_params.viv_ext_data = params.viv_ext_data.get();
   Navigate(&navigate_params);
 
   // This happens in locked fullscreen mode.
@@ -510,7 +510,7 @@ std::unique_ptr<api::tabs::Tab> ExtensionTabUtil::CreateTabObject(
   ScrubTabForExtension(extension, contents, tab_object.get(),
                        scrub_tab_behavior);
 
-  tab_object->ext_data.reset(new std::string(contents->GetExtData()));
+  tab_object->viv_ext_data.reset(new std::string(contents->GetVivExtData()));
 
   return tab_object;
 }
@@ -583,7 +583,7 @@ ExtensionTabUtil::CreateWindowValueForExtension(
                        CreateTabList(&browser, extension, context)));
 
   if (browser.is_vivaldi())
-    result->SetString(vivaldi::kWindowExtDataKey, browser.ext_data());
+    result->SetString(vivaldi::kWindowExtDataKey, browser.viv_ext_data());
 
   return result;
 }
@@ -800,6 +800,24 @@ ExtensionTabUtil::GetAllActiveWebContentsForContext(
   }
 
   return active_contents;
+}
+
+// static
+bool ExtensionTabUtil::IsWebContentsInContext(
+    content::WebContents* web_contents,
+    content::BrowserContext* browser_context,
+    bool include_incognito) {
+  // Look at the WebContents BrowserContext and see if it is the same.
+  content::BrowserContext* web_contents_browser_context =
+      web_contents->GetBrowserContext();
+  if (web_contents_browser_context == browser_context)
+    return true;
+
+  // If not it might be to include the incongito mode, so we if the profiles
+  // are the same or the parent.
+  return include_incognito && Profile::FromBrowserContext(browser_context)
+                                  ->IsSameOrParent(Profile::FromBrowserContext(
+                                      web_contents_browser_context));
 }
 
 GURL ExtensionTabUtil::ResolvePossiblyRelativeURL(const std::string& url_string,

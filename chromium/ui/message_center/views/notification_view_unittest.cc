@@ -142,12 +142,17 @@ class NotificationViewTest : public views::ViewObserver,
   std::unique_ptr<Notification> CreateSimpleNotification() const {
     RichNotificationData data;
     data.settings_button_handler = SettingsButtonHandler::INLINE;
+    return CreateSimpleNotificationWithRichData(data);
+  }
 
+  std::unique_ptr<Notification> CreateSimpleNotificationWithRichData(
+      const RichNotificationData& optional_fields) const {
     std::unique_ptr<Notification> notification = std::make_unique<Notification>(
         NOTIFICATION_TYPE_BASE_FORMAT, std::string(kDefaultNotificationId),
-        u"title", u"message", CreateTestImage(80, 80), u"display source",
-        GURL(), NotifierId(NotifierType::APPLICATION, "extension_id"), data,
-        delegate_);
+        u"title", u"message",
+        ui::ImageModel::FromImage(CreateTestImage(80, 80)), u"display source",
+        GURL(), NotifierId(NotifierType::APPLICATION, "extension_id"),
+        optional_fields, delegate_);
     notification->set_small_image(CreateTestImage(16, 16));
     notification->set_image(CreateTestImage(320, 240));
 
@@ -206,16 +211,16 @@ class NotificationViewTest : public views::ViewObserver,
     gfx::Rect rect(canvas_size);
     while (rect.width() > 0 &&
            bitmap.getColor(rect.x(), kHalfHeight) != kBitmapColor)
-      rect.Inset(1, 0, 0, 0);
+      rect.Inset(gfx::Insets::TLBR(0, 1, 0, 0));
     while (rect.height() > 0 &&
            bitmap.getColor(kHalfWidth, rect.y()) != kBitmapColor)
-      rect.Inset(0, 1, 0, 0);
+      rect.Inset(gfx::Insets::TLBR(1, 0, 0, 0));
     while (rect.width() > 0 &&
            bitmap.getColor(rect.right() - 1, kHalfHeight) != kBitmapColor)
-      rect.Inset(0, 0, 1, 0);
+      rect.Inset(gfx::Insets::TLBR(0, 0, 0, 1));
     while (rect.height() > 0 &&
            bitmap.getColor(kHalfWidth, rect.bottom() - 1) != kBitmapColor)
-      rect.Inset(0, 0, 0, 1);
+      rect.Inset(gfx::Insets::TLBR(0, 0, 1, 0));
 
     return rect.size();
   }
@@ -338,24 +343,28 @@ TEST_F(NotificationViewTest, TestIconSizing) {
   ProportionalImageView* view = notification_view()->icon_view_;
 
   // Icons smaller than the maximum size should remain unscaled.
-  notification->set_icon(CreateTestImage(kIconSize / 2, kIconSize / 4));
+  notification->set_icon(
+      ui::ImageModel::FromImage(CreateTestImage(kIconSize / 2, kIconSize / 4)));
   UpdateNotificationViews(*notification);
   EXPECT_EQ(gfx::Size(kIconSize / 2, kIconSize / 4).ToString(),
             GetImagePaintSize(view).ToString());
 
   // Icons of exactly the intended icon size should remain unscaled.
-  notification->set_icon(CreateTestImage(kIconSize, kIconSize));
+  notification->set_icon(
+      ui::ImageModel::FromImage(CreateTestImage(kIconSize, kIconSize)));
   UpdateNotificationViews(*notification);
   EXPECT_EQ(gfx::Size(kIconSize, kIconSize).ToString(),
             GetImagePaintSize(view).ToString());
 
   // Icons over the maximum size should be scaled down, maintaining proportions.
-  notification->set_icon(CreateTestImage(2 * kIconSize, 2 * kIconSize));
+  notification->set_icon(
+      ui::ImageModel::FromImage(CreateTestImage(2 * kIconSize, 2 * kIconSize)));
   UpdateNotificationViews(*notification);
   EXPECT_EQ(gfx::Size(kIconSize, kIconSize).ToString(),
             GetImagePaintSize(view).ToString());
 
-  notification->set_icon(CreateTestImage(4 * kIconSize, 2 * kIconSize));
+  notification->set_icon(
+      ui::ImageModel::FromImage(CreateTestImage(4 * kIconSize, 2 * kIconSize)));
   UpdateNotificationViews(*notification);
   EXPECT_EQ(gfx::Size(kIconSize, kIconSize / 2).ToString(),
             GetImagePaintSize(view).ToString());
@@ -366,7 +375,7 @@ TEST_F(NotificationViewTest, LeftContentResizeForIcon) {
 
   // Create a notification without an icon.
   std::unique_ptr<Notification> notification = CreateSimpleNotification();
-  notification->set_icon(gfx::Image());
+  notification->set_icon(ui::ImageModel());
   notification->set_image(gfx::Image());
   UpdateNotificationViews(*notification);
 
@@ -374,7 +383,8 @@ TEST_F(NotificationViewTest, LeftContentResizeForIcon) {
   const int left_content_width = notification_view()->left_content_->width();
 
   // Update the notification, adding an icon.
-  notification->set_icon(CreateTestImage(kIconSize, kIconSize));
+  notification->set_icon(
+      ui::ImageModel::FromImage(CreateTestImage(kIconSize, kIconSize)));
   UpdateNotificationViews(*notification);
 
   // Left content should have less space now to show the icon.
@@ -517,6 +527,30 @@ TEST_F(NotificationViewTest, TestAccentColor) {
   EXPECT_TRUE(app_icon_color_matches(expected_color_title));
 }
 
+// Tests that the header row ignores the notification's accent color when the
+// flag is present. This includes the notification setting and dismiss buttons
+// in the top right.
+TEST_F(NotificationViewTest, TestAccentColorTextFlagAffectsHeaderRow) {
+  RichNotificationData data;
+  data.settings_button_handler = SettingsButtonHandler::INLINE;
+  data.accent_color = SK_ColorGREEN;
+  std::unique_ptr<Notification> notification;
+
+  data.ignore_accent_color_for_text = true;
+  notification = CreateSimpleNotificationWithRichData(data);
+  notification->set_type(NotificationType::NOTIFICATION_TYPE_SIMPLE);
+  UpdateNotificationViews(*notification);
+  EXPECT_FALSE(
+      notification_view()->header_row_->color_for_testing().has_value());
+
+  data.ignore_accent_color_for_text = false;
+  notification = CreateSimpleNotificationWithRichData(data);
+  notification->set_type(NotificationType::NOTIFICATION_TYPE_SIMPLE);
+  UpdateNotificationViews(*notification);
+  EXPECT_EQ(*notification_view()->header_row_->color_for_testing(),
+            data.accent_color);
+}
+
 TEST_F(NotificationViewTest, InkDropClipRect) {
   std::unique_ptr<Notification> notification = CreateSimpleNotification();
   notification->set_type(NotificationType::NOTIFICATION_TYPE_IMAGE);
@@ -551,8 +585,8 @@ TEST_F(NotificationViewTest, AppIconWebAppNotification) {
 
   std::unique_ptr<Notification> notification = std::make_unique<Notification>(
       NOTIFICATION_TYPE_BASE_FORMAT, std::string(kDefaultNotificationId),
-      u"title", u"message", CreateTestImage(80, 80), u"display source", GURL(),
-      notifier_id, data, delegate_);
+      u"title", u"message", ui::ImageModel::FromImage(CreateTestImage(80, 80)),
+      u"display source", GURL(), notifier_id, data, delegate_);
   notification->set_small_image(gfx::Image::CreateFrom1xBitmap(small_bitmap));
   notification->set_image(CreateTestImage(320, 240));
 
@@ -658,7 +692,7 @@ TEST_F(NotificationViewTest, InlineSettingsInkDropAnimation) {
 
   // Resize the widget by 1px to simulate the expand animation.
   gfx::Rect size = notification_view()->GetWidget()->GetWindowBoundsInScreen();
-  size.Inset(0, 0, 0, 1);
+  size.Inset(gfx::Insets::TLBR(0, 0, 1, 0));
   notification_view()->GetWidget()->SetBounds(size);
 
   views::InkDrop::Get(notification_view())->GetInkDrop()->RemoveObserver(this);

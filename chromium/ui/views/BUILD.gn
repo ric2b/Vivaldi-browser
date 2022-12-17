@@ -160,6 +160,7 @@ component("views") {
     "controls/prefix_delegate.h",
     "controls/prefix_selector.h",
     "controls/progress_bar.h",
+    "controls/progress_ring_utils.h",
     "controls/resize_area.h",
     "controls/resize_area_delegate.h",
     "controls/scroll_view.h",
@@ -199,7 +200,6 @@ component("views") {
     "focus/focus_manager_factory.h",
     "focus/focus_search.h",
     "focus/widget_focus_manager.h",
-    "image_model_utils.h",
     "input_event_activation_protector.h",
     "interaction/element_tracker_views.h",
     "interaction/interaction_sequence_views.h",
@@ -380,6 +380,7 @@ component("views") {
     "controls/native/native_view_host.cc",
     "controls/prefix_selector.cc",
     "controls/progress_bar.cc",
+    "controls/progress_ring_utils.cc",
     "controls/resize_area.cc",
     "controls/scroll_view.cc",
     "controls/scrollbar/base_scroll_bar_thumb.cc",
@@ -411,7 +412,6 @@ component("views") {
     "focus/focus_manager_factory.cc",
     "focus/focus_search.cc",
     "focus/widget_focus_manager.cc",
-    "image_model_utils.cc",
     "input_event_activation_protector.cc",
     "interaction/element_tracker_views.cc",
     "interaction/interaction_sequence_views.cc",
@@ -588,7 +588,7 @@ component("views") {
     }
   }
 
-  if (is_chromeos_ash || is_chromeos_lacros) {
+  if (is_chromeos) {
     sources += [ "controls/menu/menu_config_chromeos.cc" ]
     if (!is_chromeos_lacros) {
       public += [ "controls/views_text_services_context_menu_chromeos.h" ]
@@ -1054,7 +1054,7 @@ source_set("test_support") {
     deps += [ "//ui/ozone" ]
   }
 
-  if (use_ozone && (is_linux || is_chromeos_lacros) && enable_desktop_aura) {
+  if (use_ozone && enable_desktop_aura) {
     sources += [
       "test/test_desktop_screen_ozone.cc",
       "test/test_desktop_screen_ozone.h",
@@ -1139,7 +1139,6 @@ test("views_unittests") {
     "event_monitor_unittest.cc",
     "focus/focus_manager_unittest.cc",
     "focus/focus_traversal_unittest.cc",
-    "image_model_utils_unittest.cc",
     "interaction/element_tracker_views_unittest.cc",
     "interaction/interaction_sequence_views_unittest.cc",
     "interaction/interaction_test_util_views_unittest.cc",
@@ -1282,6 +1281,7 @@ test("views_unittests") {
       "cocoa/bridged_native_widget_unittest.mm",
       "cocoa/cocoa_mouse_capture_unittest.mm",
       "cocoa/drag_drop_client_mac_unittest.mm",
+      "cocoa/fullscreen_controller_unittest.cc",
       "controls/menu/menu_closure_animation_mac_unittest.cc",
       "controls/menu/menu_runner_cocoa_unittest.mm",
       "controls/native/native_view_host_mac_unittest.mm",

@@ -9,14 +9,12 @@
 #include <string>
 #include <utility>
 
+#include "ash/components/multidevice/remote_device_ref.h"
 #include "ash/services/secure_channel/data_with_timestamp.h"
 #include "ash/services/secure_channel/device_id_pair.h"
-#include "chromeos/components/multidevice/remote_device_ref.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
-namespace chromeos {
-
-namespace secure_channel {
+namespace ash::secure_channel {
 
 // Provides the ability to generate BLE advertisement service data and, given
 // service data that has been received in a BLE discovery session, identify the
@@ -65,13 +63,6 @@ class BluetoothHelper {
       const DeviceIdPairSet& device_id_pair_set) = 0;
 };
 
-}  // namespace secure_channel
-
-}  // namespace chromeos
-
-// TODO(https://crbug.com/1164001): remove after the migration is finished.
-namespace ash::secure_channel {
-using ::chromeos::secure_channel::BluetoothHelper;
-}
+}  // namespace ash::secure_channel
 
 #endif  // ASH_SERVICES_SECURE_CHANNEL_BLUETOOTH_HELPER_H_

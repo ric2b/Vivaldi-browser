@@ -213,7 +213,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   bool IsReady() override;
   BrowserContext* GetBrowserContext() override;
   bool InSameStoragePartition(StoragePartition* partition) override;
-  int GetID() override;
+  int GetID() const override;
   bool IsInitializedAndNotDead() override;
   void SetBlocked(bool blocked) override;
   bool IsBlocked() override;
@@ -276,7 +276,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   bool HostHasNotBeenUsed() override;
   void SetProcessLock(const IsolationContext& isolation_context,
                       const ProcessLock& process_lock) override;
-  ProcessLock GetProcessLock() override;
+  ProcessLock GetProcessLock() const override;
   bool IsProcessLockedToSiteForTesting() override;
   void BindCacheStorage(
       const network::CrossOriginEmbedderPolicy& cross_origin_embedder_policy,
@@ -291,12 +291,8 @@ class CONTENT_EXPORT RenderProcessHostImpl
       const url::Origin& origin,
       mojo::PendingReceiver<blink::mojom::BucketManagerHost> receiver) override;
   void ForceCrash() override;
-  void CleanupNetworkServicePluginExceptionsUponDestruction() override;
   std::string GetInfoForBrowserContextDestructionCrashReporting() override;
-  void WriteIntoTrace(perfetto::TracedValue context) override;
-  void WriteIntoTrace(
-      perfetto::TracedProto<perfetto::protos::pbzero::RenderProcessHost> proto)
-      override;
+  void WriteIntoTrace(perfetto::TracedProto<TraceProto> proto) const override;
   void EnableBlinkRuntimeFeatures(
       const std::vector<std::string>& features) override;
 #if BUILDFLAG(CLANG_PROFILING_INSIDE_SANDBOX)
@@ -668,16 +664,6 @@ class CONTENT_EXPORT RenderProcessHostImpl
       net::NetworkIsolationKey isolation_key,
       mojo::PendingReceiver<network::mojom::P2PSocketManager> receiver);
 
-  // Allows |process_id| to use an additional |allowed_request_initiator|
-  // (bypassing |request_initiator_origin_lock| enforcement).
-  //
-  // The exception will be removed when the corresponding RenderProcessHostImpl
-  // is destroyed (see
-  // |cleanup_network_service_plugin_exceptions_upon_destruction_|).
-  static void AddAllowedRequestInitiatorForPlugin(
-      int process_id,
-      const url::Origin& allowed_request_initiator);
-
   using IpcSendWatcher = base::RepeatingCallback<void(const IPC::Message& msg)>;
   void SetIpcSendWatcherForTesting(IpcSendWatcher watcher) {
     ipc_send_watcher_for_testing_ = std::move(watcher);
@@ -853,9 +839,18 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // report those histograms to UMA.
   void CreateSharedRendererHistogramAllocator();
 
+  // Retrieves the details of the terminating child process.
+  //
+  // If the process is no longer running, this will also reset the process
+  // handle and (where applicable) reap the zombie process.
+  //
+  // |already_dead| should be set to true if we already know the process is
+  // dead. See `ChildProcessLauncher::GetChildTerminationInfo()` for more info
+  // on this flag.
+  ChildProcessTerminationInfo GetChildTerminationInfo(bool already_dead);
+
   // Handle termination of our process.
-  void ProcessDied(bool already_dead,
-                   ChildProcessTerminationInfo* known_details);
+  void ProcessDied(const ChildProcessTerminationInfo& termination_info);
 
   // Destroy all objects that can cause methods to be invoked on this object or
   // any other that hang off it.
@@ -890,7 +885,12 @@ class CONTENT_EXPORT RenderProcessHostImpl
       SiteInstanceImpl* site_instance);
 
   void NotifyRendererOfLockedStateUpdate();
+
+#if BUILDFLAG(IS_ANDROID)
+  // Populates the ChildProcessTerminationInfo fields that are strictly related
+  // to renderer (This struct is also used for other child processes).
   void PopulateTerminationInfoRendererFields(ChildProcessTerminationInfo* info);
+#endif  // BUILDFLAG(IS_ANDROID)
 
   static void OnMojoError(int render_process_id, const std::string& error);
 
@@ -1146,8 +1146,6 @@ class CONTENT_EXPORT RenderProcessHostImpl
 
   std::unique_ptr<mojo::Receiver<viz::mojom::CompositingModeReporter>>
       compositing_mode_reporter_;
-
-  bool cleanup_network_service_plugin_exceptions_upon_destruction_ = false;
 
   // Fields for recording MediaStream UMA.
   bool has_recorded_media_stream_frame_depth_metric_ = false;

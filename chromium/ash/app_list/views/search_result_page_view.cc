@@ -27,9 +27,11 @@
 #include "ash/public/cpp/view_shadow.h"
 #include "ash/search_box/search_box_constants.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/style/system_shadow.h"
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/time/time.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/accessibility/platform/ax_unique_id.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -37,7 +39,6 @@
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
-#include "ui/compositor_extra/shadow.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/geometry/insets.h"
@@ -75,8 +76,9 @@ constexpr int kSearchBoxBottomSpacing = 1;
 // Minimum spacing between shelf and bottom of search box.
 constexpr int kSearchResultPageMinimumBottomMargin = 24;
 
-// The shadow elevation value for the shadow of the expanded search box.
-constexpr int kSearchBoxSearchResultShadowElevation = 12;
+// The shadow type for the shadow of the expanded search box.
+constexpr SystemShadow::Type kSearchBoxSearchResultShadowType =
+    SystemShadow::Type::kElevation12;
 
 // The amount of time by which notifications to accessibility framework about
 // result page changes are delayed.
@@ -161,7 +163,7 @@ class SearchResultPageView::HorizontalSeparator : public views::View {
   explicit HorizontalSeparator(int preferred_width)
       : preferred_width_(preferred_width) {
     SetBorder(views::CreateEmptyBorder(
-        gfx::Insets(0, kSeparatorPadding, 0, kSeparatorPadding)));
+        gfx::Insets::TLBR(0, kSeparatorPadding, 0, kSeparatorPadding)));
   }
 
   HorizontalSeparator(const HorizontalSeparator&) = delete;
@@ -192,8 +194,10 @@ SearchResultPageView::SearchResultPageView() : contents_view_(new views::View) {
   contents_view_->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical, gfx::Insets(), 0));
 
-  view_shadow_ =
-      std::make_unique<ViewShadow>(this, kSearchBoxSearchResultShadowElevation);
+  view_shadow_ = std::make_unique<ViewShadow>(
+      this,
+      SystemShadow::GetElevationFromType(kSearchBoxSearchResultShadowType));
+  view_shadow_->shadow()->SetShadowStyle(gfx::ShadowStyle::kChromeOSSystemUI);
   view_shadow_->SetRoundedCornerRadius(
       kSearchBoxBorderCornerRadiusSearchResult);
 
@@ -216,14 +220,14 @@ SearchResultPageView::SearchResultPageView() : contents_view_(new views::View) {
   // App list bubble search page has its own scroller and result selection
   // controller so we do not need to construct new ones here.
   if (features::IsProductivityLauncherEnabled()) {
-    contents_view_->SetBorder(views::CreateEmptyBorder(gfx::Insets(
+    contents_view_->SetBorder(views::CreateEmptyBorder(gfx::Insets::TLBR(
         kActiveSearchBoxHeight + kSearchBoxBottomSpacing + kSeparatorThickness,
         0, 0, 0)));
     AddChildView(contents_view_);
   } else {
     auto scroller = std::make_unique<views::ScrollView>();
     // Leaves a placeholder area for the search box and the separator below it.
-    scroller->SetBorder(views::CreateEmptyBorder(gfx::Insets(
+    scroller->SetBorder(views::CreateEmptyBorder(gfx::Insets::TLBR(
         kActiveSearchBoxHeight + kSearchBoxBottomSpacing + kSeparatorThickness,
         0, 0, 0)));
     scroller->SetDrawOverflowIndicator(false);
@@ -258,9 +262,12 @@ void SearchResultPageView::InitializeContainers(
     SearchBoxView* search_box_view) {
   DCHECK(view_delegate);
   view_delegate_ = view_delegate;
-  dialog_controller_ = std::make_unique<SearchResultPageDialogController>(this);
 
   if (features::IsProductivityLauncherEnabled()) {
+    // For productivity launcher, the dialog will be anchored to the search box
+    // to keep the position of dialogs consistent.
+    dialog_controller_ =
+        std::make_unique<SearchResultPageDialogController>(search_box_view);
     std::unique_ptr<ProductivityLauncherSearchView> search_view_ptr =
         std::make_unique<ProductivityLauncherSearchView>(
             view_delegate, dialog_controller_.get(), search_box_view);
@@ -268,6 +275,8 @@ void SearchResultPageView::InitializeContainers(
     contents_view_->AddChildView(
         std::make_unique<SearchCardView>(std::move(search_view_ptr)));
   } else {
+    dialog_controller_ =
+        std::make_unique<SearchResultPageDialogController>(this);
     privacy_container_view_ = AddSearchResultContainerView(
         std::make_unique<PrivacyContainerView>(view_delegate));
     search_result_tile_item_list_view_ = AddSearchResultContainerView(
@@ -324,7 +333,8 @@ gfx::Size SearchResultPageView::CalculatePreferredSize() const {
       std::max(kMinHeight,
                productivity_launcher_search_view_->TabletModePreferredHeight() +
                    kActiveSearchBoxHeight + kSearchBoxBottomSpacing +
-                   kSeparatorThickness),
+                   kSeparatorThickness +
+                   kExpandedSearchBoxCornerRadiusForProductivityLauncher),
       AppListPage::contents_view()->height());
   return gfx::Size(kWidth, adjusted_height);
 }
@@ -611,8 +621,10 @@ void SearchResultPageView::AnimateBetweenBounds(const gfx::Rect& from_rect,
 }
 
 void SearchResultPageView::OnAnimationBetweenBoundsEnded() {
-  view_shadow_ =
-      std::make_unique<ViewShadow>(this, kSearchBoxSearchResultShadowElevation);
+  view_shadow_ = std::make_unique<ViewShadow>(
+      this,
+      SystemShadow::GetElevationFromType(kSearchBoxSearchResultShadowType));
+  view_shadow_->shadow()->SetShadowStyle(gfx::ShadowStyle::kChromeOSSystemUI);
   view_shadow_->SetRoundedCornerRadius(
       GetCornerRadiusForSearchResultsState(current_search_results_state_));
 
@@ -776,7 +788,7 @@ void SearchResultPageView::OnHidden() {
   // being moved onto suggested apps when zero state is enabled.
   AppListPage::OnHidden();
   notify_a11y_results_changed_timer_.Stop();
-  dialog_controller_->SetEnabled(false);
+  dialog_controller_->Reset(false);
   SetVisible(false);
   for (auto* container_view : result_container_views_) {
     container_view->SetShown(false);
@@ -790,7 +802,7 @@ void SearchResultPageView::OnHidden() {
 void SearchResultPageView::OnShown() {
   AppListPage::OnShown();
 
-  dialog_controller_->SetEnabled(true);
+  dialog_controller_->Reset(true);
 
   for (auto* container_view : result_container_views_) {
     container_view->SetShown(ShouldShowSearchResultView());
@@ -845,7 +857,8 @@ gfx::Rect SearchResultPageView::GetPageBoundsForState(
   }
 
   gfx::Rect bounding_rect = contents_bounds;
-  bounding_rect.Inset(0, 0, 0, kSearchResultPageMinimumBottomMargin);
+  bounding_rect.Inset(
+      gfx::Insets::TLBR(0, 0, kSearchResultPageMinimumBottomMargin, 0));
 
   gfx::Rect preferred_bounds = gfx::Rect(
       search_box_bounds.origin(),

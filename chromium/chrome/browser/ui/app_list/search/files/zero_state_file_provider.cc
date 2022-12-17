@@ -17,7 +17,6 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "base/task/task_runner_util.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
@@ -108,7 +107,7 @@ ZeroStateFileProvider::ZeroStateFileProvider(Profile* profile)
     file_tasks_observer_.Observe(notifier);
 
     MrfuCache::Params params;
-    // 5 consecutive clicks to get a new file to a score of 2/3, and 10 clicks
+    // 5 consecutive clicks to get a new file to a score of 0.8, and 10 clicks
     // on other files to reduce its score by half.
     params.half_life = 10.0f;
     params.boost_factor = 5.0f;
@@ -138,6 +137,10 @@ ash::AppListSearchResultType ZeroStateFileProvider::ResultType() const {
 
 bool ZeroStateFileProvider::ShouldBlockZeroState() const {
   return true;
+}
+
+void ZeroStateFileProvider::Start(const std::u16string& query) {
+  ClearResultsSilently();
 }
 
 void ZeroStateFileProvider::StartZeroState() {

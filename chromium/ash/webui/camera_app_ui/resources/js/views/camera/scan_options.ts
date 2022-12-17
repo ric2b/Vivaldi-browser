@@ -19,15 +19,23 @@ enum ScanType {
   DOCUMENT = 'document',
 }
 
+/**
+ * Gets the scan type from element's data-scantype.
+ */
 function getScanTypeFromElement(el: HTMLInputElement): ScanType {
   return assertEnumVariant(ScanType, el.dataset['scantype']);
 }
 
+/**
+ * Gets HTMLInputElements that has the given scan type.
+ */
 function getElemetFromScanType(type: ScanType): HTMLInputElement {
   return dom.get(`input[data-scantype=${type}]`, HTMLInputElement);
 }
 
 const DEFAULT_SCAN_TYPE = ScanType.DOCUMENT;
+
+type ScanOptionsChangeListener = () => void;
 
 /**
  * Controller for the scan options of Camera view.
@@ -51,18 +59,10 @@ export class ScanOptions implements CameraUI {
 
   private readonly documentCornerOverylay: DocumentCornerOverlay;
 
-  /**
-   * Called when scan option changed.
-   * TODO(pihsun): Change to use a setter function to set this callback,
-   * instead of a public property.
-   */
-  onChange = (): void => {
-    // Do nothing.
-  };
+  private readonly onChangeListeners = new Set<ScanOptionsChangeListener>();
 
-  /*
-   * @param updatePointOfInterest function to update point of interest on the
-   *     stream.
+  /**
+   * @param cameraManager Camera manager instance.
    */
   constructor(private readonly cameraManager: CameraManager) {
     this.cameraManager.registerCameraUI(this);
@@ -70,24 +70,31 @@ export class ScanOptions implements CameraUI {
     this.documentCornerOverylay = new DocumentCornerOverlay(
         (p) => this.cameraManager.setPointOfInterest(p));
 
-    [this.photoBarcodeOption, ...this.scanOptions].forEach((opt) => {
-      opt.addEventListener('click', (evt) => {
+    for (const option of [this.photoBarcodeOption, ...this.scanOptions]) {
+      option.addEventListener('click', (evt) => {
         if (state.get(state.State.CAMERA_CONFIGURING)) {
           evt.preventDefault();
         }
       });
-    });
+    }
     this.photoBarcodeOption.addEventListener('change', () => {
       this.updateOption(
           this.photoBarcodeOption.checked ? ScanType.BARCODE : null);
     });
-    this.scanOptions.forEach((opt) => {
-      opt.addEventListener('change', () => {
-        if (opt.checked) {
+    for (const option of this.scanOptions) {
+      option.addEventListener('change', () => {
+        if (option.checked) {
           this.updateOption(this.getToggledScanOption());
         }
       });
-    });
+    }
+  }
+
+  /**
+   * Add listener for scan options change.
+   */
+  addOnChangeListener(listener: ScanOptionsChangeListener): void {
+    this.onChangeListeners.add(listener);
   }
 
   /**
@@ -156,7 +163,9 @@ export class ScanOptions implements CameraUI {
       await this.documentCornerOverylay.stop();
     }
 
-    this.onChange();
+    for (const listener of this.onChangeListeners) {
+      listener();
+    }
   }
 
   private stopBarcodeScanner() {

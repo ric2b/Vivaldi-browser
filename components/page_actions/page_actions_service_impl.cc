@@ -3,6 +3,7 @@
 #include "components/page_actions/page_actions_service_impl.h"
 
 #include "base/path_service.h"
+#include "build/build_config.h"
 #include "chrome/common/chrome_paths.h"
 #include "components/content_injection/content_injection_service.h"
 #include "components/content_injection/content_injection_service_factory.h"
@@ -20,7 +21,7 @@ constexpr char kJavascriptWorldName[] = "Vivaldi Page Actions";
 const base::FilePath::CharType kCSSExtension[] = FILE_PATH_LITERAL(".css");
 const base::FilePath::CharType kJSExtension[] = FILE_PATH_LITERAL(".js");
 
-#ifdef OS_ANDROID
+#if BUILDFLAG(IS_ANDROID)
 const base::FilePath::CharType kBuiltInPageActionsPath[] =
     FILE_PATH_LITERAL("assets/user_files.json");
 #else
@@ -80,7 +81,7 @@ ServiceImpl::~ServiceImpl() = default;
 
 void ServiceImpl::Load() {
   base::FilePath assets_path;
-#ifdef OS_ANDROID
+#if BUILDFLAG(IS_ANDROID)
   assets_path = base::FilePath(kBuiltInPageActionsPath);
   directories_.emplace(
       std::make_pair(assets_path.DirName(), ScriptDirectory()));
@@ -92,7 +93,7 @@ void ServiceImpl::Load() {
                                                weak_factory_.GetWeakPtr()),
                            assets_path));
 
-#ifndef OS_ANDROID
+#if !BUILDFLAG(IS_ANDROID)
   base::FilePath built_in_path;
   base::PathService::Get(chrome::DIR_RESOURCES, &built_in_path);
   AddPath(

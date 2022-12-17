@@ -77,6 +77,7 @@
 <translation id="2687403674020088961">Chặn tất cả cookie (không khuyến nghị)</translation>
 <translation id="2704606927547763573">Đã sao chép</translation>
 <translation id="2717722538473713889">Địa chỉ email</translation>
+<translation id="2750481671343847896">Các trang web có thể đưa ra lời nhắc đăng nhập từ các dịch vụ nhận dạng.</translation>
 <translation id="2785051990912111074">Lựa chọn này sẽ xóa cookie của <ph name="WEBSITE" /></translation>
 <translation id="2822354292072154809">Bạn có chắc muốn đặt lại tất cả các quyền của trang web cho <ph name="CHOSEN_OBJECT_NAME" /> không?</translation>
 <translation id="2870560284913253234">Trang web</translation>
@@ -112,6 +113,7 @@
 <translation id="3763247130972274048">Nhấn đúp vào bên trái hoặc bên phải của video để tua lại/tua đi 10 giây</translation>
 <translation id="3797520601150691162">Không áp dụng giao diện tối cho một trang web cụ thể</translation>
 <translation id="381841723434055211">Số điện thoại</translation>
+<translation id="3826050100957962900">Đăng nhập qua bên thứ ba</translation>
 <translation id="3835233591525155343">Hoạt động dùng thiết bị của bạn</translation>
 <translation id="385051799172605136">Quay lại</translation>
 <translation id="3859306556332390985">Tìm kiếm tiến</translation>
@@ -122,7 +124,6 @@
 <translation id="3991845972263764475"><ph name="BYTES_DOWNLOADED_WITH_UNITS" />/?</translation>
 <translation id="4002066346123236978">Tiêu đề</translation>
 <translation id="4008040567710660924">Cho phép cookie của một trang web cụ thể.</translation>
-<translation id="4040330681741629921">Nhận thông báo khi một trang web có thể xuất hiện trong chế độ xem đơn giản</translation>
 <translation id="4046123991198612571">Bản nhạc tiếp theo</translation>
 <translation id="4149994727733219643">Chế độ xem đơn giản cho trang web</translation>
 <translation id="4165986682804962316">Cài đặt trang web</translation>
@@ -236,6 +237,7 @@
 <translation id="6643016212128521049">Xóa</translation>
 <translation id="6689172468748959065">Ảnh tiểu sử</translation>
 <translation id="6697925417670533197">Hiện đang tải xuống</translation>
+<translation id="6722828510648505498">Chặn lời nhắc đăng nhập từ các dịch vụ nhận dạng.</translation>
 <translation id="6746124502594467657">Di chuyển xuống</translation>
 <translation id="6749077623962119521">Đặt lại quyền?</translation>
 <translation id="6766622839693428701">Vuốt xuống để đóng.</translation>
@@ -255,6 +257,7 @@
 <translation id="7087918508125750058">Đã chọn <ph name="ITEM_COUNT" /> mục. Bạn có thể sử dụng các tùy chọn ở gần đầu màn hình</translation>
 <translation id="7141896414559753902">Chặn trang web hiển thị cửa sổ bật lên và liên kết chuyển hướng (khuyên dùng)</translation>
 <translation id="7176368934862295254"><ph name="KILOBYTES" /> KB</translation>
+<translation id="7180611975245234373">Làm mới</translation>
 <translation id="723171743924126238">Chọn hình ảnh</translation>
 <translation id="7243308994586599757">Có các tùy chọn ở gần cuối màn hình</translation>
 <translation id="7250468141469952378">Đã chọn <ph name="ITEM_COUNT" /></translation>
@@ -299,7 +302,7 @@
 <translation id="8206354486702514201">Cài đặt này được quản trị viên của bạn thực thi.</translation>
 <translation id="8211406090763984747">Kết nối an toàn</translation>
 <translation id="8249310407154411074">Chuyển lên trên cùng</translation>
-<translation id="8261506727792406068">Xóa</translation>
+<translation id="8261506727792406068">Xoá</translation>
 <translation id="8284326494547611709">Phụ đề</translation>
 <translation id="8300705686683892304">Do ứng dụng quản lý</translation>
 <translation id="8324158725704657629">Không hỏi lại</translation>
@@ -308,7 +311,9 @@
 <translation id="83792324527827022">Một trang web đang sử dụng máy ảnh và micrô của bạn</translation>
 <translation id="8380167699614421159">Trang web này hiển thị quảng cáo xâm nhập hoặc quảng cáo gây hiểu nhầm</translation>
 <translation id="8394832520002899662">Nhấn để quay lại trang web</translation>
+<translation id="8409345997656833551">Nhận thông báo khi có thể xem bài viết ở chế độ đơn giản hoá</translation>
 <translation id="8425213833346101688">Thay đổi</translation>
+<translation id="8428213095426709021">Cài đặt</translation>
 <translation id="8441146129660941386">Tìm kiếm lùi</translation>
 <translation id="8444433999583714703">Để cho phép <ph name="APP_NAME" /> truy cập vào thông tin vị trí của bạn, hãy bật cả dịch vụ vị trí trong phần <ph name="BEGIN_LINK" />Cài đặt Android<ph name="END_LINK" />.</translation>
 <translation id="8447861592752582886">Thu hồi quyền truy cập thiết bị</translation>

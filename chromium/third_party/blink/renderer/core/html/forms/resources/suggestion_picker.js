@@ -24,357 +24,353 @@
  * DAMAGE.
  */
 
-/**
- * @constructor
- * @param {!Element} element
- * @param {!Object} config
- */
-function SuggestionPicker(element, config) {
-  Picker.call(this, element, config);
-  this._isFocusByMouse = false;
-  this._containerElement = null;
-  this._setColors();
-  this._layout();
-  this._fixWindowSize();
-  this._handleBodyKeyDownBound = this._handleBodyKeyDown.bind(this);
-  document.body.addEventListener('keydown', this._handleBodyKeyDownBound);
-  this._element.addEventListener(
-      'mouseout', this._handleMouseOut.bind(this), false);
-}
-SuggestionPicker.prototype = Object.create(Picker.prototype);
+class SuggestionPicker extends Picker {
+  /**
+   * @param {!Element} element
+   * @param {!Object} config
+   */
+  constructor(element, config) {
+    super(element, config);
+    this.isFocusByMouse_ = false;
+    this.containerElement_ = null;
+    this.setColors_();
+    this.layout_();
+    this.fixWindowSize_();
+    this.handleBodyKeyDownBound_ = this.handleBodyKeyDown_.bind(this);
+    document.body.addEventListener('keydown', this.handleBodyKeyDownBound_);
+    this.element_.addEventListener(
+        'mouseout', this.handleMouseOut_.bind(this), false);
+  }
 
-SuggestionPicker.NumberOfVisibleEntries = 20;
+  static NUMBER_OF_VISIBLE_ENTRIES = 20;
+  // An entry needs to be at least this many pixels visible for it to be a visible entry.
+  static VISIBLE_ENTRY_THRESHOLD_HEIGHT = 4;
+  static ActionNames = {
+    OPEN_CALENDAR_PICKER: 'openCalendarPicker',
+  };
+  static LIST_ENTRY_CLASS = 'suggestion-list-entry';
 
-// An entry needs to be at least this many pixels visible for it to be a visible entry.
-SuggestionPicker.VisibleEntryThresholdHeight = 4;
+  static validateConfig(config) {
+    if (config.showOtherDateEntry && !config.otherDateLabel)
+      return 'No otherDateLabel.';
+    if (config.suggestionHighlightColor && !config.suggestionHighlightColor)
+      return 'No suggestionHighlightColor.';
+    if (config.suggestionHighlightTextColor &&
+        !config.suggestionHighlightTextColor)
+      return 'No suggestionHighlightTextColor.';
+    if (config.suggestionValues.length !==
+        config.localizedSuggestionValues.length)
+      return 'localizedSuggestionValues.length must equal suggestionValues.length.';
+    if (config.suggestionValues.length !== config.suggestionLabels.length)
+      return 'suggestionLabels.length must equal suggestionValues.length.';
+    if (typeof config.inputWidth === 'undefined')
+      return 'No inputWidth.';
+    return null;
+  }
 
-SuggestionPicker.ActionNames = {
-  OpenCalendarPicker: 'openCalendarPicker'
-};
-
-SuggestionPicker.ListEntryClass = 'suggestion-list-entry';
-
-SuggestionPicker.validateConfig = function(config) {
-  if (config.showOtherDateEntry && !config.otherDateLabel)
-    return 'No otherDateLabel.';
-  if (config.suggestionHighlightColor && !config.suggestionHighlightColor)
-    return 'No suggestionHighlightColor.';
-  if (config.suggestionHighlightTextColor &&
-      !config.suggestionHighlightTextColor)
-    return 'No suggestionHighlightTextColor.';
-  if (config.suggestionValues.length !==
-      config.localizedSuggestionValues.length)
-    return 'localizedSuggestionValues.length must equal suggestionValues.length.';
-  if (config.suggestionValues.length !== config.suggestionLabels.length)
-    return 'suggestionLabels.length must equal suggestionValues.length.';
-  if (typeof config.inputWidth === 'undefined')
-    return 'No inputWidth.';
-  return null;
-};
-
-Object.defineProperty(SuggestionPicker, 'Padding', {
-  get: function() {
+  padding_() {
     return Number(
         window.getComputedStyle(document.querySelector('.suggestion-list'))
             .getPropertyValue('padding')
             .replace('px', ''));
   }
-});
 
-SuggestionPicker.prototype._setColors = function() {
-  var text = '.' + SuggestionPicker.ListEntryClass + ':focus {\
-        background-color: ' +
-      this._config.suggestionHighlightColor + ';\
-        color: ' +
-      this._config.suggestionHighlightTextColor + '; }';
-  text += '.' + SuggestionPicker.ListEntryClass +
-      ':focus .label { color: ' + this._config.suggestionHighlightTextColor +
-      '; }';
-  document.head.appendChild(createElement('style', null, text));
-};
-
-SuggestionPicker.prototype.cleanup = function() {
-  document.body.removeEventListener(
-      'keydown', this._handleBodyKeyDownBound, false);
-};
-
-/**
- * @param {!string} title
- * @param {!string} label
- * @param {!string} value
- * @return {!Element}
- */
-SuggestionPicker.prototype._createSuggestionEntryElement = function(
-    title, label, value) {
-  var entryElement = createElement('li', SuggestionPicker.ListEntryClass);
-  entryElement.tabIndex = 0;
-  entryElement.dataset.value = value;
-  var content = createElement('span', 'content');
-  entryElement.appendChild(content);
-  var titleElement = createElement('span', 'title', title);
-  content.appendChild(titleElement);
-  if (label) {
-    var labelElement = createElement('span', 'label', label);
-    content.appendChild(labelElement);
+  setColors_() {
+    let text = '.' + SuggestionPicker.LIST_ENTRY_CLASS + ':focus {\
+          background-color: ' +
+        this.config_.suggestionHighlightColor + ';\
+          color: ' +
+        this.config_.suggestionHighlightTextColor + '; }';
+    text += '.' + SuggestionPicker.LIST_ENTRY_CLASS +
+        ':focus .label { color: ' + this.config_.suggestionHighlightTextColor +
+        '; }';
+    document.head.appendChild(createElement('style', null, text));
   }
-  entryElement.addEventListener(
-      'mouseover', this._handleEntryMouseOver.bind(this), false);
-  return entryElement;
-};
 
-/**
- * @param {!string} title
- * @param {!string} actionName
- * @return {!Element}
- */
-SuggestionPicker.prototype._createActionEntryElement = function(
-    title, actionName) {
-  var entryElement = createElement('li', SuggestionPicker.ListEntryClass);
-  entryElement.tabIndex = 0;
-  entryElement.dataset.action = actionName;
-  var content = createElement('span', 'content');
-  entryElement.appendChild(content);
-  var titleElement = createElement('span', 'title', title);
-  content.appendChild(titleElement);
-  entryElement.addEventListener(
-      'mouseover', this._handleEntryMouseOver.bind(this), false);
-  return entryElement;
-};
-
-/**
-* @return {!number}
-*/
-SuggestionPicker.prototype._measureMaxContentWidth = function() {
-  // To measure the required width, we first set the class to "measuring-width" which
-  // left aligns all the content including label.
-  this._containerElement.classList.add('measuring-width');
-  var maxContentWidth = 0;
-  var contentElements =
-      this._containerElement.getElementsByClassName('content');
-  for (var i = 0; i < contentElements.length; ++i) {
-    maxContentWidth = Math.max(
-        maxContentWidth, contentElements[i].getBoundingClientRect().width);
+  cleanup() {
+    document.body.removeEventListener(
+        'keydown', this.handleBodyKeyDownBound_, false);
   }
-  this._containerElement.classList.remove('measuring-width');
-  return maxContentWidth;
-};
 
-SuggestionPicker.prototype._fixWindowSize = function() {
-  var ListBorder = 2;
-  const ListPadding = 2 * SuggestionPicker.Padding;
-  var zoom = this._config.zoomFactor;
-  var desiredWindowWidth =
-      (this._measureMaxContentWidth() + ListBorder + ListPadding) * zoom;
-  if (typeof this._config.inputWidth === 'number')
-    desiredWindowWidth = Math.max(this._config.inputWidth, desiredWindowWidth);
-  var totalHeight = ListBorder + ListPadding;
-  var maxHeight = 0;
-  var entryCount = 0;
-  for (var i = 0; i < this._containerElement.childNodes.length; ++i) {
-    var node = this._containerElement.childNodes[i];
-    if (node.classList.contains(SuggestionPicker.ListEntryClass))
-      entryCount++;
-    totalHeight += node.offsetHeight;
-    if (maxHeight === 0 &&
-        entryCount == SuggestionPicker.NumberOfVisibleEntries)
-      maxHeight = totalHeight;
-  }
-  var desiredWindowHeight = totalHeight * zoom;
-  if (maxHeight !== 0 && totalHeight > maxHeight * zoom) {
-    this._containerElement.style.maxHeight =
-        (maxHeight - ListBorder - ListPadding) + 'px';
-    desiredWindowWidth += getScrollbarWidth() * zoom;
-    desiredWindowHeight = maxHeight * zoom;
-    this._containerElement.style.overflowY = 'scroll';
-  }
-  var windowRect = adjustWindowRect(
-      desiredWindowWidth, desiredWindowHeight, desiredWindowWidth, 0);
-  this._containerElement.style.height =
-      (windowRect.height / zoom - ListBorder - ListPadding) + 'px';
-  setWindowRect(windowRect);
-};
-
-SuggestionPicker.prototype._layout = function() {
-  if (this._config.isRTL)
-    this._element.classList.add('rtl');
-  if (this._config.isLocaleRTL)
-    this._element.classList.add('locale-rtl');
-  this._containerElement = createElement('ul', 'suggestion-list');
-  if (global.params.isBorderTransparent) {
-    this._containerElement.style.borderColor = 'transparent';
-  }
-  this._containerElement.addEventListener(
-      'click', this._handleEntryClick.bind(this), false);
-  for (var i = 0; i < this._config.suggestionValues.length; ++i) {
-    this._containerElement.appendChild(this._createSuggestionEntryElement(
-        this._config.localizedSuggestionValues[i],
-        this._config.suggestionLabels[i], this._config.suggestionValues[i]));
-  }
-  if (this._config.showOtherDateEntry) {
-    // Add "Other..." entry
-    var otherEntry = this._createActionEntryElement(
-        this._config.otherDateLabel,
-        SuggestionPicker.ActionNames.OpenCalendarPicker);
-    this._containerElement.appendChild(otherEntry);
-  }
-  this._element.appendChild(this._containerElement);
-};
-
-/**
- * @param {!Element} entry
- */
-SuggestionPicker.prototype.selectEntry = function(entry) {
-  if (typeof entry.dataset.value !== 'undefined') {
-    this.submitValue(entry.dataset.value);
-  } else if (
-      entry.dataset.action ===
-      SuggestionPicker.ActionNames.OpenCalendarPicker) {
-    window.addEventListener(
-        'didHide', SuggestionPicker._handleWindowDidHide, false);
-    hideWindow();
-  }
-};
-
-SuggestionPicker._handleWindowDidHide = function() {
-  openCalendarPicker();
-  window.removeEventListener('didHide', SuggestionPicker._handleWindowDidHide);
-};
-
-/**
- * @param {!Event} event
- */
-SuggestionPicker.prototype._handleEntryClick = function(event) {
-  var entry = enclosingNodeOrSelfWithClass(
-      event.target, SuggestionPicker.ListEntryClass);
-  if (!entry)
-    return;
-  this.selectEntry(entry);
-  event.preventDefault();
-};
-
-/**
- * @return {?Element}
- */
-SuggestionPicker.prototype._findFirstVisibleEntry = function() {
-  var scrollTop = this._containerElement.scrollTop;
-  var childNodes = this._containerElement.childNodes;
-  for (var i = 0; i < childNodes.length; ++i) {
-    var node = childNodes[i];
-    if (node.nodeType !== Node.ELEMENT_NODE ||
-        !node.classList.contains(SuggestionPicker.ListEntryClass))
-      continue;
-    if (node.offsetTop + node.offsetHeight - scrollTop >
-        SuggestionPicker.VisibleEntryThresholdHeight)
-      return node;
-  }
-  return null;
-};
-
-/**
- * @return {?Element}
- */
-SuggestionPicker.prototype._findLastVisibleEntry = function() {
-  var scrollBottom =
-      this._containerElement.scrollTop + this._containerElement.offsetHeight;
-  var childNodes = this._containerElement.childNodes;
-  for (var i = childNodes.length - 1; i >= 0; --i) {
-    var node = childNodes[i];
-    if (node.nodeType !== Node.ELEMENT_NODE ||
-        !node.classList.contains(SuggestionPicker.ListEntryClass))
-      continue;
-    if (scrollBottom - node.offsetTop >
-        SuggestionPicker.VisibleEntryThresholdHeight)
-      return node;
-  }
-  return null;
-};
-
-/**
- * @param {!Event} event
- */
-SuggestionPicker.prototype._handleBodyKeyDown = function(event) {
-  var eventHandled = false;
-  var key = event.key;
-  if (key === 'Escape') {
-    this.handleCancel();
-    eventHandled = true;
-  } else if (key == 'ArrowUp') {
-    if (document.activeElement &&
-        document.activeElement.classList.contains(
-            SuggestionPicker.ListEntryClass)) {
-      for (var node = document.activeElement.previousElementSibling; node;
-           node = node.previousElementSibling) {
-        if (node.classList.contains(SuggestionPicker.ListEntryClass)) {
-          this._isFocusByMouse = false;
-          node.focus();
-          break;
-        }
-      }
-    } else {
-      this._element
-          .querySelector('.' + SuggestionPicker.ListEntryClass + ':last-child')
-          .focus();
+  /**
+   * @param {!string} title
+   * @param {!string} label
+   * @param {!string} value
+   * @return {!Element}
+   */
+  createSuggestionEntryElement_(title, label, value) {
+    const entryElement = createElement('li', SuggestionPicker.LIST_ENTRY_CLASS);
+    entryElement.tabIndex = 0;
+    entryElement.dataset.value = value;
+    const content = createElement('span', 'content');
+    entryElement.appendChild(content);
+    const titleElement = createElement('span', 'title', title);
+    content.appendChild(titleElement);
+    if (label) {
+      const labelElement = createElement('span', 'label', label);
+      content.appendChild(labelElement);
     }
-    eventHandled = true;
-  } else if (key == 'ArrowDown') {
-    if (document.activeElement &&
-        document.activeElement.classList.contains(
-            SuggestionPicker.ListEntryClass)) {
-      for (var node = document.activeElement.nextElementSibling; node;
-           node = node.nextElementSibling) {
-        if (node.classList.contains(SuggestionPicker.ListEntryClass)) {
-          this._isFocusByMouse = false;
-          node.focus();
-          break;
-        }
-      }
-    } else {
-      this._element
-          .querySelector('.' + SuggestionPicker.ListEntryClass + ':first-child')
-          .focus();
-    }
-    eventHandled = true;
-  } else if (key === 'Enter') {
-    this.selectEntry(document.activeElement);
-    eventHandled = true;
-  } else if (key === 'PageUp') {
-    this._containerElement.scrollTop -= this._containerElement.clientHeight;
-    // Scrolling causes mouseover event to be called and that tries to move the focus too.
-    // To prevent flickering we won't focus if the current focus was caused by the mouse.
-    if (!this._isFocusByMouse)
-      this._findFirstVisibleEntry().focus();
-    eventHandled = true;
-  } else if (key === 'PageDown') {
-    this._containerElement.scrollTop += this._containerElement.clientHeight;
-    if (!this._isFocusByMouse)
-      this._findLastVisibleEntry().focus();
-    eventHandled = true;
+    entryElement.addEventListener(
+        'mouseover', this.handleEntryMouseOver_.bind(this), false);
+    return entryElement;
   }
-  if (eventHandled)
+
+  /**
+   * @param {!string} title
+   * @param {!string} actionName
+   * @return {!Element}
+   */
+  createActionEntryElement_(title, actionName) {
+    const entryElement = createElement('li', SuggestionPicker.LIST_ENTRY_CLASS);
+    entryElement.tabIndex = 0;
+    entryElement.dataset.action = actionName;
+    const content = createElement('span', 'content');
+    entryElement.appendChild(content);
+    const titleElement = createElement('span', 'title', title);
+    content.appendChild(titleElement);
+    entryElement.addEventListener(
+        'mouseover', this.handleEntryMouseOver_.bind(this), false);
+    return entryElement;
+  }
+
+  /**
+   * @return {!number}
+   */
+  measureMaxContentWidth_() {
+    // To measure the required width, we first set the class to "measuring-width" which
+    // left aligns all the content including label.
+    this.containerElement_.classList.add('measuring-width');
+    let maxContentWidth = 0;
+    const contentElements =
+        this.containerElement_.getElementsByClassName('content');
+    for (let i = 0; i < contentElements.length; ++i) {
+      maxContentWidth = Math.max(
+          maxContentWidth, contentElements[i].getBoundingClientRect().width);
+    }
+    this.containerElement_.classList.remove('measuring-width');
+    return maxContentWidth;
+  }
+
+  fixWindowSize_() {
+    const ListBorder = 2;
+    const ListPadding = 2 * this.padding_();
+    const zoom = this.config_.zoomFactor;
+    let desiredWindowWidth =
+        (this.measureMaxContentWidth_() + ListBorder + ListPadding) * zoom;
+    if (typeof this.config_.inputWidth === 'number')
+      desiredWindowWidth =
+          Math.max(this.config_.inputWidth, desiredWindowWidth);
+    let totalHeight = ListBorder + ListPadding;
+    let maxHeight = 0;
+    let entryCount = 0;
+    for (let i = 0; i < this.containerElement_.childNodes.length; ++i) {
+      const node = this.containerElement_.childNodes[i];
+      if (node.classList.contains(SuggestionPicker.LIST_ENTRY_CLASS))
+        entryCount++;
+      totalHeight += node.offsetHeight;
+      if (maxHeight === 0 &&
+          entryCount == SuggestionPicker.NUMBER_OF_VISIBLE_ENTRIES)
+        maxHeight = totalHeight;
+    }
+    let desiredWindowHeight = totalHeight * zoom;
+    if (maxHeight !== 0 && totalHeight > maxHeight * zoom) {
+      this.containerElement_.style.maxHeight =
+          maxHeight - ListBorder - ListPadding + 'px';
+      desiredWindowWidth += getScrollbarWidth() * zoom;
+      desiredWindowHeight = maxHeight * zoom;
+      this.containerElement_.style.overflowY = 'scroll';
+    }
+    const windowRect = adjustWindowRect(
+        desiredWindowWidth, desiredWindowHeight, desiredWindowWidth, 0);
+    this.containerElement_.style.height =
+        windowRect.height / zoom - ListBorder - ListPadding + 'px';
+    setWindowRect(windowRect);
+  }
+
+  layout_() {
+    if (this.config_.isRTL)
+      this.element_.classList.add('rtl');
+    if (this.config_.isLocaleRTL)
+      this.element_.classList.add('locale-rtl');
+    this.containerElement_ = createElement('ul', 'suggestion-list');
+    if (global.params.isBorderTransparent) {
+      this.containerElement_.style.borderColor = 'transparent';
+    }
+    this.containerElement_.addEventListener(
+        'click', this.handleEntryClick_.bind(this), false);
+    for (let i = 0; i < this.config_.suggestionValues.length; ++i) {
+      this.containerElement_.appendChild(this.createSuggestionEntryElement_(
+          this.config_.localizedSuggestionValues[i],
+          this.config_.suggestionLabels[i], this.config_.suggestionValues[i]));
+    }
+    if (this.config_.showOtherDateEntry) {
+      // Add "Other..." entry
+      const otherEntry = this.createActionEntryElement_(
+          this.config_.otherDateLabel,
+          SuggestionPicker.ActionNames.OPEN_CALENDAR_PICKER);
+      this.containerElement_.appendChild(otherEntry);
+    }
+    this.element_.appendChild(this.containerElement_);
+  }
+
+  /**
+   * @param {!Element} entry
+   */
+  selectEntry_(entry) {
+    if (typeof entry.dataset.value !== 'undefined') {
+      this.submitValue(entry.dataset.value);
+    } else if (
+        entry.dataset.action ===
+        SuggestionPicker.ActionNames.OPEN_CALENDAR_PICKER) {
+      window.addEventListener(
+          'didHide', SuggestionPicker.handleWindowDidHide_, false);
+      hideWindow();
+    }
+  }
+
+  static handleWindowDidHide_() {
+    openCalendarPicker();
+    window.removeEventListener('didHide', SuggestionPicker.handleWindowDidHide_);
+  }
+
+  /**
+   * @param {!Event} event
+   */
+  handleEntryClick_(event) {
+    const entry = enclosingNodeOrSelfWithClass(
+        event.target, SuggestionPicker.LIST_ENTRY_CLASS);
+    if (!entry)
+      return;
+    this.selectEntry_(entry);
     event.preventDefault();
-};
+  }
 
-/**
- * @param {!Event} event
- */
-SuggestionPicker.prototype._handleEntryMouseOver = function(event) {
-  var entry = enclosingNodeOrSelfWithClass(
-      event.target, SuggestionPicker.ListEntryClass);
-  if (!entry)
-    return;
-  this._isFocusByMouse = true;
-  entry.focus();
-  event.preventDefault();
-};
+  /**
+   * @return {?Element}
+   */
+  findFirstVisibleEntry_() {
+    const scrollTop = this.containerElement_.scrollTop;
+    const childNodes = this.containerElement_.childNodes;
+    for (let i = 0; i < childNodes.length; ++i) {
+      const node = childNodes[i];
+      if (node.nodeType !== Node.ELEMENT_NODE ||
+          !node.classList.contains(SuggestionPicker.LIST_ENTRY_CLASS))
+        continue;
+      if (node.offsetTop + node.offsetHeight - scrollTop >
+          SuggestionPicker.VISIBLE_ENTRY_THRESHOLD_HEIGHT)
+        return node;
+    }
+    return null;
+  }
 
-/**
- * @param {!Event} event
- */
-SuggestionPicker.prototype._handleMouseOut = function(event) {
-  if (!document.activeElement.classList.contains(
-          SuggestionPicker.ListEntryClass))
-    return;
-  this._isFocusByMouse = false;
-  document.activeElement.blur();
-  event.preventDefault();
-};
+  /**
+   * @return {?Element}
+   */
+  findLastVisibleEntry_() {
+    const scrollBottom =
+        this.containerElement_.scrollTop + this.containerElement_.offsetHeight;
+    const childNodes = this.containerElement_.childNodes;
+    for (let i = childNodes.length - 1; i >= 0; --i) {
+      const node = childNodes[i];
+      if (node.nodeType !== Node.ELEMENT_NODE ||
+          !node.classList.contains(SuggestionPicker.LIST_ENTRY_CLASS))
+        continue;
+      if (scrollBottom - node.offsetTop >
+          SuggestionPicker.VISIBLE_ENTRY_THRESHOLD_HEIGHT)
+        return node;
+    }
+    return null;
+  }
+
+  /**
+   * @param {!Event} event
+   */
+  handleBodyKeyDown_(event) {
+    let eventHandled = false;
+    const key = event.key;
+    if (key === 'Escape') {
+      this.handleCancel();
+      eventHandled = true;
+    } else if (key == 'ArrowUp') {
+      if (document.activeElement &&
+          document.activeElement.classList.contains(
+              SuggestionPicker.LIST_ENTRY_CLASS)) {
+        for (let node = document.activeElement.previousElementSibling; node;
+             node = node.previousElementSibling) {
+          if (node.classList.contains(SuggestionPicker.LIST_ENTRY_CLASS)) {
+            this.isFocusByMouse_ = false;
+            node.focus();
+            break;
+          }
+        }
+      } else {
+        this.element_
+            .querySelector(
+                '.' + SuggestionPicker.LIST_ENTRY_CLASS + ':last-child')
+            .focus();
+      }
+      eventHandled = true;
+    } else if (key == 'ArrowDown') {
+      if (document.activeElement &&
+          document.activeElement.classList.contains(
+              SuggestionPicker.LIST_ENTRY_CLASS)) {
+        for (let node = document.activeElement.nextElementSibling; node;
+             node = node.nextElementSibling) {
+          if (node.classList.contains(SuggestionPicker.LIST_ENTRY_CLASS)) {
+            this.isFocusByMouse_ = false;
+            node.focus();
+            break;
+          }
+        }
+      } else {
+        this.element_
+            .querySelector(
+                '.' + SuggestionPicker.LIST_ENTRY_CLASS + ':first-child')
+            .focus();
+      }
+      eventHandled = true;
+    } else if (key === 'Enter') {
+      this.selectEntry_(document.activeElement);
+      eventHandled = true;
+    } else if (key === 'PageUp') {
+      this.containerElement_.scrollTop -= this.containerElement_.clientHeight;
+      // Scrolling causes mouseover event to be called and that tries to move the focus too.
+      // To prevent flickering we won't focus if the current focus was caused by the mouse.
+      if (!this.isFocusByMouse_)
+        this.findFirstVisibleEntry_().focus();
+      eventHandled = true;
+    } else if (key === 'PageDown') {
+      this.containerElement_.scrollTop += this.containerElement_.clientHeight;
+      if (!this.isFocusByMouse_)
+        this.findLastVisibleEntry_().focus();
+      eventHandled = true;
+    }
+    if (eventHandled)
+      event.preventDefault();
+  }
+
+  /**
+   * @param {!Event} event
+   */
+  handleEntryMouseOver_(event) {
+    const entry = enclosingNodeOrSelfWithClass(
+        event.target, SuggestionPicker.LIST_ENTRY_CLASS);
+    if (!entry)
+      return;
+    this.isFocusByMouse_ = true;
+    entry.focus();
+    event.preventDefault();
+  }
+
+  /**
+   * @param {!Event} event
+   */
+  handleMouseOut_(event) {
+    if (!document.activeElement.classList.contains(
+            SuggestionPicker.LIST_ENTRY_CLASS))
+      return;
+    this.isFocusByMouse_ = false;
+    document.activeElement.blur();
+    event.preventDefault();
+  }
+}

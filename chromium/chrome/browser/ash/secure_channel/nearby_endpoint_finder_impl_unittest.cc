@@ -20,10 +20,6 @@ namespace ash {
 namespace secure_channel {
 namespace {
 
-// TODO(https://crbug.com/1164001): remove after
-// ash/services/secure_channel is moved to namespace ash.
-namespace mojom = ::chromeos::secure_channel::mojom;
-
 using ::location::nearby::connections::mojom::DiscoveredEndpointInfo;
 using ::location::nearby::connections::mojom::DiscoveredEndpointInfoPtr;
 using ::location::nearby::connections::mojom::EndpointDiscoveryListener;
@@ -210,15 +206,8 @@ TEST_F(NearbyEndpointFinderImplTest, FailStartingDiscovery) {
   EXPECT_TRUE(has_failed_);
 }
 
-#if BUILDFLAG(IS_CHROMEOS)
 // Failing on CrOS ASAN: crbug.com/1290882
-#define MAYBE_FailInjectingEndpoint DISABLED_FailInjectingEndpoint
-#else
-#define MAYBE_FailInjectingEndpoint FailInjectingEndpoint
-#endif
-
-
-TEST_F(NearbyEndpointFinderImplTest, MAYBE_FailInjectingEndpoint) {
+TEST_F(NearbyEndpointFinderImplTest, DISABLED_FailInjectingEndpoint) {
   FindEndpoint();
   InvokeStartDiscoveryCallback(/*success=*/true);
   InvokeInjectEndpointCallback(/*success=*/false);

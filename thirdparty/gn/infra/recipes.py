@@ -1,47 +1,59 @@
-#!/usr/bin/env python
-
-# Copyright 2017 The LUCI Authors. All rights reserved.
+#!/bin/sh
+# Copyright 2019 The LUCI Authors. All rights reserved.
 # Use of this source code is governed under the Apache License, Version 2.0
 # that can be found in the LICENSE file.
 
+# We want to run python in unbuffered mode; however shebangs on linux grab the
+# entire rest of the shebang line as a single argument, leading to errors like:
+#
+#   /usr/bin/env: 'python3 -u': No such file or directory
+#
+# This little shell hack is a triple-quoted noop in python, but in sh it
+# evaluates to re-exec'ing this script in unbuffered mode.
+# pylint: disable=pointless-string-statement
+''''exec python3 -u -- "$0" ${1+"$@"} # '''
+# vi: syntax=python
 """Bootstrap script to clone and forward to the recipe engine tool.
 
 *******************
 ** DO NOT MODIFY **
 *******************
 
-This is a copy of https://chromium.googlesource.com/infra/luci/recipes-py/+/master/recipes.py.
+This is a copy of https://chromium.googlesource.com/infra/luci/recipes-py/+/main/recipes.py.
 To fix bugs, fix in the googlesource repo then run the autoroller.
 """
 
+# pylint: disable=wrong-import-position
 import argparse
+import errno
 import json
 import logging
 import os
-import random
 import subprocess
 import sys
-import time
-import urlparse
 
 from collections import namedtuple
+from io import open  # pylint: disable=redefined-builtin
 
-from cStringIO import StringIO
+try:
+  import urllib.parse as urlparse
+except ImportError:
+  import urlparse
 
 # The dependency entry for the recipe_engine in the client repo's recipes.cfg
 #
 # url (str) - the url to the engine repo we want to use.
 # revision (str) - the git revision for the engine to get.
 # branch (str) - the branch to fetch for the engine as an absolute ref (e.g.
-#   refs/heads/master)
-EngineDep = namedtuple('EngineDep',
-                       'url revision branch')
+#   refs/heads/main)
+EngineDep = namedtuple('EngineDep', 'url revision branch')
 
 
 class MalformedRecipesCfg(Exception):
+
   def __init__(self, msg, path):
-    super(MalformedRecipesCfg, self).__init__('malformed recipes.cfg: %s: %r'
-                                              % (msg, path))
+    full_message = 'malformed recipes.cfg: %s: %r' % (msg, path)
+    super(MalformedRecipesCfg, self).__init__(full_message)
 
 
 def parse(repo_root, recipes_cfg_path):
@@ -59,7 +71,7 @@ def parse(repo_root, recipes_cfg_path):
       current repo (i.e. the folder containing `recipes/` and/or
       `recipe_modules`)
   """
-  with open(recipes_cfg_path, 'rU') as fh:
+  with open(recipes_cfg_path, 'r') as fh:
     pb = json.load(fh)
 
   try:
@@ -79,33 +91,38 @@ def parse(repo_root, recipes_cfg_path):
 
     if 'url' not in engine:
       raise MalformedRecipesCfg(
-        'Required field "url" in dependency "recipe_engine" not found',
-        recipes_cfg_path)
+          'Required field "url" in dependency "recipe_engine" not found',
+          recipes_cfg_path)
 
     engine.setdefault('revision', '')
-    engine.setdefault('branch', 'refs/heads/master')
+    engine.setdefault('branch', 'refs/heads/main')
     recipes_path = pb.get('recipes_path', '')
 
     # TODO(iannucci): only support absolute refs
     if not engine['branch'].startswith('refs/'):
       engine['branch'] = 'refs/heads/' + engine['branch']
 
-    recipes_path = os.path.join(
-      repo_root, recipes_path.replace('/', os.path.sep))
+    recipes_path = os.path.join(repo_root,
+                                recipes_path.replace('/', os.path.sep))
     return EngineDep(**engine), recipes_path
   except KeyError as ex:
-    raise MalformedRecipesCfg(ex.message, recipes_cfg_path)
+    raise MalformedRecipesCfg(str(ex), recipes_cfg_path)
 
 
-_BAT = '.bat' if sys.platform.startswith(('win', 'cygwin')) else ''
+IS_WIN = sys.platform.startswith(('win', 'cygwin'))
+
+_BAT = '.bat' if IS_WIN else ''
 GIT = 'git' + _BAT
-VPYTHON = 'vpython' + _BAT
+VPYTHON = ('vpython' +
+           ('3' if os.getenv('RECIPES_USE_PY3') == 'true' else '') +
+           _BAT)
 CIPD = 'cipd' + _BAT
 REQUIRED_BINARIES = {GIT, VPYTHON, CIPD}
 
 
 def _is_executable(path):
   return os.path.isfile(path) and os.access(path, os.X_OK)
+
 
 # TODO: Use shutil.which once we switch to Python3.
 def _is_on_path(basename):
@@ -122,13 +139,13 @@ def _subprocess_call(argv, **kwargs):
 
 
 def _git_check_call(argv, **kwargs):
-  argv = [GIT]+argv
+  argv = [GIT] + argv
   logging.info('Running %r', argv)
   subprocess.check_call(argv, **kwargs)
 
 
 def _git_output(argv, **kwargs):
-  argv = [GIT]+argv
+  argv = [GIT] + argv
   logging.info('Running %r', argv)
   return subprocess.check_output(argv, **kwargs)
 
@@ -174,15 +191,26 @@ def checkout_engine(engine_path, repo_root, recipes_cfg_path):
       _git_check_call(['init', engine_path], stdout=NUL)
 
       try:
-        _git_check_call(['rev-parse', '--verify', '%s^{commit}' % revision],
-                        cwd=engine_path, stdout=NUL, stderr=NUL)
-      except subprocess.CalledProcessError:
-        _git_check_call(['fetch', url, branch], cwd=engine_path, stdout=NUL,
+        _git_check_call(['rev-parse', '--verify',
+                         '%s^{commit}' % revision],
+                        cwd=engine_path,
+                        stdout=NUL,
                         stderr=NUL)
+      except subprocess.CalledProcessError:
+        _git_check_call(['fetch', '--quiet', url, branch],
+                        cwd=engine_path,
+                        stdout=NUL)
 
     try:
       _git_check_call(['diff', '--quiet', revision], cwd=engine_path)
     except subprocess.CalledProcessError:
+      index_lock = os.path.join(engine_path, '.git', 'index.lock')
+      try:
+        os.remove(index_lock)
+      except OSError as exc:
+        if exc.errno != errno.ENOENT:
+          logging.warn('failed to remove %r, reset will fail: %s', index_lock,
+                       exc)
       _git_check_call(['reset', '-q', '--hard', revision], cwd=engine_path)
 
     # If the engine has refactored/moved modules we need to clean all .pyc files
@@ -206,22 +234,31 @@ def main():
   if recipes_cfg_path:
     # calculate repo_root from recipes_cfg_path
     repo_root = os.path.dirname(
-      os.path.dirname(
-        os.path.dirname(recipes_cfg_path)))
+        os.path.dirname(os.path.dirname(recipes_cfg_path)))
   else:
     # find repo_root with git and calculate recipes_cfg_path
-    repo_root = (_git_output(
-      ['rev-parse', '--show-toplevel'],
-      cwd=os.path.abspath(os.path.dirname(__file__))).strip())
-    repo_root = os.path.abspath(repo_root)
+    repo_root = (
+        _git_output(['rev-parse', '--show-toplevel'],
+                    cwd=os.path.abspath(os.path.dirname(__file__))).strip())
+    repo_root = os.path.abspath(repo_root).decode()
     recipes_cfg_path = os.path.join(repo_root, 'infra', 'config', 'recipes.cfg')
     args = ['--package', recipes_cfg_path] + args
-
   engine_path = checkout_engine(engine_override, repo_root, recipes_cfg_path)
 
-  return _subprocess_call([
-      VPYTHON, '-u',
-      os.path.join(engine_path, 'recipe_engine', 'main.py')] + args)
+  argv = (
+      [VPYTHON, '-u',
+       os.path.join(engine_path, 'recipe_engine', 'main.py')] + args)
+
+  if IS_WIN:
+    # No real 'exec' on windows; set these signals to ignore so that they
+    # propagate to our children but we still wait for the child process to quit.
+    import signal
+    signal.signal(signal.SIGBREAK, signal.SIG_IGN)
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    return _subprocess_call(argv)
+  else:
+    os.execvp(argv[0], argv)
 
 
 if __name__ == '__main__':

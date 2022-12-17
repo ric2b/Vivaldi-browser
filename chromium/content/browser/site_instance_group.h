@@ -7,11 +7,18 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/safe_ref.h"
 #include "base/observer_list.h"
 #include "base/types/id_type.h"
 #include "content/browser/renderer_host/agent_scheduling_group_host.h"
 #include "content/common/content_export.h"
+#include "content/public/browser/browsing_instance_id.h"
 #include "content/public/browser/render_process_host_observer.h"
+#include "third_party/perfetto/include/perfetto/tracing/traced_proto.h"
+
+namespace perfetto::protos::pbzero {
+class SiteInstanceGroup;
+}  // namespace perfetto::protos::pbzero
 
 namespace content {
 
@@ -62,20 +69,17 @@ class CONTENT_EXPORT SiteInstanceGroup
     // You can reinitialize it by a call to SiteInstance::GetProcess()->Init().
     virtual void RenderProcessGone(SiteInstanceGroup* site_instance,
                                    const ChildProcessTerminationInfo& info) {}
-
-    // Called when the RenderProcessHost for this SiteInstanceGroup has been
-    // destructed. After this, the underlying `process_` is cleared, and calling
-    // SiteInstance::GetProcess() would assign a different RenderProcessHost to
-    // this SiteInstanceGroup.
-    virtual void RenderProcessHostDestroyed() {}
   };
 
-  explicit SiteInstanceGroup(RenderProcessHost* process);
+  SiteInstanceGroup(BrowsingInstanceId browsing_instance_id,
+                    RenderProcessHost* process);
 
   SiteInstanceGroup(const SiteInstanceGroup&) = delete;
   SiteInstanceGroup& operator=(const SiteInstanceGroup&) = delete;
 
-  SiteInstanceGroupId GetId();
+  SiteInstanceGroupId GetId() const;
+
+  base::SafeRef<SiteInstanceGroup> GetSafeRef();
 
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
@@ -92,7 +96,7 @@ class CONTENT_EXPORT SiteInstanceGroup
   // Get the number of active frames which belong to this SiteInstanceGroup. If
   // there are no active frames left, all frames in this SiteInstanceGroup can
   // be safely discarded.
-  size_t active_frame_count() { return active_frame_count_; }
+  size_t active_frame_count() const { return active_frame_count_; }
 
   // `process_` and `agent_scheduling_group_` have to be set together. See
   // `process_` for more details.
@@ -100,8 +104,12 @@ class CONTENT_EXPORT SiteInstanceGroup
   // `process`.
   void SetProcessAndAgentSchedulingGroup(RenderProcessHost* process);
 
-  RenderProcessHost* process() { return process_; }
-  bool has_process() { return process_ != nullptr; }
+  RenderProcessHost* process() const { return process_; }
+  bool has_process() const { return process_ != nullptr; }
+
+  BrowsingInstanceId browsing_instance_id() const {
+    return browsing_instance_id_;
+  }
 
   AgentSchedulingGroupHost& agent_scheduling_group() {
     DCHECK(agent_scheduling_group_);
@@ -111,6 +119,10 @@ class CONTENT_EXPORT SiteInstanceGroup
   bool has_agent_scheduling_group() {
     return agent_scheduling_group_ != nullptr;
   }
+
+  using TraceProto = perfetto::protos::pbzero::SiteInstanceGroup;
+  // Write a representation of this object into a trace.
+  void WriteIntoTrace(perfetto::TracedProto<TraceProto> proto) const;
 
  private:
   friend class RefCounted<SiteInstanceGroup>;
@@ -123,6 +135,9 @@ class CONTENT_EXPORT SiteInstanceGroup
 
   // A unique ID for this SiteInstanceGroup.
   SiteInstanceGroupId id_;
+
+  // ID of the BrowsingInstance this SiteInstanceGroup belongs to.
+  const BrowsingInstanceId browsing_instance_id_;
 
   // The number of active frames in this SiteInstanceGroup.
   size_t active_frame_count_ = 0;
@@ -140,6 +155,8 @@ class CONTENT_EXPORT SiteInstanceGroup
   raw_ptr<AgentSchedulingGroupHost> agent_scheduling_group_ = nullptr;
 
   base::ObserverList<Observer, true>::Unchecked observers_;
+
+  base::WeakPtrFactory<SiteInstanceGroup> weak_ptr_factory_{this};
 };
 
 }  // namespace content

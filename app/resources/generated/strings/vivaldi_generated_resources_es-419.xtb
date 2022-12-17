@@ -8,7 +8,6 @@
 <translation id="1054153489933238809">Abrir la imagen &amp;original en una pestaña nueva</translation>
 <translation id="1056898198331236512">Advertencia</translation>
 <translation id="1084824384139382525">Copiar dir&amp;ección de enlace</translation>
-<translation id="1128109161498068552">No permitir que los sitios utilicen mensajes exclusivos del sistema para acceder a dispositivos MIDI</translation>
 <translation id="1163931534039071049">&amp;Ver fuente de marco</translation>
 <translation id="1165039591588034296">Error</translation>
 <translation id="1175364870820465910">Im&amp;primir...</translation>
@@ -21,7 +20,6 @@
 <translation id="1297175357211070620">Destino</translation>
 <translation id="1303101771013849280">Archivo HTML de Marcadores</translation>
 <translation id="1430915738399379752">Imprimir</translation>
-<translation id="1433811987160647649">Preguntar antes de acceder</translation>
 <translation id="1451375123200651445">Página web (como un único archivo)</translation>
 <translation id="1465176863081977902">C&amp;opiar dirección del audio</translation>
 <translation id="1476607407192946488">Configuración de &amp;idiomas</translation>
@@ -93,13 +91,11 @@
 <translation id="2721037002783622288">Bu&amp;scar imagen en <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2785873697295365461">Descriptores de archivo</translation>
 <translation id="2809586584051668049">y <ph name="NUMBER_ADDITIONAL_DISABLED" /> más</translation>
-<translation id="2812989263793994277">No mostrar ninguna imagen</translation>
 <translation id="2850541429955027218">Agregar tema</translation>
 <translation id="2861941300086904918">Administrador de seguridad NATIVE_CLIENT</translation>
 <translation id="2881076733170862447">Cuando haces clic en la extensión</translation>
 <translation id="2889064240420137087">Abrir el vínculo con...</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> no pudo comunicarse con esta impresora. Asegúrate de que la impresora esté conectada y vuelve a intentarlo.</translation>
-<translation id="2904456025988372123">Preguntarme cuando un sitio intente descargar archivos automáticamente después del primer archivo</translation>
 <translation id="2913331724188855103">Permitir que todos los sitios web guarden y lean datos de cookies (recomendado)</translation>
 <translation id="2931157624143513983">Adaptarse al área de impresión</translation>
 <translation id="2932085390869194046">Sugerir contraseña…</translation>
@@ -120,7 +116,6 @@
 <translation id="3127156390846601284">Esta acción eliminará de su dispositivo los datos almacenados de todos los sitios web que se muestran. ¿Quiere continuar?</translation>
 <translation id="3129173833825111527">Margen izquierdo</translation>
 <translation id="3144647712221361880">Abrir vínculo como</translation>
-<translation id="3154429428035006212">Sin conexión durante más de un mes</translation>
 <translation id="3222066309010235055">Renderizar previamente: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Seleccionar el directorio de raíz de la extensión que debe empaquetarse. Para actualizar una extensión, también debes seleccionar el archivo de clave privada que será reutilizado.</translation>
 <translation id="3280237271814976245">Gu&amp;ardar como...</translation>
@@ -157,7 +152,6 @@
 <translation id="3838085852053358637">No se pudo cargar la extensión</translation>
 <translation id="383891835335927981">No se configuró el zoom para ningún sitio</translation>
 <translation id="385051799172605136">Atrás</translation>
-<translation id="3899879303189199559">Sin conexión durante más de un año</translation>
 <translation id="3905761538810670789">Reparar aplicación</translation>
 <translation id="3908501907586732282">Habilitar extensión</translation>
 <translation id="3909791450649380159">Cor&amp;tar</translation>
@@ -183,7 +177,6 @@
 <translation id="4200983522494130825">Nueva pes&amp;taña</translation>
 <translation id="4225397296022057997">En todos los sitios</translation>
 <translation id="4256316378292851214">Guardar &amp;video como...</translation>
-<translation id="4278390842282768270">Permitido</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K en vivo)</translation>
 <translation id="4345587454538109430">Configurar...</translation>
 <translation id="4348766275249686434">Recopilar errores</translation>
@@ -212,10 +205,8 @@
 <translation id="4988526792673242964">Páginas</translation>
 <translation id="49896407730300355">Girar a la &amp;izquierda</translation>
 <translation id="4989966318180235467">Inspeccionar página de &amp;fondo</translation>
-<translation id="4994474651455208930">Permitir a los sitios web pedirle permiso para convertirse en los controladores predeterminados de protocolos</translation>
 <translation id="5000922062037820727">Bloqueado (recomendado)</translation>
 <translation id="5027562294707732951">Agregar extensión</translation>
-<translation id="5036662165765606524">No permitir que ningún sitio descargue varios archivos automáticamente</translation>
 <translation id="5039804452771397117">Permitir</translation>
 <translation id="5057110919553308744">Cuando haces clic en la extensión</translation>
 <translation id="5063480226653192405">Uso</translation>
@@ -227,7 +218,6 @@
 <translation id="5233231016133573565">ID de proceso</translation>
 <translation id="5233736638227740678">&amp;Pegar</translation>
 <translation id="5256861893479663409">En todos los sitios</translation>
-<translation id="5265562206369321422">Sin conexión durante más de una semana</translation>
 <translation id="5269977353971873915">Error de impresión</translation>
 <translation id="5284445933715251131">Continuar con la descarga</translation>
 <translation id="52912272896845572">El archivo de clave privada no es válido.</translation>
@@ -283,7 +273,6 @@
 <translation id="6122081475643980456">Se está controlando tu conexión a Internet</translation>
 <translation id="6147020289383635445">Error al imprimir vista previa.</translation>
 <translation id="6156863943908443225">Caché de la secuencia de comandos</translation>
-<translation id="6169666352732958425">No se puede transmitir el escritorio.</translation>
 <translation id="6196854373336333322">La extensión "<ph name="EXTENSION_NAME" />" tomó el control de la configuración de proxy, lo que significa que puede modificar, dañar o espiar cualquier actividad que lleves a cabo en línea. Si no sabes con certeza por qué se produjo este cambio, probablemente no lo desees.</translation>
 <translation id="6206311232642889873">Cop&amp;iar imagen</translation>
 <translation id="6239558157302047471">Recargar &amp;marco</translation>
@@ -314,7 +303,6 @@
 <translation id="6798954102094737107">Complemento: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Conservar cambios</translation>
 <translation id="6817174620439930047">Preguntarme cuando un sitio quiera utilizar los mensajes exclusivos del sistema para acceder a dispositivos MIDI (recomendado)</translation>
-<translation id="682123305478866682">Transmitir escritorio</translation>
 <translation id="6824564591481349393">Copiar la &amp;dirección de correo electrónico</translation>
 <translation id="6840155290835956714">Preguntar antes de enviar</translation>
 <translation id="6886871292305414135">Abrir enlace en una nueva pes&amp;taña</translation>
@@ -332,7 +320,6 @@
 <translation id="708060913198414444">C&amp;opiar dirección del audio</translation>
 <translation id="7175353351958621980">Cargada desde:</translation>
 <translation id="7186088072322679094">Mantener en la barra</translation>
-<translation id="7270858098575133036">Preguntarme cuando un sitio quiera utilizar los mensajes exclusivos del sistema para acceder a dispositivos MIDI</translation>
 <translation id="7287143125007575591">Acceso denegado.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> ppp</translation>
 <translation id="7385854874724088939">Algo falló al intentar imprimir. Comprueba tu impresora e inténtalo de nuevo.</translation>
@@ -354,7 +341,6 @@
 <translation id="7704305437604973648">Tarea</translation>
 <translation id="7710568461918838723">&amp;Emitir...</translation>
 <translation id="7750228210027921155">Imagen sobre imagen</translation>
-<translation id="7751260505918304024">Mostrar todo</translation>
 <translation id="7760004034676677601">¿Esta es la página de inicio que esperabas ver?</translation>
 <translation id="7771452384635174008">Diseño</translation>
 <translation id="7782102568078991263">No hay más sugerencias de Google</translation>
@@ -367,9 +353,7 @@
 <translation id="7849264908733290972">Abrir &amp;imagen en una pestaña nueva</translation>
 <translation id="7857949311770343000">¿Esta es la página Nueva pestaña que esperabas ver?</translation>
 <translation id="786073089922909430">Servicio: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7885253890047913815">Destinos recientes</translation>
 <translation id="7903925330883316394">Utilidad: <ph name="UTILITY_TYPE" /></translation>
-<translation id="7938594894617528435">Actualmente sin conexión</translation>
 <translation id="7947962633355574091">C&amp;opiar dirección del vídeo</translation>
 <translation id="7966241909927244760">C&amp;opiar dirección de la imagen</translation>
 <translation id="7973394300052703468">Nueva ventana &amp;privada</translation>
@@ -412,10 +396,8 @@ Mantén el archivo de clave en un lugar seguro. Debes crear las nuevas versiones
 <translation id="8708000541097332489">Borrar al salir</translation>
 <translation id="8714838604780058252">Gráficos de fondo</translation>
 <translation id="8725066075913043281">Volver a intentarlo</translation>
-<translation id="8757090071857742562">No se puede transmitir el escritorio. Verifique que ha si confirmado el aviso para comenzar a compartir su pantalla.</translation>
 <translation id="8774934320277480003">Margen superior</translation>
 <translation id="8798099450830957504">Predeterminado</translation>
-<translation id="8800004011501252845">Mostrando destinos para</translation>
 <translation id="8808478386290700967">Tienda virtual</translation>
 <translation id="8823514049557262177">Copiar te&amp;xto del vínculo</translation>
 <translation id="8823704566850948458">Sugerir contraseña…</translation>
@@ -427,7 +409,6 @@ Mantén el archivo de clave en un lugar seguro. Debes crear las nuevas versiones
 <translation id="8962083179518285172">Ocultar detalles</translation>
 <translation id="8973557916016709913">Quitar este nivel de zoom</translation>
 <translation id="897939795688207351">En <ph name="ORIGIN" /></translation>
-<translation id="8996526648899750015">Agregar cuenta…</translation>
 <translation id="9003647077635673607">Permitir en todas las webs</translation>
 <translation id="9027459031423301635">Abrir el vínculo en la pes&amp;taña nueva</translation>
 <translation id="9056810968620647706">No se encontraron coincidencias.</translation>

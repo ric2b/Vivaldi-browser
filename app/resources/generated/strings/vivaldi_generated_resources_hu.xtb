@@ -9,7 +9,6 @@
 <translation id="1054153489933238809">Az eredeti &amp;kép megnyitása új lapon</translation>
 <translation id="1056898198331236512">Figyelmeztetés</translation>
 <translation id="1084824384139382525">Hivatkozás címén&amp;ek másolása</translation>
-<translation id="1128109161498068552">Ne engedélyezze a webhelyeknek, hogy exkluzív rendszerüzenetekkel elérhessék a MIDI-eszközöket</translation>
 <translation id="1163931534039071049">&amp;Keret forrásának megtekintése</translation>
 <translation id="1165039591588034296">Hiba</translation>
 <translation id="1175364870820465910">&amp;Nyomtatás...</translation>
@@ -22,7 +21,6 @@
 <translation id="1297175357211070620">Cél</translation>
 <translation id="1303101771013849280">Könyvjelzők HTML-fájlja</translation>
 <translation id="1430915738399379752">Nyomtatás</translation>
-<translation id="1433811987160647649">Kérdezzen rá hozzáférés előtt</translation>
 <translation id="1451375123200651445">Weboldal, egyetlen fájl</translation>
 <translation id="1465176863081977902">Audi&amp;ocím másolása</translation>
 <translation id="1476607407192946488">Nye&amp;lvi beállítások</translation>
@@ -99,13 +97,11 @@
 <translation id="2783321960289401138">Parancsikon létrehozása...</translation>
 <translation id="2785873697295365461">Fájlleírók</translation>
 <translation id="2809586584051668049">és <ph name="NUMBER_ADDITIONAL_DISABLED" /> további</translation>
-<translation id="2812989263793994277">Ne mutassa a képeket</translation>
 <translation id="2850541429955027218">Téma hozzáadása</translation>
 <translation id="2861941300086904918">Natív kliens biztonságkezelő</translation>
 <translation id="2881076733170862447">Amikor a bővítményre kattintasz</translation>
 <translation id="2889064240420137087">Hivatkozás megnyitása...</translation>
 <translation id="2902127500170292085">A(z) <ph name="EXTENSION_NAME" /> nem tud kommunikálni ezzel a nyomtatóval. Győződj meg róla, hogy a nyomtató be van kapcsolva, majd próbáld újra.</translation>
-<translation id="2904456025988372123">Kérdezzen rá, ha egy webhely automatikusan próbál letölteni fájlokat az első fájl után</translation>
 <translation id="2913331724188855103">Süti-adatok mentésének és olvasásának engedélyezése a webhelyeken (ajánlott)</translation>
 <translation id="2931157624143513983">Igazítás a nyomtatási területhez</translation>
 <translation id="2932085390869194046">Jelszó ajánlása…</translation>
@@ -126,7 +122,6 @@
 <translation id="3127156390846601284">Ez minden adatot töröl, amelyet a megjelenített webhelyek tároltak eszközödön. Folytatod?</translation>
 <translation id="3129173833825111527">Bal margó</translation>
 <translation id="3144647712221361880">Hivatkozás megnyitása mint</translation>
-<translation id="3154429428035006212">Több mint egy hónapja offline</translation>
 <translation id="3222066309010235055">Előmegjelenítés: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Válassza ki a bővítmény gyökérkönyvtárát. A bővítmény frissítéséhez meg kell adni az ismét használandó privátkulcs-fájlt is.</translation>
 <translation id="3280237271814976245">Mentés &amp;másként...</translation>
@@ -165,7 +160,6 @@
 <translation id="3838085852053358637">Nem sikerült betölteni a bővítményt</translation>
 <translation id="383891835335927981">Nincs nagyított vagy kicsinyített webhely</translation>
 <translation id="385051799172605136">Vissza</translation>
-<translation id="3899879303189199559">Több mint egy éve offline</translation>
 <translation id="3905761538810670789">Alkalmazás javítása</translation>
 <translation id="3908501907586732282">Bővítmény engedélyezése</translation>
 <translation id="3909701002594999354">Az összes &amp;vezérlő megjelenítése</translation>
@@ -192,7 +186,6 @@
 <translation id="4200983522494130825">Új &amp;lap</translation>
 <translation id="4225397296022057997">Az összes webhelyen</translation>
 <translation id="4256316378292851214">&amp;Videó mentése másként...</translation>
-<translation id="4278390842282768270">Engedélyezve</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K élő)</translation>
 <translation id="4345587454538109430">Beállítás...</translation>
 <translation id="4348766275249686434">Hibák gyűjtése</translation>
@@ -222,10 +215,8 @@
 <translation id="4988526792673242964">Oldal</translation>
 <translation id="49896407730300355">Forgatás &amp;balra</translation>
 <translation id="4989966318180235467">&amp;Háttéroldal vizsgálata</translation>
-<translation id="4994474651455208930">A webhelyek kérhetik, hogy protokollok alapértelmezett kezelői legyenek</translation>
 <translation id="5000922062037820727">Letiltva (ajánlott)</translation>
 <translation id="5027562294707732951">Bővítmény hozzáadása</translation>
-<translation id="5036662165765606524">Ne engedélyezze a webhelyeknek több fájl automatikus letöltését</translation>
 <translation id="5039804452771397117">Engedélyezés</translation>
 <translation id="5057110919553308744">Amikor a bővítményre kattintasz</translation>
 <translation id="5059526285558225588">A megosztandó tartalom kiválasztása</translation>
@@ -238,7 +229,6 @@
 <translation id="5233231016133573565">Folyamat azonosítója</translation>
 <translation id="5233736638227740678">&amp;Beillesztés</translation>
 <translation id="5256861893479663409">Az összes webhelyen</translation>
-<translation id="5265562206369321422">Több mint egy hete offline</translation>
 <translation id="5269977353971873915">A nyomtatás nem sikerült</translation>
 <translation id="5284445933715251131">Letöltés folytatása</translation>
 <translation id="52912272896845572">A privátkulcs-fájl érvénytelen.</translation>
@@ -294,7 +284,6 @@
 <translation id="6122081475643980456">Internetkapcsolata felett más vette át az irányítást</translation>
 <translation id="6147020289383635445">A nyomtatási előnézet létrehozása sikertelen.</translation>
 <translation id="6156863943908443225">Szkript gyorsítótár</translation>
-<translation id="6169666352732958425">Nem lehet átküldeni az asztalt.</translation>
 <translation id="6196854373336333322">A(z) <ph name="EXTENSION_NAME" /> bővítmény átvette az irányítást proxybeállításai felett, ami azt jelenti, hogy a bővítmény minden internetes tevékenységét módosíthatja, feltörheti vagy lehallgathatja. Ha nem biztos benne, hogy miért történt a változás, akkor valószínűleg nem is akarja azt.</translation>
 <translation id="6200151268994853226">Bővítmény kezelése</translation>
 <translation id="6206311232642889873">Ké&amp;p másolása</translation>
@@ -328,7 +317,6 @@
 <translation id="6798954102094737107">Beépülő modul: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Módosítások megtartása</translation>
 <translation id="6817174620439930047">Kérdezzen meg, amikor egy webhely exkluzív rendszerüzenetekkel szeretné elérni a MIDI-eszközöket (ajánlott)</translation>
-<translation id="682123305478866682">Asztal átküldése</translation>
 <translation id="6824564591481349393">&amp;E-mail cím másolása</translation>
 <translation id="6840155290835956714">Kérdezzen rá küldés előtt</translation>
 <translation id="6886871292305414135">Hivatkozás megnyitása új &amp;lapon</translation>
@@ -346,7 +334,6 @@
 <translation id="708060913198414444">Audi&amp;ocím másolása</translation>
 <translation id="7175353351958621980">Betöltve innen:</translation>
 <translation id="7186088072322679094">Eszköztárban tart</translation>
-<translation id="7270858098575133036">Kérdezzen meg, amikor egy webhely exkluzív rendszerüzenetekkel szeretné elérni a MIDI-eszközöket</translation>
 <translation id="7287143125007575591">Hozzáférés megtagadva.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> × <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7385854874724088939">Valami nem sikerült a nyomtatás során. Ellenőrizd a nyomtatót, és próbáld újra.</translation>
@@ -369,7 +356,6 @@
 <translation id="7704305437604973648">Feladat</translation>
 <translation id="7710568461918838723">Át&amp;játszás...</translation>
 <translation id="7750228210027921155">Kép a képben</translation>
-<translation id="7751260505918304024">Összes megjelenítése</translation>
 <translation id="7760004034676677601">Erre a kezdőoldalra számított?</translation>
 <translation id="7771452384635174008">Elrendezés</translation>
 <translation id="7782102568078991263">Nincs több javaslat a Google-tól</translation>
@@ -382,9 +368,7 @@
 <translation id="7849264908733290972">Kép &amp;megnyitása új lapon</translation>
 <translation id="7857949311770343000">Erre az új lap oldalra számított?</translation>
 <translation id="786073089922909430">Szolgáltatás: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7885253890047913815">Legutóbbi célhelyek</translation>
 <translation id="7903925330883316394">Segédprogram: <ph name="UTILITY_TYPE" /></translation>
-<translation id="7938594894617528435">Jelenleg offline</translation>
 <translation id="7947962633355574091">Vide&amp;ocím másolása</translation>
 <translation id="7966241909927244760">Képcím más&amp;olása</translation>
 <translation id="7973394300052703468">Új &amp;privát ablak</translation>
@@ -426,10 +410,8 @@ A kulcsfájlt tartsd biztonságos helyen. Szükséged lesz rá ahhoz, hogy új v
 <translation id="8708000541097332489">Törlés kilépéskor</translation>
 <translation id="8714838604780058252">Háttérgrafika</translation>
 <translation id="8725066075913043281">Újrapróbálás</translation>
-<translation id="8757090071857742562">Nem lehet átküldeni az asztal tartalmát. Ellenőrizd, hogy megerősítetted-e a képernyő megosztásának megkezdésére vonatkozó kérdést.</translation>
 <translation id="8774934320277480003">Felső margó</translation>
 <translation id="8798099450830957504">Alapértelmezett</translation>
-<translation id="8800004011501252845">Célhelyek megjelenítése a következőhöz:</translation>
 <translation id="8808478386290700967">Vivaldi internetes áruház</translation>
 <translation id="8823514049557262177">Hivatkozás szövegének má&amp;solása</translation>
 <translation id="8823704566850948458">Jelszó ajánlása…</translation>
@@ -442,7 +424,6 @@ A kulcsfájlt tartsd biztonságos helyen. Szükséged lesz rá ahhoz, hogy új v
 <translation id="8962083179518285172">Részletek elrejtése</translation>
 <translation id="8973557916016709913">Nagyítási szint eltávolítása</translation>
 <translation id="897939795688207351">Itt: <ph name="ORIGIN" /></translation>
-<translation id="8996526648899750015">Fiók hozzáadása...</translation>
 <translation id="9003647077635673607">Engedélyezés minden weboldalon</translation>
 <translation id="9027459031423301635">Hivatkozás megnyitása új &amp;lapon</translation>
 <translation id="9056810968620647706">Nincs találat.</translation>

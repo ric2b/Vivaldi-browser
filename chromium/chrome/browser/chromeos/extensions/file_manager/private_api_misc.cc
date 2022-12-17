@@ -42,6 +42,7 @@
 #include "chrome/browser/ash/file_system_provider/mount_path_util.h"
 #include "chrome/browser/ash/file_system_provider/service.h"
 #include "chrome/browser/ash/guest_os/guest_os_share_path.h"
+#include "chrome/browser/ash/guest_os/public/guest_os_service.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/extensions/file_manager/private_api_util.h"
@@ -449,7 +450,7 @@ FileManagerPrivateGetZipProgressFunction::ZipProgressValue(
 
     // Remove the matching ZipFileCreator from the list of active ones.
     const size_t n = zip_creators->erase(zip_id_);
-    DCHECK_LT(0, n);
+    DCHECK_GT(n, 0u);
   }
 
   return TwoArguments(base::Value(static_cast<int>(progress.result)),
@@ -772,7 +773,8 @@ FileManagerPrivateConfigureVolumeFunction::Run() {
   base::WeakPtr<Volume> volume =
       volume_manager->FindVolumeById(params->volume_id);
   if (!volume.get())
-    return RespondNow(Error("Volume not found."));
+    return RespondNow(Error("ConfigureVolume: volume with ID * not found.",
+                            params->volume_id));
   if (!volume->configurable())
     return RespondNow(Error("Volume not configurable."));
 
@@ -1216,6 +1218,9 @@ FileManagerPrivateInternalGetRecentFilesFunction::Run() {
     case api::file_manager_private::RECENT_FILE_TYPE_VIDEO:
       file_type = chromeos::RecentModel::FileType::kVideo;
       break;
+    case api::file_manager_private::RECENT_FILE_TYPE_DOCUMENT:
+      file_type = chromeos::RecentModel::FileType::kDocument;
+      break;
     default:
       NOTREACHED();
       return RespondNow(Error("Unknown recent file type is specified."));
@@ -1332,7 +1337,8 @@ ExtensionFunction::ResponseAction FileManagerPrivateOpenWindowFunction::Run() {
           /*target_name=*/{}, &file_type_info,
           /*file_type_index=*/0,
           /*search_query=*/{},
-          /*show_android_picker_apps=*/false);
+          /*show_android_picker_apps=*/false,
+          /*volume_filter=*/{});
 
   web_app::SystemAppLaunchParams launch_params;
   launch_params.url = files_swa_url;

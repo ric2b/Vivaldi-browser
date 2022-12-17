@@ -6,12 +6,13 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/sequence_local_storage_slot.h"
-
 #include "base/threading/sequenced_task_runner_handle.h"
+#include "build/build_config.h"
+
 #include "platform_media/gpu/pipeline/ipc_media_pipeline.h"
 #include "platform_media/renderer/decoders/ipc_factory.h"
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 #include "platform_media/common/win/platform_media_init.h"
 #endif
 
@@ -73,7 +74,7 @@ class RunnerDestructorObserver {
 IPCPipelineTestSetup::IPCPipelineTestSetup()
     : fields_(std::make_unique<Fields>()) {
   CHECK(!g_current_fields);
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   fields_->pipeline_runner = CreatePipelineRunner();
 #else
   fields_->pipeline_runner = base::ThreadPool::CreateSequencedTaskRunner({});

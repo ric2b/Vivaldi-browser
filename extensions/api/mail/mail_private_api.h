@@ -277,14 +277,15 @@ class MailPrivateMatchMessageFunction : public MailPrivateAsyncFunction {
   base::CancelableTaskTracker task_tracker_;
 };
 
-class MailPrivateRebuildDatabaseFunction : public MailPrivateAsyncFunction {
-  DECLARE_EXTENSION_FUNCTION("mailPrivate.rebuildDatabase",
+class MailPrivateRebuildAndVacuumDatabaseFunction
+    : public MailPrivateAsyncFunction {
+  DECLARE_EXTENSION_FUNCTION("mailPrivate.rebuildAndVacuumDatabase",
                              MAIL_SEARCH_REBUILD_DATABASE)
  public:
-  MailPrivateRebuildDatabaseFunction() = default;
+  MailPrivateRebuildAndVacuumDatabaseFunction() = default;
 
  private:
-  ~MailPrivateRebuildDatabaseFunction() override = default;
+  ~MailPrivateRebuildAndVacuumDatabaseFunction() override = default;
 
   // ExtensionFunction:
   ResponseAction Run() override;

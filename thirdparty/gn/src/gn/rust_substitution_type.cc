@@ -42,6 +42,12 @@ bool IsValidRustSubstitution(const Substitution* type) {
          type == &kRustSubstitutionSources;
 }
 
+// Rust substitution types which we also make available to action targets.
+bool IsValidRustScriptArgsSubstitution(const Substitution* type) {
+  return type == &kRustSubstitutionRustEnv ||
+         type == &kRustSubstitutionRustFlags;
+}
+
 bool IsValidRustLinkerSubstitution(const Substitution* type) {
   return IsValidRustSubstitution(type) ||
          type == &CSubstitutionLdFlags;

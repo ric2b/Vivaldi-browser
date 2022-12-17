@@ -4,6 +4,9 @@
 
 #include "services/network/cors/cors_url_loader.h"
 
+#include <sstream>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/containers/contains.h"
 #include "base/containers/flat_set.h"
@@ -29,6 +32,8 @@
 #include "services/network/url_loader.h"
 #include "services/network/url_loader_factory.h"
 #include "url/url_util.h"
+
+#include "app/vivaldi_apptools.h"
 
 namespace network {
 
@@ -120,6 +125,23 @@ base::Value NetLogPreflightRequiredParams(
     dict.SetStringKey("preflight_required_reason",
                       preflight_required_reason_param);
   }
+  return dict;
+}
+
+// Returns net log params for the `CORS_PREFLIGHT_ERROR` event type.
+base::Value::Dict NetLogPreflightErrorParams(
+    int net_error,
+    const absl::optional<CorsErrorStatus>& status) {
+  base::Value::Dict dict;
+
+  dict.Set("error", net::ErrorToShortString(net_error));
+  if (status) {
+    dict.Set("cors-error", static_cast<int>(status->cors_error));
+    if (!status->failed_parameter.empty()) {
+      dict.Set("failed-parameter", status->failed_parameter);
+    }
+  }
+
   return dict;
 }
 
@@ -473,6 +495,7 @@ void CorsURLLoader::OnReceiveResponse(mojom::URLResponseHeadPtr response_head,
     }
   }
 
+  has_forwarded_response_ = true;
   timing_allow_failed_flag_ = !PassesTimingAllowOriginCheck(*response_head);
 
   response_head->response_type = response_tainting_;
@@ -655,12 +678,16 @@ void CorsURLLoader::StartRequest() {
       (fetch_cors_flag_ ||
        (request_.method != net::HttpRequestHeaders::kGetMethod &&
         request_.method != net::HttpRequestHeaders::kHeadMethod))) {
+    // NOTE(andre@vivaldi.com) : If the request is from Vivaldi do not send
+    // origin as this would break outlook logins. VB-84230
+    if (!vivaldi::IsVivaldiApp(request_.request_initiator->host())){
     if (tainted_) {
       request_.headers.SetHeader(net::HttpRequestHeaders::kOrigin,
                                  url::Origin().Serialize());
     } else {
       request_.headers.SetHeader(net::HttpRequestHeaders::kOrigin,
                                  request_.request_initiator->Serialize());
+    }
     }
   }
 
@@ -744,12 +771,21 @@ absl::optional<URLLoaderCompletionStatus> CorsURLLoader::ConvertPreflightResult(
     return absl::nullopt;
   }
 
+  net_log_.AddEvent(net::NetLogEventType::CORS_PREFLIGHT_ERROR, [&] {
+    return base::Value(NetLogPreflightErrorParams(net_error, status));
+  });
+
   // `kInvalidResponse` is never returned by the preflight controller, so we use
   // it to record the case where there was a net error and no CORS error.
   auto histogram_error = mojom::CorsError::kInvalidResponse;
   if (status) {
     DCHECK(status->cors_error != mojom::CorsError::kInvalidResponse);
     histogram_error = status->cors_error;
+
+    // Report the target IP address space unconditionally as part of the error
+    // if there was one. This allows higher layers to understand that a PNA
+    // preflight request was attempted.
+    status->target_address_space = request_.target_ip_address_space;
   }
 
   if (should_ignore_preflight_errors_) {
@@ -779,10 +815,6 @@ absl::optional<URLLoaderCompletionStatus> CorsURLLoader::ConvertPreflightResult(
 
   base::UmaHistogramEnumeration(kPreflightErrorHistogramName, histogram_error);
   if (status) {
-    // Report the target IP address space unconditionally as part of the error
-    // if there was one. This allows higher layers to understand that a PNA
-    // preflight request was attempted.
-    status->target_address_space = request_.target_ip_address_space;
     return URLLoaderCompletionStatus(*std::move(status));
   }
 
@@ -861,21 +893,29 @@ void CorsURLLoader::HandleComplete(const URLLoaderCompletionStatus& status) {
     DCHECK(status.cors_error_status->resource_address_space !=
            mojom::IPAddressSpace::kUnknown);
 
-    // If we only send a preflight because of Private Network Access, and we are
-    // configured to ignore errors caused by Private Network Access, then we
-    // should ignore any preflight error, as if we had never sent the preflight.
-    // Otherwise, if we had sent a preflight before we noticed the private
-    // network access, then we rely on `PreflightController` to ignore
-    // PNA-specific preflight errors during this second preflight request.
-    should_ignore_preflight_errors_ =
-        ShouldIgnorePrivateNetworkAccessErrors() &&
-        !NeedsPreflight(request_).has_value();
+    // We should never send a preflight request for PNA after having already
+    // forwarded response headers to our client. See https://crbug.com/1279376.
+    if (!has_forwarded_response_) {
+      // If we only send a preflight because of Private Network Access, and we
+      // are configured to ignore errors caused by Private Network Access, then
+      // we should ignore any preflight error, as if we had never sent the
+      // preflight. Otherwise, if we had sent a preflight before we noticed the
+      // private network access, then we rely on `PreflightController` to ignore
+      // PNA-specific preflight errors during this second preflight request.
+      should_ignore_preflight_errors_ =
+          ShouldIgnorePrivateNetworkAccessErrors() &&
+          !(NeedsPreflight(request_).has_value() && fetch_cors_flag_);
 
-    network_client_receiver_.reset();
-    request_.target_ip_address_space =
-        status.cors_error_status->resource_address_space;
-    StartRequest();
-    return;
+      network_client_receiver_.reset();
+      request_.target_ip_address_space =
+          status.cors_error_status->resource_address_space;
+      StartRequest();
+      return;
+    }
+
+    // DCHECK that we never run into this scenario, but fail the request for
+    // safety if this ever happens in production.
+    NOTREACHED();
   }
 
   net_log_.EndEvent(net::NetLogEventType::CORS_REQUEST);

@@ -12,13 +12,15 @@
 
 #include "base/hash/hash.h"
 #include "base/memory/raw_ptr.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
-#include "components/viz/common/display/overlay_strategy.h"
+#include "build/chromeos_buildflags.h"
 #include "components/viz/common/quads/aggregated_render_pass.h"
 #include "components/viz/service/display/display_resource_provider.h"
 #include "components/viz/service/display/output_surface.h"
 #include "components/viz/service/display/overlay_candidate.h"
 #include "components/viz/service/display/overlay_candidate_temporal_tracker.h"
+#include "components/viz/service/display/overlay_combination_cache.h"
 #include "components/viz/service/display/overlay_processor_interface.h"
 #include "components/viz/service/display/overlay_processor_strategy.h"
 #include "components/viz/service/display/overlay_proposed_candidate.h"
@@ -30,6 +32,7 @@ class DisplayResourceProvider;
 }
 
 namespace viz {
+
 // OverlayProcessor subclass that goes through a list of strategies to determine
 // overlay candidates. THis is used by Android and Ozone platforms.
 class VIZ_SERVICE_EXPORT OverlayProcessorUsingStrategy
@@ -55,7 +58,7 @@ class VIZ_SERVICE_EXPORT OverlayProcessorUsingStrategy
   void ProcessForOverlays(
       DisplayResourceProvider* resource_provider,
       AggregatedRenderPassList* render_passes,
-      const skia::Matrix44& output_color_matrix,
+      const SkM44& output_color_matrix,
       const FilterOperationsMap& render_pass_filters,
       const FilterOperationsMap& render_pass_backdrop_filters,
       SurfaceDamageRectList surface_damage_rect_list,
@@ -89,6 +92,9 @@ class VIZ_SERVICE_EXPORT OverlayProcessorUsingStrategy
       const OverlayProcessorInterface::OutputSurfaceOverlayPlane* primary_plane,
       OverlayCandidateList* candidate_list);
 
+  // Clears the cache of attempted overlay combinations and their results.
+  void ClearOverlayCombinationCache();
+
   // This should be called during overlay processing to register whether or not
   // there is a candidate that requires an overlay so that the manager can allow
   // the overlay on the display with the requirement only.
@@ -117,6 +123,13 @@ class VIZ_SERVICE_EXPORT OverlayProcessorUsingStrategy
 
   OverlayPrioritizationConfig prioritization_config_;
   OverlayCandidateTemporalTracker::Config tracker_config_;
+
+  // This is controlled by the "UseMultipleOverlays" feature's "max_overlays"
+  // param.
+  const int max_overlays_config_;
+  // This will remain 1 until hardware support for more than one overlay is
+  // confirmed in `OverlayProcessorOzone::ReceiveHardwareCapabilities`.
+  int max_overlays_considered_ = 1;
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
  protected:
@@ -147,6 +160,7 @@ class VIZ_SERVICE_EXPORT OverlayProcessorUsingStrategy
     bool is_underlay;
     bool is_opaque;
     bool is_new;
+    bool prev_was_opaque;
     bool prev_was_underlay;
     bool prev_has_mask_filter;
   };
@@ -172,7 +186,7 @@ class VIZ_SERVICE_EXPORT OverlayProcessorUsingStrategy
   // through as a const member because the underlay strategy changes the
   // |primary_plane|'s blending setting.
   bool AttemptWithStrategies(
-      const skia::Matrix44& output_color_matrix,
+      const SkM44& output_color_matrix,
       const OverlayProcessorInterface::FilterOperationsMap&
           render_pass_backdrop_filters,
       DisplayResourceProvider* resource_provider,
@@ -190,7 +204,7 @@ class VIZ_SERVICE_EXPORT OverlayProcessorUsingStrategy
   // through as a const member because the underlay strategy changes the
   // |primary_plane|'s blending setting.
   bool AttemptWithStrategiesPrioritized(
-      const skia::Matrix44& output_color_matrix,
+      const SkM44& output_color_matrix,
       const OverlayProcessorInterface::FilterOperationsMap&
           render_pass_backdrop_filters,
       DisplayResourceProvider* resource_provider,
@@ -254,28 +268,6 @@ class VIZ_SERVICE_EXPORT OverlayProcessorUsingStrategy
   // reflect the overlays that will be promoted this frame in `candidates`.
   void UpdateOverlayStatusMap(const OverlayCandidateList& candidates);
 
-  struct ProposedCandidateKey {
-    OverlayCandidate::TrackingId tracking_id =
-        OverlayCandidate::kDefaultTrackingId;
-    OverlayStrategy strategy_id = OverlayStrategy::kUnknown;
-
-    bool operator==(const ProposedCandidateKey& other) const {
-      return (tracking_id == other.tracking_id &&
-              strategy_id == other.strategy_id);
-    }
-  };
-
-  struct ProposedCandidateKeyHasher {
-    std::size_t operator()(const ProposedCandidateKey& k) const {
-      return base::Hash(&k, sizeof(k));
-    }
-  };
-
-  static ProposedCandidateKey ToProposeKey(
-      const OverlayProposedCandidate& proposed);
-
-  const int max_overlays_considered_;
-
   std::unordered_map<ProposedCandidateKey,
                      OverlayCandidateTemporalTracker,
                      ProposedCandidateKeyHasher>
@@ -299,6 +291,8 @@ class VIZ_SERVICE_EXPORT OverlayProcessorUsingStrategy
   // used by UpdateDamageRect() to update damage properly.
   OverlayStatusMap prev_overlays_;
   OverlayStatusMap curr_overlays_;
+
+  OverlayCombinationCache overlay_combination_cache_;
 };
 
 }  // namespace viz

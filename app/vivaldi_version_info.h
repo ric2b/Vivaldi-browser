@@ -32,6 +32,9 @@ const base::Version& GetVivaldiVersion();
 // Returns true when running a build that is a beta or a final.
 bool IsBetaOrFinal();
 
+// Returns a version string for Vivaldi mail.
+std::string GetVivaldiMailVersionString();
+
 }  // namespace vivaldi
 
 #endif  // APP_VIVALDI_VERSION_INFO_H_

@@ -43,17 +43,16 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/current_thread.h"
-#include "base/task/post_task.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_chromeos_version_info.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/scoped_run_loop_timeout.h"
 #include "base/time/time.h"
+#include "chromeos/ash/components/dbus/upstart/fake_upstart_client.h"
 #include "chromeos/dbus/concierge/fake_concierge_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/debug_daemon/fake_debug_daemon_client.h"
 #include "chromeos/dbus/session_manager/fake_session_manager_client.h"
-#include "chromeos/dbus/upstart/fake_upstart_client.h"
 #include "components/user_manager/user_names.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -72,6 +71,9 @@ constexpr char kArcVmPostLoginServicesJobName[] =
 constexpr char kArcVmPostVmStartServicesJobName[] =
     "arcvm_2dpost_2dvm_2dstart_2dservices";
 constexpr const char kArcVmDefaultOwner[] = "ARCVM_DEFAULT_OWNER";
+
+// Disk path contained in CreateDiskImageResponse().
+constexpr const char kCreatedDiskImagePath[] = "test/data.img";
 
 constexpr const char kUserIdHash[] = "this_is_a_valid_user_id_hash";
 constexpr const char kSerialNumber[] = "AAAABBBBCCCCDDDD1234";
@@ -103,6 +105,14 @@ UpgradeParams GetPopulatedUpgradeParams() {
   return params;
 }
 
+vm_tools::concierge::CreateDiskImageResponse CreateDiskImageResponse(
+    vm_tools::concierge::DiskImageStatus status) {
+  vm_tools::concierge::CreateDiskImageResponse res;
+  res.set_status(status);
+  res.set_disk_path(base::FilePath(kCreatedDiskImagePath).AsUTF8Unsafe());
+  return res;
+}
+
 std::string GenerateAbstractAddress() {
   std::string address(kArcVmBootNotificationServerAddressPrefix,
                       sizeof(kArcVmBootNotificationServerAddressPrefix) - 1);
@@ -122,6 +132,15 @@ bool HasParameterWithPrefix(
       prefix_found = true;
   }
   return prefix_found;
+}
+
+bool HasDiskImage(const vm_tools::concierge::StartArcVmRequest& request,
+                  const std::string& disk_path) {
+  for (const auto& disk : request.disks()) {
+    if (disk.path() == disk_path)
+      return true;
+  }
+  return false;
 }
 
 // A debugd client that can fail to start Concierge.
@@ -317,7 +336,7 @@ class ArcVmClientAdapterTest : public testing::Test,
     chromeos::DBusThreadManager::GetSetterForTesting()->SetDebugDaemonClient(
         std::make_unique<TestDebugDaemonClient>());
     TestConciergeClient::Initialize();
-    chromeos::UpstartClient::InitializeFake();
+    ash::UpstartClient::InitializeFake();
   }
 
   ArcVmClientAdapterTest(const ArcVmClientAdapterTest&) = delete;
@@ -503,7 +522,7 @@ class ArcVmClientAdapterTest : public testing::Test,
   }
 
   void InjectUpstartStartJobFailure(const std::string& job_name_to_fail) {
-    auto* upstart_client = chromeos::FakeUpstartClient::Get();
+    auto* upstart_client = ash::FakeUpstartClient::Get();
     upstart_client->set_start_job_cb(base::BindLambdaForTesting(
         [job_name_to_fail](const std::string& job_name,
                            const std::vector<std::string>& env) {
@@ -513,7 +532,7 @@ class ArcVmClientAdapterTest : public testing::Test,
   }
 
   void InjectUpstartStopJobFailure(const std::string& job_name_to_fail) {
-    auto* upstart_client = chromeos::FakeUpstartClient::Get();
+    auto* upstart_client = ash::FakeUpstartClient::Get();
     upstart_client->set_stop_job_cb(base::BindLambdaForTesting(
         [job_name_to_fail](const std::string& job_name,
                            const std::vector<std::string>& env) {
@@ -523,7 +542,7 @@ class ArcVmClientAdapterTest : public testing::Test,
   }
 
   void StartRecordingUpstartOperations() {
-    auto* upstart_client = chromeos::FakeUpstartClient::Get();
+    auto* upstart_client = ash::FakeUpstartClient::Get();
     upstart_client->set_start_job_cb(
         base::BindLambdaForTesting([this](const std::string& job_name,
                                           const std::vector<std::string>& env) {
@@ -541,11 +560,11 @@ class ArcVmClientAdapterTest : public testing::Test,
   }
 
   void RemoveUpstartStartStopJobFailures() {
-    auto* upstart_client = chromeos::FakeUpstartClient::Get();
+    auto* upstart_client = ash::FakeUpstartClient::Get();
     upstart_client->set_start_job_cb(
-        chromeos::FakeUpstartClient::StartStopJobCallback());
+        ash::FakeUpstartClient::StartStopJobCallback());
     upstart_client->set_stop_job_cb(
-        chromeos::FakeUpstartClient::StartStopJobCallback());
+        ash::FakeUpstartClient::StartStopJobCallback());
   }
 
   // Calls ArcVmClientAdapter::StopArcInstance().
@@ -614,6 +633,10 @@ class ArcVmClientAdapterTest : public testing::Test,
     return boot_server_.get();
   }
 
+  void set_block_apex_path(base::FilePath block_apex_path) {
+    block_apex_path_ = block_apex_path;
+  }
+
   void set_host_rootfs_writable(bool host_rootfs_writable) {
     host_rootfs_writable_ = host_rootfs_writable;
   }
@@ -629,6 +652,7 @@ class ArcVmClientAdapterTest : public testing::Test,
 
  private:
   void RewriteStatus(FileSystemStatus* status) {
+    status->set_block_apex_path_for_testing(block_apex_path_);
     status->set_host_rootfs_writable_for_testing(host_rootfs_writable_);
     status->set_system_image_ext_format_for_testing(system_image_ext_format_);
   }
@@ -642,6 +666,7 @@ class ArcVmClientAdapterTest : public testing::Test,
   ArcServiceManager arc_service_manager_;
 
   // Variables to override the value in FileSystemStatus.
+  base::FilePath block_apex_path_;
   bool host_rootfs_writable_;
   bool system_image_ext_format_;
 
@@ -1332,13 +1357,7 @@ TEST_F(ArcVmClientAdapterTest, StartUpgradeArc_DemoMode) {
   // Verify the request.
   auto request = GetTestConciergeClient()->start_arc_vm_request();
   // Make sure disks have the squashfs image.
-  EXPECT_TRUE(([&kDemoImage, &request]() {
-    for (const auto& disk : request.disks()) {
-      if (disk.path() == kDemoImage)
-        return true;
-    }
-    return false;
-  }()));
+  EXPECT_TRUE(HasDiskImage(request, kDemoImage));
 
   SetValidUserInfo();
   UpgradeParams params(GetPopulatedUpgradeParams());
@@ -1437,9 +1456,6 @@ TEST_F(ArcVmClientAdapterTest, StartMiniArc_StartArcVmParams) {
   const auto& params = GetTestConciergeClient()->start_arc_vm_request();
   EXPECT_EQ("arcvm", params.name());
   EXPECT_LT(0u, params.cpus());
-  EXPECT_FALSE(params.vm().kernel().empty());
-  // Make sure system.raw.img is passed.
-  EXPECT_FALSE(params.vm().rootfs().empty());
   // Make sure vendor.raw.img is passed.
   EXPECT_LE(1, params.disks_size());
   EXPECT_LT(0, params.params_size());
@@ -1636,6 +1652,97 @@ TEST_F(ArcVmClientAdapterTest, SpecifyBlockSize) {
   EXPECT_EQ(
       4096u,
       GetTestConciergeClient()->start_arc_vm_request().rootfs_block_size());
+}
+
+TEST_F(ArcVmClientAdapterTest, VirtioBlkForData_FlagDisabled) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatureState(arc::kEnableVirtioBlkForData, false);
+
+  GetTestConciergeClient()->set_create_disk_image_response(
+      CreateDiskImageResponse(vm_tools::concierge::DISK_STATUS_CREATED));
+
+  SetValidUserInfo();
+  StartMiniArcWithParams(true, GetPopulatedStartParams());
+  EXPECT_GE(GetTestConciergeClient()->start_arc_vm_call_count(), 1);
+
+  // CreateDiskImage() should NOT be called.
+  EXPECT_EQ(GetTestConciergeClient()->create_disk_image_call_count(), 0);
+
+  // StartArcVmRequest should NOT contain a disk created by CreateDiskImage().
+  auto req = GetTestConciergeClient()->start_arc_vm_request();
+  EXPECT_FALSE(HasDiskImage(req, kCreatedDiskImagePath));
+  EXPECT_TRUE(
+      base::Contains(req.params(), "androidboot.arcvm_virtio_blk_data=0"));
+}
+
+TEST_F(ArcVmClientAdapterTest, VirtioBlkForData_CreateDiskimageResponseEmpty) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatureState(arc::kEnableVirtioBlkForData, true);
+
+  // CreateDiskImage() returns an empty response.
+  GetTestConciergeClient()->set_create_disk_image_response(absl::nullopt);
+
+  // StartArcVm should NOT be called.
+  SetValidUserInfo();
+  StartMiniArcWithParams(false, {});
+  EXPECT_EQ(GetTestConciergeClient()->start_arc_vm_call_count(), 0);
+
+  EXPECT_EQ(GetTestConciergeClient()->create_disk_image_call_count(), 1);
+}
+
+TEST_F(ArcVmClientAdapterTest, VirtioBlkForData_CreateDiskImageStatusFailed) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatureState(arc::kEnableVirtioBlkForData, true);
+
+  GetTestConciergeClient()->set_create_disk_image_response(
+      CreateDiskImageResponse(vm_tools::concierge::DISK_STATUS_FAILED));
+
+  // StartArcVm should NOT be called.
+  SetValidUserInfo();
+  StartMiniArcWithParams(false, {});
+  EXPECT_EQ(GetTestConciergeClient()->start_arc_vm_call_count(), 0);
+
+  EXPECT_EQ(GetTestConciergeClient()->create_disk_image_call_count(), 1);
+}
+
+TEST_F(ArcVmClientAdapterTest, VirtioBlkForData_CreateDiskImageStatusCreated) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatureState(arc::kEnableVirtioBlkForData, true);
+
+  GetTestConciergeClient()->set_create_disk_image_response(
+      CreateDiskImageResponse(vm_tools::concierge::DISK_STATUS_CREATED));
+
+  SetValidUserInfo();
+  StartMiniArcWithParams(true, GetPopulatedStartParams());
+  EXPECT_GE(GetTestConciergeClient()->start_arc_vm_call_count(), 1);
+
+  EXPECT_EQ(GetTestConciergeClient()->create_disk_image_call_count(), 1);
+
+  // StartArcVmRequest should contain a disk path created by CreateDiskImage().
+  auto req = GetTestConciergeClient()->start_arc_vm_request();
+  EXPECT_TRUE(HasDiskImage(req, kCreatedDiskImagePath));
+  EXPECT_TRUE(
+      base::Contains(req.params(), "androidboot.arcvm_virtio_blk_data=1"));
+}
+
+TEST_F(ArcVmClientAdapterTest, VirtioBlkForData_CreateDiskImageStatusExists) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatureState(arc::kEnableVirtioBlkForData, true);
+
+  GetTestConciergeClient()->set_create_disk_image_response(
+      CreateDiskImageResponse(vm_tools::concierge::DISK_STATUS_EXISTS));
+
+  SetValidUserInfo();
+  StartMiniArcWithParams(true, GetPopulatedStartParams());
+  EXPECT_GE(GetTestConciergeClient()->start_arc_vm_call_count(), 1);
+
+  EXPECT_EQ(GetTestConciergeClient()->create_disk_image_call_count(), 1);
+
+  // StartArcVmRequest should contain a disk path created by CreateDiskImage().
+  auto req = GetTestConciergeClient()->start_arc_vm_request();
+  EXPECT_TRUE(HasDiskImage(req, kCreatedDiskImagePath));
+  EXPECT_TRUE(
+      base::Contains(req.params(), "androidboot.arcvm_virtio_blk_data=1"));
 }
 
 TEST_F(ArcVmClientAdapterTest, VshdForTest) {
@@ -1880,6 +1987,34 @@ TEST_F(ArcVmClientAdapterTest, DisableDownloadProviderEnforced) {
   EXPECT_TRUE(
       base::Contains(GetTestConciergeClient()->start_arc_vm_request().params(),
                      "androidboot.disable_download_provider=1"));
+}
+
+TEST_F(ArcVmClientAdapterTest, GmsCoreLowMemoryKillerProtection_FlagDisabled) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatureState(arc::kVmGmsCoreLowMemoryKillerProtection,
+                                    false);
+
+  SetValidUserInfo();
+  StartMiniArc();
+
+  auto req = GetTestConciergeClient()->start_arc_vm_request();
+  for (const auto& param : req.params()) {
+    EXPECT_EQ(std::string::npos,
+              param.find("arc_enable_gmscore_lmk_protection"));
+  }
+}
+
+TEST_F(ArcVmClientAdapterTest, GmsCoreLowMemoryKillerProtection_FlagEnabled) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatureState(arc::kVmGmsCoreLowMemoryKillerProtection,
+                                    true);
+
+  SetValidUserInfo();
+  StartMiniArc();
+
+  auto req = GetTestConciergeClient()->start_arc_vm_request();
+  EXPECT_TRUE(base::Contains(
+      req.params(), "androidboot.arc_enable_gmscore_lmk_protection=1"));
 }
 
 TEST_F(ArcVmClientAdapterTest, TrimVmMemory_Success) {
@@ -2145,7 +2280,39 @@ TEST_F(ArcVmClientAdapterTest, ArcVmBalloonPolicyDisabled) {
   EXPECT_FALSE(request.has_balloon_policy());
 }
 
-// Tests that OnConnectionReady() calls the MakeRtVcpu call D-Bus method.
+// Test that the request passes an empty disk for the demo image
+// or the block apex composite disk when they are not present.
+// There should be two empty disks (/dev/block/vdc and /dev/block/vdd)
+// and they should have path /dev/null.
+TEST_F(ArcVmClientAdapterTest, ArcVmEmptyVirtualDisksExist) {
+  StartMiniArc();
+
+  auto request = GetTestConciergeClient()->start_arc_vm_request();
+  EXPECT_EQ(request.disks(1).path(), "/dev/null");
+  EXPECT_EQ(request.disks(2).path(), "/dev/null");
+}
+
+// Test that block apex disk path exists when the composite disk payload
+// exists.
+TEST_F(ArcVmClientAdapterTest, ArcVmBlockApexDiskExists) {
+  constexpr const char path[] = "/opt/google/vms/android/apex/payload.img";
+  set_block_apex_path(base::FilePath(path));
+  StartMiniArc();
+  auto request = GetTestConciergeClient()->start_arc_vm_request();
+  EXPECT_TRUE(base::Contains(request.disks(), path,
+                             [](const auto& p) { return p.path(); }));
+}
+
+// Test that the block apex disk path isn't included when it doesn't exist.
+TEST_F(ArcVmClientAdapterTest, ArcVmNoBlockApexDisk) {
+  constexpr const char path[] = "/opt/google/vms/android/apex/payload.img";
+  StartMiniArc();
+  auto request = GetTestConciergeClient()->start_arc_vm_request();
+  EXPECT_FALSE(base::Contains(request.disks(), path,
+                              [](const auto& p) { return p.path(); }));
+}
+
+// Tests that OnConnectionReady() calls the ArcVmCompleteBoot call D-Bus method.
 TEST_F(ArcVmClientAdapterTest, OnConnectionReady) {
   StartParams start_params(GetPopulatedStartParams());
   SetValidUserInfo();
@@ -2156,45 +2323,46 @@ TEST_F(ArcVmClientAdapterTest, OnConnectionReady) {
   arc_bridge_service()->app()->SetInstance(app_instance());
   WaitForInstanceReady(arc_bridge_service()->app());
 
-  EXPECT_EQ(1, GetTestConciergeClient()->make_rt_vcpu_call_count());
+  EXPECT_EQ(1, GetTestConciergeClient()->arcvm_complete_boot_call_count());
 }
 
-// Tests that MakeRtVcpu failure won't crash the adapter.
-TEST_F(ArcVmClientAdapterTest, OnConnectionReady_MakeRtVcpuFailure) {
+// Tests that ArcVmCompleteBoot failure won't crash the adapter.
+TEST_F(ArcVmClientAdapterTest, OnConnectionReady_ArcVmCompleteBootFailure) {
   StartParams start_params(GetPopulatedStartParams());
   SetValidUserInfo();
   StartMiniArcWithParams(true, std::move(start_params));
   UpgradeArc(true);
 
   // Inject the failure.
-  absl::optional<vm_tools::concierge::MakeRtVcpuResponse> response;
+  absl::optional<vm_tools::concierge::ArcVmCompleteBootResponse> response;
   response.emplace();
-  response->set_success(false);
-  response->set_failure_reason("unknown failure");
-  GetTestConciergeClient()->set_make_rt_vcpu_response(response);
+  response->set_result(
+      vm_tools::concierge::ArcVmCompleteBootResult::BAD_REQUEST);
+  GetTestConciergeClient()->set_arcvm_complete_boot_response(response);
 
   // This calls ArcVmClientAdapter::OnConnectionReady().
   arc_bridge_service()->app()->SetInstance(app_instance());
   WaitForInstanceReady(arc_bridge_service()->app());
 
-  EXPECT_EQ(1, GetTestConciergeClient()->make_rt_vcpu_call_count());
+  EXPECT_EQ(1, GetTestConciergeClient()->arcvm_complete_boot_call_count());
 }
 
-// Tests that null MakeRtVcpu reply won't crash the adapter.
-TEST_F(ArcVmClientAdapterTest, OnConnectionReady_MakeRtVcpuFailureNullReply) {
+// Tests that null ArcVmCompleteBoot reply won't crash the adapter.
+TEST_F(ArcVmClientAdapterTest,
+       OnConnectionReady_ArcVmCompleteBootFailureNullReply) {
   StartParams start_params(GetPopulatedStartParams());
   SetValidUserInfo();
   StartMiniArcWithParams(true, std::move(start_params));
   UpgradeArc(true);
 
   // Inject the failure.
-  GetTestConciergeClient()->set_make_rt_vcpu_response(absl::nullopt);
+  GetTestConciergeClient()->set_arcvm_complete_boot_response(absl::nullopt);
 
   // This calls ArcVmClientAdapter::OnConnectionReady().
   arc_bridge_service()->app()->SetInstance(app_instance());
   WaitForInstanceReady(arc_bridge_service()->app());
 
-  EXPECT_EQ(1, GetTestConciergeClient()->make_rt_vcpu_call_count());
+  EXPECT_EQ(1, GetTestConciergeClient()->arcvm_complete_boot_call_count());
 }
 
 TEST_F(ArcVmClientAdapterTest, UpgradeArc_EnableArcNearbyShare_Default) {
@@ -2434,6 +2602,22 @@ TEST_P(ArcVmClientAdapterUsapProfileTest, Profile) {
     for (const auto& param : request.params())
       EXPECT_EQ(std::string::npos, param.find("usap_profile"));
   }
+}
+
+TEST_F(ArcVmClientAdapterTest, ArcVmTTSCachingDefault) {
+  StartParams start_params(GetPopulatedStartParams());
+  StartMiniArcWithParams(true, std::move(start_params));
+  const auto& request = GetTestConciergeClient()->start_arc_vm_request();
+  EXPECT_FALSE(HasParameterWithPrefix(request, "androidboot.arc.tts.caching="));
+}
+
+TEST_F(ArcVmClientAdapterTest, ArcVmTTSCachingEnabled) {
+  StartParams start_params(GetPopulatedStartParams());
+  start_params.enable_tts_caching = true;
+  StartMiniArcWithParams(true, std::move(start_params));
+  const auto& request = GetTestConciergeClient()->start_arc_vm_request();
+  EXPECT_TRUE(
+      base::Contains(request.params(), "androidboot.arc.tts.caching=1"));
 }
 
 }  // namespace

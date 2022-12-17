@@ -5,6 +5,7 @@
 #include "content/browser/payments/installed_payment_apps_finder_impl.h"
 
 #include "base/bind.h"
+#include "base/memory/ptr_util.h"
 #include "base/supports_user_data.h"
 #include "content/browser/payments/payment_app_context_impl.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
@@ -77,8 +78,8 @@ void InstalledPaymentAppsFinderImpl::CheckPermissionForPaymentApps(
   PaymentApps permitted_apps;
   for (auto& app : apps) {
     GURL origin = app.second->scope.DeprecatedGetOriginAsURL();
-    if (permission_controller->GetPermissionStatus(
-            PermissionType::PAYMENT_HANDLER, origin, origin) ==
+    if (permission_controller->GetPermissionStatusForOriginWithoutContext(
+            PermissionType::PAYMENT_HANDLER, url::Origin::Create(origin)) ==
         blink::mojom::PermissionStatus::GRANTED) {
       permitted_apps[app.first] = std::move(app.second);
     }

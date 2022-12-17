@@ -20,9 +20,6 @@ const base::Feature kAllowWindowDragUsingSystemDragDrop{
 const base::Feature kChromeLabs{"ChromeLabs",
                                 base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enables the Commander UI surface. See https://crbug.com/1014639
-const base::Feature kCommander{"Commander", base::FEATURE_DISABLED_BY_DEFAULT};
-
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
 // Enables "Tips for Chrome" in Main Chrome Menu | Help.
 const base::Feature kChromeTipsInMainMenu{"ChromeTipsInMainMenu",
@@ -60,6 +57,11 @@ const base::Feature kAccessCodeCastUI{"AccessCodeCastUI",
                                       base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
 
+// Enables displaying the submenu to open a link with a different profile
+// even if there is no other profile opened in a separate window
+const base::Feature kDisplayOpenLinkAsProfile{
+    "DisplayOpenLinkAsProfile", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables showing the EV certificate details in the Page Info bubble.
 const base::Feature kEvDetailsInPageInfo{"EvDetailsInPageInfo",
                                          base::FEATURE_ENABLED_BY_DEFAULT};
@@ -79,13 +81,9 @@ const base::Feature kForceSignInReauth{"ForceSignInReauth",
 const base::Feature kProminentDarkModeActiveTabTitle{
     "ProminentDarkModeActiveTabTitle", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enables a 'new' badge on the option to add to the reading list in the tab
-// context menu.
-const base::Feature kReadLaterNewBadgePromo{"ReadLaterNewBadgePromo",
-                                            base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kReadLaterAddFromDialog{"ReadLaterAddFromDialog",
-                                            base::FEATURE_ENABLED_BY_DEFAULT};
+// Enables the QuickCommands UI surface. See https://crbug.com/1014639
+const base::Feature kQuickCommands{"QuickCommands",
+                                   base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if BUILDFLAG(ENABLE_SIDE_SEARCH)
 // Enables the side search feature for Google Search. Presents recent Google
@@ -101,13 +99,31 @@ const base::Feature kSideSearchClearCacheWhenClosed{
 const base::Feature kSideSearchFeedback{"SideSearchFeedback",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Controls whether the state of side search is set at a per tab level.
-const base::Feature kSideSearchStatePerTab{"SideSearchStatePerTab",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
+// Controls whether the Side Search feature is configured to support any
+// participating Chrome search engine. This should always be enabled with
+// kSideSearch on non-ChromeOS platforms.
+const base::Feature kSideSearchDSESupport{"SideSearchDSESupport",
+                                          base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Whether to clobber all side search side panels in the current browser window
+// or only the side search in the current tab before read later or lens side
+// panel is open.
+const base::Feature kClobberAllSideSearchSidePanels{
+    "ClobberAllSideSearchSidePanels", base::FEATURE_ENABLED_BY_DEFAULT};
+
 #endif  // BUILDFLAG(ENABLE_SIDE_SEARCH)
 
 const base::Feature kSidePanelDragAndDrop{"SidePanelDragAndDrop",
-                                          base::FEATURE_DISABLED_BY_DEFAULT};
+                                          base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Adds improved support for handling multiple contextual and global RHS browser
+// side panels. Designed specifically to handle the interim state before the v2
+// side panel project launches.
+const base::Feature kSidePanelImprovedClobbering{
+    "SidePanelImprovedClobbering", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kSidePanelJourneys{"SidePanelJourneys",
+                                       base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables tabs to scroll in the tabstrip. https://crbug.com/951078
 const base::Feature kScrollableTabStrip{"ScrollableTabStrip",
@@ -118,11 +134,6 @@ const char kMinimumTabWidthFeatureParameterName[] = "minTabWidth";
 // scrollable-tabstrip is enabled. https://crbug.com/1116118
 const base::Feature kScrollableTabStripButtons{
     "ScrollableTabStripButtons", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Automatically create groups for users based on domain.
-// https://crbug.com/1128703
-const base::Feature kTabGroupsAutoCreate{"TabGroupsAutoCreate",
-                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Directly controls the "new" badge (as opposed to old "master switch"; see
 // https://crbug.com/1169907 for master switch deprecation and

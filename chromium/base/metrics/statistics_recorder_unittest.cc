@@ -108,7 +108,7 @@ class StatisticsRecorderTest : public testing::TestWithParam<bool> {
     Histogram::InitializeBucketRanges(min, max, ranges);
     const BucketRanges* registered_ranges =
         StatisticsRecorder::RegisterOrDeleteDuplicateRanges(ranges);
-    return new Histogram(name, min, max, registered_ranges);
+    return new Histogram(name, registered_ranges);
   }
 
   void InitLogOnShutdown() { StatisticsRecorder::InitLogOnShutdown(); }
@@ -154,43 +154,6 @@ TEST_P(StatisticsRecorderTest, NotInitialized) {
   EXPECT_TRUE(HasGlobalRecorder());
   EXPECT_THAT(StatisticsRecorder::GetBucketRanges(),
               UnorderedElementsAre(ranges));
-}
-
-TEST_P(StatisticsRecorderTest, RegisterBucketRanges) {
-  std::vector<const BucketRanges*> registered_ranges;
-
-  BucketRanges* ranges1 = new BucketRanges(3);
-  ranges1->ResetChecksum();
-  BucketRanges* ranges2 = new BucketRanges(4);
-  ranges2->ResetChecksum();
-
-  // Register new ranges.
-  EXPECT_EQ(ranges1,
-            StatisticsRecorder::RegisterOrDeleteDuplicateRanges(ranges1));
-  EXPECT_EQ(ranges2,
-            StatisticsRecorder::RegisterOrDeleteDuplicateRanges(ranges2));
-  EXPECT_THAT(StatisticsRecorder::GetBucketRanges(),
-              UnorderedElementsAre(ranges1, ranges2));
-
-  // Register some ranges again.
-  EXPECT_EQ(ranges1,
-            StatisticsRecorder::RegisterOrDeleteDuplicateRanges(ranges1));
-  EXPECT_THAT(StatisticsRecorder::GetBucketRanges(),
-              UnorderedElementsAre(ranges1, ranges2));
-
-  // Make sure the ranges is still the one we know.
-  ASSERT_EQ(3u, ranges1->size());
-  EXPECT_EQ(0, ranges1->range(0));
-  EXPECT_EQ(0, ranges1->range(1));
-  EXPECT_EQ(0, ranges1->range(2));
-
-  // Register ranges with same values.
-  BucketRanges* ranges3 = new BucketRanges(3);
-  ranges3->ResetChecksum();
-  EXPECT_EQ(ranges1,  // returning ranges1
-            StatisticsRecorder::RegisterOrDeleteDuplicateRanges(ranges3));
-  EXPECT_THAT(StatisticsRecorder::GetBucketRanges(),
-              UnorderedElementsAre(ranges1, ranges2));
 }
 
 TEST_P(StatisticsRecorderTest, RegisterHistogram) {

@@ -52,9 +52,6 @@ using safe_browsing::BinaryUploadService;
 
 namespace enterprise_connectors {
 
-const base::Feature kBypassJustificationEnabled{
-    "kBypassJustificationEnabled", base::FEATURE_DISABLED_BY_DEFAULT};
-
 namespace {
 
 // Global pointer of factory function (RepeatingCallback) used to create
@@ -184,7 +181,7 @@ void ContentAnalysisDelegate::BypassWarnings(
     ReportAnalysisConnectorWarningBypass(
         profile_, url_, "Text data", std::string(), "text/plain",
         extensions::SafeBrowsingPrivateEventRouter::kTriggerWebContentUpload,
-        access_point_, content_size, text_response_);
+        access_point_, content_size, text_response_, user_justification);
   }
 
   // Mark every "warning" file as complying and report a warning bypass.
@@ -196,7 +193,8 @@ void ContentAnalysisDelegate::BypassWarnings(
         profile_, url_, data_.paths[index].AsUTF8Unsafe(),
         file_info_[index].sha256, file_info_[index].mime_type,
         extensions::SafeBrowsingPrivateEventRouter::kTriggerFileUpload,
-        access_point_, file_info_[index].size, warning.second);
+        access_point_, file_info_[index].size, warning.second,
+        user_justification);
   }
 
   // TODO(crbug.com/1273922): Add bypass reporting code for print.

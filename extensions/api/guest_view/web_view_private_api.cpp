@@ -248,6 +248,11 @@ ExtensionFunction::ResponseAction WebViewPrivateSendRequestFunction::Run() {
   ui::PageTransition transition =
       HistoryPrivateAPI::PrivateHistoryTransitionToUiTransition(
           params->transition_type);
+  if (params->from_url_field) {
+    transition = ui::PageTransitionFromInt(
+        transition | ui::PAGE_TRANSITION_FROM_ADDRESS_BAR);
+  }
+
   // All the arguments passed to the constructor are ultimately ignored
   content::OpenURLParams url_params(GURL(params->url), content::Referrer(),
                                     WindowOpenDisposition::UNKNOWN, transition,

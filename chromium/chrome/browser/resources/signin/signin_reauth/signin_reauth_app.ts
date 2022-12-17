@@ -55,7 +55,7 @@ export class SigninReauthAppElement extends SigninReauthAppElementBase {
   private signinReauthBrowserProxy_: SigninReauthBrowserProxy =
       SigninReauthBrowserProxyImpl.getInstance();
 
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
 
     this.addWebUIListener(
@@ -75,7 +75,6 @@ export class SigninReauthAppElement extends SigninReauthAppElementBase {
 
   private onReauthTypeDetermined_() {
     this.confirmButtonHidden_ = false;
-    this.$.confirmButton.focus();
     this.cancelButtonHidden_ = false;
   }
 

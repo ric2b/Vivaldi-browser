@@ -134,7 +134,8 @@ FeedStream::FeedStream(RefreshTaskScheduler* refresh_task_scheduler,
       chrome_info_(chrome_info),
       task_queue_(this),
       request_throttler_(profile_prefs),
-      privacy_notice_card_tracker_(profile_prefs) {
+      privacy_notice_card_tracker_(profile_prefs),
+      user_actions_collector_(profile_prefs) {
   DCHECK(persistent_key_value_store_);
   DCHECK(feed_network_);
   DCHECK(profile_prefs_);
@@ -188,8 +189,8 @@ FeedStream::Stream& FeedStream::GetStream(const StreamType& stream_type) {
     return iter->second;
   FeedStream::Stream& new_stream =
       streams_.emplace(stream_type, stream_type).first->second;
-  new_stream.surface_updater =
-      std::make_unique<SurfaceUpdater>(metrics_reporter_, &new_stream.surfaces);
+  new_stream.surface_updater = std::make_unique<SurfaceUpdater>(
+      metrics_reporter_, &global_datastore_slice_, &new_stream.surfaces);
   new_stream.surfaces.AddObserver(new_stream.surface_updater.get());
   return new_stream;
 }
@@ -911,6 +912,8 @@ RequestMetadata FeedStream::GetCommonRequestMetadata(
       result.session_id = session_id;
     }
   }
+  result.followed_from_web_page_menu_count =
+      metadata_.followed_from_web_page_menu_count();
 
   DCHECK(result.session_id.empty() || result.client_instance_id.empty());
   return result;
@@ -1084,6 +1087,13 @@ bool FeedStream::HasUnreadContent(const StreamType& stream_type) {
   return true;
 }
 
+void FeedStream::IncrementFollowedFromWebPageMenuCount() {
+  feedstore::Metadata metadata = GetMetadata();
+  metadata.set_followed_from_web_page_menu_count(
+      metadata.followed_from_web_page_menu_count() + 1);
+  SetMetadata(std::move(metadata));
+}
+
 void FeedStream::ClearAll() {
   metrics_reporter_->OnClearAll(base::Time::Now() -
                                 GetLastFetchTime(kForYouStream));
@@ -1193,6 +1203,12 @@ void FeedStream::UnloadModels() {
 LaunchReliabilityLogger& FeedStream::GetLaunchReliabilityLogger(
     const StreamType& stream_type) {
   return GetStream(stream_type).surface_updater->launch_reliability_logger();
+}
+
+void FeedStream::UpdateUserProfileOnLinkClick(
+    const GURL& url,
+    const std::vector<int64_t>& entity_mids) {
+  user_actions_collector_.UpdateUserProfileOnLinkClick(url, entity_mids);
 }
 
 void FeedStream::ReportOpenAction(const GURL& url,

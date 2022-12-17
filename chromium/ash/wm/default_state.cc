@@ -188,8 +188,7 @@ void DefaultState::HandleWorkspaceEvents(WindowState* window_state,
       AdjustBoundsToEnsureWindowVisibility(display_area, min_width, min_height,
                                            &bounds);
       window_state->AdjustSnappedBounds(&bounds);
-      if (window->bounds() != bounds)
-        window_state->SetBoundsConstrained(bounds);
+      window_state->SetBoundsConstrained(bounds);
       return;
     }
     case WM_EVENT_DISPLAY_BOUNDS_CHANGED: {
@@ -365,6 +364,16 @@ void DefaultState::HandleTransitionEvents(WindowState* window_state,
     return;
   }
 
+  if (next_state_type == WindowStateType::kPrimarySnapped ||
+      next_state_type == WindowStateType::kSecondarySnapped) {
+    if (type == WM_EVENT_RESTORE) {
+      window_state->set_snap_action_source(
+          WindowSnapActionSource::kSnapByWindowStateRestore);
+    }
+    window_state->RecordAndResetWindowSnapActionSource(current_state_type,
+                                                       next_state_type);
+  }
+
   EnterToNextState(window_state, next_state_type);
 }
 
@@ -535,8 +544,7 @@ void DefaultState::UpdateBoundsFromState(WindowState* window_state,
             bounds_in_parent.width() >= work_area_in_parent.width() &&
             bounds_in_parent.height() >= work_area_in_parent.height()) {
           bounds_in_parent = work_area_in_parent;
-          bounds_in_parent.Inset(kMaximizedWindowInset, kMaximizedWindowInset,
-                                 kMaximizedWindowInset, kMaximizedWindowInset);
+          bounds_in_parent.Inset(kMaximizedWindowInset);
         }
       } else {
         bounds_in_parent = window->bounds();

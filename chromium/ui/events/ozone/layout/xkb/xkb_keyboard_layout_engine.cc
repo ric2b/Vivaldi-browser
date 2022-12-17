@@ -13,11 +13,10 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/containers/span.h"
-#include "base/cxx17_backports.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/free_deleter.h"
-#include "base/task/post_task.h"
+#include "base/strings/string_util.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/task_runner.h"
 #include "base/task/thread_pool.h"
@@ -30,14 +29,6 @@
 #include "ui/events/keycodes/dom/keycode_converter.h"
 #include "ui/events/keycodes/keyboard_code_conversion.h"
 #include "ui/events/keycodes/keyboard_code_conversion_xkb.h"
-
-// xkb_keymap_key_get_mods_for_level is relatively new (introduced in ver 1.0,
-// Sep 6, 2020), thus it is not available on some platform, such as Ubuntu
-// 18.04, which we still supports.
-// Thus declare the function as weak here, so we can check the availability on
-// runtime.
-extern "C" __attribute__((weak)) decltype(
-    xkb_keymap_key_get_mods_for_level) xkb_keymap_key_get_mods_for_level;
 
 namespace ui {
 
@@ -511,64 +502,64 @@ struct PrintableMultiEntry {
 
 // Entries are ordered by character value.
 const PrintableMultiEntry kMultiMap[] = {
-    {0x0021, kU0021, base::size(kU0021)},  // exclamation mark
-    {0x0022, kU0022, base::size(kU0022)},  // quotation mark
-    {0x0023, kU0023, base::size(kU0023)},  // number sign
-    {0x0024, kU0024, base::size(kU0024)},  // dollar sign
-    {0x0027, kU0027, base::size(kU0027)},  // apostrophe
-    {0x0028, kU0028, base::size(kU0028)},  // left parenthesis
-    {0x0029, kU0029, base::size(kU0029)},  // right parenthesis
-    {0x002A, kU002A, base::size(kU002A)},  // asterisk
-    {0x002B, kU002B, base::size(kU002B)},  // plus sign
-    {0x002C, kU002C, base::size(kU002C)},  // comma
-    {0x002D, kU002D, base::size(kU002D)},  // hyphen-minus
-    {0x002E, kU002E, base::size(kU002E)},  // full stop
-    {0x002F, kU002F, base::size(kU002F)},  // solidus
-    {0x003A, kU003A, base::size(kU003A)},  // colon
-    {0x003B, kU003B, base::size(kU003B)},  // semicolon
-    {0x003D, kU003D, base::size(kU003D)},  // equals sign
-    {0x003F, kU003F, base::size(kU003F)},  // question mark
-    {0x0040, kU0040, base::size(kU0040)},  // commercial at
-    {0x005B, kU005B, base::size(kU005B)},  // left square bracket
-    {0x005C, kU005C, base::size(kU005C)},  // reverse solidus
-    {0x005D, kU005D, base::size(kU005D)},  // right square bracket
-    {0x005F, kU005F, base::size(kU005F)},  // low line
-    {0x0060, kU0060, base::size(kU0060)},  // grave accent
-    {0x00A7, kU00A7, base::size(kU00A7)},  // section sign
-    {0x00AB, kU00AB, base::size(kU00AB)},  // left double angle quotation mark
-    {0x00B0, kU00B0, base::size(kU00B0)},  // degree sign
-    {0x00BA, kU00BA, base::size(kU00BA)},  // masculine ordinal indicator
-    {0x00E0, kU00E0, base::size(kU00E0)},  // a grave
-    {0x00E1, kU00E1, base::size(kU00E1)},  // a acute
-    {0x00E2, kU00E2, base::size(kU00E2)},  // a circumflex
-    {0x00E4, kU00E4, base::size(kU00E4)},  // a diaeresis
-    {0x00E6, kU00E6, base::size(kU00E6)},  // ae
-    {0x00E7, kU00E7, base::size(kU00E7)},  // c cedilla
-    {0x00E8, kU00E8, base::size(kU00E8)},  // e grave
-    {0x00E9, kU00E9, base::size(kU00E9)},  // e acute
-    {0x00ED, kU00ED, base::size(kU00ED)},  // i acute
-    {0x00F0, kU00F0, base::size(kU00F0)},  // eth
-    {0x00F3, kU00F3, base::size(kU00F3)},  // o acute
-    {0x00F4, kU00F4, base::size(kU00F4)},  // o circumflex
-    {0x00F6, kU00F6, base::size(kU00F6)},  // o diaeresis
-    {0x00F8, kU00F8, base::size(kU00F8)},  // o stroke
-    {0x00F9, kU00F9, base::size(kU00F9)},  // u grave
-    {0x00FA, kU00FA, base::size(kU00FA)},  // u acute
-    {0x00FC, kU00FC, base::size(kU00FC)},  // u diaeresis
-    {0x0103, kU0103, base::size(kU0103)},  // a breve
-    {0x0105, kU0105, base::size(kU0105)},  // a ogonek
-    {0x010D, kU010D, base::size(kU010D)},  // c caron
-    {0x0111, kU0111, base::size(kU0111)},  // d stroke
-    {0x0117, kU0117, base::size(kU0117)},  // e dot above
-    {0x0119, kU0119, base::size(kU0119)},  // e ogonek
-    {0x012F, kU012F, base::size(kU012F)},  // i ogonek
-    {0x0142, kU0142, base::size(kU0142)},  // l stroke
-    {0x015F, kU015F, base::size(kU015F)},  // s cedilla
-    {0x0161, kU0161, base::size(kU0161)},  // s caron
-    {0x016B, kU016B, base::size(kU016B)},  // u macron
-    {0x0173, kU0173, base::size(kU0173)},  // u ogonek
-    {0x017C, kU017C, base::size(kU017C)},  // z dot above
-    {0x017E, kU017E, base::size(kU017E)},  // z caron
+    {0x0021, kU0021, std::size(kU0021)},  // exclamation mark
+    {0x0022, kU0022, std::size(kU0022)},  // quotation mark
+    {0x0023, kU0023, std::size(kU0023)},  // number sign
+    {0x0024, kU0024, std::size(kU0024)},  // dollar sign
+    {0x0027, kU0027, std::size(kU0027)},  // apostrophe
+    {0x0028, kU0028, std::size(kU0028)},  // left parenthesis
+    {0x0029, kU0029, std::size(kU0029)},  // right parenthesis
+    {0x002A, kU002A, std::size(kU002A)},  // asterisk
+    {0x002B, kU002B, std::size(kU002B)},  // plus sign
+    {0x002C, kU002C, std::size(kU002C)},  // comma
+    {0x002D, kU002D, std::size(kU002D)},  // hyphen-minus
+    {0x002E, kU002E, std::size(kU002E)},  // full stop
+    {0x002F, kU002F, std::size(kU002F)},  // solidus
+    {0x003A, kU003A, std::size(kU003A)},  // colon
+    {0x003B, kU003B, std::size(kU003B)},  // semicolon
+    {0x003D, kU003D, std::size(kU003D)},  // equals sign
+    {0x003F, kU003F, std::size(kU003F)},  // question mark
+    {0x0040, kU0040, std::size(kU0040)},  // commercial at
+    {0x005B, kU005B, std::size(kU005B)},  // left square bracket
+    {0x005C, kU005C, std::size(kU005C)},  // reverse solidus
+    {0x005D, kU005D, std::size(kU005D)},  // right square bracket
+    {0x005F, kU005F, std::size(kU005F)},  // low line
+    {0x0060, kU0060, std::size(kU0060)},  // grave accent
+    {0x00A7, kU00A7, std::size(kU00A7)},  // section sign
+    {0x00AB, kU00AB, std::size(kU00AB)},  // left double angle quotation mark
+    {0x00B0, kU00B0, std::size(kU00B0)},  // degree sign
+    {0x00BA, kU00BA, std::size(kU00BA)},  // masculine ordinal indicator
+    {0x00E0, kU00E0, std::size(kU00E0)},  // a grave
+    {0x00E1, kU00E1, std::size(kU00E1)},  // a acute
+    {0x00E2, kU00E2, std::size(kU00E2)},  // a circumflex
+    {0x00E4, kU00E4, std::size(kU00E4)},  // a diaeresis
+    {0x00E6, kU00E6, std::size(kU00E6)},  // ae
+    {0x00E7, kU00E7, std::size(kU00E7)},  // c cedilla
+    {0x00E8, kU00E8, std::size(kU00E8)},  // e grave
+    {0x00E9, kU00E9, std::size(kU00E9)},  // e acute
+    {0x00ED, kU00ED, std::size(kU00ED)},  // i acute
+    {0x00F0, kU00F0, std::size(kU00F0)},  // eth
+    {0x00F3, kU00F3, std::size(kU00F3)},  // o acute
+    {0x00F4, kU00F4, std::size(kU00F4)},  // o circumflex
+    {0x00F6, kU00F6, std::size(kU00F6)},  // o diaeresis
+    {0x00F8, kU00F8, std::size(kU00F8)},  // o stroke
+    {0x00F9, kU00F9, std::size(kU00F9)},  // u grave
+    {0x00FA, kU00FA, std::size(kU00FA)},  // u acute
+    {0x00FC, kU00FC, std::size(kU00FC)},  // u diaeresis
+    {0x0103, kU0103, std::size(kU0103)},  // a breve
+    {0x0105, kU0105, std::size(kU0105)},  // a ogonek
+    {0x010D, kU010D, std::size(kU010D)},  // c caron
+    {0x0111, kU0111, std::size(kU0111)},  // d stroke
+    {0x0117, kU0117, std::size(kU0117)},  // e dot above
+    {0x0119, kU0119, std::size(kU0119)},  // e ogonek
+    {0x012F, kU012F, std::size(kU012F)},  // i ogonek
+    {0x0142, kU0142, std::size(kU0142)},  // l stroke
+    {0x015F, kU015F, std::size(kU015F)},  // s cedilla
+    {0x0161, kU0161, std::size(kU0161)},  // s caron
+    {0x016B, kU016B, std::size(kU016B)},  // u macron
+    {0x0173, kU0173, std::size(kU0173)},  // u ogonek
+    {0x017C, kU017C, std::size(kU017C)},  // z dot above
+    {0x017E, kU017E, std::size(kU017E)},  // z caron
 };
 
 // Table mapping unshifted characters to VKEY values.
@@ -790,6 +781,33 @@ bool XkbKeyboardLayoutEngine::Lookup(DomCode dom_code,
     return true;
   }
 
+#if BUILDFLAG(IS_CHROMEOS)
+  // XbdLookup conflates KEY_PRINT and KEY_SYSRQ (printscreen) by
+  // mapping them both to XKB_KEY_Print rather than mapping KEY_SYSRQ to
+  // XKB_KEY_3270_PrintScreen. This has become expected behavior on Linux,
+  // but now ChromeOS can and wants to handle these keys separately.
+  //
+  // In the past in crbug/683097 both XKB keys were mapped to
+  // DomKey::PRINT_SCREEN in keyboard_code_conversion_xkb.cc which has also
+  // now been undone for ChromeOS only (not Linux)
+  //
+  // ChromeOS already correctly mapped the DomCode::PRINT_SCREEN and
+  // DomCode::PRINT keys, but the lookup via XKB caused the incorrect
+  // DomKey and subsequently incorrect VKEY to be used.
+  //
+  // This special cases this single key for ChromeOS platform, so that the
+  // two keys behave as intended as below.
+  //
+  // KEY_PRINT > DomCode::PRINT > XKB_KEY_Print >
+  //             DomKey::PRINT > VKEY_PRINT
+  //
+  // KEY_SYSRQ > DomCode::PRINT_SCREEN > XKB_KEY_3270_PrintScreen >
+  //             DomKey::PRINT_SCREEN > VKEY_SNAPSHOT
+  if (dom_code == DomCode::PRINT_SCREEN && xkb_keysym == XKB_KEY_Print) {
+    xkb_keysym = XKB_KEY_3270_PrintScreen;
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS)
+
   // Classify the keysym and convert to DOM and VKEY representations.
   if (xkb_keysym != XKB_KEY_at || (flags & EF_CONTROL_DOWN) == 0) {
     // Non-character key. (We only support NUL as ^@.)
@@ -868,50 +886,12 @@ bool XkbKeyboardLayoutEngine::SetCurrentLayoutFromBuffer(
 
 void XkbKeyboardLayoutEngine::SetKeymap(xkb_keymap* keymap) {
   xkb_state_.reset(xkb_state_new(keymap));
-  // Update flag map.
-  static const struct {
-    int ui_flag;
-    const char* xkb_name;
-  } flags[] = {{ui::EF_SHIFT_DOWN, XKB_MOD_NAME_SHIFT},
-               {ui::EF_CONTROL_DOWN, XKB_MOD_NAME_CTRL},
-               {ui::EF_ALT_DOWN, XKB_MOD_NAME_ALT},
-               {ui::EF_COMMAND_DOWN, XKB_MOD_NAME_LOGO},
-               {ui::EF_ALTGR_DOWN, "Mod5"},
-               {ui::EF_MOD3_DOWN, "Mod3"},
-               {ui::EF_CAPS_LOCK_ON, XKB_MOD_NAME_CAPS},
-               {ui::EF_NUM_LOCK_ON, XKB_MOD_NAME_NUM}};
-  xkb_flag_map_.clear();
-  xkb_flag_map_.reserve(base::size(flags));
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  xkb_mod_mask_t num_lock_mask = 0;
-#endif
-  for (size_t i = 0; i < base::size(flags); ++i) {
-    xkb_mod_index_t index = xkb_keymap_mod_get_index(keymap, flags[i].xkb_name);
-    if (index == XKB_MOD_INVALID) {
-      DVLOG(3) << "XKB keyboard layout does not contain " << flags[i].xkb_name;
-    } else {
-      xkb_mod_mask_t flag = static_cast<xkb_mod_mask_t>(1) << index;
-      XkbFlagMapEntry e = {flags[i].ui_flag, flag, index};
-      xkb_flag_map_.push_back(e);
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-      if (flags[i].ui_flag == EF_NUM_LOCK_ON)
-        num_lock_mask = flag;
-#endif
-    }
-  }
+  xkb_modifier_converter_ = XkbModifierConverter::CreateFromKeymap(keymap);
+  shift_mod_mask_ = xkb_modifier_converter_.MaskFromUiFlags(ui::EF_SHIFT_DOWN);
+  altgr_mod_mask_ = xkb_modifier_converter_.MaskFromUiFlags(ui::EF_ALTGR_DOWN);
 
   // Reconstruct keysym map.
-  std::vector<std::pair<XkbKeysymMapKey, uint32_t>> keysym_map;
-  auto AddEntries = [&keysym_map](base::span<const xkb_keysym_t> keysyms,
-                                  base::span<const xkb_mod_mask_t> masks,
-                                  xkb_keycode_t keycode) {
-    if (keysyms.empty() || masks.empty())
-      return;
-    for (xkb_keysym_t keysym : keysyms) {
-      for (xkb_mod_mask_t mask : masks)
-        keysym_map.emplace_back(XkbKeysymMapKey(keysym, mask), keycode);
-    }
-  };
+  std::vector<XkbKeysymMapEntry> keysym_map;
 
   const xkb_keycode_t min_key = xkb_keymap_min_keycode(keymap);
   const xkb_keycode_t max_key = xkb_keymap_max_keycode(keymap);
@@ -925,59 +905,46 @@ void XkbKeyboardLayoutEngine::SetKeymap(xkb_keymap* keymap) {
         const xkb_keysym_t* keysyms;
         int num_syms = xkb_keymap_key_get_syms_by_level(keymap, keycode, layout,
                                                         level, &keysyms);
-        if (xkb_keymap_key_get_mods_for_level) {
-          xkb_mod_mask_t masks[100];  // Large enough buffer.
-          int num_mods = xkb_keymap_key_get_mods_for_level(
-              keymap, keycode, layout, level, masks, std::size(masks));
-          AddEntries(base::make_span(keysyms, num_syms),
-                     base::make_span(masks, num_mods), keycode);
-        } else {
-          // If not, unfortunately, there's no convenient/efficient way
-          // to take the possible masks. Thus, use mask 0 always.
-          constexpr xkb_mod_mask_t kMask[] = {0};
-          AddEntries(base::make_span(keysyms, num_syms), kMask, keycode);
-        }
+        for (int i = 0; i < num_syms; ++i)
+          keysym_map.emplace_back(
+              XkbKeysymMapEntry{keysyms[i], keycode, layout});
       }
     }
   }
 
-  // Sort here. If there are multiple entries for a (keysym, mask) pair,
-  // min keycode wins.
-  std::sort(keysym_map.begin(), keysym_map.end());
+  // Then sort and unique here. On tie break, smaller keycode comes first.
+  std::sort(
+      keysym_map.begin(), keysym_map.end(),
+      [](const XkbKeysymMapEntry& entry1, const XkbKeysymMapEntry& entry2) {
+        return std::tie(entry1.xkb_keysym, entry1.xkb_keycode,
+                        entry1.xkb_layout) < std::tie(entry2.xkb_keysym,
+                                                      entry2.xkb_keycode,
+                                                      entry2.xkb_layout);
+      });
   keysym_map.erase(
-      std::unique(keysym_map.begin(), keysym_map.end(),
-                  [](const std::pair<XkbKeysymMapKey, uint32_t>& entry1,
-                     const std::pair<XkbKeysymMapKey, uint32_t>& entry2) {
-                    return entry1.first == entry2.first;
-                  }),
+      std::unique(
+          keysym_map.begin(), keysym_map.end(),
+          [](const XkbKeysymMapEntry& entry1, const XkbKeysymMapEntry& entry2) {
+            return std::tie(entry1.xkb_keysym, entry1.xkb_keycode,
+                            entry1.xkb_layout) == std::tie(entry2.xkb_keysym,
+                                                           entry2.xkb_keycode,
+                                                           entry2.xkb_layout);
+          }),
       keysym_map.end());
-  xkb_keysym_map_ = base::flat_map<XkbKeysymMapKey, uint32_t>(
-      base::sorted_unique, std::move(keysym_map));
+  xkb_keysym_map_ = std::move(keysym_map);
 
   layout_index_ = 0;
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  // Update num lock mask.
-  num_lock_mod_mask_ = num_lock_mask;
-#endif
-  shift_mod_mask_ = EventFlagsToXkbFlags(ui::EF_SHIFT_DOWN);
-  altgr_mod_mask_ = EventFlagsToXkbFlags(ui::EF_ALTGR_DOWN);
-
   if (keymap_init_closure_for_test_)
     std::move(keymap_init_closure_for_test_).Run();
 }
 
 xkb_mod_mask_t XkbKeyboardLayoutEngine::EventFlagsToXkbFlags(
     int ui_flags) const {
-  xkb_mod_mask_t xkb_flags = 0;
-  for (const auto& entry : xkb_flag_map_) {
-    if (ui_flags & entry.ui_flag)
-      xkb_flags |= entry.xkb_flag;
-  }
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // In ChromeOS NumLock is always on.
-  xkb_flags |= num_lock_mod_mask_;
+  ui_flags |= ui::EF_NUM_LOCK_ON;
 #endif
-  return xkb_flags;
+  return xkb_modifier_converter_.MaskFromUiFlags(ui_flags);
 }
 
 int XkbKeyboardLayoutEngine::UpdateModifiers(uint32_t depressed,
@@ -989,29 +956,65 @@ int XkbKeyboardLayoutEngine::UpdateModifiers(uint32_t depressed,
   auto component = static_cast<xkb_state_component>(XKB_STATE_MODS_DEPRESSED |
                                                     XKB_STATE_MODS_LATCHED |
                                                     XKB_STATE_MODS_LOCKED);
-  int ui_flags = 0;
-  for (const auto& entry : xkb_flag_map_) {
-    if (xkb_state_mod_index_is_active(state, entry.xkb_index, component))
-      ui_flags |= entry.ui_flag;
+  xkb_mod_index_t num_mods =
+      xkb_keymap_num_mods(xkb_state_get_keymap(xkb_state_.get()));
+  xkb_mod_mask_t mask = 0;
+  for (xkb_mod_index_t i = 0; i < num_mods; ++i) {
+    if (xkb_state_mod_index_is_active(state, i, component))
+      mask |= (1 << i);
   }
   layout_index_ = group;
-  return ui_flags;
+  return xkb_modifier_converter_.UiFlagsFromMask(mask);
 }
 
-DomCode XkbKeyboardLayoutEngine::GetDomCodeByKeysym(uint32_t keysym,
-                                                    uint32_t modifiers) const {
-  // If xkb_keymap_key_get_mods_for_level is not available, all entries are
-  // stored with modifiers mask is 0.
-  if (!xkb_keymap_key_get_mods_for_level)
-    modifiers = 0;
-
-  auto iter = xkb_keysym_map_.find(XkbKeysymMapKey(keysym, modifiers));
-  if (iter == xkb_keysym_map_.end()) {
-    VLOG(1) << "No Keycode found for the keysym: " << keysym
-            << ", modifiers: " << modifiers;
-    return DomCode::NONE;
+DomCode XkbKeyboardLayoutEngine::GetDomCodeByKeysym(
+    uint32_t keysym,
+    const absl::optional<std::vector<base::StringPiece>>& modifiers) const {
+  // Look up all candidates.
+  auto range = std::equal_range(
+      xkb_keysym_map_.begin(), xkb_keysym_map_.end(), XkbKeysymMapEntry{keysym},
+      [](const XkbKeysymMapEntry& entry1, const XkbKeysymMapEntry& entry2) {
+        return entry1.xkb_keysym < entry2.xkb_keysym;
+      });
+  if (range.first != range.second) {
+    // If modifier is not given, use the first entry, which is smallest keycode.
+    // This is just for backward compatibility.
+    if (!modifiers.has_value())
+      return KeycodeConverter::NativeKeycodeToDomCode(range.first->xkb_keycode);
+    xkb_mod_mask_t xkb_modifiers =
+        xkb_modifier_converter_.MaskFromNames(*modifiers);
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+    // In ChromeOS NumLock is always on.
+    xkb_modifiers |=
+        xkb_modifier_converter_.MaskFromUiFlags(ui::EF_NUM_LOCK_ON);
+#endif
+    // Note: value is already in the lexicographical order, so smaller keycode
+    // comes first.
+    for (std::unique_ptr<xkb_state, XkbStateDeleter> xkb_state(
+             xkb_state_new(xkb_state_get_keymap(xkb_state_.get())));
+         range.first != range.second; ++range.first) {
+      xkb_keycode_t xkb_keycode = range.first->xkb_keycode;
+      xkb_layout_index_t xkb_layout = range.first->xkb_layout;
+      // The argument does not have any info about the layout, so we assume the
+      // current layout here.
+      if (xkb_layout != layout_index_)
+        continue;
+      xkb_state_update_mask(xkb_state.get(), xkb_modifiers, 0, 0, 0, 0,
+                            xkb_layout);
+      const xkb_keysym_t* out_keysyms;
+      int num_syms =
+          xkb_state_key_get_syms(xkb_state.get(), xkb_keycode, &out_keysyms);
+      for (int i = 0; i < num_syms; ++i) {
+        if (out_keysyms[i] == keysym)
+          return KeycodeConverter::NativeKeycodeToDomCode(xkb_keycode);
+      }
+    }
   }
-  return KeycodeConverter::NativeKeycodeToDomCode(iter->second);
+
+  VLOG(1) << "No Keycode found for the keysym: " << keysym << ", modifiers: "
+          << (modifiers.has_value() ? base::JoinString(modifiers.value(), ",")
+                                    : "(no modifiers)");
+  return DomCode::NONE;
 }
 
 bool XkbKeyboardLayoutEngine::XkbLookup(xkb_keycode_t xkb_keycode,
@@ -1058,7 +1061,7 @@ KeyboardCode XkbKeyboardLayoutEngine::DifficultKeyboardCode(
     return key_code;
 
   // Check the multi-character tables.
-  const PrintableMultiEntry* multi_end = kMultiMap + base::size(kMultiMap);
+  const PrintableMultiEntry* multi_end = kMultiMap + std::size(kMultiMap);
   const PrintableMultiEntry* multi =
       std::lower_bound(kMultiMap, multi_end, plain_character,
                        [](const PrintableMultiEntry& e, char16_t c) {
@@ -1092,7 +1095,7 @@ KeyboardCode XkbKeyboardLayoutEngine::DifficultKeyboardCode(
   }
 
   // Check the simple character table.
-  const PrintableSimpleEntry* simple_end = kSimpleMap + base::size(kSimpleMap);
+  const PrintableSimpleEntry* simple_end = kSimpleMap + std::size(kSimpleMap);
   const PrintableSimpleEntry* simple =
       std::lower_bound(kSimpleMap, simple_end, plain_character,
                        [](const PrintableSimpleEntry& e, char16_t c) {

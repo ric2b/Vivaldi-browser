@@ -42,11 +42,17 @@ void ApplyAshFontStyles(int context,
       break;
     case CONTEXT_SEARCH_RESULT_BIG_TITLE:
       details.size_delta = 24;
+      break;
+    case CONTEXT_SEARCH_RESULT_BIG_TITLE_SUPERSCRIPT:
+      details.size_delta = 6;
   }
 
   switch (style) {
     case STYLE_EMPHASIZED:
       details.weight = gfx::Font::Weight::MEDIUM;
+      break;
+    case STYLE_HIGHLIGHT:
+      details.weight = gfx::Font::Weight::BOLD;
       break;
     case STYLE_SHARESHEET:
       DCHECK(context == CONTEXT_SHARESHEET_BUBBLE_TITLE ||

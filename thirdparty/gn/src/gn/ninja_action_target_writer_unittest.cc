@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <sstream>
 
+#include "gn/config.h"
 #include "gn/ninja_action_target_writer.h"
 #include "gn/pool.h"
 #include "gn/substitution_list.h"
@@ -484,5 +485,65 @@ TEST(NinjaActionTargetWriter, NoTransitiveHardDeps) {
         "\n"
         "build obj/bar/bar.stamp: stamp bar.out\n";
     EXPECT_EQ(expected_linux, out.str());
+  }
+}
+
+TEST(NinjaActionTargetWriter, SeesConfig) {
+  Err err;
+  TestWithScope setup;
+
+  setup.build_settings()->set_python_path(
+      base::FilePath(FILE_PATH_LITERAL("/usr/bin/python")));
+
+  Config farcfg(setup.settings(), Label(SourceDir("//foo/"), "farcfg"));
+  farcfg.own_values().defines().push_back("MY_DEFINE2");
+  farcfg.own_values().cflags().push_back("-isysroot=baz");
+  farcfg.visibility().SetPublic();
+  ASSERT_TRUE(farcfg.OnResolved(&err));
+
+  Config cfgdep(setup.settings(), Label(SourceDir("//foo/"), "cfgdep"));
+  cfgdep.own_values().rustenv().push_back("my_rustenv");
+  cfgdep.own_values().include_dirs().push_back(SourceDir("//my_inc_dir/"));
+  cfgdep.own_values().defines().push_back("MY_DEFINE");
+  cfgdep.visibility().SetPublic();
+  cfgdep.configs().push_back(LabelConfigPair(&farcfg));
+  ASSERT_TRUE(cfgdep.OnResolved(&err));
+
+  Target foo(setup.settings(), Label(SourceDir("//foo/"), "foo"));
+  foo.set_output_type(Target::ACTION);
+  foo.visibility().SetPublic();
+  foo.sources().push_back(SourceFile("//foo/input1.txt"));
+  foo.action_values().set_script(SourceFile("//foo/script.py"));
+  foo.action_values().args() = SubstitutionList::MakeForTest(
+      "{{rustenv}}", "{{include_dirs}}", "{{defines}}", "{{cflags}}");
+  foo.configs().push_back(LabelConfigPair(&cfgdep));
+  foo.SetToolchain(setup.toolchain());
+  foo.action_values().outputs() =
+      SubstitutionList::MakeForTest("//out/Debug/foo.out");
+  ASSERT_TRUE(foo.OnResolved(&err));
+
+  {
+    std::ostringstream out;
+    NinjaActionTargetWriter writer(&foo, out);
+    writer.Run();
+
+    const char expected[] =
+        "rule __foo_foo___rule\n"
+        // These come from the args.
+        "  command = /usr/bin/python ../../foo/script.py ${rustenv} "
+        "${include_dirs} ${defines} ${cflags}\n"
+        "  description = ACTION //foo:foo()\n"
+        "  restat = 1\n"
+        "\n"
+        "build foo.out: __foo_foo___rule | ../../foo/script.py"
+        " ../../foo/input1.txt\n"
+        "  rustenv = my_rustenv\n"
+        "  defines = -DMY_DEFINE -DMY_DEFINE2\n"
+        "  include_dirs = -I../../my_inc_dir\n"
+        "  cflags = -isysroot=baz\n"
+        "\n"
+        "build obj/foo/foo.stamp: stamp foo.out\n";
+    std::string out_str = out.str();
+    EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
   }
 }

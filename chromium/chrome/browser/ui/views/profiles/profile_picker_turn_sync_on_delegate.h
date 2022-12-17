@@ -38,10 +38,10 @@ class ProfilePickerTurnSyncOnDelegate : public TurnSyncOnHelper::Delegate,
   void ShowMergeSyncDataConfirmation(
       const std::string& previous_email,
       const std::string& new_email,
-      TurnSyncOnHelper::SigninChoiceCallback callback) override;
+      signin::SigninChoiceCallback callback) override;
   void ShowEnterpriseAccountConfirmation(
       const AccountInfo& account_info,
-      TurnSyncOnHelper::SigninChoiceCallback callback) override;
+      signin::SigninChoiceCallback callback) override;
   void ShowSyncConfirmation(
       base::OnceCallback<void(LoginUIService::SyncConfirmationUIClosedResult)>
           callback) override;
@@ -60,16 +60,17 @@ class ProfilePickerTurnSyncOnDelegate : public TurnSyncOnHelper::Delegate,
   void ShowSyncConfirmationScreen();
 
   // When ShowSync(Disabled)Confirmation() gets called, this must eventually get
-  // called exactly once in all code branches. Handles the callback and reports
-  // the metrics.
+  // called exactly once in all code branches. Handles the callback.
   void FinishSyncConfirmation(
-      LoginUIService::SyncConfirmationUIClosedResult result,
-      absl::optional<ProfileMetrics::ProfileAddSignInFlowOutcome> outcome);
+      LoginUIService::SyncConfirmationUIClosedResult result);
 
   // Shows the enterprise welcome screen.
   void ShowEnterpriseWelcome(EnterpriseProfileWelcomeUI::ScreenType type);
   void OnEnterpriseWelcomeClosed(EnterpriseProfileWelcomeUI::ScreenType type,
-                                 bool proceed);
+                                 signin::SigninChoice choice);
+
+  // Reports metric with the outcome of the turn-sync-on flow.
+  void LogOutcome(ProfileMetrics::ProfileSignedInFlowOutcome outcome);
 
   // Controls the sign-in flow. Is not guaranteed to outlive this object (gets
   // destroyed when the flow window closes).

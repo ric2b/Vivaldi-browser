@@ -52,10 +52,6 @@ bool EventsInOrder(const absl::optional<base::TimeDelta>& first,
   return first && first <= second;
 }
 
-bool IsMainFrame(content::RenderFrameHost* render_frame_host) {
-  return render_frame_host->GetParent() == nullptr;
-}
-
 internal::PageLoadTimingStatus IsValidPageLoadTiming(
     const mojom::PageLoadTiming& timing) {
   if (page_load_metrics::IsEmpty(timing))
@@ -434,8 +430,6 @@ PageLoadMetricsUpdateDispatcher::PageLoadMetricsUpdateDispatcher(
       is_prerendered_page_load_(navigation_handle->IsInPrerenderedMainFrame()) {
   page_input_timing_->max_event_durations =
       mojom::UserInteractionLatencies::New();
-  page_input_timing_->total_event_durations =
-      mojom::UserInteractionLatencies::New();
 }
 
 PageLoadMetricsUpdateDispatcher::~PageLoadMetricsUpdateDispatcher() {
@@ -463,7 +457,6 @@ void PageLoadMetricsUpdateDispatcher::UpdateMetrics(
     const std::vector<mojom::ResourceDataUpdatePtr>& resources,
     mojom::FrameRenderDataUpdatePtr render_data,
     mojom::CpuTimingPtr new_cpu_timing,
-    mojom::DeferredResourceCountsPtr new_deferred_resource_data,
     mojom::InputTimingPtr input_timing_delta,
     const absl::optional<blink::MobileFriendliness>& mobile_friendliness) {
   if (embedder_interface_->IsExtensionUrl(
@@ -479,12 +472,9 @@ void PageLoadMetricsUpdateDispatcher::UpdateMetrics(
   // both updates.
   client_->UpdateResourceDataUse(render_frame_host, resources);
 
-  // Report new deferral info.
-  client_->OnNewDeferredResourceCounts(*new_deferred_resource_data);
-
   UpdateHasSeenInputOrScroll(*new_timing);
 
-  bool is_main_frame = IsMainFrame(render_frame_host);
+  bool is_main_frame = client_->IsPageMainFrame(render_frame_host);
   if (is_main_frame) {
     UpdateMainFrameMetadata(render_frame_host, std::move(new_metadata));
     UpdateMainFrameTiming(std::move(new_timing));
@@ -538,7 +528,7 @@ void PageLoadMetricsUpdateDispatcher::UpdateFeatures(
 void PageLoadMetricsUpdateDispatcher::SetUpSharedMemoryForSmoothness(
     content::RenderFrameHost* render_frame_host,
     base::ReadOnlySharedMemoryRegion shared_memory) {
-  const bool is_main_frame = IsMainFrame(render_frame_host);
+  const bool is_main_frame = client_->IsPageMainFrame(render_frame_host);
   if (is_main_frame) {
     client_->SetUpSharedMemoryForSmoothness(std::move(shared_memory));
   } else {
@@ -647,7 +637,7 @@ void PageLoadMetricsUpdateDispatcher::MaybeUpdateFrameIntersection(
   // TODO(crbug/1061091): Document definition of untracked loads in page load
   // metrics.
   const int frame_tree_node_id = render_frame_host->GetFrameTreeNodeId();
-  bool is_main_frame = IsMainFrame(render_frame_host);
+  bool is_main_frame = client_->IsPageMainFrame(render_frame_host);
   if (!is_main_frame &&
       subframe_navigation_start_offset_.find(frame_tree_node_id) ==
           subframe_navigation_start_offset_.end()) {
@@ -749,8 +739,7 @@ void PageLoadMetricsUpdateDispatcher::UpdatePageInputTiming(
   if (input_timing_delta.num_interactions) {
     responsiveness_metrics_normalization_.AddNewUserInteractionLatencies(
         input_timing_delta.num_interactions,
-        *(input_timing_delta.max_event_durations),
-        *(input_timing_delta.total_event_durations));
+        *(input_timing_delta.max_event_durations));
   }
 }
 

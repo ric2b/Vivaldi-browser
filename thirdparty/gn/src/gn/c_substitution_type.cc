@@ -92,6 +92,19 @@ bool IsValidCompilerSubstitution(const Substitution* type) {
          type == &CSubstitutionModuleDepsNoSelf;
 }
 
+bool IsValidCompilerScriptArgsSubstitution(const Substitution* type) {
+  return type == &CSubstitutionAsmFlags || type == &CSubstitutionCFlags ||
+         type == &CSubstitutionCFlagsC || type == &CSubstitutionCFlagsCc ||
+         type == &CSubstitutionCFlagsObjC ||
+         type == &CSubstitutionCFlagsObjCc || type == &CSubstitutionDefines ||
+         type == &CSubstitutionFrameworkDirs ||
+         type == &CSubstitutionIncludeDirs ||
+         type == &CSubstitutionSwiftModuleName ||
+         type == &CSubstitutionSwiftBridgeHeader ||
+         type == &CSubstitutionSwiftModuleDirs ||
+         type == &CSubstitutionSwiftFlags;
+}
+
 bool IsValidCompilerOutputsSubstitution(const Substitution* type) {
   // All tool types except "output" (which would be infinitely recursive).
   return (IsValidToolSubstitution(type) && type != &SubstitutionOutput) ||

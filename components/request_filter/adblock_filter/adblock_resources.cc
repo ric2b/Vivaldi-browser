@@ -11,10 +11,11 @@
 #include "base/path_service.h"
 #include "base/strings/string_piece.h"
 #include "base/task/post_task.h"
+#include "build/build_config.h"
 #include "chrome/common/chrome_paths.h"
 #include "net/base/escape.h"
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 #include "base/android/apk_assets.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/logging.h"
@@ -24,7 +25,7 @@
 
 namespace adblock_filter {
 namespace {
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 const base::FilePath::CharType kRedirectableResourcesFilePath[] =
     FILE_PATH_LITERAL("assets/adblocker_resources/redirectable_resources.json");
 const base::FilePath::CharType kInjectableResourcesFilePath[] =
@@ -135,7 +136,7 @@ constexpr auto kInjectableRedirectables =
 
 std::unique_ptr<base::Value> LoadResources(
     const base::FilePath::CharType* resource_file) {
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   base::MemoryMappedFile::Region region;
   base::MemoryMappedFile mapped_file;
   int json_fd = base::android::OpenApkAsset(resource_file, &region);

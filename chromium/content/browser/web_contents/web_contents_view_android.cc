@@ -388,11 +388,11 @@ bool WebContentsViewAndroid::OnDragEvent(const ui::DragEventAndroid& event) {
         metadata.push_back(DropData::Metadata::CreateForMimeType(
             DropData::Kind::STRING, mime_type));
       }
-      OnDragEntered(metadata, event.location_f(), event.screen_location_f());
+      OnDragEntered(metadata, event.location(), event.screen_location());
       break;
     }
     case JNI_DragEvent::ACTION_DRAG_LOCATION:
-      OnDragUpdated(event.location_f(), event.screen_location_f());
+      OnDragUpdated(event.location(), event.screen_location());
       break;
     case JNI_DragEvent::ACTION_DROP: {
       DropData drop_data;
@@ -410,7 +410,7 @@ bool WebContentsViewAndroid::OnDragEvent(const ui::DragEventAndroid& event) {
         }
       }
 
-      OnPerformDrop(&drop_data, event.location_f(), event.screen_location_f());
+      OnPerformDrop(&drop_data, event.location(), event.screen_location());
       break;
     }
     case JNI_DragEvent::ACTION_DRAG_EXITED:
@@ -426,9 +426,9 @@ bool WebContentsViewAndroid::OnDragEvent(const ui::DragEventAndroid& event) {
   return true;
 }
 
-// TODO(paulmeyer): The drag-and-drop calls on GetRenderViewHost()->GetWidget()
-// in the following functions will need to be targeted to specific
-// RenderWidgetHosts in order to work with OOPIFs. See crbug.com/647249.
+// TODO(crbug.com/1301905): does not work for OOPIFs. The drag-and-drop calls
+// on GetRenderViewHost()->GetWidget() in the following functions will need to
+// be targeted to specific RenderWidgetHosts.
 
 void WebContentsViewAndroid::OnDragEntered(
     const std::vector<DropData::Metadata>& metadata,

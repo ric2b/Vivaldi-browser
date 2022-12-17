@@ -70,11 +70,14 @@ class Statement;
 //                          added in version 82.
 //   is_active              See TemplateURLData::is_active. This was added
 //                          in version 97.
+//   starter_pack_id        See TemplateURLData::starter_pack_id.  This was
+//                          added in version 103.
 //
 // This class also manages some fields in the |meta| table:
 //
 // Default Search Provider ID        The id of the default search provider.
 // Builtin Keyword Version           The version of builtin keywords data.
+// Starter Pack Keyword Version      The version of starter pack data.
 //
 class KeywordTable : public WebDatabaseTable {
  public:
@@ -106,6 +109,7 @@ class KeywordTable : public WebDatabaseTable {
   bool CreateTablesIfNecessary() override;
   bool IsSyncable() override;
   bool MigrateToVersion(int version, bool* update_compatible_version) override;
+  bool MigrateToVivaldiVersion(int version) override;
 
   // Performs an arbitrary number of Add/Remove/Update operations as a single
   // transaction.  This is provided for efficiency reasons: if the caller needs
@@ -126,6 +130,10 @@ class KeywordTable : public WebDatabaseTable {
   bool SetBuiltinKeywordVersion(int version);
   int GetBuiltinKeywordVersion();
 
+  // Version of built-in starter pack keywords (@bookmarks, @settings, etc.).
+  bool SetStarterPackKeywordVersion(int version);
+  int GetStarterPackKeywordVersion();
+
   // Returns a comma-separated list of the keyword columns for the current
   // version of the table.
   static std::string GetKeywordColumns();
@@ -139,7 +147,9 @@ class KeywordTable : public WebDatabaseTable {
   bool MigrateToVersion77IncreaseTimePrecision();
   bool MigrateToVersion82AddCreatedFromPlayApiColumn();
   bool MigrateToVersion97AddIsActiveColumn();
+  bool MigrateToVersion103AddStarterPackIdColumn();
 
+  bool MigrateToVivaldiVersion1AddPositionColumn();
  private:
   friend class KeywordTableTest;
 

@@ -51,6 +51,7 @@ class PowerHandler : public ::settings::SettingsPageUIHandler,
   static const char kLidClosedBehaviorKey[];
   static const char kLidClosedControlledKey[];
   static const char kHasLidKey[];
+  static const char kAdaptiveChargingKey[];
 
   // Class used by tests to interact with PowerHandler internals.
   class TestAPI {
@@ -67,6 +68,7 @@ class PowerHandler : public ::settings::SettingsPageUIHandler,
     // sets battery idle behavior to |behavior|.
     void SetIdleBehavior(IdleBehavior behavior, bool when_on_ac);
     void SetLidClosedBehavior(PowerPolicyController::Action behavior);
+    void SetAdaptiveCharging(bool enabled);
 
    private:
     PowerHandler* handler_;  // Not owned.
@@ -119,18 +121,21 @@ class PowerHandler : public ::settings::SettingsPageUIHandler,
   };
 
   // Handler to request updating the power status.
-  void HandleUpdatePowerStatus(base::Value::ConstListView args);
+  void HandleUpdatePowerStatus(const base::Value::List& args);
 
   // Handler to change the power source.
-  void HandleSetPowerSource(base::Value::ConstListView args);
+  void HandleSetPowerSource(const base::Value::List& args);
 
   // Handler to request the current power management settings. Just calls
   // SendPowerManagementSettings().
-  void HandleRequestPowerManagementSettings(base::Value::ConstListView args);
+  void HandleRequestPowerManagementSettings(const base::Value::List& args);
 
   // Handlers to change the idle and lid-closed behaviors.
-  void HandleSetIdleBehavior(base::Value::ConstListView args);
-  void HandleSetLidClosedBehavior(base::Value::ConstListView args);
+  void HandleSetIdleBehavior(const base::Value::List& args);
+  void HandleSetLidClosedBehavior(const base::Value::List& args);
+
+  // Handler to toggle adaptive charging behavior.
+  void HandleSetAdaptiveCharging(const base::Value::List& args);
 
   // Updates the UI with the current battery status.
   void SendBatteryStatus();
@@ -176,6 +181,7 @@ class PowerHandler : public ::settings::SettingsPageUIHandler,
       PowerPolicyController::ACTION_SUSPEND;
   bool last_lid_closed_controlled_ = false;
   bool last_has_lid_ = true;
+  bool last_adaptive_charging_ = false;
 
   base::WeakPtrFactory<PowerHandler> weak_ptr_factory_{this};
 };

@@ -49,7 +49,7 @@ namespace fileManagerPrivate {
 // Type of the mounted volume.
 enum VolumeType { drive, downloads, removable, archive, provided, mtp,
                   media_view, crostini, android_files, documents_provider,
-                  testing, smb, system_internal };
+                  testing, smb, system_internal, guest_os };
 
 // Device type. Available if this is removable volume.
 enum DeviceType { usb, sd, optical, mobile, unknown };
@@ -321,7 +321,8 @@ enum RecentFileType {
   all,
   audio,
   image,
-  video
+  video,
+  document
 };
 
 enum CrostiniEventType {
@@ -368,9 +369,8 @@ dictionary FileTaskDescriptor {
 };
 
 // A file task represents an action that the file manager can perform over the
-// currently selected files. See
-// chrome/browser/chromeos/extensions/file_manager/file_tasks.h for details
-// about how file tasks are handled.
+// currently selected files. See chrome/browser/ash/file_manager/file_tasks.h
+// for details about how file tasks are handled.
 dictionary FileTask {
   // Unique identifier for the task.
   FileTaskDescriptor descriptor;
@@ -1648,6 +1648,13 @@ interface Functions {
 
   // Lists mountable Guest OSs.
   static void listMountableGuests(ListMountableGuestsCallback callback);
+
+  // Starts and mounts the target Guest OS.
+  // |callback|
+  static void mountGuest(long id, SimpleCallback callback);
+
+  // Tells DriveFS to update its cached pin states of hosted files (once).
+  static void pollDriveHostedFilePinStates();
 };
 
 // Events supported by fileManagerPrivate API. These events are broadcasted.

@@ -78,9 +78,19 @@ const base::FeatureParam<std::string> kAndroidSurfaceControlModelBlocklist{
 const base::Feature kWebViewSurfaceControl{"WebViewSurfaceControl",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Same as kWebViewSurfaceControl, but affects only Android T+, used for
+// targeting pre-release version.
+const base::Feature kWebViewSurfaceControlForT{
+    "WebViewSurfaceControlForT", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Use thread-safe media path on WebView.
 const base::Feature kWebViewThreadSafeMedia{"WebViewThreadSafeMedia",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
+// This is used as default state because it's different for webview and chrome.
+// WebView hardcodes this as enabled in AwMainDelegate.
+const base::Feature kWebViewThreadSafeMediaDefault{
+    "WebViewThreadSafeMediaDefault", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Use AImageReader for MediaCodec and MediaPlyer on android.
 const base::Feature kAImageReader{"AImageReader",
@@ -155,7 +165,7 @@ const base::Feature kGpuProcessHighPriorityWin{
 // Use ThreadPriority::DISPLAY for GPU main, viz compositor and IO threads.
 const base::Feature kGpuUseDisplayThreadPriority{
   "GpuUseDisplayThreadPriority",
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_WIN)
       base::FEATURE_ENABLED_BY_DEFAULT
 #else
       base::FEATURE_DISABLED_BY_DEFAULT
@@ -166,10 +176,6 @@ const base::Feature kGpuUseDisplayThreadPriority{
 // Enable use of Metal for OOP rasterization.
 const base::Feature kMetal{"Metal", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
-
-// Turns on skia deferred display list for out of process raster.
-const base::Feature kOopRasterizationDDL{"OopRasterizationDDL",
-                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Causes us to use the SharedImageManager, removing support for the old
 // mailbox system. Any consumers of the GPU process using the old mailbox
@@ -208,6 +214,11 @@ const base::Feature kVulkan {
 
 const base::Feature kEnableDrDc{"EnableDrDc",
                                 base::FEATURE_DISABLED_BY_DEFAULT};
+
+#if BUILDFLAG(IS_ANDROID)
+const base::Feature kEnableDrDcVulkan{"EnableDrDcVulkan",
+                                      base::FEATURE_DISABLED_BY_DEFAULT};
+#endif  // BUILDFLAG(IS_ANDROID)
 
 // Enable WebGPU on gpu service side only. This is used with origin trial
 // before gpu service is enabled by default.
@@ -325,13 +336,11 @@ bool IsDrDcEnabled() {
     return false;
   }
 
-  // Currently not supported for vulkan until crbug.com/1291298 is fixed.
-  if (IsUsingVulkan())
-    return false;
-
   // DrDc is supported on android MediaPlayer and MCVD path only when
-  // AImageReader is enabled.
-  if (!IsAImageReaderEnabled())
+  // AImageReader is enabled. Also DrDc requires AImageReader max size to be
+  // at least 2 for each gpu thread. Hence DrDc is disabled on devices which has
+  // only 1 image.
+  if (!IsAImageReaderEnabled() || LimitAImageReaderMaxSizeToOne())
     return false;
 
   // Check block list against build info.
@@ -339,7 +348,11 @@ bool IsDrDcEnabled() {
   if (IsDeviceBlocked(build_info->device(), kDrDcBlockListByDevice.Get()))
     return false;
 
-  return base::FeatureList::IsEnabled(kEnableDrDc);
+  if (!base::FeatureList::IsEnabled(kEnableDrDc))
+    return false;
+
+  return IsUsingVulkan() ? base::FeatureList::IsEnabled(kEnableDrDcVulkan)
+                         : true;
 #else
   return false;
 #endif
@@ -347,15 +360,21 @@ bool IsDrDcEnabled() {
 
 bool IsUsingThreadSafeMediaForWebView() {
 #if BUILDFLAG(IS_ANDROID)
-  // SurfaceTexture can't be thread-safe.
-  if (!IsAImageReaderEnabled())
+  // SurfaceTexture can't be thread-safe. Also thread safe media code currently
+  // requires AImageReader max size to be at least 2 since one image could be
+  // accessed by each gpu thread in webview.
+  if (!IsAImageReaderEnabled() || LimitAImageReaderMaxSizeToOne())
     return false;
 
-  // Not yet compatible with Vulkan.
-  if (IsUsingVulkan())
-    return false;
+  // If the feature is overridden from command line or finch we will use its
+  // value. If not we use kWebViewThreadSafeMediaDefault which is set in
+  // AwMainDelegate for WebView.
+  base::FeatureList* feature_list = base::FeatureList::GetInstance();
+  if (feature_list &&
+      feature_list->IsFeatureOverridden(kWebViewThreadSafeMedia.name))
+    return base::FeatureList::IsEnabled(kWebViewThreadSafeMedia);
 
-  return base::FeatureList::IsEnabled(kWebViewThreadSafeMedia);
+  return base::FeatureList::IsEnabled(kWebViewThreadSafeMediaDefault);
 #else
   return false;
 #endif
@@ -401,9 +420,19 @@ bool IsAndroidSurfaceControlEnabled() {
 
   // On WebView we also require zero copy or thread-safe media to use
   // SurfaceControl
-  if ((IsWebViewZeroCopyVideoEnabled() || IsUsingThreadSafeMediaForWebView()) &&
-      base::FeatureList::IsEnabled(kWebViewSurfaceControl))
-    return true;
+  if (IsWebViewZeroCopyVideoEnabled() || IsUsingThreadSafeMediaForWebView()) {
+    // If main feature is not overridden from command line and we're running T+
+    // use kWebViewSurfaceControlForT to decide feature status instead so we
+    // can target pre-release android to fish out platform side bugs.
+    base::FeatureList* feature_list = base::FeatureList::GetInstance();
+    if ((!feature_list || !feature_list->IsFeatureOverriddenFromCommandLine(
+                              features::kWebViewSurfaceControl.name)) &&
+        build_info->is_at_least_t()) {
+      return base::FeatureList::IsEnabled(kWebViewSurfaceControlForT);
+    }
+
+    return base::FeatureList::IsEnabled(kWebViewSurfaceControl);
+  }
 
   return base::FeatureList::IsEnabled(kAndroidSurfaceControl);
 }

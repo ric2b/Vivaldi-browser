@@ -115,22 +115,6 @@ const char kCheckForUpdateIntervalSec[]     = "check-for-update-interval";
 // Comma-separated list of SSL cipher suites to disable.
 const char kCipherSuiteBlacklist[]          = "cipher-suite-blacklist";
 
-// Tells chrome to display the cloud print dialog and upload the specified file
-// for printing.
-const char kCloudPrintFile[]                = "cloud-print-file";
-
-// Specifies the mime type to be used when uploading data from the file
-// referenced by cloud-print-file. Defaults to "application/pdf" if
-// unspecified.
-const char kCloudPrintFileType[]            = "cloud-print-file-type";
-
-// Used with kCloudPrintFile to specify a title for the resulting print job.
-const char kCloudPrintJobTitle[]            = "cloud-print-job-title";
-
-// Used with kCloudPrintFile to specify a JSON print ticket for the resulting
-// print job. Defaults to null if unspecified.
-const char kCloudPrintPrintTicket[]         = "cloud-print-print-ticket";
-
 // Comma-separated list of BrowserThreads that cause browser process to crash if
 // the given browser thread is not responsive. UI/IO are the BrowserThreads that
 // are supported.
@@ -196,7 +180,7 @@ const char kDisableComponentUpdate[]        = "disable-component-update";
 
 // Disables installation of default apps on first run. This is used during
 // automated testing.
-const char kDisablePreinstalledApps[] = "disable-default-apps";
+const char kDisableDefaultApps[] = "disable-default-apps";
 
 // Disables Domain Reliability Monitoring.
 const char kDisableDomainReliability[]      = "disable-domain-reliability";
@@ -311,6 +295,11 @@ const char kForceAppMode[]                  = "force-app-mode";
 // whether or not it's actually the First Run (this overrides kNoFirstRun).
 const char kForceFirstRun[]                 = "force-first-run";
 
+// Displays the What's New experience when the browser is started if it has not
+// yet been shown for the current milestone (this overrides kNoFirstRun, without
+// showing the First Run experience).
+const char kForceWhatsNew[] = "force-whats-new";
+
 // Does not show the crash restore bubble when the browser is started during the
 // system startup phase in ChromeOS, if the ChromeOS full restore feature is
 // enabled, because the ChromeOS full restore notification is shown for the user
@@ -377,10 +366,13 @@ const char kNoDefaultBrowserCheck[]         = "no-default-browser-check";
 // then restart chrome without this switch again.
 const char kNoExperiments[]                 = "no-experiments";
 
-// Skip First Run tasks, whether or not it's actually the First Run. Overridden
-// by kForceFirstRun. This does not drop the First Run sentinel and thus doesn't
-// prevent first run from occuring the next time chrome is launched without this
-// flag.
+// Skip First Run tasks, whether or not it's actually the First Run, and the
+// What's New page. Overridden by kForceFirstRun (for FRE) and kForceWhatsNew
+// (for What's New). This does not drop the First Run sentinel and thus doesn't
+// prevent first run from occurring the next time chrome is launched without
+// this flag. It also does not update the last What's New milestone, so does not
+// prevent What's New from occurring the next time chrome is launched without
+// this flag.
 const char kNoFirstRun[]                    = "no-first-run";
 
 // Don't send hyperlink auditing pings

@@ -4,7 +4,9 @@
 
 #include "chrome/browser/ash/crosapi/environment_provider.h"
 
+#include "ash/components/tpm/install_attributes.h"
 #include "base/files/file_util.h"
+#include "base/path_service.h"
 #include "base/system/sys_info.h"
 #include "chrome/browser/ash/drive/drive_integration_service.h"
 #include "chrome/browser/ash/file_manager/path_util.h"
@@ -12,13 +14,14 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chromeos/crosapi/mojom/crosapi.mojom.h"
+#include "chromeos/crosapi/mojom/policy_namespace.mojom.h"
 #include "chromeos/dbus/cros_disks/cros_disks_client.h"
-#include "chromeos/tpm/install_attributes.h"
 #include "components/account_id/account_id.h"
 #include "components/account_manager_core/account.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
+#include "components/user_manager/user_type.h"
 #include "crypto/nss_util_internal.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -41,11 +44,17 @@ mojom::SessionType EnvironmentProvider::GetSessionType() {
   if (user->GetType() == user_manager::USER_TYPE_WEB_KIOSK_APP) {
     return mojom::SessionType::kWebKioskSession;
   }
+  if (user->GetType() == user_manager::USER_TYPE_KIOSK_APP) {
+    return mojom::SessionType::kAppKioskSession;
+  }
+  if (user->GetType() == user_manager::USER_TYPE_CHILD) {
+    return mojom::SessionType::kChildSession;
+  }
   return mojom::SessionType::kRegularSession;
 }
 
 mojom::DeviceMode EnvironmentProvider::GetDeviceMode() {
-  policy::DeviceMode mode = chromeos::InstallAttributes::Get()->GetMode();
+  policy::DeviceMode mode = ash::InstallAttributes::Get()->GetMode();
   switch (mode) {
     case policy::DEVICE_MODE_PENDING:
       // "Pending" is an internal detail of InstallAttributes and doesn't need
@@ -96,6 +105,9 @@ mojom::DefaultPathsPtr EnvironmentProvider::GetDefaultPaths() {
         base::FilePath(file_manager::util::kAndroidFilesPath);
     default_paths->linux_files =
         file_manager::util::GetCrostiniMountDirectory(profile);
+    base::FilePath ash_resources;
+    if (base::PathService::Get(base::DIR_ASSETS, &ash_resources))
+      default_paths->ash_resources = ash_resources;
   } else {
     // On developer linux workstations the above functions do path mangling to
     // support multi-signin which gets undone later in ash-specific code. This
@@ -106,12 +118,17 @@ mojom::DefaultPathsPtr EnvironmentProvider::GetDefaultPaths() {
     default_paths->drivefs = home.Append("Drive");
     default_paths->android_files = home.Append("Android");
     default_paths->linux_files = home.Append("Crostini");
+    default_paths->ash_resources = home.Append("Ash");
   }
 
   // CrosDisksClient already has a convention for its removable media directory
   // when running on Linux workstations.
   default_paths->removable_media =
       chromeos::CrosDisksClient::GetRemovableDiskMountPoint();
+
+  // Ash expects to find shared files in the share cache.
+  default_paths->share_cache =
+      file_manager::util::GetShareCacheFilePath(profile);
 
   return default_paths;
 }
@@ -163,6 +180,15 @@ void EnvironmentProvider::SetDeviceAccountPolicy(
 
 std::string EnvironmentProvider::GetDeviceAccountPolicy() {
   return device_account_policy_blob_;
+}
+
+const MojoPolicyMap& EnvironmentProvider::GetDeviceAccountComponentPolicy() {
+  return component_policy_;
+}
+
+void EnvironmentProvider::SetDeviceAccountComponentPolicy(
+    MojoPolicyMap component_policy) {
+  component_policy_ = std::move(component_policy);
 }
 
 bool EnvironmentProvider::GetUseNewAccountManager() {

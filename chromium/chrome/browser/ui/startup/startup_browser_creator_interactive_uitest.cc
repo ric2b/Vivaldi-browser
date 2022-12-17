@@ -125,7 +125,7 @@ class StartupPagePrefSetterMainExtraParts : public ChromeBrowserMainExtraParts {
   // ChromeBrowserMainExtraParts:
   void PreBrowserStart() override {
     Profile* profile =
-        g_browser_process->profile_manager()->GetActiveUserProfile();
+        g_browser_process->profile_manager()->GetLastUsedProfile();
 
     SessionStartupPref pref_urls(SessionStartupPref::URLS);
     pref_urls.urls = std::move(urls_);
@@ -149,6 +149,7 @@ class StartupPageTest : public InProcessBrowserTest {
   // InProcessBrowserTest:
   void CreatedBrowserMainParts(
       content::BrowserMainParts* browser_main_parts) override {
+    InProcessBrowserTest::CreatedBrowserMainParts(browser_main_parts);
     const std::vector<GURL> urls = {ui_test_utils::GetTestUrl(
         base::FilePath(FILE_PATH_LITERAL("focus")),
         base::FilePath(FILE_PATH_LITERAL("page_with_focus.html")))};

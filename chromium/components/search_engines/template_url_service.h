@@ -21,6 +21,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/time/default_clock.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_change_registrar.h"
@@ -102,6 +103,7 @@ class TemplateURLService : public WebDataServiceConsumer,
   struct URLVisitedDetails {
     GURL url;
     bool is_keyword_transition;
+    bool vivaldi_is_from_url_field = false;
   };
 
   // Values for an enumerated histogram used to track TemplateURL edge cases.
@@ -118,6 +120,18 @@ class TemplateURLService : public WebDataServiceConsumer,
     MIGRATE_SAFE_FOR_AUTOREPLACE_PLAY_API_ENGINE = 8,
     SEARCH_TEMPLATE_URL_EVENT_MAX,
   };
+
+  enum DefaultSearchType {
+    kDefaultSearchMain,
+    kDefaultSearchPrivate,
+    kDefaultSearchField,
+    kDefaultSearchFieldPrivate,
+    kDefaultSearchSpeeddials,
+    kDefaultSearchSpeeddialsPrivate,
+    kDefaultSearchImage,
+  };
+
+  static constexpr int kDefaultSearchTypeCount = kDefaultSearchImage + 1;
 
   TemplateURLService(
       PrefService* prefs,
@@ -280,12 +294,13 @@ class TemplateURLService : public WebDataServiceConsumer,
   // Return true if the given |url| can be made the default. This returns false
   // regardless of |url| if the default search provider is managed by policy or
   // controlled by an extension.
-  bool CanMakeDefault(const TemplateURL* url) const;
+  bool CanMakeDefault(const TemplateURL* url, DefaultSearchType type = kDefaultSearchMain) const;
 
   // Set the default search provider.  |url| may be null.
   // This will assert if the default search is managed; the UI should not be
   // invoking this method in that situation.
   void SetUserSelectedDefaultSearchProvider(TemplateURL* url);
+  void SetUserSelectedDefaultSearchProvider(TemplateURL* url, DefaultSearchType type);
 
   // Returns the default search provider. If the TemplateURLService hasn't been
   // loaded, the default search provider is pulled from preferences.
@@ -293,7 +308,7 @@ class TemplateURLService : public WebDataServiceConsumer,
   // NOTE: This may return null in certain circumstances such as:
   //       1.) Unit test mode
   //       2.) The default search engine is disabled by policy.
-  const TemplateURL* GetDefaultSearchProvider() const;
+  const TemplateURL* GetDefaultSearchProvider(DefaultSearchType type = kDefaultSearchMain) const;
 
   // Returns the default search provider, ignoring any that were provided by an
   // extension.
@@ -303,9 +318,18 @@ class TemplateURLService : public WebDataServiceConsumer,
   // provider.
   bool IsSearchResultsPageFromDefaultSearchProvider(const GURL& url) const;
 
+  // Returns true if the default search provider supports the side search
+  // feature.
+  bool IsSideSearchSupportedForDefaultSearchProvider() const;
+
+  // Generates a side search URL for the default search provider's search url.
+  GURL GenerateSideSearchURLForDefaultSearchProvider(
+      const GURL& search_url,
+      const std::string& version) const;
+
   // Returns true if the default search is managed through group policy.
   bool is_default_search_managed() const {
-    return default_search_provider_source_ == DefaultSearchManager::FROM_POLICY;
+    return default_search_provider_source_[kDefaultSearchMain] == DefaultSearchManager::FROM_POLICY;
   }
 
   // Returns true if the default search provider is controlled by an extension.
@@ -315,7 +339,7 @@ class TemplateURLService : public WebDataServiceConsumer,
   // exists.  If not, returns first URL in |template_urls_|, or NULL if that's
   // empty. The returned object is owned by TemplateURLService and can be
   // destroyed at any time so should be used right after the call.
-  TemplateURL* FindNewDefaultSearchProvider();
+  TemplateURL* FindNewDefaultSearchProvider(DefaultSearchType type);
 
   // Performs the same actions that happen when the prepopulate data version is
   // revved: all existing prepopulated entries are checked against the current
@@ -462,6 +486,28 @@ class TemplateURLService : public WebDataServiceConsumer,
   }
 #endif
 
+  // Vivaldi allows customizing more aspects of a search engine than chromium does.
+  void ResetTemplateURL(TemplateURL* url,
+                        const std::u16string& title,
+                        const std::u16string& keyword,
+                        const std::string& search_url,
+                        const std::string& search_post_params,
+                        const std::string& suggest_url,
+                        const std::string& suggest_post_params,
+                        const std::string& image_url,
+                        const std::string& image_post_params,
+                        const GURL& favicon_url);
+
+  // Vivaldi allows reordering templateURLs. |url| will end up just before
+  // |successor| or last if |successor| is null.
+  void VivaldiMoveTemplateURL(TemplateURL* url, const TemplateURL* successor);
+
+  // Temporarily overrides the main default search with a different one.
+  // This is done as a workaround helper for android and the change is not
+  // persisted.
+  void VivaldiSetDefaultOverride(TemplateURL* url);
+  void VivaldiResetDefaultOverride();
+
  private:
   FRIEND_TEST_ALL_PREFIXES(TemplateURLServiceTest, TestManagedDefaultSearch);
   FRIEND_TEST_ALL_PREFIXES(TemplateURLServiceTest,
@@ -561,12 +607,12 @@ class TemplateURLService : public WebDataServiceConsumer,
   void ChangeToLoadedState();
 
   // Applies a DSE change and reports metrics if appropriate.
-  void ApplyDefaultSearchChange(const TemplateURLData* new_dse_data,
+  void ApplyDefaultSearchChange(DefaultSearchType type, const TemplateURLData* new_dse_data,
                                 DefaultSearchManager::Source source);
 
   // Applies a DSE change. May be called at startup or after transitioning to
   // the loaded state. Returns true if a change actually occurred.
-  bool ApplyDefaultSearchChangeNoMetrics(const TemplateURLData* new_dse_data,
+  bool ApplyDefaultSearchChangeNoMetrics(DefaultSearchType type, const TemplateURLData* new_dse_data,
                                          DefaultSearchManager::Source source);
 
   // Returns false if there is a TemplateURL that has a search url with the
@@ -591,7 +637,7 @@ class TemplateURLService : public WebDataServiceConsumer,
   // If the TemplateURL's sync GUID matches the kSyncedDefaultSearchProviderGUID
   // preference it will be used to update the DSE in prefs.
   // OnDefaultSearchChange may be triggered as a result.
-  void MaybeUpdateDSEViaPrefs(TemplateURL* synced_turl);
+  void MaybeUpdateDSEViaPrefs(DefaultSearchType type, TemplateURL* synced_turl);
 
   // Iterates through the TemplateURLs to see if one matches the visited url.
   // For each TemplateURL whose url matches the visited url
@@ -654,7 +700,7 @@ class TemplateURLService : public WebDataServiceConsumer,
   // where old entries were being pushed to Sync without a sync_guid.
   void PatchMissingSyncGUIDs(OwnedTemplateURLVector* template_urls);
 
-  void OnSyncedDefaultSearchProviderGUIDChanged();
+  void OnSyncedDefaultSearchProviderGUIDChanged(DefaultSearchType type);
 
   // Goes through a vector of TemplateURLs and sets is_active to true if it was
   // not previously set (currently kUnspecified) and has been interacted with
@@ -759,14 +805,14 @@ class TemplateURLService : public WebDataServiceConsumer,
   // Essentially all direct usages of this variable need to first check that
   // |loading_| is true, and should call GetDefaultSearchProvider() instead.
   // Example of a regression due to this mistake: https://crbug.com/1164024.
-  raw_ptr<TemplateURL> default_search_provider_ = nullptr;
+  std::array<raw_ptr<TemplateURL>, kDefaultSearchTypeCount> default_search_provider_ = {};
 
   // A temporary location for the DSE until Web Data has been loaded and it can
   // be merged into |template_urls_|.
-  std::unique_ptr<TemplateURL> initial_default_search_provider_;
+  std::array<std::unique_ptr<TemplateURL>, kDefaultSearchTypeCount> initial_default_search_provider_;
 
   // Source of the default search provider.
-  DefaultSearchManager::Source default_search_provider_source_;
+  std::array<DefaultSearchManager::Source, kDefaultSearchTypeCount> default_search_provider_source_;
 
   // ID assigned to next TemplateURL added to this model. This is an ever
   // increasing integer that is initialized from the database.
@@ -814,7 +860,7 @@ class TemplateURLService : public WebDataServiceConsumer,
   base::OnceClosure on_loaded_callback_for_sync_;
 
   // Helper class to manage the default search engine.
-  DefaultSearchManager default_search_manager_;
+  std::array<DefaultSearchManager, kDefaultSearchTypeCount> default_search_manager_;
 
   // This tracks how many Scoper handles exist. When the number of handles drops
   // to zero, a notification is made to observers if
@@ -835,6 +881,8 @@ class TemplateURLService : public WebDataServiceConsumer,
   // android.
   std::unique_ptr<TemplateUrlServiceAndroid> template_url_service_android_;
 #endif
+
+  raw_ptr<TemplateURL> vivaldi_default_override_ = nullptr;
 };
 
 #endif  // COMPONENTS_SEARCH_ENGINES_TEMPLATE_URL_SERVICE_H_

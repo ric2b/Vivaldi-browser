@@ -528,6 +528,7 @@ interface FileSystemFileHandle : FileSystemHandle
     method constructor
     method createWritable
     method getFile
+    method move
 interface FileSystemHandle
     attribute @@toStringTag
     getter kind
@@ -770,6 +771,7 @@ interface MediaCapabilities
     attribute @@toStringTag
     method constructor
     method decodingInfo
+    method encodingInfo
 interface MessageChannel
     attribute @@toStringTag
     getter port1

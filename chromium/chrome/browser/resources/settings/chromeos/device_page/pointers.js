@@ -6,20 +6,21 @@
  * @fileoverview
  * 'settings-pointers' is the settings subpage with mouse and touchpad settings.
  */
-import '//resources/cr_components/chromeos/localized_link/localized_link.js';
+import '//resources/cr_components/localized_link/localized_link.js';
 import '//resources/cr_elements/cr_radio_button/cr_radio_button.m.js';
 import '//resources/cr_elements/shared_vars_css.m.js';
 import '../../controls/settings_radio_group.js';
 import '../../controls/settings_slider.js';
 import '../../controls/settings_toggle_button.js';
 import '../../settings_shared_css.js';
+import '//resources/cr_elements/cr_slider/cr_slider.js';
 
 import {loadTimeData} from '//resources/js/load_time_data.m.js';
 import {afterNextRender, flush, html, Polymer, TemplateInstanceBase, Templatizer} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {Route, Router} from '../../router.js';
-import {DeepLinkingBehavior} from '../deep_linking_behavior.m.js';
-import {routes} from '../os_route.m.js';
+import {DeepLinkingBehavior} from '../deep_linking_behavior.js';
+import {routes} from '../os_route.js';
 import {PrefsBehavior} from '../prefs_behavior.js';
 import {RouteObserverBehavior} from '../route_observer_behavior.js';
 
@@ -90,21 +91,22 @@ Polymer({
       readOnly: true,
     },
 
-    hapticClickSensitivityValues_: {
-      type: Array,
-      value: [1, 3, 5],
-      readOnly: true,
-    },
-
     /**
-     * TODO(zentaro): Remove this conditional once the feature is launched.
+     * The click sensitivity values from prefs are [1,3,5] but ChromeVox needs
+     * to announce them as [1,2,3].
+     * @type {!Array<SliderTick>}
      * @private
      */
-    allowDisableAcceleration_: {
-      type: Boolean,
+    hapticClickSensitivityValues_: {
+      type: Array,
       value() {
-        return loadTimeData.getBoolean('allowDisableMouseAcceleration');
+        return [
+          {value: 1, ariaValue: 1},
+          {value: 3, ariaValue: 2},
+          {value: 5, ariaValue: 3},
+        ];
       },
+      readOnly: true,
     },
 
     /**

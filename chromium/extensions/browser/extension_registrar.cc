@@ -10,10 +10,10 @@
 #include "base/containers/contains.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
+#include "build/chromeos_buildflags.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/devtools_agent_host.h"
-#include "content/public/browser/notification_service.h"
 #include "content/public/browser/storage_partition.h"
 #include "extensions/browser/app_sorting.h"
 #include "extensions/browser/blocklist_extension_prefs.h"
@@ -24,12 +24,15 @@
 #include "extensions/browser/extension_util.h"
 #include "extensions/browser/lazy_context_id.h"
 #include "extensions/browser/lazy_context_task_queue.h"
-#include "extensions/browser/notification_types.h"
 #include "extensions/browser/process_manager.h"
 #include "extensions/browser/renderer_startup_helper.h"
 #include "extensions/browser/service_worker_task_queue.h"
 #include "extensions/browser/task_queue_util.h"
 #include "extensions/common/manifest_handlers/background_info.h"
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chrome/browser/ash/crosapi/browser_util.h"
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 using content::DevToolsAgentHost;
 
@@ -124,11 +127,6 @@ void ExtensionRegistrar::AddNewExtension(
     registry_->AddBlocked(extension);
   } else if (extension_prefs_->IsExtensionDisabled(extension->id())) {
     registry_->AddDisabled(extension);
-    // Notify that a disabled extension was added or updated.
-    content::NotificationService::current()->Notify(
-        extensions::NOTIFICATION_EXTENSION_UPDATE_DISABLED,
-        content::Source<content::BrowserContext>(browser_context_),
-        content::Details<const Extension>(extension.get()));
   } else {  // Extension should be enabled.
     // All apps that are displayed in the launcher are ordered by their ordinals
     // so we must ensure they have valid ordinals.
@@ -238,6 +236,16 @@ void ExtensionRegistrar::DisableExtension(const ExtensionId& extension_id,
         extensions::disable_reason::DISABLE_BLOCKED_BY_POLICY |
         extensions::disable_reason::DISABLE_CUSTODIAN_APPROVAL_REQUIRED |
         extensions::disable_reason::DISABLE_REINSTALL;
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+    // For controlled extensions, only allow disabling not ash-keeplisted
+    // extensions if Lacros is the only browser.
+    if (!crosapi::browser_util::IsAshWebBrowserEnabled()) {
+      internal_disable_reason_mask |=
+          extensions::disable_reason::DISABLE_NOT_ASH_KEEPLISTED;
+    }
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
     disable_reasons &= internal_disable_reason_mask;
 
     if (disable_reasons == disable_reason::DISABLE_NONE)

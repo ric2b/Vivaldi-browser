@@ -34,6 +34,7 @@
 #include "components/content_settings/common/content_settings_agent.mojom.h"
 #include "components/guest_view/browser/guest_view_event.h"
 #include "components/guest_view/browser/guest_view_manager.h"
+#include "components/paint_preview/buildflags/buildflags.h"
 #include "components/security_state/content/content_utils.h"
 #include "components/security_state/core/security_state.h"
 #include "components/web_cache/browser/web_cache_manager.h"
@@ -75,6 +76,10 @@
 #include "ui/aura/client/cursor_client.h"
 #include "ui/aura/client/cursor_client_observer.h"
 #include "ui/aura/window.h"
+#endif
+
+#if BUILDFLAG(ENABLE_PAINT_PREVIEW)
+#include "components/paint_preview/browser/paint_preview_client.h"
 #endif
 
 using content::RenderProcessHost;
@@ -170,11 +175,8 @@ static std::string SSLStateToString(SecurityStateTabHelper* helper) {
       // show a visible warning about the page's lack of security
       return "warning";
     case security_state::SECURE: {
-      auto visible_security_state = helper->GetVisibleSecurityState();
-      if (visible_security_state->cert_status & net::CERT_STATUS_IS_EV)
-        return "secure_with_ev";
       // HTTPS
-      return "secure_no_ev";
+      return "secure";
     }
     case security_state::SECURE_WITH_POLICY_INSTALLED_CERT:
       // HTTPS, but the certificate verification chain is anchored on a
@@ -657,6 +659,20 @@ std::unique_ptr<content::EyeDropper> WebViewGuest::OpenEyeDropper(
   return ShowEyeDropper(frame, listener);
 }
 
+void WebViewGuest::CapturePaintPreviewOfSubframe(
+    content::WebContents* web_contents,
+    const gfx::Rect& rect,
+    const base::UnguessableToken& guid,
+    content::RenderFrameHost* render_frame_host) {
+#if BUILDFLAG(ENABLE_PAINT_PREVIEW)
+  auto* client =
+      paint_preview::PaintPreviewClient::FromWebContents(web_contents);
+  if (client) {
+    client->CaptureSubframePaintPreview(guid, rect, render_frame_host);
+  }
+#endif
+}
+
 void WebViewGuest::LoadTabContentsIfNecessary() {
   web_contents()->GetController().LoadIfNecessary();
 
@@ -822,24 +838,8 @@ void WebViewGuest::VivaldiCreateWebContents(
             *tab_id, profile, include_incognito, &browser, NULL,
             &tabstrip_contents, &tab_index)) {
       new_contents = tabstrip_contents;
-      content::WebContentsImpl* contentsimpl =
-          static_cast<content::WebContentsImpl*>(new_contents);
 
       CreatePluginGuest(new_contents);
-
-      // Set the owners blobregistry as fallback when accessing blob-urls.
-      // VB-72847.
-      StoragePartition* partition =
-          contentsimpl->GetBrowserContext()->GetStoragePartition(
-              contentsimpl->GetSiteInstance());
-
-      StoragePartition* owner_partition =
-          Profile::FromBrowserContext(owner_web_contents()->GetBrowserContext())
-              ->GetStoragePartition(owner_web_contents()->GetSiteInstance());
-
-      static_cast<content::StoragePartitionImpl*>(partition)
-          ->UpdateBlobRegistryWithParentAsFallback(
-              static_cast<content::StoragePartitionImpl*>(owner_partition));
 
       // Fire a WebContentsCreated event informing the client that script-
       // injection can be done.

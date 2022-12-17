@@ -36,6 +36,7 @@
 #include "third_party/blink/renderer/core/workers/worker_thread.h"
 #include "third_party/blink/renderer/core/xmlhttprequest/xml_http_request.h"
 #include "third_party/blink/renderer/platform/instrumentation/instance_counters.h"
+#include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/traced_value.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_load_priority.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_load_timing.h"
@@ -385,16 +386,18 @@ const char* PseudoTypeToString(CSSSelector::PseudoType pseudo_type) {
     DEFINE_STRING_MAPPING(PseudoVideoPersistentAncestor)
     DEFINE_STRING_MAPPING(PseudoXrOverlay)
     DEFINE_STRING_MAPPING(PseudoTargetText)
+    DEFINE_STRING_MAPPING(PseudoSelectorFragmentAnchor)
     DEFINE_STRING_MAPPING(PseudoModal)
     DEFINE_STRING_MAPPING(PseudoHighlight)
     DEFINE_STRING_MAPPING(PseudoSpellingError)
     DEFINE_STRING_MAPPING(PseudoGrammarError)
     DEFINE_STRING_MAPPING(PseudoHas)
     DEFINE_STRING_MAPPING(PseudoRelativeLeftmost)
-    DEFINE_STRING_MAPPING(PseudoTransition)
-    DEFINE_STRING_MAPPING(PseudoTransitionContainer);
-    DEFINE_STRING_MAPPING(PseudoTransitionNewContent);
-    DEFINE_STRING_MAPPING(PseudoTransitionOldContent);
+    DEFINE_STRING_MAPPING(PseudoPageTransition)
+    DEFINE_STRING_MAPPING(PseudoPageTransitionContainer);
+    DEFINE_STRING_MAPPING(PseudoPageTransitionImageWrapper);
+    DEFINE_STRING_MAPPING(PseudoPageTransitionIncomingImage);
+    DEFINE_STRING_MAPPING(PseudoPageTransitionOutgoingImage);
 #undef DEFINE_STRING_MAPPING
   }
 
@@ -756,6 +759,7 @@ const char kSvgChanged[] = "SVG changed";
 const char kScrollbarChanged[] = "Scrollbar changed";
 const char kDisplayLock[] = "Display lock";
 const char kCanvasFormattedTextRunChange[] = "CanvasFormattedText runs changed";
+const char kDevtools[] = "Inspected by devtools";
 }  // namespace layout_invalidation_reason
 
 void inspector_layout_invalidation_tracking_event::Data(
@@ -1157,17 +1161,18 @@ void inspector_mark_load_event::Data(perfetto::TracedValue context,
   dict.Add("frame", IdentifiersFactory::FrameId(frame));
 }
 
+void inspector_pre_paint_event::Data(perfetto::TracedValue context,
+                                     LocalFrame* frame) {
+  auto dict = std::move(context).WriteDictionary();
+  FrameEventData(dict, frame);
+  dict.Add("frame", IdentifiersFactory::FrameId(frame));
+}
+
 void inspector_scroll_layer_event::Data(perfetto::TracedValue context,
                                         LayoutObject* layout_object) {
   auto dict = std::move(context).WriteDictionary();
   dict.Add("frame", IdentifiersFactory::FrameId(layout_object->GetFrame()));
   SetGeneratingNodeInfo(dict, layout_object, "nodeId");
-}
-
-void inspector_update_layer_tree_event::Data(perfetto::TracedValue context,
-                                             LocalFrame* frame) {
-  auto dict = std::move(context).WriteDictionary();
-  dict.Add("frame", IdentifiersFactory::FrameId(frame));
 }
 
 namespace {

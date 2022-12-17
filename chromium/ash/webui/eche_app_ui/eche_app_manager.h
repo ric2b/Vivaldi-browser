@@ -19,10 +19,6 @@
 #include "ash/webui/eche_app_ui/eche_recent_app_click_handler.h"
 #include "ash/webui/eche_app_ui/launch_app_helper.h"
 #include "ash/webui/eche_app_ui/mojom/eche_app.mojom.h"
-// TODO(https://crbug.com/1164001): move to forward declaration.
-#include "chromeos/services/device_sync/public/cpp/device_sync_client.h"
-// TODO(https://crbug.com/1164001): move to forward declaration.
-#include "chromeos/services/multidevice_setup/public/cpp/multidevice_setup_client.h"
 #include "chromeos/services/network_config/public/mojom/cros_network_config.mojom.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -30,6 +26,15 @@
 class PrefService;
 
 namespace ash {
+
+namespace device_sync {
+class DeviceSyncClient;
+}
+
+namespace multidevice_setup {
+class MultiDeviceSetupClient;
+}
+
 namespace eche_app {
 
 class EcheConnector;
@@ -41,6 +46,8 @@ class EcheUidProvider;
 class SystemInfo;
 class SystemInfoProvider;
 class AppsAccessManager;
+class EcheStreamStatusChangeHandler;
+class EcheTrayStreamStatusObserver;
 
 // Implements the core logic of the EcheApp and exposes interfaces via its
 // public API. Implemented as a KeyedService since it depends on other
@@ -75,7 +82,13 @@ class EcheAppManager : public KeyedService {
   void BindNotificationGeneratorInterface(
       mojo::PendingReceiver<mojom::NotificationGenerator> receiver);
 
+  void BindDisplayStreamHandlerInterface(
+      mojo::PendingReceiver<mojom::DisplayStreamHandler> receiver);
+
   AppsAccessManager* GetAppsAccessManager();
+
+  // This trigger Eche Web to release connection resource.
+  void CloseStream();
 
   // KeyedService:
   void Shutdown() override;
@@ -84,6 +97,7 @@ class EcheAppManager : public KeyedService {
   std::unique_ptr<secure_channel::ConnectionManager> connection_manager_;
   std::unique_ptr<EcheFeatureStatusProvider> feature_status_provider_;
   std::unique_ptr<LaunchAppHelper> launch_app_helper_;
+  std::unique_ptr<EcheStreamStatusChangeHandler> stream_status_change_handler_;
   std::unique_ptr<EcheNotificationClickHandler>
       eche_notification_click_handler_;
   std::unique_ptr<EcheConnector> eche_connector_;
@@ -97,6 +111,8 @@ class EcheAppManager : public KeyedService {
       remote_cros_network_config_;
   std::unique_ptr<SystemInfoProvider> system_info_provider_;
   std::unique_ptr<AppsAccessManager> apps_access_manager_;
+  std::unique_ptr<EcheTrayStreamStatusObserver>
+      eche_tray_stream_status_observer_;
 };
 
 }  // namespace eche_app

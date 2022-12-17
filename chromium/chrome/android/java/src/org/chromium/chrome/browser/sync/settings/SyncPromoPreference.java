@@ -13,8 +13,6 @@ import androidx.preference.Preference;
 import androidx.preference.PreferenceViewHolder;
 
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeApplicationImpl;
-import org.chromium.chrome.browser.firstrun.FirstRunSignInProcessor;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.SyncConsentActivityLauncherImpl;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
@@ -32,6 +30,8 @@ import org.chromium.components.signin.metrics.SigninAccessPoint;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * A preference that displays Personalized Sync Promo when the user is not syncing.
@@ -76,7 +76,6 @@ public class SyncPromoPreference extends Preference
         mAccountManagerFacade.addObserver(this);
         signinManager.addSignInStateObserver(this);
         mProfileDataCache.addObserver(this);
-        FirstRunSignInProcessor.updateSigninManagerFirstRunCheckDone();
         mSigninPromoController = new SigninPromoController(
                 SigninAccessPoint.SETTINGS, SyncConsentActivityLauncherImpl.get());
 

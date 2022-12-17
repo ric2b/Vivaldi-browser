@@ -124,10 +124,10 @@ const base::FilePath& GetPathOfCurrentExe() {
   static base::NoDestructor<base::FilePath> exe_path([] {
     wchar_t path[MAX_PATH];
     path[0] = L'\0';
-    DWORD size = base::size(path);
+    DWORD size = std::size(path);
     if (!::QueryFullProcessImageName(::GetCurrentProcess(), 0, path, &size)) {
       PLOG(INFO) << "Failed QueryFullProcessImageName()";
-      if (GetModuleFileName(nullptr, path, base::size(path)) == 0) {
+      if (GetModuleFileName(nullptr, path, std::size(path)) == 0) {
         PLOG(INFO) << "Failed QueryFullProcessImageName()";
         return base::FilePath();
       }

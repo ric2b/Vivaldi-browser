@@ -14,7 +14,6 @@
 
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/scoped_refptr.h"
-#include "components/capture/capture_page.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -108,7 +107,7 @@ class ThumbnailCaptureContents : protected content::WebContentsDelegate,
 
   void CaptureViaIpc();
 
-  void OnIpcCaptureDone(::vivaldi::CapturePage::Result captured);
+  void OnIpcCaptureDone(SkBitmap bitmap);
 
   void OnCaptureTimeout();
 
@@ -129,7 +128,7 @@ class ThumbnailCaptureContents : protected content::WebContentsDelegate,
 
   CaptureCallback callback_;
 
-  base::WeakPtrFactory<ThumbnailCaptureContents> weak_ptr_factory_;
+  base::WeakPtrFactory<ThumbnailCaptureContents> weak_ptr_factory_{this};
 };
 
 }  // namespace vivaldi

@@ -21,12 +21,12 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/strings/utf_string_conversions.h"
+#include "base/task/task_runner_util.h"
 #include "base/task/thread_pool.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
-#include "base/task/task_runner_util.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -237,7 +237,7 @@ base::CancelableTaskTracker::TaskId MailClientService::MatchMessage(
       base::BindOnce(std::move(callback), email_rows));
 }
 
-base::CancelableTaskTracker::TaskId MailClientService::RebuildDatabase(
+base::CancelableTaskTracker::TaskId MailClientService::RebuildAndVacuumDatabase(
     ResultCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_)
@@ -248,8 +248,8 @@ base::CancelableTaskTracker::TaskId MailClientService::RebuildDatabase(
 
   return tracker->PostTaskAndReply(
       backend_task_runner_.get(), FROM_HERE,
-      base::BindOnce(&MailClientBackend::RebuildDatabase, mail_client_backend_,
-                     result),
+      base::BindOnce(&MailClientBackend::RebuildAndVacuumDatabase,
+                     mail_client_backend_, result),
       base::BindOnce(std::move(callback), result));
 }
 

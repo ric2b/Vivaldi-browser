@@ -142,6 +142,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/isolated_world_csp.h"
 #include "third_party/blink/renderer/bindings/core/v8/sanitize_script_errors.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
+#include "third_party/blink/renderer/bindings/core/v8/script_evaluation_result.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
 #include "third_party/blink/renderer/bindings/core/v8/source_location.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
@@ -179,7 +180,7 @@
 #include "third_party/blink/renderer/core/exported/web_plugin_container_impl.h"
 #include "third_party/blink/renderer/core/exported/web_view_impl.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
-#include "third_party/blink/renderer/core/frame/deprecation.h"
+#include "third_party/blink/renderer/core/frame/deprecation/deprecation.h"
 #include "third_party/blink/renderer/core/frame/find_in_page.h"
 #include "third_party/blink/renderer/core/frame/frame_console.h"
 #include "third_party/blink/renderer/core/frame/intervention.h"
@@ -862,6 +863,11 @@ bool WebLocalFrameImpl::IsAdSubframe() const {
   return GetFrame()->IsAdSubframe();
 }
 
+bool WebLocalFrameImpl::IsAdScriptInStack() const {
+  DCHECK(GetFrame());
+  return GetFrame()->IsAdScriptInStack();
+}
+
 void WebLocalFrameImpl::SetAdEvidence(
     const blink::FrameAdEvidence& ad_evidence) {
   DCHECK(GetFrame());
@@ -927,7 +933,8 @@ WebLocalFrameImpl::ExecuteScriptInIsolatedWorldAndReturnValue(
   return ClassicScript::CreateUnspecifiedScript(
              source_in, SanitizeScriptErrors::kDoNotSanitize)
       ->RunScriptInIsolatedWorldAndReturnValue(GetFrame()->DomWindow(),
-                                               world_id);
+                                               world_id)
+      .GetSuccessValueOrEmpty();
 }
 
 void WebLocalFrameImpl::ClearIsolatedWorldCSPForTesting(int32_t world_id) {
@@ -994,7 +1001,8 @@ v8::Local<v8::Value> WebLocalFrameImpl::ExecuteScriptAndReturnValue(
     const WebScriptSource& source) {
   DCHECK(GetFrame());
   return ClassicScript::CreateUnspecifiedScript(source)
-      ->RunScriptAndReturnValue(GetFrame()->DomWindow());
+      ->RunScriptAndReturnValue(GetFrame()->DomWindow())
+      .GetSuccessValueOrEmpty();
 }
 
 void WebLocalFrameImpl::RequestExecuteV8Function(
@@ -2204,9 +2212,10 @@ RemoteFrame* WebLocalFrameImpl::AdoptPortal(HTMLPortalElement* portal) {
 RemoteFrame* WebLocalFrameImpl::CreateFencedFrame(
     HTMLFencedFrameElement* fenced_frame,
     mojo::PendingAssociatedReceiver<mojom::blink::FencedFrameOwnerHost>
-        receiver) {
+        receiver,
+    mojom::blink::FencedFrameMode mode) {
   WebRemoteFrame* frame =
-      client_->CreateFencedFrame(fenced_frame, std::move(receiver));
+      client_->CreateFencedFrame(fenced_frame, std::move(receiver), mode);
   return To<WebRemoteFrameImpl>(frame)->GetFrame();
 }
 
@@ -2416,8 +2425,7 @@ blink::mojom::CommitResult WebLocalFrameImpl::CommitSameDocumentNavigation(
     bool is_client_redirect,
     bool has_transient_user_activation,
     const WebSecurityOrigin& initiator_origin,
-    bool is_browser_initiated,
-    std::unique_ptr<WebDocumentLoader::ExtraData> extra_data) {
+    bool is_browser_initiated) {
   DCHECK(GetFrame());
   DCHECK(!url.ProtocolIs("javascript"));
 
@@ -2428,8 +2436,7 @@ blink::mojom::CommitResult WebLocalFrameImpl::CommitSameDocumentNavigation(
                          : ClientRedirectPolicy::kNotClientRedirect,
       has_transient_user_activation, initiator_origin.Get(),
       /*is_synchronously_committed=*/false,
-      mojom::blink::TriggeringEventInfo::kNotFromEvent, is_browser_initiated,
-      std::move(extra_data));
+      mojom::blink::TriggeringEventInfo::kNotFromEvent, is_browser_initiated);
 }
 
 bool WebLocalFrameImpl::IsLoading() const {
@@ -2684,8 +2691,8 @@ bool WebLocalFrameImpl::IsAllowedToDownload() const {
          network::mojom::blink::WebSandboxFlags::kNone;
 }
 
-bool WebLocalFrameImpl::IsCrossOriginToMainFrame() const {
-  return GetFrame()->IsCrossOriginToMainFrame();
+bool WebLocalFrameImpl::IsCrossOriginToOutermostMainFrame() const {
+  return GetFrame()->IsCrossOriginToOutermostMainFrame();
 }
 
 void WebLocalFrameImpl::UsageCountChromeLoadTimes(const WebString& metric) {

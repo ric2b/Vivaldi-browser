@@ -16,6 +16,7 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/browser/certificate_viewer.h"
 #include "chrome/browser/platform_util.h"
@@ -92,7 +93,7 @@ CertNodeBuilder& CertNodeBuilder::Payload(base::StringPiece payload) {
 
 CertNodeBuilder& CertNodeBuilder::Child(
     std::unique_ptr<base::DictionaryValue> child) {
-  children_.Append(std::move(child));
+  children_.Append(base::Value::FromUniquePtrValue(std::move(child)));
   return *this;
 }
 
@@ -378,7 +379,7 @@ void CertificateViewerDialogHandler::HandleRequestCertificateFields(
   }
 
   base::ListValue root_list;
-  root_list.Append(
+  root_list.Append(base::Value::FromUniquePtrValue(
       CertNodeBuilder(x509_certificate_model::GetTitle(cert))
           .Child(
               CertNodeBuilder(
@@ -452,7 +453,7 @@ void CertificateViewerDialogHandler::HandleRequestCertificateFields(
                                   .Build())
                           .Build())
                   .Build())
-          .Build());
+          .Build()));
 
   // Send certificate information to javascript.
   ResolveJavascriptCallback(callback_id, root_list);

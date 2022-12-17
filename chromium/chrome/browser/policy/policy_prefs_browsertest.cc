@@ -114,8 +114,12 @@ class PolicyPrefsTest : public PlatformBrowserTest {
 
 // Verifies that policies make their corresponding preferences become managed,
 // and that the user can't override that setting.
-// TODO(crbug.com/1294825) Flaky on ChromeOS.
-#if BUILDFLAG(IS_CHROMEOS)
+// README SHERIFFs: This test encapsulates a whole suite of individual browser
+// tests for performance reasons and therefore has an increased chance of
+// failure/flakiness. Please add hendrich@chromium.org on any related bugs when
+// disabling this test.
+// Flake on linux-chromeos-dbg: crbug.com/1294825
+#if (BUILDFLAG(IS_CHROMEOS) && !defined(NDEBUG))
 #define MAYBE_PolicyToPrefsMapping DISABLED_PolicyToPrefsMapping
 #else
 #define MAYBE_PolicyToPrefsMapping PolicyToPrefsMapping
@@ -127,8 +131,9 @@ IN_PROC_BROWSER_TEST_F(PolicyPrefsTest, MAYBE_PolicyToPrefsMapping) {
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
   PrefService* local_state = g_browser_process->local_state();
-  PrefService* user_prefs =
-      ProfileManager::GetActiveUserProfile()->GetOriginalProfile()->GetPrefs();
+  PrefService* user_prefs = ProfileManager::GetLastUsedProfileIfLoaded()
+                                ->GetOriginalProfile()
+                                ->GetPrefs();
 
   VerifyPolicyToPrefMappings(GetTestCasePath(), local_state, user_prefs,
                              /* signin_profile_prefs= */ nullptr,

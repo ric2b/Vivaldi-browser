@@ -10,6 +10,7 @@
 #include "chromeos/services/bluetooth_config/adapter_state_controller.h"
 #include "chromeos/services/bluetooth_config/device_pairing_handler.h"
 #include "chromeos/services/bluetooth_config/discovered_devices_provider.h"
+#include "chromeos/services/bluetooth_config/discovery_session_status_notifier.h"
 #include "chromeos/services/bluetooth_config/public/mojom/cros_bluetooth_config.mojom.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote_set.h"
@@ -31,7 +32,8 @@ namespace bluetooth_config {
 // responsible for starting and stopping discovery and does not handle pairing
 // attempts.
 class DiscoverySessionManager : public AdapterStateController::Observer,
-                                public DiscoveredDevicesProvider::Observer {
+                                public DiscoveredDevicesProvider::Observer,
+                                public DiscoverySessionStatusNotifier {
  public:
   ~DiscoverySessionManager() override;
 
@@ -62,8 +64,7 @@ class DiscoverySessionManager : public AdapterStateController::Observer,
   // DevicePairingHandler.
   virtual std::unique_ptr<DevicePairingHandler> CreateDevicePairingHandler(
       AdapterStateController* adapter_state_controller,
-      mojo::PendingReceiver<mojom::DevicePairingHandler> receiver,
-      base::OnceClosure finished_pairing_callback) = 0;
+      mojo::PendingReceiver<mojom::DevicePairingHandler> receiver) = 0;
 
  private:
   friend class DiscoverySessionManagerImplTest;
@@ -78,7 +79,6 @@ class DiscoverySessionManager : public AdapterStateController::Observer,
   // |id_to_pairing_handler_map_|. Returns the remote connected to the handler.
   mojo::PendingRemote<mojom::DevicePairingHandler>
   RegisterNewDevicePairingHandler(mojo::RemoteSetElementId id);
-  void OnPairingFinished(mojo::RemoteSetElementId id);
 
   bool IsBluetoothEnabled() const;
   void OnDelegateDisconnected(mojo::RemoteSetElementId id);

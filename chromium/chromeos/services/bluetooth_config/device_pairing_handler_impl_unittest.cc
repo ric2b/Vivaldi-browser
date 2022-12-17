@@ -12,6 +12,7 @@
 #include "base/time/clock.h"
 #include "chromeos/services/bluetooth_config/fake_adapter_state_controller.h"
 #include "chromeos/services/bluetooth_config/fake_device_pairing_delegate.h"
+#include "chromeos/services/bluetooth_config/fake_fast_pair_delegate.h"
 #include "chromeos/services/bluetooth_config/fake_key_entered_handler.h"
 #include "device/bluetooth/chromeos/bluetooth_utils.h"
 #include "device/bluetooth/test/mock_bluetooth_adapter.h"
@@ -29,6 +30,7 @@ using NiceMockDevice =
 const char kTestDeviceIdSuffix[] = "-Identifier";
 const uint32_t kTestBluetoothClass = 1337u;
 const char kTestBluetoothName[] = "testName";
+constexpr char kTestDefaultImage[] = "data:image/png;base64,TestDefaultImage";
 
 const char kDefaultPinCode[] = "132546";
 const uint32_t kDefaultPinCodeNum = 132546u;
@@ -69,8 +71,7 @@ class DevicePairingHandlerImplTest : public testing::Test {
     device_pairing_handler_ = std::make_unique<DevicePairingHandlerImpl>(
         remote_handler_.BindNewPipeAndPassReceiver(),
         &fake_adapter_state_controller_, mock_adapter_,
-        base::BindOnce(&DevicePairingHandlerImplTest::OnPairingAttemptFinished,
-                       base::Unretained(this)));
+        &fake_fast_pair_delegate_);
   }
 
   void SetBluetoothSystemState(mojom::BluetoothSystemState system_state) {
@@ -214,7 +215,7 @@ class DevicePairingHandlerImplTest : public testing::Test {
   }
 
   base::TimeDelta GetPairingFailureDelay() {
-    return DevicePairingHandler::kPairingFailureDelay;
+    return DevicePairingHandlerImpl::kPairingFailureDelay;
   }
 
   void FastForwardOperation(base::TimeDelta time) {
@@ -271,16 +272,16 @@ class DevicePairingHandlerImplTest : public testing::Test {
   const absl::optional<mojom::PairingResult>& pairing_result() const {
     return pairing_result_;
   }
-  size_t num_pairing_attempt_finished_calls() const {
-    return num_pairing_attempt_finished_calls_;
-  }
   size_t num_cancel_pairing_calls() const { return num_cancel_pairing_calls_; }
   size_t num_confirm_pairing_calls() const {
     return num_confirm_pairing_calls_;
   }
   std::string received_pin_code() const { return received_pin_code_; }
   uint32_t received_passkey() const { return received_passkey_; }
-  base::HistogramTester histogram_tester;
+
+  FakeFastPairDelegate* fake_fast_pair_delegate() {
+    return &fake_fast_pair_delegate_;
+  }
 
  private:
   std::vector<const device::BluetoothDevice*> GetMockDevices() {
@@ -298,12 +299,11 @@ class DevicePairingHandlerImplTest : public testing::Test {
                         });
   }
 
-  void OnPairingAttemptFinished() { num_pairing_attempt_finished_calls_++; }
-
   base::test::TaskEnvironment task_environment_;
 
+  base::HistogramTester histogram_tester;
+
   absl::optional<mojom::PairingResult> pairing_result_;
-  size_t num_pairing_attempt_finished_calls_ = 0u;
 
   // Properties set by device::BluetoothDevice methods.
   device::BluetoothDevice::ConnectCallback connect_callback_;
@@ -318,6 +318,7 @@ class DevicePairingHandlerImplTest : public testing::Test {
 
   FakeAdapterStateController fake_adapter_state_controller_;
   scoped_refptr<testing::NiceMock<device::MockBluetoothAdapter>> mock_adapter_;
+  FakeFastPairDelegate fake_fast_pair_delegate_;
 
   mojo::Remote<mojom::DevicePairingHandler> remote_handler_;
   std::unique_ptr<DevicePairingHandlerImpl> device_pairing_handler_;
@@ -327,11 +328,19 @@ TEST_F(DevicePairingHandlerImplTest, FetchDeviceExists) {
   std::string device_id;
   AddDevice(&device_id, AuthType::kNone);
 
+  // Add device image info to ensure the FastPairDelegate is correctly provided
+  // to DeviceConversionUtil.
+  DeviceImageInfo image_info = DeviceImageInfo(
+      /*default_image=*/kTestDefaultImage, /*left_bud_image=*/"",
+      /*right_bud_image=*/"", /*case_image=*/"");
+  fake_fast_pair_delegate()->SetDeviceImageInfo(device_id, image_info);
+
   std::string device_address = GetDeviceAddress(device_id);
   mojom::BluetoothDevicePropertiesPtr device = FetchDevice(device_address);
   EXPECT_TRUE(device);
   EXPECT_EQ(device->id, device_id);
   EXPECT_EQ(device->address, device_address);
+  EXPECT_TRUE(device->image_info);
 }
 
 TEST_F(DevicePairingHandlerImplTest, FetchDeviceNotFound) {
@@ -355,8 +364,6 @@ TEST_F(DevicePairingHandlerImplTest, MultipleDevicesPairAuthNone) {
   InvokePendingConnectCallback(/*success=*/false);
   FastForwardOperation(GetPairingFailureDelay());
   EXPECT_EQ(pairing_result(), mojom::PairingResult::kNonAuthFailure);
-  EXPECT_EQ(num_pairing_attempt_finished_calls(), 0u);
-
   CheckPairingHistograms(device::BluetoothTransportType::kClassic,
                          /*type_count=*/1, /*failure_count=*/1,
                          /*success_count=*/0);
@@ -371,8 +378,6 @@ TEST_F(DevicePairingHandlerImplTest, MultipleDevicesPairAuthNone) {
   FastForwardOperation(kTestDuration);
   InvokePendingConnectCallback(/*success=*/true);
   EXPECT_EQ(pairing_result(), mojom::PairingResult::kSuccess);
-  EXPECT_EQ(num_pairing_attempt_finished_calls(), 1u);
-
   CheckPairingHistograms(device::BluetoothTransportType::kClassic,
                          /*type_count=*/2, /*failure_count=*/1,
                          /*success_count=*/1);
@@ -396,8 +401,6 @@ TEST_F(DevicePairingHandlerImplTest, DisableBluetoothBeforePairing) {
   // Pairing should immediately fail.
   EXPECT_FALSE(HasPendingConnectCallback());
   EXPECT_EQ(pairing_result(), mojom::PairingResult::kNonAuthFailure);
-  EXPECT_EQ(num_pairing_attempt_finished_calls(), 0u);
-
   CheckPairingHistograms(device::BluetoothTransportType::kInvalid,
                          /*type_count=*/1, /*failure_count=*/1,
                          /*success_count=*/0);
@@ -421,7 +424,6 @@ TEST_F(DevicePairingHandlerImplTest, DisableBluetoothDuringPairing) {
   EXPECT_TRUE(delegate->IsMojoPipeConnected());
   EXPECT_EQ(num_cancel_pairing_calls(), 1u);
   EXPECT_EQ(pairing_result(), mojom::PairingResult::kAuthFailed);
-  EXPECT_EQ(num_pairing_attempt_finished_calls(), 0u);
   CheckPairingHistograms(device::BluetoothTransportType::kClassic,
                          /*type_count=*/1, /*failure_count=*/1,
                          /*success_count=*/0);
@@ -440,9 +442,6 @@ TEST_F(DevicePairingHandlerImplTest, DestroyHandlerBeforeConnectFinishes) {
 
   // CancelPairing() should be called since we had an active pairing.
   EXPECT_EQ(num_cancel_pairing_calls(), 1u);
-
-  // Destroying the handler should call OnPairingAttemptFinished();
-  EXPECT_EQ(num_pairing_attempt_finished_calls(), 1u);
   CheckPairingHistograms(device::BluetoothTransportType::kClassic,
                          /*type_count=*/1, /*failure_count=*/1,
                          /*success_count=*/0);
@@ -462,15 +461,11 @@ TEST_F(DevicePairingHandlerImplTest, DestroyHandlerAfterConnectFinishes) {
   FastForwardOperation(kTestDuration);
   InvokePendingConnectCallback(/*success=*/true);
   EXPECT_EQ(pairing_result(), mojom::PairingResult::kSuccess);
-  EXPECT_EQ(num_pairing_attempt_finished_calls(), 1u);
 
   DestroyHandler();
 
   // CancelPairing() should not be called since we finished pairing.
   EXPECT_EQ(num_cancel_pairing_calls(), 0u);
-
-  // Destroying the handler shouldn't call OnPairingAttemptFinished();
-  EXPECT_EQ(num_pairing_attempt_finished_calls(), 1u);
   CheckPairingHistograms(device::BluetoothTransportType::kClassic,
                          /*type_count=*/1, /*failure_count=*/0,
                          /*success_count=*/1);
@@ -503,9 +498,6 @@ TEST_F(DevicePairingHandlerImplTest, DisconnectDelegateBeforeConnectFinishes) {
   // fail because CancelPairing() was called.
   EXPECT_EQ(num_cancel_pairing_calls(), 1u);
   EXPECT_EQ(pairing_result(), mojom::PairingResult::kAuthFailed);
-
-  // Disconnecting the pipe should not call OnPairingAttemptFinished().
-  EXPECT_EQ(num_pairing_attempt_finished_calls(), 0u);
   CheckPairingHistograms(device::BluetoothTransportType::kClassic,
                          /*type_count=*/1, /*failure_count=*/1,
                          /*success_count=*/0);
@@ -522,7 +514,6 @@ TEST_F(DevicePairingHandlerImplTest, DisconnectDelegateBeforeConnectFinishes) {
   FastForwardOperation(GetPairingFailureDelay());
 
   EXPECT_EQ(pairing_result(), mojom::PairingResult::kAuthFailed);
-  EXPECT_EQ(num_pairing_attempt_finished_calls(), 0u);
   CheckPairingHistograms(device::BluetoothTransportType::kClassic,
                          /*type_count=*/2, /*failure_count=*/2,
                          /*success_count=*/0);
@@ -550,9 +541,6 @@ TEST_F(DevicePairingHandlerImplTest,
   // still return with a pairing result.
   EXPECT_EQ(num_cancel_pairing_calls(), 0u);
   EXPECT_EQ(pairing_result(), mojom::PairingResult::kAuthFailed);
-
-  // Disconnecting the pipe should not call OnPairingAttemptFinished().
-  EXPECT_EQ(num_pairing_attempt_finished_calls(), 0u);
   CheckPairingHistograms(device::BluetoothTransportType::kInvalid,
                          /*type_count=*/1, /*failure_count=*/1,
                          /*success_count=*/0);
@@ -571,15 +559,11 @@ TEST_F(DevicePairingHandlerImplTest,
   InvokePendingConnectCallback(/*success=*/false);
   FastForwardOperation(GetPairingFailureDelay());
   EXPECT_EQ(pairing_result(), mojom::PairingResult::kNonAuthFailure);
-  EXPECT_EQ(num_pairing_attempt_finished_calls(), 0u);
 
   delegate->DisconnectMojoPipe();
 
   // CancelPairing() should not be called since we finished pairing.
   EXPECT_EQ(num_cancel_pairing_calls(), 0u);
-
-  // Disconnecting the pipe should not call OnPairingAttemptFinished().
-  EXPECT_EQ(num_pairing_attempt_finished_calls(), 0u);
   CheckPairingHistograms(device::BluetoothTransportType::kClassic,
                          /*type_count=*/1, /*failure_count=*/1,
                          /*success_count=*/0);
@@ -628,7 +612,6 @@ TEST_F(DevicePairingHandlerImplTest, PairFailsDeviceConnected) {
 
   // The pairing should still return as a success.
   EXPECT_EQ(pairing_result(), mojom::PairingResult::kSuccess);
-  EXPECT_EQ(num_pairing_attempt_finished_calls(), 1u);
   CheckPairingHistograms(device::BluetoothTransportType::kClassic,
                          /*type_count=*/1, /*failure_count=*/0,
                          /*success_count=*/1);

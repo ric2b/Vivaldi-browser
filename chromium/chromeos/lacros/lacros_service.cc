@@ -27,6 +27,7 @@
 #include "chromeos/crosapi/mojom/clipboard_history.mojom.h"
 #include "chromeos/crosapi/mojom/content_protection.mojom.h"
 #include "chromeos/crosapi/mojom/crosapi.mojom.h"
+#include "chromeos/crosapi/mojom/desk_template.mojom.h"
 #include "chromeos/crosapi/mojom/device_settings_service.mojom.h"
 #include "chromeos/crosapi/mojom/dlp.mojom.h"
 #include "chromeos/crosapi/mojom/download_controller.mojom.h"
@@ -58,18 +59,21 @@
 #include "chromeos/crosapi/mojom/screen_manager.mojom.h"
 #include "chromeos/crosapi/mojom/select_file.mojom.h"
 #include "chromeos/crosapi/mojom/sharesheet.mojom.h"
+#include "chromeos/crosapi/mojom/sync.mojom.h"
 #include "chromeos/crosapi/mojom/system_display.mojom.h"
 #include "chromeos/crosapi/mojom/task_manager.mojom.h"
 #include "chromeos/crosapi/mojom/test_controller.mojom.h"
 #include "chromeos/crosapi/mojom/timezone.mojom.h"
 #include "chromeos/crosapi/mojom/tts.mojom.h"
 #include "chromeos/crosapi/mojom/url_handler.mojom.h"
+#include "chromeos/crosapi/mojom/web_app_service.mojom.h"
 #include "chromeos/crosapi/mojom/web_page_info.mojom.h"
 #include "chromeos/lacros/lacros_service_never_blocking_state.h"
 #include "chromeos/lacros/native_theme_cache.h"
 #include "chromeos/lacros/system_idle_cache.h"
 #include "chromeos/services/machine_learning/public/mojom/machine_learning_service.mojom.h"
 #include "chromeos/startup/startup.h"
+#include "components/crash/core/common/crash_key.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/platform/platform_channel.h"
 #include "mojo/public/cpp/system/invitation.h"
@@ -107,6 +111,25 @@ crosapi::mojom::BrowserInitParamsPtr ReadStartupBrowserInitParams() {
   }
 
   return result;
+}
+
+std::string SessionTypeToString(crosapi::mojom::SessionType session_type) {
+  switch (session_type) {
+    case crosapi::mojom::SessionType::kUnknown:
+      return "unknown";
+    case crosapi::mojom::SessionType::kRegularSession:
+      return "regular";
+    case crosapi::mojom::SessionType::kGuestSession:
+      return "guest";
+    case crosapi::mojom::SessionType::kPublicSession:
+      return "managed-guest-session";
+    case crosapi::mojom::SessionType::kWebKioskSession:
+      return "web-kiosk";
+    case crosapi::mojom::SessionType::kChildSession:
+      return "child";
+    case crosapi::mojom::SessionType::kAppKioskSession:
+      return "chrome-app-kiosk";
+  }
 }
 
 }  // namespace
@@ -185,6 +208,9 @@ LacrosService::LacrosService()
                                   weak_factory_.GetWeakPtr()));
   }
 
+  static crash_reporter::CrashKeyString<32> session_type("session-type");
+  session_type.Set(SessionTypeToString(init_params_->session_type));
+
   // Short term workaround: if --crosapi-mojo-platform-channel-handle is
   // available, close --mojo-platform-channel-handle, and remove it
   // from command line. It is for backward compatibility support by
@@ -238,6 +264,8 @@ LacrosService::LacrosService()
   ConstructRemote<
       crosapi::mojom::ContentProtection, &Crosapi::BindContentProtection,
       Crosapi::MethodMinVersions::kBindContentProtectionMinVersion>();
+  ConstructRemote<crosapi::mojom::DeskTemplate, &Crosapi::BindDeskTemplate,
+                  Crosapi::MethodMinVersions::kBindDeskTemplateMinVersion>();
   ConstructRemote<
       crosapi::mojom::DeviceAttributes, &Crosapi::BindDeviceAttributes,
       Crosapi::MethodMinVersions::kBindDeviceAttributesMinVersion>();
@@ -350,6 +378,9 @@ LacrosService::LacrosService()
       crosapi::mojom::StructuredMetricsService,
       &crosapi::mojom::Crosapi::BindStructuredMetricsService,
       Crosapi::MethodMinVersions::kBindStructuredMetricsServiceMinVersion>();
+  ConstructRemote<crosapi::mojom::SyncService,
+                  &crosapi::mojom::Crosapi::BindSyncService,
+                  Crosapi::MethodMinVersions::kBindSyncServiceMinVersion>();
   ConstructRemote<crosapi::mojom::SystemDisplay, &Crosapi::BindSystemDisplay,
                   Crosapi::MethodMinVersions::kBindSystemDisplayMinVersion>();
   ConstructRemote<crosapi::mojom::TaskManager,
@@ -365,6 +396,9 @@ LacrosService::LacrosService()
                   Crosapi::MethodMinVersions::kBindUrlHandlerMinVersion>();
   ConstructRemote<crosapi::mojom::AppPublisher, &Crosapi::BindWebAppPublisher,
                   Crosapi::MethodMinVersions::kBindWebAppPublisherMinVersion>();
+  ConstructRemote<crosapi::mojom::WebAppService,
+                  &crosapi::mojom::Crosapi::BindWebAppService,
+                  Crosapi::MethodMinVersions::kBindWebAppServiceMinVersion>();
   ConstructRemote<
       crosapi::mojom::WebPageInfoFactory,
       &crosapi::mojom::Crosapi::BindWebPageInfoFactory,

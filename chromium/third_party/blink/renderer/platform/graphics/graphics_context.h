@@ -32,7 +32,6 @@
 
 #include "base/dcheck_is_on.h"
 #include "cc/paint/paint_flags.h"
-#include "third_party/blink/public/mojom/frame/color_scheme.mojom-blink-forward.h"
 #include "third_party/blink/renderer/platform/fonts/font.h"
 #include "third_party/blink/renderer/platform/graphics/dark_mode_filter.h"
 #include "third_party/blink/renderer/platform/graphics/dark_mode_settings.h"
@@ -126,6 +125,21 @@ struct AutoDarkMode {
   bool enabled;
 };
 
+struct ImageAutoDarkMode : AutoDarkMode {
+  ImageAutoDarkMode(DarkModeFilter::ElementRole role,
+                    bool enabled,
+                    DarkModeFilter::ImageType image_type)
+      : AutoDarkMode(role, enabled), image_type(image_type) {}
+
+  static ImageAutoDarkMode Disabled(
+      DarkModeFilter::ElementRole role =
+          DarkModeFilter::ElementRole::kBackground) {
+    return ImageAutoDarkMode(role, false, DarkModeFilter::ImageType::kNone);
+  }
+
+  DarkModeFilter::ImageType image_type;
+};
+
 class PLATFORM_EXPORT GraphicsContext {
   USING_FAST_MALLOC(GraphicsContext);
 
@@ -156,6 +170,8 @@ class PLATFORM_EXPORT GraphicsContext {
   }
 
   DarkModeFilter* GetDarkModeFilter();
+  DarkModeFilter* GetDarkModeFilterForImage(
+      const ImageAutoDarkMode& auto_dark_mode);
 
   void UpdateDarkModeSettingsForTest(const DarkModeSettings&);
 
@@ -299,14 +315,14 @@ class PLATFORM_EXPORT GraphicsContext {
 
   void DrawImage(Image*,
                  Image::ImageDecodingMode,
-                 const AutoDarkMode& auto_dark_mode,
+                 const ImageAutoDarkMode& auto_dark_mode,
                  const gfx::RectF& dest_rect,
                  const gfx::RectF* src_rect = nullptr,
                  SkBlendMode = SkBlendMode::kSrcOver,
                  RespectImageOrientationEnum = kRespectImageOrientation);
   void DrawImageRRect(Image*,
                       Image::ImageDecodingMode,
-                      const AutoDarkMode& auto_dark_mode,
+                      const ImageAutoDarkMode& auto_dark_mode,
                       const FloatRoundedRect& dest,
                       const gfx::RectF& src_rect,
                       SkBlendMode = SkBlendMode::kSrcOver,
@@ -314,7 +330,7 @@ class PLATFORM_EXPORT GraphicsContext {
   void DrawImageTiled(Image* image,
                       const gfx::RectF& dest_rect,
                       const ImageTilingInfo& tiling_info,
-                      const AutoDarkMode& auto_dark_mode,
+                      const ImageAutoDarkMode& auto_dark_mode,
                       SkBlendMode = SkBlendMode::kSrcOver,
                       RespectImageOrientationEnum = kRespectImageOrientation);
 

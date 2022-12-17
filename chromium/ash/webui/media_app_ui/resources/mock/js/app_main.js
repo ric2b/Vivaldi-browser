@@ -172,6 +172,7 @@ class BacklightApp extends HTMLElement {
 
     this.replaceChild(child, this.currentMedia);
     this.currentMedia = child;
+    this.delegate.notifyCurrentFile(file.name, mimeType);
   }
 
   updateHandler() {
@@ -183,9 +184,10 @@ class BacklightApp extends HTMLElement {
     this.replaceChild(newHandler, this.currentHandler);
     this.currentHandler = newHandler;
 
-    // Toggle 'shownav' indicating the navigation buttons are available.
-    // This emulates `setNavigationPossible()` in the real app.
-    this.currentHandler.toggleAttribute('shownav', this.files.length > 1);
+    // The presence of the 'filetraversalenabled' attribute emulates
+    // `setFileTraversalEnabled()` in the real app.
+    this.currentHandler.toggleAttribute(
+        'filetraversalenabled', this.files.length > 1);
   }
 
   /** @override  */
@@ -228,7 +230,7 @@ class BacklightApp extends HTMLElement {
 window.customElements.define('backlight-app', BacklightApp);
 
 // Element mimicking the image/video handler which is the parent of the
-// `navigation-overlay`.
+// `carousel-overlay`.
 class BacklightMediaHandler extends HTMLElement {}
 window.customElements.define('backlight-media-handler', BacklightMediaHandler);
 

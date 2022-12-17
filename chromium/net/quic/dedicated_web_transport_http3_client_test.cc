@@ -17,8 +17,8 @@
 #include "net/quic/crypto/proof_source_chromium.h"
 #include "net/test/test_data_directory.h"
 #include "net/test/test_with_task_environment.h"
-#include "net/third_party/quiche/src/quic/test_tools/crypto_test_utils.h"
-#include "net/third_party/quiche/src/quic/test_tools/quic_test_backend.h"
+#include "net/third_party/quiche/src/quiche/quic/test_tools/crypto_test_utils.h"
+#include "net/third_party/quiche/src/quiche/quic/test_tools/quic_test_backend.h"
 #include "net/tools/quic/quic_simple_server.h"
 #include "net/tools/quic/quic_simple_server_socket.h"
 #include "net/url_request/url_request_context.h"
@@ -83,7 +83,7 @@ class TestConnectionHelper : public quic::QuicConnectionHelperInterface {
   quic::QuicRandom* GetRandomGenerator() override {
     return quic::QuicRandom::GetInstance();
   }
-  quic::QuicBufferAllocator* GetStreamSendBufferAllocator() override {
+  quiche::QuicheBufferAllocator* GetStreamSendBufferAllocator() override {
     return &allocator_;
   }
 
@@ -91,7 +91,7 @@ class TestConnectionHelper : public quic::QuicConnectionHelperInterface {
 
  private:
   TestWallClock clock_;
-  quic::SimpleBufferAllocator allocator_;
+  quiche::SimpleBufferAllocator allocator_;
 };
 
 class DedicatedWebTransportHttp3Test : public TestWithTaskEnvironment {

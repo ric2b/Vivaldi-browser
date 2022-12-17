@@ -220,18 +220,12 @@
 [submodule "third_party/re2/src"]
 	path = third_party/re2/src
 	url = ../../external/github.com/google/re2.git
-[submodule "third_party/rust/serde_jsonrc/v0_1/crate"]
-	path = third_party/rust/serde_jsonrc/v0_1/crate
-	url = ../../external/github.com/serde-rs/json.git
 [submodule "third_party/ruy/src"]
 	path = third_party/ruy/src
 	url = ../../external/github.com/google/ruy.git
 [submodule "third_party/securemessage/src"]
 	path = third_party/securemessage/src
 	url = ../../external/github.com/google/securemessage.git
-[submodule "third_party/shaderc/src"]
-	path = third_party/shaderc/src
-	url = ../../external/github.com/google/shaderc.git
 [submodule "third_party/skia"]
 	path = third_party/skia
 	url = ../../skia/skia.git
@@ -247,15 +241,15 @@
 [submodule "third_party/swiftshader"]
 	path = third_party/swiftshader
 	url = ../../swiftshader/SwiftShader.git
+[submodule "third_party/text-fragments-polyfill/src"]
+	path = third_party/text-fragments-polyfill/src
+	url = ../../external/github.com/GoogleChromeLabs/text-fragments-polyfill.git
 [submodule "third_party/tflite/src"]
 	path = third_party/tflite/src
 	url = ../../external/github.com/tensorflow/tensorflow.git
 [submodule "third_party/ukey2/src"]
 	path = third_party/ukey2/src
 	url = ../../external/github.com/google/ukey2.git
-[submodule "third_party/usrsctp/usrsctplib"]
-	path = third_party/usrsctp/usrsctplib
-	url = ../../external/github.com/sctplab/usrsctp.git
 [submodule "third_party/vulkan_memory_allocator"]
 	path = third_party/vulkan_memory_allocator
 	url = ../../external/github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git

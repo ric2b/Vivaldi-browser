@@ -141,6 +141,12 @@ Inputs
   It is recommended you put inputs to your script in the "sources" variable,
   and stuff like other Python files required to run your script in the "inputs"
   variable.
+
+  Actions can take the configs and public_configs lists, as well as any of the
+  configs variables (defines, include_dirs, etc.) set directly on the target.
+  These behave exactly as they would on a binary target and can be accessed
+  using substitution patterns in the script args (see "gn help args") to
+  implement custom compiler-like tools.
 )"
 
     ACTION_DEPS
@@ -163,8 +169,11 @@ File name handling
     R"(
 Variables
 
-  args, data, data_deps, depfile, deps, inputs, metadata, outputs*, pool,
-  response_file_contents, script*, sources
+  args, asmflags, bridge_header, cflags, cflags_c, cflags_cc, cflags_objc,
+  cflags_objcc, configs, data, data_deps, defines, depfile, deps,
+  framework_dirs, include_dirs, inputs, metadata, module_deps, module_name,
+  outputs*, pool, response_file_contents, rustenv, rustflags, script*, sources,
+  swiftflags
   * = required
 
 Example
@@ -233,9 +242,11 @@ File name handling
     R"(
 Variables
 
-  args, data, data_deps, depfile, deps, inputs, metadata, outputs*, pool,
-  response_file_contents, script*, sources*
-  * = required
+  args, asmflags, bridge_header, cflags, cflags_c, cflags_cc, cflags_objc,
+  cflags_objcc, configs, data, data_deps, defines, depfile, deps,
+  framework_dirs, include_dirs, inputs, metadata, module_deps, module_name,
+  outputs*, pool, response_file_contents, rustenv, rustflags, script*, sources,
+  swiftflags
 
 Example
 

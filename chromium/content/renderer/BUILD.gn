@@ -40,6 +40,8 @@ target(link_target_type, "renderer") {
     "accessibility/ax_image_annotator.h",
     "accessibility/ax_image_stopwords.cc",
     "accessibility/ax_image_stopwords.h",
+    "accessibility/ax_tree_distiller.cc",
+    "accessibility/ax_tree_distiller.h",
     "accessibility/ax_tree_snapshotter_impl.cc",
     "accessibility/ax_tree_snapshotter_impl.h",
     "accessibility/blink_ax_action_target.cc",
@@ -60,6 +62,8 @@ target(link_target_type, "renderer") {
     "content_security_policy_util.h",
     "discardable_memory_utils.cc",
     "discardable_memory_utils.h",
+    "document_state.cc",
+    "document_state.h",
     "dom_automation_controller.cc",
     "dom_automation_controller.h",
     "effective_connection_type_helper.cc",
@@ -72,8 +76,6 @@ target(link_target_type, "renderer") {
     "gpu_benchmarking_extension.h",
     "in_process_renderer_thread.cc",
     "in_process_renderer_thread.h",
-    "internal_document_state_data.cc",
-    "internal_document_state_data.h",
     "media/audio_decoder.cc",
     "media/audio_decoder.h",
     "media/batching_media_log.cc",
@@ -242,6 +244,8 @@ target(link_target_type, "renderer") {
     "//cc/mojo_embedder",
     "//cc/mojom",
     "//cc/paint",
+    "//components/cast_streaming/public",
+    "//components/cast_streaming/renderer:wrapping_renderer_factory_selector",
     "//components/discardable_memory/client",
     "//components/metrics",
     "//components/metrics:single_sample_metrics",
@@ -377,14 +381,6 @@ target(link_target_type, "renderer") {
         "//media/remoting:remoting_renderer",
       ]
     }
-  }
-
-  if (enable_cast_streaming_renderer) {
-    deps += [
-      "//components/cast_streaming/public",
-      "//components/cast_streaming/renderer:playback_command_forwarding_renderer_factory",
-      "//components/cast_streaming/renderer:renderer_controller_proxy",
-    ]
   }
 
   if (enable_plugins) {

@@ -10,6 +10,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/serialization/serialized_script_value.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/layout/ng/exclusions/ng_exclusion_space.h"
+#include "third_party/blink/renderer/core/layout/ng/flex/ng_flex_data.h"
 #include "third_party/blink/renderer/core/layout/ng/geometry/ng_bfc_offset.h"
 #include "third_party/blink/renderer/core/layout/ng/geometry/ng_margin_strut.h"
 #include "third_party/blink/renderer/core/layout/ng/grid/layout_ng_grid.h"
@@ -21,11 +22,13 @@
 #include "third_party/blink/renderer/core/layout/ng/ng_link.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_fragment.h"
 #include "third_party/blink/renderer/core/style/computed_style_constants.h"
+#include "third_party/blink/renderer/platform/wtf/bit_field.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace blink {
 
 class NGBoxFragmentBuilder;
+class NGColumnSpannerPath;
 class NGContainerFragmentBuilder;
 class NGExclusionSpace;
 class NGLineBoxFragmentBuilder;
@@ -47,6 +50,7 @@ class CORE_EXPORT NGLayoutResult final
     kNeedsRelayoutWithNoForcedTruncateAtLineClamp = 4,
     kDisableFragmentation = 5,
     kNeedsRelayoutWithNoChildScrollbarChanges = 6,
+    kNeedsRelayoutWithRowCrossSizeChanges = 7,
     // When adding new values, make sure the bit size of |Bitfields::status| is
     // large enough to store.
   };
@@ -70,10 +74,10 @@ class CORE_EXPORT NGLayoutResult final
 
   // Creates a copy of NGLayoutResult with a new (but "identical") fragment.
   NGLayoutResult(const NGLayoutResult& other,
-                 scoped_refptr<const NGPhysicalFragment> physical_fragment);
+                 const NGPhysicalFragment* physical_fragment);
 
   // Delegate constructor that sets up what it can, based on the builder.
-  NGLayoutResult(scoped_refptr<const NGPhysicalFragment> physical_fragment,
+  NGLayoutResult(const NGPhysicalFragment* physical_fragment,
                  NGContainerFragmentBuilder* builder);
 
   // We don't need the copy constructor, move constructor, copy
@@ -103,7 +107,8 @@ class CORE_EXPORT NGLayoutResult final
   LayoutUnit AnnotationBlockOffsetAdjustment() const {
     if (!HasRareData())
       return LayoutUnit();
-    return rare_data_->annotation_block_offset_adjustment;
+    const RareData::LineData* data = rare_data_->GetLineData();
+    return data ? data->annotation_block_offset_adjustment : LayoutUnit();
   }
 
   // How much an annotation box overflow from this box.
@@ -136,9 +141,13 @@ class CORE_EXPORT NGLayoutResult final
     return bitfields_.can_use_out_of_flow_positioned_first_tier_cache;
   }
 
-  // Get the column spanner (if any) that interrupted column layout.
-  NGBlockNode ColumnSpanner() const {
-    return HasRareData() ? rare_data_->column_spanner : NGBlockNode(nullptr);
+  // Get the path to the column spanner (if any) that interrupted column layout.
+  const NGColumnSpannerPath* ColumnSpannerPath() const {
+    if (HasRareData()) {
+      if (const RareData::BlockData* data = rare_data_->GetBlockData())
+        return data->column_spanner_path;
+    }
+    return nullptr;
   }
 
   // True if this result is the parent of a column spanner and is empty (i.e.
@@ -184,7 +193,7 @@ class CORE_EXPORT NGLayoutResult final
 
   const absl::optional<LayoutUnit> BfcBlockOffset() const {
     if (HasRareData())
-      return rare_data_->bfc_block_offset;
+      return rare_data_->BfcBlockOffset();
 
     if (bitfields_.has_oof_positioned_offset) {
       DCHECK(physical_fragment_->IsOutOfFlowPositioned());
@@ -214,8 +223,11 @@ class CORE_EXPORT NGLayoutResult final
     if (Status() != kSuccess || !PhysicalFragment().IsLineBox())
       return absl::nullopt;
 
-    if (HasRareData() && rare_data_->line_box_bfc_block_offset)
-      return rare_data_->line_box_bfc_block_offset;
+    if (HasRareData()) {
+      if (absl::optional<LayoutUnit> offset =
+              rare_data_->LineBoxBfcBlockOffset())
+        return offset;
+    }
 
     return BfcBlockOffset();
   }
@@ -224,10 +236,14 @@ class CORE_EXPORT NGLayoutResult final
     return HasRareData() ? rare_data_->end_margin_strut : NGMarginStrut();
   }
 
-  // Get the intrinsic block-size of the fragment (i.e. the block-size the
-  // fragment would get if no block-size constraints were applied). This is not
-  // supported (and should not be needed [1]) if the node got split into
-  // multiple fragments.
+  // Get the intrinsic block-size of the fragment. This is the block-size the
+  // fragment would get if no block-size constraints were applied and, for
+  // non-replaced elements, no inline-size constraints were applied through any
+  // aspect-ratio (For replaced elements, inline-size constraints ARE applied
+  // through the aspect-ratio).
+
+  // This is not supported (and should not be needed [1]) if the node got split
+  // into multiple fragments.
   //
   // [1] If a node gets block-fragmented, it means that it has possibly been
   // constrained and/or stretched by something extrinsic (i.e. the
@@ -242,7 +258,10 @@ class CORE_EXPORT NGLayoutResult final
   // Return the amount of clearance that we have to add after the fragment. This
   // is used for BR clear elements.
   LayoutUnit ClearanceAfterLine() const {
-    return HasRareData() ? rare_data_->clearance_after_line : LayoutUnit();
+    if (!HasRareData())
+      return LayoutUnit();
+    const RareData::LineData* data = rare_data_->GetLineData();
+    return data ? data->clearance_after_line : LayoutUnit();
   }
 
   LayoutUnit MinimalSpaceShortage() const {
@@ -278,6 +297,13 @@ class CORE_EXPORT NGLayoutResult final
     return bitfields_.is_block_size_for_fragmentation_clamped;
   }
 
+  // Return true if this generating node must stay within the same fragmentation
+  // flow as the parent (and not establish a parallel fragmentation flow), even
+  // if it has content that overflows into the next fragmentainer.
+  bool ShouldForceSameFragmentationFlow() const {
+    return bitfields_.should_force_same_fragmentation_flow;
+  }
+
   // Return the (lowest) appeal among any unforced breaks inside the resulting
   // fragment (or kBreakAppealPerfect if there are no such breaks).
   //
@@ -303,17 +329,31 @@ class CORE_EXPORT NGLayoutResult final
   }
 
   wtf_size_t TableColumnCount() const {
-    return HasRareData() ? rare_data_->table_column_count_ : 0;
+    if (!HasRareData())
+      return 0;
+    const RareData::TableData* data = rare_data_->GetTableData();
+    return data ? data->table_column_count : 0;
   }
 
   const NGGridLayoutData* GridLayoutData() const {
-    return HasRareData() ? rare_data_->grid_layout_data_.get() : nullptr;
+    if (!HasRareData())
+      return nullptr;
+    const RareData::GridData* data = rare_data_->GetGridData();
+    return data ? data->grid_layout_data.get() : nullptr;
+  }
+
+  const DevtoolsFlexInfo* FlexLayoutData() const {
+    if (!HasRareData())
+      return nullptr;
+    const RareData::FlexData* data = rare_data_->GetFlexData();
+    return data ? data->flex_layout_data.get() : nullptr;
   }
 
   LayoutUnit MathItalicCorrection() const {
-    return HasRareData() && rare_data_->math_layout_data_
-               ? rare_data_->math_layout_data_->italic_correction_
-               : LayoutUnit();
+    if (!HasRareData())
+      return LayoutUnit();
+    const RareData::MathData* data = rare_data_->GetMathData();
+    return data ? data->italic_correction : LayoutUnit();
   }
 
   // The break-before value on the first child needs to be propagated to the
@@ -457,22 +497,17 @@ class CORE_EXPORT NGLayoutResult final
   // This constructor requires a non-null fragment and sets a success status.
   using NGBoxFragmentBuilderPassKey = base::PassKey<NGBoxFragmentBuilder>;
   NGLayoutResult(NGBoxFragmentBuilderPassKey,
-                 scoped_refptr<const NGPhysicalFragment> physical_fragment,
+                 const NGPhysicalFragment* physical_fragment,
                  NGBoxFragmentBuilder*);
 
   using NGLineBoxFragmentBuilderPassKey =
       base::PassKey<NGLineBoxFragmentBuilder>;
   // This constructor requires a non-null fragment and sets a success status.
   NGLayoutResult(NGLineBoxFragmentBuilderPassKey,
-                 scoped_refptr<const NGPhysicalFragment> physical_fragment,
+                 const NGPhysicalFragment* physical_fragment,
                  NGLineBoxFragmentBuilder*);
 
   void Trace(Visitor*) const;
-
-  // See https://w3c.github.io/mathml-core/#box-model
-  struct MathData {
-    LayoutUnit italic_correction_;
-  };
 
  private:
   friend class MutableForOutOfFlow;
@@ -485,13 +520,154 @@ class CORE_EXPORT NGLayoutResult final
 
   struct RareData final : public GarbageCollected<RareData> {
    public:
+    // RareData has fields which are mutually exclusive. They are grouped into
+    // unions.
+    //
+    // NOTE: Make sure that data_union_type has enough bits to express all these
+    // enum values.
+    enum DataUnionType {
+      kNone,
+      kBlockData,
+      kFlexData,
+      kGridData,
+      kLineData,
+      kMathData,
+      kTableData,
+    };
+
+    using BitField = WTF::ConcurrentlyReadBitField<uint8_t>;
+    using BfcBlockOffsetIsSetFlag = BitField::DefineFirstValue<bool, 1>;
+    using LineBoxBfcBlockOffsetIsSetFlag =
+        BfcBlockOffsetIsSetFlag::DefineNextValue<bool, 1>;
+    using DataUnionTypeValue =
+        LineBoxBfcBlockOffsetIsSetFlag::DefineNextValue<uint8_t, 3>;
+
+    struct BlockData {
+      GC_PLUGIN_IGNORE("crbug.com/1146383")
+      Member<const NGColumnSpannerPath> column_spanner_path;
+    };
+
+    struct FlexData {
+      FlexData() = default;
+      FlexData(const FlexData& other) {
+        flex_layout_data =
+            std::make_unique<DevtoolsFlexInfo>(*other.flex_layout_data);
+      }
+
+      std::unique_ptr<const DevtoolsFlexInfo> flex_layout_data;
+    };
+
+    struct GridData {
+      GridData() = default;
+      GridData(const GridData& other) {
+        grid_layout_data =
+            std::make_unique<NGGridLayoutData>(*other.grid_layout_data);
+      }
+
+      std::unique_ptr<const NGGridLayoutData> grid_layout_data;
+    };
+
+    struct LineData {
+      LayoutUnit clearance_after_line;
+      LayoutUnit annotation_block_offset_adjustment;
+    };
+
+    struct MathData {
+      // See https://w3c.github.io/mathml-core/#box-model
+      LayoutUnit italic_correction;
+    };
+
+    struct TableData {
+      wtf_size_t table_column_count = 0;
+    };
+
+    bool bfc_block_offset_is_set() const {
+      return bit_field.get<BfcBlockOffsetIsSetFlag>();
+    }
+
+    void set_bfc_block_offset_is_set(bool flag) {
+      return bit_field.set<BfcBlockOffsetIsSetFlag>(flag);
+    }
+
+    bool line_box_bfc_block_offset_is_set() const {
+      return bit_field.get<LineBoxBfcBlockOffsetIsSetFlag>();
+    }
+
+    void set_line_box_bfc_block_offset_is_set(bool flag) {
+      return bit_field.set<LineBoxBfcBlockOffsetIsSetFlag>(flag);
+    }
+
+    DataUnionType data_union_type() const {
+      return static_cast<DataUnionType>(bit_field.get<DataUnionTypeValue>());
+    }
+
+    void set_data_union_type(DataUnionType data_type) {
+      return bit_field.set<DataUnionTypeValue>(static_cast<uint8_t>(data_type));
+    }
+
+    template <typename DataType>
+    DataType* EnsureData(DataType* address, DataUnionType data_type) {
+      DataUnionType old_data_type = data_union_type();
+      DCHECK(old_data_type == kNone || old_data_type == data_type);
+      if (old_data_type != data_type) {
+        set_data_union_type(data_type);
+        new (address) DataType();
+      }
+      return address;
+    }
+    template <typename DataType>
+    const DataType* GetData(const DataType* address,
+                            DataUnionType data_type) const {
+      return data_union_type() == data_type ? address : nullptr;
+    }
+
+    BlockData* EnsureBlockData() {
+      return EnsureData<BlockData>(&block_data, kBlockData);
+    }
+    const BlockData* GetBlockData() const {
+      return GetData<BlockData>(&block_data, kBlockData);
+    }
+    FlexData* EnsureFlexData() {
+      return EnsureData<FlexData>(&flex_data, kFlexData);
+    }
+    const FlexData* GetFlexData() const {
+      return GetData<FlexData>(&flex_data, kFlexData);
+    }
+    GridData* EnsureGridData() {
+      return EnsureData<GridData>(&grid_data, kGridData);
+    }
+    const GridData* GetGridData() const {
+      return GetData<GridData>(&grid_data, kGridData);
+    }
+    LineData* EnsureLineData() {
+      return EnsureData<LineData>(&line_data, kLineData);
+    }
+    const LineData* GetLineData() const {
+      return GetData<LineData>(&line_data, kLineData);
+    }
+    MathData* EnsureMathData() {
+      return EnsureData<MathData>(&math_data, kMathData);
+    }
+    const MathData* GetMathData() const {
+      return GetData<MathData>(&math_data, kMathData);
+    }
+    TableData* EnsureTableData() {
+      return EnsureData<TableData>(&table_data, kTableData);
+    }
+    const TableData* GetTableData() const {
+      return GetData<TableData>(&table_data, kTableData);
+    }
+
     RareData(LayoutUnit bfc_line_offset,
              absl::optional<LayoutUnit> bfc_block_offset)
         : bfc_line_offset(bfc_line_offset),
-          bfc_block_offset(bfc_block_offset) {}
+          bit_field(BfcBlockOffsetIsSetFlag::encode(bfc_line_offset) |
+                    LineBoxBfcBlockOffsetIsSetFlag::encode(false) |
+                    DataUnionTypeValue::encode(kNone)) {
+      SetBfcBlockOffset(bfc_block_offset);
+    }
     RareData(const RareData& rare_data)
         : bfc_line_offset(rare_data.bfc_line_offset),
-          bfc_block_offset(rare_data.bfc_block_offset),
           early_break(rare_data.early_break),
           oof_positioned_offset(rare_data.oof_positioned_offset),
           end_margin_strut(rare_data.end_margin_strut),
@@ -500,30 +676,96 @@ class CORE_EXPORT NGLayoutResult final
               rare_data.tallest_unbreakable_block_size),
           exclusion_space(rare_data.exclusion_space),
           custom_layout_data(rare_data.custom_layout_data),
-          clearance_after_line(rare_data.clearance_after_line),
-          line_box_bfc_block_offset(rare_data.line_box_bfc_block_offset),
-          annotation_block_offset_adjustment(
-              rare_data.annotation_block_offset_adjustment),
           annotation_overflow(rare_data.annotation_overflow),
           block_end_annotation_space(rare_data.block_end_annotation_space),
           lines_until_clamp(rare_data.lines_until_clamp),
-          table_column_count_(rare_data.table_column_count_),
-          math_layout_data_(rare_data.math_layout_data_) {
-      if (rare_data.grid_layout_data_) {
-        grid_layout_data_ =
-            std::make_unique<NGGridLayoutData>(*rare_data.grid_layout_data_);
+          bfc_block_offset(rare_data.bfc_block_offset),
+          line_box_bfc_block_offset(rare_data.line_box_bfc_block_offset),
+          bit_field(rare_data.bit_field) {
+      switch (data_union_type()) {
+        case kNone:
+          break;
+        case kBlockData:
+          new (&block_data) BlockData(rare_data.block_data);
+          break;
+        case kFlexData:
+          new (&flex_data) FlexData(rare_data.flex_data);
+          break;
+        case kGridData:
+          new (&grid_data) GridData(rare_data.grid_data);
+          break;
+        case kLineData:
+          new (&line_data) LineData(rare_data.line_data);
+          break;
+        case kMathData:
+          new (&math_data) MathData(rare_data.math_data);
+          break;
+        case kTableData:
+          new (&table_data) TableData(rare_data.table_data);
+          break;
+        default:
+          NOTREACHED();
       }
+    }
+
+    ~RareData() {
+      switch (data_union_type()) {
+        case kNone:
+          break;
+        case kBlockData:
+          block_data.~BlockData();
+          break;
+        case kFlexData:
+          flex_data.~FlexData();
+          break;
+        case kGridData:
+          grid_data.~GridData();
+          break;
+        case kLineData:
+          line_data.~LineData();
+          break;
+        case kMathData:
+          math_data.~MathData();
+          break;
+        case kTableData:
+          table_data.~TableData();
+          break;
+        default:
+          NOTREACHED();
+      }
+    }
+
+    void SetBfcBlockOffset(absl::optional<LayoutUnit> offset) {
+      if (offset) {
+        bfc_block_offset = *offset;
+        set_bfc_block_offset_is_set(true);
+      } else {
+        set_bfc_block_offset_is_set(false);
+      }
+    }
+    absl::optional<LayoutUnit> BfcBlockOffset() const {
+      if (!bfc_block_offset_is_set())
+        return absl::nullopt;
+      return bfc_block_offset;
+    }
+
+    void SetLineBoxBfcBlockOffset(LayoutUnit offset) {
+      line_box_bfc_block_offset = offset;
+      set_line_box_bfc_block_offset_is_set(true);
+    }
+    absl::optional<LayoutUnit> LineBoxBfcBlockOffset() const {
+      if (!line_box_bfc_block_offset_is_set())
+        return absl::nullopt;
+      return line_box_bfc_block_offset;
     }
 
     void Trace(Visitor* visitor) const;
 
     LayoutUnit bfc_line_offset;
-    absl::optional<LayoutUnit> bfc_block_offset;
 
     Member<const NGEarlyBreak> early_break;
     LogicalOffset oof_positioned_offset;
     NGMarginStrut end_margin_strut;
-    NGBlockNode column_spanner = nullptr;
     union {
       // Only set in the initial column balancing layout pass, when we have no
       // clue what the column block-size is going to be.
@@ -541,15 +783,27 @@ class CORE_EXPORT NGLayoutResult final
     NGExclusionSpace exclusion_space;
     scoped_refptr<SerializedScriptValue> custom_layout_data;
 
-    LayoutUnit clearance_after_line;
-    absl::optional<LayoutUnit> line_box_bfc_block_offset;
-    LayoutUnit annotation_block_offset_adjustment;
     LayoutUnit annotation_overflow;
     LayoutUnit block_end_annotation_space;
     int lines_until_clamp = 0;
-    wtf_size_t table_column_count_ = 0;
-    std::unique_ptr<const NGGridLayoutData> grid_layout_data_;
-    absl::optional<MathData> math_layout_data_;
+
+   private:
+    // Only valid if bfc_block_offset_is_set
+    LayoutUnit bfc_block_offset;
+
+    // Only valid if line_box_bfc_block_offset_is_set
+    LayoutUnit line_box_bfc_block_offset;
+
+    BitField bit_field;
+
+    union {
+      BlockData block_data;
+      FlexData flex_data;
+      GridData grid_data;
+      LineData line_data;
+      MathData math_data;
+      TableData table_data;
+    };
   };
   bool HasRareData() const { return rare_data_; }
   RareData* EnsureRareData();
@@ -583,6 +837,7 @@ class CORE_EXPORT NGLayoutResult final
           break_appeal(kBreakAppealPerfect),
           is_empty_spanner_parent(false),
           is_block_size_for_fragmentation_clamped(false),
+          should_force_same_fragmentation_flow(false),
           is_self_collapsing(is_self_collapsing),
           is_pushed_by_floats(is_pushed_by_floats),
           adjoining_object_types(static_cast<unsigned>(adjoining_object_types)),
@@ -603,6 +858,7 @@ class CORE_EXPORT NGLayoutResult final
     unsigned break_appeal : kNGBreakAppealBitsNeeded;
     unsigned is_empty_spanner_parent : 1;
     unsigned is_block_size_for_fragmentation_clamped : 1;
+    unsigned should_force_same_fragmentation_flow : 1;
 
     unsigned is_self_collapsing : 1;
     unsigned is_pushed_by_floats : 1;
@@ -623,7 +879,7 @@ class CORE_EXPORT NGLayoutResult final
   // as indicated by |has_valid_space_|.
   const NGConstraintSpace space_;
 
-  scoped_refptr<const NGPhysicalFragment> physical_fragment_;
+  Member<const NGPhysicalFragment> physical_fragment_;
 
   // |rare_data_| cannot be stored in the union because it is difficult to have
   // a const bitfield for it and it cannot be traced.

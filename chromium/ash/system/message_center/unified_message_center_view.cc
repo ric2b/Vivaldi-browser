@@ -260,7 +260,7 @@ void UnifiedMessageCenterView::Layout() {
     gfx::Rect scroller_bounds(GetContentsBounds());
     int scroller_side_padding =
         is_notifications_refresh_enabled_ ? kMessageCenterSidePadding : 0;
-    scroller_bounds.Inset(gfx::Insets(
+    scroller_bounds.Inset(gfx::Insets::TLBR(
         notification_bar_height - notification_bar_offset,
         scroller_side_padding, scroller_bottom_inset, scroller_side_padding));
     scroller_->SetBoundsRect(scroller_bounds);
@@ -432,8 +432,10 @@ void UnifiedMessageCenterView::UpdateVisibility() {
 
     // Transfer focus to quick settings when going invisible.
     auto* widget = GetWidget();
-    if (widget && widget->IsActive())
+    if (widget && widget->IsActive()) {
+      widget->GetFocusManager()->ClearFocus();
       message_center_bubble_->ActivateQuickSettingsBubble();
+    }
   }
 }
 

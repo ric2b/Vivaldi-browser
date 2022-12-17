@@ -1002,6 +1002,63 @@ public final class Fido2Api {
         public int coseAlgorithm;
     }
 
+    /**
+     * Parse a {@link WebAuthnCredentialDetails} list from a parcel.
+     *
+     * @param parcel the {@link parcel} with current position set to the beginning of the list.
+     * @return The list of {@link WebAuthnCredentialDetails} if successfully parsed.
+     * @throws IllegalArgumentException if a parsing error is encountered.
+     */
+    public static ArrayList<WebAuthnCredentialDetails> parseCredentialList(Parcel parcel)
+            throws IllegalArgumentException {
+        int numCredentials = parcel.readInt();
+        ArrayList<WebAuthnCredentialDetails> credentials = new ArrayList<>();
+        for (int i = 0; i < numCredentials; i++) {
+            WebAuthnCredentialDetails details = new WebAuthnCredentialDetails();
+
+            // The array is as written by `Parcel.writeArray`. Each element of the array is prefixed
+            // by the class name of that element. The class names will be
+            // "com.google.android.gms.fido.fido2.api.common.DiscoverableCredentialInfo" but that
+            // isn't checked here to avoid depending on the name of the class.
+            if (parcel.readInt() != 4 /* VAL_PARCELABLE */) {
+                throw new IllegalArgumentException();
+            }
+            parcel.readString(); // ignore class name
+            Pair<Integer, Integer> header = readHeader(parcel);
+            if (header.first != OBJECT_MAGIC) {
+                throw new IllegalArgumentException();
+            }
+            final int endPosition = addLengthToParcelPosition(header.second, parcel);
+
+            while (parcel.dataPosition() < endPosition) {
+                header = readHeader(parcel);
+                switch (header.first) {
+                    case 1:
+                        details.mUserName = parcel.readString();
+                        break;
+                    case 2:
+                        details.mUserDisplayName = parcel.readString();
+                        break;
+                    case 3:
+                        details.mUserId = parcel.createByteArray();
+                        break;
+                    case 4:
+                        details.mCredentialId = parcel.createByteArray();
+                        break;
+                    default:
+                        // unknown tag. Skip over it.
+                        parcel.setDataPosition(addLengthToParcelPosition(header.second, parcel));
+                }
+            }
+            if (details.mUserName == null || details.mUserDisplayName == null
+                    || details.mUserId == null || details.mCredentialId == null) {
+                throw new IllegalArgumentException();
+            }
+            credentials.add(details);
+        }
+        return credentials;
+    }
+
     @NativeMethods
     interface Natives {
         // parseAttestationObject parses a CTAP2 attestation[1] and extracts the

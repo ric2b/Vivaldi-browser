@@ -17,11 +17,11 @@ bool TabsEventRouter::TabEntry::SetDiscarded(bool new_val) {
   return true;
 }
 
-void TabsEventRouter::TabEntry::ExtDataSet(content::WebContents* contents) {
-  router_->ExtDataUpdated(contents);
+void TabsEventRouter::TabEntry::VivExtDataSet(content::WebContents* contents) {
+  router_->VivExtDataUpdated(contents);
 }
 
-void TabsEventRouter::ExtDataUpdated(WebContents* contents) {
+void TabsEventRouter::VivExtDataUpdated(WebContents* contents) {
   std::set<std::string> changed_property_names;
   changed_property_names.insert(vivaldi::kExtDataKey);
   DispatchTabUpdatedEvent(contents, std::move(changed_property_names));

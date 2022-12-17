@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "base/base_export.h"
 #include "base/compiler_specific.h"
 #include "base/memory/raw_ptr.h"
 #include "base/message_loop/message_pump.h"
@@ -80,7 +81,8 @@ class BASE_EXPORT MessagePumpLibevent : public MessagePump,
   void Run(Delegate* delegate) override;
   void Quit() override;
   void ScheduleWork() override;
-  void ScheduleDelayedWork(const TimeTicks& delayed_work_time) override;
+  void ScheduleDelayedWork(
+      const Delegate::NextWorkInfo& next_work_info) override;
 
  private:
   friend class MessagePumpLibeventTest;

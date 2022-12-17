@@ -207,8 +207,8 @@ public class BluetoothChooserDialog
         AutocompleteSchemeClassifier autocompleteSchemeClassifier =
                 mDelegate.createAutocompleteSchemeClassifier();
 
-        OmniboxUrlEmphasizer.emphasizeUrl(origin, mContext.getResources(),
-                autocompleteSchemeClassifier, mSecurityLevel, false, useDarkColors, true);
+        OmniboxUrlEmphasizer.emphasizeUrl(origin, mContext, autocompleteSchemeClassifier,
+                mSecurityLevel, false, useDarkColors, true);
         autocompleteSchemeClassifier.destroy();
         // Construct a full string and replace the origin text with emphasized version.
         SpannableString title =
@@ -347,7 +347,7 @@ public class BluetoothChooserDialog
 
     private NoUnderlineClickableSpan createLinkSpan(@LinkType int linkType) {
         return new NoUnderlineClickableSpan(
-                mContext.getResources(), (view) -> onBluetoothLinkClick(view, linkType));
+                mContext, (view) -> onBluetoothLinkClick(view, linkType));
     }
 
     private void onBluetoothLinkClick(View view, @LinkType int linkType) {

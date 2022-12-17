@@ -13,7 +13,6 @@
 #include "base/numerics/checked_math.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "media/base/audio_bus.h"
 #include "media/base/audio_latency.h"
 #include "media/base/audio_point.h"
 #include "media/base/channel_layout.h"
@@ -27,19 +26,18 @@ namespace media {
 // size as sizeof(Audio{Input,Output}BufferParameters) + #(bytes in audio
 // buffer) without using packing. Also align Audio{Input,Output}BufferParameters
 // instead of in Audio{Input,Output}Buffer to be able to calculate size like so.
-// Use a macro for the alignment value that's the same as
+// Use a constexpr for the alignment value that's the same as
 // AudioBus::kChannelAlignment, since MSVC doesn't accept the latter to be used.
 #if BUILDFLAG(IS_WIN)
 #pragma warning(push)
 #pragma warning(disable : 4324)  // Disable warning for added padding.
 #endif
-#define PARAMETERS_ALIGNMENT 16
-static_assert(AudioBus::kChannelAlignment == PARAMETERS_ALIGNMENT,
-              "Audio buffer parameters struct alignment not same as AudioBus");
+constexpr int kParametersAlignment = 16;
+
 // ****WARNING****: Do not change the field types or ordering of these fields
 // without checking that alignment is correct. The structs may be concurrently
 // accessed by both 32bit and 64bit process in shmem. http://crbug.com/781095.
-struct MEDIA_SHMEM_EXPORT ALIGNAS(PARAMETERS_ALIGNMENT)
+struct MEDIA_SHMEM_EXPORT ALIGNAS(kParametersAlignment)
     AudioInputBufferParameters {
   double volume;
   int64_t capture_time_us;  // base::TimeTicks in microseconds.
@@ -47,7 +45,7 @@ struct MEDIA_SHMEM_EXPORT ALIGNAS(PARAMETERS_ALIGNMENT)
   uint32_t id;
   bool key_pressed;
 };
-struct MEDIA_SHMEM_EXPORT ALIGNAS(PARAMETERS_ALIGNMENT)
+struct MEDIA_SHMEM_EXPORT ALIGNAS(kParametersAlignment)
     AudioOutputBufferParameters {
   int64_t delay_us;            // base::TimeDelta in microseconds.
   int64_t delay_timestamp_us;  // base::TimeTicks in microseconds.
@@ -55,19 +53,9 @@ struct MEDIA_SHMEM_EXPORT ALIGNAS(PARAMETERS_ALIGNMENT)
   uint32_t bitstream_data_size;
   uint32_t bitstream_frames;
 };
-#undef PARAMETERS_ALIGNMENT
 #if BUILDFLAG(IS_WIN)
 #pragma warning(pop)
 #endif
-
-static_assert(sizeof(AudioInputBufferParameters) %
-                      AudioBus::kChannelAlignment ==
-                  0,
-              "AudioInputBufferParameters not aligned");
-static_assert(sizeof(AudioOutputBufferParameters) %
-                      AudioBus::kChannelAlignment ==
-                  0,
-              "AudioOutputBufferParameters not aligned");
 
 struct MEDIA_SHMEM_EXPORT AudioInputBuffer {
   AudioInputBufferParameters params;
@@ -93,6 +81,8 @@ struct MEDIA_SHMEM_EXPORT AudioRendererAlgorithmParameters {
   // https://crbug.com/879970.
   base::TimeDelta starting_capacity_for_encrypted;
 };
+
+class AudioParameters;
 
 // These convenience function safely computes the size required for
 // |shared_memory_count| AudioInputBuffers, with enough memory for AudioBus
@@ -124,8 +114,6 @@ MEDIA_SHMEM_EXPORT uint32_t ComputeAudioOutputBufferSize(int channels,
 
 class MEDIA_SHMEM_EXPORT AudioParameters {
  public:
-  // TODO(miu): Rename this enum to something that correctly reflects its
-  // semantics, such as "TransportScheme."
   // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.media
   // GENERATED_JAVA_CLASS_NAME_OVERRIDE: AudioEncodingFormat
   // GENERATED_JAVA_PREFIX_TO_STRIP: AUDIO_
@@ -170,6 +158,9 @@ class MEDIA_SHMEM_EXPORT AudioParameters {
                                            // experimentally be enabled.
     MULTIZONE = 1 << 7,
     AUDIO_PREFETCH = 1 << 8,
+    ALLOW_DSP_ECHO_CANCELLER = 1 << 9,
+    ALLOW_DSP_NOISE_SUPPRESSION = 1 << 10,
+    ALLOW_DSP_AUTOMATIC_GAIN_CONTROL = 1 << 11,
   };
 
   struct HardwareCapabilities {
@@ -177,7 +168,7 @@ class MEDIA_SHMEM_EXPORT AudioParameters {
         : min_frames_per_buffer(min_frames_per_buffer),
           max_frames_per_buffer(max_frames_per_buffer),
           bitstream_formats(0) {}
-    HardwareCapabilities(int bitstream_formats)
+    explicit HardwareCapabilities(int bitstream_formats)
         : min_frames_per_buffer(0),
           max_frames_per_buffer(0),
           bitstream_formats(bitstream_formats) {}
@@ -246,6 +237,8 @@ class MEDIA_SHMEM_EXPORT AudioParameters {
   // Return true if |format_| is compressed bitstream.
   bool IsBitstreamFormat() const;
 
+  bool IsFormatSupportedByHardware(Format format) const;
+
   void set_format(Format format) { format_ = format; }
   Format format() const { return format_; }
 
@@ -256,6 +249,7 @@ class MEDIA_SHMEM_EXPORT AudioParameters {
   // this explicitly is only required with CHANNEL_LAYOUT_DISCRETE.
   void set_channels_for_discrete(int channels) {
     DCHECK(channel_layout_ == CHANNEL_LAYOUT_DISCRETE ||
+           channel_layout_ == CHANNEL_LAYOUT_5_1_4_DOWNMIX ||
            channels == ChannelLayoutToChannelCount(channel_layout_));
     channels_ = channels;
   }

@@ -102,7 +102,10 @@ public class TabGridIphTest {
 
     @Rule
     public ChromeRenderTestRule mRenderTestRule =
-            ChromeRenderTestRule.Builder.withPublicCorpus().build();
+            ChromeRenderTestRule.Builder.withPublicCorpus()
+                    .setBugComponent(
+                            ChromeRenderTestRule.Component.UI_BROWSER_MOBILE_TAB_SWITCHER_GRID)
+                    .build();
 
     @Before
     public void setUp() {
@@ -270,6 +273,7 @@ public class TabGridIphTest {
     @Test
     @MediumTest
     @Feature({"RenderTest"})
+    @DisabledTest(message = "crbug.com/1300743")
     public void testRenderIphDialog_Landscape() throws IOException {
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
 

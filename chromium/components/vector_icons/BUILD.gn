@@ -10,6 +10,7 @@ aggregate_vector_icons("components_vector_icons") {
 
   sources = [
     "ads.icon",
+    "ads_click.icon",
     "arrow_back.icon",
     "back_arrow.icon",
     "blocked_badge.icon",
@@ -21,6 +22,7 @@ aggregate_vector_icons("components_vector_icons") {
     "call_end.icon",
     "caret_down.icon",
     "caret_up.icon",
+    "celebration.icon",
     "certificate.icon",
     "check_circle.icon",
     "close.icon",
@@ -43,6 +45,7 @@ aggregate_vector_icons("components_vector_icons") {
     "extension.icon",
     "feed.icon",
     "file_download.icon",
+    "file_download_off.icon",
     "folder.icon",
     "folder_managed.icon",
     "folder_managed_touch.icon",
@@ -61,6 +64,7 @@ aggregate_vector_icons("components_vector_icons") {
     "https_valid_arrow.icon",
     "info_outline.icon",
     "insert_drive_file_outline.icon",
+    "keyboard.icon",
     "launch.icon",
     "lightbulb_outline.icon",
     "live_caption_off.icon",

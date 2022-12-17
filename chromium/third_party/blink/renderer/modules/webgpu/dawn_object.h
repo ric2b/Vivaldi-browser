@@ -104,6 +104,8 @@ class DawnObjectBase {
 
   void setLabel(const String& value);
 
+  virtual void setLabelImpl(const String& value){};
+
  private:
   scoped_refptr<DawnControlClientHolder> dawn_control_client_;
   String label_;
@@ -115,6 +117,7 @@ class DawnObjectImpl : public ScriptWrappable, public DawnObjectBase {
   ~DawnObjectImpl() override;
 
   WGPUDevice GetDeviceHandle();
+  GPUDevice* device() { return device_.Get(); }
 
   void Trace(Visitor* visitor) const override;
 

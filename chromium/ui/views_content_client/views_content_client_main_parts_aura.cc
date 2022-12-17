@@ -4,8 +4,13 @@
 
 #include "ui/views_content_client/views_content_client_main_parts_aura.h"
 
+#include <utility>
+
 #include "build/chromeos_buildflags.h"
+
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ui/wm/core/wm_state.h"
+#endif
 
 namespace ui {
 

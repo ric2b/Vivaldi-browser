@@ -9,6 +9,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/timer/timer.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/autofill/autofill_bubble_handler.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -24,14 +25,14 @@
 #include "ui/vivaldi_rootdocument_handler.h"
 #include "ui/vivaldi_ui_web_contents_delegate.h"
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 #include "base/win/windows_version.h"
 #include "ui/views/win/scoped_fullscreen_visibility.h"
 #endif
 
 class ScopedKeepAlive;
 
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
 class JumpList;
 #endif
 
@@ -309,6 +310,7 @@ class VivaldiBrowserWindow final
       bool is_user_gesture) override;
   bool IsDownloadShelfVisible() const override;
   DownloadShelf* GetDownloadShelf() override;
+  DownloadBubbleUIController* GetDownloadBubbleUIController() override;
   void ConfirmBrowserCloseWithPendingDownloads(
       int download_count,
       Browser::DownloadCloseType dialog_type,
@@ -344,7 +346,7 @@ class VivaldiBrowserWindow final
   void LinkOpeningFromGesture(WindowOpenDisposition disposition) override {}
   // Shows in-product help for the given feature.
   void UpdateFrameColor() override {}
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   void ShowIntentPickerBubble(
       std::vector<apps::IntentPickerAppInfo> app_info,
       bool show_stay_in_chrome,
@@ -394,6 +396,13 @@ class VivaldiBrowserWindow final
   void ShowIncognitoHistoryDisclaimerDialog() override {}
   std::string GetWorkspace() const override;
   bool IsVisibleOnAllWorkspaces() const override;
+  bool IsLocationBarVisible() const override;
+#if BUILDFLAG(ENABLE_SIDE_SEARCH)
+  bool IsSideSearchPanelVisible() const override;
+  void MaybeRestoreSideSearchStatePerWindow(
+      const std::map<std::string, std::string>& extra_data) override {}
+#endif
+
   // BrowserWindow overrides end
 
   // BaseWindow overrides
@@ -570,10 +579,10 @@ class VivaldiBrowserWindow final
 
   views::UnhandledKeyboardEventHandler unhandled_keyboard_event_handler_;
 
-#if !defined(OS_MAC)
+#if !BUILDFLAG(IS_MAC)
   // Last key code received in HandleKeyboardEvent(). For auto repeat detection.
   int last_key_code_ = -1;
-#endif  // !defined(OS_MAC)
+#endif  // !BUILDFLAG(IS_MAC)
   bool last_motion_ = false;
   WindowStateData window_state_data_;
 

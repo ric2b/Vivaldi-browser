@@ -7,10 +7,12 @@
 #include <sys/mman.h>
 
 #include "ash/components/settings/cros_settings_provider.h"
+#include "ash/components/tpm/install_attributes.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
 #include "base/files/file_util.h"
+#include "chrome/browser/apps/app_service/extension_apps_utils.h"
 #include "chrome/browser/ash/crosapi/browser_util.h"
 #include "chrome/browser/ash/crosapi/browser_version_service_ash.h"
 #include "chrome/browser/ash/crosapi/field_trial_service_ash.h"
@@ -26,6 +28,7 @@
 #include "chrome/browser/web_applications/web_app_utils.h"
 #include "chromeos/components/cdm_factory_daemon/mojom/browser_cdm_factory.mojom.h"
 #include "chromeos/components/sensors/mojom/cros_sensor_service.mojom.h"
+#include "chromeos/constants/devicetype.h"
 #include "chromeos/crosapi/cpp/crosapi_constants.h"
 #include "chromeos/crosapi/mojom/app_service.mojom.h"
 #include "chromeos/crosapi/mojom/app_window_tracker.mojom.h"
@@ -38,6 +41,7 @@
 #include "chromeos/crosapi/mojom/clipboard_history.mojom.h"
 #include "chromeos/crosapi/mojom/content_protection.mojom.h"
 #include "chromeos/crosapi/mojom/crosapi.mojom.h"
+#include "chromeos/crosapi/mojom/desk_template.mojom.h"
 #include "chromeos/crosapi/mojom/device_attributes.mojom.h"
 #include "chromeos/crosapi/mojom/device_settings_service.mojom.h"
 #include "chromeos/crosapi/mojom/dlp.mojom.h"
@@ -76,14 +80,16 @@
 #include "chromeos/crosapi/mojom/tts.mojom.h"
 #include "chromeos/crosapi/mojom/url_handler.mojom.h"
 #include "chromeos/crosapi/mojom/video_capture.mojom.h"
+#include "chromeos/crosapi/mojom/web_app_service.mojom.h"
 #include "chromeos/crosapi/mojom/web_page_info.mojom.h"
 #include "chromeos/services/machine_learning/public/mojom/machine_learning_service.mojom.h"
-#include "chromeos/tpm/install_attributes.h"
 #include "components/account_manager_core/account_manager_util.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/metrics/metrics_service.h"
+#include "components/metrics_services_manager/metrics_services_manager.h"
 #include "components/policy/policy_constants.h"
 #include "components/prefs/pref_service.h"
+#include "components/ukm/ukm_service.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "media/capture/mojom/video_capture.mojom.h"
@@ -93,6 +99,8 @@
 #include "services/media_session/public/mojom/media_controller.mojom.h"
 
 using MojoOptionalBool = crosapi::mojom::DeviceSettings::OptionalBool;
+using MojoPolicyMap =
+    base::flat_map<::policy::PolicyNamespace, std::vector<uint8_t>>;
 
 namespace crosapi {
 namespace browser_util {
@@ -118,6 +126,18 @@ absl::optional<std::vector<uint8_t>> GetDeviceAccountPolicy(
   }
   std::string policy_data = environment_provider->GetDeviceAccountPolicy();
   return std::vector<uint8_t>(policy_data.begin(), policy_data.end());
+}
+
+// Returns the map containing component policy for each namespace. The values
+// represent the serialized policy blob for the namespace.
+const absl::optional<MojoPolicyMap> GetDeviceAccountComponentPolicy(
+    EnvironmentProvider* environment_provider) {
+  const MojoPolicyMap& map =
+      environment_provider->GetDeviceAccountComponentPolicy();
+  if (map.empty())
+    return absl::nullopt;
+
+  return map;
 }
 
 // Returns the device specific data needed for Lacros.
@@ -169,6 +189,7 @@ constexpr InterfaceVersionEntry kInterfaceVersionEntries[] = {
     MakeInterfaceVersionEntry<crosapi::mojom::ClipboardHistory>(),
     MakeInterfaceVersionEntry<crosapi::mojom::ContentProtection>(),
     MakeInterfaceVersionEntry<crosapi::mojom::Crosapi>(),
+    MakeInterfaceVersionEntry<crosapi::mojom::DeskTemplate>(),
     MakeInterfaceVersionEntry<crosapi::mojom::DeviceAttributes>(),
     MakeInterfaceVersionEntry<crosapi::mojom::DeviceSettingsService>(),
     MakeInterfaceVersionEntry<crosapi::mojom::Dlp>(),
@@ -214,6 +235,7 @@ constexpr InterfaceVersionEntry kInterfaceVersionEntries[] = {
     MakeInterfaceVersionEntry<crosapi::mojom::Tts>(),
     MakeInterfaceVersionEntry<crosapi::mojom::UrlHandler>(),
     MakeInterfaceVersionEntry<crosapi::mojom::VideoCaptureDeviceFactory>(),
+    MakeInterfaceVersionEntry<crosapi::mojom::WebAppService>(),
     MakeInterfaceVersionEntry<crosapi::mojom::WebPageInfoFactory>(),
     MakeInterfaceVersionEntry<device::mojom::HidConnection>(),
     MakeInterfaceVersionEntry<device::mojom::HidManager>(),
@@ -227,7 +249,7 @@ constexpr InterfaceVersionEntry kInterfaceVersionEntries[] = {
 constexpr bool HasDuplicatedUuid() {
   // We assume the number of entries are small enough so that simple
   // O(N^2) check works.
-  const size_t size = base::size(kInterfaceVersionEntries);
+  const size_t size = std::size(kInterfaceVersionEntries);
   for (size_t i = 0; i < size; ++i) {
     for (size_t j = i + 1; j < size; ++j) {
       if (kInterfaceVersionEntries[i].uuid == kInterfaceVersionEntries[j].uuid)
@@ -239,6 +261,24 @@ constexpr bool HasDuplicatedUuid() {
 
 static_assert(!HasDuplicatedUuid(),
               "Each Crosapi Mojom interface should have unique UUID.");
+
+crosapi::mojom::BrowserInitParams::DeviceType ConvertDeviceType(
+    chromeos::DeviceType device_type) {
+  switch (device_type) {
+    case chromeos::DeviceType::kChromebook:
+      return crosapi::mojom::BrowserInitParams::DeviceType::kChromebook;
+    case chromeos::DeviceType::kChromebase:
+      return crosapi::mojom::BrowserInitParams::DeviceType::kChromebase;
+    case chromeos::DeviceType::kChromebit:
+      return crosapi::mojom::BrowserInitParams::DeviceType::kChromebit;
+    case chromeos::DeviceType::kChromebox:
+      return crosapi::mojom::BrowserInitParams::DeviceType::kChromebox;
+    case chromeos::DeviceType::kUnknown:
+      [[fallthrough]];
+    default:
+      return crosapi::mojom::BrowserInitParams::DeviceType::kUnknown;
+  }
+}
 
 }  // namespace
 
@@ -332,6 +372,13 @@ mojom::BrowserInitParamsPtr GetBrowserInitParams(
       params->metrics_service_client_id = client_id;
   }
 
+  if (auto* metrics_services_manager =
+          g_browser_process->GetMetricsServicesManager()) {
+    if (auto* ukm_service = metrics_services_manager->GetUkmService()) {
+      params->ukm_client_id = ukm_service->client_id();
+    }
+  }
+
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           ash::switches::kOndeviceHandwritingSwitch)) {
     const auto handwriting_switch =
@@ -373,6 +420,7 @@ mojom::BrowserInitParamsPtr GetBrowserInitParams(
 
   params->standalone_browser_is_only_browser = !IsAshWebBrowserEnabled();
   params->publish_chrome_apps = browser_util::IsLacrosChromeAppsEnabled();
+  params->publish_hosted_apps = apps::ShouldHostedAppsRunInLacros();
 
   // Keep-alive mojom API is now used by the current ash-chrome.
   params->initial_keep_alive =
@@ -386,8 +434,7 @@ mojom::BrowserInitParamsPtr GetBrowserInitParams(
   // Pass the accepted internal urls to lacros. Only accepted urls are allowed
   // to be passed via OpenURL from Lacros to Ash.
   params->accepted_internal_ash_urls =
-      std::move(ChromeWebUIControllerFactory::GetInstance())
-          ->GetListOfAcceptableURLs();
+      ChromeWebUIControllerFactory::GetInstance()->GetListOfAcceptableURLs();
 
   // Pass holding space feature flag state to lacros.
   params->is_holding_space_incognito_profile_integration_enabled = true;
@@ -399,7 +446,14 @@ mojom::BrowserInitParamsPtr GetBrowserInitParams(
   params->ash_capabilities = {{kBrowserManagerReloadBrowserCapability}};
 
   params->is_device_enterprised_managed =
-      chromeos::InstallAttributes::Get()->IsEnterpriseManaged();
+      ash::InstallAttributes::Get()->IsEnterpriseManaged();
+
+  params->device_type = ConvertDeviceType(chromeos::GetDeviceType());
+  params->device_account_component_policy =
+      GetDeviceAccountComponentPolicy(environment_provider);
+
+  params->is_ondevice_speech_supported =
+      base::FeatureList::IsEnabled(ash::features::kOnDeviceSpeechRecognition);
 
   return params;
 }

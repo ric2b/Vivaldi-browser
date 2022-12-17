@@ -14,6 +14,7 @@
 #include "ash/public/cpp/session/session_observer.h"
 #include "ash/wm/desks/desks_histogram_enums.h"
 #include "ash/wm/desks/root_window_desk_switch_animator.h"
+#include "ash/wm/desks/templates/restore_data_collector.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/observer_list.h"
@@ -97,10 +98,6 @@ class ASH_EXPORT DesksController : public chromeos::DesksHelper,
     return visible_on_all_desks_windows_;
   }
 
-  bool disable_app_id_check_for_desk_templates() {
-    return disable_app_id_check_for_desk_templates_;
-  }
-
   DeskAnimationBase* animation() const { return animation_.get(); }
 
   // Returns the current |active_desk()| or the soon-to-be active desk if a desk
@@ -147,11 +144,15 @@ class ASH_EXPORT DesksController : public chromeos::DesksHelper,
   // Creates a new desk. CanCreateDesks() must be checked before calling this.
   void NewDesk(DesksCreationRemovalSource source);
 
-  // Removes and deletes the given |desk|. |desk| must already exist, and
+  // Removes and deletes the given `desk`. `desk` must already exist, and
   // CanRemoveDesks() must be checked before this.
   // This will trigger the `DeskRemovalAnimation` if the active desk is being
   // removed outside of overview.
-  void RemoveDesk(const Desk* desk, DesksCreationRemovalSource source);
+  // If `close_windows` is true, the function will close all of the `desk`'s
+  // windows as well. Otherwise, it will move `desk`'s windows to another desk.
+  void RemoveDesk(const Desk* desk,
+                  DesksCreationRemovalSource source,
+                  bool close_windows);
 
   // Reorder the desk at |old_index| to |new_index|.
   void ReorderDesk(int old_index, int new_index);
@@ -257,20 +258,21 @@ class ASH_EXPORT DesksController : public chromeos::DesksHelper,
   int GetNumberOfDesks() const override;
   void SendToDeskAtIndex(aura::Window* window, int desk_index) override;
 
-  // Captures the active desk and returns it as a desk template containing
-  // necessary information that can be used to create a same desk via provided
-  // `callback`, `root_window_to_show` is used to determine which monitor to
-  // show template related dialog.
-  void CaptureActiveDeskAsTemplate(
-      GetDeskTemplateCallback callback,
-      aura::Window* root_window_to_show = nullptr) const;
+  // Captures the active desk and returns it as a desk template (of type
+  // `template_type`) containing necessary information that can be used to
+  // create a same desk via provided `callback`, `root_window_to_show` is used
+  // to determine which monitor to show template related dialog.
+  void CaptureActiveDeskAsTemplate(GetDeskTemplateCallback callback,
+                                   DeskTemplateType template_type,
+                                   aura::Window* root_window_to_show) const;
 
-  // Creates and activates a new desk for a template with name `template_name`
-  // or `template_name ({counter})` to resolve naming conflicts. Runs `callback`
-  // with true if creation was successful, false otherwise.
-  void CreateAndActivateNewDeskForTemplate(
-      const std::u16string& template_name,
-      base::OnceCallback<void(bool)> callback);
+  // Creates (and optionally activates) a new desk for a template with name
+  // `template_name` or `template_name ({counter})` to resolve naming
+  // conflicts. Runs `callback` with the newly created desk if creation was
+  // successful, nullptr otherwise.
+  void CreateNewDeskForTemplate(const std::u16string& template_name,
+                                bool activate_desk,
+                                base::OnceCallback<void(const Desk*)> callback);
 
   // Called when an app with `app_id` is a single instance app which is about to
   // get launched from a saved template. Moves the existing app instance to the
@@ -307,13 +309,6 @@ class ASH_EXPORT DesksController : public chromeos::DesksHelper,
   friend class DeskAnimationBase;
   friend class DeskActivationAnimation;
   friend class DeskRemovalAnimation;
-  friend class DesksTemplatesTest;
-
-  void set_disable_app_id_check_for_desk_templates(
-      bool disable_app_id_check_for_desk_templates) {
-    disable_app_id_check_for_desk_templates_ =
-        disable_app_id_check_for_desk_templates;
-  }
 
   void OnAnimationFinished(DeskAnimationBase* animation);
 
@@ -333,11 +328,22 @@ class ASH_EXPORT DesksController : public chromeos::DesksHelper,
   void ActivateDeskInternal(const Desk* desk, bool update_window_activation);
 
   // Removes `desk` without animation.
-  void RemoveDeskInternal(const Desk* desk, DesksCreationRemovalSource source);
+  // If `close_windows` is true, the removed `desk`'s windows are closed along
+  // with the desk. Otherwise, they are moved to another desk.
+  void RemoveDeskInternal(const Desk* desk,
+                          DesksCreationRemovalSource source,
+                          bool close_windows);
 
   // Moves all the windows that are visible on all desks that currently
   // reside on |active_desk_| to |new_desk|.
   void MoveVisibleOnAllDesksWindowsFromActiveDeskTo(Desk* new_desk);
+
+  // Checks if the fullscreen state has changed after desks were switched and
+  // notifies shell if needed. For e.g Desk 1 has a window in fullscreen while
+  // Desk 2 does not, this function would notify shell of a fullscreen state
+  // change when switching between Desk 1 and 2 in that case.
+  void NotifyFullScreenStateChangedAcrossDesksIfNeeded(
+      const Desk* previous_active_desk);
 
   // Iterates through the visible on all desks windows on the active desk
   // and restacks them based on their position in the global MRU tracker. This
@@ -379,14 +385,6 @@ class ASH_EXPORT DesksController : public chromeos::DesksHelper,
   // mode as a result of desks modifications.
   bool are_desks_being_modified_ = false;
 
-  // In ash unittests, the FullRestoreSaveHandler isn't hooked up so initialized
-  // windows lack an app id. If a window doesn't have a valid app id, then it
-  // won't be tracked by Desk as a supported window and those windows will be
-  // deemed unsupported for Desk Templates. If
-  // `disable_app_id_check_for_desk_templates_` is true, then this check is
-  // omitted so we can test Desk Templates.
-  bool disable_app_id_check_for_desk_templates_ = false;
-
   // Not null if there is an on-going desks animation.
   std::unique_ptr<DeskAnimationBase> animation_;
 
@@ -403,6 +401,9 @@ class ASH_EXPORT DesksController : public chromeos::DesksHelper,
 
   // Scheduler for reporting the weekly active desks metric.
   base::OneShotTimer weekly_active_desks_scheduler_;
+
+  // Does the job for the `CaptureActiveDeskAsTemplate()` method.
+  mutable RestoreDataCollector restore_data_collector_;
 };
 
 }  // namespace ash

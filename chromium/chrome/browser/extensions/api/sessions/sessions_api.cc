@@ -85,7 +85,7 @@ api::tabs::Tab CreateTabModelHelper(
     int index,
     bool pinned,
     bool active,
-    const std::string& ext_data,
+    const std::string& viv_ext_data,
     const Extension* extension,
     Feature::Context context) {
   api::tabs::Tab tab_struct;
@@ -106,7 +106,7 @@ api::tabs::Tab CreateTabModelHelper(
   tab_struct.index = index;
   tab_struct.pinned = pinned;
   tab_struct.active = active;
-  tab_struct.ext_data.reset(new std::string(ext_data));
+  tab_struct.viv_ext_data.reset(new std::string(viv_ext_data));
 
   ExtensionTabUtil::ScrubTabBehavior scrub_tab_behavior =
       ExtensionTabUtil::GetScrubTabBehavior(extension, context, url);
@@ -120,7 +120,7 @@ std::unique_ptr<api::windows::Window> CreateWindowModelHelper(
     const std::string& session_id,
     const api::windows::WindowType& type,
     const api::windows::WindowState& state,
-    const std::string& ext_data) {
+    const std::string& viv_ext_data) {
   std::unique_ptr<api::windows::Window> window_struct(new api::windows::Window);
   window_struct->tabs = std::move(tabs);
   window_struct->session_id = std::make_unique<std::string>(session_id);
@@ -129,7 +129,7 @@ std::unique_ptr<api::windows::Window> CreateWindowModelHelper(
   window_struct->focused = false;
   window_struct->type = type;
   window_struct->state = state;
-  window_struct->ext_data.reset(new std::string(ext_data));
+  window_struct->viv_ext_data.reset(new std::string(viv_ext_data));
   return window_struct;
 }
 
@@ -164,7 +164,7 @@ api::tabs::Tab SessionsGetRecentlyClosedFunction::CreateTabModel(
   return CreateTabModelHelper(tab.navigations[tab.current_navigation_index],
                               base::NumberToString(tab.id.id()),
                               tab.tabstrip_index, tab.pinned, active,
-                              tab.ext_data,
+                              tab.viv_ext_data,
                               extension(), source_context_type());
 }
 
@@ -181,7 +181,7 @@ SessionsGetRecentlyClosedFunction::CreateWindowModel(
   return CreateWindowModelHelper(
       std::move(tabs), base::NumberToString(window.id.id()),
       api::windows::WINDOW_TYPE_NORMAL, api::windows::WINDOW_STATE_NORMAL,
-                                 window.ext_data);
+      window.viv_ext_data);
 }
 
 std::unique_ptr<api::tab_groups::TabGroup>
@@ -273,7 +273,7 @@ api::tabs::Tab SessionsGetDevicesFunction::CreateTabModel(
   std::string session_id = SessionId(session_tag, tab.tab_id.id()).ToString();
   return CreateTabModelHelper(
       tab.navigations[tab.normalized_navigation_index()], session_id, tab_index,
-      tab.pinned, active, tab.ext_data, extension(), source_context_type());
+      tab.pinned, active, tab.viv_ext_data, extension(), source_context_type());
 }
 
 std::unique_ptr<api::windows::Window>
@@ -358,10 +358,10 @@ SessionsGetDevicesFunction::CreateWindowModel(
       break;
   }
 
-  std::string ext_data = window.ext_data;
+  std::string viv_ext_data = window.viv_ext_data;
 
-  std::unique_ptr<api::windows::Window> window_struct(
-      CreateWindowModelHelper(std::move(tabs), session_id, type, state, ext_data));
+  std::unique_ptr<api::windows::Window> window_struct(CreateWindowModelHelper(
+      std::move(tabs), session_id, type, state, viv_ext_data));
   // TODO(dwankri): Dig deeper to resolve bounds not being optional, so closed
   // windows in GetRecentlyClosed can have set values in Window helper.
   window_struct->left = std::make_unique<int>(window.bounds.x());

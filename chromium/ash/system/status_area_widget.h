@@ -18,6 +18,7 @@ class Window;
 }
 
 namespace ash {
+class DateTray;
 class DictationButtonTray;
 class HoldingSpaceTray;
 class ImeMenuTray;
@@ -35,6 +36,7 @@ class StopRecordingButtonTray;
 class TrayBackgroundView;
 class UnifiedSystemTray;
 class VirtualKeyboardTray;
+class EcheTray;
 
 // Widget showing the system tray, notification tray, and other tray views in
 // the bottom-right of the screen. Exists separately from ShelfView/ShelfWidget
@@ -115,6 +117,7 @@ class ASH_EXPORT StatusAreaWidget : public SessionObserver,
     return status_area_widget_delegate_;
   }
   UnifiedSystemTray* unified_system_tray() { return unified_system_tray_; }
+  DateTray* date_tray() { return date_tray_; }
   DictationButtonTray* dictation_button_tray() {
     return dictation_button_tray_;
   }
@@ -133,6 +136,7 @@ class ASH_EXPORT StatusAreaWidget : public SessionObserver,
   ImeMenuTray* ime_menu_tray() { return ime_menu_tray_; }
   HoldingSpaceTray* holding_space_tray() { return holding_space_tray_; }
   PhoneHubTray* phone_hub_tray() { return phone_hub_tray_; }
+  EcheTray* eche_tray() { return eche_tray_; }
 
   SelectToSpeakTray* select_to_speak_tray() { return select_to_speak_tray_; }
 
@@ -230,10 +234,12 @@ class ASH_EXPORT StatusAreaWidget : public SessionObserver,
   OverviewButtonTray* overview_button_tray_ = nullptr;
   DictationButtonTray* dictation_button_tray_ = nullptr;
   MediaTray* media_tray_ = nullptr;
+  DateTray* date_tray_ = nullptr;
   UnifiedSystemTray* unified_system_tray_ = nullptr;
   LogoutButtonTray* logout_button_tray_ = nullptr;
   PaletteTray* palette_tray_ = nullptr;
   PhoneHubTray* phone_hub_tray_ = nullptr;
+  EcheTray* eche_tray_ = nullptr;
   StopRecordingButtonTray* stop_recording_button_tray_ = nullptr;
   ProjectorAnnotationTray* projector_annotation_tray_ = nullptr;
   VirtualKeyboardTray* virtual_keyboard_tray_ = nullptr;

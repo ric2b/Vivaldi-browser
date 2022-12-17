@@ -5,13 +5,16 @@
 #include "chrome/browser/ui/webui/new_tab_page/new_tab_page_ui.h"
 
 #include <memory>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "base/command_line.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/strcat.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
+#include "base/values.h"
 #include "chrome/browser/buildflags.h"
 #include "chrome/browser/cart/cart_handler.h"
 #include "chrome/browser/new_tab_page/modules/drive/drive_handler.h"
@@ -99,49 +102,47 @@ void AddRawStringOrDefault(content::WebUIDataSource* source,
 void AddResourcesForCartDiscountConsentV2(content::WebUIDataSource* source) {
   AddRawStringOrDefault(
       source, "modulesCartDiscountConsentContent",
-      ntp_features::kNtpChromeCartModuleDiscountConsentStringChangeContent
-          .Get(),
+      commerce::kNtpChromeCartModuleDiscountConsentStringChangeContent.Get(),
       IDS_NTP_MODULES_CART_DISCOUNT_CONSENT_CONTENT_V2);
 
   source->AddBoolean(
       "modulesCartConsentStepTwoDifferentColor",
-      ntp_features::
-          kNtpChromeCartModuleDiscountConsentInlineStepTwoDifferentColor.Get());
+      commerce::kNtpChromeCartModuleDiscountConsentInlineStepTwoDifferentColor
+          .Get());
 
   AddRawStringOrDefault(
       source, "modulesCartDiscountConentTitle",
-      ntp_features::kNtpChromeCartModuleDiscountConsentNtpDialogContentTitle
-          .Get(),
+      commerce::kNtpChromeCartModuleDiscountConsentNtpDialogContentTitle.Get(),
       IDS_NTP_MODULES_CART_DISCOUNT_CONSENT_TITLE);
 
   source->AddBoolean(
       "modulesCartStepOneUseStaticContent",
-      ntp_features::
-          kNtpChromeCartModuleDiscountConsentNtpStepOneUseStaticContent.Get());
+      commerce::kNtpChromeCartModuleDiscountConsentNtpStepOneUseStaticContent
+          .Get());
   // This does not have a raw string resource.
   source->AddString(
       "modulesCartStepOneStaticContent",
-      ntp_features::kNtpChromeCartModuleDiscountConsentNtpStepOneStaticContent
+      commerce::kNtpChromeCartModuleDiscountConsentNtpStepOneStaticContent
           .Get());
 
   AddRawStringOrDefault(
       source, "modulesCartConsentStepOneOneMerchantContent",
-      ntp_features::kNtpChromeCartModuleDiscountConsentNtpStepOneContentOneCart
+      commerce::kNtpChromeCartModuleDiscountConsentNtpStepOneContentOneCart
           .Get(),
       IDS_NTP_MODULES_CART_DISCOUNT_CONSENT_STEP_1_WITH_MERCHANT_NAME);
   AddRawStringOrDefault(
       source, "modulesCartConsentStepOneTwoMerchantsContent",
-      ntp_features::kNtpChromeCartModuleDiscountConsentNtpStepOneContentTwoCarts
+      commerce::kNtpChromeCartModuleDiscountConsentNtpStepOneContentTwoCarts
           .Get(),
       IDS_NTP_MODULES_CART_DISCOUNT_CONSENT_STEP_1_WITH_TWO_MERCHANT_NAMES);
   AddRawStringOrDefault(
       source, "modulesCartConsentStepOneThreeMerchantsContent",
-      ntp_features::
-          kNtpChromeCartModuleDiscountConsentNtpStepOneContentThreeCarts.Get(),
+      commerce::kNtpChromeCartModuleDiscountConsentNtpStepOneContentThreeCarts
+          .Get(),
       IDS_NTP_MODULES_CART_DISCOUNT_CONSENT_STEP_1_WITH_THREE_MERCHANT_NAMES);
   AddRawStringOrDefault(
       source, "modulesCartConsentStepTwoContent",
-      ntp_features::kNtpChromeCartModuleDiscountConsentNtpStepTwoContent.Get(),
+      commerce::kNtpChromeCartModuleDiscountConsentNtpStepTwoContent.Get(),
       IDS_NTP_MODULES_CART_DISCOUNT_CONSENT_CONTENT_V3);
 
   source->AddLocalizedString(
@@ -150,8 +151,7 @@ void AddResourcesForCartDiscountConsentV2(content::WebUIDataSource* source) {
 
   source->AddBoolean(
       "modulesCartDiscountInlineCardShowCloseButton",
-      ntp_features::kNtpChromeCartModuleDiscountConsentInlineShowCloseButton
-          .Get());
+      commerce::kNtpChromeCartModuleDiscountConsentInlineShowCloseButton.Get());
 }
 
 content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
@@ -187,6 +187,9 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
   source->AddBoolean(
       "modulesDragAndDropEnabled",
       base::FeatureList::IsEnabled(ntp_features::kNtpModulesDragAndDrop));
+  source->AddBoolean("modulesFirstRunExperienceEnabled",
+                     base::FeatureList::IsEnabled(
+                         ntp_features::kNtpModulesFirstRunExperience));
   source->AddBoolean("modulesLoadEnabled", base::FeatureList::IsEnabled(
                                                ntp_features::kNtpModulesLoad));
   source->AddInteger("modulesLoadTimeout",
@@ -283,13 +286,13 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
       {"modulesDismissButtonText", IDS_NTP_MODULES_DISMISS_BUTTON_TEXT},
       {"modulesDisableButtonText", IDS_NTP_MODULES_DISABLE_BUTTON_TEXT},
       {"modulesCustomizeButtonText", IDS_NTP_MODULES_CUSTOMIZE_BUTTON_TEXT},
-      {"modulesShoppingTasksSentence", IDS_NTP_MODULES_SHOPPING_TASKS_SENTENCE},
-      {"modulesShoppingTasksLower", IDS_NTP_MODULES_SHOPPING_TASKS_LOWER},
+      {"modulesRecipeInfo", IDS_NTP_MODULES_RECIPE_INFO},
       {"modulesRecipeTasksSentence", IDS_NTP_MODULES_RECIPE_TASKS_SENTENCE},
       {"modulesRecipeTasksLower", IDS_NTP_MODULES_RECIPE_TASKS_LOWER},
       {"modulesRecipeTasksLowerThese",
        IDS_NTP_MODULES_RECIPE_TASKS_LOWER_THESE},
       {"modulesTasksInfo", IDS_NTP_MODULES_TASKS_INFO},
+      {"modulesCartInfo", IDS_NTP_MODULES_CART_INFO},
       {"modulesCartSentence", IDS_NTP_MODULES_CART_SENTENCE},
       {"modulesCartSentenceV2", IDS_NTP_MODULES_CART_SENTENCE_V2},
       {"modulesCartLower", IDS_NTP_MODULES_CART_LOWER},
@@ -342,7 +345,6 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
       {"modulesPhotosNew", IDS_NTP_MODULES_PHOTOS_NEW},
       {"modulesTasksInfoTitle", IDS_NTP_MODULES_SHOPPING_TASKS_INFO_TITLE},
       {"modulesTasksInfoClose", IDS_NTP_MODULES_SHOPPING_TASKS_INFO_CLOSE},
-      {"modulesCartHeaderNew", IDS_NTP_MODULES_CART_HEADER_CHIP_NEW},
       {"modulesCartWarmWelcome", IDS_NTP_MODULES_CART_WARM_WELCOME},
       {"modulesCartModuleMenuHideToastMessage",
        IDS_NTP_MODULES_CART_MODULE_MENU_HIDE_TOAST_MESSAGE},
@@ -376,12 +378,25 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
        IDS_NTP_MODULES_CART_DISCOUNT_CONSENT_CONTENT_V3},
       {"modulesCartDiscountConentTitle",
        IDS_NTP_MODULES_CART_DISCOUNT_CONSENT_TITLE},
+      {"modulesNewTagLabel", IDS_NTP_MODULES_NEW_TAG_LABEL},
+      {"modulesFirstRunExperienceTitle",
+       IDS_NTP_MODULES_FIRST_RUN_EXPERIENCE_TITLE},
+      {"modulesFirstRunExperienceBodyLine1",
+       IDS_NTP_MODULES_FIRST_RUN_EXPERIENCE_BODY_LINE_1},
+      {"modulesFirstRunExperienceBodyLine2",
+       IDS_NTP_MODULES_FIRST_RUN_EXPERIENCE_BODY_LINE_2},
+      {"modulesFirstRunExperienceOptIn",
+       IDS_NTP_MODULES_FIRST_RUN_EXPERIENCE_OPT_IN},
+      {"modulesFirstRunExperienceOptOut",
+       IDS_NTP_MODULES_FIRST_RUN_EXPERIENCE_OPT_OUT},
+      {"modulesFirstRunExperienceOptOutToast",
+       IDS_NTP_MODULES_FIRST_RUN_EXPERIENCE_OPT_OUT_TOAST},
   };
   source->AddLocalizedStrings(kStrings);
 
   source->AddInteger(
       "modulesCartDiscountConsentVariation",
-      ntp_features::kNtpChromeCartModuleDiscountConsentNtpVariation.Get());
+      commerce::kNtpChromeCartModuleDiscountConsentNtpVariation.Get());
 
   if (base::FeatureList::IsEnabled(commerce::kDiscountConsentV2)) {
     AddResourcesForCartDiscountConsentV2(source);
@@ -398,9 +413,6 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
   source->AddBoolean(
       "recipeTasksModuleEnabled",
       base::FeatureList::IsEnabled(ntp_features::kNtpRecipeTasksModule));
-  source->AddBoolean(
-      "shoppingTasksModuleEnabled",
-      base::FeatureList::IsEnabled(ntp_features::kNtpShoppingTasksModule));
   source->AddBoolean(
       "chromeCartModuleEnabled",
       base::FeatureList::IsEnabled(ntp_features::kNtpChromeCartModule));
@@ -619,8 +631,8 @@ void NewTabPageUI::BindInterface(
 
 void NewTabPageUI::BindInterface(
     mojo::PendingReceiver<photos::mojom::PhotosHandler> pending_receiver) {
-  photos_handler_ =
-      std::make_unique<PhotosHandler>(std::move(pending_receiver), profile_);
+  photos_handler_ = std::make_unique<PhotosHandler>(std::move(pending_receiver),
+                                                    profile_, web_contents_);
 }
 
 #if !defined(OFFICIAL_BUILD)
@@ -689,7 +701,7 @@ void NewTabPageUI::OnNativeThemeUpdated(ui::NativeTheme* observed_theme) {
 }
 
 void NewTabPageUI::OnThemeChanged() {
-  std::unique_ptr<base::DictionaryValue> update(new base::DictionaryValue);
+  base::Value::Dict update;
 
   const ui::ThemeProvider* theme_provider =
       webui::GetThemeProvider(web_contents_);
@@ -698,17 +710,16 @@ void NewTabPageUI::OnThemeChanged() {
   if (theme_provider) {
     auto background_color =
         theme_provider->GetColor(ThemeProperties::COLOR_NTP_BACKGROUND);
-    update->SetStringKey("backgroundColor",
-                         skia::SkColorToHexString(background_color));
+    update.Set("backgroundColor", skia::SkColorToHexString(background_color));
   } else {
-    update->SetStringKey("backgroundColor", "");
+    update.Set("backgroundColor", "");
   }
   content::WebUIDataSource::Update(profile_, chrome::kChromeUINewTabPageHost,
                                    std::move(update));
 }
 
 void NewTabPageUI::OnCustomBackgroundImageUpdated() {
-  std::unique_ptr<base::DictionaryValue> update(new base::DictionaryValue);
+  base::Value::Dict update;
   url::RawCanonOutputT<char> encoded_url;
   auto custom_background_url =
       (ntp_custom_background_service_
@@ -718,7 +729,7 @@ void NewTabPageUI::OnCustomBackgroundImageUpdated() {
           .custom_background_url;
   url::EncodeURIComponent(custom_background_url.spec().c_str(),
                           custom_background_url.spec().size(), &encoded_url);
-  update->SetStringKey(
+  update.Set(
       "backgroundImageUrl",
       encoded_url.length() > 0
           ? base::StrCat(
@@ -736,9 +747,6 @@ void NewTabPageUI::OnNtpCustomBackgroundServiceShuttingDown() {
 
 void NewTabPageUI::DidStartNavigation(
     content::NavigationHandle* navigation_handle) {
-  // TODO(https://crbug.com/1218946): With MPArch there may be multiple main
-  // frames. This caller was converted automatically to the primary main frame
-  // to preserve its semantics. Follow up to confirm correctness.
   if (navigation_handle->IsInPrimaryMainFrame() &&
       navigation_handle->GetURL() == GURL(chrome::kChromeUINewTabPageURL)) {
     navigation_start_time_ = base::Time::Now();
@@ -779,20 +787,19 @@ void NewTabPageUI::OnTilesVisibilityPrefChanged() {
 }
 
 void NewTabPageUI::OnLoad() {
-  std::unique_ptr<base::DictionaryValue> update(new base::DictionaryValue);
-  update->SetDoubleKey("navigationStartTime",
-                       navigation_start_time_.ToJsTime());
+  base::Value::Dict update;
+  update.Set("navigationStartTime", navigation_start_time_.ToJsTime());
   // Only enable modules if account credentials are available as most modules
   // won't have data to render otherwise. We can override this behavior with the
   // "--signed-out-ntp-modules" command line switch, e.g. to allow modules in
   // perf tests, which do not support sign-in.
-  update->SetBoolKey("modulesEnabled",
-                     base::FeatureList::IsEnabled(ntp_features::kModules) &&
-                         (base::CommandLine::ForCurrentProcess()->HasSwitch(
-                              kSignedOutNtpModulesSwitch) ||
-                          HasCredentials(profile_)));
-  update->SetBoolKey("driveModuleEnabled",
-                     NewTabPageUI::IsDriveModuleEnabled(profile_));
+  update.Set("modulesEnabled",
+             base::FeatureList::IsEnabled(ntp_features::kModules) &&
+                 (base::CommandLine::ForCurrentProcess()->HasSwitch(
+                      kSignedOutNtpModulesSwitch) ||
+                  HasCredentials(profile_)));
+  update.Set("driveModuleEnabled",
+             NewTabPageUI::IsDriveModuleEnabled(profile_));
   content::WebUIDataSource::Update(profile_, chrome::kChromeUINewTabPageHost,
                                    std::move(update));
 }

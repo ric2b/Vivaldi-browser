@@ -4,7 +4,6 @@
 
 #include "ui/gl/gl_switches.h"
 
-#include "base/cxx17_backports.h"
 #include "build/build_config.h"
 
 #if BUILDFLAG(IS_ANDROID)
@@ -17,8 +16,6 @@ const char kGLImplementationDesktopName[] = "desktop";
 const char kGLImplementationAppleName[] = "apple";
 const char kGLImplementationEGLName[] = "egl";
 const char kGLImplementationANGLEName[] = "angle";
-const char kGLImplementationSwiftShaderName[] = "swiftshader";
-const char kGLImplementationSwiftShaderForWebGLName[] = "swiftshader-webgl";
 const char kGLImplementationMockName[] = "mock";
 const char kGLImplementationStubName[] = "stub";
 const char kGLImplementationDisabledName[] = "disabled";
@@ -193,7 +190,7 @@ const char* const kGLSwitchesCopiedFromGpuProcessHost[] = {
     kDirectCompositionVideoSwapChainFormat,
 };
 const int kGLSwitchesCopiedFromGpuProcessHostNumSwitches =
-    base::size(kGLSwitchesCopiedFromGpuProcessHost);
+    std::size(kGLSwitchesCopiedFromGpuProcessHost);
 
 }  // namespace switches
 
@@ -222,6 +219,17 @@ const base::Feature kDirectCompositionLowLatencyPresentation{
 // software overlays. GPU deny lists limit it to NVIDIA only at the moment.
 const base::Feature kDirectCompositionSoftwareOverlays{
     "DirectCompositionSoftwareOverlays", base::FEATURE_ENABLED_BY_DEFAULT};
+
+// TODO(crbug.com/1269749): This is used temporarily for verifying
+// the draw offset bug. The code should be removed once the bug is fixed.
+const base::Feature kDirectCompositionVerifyDrawOffset{
+    "DirectCompositionVerifyDrawOffset", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::FeatureParam<int> kVerifyDrawOffsetX{
+    &kDirectCompositionVerifyDrawOffset, "verify_draw_offset_x", 0};
+
+const base::FeatureParam<int> kVerifyDrawOffsetY{
+    &kDirectCompositionVerifyDrawOffset, "verify_draw_offset_y", 0};
 
 // Default to using ANGLE's OpenGL backend
 const base::Feature kDefaultANGLEOpenGL{"DefaultANGLEOpenGL",

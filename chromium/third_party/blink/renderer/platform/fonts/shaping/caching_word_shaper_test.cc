@@ -6,16 +6,16 @@
 
 #include <memory>
 
-#include "base/cxx17_backports.h"
 #include "base/test/task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/platform/fonts/font_cache.h"
 #include "third_party/blink/renderer/platform/fonts/shaping/caching_word_shape_iterator.h"
 #include "third_party/blink/renderer/platform/fonts/shaping/shape_result_test_info.h"
+#include "third_party/blink/renderer/platform/testing/font_test_base.h"
 
 namespace blink {
 
-class CachingWordShaperTest : public testing::Test {
+class CachingWordShaperTest : public FontTestBase {
  protected:
   void SetUp() override {
     font_description.SetComputedSize(12.0);
@@ -29,7 +29,6 @@ class CachingWordShaperTest : public testing::Test {
     cache = std::make_unique<ShapeCache>();
   }
 
-  base::test::TaskEnvironment task_environment_;
   FontCachePurgePreventer font_cache_purge_preventer;
   FontDescription font_description;
   Font font;
@@ -273,7 +272,7 @@ TEST_F(CachingWordShaperTest, SegmentEmojiSubdivisionFlags) {
                         0xDC73, 0xDB40, 0xDC63, 0xDB40, 0xDC74, 0xDB40, 0xDC7F,
                         0xD83C, 0xDFF4, 0xDB40, 0xDC67, 0xDB40, 0xDC62, 0xDB40,
                         0xDC65, 0xDB40, 0xDC6E, 0xDB40, 0xDC67, 0xDB40, 0xDC7F};
-  TextRun text_run(kStr, base::size(kStr));
+  TextRun text_run(kStr, std::size(kStr));
 
   scoped_refptr<const ShapeResult> word_result;
   CachingWordShapeIterator iterator(cache.get(), text_run, &font);

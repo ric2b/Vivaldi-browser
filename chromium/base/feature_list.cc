@@ -326,7 +326,7 @@ void FeatureList::RegisterFieldTrialOverride(const std::string& feature_name,
       << "(2) fieldtrial_testing_config.json, (3) about_flags.cc, and "
       << "(4) client-side field trials.";
 
-  #if !(defined(VIVALDI_BUILD) && defined(OS_ANDROID))
+  #if !(defined(VIVALDI_BUILD) && BUILDFLAG(IS_ANDROID))
     RegisterOverride(feature_name, override_state, field_trial);
   #endif
 }

@@ -16,6 +16,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
 #include "browser/translate/vivaldi_translate_client.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -68,10 +69,8 @@
 #include "ui/display/win/dpi.h"
 #include "ui/gfx/codec/jpeg_codec.h"
 #include "ui/gfx/codec/png_codec.h"
+#include "ui/gfx/image/image_skia_rep.h"
 #include "ui/views/drag_utils.h"
-#if defined(OS_WIN)
-#include "ui/display/win/screen_win.h"
-#endif  // defined(OS_WIN)
 #include "ui/strings/grit/ui_strings.h"
 
 #include "app/vivaldi_apptools.h"
@@ -90,6 +89,10 @@
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_ui_utils.h"
 
+#if BUILDFLAG(IS_WIN)
+#include "ui/display/win/screen_win.h"
+#endif  // BUILDFLAG(IS_WIN)
+
 using content::WebContents;
 
 namespace extensions {
@@ -103,9 +106,10 @@ const int& VivaldiPrivateTabObserver::kUserDataKey =
 namespace tabs_private = vivaldi::tabs_private;
 
 bool IsTabMuted(const WebContents* web_contents) {
-  std::string extdata = web_contents->GetExtData();
+  std::string viv_extdata = web_contents->GetVivExtData();
   base::JSONParserOptions options = base::JSON_PARSE_RFC;
-  absl::optional<base::Value> json = base::JSONReader::Read(extdata, options);
+  absl::optional<base::Value> json =
+      base::JSONReader::Read(viv_extdata, options);
   absl::optional<bool> mute = absl::nullopt;
   if (json && json->is_dict()) {
     mute = json->FindBoolKey(kVivaldiTabMuted);
@@ -471,9 +475,11 @@ bool ValueToJSONString(const base::Value& value, std::string& json_string) {
   return serializer.Serialize(value);
 }
 
-absl::optional<base::Value> GetDictValueFromExtData(std::string& extdata) {
+absl::optional<base::Value> GetDictValueFromVivExtData(
+    std::string& viv_extdata) {
   base::JSONParserOptions options = base::JSON_PARSE_RFC;
-  absl::optional<base::Value> value = base::JSONReader::Read(extdata, options);
+  absl::optional<base::Value> value =
+      base::JSONReader::Read(viv_extdata, options);
   if (value && value->is_dict()) {
     return value;
   }
@@ -482,8 +488,8 @@ absl::optional<base::Value> GetDictValueFromExtData(std::string& extdata) {
 
 void VivaldiPrivateTabObserver::RenderFrameCreated(
     content::RenderFrameHost* render_frame_host) {
-  std::string ext = web_contents()->GetExtData();
-  absl::optional<base::Value> json = GetDictValueFromExtData(ext);
+  std::string viv_ext_data = web_contents()->GetVivExtData();
+  absl::optional<base::Value> json = GetDictValueFromVivExtData(viv_ext_data);
   if (::vivaldi::IsTabZoomEnabled(web_contents())) {
     absl::optional<double> zoom =
         json ? json->FindDoubleKey(kVivaldiTabZoom) : absl::nullopt;
@@ -520,13 +526,13 @@ void VivaldiPrivateTabObserver::RenderFrameCreated(
 }
 
 void VivaldiPrivateTabObserver::SaveZoomLevelToExtData(double zoom_level) {
-  std::string ext = web_contents()->GetExtData();
-  absl::optional<base::Value> json = GetDictValueFromExtData(ext);
+  std::string viv_ext_data = web_contents()->GetVivExtData();
+  absl::optional<base::Value> json = GetDictValueFromVivExtData(viv_ext_data);
   if (json) {
     json->SetDoubleKey(kVivaldiTabZoom, zoom_level);
     std::string json_string;
     if (ValueToJSONString(*json, json_string)) {
-      web_contents()->SetExtData(json_string);
+      web_contents()->SetVivExtData(json_string);
     }
   }
 }
@@ -603,15 +609,15 @@ void VivaldiPrivateTabObserver::SetEnablePlugins(bool enable_plugins) {
 
 void VivaldiPrivateTabObserver::SetMuted(bool mute) {
   mute_ = mute;
-  std::string ext = web_contents()->GetExtData();
-  absl::optional<base::Value> json = GetDictValueFromExtData(ext);
+  std::string viv_ext_data = web_contents()->GetVivExtData();
+  absl::optional<base::Value> json = GetDictValueFromVivExtData(viv_ext_data);
   if (json) {
     absl::optional<bool> existing = json->FindBoolKey(kVivaldiTabMuted);
     if ((existing && *existing != mute) || (!existing && mute)) {
       json->SetBoolKey(kVivaldiTabMuted, mute);
       std::string json_string;
       if (ValueToJSONString(*json, json_string)) {
-        web_contents()->SetExtData(json_string);
+        web_contents()->SetVivExtData(json_string);
       }
     }
   }

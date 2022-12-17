@@ -35,7 +35,7 @@ void ContentAutofillDriverFactory::CreateForWebContentsAndDelegate(
     AutofillManager::AutofillManagerFactoryCallback
         autofill_manager_factory_callback) {
 // Vivaldi
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   if (FromWebContents(contents))
     return;
 #endif
@@ -94,10 +94,17 @@ ContentAutofillDriverFactory::~ContentAutofillDriverFactory() = default;
 
 ContentAutofillDriver* ContentAutofillDriverFactory::DriverForFrame(
     content::RenderFrameHost* render_frame_host) {
-  auto insertion_result = driver_map_.emplace(render_frame_host, nullptr);
-  std::unique_ptr<ContentAutofillDriver>& driver =
-      insertion_result.first->second;
-  bool insertion_happened = insertion_result.second;
+  // Within fenced frames and their descendants, Password Manager should for now
+  // be disabled (crbug.com/1294378).
+  if (render_frame_host->IsNestedWithinFencedFrame() &&
+      !base::FeatureList::IsEnabled(
+          features::kAutofillEnableWithinFencedFrame)) {
+    return nullptr;
+  }
+
+  auto [iter, insertion_happened] =
+      driver_map_.emplace(render_frame_host, nullptr);
+  std::unique_ptr<ContentAutofillDriver>& driver = iter->second;
   if (insertion_happened) {
     // The `render_frame_host` may already be deleted (or be in the process of
     // being deleted). In this case, we must not create a new driver. Otherwise,
@@ -118,7 +125,7 @@ ContentAutofillDriver* ContentAutofillDriverFactory::DriverForFrame(
       DCHECK_EQ(driver_map_.find(render_frame_host)->second.get(),
                 driver.get());
     } else {
-      driver_map_.erase(insertion_result.first);
+      driver_map_.erase(iter);
       DCHECK_EQ(driver_map_.count(render_frame_host), 0u);
       return nullptr;
     }
@@ -146,8 +153,8 @@ void ContentAutofillDriverFactory::RenderFrameDeleted(
   // may actually be shown by the AutofillExternalDelegate of an ancestor
   // frame, which is not notified about |render_frame_host|'s destruction
   // and therefore won't close the popup.
-  if (render_frame_host->GetParent() &&
-      router_.last_queried_source() == driver) {
+  bool is_iframe = !driver->IsInAnyMainFrame();
+  if (is_iframe && router_.last_queried_source() == driver) {
     DCHECK_NE(content::RenderFrameHost::LifecycleState::kPrerendering,
               render_frame_host->GetLifecycleState());
     router_.HidePopup(driver);

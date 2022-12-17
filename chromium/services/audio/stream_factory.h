@@ -12,15 +12,16 @@
 #include "base/callback.h"
 #include "base/containers/flat_set.h"
 #include "base/containers/unique_ptr_adapters.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
 #include "base/threading/thread.h"
+#include "media/media_buildflags.h"
 #include "media/mojo/mojom/audio_logging.mojom.h"
 #include "media/mojo/mojom/audio_output_stream.mojom.h"
 #include "media/mojo/mojom/audio_processing.mojom.h"
 #include "media/mojo/mojom/audio_stream_factory.mojom.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
-#include "services/audio/buildflags.h"
 #include "services/audio/concurrent_stream_metric_reporter.h"
 #include "services/audio/loopback_coordinator.h"
 
@@ -43,6 +44,7 @@ class InputStream;
 class LocalMuter;
 class LoopbackStream;
 class OutputStream;
+class AecdumpRecordingManager;
 
 // This class is used to provide the AudioStreamFactory interface. It will
 // typically be instantiated when needed and remain for the lifetime of the
@@ -50,7 +52,9 @@ class OutputStream;
 // created. |audio_manager| must outlive the factory.
 class StreamFactory final : public media::mojom::AudioStreamFactory {
  public:
-  explicit StreamFactory(media::AudioManager* audio_manager);
+  // If not nullptr, then |aecdump_recording_manager| must outlive the factory.
+  explicit StreamFactory(media::AudioManager* audio_manager,
+                         AecdumpRecordingManager* aecdump_recording_manager);
 
   StreamFactory(const StreamFactory&) = delete;
   StreamFactory& operator=(const StreamFactory&) = delete;
@@ -111,7 +115,11 @@ class StreamFactory final : public media::mojom::AudioStreamFactory {
 
   SEQUENCE_CHECKER(owning_sequence_);
 
-  media::AudioManager* const audio_manager_;
+  const raw_ptr<media::AudioManager> audio_manager_;
+
+  // Manages starting and stopping of diagnostic recordings of audio processing.
+  // May be nullptr.
+  const raw_ptr<AecdumpRecordingManager> aecdump_recording_manager_;
 
   mojo::ReceiverSet<media::mojom::AudioStreamFactory> receivers_;
 

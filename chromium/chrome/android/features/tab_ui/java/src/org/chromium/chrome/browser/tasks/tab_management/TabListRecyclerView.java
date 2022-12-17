@@ -51,11 +51,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+// Vivaldi
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.vivaldi.browser.common.VivaldiUtils;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
+import org.vivaldi.browser.tasks.tab_management.TabSwitcherView;
 
 /**
  * A custom RecyclerView implementation for the tab grid, to handle show/hide logic in class.
@@ -158,6 +160,9 @@ class TabListRecyclerView
     private TabListOnScrollListener mScrollListener;
     private RecyclerView.ItemAnimator mOriginalAnimator;
 
+    // Vivaldi
+    private int mCurrentTabViewInstance;
+
     /**
      * Basic constructor to use during inflation from xml.
      */
@@ -166,6 +171,9 @@ class TabListRecyclerView
 
         // Use this object in case there are multiple instances of this class.
         mResourceId = this.toString().hashCode();
+
+        // Vivaldi
+        mCurrentTabViewInstance = TabSwitcherView.CurrentTabViewInstance;
     }
 
     /**
@@ -643,5 +651,10 @@ class TabListRecyclerView
     @VisibleForTesting
     ImageView getShadowImageViewForTesting() {
         return mShadowImageView;
+    }
+
+    /** Vivaldi */
+    public int getCurrentTabViewInstance() {
+        return mCurrentTabViewInstance;
     }
 }

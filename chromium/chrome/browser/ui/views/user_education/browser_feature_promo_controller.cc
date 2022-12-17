@@ -4,6 +4,9 @@
 
 #include "chrome/browser/ui/views/user_education/browser_feature_promo_controller.h"
 
+#include <string>
+
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/user_education/help_bubble_factory_views.h"
@@ -11,9 +14,10 @@
 #include "chrome/grit/generated_resources.h"
 #include "ui/base/interaction/element_tracker.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/views/accessible_pane_view.h"
 #include "ui/views/interaction/element_tracker_views.h"
-#include "ui/views/style/platform_style.h"
 #include "ui/views/view.h"
+#include "ui/views/view_utils.h"
 
 BrowserFeaturePromoController::BrowserFeaturePromoController(
     BrowserView* browser_view,
@@ -86,14 +90,32 @@ std::u16string BrowserFeaturePromoController::GetDismissButtonText() const {
   return l10n_util::GetStringUTF16(IDS_PROMO_DISMISS_BUTTON);
 }
 
-bool BrowserFeaturePromoController::IsOkButtonLeading() const {
-  return views::PlatformStyle::kIsOkButtonLeading;
+std::u16string BrowserFeaturePromoController::GetTutorialScreenReaderHint()
+    const {
+  ui::Accelerator accelerator;
+  std::u16string accelerator_text;
+#if BUILDFLAG(IS_CHROMEOS)
+  // IDC_FOCUS_NEXT_PANE still reports as F6 on ChromeOS, but many ChromeOS
+  // devices do not have function keys. Therefore, instead prompt the other
+  // accelerator that does the same thing.
+  static const auto kAccelerator = IDC_FOCUS_INACTIVE_POPUP_FOR_ACCESSIBILITY;
+#else
+  static const auto kAccelerator = IDC_FOCUS_NEXT_PANE;
+#endif
+  if (browser_view_->GetAccelerator(kAccelerator, &accelerator)) {
+    accelerator_text = accelerator.GetShortcutText();
+  } else {
+    NOTREACHED();
+  }
+
+  return l10n_util::GetStringFUTF16(IDS_FOCUS_HELP_BUBBLE_TUTORIAL_DESCRIPTION,
+                                    accelerator_text);
 }
 
 std::u16string
 BrowserFeaturePromoController::GetFocusHelpBubbleScreenReaderHint(
     FeaturePromoSpecification::PromoType promo_type,
-    const ui::TrackedElement* anchor_element,
+    ui::TrackedElement* anchor_element,
     bool is_critical_promo) const {
   // No message is required as this is a background bubble with a
   // screen reader-specific prompt and will dismiss itself.
@@ -110,7 +132,10 @@ BrowserFeaturePromoController::GetFocusHelpBubbleScreenReaderHint(
 
   // Present the user with the full help bubble navigation shortcut.
   auto* const anchor_view = anchor_element->AsA<views::TrackedElementViews>();
-  if (anchor_view && anchor_view->view()->IsAccessibilityFocusable()) {
+  if (promo_type == FeaturePromoSpecification::PromoType::kTutorial ||
+      (anchor_view &&
+       (anchor_view->view()->IsAccessibilityFocusable() ||
+        views::IsViewClass<views::AccessiblePaneView>(anchor_view->view())))) {
     return l10n_util::GetStringFUTF16(IDS_FOCUS_HELP_BUBBLE_TOGGLE_DESCRIPTION,
                                       accelerator_text);
   }

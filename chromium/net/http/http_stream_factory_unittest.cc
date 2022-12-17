@@ -15,7 +15,6 @@
 
 #include "base/compiler_specific.h"
 #include "base/containers/contains.h"
-#include "base/cxx17_backports.h"
 #include "base/memory/ptr_util.h"
 #include "base/no_destructor.h"
 #include "base/run_loop.h"
@@ -77,23 +76,22 @@
 #include "net/test/gtest_util.h"
 #include "net/test/test_data_directory.h"
 #include "net/test/test_with_task_environment.h"
-#include "net/third_party/quiche/src/quic/core/quic_server_id.h"
-#include "net/third_party/quiche/src/quic/core/quic_utils.h"
-#include "net/third_party/quiche/src/quic/test_tools/crypto_test_utils.h"
-#include "net/third_party/quiche/src/quic/test_tools/mock_random.h"
-#include "net/third_party/quiche/src/quic/test_tools/quic_test_utils.h"
+#include "net/third_party/quiche/src/quiche/quic/core/quic_server_id.h"
+#include "net/third_party/quiche/src/quiche/quic/core/quic_utils.h"
+#include "net/third_party/quiche/src/quiche/quic/test_tools/crypto_test_utils.h"
+#include "net/third_party/quiche/src/quiche/quic/test_tools/mock_random.h"
+#include "net/third_party/quiche/src/quiche/quic/test_tools/quic_test_utils.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
+// This file can be included from net/http even though
+// it is in net/websockets because it doesn't
+// introduce any link dependency to net/websockets.
+#include "net/websockets/websocket_handshake_stream_base.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 #include "url/scheme_host_port.h"
 #include "url/url_constants.h"
-
-// This file can be included from net/http even though
-// it is in net/websockets because it doesn't
-// introduce any link dependency to net/websockets.
-#include "net/websockets/websocket_handshake_stream_base.h"
 
 using ::testing::Contains;
 using ::testing::ElementsAre;
@@ -129,8 +127,8 @@ class MockWebSocketHandshakeStream : public WebSocketHandshakeStreamBase {
   StreamType type() const { return type_; }
 
   // HttpStream methods
-  int InitializeStream(const HttpRequestInfo* request_info,
-                       bool can_send_early,
+  void RegisterRequest(const HttpRequestInfo* request_info) override {}
+  int InitializeStream(bool can_send_early,
                        RequestPriority priority,
                        const NetLogWithSource& net_log,
                        CompletionOnceCallback callback) override {
@@ -505,7 +503,7 @@ class CapturePreconnectsTransportSocketPool : public TransportClientSocketPool {
 using HttpStreamFactoryTest = TestWithTaskEnvironment;
 
 TEST_F(HttpStreamFactoryTest, PreconnectDirect) {
-  for (size_t i = 0; i < base::size(kTests); ++i) {
+  for (size_t i = 0; i < std::size(kTests); ++i) {
     SpdySessionDependencies session_deps(
         ConfiguredProxyResolutionService::CreateDirect());
     std::unique_ptr<HttpNetworkSession> session(
@@ -530,7 +528,7 @@ TEST_F(HttpStreamFactoryTest, PreconnectDirect) {
 }
 
 TEST_F(HttpStreamFactoryTest, PreconnectHttpProxy) {
-  for (size_t i = 0; i < base::size(kTests); ++i) {
+  for (size_t i = 0; i < std::size(kTests); ++i) {
     SpdySessionDependencies session_deps(
         ConfiguredProxyResolutionService::CreateFixed(
             "http_proxy", TRAFFIC_ANNOTATION_FOR_TESTS));
@@ -554,7 +552,7 @@ TEST_F(HttpStreamFactoryTest, PreconnectHttpProxy) {
 }
 
 TEST_F(HttpStreamFactoryTest, PreconnectSocksProxy) {
-  for (size_t i = 0; i < base::size(kTests); ++i) {
+  for (size_t i = 0; i < std::size(kTests); ++i) {
     SpdySessionDependencies session_deps(
         ConfiguredProxyResolutionService::CreateFixed(
             "socks4://socks_proxy:1080", TRAFFIC_ANNOTATION_FOR_TESTS));
@@ -578,7 +576,7 @@ TEST_F(HttpStreamFactoryTest, PreconnectSocksProxy) {
 }
 
 TEST_F(HttpStreamFactoryTest, PreconnectDirectWithExistingSpdySession) {
-  for (size_t i = 0; i < base::size(kTests); ++i) {
+  for (size_t i = 0; i < std::size(kTests); ++i) {
     SpdySessionDependencies session_deps(
         ConfiguredProxyResolutionService::CreateDirect());
     std::unique_ptr<HttpNetworkSession> session(
@@ -2753,10 +2751,10 @@ TEST_F(HttpStreamFactoryTest, ChangeSocketTag) {
   // Verify attempting to use the first stream fails because the session's
   // socket tag has since changed.
   TestCompletionCallback callback1;
-  EXPECT_EQ(ERR_FAILED,
-            waiter1.stream()->InitializeStream(
-                &request_info1, /* can_send_early = */ false, DEFAULT_PRIORITY,
-                NetLogWithSource(), callback1.callback()));
+  waiter1.stream()->RegisterRequest(&request_info1);
+  EXPECT_EQ(ERR_FAILED, waiter1.stream()->InitializeStream(
+                            /* can_send_early = */ false, DEFAULT_PRIORITY,
+                            NetLogWithSource(), callback1.callback()));
 
   // Verify the socket tag can be changed, this time using an IP alias
   // (different host, same IP).
@@ -2787,10 +2785,10 @@ TEST_F(HttpStreamFactoryTest, ChangeSocketTag) {
   // Initialize the third stream, thus marking the session active, so it cannot
   // have its socket tag changed.
   TestCompletionCallback callback3;
-  EXPECT_EQ(OK,
-            waiter3.stream()->InitializeStream(
-                &request_info3, /* can_send_early = */ false, DEFAULT_PRIORITY,
-                NetLogWithSource(), callback3.callback()));
+  waiter3.stream()->RegisterRequest(&request_info3);
+  EXPECT_EQ(OK, waiter3.stream()->InitializeStream(
+                    /* can_send_early = */ false, DEFAULT_PRIORITY,
+                    NetLogWithSource(), callback3.callback()));
 
   // Verify a new session is created when a request with a different tag is
   // started.
@@ -2910,10 +2908,10 @@ TEST_F(HttpStreamFactoryTest, ChangeSocketTagAvoidOverwrite) {
   // Initialize the first stream, thus marking the session active, so it cannot
   // have its socket tag changed and be reused for the second session.
   TestCompletionCallback callback1;
-  EXPECT_EQ(OK,
-            waiter1.stream()->InitializeStream(
-                &request_info1, /* can_send_early = */ false, DEFAULT_PRIORITY,
-                NetLogWithSource(), callback1.callback()));
+  waiter1.stream()->RegisterRequest(&request_info1);
+  EXPECT_EQ(OK, waiter1.stream()->InitializeStream(
+                    /* can_send_early = */ false, DEFAULT_PRIORITY,
+                    NetLogWithSource(), callback1.callback()));
 
   // Create a second stream with a new tag.
   StreamRequestWaiter waiter2;
@@ -2946,10 +2944,10 @@ TEST_F(HttpStreamFactoryTest, ChangeSocketTagAvoidOverwrite) {
   // Initialize the second stream, thus marking the session active, so it cannot
   // have its socket tag changed and be reused for the third session.
   TestCompletionCallback callback2;
-  EXPECT_EQ(OK,
-            waiter2.stream()->InitializeStream(
-                &request_info2, /* can_send_early = */ false, DEFAULT_PRIORITY,
-                NetLogWithSource(), callback2.callback()));
+  waiter2.stream()->RegisterRequest(&request_info2);
+  EXPECT_EQ(OK, waiter2.stream()->InitializeStream(
+                    /* can_send_early = */ false, DEFAULT_PRIORITY,
+                    NetLogWithSource(), callback2.callback()));
 
   // Release first stream so first session can be retagged for third request.
   waiter1.stream()->Close(/* not_reusable = */ true);

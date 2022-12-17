@@ -72,7 +72,7 @@ class ExtensionTabUtil {
     std::unique_ptr<bool> pinned;
     std::unique_ptr<int> index;
     std::unique_ptr<ui::PageTransition> transition;
-    std::unique_ptr<std::string> ext_data;
+    std::unique_ptr<std::string> viv_ext_data;
   };
 
   // Platform specific delegate.
@@ -208,6 +208,12 @@ class ExtensionTabUtil {
   static std::vector<content::WebContents*> GetAllActiveWebContentsForContext(
       content::BrowserContext* browser_context,
       bool include_incognito);
+
+  // Determines if the |web_contents| is in |browser_context| or it's OTR
+  // BrowserContext if |include_incognito| is true.
+  static bool IsWebContentsInContext(content::WebContents* web_contents,
+                                     content::BrowserContext* browser_context,
+                                     bool include_incognito);
 
   // Takes |url_string| and returns a GURL which is either valid and absolute
   // or invalid. If |url_string| is not directly interpretable as a valid (it is

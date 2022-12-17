@@ -6,9 +6,7 @@
 
 #include <unicode/uscript.h>
 
-#include "base/cxx17_backports.h"
 #include "base/test/bind.h"
-#include "base/test/task_environment.h"
 #include "build/build_config.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -19,6 +17,7 @@
 #include "third_party/blink/renderer/platform/fonts/shaping/shape_result_spacing.h"
 #include "third_party/blink/renderer/platform/fonts/shaping/shape_result_test_info.h"
 #include "third_party/blink/renderer/platform/fonts/shaping/shape_result_view.h"
+#include "third_party/blink/renderer/platform/testing/font_test_base.h"
 #include "third_party/blink/renderer/platform/testing/font_test_helpers.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 #include "third_party/blink/renderer/platform/text/text_break_iterator.h"
@@ -87,7 +86,7 @@ String CreateStringOf(UChar ch, unsigned length) {
 
 }  // namespace
 
-class HarfBuzzShaperTest : public testing::Test {
+class HarfBuzzShaperTest : public FontTestBase {
  protected:
   void SetUp() override {
     font_description.SetComputedSize(12.0);
@@ -147,7 +146,6 @@ class HarfBuzzShaperTest : public testing::Test {
     return result;
   }
 
-  base::test::TaskEnvironment task_environment_;
   FontCachePurgePreventer font_cache_purge_preventer;
   FontDescription font_description;
   Font font;
@@ -695,7 +693,7 @@ TEST_P(ShapeParameterTest, ZeroWidthSpace) {
                     0x0648,
                     kZeroWidthSpaceCharacter,
                     kZeroWidthSpaceCharacter};
-  const unsigned length = base::size(string);
+  const unsigned length = std::size(string);
   HarfBuzzShaper shaper(String(string, length));
   scoped_refptr<ShapeResult> result = ShapeWithParameter(&shaper);
   EXPECT_EQ(0u, result->StartIndex());
@@ -925,7 +923,7 @@ TEST_F(HarfBuzzShaperTest, EmojiZWJSequence) {
   TextDirection direction = TextDirection::kLtr;
 
   HarfBuzzShaper shaper(
-      String(emoji_zwj_sequence, base::size(emoji_zwj_sequence)));
+      String(emoji_zwj_sequence, std::size(emoji_zwj_sequence)));
   scoped_refptr<ShapeResult> result = shaper.Shape(&font, direction);
 }
 
@@ -1899,7 +1897,7 @@ TEST_F(HarfBuzzShaperTest, EmojiPercentage) {
   Font emoji_font = CreateNotoColorEmoji();
   scoped_refptr<ShapeResult> result =
       shaper.Shape(&emoji_font, TextDirection::kLtr);
-  CHECK_EQ(num_calls, base::size(expectations));
+  CHECK_EQ(num_calls, std::size(expectations));
 }
 
 // https://crbug.com/1255482

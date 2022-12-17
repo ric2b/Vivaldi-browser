@@ -10,6 +10,7 @@
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
+#include "components/autofill_assistant/browser/metrics.h"
 #include "components/autofill_assistant/browser/service.pb.h"
 #include "components/autofill_assistant/browser/switches.h"
 #include "components/client_update_protocol/ecdsa.h"
@@ -19,8 +20,8 @@ namespace {
 // This is an ECDSA prime256v1 named-curve key.
 constexpr int kKeyVersion = 11;
 constexpr char kKeyPubBytesBase64[] =
-    "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEgH30WRJf4g6I2C1FKsBQF3qHANLw"
-    "thwYsNt2PWTDQBS0ufSRE83piOPoJQcePzTkMfbghjnZerDjLJhBsDkfFg==";
+    "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEK2TXDqsaUceOfIJldE1T+RENfPZk848Se+"
+    "8ODrfNFfIW4CK5qwgoCdE2xbJPkgivLHNnm1nk6LQM7mP6FgsOGg==";
 
 absl::optional<std::string> GetKey(const std::string& key_bytes_base64) {
   std::string result;
@@ -127,6 +128,8 @@ absl::optional<std::string> CUPImpl::UnpackGetActionsResponse(
   autofill_assistant::ActionsResponseProto actions_response;
   if (!actions_response.ParseFromString(original_response)) {
     LOG(ERROR) << "Failed to parse server response";
+    Metrics::RecordCupRpcVerificationEvent(
+        Metrics::CupRpcVerificationEvent::PARSING_FAILED);
     return absl::nullopt;
   }
 
@@ -134,9 +137,13 @@ absl::optional<std::string> CUPImpl::UnpackGetActionsResponse(
   if (!query_signer_->ValidateResponse(
           serialized_response, actions_response.cup_data().ecdsa_signature())) {
     LOG(ERROR) << "CUP RPC response verification failed";
+    Metrics::RecordCupRpcVerificationEvent(
+        Metrics::CupRpcVerificationEvent::VERIFICATION_FAILED);
     return absl::nullopt;
   }
 
+  Metrics::RecordCupRpcVerificationEvent(
+      Metrics::CupRpcVerificationEvent::VERIFICATION_SUCCEEDED);
   return serialized_response;
 }
 

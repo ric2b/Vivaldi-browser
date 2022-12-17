@@ -25,9 +25,11 @@
 
 #include "third_party/blink/renderer/core/script/pending_script.h"
 
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/mojom/script/script_type.mojom-shared.h"
 #include "third_party/blink/public/mojom/web_feature/web_feature.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/document_parser_timing.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
@@ -36,6 +38,8 @@
 #include "third_party/blink/renderer/core/script/script_element_base.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/scheduler/public/frame_scheduler.h"
+#include "third_party/blink/renderer/platform/scheduler/public/task_attribution_tracker.h"
+#include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
 
 namespace blink {
 
@@ -136,7 +140,8 @@ void PendingScript::ExecuteScriptBlock(const KURL& document_url) {
     return;
   }
 
-  if (!To<LocalDOMWindow>(context)->GetFrame()) {
+  LocalFrame* frame = To<LocalDOMWindow>(context)->GetFrame();
+  if (!frame) {
     Dispose();
     return;
   }
@@ -152,6 +157,17 @@ void PendingScript::ExecuteScriptBlock(const KURL& document_url) {
     // the same context Document).
     Dispose();
     return;
+  }
+
+  std::unique_ptr<scheduler::TaskAttributionTracker::TaskScope>
+      task_attribution_scope;
+  if (ScriptState* script_state = ToScriptStateForMainWorld(frame)) {
+    DCHECK(ThreadScheduler::Current());
+    if (auto* tracker =
+            ThreadScheduler::Current()->GetTaskAttributionTracker()) {
+      task_attribution_scope =
+          tracker->CreateTaskScope(script_state, absl::nullopt);
+    }
   }
 
   Script* script = GetSource(document_url);
@@ -184,6 +200,12 @@ void PendingScript::ExecuteScriptBlockInternal(
   Document& element_document = element->GetDocument();
   Document* context_document =
       To<LocalDOMWindow>(element_document.GetExecutionContext())->document();
+
+  // Unblock rendering on scriptElement.
+  if (element_document.GetRenderBlockingResourceManager()) {
+    element_document.GetRenderBlockingResourceManager()->RemovePendingScript(
+        *element);
+  }
 
   // <spec step="2">If the script's script is null, fire an event named error at
   // the element, and return.</spec>

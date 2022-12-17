@@ -9,6 +9,7 @@ import {ListSelectionModel} from 'chrome://resources/js/cr/ui/list_selection_mod
 import {ListSingleSelectionModel} from 'chrome://resources/js/cr/ui/list_single_selection_model.m.js';
 
 import {AsyncUtil} from '../../common/js/async_util.js';
+import {GuestOsPlaceholder} from '../../common/js/files_app_entry_types.js';
 import {metrics} from '../../common/js/metrics.js';
 import {util} from '../../common/js/util.js';
 import {VolumeManagerCommon} from '../../common/js/volume_manager_types.js';
@@ -19,7 +20,7 @@ import {VolumeInfo} from '../../externs/volume_info.js';
 import {VolumeManager} from '../../externs/volume_manager.js';
 
 import {constants} from './constants.js';
-import {ContentScanner, CrostiniMounter, DirectoryContents, DirectoryContentScanner, DriveMetadataSearchContentScanner, DriveSearchContentScanner, FileFilter, FileListContext, LocalSearchContentScanner, MediaViewContentScanner, RecentContentScanner} from './directory_contents.js';
+import {ContentScanner, CrostiniMounter, DirectoryContents, DirectoryContentScanner, DriveMetadataSearchContentScanner, DriveSearchContentScanner, FileFilter, FileListContext, GuestOsMounter, LocalSearchContentScanner, MediaViewContentScanner, RecentContentScanner} from './directory_contents.js';
 import {FileListModel} from './file_list_model.js';
 import {FileWatcher} from './file_watcher.js';
 import {MetadataModel} from './metadata/metadata_model.js';
@@ -360,7 +361,7 @@ export class DirectoryModel extends EventTarget {
             this.partialUpdate_(result.entries, deletedFileUrls);
           })
           .catch(error => {
-            console.error(
+            console.warn(
                 'Error in proceeding the changed event.', error,
                 'Fallback to force-refresh');
             this.rescanAggregator_.run();
@@ -663,6 +664,10 @@ export class DirectoryModel extends EventTarget {
 
     // Retrieve metadata information for the newly selected directory.
     const currentEntry = this.currentDirContents_.getDirectoryEntry();
+    if (this.volumeManager_.getLocationInfo(assert(currentEntry))
+            .isDriveBased) {
+      chrome.fileManagerPrivate.pollDriveHostedFilePinStates();
+    }
     if (currentEntry && !util.isFakeEntry(assert(currentEntry))) {
       this.metadataModel_.get(
           [currentEntry],
@@ -809,7 +814,9 @@ export class DirectoryModel extends EventTarget {
         return;
       }
 
-      // Do not rescan for crostini errors.
+      // Do not rescan for Guest OS (including Crostini) errors.
+      // TODO(crbug/1293229): Guest OS currently reuses the Crostini error
+      // string, but once it gets its own strings this needs to include both.
       if (event.error.name === constants.CROSTINI_CONNECT_ERR) {
         return;
       }
@@ -928,7 +935,7 @@ export class DirectoryModel extends EventTarget {
 
           this.partialUpdate_(entriesToAdd, []);
         } catch (error) {
-          console.error(error.stack || error);
+          console.warn(error.stack || error);
         }
         break;
 
@@ -1305,7 +1312,12 @@ export class DirectoryModel extends EventTarget {
          event.added[0].source === VolumeManagerCommon.Source.FILE) ||
         (event.added[0].volumeType ===
              VolumeManagerCommon.VolumeType.CROSTINI &&
-         this.getCurrentRootType() === VolumeManagerCommon.RootType.CROSTINI)) {
+         this.getCurrentRootType() === VolumeManagerCommon.RootType.CROSTINI) ||
+        // TODO(crbug/1293229): Don't redirect if the user is looking at a
+        // different Guest OS folder.
+        (event.added[0].volumeType ===
+             VolumeManagerCommon.VolumeType.GUEST_OS &&
+         this.getCurrentRootType() === VolumeManagerCommon.RootType.GUEST_OS)) {
       // Resolving a display root on FSP volumes is instant, despite the
       // asynchronous call.
       event.added[0].resolveDisplayRoot().then((displayRoot) => {
@@ -1409,6 +1421,12 @@ export class DirectoryModel extends EventTarget {
     if (entry.rootType == VolumeManagerCommon.RootType.CROSTINI) {
       return () => {
         return new CrostiniMounter();
+      };
+    }
+    if (entry.rootType == VolumeManagerCommon.RootType.GUEST_OS) {
+      return () => {
+        const placeholder = /** @type {!GuestOsPlaceholder} */ (entry);
+        return new GuestOsMounter(placeholder.guest_id);
       };
     }
     if (entry.rootType == VolumeManagerCommon.RootType.MY_FILES) {

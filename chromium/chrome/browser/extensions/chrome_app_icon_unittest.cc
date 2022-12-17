@@ -23,6 +23,7 @@
 #include "extensions/common/constants.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/image/image_skia_operations.h"
+#include "ui/gfx/image/image_skia_rep.h"
 #include "ui/gfx/image/image_unittest_util.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -305,7 +306,9 @@ TEST_F(ChromeAppIconTest, ChromeBadging) {
   // Opts out the Play Store. Badge should be gone and icon image is the same
   // as it was before badging.
   arc::SetArcPlayStoreEnabledForProfile(profile(), false);
-  EXPECT_EQ(3U, reference_icon.icon_update_count());
+  // Wait for the asynchronous ArcAppListPrefs::RemoveAllAppsAndPackages to be
+  // called.
+  arc_test.WaitForRemoveAllApps();
   EXPECT_TRUE(AreEqual(reference_icon.image_skia(), image_before_badging));
 }
 

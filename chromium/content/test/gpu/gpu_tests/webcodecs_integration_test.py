@@ -45,6 +45,15 @@ class WebCodecsIntegrationTest(gpu_integration_test.GpuIntegrationTest):
           source_type
       }))
 
+    yield ('WebCodecs_WebRTCPeerConnection_Window',
+           'webrtc-peer-connection.html', ({
+               'use_worker': False
+           }))
+    yield ('WebCodecs_WebRTCPeerConnection_Worker',
+           'webrtc-peer-connection.html', ({
+               'use_worker': True
+           }))
+
     for codec in codecs:
       yield ('WebCodecs_EncodeDecode_' + codec, 'encode-decode.html', ({
           'codec':
@@ -68,7 +77,8 @@ class WebCodecsIntegrationTest(gpu_integration_test.GpuIntegrationTest):
       for acc in accelerations:
         for bitrate_mode in ['constant', 'variable']:
           for latency_mode in ['realtime', 'quality']:
-            args = ('offscreen', codec, acc, bitrate_mode, latency_mode)
+            source_type = 'offscreen'
+            args = (source_type, codec, acc, bitrate_mode, latency_mode)
             yield ('WebCodecs_EncodingModes_%s_%s_%s_%s_%s' % args,
                    'encoding-modes.html', ({
                        'source_type': source_type,

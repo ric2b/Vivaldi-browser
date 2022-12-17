@@ -21,17 +21,21 @@
 <translation id="3377025655491224618">Privater Tab</translation>
 <translation id="3504699618187058974">Tabs gruppieren</translation>
 <translation id="3518985090088779359">Akzeptieren &amp; weiter</translation>
+<translation id="3571177741182643350">Ungelesene Artikel - Offline verfügbar:</translation>
 <translation id="3700829948786686853">Willkommen bei Vivaldi</translation>
 <translation id="3719826155360621982">Gehe zur Startseite</translation>
 <translation id="385051799172605136">Zurück</translation>
+<translation id="399014816462153200">Artikel lesen:</translation>
 <translation id="4121750346708795461">Durch die Verwendung dieser App stimmen Sie den <ph name="BEGIN_LINK1" />Nutzungsbedingungen<ph name="END_LINK1" /> und der <ph name="BEGIN_LINK2" />Datenschutzerklärung<ph name="END_LINK2" /> von Vivaldi zu.</translation>
 <translation id="4137746084635924146">Aktuelle Gerätesprache</translation>
+<translation id="4167670741834902166">Neuer privater Tab</translation>
 <translation id="4243710787042215766">Im privaten Tab öffnen</translation>
 <translation id="4526803704855831732">Private Tabs</translation>
 <translation id="4759238208242260848">Downloads</translation>
 <translation id="4883379392681899581">Privatmodus verlassen</translation>
 <translation id="4943872375798546930">Keine Ergebnisse</translation>
 <translation id="49576331685473090">Inhalte blockieren</translation>
+<translation id="5079259810715830221">Wenn eine Google-Website darum bittet, Links auf ihrer Seite privat vorab zu laden, verschlüsselt und lädt Vivaldi Seiten über Google-Server ohne Cookies vor. Dies verbirgt Ihre Identität vor der vorinstallierten Website.</translation>
 <translation id="5118676864324397542"><ph name="APP_NAME" />-Speicher</translation>
 <translation id="5186185447130319458">Privat</translation>
 <translation id="5233638681132016545">Neuer Tab</translation>
@@ -44,6 +48,7 @@ Ihren Suchbegriff können Sie anpassen, wenn Sie die Suche erweitern. Um einen S
 <translation id="6585139692466700358">Übersetzung von Seiten in andere Sprachen mit Hilfe des Vivaldi-Übersetzungsdienstes anbieten</translation>
 <translation id="6593061639179217415">Desktopwebsite</translation>
 <translation id="6610147964972079463">Private Tabs schließen</translation>
+<translation id="7029995644714925509">Wenn eine Website darum bittet, Links auf ihrer Seite privat vorab zu laden, verschlüsselt und lädt Vivaldi Seiten über Google-Server ohne Cookies vor. Dies verbirgt Ihre Identität vor der vorinstallierten Website.</translation>
 <translation id="706339621163631076">Vivaldi-Datenschutzerklärung</translation>
 <translation id="732145680195464316">Lesezeichen in <ph name="PRODUCT_NAME" /> gespeichert</translation>
 <translation id="7427132068601343474">Über Vivaldi</translation>

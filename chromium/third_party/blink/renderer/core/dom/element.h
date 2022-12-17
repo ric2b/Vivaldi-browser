@@ -46,11 +46,11 @@
 #include "third_party/blink/renderer/core/dom/whitespace_attacher.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/trustedtypes/trusted_types_util.h"
+#include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_map.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/region_capture_crop_id.h"
 #include "third_party/blink/renderer/platform/text/text_direction.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
-#include "third_party/blink/renderer/platform/wtf/hash_set.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string_table.h"
 #include "ui/gfx/geometry/rect_f.h"
@@ -58,7 +58,7 @@
 namespace gfx {
 class QuadF;
 class Vector2dF;
-}
+}  // namespace gfx
 
 namespace blink {
 
@@ -86,6 +86,7 @@ class ExceptionState;
 class FocusOptions;
 class GetInnerHTMLOptions;
 class HTMLFieldSetElement;
+class HTMLSelectMenuElement;
 class HTMLTemplateElement;
 class Image;
 class InputDeviceCapabilities;
@@ -93,6 +94,7 @@ class Locale;
 class MutableCSSPropertyValueSet;
 class NamedNodeMap;
 class PointerLockOptions;
+class PopupData;
 class PseudoElement;
 class ResizeObservation;
 class ResizeObserver;
@@ -153,6 +155,16 @@ enum class NamedItemType {
   kNameOrIdWithName,
 };
 
+enum class PopupValueType {
+  kNone,
+  kPopup,
+  kHint,
+  kAsync,
+};
+constexpr const char* kPopupTypeValuePopup = "popup";
+constexpr const char* kPopupTypeValueHint = "hint";
+constexpr const char* kPopupTypeValueAsync = "async";
+
 typedef HeapVector<Member<Attr>> AttrNodeList;
 
 typedef HashMap<AtomicString, SpecificTrustedType> AttrNameToTrustedType;
@@ -172,7 +184,6 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   DEFINE_ATTRIBUTE_EVENT_LISTENER(beforecut, kBeforecut)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(beforepaste, kBeforepaste)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(search, kSearch)
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(beforematch, kBeforematch)
 
   bool hasAttribute(const QualifiedName&) const;
   const AtomicString& getAttribute(const QualifiedName&) const;
@@ -299,7 +310,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   //   https://dom.spec.whatwg.org/#concept-element-attributes-get-by-name
   AtomicString LowercaseIfNecessary(AtomicString) const;
   WTF::AtomicStringTable::WeakResult WeakLowercaseIfNecessary(
-      const StringView&) const;
+      const AtomicString&) const;
 
   // NoncedElement implementation: this is only used by HTMLElement and
   // SVGElement, but putting the implementation here allows us to use
@@ -443,7 +454,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   virtual const CSSPropertyValueSet* AdditionalPresentationAttributeStyle() {
     return nullptr;
   }
-  void InvalidateStyleAttribute();
+  void InvalidateStyleAttribute(bool only_changed_independent_properties);
 
   const CSSPropertyValueSet* InlineStyle() const {
     return GetElementData() ? GetElementData()->inline_style_.Get() : nullptr;
@@ -524,6 +535,24 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   // While the owner document is parsed, this function is called after all
   // attributes in a start tag were added to the element.
   virtual void ParseAttribute(const AttributeModificationParams&);
+
+  // Popup API related functions.
+  void UpdatePopupAttribute(String);
+  bool HasValidPopupAttribute() const;
+  PopupData* GetPopupData() const;
+  bool popupOpen() const;
+  void showPopup();
+  void hidePopup();
+  static const Element* NearestOpenAncestralPopup(Node* start_node);
+  static void HandlePopupLightDismiss(const Event& event);
+  void InvokePopup(Element* invoker);
+  void SetPopupFocusOnShow();
+
+  // TODO(crbug.com/1197720): The popup position should be provided by the new
+  // anchored positioning scheme.
+  void SetNeedsRepositioningForSelectMenu(bool flag);
+  void SetOwnerSelectMenuElement(HTMLSelectMenuElement* element);
+  void AdjustPopupPositionForSelectMenu(ComputedStyle& style);
 
   virtual bool HasLegalLinkAttribute(const QualifiedName&) const;
   virtual const QualifiedName& SubResourceAttributeName() const;
@@ -692,6 +721,11 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   bool DelegatesFocus() const;
   Element* GetFocusableArea() const;
   Element* GetAutofocusDelegate() const;
+  // Element focus function called through IDL (i.e. element.focus() in JS)
+  void focusForBindings();
+  void focusForBindings(const FocusOptions*);
+  // Element focus function called from outside IDL (user focus,
+  // accessibility, etc...)
   virtual void focus(const FocusParams&);
   void focus();
   void focus(const FocusOptions*);
@@ -1042,8 +1076,20 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
 
   bool AffectedByNonSubjectHas() const;
   void SetAffectedByNonSubjectHas();
-  bool AncestorsAffectedByHas() const;
-  void SetAncestorsAffectedByHas();
+  bool AncestorsOrAncestorSiblingsAffectedByHas() const;
+  void SetAncestorsOrAncestorSiblingsAffectedByHas();
+  bool SiblingsAffectedByHas() const;
+  void SetSiblingsAffectedByHas();
+  bool AffectedByPseudoInHas() const;
+  void SetAffectedByPseudoInHas();
+  bool AncestorsOrSiblingsAffectedByHoverInHas() const;
+  void SetAncestorsOrSiblingsAffectedByHoverInHas();
+  bool AncestorsOrSiblingsAffectedByActiveInHas() const;
+  void SetAncestorsOrSiblingsAffectedByActiveInHas();
+  bool AncestorsOrSiblingsAffectedByFocusInHas() const;
+  void SetAncestorsOrSiblingsAffectedByFocusInHas();
+  bool AncestorsOrSiblingsAffectedByFocusVisibleInHas() const;
+  void SetAncestorsOrSiblingsAffectedByFocusVisibleInHas();
 
   void SaveIntrinsicSize(ResizeObserverSize* size);
   const ResizeObserverSize* LastIntrinsicSize() const;
@@ -1241,6 +1287,13 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
     kRebuildLayoutTree,
     kAttachLayoutTree,
   };
+
+  // Retrieves the element pointed to by this element's 'anchor' content
+  // attribute, if that element exists.
+  Element* anchorElement() const;
+
+  // Special focus handling for popups.
+  Element* GetPopupFocusableArea(bool autofocus_only) const;
 
   void UpdateFirstLetterPseudoElement(StyleUpdatePhase,
                                       const StyleRecalcContext&);

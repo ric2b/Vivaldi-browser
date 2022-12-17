@@ -54,7 +54,7 @@ class TabContentManager::TabReadbackRequest {
  public:
   TabReadbackRequest(content::RenderWidgetHostView* rwhv,
                      float thumbnail_scale,
-                     float aspect_ratio,
+                     double aspect_ratio,
                      bool crop_to_match_aspect_ratio,
                      TabReadbackCallback end_callback)
       : thumbnail_scale_(thumbnail_scale),
@@ -127,7 +127,7 @@ TabContentManager::TabContentManager(JNIEnv* env,
                                      jint write_queue_max_size,
                                      jboolean use_approximation_thumbnail,
                                      jboolean save_jpeg_thumbnails,
-                                     jfloat jpeg_aspect_ratio)
+                                     jdouble jpeg_aspect_ratio)
     : weak_java_tab_content_manager_(env, obj) {
   thumbnail_cache_ = std::make_unique<ThumbnailCache>(
       static_cast<size_t>(default_cache_size),
@@ -255,8 +255,8 @@ void TabContentManager::CaptureThumbnail(
     const JavaParamRef<jobject>& obj,
     const JavaParamRef<jobject>& tab,
     jfloat thumbnail_scale,
-    jfloat aspect_ratio,
     jboolean write_to_cache,
+    jdouble aspect_ratio,
     const base::android::JavaParamRef<jobject>& j_callback) {
   TabAndroid* tab_android = TabAndroid::GetNativeTab(env, tab);
   DCHECK(tab_android);
@@ -286,7 +286,7 @@ void TabContentManager::CacheTabWithBitmap(JNIEnv* env,
                                            const JavaParamRef<jobject>& tab,
                                            const JavaParamRef<jobject>& bitmap,
                                            jfloat thumbnail_scale,
-                                           jfloat aspect_ratio) {
+                                           jdouble aspect_ratio) {
   TabAndroid* tab_android = TabAndroid::GetNativeTab(env, tab);
   DCHECK(tab_android);
   int tab_id = tab_android->GetAndroidId();
@@ -342,10 +342,10 @@ void TabContentManager::GetEtc1TabThumbnail(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& obj,
     jint tab_id,
-    jfloat aspect_ratio,
+    jdouble aspect_ratio,
     const base::android::JavaParamRef<jobject>& j_callback) {
   thumbnail_cache_->DecompressThumbnailFromFile(
-      tab_id,
+      tab_id, aspect_ratio,
       base::BindOnce(&TabContentManager::SendThumbnailToJava,
                      weak_factory_.GetWeakPtr(),
                      base::android::ScopedJavaGlobalRef<jobject>(j_callback),
@@ -366,7 +366,7 @@ void TabContentManager::OnTabReadback(
     int tab_id,
     base::android::ScopedJavaGlobalRef<jobject> j_callback,
     bool write_to_cache,
-    float aspect_ratio,
+    double aspect_ratio,
     float thumbnail_scale,
     const SkBitmap& bitmap) {
   TabReadbackRequestMap::iterator readback_iter =
@@ -380,13 +380,13 @@ void TabContentManager::OnTabReadback(
   }
 
   if (write_to_cache && thumbnail_scale > 0 && !bitmap.empty())
-    thumbnail_cache_->Put(tab_id, bitmap, thumbnail_scale);
+    thumbnail_cache_->Put(tab_id, bitmap, thumbnail_scale, aspect_ratio);
 }
 
 void TabContentManager::SendThumbnailToJava(
     base::android::ScopedJavaGlobalRef<jobject> j_callback,
     bool need_downsampling,
-    float aspect_ratio,
+    double aspect_ratio,
     bool result,
     const SkBitmap& bitmap) {
   ScopedJavaLocalRef<jobject> j_bitmap;
@@ -397,6 +397,7 @@ void TabContentManager::SendThumbnailToJava(
     // portrait mode, or it would be shown in the wrong aspect ratio in
     // landscape mode.
     int scale = need_downsampling ? 2 : 1;
+
     int width = std::min(bitmap.width() / scale,
                          (int)(bitmap.height() * aspect_ratio / scale));
     int height = std::min(bitmap.height() / scale,
@@ -438,7 +439,7 @@ jlong JNI_TabContentManager_Init(JNIEnv* env,
                                  jint write_queue_max_size,
                                  jboolean use_approximation_thumbnail,
                                  jboolean save_jpeg_thumbnails,
-                                 jfloat jpeg_aspect_ratio) {
+                                 jdouble jpeg_aspect_ratio) {
   TabContentManager* manager = new TabContentManager(
       env, obj, default_cache_size, approximation_cache_size,
       compression_queue_max_size, write_queue_max_size,

@@ -39,6 +39,7 @@
 #include "third_party/blink/renderer/core/editing/position_with_affinity.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
+#include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/html/shadow/shadow_element_names.h"
 #include "third_party/blink/renderer/core/layout/hit_test_location.h"
 #include "third_party/blink/renderer/core/layout/layout_flow_thread.h"
@@ -2981,6 +2982,10 @@ void LayoutBlockFlow::AddChild(LayoutObject* new_child,
 
   if (ChildrenInline()) {
     if (child_is_block_level) {
+      if (GetDisplayLockContext() && IsShapingDeferred()) {
+        GetDisplayLockContext()->SetRequestedState(
+            EContentVisibility::kVisible);
+      }
       // Wrap the inline content in anonymous blocks, to allow for the new block
       // child to be inserted.
       MakeChildrenNonInline(before_child);
@@ -3012,8 +3017,6 @@ void LayoutBlockFlow::AddChild(LayoutObject* new_child,
     if (new_child->IsInline() && !new_child->IsLayoutNGOutsideListMarker()) {
       // No suitable existing anonymous box - create a new one.
       auto* new_block = To<LayoutBlockFlow>(CreateAnonymousBlock());
-      if (new_block->IsLayoutNGObject() && IsLayoutFlowThread())
-        new_block->SetIsAnonymousNGMulticolInlineWrapper();
       LayoutBox::AddChild(new_block, before_child);
       // Reparent adjacent floating or out-of-flow siblings to the new box.
       new_block->ReparentPrecedingFloatingOrOutOfFlowSiblings();
@@ -3048,15 +3051,6 @@ void LayoutBlockFlow::RemoveChild(LayoutObject* old_child) {
     LayoutBox::RemoveChild(old_child);
     return;
   }
-
-  // All children are removed from the flow thread automatically eventually (via
-  // WillBeRemovedFromTree()), but that's a bit too late for us. The code
-  // section right below here might merge and remove anonymous blocks, and there
-  // may be column spanners inside an inline in these anonymous blocks. If these
-  // move around without telling the flow thread right away, it will get
-  // confused and crash.
-  if (UNLIKELY(old_child->IsInsideFlowThread()))
-    old_child->RemoveFromLayoutFlowThread();
 
   // If this child is a block, and if our previous and next siblings are both
   // anonymous blocks with inline content, then we can go ahead and fold the
@@ -3286,10 +3280,15 @@ bool LayoutBlockFlow::MergeSiblingContiguousAnonymousBlock(
   // If the inlineness of children of the two block don't match, we'd need
   // special code here (but there should be no need for it).
   DCHECK_EQ(sibling_that_may_be_deleted->ChildrenInline(), ChildrenInline());
-  // Take all the children out of the |next| block and put them in
-  // the |prev| block.
+
+  // Take all the children out of the |next| block and put them in the |prev|
+  // block. If there are paint layers involved, or if we're part of a flow
+  // thread, we need to notify the layout tree about the movement.
+  bool full_remove_insert = sibling_that_may_be_deleted->HasLayer() ||
+                            HasLayer() ||
+                            sibling_that_may_be_deleted->IsInsideFlowThread();
   sibling_that_may_be_deleted->MoveAllChildrenIncludingFloatsTo(
-      this, sibling_that_may_be_deleted->HasLayer() || HasLayer());
+      this, full_remove_insert);
   // Delete the now-empty block's lines and nuke it.
   sibling_that_may_be_deleted->DeleteLineBoxTree();
   sibling_that_may_be_deleted->Destroy();
@@ -4115,10 +4114,17 @@ LayoutUnit LayoutBlockFlow::LogicalHeightWithVisibleOverflow() const {
 Node* LayoutBlockFlow::NodeForHitTest() const {
   NOT_DESTROYED();
   // If we are in the margins of block elements that are part of a
-  // continuation we're actually still inside the enclosing element
+  // block-in-inline we're actually still inside the enclosing element
   // that was split. Use the appropriate inner node.
-  return IsAnonymousBlockContinuation() ? Continuation()->NodeForHitTest()
-                                        : LayoutBlock::NodeForHitTest();
+  if (UNLIKELY(IsBlockInInline())) {
+    DCHECK(RuntimeEnabledFeatures::LayoutNGBlockInInlineEnabled());
+    DCHECK(Parent());
+    DCHECK(Parent()->IsLayoutInline());
+    return Parent()->NodeForHitTest();
+  }
+  if (UNLIKELY(IsAnonymousBlockContinuation()))
+    return Continuation()->NodeForHitTest();
+  return LayoutBlock::NodeForHitTest();
 }
 
 bool LayoutBlockFlow::HitTestChildren(HitTestResult& result,
@@ -4499,20 +4505,6 @@ void LayoutBlockFlow::CreateOrDestroyMultiColumnFlowThreadIfNeeded(
   DCHECK_EQ(flow_thread->Parent(), this);
 
   flow_thread->Populate();
-
-  if (auto* child = DynamicTo<LayoutNGBlockFlow>(flow_thread->FirstChild())) {
-    // Attempt to identify the anonymous inline wrapper that may have been
-    // created, if all multicol children are inline. The child insertion
-    // machinery (invoked above, when adding |flow_thread|) may already have
-    // inserted an anonymous block for other reasons (when the flow thread
-    // temporarily becomes a sibling of the actual DOM children), in which case
-    // we haven't tagged this anonymous wrapper properly. Do it now. This is
-    // important for OOF descendants, as this anonymous wrapper may act as their
-    // containing block, but that will only happen if it is tagged correctly;
-    // see LayoutObject::FindNonAnonymousContainingBlock().
-    if (child->IsAnonymousBlock() && !child->NextSibling())
-      child->SetIsAnonymousNGMulticolInlineWrapper();
-  }
 
   LayoutBlockFlowRareData& rare_data = EnsureRareData();
   DCHECK(!rare_data.multi_column_flow_thread_);
@@ -4936,6 +4928,11 @@ void LayoutBlockFlow::SetOffsetMapping(NGOffsetMapping* offset_mapping) {
   DCHECK(!IsLayoutNGObject());
   DCHECK(offset_mapping);
   EnsureRareData().offset_mapping_ = offset_mapping;
+}
+
+void LayoutBlockFlow::StopDeferringShaping() const {
+  if (HasNGInlineNodeData())
+    GetNGInlineNodeData()->StopDeferringShaping();
 }
 
 }  // namespace blink

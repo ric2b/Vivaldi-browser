@@ -85,7 +85,7 @@ void StartKioskSession() {
 // Starts the login/oobe screen.
 void StartLoginOobeSession() {
   // State will be defined once out-of-box/login branching is complete.
-  ShowLoginWizard(OobeScreen::SCREEN_UNKNOWN);
+  ShowLoginWizard(ash::OOBE_SCREEN_UNKNOWN);
 
   // Reset reboot after update flag when login screen is shown.
   policy::BrowserPolicyConnectorAsh* connector =
@@ -190,8 +190,14 @@ void OnRmaIsRequiredResponse() {
     case session_manager::SessionState::RMA:
       // Already in RMA, do nothing.
       break;
-    case session_manager::SessionState::OOBE:
-    case session_manager::SessionState::LOGIN_PRIMARY: {
+    // Restart Chrome and launch RMA from any session state as the user is
+    // expecting to be in RMA.
+    case session_manager::SessionState::ACTIVE:
+    case session_manager::SessionState::LOCKED:
+    case session_manager::SessionState::LOGGED_IN_NOT_ACTIVE:
+    case session_manager::SessionState::LOGIN_PRIMARY:
+    case session_manager::SessionState::LOGIN_SECONDARY:
+    case session_manager::SessionState::OOBE: {
       auto* existing_user_controller =
           ash::ExistingUserController::current_controller();
       if (!existing_user_controller ||
@@ -207,17 +213,7 @@ void OnRmaIsRequiredResponse() {
         ash::RestartChrome(command_line, ash::RestartChromeReason::kUserless);
         break;
       }
-
-      // If signin in progress, don't launch RMA and fall through to the
-      // logged in state cases.
-      ABSL_FALLTHROUGH_INTENDED;
     }
-    case session_manager::SessionState::LOGGED_IN_NOT_ACTIVE:
-    case session_manager::SessionState::ACTIVE:
-    case session_manager::SessionState::LOCKED:
-    case session_manager::SessionState::LOGIN_SECONDARY:
-      // TODO(gavinwill): Trigger a notification to open RMA app.
-      break;
   }
 }
 
@@ -246,20 +242,17 @@ void ChromeSessionManager::Initialize(
   }
 
   if (ash::shimless_rma::IsShimlessRmaAllowed()) {
-    // If the RMA state is detected later, OnRmaIsRequiredResponse() is invoked
-    // to reboot the device in RMA mode.
-    const bool was_rma_state_detected_now =
-        chromeos::RmadClient::Get()->WasRmaStateDetectedForSessionManager(
-            base::BindOnce(&OnRmaIsRequiredResponse));
-    const bool has_launch_rma_switch =
-        ash::shimless_rma::HasLaunchRmaSwitchAndIsAllowed();
-
     // If we should be in Shimless RMA, start it and skip the rest of
     // initialization.
-    if (has_launch_rma_switch || was_rma_state_detected_now) {
+    if (ash::shimless_rma::HasLaunchRmaSwitchAndIsAllowed()) {
       LaunchShimlessRma();
       return;
     }
+
+    // If the RMA state is detected later, OnRmaIsRequiredResponse() is invoked
+    // to append the kLaunchRma switch and restart Chrome in RMA mode.
+    chromeos::RmadClient::Get()->SetRmaRequiredCallbackForSessionManager(
+        base::BindOnce(&OnRmaIsRequiredResponse));
   }
 
   // Tests should be able to tune login manager before showing it. Thus only
@@ -290,14 +283,13 @@ void ChromeSessionManager::Initialize(
     return;
   }
 
-  if (parsed_command_line.HasSwitch(switches::kLoginManager) &&
-      (!is_running_test || force_login_screen_in_test)) {
-    VLOG(1) << "Starting Chrome with login/oobe screen.";
+  if (parsed_command_line.HasSwitch(switches::kLoginManager)) {
     oobe_configuration_->CheckConfiguration();
+    if (is_running_test && !force_login_screen_in_test)
+      return;
+    VLOG(1) << "Starting Chrome with login/oobe screen.";
     StartLoginOobeSession();
     return;
-  } else if (is_running_test) {
-    oobe_configuration_->CheckConfiguration();
   }
 
   VLOG(1) << "Starting Chrome with a user session.";

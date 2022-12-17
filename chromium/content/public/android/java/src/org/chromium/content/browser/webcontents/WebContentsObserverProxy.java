@@ -111,12 +111,12 @@ class WebContentsObserverProxy extends WebContentsObserver {
 
     @Override
     @CalledByNative
-    public void renderProcessGone(boolean wasOomProtected) {
+    public void renderProcessGone() {
         // Don't call handleObserverCall() and finishObserverCall() to explicitly allow a
         // WebContents to be destroyed while handling an this observer call. See
         // https://chromium-review.googlesource.com/c/chromium/src/+/2343269 for details
         for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
-            mObserversIterator.next().renderProcessGone(wasOomProtected);
+            mObserversIterator.next().renderProcessGone();
         }
     }
 
@@ -244,10 +244,10 @@ class WebContentsObserverProxy extends WebContentsObserver {
 
     @Override
     @CalledByNative
-    public void documentAvailableInMainFrame() {
+    public void primaryMainDocumentElementAvailable() {
         handleObserverCall();
         for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
-            mObserversIterator.next().documentAvailableInMainFrame();
+            mObserversIterator.next().primaryMainDocumentElementAvailable();
         }
         finishObserverCall();
     }
@@ -264,10 +264,12 @@ class WebContentsObserverProxy extends WebContentsObserver {
     public void didFinishLoad(GlobalRenderFrameHostId rfhId, GURL url, boolean isKnownValid,
             boolean isInPrimaryMainFrame, @LifecycleState int rfhLifecycleState) {
         handleObserverCall();
+        try { // Vivaldi: Catch potential exceptions here to avoid native crash. Ref. VAB-5600.
         for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
             mObserversIterator.next().didFinishLoad(
                     rfhId, url, isKnownValid, isInPrimaryMainFrame, rfhLifecycleState);
         }
+        } catch (Exception ignored) {}
         finishObserverCall();
     }
 

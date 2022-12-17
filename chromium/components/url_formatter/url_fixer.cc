@@ -585,7 +585,7 @@ GURL FixupURL(const std::string& text, const std::string& desired_tld) {
       return about_url;
   }
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   // NOTE(jarle): Android: this fixes https://bugs.vivaldi.com/browse/VB-60615
   bool vivaldi_url = false;
 #else

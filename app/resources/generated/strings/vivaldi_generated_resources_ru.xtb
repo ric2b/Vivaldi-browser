@@ -9,7 +9,6 @@
 <translation id="1054153489933238809">Открыть оригинальную &amp;картинку в новой вкладке</translation>
 <translation id="1056898198331236512">Внимание</translation>
 <translation id="1084824384139382525">Копировать &amp;адрес ссылки</translation>
-<translation id="1128109161498068552">Запретить сайтам доступ к устройствам MIDI с помощью системных сообщений</translation>
 <translation id="1163931534039071049">&amp;Просмотр кода фрейма</translation>
 <translation id="1165039591588034296">Ошибка</translation>
 <translation id="1175364870820465910">&amp;Печать...</translation>
@@ -22,7 +21,6 @@
 <translation id="1297175357211070620">Принтер</translation>
 <translation id="1303101771013849280">HTML-файл закладок</translation>
 <translation id="1430915738399379752">Печать</translation>
-<translation id="1433811987160647649">Спрашивать разрешение на доступ</translation>
 <translation id="1451375123200651445">Веб-страница, один файл</translation>
 <translation id="1465176863081977902">&amp;Копировать адрес аудио</translation>
 <translation id="1476607407192946488">&amp;Настройки языка</translation>
@@ -99,13 +97,11 @@
 <translation id="2783321960289401138">Создать ярлык...</translation>
 <translation id="2785873697295365461">Дескрипторы файлов</translation>
 <translation id="2809586584051668049">и ещё <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
-<translation id="2812989263793994277">Не показывать картинки</translation>
 <translation id="2850541429955027218">Добавить тему</translation>
 <translation id="2861941300086904918">Менеджер безопасности – Native Client</translation>
 <translation id="2881076733170862447">При нажатии на расширение</translation>
 <translation id="2889064240420137087">Открыть ссылку с помощью...</translation>
 <translation id="2902127500170292085">Расширение "<ph name="EXTENSION_NAME" />" не может установить связь с принтером. Убедитесь, что он подключён и повторите попытку.</translation>
-<translation id="2904456025988372123">Предупреждать о попытках автоматической загрузки файлов</translation>
 <translation id="2913331724188855103">Разрешить сайтам сохранять и читать файлы cookie (рекомендуется)</translation>
 <translation id="2931157624143513983">По области печати</translation>
 <translation id="2932085390869194046">Предложить пароль…</translation>
@@ -126,7 +122,6 @@
 <translation id="3127156390846601284">Все данные указанных сайтов будут удалены с устройства. Продолжить?</translation>
 <translation id="3129173833825111527">Левое поле</translation>
 <translation id="3144647712221361880">Открыть ссылку как</translation>
-<translation id="3154429428035006212">Не в сети больше месяца</translation>
 <translation id="3222066309010235055">Предварительная обработка: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Выберите корневой каталог упаковываемого расширения. Для обновления расширения также укажите закрытый ключ.</translation>
 <translation id="3280237271814976245">Сохранить &amp;как...</translation>
@@ -143,6 +138,7 @@
 <translation id="3360297538363969800">Печать не удалась. Проверьте принтер и повторите попытку.</translation>
 <translation id="3378572629723696641">Это расширение могло быть повреждено.</translation>
 <translation id="3387614642886316601">Расширенная проверка правописания</translation>
+<translation id="3393582007140394275">Не удается транслировать экран.</translation>
 <translation id="3432227430032737297">Удалить все видимые</translation>
 <translation id="345693547134384690">Открыть &amp;картинку в новой вкладке</translation>
 <translation id="3494769164076977169">Предупреждать о попытках автоматической загрузки файлов (рекомендуется)</translation>
@@ -165,7 +161,6 @@
 <translation id="3838085852053358637">Ошибка загрузки расширения</translation>
 <translation id="383891835335927981">Нет сайтов с изменённым масштабом</translation>
 <translation id="385051799172605136">Назад</translation>
-<translation id="3899879303189199559">Не в сети больше года</translation>
 <translation id="3905761538810670789">Восстановить приложение</translation>
 <translation id="3908501907586732282">Включить расширение</translation>
 <translation id="3909701002594999354">Показать все &amp;элементы управления</translation>
@@ -192,7 +187,6 @@
 <translation id="4200983522494130825">Новая &amp;вкладка</translation>
 <translation id="4225397296022057997">На всех сайтах</translation>
 <translation id="4256316378292851214">&amp;Сохранить видео как...</translation>
-<translation id="4278390842282768270">Разрешено</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> КБ (<ph name="NUM_KILOBYTES_LIVE" /> КБ активно)</translation>
 <translation id="4345587454538109430">Настройка...</translation>
 <translation id="4348766275249686434">Отслеживать ошибки</translation>
@@ -217,15 +211,15 @@
 <translation id="488785315393301722">Показать настройки</translation>
 <translation id="4907306957610201395">Категория разрешения</translation>
 <translation id="4912643508233590958">Переходы в активный режим</translation>
+<translation id="49265687513387605">Не удается транслировать экран. Убедитесь, что вы открыли доступ к нему.</translation>
 <translation id="4927753642311223124">Здесь ничего нет, проходите.</translation>
 <translation id="4930714375720679147">Включить</translation>
+<translation id="4961318399572185831">Трансляция экрана</translation>
 <translation id="4988526792673242964">Страницы</translation>
 <translation id="49896407730300355">Повернуть п&amp;ротив часовой стрелки</translation>
 <translation id="4989966318180235467">Инспектировать &amp;фоновую страницу</translation>
-<translation id="4994474651455208930">Разрешить запрашивать установку обработчиков протоколов для сайтов по умолчанию</translation>
 <translation id="5000922062037820727">Заблокировано (рекомендуется)</translation>
 <translation id="5027562294707732951">Установить</translation>
-<translation id="5036662165765606524">Запретить сайтам автоматическую загрузку файлов</translation>
 <translation id="5039804452771397117">Разрешить</translation>
 <translation id="5057110919553308744">При нажатии на расширение</translation>
 <translation id="5059526285558225588">Выберите часть экрана для демонстрации</translation>
@@ -238,7 +232,6 @@
 <translation id="5233231016133573565">ID процесса</translation>
 <translation id="5233736638227740678">&amp;Вставить</translation>
 <translation id="5256861893479663409">На всех сайтах</translation>
-<translation id="5265562206369321422">Не в сети больше недели</translation>
 <translation id="5269977353971873915">Печать не удалась</translation>
 <translation id="5284445933715251131">Продолжить загрузку</translation>
 <translation id="52912272896845572">Неверный файл закрытого ключа.</translation>
@@ -294,7 +287,6 @@
 <translation id="6122081475643980456">Расширение изменило настройки прокси</translation>
 <translation id="6147020289383635445">Произошла ошибка предварительного просмотра печати.</translation>
 <translation id="6156863943908443225">Кэш скрипта</translation>
-<translation id="6169666352732958425">Не удаётся транслировать рабочий стол.</translation>
 <translation id="6196854373336333322">Расширение "<ph name="EXTENSION_NAME" />" изменило настройки прокси. Теперь оно может отследить или изменить передаваемые вами данные, а также прервать интернет-соединение. Если вы не знали об этом, вам следует отключить расширение.</translation>
 <translation id="6200151268994853226">Настройки расширения</translation>
 <translation id="6206311232642889873">&amp;Копировать изображение</translation>
@@ -328,7 +320,6 @@
 <translation id="6798954102094737107">Плагин: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Сохранить изменения</translation>
 <translation id="6817174620439930047">Уведомлять меня о сайтах, пытающихся использовать системные сообщения для доступа к MIDI-устройствам (рекомендуется)</translation>
-<translation id="682123305478866682">Транслировать рабочий стол</translation>
 <translation id="6824564591481349393">&amp;Скопировать адрес электронной почты</translation>
 <translation id="6840155290835956714">Спрашивать разрешение перед отправкой</translation>
 <translation id="6886871292305414135">Открыть ссылку в новой &amp;вкладке</translation>
@@ -346,7 +337,6 @@
 <translation id="708060913198414444">&amp;Копировать адрес аудио</translation>
 <translation id="7175353351958621980">Загружено с:</translation>
 <translation id="7186088072322679094">Держать на панели</translation>
-<translation id="7270858098575133036">Уведомлять меня о сайтах, пытающихся использовать системные сообщения для доступа к MIDI-устройствам</translation>
 <translation id="7287143125007575591">Доступ запрещён.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7385854874724088939">При печати произошла ошибка. Проверьте состояние принтера и повторите попытку.</translation>
@@ -369,7 +359,6 @@
 <translation id="7704305437604973648">Задача</translation>
 <translation id="7710568461918838723">&amp;Трансляция...</translation>
 <translation id="7750228210027921155">Картинка в картинке</translation>
-<translation id="7751260505918304024">Показывать все</translation>
 <translation id="7760004034676677601">Это та страница, которую вы ожидали?</translation>
 <translation id="7771452384635174008">Раскладка</translation>
 <translation id="7782102568078991263">Подсказок от Google больше нет</translation>
@@ -382,9 +371,7 @@
 <translation id="7849264908733290972">Открыть &amp;картинку в новой вкладке</translation>
 <translation id="7857949311770343000">Установить новую вкладку по умолчанию?</translation>
 <translation id="786073089922909430">Сервис: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7885253890047913815">Недавние места назначения</translation>
 <translation id="7903925330883316394">Утилита: <ph name="UTILITY_TYPE" /></translation>
-<translation id="7938594894617528435">Сейчас не в сети</translation>
 <translation id="7947962633355574091">&amp;Копировать URL видео</translation>
 <translation id="7966241909927244760">&amp;Копировать адрес картинки</translation>
 <translation id="7973394300052703468">Новое &amp;приватное окно</translation>
@@ -426,10 +413,8 @@
 <translation id="8708000541097332489">Удалять при выходе</translation>
 <translation id="8714838604780058252">Фоновая графика</translation>
 <translation id="8725066075913043281">Повторить</translation>
-<translation id="8757090071857742562">Невозможно транслировать содержимое рабочего стола. Убедитесь, что вы открыли доступ к экрану.</translation>
 <translation id="8774934320277480003">Верхнее поле</translation>
 <translation id="8798099450830957504">По умолчанию</translation>
-<translation id="8800004011501252845">Поиск мест назначения для</translation>
 <translation id="8808478386290700967">Интернет-магазин</translation>
 <translation id="8823514049557262177">Копировать &amp;текст ссылки</translation>
 <translation id="8823704566850948458">Предложить пароль...</translation>
@@ -442,7 +427,6 @@
 <translation id="8962083179518285172">Скрыть настройки</translation>
 <translation id="8973557916016709913">Сбросить масштаб</translation>
 <translation id="897939795688207351"><ph name="ORIGIN" />: вкл</translation>
-<translation id="8996526648899750015">Добавить учётную запись...</translation>
 <translation id="9003647077635673607">Разрешить на всех сайтах</translation>
 <translation id="9027459031423301635">Открыть ссылку в новой &amp;вкладке</translation>
 <translation id="9056810968620647706">Ничего не найдено.</translation>

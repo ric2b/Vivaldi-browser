@@ -8,7 +8,10 @@
 #include <sstream>
 #include <utility>
 
+#include "ash/components/multidevice/logging/logging.h"
 #include "ash/services/secure_channel/background_eid_generator.h"
+#include "ash/services/secure_channel/ble_weave_packet_generator.h"
+#include "ash/services/secure_channel/ble_weave_packet_receiver.h"
 #include "ash/services/secure_channel/file_transfer_update_callback.h"
 #include "ash/services/secure_channel/public/mojom/secure_channel_types.mojom.h"
 #include "ash/services/secure_channel/wire_message.h"
@@ -20,15 +23,11 @@
 #include "base/task/task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/timer.h"
-#include "chromeos/components/multidevice/logging/logging.h"
 #include "device/bluetooth/bluetooth_gatt_connection.h"
 
 namespace ash::secure_channel::weave {
 
 namespace {
-
-// TODO(https://crbug.com/1164001): remove after the migration is finished.
-namespace mojom = ::chromeos::secure_channel::mojom;
 
 typedef BluetoothLowEnergyWeavePacketReceiver::State ReceiverState;
 

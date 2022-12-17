@@ -107,7 +107,11 @@ foreach(_target_config, CHROMIUM_VIVALDI_RESOURCE_LIST) {
       pakext = _flags.pak_file_extension
     }
     locale_prefix = ""
-    foreach (locale, vivaldi_pending_locales) {
+    extra_locales = []
+    if (!is_android && defined(_flags.add_mobile_locales) && _flags.add_mobile_locales) {
+      extra_locales = vivaldi_pending_mobile_locales
+    }
+    foreach (locale, vivaldi_pending_locales + extra_locales) {
       locale_prefix = ""
       locale_postfix = "$locale"
       if (defined(_flags.pak_file_locale_prefix)){

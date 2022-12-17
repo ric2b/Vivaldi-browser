@@ -5,6 +5,7 @@
 #include "content/browser/attribution_reporting/attribution_internals_ui.h"
 
 #include "content/browser/attribution_reporting/attribution_internals_handler_impl.h"
+#include "content/browser/attribution_reporting/attribution_manager_provider.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/grit/dev_ui_content_resources.h"
 #include "content/public/browser/render_frame_host.h"
@@ -45,17 +46,17 @@ AttributionInternalsUI::~AttributionInternalsUI() = default;
 void AttributionInternalsUI::WebUIRenderFrameCreated(RenderFrameHost* rfh) {
   // Enable the JavaScript Mojo bindings in the renderer process, so the JS
   // code can call the Mojo APIs exposed by this WebUI.
-  static_cast<RenderFrameHostImpl*>(rfh)->EnableMojoJsBindings();
+  rfh->EnableMojoJsBindings(nullptr);
 }
 
 void AttributionInternalsUI::BindInterface(
-    mojo::PendingReceiver<mojom::AttributionInternalsHandler> receiver) {
+    mojo::PendingReceiver<attribution_internals::mojom::Handler> receiver) {
   ui_handler_ = std::make_unique<AttributionInternalsHandlerImpl>(
       web_ui(), std::move(receiver));
 }
 
 void AttributionInternalsUI::SetAttributionManagerProviderForTesting(
-    std::unique_ptr<AttributionManager::Provider> manager_provider) {
+    std::unique_ptr<AttributionManagerProvider> manager_provider) {
   ui_handler_->SetAttributionManagerProviderForTesting(
       std::move(manager_provider));
 }

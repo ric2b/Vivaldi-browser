@@ -14,6 +14,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
@@ -26,6 +27,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/no_destructor.h"
+#include "base/observer_list.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -37,7 +39,6 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/accessibility/accessibility_labels_service.h"
 #include "chrome/browser/accessibility/accessibility_labels_service_factory.h"
-#include "chrome/browser/ash/account_manager/child_account_type_changed_user_data.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_features.h"
 #include "chrome/browser/browser_process.h"
@@ -66,6 +67,7 @@
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/signin/account_reconcilor_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/browser/signin/primary_account_policy_manager_factory.h"
 #include "chrome/browser/signin/signin_util.h"
 #include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
@@ -133,6 +135,8 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "components/browsing_data/core/pref_names.h"
+#include "components/keep_alive_registry/keep_alive_types.h"
+#include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "components/live_caption/live_caption_controller.h"
 #endif
 
@@ -142,6 +146,7 @@
 #include "ash/components/arc/session/arc_management_transition.h"
 #include "ash/constants/ash_switches.h"
 #include "chrome/browser/ash/account_manager/account_manager_policy_controller_factory.h"
+#include "chrome/browser/ash/account_manager/child_account_type_changed_user_data.h"
 #include "chrome/browser/ash/arc/policy/arc_policy_util.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/browser_process_platform_part_chromeos.h"
@@ -161,6 +166,7 @@
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "chrome/browser/lacros/account_manager/account_profile_mapper.h"
+#include "chromeos/lacros/lacros_service.h"
 #include "components/account_manager_core/chromeos/account_manager_facade_factory.h"
 #endif
 
@@ -483,6 +489,18 @@ base::FilePath GetLastUsedProfileBaseName() {
 
   return base::FilePath::FromASCII(chrome::kInitialProfile);
 }
+
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+void UpdateSupervisedUserPref(Profile* profile, bool is_child) {
+  DCHECK(profile);
+  if (is_child) {
+    profile->GetPrefs()->SetString(prefs::kSupervisedUserId,
+                                   supervised_users::kChildAccountSUID);
+  } else {
+    profile->GetPrefs()->ClearPref(prefs::kSupervisedUserId);
+  }
+}
+#endif
 
 }  // namespace
 
@@ -1314,15 +1332,17 @@ void ProfileManager::InitProfileUserPrefs(Profile* profile) {
       profile->GetPrefs()->SetInteger(arc::prefs::kArcManagementTransition,
                                       static_cast<int>(transition));
     }
-
-    if (user_is_child) {
-      profile->GetPrefs()->SetString(prefs::kSupervisedUserId,
-                                     supervised_users::kChildAccountSUID);
-    } else {
-      profile->GetPrefs()->ClearPref(prefs::kSupervisedUserId);
-    }
+    UpdateSupervisedUserPref(profile, user_is_child);
   }
-#endif
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  DCHECK(chromeos::LacrosService::Get());
+  const bool user_is_child =
+      chromeos::LacrosService::Get()->init_params()->session_type ==
+      crosapi::mojom::SessionType::kChildSession;
+  UpdateSupervisedUserPref(profile, user_is_child);
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
   size_t avatar_index;
   std::string profile_name;
@@ -1420,6 +1440,15 @@ bool ProfileManager::HasKeepAliveForTesting(const Profile* profile,
   DCHECK(info);
   return info->keep_alives[origin] > 0;
 }
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+void ProfileManager::SetAccountProfileMapperForTests(
+    std::unique_ptr<AccountProfileMapper> mapper) {
+  DCHECK(!account_profile_mapper_)
+      << "AccountProfileMapper must be set before the first usage";
+  account_profile_mapper_ = std::move(mapper);
+}
+#endif
 
 void ProfileManager::DisableProfileMetricsForTesting() {
   zombie_metrics_timer_.Stop();
@@ -1579,7 +1608,7 @@ void ProfileManager::DoFinalInit(ProfileInfo* profile_info,
   // had enough time to initialize and should have updated the user signout
   // flag attached to the profile.
   signin_util::EnsureUserSignoutAllowedIsInitializedForProfile(profile);
-  signin_util::EnsurePrimaryAccountAllowedForProfile(profile);
+  PrimaryAccountPolicyManagerFactory::GetForProfile(profile)->Initialize();
 
 #if !BUILDFLAG(IS_ANDROID)
   // The caret browsing command-line switch toggles caret browsing on
@@ -1957,8 +1986,8 @@ void ProfileManager::EnsureActiveProfileExistsBeforeDeletion(
     base::FilePath cur_path = profile->GetPath();
     if (cur_path != profile_dir && cur_path != guest_profile_path &&
         !IsProfileDirectoryMarkedForDeletion(cur_path)) {
-      OnNewActiveProfileLoaded(profile_dir, cur_path, &callback, profile,
-                               Profile::CREATE_STATUS_INITIALIZED);
+      OnNewActiveProfileLoaded(profile_dir, cur_path, &callback, nullptr,
+                               profile, Profile::CREATE_STATUS_INITIALIZED);
       return;
     }
   }
@@ -1988,6 +2017,12 @@ void ProfileManager::EnsureActiveProfileExistsBeforeDeletion(
         ProfileMetrics::ADD_NEW_USER_LAST_DELETED);
   }
 
+  // When this is called all browser windows may be about to be destroyed
+  // (but still exist in BrowserList), which means shutdown may be about to
+  // start. Use a KeepAlive to ensure shutdown doesn't start.
+  std::unique_ptr<ScopedKeepAlive> keep_alive =
+      std::make_unique<ScopedKeepAlive>(KeepAliveOrigin::PROFILE_MANAGER,
+                                        KeepAliveRestartOption::DISABLED);
   // Create and/or load fallback profile.
   CreateProfileAsync(
       fallback_profile_path,
@@ -1997,7 +2032,8 @@ void ProfileManager::EnsureActiveProfileExistsBeforeDeletion(
           // OnNewActiveProfileLoaded may be called several times, but
           // only once with CREATE_STATUS_INITIALIZED.
           base::Owned(
-              std::make_unique<ProfileLoadedCallback>(std::move(callback)))));
+              std::make_unique<ProfileLoadedCallback>(std::move(callback))),
+          base::Owned(std::move(keep_alive))));
 }
 
 void ProfileManager::OnLoadProfileForProfileDeletion(
@@ -2031,8 +2067,8 @@ void ProfileManager::OnLoadProfileForProfileDeletion(
                                             ServiceAccessType::EXPLICIT_ACCESS)
             .get();
     if (password_store.get()) {
-      password_store->RemoveLoginsCreatedBetween(
-          base::Time(), base::Time::Max(), base::DoNothing());
+      password_store->RemoveLoginsCreatedBetween(base::Time(),
+                                                 base::Time::Max());
     }
 
     // The Profile Data doesn't get wiped until Chrome closes. Since we promised
@@ -2446,6 +2482,7 @@ void ProfileManager::OnNewActiveProfileLoaded(
     const base::FilePath& profile_to_delete_path,
     const base::FilePath& new_active_profile_path,
     ProfileLoadedCallback* callback,
+    ScopedKeepAlive* keep_alive,
     Profile* loaded_profile,
     Profile::CreateStatus status) {
   DCHECK_NE(status, Profile::CREATE_STATUS_LOCAL_FAIL);

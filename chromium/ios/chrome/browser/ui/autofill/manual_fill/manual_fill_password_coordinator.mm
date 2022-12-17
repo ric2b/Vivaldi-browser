@@ -105,6 +105,7 @@
 
 - (void)openAllPasswordsList {
   __weak id<PasswordCoordinatorDelegate> weakDelegate = self.delegate;
+
   [self dismissIfNecessaryThenDoCompletion:^{
     [weakDelegate openAllPasswordsPicker];
   }];
@@ -112,13 +113,17 @@
 
 - (void)openPasswordSettings {
   __weak id<PasswordCoordinatorDelegate> weakDelegate = self.delegate;
-  __weak __typeof(self) weakSelf = self;
+
   [self dismissIfNecessaryThenDoCompletion:^{
     [weakDelegate openPasswordSettings];
-    if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
-      // Settings close the popover but don't send a message to reopen it.
-      [weakDelegate fallbackCoordinatorDidDismissPopover:weakSelf];
-    }
+  }];
+}
+
+- (void)openPasswordSuggestion {
+  __weak id<PasswordCoordinatorDelegate> weakDelegate = self.delegate;
+
+  [self dismissIfNecessaryThenDoCompletion:^{
+    [weakDelegate openPasswordSuggestion];
   }];
 }
 

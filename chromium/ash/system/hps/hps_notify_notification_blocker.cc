@@ -9,15 +9,23 @@
 #include "ash/constants/ash_pref_names.h"
 #include "ash/public/cpp/notification_utils.h"
 #include "ash/public/cpp/session/session_observer.h"
+#include "ash/public/cpp/system_tray_client.h"
 #include "ash/resources/vector_icons/vector_icons.h"
+#include "ash/root_window_controller.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/system/hps/hps_notify_notification_blocker_internal.h"
+#include "ash/system/model/system_tray_model.h"
 #include "ash/system/network/sms_observer.h"
+#include "ash/system/status_area_widget.h"
 #include "ash/system/unified/hps_notify_controller.h"
+#include "ash/system/unified/unified_system_tray.h"
 #include "base/bind.h"
 #include "base/check_op.h"
 #include "base/memory/weak_ptr.h"
+#include "base/no_destructor.h"
+#include "base/notreached.h"
 #include "base/strings/string_util.h"
 #include "chromeos/dbus/hps/hps_service.pb.h"
 #include "components/prefs/pref_change_registrar.h"
@@ -25,8 +33,6 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/public/cpp/notification.h"
-#include "ui/message_center/public/cpp/notification_types.h"
-#include "ui/message_center/public/cpp/notifier_id.h"
 
 namespace ash {
 
@@ -34,26 +40,55 @@ namespace {
 
 constexpr char kNotifierId[] = "hps-notify";
 
-// Returns the right message for the number of titles.
-std::u16string TitlesBlockedMessage(const std::vector<std::u16string>& titles) {
-  switch (titles.size()) {
-    case 0:
-      return u"";
-    case 1:
-      return l10n_util::GetStringFUTF16(
-          IDS_ASH_SMART_PRIVACY_SNOOPING_NOTIFICATION_MESSAGE_1, titles[0]);
-    case 2:
-      return l10n_util::GetStringFUTF16(
-          IDS_ASH_SMART_PRIVACY_SNOOPING_NOTIFICATION_MESSAGE_2, titles[0],
-          titles[1]);
-    default:
-      return l10n_util::GetStringFUTF16(
-          IDS_ASH_SMART_PRIVACY_SNOOPING_NOTIFICATION_MESSAGE_3_PLUS, titles[0],
-          titles[1]);
-  }
+// Returns the capitalized version of an improper-noun notifier title, or the
+// unchanged title if it is a proper noun.
+std::u16string GetCapitalizedNotifierTitle(const std::u16string& title) {
+  static base::NoDestructor<std::map<std::u16string, std::u16string>>
+      kCapitalizedTitles(
+          {{l10n_util::GetStringUTF16(
+                IDS_ASH_SMART_PRIVACY_SNOOPING_NOTIFICATION_APP_TITLE_LOWER),
+            l10n_util::GetStringUTF16(
+                IDS_ASH_SMART_PRIVACY_SNOOPING_NOTIFICATION_APP_TITLE_UPPER)},
+           {l10n_util::GetStringUTF16(
+                IDS_ASH_SMART_PRIVACY_SNOOPING_NOTIFICATION_SYSTEM_TITLE_LOWER),
+            l10n_util::GetStringUTF16(
+                IDS_ASH_SMART_PRIVACY_SNOOPING_NOTIFICATION_SYSTEM_TITLE_UPPER)},
+           {l10n_util::GetStringUTF16(
+                IDS_ASH_SMART_PRIVACY_SNOOPING_NOTIFICATION_WEB_TITLE_LOWER),
+            l10n_util::GetStringUTF16(
+                IDS_ASH_SMART_PRIVACY_SNOOPING_NOTIFICATION_WEB_TITLE_UPPER)}});
+
+  const auto it = kCapitalizedTitles->find(title);
+  return it == kCapitalizedTitles->end() ? title : it->second;
 }
 
 }  // namespace
+
+namespace hps_internal {
+
+// Returns the popup message listing the correct notifier titles and the correct
+// number of titles.
+std::u16string GetTitlesBlockedMessage(
+    const std::vector<std::u16string>& titles) {
+  DCHECK(!titles.empty());
+
+  const std::u16string& first_title = GetCapitalizedNotifierTitle(titles[0]);
+  switch (titles.size()) {
+    case 1:
+      return l10n_util::GetStringFUTF16(
+          IDS_ASH_SMART_PRIVACY_SNOOPING_NOTIFICATION_MESSAGE_1, first_title);
+    case 2:
+      return l10n_util::GetStringFUTF16(
+          IDS_ASH_SMART_PRIVACY_SNOOPING_NOTIFICATION_MESSAGE_2, first_title,
+          titles[1]);
+    default:
+      return l10n_util::GetStringFUTF16(
+          IDS_ASH_SMART_PRIVACY_SNOOPING_NOTIFICATION_MESSAGE_3_PLUS,
+          first_title, titles[1]);
+  }
+}
+
+}  // namespace hps_internal
 
 HpsNotifyNotificationBlocker::HpsNotifyNotificationBlocker(
     message_center::MessageCenter* message_center,
@@ -93,12 +128,6 @@ void HpsNotifyNotificationBlocker::OnActiveUserPrefServiceChanged(
 void HpsNotifyNotificationBlocker::OnBlockingActiveChanged() {
   NotifyBlockingStateChanged();
   UpdateInfoNotificationIfNecessary();
-}
-
-bool HpsNotifyNotificationBlocker::ShouldShowNotification(
-    const message_center::Notification& notification) const {
-  // Never show the info notification in the notification tray.
-  return notification.id() != kInfoNotificationId;
 }
 
 bool HpsNotifyNotificationBlocker::ShouldShowNotificationAsPopup(
@@ -158,6 +187,31 @@ void HpsNotifyNotificationBlocker::OnBlockingStateChanged(
     UpdateInfoNotificationIfNecessary();
 }
 
+void HpsNotifyNotificationBlocker::Close(bool by_user) {}
+
+void HpsNotifyNotificationBlocker::Click(
+    const absl::optional<int>& button_index,
+    const absl::optional<std::u16string>& reply) {
+  if (!button_index.has_value())
+    return;
+  switch (button_index.value()) {
+    // Show notifications button
+    case 0:
+      Shell::Get()
+          ->GetPrimaryRootWindowController()
+          ->GetStatusAreaWidget()
+          ->unified_system_tray()
+          ->ShowBubble();
+      break;
+    // Show privacy settings button
+    case 1:
+      Shell::Get()->system_tray_model()->client()->ShowSmartPrivacySettings();
+      break;
+    default:
+      NOTREACHED() << "Unknown button index value";
+  }
+}
+
 bool HpsNotifyNotificationBlocker::BlockingActive() const {
   // Never block if the feature is disabled.
   const PrefService* const pref_service =
@@ -197,6 +251,7 @@ void HpsNotifyNotificationBlocker::UpdateInfoNotificationIfNecessary() {
     message_center_->ResetSinglePopup(kInfoNotificationId);
   } else {
     message_center_->AddNotification(CreateInfoNotification());
+    message_center_->ResetSinglePopup(kInfoNotificationId);
     info_popup_exists_ = true;
   }
 }
@@ -213,11 +268,11 @@ HpsNotifyNotificationBlocker::CreateInfoNotification() const {
     if (blocked_popups_.find(id) == blocked_popups_.end())
       continue;
 
-    // Websites have long URL titles; we use Web here for cleaner messages.
-    // TODO(1294649): deduce the right title to use in this case and replace raw
-    //                literal with a localized string.
+    // Use a human readable-title (e.g. "Web" vs "https://somesite.com:443").
     const std::u16string& title =
-        notification->notifier_id().title.value_or(u"Web");
+        hps_internal::GetNotifierTitle<apps::AppRegistryCacheWrapper>(
+            notification->notifier_id(),
+            Shell::Get()->session_controller()->GetActiveAccountId());
     if (seen_titles.find(title) != seen_titles.end())
       continue;
 
@@ -225,20 +280,28 @@ HpsNotifyNotificationBlocker::CreateInfoNotification() const {
     seen_titles.insert(title);
   }
 
-  // TODO(1276903): find out how to make notification disappear after a few
-  // seconds.
-  // TODO(1276903): find out how to correctly show a system cog icon or similar.
+  // TODO(1276903): find out how to make the correct notification count.
+  message_center::RichNotificationData notification_data;
+
+  notification_data.buttons.push_back(
+      message_center::ButtonInfo(l10n_util::GetStringUTF16(
+          IDS_ASH_SMART_PRIVACY_SNOOPING_NOTIFICATION_SHOW_BUTTON_TEXT)));
+  notification_data.buttons.push_back(
+      message_center::ButtonInfo(l10n_util::GetStringUTF16(
+          IDS_ASH_SMART_PRIVACY_SNOOPING_NOTIFICATION_SETTINGS_BUTTON_TEXT)));
   auto notification = CreateSystemNotification(
       message_center::NOTIFICATION_TYPE_SIMPLE, kInfoNotificationId,
       l10n_util::GetStringUTF16(
           IDS_ASH_SMART_PRIVACY_SNOOPING_NOTIFICATION_TITLE),
-      TitlesBlockedMessage(titles),
+      hps_internal::GetTitlesBlockedMessage(titles),
       /*display_source=*/std::u16string(), /*origin_url=*/GURL(),
       message_center::NotifierId(message_center::NotifierType::SYSTEM_COMPONENT,
                                  kNotifierId),
-      message_center::RichNotificationData(),
-      base::MakeRefCounted<message_center::NotificationDelegate>(),
-      kSettingsIcon, message_center::SystemNotificationWarningLevel::NORMAL);
+      notification_data,
+      base::MakeRefCounted<message_center::ThunkNotificationDelegate>(
+          weak_ptr_factory_.GetWeakPtr()),
+      kSystemTrayHpsNotifyIcon,
+      message_center::SystemNotificationWarningLevel::NORMAL);
 
   return notification;
 }

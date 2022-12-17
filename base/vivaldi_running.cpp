@@ -9,7 +9,7 @@
 
 namespace vivaldi {
 
-#ifdef OS_WIN
+#if BUILDFLAG(IS_WIN)
 bool g_cancelled_drag = false;
 #endif
 

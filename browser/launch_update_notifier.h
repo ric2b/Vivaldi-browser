@@ -4,6 +4,7 @@
 #define BROWSER_LAUNCH_UPDATE_NOTIFIER_H_
 
 #include "base/command_line.h"
+#include "build/build_config.h"
 
 class Profile;
 
@@ -11,7 +12,7 @@ namespace vivaldi {
 
 void LaunchUpdateNotifier(Profile* profile);
 
-#ifdef OS_WIN
+#if BUILDFLAG(IS_WIN)
 void DisableStandaloneAutoUpdate();
 void EnableStandaloneAutoUpdate();
 bool IsStandaloneAutoUpdateEnabled();

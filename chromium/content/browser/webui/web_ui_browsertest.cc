@@ -20,7 +20,9 @@
 #include "base/test/simple_test_tick_clock.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "content/browser/fenced_frame/fenced_frame.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
+#include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/webui/content_web_ui_controller_factory.h"
 #include "content/browser/webui/web_ui_impl.h"
 #include "content/public/browser/child_process_security_policy.h"
@@ -34,7 +36,9 @@
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
+#include "content/public/test/fenced_frame_test_util.h"
 #include "content/public/test/scoped_web_ui_controller_factory_registration.h"
+#include "content/public/test/test_frame_navigation_observer.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
 #include "content/public/test/web_ui_browsertest_util.h"
@@ -348,7 +352,8 @@ IN_PROC_BROWSER_TEST_F(WebUIRequiringGestureBrowserTest,
   // renderer.
   main_rfh()->ExecuteJavaScriptWithUserGestureForTests(
       u"chrome.send('messageRequiringGesture');"
-      u"chrome.send('notifyFinish');");
+      u"chrome.send('notifyFinish');",
+      base::NullCallback());
   base::RunLoop run_loop;
   test_handler()->set_finish_closure(run_loop.QuitClosure());
   run_loop.Run();

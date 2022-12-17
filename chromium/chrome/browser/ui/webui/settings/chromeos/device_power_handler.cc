@@ -109,6 +109,7 @@ const char PowerHandler::kBatteryIdleManagedKey[] = "batteryIdleManaged";
 
 const char PowerHandler::kLidClosedControlledKey[] = "lidClosedControlled";
 const char PowerHandler::kHasLidKey[] = "hasLid";
+const char PowerHandler::kAdaptiveChargingKey[] = "adaptiveCharging";
 
 PowerHandler::TestAPI::TestAPI(PowerHandler* handler) : handler_(handler) {}
 
@@ -116,7 +117,7 @@ PowerHandler::TestAPI::~TestAPI() = default;
 
 void PowerHandler::TestAPI::RequestPowerManagementSettings() {
   base::Value args(base::Value::Type::LIST);
-  handler_->HandleRequestPowerManagementSettings(args.GetListDeprecated());
+  handler_->HandleRequestPowerManagementSettings(args.GetList());
 }
 
 void PowerHandler::TestAPI::SetIdleBehavior(IdleBehavior behavior,
@@ -124,14 +125,20 @@ void PowerHandler::TestAPI::SetIdleBehavior(IdleBehavior behavior,
   base::Value args(base::Value::Type::LIST);
   args.Append(static_cast<int>(behavior));
   args.Append(when_on_ac);
-  handler_->HandleSetIdleBehavior(args.GetListDeprecated());
+  handler_->HandleSetIdleBehavior(args.GetList());
 }
 
 void PowerHandler::TestAPI::SetLidClosedBehavior(
     PowerPolicyController::Action behavior) {
   base::Value args(base::Value::Type::LIST);
   args.Append(behavior);
-  handler_->HandleSetLidClosedBehavior(args.GetListDeprecated());
+  handler_->HandleSetLidClosedBehavior(args.GetList());
+}
+
+void PowerHandler::TestAPI::SetAdaptiveCharging(bool enabled) {
+  base::Value args(base::Value::Type::LIST);
+  args.Append(enabled);
+  handler_->HandleSetAdaptiveCharging(args.GetList());
 }
 
 PowerHandler::PowerHandler(PrefService* prefs) : prefs_(prefs) {}
@@ -157,6 +164,10 @@ void PowerHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
       "setIdleBehavior",
       base::BindRepeating(&PowerHandler::HandleSetIdleBehavior,
+                          base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "setAdaptiveCharging",
+      base::BindRepeating(&PowerHandler::HandleSetAdaptiveCharging,
                           base::Unretained(this)));
 }
 
@@ -184,6 +195,8 @@ void PowerHandler::OnJavascriptAllowed() {
   pref_change_registrar_->Add(ash::prefs::kPowerBatteryScreenLockDelayMs,
                               callback);
   pref_change_registrar_->Add(ash::prefs::kPowerLidClosedAction, callback);
+  pref_change_registrar_->Add(ash::prefs::kPowerAdaptiveChargingEnabled,
+                              callback);
 }
 
 void PowerHandler::OnJavascriptDisallowed() {
@@ -208,12 +221,12 @@ void PowerHandler::LidEventReceived(PowerManagerClient::LidState state,
   SendPowerManagementSettings(false /* force */);
 }
 
-void PowerHandler::HandleUpdatePowerStatus(base::Value::ConstListView args) {
+void PowerHandler::HandleUpdatePowerStatus(const base::Value::List& args) {
   AllowJavascript();
   chromeos::PowerManagerClient::Get()->RequestStatusUpdate();
 }
 
-void PowerHandler::HandleSetPowerSource(base::Value::ConstListView args) {
+void PowerHandler::HandleSetPowerSource(const base::Value::List& args) {
   AllowJavascript();
 
   const std::string& id = args[0].GetString();
@@ -221,12 +234,12 @@ void PowerHandler::HandleSetPowerSource(base::Value::ConstListView args) {
 }
 
 void PowerHandler::HandleRequestPowerManagementSettings(
-    base::Value::ConstListView args) {
+    const base::Value::List& args) {
   AllowJavascript();
   SendPowerManagementSettings(true /* force */);
 }
 
-void PowerHandler::HandleSetIdleBehavior(base::Value::ConstListView args) {
+void PowerHandler::HandleSetIdleBehavior(const base::Value::List& args) {
   AllowJavascript();
 
   const auto& list = args;
@@ -276,7 +289,7 @@ void PowerHandler::HandleSetIdleBehavior(base::Value::ConstListView args) {
   }
 }
 
-void PowerHandler::HandleSetLidClosedBehavior(base::Value::ConstListView args) {
+void PowerHandler::HandleSetLidClosedBehavior(const base::Value::List& args) {
   AllowJavascript();
 
   const auto& list = args;
@@ -293,6 +306,15 @@ void PowerHandler::HandleSetLidClosedBehavior(base::Value::ConstListView args) {
     default:
       NOTREACHED() << "Unsupported lid-closed behavior " << value;
   }
+}
+
+void PowerHandler::HandleSetAdaptiveCharging(const base::Value::List& args) {
+  AllowJavascript();
+
+  CHECK_GE(args.size(), 1u);
+  bool enabled = args[0].GetBool();
+
+  prefs_->SetBoolean(ash::prefs::kPowerAdaptiveChargingEnabled, enabled);
 }
 
 void PowerHandler::SendBatteryStatus() {
@@ -372,12 +394,16 @@ void PowerHandler::SendPowerManagementSettings(bool force) {
       prefs_->IsManagedPreference(ash::prefs::kPowerLidClosedAction);
   const bool has_lid = lid_state_ != PowerManagerClient::LidState::NOT_PRESENT;
 
+  const bool adaptive_charging =
+      prefs_->GetBoolean(ash::prefs::kPowerAdaptiveChargingEnabled);
+
   // Don't notify the UI if nothing changed.
   if (!force && ac_idle_info == last_ac_idle_info_ &&
       battery_idle_info == last_battery_idle_info_ &&
       lid_closed_behavior == last_lid_closed_behavior_ &&
       lid_closed_controlled == last_lid_closed_controlled_ &&
-      has_lid == last_has_lid_) {
+      has_lid == last_has_lid_ &&
+      adaptive_charging == last_adaptive_charging_) {
     return;
   }
 
@@ -400,6 +426,7 @@ void PowerHandler::SendPowerManagementSettings(bool force) {
   dict.SetBoolKey(kBatteryIdleManagedKey, battery_idle_info.is_managed);
   dict.SetBoolKey(kLidClosedControlledKey, lid_closed_controlled);
   dict.SetBoolKey(kHasLidKey, has_lid);
+  dict.SetBoolKey(kAdaptiveChargingKey, adaptive_charging);
   FireWebUIListener(kPowerManagementSettingsChangedName, dict);
 
   last_ac_idle_info_ = ac_idle_info;
@@ -407,6 +434,7 @@ void PowerHandler::SendPowerManagementSettings(bool force) {
   last_lid_closed_behavior_ = lid_closed_behavior;
   last_lid_closed_controlled_ = lid_closed_controlled;
   last_has_lid_ = has_lid;
+  last_adaptive_charging_ = adaptive_charging;
 }
 
 void PowerHandler::OnGotSwitchStates(

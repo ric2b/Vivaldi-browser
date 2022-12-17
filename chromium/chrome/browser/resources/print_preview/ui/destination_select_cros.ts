@@ -16,12 +16,13 @@ import './throbber_css.js';
 import '../strings.m.js';
 
 import {I18nMixin} from 'chrome://resources/js/i18n_mixin.js';
-import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {CloudOrigins, Destination, DestinationOrigin, GooglePromotedDestinationId, PDF_DESTINATION_KEY, RecentDestination, SAVE_TO_DRIVE_CROS_DESTINATION_KEY} from '../data/destination.js';
+import {Destination, DestinationOrigin, GooglePromotedDestinationId, PDF_DESTINATION_KEY} from '../data/destination.js';
 import {ERROR_STRING_KEY_MAP, getPrinterStatusIcon, PrinterStatusReason} from '../data/printer_status_cros.js';
 
 import {PrintPreviewDestinationDropdownCrosElement} from './destination_dropdown_cros.js';
+import {getTemplate} from './destination_select_cros.html.js';
 import {SelectMixin} from './select_mixin.js';
 import {PrintPreviewSettingsSectionElement} from './settings_section.js';
 
@@ -42,7 +43,7 @@ export class PrintPreviewDestinationSelectCrosElement extends
   }
 
   static get template() {
-    return html`{__html_template__}`;
+    return getTemplate();
   }
 
   static get properties() {
@@ -109,7 +110,7 @@ export class PrintPreviewDestinationSelectCrosElement extends
   private isCurrentDestinationCrosLocal_: boolean;
   private isDarkModeActive_: boolean;
 
-  focus() {
+  override focus() {
     this.shadowRoot!.querySelector(
                         'print-preview-destination-dropdown-cros')!.focus();
   }
@@ -148,10 +149,6 @@ export class PrintPreviewDestinationSelectCrosElement extends
       return 'print-preview:save-to-drive';
     }
 
-    if (keyParams[0] === GooglePromotedDestinationId.DOCS) {
-      return 'print-preview:save-to-drive';
-    }
-
     if (keyParams[0] === GooglePromotedDestinationId.SAVE_AS_PDF) {
       return 'cr:insert-drive-file';
     }
@@ -176,7 +173,7 @@ export class PrintPreviewDestinationSelectCrosElement extends
         {bubbles: true, composed: true, detail: value}));
   }
 
-  onProcessSelectChange(value: string) {
+  override onProcessSelectChange(value: string) {
     this.fireSelectedOptionChange_(value);
   }
 
@@ -235,16 +232,6 @@ export class PrintPreviewDestinationSelectCrosElement extends
     // |destination| can be either undefined, or null here.
     if (!this.destination) {
       return '';
-    }
-
-    // Cloudprint destinations contain their own status text.
-    if (CloudOrigins.some(origin => origin === this.destination.origin)) {
-      if (this.destination.shouldShowInvalidCertificateError) {
-        return this.i18n('noLongerSupportedFragment');
-      }
-      if (this.destination.connectionStatusText) {
-        return this.destination.connectionStatusText;
-      }
     }
 
     // Non-local printers do not show an error status.

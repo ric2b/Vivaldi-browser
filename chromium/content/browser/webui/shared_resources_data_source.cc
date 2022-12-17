@@ -19,7 +19,6 @@
 #include "ui/base/webui/web_ui_util.h"
 #include "ui/resources/grit/webui_generated_resources.h"
 #include "ui/resources/grit/webui_generated_resources_map.h"
-#include "ui/resources/grit/webui_resources_map.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/constants/ash_features.h"
@@ -63,10 +62,6 @@ const std::set<int> GetContentResourceIds() {
 const std::set<int> GetChromeosMojoResourceIds() {
   return std::set<int>{
       IDR_BLUETOOTH_CONFIG_MOJOM_LITE_JS,
-      IDR_CELLULAR_SETUP_MOJOM_HTML,
-      IDR_CELLULAR_SETUP_MOJOM_LITE_JS,
-      IDR_ESIM_MANAGER_MOJOM_HTML,
-      IDR_ESIM_MANAGER_MOJOM_LITE_JS,
       IDR_IP_ADDRESS_MOJOM_HTML,
       IDR_IP_ADDRESS_MOJOM_LITE_JS,
       IDR_IP_ADDRESS_MOJOM_WEBUI_JS,
@@ -86,6 +81,10 @@ const std::set<int> GetChromeosMojoResourceIds() {
 
 const std::set<int> GetAshMojoResourceIds() {
   return std::set<int>{
+      IDR_CELLULAR_SETUP_MOJOM_HTML,
+      IDR_CELLULAR_SETUP_MOJOM_LITE_JS,
+      IDR_ESIM_MANAGER_MOJOM_HTML,
+      IDR_ESIM_MANAGER_MOJOM_LITE_JS,
       IDR_MULTIDEVICE_DEVICE_SYNC_MOJOM_HTML,
       IDR_MULTIDEVICE_DEVICE_SYNC_MOJOM_LITE_JS,
       IDR_MULTIDEVICE_MULTIDEVICE_SETUP_MOJOM_HTML,
@@ -121,8 +120,6 @@ void PopulateSharedResourcesDataSource(WebUIDataSource* source) {
 
   AddResources(GetContentResourceIds(), kContentResources,
                kContentResourcesSize, source);
-  source->AddResourcePaths(
-      base::make_span(kWebuiResources, kWebuiResourcesSize));
   source->AddResourcePaths(
       base::make_span(kWebuiGeneratedResources, kWebuiGeneratedResourcesSize));
   source->AddResourcePaths(

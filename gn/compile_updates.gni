@@ -1,6 +1,5 @@
 import("//build/config/chrome_build.gni")
 import("//vivaldi/gn/config/version.gni")
-import("//vivaldi/installer/win/extras.gni")
 
 if (is_win) {
   if (is_official_build) {

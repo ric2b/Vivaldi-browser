@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "base/base_export.h"
+#include "base/check.h"
 #include "base/check_op.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/message_loop/timer_slack.h"
@@ -56,7 +57,7 @@ class BASE_EXPORT MessagePump {
       // delayed tasks.
       TimeTicks delayed_run_time;
 
-      // A recent view of TimeTicks::Now(). Only valid if |next_task_run_time|
+      // A recent view of TimeTicks::Now(). Only valid if |delayed_run_time|
       // isn't null nor max. MessagePump impls should use remaining_delay()
       // instead of resampling Now() if they wish to sleep for a TimeDelta.
       TimeTicks recent_now;
@@ -225,7 +226,8 @@ class BASE_EXPORT MessagePump {
   // TODO(crbug.com/885371): Determine if this must be called to ensure that
   // delayed tasks run when a message pump outside the control of Run is
   // entered.
-  virtual void ScheduleDelayedWork(const TimeTicks& delayed_work_time) = 0;
+  virtual void ScheduleDelayedWork(
+      const Delegate::NextWorkInfo& next_work_info) = 0;
 
   // Sets the timer slack to the specified value.
   virtual void SetTimerSlack(TimerSlack timer_slack);

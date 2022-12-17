@@ -23,12 +23,12 @@ namespace init_sparkle {
 
 namespace {
 
-#if defined(OS_WIN) || defined(OS_MAC)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
 const char kVivaldiAppCastUrl[] =
 #if defined(OFFICIAL_BUILD) && \
     (UPDATE_SOURCE_WIN(VIVALDI_RELEASE) == UPDATE_PREVIEW_SOURCE_WINDOWS)
 // This is the public TP/Beta/Final release channel
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
     "https://update.vivaldi.com/update/1.0/public/mac/appcast.xml";
 #elif defined(_WIN64)
     "https://update.vivaldi.com/update/1.0/public/appcast.x64.xml";
@@ -37,7 +37,7 @@ const char kVivaldiAppCastUrl[] =
 #endif
 #elif defined(OFFICIAL_BUILD)
 // This is the public snapshot release channel
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
     "https://update.vivaldi.com/update/1.0/snapshot/mac/appcast.xml";
 #elif defined(_WIN64)
     "https://update.vivaldi.com/update/1.0/win/appcast.x64.xml";
@@ -46,7 +46,7 @@ const char kVivaldiAppCastUrl[] =
 #endif
 #else
 // This is the internal sopranos release channel
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
     "https://update.vivaldi.com/update/1.0/sopranos_new/mac/appcast.xml";
 #elif defined(_WIN64)
     "https://update.vivaldi.com/update/1.0/sopranos_new/appcast.x64.xml";
@@ -59,7 +59,7 @@ const char kVivaldiAppCastUrl[] =
 
 GURL GetAppcastUrl() {
   GURL url;
-#if defined(OS_WIN) || defined(OS_MAC)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
   url = GURL(kVivaldiAppCastUrl);
   DCHECK(url.is_valid());
 

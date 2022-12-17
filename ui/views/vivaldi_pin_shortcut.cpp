@@ -3,7 +3,8 @@
 #include "ui/views/vivaldi_pin_shortcut.h"
 
 #include "build/build_config.h"
-#if defined(OS_WIN)
+
+#if BUILDFLAG(IS_WIN)
 
 #include <shlobj.h>
 
@@ -71,4 +72,4 @@ void StartPinShortcutToTaskbar(VivaldiBrowserWindow* window) {
 
 }  // namespace vivaldi
 
-#endif  // OS_WIN
+#endif  // IS_WIN

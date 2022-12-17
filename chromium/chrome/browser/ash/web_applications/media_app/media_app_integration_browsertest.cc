@@ -47,6 +47,8 @@
 #include "services/media_session/public/mojom/media_controller.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
+#include "ui/aura/window.h"
+#include "ui/aura/window_observer.h"
 #include "ui/gfx/color_palette.h"
 
 using platform_util::OpenOperationResult;
@@ -77,6 +79,12 @@ constexpr char kFileVideoVP9[] = "world.webm";
 // A 5-second long 96kb/s Ogg-Vorbis 44.1kHz mono audio file.
 constexpr char kFileAudioOgg[] = "music.ogg";
 
+// A 1-page (8.5" x 11") PDF with some text and metadata.
+constexpr char kFilePdfTall[] = "tall.pdf";
+
+// A small square image PDF created by a camera.
+constexpr char kFilePdfImg[] = "img.pdf";
+
 constexpr char kUnhandledRejectionScript[] =
     "window.dispatchEvent("
     "new CustomEvent('simulate-unhandled-rejection-for-test'));";
@@ -92,6 +100,10 @@ constexpr char kDomExceptionScript[] =
 
 class MediaAppIntegrationTest : public SystemWebAppIntegrationTest {
  public:
+  MediaAppIntegrationTest() {
+    feature_list_.InitAndEnableFeature(ash::features::kMediaAppHandlesPdf);
+  }
+
   void MediaAppLaunchWithFile(bool audio_enabled);
   void MediaAppWithLaunchSystemWebAppAsync(bool audio_enabled);
   void MediaAppEligibleOpenTask(bool audio_enabled);
@@ -99,7 +111,11 @@ class MediaAppIntegrationTest : public SystemWebAppIntegrationTest {
   // Helper to initiate a test by launching a single file.
   content::WebContents* LaunchWithOneTestFile(const char* file);
 
+  // Helper to initiate a test by launching with no files (zero state).
+  content::WebContents* LaunchWithNoFiles();
+
  private:
+  base::test::ScopedFeatureList feature_list_;
   std::unique_ptr<file_manager::test::FolderInMyFiles> launch_folder_;
 };
 
@@ -146,6 +162,18 @@ class MediaAppIntegrationDarkLightModeDisabledTest
  public:
   MediaAppIntegrationDarkLightModeDisabledTest() {
     feature_list_.InitAndDisableFeature(chromeos::features::kDarkLightMode);
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+class MediaAppIntegrationPdfDisabledTest : public MediaAppIntegrationTest {
+ public:
+  MediaAppIntegrationPdfDisabledTest() {
+    // This reverts the "default"-enabled state of the feature set in the
+    // base class test harness.
+    feature_list_.InitAndDisableFeature(ash::features::kMediaAppHandlesPdf);
   }
 
  private:
@@ -263,14 +291,14 @@ std::string ExtractStringInGlobalScope(content::WebContents* web_ui,
   return result;
 }
 
-// Waits for the "shownav" attribute to show up in the MediaApp's current
-// handler. Also checks the panel isn't open indicating an edit is not in
-// progress. This prevents trying to traverse a directory before other files are
-// available / while editing.
+// Waits for the "filetraversalenabled" attribute to show up in the MediaApp's
+// current handler. Also checks the panel isn't open indicating an edit is not
+// in progress. This prevents trying to traverse a directory before other files
+// are available / while editing.
 content::EvalJsResult WaitForNavigable(content::WebContents* web_ui) {
   constexpr char kScript[] = R"(
       (async function waitForNavigable() {
-        await waitForNode(':not([panelopen])[shownav]');
+        await waitForNode(':not([panelopen])[filetraversalenabled]');
       })();
   )";
 
@@ -291,6 +319,13 @@ content::WebContents* MediaAppIntegrationTest::LaunchWithOneTestFile(
   EXPECT_EQ(launch_folder_->Open(TestFile(file)),
             platform_util::OPEN_SUCCEEDED);
   return PrepareActiveBrowserForTest();
+}
+
+content::WebContents* MediaAppIntegrationTest::LaunchWithNoFiles() {
+  WaitForTestSystemAppInstall();
+  content::WebContents* web_ui = LaunchApp(web_app::SystemAppType::MEDIA);
+  PrepareAppForTest(web_ui);
+  return web_ui;
 }
 
 std::vector<apps::IntentLaunchInfo> GetAppsForMimeType(
@@ -402,6 +437,49 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationAudioDisabledTest,
   MediaAppWithLaunchSystemWebAppAsync(false);
 }
 
+// Test that the Media App launches a single window for images.
+IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MediaAppLaunchImageMulti) {
+  WaitForTestSystemAppInstall();
+  web_app::SystemAppLaunchParams image_params;
+  image_params.launch_paths = {TestFile(kFilePng800x600),
+                               TestFile(kFileJpeg640x480)};
+
+  web_app::LaunchSystemWebAppAsync(browser()->profile(),
+                                   web_app::SystemAppType::MEDIA, image_params);
+  web_app::FlushSystemWebAppLaunchesForTesting(browser()->profile());
+
+  const BrowserList* browser_list = BrowserList::GetInstance();
+  EXPECT_EQ(2u, browser_list->size());  // 1 extra for the browser test browser.
+
+  content::TitleWatcher watcher(
+      browser_list->get(1)->tab_strip_model()->GetActiveWebContents(),
+      u"image.png");
+  EXPECT_EQ(u"image.png", watcher.WaitAndGetTitle());
+}
+
+// Test that the Media App launches multiple windows for PDFs.
+IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MediaAppLaunchPdfMulti) {
+  WaitForTestSystemAppInstall();
+  web_app::SystemAppLaunchParams pdf_params;
+  pdf_params.launch_paths = {TestFile(kFilePdfTall), TestFile(kFilePdfImg)};
+
+  web_app::LaunchSystemWebAppAsync(browser()->profile(),
+                                   web_app::SystemAppType::MEDIA, pdf_params);
+  web_app::FlushSystemWebAppLaunchesForTesting(browser()->profile());
+
+  const BrowserList* browser_list = BrowserList::GetInstance();
+  EXPECT_EQ(3u, browser_list->size());  // 1 extra for the browser test browser.
+
+  content::TitleWatcher watcher1(
+      browser_list->get(1)->tab_strip_model()->GetActiveWebContents(),
+      u"tall.pdf");
+  content::TitleWatcher watcher2(
+      browser_list->get(2)->tab_strip_model()->GetActiveWebContents(),
+      u"img.pdf");
+  EXPECT_EQ(u"tall.pdf", watcher1.WaitAndGetTitle());
+  EXPECT_EQ(u"img.pdf", watcher2.WaitAndGetTitle());
+}
+
 // Test that the Media App appears as a handler for files in the App Service.
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MediaAppHandlesIntents) {
   WaitForTestSystemAppInstall();
@@ -472,11 +550,6 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, LoadsPdf) {
   EXPECT_EQ(true, MediaAppUiBrowserTest::EvalJsInAppFrame(app, kLoadPdf));
 }
 
-// These tests try to load files bundled in our CIPD package. The CIPD package
-// is included in the `linux-chromeos-chrome` trybot but not in
-// `linux-chromeos-rel` trybot. Only include these when our CIPD package is
-// present.
-#if BUILDFLAG(ENABLE_CROS_MEDIA_APP)
 namespace {
 // icon-button ids are calculated from a hash of the button labels. Id is used
 // because the UI toolkit has loose guarantees about where the actual label
@@ -515,7 +588,25 @@ bool isAppBarButtonOn(content::WebContents* app, const std::string& selector) {
 }
 }  // namespace
 
-IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, LoadsInkForImageAnnotation) {
+// These tests try to load files bundled in our CIPD package. The CIPD package
+// is included in the `linux-chromeos-chrome` trybot but not in
+// `linux-chromeos-rel` trybot. Only include these when our CIPD package is
+// present. We disable the tests rather than comment them out entirely so that
+// they are still subject to compilation on open-source builds.
+#if BUILDFLAG(ENABLE_CROS_MEDIA_APP)
+#define MAYBE_LoadsInkForImageAnnotation LoadsInkForImageAnnotation
+#define MAYBE_InformationPanel InformationPanel
+#define MAYBE_SavesToOriginalFile SavesToOriginalFile
+#define MAYBE_OpenPdfInViewerPopup OpenPdfInViewerPopup
+#else
+#define MAYBE_LoadsInkForImageAnnotation DISABLED_LoadsInkForImageAnnotation
+#define MAYBE_InformationPanel DISABLED_InformationPanel
+#define MAYBE_SavesToOriginalFile DISABLED_SavesToOriginalFile
+#define MAYBE_OpenPdfInViewerPopup DISABLED_OpenPdfInViewerPopup
+#endif
+
+IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
+                       MAYBE_LoadsInkForImageAnnotation) {
   WaitForTestSystemAppInstall();
   content::WebContents* app = LaunchAppWithFile(web_app::SystemAppType::MEDIA,
                                                 TestFile(kFileJpeg640x480));
@@ -548,7 +639,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, LoadsInkForImageAnnotation) {
 
 // Tests that clicking on the 'Info' button in the app bar toggles the
 // information panel.
-IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, InformationPanel) {
+IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MAYBE_InformationPanel) {
   WaitForTestSystemAppInstall();
   content::WebContents* app = LaunchAppWithFile(web_app::SystemAppType::MEDIA,
                                                 TestFile(kFileJpeg640x480));
@@ -591,7 +682,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, InformationPanel) {
 
 // Tests that the media app is able to overwrite the original file on save.
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppTest,
-                       SavesToOriginalFile) {
+                       MAYBE_SavesToOriginalFile) {
   WaitForTestSystemAppInstall();
   file_manager::test::FolderInMyFiles folder(profile());
   folder.Add({TestFile(kFilePng800x600)});
@@ -675,7 +766,81 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppTest,
   EXPECT_TRUE(base::ReadFileToString(kTestFile, &rotated_contents));
   EXPECT_NE(original_contents, rotated_contents);
 }
-#endif  // BUILDFLAG(ENABLE_CROS_MEDIA_APP)
+
+IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MAYBE_OpenPdfInViewerPopup) {
+  // A small test PDF.
+  constexpr char kOpenPdfInViewer[] = R"(
+    const pdf = `%PDF-1.0
+1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 ` +
+`obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj 3 0 ` +
+`obj<</Type/Page/MediaBox[0 0 3 3]>>endobj
+xref
+0 4
+0000000000 65535 f
+0000000010 00000 n
+0000000053 00000 n
+0000000102 00000 n
+trailer<</Size 4/Root 1 0 R>>
+startxref
+149
+%EOF`;
+    const pdfBlob = new Blob([pdf], {type: 'application/pdf'});
+    const blobUrl = URL.createObjectURL(pdfBlob);
+    const blobUuid =
+        (new URL(blobUrl.substring(5))).pathname.substring(1);
+    document.querySelector('backlight-app').delegate.openInSandboxedViewer(
+        'PDF Accessibility Mode - TestPdfTitle.pdf', blobUuid);
+  )";
+
+  content::WebContents* web_ui = LaunchWithNoFiles();
+  content::RenderFrameHost* app = MediaAppUiBrowserTest::GetAppFrame(web_ui);
+
+  WaitForBrowserCount(2);
+  EXPECT_EQ(true, ExecuteScript(app, kOpenPdfInViewer));
+
+  WaitForBrowserCount(3);
+  Browser* popup_browser = chrome::FindBrowserWithActiveWindow();
+  content::WebContents* popup_ui =
+      popup_browser->tab_strip_model()->GetActiveWebContents();
+
+  content::TitleWatcher watcher(popup_ui,
+                                u"PDF Accessibility Mode - TestPdfTitle.pdf");
+
+  EXPECT_EQ(u"PDF Accessibility Mode - TestPdfTitle.pdf",
+            watcher.WaitAndGetTitle());
+  EXPECT_EQ(u"PDF Accessibility Mode - TestPdfTitle.pdf", popup_ui->GetTitle());
+
+  const char16_t kExpectedWindowTitle[] =
+      u"Gallery - PDF Accessibility Mode - TestPdfTitle.pdf";
+  aura::Window* popup_window = popup_ui->GetTopLevelNativeWindow();
+
+  // The NativeWindow title change may happen asynchronously.
+  if (popup_window->GetTitle() != kExpectedWindowTitle) {
+    struct NativeWindowTitleWatcher : public aura::WindowObserver {
+      base::RunLoop run_loop;
+      void OnWindowTitleChanged(aura::Window* window) override {
+        run_loop.Quit();
+      }
+    } wait_for_title_change;
+    popup_window->AddObserver(&wait_for_title_change);
+    wait_for_title_change.run_loop.Run();
+    popup_window->RemoveObserver(&wait_for_title_change);
+  }
+
+  EXPECT_EQ(kExpectedWindowTitle, popup_window->GetTitle());
+
+  EXPECT_TRUE(content::WaitForLoadStop(popup_ui));
+  content::RenderFrameHost* untrusted_ui = ChildFrameAt(popup_ui, 0);
+  content::RenderFrameHost* embed_ui = ChildFrameAt(untrusted_ui, 0);
+  content::RenderFrameHost* pdf_ui = ChildFrameAt(embed_ui, 0);
+
+  // Spot-check that the <embed> element hosting <pdf-viewer> (which is nested
+  // inside "our" <embed> element) exists. Figuring out more about this element
+  // is hard - the normal ways we inject test code results in "Failure to
+  // communicate with DOMMessageQueue", and would result in bad coupling to the
+  // PDF viewer UI.
+  EXPECT_TRUE(pdf_ui) << "Nested PDF <embed> element not found";
+}
 
 // Test that the MediaApp can load RAW files passed on launch params.
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppTest, HandleRawFiles) {
@@ -773,6 +938,18 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationAudioDisabledTest,
 }
 
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationAllProfilesTest,
+                       ShownInLauncherAndSearch) {
+  WaitForTestSystemAppInstall();
+
+  // Check system_web_app_manager has the correct attributes for Media App.
+  auto* system_app = GetManager().GetSystemApp(web_app::SystemAppType::MEDIA);
+  EXPECT_TRUE(system_app->ShouldShowInLauncher());
+  EXPECT_TRUE(system_app->ShouldShowInSearch());
+}
+
+// Test for the old behaviour with fewer permutations. Can be removed along with
+// features::MediaAppHandlesPdf.
+IN_PROC_BROWSER_TEST_P(MediaAppIntegrationPdfDisabledTest,
                        HiddenInLauncherAndSearch) {
   WaitForTestSystemAppInstall();
 
@@ -1090,7 +1267,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationAudioEnabledTest, MediaControls) {
   EXPECT_EQ(u"Gallery", observer.source_title);
 }
 
-// Test that the MediaApp can navigate other files in the directory of a file
+// Test that the MediaApp can traverse other files in the directory of a file
 // that was opened, even if those files have changed since launch.
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppAllProfilesTest,
                        FileOpenCanTraverseDirectory) {
@@ -1304,8 +1481,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, GuestCanReadLocalFonts) {
   const std::string script =
       base::ReplaceStringPlaceholders(kFetchTestFont, {font_to_try}, nullptr);
 
-  WaitForTestSystemAppInstall();
-  content::WebContents* web_ui = LaunchApp(web_app::SystemAppType::MEDIA);
+  content::WebContents* web_ui = LaunchWithNoFiles();
   EXPECT_EQ("success", ExtractStringInGlobalScope(web_ui, script));
 }
 
@@ -1314,6 +1490,9 @@ INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_REGULAR_PROFILE_P(
 
 INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_REGULAR_PROFILE_P(
     MediaAppIntegrationAudioDisabledTest);
+
+INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_REGULAR_PROFILE_P(
+    MediaAppIntegrationPdfDisabledTest);
 
 INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_REGULAR_PROFILE_P(
     MediaAppIntegrationDarkLightModeEnabledTest);

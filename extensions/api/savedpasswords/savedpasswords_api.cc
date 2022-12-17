@@ -10,6 +10,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/language/core/browser/pref_names.h"
@@ -23,7 +24,7 @@
 #include "extensions/schema/savedpasswords.h"
 #include "ui/vivaldi_browser_window.h"
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 #include "extraparts/vivaldi_keychain_util.h"
 #endif
 
@@ -136,7 +137,7 @@ ExtensionFunction::ResponseAction SavedpasswordsAddFunction::Run() {
     return RespondNow(Error("No password"));
   }
 
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   if (!::vivaldi::HasKeychainAccess()) {
     return RespondNow(Error("No keychain access, unable to store password."));
   }

@@ -11,6 +11,7 @@
 #include "base/containers/contains.h"
 #include "base/location.h"
 #include "base/task/single_thread_task_runner.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/limits.h"
@@ -21,6 +22,7 @@
 #include "third_party/blink/renderer/platform/mediastream/media_stream_component.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread.h"
+#include "third_party/blink/renderer/platform/wtf/cross_thread_copier_base.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
@@ -411,9 +413,9 @@ WebMediaStreamTrack MediaStreamVideoTrack::CreateVideoTrack(
     MediaStreamVideoSource* source,
     MediaStreamVideoSource::ConstraintsOnceCallback callback,
     bool enabled) {
-  auto* component = MakeGarbageCollected<MediaStreamComponent>(source->Owner());
-  component->SetPlatformTrack(std::make_unique<MediaStreamVideoTrack>(
-      source, std::move(callback), enabled));
+  auto* component = MakeGarbageCollected<MediaStreamComponent>(
+      source->Owner(), std::make_unique<MediaStreamVideoTrack>(
+                           source, std::move(callback), enabled));
   return WebMediaStreamTrack(component);
 }
 
@@ -431,10 +433,12 @@ WebMediaStreamTrack MediaStreamVideoTrack::CreateVideoTrack(
     MediaStreamVideoSource::ConstraintsOnceCallback callback,
     bool enabled) {
   WebMediaStreamTrack track;
-  auto* component = MakeGarbageCollected<MediaStreamComponent>(source->Owner());
-  component->SetPlatformTrack(std::make_unique<MediaStreamVideoTrack>(
-      source, adapter_settings, noise_reduction, is_screencast, min_frame_rate,
-      pan, tilt, zoom, pan_tilt_zoom_allowed, std::move(callback), enabled));
+  auto* component = MakeGarbageCollected<MediaStreamComponent>(
+      source->Owner(),
+      std::make_unique<MediaStreamVideoTrack>(
+          source, adapter_settings, noise_reduction, is_screencast,
+          min_frame_rate, pan, tilt, zoom, pan_tilt_zoom_allowed,
+          std::move(callback), enabled));
   return WebMediaStreamTrack(component);
 }
 
@@ -705,8 +709,8 @@ void MediaStreamVideoTrack::GetSettings(
   settings.resize_mode = WebString::FromASCII(std::string(
       adapter_settings().target_size() ? WebMediaStreamTrack::kResizeModeRescale
                                        : WebMediaStreamTrack::kResizeModeNone));
-  if (source_->device().display_media_info.has_value()) {
-    const auto& info = source_->device().display_media_info.value();
+  if (source_->device().display_media_info) {
+    const auto& info = source_->device().display_media_info;
     settings.display_surface = info->display_surface;
     settings.logical_surface = info->logical_surface;
     settings.cursor = info->cursor;
@@ -724,11 +728,11 @@ MediaStreamVideoTrack::GetCaptureHandle() {
   }
 
   const MediaStreamDevice& device = source_->device();
-  if (!device.display_media_info.has_value()) {
+  if (!device.display_media_info) {
     return capture_handle;
   }
   const media::mojom::DisplayMediaInformationPtr& info =
-      device.display_media_info.value();
+      device.display_media_info;
 
   if (!info->capture_handle) {
     return capture_handle;

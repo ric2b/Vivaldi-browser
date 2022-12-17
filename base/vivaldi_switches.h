@@ -7,7 +7,7 @@
 
 #include "build/build_config.h"
 
-#if defined(OS_LINUX)
+#if BUILDFLAG(IS_LINUX)
 // Needed for chromium/services/service_manager/zygote/host/zygote_communication_linux.cc
 #include "base/base_export.h"
 

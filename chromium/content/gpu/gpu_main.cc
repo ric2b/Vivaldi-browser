@@ -24,6 +24,7 @@
 #include "base/task/single_thread_task_executor.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/platform_thread.h"
+#include "base/time/time.h"
 #include "base/timer/hi_res_timer_manager.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -104,7 +105,7 @@
 #include "media/gpu/vaapi/vaapi_wrapper.h"
 #endif
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && defined(OS_WIN)
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && BUILDFLAG(IS_WIN)
 #include "platform_media/common/win/platform_media_init.h"
 #endif
 
@@ -170,7 +171,7 @@ class ContentSandboxHelper : public gpu::GpuSandboxHelper {
     // This value is cached, so access it here to populate the cache.
     base::SysInfo::AmountOfPhysicalMemory();
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && defined(OS_WIN)
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && BUILDFLAG(IS_WIN)
     platform_media_init::InitForGPUProcess();
 #endif
   }

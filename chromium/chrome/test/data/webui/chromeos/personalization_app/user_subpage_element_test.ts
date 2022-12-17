@@ -2,16 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {UserSubpage} from 'chrome://personalization/trusted/user/user_subpage_element.js';
+import 'chrome://personalization/strings.m.js';
+import 'chrome://webui-test/mojo_webui_test_support.js';
 
-import {assertEquals} from 'chrome://webui-test/chai_assert.js';
+import {UserSubpage} from 'chrome://personalization/trusted/personalization_app.js';
+import {assertTrue} from 'chrome://webui-test/chai_assert.js';
+import {baseSetup, initElement, teardownElement} from './personalization_app_test_utils.js';
 
-import {initElement, teardownElement} from './personalization_app_test_utils.js';
-
-export function UserSubpageTest() {
+suite('UserSubpageTest', function() {
   let userSubpageElement: UserSubpage|null;
 
-  setup(function() {});
+  setup(() => {
+    baseSetup();
+  });
 
   teardown(async () => {
     await teardownElement(userSubpageElement);
@@ -20,7 +23,11 @@ export function UserSubpageTest() {
 
   test('displays content', async () => {
     userSubpageElement = initElement(UserSubpage);
-    assertEquals(
-        'User', userSubpageElement.shadowRoot!.querySelector('h2')!.innerText);
+    const userPreview =
+        userSubpageElement.shadowRoot!.querySelector('user-preview');
+    assertTrue(!!userPreview);
+    const avatarList =
+        userSubpageElement.shadowRoot!.querySelector('avatar-list');
+    assertTrue(!!avatarList);
   });
-}
+});

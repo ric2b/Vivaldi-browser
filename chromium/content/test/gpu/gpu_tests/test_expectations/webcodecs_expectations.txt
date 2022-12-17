@@ -9,8 +9,8 @@
 #             mountainlion sierra
 #         win win7 win8 win10 ]
 # Devices
-# tags: [ android-nexus-5 android-nexus-5x android-nexus-9 android-pixel-2
-#             android-pixel-4 android-pixel-6 android-shield-android-tv
+# tags: [ android-nexus-5 android-nexus-5x android-pixel-2 android-pixel-4
+#             android-pixel-6 android-shield-android-tv
 #         chromeos-board-amd64-generic chromeos-board-kevin chromeos-board-eve
 #         fuchsia-board-astro fuchsia-board-sherlock fuchsia-board-qemu-x64 ]
 # Platform
@@ -54,7 +54,9 @@
 # tags: [ display-server-wayland display-server-x ]
 # OOP-Canvas
 # tags: [ oop-c no-oop-c ]
-# results: [ Failure RetryOnFailure Skip ]
+# WebGPU Backend Validation
+# tags: [ dawn-backend-validation dawn-no-backend-validation ]
+# results: [ Failure RetryOnFailure Skip Slow ]
 # END TAG HEADER
 
 ###############################
@@ -83,7 +85,7 @@ crbug.com/1207682 [ android ] WebCodecs_* [ RetryOnFailure ]
 crbug.com/1286918 [ android android-pixel-6 ] WebCodecs_TexImage2d_sw_decoder [ Failure ]
 crbug.com/1288914 [ android android-pixel-6 ] WebCodecs_TexImage2d_camera [ Failure ]
 
-crbug.com/1291374 [ android android-pixel-6 ] WebCodecs_Encoding* [ Failure ]
+crbug.com/1311091 WebCodecs_WebRTCPeerConnection_* [ Skip ]
 
 #######################################################################
 # Automated Entries After This Point - Do Not Manually Add Below Here #

@@ -59,7 +59,8 @@ class ASH_EXPORT SearchResultListView : public SearchResultContainerView {
     kWeb,
     // kFiles list view contains relevant local and Google Drive files.
     kFiles,
-    // kSettings list view contains relevant system settings.
+    // kSettings list view contains relevant system settings and personalization
+    // settings.
     kSettings,
     // kHelp list view contains help articles from Showoff and Keyboard
     // Shortcuts.
@@ -67,9 +68,12 @@ class ASH_EXPORT SearchResultListView : public SearchResultContainerView {
     // kPlayStore contains suggested apps from the playstore that are not
     // currently installed.
     kPlayStore,
-    // kSearchAndAssistant contain suggestions from Search and Google Assistant.
+    // kSearchAndAssistant contains suggestions from Search and Google
+    // Assistant.
     kSearchAndAssistant,
-    kMaxValue = kSearchAndAssistant,
+    // kGames contains cloud game search results.
+    kGames,
+    kMaxValue = kGames,
   };
 
   SearchResultListView(
@@ -103,10 +107,14 @@ class ASH_EXPORT SearchResultListView : public SearchResultContainerView {
   SearchResultView* GetResultViewAt(size_t index) override;
   absl::optional<ResultsAnimationInfo> ScheduleResultAnimations(
       const ResultsAnimationInfo& aggregate_animation_info) override;
+  bool HasAnimatingChildView() override;
 
   // Fades the view in and animates a vertical transform based on the view's
-  // position in the overall search container view.
-  void ShowViewWithAnimation(views::View* view, int position);
+  // position in the overall search container view. Returns whether fast
+  // animations were used.
+  void ShowViewWithAnimation(views::View* view,
+                             int position,
+                             bool use_short_animations);
 
   AppListMainView* app_list_main_view() const { return main_view_; }
 

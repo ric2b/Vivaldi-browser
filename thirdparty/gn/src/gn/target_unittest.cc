@@ -628,6 +628,31 @@ TEST_F(TargetTest, Testonly) {
   ASSERT_FALSE(product.OnResolved(&err));
 }
 
+// Configs can be testonly too.
+// Repeat the testonly test with a config.
+TEST_F(TargetTest, TestonlyConfig) {
+  TestWithScope setup;
+  Err err;
+
+  // "testconfig" is a test-only config.
+  Config testconfig(setup.settings(), Label(SourceDir("//test/"), "config"));
+  testconfig.set_testonly(true);
+  testconfig.visibility().SetPublic();
+  ASSERT_TRUE(testconfig.OnResolved(&err));
+
+  // "test" is a test-only executable that uses testconfig, this is OK.
+  TestTarget test(setup, "//test:test", Target::EXECUTABLE);
+  test.set_testonly(true);
+  test.configs().push_back(LabelConfigPair(&testconfig));
+  ASSERT_TRUE(test.OnResolved(&err));
+
+  // "product" is a non-test that uses testconfig. This should fail.
+  TestTarget product(setup, "//app:product", Target::EXECUTABLE);
+  product.set_testonly(false);
+  product.configs().push_back(LabelConfigPair(&testconfig));
+  ASSERT_FALSE(product.OnResolved(&err));
+}
+
 TEST_F(TargetTest, PublicConfigs) {
   TestWithScope setup;
   Err err;

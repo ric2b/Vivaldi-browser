@@ -6,6 +6,7 @@
 
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
+#include "build/build_config.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
@@ -18,7 +19,7 @@
 #include "app/vivaldi_resources.h"
 #include "app/vivaldi_version_info.h"
 
-#ifdef OS_WIN
+#if BUILDFLAG(IS_WIN)
 #include "installer/util/vivaldi_install_util.h"
 #endif
 

@@ -16,7 +16,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/strings/stringprintf.h"
-#include "base/task/post_task.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -872,7 +871,7 @@ IN_PROC_BROWSER_TEST_F(LoadingPredictorBrowserTest,
         host_url.host(), network_isolation_key));
   }
   // 2 connections to the main frame host + 1 connection per host for others.
-  const size_t expected_connections = base::size(kHtmlSubresourcesHosts) + 1;
+  const size_t expected_connections = std::size(kHtmlSubresourcesHosts) + 1;
   connection_tracker()->WaitForAcceptedConnections(expected_connections);
   EXPECT_EQ(expected_connections,
             connection_tracker()->GetAcceptedSocketCount());
@@ -1453,7 +1452,7 @@ IN_PROC_BROWSER_TEST_F(LoadingPredictorBrowserTestWithProxy,
         host_url, network_isolation_key));
   }
   // 2 connections to the main frame host + 1 connection per host for others.
-  const size_t expected_connections = base::size(kHtmlSubresourcesHosts) + 1;
+  const size_t expected_connections = std::size(kHtmlSubresourcesHosts) + 1;
   connection_tracker()->WaitForAcceptedConnections(expected_connections);
   EXPECT_EQ(expected_connections,
             connection_tracker()->GetAcceptedSocketCount());
@@ -1594,7 +1593,7 @@ IN_PROC_BROWSER_TEST_P(LoadingPredictorBrowserTestWithOptimizationGuide,
   size_t expected_connections;
   if (IsLocalPredictionEnabled()) {
     // 2 connections to the main frame host  + 1 connection per host for others.
-    expected_connections = base::size(kHtmlSubresourcesHosts) + 1;
+    expected_connections = std::size(kHtmlSubresourcesHosts) + 1;
   } else {
     // There should always be 2 connections to the main frame host.
     expected_connections = 2;

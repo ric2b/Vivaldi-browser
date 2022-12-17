@@ -33,20 +33,20 @@ def get_parts(config):
     else:
         uncustomized_bundle_id = config.base_bundle_id
 
-    verify_options = VerifyOptions.DEEP + VerifyOptions.STRICT
+    verify_options = VerifyOptions.DEEP | VerifyOptions.STRICT
 
     # Specify the components of HARDENED_RUNTIME that are also available on
     # older macOS versions.
     full_hardened_runtime_options = (
-        CodeSignOptions.HARDENED_RUNTIME + CodeSignOptions.RESTRICT +
-        CodeSignOptions.LIBRARY_VALIDATION + CodeSignOptions.KILL)
+        CodeSignOptions.HARDENED_RUNTIME | CodeSignOptions.RESTRICT |
+        CodeSignOptions.LIBRARY_VALIDATION | CodeSignOptions.KILL)
     app_hardened_runtime_options = full_hardened_runtime_options
     limited_app_hardened_runtime_options = (
-        CodeSignOptions.HARDENED_RUNTIME + CodeSignOptions.RESTRICT +
+        CodeSignOptions.HARDENED_RUNTIME | CodeSignOptions.RESTRICT |
         CodeSignOptions.KILL)
 
     if hasattr(config, "is_development_version") and config.is_development_version:
-      full_hardened_runtime_options = (CodeSignOptions.RESTRICT +
+      full_hardened_runtime_options = (CodeSignOptions.RESTRICT |
           CodeSignOptions.LIBRARY_VALIDATION)
       app_hardened_runtime_options = (CodeSignOptions.RESTRICT)
       limited_app_hardened_runtime_options = (CodeSignOptions.RESTRICT)
@@ -153,8 +153,6 @@ def get_parts(config):
     dylibs = [
         'libEGL.dylib',
         'libGLESv2.dylib',
-        'libswiftshader_libEGL.dylib',
-        'libswiftshader_libGLESv2.dylib',
         'libvk_swiftshader.dylib',
     ]
     if config.is_chrome_branded():
@@ -191,13 +189,13 @@ def get_installer_tools(config):
     )
     for binary in binaries:
         options = (
-            CodeSignOptions.HARDENED_RUNTIME + CodeSignOptions.RESTRICT +
-            CodeSignOptions.LIBRARY_VALIDATION + CodeSignOptions.KILL)
+            CodeSignOptions.HARDENED_RUNTIME | CodeSignOptions.RESTRICT
+            | CodeSignOptions.LIBRARY_VALIDATION | CodeSignOptions.KILL)
         tools[binary] = CodeSignedProduct(
             '{.packaging_dir}/{binary}'.format(config, binary=binary),
             binary.replace('.dylib', ''),
             options=options if not binary.endswith('dylib') else None,
-            verify_options=VerifyOptions.DEEP + VerifyOptions.STRICT)
+            verify_options=VerifyOptions.DEEP | VerifyOptions.STRICT)
 
     return tools
 

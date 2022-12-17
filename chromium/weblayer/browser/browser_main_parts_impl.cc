@@ -71,6 +71,7 @@
 #include "weblayer/browser/media/media_router_factory.h"
 #include "weblayer/browser/safe_browsing/safe_browsing_metrics_collector_factory.h"
 #include "weblayer/browser/safe_browsing/safe_browsing_navigation_observer_manager_factory.h"
+#include "weblayer/browser/site_engagement/site_engagement_service_factory.h"
 #include "weblayer/browser/webapps/weblayer_webapps_client.h"
 #include "weblayer/browser/weblayer_factory_impl_android.h"
 #include "weblayer/common/features.h"
@@ -128,6 +129,7 @@ void EnsureBrowserContextKeyedServiceFactoriesBuilt() {
   NoStatePrefetchManagerFactory::GetInstance();
   SubresourceFilterProfileContextFactory::GetInstance();
 #if BUILDFLAG(IS_ANDROID)
+  SiteEngagementServiceFactory::GetInstance();
   SafeBrowsingMetricsCollectorFactory::GetInstance();
   SafeBrowsingNavigationObserverManagerFactory::GetInstance();
   if (MediaRouterFactory::IsFeatureEnabled()) {
@@ -165,8 +167,8 @@ int BrowserMainPartsImpl::PreCreateThreads() {
 #if BUILDFLAG(IS_ANDROID)
   // The ChildExitObserver needs to be created before any child process is
   // created because it needs to be notified during process creation.
-  crash_reporter::ChildExitObserver::Create();
-  crash_reporter::ChildExitObserver::GetInstance()->RegisterClient(
+  child_exit_observer_ = std::make_unique<crash_reporter::ChildExitObserver>();
+  child_exit_observer_->RegisterClient(
       std::make_unique<crash_reporter::ChildProcessCrashObserver>());
 
   crash_reporter::InitializeCrashKeys();
@@ -181,7 +183,7 @@ int BrowserMainPartsImpl::PreCreateThreads() {
   // Chrome registers these providers from PreCreateThreads() as well.
   auto* synthetic_trial_registry = WebLayerMetricsServiceClient::GetInstance()
                                        ->GetMetricsService()
-                                       ->synthetic_trial_registry();
+                                       ->GetSyntheticTrialRegistry();
   synthetic_trial_registry->AddSyntheticTrialObserver(
       variations::VariationsIdsProvider::GetInstance());
   synthetic_trial_registry->AddSyntheticTrialObserver(

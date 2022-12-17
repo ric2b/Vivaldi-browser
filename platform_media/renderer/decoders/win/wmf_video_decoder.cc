@@ -39,4 +39,8 @@ VideoDecoderType WMFVideoDecoder::GetDecoderType() const {
   return VideoDecoderType::kVivWMFDecoder;
 }
 
+bool WMFVideoDecoder::NeedsBitstreamConversion() const {
+  return true;
+}
+
 }  // namespace media

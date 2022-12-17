@@ -4,4 +4,6 @@
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> bookmark}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> bookmarks}}</translation>
+<translation id="5118676864324397542"><ph name="APP_NAME" /> storage</translation>
+<translation id="7427132068601343474">About Vivaldi</translation>
 </translationbundle>

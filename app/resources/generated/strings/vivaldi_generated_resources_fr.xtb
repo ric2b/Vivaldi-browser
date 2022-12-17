@@ -9,7 +9,6 @@
 <translation id="1054153489933238809">Ouvrir l’&amp;image originale dans un nouvel onglet</translation>
 <translation id="1056898198331236512">Avertissement</translation>
 <translation id="1084824384139382525">Copier l’adr&amp;esse du lien</translation>
-<translation id="1128109161498068552">N’autoriser aucun site à utiliser des messages spécifiques au système pour accéder aux appareils MIDI</translation>
 <translation id="1163931534039071049">&amp;Afficher le code source du cadre</translation>
 <translation id="1165039591588034296">Erreur</translation>
 <translation id="1175364870820465910">Im&amp;primer...</translation>
@@ -22,7 +21,6 @@
 <translation id="1297175357211070620">Destination</translation>
 <translation id="1303101771013849280">Fichier de signets au format HTML</translation>
 <translation id="1430915738399379752">Imprimer</translation>
-<translation id="1433811987160647649">Demander avant d’accéder</translation>
 <translation id="1451375123200651445">Page Web complète, en un seul fichier MHTML</translation>
 <translation id="1465176863081977902">C&amp;opier l’adresse du fichier audio</translation>
 <translation id="1476607407192946488">&amp;Paramètres linguistiques</translation>
@@ -99,13 +97,11 @@
 <translation id="2783321960289401138">Créer un raccourci…</translation>
 <translation id="2785873697295365461">Descripteurs de fichiers</translation>
 <translation id="2809586584051668049">ainsi que <ph name="NUMBER_ADDITIONAL_DISABLED" /> autre(s) extension(s)</translation>
-<translation id="2812989263793994277">Ne pas afficher les images</translation>
 <translation id="2850541429955027218">Ajouter un thème</translation>
 <translation id="2861941300086904918">Gestionnaire de sécurité Native Client</translation>
 <translation id="2881076733170862447">Lorsque vous cliquez sur l’extension</translation>
 <translation id="2889064240420137087">Ouvrir le lien avec…</translation>
 <translation id="2902127500170292085">Communication impossible entre l’extension "<ph name="EXTENSION_NAME" />" et cette imprimante. Veuillez vous assurer que l’imprimante est branchée, puis réessayer.</translation>
-<translation id="2904456025988372123">Me demander lorsqu’un site tente de télécharger des fichiers automatiquement après le premier fichier</translation>
 <translation id="2913331724188855103">Autoriser les sites à enregistrer et à lire les données des cookies (recommandé)</translation>
 <translation id="2931157624143513983">Ajuster à la zone imprimable</translation>
 <translation id="2932085390869194046">Suggérer un mot de passe…</translation>
@@ -126,7 +122,6 @@
 <translation id="3127156390846601284">Toutes les données enregistrées sur votre appareil seront supprimées pour tous les sites affichés. Voulez-vous continuer ?</translation>
 <translation id="3129173833825111527">Marge gauche</translation>
 <translation id="3144647712221361880">Ouvrir le lien avec le compte</translation>
-<translation id="3154429428035006212">Hors connexion pendant plus d’un mois</translation>
 <translation id="3222066309010235055">Pré-rendu : <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Sélectionnez le répertoire racine de l’extension à empaqueter. Pour mettre à jour une extension, sélectionnez également le fichier de clé privée à réutiliser.</translation>
 <translation id="3280237271814976245">Enregistrer &amp;sous…</translation>
@@ -143,6 +138,7 @@
 <translation id="3360297538363969800">Échec de l’impression. Veuillez vérifier votre imprimante, puis réessayer.</translation>
 <translation id="3378572629723696641">Cette extension a pu être corrompue.</translation>
 <translation id="3387614642886316601">Utiliser le correcteur orthographique amélioré</translation>
+<translation id="3393582007140394275">Impossible de caster l’écran.</translation>
 <translation id="3432227430032737297">Supprimer tous les cookies affichés</translation>
 <translation id="345693547134384690">Ouvrir l’&amp;image dans un nouvel onglet</translation>
 <translation id="3494769164076977169">Me demander lorsque le téléchargement automatique de fichiers est requis sur un site après le premier fichier (recommandé)</translation>
@@ -165,7 +161,6 @@
 <translation id="3838085852053358637">Échec du chargement de l’extension</translation>
 <translation id="383891835335927981">Vous n’avez fait de zoom avant ou arrière sur aucun site</translation>
 <translation id="385051799172605136">Retour</translation>
-<translation id="3899879303189199559">Hors connexion pendant plus d’un an</translation>
 <translation id="3905761538810670789">Réparer l’application</translation>
 <translation id="3908501907586732282">Activer l’extension</translation>
 <translation id="3909701002594999354">Affichier tous les contrôles</translation>
@@ -192,7 +187,6 @@
 <translation id="4200983522494130825">Nouvel ongle&amp;t</translation>
 <translation id="4225397296022057997">Sur tous les sites</translation>
 <translation id="4256316378292851214">En&amp;registrer la vidéo sous…</translation>
-<translation id="4278390842282768270">Autorisé</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> Kio (<ph name="NUM_KILOBYTES_LIVE" /> Kio effectifs)</translation>
 <translation id="4345587454538109430">Configurer...</translation>
 <translation id="4348766275249686434">Détecter les erreurs</translation>
@@ -217,15 +211,15 @@
 <translation id="488785315393301722">Afficher les détails</translation>
 <translation id="4907306957610201395">Catégorie d’autorisation</translation>
 <translation id="4912643508233590958">Sorties de veille</translation>
+<translation id="49265687513387605">Impossible de caster l'écran. Vérifiez que vous avez répondu au message vous invitant à partager votre écran.</translation>
 <translation id="4927753642311223124">Circulez, il n’y a rien à voir ici.</translation>
 <translation id="4930714375720679147">Activer</translation>
+<translation id="4961318399572185831">Caster l’écran</translation>
 <translation id="4988526792673242964">Pages</translation>
 <translation id="49896407730300355">Rotation &amp;antihoraire</translation>
 <translation id="4989966318180235467">Inspecter la page d’arrière-plan</translation>
-<translation id="4994474651455208930">Permettre aux sites de demander l’autorisation de devenir gestionnaires par défaut des protocoles</translation>
 <translation id="5000922062037820727">Bloqué (recommandé)</translation>
 <translation id="5027562294707732951">Ajouter l’extension</translation>
-<translation id="5036662165765606524">N’autoriser le téléchargement automatique de plusieurs fichiers pour aucun site</translation>
 <translation id="5039804452771397117">Autoriser</translation>
 <translation id="5057110919553308744">Lorsque vous cliquez sur l’extension</translation>
 <translation id="5059526285558225588">Choisir ce que vous partagez</translation>
@@ -238,7 +232,6 @@
 <translation id="5233231016133573565">ID du processus</translation>
 <translation id="5233736638227740678">Co&amp;ller</translation>
 <translation id="5256861893479663409">Sur tous les sites</translation>
-<translation id="5265562206369321422">Hors connexion pendant plus d’une semaine</translation>
 <translation id="5269977353971873915">Échec de l’impression</translation>
 <translation id="5284445933715251131">Continuer le téléchargement</translation>
 <translation id="52912272896845572">Le fichier de clé privée est incorrect.</translation>
@@ -294,7 +287,6 @@
 <translation id="6122081475643980456">Une extension a modifié les réglages de votre proxy</translation>
 <translation id="6147020289383635445">Échec de l’aperçu avant impression.</translation>
 <translation id="6156863943908443225">Cache des scripts</translation>
-<translation id="6169666352732958425">Impossible de caster le bureau.</translation>
 <translation id="6196854373336333322">L’extension <ph name="EXTENSION_NAME" /> a pris le contrôle de vos réglages de proxy, ce qui signifie que toutes vos activités en ligne peuvent être modifiées, interrompues ou espionnées. Si vous ne savez pas pourquoi cette modification s’est produite, c’est qu’elle est probablement indésirable.</translation>
 <translation id="6200151268994853226">Gérer l’extension</translation>
 <translation id="6206311232642889873">Cop&amp;ier l’image</translation>
@@ -328,7 +320,6 @@
 <translation id="6798954102094737107">Plugin : <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Conserver les modifications</translation>
 <translation id="6817174620439930047">Demander lorsqu'un site souhaite utiliser des messages spécifiques au système pour accéder aux appareils MIDI (recommandé)</translation>
-<translation id="682123305478866682">Caster le bureau</translation>
 <translation id="6824564591481349393">Copi&amp;er l’adresse e-mail</translation>
 <translation id="6840155290835956714">Demander avant d’envoyer</translation>
 <translation id="6886871292305414135">Ouvrir le lien dans un nouvel ongle&amp;t</translation>
@@ -346,7 +337,6 @@
 <translation id="708060913198414444">C&amp;opier l’adresse du fichier audio</translation>
 <translation id="7175353351958621980">Chargée depuis :</translation>
 <translation id="7186088072322679094">Conserver dans la barre d’outils</translation>
-<translation id="7270858098575133036">Demander lorsqu’un site souhaite utiliser des messages spécifiques au système pour accéder aux appareils MIDI</translation>
 <translation id="7287143125007575591">Accès refusé.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> points par pouce</translation>
 <translation id="7385854874724088939">Erreur lors de la tentative d’impression. Vérifiez votre imprimante et réessayez.</translation>
@@ -369,7 +359,6 @@
 <translation id="7704305437604973648">Tâche</translation>
 <translation id="7710568461918838723">Ca&amp;ster...</translation>
 <translation id="7750228210027921155">Mode PIP (Picture-in-Picture)</translation>
-<translation id="7751260505918304024">Tout afficher</translation>
 <translation id="7760004034676677601">Est-ce bien la page de démarrage que vous attendiez ?</translation>
 <translation id="7771452384635174008">Mise en page</translation>
 <translation id="7782102568078991263">Aucune autre suggestion de Google</translation>
@@ -382,9 +371,7 @@
 <translation id="7849264908733290972">Ouvrir l’&amp;image dans un nouvel onglet</translation>
 <translation id="7857949311770343000">Est-ce bien la page de nouvel onglet que vous attendiez ?</translation>
 <translation id="786073089922909430">Service : <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7885253890047913815">Destinations récentes</translation>
 <translation id="7903925330883316394">Utilitaire : <ph name="UTILITY_TYPE" /></translation>
-<translation id="7938594894617528435">Actuellement hors connexion</translation>
 <translation id="7947962633355574091">C&amp;opier l‘adresse de la vidéo</translation>
 <translation id="7966241909927244760">C&amp;opier l’adresse de l’image</translation>
 <translation id="7973394300052703468">Nouvelle fenêtre privée</translation>
@@ -427,10 +414,8 @@ Conservez votre fichier de clé en lieu sûr. Vous en aurez besoin lors de la cr
 <translation id="8708000541097332489">Supprimer les données à la fin de la session</translation>
 <translation id="8714838604780058252">Graphiques d’arrière-plan</translation>
 <translation id="8725066075913043281">Réessayer</translation>
-<translation id="8757090071857742562">Impossible de caster le bureau. Vérifiez si vous avez bien confirmé le partage de votre écran via l’invite.</translation>
 <translation id="8774934320277480003">Marge supérieure</translation>
 <translation id="8798099450830957504">Par défaut</translation>
-<translation id="8800004011501252845">Affichage des destinations pour</translation>
 <translation id="8808478386290700967">Web Store</translation>
 <translation id="8823514049557262177">Copier le te&amp;xte du lien</translation>
 <translation id="8823704566850948458">Suggérer un mot de passe…</translation>
@@ -443,7 +428,6 @@ Conservez votre fichier de clé en lieu sûr. Vous en aurez besoin lors de la cr
 <translation id="8962083179518285172">Masquer les détails</translation>
 <translation id="8973557916016709913">Supprimer le réglage de zoom</translation>
 <translation id="897939795688207351">Sur <ph name="ORIGIN" /></translation>
-<translation id="8996526648899750015">Ajouter un compte…</translation>
 <translation id="9003647077635673607">Autoriser sur tous les sites Web</translation>
 <translation id="9027459031423301635">Ouvrir le lien dans un nouvel ongle&amp;t</translation>
 <translation id="9056810968620647706">Aucune correspondance trouvée.</translation>

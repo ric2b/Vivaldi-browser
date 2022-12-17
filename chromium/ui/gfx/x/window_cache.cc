@@ -5,17 +5,43 @@
 #include "ui/gfx/x/window_cache.h"
 
 #include "base/bind.h"
+#include "base/containers/adapters.h"
 #include "base/containers/contains.h"
 #include "base/containers/cxx20_erase_vector.h"
 #include "base/notreached.h"
+#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
+#include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
+#include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/x/connection.h"
 #include "ui/gfx/x/event.h"
-#include "ui/gfx/x/future.h"
+#include "ui/gfx/x/x11_atom_cache.h"
 #include "ui/gfx/x/x11_window_event_manager.h"
 #include "ui/gfx/x/xproto.h"
 
 namespace x11 {
+
+const base::TimeDelta kDestroyTimerInterval = base::Seconds(3);
+
+Window GetWindowAtPoint(const gfx::Point& point_px,
+                        const base::flat_set<Window>* ignore) {
+  auto* connection = Connection::Get();
+  Window root = connection->default_root();
+
+  if (!WindowCache::instance()) {
+    auto instance =
+        std::make_unique<WindowCache>(connection, connection->default_root());
+    auto* cache = instance.get();
+    cache->BeginDestroyTimer(std::move(instance));
+  }
+
+  auto* instance = WindowCache::instance();
+  instance->WaitUntilReady();
+  return instance->GetWindowAtPoint(point_px, root, ignore);
+}
 
 ScopedShapeEventSelector::ScopedShapeEventSelector(Connection* connection,
                                                    Window window)
@@ -37,7 +63,9 @@ WindowCache::WindowInfo::~WindowInfo() = default;
 WindowCache* WindowCache::instance_ = nullptr;
 
 WindowCache::WindowCache(Connection* connection, Window root)
-    : connection_(connection), root_(root) {
+    : connection_(connection),
+      root_(root),
+      gtk_frame_extents_(GetAtom("_GTK_FRAME_EXTENTS")) {
   DCHECK(!instance_) << "Only one WindowCache should be active at a time";
   instance_ = this;
 
@@ -59,15 +87,89 @@ WindowCache::~WindowCache() {
   instance_ = nullptr;
 }
 
+void WindowCache::WaitUntilReady() {
+  auto& events = connection_->events();
+  size_t event = 0;
+  while (!pending_requests_.empty()) {
+    connection_->Flush();
+    for (size_t pending = pending_requests_.size(); pending;) {
+      if (event < events.size() &&
+          pending_requests_.front().AfterEvent(events[event])) {
+        OnEvent(events[event++]);
+      } else {
+        pending_requests_.front().DispatchNow();
+        --pending;
+      }
+    }
+  }
+  if (event)
+    last_processed_event_ = events[event - 1].sequence();
+}
+
+void WindowCache::BeginDestroyTimer(std::unique_ptr<WindowCache> self) {
+  DCHECK_EQ(this, self.get());
+  delete_when_destroy_timer_fires_ = false;
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(&WindowCache::OnDestroyTimerExpired,
+                     base::Unretained(this), std::move(self)),
+      kDestroyTimerInterval);
+}
+
 void WindowCache::SyncForTest() {
   do {
     // Perform a blocking sync to prevent spinning while waiting for replies.
     connection_->Sync();
     connection_->DispatchAll();
-  } while (pending_requests_);
+  } while (!pending_requests_.empty());
+}
+
+Window WindowCache::GetWindowAtPoint(gfx::Point point_px,
+                                     Window window,
+                                     const base::flat_set<Window>* ignore) {
+  delete_when_destroy_timer_fires_ = true;
+  if (ignore && ignore->contains(window))
+    return Window::None;
+  auto* info = GetInfo(window);
+  if (!info || !info->mapped)
+    return Window::None;
+
+  gfx::Rect rect(info->x_px, info->y_px, info->width_px, info->height_px);
+  rect.Outset(info->border_width_px);
+  rect.Inset(info->gtk_frame_extents_px);
+  if (!rect.Contains(point_px))
+    return Window::None;
+
+  point_px -= gfx::Vector2d(info->x_px, info->y_px);
+  if (info->bounding_rects_px && info->input_rects_px) {
+    for (const auto& rects : {info->bounding_rects_px, info->input_rects_px}) {
+      if (!base::ranges::any_of(*rects, [&point_px](const Rectangle& x_rect) {
+            gfx::Rect rect{x_rect.x, x_rect.y, x_rect.width, x_rect.height};
+            return rect.Contains(point_px);
+          })) {
+        return Window::None;
+      }
+    }
+  }
+
+  if (info->has_wm_name)
+    return window;
+  for (Window child : base::Reversed(info->children)) {
+    Window ret = GetWindowAtPoint(point_px, child, ignore);
+    if (ret != Window::None)
+      return ret;
+  }
+  return Window::None;
 }
 
 void WindowCache::OnEvent(const Event& event) {
+  // Ignore events that we've already processed.
+  if (last_processed_event_ &&
+      CompareSequenceIds(event.sequence(), *last_processed_event_) <= 0) {
+    return;
+  }
+  last_processed_event_ = absl::nullopt;
+
   // Ignore events sent by clients since the server will send everything
   // we need and client events may have different semantics (eg.
   // ConfigureNotifyEvents are parent-relative if sent by the server but
@@ -95,6 +197,17 @@ void WindowCache::OnEvent(const Event& event) {
           else if (src > dst)
             std::rotate(dst, src, src + 1);
         }
+      }
+    }
+  } else if (auto* property = event.As<PropertyNotifyEvent>()) {
+    if (auto* info = GetInfo(property->window)) {
+      if (property->atom == Atom::WM_NAME) {
+        info->has_wm_name = property->state != Property::Delete;
+      } else if (property->atom == gtk_frame_extents_) {
+        if (property->state == Property::Delete)
+          info->gtk_frame_extents_px = gfx::Insets();
+        else
+          GetProperty(property->window, gtk_frame_extents_, 4);
       }
     }
   } else if (auto* create = event.As<CreateNotifyEvent>()) {
@@ -141,11 +254,8 @@ void WindowCache::OnEvent(const Event& event) {
     Window window = shape->affected_window;
     Shape::Sk kind = shape->shape_kind;
     if (base::Contains(windows_, window)) {
-      connection_->shape()
-          .GetRectangles(window, kind)
-          .OnResponse(base::BindOnce(&WindowCache::OnGetRectanglesResponse,
-                                     weak_factory_.GetWeakPtr(), window, kind));
-      pending_requests_++;
+      AddRequest(connection_->shape().GetRectangles(window, kind),
+                 &WindowCache::OnGetRectanglesResponse, window, kind);
     }
   }
 }
@@ -155,19 +265,20 @@ void WindowCache::AddWindow(Window window, Window parent) {
     return;
   WindowInfo& info = windows_[window];
   info.parent = parent;
-  // Events must be selected before getting the initial window info to prevent
-  // race conditions.
+  // Events must be selected before getting the initial window info to
+  // prevent race conditions.
   info.events = std::make_unique<XScopedEventSelector>(
-      window, EventMask::SubstructureNotify);
+      window, EventMask::SubstructureNotify | EventMask::PropertyChange);
 
-  connection_->GetWindowAttributes(window).OnResponse(
-      base::BindOnce(&WindowCache::OnGetWindowAttributesResponse,
-                     weak_factory_.GetWeakPtr(), window));
-  connection_->GetGeometry(window).OnResponse(base::BindOnce(
-      &WindowCache::OnGetGeometryResponse, weak_factory_.GetWeakPtr(), window));
-  connection_->QueryTree(window).OnResponse(base::BindOnce(
-      &WindowCache::OnQueryTreeResponse, weak_factory_.GetWeakPtr(), window));
-  pending_requests_ += 3;
+  AddRequest(connection_->GetWindowAttributes(window),
+             &WindowCache::OnGetWindowAttributesResponse, window);
+  AddRequest(connection_->GetGeometry(window),
+             &WindowCache::OnGetGeometryResponse, window);
+  AddRequest(connection_->QueryTree(window), &WindowCache::OnQueryTreeResponse,
+             window);
+
+  GetProperty(window, Atom::WM_NAME, 1);
+  GetProperty(window, gtk_frame_extents_, 4);
 
   auto& shape = connection_->shape();
   if (shape.present()) {
@@ -175,10 +286,8 @@ void WindowCache::AddWindow(Window window, Window parent) {
         std::make_unique<ScopedShapeEventSelector>(connection_, window);
 
     for (auto kind : {Shape::Sk::Bounding, Shape::Sk::Input}) {
-      shape.GetRectangles(window, kind)
-          .OnResponse(base::BindOnce(&WindowCache::OnGetRectanglesResponse,
-                                     weak_factory_.GetWeakPtr(), window, kind));
-      pending_requests_++;
+      AddRequest(shape.GetRectangles(window, kind),
+                 &WindowCache::OnGetRectanglesResponse, window, kind);
     }
   }
 }
@@ -196,9 +305,16 @@ std::vector<Window>* WindowCache::GetChildren(Window window) {
   return nullptr;
 }
 
+void WindowCache::GetProperty(Window window, Atom property, uint32_t length) {
+  AddRequest(
+      connection_->GetProperty(
+          {.window = window, .property = property, .long_length = length}),
+      &WindowCache::OnGetPropertyResponse, window, property);
+}
+
 WindowCache::WindowInfo* WindowCache::OnResponse(Window window,
                                                  bool has_reply) {
-  pending_requests_--;
+  pending_requests_.pop_front();
   if (!has_reply) {
     windows_.erase(window);
     return nullptr;
@@ -236,6 +352,26 @@ void WindowCache::OnQueryTreeResponse(Window window,
   }
 }
 
+void WindowCache::OnGetPropertyResponse(Window window,
+                                        Atom atom,
+                                        GetPropertyResponse response) {
+  if (auto* info = OnResponse(window, response.reply.get())) {
+    if (atom == Atom::WM_NAME) {
+      info->has_wm_name = response->format;
+    } else if (atom == gtk_frame_extents_) {
+      if (response->format == CHAR_BIT * sizeof(int32_t) &&
+          response->value_len == 4) {
+        const int32_t* frame_extents = response->value->front_as<int32_t>();
+        info->gtk_frame_extents_px =
+            gfx::Insets::TLBR(frame_extents[2], frame_extents[0],
+                              frame_extents[3], frame_extents[1]);
+      } else {
+        info->gtk_frame_extents_px = gfx::Insets();
+      }
+    }
+  }
+}
+
 void WindowCache::OnGetRectanglesResponse(
     Window window,
     Shape::Sk kind,
@@ -253,6 +389,13 @@ void WindowCache::OnGetRectanglesResponse(
         break;
     }
   }
+}
+
+void WindowCache::OnDestroyTimerExpired(std::unique_ptr<WindowCache> self) {
+  if (!delete_when_destroy_timer_fires_)
+    return;  // destroy `this`
+
+  BeginDestroyTimer(std::move(self));
 }
 
 }  // namespace x11

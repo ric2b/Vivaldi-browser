@@ -10,10 +10,10 @@
 
 #include "base/callback.h"
 #include "base/files/file_enumerator.h"
+#include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/notreached.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "base/values.h"
@@ -50,8 +50,20 @@ absl::optional<base::FilePath> GetAppInstallDir(UpdaterScope scope,
 
 }  // namespace
 
+AppInfo::AppInfo(const UpdaterScope scope,
+                 const std::string& app_id,
+                 const std::string& ap,
+                 const base::Version& app_version,
+                 const base::FilePath& ecp)
+    : scope(scope), app_id(app_id), ap(ap), version(app_version), ecp(ecp) {}
+
+AppInfo::AppInfo(const AppInfo&) = default;
+AppInfo& AppInfo::operator=(const AppInfo&) = default;
+AppInfo::~AppInfo() = default;
+
 Installer::Installer(
     const std::string& app_id,
+    const std::string& install_data_index,
     const std::string& target_channel,
     const std::string& target_version_prefix,
     bool rollback_allowed,
@@ -61,6 +73,7 @@ Installer::Installer(
     crx_file::VerifierFormat crx_verifier_format)
     : updater_scope_(GetUpdaterScope()),
       app_id_(app_id),
+      install_data_index_(install_data_index),
       rollback_allowed_(rollback_allowed),
       target_channel_(target_channel),
       target_version_prefix_(target_version_prefix),
@@ -96,8 +109,9 @@ update_client::CrxComponent Installer::MakeCrxComponent() {
   component.requires_network_encryption = false;
   component.crx_format_requirement = crx_verifier_format_;
   component.app_id = app_id_;
+  component.install_data_index = install_data_index_;
   component.ap = ap_;
-  component.ap = persisted_data_->GetBrandCode(app_id_);
+  component.brand = persisted_data_->GetBrandCode(app_id_);
   component.name = app_id_;
   component.version = pv_;
   component.fingerprint = fingerprint_;
@@ -160,9 +174,12 @@ Installer::Result Installer::InstallHelper(
   // the prefs are updated asynchronously with the new |pv| and |fingerprint|.
   // The task sequencing guarantees that the prefs will be updated by the
   // time another CrxDataCallback is invoked, which needs updated values.
-  return RunApplicationInstaller(application_installer,
-                                 install_params->arguments,
-                                 std::move(progress_callback));
+  return RunApplicationInstaller(
+      AppInfo(updater_scope_, app_id_, ap_, pv_, checker_path_),
+      application_installer, install_params->arguments,
+      WriteInstallerDataToTempFile(unpack_path,
+                                   install_params->server_install_data),
+      std::move(progress_callback));
 }
 
 void Installer::InstallWithSyncPrimitives(
@@ -226,13 +243,17 @@ absl::optional<base::FilePath> Installer::GetCurrentInstallDir() const {
 }
 
 #if BUILDFLAG(IS_LINUX)
-Installer::Result Installer::RunApplicationInstaller(
+
+AppInstallerResult RunApplicationInstaller(
+    const AppInfo& /*app_info*/,
     const base::FilePath& /*app_installer*/,
     const std::string& /*arguments*/,
-    ProgressCallback /*progress_callback*/) {
+    const absl::optional<base::FilePath>& /*install_data_file*/,
+    InstallProgressCallback /*progress_callback*/) {
   NOTIMPLEMENTED();
-  return Installer::Result(-1);
+  return AppInstallerResult(-1);
 }
+
 #endif  // BUILDFLAG(IS_LINUX)
 
 }  // namespace updater

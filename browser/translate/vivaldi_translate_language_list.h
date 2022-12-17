@@ -22,7 +22,7 @@ namespace translate {
 class VivaldiTranslateLanguageList
     : public web_resource::ResourceRequestAllowedNotifier::Observer {
  public:
-  VivaldiTranslateLanguageList(content::BrowserContext* context);
+  VivaldiTranslateLanguageList();
   ~VivaldiTranslateLanguageList() override;
   VivaldiTranslateLanguageList(const VivaldiTranslateLanguageList&) = delete;
   VivaldiTranslateLanguageList& operator=(const VivaldiTranslateLanguageList&) =
@@ -36,8 +36,6 @@ class VivaldiTranslateLanguageList
   void SetPrefsListAsDefault();
   void SetListInChromium(const base::Value::List& list);
   const std::string GetServer();
-
-  content::BrowserContext* context_;
 
   std::unique_ptr<network::SimpleURLLoader> url_loader_;
   base::OneShotTimer update_timer_;

@@ -89,15 +89,6 @@ absl::optional<FeatureMap> ParseFeatures(base::Value json) {
       }
     }
 #endif
-#if BUILDFLAG(IS_WIN)
-    // NOTE(igor@vivaldi.com): Temporary workaround to disable
-    // disable_ipc_demuxer feature by default on Windows until VB-87590 is
-    // resolved. Note as on Mac it works fine, we proceed with it enabled there.
-    if (feature_name == "disable_ipc_demuxer") {
-        feature.default_value = false;
-        feature.locked = false;
-    }
-#endif
     if (const std::string* value = dict.FindStringKey("os")) {
       std::vector<base::StringPiece> os_list = base::SplitStringPiece(
           *value, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);

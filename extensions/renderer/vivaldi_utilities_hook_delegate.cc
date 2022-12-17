@@ -96,6 +96,9 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleGetUrlFragments(
 
   GURL url(url_string);
   url::Parsed parsed;
+  url::Parsed parsed_unicode;
+  std::u16string formatted_url;
+
   if (url.is_valid()) {
     if (url.SchemeIsFile()) {
       ParseFileURL(url.spec().c_str(), url.spec().length(), &parsed);
@@ -116,17 +119,47 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleGetUrlFragments(
               gin::StringToV8(isolate, value))
         .ToChecked();
   };
-  auto set_fragment16 = [&](base::StringPiece key, std::u16string value) {
+  auto set_fragment16 = [&](base::StringPiece key,
+                            const std::u16string& value) {
+    fragments
+        ->Set(context, gin::StringToV8(isolate, key),
+              gin::StringToSymbol(isolate, value))
+        .ToChecked();
+  };
+  // Set a url component for security display
+  auto set_fragment16_for_sd = [&](const std::u16string& url,
+                                   base::StringPiece key, url::Component comp) {
+    std::u16string value;
+    if (comp.len > 0) {
+      value = std::u16string(&url[comp.begin], comp.len);
+    }
     fragments
         ->Set(context, gin::StringToV8(isolate, key),
               gin::StringToSymbol(isolate, value))
         .ToChecked();
   };
   if (url.is_valid()) {
-    set_fragment16("urlForSecurityDisplay",
-                   url_formatter::FormatUrl(
-                       url, url_formatter::kFormatUrlOmitNothing,
-                       net::UnescapeRule::NORMAL, nullptr, nullptr, nullptr));
+    formatted_url = url_formatter::FormatUrl(
+        url, url_formatter::kFormatUrlOmitNothing, net::UnescapeRule::NORMAL,
+        &parsed_unicode, nullptr, nullptr);
+
+    set_fragment16("urlForSecurityDisplay", formatted_url);
+  }
+  if (parsed_unicode.Length()) {
+    set_fragment16_for_sd(formatted_url, "hostForSecurityDisplay", parsed_unicode.host);
+    set_fragment16_for_sd(formatted_url, "pathForSecurityDisplay", parsed_unicode.path);
+    set_fragment16_for_sd(formatted_url, "queryForSecurityDisplay", parsed_unicode.query);
+    set_fragment16_for_sd(formatted_url, "refForSecurityDisplay", parsed_unicode.ref);
+
+    DomainInfo info = GetDomainInfo(url);
+    std::u16string tld(info.idn_result.result);
+    if (!tld.empty()) {
+      size_t dot = tld.find_last_of('.');
+      if (dot != std::u16string::npos) {
+        tld = tld.substr(dot + 1);
+      }
+    }
+    set_fragment16("tldForSecurityDisplay", tld);
   }
 
   if (parsed.scheme.is_valid()) {
@@ -188,6 +221,11 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleGetVersion(
       ->Set(context, gin::StringToV8(isolate, "chromiumVersion"),
             gin::StringToV8(isolate, version_info::GetVersionNumber()))
       .ToChecked();
+  version_object
+      ->Set(context, gin::StringToV8(isolate, "mailVersion"),
+            gin::StringToV8(isolate, ::vivaldi::GetVivaldiMailVersionString()))
+      .ToChecked();
+
 
   RequestResult result(RequestResult::HANDLED);
   result.return_value = std::move(version_object);

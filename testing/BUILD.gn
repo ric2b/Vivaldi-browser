@@ -10,7 +10,7 @@ if (is_win) {
       "//ui/compositor:compositor_unittests",
       "//ui/views:views_unittests",
       "//printing:printing_unittests",
-      "//courgette:courgette_unittests",
+      "//components/zucchini:zucchini_unittests",
       "//sandbox/win:sbox_integration_tests",
       "//sandbox/win:sbox_unittests",
       "//sandbox/win:sbox_validation_tests",

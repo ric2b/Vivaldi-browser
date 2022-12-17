@@ -5,6 +5,7 @@
 #ifndef CONTENT_BROWSER_FILE_SYSTEM_ACCESS_FILE_SYSTEM_ACCESS_MANAGER_IMPL_H_
 #define CONTENT_BROWSER_FILE_SYSTEM_ACCESS_FILE_SYSTEM_ACCESS_MANAGER_IMPL_H_
 
+#include "base/callback_forward.h"
 #include "base/containers/flat_set.h"
 #include "base/containers/unique_ptr_adapters.h"
 #include "base/files/file_path.h"
@@ -149,6 +150,11 @@ class CONTENT_EXPORT FileSystemAccessManagerImpl
       PathType path_type,
       const base::FilePath& directory_path,
       UserAction user_action) override;
+  void ResolveTransferToken(
+      mojo::PendingRemote<blink::mojom::FileSystemAccessTransferToken>
+          transfer_token,
+      base::OnceCallback<void(absl::optional<storage::FileSystemURL>)> callback)
+      override;
 
   // Creates a new FileSystemAccessFileHandleImpl for a given url. Assumes the
   // passed in URL is valid and represents a file.
@@ -269,8 +275,7 @@ class CONTENT_EXPORT FileSystemAccessManagerImpl
   // Remove `access_handle_host` from `access_handle_host_receivers_`. It is an
   // error to try to remove an access handle that doesn't exist.
   void RemoveAccessHandleHost(
-      FileSystemAccessAccessHandleHostImpl* access_handle_host,
-      base::OnceCallback<void()> callback);
+      FileSystemAccessAccessHandleHostImpl* access_handle_host);
 
   // Remove `token` from `transfer_tokens_`. It is an error to try to remove
   // a token that doesn't exist.
@@ -442,25 +447,23 @@ class CONTENT_EXPORT FileSystemAccessManagerImpl
   // FileSystemAccessCapacityAllocationHosts may reserve too much capacity from
   // the quota system. This function determines the file's actual size and
   // corrects its capacity usage in the quota system.
-  void CleanupAccessHandleCapacityAllocation(
-      const storage::FileSystemURL& url,
-      int64_t allocated_file_size,
-      base::OnceCallback<void()> callback);
+  void CleanupAccessHandleCapacityAllocation(const storage::FileSystemURL& url,
+                                             int64_t allocated_file_size,
+                                             base::OnceClosure callback);
 
   // Performs the actual work of `CleanupAccessHandleCapacityAllocation()` after
   // the file's size has been determined.
   void CleanupAccessHandleCapacityAllocationImpl(
       const storage::FileSystemURL& url,
       int64_t allocated_file_size,
-      base::OnceCallback<void()> callback,
+      base::OnceClosure callback,
       base::File::Error result,
       const base::File::Info& file_info);
 
   // Called after `CleanupAccessHandleCapacityAllocationImpl()` has completed.
   // Removes `access_handle_host` from the set of active hosts.
   void DidCleanupAccessHandleCapacityAllocation(
-      FileSystemAccessAccessHandleHostImpl* access_handle_host,
-      base::OnceCallback<void()> callback);
+      FileSystemAccessAccessHandleHostImpl* access_handle_host);
 
   // Calls `token_resolved_callback` with a FileSystemAccessEntry object
   // that's at the file path of the FileSystemAccessDataTransferToken with token

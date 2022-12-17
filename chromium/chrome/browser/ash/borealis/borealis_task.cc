@@ -4,7 +4,6 @@
 
 #include "chrome/browser/ash/borealis/borealis_task.h"
 
-#include <optional>
 #include <sstream>
 #include <string>
 
@@ -31,6 +30,8 @@
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chromeos/dbus/concierge/concierge_service.pb.h"
+#include "chromeos/dbus/dlcservice/dlcservice.pb.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace borealis {
 
@@ -78,14 +79,32 @@ void CheckAllowed::OnAllowednessChecked(
   Complete(BorealisStartupResult::kDisallowed, ss.str());
 }
 
+GetLaunchOptions::GetLaunchOptions() : BorealisTask("GetLaunchOptions") {}
+GetLaunchOptions::~GetLaunchOptions() = default;
+
+void GetLaunchOptions::RunInternal(BorealisContext* context) {
+  BorealisService::GetForProfile(context->profile())
+      ->LaunchOptions()
+      .Build(base::BindOnce(&GetLaunchOptions::HandleOptions,
+                            weak_factory_.GetWeakPtr(), context));
+}
+
+void GetLaunchOptions::HandleOptions(BorealisContext* context,
+                                     BorealisLaunchOptions::Options options) {
+  context->set_launch_options(options);
+  Complete(BorealisStartupResult::kSuccess, "");
+}
+
 MountDlc::MountDlc() : BorealisTask("MountDlc") {}
 MountDlc::~MountDlc() = default;
 
 void MountDlc::RunInternal(BorealisContext* context) {
   // TODO(b/172279567): Ensure the DLC is present before trying to install,
   // otherwise we will silently download borealis here.
+  dlcservice::InstallRequest install_request;
+  install_request.set_id(kBorealisDlcName);
   chromeos::DlcserviceClient::Get()->Install(
-      kBorealisDlcName,
+      install_request,
       base::BindOnce(&MountDlc::OnMountDlc, weak_factory_.GetWeakPtr(),
                      context),
       base::DoNothing());
@@ -167,20 +186,9 @@ void RequestWaylandServer::OnServerRequested(
 
 namespace {
 
-bool GetDeveloperMode() {
-  std::string output;
-  if (!base::GetAppOutput({"/usr/bin/crossystem", "cros_debug"}, &output)) {
-    return false;
-  }
-  return output == "1";
-}
-
-absl::optional<base::File> GetExtraDiskIfInDeveloperMode(
+absl::optional<base::File> MaybeOpenFile(
     absl::optional<base::FilePath> file_path) {
   if (!file_path)
-    return absl::nullopt;
-
-  if (!GetDeveloperMode())
     return absl::nullopt;
 
   base::File file(file_path.value(), base::File::FLAG_OPEN |
@@ -199,13 +207,9 @@ StartBorealisVm::StartBorealisVm() : BorealisTask("StartBorealisVm") {}
 StartBorealisVm::~StartBorealisVm() = default;
 
 void StartBorealisVm::RunInternal(BorealisContext* context) {
-  absl::optional<base::FilePath> external_disk =
-      borealis::BorealisService::GetForProfile(context->profile())
-          ->LaunchOptions()
-          .GetExtraDisk();
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, base::MayBlock(),
-      base::BindOnce(&GetExtraDiskIfInDeveloperMode, std::move(external_disk)),
+      base::BindOnce(&MaybeOpenFile, context->launch_options().extra_disk),
       base::BindOnce(&StartBorealisVm::StartBorealisWithExternalDisk,
                      weak_factory_.GetWeakPtr(), context));
 }

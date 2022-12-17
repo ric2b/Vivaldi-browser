@@ -57,7 +57,7 @@ DictationButtonTray::DictationButtonTray(Shelf* shelf)
   const int vertical_padding = (kTrayItemSize - icon_image.height()) / 2;
   const int horizontal_padding = (kTrayItemSize - icon_image.width()) / 2;
   icon_->SetBorder(views::CreateEmptyBorder(
-      gfx::Insets(vertical_padding, horizontal_padding)));
+      gfx::Insets::VH(vertical_padding, horizontal_padding)));
   icon_->SetTooltipText(
       l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_ACCESSIBILITY_DICTATION));
   tray_container()->AddChildView(icon_);
@@ -226,8 +226,7 @@ void DictationButtonTray::CheckDictationStatusAndUpdateIcon() {
 
 void DictationButtonTray::UpdateOnSpeechRecognitionDownloadChanged(
     int download_progress) {
-  if (!::features::IsExperimentalAccessibilityDictationOfflineEnabled() ||
-      !visible_preferred())
+  if (!visible_preferred())
     return;
 
   bool download_in_progress = download_progress > 0 && download_progress < 100;

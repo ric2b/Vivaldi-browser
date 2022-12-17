@@ -21,6 +21,7 @@
 #include "base/task/thread_pool.h"
 #include "browser/sessions/vivaldi_session_service.h"
 #include "browser/vivaldi_browser_finder.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -61,9 +62,9 @@ base::FilePath GenerateFilename(Profile* profile,
   do {
     base::FilePath path(profile->GetPath());
     path = path.Append(kSessionPath)
-#if defined(OS_POSIX)
+#if BUILDFLAG(IS_POSIX)
                .Append(temp_session_name)
-#elif defined(OS_WIN)
+#elif BUILDFLAG(IS_WIN)
                .Append(base::UTF8ToWide(temp_session_name))
 #endif
                .AddExtension(FILE_PATH_LITERAL(".bin"));
@@ -163,9 +164,9 @@ SessionsPrivateGetAllFunction::RunOnFileThread(base::FilePath path) {
     std::unique_ptr<SessionEntry> entry = std::make_unique<SessionEntry>();
     entry->item = std::make_unique<SessionItem>();
     SessionItem* new_item = entry->item.get();
-#if defined(OS_POSIX)
+#if BUILDFLAG(IS_POSIX)
     std::string filename = name.BaseName().value();
-#elif defined(OS_WIN)
+#elif BUILDFLAG(IS_WIN)
     std::string filename = base::WideToUTF8(name.BaseName().value());
 #endif
     size_t ext = filename.find_last_of('.');

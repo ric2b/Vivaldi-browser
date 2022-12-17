@@ -35,8 +35,6 @@ class FakeWebState : public WebState {
   ~FakeWebState() override;
 
   // WebState implementation.
-  Getter CreateDefaultGetter() override;
-  OnceGetter CreateDefaultOnceGetter() override;
   WebStateDelegate* GetDelegate() override;
   void SetDelegate(WebStateDelegate* delegate) override;
   bool IsRealized() const final;
@@ -51,7 +49,15 @@ class FakeWebState : public WebState {
   void WasHidden() override;
   void SetKeepRenderProcessAlive(bool keep_alive) override;
   BrowserState* GetBrowserState() const override;
+  base::WeakPtr<WebState> GetWeakPtr() override;
   void OpenURL(const OpenURLParams& params) override {}
+  void LoadSimulatedRequest(const GURL& url,
+                            NSString* response_html_string) override
+      API_AVAILABLE(ios(15.0));
+  void LoadSimulatedRequest(const GURL& url,
+                            NSData* response_data,
+                            NSString* mime_type) override
+      API_AVAILABLE(ios(15.0));
   void Stop() override {}
   const NavigationManager* GetNavigationManager() const override;
   NavigationManager* GetNavigationManager() override;

@@ -21,6 +21,7 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "media/base/bitrate.h"
+#include "media/base/media_util.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_util.h"
 #include "media/video/fake_video_encode_accelerator.h"
@@ -57,9 +58,10 @@ class VideoEncodeAcceleratorAdapterTest
     EXPECT_CALL(*gpu_factories_.get(), GetTaskRunner())
         .WillRepeatedly(Return(vea_runner_));
 
+    auto media_log = std::make_unique<NullMediaLog>();
     callback_runner_ = base::SequencedTaskRunnerHandle::Get();
     vae_adapter_ = std::make_unique<VideoEncodeAcceleratorAdapter>(
-        gpu_factories_.get(), callback_runner_);
+        gpu_factories_.get(), media_log->Clone(), callback_runner_);
   }
 
   void TearDown() override {
@@ -328,6 +330,32 @@ TEST_F(VideoEncodeAcceleratorAdapterTest, InitializationError) {
       }));
   adapter()->Initialize(VIDEO_CODEC_PROFILE_UNKNOWN, options,
                         std::move(output_cb), ValidatingStatusCB());
+
+  auto frame =
+      CreateGreenFrame(options.frame_size, pixel_format, base::Milliseconds(1));
+  adapter()->Encode(frame, true, std::move(expect_error_done_cb));
+  RunUntilIdle();
+  EXPECT_EQ(outputs_count, 0);
+}
+
+TEST_F(VideoEncodeAcceleratorAdapterTest, EncodingError) {
+  VideoEncoder::Options options;
+  options.frame_size = gfx::Size(640, 480);
+  int outputs_count = 0;
+  auto pixel_format = PIXEL_FORMAT_I420;
+  VideoEncoder::OutputCB output_cb = base::BindLambdaForTesting(
+      [&](VideoEncoderOutput, absl::optional<VideoEncoder::CodecDescription>) {
+        outputs_count++;
+      });
+
+  VideoEncoder::EncoderStatusCB expect_error_done_cb =
+      base::BindLambdaForTesting(
+          [&](EncoderStatus s) { EXPECT_FALSE(s.is_ok()); });
+
+  adapter()->Initialize(profile_, options, std::move(output_cb),
+                        ValidatingStatusCB());
+
+  vea()->SetWillEncodingSucceed(false);
 
   auto frame =
       CreateGreenFrame(options.frame_size, pixel_format, base::Milliseconds(1));

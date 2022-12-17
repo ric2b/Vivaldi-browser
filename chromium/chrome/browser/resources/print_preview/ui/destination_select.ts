@@ -21,11 +21,12 @@ import '../strings.m.js';
 
 import {I18nMixin} from 'chrome://resources/js/i18n_mixin.js';
 import {IronMeta} from 'chrome://resources/polymer/v3_0/iron-meta/iron-meta.js';
-import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {Destination, GooglePromotedDestinationId, PDF_DESTINATION_KEY} from '../data/destination.js';
+import {Destination, PDF_DESTINATION_KEY} from '../data/destination.js';
 import {getSelectDropdownBackground} from '../print_preview_utils.js';
 
+import {getTemplate} from './destination_select.html.js';
 import {SelectMixin} from './select_mixin.js';
 
 const PrintPreviewDestinationSelectElementBase =
@@ -38,7 +39,7 @@ export class PrintPreviewDestinationSelectElement extends
   }
 
   static get template() {
-    return html`{__html_template__}`;
+    return getTemplate();
   }
 
   static get properties() {
@@ -63,12 +64,6 @@ export class PrintPreviewDestinationSelectElement extends
         type: String,
         value: PDF_DESTINATION_KEY,
       },
-
-      statusText_: {
-        type: String,
-        computed: 'computeStatusText_(destination)',
-        observer: 'onStatusTextSet_'
-      },
     };
   }
 
@@ -81,7 +76,6 @@ export class PrintPreviewDestinationSelectElement extends
   pdfPrinterDisabled: boolean;
   recentDestinationList: Destination[];
   private pdfDestinationKey_: string;
-  private statusText_: string;
   private meta_: IronMeta;
 
   constructor() {
@@ -90,7 +84,7 @@ export class PrintPreviewDestinationSelectElement extends
     this.meta_ = new IronMeta({type: 'iconset', value: undefined});
   }
 
-  focus() {
+  override focus() {
     this.shadowRoot!.querySelector<HTMLElement>('.md-select')!.focus();
   }
 
@@ -116,12 +110,8 @@ export class PrintPreviewDestinationSelectElement extends
       return this.destination.icon;
     }
 
-    // Check for the Docs or Save as PDF ids first.
-    const keyParams = this.selectedValue.split('/');
-    if (keyParams[0] === GooglePromotedDestinationId.DOCS) {
-      return 'print-preview:save-to-drive';
-    }
-    if (keyParams[0] === GooglePromotedDestinationId.SAVE_AS_PDF) {
+    // Check for the Save as PDF id first.
+    if (this.selectedValue === PDF_DESTINATION_KEY) {
       return 'cr:insert-drive-file';
     }
 
@@ -158,36 +148,10 @@ export class PrintPreviewDestinationSelectElement extends
     return getSelectDropdownBackground(iconset, iconSetAndIcon[1], this);
   }
 
-  onProcessSelectChange(value: string) {
+  override onProcessSelectChange(value: string) {
     this.dispatchEvent(new CustomEvent(
         'selected-option-change',
         {bubbles: true, composed: true, detail: value}));
-  }
-
-  /**
-   * @return The connection status text to display.
-   */
-  private computeStatusText_(): string {
-    // |destination| can be either undefined, or null here.
-    if (!this.destination) {
-      return '';
-    }
-
-    if (this.destination.shouldShowInvalidCertificateError) {
-      return this.i18n('noLongerSupportedFragment');
-    }
-
-    // Give preference to connection status.
-    if (this.destination.connectionStatusText) {
-      return this.destination.connectionStatusText;
-    }
-
-    return '';
-  }
-
-  private onStatusTextSet_() {
-    this.shadowRoot!.querySelector('.destination-status')!.innerHTML =
-        this.statusText_;
   }
 
   /**

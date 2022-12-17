@@ -11,6 +11,7 @@
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/color/color_id.h"
 #include "ui/gfx/color_palette.h"
+#include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia.h"
 
@@ -120,6 +121,9 @@ class COMPONENT_EXPORT(UI_BASE) ImageModel {
   // Checks if both models yield equal images.
   bool operator==(const ImageModel& other) const;
   bool operator!=(const ImageModel& other) const;
+
+  // Rasterizes if necessary.
+  gfx::ImageSkia Rasterize(const ui::ColorProvider* color_provider) const;
 
  private:
   struct ImageGeneratorAndSize {

@@ -21,10 +21,10 @@
 #include "net/quic/quic_chromium_client_session.h"
 #include "net/quic/quic_http_utils.h"
 #include "net/spdy/spdy_log_util.h"
-#include "net/third_party/quiche/src/quic/core/http/quic_spdy_session.h"
-#include "net/third_party/quiche/src/quic/core/http/spdy_utils.h"
-#include "net/third_party/quiche/src/quic/core/quic_utils.h"
-#include "net/third_party/quiche/src/quic/core/quic_write_blocked_list.h"
+#include "net/third_party/quiche/src/quiche/quic/core/http/quic_spdy_session.h"
+#include "net/third_party/quiche/src/quiche/quic/core/http/spdy_utils.h"
+#include "net/third_party/quiche/src/quiche/quic/core/quic_utils.h"
+#include "net/third_party/quiche/src/quiche/quic/core/quic_write_blocked_list.h"
 
 namespace net {
 namespace {
@@ -233,7 +233,7 @@ int QuicChromiumClientStream::Handle::ReadTrailingHeaders(
 int QuicChromiumClientStream::Handle::WriteHeaders(
     spdy::Http2HeaderBlock header_block,
     bool fin,
-    quic::QuicReferenceCountedPointer<quic::QuicAckListenerInterface>
+    quiche::QuicheReferenceCountedPointer<quic::QuicAckListenerInterface>
         ack_notifier_delegate) {
   if (!stream_)
     return 0;
@@ -610,7 +610,7 @@ void QuicChromiumClientStream::OnCanWrite() {
 size_t QuicChromiumClientStream::WriteHeaders(
     spdy::Http2HeaderBlock header_block,
     bool fin,
-    quic::QuicReferenceCountedPointer<quic::QuicAckListenerInterface>
+    quiche::QuicheReferenceCountedPointer<quic::QuicAckListenerInterface>
         ack_listener) {
   if (!session()->OneRttKeysAvailable()) {
     auto entry = header_block.find(":method");

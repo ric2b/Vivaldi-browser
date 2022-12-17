@@ -22,7 +22,6 @@
 #include "base/notreached.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
@@ -485,7 +484,8 @@ void UserPolicyStatusProviderLacros::GetStatus(base::DictionaryValue* dict) {
           ? base::Time::FromJavaTime(policy->timestamp())
           : base::Time();
   dict->SetStringKey("timeSinceLastRefresh",
-                     GetTimeSinceLastRefreshString(last_refresh_time));
+                     GetTimeSinceLastActionString(last_refresh_time));
+  // TODO(crbug.com/1217542): Add timeSinceLastFetchAttempt for LaCrOS.
 
   // TODO(https://crbug.com/1243869): Pass this information from Ash through
   // Mojo. Assume no error for now.
@@ -596,10 +596,6 @@ void UserActiveDirectoryPolicyStatusProvider::GetStatus(
   const em::PolicyData* policy = policy_manager_->store()->policy();
   const std::string client_id = policy ? policy->device_id() : std::string();
   const std::string username = policy ? policy->username() : std::string();
-  const base::Time last_refresh_time =
-      (policy && policy->has_timestamp())
-          ? base::Time::FromJavaTime(policy->timestamp())
-          : base::Time();
   const std::u16string status =
       policy::FormatStoreStatus(policy_manager_->store()->status(),
                                 policy_manager_->store()->validation_status());
@@ -614,8 +610,17 @@ void UserActiveDirectoryPolicyStatusProvider::GetStatus(
       ui::TimeFormat::Simple(ui::TimeFormat::FORMAT_DURATION,
                              ui::TimeFormat::LENGTH_SHORT, refresh_interval));
 
+  const base::Time last_refresh_time =
+      (policy && policy->has_timestamp())
+          ? base::Time::FromJavaTime(policy->timestamp())
+          : base::Time();
   dict->SetStringKey("timeSinceLastRefresh",
-                     GetTimeSinceLastRefreshString(last_refresh_time));
+                     GetTimeSinceLastActionString(last_refresh_time));
+
+  const base::Time last_refresh_attempt_time =
+      policy_manager_->scheduler()->last_refresh_attempt();
+  dict->SetStringKey("timeSinceLastFetchAttempt",
+                     GetTimeSinceLastActionString(last_refresh_attempt_time));
 
   // Check if profile is present. Note that profile is not present if object is
   // an instance of DeviceActiveDirectoryPolicyStatusProvider that inherits from
@@ -678,7 +683,7 @@ void UpdaterStatusProvider::GetStatus(base::DictionaryValue* dict) {
   if (!updater_status_->last_checked_time.is_null()) {
     dict->SetStringKey(
         "timeSinceLastRefresh",
-        GetTimeSinceLastRefreshString(updater_status_->last_checked_time));
+        GetTimeSinceLastActionString(updater_status_->last_checked_time));
   }
 }
 
@@ -913,19 +918,19 @@ void PolicyUIHandler::RegisterMessages() {
                                          ->registry();
   registry->AddObserver(this);
 
-  web_ui()->RegisterDeprecatedMessageCallback(
+  web_ui()->RegisterMessageCallback(
       "exportPoliciesJSON",
       base::BindRepeating(&PolicyUIHandler::HandleExportPoliciesJson,
                           base::Unretained(this)));
-  web_ui()->RegisterDeprecatedMessageCallback(
+  web_ui()->RegisterMessageCallback(
       "listenPoliciesUpdates",
       base::BindRepeating(&PolicyUIHandler::HandleListenPoliciesUpdates,
                           base::Unretained(this)));
-  web_ui()->RegisterDeprecatedMessageCallback(
+  web_ui()->RegisterMessageCallback(
       "reloadPolicies",
       base::BindRepeating(&PolicyUIHandler::HandleReloadPolicies,
                           base::Unretained(this)));
-  web_ui()->RegisterDeprecatedMessageCallback(
+  web_ui()->RegisterMessageCallback(
       "copyPoliciesJSON",
       base::BindRepeating(&PolicyUIHandler::HandleCopyPoliciesJson,
                           base::Unretained(this)));
@@ -1022,6 +1027,7 @@ base::Value PolicyUIHandler::GetPolicyValues() {
   if (updater_policies_) {
     return policy::ArrayPolicyConversions(std::move(client))
         .EnableConvertValues(true)
+        .SetDropDefaultValues(true)
         .WithUpdaterPolicies(
             std::make_unique<policy::PolicyMap>(updater_policies_->Clone()))
         .WithUpdaterPolicySchemas(GetGoogleUpdatePolicySchemas())
@@ -1146,7 +1152,7 @@ base::DictionaryValue PolicyUIHandler::GetStatusValue(bool for_webui) const {
   return status;
 }
 
-void PolicyUIHandler::HandleExportPoliciesJson(const base::ListValue* args) {
+void PolicyUIHandler::HandleExportPoliciesJson(const base::Value::List& args) {
 #if BUILDFLAG(IS_ANDROID)
   // TODO(crbug.com/1228691): Unify download logic between all platforms to
   // use the WebUI download solution (and remove the Android check).
@@ -1186,12 +1192,13 @@ void PolicyUIHandler::HandleExportPoliciesJson(const base::ListValue* args) {
 #endif
 }
 
-void PolicyUIHandler::HandleListenPoliciesUpdates(const base::ListValue* args) {
+void PolicyUIHandler::HandleListenPoliciesUpdates(
+    const base::Value::List& args) {
   AllowJavascript();
   OnRefreshPoliciesDone();
 }
 
-void PolicyUIHandler::HandleReloadPolicies(const base::ListValue* args) {
+void PolicyUIHandler::HandleReloadPolicies(const base::Value::List& args) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // Allow user to manually fetch remote commands. Useful for testing or when
   // the invalidation service is not working properly.
@@ -1234,7 +1241,7 @@ void PolicyUIHandler::HandleReloadPolicies(const base::ListValue* args) {
       &PolicyUIHandler::OnRefreshPoliciesDone, weak_factory_.GetWeakPtr()));
 }
 
-void PolicyUIHandler::HandleCopyPoliciesJson(const base::ListValue* args) {
+void PolicyUIHandler::HandleCopyPoliciesJson(const base::Value::List& args) {
   std::string policies_json = GetPoliciesAsJson();
   ui::ScopedClipboardWriter scw(ui::ClipboardBuffer::kCopyPaste);
   scw.WriteText(base::UTF8ToUTF16(policies_json));

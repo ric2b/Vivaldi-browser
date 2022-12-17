@@ -7,7 +7,6 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/cxx17_backports.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
@@ -15,6 +14,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/cache_type.h"
 #include "net/base/features.h"
@@ -111,7 +111,7 @@ class HttpCacheDataRemoverTest : public testing::Test {
       entry->Close();
       task_environment_.RunUntilIdle();
     }
-    ASSERT_EQ(base::size(kCacheEntries),
+    ASSERT_EQ(std::size(kCacheEntries),
               static_cast<size_t>(backend_->GetEntryCount()));
   }
 

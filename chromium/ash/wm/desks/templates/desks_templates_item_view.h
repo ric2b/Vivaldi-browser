@@ -27,6 +27,7 @@ class CloseButton;
 class DesksTemplatesIconContainer;
 class DesksTemplatesNameView;
 class PillButton;
+class ViewShadow;
 
 // A view that represents each individual template item in the desks templates
 // grid. The view has different shown contents depending on whether the mouse is
@@ -85,6 +86,12 @@ class ASH_EXPORT DesksTemplatesItemView : public views::Button,
   // `DesksTemplatesNameView` has the focus).
   bool IsTemplateNameBeingModified() const;
 
+  // To prevent duplications when creating template from the same desk, check if
+  // there's a existing template shares the same name as current active desk, if
+  // so, remove auto added number.
+  void MaybeRemoveNameNumber();
+  // Show replace dialog when found a name duplication.
+  void MaybeShowReplaceDialog(DesksTemplatesItemView* template_to_replace);
   // Rename current template with new name, delete old template with same name
   // by uuid. Used for callback functions for Replace Dialog.
   void ReplaceTemplate(const std::string& uuid);
@@ -117,6 +124,11 @@ class ASH_EXPORT DesksTemplatesItemView : public views::Button,
 
  private:
   friend class DesksTemplatesItemViewTestApi;
+
+  // Return the duplicated template item if there is a name duplication in saved
+  // templates.
+  DesksTemplatesItemView* FindOtherTemplateWithName(
+      const std::u16string& name) const;
 
   void OnDeleteTemplate();
   void OnDeleteButtonPressed();
@@ -156,6 +168,8 @@ class ASH_EXPORT DesksTemplatesItemView : public views::Button,
   PillButton* launch_button_ = nullptr;
   // Container used for holding all the views that appear on hover.
   views::View* hover_container_ = nullptr;
+
+  std::unique_ptr<ViewShadow> shadow_;
 
   // When the `name_view_` is focused, we select all its text. However, if it is
   // focused via a mouse press event, on mouse release will clear the selection.

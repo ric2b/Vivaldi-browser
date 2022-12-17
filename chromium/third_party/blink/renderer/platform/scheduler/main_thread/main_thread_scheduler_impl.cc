@@ -17,6 +17,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/observer_list.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/common/scoped_defer_task_posting.h"
 #include "base/task/common/task_annotator.h"
@@ -31,6 +32,7 @@
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/input/web_input_event_attribution.h"
 #include "third_party/blink/public/common/input/web_mouse_wheel_event.h"
 #include "third_party/blink/public/common/input/web_touch_event.h"
@@ -579,6 +581,9 @@ MainThreadSchedulerImpl::SchedulingSettings::SchedulingSettings() {
   mbi_compositor_task_runner_per_agent_scheduling_group =
       base::FeatureList::IsEnabled(
           kMbiCompositorTaskRunnerPerAgentSchedulingGroup);
+
+  can_defer_begin_main_frame_during_loading =
+      base::FeatureList::IsEnabled(features::kDeferBeginMainFrameDuringLoading);
 }
 
 MainThreadSchedulerImpl::AnyThread::~AnyThread() = default;
@@ -672,11 +677,6 @@ MainThreadSchedulerImpl::DeprecatedDefaultTaskRunner() {
   return helper_.DeprecatedDefaultTaskRunner();
 }
 
-scoped_refptr<base::SingleThreadTaskRunner>
-MainThreadSchedulerImpl::VirtualTimeControlTaskRunner() {
-  return virtual_time_control_task_queue_->GetTaskRunnerWithDefaultTaskType();
-}
-
 scoped_refptr<MainThreadTaskQueue>
 MainThreadSchedulerImpl::CompositorTaskQueue() {
   helper_.CheckOnValidThread();
@@ -694,12 +694,6 @@ scoped_refptr<MainThreadTaskQueue> MainThreadSchedulerImpl::ControlTaskQueue() {
 
 scoped_refptr<MainThreadTaskQueue> MainThreadSchedulerImpl::DefaultTaskQueue() {
   return helper_.DefaultMainThreadTaskQueue();
-}
-
-scoped_refptr<MainThreadTaskQueue>
-MainThreadSchedulerImpl::VirtualTimeControlTaskQueue() {
-  helper_.CheckOnValidThread();
-  return virtual_time_control_task_queue_;
 }
 
 scoped_refptr<MainThreadTaskQueue> MainThreadSchedulerImpl::NewTaskQueue(
@@ -1016,7 +1010,8 @@ void MainThreadSchedulerImpl::SetRendererHidden(bool hidden) {
     TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"),
                  "MainThreadSchedulerImpl::OnRendererHidden");
     main_thread_only().renderer_hidden_metadata.emplace(
-        "MainThreadSchedulerImpl.RendererHidden", /* is_hidden */ 1);
+        "MainThreadSchedulerImpl.RendererHidden", /* is_hidden */ 1,
+        base::SampleMetadataScope::kProcess);
   } else {
     TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"),
                  "MainThreadSchedulerImpl::OnRendererVisible");
@@ -1202,6 +1197,7 @@ void MainThreadSchedulerImpl::DidScheduleBeginMainFrame() {
 void MainThreadSchedulerImpl::DidRunBeginMainFrame() {
   base::AutoLock lock(any_thread_lock_);
   any_thread().begin_main_frame_scheduled_count -= 1;
+  any_thread().last_main_frame_time = base::TimeTicks::Now();
 }
 
 void MainThreadSchedulerImpl::UpdateForInputEventOnCompositorThread(
@@ -1581,10 +1577,6 @@ void MainThreadSchedulerImpl::UpdatePolicyLocked(UpdateType update_type) {
     new_policy.should_pause_task_queues_for_android_webview() = true;
   }
 
-  if (main_thread_only().use_virtual_time) {
-    new_policy.use_virtual_time() = true;
-  }
-
   if (scheduling_settings_
           .prioritize_compositing_and_loading_during_early_loading &&
       current_use_case() == UseCase::kEarlyLoading) {
@@ -1886,6 +1878,17 @@ bool MainThreadSchedulerImpl::VirtualTimeAllowedToAdvance() const {
   return !main_thread_only().virtual_time_stopped;
 }
 
+void MainThreadSchedulerImpl::GrantVirtualTimeBudget(
+    base::TimeDelta budget,
+    base::OnceClosure budget_exhausted_callback) {
+  virtual_time_control_task_queue_->GetTaskRunnerWithDefaultTaskType()
+      ->PostDelayedTask(FROM_HERE, std::move(budget_exhausted_callback),
+                        budget);
+  // This can shift time forwards if there's a pending MaybeAdvanceVirtualTime,
+  // so it's important this is called second.
+  virtual_time_domain_->SetVirtualTimeFence(NowTicks() + budget);
+}
+
 base::TimeTicks MainThreadSchedulerImpl::IncrementVirtualTimePauseCount() {
   main_thread_only().virtual_time_pause_count++;
   ApplyVirtualTimePolicy();
@@ -1954,6 +1957,13 @@ void MainThreadSchedulerImpl::SetMaxVirtualTimeTaskStarvationCount(
   main_thread_only().max_virtual_time_task_starvation_count =
       max_task_starvation_count;
   ApplyVirtualTimePolicy();
+}
+
+WebScopedVirtualTimePauser
+MainThreadSchedulerImpl::CreateWebScopedVirtualTimePauser(
+    const WTF::String& name,
+    WebScopedVirtualTimePauser::VirtualTaskDuration duration) {
+  return WebScopedVirtualTimePauser(this, duration, name);
 }
 
 void MainThreadSchedulerImpl::CreateTraceEventObjectSnapshot() const {
@@ -2077,7 +2087,6 @@ void MainThreadSchedulerImpl::Policy::WriteIntoTrace(
   dict.Add("should_pause_task_queues", should_pause_task_queues());
   dict.Add("should_pause_task_queues_for_android_webview",
            should_pause_task_queues_for_android_webview());
-  dict.Add("use_virtual_time", use_virtual_time());
 }
 
 void MainThreadSchedulerImpl::OnIdlePeriodStarted() {
@@ -2245,6 +2254,16 @@ MainThreadSchedulerImpl::GetPendingUserInputInfo(
 bool MainThreadSchedulerImpl::IsBeginMainFrameScheduled() const {
   base::AutoLock lock(any_thread_lock_);
   return any_thread().begin_main_frame_scheduled_count.value() > 0;
+}
+
+bool MainThreadSchedulerImpl::DontDeferBeginMainFrame() const {
+  if (!scheduling_settings().can_defer_begin_main_frame_during_loading)
+    return true;
+
+  base::AutoLock lock(any_thread_lock_);
+  return IsAnyMainFrameWaitingForFirstContentfulPaint() ||
+         (base::TimeTicks::Now() - any_thread().last_main_frame_time) >
+             features::kRecentBeginMainFrameCutoff.Get();
 }
 
 void MainThreadSchedulerImpl::RunIdleTask(Thread::IdleTask task,

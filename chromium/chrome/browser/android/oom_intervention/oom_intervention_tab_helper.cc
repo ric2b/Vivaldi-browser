@@ -128,10 +128,6 @@ void OomInterventionTabHelper::PrimaryMainFrameRenderProcessGone(
     return;
   }
 
-  // OOM crash is handled in OnForegroundOOMDetected().
-  if (status == base::TERMINATION_STATUS_OOM_PROTECTED)
-    return;
-
   if (near_oom_detected_time_) {
     ResetInterventionState();
   }
@@ -168,7 +164,7 @@ void OomInterventionTabHelper::DidStartNavigation(
 }
 
 void OomInterventionTabHelper::PrimaryPageChanged(content::Page& page) {
-  if (!page.GetMainDocument().IsDocumentOnLoadCompletedInPrimaryMainFrame())
+  if (!page.GetMainDocument().IsDocumentOnLoadCompletedInMainFrame())
     return;
   if (IsLastVisibleWebContents(web_contents()))
     StartMonitoringIfNeeded();

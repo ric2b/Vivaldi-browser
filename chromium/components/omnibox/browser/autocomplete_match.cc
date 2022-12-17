@@ -7,7 +7,6 @@
 #include <algorithm>
 
 #include "base/check_op.h"
-#include "base/cxx17_backports.h"
 #include "base/debug/crash_logging.h"
 #include "base/feature_list.h"
 #include "base/i18n/case_conversion.h"
@@ -96,6 +95,11 @@ bool RichAutocompletionApplicable(bool enabled_all_providers,
           base::ranges::none_of(input_text, &base::IsAsciiWhitespace<char>));
 }
 
+bool IsQuickHistoryMatch(const AutocompleteMatch& match) {
+  return match.type == AutocompleteMatchType::HISTORY_TITLE ||
+         match.type == AutocompleteMatchType::HISTORY_URL;
+}
+
 }  // namespace
 
 SplitAutocompletion::SplitAutocompletion(std::u16string display_text,
@@ -130,7 +134,7 @@ const char* const AutocompleteMatch::kDocumentTypeStrings[]{
     "drive_image", "drive_pdf",  "drive_video", "drive_folder", "drive_other"};
 
 static_assert(
-    base::size(AutocompleteMatch::kDocumentTypeStrings) ==
+    std::size(AutocompleteMatch::kDocumentTypeStrings) ==
         static_cast<int>(AutocompleteMatch::DocumentType::DOCUMENT_TYPE_SIZE),
     "Sizes of AutocompleteMatch::kDocumentTypeStrings and "
     "AutocompleteMatch::DocumentType don't match.");
@@ -507,6 +511,16 @@ bool AutocompleteMatch::BetterDuplicate(const AutocompleteMatch& match1,
     return false;
   }
 
+  // Prefer open tab matches over quick history matches.
+  if (match1.type == AutocompleteMatchType::OPEN_TAB &&
+      IsQuickHistoryMatch(match2)) {
+    return true;
+  }
+  if (IsQuickHistoryMatch(match1) &&
+      match2.type == AutocompleteMatchType::OPEN_TAB) {
+    return false;
+  }
+
   // Prefer matches allowed to be the default match.
   if (match1.allowed_to_be_default_match && !match2.allowed_to_be_default_match)
     return true;
@@ -522,17 +536,26 @@ bool AutocompleteMatch::BetterDuplicate(const AutocompleteMatch& match1,
       return false;
   }
 
-  // Prefer live document suggestions. We check provider type instead of match
-  // type in order to distinguish live suggestions from the document provider
-  // from stale suggestions from the shortcuts providers, because the latter
-  // omits changing metadata such as last access date.
-  if (match1.provider->type() == AutocompleteProvider::TYPE_DOCUMENT &&
-      match2.provider->type() != AutocompleteProvider::TYPE_DOCUMENT) {
-    return true;
-  }
-  if (match1.provider->type() != AutocompleteProvider::TYPE_DOCUMENT &&
-      match2.provider->type() == AutocompleteProvider::TYPE_DOCUMENT) {
-    return false;
+  // Prefer some providers over others.
+  const std::vector<AutocompleteProvider::Type> preferred_providers = {
+      // Prefer live document suggestions. We check provider type instead of
+      // match type in order to distinguish live suggestions from the document
+      // provider from stale suggestions from the shortcuts providers, because
+      // the latter omits changing metadata such as last access date.
+      AutocompleteProvider::TYPE_DOCUMENT,
+      // Prefer bookmark suggestions, as 1) their titles may be explicitly set,
+      // and 2) they may display enhanced information such as the bookmark
+      // folders path.
+      AutocompleteProvider::TYPE_BOOKMARK,
+  };
+
+  if (match1.provider->type() != match2.provider->type()) {
+    for (const auto& preferred_provider : preferred_providers) {
+      if (match1.provider->type() == preferred_provider)
+        return true;
+      if (match2.provider->type() == preferred_provider)
+        return false;
+    }
   }
 
   // By default, simply prefer the more relevant match.
@@ -814,7 +837,7 @@ GURL AutocompleteMatch::GURLToStrippedGURL(
 
   // Remove the www. prefix from the host.
   static const char prefix[] = "www.";
-  static const size_t prefix_len = base::size(prefix) - 1;
+  static const size_t prefix_len = std::size(prefix) - 1;
   std::string host = stripped_destination_url.host();
   if (host.compare(0, prefix_len, prefix) == 0 && host.length() > prefix_len) {
     replacements.SetHostStr(base::StringPiece(host).substr(prefix_len));

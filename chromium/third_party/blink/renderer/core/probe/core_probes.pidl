@@ -53,6 +53,7 @@
 
 interface CoreProbes {
 
+  class ClassicScript;
   class ConsoleMessage;
   class FontCustomPlatformData;
   class FontFace;
@@ -190,4 +191,5 @@ interface CoreProbes {
   void OnContentSecurityPolicyViolation(ExecutionContext* context, const blink::ContentSecurityPolicyViolationType violationType);
   void IsCacheDisabled(ExecutionContext*, bool* is_cache_disabled);
   void PerformanceEntryAdded([Keep] ExecutionContext*, PerformanceEntry*);
+  void ApplyAutomationOverride(ExecutionContext*, bool& enabled);
 }

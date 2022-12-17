@@ -17,7 +17,6 @@
 #include "base/sampling_heap_profiler/sampling_heap_profiler.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_piece.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
@@ -45,17 +44,30 @@ constexpr int kDefaultSamplingRateBytes = 10'000'000;
 constexpr int kDefaultCollectionIntervalInMinutes = 24 * 60;
 #endif
 
+#if BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_APPLE) && defined(ARCH_CPU_ARM64)
+// DecideIfCollectionIsEnabled is stubbed out so kStableProbability and
+// kNonStableProbability are never referenced.
+#else
 // Sets the chance that this client will report heap samples through a metrics
 // provider if it's on the stable channel.
 constexpr base::FeatureParam<double> kStableProbability{
-    &HeapProfilerController::kHeapProfilerReporting, "stable-probability",
-    0.01};
+  &HeapProfilerController::kHeapProfilerReporting, "stable-probability",
+#if BUILDFLAG(IS_ANDROID)
+      // With stable-probability 0.01 we get about 4x as many records as before
+      // https://crrev.com/c/3309878 landed in 98.0.4742.0, even with ARM64
+      // disabled. This is too high a volume to process.
+      0.0025
+#else
+      0.01
+#endif
+};
 
 // Sets the chance that this client will report heap samples through a metrics
 // provider if it's on a non-stable channel.
 constexpr base::FeatureParam<double> kNonStableProbability{
     &HeapProfilerController::kHeapProfilerReporting, "nonstable-probability",
     0.5};
+#endif
 
 // Sets heap sampling interval in bytes.
 constexpr base::FeatureParam<int> kSamplingRateBytes{
@@ -80,8 +92,15 @@ base::TimeDelta RandomInterval(base::TimeDelta mean) {
 }
 
 bool DecideIfCollectionIsEnabled(version_info::Channel channel) {
-  // TODO(crbug.com/1271555): Register a synthetic field trial
-  // (go/synthetic-trials) to keep track of which clients are opted in.
+#if BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_APPLE) && defined(ARCH_CPU_ARM64)
+  // TODO(crbug.com/1297724): The POSIX implementation of
+  // ModuleCache::CreateModuleForAddress is stubbed out on ARM64, so all samples
+  // would lack module information (see base/profiler/module_cache_posix.cc).
+  // Without this the reports cannot be symbolized so no point in collecting
+  // them. If this is fixed, also re-enable the tests in
+  // heap_profiler_controller_unittests.cc.
+  return false;
+#else
   if (!base::FeatureList::IsEnabled(
           HeapProfilerController::kHeapProfilerReporting))
     return false;
@@ -89,6 +108,7 @@ bool DecideIfCollectionIsEnabled(version_info::Channel channel) {
                                  ? kStableProbability.Get()
                                  : kNonStableProbability.Get();
   return base::RandDouble() < probability;
+#endif
 }
 
 // Records a time histogram for the `interval` between snapshots, using the

@@ -15,8 +15,13 @@ cargo_crate("lib") {
   crate_root = "crate/src/lib.rs"
 
   # Unit tests skipped. Generate with --with-tests to include them.
-  skip_unit_tests = true
+  build_native_rust_unit_tests = false
   sources = [ "crate/src/lib.rs" ]
   edition = "2015"
+  cargo_pkg_version = "1.1.0"
+  cargo_pkg_authors = "comex <comexk@gmail.com>, Fenhl <fenhl@fenhl.net>"
+  cargo_pkg_name = "shlex"
+  cargo_pkg_description =
+      "Split a string into shell words, like Python's shlex."
   features = [ "std" ]
 }

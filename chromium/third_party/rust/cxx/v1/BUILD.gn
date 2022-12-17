@@ -11,11 +11,15 @@ cargo_crate("lib") {
   crate_root = "crate/src/lib.rs"
 
   # Unit tests skipped. Generate with --with-tests to include them.
-  skip_unit_tests = true
+  build_native_rust_unit_tests = false
   sources = [ "crate/src/lib.rs" ]
   edition = "2018"
+  cargo_pkg_version = "1.0.57"
+  cargo_pkg_authors = "David Tolnay <dtolnay@gmail.com>"
+  cargo_pkg_name = "cxx"
+  cargo_pkg_description = "Safe interop between Rust and C++"
   deps = [
-    "//third_party/rust/cxxbridge_macro/v1:lib($host_toolchain)",
+    "//third_party/rust/cxxbridge_macro/v1:lib",
     "//third_party/rust/link_cplusplus/v1:lib",
   ]
   build_root = "crate/build.rs"

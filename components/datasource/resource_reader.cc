@@ -19,7 +19,7 @@
 
 #include "app/vivaldi_apptools.h"
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
 #include "base/android/apk_assets.h"
 #endif
 
@@ -43,7 +43,7 @@ bool ResourceReader::IsResourceURL(base::StringPiece url,
   return true;
 }
 
-#if !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
 
 namespace {
 
@@ -79,7 +79,7 @@ const base::FilePath& ResourceReader::GetResourceDirectory() {
   return *dir;
 }
 
-#endif  // !OS_ANDROID
+#endif  // !IS_ANDROID
 
 /* static */
 absl::optional<base::Value> ResourceReader::ReadJSON(
@@ -108,7 +108,7 @@ ResourceReader::ResourceReader(std::string resource_path)
     : resource_path_(std::move(resource_path)) {
   DCHECK(!resource_path_.empty());
   DCHECK(resource_path_.front() != '/');
-#if defined(OS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
   base::MemoryMappedFile::Region region;
   int json_fd =
       base::android::OpenApkAsset("assets/" + resource_path_, &region);

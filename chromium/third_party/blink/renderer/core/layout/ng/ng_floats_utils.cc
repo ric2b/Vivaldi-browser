@@ -177,7 +177,12 @@ void LayoutFloatWithoutFragmentation(NGUnpositionedFloat* unpositioned_float) {
   const NGConstraintSpace space =
       CreateConstraintSpaceForFloat(*unpositioned_float);
 
-  unpositioned_float->layout_result = unpositioned_float->node.Layout(space);
+  // Pass in the break token if one exists. This can happen when we relayout
+  // without fragmentation to handle clipping. We still want to look at the
+  // break token so that layout is resumed correctly. See
+  // NGFragmentationUtils::InvolvedInBlockFragmentation() for more details.
+  unpositioned_float->layout_result =
+      unpositioned_float->node.Layout(space, unpositioned_float->token);
   unpositioned_float->margins =
       ComputeMarginsFor(space, unpositioned_float->node.Style(),
                         unpositioned_float->parent_space);
@@ -361,7 +366,7 @@ NGPositionedFloat PositionFloat(NGUnpositionedFloat* unpositioned_float,
         (opportunity.rect.InlineSize() - float_margin_box_inline_size);
   }
 
-  if (!need_break_before &&
+  if (parent_space.HasBlockFragmentation() && !need_break_before &&
       exclusion_space->NeedsBreakBeforeFloat(
           unpositioned_float->ClearType(parent_space.Direction())))
     need_break_before = true;

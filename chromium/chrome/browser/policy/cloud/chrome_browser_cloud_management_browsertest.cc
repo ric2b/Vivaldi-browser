@@ -14,7 +14,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/threading/thread_restrictions.h"
@@ -528,6 +527,7 @@ class ChromeBrowserCloudManagementEnrollmentTest
   }
 
   void CreatedBrowserMainParts(content::BrowserMainParts* parts) override {
+    PlatformBrowserTest::CreatedBrowserMainParts(parts);
     static_cast<ChromeBrowserMainParts*>(parts)->AddParts(
         std::make_unique<ChromeBrowserExtraSetUp>(&observer_));
   }
@@ -715,13 +715,13 @@ class MachineLevelUserCloudPolicyPolicyFetchTest
   base::ScopedTempDir temp_dir_;
 };
 
-#if BUILDFLAG(IS_ANDROID)
-// Flaky on android-pie-x86-rel. https://crbug.com/1235367
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC)
+// TODO(crbug.com/1235367): Test is flaky.
 IN_PROC_BROWSER_TEST_P(MachineLevelUserCloudPolicyPolicyFetchTest,
                        DISABLED_Test) {
 #else
 IN_PROC_BROWSER_TEST_P(MachineLevelUserCloudPolicyPolicyFetchTest, Test) {
-#endif  // BUILDFLAG(IS_ANDROID)
+#endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC)
   MachineLevelUserCloudPolicyManager* manager =
       g_browser_process->browser_policy_connector()
           ->machine_level_user_cloud_policy_manager();
@@ -762,7 +762,8 @@ IN_PROC_BROWSER_TEST_P(MachineLevelUserCloudPolicyPolicyFetchTest, Test) {
   if (dm_token() != kInvalidDMToken) {
     EXPECT_EQ(1u, policy_map.size());
     EXPECT_EQ(base::Value(true),
-              *(policy_map.Get(key::kSavingBrowserHistoryDisabled)->value()));
+              *(policy_map.Get(key::kSavingBrowserHistoryDisabled)
+                    ->value(base::Value::Type::BOOLEAN)));
 
     // The token in storage should be valid.
     DMToken token = retrieve_dm_token();
@@ -902,7 +903,8 @@ IN_PROC_BROWSER_TEST_F(MachineLevelUserCloudPolicyRobotAuthTest, MAYBE_Test) {
 
   EXPECT_EQ(1u, policy_map.size());
   EXPECT_EQ(base::Value(true),
-            *(policy_map.Get(key::kSavingBrowserHistoryDisabled)->value()));
+            *(policy_map.Get(key::kSavingBrowserHistoryDisabled)
+                  ->value(base::Value::Type::BOOLEAN)));
 
   // The token in storage should be valid.
   DMToken token = retrieve_dm_token();

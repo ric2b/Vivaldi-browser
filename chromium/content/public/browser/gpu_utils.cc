@@ -14,7 +14,6 @@
 #include "build/chromeos_buildflags.h"
 #include "cc/base/switches.h"
 #include "components/viz/common/features.h"
-#include "components/viz/common/switches.h"
 #include "components/viz/common/viz_utils.h"
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/gpu/gpu_process_host.h"
@@ -27,6 +26,12 @@
 #include "media/base/media_switches.h"
 #include "media/media_buildflags.h"
 #include "ui/gfx/switches.h"
+
+// TODO(b/192563524): remove it when the legacy video decoder is replaced for
+// all devices.
+#if BUILDFLAG(IS_CHROMEOS)
+#include "ui/ozone/public/ozone_switches.h"  // nogncheck
+#endif                                       // BUILDFLAG(IS_CHROMEOS)
 
 namespace {
 
@@ -87,9 +92,6 @@ const gpu::GpuPreferences GetGpuPreferencesFromCommandLine() {
       command_line->HasSwitch(switches::kInProcessGPU);
   gpu_preferences.gpu_sandbox_start_early =
       command_line->HasSwitch(switches::kGpuSandboxStartEarly);
-
-  gpu_preferences.enable_oop_rasterization_ddl =
-      base::FeatureList::IsEnabled(features::kOopRasterizationDDL);
   gpu_preferences.enable_vulkan_protected_memory =
       command_line->HasSwitch(switches::kEnableVulkanProtectedMemory);
   gpu_preferences.disable_vulkan_fallback_to_gl_for_testing =

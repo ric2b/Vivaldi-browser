@@ -25,6 +25,9 @@
 #include "extensions/common/error_utils.h"
 #include "extensions/common/manifest_constants.h"
 
+#include "app/vivaldi_apptools.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
+
 namespace extensions {
 
 namespace {
@@ -248,7 +251,7 @@ void SettingsOverridesAPI::RegisterSearchProvider(
 
   url_service_->Add(std::move(turl));
 
-  if (settings->search_engine->is_default) {
+  if (settings->search_engine->is_default && (!vivaldi::IsVivaldiRunning() || profile_->GetPrefs()->GetBoolean(vivaldiprefs::kAddressBarSearchAllowExtensionOverride))) {
     // Override current DSE pref to have extension overriden value.
     SetPref(extension->id(),
             DefaultSearchManager::kDefaultSearchProviderDataPrefName,

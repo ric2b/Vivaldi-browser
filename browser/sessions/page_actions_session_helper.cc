@@ -8,7 +8,7 @@
 #include "components/sessions/core/session_command.h"
 #include "components/sessions/vivaldi_session_service_commands.h"
 
-void SessionService::PageActionOverridesChanged(
+void SessionService::VivPageActionOverridesChanged(
     const SessionID& window_id,
     const SessionID& tab_id,
     const base::FilePath& script_path,
@@ -17,15 +17,15 @@ void SessionService::PageActionOverridesChanged(
     return;
   switch (script_override) {
     case page_actions::Service::kNoOverride:
-      ScheduleCommand(sessions::CreateRemovePageActionOverrideCommand(
+      ScheduleCommand(sessions::CreateRemoveVivPageActionOverrideCommand(
           tab_id, script_path.AsUTF8Unsafe()));
       break;
     case page_actions::Service::kEnabledOverride:
-      ScheduleCommand(sessions::CreatePageActionOverrideCommand(
+      ScheduleCommand(sessions::CreateVivPageActionOverrideCommand(
           tab_id, script_path.AsUTF8Unsafe(), true));
       break;
     case page_actions::Service::kDisabledOverride:
-      ScheduleCommand(sessions::CreatePageActionOverrideCommand(
+      ScheduleCommand(sessions::CreateVivPageActionOverrideCommand(
           tab_id, script_path.AsUTF8Unsafe(), false));
       break;
   }
@@ -54,9 +54,9 @@ void PageActionsSessionHelper::OnScriptOverridesChanged(
       sessions::SessionTabHelper::FromWebContents(tab_contents);
   if (!session_tab_helper)
     return;
-  session_service_->PageActionOverridesChanged(session_tab_helper->window_id(),
-                                               session_tab_helper->session_id(),
-                                               script_path, script_override);
+  session_service_->VivPageActionOverridesChanged(
+      session_tab_helper->window_id(), session_tab_helper->session_id(),
+      script_path, script_override);
 }
 
 void PageActionsSessionHelper::OnProfileWillBeDestroyed(Profile* profile) {

@@ -258,7 +258,7 @@ void OvenHandler::RegisterMessages() {
                           base::Unretained(this)));
 }
 
-void OvenHandler::HandleBakeDonuts(base::Value::ConstListView args) {
+void OvenHandler::HandleBakeDonuts(const base::Value::List& args) {
   AllowJavascript();
 
   // IMPORTANT: Fully validate `args`.
@@ -379,7 +379,7 @@ if (loadTimeData.getBoolean('myFeatureIsEnabled')) {
 <div class="note">
 Data sources are not recreated on refresh, and therefore values that are dynamic
 (i.e. that can change while Chrome is running) may easily become stale. It may
-be preferable to use <code>cr.sendWithPromise()</code> to initialize dynamic
+be preferable to use <code>sendWithPromise()</code> to initialize dynamic
 values and call <code>FireWebUIListener()</code> to update them.
 
 If you really want or need to use <code>AddBoolean()</code> for a dynamic value,
@@ -513,7 +513,7 @@ alternatives:
 * [`FireWebUIListener()`](#FireWebUIListener) allows easily notifying the page
   when an event occurs in C++ and is more loosely coupled (nothing blows up if
   the event dispatch is ignored). JS subscribes to notifications via
-  [`cr.addWebUIListener`](#cr_addWebUIListener).
+  [`addWebUIListener`](#addWebUIListener).
 * [`ResolveJavascriptCallback`](#ResolveJavascriptCallback) and
   [`RejectJavascriptCallback`](#RejectJavascriptCallback) are useful
   when Javascript requires a response to an inquiry about C++-canonical state
@@ -529,7 +529,7 @@ happen in timely manner, or may be caused to happen by unpredictable events
 Here's some example to detect a change to Chrome's theme:
 
 ```js
-cr.addWebUIListener("theme-changed", refreshThemeStyles);
+addWebUIListener("theme-changed", refreshThemeStyles);
 ```
 
 This Javascript event listener can be triggered in C++ via:
@@ -544,7 +544,7 @@ Because it's not clear when a user might want to change their theme nor what
 theme they'll choose, this is a good candidate for an event listener.
 
 If you simply need to get a response in Javascript from C++, consider using
-[`cr.sendWithPromise()`](#cr_sendWithPromise) and
+[`sendWithPromise()`](#sendWithPromise) and
 [`ResolveJavascriptCallback`](#ResolveJavascriptCallback).
 
 ### WebUIMessageHandler::OnJavascriptAllowed()
@@ -626,7 +626,7 @@ imperatively unsubscribe in `OnJavascriptDisallowed()`.
 ### WebUIMessageHandler::RejectJavascriptCallback()
 
 This method is called in response to
-[`cr.sendWithPromise()`](#cr_sendWithPromise) to reject the issued Promise. This
+[`sendWithPromise()`](#sendWithPromise) to reject the issued Promise. This
 runs the rejection (second) callback in the [Promise's
 executor](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise)
 and any
@@ -657,16 +657,16 @@ See also: [`ResolveJavascriptCallback`](#ResolveJavascriptCallback)
 ### WebUIMessageHandler::ResolveJavascriptCallback()
 
 This method is called in response to
-[`cr.sendWithPromise()`](#cr_sendWithPromise) to fulfill an issued Promise,
+[`sendWithPromise()`](#sendWithPromise) to fulfill an issued Promise,
 often with a value. This results in runnings any fulfillment (first) callbacks
 in the associate Promise executor and any registered
 [`then()`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/then)
 callbacks.
 
-So, given this JS code:
+So, given this TypeScript code:
 
 ```js
-cr.sendWithPromise('bakeDonuts').then(function(numDonutsBaked) {
+sendWithPromise('bakeDonuts').then(function(numDonutsBaked: number) {
   shop.donuts += numDonutsBaked;
 });
 ```
@@ -734,7 +734,7 @@ callback with the deserialized arguments:
 message_callbacks_.find(message)->second.Run(&args);
 ```
 
-### cr.addWebUIListener()
+### addWebUIListener()
 
 WebUI listeners are a convenient way for C++ to inform JavaScript of events.
 
@@ -745,7 +745,9 @@ listening for events in some cases. **cr.addWebUIListener** is preferred in new
 code.
 
 Adding WebUI listeners creates and inserts a unique ID into a map in JavaScript,
-just like [cr.sendWithPromise()](#cr_sendWithPromise).
+just like [sendWithPromise()](#sendWithPromise).
+
+addWebUIListener can be imported from 'chrome://resources/js/cr.m.js'.
 
 ```js
 // addWebUIListener():
@@ -774,18 +776,18 @@ void OvenHandler::OnBakingDonutsFinished(size_t num_donuts) {
 }
 ```
 
-JavaScript can listen for WebUI events via:
+TypeScript can listen for WebUI events via:
 
 ```js
-var donutsReady = 0;
-cr.addWebUIListener('donuts-baked', function(numFreshlyBakedDonuts) {
+let donutsReady: number = 0;
+addWebUIListener('donuts-baked', function(numFreshlyBakedDonuts: number) {
   donutsReady += numFreshlyBakedDonuts;
 });
 ```
 
-### cr.sendWithPromise()
+### sendWithPromise()
 
-`cr.sendWithPromise()` is a wrapper around `chrome.send()`. It's used when
+`sendWithPromise()` is a wrapper around `chrome.send()`. It's used when
 triggering a message requires a response:
 
 ```js
@@ -799,16 +801,18 @@ to make request specific or do from deeply nested code.
 In newer WebUI pages, you see code like this:
 
 ```js
-cr.sendWithPromise('getNumberOfDonuts').then(function(numDonuts) {
+sendWithPromise('getNumberOfDonuts').then(function(numDonuts: number) {
   alert('Yay, there are ' + numDonuts + ' delicious donuts left!');
 });
 ```
+
+Note that sendWithPromise can be imported from 'chrome://resources/js/cr.m.js';
 
 On the C++ side, the message registration is similar to
 [`chrome.send()`](#chrome_send) except that the first argument in the
 message handler's list is a callback ID. That ID is passed to
 `ResolveJavascriptCallback()`, which ends up resolving the `Promise` in
-JavaScript and calling the `then()` function.
+JavaScript/TypeScript and calling the `then()` function.
 
 ```c++
 void DonutHandler::HandleGetNumberOfDonuts(const base::ListValue* args) {
@@ -826,7 +830,7 @@ The callback ID is just a namespaced, ever-increasing number. It's used to
 insert a `Promise` into the JS-side map when created.
 
 ```js
-// cr.sendWithPromise():
+// sendWithPromise():
 var id = methodName + '_' + uidCounter++;
 chromeSendResolverMap[id] = new PromiseResolver;
 chrome.send(methodName, [id].concat(args));
@@ -888,25 +892,37 @@ therefore it is not advisable to use for any sensitive content.
 
 ## JavaScript Error Reporting
 
-By default, errors in the JavaScript of a WebUI page will generate error reports
-which appear in Google's internal crash/ reports page. These error reports will
-only be generated for Google Chrome builds, not Chromium or other Chromium-based
-browsers.
+By default, errors in the JavaScript or TypeScript of a WebUI page will generate
+error reports which appear in Google's internal [go/crash](http://go/crash)
+reports page. These error reports will only be generated for Google Chrome
+builds, not Chromium or other Chromium-based browsers.
 
-Specifically, an error report will be generated when the JavaScript for a
-WebUI-based chrome:// page does one of the following:
+Specifically, an error report will be generated when the JavaScript or
+TypeScript for a WebUI-based chrome:// page does one of the following:
 * Generates an uncaught exception,
 * Has a promise which is rejected, and no rejection handler is provided, or
 * Calls `console.error()`.
 
 Such errors will appear alongside other crashes in the
-`product_name=Chrome_ChromeOS` or `product_name=Chrome_Linux` lists on crash/.
-The signature of the error is simply the error message. To avoid
-spamming the system, only one error report with a given message will be
+`product_name=Chrome_ChromeOS`, `product_name=Chrome_Lacros`, or
+`product_name=Chrome_Linux` lists on [go/crash](http://go/crash).
+
+The signature of the error is the error message followed by the URL on which the
+error appeared. For example, if chrome://settings/lazy_load.js throws a
+TypeError with a message `Cannot read properties of null (reading 'select')` and
+does not catch it, the magic signature would be 
+```
+Uncaught TypeError: Cannot read properties of null (reading 'select') (chrome://settings)
+```
+To avoid spamming the system, only one error report with a given message will be
 generated per hour.
 
 If you are getting error reports for an expected condition, you can turn off the
-reports simply by changing `console.error()` into `console.warn()`.
+reports simply by changing `console.error()` into `console.warn()`. For
+instance, if JavaScript is calling `console.error()` when the user tries to
+connect to an unavailable WiFi network at the same time the page shows the user
+an error message, the `console.error()` should be replaced with a
+`console.warn()`.
 
 If you wish to get more control of the JavaScript error messages, for example
 to change the product name or to add additional data, you may wish to switch to
@@ -914,8 +930,28 @@ using `CrashReportPrivate.reportError()`. If you do so, be sure to override
 `WebUIController::IsJavascriptErrorReportingEnabled()` to return false for your
 page; this will avoid generating redundant error reports.
 
-Known issues:
-1. Error reporting is currently enabled only on ChromeOS and Linux.
+### Are JavaScript errors actually crashes?
+JavaScript errors are not "crashes" in the C++ sense. They do not stop a process
+from running, they do not cause a "sad tab" page. Some tooling refers to them as
+crashes because they are going through the same pipeline as the C++ crashes, and
+that pipeline was originally designed to handle crashes.
+
+### How much impact does this JavaScript error have?
+That depends on the JavaScript error. In some cases, the errors have no user
+impact; for instance, the "unavailable WiFi network calling `console.error()`"
+example above. In other cases, JavaScript errors may be serious errors that
+block the user from completing critical user journeys. For example, if the
+JavaScript is supposed to un-hide one of several variants of settings page, but
+the JavaScript has an unhandled exception before un-hiding any of them, then
+the user will see a blank page and be unable to change that setting.
+
+Because it is difficult to automatically determine the severity of a given
+error, JavaScript errors are currently all classified as "WARNING" level when
+computing stability metrics.
+
+### Known issues
+1. Error reporting is currently enabled only on ChromeOS (ash and Lacros) and
+   Linux.
 2. Errors are only reported for chrome:// URLs.
 3. Unhandled promise rejections do not have a good stack.
 4. The line numbers and column numbers in the stacks are for the minified
@@ -924,7 +960,6 @@ Known issues:
 5. Error messages with variable strings do not group well. For example, if the
    error message includes the name of a network, each network name will be its
    own signature.
-
 
 ## See also
 

@@ -17,6 +17,7 @@
 #include "base/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/observer_list.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -52,10 +53,9 @@
 #include "net/cookies/cookie_util.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/models/image_model.h"
 #include "ui/base/resource/resource_bundle.h"
-#include "ui/gfx/color_palette.h"
-#include "ui/gfx/image/image_skia.h"
-#include "ui/gfx/paint_vector_icon.h"
+#include "ui/color/color_id.h"
 #include "ui/resources/grit/ui_resources.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -1371,12 +1371,12 @@ int CookiesTreeModel::GetSendForMessageID(const net::CanonicalCookie& cookie) {
 // TreeModel methods:
 // Returns the set of icons for the nodes in the tree. You only need override
 // this if you don't want to use the default folder icons.
-void CookiesTreeModel::GetIcons(std::vector<gfx::ImageSkia>* icons) {
-  icons->push_back(gfx::CreateVectorIcon(vector_icons::kCookieIcon, 18,
-                                         gfx::kChromeIconGrey));
-  icons->push_back(*ui::ResourceBundle::GetSharedInstance()
-                        .GetNativeImageNamed(IDR_COOKIE_STORAGE_ICON)
-                        .ToImageSkia());
+void CookiesTreeModel::GetIcons(std::vector<ui::ImageModel>* icons) {
+  icons->push_back(ui::ImageModel::FromVectorIcon(vector_icons::kCookieIcon,
+                                                  ui::kColorIcon, 18));
+  icons->push_back(ui::ImageModel::FromImage(
+      ui::ResourceBundle::GetSharedInstance().GetNativeImageNamed(
+          IDR_COOKIE_STORAGE_ICON)));
 }
 
 // Returns the index of the icon to use for |node|. Return -1 to use the

@@ -8,11 +8,11 @@ import '../icons.js';
 import '../settings_shared_css.js';
 import '../i18n_setup.js';
 
-import {assert} from 'chrome://resources/js/assert.m.js';
+import {assert} from 'chrome://resources/js/assert_ts.js';
 import {focusWithoutInk} from 'chrome://resources/js/cr/ui/focus_without_ink.m.js';
 import {I18nMixin} from 'chrome://resources/js/i18n_mixin.js';
 import {WebUIListenerMixin} from 'chrome://resources/js/web_ui_listener_mixin.js';
-import {DomRepeatEvent, html, microTask, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {DomRepeatEvent, microTask, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {BaseMixin} from '../base_mixin.js';
 import {PrefsMixin} from '../prefs/prefs_mixin.js';
@@ -97,12 +97,14 @@ class SettingsSiteSettingsListElement extends
     // elements residing in this element's Shadow DOM.
     for (const item of this.categoryList) {
       this.focusConfig.set(item.route.path, () => microTask.run(() => {
-        focusWithoutInk(assert(this.shadowRoot!.querySelector(`#${item.id}`)!));
+        const toFocus = this.shadowRoot!.querySelector(`#${item.id}`);
+        assert(!!toFocus);
+        focusWithoutInk(toFocus);
       }));
     }
   }
 
-  ready() {
+  override ready() {
     super.ready();
 
     Promise

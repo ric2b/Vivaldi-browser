@@ -63,6 +63,17 @@ void PairerBrokerImpl::PairDevice(scoped_refptr<Device> device) {
   }
 }
 
+bool PairerBrokerImpl::IsPairing() {
+  // We are guaranteed to not be pairing when the following two maps are
+  // empty.
+  return !fast_pair_pairers_.empty() || !pair_failure_counts_.empty();
+}
+
+void PairerBrokerImpl::StopPairing() {
+  fast_pair_pairers_.clear();
+  pair_failure_counts_.clear();
+}
+
 void PairerBrokerImpl::PairFastPairDevice(scoped_refptr<Device> device) {
   if (base::Contains(fast_pair_pairers_, device->ble_address)) {
     QP_LOG(WARNING) << __func__ << ": Already pairing device" << device;
@@ -130,13 +141,29 @@ void PairerBrokerImpl::OnAccountKeyFailure(scoped_refptr<Device> device,
   for (auto& observer : observers_) {
     observer.OnAccountKeyWrite(device, failure);
   }
+
+  FastPairHandshakeLookup::GetInstance()->Erase(device);
+  pair_failure_counts_.erase(device->ble_address);
+  fast_pair_pairers_.erase(device->ble_address);
 }
 
 void PairerBrokerImpl::OnFastPairProcedureComplete(
     scoped_refptr<Device> device) {
   QP_LOG(INFO) << __func__ << ": Device=" << device;
-  fast_pair_pairers_.erase(device->ble_address);
+
+  // If we get to this point in the flow for the initial and retroactive pairing
+  // scenarios, this means that the account key has successfully been written
+  // to these devices.
+  if (device->protocol == Protocol::kFastPairInitial ||
+      device->protocol == Protocol::kFastPairRetroactive) {
+    for (auto& observer : observers_) {
+      observer.OnAccountKeyWrite(device, /*error=*/absl::nullopt);
+    }
+  }
+
   FastPairHandshakeLookup::GetInstance()->Erase(device);
+  fast_pair_pairers_.erase(device->ble_address);
+  pair_failure_counts_.erase(device->ble_address);
 }
 
 }  // namespace quick_pair

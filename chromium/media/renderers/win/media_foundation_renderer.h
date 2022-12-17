@@ -15,6 +15,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "base/unguessable_token.h"
 #include "base/win/windows_types.h"
@@ -45,16 +46,20 @@ class MEDIA_EXPORT MediaFoundationRenderer
   // Reported to UMA. Do not change existing values.
   enum class ErrorReason {
     kUnknown = 0,
-    kCdmProxyReceivedInInvalidState,
-    kFailedToSetSourceOnMediaEngine,
-    kFailedToSetCurrentTime,
-    kFailedToPlay,
-    kOnPlaybackError,
-    kOnDCompSurfaceReceivedError,
-    kOnDCompSurfaceHandleSetError,
-    kOnConnectionError,
+    kCdmProxyReceivedInInvalidState = 1,
+    kFailedToSetSourceOnMediaEngine = 2,
+    kFailedToSetCurrentTime = 3,
+    kFailedToPlay = 4,
+    kOnPlaybackError = 5,
+    kOnDCompSurfaceReceivedError [[deprecated]] = 6,
+    kOnDCompSurfaceHandleSetError = 7,
+    kOnConnectionError = 8,
+    kFailedToSetDCompMode = 9,
+    kFailedToGetDCompSurface = 10,
+    kFailedToDuplicateHandle = 11,
+    kFailedToCreateMediaEngine = 12,
     // Add new values here and update `kMaxValue`. Never reuse existing values.
-    kMaxValue = kOnConnectionError,
+    kMaxValue = kFailedToCreateMediaEngine,
   };
 
   // Report `reason` to UMA.
@@ -88,6 +93,19 @@ class MEDIA_EXPORT MediaFoundationRenderer
   void SetOutputRect(const gfx::Rect& output_rect,
                      SetOutputRectCB callback) override;
 
+  using FrameReturnCallback = base::RepeatingCallback<
+      void(const base::UnguessableToken&, const gfx::Size&, base::TimeDelta)>;
+  void SetFrameReturnCallbacks(
+      FrameReturnCallback frame_available_cb,
+      FramePoolInitializedCallback initialized_frame_pool_cb);
+  void NotifyFrameReleased(const base::UnguessableToken& frame_token) override;
+  void RequestNextFrameBetweenTimestamps(base::TimeTicks deadline_min,
+                                         base::TimeTicks deadline_max) override;
+  void SetRenderingMode(RenderingMode render_mode) override;
+
+  // Testing verification
+  bool InFrameServerMode();
+
  private:
   HRESULT CreateMediaEngine(MediaResource* media_resource);
   HRESULT InitializeDXGIDeviceManager();
@@ -111,7 +129,7 @@ class MEDIA_EXPORT MediaFoundationRenderer
   // Callback for `content_protection_manager_`.
   void OnProtectionManagerWaiting(WaitingReason reason);
 
-  void OnCdmProxyReceived(scoped_refptr<MediaFoundationCdmProxy> cdm_proxy);
+  void OnCdmProxyReceived();
   void OnBufferingStateChange(BufferingState state,
                               BufferingStateChangeReason reason);
 
@@ -122,9 +140,18 @@ class MEDIA_EXPORT MediaFoundationRenderer
   HRESULT PauseInternal();
   HRESULT InitializeTexturePool(const gfx::Size& size);
   void OnVideoNaturalSizeChange();
+
+  // Handles errors in MediaFoundationRenderer:
+  // - DLOG for local debugging
+  // - MEDIA_LOG for media-internals, dev tools etc.
+  // - Report error reason to UMA.
+  // - Notify the `cdm_proxy_`.
+  // - Notify the client via `status_cb`, or if `status_cb` is null, notify
+  //   `renderer_client` via OnError().
   void OnError(PipelineStatus status,
                ErrorReason reason,
-               absl::optional<HRESULT> hresult = absl::nullopt);
+               absl::optional<HRESULT> hresult = absl::nullopt,
+               PipelineStatusCallback status_cb = base::NullCallback());
 
   // Renderer methods are running in the same sequence.
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
@@ -137,11 +164,14 @@ class MEDIA_EXPORT MediaFoundationRenderer
   const bool force_dcomp_mode_for_testing_;
 
   raw_ptr<RendererClient> renderer_client_;
+  FrameReturnCallback frame_available_cb_;
+  FramePoolInitializedCallback initialized_frame_pool_cb_;
 
   Microsoft::WRL::ComPtr<IMFMediaEngine> mf_media_engine_;
   Microsoft::WRL::ComPtr<MediaEngineNotifyImpl> mf_media_engine_notify_;
   Microsoft::WRL::ComPtr<MediaEngineExtension> mf_media_engine_extension_;
   Microsoft::WRL::ComPtr<MediaFoundationSourceWrapper> mf_source_;
+
   // This enables MFMediaEngine to use hardware acceleration for video decoding
   // and video processing.
   Microsoft::WRL::ComPtr<IMFDXGIDeviceManager> dxgi_device_manager_;
@@ -181,10 +211,10 @@ class MEDIA_EXPORT MediaFoundationRenderer
   // Composition mode.
   MediaFoundationTexturePool texture_pool_;
 
-  // When in frame server mode we need to manage the DX textures and provide
-  // frames to the renderer.
-  // Disabled until we move
-  bool in_frame_server_mode_ = false;
+  // The represents the rendering mode of the Media Engine.
+  RenderingMode rendering_mode_ = RenderingMode::DirectComposition;
+
+  bool has_reported_significant_playback_ = false;
 
   // NOTE: Weak pointers must be invalidated before all other member variables.
   base::WeakPtrFactory<MediaFoundationRenderer> weak_factory_{this};

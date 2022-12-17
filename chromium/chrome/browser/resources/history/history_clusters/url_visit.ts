@@ -2,21 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import './menu_container.js';
 import './page_favicon.js';
 import './shared_style.js';
 import 'chrome://resources/cr_elements/cr_action_menu/cr_action_menu.js';
 import 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.m.js';
 
-import {CrActionMenuElement} from 'chrome://resources/cr_elements/cr_action_menu/cr_action_menu.js';
-import {CrLazyRenderElement} from 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.m.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {BrowserProxyImpl} from './browser_proxy.js';
-import {Annotation, PageHandlerRemote, URLVisit} from './history_clusters.mojom-webui.js';
-import {ClusterAction, MetricsProxyImpl, VisitAction, VisitType} from './metrics_proxy.js';
+import {Annotation, URLVisit} from './history_clusters.mojom-webui.js';
 import {OpenWindowProxyImpl} from './open_window_proxy.js';
 import {getTemplate} from './url_visit.html.js';
+import {insertHighlightedTextIntoElement} from './utils.js';
 
 /**
  * @fileoverview This file provides a custom element displaying a visit to a
@@ -40,8 +38,8 @@ declare global {
 
 interface VisitRowElement {
   $: {
-    actionMenu: CrLazyRenderElement<CrActionMenuElement>,
-    actionMenuButton: Element,
+    title: HTMLElement,
+    url: HTMLElement,
   };
 }
 
@@ -57,14 +55,6 @@ class VisitRowElement extends PolymerElement {
   static get properties() {
     return {
       /**
-       * The index of the cluster this visit belongs to.
-       */
-      clusterIndex: {
-        type: Number,
-        value: -1,  // Initialized to an invalid value.
-      },
-
-      /**
        * Whether this is a top visit.
        */
       isTopVisit: {
@@ -74,12 +64,9 @@ class VisitRowElement extends PolymerElement {
       },
 
       /**
-       * The index of the visit in the cluster.
+       * The current query for which related clusters are requested and shown.
        */
-      index: {
-        type: Number,
-        value: -1,  // Initialized to an invalid value.
-      },
+      query: String,
 
       /**
        * The visit to display.
@@ -101,6 +88,28 @@ class VisitRowElement extends PolymerElement {
         type: String,
         computed: 'computeDebugInfo_(visit)',
       },
+
+      /**
+       * Page title for the visit. This property is actually unused. The side
+       * effect of the compute function is used to insert the HTML elements for
+       * highlighting into this.$.title element.
+       */
+      unusedTitle_: {
+        type: String,
+        computed: 'computeTitle_(visit)',
+      },
+
+      /**
+       * The visible url stripped of the scheme, common prefixes, username,
+       * password, port, queries, and hashes to be simpler and more descriptive.
+       * This property is actually unused. The side effect of the compute
+       * function is used to insert the HTML elements for highlighting into
+       * this.$.url element.
+       */
+      unusedVisibleUrl_: {
+        type: String,
+        computed: 'computeVisibleUrl_(visit)',
+      }
     };
   }
 
@@ -108,37 +117,24 @@ class VisitRowElement extends PolymerElement {
   // Properties
   //============================================================================
 
-  clusterIndex: number;
-  index: number;
+  isTopVisit: boolean;
+  query: string;
   visit: URLVisit;
-  private pageHandler_: PageHandlerRemote;
-
-  //============================================================================
-  // Overridden methods
-  //============================================================================
-
-  constructor() {
-    super();
-    this.pageHandler_ = BrowserProxyImpl.getInstance().handler;
-  }
+  private annotations_: Array<string>;
+  private debugInfo_: string;
+  private unusedTitle_: string;
+  private unusedVisibleUrl_: string;
 
   //============================================================================
   // Event handlers
   //============================================================================
 
-  private onActionMenuButtonClick_(event: MouseEvent) {
-    this.$.actionMenu.get().showAt(this.$.actionMenuButton);
-    event.preventDefault();  // Prevent default browser action (navigation).
-  }
-
   private onAuxClick_() {
-    MetricsProxyImpl.getInstance().recordVisitAction(
-        VisitAction.CLICKED, this.index, this.getVisitType_());
-
     // Notify the parent <history-cluster> element of this event.
     this.dispatchEvent(new CustomEvent('visit-clicked', {
       bubbles: true,
       composed: true,
+      detail: this.visit,
     }));
   }
 
@@ -168,39 +164,6 @@ class VisitRowElement extends PolymerElement {
     OpenWindowProxyImpl.getInstance().open(this.visit.normalizedUrl.url);
   }
 
-  private onOpenAllButtonClick_() {
-    this.pageHandler_.openVisitUrlsInTabGroup(
-        [this.visit, ...this.visit.relatedVisits]);
-
-    this.$.actionMenu.get().close();
-
-    MetricsProxyImpl.getInstance().recordClusterAction(
-        ClusterAction.OPENED_IN_TAB_GROUP, this.clusterIndex);
-  }
-
-  private onRemoveAllButtonClick_() {
-    this.dispatchEvent(new CustomEvent('remove-visits', {
-      bubbles: true,
-      composed: true,
-      detail: [this.visit, ...this.visit.relatedVisits],
-    }));
-
-    this.$.actionMenu.get().close();
-  }
-
-  private onRemoveSelfButtonClick_() {
-    this.dispatchEvent(new CustomEvent('remove-visits', {
-      bubbles: true,
-      composed: true,
-      detail: [this.visit],
-    }));
-
-    this.$.actionMenu.get().close();
-
-    MetricsProxyImpl.getInstance().recordVisitAction(
-        VisitAction.DELETED, this.index, this.getVisitType_());
-  }
-
   //============================================================================
   // Helper methods
   //============================================================================
@@ -224,30 +187,27 @@ class VisitRowElement extends PolymerElement {
     return JSON.stringify(this.visit.debugInfo);
   }
 
-  /**
-   * Returns the visible url stripped of the scheme, common prefixes, username,
-   * password, port, queries, and hashes for simpler more descriptive urls.
-   * TODO(crbug.com/1294350): Move this logic to a cross-platform location to
-   * be shared by various surfaces.
-   */
-  private getVisibleUrl_(_visit: URLVisit): string {
-    try {
-      const url = new URL(this.visit.normalizedUrl.url);
-      return url.hostname.replace(/^(www\.|m\.|mobile\.|touch\.)/, '').trim() +
-          url.pathname.trim();
-    } catch (err) {
-      return '';
-    }
+  private computeTitle_(_visit: URLVisit): string {
+    insertHighlightedTextIntoElement(
+        this.$.title, this.visit.pageTitle, this.query);
+    return this.visit.pageTitle;
   }
 
   /**
-   * Returns the VisitType based on whether this is a visit to the default
-   * search provider's results page.
+   * TODO(crbug.com/1294350): Move this logic to a cross-platform location to
+   * be shared by various surfaces.
    */
-  private getVisitType_(): VisitType {
-    return this.visit.annotations.includes(Annotation.kSearchResultsPage) ?
-        VisitType.SRP :
-        VisitType.NON_SRP;
+  private computeVisibleUrl_(_visit: URLVisit): string {
+    try {
+      const url = new URL(this.visit.normalizedUrl.url);
+      const visibleUrl =
+          url.hostname.replace(/^(www\.|m\.|mobile\.|touch\.)/, '').trim() +
+          url.pathname.trim();
+      insertHighlightedTextIntoElement(this.$.url, visibleUrl, this.query);
+      return visibleUrl;
+    } catch (err) {
+      return '';
+    }
   }
 }
 

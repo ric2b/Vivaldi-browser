@@ -18,7 +18,7 @@ import 'chrome://resources/polymer/v3_0/paper-ripple/paper-ripple.js';
 import '../icons.js';
 import '../settings_shared_css.js';
 
-import {assert} from 'chrome://resources/js/assert.m.js';
+import {assert} from 'chrome://resources/js/assert_ts.js';
 import {IronCollapseElement} from 'chrome://resources/polymer/v3_0/iron-collapse/iron-collapse.js';
 import {IronSelectorElement} from 'chrome://resources/polymer/v3_0/iron-selector/iron-selector.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -69,7 +69,7 @@ export class SettingsMenuElement extends SettingsMenuElementBase {
   advancedOpened: boolean;
   pageVisibility: PageVisibility;
 
-  currentRouteChanged(newRoute: Route) {
+  override currentRouteChanged(newRoute: Route) {
     // Focus the initially selected path.
     const anchors = this.shadowRoot!.querySelectorAll('a');
     for (let i = 0; i < anchors.length; ++i) {

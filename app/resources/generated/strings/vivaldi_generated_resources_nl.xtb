@@ -9,7 +9,6 @@
 <translation id="1054153489933238809">Oorspronkelijke &amp;afbeelding openen in nieuwe tab</translation>
 <translation id="1056898198331236512">Waarschuwing</translation>
 <translation id="1084824384139382525">Koppelingsadres &amp;kopiëren</translation>
-<translation id="1128109161498068552">Websites niet toestaan berichten exclusief voor het systeem te gebruiken om toegang te krijgen tot MIDI-apparaten</translation>
 <translation id="1163931534039071049">&amp;Framebron weergeven</translation>
 <translation id="1165039591588034296">Fout</translation>
 <translation id="1175364870820465910">A&amp;fdrukken...</translation>
@@ -22,7 +21,6 @@
 <translation id="1297175357211070620">Bestemming</translation>
 <translation id="1303101771013849280">Html-bladwijzerbestand</translation>
 <translation id="1430915738399379752">Afdrukken</translation>
-<translation id="1433811987160647649">Goedkeuring vragen vóór toegang</translation>
 <translation id="1451375123200651445">Webpagina, één bestand</translation>
 <translation id="1465176863081977902">Audioadres k&amp;opiëren</translation>
 <translation id="1476607407192946488">&amp;Taalinstellingen</translation>
@@ -99,13 +97,11 @@
 <translation id="2783321960289401138">Snelkoppeling maken...</translation>
 <translation id="2785873697295365461">Bestandsdescriptors</translation>
 <translation id="2809586584051668049">en <ph name="NUMBER_ADDITIONAL_DISABLED" /> andere</translation>
-<translation id="2812989263793994277">Geen afbeeldingen weergeven</translation>
 <translation id="2850541429955027218">Thema toevoegen</translation>
 <translation id="2861941300086904918">Beveiligingsbeheerder voor Native Client</translation>
 <translation id="2881076733170862447">Wanneer je op de extensie klikt</translation>
 <translation id="2889064240420137087">Koppeling openen met...</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> kan niet communiceren met deze printer. Controleer of de printer is aangesloten en probeer het opnieuw.</translation>
-<translation id="2904456025988372123">Goedkeuring vragen als een website na het eerste bestand probeert aanvullende bestanden automatisch te downloaden</translation>
 <translation id="2913331724188855103">Websites toestaan cookiegegevens op te slaan en te lezen (aanbevolen)</translation>
 <translation id="2931157624143513983">Aanpassen aan afdrukgebied</translation>
 <translation id="2932085390869194046">Wachtwoord voorstellen…</translation>
@@ -126,7 +122,6 @@
 <translation id="3127156390846601284">Hiermee worden voor alle weergegeven websites de opgeslagen gegevens van dit apparaat verwijderd. Wil je doorgaan?</translation>
 <translation id="3129173833825111527">Marge links</translation>
 <translation id="3144647712221361880">Koppeling openen als</translation>
-<translation id="3154429428035006212">Langer dan een maand offline</translation>
 <translation id="3222066309010235055">PreRender: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Selecteer de hoofddirectory van de extensie die je wilt inpakken. Als je een extensie wilt bijwerken, selecteer je ook het privésleutelbestand om dit opnieuw te gebruiken.</translation>
 <translation id="3280237271814976245">&amp;Opslaan als...</translation>
@@ -143,6 +138,7 @@
 <translation id="3360297538363969800">Afdrukken is mislukt. Controleer de printer en probeer het opnieuw.</translation>
 <translation id="3378572629723696641">Deze extensie is mogelijk beschadigd.</translation>
 <translation id="3387614642886316601">Verbeterde spellingcontrole gebruiken</translation>
+<translation id="3393582007140394275">Kan scherm niet casten.</translation>
 <translation id="3432227430032737297">Alle weergegeven verwijderen</translation>
 <translation id="345693547134384690">Afbeelding openen in nieuwe &amp;tab</translation>
 <translation id="3494769164076977169">Goedkeuring vragen als een website na het eerste bestand probeert aanvullende bestanden automatisch te downloaden (aanbevolen)</translation>
@@ -165,7 +161,6 @@
 <translation id="3838085852053358637">Kan extensie niet laden</translation>
 <translation id="383891835335927981">Er zijn geen websites in- of uitgezoomd</translation>
 <translation id="385051799172605136">Vorige</translation>
-<translation id="3899879303189199559">Langer dan een jaar offline</translation>
 <translation id="3905761538810670789">App repareren</translation>
 <translation id="3908501907586732282">Extensie inschakelen</translation>
 <translation id="3909701002594999354">Alle &amp;besturingsknoppen tonen</translation>
@@ -192,7 +187,6 @@
 <translation id="4200983522494130825">Nieuwe &amp;tab</translation>
 <translation id="4225397296022057997">Op alle websites</translation>
 <translation id="4256316378292851214">&amp;Video opslaan als...</translation>
-<translation id="4278390842282768270">Toegestaan</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> kB (<ph name="NUM_KILOBYTES_LIVE" /> kB live)</translation>
 <translation id="4345587454538109430">Configureren...</translation>
 <translation id="4348766275249686434">Fouten verzamelen</translation>
@@ -217,15 +211,15 @@
 <translation id="488785315393301722">Details weergeven</translation>
 <translation id="4907306957610201395">Permissies</translation>
 <translation id="4912643508233590958">Activeringen vanuit inactief</translation>
+<translation id="49265687513387605">Kan scherm niet casten. Controleer of je het bericht voor het delen van je scherm hebt bevestigd.</translation>
 <translation id="4927753642311223124">Hier is niets te zien.</translation>
 <translation id="4930714375720679147">Inschakelen</translation>
+<translation id="4961318399572185831">Scherm casten</translation>
 <translation id="4988526792673242964">Pagina's</translation>
 <translation id="49896407730300355">Linksom &amp;draaien</translation>
 <translation id="4989966318180235467">Achtergrondpagina inspecteren</translation>
-<translation id="4994474651455208930">Websites laten vragen om als standaardhandler voor protocollen in te stellen</translation>
 <translation id="5000922062037820727">Geblokkeerd (aanbevolen)</translation>
 <translation id="5027562294707732951">Extensie toevoegen</translation>
-<translation id="5036662165765606524">Websites niet toestaan automatisch meerdere bestanden te downloaden</translation>
 <translation id="5039804452771397117">Toestaan</translation>
 <translation id="5057110919553308744">Wanneer je op de extensie klikt</translation>
 <translation id="5059526285558225588">Kies wat je wilt delen</translation>
@@ -238,7 +232,6 @@
 <translation id="5233231016133573565">Proces-ID</translation>
 <translation id="5233736638227740678">&amp;Plakken</translation>
 <translation id="5256861893479663409">Op alle websites</translation>
-<translation id="5265562206369321422">Langer dan een week offline</translation>
 <translation id="5269977353971873915">Afdrukken mislukt</translation>
 <translation id="5284445933715251131">Doorgaan met downloaden</translation>
 <translation id="52912272896845572">Privésleutelbestand is ongeldig.</translation>
@@ -294,7 +287,6 @@
 <translation id="6122081475643980456">Je internetverbinding wordt beheerd</translation>
 <translation id="6147020289383635445">Kan afdrukvoorbeeld niet weergeven.</translation>
 <translation id="6156863943908443225">Scriptcache</translation>
-<translation id="6169666352732958425">Kan bureaublad niet casten.</translation>
 <translation id="6196854373336333322">De extensie "<ph name="EXTENSION_NAME" />" heeft het beheer van je proxyinstellingen overgenomen. Dit betekent dat de extensie alles wat je online doet, kan wijzigen, beschadigen of bekijken. Als je niet zeker weet waarom deze wijziging heeft plaatsgevonden, is het waarschijnlijk een ongewenste wijziging.</translation>
 <translation id="6200151268994853226">Extensie beheren</translation>
 <translation id="6206311232642889873">A&amp;fbeelding kopiëren</translation>
@@ -328,7 +320,6 @@
 <translation id="6798954102094737107">Plug-in: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Wijzigingen behouden</translation>
 <translation id="6817174620439930047">Goedkeuring vragen als een website berichten exclusief voor het systeem wil gebruiken om toegang te krijgen tot MIDI-apparaten (aanbevolen)</translation>
-<translation id="682123305478866682">Bureaublad casten</translation>
 <translation id="6824564591481349393">&amp;E-mailadres kopiëren</translation>
 <translation id="6840155290835956714">Goedkeuring vragen vóór verzenden</translation>
 <translation id="6886871292305414135">Koppeling openen in nieuwe &amp;tab</translation>
@@ -346,7 +337,6 @@
 <translation id="708060913198414444">Audioadres k&amp;opiëren</translation>
 <translation id="7175353351958621980">Geladen vanaf:</translation>
 <translation id="7186088072322679094">In werkbalk houden</translation>
-<translation id="7270858098575133036">Goedkeuring vragen als een website berichten exclusief voor het systeem wil gebruiken om toegang te krijgen tot MIDI-apparaten</translation>
 <translation id="7287143125007575591">Toegang geweigerd.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7385854874724088939">Er is iets misgegaan bij het afdrukken. Controleer de printer en probeer het opnieuw.</translation>
@@ -369,7 +359,6 @@
 <translation id="7704305437604973648">Taak</translation>
 <translation id="7710568461918838723">&amp;Casten...</translation>
 <translation id="7750228210027921155">Beeld-in-beeld</translation>
-<translation id="7751260505918304024">Alles weergeven</translation>
 <translation id="7760004034676677601">Is dit de startpagina die je verwachtte?</translation>
 <translation id="7771452384635174008">Opmaak</translation>
 <translation id="7782102568078991263">Geen verdere suggesties van Google</translation>
@@ -382,9 +371,7 @@
 <translation id="7849264908733290972">&amp;Afbeelding openen in nieuwe tab</translation>
 <translation id="7857949311770343000">Is dit de pagina voor 'nieuwe tab' die je verwachtte?</translation>
 <translation id="786073089922909430">Service: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7885253890047913815">Recente bestemmingen</translation>
 <translation id="7903925330883316394">Hulpprogramma: <ph name="UTILITY_TYPE" /></translation>
-<translation id="7938594894617528435">Op dit moment offline</translation>
 <translation id="7947962633355574091">Videoadres k&amp;opiëren</translation>
 <translation id="7966241909927244760">Afbeeldingsadres k&amp;opiëren</translation>
 <translation id="7973394300052703468">Nieuw &amp;privévenster</translation>
@@ -426,10 +413,8 @@ Bewaar je sleutelbestand op een veilige plaats. Je hebt het bestand nodig om nie
 <translation id="8708000541097332489">Wissen bij het verlaten</translation>
 <translation id="8714838604780058252">Achtergrondbeelden</translation>
 <translation id="8725066075913043281">Opnieuw proberen</translation>
-<translation id="8757090071857742562">Kan bureaublad niet casten. Controleer of je het bericht voor het delen van je scherm hebt bevestigd.</translation>
 <translation id="8774934320277480003">Marge bovenkant</translation>
 <translation id="8798099450830957504">Standaard</translation>
-<translation id="8800004011501252845">Bestemmingen weergeven voor</translation>
 <translation id="8808478386290700967">Web Store</translation>
 <translation id="8823514049557262177">Koppelings&amp;tekst kopiëren</translation>
 <translation id="8823704566850948458">Wachtwoord voorstellen...</translation>
@@ -442,7 +427,6 @@ Bewaar je sleutelbestand op een veilige plaats. Je hebt het bestand nodig om nie
 <translation id="8962083179518285172">Details verbergen</translation>
 <translation id="8973557916016709913">Zoomniveau verwijderen</translation>
 <translation id="897939795688207351">Op <ph name="ORIGIN" /></translation>
-<translation id="8996526648899750015">Account toevoegen...</translation>
 <translation id="9003647077635673607">Toestaan op alle websites</translation>
 <translation id="9027459031423301635">Koppeling openen in nieuwe &amp;tab</translation>
 <translation id="9056810968620647706">Geen overeenkomsten gevonden.</translation>

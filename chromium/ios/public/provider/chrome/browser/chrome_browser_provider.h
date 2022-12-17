@@ -16,9 +16,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 
-class DiscoverFeedProvider;
 class FollowProvider;
-class MailtoHandlerProvider;
 class UserFeedbackProvider;
 
 @class UITextField;
@@ -80,12 +78,6 @@ class ChromeBrowserProvider {
   // Returns an instance of the user feedback provider.
   virtual UserFeedbackProvider* GetUserFeedbackProvider() const;
 
-  // Returns a valid non-null instance of the mailto handler provider.
-  virtual MailtoHandlerProvider* GetMailtoHandlerProvider() const;
-
-  // Returns an instance of the DiscoverFeed provider;
-  virtual DiscoverFeedProvider* GetDiscoverFeedProvider() const;
-
   // Returns an instance of the Follow provider;
   virtual FollowProvider* GetFollowProvider() const;
 
@@ -104,8 +96,8 @@ class ChromeBrowserProvider {
 
  private:
   base::ObserverList<Observer, true>::Unchecked observer_list_;
-  std::unique_ptr<MailtoHandlerProvider> mailto_handler_provider_;
   std::unique_ptr<ios::ChromeIdentityService> chrome_identity_service_;
+  bool chrome_identity_service_replaced_for_testing_ = false;
 };
 
 }  // namespace ios

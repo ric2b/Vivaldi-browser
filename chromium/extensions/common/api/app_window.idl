@@ -304,7 +304,7 @@ namespace app.window {
     boolean ? avoidCachedPositions;
 
     // Data to store different members used in Vivaldi
-    DOMString? extData;
+    DOMString? vivExtData;
   };
 
   // Called in the creating window (parent) before the load event is called in

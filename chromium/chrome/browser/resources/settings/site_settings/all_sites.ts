@@ -23,7 +23,7 @@ import './site_entry.js';
 import {CrActionMenuElement} from 'chrome://resources/cr_elements/cr_action_menu/cr_action_menu.js';
 import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
 import {CrLazyRenderElement} from 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.m.js';
-import {assert} from 'chrome://resources/js/assert.m.js';
+import {assert} from 'chrome://resources/js/assert_ts.js';
 import {I18nMixin, I18nMixinInterface} from 'chrome://resources/js/i18n_mixin.js';
 import {WebUIListenerMixin, WebUIListenerMixinInterface} from 'chrome://resources/js/web_ui_listener_mixin.js';
 import {IronListElement} from 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
@@ -91,7 +91,7 @@ const AllSitesElementBaseTemp = GlobalScrollTargetMixin(
 
 const AllSitesElementBase = AllSitesElementBaseTemp as unknown as {
   new (): PolymerElement & I18nMixinInterface & WebUIListenerMixinInterface &
-  SiteSettingsMixinInterface & RouteObserverMixinInterface
+      SiteSettingsMixinInterface & RouteObserverMixinInterface,
 };
 
 export class AllSitesElement extends AllSitesElementBase {
@@ -209,7 +209,7 @@ export class AllSitesElement extends AllSitesElementBase {
   private localDataBrowserProxy_: LocalDataBrowserProxy =
       LocalDataBrowserProxyImpl.getInstance();
 
-  ready() {
+  override ready() {
     super.ready();
 
     this.addWebUIListener(
@@ -230,7 +230,7 @@ export class AllSitesElement extends AllSitesElementBase {
     this.sortMethod_ = this.$.sortMethod.value as (SortMethod | undefined);
   }
 
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
 
     // Set scrollOffset so the iron-list scrolling accounts for the space the
@@ -245,7 +245,7 @@ export class AllSitesElement extends AllSitesElementBase {
    *
    * RouteObserverBehavior
    */
-  currentRouteChanged(currentRoute: Route) {
+  override currentRouteChanged(currentRoute: Route) {
     super.currentRouteChanged(currentRoute);
     if (currentRoute === routes.SITE_SETTINGS_ALL) {
       this.populateList_();
@@ -291,7 +291,7 @@ export class AllSitesElement extends AllSitesElementBase {
    */
   private updateTotalUsage_() {
     let usageSum = 0;
-    for (const [etldPlus1, siteGroup] of this.siteGroupMap) {
+    for (const [_etldPlus1, siteGroup] of this.siteGroupMap) {
       siteGroup.origins.forEach(origin => {
         usageSum += origin.usage;
       });
@@ -310,7 +310,7 @@ export class AllSitesElement extends AllSitesElementBase {
       siteGroupMap: Map<string, SiteGroup>,
       searchQuery: string): Array<SiteGroup> {
     const result = [];
-    for (const [etldPlus1, siteGroup] of siteGroupMap) {
+    for (const [_etldPlus1, siteGroup] of siteGroupMap) {
       if (siteGroup.origins.find(
               originInfo => originInfo.origin.includes(searchQuery))) {
         result.push(siteGroup);
@@ -487,7 +487,6 @@ export class AllSitesElement extends AllSitesElementBase {
       updatedSiteGroup.origins = siteGroupToUpdate.origins.filter(
           o => (o.isPartitioned !== isPartitioned || o.origin !== origin));
 
-      console.log(updatedSiteGroup.origins);
       updatedSiteGroup.hasInstalledPWA =
           updatedSiteGroup.origins.some(o => o.isInstalled);
       updatedSiteGroup.numCookies -=

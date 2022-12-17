@@ -28,9 +28,11 @@
 
 #include <memory>
 
+#include "base/auto_reset.h"
 #include "base/callback_forward.h"
 #include "base/dcheck_is_on.h"
 #include "base/gtest_prod_util.h"
+#include "base/time/time.h"
 #include "third_party/blink/public/common/metrics/document_update_reason.h"
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/frame/viewport_intersection_state.mojom-blink-forward.h"
@@ -262,6 +264,8 @@ class CORE_EXPORT LocalFrameView final
   void PropagateFrameRects() override;
   void InvalidateAllCustomScrollbarsOnActiveChanged();
 
+  void UsesOverlayScrollbarsChanged();
+
   Color BaseBackgroundColor() const;
   void SetBaseBackgroundColor(const Color&);
   void UpdateBaseBackgroundColorRecursively(const Color&);
@@ -474,7 +478,8 @@ class CORE_EXPORT LocalFrameView final
 
   void ServiceScriptedAnimations(base::TimeTicks);
 
-  void ScheduleAnimation(base::TimeDelta = base::TimeDelta());
+  void ScheduleAnimation(base::TimeDelta = base::TimeDelta(),
+                         base::Location location = base::Location::Current());
 
   // FIXME: This should probably be renamed as the 'inSubtreeLayout' parameter
   // passed around the LocalFrameView layout methods can be true while this
@@ -501,6 +506,8 @@ class CORE_EXPORT LocalFrameView final
                                bool value) {
     allow_deferred_shaping_ = value;
   }
+  void RequestToLockDeferred(Element& element);
+  bool LockDeferredRequested(Element& element) const;
 
   // The window that hosts the LocalFrameView. The LocalFrameView will
   // communicate scrolls and repaints to the host window in the window's
@@ -558,7 +565,6 @@ class CORE_EXPORT LocalFrameView final
   gfx::PointF RootFrameToDocument(const gfx::PointF&);
   gfx::Point DocumentToFrame(const gfx::Point&) const;
   gfx::PointF DocumentToFrame(const gfx::PointF&) const;
-  DoublePoint DocumentToFrame(const DoublePoint&) const;
   PhysicalOffset DocumentToFrame(const PhysicalOffset&) const;
   gfx::Rect DocumentToFrame(const gfx::Rect&) const;
   PhysicalRect DocumentToFrame(const PhysicalRect&) const;
@@ -714,6 +720,11 @@ class CORE_EXPORT LocalFrameView final
   // scrolling should continue in the parent process.
   void ScrollRectToVisibleInRemoteParent(const PhysicalRect&,
                                          mojom::blink::ScrollIntoViewParamsPtr);
+
+  // Returns true if a scroll into view can continue to cause scrolling in the
+  // parent frame.
+  bool AllowedToPropagateScrollIntoView(
+      const mojom::blink::ScrollIntoViewParamsPtr&);
 
   PaintArtifactCompositor* GetPaintArtifactCompositor() const;
 
@@ -943,8 +954,6 @@ class CORE_EXPORT LocalFrameView final
       const PhysicalOffset&) const;
   gfx::PointF ConvertFromContainingEmbeddedContentView(
       const gfx::PointF&) const;
-  DoublePoint ConvertFromContainingEmbeddedContentView(
-      const DoublePoint&) const;
 
   void UpdateGeometriesIfNeeded();
 
@@ -1046,6 +1055,7 @@ class CORE_EXPORT LocalFrameView final
 
   Member<LocalFrame> frame_;
 
+  HeapVector<Member<Element>> deferred_to_be_locked_;
   LayoutUnit current_viewport_bottom_ = kIndefiniteSize;
   LayoutUnit current_minimum_top_;
   bool allow_deferred_shaping_ = false;

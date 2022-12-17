@@ -51,7 +51,9 @@ class MEDIA_GPU_EXPORT V4L2VideoEncodeAccelerator
 
   // VideoEncodeAccelerator implementation.
   VideoEncodeAccelerator::SupportedProfiles GetSupportedProfiles() override;
-  bool Initialize(const Config& config, Client* client) override;
+  bool Initialize(const Config& config,
+                  Client* client,
+                  std::unique_ptr<MediaLog> media_log) override;
   void Encode(scoped_refptr<VideoFrame> frame, bool force_keyframe) override;
   void UseOutputBitstreamBuffer(BitstreamBuffer buffer) override;
   void RequestEncodingParametersChange(const Bitrate& bitrate,
@@ -259,6 +261,14 @@ class MEDIA_GPU_EXPORT V4L2VideoEncodeAccelerator
 
   // Initializes input_memory_type_.
   bool InitInputMemoryType(const Config& config);
+
+  // Having too many encoder instances at once may cause us to run out of FDs
+  // and subsequently crash (crbug.com/1289465). To avoid that, we limit the
+  // maximum number of encoder instances that can exist at once.
+  // |num_instances_| tracks that number.
+  static constexpr int kMaxNumOfInstances = 10;
+  static base::AtomicRefCount num_instances_;
+  const bool can_use_encoder_;
 
   // Our original calling task runner for the child thread and its checker.
   const scoped_refptr<base::SingleThreadTaskRunner> child_task_runner_;

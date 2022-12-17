@@ -11,7 +11,6 @@
 
 #include "base/bind.h"
 #include "base/location.h"
-#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "device/bluetooth/bluetooth_device.h"
 #include "device/bluetooth/bluetooth_discovery_filter.h"
@@ -635,6 +634,12 @@ FakeCentral::GetLowEnergyScanSessionHardwareOffloadingStatus() {
   return LowEnergyScanSessionHardwareOffloadingStatus::kNotSupported;
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+void FakeCentral::SetStandardChromeOSAdapterName() {
+  NOTREACHED();
+}
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 base::WeakPtr<device::BluetoothAdapter> FakeCentral::GetWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();

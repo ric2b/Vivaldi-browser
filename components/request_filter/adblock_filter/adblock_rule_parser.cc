@@ -598,7 +598,7 @@ RuleParser::Result RuleParser::ParseRequestFilterRuleOptions(
           return kError;
         if (!base::StartsWith(option_value, kRewritePrefix))
           return kError;
-        option_value.remove_prefix(base::size(kRewritePrefix) - 1);
+        option_value.remove_prefix(std::size(kRewritePrefix) - 1);
         rule->redirect = std::string(option_value);
         break;
 

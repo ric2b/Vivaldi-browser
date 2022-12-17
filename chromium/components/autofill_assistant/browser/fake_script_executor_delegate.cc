@@ -58,7 +58,7 @@ FakeScriptExecutorDelegate::GetPasswordChangeSuccessTracker() {
 }
 
 content::WebContents* FakeScriptExecutorDelegate::GetWebContents() {
-  return nullptr;
+  return web_contents_;
 }
 
 std::string FakeScriptExecutorDelegate::GetEmailAddressForAccessTokenAccount() {
@@ -88,8 +88,7 @@ void FakeScriptExecutorDelegate::SetTouchableElementArea(
 }
 
 void FakeScriptExecutorDelegate::WriteUserData(
-    base::OnceCallback<void(UserData*, UserData::FieldChange*)>
-        write_callback) {}
+    base::OnceCallback<void(UserData*, UserDataFieldChange*)> write_callback) {}
 
 void FakeScriptExecutorDelegate::SetViewportMode(ViewportMode mode) {
   viewport_mode_ = mode;
@@ -125,16 +124,6 @@ void FakeScriptExecutorDelegate::AddNavigationListener(
 void FakeScriptExecutorDelegate::RemoveNavigationListener(
     ScriptExecutorDelegate::NavigationListener* listener) {
   navigation_listeners_.erase(listener);
-}
-
-void FakeScriptExecutorDelegate::AddListener(
-    ScriptExecutorDelegate::Listener* listener) {
-  listeners_.insert(listener);
-}
-
-void FakeScriptExecutorDelegate::RemoveListener(
-    ScriptExecutorDelegate::Listener* listener) {
-  listeners_.erase(listener);
 }
 
 void FakeScriptExecutorDelegate::SetBrowseDomainsAllowlist(

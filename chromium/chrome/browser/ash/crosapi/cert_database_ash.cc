@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ash/crosapi/cert_database_ash.h"
 
+#include "ash/components/tpm/tpm_token_info_getter.h"
 #include "base/bind.h"
 #include "base/system/sys_info.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
@@ -12,12 +13,12 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chromeos/crosapi/mojom/cert_database.mojom.h"
 #include "chromeos/login/login_state/login_state.h"
-#include "chromeos/tpm/tpm_token_info_getter.h"
 #include "components/account_id/account_id.h"
 #include "components/user_manager/user.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "crypto/nss_util_internal.h"
+#include "net/cert/cert_database.h"
 #include "net/cert/nss_cert_database.h"
 
 namespace {
@@ -174,6 +175,25 @@ void CertDatabaseAsh::LoggedInStateChanged() {
   // sign out. Currently it is not necessary to reset it on sign in, but doesn't
   // hurt.
   is_cert_database_ready_.reset();
+}
+
+void CertDatabaseAsh::OnCertsChangedInLacros() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  net::CertDatabase::GetInstance()->NotifyObserversCertDBChanged();
+}
+
+void CertDatabaseAsh::AddAshCertDatabaseObserver(
+    mojo::PendingRemote<mojom::AshCertDatabaseObserver> observer) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  observers_.Add(
+      mojo::Remote<mojom::AshCertDatabaseObserver>(std::move(observer)));
+}
+
+void CertDatabaseAsh::NotifyCertsChangedInAsh() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  for (const auto& observer : observers_) {
+    observer->OnCertsChangedInAsh();
+  }
 }
 
 }  // namespace crosapi

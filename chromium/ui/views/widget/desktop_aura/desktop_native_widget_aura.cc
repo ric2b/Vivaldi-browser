@@ -13,6 +13,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/aura/client/aura_constants.h"
@@ -52,7 +53,6 @@
 #include "ui/views/widget/desktop_aura/desktop_screen_position_client.h"
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host.h"
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host_platform.h"
-#include "ui/views/widget/drop_helper.h"
 #include "ui/views/widget/focus_manager_event_handler.h"
 #include "ui/views/widget/native_widget_aura.h"
 #include "ui/views/widget/root_view.h"
@@ -114,6 +114,15 @@ class DesktopNativeWidgetTopLevelHandler : public aura::WindowObserver {
     init_params.type = full_screen ? Widget::InitParams::TYPE_WINDOW
                                    : is_menu ? Widget::InitParams::TYPE_MENU
                                              : Widget::InitParams::TYPE_POPUP;
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+    // Evaluate if the window needs shadow.
+    init_params.shadow_type =
+        (wm::GetShadowElevationConvertDefault(child_window) > 0)
+            ? Widget::InitParams::ShadowType::kDrop
+            : Widget::InitParams::ShadowType::kNone;
+#endif
+
 #if BUILDFLAG(IS_WIN)
     // For menus, on Windows versions that support drop shadow remove
     // the standard frame in order to keep just the shadow.
@@ -372,7 +381,7 @@ void DesktopNativeWidgetAura::OnHostClosed() {
   // host_ as it can be used in teardown.
   host_.reset();
 
-  if (vivaldi::IsVivaldiRunning() &&
+  if (vivaldi::IsVivaldiRunning() && content_window_ &&
       (ownership_ == Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET)) {
     // Potential fix for VB-53173: Callstacks from users show that
     // WindowDelegate is used after deletion in Window::~Window. This makes sure
@@ -990,7 +999,10 @@ void DesktopNativeWidgetAura::Restore() {
 }
 
 void DesktopNativeWidgetAura::SetFullscreen(bool fullscreen,
-                                            const base::TimeDelta& delay) {
+                                            const base::TimeDelta& delay,
+                                            int64_t target_display_id) {
+  // The `target_display_id` argument is unsupported in Aura.
+  DCHECK_EQ(target_display_id, display::kInvalidDisplayId);
   if (content_window_)
     desktop_window_tree_host_->SetFullscreen(fullscreen);
 }
@@ -1375,24 +1387,14 @@ void DesktopNativeWidgetAura::OnDragExited() {
   drop_helper_->OnDragExit();
 }
 
-ui::mojom::DragOperation DesktopNativeWidgetAura::OnPerformDrop(
-    const ui::DropTargetEvent& event,
-    std::unique_ptr<ui::OSExchangeData> data) {
-  DCHECK(drop_helper_.get() != nullptr);
-  if (ShouldActivate())
-    Activate();
-  return drop_helper_->OnDrop(event.data(), event.location(),
-                              last_drop_operation_);
-}
-
 aura::client::DragDropDelegate::DropCallback
 DesktopNativeWidgetAura::GetDropCallback(const ui::DropTargetEvent& event) {
   DCHECK(drop_helper_);
-  if (ShouldActivate())
-    Activate();
-
-  return drop_helper_->GetDropCallback(event.data(), event.location(),
-                                       last_drop_operation_);
+  auto drop_helper_cb = drop_helper_->GetDropCallback(
+      event.data(), event.location(), last_drop_operation_);
+  return base::BindOnce(&DesktopNativeWidgetAura::PerformDrop,
+                        weak_ptr_factory_.GetWeakPtr(),
+                        std::move(drop_helper_cb));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1440,6 +1442,17 @@ void DesktopNativeWidgetAura::RootWindowDestroyed() {
     native_cursor_manager_ = nullptr;
     cursor_manager_ = nullptr;
   }
+}
+
+void DesktopNativeWidgetAura::PerformDrop(
+    views::DropHelper::DropCallback drop_cb,
+    std::unique_ptr<ui::OSExchangeData> data,
+    ui::mojom::DragOperation& output_drag_op) {
+  if (ShouldActivate())
+    Activate();
+
+  if (drop_cb)
+    std::move(drop_cb).Run(std::move(data), output_drag_op);
 }
 
 }  // namespace views

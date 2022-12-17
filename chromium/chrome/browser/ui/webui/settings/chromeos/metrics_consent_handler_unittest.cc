@@ -90,7 +90,7 @@ class TestMetricsConsentHandler : public MetricsConsentHandler {
   void GetMetricsConsentState() {
     base::ListValue args;
     args.Append(base::Value("callback-id"));
-    HandleGetMetricsConsentState(args.GetListDeprecated());
+    HandleGetMetricsConsentState(args.GetList());
   }
 
   void UpdateMetricsConsent(bool metrics_consent) {
@@ -101,7 +101,7 @@ class TestMetricsConsentHandler : public MetricsConsentHandler {
     dict.SetBoolKey("consent", metrics_consent);
     args.Append(std::move(dict));
 
-    HandleUpdateMetricsConsent(args.GetListDeprecated());
+    HandleUpdateMetricsConsent(args.GetList());
   }
 };
 
@@ -257,7 +257,7 @@ class MetricsConsentHandlerTest : public testing::Test {
   std::unique_ptr<metrics::MetricsService> test_metrics_service_;
 
   // Set up stubs for StatsReportingController.
-  chromeos::ScopedStubInstallAttributes scoped_install_attributes_;
+  ScopedStubInstallAttributes scoped_install_attributes_;
   ash::FakeSessionManagerClient fake_session_manager_client_;
   ash::ScopedTestDeviceSettingsService scoped_device_settings_;
   ash::ScopedTestCrosSettings scoped_cros_settings_{

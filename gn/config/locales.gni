@@ -16,9 +16,9 @@ vivaldi_pending_locales = [
   "nn",
 ]
 
+vivaldi_pending_mobile_locales = []
 if (!is_android) {
-  vivaldi_pending_locales += [
-    "af",
+  vivaldi_pending_mobile_locales += [
     "az",
     "be",
     "eu",

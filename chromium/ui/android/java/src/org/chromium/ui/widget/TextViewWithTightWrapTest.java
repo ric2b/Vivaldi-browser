@@ -40,6 +40,7 @@ public class TextViewWithTightWrapTest extends BlankUiTestActivityTestCase {
             RenderTestRule.Builder.withPublicCorpus()
                     .setRevision(RENDER_TEST_REVISION)
                     .setDescription(RENDER_TEST_REVISION_DESCRIPTION)
+                    .setBugComponent(RenderTestRule.Component.UI_BROWSER_MOBILE)
                     .build();
 
     @Before
@@ -93,6 +94,6 @@ public class TextViewWithTightWrapTest extends BlankUiTestActivityTestCase {
         Button snoozeButton = (Button) mView.findViewById(R.id.button_snooze);
         TestThreadUtils.runOnUiThreadBlocking(() -> { snoozeButton.setVisibility(View.VISIBLE); });
         // Render UI Elements.
-        mRenderTestRule.render(mView, "TextViewWithTightWrap_MatchParent");
+        mRenderTestRule.render(mView, "TextViewWithTightWrap_MatchParent_WithSnooze");
     }
 }

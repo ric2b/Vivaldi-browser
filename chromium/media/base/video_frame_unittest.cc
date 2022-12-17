@@ -6,11 +6,11 @@
 
 #include <stddef.h>
 #include <stdint.h>
+
 #include <memory>
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
-#include "base/cxx17_backports.h"
 #include "base/format_macros.h"
 #include "base/memory/aligned_memory.h"
 #include "base/memory/unsafe_shared_memory_region.h"
@@ -340,15 +340,15 @@ TEST(VideoFrame, CreateBlackFrame) {
   // Test frames themselves.
   uint8_t* y_plane = frame->data(VideoFrame::kYPlane);
   for (int y = 0; y < frame->coded_size().height(); ++y) {
-    EXPECT_EQ(0, memcmp(kExpectedYRow, y_plane, base::size(kExpectedYRow)));
+    EXPECT_EQ(0, memcmp(kExpectedYRow, y_plane, std::size(kExpectedYRow)));
     y_plane += frame->stride(VideoFrame::kYPlane);
   }
 
   uint8_t* u_plane = frame->data(VideoFrame::kUPlane);
   uint8_t* v_plane = frame->data(VideoFrame::kVPlane);
   for (int y = 0; y < frame->coded_size().height() / 2; ++y) {
-    EXPECT_EQ(0, memcmp(kExpectedUVRow, u_plane, base::size(kExpectedUVRow)));
-    EXPECT_EQ(0, memcmp(kExpectedUVRow, v_plane, base::size(kExpectedUVRow)));
+    EXPECT_EQ(0, memcmp(kExpectedUVRow, u_plane, std::size(kExpectedUVRow)));
+    EXPECT_EQ(0, memcmp(kExpectedUVRow, v_plane, std::size(kExpectedUVRow)));
     u_plane += frame->stride(VideoFrame::kUPlane);
     v_plane += frame->stride(VideoFrame::kVPlane);
   }
@@ -703,12 +703,14 @@ TEST(VideoFrame, AllocationSize_OddSize) {
       case PIXEL_FORMAT_YUV444P9:
       case PIXEL_FORMAT_YUV444P10:
       case PIXEL_FORMAT_YUV444P12:
+      case PIXEL_FORMAT_YUV422AP10:
         EXPECT_EQ(144u, VideoFrame::AllocationSize(format, size))
             << VideoPixelFormatToString(format);
         break;
       case PIXEL_FORMAT_YUV422P9:
       case PIXEL_FORMAT_YUV422P10:
       case PIXEL_FORMAT_YUV422P12:
+      case PIXEL_FORMAT_I444A:
         EXPECT_EQ(96u, VideoFrame::AllocationSize(format, size))
             << VideoPixelFormatToString(format);
         break;
@@ -717,6 +719,7 @@ TEST(VideoFrame, AllocationSize_OddSize) {
       case PIXEL_FORMAT_YUV420P10:
       case PIXEL_FORMAT_YUV420P12:
       case PIXEL_FORMAT_P016LE:
+      case PIXEL_FORMAT_I422A:
         EXPECT_EQ(72u, VideoFrame::AllocationSize(format, size))
             << VideoPixelFormatToString(format);
         break;
@@ -753,7 +756,12 @@ TEST(VideoFrame, AllocationSize_OddSize) {
             << VideoPixelFormatToString(format);
         break;
       case PIXEL_FORMAT_RGBAF16:
+      case PIXEL_FORMAT_YUV420AP10:
         EXPECT_EQ(120u, VideoFrame::AllocationSize(format, size))
+            << VideoPixelFormatToString(format);
+        break;
+      case PIXEL_FORMAT_YUV444AP10:
+        EXPECT_EQ(192u, VideoFrame::AllocationSize(format, size))
             << VideoPixelFormatToString(format);
         break;
       case PIXEL_FORMAT_MJPEG:

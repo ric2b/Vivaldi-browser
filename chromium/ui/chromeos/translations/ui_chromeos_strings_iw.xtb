@@ -31,6 +31,7 @@
 <translation id="1201402288615127009">הבא</translation>
 <translation id="1209796539517632982">שרתי שמות אוטומטיים</translation>
 <translation id="1210831758834677569">לאו</translation>
+<translation id="1223825810409523901">‏תוסף Chrome</translation>
 <translation id="1243314992276662751">העלאה</translation>
 <translation id="1249250836236328755">ז'אנר</translation>
 <translation id="1254593899333212300">חיבור אינטרנט ישיר</translation>
@@ -61,6 +62,7 @@
 <translation id="1497522201463361063">לא ניתן לשנות את השם של "<ph name="FILE_NAME" />". <ph name="ERROR_MESSAGE" /></translation>
 <translation id="1499943022354839699">‏מקלדת Dvorak באנגלית (ארה"ב)</translation>
 <translation id="1515909359182093592"><ph name="INPUT_LABEL" /> – מארח</translation>
+<translation id="1521655867290435174">Google Sheets</translation>
 <translation id="1538729222189715449">‏מתבצעת פתיחה של קובצי Linux...</translation>
 <translation id="1547964879613821194">אנגלית קנדית</translation>
 <translation id="1556189134700913550">החלה על הכול</translation>
@@ -79,6 +81,7 @@
 <translation id="166439687370499867">אין אישור לשנות את תצורת הרשתות המשותפות</translation>
 <translation id="1665611772925418501">הקובץ לא ניתן לשינוי.</translation>
 <translation id="1673103856845176271">לא היתה אפשרות לגשת לקובץ מסיבות אבטחה.</translation>
+<translation id="16762847117768727">‏תמונת ISO</translation>
 <translation id="169515659049020177">Shift</translation>
 <translation id="1715848075824334077">רוכב אופניים</translation>
 <translation id="1722487484194605434">מתבצע כיווץ של <ph name="NUMBER_OF_ITEMS" /> פריטים…</translation>
@@ -106,7 +109,6 @@
 <translation id="1853795129690976061">‏התיקייה הזו משותפת עם Linux</translation>
 <translation id="1864756863218646478">הקובץ לא נמצא.</translation>
 <translation id="1884013283844450420">רשת <ph name="NETWORK_INDEX" /> מתוך <ph name="NETWORK_COUNT" />,‏ <ph name="NETWORK_NAME" />, התחברות</translation>
-<translation id="1914901738028575085">‏מכשיר CloudReady 2.0</translation>
 <translation id="1920670151694390848">מליאלאם, תעתיק</translation>
 <translation id="1920798810075583923">אבטיח</translation>
 <translation id="1924372192547904021">הפרמוט של <ph name="DRIVE_NAME" /> הושלם</translation>
@@ -185,7 +187,6 @@
 <translation id="2544853746127077729">אישור האימות נדחה על ידי הרשת</translation>
 <translation id="2547921442987553570">הוספה אל <ph name="EXTENSION_NAME" /></translation>
 <translation id="255937426064304553">ארה"ב - בינלאומית</translation>
-<translation id="2562685439590298522">Google Docs</translation>
 <translation id="2563185590376525700">צפרדע</translation>
 <translation id="2578394532502990878">טמילית פונטית</translation>
 <translation id="2579959351793446050">אודיה</translation>
@@ -221,9 +222,7 @@
 <translation id="2902734494705624966">ארה"ב - מורחבת</translation>
 <translation id="290843123675549676">מראטית</translation>
 <translation id="2923240520113693977">אסטונית</translation>
-<translation id="2925966894897775835">גיליונות אלקטרוניים</translation>
 <translation id="2938685643439809023">מונגולית</translation>
-<translation id="2943400156390503548">שקופיות</translation>
 <translation id="2943503720238418293">השם צריך להיות קצר יותר</translation>
 <translation id="2949781154072577687">מתבצע פרמוט של <ph name="DRIVE_NAME" />...</translation>
 <translation id="2951236788251446349">מדוזה</translation>
@@ -368,6 +367,7 @@
 <translation id="4215448920900139318">הגיבוי של <ph name="FILE_COUNT" /> מתבצע</translation>
 <translation id="4218274196133425560">הסרת החריגה של <ph name="HOST_NAME" /></translation>
 <translation id="4261901459838235729">‏מצגת Google</translation>
+<translation id="4277536868133419688">המסנן <ph name="FILTER_NAME" /> פעיל.</translation>
 <translation id="4290535918735525311">‏תיקייה אחת שותפה עם Linux</translation>
 <translation id="4299729908419173967">פורטוגזית (ברזיל)</translation>
 <translation id="4302605047395093221">כל המשתמשים במכשיר יצטרכו להזין את קוד האימות כדי להתחבר לרשת הסלולרית הזו</translation>
@@ -385,6 +385,8 @@
 <translation id="4380245540200674032">‏רשת <ph name="NETWORK_INDEX" /> מתוך <ph name="NETWORK_COUNT" />,‏ <ph name="NETWORK_NAME" />,‏ <ph name="NETWORK_PROVIDER_NAME" />,‏ <ph name="CONNECTION_STATUS" />, עוצמת האות: ‎<ph name="SIGNAL_STRENGTH" />%‎, הרשת מנוהלת על ידי מנהל המערכת שלך, פרטים</translation>
 <translation id="4387004326333427325">אישור האימות נדחה מרחוק</translation>
 <translation id="4394214039309501350">קישור חיצוני</translation>
+<translation id="4401287888955153199">חילוץ הכול</translation>
+<translation id="4410695710508688828">פעולת החילוץ נכשלה. <ph name="ERROR_MESSAGE" /></translation>
 <translation id="4418686080762064601">יצירת קיצור דרך לקבצים</translation>
 <translation id="4425149324548788773">האחסון שלי</translation>
 <translation id="4439427728133035643">‏רשת <ph name="NETWORK_INDEX" /> מתוך <ph name="NETWORK_COUNT" />,‏ <ph name="NETWORK_NAME" />,‏ עוצמת האות: ‎<ph name="SIGNAL_STRENGTH" />%‎, התחברות</translation>
@@ -406,6 +408,7 @@
 <translation id="457386861538956877">עוד...</translation>
 <translation id="4579744207439506346">הוספת את <ph name="ENTRY_NAME" /> לבחירה</translation>
 <translation id="4594543368593301662">מוצגות תוצאות עבור <ph name="SEARCH_TERM" />.</translation>
+<translation id="4599600860674643278">המסנן אופס.</translation>
 <translation id="4603392156942865207">המערכת מעתיקה את <ph name="FILE_NAME" /> אל <ph name="FOLDER_NAME" /></translation>
 <translation id="4631887759990505102">אומן</translation>
 <translation id="4642769377300286600">התקנה של פרופיל נייד, רשת <ph name="NETWORK_INDEX" /> מתוך <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" /></translation>
@@ -414,6 +417,7 @@
 <translation id="4656777537938206294">הגדרת גישה אופליין לקבצים</translation>
 <translation id="4658782175094886150">אדם בשלג</translation>
 <translation id="4669606053856530811">אם הפריטים האלה לא ישותפו עם החברים באחסון השיתופי '<ph name="SOURCE_NAME" />', הם יאבדו את הגישה אליהם.</translation>
+<translation id="467809019005607715">Google Slides</translation>
 <translation id="4690246192099372265">שוודית</translation>
 <translation id="4693155481716051732">סושי</translation>
 <translation id="4694604912444486114">קוף</translation>
@@ -529,6 +533,7 @@
 <translation id="5469868506864199649">איטלקית</translation>
 <translation id="5473333559083690127">יש להזין שוב את קוד האימות החדש</translation>
 <translation id="5489067830765222292">לטבית</translation>
+<translation id="5489965683297092283">המסנן <ph name="FILTER_NAME" /> מושבת.</translation>
 <translation id="5494920125229734069">בחירת הכול</translation>
 <translation id="5500122897333236901">איסלנדית</translation>
 <translation id="5508696409934741614">נקודות</translation>
@@ -595,6 +600,7 @@
 <translation id="6082256976217156453">‏ארכיון LZMA דחוס</translation>
 <translation id="6096979789310008754">טקסט החיפוש נוקה, מוצגים עכשיו כל הקבצים והתיקיות.</translation>
 <translation id="610101264611565198">מתבצעת העברה של <ph name="FILE_NAME" /> אל <ph name="FOLDER_NAME" /></translation>
+<translation id="61118516107968648">‏טקסט CSV</translation>
 <translation id="6129953537138746214">רווח</translation>
 <translation id="6133173853026656527">מתבצעת העברה של <ph name="FILE_NAME" />...</translation>
 <translation id="613750717151263950">יפנית עם מקלדת אמריקאית</translation>
@@ -659,6 +665,7 @@
 <translation id="6732801395666424405">האישורים לא נטענו</translation>
 <translation id="6736329909263487977"><ph name="ISSUED_BY" /> ‏[<ph name="ISSUED_TO" />]‏</translation>
 <translation id="6751256176799620176">תיקייה אחת נבחרה</translation>
+<translation id="6755827872271341378">‏מכשיר עם ChromeOS Flex</translation>
 <translation id="6790428901817661496">הפעלה</translation>
 <translation id="6795884519221689054">פנדה</translation>
 <translation id="6806699711453372963">‏ניהול שיתוף ב-Linux</translation>
@@ -736,6 +743,7 @@
 <translation id="7343393116438664539">‏וייטנאמית Telex</translation>
 <translation id="7359359531237882347">המערכת מעתיקה <ph name="NUMBER_OF_ITEMS" /> פריטים…</translation>
 <translation id="7375951387215729722">רשימת הקבצים ממוינת לפי <ph name="COLUMN_NAME" /> בסדר יורד.</translation>
+<translation id="7402503521691663770">‏מכשירים עם ChromeOS Flex</translation>
 <translation id="7408870451288633753">צ'כית</translation>
 <translation id="7417453074306512035">מקלדת אתיופית</translation>
 <translation id="7417705661718309329">‏מפת Google</translation>
@@ -811,6 +819,7 @@
 <translation id="7925686952655276919">אין להשתמש בנתונים ניידים עבור סנכרון</translation>
 <translation id="7928710562641958568">הוצאת המכשיר</translation>
 <translation id="7943385054491506837">‏ארה"ב – Colemak</translation>
+<translation id="7948417415021769876">‏ארכיון 7z</translation>
 <translation id="7953739707111622108">לא ניתן לפתוח מכשיר זה משום שמערכת הקבצים שלו לא זוהתה.</translation>
 <translation id="7969525169268594403">סלובנית</translation>
 <translation id="7972920761225148017">צרפתית (שוויץ)</translation>
@@ -825,6 +834,7 @@
 <translation id="8042602468072383151">קובץ אודיו בפורמט <ph name="AUDIO_TYPE" /></translation>
 <translation id="8045462269890919536">רומנית</translation>
 <translation id="8049184478152619004">‏יש להזין מפתח אישי לביטול חסימה (PUK)</translation>
+<translation id="807187749540895545">מתבצע חילוץ של הקובץ <ph name="FILE_NAME" />…</translation>
 <translation id="8079530767338315840">חזרה</translation>
 <translation id="8087576439476816834">הורדה, <ph name="PROFILE_NAME" /></translation>
 <translation id="8106045200081704138">בשיתוף איתי</translation>
@@ -841,6 +851,7 @@
 <translation id="8208580316430297579">עטיפת האלבום</translation>
 <translation id="8223479393428528563">כדי לשמור קבצים אלה לשימוש אופליין, יש לחזור למצב אונליין, ללחוץ לחיצה ימנית על הקבצים ולבחור את האפשרות <ph name="OFFLINE_CHECKBOX_NAME" />.</translation>
 <translation id="8249296373107784235">ביטול</translation>
+<translation id="8250920743982581267">מסמכים</translation>
 <translation id="8261506727792406068">מחיקה</translation>
 <translation id="8261561378965667560">‏סינית Array</translation>
 <translation id="8269755669432358899">כיווץ חלוניות המשוב של הקבצים</translation>
@@ -859,6 +870,7 @@
 <translation id="8372369524088641025">‏מקש WEP גרוע</translation>
 <translation id="8372852072747894550">יוונית</translation>
 <translation id="8386903983509584791">הסריקה הושלמה</translation>
+<translation id="8387733224523483503">הקובץ <ph name="FILE_NAME" /> חולץ.</translation>
 <translation id="8395901698320285466">מידות</translation>
 <translation id="8408068190360279472">רשת <ph name="NETWORK_TYPE" />, מתבצעת התחברות</translation>
 <translation id="8425213833346101688">שינוי</translation>
@@ -876,6 +888,7 @@
 <translation id="8484284835977497781">אפשר לבחור פריטים מתוך התמונות האחרונות.</translation>
 <translation id="8487700953926739672">זמין אופליין</translation>
 <translation id="8492972329130824181">הרשת הביתית אינה זמינה. יש להפעיל נדידה בחבילת גלישה כדי להתחבר.</translation>
+<translation id="8499098729323186194">מתבצע חילוץ של <ph name="NUMBER_OF_ITEMS" /> פריטים…</translation>
 <translation id="8521441079177373948">בריטניה</translation>
 <translation id="8525306231823319788">מסך מלא</translation>
 <translation id="853494022971700746">צרפתית (צרפת)</translation>
@@ -904,7 +917,6 @@
 <translation id="8714406895390098252">אופניים</translation>
 <translation id="8719721339511222681">בחרת את <ph name="ENTRY_NAME" />.</translation>
 <translation id="872537912056138402">קרואטית</translation>
-<translation id="873847021056608403">‏מכשירי CloudReady 2.0</translation>
 <translation id="8743164338060742337">‏רשת <ph name="NETWORK_INDEX" /> מתוך <ph name="NETWORK_COUNT" />,‏ <ph name="NETWORK_NAME" />,‏ עוצמת האות של ‎<ph name="NETWORK_PROVIDER_NAME" />‎%<ph name="SIGNAL_STRENGTH" />, הרשת מנוהלת על ידי מנהל המערכת שלך, התחברות</translation>
 <translation id="8750438273876807512">כד לגשת במהירות לקבצים שבמדף, יש ללחוץ לחיצה ארוכה על הקובץ, להקיש על <ph name="ICON" /> ולבחור באפשרות "הצמדה למדף"</translation>
 <translation id="8787254343425541995">‏אפשר שרתי proxy עבור רשתות משותפות</translation>
@@ -951,7 +963,9 @@
 <translation id="9172592259078059678">תעתיק גוג'ראטית</translation>
 <translation id="9173120999827300720">מקלדת בינלאומית באנגלית (ארה"ב)</translation>
 <translation id="9174050671906956834">פריטים שבאשפה יימחקו באופן סופי לאחר 30 יום.</translation>
+<translation id="9183302530794969518">Google Docs</translation>
 <translation id="9189836632794948435">קזחית</translation>
+<translation id="9200427192836333033">חולצו <ph name="NUMBER_OF_ITEMS" /> פריטים.</translation>
 <translation id="9213073329713032541">ההתקנה התחילה בהצלחה.</translation>
 <translation id="9219103736887031265">תמונות</translation>
 <translation id="9219908252191632183">נוף ירח</translation>

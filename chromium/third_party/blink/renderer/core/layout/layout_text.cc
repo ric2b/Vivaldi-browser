@@ -212,7 +212,7 @@ LayoutText* LayoutText::CreateEmptyAnonymous(
   return text;
 }
 
-LayoutText* LayoutText::CreateAnonymous(
+LayoutText* LayoutText::CreateAnonymousForFormattedText(
     Document& doc,
     scoped_refptr<const ComputedStyle> style,
     scoped_refptr<StringImpl> text,
@@ -220,7 +220,7 @@ LayoutText* LayoutText::CreateAnonymous(
   LayoutText* layout_text =
       LayoutObjectFactory::CreateText(nullptr, std::move(text), legacy);
   layout_text->SetDocumentForAnonymous(&doc);
-  layout_text->SetStyle(std::move(style));
+  layout_text->SetStyleInternal(std::move(style));
   return layout_text;
 }
 
@@ -303,7 +303,7 @@ void LayoutText::WillBeDestroyed() {
   GetSelectionDisplayItemClientMap().erase(this);
 
   if (node_id_ != kInvalidDOMNodeId) {
-    if (auto* manager = GetContentCaptureManager())
+    if (auto* manager = GetOrResetContentCaptureManager())
       manager->OnLayoutTextWillBeDestroyed(*GetNode());
     node_id_ = kInvalidDOMNodeId;
   }
@@ -2241,7 +2241,7 @@ void LayoutText::TextDidChangeWithoutInvalidation() {
     text_autosizer->Record(this);
 
   if (HasNodeId()) {
-    if (auto* content_capture_manager = GetContentCaptureManager())
+    if (auto* content_capture_manager = GetOrResetContentCaptureManager())
       content_capture_manager->OnNodeTextChanged(*GetNode());
   }
 
@@ -2871,7 +2871,7 @@ PhysicalRect LayoutText::DebugRect() const {
 DOMNodeId LayoutText::EnsureNodeId() {
   NOT_DESTROYED();
   if (node_id_ == kInvalidDOMNodeId) {
-    if (auto* content_capture_manager = GetContentCaptureManager()) {
+    if (auto* content_capture_manager = GetOrResetContentCaptureManager()) {
       if (auto* node = GetNode()) {
         content_capture_manager->ScheduleTaskIfNeeded(*node);
         node_id_ = DOMNodeIds::IdForNode(node);
@@ -2881,11 +2881,11 @@ DOMNodeId LayoutText::EnsureNodeId() {
   return node_id_;
 }
 
-ContentCaptureManager* LayoutText::GetContentCaptureManager() {
+ContentCaptureManager* LayoutText::GetOrResetContentCaptureManager() {
   NOT_DESTROYED();
   if (auto* node = GetNode()) {
     if (auto* frame = node->GetDocument().GetFrame()) {
-      return frame->LocalFrameRoot().GetContentCaptureManager();
+      return frame->LocalFrameRoot().GetOrResetContentCaptureManager();
     }
   }
   return nullptr;

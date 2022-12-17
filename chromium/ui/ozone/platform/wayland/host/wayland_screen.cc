@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "base/containers/contains.h"
+#include "base/observer_list.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -128,7 +129,15 @@ void WaylandScreen::OnOutputRemoved(uint32_t output_id) {
       }
     }
   }
-  display_list_.RemoveDisplay(output_id);
+  // TODO(https://crbug.com/1299403): Work around the symptoms of a common
+  // crash. Unclear if this is the proper long term solution.
+  auto it = display_list_.FindDisplayById(output_id);
+  DCHECK(it != display_list_.displays().end());
+  if (it != display_list_.displays().end()) {
+    display_list_.RemoveDisplay(output_id);
+  } else {
+    LOG(ERROR) << "output_id is not associated with a Display.";
+  }
 }
 
 void WaylandScreen::AddOrUpdateDisplay(uint32_t output_id,
@@ -224,9 +233,9 @@ display::Display WaylandScreen::GetDisplayForAcceleratedWidget(
 }
 
 gfx::Point WaylandScreen::GetCursorScreenPoint() const {
-  // Wayland does not provide either location of surfaces in global space
-  // coordinate system or location of a pointer. Instead, only locations of
-  // mouse/touch events are known. Given that Chromium assumes top-level
+  // wl_shell/xdg-shell do not provide either location of surfaces in global
+  // space coordinate system or location of a pointer. Instead, only locations
+  // of mouse/touch events are known. Given that Chromium assumes top-level
   // windows are located at origin, always provide a cursor point in regards
   // to surfaces' location.
   //

@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "ash/constants/ambient_animation_theme.h"
 #include "ash/public/cpp/ambient/common/ambient_settings.h"
 #include "ash/public/cpp/default_user_image.h"
 #include "ash/public/cpp/personalization_app/user_display_info.h"
@@ -56,7 +57,7 @@ struct StructTraits<
     backdrop::Collection> {
   static const std::string& id(const backdrop::Collection& collection);
   static const std::string& name(const backdrop::Collection& collection);
-  static absl::optional<GURL> preview(const backdrop::Collection& collection);
+  static std::vector<GURL> previews(const backdrop::Collection& collection);
 
   static bool Read(
       ash::personalization_app::mojom::WallpaperCollectionDataView data,
@@ -104,12 +105,31 @@ struct StructTraits<ash::personalization_app::mojom::DefaultUserImageDataView,
 };
 
 template <>
+struct EnumTraits<ash::personalization_app::mojom::AnimationTheme,
+                  ash::AmbientAnimationTheme> {
+  using MojomAnimationTheme = ::ash::personalization_app::mojom::AnimationTheme;
+  static MojomAnimationTheme ToMojom(ash::AmbientAnimationTheme input);
+  static bool FromMojom(MojomAnimationTheme input,
+                        ash::AmbientAnimationTheme* output);
+};
+
+template <>
 struct EnumTraits<ash::personalization_app::mojom::TopicSource,
                   ash::AmbientModeTopicSource> {
   using MojomTopicSource = ::ash::personalization_app::mojom::TopicSource;
   static MojomTopicSource ToMojom(ash::AmbientModeTopicSource input);
   static bool FromMojom(MojomTopicSource input,
                         ash::AmbientModeTopicSource* output);
+};
+
+template <>
+struct EnumTraits<ash::personalization_app::mojom::TemperatureUnit,
+                  ash::AmbientModeTemperatureUnit> {
+  using MojomTemperatureUnit =
+      ::ash::personalization_app::mojom::TemperatureUnit;
+  static MojomTemperatureUnit ToMojom(ash::AmbientModeTemperatureUnit input);
+  static bool FromMojom(MojomTemperatureUnit input,
+                        ash::AmbientModeTemperatureUnit* output);
 };
 
 }  // namespace mojo

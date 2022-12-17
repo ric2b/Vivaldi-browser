@@ -618,7 +618,6 @@
 <translation id="5170206230005240598">Брайль жазулары қосылған.</translation>
 <translation id="5183440668879371625">Брайль алдыңғы жолы</translation>
 <translation id="5189244881767082992">Сызық</translation>
-<translation id="5234747236692380506">"<ph name="TEXT" />" деп тер</translation>
 <translation id="5263034204789987535">Боз сары</translation>
 <translation id="5263344797180442561">h2</translation>
 <translation id="528468243742722775">Соңы</translation>
@@ -685,6 +684,8 @@
 <translation id="5623842676595125836">Журнал</translation>
 <translation id="5628125749885014029">h4</translation>
 <translation id="5632083598315326067">Графикалық таңба</translation>
+<translation id="5648939288050772726">Құттықтаймыз! ChromeVox қызметін пайдалануға қатысты маңызды нәрселерді үйрендіңіз. "Іздеу" және нүкте пернелерін бір уақытта басу арқылы ChromeVox пәрмендер мәзірін кез келген уақытта аша аласыз. ChromeVox және ChromeOS туралы толығырақ ақпарат алу үшін мына мақалаларды оқыңыз.
+    Оқулықтағы ақпаратпен танысып шыққан соң, одан шығу үшін ChromeVox қызметінің көмегімен "Жабу" түймесін басыңыз.</translation>
 <translation id="5653397561111110475">Chromebook сенсорлық экранының арнайы мүмкіндіктерін пайдалану</translation>
 <translation id="5655682562155942719">Өту пәрмендері</translation>
 <translation id="56637627897541303">Мәтін аймағы</translation>
@@ -794,6 +795,7 @@
 <translation id="641759969622533235">{COUNT,plural, =1{қос нүкте}other{# қос нүкте}}</translation>
 <translation id="6444046323172968959">Ескерту диалогтік терезесі</translation>
 <translation id="6452403590345320472">Мазмұны</translation>
+<translation id="6457542714329819968">теру</translation>
 <translation id="6468049171101508116">"Келесі" түймесі</translation>
 <translation id="646954774886932461">Индекс</translation>
 <translation id="6475604559827479857">Сөзді ерекшелеп көрсететін түс:</translation>
@@ -965,8 +967,6 @@
 <translation id="7701196182766842984">autolst</translation>
 <translation id="7713139339518499741">Табиғи дауыс</translation>
 <translation id="7714340021005120797">Келесі мәтінді-тізімді өріс жоқ.</translation>
-<translation id="772146615414628379">Құттықтаймыз! ChromeVox қызметін пайдалануға қатысты маңызды нәрселерді үйрендіңіз. "Іздеу" және нүкте пернелерін бір уақытта басу арқылы ChromeVox пәрмендер мәзірін кез келген уақытта аша аласыз. ChromeVox және Chrome OS туралы толық ақпарат алу үшін мына мақалаларды оқыңыз.
-    Оқулықтағы ақпаратпен танысып шыққан соң, одан шығу үшін ChromeVox қызметінің көмегімен "Жабу" түймесіне өтіп, оны басыңыз.</translation>
 <translation id="7724603315864178912">Қиып алу</translation>
 <translation id="7731785449856576010">Келесі медиа виджеті жоқ.</translation>
 <translation id="7735498529470878067">Түртілген элементтерді дыбыстау экранда не орналасқанын жылдам түсінуіңізге көмектеседі.</translation>

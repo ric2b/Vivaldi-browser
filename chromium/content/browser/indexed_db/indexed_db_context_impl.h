@@ -175,8 +175,8 @@ class CONTENT_EXPORT IndexedDBContextImpl
   void BlobFilesCleaned(const blink::StorageKey& storage_key);
 
   // Will be null in unit tests.
-  storage::QuotaManagerProxy* quota_manager_proxy() const {
-    return quota_manager_proxy_.get();
+  const scoped_refptr<storage::QuotaManagerProxy>& quota_manager_proxy() const {
+    return quota_manager_proxy_;
   }
 
   // Returns a list of all storage_keys with backing stores.
@@ -223,6 +223,14 @@ class CONTENT_EXPORT IndexedDBContextImpl
   class IndexedDBGetUsageAndQuotaCallback;
 
   ~IndexedDBContextImpl() override;
+
+  void BindPipesOnIDBSequence(
+      mojo::PendingReceiver<storage::mojom::QuotaClient>
+          pending_quota_client_receiver,
+      mojo::PendingRemote<storage::mojom::BlobStorageContext>
+          pending_blob_storage_context,
+      mojo::PendingRemote<storage::mojom::FileSystemAccessContext>
+          pending_file_system_access_context);
 
   // Binds receiver on bucket retrieval to ensure that a bucket always exists
   // for a storage key.
@@ -282,6 +290,8 @@ class CONTENT_EXPORT IndexedDBContextImpl
   mojo::Receiver<storage::mojom::QuotaClient> quota_client_receiver_;
   const std::unique_ptr<storage::FilesystemProxy> filesystem_proxy_;
 
+  // weak_factory_->GetWeakPtr() may be used on any thread, but the resulting
+  // pointer must only be checked/used on idb_task_runner_.
   base::WeakPtrFactory<IndexedDBContextImpl> weak_factory_{this};
 };
 

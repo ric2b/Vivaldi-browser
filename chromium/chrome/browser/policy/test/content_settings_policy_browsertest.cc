@@ -7,6 +7,7 @@
 #include "base/command_line.h"
 #include "base/strings/strcat.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/permissions/permission_manager_factory.h"
@@ -169,7 +170,13 @@ class WebBluetoothPolicyTest : public PolicyTest {
   }
 };
 
-IN_PROC_BROWSER_TEST_F(WebBluetoothPolicyTest, Block) {
+// crbug.com/1061063
+#if BUILDFLAG(IS_MAC) && defined(ARCH_CPU_ARM64)
+#define MAYBE_Block DISABLED_Block
+#else
+#define MAYBE_Block Block
+#endif  // BUILDFLAG(IS_MAC) && defined(ARCH_CPU_ARM64)
+IN_PROC_BROWSER_TEST_F(WebBluetoothPolicyTest, MAYBE_Block) {
   // Fake the BluetoothAdapter to say it's present.
   scoped_refptr<device::MockBluetoothAdapter> adapter =
       new testing::NiceMock<device::MockBluetoothAdapter>;

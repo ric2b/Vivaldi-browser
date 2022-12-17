@@ -46,18 +46,6 @@ extern const char kMarkdown[];
 extern const char kMarkdown_HelpShort[];
 extern const char kMarkdown_Help[];
 
-extern const char kMetaDataKeys[];
-extern const char kMetaDataKeys_HelpShort[];
-extern const char kMetaDataKeys_Help[];
-
-extern const char kMetaWalkKeys[];
-extern const char kMetaWalkKeys_HelpShort[];
-extern const char kMetaWalkKeys_Help[];
-
-extern const char kMetaRebaseFiles[];
-extern const char kMetaRebaseFiles_HelpShort[];
-extern const char kMetaRebaseFiles_Help[];
-
 extern const char kNinjaExecutable[];
 extern const char kNinjaExecutable_HelpShort[];
 extern const char kNinjaExecutable_Help[];

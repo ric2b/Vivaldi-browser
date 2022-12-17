@@ -28,6 +28,21 @@ import java.util.List;
  * See components/search_engines/template_url_service.h for more details.
  */
 public class TemplateUrlService {
+    public enum DefaultSearchType {
+        DEFAULT_SEARCH_MAIN,
+        DEFAULT_SEARCH_PRIVATE,
+        DEFAULT_SEARCH_FIELD,
+        DEFAULT_SEARCH_FIELD_PRIVATE,
+        DEFAULT_SEARCH_SPEED_DIALS,
+        DEFAULT_SEARCH_SPEED_DIALS_PRIVATE,
+        DEFAULT_SEARCH_IMAGE
+    }
+
+    public static class PostParams {
+        public String contentType;
+        public byte[] postContent;
+    }
+
     /**
      * This listener will be notified when template url service is done loading.
      */
@@ -144,15 +159,23 @@ public class TemplateUrlService {
      *         be null if DSEs are disabled entirely by administrators.
      */
     public @Nullable TemplateUrl getDefaultSearchEngineTemplateUrl() {
+        return getDefaultSearchEngineTemplateUrl(DefaultSearchType.DEFAULT_SEARCH_MAIN);
+    }
+
+    public @Nullable TemplateUrl getDefaultSearchEngineTemplateUrl(DefaultSearchType type) {
         if (!isLoaded()) return null;
         return TemplateUrlServiceJni.get().getDefaultSearchEngine(
-                mNativeTemplateUrlServiceAndroid, TemplateUrlService.this);
+                mNativeTemplateUrlServiceAndroid, TemplateUrlService.this, type.ordinal());
     }
 
     public void setSearchEngine(String selectedKeyword) {
+        setSearchEngine(selectedKeyword, DefaultSearchType.DEFAULT_SEARCH_MAIN);
+    }
+
+    public void setSearchEngine(String selectedKeyword, DefaultSearchType type) {
         ThreadUtils.assertOnUiThread();
         TemplateUrlServiceJni.get().setUserSelectedDefaultSearchProvider(
-                mNativeTemplateUrlServiceAndroid, TemplateUrlService.this, selectedKeyword);
+                mNativeTemplateUrlServiceAndroid, TemplateUrlService.this, selectedKeyword, type.ordinal());
     }
 
     /**
@@ -256,7 +279,11 @@ public class TemplateUrlService {
      *              {@code query} inserted as the search parameter.
      */
     public String getUrlForSearchQuery(String query) {
-        return getUrlForSearchQuery(query, null);
+        return getUrlForSearchQuery(query, null, DefaultSearchType.DEFAULT_SEARCH_MAIN);
+    }
+
+    public String getUrlForSearchQuery(String query, PostParams postParams, DefaultSearchType type) {
+        return getUrlForSearchQuery(query, null, postParams, type);
     }
 
     /**
@@ -269,9 +296,13 @@ public class TemplateUrlService {
      *              {@code query} inserted as the search parameter.
      */
     public String getUrlForSearchQuery(String query, List<String> searchParams) {
+        return getUrlForSearchQuery(query, searchParams, null, DefaultSearchType.DEFAULT_SEARCH_MAIN);
+    }
+
+    public String getUrlForSearchQuery(String query, List<String> searchParams, PostParams postParams, DefaultSearchType type) {
         return TemplateUrlServiceJni.get().getUrlForSearchQuery(mNativeTemplateUrlServiceAndroid,
                 TemplateUrlService.this, query,
-                searchParams == null ? null : searchParams.toArray(new String[0]));
+                searchParams == null ? null : searchParams.toArray(new String[0]), postParams, type.ordinal());
     }
 
     /**
@@ -379,7 +410,7 @@ public class TemplateUrlService {
         void load(long nativeTemplateUrlServiceAndroid, TemplateUrlService caller);
         boolean isLoaded(long nativeTemplateUrlServiceAndroid, TemplateUrlService caller);
         void setUserSelectedDefaultSearchProvider(long nativeTemplateUrlServiceAndroid,
-                TemplateUrlService caller, String selectedKeyword);
+                TemplateUrlService caller, String selectedKeyword, int type);
         boolean isDefaultSearchManaged(
                 long nativeTemplateUrlServiceAndroid, TemplateUrlService caller);
         boolean isSearchResultsPageFromDefaultSearchProvider(
@@ -391,7 +422,7 @@ public class TemplateUrlService {
         boolean isDefaultSearchEngineGoogle(
                 long nativeTemplateUrlServiceAndroid, TemplateUrlService caller);
         String getUrlForSearchQuery(long nativeTemplateUrlServiceAndroid, TemplateUrlService caller,
-                String query, String[] searchParams);
+                String query, String[] searchParams, PostParams postParams, int type);
         String getSearchQueryForUrl(
                 long nativeTemplateUrlServiceAndroid, TemplateUrlService caller, GURL url);
         GURL getUrlForVoiceSearchQuery(
@@ -411,6 +442,29 @@ public class TemplateUrlService {
         void getTemplateUrls(long nativeTemplateUrlServiceAndroid, TemplateUrlService caller,
                 List<TemplateUrl> templateUrls);
         TemplateUrl getDefaultSearchEngine(
-                long nativeTemplateUrlServiceAndroid, TemplateUrlService caller);
+                long nativeTemplateUrlServiceAndroid, TemplateUrlService caller, int type);
+        void vivaldiSetDefaultOverride(long nativeTemplateUrlServiceAndroid,
+                TemplateUrlService caller, String selectedKeyword);
+        void vivaldiResetDefaultOverride(long nativeTemplateUrlServiceAndroid,
+                TemplateUrlService caller);
+    }
+
+    public void vivaldiSetSearchEngineOverride(String selectedKeyword) {
+        ThreadUtils.assertOnUiThread();
+        TemplateUrlServiceJni.get().vivaldiSetDefaultOverride(
+                mNativeTemplateUrlServiceAndroid, TemplateUrlService.this, selectedKeyword);
+    }
+
+    public void vivaldiResetSearchEngineOverride() {
+        ThreadUtils.assertOnUiThread();
+        TemplateUrlServiceJni.get().vivaldiResetDefaultOverride(
+                mNativeTemplateUrlServiceAndroid, TemplateUrlService.this);
+    }
+
+    @CalledByNative
+    private static void PopulatePostParams(
+            PostParams postParams, String contentType, byte[] postContent) {
+        postParams.contentType = contentType;
+        postParams.postContent = postContent;
     }
 }

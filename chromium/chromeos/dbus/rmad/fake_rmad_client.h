@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "base/callback_forward.h"
 #include "base/component_export.h"
 #include "base/observer_list.h"
 #include "chromeos/dbus/rmad/rmad.pb.h"
@@ -26,8 +27,8 @@ class COMPONENT_EXPORT(RMAD) FakeRmadClient : public RmadClient {
   static FakeRmadClient* Get();
 
   bool WasRmaStateDetected() override;
-  bool WasRmaStateDetectedForSessionManager(
-      base::OnceCallback<void()> session_manager_callback) override;
+  void SetRmaRequiredCallbackForSessionManager(
+      base::OnceClosure session_manager_callback) override;
   void GetCurrentState(
       DBusMethodCallback<rmad::GetStateReply> callback) override;
   void TransitionNextState(
@@ -59,7 +60,8 @@ class COMPONENT_EXPORT(RMAD) FakeRmadClient : public RmadClient {
       rmad::CalibrationOverallStatus status);
   void TriggerProvisioningProgressObservation(
       rmad::ProvisionStatus::Status status,
-      double progress);
+      double progress,
+      rmad::ProvisionStatus::Error error);
   void TriggerHardwareWriteProtectionStateObservation(bool enabled);
   void TriggerPowerCableStateObservation(bool plugged_in);
   void TriggerHardwareVerificationResultObservation(
@@ -67,7 +69,8 @@ class COMPONENT_EXPORT(RMAD) FakeRmadClient : public RmadClient {
       const std::string& error_str);
   void TriggerFinalizationProgressObservation(
       rmad::FinalizeStatus::Status status,
-      double progress);
+      double progress,
+      rmad::FinalizeStatus::Error error);
   void TriggerRoFirmwareUpdateProgressObservation(
       rmad::UpdateRoFirmwareStatus status);
 

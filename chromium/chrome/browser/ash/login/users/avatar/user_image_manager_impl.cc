@@ -17,7 +17,6 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
-#include "base/task/post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/task_runner_util.h"
 #include "base/task/thread_pool.h"
@@ -125,6 +124,17 @@ int UserImageManager::ImageIndexToHistogramIndex(int image_index) {
     default:
       return image_index + default_user_image::kHistogramSpecialImagesMaxCount;
   }
+}
+
+// static
+void UserImageManager::RecordUserImageChanged(int histogram_value) {
+  // Although |UserImageManager::kUserImageChangedHistogramName| is an
+  // enumerated histogram, we intentionally use UmaHistogramExactLinear() to
+  // emit the metric rather than UmaHistogramEnumeration(). This is because the
+  // enums.xml values correspond to (a) special constants and (b) indexes of an
+  // array containing resource IDs.
+  base::UmaHistogramExactLinear(kUserImageChangedHistogramName, histogram_value,
+                                default_user_image::kHistogramImagesCount + 1);
 }
 
 // static

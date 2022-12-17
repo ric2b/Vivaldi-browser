@@ -22,7 +22,6 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
-#include "base/cxx17_backports.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/posix/eintr_wrapper.h"
@@ -30,7 +29,6 @@
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/system/sys_info.h"
-#include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_restrictions.h"
@@ -75,7 +73,7 @@ bool WaitForSocketReadable(int raw_socket_fd, int raw_cancel_fd) {
       {raw_cancel_fd, POLLIN, 0},
   };
 
-  if (HANDLE_EINTR(poll(fds, base::size(fds), -1)) <= 0) {
+  if (HANDLE_EINTR(poll(fds, std::size(fds), -1)) <= 0) {
     PLOG(ERROR) << "poll()";
     return false;
   }
@@ -465,6 +463,7 @@ void ArcSessionImpl::DoStartMiniInstance(size_t num_cores_disabled) {
   params.num_cores_disabled = num_cores_disabled;
   params.enable_notifications_refresh =
       ash::features::IsNotificationsRefreshEnabled();
+  params.enable_tts_caching = base::FeatureList::IsEnabled(kEnableTTSCaching);
 
   // TODO (b/196460968): Remove after CTS run is complete.
   if (params.enable_notifications_refresh) {

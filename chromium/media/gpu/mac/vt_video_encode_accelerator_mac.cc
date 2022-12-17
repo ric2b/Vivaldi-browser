@@ -13,13 +13,17 @@
 #include "base/memory/unsafe_shared_memory_region.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "media/base/bitrate.h"
+#include "media/base/bitstream_buffer.h"
 #include "media/base/mac/video_frame_mac.h"
+#include "media/base/media_log.h"
+#include "media/base/video_frame.h"
 
 // This is a min version of macOS where we want to support SVC encoding via
 // EnableLowLatencyRateControl flag. The flag is actually supported since 11.3,
 // but there we see frame drops even with ample bitrate budget. Excessive frame
-// drops were fixed in 12.1.
+// drops were fixed in 12.0.1.
 #define LOW_LATENCY_FLAG_AVAILABLE_VER 12.0.1
 
 namespace media {
@@ -135,13 +139,13 @@ VTVideoEncodeAccelerator::GetSupportedProfiles() {
   SupportedProfiles profiles;
   const bool rv = CreateCompressionSession(
       gfx::Size(kDefaultResolutionWidth, kDefaultResolutionHeight));
-  DestroyCompressionSession();
   if (!rv) {
     VLOG(1)
         << "Hardware encode acceleration is not available on this platform.";
     return profiles;
   }
 
+  DestroyCompressionSession();
   SupportedProfile profile;
   profile.max_framerate_numerator = kMaxFrameRateNumerator;
   profile.max_framerate_denominator = kMaxFrameRateDenominator;
@@ -155,8 +159,27 @@ VTVideoEncodeAccelerator::GetSupportedProfiles() {
   return profiles;
 }
 
+VideoEncodeAccelerator::SupportedProfiles
+VTVideoEncodeAccelerator::GetSupportedProfilesLight() {
+  DVLOG(3) << __func__;
+  DCHECK_CALLED_ON_VALID_SEQUENCE(client_sequence_checker_);
+
+  SupportedProfiles profiles;
+
+  SupportedProfile profile;
+  profile.max_framerate_numerator = kMaxFrameRateNumerator;
+  profile.max_framerate_denominator = kMaxFrameRateDenominator;
+  profile.max_resolution = gfx::Size(kMaxResolutionWidth, kMaxResolutionHeight);
+  for (const auto& supported_profile : kSupportedProfiles) {
+    profile.profile = supported_profile;
+    profiles.push_back(profile);
+  }
+  return profiles;
+}
+
 bool VTVideoEncodeAccelerator::Initialize(const Config& config,
-                                          Client* client) {
+                                          Client* client,
+                                          std::unique_ptr<MediaLog> media_log) {
   DVLOG(3) << __func__ << ": " << config.AsHumanReadableString();
   DCHECK_CALLED_ON_VALID_SEQUENCE(client_sequence_checker_);
   DCHECK(client);
@@ -166,14 +189,15 @@ bool VTVideoEncodeAccelerator::Initialize(const Config& config,
 
   if (config.input_format != PIXEL_FORMAT_I420 &&
       config.input_format != PIXEL_FORMAT_NV12) {
-    DLOG(ERROR) << "Input format not supported= "
-                << VideoPixelFormatToString(config.input_format);
+    MEDIA_LOG(ERROR, media_log.get())
+        << "Input format not supported= "
+        << VideoPixelFormatToString(config.input_format);
     return false;
   }
   if (std::find(std::begin(kSupportedProfiles), std::end(kSupportedProfiles),
                 config.output_profile) == std::end(kSupportedProfiles)) {
-    DLOG(ERROR) << "Output profile not supported= "
-                << GetProfileName(config.output_profile);
+    MEDIA_LOG(ERROR, media_log.get()) << "Output profile not supported= "
+                                      << GetProfileName(config.output_profile);
     return false;
   }
   h264_profile_ = config.output_profile;
@@ -193,12 +217,13 @@ bool VTVideoEncodeAccelerator::Initialize(const Config& config,
     num_temporal_layers_ = config.spatial_layers.front().num_of_temporal_layers;
 
   if (num_temporal_layers_ > 2) {
-    DLOG(ERROR) << "Unsupported number of SVC temporal layers.";
+    MEDIA_LOG(ERROR, media_log.get())
+        << "Unsupported number of SVC temporal layers.";
     return false;
   }
 
   if (!ResetCompressionSession()) {
-    DLOG(ERROR) << "Failed creating compression session.";
+    MEDIA_LOG(ERROR, media_log.get()) << "Failed creating compression session.";
     return false;
   }
 
@@ -370,8 +395,8 @@ void VTVideoEncodeAccelerator::RequestEncodingParametersChangeTask(
 
   switch (bitrate.mode()) {
     case Bitrate::Mode::kConstant:
-      if (bitrate.target() != static_cast<uint32_t>(target_bitrate_)) {
-        target_bitrate_ = bitrate.target();
+      if (bitrate.target_bps() != static_cast<uint32_t>(target_bitrate_)) {
+        target_bitrate_ = bitrate.target_bps();
         bitrate_adjuster_.SetTargetBitrateBps(target_bitrate_);
         SetAdjustedConstantBitrate(bitrate_adjuster_.GetAdjustedBitrateBps());
       }
@@ -412,10 +437,11 @@ void VTVideoEncodeAccelerator::SetVariableBitrate(const Bitrate& bitrate) {
       compression_session_);
   [[maybe_unused]] bool rv =
       session_property_setter.Set(kVTCompressionPropertyKey_AverageBitRate,
-                                  static_cast<int32_t>(bitrate.target()));
-  rv &= session_property_setter.Set(kVTCompressionPropertyKey_DataRateLimits,
-                                    video_toolbox::ArrayWithIntegerAndFloat(
-                                        bitrate.peak() / kBitsPerByte, 1.0f));
+                                  static_cast<int32_t>(bitrate.target_bps()));
+  rv &=
+      session_property_setter.Set(kVTCompressionPropertyKey_DataRateLimits,
+                                  video_toolbox::ArrayWithIntegerAndFloat(
+                                      bitrate.peak_bps() / kBitsPerByte, 1.0f));
   DLOG_IF(ERROR, !rv)
       << "Couldn't change bitrate parameters of encode session.";
 }
@@ -552,10 +578,8 @@ bool VTVideoEncodeAccelerator::ResetCompressionSession() {
   DestroyCompressionSession();
 
   bool session_rv = CreateCompressionSession(input_visible_size_);
-  if (!session_rv) {
-    DestroyCompressionSession();
+  if (!session_rv)
     return false;
-  }
 
   const bool configure_rv = ConfigureCompressionSession();
   if (configure_rv)
@@ -599,6 +623,12 @@ bool VTVideoEncodeAccelerator::CreateCompressionSession(
       &VTVideoEncodeAccelerator::CompressionCallback,
       reinterpret_cast<void*>(this), compression_session_.InitializeInto());
   if (status != noErr) {
+    // IMPORTANT: ScopedCFTypeRef::release() doesn't call CFRelease().
+    // In case of an error VTCompressionSessionCreate() is not supposed to
+    // write a non-null value into compression_session_, but just in case,
+    // we'll clear it without calling CFRelease() because it can be unsafe
+    // to call on a not fully created session.
+    (void)compression_session_.release();
     DLOG(ERROR) << " VTCompressionSessionCreate failed: " << status;
     return false;
   }

@@ -28,14 +28,14 @@ class FakeKioskSessionServiceLacros : public KioskSessionServiceLacros {
   ~FakeKioskSessionServiceLacros() override = default;
 
   // KioskSessionServiceLacros:
-  void AttemptUserExit() override { std::move(after_attempt_user_exit).Run(); }
+  void AttemptUserExit() override { std::move(after_attempt_user_exit_).Run(); }
 
   void set_after_attempt_user_exit(base::OnceClosure closure) {
-    after_attempt_user_exit = base::BindOnce(std::move(closure));
+    after_attempt_user_exit_ = std::move(closure);
   }
 
  private:
-  base::OnceClosure after_attempt_user_exit;
+  base::OnceClosure after_attempt_user_exit_;
 };
 
 class KioskSessionServiceBrowserTest : public InProcessBrowserTest {
@@ -97,6 +97,10 @@ class KioskSessionServiceBrowserTest : public InProcessBrowserTest {
 IN_PROC_BROWSER_TEST_F(KioskSessionServiceBrowserTest, AttemptUserExit) {
   SetSessionType(SessionType::kWebKioskSession);
   CreateKioskMainWindow();
+
+  // Verify the install URL stored in the service.
+  EXPECT_EQ(kiosk_session_service_lacros()->GetInstallURL(),
+            GURL(kNavigationUrl));
 
   // Close all browser windows, which should trigger `AttemptUserExit` API call.
   base::RunLoop run_loop;

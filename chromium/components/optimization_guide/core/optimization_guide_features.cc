@@ -15,8 +15,10 @@
 #include "build/build_config.h"
 #include "components/optimization_guide/core/insertion_ordered_set.h"
 #include "components/optimization_guide/core/optimization_guide_constants.h"
+#include "components/optimization_guide/core/optimization_guide_prefs.h"
 #include "components/optimization_guide/core/optimization_guide_switches.h"
 #include "components/optimization_guide/machine_learning_tflite_buildflags.h"
+#include "components/prefs/pref_service.h"
 #include "components/variations/hashing.h"
 #include "google_apis/google_api_keys.h"
 #include "net/base/url_util.h"
@@ -26,6 +28,13 @@ namespace optimization_guide {
 namespace features {
 
 namespace {
+
+constexpr auto enabled_by_default_desktop_only =
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#endif
 
 // Returns whether |locale| is a supported locale for |feature|.
 //
@@ -43,6 +52,14 @@ bool IsSupportedLocaleForFeature(const std::string locale,
 
   std::string value =
       base::GetFieldTrialParamValueByFeature(feature, "supported_locales");
+  if (value.empty()) {
+    // The default list of supported locales for optimization guide features.
+    value = "de,en,es,fr,it,nl,pt,tr";
+  } else if (value == "*") {
+    // Still provide a way to enable all locales remotely via the '*' character.
+    return true;
+  }
+
   std::vector<std::string> supported_locales = base::SplitString(
       value, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
   // An empty allowlist admits any locale.
@@ -61,14 +78,8 @@ bool IsSupportedLocaleForFeature(const std::string locale,
 
 // Enables the syncing of the Optimization Hints component, which provides
 // hints for what optimizations can be applied on a page load.
-const base::Feature kOptimizationHints {
-  "OptimizationHints",
-#if BUILDFLAG(IS_IOS)
-      base::FEATURE_DISABLED_BY_DEFAULT
-#else   // !BUILDFLAG(IS_IOS)
-      base::FEATURE_ENABLED_BY_DEFAULT
-#endif  // BUILDFLAG(IS_IOS)
-};
+const base::Feature kOptimizationHints{"OptimizationHints",
+                                       base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Feature flag that contains a feature param that specifies the field trials
 // that are allowed to be sent up to the Optimization Guide Server.
@@ -81,9 +92,9 @@ const base::Feature kRemoteOptimizationGuideFetching{
 
 const base::Feature kRemoteOptimizationGuideFetchingAnonymousDataConsent {
   "OptimizationHintsFetchingAnonymousDataConsent",
-#if BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
       base::FEATURE_ENABLED_BY_DEFAULT
-#else   // !BUILDFLAG(IS_ANDROID)
+#else   // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
       base::FEATURE_DISABLED_BY_DEFAULT
 #endif  // BUILDFLAG(IS_ANDROID)
 };
@@ -110,14 +121,19 @@ const base::Feature kOptimizationGuideModelDownloading {
 
 // Enables page content to be annotated.
 const base::Feature kPageContentAnnotations{"PageContentAnnotations",
-                                            base::FEATURE_DISABLED_BY_DEFAULT};
+                                            enabled_by_default_desktop_only};
 
 // Enables the page entities model to be annotated on every page load.
 const base::Feature kPageEntitiesPageContentAnnotations{
-    "PageEntitiesPageContentAnnotations", base::FEATURE_DISABLED_BY_DEFAULT};
+    "PageEntitiesPageContentAnnotations", enabled_by_default_desktop_only};
 // Enables the page visibility model to be annotated on every page load.
 const base::Feature kPageVisibilityPageContentAnnotations{
     "PageVisibilityPageContentAnnotations", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// This feature flag does not allow for the entities model to load the name and
+// prefix filters.
+const base::Feature kPageEntitiesModelBypassFilters{
+    "PageEntitiesModelBypassFilters", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // This feature flag enables resetting the entities model on shutdown.
 const base::Feature kPageEntitiesModelResetOnShutdown{
@@ -146,6 +162,14 @@ const base::Feature kUseLocalPageEntitiesMetadataProvider{
 
 const base::Feature kBatchAnnotationsValidation{
     "BatchAnnotationsValidation", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kPreventLongRunningPredictionModels{
+    "PreventLongRunningPredictionModels", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature
+    kOptimizationGuideUseContinueOnShutdownForPageContentAnnotations{
+        "OptimizationGuideUseContinueOnShutdownForPageContentAnnotations",
+        base::FEATURE_ENABLED_BY_DEFAULT};
 
 // The default value here is a bit of a guess.
 // TODO(crbug/1163244): This should be tuned once metrics are available.
@@ -235,12 +259,18 @@ GURL GetOptimizationGuideServiceGetModelsURL() {
   return get_models_url;
 }
 
+bool IsOptimizationTargetPredictionEnabled() {
+  return base::FeatureList::IsEnabled(kOptimizationTargetPrediction);
+}
+
 bool IsOptimizationHintsEnabled() {
   return base::FeatureList::IsEnabled(kOptimizationHints);
 }
 
-bool IsRemoteFetchingEnabled() {
-  return base::FeatureList::IsEnabled(kRemoteOptimizationGuideFetching);
+bool IsRemoteFetchingEnabled(PrefService* pref_service) {
+  return base::FeatureList::IsEnabled(kRemoteOptimizationGuideFetching) &&
+         pref_service->GetBoolean(
+             optimization_guide::prefs::kOptimizationGuideFetchingEnabled);
 }
 
 bool IsPushNotificationsEnabled() {
@@ -396,6 +426,14 @@ base::TimeDelta PredictionModelFetchInterval() {
       kOptimizationTargetPrediction, "fetch_interval_hours", 24));
 }
 
+absl::optional<base::TimeDelta> ModelExecutionTimeout() {
+  if (!base::FeatureList::IsEnabled(kPreventLongRunningPredictionModels)) {
+    return absl::nullopt;
+  }
+  return base::Milliseconds(GetFieldTrialParamByFeatureAsInt(
+      kPreventLongRunningPredictionModels, "model_execution_timeout_ms", 2000));
+}
+
 base::flat_set<uint32_t> FieldTrialNameHashesAllowedForFetch() {
   std::string value = base::GetFieldTrialParamValueByFeature(
       kOptimizationHintsFieldTrials, "allowed_field_trial_names");
@@ -419,7 +457,7 @@ bool IsModelDownloadingEnabled() {
 bool IsUnrestrictedModelDownloadingEnabled() {
   return base::GetFieldTrialParamByFeatureAsBool(
       kOptimizationGuideModelDownloading, "unrestricted_model_downloading",
-      false);
+      true);
 }
 
 bool IsPageContentAnnotationEnabled() {
@@ -433,7 +471,7 @@ uint64_t MaxSizeForPageContentTextDump() {
 
 bool ShouldAnnotateTitleInsteadOfPageContent() {
   return base::GetFieldTrialParamByFeatureAsBool(
-      kPageContentAnnotations, "annotate_title_instead_of_page_content", false);
+      kPageContentAnnotations, "annotate_title_instead_of_page_content", true);
 }
 
 bool ShouldWriteContentAnnotationsToHistoryService() {
@@ -447,7 +485,7 @@ size_t MaxContentAnnotationRequestsCached() {
 }
 
 const base::FeatureParam<bool> kContentAnnotationsExtractRelatedSearchesParam{
-    &kPageContentAnnotations, "extract_related_searches", false};
+    &kPageContentAnnotations, "extract_related_searches", true};
 
 bool ShouldExtractRelatedSearches() {
   return kContentAnnotationsExtractRelatedSearchesParam.Get();
@@ -457,10 +495,6 @@ bool ShouldExecutePageEntitiesModelOnPageContent(const std::string& locale) {
   return base::FeatureList::IsEnabled(kPageEntitiesPageContentAnnotations) &&
          IsSupportedLocaleForFeature(locale,
                                      kPageEntitiesPageContentAnnotations);
-}
-
-bool ShouldResetPageEntitiesModelOnShutdown() {
-  return base::FeatureList::IsEnabled(kPageEntitiesModelResetOnShutdown);
 }
 
 bool ShouldExecutePageVisibilityModelOnPageContent(const std::string& locale) {
@@ -543,6 +577,11 @@ size_t BatchAnnotationsValidationBatchSize() {
   int batch_size = GetFieldTrialParamByFeatureAsInt(kBatchAnnotationsValidation,
                                                     "batch_size", 25);
   return std::max(1, batch_size);
+}
+
+bool BatchAnnotationsValidationUsePageTopics() {
+  return GetFieldTrialParamByFeatureAsBool(kBatchAnnotationsValidation,
+                                           "use_page_topics", false);
 }
 
 size_t MaxVisitAnnotationCacheSize() {

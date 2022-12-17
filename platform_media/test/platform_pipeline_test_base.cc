@@ -5,12 +5,13 @@
 
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
+#include "build/build_config.h"
 #include "media/base/test_data_util.h"
 
 #include "media/base/limits.h"
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
 #include "platform_media/renderer/decoders/mac/at_audio_decoder.h"
-#elif defined(OS_WIN)
+#elif BUILDFLAG(IS_WIN)
 #include "platform_media/renderer/decoders/win/wmf_audio_decoder.h"
 #include "platform_media/renderer/decoders/win/wmf_video_decoder.h"
 #endif
@@ -116,9 +117,9 @@ Demuxer* PlatformPipelineTestBase::CreatePlatformDemuxer(
 void PlatformPipelineTestBase::AppendPlatformAudioDecoders(
     std::vector<std::unique_ptr<AudioDecoder>>& audio_decoders,
     const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner) {
-#if defined(OS_MAC)
+#if BUILDFLAG(IS_MAC)
   audio_decoders.push_back(std::make_unique<ATAudioDecoder>(media_task_runner));
-#elif defined(OS_WIN)
+#elif BUILDFLAG(IS_WIN)
   if (WMFAudioDecoder::IsEnabled()) {
     audio_decoders.push_back(
         std::make_unique<WMFAudioDecoder>(media_task_runner));
@@ -130,7 +131,7 @@ void PlatformPipelineTestBase::AppendPlatformVideoDecoders(
     std::vector<std::unique_ptr<VideoDecoder>>& video_decoders,
     const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
     MediaLog* media_log) {
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   video_decoders.push_back(
       std::make_unique<WMFVideoDecoder>(media_task_runner));
 #endif

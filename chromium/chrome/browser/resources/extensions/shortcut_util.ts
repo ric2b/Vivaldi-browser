@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assertNotReached} from 'chrome://resources/js/assert.m.js';
+import {assertNotReached} from 'chrome://resources/js/assert_ts.js';
 import {isChromeOS, isMac} from 'chrome://resources/js/cr.m.js';
 
 
@@ -186,6 +186,7 @@ export function hasValidModifiers(e: KeyboardEvent): boolean {
       return hasModifier(e, false);
     case ModifierPolicy.NOT_ALLOWED:
       return !hasModifier(e, true);
+    default:
+      assertNotReached();
   }
-  assertNotReached();
 }

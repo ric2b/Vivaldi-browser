@@ -25,6 +25,7 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/bluetooth/web_bluetooth.mojom-forward.h"
+#include "third_party/blink/public/mojom/loader/transferrable_url_loader.mojom.h"
 #include "third_party/blink/public/mojom/navigation/navigation_params.mojom-forward.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-forward.h"
 #include "ui/base/page_transition_types.h"
@@ -73,8 +74,8 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
   void FlushLocalFrameMessages();
 
   // RenderFrameHostImpl overrides (same values, but in Test*/Mock* types)
-  TestRenderViewHost* GetRenderViewHost() override;
-  MockRenderProcessHost* GetProcess() override;
+  TestRenderViewHost* GetRenderViewHost() const override;
+  MockRenderProcessHost* GetProcess() const override;
   MockAgentSchedulingGroupHost& GetAgentSchedulingGroup() override;
   TestRenderWidgetHost* GetRenderWidgetHost() override;
   void AddMessageToConsole(blink::mojom::ConsoleMessageLevel level,
@@ -102,7 +103,9 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
   const std::vector<std::string>& GetConsoleMessages() override;
   int GetHeavyAdIssueCount(HeavyAdIssueType type) override;
   void SimulateManifestURLUpdate(const GURL& manifest_url) override;
-  TestRenderFrameHost* AppendFencedFrame() override;
+  TestRenderFrameHost* AppendFencedFrame(
+      blink::mojom::FencedFrameMode mode =
+          blink::mojom::FencedFrameMode::kDefault) override;
 
   void SendNavigate(int nav_entry_id,
                     bool did_create_new_entry,

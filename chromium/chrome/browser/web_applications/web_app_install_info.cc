@@ -127,8 +127,8 @@ WebAppShortcutsMenuItemInfo::Icon::Icon() = default;
 WebAppShortcutsMenuItemInfo::Icon::Icon(
     const WebAppShortcutsMenuItemInfo::Icon&) = default;
 
-WebAppShortcutsMenuItemInfo::Icon::Icon(WebAppShortcutsMenuItemInfo::Icon&&) =
-    default;
+WebAppShortcutsMenuItemInfo::Icon::Icon(
+    WebAppShortcutsMenuItemInfo::Icon&&) noexcept = default;
 
 WebAppShortcutsMenuItemInfo::Icon::~Icon() = default;
 
@@ -217,6 +217,10 @@ WebAppInstallInfo::WebAppInstallInfo() = default;
 
 WebAppInstallInfo::WebAppInstallInfo(const WebAppInstallInfo& other) = default;
 
+WebAppInstallInfo::WebAppInstallInfo(WebAppInstallInfo&&) = default;
+
+WebAppInstallInfo& WebAppInstallInfo::operator=(WebAppInstallInfo&&) = default;
+
 WebAppInstallInfo::WebAppInstallInfo(
     const webapps::mojom::WebPageMetadata& metadata)
     : title(metadata.application_name),
@@ -243,6 +247,10 @@ WebAppInstallInfo::WebAppInstallInfo(
 }
 
 WebAppInstallInfo::~WebAppInstallInfo() = default;
+
+WebAppInstallInfo WebAppInstallInfo::Clone() const {
+  return WebAppInstallInfo(*this);
+}
 
 bool operator==(const IconSizes& icon_sizes1, const IconSizes& icon_sizes2) {
   return std::tie(icon_sizes1.any, icon_sizes1.maskable,

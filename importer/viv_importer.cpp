@@ -5,8 +5,10 @@
 #include "base/files/file_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/common/importer/importer_bridge.h"
 #include "chrome/common/ini_parser.h"
+
 #include "importer/imported_speeddial_entry.h"
 
 static const char OPERA_PREFS_NAME[] = "operaprefs.ini";
@@ -34,7 +36,7 @@ base::FilePath::StringType StringToPath(const std::string* str) {
   if (!str)
     return base::FilePath::StringType();
 
-#if OS_WIN
+#if BUILDFLAG(IS_WIN)
   return base::UTF8ToWide(*str);
 #else
   return *str;

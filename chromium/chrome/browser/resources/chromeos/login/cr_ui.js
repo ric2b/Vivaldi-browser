@@ -123,32 +123,6 @@ cr.define('cr.ui', function() {
     }
 
     /**
-     * Shows signin UI.
-     * @param {string} opt_email An optional email for signin UI.
-     */
-    static showSigninUI(opt_email) {
-      Oobe.getInstance().showSigninUI(opt_email);
-    }
-
-    /**
-     * Resets sign-in input fields.
-     * @param {boolean} forceOnline Whether online sign-in should be forced.
-     * If |forceOnline| is false previously used sign-in type will be used.
-     */
-    static resetSigninUI(forceOnline) {
-      Oobe.getInstance().resetSigninUI(forceOnline);
-    }
-
-    /**
-     * Sets the current size of the client area (display size).
-     * @param {number} width client area width
-     * @param {number} height client area height
-     */
-    static setClientAreaSize(width, height) {
-      Oobe.getInstance().setClientAreaSize(width, height);
-    }
-
-    /**
      * Sets the current height of the shelf area.
      * @param {number} height current shelf height
      */
@@ -215,12 +189,14 @@ cr.define('cr.ui', function() {
       } else {
         waitForOobeScreen('gaia-signin', function() {
           // TODO(crbug.com/1100910): migrate logic to dedicated test api.
-          chrome.send('toggleEnrollmentScreen');
+          chrome.send('OobeTestApi.advanceToScreen', ['enterprise-enrollment']);
           chrome.send('toggleFakeEnrollment');
         });
 
         waitForOobeScreen('enterprise-enrollment', function() {
-          chrome.send('oauthEnrollCompleteLogin', [username]);
+          chrome.send(
+              'oauthEnrollCompleteLogin',
+              [username, OobeTypes.LicenseType.ENTERPRISE]);
         });
       }
     }  // loginForTesting
@@ -245,7 +221,8 @@ cr.define('cr.ui', function() {
      * Shows the add user dialog. Used in browser tests.
      */
     static showAddUserForTesting() {
-      chrome.send('showAddUser');
+      // TODO(crbug.com/1100910): migrate logic to dedicated test api.
+      chrome.send('OobeTestApi.showGaiaDialog');
     }
 
     /**
@@ -260,7 +237,7 @@ cr.define('cr.ui', function() {
      */
     static switchToEnterpriseEnrollmentForTesting() {
       // TODO(crbug.com/1100910): migrate logic to dedicated test api.
-      chrome.send('toggleEnrollmentScreen');
+      chrome.send('OobeTestApi.advanceToScreen', ['enterprise-enrollment']);
     }
 
     /**
@@ -295,17 +272,6 @@ cr.define('cr.ui', function() {
      */
     static setUpOnlineDemoModeForTesting() {
       DemoModeTestHelper.setUp('online');
-    }
-
-    /**
-     * Get the primary display's name.
-     *
-     * Same as the displayInfo.name parameter returned by
-     * chrome.system.display.getInfo(), but unlike chrome.system it's available
-     * during OOBE.
-     */
-    static getPrimaryDisplayNameForTesting() {
-      return cr.sendWithPromise('getPrimaryDisplayNameForTesting');
     }
 
     /**

@@ -813,12 +813,22 @@ void WebAppAutoLoginUtil::SetInstanceForTesting(
 
 void WebAppAutoLoginUtil::AddToLoginItems(const base::FilePath& app_bundle_path,
                                           bool hide_on_startup) {
-  base::mac::AddToLoginItems(app_bundle_path, hide_on_startup);
+  auto* override = web_app::GetShortcutOverrideForTesting();
+  if (override) {
+    override->startup_enabled[app_bundle_path] = true;
+  } else {
+    base::mac::AddToLoginItems(app_bundle_path, hide_on_startup);
+  }
 }
 
 void WebAppAutoLoginUtil::RemoveFromLoginItems(
     const base::FilePath& app_bundle_path) {
-  base::mac::RemoveFromLoginItems(app_bundle_path);
+  auto* override = web_app::GetShortcutOverrideForTesting();
+  if (override) {
+    override->startup_enabled[app_bundle_path] = false;
+  } else {
+    base::mac::RemoveFromLoginItems(app_bundle_path);
+  }
 }
 
 WebAppShortcutCreator::WebAppShortcutCreator(const base::FilePath& app_data_dir,
@@ -952,7 +962,7 @@ bool WebAppShortcutCreator::BuildShortcut(
 
   // Write the PkgInfo file.
   constexpr char kPkgInfoData[] = "APPL????";
-  constexpr size_t kPkgInfoDataSize = base::size(kPkgInfoData) - 1;
+  constexpr size_t kPkgInfoDataSize = std::size(kPkgInfoData) - 1;
   if (base::WriteFile(destination_contents_path.Append("PkgInfo"), kPkgInfoData,
                       kPkgInfoDataSize) != kPkgInfoDataSize) {
     RecordCreateShortcut(CreateShortcutResult::kFailToWritePkgInfoFile);

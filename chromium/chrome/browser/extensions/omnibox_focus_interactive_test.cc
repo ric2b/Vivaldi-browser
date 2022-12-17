@@ -5,7 +5,6 @@
 #include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
-#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/extensions/settings_api_bubble_helpers.h"
@@ -15,11 +14,13 @@
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_features.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_frame_navigation_observer.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/test/test_extension_dir.h"
+#include "third_party/blink/public/common/features.h"
 
 namespace extensions {
 
@@ -368,14 +369,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxFocusInteractiveTest, OmniboxFocusStealing) {
 }
 
 // Tab focus should not be stolen by the omnibox - https://crbug.com/1127220.
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC)
-// Flaky on Linux/Mac, crbug.com/1254186.
-#define MAYBE_TabFocusStealingFromOopif DISABLED_TabFocusStealingFromOopif
-#else
-#define MAYBE_TabFocusStealingFromOopif TabFocusStealingFromOopif
-#endif
-IN_PROC_BROWSER_TEST_F(OmniboxFocusInteractiveTest,
-                       MAYBE_TabFocusStealingFromOopif) {
+IN_PROC_BROWSER_TEST_F(OmniboxFocusInteractiveTest, TabFocusStealingFromOopif) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // CSP of the NTP page enforces that only HTTPS subframes may be used.
@@ -519,6 +513,69 @@ IN_PROC_BROWSER_TEST_F(OmniboxFocusInteractiveTest,
   }
   EXPECT_TRUE(ui_test_utils::IsViewFocused(browser(), VIEW_ID_OMNIBOX));
   EXPECT_FALSE(ui_test_utils::IsViewFocused(browser(), VIEW_ID_TAB_CONTAINER));
+}
+
+class OmniboxFocusInteractiveFencedFrameTest
+    : public OmniboxFocusInteractiveTest {
+ public:
+  OmniboxFocusInteractiveFencedFrameTest() {
+    feature_list_.InitWithFeaturesAndParameters(
+        {{blink::features::kFencedFrames, {{"implementation_type", "mparch"}}},
+         {features::kPrivacySandboxAdsAPIsOverride, {}}},
+        {/* disabled_features */});
+  }
+  ~OmniboxFocusInteractiveFencedFrameTest() override = default;
+
+  void SetUpOnMainThread() override {
+    OmniboxFocusInteractiveTest::SetUpOnMainThread();
+    ASSERT_TRUE(https_server_.Start());
+  }
+
+ protected:
+  net::EmbeddedTestServer& https_server() { return https_server_; }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+  net::EmbeddedTestServer https_server_{net::EmbeddedTestServer::TYPE_HTTPS};
+};
+
+IN_PROC_BROWSER_TEST_F(OmniboxFocusInteractiveFencedFrameTest,
+                       NtpReplacementExtension_LoadFencedFrame) {
+  // Open the new tab, focus should be on the location bar.
+  OpenNewTab();
+
+  EXPECT_TRUE(ui_test_utils::IsViewFocused(browser(), VIEW_ID_OMNIBOX));
+  EXPECT_FALSE(ui_test_utils::IsViewFocused(browser(), VIEW_ID_TAB_CONTAINER));
+
+  // Focus the tab contents.
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  web_contents->Focus();
+  EXPECT_FALSE(ui_test_utils::IsViewFocused(browser(), VIEW_ID_OMNIBOX));
+  EXPECT_TRUE(ui_test_utils::IsViewFocused(browser(), VIEW_ID_TAB_CONTAINER));
+
+  // FencedFrameTestHelper uses eval() function that is blocked by the
+  // document's CSP on this page. So need to maually create a fenced frame for
+  // avoiding the CSP policy.
+  constexpr char kAddFencedFrameScript[] = R"({
+      const fenced_frame = document.createElement('fencedframe');
+      fenced_frame.src = $1;
+      document.body.appendChild(fenced_frame);
+  })";
+
+  // Create a fenced frame and load a URL.
+  // The fenced frame navigation should not affect the view focus.
+  GURL fenced_frame_url = https_server().GetURL("/fenced_frames/title1.html");
+  content::TestNavigationManager navigation(web_contents, fenced_frame_url);
+  EXPECT_TRUE(content::ExecuteScript(
+      web_contents->GetMainFrame(),
+      content::JsReplace(kAddFencedFrameScript, fenced_frame_url)));
+  navigation.WaitForNavigationFinished();
+
+  // Verify that after the fenced frame navigation, the tab contents stayed
+  // focused.
+  EXPECT_FALSE(ui_test_utils::IsViewFocused(browser(), VIEW_ID_OMNIBOX));
+  EXPECT_TRUE(ui_test_utils::IsViewFocused(browser(), VIEW_ID_TAB_CONTAINER));
 }
 
 }  // namespace extensions

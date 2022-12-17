@@ -48,11 +48,12 @@ class GaiaScreen : public BaseScreen {
   void LoadOnlineForChildSignup();
   // Loads online Gaia (for child signin) into the webview.
   void LoadOnlineForChildSignin();
+  void ShowAllowlistCheckFailedError();
 
  private:
   void ShowImpl() override;
   void HideImpl() override;
-  void OnUserAction(const std::string& action_id) override;
+  void OnUserActionDeprecated(const std::string& action_id) override;
   bool HandleAccelerator(LoginAcceleratorAction action) override;
 
   GaiaView* view_ = nullptr;

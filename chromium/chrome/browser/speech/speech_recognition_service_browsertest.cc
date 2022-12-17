@@ -30,6 +30,7 @@
 #include "content/public/test/browser_test.h"
 #include "media/audio/audio_device_description.h"
 #include "media/audio/wav_audio_handler.h"
+#include "media/base/audio_bus.h"
 #include "media/base/media_switches.h"
 #include "media/mojo/mojom/audio_data_pipe.mojom.h"
 #include "media/mojo/mojom/audio_input_stream.mojom.h"
@@ -75,6 +76,7 @@ class TestStreamFactory : public audio::FakeStreamFactory {
       uint32_t shared_memory_count,
       bool enable_agc,
       base::ReadOnlySharedMemoryRegion key_press_count_buffer,
+      media::mojom::AudioProcessingConfigPtr processing_config,
       CreateInputStreamCallback created_callback) {
     device_id_ = device_id;
     params_ = params;

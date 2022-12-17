@@ -112,8 +112,8 @@ class ReadOnlyOriginView : public views::View {
 
       // Pad to keep header as the same height as when the page title is valid.
       constexpr int kVerticalPadding = 10;
-      origin_label->SetBorder(
-          views::CreateEmptyBorder(kVerticalPadding, 0, kVerticalPadding, 0));
+      origin_label->SetBorder(views::CreateEmptyBorder(
+          gfx::Insets::TLBR(kVerticalPadding, 0, kVerticalPadding, 0)));
     }
     // Turn off autoreadability because the computed |foreground| color takes
     // contrast into account.
@@ -146,7 +146,8 @@ class ReadOnlyOriginView : public views::View {
       app_icon_view->SetImageSize(gfx::Size(
           adjusted_width,
           IconSizeCalculator::kPaymentAppDeviceIndependentIdealIconHeight));
-      app_icon_view->SetProperty(views::kMarginsKey, gfx::Insets(0, 0, 0, 8));
+      app_icon_view->SetProperty(views::kMarginsKey,
+                                 gfx::Insets::TLBR(0, 0, 0, 8));
     }
   }
   ReadOnlyOriginView(const ReadOnlyOriginView&) = delete;
@@ -199,7 +200,6 @@ void PaymentHandlerWebFlowViewController::FillContentView(
     // separator as the initially-visible one.
     progress_bar_ = header_content_separator_container()->AddChildView(
         std::make_unique<views::ProgressBar>(/*preferred_height=*/2));
-    progress_bar_->SetForegroundColor(gfx::kGoogleBlue500);
     progress_bar_->SetBackgroundColor(SK_ColorTRANSPARENT);
     progress_bar_->SetVisible(false);
     separator_ = header_content_separator_container()->AddChildView(
@@ -265,6 +265,8 @@ PaymentHandlerWebFlowViewController::GetHeaderBackground(
   auto default_header_background =
       PaymentRequestSheetController::GetHeaderBackground(header_view);
   if (web_contents() && header_view->GetWidget()) {
+    // Make sure the color is actually set before using it.
+    default_header_background->OnViewThemeChanged(header_view);
     return views::CreateSolidBackground(color_utils::GetResultingPaintColor(
         web_contents()->GetThemeColor().value_or(SK_ColorTRANSPARENT),
         default_header_background->get_color()));

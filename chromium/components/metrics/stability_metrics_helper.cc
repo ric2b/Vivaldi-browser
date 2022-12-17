@@ -34,7 +34,6 @@
 #endif
 
 namespace metrics {
-
 namespace {
 
 enum RendererType {
@@ -46,6 +45,7 @@ enum RendererType {
   RENDERER_TYPE_COUNT
 };
 
+#if !BUILDFLAG(IS_ANDROID)
 // Converts an exit code into something that can be inserted into our
 // histograms (which expect non-negative numbers less than MAX_INT).
 int MapCrashExitCodeForHistogram(int exit_code) {
@@ -64,6 +64,7 @@ void RecordChildKills(RendererType histogram_type) {
   base::UmaHistogramEnumeration("BrowserRenderProcessHost.ChildKills",
                                 histogram_type, RENDERER_TYPE_COUNT);
 }
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 }  // namespace
 
@@ -97,12 +98,6 @@ void StabilityMetricsHelper::ProvideStabilityMetrics(
     local_state_->SetInteger(prefs::kStabilityRendererCrashCount, 0);
   }
 
-  count = local_state_->GetInteger(prefs::kStabilityRendererFailedLaunchCount);
-  if (count) {
-    stability_proto->set_renderer_failed_launch_count(count);
-    local_state_->SetInteger(prefs::kStabilityRendererFailedLaunchCount, 0);
-  }
-
   count = local_state_->GetInteger(prefs::kStabilityRendererLaunchCount);
   if (count) {
     stability_proto->set_renderer_launch_count(count);
@@ -115,33 +110,14 @@ void StabilityMetricsHelper::ProvideStabilityMetrics(
     stability_proto->set_extension_renderer_crash_count(count);
     local_state_->SetInteger(prefs::kStabilityExtensionRendererCrashCount, 0);
   }
-
-  count = local_state_->GetInteger(
-      prefs::kStabilityExtensionRendererFailedLaunchCount);
-  if (count) {
-    stability_proto->set_extension_renderer_failed_launch_count(count);
-    local_state_->SetInteger(
-        prefs::kStabilityExtensionRendererFailedLaunchCount, 0);
-  }
-
-  count =
-      local_state_->GetInteger(prefs::kStabilityExtensionRendererLaunchCount);
-  if (count) {
-    stability_proto->set_extension_renderer_launch_count(count);
-    local_state_->SetInteger(prefs::kStabilityExtensionRendererLaunchCount, 0);
-  }
 }
 
 void StabilityMetricsHelper::ClearSavedStabilityMetrics() {
   // Clear all the prefs used in this class in UMA reports.
   local_state_->SetInteger(prefs::kStabilityExtensionRendererCrashCount, 0);
-  local_state_->SetInteger(prefs::kStabilityExtensionRendererFailedLaunchCount,
-                           0);
-  local_state_->SetInteger(prefs::kStabilityExtensionRendererLaunchCount, 0);
   local_state_->SetInteger(prefs::kStabilityGpuCrashCount, 0);
   local_state_->SetInteger(prefs::kStabilityPageLoadCount, 0);
   local_state_->SetInteger(prefs::kStabilityRendererCrashCount, 0);
-  local_state_->SetInteger(prefs::kStabilityRendererFailedLaunchCount, 0);
   local_state_->SetInteger(prefs::kStabilityRendererLaunchCount, 0);
 }
 
@@ -149,14 +125,9 @@ void StabilityMetricsHelper::ClearSavedStabilityMetrics() {
 void StabilityMetricsHelper::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterIntegerPref(prefs::kStabilityExtensionRendererCrashCount,
                                 0);
-  registry->RegisterIntegerPref(
-      prefs::kStabilityExtensionRendererFailedLaunchCount, 0);
-  registry->RegisterIntegerPref(prefs::kStabilityExtensionRendererLaunchCount,
-                                0);
   registry->RegisterIntegerPref(prefs::kStabilityGpuCrashCount, 0);
   registry->RegisterIntegerPref(prefs::kStabilityPageLoadCount, 0);
   registry->RegisterIntegerPref(prefs::kStabilityRendererCrashCount, 0);
-  registry->RegisterIntegerPref(prefs::kStabilityRendererFailedLaunchCount, 0);
   registry->RegisterIntegerPref(prefs::kStabilityRendererLaunchCount, 0);
 }
 
@@ -214,6 +185,7 @@ void StabilityMetricsHelper::LogLoadStarted() {
   RecordStabilityEvent(StabilityEventType::kPageLoad);
 }
 
+#if !BUILDFLAG(IS_ANDROID)
 void StabilityMetricsHelper::LogRendererCrash(bool was_extension_process,
                                               base::TerminationStatus status,
                                               int exit_code) {
@@ -248,11 +220,6 @@ void StabilityMetricsHelper::LogRendererCrash(bool was_extension_process,
     case base::TERMINATION_STATUS_PROCESS_WAS_KILLED:
       RecordChildKills(histogram_type);
       break;
-#if BUILDFLAG(IS_ANDROID)
-    case base::TERMINATION_STATUS_OOM_PROTECTED:
-      // TODO(wfh): Check if this should be a Kill or a Crash on Android.
-      break;
-#endif
 #if BUILDFLAG(IS_CHROMEOS)
     case base::TERMINATION_STATUS_PROCESS_WAS_KILLED_BY_OOM:
       RecordChildKills(histogram_type);
@@ -290,16 +257,15 @@ void StabilityMetricsHelper::LogRendererCrash(bool was_extension_process,
       break;
   }
 }
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 void StabilityMetricsHelper::LogRendererLaunched(bool was_extension_process) {
   auto metric = was_extension_process
                     ? StabilityEventType::kExtensionRendererLaunch
                     : StabilityEventType::kRendererLaunch;
-  auto* pref = was_extension_process
-                   ? prefs::kStabilityExtensionRendererLaunchCount
-                   : prefs::kStabilityRendererLaunchCount;
   RecordStabilityEvent(metric);
-  IncrementPrefValue(pref);
+  if (!was_extension_process)
+    IncrementPrefValue(prefs::kStabilityRendererLaunchCount);
 }
 
 void StabilityMetricsHelper::LogRendererLaunchFailed(
@@ -307,11 +273,7 @@ void StabilityMetricsHelper::LogRendererLaunchFailed(
   auto metric = was_extension_process
                     ? StabilityEventType::kExtensionRendererFailedLaunch
                     : StabilityEventType::kRendererFailedLaunch;
-  auto* pref = was_extension_process
-                   ? prefs::kStabilityExtensionRendererFailedLaunchCount
-                   : prefs::kStabilityRendererFailedLaunchCount;
   RecordStabilityEvent(metric);
-  IncrementPrefValue(pref);
 }
 
 void StabilityMetricsHelper::IncrementPrefValue(const char* path) {

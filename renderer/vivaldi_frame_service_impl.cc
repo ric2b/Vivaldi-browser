@@ -15,6 +15,7 @@
 #include "third_party/blink/public/web/web_view.h"
 #include "third_party/blink/renderer/core/dom/focus_params.h"
 #include "third_party/blink/renderer/core/events/keyboard_event.h"
+#include "third_party/blink/renderer/core/exported/web_plugin_container_impl.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/input/event_handler.h"
@@ -269,10 +270,14 @@ void VivaldiFrameServiceImpl::GetFocusedElementInfo(
   // not going to tell us what we need, so we get the plugin instance and ask it
   // directly.
 #if BUILDFLAG(ENABLE_PLUGINS)
-  auto* plugin = static_cast<content::RenderFrameImpl*>(render_frame_)
-                     ->focused_pepper_plugin();
-  if (plugin) {
-    editable = plugin->CanEditText();
+  auto* plugin_container = static_cast<blink::WebLocalFrameImpl*>(frame)
+                               ->GetFrame()
+                               ->GetWebPluginContainer();
+  if (plugin_container) {
+    auto *plugin = plugin_container->Plugin();
+    if (plugin) {
+      editable = plugin->CanEditText();
+    }
   }
 #endif
   std::move(callback).Run(tagname, type, editable, role);

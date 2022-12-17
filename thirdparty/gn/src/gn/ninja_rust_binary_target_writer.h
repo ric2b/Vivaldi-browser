@@ -6,9 +6,9 @@
 #define TOOLS_GN_NINJA_RUST_BINARY_TARGET_WRITER_H_
 
 #include "gn/ninja_binary_target_writer.h"
+#include "gn/output_file.h"
 #include "gn/rust_tool.h"
-
-struct EscapeOptions;
+#include "gn/target.h"
 
 // Writes a .ninja file for a binary target type (an executable, a shared
 // library, or a static library).
@@ -20,13 +20,18 @@ class NinjaRustBinaryTargetWriter : public NinjaBinaryTargetWriter {
   void Run() override;
 
  private:
+  struct ExternCrate {
+    const Target* target;
+    bool has_direct_access;
+  };
+
   void WriteCompilerVars();
   void WriteSources(const OutputFile& input_dep,
                     const std::vector<OutputFile>& order_only_deps);
-  void WriteExterns(const std::vector<const Target*>& deps);
-  void WriteRustdeps(const std::vector<OutputFile>& transitive_rustdeps,
-                     const std::vector<OutputFile>& rustdeps,
-                     const std::vector<OutputFile>& nonrustdeps);
+  void WriteExternsAndDeps(const std::vector<const Target*>& deps,
+                           const std::vector<ExternCrate>& transitive_rust_deps,
+                           const std::vector<OutputFile>& rustdeps,
+                           const std::vector<OutputFile>& nonrustdeps);
   // Unlike C/C++, Rust compiles all sources of a crate in one command.
   // Write a ninja variable `sources` that contains all sources and input files.
   void WriteSourcesAndInputs();

@@ -17,6 +17,7 @@
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_web_ui.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/webui/web_ui_util.h"
 #include "ui/gfx/image/image_unittest_util.h"
 
@@ -159,7 +160,7 @@ class ManageProfileHandlerTest : public testing::Test {
 };
 
 TEST_F(ManageProfileHandlerTest, HandleSetProfileIconToGaiaAvatar) {
-  handler()->HandleSetProfileIconToGaiaAvatar(base::Value::ConstListView());
+  handler()->HandleSetProfileIconToGaiaAvatar(base::Value::List());
 
   PrefService* pref_service = profile()->GetPrefs();
   EXPECT_FALSE(pref_service->GetBoolean(prefs::kProfileUsingDefaultAvatar));
@@ -169,7 +170,7 @@ TEST_F(ManageProfileHandlerTest, HandleSetProfileIconToGaiaAvatar) {
 TEST_F(ManageProfileHandlerTest, HandleSetProfileIconToDefaultCustomAvatar) {
   base::Value list_args(base::Value::Type::LIST);
   list_args.Append(15);
-  handler()->HandleSetProfileIconToDefaultAvatar(list_args.GetListDeprecated());
+  handler()->HandleSetProfileIconToDefaultAvatar(list_args.GetList());
 
   PrefService* pref_service = profile()->GetPrefs();
   EXPECT_EQ(15, pref_service->GetInteger(prefs::kProfileAvatarIndex));
@@ -181,7 +182,7 @@ TEST_F(ManageProfileHandlerTest, HandleSetProfileIconToDefaultGenericAvatar) {
   int generic_avatar_index = profiles::GetPlaceholderAvatarIndex();
   base::Value list_args(base::Value::Type::LIST);
   list_args.Append(generic_avatar_index);
-  handler()->HandleSetProfileIconToDefaultAvatar(list_args.GetListDeprecated());
+  handler()->HandleSetProfileIconToDefaultAvatar(list_args.GetList());
 
   PrefService* pref_service = profile()->GetPrefs();
   EXPECT_EQ(generic_avatar_index,
@@ -193,7 +194,7 @@ TEST_F(ManageProfileHandlerTest, HandleSetProfileIconToDefaultGenericAvatar) {
 TEST_F(ManageProfileHandlerTest, HandleSetProfileName) {
   base::Value list_args(base::Value::Type::LIST);
   list_args.Append("New Profile Name");
-  handler()->HandleSetProfileName(list_args.GetListDeprecated());
+  handler()->HandleSetProfileName(list_args.GetList());
 
   PrefService* pref_service = profile()->GetPrefs();
   EXPECT_EQ("New Profile Name", pref_service->GetString(prefs::kProfileName));
@@ -208,7 +209,7 @@ TEST_F(ManageProfileHandlerTest, HandleGetAvailableIcons) {
 
   base::Value list_args_1(base::Value::Type::LIST);
   list_args_1.Append("get-icons-callback-id");
-  handler()->HandleGetAvailableIcons(list_args_1.GetListDeprecated());
+  handler()->HandleGetAvailableIcons(list_args_1.GetList());
 
   EXPECT_EQ(1U, web_ui()->call_data().size());
 
@@ -227,7 +228,7 @@ TEST_F(ManageProfileHandlerTest, HandleGetAvailableIconsOldIconSelected) {
 
   base::Value list_args(base::Value::Type::LIST);
   list_args.Append("get-icons-callback-id");
-  handler()->HandleGetAvailableIcons(list_args.GetListDeprecated());
+  handler()->HandleGetAvailableIcons(list_args.GetList());
 
   EXPECT_EQ(1U, web_ui()->call_data().size());
 
@@ -246,7 +247,7 @@ TEST_F(ManageProfileHandlerTest, GetAvailableIconsSignedInProfile) {
 
   base::Value list_args(base::Value::Type::LIST);
   list_args.Append("get-icons-callback-id");
-  handler()->HandleGetAvailableIcons(list_args.GetListDeprecated());
+  handler()->HandleGetAvailableIcons(list_args.GetList());
 
   EXPECT_EQ(1U, web_ui()->call_data().size());
 
@@ -292,7 +293,7 @@ TEST_F(ManageProfileHandlerTest, GetAvailableIconsLocalProfile) {
 
   base::Value list_args(base::Value::Type::LIST);
   list_args.Append("get-icons-callback-id");
-  handler()->HandleGetAvailableIcons(list_args.GetListDeprecated());
+  handler()->HandleGetAvailableIcons(list_args.GetList());
 
   EXPECT_EQ(1U, web_ui()->call_data().size());
 

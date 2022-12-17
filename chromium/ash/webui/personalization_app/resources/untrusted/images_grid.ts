@@ -2,29 +2,32 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import '//resources/cr_elements/cr_auto_img/cr_auto_img.js';
 import '//resources/polymer/v3_0/iron-list/iron-list.js';
 import './setup.js';
-import './styles.js';
+import '../trusted/wallpaper/styles.js';
 
-import {assert, assertNotReached} from '//resources/js/assert.m.js';
-import {html, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {assertNotReached} from '//resources/js/assert.m.js';
+import {afterNextRender, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {Events, EventType, ImageTile} from '../common/constants.js';
 import {isSelectionEvent} from '../common/utils.js';
 import {selectImage, validateReceivedData} from '../untrusted/iframe_api.js';
+
+import {getTemplate} from './images_grid.html.js';
 
 /**
  * @fileoverview Responds to |SendImageTilesEvent| from trusted. Handles user
  * input and responds with |SelectImageEvent| when an image is selected.
  */
 
-class ImagesGrid extends PolymerElement {
+export class ImagesGrid extends PolymerElement {
   static get is() {
     return 'images-grid';
   }
 
   static get template() {
-    return html`{__html_template__}`;
+    return getTemplate();
   }
 
   static get properties() {
@@ -50,58 +53,37 @@ class ImagesGrid extends PolymerElement {
   private selectedAssetId_: bigint|undefined;
   private pendingSelectedAssetId_: bigint|undefined;
 
-  constructor() {
-    super();
-    this.onMessageReceived_ = this.onMessageReceived_.bind(this);
-  }
-
-  connectedCallback() {
-    super.connectedCallback();
-    window.addEventListener('message', this.onMessageReceived_);
-  }
-
-  disconnectedCallback() {
-    super.disconnectedCallback();
-    window.removeEventListener('message', this.onMessageReceived_);
-  }
-
   /**
    * Handler for messages from trusted code. Expects only SendImagesEvent and
    * will error on any other event.
    */
-  private onMessageReceived_(message: MessageEvent) {
-    const event: Events = message.data;
+  onMessageReceived(event: Events) {
     switch (event.type) {
       case EventType.SEND_IMAGE_TILES:
-        this.tiles_ =
-            validateReceivedData(event, message.origin) ? event.tiles : [];
+        this.tiles_ = validateReceivedData(event) ? event.tiles : [];
         return;
       case EventType.SEND_CURRENT_WALLPAPER_ASSET_ID:
-        this.selectedAssetId_ = validateReceivedData(event, message.origin) ?
-            event.assetId :
-            undefined;
+        this.selectedAssetId_ =
+            validateReceivedData(event) ? event.assetId : undefined;
         return;
       case EventType.SEND_PENDING_WALLPAPER_ASSET_ID:
         this.pendingSelectedAssetId_ =
-            validateReceivedData(event, message.origin) ? event.assetId :
-                                                          undefined;
+            validateReceivedData(event) ? event.assetId : undefined;
         return;
       case EventType.SEND_VISIBLE:
         let visible = false;
-        if (validateReceivedData(event, message.origin)) {
+        if (validateReceivedData(event)) {
           visible = event.visible;
         }
-        if (!visible) {
-          // When the iframe is hidden, do some dom magic to hide old image
-          // content. This is in preparation for a user switching to a new
-          // wallpaper collection and loading a new set of images.
-          const ironList = this.shadowRoot!.querySelector('iron-list');
-          const images: NodeListOf<HTMLImageElement> =
-              ironList!.querySelectorAll('.photo-container img');
-          for (const image of images) {
-            image.src = '';
-          }
-          this.tiles_ = [];
+        if (visible) {
+          // If iron-list items were updated while this iron-list was hidden,
+          // the layout will be incorrect. Trigger another layout when iron-list
+          // becomes visible again. Wait until |afterNextRender| completes
+          // otherwise iron-list width may still be 0.
+          afterNextRender(this, () => {
+            // Trigger a layout now that iron-list has the correct width.
+            this.shadowRoot!.querySelector('iron-list')!.fire('iron-resize');
+          });
         }
         return;
       default:
@@ -113,10 +95,10 @@ class ImagesGrid extends PolymerElement {
       tile: ImageTile, selectedAssetId: bigint|undefined,
       pendingSelectedAssetId: bigint|undefined): string {
     // Make sure that both are bigint (not undefined) and equal.
-    return (typeof selectedAssetId === 'bigint' &&
-                tile?.assetId === selectedAssetId && !pendingSelectedAssetId ||
-            typeof pendingSelectedAssetId === 'bigint' &&
-                tile?.assetId === pendingSelectedAssetId)
+    return (typeof selectedAssetId === 'bigint' && !!tile &&
+                tile.assetId === selectedAssetId && !pendingSelectedAssetId ||
+            typeof pendingSelectedAssetId === 'bigint' && !!tile &&
+                tile.assetId === pendingSelectedAssetId)
         .toString();
   }
 
@@ -147,7 +129,7 @@ class ImagesGrid extends PolymerElement {
       assertNotReached('assetId not found');
       return;
     }
-    selectImage(window.parent, BigInt(assetId));
+    selectImage(BigInt(assetId));
   }
 
   private getAriaLabel_(tile: ImageTile): string {

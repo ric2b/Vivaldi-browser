@@ -496,9 +496,9 @@
         }
       },
       {
-        "name": "rebuildDatabase",
+        "name": "rebuildAndVacuumDatabase",
         "type": "function",
-        "description": "Rebuilds the full text database index.",
+        "description": "Rebuilds the full text database index. Defragments and frees up unused space in the db file. This can be very slow.",
         "parameters": [],
         "returns_async": {
           "name": "callback",

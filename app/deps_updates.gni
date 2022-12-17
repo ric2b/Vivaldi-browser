@@ -105,6 +105,41 @@ if (!is_android) {
       "$root_gen_dir/vivaldi/vivaldi_native_unscaled.pak",
     ]
   }
+
+  update_template_instance("//chrome/android:chrome_bundle_module_paks") {
+    deps += [
+      "//vivaldi/app:vivaldi_native_resources",
+      "//vivaldi/app:vivaldi_native_strings",
+      "//vivaldi/app:vivaldi_merge_repacks",
+    ]
+    if (!defined(additional_extra_paks)) {
+      additional_extra_paks = []
+    }
+    additional_extra_paks += [
+      "$root_gen_dir/vivaldi/vivaldi_native_resources_100_percent.pak",
+    ]
+  }
+
+  update_template_instance("//chrome/android:chrome_bundle_module_paks_locales") {
+    if (!defined(additional_source_patterns)) {
+      additional_source_patterns = []
+    }
+    additional_source_patterns += [ "$root_gen_dir/vivaldi/app/vivaldi_native_strings_" ]
+
+    # Both deps and public_deps need to be updated; deps are used by subtargets
+    if (!defined(deps)) { deps = [] }
+    deps += [
+      "//vivaldi/app:vivaldi_native_strings",
+      "//vivaldi/app:vivaldi_unscaled_native_resources",
+    ]
+  }
+
+  update_template_instance("//chrome/android:chrome_bundle_module_paks_extra") {
+    deps += [ "//vivaldi/app:vivaldi_unscaled_native_resources" ]
+    additional_paks += [
+      "$root_gen_dir/vivaldi/vivaldi_native_unscaled.pak",
+    ]
+  }
 }
 
 update_target("//chrome:resources") {

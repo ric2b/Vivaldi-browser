@@ -67,6 +67,9 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDeviceBlueZ
   uint16_t GetAppearance() const override;
   absl::optional<std::string> GetName() const override;
   bool IsPaired() const override;
+#if BUILDFLAG(IS_CHROMEOS)
+  bool IsBonded() const override;
+#endif  // BUILDFLAG(IS_CHROMEOS)
   bool IsConnected() const override;
   bool IsGattConnected() const override;
   bool IsConnectable() const override;
@@ -115,6 +118,12 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDeviceBlueZ
   void AbortWrite(base::OnceClosure callback,
                   AbortWriteErrorCallback error_callback) override;
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+
+  // Invoked after a ConnectToService() or ConnectToServiceInsecurely() error,
+  // to allow us to perform error handling before we invoke the
+  // ConnectToServiceErrorCallback.
+  void OnConnectToServiceError(ConnectToServiceErrorCallback error_callback,
+                               const std::string& error_message);
 
   // Returns the complete list of service records discovered for on this
   // device via SDP. If called before discovery is complete, it may return
@@ -294,10 +303,6 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDeviceBlueZ
                          const std::string& error_name,
                          const std::string& error_message);
 
-  // Called by dbus:: on successful completion of the D-Bus method to remove the
-  // device.
-  void OnForgetSuccess(base::OnceClosure callback);
-
   // The dbus object path of the device object.
   dbus::ObjectPath object_path_;
 
@@ -312,7 +317,6 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDeviceBlueZ
   // UI thread task runner and socket thread object used to create sockets.
   scoped_refptr<base::SequencedTaskRunner> ui_task_runner_;
   scoped_refptr<device::BluetoothSocketThread> socket_thread_;
-
 
   // During pairing this is set to an object that we don't own, but on which
   // we can make method calls to request, display or confirm PIN Codes and

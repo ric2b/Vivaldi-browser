@@ -27,6 +27,8 @@ IN_PROC_BROWSER_TEST_F(TelemetryExtensionDiagnosticsApiBrowserTest,
       cros_healthd::mojom::DiagnosticRoutineEnum::kFloatingPointAccuracy,
       cros_healthd::mojom::DiagnosticRoutineEnum::kPrimeSearch,
       cros_healthd::mojom::DiagnosticRoutineEnum::kCpuStress,
+      cros_healthd::mojom::DiagnosticRoutineEnum::kDiskRead,
+      cros_healthd::mojom::DiagnosticRoutineEnum::kLanConnectivity,
       cros_healthd::mojom::DiagnosticRoutineEnum::kMemory,
       cros_healthd::mojom::DiagnosticRoutineEnum::kNvmeWearLevel,
       cros_healthd::mojom::DiagnosticRoutineEnum::kSmartctlCheck,
@@ -48,6 +50,8 @@ IN_PROC_BROWSER_TEST_F(TelemetryExtensionDiagnosticsApiBrowserTest,
               "cpu_floating_point_accuracy",
               "cpu_prime_search",
               "cpu_stress",
+              "disk_read",
+              "lan_connectivity",
               "memory",
               "nvme_wear_level",
               "smartctl_check"
@@ -322,6 +326,44 @@ IN_PROC_BROWSER_TEST_F(TelemetryExtensionDiagnosticsApiBrowserTest,
   )");
   EXPECT_EQ(cros_healthd::FakeCrosHealthdClient::Get()->GetLastRunRoutine(),
             cros_healthd::mojom::DiagnosticRoutineEnum::kCpuStress);
+}
+
+IN_PROC_BROWSER_TEST_F(TelemetryExtensionDiagnosticsApiBrowserTest,
+                       RunDiskReadRoutineSuccess) {
+  CreateExtensionAndRunServiceWorker(R"(
+    chrome.test.runTests([
+      async function runDiskReadRoutine() {
+        const response =
+          await chrome.os.diagnostics.runDiskReadRoutine(
+            {
+                type: "linear",
+                length_seconds: 20,
+                file_size_mb: 1000
+            }
+          );
+        chrome.test.assertEq({id: 0, status: "ready"}, response);
+        chrome.test.succeed();
+      }
+    ]);
+  )");
+  EXPECT_EQ(cros_healthd::FakeCrosHealthdClient::Get()->GetLastRunRoutine(),
+            cros_healthd::mojom::DiagnosticRoutineEnum::kDiskRead);
+}
+
+IN_PROC_BROWSER_TEST_F(TelemetryExtensionDiagnosticsApiBrowserTest,
+                       RunLanConnectivityRoutineSuccess) {
+  CreateExtensionAndRunServiceWorker(R"(
+    chrome.test.runTests([
+      async function runLanConnectivityRoutine() {
+        const response =
+          await chrome.os.diagnostics.runLanConnectivityRoutine();
+        chrome.test.assertEq({id: 0, status: "ready"}, response);
+        chrome.test.succeed();
+      }
+    ]);
+  )");
+  EXPECT_EQ(cros_healthd::FakeCrosHealthdClient::Get()->GetLastRunRoutine(),
+            cros_healthd::mojom::DiagnosticRoutineEnum::kLanConnectivity);
 }
 
 IN_PROC_BROWSER_TEST_F(TelemetryExtensionDiagnosticsApiBrowserTest,

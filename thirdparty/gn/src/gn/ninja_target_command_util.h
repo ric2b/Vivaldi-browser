@@ -102,7 +102,8 @@ void WriteOneFlag(RecursiveWriterConfig config,
                   EscapeOptions flag_escape_options,
                   PathOutput& path_output,
                   std::ostream& out,
-                  bool write_substitution = true);
+                  bool write_substitution = true,
+                  bool indent = false);
 
 // Fills |outputs| with the object or gch file for the precompiled header of the
 // given type (flag type and tool type must match).

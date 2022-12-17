@@ -12,9 +12,6 @@ namespace signin {
 // Returns true if the startup sign-in promo should be displayed at boot.
 bool ForceStartupSigninPromo();
 
-// Returns true if extended sync promos should be disabled unconditionally.
-bool ForceDisableExtendedSyncPromos();
-
 // Name of multi-value switch that controls the delay (in minutes) for polling
 // for the existence of Gaia cookies for google.com.
 extern const char kDelayThresholdMinutesToUpdateGaiaCookie[];
@@ -24,7 +21,7 @@ extern const char kDelayThresholdMinutesToUpdateGaiaCookie[];
 extern const char kWaitThresholdMillisecondsForCapabilitiesApi[];
 
 // Feature to enable FRE MICe.
-extern const base::Feature kFREMobileIdentityConsistency;
+extern const base::Feature kNewMobileIdentityConsistencyFRE;
 
 // Feature to enable Unicorn account sign-in for iOS.
 extern const base::Feature kEnableUnicornAccountSupport;

@@ -2002,11 +2002,19 @@ TEST_P(PaintArtifactCompositorTest, CompositedMaskOneChild) {
 
   TestPaintArtifact artifact;
   artifact.Chunk(t0(), c0(), *masked)
-      .RectDrawing(gfx::Rect(100, 100, 200, 200), Color::kGray);
+      .RectDrawing(gfx::Rect(100, 100, 200, 200), Color::kGray)
+      .RectKnownToBeOpaque(gfx::Rect(100, 100, 200, 200))
+      .HasText()
+      .TextKnownToBeOnOpaqueBackground();
   artifact.Chunk(t0(), c0(), *masking)
       .RectDrawing(gfx::Rect(150, 150, 100, 100), Color::kWhite);
   Update(artifact.Build());
   ASSERT_EQ(2u, LayerCount());
+
+  // Composited mask doesn't affect opaqueness of the masked layer.
+  const cc::Layer* masked_layer = LayerAt(0);
+  EXPECT_TRUE(masked_layer->contents_opaque());
+  EXPECT_TRUE(masked_layer->contents_opaque_for_text());
 
   const cc::Layer* masking_layer = LayerAt(1);
   const cc::EffectNode* masking_group =
@@ -2022,6 +2030,34 @@ TEST_P(PaintArtifactCompositorTest, CompositedMaskOneChild) {
                   .effect_tree()
                   .parent(masking_group)
                   ->HasRenderSurface());
+}
+
+TEST_P(PaintArtifactCompositorTest, NonCompositedMaskClearsOpaqueness) {
+  auto masked = CreateOpacityEffect(
+      e0(), 1.0, CompositingReason::kOpacityWithCompositedDescendants);
+  EffectPaintPropertyNode::State masking_state;
+  masking_state.local_transform_space = &t0();
+  masking_state.output_clip = &c0();
+  masking_state.blend_mode = SkBlendMode::kDstIn;
+  auto masking =
+      EffectPaintPropertyNode::Create(*masked, std::move(masking_state));
+
+  TestPaintArtifact artifact;
+  artifact.Chunk(t0(), c0(), *masked)
+      .RectDrawing(gfx::Rect(100, 100, 200, 200), Color::kGray)
+      .RectKnownToBeOpaque(gfx::Rect(100, 100, 200, 200))
+      .HasText()
+      .TextKnownToBeOnOpaqueBackground();
+  artifact.Chunk(t0(), c0(), *masking)
+      .RectDrawing(gfx::Rect(150, 150, 100, 100), Color::kWhite);
+  Update(artifact.Build());
+  ASSERT_EQ(1u, LayerCount());
+
+  // Non-composited mask clears opaqueness status of the masked layer.
+  const cc::Layer* layer = LayerAt(0);
+  EXPECT_EQ(gfx::Size(200, 200), layer->bounds());
+  EXPECT_FALSE(layer->contents_opaque());
+  EXPECT_FALSE(layer->contents_opaque_for_text());
 }
 
 TEST_P(PaintArtifactCompositorTest, CompositedMaskTwoChildren) {
@@ -3482,10 +3518,10 @@ TEST_P(PaintArtifactCompositorTest, SynthesizedClipMultipleNonBackdropEffects) {
   auto c1 = CreateClip(c0(), t0(), rrect);
   auto c2 = CreateClip(*c1, t0(), FloatRoundedRect(60, 60, 200, 100));
 
-  auto e1 =
-      CreateOpacityEffect(e0(), t0(), c2.get(), 0.5, CompositingReason::kAll);
-  auto e2 =
-      CreateOpacityEffect(e0(), t0(), c1.get(), 0.75, CompositingReason::kAll);
+  auto e1 = CreateOpacityEffect(e0(), t0(), c2.get(), 0.5,
+                                CompositingReason::kWillChangeOpacity);
+  auto e2 = CreateOpacityEffect(e0(), t0(), c1.get(), 0.75,
+                                CompositingReason::kWillChangeOpacity);
 
   TestPaintArtifact artifact;
   artifact.Chunk(t0(), *c2, *e1)
@@ -4242,26 +4278,6 @@ TEST_P(PaintArtifactCompositorTest,
   EXPECT_OPACITY(opacity_id, 1.f, kNoRenderSurface);
 }
 
-TEST_P(PaintArtifactCompositorTest,
-       ActiveAnimationCompositingReasonWithoutActiveAnimationFlag) {
-  // TODO(crbug.com/900241): This test tests no render surface should be created
-  // for an effect node with kActiveFilterAnimation compositing reason without
-  // active animation flag. This simulates the extra effect node created for
-  // filter animation, which should not create render surface.
-  // Remove this test when we fix the bug.
-  EffectPaintPropertyNode::State state;
-  state.local_transform_space = &t0();
-  state.direct_compositing_reasons = CompositingReason::kActiveFilterAnimation;
-  auto e1 = EffectPaintPropertyNode::Create(e0(), std::move(state));
-
-  Update(TestPaintArtifact()
-             .Chunk(t0(), c0(), *e1)
-             .RectDrawing(gfx::Rect(150, 150, 100, 100), Color::kWhite)
-             .Build());
-  ASSERT_EQ(1u, LayerCount());
-  EXPECT_OPACITY(LayerAt(0)->effect_tree_index(), 1.f, kNoRenderSurface);
-}
-
 TEST_P(PaintArtifactCompositorTest, FilterCreatesRenderSurface) {
   CompositorFilterOperations filter;
   filter.AppendBlurFilter(5);
@@ -4365,17 +4381,25 @@ TEST_P(PaintArtifactCompositorTest, Non2dAxisAlignedRoundedRectClip) {
   artifact.Chunk(t0(), *clip, *opacity)
       .RectDrawing(gfx::Rect(50, 50, 50, 50), Color::kWhite);
   Update(artifact.Build());
-  ASSERT_EQ(1u, LayerCount());
+  ASSERT_EQ(2u, LayerCount());
 
   // We should create a synthetic effect node for the non-2d-axis-aligned clip.
-  int clip_id = LayerAt(0)->clip_tree_index();
+  auto* masked_layer = LayerAt(0);
+  EXPECT_TRUE(masked_layer->draws_content());
+  int clip_id = masked_layer->clip_tree_index();
   const auto* cc_clip = GetPropertyTrees().clip_tree().Node(clip_id);
-  int effect_id = LayerAt(0)->effect_tree_index();
+  int effect_id = masked_layer->effect_tree_index();
   const auto* cc_effect = GetPropertyTrees().effect_tree().Node(effect_id);
   EXPECT_OPACITY(effect_id, 1.f, kHasRenderSurface);
   EXPECT_OPACITY(cc_effect->parent_id, 0.5f, kNoRenderSurface);
   // cc_clip should be applied in the clip mask layer.
   EXPECT_EQ(cc_effect->clip_id, cc_clip->parent_id);
+
+  // The mask layer is needed because the masked layer draws content.
+  auto* mask_layer = LayerAt(1);
+  const auto* cc_mask =
+      GetPropertyTrees().effect_tree().Node(mask_layer->effect_tree_index());
+  EXPECT_EQ(SkBlendMode::kDstIn, cc_mask->blend_mode);
 }
 
 TEST_P(PaintArtifactCompositorTest,

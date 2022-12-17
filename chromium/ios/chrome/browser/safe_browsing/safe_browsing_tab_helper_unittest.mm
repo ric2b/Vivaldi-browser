@@ -13,9 +13,9 @@
 #import "ios/chrome/browser/prerender/fake_prerender_service.h"
 #import "ios/chrome/browser/prerender/prerender_service_factory.h"
 #import "ios/chrome/browser/safe_browsing/fake_safe_browsing_service.h"
-#import "ios/chrome/browser/safe_browsing/safe_browsing_error.h"
 #import "ios/chrome/browser/safe_browsing/safe_browsing_query_manager.h"
-#import "ios/chrome/browser/safe_browsing/safe_browsing_unsafe_resource_container.h"
+#import "ios/components/security_interstitials/safe_browsing/safe_browsing_error.h"
+#import "ios/components/security_interstitials/safe_browsing/safe_browsing_unsafe_resource_container.h"
 #import "ios/web/public/navigation/navigation_item.h"
 #import "ios/web/public/test/fakes/fake_navigation_context.h"
 #import "ios/web/public/test/fakes/fake_navigation_manager.h"
@@ -156,7 +156,7 @@ class SafeBrowsingTabHelperTest
     resource.request_destination =
         is_main_frame ? network::mojom::RequestDestination::kDocument
                       : network::mojom::RequestDestination::kIframe;
-    resource.web_state_getter = web_state_.CreateDefaultGetter();
+    resource.weak_web_state = web_state_.GetWeakPtr();
     SafeBrowsingQueryManager::FromWebState(&web_state_)
         ->StoreUnsafeResource(resource);
   }

@@ -73,10 +73,11 @@ void VivaldiRootDocumentHandler::OnOffTheRecordProfileCreated(
   DCHECK(vivaldi_extension_);
   vivaldi_document_loader_off_the_record_ =
       new VivaldiDocumentLoader(off_the_record, vivaldi_extension_);
-    // get the navigation-state updates
-  content::WebContentsObserver::Observe(
-      vivaldi_document_loader_off_the_record_->GetWebContents());
 
+  otr_document_observer_ = std::make_unique<DocumentContentsObserver>(
+      this, vivaldi_document_loader_off_the_record_->GetWebContents());
+
+  vivaldi_document_loader_off_the_record_->Load();
 }
 
 void VivaldiRootDocumentHandler::OnProfileWillBeDestroyed(Profile* profile) {
@@ -94,35 +95,45 @@ void VivaldiRootDocumentHandler::OnExtensionLoaded(
     const Extension* extension) {
   if (extension->id() == ::vivaldi::kVivaldiAppId &&
       !vivaldi_document_loader_) {
-    vivaldi_document_loader_ = new VivaldiDocumentLoader(profile_, extension);
+    vivaldi_document_loader_ = new VivaldiDocumentLoader(
+        Profile::FromBrowserContext(browser_context), extension);
     vivaldi_extension_ = extension;
-
-    // get the navigation-state updates
-    content::WebContentsObserver::Observe(vivaldi_document_loader_->GetWebContents());
-
+    document_observer_ = std::make_unique<DocumentContentsObserver>(
+        this, vivaldi_document_loader_->GetWebContents());
+    vivaldi_document_loader_->Load();
   }
 }
 
-void VivaldiRootDocumentHandler::DidFinishNavigation(
-    content::NavigationHandle* navigation_handle) {
+VivaldiRootDocumentHandler::DocumentContentsObserver::DocumentContentsObserver(
+    VivaldiRootDocumentHandler* handler,
+    content::WebContents* contents)
+    : WebContentsObserver(contents), root_doc_handler_(handler) {}
 
-  if (!navigation_handle->HasCommitted() ||
-      (!navigation_handle->IsInMainFrame() &&
-       !navigation_handle->HasSubframeNavigationEntryCommitted()))
-    return;
-
-  if (navigation_handle->GetWebContents() ==
-      vivaldi_document_loader_->GetWebContents()) {
-    document_loader_is_ready_ = true;
-  } else if (navigation_handle->GetWebContents() ==
-             vivaldi_document_loader_off_the_record_->GetWebContents()) {
-    otr_document_loader_is_ready_ = true;
+void VivaldiRootDocumentHandler::DocumentContentsObserver::
+    PrimaryMainDocumentElementAvailable() {
+  if (web_contents() == root_doc_handler_->GetWebContents()) {
+    root_doc_handler_->document_loader_is_ready_ = true;
+  } else if (web_contents() == root_doc_handler_->GetOTRWebContents()) {
+    root_doc_handler_->otr_document_loader_is_ready_ = true;
   }
+  root_doc_handler_->InformObservers();
+}
 
+void VivaldiRootDocumentHandler::InformObservers() {
   for (auto& observer : observers_) {
     observer.OnRootDocumentDidFinishNavigation();
   }
+}
 
+content::WebContents* VivaldiRootDocumentHandler::GetWebContents() {
+  return vivaldi_document_loader_ ? vivaldi_document_loader_->GetWebContents()
+                                  : nullptr;
+}
+
+content::WebContents* VivaldiRootDocumentHandler::GetOTRWebContents() {
+  return vivaldi_document_loader_off_the_record_
+             ? vivaldi_document_loader_off_the_record_->GetWebContents()
+             : nullptr;
 }
 
 void VivaldiRootDocumentHandler::OnExtensionUnloaded(
@@ -168,7 +179,6 @@ void VivaldiRootDocumentHandler::AddObserver(
                ->GetBrowserContext())) {
     observer->OnRootDocumentDidFinishNavigation();
   }
-
 }
 
 void VivaldiRootDocumentHandler::RemoveObserver(

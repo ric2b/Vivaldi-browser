@@ -11,7 +11,6 @@
 #import "base/ios/block_types.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/sys_string_conversions.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "ios/web/public/browser_state.h"
 #include "ios/web/public/security/certificate_policy_cache.h"
@@ -141,10 +140,11 @@ using web::WebThread;
     DCHECK(cert);
   }
   DCHECK(cert->intermediate_buffers().empty());
-  base::PostTask(FROM_HERE, {WebThread::IO}, base::BindOnce(^{
-                   self->_certPolicyCache->AllowCertForHost(
-                       cert.get(), base::SysNSStringToUTF8(host), status);
-                 }));
+  web::GetIOThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(^{
+        self->_certPolicyCache->AllowCertForHost(
+            cert.get(), base::SysNSStringToUTF8(host), status);
+      }));
 }
 
 #pragma mark - Private
@@ -180,8 +180,8 @@ using web::WebThread;
                          completionHandler:(web::PolicyDecisionHandler)handler {
   DCHECK_CURRENTLY_ON(WebThread::UI);
   DCHECK(handler);
-  TaskTraits traits{WebThread::IO, TaskShutdownBehavior::BLOCK_SHUTDOWN};
-  base::PostTask(FROM_HERE, traits, base::BindOnce(^{
+  web::GetIOThreadTaskRunner({})
+      ->PostTask(FROM_HERE, base::BindOnce(^{
                    // |loadPolicyForRejectedTrustResult:certStatus:serverTrust
                    // :host:| can only be called on IO thread.
                    net::CertStatus certStatus =

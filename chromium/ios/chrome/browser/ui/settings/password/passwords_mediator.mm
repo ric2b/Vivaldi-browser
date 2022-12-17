@@ -9,16 +9,22 @@
 #include "base/time/time.h"
 #include "components/password_manager/core/browser/leak_detection_dialog_utils.h"
 #include "components/password_manager/core/common/password_manager_features.h"
+#import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
+#import "ios/chrome/browser/favicon/favicon_loader.h"
+#import "ios/chrome/browser/net/crurl.h"
 #include "ios/chrome/browser/passwords/password_check_observer_bridge.h"
 #import "ios/chrome/browser/passwords/save_passwords_consumer.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
+#include "ios/chrome/browser/signin/identity_manager_factory.h"
+#include "ios/chrome/browser/sync/sync_observer_bridge.h"
+#include "ios/chrome/browser/sync/sync_service_factory.h"
 #include "ios/chrome/browser/sync/sync_setup_service.h"
 #import "ios/chrome/browser/ui/settings/password/passwords_consumer.h"
 #import "ios/chrome/browser/ui/settings/password/saved_passwords_presenter_observer.h"
 #import "ios/chrome/browser/ui/settings/utils/password_auto_fill_status_manager.h"
-#include "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/common/string_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#import "ios/chrome/common/ui/favicon/favicon_constants.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "net/base/mac/url_conversions.h"
@@ -35,13 +41,15 @@ namespace {
 constexpr base::TimeDelta kJustCheckedTimeThresholdInMinutes = base::Minutes(1);
 }  // namespace
 
-@interface PasswordsMediator () <PasswordCheckObserver,
-                                 SavedPasswordsPresenterObserver> {
+@interface PasswordsMediator () <IdentityManagerObserverBridgeDelegate,
+                                 PasswordCheckObserver,
+                                 SavedPasswordsPresenterObserver,
+                                 SyncObserverModelBridge> {
   // The service responsible for password check feature.
   scoped_refptr<IOSChromePasswordCheckManager> _passwordCheckManager;
 
   // Service to check if passwords are synced.
-  SyncSetupService* _syncService;
+  SyncSetupService* _syncSetupService;
 
   password_manager::SavedPasswordsPresenter* _savedPasswordsPresenter;
 
@@ -56,6 +64,13 @@ constexpr base::TimeDelta kJustCheckedTimeThresholdInMinutes = base::Minutes(1);
 
   // Current state of password check.
   PasswordCheckState _currentState;
+
+  // IdentityManager observer.
+  std::unique_ptr<signin::IdentityManagerObserverBridge>
+      _identityManagerObserver;
+
+  // Sync observer
+  std::unique_ptr<SyncObserverBridge> _syncObserver;
 }
 
 // Object storing the time of the previous successful re-authentication.
@@ -64,17 +79,30 @@ constexpr base::TimeDelta kJustCheckedTimeThresholdInMinutes = base::Minutes(1);
 // of the Passwords Screen.
 @property(nonatomic, strong, readonly) NSDate* successfulReauthTime;
 
+// FaviconLoader is a keyed service that uses LargeIconService to retrieve
+// favicon images.
+@property(nonatomic, assign) FaviconLoader* faviconLoader;
+
 @end
 
 @implementation PasswordsMediator
 
-- (instancetype)initWithPasswordCheckManager:
-                    (scoped_refptr<IOSChromePasswordCheckManager>)
-                        passwordCheckManager
-                                 syncService:(SyncSetupService*)syncService {
+- (instancetype)
+    initWithPasswordCheckManager:
+        (scoped_refptr<IOSChromePasswordCheckManager>)passwordCheckManager
+                syncSetupService:(SyncSetupService*)syncSetupService
+                   faviconLoader:(FaviconLoader*)faviconLoader
+                 identityManager:(signin::IdentityManager*)identityManager
+                     syncService:(syncer::SyncService*)syncService {
   self = [super init];
   if (self) {
-    _syncService = syncService;
+    _faviconLoader = faviconLoader;
+    _identityManagerObserver =
+        std::make_unique<signin::IdentityManagerObserverBridge>(identityManager,
+                                                                self);
+    _syncObserver = std::make_unique<SyncObserverBridge>(self, syncService);
+
+    _syncSetupService = syncSetupService;
 
     _passwordCheckManager = passwordCheckManager;
     _savedPasswordsPresenter =
@@ -86,9 +114,7 @@ constexpr base::TimeDelta kJustCheckedTimeThresholdInMinutes = base::Minutes(1);
     _passwordsPresenterObserver =
         std::make_unique<SavedPasswordsPresenterObserverBridge>(
             self, _savedPasswordsPresenter);
-    if (base::FeatureList::IsEnabled(kCredentialProviderExtensionPromo)) {
-      [[PasswordAutoFillStatusManager sharedManager] addObserver:self];
-    }
+    [[PasswordAutoFillStatusManager sharedManager] addObserver:self];
   }
   return self;
 }
@@ -100,9 +126,7 @@ constexpr base::TimeDelta kJustCheckedTimeThresholdInMinutes = base::Minutes(1);
   if (_passwordCheckObserver) {
     _passwordCheckManager->RemoveObserver(_passwordCheckObserver.get());
   }
-  if (base::FeatureList::IsEnabled(kCredentialProviderExtensionPromo)) {
-    [[PasswordAutoFillStatusManager sharedManager] removeObserver:self];
-  }
+  [[PasswordAutoFillStatusManager sharedManager] removeObserver:self];
 }
 
 - (void)setConsumer:(id<PasswordsConsumer>)consumer {
@@ -123,6 +147,11 @@ constexpr base::TimeDelta kJustCheckedTimeThresholdInMinutes = base::Minutes(1);
 
 - (void)deletePasswordForm:(const password_manager::PasswordForm&)form {
   _savedPasswordsPresenter->RemovePassword(form);
+}
+
+- (void)disconnect {
+  _identityManagerObserver.reset();
+  _syncObserver.reset();
 }
 
 #pragma mark - PasswordsTableViewControllerDelegate
@@ -303,8 +332,8 @@ constexpr base::TimeDelta kJustCheckedTimeThresholdInMinutes = base::Minutes(1);
 
 // Compute whether user is capable to run password check in Google Account.
 - (BOOL)canUseAccountPasswordCheckup {
-  return _syncService->CanSyncFeatureStart() &&
-         !_syncService->IsEncryptEverythingEnabled();
+  return _syncSetupService->CanSyncFeatureStart() &&
+         !_syncSetupService->IsEncryptEverythingEnabled();
 }
 
 #pragma mark - SavedPasswordsPresenterObserver
@@ -322,6 +351,30 @@ constexpr base::TimeDelta kJustCheckedTimeThresholdInMinutes = base::Minutes(1);
 
 - (NSDate*)lastSuccessfulReauthTime {
   return [self successfulReauthTime];
+}
+
+#pragma mark - TableViewFaviconDataSource
+
+- (void)faviconForURL:(CrURL*)URL
+           completion:(void (^)(FaviconAttributes*))completion {
+  self.faviconLoader->FaviconForPageUrl(
+      URL.gurl, kDesiredMediumFaviconSizePt, kMinFaviconSizePt,
+      /*fallback_to_google_server=*/false, ^(FaviconAttributes* attributes) {
+        completion(attributes);
+      });
+}
+
+#pragma mark - IdentityManagerObserverBridgeDelegate
+
+- (void)onPrimaryAccountChanged:
+    (const signin::PrimaryAccountChangeEvent&)event {
+  [self.consumer updateOnDeviceEncryptionSessionAndUpdateTableView];
+}
+
+#pragma mark - SyncObserverModelBridge
+
+- (void)onSyncStateChanged {
+  [self.consumer updateOnDeviceEncryptionSessionAndUpdateTableView];
 }
 
 @end

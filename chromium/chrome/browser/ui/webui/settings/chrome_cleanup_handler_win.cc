@@ -190,7 +190,7 @@ void ChromeCleanupHandler::OnRebootRequired() {
 }
 
 void ChromeCleanupHandler::HandleRegisterChromeCleanerObserver(
-    base::Value::ConstListView args) {
+    const base::Value::List& args) {
   DCHECK_EQ(0U, args.size());
 
   base::RecordAction(
@@ -201,8 +201,7 @@ void ChromeCleanupHandler::HandleRegisterChromeCleanerObserver(
                     base::Value(controller_->IsAllowedByPolicy()));
 }
 
-void ChromeCleanupHandler::HandleStartScanning(
-    base::Value::ConstListView args) {
+void ChromeCleanupHandler::HandleStartScanning(const base::Value::List& args) {
   CHECK_EQ(1U, args.size());
   bool allow_logs_upload = false;
   if (args[0].is_bool())
@@ -221,7 +220,7 @@ void ChromeCleanupHandler::HandleStartScanning(
 }
 
 void ChromeCleanupHandler::HandleRestartComputer(
-    base::Value::ConstListView args) {
+    const base::Value::List& args) {
   DCHECK_EQ(0U, args.size());
 
   base::RecordAction(
@@ -230,7 +229,7 @@ void ChromeCleanupHandler::HandleRestartComputer(
   controller_->Reboot();
 }
 
-void ChromeCleanupHandler::HandleStartCleanup(base::Value::ConstListView args) {
+void ChromeCleanupHandler::HandleStartCleanup(const base::Value::List& args) {
   CHECK_EQ(1U, args.size());
   bool allow_logs_upload = false;
   if (args[0].is_bool())
@@ -239,8 +238,6 @@ void ChromeCleanupHandler::HandleStartCleanup(base::Value::ConstListView args) {
   // The state is propagated to all open tabs and should be consistent.
   DCHECK_EQ(controller_->logs_enabled(profile_), allow_logs_upload);
 
-  safe_browsing::RecordCleanupStartedHistogram(
-      safe_browsing::CLEANUP_STARTED_FROM_PROMPT_IN_SETTINGS);
   base::RecordAction(
       base::UserMetricsAction("SoftwareReporter.CleanupWebui_StartCleanup"));
 
@@ -252,7 +249,7 @@ void ChromeCleanupHandler::HandleStartCleanup(base::Value::ConstListView args) {
 }
 
 void ChromeCleanupHandler::HandleNotifyShowDetails(
-    base::Value::ConstListView args) {
+    const base::Value::List& args) {
   CHECK_EQ(1U, args.size());
   bool details_section_visible = false;
   if (args[0].is_bool())
@@ -268,7 +265,7 @@ void ChromeCleanupHandler::HandleNotifyShowDetails(
 }
 
 void ChromeCleanupHandler::HandleNotifyChromeCleanupLearnMoreClicked(
-    base::Value::ConstListView args) {
+    const base::Value::List& args) {
   CHECK_EQ(0U, args.size());
 
   base::RecordAction(
@@ -276,21 +273,21 @@ void ChromeCleanupHandler::HandleNotifyChromeCleanupLearnMoreClicked(
 }
 
 void ChromeCleanupHandler::HandleGetMoreItemsPluralString(
-    base::Value::ConstListView args) {
+    const base::Value::List& args) {
 #if BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
   GetPluralString(IDS_SETTINGS_RESET_CLEANUP_DETAILS_MORE, args);
 #endif  // BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
 }
 
 void ChromeCleanupHandler::HandleGetItemsToRemovePluralString(
-    base::Value::ConstListView args) {
+    const base::Value::List& args) {
 #if BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
   GetPluralString(IDS_SETTINGS_RESET_CLEANUP_DETAILS_ITEMS_TO_BE_REMOVED, args);
 #endif  // BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
 }
 
 void ChromeCleanupHandler::GetPluralString(int id,
-                                           base::Value::ConstListView args) {
+                                           const base::Value::List& args) {
   const auto& list = args;
   CHECK_EQ(2U, list.size());
 

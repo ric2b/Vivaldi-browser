@@ -93,8 +93,8 @@ class SESSIONS_EXPORT LiveTabContext {
       const std::map<std::string, std::string>& extra_data);
   virtual void CloseTab() = 0;
 
-   // see Browser::ext_data()
-  virtual std::string GetExtData() const;
+   // see Browser::viv_ext_data()
+  virtual std::string GetVivExtData() const;
 
   virtual LiveTab* AddRestoredTab(
       const std::vector<SerializedNavigationEntry>& navigations,
@@ -109,8 +109,8 @@ class SESSIONS_EXPORT LiveTabContext {
       const sessions::SerializedUserAgentOverride& user_agent_override,
       const std::map<std::string, std::string>& extra_data,
       const SessionID* tab_id,
-      const std::map<std::string, bool> page_action_overrides,
-      const std::string& ext_data);
+      const std::map<std::string, bool> viv_page_action_overrides,
+      const std::string& viv_ext_data);
 
   virtual LiveTab* ReplaceRestoredTab(
       const std::vector<SerializedNavigationEntry>& navigations,
@@ -120,8 +120,8 @@ class SESSIONS_EXPORT LiveTabContext {
       const PlatformSpecificTabData* tab_platform_data,
       const sessions::SerializedUserAgentOverride& user_agent_override,
       const std::map<std::string, std::string>& extra_data,
-      const std::map<std::string, bool> page_action_overrides,
-      const std::string& ext_data);
+      const std::map<std::string, bool> viv_page_action_overrides,
+      const std::string& viv_ext_data);
 
  protected:
   virtual ~LiveTabContext() {}

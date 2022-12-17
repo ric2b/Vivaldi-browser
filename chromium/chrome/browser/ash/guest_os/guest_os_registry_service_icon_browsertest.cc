@@ -8,7 +8,6 @@
 
 #include "base/files/file_path_watcher.h"
 #include "base/files/file_util.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/test/bind.h"
 #include "base/threading/thread_restrictions.h"
@@ -66,7 +65,7 @@ class GuestOsRegistryServiceIconTest : public InProcessBrowserTest {
               if (expect_loaded) {
                 EXPECT_FALSE(icon->is_placeholder_icon);
                 EXPECT_EQ(apps::IconType::kCompressed, icon->icon_type);
-                EXPECT_GT(icon->compressed.size(), 0);
+                EXPECT_GT(icon->compressed.size(), 0u);
               } else {
                 EXPECT_EQ(apps::IconType::kUnknown, icon->icon_type);
               }

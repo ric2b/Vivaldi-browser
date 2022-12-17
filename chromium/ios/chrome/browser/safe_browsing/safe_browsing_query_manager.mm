@@ -6,10 +6,11 @@
 
 #include "base/callback_helpers.h"
 #include "base/check_op.h"
-#include "base/task/post_task.h"
-#include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/safe_browsing/safe_browsing_service.h"
+#include "ios/components/security_interstitials/safe_browsing/safe_browsing_client.h"
+#include "ios/components/security_interstitials/safe_browsing/safe_browsing_client_factory.h"
 #include "ios/web/public/thread/web_task_traits.h"
+#include "ios/web/public/thread/web_thread.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -41,8 +42,8 @@ SafeBrowsingQueryManager::~SafeBrowsingQueryManager() {
     observer.SafeBrowsingQueryManagerDestroyed(this);
   }
 
-  base::DeleteSoon(FROM_HERE, {web::WebThread::IO},
-                   url_checker_client_.release());
+  web::GetIOThreadTaskRunner({})->DeleteSoon(FROM_HERE,
+                                             url_checker_client_.release());
 }
 
 void SafeBrowsingQueryManager::AddObserver(Observer* observer) {
@@ -61,14 +62,18 @@ void SafeBrowsingQueryManager::StartQuery(const Query& query) {
   network::mojom::RequestDestination request_destination =
       query.IsMainFrame() ? network::mojom::RequestDestination::kDocument
                           : network::mojom::RequestDestination::kIframe;
+  SafeBrowsingClient* safe_browsing_client =
+      SafeBrowsingClientFactory::GetForBrowserState(
+          web_state_->GetBrowserState());
+  SafeBrowsingService* safe_browsing_service =
+      safe_browsing_client->GetSafeBrowsingService();
   std::unique_ptr<safe_browsing::SafeBrowsingUrlCheckerImpl> url_checker =
-      GetApplicationContext()->GetSafeBrowsingService()->CreateUrlChecker(
-          request_destination, web_state_);
+      safe_browsing_service->CreateUrlChecker(request_destination, web_state_);
   base::OnceCallback<void(bool proceed, bool show_error_page)> callback =
       base::BindOnce(&SafeBrowsingQueryManager::UrlCheckFinished,
                      weak_factory_.GetWeakPtr(), query);
-  base::PostTask(
-      FROM_HERE, {web::WebThread::IO},
+  web::GetIOThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(&UrlCheckerClient::CheckUrl,
                      url_checker_client_->AsWeakPtr(), std::move(url_checker),
                      query.url, query.http_method, std::move(callback)));
@@ -203,8 +208,8 @@ void SafeBrowsingQueryManager::UrlCheckerClient::OnCheckComplete(
   DCHECK(url_checker);
 
   auto it = active_url_checkers_.find(url_checker);
-  base::PostTask(
-      FROM_HERE, {web::WebThread::UI},
+  web::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(std::move(it->second), proceed, showed_interstitial));
 
   active_url_checkers_.erase(it);

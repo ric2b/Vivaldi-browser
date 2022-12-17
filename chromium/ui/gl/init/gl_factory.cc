@@ -81,14 +81,10 @@ GLImplementationParts GetRequestedGLImplementation(
   if (g_is_angle_enabled && UsePassthroughCommandDecoder(cmd)) {
     std::vector<GLImplementationParts> angle_impls = {};
     bool software_gl_allowed = false;
-    bool legacy_software_gl_allowed = false;
     auto iter = allowed_impls.begin();
     while (iter != allowed_impls.end()) {
       if ((*iter) == GetSoftwareGLImplementation()) {
         software_gl_allowed = true;
-        allowed_impls.erase(iter);
-      } else if ((*iter) == GetLegacySoftwareGLImplementation()) {
-        legacy_software_gl_allowed = true;
         allowed_impls.erase(iter);
       } else if (iter->gl == kGLImplementationEGLANGLE) {
         angle_impls.emplace_back(*iter);
@@ -103,9 +99,6 @@ GLImplementationParts GetRequestedGLImplementation(
     // implementations
     if (software_gl_allowed) {
       allowed_impls.emplace_back(GetSoftwareGLImplementation());
-    }
-    if (legacy_software_gl_allowed) {
-      allowed_impls.emplace_back(GetLegacySoftwareGLImplementation());
     }
   }
 
@@ -138,7 +131,8 @@ GLImplementationParts GetRequestedGLImplementation(
   return GLImplementationParts(kGLImplementationNone);
 }
 
-bool InitializeGLOneOffPlatformHelper(bool init_extensions) {
+bool InitializeGLOneOffPlatformHelper(bool init_extensions,
+                                      uint64_t system_device_id) {
   TRACE_EVENT1("gpu,startup", "gl::init::InitializeGLOneOffPlatformHelper",
                "init_extensions", init_extensions);
 
@@ -147,12 +141,13 @@ bool InitializeGLOneOffPlatformHelper(bool init_extensions) {
   bool disable_gl_drawing = cmd->HasSwitch(switches::kDisableGLDrawingForTests);
 
   return InitializeGLOneOffPlatformImplementation(
-      fallback_to_software_gl, disable_gl_drawing, init_extensions);
+      fallback_to_software_gl, disable_gl_drawing, init_extensions,
+      system_device_id);
 }
 
 }  // namespace
 
-bool InitializeGLOneOff() {
+bool InitializeGLOneOff(uint64_t system_device_id) {
   TRACE_EVENT0("gpu,startup", "gl::init::InitializeOneOff");
 
   if (!InitializeStaticGLBindingsOneOff())
@@ -160,10 +155,11 @@ bool InitializeGLOneOff() {
   if (GetGLImplementation() == kGLImplementationDisabled)
     return true;
 
-  return InitializeGLOneOffPlatformHelper(true);
+  return InitializeGLOneOffPlatformHelper(true, system_device_id);
 }
 
-bool InitializeGLNoExtensionsOneOff(bool init_bindings) {
+bool InitializeGLNoExtensionsOneOff(bool init_bindings,
+                                    uint64_t system_device_id) {
   TRACE_EVENT1("gpu,startup", "gl::init::InitializeNoExtensionsOneOff",
                "init_bindings", init_bindings);
   if (init_bindings) {
@@ -173,7 +169,7 @@ bool InitializeGLNoExtensionsOneOff(bool init_bindings) {
       return true;
   }
 
-  return InitializeGLOneOffPlatformHelper(false);
+  return InitializeGLOneOffPlatformHelper(false, system_device_id);
 }
 
 bool InitializeStaticGLBindingsOneOff() {
@@ -201,8 +197,7 @@ bool InitializeStaticGLBindingsImplementation(GLImplementationParts impl,
   bool initialized = InitializeStaticGLBindings(impl);
   if (!initialized && fallback_to_software_gl) {
     ShutdownGL(/*due_to_fallback*/ true);
-    initialized =
-        InitializeStaticGLBindings(GetSoftwareGLImplementationForPlatform());
+    initialized = InitializeStaticGLBindings(GetSoftwareGLImplementation());
   }
   if (!initialized) {
     ShutdownGL(/*due_to_fallback*/ false);
@@ -213,16 +208,16 @@ bool InitializeStaticGLBindingsImplementation(GLImplementationParts impl,
 
 bool InitializeGLOneOffPlatformImplementation(bool fallback_to_software_gl,
                                               bool disable_gl_drawing,
-                                              bool init_extensions) {
+                                              bool init_extensions,
+                                              uint64_t system_device_id) {
   if (IsSoftwareGLImplementation(GetGLImplementationParts()))
     fallback_to_software_gl = false;
 
-  bool initialized = InitializeGLOneOffPlatform();
+  bool initialized = InitializeGLOneOffPlatform(system_device_id);
   if (!initialized && fallback_to_software_gl) {
     ShutdownGL(/*due_to_fallback*/ true);
-    initialized =
-        InitializeStaticGLBindings(GetSoftwareGLImplementationForPlatform()) &&
-        InitializeGLOneOffPlatform();
+    initialized = InitializeStaticGLBindings(GetSoftwareGLImplementation()) &&
+                  InitializeGLOneOffPlatform(system_device_id);
   }
   if (initialized && init_extensions) {
     initialized = InitializeExtensionSettingsOneOffPlatform();

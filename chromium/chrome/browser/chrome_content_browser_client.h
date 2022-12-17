@@ -18,6 +18,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "base/values.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/startup_data.h"
@@ -104,10 +105,6 @@ class ChromeWebAuthenticationDelegate;
 namespace vr {
 class ChromeXrIntegrationClient;
 }
-#endif
-
-#if BUILDFLAG(IS_ANDROID)
-class BackgroundAttributionFlusher;
 #endif
 
 class ChromeContentBrowserClient : public content::ContentBrowserClient {
@@ -230,7 +227,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   bool ShouldUrlUseApplicationIsolationLevel(
       content::BrowserContext* browser_context,
       const GURL& url) override;
-  bool AreDirectSocketsAllowedByPolicy(
+  bool IsIsolatedAppsDeveloperModeAllowed(
       content::BrowserContext* context) override;
   bool IsFileAccessAllowed(const base::FilePath& path,
                            const base::FilePath& absolute_path,
@@ -304,9 +301,8 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
 #if BUILDFLAG(IS_CHROMEOS)
   void OnTrustAnchorUsed(content::BrowserContext* browser_context) override;
 #endif
-  void CanSendSCTAuditingReport(
-      content::BrowserContext* browser_context,
-      base::OnceCallback<void(bool)> callback) override;
+  bool CanSendSCTAuditingReport(
+      content::BrowserContext* browser_context) override;
   void OnNewSCTAuditingReportSent(
       content::BrowserContext* browser_context) override;
   scoped_refptr<network::SharedURLLoaderFactory>
@@ -374,6 +370,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   base::FilePath GetShaderDiskCacheDirectory() override;
   base::FilePath GetGrShaderDiskCacheDirectory() override;
   base::FilePath GetNetLogDefaultDirectory() override;
+  base::FilePath GetFirstPartySetsDirectory() override;
   void DidCreatePpapiPlugin(content::BrowserPpapiHost* browser_host) override;
   content::BrowserPpapiHost* GetExternalBrowserPpapiHost(
       int plugin_process_id) override;
@@ -611,10 +608,10 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   bool HandleExternalProtocol(
       const GURL& url,
       content::WebContents::Getter web_contents_getter,
-      int child_id,
       int frame_tree_node_id,
       content::NavigationUIData* navigation_data,
-      bool is_main_frame,
+      bool is_primary_main_frame,
+      bool is_in_fenced_frame_tree,
       network::mojom::WebSandboxFlags sandbox_flags,
       ui::PageTransition page_transition,
       bool has_user_gesture,
@@ -680,6 +677,10 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       bool user_gesture,
       blink::NavigationDownloadPolicy* download_policy) override;
 
+  std::vector<blink::mojom::EpochTopicPtr> GetBrowsingTopicsForJsApi(
+      const url::Origin& context_origin,
+      content::RenderFrameHost* main_frame) override;
+
   bool IsBluetoothScanningBlocked(content::BrowserContext* browser_context,
                                   const url::Origin& requesting_origin,
                                   const url::Origin& embedding_origin) override;
@@ -687,8 +688,6 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   void BlockBluetoothScanning(content::BrowserContext* browser_context,
                               const url::Origin& requesting_origin,
                               const url::Origin& embedding_origin) override;
-
-  bool ShouldLoadExtraIcuDataFile(std::string* split_name) override;
 
   bool ArePersistentMediaDeviceIDsAllowed(
       content::BrowserContext* browser_context,
@@ -773,8 +772,8 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
 
   bool IsFindInPageDisabledForOrigin(const url::Origin& origin) override;
   bool IsFirstPartySetsEnabled() override;
+  base::Value::Dict GetFirstPartySetsOverrides() override;
 
-  void FlushBackgroundAttributions(base::OnceClosure callback) override;
   bool ShouldPreconnectNavigation(
       content::BrowserContext* browser_context) override;
 
@@ -894,9 +893,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
 
   StartupData startup_data_;
 
-#if BUILDFLAG(IS_ANDROID)
-  std::unique_ptr<BackgroundAttributionFlusher> background_attribution_flusher_;
-#else
+#if !BUILDFLAG(IS_ANDROID)
   std::unique_ptr<ChromeSerialDelegate> serial_delegate_;
   std::unique_ptr<ChromeHidDelegate> hid_delegate_;
   std::unique_ptr<ChromeWebAuthenticationDelegate> web_authentication_delegate_;

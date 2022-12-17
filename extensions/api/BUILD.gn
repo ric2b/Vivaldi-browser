@@ -183,6 +183,8 @@ static_library("apis") {
     "runtime/runtime_api.h",
     "savedpasswords/savedpasswords_api.cc",
     "savedpasswords/savedpasswords_api.h",
+    "search_engines/search_engines_api.cc",
+    "search_engines/search_engines_api.h",
     "sessions/vivaldi_sessions_api.cc",
     "sessions/vivaldi_sessions_api.h",
     "settings/settings_api.cc",

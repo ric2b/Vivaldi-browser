@@ -33,6 +33,7 @@ source_set("history") {
     "//ios/chrome/browser/ui/sharing",
     "//ios/chrome/browser/ui/table_view",
     "//ios/chrome/browser/ui/util",
+    "//ios/chrome/common/ui/favicon:favicon_constants",
   ]
   frameworks = [
     "MobileCoreServices.framework",
@@ -80,7 +81,6 @@ source_set("history_ui") {
     "//components/history/core/browser",
     "//components/strings",
     "//components/url_formatter",
-    "//components/url_formatter",
     "//ios/chrome/app:tests_hook",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser",
@@ -101,12 +101,11 @@ source_set("history_ui") {
     "//ios/chrome/browser/ui/table_view:styler",
     "//ios/chrome/browser/ui/table_view:utils",
     "//ios/chrome/browser/ui/table_view/cells",
-    "//ios/chrome/browser/ui/table_view/cells:cells_constants",
-    "//ios/chrome/browser/ui/util",
     "//ios/chrome/browser/url_loading",
     "//ios/chrome/browser/web_state_list",
     "//ios/chrome/browser/window_activities",
     "//ios/chrome/common/ui/favicon",
+    "//ios/chrome/common/ui/table_view:cells_constants",
     "//ios/chrome/common/ui/util",
     "//ui/base",
   ]
@@ -179,6 +178,7 @@ source_set("eg2_tests") {
   deps = [
     ":constants",
     "//base",
+    "//components/url_formatter",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser/ui:feature_flags",
     "//ios/chrome/browser/ui/popup_menu:constants",

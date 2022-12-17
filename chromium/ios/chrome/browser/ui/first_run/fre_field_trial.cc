@@ -9,6 +9,7 @@
 #include "base/metrics/field_trial_params.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
+#include "components/signin/ios/browser/features.h"
 #include "components/variations/variations_associated_data.h"
 #include "components/version_info/version_info.h"
 #include "ios/chrome/browser/first_run/first_run.h"
@@ -24,7 +25,7 @@ const char kFREDefaultPromoTestingShortDelayParam[] =
 const char kFREUIIdentitySwitcherPositionParam[] =
     "signin_sync_screen_identity_position";
 const char kFREUIStringsSetParam[] = "signin_sync_screen_strings_set";
-const char kFRESecondUITrialName[] = "EnableFREUIModuleIOSV2";
+const char kFREThirdUITrialName[] = "EnableFREUIModuleIOSV3";
 
 // Group names for the second trial of the FRE UI.
 const char kIdentitySwitcherInTopAndOldStringsSetGroup[] =
@@ -35,6 +36,20 @@ const char kIdentitySwitcherInBottomAndOldStringsSetGroup[] =
     "IdentitySwitcherInBottomAndOldStringsSet";
 const char kIdentitySwitcherInBottomAndNewStringsSetGroup[] =
     "IdentitySwitcherInBottomAndNewStringsSet";
+
+// Parameters for new Mobile Identity Consistency FRE.
+const char kNewMobileIdentityConsistencyFREParam[] = "variant_new_mice_fre";
+const char kNewMobileIdentityConsistencyFREParamUMADialog[] = "umadialog";
+const char kNewMobileIdentityConsistencyFREParamThreeSteps[] = "3steps";
+const char kNewMobileIdentityConsistencyFREParamTwoSteps[] = "2steps";
+
+// Group names for the new Mobile Identity Consistency FRE.
+const char kNewMICEFREWithUMADialogSetGroup[] =
+    "NewMobileIdentityConsistencyFREParamUMADialog";
+const char kNewMICEFREWithThreeStepsSetGroup[] =
+    "NewMobileIdentityConsistencyFREParamThreeSteps";
+const char kNewMICEFREWithTwoStepsSetGroup[] =
+    "NewMobileIdentityConsistencyFREParamTwoSteps";
 
 // Feature param and options for the identity switcher position.
 constexpr base::FeatureParam<SigninSyncScreenUIIdentitySwitcherPosition>::Option
@@ -60,7 +75,7 @@ constexpr base::FeatureParam<SigninSyncScreenUIStringSet> kStringSetParam{
 namespace {
 // String local state preference with the name of the assigned trial group.
 // Empty if no group has been assigned yet.
-const char kTrialGroupPrefName[] = "fre_refactoring.trial_group";
+const char kTrialGroupV3PrefName[] = "fre_refactoringV3.trial_group";
 
 // Group names for the default browser promo trial.
 const char kFREDefaultBrowserAndSmallDelayBeforeOtherPromosGroup[] =
@@ -81,18 +96,41 @@ const variations::VariationID
 // Group name for the FRE disabled group.
 const char kDisabledGroup[] = "Disabled";
 // Experiment IDs defined for the second trial of the FRE UI.
-const variations::VariationID kDisabledTrialID = 3344682;
+const variations::VariationID kDisabledTrialID = 3346917;
 const variations::VariationID kIdentitySwitcherInTopAndOldStringsSetID =
-    3344678;
+    3346918;
 const variations::VariationID kIdentitySwitcherInTopAndNewStringsSetID =
-    3344679;
+    3346919;
 const variations::VariationID kIdentitySwitcherInBottomAndOldStringsSetID =
-    3344680;
+    3346920;
 const variations::VariationID kIdentitySwitcherInBottomAndNewStringsSetID =
-    3344681;
+    3346921;
 
 // Default local state pref value.
 const int kDefaultPrefValue = -1;
+
+// Options for kkNewMobileIdentityConsistencyFREParam.
+constexpr base::FeatureParam<NewMobileIdentityConsistencyFRE>::Option
+    kNewMobileIdentityConsistencyFREOptions[] = {
+        {NewMobileIdentityConsistencyFRE::kUMADialog,
+         kNewMobileIdentityConsistencyFREParamUMADialog},
+        {NewMobileIdentityConsistencyFRE::kThreeSteps,
+         kNewMobileIdentityConsistencyFREParamThreeSteps},
+        {NewMobileIdentityConsistencyFRE::kTwoSteps,
+         kNewMobileIdentityConsistencyFREParamTwoSteps}};
+
+// Parameter for signin::kNewMobileIdentityConsistencyFRE feature.
+constexpr base::FeatureParam<NewMobileIdentityConsistencyFRE>
+    kkNewMobileIdentityConsistencyFREParam{
+        &signin::kNewMobileIdentityConsistencyFRE,
+        kNewMobileIdentityConsistencyFREParam,
+        NewMobileIdentityConsistencyFRE::kUMADialog,
+        &kNewMobileIdentityConsistencyFREOptions};
+
+// Experiment IDs defined for the second trial of the FRE UI.
+const variations::VariationID kNewMICEFREWithUMADialogSetID = 3346235;
+const variations::VariationID kNewMICEFREWithThreeStepsSetID = 3346236;
+const variations::VariationID kNewMICEFREWithTwoStepsSetID = 3346237;
 
 // Sets the parameters value of the position and the strings set for a specific
 // group for the FRE second experiment.
@@ -103,9 +141,21 @@ void AssociateFieldTrialParamsForFRESecondTrialGroup(
   base::FieldTrialParams params;
   params[kFREUIIdentitySwitcherPositionParam] = position;
   params[kFREUIStringsSetParam] = stringsSet;
-  DCHECK(base::AssociateFieldTrialParams(kEnableFREUIModuleIOS.name, group_name,
-                                         params));
+  bool association_result = base::AssociateFieldTrialParams(
+      kEnableFREUIModuleIOS.name, group_name, params);
+  DCHECK(association_result);
 }
+
+// Sets the parameter value of the new MICE FRE parameter.
+void AssociateFieldTrialParamsForNewMICEFREGroup(const std::string& group_name,
+                                                 const std::string& value) {
+  base::FieldTrialParams params;
+  params[kNewMobileIdentityConsistencyFREParam] = value;
+  bool association_result = base::AssociateFieldTrialParams(
+      signin::kNewMobileIdentityConsistencyFRE.name, group_name, params);
+  DCHECK(association_result);
+}
+
 }  // namespace
 
 namespace fre_field_trial {
@@ -158,6 +208,13 @@ GetSigninSyncScreenUIIdentitySwitcherPosition() {
 SigninSyncScreenUIStringSet GetSigninSyncScreenUIStringSet() {
   // Default: OLD strings set.
   return kStringSetParam.Get();
+}
+
+NewMobileIdentityConsistencyFRE GetNewMobileIdentityConsistencyFRE() {
+  if (base::FeatureList::IsEnabled(signin::kNewMobileIdentityConsistencyFRE)) {
+    return kkNewMobileIdentityConsistencyFREParam.Get();
+  }
+  return NewMobileIdentityConsistencyFRE::kOld;
 }
 
 // Creates a trial for the first run (when there is no variations seed) if
@@ -271,7 +328,7 @@ int CreateFirstRunSecondTrial(
   }
 
   // Set up the trial and groups.
-  FirstRunFieldTrialConfig config(kFRESecondUITrialName);
+  FirstRunFieldTrialConfig config(kFREThirdUITrialName);
 
   config.AddGroup(kIdentitySwitcherInTopAndOldStringsSetGroup,
                   kIdentitySwitcherInTopAndOldStringsSetID,
@@ -328,34 +385,123 @@ int CreateFirstRunSecondTrial(
   return trial->group();
 }
 
+// Creates the trial config, initialize the trial and returns the ID of the
+// new Mobile Identity Consistency FRE trial group. There are 5 groups:
+// - Control (Default)
+// - Disabled
+// - New MICE FRE with UMA dialog
+// - New MICE FRE with 3 steps
+// - New MICE FRE with 2 steps
+int CreateNewMobileIdentityConsistencyFRETrial(
+    const base::FieldTrial::EntropyProvider& low_entropy_provider,
+    base::FeatureList* feature_list) {
+  // Experiment groups
+  int new_fre_default_percent = 0;
+  int new_fre_disabled_percent = 0;
+  int new_fre_with_uma_dialog_set_percent = 0;
+  int new_fre_with_three_steps_set_percent = 0;
+  int new_fre_with_two_steps_set_percent = 0;
+
+  switch (GetChannel()) {
+    case version_info::Channel::UNKNOWN:
+    case version_info::Channel::CANARY:
+    case version_info::Channel::DEV:
+    case version_info::Channel::BETA:
+    case version_info::Channel::STABLE:
+      new_fre_disabled_percent = 0;
+      new_fre_with_uma_dialog_set_percent = 0;
+      new_fre_with_three_steps_set_percent = 0;
+      new_fre_with_two_steps_set_percent = 0;
+      new_fre_default_percent = 100;
+      break;
+  }
+
+  // Set up the trial and groups.
+  FirstRunFieldTrialConfig config(
+      signin::kNewMobileIdentityConsistencyFRE.name);
+
+  config.AddGroup(kNewMICEFREWithUMADialogSetGroup,
+                  kNewMICEFREWithUMADialogSetID,
+                  new_fre_with_uma_dialog_set_percent);
+
+  config.AddGroup(kNewMICEFREWithThreeStepsSetGroup,
+                  kNewMICEFREWithThreeStepsSetID,
+                  new_fre_with_three_steps_set_percent);
+
+  config.AddGroup(kNewMICEFREWithTwoStepsSetGroup, kNewMICEFREWithTwoStepsSetID,
+                  new_fre_with_two_steps_set_percent);
+
+  config.AddGroup(kDisabledGroup, kDisabledTrialID, new_fre_disabled_percent);
+  config.AddGroup(kDefaultGroup, kDefaultTrialID, new_fre_default_percent);
+
+  DCHECK_EQ(100, config.GetTotalProbability());
+
+  // Associate field trial params to each group.
+  AssociateFieldTrialParamsForNewMICEFREGroup(
+      kNewMICEFREWithUMADialogSetGroup,
+      kNewMobileIdentityConsistencyFREParamUMADialog);
+  AssociateFieldTrialParamsForNewMICEFREGroup(
+      kNewMICEFREWithThreeStepsSetGroup,
+      kNewMobileIdentityConsistencyFREParamThreeSteps);
+  AssociateFieldTrialParamsForNewMICEFREGroup(
+      kNewMICEFREWithTwoStepsSetGroup,
+      kNewMobileIdentityConsistencyFREParamTwoSteps);
+
+  scoped_refptr<base::FieldTrial> trial =
+      config.CreateOneTimeRandomizedTrial(kDefaultGroup, low_entropy_provider);
+
+  // Finalize the group choice and activates the trial - similar to a variation
+  // config that's marked with |starts_active| true. This is required for
+  // studies that register variation ids, so they don't reveal extra information
+  // beyond the low-entropy source.
+  int group = trial->group();
+  const std::string& group_name = trial->group_name();
+  if (group_name == kNewMICEFREWithUMADialogSetGroup ||
+      group_name == kNewMICEFREWithThreeStepsSetGroup ||
+      group_name == kNewMICEFREWithTwoStepsSetGroup) {
+    feature_list->RegisterFieldTrialOverride(
+        signin::kNewMobileIdentityConsistencyFRE.name,
+        base::FeatureList::OVERRIDE_ENABLE_FEATURE, trial.get());
+  } else if (group_name == kDisabledGroup) {
+    feature_list->RegisterFieldTrialOverride(
+        signin::kNewMobileIdentityConsistencyFRE.name,
+        base::FeatureList::OVERRIDE_DISABLE_FEATURE, trial.get());
+  }
+  return group;
+}
+
 void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
-  registry->RegisterIntegerPref(kTrialGroupPrefName, kDefaultPrefValue);
+  registry->RegisterIntegerPref(kTrialGroupV3PrefName, kDefaultPrefValue);
 }
 
 void Create(const base::FieldTrial::EntropyProvider& low_entropy_provider,
             base::FeatureList* feature_list,
             PrefService* local_state) {
-  int trial_group = local_state->GetInteger(kTrialGroupPrefName);
-  if (trial_group == kDefaultPrefValue && !FirstRun::IsChromeFirstRun()) {
-    // Do not bucket existing users that have not been already been grouped. The
-    // experiment wants to only add users who have not seen the First Run
-    // Experience yet.
-    return;
-  }
   // Don't create the trial if it was already created for testing. This is only
   // expected when the browser is used for development purpose. The trial
   // created when the about flag is set will have the same name as the feature.
   // This condition is to avoid having multiple trials overriding the same
   // feature. A trial might have also been created with the commandline
   // arugments.
-  if (!base::FieldTrialList::TrialExists(kFRESecondUITrialName) &&
-      !base::FieldTrialList::TrialExists(kEnableFREUIModuleIOS.name)) {
+  if (base::FieldTrialList::TrialExists(kFREThirdUITrialName) ||
+      base::FieldTrialList::TrialExists(kEnableFREUIModuleIOS.name) ||
+      base::FieldTrialList::TrialExists(
+          signin::kNewMobileIdentityConsistencyFRE.name)) {
+    return;
+  }
+
+  if (FirstRun::IsChromeFirstRun()) {
     // Create trial and group user for the first time, or tag users again to
     // ensure the experiment can be used to filter UMA metrics.
-    trial_group = CreateFirstRunSecondTrial(low_entropy_provider, feature_list);
+    int trial_group =
+        CreateFirstRunSecondTrial(low_entropy_provider, feature_list);
+    // Persist the assigned group for subsequent runs.
+    local_state->SetInteger(kTrialGroupV3PrefName, trial_group);
+  } else if (local_state->GetInteger(kTrialGroupV3PrefName) !=
+             kDefaultPrefValue) {
+    // The user was assigned to a group in a previous run.
+    CreateFirstRunSecondTrial(low_entropy_provider, feature_list);
   }
-  // Persist the assigned group for subsequent runs.
-  local_state->SetInteger(kTrialGroupPrefName, trial_group);
 }
 
 }  // namespace fre_field_trial

@@ -158,6 +158,7 @@ void Scheduler::SetNeedsPrepareTiles() {
 }
 
 void Scheduler::DidSubmitCompositorFrame(uint32_t frame_token,
+                                         base::TimeTicks submit_time,
                                          EventMetricsSet events_metrics,
                                          bool has_missing_content) {
   // Timedelta used from begin impl frame to submit frame.
@@ -175,7 +176,7 @@ void Scheduler::DidSubmitCompositorFrame(uint32_t frame_token,
   }
 
   compositor_frame_reporting_controller_->DidSubmitCompositorFrame(
-      frame_token, begin_main_frame_args_.frame_id,
+      frame_token, submit_time, begin_main_frame_args_.frame_id,
       last_activate_origin_frame_args_.frame_id, std::move(events_metrics),
       has_missing_content);
   state_machine_.DidSubmitCompositorFrame();
@@ -984,11 +985,6 @@ void Scheduler::UpdateCompositorTimingHistoryRecordingEnabled() {
   compositor_timing_history_->SetRecordingEnabled(
       state_machine_.HasInitializedLayerTreeFrameSink() &&
       state_machine_.visible());
-}
-
-bool Scheduler::IsBeginMainFrameSent() const {
-  return state_machine_.begin_main_frame_state() ==
-         SchedulerStateMachine::BeginMainFrameState::SENT;
 }
 
 size_t Scheduler::CommitDurationSampleCountForTesting() const {

@@ -14,7 +14,6 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/cxx17_backports.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -74,7 +73,7 @@ bool WaitForSocketReadable(int raw_socket_fd, int raw_cancel_fd) {
       {raw_cancel_fd, POLLIN, 0},
   };
 
-  if (HANDLE_EINTR(poll(fds, base::size(fds), -1)) <= 0) {
+  if (HANDLE_EINTR(poll(fds, std::size(fds), -1)) <= 0) {
     PLOG(ERROR) << "poll()";
     return false;
   }
@@ -182,9 +181,6 @@ bool CameraHalDispatcherImpl::Start(
   if (!StartThreads()) {
     return false;
   }
-  // This event is for adding camera category to categories list.
-  TRACE_EVENT0("camera", "CameraHalDispatcherImpl");
-  base::trace_event::TraceLog::GetInstance()->AddEnabledStateObserver(this);
 
   {
     base::FilePath enable_file_path(kForceEnableAePath);
@@ -523,20 +519,6 @@ base::UnguessableToken CameraHalDispatcherImpl::GetTokenForTrustedClient(
   return token_manager_.GetTokenForTrustedClient(type);
 }
 
-void CameraHalDispatcherImpl::OnTraceLogEnabled() {
-  proxy_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(&CameraHalDispatcherImpl::OnTraceLogEnabledOnProxyThread,
-                     base::Unretained(this)));
-}
-
-void CameraHalDispatcherImpl::OnTraceLogDisabled() {
-  proxy_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(&CameraHalDispatcherImpl::OnTraceLogDisabledOnProxyThread,
-                     base::Unretained(this)));
-}
-
 void CameraHalDispatcherImpl::CreateSocket(base::WaitableEvent* started) {
   DCHECK(blocking_io_task_runner_->BelongsToCurrentThread());
 
@@ -783,7 +765,6 @@ void CameraHalDispatcherImpl::RegisterSensorClientWithTokenOnUIThread(
 
 void CameraHalDispatcherImpl::StopOnProxyThread() {
   DCHECK(proxy_task_runner_->BelongsToCurrentThread());
-  base::trace_event::TraceLog::GetInstance()->RemoveEnabledStateObserver(this);
 
   // TODO(crbug.com/1053569): Remove these lines once the issue is solved.
   base::File::Info info;
@@ -805,26 +786,6 @@ void CameraHalDispatcherImpl::StopOnProxyThread() {
   camera_hal_server_callbacks_.reset();
   camera_hal_server_.reset();
   receiver_set_.Clear();
-}
-
-void CameraHalDispatcherImpl::OnTraceLogEnabledOnProxyThread() {
-  DCHECK(proxy_task_runner_->BelongsToCurrentThread());
-  if (!camera_hal_server_) {
-    return;
-  }
-  bool camera_event_enabled = false;
-  TRACE_EVENT_CATEGORY_GROUP_ENABLED("camera", &camera_event_enabled);
-  if (camera_event_enabled) {
-    camera_hal_server_->SetTracingEnabled(true);
-  }
-}
-
-void CameraHalDispatcherImpl::OnTraceLogDisabledOnProxyThread() {
-  DCHECK(proxy_task_runner_->BelongsToCurrentThread());
-  if (!camera_hal_server_) {
-    return;
-  }
-  camera_hal_server_->SetTracingEnabled(false);
 }
 
 TokenManager* CameraHalDispatcherImpl::GetTokenManagerForTesting() {

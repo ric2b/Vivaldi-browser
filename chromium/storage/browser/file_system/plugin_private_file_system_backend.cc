@@ -9,6 +9,7 @@
 #include <map>
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/containers/contains.h"
@@ -18,6 +19,7 @@
 #include "base/synchronization/lock.h"
 #include "base/task/task_runner_util.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "storage/browser/file_system/async_file_util_adapter.h"
 #include "storage/browser/file_system/file_system_context.h"
 #include "storage/browser/file_system/file_system_operation.h"
@@ -99,9 +101,20 @@ base::File::Error OpenFileSystemOnFileTaskRunner(
 
 }  // namespace
 
+PluginPrivateFileSystemBackend::CdmFileInfo::CdmFileInfo(
+    const std::string& name,
+    const std::string& legacy_file_system_id)
+    : name(name), legacy_file_system_id(legacy_file_system_id) {}
+PluginPrivateFileSystemBackend::CdmFileInfo::CdmFileInfo(const CdmFileInfo&) =
+    default;
+PluginPrivateFileSystemBackend::CdmFileInfo::CdmFileInfo(CdmFileInfo&&) =
+    default;
+PluginPrivateFileSystemBackend::CdmFileInfo::~CdmFileInfo() = default;
+
 PluginPrivateFileSystemBackend::PluginPrivateFileSystemBackend(
     scoped_refptr<base::SequencedTaskRunner> file_task_runner,
     const base::FilePath& profile_path,
+    const base::FilePath& bucket_base_path,
     scoped_refptr<SpecialStoragePolicy> special_storage_policy,
     const FileSystemOptions& file_system_options,
     leveldb::Env* env_override)
@@ -112,7 +125,8 @@ PluginPrivateFileSystemBackend::PluginPrivateFileSystemBackend(
       plugin_map_(new FileSystemIDToPluginMap(file_task_runner_)) {
   file_util_ = std::make_unique<AsyncFileUtilAdapter>(
       std::make_unique<ObfuscatedFileUtil>(
-          std::move(special_storage_policy), base_path_, env_override,
+          std::move(special_storage_policy), base_path_, bucket_base_path,
+          env_override,
           base::BindRepeating(&FileSystemIDToPluginMap::GetPluginIDForURL,
                               base::Owned(plugin_map_.get())),
           std::set<std::string>(), nullptr,
@@ -301,11 +315,12 @@ void PluginPrivateFileSystemBackend::GetOriginDetailsOnFileTaskRunner(
   *last_modified_time = base::Time::UnixEpoch();
   std::string fsid =
       IsolatedContext::GetInstance()->RegisterFileSystemForVirtualPath(
-          kFileSystemTypePluginPrivate, "pluginprivate", base::FilePath());
+          kFileSystemTypePluginPrivate, kPluginPrivateRootName,
+          base::FilePath());
   DCHECK(ValidateIsolatedFileSystemId(fsid));
 
   std::string root = GetIsolatedFileSystemRootURIString(origin.GetURL(), fsid,
-                                                        "pluginprivate");
+                                                        kPluginPrivateRootName);
 
   std::unique_ptr<FileSystemOperationContext> operation_context(
       std::make_unique<FileSystemOperationContext>(context));
@@ -354,6 +369,65 @@ void PluginPrivateFileSystemBackend::GetOriginDetailsOnFileTaskRunner(
         *last_modified_time = enumerator->LastModifiedTime();
     }
   }
+}
+
+std::vector<PluginPrivateFileSystemBackend::CdmFileInfo>
+PluginPrivateFileSystemBackend::GetMediaLicenseFilesForOriginOnFileTaskRunner(
+    FileSystemContext* context,
+    const url::Origin& origin) {
+  DCHECK(file_task_runner_->RunsTasksInCurrentSequence());
+
+  std::unique_ptr<FileSystemOperationContext> operation_context(
+      std::make_unique<FileSystemOperationContext>(context));
+
+  // Determine the available plugin private filesystem directories for this
+  // origin. Currently the plugin private filesystem is only used by Encrypted
+  // Media Content Decryption Modules. Each CDM gets a directory based on the
+  // mimetype (e.g. plugin application/x-ppapi-widevine-cdm uses directory
+  // application_x-ppapi-widevine-cdm). Enumerate through the set of
+  // directories so that data from any CDM used by this origin is counted.
+  base::File::Error error;
+  base::FilePath path =
+      obfuscated_file_util()->GetDirectoryForStorageKeyAndType(
+          blink::StorageKey(origin), "", false, &error);
+  if (error != base::File::FILE_OK)
+    return {};
+
+  std::vector<CdmFileInfo> cdm_files;
+  base::FileEnumerator directory_enumerator(path, false,
+                                            base::FileEnumerator::DIRECTORIES);
+  base::FilePath plugin_path;
+  while (!(plugin_path = directory_enumerator.Next()).empty()) {
+    std::string plugin_name = plugin_path.BaseName().MaybeAsASCII();
+
+    std::string fsid =
+        IsolatedContext::GetInstance()->RegisterFileSystemForVirtualPath(
+            kFileSystemTypePluginPrivate, kPluginPrivateRootName,
+            base::FilePath());
+    DCHECK(ValidateIsolatedFileSystemId(fsid));
+    std::string root = GetIsolatedFileSystemRootURIString(
+        origin.GetURL(), fsid, kPluginPrivateRootName);
+
+    if (OpenFileSystemOnFileTaskRunner(
+            obfuscated_file_util(), plugin_map_, origin, fsid, plugin_name,
+            OPEN_FILE_SYSTEM_FAIL_IF_NONEXISTENT) != base::File::FILE_OK) {
+      continue;
+    }
+    std::unique_ptr<FileSystemFileUtil::AbstractFileEnumerator> enumerator(
+        obfuscated_file_util()->CreateFileEnumerator(
+            operation_context.get(),
+            context->CrackURL(
+                GURL(root), blink::StorageKey(url::Origin::Create(GURL(root)))),
+            true));
+
+    base::FilePath cdm_file_path;
+    while (!(cdm_file_path = enumerator->Next()).empty()) {
+      cdm_files.emplace_back(cdm_file_path.BaseName().AsUTF8Unsafe(),
+                             plugin_path.BaseName().AsUTF8Unsafe());
+    }
+  }
+
+  return cdm_files;
 }
 
 scoped_refptr<QuotaReservation>

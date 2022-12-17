@@ -10,10 +10,6 @@
 
 #include "ui/base/models/simple_menu_model.h"
 
-namespace send_tab_to_self {
-class SendTabToSelfSubMenuModel;
-}
-
 class Browser;
 
 namespace vivaldi {
@@ -40,7 +36,6 @@ class DeviceMenuController {
  private:
   VivaldiRenderViewContextMenu* rv_context_menu_;
   Mode mode_;
-  std::unique_ptr<send_tab_to_self::SendTabToSelfSubMenuModel> sub_menu_model_;
 };
 
 }  // namespace vivaldi

@@ -9,7 +9,6 @@
 <translation id="1054153489933238809">在新分頁開啟原始圖片(&amp;I)</translation>
 <translation id="1056898198331236512">警告</translation>
 <translation id="1084824384139382525">複製連結(&amp;E)</translation>
-<translation id="1128109161498068552">禁止任何網站使用系統專用訊息存取 MIDI 裝置</translation>
 <translation id="1163931534039071049">檢視頁框原始碼(&amp;V)</translation>
 <translation id="1165039591588034296">錯誤</translation>
 <translation id="1175364870820465910">列印(&amp;P)...</translation>
@@ -22,7 +21,6 @@
 <translation id="1297175357211070620">印表機</translation>
 <translation id="1303101771013849280">HTML 書籤檔案</translation>
 <translation id="1430915738399379752">列印</translation>
-<translation id="1433811987160647649">存取前詢問我</translation>
 <translation id="1451375123200651445">網頁，單一檔案</translation>
 <translation id="1465176863081977902">複製音訊網址(&amp;O)</translation>
 <translation id="1476607407192946488">語言設定(&amp;L)</translation>
@@ -99,13 +97,11 @@
 <translation id="2783321960289401138">建立捷徑...</translation>
 <translation id="2785873697295365461">檔案描述符</translation>
 <translation id="2809586584051668049">和另外 <ph name="NUMBER_ADDITIONAL_DISABLED" /> 個</translation>
-<translation id="2812989263793994277">不顯示任何圖片</translation>
 <translation id="2850541429955027218">新增主題</translation>
 <translation id="2861941300086904918">原生用戶端安全性管理員</translation>
 <translation id="2881076733170862447">點一下擴充功能時</translation>
 <translation id="2889064240420137087">透過其他程式開啟連結...</translation>
 <translation id="2902127500170292085">「<ph name="EXTENSION_NAME" />」無法與這部印表機進行通訊，請確認您已插上印表機，然後再試一次。</translation>
-<translation id="2904456025988372123">在網站已下載第一個檔案，並且嘗試自動下載更多檔案時先詢問我</translation>
 <translation id="2913331724188855103">允許網站儲存及讀取 Cookie 資料 (建議)</translation>
 <translation id="2931157624143513983">依可列印範圍自動調整</translation>
 <translation id="2932085390869194046">建議密碼...</translation>
@@ -126,7 +122,6 @@
 <translation id="3127156390846601284">這會將顯示的所有網站儲存在你裝置上的資料全部刪除。你要繼續操作嗎？</translation>
 <translation id="3129173833825111527">左邊界</translation>
 <translation id="3144647712221361880">以其他身分開啟連結</translation>
-<translation id="3154429428035006212">離線超過一個月</translation>
 <translation id="3222066309010235055">預先轉譯：<ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">請選取要封裝的擴充功能根目錄。如要更新擴充功能，請一併選取要重複使用的私鑰。</translation>
 <translation id="3280237271814976245">另存新檔(&amp;A)...</translation>
@@ -165,7 +160,6 @@
 <translation id="3838085852053358637">無法載入擴充功能</translation>
 <translation id="383891835335927981">未針對任何網站設定縮放等級</translation>
 <translation id="385051799172605136">上一頁</translation>
-<translation id="3899879303189199559">離線超過一年</translation>
 <translation id="3905761538810670789">修復應用程式</translation>
 <translation id="3908501907586732282">啟用擴充功能</translation>
 <translation id="3909701002594999354">顯示所有控制項(&amp;C)</translation>
@@ -192,7 +186,6 @@
 <translation id="4200983522494130825">新增分頁(&amp;T)</translation>
 <translation id="4225397296022057997">在全部網站上</translation>
 <translation id="4256316378292851214">另存影片(&amp;V)...</translation>
-<translation id="4278390842282768270">允許</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K 作用中)</translation>
 <translation id="4345587454538109430">設定...</translation>
 <translation id="4348766275249686434">收集錯誤信息</translation>
@@ -222,10 +215,8 @@
 <translation id="4988526792673242964">頁數</translation>
 <translation id="49896407730300355">逆時針旋轉(&amp;O)</translation>
 <translation id="4989966318180235467">檢查背景頁面(&amp;B)</translation>
-<translation id="4994474651455208930">允許網站要求成為通訊協定的預設處理常式</translation>
 <translation id="5000922062037820727">已封鎖 (建議)</translation>
 <translation id="5027562294707732951">新增擴充功能</translation>
-<translation id="5036662165765606524">禁止任何網站自動下載多個檔案</translation>
 <translation id="5039804452771397117">允許</translation>
 <translation id="5057110919553308744">點一下擴充功能時</translation>
 <translation id="5059526285558225588">選擇要分享的內容</translation>
@@ -238,7 +229,6 @@
 <translation id="5233231016133573565">程式 ID</translation>
 <translation id="5233736638227740678">貼上(&amp;P)</translation>
 <translation id="5256861893479663409">在全部站點上</translation>
-<translation id="5265562206369321422">離線超過一週</translation>
 <translation id="5269977353971873915">列印失敗</translation>
 <translation id="5284445933715251131">繼續下載</translation>
 <translation id="52912272896845572">私鑰檔案無效。</translation>
@@ -294,7 +284,6 @@
 <translation id="6122081475643980456">您的網際網路連線目前受到控制</translation>
 <translation id="6147020289383635445">列印預覽失敗。</translation>
 <translation id="6156863943908443225">腳本快取</translation>
-<translation id="6169666352732958425">無法投放桌面。</translation>
 <translation id="6196854373336333322">您的代理設定已受到擴充功能「<ph name="EXTENSION_NAME" />」控制，該擴充功能可變更、中斷、或監視您在網路上的行為。如果您不確定這項變更的發生原因，建議您停用該擴充功能。</translation>
 <translation id="6200151268994853226">管理擴充功能</translation>
 <translation id="6206311232642889873">複製圖片(&amp;Y)</translation>
@@ -328,7 +317,6 @@
 <translation id="6798954102094737107">外掛程式：<ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">保留變更</translation>
 <translation id="6817174620439930047">每當有網站要使用系統專用訊息存取 MIDI 裝置時詢問我 (建議)</translation>
-<translation id="682123305478866682">投放桌面</translation>
 <translation id="6824564591481349393">複製電子郵件地址(&amp;E)</translation>
 <translation id="6840155290835956714">傳送前詢問我</translation>
 <translation id="6886871292305414135">在新分頁開啟連結(&amp;T)</translation>
@@ -346,7 +334,6 @@
 <translation id="708060913198414444">複製音訊網址(&amp;O)</translation>
 <translation id="7175353351958621980">載入自：</translation>
 <translation id="7186088072322679094">放置於工具列</translation>
-<translation id="7270858098575133036">每當有網站要使用系統專用訊息存取 MIDI 裝置時詢問我</translation>
 <translation id="7287143125007575591">存取遭拒。</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7385854874724088939">準備列印時出現錯誤，請檢查您的印表機，然後再試一次。</translation>
@@ -369,7 +356,6 @@
 <translation id="7704305437604973648">工作</translation>
 <translation id="7710568461918838723">投影(&amp;C)...</translation>
 <translation id="7750228210027921155">子母畫面</translation>
-<translation id="7751260505918304024">全部顯示</translation>
 <translation id="7760004034676677601">這是您想要的起始頁嗎？</translation>
 <translation id="7771452384635174008">版式</translation>
 <translation id="7782102568078991263">沒有更多來自 Google 的建議</translation>
@@ -382,9 +368,7 @@
 <translation id="7849264908733290972">在新分頁開啟圖片(&amp;I)</translation>
 <translation id="7857949311770343000">這是您想要的新分頁嗎？</translation>
 <translation id="786073089922909430">服務：<ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7885253890047913815">最近使用過的印表機</translation>
 <translation id="7903925330883316394">公用程式：<ph name="UTILITY_TYPE" /></translation>
-<translation id="7938594894617528435">目前離線</translation>
 <translation id="7947962633355574091">複製影片網址(&amp;O)</translation>
 <translation id="7966241909927244760">複製圖片網址(&amp;O)</translation>
 <translation id="7973394300052703468">新增無痕視窗(&amp;P)</translation>
@@ -427,10 +411,8 @@
 <translation id="8708000541097332489">結束時清除</translation>
 <translation id="8714838604780058252">背景圖形</translation>
 <translation id="8725066075913043281">再試一次</translation>
-<translation id="8757090071857742562">無法投放桌面，請檢查您是否已確認要開始分享您的螢幕畫面。</translation>
 <translation id="8774934320277480003">上邊界</translation>
 <translation id="8798099450830957504">預設</translation>
-<translation id="8800004011501252845">顯示以下帳號的印表機</translation>
 <translation id="8808478386290700967">線上應用程式商店</translation>
 <translation id="8823514049557262177">複製連結文字(&amp;X)</translation>
 <translation id="8823704566850948458">建議密碼...</translation>
@@ -443,7 +425,6 @@
 <translation id="8962083179518285172">隱藏詳細資訊</translation>
 <translation id="8973557916016709913">重設為預設縮放比例</translation>
 <translation id="897939795688207351">在 <ph name="ORIGIN" /> 上</translation>
-<translation id="8996526648899750015">新增帳號...</translation>
 <translation id="9003647077635673607">允許在全部網站啟用</translation>
 <translation id="9027459031423301635">在新分頁開啟連結(T)</translation>
 <translation id="9056810968620647706">找不到相符項目。</translation>

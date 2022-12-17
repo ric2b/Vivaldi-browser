@@ -77,6 +77,7 @@
 <translation id="2687403674020088961">ସମସ୍ତ କୁକୀ ବ୍ଲକ୍ କରନ୍ତୁ (ସୁପାରିଶ କରାଯାଇ ନାହିଁ)</translation>
 <translation id="2704606927547763573">କପି କରାଯାଇଛି</translation>
 <translation id="2717722538473713889">ଇମେଲ୍ ଠିକଣାଗୁଡ଼ିକ</translation>
+<translation id="2750481671343847896">ପରିଚୟ ପ୍ରଦାନ କରୁଥିବା ସେବାଗୁଡ଼ିକରୁ ସାଇନ-ଇନ ପ୍ରମ୍ପ୍ଟଗୁଡ଼ିକୁ ସାଇଟଗୁଡ଼ିକ ଦେଖାଇପାରନ୍ତି।</translation>
 <translation id="2785051990912111074">ଏହି ବିକଳ୍ପକୁ ପସନ୍ଦ କଲେ ଏହା<ph name="WEBSITE" /> ପାଇଁ କୁକୀଗୁଡ଼ିକୁ ଖାଲି କରିଦେବ</translation>
 <translation id="2822354292072154809">ଆପଣ କ’ଣ ନିଶ୍ଚିତ ଯେ ଆପଣ <ph name="CHOSEN_OBJECT_NAME" /> ପାଇଁ ସମସ୍ତ ସାଇଟ୍ ଅନୁମତିଗୁଡ଼ିକ ଚାହୁଁଛନ୍ତି?</translation>
 <translation id="2870560284913253234">ସାଇଟ୍</translation>
@@ -112,6 +113,7 @@
 <translation id="3763247130972274048">10 ସେକେଣ୍ଡ ବାଦ୍ ଦେବାକୁ ଭିଡିଓର ବାମ କିମ୍ବା ଡାହାଣକୁ ଦୁଇ ଥର ଟାପ୍ କରନ୍ତୁ</translation>
 <translation id="3797520601150691162">ଏକ ନିର୍ଦ୍ଦିଷ୍ଟ ସାଇଟ ପାଇଁ ଗାଢ଼ା ଥିମ ଲାଗୁ କରନ୍ତୁ ନାହିଁ</translation>
 <translation id="381841723434055211">ଫୋନ୍ ନମ୍ଵରଗୁଡ଼ିକ</translation>
+<translation id="3826050100957962900">ତୃତୀୟ-ପକ୍ଷ ସାଇନ-ଇନ</translation>
 <translation id="3835233591525155343">ଆପଣଙ୍କ ଡିଭାଇସର ବ୍ୟବହାର</translation>
 <translation id="385051799172605136">ପଛକୁ</translation>
 <translation id="3859306556332390985">ଆଗକୁ ବଢ଼ାନ୍ତୁ</translation>
@@ -122,7 +124,6 @@
 <translation id="3991845972263764475"><ph name="BYTES_DOWNLOADED_WITH_UNITS" /> / ?</translation>
 <translation id="4002066346123236978">ଆଖ୍ୟା</translation>
 <translation id="4008040567710660924">ଏକ ନିର୍ଦ୍ଦିଷ୍ଟ ସାଇଟ୍ ପାଇଁ କୁକୀଗୁଡ଼ିକୁ ଅନୁମତି ଦିଏ।</translation>
-<translation id="4040330681741629921">ଯେତେବେଳେ ଏକ ସାଇଟ ସରଳୀକୃତ ଭ୍ୟୁରେ ଦେଖାଯାଇପାରିବ, ସେତେବେଳେ ସେ ବିଷୟରେ ସୂଚନା ପାଆନ୍ତୁ</translation>
 <translation id="4046123991198612571">ପରବର୍ତ୍ତୀ ଟ୍ରାକ୍</translation>
 <translation id="4149994727733219643">ୱେବ୍ ପୃଷ୍ଠାଗୁଡ଼ିକ ପାଇଁ ସରଳୀକୃତ ଭ୍ୟୁ</translation>
 <translation id="4165986682804962316">ସାଇଟ୍‍ ସେଟିଂସ୍‌</translation>
@@ -236,6 +237,7 @@
 <translation id="6643016212128521049">ଖାଲି କରନ୍ତୁ</translation>
 <translation id="6689172468748959065">ପ୍ରୋଫାଇଲ୍ ଫଟୋ</translation>
 <translation id="6697925417670533197">ସକ୍ରିୟ ଡାଉନଲୋଡଗୁଡ଼ିକ</translation>
+<translation id="6722828510648505498">ପରିଚୟ ପ୍ରଦାନ କରୁଥିବା ସେବାଗୁଡ଼ିକରୁ ସାଇନ-ଇନ ପ୍ରମ୍ପ୍ଟଗୁଡ଼ିକୁ ବ୍ଲକ କରନ୍ତୁ।</translation>
 <translation id="6746124502594467657">ତଳକୁ ଚାଳନ କରନ୍ତୁ</translation>
 <translation id="6749077623962119521">ଅନୁମତିଗୁଡ଼ିକୁ ରିସେଟ୍ କରିବେ?</translation>
 <translation id="6766622839693428701">ବନ୍ଦ କରିବା ପାଇଁ ତଳକୁ ସ୍ଵାଇପ୍ କରନ୍ତୁ</translation>
@@ -255,6 +257,7 @@
 <translation id="7087918508125750058"><ph name="ITEM_COUNT" />ଟି ଚୟନ କରାଯାଇଛି।  ସ୍କ୍ରିନ୍‌ର ଶୀର୍ଷଭାଗରେ ବିକଳ୍ପଗୁଡ଼ିକ ଉପଲବ୍ଧ ଅଛି</translation>
 <translation id="7141896414559753902">ସାଇଟ୍‌ଗୁଡ଼ିକର ପପ୍‌-ଅପ୍‌ ଏବଂ ରିଡାଇରେକ୍ଟ ଦେଖାଇବାକୁ ଅବରୋଧ କରନ୍ତୁ (ସୁପାରିଶ୍ କରାଯାଇଛି)</translation>
 <translation id="7176368934862295254"><ph name="KILOBYTES" /> KB</translation>
+<translation id="7180611975245234373">ରିଫ୍ରେଶ୍</translation>
 <translation id="723171743924126238">ଛବିଗୁଡ଼ିକ ଚୟନ କରନ୍ତୁ</translation>
 <translation id="7243308994586599757">ସ୍କ୍ରିନ୍‍ର ନିମ୍ନରେ ବିକଳ୍ପଗୁଡ଼ିକ ଉପଲବ୍ଧ ଅଛି</translation>
 <translation id="7250468141469952378"><ph name="ITEM_COUNT" /> ଚୟନିତ</translation>
@@ -308,7 +311,9 @@
 <translation id="83792324527827022">କୌଣସି ସାଇଟ୍ ଆପଣଙ୍କ କ୍ୟାମେରା ଏବଂ ମାଇକ୍ରୋଫୋନକୁ ବ୍ୟବହାର କରୁଛି</translation>
 <translation id="8380167699614421159">ଏହି ସାଇଟ୍, ଅନଧିକାର ପ୍ରବେଶ କରିଥିବା କିମ୍ବା ବିଭ୍ରାନ୍ତିକର ବିଜ୍ଞାପନ ଦେଖାଉଛି</translation>
 <translation id="8394832520002899662">ସାଇଟକୁ ଫେରିବାକୁ ଟାପ୍ କରନ୍ତୁ</translation>
+<translation id="8409345997656833551">ଯେତେବେଳେ ଏକ ଆର୍ଟିକିଲ ସରଳୀକୃତ ଭ୍ୟୁରେ ଦେଖାଯାଇପାରିବ, ସେତେବେଳେ ସେ ବିଷୟରେ ସୂଚନା ପାଆନ୍ତୁ</translation>
 <translation id="8425213833346101688">ପରିବର୍ତ୍ତନ କରନ୍ତୁ</translation>
+<translation id="8428213095426709021">ସେଟିଂସ୍</translation>
 <translation id="8441146129660941386">ପଛକୁ ଫେରନ୍ତୁ</translation>
 <translation id="8444433999583714703"><ph name="APP_NAME" />କୁ ଆପଣଙ୍କ ଲୋକେସନ୍ ଆକ୍ସେସ୍ ଦେବା ପାଇଁ, <ph name="BEGIN_LINK" />Android ସେଟିଂସ<ph name="END_LINK" />ରେ ଲୋକେସନ୍ ମଧ୍ୟ ଚାଲୁ କରନ୍ତୁ।</translation>
 <translation id="8447861592752582886">ଡିଭାଇସ୍ ଅନୁମତି କାଢ଼ି ଦିଅନ୍ତୁ</translation>

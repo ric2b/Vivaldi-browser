@@ -4,23 +4,34 @@
 
 #include "components/segmentation_platform/internal/data_collection/training_data_collector.h"
 
-#include "base/notreached.h"
-#include "components/segmentation_platform/internal/execution/feature_list_query_processor.h"
+#include <utility>
+
+#include "base/feature_list.h"
+#include "components/segmentation_platform/internal/data_collection/dummy_training_data_collector.h"
+#include "components/segmentation_platform/internal/data_collection/training_data_collector_impl.h"
+#include "components/segmentation_platform/public/features.h"
 
 namespace segmentation_platform {
 
-TrainingDataCollector::TrainingDataCollector(
-    FeatureListQueryProcessor* processor)
-    : feature_list_query_processor_(processor) {}
+// static
+std::unique_ptr<TrainingDataCollector> TrainingDataCollector::Create(
+    SegmentInfoDatabase* segment_info_database,
+    FeatureListQueryProcessor* processor,
+    HistogramSignalHandler* histogram_signal_handler,
+    SignalStorageConfig* signal_storage_config,
+    base::Clock* clock) {
+  if (base::FeatureList::IsEnabled(
+          features::kSegmentationStructuredMetricsFeature)) {
+    return std::make_unique<TrainingDataCollectorImpl>(
+        segment_info_database, processor, histogram_signal_handler,
+        signal_storage_config, clock);
+  }
+
+  return std::make_unique<DummyTrainingDataCollector>();
+}
+
+TrainingDataCollector::TrainingDataCollector() = default;
 
 TrainingDataCollector::~TrainingDataCollector() = default;
-
-void TrainingDataCollector::OnModelMetadataUpdated() {
-  NOTIMPLEMENTED();
-}
-
-void TrainingDataCollector::OnServiceInitialized() {
-  NOTIMPLEMENTED();
-}
 
 }  // namespace segmentation_platform

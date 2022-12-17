@@ -15,7 +15,6 @@
 
 #include "base/base64.h"
 #include "base/command_line.h"
-#include "base/cxx17_backports.h"
 #include "base/feature_list.h"
 #include "base/hash/hash.h"
 #include "base/memory/raw_ptr.h"
@@ -323,7 +322,7 @@ class MockAutofillDriver : public TestAutofillDriver {
   MockAutofillDriver& operator=(const MockAutofillDriver&) = delete;
 
   // Mock methods to enable testability.
-  MOCK_METHOD((base::flat_map<FieldGlobalId, ServerFieldType>),
+  MOCK_METHOD((std::vector<FieldGlobalId>),
               FillOrPreviewForm,
               (int query_id,
                mojom::RendererFormDataAction action,
@@ -530,9 +529,9 @@ class BrowserAutofillManagerTest : public testing::Test {
                                           int* response_query_id,
                                           FormData* response_data) {
     EXPECT_CALL(*autofill_driver_, FillOrPreviewForm(_, _, _, _, _))
-        .WillOnce((DoAll(testing::SaveArg<0>(response_query_id),
-                         testing::SaveArg<2>(response_data),
-                         testing::ReturnArg<4>())));
+        .WillOnce(DoAll(testing::SaveArg<0>(response_query_id),
+                        testing::SaveArg<2>(response_data),
+                        testing::Return(std::vector<FieldGlobalId>{})));
     FillAutofillFormData(input_query_id, input_form, input_field, unique_id);
   }
 
@@ -547,7 +546,7 @@ class BrowserAutofillManagerTest : public testing::Test {
     EXPECT_CALL(*autofill_driver_, FillOrPreviewForm(_, _, _, _, _))
         .WillOnce((DoAll(testing::SaveArg<0>(response_query_id),
                          testing::SaveArg<2>(response_data),
-                         testing::ReturnArg<4>())));
+                         testing::Return(std::vector<FieldGlobalId>{}))));
     browser_autofill_manager_->FillOrPreviewVirtualCardInformation(
         action, guid, input_query_id, input_form, input_field);
   }
@@ -1776,121 +1775,6 @@ TEST_P(CreditCardSuggestionTest, GetCreditCardSuggestions_NonCCNumber) {
                  browser_autofill_manager_->GetPackedCreditCardID(5)));
 }
 
-TEST_P(BrowserAutofillManagerStructuredProfileTest,
-       GetCreditCardSuggestions_GoogleIssuedCard_CCNumber) {
-  base::test::ScopedFeatureList features;
-  features.InitAndEnableFeature(
-      autofill::features::kAutofillEnableGoogleIssuedCard);
-  personal_data_.ClearCreditCards();
-  // Add a Google Issued Card.
-  CreditCard google_issued_card;
-  test::SetCreditCardInfo(&google_issued_card, "Lorem Ispium",
-                          "5555555555554444",  // Mastercard
-                          "10", "2998", "1");
-  google_issued_card.set_guid("00000000-0000-0000-0000-000000000007");
-  google_issued_card.set_record_type(
-      CreditCard::RecordType::MASKED_SERVER_CARD);
-  google_issued_card.set_card_issuer(CreditCard::Issuer::GOOGLE);
-  personal_data_.AddServerCreditCard(google_issued_card);
-  // Set up our form data.
-  FormData form;
-  CreateTestCreditCardFormData(&form, true, false);
-  std::vector<FormData> forms(1, form);
-  FormsSeen(forms);
-  // Set the field being edited to CC field.
-  const FormFieldData& credit_card_number_field = form.fields[1];
-  const std::string google_issued_card_value = base::JoinString(
-      {"Plex Mastercard  ", test::ObfuscatedCardDigitsAsUTF8("4444")}, "");
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
-  const std::string google_issued_card_label = std::string("10/98");
-#else
-  const std::string google_issued_card_label = std::string("Expires on 10/98");
-#endif
-
-  GetAutofillSuggestions(form, credit_card_number_field);
-
-  CheckSuggestions(
-      kDefaultPageID,
-      Suggestion(google_issued_card_value, google_issued_card_label,
-                 kGoogleIssuedCard,
-                 browser_autofill_manager_->GetPackedCreditCardID(7)));
-}
-
-TEST_P(BrowserAutofillManagerStructuredProfileTest,
-       GetCreditCardSuggestions_GoogleIssuedCard_NonCCNumber) {
-  base::test::ScopedFeatureList features;
-  features.InitAndEnableFeature(
-      autofill::features::kAutofillEnableGoogleIssuedCard);
-  personal_data_.ClearCreditCards();
-  // Add a Google Issued Card.
-  CreditCard google_issued_card;
-  test::SetCreditCardInfo(&google_issued_card, "Lorem Ispium",
-                          "5555555555554444",  // Mastercard
-                          "10", "2998", "1");
-  google_issued_card.set_guid("00000000-0000-0000-0000-000000000007");
-  google_issued_card.set_record_type(
-      CreditCard::RecordType::MASKED_SERVER_CARD);
-  google_issued_card.set_card_issuer(CreditCard::Issuer::GOOGLE);
-  personal_data_.AddServerCreditCard(google_issued_card);
-  // Set up our form data.
-  FormData form;
-  CreateTestCreditCardFormData(&form, true, false);
-  std::vector<FormData> forms(1, form);
-  FormsSeen(forms);
-  // Set the field being edited to the cardholder name field.
-  const FormFieldData& cardholder_name_field = form.fields[0];
-#if BUILDFLAG(IS_ANDROID)
-  const std::string google_issued_card_label = base::JoinString(
-      {"Plex Mastercard  ", test::ObfuscatedCardDigitsAsUTF8("4444")}, "");
-#elif BUILDFLAG(IS_IOS)
-  const std::string google_issued_card_label =
-      test::ObfuscatedCardDigitsAsUTF8("4444");
-#else
-  const std::string google_issued_card_label = base::JoinString(
-      {"Plex Mastercard  ", test::ObfuscatedCardDigitsAsUTF8("4444"),
-       ", expires on 10/98"},
-      "");
-#endif
-
-  GetAutofillSuggestions(form, cardholder_name_field);
-
-  CheckSuggestions(
-      kDefaultPageID,
-      Suggestion("Lorem Ispium", google_issued_card_label, kGoogleIssuedCard,
-                 browser_autofill_manager_->GetPackedCreditCardID(7)));
-}
-
-TEST_P(BrowserAutofillManagerStructuredProfileTest,
-       GetCreditCardSuggestions_GoogleIssuedCardNotPresent_ExpOff) {
-  base::test::ScopedFeatureList features;
-  features.InitAndDisableFeature(
-      autofill::features::kAutofillEnableGoogleIssuedCard);
-  // Add 2 Server cards.
-  CreateTestServerCreditCards();
-  // Add a Google Issued Card.
-  CreditCard google_issued_card;
-  test::SetCreditCardInfo(&google_issued_card, "Lorem Ispium",
-                          "5555555555554444",  // Mastercard
-                          "10", "2998", "1");
-  google_issued_card.set_guid("00000000-0000-0000-0000-000000000007");
-  google_issued_card.set_record_type(
-      CreditCard::RecordType::MASKED_SERVER_CARD);
-  google_issued_card.set_card_issuer(CreditCard::Issuer::GOOGLE);
-  personal_data_.AddServerCreditCard(google_issued_card);
-  // Set up our form data.
-  FormData form;
-  CreateTestCreditCardFormData(&form, true, false);
-  std::vector<FormData> forms(1, form);
-  FormsSeen(forms);
-  // Set the field being edited to CC field.
-  const FormFieldData& credit_card_number_field = form.fields[1];
-
-  GetAutofillSuggestions(form, credit_card_number_field);
-
-  // Assert that there are only two credit card suggestions returned.
-  external_delegate_->CheckSuggestionCount(kDefaultPageID, 2);
-}
-
 // Test that we will eventually return the credit card signin promo when there
 // are no credit card suggestions and the promo is active. See the tests in
 // AutofillExternalDelegateTest that test whether the promo is added.
@@ -2659,7 +2543,7 @@ TEST_F(BrowserAutofillManagerTest, DoNotFillIfFormFieldChanged) {
   EXPECT_CALL(*autofill_driver_, FillOrPreviewForm(_, _, _, _, _))
       .WillOnce((DoAll(testing::SaveArg<0>(&response_query_id),
                        testing::SaveArg<2>(&response_data),
-                       testing::ReturnArg<4>())));
+                       testing::Return(std::vector<FieldGlobalId>{}))));
   browser_autofill_manager_->FillOrPreviewDataModelForm(
       mojom::RendererFormDataAction::kFill, kDefaultPageID, form,
       form.fields.front(), profile, nullptr, form_structure, autofill_field);
@@ -4305,41 +4189,6 @@ TEST_P(BrowserAutofillManagerStructuredProfileTest,
                     response_data.fields[3]);
   ExpectFilledField("Expiration Year", "ccyear", "", "text",
                     response_data.fields[4]);
-}
-
-TEST_P(BrowserAutofillManagerStructuredProfileTest,
-       FillCreditCardForm_VirtualCard) {
-  personal_data_.ClearCreditCards();
-  CreditCard masked_server_card;
-  test::SetCreditCardInfo(&masked_server_card, "Lorem Ipsum",
-                          "5555555555554444",  // Mastercard
-                          "10", test::NextYear().c_str(), "1");
-  masked_server_card.set_guid("00000000-0000-0000-0000-000000000007");
-  masked_server_card.set_record_type(
-      CreditCard::RecordType::MASKED_SERVER_CARD);
-  masked_server_card.SetNetworkForMaskedCard(kMasterCard);
-  personal_data_.AddServerCreditCard(masked_server_card);
-  // Set up our form data.
-  FormData form;
-  CreateTestCreditCardFormData(&form, true, false);
-  std::vector<FormData> forms(1, form);
-  FormsSeen(forms);
-
-  browser_autofill_manager_->FillOrPreviewVirtualCardInformation(
-      mojom::RendererFormDataAction::kFill, masked_server_card.guid(),
-      kDefaultPageID, form, form.fields[1]);
-
-  CardUnmaskDelegate::UserProvidedUnmaskDetails details;
-  details.cvc = u"123";
-  details.exp_month = u"10";
-  details.exp_year = u"2998";
-  full_card_unmask_delegate()->OnUnmaskPromptAccepted(details);
-
-  const payments::PaymentsClient::UnmaskRequestDetails* request_details =
-      payments_client_->unmask_request();
-  EXPECT_EQ(request_details->card.number(), u"5555555555554444");
-  EXPECT_EQ(request_details->last_committed_url_origin.value(),
-            GURL("https://example.test/"));
 }
 
 TEST_P(BrowserAutofillManagerStructuredProfileTest,
@@ -6690,126 +6539,113 @@ TEST_P(BrowserAutofillManagerStructuredProfileTest, DisambiguateUploadTypes) {
   credit_card.set_guid("00000000-0000-0000-0000-000000000003");
   credit_cards.push_back(credit_card);
 
-  typedef struct {
+  struct TestFieldData {
     std::u16string input_value;
     ServerFieldType predicted_type;
     bool expect_disambiguation;
     ServerFieldType expected_upload_type;
-  } TestFieldData;
+  };
+  using TestCase = std::vector<TestFieldData>;
 
-  std::vector<TestFieldData> test_cases[13];
+  std::vector<TestCase> test_cases;
 
   // Address disambiguation.
   // An ambiguous address line followed by a field predicted as a line 2 and
   // that is empty should be disambiguated as an ADDRESS_HOME_LINE1.
-  test_cases[0].push_back({u"3734 Elvis Presley Blvd.", ADDRESS_HOME_LINE1,
-                           true, ADDRESS_HOME_LINE1});
-  test_cases[0].push_back({u"", ADDRESS_HOME_LINE2, true, EMPTY_TYPE});
+  test_cases.push_back({{u"3734 Elvis Presley Blvd.", ADDRESS_HOME_LINE1, true,
+                         ADDRESS_HOME_LINE1},
+                        {u"", ADDRESS_HOME_LINE2, true, EMPTY_TYPE}});
 
   // An ambiguous address line followed by a field predicted as a line 2 but
   // filled with another know profile value should be disambiguated as an
   // ADDRESS_HOME_STREET_ADDRESS.
-  test_cases[1].push_back({u"3734 Elvis Presley Blvd.",
-                           ADDRESS_HOME_STREET_ADDRESS, true,
-                           ADDRESS_HOME_STREET_ADDRESS});
-  test_cases[1].push_back(
-      {u"38116", ADDRESS_HOME_LINE2, true, ADDRESS_HOME_ZIP});
+  test_cases.push_back(
+      {{u"3734 Elvis Presley Blvd.", ADDRESS_HOME_STREET_ADDRESS, true,
+        ADDRESS_HOME_STREET_ADDRESS},
+       {u"38116", ADDRESS_HOME_LINE2, true, ADDRESS_HOME_ZIP}});
 
   // An ambiguous address line followed by an empty field predicted as
   // something other than a line 2 should be disambiguated as an
   // ADDRESS_HOME_STREET_ADDRESS.
-  test_cases[2].push_back({u"3734 Elvis Presley Blvd.",
-                           ADDRESS_HOME_STREET_ADDRESS, true,
-                           ADDRESS_HOME_STREET_ADDRESS});
-  test_cases[2].push_back({u"", ADDRESS_HOME_ZIP, true, EMPTY_TYPE});
+  test_cases.push_back(
+      {{u"3734 Elvis Presley Blvd.", ADDRESS_HOME_STREET_ADDRESS, true,
+        ADDRESS_HOME_STREET_ADDRESS},
+       {u"", ADDRESS_HOME_ZIP, true, EMPTY_TYPE}});
 
   // An ambiguous address line followed by no other field should be
   // disambiguated as an ADDRESS_HOME_STREET_ADDRESS.
-  test_cases[3].push_back({u"3734 Elvis Presley Blvd.",
-                           ADDRESS_HOME_STREET_ADDRESS, true,
-                           ADDRESS_HOME_STREET_ADDRESS});
-
-  // Phone number disambiguation.
-  // A field with possible types PHONE_HOME_CITY_AND_NUMBER and
-  // PHONE_HOME_WHOLE_NUMBER should be disambiguated as
-  // PHONE_HOME_CITY_AND_NUMBER
-  test_cases[4].push_back({u"2345678901", PHONE_HOME_WHOLE_NUMBER, true,
-                           PHONE_HOME_CITY_AND_NUMBER});
+  test_cases.push_back(
+      {{u"3734 Elvis Presley Blvd.", ADDRESS_HOME_STREET_ADDRESS, true,
+        ADDRESS_HOME_STREET_ADDRESS}});
 
   // Name disambiguation.
   // An ambiguous name field that has no next field and that is preceded by
   // a non credit card field should be disambiguated as a non credit card
   // name.
-  test_cases[5].push_back(
-      {u"Memphis", ADDRESS_HOME_CITY, true, ADDRESS_HOME_CITY});
-  test_cases[5].push_back({u"Elvis", CREDIT_CARD_NAME_FIRST, true, NAME_FIRST});
-  test_cases[5].push_back({u"Presley", CREDIT_CARD_NAME_LAST, true, NAME_LAST});
+  test_cases.push_back(
+      {{u"Memphis", ADDRESS_HOME_CITY, true, ADDRESS_HOME_CITY},
+       {u"Elvis", CREDIT_CARD_NAME_FIRST, true, NAME_FIRST},
+       {u"Presley", CREDIT_CARD_NAME_LAST, true, NAME_LAST}});
 
   // An ambiguous name field that has no next field and that is preceded by
   // a credit card field should be disambiguated as a credit card name.
-  test_cases[6].push_back(
-      {u"4234-5678-9012-3456", CREDIT_CARD_NUMBER, true, CREDIT_CARD_NUMBER});
-  test_cases[6].push_back({u"Elvis", NAME_FIRST, true, CREDIT_CARD_NAME_FIRST});
-  test_cases[6].push_back({u"Presley", NAME_LAST, true, CREDIT_CARD_NAME_LAST});
+  test_cases.push_back(
+      {{u"4234-5678-9012-3456", CREDIT_CARD_NUMBER, true, CREDIT_CARD_NUMBER},
+       {u"Elvis", NAME_FIRST, true, CREDIT_CARD_NAME_FIRST},
+       {u"Presley", NAME_LAST, true, CREDIT_CARD_NAME_LAST}});
 
   // An ambiguous name field that has no previous field and that is
   // followed by a non credit card field should be disambiguated as a non
   // credit card name.
-  test_cases[7].push_back({u"Elvis", CREDIT_CARD_NAME_FIRST, true, NAME_FIRST});
-  test_cases[7].push_back({u"Presley", CREDIT_CARD_NAME_LAST, true, NAME_LAST});
-  test_cases[7].push_back(
-      {u"Memphis", ADDRESS_HOME_CITY, true, ADDRESS_HOME_CITY});
+  test_cases.push_back(
+      {{u"Elvis", CREDIT_CARD_NAME_FIRST, true, NAME_FIRST},
+       {u"Presley", CREDIT_CARD_NAME_LAST, true, NAME_LAST},
+
+       {u"Memphis", ADDRESS_HOME_CITY, true, ADDRESS_HOME_CITY}});
 
   // An ambiguous name field that has no previous field and that is followed
   // by a credit card field should be disambiguated as a credit card name.
-  test_cases[8].push_back({u"Elvis", NAME_FIRST, true, CREDIT_CARD_NAME_FIRST});
-  test_cases[8].push_back({u"Presley", NAME_LAST, true, CREDIT_CARD_NAME_LAST});
-  test_cases[8].push_back(
-      {u"4234-5678-9012-3456", CREDIT_CARD_NUMBER, true, CREDIT_CARD_NUMBER});
+  test_cases.push_back(
+      {{u"Elvis", NAME_FIRST, true, CREDIT_CARD_NAME_FIRST},
+       {u"Presley", NAME_LAST, true, CREDIT_CARD_NAME_LAST},
+       {u"4234-5678-9012-3456", CREDIT_CARD_NUMBER, true, CREDIT_CARD_NUMBER}});
 
   // An ambiguous name field that is preceded and followed by non credit
   // card fields should be disambiguated as a non credit card name.
-  test_cases[9].push_back(
-      {u"Memphis", ADDRESS_HOME_CITY, true, ADDRESS_HOME_CITY});
-  test_cases[9].push_back({u"Elvis", CREDIT_CARD_NAME_FIRST, true, NAME_FIRST});
-  test_cases[9].push_back({u"Presley", CREDIT_CARD_NAME_LAST, true, NAME_LAST});
-  test_cases[9].push_back(
-      {u"Tennessee", ADDRESS_HOME_STATE, true, ADDRESS_HOME_STATE});
+  test_cases.push_back(
+      {{u"Memphis", ADDRESS_HOME_CITY, true, ADDRESS_HOME_CITY},
+       {u"Elvis", CREDIT_CARD_NAME_FIRST, true, NAME_FIRST},
+       {u"Presley", CREDIT_CARD_NAME_LAST, true, NAME_LAST},
+       {u"Tennessee", ADDRESS_HOME_STATE, true, ADDRESS_HOME_STATE}});
 
   // An ambiguous name field that is preceded and followed by credit card
   // fields should be disambiguated as a credit card name.
-  test_cases[10].push_back(
-      {u"4234-5678-9012-3456", CREDIT_CARD_NUMBER, true, CREDIT_CARD_NUMBER});
-  test_cases[10].push_back(
-      {u"Elvis", NAME_FIRST, true, CREDIT_CARD_NAME_FIRST});
-  test_cases[10].push_back(
-      {u"Presley", NAME_LAST, true, CREDIT_CARD_NAME_LAST});
-  test_cases[10].push_back({u"2999", CREDIT_CARD_EXP_4_DIGIT_YEAR, true,
-                            CREDIT_CARD_EXP_4_DIGIT_YEAR});
+  test_cases.push_back(
+      {{u"4234-5678-9012-3456", CREDIT_CARD_NUMBER, true, CREDIT_CARD_NUMBER},
+       {u"Elvis", NAME_FIRST, true, CREDIT_CARD_NAME_FIRST},
+       {u"Presley", NAME_LAST, true, CREDIT_CARD_NAME_LAST},
+       {u"2999", CREDIT_CARD_EXP_4_DIGIT_YEAR, true,
+        CREDIT_CARD_EXP_4_DIGIT_YEAR}});
 
   // An ambiguous name field that is preceded by a non credit card field and
   // followed by a credit card field should not be disambiguated.
-  test_cases[11].push_back(
-      {u"Memphis", ADDRESS_HOME_CITY, true, ADDRESS_HOME_CITY});
-  test_cases[11].push_back(
-      {u"Elvis", NAME_FIRST, false, CREDIT_CARD_NAME_FIRST});
-  test_cases[11].push_back(
-      {u"Presley", NAME_LAST, false, CREDIT_CARD_NAME_LAST});
-  test_cases[11].push_back({u"2999", CREDIT_CARD_EXP_4_DIGIT_YEAR, true,
-                            CREDIT_CARD_EXP_4_DIGIT_YEAR});
+  test_cases.push_back(
+      {{u"Memphis", ADDRESS_HOME_CITY, true, ADDRESS_HOME_CITY},
+       {u"Elvis", NAME_FIRST, false, CREDIT_CARD_NAME_FIRST},
+       {u"Presley", NAME_LAST, false, CREDIT_CARD_NAME_LAST},
+       {u"2999", CREDIT_CARD_EXP_4_DIGIT_YEAR, true,
+        CREDIT_CARD_EXP_4_DIGIT_YEAR}});
 
   // An ambiguous name field that is preceded by a credit card field and
   // followed by a non credit card field should not be disambiguated.
-  test_cases[12].push_back({u"2999", CREDIT_CARD_EXP_4_DIGIT_YEAR, true,
-                            CREDIT_CARD_EXP_4_DIGIT_YEAR});
-  test_cases[12].push_back(
-      {u"Elvis", NAME_FIRST, false, CREDIT_CARD_NAME_FIRST});
-  test_cases[12].push_back(
-      {u"Presley", NAME_LAST, false, CREDIT_CARD_NAME_LAST});
-  test_cases[12].push_back(
-      {u"Memphis", ADDRESS_HOME_CITY, true, ADDRESS_HOME_CITY});
+  test_cases.push_back(
+      {{u"2999", CREDIT_CARD_EXP_4_DIGIT_YEAR, true,
+        CREDIT_CARD_EXP_4_DIGIT_YEAR},
+       {u"Elvis", NAME_FIRST, false, CREDIT_CARD_NAME_FIRST},
+       {u"Presley", NAME_LAST, false, CREDIT_CARD_NAME_LAST},
+       {u"Memphis", ADDRESS_HOME_CITY, true, ADDRESS_HOME_CITY}});
 
-  for (const std::vector<TestFieldData>& test_fields : test_cases) {
+  for (const TestCase& test_fields : test_cases) {
     FormData form;
     form.name = u"MyForm";
     form.url = GURL("https://myform.com/form.html");
@@ -7542,8 +7378,8 @@ TEST_P(BrowserAutofillManagerStructuredProfileTest,
   FormSubmitted(form);
 
   EXPECT_EQ(form.fields.size(), form_seen_by_ahm.fields.size());
-  ASSERT_EQ(base::size(test_fields), form_seen_by_ahm.fields.size());
-  for (size_t i = 0; i < base::size(test_fields); ++i) {
+  ASSERT_EQ(std::size(test_fields), form_seen_by_ahm.fields.size());
+  for (size_t i = 0; i < std::size(test_fields); ++i) {
     EXPECT_EQ(
         form_seen_by_ahm.fields[i].should_autocomplete,
         test_fields[i].expected_field_type != CREDIT_CARD_VERIFICATION_CODE);

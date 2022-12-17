@@ -5,8 +5,9 @@
 #include "ash/ambient/resources/ambient_animation_static_resources.h"
 
 #include "ash/ambient/resources/ambient_animation_resource_constants.h"
-#include "ash/public/cpp/ambient/ambient_animation_theme.h"
+#include "ash/constants/ambient_animation_theme.h"
 #include "base/json/json_reader.h"
+#include "cc/paint/skottie_wrapper.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/image/image_skia.h"
@@ -26,9 +27,8 @@ using ::testing::NotNull;
 TEST(AmbientAnimationStaticResourcesTest, LoadsLottieData) {
   auto resources = AmbientAnimationStaticResources::Create(
       AmbientAnimationTheme::kFeelTheBreeze);
-  ASSERT_THAT(resources, NotNull());
-  ASSERT_THAT(resources->GetLottieData(), Not(IsEmpty()));
-  EXPECT_TRUE(base::JSONReader::Read(resources->GetLottieData()));
+  ASSERT_THAT(resources->GetSkottieWrapper(), NotNull());
+  EXPECT_TRUE(resources->GetSkottieWrapper()->is_valid());
 }
 
 TEST(AmbientAnimationStaticResourcesTest, LoadsStaticAssets) {
@@ -36,7 +36,7 @@ TEST(AmbientAnimationStaticResourcesTest, LoadsStaticAssets) {
       AmbientAnimationTheme::kFeelTheBreeze);
   ASSERT_THAT(resources, NotNull());
   for (base::StringPiece asset_id :
-       ambient::resources::kAllFeelTheBreeezeStaticAssets) {
+       ambient::resources::kAllFeelTheBreezeStaticAssets) {
     gfx::ImageSkia image_original = resources->GetStaticImageAsset(asset_id);
     ASSERT_FALSE(image_original.isNull());
     gfx::ImageSkia image_reloaded = resources->GetStaticImageAsset(asset_id);

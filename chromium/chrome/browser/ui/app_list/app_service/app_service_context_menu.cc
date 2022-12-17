@@ -59,21 +59,20 @@ bool MenuItemHasLauncherContext(const extensions::MenuItem* item) {
   return item->contexts().Contains(extensions::MenuItem::LAUNCHER);
 }
 
-apps::mojom::WindowMode ConvertUseLaunchTypeCommandToWindowMode(
-    int command_id) {
+apps::WindowMode ConvertUseLaunchTypeCommandToWindowMode(int command_id) {
   DCHECK(command_id >= ash::USE_LAUNCH_TYPE_COMMAND_START &&
          command_id < ash::USE_LAUNCH_TYPE_COMMAND_END);
   switch (command_id) {
     case ash::USE_LAUNCH_TYPE_REGULAR:
-      return apps::mojom::WindowMode::kBrowser;
+      return apps::WindowMode::kBrowser;
     case ash::USE_LAUNCH_TYPE_WINDOW:
-      return apps::mojom::WindowMode::kWindow;
+      return apps::WindowMode::kWindow;
     case ash::USE_LAUNCH_TYPE_TABBED_WINDOW:
-      return apps::mojom::WindowMode::kTabbedWindow;
+      return apps::WindowMode::kTabbedWindow;
     case ash::USE_LAUNCH_TYPE_PINNED:
     case ash::USE_LAUNCH_TYPE_FULLSCREEN:
     default:
-      return apps::mojom::WindowMode::kUnknown;
+      return apps::WindowMode::kUnknown;
   }
 }
 
@@ -134,11 +133,13 @@ AppServiceContextMenu::AppServiceContextMenu(
   proxy_->AppRegistryCache().ForOneApp(
       app_id, [this](const apps::AppUpdate& update) {
         app_type_ = apps_util::IsInstalled(update.Readiness())
-                        ? apps::ConvertMojomAppTypToAppType(update.AppType())
+                        ? update.AppType()
                         : apps::AppType::kUnknown;
+        is_platform_app_ = update.IsPlatformApp().value_or(false);
       });
-
-  if (app_type_ == apps::AppType::kStandaloneBrowserChromeApp) {
+  // StandaloneBrowserExtension creates its own context menus for platform apps.
+  if (app_type_ == apps::AppType::kStandaloneBrowserChromeApp &&
+      is_platform_app_) {
     standalone_browser_extension_menu_ =
         std::make_unique<StandaloneBrowserExtensionAppContextMenu>(
             app_id, StandaloneBrowserExtensionAppContextMenu::Source::kAppList);
@@ -153,9 +154,10 @@ void AppServiceContextMenu::GetMenuModel(GetMenuModelCallback callback) {
     return;
   }
 
-  // StandaloneBrowserExtension handles its own context menus. Forward to that
-  // class.
-  if (app_type_ == apps::AppType::kStandaloneBrowserChromeApp) {
+  // StandaloneBrowserExtension handles its own context menus for platform apps.
+  // Forward to that class.
+  if (app_type_ == apps::AppType::kStandaloneBrowserChromeApp &&
+      is_platform_app_) {
     standalone_browser_extension_menu_->GetMenuModel(std::move(callback));
     return;
   }
@@ -288,14 +290,15 @@ bool AppServiceContextMenu::IsCommandIdChecked(int command_id) const {
 
   switch (app_type_) {
     case apps::AppType::kWeb:
+    case apps::AppType::kStandaloneBrowserChromeApp:  // hosted app
       if (command_id >= ash::USE_LAUNCH_TYPE_COMMAND_START &&
           command_id < ash::USE_LAUNCH_TYPE_COMMAND_END) {
-        auto user_window_mode = apps::mojom::WindowMode::kUnknown;
+        auto user_window_mode = apps::WindowMode::kUnknown;
         proxy_->AppRegistryCache().ForOneApp(
             app_id(), [&user_window_mode](const apps::AppUpdate& update) {
               user_window_mode = update.WindowMode();
             });
-        return user_window_mode != apps::mojom::WindowMode::kUnknown &&
+        return user_window_mode != apps::WindowMode::kUnknown &&
                user_window_mode ==
                    ConvertUseLaunchTypeCommandToWindowMode(command_id);
       }
@@ -452,12 +455,17 @@ void AppServiceContextMenu::ShowAppInfo() {
 
 void AppServiceContextMenu::SetLaunchType(int command_id) {
   switch (app_type_) {
-    case apps::AppType::kWeb: {
-      // Web apps can only toggle between kWindow and kBrowser.
-      apps::mojom::WindowMode user_window_mode =
+    case apps::AppType::kWeb:
+    case apps::AppType::kStandaloneBrowserChromeApp: {
+      // Web apps and standalone browser hosted apps can only toggle between
+      // kWindow and kBrowser.
+      apps::WindowMode user_window_mode =
           ConvertUseLaunchTypeCommandToWindowMode(command_id);
-      if (user_window_mode != apps::mojom::WindowMode::kUnknown)
-        proxy_->SetWindowMode(app_id(), user_window_mode);
+      if (user_window_mode != apps::WindowMode::kUnknown) {
+        proxy_->SetWindowMode(
+            app_id(),
+            apps::ConvertWindowModeToMojomWindowMode(user_window_mode));
+      }
       return;
     }
     case apps::AppType::kChromeApp: {

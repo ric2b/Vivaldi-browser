@@ -27,7 +27,9 @@ foreach(ts_file, list_from_ts_sources_txt) {
 
   if (js_node_file != "src-node/common/runtime/wpt.js" &&
       js_node_file != "src-node/common/runtime/standalone.js" &&
-      js_node_file != "src-node/common/runtime/helper/test_worker.js") {
+      js_node_file != "src-node/common/runtime/helper/test_worker.js" &&
+      js_node_file !=
+      "src-node/webgpu/web_platform/worker/worker_launcher.js") {
     js_outputs += [ "$target_gen_dir/$js_node_file" ]
   }
 }
@@ -69,6 +71,10 @@ copy("copy_resources") {
 
 action("verify_gen_ts_dep_list") {
   script = "scripts/gen_ts_dep_lists.py"
+  inputs = [
+    "resource_files.txt",
+    "ts_sources.txt",
+  ]
   outputs = [ "$target_out_dir/run_$target_name.stamp" ]
   args = [
     "--check",

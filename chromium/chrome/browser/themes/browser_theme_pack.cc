@@ -22,7 +22,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/values.h"
@@ -53,6 +52,7 @@
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_operations.h"
+#include "ui/gfx/image/image_skia_rep.h"
 
 using content::BrowserThread;
 using extensions::Extension;
@@ -97,7 +97,7 @@ constexpr int kTallestFrameHeight = kTallestTabHeight + 19;
 // changed default theme assets, if you need themes to recreate their generated
 // images (which are cached), if you changed how missing values are
 // generated, or if you changed any constants.
-const int kThemePackVersion = 83;
+const int kThemePackVersion = 97;
 
 // IDs that are in the DataPack won't clash with the positive integer
 // uint16_t. kHeaderID should always have the maximum value because we want the
@@ -218,7 +218,7 @@ const StringToIntTable kTintTable[] = {
     // /!\ If you make any changes here, you must also increment
     // kThemePackVersion above, or else themes will display incorrectly.
 };
-const size_t kTintTableLength = base::size(kTintTable);
+const size_t kTintTableLength = std::size(kTintTable);
 
 // Strings used by themes to identify colors in the JSON.
 constexpr StringToIntTable kOverwritableColorTable[] = {
@@ -257,7 +257,7 @@ constexpr StringToIntTable kOverwritableColorTable[] = {
     // kThemePackVersion above, or else themes will display incorrectly.
 };
 constexpr size_t kOverwritableColorTableLength =
-    base::size(kOverwritableColorTable);
+    std::size(kOverwritableColorTable);
 
 // Colors generated based on the theme, but not overwritable in the theme file.
 constexpr int kNonOverwritableColorTable[] = {
@@ -266,8 +266,8 @@ constexpr int kNonOverwritableColorTable[] = {
     TP::COLOR_WINDOW_CONTROL_BUTTON_BACKGROUND_INCOGNITO_ACTIVE,
     TP::COLOR_WINDOW_CONTROL_BUTTON_BACKGROUND_INCOGNITO_INACTIVE,
     TP::COLOR_INFOBAR,
+    TP::COLOR_INFOBAR_TEXT,
     TP::COLOR_DOWNLOAD_SHELF,
-    TP::COLOR_STATUS_BUBBLE,
     TP::COLOR_TOOLBAR_BUTTON_ICON_HOVERED,
     TP::COLOR_TOOLBAR_BUTTON_ICON_PRESSED,
     TP::COLOR_TAB_BACKGROUND_ACTIVE_FRAME_ACTIVE,
@@ -278,7 +278,7 @@ constexpr int kNonOverwritableColorTable[] = {
     // kThemePackVersion above, or else themes will display incorrectly.
 };
 constexpr size_t kNonOverwritableColorTableLength =
-    base::size(kNonOverwritableColorTable);
+    std::size(kNonOverwritableColorTable);
 
 // The maximum number of colors we may need to store (includes ones that can be
 // specified by the theme, and ones that we calculate but can't be specified).
@@ -294,7 +294,7 @@ const StringToIntTable kDisplayProperties[] = {
     // /!\ If you make any changes here, you must also increment
     // kThemePackVersion above, or else themes will display incorrectly.
 };
-const size_t kDisplayPropertiesSize = base::size(kDisplayProperties);
+const size_t kDisplayPropertiesSize = std::size(kDisplayProperties);
 
 int GetIntForString(const std::string& key,
                     const StringToIntTable* table,
@@ -384,7 +384,7 @@ SkBitmap CreateLowQualityResizedBitmap(
 
 // A ImageSkiaSource that scales 100P image to the target scale factor
 // if the ImageSkiaRep for the target scale factor isn't available.
-class ThemeImageSource: public gfx::ImageSkiaSource {
+class ThemeImageSource : public gfx::ImageSkiaSource {
  public:
   explicit ThemeImageSource(const gfx::ImageSkia& source) : source_(source) {
   }
@@ -497,7 +497,7 @@ class ThemeImagePngSource : public gfx::ImageSkiaSource {
   BitmapMap bitmap_map_;
 };
 
-class TabBackgroundImageSource: public gfx::CanvasImageSource {
+class TabBackgroundImageSource : public gfx::CanvasImageSource {
  public:
   TabBackgroundImageSource(SkColor background_color,
                            const gfx::ImageSkia& image_to_tint,
@@ -588,6 +588,22 @@ bool IsColorGrayscale(SkColor color) {
   auto channels = {SkColorGetR(color), SkColorGetG(color), SkColorGetB(color)};
   const int range = std::max(channels) - std::min(channels);
   return range < kChannelTolerance;
+}
+
+// The minimum contrast the omnibox background must have against the toolbar.
+constexpr float kMinOmniboxToolbarContrast = 1.3f;
+
+ui::ColorTransform ChooseOmniboxBgBlendTarget() {
+  return base::BindRepeating(
+      [](SkColor input_color, const ui::ColorMixer& mixer) {
+        const SkColor toolbar_color = mixer.GetResultColor(kColorToolbar);
+        const SkColor endpoint_color =
+            color_utils::GetEndpointColorWithMinContrast(toolbar_color);
+        return (color_utils::GetContrastRatio(toolbar_color, endpoint_color) >=
+                kMinOmniboxToolbarContrast)
+                   ? endpoint_color
+                   : color_utils::GetColorWithMaxContrast(endpoint_color);
+      });
 }
 
 }  // namespace
@@ -1065,15 +1081,32 @@ bool BrowserThemePack::HasCustomImage(int idr_id) const {
 void BrowserThemePack::AddColorMixers(
     ui::ColorProvider* provider,
     const ui::ColorProviderManager::Key& key) const {
+  ui::ColorMixer& mixer = provider->AddMixer();
+
+  // TODO(http://crbug.com/878664): Enable for all cases.
+  mixer[kColorOmniboxBackground] = ui::BlendForMinContrast(
+      kColorToolbar, kColorToolbar, ChooseOmniboxBgBlendTarget(),
+      kMinOmniboxToolbarContrast);
+
   // A map from theme property IDs to color IDs for use in color mixers.
   constexpr struct {
     int property_id;
     int color_id;
   } kThemePropertiesMap[] = {
       {TP::COLOR_BOOKMARK_TEXT, kColorBookmarkBarForeground},
-      {TP::COLOR_DOWNLOAD_SHELF, kColorDownloadShelf},
+      {TP::COLOR_CONTROL_BUTTON_BACKGROUND, kColorCaptionButtonBackground},
+      {TP::COLOR_DOWNLOAD_SHELF, kColorDownloadShelfBackground},
       {TP::COLOR_FRAME_ACTIVE, ui::kColorFrameActive},
       {TP::COLOR_FRAME_INACTIVE, ui::kColorFrameInactive},
+      {TP::COLOR_INFOBAR, kColorInfoBarBackground},
+      {TP::COLOR_INFOBAR_TEXT, kColorInfoBarForeground},
+      {TP::COLOR_NTP_BACKGROUND, kColorNewTabPageBackground},
+      {TP::COLOR_NTP_HEADER, kColorNewTabPageHeader},
+      {TP::COLOR_NTP_LINK, kColorNewTabPageLink},
+      {TP::COLOR_NTP_LOGO, kColorNewTabPageLogo},
+      {TP::COLOR_NTP_SECTION_BORDER, kColorNewTabPageSectionBorder},
+      {TP::COLOR_NTP_SHORTCUT, kColorNewTabPageMostVisitedTileBackground},
+      {TP::COLOR_NTP_TEXT, kColorNewTabPageText},
       {TP::COLOR_OMNIBOX_TEXT, kColorOmniboxText},
       {TP::COLOR_OMNIBOX_BACKGROUND, kColorOmniboxBackground},
       {TP::COLOR_TAB_BACKGROUND_ACTIVE_FRAME_ACTIVE,
@@ -1092,10 +1125,12 @@ void BrowserThemePack::AddColorMixers(
        kColorTabForegroundInactiveFrameActive},
       {TP::COLOR_TAB_FOREGROUND_INACTIVE_FRAME_INACTIVE,
        kColorTabForegroundInactiveFrameInactive},
-      {TP::COLOR_TAB_THROBBER_SPINNING, ui::kColorThrobber},
-      {TP::COLOR_TAB_THROBBER_WAITING, ui::kColorThrobberPreconnect},
+      {TP::COLOR_TAB_THROBBER_SPINNING, kColorTabThrobber},
+      {TP::COLOR_TAB_THROBBER_WAITING, kColorTabThrobberPreconnect},
       {TP::COLOR_TOOLBAR, kColorToolbar},
       {TP::COLOR_TOOLBAR_BUTTON_ICON, kColorToolbarButtonIcon},
+      {TP::COLOR_TOOLBAR_BUTTON_ICON_HOVERED, kColorToolbarButtonIconHovered},
+      {TP::COLOR_TOOLBAR_BUTTON_ICON_PRESSED, kColorToolbarButtonIconPressed},
       {TP::COLOR_TOOLBAR_TEXT, kColorToolbarText},
       /* Tab Group Colors */
       {TP::COLOR_TAB_GROUP_CONTEXT_MENU_GREY, kColorTabGroupContextMenuGrey},
@@ -1112,7 +1147,6 @@ void BrowserThemePack::AddColorMixers(
        kColorTabGroupContextMenuOrange},
   };
 
-  ui::ColorMixer& mixer = provider->AddMixer();
   for (const auto& entry : kThemePropertiesMap) {
     SkColor color;
     if (GetColor(entry.property_id, &color))
@@ -1124,10 +1158,6 @@ void BrowserThemePack::AddColorMixers(
 
 void BrowserThemePack::AdjustThemePack() {
   CropImages(&images_);
-
-  // Set frame and toolbar related elements' colors (e.g. status bubble,
-  // info bar, download shelf) to frame or toolbar color.
-  SetFrameAndToolbarRelatedColors();
 
   // Create toolbar image, and generate toolbar color from image where relevant.
   // This must be done after reading colors from JSON (so they can be used for
@@ -1143,6 +1173,10 @@ void BrowserThemePack::AdjustThemePack() {
   // generating colors from the frame images, so only colors with no matching
   // images are generated.
   GenerateFrameColorsFromTints();
+
+  // Set frame and toolbar related elements' colors (e.g. status bubble,
+  // info bar, download shelf) to frame or toolbar color.
+  SetFrameAndToolbarRelatedColors();
 
   // Generate background color information for window control buttons.  This
   // must be done after frame colors are set, since they are used when
@@ -1177,7 +1211,7 @@ void BrowserThemePack::AdjustThemePack() {
 
   // Generate raw images (for new-tab-page attribution and background) for
   // any missing scale from an available scale image.
-  for (size_t i = 0; i < base::size(kPreloadIDs); ++i) {
+  for (size_t i = 0; i < std::size(kPreloadIDs); ++i) {
     GenerateRawImageForAllSupportedScales(kPreloadIDs[i]);
   }
 
@@ -1539,11 +1573,7 @@ void BrowserThemePack::CropImages(ImageCache* images) const {
 }
 
 void BrowserThemePack::SetFrameAndToolbarRelatedColors() {
-  // Propagate the user-specified Frame and Toolbar Colors to similar elements.
-  SkColor frame_color;
-  if (GetColor(TP::COLOR_FRAME_ACTIVE, &frame_color))
-    SetColor(TP::COLOR_STATUS_BUBBLE, frame_color);
-
+  // Propagate the user-specified toolbar color to similar elements.
   SkColor toolbar_color;
   if (GetColor(TP::COLOR_TOOLBAR, &toolbar_color)) {
     SetColor(TP::COLOR_INFOBAR, toolbar_color);
@@ -1559,6 +1589,8 @@ void BrowserThemePack::SetFrameAndToolbarRelatedColors() {
         color_utils::BlendForMinContrast(toolbar_text_color, toolbar_color)
             .color;
     SetColorIfUnspecified(TP::COLOR_TOOLBAR_TEXT, toolbar_text_color);
+  } else {
+    toolbar_color = TP::GetDefaultColor(TP::COLOR_TOOLBAR, false);
   }
   SkColor toolbar_button_icon_color;
   color_utils::HSL button_tint;
@@ -1572,13 +1604,14 @@ void BrowserThemePack::SetFrameAndToolbarRelatedColors() {
     // TODO(pkasting): Should this code be shared with
     // ThemeHelper::GetDefaultColor() somehow?
     const SkColor button_color =
-        color_utils::HSLShift(gfx::kChromeIconGrey, button_tint);
+        color_utils::HSLShift(gfx::kGoogleGrey700, button_tint);
     SetColor(TP::COLOR_TAB_THROBBER_SPINNING, button_color);
     SetColor(TP::COLOR_TAB_THROBBER_WAITING, button_color);
   }
   SkColor toolbar_text_color;
   if (GetColor(TP::COLOR_TOOLBAR_TEXT, &toolbar_text_color)) {
     SetColorIfUnspecified(TP::COLOR_BOOKMARK_TEXT, toolbar_text_color);
+    SetColor(TP::COLOR_INFOBAR_TEXT, toolbar_text_color);
     SetColorIfUnspecified(TP::COLOR_TAB_FOREGROUND_ACTIVE_FRAME_ACTIVE,
                           toolbar_text_color);
   }
@@ -1587,6 +1620,21 @@ void BrowserThemePack::SetFrameAndToolbarRelatedColors() {
                &tab_foreground_color)) {
     SetColor(TP::COLOR_TAB_FOREGROUND_ACTIVE_FRAME_INACTIVE,
              tab_foreground_color);
+  }
+  SkColor omnibox_background_color;
+  if (GetColor(TP::COLOR_OMNIBOX_BACKGROUND, &omnibox_background_color)) {
+    omnibox_background_color = color_utils::GetResultingPaintColor(
+        omnibox_background_color, toolbar_color);
+    SetColor(TP::COLOR_OMNIBOX_BACKGROUND, omnibox_background_color);
+  } else {
+    omnibox_background_color =
+        TP::GetDefaultColor(TP::COLOR_OMNIBOX_BACKGROUND, false);
+  }
+  SkColor omnibox_text_color;
+  if (GetColor(TP::COLOR_OMNIBOX_TEXT, &omnibox_text_color)) {
+    SetColor(TP::COLOR_OMNIBOX_TEXT,
+             color_utils::GetResultingPaintColor(omnibox_text_color,
+                                                 omnibox_background_color));
   }
 }
 
@@ -1858,9 +1906,15 @@ void BrowserThemePack::GenerateMissingNtpColors() {
   gfx::Image image = GetImageNamed(IDR_THEME_NTP_BACKGROUND);
   bool has_background_image = !image.IsEmpty();
 
+  // Opaquify background color.
   SkColor background_color;
   bool has_background_color =
       GetColor(TP::COLOR_NTP_BACKGROUND, &background_color);
+  if (has_background_color) {
+    background_color = color_utils::GetResultingPaintColor(
+        background_color, TP::GetDefaultColor(TP::COLOR_NTP_BACKGROUND, false));
+    SetColor(TP::COLOR_NTP_BACKGROUND, background_color);
+  }
 
   // Calculate NTP text color based on NTP background.
   SkColor text_color;
@@ -1903,6 +1957,11 @@ void BrowserThemePack::GenerateMissingNtpColors() {
                                          background_color,
                                          /*luminosity_change=*/0.2f));
   }
+
+  // Calculate NTP section border color.
+  SkColor header_color;
+  if (GetColor(TP::COLOR_NTP_HEADER, &header_color))
+    SetColor(TP::COLOR_NTP_SECTION_BORDER, SkColorSetA(header_color, 0x50));
 }
 
 void BrowserThemePack::RepackImages(const ImageCache& images,

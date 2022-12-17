@@ -35,9 +35,6 @@ class SwiftValues {
   std::string& module_name() { return module_name_; }
   const std::string module_name() const { return module_name_; }
 
-  // Returns whether the target generates a .swiftmodule.
-  bool builds_module() const { return !module_output_file_.value().empty(); }
-
   // Name of the generated .swiftmodule file. Computed when the target
   // is resolved.
   const OutputFile& module_output_file() const { return module_output_file_; }

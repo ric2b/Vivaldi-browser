@@ -10,6 +10,7 @@
 <translation id="1045899828449635435">要一併清除這些網站的資料嗎？</translation>
 <translation id="1049743911850919806">無痕模式</translation>
 <translation id="10614374240317010">永不儲存</translation>
+<translation id="1062628064301375934">協助我們建立更私密的網絡</translation>
 <translation id="107147699690128016">如果變更副檔名，此檔案可能會在其他應用程式中開啟，並可能對裝置造成損害。</translation>
 <translation id="1089606299949659462">審核已完成！</translation>
 <translation id="1095761715416917775">請確保您可隨時存取同步處理的資料</translation>
@@ -29,11 +30,13 @@
 <translation id="1146678959555564648">進入 VR</translation>
 <translation id="114825011539563458">集中查看最重要的私隱和安全控制項</translation>
 <translation id="1149401351239820326">到期月份</translation>
+<translation id="1150263420752757504">「<ph name="APP_NAME" />」將在 Chrome 中開啟。繼續即表示您同意《<ph name="BEGIN_LINK1" />Google 服務條款<ph name="END_LINK1" />》以及 <ph name="BEGIN_LINK2" />Google Chrome 和 Chrome OS 的《附加服務條款》<ph name="END_LINK2" />。</translation>
 <translation id="1154704303112745282">頁面無法離線使用：<ph name="VIOLATED_URL" /></translation>
 <translation id="1171770572613082465">輕按「熱門網站」按鈕，即可查看熱門網站</translation>
 <translation id="1173894706177603556">重新命名</translation>
 <translation id="1177863135347784049">自訂</translation>
 <translation id="1181037720776840403">移除</translation>
+<translation id="1193729455103054076">要使用安全性強的密碼嗎？</translation>
 <translation id="1197267115302279827">移動書籤</translation>
 <translation id="1201402288615127009">下一個</translation>
 <translation id="1202892408424955784">已追蹤的產品</translation>
@@ -48,6 +51,7 @@
 <translation id="1239792311949352652">快速分享此頁面。如要編輯此捷徑，請前往「設定」。</translation>
 <translation id="1240190568154816272">Chrome 提示</translation>
 <translation id="1240288207750131269">正在載入<ph name="LANG" /></translation>
+<translation id="1240903469550363138">如要繼續，<ph name="IDENTITY_PROVIDER_ETLD_PLUS_ONE" /> 將會與此網站分享您的姓名、電郵地址和個人檔案相片。查看此網站的《<ph name="BEGIN_LINK1" />私隱權政策<ph name="END_LINK1" />》和《<ph name="BEGIN_LINK2" />服務條款<ph name="END_LINK2" />》。</translation>
 <translation id="1242883863226959074">裝置</translation>
 <translation id="124678866338384709">關閉目前分頁</translation>
 <translation id="1246905108078336582">要從剪貼簿中移除建議嗎？</translation>
@@ -66,6 +70,9 @@
 <translation id="1320912611264252795">書籤儲存流程宜家顯示喺成個畫面</translation>
 <translation id="1327257854815634930">導覽記錄開咗</translation>
 <translation id="1331212799747679585">無法更新 Chrome。其他選項</translation>
+<translation id="1332100670807501334">「廣告評估」允許您瀏覽的網站向 Chrome 要求資料，以便評估廣告的效益。「廣告評估」會透過盡量減少在網站之間傳送的資料，從而限制跨網站追蹤功能。
+
+如果刪除所有或特定網站的瀏覽記錄，亦會同時刪除相關的評估資料。請查看<ph name="BEGIN_LINK" />您的瀏覽記錄<ph name="END_LINK" />。</translation>
 <translation id="1332501820983677155">Google Chrome 功能快速鍵</translation>
 <translation id="1344653310988386453">包含突顯文字的連結</translation>
 <translation id="1347468774581902829">管理活動</translation>
@@ -77,18 +84,21 @@
 <translation id="1384704387250346179">使用「Google 智能鏡頭」翻譯圖片 <ph name="BEGIN_NEW" />新功能<ph name="END_NEW" /></translation>
 <translation id="1386674309198842382">曾於 <ph name="LAST_UPDATED" /> 天前在線</translation>
 <translation id="1397811292916898096">使用 <ph name="PRODUCT_NAME" /> 搜尋內容</translation>
+<translation id="139993653570221430">您可於 Chrome 設定中隨時改變主意。系統會同時執行試用功能和目前放送廣告的方式，因此您不會立即看到變化。</translation>
 <translation id="1406000523432664303">「不追蹤」</translation>
 <translation id="1407069428457324124">深色主題背景</translation>
 <translation id="1407135791313364759">全部開啟</translation>
 <translation id="1409879593029778104"><ph name="FILE_NAME" /> 檔案已存在，因此無法下載。</translation>
 <translation id="1414981605391750300">正在連線至 Google。可能需要一分鐘的時間…</translation>
 <translation id="1416550906796893042">應用程式版本</translation>
+<translation id="1428770807407000502">要關閉同步功能嗎？</translation>
 <translation id="1430915738399379752">列印</translation>
 <translation id="1436784010935106834">已移除</translation>
 <translation id="1448440926884431741">在「書籤」中整理追蹤的產品</translation>
 <translation id="1450753235335490080">無法分享<ph name="CONTENT_TYPE" /></translation>
 <translation id="1466383950273130737">選取 Chrome 的語言</translation>
 <translation id="147113415845704694">嘗試說「今日天氣點呀？」</translation>
+<translation id="1474893630593443211">更全面控制系統顯示的廣告</translation>
 <translation id="1477626028522505441">伺服器發生問題，因此無法下載 <ph name="FILE_NAME" />。</translation>
 <translation id="148482509007564431">書籤儲存流程</translation>
 <translation id="1488775391433859242">您可在正在顯示此 QR 碼的電腦上使用此手機來登入。</translation>
@@ -107,6 +117,12 @@
 <translation id="1558391695376153246">關閉無痕式分頁</translation>
 <translation id="1571304935088121812">複製使用者名稱</translation>
 <translation id="1592864538817356322">標準保護功能：</translation>
+<translation id="161647866166517041">為減少垃圾內容和欺詐行為，系統需依賴信任憑證，以協助網站對抗欺詐行為，並分辨機器人和人類。
+
+網站可根據您與網站的互動 (例如定期登入網站)，向您的瀏覽器發出信任憑證。日後，如果您瀏覽的其他網站檢查並找到有效的信任憑證，則這些網站更有可能將您視為人類，而不是機器人。
+
+信任憑證能夠改善網絡上的私隱，而且系統無法透過信任憑證來識別您的身分。</translation>
+<translation id="1627304841979541023"><ph name="BEGIN_BOLD" />您可如何管理資料：<ph name="END_BOLD" />為保障您的私隱，我們會自動刪除超過 4 星期的興趣。按瀏覽內容而定，某個主題可能會再次在您的興趣清單中顯示。您亦可移除不希望 Chrome 列在興趣清單中的項目。</translation>
 <translation id="1628019612362412531">{NUM_SELECTED,plural, =1{移除 1 個已選取的項目}other{移除 # 個已選取的項目}}</translation>
 <translation id="1633659023549081553">透過 Chrome 首頁探索新內容</translation>
 <translation id="1641113438599504367">安全瀏覽</translation>
@@ -133,17 +149,19 @@
 <translation id="1779766957982586368">關閉視窗</translation>
 <translation id="1791662854739702043">安裝位置</translation>
 <translation id="1792959175193046959">隨時變更預設的下載位置</translation>
-<translation id="1795251344124198516">Chrome 和 Chrome 作業系統的《附加服務條款》</translation>
 <translation id="1807246157184219062">淺色</translation>
 <translation id="1810845389119482123">未完成初始同步處理設定</translation>
 <translation id="1829244130665387512">在網頁中尋找</translation>
 <translation id="1832459821645506983">是，我同意使用</translation>
+<translation id="1849863543394887018">您可前往設定以停用通知</translation>
+<translation id="1854311313115643875">在試用期間，「廣告評估」允許您瀏覽的網站向 Chrome 要求資料，以便評估廣告的效益。「廣告評估」會透過盡量減少在網站之間傳送的資料，從而限制跨網站追蹤功能。
+
+如果刪除所有或特定網站的瀏覽記錄，亦會同時刪除相關的評估資料。請查看<ph name="BEGIN_LINK" />您的瀏覽記錄<ph name="END_LINK" />。</translation>
 <translation id="1877026089748256423">Chrome 版本過舊</translation>
 <translation id="1883903952484604915">我的檔案</translation>
 <translation id="189358972401248634">其他語言</translation>
 <translation id="1894023287452300670">在此處追蹤價格</translation>
 <translation id="1900260903084164610">繼續即表示您同意《<ph name="BEGIN_TOS_LINK" />服務條款<ph name="END_TOS_LINK" />》。</translation>
-<translation id="1905320231301365059">此裝置的其他使用者仍看到您在無痕模式中下載的檔案。</translation>
 <translation id="1910950723001426294">閂咗分享選項清單。</translation>
 <translation id="1918175104945982129">「Google 助理」語音搜尋的同意使用者介面已開啟，顯示在畫面下半部</translation>
 <translation id="1919130412786645364">允許登入 Chrome</translation>
@@ -163,10 +181,10 @@
 <translation id="1974060860693918893">進階選項</translation>
 <translation id="1984417487208496350">無保護功能 (不建議)</translation>
 <translation id="1986685561493779662">此名稱已有人使用</translation>
+<translation id="1995884366040846621">如要繼續，<ph name="IDENTITY_PROVIDER_ETLD_PLUS_ONE" /> 將會與此網站分享您的姓名、電郵地址和個人檔案相片。查看此網站的《<ph name="BEGIN_LINK1" />私隱權政策<ph name="END_LINK1" />》。</translation>
 <translation id="2000419248597011803">將部分 Cookie，以及網址列和搜尋框中的搜尋內容傳送至預設搜尋引擎</translation>
 <translation id="200114059308480249">要加入上下文來執行 Google 搜尋嗎？</translation>
 <translation id="2013642289801508067">{FILE_COUNT,plural, =1{# 個檔案}other{# 個檔案}}</translation>
-<translation id="2015836039326522978">「<ph name="APP_NAME" />」將在 Chrome 中開啟。繼續即表示您同意《<ph name="BEGIN_LINK1" />Google 服務條款<ph name="END_LINK1" />》以及 <ph name="BEGIN_LINK2" />Google Chrome 和 Chrome OS 的《附加服務條款》<ph name="END_LINK2" />。須同時受《<ph name="BEGIN_LINK3" />私隱權政策<ph name="END_LINK3" />》約束。</translation>
 <translation id="2020309681647789787">您可在所有已同步的裝置上查看記錄，繼續執行先前的任何工作</translation>
 <translation id="2021896219286479412">全螢幕網站控制</translation>
 <translation id="2038563949887743358">開啟「切換為電腦版網站」</translation>
@@ -191,11 +209,12 @@
 <translation id="2126426811489709554">Chrome 技術提供</translation>
 <translation id="2132122640199389833">移除所有已連結的裝置</translation>
 <translation id="213279576345780926">已關閉「<ph name="TAB_TITLE" />」</translation>
+<translation id="2134927169889348449">使用 Chrome 即表示您同意《<ph name="BEGIN_TOS_LINK" />Google 服務條款<ph name="END_TOS_LINK" />》以及 <ph name="BEGIN_ATOS_LINK" />Google Chrome 和 Chrome OS 的《附加服務條款》<ph name="END_ATOS_LINK" />。</translation>
 <translation id="2139186145475833000">新增至主螢幕</translation>
 <translation id="2141396931810938595">根據使用情況</translation>
 <translation id="214888715418183969">選擇您想與 Chrome 分享的資料。您分享的數據將有助我們改善 Chrome 的功能、效能和穩定性。</translation>
 <translation id="2149973817440762519">編輯書籤</translation>
-<translation id="2154484045852737596">編輯付款信用卡</translation>
+<translation id="2155214902713132423">此裝置不支援此驗證方法。請在另一部裝置上採用其他選項。</translation>
 <translation id="2157851137955077194">如要將手機上的內容分享至另一部裝置，請同時在這兩部裝置的 Chrome 設定中開啟同步功能</translation>
 <translation id="2158408438301413340">Chrome 無法檢查所有密碼</translation>
 <translation id="2169830938017475061">現在</translation>
@@ -204,6 +223,7 @@
 <translation id="2175927920773552910">二維條碼</translation>
 <translation id="2176767904800337188">虛擬卡會隱藏您的實體卡，保護您免受潛在欺詐行為的威脅。<ph name="BEGIN_LINK1" />進一步瞭解虛擬卡<ph name="END_LINK1" /></translation>
 <translation id="218608176142494674">共用</translation>
+<translation id="2189903024544168260">已移除興趣</translation>
 <translation id="2194856509914051091">考慮因素</translation>
 <translation id="2200113223741723867">管理使用情況資料分享設定</translation>
 <translation id="2218567645332692482">將瀏覽升級為採用 HTTPS，並在載入不支援該協定的網站前發出警告</translation>
@@ -267,9 +287,11 @@
 <translation id="2536728043171574184">正在瀏覽此網頁的離線版本</translation>
 <translation id="2546283357679194313">Cookie 和網站數據</translation>
 <translation id="2549516196460093976">您可在正在顯示此 QR 碼的電腦上使用此平板電腦來登入。</translation>
+<translation id="2558569818338050235">您的瀏覽記錄會影響系統顯示的廣告</translation>
 <translation id="2561519700418191927">影片預覽</translation>
 <translation id="2567385386134582609">圖片</translation>
 <translation id="2567545343356994513">對危險網站、下載檔案及擴充程式提供更快速的主動式保護功能</translation>
+<translation id="2569733278091928697">您將能輕鬆管理媒體控制項、無痕工作階段、下載項目等等</translation>
 <translation id="2571711316400087311">詢問是否將其他語言的網頁傳送至「Google 翻譯」</translation>
 <translation id="2573452357057307036">瞭解如何將 Chrome 設定為預設瀏覽器</translation>
 <translation id="2581165646603367611">這會清除 Chrome 認為不重要的網站內的 Cookie、快取和其他資料。</translation>
@@ -278,6 +300,7 @@
 <translation id="2604446170045642109">您可在設定中關閉網站深色主題背景。</translation>
 <translation id="2612676031748830579">信用卡號碼</translation>
 <translation id="2625189173221582860">已複製密碼</translation>
+<translation id="2642087927315268160">閂咗登入頁底面板。</translation>
 <translation id="2645657967708199252"><ph name="CONNECTION_TYPE" /> 連線可能會減慢下載速度</translation>
 <translation id="2647434099613338025">新增語言</translation>
 <translation id="2649068648233607930">您的瀏覽器由 <ph name="DOMAIN" /> 管理</translation>
@@ -290,6 +313,7 @@
 <translation id="2704606927547763573">已複製</translation>
 <translation id="2707726405694321444">重新整理網頁</translation>
 <translation id="271033894570825754">全新</translation>
+<translation id="2711073837061989559">試用功能</translation>
 <translation id="2718352093833049315">僅限 Wi-Fi 連線時</translation>
 <translation id="2718846868787000099">為了要以您偏好的語言顯示內容，您瀏覽的網站將能看到偏好設定</translation>
 <translation id="2723001399770238859">音效檔案</translation>
@@ -363,12 +387,14 @@
 <translation id="3037177537145227281">正在追蹤價格</translation>
 <translation id="3037517125981011456">顯示登入 Chrome 的指示</translation>
 <translation id="3046945242843292318">之後可更快前往此網站</translation>
+<translation id="3055113921564083271">您已移除的興趣</translation>
 <translation id="3055259925215945098">已移動書籤</translation>
 <translation id="3055841435094910999">系統會將 Chrome 使用情況傳送給 Google，但不會與您有任何關聯\n\nChrome 當機時，有關當機詳情可能會包括部分個人資料\n\n開啟同步處理功能後，數據可能亦會包括先前瀏覽網址的資料</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT,plural, =1{<ph name="BOOKMARKS_COUNT_ONE" /> 個書籤}other{<ph name="BOOKMARKS_COUNT_MANY" /> 個書籤}}</translation>
 <translation id="3062802207422175757">您感興趣的文章和內容，一切盡在 Chrome</translation>
 <translation id="3066573403916685335">向下移動</translation>
 <translation id="3070005020161560471">自動翻譯</translation>
+<translation id="3072980200212375806">「<ph name="APP_NAME" />」將在 Chrome 中開啟。繼續即表示您同意《<ph name="BEGIN_LINK1" />Google 服務條款<ph name="END_LINK1" />》以及 <ph name="BEGIN_LINK2" />Google Chrome 和 Chrome OS 的《附加服務條款》<ph name="END_LINK2" />。須同時受《<ph name="BEGIN_LINK3" />私隱權政策<ph name="END_LINK3" />》約束。</translation>
 <translation id="3091010850649238832">顯示剪貼簿內容</translation>
 <translation id="3098745985164956033">部分圖片會傳送至 Google，以便為您提供更完善的說明</translation>
 <translation id="3114507951000454849">閱讀今天的新聞 <ph name="NEWS_ICON" /></translation>
@@ -379,6 +405,8 @@
 <translation id="3166827708714933426">分頁和視窗快速鍵</translation>
 <translation id="316694332262407393">Chrome 已在此執行中。</translation>
 <translation id="3169472444629675720">探索</translation>
+<translation id="3169523567916669830">在試用期間，您可以查看及移除網站用來向您顯示廣告的感興趣主題。Chrome 會根據您最近的瀏覽記錄，推測您感興趣的主題。</translation>
+<translation id="3187472288455401631">廣告評估</translation>
 <translation id="3207960819495026254">已加入書籤</translation>
 <translation id="3208584281581115441">立即檢查</translation>
 <translation id="3211426585530211793">已刪除 <ph name="ITEM_TITLE" /></translation>
@@ -409,6 +437,7 @@
 <translation id="3290991969712132877">如要更快速開啟此網頁，請使用「更多選項」按鈕將此網頁新增到主畫面</translation>
 <translation id="3297344142967351106">語音助手</translation>
 <translation id="3303414029551471755">繼續下載內容？</translation>
+<translation id="3321367458490630980">已新增興趣</translation>
 <translation id="3334729583274622784">要變更副檔名嗎？</translation>
 <translation id="3341262203274374114">無法取消追蹤，發生錯誤。</translation>
 <translation id="3359667936385849800">使用目前的服務供應商</translation>
@@ -429,10 +458,11 @@
 <translation id="3443221991560634068">重新載入目前網頁</translation>
 <translation id="3444179773590444986">要就網站深色主題背景提供意見嗎？</translation>
 <translation id="3469665409713263828">{FILE_COUNT,plural, =1{已預定 1 項下載}other{已預定 # 項下載}}</translation>
+<translation id="3474624961160222204">以「<ph name="NAME" />」的身分繼續</translation>
 <translation id="3478363558367712427">您可以選擇搜尋引擎</translation>
 <translation id="3493531032208478708"><ph name="BEGIN_LINK" />進一步瞭解<ph name="END_LINK" />建議的內容</translation>
+<translation id="3495219333887281978">登入頁底面板宜家顯示喺畫面下半部。</translation>
 <translation id="3499246418971111862">chrome_qrcode_<ph name="CURRENT_TIMESTAMP_MS" /></translation>
-<translation id="3502647154914451322">使用 Chrome 即表示您同意《<ph name="BEGIN_TOS_LINK" />Google 服務條款<ph name="END_TOS_LINK" />》以及 <ph name="BEGIN_ATOS_LINK" />Google Chrome 和 Chrome OS 的《附加服務條款》<ph name="END_ATOS_LINK" />。</translation>
 <translation id="3507132249039706973">已開啟「標準保護功能」</translation>
 <translation id="3509330069915219067">離線。Chrome 無法檢查更新。</translation>
 <translation id="3513704683820682405">擴張實境</translation>
@@ -449,6 +479,8 @@
 <translation id="3568688522516854065">如要取得其他裝置上的分頁，請登入並開啟同步處理功能</translation>
 <translation id="357465026686164600">使用手機作為安全密鑰</translation>
 <translation id="3577473026931028326">發生錯誤，請再試一次。</translation>
+<translation id="3578024735349927859">透過通知管理媒體控制項、無痕式分頁等項目</translation>
+<translation id="3578874072190212775">協助網站對抗欺詐，以及分辨機器人和人類</translation>
 <translation id="3587482841069643663">全部</translation>
 <translation id="3587596251841506391">協助改善網絡安全</translation>
 <translation id="3602290021589620013">預覽</translation>
@@ -459,9 +491,11 @@
 <translation id="363596933471559332">使用儲存的憑證自動登入網站。關閉功能時，每次登入網站之前都會要求您驗證。</translation>
 <translation id="3653111872753786013"><ph name="WEBSITE_TITLE" />：<ph name="WEBSITE_URL" /></translation>
 <translation id="3677911431265050325">切換至流動網站</translation>
+<translation id="3685860403008476208">此裝置的所有使用者都能看到您在無痕模式下載的檔案</translation>
 <translation id="3687645719033307815">您正在預覽此網頁的預覽畫面</translation>
 <translation id="3690369331356918524">密碼因資料外洩而被洩露時接收警告</translation>
 <translation id="3692944402865947621">無法存取儲存位置，因此無法下載 <ph name="FILE_NAME" />。</translation>
+<translation id="3699022356773522638">要下載檔案嗎？</translation>
 <translation id="371230970611282515">在危險事件發生前進行預測並發出警告。</translation>
 <translation id="3714981814255182093">開啟搜尋列</translation>
 <translation id="3716182511346448902">這個網頁使用過多記憶體，因此 Chrome 已暫停顯示這個網頁。</translation>
@@ -496,6 +530,7 @@
 <translation id="3924911262913579434">已開啟「<ph name="SAFE_BROWSING_MODE" />」</translation>
 <translation id="3927692899758076493">Sans Serif</translation>
 <translation id="3928666092801078803">合併我的資料</translation>
+<translation id="3932390316856284148">登入頁底面板宜家顯示喺成個畫面。</translation>
 <translation id="3934366560681368531">「</translation>
 <translation id="393697183122708255">沒有可用的語音搜尋功能</translation>
 <translation id="395377504920307820">不登入帳戶使用</translation>
@@ -507,6 +542,7 @@
 <translation id="3969863827134279083">向上移動</translation>
 <translation id="397583555483684758">同步處理功能已停止運作</translation>
 <translation id="3976396876660209797">移除並重新建立此捷徑</translation>
+<translation id="3981902534690264083">廣告客戶可以瞭解廣告的效益</translation>
 <translation id="3985215325736559418">您要再次下載 <ph name="FILE_NAME" /> 嗎？</translation>
 <translation id="3987993985790029246">複製連結</translation>
 <translation id="4000212216660919741">離線首頁</translation>
@@ -524,6 +560,7 @@
 <translation id="4096227151372679484">書籤儲存流程宜家顯示喺畫面下半部</translation>
 <translation id="4099578267706723511">將使用統計資料及當機報告傳送給 Google，助我們一臂之力，讓 Chrome 更臻完美。</translation>
 <translation id="410351446219883937">自動播放</translation>
+<translation id="4106587138345390261">Chrome 正在探索新功能，讓網站能在使用較少資料的情況下提供相同的瀏覽體驗</translation>
 <translation id="4108314971463891922">追蹤</translation>
 <translation id="4108998448622696017">偵測並在危險事件發生時發出警告。</translation>
 <translation id="4116038641877404294">下載網頁，以便在離線時使用</translation>
@@ -544,13 +581,16 @@
 <translation id="4248098802131000011">確保密碼安全，避免發生資料外洩或其他安全性問題</translation>
 <translation id="4250229828105606438">螢幕截圖</translation>
 <translation id="4256782883801055595">開放原始碼授權</translation>
+<translation id="4262915912852657291"><ph name="BEGIN_BOLD" />需要使用什麼資料：<ph name="END_BOLD" />您的瀏覽記錄，亦即您在此裝置上使用 Chrome 瀏覽過的網站記錄。</translation>
 <translation id="4263656433980196874">「Google 助理」語音搜尋的同意使用者介面已開啟，顯示於整個畫面</translation>
 <translation id="4269820728363426813">複製連結網址</translation>
 <translation id="4290281343757112331">要稍後再下載嗎？</translation>
 <translation id="4291407919474070700"><ph name="BEGIN_LINK" />在 Android 設定中開啟螢幕鎖定<ph name="END_LINK" /></translation>
+<translation id="4293476595220860475">使用 Chrome 即表示您同意《<ph name="BEGIN_TOS_LINK" />Google 服務條款<ph name="END_TOS_LINK" />》以及 <ph name="BEGIN_ATOS_LINK" />Google Chrome 和 Chrome OS 的《附加服務條款》<ph name="END_ATOS_LINK" />。須同時受《<ph name="BEGIN_PRIVACY_LINK" />私隱權政策<ph name="END_PRIVACY_LINK" />》約束。</translation>
 <translation id="4296252229500326964">新無痕式分頁</translation>
 <translation id="4298388696830689168">已連結的網站</translation>
 <translation id="4303044213806199882">chrome_screenshot_<ph name="CURRENT_TIMESTAMP_MS" /></translation>
+<translation id="4304713468139749426">密碼管理員</translation>
 <translation id="4307992518367153382">基本</translation>
 <translation id="4320177379694898372">沒有互聯網連線</translation>
 <translation id="4321739720395210191">無法開啟攝錄機。請重新開機，然後再試一次。</translation>
@@ -568,6 +608,7 @@
 <translation id="4415276339145661267">管理您的 Google 帳戶</translation>
 <translation id="4425140285732600465">正在追蹤價格。如果產品在任何網站上降價，系統將通知您。</translation>
 <translation id="442518031075347249">您將無法再透過 Google Pay 使用虛擬卡。<ph name="BEGIN_LINK1" />進一步瞭解虛擬卡<ph name="END_LINK1" /></translation>
+<translation id="4428065317363009941">廣告個人化</translation>
 <translation id="4450672886426705087">Google 的搜尋結果。</translation>
 <translation id="4452411734226507615">關閉 <ph name="TAB_TITLE" /> 分頁</translation>
 <translation id="4452548195519783679">已將書籤加入到「<ph name="FOLDER_NAME" />」</translation>
@@ -640,8 +681,10 @@
 <translation id="4807098396393229769">信用卡持有人姓名</translation>
 <translation id="481574578487123132">連結的裝置</translation>
 <translation id="4818017973810341238"><ph name="VIOLATED_URL" /> 上的 Digital Asset Links 驗證失敗</translation>
+<translation id="4826163340425232009">登入頁底面板。</translation>
 <translation id="4831037795716408498">下載內容</translation>
 <translation id="4834007576107377210">同時建議您查看搜尋引擎的搜尋記錄刪除指示 (如有)</translation>
+<translation id="4834250788637067901">使用 Google Pay 儲存的付款方法、優惠和地址</translation>
 <translation id="4835385943915508971">Chrome 沒有要求資源的存取權。</translation>
 <translation id="4837753911714442426">開啟列印網頁選項</translation>
 <translation id="4842092870884894799">正在顯示密碼產生彈出式視窗</translation>
@@ -651,6 +694,7 @@
 <translation id="4860895144060829044">撥號</translation>
 <translation id="4864369630010738180">正在登入…</translation>
 <translation id="4866368707455379617">無法為 Chrome 安裝 <ph name="MODULE" /></translation>
+<translation id="4871568871368204250">關閉同步處理功能</translation>
 <translation id="4875775213178255010">內容建議</translation>
 <translation id="4877678010818027629">進入無痕模式</translation>
 <translation id="4878404682131129617">透過 Proxy 伺服器建立通道失敗</translation>
@@ -676,10 +720,12 @@
 <translation id="4961107849584082341">將此網頁翻譯成任何語言</translation>
 <translation id="4971735654804503942">對危險網站、下載檔案及擴充程式提供更快速的主動式保護功能。密碼外洩時系統會發出警告。需要將瀏覽資料傳送給 Google。</translation>
 <translation id="497421865427891073">往前</translation>
+<translation id="4985248278475639481">關於廣告個人化</translation>
 <translation id="4987271110129728827">找不到該頁面。請檢查拼字，或嘗試執行網絡搜尋。</translation>
 <translation id="4988526792673242964">網頁</translation>
 <translation id="5001388021414335527">按一下這裡追蹤此網站</translation>
 <translation id="5004416275253351869">Google 活動控制項</translation>
+<translation id="5005141133360250920">已經刪除咗反應</translation>
 <translation id="5005498671520578047">複製密碼</translation>
 <translation id="5011311129201317034"><ph name="SITE" /> 要求連接至</translation>
 <translation id="5016205925109358554">Serif</translation>
@@ -688,7 +734,6 @@
 <translation id="5054455334322721892">在您登入後，<ph name="BEGIN_LINK1" />其他形式的活動<ph name="END_LINK1" />可能會儲存至您的 Google 帳戶。您可以隨時刪除這些資料。</translation>
 <translation id="5061533557687621530">如要查看天氣，請輕按麥克風圖示，然後說「今日天氣點呀？」</translation>
 <translation id="506254248375231072">沒有分頁</translation>
-<translation id="5087580092889165836">加入新卡</translation>
 <translation id="5091199029769593641">不久後，您將會在開啟新分頁時看到 <ph name="SITE_NAME" /> 的內容。您追蹤的網站會儲存在 Google 帳戶中。您可在「探索」設定中管理已儲存的網站。</translation>
 <translation id="5091249083535528968">延伸使用情況資料</translation>
 <translation id="509429900233858213">發生錯誤。</translation>
@@ -716,7 +761,6 @@
 <translation id="5210286577605176222">跳至上一個分頁</translation>
 <translation id="5210365745912300556">關閉分頁</translation>
 <translation id="5213672942202814946">使用語音搜尋</translation>
-<translation id="5215116848420601511">使用 Google Pay 儲存的付款方法和地址</translation>
 <translation id="5222676887888702881">登出</translation>
 <translation id="5227554086496586518">輕按以查看搜尋結果</translation>
 <translation id="5233638681132016545">新分頁</translation>
@@ -725,6 +769,7 @@
 <translation id="526421993248218238">無法載入此網頁</translation>
 <translation id="5271967389191913893">裝置無法開啟下載的檔案。</translation>
 <translation id="5292796745632149097">傳送至</translation>
+<translation id="5300426565656326054">基於瀏覽器的廣告個人化</translation>
 <translation id="5304593522240415983">這個欄位不得留空</translation>
 <translation id="5308380583665731573">連線</translation>
 <translation id="5317780077021120954">儲存</translation>
@@ -737,6 +782,7 @@
 <translation id="5368227114232678694">如要在此裝置上私密瀏覽，請使用「無痕模式」</translation>
 <translation id="5368958499335451666">{OPEN_TABS,plural, =1{<ph name="OPEN_TABS_ONE" /> 個開啟的分頁，輕按即可切換分頁}other{<ph name="OPEN_TABS_MANY" /> 個開啟的分頁，輕按即可切換分頁}}</translation>
 <translation id="5375577065097716013">使用「Google 智能鏡頭」搜尋圖片 <ph name="BEGIN_NEW" />新功能<ph name="END_NEW" /></translation>
+<translation id="5376898820269806588">已經變更咗反應</translation>
 <translation id="5403644198645076998">只允許瀏覽部分網站</translation>
 <translation id="5409881200985013443">要在「<ph name="CLIENT_NAME" />」上提交 <ph name="ONE_TIME_CODE" /> 嗎？</translation>
 <translation id="5414836363063783498">正在驗證…</translation>
@@ -760,6 +806,7 @@
 <translation id="5514904542973294328">此裝置的管理員已停用</translation>
 <translation id="5515439363601853141">解鎖即可查看您的密碼</translation>
 <translation id="5517095782334947753">您有來自 <ph name="FROM_ACCOUNT" /> 的書籤、記錄、密碼和其他設定。</translation>
+<translation id="5524761631371622910">在試用期間，如果 Chrome 隨機將您加入試用行列，您的瀏覽記錄會影響所看到的廣告，以及系統推測的以下興趣。為保障您的私隱，Chrome 每個月都會自動刪除您的興趣。</translation>
 <translation id="5524843473235508879">已禁止重新導向。</translation>
 <translation id="5548606607480005320">安全檢查</translation>
 <translation id="5555525474779371165">選取您的「安全瀏覽」功能</translation>
@@ -791,6 +838,7 @@
 <translation id="570347048394355941">切換至分頁</translation>
 <translation id="572328651809341494">最近開啟的分頁</translation>
 <translation id="5726692708398506830">放大網頁中的所有內容</translation>
+<translation id="5727531838415286053">如果 Chrome 隨機將您加入啟用的試用功能中，您的瀏覽紀錄會影響系統顯示的廣告，以及以下推測的興趣。為保障您的私隱，Chrome 每個月都會自動刪除您的興趣。除非您移除興趣，否則系統會重新整理興趣。</translation>
 <translation id="5748802427693696783">已切換至標準分頁</translation>
 <translation id="5749068826913805084">Chrome 需要儲存空間的存取權才能下載檔案。</translation>
 <translation id="5749237766298580851">關閉 <ph name="SEPARATOR" /> 不建議</translation>
@@ -834,6 +882,7 @@
 <translation id="5906513782029855931">如果「Google 助理」知道網站的網址，便能夠助您完成工作。您可在 Chrome 設定中關閉「Google 助理」。</translation>
 <translation id="5916664084637901428">開啟</translation>
 <translation id="5919204609460789179">更新 <ph name="PRODUCT_NAME" /> 即可開始同步處理</translation>
+<translation id="5938820472109305350">新增<ph name="INTEREST" /></translation>
 <translation id="5942872142862698679">使用 Google 搜尋內容</translation>
 <translation id="5945035219773565305">目前的建議：<ph name="RECOMMENDATION" /></translation>
 <translation id="5951119116059277034">正在查看實際網頁</translation>
@@ -853,7 +902,6 @@
 <translation id="6033245666633565791">Chrome 透過「<ph name="BEGIN_LINK" />私隱沙箱<ph name="END_LINK" />」開發新的技術，防止有心人士透過跨網站追蹤機制取得您的資料，同時保護開放網絡。
 
 「私隱沙箱」的試用功能仍在開發階段，目前開放地區有限。現在網站可以嘗試使用「私隱沙箱」，亦能繼續使用第三方 Cookie 等現有的網絡技術。</translation>
-<translation id="6036057147555329831">其他 ICU</translation>
 <translation id="6039379616847168523">跳至下一個分頁</translation>
 <translation id="6040143037577758943">關閉</translation>
 <translation id="604124094241169006">自動</translation>
@@ -864,6 +912,7 @@
 <translation id="6069177176307973611">查看私隱和安全設定</translation>
 <translation id="6070730414166672373">正在聯絡銀行\u2026</translation>
 <translation id="6085886413119427067">判斷如何透過安全連線連接網站</translation>
+<translation id="6091413777268123602">透過「私隱沙箱」試用功能，網站可在使用較少資料的情況下，提供相同的瀏覽體驗。這代表您能享有更高私隱度，而且系統會使用較少跨網站追蹤功能。我們將會在更多試用功能準備好進行測試時，新增這些試用功能。</translation>
 <translation id="60923314841986378">尚餘 <ph name="HOURS" /> 小時</translation>
 <translation id="6095578583683628124">如果 Google 亦是預設的搜尋引擎，您將能取得更實用、更符合需要的建議</translation>
 <translation id="6108923351542677676">設定中…</translation>
@@ -874,7 +923,6 @@
 <translation id="6138832295072039549">在此變更網站設定</translation>
 <translation id="6140709049082532940">強化保護功能：</translation>
 <translation id="6140912465461743537">國家/地區</translation>
-<translation id="6141988275892716286">確認下載</translation>
 <translation id="614940544461990577">建議做法：</translation>
 <translation id="6150320133806434356">已儲存書籤</translation>
 <translation id="6154478581116148741">在「設定」中開啟螢幕鎖定功能，即可從此裝置匯出您的密碼</translation>
@@ -911,8 +959,12 @@
 <translation id="6345878117466430440">標示為已閱讀</translation>
 <translation id="6363990818884053551">如要開始同步，請驗證您的身分</translation>
 <translation id="6364438453358674297">從記錄中移除建議項目嗎？</translation>
-<translation id="6379829913050047669">「<ph name="APP_NAME" />」將在 Chrome 中開啟。繼續即表示您同意《<ph name="BEGIN_LINK1" />Google 服務條款<ph name="END_LINK1" />》以及 <ph name="BEGIN_LINK2" />Google Chrome 和 Chrome 作業系統的《附加服務條款》<ph name="END_LINK2" />。</translation>
 <translation id="6380100320871303656">Chrome 會較頻密地預先載入 Chrome 您可能會瀏覽的頁面。此設定可能會提高數據用量。</translation>
+<translation id="6385407407546870227">在試用期間，為減少垃圾內容和欺詐行為，系統需依賴信任憑證，以協助網站對抗欺詐行為，並分辨機器人和真人。
+
+網站可根據您與網站的互動 (例如定期登入網站)，向您的瀏覽器發出信任憑證。日後，如果您瀏覽的其他網站檢查並找到有效的信任憑證，則這些網站更有可能將您視為真人，而不是機器人。
+
+信任憑證能夠改善網絡上的私隱，而且系統無法透過信任憑證來識別您的身分。</translation>
 <translation id="6395288395575013217">連結</translation>
 <translation id="6397616442223433927">已重新連線</translation>
 <translation id="6402652558933147609"><ph name="ERROR_CODE" /> (<ph name="VIOLATED_URL" />)</translation>
@@ -973,6 +1025,7 @@
 <translation id="663674369910034433">如需更多與私隱權、安全性和資料收集相關的設定，請參閱<ph name="BEGIN_LINK1" />同步處理<ph name="END_LINK1" />和 <ph name="BEGIN_LINK2" />Google 服務<ph name="END_LINK2" /></translation>
 <translation id="6637100877383020115">Chrome 會向 Google 傳送使用情況和當機資料，以協助改善應用程式。<ph name="BEGIN_UMA_LINK" />管理<ph name="END_UMA_LINK" /></translation>
 <translation id="6640207029842583248">一律封鎖</translation>
+<translation id="6641780377503683465">移除<ph name="INTEREST" /></translation>
 <translation id="6643016212128521049">清除</translation>
 <translation id="6645629752388991326">透過使用此裝置作為安全密鑰，控制可以登入的裝置。</translation>
 <translation id="6648459603387803038">您的管理員可遠端變更瀏覽器設定。此裝置上的活動也可透過 Chrome 以外的服務管理。</translation>
@@ -991,6 +1044,7 @@
 <translation id="671481426037969117">「<ph name="FQDN" />」計時器已結束計時，將於明天重新開始。</translation>
 <translation id="6715020873764921614">仍要下載「<ph name="FILE_NAME" />」(<ph name="FILE_SIZE" />) 嗎？</translation>
 <translation id="6719634564325948108">要使用 QR 碼連線嗎？</translation>
+<translation id="6737612727720318154">如果您認為與項目有關的廣告會對您有用，可允許興趣或網站</translation>
 <translation id="6738516213925468394">您已於 <ph name="TIME" />使用<ph name="BEGIN_LINK" />同步密碼短語<ph name="END_LINK" />加密資料，請輸入密碼短語開始同步資料。</translation>
 <translation id="6738867403308150051">下載中…</translation>
 <translation id="6751521182688001123">快速開啟新分頁。如要編輯此捷徑，請按住捷徑按鈕。</translation>
@@ -998,6 +1052,7 @@
 <translation id="6767294960381293877">要共用分頁嘅裝置清單宜家顯示喺畫面下半部。</translation>
 <translation id="6770602306803890733">為您和網絡上的所有使用者提高安全性</translation>
 <translation id="6783942555455976443">將此頁面儲存至稍後閱讀，並接收提醒</translation>
+<translation id="6785476624617658922">Chrome 和 Chrome OS 的《附加服務條款》</translation>
 <translation id="6795633245022906657">快速開啟新分頁。如要編輯此捷徑，請前往「設定」。</translation>
 <translation id="6802555630140434547">視窗即將關閉</translation>
 <translation id="6811034713472274749">網頁已準備就緒，可供查看</translation>
@@ -1056,7 +1111,7 @@
 <translation id="7093803425429738190">新增表情符號</translation>
 <translation id="7105047059074518658">登入即可讓跨裝置瀏覽更順暢</translation>
 <translation id="7106762743910369165">您的瀏覽器由組織管理</translation>
-<translation id="7121362699166175603">清除記錄和網址列中的自動完成資料。您的 Google 帳戶在 <ph name="BEGIN_LINK" />myactivity.google.com<ph name="END_LINK" /> 上可能有其他形式的瀏覽記錄。</translation>
+<translation id="7130504491556983216">在您瀏覽網絡同時，系統會於此處顯示興趣清單</translation>
 <translation id="7138678301420049075">其他</translation>
 <translation id="7143462160780459030">無法擷取螢幕擷圖。請再試一次。</translation>
 <translation id="7146622961999026732">這些網站和應用程式似乎對您很重要：</translation>
@@ -1065,14 +1120,15 @@
 <translation id="7173114856073700355">開啟設定</translation>
 <translation id="7177466738963138057">您稍後可在「設定」中作出變更</translation>
 <translation id="7177873915659574692">無法建立 QR 碼。網址超過 <ph name="CHARACTER_LIMIT" /> 個字元。</translation>
-<translation id="7180611975245234373">重新整理</translation>
+<translation id="7177959540995930968">您可在 Chrome 設定中進一步瞭解這些功能。</translation>
 <translation id="718226107353899806">您可新增最多 <ph name="MAX_NUM_REACTIONS" /> 個反應</translation>
 <translation id="7187993566681480880">確保您登入使用 Chrome 的安全，並可提升您在其他 Google 應用程式的安全性。</translation>
 <translation id="718926126787620637">書籤資料夾清單宜家顯示喺成個畫面</translation>
 <translation id="7191430249889272776">已在背景開啟分頁。</translation>
 <translation id="7196215469483532480">私隱權指南說明宜家顯示喺成個畫面</translation>
+<translation id="7208109991155904980">已經移動咗反應</translation>
+<translation id="7222235798733126207">限制網站共用</translation>
 <translation id="7227218174981371415">{FILE_COUNT,plural, =1{1 項下載操作尚待處理}other{# 項下載操作尚待處理}}</translation>
-<translation id="7237045078887540010">使用 Chrome 即表示您同意《<ph name="BEGIN_TOS_LINK" />Google 服務條款<ph name="END_TOS_LINK" />》以及 <ph name="BEGIN_ATOS_LINK" />Google Chrome 和 Chrome OS 的《附加服務條款》<ph name="END_ATOS_LINK" />。須同時受《<ph name="BEGIN_PRIVACY_LINK" />私隱權政策<ph name="END_PRIVACY_LINK" />》約束。</translation>
 <translation id="7242755609445462077">風格化突顯內容 (日期：<ph name="CURRENT_DATE" />)</translation>
 <translation id="7248069434667874558">請確認 <ph name="TARGET_DEVICE_NAME" /> 已開啟 Chrome 的同步處理功能。</translation>
 <translation id="7252076891734325316">請將手機放在電腦附近</translation>
@@ -1130,7 +1186,6 @@
 <translation id="752220631458524187">請在完成後拔除連接線</translation>
 <translation id="7523960634226602883">使用 Google 智能鏡頭，透過相機搜尋</translation>
 <translation id="753225086557513863">已預定稍後下載</translation>
-<translation id="7560448309733608642">清除所有已同步裝置上的記錄。您的 Google 帳戶在 <ph name="BEGIN_LINK" />myactivity.google.com<ph name="END_LINK" /> 上可能有其他形式的瀏覽記錄。</translation>
 <translation id="7562080006725997899">正在清除瀏覽資料</translation>
 <translation id="756809126120519699">已清除 Chrome 資料</translation>
 <translation id="7577900504646297215">管理興趣</translation>
@@ -1146,6 +1201,7 @@
 <translation id="7619072057915878432">無法連線至網絡，因此無法下載 <ph name="FILE_NAME" />。</translation>
 <translation id="7626032353295482388">歡迎使用 Chrome</translation>
 <translation id="7630202231528827509">供應商網址</translation>
+<translation id="7634280112532283638">減少垃圾內容和欺詐行為</translation>
 <translation id="7638584964844754484">複雜密碼不正確</translation>
 <translation id="7641339528570811325">清除瀏覽資料…</translation>
 <translation id="7646772052135772216">密碼同步功能無法正常運作</translation>
@@ -1161,6 +1217,7 @@
 <translation id="7704317875155739195">自動完成搜尋和網址</translation>
 <translation id="770741401784017797">建立緊 GIF</translation>
 <translation id="7707922173985738739">使用流動數據</translation>
+<translation id="7709094866268987903">系統會在此處顯示您已移除的興趣</translation>
 <translation id="7725024127233776428">加入書籤的網頁會在這裡顯示</translation>
 <translation id="7757787379047923882">透過 <ph name="DEVICE_NAME" /> 分享的文字</translation>
 <translation id="7761849928583394409">選擇日期和時間</translation>
@@ -1279,15 +1336,17 @@
 <translation id="834313815369870491">永遠不要翻譯的網站</translation>
 <translation id="8352996530981010042">無法載入回應，請再試一次。</translation>
 <translation id="8354977102499939946">透過語音快速搜尋。如要編輯此捷徑，請前往「設定」。</translation>
-<translation id="8356078935982976590">您將能輕鬆管理媒體控制項、無痕工作階段、下載項目等等</translation>
 <translation id="835847953965672673">還原咗 <ph name="NUMBER_OF_DOWNLOADS" /> 個下載嘅內容</translation>
 <translation id="8364299278605033898">查看熱門網站</translation>
 <translation id="8368001212524806591">追蹤價格</translation>
+<translation id="8383226135083126309"><ph name="BEGIN_BOLD" />我們如何使用這項資料：<ph name="END_BOLD" />Chrome 可以推測您的興趣。您日後瀏覽的網站可向 Chrome 要求查看您的興趣，以便向您顯示個人化廣告。</translation>
 <translation id="8387617938027387193">驗證您的身分</translation>
 <translation id="8393700583063109961">傳送訊息</translation>
 <translation id="8394720698884623075">使用儲存在 Chrome 中的不安全網站清單來檢查網址</translation>
 <translation id="8410695015584479363">追蹤價格</translation>
 <translation id="8413126021676339697">顯示完整記錄</translation>
+<translation id="8414396119627470038">使用 <ph name="IDENTITY_PROVIDER_ETLD_PLUS_ONE" /> 登入 <ph name="SITE_ETLD_PLUS_ONE" /></translation>
+<translation id="8416347857511542594">前往 Chrome 進一步瞭解廣告個人化</translation>
 <translation id="8419244640277402268">加入</translation>
 <translation id="8424781820952413435">已傳送網頁。如要查看，請在<ph name="DEVICE_TYPE" />上開啟 Chrome</translation>
 <translation id="8427875596167638501">預覽分頁喺畫面下半部分顯示</translation>
@@ -1319,6 +1378,7 @@
 <translation id="8505766168025405649">查看下載狀態的通知</translation>
 <translation id="8514477925623180633">匯出儲存在 Chrome 中的密碼</translation>
 <translation id="8516012719330875537">圖片編輯器</translation>
+<translation id="8516431725144212809">Chrome 推測您有以下興趣</translation>
 <translation id="8523928698583292556">刪除已儲存的密碼</translation>
 <translation id="8540136935098276800">請輸入正確格式的網址</translation>
 <translation id="854522910157234410">開啟此頁</translation>
@@ -1350,6 +1410,8 @@
 <translation id="8659579665266920523">如何使用 Chrome 搜尋</translation>
 <translation id="8662811608048051533">您會從大部分網站登出。</translation>
 <translation id="8664979001105139458">檔案名稱已存在</translation>
+<translation id="8666759526542103597">關於基於瀏覽器的廣告個人化</translation>
+<translation id="8667760277771450375">我們正在探索方法，讓網站阻止垃圾廣告和欺詐行為，同時限制跨網站追蹤功能。</translation>
 <translation id="8676789164135894283">登入驗證</translation>
 <translation id="867767487203716855">下一個更新項目</translation>
 <translation id="8683039184091909753">圖片</translation>
@@ -1357,6 +1419,7 @@
 <translation id="8683526617475118045">本功能的優點</translation>
 <translation id="869891660844655955">到期日</translation>
 <translation id="8699120352855309748">不要詢問是否翻譯這些語言</translation>
+<translation id="8712637175834984815">我知道了</translation>
 <translation id="8725066075913043281">再試一次</translation>
 <translation id="8730621377337864115">完成</translation>
 <translation id="8746155870861185046">分享突顯項目</translation>
@@ -1382,6 +1445,7 @@
 <translation id="8881973373982641723">清除記錄 (包括搜尋框中的記錄)。</translation>
 <translation id="889338405075704026">前往 Chrome 設定</translation>
 <translation id="8898822736010347272">向 Google 傳送部分您瀏覽網頁的網址、特定的系統資料及部分網頁內容，以協助探索新威脅，並保護所有網絡使用者。</translation>
+<translation id="8906502871739599113">複製咗反應</translation>
 <translation id="8909135823018751308">共用…</translation>
 <translation id="8912362522468806198">Google 帳戶</translation>
 <translation id="8920114477895755567">正在等候家長的詳細資訊。</translation>
@@ -1401,6 +1465,8 @@
 <translation id="8970887620466824814">發生錯誤。</translation>
 <translation id="8972098258593396643">要下載至預設資料夾嗎？</translation>
 <translation id="8987641763863173640">管理影片預覽設定</translation>
+<translation id="898854820045159673">加咗反應</translation>
+<translation id="8989968390305463310">您的瀏覽記錄會影響系統顯示的廣告，以及下列由系統推測的興趣。為保障您的私隱，Chrome 每個月都會自動刪除您的興趣。除非您移除興趣，否則系統會重新整理興趣。</translation>
 <translation id="8993760627012879038">在無痕模式中開啟新分頁</translation>
 <translation id="8996847606757455498">選擇其他供應商</translation>
 <translation id="8998729206196772491">您即將登入由 <ph name="MANAGED_DOMAIN" /> 管理的帳戶，並讓帳戶管理員控制您的 Chrome 資料。您的資料將與這個帳戶建立永久連結。如果您登出 Chrome，系統將刪除此裝置上的資料，但這些資料仍會保留在您的 Google 帳戶中。</translation>
@@ -1435,6 +1501,7 @@
 <translation id="9158770349521403363">只分享內容</translation>
 <translation id="916446198114569890">系統會將您瀏覽的網址儲存至 Google 帳戶</translation>
 <translation id="9169507124922466868">導覽記錄喺畫面下半部分顯示</translation>
+<translation id="9187955620966010988">調整咗反應</translation>
 <translation id="9199368092038462496">{NUM_MINS,plural, =1{曾在 1 分鐘前檢查}other{曾在 # 分鐘前檢查}}</translation>
 <translation id="9204836675896933765">尚餘 1 個檔案</translation>
 <translation id="9205933215779845960">找不到該頁面。請檢查拼字，或嘗試在 <ph name="SEARCH_ENGINE" /> 上搜尋。</translation>

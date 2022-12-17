@@ -7,8 +7,10 @@
 
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
+#include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/gfx/text_constants.h"
 #include "ui/message_center/message_center_export.h"
@@ -116,6 +118,7 @@ class MESSAGE_CENTER_EXPORT NotificationHeaderView : public views::Button {
   raw_ptr<views::ImageView> app_icon_view_ = nullptr;
   raw_ptr<views::Label> app_name_view_ = nullptr;
   raw_ptr<views::View> detail_views_ = nullptr;
+  raw_ptr<views::View> spacer_ = nullptr;
   raw_ptr<views::Label> summary_text_divider_ = nullptr;
   raw_ptr<views::Label> summary_text_view_ = nullptr;
   raw_ptr<views::Label> timestamp_divider_ = nullptr;

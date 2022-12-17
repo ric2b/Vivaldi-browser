@@ -14,6 +14,7 @@
 #include "components/sync/protocol/model_type_state.pb.h"
 #include "components/sync/protocol/notes_specifics.pb.h"
 #include "notes/note_node.h"
+#include "sync/notes/synced_note_tracker_entity.h"
 #include "sync/notes/synced_note_tracker.h"
 
 namespace sync_notes {
@@ -53,7 +54,7 @@ base::GUID TryGetParentGuidFromTracker(
   DCHECK(update.entity.server_defined_unique_tag.empty());
   DCHECK(!update.entity.specifics.notes().has_parent_guid());
 
-  const SyncedNoteTracker::Entity* const tracked_parent =
+  const SyncedNoteTrackerEntity* const tracked_parent =
       tracker->GetEntityForSyncId(update.entity.legacy_parent_id);
   if (!tracked_parent) {
     // Parent not known by tracker.
@@ -211,12 +212,12 @@ void PopulateParentGuidInSpecifics(const SyncedNoteTracker* tracker,
     // SyncedNoteTracker. Since this is prone to change in the future, the
     // DCHECK below is added to avoid subtle bugs, without relying exclusively
     // on integration tests that exercise legacy data..
-    DCHECK(tracker->GetEntityForGUID(base::GUID::ParseLowercase(
-        vivaldi::NoteNode::kMainNodeGuid)));
-    DCHECK(tracker->GetEntityForGUID(base::GUID::ParseLowercase(
-        vivaldi::NoteNode::kOtherNotesNodeGuid)));
-    DCHECK(tracker->GetEntityForGUID(base::GUID::ParseLowercase(
-        vivaldi::NoteNode::kTrashNodeGuid)));
+    DCHECK(tracker->GetEntityForGUID(
+        base::GUID::ParseLowercase(vivaldi::NoteNode::kMainNodeGuid)));
+    DCHECK(tracker->GetEntityForGUID(
+        base::GUID::ParseLowercase(vivaldi::NoteNode::kOtherNotesNodeGuid)));
+    DCHECK(tracker->GetEntityForGUID(
+        base::GUID::ParseLowercase(vivaldi::NoteNode::kTrashNodeGuid)));
 
     PopulateParentGuidInSpecificsWithTracker(tracker, updates);
     return;

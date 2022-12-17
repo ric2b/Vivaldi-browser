@@ -23,7 +23,6 @@
 #import "ios/chrome/browser/ui/settings/password/password_details/password_details_table_view_constants.h"
 #import "ios/chrome/browser/ui/settings/password/password_details/password_details_table_view_controller_delegate.h"
 #import "ios/chrome/browser/ui/settings/password/passwords_table_view_constants.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_cells_constants.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_link_header_footer_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_text_edit_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_text_edit_item_delegate.h"
@@ -34,6 +33,7 @@
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/elements/popover_label_view_controller.h"
 #import "ios/chrome/common/ui/reauthentication/reauthentication_module.h"
+#import "ios/chrome/common/ui/table_view/table_view_cells_constants.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ui/base/l10n/l10n_util_mac.h"
@@ -634,7 +634,7 @@ typedef NS_ENUM(NSInteger, ReauthenticationReason) {
 - (CGFloat)tableView:(UITableView*)tableView
     heightForHeaderInSection:(NSInteger)section {
   NSInteger sectionIdentifier =
-      [self.tableViewModel sectionIdentifierForSection:section];
+      [self.tableViewModel sectionIdentifierForSectionIndex:section];
 
   if (sectionIdentifier == SectionIdentifierFooter ||
       sectionIdentifier == SectionIdentifierTLDFooter) {
@@ -646,7 +646,7 @@ typedef NS_ENUM(NSInteger, ReauthenticationReason) {
 - (CGFloat)tableView:(UITableView*)tableView
     heightForFooterInSection:(NSInteger)section {
   NSInteger sectionIdentifier =
-      [self.tableViewModel sectionIdentifierForSection:section];
+      [self.tableViewModel sectionIdentifierForSectionIndex:section];
   if (sectionIdentifier == SectionIdentifierSite) {
     return 0;
   }
@@ -1006,7 +1006,8 @@ typedef NS_ENUM(NSInteger, ReauthenticationReason) {
 }
 
 // Shows a snack bar with |message| and provides haptic feedback. The haptic
-// feedback is either for success or for error, depending on |success|.
+// feedback is either for success or for error, depending on |success|. Deselect
+// cell if there was one selected.
 - (void)showToast:(NSString*)message forSuccess:(BOOL)success {
   TriggerHapticFeedbackForNotification(success
                                            ? UINotificationFeedbackTypeSuccess
@@ -1015,6 +1016,12 @@ typedef NS_ENUM(NSInteger, ReauthenticationReason) {
                                      buttonText:nil
                                   messageAction:nil
                                completionAction:nil];
+
+  if ([self.tableView indexPathForSelectedRow]) {
+    [self.tableView
+        deselectRowAtIndexPath:[self.tableView indexPathForSelectedRow]
+                      animated:YES];
+  }
 }
 
 - (BOOL)isItemAtIndexPathTextEditCell:(NSIndexPath*)cellPath {

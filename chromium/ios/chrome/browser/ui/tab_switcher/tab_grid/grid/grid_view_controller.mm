@@ -311,6 +311,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   _mode = mode;
   // TODO(crbug.com/1300369): Enable dragging items from search results.
   self.collectionView.dragInteractionEnabled = (_mode != TabGridModeSearch);
+  self.emptyStateView.tabGridMode = _mode;
 
   if (IsTabsSearchRegularResultsSuggestedActionsEnabled()) {
     if (mode == TabGridModeSearch && self.suggestedActionsDelegate) {
@@ -394,6 +395,8 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   GridTransitionActiveItem* activeItem;
   GridTransitionItem* selectionItem;
   for (NSIndexPath* path in self.collectionView.indexPathsForVisibleItems) {
+    if (path.section != kOpenTabsSectionIndex)
+      continue;
     GridCell* cell = base::mac::ObjCCastStrict<GridCell>(
         [self.collectionView cellForItemAtIndexPath:path]);
     UICollectionViewLayoutAttributes* attributes =
@@ -668,9 +671,16 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 
   GridCell* cell = base::mac::ObjCCastStrict<GridCell>(
       [self.collectionView cellForItemAtIndexPath:indexPath]);
-  MenuScenario scenario = _mode == TabGridModeSearch
-                              ? MenuScenario::kTabGridSearchResult
-                              : MenuScenario::kTabGridEntry;
+
+  MenuScenario scenario;
+  if (_mode == TabGridModeSearch) {
+    scenario = MenuScenario::kTabGridSearchResult;
+  } else if (self.currentLayout == self.horizontalLayout) {
+    scenario = MenuScenario::kThumbStrip;
+  } else {
+    scenario = MenuScenario::kTabGridEntry;
+  }
+
   return [self.menuProvider contextMenuConfigurationForGridCell:cell
                                                    menuScenario:scenario];
 }
@@ -682,6 +692,18 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   return [[BidirectionalCollectionViewTransitionLayout alloc]
       initWithCurrentLayout:fromLayout
                  nextLayout:toLayout];
+}
+
+- (void)collectionView:(UICollectionView*)collectionView
+    didEndDisplayingCell:(UICollectionViewCell*)cell
+      forItemAtIndexPath:(NSIndexPath*)indexPath {
+  if ([cell isKindOfClass:[GridCell class]]) {
+    // Stop animation of GridCells when removing them from the collection view.
+    // This is important to prevent cells from animating indefinitely. This is
+    // safe because the animation state of GridCells is set in
+    // |configureCell:withItem:| whenever a cell is used.
+    [base::mac::ObjCCastStrict<GridCell>(cell) hideActivityIndicator];
+  }
 }
 
 #pragma mark - UIPointerInteractionDelegate
@@ -1260,18 +1282,12 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 }
 
 - (CGFloat)offsetPastEndOfScrollView {
-  CGFloat offset;
-  if (UseRTLLayout()) {
-    offset = -self.collectionView.contentOffset.x;
-  } else {
-    // Use collectionViewLayout.collectionViwContentSize because it has the
-    // correct size during a batch update.
-    offset = self.collectionView.contentOffset.x +
-             self.collectionView.frame.size.width -
-             self.collectionView.collectionViewLayout.collectionViewContentSize
-                 .width;
-  }
-  return offset;
+  // Use collectionViewLayout.collectionViwContentSize because it has the
+  // correct size during a batch update.
+  return self.collectionView.contentOffset.x +
+         self.collectionView.frame.size.width -
+         self.collectionView.collectionViewLayout.collectionViewContentSize
+             .width;
 }
 
 - (void)setFractionVisibleOfLastItem:(CGFloat)fractionVisibleOfLastItem {
@@ -1526,6 +1542,8 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
            .indexPathsForVisibleItems) {
     UICollectionViewCell* cell =
         [self.collectionView cellForItemAtIndexPath:indexPath];
+    if (![cell isKindOfClass:[GridCell class]])
+      continue;
     NSUInteger itemIndex = base::checked_cast<NSUInteger>(indexPath.item);
     cell.accessibilityIdentifier = [NSString
         stringWithFormat:@"%@%ld", kGridCellIdentifierPrefix, itemIndex];
@@ -1547,14 +1565,15 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   }
   for (NSIndexPath* indexPath in self.collectionView
            .indexPathsForVisibleItems) {
-    if ([self isIndexPathForPlusSignCell:indexPath])
+    UICollectionViewCell* cell =
+        [self.collectionView cellForItemAtIndexPath:indexPath];
+    if (![cell isKindOfClass:[GridCell class]])
       continue;
-    GridCell* cell = base::mac::ObjCCastStrict<GridCell>(
-        [self.collectionView cellForItemAtIndexPath:indexPath]);
-    if (cell.itemIdentifier != self.selectedItemID) {
-      cell.opacity = self.notSelectedTabCellOpacity;
+    GridCell* gridCell = base::mac::ObjCCastStrict<GridCell>(cell);
+    if (gridCell.itemIdentifier != self.selectedItemID) {
+      gridCell.opacity = self.notSelectedTabCellOpacity;
     } else {
-      cell.opacity = 1.0f;
+      gridCell.opacity = 1.0f;
     }
   }
 }
@@ -1601,7 +1620,6 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 #pragma mark Suggested Actions Section
 
 - (void)updateSuggestedActionsSection {
-  DCHECK(IsTabsSearchEnabled());
   if (!self.suggestedActionsDelegate)
     return;
   // In search mode if there is already a search query, and the suggested
@@ -1722,8 +1740,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
         addGestureRecognizer:self.thumbStripSwipeUpDismissRecognizer];
   }
 
-  if (panHandler.currentState == ViewRevealState::Revealed ||
-      panHandler.currentState == ViewRevealState::Fullscreen) {
+  if (panHandler.currentState == ViewRevealState::Revealed) {
     self.thumbStripDismissRecognizer.enabled = NO;
     self.thumbStripSwipeUpDismissRecognizer.enabled = NO;
     collectionView.collectionViewLayout = self.gridLayout;
@@ -1774,7 +1791,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   _thumbStripEnabled = NO;
 }
 
-#pragma mark-- Thumbstrip tap dismiss handling
+#pragma mark - Thumbstrip tap dismiss handling
 
 - (void)handleThumbStripBackgroundTapGesture:(UIGestureRecognizer*)recognizer {
   if (recognizer.state != UIGestureRecognizerStateEnded)

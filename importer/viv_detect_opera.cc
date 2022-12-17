@@ -2,9 +2,11 @@
 
 #include "importer/viv_importer.h"
 
+#include "build/build_config.h"
+#include "ui/base/l10n/l10n_util.h"
+
 #include "app/vivaldi_resources.h"
 #include "importer/viv_importer_utils.h"
-#include "ui/base/l10n/l10n_util.h"
 
 // static const char OPERA_PREFS_NAME[] = "operaprefs.ini";
 // static const char OPERA_SPEEDDIAL_NAME[] = "speeddial.ini";
@@ -28,7 +30,7 @@ void DetectOperaProfiles(std::vector<importer::SourceProfile>* profiles) {
   opera.importer_type = importer::TYPE_OPERA;
   opera.source_path = GetProfileDir();
   opera.mail_path = GetMailDirectory();
-#if defined(OS_WIN)
+#if BUILDFLAG(IS_WIN)
   opera.app_path = GetOperaInstallPathFromRegistry();
 #endif
   opera.services_supported = importer::SPEED_DIAL | importer::FAVORITES |

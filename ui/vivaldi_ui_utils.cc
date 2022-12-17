@@ -9,6 +9,7 @@
 
 #include "app/vivaldi_constants.h"
 #include "base/json/json_reader.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/platform_util.h"
@@ -35,14 +36,14 @@ bool IsMainVivaldiBrowserWindow(VivaldiBrowserWindow* window) {
   DCHECK(window);
   base::JSONParserOptions options = base::JSON_PARSE_RFC;
   absl::optional<base::Value> json =
-      base::JSONReader::Read(window->browser()->ext_data(), options);
+      base::JSONReader::Read(window->browser()->viv_ext_data(), options);
   std::string window_type;
   if (json) {
     if (base::Value::Dict* dict = json->GetIfDict()) {
       if (std::string* window_type = dict->FindString("windowType")) {
         // Don't track popup windows (like settings) in the session.
         // We have "", "popup" and "settings".
-        // TODO(pettern): Popup windows still rely on extData, this
+        // TODO(pettern): Popup windows still rely on vivExtData, this
         // should go away and we should use the type sent to the apis
         // instead.
         if (*window_type == "popup" || *window_type == "settings") {
@@ -74,7 +75,7 @@ extensions::WebViewGuest* GetActiveWebGuestFromBrowser(Browser* browser) {
 }
 
 VivaldiBrowserWindow* GetActiveAppWindow() {
-#if defined(OS_WIN) || defined(OS_LINUX)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   Browser* browser = chrome::FindLastActive();
   if (browser && browser->is_vivaldi())
     return static_cast<VivaldiBrowserWindow*>(browser->window());

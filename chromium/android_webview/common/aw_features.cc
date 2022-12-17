@@ -41,11 +41,6 @@ const base::Feature kWebViewBrotliSupport{"WebViewBrotliSupport",
 const base::Feature kWebViewConnectionlessSafeBrowsing{
     "WebViewConnectionlessSafeBrowsing", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enable WebView to set prefers-color-theme according to the app's theme unless
-// app specifies FORCE_DARK_OFF or DARK_STRATEGY_USER_AGENT_DARKENING_ONLY.
-const base::Feature kWebViewDarkModeMatchTheme{
-    "WebViewDarkModeMatchTheme", base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Enable WebView to automatically darken the page in FORCE_DARK_AUTO mode if
 // the app's theme is dark.
 const base::Feature kWebViewForceDarkModeMatchTheme{
@@ -81,10 +76,6 @@ const base::Feature kWebViewJavaJsBridgeMojo{"WebViewJavaJsBridgeMojo",
 // When enabled, connections using legacy TLS 1.0/1.1 versions are allowed.
 const base::Feature kWebViewLegacyTlsSupport{"WebViewLegacyTlsSupport",
                                              base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Enables logging whether it was a first party page when logging PageTimeSpent.
-const base::Feature kWebViewLogFirstPartyPageTimeSpent{
-    "WebViewLogFirstPartyPageTimeSpent", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Measure the number of pixels occupied by one or more WebViews as a
 // proportion of the total screen size. Depending on the number of
@@ -130,6 +121,13 @@ const base::Feature kWebViewXRequestedWithHeader{
 // Must be value declared in in |AwSettings::RequestedWithHeaderMode|
 const base::FeatureParam<int> kWebViewXRequestedWithHeaderMode{
     &kWebViewXRequestedWithHeader, "WebViewXRequestedWithHeaderMode", 1};
+
+// Only synthesize page load for URL spoof prevention at most once, on initial
+// main document access (instead on every NavigationStateChanged call that
+// invalidates the URL after).
+const base::Feature kWebViewSynthesizePageLoadOnlyOnInitialMainDocumentAccess{
+    "WebViewSynthesizePageLoadOnlyOnInitialMainDocumentAccess",
+    base::FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace features
 }  // namespace android_webview

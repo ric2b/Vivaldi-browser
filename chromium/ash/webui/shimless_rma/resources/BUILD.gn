@@ -22,6 +22,7 @@ polymer_element_files = [
   "critical_error_page.js",
   "onboarding_choose_destination_page.js",
   "onboarding_choose_wp_disable_method_page.js",
+  "onboarding_choose_wipe_device_page.js",
   "onboarding_enter_rsu_wp_disable_code_page.js",
   "onboarding_landing_page.js",
   "onboarding_network_page.js",
@@ -54,12 +55,16 @@ generate_grd("build_grd") {
     "fake_shimless_rma_service.js",
     "index.html",
     "mojo_interface_provider.js",
+    "illustrations/base_on_flat_surface.svg",
     "illustrations/downloading.svg",
+    "illustrations/error.svg",
     "illustrations/insert_usb.svg",
+    "illustrations/lid_on_flat_surface.svg",
     "illustrations/repair_start.svg",
     "illustrations/update_os.svg",
     "png/diagnostics_app_icon_192.png",
     "shimless_rma_types.js",
+    "shimless_rma_util.js",
   ]
   input_files_base_dir = rebase_path(".", "//")
   deps = [
@@ -85,6 +90,7 @@ js_type_check("closure_compile_module") {
     ":fake_shimless_rma_service",
     ":mojo_interface_provider",
     ":onboarding_choose_destination_page",
+    ":onboarding_choose_wipe_device_page",
     ":onboarding_choose_wp_disable_method_page",
     ":onboarding_enter_rsu_wp_disable_code_page",
     ":onboarding_landing_page",
@@ -102,6 +108,7 @@ js_type_check("closure_compile_module") {
     ":repair_component_chip",
     ":shimless_rma",
     ":shimless_rma_types",
+    ":shimless_rma_util",
     ":splash_screen",
     ":wrapup_finalize_page",
     ":wrapup_repair_complete_page",
@@ -115,6 +122,7 @@ js_library("shimless_rma") {
     ":critical_error_page",
     ":mojo_interface_provider",
     ":onboarding_choose_destination_page",
+    ":onboarding_choose_wipe_device_page",
     ":onboarding_choose_wp_disable_method_page",
     ":onboarding_enter_rsu_wp_disable_code_page",
     ":onboarding_landing_page",
@@ -204,6 +212,15 @@ js_library("onboarding_choose_destination_page") {
     "//ui/webui/resources/cr_elements/cr_radio_button:cr_radio_button.m",
     "//ui/webui/resources/cr_elements/cr_radio_group:cr_radio_group.m",
     "//ui/webui/resources/js:i18n_behavior.m",
+  ]
+}
+
+js_library("onboarding_choose_wipe_device_page") {
+  deps = [
+    ":base_page",
+    ":mojo_interface_provider",
+    ":shimless_rma_types",
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
   ]
 }
 
@@ -428,6 +445,12 @@ js_library("shimless_rma_types") {
   deps = [
     "//ash/webui/shimless_rma/mojom:mojom_js_library_for_compile",
     "//chromeos/services/network_config/public/mojom:mojom_js_library_for_compile",
+  ]
+}
+
+js_library("shimless_rma_util") {
+  deps = [
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
   ]
 }
 

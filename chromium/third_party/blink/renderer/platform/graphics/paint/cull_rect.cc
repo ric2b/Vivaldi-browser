@@ -137,7 +137,11 @@ bool CullRect::ApplyPaintProperties(
 
   for (const auto* t = &destination.Transform(); t != &source.Transform();
        t = t->UnaliasedParent()) {
-    DCHECK(t);
+    // TODO(wangxianzhu): This should be DCHECK(t), but for now we need to
+    // work around crbug.com/1262837 etc. Also see the TODO in
+    // FragmentData::LocalBorderBoxProperties().
+    if (!t)
+      return false;
     if (t == &root.Transform()) {
       abnormal_hierarchy = true;
       break;
@@ -263,15 +267,15 @@ bool CullRect::ApplyPaintProperties(
     int pixel_distance_to_expand =
         LocalPixelDistanceToExpand(root.Transform(), destination.Transform());
     if (rect_.width() < pixel_distance_to_expand) {
-      rect_.Outset(pixel_distance_to_expand, 0);
+      rect_.Outset(gfx::Outsets::VH(0, pixel_distance_to_expand));
       if (expansion_bounds)
-        expansion_bounds->Outset(pixel_distance_to_expand, 0);
+        expansion_bounds->Outset(gfx::Outsets::VH(0, pixel_distance_to_expand));
       expanded = true;
     }
     if (rect_.height() < pixel_distance_to_expand) {
-      rect_.Outset(0, pixel_distance_to_expand);
+      rect_.Outset(gfx::Outsets::VH(pixel_distance_to_expand, 0));
       if (expansion_bounds)
-        expansion_bounds->Outset(0, pixel_distance_to_expand);
+        expansion_bounds->Outset(gfx::Outsets::VH(pixel_distance_to_expand, 0));
       expanded = true;
     }
   }

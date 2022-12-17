@@ -9,11 +9,10 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/content_navigation_policy.h"
 #include "content/public/browser/navigation_controller.h"
-#include "content/public/browser/notification_service.h"
-#include "content/public/browser/notification_types.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
@@ -94,7 +93,8 @@ class SessionHistoryTest : public ContentBrowserTest {
   // Navigate session history using history.go(distance).
   void JavascriptGo(const std::string& distance) {
     TestNavigationObserver observer(shell()->web_contents());
-    shell()->LoadURL(GURL("javascript:history.go('" + distance + "')"));
+    EXPECT_TRUE(ExecuteScript(ToRenderFrameHost(shell()->web_contents()),
+                              "history.go('" + distance + "')"));
     observer.Wait();
   }
 
@@ -128,17 +128,13 @@ class SessionHistoryTest : public ContentBrowserTest {
   }
 
   void GoBack() {
-    WindowedNotificationObserver load_stop_observer(
-        NOTIFICATION_LOAD_STOP,
-        NotificationService::AllSources());
+    LoadStopObserver load_stop_observer(shell()->web_contents());
     shell()->web_contents()->GetController().GoBack();
     load_stop_observer.Wait();
   }
 
   void GoForward() {
-    WindowedNotificationObserver load_stop_observer(
-        NOTIFICATION_LOAD_STOP,
-        NotificationService::AllSources());
+    LoadStopObserver load_stop_observer(shell()->web_contents());
     shell()->web_contents()->GetController().GoForward();
     load_stop_observer.Wait();
   }

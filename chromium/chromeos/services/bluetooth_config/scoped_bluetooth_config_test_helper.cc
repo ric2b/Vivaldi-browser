@@ -14,11 +14,15 @@
 #include "chromeos/services/bluetooth_config/fake_discovery_session_manager.h"
 #include "chromeos/services/bluetooth_config/in_process_instance.h"
 #include "device/bluetooth/bluetooth_adapter.h"
+#include "device/bluetooth/dbus/bluez_dbus_manager.h"
 
 namespace chromeos {
 namespace bluetooth_config {
 
 ScopedBluetoothConfigTestHelper::ScopedBluetoothConfigTestHelper() {
+  if (!bluez::BluezDBusManager::IsInitialized())
+    bluez::BluezDBusManager::InitializeFake();
+
   OverrideInProcessInstanceForTesting(/*initializer=*/this);
 }
 
@@ -87,7 +91,8 @@ std::unique_ptr<DiscoverySessionManager>
 ScopedBluetoothConfigTestHelper::CreateDiscoverySessionManager(
     AdapterStateController* adapter_state_controller,
     scoped_refptr<device::BluetoothAdapter> bluetooth_adapter,
-    DiscoveredDevicesProvider* discovered_devices_provider) {
+    DiscoveredDevicesProvider* discovered_devices_provider,
+    FastPairDelegate* fast_pair_delegate) {
   auto fake_discovery_session_manager =
       std::make_unique<FakeDiscoverySessionManager>(
           adapter_state_controller, discovered_devices_provider);

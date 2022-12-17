@@ -46,7 +46,7 @@ class SESSIONS_EXPORT ContentLiveTab
       override;
   SerializedUserAgentOverride GetUserAgentOverride() override;
 
-  const std::string& GetExtData() const override;
+  const std::string& GetVivExtData() const override;
 
   content::WebContents* web_contents() { return web_contents_; }
   const content::WebContents* web_contents() const { return web_contents_; }

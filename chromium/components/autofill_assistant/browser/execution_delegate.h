@@ -42,10 +42,6 @@ class ExecutionDelegate {
   virtual void OnFatalError(const std::string& error_message,
                             Metrics::DropOutReason reason) = 0;
 
-  // Reports that Autofill Assistant should be Stopped.
-  virtual void OnStop(const std::string& message,
-                      const std::string& button_label) = 0;
-
   // Adds the rectangles that correspond to the current touchable area to
   // the given vector.
   //
@@ -105,7 +101,7 @@ class ExecutionDelegate {
   virtual void ShutdownIfNecessary() = 0;
 
   // Notifies the execution delegate about a change to the UserData.
-  virtual void NotifyUserDataChange(UserData::FieldChange field_change) = 0;
+  virtual void NotifyUserDataChange(UserDataFieldChange field_change) = 0;
 
   // Register an observer. Observers get told about changes to the
   // controller.

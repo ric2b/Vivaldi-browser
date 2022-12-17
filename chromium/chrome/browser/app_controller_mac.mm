@@ -26,7 +26,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "base/threading/thread_restrictions.h"
@@ -76,7 +75,7 @@
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_menu_bridge.h"
 #import "chrome/browser/ui/cocoa/confirm_quit.h"
 #import "chrome/browser/ui/cocoa/confirm_quit_panel_controller.h"
-#include "chrome/browser/ui/cocoa/handoff_active_url_observer_bridge.h"
+#include "chrome/browser/ui/cocoa/handoff_observer.h"
 #import "chrome/browser/ui/cocoa/history_menu_bridge.h"
 #include "chrome/browser/ui/cocoa/last_active_browser_cocoa.h"
 #import "chrome/browser/ui/cocoa/profiles/profile_menu_controller.h"
@@ -389,7 +388,7 @@ Profile* GetLastProfileMac() {
   return profile_manager->GetProfile(profile_path);
 }
 
-@interface AppController () <HandoffActiveURLObserverBridgeDelegate>
+@interface AppController () <HandoffObserverDelegate>
 - (void)initMenuState;
 - (void)initProfileMenu;
 - (void)updateConfirmToQuitPrefMenuItem:(NSMenuItem*)item;
@@ -414,8 +413,14 @@ Profile* GetLastProfileMac() {
 // NTP after all the |urls| have been opened.
 - (void)openUrlsReplacingNTP:(const std::vector<GURL>&)urls;
 
-// This method passes |handoffURL| to |handoffManager_|.
-- (void)passURLToHandoffManager:(const GURL&)handoffURL;
+// Returns |YES| if |webContents| can be sent to another device via Handoff.
+- (BOOL)isHandoffEligible:(content::WebContents*)webContents;
+
+// This method passes |handoffURL| and |handoffTitle| to |handoffManager_|.
+// This is a separate method (vs. being inlined into `updateHandoffManager`
+// below) so that it can be swizzled in tests.
+- (void)updateHandoffManagerWithURL:(const GURL&)handoffURL
+                              title:(const std::u16string&)handoffTitle;
 
 // Lazily creates the Handoff Manager. Updates the state of the Handoff
 // Manager. This method is idempotent. This should be called:
@@ -425,10 +430,6 @@ Profile* GetLastProfileMac() {
 // - When the active browser's active tab switches.
 // |webContents| should be the new, active WebContents.
 - (void)updateHandoffManager:(content::WebContents*)webContents;
-
-// Given |webContents|, extracts a GURL to be used for Handoff. This may return
-// the empty GURL.
-- (GURL)handoffURLFromWebContents:(content::WebContents*)webContents;
 
 // Return false if Chrome startup is paused by dialog and AppController is
 // called without any initialized Profile.
@@ -930,8 +931,7 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
     return;
   }
 
-  StartupBrowserCreator::MaybeHandleProfileAgnosticUrls(
-      urls, base::BindOnce(&OpenUrlsInBrowser, urls));
+  OpenUrlsInBrowser(urls);
 }
 
 // This is called after profiles have been loaded and preferences registered.
@@ -1027,8 +1027,7 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
             _menuState.get()));
   }
 
-  _handoff_active_url_observer_bridge =
-      std::make_unique<HandoffActiveURLObserverBridge>(self);
+  _handoff_observer = std::make_unique<HandoffObserver>(self);
 
   if (@available(macOS 10.15, *)) {
     ASWebAuthenticationSessionWebBrowserSessionManager.sharedManager
@@ -1275,7 +1274,7 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
     enable = canOpenNewBrowser;
   } else if (action == @selector(toggleConfirmToQuit:)) {
     [self updateConfirmToQuitPrefMenuItem:static_cast<NSMenuItem*>(item)];
-    enable = YES;
+    enable = [self shouldEnableConfirmToQuitPrefMenuItem];
   } else if (action == @selector(checkForUpdates:)) {
 #ifndef VIVALDI_SPARKLE_DISABLED
     enable = [[_sparkle_updater_controller updater] canCheckForUpdates];
@@ -1387,115 +1386,121 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
 
   if (unsafeLastProfile && !lastProfile) {
     // The profile is disallowed by policy (locked or guest mode disabled).
-    ProfilePicker::Show(ProfilePicker::EntryPoint::kProfileLocked);
+    ProfilePicker::Show(ProfilePicker::Params::FromEntryPoint(
+        ProfilePicker::EntryPoint::kProfileLocked));
     return;
   }
 
-  // VB-13452 [Mac] Can not close developer tools window using keyboard
-  if ([NSApp keyWindow] &&
-      (tag == IDC_VIV_CLOSE_TAB || tag == IDC_VIV_CLOSE_WINDOW)) {
-    Browser* browser = chrome::FindBrowserWithWindow([NSApp keyWindow]);
-    if (browser && browser->is_type_devtools()) {
-      // When inspecting Vivaldi UI, devtools is in a BrowerWindow
-      [[NSApp keyWindow] close];
-      return;
-    }
-    if (!browser) {
-      // When inspecting a page, devtools is in an AppWindow -> no browser
-      extensions::AppWindow* app_window =
-        AppWindowRegistryUtil::GetAppWindowForNativeWindowAnyProfile(
-          [NSApp keyWindow]);
-      if (app_window) {
-        for (content::WebContents* web_contents :
-             app_window->web_contents()->GetInnerWebContents()) {
-          if (DevToolsWindow::IsDevToolsWindow(web_contents)) {
-            DevToolsWindow* devtools_window =
-              DevToolsWindow::FindWindowByDevtoolsWebContents(web_contents);
-            if (devtools_window) {
-              devtools_window->ForceCloseWindow();
-            }
-            return;
-          }
-        }
-      }
-    }
-  } // end VB-13452
-
-  SEL action = [sender action];
-  if (action == @selector(commandFromDock:) || tag == IDC_VIV_EXIT) {
-    // Do nothing, but make it clear. The dock menu is not controlled from
-    // Vivaldi and actions from that must not be subject to those we use below.
-
-    // IDC_VIV_EXIT keyb shortcut needs to be handled on this side to show the
-    // confirmation dialog before quitting
-  } else {
-    // Vivaldi executes its own shortcuts from the javascript side. Mac will in
-    // addition execute shortcuts that are displayed in the menu so we must stop
-    // those. First step is to only allow proper mouse and keyboard events. We
-    // have observed during rapid keypresses that other events are the current
-    // event when commandDisptach fires (see VB-10837).
-    NSEventType eventType = [[NSApp currentEvent] type];
-    if (eventType != NSKeyDown &&
-        eventType != NSLeftMouseUp &&
-        eventType != NSRightMouseUp) {
-      return;
-    }
-
-    if (eventType == NSKeyDown) {
-      // Additional test for key presses. Allow those that are sent from the
-      // menu by selecting an entry and pressing space/enter and even a shortcut
-      // if there is no browser window (in that case vivaldi will not execute its
-      // own). Note that if the shortcut happens as a result of dead keys the
-      // character length is 0. We have seen this for Alt+E when used with a
-      // Japanese input method (Romaji).
-      auto key = [[NSApp currentEvent] characters];
-      if (key.length == 0 ||
-          ([key characterAtIndex:0] != NSCarriageReturnCharacter &&
-           [key characterAtIndex:0] != NSNewlineCharacter &&
-           [key characterAtIndex:0] != NSEnterCharacter &&
-           ![key isEqual:@" "])) {
-        Browser* browser = chrome::FindLastActiveWithProfile(
-            lastProfile->IsGuestSession()
-                ? lastProfile->GetOffTheRecordProfile(
-                      Profile::OTRProfileID::PrimaryID(), true)
-                : lastProfile);
-        if (browser) {
-          // The window will not receive regular shortcuts in JS when minimzed.
-          // So allow the menu drive action continue in that case.
-          if (!browser->window() || !browser->window()->IsMinimized()) {
-            return;
-          }
-        }
-      }
-    }
-  }
-
   if (vivaldi::IsVivaldiRunning()) {
-    Browser* browser = chrome::FindLastActiveWithProfile(
-        lastProfile->IsGuestSession()
-            ? lastProfile->GetOffTheRecordProfile(
-                  Profile::OTRProfileID::PrimaryID(), true)
-            : lastProfile);
-    if (!browser)
-      browser =
-          chrome::FindLastActiveWithProfile(lastProfile->GetOffTheRecordProfile(
-              Profile::OTRProfileID::PrimaryID(), true));
+    // VB-13452 [Mac] Can not close developer tools window using keyboard
+    if ([NSApp keyWindow] &&
+        (tag == IDC_VIV_CLOSE_TAB || tag == IDC_VIV_CLOSE_WINDOW)) {
+      Browser* browser = chrome::FindBrowserWithWindow([NSApp keyWindow]);
+      if (browser && browser->is_type_devtools()) {
+        // When inspecting Vivaldi UI, devtools is in a BrowerWindow
+        [[NSApp keyWindow] close];
+        return;
+      }
+      if (!browser) {
+        // When inspecting a page, devtools is in an AppWindow -> no browser
+        extensions::AppWindow* app_window =
+          AppWindowRegistryUtil::GetAppWindowForNativeWindowAnyProfile(
+            [NSApp keyWindow]);
+        if (app_window) {
+          for (content::WebContents* web_contents :
+              app_window->web_contents()->GetInnerWebContents()) {
+            if (DevToolsWindow::IsDevToolsWindow(web_contents)) {
+              DevToolsWindow* devtools_window =
+                DevToolsWindow::FindWindowByDevtoolsWebContents(web_contents);
+              if (devtools_window) {
+                devtools_window->ForceCloseWindow();
+              }
+              return;
+            }
+          }
+        }
+      }
+    } // end VB-13452
 
-    if (browser && browser->window()->IsMinimized()) {
-      // NOTE(tomas@vivaldi.com): For minimized windows we don't want to
-      // unminimize any open windows for these commands, so we handle them here.
-      if (tag == IDC_VIV_NEW_PRIVATE_WINDOW) {
-        CreateBrowser(lastProfile->GetOffTheRecordProfile(
-            Profile::OTRProfileID::PrimaryID(), true));
+    SEL action = [sender action];
+    if (action == @selector(commandFromDock:) || tag == IDC_VIV_EXIT) {
+      // Do nothing, but make it clear. The dock menu is not controlled from
+      // Vivaldi and actions from that must not be subject to those we use below.
+
+      // IDC_VIV_EXIT keyb shortcut needs to be handled on this side to show the
+      // confirmation dialog before quitting
+    } else {
+      // Vivaldi executes its own shortcuts from the javascript side. Mac will in
+      // addition execute shortcuts that are displayed in the menu so we must stop
+      // those. First step is to only allow proper mouse and keyboard events. We
+      // have observed during rapid keypresses that other events are the current
+      // event when commandDisptach fires (see VB-10837).
+      NSEventType eventType = [[NSApp currentEvent] type];
+      if (eventType != NSKeyDown &&
+          eventType != NSLeftMouseUp &&
+          eventType != NSRightMouseUp) {
         return;
-      } else if (tag == IDC_VIV_NEW_WINDOW) {
-        CreateBrowser(lastProfile);
-        return;
+      }
+
+      if (eventType == NSKeyDown) {
+        // Additional test for key presses. Allow those that are sent from the
+        // menu by selecting an entry and pressing space/enter and even a shortcut
+        // if there is no browser window (in that case vivaldi will not execute its
+        // own). Note that if the shortcut happens as a result of dead keys the
+        // character length is 0. We have seen this for Alt+E when used with a
+        // Japanese input method (Romaji).
+        auto key = [[NSApp currentEvent] characters];
+        if (key.length == 0 ||
+            ([key characterAtIndex:0] != NSCarriageReturnCharacter &&
+             [key characterAtIndex:0] != NSNewlineCharacter &&
+             [key characterAtIndex:0] != NSEnterCharacter &&
+             ![key isEqual:@" "])) {
+          if (lastProfile) {
+            Browser* browser = chrome::FindLastActiveWithProfile(
+                lastProfile->IsGuestSession()
+                    ? lastProfile->GetOffTheRecordProfile(
+                          Profile::OTRProfileID::PrimaryID(), true)
+                    : lastProfile);
+            if (browser) {
+              // The window will not receive regular shortcuts in JS when
+              // minimzed. So allow the menu drive action continue in that case.
+              if (!browser->window() || !browser->window()->IsMinimized()) {
+                return;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    Browser* browser = nullptr;
+    if (lastProfile) {
+      browser = chrome::FindLastActiveWithProfile(
+          lastProfile->IsGuestSession()
+              ? lastProfile->GetOffTheRecordProfile(
+                    Profile::OTRProfileID::PrimaryID(), true)
+              : lastProfile);
+      if (!browser)
+        browser =
+            chrome::FindLastActiveWithProfile(lastProfile->GetOffTheRecordProfile(
+                Profile::OTRProfileID::PrimaryID(), true));
+
+      if (browser && browser->window()->IsMinimized()) {
+        // NOTE(tomas@vivaldi.com): For minimized windows we don't want to
+        // unminimize any open windows for these commands, so we handle them here.
+        if (tag == IDC_VIV_NEW_PRIVATE_WINDOW) {
+          CreateBrowser(lastProfile->GetOffTheRecordProfile(
+              Profile::OTRProfileID::PrimaryID(), true));
+          return;
+        } else if (tag == IDC_VIV_NEW_WINDOW) {
+          CreateBrowser(lastProfile);
+          return;
+        }
       }
     }
 
     if (!browser) {
-      // NOTE(tomas@vivaldi.com): Handle shorcuts and menu items when no
+      // NOTE(tomas@vivaldi.com): Handle shortcuts and menu items when no
       // window is open. First open a window, and then send the command to the
       // vivaldi app via VivaldiAppObserver.
       if (tag == IDC_VIV_EXIT) {
@@ -1507,33 +1512,41 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
       if (tag == IDC_VIV_CLOSE_TAB || tag == IDC_VIV_CLOSE_WINDOW)
         return;
 
-      if (tag == IDC_VIV_NEW_PRIVATE_WINDOW) {
-        browser = CreateBrowser(lastProfile->GetOffTheRecordProfile(
-            Profile::OTRProfileID::PrimaryID(), true));
+      if (lastProfile) {
+        [self CreateBrowserAndExecuteCommand:tag withProfile:lastProfile];
         return;
       }
-
-      browser = CreateBrowser(lastProfile);
-
-      // NOTE(tomas@vivaldi.com): For "new tab" and "new window" we only want to
-      // open one new window so we do not send the command onward to the vivaldi
-      // app.
-      if (tag == IDC_VIV_NEW_TAB || tag == IDC_VIV_NEW_WINDOW)
-        return;
-
-      vivaldi::VivaldiAppObserver::Get(browser->tab_strip_model()
-                                           ->GetActiveWebContents()
-                                           ->GetBrowserContext())
-          ->SetCommand(tag, browser);
-      return;
     }
-  }
+  }  // vivaldi::IsVivaldiRunning()
 
   // Asynchronously load profile first if needed.
   RunInSafeProfileHelper::Run(
       base::BindOnce(base::RetainBlock(^(Profile* profile) {
         [self executeCommand:sender withProfile:profile];
       })));
+}
+
+// For Vivaldi.
+- (void) CreateBrowserAndExecuteCommand:(int)tag
+                            withProfile:(Profile*) profile {
+  if (tag == IDC_VIV_NEW_PRIVATE_WINDOW) {
+    CreateBrowser(profile->GetOffTheRecordProfile(
+        Profile::OTRProfileID::PrimaryID(), true));
+    return;
+  }
+
+  Browser* browser = CreateBrowser(profile);
+
+  // NOTE(tomas@vivaldi.com): For "new tab" and "new window" we only want to
+  // open one new window so we do not send the command onward to the vivaldi
+  // app.
+  if (tag == IDC_VIV_NEW_TAB || tag == IDC_VIV_NEW_WINDOW)
+    return;
+
+  vivaldi::VivaldiAppObserver::Get(browser->tab_strip_model()
+                                      ->GetActiveWebContents()
+                                      ->GetBrowserContext())
+        ->SetCommand(tag, browser);
 }
 
 - (void)executeCommand:(id)sender withProfile:(Profile*)profile {
@@ -1544,6 +1557,20 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
   }
 
   NSInteger tag = [sender tag];
+
+  if (vivaldi::IsVivaldiRunning()) {
+    // Test if we have a browser. If not create one and execute the requested
+    // command. This needs special handling in vivaldi
+    Browser* browser = chrome::FindLastActiveWithProfile(
+        profile->IsGuestSession()
+            ? profile->GetOffTheRecordProfile(
+                  Profile::OTRProfileID::PrimaryID(), true)
+            : profile);
+    if (!browser) {
+      [self CreateBrowserAndExecuteCommand:tag withProfile:profile];
+      return;
+    }
+  }
 
   switch (tag) {
     case IDC_VIV_EXIT:
@@ -1732,9 +1759,9 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
     doneOnce = YES;
     if (attemptRestore) {
       Profile* lastProfile = [self lastProfile];
-      if (!lastProfile) {
-        // There is no session to be restored without a valid profile. Return NO
-        // to do nothing.
+      if (!lastProfile || IsProfileSignedOut(lastProfile)) {
+        // There is no session to be restored without a valid profile or a
+        // profile that is locked and requires signin. Return NO to do nothing.
         return NO;
       }
       SessionService* sessionService =
@@ -1759,10 +1786,11 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
   }
   if (lastProfile->IsGuestSession() || IsProfileSignedOut(lastProfile) ||
       lastProfile->IsSystemProfile()) {
-    ProfilePicker::Show(ProfilePicker::EntryPoint::kProfileLocked);
+    ProfilePicker::Show(ProfilePicker::Params::FromEntryPoint(
+        ProfilePicker::EntryPoint::kProfileLocked));
   } else if (ProfilePicker::ShouldShowAtLaunch()) {
-    ProfilePicker::Show(
-        ProfilePicker::EntryPoint::kNewSessionOnExistingProcess);
+    ProfilePicker::Show(ProfilePicker::Params::FromEntryPoint(
+        ProfilePicker::EntryPoint::kNewSessionOnExistingProcess));
   } else {
     CreateBrowser(lastProfile);
   }
@@ -1929,6 +1957,12 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
   const PrefService* prefService = g_browser_process->local_state();
   bool enabled = prefService->GetBoolean(prefs::kConfirmToQuitEnabled);
   [item setState:enabled ? NSOnState : NSOffState];
+}
+
+- (BOOL)shouldEnableConfirmToQuitPrefMenuItem {
+  const PrefService* prefService = g_browser_process->local_state();
+  return !prefService->FindPreference(prefs::kConfirmToQuitEnabled)
+              ->IsManaged();
 }
 
 - (void)registerServicesMenuTypesTo:(NSApplication*)app {
@@ -2315,36 +2349,36 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
 
 #pragma mark - Handoff Manager
 
-- (void)passURLToHandoffManager:(const GURL&)handoffURL {
+- (void)updateHandoffManagerWithURL:(const GURL&)handoffURL
+                              title:(const std::u16string&)handoffTitle {
   [_handoffManager updateActiveURL:handoffURL];
+  [_handoffManager updateActiveTitle:handoffTitle];
 }
 
 - (void)updateHandoffManager:(content::WebContents*)webContents {
   if (!_handoffManager)
     _handoffManager.reset([[HandoffManager alloc] init]);
 
-  GURL handoffURL = [self handoffURLFromWebContents:webContents];
-  [self passURLToHandoffManager:handoffURL];
+  if ([self isHandoffEligible:webContents]) {
+    [self updateHandoffManagerWithURL:webContents->GetVisibleURL()
+                                title:webContents->GetTitle()];
+  } else {
+    [self updateHandoffManagerWithURL:GURL() title:std::u16string()];
+  }
 }
 
-- (GURL)handoffURLFromWebContents:(content::WebContents*)webContents {
+- (BOOL)isHandoffEligible:(content::WebContents*)webContents {
   if (!webContents)
-    return GURL();
+    return NO;
 
   Profile* profile =
       Profile::FromBrowserContext(webContents->GetBrowserContext());
   if (!profile)
-    return GURL();
+    return NO;
 
   // Handoff is not allowed from an incognito profile. To err on the safe side,
   // also disallow Handoff from a guest profile.
-  if (!profile->IsRegularProfile())
-    return GURL();
-
-  if (!webContents)
-    return GURL();
-
-  return webContents->GetVisibleURL();
+  return profile->IsRegularProfile();
 }
 
 - (BOOL)isProfileReady {
@@ -2353,9 +2387,9 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
               ->IsEnterpriseStartupDialogShowing();
 }
 
-#pragma mark - HandoffActiveURLObserverBridgeDelegate
+#pragma mark - HandoffObserverDelegate
 
-- (void)handoffActiveURLChanged:(content::WebContents*)webContents {
+- (void)handoffContentsChanged:(content::WebContents*)webContents {
   [self updateHandoffManager:webContents];
 }
 
@@ -2437,8 +2471,10 @@ void RunInSafeProfileHelper::OnProfileLoaded(
   if (status == Profile::CREATE_STATUS_CREATED)
     return;  // Profile loading is not complete, wait to be called again.
   Profile* safe_profile = GetSafeProfile(loaded_profile, status);
-  if (!safe_profile)
-    ProfilePicker::Show(ProfilePicker::EntryPoint::kUnableToCreateBrowser);
+  if (!safe_profile) {
+    ProfilePicker::Show(ProfilePicker::Params::FromEntryPoint(
+        ProfilePicker::EntryPoint::kUnableToCreateBrowser));
+  }
   std::move(callback).Run(safe_profile);
 }
 
@@ -2484,20 +2520,6 @@ void OpenUrlsInBrowserWithProfile(const std::vector<GURL>& urls,
     startupIndex = browser->tab_strip_model()->active_index();
     startupContent = browser->tab_strip_model()->GetActiveWebContents();
   } else if (!browser) {
-    if (vivaldi::IsVivaldiRunning()) {
-      // We get here before the app is run, so we dont have any browser.
-      base::CommandLine dummy(base::CommandLine::NO_PROGRAM);
-      chrome::startup::IsFirstRun first_run = first_run::IsChromeFirstRun() ?
-          chrome::startup::IsFirstRun::kYes : chrome::startup::IsFirstRun::kNo;
-      StartupBrowserCreatorImpl launch(base::FilePath(),
-                                      dummy,
-                                      first_run);
-
-      launch.Launch(profile, chrome::startup::IsProcessStartup::kNo,
-                    std::make_unique<LaunchModeRecorder>());
-      return;
-    }
-
     // if no browser window exists then create one with no tabs to be filled in.
     browser = Browser::Create(Browser::CreateParams(profile, true));
     browser->window()->Show();

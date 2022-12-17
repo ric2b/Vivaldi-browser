@@ -50,7 +50,8 @@ bool IsTextField(const FormFieldData& field) {
 // totally different purpose.
 bool IsMeaningfulFieldName(const std::u16string& name) {
   return !MatchesPattern(
-      name, u"^(((field|input)(_|-)?\\d+)|tan|otp|title|captcha)$");
+      name,
+      u"^(((field|input)(_|-)?\\d+)|title|otp|tan)$|(cvc|cvn|cvv|captcha)");
 }
 
 }  // namespace
@@ -132,11 +133,9 @@ void AutocompleteHistoryManager::OnWillSubmitForm(
 void AutocompleteHistoryManager::CancelPendingQueries(
     const SuggestionsHandler* handler) {
   if (handler && profile_database_) {
-    for (auto iter : pending_queries_) {
-      const QueryHandler& query_handler = iter.second;
-
+    for (const auto& [handle, query_handler] : pending_queries_) {
       if (query_handler.handler_ && query_handler.handler_.get() == handler) {
-        profile_database_->CancelRequest(iter.first);
+        profile_database_->CancelRequest(handle);
       }
     }
   }
@@ -303,8 +302,8 @@ void AutocompleteHistoryManager::SendSuggestions(
 
 void AutocompleteHistoryManager::CancelAllPendingQueries() {
   if (profile_database_) {
-    for (const auto& pending_query : pending_queries_) {
-      profile_database_->CancelRequest(pending_query.first);
+    for (const auto& [handle, query_handler] : pending_queries_) {
+      profile_database_->CancelRequest(handle);
     }
   }
 

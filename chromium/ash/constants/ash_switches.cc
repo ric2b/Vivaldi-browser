@@ -45,6 +45,10 @@ const char kAllowOsInstall[] = "allow-os-install";
 // mode. This can be enabled by this flag.
 const char kAllowRAInDevMode[] = "allow-ra-in-dev-mode";
 
+// Causes HDCP of the specified type to always be enabled when an external
+// display is connected. Used for HDCP compliance testing on ChromeOS.
+const char kAlwaysEnableHdcp[] = "always-enable-hdcp";
+
 // Specifies whether an app launched in kiosk mode was auto launched with zero
 // delay. Used in order to properly restore auto-launched state during session
 // restore flow.
@@ -527,6 +531,10 @@ const char kFingerprintSensorLocation[] = "fingerprint-sensor-location";
 // Passed to Chrome the first time that it's run after the system boots.
 // Not passed on restart after sign out.
 const char kFirstExecAfterBoot[] = "first-exec-after-boot";
+
+// Forces fetching tokens for Cryptohome Recovery.
+const char kForceCryptohomeRecoveryForTesting[] =
+    "force-cryptohome-recovery-for-testing";
 
 // Forces developer tools availability, no matter what values the enterprise
 // policies DeveloperToolsDisabled and DeveloperToolsAvailability are set to.

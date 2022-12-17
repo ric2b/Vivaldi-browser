@@ -33,6 +33,7 @@
 #include "components/safe_browsing/core/common/features.h"
 #include "components/safe_browsing/core/common/proto/csd.pb.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+#include "content/public/browser/global_routing_id.h"
 #include "services/network/public/mojom/cookie_manager.mojom.h"
 #if BUILDFLAG(FULL_SAFE_BROWSING)
 #include "components/enterprise/common/proto/connectors.pb.h"
@@ -306,7 +307,7 @@ void WebUIInfoSingleton::AddToReportingEvents(const base::Value::Dict& event) {
 }
 
 void WebUIInfoSingleton::ClearReportingEvents() {
-  std::vector<base::Value>().swap(reporting_events_);
+  std::vector<base::Value::Dict>().swap(reporting_events_);
 }
 
 #if BUILDFLAG(FULL_SAFE_BROWSING)
@@ -973,6 +974,20 @@ std::string SerializeClientDownloadResponse(const ClientDownloadResponse& cdr) {
   return request_serialized;
 }
 
+base::Value SerializeVisualFeatures(const VisualFeatures& visual_features) {
+  base::Value image_dict(base::Value::Type::DICTIONARY);
+  const VisualFeatures::BlurredImage& image = visual_features.image();
+  image_dict.SetIntKey("width", image.width());
+  image_dict.SetIntKey("height", image.height());
+  image_dict.SetStringKey(
+      "data",
+      base::Base64Encode(base::as_bytes(base::make_span(image.data()))));
+
+  base::Value visual_dict(base::Value::Type::DICTIONARY);
+  visual_dict.SetKey("blurred_image", base::Value(std::move(image_dict)));
+  return visual_dict;
+}
+
 std::string SerializeClientPhishingRequest(
     const ClientPhishingRequestAndToken& cprat) {
   const ClientPhishingRequest& cpr = cprat.request;
@@ -1012,24 +1027,7 @@ std::string SerializeClientPhishingRequest(
   dict.SetKey("shingle_hashes", base::Value(std::move(shingle_hashes)));
 
   dict.SetKey("population", SerializeChromeUserPopulation(cpr.population()));
-  if (cpr.has_screenshot_digest()) {
-    dict.SetKey("screenshot_digest", base::Value(cpr.screenshot_digest()));
-  }
-  dict.SetBoolean("phash_dimension_size", cpr.has_phash_dimension_size());
   dict.SetBoolean("is_dom_match", cpr.is_dom_match());
-
-  base::Value::ListStorage vision_matches;
-  for (const auto& match : cpr.vision_match()) {
-    base::Value vision_match(base::Value::Type::DICTIONARY);
-    vision_match.SetBoolKey("matched_target_digest",
-                            match.has_matched_target_digest());
-    vision_match.SetDoubleKey("vision_matched_phash_score",
-                              match.vision_matched_phash_score());
-    vision_match.SetDoubleKey("vision_matched_emd_score",
-                              match.vision_matched_emd_score());
-    vision_matches.push_back(std::move(vision_match));
-  }
-  dict.SetKey("vision_match", base::Value(std::move(vision_matches)));
   dict.SetKey("scoped_oauth_token", base::Value(cprat.token));
 
   if (cpr.has_tflite_model_version())
@@ -1044,6 +1042,11 @@ std::string SerializeClientPhishingRequest(
     tflite_scores.push_back(std::move(score_value));
   }
   dict.SetKey("tflite_model_scores", base::Value(std::move(tflite_scores)));
+
+  if (cpr.has_visual_features()) {
+    dict.SetKey("visual_features",
+                SerializeVisualFeatures(cpr.visual_features()));
+  }
 
   base::Value* request_tree = &dict;
   std::string request_serialized;
@@ -1645,6 +1648,11 @@ std::string SerializePGPing(
         SerializeReferringAppInfo(request.referring_app_info()));
   }
 
+  if (request.has_visual_features()) {
+    request_dict.SetKey("visual_features",
+                        SerializeVisualFeatures(request.visual_features()));
+  }
+
   request_dict.SetKey("scoped_oauth_token",
                       base::Value(request_and_token.token));
 
@@ -2031,15 +2039,14 @@ void SafeBrowsingUIHandler::OnJavascriptDisallowed() {
   WebUIInfoSingleton::GetInstance()->UnregisterWebUIInstance(this);
 }
 
-void SafeBrowsingUIHandler::GetExperiments(
-    const base::Value::ConstListView args) {
+void SafeBrowsingUIHandler::GetExperiments(const base::Value::List& args) {
   AllowJavascript();
   DCHECK(!args.empty());
   std::string callback_id = args[0].GetString();
   ResolveJavascriptCallback(base::Value(callback_id), GetFeatureStatusList());
 }
 
-void SafeBrowsingUIHandler::GetPrefs(const base::Value::ConstListView args) {
+void SafeBrowsingUIHandler::GetPrefs(const base::Value::List& args) {
   AllowJavascript();
   DCHECK(!args.empty());
   std::string callback_id = args[0].GetString();
@@ -2048,7 +2055,7 @@ void SafeBrowsingUIHandler::GetPrefs(const base::Value::ConstListView args) {
                                 user_prefs::UserPrefs::Get(browser_context_)));
 }
 
-void SafeBrowsingUIHandler::GetPolicies(const base::Value::ConstListView args) {
+void SafeBrowsingUIHandler::GetPolicies(const base::Value::List& args) {
   AllowJavascript();
   DCHECK(!args.empty());
   std::string callback_id = args[0].GetString();
@@ -2057,7 +2064,7 @@ void SafeBrowsingUIHandler::GetPolicies(const base::Value::ConstListView args) {
                                 user_prefs::UserPrefs::Get(browser_context_)));
 }
 
-void SafeBrowsingUIHandler::GetCookie(const base::Value::ConstListView args) {
+void SafeBrowsingUIHandler::GetCookie(const base::Value::List& args) {
   DCHECK(!args.empty());
   std::string callback_id = args[0].GetString();
 
@@ -2089,8 +2096,7 @@ void SafeBrowsingUIHandler::OnGetCookie(
                             base::Value(std::move(response)));
 }
 
-void SafeBrowsingUIHandler::GetSavedPasswords(
-    const base::Value::ConstListView args) {
+void SafeBrowsingUIHandler::GetSavedPasswords(const base::Value::List& args) {
   password_manager::HashPasswordManager hash_manager(
       user_prefs::UserPrefs::Get(browser_context_));
 
@@ -2108,7 +2114,7 @@ void SafeBrowsingUIHandler::GetSavedPasswords(
 }
 
 void SafeBrowsingUIHandler::GetDatabaseManagerInfo(
-    const base::Value::ConstListView args) {
+    const base::Value::List& args) {
   base::ListValue database_manager_info;
 
 #if BUILDFLAG(SAFE_BROWSING_DB_LOCAL)
@@ -2210,7 +2216,7 @@ std::string SerializeDownloadUrlChecked(const std::vector<GURL>& urls,
 }
 
 void SafeBrowsingUIHandler::GetDownloadUrlsChecked(
-    const base::Value::ConstListView args) {
+    const base::Value::List& args) {
   const std::vector<std::pair<std::vector<GURL>, DownloadCheckResult>>&
       urls_checked = WebUIInfoSingleton::GetInstance()->download_urls_checked();
 
@@ -2228,7 +2234,7 @@ void SafeBrowsingUIHandler::GetDownloadUrlsChecked(
 }
 
 void SafeBrowsingUIHandler::GetSentClientDownloadRequests(
-    const base::Value::ConstListView args) {
+    const base::Value::List& args) {
   const std::vector<std::unique_ptr<ClientDownloadRequest>>& cdrs =
       WebUIInfoSingleton::GetInstance()->client_download_requests_sent();
 
@@ -2245,7 +2251,7 @@ void SafeBrowsingUIHandler::GetSentClientDownloadRequests(
 }
 
 void SafeBrowsingUIHandler::GetReceivedClientDownloadResponses(
-    const base::Value::ConstListView args) {
+    const base::Value::List& args) {
   const std::vector<std::unique_ptr<ClientDownloadResponse>>& cdrs =
       WebUIInfoSingleton::GetInstance()->client_download_responses_received();
 
@@ -2262,7 +2268,7 @@ void SafeBrowsingUIHandler::GetReceivedClientDownloadResponses(
 }
 
 void SafeBrowsingUIHandler::GetSentClientPhishingRequests(
-    const base::Value::ConstListView args) {
+    const base::Value::List& args) {
   const std::vector<ClientPhishingRequestAndToken>& cprs =
       WebUIInfoSingleton::GetInstance()->client_phishing_requests_sent();
 
@@ -2279,7 +2285,7 @@ void SafeBrowsingUIHandler::GetSentClientPhishingRequests(
 }
 
 void SafeBrowsingUIHandler::GetReceivedClientPhishingResponses(
-    const base::Value::ConstListView args) {
+    const base::Value::List& args) {
   const std::vector<std::unique_ptr<ClientPhishingResponse>>& cprs =
       WebUIInfoSingleton::GetInstance()->client_phishing_responses_received();
 
@@ -2295,8 +2301,7 @@ void SafeBrowsingUIHandler::GetReceivedClientPhishingResponses(
   ResolveJavascriptCallback(base::Value(callback_id), cprs_received);
 }
 
-void SafeBrowsingUIHandler::GetSentCSBRRs(
-    const base::Value::ConstListView args) {
+void SafeBrowsingUIHandler::GetSentCSBRRs(const base::Value::List& args) {
   const std::vector<std::unique_ptr<ClientSafeBrowsingReportRequest>>& reports =
       WebUIInfoSingleton::GetInstance()->csbrrs_sent();
 
@@ -2312,7 +2317,7 @@ void SafeBrowsingUIHandler::GetSentCSBRRs(
   ResolveJavascriptCallback(base::Value(callback_id), sent_reports);
 }
 
-void SafeBrowsingUIHandler::GetPGEvents(const base::Value::ConstListView args) {
+void SafeBrowsingUIHandler::GetPGEvents(const base::Value::List& args) {
   const std::vector<sync_pb::UserEventSpecifics>& events =
       WebUIInfoSingleton::GetInstance()->pg_event_log();
 
@@ -2327,8 +2332,7 @@ void SafeBrowsingUIHandler::GetPGEvents(const base::Value::ConstListView args) {
   ResolveJavascriptCallback(base::Value(callback_id), events_sent);
 }
 
-void SafeBrowsingUIHandler::GetSecurityEvents(
-    const base::Value::ConstListView args) {
+void SafeBrowsingUIHandler::GetSecurityEvents(const base::Value::List& args) {
   const std::vector<sync_pb::GaiaPasswordReuse>& events =
       WebUIInfoSingleton::GetInstance()->security_event_log();
 
@@ -2343,7 +2347,7 @@ void SafeBrowsingUIHandler::GetSecurityEvents(
   ResolveJavascriptCallback(base::Value(callback_id), events_sent);
 }
 
-void SafeBrowsingUIHandler::GetPGPings(const base::Value::ConstListView args) {
+void SafeBrowsingUIHandler::GetPGPings(const base::Value::List& args) {
   const std::vector<LoginReputationClientRequestAndToken> requests =
       WebUIInfoSingleton::GetInstance()->pg_pings();
 
@@ -2362,8 +2366,7 @@ void SafeBrowsingUIHandler::GetPGPings(const base::Value::ConstListView args) {
   ResolveJavascriptCallback(base::Value(callback_id), pings_sent);
 }
 
-void SafeBrowsingUIHandler::GetPGResponses(
-    const base::Value::ConstListView args) {
+void SafeBrowsingUIHandler::GetPGResponses(const base::Value::List& args) {
   const std::map<int, LoginReputationClientResponse> responses =
       WebUIInfoSingleton::GetInstance()->pg_responses();
 
@@ -2382,8 +2385,7 @@ void SafeBrowsingUIHandler::GetPGResponses(
   ResolveJavascriptCallback(base::Value(callback_id), responses_sent);
 }
 
-void SafeBrowsingUIHandler::GetRTLookupPings(
-    const base::Value::ConstListView args) {
+void SafeBrowsingUIHandler::GetRTLookupPings(const base::Value::List& args) {
   const std::vector<RTLookupRequestAndToken> requests =
       WebUIInfoSingleton::GetInstance()->rt_lookup_pings();
 
@@ -2404,7 +2406,7 @@ void SafeBrowsingUIHandler::GetRTLookupPings(
 }
 
 void SafeBrowsingUIHandler::GetRTLookupResponses(
-    const base::Value::ConstListView args) {
+    const base::Value::List& args) {
   const std::map<int, RTLookupResponse> responses =
       WebUIInfoSingleton::GetInstance()->rt_lookup_responses();
 
@@ -2423,8 +2425,7 @@ void SafeBrowsingUIHandler::GetRTLookupResponses(
   ResolveJavascriptCallback(base::Value(callback_id), responses_sent);
 }
 
-void SafeBrowsingUIHandler::GetReferrerChain(
-    const base::Value::ConstListView args) {
+void SafeBrowsingUIHandler::GetReferrerChain(const base::Value::List& args) {
   DCHECK_GE(args.size(), 2U);
   std::string url_string = args[1].GetString();
 
@@ -2442,7 +2443,8 @@ void SafeBrowsingUIHandler::GetReferrerChain(
 
   ReferrerChain referrer_chain;
   provider->IdentifyReferrerChainByEventURL(
-      GURL(url_string), SessionID::InvalidValue(), 2, &referrer_chain);
+      GURL(url_string), SessionID::InvalidValue(),
+      content::GlobalRenderFrameHostId(), 2, &referrer_chain);
 
   base::ListValue referrer_list;
   for (const ReferrerChainEntry& entry : referrer_chain) {
@@ -2459,8 +2461,7 @@ void SafeBrowsingUIHandler::GetReferrerChain(
                             base::Value(referrer_chain_serialized));
 }
 
-void SafeBrowsingUIHandler::GetReferringAppInfo(
-    const base::Value::ConstListView args) {
+void SafeBrowsingUIHandler::GetReferringAppInfo(const base::Value::List& args) {
   base::Value referring_app_value;
 #if BUILDFLAG(IS_ANDROID)
   LoginReputationClientRequest::ReferringAppInfo info =
@@ -2480,9 +2481,8 @@ void SafeBrowsingUIHandler::GetReferringAppInfo(
                             base::Value(referring_app_serialized));
 }
 
-void SafeBrowsingUIHandler::GetReportingEvents(
-    const base::Value::ConstListView args) {
-  base::ListValue reporting_events;
+void SafeBrowsingUIHandler::GetReportingEvents(const base::Value::List& args) {
+  base::Value::List reporting_events;
   for (const auto& reporting_event :
        WebUIInfoSingleton::GetInstance()->reporting_events()) {
     reporting_events.Append(reporting_event.Clone());
@@ -2491,11 +2491,11 @@ void SafeBrowsingUIHandler::GetReportingEvents(
   AllowJavascript();
   DCHECK(!args.empty());
   std::string callback_id = args[0].GetString();
-  ResolveJavascriptCallback(base::Value(callback_id), reporting_events);
+  ResolveJavascriptCallback(base::Value(callback_id),
+                            base::Value(std::move(reporting_events)));
 }
 
-void SafeBrowsingUIHandler::GetLogMessages(
-    const base::Value::ConstListView args) {
+void SafeBrowsingUIHandler::GetLogMessages(const base::Value::List& args) {
   const std::vector<std::pair<base::Time, std::string>>& log_messages =
       WebUIInfoSingleton::GetInstance()->log_messages();
 
@@ -2511,8 +2511,7 @@ void SafeBrowsingUIHandler::GetLogMessages(
   ResolveJavascriptCallback(base::Value(callback_id), messages_received);
 }
 
-void SafeBrowsingUIHandler::GetDeepScans(
-    const base::Value::ConstListView args) {
+void SafeBrowsingUIHandler::GetDeepScans(const base::Value::List& args) {
   base::ListValue pings_sent;
 #if BUILDFLAG(FULL_SAFE_BROWSING)
   for (const auto& token_and_data :

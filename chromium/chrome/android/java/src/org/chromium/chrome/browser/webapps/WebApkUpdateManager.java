@@ -38,6 +38,7 @@ import org.chromium.components.background_task_scheduler.BackgroundTaskScheduler
 import org.chromium.components.background_task_scheduler.TaskIds;
 import org.chromium.components.background_task_scheduler.TaskInfo;
 import org.chromium.components.embedder_support.util.UrlUtilities;
+import org.chromium.components.webapps.WebApkInstallResult;
 import org.chromium.components.webapps.WebApkUpdateReason;
 import org.chromium.components.webapps.WebappsIconUtils;
 import org.chromium.ui.modaldialog.DialogDismissalCause;
@@ -212,9 +213,11 @@ public class WebApkUpdateManager implements WebApkUpdateDataFetcher.Observer, De
         String hash = getAppIdentityHash(mFetchedInfo, mFetchedPrimaryIconUrl);
         boolean alreadyUserApproved = !hash.isEmpty()
                 && TextUtils.equals(hash, mStorage.getLastWebApkUpdateHashAccepted());
+        boolean showDialogForName =
+                (nameChanging || shortNameChanging) && nameUpdateDialogEnabled();
+        boolean showDialogForIcon = iconChanging && iconUpdateDialogEnabled();
 
-        if (!iconOrNameUpdateDialogEnabled() || alreadyUserApproved
-                || (!iconChanging && !shortNameChanging && !nameChanging)) {
+        if ((!showDialogForName && !showDialogForIcon) || alreadyUserApproved) {
             if (alreadyUserApproved) {
                 RecordHistogram.recordEnumeratedHistogram(
                         "Webapp.AppIdentityDialog.AlreadyApproved", histogramAction,
@@ -240,8 +243,12 @@ public class WebApkUpdateManager implements WebApkUpdateDataFetcher.Observer, De
         showIconOrNameUpdateDialog(iconChanging, shortNameChanging, nameChanging);
     }
 
-    protected boolean iconOrNameUpdateDialogEnabled() {
-        return ChromeFeatureList.isEnabled(ChromeFeatureList.PWA_UPDATE_DIALOG_FOR_NAME_AND_ICON);
+    protected boolean iconUpdateDialogEnabled() {
+        return ChromeFeatureList.isEnabled(ChromeFeatureList.PWA_UPDATE_DIALOG_FOR_ICON);
+    }
+
+    protected boolean nameUpdateDialogEnabled() {
+        return ChromeFeatureList.isEnabled(ChromeFeatureList.PWA_UPDATE_DIALOG_FOR_NAME);
     }
 
     protected void showIconOrNameUpdateDialog(
@@ -284,7 +291,8 @@ public class WebApkUpdateManager implements WebApkUpdateDataFetcher.Observer, De
         if (mFetchedInfo != null) {
             buildUpdateRequestAndSchedule(mFetchedInfo, mFetchedPrimaryIconUrl,
                     mFetchedSplashIconUrl, false /* isManifestStale */,
-                    iconOrNameUpdateDialogEnabled() /* appIdentityUpdateSupported */,
+                    nameUpdateDialogEnabled()
+                            || iconUpdateDialogEnabled() /* appIdentityUpdateSupported */,
                     mUpdateReasons);
             return;
         }
@@ -294,7 +302,9 @@ public class WebApkUpdateManager implements WebApkUpdateDataFetcher.Observer, De
         // occur if the Web Manifest is temporarily unreachable.
         buildUpdateRequestAndSchedule(mInfo, "" /* primaryIconUrl */, "" /* splashIconUrl */,
                 true /* isManifestStale */,
-                iconOrNameUpdateDialogEnabled() /* appIdentityUpdateSupported */, mUpdateReasons);
+                nameUpdateDialogEnabled()
+                        || iconUpdateDialogEnabled() /* appIdentityUpdateSupported */,
+                mUpdateReasons);
     }
 
     /**

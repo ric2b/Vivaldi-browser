@@ -16,6 +16,7 @@
 #include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
+#include "base/containers/adapters.h"
 #include "base/file_version_info.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
@@ -339,11 +340,9 @@ void URLRequestHttpJob::OnGotFirstPartySetMetadata(
     // We shouldn't overwrite this if we've already computed the key.
     DCHECK(!cookie_partition_key_.has_value());
 
-    cookie_partition_key_ =
-        absl::make_optional(CookiePartitionKey::FromNetworkIsolationKey(
-            request_->isolation_info().network_isolation_key(),
-            base::OptionalOrNullptr(
-                first_party_set_metadata_.top_frame_owner())));
+    cookie_partition_key_ = CookiePartitionKey::FromNetworkIsolationKey(
+        request_->isolation_info().network_isolation_key(),
+        base::OptionalOrNullptr(first_party_set_metadata_.top_frame_owner()));
     AddCookieHeaderAndStart();
   } else {
     StartTransaction();
@@ -357,11 +356,10 @@ void URLRequestHttpJob::Kill() {
   URLRequestJob::Kill();
 }
 
-void URLRequestHttpJob::GetConnectionAttempts(ConnectionAttempts* out) const {
+ConnectionAttempts URLRequestHttpJob::GetConnectionAttempts() const {
   if (transaction_)
-    transaction_->GetConnectionAttempts(out);
-  else
-    out->clear();
+    return transaction_->GetConnectionAttempts();
+  return {};
 }
 
 void URLRequestHttpJob::CloseConnectionOnDestruction() {
@@ -953,7 +951,7 @@ void URLRequestHttpJob::SaveCookiesAndNotifyHeadersComplete(int result) {
         base::BindOnce(&URLRequestHttpJob::OnSetCookieResult,
                        weak_factory_.GetWeakPtr(), options, cookie_to_return,
                        cookie_string),
-        &cookie_access_result);
+        std::move(cookie_access_result));
   }
   // Removing the 1 that |num_cookie_lines_left| started with, signifing that
   // loop has been exited.
@@ -1333,9 +1331,8 @@ std::unique_ptr<SourceStream> URLRequestHttpJob::SetUpSourceStream() {
     }
   }
 
-  for (auto r_iter = types.rbegin(); r_iter != types.rend(); ++r_iter) {
+  for (const auto& type : base::Reversed(types)) {
     std::unique_ptr<FilterSourceStream> downstream;
-    SourceStream::SourceType type = *r_iter;
     switch (type) {
       case SourceStream::TYPE_BROTLI:
         downstream = CreateBrotliSourceStream(std::move(upstream));

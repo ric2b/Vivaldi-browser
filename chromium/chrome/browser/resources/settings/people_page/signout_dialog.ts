@@ -18,7 +18,7 @@ import '../settings_shared_css.js';
 
 import {CrDialogElement} from '//resources/cr_elements/cr_dialog/cr_dialog.m.js';
 import {WebUIListenerMixin} from '//resources/js/web_ui_listener_mixin.js';
-import {html, microTask, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {microTask, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {loadTimeData} from '../i18n_setup.js';
 
@@ -79,12 +79,12 @@ export class SettingsSignoutDialogElement extends
   private deleteProfileWarningVisible_: boolean;
   private deleteProfileWarning_: string;
 
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
 
     this.addWebUIListener(
         'profile-stats-count-ready', this.handleProfileStatsCount_.bind(this));
-    // <if expr="not chromeos">
+    // <if expr="not chromeos_ash">
     ProfileInfoBrowserProxyImpl.getInstance().getProfileStatsCount();
     // </if>
     microTask.run(() => {
@@ -125,7 +125,7 @@ export class SettingsSignoutDialogElement extends
     }
   }
 
-  // <if expr="not chromeos">
+  // <if expr="not chromeos_ash">
   private getDisconnectExplanationHtml_(domain: string): string {
     if (domain) {
       return loadTimeData.getStringF(
@@ -136,7 +136,7 @@ export class SettingsSignoutDialogElement extends
   }
   // </if>
 
-  // <if expr="chromeos">
+  // <if expr="chromeos_ash">
   private getDisconnectExplanationHtml_(_domain: string): string {
     return loadTimeData.getString('syncDisconnectExplanation');
   }
@@ -148,14 +148,24 @@ export class SettingsSignoutDialogElement extends
 
   private onDisconnectConfirm_() {
     this.$.dialog.close();
-    // <if expr="not chromeos">
+    // <if expr="not chromeos_ash">
     const deleteProfile = !!this.syncStatus!.domain || this.deleteProfile_;
     SyncBrowserProxyImpl.getInstance().signOut(deleteProfile);
     // </if>
-    // <if expr="chromeos">
+    // <if expr="chromeos_ash">
     // Chrome OS users are always signed-in, so just turn off sync.
     SyncBrowserProxyImpl.getInstance().turnOffSync();
     // </if>
+  }
+
+  private isDeleteProfileFooterVisible_(): boolean {
+    // <if expr="chromeos_lacros">
+    if (!loadTimeData.getBoolean('isSecondaryUser')) {
+      // Profile deletion is not allowed for the main profile.
+      return false;
+    }
+    // </if>
+    return !this.syncStatus!.domain;
   }
 }
 

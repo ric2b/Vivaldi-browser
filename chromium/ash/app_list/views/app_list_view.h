@@ -16,6 +16,7 @@
 #include "ash/public/cpp/metrics_util.h"
 #include "base/callback.h"
 #include "base/gtest_prod_util.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/aura/window_observer.h"
@@ -410,6 +411,7 @@ class ASH_EXPORT AppListView : public views::WidgetDelegateView,
   void UpdateWindowTitle();
 
   // Called when app list visibility changed.
+  void OnAppListVisibilityWillChange(bool visible);
   void OnAppListVisibilityChanged(bool shown);
 
  private:

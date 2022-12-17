@@ -15,6 +15,7 @@
 #include "base/containers/circular_deque.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "ui/gfx/image/image_skia.h"
 
 namespace ash {
@@ -58,9 +59,6 @@ class ASH_EXPORT AmbientBackendModel {
 
   void AddObserver(AmbientBackendModelObserver* observer);
   void RemoveObserver(AmbientBackendModelObserver* observer);
-
-  void AppendTopics(const std::vector<AmbientModeTopic>& topics);
-  const std::vector<AmbientModeTopic>& topics() const { return topics_; }
 
   // If enough images are loaded to start ambient mode.
   bool ImagesReady() const;
@@ -138,10 +136,10 @@ class ASH_EXPORT AmbientBackendModel {
   friend class AmbientBackendModelTest;
   friend class AmbientAshTestBase;
 
-  void NotifyTopicsChanged();
   void NotifyImageAdded();
   void NotifyImagesReady();
   void NotifyWeatherInfoUpdated();
+  void OnImagesReadyTimeoutFired();
 
   AmbientPhotoConfig photo_config_;
   std::vector<AmbientModeTopic> topics_;
@@ -151,6 +149,9 @@ class ASH_EXPORT AmbientBackendModel {
   // recently decoded topics are pushed to the back of the ring buffer and the
   // oldest topics are popped from the front.
   base::circular_deque<PhotoWithDetails> all_decoded_topics_;
+
+  base::OneShotTimer images_ready_timeout_timer_;
+  bool images_ready_timed_out_ = false;
 
   // Current weather information.
   gfx::ImageSkia weather_condition_icon_;

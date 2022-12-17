@@ -77,6 +77,7 @@
 <translation id="2687403674020088961">Tüm çerezleri engelle (önerilmez)</translation>
 <translation id="2704606927547763573">Kopyalandı</translation>
 <translation id="2717722538473713889">E-posta adresleri</translation>
+<translation id="2750481671343847896">Siteler, kimlik hizmetlerinden gelen oturum açma istemlerini gösterebilir.</translation>
 <translation id="2785051990912111074">Bu tercih, <ph name="WEBSITE" /> çerezlerini temizler</translation>
 <translation id="2822354292072154809"><ph name="CHOSEN_OBJECT_NAME" /> için tüm site izinlerini sıfırlamak istediğinizden emin misiniz?</translation>
 <translation id="2870560284913253234">Site</translation>
@@ -112,6 +113,7 @@
 <translation id="3763247130972274048">10 sn. atlamak için videoda sola veya sağa iki kez dokunun</translation>
 <translation id="3797520601150691162">Belirli bir siteye koyu tema uygulama</translation>
 <translation id="381841723434055211">Telefon numaraları</translation>
+<translation id="3826050100957962900">Üçüncü taraf oturum açma</translation>
 <translation id="3835233591525155343">Cihaz kullanımınız</translation>
 <translation id="385051799172605136">Geri</translation>
 <translation id="3859306556332390985">İleriye doğru git</translation>
@@ -122,7 +124,6 @@
 <translation id="3991845972263764475"><ph name="BYTES_DOWNLOADED_WITH_UNITS" /> / ?</translation>
 <translation id="4002066346123236978">Başlık</translation>
 <translation id="4008040567710660924">Belirli bir site için çerezlere izin verin.</translation>
-<translation id="4040330681741629921">Siteler basitleştirilmiş görünümde gösterilebiliyorsa bilgilendirilirsiniz</translation>
 <translation id="4046123991198612571">Sonraki parça</translation>
 <translation id="4149994727733219643">Web sayfalarının basitleştirilmiş görünümü</translation>
 <translation id="4165986682804962316">Site ayarları</translation>
@@ -236,6 +237,7 @@
 <translation id="6643016212128521049">Temizle</translation>
 <translation id="6689172468748959065">Profil fotoğrafları</translation>
 <translation id="6697925417670533197">Etkin indirme işlemleri</translation>
+<translation id="6722828510648505498">Kimlik hizmetlerinden gelen oturum açma istemlerini engelleyin.</translation>
 <translation id="6746124502594467657">Aşağı taşı</translation>
 <translation id="6749077623962119521">İzinler sıfırlansın mı?</translation>
 <translation id="6766622839693428701">Kapatmak için aşağı kaydırın.</translation>
@@ -255,6 +257,7 @@
 <translation id="7087918508125750058"><ph name="ITEM_COUNT" /> öğe seçildi. Seçenekler, ekranın üst kısmına yakın bir yerde bulunur</translation>
 <translation id="7141896414559753902">Sitelerin pop-up göstermesini ve yönlendirme yapmasını engelle (önerilir)</translation>
 <translation id="7176368934862295254"><ph name="KILOBYTES" /> KB</translation>
+<translation id="7180611975245234373">Yenile</translation>
 <translation id="723171743924126238">Resim seç</translation>
 <translation id="7243308994586599757">Sayfanın altına yakın bir yerde kullanılabilen seçenekler</translation>
 <translation id="7250468141469952378"><ph name="ITEM_COUNT" /> öğe seçildi</translation>
@@ -308,7 +311,9 @@
 <translation id="83792324527827022">Bir site kameranızı ve mikrofonunuzu kullanıyor</translation>
 <translation id="8380167699614421159">Bu site, araya giren veya yanıltıcı reklamlar gösteriyor</translation>
 <translation id="8394832520002899662">Siteye dönmek için dokunun</translation>
+<translation id="8409345997656833551">Makaleler basitleştirilmiş görünümde gösterilebiliyorsa bilgilendirilirsiniz</translation>
 <translation id="8425213833346101688">Değiştir</translation>
+<translation id="8428213095426709021">Ayarlar</translation>
 <translation id="8441146129660941386">Geriye doğru git</translation>
 <translation id="8444433999583714703"><ph name="APP_NAME" /> uygulamasının konumunuza erişebilmesi için <ph name="BEGIN_LINK" />Android Ayarları<ph name="END_LINK" />'nda da konumu açın.</translation>
 <translation id="8447861592752582886">Cihaz iznini iptal et</translation>

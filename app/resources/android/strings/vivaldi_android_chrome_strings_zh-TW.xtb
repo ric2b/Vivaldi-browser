@@ -21,17 +21,21 @@
 <translation id="3377025655491224618">無痕分頁</translation>
 <translation id="3504699618187058974">分頁堆疊</translation>
 <translation id="3518985090088779359">接受並繼續</translation>
+<translation id="3571177741182643350">未讀文章 - 離線可用：</translation>
 <translation id="3700829948786686853">歡迎使用 Vivaldi</translation>
 <translation id="3719826155360621982">首頁</translation>
 <translation id="385051799172605136">上一頁</translation>
+<translation id="399014816462153200">閱讀文章：</translation>
 <translation id="4121750346708795461">使用這個應用程式即表示您同意接受 Vivaldi 的<ph name="BEGIN_LINK1" />最終用戶許可協議<ph name="END_LINK1" />及<ph name="BEGIN_LINK2" />隱私權政策<ph name="END_LINK2" />。</translation>
-<translation id="4137746084635924146">目前裝置語系</translation>
+<translation id="4137746084635924146">目前裝置語言</translation>
+<translation id="4167670741834902166">新增無痕分頁</translation>
 <translation id="4243710787042215766">在無痕分頁中開啟</translation>
 <translation id="4526803704855831732">無痕分頁</translation>
 <translation id="4759238208242260848">下載</translation>
 <translation id="4883379392681899581">離開無痕模式</translation>
 <translation id="4943872375798546930">無結果</translation>
 <translation id="49576331685473090">內容封鎖器</translation>
+<translation id="5079259810715830221">當 Google網站要求在其頁面上私下預先載入連結時，Vivaldi會透過 Google伺服器加密和預先載入頁面，而不使用 cookie。這會在預先載入的網站中隱藏您的身份。</translation>
 <translation id="5118676864324397542"><ph name="APP_NAME" /> 儲存資料量</translation>
 <translation id="5186185447130319458">無痕</translation>
 <translation id="5233638681132016545">新增分頁</translation>
@@ -44,6 +48,7 @@
 <translation id="6585139692466700358">透過 Vivaldi的翻譯服務在其他語系的頁面上使用翻譯</translation>
 <translation id="6593061639179217415">桌面版網站</translation>
 <translation id="6610147964972079463">關閉無痕分頁</translation>
+<translation id="7029995644714925509">當網站要求在其頁面上私下預先載入連結時，Vivaldi會透過 Google伺服器加密和預先載入頁面，而不使用 cookie。這會在預先載入的網站中隱藏您的身份。</translation>
 <translation id="706339621163631076">瀏覽器隱私權政策</translation>
 <translation id="732145680195464316">書籤儲存於 <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">關於 Vivaldi</translation>

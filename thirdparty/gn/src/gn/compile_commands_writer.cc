@@ -105,7 +105,7 @@ void SetupCompileFlags(const Target* target,
     std::ostringstream out;
     WriteOneFlag(config, target, substitution, has_precompiled_headers,
                  tool_name, getter, opts, path_output, out,
-                 /*write_substitution=*/false);
+                 /*write_substitution=*/false, /*indent=*/false);
     base::EscapeJSONString(out.str(), false, &result);
     return result;
   };

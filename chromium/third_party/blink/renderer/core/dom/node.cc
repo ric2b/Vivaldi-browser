@@ -78,6 +78,7 @@
 #include "third_party/blink/renderer/core/dom/user_action_element_set.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
 #include "third_party/blink/renderer/core/editing/markers/document_marker_controller.h"
+#include "third_party/blink/renderer/core/event_target_names.h"
 #include "third_party/blink/renderer/core/events/event_util.h"
 #include "third_party/blink/renderer/core/events/gesture_event.h"
 #include "third_party/blink/renderer/core/events/input_event.h"
@@ -368,7 +369,7 @@ String Node::nodeValue() const {
   return String();
 }
 
-void Node::setNodeValue(const String&) {
+void Node::setNodeValue(const String&, ExceptionState&) {
   // By default, setting nodeValue has no effect.
 }
 
@@ -1695,22 +1696,6 @@ void Node::NotifyPriorityScrollAnchorStatusChanged() {
   }
 }
 
-// StyledElements allow inline style (style="border: 1px"), presentational
-// attributes (ex. color), class names (ex. class="foo bar") and other non-basic
-// styling features. They also control if this element can participate in style
-// sharing.
-//
-// FIXME: The only things that ever go through StyleResolver that aren't
-// StyledElements are PseudoElements and VTTElements. It's possible we can just
-// eliminate all the checks since those elements will never have class names,
-// inline style, or other things that this apparently guards against.
-bool Node::IsStyledElement() const {
-  auto* this_element = DynamicTo<Element>(this);
-  return IsHTMLElement() || IsSVGElement() || IsMathMLElement() ||
-         (!RuntimeEnabledFeatures::MathMLCoreEnabled() && this_element &&
-          this_element->namespaceURI() == mathml_names::kNamespaceURI);
-}
-
 bool Node::IsActiveSlot() const {
   return ToHTMLSlotElementIfSupportsAssignmentOrNull(*this);
 }
@@ -2886,7 +2871,7 @@ void Node::HandleLocalEvents(Event& event) {
       DCHECK(RuntimeEnabledFeatures::HTMLPopupElementEnabled());
       // There is a popup visible - check if this event should "light dismiss"
       // one or more popups.
-      HTMLPopupElement::HandleLightDismiss(event);
+      Element::HandlePopupLightDismiss(event);
     }
   }
 

@@ -21,17 +21,21 @@
 <translation id="3377025655491224618">Einkaflipi</translation>
 <translation id="3504699618187058974">Flipabunkar</translation>
 <translation id="3518985090088779359">Samþykkja og halda áfram</translation>
+<translation id="3571177741182643350">Ólesnar greinar - Aðgengilegar án nettengingar:</translation>
 <translation id="3700829948786686853">Velkomin/n í Vivaldi</translation>
 <translation id="3719826155360621982">Heimasíða</translation>
 <translation id="385051799172605136">Til baka</translation>
+<translation id="399014816462153200">Lestu greinar:</translation>
 <translation id="4121750346708795461">Með því að nota þetta forrit, samþykkir þú <ph name="BEGIN_LINK1" />Notendaleyfi Vivaldi<ph name="END_LINK1" /> og <ph name="BEGIN_LINK2" /> Persónuverndarstefnu<ph name="END_LINK2" />.</translation>
 <translation id="4137746084635924146">Núverandi tungumál tækis</translation>
+<translation id="4167670741834902166">Nýr einkaflipi</translation>
 <translation id="4243710787042215766">Opna í einkaglugga</translation>
 <translation id="4526803704855831732">Einkaflipar</translation>
 <translation id="4759238208242260848">Niðurhöl</translation>
 <translation id="4883379392681899581">Fara úr einkaham</translation>
 <translation id="4943872375798546930">Engin niðurstaða</translation>
 <translation id="49576331685473090">Innihaldssía</translation>
+<translation id="5079259810715830221">Þegar Google síða biður um að fá að forsækja tengt efni þá mun Vivaldi dulkóða og sækja efni frá Google án þess að nota kökur. Þetta gerir tengdum síðum ókleyft að sjá persónuauðkenni þín.</translation>
 <translation id="5118676864324397542"><ph name="APP_NAME" /> geymslusvæði</translation>
 <translation id="5186185447130319458">Einka</translation>
 <translation id="5233638681132016545">Nýr flipi</translation>
@@ -44,6 +48,7 @@ Haltu við orðið sem þú vilt leita að. Þá birtist leitarspjald neðst á 
 <translation id="6585139692466700358">Bjóða upp á að þýða síður af erlendum tungumálum með þýðingarþjónustu Vivaldi</translation>
 <translation id="6593061639179217415">Nota borðtölvuútlit</translation>
 <translation id="6610147964972079463">Loka einkagluggum</translation>
+<translation id="7029995644714925509">Þegar síða biður um að fá að forsækja tengt efni þá mun Vivaldi dulkóða og sækja efni frá Google án þess að nota kökur. Þetta gerir tengdum síðum ókleyft að sjá persónuauðkenni þín.</translation>
 <translation id="706339621163631076">Persónuverndarstefna vafrans</translation>
 <translation id="732145680195464316">Bókamerki vistað í <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Um Vivaldi</translation>

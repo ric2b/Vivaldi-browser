@@ -21,17 +21,21 @@
 <translation id="3377025655491224618">Yksityisvälilehti</translation>
 <translation id="3504699618187058974">Niputa välilehdet</translation>
 <translation id="3518985090088779359">Hyväksy ja jatka</translation>
+<translation id="3571177741182643350">Ei-luetut artikkelit – Saatavilla verkotta:</translation>
 <translation id="3700829948786686853">Tervetuloa Vivaldiin</translation>
 <translation id="3719826155360621982">Kotisivu</translation>
 <translation id="385051799172605136">Takaisin</translation>
+<translation id="399014816462153200">Luetut artikkelit:</translation>
 <translation id="4121750346708795461">Käyttämällä sovellusta hyväksyt Vivaldin <ph name="BEGIN_LINK1" />käyttöehdot<ph name="END_LINK1" /> ja <ph name="BEGIN_LINK2" />tietosuojailmoituksen<ph name="END_LINK2" />.</translation>
 <translation id="4137746084635924146">Laitteen nykyinen kieli</translation>
+<translation id="4167670741834902166">Uusi yksityisvälilehti</translation>
 <translation id="4243710787042215766">Avaa yksityisvälilehteen</translation>
 <translation id="4526803704855831732">Yksityisvälilehdet</translation>
 <translation id="4759238208242260848">Lataukset</translation>
 <translation id="4883379392681899581">Poistu yksityistilasta</translation>
 <translation id="4943872375798546930">Ei tuloksia</translation>
 <translation id="49576331685473090">Sisällönesto</translation>
+<translation id="5079259810715830221">Google-sivuston pyytäessä sivujensa linkkien yksityistä esilatausta Vivaldi salaa ja esilataa sivut evästeittä Googlen palvelimilla. Näin henkilöytesi piilotetaan esiladatulta sivustolta.</translation>
 <translation id="5118676864324397542"><ph name="APP_NAME" /> – tallennustila</translation>
 <translation id="5186185447130319458">Yksityinen</translation>
 <translation id="5233638681132016545">Uusi välilehti</translation>
@@ -44,6 +48,7 @@ Muokataksesi hakusanaa valitse se ensin painamalla pitkään. Tarkenna hakua liu
 <translation id="6585139692466700358">Tarjoa sivujen käännöstä eri kielille Vivaldin käännöspalvelulla</translation>
 <translation id="6593061639179217415">Työpöytäsivusto</translation>
 <translation id="6610147964972079463">Sulje yksityisvälilehdet</translation>
+<translation id="7029995644714925509">Sivuston pyytäessä sivujensa linkkien yksityistä esilatausta Vivaldi salaa ja esilataa sivut evästeittä Googlen palvelimilla. Näin henkilöytesi piilotetaan esiladatulta sivustolta.</translation>
 <translation id="706339621163631076">Selaimen tietosuojailmoitus</translation>
 <translation id="732145680195464316">Kirjanmerkki tallennettu ohjelmalle <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Tietoja Vivaldista</translation>

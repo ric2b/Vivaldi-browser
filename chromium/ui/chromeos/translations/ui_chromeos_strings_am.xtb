@@ -31,6 +31,7 @@
 <translation id="1201402288615127009">ቀጣይ</translation>
 <translation id="1209796539517632982">የራስ-ሰር ስም አገልጋዮች</translation>
 <translation id="1210831758834677569">ላኦኛ</translation>
+<translation id="1223825810409523901">የChrome ቅጥያ</translation>
 <translation id="1243314992276662751">ስቀል</translation>
 <translation id="1249250836236328755">ዘውግ</translation>
 <translation id="1254593899333212300">ቀጥተኛ የበይነመረብ ግንኙነት</translation>
@@ -61,6 +62,7 @@
 <translation id="1497522201463361063">«<ph name="FILE_NAME" />»ን ዳግም መሰየም አልተቻለም። <ph name="ERROR_MESSAGE" /></translation>
 <translation id="1499943022354839699">እንግሊዝኛ (አሜሪካ) ከድቮራክ ቁልፍ ሰሌዳ ጋር</translation>
 <translation id="1515909359182093592"><ph name="INPUT_LABEL" /> - አስተናጋጅ</translation>
+<translation id="1521655867290435174">Google ሉሆች</translation>
 <translation id="1538729222189715449">የLinux ፋይሎችን በመክፈት ላይ...</translation>
 <translation id="1547964879613821194">የካናዳ እንግሊዝኛ</translation>
 <translation id="1556189134700913550">ሁሉም ላይ ተግብር</translation>
@@ -79,6 +81,7 @@
 <translation id="166439687370499867">የተጋራ አውታረ መረብ ውቅረቶችን መለወጥ አይፈቀድም</translation>
 <translation id="1665611772925418501">ይህ ፋይል ሊቀየር አልቻለም።</translation>
 <translation id="1673103856845176271">ይህ ፋይል በደህንነት ምክንያቶች ሊደረስበት አልተቻለም።</translation>
+<translation id="16762847117768727">የISO ምስል</translation>
 <translation id="169515659049020177">Shift</translation>
 <translation id="1715848075824334077">ቢስክሌት መንዳት</translation>
 <translation id="1722487484194605434"><ph name="NUMBER_OF_ITEMS" /> ንጥሎችን በማመቅ ላይ...</translation>
@@ -106,7 +109,6 @@
 <translation id="1853795129690976061">ይህ አቃፊ ለLinux ተጋርቷል</translation>
 <translation id="1864756863218646478">ፋይሉ ሊገኝ አልቻለም።</translation>
 <translation id="1884013283844450420">አውታረ መረብ <ph name="NETWORK_INDEX" /> ከ<ph name="NETWORK_COUNT" />፣ <ph name="NETWORK_NAME" />፣ አገናኝ</translation>
-<translation id="1914901738028575085">የCloudReady 2.0 መሳሪያ</translation>
 <translation id="1920670151694390848">በማላያላምኛ ቋንቋ ፊደል መጻፍ</translation>
 <translation id="1920798810075583923">ሐብሐብ</translation>
 <translation id="1924372192547904021"><ph name="DRIVE_NAME" /> ላይ ቅርጸት ተሰርቷል</translation>
@@ -185,7 +187,6 @@
 <translation id="2544853746127077729">የማረጋገጫ ምስክር ወረቀት በአውታረ መረቡ ተቀባይነት አላገኘም</translation>
 <translation id="2547921442987553570">ወደ <ph name="EXTENSION_NAME" /> አክል</translation>
 <translation id="255937426064304553">አሜሪካ ዓለምአቀፍ</translation>
-<translation id="2562685439590298522">ሰነዶች</translation>
 <translation id="2563185590376525700">እንቁራሪት</translation>
 <translation id="2578394532502990878">ታሚልኛ ፎነቲክ</translation>
 <translation id="2579959351793446050">ኦዲያ</translation>
@@ -221,9 +222,7 @@
 <translation id="2902734494705624966">የአሜሪካ ተቀጥሎ</translation>
 <translation id="290843123675549676">ማራቲኛ</translation>
 <translation id="2923240520113693977">ኤስቶኒአን</translation>
-<translation id="2925966894897775835">ሉሆች</translation>
 <translation id="2938685643439809023">ሞንጎልኛ</translation>
-<translation id="2943400156390503548">ስላይድ</translation>
 <translation id="2943503720238418293">ያጠረ ስም ይጠቀሙ</translation>
 <translation id="2949781154072577687"><ph name="DRIVE_NAME" /> ላይ ቅርጸት በመስራት ላይ...</translation>
 <translation id="2951236788251446349">ዝልግልግ አሳ</translation>
@@ -368,6 +367,7 @@
 <translation id="4215448920900139318">የ<ph name="FILE_COUNT" />ን ምትኬ በማስቀመጥ ላይ</translation>
 <translation id="4218274196133425560">ለ<ph name="HOST_NAME" /> ልዩ ሁኔታዎችን አስወግድ</translation>
 <translation id="4261901459838235729">Google ማቅረቢያ</translation>
+<translation id="4277536868133419688"><ph name="FILTER_NAME" /> ማጣሪያ በርቷል።</translation>
 <translation id="4290535918735525311">1 አቃፊ ከLinux ጋር ተጋርቷል</translation>
 <translation id="4299729908419173967">የብራዚል</translation>
 <translation id="4302605047395093221">ይህን መሣሪያ የሚጠቀም ማንኛውም ሰው ከዚህ የተንቀሳቃሽ ስልክ አውታረ መረብ ጋር ለመገናኘት ፒኑን ማስገባት ይኖርበታል</translation>
@@ -385,6 +385,8 @@
 <translation id="4380245540200674032">አውታረ መረብ <ph name="NETWORK_INDEX" /> ከ<ph name="NETWORK_COUNT" />፣ <ph name="NETWORK_NAME" />፣ <ph name="NETWORK_PROVIDER_NAME" />፣ <ph name="CONNECTION_STATUS" />፣ የሲግናል ጥንካሬ <ph name="SIGNAL_STRENGTH" />%፣ በእርስዎ አስተዳዳሪ የሚተዳደር፣ ዝርዝሮች</translation>
 <translation id="4387004326333427325">የማረጋገጫ ምስክር ወረቀት በርቀት ተቀባይነት አላገኘም</translation>
 <translation id="4394214039309501350">ውጫዊ አገናኝ</translation>
+<translation id="4401287888955153199">ሁሉንም ያውጡ</translation>
+<translation id="4410695710508688828">የማውጣት ክወና አልተሳካም። <ph name="ERROR_MESSAGE" /></translation>
 <translation id="4418686080762064601">ለፋይሎችዎ አቋራጭ ይፍጠሩ</translation>
 <translation id="4425149324548788773">የእኔ Drive</translation>
 <translation id="4439427728133035643">አውታረ መረብ <ph name="NETWORK_INDEX" /> ከ<ph name="NETWORK_COUNT" />፣ <ph name="NETWORK_NAME" />፣ የሲግናል ጥንካሬ <ph name="SIGNAL_STRENGTH" />%, አገናኝ</translation>
@@ -406,6 +408,7 @@
 <translation id="457386861538956877">ተጨማሪ...</translation>
 <translation id="4579744207439506346"><ph name="ENTRY_NAME" /> ወደ ምርጫ ታክለዋል።</translation>
 <translation id="4594543368593301662">ለ <ph name="SEARCH_TERM" /> ውጤቶችን በማሳየት ላይ።</translation>
+<translation id="4599600860674643278">ማጣሪያ ዳግም ተጀምሯል።</translation>
 <translation id="4603392156942865207"><ph name="FILE_NAME" /> ወደ <ph name="FOLDER_NAME" /> በመቅዳት ላይ</translation>
 <translation id="4631887759990505102">አርቲስት</translation>
 <translation id="4642769377300286600">የሞባይል መገለጫ በመጫን ላይ፣ አውታረ መረብ<ph name="NETWORK_INDEX" /> ከ <ph name="NETWORK_COUNT" />፣ <ph name="NETWORK_NAME" />፣ <ph name="NETWORK_PROVIDER_NAME" /></translation>
@@ -414,6 +417,7 @@
 <translation id="4656777537938206294">ፋይሎችን ከመስመር ውጭ እንዲገኙ ያድርጉ</translation>
 <translation id="4658782175094886150">በበረዶ ውስጥ ያለ ሰው</translation>
 <translation id="4669606053856530811">እነዚህ ንጥሎች ለእነሱ ካልተጋሩ በስተቀር የ«<ph name="SOURCE_NAME" />» አባላት መዳረሻ ያጣሉ።</translation>
+<translation id="467809019005607715">Google ስላይዶች</translation>
 <translation id="4690246192099372265">ስዊድንኛ</translation>
 <translation id="4693155481716051732">ሱሺ</translation>
 <translation id="4694604912444486114">ጦጣ</translation>
@@ -528,6 +532,7 @@
 <translation id="5469868506864199649">ጣሊያንኛ</translation>
 <translation id="5473333559083690127">አዲሱን ፒን ደግመው ያስገቡ</translation>
 <translation id="5489067830765222292">ላትቪያኛ</translation>
+<translation id="5489965683297092283"><ph name="FILTER_NAME" /> ማጣሪያ ጠፍቷል።</translation>
 <translation id="5494920125229734069">ሁሉንም ይመርጣል</translation>
 <translation id="5500122897333236901">አይስላንድኛ</translation>
 <translation id="5508696409934741614">ነጥቦች</translation>
@@ -594,6 +599,7 @@
 <translation id="6082256976217156453">የLZMA የታመቀ መዝገብ</translation>
 <translation id="6096979789310008754">የፍለጋ ጽሑፍ ጸድቷል፣ ሁሉንም ፋይሎች እና አቃፊዎች በማሳየት ላይ።</translation>
 <translation id="610101264611565198"><ph name="FILE_NAME" />ን ወደ <ph name="FOLDER_NAME" /> በመውሰድ ላይ</translation>
+<translation id="61118516107968648">የCSV ጽሁፍ</translation>
 <translation id="6129953537138746214">ባዶ ቦታ</translation>
 <translation id="6133173853026656527"><ph name="FILE_NAME" />ን በመውሰድ ላይ...</translation>
 <translation id="613750717151263950">ጃፓንኛ በአሜሪካ ቁልፍ ሰሌዳ</translation>
@@ -658,6 +664,7 @@
 <translation id="6732801395666424405">የእውቅና ማረጋገጫዎች አልተጫኑም</translation>
 <translation id="6736329909263487977"><ph name="ISSUED_BY" /> [<ph name="ISSUED_TO" />]</translation>
 <translation id="6751256176799620176">1 አቃፊ ተመርጧል</translation>
+<translation id="6755827872271341378">የChromeOS Flex መሣሪያ</translation>
 <translation id="6790428901817661496">አጫውት</translation>
 <translation id="6795884519221689054">ፓንዳ</translation>
 <translation id="6806699711453372963">የLinux ማጋራትን አቀናብር</translation>
@@ -735,6 +742,7 @@
 <translation id="7343393116438664539">የቬትናምኛ ቴሌክስ</translation>
 <translation id="7359359531237882347"><ph name="NUMBER_OF_ITEMS" /> ንጥሎችን በመቅዳት ላይ...</translation>
 <translation id="7375951387215729722">የፋይል ዝርዝር በ<ph name="COLUMN_NAME" /> በቁልቁለት ተደርድሯል።</translation>
+<translation id="7402503521691663770">የChromeOS Flex መሣሪያዎች</translation>
 <translation id="7408870451288633753">ቼክ</translation>
 <translation id="7417453074306512035">የግዕዝ ቁልፍ ሰሌዳ</translation>
 <translation id="7417705661718309329">Google ካርታ</translation>
@@ -810,6 +818,7 @@
 <translation id="7925686952655276919">ለማመሳሰል የተንቀሳቃሽ ስልክ ውሂብን አትጠቀም</translation>
 <translation id="7928710562641958568">መሣሪያን አውጣ</translation>
 <translation id="7943385054491506837">የአሜሪካ ኮልማክ</translation>
+<translation id="7948417415021769876">የ7z ማህደር</translation>
 <translation id="7953739707111622108">የዚህ መሣሪያ ስርዓተ ፋይል ስላልታወቀ ሊከፈት አይችልም።</translation>
 <translation id="7969525169268594403">ስሎቪኛ</translation>
 <translation id="7972920761225148017">ፈረንሳይኛ (ስዊዘርላንድ)</translation>
@@ -824,6 +833,7 @@
 <translation id="8042602468072383151">የ<ph name="AUDIO_TYPE" /> ኦዲዮ</translation>
 <translation id="8045462269890919536">ሮማኒያን</translation>
 <translation id="8049184478152619004">የግል እገዳ ማንሻ ቁልፍ (PUK) ያስገቡ</translation>
+<translation id="807187749540895545"><ph name="FILE_NAME" />ን ሰርስሮ በማውጣት ላይ...</translation>
 <translation id="8079530767338315840">ድገም</translation>
 <translation id="8087576439476816834">አውርድ፣ <ph name="PROFILE_NAME" /></translation>
 <translation id="8106045200081704138">ከእኔ ጋር የተጋሩ</translation>
@@ -840,6 +850,7 @@
 <translation id="8208580316430297579">ሥነ ጥበብ</translation>
 <translation id="8223479393428528563">እነዚህን ፋይሎች ከመስመር ውጪ ለመጠቀም ለማስቀመጥ ተመልሰው መስመር ላይ ይሂዱ፣ ፋይሎቹን በቀኝ ጠቅ ያድርጉ፣ እና የ<ph name="OFFLINE_CHECKBOX_NAME" /> አማራጩን ይምረጡ።</translation>
 <translation id="8249296373107784235">አጨንግፍ</translation>
+<translation id="8250920743982581267">ሰነዶች</translation>
 <translation id="8261506727792406068">ሰርዝ</translation>
 <translation id="8261561378965667560">የቻይንኛ ድርድር</translation>
 <translation id="8269755669432358899">የፋይሎች ግብረመልስ ፓነሎችን ሰብስብ</translation>
@@ -858,6 +869,7 @@
 <translation id="8372369524088641025">መጥፎ የWEP ቁልፍ</translation>
 <translation id="8372852072747894550">ግሪክኛ</translation>
 <translation id="8386903983509584791">መቃኘት ተጠናቅቋል</translation>
+<translation id="8387733224523483503"><ph name="FILE_NAME" /> ከማህደር ወጥቷል።</translation>
 <translation id="8395901698320285466">ልኬቶች</translation>
 <translation id="8408068190360279472"><ph name="NETWORK_TYPE" /> አውታረ መረብ፣ በመገናኘት ላይ</translation>
 <translation id="8425213833346101688">ለውጥ</translation>
@@ -875,6 +887,7 @@
 <translation id="8484284835977497781">ከቅርብ ጊዜ ፎቶዎችዎ ውስጥ ይምረጡ።</translation>
 <translation id="8487700953926739672">ከመስመር ውጪ ይገኛል</translation>
 <translation id="8492972329130824181">የቤት አውታረ መረብ አይገኝም። ለማገናኘት የተንቀሳቃሽ ስልክ የውሂብ ዝውውር መንቃት አለበት።</translation>
+<translation id="8499098729323186194"><ph name="NUMBER_OF_ITEMS" /> ንጥሎችን ሰርስሮ በማውጣት ላይ...</translation>
 <translation id="8521441079177373948">ዩኬ</translation>
 <translation id="8525306231823319788">ሙሉ ማያ ገጽ</translation>
 <translation id="853494022971700746">ፈረንሳይኛ (ፈረንሳይ)</translation>
@@ -903,7 +916,6 @@
 <translation id="8714406895390098252">ቢስክሌት</translation>
 <translation id="8719721339511222681"><ph name="ENTRY_NAME" /> ተመርጧል።</translation>
 <translation id="872537912056138402">ክሮሽያንኛ</translation>
-<translation id="873847021056608403">የCloudReady 2.0 መሳሪያዎች</translation>
 <translation id="8743164338060742337">አውታረ መረብ <ph name="NETWORK_INDEX" /> ከ<ph name="NETWORK_COUNT" />፣ <ph name="NETWORK_NAME" /> <ph name="NETWORK_PROVIDER_NAME" />፣ የሲግናል ጥንካሬ <ph name="SIGNAL_STRENGTH" />%፣ በአስተዳዳሪ የሚተዳደር፣ ተገናኝ</translation>
 <translation id="8750438273876807512">በመደርደሪያ ውስጥ ያሉትን ፋይሎችዎ በፍጥነት ለመድረስ ፋይልን ይንኩ እና ይያዙ እና <ph name="ICON" />ን መታ ያድርጉ እና «ለመደርደሪያ ሰካ»ን ይምረጡ።</translation>
 <translation id="8787254343425541995">ለተጋሩ አውታረ መረቦች ተኪዎችን ይፍቀዱ</translation>
@@ -950,7 +962,9 @@
 <translation id="9172592259078059678">በጉጃራቲ ቋንቋ ፊደል መጻፍ</translation>
 <translation id="9173120999827300720">እንግሊዝኛ (አሜሪካ) በዓለም አቀፍ ቁልፍ ሰሌዳ</translation>
 <translation id="9174050671906956834">በመጣያው ውስጥ ያሉ ንጥሎች ከ30 ቀኖች በኋላ ለዘለዓለም ይሰረዛሉ።</translation>
+<translation id="9183302530794969518">Google ሰነድ</translation>
 <translation id="9189836632794948435">ካዛክኛ</translation>
+<translation id="9200427192836333033"><ph name="NUMBER_OF_ITEMS" /> ንጥሎች ከማህደር ወጥተዋል።</translation>
 <translation id="9213073329713032541">ጭነት በተሳካ ሁኔታ ጀምሯል።</translation>
 <translation id="9219103736887031265">ምስሎች</translation>
 <translation id="9219908252191632183">ጨረቃዊ</translation>

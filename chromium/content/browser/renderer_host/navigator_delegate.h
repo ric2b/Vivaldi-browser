@@ -86,7 +86,7 @@ class NavigatorDelegate {
   // Returns whether to continue a navigation that needs to transfer to a
   // different process between the load start and commit.
   virtual bool ShouldAllowRendererInitiatedCrossProcessNavigation(
-      bool is_main_frame_navigation) = 0;
+      bool is_outermost_main_frame_navigation) = 0;
 
   // Returns the overridden user agent string if it's set.
   virtual const blink::UserAgentOverride& GetUserAgentOverride() = 0;
@@ -133,13 +133,6 @@ class NavigatorDelegate {
   virtual void RegisterExistingOriginToPreventOptInIsolation(
       const url::Origin& origin,
       NavigationRequest* navigation_request_to_exclude) = 0;
-
-  // Returns true if activation navigations are disallowed in the
-  // Navigator.
-  // TODO(https://crbug.com/1234857): Remove this. This is a temporary
-  // workaround to avoid breaking features that must be taught to deal with
-  // activation navigations.
-  virtual bool IsActivationNavigationDisallowedForBug1234857() = 0;
 };
 
 }  // namespace content

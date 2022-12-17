@@ -6,16 +6,11 @@
     overflow-y: auto;
   }
 
-  #clusters,
-  #header {
+  #clusters {
     margin: 0 auto;
     max-width: var(--cluster-max-width);
     min-width: var(--cluster-min-width);
     padding: var(--first-cluster-padding-top) var(--cluster-padding-horizontal) 0;
-  }
-
-  #header {
-    font-size: 1.25rem;  /* 20px */
   }
 
   #placeholder {
@@ -29,7 +24,6 @@
         0 var(--cluster-padding-horizontal) var(--cluster-padding-vertical);
   }
 </style>
-<div id="header" hidden="[[!headerText_]]">[[headerText_]]</div>
 <div id="placeholder" class="centered-message" hidden="[[!placeholderText_]]">
   [[placeholderText_]]
 </div>
@@ -41,15 +35,19 @@
        https://github.com/PolymerElements/iron-list/issues/546 -->
   <template>
     <history-cluster cluster="[[item]]" index="[[index]]"
-        tabindex$="[[tabIndex]]" on-remove-cluster="onRemoveCluster_">
+        query="[[result_.query]]" tabindex$="[[tabIndex]]"
+        on-remove-cluster="onRemoveCluster_">
     </history-cluster>
   </template>
 </iron-list>
 <div id="footer" hidden="[[getLoadMoreButtonHidden_(
     result_, result_.clusters.*, result_.canLoadMore)]]">
-  <cr-button id="loadMoreButton" on-click="onLoadMoreButtonClick_">
+  <cr-button id="loadMoreButton" on-click="onLoadMoreButtonClick_"
+             hidden$="[[showSpinner_]]">
     $i18n{loadMoreButtonLabel}
   </cr-button>
+  <iron-icon src="chrome://resources/images/throbber_small.svg"
+             hidden$="[[!showSpinner_]]"></iron-icon>
 </div>
 <iron-scroll-threshold id="scrollThreshold"
     lower-threshold="500" on-lower-threshold="onScrolledToBottom_">

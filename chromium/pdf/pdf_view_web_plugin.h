@@ -20,9 +20,9 @@
 #include "pdf/pdf_accessibility_action_handler.h"
 #include "pdf/pdf_view_plugin_base.h"
 #include "pdf/post_message_receiver.h"
-#include "pdf/post_message_sender.h"
 #include "pdf/ppapi_migration/graphics.h"
 #include "pdf/ppapi_migration/url_loader.h"
+#include "pdf/v8_value_converter.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_text_input_type.h"
 #include "third_party/blink/public/web/web_plugin.h"
@@ -53,10 +53,10 @@ class MetafileSkia;
 
 namespace chrome_pdf {
 
+class MetricsHandler;
 class PDFiumEngine;
 class PdfAccessibilityDataHandler;
 
-// Skeleton for a `blink::WebPlugin` to replace `OutOfProcessInstance`.
 class PdfViewWebPlugin final : public PdfViewPluginBase,
                                public blink::WebPlugin,
                                public pdf::mojom::PdfListener,
@@ -95,6 +95,12 @@ class PdfViewWebPlugin final : public PdfViewPluginBase,
 
     // Gets the scroll position.
     virtual gfx::PointF GetScrollPosition() = 0;
+
+    // Enqueues a "message" event carrying `message` to the plugin embedder.
+    virtual void PostMessage(base::Value::Dict message) = 0;
+
+    // Tells the embedder to allow the plugin to handle find requests.
+    virtual void UsePluginAsFindHandler() = 0;
 
     // Calls underlying WebLocalFrame::SetReferrerForRequest().
     virtual void SetReferrerForRequest(blink::WebURLRequest& request,
@@ -142,9 +148,11 @@ class PdfViewWebPlugin final : public PdfViewPluginBase,
   };
 
   // Allows for dependency injections into `PdfViewWebPlugin`.
-  class Client {
+  class Client : public V8ValueConverter {
    public:
     virtual ~Client() = default;
+
+    virtual base::WeakPtr<Client> GetWeakPtr() = 0;
 
     // Prints the given `element`.
     virtual void Print(const blink::WebElement& element) {}
@@ -159,9 +167,6 @@ class PdfViewWebPlugin final : public PdfViewPluginBase,
     virtual std::unique_ptr<PdfAccessibilityDataHandler>
     CreateAccessibilityDataHandler(
         PdfAccessibilityActionHandler* action_handler);
-
-    // Indicates whether to use zoom for DSF (device scale factor).
-    virtual bool IsUseZoomForDSFEnabled() const;
   };
 
   PdfViewWebPlugin(
@@ -232,10 +237,11 @@ class PdfViewWebPlugin final : public PdfViewPluginBase,
       int relative_cursor_pos) override;
   void ImeFinishComposingTextForPlugin(bool keep_selection) override;
 
-  // PdfViewPluginBase:
+  // PDFEngine::Client:
   void UpdateCursor(ui::mojom::CursorType new_cursor_type) override;
+  void UpdateTickMarks(const std::vector<gfx::Rect>& tickmarks) override;
+  void NotifyNumberOfFindResultsChanged(int total, bool final_result) override;
   void NotifySelectedFindResultChanged(int current_find_index) override;
-  void CaretChanged(const gfx::Rect& caret_rect) override;
   void Alert(const std::string& message) override;
   bool Confirm(const std::string& message) override;
   std::string Prompt(const std::string& question,
@@ -243,14 +249,13 @@ class PdfViewWebPlugin final : public PdfViewPluginBase,
   std::vector<SearchStringResult> SearchString(const char16_t* string,
                                                const char16_t* term,
                                                bool case_sensitive) override;
+  void CaretChanged(const gfx::Rect& caret_rect) override;
   void SetSelectedText(const std::string& selected_text) override;
   bool IsValidLink(const std::string& url) override;
+
+  // PdfViewPluginBase:
   std::unique_ptr<Graphics> CreatePaintGraphics(const gfx::Size& size) override;
   bool BindPaintGraphics(Graphics& graphics) override;
-  void ScheduleTaskOnMainThread(const base::Location& from_here,
-                                ResultCallback callback,
-                                int32_t result,
-                                base::TimeDelta delay) override;
 
   // pdf::mojom::PdfListener:
   void SetCaretPosition(const gfx::PointF& position) override;
@@ -268,7 +273,7 @@ class PdfViewWebPlugin final : public PdfViewPluginBase,
       const blink::WebAssociatedURLLoaderOptions& options) override;
 
   // PostMessageReceiver::Client:
-  void OnMessage(const base::Value& message) override;
+  void OnMessage(const base::Value::Dict& message) override;
 
   // SkiaGraphics::Client:
   void UpdateSnapshot(sk_sp<SkImage> snapshot) override;
@@ -282,9 +287,10 @@ class PdfViewWebPlugin final : public PdfViewPluginBase,
       const AccessibilityActionData& action_data) override;
 
   // Initializes the plugin using the `container_wrapper` and `engine` provided
-  // by tests.
+  // by tests. Lets CreateUrlLoaderInternal() return `loader` on its first call.
   bool InitializeForTesting(std::unique_ptr<ContainerWrapper> container_wrapper,
-                            std::unique_ptr<PDFiumEngine> engine);
+                            std::unique_ptr<PDFiumEngine> engine,
+                            std::unique_ptr<UrlLoader> loader);
 
   const gfx::Rect& GetPluginRectForTesting() const { return plugin_rect(); }
 
@@ -294,7 +300,8 @@ class PdfViewWebPlugin final : public PdfViewPluginBase,
   // PdfViewPluginBase:
   base::WeakPtr<PdfViewPluginBase> GetWeakPtr() override;
   std::unique_ptr<UrlLoader> CreateUrlLoaderInternal() override;
-  void SendMessage(base::Value message) override;
+  void OnDocumentLoadComplete() override;
+  void SendMessage(base::Value::Dict message) override;
   void SaveAs() override;
   void InitImageData(const gfx::Size& size) override;
   void SetFormTextFieldInFocus(bool in_focus) override;
@@ -305,8 +312,6 @@ class PdfViewWebPlugin final : public PdfViewPluginBase,
                                 AccessibilityPageObjects page_objects) override;
   void SetAccessibilityViewportInfo(
       AccessibilityViewportInfo viewport_info) override;
-  void NotifyFindResultsChanged(int total, bool final_result) override;
-  void NotifyFindTickmarks(const std::vector<gfx::Rect>& tickmarks) override;
   void SetContentRestrictions(int content_restrictions) override;
   void SetPluginCanSave(bool can_save) override;
   void PluginDidStartLoading() override;
@@ -324,8 +329,10 @@ class PdfViewWebPlugin final : public PdfViewPluginBase,
   // Call `Destroy()` instead.
   ~PdfViewWebPlugin() override;
 
+  // Passing in a null `engine_override` allows InitializeCommon() to create a
+  // PDFiumEngine normally. Otherwise, `engine_override` is used.
   bool InitializeCommon(std::unique_ptr<ContainerWrapper> container_wrapper,
-                        std::unique_ptr<PDFiumEngine> engine);
+                        std::unique_ptr<PDFiumEngine> engine_override);
 
   // Sends whether to do smooth scrolling.
   void SendSetSmoothScrolling();
@@ -356,7 +363,7 @@ class PdfViewWebPlugin final : public PdfViewPluginBase,
   // see crbug.com/66334.
   // TODO(crbug.com/1217012): Re-evaluate the need for a callback when parts of
   // the plugin are moved off the main thread.
-  void OnInvokePrintDialog(int32_t /*result*/);
+  void OnInvokePrintDialog();
 
   // Callback to set the document information in the accessibility tree
   // asynchronously.
@@ -376,6 +383,20 @@ class PdfViewWebPlugin final : public PdfViewPluginBase,
 
   // May be null in unit tests.
   pdf::mojom::PdfService* GetPdfService();
+
+  void ResetRecentlySentFindUpdate();
+
+  // Records metrics about the document metadata.
+  void RecordDocumentMetrics();
+
+  // Sends the attachments data.
+  void SendAttachments();
+
+  // Sends the bookmarks data.
+  void SendBookmarks();
+
+  // Send document metadata data.
+  void SendMetadata();
 
   blink::WebString selected_text_;
 
@@ -406,7 +427,6 @@ class PdfViewWebPlugin final : public PdfViewPluginBase,
   std::unique_ptr<ContainerWrapper> container_wrapper_;
 
   v8::Persistent<v8::Object> scriptable_receiver_;
-  PostMessageSender post_message_sender_;
 
   // The current image snapshot.
   cc::PaintImage snapshot_;
@@ -433,12 +453,26 @@ class PdfViewWebPlugin final : public PdfViewPluginBase,
   std::unique_ptr<PdfAccessibilityDataHandler> const
       pdf_accessibility_data_handler_;
 
+  // Whether an update to the number of find results found was sent less than
+  // `kFindResultCooldown` TimeDelta ago.
+  bool recently_sent_find_update_ = false;
+
+  // Stores the tickmarks to be shown for the current find results.
+  std::vector<gfx::Rect> tickmarks_;
+
+  // Only instantiated when not print previewing.
+  std::unique_ptr<MetricsHandler> metrics_handler_;
+
   // The metafile in which to save the printed output. Assigned a value only
   // between `PrintBegin()` and `PrintEnd()` calls.
   raw_ptr<printing::MetafileSkia> printing_metafile_ = nullptr;
 
   // The indices of pages to print.
   std::vector<int> pages_to_print_;
+
+  // If non-null, the UrlLoader that CreateUrlLoaderInternal() returns for
+  // testing purposes.
+  std::unique_ptr<UrlLoader> test_loader_;
 
   base::WeakPtrFactory<PdfViewWebPlugin> weak_factory_{this};
 };

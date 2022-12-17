@@ -23,6 +23,7 @@
 #include "components/optimization_guide/core/optimization_guide_constants.h"
 #include "components/optimization_guide/core/optimization_guide_enums.h"
 #include "components/optimization_guide/core/optimization_guide_features.h"
+#include "components/optimization_guide/core/optimization_guide_logger.h"
 #include "components/optimization_guide/core/optimization_guide_navigation_data.h"
 #include "components/optimization_guide/core/optimization_guide_prefs.h"
 #include "components/optimization_guide/core/optimization_guide_store.h"
@@ -192,7 +193,7 @@ class TestHintsFetcher : public HintsFetcher {
       : HintsFetcher(url_loader_factory,
                      optimization_guide_service_url,
                      pref_service,
-                     optimization_guide_logger),
+                     &optimization_guide_logger_),
         fetch_states_(fetch_states) {
     DCHECK(!fetch_states_.empty());
   }
@@ -253,6 +254,7 @@ class TestHintsFetcher : public HintsFetcher {
   std::string locale_requested_;
   proto::RequestContext request_context_requested_ =
       proto::RequestContext::CONTEXT_UNSPECIFIED;
+  OptimizationGuideLogger optimization_guide_logger_;
 };
 
 // A mock class of HintsFetcherFactory that returns instances of
@@ -318,7 +320,7 @@ class HintsManagerTest : public ProtoDatabaseProviderTestBase {
 
     hint_store_ = std::make_unique<OptimizationGuideStore>(
         db_provider_.get(), temp_dir(),
-        task_environment_.GetMainThreadTaskRunner());
+        task_environment_.GetMainThreadTaskRunner(), pref_service_.get());
 
     tab_url_provider_ = std::make_unique<FakeTabUrlProvider>();
 
@@ -326,8 +328,7 @@ class HintsManagerTest : public ProtoDatabaseProviderTestBase {
         /*is_off_the_record=*/false, /*application_locale=*/"en-US",
         pref_service(), hint_store_->AsWeakPtr(), top_host_provider,
         tab_url_provider_.get(), url_loader_factory_,
-        /*push_notification_manager=*/nullptr,
-        /*optimization_guide_logger=*/nullptr);
+        /*push_notification_manager=*/nullptr, &optimization_guide_logger_);
     hints_manager_->SetClockForTesting(task_environment_.GetMockClock());
 
     // Run until hint cache is initialized and the HintsManager is ready to
@@ -490,6 +491,7 @@ class HintsManagerTest : public ProtoDatabaseProviderTestBase {
   std::unique_ptr<sync_preferences::TestingPrefServiceSyncable> pref_service_;
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
   network::TestURLLoaderFactory test_url_loader_factory_;
+  OptimizationGuideLogger optimization_guide_logger_;
 };
 
 TEST_F(HintsManagerTest, ProcessHintsWithValidCommandLineOverride) {
@@ -2619,6 +2621,97 @@ TEST_F(HintsManagerFetchingTest,
       "OptimizationGuide.HintsManager.ConcurrentPageNavigationFetches", 1, 1);
   histogram_tester.ExpectBucketCount(
       "OptimizationGuide.HintsManager.ConcurrentPageNavigationFetches", 2, 2);
+}
+
+TEST_F(HintsManagerFetchingTest,
+       CanApplyOptimizationNewAPIDecisionComesFromInFlightURLHint) {
+  base::HistogramTester histogram_tester;
+
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      switches::kDisableCheckingUserPermissionsForTesting);
+  hints_manager()->RegisterOptimizationTypes({proto::COMPRESS_PUBLIC_IMAGES});
+  InitializeWithDefaultConfig("1.0.0.0");
+
+  hints_manager()->SetHintsFetcherFactoryForTesting(
+      BuildTestHintsFetcherFactory(
+          {HintsFetcherEndState::kFetchSuccessWithURLHints}));
+  auto navigation_data = CreateTestNavigationData(
+      url_with_url_keyed_hint(), {proto::COMPRESS_PUBLIC_IMAGES});
+  CallOnNavigationStartOrRedirect(navigation_data.get(), base::DoNothing());
+  hints_manager()->CanApplyOptimization(
+      url_with_url_keyed_hint(), proto::COMPRESS_PUBLIC_IMAGES,
+      base::BindOnce([](OptimizationGuideDecision decision,
+                        const OptimizationMetadata& metadata) {
+        EXPECT_EQ(OptimizationGuideDecision::kTrue, decision);
+      }));
+
+  // Wait for the hint to be available and for the callback to execute.
+  RunUntilIdle();
+
+  // The new API should have called the async API in the background.
+  histogram_tester.ExpectUniqueSample(
+      "OptimizationGuide.ApplyDecisionAsync.CompressPublicImages",
+      OptimizationTypeDecision::kAllowedByHint, 1);
+}
+
+TEST_F(HintsManagerFetchingTest,
+       CanApplyOptimizationNewAPIRequestFailsBeforeFetch) {
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      switches::kDisableCheckingUserPermissionsForTesting);
+  hints_manager()->RegisterOptimizationTypes({proto::COMPRESS_PUBLIC_IMAGES});
+  InitializeWithDefaultConfig("1.0.0.0");
+
+  // The first query should fail since no "navigation" has occurred.
+  hints_manager()->CanApplyOptimization(
+      url_with_url_keyed_hint(), proto::COMPRESS_PUBLIC_IMAGES,
+      base::BindOnce([](OptimizationGuideDecision decision,
+                        const OptimizationMetadata& metadata) {
+        EXPECT_EQ(OptimizationGuideDecision::kUnknown, decision);
+      }));
+
+  // Make the hints available after the URL has been queried.
+  auto navigation_data = CreateTestNavigationData(
+      url_with_url_keyed_hint(), {proto::COMPRESS_PUBLIC_IMAGES});
+  CallOnNavigationStartOrRedirect(navigation_data.get(), base::DoNothing());
+  hints_manager()->SetHintsFetcherFactoryForTesting(
+      BuildTestHintsFetcherFactory(
+          {HintsFetcherEndState::kFetchSuccessWithURLHints}));
+
+  // Wait for the hint to become available.
+  RunUntilIdle();
+
+  // Now make sure the hint is available with the same API.
+  hints_manager()->CanApplyOptimization(
+      url_with_url_keyed_hint(), proto::COMPRESS_PUBLIC_IMAGES,
+      base::BindOnce([](OptimizationGuideDecision decision,
+                        const OptimizationMetadata& metadata) {
+        EXPECT_EQ(OptimizationGuideDecision::kTrue, decision);
+      }));
+}
+
+TEST_F(HintsManagerFetchingTest, CanApplyOptimizationNewAPICalledPostFetch) {
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      switches::kDisableCheckingUserPermissionsForTesting);
+  hints_manager()->RegisterOptimizationTypes({proto::COMPRESS_PUBLIC_IMAGES});
+  InitializeWithDefaultConfig("1.0.0.0");
+
+  hints_manager()->SetHintsFetcherFactoryForTesting(
+      BuildTestHintsFetcherFactory(
+          {HintsFetcherEndState::kFetchSuccessWithURLHints}));
+
+  auto navigation_data = CreateTestNavigationData(
+      url_with_url_keyed_hint(), {proto::COMPRESS_PUBLIC_IMAGES});
+  CallOnNavigationStartOrRedirect(navigation_data.get(), base::DoNothing());
+
+  // Wait for the hint to become available.
+  RunUntilIdle();
+
+  hints_manager()->CanApplyOptimization(
+      url_with_url_keyed_hint(), proto::COMPRESS_PUBLIC_IMAGES,
+      base::BindOnce([](OptimizationGuideDecision decision,
+                        const OptimizationMetadata& metadata) {
+        EXPECT_EQ(OptimizationGuideDecision::kTrue, decision);
+      }));
 }
 
 TEST_F(HintsManagerFetchingTest,

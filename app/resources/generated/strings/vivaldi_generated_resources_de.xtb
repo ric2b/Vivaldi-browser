@@ -9,7 +9,6 @@
 <translation id="1054153489933238809">Original &amp;Bild in neuem Tab öffnen</translation>
 <translation id="1056898198331236512">Warnung</translation>
 <translation id="1084824384139382525">Adr&amp;esse des Links kopieren</translation>
-<translation id="1128109161498068552">Websites nicht gestatten, mittels systemexklusiver Meldungen auf MIDI-Geräte zuzugreifen</translation>
 <translation id="1163931534039071049">Frame-Quelltext &amp;anzeigen</translation>
 <translation id="1165039591588034296">Fehler</translation>
 <translation id="1175364870820465910">&amp;Drucken...</translation>
@@ -22,7 +21,6 @@
 <translation id="1297175357211070620">Ziel</translation>
 <translation id="1303101771013849280">Lesezeichen-HTML-Datei</translation>
 <translation id="1430915738399379752">Drucken</translation>
-<translation id="1433811987160647649">Vor dem Zugriff nachfragen</translation>
 <translation id="1451375123200651445">Webseite, Einzeldatei (MHTML)</translation>
 <translation id="1465176863081977902">Audioadresse k&amp;opieren</translation>
 <translation id="1476607407192946488">&amp;Spracheinstellungen</translation>
@@ -99,13 +97,11 @@
 <translation id="2783321960289401138">Verknüpfung erstellen...</translation>
 <translation id="2785873697295365461">Dateideskriptoren</translation>
 <translation id="2809586584051668049">und <ph name="NUMBER_ADDITIONAL_DISABLED" /> weitere</translation>
-<translation id="2812989263793994277">Keine Bilder anzeigen</translation>
 <translation id="2850541429955027218">Design hinzufügen</translation>
 <translation id="2861941300086904918">Sicherheitsmanager für native Clients</translation>
 <translation id="2881076733170862447">Wenn die Erweiterung angeklickt wird</translation>
 <translation id="2889064240420137087">Link öffnen mit…</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> konnte nicht mit diesem Drucker kommunizieren. Vergewissern Sie sich, dass der Drucker angeschlossen ist, und versuchen Sie es dann erneut.</translation>
-<translation id="2904456025988372123">Nachfragen, wenn eine Website versucht, nach der ersten Datei weitere Dateien automatisch herunterzuladen</translation>
 <translation id="2913331724188855103">Websites dürfen Cookiedaten speichern und lesen (empfohlen)</translation>
 <translation id="2931157624143513983">An Druckbereich anpassen</translation>
 <translation id="2932085390869194046">Passwort vorschlagen…</translation>
@@ -126,7 +122,6 @@
 <translation id="3127156390846601284">Dadurch werden alle auf Ihrem Gerät gespeicherten Daten für alle angezeigten Websites gelöscht. Möchten Sie fortfahren?</translation>
 <translation id="3129173833825111527">Linker Rand</translation>
 <translation id="3144647712221361880">Link öffnen als</translation>
-<translation id="3154429428035006212">Seit über einem Monat offline</translation>
 <translation id="3222066309010235055">Vorrendern: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Wählen Sie das Stammverzeichnis der Erweiterung, die gepackt werden soll. Zur Aktualisierung einer Erweiterung wählen Sie eine private Schlüsseldatei zur Wiederverwendung.</translation>
 <translation id="3280237271814976245">Speichern &amp;unter...</translation>
@@ -143,6 +138,7 @@
 <translation id="3360297538363969800">Fehler beim Drucken. Bitte überprüfen Sie Ihren Drucker und versuchen Sie es erneut.</translation>
 <translation id="3378572629723696641">Diese Erweiterung ist möglicherweise beschädigt.</translation>
 <translation id="3387614642886316601">Vorschläge von Google</translation>
+<translation id="3393582007140394275">Bildschirm kann nicht gestreamt werden.</translation>
 <translation id="3432227430032737297">Alle angezeigten Cookies entfernen</translation>
 <translation id="345693547134384690">Bil&amp;d in neuem Tab öffnen</translation>
 <translation id="3494769164076977169">Nachfragen, wenn eine Website versucht, Dateien nach der ersten Datei automatisch herunterzuladen (empfohlen)</translation>
@@ -165,7 +161,6 @@
 <translation id="3838085852053358637">Fehler beim Laden der Erweiterung</translation>
 <translation id="383891835335927981">Keine Websites wurden vergrößert oder verkleinert</translation>
 <translation id="385051799172605136">Zurück</translation>
-<translation id="3899879303189199559">Seit über einem Jahr offline</translation>
 <translation id="3905761538810670789">App reparieren</translation>
 <translation id="3908501907586732282">Erweiterung aktivieren</translation>
 <translation id="3909701002594999354">Alle &amp;Steuerelemente anzeigen</translation>
@@ -192,7 +187,6 @@
 <translation id="4200983522494130825">&amp;Neuer Tab</translation>
 <translation id="4225397296022057997">Auf allen Websites</translation>
 <translation id="4256316378292851214">Video &amp;speichern unter...</translation>
-<translation id="4278390842282768270">Zugelassen</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> KB (<ph name="NUM_KILOBYTES_LIVE" /> KB live)</translation>
 <translation id="4345587454538109430">Konfigurieren...</translation>
 <translation id="4348766275249686434">Fehler erfassen</translation>
@@ -217,15 +211,15 @@
 <translation id="488785315393301722">Details anzeigen</translation>
 <translation id="4907306957610201395">Berechtigungskategorie</translation>
 <translation id="4912643508233590958">Inaktive Weckbefehle</translation>
+<translation id="49265687513387605">Bildschirm kann nicht übertragen werden.  Prüfen Sie, ob Sie die Aufforderung zur Freigabe Ihres Bildschirms bestätigt haben.</translation>
 <translation id="4927753642311223124">Nichts zu sehen, alles OK.</translation>
 <translation id="4930714375720679147">Aktivieren</translation>
+<translation id="4961318399572185831">Bildschirm streamen</translation>
 <translation id="4988526792673242964">Seiten</translation>
 <translation id="49896407730300355">&amp;Gegen den Uhrzeigersinn drehen</translation>
 <translation id="4989966318180235467">&amp;Hintergrundseite prüfen</translation>
-<translation id="4994474651455208930">Registrierung von Websites als Standard-Handler für Protokolle zulassen</translation>
 <translation id="5000922062037820727">Blockiert (empfohlen)</translation>
 <translation id="5027562294707732951">Erweiterung hinzufügen</translation>
-<translation id="5036662165765606524">Keiner Website erlauben, automatisch mehrere Dateien herunterzuladen</translation>
 <translation id="5039804452771397117">Erlauben</translation>
 <translation id="5057110919553308744">Wenn die Erweiterung angeklickt wird</translation>
 <translation id="5059526285558225588">Auswählen, was geteilt werden soll</translation>
@@ -238,7 +232,6 @@
 <translation id="5233231016133573565">Prozess-ID</translation>
 <translation id="5233736638227740678">&amp;Einfügen</translation>
 <translation id="5256861893479663409">Auf allen Websites</translation>
-<translation id="5265562206369321422">Seit über einer Woche offline</translation>
 <translation id="5269977353971873915">Fehler beim Drucken</translation>
 <translation id="5284445933715251131">Download fortsetzen</translation>
 <translation id="52912272896845572">Private Schlüsseldatei ist ungültig.</translation>
@@ -294,7 +287,6 @@
 <translation id="6122081475643980456">Ihre Internetverbindung wird beeinflusst</translation>
 <translation id="6147020289383635445">Druckvorschau fehlgeschlagen.</translation>
 <translation id="6156863943908443225">Skript-Cache</translation>
-<translation id="6169666352732958425">Der Desktop kann nicht übertragen werden.</translation>
 <translation id="6196854373336333322">Die Erweiterung „<ph name="EXTENSION_NAME" />” hat die Kontrolle über Ihre Proxyeinstellungen übernommen, dadurch kann sie alle Onlineaktivitäten ändern, stören oder abhören. Wenn Sie sich nicht sicher sind, warum diese Änderung erfolgt ist, war sie wahrscheinlich nicht gewollt.</translation>
 <translation id="6200151268994853226">Erweiterung verwalten</translation>
 <translation id="6206311232642889873">Bild kop&amp;ieren</translation>
@@ -328,7 +320,6 @@
 <translation id="6798954102094737107">Plug-in: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Änderungen beibehalten</translation>
 <translation id="6817174620439930047">Nachfragen, wenn eine Website versucht, mit systemexklusiven Meldungen auf MIDI-Geräte zuzugreifen (empfohlen)</translation>
-<translation id="682123305478866682">Desktop streamen</translation>
 <translation id="6824564591481349393">E-Mail-Adr&amp;esse kopieren</translation>
 <translation id="6840155290835956714">Vor dem Senden nachfragen</translation>
 <translation id="6886871292305414135">Link in neuem &amp;Tab öffnen</translation>
@@ -346,7 +337,6 @@
 <translation id="708060913198414444">Audioadresse k&amp;opieren</translation>
 <translation id="7175353351958621980">Geladen von:</translation>
 <translation id="7186088072322679094">In der Symbolleiste behalten</translation>
-<translation id="7270858098575133036">Nachfragen, wenn eine Website versucht, mit systemexklusiven Meldungen auf MIDI-Geräte zuzugreifen</translation>
 <translation id="7287143125007575591">Zugriff verweigert.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7385854874724088939">Beim Drucken ist ein Fehler aufgetreten. Bitte überprüfen Sie Ihren Drucker und versuchen Sie es erneut.</translation>
@@ -369,7 +359,6 @@
 <translation id="7704305437604973648">Aufgabe</translation>
 <translation id="7710568461918838723">&amp;Streamen…</translation>
 <translation id="7750228210027921155">Bild-in-Bild</translation>
-<translation id="7751260505918304024">Alle anzeigen</translation>
 <translation id="7760004034676677601">Ist dies die Seite, die sie beim Start erwartet haben?</translation>
 <translation id="7771452384635174008">Layout</translation>
 <translation id="7782102568078991263">Keine weiteren Vorschläge von Google</translation>
@@ -382,9 +371,7 @@
 <translation id="7849264908733290972">B&amp;ild in neuem Tab öffnen</translation>
 <translation id="7857949311770343000">Ist dies die “Neuer Tab”-Seite, die Sie erwartet hatten?</translation>
 <translation id="786073089922909430">Dienst: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7885253890047913815">Letzte Ziele</translation>
 <translation id="7903925330883316394">Dienstprogramm: <ph name="UTILITY_TYPE" /></translation>
-<translation id="7938594894617528435">Derzeit offline</translation>
 <translation id="7947962633355574091">Videoadresse k&amp;opieren</translation>
 <translation id="7966241909927244760">Bildadresse k&amp;opieren</translation>
 <translation id="7973394300052703468">Neues &amp;privates Fenster</translation>
@@ -426,10 +413,8 @@ Speichern Sie Ihre Schlüsseldatei an einem sicheren Ort. Sie benötigen die Dat
 <translation id="8708000541097332489">Beim Beenden löschen</translation>
 <translation id="8714838604780058252">Hintergrundgrafiken</translation>
 <translation id="8725066075913043281">Erneut versuchen</translation>
-<translation id="8757090071857742562">Der Desktop kann nicht gestreamt werden. Überprüfen Sie, ob Sie die Aufforderung zur Freigabe Ihres Bildschirms bestätigt haben.</translation>
 <translation id="8774934320277480003">Oberer Rand</translation>
 <translation id="8798099450830957504">Standardeinstellung</translation>
-<translation id="8800004011501252845">Ziele werden angezeigt für</translation>
 <translation id="8808478386290700967">Chrome Web Store</translation>
 <translation id="8823514049557262177">Linkte&amp;xt kopieren</translation>
 <translation id="8823704566850948458">Passwort vorschlagen…</translation>
@@ -442,7 +427,6 @@ Speichern Sie Ihre Schlüsseldatei an einem sicheren Ort. Sie benötigen die Dat
 <translation id="8962083179518285172">Details ausblenden</translation>
 <translation id="8973557916016709913">Zoom zurücksetzen</translation>
 <translation id="897939795688207351">Auf <ph name="ORIGIN" /></translation>
-<translation id="8996526648899750015">Konto hinzufügen…</translation>
 <translation id="9003647077635673607">Auf allen Webseiten zulassen</translation>
 <translation id="9027459031423301635">Link in neuem Tab öffnen</translation>
 <translation id="9056810968620647706">Keine Übereinstimmungen gefunden.</translation>

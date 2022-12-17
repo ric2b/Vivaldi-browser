@@ -22,10 +22,12 @@
 #include "ash/public/cpp/keyboard/keyboard_controller_observer.h"
 #include "ash/public/cpp/login_accelerators.h"
 #include "ash/public/cpp/login_types.h"
+#include "ash/public/cpp/smartlock_state.h"
 #include "ash/public/cpp/system_tray_observer.h"
 #include "base/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/time/time.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "chromeos/dbus/power_manager/power_supply_properties.pb.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -53,7 +55,6 @@ class LoginExpandedPublicAccountView;
 class LoginUserView;
 class NoteActionLaunchButton;
 class ScrollableUsersListView;
-enum class SmartLockState;
 
 namespace mojom {
 enum class TrayActionState;
@@ -276,8 +277,8 @@ class ASH_EXPORT LockContentsView
     bool show_pin_pad_for_password = false;
     size_t autosubmit_pin_length = 0;
     absl::optional<EasyUnlockIconInfo> easy_unlock_icon_info = absl::nullopt;
-    FingerprintState fingerprint_state;
-    SmartLockState smart_lock_state;
+    FingerprintState fingerprint_state = FingerprintState::UNAVAILABLE;
+    SmartLockState smart_lock_state = SmartLockState::kDisabled;
     bool auth_factor_is_hiding_password = false;
     // When present, indicates that the TPM is locked.
     absl::optional<base::TimeDelta> time_until_tpm_unlock = absl::nullopt;
@@ -383,6 +384,9 @@ class ASH_EXPORT LockContentsView
 
   // Opens an error bubble to indicate authentication failure.
   void ShowAuthErrorMessage();
+
+  // Hides the error bubble indicating authentication failure if open.
+  void HideAuthErrorMessage();
 
   // Called when the easy unlock icon is hovered.
   void OnEasyUnlockIconHovered();

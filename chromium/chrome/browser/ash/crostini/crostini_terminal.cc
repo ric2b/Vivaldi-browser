@@ -32,6 +32,7 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/window_properties.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
@@ -40,6 +41,7 @@
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/chrome_unscaled_resources.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/base/escape.h"
@@ -51,13 +53,20 @@
 #include "ui/color/color_provider_manager.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/native_theme/native_theme.h"
-#include "ui/views/image_model_utils.h"
 
 namespace crostini {
 
+const char kTerminalHomePath[] = "html/terminal_home.html";
+
+const char kShortcutKey[] = "shortcut";
+const char kShortcutValueSSH[] = "ssh";
+const char kShortcutValueTerminal[] = "terminal";
+const char kProfileIdKey[] = "profileId";
+
 namespace {
+
 constexpr char kSettingPrefix[] = "/hterm/profiles/default/";
-const size_t kSettingPrefixSize = base::size(kSettingPrefix) - 1;
+const size_t kSettingPrefixSize = std::size(kSettingPrefix) - 1;
 
 constexpr char kSettingBackgroundColor[] =
     "/hterm/profiles/default/background-color";
@@ -65,26 +74,6 @@ constexpr char kDefaultBackgroundColor[] = "#202124";
 
 constexpr char kSettingPassCtrlW[] = "/hterm/profiles/default/pass-ctrl-w";
 constexpr bool kDefaultPassCtrlW = false;
-
-constexpr char kShortcutKey[] = "shortcut";
-constexpr char kShortcutValueSSH[] = "ssh";
-constexpr char kShortcutValueTerminal[] = "terminal";
-
-std::string ShortcutIdForSSH() {
-  base::Value dict(base::Value::Type::DICTIONARY);
-  dict.SetKey(kShortcutKey, base::Value(kShortcutValueSSH));
-  std::string shortcut_id;
-  base::JSONWriter::Write(dict, &shortcut_id);
-  return shortcut_id;
-}
-
-std::string ShortcutIdFromContainerId(const crostini::ContainerId& id) {
-  base::Value dict = id.ToDictValue();
-  dict.SetKey(kShortcutKey, base::Value(kShortcutValueTerminal));
-  std::string shortcut_id;
-  base::JSONWriter::Write(dict, &shortcut_id);
-  return shortcut_id;
-}
 
 base::flat_map<std::string, std::string> ExtrasFromShortcutId(
     const base::Value& shortcut) {
@@ -97,7 +86,7 @@ base::flat_map<std::string, std::string> ExtrasFromShortcutId(
 
 void LaunchTerminalImpl(Profile* profile,
                         const GURL& url,
-                        const apps::AppLaunchParams& params) {
+                        apps::AppLaunchParams params) {
   // This function is called asynchronously, so we need to check whether
   // `profile` is still valid first.
   if (g_browser_process) {
@@ -110,8 +99,24 @@ void LaunchTerminalImpl(Profile* profile,
       //
       // System Web Apps managed by Web App publisher should call
       // LaunchSystemWebAppAsync.
-      web_app::LaunchSystemWebAppImpl(profile, web_app::SystemAppType::TERMINAL,
-                                      url, params);
+
+      // Launch without a pinned home tab (settings page).
+      if (!base::FeatureList::IsEnabled(chromeos::features::kTerminalSSH) ||
+          params.disposition == WindowOpenDisposition::NEW_POPUP) {
+        web_app::LaunchSystemWebAppImpl(
+            profile, web_app::SystemAppType::TERMINAL, url, params);
+        return;
+      }
+
+      // TODO(crbug.com/1308961): Migrate to use PWA pinned home tab when ready.
+      // For TerminalSSH, if opening a new tab, first pin home tab.
+      GURL home(base::StrCat(
+          {chrome::kChromeUIUntrustedTerminalURL, kTerminalHomePath}));
+      Browser* browser = web_app::LaunchSystemWebAppImpl(
+          profile, web_app::SystemAppType::TERMINAL, home, params);
+      if (url != home) {
+        chrome::AddTabAt(browser, url, /*index=*/1, /*foreground=*/true);
+      }
       return;
     }
   }
@@ -168,11 +173,11 @@ void LaunchTerminal(Profile* profile,
   LaunchTerminalWithUrl(profile, display_id, url);
 }
 
-void LaunchTerminalForSSH(Profile* profile, int64_t display_id) {
+void LaunchTerminalHome(Profile* profile, int64_t display_id) {
   LaunchTerminalWithUrl(
       profile, display_id,
       GURL(base::StrCat(
-          {chrome::kChromeUIUntrustedTerminalURL, "html/terminal_ssh.html"})));
+          {chrome::kChromeUIUntrustedTerminalURL, kTerminalHomePath})));
 }
 
 void LaunchTerminalWithUrl(Profile* profile,
@@ -397,6 +402,62 @@ bool GetTerminalSettingPassCtrlW(Profile* profile) {
   return value->FindBoolKey(kSettingPassCtrlW).value_or(kDefaultPassCtrlW);
 }
 
+std::string ShortcutIdForSSH(const std::string& profileId) {
+  base::Value dict(base::Value::Type::DICTIONARY);
+  dict.SetKey(kShortcutKey, base::Value(kShortcutValueSSH));
+  dict.SetKey(kProfileIdKey, base::Value(profileId));
+  std::string shortcut_id;
+  base::JSONWriter::Write(dict, &shortcut_id);
+  return shortcut_id;
+}
+
+std::string ShortcutIdFromContainerId(const crostini::ContainerId& id) {
+  base::Value dict = id.ToDictValue();
+  dict.SetKey(kShortcutKey, base::Value(kShortcutValueTerminal));
+  std::string shortcut_id;
+  base::JSONWriter::Write(dict, &shortcut_id);
+  return shortcut_id;
+}
+
+std::vector<std::pair<std::string, std::string>> GetSSHConnections(
+    Profile* profile) {
+  std::vector<std::pair<std::string, std::string>> result;
+  const base::Value::Dict& settings =
+      profile->GetPrefs()
+          ->GetDictionary(crostini::prefs::kCrostiniTerminalSettings)
+          ->GetDict();
+  const base::Value::List* ids = settings.FindList("/nassh/profile-ids");
+  if (!ids) {
+    return result;
+  }
+  for (const auto& id : *ids) {
+    if (!id.is_string()) {
+      continue;
+    }
+    const std::string* description = settings.FindString(
+        base::StrCat({"/nassh/profiles/", id.GetString(), "/description"}));
+    if (description) {
+      result.emplace_back(id.GetString(), *description);
+    }
+  }
+  return result;
+}
+
+std::vector<ContainerId> GetLinuxContainers(Profile* profile) {
+  std::vector<ContainerId> result;
+  const base::Value::List& container_list =
+      profile->GetPrefs()
+          ->GetList(crostini::prefs::kCrostiniContainers)
+          ->GetList();
+  for (const auto& container : container_list) {
+    crostini::ContainerId id(container);
+    if (!id.vm_name.empty() && !id.container_name.empty()) {
+      result.push_back(std::move(id));
+    }
+  }
+  return result;
+}
+
 void AddTerminalMenuItems(Profile* profile,
                           apps::mojom::MenuItemsPtr* menu_items) {
   apps::AddCommandItem(ash::SETTINGS, IDS_INTERNAL_APP_SETTINGS, menu_items);
@@ -412,57 +473,50 @@ void AddTerminalMenuShortcuts(
     apps::mojom::MenuItemsPtr menu_items,
     apps::mojom::Publisher::GetMenuModelCallback callback,
     std::vector<gfx::ImageSkia> images) {
+  if (!base::FeatureList::IsEnabled(chromeos::features::kTerminalSSH)) {
+    std::move(callback).Run(std::move(menu_items));
+    return;
+  }
+
   ui::ColorProvider* color_provider =
       ui::ColorProviderManager::Get().GetColorProviderFor(
           ui::NativeTheme::GetInstanceForWeb()->GetColorProviderKey(nullptr));
   auto icon = [color_provider](const gfx::VectorIcon& icon) {
-    return views::GetImageSkiaFromImageModel(
-        ui::ImageModel::FromVectorIcon(icon, ui::kColorMenuIcon,
-                                       apps::kAppShortcutIconSizeDip),
-        color_provider);
+    return ui::ImageModel::FromVectorIcon(icon, ui::kColorMenuIcon,
+                                          apps::kAppShortcutIconSizeDip)
+        .Rasterize(color_provider);
   };
   gfx::ImageSkia terminal_ssh_icon = icon(kTerminalSshIcon);
   gfx::ImageSkia crostini_mascot_icon = icon(kCrostiniMascotIcon);
-  if (base::FeatureList::IsEnabled(chromeos::features::kTerminalSSH)) {
+  std::vector<std::pair<std::string, std::string>> connections =
+      GetSSHConnections(profile);
+  std::vector<ContainerId> containers;
+  if (CrostiniFeatures::Get()->IsEnabled(profile)) {
+    containers = GetLinuxContainers(profile);
+  }
+  if (connections.size() > 0 || containers.size() > 0) {
     apps::AddSeparator(ui::DOUBLE_SEPARATOR, &menu_items);
+  }
+
+  for (const auto& connection : connections) {
     apps::AddShortcutCommandItem(
-        next_command_id++, ShortcutIdForSSH(),
-        l10n_util::GetStringUTF8(IDS_CROSTINI_TERMINAL_CONNECT_TO_SSH),
-        terminal_ssh_icon, &menu_items);
+        next_command_id++, ShortcutIdForSSH(connection.first),
+        connection.second, terminal_ssh_icon, &menu_items);
   }
 
-  if (!CrostiniFeatures::Get()->IsEnabled(profile)) {
-    return std::move(callback).Run(std::move(menu_items));
-  }
-
-  if (crostini::CrostiniFeatures::Get()->IsMultiContainerAllowed(profile)) {
-    const base::Value* container_list =
-        profile->GetPrefs()->GetList(crostini::prefs::kCrostiniContainers);
-    if (container_list && container_list->GetListDeprecated().size() > 1) {
-      // Shortcuts for each container.
-      for (const auto& dict : container_list->GetListDeprecated()) {
-        crostini::ContainerId id(dict);
-        if (!id.vm_name.empty() && !id.container_name.empty()) {
-          std::string shortcut_id = ShortcutIdFromContainerId(id);
-          std::string label =
-              base::StrCat({id.vm_name, ":", id.container_name});
-          apps::AddShortcutCommandItem(next_command_id++, shortcut_id, label,
-                                       crostini_mascot_icon, &menu_items);
-        }
-      }
-      return std::move(callback).Run(std::move(menu_items));
+  for (const auto& container : containers) {
+    // Use label 'Linux' if we have only the default container, else use
+    // <vm_name>:<container_name>.
+    std::string label = l10n_util::GetStringUTF8(IDS_APP_TERMINAL_LINUX);
+    if (containers.size() > 1 ||
+        container != crostini::ContainerId::GetDefault()) {
+      label = base::StrCat({container.vm_name, ":", container.container_name});
     }
+    apps::AddShortcutCommandItem(next_command_id++,
+                                 ShortcutIdFromContainerId(container), label,
+                                 crostini_mascot_icon, &menu_items);
   }
 
-  // Single shortcut: 'Connect to Linux'.
-  if (base::FeatureList::IsEnabled(chromeos::features::kTerminalSSH)) {
-    std::string shortcut_id =
-        ShortcutIdFromContainerId(ContainerId::GetDefault());
-    apps::AddShortcutCommandItem(
-        next_command_id++, shortcut_id,
-        l10n_util::GetStringUTF8(IDS_CROSTINI_TERMINAL_CONNECT_TO_LINUX),
-        crostini_mascot_icon, &menu_items);
-  }
   std::move(callback).Run(std::move(menu_items));
 }
 
@@ -475,7 +529,14 @@ bool ExecuteTerminalMenuShortcutCommand(Profile* profile,
   }
   const std::string* shortcut_value = shortcut->FindStringKey(kShortcutKey);
   if (shortcut_value && *shortcut_value == kShortcutValueSSH) {
-    LaunchTerminalForSSH(profile, display_id);
+    const std::string* profileId = shortcut->FindStringKey(kProfileIdKey);
+    if (!profileId) {
+      return false;
+    }
+    LaunchTerminalWithUrl(
+        profile, display_id,
+        GURL(base::StrCat({chrome::kChromeUIUntrustedTerminalURL,
+                           "html/terminal_ssh.html#profile-id:", *profileId})));
     return true;
   }
 

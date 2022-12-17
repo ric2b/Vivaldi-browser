@@ -12,6 +12,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "components/services/storage/public/cpp/buckets/bucket_info.h"
 #include "components/services/storage/public/cpp/buckets/constants.h"
@@ -36,6 +37,13 @@
 namespace content {
 
 namespace {
+
+// When this is enabled, the browser will schedule
+// ServiceWorkerStorageControl's response in a kHighest priority
+// queue during startup. After startup, it has a normal priority.
+const base::Feature kServiceWorkerStorageControlResponseQueue{
+    "ServiceWorkerStorageControlResponseQueue",
+    base::FEATURE_DISABLED_BY_DEFAULT};
 
 blink::ServiceWorkerStatusCode DatabaseStatusToStatusCode(
     storage::mojom::ServiceWorkerDatabaseStatus status) {
@@ -79,9 +87,15 @@ void CompleteFindSoon(
                                     status, std::move(callback)));
 }
 
-void RecordRetryCount(size_t retries) {
+void RecordRetryCount(size_t retries, size_t queue_size) {
   base::UmaHistogramCounts100("ServiceWorker.Storage.RetryCountForRecovery",
                               retries);
+
+  // We've seen traces with 14,000 ServiceWorkerStorageControl tasks
+  // (https://crbug.com/1302111), so ensure more than that can fit in the
+  // histogram buckets in case those were queued retries.
+  base::UmaHistogramCounts100000(
+      "ServiceWorker.Storage.RetryQueueSizeForRecovery", queue_size);
 }
 
 // Notifies quota manager that a disk write operation failed so that it can
@@ -392,7 +406,7 @@ void ServiceWorkerRegistry::StoreRegistration(
   // loading the main script. This happens in many unittests.
   if (version->cross_origin_embedder_policy()) {
     data->cross_origin_embedder_policy =
-        version->cross_origin_embedder_policy().value();
+        *version->cross_origin_embedder_policy();
   }
 
   ResourceList resources;
@@ -1531,7 +1545,12 @@ ServiceWorkerRegistry::GetRemoteStorageControl() {
 
   if (!remote_storage_control_.is_bound()) {
     context_->wrapper()->BindStorageControl(
-        remote_storage_control_.BindNewPipeAndPassReceiver());
+        remote_storage_control_.BindNewPipeAndPassReceiver(
+            base::FeatureList::IsEnabled(
+                kServiceWorkerStorageControlResponseQueue)
+                ? GetUIThreadTaskRunner(
+                      {BrowserTaskType::kServiceWorkerStorageControlResponse})
+                : base::SequencedTaskRunnerHandle::Get()));
     DCHECK(remote_storage_control_.is_bound());
     remote_storage_control_.set_disconnect_handler(
         base::BindOnce(&ServiceWorkerRegistry::OnRemoteStorageDisconnected,
@@ -1565,7 +1584,7 @@ void ServiceWorkerRegistry::OnRemoteStorageDisconnected() {
   if (connection_state_ == ConnectionState::kRecovering) {
     ++recovery_retry_counts_;
     if (recovery_retry_counts_ > kMaxRetryCounts) {
-      RecordRetryCount(kMaxRetryCounts);
+      RecordRetryCount(kMaxRetryCounts, inflight_calls_.size());
       CHECK(false) << "The Storage Service consistently crashes.";
       return;
     }
@@ -1588,7 +1607,7 @@ void ServiceWorkerRegistry::OnRemoteStorageDisconnected() {
 void ServiceWorkerRegistry::DidRecover() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  RecordRetryCount(recovery_retry_counts_);
+  RecordRetryCount(recovery_retry_counts_, inflight_calls_.size());
 
   recovery_retry_counts_ = 0;
   connection_state_ = ConnectionState::kNormal;

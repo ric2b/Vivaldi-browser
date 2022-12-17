@@ -5,18 +5,20 @@
 #include "content/test/attribution_simulator_input_parser.h"
 
 #include <ostream>
+#include <sstream>
 #include <vector>
 
 #include "base/test/values_test_util.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "content/browser/attribution_reporting/attribution_aggregatable_trigger.h"
+#include "content/browser/attribution_reporting/attribution_filter_data.h"
+#include "content/browser/attribution_reporting/attribution_source_type.h"
 #include "content/browser/attribution_reporting/attribution_test_utils.h"
 #include "content/browser/attribution_reporting/common_source_info.h"
 #include "content/browser/attribution_reporting/storable_source.h"
-#include "net/base/schemeful_site.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -36,7 +38,9 @@ namespace {
 
 using ::testing::_;
 using ::testing::ElementsAre;
+using ::testing::HasSubstr;
 using ::testing::IsEmpty;
+using ::testing::Optional;
 using ::testing::Pair;
 using ::testing::SizeIs;
 
@@ -52,21 +56,23 @@ TEST(AttributionSimulatorInputParserTest, EmptyInputParses) {
 
   for (const char* json : kTestCases) {
     base::Value value = base::test::ParseJson(json);
-    EXPECT_THAT(
-        ParseAttributionSimulationInputOrExit(std::move(value), kOffsetTime),
-        IsEmpty())
+    std::stringstream error_stream;
+    EXPECT_THAT(ParseAttributionSimulationInput(std::move(value), kOffsetTime,
+                                                error_stream),
+                Optional(IsEmpty()))
         << json;
+    EXPECT_THAT(error_stream.str(), IsEmpty()) << json;
   }
 }
 
 TEST(AttributionSimulatorInputParserTest, ValidSourceParses) {
   constexpr char kJson[] = R"json({"sources": [
     {
+      "timestamp": 1643235574,
       "source_type": "navigation",
-      "source_time": 1643235574,
       "reporting_origin": "https://a.r.test",
       "source_origin": "https://a.s.test",
-      "registration_config": {
+      "Attribution-Reporting-Register-Source": {
         "source_event_id": "123",
         "destination": "https://a.d.test",
         "expiry": "864000000",
@@ -75,34 +81,55 @@ TEST(AttributionSimulatorInputParserTest, ValidSourceParses) {
       }
     },
     {
+      "timestamp": 1643235573,
       "source_type": "event",
-      "source_time": 1643235573,
       "reporting_origin": "https://b.r.test",
       "source_origin": "https://b.s.test",
-      "registration_config": {
+      "Attribution-Reporting-Register-Source": {
         "source_event_id": "456",
         "destination": "https://b.d.test"
       }
     },
     {
+      "timestamp": 1643235575,
       "source_type": "event",
-      "source_time": 1643235575,
       "reporting_origin": "https://c.r.test",
       "source_origin": "https://c.s.test",
-      "registration_config": {
+      "Attribution-Reporting-Register-Source": {
+        "source_event_id": "789",
+        "destination": "https://c.d.test",
+        "expiry": "864000001",
+        "filter_data": {
+          "a": [],
+          "b": ["c", "d"]
+        }
+      }
+    },
+    {
+      "timestamp": 1643235576,
+      "source_type": "event",
+      "reporting_origin": "https://c.r.test",
+      "source_origin": "https://c.s.test",
+      "Attribution-Reporting-Register-Source": {
         "source_event_id": "789",
         "destination": "https://c.d.test",
         "expiry": "864000001"
-      }
+      },
+      "Attribution-Reporting-Register-Aggregatable-Source": [{
+        "id": "a",
+        "key_piece": "0x1"
+      }]
     }
   ]})json";
 
   base::Value value = base::test::ParseJson(kJson);
+  std::stringstream error_stream;
   EXPECT_THAT(
-      ParseAttributionSimulationInputOrExit(std::move(value), kOffsetTime),
-      ElementsAre(
+      ParseAttributionSimulationInput(std::move(value), kOffsetTime,
+                                      error_stream),
+      Optional(ElementsAre(
           Pair(SourceBuilder(kOffsetTime + base::Seconds(1643235574))
-                   .SetSourceType(CommonSourceInfo::SourceType::kNavigation)
+                   .SetSourceType(AttributionSourceType::kNavigation)
                    .SetReportingOrigin(
                        url::Origin::Create(GURL("https://a.r.test")))
                    .SetImpressionOrigin(
@@ -116,7 +143,7 @@ TEST(AttributionSimulatorInputParserTest, ValidSourceParses) {
                    .Build(),
                _),
           Pair(SourceBuilder(kOffsetTime + base::Seconds(1643235573))
-                   .SetSourceType(CommonSourceInfo::SourceType::kEvent)
+                   .SetSourceType(AttributionSourceType::kEvent)
                    .SetReportingOrigin(
                        url::Origin::Create(GURL("https://b.r.test")))
                    .SetImpressionOrigin(
@@ -131,7 +158,7 @@ TEST(AttributionSimulatorInputParserTest, ValidSourceParses) {
                _),
           Pair(
               SourceBuilder(kOffsetTime + base::Seconds(1643235575))
-                  .SetSourceType(CommonSourceInfo::SourceType::kEvent)
+                  .SetSourceType(AttributionSourceType::kEvent)
                   .SetReportingOrigin(
                       url::Origin::Create(GURL("https://c.r.test")))
                   .SetImpressionOrigin(
@@ -142,222 +169,363 @@ TEST(AttributionSimulatorInputParserTest, ValidSourceParses) {
                   .SetExpiry(base::Days(10))  // rounded to whole number of days
                   .SetPriority(0)             // default
                   .SetDebugKey(absl::nullopt)  // default
+                  .SetFilterData(
+                      *AttributionFilterData::FromSourceFilterValues({
+                          {"a", {}},
+                          {"b", {"c", "d"}},
+                      }))
                   .Build(),
-              _)));
+              _),
+          Pair(
+              SourceBuilder(kOffsetTime + base::Seconds(1643235576))
+                  .SetSourceType(AttributionSourceType::kEvent)
+                  .SetReportingOrigin(
+                      url::Origin::Create(GURL("https://c.r.test")))
+                  .SetImpressionOrigin(
+                      url::Origin::Create(GURL("https://c.s.test")))
+                  .SetSourceEventId(789)
+                  .SetConversionOrigin(
+                      url::Origin::Create(GURL("https://c.d.test")))
+                  .SetExpiry(base::Days(10))  // rounded to whole number of days
+                  .SetPriority(0)             // default
+                  .SetDebugKey(absl::nullopt)  // default
+                  .SetAggregatableSource(*AttributionAggregatableSource::Create(
+                      AggregatableSourceProtoBuilder()
+                          .AddKey("a", AggregatableKeyProtoBuilder()
+                                           .SetHighBits(0)
+                                           .SetLowBits(1)
+                                           .Build())
+                          .Build()))
+                  .Build(),
+              _))));
+  EXPECT_THAT(error_stream.str(), IsEmpty());
+}
+
+TEST(AttributionSimulatorInputParserTest, OutputRetainsInputJSON) {
+  constexpr char kJson[] = R"json({
+    "sources": [
+      {
+        "timestamp": 1643235574,
+        "source_type": "navigation",
+        "reporting_origin": "https://r.test",
+        "source_origin": "https://s.test",
+        "Attribution-Reporting-Register-Source": {
+          "source_event_id": "123",
+          "destination": "https://d.test",
+          "filter_data": {"a": ["b", "c"]},
+          "expiry": "864000000",
+          "priority": "-5",
+          "debug_key": "14"
+        }
+      }
+    ],
+    "triggers": [
+      {
+        "timestamp": 1643235576,
+        "reporting_origin": "https://a.r.test",
+        "destination_origin": " https://a.d1.test",
+        "trigger_data": "10",
+        "event_source_trigger_data": "3",
+        "priority": "-5",
+        "deduplication_key": "123",
+        "debug_key": "14"
+      }
+    ]})json";
+
+  const base::Value value = base::test::ParseJson(kJson);
+  std::stringstream error_stream;
+  EXPECT_THAT(
+      ParseAttributionSimulationInput(value.Clone(), kOffsetTime, error_stream),
+      Optional(ElementsAre(
+          Pair(_, base::test::IsJson(
+                      value.FindKey("sources")->GetIfList()->front())),
+          Pair(_, base::test::IsJson(
+                      value.FindKey("triggers")->GetIfList()->front())))));
 }
 
 TEST(AttributionSimulatorInputParserTest, ValidTriggerParses) {
   constexpr char kJson[] = R"json({"triggers": [
     {
-      "trigger_time": 1643235576,
+      "timestamp": 1643235576,
       "reporting_origin": "https://a.r.test",
-      "destination": " https://a.d1.test",
-      "registration_config": {
-        "trigger_data": "10",
-        "event_source_trigger_data": "3",
-        "priority": "-5",
-        "dedup_key": "123",
-        "debug_key": "14"
+      "destination_origin": " https://a.d1.test",
+      "Attribution-Reporting-Register-Event-Trigger": [
+        {
+          "trigger_data": "10",
+          "priority": "-5",
+          "deduplication_key": "123",
+          "filters": {
+            "x": ["y"]
+          },
+          "not_filters": {
+            "z": []
+          }
+        },
+        {}
+      ],
+      "Attribution-Reporting-Trigger-Debug-Key": "14",
+      "Attribution-Reporting-Filters": {
+        "a": ["b", "c"],
+        "d": []
       }
     },
     {
-      "trigger_time": 1643235575,
+      "timestamp": 1643235575,
       "reporting_origin": "https://b.r.test",
-      "destination": " https://a.d2.test",
-      "registration_config": {}
+      "destination_origin": " https://a.d2.test"
+    },
+    {
+      "timestamp": 1643235574,
+      "reporting_origin": "https://b.r.test",
+      "destination_origin": " https://a.d2.test",
+      "Attribution-Reporting-Register-Aggregatable-Trigger-Data": [{
+        "source_keys": ["a"],
+        "key_piece": "0x1"
+      }],
+      "Attribution-Reporting-Register-Aggregatable-Values": {"a": 1}
     }
   ]})json";
 
   base::Value value = base::test::ParseJson(kJson);
+  std::stringstream error_stream;
+
+  std::vector<blink::mojom::AttributionAggregatableTriggerDataPtr>
+      aggregatable_trigger_data;
+  aggregatable_trigger_data.push_back(
+      blink::mojom::AttributionAggregatableTriggerData::New(
+          blink::mojom::AttributionAggregatableKey::New(/*high_bits=*/0,
+                                                        /*low_bits=*/1),
+          std::vector<std::string>{"a"},
+          blink::mojom::AttributionFilterData::New(),
+          blink::mojom::AttributionFilterData::New()));
+
   EXPECT_THAT(
-      ParseAttributionSimulationInputOrExit(std::move(value), kOffsetTime),
-      ElementsAre(
+      ParseAttributionSimulationInput(std::move(value), kOffsetTime,
+                                      error_stream),
+      Optional(ElementsAre(
           Pair(
               AttributionTriggerAndTime{
-                  .trigger =
-                      TriggerBuilder()
-                          .SetReportingOrigin(
-                              url::Origin::Create(GURL("https://a.r.test")))
-                          .SetConversionDestination(net::SchemefulSite(
-                              url::Origin::Create(GURL("https://a.d1.test"))))
-                          .SetTriggerData(2)             // sanitized to 3 bits
-                          .SetEventSourceTriggerData(1)  // sanitized to 1 bit
-                          .SetPriority(-5)
-                          .SetDedupKey(123)
-                          .SetDebugKey(14)
-                          .Build(),
+                  .trigger = AttributionTrigger(
+                      /*destination_origin=*/
+                      url::Origin::Create(GURL("https://a.d1.test")),
+                      /*reporting_origin=*/
+                      url::Origin::Create(GURL("https://a.r.test")),
+                      *AttributionFilterData::FromTriggerFilterValues({
+                          {"a", {"b", "c"}},
+                          {"d", {}},
+                      }),
+                      /*debug_key=*/14,
+                      {
+                          AttributionTrigger::EventTriggerData(
+                              /*data=*/10,
+                              /*priority=*/-5,
+                              /*dedup_key=*/123,
+                              /*filters=*/
+                              *AttributionFilterData::FromTriggerFilterValues({
+                                  {"x", {"y"}},
+                              }),
+                              /*not_filters=*/
+                              *AttributionFilterData::FromTriggerFilterValues({
+                                  {"z", {}},
+                              })),
+                          AttributionTrigger::EventTriggerData(
+                              /*data=*/0,
+                              /*priority=*/0,
+                              /*dedup_key=*/absl::nullopt,
+                              /*filters=*/AttributionFilterData(),
+                              /*not_filters=*/AttributionFilterData()),
+                      },
+                      AttributionAggregatableTrigger()),
                   .time = kOffsetTime + base::Seconds(1643235576),
               },
               _),
           Pair(
               AttributionTriggerAndTime{
-                  .trigger =
-                      TriggerBuilder()
-                          .SetReportingOrigin(
-                              url::Origin::Create(GURL("https://b.r.test")))
-                          .SetConversionDestination(net::SchemefulSite(
-                              url::Origin::Create(GURL("https://a.d2.test"))))
-                          .SetTriggerData(0)             // default
-                          .SetEventSourceTriggerData(0)  // default
-                          .SetPriority(0)                // default
-                          .SetDedupKey(absl::nullopt)    // default
-                          .SetDebugKey(absl::nullopt)    // default
-                          .Build(),
+                  .trigger = AttributionTrigger(
+                      /*destination_origin=*/
+                      url::Origin::Create(GURL("https://a.d2.test")),
+                      /*reporting_origin=*/
+                      url::Origin::Create(GURL("https://b.r.test")),
+                      AttributionFilterData(),
+                      /*debug_key=*/absl::nullopt,
+                      /*event_triggers=*/{}, AttributionAggregatableTrigger()),
                   .time = kOffsetTime + base::Seconds(1643235575),
               },
-              _)));
+              _),
+          Pair(
+              AttributionTriggerAndTime{
+                  .trigger = AttributionTrigger(
+                      /*destination_origin=*/
+                      url::Origin::Create(GURL("https://a.d2.test")),
+                      /*reporting_origin=*/
+                      url::Origin::Create(GURL("https://b.r.test")),
+                      AttributionFilterData(),
+                      /*debug_key=*/absl::nullopt,
+                      /*event_triggers=*/{},
+                      *AttributionAggregatableTrigger::FromMojo(
+                          blink::mojom::AttributionAggregatableTrigger::New(
+                              std::move(aggregatable_trigger_data),
+                              AttributionAggregatableTrigger::Values{
+                                  {"a", 1}}))),
+                  .time = kOffsetTime + base::Seconds(1643235574),
+              },
+              _))));
+  EXPECT_THAT(error_stream.str(), IsEmpty());
 }
 
 TEST(AttributionSimulatorInputParserTest, ValidSourceAndTriggerParses) {
   constexpr char kJson[] = R"json({
     "sources": [{
+      "timestamp": 1643235573,
       "source_type": "event",
-      "source_time": 1643235573,
       "reporting_origin": "https://b.r.test",
       "source_origin": "https://b.s.test",
-      "registration_config": {
+      "Attribution-Reporting-Register-Source": {
         "source_event_id": "456",
         "destination": "https://b.d.test"
       }
     }],
     "triggers": [{
-      "trigger_time": 1643235575,
+      "timestamp": 1643235575,
       "reporting_origin": "https://b.r.test",
-      "destination": " https://a.d2.test",
-      "registration_config": {}
+      "destination_origin": " https://a.d2.test"
     }]
   })json";
 
   base::Value value = base::test::ParseJson(kJson);
-  EXPECT_THAT(
-      ParseAttributionSimulationInputOrExit(std::move(value), kOffsetTime),
-      SizeIs(2));
+  std::stringstream error_stream;
+  EXPECT_THAT(ParseAttributionSimulationInput(std::move(value), kOffsetTime,
+                                              error_stream),
+              Optional(SizeIs(2)));
+  EXPECT_THAT(error_stream.str(), IsEmpty());
 }
 
-struct DeathTestCase {
-  const char* expected_failure;
+struct ParseErrorTestCase {
+  const char* expected_failure_substr;
   const char* json;
 };
 
-// Death tests are slow, so use a parameterized test fixture instead of a loop
-// over test cases so that incremental progress is made and tests can be
-// parallelized.
-class AttributionSimulatorInputParserDeathTest
-    : public testing::TestWithParam<DeathTestCase> {};
+class AttributionSimulatorInputParseErrorTest
+    : public testing::TestWithParam<ParseErrorTestCase> {};
 
-TEST_P(AttributionSimulatorInputParserDeathTest, InvalidInputExits) {
-  const DeathTestCase& test_case = GetParam();
-  EXPECT_DEATH_IF_SUPPORTED(
-      {
-        base::Value value = base::test::ParseJson(test_case.json);
-        ParseAttributionSimulationInputOrExit(std::move(value), kOffsetTime);
-      },
-      test_case.expected_failure);
+TEST_P(AttributionSimulatorInputParseErrorTest, InvalidInputFails) {
+  const ParseErrorTestCase& test_case = GetParam();
+
+  base::Value value = base::test::ParseJson(test_case.json);
+  std::stringstream error_stream;
+  EXPECT_EQ(ParseAttributionSimulationInput(std::move(value), kOffsetTime,
+                                            error_stream),
+            absl::nullopt);
+
+  EXPECT_THAT(error_stream.str(), HasSubstr(test_case.expected_failure_substr));
 }
 
-const DeathTestCase kSourceDeathTestCases[] = {
+const ParseErrorTestCase kParseErrorTestCases[] = {
     {
-        "key not found: source_type",
-        R"json({"sources": [{
-          "source_time": 1643235574,
-          "reporting_origin": "https://a.r.test",
-          "source_origin": "https://a.s.test",
-          "registration_config": {
-            "source_event_id": "123",
-            "destination": "https://a.d.test"
-          }
-        }]})json",
+        "input root: must be a dictionary",
+        R"json(1)json",
     },
     {
-        "key not found: source_time",
+        R"(["sources"][0]["source_type"]: must be either)",
         R"json({"sources": [{
-          "source_type": "navigation",
-          "reporting_origin": "https://a.r.test",
-          "source_origin": "https://a.s.test",
-          "registration_config": {
-            "source_event_id": "123",
-            "destination": "https://a.d.test"
-          }
-        }]})json",
-    },
-    {
-        "key not found: reporting_origin",
-        R"json({"sources": [{
-          "source_type": "navigation",
-          "source_time": 1643235574,
-          "source_origin": "https://a.s.test",
-          "registration_config": {
-            "source_event_id": "123",
-            "destination": "https://a.d.test"
-          }
-        }]})json",
-    },
-    {
-        "key not found: source_origin",
-        R"json({"sources": [{
-          "source_type": "navigation",
-          "source_time": 1643235574,
-          "reporting_origin": "https://a.s.test",
-          "registration_config": {
-            "source_event_id": "123",
-            "destination": "https://a.d.test"
-          }
-        }]})json",
-    },
-    {
-        "key not found: registration_config",
-        R"json({"sources": [{
-          "source_type": "navigation",
-          "source_time": 1643235574,
+          "timestamp": 1643235574,
           "reporting_origin": "https://a.r.test",
           "source_origin": "https://a.s.test"
         }]})json",
     },
     {
-        "key not found: source_event_id",
+        R"(["sources"][0]["timestamp"]: must be an integer number of)",
         R"json({"sources": [{
           "source_type": "navigation",
-          "source_time": 1643235574,
+          "reporting_origin": "https://a.r.test",
+          "source_origin": "https://a.s.test"
+        }]})json",
+    },
+    {
+        R"(["sources"][0]["reporting_origin"]: must be a valid, secure origin)",
+        R"json({"sources": [{
+          "timestamp": 1643235574,
+          "source_type": "navigation",
+          "source_origin": "https://a.s.test"
+        }]})json",
+    },
+    {
+        R"(["sources"][0]["reporting_origin"]: must be a valid, secure origin)",
+        R"json({"sources": [{
+          "timestamp": 1643235574,
+          "source_type": "navigation",
+          "source_origin": "https://a.s.test",
+          "reporting_origin": "http://r.test"
+        }]})json",
+    },
+    {
+        R"(["sources"][0]["source_origin"]: must be a valid, secure origin)",
+        R"json({"sources": [{
+          "timestamp": 1643235574,
+          "source_type": "navigation",
+          "reporting_origin": "https://a.s.test"
+        }]})json",
+    },
+    {
+        R"(["sources"][0]["Attribution-Reporting-Register-Source"]: must be present)",
+        R"json({"sources": [{
+          "timestamp": 1643235574,
+          "source_type": "navigation",
+          "reporting_origin": "https://a.r.test",
+          "source_origin": "https://a.s.test"
+        }]})json",
+    },
+    {
+        R"(["sources"][0]["Attribution-Reporting-Register-Source"]: must be a dictionary)",
+        R"json({"sources": [{
+          "timestamp": 1643235574,
+          "source_type": "navigation",
           "reporting_origin": "https://a.r.test",
           "source_origin": "https://a.s.test",
-          "registration_config": {
+          "Attribution-Reporting-Register-Source": ""
+        }]})json",
+    },
+    {
+        R"(["sources"][0]["Attribution-Reporting-Register-Source"]["source_event_id"]: must be a uint64 formatted)",
+        R"json({"sources": [{
+          "timestamp": 1643235574,
+          "source_type": "navigation",
+          "reporting_origin": "https://a.r.test",
+          "source_origin": "https://a.s.test",
+          "Attribution-Reporting-Register-Source": {
             "destination": "https://a.d.test"
           }
         }]})json",
     },
     {
-        "key not found: destination",
+        R"(["sources"][0]["Attribution-Reporting-Register-Source"]["destination"]: must be a valid, secure origin)",
         R"json({"sources": [{
+          "timestamp": 1643235574,
           "source_type": "navigation",
-          "source_time": 1643235574,
           "reporting_origin": "https://a.r.test",
           "source_origin": "https://a.s.test",
-          "registration_config": {
-            "source_event_id": "123",
+          "Attribution-Reporting-Register-Source": {
+            "source_event_id": "123"
           }
         }]})json",
     },
     {
-        "invalid source type: NAVIGATION",
+        R"(["sources"][0]["source_type"]: must be either)",
         R"json({"sources": [{
+          "timestamp": 1643235574,
           "source_type": "NAVIGATION",
-          "source_time": 1643235574,
           "reporting_origin": "https://a.r.test",
-          "source_origin": "https://a.s.test",
-          "registration_config": {
-            "source_event_id": "123",
-            "destination": "https://a.d.test"
-          }
+          "source_origin": "https://a.s.test"
         }]})json",
     },
     {
-        "expiry must be >= 0: -5",
+        R"(["sources"][0]["Attribution-Reporting-Register-Source"]["expiry"]: must be a positive number of)",
         R"json({"sources": [{
+          "timestamp": 1643235574,
           "source_type": "navigation",
-          "source_time": 1643235574,
           "reporting_origin": "https://a.r.test",
           "source_origin": "https://a.s.test",
-          "registration_config": {
+          "Attribution-Reporting-Register-Source": {
             "source_event_id": "123",
             "destination": "https://a.d.test",
             "expiry": "-5"
@@ -365,13 +533,13 @@ const DeathTestCase kSourceDeathTestCases[] = {
         }]})json",
     },
     {
-        "invalid int64: x",
+        R"(["sources"][0]["Attribution-Reporting-Register-Source"]["priority"]: must be an int64)",
         R"json({"sources": [{
+          "timestamp": 1643235574,
           "source_type": "navigation",
-          "source_time": 1643235574,
           "reporting_origin": "https://a.r.test",
           "source_origin": "https://a.s.test",
-          "registration_config": {
+          "Attribution-Reporting-Register-Source": {
             "source_event_id": "123",
             "destination": "https://a.d.test",
             "priority": "x"
@@ -379,62 +547,273 @@ const DeathTestCase kSourceDeathTestCases[] = {
         }]})json",
     },
     {
-        "invalid uint64: x",
+        R"(["sources"][0]["Attribution-Reporting-Register-Source"]["source_event_id"]: must be a uint64 formatted)",
         R"json({"sources": [{
+          "timestamp": 1643235574,
           "source_type": "navigation",
-          "source_time": 1643235574,
           "reporting_origin": "https://a.r.test",
           "source_origin": "https://a.s.test",
-          "registration_config": {
+          "Attribution-Reporting-Register-Source": {
             "source_event_id": "x",
-            "destination": "https://a.d.test",
+            "destination": "https://a.d.test"
           }
         }]})json",
     },
-};
-
-INSTANTIATE_TEST_SUITE_P(AttributionSimulatorInputParserInvalidSources,
-                         AttributionSimulatorInputParserDeathTest,
-                         ::testing::ValuesIn(kSourceDeathTestCases));
-
-const DeathTestCase kTriggerDeathTestCases[] = {
     {
-        "key not found: registration_config",
-        R"json({"triggers": [{
-          "trigger_time": 1643235576,
+        R"(["sources"][0]["Attribution-Reporting-Register-Source"]["filter_data"]: must be a dictionary)",
+        R"json({"sources": [{
+          "timestamp": 1643235574,
+          "source_type": "navigation",
           "reporting_origin": "https://a.r.test",
-          "destination": " https://a.d1.test",
+          "source_origin": "https://a.s.test",
+          "Attribution-Reporting-Register-Source": {
+            "source_event_id": "123",
+            "destination": "https://a.d.test",
+            "filter_data": ""
+          }
         }]})json",
     },
     {
-        "key not found: trigger_time",
+        R"(["sources"][0]["Attribution-Reporting-Register-Source"]["filter_data"]["a"]: must be a list)",
+        R"json({"sources": [{
+          "timestamp": 1643235574,
+          "source_type": "navigation",
+          "reporting_origin": "https://a.r.test",
+          "source_origin": "https://a.s.test",
+          "Attribution-Reporting-Register-Source": {
+            "source_event_id": "123",
+            "destination": "https://a.d.test",
+            "filter_data": {
+              "a": "x"
+            }
+          }
+        }]})json",
+    },
+    {
+        R"(["sources"][0]["Attribution-Reporting-Register-Source"]["filter_data"]["a"][0]: must be a string)",
+        R"json({"sources": [{
+          "timestamp": 1643235574,
+          "source_type": "navigation",
+          "reporting_origin": "https://a.r.test",
+          "source_origin": "https://a.s.test",
+          "Attribution-Reporting-Register-Source": {
+            "source_event_id": "123",
+            "destination": "https://a.d.test",
+            "filter_data": {
+              "a": [5]
+            }
+          }
+        }]})json",
+    },
+    {
+        R"(["sources"][0]["Attribution-Reporting-Register-Aggregatable-Source"]: must be a list)",
+        R"json({"sources": [{
+          "timestamp": 1643235574,
+          "source_type": "event",
+          "reporting_origin": "https://a.r.test",
+          "source_origin": "https://a.s.test",
+          "Attribution-Reporting-Register-Source": {
+            "source_event_id": "123",
+            "destination": "https://a.d.test"
+          },
+          "Attribution-Reporting-Register-Aggregatable-Source": ""
+        }]})json",
+    },
+    {
+        R"(["sources"][0]["Attribution-Reporting-Register-Aggregatable-Source"][0]: must be a dictionary)",
+        R"json({"sources": [{
+          "timestamp": 1643235574,
+          "source_type": "event",
+          "reporting_origin": "https://a.r.test",
+          "source_origin": "https://a.s.test",
+          "Attribution-Reporting-Register-Source": {
+            "source_event_id": "123",
+            "destination": "https://a.d.test"
+          },
+          "Attribution-Reporting-Register-Aggregatable-Source": [5]
+        }]})json",
+    },
+    {
+        R"(["sources"][0]["Attribution-Reporting-Register-Aggregatable-Source"][0]["id"]: must be a string)",
+        R"json({"sources": [{
+          "timestamp": 1643235574,
+          "source_type": "event",
+          "reporting_origin": "https://a.r.test",
+          "source_origin": "https://a.s.test",
+          "Attribution-Reporting-Register-Source": {
+            "source_event_id": "123",
+            "destination": "https://a.d.test"
+          },
+          "Attribution-Reporting-Register-Aggregatable-Source": [{"id": 5}]
+        }]})json",
+    },
+    {
+        R"(["sources"][0]["Attribution-Reporting-Register-Aggregatable-Source"][0]["key_piece"]: must be a uint128 formatted as a base-16 string)",
+        R"json({"sources": [{
+          "timestamp": 1643235574,
+          "source_type": "event",
+          "reporting_origin": "https://a.r.test",
+          "source_origin": "https://a.s.test",
+          "Attribution-Reporting-Register-Source": {
+            "source_event_id": "123",
+            "destination": "https://a.d.test"
+          },
+          "Attribution-Reporting-Register-Aggregatable-Source": [{
+            "id": "a",
+            "key_piece": "0xG"
+          }]
+        }]})json",
+    },
+    {
+        R"(["sources"]: must be a list)",
+        R"json({"sources": ""})json",
+    },
+    {
+        R"(["triggers"][0]["timestamp"]: must be an integer number of)",
         R"json({"triggers": [{
           "reporting_origin": "https://a.r.test",
-          "destination": " https://a.d1.test",
-          "registration_config": {}
+          "destination_origin": " https://a.d1.test"
         }]})json",
     },
     {
-        "key not found: destination",
+        R"(["triggers"][0]["destination_origin"]: must be a valid, secure origin)",
         R"json({"triggers": [{
-          "trigger_time": 1643235576,
+          "timestamp": 1643235576,
+          "reporting_origin": "https://a.r.test"
+        }]})json",
+    },
+    {
+        R"(["triggers"][0]["reporting_origin"]: must be a valid, secure origin)",
+        R"json({"triggers": [{
+          "timestamp": 1643235576,
+          "destination_origin": " https://a.d1.test"
+        }]})json",
+    },
+    {
+        R"(["triggers"]: must be a list)",
+        R"json({"triggers": ""})json",
+    },
+    {
+        R"(["triggers"][0]["Attribution-Reporting-Register-Event-Trigger"]: must be a list)",
+        R"json({"triggers": [{
+          "timestamp": 1643235576,
           "reporting_origin": "https://a.r.test",
-          "registration_config": {}
+          "destination_origin": " https://a.d1.test",
+          "Attribution-Reporting-Register-Event-Trigger": 1
         }]})json",
     },
     {
-        "key not found: reporting_origin",
+        R"(["triggers"][0]["Attribution-Reporting-Register-Aggregatable-Trigger-Data"]: must be a list)",
         R"json({"triggers": [{
-          "trigger_time": 1643235576,
-          "destination": " https://a.d1.test",
-          "registration_config": {}
+          "timestamp": 1643235576,
+          "reporting_origin": "https://a.r.test",
+          "destination_origin": " https://a.d1.test",
+          "Attribution-Reporting-Register-Aggregatable-Trigger-Data": 5
         }]})json",
     },
-};
+    {
+        R"(["triggers"][0]["Attribution-Reporting-Register-Aggregatable-Trigger-Data"][0]: must be a dictionary)",
+        R"json({"triggers": [{
+          "timestamp": 1643235576,
+          "reporting_origin": "https://a.r.test",
+          "destination_origin": " https://a.d1.test",
+          "Attribution-Reporting-Register-Aggregatable-Trigger-Data": [ 5 ]
+        }]})json",
+    },
+    {
+        R"(["triggers"][0]["Attribution-Reporting-Register-Aggregatable-Trigger-Data"][0]["source_keys"]: must be present)",
+        R"json({"triggers": [{
+          "timestamp": 1643235576,
+          "reporting_origin": "https://a.r.test",
+          "destination_origin": " https://a.d1.test",
+          "Attribution-Reporting-Register-Aggregatable-Trigger-Data": [{}]
+        }]})json",
+    },
+    {
+        R"(["triggers"][0]["Attribution-Reporting-Register-Aggregatable-Trigger-Data"][0]["source_keys"]: must be a list)",
+        R"json({"triggers": [{
+          "timestamp": 1643235576,
+          "reporting_origin": "https://a.r.test",
+          "destination_origin": " https://a.d1.test",
+          "Attribution-Reporting-Register-Aggregatable-Trigger-Data": [{
+            "source_keys": "a"
+          }]
+        }]})json",
+    },
+    {
+        R"(["triggers"][0]["Attribution-Reporting-Register-Aggregatable-Trigger-Data"][0]["source_keys"][0]: must be a string)",
+        R"json({"triggers": [{
+          "timestamp": 1643235576,
+          "reporting_origin": "https://a.r.test",
+          "destination_origin": " https://a.d1.test",
+          "Attribution-Reporting-Register-Aggregatable-Trigger-Data": [{
+            "source_keys": [ 5 ]
+          }]
+        }]})json",
+    },
+    {
+        R"(["triggers"][0]["Attribution-Reporting-Register-Aggregatable-Trigger-Data"][0]["key_piece"]: must be a uint128 formatted as a base-16 string)",
+        R"json({"triggers": [{
+          "timestamp": 1643235576,
+          "reporting_origin": "https://a.r.test",
+          "destination_origin": " https://a.d1.test",
+          "Attribution-Reporting-Register-Aggregatable-Trigger-Data": [{
+            "source_keys": [ "a" ],
+            "key_piece": "0xG"
+          }]
+        }]})json",
+    },
+    {
+        R"(["triggers"][0]["Attribution-Reporting-Register-Aggregatable-Values"]: must be a dictionary)",
+        R"json({"triggers": [{
+          "timestamp": 1643235576,
+          "reporting_origin": "https://a.r.test",
+          "destination_origin": " https://a.d1.test",
+          "Attribution-Reporting-Register-Aggregatable-Values": 5
+        }]})json",
+    },
+    {
+        R"(["triggers"][0]["Attribution-Reporting-Register-Aggregatable-Values"]["a"]: must be a positive integer)",
+        R"json({"triggers": [{
+          "timestamp": 1643235576,
+          "reporting_origin": "https://a.r.test",
+          "destination_origin": " https://a.d1.test",
+          "Attribution-Reporting-Register-Aggregatable-Values": {
+            "a": -5
+          }
+        }]})json",
+    },
+    {
+        R"(["triggers"][0]["Attribution-Reporting-Register-Event-Trigger"][0]: must be a dictionary)",
+        R"json({"triggers":[{
+          "timestamp": 1643235576,
+          "reporting_origin": "https://a.r.test",
+          "destination_origin": " https://a.d1.test",
+          "Attribution-Reporting-Register-Event-Trigger":[true]
+        }]})json",
+    },
+    {
+        R"(["triggers"][0]["Attribution-Reporting-Register-Aggregatable-Trigger-Data"]: must be present)",
+        R"json({"triggers": [{
+          "timestamp": 1643235576,
+          "reporting_origin": "https://a.r.test",
+          "destination_origin": " https://a.d1.test",
+          "Attribution-Reporting-Register-Aggregatable-Values": {}
+        }]})json",
+    },
+    {
+        R"(["triggers"][0]["Attribution-Reporting-Register-Aggregatable-Values"]: must be present)",
+        R"json({"triggers": [{
+          "timestamp": 1643235576,
+          "reporting_origin": "https://a.r.test",
+          "destination_origin": " https://a.d1.test",
+          "Attribution-Reporting-Register-Aggregatable-Trigger-Data": []
+        }]})json",
+    }};
 
-INSTANTIATE_TEST_SUITE_P(AttributionSimulatorInputParserInvalidTriggers,
-                         AttributionSimulatorInputParserDeathTest,
-                         ::testing::ValuesIn(kTriggerDeathTestCases));
+INSTANTIATE_TEST_SUITE_P(AttributionSimulatorInputParserInvalidInputs,
+                         AttributionSimulatorInputParseErrorTest,
+                         ::testing::ValuesIn(kParseErrorTestCases));
 
 }  // namespace
 }  // namespace content

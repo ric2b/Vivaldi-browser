@@ -36,6 +36,7 @@
 #include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/animation/keyframe/keyframed_animation_curve.h"
+#include "ui/gfx/geometry/linear_gradient.h"
 #include "ui/gfx/geometry/quad_f.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
@@ -743,23 +744,22 @@ TEST_F(DrawPropertiesTest, TransformsForRenderSurfaceHierarchy) {
   // Sanity check. If these fail there is probably a bug in the test itself.  It
   // is expected that we correctly set up transforms so that the y-component of
   // the screen-space transform encodes the "depth" of the layer in the tree.
-  EXPECT_FLOAT_EQ(1.0, parent->ScreenSpaceTransform().matrix().get(1, 3));
-  EXPECT_FLOAT_EQ(2.0,
-                  child_of_root->ScreenSpaceTransform().matrix().get(1, 3));
+  EXPECT_FLOAT_EQ(1.0, parent->ScreenSpaceTransform().matrix().rc(1, 3));
+  EXPECT_FLOAT_EQ(2.0, child_of_root->ScreenSpaceTransform().matrix().rc(1, 3));
   EXPECT_FLOAT_EQ(
-      3.0, grand_child_of_root->ScreenSpaceTransform().matrix().get(1, 3));
+      3.0, grand_child_of_root->ScreenSpaceTransform().matrix().rc(1, 3));
 
   EXPECT_FLOAT_EQ(2.0,
-                  render_surface1->ScreenSpaceTransform().matrix().get(1, 3));
-  EXPECT_FLOAT_EQ(3.0, child_of_rs1->ScreenSpaceTransform().matrix().get(1, 3));
-  EXPECT_FLOAT_EQ(
-      4.0, grand_child_of_rs1->ScreenSpaceTransform().matrix().get(1, 3));
+                  render_surface1->ScreenSpaceTransform().matrix().rc(1, 3));
+  EXPECT_FLOAT_EQ(3.0, child_of_rs1->ScreenSpaceTransform().matrix().rc(1, 3));
+  EXPECT_FLOAT_EQ(4.0,
+                  grand_child_of_rs1->ScreenSpaceTransform().matrix().rc(1, 3));
 
   EXPECT_FLOAT_EQ(3.0,
-                  render_surface2->ScreenSpaceTransform().matrix().get(1, 3));
-  EXPECT_FLOAT_EQ(4.0, child_of_rs2->ScreenSpaceTransform().matrix().get(1, 3));
-  EXPECT_FLOAT_EQ(
-      5.0, grand_child_of_rs2->ScreenSpaceTransform().matrix().get(1, 3));
+                  render_surface2->ScreenSpaceTransform().matrix().rc(1, 3));
+  EXPECT_FLOAT_EQ(4.0, child_of_rs2->ScreenSpaceTransform().matrix().rc(1, 3));
+  EXPECT_FLOAT_EQ(5.0,
+                  grand_child_of_rs2->ScreenSpaceTransform().matrix().rc(1, 3));
 }
 
 TEST_F(DrawPropertiesTest, LayerFullyContainedWithinClipInTargetSpace) {
@@ -1637,22 +1637,22 @@ TEST_F(DrawPropertiesTest, AnimationsForRenderSurfaceHierarchy) {
   // Sanity check. If these fail there is probably a bug in the test itself.
   // It is expected that we correctly set up transforms so that the y-component
   // of the screen-space transform encodes the "depth" of the layer in the tree.
-  EXPECT_FLOAT_EQ(1.0, top->ScreenSpaceTransform().matrix().get(1, 3));
-  EXPECT_FLOAT_EQ(2.0, child_of_top->ScreenSpaceTransform().matrix().get(1, 3));
-  EXPECT_FLOAT_EQ(
-      3.0, grand_child_of_top->ScreenSpaceTransform().matrix().get(1, 3));
+  EXPECT_FLOAT_EQ(1.0, top->ScreenSpaceTransform().matrix().rc(1, 3));
+  EXPECT_FLOAT_EQ(2.0, child_of_top->ScreenSpaceTransform().matrix().rc(1, 3));
+  EXPECT_FLOAT_EQ(3.0,
+                  grand_child_of_top->ScreenSpaceTransform().matrix().rc(1, 3));
 
   EXPECT_FLOAT_EQ(2.0,
-                  render_surface1->ScreenSpaceTransform().matrix().get(1, 3));
-  EXPECT_FLOAT_EQ(3.0, child_of_rs1->ScreenSpaceTransform().matrix().get(1, 3));
-  EXPECT_FLOAT_EQ(
-      4.0, grand_child_of_rs1->ScreenSpaceTransform().matrix().get(1, 3));
+                  render_surface1->ScreenSpaceTransform().matrix().rc(1, 3));
+  EXPECT_FLOAT_EQ(3.0, child_of_rs1->ScreenSpaceTransform().matrix().rc(1, 3));
+  EXPECT_FLOAT_EQ(4.0,
+                  grand_child_of_rs1->ScreenSpaceTransform().matrix().rc(1, 3));
 
   EXPECT_FLOAT_EQ(3.0,
-                  render_surface2->ScreenSpaceTransform().matrix().get(1, 3));
-  EXPECT_FLOAT_EQ(4.0, child_of_rs2->ScreenSpaceTransform().matrix().get(1, 3));
-  EXPECT_FLOAT_EQ(
-      5.0, grand_child_of_rs2->ScreenSpaceTransform().matrix().get(1, 3));
+                  render_surface2->ScreenSpaceTransform().matrix().rc(1, 3));
+  EXPECT_FLOAT_EQ(4.0, child_of_rs2->ScreenSpaceTransform().matrix().rc(1, 3));
+  EXPECT_FLOAT_EQ(5.0,
+                  grand_child_of_rs2->ScreenSpaceTransform().matrix().rc(1, 3));
 }
 
 TEST_F(DrawPropertiesTest, LargeTransforms) {
@@ -2345,7 +2345,7 @@ TEST_F(DrawPropertiesTest,
   // Case 2: a matrix with flattened z, uninvertible and not visible according
   // to the CSS spec.
   uninvertible_matrix.MakeIdentity();
-  uninvertible_matrix.matrix().set(2, 2, 0.0);
+  uninvertible_matrix.matrix().setRC(2, 2, 0.0);
   ASSERT_FALSE(uninvertible_matrix.IsInvertible());
 
   SetTransform(child, uninvertible_matrix);
@@ -2357,7 +2357,7 @@ TEST_F(DrawPropertiesTest,
   // Case 3: a matrix with flattened z, also uninvertible and not visible.
   uninvertible_matrix.MakeIdentity();
   uninvertible_matrix.Translate(500.0, 0.0);
-  uninvertible_matrix.matrix().set(2, 2, 0.0);
+  uninvertible_matrix.matrix().setRC(2, 2, 0.0);
   ASSERT_FALSE(uninvertible_matrix.IsInvertible());
 
   SetTransform(child, uninvertible_matrix);
@@ -6443,7 +6443,7 @@ TEST_F(DrawPropertiesTestWithLayerTree, SkippingSubtreeMain) {
   // to be skipped. The visible content rect for |grandchild| should, therefore,
   // remain empty.
   gfx::Transform singular;
-  singular.matrix().set(0, 0, 0);
+  singular.matrix().setRC(0, 0, 0);
 
   child->SetTransform(singular);
   UpdateMainDrawProperties();
@@ -6538,10 +6538,10 @@ TEST_F(DrawPropertiesTestWithLayerTree, SkippingLayerImpl) {
   ImplOf(grandchild)->set_visible_layer_rect(gfx::Rect());
 
   gfx::Transform singular;
-  singular.matrix().set(0, 0, 0);
+  singular.matrix().setRC(0, 0, 0);
   // This line is used to make the results of skipping and not skipping layers
   // different.
-  singular.matrix().set(0, 1, 1);
+  singular.matrix().setRC(0, 1, 1);
 
   gfx::Transform rotate;
   rotate.Rotate(90);
@@ -6665,8 +6665,8 @@ TEST_F(DrawPropertiesTest, LayerSkippingInSubtreeOfSingularTransform) {
 
   // A non-invertible matrix for use later.
   gfx::Transform singular;
-  singular.matrix().set(0, 0, 0);
-  singular.matrix().set(0, 1, 1);
+  singular.matrix().setRC(0, 0, 0);
+  singular.matrix().setRC(0, 1, 1);
 
   root->SetBounds(gfx::Size(10, 10));
   child->SetBounds(gfx::Size(10, 10));
@@ -7414,10 +7414,10 @@ TEST_F(DrawPropertiesTest, NoisyTransform) {
 
   // A noisy transform that's invertible.
   gfx::Transform transform;
-  transform.matrix().setDouble(0, 0, 6.12323e-17);
-  transform.matrix().setDouble(0, 2, 1);
-  transform.matrix().setDouble(2, 2, 6.12323e-17);
-  transform.matrix().setDouble(2, 0, -1);
+  transform.matrix().setRC(0, 0, 6.12323e-17);
+  transform.matrix().setRC(0, 2, 1);
+  transform.matrix().setRC(2, 2, 6.12323e-17);
+  transform.matrix().setRC(2, 0, -1);
 
   CopyProperties(root, render_surface);
   CreateTransformNode(render_surface).local = transform;
@@ -7430,10 +7430,10 @@ TEST_F(DrawPropertiesTest, NoisyTransform) {
   UpdateActiveTreeDrawProperties();
 
   gfx::Transform expected;
-  expected.matrix().setDouble(0, 0, 3.749395e-33);
-  expected.matrix().setDouble(0, 2, 6.12323e-17);
-  expected.matrix().setDouble(2, 0, -1);
-  expected.matrix().setDouble(2, 2, 6.12323e-17);
+  expected.matrix().setRC(0, 0, 3.749395e-33);
+  expected.matrix().setRC(0, 2, 6.12323e-17);
+  expected.matrix().setRC(2, 0, -1);
+  expected.matrix().setRC(2, 2, 6.12323e-17);
   EXPECT_TRANSFORM_EQ(expected, child->ScreenSpaceTransform());
 }
 
@@ -7447,8 +7447,8 @@ TEST_F(DrawPropertiesTest, LargeTransformTest) {
   gfx::Transform large_transform;
   large_transform.Scale(99999999999999999999.f, 99999999999999999999.f);
   large_transform.Scale(9999999999999999999.f, 9999999999999999999.f);
-  EXPECT_TRUE(std::isinf(large_transform.matrix().get(0, 0)));
-  EXPECT_TRUE(std::isinf(large_transform.matrix().get(1, 1)));
+  EXPECT_TRUE(std::isinf(large_transform.matrix().rc(0, 0)));
+  EXPECT_TRUE(std::isinf(large_transform.matrix().rc(1, 1)));
 
   root->SetBounds(gfx::Size(30, 30));
   render_surface1->SetBounds(gfx::Size(30, 30));
@@ -7472,12 +7472,12 @@ TEST_F(DrawPropertiesTest, LargeTransformTest) {
   EXPECT_EQ(gfx::RectF(),
             GetRenderSurface(render_surface1)->DrawableContentRect());
 
-  bool is_inf_or_nan = std::isinf(child->DrawTransform().matrix().get(0, 0)) ||
-                       std::isnan(child->DrawTransform().matrix().get(0, 0));
+  bool is_inf_or_nan = std::isinf(child->DrawTransform().matrix().rc(0, 0)) ||
+                       std::isnan(child->DrawTransform().matrix().rc(0, 0));
   EXPECT_TRUE(is_inf_or_nan);
 
-  is_inf_or_nan = std::isinf(child->DrawTransform().matrix().get(1, 1)) ||
-                  std::isnan(child->DrawTransform().matrix().get(1, 1));
+  is_inf_or_nan = std::isinf(child->DrawTransform().matrix().rc(1, 1)) ||
+                  std::isnan(child->DrawTransform().matrix().rc(1, 1));
   EXPECT_TRUE(is_inf_or_nan);
 
   // The root layer should be in the RenderSurfaceList.
@@ -8120,15 +8120,31 @@ TEST_F(DrawPropertiesTestWithLayerTree, CustomLayerClipBoundsWithMaskToBounds) {
   EXPECT_EQ(child_impl->clip_rect(), expected_child_impl->clip_rect());
 }
 
+struct MaskFilterTestCase {
+  std::string test_name;
+  gfx::RoundedCornersF rounded_corners;
+  gfx::LinearGradient gradient_mask;
+};
+
+class DrawPropertiesWithLayerTreeTest :
+    public DrawPropertiesTestWithLayerTree,
+    public testing::WithParamInterface<MaskFilterTestCase> {
+};
+
 // In layer tree mode, not using impl-side PropertyTreeBuilder.
-TEST_F(DrawPropertiesTestWithLayerTree, RoundedCornerOnRenderSurface) {
+TEST_P(DrawPropertiesWithLayerTreeTest, MaskFilterOnRenderSurface) {
   // -Root
   //   - Parent 1
-  //     - [Render Surface] Child 1 with rounded corner
-  //   - [Render Surface] Parent 2 with rounded corner
+  //     - [Render Surface] Child 1 with rounded corner and/or gradient mask
+  //   - [Render Surface] Parent 2 with rounded corner and/or gradient mask
   //     - [Render Surface] Child 2
-  //   - Parent 3 with rounded corner
+  //   - Parent 3 with rounded corner and/or gradient mask
   //     - [Render Surface] Child 3
+
+  const MaskFilterTestCase test_case = GetParam();
+  gfx::LinearGradient gradient_mask = test_case.gradient_mask;
+  if (!gradient_mask.IsEmpty())
+    gradient_mask.AddStep(50, 0x50);
 
   scoped_refptr<Layer> root = Layer::Create();
   host()->SetRootLayer(root);
@@ -8147,7 +8163,8 @@ TEST_F(DrawPropertiesTestWithLayerTree, RoundedCornerOnRenderSurface) {
   parent_1->SetPosition(gfx::PointF(80, 80));
   parent_2->SetIsDrawable(true);
   parent_2->SetForceRenderSurfaceForTesting(true);
-  parent_2->SetRoundedCorner(gfx::RoundedCornersF(10.f));
+  parent_2->SetRoundedCorner(test_case.rounded_corners);
+  parent_2->SetGradientMask(gradient_mask);
   parent_2->SetIsFastRoundedCorner(true);
 
   scoped_refptr<Layer> parent_3 = Layer::Create();
@@ -8155,7 +8172,8 @@ TEST_F(DrawPropertiesTestWithLayerTree, RoundedCornerOnRenderSurface) {
   parent_3->SetBounds(gfx::Size(80, 80));
   parent_1->SetPosition(gfx::PointF(160, 160));
   parent_3->SetIsDrawable(true);
-  parent_3->SetRoundedCorner(gfx::RoundedCornersF(10.f));
+  parent_3->SetRoundedCorner(test_case.rounded_corners);
+  parent_3->SetGradientMask(gradient_mask);
   parent_3->SetIsFastRoundedCorner(true);
 
   scoped_refptr<Layer> child_1 = Layer::Create();
@@ -8163,7 +8181,8 @@ TEST_F(DrawPropertiesTestWithLayerTree, RoundedCornerOnRenderSurface) {
   child_1->SetBounds(gfx::Size(80, 80));
   child_1->SetIsDrawable(true);
   child_1->SetForceRenderSurfaceForTesting(true);
-  child_1->SetRoundedCorner(gfx::RoundedCornersF(10.f));
+  child_1->SetRoundedCorner(test_case.rounded_corners);
+  child_1->SetGradientMask(gradient_mask);
   child_1->SetIsFastRoundedCorner(true);
 
   scoped_refptr<Layer> child_2 = Layer::Create();
@@ -8181,13 +8200,33 @@ TEST_F(DrawPropertiesTestWithLayerTree, RoundedCornerOnRenderSurface) {
   UpdateMainDrawProperties();
   CommitAndActivate();
 
-  EXPECT_TRUE(
+  EXPECT_NE(test_case.rounded_corners.IsEmpty(),
       GetRenderSurfaceImpl(child_1)->mask_filter_info().HasRoundedCorners());
-  EXPECT_TRUE(
+  EXPECT_NE(test_case.rounded_corners.IsEmpty(),
       GetRenderSurfaceImpl(child_2)->mask_filter_info().HasRoundedCorners());
-  EXPECT_TRUE(
+  EXPECT_NE(test_case.rounded_corners.IsEmpty(),
       GetRenderSurfaceImpl(child_3)->mask_filter_info().HasRoundedCorners());
-}
 
+  EXPECT_NE(test_case.gradient_mask.IsEmpty(),
+      GetRenderSurfaceImpl(child_1)->mask_filter_info().HasGradientMask());
+  EXPECT_NE(test_case.gradient_mask.IsEmpty(),
+      GetRenderSurfaceImpl(child_2)->mask_filter_info().HasGradientMask());
+  EXPECT_NE(test_case.gradient_mask.IsEmpty(),
+      GetRenderSurfaceImpl(child_3)->mask_filter_info().HasGradientMask());
+  }
+
+
+INSTANTIATE_TEST_SUITE_P(
+    DrawPropertiesWithLayerTreeTests,
+    DrawPropertiesWithLayerTreeTest,
+    testing::ValuesIn<MaskFilterTestCase>({
+        {"WithRoundedCorners", gfx::RoundedCornersF(10.f),
+         gfx::LinearGradient::GetEmpty()},
+        {"WithGradientMask", gfx::RoundedCornersF(0.f), gfx::LinearGradient(45)},
+        {"WithRoundedCornersAndGradientMask", gfx::RoundedCornersF(10.f),
+         gfx::LinearGradient(45)},
+    }),
+    [](const testing::TestParamInfo<DrawPropertiesWithLayerTreeTest::ParamType>&
+           info) { return info.param.test_name; });
 }  // namespace
 }  // namespace cc

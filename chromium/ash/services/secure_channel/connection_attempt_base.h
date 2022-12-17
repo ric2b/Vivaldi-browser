@@ -5,6 +5,7 @@
 #ifndef ASH_SERVICES_SECURE_CHANNEL_CONNECTION_ATTEMPT_BASE_H_
 #define ASH_SERVICES_SECURE_CHANNEL_CONNECTION_ATTEMPT_BASE_H_
 
+#include "ash/components/multidevice/logging/logging.h"
 #include "ash/services/secure_channel/authenticated_channel.h"
 #include "ash/services/secure_channel/connect_to_device_operation.h"
 #include "ash/services/secure_channel/connection_attempt.h"
@@ -18,11 +19,8 @@
 #include "base/logging.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/default_clock.h"
-#include "chromeos/components/multidevice/logging/logging.h"
 
-namespace chromeos {
-
-namespace secure_channel {
+namespace ash::secure_channel {
 
 // ConnectionAttempt implementation which stays active for as long as at least
 // one of its requests has not yet completed. While a ConnectionAttemptBase is
@@ -155,8 +153,14 @@ class ConnectionAttemptBase : public ConnectionAttempt<FailureDetailType> {
   }
 
   void OnConnectToDeviceOperationFailure(FailureDetailType failure_detail) {
-    for (auto& map_entry : id_to_request_map_)
-      map_entry.second->HandleConnectionFailure(failure_detail);
+    // The call to HandleConnectionFailure() will generally remove the item from
+    // the map, so we use a std::map instead of base::flat_map and an idiom that
+    // allows us to safely remove items while iterating.
+    for (auto it = id_to_request_map_.begin();
+         it != id_to_request_map_.end();) {
+      auto it_copy = it++;
+      it_copy->second->HandleConnectionFailure(failure_detail);
+    }
   }
 
   ConnectionPriority GetHighestRemainingConnectionPriority() {
@@ -169,21 +173,14 @@ class ConnectionAttemptBase : public ConnectionAttempt<FailureDetailType> {
   }
 
   std::unique_ptr<ConnectToDeviceOperation<FailureDetailType>> operation_;
-  base::flat_map<base::UnguessableToken,
-                 std::unique_ptr<PendingConnectionRequest<FailureDetailType>>>
+  std::map<base::UnguessableToken,
+           std::unique_ptr<PendingConnectionRequest<FailureDetailType>>>
       id_to_request_map_;
 
   base::WeakPtrFactory<ConnectionAttemptBase<FailureDetailType>>
       weak_ptr_factory_{this};
 };
 
-}  // namespace secure_channel
-
-}  // namespace chromeos
-
-// TODO(https://crbug.com/1164001): remove after the migration is finished.
-namespace ash::secure_channel {
-using ::chromeos::secure_channel::ConnectionAttemptBase;
-}
+}  // namespace ash::secure_channel
 
 #endif  // ASH_SERVICES_SECURE_CHANNEL_CONNECTION_ATTEMPT_BASE_H_

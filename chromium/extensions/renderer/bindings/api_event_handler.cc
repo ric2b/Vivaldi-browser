@@ -13,7 +13,6 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/check.h"
-#include "base/cxx17_backports.h"
 #include "base/notreached.h"
 #include "base/supports_user_data.h"
 #include "base/values.h"
@@ -213,7 +212,7 @@ void APIEventHandler::InvalidateCustomEvent(v8::Local<v8::Context> context,
 
 void APIEventHandler::FireEventInContext(const std::string& event_name,
                                          v8::Local<v8::Context> context,
-                                         const base::ListValue& args,
+                                         const base::Value::List& args,
                                          mojom::EventFilteringInfoPtr filter) {
   // Don't bother converting arguments if there are no listeners.
   // NOTE(devlin): This causes a double data and EventEmitter lookup, since
@@ -229,8 +228,8 @@ void APIEventHandler::FireEventInContext(const std::string& event_name,
       content::V8ValueConverter::Create();
 
   std::vector<v8::Local<v8::Value>> v8_args;
-  v8_args.reserve(args.GetListDeprecated().size());
-  for (const auto& arg : args.GetListDeprecated())
+  v8_args.reserve(args.size());
+  for (const auto& arg : args)
     v8_args.push_back(converter->ToV8Value(&arg, context));
 
   FireEventInContext(event_name, context, &v8_args, std::move(filter),
@@ -292,7 +291,7 @@ void APIEventHandler::FireEventInContext(
 
     v8::Local<v8::Value> massager_args[] = {args_array, dispatch_event};
     JSRunner::Get(context)->RunJSFunction(
-        massager, context, base::size(massager_args), massager_args);
+        massager, context, std::size(massager_args), massager_args);
   }
 }
 

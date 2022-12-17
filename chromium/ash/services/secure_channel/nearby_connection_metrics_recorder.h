@@ -8,13 +8,13 @@
 #include "ash/services/secure_channel/device_id_pair.h"
 #include "base/containers/flat_map.h"
 #include "base/memory/weak_ptr.h"
+#include "base/time/time.h"
 
 namespace base {
 class Time;
 }
 
-namespace chromeos {
-namespace secure_channel {
+namespace ash::secure_channel {
 
 // Records the effective success rate for Nearby Connections attempts. In this
 // context, "effective" means that (1) a failure followed by a successful retry
@@ -44,7 +44,6 @@ class NearbyConnectionMetricsRecorder {
   base::WeakPtrFactory<NearbyConnectionMetricsRecorder> weak_ptr_factory_{this};
 };
 
-}  // namespace secure_channel
-}  // namespace chromeos
+}  // namespace ash::secure_channel
 
 #endif  // ASH_SERVICES_SECURE_CHANNEL_NEARBY_CONNECTION_METRICS_RECORDER_H_

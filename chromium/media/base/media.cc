@@ -25,7 +25,7 @@ extern "C" {
 }
 #endif
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && defined(OS_WIN)
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && BUILDFLAG(IS_WIN)
 #include "platform_media/common/win/platform_media_init.h"
 #endif
 
@@ -53,8 +53,11 @@ class MediaInitializer {
 
 #endif  // BUILDFLAG(ENABLE_FFMPEG)
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && defined(OS_WIN)
-    platform_media_init::OnFFmpegInit();
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && BUILDFLAG(IS_WIN)
+    // Due to linking dependencies OnFFmpegInit() cannot call
+    // ffwmf_get_log_info() directly, so call it here and pass the result to the
+    // init function.
+    platform_media_init::OnFFmpegInit(ffwmf_get_log_info());
 #endif
   }
 

@@ -4,11 +4,10 @@
 
 #include "chrome/browser/ash/policy/status_collector/legacy_device_status_collector.h"
 
-#include <sys/types.h>
-#include <unistd.h>
-
 #include <stddef.h>
 #include <stdint.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -26,7 +25,6 @@
 #include "ash/components/settings/timezone_settings.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
-#include "base/cxx17_backports.h"
 #include "base/feature_list.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
@@ -40,7 +38,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
-#include "base/task/post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
@@ -481,9 +478,9 @@ int ConvertWifiSignalStrength(int signal_strength) {
   return signal_strength - 120;
 }
 
-bool IsKioskApp() {
+bool IsKioskSession() {
   return chromeos::LoginState::Get()->GetLoggedInUserType() ==
-         chromeos::LoginState::LOGGED_IN_USER_KIOSK_APP;
+         chromeos::LoginState::LOGGED_IN_USER_KIOSK;
 }
 
 // Utility method to turn cpu_temp_fetcher_ to OnceCallback
@@ -1408,7 +1405,6 @@ class DeviceStatusCollectorState : public StatusCollectorState {
       return;
     em::StatefulPartitionInfo* stateful_partition_info =
         response_params_.device_status->mutable_stateful_partition_info();
-    DCHECK_GE(hdsi.available_space(), 0);
     DCHECK_GE(hdsi.total_space(), hdsi.available_space());
     stateful_partition_info->CopyFrom(hdsi);
   }
@@ -1779,8 +1775,8 @@ void LegacyDeviceStatusCollector::ProcessIdleState(ui::IdleState state) {
 
   Time now = clock_->Now();
 
-  // For kiosk apps we report total uptime instead of active time.
-  if (state == ui::IDLE_STATE_ACTIVE || IsKioskApp()) {
+  // For kiosk session we report total uptime instead of active time.
+  if (state == ui::IDLE_STATE_ACTIVE || IsKioskSession()) {
     std::string user_email = GetUserForActivityReporting();
     // If it's been too long since the last report, or if the activity is
     // negative (which can happen when the clock changes), assume a single
@@ -2270,14 +2266,14 @@ bool LegacyDeviceStatusCollector::GetNetworkInterfaces(
   for (device = device_list.begin(); device != device_list.end(); ++device) {
     // Determine the type enum constant for |device|.
     size_t type_idx = 0;
-    for (; type_idx < base::size(kDeviceTypeMap); ++type_idx) {
+    for (; type_idx < std::size(kDeviceTypeMap); ++type_idx) {
       if ((*device)->type() == kDeviceTypeMap[type_idx].type_string)
         break;
     }
 
     // If the type isn't in |kDeviceTypeMap|, the interface is not relevant for
     // reporting. This filters out VPN devices.
-    if (type_idx >= base::size(kDeviceTypeMap))
+    if (type_idx >= std::size(kDeviceTypeMap))
       continue;
 
     em::NetworkInterface* interface = status->add_network_interfaces();
@@ -2315,7 +2311,7 @@ bool LegacyDeviceStatusCollector::GetNetworkInterfaces(
     em::NetworkState::ConnectionState connection_state_enum =
         em::NetworkState::UNKNOWN;
     const std::string connection_state_string(state->connection_state());
-    for (size_t i = 0; i < base::size(kConnectionStateMap); ++i) {
+    for (size_t i = 0; i < std::size(kConnectionStateMap); ++i) {
       if (connection_state_string == kConnectionStateMap[i].state_string) {
         connection_state_enum = kConnectionStateMap[i].state_constant;
         break;

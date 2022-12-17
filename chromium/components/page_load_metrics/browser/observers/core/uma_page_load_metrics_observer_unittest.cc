@@ -9,6 +9,7 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/power_monitor_test.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/time/time.h"
 #include "components/page_load_metrics/browser/metrics_web_contents_observer.h"
 #include "components/page_load_metrics/browser/observers/core/largest_contentful_paint_handler.h"
 #include "components/page_load_metrics/browser/observers/page_load_metrics_observer_content_test_harness.h"
@@ -1161,10 +1162,6 @@ TEST_F(UmaPageLoadMetricsObserverTest,
 }
 
 TEST_F(UmaPageLoadMetricsObserverTest, NormalizedResponsivenessMetrics) {
-  // Flip the flag.
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      blink::features::kSendAllUserInteractionLatencies);
   page_load_metrics::mojom::InputTiming input_timing;
   input_timing.num_interactions = 3;
   input_timing.max_event_durations =
@@ -1177,17 +1174,6 @@ TEST_F(UmaPageLoadMetricsObserverTest, NormalizedResponsivenessMetrics) {
       base::Milliseconds(100), UserInteractionType::kTapOrClick));
   max_event_durations.emplace_back(UserInteractionLatency::New(
       base::Milliseconds(150), UserInteractionType::kDrag));
-  input_timing.total_event_durations =
-      UserInteractionLatencies::NewUserInteractionLatencies({});
-
-  auto& total_event_durations =
-      input_timing.total_event_durations->get_user_interaction_latencies();
-  total_event_durations.emplace_back(UserInteractionLatency::New(
-      base::Milliseconds(55), UserInteractionType::kKeyboard));
-  total_event_durations.emplace_back(UserInteractionLatency::New(
-      base::Milliseconds(105), UserInteractionType::kTapOrClick));
-  total_event_durations.emplace_back(UserInteractionLatency::New(
-      base::Milliseconds(155), UserInteractionType::kDrag));
   NavigateAndCommit(GURL(kDefaultTestUrl));
   tester()->SimulateInputTimingUpdate(input_timing);
   // Navigate again to force histogram recording.
@@ -1197,54 +1183,28 @@ TEST_F(UmaPageLoadMetricsObserverTest, NormalizedResponsivenessMetrics) {
       std::make_pair(
           internal::kHistogramWorstUserInteractionLatencyMaxEventDuration, 146),
       std::make_pair(
-          internal::kHistogramWorstUserInteractionLatencyTotalEventDuration,
-          146),
-      std::make_pair(
-          internal::
-              kHistogramWorstUserInteractionLatencyOverBudgetMaxEventDuration,
-          50),
-      std::make_pair(
-          internal::
-              kHistogramWorstUserInteractionLatencyOverBudgetTotalEventDuration,
-          50),
-      std::make_pair(
           internal::
               kHistogramSumOfUserInteractionLatencyOverBudgetMaxEventDuration,
           50),
-      std::make_pair(
-          internal::
-              kHistogramSumOfUserInteractionLatencyOverBudgetTotalEventDuration,
-          62),
       std::make_pair(
           internal::
               kHistogramAverageUserInteractionLatencyOverBudgetMaxEventDuration,
           14),
       std::make_pair(
           internal::
-              kHistogramAverageUserInteractionLatencyOverBudgetTotalEventDuration,
-          21),
-      std::make_pair(
-          internal::
-              kHistogramSlowUserInteractionLatencyOverBudgetHighPercentileMaxEventDuration,
-          50),
-      std::make_pair(
-          internal::
-              kHistogramSlowUserInteractionLatencyOverBudgetHighPercentileTotalEventDuration,
-          50),
-      std::make_pair(
-          internal::
               kHistogramSlowUserInteractionLatencyOverBudgetHighPercentile2MaxEventDuration,
           50),
       std::make_pair(
           internal::
-              kHistogramSlowUserInteractionLatencyOverBudgetHighPercentile2TotalEventDuration,
-          50)};
+              kHistogramUserInteractionLatencyHighPercentile2MaxEventDuration,
+          146),
+      std::make_pair(internal::kHistogramNumInteractions, 3)};
 
   for (auto& metric : uma_list) {
     EXPECT_THAT(
         tester()->histogram_tester().GetAllSamples(metric.first.c_str()),
-        // metric.second is the minimum value of the bucket, not the actual
-        // value.
+        // metric.second is the minimum value of the bucket, not the
+        // actual value.
         testing::ElementsAre(base::Bucket(metric.second, 1)));
   }
 }

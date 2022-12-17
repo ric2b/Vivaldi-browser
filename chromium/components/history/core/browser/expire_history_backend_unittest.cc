@@ -13,7 +13,6 @@
 
 #include "base/bind.h"
 #include "base/compiler_specific.h"
-#include "base/cxx17_backports.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
@@ -22,6 +21,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/current_thread.h"
 #include "base/test/task_environment.h"
+#include "base/time/time.h"
 #include "components/favicon/core/favicon_database.h"
 #include "components/history/core/browser/history_backend_client.h"
 #include "components/history/core/browser/history_backend_notifier.h"
@@ -607,7 +607,7 @@ TEST_F(ExpireHistoryTest, DeleteURLs) {
   std::vector<GURL> urls;
   // Push back a bogus URL (which shouldn't change anything).
   urls.push_back(GURL());
-  for (size_t i = 0; i < base::size(rows); ++i) {
+  for (size_t i = 0; i < std::size(rows); ++i) {
     ASSERT_TRUE(main_db_->GetURLRow(url_ids[i], &rows[i]));
     favicon_ids[i] =
         GetFavicon(rows[i].url(), favicon_base::IconType::kFavicon);

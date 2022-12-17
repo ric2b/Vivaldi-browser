@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/browser/web_applications/web_app_chromeos_data.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
@@ -23,12 +24,13 @@
 #include "components/sync/model/string_ordinal.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "url/gurl.h"
 
 namespace web_app {
 
-using WebAppSources = std::bitset<Source::kMaxValue + 1>;
+using WebAppSources = std::bitset<WebAppManagement::kMaxValue + 1>;
 class WebApp {
  public:
   explicit WebApp(const AppId& app_id);
@@ -44,10 +46,13 @@ class WebApp {
 
   const AppId& app_id() const { return app_id_; }
 
-  // UTF8 encoded application name.
-  const std::string& name() const { return name_; }
-  // UTF8 encoded long application description (a full application name).
-  const std::string& description() const { return description_; }
+  // UTF8 encoded application name. This name is not translated, use
+  // WebAppRegistrar.GetAppShortName to get the translated name.
+  const std::string& untranslated_name() const { return name_; }
+  // UTF8 encoded long application description (a full application name). This
+  // description is not translated, use WebAppRegistrar.GetAppDescription to get
+  // the translated description.
+  const std::string& untranslated_description() const { return description_; }
 
   const GURL& start_url() const { return start_url_; }
 
@@ -202,6 +207,7 @@ class WebApp {
     ~SyncFallbackData();
     // Copyable and move-assignable to support Copy-on-Write with Commit.
     SyncFallbackData(const SyncFallbackData& sync_fallback_data);
+    SyncFallbackData(SyncFallbackData&& sync_fallback_data) noexcept;
     SyncFallbackData& operator=(SyncFallbackData&& sync_fallback_data);
 
     base::Value AsDebugValue() const;
@@ -245,21 +251,21 @@ class WebApp {
 
   const absl::optional<AppId>& parent_app_id() const { return parent_app_id_; }
 
-  const std::vector<PermissionsPolicyDeclaration>& permissions_policy() const {
+  const blink::ParsedPermissionsPolicy& permissions_policy() const {
     return permissions_policy_;
   }
 
-  const absl::optional<webapps::WebappInstallSource>
-  install_source_for_metrics() const {
+  absl::optional<webapps::WebappInstallSource> install_source_for_metrics()
+      const {
     return install_source_for_metrics_;
   }
 
   // A Web App can be installed from multiple sources simultaneously. Installs
   // add a source to the app. Uninstalls remove a source from the app.
-  void AddSource(Source::Type source);
-  void RemoveSource(Source::Type source);
+  void AddSource(WebAppManagement::Type source);
+  void RemoveSource(WebAppManagement::Type source);
   bool HasAnySources() const;
-  bool HasOnlySource(Source::Type source) const;
+  bool HasOnlySource(WebAppManagement::Type source) const;
   WebAppSources GetSources() const;
 
   bool IsSynced() const;
@@ -272,7 +278,7 @@ class WebApp {
   bool WasInstalledByUser() const;
   // Returns the highest priority source. AppService assumes that every app has
   // just one install source.
-  Source::Type GetHighestPrioritySource() const;
+  WebAppManagement::Type GetHighestPrioritySource() const;
 
   void SetName(const std::string& name);
   void SetDescription(const std::string& description);
@@ -330,8 +336,7 @@ class WebApp {
   void SetStorageIsolated(bool is_storage_isolated);
   void SetLaunchHandler(absl::optional<LaunchHandler> launch_handler);
   void SetParentAppId(const absl::optional<AppId>& parent_app_id);
-  void SetPermissionsPolicy(
-      std::vector<PermissionsPolicyDeclaration> permissions_policy);
+  void SetPermissionsPolicy(blink::ParsedPermissionsPolicy permissions_policy);
   void SetInstallSourceForMetrics(
       absl::optional<webapps::WebappInstallSource> install_source);
 
@@ -358,8 +363,8 @@ class WebApp {
   absl::optional<SkColor> dark_mode_theme_color_;
   absl::optional<SkColor> background_color_;
   absl::optional<SkColor> dark_mode_background_color_;
-  DisplayMode display_mode_;
-  DisplayMode user_display_mode_;
+  DisplayMode display_mode_ = DisplayMode::kUndefined;
+  DisplayMode user_display_mode_ = DisplayMode::kUndefined;
   std::vector<DisplayMode> display_mode_override_;
   syncer::StringOrdinal user_page_ordinal_;
   syncer::StringOrdinal user_launch_ordinal_;
@@ -415,7 +420,7 @@ class WebApp {
   bool is_storage_isolated_ = false;
   absl::optional<LaunchHandler> launch_handler_;
   absl::optional<AppId> parent_app_id_;
-  std::vector<PermissionsPolicyDeclaration> permissions_policy_;
+  blink::ParsedPermissionsPolicy permissions_policy_;
   // The source of the latest install, used for logging metrics. WebAppRegistrar
   // provides range validation. Optional only to support legacy installations,
   // since this used to be tracked as a pref. It might also be null if the value

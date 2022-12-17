@@ -17,6 +17,7 @@
 #include "ash/shelf/drag_window_from_shelf_controller.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_metrics.h"
+#include "ash/shelf/shelf_observer.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell_observer.h"
 #include "ash/system/locale/locale_update_controller_impl.h"
@@ -68,22 +69,32 @@ class SwipeHomeToOverviewController;
 // layout to the status area.
 // To respond to bounds changes in the status area StatusAreaLayoutManager works
 // closely with ShelfLayoutManager.
-// On mus, widget bounds management is handled by the window manager.
-class ASH_EXPORT ShelfLayoutManager
-    : public AppListControllerObserver,
-      public ShellObserver,
-      public SplitViewObserver,
-      public OverviewObserver,
-      public ::wm::ActivationChangeObserver,
-      public LockStateObserver,
-      public WmDefaultLayoutManager,
-      public display::DisplayObserver,
-      public SessionObserver,
-      public WallpaperControllerObserver,
-      public LocaleChangeObserver,
-      public DesksController::Observer,
-      public ShelfConfig::Observer {
+class ASH_EXPORT ShelfLayoutManager : public AppListControllerObserver,
+                                      public ShelfObserver,
+                                      public ShellObserver,
+                                      public SplitViewObserver,
+                                      public OverviewObserver,
+                                      public ::wm::ActivationChangeObserver,
+                                      public LockStateObserver,
+                                      public WmDefaultLayoutManager,
+                                      public display::DisplayObserver,
+                                      public SessionObserver,
+                                      public WallpaperControllerObserver,
+                                      public LocaleChangeObserver,
+                                      public DesksController::Observer,
+                                      public ShelfConfig::Observer {
  public:
+  // See `drag_status_`. Visible for testing.
+  enum DragStatus {
+    kDragNone,
+    kDragAttempt,
+    kDragInProgress,
+    kDragCancelInProgress,
+    kDragCompleteInProgress,
+    kDragAppListInProgress,
+    kDragHomeToOverviewInProgress,
+  };
+
   // Suspend work area updates within its scope. Note that relevant
   // ShelfLayoutManager must outlive this class.
   class ScopedSuspendWorkAreaUpdate {
@@ -222,8 +233,10 @@ class ASH_EXPORT ShelfLayoutManager
   void SetChildBounds(aura::Window* child,
                       const gfx::Rect& requested_bounds) override;
 
+  // ShelfObserver:
+  void OnShelfAutoHideBehaviorChanged() override;
+
   // ShellObserver:
-  void OnShelfAutoHideBehaviorChanged(aura::Window* root_window) override;
   void OnShelfAlignmentChanged(aura::Window* root_window,
                                ShelfAlignment old_alignment) override;
   void OnUserWorkAreaInsetsChanged(aura::Window* root_window) override;
@@ -321,6 +334,8 @@ class ASH_EXPORT ShelfLayoutManager
     return home_to_overview_nudge_controller_.get();
   }
 
+  DragStatus drag_status_for_test() const { return drag_status_; }
+
   bool IsDraggingApplist() const {
     return drag_status_ == kDragAppListInProgress;
   }
@@ -369,14 +384,14 @@ class ASH_EXPORT ShelfLayoutManager
     // appropriate.
     bool Equals(const State& other) const;
 
-    ShelfVisibilityState visibility_state;
-    ShelfAutoHideState auto_hide_state;
-    WorkspaceWindowState window_state;
-    HotseatState hotseat_state;
+    ShelfVisibilityState visibility_state = SHELF_VISIBLE;
+    ShelfAutoHideState auto_hide_state = SHELF_AUTO_HIDE_HIDDEN;
+    WorkspaceWindowState window_state = WorkspaceWindowState::kDefault;
 
     // True when the system is in the cancelable, pre-lock screen animation.
-    bool pre_lock_screen_animation_active;
-    session_manager::SessionState session_state;
+    bool pre_lock_screen_animation_active = false;
+    session_manager::SessionState session_state =
+        session_manager::SessionState::UNKNOWN;
   };
 
   // An enumration describing the various phases in which the shelf can be when
@@ -561,8 +576,8 @@ class ASH_EXPORT ShelfLayoutManager
 
   float target_opacity_ = 0.0f;
 
-  ShelfWidget* shelf_widget_;
-  Shelf* shelf_;
+  ShelfWidget* const shelf_widget_;
+  Shelf* const shelf_;
 
   // Count of pending visibility update suspensions. Skip updating the shelf
   // visibility state if it is greater than 0.
@@ -597,16 +612,6 @@ class ASH_EXPORT ShelfLayoutManager
   // events. For example, swiping up from the shelf in tablet mode can open the
   // fullscreen app list. Some shelf behaviour (e.g. visibility state,
   // background color etc.) are affected by various stages of the drag.
-  enum DragStatus {
-    kDragNone,
-    kDragAttempt,
-    kDragInProgress,
-    kDragCancelInProgress,
-    kDragCompleteInProgress,
-    kDragAppListInProgress,
-    kDragHomeToOverviewInProgress,
-  };
-
   DragStatus drag_status_ = kDragNone;
 
   // Whether the hotseat is being dragged.

@@ -33,6 +33,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_testing.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 
+#include "base/time/time.h"
 #include "third_party/blink/renderer/modules/webcodecs/video_decoder_broker.h"
 using ::testing::_;
 using ::testing::Invoke;
@@ -112,7 +113,9 @@ class FakeInterfaceFactory : public media::mojom::InterfaceFactory {
   // MojoVideoDecoderService allows us to reuse buffer conversion code. The
   // FakeMojoMediaClient will create a FakeGpuVideoDecoder.
   void CreateVideoDecoder(
-      mojo::PendingReceiver<media::mojom::VideoDecoder> receiver) override {
+      mojo::PendingReceiver<media::mojom::VideoDecoder> receiver,
+      mojo::PendingRemote<media::stable::mojom::StableVideoDecoder>
+          dst_video_decoder) override {
     video_decoder_receivers_.Add(
         std::make_unique<media::MojoVideoDecoderService>(&mojo_media_client_,
                                                          &cdm_service_context_),
@@ -155,9 +158,11 @@ class FakeInterfaceFactory : public media::mojom::InterfaceFactory {
       mojo::PendingRemote<media::mojom::MediaLog> media_log_remote,
       mojo::PendingReceiver<media::mojom::Renderer> receiver,
       mojo::PendingReceiver<media::mojom::MediaFoundationRendererExtension>
-          renderer_extension_receiver) override {}
+          renderer_extension_receiver,
+      mojo::PendingRemote<
+          ::media::mojom::MediaFoundationRendererClientExtension>
+          client_extension_remote) override {}
 #endif  // BUILDFLAG(IS_WIN)
-
  private:
   media::MojoCdmServiceContext cdm_service_context_;
   FakeMojoMediaClient mojo_media_client_;
